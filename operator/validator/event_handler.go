@@ -6,18 +6,17 @@ import (
 	"fmt"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/exporter"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
 // b64 encrypted key length is 256
@@ -157,15 +156,24 @@ func (c *controller) handleValidatorAddedEvent(
 		return nil, errors.Wrap(err, "failed to get nonce")
 	}
 
-	err = c.eventHandler.SaveEventData(event.TxHash)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to save event data")
-	}
+	var valid, malformed bool
 
-	err = c.eventHandler.BumpNonce(event.Owner)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to bump the nonce")
-	}
+	defer func() {
+
+		if valid || malformed {
+			err = c.eventHandler.SaveEventData(event.TxHash)
+			if err != nil {
+				err = errors.Wrap(err, "failed to save event data")
+				return
+			}
+
+			err = c.eventHandler.BumpNonce(event.Owner)
+			if err != nil {
+				err = errors.Wrap(err, "failed to bump the nonce")
+				return
+			}
+		}
+	}()
 
 	// Calculate the expected length of constructed shares based on the number of operator IDs,
 	// signature length, public key length, and encrypted key length.
@@ -175,7 +183,8 @@ func (c *controller) handleValidatorAddedEvent(
 	sharesExpectedLength := encryptedKeyLength*operatorCount + pubKeysOffset
 
 	if sharesExpectedLength != len(event.Shares) {
-		return nil, errors.Errorf("%s event shares length is not correct", abiparser.ValidatorAdded)
+		malformed = true
+		return nil, &abiparser.MalformedEventError{errors.Errorf("%s event shares length is not correct", abiparser.ValidatorAdded)}
 	}
 
 	event.Signature = event.Shares[:signatureOffset]
@@ -184,19 +193,13 @@ func (c *controller) handleValidatorAddedEvent(
 
 	// verify sig
 	if err = verifySignature(event.Signature, event.Owner, event.PublicKey, nonce); err != nil {
+		malformed = true
 		return nil, &abiparser.MalformedEventError{
 			Err: errors.Wrap(err, "failed to verify signature"),
 		}
 	}
 
 	pubKey := hex.EncodeToString(event.PublicKey)
-	// TODO: check if need
-	if ongoingSync {
-		if _, ok := c.validatorsMap.GetValidator(pubKey); ok {
-			logger.Debug("validator was loaded already")
-			return nil, nil
-		}
-	}
 
 	validatorShare, found, err := c.sharesStorage.GetShare(event.PublicKey)
 	if err != nil {
@@ -230,7 +233,9 @@ func (c *controller) handleValidatorAddedEvent(
 		)
 	}
 
-	return logFields, nil
+	valid = true
+
+	return logFields, err
 }
 
 // handleValidatorRemovedEvent handles registry contract event for validator removed
