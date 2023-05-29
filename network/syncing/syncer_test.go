@@ -5,12 +5,12 @@ import (
 	"testing"
 	"time"
 
-	"go.uber.org/zap"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/network/syncing"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/network/syncing"
 )
 
 type mockSyncer struct{}
@@ -50,5 +50,5 @@ func TestThrottle(t *testing.T) {
 	end := time.Now()
 
 	require.Equal(t, 10, calls)
-	require.True(t, end.Sub(start) > 100*time.Millisecond && end.Sub(start) < 110*time.Millisecond, "expected time to be between 100ms and 110ms")
+	require.WithinRangef(t, end, start.Add(100*time.Millisecond), start.Add(110*time.Millisecond), "expected time to be between 100ms and 110ms, is %v", end.Sub(start))
 }
