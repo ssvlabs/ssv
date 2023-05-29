@@ -24,6 +24,22 @@ go install github.com/bloxapp/ssv/scripts/differ@latest
 differ --left <leftCodebasePath> --right <rightCodebasePath> --output <outputFile>
 ```
 
+### 👀 Approving Changes
+
+1. Copy & paste the contents of `output.diff` into [differ.vercel.app](differ.vercel.app) (or your locally hosted instance)
+2. Approve changes
+3. Copy the `Change IDs` (at the top)
+4. Paste them under `ApprovedChanges` in your `config.yaml`
+
+#### Running the web UI locally
+
+```bash
+git clone github.com/bloxapp/ssv
+cd ssv/scripts/differ/ui
+npm install
+npm run dev
+```
+
 ### Configuration
 
 The `config.yaml` file is used to fine-tune the behavior of Differ.
