@@ -63,5 +63,5 @@ type Options struct {
 	BeaconNetwork  spectypes.BeaconNetwork
 	BeaconNodeAddr string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
 	Graffiti       []byte
-	GasLimit       uint64 `yaml:"GasLimit" env:"GAS_LIMIT" env-default:"30000000" env-description:"Gas limit used for beacon node actions"`
+	GasLimit       uint64
 }
