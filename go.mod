@@ -6,7 +6,7 @@ require (
 	github.com/aquasecurity/table v1.8.0
 	github.com/attestantio/go-eth2-client v0.15.8
 	github.com/bloxapp/eth2-key-manager v1.3.0-rc.0
-	github.com/bloxapp/ssv-spec v0.3.1-0.20230322125847-21e97ea2ad3d
+	github.com/bloxapp/ssv-spec v0.3.1-0.20230528103541-820f72b858bc
 	github.com/btcsuite/btcd/btcec/v2 v2.2.1
 	github.com/cespare/xxhash/v2 v2.2.0
 	github.com/cornelk/hashmap v1.0.8
@@ -183,7 +183,3 @@ replace github.com/prysmaticlabs/prysm => github.com/prysmaticlabs/prysm v1.4.2-
 replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
-
-replace github.com/bloxapp/ssv-spec => github.com/bloxapp/ssv-spec v0.0.0-20230524104230-42bf86e3f977 // #disable-preconsensus-liveness
-
-// replace github.com/bloxapp/ssv-spec => ../ssv-spec
