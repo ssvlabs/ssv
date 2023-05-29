@@ -6,7 +6,7 @@ on:
       - "**"
 
 jobs:
-  run-differ:
+  spec-alignment:
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
@@ -28,4 +28,4 @@ jobs:
         run: go install github.com/bloxapp/ssv/scripts/differ@spec-alignment-script
 
       - name: Run Differ
-        run: differ --left ./ --right ${{ steps.get-path.outputs.path }}
+        run: differ ./ ${{ steps.get-path.outputs.path }}
