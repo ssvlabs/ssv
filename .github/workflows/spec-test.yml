@@ -3,10 +3,6 @@ name: Spec tests
 on:
   push:
     branches:
-      - "main"
-      - "stage"
-  pull_request:
-    branches:
       - "**"
 
   workflow_dispatch:
