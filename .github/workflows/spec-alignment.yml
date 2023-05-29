@@ -34,3 +34,4 @@ jobs:
           --output ./scripts/spec-alignment/output.diff \
           ./ \
           ${{ steps.get-path.outputs.path }}
+
