@@ -353,7 +353,7 @@ func setupNodes(
 	// consensus client
 	cfg.ETH2Options.Graffiti = []byte("SSV.Network")
 	cfg.ETH2Options.GasLimit = spectypes.DefaultGasLimit
-	cfg.ETH2Options.BeaconNetwork = beaconNetwork
+	cfg.ETH2Options.Network = beaconNetwork
 	cl, err := goclient.New(logger, cfg.ETH2Options, operatorID, slotTicker)
 	if err != nil {
 		logger.Fatal("failed to create beacon go-client", zap.Error(err),

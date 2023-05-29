@@ -48,7 +48,6 @@ const (
 	FieldDutyID              = "duty_id"
 	FieldENR                 = "enr"
 	FieldErrors              = "errors"
-	FieldETHNetwork          = "eth_network"
 	FieldEvent               = "event"
 	FieldEventID             = "event_id"
 	FieldFeeRecipient        = "fee_recipient"
@@ -250,10 +249,6 @@ func DutyID(val string) zap.Field {
 
 func Slot(val phase0.Slot) zap.Field {
 	return zap.Uint64(FieldSlot, uint64(val))
-}
-
-func ETHNetwork(val spectypes.BeaconNetwork) zap.Field {
-	return zap.String(FieldETHNetwork, string(val))
 }
 
 func Domain(val spectypes.DomainType) zap.Field {
