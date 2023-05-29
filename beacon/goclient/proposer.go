@@ -24,7 +24,7 @@ const (
 	batchSize = 500
 )
 
-// GetBeaconBlock returns beacon block by the given slot and committee index
+// GetBeaconBlock returns beacon block by the given slot, graffiti, and randao.
 func (gc *goClient) GetBeaconBlock(slot phase0.Slot, graffiti, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
 	sig := phase0.BLSSignature{}
 	copy(sig[:], randao[:])
@@ -74,6 +74,7 @@ func (gc *goClient) GetBeaconBlock(slot phase0.Slot, graffiti, randao []byte) (s
 	}
 }
 
+// GetBlindedBeaconBlock returns blinded beacon block by the given slot, graffiti, and randao.
 func (gc *goClient) GetBlindedBeaconBlock(slot phase0.Slot, graffiti, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
 	sig := phase0.BLSSignature{}
 	copy(sig[:], randao[:])
