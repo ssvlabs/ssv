@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -23,13 +24,13 @@ func GetNetworkByName(name string) (NetworkConfig, error) {
 }
 
 type NetworkConfig struct {
-	Name                    string
-	spectypes.BeaconNetwork // TODO: unembed
-	Domain                  spectypes.DomainType
-	GenesisEpoch            spec.Epoch
-	ETH1SyncOffset          *big.Int
-	RegistryContractAddr    string
-	Bootnodes               []string
+	Name                 string
+	BeaconNetwork        spectypes.BeaconNetwork
+	Domain               spectypes.DomainType
+	GenesisEpoch         spec.Epoch
+	ETH1SyncOffset       *big.Int
+	RegistryContractAddr string
+	Bootnodes            []string
 }
 
 func (n NetworkConfig) String() string {
@@ -39,4 +40,19 @@ func (n NetworkConfig) String() string {
 	}
 
 	return string(b)
+}
+
+// ForkVersion returns the fork version of the network.
+func (n NetworkConfig) ForkVersion() [4]byte {
+	return n.BeaconNetwork.ForkVersion()
+}
+
+// SlotDurationSec returns slot duration
+func (n NetworkConfig) SlotDurationSec() time.Duration {
+	return n.BeaconNetwork.SlotDurationSec()
+}
+
+// SlotsPerEpoch returns number of slots per one epoch
+func (n NetworkConfig) SlotsPerEpoch() uint64 {
+	return n.BeaconNetwork.SlotsPerEpoch()
 }
