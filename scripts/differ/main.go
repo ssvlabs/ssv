@@ -50,7 +50,7 @@ var cli struct {
 	Config string `default:"config.yaml" help:"Path to the config file." type:"existingfile"`
 	Left   string `arg:"" help:"Path to the left codebase." type:"existingdir"`
 	Right  string `arg:"" help:"Path to the right codebase." type:"existingdir"`
-	Output string `default:"output.diff" help:"Path to the output diff file." type:"existingfile"`
+	Output string `default:"output.diff" help:"Path to the output diff file." type:"path"`
 }
 
 func run() (changes int, err error) {
