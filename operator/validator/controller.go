@@ -523,6 +523,9 @@ func (c *controller) UpdateValidatorMetadata(logger *zap.Logger, pk string, meta
 		if err != nil {
 			return errors.Wrap(err, "could not get share")
 		}
+		if share == nil {
+			return errors.New("share was not found")
+		}
 		started, err := c.onShareStart(logger, share)
 		if err != nil {
 			return errors.Wrap(err, "could not start validator")
