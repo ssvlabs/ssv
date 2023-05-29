@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
 	"log"
 	"net/http"
 	"time"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/logging/fields"
-
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ilyakaznacheev/cleanenv"
@@ -33,6 +33,7 @@ import (
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/operator"
+	"github.com/bloxapp/ssv/operator/slot_ticker"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
@@ -76,6 +77,7 @@ var StartNodeCmd = &cobra.Command{
 	Use:   "start-node",
 	Short: "Starts an instance of SSV node",
 	Run: func(cmd *cobra.Command, args []string) {
+
 		logger, err := setupGlobal(cmd)
 		if err != nil {
 			log.Fatal("could not create logger", err)
@@ -90,18 +92,29 @@ var StartNodeCmd = &cobra.Command{
 		}
 		nodeStorage, operatorData := setupOperatorStorage(logger, db)
 
-		keyManager, err := ekm.NewETHKeyManagerSigner(db, eth2Network, types.GetDefaultDomain(), logger)
+		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, eth2Network, types.GetDefaultDomain(), cfg.SSVOptions.ValidatorOptions.BuilderProposals)
 		if err != nil {
 			logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 		}
 
 		cfg.P2pNetworkConfig.Ctx = cmd.Context()
+
+		permissioned := func() bool {
+			currentEpoch := uint64(eth2Network.EstimatedCurrentEpoch())
+			return currentEpoch >= cfg.P2pNetworkConfig.PermissionedActivateEpoch && currentEpoch < cfg.P2pNetworkConfig.PermissionedDeactivateEpoch
+		}
+
+		cfg.P2pNetworkConfig.Permissioned = permissioned
+		cfg.P2pNetworkConfig.WhitelistedOperatorKeys = append(cfg.P2pNetworkConfig.WhitelistedOperatorKeys, p2pv1.StageExporterPubkeys...) // TODO: get whitelisted from network config
+
 		p2pNetwork := setupP2P(forkVersion, operatorData, db, logger)
 
-		cfg.ETH2Options.Context = cmd.Context()
-		el, cl := setupNodes(logger)
-
 		ctx := cmd.Context()
+		slotTicker := slot_ticker.NewTicker(ctx, eth2Network, phase0.Epoch(cfg.SSVOptions.GenesisEpoch))
+
+		cfg.ETH2Options.Context = cmd.Context()
+		el, cl := setupNodes(logger, operatorData.ID, slotTicker)
+
 		cfg.SSVOptions.ForkVersion = forkVersion
 		cfg.SSVOptions.Context = ctx
 		cfg.SSVOptions.DB = db
@@ -120,6 +133,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = nodeStorage.GetPrivateKey
 		cfg.SSVOptions.ValidatorOptions.OperatorData = operatorData
 		cfg.SSVOptions.ValidatorOptions.RegistryStorage = nodeStorage
+		cfg.SSVOptions.ValidatorOptions.GasLimit = cfg.ETH2Options.GasLimit
 
 		cfg.SSVOptions.Eth1Client = cl
 
@@ -134,7 +148,7 @@ var StartNodeCmd = &cobra.Command{
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 
-		operatorNode = operator.New(logger, cfg.SSVOptions)
+		operatorNode = operator.New(logger, cfg.SSVOptions, slotTicker)
 
 		if cfg.MetricsAPIPort > 0 {
 			go startMetricsHandler(cmd.Context(), logger, db, cfg.MetricsAPIPort, cfg.EnableProfile)
@@ -192,7 +206,7 @@ func setupGlobal(cmd *cobra.Command) (*zap.Logger, error) {
 		}
 	}
 
-	if err := logging.SetGlobalLogger(cfg.LogLevel, cfg.LogLevelFormat, cfg.LogFormat); err != nil {
+	if err := logging.SetGlobalLogger(cfg.LogLevel, cfg.LogLevelFormat, cfg.LogFormat, cfg.LogFilePath); err != nil {
 		return nil, fmt.Errorf("logging.SetGlobalLogger: %w", err)
 	}
 
@@ -320,10 +334,11 @@ func setupP2P(forkVersion forksprotocol.ForkVersion, operatorData *registrystora
 	return p2pv1.New(logger, &cfg.P2pNetworkConfig)
 }
 
-func setupNodes(logger *zap.Logger) (beaconprotocol.Beacon, eth1.Client) {
+func setupNodes(logger *zap.Logger, operatorID spectypes.OperatorID, slotTicker slot_ticker.Ticker) (beaconprotocol.Beacon, eth1.Client) {
 	// consensus client
 	cfg.ETH2Options.Graffiti = []byte("SSV.Network")
-	cl, err := goclient.New(logger, cfg.ETH2Options)
+	cfg.ETH2Options.GasLimit = spectypes.DefaultGasLimit
+	cl, err := goclient.New(logger, cfg.ETH2Options, operatorID, slotTicker)
 	if err != nil {
 		logger.Fatal("failed to create beacon go-client", zap.Error(err),
 			fields.Address(cfg.ETH2Options.BeaconNodeAddr))

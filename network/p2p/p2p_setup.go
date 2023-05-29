@@ -9,7 +9,6 @@ import (
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
-
 	p2pcommons "github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"
 	"github.com/bloxapp/ssv/network/peers"
@@ -188,9 +187,21 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	subnetsProvider := func() records.Subnets {
 		return n.subnets
 	}
-	filters := []connections.HandshakeFilter{
-		connections.NetworkIDFilter(n.cfg.NetworkID),
+
+	filters := func() []connections.HandshakeFilter {
+		filters := []connections.HandshakeFilter{
+			connections.NetworkIDFilter(n.cfg.NetworkID),
+		}
+
+		if n.cfg.Permissioned() {
+			filters = append(filters,
+				connections.SenderRecipientIPsCheckFilter(n.host.ID()),
+				connections.SignatureCheckFilter(),
+				connections.RegisteredOperatorsFilter(logger, n.nodeStorage, n.cfg.WhitelistedOperatorKeys))
+		}
+		return filters
 	}
+
 	handshaker := connections.NewHandshaker(n.ctx, &connections.HandshakerCfg{
 		Streams:         n.streamCtrl,
 		NodeInfoIdx:     n.idx,
@@ -200,13 +211,17 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 		IDService:       ids,
 		Network:         n.host.Network(),
 		SubnetsProvider: subnetsProvider,
-	}, filters...)
+		NodeStorage:     n.nodeStorage,
+		Permissioned:    n.cfg.Permissioned,
+	}, filters)
+
 	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler(logger))
 	logger.Debug("handshaker is ready")
 
 	n.connHandler = connections.NewConnHandler(n.ctx, handshaker, subnetsProvider, n.idx, n.idx)
 	n.host.Network().Notify(n.connHandler.Handle(logger))
 	logger.Debug("connection handler is ready")
+
 	return nil
 }
 

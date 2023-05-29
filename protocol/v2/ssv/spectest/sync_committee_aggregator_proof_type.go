@@ -44,7 +44,7 @@ func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCo
 	// post root
 	postRoot, err := r.GetBaseRunner().State.GetRoot()
 	require.NoError(t, err)
-	require.EqualValues(t, test.PostDutyRunnerStateRoot, hex.EncodeToString(postRoot))
+	require.EqualValues(t, test.PostDutyRunnerStateRoot, hex.EncodeToString(postRoot[:]))
 }
 
 func keySetForShare(share *types.Share) *testingutils.TestKeySet {

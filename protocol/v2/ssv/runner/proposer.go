@@ -3,6 +3,7 @@ package runner
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -40,13 +41,15 @@ func NewProposerRunner(
 	network specssv.Network,
 	signer spectypes.KeyManager,
 	valCheck specqbft.ProposedValueCheckF,
+	highestDecidedSlot phase0.Slot,
 ) Runner {
 	return &ProposerRunner{
 		BaseRunner: &BaseRunner{
-			BeaconRoleType: spectypes.BNRoleProposer,
-			BeaconNetwork:  beaconNetwork,
-			Share:          share,
-			QBFTController: qbftController,
+			BeaconRoleType:     spectypes.BNRoleProposer,
+			BeaconNetwork:      beaconNetwork,
+			Share:              share,
+			QBFTController:     qbftController,
+			highestDecidedSlot: highestDecidedSlot,
 		},
 
 		beacon:   beacon,
@@ -72,6 +75,11 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 		return errors.Wrap(err, "failed processing randao message")
 	}
 
+	duty := r.GetState().StartingDuty
+	logger = logger.With(fields.Slot(duty.Slot))
+	logger.Debug("🧩 got partial RANDAO signatures",
+		zap.Uint64("signer", signedMsg.Signer))
+
 	// quorum returns true only once (first time quorum achieved)
 	if !quorum {
 		return nil
@@ -87,23 +95,30 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 		return errors.Wrap(err, "could not reconstruct randao sig")
 	}
 
-	duty := r.GetState().StartingDuty
+	logger.Debug("🧩 reconstructed partial RANDAO signatures",
+		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)))
 
 	var ver spec.DataVersion
 	var obj ssz.Marshaler
+	var start = time.Now()
 	if r.ProducesBlindedBlocks {
 		// get block data
-		obj, ver, err = r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, duty.CommitteeIndex, r.GetShare().Graffiti, fullSig)
+		obj, ver, err = r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
 		if err != nil {
+			// Prysm currently doesn’t support MEV.
+			// TODO: Check Prysm MEV support after https://github.com/prysmaticlabs/prysm/issues/12103 is resolved.
 			return errors.Wrap(err, "failed to get Beacon block")
 		}
 	} else {
 		// get block data
-		obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.Slot, duty.CommitteeIndex, r.GetShare().Graffiti, fullSig)
+		obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
 		if err != nil {
 			return errors.Wrap(err, "failed to get Beacon block")
 		}
 	}
+
+	logger.Debug("🧊 got beacon block",
+		zap.Duration("took", time.Since(start)))
 
 	byts, err := obj.MarshalSSZ()
 	if err != nil {
@@ -206,7 +221,9 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 
 		blockSubmissionEnd := r.metrics.StartBeaconSubmission()
 
-		if r.decidedBlindedBlock() {
+		start := time.Now()
+		decidedBlockIsBlinded := r.decidedBlindedBlock()
+		if decidedBlockIsBlinded {
 			vBlindedBlk, _, err := r.GetState().DecidedValue.GetBlindedBlockData()
 			if err != nil {
 				return errors.Wrap(err, "could not get blinded block")
@@ -237,7 +254,9 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		logger.Info("✅ successfully submitted block proposal",
 			fields.Slot(signedMsg.Message.Slot),
 			fields.Height(r.BaseRunner.QBFTController.Height),
-			fields.Round(r.GetState().RunningInstance.State.Round))
+			fields.Round(r.GetState().RunningInstance.State.Round),
+			fields.BuilderProposals(decidedBlockIsBlinded),
+			zap.Duration("took", time.Since(start)))
 	}
 	r.GetState().Finished = true
 	return nil
@@ -318,6 +337,9 @@ func (r *ProposerRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) e
 	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
 		return errors.Wrap(err, "can't broadcast partial randao sig")
 	}
+
+	logger.Debug("🔏 signed & broadcasted partial RANDAO signature")
+
 	return nil
 }
 

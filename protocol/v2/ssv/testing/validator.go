@@ -3,12 +3,11 @@ package testing
 import (
 	"context"
 
-	"github.com/bloxapp/ssv/protocol/v2/qbft/testing"
-	"go.uber.org/zap"
-
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
+	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/protocol/v2/qbft/testing"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/types"
@@ -33,6 +32,7 @@ var BaseValidator = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet
 				spectypes.BNRoleAggregator:                AggregatorRunner(logger, keySet),
 				spectypes.BNRoleSyncCommittee:             SyncCommitteeRunner(logger, keySet),
 				spectypes.BNRoleSyncCommitteeContribution: SyncCommitteeContributionRunner(logger, keySet),
+				spectypes.BNRoleValidatorRegistration:     ValidatorRegistrationRunner(logger, keySet),
 			},
 		},
 	)

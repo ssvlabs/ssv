@@ -27,13 +27,15 @@ func (i *Instance) UponCommit(logger *zap.Logger, signedCommit *specqbft.SignedM
 
 	logger.Debug("📬 got commit message",
 		fields.Round(i.State.Round),
-		zap.Any("commit-signers", signedCommit.Signers))
+		zap.Any("commit-signers", signedCommit.Signers),
+		fields.Root(signedCommit.Message.Root))
 
 	// calculate commit quorum and act upon it
 	quorum, commitMsgs, err := commitQuorumForRoundRoot(i.State, commitMsgContainer, signedCommit.Message.Root, signedCommit.Message.Round)
 	if err != nil {
 		return false, nil, nil, errors.Wrap(err, "could not calculate commit quorum")
 	}
+
 	if quorum {
 		fullData := i.State.ProposalAcceptedForCurrentRound.FullData /* must have value there, checked on validateCommit */
 
@@ -44,13 +46,14 @@ func (i *Instance) UponCommit(logger *zap.Logger, signedCommit *specqbft.SignedM
 
 		logger.Debug("🎯 got commit quorum",
 			fields.Round(i.State.Round),
-			zap.Any("commit-signers", signedCommit.Signers),
-			zap.Any("agg-signers", agg.Signers))
+			zap.Any("agg-signers", agg.Signers),
+			fields.Root(signedCommit.Message.Root))
 
 		i.metrics.EndStageCommit()
 
 		return true, fullData, agg, nil
 	}
+
 	return false, nil, nil, nil
 }
 

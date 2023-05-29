@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"sync"
 
+	"github.com/bloxapp/ssv/logging/fields"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
@@ -60,10 +62,15 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Heigh
 
 		i.config.GetTimer().TimeoutForRound(specqbft.FirstRound)
 
-		logger.Debug("ℹ️ starting QBFT instance")
+		logger = logger.With(
+			fields.Round(i.State.Round),
+			fields.Height(i.State.Height))
+
+		proposerID := proposer(i.State, i.GetConfig(), specqbft.FirstRound)
+		logger.Debug("ℹ️ starting QBFT instance", zap.Uint64("leader", proposerID))
 
 		// propose if this node is the proposer
-		if proposer(i.State, i.GetConfig(), specqbft.FirstRound) == i.State.Share.OperatorID {
+		if proposerID == i.State.Share.OperatorID {
 			proposal, err := CreateProposal(i.State, i.config, i.StartValue, nil, nil)
 			// nolint
 			if err != nil {
@@ -71,6 +78,8 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Heigh
 				// TODO align spec to add else to avoid broadcast errored proposal
 			} else {
 				// nolint
+				logger = logger.With(fields.Root(proposal.Message.Root))
+				logger.Debug("📢 leader broadcasting proposal message")
 				if err := i.Broadcast(logger, proposal); err != nil {
 					logger.Warn("❌ failed to broadcast proposal", zap.Error(err))
 				}
@@ -101,6 +110,14 @@ func (i *Instance) Broadcast(logger *zap.Logger, msg *specqbft.SignedMessage) er
 		Data:    byts,
 	}
 	return i.config.GetNetwork().Broadcast(msgToBroadcast)
+}
+
+func allSigners(all []*specqbft.SignedMessage) []spectypes.OperatorID {
+	signers := make([]spectypes.OperatorID, 0, len(all))
+	for _, m := range all {
+		signers = append(signers, m.Signers...)
+	}
+	return signers
 }
 
 // ProcessMsg processes a new QBFT msg, returns non nil error on msg processing error
@@ -209,7 +226,7 @@ func (i *Instance) GetHeight() specqbft.Height {
 }
 
 // GetRoot returns the state's deterministic root
-func (i *Instance) GetRoot() ([]byte, error) {
+func (i *Instance) GetRoot() ([32]byte, error) {
 	return i.State.GetRoot()
 }
 

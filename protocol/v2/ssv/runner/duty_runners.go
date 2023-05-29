@@ -6,7 +6,7 @@ import spectypes "github.com/bloxapp/ssv-spec/types"
 type DutyRunners map[spectypes.BeaconRole]Runner
 
 // DutyRunnerForMsgID returns a Runner from the provided msg ID, or nil if not found
-func (dr DutyRunners) DutyRunnerForMsgID(msgID spectypes.MessageID) Runner {
+func (ci DutyRunners) DutyRunnerForMsgID(msgID spectypes.MessageID) Runner {
 	role := msgID.GetRoleType()
-	return dr[role]
+	return ci[role]
 }

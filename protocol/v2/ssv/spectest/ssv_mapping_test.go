@@ -15,9 +15,10 @@ import (
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/valcheck"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
-	"github.com/bloxapp/ssv/logging"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
@@ -225,7 +226,7 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *MsgPr
 func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *testingutils.TestKeySet) runner.Runner {
 	baseRunnerMap := runnerMap["BaseRunner"].(map[string]interface{})
 
-	base := runner.NewBaseRunner()
+	base := &runner.BaseRunner{}
 	byts, _ := json.Marshal(baseRunnerMap)
 	require.NoError(t, json.Unmarshal(byts, &base))
 
@@ -252,6 +253,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *testing
 
 func fixControllerForRun(t *testing.T, logger *zap.Logger, runner runner.Runner, contr *controller.Controller, ks *testingutils.TestKeySet) *controller.Controller {
 	config := qbfttesting.TestingConfig(logger, ks, spectypes.BNRoleAttester)
+	config.ValueCheckF = runner.GetValCheckF()
 	newContr := controller.NewController(
 		contr.Identifier,
 		contr.Share,

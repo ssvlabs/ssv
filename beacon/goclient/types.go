@@ -9,4 +9,5 @@ var (
 	EpochsPerSyncCommitteePeriod         uint64       = 256
 	TargetAggregatorsPerCommittee        uint64       = 16
 	FarFutureEpoch                       phase0.Epoch = 1<<64 - 1
+	GenesisForkVersion                                = phase0.Version{0x0, 0x0, 0x10, 0x20} // prater
 )

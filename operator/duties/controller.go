@@ -3,21 +3,20 @@ package duties
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
-
-	"github.com/bloxapp/ssv/logging/fields"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/beacon/goclient"
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/operator/slot_ticker"
 	"github.com/bloxapp/ssv/operator/validator"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
@@ -32,6 +31,8 @@ import (
 // syncCommitteePreparationEpochs is the number of epochs ahead of the sync committee
 // period change at which to prepare the relevant duties.
 var syncCommitteePreparationEpochs = uint64(2)
+
+const validatorRegistrationEpochInterval = uint64(10)
 
 // DutyExecutor represents the component that executes duties
 type DutyExecutor interface {
@@ -53,6 +54,7 @@ type ControllerOptions struct {
 	DutyLimit           uint64
 	ForkVersion         forksprotocol.ForkVersion
 	Ticker              slot_ticker.Ticker
+	BuilderProposals    bool
 }
 
 // dutyController internal implementation of DutyController
@@ -65,11 +67,13 @@ type dutyController struct {
 	validatorController validator.Controller
 	dutyLimit           uint64
 	ticker              slot_ticker.Ticker
+	builderProposals    bool
 
 	// sync committee duties map [period, map[index, duty]]
-	syncCommitteeDutiesMap   *hashmap.Map[uint64, *hashmap.Map[phase0.ValidatorIndex, *eth2apiv1.SyncCommitteeDuty]]
-	lastBlockEpoch           phase0.Epoch
-	currentDutyDependentRoot phase0.Root
+	syncCommitteeDutiesMap            *hashmap.Map[uint64, *hashmap.Map[phase0.ValidatorIndex, *eth2apiv1.SyncCommitteeDuty]]
+	lastBlockEpoch                    phase0.Epoch
+	currentDutyDependentRoot          phase0.Root
+	validatorsPassedFirstRegistration map[string]struct{}
 }
 
 var secPerSlot int64 = 12
@@ -85,8 +89,10 @@ func NewDutyController(logger *zap.Logger, opts *ControllerOptions) DutyControll
 		dutyLimit:           opts.DutyLimit,
 		executor:            opts.Executor,
 		ticker:              opts.Ticker,
+		builderProposals:    opts.BuilderProposals,
 
-		syncCommitteeDutiesMap: hashmap.New[uint64, *hashmap.Map[phase0.ValidatorIndex, *eth2apiv1.SyncCommitteeDuty]](),
+		syncCommitteeDutiesMap:            hashmap.New[uint64, *hashmap.Map[phase0.ValidatorIndex, *eth2apiv1.SyncCommitteeDuty]](),
+		validatorsPassedFirstRegistration: map[string]struct{}{},
 	}
 	return &dc
 }
@@ -140,12 +146,8 @@ func (dc *dutyController) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) 
 	var pk phase0.BLSPubKey
 	copy(pk[:], duty.PubKey[:])
 
-	pubKey, err := types.DeserializeBLSPublicKey(pk[:])
-	if err != nil {
-		return errors.Wrap(err, "failed to deserialize pubkey from duty")
-	}
-	if v, ok := dc.validatorController.GetValidator(pubKey.SerializeToHexStr()); ok {
-		ssvMsg, err := CreateDutyExecuteMsg(duty, &pubKey)
+	if v, ok := dc.validatorController.GetValidator(hex.EncodeToString(pk[:])); ok {
+		ssvMsg, err := CreateDutyExecuteMsg(duty, pk)
 		if err != nil {
 			return err
 		}
@@ -165,7 +167,7 @@ func (dc *dutyController) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) 
 }
 
 // CreateDutyExecuteMsg returns ssvMsg with event type of duty execute
-func CreateDutyExecuteMsg(duty *spectypes.Duty, pubKey *bls.PublicKey) (*spectypes.SSVMessage, error) {
+func CreateDutyExecuteMsg(duty *spectypes.Duty, pubKey phase0.BLSPubKey) (*spectypes.SSVMessage, error) {
 	executeDutyData := types.ExecuteDutyData{Duty: duty}
 	edd, err := json.Marshal(executeDutyData)
 	if err != nil {
@@ -181,7 +183,7 @@ func CreateDutyExecuteMsg(duty *spectypes.Duty, pubKey *bls.PublicKey) (*spectyp
 	}
 	return &spectypes.SSVMessage{
 		MsgType: message.SSVEventMsgType,
-		MsgID:   spectypes.NewMsgID(types.GetDefaultDomain(), pubKey.Serialize(), duty.Type),
+		MsgID:   spectypes.NewMsgID(types.GetDefaultDomain(), pubKey[:], duty.Type),
 		Data:    data,
 	}, nil
 }
@@ -241,6 +243,57 @@ func (dc *dutyController) handleSlot(logger *zap.Logger, slot phase0.Slot) {
 		go dc.onDuty(logger, &duties[i])
 	}
 
+	dc.handleSyncCommittee(logger, slot, syncPeriod)
+	if dc.builderProposals {
+		dc.handleValidatorRegistration(logger, slot)
+	}
+}
+
+func (dc *dutyController) handleValidatorRegistration(logger *zap.Logger, slot phase0.Slot) {
+	shares, err := dc.validatorController.GetOperatorShares(logger)
+	if err != nil {
+		logger.Warn("failed to get all validators share", zap.Error(err))
+		return
+	}
+
+	sent := 0
+	for _, share := range shares {
+		if !share.HasBeaconMetadata() {
+			continue
+		}
+
+		// if not passed first registration, should be registered within one epoch time in a corresponding slot
+		// if passed first registration, should be registered within validatorRegistrationEpochInterval epochs time in a corresponding slot
+		registrationSlotInterval := dc.ethNetwork.SlotsPerEpoch()
+		if _, ok := dc.validatorsPassedFirstRegistration[string(share.ValidatorPubKey)]; ok {
+			registrationSlotInterval *= validatorRegistrationEpochInterval
+		}
+
+		if uint64(share.BeaconMetadata.Index)%registrationSlotInterval != uint64(slot)%registrationSlotInterval {
+			continue
+		}
+
+		pk := phase0.BLSPubKey{}
+		copy(pk[:], share.ValidatorPubKey)
+
+		go dc.onDuty(logger, &spectypes.Duty{
+			Type:   spectypes.BNRoleValidatorRegistration,
+			PubKey: pk,
+			Slot:   slot,
+			// no need for other params
+		})
+
+		sent++
+		dc.validatorsPassedFirstRegistration[string(share.ValidatorPubKey)] = struct{}{}
+	}
+	logger.Debug("validator registration duties sent", zap.Uint64("slot", uint64(slot)), fields.Count(sent))
+}
+
+// handleSyncCommittee preform the following processes -
+//  1. execute sync committee duties
+//  2. Get next period's sync committee duties, but wait until half-way through the epoch
+//     This allows us to set them up at a time when the beacon node should be less busy.
+func (dc *dutyController) handleSyncCommittee(logger *zap.Logger, slot phase0.Slot, syncPeriod uint64) {
 	// execute sync committee duties
 	if syncCommitteeDuties, found := dc.syncCommitteeDutiesMap.Get(syncPeriod); found {
 		toSpecDuty := func(duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot, role spectypes.BeaconRole) *spectypes.Duty {

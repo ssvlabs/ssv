@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/aquasecurity/table v1.8.0
-	github.com/attestantio/go-eth2-client v0.15.8-0.20230322092059-6b2aee891155
+	github.com/attestantio/go-eth2-client v0.15.8
 	github.com/bloxapp/eth2-key-manager v1.3.0-rc.0
 	github.com/bloxapp/ssv-spec v0.3.1-0.20230322125847-21e97ea2ad3d
 	github.com/btcsuite/btcd/btcec/v2 v2.2.1
@@ -19,7 +19,6 @@ require (
 	github.com/gorilla/websocket v1.5.0
 	github.com/grpc-ecosystem/go-grpc-middleware v1.2.2
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
-	github.com/hashicorp/go-multierror v1.1.1
 	github.com/hashicorp/golang-lru/v2 v2.0.2
 	github.com/herumi/bls-eth-go-binary v1.28.1
 	github.com/ilyakaznacheev/cleanenv v1.2.5
@@ -43,6 +42,7 @@ require (
 	golang.org/x/sync v0.1.0
 	golang.org/x/text v0.7.0
 	google.golang.org/grpc v1.40.0
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -79,6 +79,7 @@ require (
 	github.com/google/gopacket v1.1.19 // indirect
 	github.com/google/pprof v0.0.0-20221219190121-3cb0bae90811 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
+	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/hashicorp/golang-lru v0.5.5-0.20210104140557-80c98217689d // indirect
 	github.com/huin/goupnp v1.0.3 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
@@ -182,3 +183,7 @@ replace github.com/prysmaticlabs/prysm => github.com/prysmaticlabs/prysm v1.4.2-
 replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
+
+replace github.com/bloxapp/ssv-spec => github.com/bloxapp/ssv-spec v0.0.0-20230524104230-42bf86e3f977 // #disable-preconsensus-liveness
+
+// replace github.com/bloxapp/ssv-spec => ../ssv-spec

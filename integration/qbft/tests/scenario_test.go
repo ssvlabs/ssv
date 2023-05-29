@@ -11,6 +11,8 @@ import (
 	"github.com/bloxapp/ssv-spec/types/testingutils"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging"
@@ -28,8 +30,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 var (
@@ -81,8 +81,9 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 				time.Sleep(dutyProp.Delay)
 
 				duty := createDuty(getKeySet(s.Committee).ValidatorPK.Serialize(), dutyProp.Slot, dutyProp.ValidatorIndex, role)
-
-				ssvMsg, err := duties.CreateDutyExecuteMsg(duty, getKeySet(s.Committee).ValidatorPK)
+				var pk spec.BLSPubKey
+				copy(pk[:], getKeySet(s.Committee).ValidatorPK.Serialize())
+				ssvMsg, err := duties.CreateDutyExecuteMsg(duty, pk)
 				require.NoError(t, err)
 				dec, err := queue.DecodeSSVMessage(logger, ssvMsg)
 				require.NoError(t, err)
@@ -183,6 +184,7 @@ func newStores(logger *zap.Logger) *qbftstorage.QBFTStores {
 		spectypes.BNRoleAggregator,
 		spectypes.BNRoleSyncCommittee,
 		spectypes.BNRoleSyncCommitteeContribution,
+		spectypes.BNRoleValidatorRegistration,
 	}
 	for _, role := range roles {
 		storageMap.Add(role, qbftstorage.New(db, role.String(), protocolforks.GenesisForkVersion))

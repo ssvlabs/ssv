@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/bloxapp/ssv/network/peers/connections/mock"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/bloxapp/ssv/network"
@@ -127,6 +128,10 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, keys testing.NodeKeys
 	cfg := NewNetConfig(keys.NetKey, format.OperatorID([]byte(operatorPubkey)), forkVersion, ln.Bootnode, testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), maxPeers)
 	cfg.Ctx = ctx
 	cfg.Subnets = "00000000000000000000020000000000" //PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
+	cfg.NodeStorage = mock.NodeStorage{
+		MockGetPrivateKey:               keys.OperatorKey,
+		RegisteredOperatorPublicKeyPEMs: []string{},
+	}
 
 	p := New(logger, cfg)
 	err = p.Setup(logger)
@@ -190,5 +195,8 @@ func NewNetConfig(netPrivKey *ecdsa.PrivateKey, operatorID string, forkVersion f
 		UserAgent:         ua,
 		NetworkID:         "ssv-testnet",
 		Discovery:         discT,
+		Permissioned: func() bool {
+			return false
+		},
 	}
 }

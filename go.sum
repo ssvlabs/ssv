@@ -111,8 +111,8 @@ github.com/armon/consul-api v0.0.0-20180202201655-eb2c6b5be1b6/go.mod h1:grANhF5
 github.com/armon/go-metrics v0.0.0-20180917152333-f0300d1749da/go.mod h1:Q73ZrmVTwzkszR9V5SSuryQ31EELlFMUz1kKyl939pY=
 github.com/armon/go-radix v0.0.0-20180808171621-7fddfc383310/go.mod h1:ufUuZ+zHj4x4TnLV4JWEpy2hxWSpsRywHrMgIH9cCH8=
 github.com/aryann/difflib v0.0.0-20170710044230-e206f873d14a/go.mod h1:DAHtR1m6lCRdSC2Tm3DSWRPvIPr6xNKyeHdqDQSQT+A=
-github.com/attestantio/go-eth2-client v0.15.8-0.20230322092059-6b2aee891155 h1:MGoOMumyZiwVVnMgc4FmQyaOMgA7TzP4zM5RlRSO++o=
-github.com/attestantio/go-eth2-client v0.15.8-0.20230322092059-6b2aee891155/go.mod h1:PLRKnILnr63V3yl2VagBqnhVRFBWc0V+JhQSsXQaSwQ=
+github.com/attestantio/go-eth2-client v0.15.8 h1:ndeqKacjT3vDD8yJVGe7CGmyrhVbQleBCYIPsULzGMM=
+github.com/attestantio/go-eth2-client v0.15.8/go.mod h1:PLRKnILnr63V3yl2VagBqnhVRFBWc0V+JhQSsXQaSwQ=
 github.com/aws/aws-lambda-go v1.13.3/go.mod h1:4UKl9IzQMoD+QF79YdCuzCwp8VbmG4VAQwij/eHl5CU=
 github.com/aws/aws-sdk-go v1.27.0/go.mod h1:KmX6BPdI08NWTb3/sm4ZGu5ShLoqVDhKgpiN924inxo=
 github.com/aws/aws-sdk-go-v2 v0.18.0/go.mod h1:JWVYvqSMppoMJC0x5wdwiImzgXTI9FuZwxzkQq9wy+g=
@@ -139,8 +139,8 @@ github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6r
 github.com/bgentry/speakeasy v0.1.0/go.mod h1:+zsyZBPWlz7T6j88CTgSN5bM796AkVf0kBD4zp0CCIs=
 github.com/bloxapp/eth2-key-manager v1.3.0-rc.0 h1:Hfq7/mdjUHmqI5Tv0Pc1TdGgXfHrgrY1tOTIz290pAg=
 github.com/bloxapp/eth2-key-manager v1.3.0-rc.0/go.mod h1:cT+qAJfnAzNz9StFoHQ8xAkyU2eyEukd6xfxvcBWuZA=
-github.com/bloxapp/ssv-spec v0.3.1-0.20230322125847-21e97ea2ad3d h1:53fq26+ulTdIB35ea5ji64pmb9hE2sAuK5FRYXP2liA=
-github.com/bloxapp/ssv-spec v0.3.1-0.20230322125847-21e97ea2ad3d/go.mod h1:VDG27SnHcC2coL/eCXFvROuzvlOrdlSTzgCWcoUvh7s=
+github.com/bloxapp/ssv-spec v0.0.0-20230524104230-42bf86e3f977 h1:Z4UCIz6oo6aFJYlr7Is0F2j5Uo2/9Ngm2gNJkTV9MoI=
+github.com/bloxapp/ssv-spec v0.0.0-20230524104230-42bf86e3f977/go.mod h1:8OAYKYxifYZ0ahWb4X+KZ6Rb49L2R3bm8lpqXt8u/2k=
 github.com/bmizerany/pat v0.0.0-20170815010413-6226ea591a40/go.mod h1:8rLXio+WjiTceGBHIoTvn60HIbs7Hm7bcHjyrSqYB9c=
 github.com/boltdb/bolt v1.3.1/go.mod h1:clJnj/oiGkjum5o1McbSZDSLxVThjynRyGBgiAx27Ps=
 github.com/bradfitz/go-smtpd v0.0.0-20170404230938-deb6d6237625/go.mod h1:HYsPBTaaSFSlLx/70C2HPIMNZpVV8+vt/A+FMnYP11g=
@@ -2041,6 +2041,8 @@ gopkg.in/jcmturner/dnsutils.v1 v1.0.1/go.mod h1:m3v+5svpVOhtFAP/wSz+yzh4Mc0Fg7eR
 gopkg.in/jcmturner/goidentity.v3 v3.0.0/go.mod h1:oG2kH0IvSYNIu80dVAyu/yoefjq1mNfM5bm88whjWx4=
 gopkg.in/jcmturner/gokrb5.v7 v7.5.0/go.mod h1:l8VISx+WGYp+Fp7KRbsiUuXTTOnxIc3Tuvyavf11/WM=
 gopkg.in/jcmturner/rpc.v1 v1.1.0/go.mod h1:YIdkC4XfD6GXbzje11McwsDuOlZQSb9W4vfLvuNnlv8=
+gopkg.in/natefinch/lumberjack.v2 v2.2.1 h1:bBRl1b0OH9s/DuPhuXpNl+VtCaJXFZ5/uEFST95x9zc=
+gopkg.in/natefinch/lumberjack.v2 v2.2.1/go.mod h1:YD8tP3GAjkrDg1eZH7EGmyESg/lsYskCTPBJVb9jqSc=
 gopkg.in/natefinch/npipe.v2 v2.0.0-20160621034901-c1b8fa8bdcce h1:+JknDZhAj8YMt7GC73Ei8pv4MzjDUNPHgQWJdtMAaDU=
 gopkg.in/natefinch/npipe.v2 v2.0.0-20160621034901-c1b8fa8bdcce/go.mod h1:5AcXVHNjg+BDxry382+8OKon8SEWiKktQR07RKPsv1c=
 gopkg.in/olebedev/go-duktape.v3 v3.0.0-20200619000410-60c24ae608a6/go.mod h1:uAJfkITjFhyEEuUfm7bsmCZRbW5WRq8s9EY8HZ6hCns=
