@@ -7,22 +7,19 @@ import (
 	"fmt"
 	"time"
 
-	"golang.org/x/sync/errgroup"
-
-	"github.com/bloxapp/ssv/network/peers/connections/mock"
-
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"
+	"github.com/bloxapp/ssv/network/peers/connections/mock"
 	"github.com/bloxapp/ssv/network/testing"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
-
-	"go.uber.org/zap"
 )
 
 // HostProvider holds host instance
