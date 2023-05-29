@@ -1,9 +1,9 @@
 name: Test coverage
 
 on:
-  push:
-    branches:
-      - "stage"
+#  push:
+#    branches:
+#      - "stage"
 
   workflow_dispatch:
 
