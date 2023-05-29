@@ -163,7 +163,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 		return err
 	}
 
-	domain := "0x" + hex.EncodeToString(n.cfg.BeaconNetwork.SSV.Domain[:])
+	domain := "0x" + hex.EncodeToString(n.cfg.Network.Domain[:])
 	self := records.NewNodeInfo(n.cfg.ForkVersion, domain)
 	self.Metadata = &records.NodeMetadata{
 		OperatorID:  n.cfg.OperatorID,

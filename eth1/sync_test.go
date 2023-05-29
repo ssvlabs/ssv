@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/golang/mock/gomock"
 	"github.com/prysmaticlabs/prysm/async/event"
@@ -14,6 +13,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
 func TestSyncEth1(t *testing.T) {
@@ -24,7 +25,7 @@ func TestSyncEth1(t *testing.T) {
 	eth1Client, eventsFeed := eth1ClientMock(logger, ctrl, nil)
 	storage := syncStorageMock(ctrl)
 
-	rawOffset := spectypes.TestNetwork.SSV.ETH1SyncOffset.Uint64()
+	rawOffset := networkconfig.TestNetwork.ETH1SyncOffset.Uint64()
 	rawOffset += 10
 	go func() {
 		// wait 5 ms and start to push events
@@ -35,7 +36,7 @@ func TestSyncEth1(t *testing.T) {
 		eventsFeed.Send(&Event{Data: SyncEndedEvent{Logs: logs, Success: true}})
 	}()
 	// todo(align-contract-v0.3.1-rc.0) handle event handler?
-	err := SyncEth1Events(logger, eth1Client, storage, spectypes.TestNetwork, nil, nil)
+	err := SyncEth1Events(logger, eth1Client, storage, beacon.NewNetwork(networkconfig.TestNetwork), nil, nil)
 	require.NoError(t, err)
 	syncOffset, _, err := storage.GetSyncOffset()
 	require.NoError(t, err)
@@ -53,13 +54,13 @@ func TestSyncEth1Error(t *testing.T) {
 	storage := syncStorageMock(ctrl)
 
 	go func() {
-		logs := []types.Log{{}, {BlockNumber: spectypes.TestNetwork.SSV.ETH1SyncOffset.Uint64()}}
+		logs := []types.Log{{}, {BlockNumber: networkconfig.TestNetwork.ETH1SyncOffset.Uint64()}}
 		eventsFeed.Send(&Event{Data: struct{}{}, Log: logs[0]})
 		eventsFeed.Send(&Event{Data: struct{}{}, Log: logs[1]})
 		eventsFeed.Send(&Event{Data: SyncEndedEvent{Logs: logs, Success: false}})
 	}()
 	// todo(align-contract-v0.3.1-rc.0) handle event handler?
-	err := SyncEth1Events(logger, eth1Client, storage, spectypes.TestNetwork, nil, nil)
+	err := SyncEth1Events(logger, eth1Client, storage, beacon.NewNetwork(networkconfig.TestNetwork), nil, nil)
 	require.EqualError(t, err, "failed to sync contract events: eth1-sync-test")
 
 	_, found, err := storage.GetSyncOffset()
@@ -78,14 +79,14 @@ func TestSyncEth1HandlerError(t *testing.T) {
 
 	go func() {
 		<-time.After(time.Millisecond * 25)
-		blockNumber := spectypes.TestNetwork.SSV.ETH1SyncOffset.Uint64()
+		blockNumber := networkconfig.TestNetwork.ETH1SyncOffset.Uint64()
 		logs := []types.Log{{BlockNumber: blockNumber - 1}, {BlockNumber: blockNumber}}
 		eventsFeed.Send(&Event{Data: struct{}{}, Log: logs[0]})
 		eventsFeed.Send(&Event{Data: struct{}{}, Log: logs[1]})
 		eventsFeed.Send(&Event{Data: SyncEndedEvent{Logs: logs, Success: false}})
 	}()
 	// todo(align-contract-v0.3.1-rc.0) handle event handler?
-	err := SyncEth1Events(logger, eth1Client, storage, spectypes.TestNetwork, nil, func(event Event) ([]zap.Field, error) {
+	err := SyncEth1Events(logger, eth1Client, storage, beacon.NewNetwork(networkconfig.TestNetwork), nil, func(event Event) ([]zap.Field, error) {
 		return nil, errors.New("test")
 	})
 	require.EqualError(t, err, "could not handle some of the events during history sync")
@@ -93,7 +94,7 @@ func TestSyncEth1HandlerError(t *testing.T) {
 
 func TestDetermineSyncOffset(t *testing.T) {
 	logger := logging.TestLogger(t)
-	beaconNetwork := spectypes.TestNetwork
+	beaconNetwork := beacon.NewNetwork(networkconfig.TestNetwork)
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -103,7 +104,7 @@ func TestDetermineSyncOffset(t *testing.T) {
 
 		so := determineSyncOffset(logger, storage, beaconNetwork, nil)
 		require.NotNil(t, so)
-		require.Equal(t, beaconNetwork.SSV.ETH1SyncOffset, so)
+		require.Equal(t, beaconNetwork.ETH1SyncOffset, so)
 	})
 
 	t.Run("persisted sync offset", func(t *testing.T) {

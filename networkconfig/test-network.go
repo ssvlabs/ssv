@@ -6,10 +6,10 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
-var JatoV2Stage = NetworkConfig{
-	Name:                 "jato-v2-stage",
-	BeaconNetwork:        spectypes.PraterNetwork,
-	Domain:               [4]byte{0x00, 0x00, 0x30, 0x12},
+var TestNetwork = NetworkConfig{
+	Name:                 "testnet",
+	BeaconNetwork:        spectypes.BeaconTestNetwork,
+	Domain:               spectypes.V3Testnet,
 	GenesisEpoch:         152834,
 	ETH1SyncOffset:       new(big.Int).SetInt64(9015219),
 	RegistryContractAddr: "0x4B133c68A084B8A88f72eDCd7944B69c8D545f03",

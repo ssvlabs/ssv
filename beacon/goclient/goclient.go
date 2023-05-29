@@ -124,7 +124,7 @@ var _ metrics.HealthCheckAgent = &goClient{}
 
 // New init new client and go-client instance
 func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.OperatorID, slotTicker slot_ticker.Ticker) (beaconprotocol.Beacon, error) {
-	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.ETHNetwork(opt.BeaconNetwork.ETH.NetworkName))
+	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.ETHNetwork(opt.BeaconNetwork.BeaconNetwork))
 
 	httpClient, err := http.New(opt.Context,
 		// WithAddress supplies the address of the beacon node, in host:port format.
@@ -145,7 +145,7 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 	client := &goClient{
 		log:               logger,
 		ctx:               opt.Context,
-		network:           beaconprotocol.NewNetwork(opt.BeaconNetwork),
+		network:           opt.BeaconNetwork,
 		client:            httpClient.(*http.Service),
 		graffiti:          opt.Graffiti,
 		gasLimit:          opt.GasLimit,
@@ -187,7 +187,7 @@ func (gc *goClient) GetBeaconNetwork() spectypes.BeaconNetwork {
 // SlotStartTime returns the start time in terms of its unix epoch
 // value.
 func (gc *goClient) slotStartTime(slot phase0.Slot) time.Time {
-	duration := time.Second * time.Duration(uint64(slot)*uint64(gc.network.SlotDuration().Seconds()))
+	duration := time.Second * time.Duration(uint64(slot)*uint64(gc.network.SlotDurationSec().Seconds()))
 	startTime := time.Unix(int64(gc.network.MinGenesisTime()), 0).Add(duration)
 	return startTime
 }

@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	libp2ptcp "github.com/libp2p/go-libp2p/p2p/transport/tcp"
@@ -20,6 +19,7 @@ import (
 	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/operator/storage"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	uc "github.com/bloxapp/ssv/utils/commons"
 )
 
@@ -65,8 +65,8 @@ type Config struct {
 	ForkVersion forksprotocol.ForkVersion
 	// NodeStorage is used to get operator metadata.
 	NodeStorage storage.Storage
-	// BeaconNetwork defines a network configuration.
-	BeaconNetwork spectypes.BeaconNetwork
+	// Network defines a network configuration.
+	Network beaconprotocol.Network
 
 	PubsubMsgCacheTTL         time.Duration `yaml:"PubsubMsgCacheTTL" env:"PUBSUB_MSG_CACHE_TTL" env-description:"How long a message ID will be remembered as seen"`
 	PubsubOutQueueSize        int           `yaml:"PubsubOutQueueSize" env:"PUBSUB_OUT_Q_SIZE" env-description:"The size that we assign to the outbound pubsub message queue"`
@@ -176,7 +176,7 @@ func (c *Config) configureAddrs(logger *zap.Logger, opts []libp2p.Option) ([]lib
 func (c *Config) TransformBootnodes() []string {
 	items := strings.Split(c.Bootnodes, ";")
 	if len(items) == 0 {
-		items = append(items, c.BeaconNetwork.SSV.Bootnodes...)
+		items = append(items, c.Network.Bootnodes...)
 	}
 	return items
 }

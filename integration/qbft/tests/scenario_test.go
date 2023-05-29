@@ -18,6 +18,7 @@ import (
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/duties"
 	"github.com/bloxapp/ssv/operator/validator"
 	protocolforks "github.com/bloxapp/ssv/protocol/forks"
@@ -83,7 +84,7 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 				duty := createDuty(getKeySet(s.Committee).ValidatorPK.Serialize(), dutyProp.Slot, dutyProp.ValidatorIndex, role)
 				var pk spec.BLSPubKey
 				copy(pk[:], getKeySet(s.Committee).ValidatorPK.Serialize())
-				ssvMsg, err := duties.CreateDutyExecuteMsg(duty, pk, spectypes.TestNetwork.SSV.Domain)
+				ssvMsg, err := duties.CreateDutyExecuteMsg(duty, pk, networkconfig.TestNetwork.Domain)
 				require.NoError(t, err)
 				dec, err := queue.DecodeSSVMessage(logger, ssvMsg)
 				require.NoError(t, err)

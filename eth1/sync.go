@@ -5,12 +5,12 @@ import (
 	"math/big"
 	"sync"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/logging/fields"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
 //go:generate mockgen -package=eth1 -destination=./mock_sync.go -source=./sync.go
@@ -44,7 +44,7 @@ func SyncEth1Events(
 	logger *zap.Logger,
 	client Client,
 	storage SyncOffsetStorage,
-	beaconNetwork spectypes.BeaconNetwork,
+	network beaconprotocol.Network,
 	syncOffset *SyncOffset,
 	handler SyncEventHandler,
 ) error {
@@ -73,7 +73,7 @@ func SyncEth1Events(
 			}
 		}
 	}()
-	syncOffset = determineSyncOffset(logger, storage, beaconNetwork, syncOffset)
+	syncOffset = determineSyncOffset(logger, storage, network, syncOffset)
 	if err := client.Sync(logger, syncOffset); err != nil {
 		return errors.Wrap(err, "failed to sync contract events")
 	}
@@ -109,7 +109,7 @@ func upgradeSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, syncOffset
 //  1. last saved sync offset
 //  2. provided value (from config)
 //  3. default sync offset (the genesis block of the contract)
-func determineSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, beaconNetwork spectypes.BeaconNetwork, syncOffset *SyncOffset) *SyncOffset {
+func determineSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, network beaconprotocol.Network, syncOffset *SyncOffset) *SyncOffset {
 	syncOffsetFromStorage, found, err := storage.GetSyncOffset()
 	if err != nil {
 		logger.Warn("failed to get sync offset", zap.Error(err))
@@ -122,7 +122,7 @@ func determineSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, beaconNe
 		logger.Debug("using provided sync offset", fields.SyncOffset(syncOffset))
 		return syncOffset
 	}
-	syncOffset = beaconNetwork.SSV.ETH1SyncOffset
+	syncOffset = network.ETH1SyncOffset
 	logger.Debug("using default sync offset", fields.SyncOffset(syncOffset))
 	return syncOffset
 }

@@ -147,7 +147,7 @@ func (dc *dutyController) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) 
 	copy(pk[:], duty.PubKey[:])
 
 	if v, ok := dc.validatorController.GetValidator(hex.EncodeToString(pk[:])); ok {
-		ssvMsg, err := CreateDutyExecuteMsg(duty, pk, dc.ethNetwork.SSV.Domain)
+		ssvMsg, err := CreateDutyExecuteMsg(duty, pk, dc.ethNetwork.Domain)
 		if err != nil {
 			return err
 		}

@@ -190,7 +190,7 @@ func (n *operatorNode) StartEth1(logger *zap.Logger, syncOffset *eth1.SyncOffset
 	handler := n.validatorsCtrl.Eth1EventHandler(logger, false)
 	// sync past events
 	// todo(align-contract-v0.3.1-rc.0) find a proper way to pass the event handler interface
-	if err := eth1.SyncEth1Events(logger, n.eth1Client, n.storage, n.ethNetwork.BeaconNetwork, syncOffset, handler); err != nil {
+	if err := eth1.SyncEth1Events(logger, n.eth1Client, n.storage, n.ethNetwork, syncOffset, handler); err != nil {
 		return errors.Wrap(err, "failed to sync contract events")
 	}
 	logger.Info("manage to sync contract events")

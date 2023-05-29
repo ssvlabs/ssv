@@ -11,13 +11,13 @@ import (
 	"github.com/bloxapp/eth2-key-manager/encryptor"
 	"github.com/bloxapp/eth2-key-manager/encryptor/keystorev4"
 	"github.com/bloxapp/eth2-key-manager/wallets/hd"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/google/uuid"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/networkconfig"
 
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	ssvstorage "github.com/bloxapp/ssv/storage"
@@ -43,7 +43,7 @@ func newStorageForTest(t *testing.T) (Storage, func()) {
 	if err != nil {
 		return nil, func() {}
 	}
-	s := NewSignerStorage(db, beaconprotocol.NewNetwork(spectypes.TestNetwork), logger)
+	s := NewSignerStorage(db, beaconprotocol.NewNetwork(networkconfig.TestNetwork), logger)
 	return s, func() {
 		db.Close(logging.TestLogger(t))
 	}

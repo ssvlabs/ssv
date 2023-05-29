@@ -252,8 +252,8 @@ func Slot(val phase0.Slot) zap.Field {
 	return zap.Uint64(FieldSlot, uint64(val))
 }
 
-func ETHNetwork(val string) zap.Field {
-	return zap.String(FieldETHNetwork, val)
+func ETHNetwork(val spectypes.BeaconNetwork) zap.Field {
+	return zap.String(FieldETHNetwork, string(val))
 }
 
 func Domain(val spectypes.DomainType) zap.Field {

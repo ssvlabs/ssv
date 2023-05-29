@@ -4,22 +4,23 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+
+	"github.com/bloxapp/ssv/networkconfig"
 )
 
 // Network is a beacon chain network.
 type Network struct {
-	spectypes.BeaconNetwork
+	networkconfig.NetworkConfig
 }
 
 // NewNetwork creates a new beacon chain network.
-func NewNetwork(network spectypes.BeaconNetwork) Network {
+func NewNetwork(network networkconfig.NetworkConfig) Network {
 	return Network{network}
 }
 
 // GetSlotStartTime returns the start time for the given slot
 func (n Network) GetSlotStartTime(slot phase0.Slot) time.Time {
-	timeSinceGenesisStart := uint64(slot) * uint64(n.SlotDuration().Seconds())
+	timeSinceGenesisStart := uint64(slot) * uint64(n.SlotDurationSec().Seconds())
 	start := time.Unix(int64(n.MinGenesisTime()+timeSinceGenesisStart), 0)
 	return start
 }
@@ -39,7 +40,7 @@ func (n Network) EstimatedSlotAtTime(time int64) phase0.Slot {
 	if time < genesis {
 		return 0
 	}
-	return phase0.Slot(uint64(time-genesis) / uint64(n.SlotDuration().Seconds()))
+	return phase0.Slot(uint64(time-genesis) / uint64(n.SlotDurationSec().Seconds()))
 }
 
 // EstimatedCurrentEpoch estimates the current epoch

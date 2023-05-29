@@ -10,8 +10,6 @@ import (
 	"net/http"
 	"path/filepath"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
-
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/networkconfig"
@@ -52,12 +50,12 @@ type bootNode struct {
 	externalIP  string
 	tcpPort     int
 	dbPath      string
-	network     spectypes.BeaconNetwork
+	network     networkconfig.NetworkConfig
 }
 
 // New is the constructor of ssvNode
 func New(opts Options) (Node, error) {
-	beaconNetwork, err := networkconfig.GetNetworkByName(opts.Network)
+	networkConfig, err := networkconfig.GetNetworkByName(opts.Network)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +66,7 @@ func New(opts Options) (Node, error) {
 		externalIP:  opts.ExternalIP,
 		tcpPort:     opts.TCPPort,
 		dbPath:      opts.DbPath,
-		network:     beaconNetwork,
+		network:     networkConfig,
 	}, nil
 }
 

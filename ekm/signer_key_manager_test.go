@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
@@ -32,7 +33,7 @@ func testKeyManager(t *testing.T) spectypes.KeyManager {
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 
-	km, err := NewETHKeyManagerSigner(logger, db, beacon.NewNetwork(spectypes.TestNetwork), true)
+	km, err := NewETHKeyManagerSigner(logger, db, beacon.NewNetwork(networkconfig.TestNetwork), true)
 	require.NoError(t, err)
 
 	sk1 := &bls.SecretKey{}
@@ -221,7 +222,7 @@ func TestSignRoot(t *testing.T) {
 			Message:   msg,
 		}
 
-		err = signed.GetSignature().VerifyByOperators(signed, spectypes.TestNetwork.SSV.Domain, spectypes.QBFTSignatureType, []*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}})
+		err = signed.GetSignature().VerifyByOperators(signed, networkconfig.TestNetwork.Domain, spectypes.QBFTSignatureType, []*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}})
 		// res, err := signed.VerifySig(pk)
 		require.NoError(t, err)
 		// require.True(t, res)
@@ -250,7 +251,7 @@ func TestSignRoot(t *testing.T) {
 			Message:   msg,
 		}
 
-		err = signed.GetSignature().VerifyByOperators(signed, spectypes.TestNetwork.SSV.Domain, spectypes.QBFTSignatureType, []*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}})
+		err = signed.GetSignature().VerifyByOperators(signed, networkconfig.TestNetwork.Domain, spectypes.QBFTSignatureType, []*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}})
 		// res, err := signed.VerifySig(pk)
 		require.NoError(t, err)
 		// require.True(t, res)
