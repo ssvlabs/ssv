@@ -28,4 +28,9 @@ jobs:
         run: go install github.com/bloxapp/ssv/scripts/differ@spec-alignment-script
 
       - name: Run Differ
-        run: differ --config ./scripts/spec-alignment/config.yaml ./ ${{ steps.get-path.outputs.path }}
+        run: |
+          differ \
+          --config ./scripts/spec-alignment/config.yaml \
+          --output ./scripts/spec-alignment/output.diff \
+          ./ \
+          ${{ steps.get-path.outputs.path }}
