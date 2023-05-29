@@ -56,7 +56,7 @@ var cli struct {
 func run() (changes int, err error) {
 	// Parse the config.yaml file.
 	var config Config
-	yamlFile, err := ioutil.ReadFile("config.yaml")
+	yamlFile, err := ioutil.ReadFile(cli.Config)
 	if err != nil {
 		return 0, errors.Wrap(err, "failed to read config file")
 	}

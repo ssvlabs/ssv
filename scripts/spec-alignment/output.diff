@@ -1,0 +1,385 @@
+diff --git a/protocol/v2/ssv/runner/attester.go@AttesterRunner.ProcessPostConsensus b/ssv/attester.go@AttesterRunner.ProcessPostConsensus
+index f372e174e1f34c3b..2222222
+--- a/protocol/v2/ssv/runner/attester.go@AttesterRunner.ProcessPostConsensus
++++ b/ssv/attester.go@AttesterRunner.ProcessPostConsensus
+@@ -3,11 +3,9 @@
+ 	if err != nil {
+ 		return errors.Wrap(err, "failed processing post consensus message")
+ 	}
+-	duty := r.GetState().DecidedValue.Duty
+ 	if !quorum {
+ 		return nil
+ 	}
+-	r.metrics.EndPostConsensus()
+ 	attestationData, err := r.GetState().DecidedValue.GetAttestationData()
+ 	if err != nil {
+ 		return errors.Wrap(err, "could not get attestation data")
+@@ -19,6 +14,7 @@
+ 		}
+ 		specSig := phase0.BLSSignature{}
+ 		copy(specSig[:], sig)
++		duty := r.GetState().DecidedValue.Duty
+ 		aggregationBitfield := bitfield.NewBitlist(r.GetState().DecidedValue.Duty.CommitteeLength)
+ 		aggregationBitfield.SetBitAt(duty.ValidatorCommitteeIndex, true)
+ 		signedAtt := &phase0.Attestation{
+@@ -26,14 +22,9 @@
+ 			Signature:		specSig,
+ 			AggregationBits:	aggregationBitfield,
+ 		}
+-		attestationSubmissionEnd := r.metrics.StartBeaconSubmission()
+ 		if err := r.beacon.SubmitAttestation(signedAtt); err != nil {
+-			r.metrics.RoleSubmissionFailed()
+ 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
+ 		}
+-		attestationSubmissionEnd()
+-		r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
+-		r.metrics.RoleSubmitted()
+ 	}
+ 	r.GetState().Finished = true
+ 	return nil
+diff --git a/protocol/v2/ssv/runner/runner.go@BaseRunner.didDecideCorrectly b/ssv/runner.go@BaseRunner.didDecideCorrectly
+index bc47b3d202e8cd0d..2222222
+--- a/protocol/v2/ssv/runner/runner.go@BaseRunner.didDecideCorrectly
++++ b/ssv/runner.go@BaseRunner.didDecideCorrectly
+@@ -1,6 +1,6 @@
+ func (b *BaseRunner) didDecideCorrectly(prevDecided bool, decidedMsg *SignedMessage) (bool, error) {
+ 	decided := decidedMsg != nil
+-	decidedRunningInstance := decided && b.State.RunningInstance != nil && decidedMsg.Message.Height == b.State.RunningInstance.GetHeight()
++	decidedRunningInstance := decided && decidedMsg.Message.Height == b.State.RunningInstance.GetHeight()
+ 	if !decided {
+ 		return false, nil
+ 	}
+diff --git a/protocol/v2/ssv/runner/validator_registration.go@NewValidatorRegistrationRunner b/ssv/validator_registration.go@NewValidatorRegistrationRunner
+index 90b8a0c8d2c30e95..2222222
+--- a/protocol/v2/ssv/runner/validator_registration.go@NewValidatorRegistrationRunner
++++ b/ssv/validator_registration.go@NewValidatorRegistrationRunner
+@@ -1,7 +1,6 @@
+ func NewValidatorRegistrationRunner(
+ 	beaconNetwork BeaconNetwork,
+ 	share *Share,
+-	qbftController *Controller,
+ 	beacon BeaconNode,
+ 	network Network,
+ 	signer KeyManager,
+@@ -11,11 +10,9 @@
+ 			BeaconRoleType:	BNRoleValidatorRegistration,
+ 			BeaconNetwork:	beaconNetwork,
+ 			Share:		share,
+-			QBFTController:	qbftController,
+ 		},
+ 		beacon:		beacon,
+ 		network:	network,
+ 		signer:		signer,
+-		metrics:	metrics.NewConsensusMetrics(BNRoleValidatorRegistration),
+ 	}
+ }
+\ No newline at end of file
+diff --git a/protocol/v2/ssv/runner/proposer.go@ProposerRunner.ProcessPostConsensus b/ssv/proposer.go@ProposerRunner.ProcessPostConsensus
+index 86a6abca1a1c16d6..2222222
+--- a/protocol/v2/ssv/runner/proposer.go@ProposerRunner.ProcessPostConsensus
++++ b/ssv/proposer.go@ProposerRunner.ProcessPostConsensus
+@@ -6,7 +6,6 @@
+ 	if !quorum {
+ 		return nil
+ 	}
+-	r.metrics.EndPostConsensus()
+ 	for _, root := range roots {
+ 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey)
+ 		if err != nil {
+@@ -14,16 +13,12 @@
+ 		}
+ 		specSig := phase0.BLSSignature{}
+ 		copy(specSig[:], sig)
+-		blockSubmissionEnd := r.metrics.StartBeaconSubmission()
+-		start := time.Now()
+-		decidedBlockIsBlinded := r.decidedBlindedBlock()
+-		if decidedBlockIsBlinded {
++		if r.decidedBlindedBlock() {
+ 			vBlindedBlk, _, err := r.GetState().DecidedValue.GetBlindedBlockData()
+ 			if err != nil {
+ 				return errors.Wrap(err, "could not get blinded block")
+ 			}
+ 			if err := r.GetBeaconNode().SubmitBlindedBeaconBlock(vBlindedBlk, specSig); err != nil {
+-				r.metrics.RoleSubmissionFailed()
+ 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed blinded Beacon block")
+ 			}
+ 		} else {
+@@ -32,13 +22,9 @@
+ 				return errors.Wrap(err, "could not get block")
+ 			}
+ 			if err := r.GetBeaconNode().SubmitBeaconBlock(vBlk, specSig); err != nil {
+-				r.metrics.RoleSubmissionFailed()
+ 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed Beacon block")
+ 			}
+ 		}
+-		blockSubmissionEnd()
+-		r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
+-		r.metrics.RoleSubmitted()
+ 	}
+ 	r.GetState().Finished = true
+ 	return nil
+diff --git a/protocol/v2/ssv/runner/proposer.go@ProposerRunner.ProcessPreConsensus b/ssv/proposer.go@ProposerRunner.ProcessPreConsensus
+index 1655d21d5a4cad4..2222222
+--- a/protocol/v2/ssv/runner/proposer.go@ProposerRunner.ProcessPreConsensus
++++ b/ssv/proposer.go@ProposerRunner.ProcessPreConsensus
+@@ -3,19 +3,17 @@
+ 	if err != nil {
+ 		return errors.Wrap(err, "failed processing randao message")
+ 	}
+-	duty := r.GetState().StartingDuty
+ 	if !quorum {
+ 		return nil
+ 	}
+-	r.metrics.EndPreConsensus()
+ 	root := roots[0]
+ 	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey)
+ 	if err != nil {
+ 		return errors.Wrap(err, "could not reconstruct randao sig")
+ 	}
++	duty := r.GetState().StartingDuty
+ 	var ver spec.DataVersion
+ 	var obj ssz.Marshaler
+-	var start = time.Now()
+ 	if r.ProducesBlindedBlocks {
+ 		obj, ver, err = r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
+ 		if err != nil {
+@@ -36,7 +24,6 @@
+ 		Version:	ver,
+ 		DataSSZ:	byts,
+ 	}
+-	r.metrics.StartConsensus()
+ 	if err := r.BaseRunner.decide(r, input); err != nil {
+ 		return errors.Wrap(err, "can't start new duty runner instance for duty")
+ 	}
+diff --git a/protocol/v2/ssv/runner/sync_committee_aggregator.go@SyncCommitteeAggregatorRunner.ProcessPreConsensus b/ssv/sync_committee_aggregator.go@SyncCommitteeAggregatorRunner.ProcessPreConsensus
+index 6b4d5a114f8066ff..2222222
+--- a/protocol/v2/ssv/runner/sync_committee_aggregator.go@SyncCommitteeAggregatorRunner.ProcessPreConsensus
++++ b/ssv/sync_committee_aggregator.go@SyncCommitteeAggregatorRunner.ProcessPreConsensus
+@@ -6,11 +6,9 @@
+ 	if !quorum {
+ 		return nil
+ 	}
+-	r.metrics.EndPreConsensus()
+-	var (
+-		selectionProofs	[]phase0.BLSSignature
+-		subnets		[]uint64
+-	)
++	anyIsAggregator := false
++	subnets := make([]uint64, 0)
++	selectionProofs := make([]phase0.BLSSignature, 0)
+ 	for i, root := range roots {
+ 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey)
+ 		if err != nil {
+@@ -18,6 +16,7 @@
+ 		}
+ 		blsSigSelectionProof := phase0.BLSSignature{}
+ 		copy(blsSigSelectionProof[:], sig)
++		selectionProofs = append(selectionProofs, blsSigSelectionProof)
+ 		aggregator, err := r.GetBeaconNode().IsSyncCommitteeAggregator(sig)
+ 		if err != nil {
+ 			return errors.Wrap(err, "could not check if sync committee aggregator")
+@@ -25,24 +24,18 @@
+ 		if !aggregator {
+ 			continue
+ 		}
++		anyIsAggregator = true
+ 		subnet, err := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(r.GetState().StartingDuty.ValidatorSyncCommitteeIndices[i]))
+ 		if err != nil {
+ 			return errors.Wrap(err, "could not get sync committee subnet ID")
+ 		}
+-		selectionProofs = append(selectionProofs, blsSigSelectionProof)
+ 		subnets = append(subnets, subnet)
+ 	}
+-	if len(selectionProofs) == 0 {
+-		r.GetState().Finished = true
+-		return nil
+-	}
+ 	duty := r.GetState().StartingDuty
+-	r.metrics.PauseDutyFullFlow()
+ 	contributions, ver, err := r.GetBeaconNode().GetSyncCommitteeContribution(duty.Slot, selectionProofs, subnets)
+ 	if err != nil {
+ 		return errors.Wrap(err, "could not get sync committee contribution")
+ 	}
+-	r.metrics.ContinueDutyFullFlow()
+ 	byts, err := contributions.MarshalSSZ()
+ 	if err != nil {
+ 		return errors.Wrap(err, "could not marshal contributions")
+@@ -52,9 +34,12 @@
+ 		Version:	ver,
+ 		DataSSZ:	byts,
+ 	}
+-	r.metrics.StartConsensus()
+-	if err := r.BaseRunner.decide(r, input); err != nil {
+-		return errors.Wrap(err, "can't start new duty runner instance for duty")
++	if anyIsAggregator {
++		if err := r.BaseRunner.decide(r, input); err != nil {
++			return errors.Wrap(err, "can't start new duty runner instance for duty")
++		}
++	} else {
++		r.BaseRunner.State.Finished = true
+ 	}
+ 	return nil
+ }
+\ No newline at end of file
+diff --git a/protocol/v2/qbft/controller/controller.go@Controller.UponExistingInstanceMsg b/qbft/controller.go@Controller.UponExistingInstanceMsg
+index e12b17f3910be26b..2222222
+--- a/protocol/v2/qbft/controller/controller.go@Controller.UponExistingInstanceMsg
++++ b/qbft/controller.go@Controller.UponExistingInstanceMsg
+@@ -8,16 +8,14 @@
+ 	if err != nil {
+ 		return nil, errors.Wrap(err, "could not process msg")
+ 	}
++	if prevDecided {
++		return nil, err
++	}
+ 	if !decided {
+ 		return nil, nil
+ 	}
+-	if decidedMsg == nil {
+-		return nil, nil
+-	}
+ 	if err := c.broadcastDecided(decidedMsg); err != nil {
++		fmt.Printf("%s\n", err.Error())
+ 	}
+-	if prevDecided {
+-		return nil, err
+-	}
+ 	return decidedMsg, nil
+ }
+\ No newline at end of file
+diff --git a/protocol/v2/qbft/instance/instance.go@Instance.Start b/qbft/instance.go@Instance.Start
+index 17cf3119ac6879f2..2222222
+--- a/protocol/v2/qbft/instance/instance.go@Instance.Start
++++ b/qbft/instance.go@Instance.Start
+@@ -1,18 +1,17 @@
+ func (i *Instance) Start(value []byte, height Height) {
+ 	i.startOnce.Do(func() {
+ 		i.StartValue = value
+-		i.bumpToRound(FirstRound)
++		i.State.Round = FirstRound
+ 		i.State.Height = height
+-		i.metrics.StartStage()
+ 		i.config.GetTimer().TimeoutForRound(FirstRound)
+-		proposerID := proposer(i.State, i.GetConfig(), FirstRound)
+-		if proposerID == i.State.Share.OperatorID {
++		if proposer(i.State, i.GetConfig(), FirstRound) == i.State.Share.OperatorID {
+ 			proposal, err := CreateProposal(i.State, i.config, i.StartValue, nil, nil)
+ 			if err != nil {
+-			} else {
+-				if err := i.Broadcast(proposal); err != nil {
+-				}
++				fmt.Printf("%s\n", err.Error())
+ 			}
++			if err := i.Broadcast(proposal); err != nil {
++				fmt.Printf("%s\n", err.Error())
++			}
+ 		}
+ 	})
+ }
+\ No newline at end of file
+diff --git a/protocol/v2/qbft/instance/instance_test.go@TestInstance_Marshaling b/qbft/instance_test.go@TestInstance_Marshaling
+index d11fa6aecb3f91c2..2222222
+--- a/protocol/v2/qbft/instance/instance_test.go@TestInstance_Marshaling
++++ b/qbft/instance_test.go@TestInstance_Marshaling
+@@ -20,7 +20,7 @@
+ 		OperatorID:		1,
+ 		ValidatorPubKey:	testingValidatorPK[:],
+ 		SharePubKey:		TestingSK.GetPublicKey().Serialize(),
+-		DomainType:		testingutils.TestingSSVDomainType,
++		DomainType:		PrimusTestnet,
+ 		Quorum:			3,
+ 		PartialQuorum:		2,
+ 		Committee: []*Operator{
+diff --git a/protocol/v2/qbft/controller/decided.go@ValidateDecided b/qbft/decided.go@ValidateDecided
+index 5778a05e0976a6eb..2222222
+--- a/protocol/v2/qbft/controller/decided.go@ValidateDecided
++++ b/qbft/decided.go@ValidateDecided
+@@ -9,7 +9,7 @@
+ 	if err := signedDecided.Validate(); err != nil {
+ 		return errors.Wrap(err, "invalid decided msg")
+ 	}
+-	if err := BaseCommitValidation(config, signedDecided, signedDecided.Message.Height, share.Committee); err != nil {
++	if err := baseCommitValidation(config, signedDecided, signedDecided.Message.Height, share.Committee); err != nil {
+ 		return errors.Wrap(err, "invalid decided msg")
+ 	}
+ 	if err := signedDecided.Validate(); err != nil {
+diff --git a/protocol/v2/qbft/controller/future_msg.go@ValidateFutureMsg b/qbft/future_msg.go@ValidateFutureMsg
+index 24e2c7f54d5dd1d..2222222
+--- a/protocol/v2/qbft/controller/future_msg.go@ValidateFutureMsg
++++ b/qbft/future_msg.go@ValidateFutureMsg
+@@ -9,7 +9,7 @@
+ 	if len(msg.GetSigners()) != 1 {
+ 		return errors.New("allows 1 signer")
+ 	}
+-	if err := VerifyByOperators(msg.Signature, msg, config.GetSignatureDomainType(), QBFTSignatureType, operators); err != nil {
++	if err := msg.Signature.VerifyByOperators(msg, config.GetSignatureDomainType(), QBFTSignatureType, operators); err != nil {
+ 		return errors.Wrap(err, "msg signature invalid")
+ 	}
+ 	return nil
+diff --git a/protocol/v2/qbft/instance/commit.go@aggregateCommitMsgs b/qbft/commit.go@aggregateCommitMsgs
+index b10c6fc7dd9eee7..2222222
+--- a/protocol/v2/qbft/instance/commit.go@aggregateCommitMsgs
++++ b/qbft/commit.go@aggregateCommitMsgs
+@@ -13,8 +13,5 @@
+ 		}
+ 	}
+ 	ret.FullData = fullData
+-	sort.Slice(ret.Signers, func(i, j int) bool {
+-		return ret.Signers[i] < ret.Signers[j]
+-	})
+ 	return ret, nil
+ }
+\ No newline at end of file
+diff --git a/protocol/v2/qbft/instance/prepare.go@getRoundChangeJustification b/qbft/prepare.go@getRoundChangeJustification
+index 7aa380d0261f7286..2222222
+--- a/protocol/v2/qbft/instance/prepare.go@getRoundChangeJustification
++++ b/qbft/prepare.go@getRoundChangeJustification
+@@ -20,5 +20,8 @@
+ 			ret = append(ret, msg)
+ 		}
+ 	}
++	if !HasQuorum(state.Share, ret) {
++		return nil, nil
++	}
+ 	return ret, nil
+ }
+\ No newline at end of file
+diff --git a/protocol/v2/qbft/instance/proposal.go@isValidProposal b/qbft/proposal.go@isValidProposal
+index 2a8937e50d20faa9..2222222
+--- a/protocol/v2/qbft/instance/proposal.go@isValidProposal
++++ b/qbft/proposal.go@isValidProposal
+@@ -14,7 +14,7 @@
+ 	if len(signedProposal.GetSigners()) != 1 {
+ 		return errors.New("msg allows 1 signer")
+ 	}
+-	if err := VerifyByOperators(signedProposal.Signature, signedProposal, config.GetSignatureDomainType(), QBFTSignatureType, operators); err != nil {
++	if err := signedProposal.Signature.VerifyByOperators(signedProposal, config.GetSignatureDomainType(), QBFTSignatureType, operators); err != nil {
+ 		return errors.Wrap(err, "msg signature invalid")
+ 	}
+ 	if !signedProposal.MatchedSigners([]OperatorID{proposer(state, config, signedProposal.Message.Round)}) {
+diff --git a/protocol/v2/qbft/instance/round_change.go@validRoundChangeForData b/qbft/round_change.go@validRoundChangeForData
+index 587c629a67ef07ed..2222222
+--- a/protocol/v2/qbft/instance/round_change.go@validRoundChangeForData
++++ b/qbft/round_change.go@validRoundChangeForData
+@@ -18,7 +18,7 @@
+ 	if len(signedMsg.GetSigners()) != 1 {
+ 		return errors.New("msg allows 1 signer")
+ 	}
+-	if err := VerifyByOperators(signedMsg.Signature, signedMsg, config.GetSignatureDomainType(), QBFTSignatureType, state.Share.Committee); err != nil {
++	if err := signedMsg.Signature.VerifyByOperators(signedMsg, config.GetSignatureDomainType(), QBFTSignatureType, state.Share.Committee); err != nil {
+ 		return errors.Wrap(err, "msg signature invalid")
+ 	}
+ 	if err := signedMsg.Message.Validate(); err != nil {
+diff --git a/protocol/v2/qbft/instance/prepare.go@validSignedPrepareForHeightRoundAndRoot b/qbft/prepare.go@validSignedPrepareForHeightRoundAndRoot
+index 9d06d8e0ee4e1113..2222222
+--- a/protocol/v2/qbft/instance/prepare.go@validSignedPrepareForHeightRoundAndRoot
++++ b/qbft/prepare.go@validSignedPrepareForHeightRoundAndRoot
+@@ -23,7 +23,7 @@
+ 	if len(signedPrepare.GetSigners()) != 1 {
+ 		return errors.New("msg allows 1 signer")
+ 	}
+-	if err := VerifyByOperators(signedPrepare.Signature, signedPrepare, config.GetSignatureDomainType(), QBFTSignatureType, operators); err != nil {
++	if err := signedPrepare.Signature.VerifyByOperators(signedPrepare, config.GetSignatureDomainType(), QBFTSignatureType, operators); err != nil {
+ 		return errors.Wrap(err, "msg signature invalid")
+ 	}
+ 	return nil
