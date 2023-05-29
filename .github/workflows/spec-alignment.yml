@@ -25,7 +25,7 @@ jobs:
         run: echo "::set-output name=path::$(go mod download -json github.com/bloxapp/ssv-spec | jq -r .Dir)"
 
       - name: Install Differ
-        run: go install github.com/bloxapp/ssv/scripts/differ@latest
+        run: go install github.com/bloxapp/ssv/scripts/differ@spec-alignment-script
 
       - name: Run Differ
         run: differ --left ./ --right ${{ steps.get-path.outputs.path }}
