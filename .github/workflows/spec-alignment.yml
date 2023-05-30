@@ -20,18 +20,15 @@ jobs:
       - name: Tidy up dependencies
         run: go mod tidy
 
-      - name: Get SSV-Spec path
-        id: get-path
-        run: echo "::set-output name=path::$(go mod download -json github.com/bloxapp/ssv-spec | jq -r .Dir)"
-
       - name: Install Differ
         run: cd ./scripts/differ && go install .
 
       - name: Run Differ
-        run: |
-          differ \
-          --config ./scripts/spec-alignment/config.yaml \
-          --output ./scripts/spec-alignment/output.diff \
-          ./ \
-          ${{ steps.get-path.outputs.path }}
+        run: cd ./scripts/spec-alignment && ./differ.sh
 
+      - name: Upload output.diff
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: output.diff
+          path: ./scripts/spec-alignment/output.diff
