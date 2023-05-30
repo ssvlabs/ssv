@@ -184,7 +184,7 @@ func (c *controller) handleValidatorAddedEvent(
 
 	if sharesExpectedLength != len(event.Shares) {
 		malformed = true
-		return nil, &abiparser.MalformedEventError{errors.Errorf("%s event shares length is not correct", abiparser.ValidatorAdded)}
+		return nil, &abiparser.MalformedEventError{Err: errors.Errorf("%s event shares length is not correct", abiparser.ValidatorAdded)}
 	}
 
 	event.Signature = event.Shares[:signatureOffset]
