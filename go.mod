@@ -6,7 +6,7 @@ require (
 	github.com/aquasecurity/table v1.8.0
 	github.com/attestantio/go-eth2-client v0.15.8
 	github.com/bloxapp/eth2-key-manager v1.3.0-rc.0
-	github.com/bloxapp/ssv-spec v0.3.1-0.20230322125847-21e97ea2ad3d
+	github.com/bloxapp/ssv-spec v0.3.1-0.20230528103541-820f72b858bc
 	github.com/btcsuite/btcd/btcec/v2 v2.2.1
 	github.com/cespare/xxhash/v2 v2.2.0
 	github.com/cornelk/hashmap v1.0.8
@@ -117,7 +117,7 @@ require (
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.17 // indirect
 	github.com/mattn/go-pointer v0.0.1 // indirect
-	github.com/mattn/go-runewidth v0.0.13 // indirect
+	github.com/mattn/go-runewidth v0.0.14 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
 	github.com/miekg/dns v1.1.50 // indirect
 	github.com/mikioh/tcpinfo v0.0.0-20190314235526-30a79bb1804b // indirect
@@ -144,7 +144,7 @@ require (
 	github.com/prometheus/procfs v0.9.0 // indirect
 	github.com/r3labs/sse/v2 v2.7.4 // indirect
 	github.com/raulk/go-watchdog v1.3.0 // indirect
-	github.com/rivo/uniseg v0.2.0 // indirect
+	github.com/rivo/uniseg v0.4.4 // indirect
 	github.com/shirou/gopsutil v3.21.4-0.20210419000835-c7a38de76ee5+incompatible // indirect
 	github.com/sirupsen/logrus v1.8.1 // indirect
 	github.com/spacemonkeygo/spacelog v0.0.0-20180420211403-2296661a0572 // indirect
@@ -163,10 +163,10 @@ require (
 	go.uber.org/fx v1.19.0 // indirect
 	go.uber.org/multierr v1.9.0 // indirect
 	golang.org/x/crypto v0.5.0 // indirect
-	golang.org/x/exp v0.0.0-20230206171751-46f607a40771 // indirect
+	golang.org/x/exp v0.0.0-20230522175609-2e198f4a06a1 // indirect
 	golang.org/x/net v0.5.0 // indirect
-	golang.org/x/sys v0.5.0 // indirect
-	golang.org/x/term v0.4.0 // indirect
+	golang.org/x/sys v0.8.0 // indirect
+	golang.org/x/term v0.8.0 // indirect
 	golang.org/x/tools v0.5.0 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	google.golang.org/genproto v0.0.0-20210426193834-eac7f76ac494 // indirect
@@ -183,7 +183,3 @@ replace github.com/prysmaticlabs/prysm => github.com/prysmaticlabs/prysm v1.4.2-
 replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
-
-replace github.com/bloxapp/ssv-spec => github.com/bloxapp/ssv-spec v0.0.0-20230524104230-42bf86e3f977 // #disable-preconsensus-liveness
-
-// replace github.com/bloxapp/ssv-spec => ../ssv-spec
