@@ -318,25 +318,12 @@ func (c *controller) handleRouterMessages(logger *zap.Logger) {
 	}
 }
 
-// getShare returns the share of the given validator public key
-// TODO: optimize
-func (c *controller) getShare(pk spectypes.ValidatorPK) (*types.SSVShare, error) {
-	share, found, err := c.sharesStorage.GetShare(pk)
-	if err != nil {
-		return nil, errors.Wrapf(err, "could not read validator share [%s]", pk)
-	}
-	if !found {
-		return nil, nil
-	}
-	return share, nil
-}
-
 func (c *controller) handleWorkerMessages(logger *zap.Logger, msg *spectypes.SSVMessage) error {
-	share, err := c.getShare(msg.GetID().GetPubKey())
+	share, found, err := c.sharesStorage.GetShare(msg.GetID().GetPubKey())
 	if err != nil {
 		return err
 	}
-	if share == nil {
+	if !found {
 		return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetID().GetPubKey()))
 	}
 
@@ -519,9 +506,12 @@ func (c *controller) UpdateValidatorMetadata(logger *zap.Logger, pk string, meta
 		if err != nil {
 			return errors.Wrap(err, "could not decode public key")
 		}
-		share, err := c.getShare(pkBytes)
+		share, found, err := c.sharesStorage.GetShare(pkBytes)
 		if err != nil {
 			return errors.Wrap(err, "could not get share")
+		}
+		if !found {
+			return errors.New("share was not found")
 		}
 		started, err := c.onShareStart(logger, share)
 		if err != nil {
