@@ -8,7 +8,7 @@ import (
 
 var TestNetwork = NetworkConfig{
 	Name:                 "testnet",
-	BeaconNetwork:        spectypes.BeaconTestNetwork,
+	BeaconNetwork:        spectypes.PraterNetwork,
 	Domain:               spectypes.V3Testnet,
 	GenesisEpoch:         152834,
 	ETH1SyncOffset:       new(big.Int).SetInt64(9015219),
