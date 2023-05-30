@@ -15,7 +15,7 @@ var SupportedConfigs = map[string]NetworkConfig{
 	JatoV2Stage.Name: JatoV2Stage,
 }
 
-func GetNetworkByName(name string) (NetworkConfig, error) {
+func GetNetworkConfigByName(name string) (NetworkConfig, error) {
 	if network, ok := SupportedConfigs[name]; ok {
 		return network, nil
 	}

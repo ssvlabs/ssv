@@ -295,7 +295,7 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.St
 }
 
 func setupSSVNetwork(logger *zap.Logger) (beaconprotocol.Network, forksprotocol.ForkVersion, error) {
-	networkConfig, err := networkconfig.GetNetworkByName(cfg.SSVOptions.Network)
+	networkConfig, err := networkconfig.GetNetworkConfigByName(cfg.SSVOptions.Network)
 	if err != nil {
 		return beaconprotocol.Network{}, "", err
 	}

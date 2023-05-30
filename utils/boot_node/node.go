@@ -55,7 +55,7 @@ type bootNode struct {
 
 // New is the constructor of ssvNode
 func New(opts Options) (Node, error) {
-	networkConfig, err := networkconfig.GetNetworkByName(opts.Network)
+	networkConfig, err := networkconfig.GetNetworkConfigByName(opts.Network)
 	if err != nil {
 		return nil, err
 	}
