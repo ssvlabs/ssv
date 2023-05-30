@@ -339,26 +339,25 @@ func (c *controller) getShare(pk spectypes.ValidatorPK) (*types.SSVShare, error)
 }
 
 func (c *controller) handleWorkerMessages(logger *zap.Logger, msg *spectypes.SSVMessage) error {
-	share, err := c.getShare(msg.GetID().GetPubKey())
-	if err != nil {
-		return err
-	}
-	if share == nil {
-		return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetID().GetPubKey()))
-	}
-
-	opts := *c.validatorOptions
-	opts.SSVShare = share
-
-	// Get or create a nonCommitteeValidator for the message, and lock it to prevent
-	// concurrent processing of messages for the same nonCommitteeValidator.
+	// Get or create a nonCommitteeValidator for this MessageID, and lock it to prevent
+	// other handlers from processing
 	var ncv *nonCommitteeValidator
-	func() {
+	err := func() error {
 		c.nonCommitteeMutex.Lock()
 		defer c.nonCommitteeMutex.Unlock()
 
 		item := c.nonCommitteeValidators.Get(msg.GetID())
 		if item == nil {
+			share, err := c.getShare(msg.GetID().GetPubKey())
+			if err != nil {
+				return err
+			}
+			if share == nil {
+				return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetID().GetPubKey()))
+			}
+
+			opts := *c.validatorOptions
+			opts.SSVShare = share
 			ncv = &nonCommitteeValidator{
 				NonCommitteeValidator: validator.NewNonCommitteeValidator(logger, msg.GetID(), opts),
 			}
@@ -368,7 +367,11 @@ func (c *controller) handleWorkerMessages(logger *zap.Logger, msg *spectypes.SSV
 		}
 
 		ncv.Lock()
+		return nil
 	}()
+	if err != nil {
+		return err
+	}
 
 	// Process the message.
 	defer ncv.Unlock()
