@@ -9,6 +9,7 @@ import (
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/jellydator/ttlcache/v3"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -116,6 +117,11 @@ type EventHandler interface {
 	BumpNonce(owner common.Address) error
 }
 
+type nonCommitteeValidator struct {
+	*validator.NonCommitteeValidator
+	sync.Mutex
+}
+
 // controller implements Controller
 type controller struct {
 	context context.Context
@@ -145,10 +151,9 @@ type controller struct {
 	messageWorker        *worker.Worker
 	historySyncBatchSize int
 
-	// nonCommitteeLocks is a map of locks for non committee validators, used to ensure
-	// messages with identical public key and role are processed one at a time.
-	nonCommitteeLocks map[spectypes.MessageID]*sync.Mutex
-	nonCommitteeMutex sync.Mutex
+	// nonCommittees is a cache of initialized nonCommitteeValidator instances
+	nonCommitteeValidators *ttlcache.Cache[spectypes.MessageID, *nonCommitteeValidator]
+	nonCommitteeMutex      sync.Mutex
 }
 
 // NewController creates a new validator controller instance
@@ -223,7 +228,9 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		messageWorker:        worker.NewWorker(logger, workerCfg),
 		historySyncBatchSize: options.HistorySyncBatchSize,
 
-		nonCommitteeLocks: make(map[spectypes.MessageID]*sync.Mutex),
+		nonCommitteeValidators: ttlcache.New[spectypes.MessageID, *nonCommitteeValidator](
+			ttlcache.WithTTL[spectypes.MessageID, *nonCommitteeValidator](time.Minute * 13),
+		),
 	}
 
 	if err := ctrl.initShares(logger, options); err != nil {
@@ -343,23 +350,29 @@ func (c *controller) handleWorkerMessages(logger *zap.Logger, msg *spectypes.SSV
 	opts := *c.validatorOptions
 	opts.SSVShare = share
 
-	// Lock this message ID.
-	lock := func() *sync.Mutex {
+	// Get or create a nonCommitteeValidator for the message, and lock it to prevent
+	// concurrent processing of messages for the same nonCommitteeValidator.
+	var ncv *nonCommitteeValidator
+	func() {
 		c.nonCommitteeMutex.Lock()
 		defer c.nonCommitteeMutex.Unlock()
-		if _, ok := c.nonCommitteeLocks[msg.GetID()]; !ok {
-			c.nonCommitteeLocks[msg.GetID()] = &sync.Mutex{}
+
+		item := c.nonCommitteeValidators.Get(msg.GetID())
+		if item == nil {
+			ncv = &nonCommitteeValidator{
+				NonCommitteeValidator: validator.NewNonCommitteeValidator(logger, msg.GetID(), opts),
+			}
+			c.nonCommitteeValidators.Set(msg.GetID(), ncv, ttlcache.DefaultTTL)
+		} else {
+			ncv = item.Value()
 		}
-		return c.nonCommitteeLocks[msg.GetID()]
+
+		ncv.Lock()
 	}()
 
-	lock.Lock()
-	defer lock.Unlock()
-
-	// Create a disposable NonCommitteeValidator to process the message.
-	// TODO: consider caching highest instance heights for each validator instead of creating a new validator & loading from storage each time.
-	v := validator.NewNonCommitteeValidator(logger, msg.GetID(), opts)
-	v.ProcessMessage(logger, msg)
+	// Process the message.
+	defer ncv.Unlock()
+	ncv.ProcessMessage(logger, msg)
 
 	return nil
 }
