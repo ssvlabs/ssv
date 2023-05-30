@@ -20,8 +20,11 @@ import (
 )
 
 type Comparison struct {
-	Left  []string `yaml:"Left"`
-	Right []string `yaml:"Right"`
+	Packages struct {
+		Left  []string `yaml:"Left"`
+		Right []string `yaml:"Right"`
+	} `yaml:"Packages"`
+	Hints map[string]string `yaml:"Hints"`
 }
 
 type Config struct {
@@ -38,8 +41,8 @@ type Config struct {
 	// ReducedPackageNames is a list of package names that should be reduced
 	// to their last component.
 	//
-	// For example, if "ssv" is ignored, then any reference to "ssv.Message"
-	// will be reduced to "Message".
+	// For example, if "ssv" is given, then any reference to "ssv.Message"
+	// will be reduced to just "Message".
 	ReducedPackageNames []string `yaml:"ReducedPackageNames"`
 
 	// Comparisons is a list of pairs of packages to compare.
@@ -90,22 +93,27 @@ func run() (changes int, err error) {
 	tbl.SetHeaders(filepath.Base(cli.Left), filepath.Base(cli.Right), "Symbol", "Changed")
 	var total, changed int
 	for _, pair := range config.Comparisons {
-		lefts, err := NewParser(cli.Left, pair.Left, config.IgnoredIdentifiers).Parse()
+		lefts, err := NewParser(cli.Left, pair.Packages.Left, config.IgnoredIdentifiers).Parse()
 		if err != nil {
 			return 0, errors.Wrap(err, "failed to parse left package")
 		}
-		rights, err := NewParser(cli.Right, pair.Right, config.IgnoredIdentifiers).Parse()
+		rights, err := NewParser(cli.Right, pair.Packages.Right, config.IgnoredIdentifiers).Parse()
 		if err != nil {
 			return 0, errors.Wrap(err, "failed to parse right package")
 		}
 
 		// For each element in the left package, find the corresponding element
 		// in the right package and compare.
-		elements := maps.Keys(lefts)
-		sort.Strings(elements)
-		for _, name := range elements {
+		sortedNames := maps.Keys(lefts)
+		sort.Strings(sortedNames)
+		for _, name := range sortedNames {
 			left := lefts[name]
-			right, ok := rights[name]
+
+			rightName := name
+			if hint, ok := pair.Hints[name]; ok {
+				rightName = hint
+			}
+			right, ok := rights[rightName]
 			if !ok {
 				continue
 			}

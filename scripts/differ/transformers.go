@@ -16,6 +16,7 @@ func NoComments() Transformer {
 	expr := regexp.MustCompile(`(?m)^[ \t]*//.*\n`)
 	return func(code string) string { return expr.ReplaceAllString(code, "") }
 }
+
 func NoPackageNames(packages []string) Transformer {
 	if len(packages) == 0 {
 		return NopTransformer()
@@ -23,6 +24,7 @@ func NoPackageNames(packages []string) Transformer {
 	expr := regexp.MustCompile(`\b(?:` + strings.Join(packages, "|") + `)\.([a-zA-Z_][a-zA-Z0-9_]*)\b`)
 	return func(code string) string { return expr.ReplaceAllString(code, "$1") }
 }
+
 func NoEmptyLines() Transformer {
 	expr := regexp.MustCompile(`(?m)^\s*$[\r\n]*|[\r\n]+\s+\z`)
 	return func(code string) string { return expr.ReplaceAllString(code, "") }

@@ -4,41 +4,76 @@ Differ is a robust Go codebase comparison tool that enables you to easily identi
 
 ![Differ](https://dummyimage.com/600x200/000/fff&text=Differ)
 
-## :sparkles: Capabilities
+## :sparkles: Highlights
 
-- :zap: Swiftly compare between two codebases, unaffected by differences in package paths or file names.
+- :zap: Swiftly compare symbols\* between two codebases, unaffected by differences in package paths or file names.
+- :link: Automatically identifies corresponding symbols\* by parsing Go code with `go/ast`.
 - :see_no_evil: Ignore changes considered irrelevant or approved.
-- :link: Compares only structs, methods and functions with matching names.
+
+_\* symbol: the name of a function, struct or method (symbol for methods are `<type>.<method>`)_
 
 ## :gear: Installation
 
-Differ doesn't require a special installation step. Just clone the repository and you're good to go!
+### Quickly
+
+Just `go install` and you're good to go!
 
 ```bash
 go install github.com/bloxapp/ssv/scripts/differ@latest
 ```
 
+_Tip: you can replace `@latest` with `@any-git-branch`._
+
+### Locally
+
+After cloning the SSV repo, just `go install` from it.
+
+```bash
+cd ./scripts/differ
+go install .
+```
+
 ## :rocket: Usage
 
 ```bash
-differ --left <leftCodebasePath> --right <rightCodebasePath> --output <outputFile>
+Usage: differ <left> <right>
+
+Arguments:
+  <left>     Path to the left codebase.
+  <right>    Path to the right codebase.
+
+Flags:
+  -h, --help                    Show context-sensitive help.
+      --config="config.yaml"    Path to the config file.
+      --output="output.diff"    Path to the output diff file.
 ```
 
-### 👀 Approving Changes
-
-1. Copy & paste the contents of `output.diff` into [differ.vercel.app](differ.vercel.app) (or your locally hosted instance)
-2. Approve changes
-3. Copy the `Change IDs` (at the top)
-4. Paste them under `ApprovedChanges` in your `config.yaml`
-
-#### Running the web UI locally
+Example:
 
 ```bash
-git clone github.com/bloxapp/ssv
-cd ssv/scripts/differ/ui
+differ ./ssv ./ssv-spec
+```
+
+### 👀 Reviewing
+
+Differ provides a web UI to review the changes.
+
+1. Copy & paste the contents of `output.diff` into [differ.vercel.app](https://differ.vercel.app) (or your local instance — see below)
+2. Approve changes
+3. Copy from `Change IDs` at the top
+4. Edit `config.yaml` and append the IDs to `ApprovedChanges`
+
+#### Locally Running the UI
+
+After cloning the repo, install & run the Next.js project:
+
+```bash
+cd ./scripts/differ/ui
 npm install
 npm run dev
 ```
+
+Check it out at http://localhost:3000
 
 ### Configuration
 

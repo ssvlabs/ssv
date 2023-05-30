@@ -11,12 +11,28 @@ ReducedPackageNames:
   - instance
   - controller
 Comparisons:
-  - Left:
-      - ./protocol/v2/ssv/runner
-    Right:
-      - ./ssv
-  - Left:
-      - protocol/v2/qbft/controller
-      - protocol/v2/qbft/instance
-    Right:
-      - ./qbft
+  - Packages:
+      Left:
+        - ./protocol/v2/ssv/runner
+        - ./protocol/v2/types
+      Right:
+        - ./ssv
+    Hints:
+      ReconstructSignature: PartialSigContainer.ReconstructSignature
+
+  - Packages:
+      Left:
+        - ./protocol/v2/qbft/controller
+        - ./protocol/v2/qbft/instance
+      Right:
+        - ./qbft
+    Hints:
+      BaseCommitValidation: baseCommitValidation
+  
+  - Packages:
+      Left:
+        - ./protocol/v2/types
+      Right:
+        - ./types
+    Hints:
+      VerifyByOperators: Signature.VerifyByOperators

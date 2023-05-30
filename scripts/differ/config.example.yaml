@@ -12,12 +12,18 @@ ReducedPackageNames:
 
 # Pairs of packages to compare across the codebases.
 Comparisons:
-  - Left:
-      - ./protocol/v2/ssv/runner
-    Right:
-      - ./ssv
-  - Left:
-      - protocol/v2/qbft/controller
-      - protocol/v2/qbft/instance
-    Right:
-      - ./qbft
+  - Packages:
+      Left:
+        - ./protocol/v2/ssv/runner
+      Right:
+        - ./ssv
+    # User-defined hints for symbol matching. Maps from Left to Right.
+    Hints:
+      ReconstructSignature: PartialSigContainer.ReconstructSignature
+
+  - Packages:
+      Left:
+        - protocol/v2/qbft/controller
+        - protocol/v2/qbft/instance
+      Right:
+        - ./qbft
