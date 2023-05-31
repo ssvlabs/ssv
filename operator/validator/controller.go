@@ -66,7 +66,7 @@ type ControllerOptions struct {
 	MetadataUpdateInterval     time.Duration `yaml:"MetadataUpdateInterval" env:"METADATA_UPDATE_INTERVAL" env-default:"12m" env-description:"Interval for updating metadata"`
 	HistorySyncBatchSize       int           `yaml:"HistorySyncBatchSize" env:"HISTORY_SYNC_BATCH_SIZE" env-default:"25" env-description:"Maximum number of messages to sync in a single batch"`
 	MinPeers                   int           `yaml:"MinimumPeers" env:"MINIMUM_PEERS" env-default:"2" env-description:"The required minimum peers for sync"`
-	ETHNetwork                 beaconprotocol.Network
+	BeaconNetwork              beaconprotocol.Network
 	Network                    network.P2PNetwork
 	Beacon                     beaconprotocol.BeaconNode
 	ShareEncryptionKeyProvider ShareEncryptionKeyProvider
@@ -176,7 +176,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	validatorOptions := &validator.Options{ //TODO add vars
 		Network:       options.Network,
 		Beacon:        options.Beacon,
-		BeaconNetwork: options.ETHNetwork.BeaconNetwork,
+		BeaconNetwork: options.BeaconNetwork.BeaconNetwork,
 		Storage:       storageMap,
 		//Share:   nil,  // set per validator
 		Signer: options.KeyManager,
