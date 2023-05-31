@@ -33,7 +33,7 @@ func TestInstance_Marshaling(t *testing.T) {
 		OperatorID:      1,
 		ValidatorPubKey: testingValidatorPK[:],
 		SharePubKey:     TestingSK.GetPublicKey().Serialize(),
-		DomainType:      testingutils.TestingSSVDomainType,
+		DomainType:      spectypes.PrimusTestnet,
 		Quorum:          3,
 		PartialQuorum:   2,
 		Committee: []*spectypes.Operator{
