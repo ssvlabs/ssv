@@ -139,7 +139,6 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 		return runner.NewValidatorRegistrationRunner(
 			spectypes.BeaconTestNetwork,
 			share,
-			contr,
 			spectestingutils.NewTestingBeaconNode(),
 			net,
 			km,
