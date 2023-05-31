@@ -1,11 +1,22 @@
 package p2pv1
 
 import (
+	"encoding/hex"
 	"math/rand"
 	"net"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p/core/crypto"
+	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
+	basichost "github.com/libp2p/go-libp2p/p2p/host/basic"
+	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
+	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
+	"github.com/pkg/errors"
+	"github.com/prysmaticlabs/prysm/async"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
@@ -17,15 +28,6 @@ import (
 	"github.com/bloxapp/ssv/network/streams"
 	"github.com/bloxapp/ssv/network/topics"
 	"github.com/bloxapp/ssv/utils/commons"
-	"github.com/libp2p/go-libp2p"
-	"github.com/libp2p/go-libp2p/core/crypto"
-	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
-	basichost "github.com/libp2p/go-libp2p/p2p/host/basic"
-	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
-	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
-	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/prysm/async"
-	"go.uber.org/zap"
 )
 
 const (
@@ -161,7 +163,8 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 		return err
 	}
 
-	self := records.NewNodeInfo(n.cfg.ForkVersion, n.cfg.NetworkID)
+	domain := "0x" + hex.EncodeToString(n.cfg.Network.Domain[:])
+	self := records.NewNodeInfo(n.cfg.ForkVersion, domain)
 	self.Metadata = &records.NodeMetadata{
 		OperatorID:  n.cfg.OperatorID,
 		NodeVersion: commons.GetNodeVersion(),
@@ -190,7 +193,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 
 	filters := func() []connections.HandshakeFilter {
 		filters := []connections.HandshakeFilter{
-			connections.NetworkIDFilter(n.cfg.NetworkID),
+			connections.NetworkIDFilter(domain),
 		}
 
 		if n.cfg.Permissioned() {

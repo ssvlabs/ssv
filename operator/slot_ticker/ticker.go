@@ -9,7 +9,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	"github.com/bloxapp/ssv/networkconfig"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/ticker.go -source=./ticker.go
@@ -22,28 +22,26 @@ type Ticker interface {
 }
 
 type ticker struct {
-	ctx          context.Context
-	ethNetwork   beaconprotocol.Network
-	genesisEpoch phase0.Epoch
+	ctx     context.Context
+	network networkconfig.NetworkConfig
 
 	// chan
 	feed *event.Feed
 }
 
 // NewTicker returns Ticker struct pointer
-func NewTicker(ctx context.Context, ethNetwork beaconprotocol.Network, genesisEpoch phase0.Epoch) Ticker {
+func NewTicker(ctx context.Context, network networkconfig.NetworkConfig) Ticker {
 	return &ticker{
-		ctx:          ctx,
-		ethNetwork:   ethNetwork,
-		genesisEpoch: genesisEpoch,
-		feed:         &event.Feed{},
+		ctx:     ctx,
+		network: network,
+		feed:    &event.Feed{},
 	}
 }
 
 // Start slot ticker
 func (t *ticker) Start(logger *zap.Logger) {
-	genesisTime := time.Unix(int64(t.ethNetwork.MinGenesisTime()), 0)
-	slotTicker := NewSlotTicker(genesisTime, uint64(t.ethNetwork.SlotDurationSec().Seconds()))
+	genesisTime := time.Unix(int64(t.network.Beacon.MinGenesisTime()), 0)
+	slotTicker := NewSlotTicker(genesisTime, uint64(t.network.SlotDurationSec().Seconds()))
 	t.listenToTicker(logger, slotTicker.C())
 }
 
@@ -65,15 +63,15 @@ func (t *ticker) listenToTicker(logger *zap.Logger, slots <-chan phase0.Slot) {
 }
 
 func (t *ticker) genesisEpochEffective(logger *zap.Logger) bool {
-	curSlot := t.ethNetwork.EstimatedCurrentSlot()
-	genSlot := t.ethNetwork.GetEpochFirstSlot(t.genesisEpoch)
+	curSlot := t.network.Beacon.EstimatedCurrentSlot()
+	genSlot := t.network.Beacon.GetEpochFirstSlot(t.network.GenesisEpoch)
 	if curSlot < genSlot {
-		if t.ethNetwork.IsFirstSlotOfEpoch(curSlot) {
+		if t.network.Beacon.IsFirstSlotOfEpoch(curSlot) {
 			// wait until genesis epoch starts
-			curEpoch := t.ethNetwork.EstimatedCurrentEpoch()
-			gnsTime := t.ethNetwork.GetSlotStartTime(genSlot)
+			curEpoch := t.network.Beacon.EstimatedCurrentEpoch()
+			gnsTime := t.network.Beacon.GetSlotStartTime(genSlot)
 			logger.Info("duties paused, will resume duties on genesis epoch",
-				zap.Uint64("genesis_epoch", uint64(t.genesisEpoch)),
+				zap.Uint64("genesis_epoch", uint64(t.network.GenesisEpoch)),
 				zap.Uint64("current_epoch", uint64(curEpoch)),
 				zap.String("genesis_time", gnsTime.Format(time.UnixDate)))
 		}

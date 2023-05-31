@@ -134,17 +134,6 @@ spec:
               secretKeyRef:
                 name: config-secrets
                 key: boot_node
-          - name: REGISTRY_CONTRACT_ADDR_KEY
-            valueFrom:
-              secretKeyRef:
-                name: config-secrets
-                key: smart_contract_addr_key
-          - name: ETH_1_SYNC_OFFSET
-            valueFrom:
-              secretKeyRef:
-                name: config-secrets
-                key: eth_1_sync_offset
-                optional: true
           - name: ABI_VERSION
             valueFrom:
               secretKeyRef:
@@ -159,8 +148,6 @@ spec:
             value: "false"
           - name: DISCOVERY_TYPE_KEY
             value: "discv5"
-          - name: NETWORK
-            value: "prater"
           - name: DB_PATH
             value: "./data/db-shifu-v3"
           - name: METRICS_API_PORT

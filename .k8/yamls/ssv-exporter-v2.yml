@@ -134,31 +134,16 @@ spec:
               secretKeyRef:
                 name: config-secrets
                 key: boot_node_v2
-          - name: REGISTRY_CONTRACT_ADDR_KEY
-            valueFrom:
-              secretKeyRef:
-                name: config-secrets
-                key: smart_contract_addr_key_v2
-          - name: ETH_1_SYNC_OFFSET
-            valueFrom:
-              secretKeyRef:
-                name: config-secrets
-                key: eth_1_sync_offset
-                optional: true
           - name: ABI_VERSION
             valueFrom:
               secretKeyRef:
                 name: config-secrets
                 key: abi_version_v2
                 optional: true
-          - name: GENESIS_EPOCH
-            value: '1'
           - name: LOG_LEVEL
             value: "debug"
           - name: DISCOVERY_TYPE_KEY
             value: "discv5"
-          - name: NETWORK
-            value: "prater"
           - name: DB_PATH
             value: "./data/db-shifu-v3"
           - name: DB_REPORTING

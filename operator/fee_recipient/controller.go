@@ -9,6 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/slot_ticker"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
@@ -25,8 +26,8 @@ type RecipientController interface {
 // ControllerOptions holds the needed dependencies
 type ControllerOptions struct {
 	Ctx              context.Context
-	BeaconClient     beaconprotocol.Beacon
-	EthNetwork       beaconprotocol.Network
+	BeaconClient     beaconprotocol.BeaconNode
+	Network          networkconfig.NetworkConfig
 	ShareStorage     storage.Shares
 	RecipientStorage storage.Recipients
 	Ticker           slot_ticker.Ticker
@@ -36,8 +37,8 @@ type ControllerOptions struct {
 // recipientController implementation of RecipientController
 type recipientController struct {
 	ctx              context.Context
-	beaconClient     beaconprotocol.Beacon
-	ethNetwork       beaconprotocol.Network
+	beaconClient     beaconprotocol.BeaconNode
+	network          networkconfig.NetworkConfig
 	shareStorage     storage.Shares
 	recipientStorage storage.Recipients
 	ticker           slot_ticker.Ticker
@@ -48,7 +49,7 @@ func NewController(opts *ControllerOptions) *recipientController {
 	return &recipientController{
 		ctx:              opts.Ctx,
 		beaconClient:     opts.BeaconClient,
-		ethNetwork:       opts.EthNetwork,
+		network:          opts.Network,
 		shareStorage:     opts.ShareStorage,
 		recipientStorage: opts.RecipientStorage,
 		ticker:           opts.Ticker,
@@ -71,7 +72,7 @@ func (rc *recipientController) listenToTicker(logger *zap.Logger, slots chan pha
 	firstTimeSubmitted := false
 	for currentSlot := range slots {
 		// submit if first time or if first slot in epoch
-		if firstTimeSubmitted && uint64(currentSlot)%rc.ethNetwork.SlotsPerEpoch() != 0 {
+		if firstTimeSubmitted && uint64(currentSlot)%rc.network.SlotsPerEpoch() != 0 {
 			continue
 		}
 		firstTimeSubmitted = true

@@ -7,7 +7,7 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv-spec/ssv"
+	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
 )
@@ -47,9 +47,9 @@ type signer interface {
 	ComputeSigningRoot(object interface{}, domain phase0.Domain) ([32]byte, error)
 }
 
-// Beacon interface for all beacon duty calls
-type Beacon interface {
-	ssv.BeaconNode // spec beacon interface
+// BeaconNode interface for all beacon duty calls
+type BeaconNode interface {
+	specssv.BeaconNode // spec beacon interface
 	beaconDuties
 	beaconSubscriber
 	beaconValidator
@@ -60,8 +60,7 @@ type Beacon interface {
 // Options for controller struct creation
 type Options struct {
 	Context        context.Context
-	Network        string `yaml:"Network" env:"NETWORK" env-default:"prater"`
-	MinGenesisTime uint64 `yaml:"MinGenesisTime" env:"MinGenesisTime"`
+	Network        Network
 	BeaconNodeAddr string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
 	Graffiti       []byte
 	GasLimit       uint64
