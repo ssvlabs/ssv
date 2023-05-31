@@ -4,11 +4,12 @@ import (
 	"math/big"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
 var JatoV2Stage = NetworkConfig{
 	Name:                 "jato-v2-stage",
-	BeaconNetwork:        spectypes.PraterNetwork,
+	Beacon:               beacon.NewNetwork(spectypes.PraterNetwork),
 	Domain:               [4]byte{0x00, 0x00, 0x30, 0x12},
 	GenesisEpoch:         152834,
 	ETH1SyncOffset:       new(big.Int).SetInt64(9015219),

@@ -4,11 +4,12 @@ import (
 	"math/big"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
 var TestNetwork = NetworkConfig{
 	Name:                 "testnet",
-	BeaconNetwork:        spectypes.PraterNetwork,
+	Beacon:               beacon.NewNetwork(spectypes.PraterNetwork),
 	Domain:               spectypes.V3Testnet,
 	GenesisEpoch:         152834,
 	ETH1SyncOffset:       new(big.Int).SetInt64(9015219),

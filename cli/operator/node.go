@@ -82,19 +82,19 @@ var StartNodeCmd = &cobra.Command{
 			log.Fatal("could not create logger", err)
 		}
 
-		eth2Network, forkVersion, err := setupSSVNetwork(logger)
+		networkConfig, forkVersion, err := setupSSVNetwork(logger)
 		if err != nil {
 			log.Fatal("could not setup network", err)
 		}
 
 		cfg.DBOptions.Ctx = cmd.Context()
-		db, err := setupDb(logger, eth2Network)
+		db, err := setupDb(logger, networkConfig.Beacon)
 		if err != nil {
 			logger.Fatal("could not setup db", zap.Error(err))
 		}
 		nodeStorage, operatorData := setupOperatorStorage(logger, db)
 
-		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, eth2Network, cfg.SSVOptions.ValidatorOptions.BuilderProposals)
+		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkConfig, cfg.SSVOptions.ValidatorOptions.BuilderProposals)
 		if err != nil {
 			logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 		}
@@ -102,29 +102,29 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.Ctx = cmd.Context()
 
 		permissioned := func() bool {
-			currentEpoch := uint64(eth2Network.EstimatedCurrentEpoch())
+			currentEpoch := uint64(networkConfig.Beacon.EstimatedCurrentEpoch())
 			return currentEpoch >= cfg.P2pNetworkConfig.PermissionedActivateEpoch && currentEpoch < cfg.P2pNetworkConfig.PermissionedDeactivateEpoch
 		}
 
 		cfg.P2pNetworkConfig.Permissioned = permissioned
 		cfg.P2pNetworkConfig.WhitelistedOperatorKeys = append(cfg.P2pNetworkConfig.WhitelistedOperatorKeys, p2pv1.StageExporterPubkeys...) // TODO: get whitelisted from network config
 
-		p2pNetwork := setupP2P(forkVersion, operatorData, db, logger, eth2Network)
+		p2pNetwork := setupP2P(forkVersion, operatorData, db, logger, networkConfig)
 
 		ctx := cmd.Context()
-		slotTicker := slot_ticker.NewTicker(ctx, eth2Network)
+		slotTicker := slot_ticker.NewTicker(ctx, networkConfig)
 
 		cfg.ETH2Options.Context = cmd.Context()
-		el, cl := setupNodes(logger, operatorData.ID, eth2Network, slotTicker)
+		el, cl := setupNodes(logger, operatorData.ID, networkConfig, slotTicker)
 
 		cfg.SSVOptions.ForkVersion = forkVersion
 		cfg.SSVOptions.Context = ctx
 		cfg.SSVOptions.DB = db
-		cfg.SSVOptions.Beacon = el
-		cfg.SSVOptions.ETHNetwork = eth2Network
+		cfg.SSVOptions.BeaconNode = el
+		cfg.SSVOptions.Network = networkConfig
 		cfg.SSVOptions.P2PNetwork = p2pNetwork
 		cfg.SSVOptions.ValidatorOptions.ForkVersion = forkVersion
-		cfg.SSVOptions.ValidatorOptions.ETHNetwork = eth2Network
+		cfg.SSVOptions.ValidatorOptions.ETHNetwork = networkConfig.Beacon
 		cfg.SSVOptions.ValidatorOptions.Context = ctx
 		cfg.SSVOptions.ValidatorOptions.DB = db
 		cfg.SSVOptions.ValidatorOptions.Network = p2pNetwork
@@ -157,7 +157,7 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		metrics.WaitUntilHealthy(logger, cfg.SSVOptions.Eth1Client, "execution client")
-		metrics.WaitUntilHealthy(logger, cfg.SSVOptions.Beacon, "consensus client")
+		metrics.WaitUntilHealthy(logger, cfg.SSVOptions.BeaconNode, "consensus client")
 		metrics.ReportSSVNodeHealthiness(true)
 
 		// load & parse local events yaml if exists, otherwise sync from contract
@@ -171,7 +171,7 @@ var StartNodeCmd = &cobra.Command{
 				logger.Fatal("failed to load local events", zap.Error(err))
 			}
 		} else {
-			if err := operatorNode.StartEth1(logger, eth2Network.ETH1SyncOffset); err != nil {
+			if err := operatorNode.StartEth1(logger, networkConfig.ETH1SyncOffset); err != nil {
 				logger.Fatal("failed to start eth1", zap.Error(err))
 			}
 		}
@@ -294,26 +294,24 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.St
 	return nodeStorage, operatorData
 }
 
-func setupSSVNetwork(logger *zap.Logger) (beaconprotocol.Network, forksprotocol.ForkVersion, error) {
-	networkConfig, err := networkconfig.GetNetworkConfigByName(cfg.SSVOptions.Network)
+func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, forksprotocol.ForkVersion, error) {
+	networkConfig, err := networkconfig.GetNetworkConfigByName(cfg.SSVOptions.NetworkName)
 	if err != nil {
-		return beaconprotocol.Network{}, "", err
+		return networkconfig.NetworkConfig{}, "", err
 	}
 
 	types.SetDefaultDomain(networkConfig.Domain)
 
-	eth2Network := beaconprotocol.NewNetwork(networkConfig)
-
-	currentEpoch := eth2Network.EstimatedCurrentEpoch()
+	currentEpoch := networkConfig.Beacon.EstimatedCurrentEpoch()
 	forkVersion := forksprotocol.GetCurrentForkVersion(currentEpoch)
 
 	logger.Info("setting ssv network",
-		fields.Network(cfg.SSVOptions.Network),
+		fields.Network(cfg.SSVOptions.NetworkName),
 		fields.Domain(networkConfig.Domain),
 		fields.Fork(forkVersion),
 		fields.Config(networkConfig),
 	)
-	return eth2Network, forkVersion, nil
+	return networkConfig, forkVersion, nil
 }
 
 func setupP2P(
@@ -321,7 +319,7 @@ func setupP2P(
 	operatorData *registrystorage.OperatorData,
 	db basedb.IDb,
 	logger *zap.Logger,
-	network beaconprotocol.Network,
+	network networkconfig.NetworkConfig,
 ) network.P2PNetwork {
 	istore := ssv_identity.NewIdentityStore(db)
 	netPrivKey, err := istore.SetupNetworkKey(logger, cfg.NetworkPrivateKey)
@@ -347,13 +345,13 @@ func setupP2P(
 func setupNodes(
 	logger *zap.Logger,
 	operatorID spectypes.OperatorID,
-	beaconNetwork beaconprotocol.Network,
+	network networkconfig.NetworkConfig,
 	slotTicker slot_ticker.Ticker,
-) (beaconprotocol.Beacon, eth1.Client) {
+) (beaconprotocol.BeaconNode, eth1.Client) {
 	// consensus client
 	cfg.ETH2Options.Graffiti = []byte("SSV.Network")
 	cfg.ETH2Options.GasLimit = spectypes.DefaultGasLimit
-	cfg.ETH2Options.Network = beaconNetwork
+	cfg.ETH2Options.Network = network.Beacon
 	cl, err := goclient.New(logger, cfg.ETH2Options, operatorID, slotTicker)
 	if err != nil {
 		logger.Fatal("failed to create beacon go-client", zap.Error(err),
@@ -361,7 +359,7 @@ func setupNodes(
 	}
 
 	// execution client
-	logger.Info("using registry contract address", fields.Address(beaconNetwork.RegistryContractAddr), fields.ABIVersion(cfg.ETH1Options.AbiVersion.String()))
+	logger.Info("using registry contract address", fields.Address(network.RegistryContractAddr), fields.ABIVersion(cfg.ETH1Options.AbiVersion.String()))
 	if len(cfg.ETH1Options.RegistryContractABI) > 0 {
 		logger.Info("using registry contract abi", fields.ABI(cfg.ETH1Options.RegistryContractABI))
 		if err = eth1.LoadABI(logger, cfg.ETH1Options.RegistryContractABI); err != nil {
@@ -373,7 +371,7 @@ func setupNodes(
 		NodeAddr:             cfg.ETH1Options.ETH1Addr,
 		ConnectionTimeout:    cfg.ETH1Options.ETH1ConnectionTimeout,
 		ContractABI:          eth1.ContractABI(cfg.ETH1Options.AbiVersion),
-		RegistryContractAddr: beaconNetwork.RegistryContractAddr,
+		RegistryContractAddr: network.RegistryContractAddr,
 		AbiVersion:           cfg.ETH1Options.AbiVersion,
 	})
 	if err != nil {

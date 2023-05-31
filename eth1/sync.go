@@ -10,7 +10,7 @@ import (
 
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/logging/fields"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	"github.com/bloxapp/ssv/networkconfig"
 )
 
 //go:generate mockgen -package=eth1 -destination=./mock_sync.go -source=./sync.go
@@ -44,7 +44,7 @@ func SyncEth1Events(
 	logger *zap.Logger,
 	client Client,
 	storage SyncOffsetStorage,
-	network beaconprotocol.Network,
+	network networkconfig.NetworkConfig,
 	syncOffset *SyncOffset,
 	handler SyncEventHandler,
 ) error {
@@ -109,7 +109,7 @@ func upgradeSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, syncOffset
 //  1. last saved sync offset
 //  2. provided value (from config)
 //  3. default sync offset (the genesis block of the contract)
-func determineSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, network beaconprotocol.Network, syncOffset *SyncOffset) *SyncOffset {
+func determineSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, network networkconfig.NetworkConfig, syncOffset *SyncOffset) *SyncOffset {
 	syncOffsetFromStorage, found, err := storage.GetSyncOffset()
 	if err != nil {
 		logger.Warn("failed to get sync offset", zap.Error(err))

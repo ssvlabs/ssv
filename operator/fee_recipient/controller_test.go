@@ -38,12 +38,12 @@ func TestSubmitProposal(t *testing.T) {
 
 	db, shareStorage, recipientStorage := createStorage(t)
 	defer db.Close(logger)
-	network := beacon.NewNetwork(networkconfig.TestNetwork)
+	network := networkconfig.TestNetwork
 	populateStorage(t, logger, shareStorage, operatorData)
 
 	frCtrl := NewController(&ControllerOptions{
 		Ctx:              context.TODO(),
-		EthNetwork:       network,
+		Network:          network,
 		ShareStorage:     shareStorage,
 		RecipientStorage: recipientStorage,
 		OperatorData:     operatorData,

@@ -68,7 +68,7 @@ type ControllerOptions struct {
 	MinPeers                   int           `yaml:"MinimumPeers" env:"MINIMUM_PEERS" env-default:"2" env-description:"The required minimum peers for sync"`
 	ETHNetwork                 beaconprotocol.Network
 	Network                    network.P2PNetwork
-	Beacon                     beaconprotocol.Beacon
+	Beacon                     beaconprotocol.BeaconNode
 	ShareEncryptionKeyProvider ShareEncryptionKeyProvider
 	CleanRegistryData          bool
 	FullNode                   bool `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Save decided history rather than just highest messages"`
@@ -126,7 +126,7 @@ type controller struct {
 	recipientsStorage registrystorage.Recipients
 	ibftStorageMap    *storage.QBFTStores
 
-	beacon     beaconprotocol.Beacon
+	beacon     beaconprotocol.BeaconNode
 	keyManager spectypes.KeyManager
 
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider

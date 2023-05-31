@@ -5,16 +5,16 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 
-	"github.com/bloxapp/ssv/networkconfig"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
 // Network is a beacon chain network.
 type Network struct {
-	networkconfig.NetworkConfig
+	spectypes.BeaconNetwork
 }
 
 // NewNetwork creates a new beacon chain network.
-func NewNetwork(network networkconfig.NetworkConfig) Network {
+func NewNetwork(network spectypes.BeaconNetwork) Network {
 	return Network{network}
 }
 
@@ -23,10 +23,6 @@ func (n Network) GetSlotStartTime(slot phase0.Slot) time.Time {
 	timeSinceGenesisStart := uint64(slot) * uint64(n.SlotDurationSec().Seconds())
 	start := time.Unix(int64(n.MinGenesisTime()+timeSinceGenesisStart), 0)
 	return start
-}
-
-func (n Network) MinGenesisTime() uint64 {
-	return n.BeaconNetwork.MinGenesisTime()
 }
 
 // EstimatedCurrentSlot returns the estimation of the current slot
@@ -81,4 +77,20 @@ func (n Network) LastSlotOfSyncPeriod(period uint64) phase0.Slot {
 	// If we are in the sync committee that ends at slot x we do not generate a message during slot x-1
 	// as it will never be included, hence -1.
 	return n.GetEpochFirstSlot(lastEpoch+1) - 2
+}
+
+func (n Network) String() string {
+	return string(n.BeaconNetwork)
+}
+
+func (n Network) MarshalJSON() ([]byte, error) {
+	return []byte(`"` + n.BeaconNetwork + `"`), nil
+}
+
+func (n *Network) UnmarshalJSON(b []byte) error {
+	if len(b) < 2 {
+		return nil
+	}
+	*n = NewNetwork(spectypes.BeaconNetwork(b[1 : len(b)-1]))
+	return nil
 }

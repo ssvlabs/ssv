@@ -14,7 +14,6 @@ import (
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
 func TestSyncEth1(t *testing.T) {
@@ -36,7 +35,7 @@ func TestSyncEth1(t *testing.T) {
 		eventsFeed.Send(&Event{Data: SyncEndedEvent{Logs: logs, Success: true}})
 	}()
 	// todo(align-contract-v0.3.1-rc.0) handle event handler?
-	err := SyncEth1Events(logger, eth1Client, storage, beacon.NewNetwork(networkconfig.TestNetwork), nil, nil)
+	err := SyncEth1Events(logger, eth1Client, storage, networkconfig.TestNetwork, nil, nil)
 	require.NoError(t, err)
 	syncOffset, _, err := storage.GetSyncOffset()
 	require.NoError(t, err)
@@ -60,7 +59,7 @@ func TestSyncEth1Error(t *testing.T) {
 		eventsFeed.Send(&Event{Data: SyncEndedEvent{Logs: logs, Success: false}})
 	}()
 	// todo(align-contract-v0.3.1-rc.0) handle event handler?
-	err := SyncEth1Events(logger, eth1Client, storage, beacon.NewNetwork(networkconfig.TestNetwork), nil, nil)
+	err := SyncEth1Events(logger, eth1Client, storage, networkconfig.TestNetwork, nil, nil)
 	require.EqualError(t, err, "failed to sync contract events: eth1-sync-test")
 
 	_, found, err := storage.GetSyncOffset()
@@ -86,7 +85,7 @@ func TestSyncEth1HandlerError(t *testing.T) {
 		eventsFeed.Send(&Event{Data: SyncEndedEvent{Logs: logs, Success: false}})
 	}()
 	// todo(align-contract-v0.3.1-rc.0) handle event handler?
-	err := SyncEth1Events(logger, eth1Client, storage, beacon.NewNetwork(networkconfig.TestNetwork), nil, func(event Event) ([]zap.Field, error) {
+	err := SyncEth1Events(logger, eth1Client, storage, networkconfig.TestNetwork, nil, func(event Event) ([]zap.Field, error) {
 		return nil, errors.New("test")
 	})
 	require.EqualError(t, err, "could not handle some of the events during history sync")
@@ -94,7 +93,6 @@ func TestSyncEth1HandlerError(t *testing.T) {
 
 func TestDetermineSyncOffset(t *testing.T) {
 	logger := logging.TestLogger(t)
-	beaconNetwork := beacon.NewNetwork(networkconfig.TestNetwork)
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -102,9 +100,9 @@ func TestDetermineSyncOffset(t *testing.T) {
 	t.Run("default sync offset", func(t *testing.T) {
 		storage := syncStorageMock(ctrl)
 
-		so := determineSyncOffset(logger, storage, beaconNetwork, nil)
+		so := determineSyncOffset(logger, storage, networkconfig.TestNetwork, nil)
 		require.NotNil(t, so)
-		require.Equal(t, beaconNetwork.ETH1SyncOffset, so)
+		require.Equal(t, networkconfig.TestNetwork.ETH1SyncOffset, so)
 	})
 
 	t.Run("persisted sync offset", func(t *testing.T) {
@@ -113,7 +111,7 @@ func TestDetermineSyncOffset(t *testing.T) {
 		persistedSyncOffset := "60e08f"
 		so.SetString(persistedSyncOffset, 16)
 		require.NoError(t, storage.SaveSyncOffset(so))
-		so = determineSyncOffset(logger, storage, beaconNetwork, nil)
+		so = determineSyncOffset(logger, storage, networkconfig.TestNetwork, nil)
 		require.NotNil(t, so)
 		require.Equal(t, persistedSyncOffset, so.Text(16))
 	})
@@ -122,7 +120,7 @@ func TestDetermineSyncOffset(t *testing.T) {
 		storage := syncStorageMock(ctrl)
 		soConfig := new(SyncOffset)
 		soConfig.SetString("61e08f", 16)
-		so := determineSyncOffset(logger, storage, beaconNetwork, soConfig)
+		so := determineSyncOffset(logger, storage, networkconfig.TestNetwork, soConfig)
 		require.NotNil(t, so)
 		require.Equal(t, "61e08f", so.Text(16))
 	})
