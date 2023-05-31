@@ -233,6 +233,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		),
 	}
 
+	// Start automatic expired item deletion in nonCommitteeValidators.
 	go ctrl.nonCommitteeValidators.Start()
 
 	if err := ctrl.initShares(logger, options); err != nil {
