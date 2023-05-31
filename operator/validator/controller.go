@@ -327,19 +327,6 @@ func (c *controller) handleRouterMessages(logger *zap.Logger) {
 	}
 }
 
-// getShare returns the share of the given validator public key
-// TODO: optimize
-func (c *controller) getShare(pk spectypes.ValidatorPK) (*types.SSVShare, error) {
-	share, found, err := c.sharesStorage.GetShare(pk)
-	if err != nil {
-		return nil, errors.Wrapf(err, "could not read validator share [%s]", pk)
-	}
-	if !found {
-		return nil, nil
-	}
-	return share, nil
-}
-
 var nonCommitteeValidatorTTLs = map[spectypes.BeaconRole]phase0.Slot{
 	spectypes.BNRoleAttester:                  64,
 	spectypes.BNRoleProposer:                  4,
@@ -551,9 +538,12 @@ func (c *controller) UpdateValidatorMetadata(logger *zap.Logger, pk string, meta
 		if err != nil {
 			return errors.Wrap(err, "could not decode public key")
 		}
-		share, err := c.getShare(pkBytes)
+		share, found, err := c.sharesStorage.GetShare(pkBytes)
 		if err != nil {
 			return errors.Wrap(err, "could not get share")
+		}
+		if !found {
+			return errors.New("share was not found")
 		}
 		started, err := c.onShareStart(logger, share)
 		if err != nil {
@@ -794,8 +784,7 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 			qbftCtrl := buildController(spectypes.BNRoleSyncCommitteeContribution, syncCommitteeContributionValueCheckF)
 			runners[role] = runner.NewSyncCommitteeAggregatorRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, syncCommitteeContributionValueCheckF, 0)
 		case spectypes.BNRoleValidatorRegistration:
-			qbftCtrl := buildController(spectypes.BNRoleValidatorRegistration, nil)
-			runners[role] = runner.NewValidatorRegistrationRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer)
+			runners[role] = runner.NewValidatorRegistrationRunner(spectypes.PraterNetwork, &options.SSVShare.Share, options.Beacon, options.Network, options.Signer)
 		}
 	}
 	return runners
