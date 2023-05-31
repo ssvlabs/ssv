@@ -97,6 +97,7 @@ func SetGlobalLogger(levelName string, levelEncoderName string, logFormat string
 
 func CapturePanic(logger *zap.Logger) {
 	if r := recover(); r != nil {
+		defer logger.Sync()
 		stackTrace := string(debug.Stack())
 		logger.Panic("Recovered from panic", zap.Any("panic", r), zap.String("stackTrace", stackTrace))
 	}
