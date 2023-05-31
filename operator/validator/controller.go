@@ -327,6 +327,19 @@ func (c *controller) handleRouterMessages(logger *zap.Logger) {
 	}
 }
 
+// getShare returns the share of the given validator public key
+// TODO: optimize
+func (c *controller) getShare(pk spectypes.ValidatorPK) (*types.SSVShare, error) {
+	share, found, err := c.sharesStorage.GetShare(pk)
+	if err != nil {
+		return nil, errors.Wrapf(err, "could not read validator share [%s]", pk)
+	}
+	if !found {
+		return nil, nil
+	}
+	return share, nil
+}
+
 var nonCommitteeValidatorTTLs = map[spectypes.BeaconRole]phase0.Slot{
 	spectypes.BNRoleAttester:                  64,
 	spectypes.BNRoleProposer:                  4,
