@@ -18,18 +18,16 @@ func (v *Validator) handleEventMessage(logger *zap.Logger, msg *queue.DecodedSSV
 	}
 	switch eventMsg.Type {
 	case types.Timeout:
-		err := dutyRunner.GetBaseRunner().QBFTController.OnTimeout(logger, *eventMsg)
-		if err != nil {
-			logger.Warn("❗ on timeout failed", zap.Error(err)) // need to return error instead?
+		if err := dutyRunner.GetBaseRunner().QBFTController.OnTimeout(logger, *eventMsg); err != nil {
+			return fmt.Errorf("timeout event: %w", err)
 		}
 		return nil
 	case types.ExecuteDuty:
-		err := v.OnExecuteDuty(logger, *eventMsg)
-		if err != nil {
-			logger.Warn("❗ failed to execute duty", zap.Error(err)) // need to return error instead?
+		if err := v.OnExecuteDuty(logger, *eventMsg); err != nil {
+			return fmt.Errorf("execute duty event: %w", err)
 		}
 		return nil
 	default:
-		return errors.New(fmt.Sprintf("unknown event msg - %s", eventMsg.Type.String()))
+		return fmt.Errorf("unknown event msg - %s", eventMsg.Type.String())
 	}
 }
