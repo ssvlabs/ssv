@@ -228,10 +228,12 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		messageWorker:        worker.NewWorker(logger, workerCfg),
 		historySyncBatchSize: options.HistorySyncBatchSize,
 
-		nonCommitteeValidators: ttlcache.New[spectypes.MessageID, *nonCommitteeValidator](
+		nonCommitteeValidators: ttlcache.New(
 			ttlcache.WithTTL[spectypes.MessageID, *nonCommitteeValidator](time.Minute * 13),
 		),
 	}
+
+	go ctrl.nonCommitteeValidators.Start()
 
 	if err := ctrl.initShares(logger, options); err != nil {
 		logger.Panic("could not initialize shares", zap.Error(err))
@@ -338,6 +340,14 @@ func (c *controller) getShare(pk spectypes.ValidatorPK) (*types.SSVShare, error)
 	return share, nil
 }
 
+var nonCommitteeValidatorTTLs = map[spectypes.BeaconRole]phase0.Slot{
+	spectypes.BNRoleAttester:                  64,
+	spectypes.BNRoleProposer:                  4,
+	spectypes.BNRoleAggregator:                4,
+	spectypes.BNRoleSyncCommittee:             4,
+	spectypes.BNRoleSyncCommitteeContribution: 4,
+}
+
 func (c *controller) handleWorkerMessages(logger *zap.Logger, msg *spectypes.SSVMessage) error {
 	// Get or create a nonCommitteeValidator for this MessageID, and lock it to prevent
 	// other handlers from processing
@@ -347,7 +357,10 @@ func (c *controller) handleWorkerMessages(logger *zap.Logger, msg *spectypes.SSV
 		defer c.nonCommitteeMutex.Unlock()
 
 		item := c.nonCommitteeValidators.Get(msg.GetID())
-		if item == nil {
+		if item != nil {
+			ncv = item.Value()
+		} else {
+			// Create a new nonCommitteeValidator.
 			share, err := c.getShare(msg.GetID().GetPubKey())
 			if err != nil {
 				return err
@@ -361,9 +374,12 @@ func (c *controller) handleWorkerMessages(logger *zap.Logger, msg *spectypes.SSV
 			ncv = &nonCommitteeValidator{
 				NonCommitteeValidator: validator.NewNonCommitteeValidator(logger, msg.GetID(), opts),
 			}
-			c.nonCommitteeValidators.Set(msg.GetID(), ncv, ttlcache.DefaultTTL)
-		} else {
-			ncv = item.Value()
+
+			ttlSlots := nonCommitteeValidatorTTLs[msg.MsgID.GetRoleType()]
+			c.nonCommitteeValidators.Set(msg.GetID(),
+				ncv,
+				time.Duration(ttlSlots)*c.beacon.GetBeaconNetwork().SlotDurationSec(),
+			)
 		}
 
 		ncv.Lock()
