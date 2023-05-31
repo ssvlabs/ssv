@@ -14,7 +14,6 @@ import (
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
 
@@ -33,7 +32,7 @@ func testKeyManager(t *testing.T) spectypes.KeyManager {
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 
-	km, err := NewETHKeyManagerSigner(logger, db, beacon.NewNetwork(networkconfig.TestNetwork), true)
+	km, err := NewETHKeyManagerSigner(logger, db, networkconfig.TestNetwork, true)
 	require.NoError(t, err)
 
 	sk1 := &bls.SecretKey{}

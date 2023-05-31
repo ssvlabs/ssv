@@ -8,6 +8,7 @@ import (
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
 var SupportedConfigs = map[string]NetworkConfig{
@@ -25,7 +26,7 @@ func GetNetworkConfigByName(name string) (NetworkConfig, error) {
 
 type NetworkConfig struct {
 	Name                 string
-	BeaconNetwork        spectypes.BeaconNetwork
+	Beacon               beacon.Network
 	Domain               spectypes.DomainType
 	GenesisEpoch         spec.Epoch
 	ETH1SyncOffset       *big.Int
@@ -44,15 +45,15 @@ func (n NetworkConfig) String() string {
 
 // ForkVersion returns the fork version of the network.
 func (n NetworkConfig) ForkVersion() [4]byte {
-	return n.BeaconNetwork.ForkVersion()
+	return n.Beacon.ForkVersion()
 }
 
 // SlotDurationSec returns slot duration
 func (n NetworkConfig) SlotDurationSec() time.Duration {
-	return n.BeaconNetwork.SlotDurationSec()
+	return n.Beacon.SlotDurationSec()
 }
 
 // SlotsPerEpoch returns number of slots per one epoch
 func (n NetworkConfig) SlotsPerEpoch() uint64 {
-	return n.BeaconNetwork.SlotsPerEpoch()
+	return n.Beacon.SlotsPerEpoch()
 }
