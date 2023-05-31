@@ -193,6 +193,13 @@ func (c *controller) handleValidatorAddedEvent(
 	}
 
 	pubKey := hex.EncodeToString(event.PublicKey)
+	// TODO: check if need
+	if ongoingSync {
+		if _, ok := c.validatorsMap.GetValidator(pubKey); ok {
+			logger.Debug("validator was loaded already")
+			return nil, nil
+		}
+	}
 
 	validatorShare, found, shareErr := c.sharesStorage.GetShare(event.PublicKey)
 	if shareErr != nil {
