@@ -203,7 +203,20 @@ func (c *controller) handleValidatorAddedEvent(
 
 	validatorShare, found, shareErr := c.sharesStorage.GetShare(event.PublicKey)
 	if shareErr != nil {
-		return nil, errors.Wrap(err, "could not check if validator share exist")
+		return nil, errors.Wrap(shareErr, "could not check if validator share exist")
+	}
+	// Prevent multiple registration of the same validator with different owner address
+	// owner A registers validator with public key X (OK)
+	// owner B registers validator with public key X (NOT OK)
+	if found && event.Owner != validatorShare.OwnerAddress {
+		err = &abiparser.MalformedEventError{
+			Err: errors.Errorf(
+				"validator share already exists with different owner address: expected %s, got %s",
+				validatorShare.OwnerAddress.String(),
+				event.Owner.String(),
+			),
+		}
+		return nil, err
 	}
 	if !found {
 		validatorShare, err = c.onShareCreate(logger, event)
@@ -275,6 +288,22 @@ func (c *controller) handleValidatorRemovedEvent(
 	share, found, err := c.sharesStorage.GetShare(event.PublicKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not check if validator share exist")
+	}
+
+	// Prevent removal of the validator registered with different owner address
+	// owner A registers validator with public key X (OK)
+	// owner B registers validator with public key X (NOT OK)
+	// owner A removes validator with public key X (OK)
+	// owner B removes validator with public key X (NOT OK)
+	if found && event.Owner != share.OwnerAddress {
+		err = &abiparser.MalformedEventError{
+			Err: errors.Errorf(
+				"validator share already exists with different owner address: expected %s, got %s",
+				share.OwnerAddress.String(),
+				event.Owner.String(),
+			),
+		}
+		return nil, err
 	}
 	if !found {
 		return nil, &abiparser.MalformedEventError{
