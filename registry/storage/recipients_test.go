@@ -215,11 +215,8 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 
 		data, found, err = storageCollection.GetRecipientData(owner)
 		require.NoError(t, err)
-		require.True(t, found)
-		require.NotNil(t, data)
-		require.Equal(t, owner, data.Owner)
-		require.Equal(t, feeRecipient, data.FeeRecipient)
-		require.Equal(t, storage.Nonce(0), *data.Nonce)
+		require.False(t, found)
+		require.Nil(t, data)
 	})
 
 	t.Run("get next nonce after fee recipient created - should be 0", func(t *testing.T) {
@@ -267,7 +264,7 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 
 	t.Run("get next nonce after bump", func(t *testing.T) {
 		rdToCreate := &storage.RecipientData{
-			Owner: common.BytesToAddress([]byte("0x11117")),
+			Owner: common.BytesToAddress([]byte("0x11118")),
 		}
 		copy(rdToCreate.FeeRecipient[:], rdToCreate.Owner.Bytes())
 		rd, err := storageCollection.SaveRecipientData(rdToCreate)
