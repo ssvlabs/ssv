@@ -13,10 +13,9 @@ import (
 	"github.com/prysmaticlabs/prysm/async/event"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/logging"
-
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
+	"github.com/bloxapp/ssv/logging"
 )
 
 func TestEth1Client_handleEvent(t *testing.T) {

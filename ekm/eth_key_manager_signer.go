@@ -25,7 +25,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
@@ -44,8 +44,8 @@ type ethKeyManagerSigner struct {
 }
 
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
-func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.IDb, network beaconprotocol.Network, domain spectypes.DomainType, builderProposals bool) (spectypes.KeyManager, error) {
-	signerStore := NewSignerStorage(db, network, logger)
+func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.IDb, network networkconfig.NetworkConfig, builderProposals bool) (spectypes.KeyManager, error) {
+	signerStore := NewSignerStorage(db, network.Beacon, logger)
 	options := &eth2keymanager.KeyVaultOptions{}
 	options.SetStorage(signerStore)
 	options.SetWalletType(core.NDWallet)
@@ -66,14 +66,14 @@ func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.IDb, network beaconpro
 	}
 
 	slashingProtector := slashingprotection.NewNormalProtection(signerStore)
-	beaconSigner := signer.NewSimpleSigner(wallet, slashingProtector, network.Network)
+	beaconSigner := signer.NewSimpleSigner(wallet, slashingProtector, core.Network(network.Beacon.BeaconNetwork))
 
 	return &ethKeyManagerSigner{
 		wallet:            wallet,
 		walletLock:        &sync.RWMutex{},
 		signer:            beaconSigner,
 		storage:           signerStore,
-		domain:            domain,
+		domain:            network.Domain,
 		slashingProtector: slashingProtector,
 		builderProposals:  builderProposals,
 	}, nil
