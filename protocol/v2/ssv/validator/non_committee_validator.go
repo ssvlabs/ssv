@@ -26,7 +26,7 @@ func NewNonCommitteeValidator(logger *zap.Logger, identifier spectypes.MessageID
 		Network: opts.Network,
 	}
 	ctrl := qbftcontroller.NewController(identifier[:], &opts.SSVShare.Share, types.GetDefaultDomain(), config, opts.FullNode)
-	ctrl.StoredInstances = make(qbftcontroller.InstanceContainer, 0, 1)
+	ctrl.StoredInstances = make(qbftcontroller.InstanceContainer, 0, nonCommitteeInstanceContainerCapacity(opts.FullNode))
 	ctrl.NewDecidedHandler = opts.NewDecidedHandler
 	if _, err := ctrl.LoadHighestInstance(identifier[:]); err != nil {
 		logger.Debug("❗ failed to load highest instance", zap.Error(err))
@@ -82,4 +82,13 @@ func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *specty
 		}
 		return
 	}
+}
+
+// nonCommitteeInstanceContainerCapacity returns the capacity of InstanceContainer for non-committee validators
+func nonCommitteeInstanceContainerCapacity(fullNode bool) int {
+	if fullNode {
+		// Helps full nodes reduce
+		return 2
+	}
+	return 1
 }
