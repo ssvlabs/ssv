@@ -2,7 +2,9 @@ package logging
 
 import (
 	"io"
+	"log"
 	"os"
+	"runtime/debug"
 	"time"
 
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -92,4 +94,17 @@ func SetGlobalLogger(levelName string, levelEncoderName string, logFormat string
 	zap.ReplaceGlobals(zap.New(zapcore.NewTee(consoleCore, fileCore)))
 
 	return nil
+}
+
+func CapturePanic(logger *zap.Logger) {
+	if r := recover(); r != nil {
+		// defer logger.Sync()
+		defer func() {
+			if err := logger.Sync(); err != nil {
+				log.Println("failed to sync zap.Logger", err)
+			}
+		}()
+		stackTrace := string(debug.Stack())
+		logger.Panic("Recovered from panic", zap.Any("panic", r), zap.String("stackTrace", stackTrace))
+	}
 }

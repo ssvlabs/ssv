@@ -76,11 +76,12 @@ var StartNodeCmd = &cobra.Command{
 	Use:   "start-node",
 	Short: "Starts an instance of SSV node",
 	Run: func(cmd *cobra.Command, args []string) {
-
 		logger, err := setupGlobal(cmd)
 		if err != nil {
 			log.Fatal("could not create logger", err)
 		}
+
+		defer logging.CapturePanic(logger)
 
 		networkConfig, forkVersion, err := setupSSVNetwork(logger)
 		if err != nil {
