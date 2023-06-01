@@ -17,7 +17,7 @@ var (
 	recipientsPrefix = []byte("recipients")
 )
 
-type Nonce int32
+type Nonce uint16
 
 // RecipientData the public data of a recipient
 type RecipientData struct {
@@ -28,7 +28,8 @@ type RecipientData struct {
 	// It serves a crucial role in protecting against replay attacks.
 	// Each time a new validator added event is triggered, regardless of whether the event is malformed or not,
 	// we increment this nonce by 1.
-	// todo(align-contract-v0.3.1-rc.0) explain why nullable
+	// ** The Nonce field can be nil because the 'FeeRecipientAddressUpdatedEvent'
+	// might occur before the addition of a validator to the network, and this event does not increment the nonce.
 	Nonce *Nonce `json:"nonce"`
 }
 
@@ -116,8 +117,11 @@ func (s *recipientsStorage) GetNextNonce(owner common.Address) (Nonce, error) {
 	if !found {
 		return Nonce(0), nil
 	}
+	if data == nil {
+		return Nonce(0), errors.New("recipient data is nil")
+	}
 	if data.Nonce == nil {
-		return Nonce(0), errors.New("nonce data is nil")
+		return Nonce(0), nil
 	}
 
 	return *data.Nonce + 1, nil
