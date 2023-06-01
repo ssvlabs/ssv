@@ -161,7 +161,6 @@ var StartNodeCmd = &cobra.Command{
 
 		// load & parse local events yaml if exists, otherwise sync from contract
 		if len(cfg.LocalEventsPath) > 0 {
-			// todo(align-contract-v0.3.1-rc.0) how the nonce effect the local events - regression?
 			if err := validator.LoadLocalEvents(
 				logger,
 				validatorCtrl.Eth1EventHandler(logger, false),

@@ -107,8 +107,7 @@ type Controller interface {
 	//OnFork(forkVersion forksprotocol.ForkVersion) error
 }
 
-// EventHandler represents the interface for compatible storage
-// todo(align-contract-v0.3.1-rc.0) add proper place for the interface
+// EventHandler represents the interface for compatible storage event handlers
 type EventHandler interface {
 	GetEventData(txHash common.Hash) (*registrystorage.EventData, bool, error)
 	SaveEventData(txHash common.Hash) error
