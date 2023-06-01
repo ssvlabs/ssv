@@ -365,7 +365,8 @@ func (c *controller) handleWorkerMessages(logger *zap.Logger, msg *spectypes.SSV
 			}
 
 			ttlSlots := nonCommitteeValidatorTTLs[msg.MsgID.GetRoleType()]
-			c.nonCommitteeValidators.Set(msg.GetID(),
+			c.nonCommitteeValidators.Set(
+				msg.GetID(),
 				ncv,
 				time.Duration(ttlSlots)*c.beacon.GetBeaconNetwork().SlotDurationSec(),
 			)
@@ -786,7 +787,8 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 			qbftCtrl := buildController(spectypes.BNRoleSyncCommitteeContribution, syncCommitteeContributionValueCheckF)
 			runners[role] = runner.NewSyncCommitteeAggregatorRunner(options.BeaconNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, syncCommitteeContributionValueCheckF, 0)
 		case spectypes.BNRoleValidatorRegistration:
-			runners[role] = runner.NewValidatorRegistrationRunner(options.BeaconNetwork, &options.SSVShare.Share, options.Beacon, options.Network, options.Signer)
+			qbftCtrl := buildController(spectypes.BNRoleValidatorRegistration, nil)
+			runners[role] = runner.NewValidatorRegistrationRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer)
 		}
 	}
 	return runners

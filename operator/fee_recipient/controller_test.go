@@ -49,14 +49,14 @@ func TestSubmitProposal(t *testing.T) {
 		OperatorData:     operatorData,
 	})
 
-	t.Run("submit first time or first slot in epoch", func(t *testing.T) {
+	t.Run("submit first time or halfway through epoch", func(t *testing.T) {
 		numberOfRequests := 4
 		var wg sync.WaitGroup
 		client := beacon.NewMockBeacon(ctrl)
 		client.EXPECT().SubmitProposalPreparation(gomock.Any()).DoAndReturn(func(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
 			wg.Done()
 			return nil
-		}).MinTimes(numberOfRequests).MaxTimes(numberOfRequests) // call first time and on the first slot of epoch. each time should be 2 request as we have two batches
+		}).MinTimes(numberOfRequests).MaxTimes(numberOfRequests) // call first time and on the halfway through epoch. each time should be 2 request as we have two batches
 
 		ticker := mocks.NewMockTicker(ctrl)
 		ticker.EXPECT().Subscribe(gomock.Any()).DoAndReturn(func(subscription chan phase0.Slot) event.Subscription {
@@ -66,7 +66,7 @@ func TestSubmitProposal(t *testing.T) {
 			time.Sleep(time.Millisecond * 500)
 			subscription <- 20 // should not call submit
 			time.Sleep(time.Millisecond * 500)
-			subscription <- 32 // first slot of epoch
+			subscription <- phase0.Slot(network.SlotsPerEpoch()) / 2 // halfway through epoch
 			time.Sleep(time.Millisecond * 500)
 			subscription <- 63 // should not call submit
 			return nil

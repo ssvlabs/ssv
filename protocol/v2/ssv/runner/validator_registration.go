@@ -14,6 +14,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 )
 
@@ -31,6 +32,7 @@ type ValidatorRegistrationRunner struct {
 func NewValidatorRegistrationRunner(
 	beaconNetwork spectypes.BeaconNetwork,
 	share *spectypes.Share,
+	qbftController *controller.Controller,
 	beacon specssv.BeaconNode,
 	network specssv.Network,
 	signer spectypes.KeyManager,
@@ -40,6 +42,7 @@ func NewValidatorRegistrationRunner(
 			BeaconRoleType: spectypes.BNRoleValidatorRegistration,
 			BeaconNetwork:  beaconNetwork,
 			Share:          share,
+			QBFTController: qbftController,
 		},
 
 		beacon:  beacon,
