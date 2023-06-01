@@ -108,7 +108,7 @@ func (n *p2pNetwork) GetHistory(logger *zap.Logger, mid spectypes.MessageID, fro
 	}
 	// if no peers were provided -> select a random set of peers
 	if len(peers) == 0 {
-		random, err := n.getSubsetOfPeers(logger, mid.GetPubKey(), peerCount, n.peersWithProtocolsFilter(string(protocolID)))
+		random, err := n.getSubsetOfPeers(logger, mid.GetPubKey(), peerCount, n.peersWithProtocolsFilter(protocolID))
 		if err != nil {
 			return nil, 0, errors.Wrap(err, "could not get subset of peers")
 		}
@@ -259,7 +259,9 @@ func (n *p2pNetwork) makeSyncRequest(logger *zap.Logger, peers []peer.ID, mid sp
 		logger := logger.With(fields.PeerID(pid))
 		raw, err := n.streamCtrl.Request(logger, pid, protocol, encoded)
 		if err != nil {
-			if err != multistream.ErrNotSupported {
+			// TODO: is this how to check for ErrNotSupported?
+			var e multistream.ErrNotSupported[libp2p_protocol.ID]
+			if errors.Is(err, e) {
 				logger.Debug("could not make stream request", zap.Error(err))
 			}
 			continue
@@ -283,7 +285,7 @@ func (n *p2pNetwork) makeSyncRequest(logger *zap.Logger, peers []peer.ID, mid sp
 }
 
 // peersWithProtocolsFilter is used to accept peers that supports the given protocols
-func (n *p2pNetwork) peersWithProtocolsFilter(protocols ...string) func(peer.ID) bool {
+func (n *p2pNetwork) peersWithProtocolsFilter(protocols ...libp2p_protocol.ID) func(peer.ID) bool {
 	return func(id peer.ID) bool {
 		supported, err := n.host.Network().Peerstore().SupportsProtocols(id, protocols...)
 		if err != nil {
