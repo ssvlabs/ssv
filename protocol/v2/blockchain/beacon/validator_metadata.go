@@ -49,6 +49,11 @@ func (m *ValidatorMetadata) IsActive() bool {
 	return m.Status == eth2apiv1.ValidatorStateActiveOngoing
 }
 
+// IsAttesting returns true if the validator should be attesting.
+func (m *ValidatorMetadata) IsAttesting() bool {
+	return m.Status.IsAttesting()
+}
+
 // Exiting returns true if the validator is existing or exited
 func (m *ValidatorMetadata) Exiting() bool {
 	return m.Status.IsExited() || m.Status.HasExited()

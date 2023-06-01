@@ -93,7 +93,7 @@ type ControllerOptions struct {
 type Controller interface {
 	ListenToEth1Events(logger *zap.Logger, feed *event.Feed)
 	StartValidators(logger *zap.Logger)
-	GetValidatorsIndices(logger *zap.Logger) []phase0.ValidatorIndex
+	ActiveValidatorIndices(logger *zap.Logger) []phase0.ValidatorIndex
 	GetValidator(pubKey string) (*validator.Validator, bool)
 	UpdateValidatorMetaDataLoop(logger *zap.Logger)
 	StartNetworkHandlers(logger *zap.Logger)
@@ -290,7 +290,7 @@ func (c *controller) GetValidatorStats(logger *zap.Logger) (uint64, uint64, uint
 		if ok := s.BelongsToOperator(c.operatorData.ID); ok {
 			operatorShares++
 		}
-		if s.HasBeaconMetadata() && s.BeaconMetadata.IsActive() {
+		if s.HasBeaconMetadata() && s.BeaconMetadata.IsAttesting() {
 			active++
 		}
 	}
@@ -564,15 +564,15 @@ func (c *controller) GetValidator(pubKey string) (*validator.Validator, bool) {
 	return c.validatorsMap.GetValidator(pubKey)
 }
 
-// GetValidatorsIndices returns a list of all the active validators indices
+// ActiveValidatorIndices returns a list of all the active validators indices
 // and fetch indices for missing once (could be first time attesting or non active once)
-func (c *controller) GetValidatorsIndices(logger *zap.Logger) []phase0.ValidatorIndex {
+func (c *controller) ActiveValidatorIndices(logger *zap.Logger) []phase0.ValidatorIndex {
 	logger = logger.Named(logging.NameController)
 
 	indices := make([]phase0.ValidatorIndex, 0, len(c.validatorsMap.validatorsMap))
 	err := c.validatorsMap.ForEach(func(v *validator.Validator) error {
 		// Beacon node throws error when trying to fetch duties for non-existing validators.
-		if v.Share.BeaconMetadata.IsActive() {
+		if v.Share.BeaconMetadata.IsAttesting() {
 			indices = append(indices, v.Share.BeaconMetadata.Index)
 		}
 		return nil

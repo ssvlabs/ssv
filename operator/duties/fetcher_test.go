@@ -122,7 +122,7 @@ func TestDutyFetcher_AddMissingSlots(t *testing.T) {
 
 func createIndexFetcher(ctrl *gomock.Controller, result []phase0.ValidatorIndex) *mocks.MockvalidatorsIndicesFetcher {
 	indexFetcher := mocks.NewMockvalidatorsIndicesFetcher(ctrl)
-	indexFetcher.EXPECT().GetValidatorsIndices(gomock.Any()).Return(result).Times(1)
+	indexFetcher.EXPECT().ActiveValidatorIndices(gomock.Any()).Return(result).Times(1)
 
 	return indexFetcher
 }
