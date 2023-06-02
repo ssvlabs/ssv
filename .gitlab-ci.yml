@@ -85,11 +85,6 @@ Deploy ssv nodes to blox-infra-stage cluster:
     # +-------------------+
     # █▓▒░ Keep commented unless you're testing the bootnode ░▒▓█
     # - .k8/scripts/deploy-boot-node-yaml-on-stage-k8s.sh $DOCKER_REPO_INFRA_STAGE $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V1 $SSV_NODES_MEM_LIMIT_V1
-    #
-    # +------------------------+
-    # │  Deploy Prater Jato V2 |
-    # +------------------------+
-    # - .k8/scripts/deploy-ssv-nodes-prater-jato-v2-yamls-on-stage-k8s.sh $DOCKER_REPO_INFRA_STAGE $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V1 $SSV_NODES_MEM_LIMIT_V1
   only:
     - stage
 
@@ -112,7 +107,7 @@ Build prod Docker image:
     - docker tag $IMAGE_NAME:$CI_BUILD_REF $DOCKER_REPO_INFRA_PROD:$CI_BUILD_REF
     - $DOCKER_LOGIN_TO_INFRA_PROD_REPO && docker push $DOCKER_REPO_INFRA_PROD:$CI_BUILD_REF
   only:
-    - main
+    - stage-jato-v2-setup-ci-cd
 
 Deploy v3 ssv-nodes to blox-infra-prod cluster:
   stage: deploy
@@ -128,9 +123,14 @@ Deploy v3 ssv-nodes to blox-infra-prod cluster:
     - curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.18.0/bin/linux/amd64/kubectl
     - chmod +x ./kubectl
     - mv ./kubectl /usr/bin/kubectl
-    - .k8/scripts/deploy-ssv-node-v3-yamls-on-prod-k8s.sh $DOCKER_REPO_INFRA_PROD $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $PROD_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V3 $SSV_NODES_MEM_LIMIT_V3
+    # - .k8/scripts/deploy-ssv-node-v3-yamls-on-prod-k8s.sh $DOCKER_REPO_INFRA_PROD $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $PROD_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V3 $SSV_NODES_MEM_LIMIT_V3
+    #
+    # +------------------------+
+    # │  Deploy Prater Jato V2 |
+    # +------------------------+
+    - .k8/scripts/deploy-ssv-nodes-prater-jato-v2-yamls-on-stage-k8s.sh $DOCKER_REPO_INFRA_STAGE $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V1 $SSV_NODES_MEM_LIMIT_V1
   only:
-    - main
+    - stage-jato-v2-setup-ci-cd
 
 
 Deploy ssv exporter to blox-infra-prod cluster:
