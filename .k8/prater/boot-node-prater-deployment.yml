@@ -102,7 +102,7 @@ spec:
             valueFrom:
               secretKeyRef:
                 name: config-secrets
-                key: boot_node_prater_axternal_ip
+                key: boot_node_prater_external_ip
           - name: TCP_PORT
             value: "5001"
           - name: UDP_PORT
