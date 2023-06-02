@@ -103,7 +103,7 @@ spec:
           - name: GENESIS_EPOCH
             value: "1"
           - name: DB_PATH
-            value: "./data/jato-v2-stage"
+            value: "./data/db-jato-v2"
           - name: METRICS_API_PORT
             value: "15011"
           - name: ENABLE_PROFILE

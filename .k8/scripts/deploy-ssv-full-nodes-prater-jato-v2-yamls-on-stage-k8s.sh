@@ -143,10 +143,5 @@ fi
 #fi
 
 #deploy
-#kubectl --context=$K8S_CONTEXT apply -f .k8/prater/boot-node-prater-deployment.yml || exit 1
 kubectl --context=$K8S_CONTEXT apply -f .k8/prater/ssv-full-node-prater-1.yml || exit 1
 kubectl --context=$K8S_CONTEXT apply -f .k8/prater/ssv-full-node-prater-2.yml || exit 1
-#kubectl --context=$K8S_CONTEXT apply -f .k8/prater/ssv-node-prater-1-deployment.yml || exit 1
-#kubectl --context=$K8S_CONTEXT apply -f .k8/prater/ssv-node-prater-2-deployment.yml || exit 1
-#kubectl --context=$K8S_CONTEXT apply -f .k8/prater/ssv-node-prater-3-deployment.yml || exit 1
-#kubectl --context=$K8S_CONTEXT apply -f .k8/prater/ssv-node-prater-4-deployment.yml || exit 1
