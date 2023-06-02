@@ -5,11 +5,12 @@
 package mocks
 
 import (
+	reflect "reflect"
+
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	gomock "github.com/golang/mock/gomock"
-	event "github.com/prysmaticlabs/prysm/async/event"
+	event "github.com/prysmaticlabs/prysm/v4/async/event"
 	zap "go.uber.org/zap"
-	reflect "reflect"
 )
 
 // MockTicker is a mock of Ticker interface
