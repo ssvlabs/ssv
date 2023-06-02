@@ -91,11 +91,13 @@ spec:
           name: port-5001      
           hostPort: 5001
         env:
-          - name: BOOT_NODE_PRIVATE_KEY
-            valueFrom:
-              secretKeyRef:
-                name: config-secrets
-                key: boot_node_prater_private_key
+          - name: CONFIG_PATH
+            value: /config/config.example.yaml
+#          - name: BOOT_NODE_PRIVATE_KEY
+#            valueFrom:
+#              secretKeyRef:
+#                name: config-secrets
+#                key: boot_node_prater_private_key
           - name: BOOT_NODE_EXTERNAL_IP
             valueFrom:
               secretKeyRef:
@@ -108,10 +110,16 @@ spec:
         volumeMounts:
         - mountPath: /data/bootnode
           name: boot-node-prater
+        - mountPath: /data/config.yaml
+          name: boot-node-prater-cm
       volumes:
       - name: boot-node-prater
         persistentVolumeClaim:
           claimName: boot-node-prater
+      - configMap:
+          defaultMode: 420
+          name: boot-node-prater-cm
+        name: boot-node-prater-cm
       tolerations:
       - effect: NoSchedule
         key: kubernetes.io/role
