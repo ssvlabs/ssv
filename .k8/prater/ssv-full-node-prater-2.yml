@@ -138,9 +138,9 @@ spec:
           - name: DISCOVERY_TYPE_KEY
             value: "discv5"
           - name: NETWORK
-            value: "prater"
+            value: "jato-v2-stage"
           - name: DB_PATH
-            value: "./data/db-shifu-v3"
+            value: "./data/jato-v2-stage"
           - name: METRICS_API_PORT
             value: "15010"
           - name: ENABLE_PROFILE
