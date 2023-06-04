@@ -27,13 +27,14 @@ func GetNetworkConfigByName(name string) (NetworkConfig, error) {
 }
 
 type NetworkConfig struct {
-	Name                 string
-	Beacon               beacon.Network
-	Domain               spectypes.DomainType
-	GenesisEpoch         spec.Epoch
-	ETH1SyncOffset       *big.Int
-	RegistryContractAddr string
-	Bootnodes            []string
+	Name                    string
+	Beacon                  beacon.Network
+	Domain                  spectypes.DomainType
+	GenesisEpoch            spec.Epoch
+	ETH1SyncOffset          *big.Int
+	RegistryContractAddr    string
+	Bootnodes               []string
+	WhitelistedOperatorKeys []string
 }
 
 func (n NetworkConfig) String() string {
