@@ -40,7 +40,7 @@ Build stage Docker image:
     - docker tag $IMAGE_NAME:$CI_BUILD_REF $DOCKER_REPO_INFRA_STAGE:$CI_BUILD_REF
     - $DOCKER_LOGIN_TO_INFRA_STAGE_REPO && docker push $DOCKER_REPO_INFRA_STAGE:$CI_BUILD_REF
   only:
-    - stage-jato-v2-setup-ci-cd-disabled
+    - stage-jato-v2-setup-ci-cd
 
 Deploy nodes to stage:
   stage: deploy
@@ -71,7 +71,7 @@ Deploy nodes to stage:
     # █▓▒░ Keep commented unless you're testing the bootnode ░▒▓█
     # - .k8/stage/scripts/deploy-boot-nodes.sh $DOCKER_REPO_INFRA_STAGE $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V1 $SSV_NODES_MEM_LIMIT_V1
   only:
-    - stage-jato-v2-setup-ci-cd-disabled
+    - stage-jato-v2-setup-ci-cd
 
 Deploy exporter to stage:
   stage: deploy
@@ -87,7 +87,7 @@ Deploy exporter to stage:
     - mv kubectl /usr/bin/
     - .k8/stage/scripts/deploy-exporters.sh $DOCKER_REPO_INFRA_STAGE $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $SSV_EXPORTER_CPU_LIMIT $SSV_EXPORTER_MEM_LIMIT
   only:
-    - stage-jato-v2-setup-ci-cd-disabled
+    - stage-jato-v2-setup-ci-cd
 
 
 
@@ -108,7 +108,7 @@ Build prod Docker image:
     - docker tag $IMAGE_NAME:$CI_BUILD_REF $DOCKER_REPO_INFRA_PROD:$CI_BUILD_REF
     - $DOCKER_LOGIN_TO_INFRA_PROD_REPO && docker push $DOCKER_REPO_INFRA_PROD:$CI_BUILD_REF
   only:
-    - stage-jato-v2-setup-ci-cd
+    - stage-jato-v2-setup-ci-cd-disabled
 
 Deploy nodes to prod:
   stage: deploy
@@ -136,7 +136,7 @@ Deploy nodes to prod:
     # █▓▒░ Keep commented unless you're testing the bootnode ░▒▓█
     # - .k8/production/prater/scripts/deploy-boot-nodes.sh $DOCKER_REPO_INFRA_PROD $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $PROD_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V3 $SSV_NODES_MEM_LIMIT_V3
   only:
-    - stage-jato-v2-setup-ci-cd
+    - stage-jato-v2-setup-ci-cd-disabled
 
 Deploy exporter to prod:
   stage: deploy
@@ -154,4 +154,4 @@ Deploy exporter to prod:
     - mv ./kubectl /usr/bin/kubectl
     - .k8/production/prater/scripts/deploy-exporters.sh $DOCKER_REPO_INFRA_PROD $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $SSV_EXPORTER_CPU_LIMIT $SSV_EXPORTER_MEM_LIMIT
   only:
-    - stage-jato-v2-setup-ci-cd
+    - stage-jato-v2-setup-ci-cd-disabled
