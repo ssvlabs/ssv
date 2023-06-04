@@ -33,7 +33,7 @@ if [[ -z $6 ]]; then
 fi
 
 if [[ -z $7 ]]; then
-  echo "Pleae provide domain suffix"
+  echo "Please provide domain suffix"
   exit 1
 fi
 
@@ -80,22 +80,14 @@ if ! kubectl --context=$K8S_CONTEXT get ns | grep -q $NAMESPACE; then
   kubectl --context=$K8S_CONTEXT create namespace $NAMESPACE
 fi
 
-#config
-#if [[ -d .k8/configmaps/ ]]; then
-#config
-  #for file in $(ls -A1 .k8/configmaps/); do
-    #sed -i -e "s|REPLACE_NAMESPACE|${NAMESPACE}|g" ".k8/configmaps/${file}" 
-  #done
-#fi
+DIR=".k8/stage"
+DEPLOY_FILES=(
+  "ssv-exporter-1.yml"
+  "ssv-exporter-2.yml"
+)
 
-#if [[ -d .k8/secrets/ ]]; then
-  #for file in $(ls -A1 .k8/secrets/); do
-   #sed -i -e "s|REPLACE_NAMESPACE|${NAMESPACE}|g" ".k8/secrets/${file}"
-  #done
-#fi
-
-if [[ -d .k8/stage/ ]]; then
-  for file in $(ls -A1 .k8/stage/*.yml); do
+if [[ -d $DIR ]]; then
+  for file in "${DEPLOY_FILES[@]}"; do
    sed -i -e "s|REPLACE_NAMESPACE|${NAMESPACE}|g" \
           -e "s|REPLACE_DOCKER_REPO|${DOCKERREPO}|g" \
           -e "s|REPLACE_REPLICAS|${REPLICAS}|g" \
@@ -103,35 +95,11 @@ if [[ -d .k8/stage/ ]]; then
           -e "s|REPLACE_API_VERSION|${K8S_API_VERSION}|g" \
           -e "s|REPLACE_EXPORTER_CPU_LIMIT|${EXPORTER_CPU_LIMIT}|g" \
           -e "s|REPLACE_EXPORTER_MEM_LIMIT|${EXPORTER_MEM_LIMIT}|g" \
-	  -e "s|REPLACE_IMAGETAG|${IMAGETAG}|g" "${file}" || exit 1
+	        -e "s|REPLACE_IMAGETAG|${IMAGETAG}|g" "${DIR}/${file}" || exit 1
   done
 fi
 
-#disable automounting of tokens
-#kubectl --context=admin-prod patch serviceaccount default -p "automountServiceAccountToken: false" -n ${NAMESPACE}
-
-#apply network policy
-#for file in $(ls -A1 .k8/network-policy/); do
-#  sed -i -e "s|REPLACE_NAMESPACE|${NAMESPACE}|g" .k8/network-policy/${file} || exit 1
-#done
-
-
-#secure namespace
-#if [ "${DEPL_TYPE}" = "prod" ]; then
-
-
-
-  #kubectl --context=admin-prod apply -f .k8/psp/ -n ${NAMESPACE} || exit 1
-
-  #apply network policy
-  #for file in $(ls -A1 .k8/network-policy/); do
-    #sed -i -e "s|REPLACE_NAMESPACE|${NAMESPACE}|g" .k8/network-policy/${file} || exit 1
-  #done
-  #kubectl --context=admin-prod apply -f .k8/network-policy/ -n ${NAMESPACE} || exit 1
-
-
-#fi
-
 #deploy
-kubectl --context=$K8S_CONTEXT apply -f .k8/stage/ssv-exporter-1.yml || exit 1
-kubectl --context=$K8S_CONTEXT apply -f .k8/stage/ssv-exporter-2.yml || exit 1
+for file in "${DEPLOY_FILES[@]}"; do
+    kubectl --context=$K8S_CONTEXT apply -f "${DIR}/${file}" || exit 1
+done

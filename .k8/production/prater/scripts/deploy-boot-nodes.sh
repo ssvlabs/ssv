@@ -103,8 +103,13 @@ fi
   #done
 #fi
 
-if [[ -d .k8/production/prater/ ]]; then
-  for file in $(ls -A1 .k8/production/prater/*.yml); do
+DIR=".k8/production/prater"
+DEPLOY_FILES=(
+  "boot-node-prater-deployment.yml"
+)
+
+if [[ -d $DIR ]]; then
+  for file in "${DEPLOY_FILES[@]}"; do
    sed -i -e "s|REPLACE_NAMESPACE|${NAMESPACE}|g" \
           -e "s|REPLACE_DOCKER_REPO|${DOCKERREPO}|g" \
           -e "s|REPLACE_REPLICAS|${REPLICAS}|g" \
@@ -113,34 +118,11 @@ if [[ -d .k8/production/prater/ ]]; then
           -e "s|REPLACE_HEALTH_IMAGE|${HEALTH_CHECK_IMAGE}|g" \
           -e "s|REPLACE_NODES_CPU_LIMIT|${NODES_CPU_LIMIT}|g" \
           -e "s|REPLACE_NODES_MEM_LIMIT|${NODES_MEM_LIMIT}|g" \
-	  -e "s|REPLACE_IMAGETAG|${IMAGETAG}|g" "${file}" || exit 1
+	        -e "s|REPLACE_IMAGETAG|${IMAGETAG}|g" "${DIR}/${file}" || exit 1
   done
 fi
 
-#disable automounting of tokens
-#kubectl --context=admin-prod patch serviceaccount default -p "automountServiceAccountToken: false" -n ${NAMESPACE}
-
-#apply network policy
-#for file in $(ls -A1 .k8/network-policy/); do
-#  sed -i -e "s|REPLACE_NAMESPACE|${NAMESPACE}|g" .k8/network-policy/${file} || exit 1
-#done
-
-
-#secure namespace
-#if [ "${DEPL_TYPE}" = "prod" ]; then
-
-
-
-  #kubectl --context=admin-prod apply -f .k8/psp/ -n ${NAMESPACE} || exit 1
-
-  #apply network policy
-  #for file in $(ls -A1 .k8/network-policy/); do
-    #sed -i -e "s|REPLACE_NAMESPACE|${NAMESPACE}|g" .k8/network-policy/${file} || exit 1
-  #done
-  #kubectl --context=admin-prod apply -f .k8/network-policy/ -n ${NAMESPACE} || exit 1
-
-
-#fi
-
 #deploy
-kubectl --context=$K8S_CONTEXT apply -f .k8/production/prater/boot-node-prater-deployment.yml || exit 1
+for file in "${DEPLOY_FILES[@]}"; do
+    kubectl --context=$K8S_CONTEXT apply -f "${DIR}/${file}" || exit 1
+done
