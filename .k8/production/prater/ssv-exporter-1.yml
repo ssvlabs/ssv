@@ -119,11 +119,6 @@ spec:
         env:
           - name: SHARE_CONFIG
             value: "./data/share.yaml"
-          - name: ETH_1_ADDR
-            valueFrom:
-              secretKeyRef:
-                name: config-secrets
-                key: eth1_addr
           - name: LOG_LEVEL
             value: "debug"
           - name: DB_REPORTING
