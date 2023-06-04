@@ -167,9 +167,12 @@ func (c *Config) configureAddrs(logger *zap.Logger, opts []libp2p.Option) ([]lib
 
 // TransformBootnodes converts bootnodes string and convert it to slice
 func (c *Config) TransformBootnodes() []string {
+	if c.Bootnodes == "" {
+		return c.Network.Bootnodes
+	}
 	items := strings.Split(c.Bootnodes, ";")
 	if len(items) == 0 {
-		items = append(items, c.Network.Bootnodes...)
+		return c.Network.Bootnodes
 	}
 	return items
 }
