@@ -21,6 +21,7 @@ func TestStorage_SaveAndGetEventData(t *testing.T) {
 	t.Run("get non-existing event", func(t *testing.T) {
 		eventData := &storage.EventData{}
 		copy(eventData.TxHash[:], "0x1")
+
 		nonExistingEvent, found, err := storageCollection.GetEventData(eventData.TxHash)
 		require.NoError(t, err)
 		require.Nil(t, nonExistingEvent)
@@ -30,8 +31,10 @@ func TestStorage_SaveAndGetEventData(t *testing.T) {
 	t.Run("create and get event", func(t *testing.T) {
 		edToCreate := &storage.EventData{}
 		copy(edToCreate.TxHash[:], "0x1")
+
 		err := storageCollection.SaveEventData(edToCreate.TxHash)
 		require.NoError(t, err)
+
 		eventDataFromDB, found, err := storageCollection.GetEventData(edToCreate.TxHash)
 		require.NoError(t, err)
 		require.True(t, found)
