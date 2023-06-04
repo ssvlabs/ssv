@@ -174,7 +174,7 @@ func (c *Config) TransformBootnodes() []string {
 	if len(items) == 0 {
 		return c.Network.Bootnodes
 	}
-	return items
+	return append(items, c.Network.Bootnodes...)
 }
 
 func userAgent(fromCfg string) string {
