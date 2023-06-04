@@ -16,7 +16,7 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/prysm/async/event"
+	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth1"

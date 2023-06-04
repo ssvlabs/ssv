@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/prysmaticlabs/prysm/async/event"
+	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
