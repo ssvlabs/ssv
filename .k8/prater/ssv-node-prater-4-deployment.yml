@@ -79,11 +79,6 @@ spec:
         env:
           - name: SHARE_CONFIG
             value: "./data1/share.yaml"
-          - name: BOOTNODES
-            valueFrom:
-              secretKeyRef:
-                name: config-secrets
-                key: boot_node_prater_enr
           - name: LOG_LEVEL
             value: "debug"
           - name: DB_REPORTING
@@ -93,7 +88,7 @@ spec:
           - name: DISCOVERY_TYPE_KEY
             value: "discv5"
           - name: NETWORK
-            value: "jato-v2-stage"
+            value: "jato-v2"
           - name: CONSENSUS_TYPE
             value: "validation"
           - name: HOST_DNS
@@ -108,13 +103,6 @@ spec:
             value: "15014"
           - name: ENABLE_PROFILE
             value: "true"
-          - name: NETWORK_ID
-            value: "0x00003012"
-          - name: REGISTRY_CONTRACT_ADDR_KEY
-            valueFrom:
-              secretKeyRef:
-                name: config-secrets
-                key: smart_contract_addr_key_prater
         volumeMounts:
         - mountPath: /data
           name: ssv-node-prater-4

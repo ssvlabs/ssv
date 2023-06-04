@@ -124,11 +124,6 @@ spec:
               secretKeyRef:
                 name: config-secrets
                 key: eth1_addr
-          - name: BOOTNODES
-            valueFrom:
-              secretKeyRef:
-                name: config-secrets
-                key: boot_node_prater_enr
           - name: LOG_LEVEL
             value: "debug"
           - name: DB_REPORTING
@@ -138,7 +133,7 @@ spec:
           - name: DISCOVERY_TYPE_KEY
             value: "discv5"
           - name: NETWORK
-            value: "jato-v2-stage"
+            value: "jato-v2"
           - name: DB_PATH
             value: "./data/db-jato-v2"
           - name: METRICS_API_PORT
@@ -163,13 +158,6 @@ spec:
             value: "0xffffffffffffffffffffffffffffffff"
           - name: P2P_MAX_PEERS
             value: "300"
-          - name: NETWORK_ID
-            value: "0x00003012"
-          - name: REGISTRY_CONTRACT_ADDR_KEY
-            valueFrom:
-              secretKeyRef:
-                name: config-secrets
-                key: smart_contract_addr_key_prater
         volumeMounts:
         - mountPath: /data
           name: ssv-full-node-prater-1
