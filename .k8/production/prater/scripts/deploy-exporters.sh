@@ -95,7 +95,7 @@ fi
 #fi
 
 if [[ -d .k8/production/prater/ ]]; then
-  for file in $(ls -A1 .k8/production/prater/); do
+  for file in $(ls -A1 .k8/production/prater/*.yml); do
    sed -i -e "s|REPLACE_NAMESPACE|${NAMESPACE}|g" \
           -e "s|REPLACE_DOCKER_REPO|${DOCKERREPO}|g" \
           -e "s|REPLACE_REPLICAS|${REPLICAS}|g" \
@@ -103,7 +103,7 @@ if [[ -d .k8/production/prater/ ]]; then
           -e "s|REPLACE_API_VERSION|${K8S_API_VERSION}|g" \
           -e "s|REPLACE_EXPORTER_CPU_LIMIT|${EXPORTER_CPU_LIMIT}|g" \
           -e "s|REPLACE_EXPORTER_MEM_LIMIT|${EXPORTER_MEM_LIMIT}|g" \
-	  -e "s|REPLACE_IMAGETAG|${IMAGETAG}|g" ".k8/production/prater/${file}" || exit 1
+	  -e "s|REPLACE_IMAGETAG|${IMAGETAG}|g" "${file}" || exit 1
   done
 fi
 
