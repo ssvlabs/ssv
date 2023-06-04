@@ -12,7 +12,7 @@ var JatoV2 = NetworkConfig{
 	Name:                 "jato-v2",
 	Beacon:               beacon.NewNetwork(spectypes.PraterNetwork),
 	Domain:               spectypes.DomainType{0x0, 0x0, 0x4, 0x1},
-	GenesisEpoch:         205852,
+	GenesisEpoch:         180677,
 	ETH1SyncOffset:       new(big.Int).SetInt64(9120510),
 	RegistryContractAddr: "0x9d3F908cB3b132379A97b0E0f8171F0B42756E28",
 	Bootnodes: []string{
