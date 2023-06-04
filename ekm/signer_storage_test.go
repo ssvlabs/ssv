@@ -17,8 +17,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/networkconfig"
 
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/threshold"
@@ -42,7 +42,7 @@ func newStorageForTest(t *testing.T) (Storage, func()) {
 	if err != nil {
 		return nil, func() {}
 	}
-	s := NewSignerStorage(db, beaconprotocol.NewNetwork(core.PraterNetwork, 0), logger)
+	s := NewSignerStorage(db, networkconfig.TestNetwork.Beacon, logger)
 	return s, func() {
 		db.Close(logging.TestLogger(t))
 	}

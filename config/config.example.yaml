@@ -7,12 +7,10 @@ db:
 
 eth2:
   BeaconNodeAddr: example.url
-  Network: prater
 
 eth1:
   # ETH1 node WebSocket address
   ETH1Addr: example.url
-  RegistryContractAddr: example.address
 
 p2p:
   # replace with your ip

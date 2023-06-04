@@ -20,6 +20,7 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.2
 	github.com/herumi/bls-eth-go-binary v1.29.1
 	github.com/ilyakaznacheev/cleanenv v1.4.2
+	github.com/jellydator/ttlcache/v3 v3.0.1
 	github.com/libp2p/go-libp2p v0.27.4
 	github.com/libp2p/go-libp2p-kad-dht v0.23.0
 	github.com/libp2p/go-libp2p-pubsub v0.9.3
@@ -181,6 +182,4 @@ require (
 
 replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
-replace github.com/bloxapp/ssv-spec => github.com/bloxapp/ssv-spec v0.0.0-20230524104230-42bf86e3f977 // #disable-preconsensus-liveness
-
-// replace github.com/bloxapp/ssv-spec => ../ssv-spec
+replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f

@@ -12,8 +12,8 @@ import (
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/networkconfig"
 
-	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
@@ -33,7 +33,7 @@ type Options struct {
 	TCPPort    int    `yaml:"TcpPort" env:"TCP_PORT" env-default:"5000" env-description:"TCP port for p2p transport"`
 	UDPPort    int    `yaml:"UdpPort" env:"UDP_PORT" env-default:"4000" env-description:"UDP port for discovery"`
 	DbPath     string `yaml:"DbPath" env:"BOOT_NODE_DB_PATH" env-default:"/data/bootnode" env-description:"Path to the boot node's database"`
-	Network    string `yaml:"Network" env:"NETWORK" env-default:"prater"`
+	Network    string `yaml:"Network" env:"NETWORK" env-default:"mainnet"`
 }
 
 // Node represents the behavior of boot node
@@ -50,11 +50,15 @@ type bootNode struct {
 	externalIP  string
 	tcpPort     int
 	dbPath      string
-	network     core.Network
+	network     networkconfig.NetworkConfig
 }
 
 // New is the constructor of ssvNode
-func New(opts Options) Node {
+func New(opts Options) (Node, error) {
+	networkConfig, err := networkconfig.GetNetworkConfigByName(opts.Network)
+	if err != nil {
+		return nil, err
+	}
 	return &bootNode{
 		privateKey:  opts.PrivateKey,
 		discv5port:  opts.UDPPort,
@@ -62,8 +66,8 @@ func New(opts Options) Node {
 		externalIP:  opts.ExternalIP,
 		tcpPort:     opts.TCPPort,
 		dbPath:      opts.DbPath,
-		network:     core.NetworkFromString(opts.Network),
-	}
+		network:     networkConfig,
+	}, nil
 }
 
 type handler struct {
@@ -176,7 +180,7 @@ func (n *bootNode) createLocalNode(logger *zap.Logger, privKey *ecdsa.PrivateKey
 		logger.Info("Running with External IP", zap.String("external-ip", n.externalIP))
 	}
 
-	fVersion := n.network.GenesisForkVersion()
+	fVersion := n.network.ForkVersion()
 
 	// if *forkVersion != "" {
 	//	fVersion, err = hex.DecodeString(*forkVersion)
