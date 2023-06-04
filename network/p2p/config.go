@@ -170,11 +170,8 @@ func (c *Config) TransformBootnodes() []string {
 	if c.Bootnodes == "" {
 		return c.Network.Bootnodes
 	}
-	items := strings.Split(c.Bootnodes, ";")
-	if len(items) == 0 {
-		return c.Network.Bootnodes
-	}
-	return append(items, c.Network.Bootnodes...)
+	extraBootnodes := strings.Split(c.Bootnodes, ";")
+	return append(extraBootnodes, c.Network.Bootnodes...)
 }
 
 func userAgent(fromCfg string) string {
