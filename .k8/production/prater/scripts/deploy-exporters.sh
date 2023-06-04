@@ -134,4 +134,4 @@ fi
 
 #deploy
 kubectl --context=$K8S_CONTEXT apply -f .k8/production/prater/ssv-exporter-1.yml || exit 1
-kubectl --context=$K8S_CONTEXT apply -f .k8/production/prater/ssv-exporter-2.yml || exit 1
+# kubectl --context=$K8S_CONTEXT apply -f .k8/production/prater/ssv-exporter-2.yml || exit 1
