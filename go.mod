@@ -21,7 +21,7 @@ require (
 	github.com/herumi/bls-eth-go-binary v1.29.1
 	github.com/ilyakaznacheev/cleanenv v1.4.2
 	github.com/jellydator/ttlcache/v3 v3.0.1
-	github.com/libp2p/go-libp2p v0.27.4
+	github.com/libp2p/go-libp2p v0.27.5
 	github.com/libp2p/go-libp2p-kad-dht v0.23.0
 	github.com/libp2p/go-libp2p-pubsub v0.9.3
 	github.com/multiformats/go-multiaddr v0.9.0
@@ -172,8 +172,6 @@ require (
 	golang.org/x/tools v0.9.3 // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
 	gonum.org/v1/gonum v0.13.0 // indirect
-	google.golang.org/genproto v0.0.0-20230525234025-438c736192d0 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20230525234020-1aefcd67740a // indirect
 	google.golang.org/protobuf v1.30.0 // indirect
 	gopkg.in/cenkalti/backoff.v1 v1.1.0 // indirect
 	gopkg.in/natefinch/npipe.v2 v2.0.0-20160621034901-c1b8fa8bdcce // indirect
