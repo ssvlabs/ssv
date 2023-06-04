@@ -79,18 +79,12 @@ type Config struct {
 
 	GetValidatorStats network.GetValidatorStats
 
-	PermissionedActivateEpoch   uint64 `yaml:"PermissionedActivateEpoch" env:"PERMISSIONED_ACTIVE_EPOCH" env-default:"99999999999999" env-description:"On which epoch to start only accepting peers that are operators registered in the contract"`
-	PermissionedDeactivateEpoch uint64 `yaml:"PermissionedDeactivateEpoch" env:"PERMISSIONED_DEACTIVE_EPOCH" env-default:"0" env-description:"On which epoch to start accepting operators all peers"`
+	PermissionedActivateEpoch   uint64 `yaml:"PermissionedActivateEpoch" env:"PERMISSIONED_ACTIVE_EPOCH" env-default:"0" env-description:"On which epoch to start only accepting peers that are operators registered in the contract"`
+	PermissionedDeactivateEpoch uint64 `yaml:"PermissionedDeactivateEpoch" env:"PERMISSIONED_DEACTIVE_EPOCH" env-default:"99999999999999" env-description:"On which epoch to start accepting operators all peers"`
 
 	Permissioned func() bool // this is not loaded from config file but set up in full node setup
 	// WhitelistedOperatorKeys is an array of Operator Public Key PEMs not registered in the contract with which the node will accept connections
 	WhitelistedOperatorKeys []string `yaml:"WhitelistedOperatorKeys" env:"WHITELISTED_KEYS" env-description:"Operators' keys not registered in the contract with which the node will accept connections"`
-}
-
-// StageExporterPubkeys is used to whitelist the exporters  TODO: Add to mainnet/testnet configs
-var StageExporterPubkeys = []string{
-	"LS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBd01Lck9lU1ZzMDRaSk00OFZuZGgKMmJqVmtSMFRiblZxZVBrZVA4L3RDMUVOTFhHYW5zb0cvUzRYdEQ3Y25zbE1Dekwvb0RuTFZLL2lBVndtelNJQQpUZTZOWXdMY3hQVzhiNlo2d0ZBZ0RjSm1ZeVBYRUxYMGJ1UWhOL01ZSFE0bnJvRlpwdmRhUXBGS0w3Tjk1cHhzCnlkeXArUmJjVzcyWnFjamlmR1cvVytsblpzZStmVjRlODU3a1pSY29UQUJHdGxsQ1p0N3BNeGU4blYxSmRFaEoKenFSNDdabjQ0SE4zVUZIbFFSMjBTNWxkSlRzSFdkMExJcjNlYmJWSnV0Uzd2ZmxEbThYOWhoUXErYnpjZ2JQOQplejlZTjVFdzRaRE8xcGFkVlkzOFdiVzFEZWxoUkpLTFNhRjN0RXlpZE1mNkk2bmJJekRQVWpIZ1lYSjZLQ3I5CjJ3SURBUUFCCi0tLS0tRU5EIFJTQSBQVUJMSUMgS0VZLS0tLS0K",
-	"LS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBbk9aQzNieDkyUE50WU93VnpDa2IKa3djZk84VGRsaW1vYjNzTEZtUE1VTzhNai9IUEp1N2RUU1JpMWpkTDZQNVNLbVNtMzl2cXdIRURxM3dtQzFjVwpsTzlTWlg5bDNORDNmM1VBN1JIK283WUFRa0VpakVTMUE0RUVmOTdKSkdqdE1SUTExRWFpelZkUnVSamRxU1RSClVIdE80Z3ZZK0NGTnEzSDZOdXh2OFVmL2lOV3ZyQWxleDdzWFlzUHF6SUQveHR6UGJGbXduZlE1bC9kUlgwYUEKYkpLVzJraElBdmpxSitkam5PMWdkWE9zc0xQZEFHM3pySkdJQnBWenpIaERtRUVmSVFrQUd5Mi9WYVBkcHd3dQpCNTlNRGJ2TmtLakdWR1c1VGl4R2hzaWN6Mmh4b3dhSlJjaHF1V042djZrcEpPTEFUYVkySHMzL1pSTlNwRmZJCjFRSURBUUFCCi0tLS0tRU5EIFJTQSBQVUJMSUMgS0VZLS0tLS0K",
 }
 
 // Libp2pOptions creates options list for the libp2p host

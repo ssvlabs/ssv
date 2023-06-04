@@ -8,12 +8,14 @@ import (
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
 var SupportedConfigs = map[string]NetworkConfig{
 	Mainnet.Name:     Mainnet,
 	JatoV2Stage.Name: JatoV2Stage,
+	JatoV2.Name:      JatoV2,
 }
 
 func GetNetworkConfigByName(name string) (NetworkConfig, error) {
@@ -25,13 +27,14 @@ func GetNetworkConfigByName(name string) (NetworkConfig, error) {
 }
 
 type NetworkConfig struct {
-	Name                 string
-	Beacon               beacon.Network
-	Domain               spectypes.DomainType
-	GenesisEpoch         spec.Epoch
-	ETH1SyncOffset       *big.Int
-	RegistryContractAddr string
-	Bootnodes            []string
+	Name                    string
+	Beacon                  beacon.Network
+	Domain                  spectypes.DomainType
+	GenesisEpoch            spec.Epoch
+	ETH1SyncOffset          *big.Int
+	RegistryContractAddr    string
+	Bootnodes               []string
+	WhitelistedOperatorKeys []string
 }
 
 func (n NetworkConfig) String() string {
