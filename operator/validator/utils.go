@@ -24,7 +24,7 @@ import (
 
 // UpdateShareMetadata will update the given share object w/o involving storage,
 // it will be called only when a new share is created
-func UpdateShareMetadata(share *types.SSVShare, bc beaconprotocol.Beacon) (bool, error) {
+func UpdateShareMetadata(share *types.SSVShare, bc beaconprotocol.BeaconNode) (bool, error) {
 	pk := hex.EncodeToString(share.ValidatorPubKey)
 	results, err := beaconprotocol.FetchValidatorsMetadata(bc, [][]byte{share.ValidatorPubKey})
 	if err != nil {
