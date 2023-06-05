@@ -10,14 +10,10 @@ import (
 
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/networkconfig"
 )
 
 //go:generate mockgen -package=eth1 -destination=./mock_sync.go -source=./sync.go
-
-const (
-	// prod contract genesis block
-	defaultPraterSyncOffset string = "8661727"
-)
 
 // SyncOffset is the type of variable used for passing around the offset
 type SyncOffset = big.Int
@@ -33,11 +29,6 @@ type SyncOffsetStorage interface {
 	GetSyncOffset() (*SyncOffset, bool, error)
 }
 
-// DefaultSyncOffset returns the default value (block number of the first event from the contract)
-func DefaultSyncOffset() *SyncOffset {
-	return StringToSyncOffset(defaultPraterSyncOffset)
-}
-
 // StringToSyncOffset converts string to SyncOffset
 func StringToSyncOffset(syncOffset string) *SyncOffset {
 	if len(syncOffset) == 0 {
@@ -49,7 +40,14 @@ func StringToSyncOffset(syncOffset string) *SyncOffset {
 }
 
 // SyncEth1Events sync past events
-func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage, syncOffset *SyncOffset, handler SyncEventHandler) error {
+func SyncEth1Events(
+	logger *zap.Logger,
+	client Client,
+	storage SyncOffsetStorage,
+	network networkconfig.NetworkConfig,
+	syncOffset *SyncOffset,
+	handler SyncEventHandler,
+) error {
 	logger.Info("syncing eth1 contract events")
 
 	cn := make(chan *Event, 4096)
@@ -75,7 +73,7 @@ func SyncEth1Events(logger *zap.Logger, client Client, storage SyncOffsetStorage
 			}
 		}
 	}()
-	syncOffset = determineSyncOffset(logger, storage, syncOffset)
+	syncOffset = determineSyncOffset(logger, storage, network, syncOffset)
 	if err := client.Sync(logger, syncOffset); err != nil {
 		return errors.Wrap(err, "failed to sync contract events")
 	}
@@ -111,7 +109,7 @@ func upgradeSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, syncOffset
 //  1. last saved sync offset
 //  2. provided value (from config)
 //  3. default sync offset (the genesis block of the contract)
-func determineSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, syncOffset *SyncOffset) *SyncOffset {
+func determineSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, network networkconfig.NetworkConfig, syncOffset *SyncOffset) *SyncOffset {
 	syncOffsetFromStorage, found, err := storage.GetSyncOffset()
 	if err != nil {
 		logger.Warn("failed to get sync offset", zap.Error(err))
@@ -124,7 +122,7 @@ func determineSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, syncOffs
 		logger.Debug("using provided sync offset", fields.SyncOffset(syncOffset))
 		return syncOffset
 	}
-	syncOffset = DefaultSyncOffset()
+	syncOffset = network.ETH1SyncOffset
 	logger.Debug("using default sync offset", fields.SyncOffset(syncOffset))
 	return syncOffset
 }

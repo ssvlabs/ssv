@@ -7,19 +7,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv/logging"
-	"go.uber.org/zap"
-
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/eth2-key-manager/core"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/golang/mock/gomock"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/async/event"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/slot_ticker/mocks"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
@@ -39,25 +38,25 @@ func TestSubmitProposal(t *testing.T) {
 
 	db, shareStorage, recipientStorage := createStorage(t)
 	defer db.Close(logger)
-	network := beacon.NewNetwork(core.PraterNetwork, 0)
+	network := networkconfig.TestNetwork
 	populateStorage(t, logger, shareStorage, operatorData)
 
 	frCtrl := NewController(&ControllerOptions{
 		Ctx:              context.TODO(),
-		EthNetwork:       network,
+		Network:          network,
 		ShareStorage:     shareStorage,
 		RecipientStorage: recipientStorage,
 		OperatorData:     operatorData,
 	})
 
-	t.Run("submit first time or first slot in epoch", func(t *testing.T) {
+	t.Run("submit first time or halfway through epoch", func(t *testing.T) {
 		numberOfRequests := 4
 		var wg sync.WaitGroup
 		client := beacon.NewMockBeacon(ctrl)
 		client.EXPECT().SubmitProposalPreparation(gomock.Any()).DoAndReturn(func(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
 			wg.Done()
 			return nil
-		}).MinTimes(numberOfRequests).MaxTimes(numberOfRequests) // call first time and on the first slot of epoch. each time should be 2 request as we have two batches
+		}).MinTimes(numberOfRequests).MaxTimes(numberOfRequests) // call first time and on the halfway through epoch. each time should be 2 request as we have two batches
 
 		ticker := mocks.NewMockTicker(ctrl)
 		ticker.EXPECT().Subscribe(gomock.Any()).DoAndReturn(func(subscription chan phase0.Slot) event.Subscription {
@@ -67,7 +66,7 @@ func TestSubmitProposal(t *testing.T) {
 			time.Sleep(time.Millisecond * 500)
 			subscription <- 20 // should not call submit
 			time.Sleep(time.Millisecond * 500)
-			subscription <- 32 // first slot of epoch
+			subscription <- phase0.Slot(network.SlotsPerEpoch()) / 2 // halfway through epoch
 			time.Sleep(time.Millisecond * 500)
 			subscription <- 63 // should not call submit
 			return nil

@@ -20,6 +20,7 @@ const (
 type Options struct {
 	Network           specqbft.Network
 	Beacon            specssv.BeaconNode
+	BeaconNetwork     spectypes.BeaconNetwork
 	Eth1Client        eth1.Client
 	Storage           *storage.QBFTStores
 	SSVShare          *types.SSVShare

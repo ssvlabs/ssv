@@ -24,7 +24,7 @@ import (
 
 // UpdateShareMetadata will update the given share object w/o involving storage,
 // it will be called only when a new share is created
-func UpdateShareMetadata(share *types.SSVShare, bc beaconprotocol.Beacon) (bool, error) {
+func UpdateShareMetadata(share *types.SSVShare, bc beaconprotocol.BeaconNode) (bool, error) {
 	pk := hex.EncodeToString(share.ValidatorPubKey)
 	results, err := beaconprotocol.FetchValidatorsMetadata(bc, [][]byte{share.ValidatorPubKey})
 	if err != nil {
@@ -137,7 +137,6 @@ func LoadLocalEvents(logger *zap.Logger, handler eth1.SyncEventHandler, path str
 	}
 	for _, ev := range parsedData {
 		logFields, err := handler(*ev)
-		// todo(align-contract-v0.3.1-rc.0) handle nonce handler for local events
 		errs := eth1.HandleEventResult(logger, *ev, logFields, err, false)
 		if len(errs) > 0 {
 			logger.Warn("could not handle some of the events during local events sync", zap.Any("errs", errs))

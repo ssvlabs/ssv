@@ -9,7 +9,7 @@ import (
 
 // getForkVersion returns the fork version of the given slot
 func (n *operatorNode) getForkVersion(slot phase0.Slot) forksprotocol.ForkVersion {
-	epoch := n.ethNetwork.EstimatedEpochAtSlot(slot)
+	epoch := n.network.Beacon.EstimatedEpochAtSlot(slot)
 	return forksprotocol.GetCurrentForkVersion(epoch)
 }
 

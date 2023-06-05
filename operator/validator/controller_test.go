@@ -130,9 +130,9 @@ func TestGetIndices(t *testing.T) {
 
 	logger := logging.TestLogger(t)
 	ctr := setupController(logger, validators)
-	indices := ctr.GetValidatorsIndices(logger)
+	indices := ctr.ActiveValidatorIndices(logger)
 	logger.Info("result", zap.Any("indices", indices))
-	require.Equal(t, 1, len(indices)) // should return only active indices
+	require.Equal(t, 2, len(indices)) // should return only active indices
 }
 
 func setupController(logger *zap.Logger, validators map[string]*validator.Validator) controller {
