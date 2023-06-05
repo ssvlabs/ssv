@@ -2,10 +2,13 @@ package types
 
 import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
+
+	"github.com/bloxapp/ssv/networkconfig"
 )
 
+// TODO: get rid of singleton, pass domain as a parameter
 var (
-	domain = spectypes.V3Testnet
+	domain = networkconfig.Mainnet.Domain
 )
 
 // GetDefaultDomain returns the global domain used across the system

@@ -49,6 +49,11 @@ func (m *ValidatorMetadata) IsActive() bool {
 	return m.Status == eth2apiv1.ValidatorStateActiveOngoing
 }
 
+// IsAttesting returns true if the validator should be attesting.
+func (m *ValidatorMetadata) IsAttesting() bool {
+	return m.Status.IsAttesting()
+}
+
 // Exiting returns true if the validator is existing or exited
 func (m *ValidatorMetadata) Exiting() bool {
 	return m.Status.IsExited() || m.Status.HasExited()
@@ -63,7 +68,7 @@ func (m *ValidatorMetadata) Slashed() bool {
 type OnUpdated func(logger *zap.Logger, pk string, meta *ValidatorMetadata)
 
 // UpdateValidatorsMetadata updates validator information for the given public keys
-func UpdateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte, collection ValidatorMetadataStorage, bc Beacon, onUpdated OnUpdated) error {
+func UpdateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte, collection ValidatorMetadataStorage, bc BeaconNode, onUpdated OnUpdated) error {
 	results, err := FetchValidatorsMetadata(bc, pubKeys)
 	if err != nil {
 		return errors.Wrap(err, "failed to get validator data from Beacon")
@@ -96,7 +101,7 @@ func UpdateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte, collection V
 }
 
 // FetchValidatorsMetadata is fetching validators data from beacon
-func FetchValidatorsMetadata(bc Beacon, pubKeys [][]byte) (map[string]*ValidatorMetadata, error) {
+func FetchValidatorsMetadata(bc BeaconNode, pubKeys [][]byte) (map[string]*ValidatorMetadata, error) {
 	if len(pubKeys) == 0 {
 		return nil, nil
 	}
@@ -128,7 +133,7 @@ func UpdateValidatorsMetadataBatch(logger *zap.Logger,
 	pubKeys [][]byte,
 	queue queue.Queue,
 	collection ValidatorMetadataStorage,
-	bc Beacon,
+	bc BeaconNode,
 	onUpdated OnUpdated,
 	batchSize int) {
 	batch(pubKeys, queue, func(pks [][]byte) func() error {

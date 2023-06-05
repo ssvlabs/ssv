@@ -5,11 +5,12 @@ import (
 
 	"github.com/bloxapp/ssv/logging"
 
-	global_config "github.com/bloxapp/ssv/cli/config"
-	bootnode "github.com/bloxapp/ssv/utils/boot_node"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
+
+	global_config "github.com/bloxapp/ssv/cli/config"
+	bootnode "github.com/bloxapp/ssv/utils/boot_node"
 )
 
 type config struct {
@@ -36,7 +37,10 @@ var StartBootNodeCmd = &cobra.Command{
 
 		logger := zap.L()
 
-		bootNode := bootnode.New(cfg.Options)
+		bootNode, err := bootnode.New(cfg.Options)
+		if err != nil {
+			logger.Fatal("failed to set up boot node", zap.Error(err))
+		}
 		if err := bootNode.Start(cmd.Context(), logger); err != nil {
 			logger.Fatal("failed to start boot node", zap.Error(err))
 		}

@@ -17,6 +17,7 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/forks"
+	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/storage"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	uc "github.com/bloxapp/ssv/utils/commons"
@@ -52,8 +53,6 @@ type Config struct {
 	PubSubTrace bool `yaml:"PubSubTrace" env:"PUBSUB_TRACE" env-description:"Flag to turn on/off pubsub tracing in logs"`
 	// DiscoveryTrace is a flag to turn on/off discovery tracing in logs
 	DiscoveryTrace bool `yaml:"DiscoveryTrace" env:"DISCOVERY_TRACE" env-description:"Flag to turn on/off discovery tracing in logs"`
-	// NetworkID is the network of this node
-	NetworkID string `yaml:"NetworkID" env:"NETWORK_ID" env-description:"Network ID is the network of this node"`
 	// NetworkPrivateKey is used for network identity, MUST be injected
 	NetworkPrivateKey *ecdsa.PrivateKey
 	// OperatorPublicKey is used for operator identity, optional
@@ -66,6 +65,8 @@ type Config struct {
 	ForkVersion forksprotocol.ForkVersion
 	// NodeStorage is used to get operator metadata.
 	NodeStorage storage.Storage
+	// Network defines a network configuration.
+	Network networkconfig.NetworkConfig
 
 	PubsubMsgCacheTTL         time.Duration `yaml:"PubsubMsgCacheTTL" env:"PUBSUB_MSG_CACHE_TTL" env-description:"How long a message ID will be remembered as seen"`
 	PubsubOutQueueSize        int           `yaml:"PubsubOutQueueSize" env:"PUBSUB_OUT_Q_SIZE" env-description:"The size that we assign to the outbound pubsub message queue"`
@@ -78,18 +79,12 @@ type Config struct {
 
 	GetValidatorStats network.GetValidatorStats
 
-	PermissionedActivateEpoch   uint64 `yaml:"PermissionedActivateEpoch" env:"PERMISSIONED_ACTIVE_EPOCH" env-default:"99999999999999" env-description:"On which epoch to start only accepting peers that are operators registered in the contract"`
-	PermissionedDeactivateEpoch uint64 `yaml:"PermissionedDeactivateEpoch" env:"PERMISSIONED_DEACTIVE_EPOCH" env-default:"0" env-description:"On which epoch to start accepting operators all peers"`
+	PermissionedActivateEpoch   uint64 `yaml:"PermissionedActivateEpoch" env:"PERMISSIONED_ACTIVE_EPOCH" env-default:"0" env-description:"On which epoch to start only accepting peers that are operators registered in the contract"`
+	PermissionedDeactivateEpoch uint64 `yaml:"PermissionedDeactivateEpoch" env:"PERMISSIONED_DEACTIVE_EPOCH" env-default:"99999999999999" env-description:"On which epoch to start accepting operators all peers"`
 
 	Permissioned func() bool // this is not loaded from config file but set up in full node setup
 	// WhitelistedOperatorKeys is an array of Operator Public Key PEMs not registered in the contract with which the node will accept connections
 	WhitelistedOperatorKeys []string `yaml:"WhitelistedOperatorKeys" env:"WHITELISTED_KEYS" env-description:"Operators' keys not registered in the contract with which the node will accept connections"`
-}
-
-// StageExporterPubkeys is used to whitelist the exporters  TODO: Add to mainnet/testnet configs
-var StageExporterPubkeys = []string{
-	"LS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBd01Lck9lU1ZzMDRaSk00OFZuZGgKMmJqVmtSMFRiblZxZVBrZVA4L3RDMUVOTFhHYW5zb0cvUzRYdEQ3Y25zbE1Dekwvb0RuTFZLL2lBVndtelNJQQpUZTZOWXdMY3hQVzhiNlo2d0ZBZ0RjSm1ZeVBYRUxYMGJ1UWhOL01ZSFE0bnJvRlpwdmRhUXBGS0w3Tjk1cHhzCnlkeXArUmJjVzcyWnFjamlmR1cvVytsblpzZStmVjRlODU3a1pSY29UQUJHdGxsQ1p0N3BNeGU4blYxSmRFaEoKenFSNDdabjQ0SE4zVUZIbFFSMjBTNWxkSlRzSFdkMExJcjNlYmJWSnV0Uzd2ZmxEbThYOWhoUXErYnpjZ2JQOQplejlZTjVFdzRaRE8xcGFkVlkzOFdiVzFEZWxoUkpLTFNhRjN0RXlpZE1mNkk2bmJJekRQVWpIZ1lYSjZLQ3I5CjJ3SURBUUFCCi0tLS0tRU5EIFJTQSBQVUJMSUMgS0VZLS0tLS0K",
-	"LS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBbk9aQzNieDkyUE50WU93VnpDa2IKa3djZk84VGRsaW1vYjNzTEZtUE1VTzhNai9IUEp1N2RUU1JpMWpkTDZQNVNLbVNtMzl2cXdIRURxM3dtQzFjVwpsTzlTWlg5bDNORDNmM1VBN1JIK283WUFRa0VpakVTMUE0RUVmOTdKSkdqdE1SUTExRWFpelZkUnVSamRxU1RSClVIdE80Z3ZZK0NGTnEzSDZOdXh2OFVmL2lOV3ZyQWxleDdzWFlzUHF6SUQveHR6UGJGbXduZlE1bC9kUlgwYUEKYkpLVzJraElBdmpxSitkam5PMWdkWE9zc0xQZEFHM3pySkdJQnBWenpIaERtRUVmSVFrQUd5Mi9WYVBkcHd3dQpCNTlNRGJ2TmtLakdWR1c1VGl4R2hzaWN6Mmh4b3dhSlJjaHF1V042djZrcEpPTEFUYVkySHMzL1pSTlNwRmZJCjFRSURBUUFCCi0tLS0tRU5EIFJTQSBQVUJMSUMgS0VZLS0tLS0K",
 }
 
 // Libp2pOptions creates options list for the libp2p host
@@ -175,15 +170,7 @@ func (c *Config) configureAddrs(logger *zap.Logger, opts []libp2p.Option) ([]lib
 func (c *Config) TransformBootnodes() []string {
 	items := strings.Split(c.Bootnodes, ";")
 	if len(items) == 0 {
-		// STAGE
-		// items = append(items, "enr:-LK4QHVq6HEA2KVnAw593SRMqUOvMGlkP8Jb-qHn4yPLHx--cStvWc38Or2xLcWgDPynVxXPT9NWIEXRzrBUsLmcFkUBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhDbUHcyJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g")
-		// PROD - first public bootnode
-		// internal ip
-		// items = append(items, "enr:-LK4QPbCB0Mw_8ji7D02OwXmqSRZe9wTmitle_cQnECIl-5GBPH9PH__eUpdeiI_t122inm62uTgO9CptbGNLKNId7gBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhArsBGGJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g")
-		// external ip
-		items = append(items, "enr:-LK4QMmL9hLJ1csDN4rQoSjlJGE2SvsXOETfcLH8uAVrxlHaELF0u3NeKCTY2eO_X1zy5eEKcHruyaAsGNiyyG4QWUQBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCLdu_SJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g")
-		//PROD - second public bootnode
-		//items = append(items, "enr:-Li4QAxqhjjQN2zMAAEtOF5wlcr2SFnPKINvvlwMXztJhClrfRYLrqNy2a_dMUwDPKcvM7bebq3uptRoGSV0LpYEJuyGAYRZG5n5h2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhBLb3g2Jc2VjcDI1NmsxoQLbXMJi_Pq3imTq11EwH8MbxmXlHYvH2Drz_rsqP1rNyoN0Y3CCE4iDdWRwgg-g")
+		items = append(items, c.Network.Bootnodes...)
 	}
 	return items
 }

@@ -29,7 +29,7 @@ type cacheEntry struct {
 // validatorsIndicesFetcher represents the interface for retrieving indices.
 // It have a minimal interface instead of working with the complete validator.IController interface
 type validatorsIndicesFetcher interface {
-	GetValidatorsIndices(logger *zap.Logger) []phase0.ValidatorIndex
+	ActiveValidatorIndices(logger *zap.Logger) []phase0.ValidatorIndex
 }
 
 // DutyFetcher represents the component that manages duties
@@ -40,7 +40,7 @@ type DutyFetcher interface {
 }
 
 // newDutyFetcher creates a new instance
-func newDutyFetcher(logger *zap.Logger, beaconClient beacon.Beacon, indicesFetcher validatorsIndicesFetcher, network beacon.Network) DutyFetcher {
+func newDutyFetcher(logger *zap.Logger, beaconClient beacon.BeaconNode, indicesFetcher validatorsIndicesFetcher, network beacon.Network) DutyFetcher {
 	df := dutyFetcher{
 		logger:         logger,
 		ethNetwork:     network,
@@ -55,7 +55,7 @@ func newDutyFetcher(logger *zap.Logger, beaconClient beacon.Beacon, indicesFetch
 type dutyFetcher struct {
 	logger         *zap.Logger // struct logger to implement eth2client.EventsProvider
 	ethNetwork     beacon.Network
-	beaconClient   beacon.Beacon
+	beaconClient   beacon.BeaconNode
 	indicesFetcher validatorsIndicesFetcher
 
 	cache *cache.Cache
@@ -128,7 +128,7 @@ func (df *dutyFetcher) updateDutiesFromBeacon(logger *zap.Logger, slot phase0.Sl
 
 // fetchDuties fetches duties for the epoch of the given slot
 func (df *dutyFetcher) fetchDuties(logger *zap.Logger, slot phase0.Slot) ([]*spectypes.Duty, error) {
-	if indices := df.indicesFetcher.GetValidatorsIndices(logger); len(indices) > 0 {
+	if indices := df.indicesFetcher.ActiveValidatorIndices(logger); len(indices) > 0 {
 		logger.Debug("got indices for existing validators",
 			zap.Int("count", len(indices)), zap.Any("indices", indices))
 		epoch := df.ethNetwork.EstimatedEpochAtSlot(slot)

@@ -4,18 +4,18 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/eth2-key-manager/core"
+
+	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
 // Network is a beacon chain network.
 type Network struct {
-	core.Network
-	minGenesisTime uint64
+	spectypes.BeaconNetwork
 }
 
 // NewNetwork creates a new beacon chain network.
-func NewNetwork(network core.Network, minGenesisTime uint64) Network {
-	return Network{network, minGenesisTime}
+func NewNetwork(network spectypes.BeaconNetwork) Network {
+	return Network{network}
 }
 
 // GetSlotStartTime returns the start time for the given slot
@@ -23,14 +23,6 @@ func (n Network) GetSlotStartTime(slot phase0.Slot) time.Time {
 	timeSinceGenesisStart := uint64(slot) * uint64(n.SlotDurationSec().Seconds())
 	start := time.Unix(int64(n.MinGenesisTime()+timeSinceGenesisStart), 0)
 	return start
-}
-
-func (n Network) MinGenesisTime() uint64 {
-	if n.minGenesisTime > 0 {
-		return n.minGenesisTime
-	} else {
-		return n.Network.MinGenesisTime()
-	}
 }
 
 // EstimatedCurrentSlot returns the estimation of the current slot
@@ -65,11 +57,12 @@ func (n Network) IsFirstSlotOfEpoch(slot phase0.Slot) bool {
 
 // GetEpochFirstSlot returns the beacon node first slot in epoch
 func (n Network) GetEpochFirstSlot(epoch phase0.Epoch) phase0.Slot {
-	return phase0.Slot(epoch * 32)
+	return phase0.Slot(uint64(epoch) * n.SlotsPerEpoch())
 }
 
 // EstimatedSyncCommitteePeriodAtEpoch estimates the current sync committee period at the given Epoch
 func (n Network) EstimatedSyncCommitteePeriodAtEpoch(epoch phase0.Epoch) uint64 {
+	// TODO: consider extracting EpochsPerSyncCommitteePeriod to config
 	return uint64(epoch) / 256 // EpochsPerSyncCommitteePeriod
 }
 
@@ -84,4 +77,20 @@ func (n Network) LastSlotOfSyncPeriod(period uint64) phase0.Slot {
 	// If we are in the sync committee that ends at slot x we do not generate a message during slot x-1
 	// as it will never be included, hence -1.
 	return n.GetEpochFirstSlot(lastEpoch+1) - 2
+}
+
+func (n Network) String() string {
+	return string(n.BeaconNetwork)
+}
+
+func (n Network) MarshalJSON() ([]byte, error) {
+	return []byte(`"` + n.BeaconNetwork + `"`), nil
+}
+
+func (n *Network) UnmarshalJSON(b []byte) error {
+	if len(b) < 2 {
+		return nil
+	}
+	*n = NewNetwork(spectypes.BeaconNetwork(b[1 : len(b)-1]))
+	return nil
 }
