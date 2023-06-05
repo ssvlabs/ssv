@@ -7,9 +7,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jellydator/ttlcache/v3"
+
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/jellydator/ttlcache/v3"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -71,7 +72,6 @@ type ControllerOptions struct {
 	Network                    network.P2PNetwork
 	Beacon                     beaconprotocol.BeaconNode
 	ShareEncryptionKeyProvider ShareEncryptionKeyProvider
-	CleanRegistryData          bool
 	FullNode                   bool `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Save decided history rather than just highest messages"`
 	Exporter                   bool `yaml:"Exporter" env:"EXPORTER" env-default:"false" env-description:""`
 	BuilderProposals           bool `yaml:"BuilderProposals" env:"BUILDER_PROPOSALS" env-default:"false" env-description:"Use external builders to produce blocks"`
@@ -235,10 +235,6 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 
 	// Start automatic expired item deletion in nonCommitteeValidators.
 	go ctrl.nonCommitteeValidators.Start()
-
-	if err := ctrl.initShares(logger, options); err != nil {
-		logger.Panic("could not initialize shares", zap.Error(err))
-	}
 
 	return &ctrl
 }
