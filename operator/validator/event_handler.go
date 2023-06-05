@@ -3,13 +3,10 @@ package validator
 import (
 	"bytes"
 	"encoding/hex"
-	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -143,11 +140,6 @@ func (c *controller) handleValidatorAddedEvent(
 	event abiparser.ValidatorAddedEvent,
 	ongoingSync bool,
 ) (logFields []zap.Field, err error) {
-	// TODO: adjust to recent changes
-	if err := validateValidatorAddedEvent(event); err != nil {
-		return nil, fmt.Errorf("malformed ValidatorAddedEvent: %w", err)
-	}
-
 	var valid bool
 	defer func() {
 		err = c.handleValidatorAddedEventDefer(valid, err, event)
@@ -166,6 +158,13 @@ func (c *controller) handleValidatorAddedEvent(
 	nonce, nonceErr := c.eventHandler.GetNextNonce(event.Owner)
 	if nonceErr != nil {
 		return nil, errors.Wrap(nonceErr, "failed to get next nonce")
+	}
+
+	if err := validateOperators(event.OperatorIds); err != nil {
+		err = &abiparser.MalformedEventError{
+			Err: err,
+		}
+		return nil, err
 	}
 
 	// Calculate the expected length of constructed shares based on the number of operator IDs,
@@ -501,27 +500,4 @@ func (c *controller) handleFeeRecipientAddressUpdatedEvent(
 	}
 
 	return logFields, nil
-}
-
-// todo(align-contract-v0.3.1-rc.0): move to crypto package in ssv protocol?
-// verify signature of the ValidatorAddedEvent shares data
-func verifySignature(sig []byte, owner common.Address, pubKey []byte, nonce registrystorage.Nonce) error {
-	data := fmt.Sprintf("%s:%d", owner.String(), nonce)
-	hash := crypto.Keccak256([]byte(data))
-
-	sign := &bls.Sign{}
-	if err := sign.Deserialize(sig); err != nil {
-		return errors.Wrap(err, "failed to deserialize signature")
-	}
-
-	pk := &bls.PublicKey{}
-	if err := pk.Deserialize(pubKey); err != nil {
-		return errors.Wrap(err, "failed to deserialize public key")
-	}
-
-	if res := sign.VerifyByte(pk, hash); !res {
-		return errors.New("failed to verify signature")
-	}
-
-	return nil
 }
