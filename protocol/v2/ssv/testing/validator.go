@@ -19,9 +19,10 @@ var BaseValidator = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet
 		ctx,
 		cancel,
 		validator.Options{
-			Network: spectestingutils.NewTestingNetwork(),
-			Beacon:  spectestingutils.NewTestingBeaconNode(),
-			Storage: testing.TestingStores(logger),
+			Network:       spectestingutils.NewTestingNetwork(),
+			Beacon:        spectestingutils.NewTestingBeaconNode(),
+			BeaconNetwork: spectypes.BeaconTestNetwork,
+			Storage:       testing.TestingStores(logger),
 			SSVShare: &types.SSVShare{
 				Share: *spectestingutils.TestingShare(keySet),
 			},

@@ -13,16 +13,13 @@ import (
 
 const (
 	DefaultQueueSize = 32
-	// DefaultGasLimit sets validator registration gas limit.
-	// TODO: This is a reasonable default, but we should probably make this configurable.
-	//       Discussion here: https://github.com/ethereum/builder-specs/issues/17
-	DefaultGasLimit = 30_000_000
 )
 
 // Options represents options that should be passed to a new instance of Validator.
 type Options struct {
 	Network           specqbft.Network
 	Beacon            specssv.BeaconNode
+	BeaconNetwork     spectypes.BeaconNetwork
 	Storage           *storage.QBFTStores
 	SSVShare          *types.SSVShare
 	Signer            spectypes.KeyManager
@@ -40,7 +37,7 @@ func (o *Options) defaults() {
 		o.QueueSize = DefaultQueueSize
 	}
 	if o.GasLimit == 0 {
-		o.GasLimit = DefaultGasLimit
+		o.GasLimit = spectypes.DefaultGasLimit
 	}
 }
 

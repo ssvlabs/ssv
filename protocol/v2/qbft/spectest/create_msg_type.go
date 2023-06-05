@@ -13,31 +13,32 @@ import (
 
 func RunCreateMsg(t *testing.T, test *spectests.CreateMsgSpecTest) {
 	var msg *specqbft.SignedMessage
-	var lastErr error
+	var err error
 	switch test.CreateType {
 	case spectests.CreateProposal:
-		msg, lastErr = createProposal(test)
+		msg, err = createProposal(test)
 	case spectests.CreatePrepare:
-		msg, lastErr = createPrepare(test)
+		msg, err = createPrepare(test)
 	case spectests.CreateCommit:
-		msg, lastErr = createCommit(test)
+		msg, err = createCommit(test)
 	case spectests.CreateRoundChange:
-		msg, lastErr = createRoundChange(test)
+		msg, err = createRoundChange(test)
 	default:
 		t.Fail()
 	}
 
-	r, err := msg.GetRoot()
-	if err != nil {
-		lastErr = err
+	if err != nil && len(test.ExpectedError) != 0 {
+		require.EqualError(t, err, test.ExpectedError)
+		return
 	}
+	require.NoError(t, err)
 
+	r, err2 := msg.GetRoot()
 	if len(test.ExpectedError) != 0 {
-		require.EqualError(t, lastErr, test.ExpectedError)
-	} else {
-		require.NoError(t, lastErr)
+		require.EqualError(t, err2, test.ExpectedError)
+		return
 	}
-
+	require.NoError(t, err2)
 	require.EqualValues(t, test.ExpectedRoot, hex.EncodeToString(r[:]))
 }
 
@@ -77,14 +78,15 @@ func createProposal(test *spectests.CreateMsgSpecTest) (*specqbft.SignedMessage,
 func createRoundChange(test *spectests.CreateMsgSpecTest) (*specqbft.SignedMessage, error) {
 	ks := testingutils.Testing4SharesSet()
 	state := &specqbft.State{
-		Share: testingutils.TestingShare(ks),
-		ID:    []byte{1, 2, 3, 4},
+		Share:            testingutils.TestingShare(ks),
+		ID:               []byte{1, 2, 3, 4},
+		PrepareContainer: specqbft.NewMsgContainer(),
 	}
 	config := testingutils.TestingConfig(ks)
 
 	if len(test.PrepareJustifications) > 0 {
 		state.LastPreparedRound = test.PrepareJustifications[0].Message.Round
-		state.LastPreparedValue = test.Value[:]
+		state.LastPreparedValue = test.StateValue
 
 		for _, msg := range test.PrepareJustifications {
 			_, err := state.PrepareContainer.AddFirstMsgForSignerAndRound(msg)

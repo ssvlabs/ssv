@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.diff-gutter:not(:first-child) {
+    border-left: 2px solid #e5e7eb;
+}
+
+.diff {
+    font-size: 14px;
+}
+
+body {
+    height: auto;
+}
+
+body, html, .diff-line {
+    font-family: 'Recursive', monospace, sans-serif !important;
+}
+  

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/networkconfig"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -35,16 +36,16 @@ type Node interface {
 
 // Options contains options to create the node
 type Options struct {
-	ETHNetwork          beaconprotocol.Network
-	Beacon              beaconprotocol.Beacon
-	Network             network.P2PNetwork
+	// NetworkName is the network name of this node
+	NetworkName         string `yaml:"Network" env:"NETWORK" env-default:"mainnet" env-description:"Network is the network of this node"`
+	Network             networkconfig.NetworkConfig
+	BeaconNode          beaconprotocol.BeaconNode
+	P2PNetwork          network.P2PNetwork
 	Context             context.Context
 	Eth1Client          eth1.Client
 	DB                  basedb.IDb
 	ValidatorController validator.Controller
 	DutyExec            duties.DutyExecutor
-	// genesis epoch
-	GenesisEpoch uint64 `yaml:"GenesisEpoch" env:"GENESIS_EPOCH" env-default:"156113" env-description:"Genesis Epoch SSV node will start"`
 	// max slots for duty to wait
 	DutyLimit        uint64                      `yaml:"DutyLimit" env:"DUTY_LIMIT" env-default:"32" env-description:"max slots to wait for duty to start"`
 	ValidatorOptions validator.ControllerOptions `yaml:"ValidatorOptions"`
@@ -57,11 +58,11 @@ type Options struct {
 
 // operatorNode implements Node interface
 type operatorNode struct {
-	ethNetwork       beaconprotocol.Network
+	network          networkconfig.NetworkConfig
 	context          context.Context
 	ticker           slot_ticker.Ticker
 	validatorsCtrl   validator.Controller
-	beacon           beaconprotocol.Beacon
+	beacon           beaconprotocol.BeaconNode
 	net              network.P2PNetwork
 	storage          storage.Storage
 	qbftStorage      *qbftstorage.QBFTStores
@@ -96,16 +97,16 @@ func New(logger *zap.Logger, opts Options, slotTicker slot_ticker.Ticker) Node {
 		context:        opts.Context,
 		ticker:         slotTicker,
 		validatorsCtrl: opts.ValidatorController,
-		ethNetwork:     opts.ETHNetwork,
-		beacon:         opts.Beacon,
-		net:            opts.Network,
+		network:        opts.Network,
+		beacon:         opts.BeaconNode,
+		net:            opts.P2PNetwork,
 		eth1Client:     opts.Eth1Client,
 		storage:        opts.ValidatorOptions.RegistryStorage,
 		qbftStorage:    storageMap,
 		dutyCtrl: duties.NewDutyController(logger, &duties.ControllerOptions{
 			Ctx:                 opts.Context,
-			BeaconClient:        opts.Beacon,
-			EthNetwork:          opts.ETHNetwork,
+			BeaconClient:        opts.BeaconNode,
+			Network:             opts.Network,
 			ValidatorController: opts.ValidatorController,
 			DutyLimit:           opts.DutyLimit,
 			Executor:            opts.DutyExec,
@@ -115,8 +116,8 @@ func New(logger *zap.Logger, opts Options, slotTicker slot_ticker.Ticker) Node {
 		}),
 		feeRecipientCtrl: fee_recipient.NewController(&fee_recipient.ControllerOptions{
 			Ctx:              opts.Context,
-			BeaconClient:     opts.Beacon,
-			EthNetwork:       opts.ETHNetwork,
+			BeaconClient:     opts.BeaconNode,
+			Network:          opts.Network,
 			ShareStorage:     opts.ValidatorOptions.RegistryStorage,
 			RecipientStorage: opts.ValidatorOptions.RegistryStorage,
 			Ticker:           slotTicker,
@@ -128,20 +129,7 @@ func New(logger *zap.Logger, opts Options, slotTicker slot_ticker.Ticker) Node {
 		wsAPIPort: opts.WsAPIPort,
 	}
 
-	if err := node.init(opts); err != nil {
-		logger.Panic("failed to init", zap.Error(err))
-	}
-
 	return node
-}
-
-func (n *operatorNode) init(opts Options) error {
-	if opts.ValidatorOptions.CleanRegistryData {
-		if err := n.storage.CleanRegistryData(); err != nil {
-			return errors.Wrap(err, "failed to clean registry data")
-		}
-	}
-	return nil
 }
 
 // Start starts to stream duties and run IBFT instances
@@ -189,8 +177,7 @@ func (n *operatorNode) StartEth1(logger *zap.Logger, syncOffset *eth1.SyncOffset
 
 	handler := n.validatorsCtrl.Eth1EventHandler(logger, false)
 	// sync past events
-	// todo(align-contract-v0.3.1-rc.0) find a proper way to pass the event handler interface
-	if err := eth1.SyncEth1Events(logger, n.eth1Client, n.storage, syncOffset, handler); err != nil {
+	if err := eth1.SyncEth1Events(logger, n.eth1Client, n.storage, n.network, syncOffset, handler); err != nil {
 		return errors.Wrap(err, "failed to sync contract events")
 	}
 	logger.Info("manage to sync contract events")

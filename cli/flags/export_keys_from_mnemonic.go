@@ -3,6 +3,7 @@ package flags
 import (
 	"github.com/spf13/cobra"
 
+	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/utils/cliflag"
 )
 
@@ -10,6 +11,7 @@ import (
 const (
 	mnemonicFlag = "mnemonic"
 	indexFlag    = "index"
+	networkFlag  = "network"
 )
 
 // AddMnemonicFlag adds the mnemonic key flag to the command
@@ -30,4 +32,14 @@ func AddKeyIndexFlag(c *cobra.Command) {
 // GetKeyIndexFlagValue gets the key index flag to the command
 func GetKeyIndexFlagValue(c *cobra.Command) (uint64, error) {
 	return c.Flags().GetUint64(indexFlag)
+}
+
+// AddNetworkFlag adds the network key flag to the command
+func AddNetworkFlag(c *cobra.Command) {
+	cliflag.AddPersistentStringFlag(c, networkFlag, string(networkconfig.Mainnet.Beacon.BeaconNetwork), "network", false)
+}
+
+// GetNetworkFlag gets the network key flag from the command
+func GetNetworkFlag(c *cobra.Command) (string, error) {
+	return c.Flags().GetString(networkFlag)
 }
