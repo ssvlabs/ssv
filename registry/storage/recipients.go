@@ -17,16 +17,28 @@ var (
 	recipientsPrefix = []byte("recipients")
 )
 
+type Nonce uint16
+
 // RecipientData the public data of a recipient
 type RecipientData struct {
 	Owner        common.Address             `json:"ownerAddress"`
 	FeeRecipient bellatrix.ExecutionAddress `json:"feeRecipientAddress"`
+
+	// Nonce: This field represents the 'ValidatorAdded Event' nonce.
+	// It serves a crucial role in protecting against replay attacks.
+	// Each time a new validator added event is triggered, regardless of whether the event is malformed or not,
+	// we increment this nonce by 1.
+	// ** The Nonce field can be nil because the 'FeeRecipientAddressUpdatedEvent'
+	// might occur before the addition of a validator to the network, and this event does not increment the nonce.
+	Nonce *Nonce `json:"nonce"`
 }
 
 // Recipients is the interface for managing recipients data
 type Recipients interface {
 	GetRecipientData(owner common.Address) (*RecipientData, bool, error)
 	GetRecipientDataMany(logger *zap.Logger, owners []common.Address) (map[common.Address]bellatrix.ExecutionAddress, error)
+	GetNextNonce(owner common.Address) (Nonce, error)
+	BumpNonce(owner common.Address) error
 	SaveRecipientData(recipientData *RecipientData) (*RecipientData, error)
 	DeleteRecipientData(owner common.Address) error
 	GetRecipientsPrefix() []byte
@@ -95,6 +107,61 @@ func (s *recipientsStorage) GetRecipientDataMany(logger *zap.Logger, owners []co
 	}
 
 	return results, nil
+}
+
+func (s *recipientsStorage) GetNextNonce(owner common.Address) (Nonce, error) {
+	data, found, err := s.GetRecipientData(owner)
+	if err != nil {
+		return Nonce(0), errors.Wrap(err, "could not get recipient data")
+	}
+	if !found {
+		return Nonce(0), nil
+	}
+	if data == nil {
+		return Nonce(0), errors.New("recipient data is nil")
+	}
+	if data.Nonce == nil {
+		return Nonce(0), nil
+	}
+
+	return *data.Nonce + 1, nil
+}
+
+func (s *recipientsStorage) BumpNonce(owner common.Address) error {
+	rData, found, err := s.GetRecipientData(owner)
+	if err != nil {
+		return errors.Wrap(err, "could not get recipient data")
+	}
+
+	if !found {
+		// Create a variable of type Nonce
+		nonce := Nonce(0)
+
+		// Create an instance of RecipientData and assign the Nonce and Owner address values
+		rData = &RecipientData{
+			Owner: owner,
+			Nonce: &nonce, // Assign the address of nonceValue to Nonce field
+		}
+		copy(rData.FeeRecipient[:], owner.Bytes())
+	}
+
+	if rData == nil {
+		return errors.New("recipient data is nil")
+	}
+
+	if rData.Nonce == nil {
+		nonce := Nonce(0)
+		rData.Nonce = &nonce
+	} else if found {
+		// Bump the nonce
+		*rData.Nonce++
+	}
+
+	raw, err := json.Marshal(rData)
+	if err != nil {
+		return errors.Wrap(err, "could not marshal recipient data")
+	}
+	return s.db.Set(s.prefix, buildRecipientKey(rData.Owner), raw)
 }
 
 // SaveRecipientData saves recipient data and return it.

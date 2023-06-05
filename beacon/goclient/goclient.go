@@ -13,7 +13,6 @@ import (
 	"github.com/attestantio/go-eth2-client/http"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/eth2-key-manager/core"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -124,8 +123,8 @@ type goClient struct {
 var _ metrics.HealthCheckAgent = &goClient{}
 
 // New init new client and go-client instance
-func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.OperatorID, slotTicker slot_ticker.Ticker) (beaconprotocol.Beacon, error) {
-	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(opt.Network))
+func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.OperatorID, slotTicker slot_ticker.Ticker) (beaconprotocol.BeaconNode, error) {
+	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(string(opt.Network.BeaconNetwork)))
 
 	httpClient, err := http.New(opt.Context,
 		// WithAddress supplies the address of the beacon node, in host:port format.
@@ -140,15 +139,13 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 
 	logger.Info("consensus client: connected", fields.Name(httpClient.Name()), fields.Address(httpClient.Address()))
 
-	network := beaconprotocol.NewNetwork(core.NetworkFromString(opt.Network), opt.MinGenesisTime)
-
 	tickerChan := make(chan phase0.Slot, 32)
 	slotTicker.Subscribe(tickerChan)
 
 	client := &goClient{
 		log:               logger,
 		ctx:               opt.Context,
-		network:           network,
+		network:           opt.Network,
 		client:            httpClient.(*http.Service),
 		graffiti:          opt.Graffiti,
 		gasLimit:          opt.GasLimit,
@@ -184,7 +181,7 @@ func (gc *goClient) HealthCheck() []string {
 
 // GetBeaconNetwork returns the beacon network the node is on
 func (gc *goClient) GetBeaconNetwork() spectypes.BeaconNetwork {
-	return spectypes.BeaconNetwork(gc.network.Network)
+	return gc.network.BeaconNetwork
 }
 
 // SlotStartTime returns the start time in terms of its unix epoch

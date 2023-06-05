@@ -5,12 +5,12 @@ import (
 	"testing"
 	"time"
 
-	"go.uber.org/zap"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/network/syncing"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/network/syncing"
 )
 
 type mockSyncer struct{}

@@ -63,18 +63,18 @@ func (mr *MockControllerMockRecorder) StartValidators(logger interface{}) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartValidators", reflect.TypeOf((*MockController)(nil).StartValidators), logger)
 }
 
-// GetValidatorsIndices mocks base method
-func (m *MockController) GetValidatorsIndices(logger *zap.Logger) []phase0.ValidatorIndex {
+// ActiveValidatorIndices mocks base method
+func (m *MockController) ActiveValidatorIndices(logger *zap.Logger) []phase0.ValidatorIndex {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetValidatorsIndices", logger)
+	ret := m.ctrl.Call(m, "ActiveValidatorIndices", logger)
 	ret0, _ := ret[0].([]phase0.ValidatorIndex)
 	return ret0
 }
 
-// GetValidatorsIndices indicates an expected call of GetValidatorsIndices
-func (mr *MockControllerMockRecorder) GetValidatorsIndices(logger interface{}) *gomock.Call {
+// ActiveValidatorIndices indicates an expected call of ActiveValidatorIndices
+func (mr *MockControllerMockRecorder) ActiveValidatorIndices(logger interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidatorsIndices", reflect.TypeOf((*MockController)(nil).GetValidatorsIndices), logger)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ActiveValidatorIndices", reflect.TypeOf((*MockController)(nil).ActiveValidatorIndices), logger)
 }
 
 // GetValidator mocks base method

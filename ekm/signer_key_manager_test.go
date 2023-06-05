@@ -6,7 +6,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/eth2-key-manager/core"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -14,8 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
 
@@ -34,7 +32,7 @@ func testKeyManager(t *testing.T) spectypes.KeyManager {
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 
-	km, err := NewETHKeyManagerSigner(logger, db, beacon.NewNetwork(core.PraterNetwork, 0), types.GetDefaultDomain(), true)
+	km, err := NewETHKeyManagerSigner(logger, db, networkconfig.TestNetwork, true)
 	require.NoError(t, err)
 
 	sk1 := &bls.SecretKey{}
@@ -196,7 +194,6 @@ func TestSlashing(t *testing.T) {
 }
 
 func TestSignRoot(t *testing.T) {
-
 	require.NoError(t, bls.Init(bls.BLS12_381))
 
 	km := testKeyManager(t)
@@ -224,7 +221,7 @@ func TestSignRoot(t *testing.T) {
 			Message:   msg,
 		}
 
-		err = signed.GetSignature().VerifyByOperators(signed, types.GetDefaultDomain(), spectypes.QBFTSignatureType, []*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}})
+		err = signed.GetSignature().VerifyByOperators(signed, networkconfig.TestNetwork.Domain, spectypes.QBFTSignatureType, []*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}})
 		// res, err := signed.VerifySig(pk)
 		require.NoError(t, err)
 		// require.True(t, res)
@@ -253,7 +250,7 @@ func TestSignRoot(t *testing.T) {
 			Message:   msg,
 		}
 
-		err = signed.GetSignature().VerifyByOperators(signed, types.GetDefaultDomain(), spectypes.QBFTSignatureType, []*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}})
+		err = signed.GetSignature().VerifyByOperators(signed, networkconfig.TestNetwork.Domain, spectypes.QBFTSignatureType, []*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}})
 		// res, err := signed.VerifySig(pk)
 		require.NoError(t, err)
 		// require.True(t, res)

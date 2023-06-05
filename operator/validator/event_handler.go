@@ -3,9 +3,13 @@ package validator
 import (
 	"bytes"
 	"encoding/hex"
+	"fmt"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -16,6 +20,22 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )
+
+// b64 encrypted key length is 256
+const encryptedKeyLength = 256
+
+func splitBytes(buf []byte, lim int) [][]byte {
+	var chunk []byte
+	chunks := make([][]byte, 0, len(buf)/lim+1)
+	for len(buf) >= lim {
+		chunk, buf = buf[:lim], buf[lim:]
+		chunks = append(chunks, chunk)
+	}
+	if len(buf) > 0 {
+		chunks = append(chunks, buf[:])
+	}
+	return chunks
+}
 
 // Eth1EventHandler is a factory function for creating eth1 event handler
 func (c *controller) Eth1EventHandler(logger *zap.Logger, ongoingSync bool) eth1.SyncEventHandler {
@@ -122,7 +142,56 @@ func (c *controller) handleValidatorAddedEvent(
 	logger *zap.Logger,
 	event abiparser.ValidatorAddedEvent,
 	ongoingSync bool,
-) ([]zap.Field, error) {
+) (logFields []zap.Field, err error) {
+	var valid bool
+	defer func() {
+		err = c.handleValidatorAddedEventDefer(valid, err, event)
+	}()
+
+	_, found, eventErr := c.eventHandler.GetEventData(event.TxHash)
+	if eventErr != nil {
+		return nil, errors.Wrap(eventErr, "failed to get event data")
+	}
+	if found {
+		// skip
+		return nil, nil
+	}
+
+	// get nonce
+	nonce, nonceErr := c.eventHandler.GetNextNonce(event.Owner)
+	if nonceErr != nil {
+		return nil, errors.Wrap(nonceErr, "failed to get next nonce")
+	}
+
+	// Calculate the expected length of constructed shares based on the number of operator IDs,
+	// signature length, public key length, and encrypted key length.
+	operatorCount := len(event.OperatorIds)
+	signatureOffset := phase0.SignatureLength
+	pubKeysOffset := phase0.PublicKeyLength*operatorCount + signatureOffset
+	sharesExpectedLength := encryptedKeyLength*operatorCount + pubKeysOffset
+
+	if sharesExpectedLength != len(event.Shares) {
+		err = &abiparser.MalformedEventError{
+			Err: errors.Errorf(
+				"%s event shares length is not correct: expected %d, got %d",
+				abiparser.ValidatorAdded,
+				sharesExpectedLength,
+				len(event.Shares),
+			),
+		}
+		return nil, err
+	}
+
+	event.Signature = event.Shares[:signatureOffset]
+	event.SharePublicKeys = splitBytes(event.Shares[signatureOffset:pubKeysOffset], phase0.PublicKeyLength)
+	event.EncryptedKeys = splitBytes(event.Shares[pubKeysOffset:], len(event.Shares[pubKeysOffset:])/operatorCount)
+
+	// verify sig
+	if err = verifySignature(event.Signature, event.Owner, event.PublicKey, nonce); err != nil {
+		err = &abiparser.MalformedEventError{Err: errors.Wrap(err, "failed to verify signature")}
+		return nil, err
+	}
+
 	pubKey := hex.EncodeToString(event.PublicKey)
 	// TODO: check if need
 	if ongoingSync {
@@ -132,9 +201,22 @@ func (c *controller) handleValidatorAddedEvent(
 		}
 	}
 
-	validatorShare, found, err := c.sharesStorage.GetShare(event.PublicKey)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not check if validator share exist")
+	validatorShare, found, shareErr := c.sharesStorage.GetShare(event.PublicKey)
+	if shareErr != nil {
+		return nil, errors.Wrap(shareErr, "could not check if validator share exist")
+	}
+	// Prevent multiple registration of the same validator with different owner address
+	// owner A registers validator with public key X (OK)
+	// owner B registers validator with public key X (NOT OK)
+	if found && event.Owner != validatorShare.OwnerAddress {
+		err = &abiparser.MalformedEventError{
+			Err: errors.Errorf(
+				"validator share already exists with different owner address: expected %s, got %s",
+				validatorShare.OwnerAddress.String(),
+				event.Owner.String(),
+			),
+		}
+		return nil, err
 	}
 	if !found {
 		validatorShare, err = c.onShareCreate(logger, event)
@@ -142,20 +224,23 @@ func (c *controller) handleValidatorAddedEvent(
 			metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusError))
 			return nil, err
 		}
+		valid = true
 	}
 
-	logFields := make([]zap.Field, 0)
 	isOperatorShare := validatorShare.BelongsToOperator(c.operatorData.ID)
 	if isOperatorShare {
 		metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusInactive))
 		if ongoingSync {
-			_, err = c.onShareStart(logger, validatorShare)
-			if err != nil {
-				logger.Warn("could not start validator", zap.String("pubkey", hex.EncodeToString(validatorShare.ValidatorPubKey)), zap.Error(err))
+			if _, startErr := c.onShareStart(logger, validatorShare); startErr != nil {
+				logger.Warn("could not start validator",
+					zap.String("pubkey", hex.EncodeToString(validatorShare.ValidatorPubKey)),
+					zap.Error(startErr),
+				)
 			}
 		}
 	}
 
+	logFields = make([]zap.Field, 0)
 	if isOperatorShare || c.validatorOptions.FullNode {
 		logFields = append(logFields,
 			zap.String("validatorPubKey", pubKey),
@@ -164,7 +249,33 @@ func (c *controller) handleValidatorAddedEvent(
 		)
 	}
 
-	return logFields, nil
+	return logFields, err
+}
+
+func (c *controller) handleValidatorAddedEventDefer(valid bool, err error, event abiparser.ValidatorAddedEvent) error {
+	var malformedEventErr *abiparser.MalformedEventError
+
+	if valid || errors.As(err, &malformedEventErr) {
+		saveErr := c.eventHandler.SaveEventData(event.TxHash)
+		if saveErr != nil {
+			wrappedErr := errors.Wrap(saveErr, "could not save event data")
+			if err == nil {
+				return wrappedErr
+			}
+			return errors.Wrap(err, wrappedErr.Error())
+		}
+
+		bumpErr := c.eventHandler.BumpNonce(event.Owner)
+		if bumpErr != nil {
+			wrappedErr := errors.Wrap(bumpErr, "failed to bump the nonce")
+			if err == nil {
+				return wrappedErr
+			}
+			return errors.Wrap(err, wrappedErr.Error())
+		}
+	}
+
+	return err
 }
 
 // handleValidatorRemovedEvent handles registry contract event for validator removed
@@ -177,6 +288,22 @@ func (c *controller) handleValidatorRemovedEvent(
 	share, found, err := c.sharesStorage.GetShare(event.PublicKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not check if validator share exist")
+	}
+
+	// Prevent removal of the validator registered with different owner address
+	// owner A registers validator with public key X (OK)
+	// owner B registers validator with public key X (NOT OK)
+	// owner A removes validator with public key X (OK)
+	// owner B removes validator with public key X (NOT OK)
+	if found && event.Owner != share.OwnerAddress {
+		err = &abiparser.MalformedEventError{
+			Err: errors.Errorf(
+				"validator share already exists with different owner address: expected %s, got %s",
+				share.OwnerAddress.String(),
+				event.Owner.String(),
+			),
+		}
+		return nil, err
 	}
 	if !found {
 		return nil, &abiparser.MalformedEventError{
@@ -369,4 +496,27 @@ func (c *controller) handleFeeRecipientAddressUpdatedEvent(
 	}
 
 	return logFields, nil
+}
+
+// todo(align-contract-v0.3.1-rc.0): move to crypto package in ssv protocol?
+// verify signature of the ValidatorAddedEvent shares data
+func verifySignature(sig []byte, owner common.Address, pubKey []byte, nonce registrystorage.Nonce) error {
+	data := fmt.Sprintf("%s:%d", owner.String(), nonce)
+	hash := crypto.Keccak256([]byte(data))
+
+	sign := &bls.Sign{}
+	if err := sign.Deserialize(sig); err != nil {
+		return errors.Wrap(err, "failed to deserialize signature")
+	}
+
+	pk := &bls.PublicKey{}
+	if err := pk.Deserialize(pubKey); err != nil {
+		return errors.Wrap(err, "failed to deserialize public key")
+	}
+
+	if res := sign.VerifyByte(pk, hash); !res {
+		return errors.New("failed to verify signature")
+	}
+
+	return nil
 }

@@ -7,11 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bloxapp/ssv/logging/fields"
-
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/utils/tasks"
 
