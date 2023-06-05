@@ -119,8 +119,6 @@ spec:
           value: 'false'
         - name: PUBSUB_TRACE
           value: 'false'
-        - name: CLEAN_REGISTRY_DATA
-          value: "false"
         - name: BUILDER_PROPOSALS
           value: "true"
         volumeMounts:
