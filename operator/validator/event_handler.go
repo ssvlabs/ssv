@@ -40,51 +40,26 @@ func splitBytes(buf []byte, lim int) [][]byte {
 // Eth1EventHandler is a factory function for creating eth1 event handler
 func (c *controller) Eth1EventHandler(logger *zap.Logger, ongoingSync bool) eth1.SyncEventHandler {
 	return func(e eth1.Event) ([]zap.Field, error) {
-		switch e.Name {
-		case abiparser.OperatorAdded:
-			ev, ok := e.Data.(abiparser.OperatorAddedEvent)
-			if !ok {
-				return nil, fmt.Errorf("malformed event, received %T, expected abiparser.OperatorAddedEvent", e.Data)
-			}
+		switch ev := e.Data.(type) {
+		case abiparser.OperatorAddedEvent:
 			return c.handleOperatorAddedEvent(logger, ev)
-		case abiparser.OperatorRemoved:
-			ev, ok := e.Data.(abiparser.OperatorRemovedEvent)
-			if !ok {
-				return nil, fmt.Errorf("malformed event, received %T, expected abiparser.OperatorRemovedEvent", e.Data)
-			}
+		case abiparser.OperatorRemovedEvent:
 			return c.handleOperatorRemovedEvent(logger, ev, ongoingSync)
-		case abiparser.ValidatorAdded:
-			ev, ok := e.Data.(abiparser.ValidatorAddedEvent)
-			if !ok {
-				return nil, fmt.Errorf("malformed event, received %T, expected abiparser.ValidatorAddedEvent", e.Data)
-			}
+		case abiparser.ValidatorAddedEvent:
 			return c.handleValidatorAddedEvent(logger, ev, ongoingSync)
-		case abiparser.ValidatorRemoved:
-			ev, ok := e.Data.(abiparser.ValidatorRemovedEvent)
-			if !ok {
-				return nil, fmt.Errorf("malformed event, received %T, expected abiparser.ValidatorRemovedEvent", e.Data)
-			}
+		case abiparser.ValidatorRemovedEvent:
 			return c.handleValidatorRemovedEvent(logger, ev, ongoingSync)
-		case abiparser.ClusterLiquidated:
-			ev, ok := e.Data.(abiparser.ClusterLiquidatedEvent)
-			if !ok {
-				return nil, fmt.Errorf("malformed event, received %T, expected abiparser.ClusterLiquidatedEvent", e.Data)
-			}
+		case abiparser.ClusterLiquidatedEvent:
 			return c.handleClusterLiquidatedEvent(logger, ev, ongoingSync)
-		case abiparser.ClusterReactivated:
-			ev, ok := e.Data.(abiparser.ClusterReactivatedEvent)
-			if !ok {
-				return nil, fmt.Errorf("malformed event, received %T, expected abiparser.ClusterReactivatedEvent", e.Data)
-			}
+		case abiparser.ClusterReactivatedEvent:
 			return c.handleClusterReactivatedEvent(logger, ev, ongoingSync)
-		case abiparser.FeeRecipientAddressUpdated:
-			ev, ok := e.Data.(abiparser.FeeRecipientAddressUpdatedEvent)
-			if !ok {
-				return nil, fmt.Errorf("malformed event, received %T, expected abiparser.FeeRecipientAddressUpdatedEvent", e.Data)
-			}
+		case abiparser.FeeRecipientAddressUpdatedEvent:
 			return c.handleFeeRecipientAddressUpdatedEvent(logger, ev, ongoingSync)
 		default:
-			logger.Debug("could not handle unknown event")
+			logger.Debug("could not handle unknown event",
+				zap.String("event_name", e.Name),
+				zap.String("event_type", fmt.Sprintf("%T", ev)),
+			)
 		}
 		return nil, nil
 	}
