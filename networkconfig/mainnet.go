@@ -15,8 +15,8 @@ var Mainnet = NetworkConfig{
 	GenesisEpoch:         1,                              // TODO: set up
 	ETH1SyncOffset:       new(big.Int).SetInt64(8661727), // TODO: set up
 	RegistryContractAddr: "",                             // TODO: set up
-	Bootnodes:            []string{
-		// TODO: fill
+	Bootnodes: []string{
+		"enr:-Li4QFJEmDrCkMnHSM60-0jeivkc20f803sKyNr_rvFGEuLiAghKBwpjXU9sG5VL2qnp7e1XKYxc0qFk8r5MWBJUT2yGAYiQdWLDh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCzmKVSJc2VjcDI1NmsxoQJZGVC3UnuZe1nU7WNuvVXEOOAsf0H2_QMeXEipUVMdaoN0Y3CCE4qDdWRwgg-i",
 	},
 	WhitelistedOperatorKeys: []string{
 		"LS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBeSttZUZmOGwyZ2lzK01YU1pXc3oKTFhPTjRodXJ1ak4zQnNSRTJCU1FuV3RMUHY1Y2prSW0xa2FxRThqWEtBbU5nRkwrT3o0eldpczhFRVFhMjB1UgpyM01RM1NMQnlpaWFRYjNDeStjMFg1UDFsTFBBYzVxNnhiZlJBZXp3K2dUUkFYSXo4RXBwaGdVblNyVUQvOXp2CmZ1OFRaQkVLSlYrcnFDRTZZN0FpcU9jVUsrNHF3TWUyeWQrMW9rRld2d2E3c3h4T2VZNGdBcG9jTENNQmRzKzIKQlY2UVR5aVZaT1daQlhFSjdXMllINHBHMWRlMHdMRUZaUnVkcmE1L3RXUzBqSzRRV0Vhc21WeG5LOUpsSWJDdgplZW5vYWt2M1pjamM4WGs1MmRLWGFuNy9TNDNxdHRJT1MvbFdmRDdxSTZvWXp5aXJhZVh2dDdYbXlhODJIa3JZCkd3SURBUUFCCi0tLS0tRU5EIFJTQSBQVUJMSUMgS0VZLS0tLS0K",
