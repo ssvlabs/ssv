@@ -15,14 +15,6 @@ import (
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 )
 
-type subscriptionStatus int
-
-const (
-	subscriptionStatusInactive    subscriptionStatus = 0
-	subscriptionStatusSubscribing subscriptionStatus = 1
-	subscriptionStatusSubscribed  subscriptionStatus = 2
-)
-
 // UseMessageRouter registers a message router to handle incoming messages
 func (n *p2pNetwork) UseMessageRouter(router network.MessageRouter) {
 	n.msgRouter = router
