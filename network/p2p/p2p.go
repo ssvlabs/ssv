@@ -220,29 +220,37 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 	if err != nil {
 		logger.Warn("could not update subnets", zap.Error(err))
 	}
-	if len(newSubnets) == 0 {
+	if len(newSubnets) == 0 && len(inactiveSubnets) == 0 {
+		// Nothing changed.
 		return
 	}
+	n.subnets = n.subscriber.Subnets()
 
 	self := n.idx.Self()
 	self.Metadata.Subnets = records.Subnets(n.subnets).String()
 	n.idx.UpdateSelfRecord(self)
 
-	err = n.disc.RegisterSubnets(logger.Named(logging.NameDiscoveryService), newSubnets...)
-	if err != nil {
-		logger.Warn("could not register subnets", zap.Error(err))
-		return
+	if len(newSubnets) > 0 {
+		err = n.disc.RegisterSubnets(logger.Named(logging.NameDiscoveryService), newSubnets...)
+		if err != nil {
+			logger.Warn("could not register subnets", zap.Error(err))
+			return
+		}
 	}
-	err = n.disc.DeregisterSubnets(logger.Named(logging.NameDiscoveryService), inactiveSubnets...)
-	if err != nil {
-		logger.Warn("could not deregister subnets", zap.Error(err))
-		return
+	if len(inactiveSubnets) > 0 {
+		err = n.disc.DeregisterSubnets(logger.Named(logging.NameDiscoveryService), inactiveSubnets...)
+		if err != nil {
+			logger.Warn("could not deregister subnets", zap.Error(err))
+			return
+		}
 	}
 
 	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
 	subnetsList := records.SharedSubnets(allSubs, n.subnets, 0)
 	logger.Debug("updated subnets (node-info)",
 		zap.Any("subnets", subnetsList),
+		zap.Ints("new_subnets", newSubnets),
+		zap.Ints("inactive_subnets", inactiveSubnets),
 		zap.Duration("took", time.Since(start)),
 	)
 }

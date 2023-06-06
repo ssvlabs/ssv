@@ -85,8 +85,10 @@ func (s *subscriber) Subnets() []byte {
 	defer s.subscriptionsMu.Unlock()
 
 	subnets := make([]byte, s.fork.Subnets())
-	for subnet := range s.subscriptions {
-		subnets[subnet] = 1
+	for subnet, validators := range s.subscriptions {
+		if validators > 0 {
+			subnets[subnet] = 1
+		}
 	}
 	return subnets
 }
