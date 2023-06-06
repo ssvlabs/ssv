@@ -14,7 +14,6 @@ import (
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	registry "github.com/bloxapp/ssv/protocol/v2/blockchain/eth1"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
@@ -32,7 +31,7 @@ type Storage interface {
 
 	registrystorage.Operators
 	registrystorage.Recipients
-	registrystorage.Shares
+	Shares() registrystorage.Shares
 	registrystorage.Events
 
 	GetPrivateKey() (*rsa.PrivateKey, bool, error)
@@ -49,38 +48,23 @@ type storage struct {
 }
 
 // NewNodeStorage creates a new instance of Storage
-func NewNodeStorage(db basedb.IDb) Storage {
-	return &storage{
+func NewNodeStorage(logger *zap.Logger, db basedb.IDb) (Storage, error) {
+	stg := &storage{
 		db:             db,
 		operatorStore:  registrystorage.NewOperatorsStorage(db, storagePrefix),
 		recipientStore: registrystorage.NewRecipientsStorage(db, storagePrefix),
-		shareStore:     registrystorage.NewSharesStorage(db, storagePrefix),
 		eventStore:     registrystorage.NewEventsStorage(db, storagePrefix),
 	}
+	var err error
+	stg.shareStore, err = registrystorage.NewSharesStorage(logger, db, storagePrefix)
+	if err != nil {
+		return nil, err
+	}
+	return stg, nil
 }
 
-func (s *storage) SaveShare(logger *zap.Logger, share *types.SSVShare) error {
-	return s.shareStore.SaveShare(logger, share)
-}
-
-func (s *storage) SaveShareMany(logger *zap.Logger, shares []*types.SSVShare) error {
-	return s.shareStore.SaveShareMany(logger, shares)
-}
-
-func (s *storage) GetShare(key []byte) (*types.SSVShare, bool, error) {
-	return s.shareStore.GetShare(key)
-}
-
-func (s *storage) GetAllShares(logger *zap.Logger) ([]*types.SSVShare, error) {
-	return s.shareStore.GetAllShares(logger)
-}
-
-func (s *storage) GetFilteredShares(logger *zap.Logger, f func(share *types.SSVShare) bool) ([]*types.SSVShare, error) {
-	return s.shareStore.GetFilteredShares(logger, f)
-}
-
-func (s *storage) DeleteShare(key []byte) error {
-	return s.shareStore.DeleteShare(key)
+func (s *storage) Shares() registrystorage.Shares {
+	return s.shareStore
 }
 
 func (s *storage) GetOperatorDataByPubKey(logger *zap.Logger, operatorPubKey []byte) (*registrystorage.OperatorData, bool, error) {

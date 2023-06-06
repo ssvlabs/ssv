@@ -269,7 +269,10 @@ func setupDb(logger *zap.Logger, eth2Network beaconprotocol.Network) (basedb.IDb
 }
 
 func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.Storage, *registrystorage.OperatorData) {
-	nodeStorage := operatorstorage.NewNodeStorage(db)
+	nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)
+	if err != nil {
+		logger.Fatal("failed to create node storage", zap.Error(err))
+	}
 	operatorPubKey, err := nodeStorage.SetupPrivateKey(logger, cfg.OperatorPrivateKey, cfg.GenerateOperatorPrivateKey)
 	if err != nil {
 		logger.Fatal("could not setup operator private key", zap.Error(err))
@@ -326,9 +329,12 @@ func setupP2P(
 		logger.Fatal("failed to setup network private key", zap.Error(err))
 	}
 
-	cfg.P2pNetworkConfig.NodeStorage = operatorstorage.NewNodeStorage(db)
+	cfg.P2pNetworkConfig.NodeStorage, err = operatorstorage.NewNodeStorage(logger, db)
+	if err != nil {
+		logger.Fatal("failed to create node storage", zap.Error(err))
+	}
 	if len(cfg.P2pNetworkConfig.Subnets) == 0 {
-		subnets := getNodeSubnets(logger, cfg.P2pNetworkConfig.NodeStorage.GetFilteredShares, forkVersion, operatorData.ID)
+		subnets := getNodeSubnets(logger, cfg.P2pNetworkConfig.NodeStorage.Shares().List, forkVersion, operatorData.ID)
 		cfg.P2pNetworkConfig.Subnets = subnets.String()
 	}
 
@@ -395,17 +401,13 @@ func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.IDb,
 // note that we'll trigger another update once finished processing registry events
 func getNodeSubnets(
 	logger *zap.Logger,
-	getFiltered registrystorage.FilteredSharesFunc,
+	getFiltered registrystorage.SharesListFunc,
 	ssvForkVersion forksprotocol.ForkVersion,
 	operatorID spectypes.OperatorID,
 ) records.Subnets {
 	f := forksfactory.NewFork(ssvForkVersion)
 	subnetsMap := make(map[int]bool)
-	shares, err := getFiltered(logger, registrystorage.ByOperatorIDAndNotLiquidated(operatorID))
-	if err != nil {
-		logger.Warn("could not read validators to bootstrap subnets")
-		return nil
-	}
+	shares := getFiltered(registrystorage.FilterOperatorID(operatorID), registrystorage.FilterNotLiquidated())
 	for _, share := range shares {
 		subnet := f.ValidatorSubnet(hex.EncodeToString(share.ValidatorPubKey))
 		if subnet < 0 {
