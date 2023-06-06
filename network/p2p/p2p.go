@@ -1,7 +1,6 @@
 package p2pv1
 
 import (
-	"bytes"
 	"context"
 	"sync"
 	"sync/atomic"
@@ -9,7 +8,6 @@ import (
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/cornelk/hashmap"
 
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -70,10 +68,10 @@ type p2pNetwork struct {
 
 	state int32
 
-	activeValidators *hashmap.Map[string, validatorStatus]
+	subscriber *subscriber
+	subnets    []byte
 
 	backoffConnector *libp2pdiscbackoff.BackoffConnector
-	subnets          []byte
 	libConnManager   connmgrcore.ConnManager
 	syncer           syncing.Syncer
 	nodeStorage      operatorstorage.Storage
@@ -87,17 +85,16 @@ func New(logger *zap.Logger, cfg *Config) network.P2PNetwork {
 	logger = logger.Named(logging.NameP2PNetwork)
 
 	return &p2pNetwork{
-		parentCtx:        cfg.Ctx,
-		ctx:              ctx,
-		cancel:           cancel,
-		interfaceLogger:  logger,
-		fork:             forksfactory.NewFork(cfg.ForkVersion),
-		cfg:              cfg,
-		msgRouter:        cfg.Router,
-		state:            stateClosed,
-		activeValidators: hashmap.New[string, validatorStatus](),
-		nodeStorage:      cfg.NodeStorage,
-		operatorPKCache:  sync.Map{},
+		parentCtx:       cfg.Ctx,
+		ctx:             ctx,
+		cancel:          cancel,
+		interfaceLogger: logger,
+		fork:            forksfactory.NewFork(cfg.ForkVersion),
+		cfg:             cfg,
+		msgRouter:       cfg.Router,
+		state:           stateClosed,
+		nodeStorage:     cfg.NodeStorage,
+		operatorPKCache: sync.Map{},
 	}
 }
 
@@ -210,39 +207,104 @@ func (n *p2pNetwork) isReady() bool {
 	return atomic.LoadInt32(&n.state) == stateReady
 }
 
+var fakeRoutine sync.Once
+
 // UpdateSubnets will update the registered subnets according to active validators
 // NOTE: it won't subscribe to the subnets (use subscribeToSubnets for that)
 func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
+	// defer fakeRoutine.Do(func() {
+	// 	logger.Debug("rvrt: starting goroutines")
+
+	// 	// Log stats.
+	// 	go func() {
+	// 		for {
+	// 			time.Sleep(time.Second * 1)
+
+	// 			var inactive, subscribing, subscribed int
+	// 			n.activeValidators.Range(func(pk string, status validatorStatus) bool {
+	// 				switch status {
+	// 				case validatorStatusInactive:
+	// 					inactive++
+	// 				case validatorStatusSubscribing:
+	// 					subscribing++
+	// 				case validatorStatusSubscribed:
+	// 					subscribed++
+	// 				}
+	// 				return true
+	// 			})
+
+	// 			allSubnets, err := records.Subnets{}.FromString(records.AllSubnets)
+	// 			if err != nil {
+	// 				logger.Warn("could not parse all subnets", zap.Error(err))
+	// 			}
+	// 			metadataSubnets, err := records.Subnets{}.FromString(n.idx.Self().Metadata.Subnets)
+	// 			if err != nil {
+	// 				logger.Warn("could not parse metadata subnets", zap.Error(err))
+	// 			}
+	// 			metadataSubnetsCount := len(records.SharedSubnets(allSubnets, metadataSubnets, 0))
+
+	// 			networkSubnets := records.Subnets(n.subnets)
+	// 			networkSubnetsCount := len(records.SharedSubnets(allSubnets, networkSubnets, 0))
+
+	// 			logger.Debug("rvrt: current status",
+	// 				zap.Int("subnets", networkSubnetsCount),
+	// 				zap.Int("metadata_subnets", metadataSubnetsCount),
+	// 				zap.Int("inactive", inactive),
+	// 				zap.Int("subscribing", subscribing),
+	// 				zap.Int("subscribed", subscribed),
+	// 			)
+	// 		}
+	// 	}()
+
+	// 	// Fake subscribe.
+	// 	go func() {
+	// 		for i := 0; i < 500; i++ {
+	// 			time.Sleep(time.Millisecond * 100)
+	// 			randomPK := make(spectypes.ValidatorPK, 48)
+	// 			_n, err := rand.Read(randomPK[:])
+	// 			if err != nil || _n != len(randomPK) {
+	// 				panic("could not generate random validator pk")
+	// 			}
+	// 			err = n.Subscribe(randomPK)
+	// 			if err != nil {
+	// 				logger.Error("rvrt: could not subscribe", zap.Error(err))
+	// 			}
+	// 			logger.Debug("rvrt: subscribed",
+	// 				zap.String("pk", fmt.Sprintf("%x", randomPK)),
+	// 				zap.String("subnet", n.fork.ValidatorTopicID(randomPK)[0]),
+	// 			)
+	// 		}
+	// 	}()
+
+	// 	// UpdateSubnets interval.
+	// 	go func() {
+	// 		for {
+	// 			time.Sleep(time.Second * 10)
+	// 			n.UpdateSubnets(logger)
+	// 		}
+	// 	}()
+	// })
+
+	// register 1 topic test
+	// allSubnets := []int{}
+	// for i := 0; i < 1; i++ {
+	// 	allSubnets = append(allSubnets, i)
+	// }
+	// err := n.disc.RegisterSubnets(logger.Named(logging.NameDiscoveryService), allSubnets...)
+	// if err != nil {
+	// 	logger.Warn("could not register subnets", zap.Error(err))
+	// 	return
+	// }
+
+	// return
+
 	logger = logger.Named(logging.NameP2PNetwork)
 
-	visited := make(map[int]bool)
-	last := make([]byte, len(n.subnets))
-	if len(n.subnets) > 0 {
-		copy(last, n.subnets)
+	newSubnets, err := n.subscriber.update(logger)
+	if err != nil {
+		logger.Warn("could not update subnets", zap.Error(err))
 	}
-	newSubnets := make([]byte, n.fork.Subnets())
-	n.activeValidators.Range(func(pkHex string, status validatorStatus) bool {
-		if status == validatorStatusInactive {
-			return true
-		}
-		subnet := n.fork.ValidatorSubnet(pkHex)
-		if _, ok := visited[subnet]; ok {
-			return true
-		}
-		newSubnets[subnet] = byte(1)
-		return true
-	})
-	subnetsToAdd := make([]int, 0)
-	if !bytes.Equal(newSubnets, last) { // have changes
-		n.subnets = newSubnets
-		for i, b := range newSubnets {
-			if b == byte(1) {
-				subnetsToAdd = append(subnetsToAdd, i)
-			}
-		}
-	}
-
-	if len(subnetsToAdd) == 0 {
+	if len(newSubnets) == 0 {
 		return
 	}
 
@@ -250,7 +312,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 	self.Metadata.Subnets = records.Subnets(n.subnets).String()
 	n.idx.UpdateSelfRecord(self)
 
-	err := n.disc.RegisterSubnets(logger.Named(logging.NameDiscoveryService), subnetsToAdd...)
+	err = n.disc.RegisterSubnets(logger.Named(logging.NameDiscoveryService), newSubnets...)
 	if err != nil {
 		logger.Warn("could not register subnets", zap.Error(err))
 		return

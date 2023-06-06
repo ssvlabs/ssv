@@ -39,6 +39,7 @@ require (
 	github.com/wealdtech/go-eth2-util v1.6.3
 	go.opencensus.io v0.24.0
 	go.uber.org/zap v1.24.0
+	golang.org/x/exp v0.0.0-20230522175609-2e198f4a06a1
 	golang.org/x/mod v0.7.0
 	golang.org/x/sync v0.1.0
 	golang.org/x/text v0.7.0
@@ -164,7 +165,6 @@ require (
 	go.uber.org/fx v1.19.0 // indirect
 	go.uber.org/multierr v1.9.0 // indirect
 	golang.org/x/crypto v0.5.0 // indirect
-	golang.org/x/exp v0.0.0-20230522175609-2e198f4a06a1 // indirect
 	golang.org/x/net v0.5.0 // indirect
 	golang.org/x/sys v0.8.0 // indirect
 	golang.org/x/term v0.8.0 // indirect

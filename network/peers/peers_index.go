@@ -141,6 +141,10 @@ func (pi *peersIndex) SelfSealed(sender, recipient peer.ID, permissioned bool, o
 			return nil, err
 		}
 
+		zap.L().Debug(
+			"rvrt: sending self node info",
+			zap.String("my_subnets", pi.self.Metadata.Subnets),
+		)
 		signedNodeInfo := &records.SignedNodeInfo{
 			NodeInfo:      pi.self,
 			HandshakeData: handshakeData,

@@ -51,6 +51,11 @@ func (genesis *ForkGenesis) ValidatorSubnet(validatorPKHex string) int {
 	return int(val % subnetsCount)
 }
 
+// SubnetTopicID returns the topic to use for the given subnet
+func (genesis *ForkGenesis) SubnetTopicID(subnet int) string {
+	return topicOf(subnet)
+}
+
 func hexToUint64(hexStr string) uint64 {
 	result, err := strconv.ParseUint(hexStr, 16, 64)
 	if err != nil {

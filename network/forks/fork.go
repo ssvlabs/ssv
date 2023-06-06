@@ -33,6 +33,8 @@ type pubSubMapping interface {
 	GetTopicBaseName(topicName string) string
 	// ValidatorSubnet returns the subnet for the given validator
 	ValidatorSubnet(validatorPKHex string) int
+	// SubnetTopicID returns the topic id for the given subnet
+	SubnetTopicID(subnet int) string
 }
 
 type pubSubConfig interface {

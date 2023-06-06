@@ -1,7 +1,6 @@
 package p2pv1
 
 import (
-	"encoding/hex"
 	"fmt"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -16,12 +15,12 @@ import (
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 )
 
-type validatorStatus int
+type subscriptionStatus int
 
 const (
-	validatorStatusInactive    validatorStatus = 0
-	validatorStatusSubscribing validatorStatus = 1
-	validatorStatusSubscribed  validatorStatus = 2
+	subscriptionStatusInactive    subscriptionStatus = 0
+	subscriptionStatusSubscribing subscriptionStatus = 1
+	subscriptionStatusSubscribed  subscriptionStatus = 2
 )
 
 // UseMessageRouter registers a message router to handle incoming messages
@@ -71,16 +70,7 @@ func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
-	pkHex := hex.EncodeToString(pk)
-	status, found := n.activeValidators.GetOrInsert(pkHex, validatorStatusSubscribing)
-	if found && status != validatorStatusInactive {
-		return nil
-	}
-	err := n.subscribe(n.interfaceLogger, pk)
-	if err != nil {
-		return err
-	}
-	n.activeValidators.Set(pkHex, validatorStatusSubscribed)
+	n.subscriber.addValidator(pk)
 	return nil
 }
 
@@ -89,17 +79,7 @@ func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) e
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
-	pkHex := hex.EncodeToString(pk)
-	if status, _ := n.activeValidators.Get(pkHex); status != validatorStatusSubscribed {
-		return nil
-	}
-	topics := n.fork.ValidatorTopicID(pk)
-	for _, topic := range topics {
-		if err := n.topicsCtrl.Unsubscribe(logger, topic, false); err != nil {
-			return err
-		}
-	}
-	n.activeValidators.Del(pkHex)
+	n.subscriber.removeValidator(logger, pk)
 	return nil
 }
 

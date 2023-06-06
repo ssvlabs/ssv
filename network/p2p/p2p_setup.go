@@ -245,8 +245,8 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 			OperatorID:    n.cfg.OperatorID,
 			EnableLogging: n.cfg.DiscoveryTrace,
 		}
-		if len(n.subnets) > 0 {
-			discV5Opts.Subnets = n.subnets
+		if subnets := n.subnets; len(subnets) > 0 {
+			discV5Opts.Subnets = subnets
 		}
 		logger.Info("discovery: using discv5", zap.Strings("bootnodes", discV5Opts.Bootnodes))
 	} else {
@@ -306,6 +306,7 @@ func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
 		return errors.Wrap(err, "could not setup pubsub")
 	}
 	n.topicsCtrl = tc
+	n.subscriber = newSubscriber(tc, n.fork)
 	logger.Debug("topics controller is ready")
 	return nil
 }
