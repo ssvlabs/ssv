@@ -22,7 +22,8 @@ type subscriber struct {
 	validators       map[string]struct{}
 	subscriptions    map[int]int
 	newSubscriptions map[int]struct{}
-	mu               sync.Mutex
+	subscriptionsMu  sync.Mutex
+	updateMu         sync.Mutex
 }
 
 // newSubscriber creates a new subscriber.
@@ -41,8 +42,8 @@ func newSubscriber(topicsCtrl topics.Controller, fork forks.Fork, constantSubnet
 }
 
 func (s *subscriber) AddValidator(pk spectypes.ValidatorPK) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.subscriptionsMu.Lock()
+	defer s.subscriptionsMu.Unlock()
 
 	pkHex := hex.EncodeToString(pk)
 	if _, ok := s.validators[pkHex]; ok {
@@ -62,8 +63,8 @@ func (s *subscriber) AddValidator(pk spectypes.ValidatorPK) {
 }
 
 func (s *subscriber) RemoveValidator(logger *zap.Logger, pk spectypes.ValidatorPK) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.subscriptionsMu.Lock()
+	defer s.subscriptionsMu.Unlock()
 
 	pkHex := hex.EncodeToString(pk)
 	if _, ok := s.validators[pkHex]; !ok {
@@ -80,8 +81,8 @@ func (s *subscriber) RemoveValidator(logger *zap.Logger, pk spectypes.ValidatorP
 }
 
 func (s *subscriber) Subnets() []byte {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.subscriptionsMu.Lock()
+	defer s.subscriptionsMu.Unlock()
 
 	subnets := make([]byte, s.fork.Subnets())
 	for subnet := range s.subscriptions {
@@ -95,26 +96,13 @@ func (s *subscriber) Subnets() []byte {
 //
 // Update always keeps the subnets specified in `constantSubnets` active.
 func (s *subscriber) Update(logger *zap.Logger) (newSubnets []int, inactiveSubnets []int, err error) {
-	func() {
-		s.mu.Lock()
-		defer s.mu.Unlock()
+	s.updateMu.Lock()
+	defer s.updateMu.Unlock()
 
-		// Get new subnets.
-		newSubnets = maps.Keys(s.newSubscriptions)
-		s.newSubscriptions = make(map[int]struct{})
-
-		// Compute inactive subnets.
-		inactiveSubnets = make([]int, 0, len(s.subscriptions))
-		for subnet, validators := range s.subscriptions {
-			if validators == 0 && s.constantSubnets[subnet] != 1 {
-				inactiveSubnets = append(inactiveSubnets, subnet)
-				delete(s.subscriptions, subnet)
-			}
-		}
-	}()
+	newSubnets, inactiveSubnets = s.updates()
 
 	// Subscribe to new subnets.
-	for subnet := range s.newSubscriptions {
+	for subnet := range newSubnets {
 		subscribeErr := s.topicsCtrl.Subscribe(logger, s.fork.SubnetTopicID(subnet))
 		err = multierr.Append(err, subscribeErr)
 	}
@@ -124,6 +112,24 @@ func (s *subscriber) Update(logger *zap.Logger) (newSubnets []int, inactiveSubne
 		unsubscribeErr := s.topicsCtrl.Unsubscribe(logger, s.fork.SubnetTopicID(subnet), false)
 		err = multierr.Append(err, unsubscribeErr)
 	}
+	return
+}
 
+func (s *subscriber) updates() (newSubnets []int, inactiveSubnets []int) {
+	s.subscriptionsMu.Lock()
+	defer s.subscriptionsMu.Unlock()
+
+	// Get new subnets.
+	newSubnets = maps.Keys(s.newSubscriptions)
+	s.newSubscriptions = make(map[int]struct{})
+
+	// Compute inactive subnets.
+	inactiveSubnets = make([]int, 0, len(s.subscriptions))
+	for subnet, validators := range s.subscriptions {
+		if validators == 0 && s.constantSubnets[subnet] != 1 {
+			inactiveSubnets = append(inactiveSubnets, subnet)
+			delete(s.subscriptions, subnet)
+		}
+	}
 	return
 }
