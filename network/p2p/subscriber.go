@@ -115,6 +115,7 @@ func (s *subscriber) Update(logger *zap.Logger) (newSubnets []int, inactiveSubne
 	return
 }
 
+// updates returns the list of new subnets and newly inactive subnets.
 func (s *subscriber) updates() (newSubnets []int, inactiveSubnets []int) {
 	s.subscriptionsMu.Lock()
 	defer s.subscriptionsMu.Unlock()
