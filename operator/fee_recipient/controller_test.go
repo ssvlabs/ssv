@@ -145,6 +145,6 @@ func populateStorage(t *testing.T, logger *zap.Logger, storage registrystorage.S
 	// add none committee share
 	require.NoError(t, storage.Save(logger, createShare(2000, spectypes.OperatorID(1))))
 
-	all := storage.List(registrystorage.FilterOperatorID(operatorData.ID), registrystorage.FilterNotLiquidated())
+	all := storage.List(registrystorage.ByOperatorID(operatorData.ID), registrystorage.ByNotLiquidated())
 	require.Equal(t, 1000, len(all))
 }

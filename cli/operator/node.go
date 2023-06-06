@@ -407,7 +407,7 @@ func getNodeSubnets(
 ) records.Subnets {
 	f := forksfactory.NewFork(ssvForkVersion)
 	subnetsMap := make(map[int]bool)
-	shares := getFiltered(registrystorage.FilterOperatorID(operatorID), registrystorage.FilterNotLiquidated())
+	shares := getFiltered(registrystorage.ByOperatorID(operatorID), registrystorage.ByNotLiquidated())
 	for _, share := range shares {
 		subnet := f.ValidatorSubnet(hex.EncodeToString(share.ValidatorPubKey))
 		if subnet < 0 {

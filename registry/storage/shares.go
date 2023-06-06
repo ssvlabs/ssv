@@ -8,6 +8,7 @@ import (
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
+	"golang.org/x/exp/maps"
 
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/eth1"
@@ -24,9 +25,16 @@ type SharesListFunc = func(filters ...func(share *types.SSVShare) bool) []*types
 type Shares interface {
 	eth1.RegistryStore
 
+	// Get returns the share for the given public key, or nil if not found.
 	Get(pubKey []byte) *types.SSVShare
+
+	// List returns a list of shares, filtered by the given filters (if any).
 	List(filters ...func(*types.SSVShare) bool) []*types.SSVShare
+
+	// Save saves the given shares.
 	Save(logger *zap.Logger, shares ...*types.SSVShare) error
+
+	// Delete deletes the share for the given public key.
 	Delete(pubKey []byte) error
 }
 
@@ -50,6 +58,7 @@ func NewSharesStorage(logger *zap.Logger, db basedb.IDb, prefix []byte) (Shares,
 	return storage, nil
 }
 
+// load reads all shares from db.
 func (s *sharesStorage) load(logger *zap.Logger) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -75,6 +84,10 @@ func (s *sharesStorage) List(filters ...func(*types.SSVShare) bool) []*types.SSV
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
+	if len(filters) == 0 {
+		return maps.Values(s.shares)
+	}
+
 	var shares []*types.SSVShare
 	for _, share := range s.shares {
 		match := true
@@ -92,6 +105,10 @@ func (s *sharesStorage) List(filters ...func(*types.SSVShare) bool) []*types.SSV
 }
 
 func (s *sharesStorage) Save(logger *zap.Logger, shares ...*types.SSVShare) error {
+	if len(shares) == 0 {
+		return nil
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -106,7 +123,7 @@ func (s *sharesStorage) Save(logger *zap.Logger, shares ...*types.SSVShare) erro
 			logger.Error("failed to serialize share", zap.Error(err))
 			return basedb.Obj{}, err
 		}
-		return basedb.Obj{Key: buildShareKey(shares[i].ValidatorPubKey), Value: value}, nil
+		return basedb.Obj{Key: s.storageKey(shares[i].ValidatorPubKey), Value: value}, nil
 	})
 }
 
@@ -115,7 +132,7 @@ func (s *sharesStorage) Delete(pubKey []byte) error {
 	defer s.mu.Unlock()
 
 	delete(s.shares, hex.EncodeToString(pubKey))
-	return s.db.Delete(s.prefix, buildShareKey(pubKey))
+	return s.db.Delete(s.prefix, s.storageKey(pubKey))
 }
 
 // UpdateValidatorMetadata updates the metadata of the given validator
@@ -137,34 +154,34 @@ func (s *sharesStorage) CleanRegistryData() error {
 	return s.db.RemoveAllByCollection(sharesPrefix)
 }
 
-// buildShareKey builds share key using sharesPrefix & validator public key, e.g. "shares/0x00..01"
-func buildShareKey(pk []byte) []byte {
+// storageKey builds share key using sharesPrefix & validator public key, e.g. "shares/0x00..01"
+func (s *sharesStorage) storageKey(pk []byte) []byte {
 	return bytes.Join([][]byte{sharesPrefix, pk}, []byte("/"))
 }
 
-// FilterOperatorID filters by operator ID.
-func FilterOperatorID(operatorID spectypes.OperatorID) func(share *types.SSVShare) bool {
+// ByOperatorID filters by operator ID.
+func ByOperatorID(operatorID spectypes.OperatorID) func(share *types.SSVShare) bool {
 	return func(share *types.SSVShare) bool {
 		return share.BelongsToOperator(operatorID)
 	}
 }
 
-// FilterNotLiquidated filters for not liquidated.
-func FilterNotLiquidated() func(share *types.SSVShare) bool {
+// ByNotLiquidated filters for not liquidated.
+func ByNotLiquidated() func(share *types.SSVShare) bool {
 	return func(share *types.SSVShare) bool {
 		return !share.Liquidated
 	}
 }
 
-// FilterActiveValidator filters for active validators.
-func FilterActiveValidator() func(share *types.SSVShare) bool {
+// ByActiveValidator filters for active validators.
+func ByActiveValidator() func(share *types.SSVShare) bool {
 	return func(share *types.SSVShare) bool {
 		return share.HasBeaconMetadata()
 	}
 }
 
-// FilterByClusterID filters by cluster id.
-func FilterByClusterID(clusterID []byte) func(share *types.SSVShare) bool {
+// ByClusterID filters by cluster id.
+func ByClusterID(clusterID []byte) func(share *types.SSVShare) bool {
 	return func(share *types.SSVShare) bool {
 		var operatorIDs []uint64
 		for _, op := range share.Committee {

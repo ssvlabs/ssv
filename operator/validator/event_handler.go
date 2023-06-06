@@ -415,7 +415,7 @@ func (c *controller) processClusterEvent(
 		return nil, nil, errors.Wrapf(err, "could not compute share cluster id")
 	}
 
-	shares := c.sharesStorage.List(registrystorage.FilterByClusterID(clusterID))
+	shares := c.sharesStorage.List(registrystorage.ByClusterID(clusterID))
 	toUpdate := make([]*types.SSVShare, 0)
 	updatedPubKeys := make([]string, 0)
 
@@ -464,7 +464,7 @@ func (c *controller) handleFeeRecipientAddressUpdatedEvent(
 
 	var isOperatorEvent bool
 	if c.operatorData.ID != 0 {
-		shares := c.sharesStorage.List(registrystorage.FilterOperatorID(c.operatorData.ID))
+		shares := c.sharesStorage.List(registrystorage.ByOperatorID(c.operatorData.ID))
 		for _, share := range shares {
 			if bytes.Equal(share.OwnerAddress.Bytes(), event.Owner.Bytes()) {
 				isOperatorEvent = true

@@ -267,7 +267,7 @@ func (c *controller) setupNetworkHandlers(logger *zap.Logger) error {
 }
 
 func (c *controller) GetOperatorShares(logger *zap.Logger) []*types.SSVShare {
-	return c.sharesStorage.List(registrystorage.FilterOperatorID(c.operatorData.ID), registrystorage.FilterActiveValidator())
+	return c.sharesStorage.List(registrystorage.ByOperatorID(c.operatorData.ID), registrystorage.ByActiveValidator())
 }
 
 func (c *controller) GetOperatorData() *registrystorage.OperatorData {
@@ -404,7 +404,7 @@ func (c *controller) StartValidators(logger *zap.Logger) {
 		return
 	}
 
-	shares := c.sharesStorage.List(registrystorage.FilterOperatorID(c.operatorData.ID), registrystorage.FilterNotLiquidated())
+	shares := c.sharesStorage.List(registrystorage.ByOperatorID(c.operatorData.ID), registrystorage.ByNotLiquidated())
 	if len(shares) == 0 {
 		logger.Info("could not find validators")
 		return
@@ -452,7 +452,7 @@ func (c *controller) setupValidators(logger *zap.Logger, shares []*types.SSVShar
 // to start consensus flow which would save the highest decided instance
 // and sync any gaps (in protocol/v2/qbft/controller/decided.go).
 func (c *controller) setupNonCommitteeValidators(logger *zap.Logger) {
-	nonCommitteeShares := c.sharesStorage.List(registrystorage.FilterNotLiquidated())
+	nonCommitteeShares := c.sharesStorage.List(registrystorage.ByNotLiquidated())
 	if len(nonCommitteeShares) == 0 {
 		logger.Info("could not find non-committee validators")
 		return
@@ -687,7 +687,7 @@ func (c *controller) UpdateValidatorMetaDataLoop(logger *zap.Logger) {
 	for {
 		time.Sleep(c.metadataUpdateInterval)
 
-		shares := c.sharesStorage.List(registrystorage.FilterOperatorID(c.operatorData.ID), registrystorage.FilterNotLiquidated())
+		shares := c.sharesStorage.List(registrystorage.ByOperatorID(c.operatorData.ID), registrystorage.ByNotLiquidated())
 		var pks [][]byte
 		for _, share := range shares {
 			pks = append(pks, share.ValidatorPubKey)
