@@ -245,8 +245,8 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 			OperatorID:    n.cfg.OperatorID,
 			EnableLogging: n.cfg.DiscoveryTrace,
 		}
-		if subnets := n.subnets; len(subnets) > 0 {
-			discV5Opts.Subnets = subnets
+		if len(n.subnets) > 0 {
+			discV5Opts.Subnets = n.subnets
 		}
 		logger.Info("discovery: using discv5", zap.Strings("bootnodes", discV5Opts.Bootnodes))
 	} else {
