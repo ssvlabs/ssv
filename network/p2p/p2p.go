@@ -247,7 +247,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 			}
 
 			if len(subnetsToAdd) == 0 {
-				return
+				continue
 			}
 
 			self := n.idx.Self()
@@ -257,7 +257,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 			err := n.disc.RegisterSubnets(logger.Named(logging.NameDiscoveryService), subnetsToAdd...)
 			if err != nil {
 				logger.Warn("could not register subnets", zap.Error(err))
-				return
+				continue
 			}
 			allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
 			subnetsList := records.SharedSubnets(allSubs, n.subnets, 0)
