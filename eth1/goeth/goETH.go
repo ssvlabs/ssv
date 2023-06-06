@@ -159,8 +159,7 @@ func (ec *eth1Client) reconnect(logger *zap.Logger) {
 	}, 1*time.Second, limit+(1*time.Second))
 	logger.Debug("managed to reconnect")
 	if err := ec.streamSmartContractEvents(logger); err != nil {
-		// TODO: panic?
-		logger.Error("failed to stream events after reconnection", zap.Error(err))
+		logger.Panic("failed to stream events after reconnection", zap.Error(err))
 	}
 }
 
