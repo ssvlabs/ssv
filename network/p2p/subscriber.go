@@ -24,11 +24,10 @@ type subscriber struct {
 	mu               sync.Mutex
 }
 
-// newSubscriber creates a new instance of a subscriber.
+// newSubscriber creates a new subscriber.
 //
-// The `constantSubnets` parameter represents a slice of bytes that specifies
-// which subnets should always remain active, regardless of whether they have
-// active validators or not.
+// `constantSubnets` is a list of subnets that should always remain subscribed to,
+// regardless of they have active validators or not.
 func newSubscriber(topicsCtrl topics.Controller, fork forks.Fork, constantSubnets []byte) *subscriber {
 	return &subscriber{
 		topicsCtrl:       topicsCtrl,
