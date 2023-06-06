@@ -216,7 +216,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 	start := time.Now()
 	logger = logger.Named(logging.NameP2PNetwork)
 
-	newSubnets, inactiveSubnets, err := n.subscriber.update(logger)
+	newSubnets, inactiveSubnets, err := n.subscriber.Update(logger)
 	if err != nil {
 		logger.Warn("could not update subnets", zap.Error(err))
 	}

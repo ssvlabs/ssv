@@ -62,7 +62,7 @@ func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
-	n.subscriber.addValidator(pk)
+	n.subscriber.AddValidator(pk)
 	return nil
 }
 
@@ -71,7 +71,7 @@ func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) e
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
-	n.subscriber.removeValidator(logger, pk)
+	n.subscriber.RemoveValidator(logger, pk)
 	return nil
 }
 

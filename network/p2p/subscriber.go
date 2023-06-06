@@ -7,6 +7,7 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/network/topics"
+	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"golang.org/x/exp/maps"
 )
@@ -39,14 +40,14 @@ func newSubscriber(topicsCtrl topics.Controller, fork forks.Fork, constantSubnet
 	}
 }
 
-func (s *subscriber) addValidator(pk spectypes.ValidatorPK) error {
+func (s *subscriber) AddValidator(pk spectypes.ValidatorPK) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	pkHex := hex.EncodeToString(pk)
 	if _, ok := s.validators[pkHex]; ok {
 		// Already exists.
-		return nil
+		return
 	}
 	s.validators[pkHex] = struct{}{}
 
@@ -58,18 +59,16 @@ func (s *subscriber) addValidator(pk spectypes.ValidatorPK) error {
 		s.subscriptions[subnet] = 1
 		s.newSubscriptions[subnet] = struct{}{}
 	}
-
-	return nil
 }
 
-func (s *subscriber) removeValidator(logger *zap.Logger, pk spectypes.ValidatorPK) error {
+func (s *subscriber) RemoveValidator(logger *zap.Logger, pk spectypes.ValidatorPK) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	pkHex := hex.EncodeToString(pk)
 	if _, ok := s.validators[pkHex]; !ok {
 		// Doesn't exist.
-		return nil
+		return
 	}
 	delete(s.validators, pkHex)
 
@@ -78,11 +77,9 @@ func (s *subscriber) removeValidator(logger *zap.Logger, pk spectypes.ValidatorP
 	if _, ok := s.subscriptions[subnet]; ok {
 		s.subscriptions[subnet]--
 	}
-
-	return nil
 }
 
-func (s *subscriber) subnets() []byte {
+func (s *subscriber) Subnets() []byte {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -93,17 +90,18 @@ func (s *subscriber) subnets() []byte {
 	return subnets
 }
 
-// update subscribes/unsubscribes from subnets based on the current state of
+// Update subscribes/unsubscribes from subnets based on the current state of
 // the validator set.
 //
-// update always keeps the subnets specified in `constantSubnets` active.
-func (s *subscriber) update(logger *zap.Logger) (newSubnets []int, inactiveSubnets []int, err error) {
+// Update always keeps the subnets specified in `constantSubnets` active.
+func (s *subscriber) Update(logger *zap.Logger) (newSubnets []int, inactiveSubnets []int, err error) {
 	func() {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 
 		// Get new subnets.
 		newSubnets = maps.Keys(s.newSubscriptions)
+		s.newSubscriptions = make(map[int]struct{})
 
 		// Compute inactive subnets.
 		inactiveSubnets = make([]int, 0, len(s.subscriptions))
@@ -117,17 +115,14 @@ func (s *subscriber) update(logger *zap.Logger) (newSubnets []int, inactiveSubne
 
 	// Subscribe to new subnets.
 	for subnet := range s.newSubscriptions {
-		if err = s.topicsCtrl.Subscribe(logger, s.fork.SubnetTopicID(subnet)); err != nil {
-			return
-		}
+		subscribeErr := s.topicsCtrl.Subscribe(logger, s.fork.SubnetTopicID(subnet))
+		err = multierr.Append(err, subscribeErr)
 	}
-	s.newSubscriptions = make(map[int]struct{})
 
 	// Unsubscribe from inactive subnets.
 	for _, subnet := range inactiveSubnets {
-		if err = s.topicsCtrl.Unsubscribe(logger, s.fork.SubnetTopicID(subnet), false); err != nil {
-			return
-		}
+		unsubscribeErr := s.topicsCtrl.Unsubscribe(logger, s.fork.SubnetTopicID(subnet), false)
+		err = multierr.Append(err, unsubscribeErr)
 	}
 
 	return
