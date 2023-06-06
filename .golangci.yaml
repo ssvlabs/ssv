@@ -464,6 +464,7 @@ linters:
     - goconst
     - unconvert
     - gosec
+    - errcheck
 
 #  disable:
 #    - maligned
