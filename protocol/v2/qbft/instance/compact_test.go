@@ -153,8 +153,8 @@ func TestCompact(t *testing.T) {
 			}
 
 			// Test CompactCopy.
-			copy := CompactCopy(tt.inputState, tt.inputMsg)
-			require.Equal(t, tt.expected, copy)
+			stateCopy := CompactCopy(tt.inputState, tt.inputMsg)
+			require.Equal(t, tt.expected, stateCopy)
 
 			// Verify that input state was not modified by CompactCopy.
 			inputStateAfter, err := tt.inputState.Encode()
