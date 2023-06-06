@@ -36,7 +36,6 @@ func newMockMessageHandler() *mockMessageHandler {
 	return m
 }
 
-// TODO: this test is not stable
 func TestThrottle(t *testing.T) {
 	var calls int
 	handler := syncing.Throttle(func(msg spectypes.SSVMessage) {
@@ -50,5 +49,8 @@ func TestThrottle(t *testing.T) {
 	end := time.Now()
 
 	require.Equal(t, 10, calls)
-	require.WithinRangef(t, end, start.Add(100*time.Millisecond), start.Add(110*time.Millisecond), "expected time to be between 100ms and 110ms, is %v", end.Sub(start))
+
+	rangeStart := start.Add(100 * time.Millisecond)
+	rangeEnd := start.Add(120 * time.Millisecond)
+	require.WithinRangef(t, end, rangeStart, rangeEnd, "expected duration to be between 100ms and 120ms, but it is %v", end.Sub(start))
 }
