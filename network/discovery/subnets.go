@@ -8,8 +8,8 @@ import (
 )
 
 var (
-	regPool     = format.NewRegexpPool("\\w+:bloxstaking\\.ssv\\.(\\d+)")
-	errNotFound = fmt.Errorf("not found")
+	regPool            = format.NewRegexpPool("\\w+:bloxstaking\\.ssv\\.(\\d+)")
+	errPatternMismatch = fmt.Errorf("pattern mismatch")
 )
 
 // nsToSubnet converts the given topic to subnet
@@ -18,7 +18,7 @@ func nsToSubnet(ns string) (int, error) {
 	defer done()
 	found := r.FindStringSubmatch(ns)
 	if len(found) != 2 {
-		return 0, errNotFound
+		return 0, errPatternMismatch
 	}
 	val, err := strconv.ParseUint(found[1], 10, 64)
 	if err != nil {
