@@ -129,20 +129,7 @@ func New(logger *zap.Logger, opts Options, slotTicker slot_ticker.Ticker) Node {
 		wsAPIPort: opts.WsAPIPort,
 	}
 
-	if err := node.init(opts); err != nil {
-		logger.Panic("failed to init", zap.Error(err))
-	}
-
 	return node
-}
-
-func (n *operatorNode) init(opts Options) error {
-	if opts.ValidatorOptions.CleanRegistryData {
-		if err := n.storage.CleanRegistryData(); err != nil {
-			return errors.Wrap(err, "failed to clean registry data")
-		}
-	}
-	return nil
 }
 
 // Start starts to stream duties and run IBFT instances

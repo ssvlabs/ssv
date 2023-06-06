@@ -82,11 +82,6 @@ spec:
             secretKeyRef:
               name: config-secrets
               key: config_path
-        - name: BOOTNODES
-          valueFrom:
-            secretKeyRef:
-              name: config-secrets
-              key: boot_node
         - name: ABI_VERSION
           valueFrom:
             secretKeyRef:
@@ -123,8 +118,6 @@ spec:
           value: 'false'
         - name: PUBSUB_TRACE
           value: 'false'
-        - name: CLEAN_REGISTRY_DATA
-          value: "false"
         - name: BUILDER_PROPOSALS
           value: "true"
         volumeMounts:

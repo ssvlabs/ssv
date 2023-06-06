@@ -50,5 +50,5 @@ func TestThrottle(t *testing.T) {
 	end := time.Now()
 
 	require.Equal(t, 10, calls)
-	require.True(t, end.Sub(start) > 100*time.Millisecond && end.Sub(start) < 110*time.Millisecond, "expected time to be between 100ms and 110ms")
+	require.WithinRangef(t, end, start.Add(100*time.Millisecond), start.Add(110*time.Millisecond), "expected time to be between 100ms and 110ms, is %v", end.Sub(start))
 }
