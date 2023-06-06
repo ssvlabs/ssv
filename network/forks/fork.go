@@ -9,6 +9,8 @@ import (
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 )
 
+//go:generate mockgen -package=mocks -destination=./mocks/fork.go -source=./fork.go
+
 // Fork is an interface for network specific fork implementations
 type Fork interface {
 	encoding

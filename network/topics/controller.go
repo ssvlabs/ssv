@@ -15,6 +15,8 @@ import (
 	"github.com/bloxapp/ssv/network/forks"
 )
 
+//go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
+
 var (
 	// ErrTopicNotReady happens when trying to access a topic which is not ready yet
 	ErrTopicNotReady = errors.New("topic is not ready")

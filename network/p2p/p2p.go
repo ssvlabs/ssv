@@ -212,7 +212,6 @@ var fakeRoutine sync.Once
 // UpdateSubnets will update the registered subnets according to active validators
 // NOTE: it won't subscribe to the subnets (use subscribeToSubnets for that)
 func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
-
 	start := time.Now()
 	logger = logger.Named(logging.NameP2PNetwork)
 
