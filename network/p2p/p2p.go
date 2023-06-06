@@ -212,95 +212,11 @@ var fakeRoutine sync.Once
 // UpdateSubnets will update the registered subnets according to active validators
 // NOTE: it won't subscribe to the subnets (use subscribeToSubnets for that)
 func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
-	// defer fakeRoutine.Do(func() {
-	// 	logger.Debug("rvrt: starting goroutines")
 
-	// 	// Log stats.
-	// 	go func() {
-	// 		for {
-	// 			time.Sleep(time.Second * 1)
-
-	// 			var inactive, subscribing, subscribed int
-	// 			n.activeValidators.Range(func(pk string, status validatorStatus) bool {
-	// 				switch status {
-	// 				case validatorStatusInactive:
-	// 					inactive++
-	// 				case validatorStatusSubscribing:
-	// 					subscribing++
-	// 				case validatorStatusSubscribed:
-	// 					subscribed++
-	// 				}
-	// 				return true
-	// 			})
-
-	// 			allSubnets, err := records.Subnets{}.FromString(records.AllSubnets)
-	// 			if err != nil {
-	// 				logger.Warn("could not parse all subnets", zap.Error(err))
-	// 			}
-	// 			metadataSubnets, err := records.Subnets{}.FromString(n.idx.Self().Metadata.Subnets)
-	// 			if err != nil {
-	// 				logger.Warn("could not parse metadata subnets", zap.Error(err))
-	// 			}
-	// 			metadataSubnetsCount := len(records.SharedSubnets(allSubnets, metadataSubnets, 0))
-
-	// 			networkSubnets := records.Subnets(n.subnets)
-	// 			networkSubnetsCount := len(records.SharedSubnets(allSubnets, networkSubnets, 0))
-
-	// 			logger.Debug("rvrt: current status",
-	// 				zap.Int("subnets", networkSubnetsCount),
-	// 				zap.Int("metadata_subnets", metadataSubnetsCount),
-	// 				zap.Int("inactive", inactive),
-	// 				zap.Int("subscribing", subscribing),
-	// 				zap.Int("subscribed", subscribed),
-	// 			)
-	// 		}
-	// 	}()
-
-	// 	// Fake subscribe.
-	// 	go func() {
-	// 		for i := 0; i < 500; i++ {
-	// 			time.Sleep(time.Millisecond * 100)
-	// 			randomPK := make(spectypes.ValidatorPK, 48)
-	// 			_n, err := rand.Read(randomPK[:])
-	// 			if err != nil || _n != len(randomPK) {
-	// 				panic("could not generate random validator pk")
-	// 			}
-	// 			err = n.Subscribe(randomPK)
-	// 			if err != nil {
-	// 				logger.Error("rvrt: could not subscribe", zap.Error(err))
-	// 			}
-	// 			logger.Debug("rvrt: subscribed",
-	// 				zap.String("pk", fmt.Sprintf("%x", randomPK)),
-	// 				zap.String("subnet", n.fork.ValidatorTopicID(randomPK)[0]),
-	// 			)
-	// 		}
-	// 	}()
-
-	// 	// UpdateSubnets interval.
-	// 	go func() {
-	// 		for {
-	// 			time.Sleep(time.Second * 10)
-	// 			n.UpdateSubnets(logger)
-	// 		}
-	// 	}()
-	// })
-
-	// register 1 topic test
-	// allSubnets := []int{}
-	// for i := 0; i < 1; i++ {
-	// 	allSubnets = append(allSubnets, i)
-	// }
-	// err := n.disc.RegisterSubnets(logger.Named(logging.NameDiscoveryService), allSubnets...)
-	// if err != nil {
-	// 	logger.Warn("could not register subnets", zap.Error(err))
-	// 	return
-	// }
-
-	// return
-
+	start := time.Now()
 	logger = logger.Named(logging.NameP2PNetwork)
 
-	newSubnets, err := n.subscriber.update(logger)
+	newSubnets, inactiveSubnets, err := n.subscriber.update(logger)
 	if err != nil {
 		logger.Warn("could not update subnets", zap.Error(err))
 	}
@@ -317,9 +233,18 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 		logger.Warn("could not register subnets", zap.Error(err))
 		return
 	}
+	err = n.disc.DeregisterSubnets(logger.Named(logging.NameDiscoveryService), inactiveSubnets...)
+	if err != nil {
+		logger.Warn("could not deregister subnets", zap.Error(err))
+		return
+	}
+
 	allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
 	subnetsList := records.SharedSubnets(allSubs, n.subnets, 0)
-	logger.Debug("updated subnets (node-info)", zap.Any("subnets", subnetsList))
+	logger.Debug("updated subnets (node-info)",
+		zap.Any("subnets", subnetsList),
+		zap.Duration("took", time.Since(start)),
+	)
 }
 
 // getMaxPeers returns max peers of the given topic.

@@ -11,6 +11,8 @@ import (
 	"golang.org/x/exp/maps"
 )
 
+// subscriber keeps track of active validators and their corresponding subnets
+// and automatically subscribes/unsubscribes from subnets accordingly.
 type subscriber struct {
 	topicsCtrl      topics.Controller
 	fork            forks.Fork
@@ -22,6 +24,11 @@ type subscriber struct {
 	mu               sync.Mutex
 }
 
+// newSubscriber creates a new instance of a subscriber.
+//
+// The `constantSubnets` parameter represents a slice of bytes that specifies
+// which subnets should always remain active, regardless of whether they have
+// active validators or not.
 func newSubscriber(topicsCtrl topics.Controller, fork forks.Fork, constantSubnets []byte) *subscriber {
 	return &subscriber{
 		topicsCtrl:       topicsCtrl,
@@ -87,17 +94,27 @@ func (s *subscriber) subnets() []byte {
 	return subnets
 }
 
-func (s *subscriber) update(logger *zap.Logger) (newSubnets []int, err error) {
-	s.mu.Lock()
-	newSubnets = maps.Keys(s.newSubscriptions)
-	inactiveSubnets := make([]int, 0, len(s.subscriptions))
-	for subnet, validators := range s.subscriptions {
-		if validators == 0 && s.constantSubnets[subnet] != 1 {
-			inactiveSubnets = append(inactiveSubnets, subnet)
-			delete(s.subscriptions, subnet)
+// update subscribes/unsubscribes from subnets based on the current state of
+// the validator set.
+//
+// update always keeps the subnets specified in `constantSubnets` active.
+func (s *subscriber) update(logger *zap.Logger) (newSubnets []int, inactiveSubnets []int, err error) {
+	func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+
+		// Get new subnets.
+		newSubnets = maps.Keys(s.newSubscriptions)
+
+		// Compute inactive subnets.
+		inactiveSubnets = make([]int, 0, len(s.subscriptions))
+		for subnet, validators := range s.subscriptions {
+			if validators == 0 && s.constantSubnets[subnet] != 1 {
+				inactiveSubnets = append(inactiveSubnets, subnet)
+				delete(s.subscriptions, subnet)
+			}
 		}
-	}
-	s.mu.Unlock()
+	}()
 
 	// Subscribe to new subnets.
 	for subnet := range s.newSubscriptions {
@@ -105,6 +122,7 @@ func (s *subscriber) update(logger *zap.Logger) (newSubnets []int, err error) {
 			return
 		}
 	}
+	s.newSubscriptions = make(map[int]struct{})
 
 	// Unsubscribe from inactive subnets.
 	for _, subnet := range inactiveSubnets {
@@ -112,8 +130,6 @@ func (s *subscriber) update(logger *zap.Logger) (newSubnets []int, err error) {
 			return
 		}
 	}
-
-	s.newSubscriptions = make(map[int]struct{})
 
 	return
 }
