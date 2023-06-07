@@ -85,10 +85,7 @@ func (rc *recipientController) listenToTicker(logger *zap.Logger, slots chan pha
 }
 
 func (rc *recipientController) prepareAndSubmit(logger *zap.Logger, slot phase0.Slot) error {
-	shares, err := rc.shareStorage.GetFilteredShares(logger, storage.ByOperatorIDAndActive(rc.operatorData.ID))
-	if err != nil {
-		return errors.Wrap(err, "could not get shares")
-	}
+	shares := rc.shareStorage.List(storage.ByOperatorID(rc.operatorData.ID), storage.ByActiveValidator())
 
 	const batchSize = 500
 	var submitted int
