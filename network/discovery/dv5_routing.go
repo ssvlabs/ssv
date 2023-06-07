@@ -26,7 +26,7 @@ func (dvs *DiscV5Service) Advertise(ctx context.Context, ns string, opt ...disco
 	if opts.Ttl == 0 {
 		opts.Ttl = time.Hour
 	}
-	subnet, err := nsToSubnet(ns)
+	subnet, err := dvs.nsToSubnet(ns)
 	if err != nil {
 		logger.Debug("not a subnet", fields.Topic(ns), zap.Error(err))
 		return opts.Ttl, nil
@@ -43,7 +43,7 @@ func (dvs *DiscV5Service) Advertise(ctx context.Context, ns string, opt ...disco
 // implementation of discovery.Discoverer
 func (dvs *DiscV5Service) FindPeers(ctx context.Context, ns string, opt ...discovery.Option) (<-chan peer.AddrInfo, error) {
 	logger := logging.FromContext(ctx).Named(logging.NameDiscoveryService)
-	subnet, err := nsToSubnet(ns)
+	subnet, err := dvs.nsToSubnet(ns)
 	if err != nil {
 		logger.Debug("not a subnet", fields.Topic(ns), zap.Error(err))
 		return nil, nil

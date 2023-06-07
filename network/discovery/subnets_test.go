@@ -4,6 +4,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
+	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 )
 
 func TestNsToSubnet(t *testing.T) {
@@ -43,9 +46,16 @@ func TestNsToSubnet(t *testing.T) {
 			true,
 		},
 		{
+			"value out of range",
+			"floodsub:bloxstaking.ssv.128",
+			0,
+			errValueOutOfRange.Error(),
+			true,
+		},
+		{
 			"valid",
-			"floodsub:bloxstaking.ssv.21",
-			21,
+			"floodsub:bloxstaking.ssv.127",
+			127,
 			"",
 			true,
 		},
@@ -56,7 +66,12 @@ func TestNsToSubnet(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			require.Equal(t, test.isSubnet, isSubnet(test.ns))
 
-			subnet, err := nsToSubnet(test.ns)
+			fork := forksfactory.NewFork(forksprotocol.GenesisForkVersion)
+			dvs := &DiscV5Service{
+				fork: fork,
+			}
+
+			subnet, err := dvs.nsToSubnet(test.ns)
 			if test.expectedErr == "" {
 				require.NoError(t, err)
 			} else {
