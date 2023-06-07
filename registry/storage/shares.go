@@ -89,17 +89,14 @@ func (s *sharesStorage) List(filters ...func(*types.SSVShare) bool) []*types.SSV
 	}
 
 	var shares []*types.SSVShare
+        shareLoop:
 	for _, share := range s.shares {
-		match := true
 		for _, filter := range filters {
 			if !filter(share) {
-				match = false
-				break
+				continue shareLoop
 			}
 		}
-		if match {
-			shares = append(shares, share)
-		}
+		shares = append(shares, share)
 	}
 	return shares
 }
