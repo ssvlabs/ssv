@@ -22,7 +22,6 @@ type SyncCommitteeAggregatorRunner struct {
 	BaseRunner *BaseRunner
 
 	beacon   specssv.BeaconNode
-	eth1     NodeStatusChecker
 	network  specssv.Network
 	signer   spectypes.KeyManager
 	valCheck specqbft.ProposedValueCheckF
@@ -35,7 +34,6 @@ func NewSyncCommitteeAggregatorRunner(
 	share *spectypes.Share,
 	qbftController *controller.Controller,
 	beacon specssv.BeaconNode,
-	eth1 NodeStatusChecker,
 	network specssv.Network,
 	signer spectypes.KeyManager,
 	valCheck specqbft.ProposedValueCheckF,
@@ -51,7 +49,6 @@ func NewSyncCommitteeAggregatorRunner(
 		},
 
 		beacon:   beacon,
-		eth1:     eth1,
 		network:  network,
 		signer:   signer,
 		valCheck: valCheck,
@@ -334,10 +331,6 @@ func (r *SyncCommitteeAggregatorRunner) expectedPostConsensusRootsAndDomain() ([
 // 3) Once consensus decides, sign partial contribution data (for each subcommittee) and broadcast
 // 4) collect 2f+1 partial sigs, reconstruct and broadcast valid SignedContributionAndProof (for each subcommittee) sig to the BN
 func (r *SyncCommitteeAggregatorRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
-	if !r.eth1.IsReady() {
-		logger.Panic("eth1 node isn't ready, there's a risk of getting slashed")
-	}
-
 	r.metrics.StartDutyFullFlow()
 	r.metrics.StartPreConsensus()
 

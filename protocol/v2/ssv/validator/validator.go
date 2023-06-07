@@ -31,6 +31,7 @@ type Validator struct {
 	DutyRunners runner.DutyRunners
 	Network     specqbft.Network
 	Beacon      specssv.BeaconNode
+	Eth1        NodeStatusChecker
 	Share       *types.SSVShare
 	Signer      spectypes.KeyManager
 
@@ -54,6 +55,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		DutyRunners: options.DutyRunners,
 		Network:     options.Network,
 		Beacon:      options.Beacon,
+		Eth1:        options.Eth1,
 		Storage:     options.Storage,
 		Share:       options.SSVShare,
 		Signer:      options.Signer,
@@ -86,6 +88,10 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 
 // StartDuty starts a duty for the validator
 func (v *Validator) StartDuty(logger *zap.Logger, duty *spectypes.Duty) error {
+	if !v.Eth1.IsReady() {
+		logger.Panic("eth1 node isn't ready, there's a risk of getting slashed")
+	}
+
 	dutyRunner := v.DutyRunners[duty.Type]
 	if dutyRunner == nil {
 		return errors.Errorf("no runner for duty type %s", duty.Type.String())

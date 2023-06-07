@@ -26,6 +26,7 @@ import (
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 	protocolstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
+	ssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
 	protocolvalidator "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/sync/handlers"
 	"github.com/bloxapp/ssv/protocol/v2/types"
@@ -218,6 +219,7 @@ func createValidator(t *testing.T, pCtx context.Context, id spectypes.OperatorID
 			},
 		},
 		Beacon: spectestingutils.NewTestingBeaconNode(),
+		Eth1:   ssvtesting.StatusChecker{},
 		Signer: km,
 	}
 

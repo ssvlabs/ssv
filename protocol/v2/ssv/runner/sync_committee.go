@@ -23,7 +23,6 @@ type SyncCommitteeRunner struct {
 	BaseRunner *BaseRunner
 
 	beacon   specssv.BeaconNode
-	eth1     NodeStatusChecker
 	network  specssv.Network
 	signer   spectypes.KeyManager
 	valCheck specqbft.ProposedValueCheckF
@@ -36,7 +35,6 @@ func NewSyncCommitteeRunner(
 	share *spectypes.Share,
 	qbftController *controller.Controller,
 	beacon specssv.BeaconNode,
-	eth1 NodeStatusChecker,
 	network specssv.Network,
 	signer spectypes.KeyManager,
 	valCheck specqbft.ProposedValueCheckF,
@@ -52,7 +50,6 @@ func NewSyncCommitteeRunner(
 		},
 
 		beacon:   beacon,
-		eth1:     eth1,
 		network:  network,
 		signer:   signer,
 		valCheck: valCheck,
@@ -198,10 +195,6 @@ func (r *SyncCommitteeRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashR
 // 3) Once consensus decides, sign partial block root and broadcast
 // 4) collect 2f+1 partial sigs, reconstruct and broadcast valid sync committee sig to the BN
 func (r *SyncCommitteeRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
-	if !r.eth1.IsReady() {
-		logger.Panic("eth1 node isn't ready, there's a risk of getting slashed")
-	}
-
 	// TODO - waitOneThirdOrValidBlock
 
 	root, ver, err := r.GetBeaconNode().GetSyncMessageBlockRoot(duty.Slot)

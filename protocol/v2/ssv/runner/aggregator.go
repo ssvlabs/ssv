@@ -21,7 +21,6 @@ type AggregatorRunner struct {
 	BaseRunner *BaseRunner
 
 	beacon   specssv.BeaconNode
-	eth1     NodeStatusChecker
 	network  specssv.Network
 	signer   spectypes.KeyManager
 	valCheck specqbft.ProposedValueCheckF
@@ -35,7 +34,6 @@ func NewAggregatorRunner(
 	share *spectypes.Share,
 	qbftController *controller.Controller,
 	beacon specssv.BeaconNode,
-	eth1 NodeStatusChecker,
 	network specssv.Network,
 	signer spectypes.KeyManager,
 	valCheck specqbft.ProposedValueCheckF,
@@ -50,7 +48,6 @@ func NewAggregatorRunner(
 			highestDecidedSlot: highestDecidedSlot,
 		},
 		beacon:   beacon,
-		eth1:     eth1,
 		network:  network,
 		signer:   signer,
 		valCheck: valCheck,
@@ -243,10 +240,6 @@ func (r *AggregatorRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot
 // 4) Once consensus decides, sign partial aggregation data and broadcast
 // 5) collect 2f+1 partial sigs, reconstruct and broadcast valid SignedAggregateSubmitRequest sig to the BN
 func (r *AggregatorRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
-	if !r.eth1.IsReady() {
-		logger.Panic("eth1 node isn't ready, there's a risk of getting slashed")
-	}
-
 	r.metrics.StartDutyFullFlow()
 	r.metrics.StartPreConsensus()
 

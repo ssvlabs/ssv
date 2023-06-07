@@ -22,7 +22,6 @@ type ValidatorRegistrationRunner struct {
 	BaseRunner *BaseRunner
 
 	beacon   specssv.BeaconNode
-	eth1     NodeStatusChecker
 	network  specssv.Network
 	signer   spectypes.KeyManager
 	valCheck qbft.ProposedValueCheckF
@@ -35,7 +34,6 @@ func NewValidatorRegistrationRunner(
 	share *spectypes.Share,
 	qbftController *controller.Controller,
 	beacon specssv.BeaconNode,
-	eth1 NodeStatusChecker,
 	network specssv.Network,
 	signer spectypes.KeyManager,
 ) Runner {
@@ -48,7 +46,6 @@ func NewValidatorRegistrationRunner(
 		},
 
 		beacon:  beacon,
-		eth1:    eth1,
 		network: network,
 		signer:  signer,
 		metrics: metrics.NewConsensusMetrics(spectypes.BNRoleValidatorRegistration),
@@ -116,10 +113,6 @@ func (r *ValidatorRegistrationRunner) expectedPostConsensusRootsAndDomain() ([]s
 }
 
 func (r *ValidatorRegistrationRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
-	if !r.eth1.IsReady() {
-		logger.Panic("eth1 node isn't ready, there's a risk of getting slashed")
-	}
-
 	vr, err := r.calculateValidatorRegistration()
 	if err != nil {
 		return errors.Wrap(err, "could not calculate validator registration")

@@ -1,8 +1,8 @@
 package testing
 
-type testingStatusChecker struct {
+type StatusChecker struct {
 }
 
-func (t testingStatusChecker) IsReady() bool {
+func (t StatusChecker) IsReady() bool {
 	return true
 }
