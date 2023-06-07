@@ -392,8 +392,7 @@ func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.IDb,
 	metricsHandler := metrics.NewMetricsHandler(ctx, db, enableProf, operatorNode.(metrics.HealthCheckAgent))
 	addr := fmt.Sprintf(":%d", port)
 	if err := metricsHandler.Start(logger, http.NewServeMux(), addr); err != nil {
-		// TODO: stop node if metrics setup failed?
-		logger.Error("failed to start", zap.Error(err))
+		logger.Panic("failed to serve metrics", zap.Error(err))
 	}
 }
 
