@@ -12,7 +12,6 @@ import (
 
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )
 
@@ -123,32 +122,7 @@ func (m NodeStorage) GetRecipientsPrefix() []byte {
 	panic("implement me")
 }
 
-func (m NodeStorage) SaveShare(logger *zap.Logger, share *types.SSVShare) error {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (m NodeStorage) SaveShareMany(logger *zap.Logger, shares []*types.SSVShare) error {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (m NodeStorage) GetShare(key []byte) (*types.SSVShare, bool, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (m NodeStorage) GetAllShares(logger *zap.Logger) ([]*types.SSVShare, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (m NodeStorage) GetFilteredShares(logger *zap.Logger, f func(share *types.SSVShare) bool) ([]*types.SSVShare, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (m NodeStorage) DeleteShare(key []byte) error {
+func (m NodeStorage) Shares() registrystorage.Shares {
 	//TODO implement me
 	panic("implement me")
 }

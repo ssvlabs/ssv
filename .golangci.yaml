@@ -465,6 +465,7 @@ linters:
     - unconvert
     - gosec
     - errcheck
+    - errorlint
 
 #  disable:
 #    - maligned
