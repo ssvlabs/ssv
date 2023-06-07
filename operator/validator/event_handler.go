@@ -40,30 +40,26 @@ func splitBytes(buf []byte, lim int) [][]byte {
 // Eth1EventHandler is a factory function for creating eth1 event handler
 func (c *controller) Eth1EventHandler(logger *zap.Logger, ongoingSync bool) eth1.SyncEventHandler {
 	return func(e eth1.Event) ([]zap.Field, error) {
-		switch e.Name {
-		case abiparser.OperatorAdded:
-			ev := e.Data.(abiparser.OperatorAddedEvent)
+		switch ev := e.Data.(type) {
+		case abiparser.OperatorAddedEvent:
 			return c.handleOperatorAddedEvent(logger, ev)
-		case abiparser.OperatorRemoved:
-			ev := e.Data.(abiparser.OperatorRemovedEvent)
+		case abiparser.OperatorRemovedEvent:
 			return c.handleOperatorRemovedEvent(logger, ev, ongoingSync)
-		case abiparser.ValidatorAdded:
-			ev := e.Data.(abiparser.ValidatorAddedEvent)
+		case abiparser.ValidatorAddedEvent:
 			return c.handleValidatorAddedEvent(logger, ev, ongoingSync)
-		case abiparser.ValidatorRemoved:
-			ev := e.Data.(abiparser.ValidatorRemovedEvent)
+		case abiparser.ValidatorRemovedEvent:
 			return c.handleValidatorRemovedEvent(logger, ev, ongoingSync)
-		case abiparser.ClusterLiquidated:
-			ev := e.Data.(abiparser.ClusterLiquidatedEvent)
+		case abiparser.ClusterLiquidatedEvent:
 			return c.handleClusterLiquidatedEvent(logger, ev, ongoingSync)
-		case abiparser.ClusterReactivated:
-			ev := e.Data.(abiparser.ClusterReactivatedEvent)
+		case abiparser.ClusterReactivatedEvent:
 			return c.handleClusterReactivatedEvent(logger, ev, ongoingSync)
-		case abiparser.FeeRecipientAddressUpdated:
-			ev := e.Data.(abiparser.FeeRecipientAddressUpdatedEvent)
+		case abiparser.FeeRecipientAddressUpdatedEvent:
 			return c.handleFeeRecipientAddressUpdatedEvent(logger, ev, ongoingSync)
 		default:
-			logger.Debug("could not handle unknown event")
+			logger.Debug("could not handle unknown event",
+				zap.String("event_name", e.Name),
+				zap.String("event_type", fmt.Sprintf("%T", ev)),
+			)
 		}
 		return nil, nil
 	}
