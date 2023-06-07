@@ -98,12 +98,12 @@ type Controller interface {
 	UpdateValidatorMetaDataLoop(logger *zap.Logger)
 	StartNetworkHandlers(logger *zap.Logger)
 	Eth1EventHandler(logger *zap.Logger, ongoingSync bool) eth1.SyncEventHandler
-	GetOperatorShares(logger *zap.Logger) ([]*types.SSVShare, error)
+	GetOperatorShares() []*types.SSVShare
 	// GetValidatorStats returns stats of validators, including the following:
 	//  - the amount of validators in the network
 	//  - the amount of active validators (i.e. not slashed or existed)
 	//  - the amount of validators assigned to this operator
-	GetValidatorStats(logger *zap.Logger) (uint64, uint64, uint64, error)
+	GetValidatorStats() (uint64, uint64, uint64, error)
 	GetOperatorData() *registrystorage.OperatorData
 	//OnFork(forkVersion forksprotocol.ForkVersion) error
 }
@@ -203,7 +203,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	}
 
 	ctrl := controller{
-		sharesStorage:              options.RegistryStorage,
+		sharesStorage:              options.RegistryStorage.Shares(),
 		operatorsStorage:           options.RegistryStorage,
 		recipientsStorage:          options.RegistryStorage,
 		eventHandler:               options.RegistryStorage,
@@ -266,19 +266,16 @@ func (c *controller) setupNetworkHandlers(logger *zap.Logger) error {
 	return nil
 }
 
-func (c *controller) GetOperatorShares(logger *zap.Logger) ([]*types.SSVShare, error) {
-	return c.sharesStorage.GetFilteredShares(logger, registrystorage.ByOperatorIDAndActive(c.operatorData.ID))
+func (c *controller) GetOperatorShares() []*types.SSVShare {
+	return c.sharesStorage.List(registrystorage.ByOperatorID(c.operatorData.ID), registrystorage.ByActiveValidator())
 }
 
 func (c *controller) GetOperatorData() *registrystorage.OperatorData {
 	return c.operatorData
 }
 
-func (c *controller) GetValidatorStats(logger *zap.Logger) (uint64, uint64, uint64, error) {
-	allShares, err := c.sharesStorage.GetAllShares(logger)
-	if err != nil {
-		return 0, 0, 0, err
-	}
+func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
+	allShares := c.sharesStorage.List()
 	operatorShares := uint64(0)
 	active := uint64(0)
 	for _, s := range allShares {
@@ -345,11 +342,8 @@ func (c *controller) handleWorkerMessages(logger *zap.Logger, msg *spectypes.SSV
 			ncv = item.Value()
 		} else {
 			// Create a new nonCommitteeValidator and cache it.
-			share, found, err := c.sharesStorage.GetShare(msg.GetID().GetPubKey())
-			if err != nil {
-				return err
-			}
-			if !found {
+			share := c.sharesStorage.Get(msg.GetID().GetPubKey())
+			if share == nil {
 				return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetID().GetPubKey()))
 			}
 
@@ -410,10 +404,7 @@ func (c *controller) StartValidators(logger *zap.Logger) {
 		return
 	}
 
-	shares, err := c.sharesStorage.GetFilteredShares(logger, registrystorage.ByOperatorIDAndNotLiquidated(c.operatorData.ID))
-	if err != nil {
-		logger.Fatal("failed to get validators shares", zap.Error(err))
-	}
+	shares := c.sharesStorage.List(registrystorage.ByOperatorID(c.operatorData.ID), registrystorage.ByNotLiquidated())
 	if len(shares) == 0 {
 		logger.Info("could not find validators")
 		return
@@ -461,10 +452,7 @@ func (c *controller) setupValidators(logger *zap.Logger, shares []*types.SSVShar
 // to start consensus flow which would save the highest decided instance
 // and sync any gaps (in protocol/v2/qbft/controller/decided.go).
 func (c *controller) setupNonCommitteeValidators(logger *zap.Logger) {
-	nonCommitteeShares, err := c.sharesStorage.GetFilteredShares(logger, registrystorage.NotLiquidated())
-	if err != nil {
-		logger.Fatal("failed to get non-committee validator shares", zap.Error(err))
-	}
+	nonCommitteeShares := c.sharesStorage.List(registrystorage.ByNotLiquidated())
 	if len(nonCommitteeShares) == 0 {
 		logger.Info("could not find non-committee validators")
 		return
@@ -536,11 +524,8 @@ func (c *controller) UpdateValidatorMetadata(logger *zap.Logger, pk string, meta
 		if err != nil {
 			return errors.Wrap(err, "could not decode public key")
 		}
-		share, found, err := c.sharesStorage.GetShare(pkBytes)
-		if err != nil {
-			return errors.Wrap(err, "could not get share")
-		}
-		if !found {
+		share := c.sharesStorage.Get(pkBytes)
+		if share == nil {
 			return errors.New("share was not found")
 		}
 		started, err := c.onShareStart(logger, share)
@@ -635,7 +620,7 @@ func (c *controller) onShareCreate(logger *zap.Logger, validatorEvent abiparser.
 	}
 
 	// save validator data
-	if err := c.sharesStorage.SaveShare(logger, share); err != nil {
+	if err := c.sharesStorage.Save(logger, share); err != nil {
 		return nil, errors.Wrap(err, "could not save validator share")
 	}
 
@@ -702,11 +687,7 @@ func (c *controller) UpdateValidatorMetaDataLoop(logger *zap.Logger) {
 	for {
 		time.Sleep(c.metadataUpdateInterval)
 
-		shares, err := c.sharesStorage.GetFilteredShares(logger, registrystorage.ByOperatorIDAndNotLiquidated(c.operatorData.ID))
-		if err != nil {
-			logger.Warn("could not get validators shares for metadata update", zap.Error(err))
-			continue
-		}
+		shares := c.sharesStorage.List(registrystorage.ByOperatorID(c.operatorData.ID), registrystorage.ByNotLiquidated())
 		var pks [][]byte
 		for _, share := range shares {
 			pks = append(pks, share.ValidatorPubKey)

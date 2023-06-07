@@ -173,7 +173,10 @@ func TestStorage_SaveAndGetSyncOffset(t *testing.T) {
 		Path: "",
 	})
 	require.NoError(t, err)
-	s := NewNodeStorage(db)
+	s, err := NewNodeStorage(logger, db)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	offset := new(eth1.SyncOffset)
 	offset.SetString("49e08f", 16)

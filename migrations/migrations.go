@@ -53,13 +53,17 @@ type Options struct {
 }
 
 // nolint
-func (o Options) getRegistryStores(logger *zap.Logger) []eth1.RegistryStore {
-	return []eth1.RegistryStore{o.nodeStorage(), o.signerStorage(logger)}
+func (o Options) getRegistryStores(logger *zap.Logger) ([]eth1.RegistryStore, error) {
+	nodeStorage, err := o.nodeStorage(logger)
+	if err != nil {
+		return nil, err
+	}
+	return []eth1.RegistryStore{nodeStorage, o.signerStorage(logger)}, nil
 }
 
 // nolint
-func (o Options) nodeStorage() operatorstorage.Storage {
-	return operatorstorage.NewNodeStorage(o.Db)
+func (o Options) nodeStorage(logger *zap.Logger) (operatorstorage.Storage, error) {
+	return operatorstorage.NewNodeStorage(logger, o.Db)
 }
 
 // nolint

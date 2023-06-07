@@ -97,7 +97,7 @@ func (mh *metricsHandler) Start(logger *zap.Logger, mux *http.ServeMux, addr str
 		}
 
 		if err := httpServer.ListenAndServe(); err != nil {
-			logger.Error("failed to start http end-point", zap.Error(err))
+			return fmt.Errorf("listen to %s: %w", addr, err)
 		}
 	}()
 
