@@ -244,7 +244,7 @@ func (r *AggregatorRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot
 // 5) collect 2f+1 partial sigs, reconstruct and broadcast valid SignedAggregateSubmitRequest sig to the BN
 func (r *AggregatorRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 	if !r.eth1.IsReady() {
-		panic("eth1 node isn't ready, there's a risk of getting slashed")
+		logger.Panic("eth1 node isn't ready, there's a risk of getting slashed")
 	}
 
 	r.metrics.StartDutyFullFlow()

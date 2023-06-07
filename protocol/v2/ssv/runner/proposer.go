@@ -302,7 +302,7 @@ func (r *ProposerRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, 
 // 5) collect 2f+1 partial sigs, reconstruct and broadcast valid block sig to the BN
 func (r *ProposerRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 	if !r.eth1.IsReady() {
-		panic("eth1 node isn't ready, there's a risk of getting slashed")
+		logger.Panic("eth1 node isn't ready, there's a risk of getting slashed")
 	}
 
 	r.metrics.StartDutyFullFlow()

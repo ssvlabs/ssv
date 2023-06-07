@@ -117,7 +117,7 @@ func (r *ValidatorRegistrationRunner) expectedPostConsensusRootsAndDomain() ([]s
 
 func (r *ValidatorRegistrationRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 	if !r.eth1.IsReady() {
-		panic("eth1 node isn't ready, there's a risk of getting slashed")
+		logger.Panic("eth1 node isn't ready, there's a risk of getting slashed")
 	}
 
 	vr, err := r.calculateValidatorRegistration()
