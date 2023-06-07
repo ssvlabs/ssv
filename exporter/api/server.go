@@ -5,12 +5,13 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/gorilla/websocket"
 	"github.com/prysmaticlabs/prysm/async/event"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/utils/tasks"
 )
 
 const (
@@ -70,9 +71,16 @@ func (ws *wsServer) Start(logger *zap.Logger, addr string) error {
 
 	logger.Info("starting", fields.Address(addr), zap.Strings("endPoints", []string{"/query", "/stream"}))
 
-	// TODO: enable lint (G114: Use of net/http serve function that has no support for setting timeouts (gosec))
-	// nolint: gosec
-	err := http.ListenAndServe(addr, ws.router)
+	const timeout = 3 * time.Second
+
+	httpServer := &http.Server{
+		Addr:         addr,
+		Handler:      ws.router,
+		ReadTimeout:  timeout,
+		WriteTimeout: timeout,
+	}
+
+	err := httpServer.ListenAndServe()
 	if err != nil {
 		logger.Warn("could not start", zap.Error(err))
 	}

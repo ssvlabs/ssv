@@ -10,6 +10,7 @@ import (
 	http_pprof "net/http/pprof"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -85,11 +86,20 @@ func (mh *metricsHandler) Start(logger *zap.Logger, mux *http.ServeMux, addr str
 	mux.HandleFunc("/database/count-by-collection", mh.handleCountByCollection)
 	mux.HandleFunc("/health", mh.handleHealth)
 
-	// TODO: enable lint (G114: Use of net/http serve function that has no support for setting timeouts (gosec))
-	// nolint: gosec
-	if err := http.ListenAndServe(addr, mux); err != nil {
-		return fmt.Errorf("listen to %s: %w", addr, err)
-	}
+	go func() {
+		const timeout = 3 * time.Second
+
+		httpServer := &http.Server{
+			Addr:         addr,
+			Handler:      mux,
+			ReadTimeout:  timeout,
+			WriteTimeout: timeout,
+		}
+
+		if err := httpServer.ListenAndServe(); err != nil {
+			return fmt.Errorf("listen to %s: %w", addr, err)
+		}
+	}()
 
 	return nil
 }
