@@ -204,7 +204,7 @@ func setupGlobal(cmd *cobra.Command) (*zap.Logger, error) {
 	}
 	if globalArgs.ShareConfigPath != "" {
 		if err := cleanenv.ReadConfig(globalArgs.ShareConfigPath, &cfg); err != nil {
-			return nil, fmt.Errorf("could not read share config: %W", err)
+			return nil, fmt.Errorf("could not read share config: %w", err)
 		}
 	}
 

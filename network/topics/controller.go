@@ -217,7 +217,7 @@ func (ctrl *topicsCtrl) listen(logger *zap.Logger, sub *pubsub.Subscription) err
 			if ctx.Err() != nil {
 				logger.Debug("stop listening to topic: context is done")
 				return nil
-			} else if err == pubsub.ErrSubscriptionCancelled || err == pubsub.ErrTopicClosed {
+			} else if errors.Is(err, pubsub.ErrSubscriptionCancelled) || errors.Is(err, pubsub.ErrTopicClosed) {
 				logger.Debug("stop listening to topic", zap.Error(err))
 				return nil
 			}
