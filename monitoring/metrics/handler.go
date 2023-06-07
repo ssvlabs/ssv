@@ -86,20 +86,18 @@ func (mh *metricsHandler) Start(logger *zap.Logger, mux *http.ServeMux, addr str
 	mux.HandleFunc("/database/count-by-collection", mh.handleCountByCollection)
 	mux.HandleFunc("/health", mh.handleHealth)
 
-	go func() {
-		const timeout = 3 * time.Second
+	const timeout = 3 * time.Second
 
-		httpServer := &http.Server{
-			Addr:         addr,
-			Handler:      mux,
-			ReadTimeout:  timeout,
-			WriteTimeout: timeout,
-		}
+	httpServer := &http.Server{
+		Addr:         addr,
+		Handler:      mux,
+		ReadTimeout:  timeout,
+		WriteTimeout: timeout,
+	}
 
-		if err := httpServer.ListenAndServe(); err != nil {
-			logger.Error("can't listen on metrics server", zap.String("ip", addr), zap.Error(err))
-		}
-	}()
+	if err := httpServer.ListenAndServe(); err != nil {
+		return fmt.Errorf("listen to %s: %w", addr, err)
+	}
 
 	return nil
 }
