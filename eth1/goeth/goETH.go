@@ -174,7 +174,12 @@ func (ec *eth1Client) fireEvent(log types.Log, name string, data interface{}) {
 
 // streamSmartContractEvents sync events history of the given contract
 func (ec *eth1Client) streamSmartContractEvents(logger *zap.Logger) error {
-	logger.Debug("streaming smart contract events")
+	currentBlock, err := ec.conn.BlockNumber(ec.ctx)
+	if err != nil {
+		return errors.Wrap(err, "failed to get current block")
+	}
+	logger.Debug("streaming smart contract events",
+		zap.Uint64("current_block", currentBlock))
 
 	contractAbi, err := abi.JSON(strings.NewReader(ec.contractABI))
 	if err != nil {
