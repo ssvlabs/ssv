@@ -80,7 +80,7 @@ spec:
               - key: kubernetes.io/role
                 operator: In
                 values:
-                - ssv-boot-node
+                - ssv-boot-node-mainnet
       containers:
       - name: boot-node-mainnet
         image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
