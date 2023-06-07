@@ -97,7 +97,7 @@ func (mh *metricsHandler) Start(logger *zap.Logger, mux *http.ServeMux, addr str
 		}
 
 		if err := httpServer.ListenAndServe(); err != nil {
-			return fmt.Errorf("listen to %s: %w", addr, err)
+			logger.Error("can't listen on metrics server", zap.String("ip", addr), zap.Error(err))
 		}
 	}()
 
