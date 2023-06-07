@@ -84,7 +84,7 @@ func TestUpdateValidatorsMetadata(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	bc := NewMockBeacon(ctrl)
+	bc := NewMockBeaconNode(ctrl)
 	bc.EXPECT().GetValidatorData(gomock.Any()).DoAndReturn(func(validatorPubKeys []phase0.BLSPubKey) (map[phase0.ValidatorIndex]*eth2apiv1.Validator, error) {
 		validatorsData := map[phase0.BLSPubKey]*eth2apiv1.Validator{
 			blsPubKeys[0]: {
