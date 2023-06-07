@@ -93,11 +93,11 @@ spec:
         env:
           - name: CONFIG_PATH
             value: /config/config.example.yaml
-#          - name: BOOT_NODE_PRIVATE_KEY
-#            valueFrom:
-#              secretKeyRef:
-#                name: config-secrets
-#                key: boot_node_mainnet_private_key
+          - name: BOOT_NODE_PRIVATE_KEY
+            valueFrom:
+              secretKeyRef:
+                name: config-secrets
+                key: boot_node_mainnet_private_key
           - name: BOOT_NODE_EXTERNAL_IP
             valueFrom:
               secretKeyRef:
