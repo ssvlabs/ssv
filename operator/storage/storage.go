@@ -26,6 +26,8 @@ var (
 
 // Storage represents the interface for ssv node storage
 type Storage interface {
+	// TODO: de-anonymize the sub-storages, like Shares() below
+
 	eth1.SyncOffsetStorage
 	registry.RegistryStore
 

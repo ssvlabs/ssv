@@ -251,7 +251,7 @@ func (dc *dutyController) handleSlot(logger *zap.Logger, slot phase0.Slot) {
 }
 
 func (dc *dutyController) handleValidatorRegistration(logger *zap.Logger, slot phase0.Slot) {
-	shares := dc.validatorController.GetOperatorShares(logger)
+	shares := dc.validatorController.GetOperatorShares()
 
 	sent := 0
 	for _, share := range shares {

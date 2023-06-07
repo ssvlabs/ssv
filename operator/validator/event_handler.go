@@ -455,7 +455,7 @@ func (c *controller) handleFeeRecipientAddressUpdatedEvent(
 
 	if ongoingSync && r != nil {
 		_ = c.validatorsMap.ForEach(func(v *validator.Validator) error {
-			if bytes.Equal(v.Share.OwnerAddress.Bytes(), r.Owner.Bytes()) {
+			if v.Share.OwnerAddress == r.Owner {
 				v.Share.FeeRecipientAddress = r.FeeRecipient
 			}
 			return nil
@@ -466,7 +466,7 @@ func (c *controller) handleFeeRecipientAddressUpdatedEvent(
 	if c.operatorData.ID != 0 {
 		shares := c.sharesStorage.List(registrystorage.ByOperatorID(c.operatorData.ID))
 		for _, share := range shares {
-			if bytes.Equal(share.OwnerAddress.Bytes(), event.Owner.Bytes()) {
+			if share.OwnerAddress == event.Owner {
 				isOperatorEvent = true
 				break
 			}

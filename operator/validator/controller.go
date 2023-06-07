@@ -98,12 +98,12 @@ type Controller interface {
 	UpdateValidatorMetaDataLoop(logger *zap.Logger)
 	StartNetworkHandlers(logger *zap.Logger)
 	Eth1EventHandler(logger *zap.Logger, ongoingSync bool) eth1.SyncEventHandler
-	GetOperatorShares(logger *zap.Logger) []*types.SSVShare
+	GetOperatorShares() []*types.SSVShare
 	// GetValidatorStats returns stats of validators, including the following:
 	//  - the amount of validators in the network
 	//  - the amount of active validators (i.e. not slashed or existed)
 	//  - the amount of validators assigned to this operator
-	GetValidatorStats(logger *zap.Logger) (uint64, uint64, uint64, error)
+	GetValidatorStats() (uint64, uint64, uint64, error)
 	GetOperatorData() *registrystorage.OperatorData
 	//OnFork(forkVersion forksprotocol.ForkVersion) error
 }
@@ -266,7 +266,7 @@ func (c *controller) setupNetworkHandlers(logger *zap.Logger) error {
 	return nil
 }
 
-func (c *controller) GetOperatorShares(logger *zap.Logger) []*types.SSVShare {
+func (c *controller) GetOperatorShares() []*types.SSVShare {
 	return c.sharesStorage.List(registrystorage.ByOperatorID(c.operatorData.ID), registrystorage.ByActiveValidator())
 }
 
@@ -274,7 +274,7 @@ func (c *controller) GetOperatorData() *registrystorage.OperatorData {
 	return c.operatorData
 }
 
-func (c *controller) GetValidatorStats(logger *zap.Logger) (uint64, uint64, uint64, error) {
+func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
 	allShares := c.sharesStorage.List()
 	operatorShares := uint64(0)
 	active := uint64(0)
