@@ -64,24 +64,24 @@ func TestSaveAndGetValidatorStorage(t *testing.T) {
 	require.NoError(t, err)
 
 	validatorShare, _ := generateRandomValidatorShare(splitKeys)
-	require.NoError(t, shareStorage.SaveShare(logger, validatorShare))
+	require.NoError(t, shareStorage.Save(logger, validatorShare))
 
 	validatorShare2, _ := generateRandomValidatorShare(splitKeys)
-	require.NoError(t, shareStorage.SaveShare(logger, validatorShare2))
+	require.NoError(t, shareStorage.Save(logger, validatorShare2))
 
-	validatorShareByKey, found, err := shareStorage.GetShare(validatorShare.ValidatorPubKey)
-	require.True(t, found)
+	validatorShareByKey := shareStorage.Get(validatorShare.ValidatorPubKey)
+	require.NotNil(t, validatorShareByKey)
 	require.NoError(t, err)
 	require.EqualValues(t, hex.EncodeToString(validatorShareByKey.ValidatorPubKey), hex.EncodeToString(validatorShare.ValidatorPubKey))
 
-	validators, err := shareStorage.GetAllShares(logger)
+	validators := shareStorage.List()
 	require.NoError(t, err)
 	require.EqualValues(t, 2, len(validators))
 
-	require.NoError(t, shareStorage.DeleteShare(validatorShare.ValidatorPubKey))
-	_, found, err = shareStorage.GetShare(validatorShare.ValidatorPubKey)
+	require.NoError(t, shareStorage.Delete(validatorShare.ValidatorPubKey))
+	share := shareStorage.Get(validatorShare.ValidatorPubKey)
 	require.NoError(t, err)
-	require.False(t, found)
+	require.Nil(t, share)
 }
 
 func generateRandomValidatorShare(splitKeys map[uint64]*bls.SecretKey) (*types.SSVShare, *bls.SecretKey) {
@@ -143,7 +143,10 @@ func newShareStorageForTest(logger *zap.Logger) (Shares, func()) {
 	if err != nil {
 		return nil, func() {}
 	}
-	s := NewSharesStorage(db, []byte("test"))
+	s, err := NewSharesStorage(logger, db, []byte("test"))
+	if err != nil {
+		return nil, func() {}
+	}
 	return s, func() {
 		db.Close(logger)
 	}

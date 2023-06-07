@@ -196,7 +196,10 @@ func newDBAndLoggerForTest(logger *zap.Logger) (basedb.IDb, *zap.Logger, func())
 }
 
 func newStorageForTest(db basedb.IDb, logger *zap.Logger, roles ...spectypes.BeaconRole) (storage.Storage, *qbftstorage.QBFTStores) {
-	sExporter := storage.NewNodeStorage(db)
+	sExporter, err := storage.NewNodeStorage(logger, db)
+	if err != nil {
+		panic(err)
+	}
 
 	storageMap := qbftstorage.NewStores()
 	for _, role := range roles {
