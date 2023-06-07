@@ -12,9 +12,9 @@ var Mainnet = NetworkConfig{
 	Name:                 "mainnet",
 	Beacon:               beacon.NewNetwork(spectypes.MainNetwork),
 	Domain:               spectypes.GenesisMainnet,
-	GenesisEpoch:         1,                              // TODO: set up
-	ETH1SyncOffset:       new(big.Int).SetInt64(8661727), // TODO: set up
-	RegistryContractAddr: "",                             // TODO: set up
+	GenesisEpoch:         1,
+	ETH1SyncOffset:       new(big.Int).SetInt64(17428695),
+	RegistryContractAddr: "0x42Cd8D240E30102B715d7516f97864ECeC4441Ab",
 	Bootnodes: []string{
 		"enr:-Li4QFJEmDrCkMnHSM60-0jeivkc20f803sKyNr_rvFGEuLiAghKBwpjXU9sG5VL2qnp7e1XKYxc0qFk8r5MWBJUT2yGAYiQdWLDh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCzmKVSJc2VjcDI1NmsxoQJZGVC3UnuZe1nU7WNuvVXEOOAsf0H2_QMeXEipUVMdaoN0Y3CCE4qDdWRwgg-i",
 	},
