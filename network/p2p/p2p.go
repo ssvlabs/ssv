@@ -217,7 +217,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 		for {
 			time.Sleep(time.Second * 4)
 			start := time.Now()
-			logger = logger.Named(logging.NameP2PNetwork)
+			logger := logger.Named(logging.NameP2PNetwork)
 
 			visited := make(map[int]bool)
 			last := make([]byte, len(n.subnets))
