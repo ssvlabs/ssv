@@ -242,6 +242,8 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 			}
 		}
 
+		time.Sleep(time.Second * 4)
+
 		if len(subnetsToAdd) == 0 {
 			continue
 		}
@@ -261,8 +263,6 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 			zap.Any("subnets", subnetsList),
 			zap.Duration("took", time.Since(start)),
 		)
-
-		time.Sleep(time.Second * 4)
 	}
 }
 
