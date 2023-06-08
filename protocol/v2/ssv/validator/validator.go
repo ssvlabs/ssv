@@ -91,10 +91,11 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 
 // StartDuty starts a duty for the validator
 func (v *Validator) StartDuty(logger *zap.Logger, duty *spectypes.Duty) error {
-	if !v.Eth1.IsReady() || !v.Beacon.IsReady() {
+	eth1Ready, eth2Ready := v.Eth1.IsReady(), v.Beacon.IsReady()
+	if !eth1Ready || !eth2Ready {
 		logger.Panic("eth1 and eth2 nodes must be ready, otherwise there's a risk of getting slashed",
-			zap.Bool("eth1_ready", v.Eth1.IsReady()),
-			zap.Bool("eth2_ready", v.Beacon.IsReady()),
+			zap.Bool("eth1_ready", eth1Ready),
+			zap.Bool("eth2_ready", eth2Ready),
 		)
 	}
 
