@@ -1,8 +1,7 @@
 package queue
 
 import (
-	"github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/types"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -13,7 +12,7 @@ import (
 
 // DecodedSSVMessage is a bundle of SSVMessage and it's decoding.
 type DecodedSSVMessage struct {
-	*types.SSVMessage
+	*spectypes.SSVMessage
 
 	// Body is the decoded Data.
 	Body interface{} // *SignedMessage | *SignedPartialSignatureMessage
@@ -23,13 +22,13 @@ type DecodedSSVMessage struct {
 func DecodeSSVMessage(logger *zap.Logger, m *spectypes.SSVMessage) (*DecodedSSVMessage, error) {
 	var body interface{}
 	switch m.MsgType {
-	case types.SSVConsensusMsgType: // TODO: Or message.SSVDecidedMsgType?
-		sm := &qbft.SignedMessage{}
+	case spectypes.SSVConsensusMsgType: // TODO: Or message.SSVDecidedMsgType?
+		sm := &specqbft.SignedMessage{}
 		if err := sm.Decode(m.Data); err != nil {
 			return nil, errors.Wrap(err, "failed to decode SignedMessage")
 		}
 		body = sm
-	case types.SSVPartialSignatureMsgType:
+	case spectypes.SSVPartialSignatureMsgType:
 		sm := &spectypes.SignedPartialSignatureMessage{}
 		if err := sm.Decode(m.Data); err != nil {
 			return nil, errors.Wrap(err, "failed to decode SignedPartialSignatureMessage")
@@ -51,7 +50,7 @@ func DecodeSSVMessage(logger *zap.Logger, m *spectypes.SSVMessage) (*DecodedSSVM
 // compareHeightOrSlot returns an integer comparing the message's height/slot to the current.
 // The reuslt will be 0 if equal, -1 if lower, 1 if higher.
 func compareHeightOrSlot(state *State, m *DecodedSSVMessage) int {
-	if mm, ok := m.Body.(*qbft.SignedMessage); ok {
+	if mm, ok := m.Body.(*specqbft.SignedMessage); ok {
 		if mm.Message.Height == state.Height {
 			return 0
 		}
@@ -72,7 +71,7 @@ func compareHeightOrSlot(state *State, m *DecodedSSVMessage) int {
 // scoreRound returns an integer comparing the message's round (if exist) to the current.
 // The reuslt will be 0 if equal, -1 if lower, 1 if higher.
 func scoreRound(state *State, m *DecodedSSVMessage) int {
-	if mm, ok := m.Body.(*qbft.SignedMessage); ok {
+	if mm, ok := m.Body.(*specqbft.SignedMessage); ok {
 		if mm.Message.Round == state.Round {
 			return 2
 		}
@@ -103,7 +102,7 @@ func scoreMessageType(m *DecodedSSVMessage) int {
 
 // scoreMessageSubtype returns an integer score for the message's type.
 func scoreMessageSubtype(state *State, m *DecodedSSVMessage, relativeHeight int) int {
-	consensusMessage, isConsensusMessage := m.Body.(*qbft.SignedMessage)
+	consensusMessage, isConsensusMessage := m.Body.(*specqbft.SignedMessage)
 
 	var (
 		isPreConsensusMessage  = false
@@ -157,7 +156,7 @@ func scoreMessageSubtype(state *State, m *DecodedSSVMessage, relativeHeight int)
 	switch {
 	case isDecidedMesssage(state, consensusMessage):
 		return 2
-	case isConsensusMessage && consensusMessage.Message.MsgType == qbft.CommitMsgType:
+	case isConsensusMessage && consensusMessage.Message.MsgType == specqbft.CommitMsgType:
 		return 1
 	}
 	return 0
@@ -166,25 +165,25 @@ func scoreMessageSubtype(state *State, m *DecodedSSVMessage, relativeHeight int)
 // scoreConsensusType returns an integer score for the type of a consensus message.
 // When given a non-consensus message, scoreConsensusType returns 0.
 func scoreConsensusType(state *State, m *DecodedSSVMessage) int {
-	if mm, ok := m.Body.(*qbft.SignedMessage); ok {
+	if mm, ok := m.Body.(*specqbft.SignedMessage); ok {
 		switch mm.Message.MsgType {
-		case qbft.ProposalMsgType:
+		case specqbft.ProposalMsgType:
 			return 4
-		case qbft.PrepareMsgType:
+		case specqbft.PrepareMsgType:
 			return 3
-		case qbft.CommitMsgType:
+		case specqbft.CommitMsgType:
 			return 2
-		case qbft.RoundChangeMsgType:
+		case specqbft.RoundChangeMsgType:
 			return 1
 		}
 	}
 	return 0
 }
 
-func isDecidedMesssage(s *State, sm *qbft.SignedMessage) bool {
+func isDecidedMesssage(s *State, sm *specqbft.SignedMessage) bool {
 	if sm == nil {
 		return false
 	}
-	return sm.Message.MsgType == qbft.CommitMsgType &&
+	return sm.Message.MsgType == specqbft.CommitMsgType &&
 		len(sm.Signers) > int(s.Quorum)
 }

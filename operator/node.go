@@ -118,7 +118,7 @@ func New(logger *zap.Logger, opts Options, slotTicker slot_ticker.Ticker) Node {
 			Ctx:              opts.Context,
 			BeaconClient:     opts.BeaconNode,
 			Network:          opts.Network,
-			ShareStorage:     opts.ValidatorOptions.RegistryStorage,
+			ShareStorage:     opts.ValidatorOptions.RegistryStorage.Shares(),
 			RecipientStorage: opts.ValidatorOptions.RegistryStorage,
 			Ticker:           slotTicker,
 			OperatorData:     opts.ValidatorOptions.OperatorData,
@@ -181,10 +181,7 @@ func (n *operatorNode) StartEth1(logger *zap.Logger, syncOffset *eth1.SyncOffset
 		return errors.Wrap(err, "failed to sync contract events")
 	}
 	logger.Info("manage to sync contract events")
-	shares, err := n.storage.GetAllShares(logger)
-	if err != nil {
-		logger.Error("failed to get validator shares", zap.Error(err))
-	}
+	shares := n.storage.Shares().List()
 	operators, err := n.storage.ListOperators(logger, 0, 0)
 	if err != nil {
 		logger.Error("failed to get operators", zap.Error(err))

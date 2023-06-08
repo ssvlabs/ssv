@@ -40,30 +40,26 @@ func splitBytes(buf []byte, lim int) [][]byte {
 // Eth1EventHandler is a factory function for creating eth1 event handler
 func (c *controller) Eth1EventHandler(logger *zap.Logger, ongoingSync bool) eth1.SyncEventHandler {
 	return func(e eth1.Event) ([]zap.Field, error) {
-		switch e.Name {
-		case abiparser.OperatorAdded:
-			ev := e.Data.(abiparser.OperatorAddedEvent)
+		switch ev := e.Data.(type) {
+		case abiparser.OperatorAddedEvent:
 			return c.handleOperatorAddedEvent(logger, ev)
-		case abiparser.OperatorRemoved:
-			ev := e.Data.(abiparser.OperatorRemovedEvent)
+		case abiparser.OperatorRemovedEvent:
 			return c.handleOperatorRemovedEvent(logger, ev, ongoingSync)
-		case abiparser.ValidatorAdded:
-			ev := e.Data.(abiparser.ValidatorAddedEvent)
+		case abiparser.ValidatorAddedEvent:
 			return c.handleValidatorAddedEvent(logger, ev, ongoingSync)
-		case abiparser.ValidatorRemoved:
-			ev := e.Data.(abiparser.ValidatorRemovedEvent)
+		case abiparser.ValidatorRemovedEvent:
 			return c.handleValidatorRemovedEvent(logger, ev, ongoingSync)
-		case abiparser.ClusterLiquidated:
-			ev := e.Data.(abiparser.ClusterLiquidatedEvent)
+		case abiparser.ClusterLiquidatedEvent:
 			return c.handleClusterLiquidatedEvent(logger, ev, ongoingSync)
-		case abiparser.ClusterReactivated:
-			ev := e.Data.(abiparser.ClusterReactivatedEvent)
+		case abiparser.ClusterReactivatedEvent:
 			return c.handleClusterReactivatedEvent(logger, ev, ongoingSync)
-		case abiparser.FeeRecipientAddressUpdated:
-			ev := e.Data.(abiparser.FeeRecipientAddressUpdatedEvent)
+		case abiparser.FeeRecipientAddressUpdatedEvent:
 			return c.handleFeeRecipientAddressUpdatedEvent(logger, ev, ongoingSync)
 		default:
-			logger.Debug("could not handle unknown event")
+			logger.Debug("could not handle unknown event",
+				zap.String("event_name", e.Name),
+				zap.String("event_type", fmt.Sprintf("%T", ev)),
+			)
 		}
 		return nil, nil
 	}
@@ -201,14 +197,18 @@ func (c *controller) handleValidatorAddedEvent(
 		}
 	}
 
-	validatorShare, found, shareErr := c.sharesStorage.GetShare(event.PublicKey)
-	if shareErr != nil {
-		return nil, errors.Wrap(shareErr, "could not check if validator share exist")
-	}
-	// Prevent multiple registration of the same validator with different owner address
-	// owner A registers validator with public key X (OK)
-	// owner B registers validator with public key X (NOT OK)
-	if found && event.Owner != validatorShare.OwnerAddress {
+	validatorShare := c.sharesStorage.Get(event.PublicKey)
+	if validatorShare == nil {
+		validatorShare, err = c.onShareCreate(logger, event)
+		if err != nil {
+			metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusError))
+			return nil, err
+		}
+		valid = true
+	} else if event.Owner != validatorShare.OwnerAddress {
+		// Prevent multiple registration of the same validator with different owner address
+		// owner A registers validator with public key X (OK)
+		// owner B registers validator with public key X (NOT OK)
 		err = &abiparser.MalformedEventError{
 			Err: errors.Errorf(
 				"validator share already exists with different owner address: expected %s, got %s",
@@ -217,14 +217,6 @@ func (c *controller) handleValidatorAddedEvent(
 			),
 		}
 		return nil, err
-	}
-	if !found {
-		validatorShare, err = c.onShareCreate(logger, event)
-		if err != nil {
-			metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusError))
-			return nil, err
-		}
-		valid = true
 	}
 
 	isOperatorShare := validatorShare.BelongsToOperator(c.operatorData.ID)
@@ -285,9 +277,11 @@ func (c *controller) handleValidatorRemovedEvent(
 	ongoingSync bool,
 ) ([]zap.Field, error) {
 	// TODO: handle metrics
-	share, found, err := c.sharesStorage.GetShare(event.PublicKey)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not check if validator share exist")
+	share := c.sharesStorage.Get(event.PublicKey)
+	if share == nil {
+		return nil, &abiparser.MalformedEventError{
+			Err: errors.New("could not find validator share"),
+		}
 	}
 
 	// Prevent removal of the validator registered with different owner address
@@ -295,19 +289,13 @@ func (c *controller) handleValidatorRemovedEvent(
 	// owner B registers validator with public key X (NOT OK)
 	// owner A removes validator with public key X (OK)
 	// owner B removes validator with public key X (NOT OK)
-	if found && event.Owner != share.OwnerAddress {
-		err = &abiparser.MalformedEventError{
+	if event.Owner != share.OwnerAddress {
+		return nil, &abiparser.MalformedEventError{
 			Err: errors.Errorf(
 				"validator share already exists with different owner address: expected %s, got %s",
 				share.OwnerAddress.String(),
 				event.Owner.String(),
 			),
-		}
-		return nil, err
-	}
-	if !found {
-		return nil, &abiparser.MalformedEventError{
-			Err: errors.New("could not find validator share"),
 		}
 	}
 
@@ -321,7 +309,7 @@ func (c *controller) handleValidatorRemovedEvent(
 	}
 
 	// remove from storage
-	if err := c.sharesStorage.DeleteShare(share.ValidatorPubKey); err != nil {
+	if err := c.sharesStorage.Delete(share.ValidatorPubKey); err != nil {
 		return nil, errors.Wrap(err, "could not remove validator share")
 	}
 
@@ -423,10 +411,7 @@ func (c *controller) processClusterEvent(
 		return nil, nil, errors.Wrapf(err, "could not compute share cluster id")
 	}
 
-	shares, err := c.sharesStorage.GetFilteredShares(logger, registrystorage.ByClusterID(clusterID))
-	if err != nil {
-		return nil, nil, errors.Wrap(err, "could not get validator shares by cluster id")
-	}
+	shares := c.sharesStorage.List(registrystorage.ByClusterID(clusterID))
 	toUpdate := make([]*types.SSVShare, 0)
 	updatedPubKeys := make([]string, 0)
 
@@ -442,7 +427,7 @@ func (c *controller) processClusterEvent(
 	}
 
 	if len(toUpdate) > 0 {
-		if err = c.sharesStorage.SaveShareMany(logger, toUpdate); err != nil {
+		if err = c.sharesStorage.Save(logger, toUpdate...); err != nil {
 			return nil, nil, errors.Wrapf(err, "could not save validator shares")
 		}
 	}
@@ -466,7 +451,7 @@ func (c *controller) handleFeeRecipientAddressUpdatedEvent(
 
 	if ongoingSync && r != nil {
 		_ = c.validatorsMap.ForEach(func(v *validator.Validator) error {
-			if bytes.Equal(v.Share.OwnerAddress.Bytes(), r.Owner.Bytes()) {
+			if v.Share.OwnerAddress == r.Owner {
 				v.Share.FeeRecipientAddress = r.FeeRecipient
 			}
 			return nil
@@ -475,12 +460,9 @@ func (c *controller) handleFeeRecipientAddressUpdatedEvent(
 
 	var isOperatorEvent bool
 	if c.operatorData.ID != 0 {
-		shares, err := c.sharesStorage.GetFilteredShares(logger, registrystorage.ByOperatorID(c.operatorData.ID))
-		if err != nil {
-			return nil, errors.Wrap(err, "could not get validator shares by operator id")
-		}
+		shares := c.sharesStorage.List(registrystorage.ByOperatorID(c.operatorData.ID))
 		for _, share := range shares {
-			if bytes.Equal(share.OwnerAddress.Bytes(), event.Owner.Bytes()) {
+			if share.OwnerAddress == event.Owner {
 				isOperatorEvent = true
 				break
 			}
