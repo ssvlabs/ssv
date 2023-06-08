@@ -216,7 +216,9 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 	// TODO: this is a temporary fix to update subnets when validators are added/removed,
 	// there is a pending PR to replace this: https://github.com/bloxapp/ssv/pull/990
 	logger = logger.Named(logging.NameP2PNetwork)
-	for {
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+	for range ticker.C {
 		start := time.Now()
 
 		last := make([]byte, len(n.subnets))
@@ -241,8 +243,6 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 				}
 			}
 		}
-
-		time.Sleep(time.Second * 4)
 
 		if len(subnetsToAdd) == 0 {
 			continue
