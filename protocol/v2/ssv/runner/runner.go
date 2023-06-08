@@ -14,10 +14,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 )
 
-type NodeStatusChecker interface {
-	IsReady() bool
-}
-
 type Getters interface {
 	GetBaseRunner() *BaseRunner
 	GetBeaconNode() specssv.BeaconNode

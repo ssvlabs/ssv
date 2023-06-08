@@ -15,13 +15,23 @@ import (
 
 var BaseValidator = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) *validator.Validator {
 	ctx, cancel := context.WithCancel(context.TODO())
+
+	statusChecker := StatusChecker{}
+	beaconNodeWithStatusChecker := struct {
+		*spectestingutils.TestingBeaconNode
+		StatusChecker
+	}{
+		spectestingutils.NewTestingBeaconNode(),
+		statusChecker,
+	}
+
 	return validator.NewValidator(
 		ctx,
 		cancel,
 		validator.Options{
 			Network:       spectestingutils.NewTestingNetwork(),
-			Beacon:        spectestingutils.NewTestingBeaconNode(),
-			Eth1:          StatusChecker{},
+			Beacon:        beaconNodeWithStatusChecker,
+			Eth1:          statusChecker,
 			BeaconNetwork: spectypes.BeaconTestNetwork,
 			Storage:       testing.TestingStores(logger),
 			SSVShare: &types.SSVShare{
