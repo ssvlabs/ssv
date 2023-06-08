@@ -32,7 +32,7 @@ type Shares interface {
 	List(filters ...func(*types.SSVShare) bool) []*types.SSVShare
 
 	// Save saves the given shares.
-	Save(logger *zap.Logger, shares ...*types.SSVShare) error
+	Save(shares ...*types.SSVShare) error
 
 	// Delete deletes the share for the given public key.
 	Delete(pubKey []byte) error
@@ -101,7 +101,7 @@ Shares:
 	return shares
 }
 
-func (s *sharesStorage) Save(logger *zap.Logger, shares ...*types.SSVShare) error {
+func (s *sharesStorage) Save(shares ...*types.SSVShare) error {
 	if len(shares) == 0 {
 		return nil
 	}
@@ -112,8 +112,7 @@ func (s *sharesStorage) Save(logger *zap.Logger, shares ...*types.SSVShare) erro
 	err := s.db.SetMany(s.prefix, len(shares), func(i int) (basedb.Obj, error) {
 		value, err := shares[i].Encode()
 		if err != nil {
-			logger.Error("failed to serialize share", zap.Error(err))
-			return basedb.Obj{}, err
+			return basedb.Obj{}, fmt.Errorf("failed to serialize share: %w", err)
 		}
 		return basedb.Obj{Key: s.storageKey(shares[i].ValidatorPubKey), Value: value}, nil
 	})
@@ -152,7 +151,7 @@ func (s *sharesStorage) UpdateValidatorMetadata(logger *zap.Logger, pk string, m
 		return nil
 	}
 	share.BeaconMetadata = metadata
-	return s.Save(logger, share)
+	return s.Save(share)
 }
 
 // CleanRegistryData clears all registry data
@@ -161,6 +160,7 @@ func (s *sharesStorage) CleanRegistryData() error {
 	if err != nil {
 		return err
 	}
+
 	s.shares = make(map[string]*types.SSVShare)
 	return nil
 }
