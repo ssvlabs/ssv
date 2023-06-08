@@ -4,16 +4,17 @@ import (
 	"context"
 	"time"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/network/peers"
-	"github.com/bloxapp/ssv/network/records"
-	"github.com/bloxapp/ssv/network/streams"
-	"github.com/bloxapp/ssv/operator/storage"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/network/peers"
+	"github.com/bloxapp/ssv/network/records"
+	"github.com/bloxapp/ssv/network/streams"
+	"github.com/bloxapp/ssv/operator/storage"
 )
 
 // errHandshakeInProcess is thrown when and handshake process for that peer is already running
@@ -226,7 +227,7 @@ func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) erro
 
 func (h *handshaker) getNodeInfo(pid peer.ID) (*records.NodeInfo, error) {
 	ni, err := h.nodeInfoIdx.GetNodeInfo(pid)
-	if err != nil && err != peers.ErrNotFound {
+	if err != nil && !errors.Is(err, peers.ErrNotFound) {
 		return nil, errors.Wrap(err, "could not read node info")
 	}
 	if ni != nil {

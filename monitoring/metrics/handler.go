@@ -10,13 +10,15 @@ import (
 	http_pprof "net/http/pprof"
 	"runtime"
 	"strings"
+	"time"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/storage/basedb"
 )
 
 // Handler handles incoming metrics requests
@@ -84,13 +86,19 @@ func (mh *metricsHandler) Start(logger *zap.Logger, mux *http.ServeMux, addr str
 	mux.HandleFunc("/database/count-by-collection", mh.handleCountByCollection)
 	mux.HandleFunc("/health", mh.handleHealth)
 
-	go func() {
-		// TODO: enable lint (G114: Use of net/http serve function that has no support for setting timeouts (gosec))
-		// nolint: gosec
-		if err := http.ListenAndServe(addr, mux); err != nil {
-			logger.Error("failed to start http end-point", zap.Error(err))
-		}
-	}()
+	// Set a high timeout to allow for long-running pprof requests.
+	const timeout = 600 * time.Second
+
+	httpServer := &http.Server{
+		Addr:         addr,
+		Handler:      mux,
+		ReadTimeout:  timeout,
+		WriteTimeout: timeout,
+	}
+
+	if err := httpServer.ListenAndServe(); err != nil {
+		return fmt.Errorf("listen to %s: %w", addr, err)
+	}
 
 	return nil
 }

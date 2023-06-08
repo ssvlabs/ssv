@@ -6,7 +6,6 @@ import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
-	"github.com/bloxapp/ssv-spec/types"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
@@ -71,7 +70,7 @@ func (b *BaseRunner) SetHighestDecidedSlot(slot spec.Slot) {
 }
 
 // setupForNewDuty is sets the runner for a new duty
-func (b *BaseRunner) baseSetupForNewDuty(duty *types.Duty) {
+func (b *BaseRunner) baseSetupForNewDuty(duty *spectypes.Duty) {
 	state := NewRunnerState(b.Share.Quorum, duty)
 
 	// TODO: potentially incomplete locking of b.State. runner.Execute(duty) has access to

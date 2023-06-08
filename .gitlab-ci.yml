@@ -107,6 +107,7 @@ Build prod Docker image:
     - DOCKER_LOGIN_TO_INFRA_PROD_REPO=`$ECRLOGIN_INFRA_PROD`
     - docker tag $IMAGE_NAME:$CI_BUILD_REF $DOCKER_REPO_INFRA_PROD:$CI_BUILD_REF
     - $DOCKER_LOGIN_TO_INFRA_PROD_REPO && docker push $DOCKER_REPO_INFRA_PROD:$CI_BUILD_REF
+
   only:
     - main
 
@@ -125,16 +126,26 @@ Deploy nodes to prod:
     - chmod +x ./kubectl
     - mv ./kubectl /usr/bin/kubectl
     #
-    # +--------------------+
-    # |  Deploy SSV nodes  |
-    # +--------------------+
-    - .k8/production/prater/scripts/deploy-cluster-1--4.sh $DOCKER_REPO_INFRA_PROD $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $PROD_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V3 $SSV_NODES_MEM_LIMIT_V3
+    # +---------------------------+
+    # |  Deploy SSV Prater nodes  |
+    # +---------------------------+
+    # - .k8/production/prater/scripts/deploy-cluster-1--4.sh $DOCKER_REPO_INFRA_PROD $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $PROD_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V3 $SSV_NODES_MEM_LIMIT_V3
+    # +----------------------------+
+    # |  Deploy SSV Mainnet nodes  |
+    # +----------------------------+
+    - .k8/production/mainnet/scripts/deploy-cluster-1-4.sh $DOCKER_REPO_INFRA_PROD $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $PROD_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V3 $SSV_NODES_MEM_LIMIT_V3
     #
-    # +-------------------+
-    # │  Deploy Bootnode  |
-    # +-------------------+
+    # +--------------------------+
+    # │  Deploy Prater Bootnode  |
+    # +--------------------------+
     # █▓▒░ Keep commented unless you're testing the bootnode ░▒▓█
     # - .k8/production/prater/scripts/deploy-boot-nodes.sh $DOCKER_REPO_INFRA_PROD $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $PROD_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V3 $SSV_NODES_MEM_LIMIT_V3
+    # +---------------------------+
+    # │  Deploy Mainnet Bootnode  |
+    # +---------------------------+
+    # █▓▒░ Keep commented unless you're testing the bootnode ░▒▓█
+    # - .k8/production/mainnet/scripts/deploy-boot-nodes.sh $DOCKER_REPO_INFRA_PROD $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $PROD_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V3 $SSV_NODES_MEM_LIMIT_V3
+
   only:
     - main
 
@@ -152,6 +163,15 @@ Deploy exporter to prod:
     - curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.18.0/bin/linux/amd64/kubectl
     - chmod +x ./kubectl
     - mv ./kubectl /usr/bin/kubectl
-    - .k8/production/prater/scripts/deploy-exporters.sh $DOCKER_REPO_INFRA_PROD $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $SSV_EXPORTER_CPU_LIMIT $SSV_EXPORTER_MEM_LIMIT
+    # +---------------------------+
+    # |  Deploy Prater exporter   |
+    # +---------------------------+
+    # - .k8/production/prater/scripts/deploy-exporters.sh $DOCKER_REPO_INFRA_PROD $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $SSV_EXPORTER_CPU_LIMIT $SSV_EXPORTER_MEM_LIMIT
+    # +---------------------------+
+    # │  Deploy Mainnet exporter  |
+    # +---------------------------+
+    - .k8/production/mainnet/scripts/deploy-exporters.sh $DOCKER_REPO_INFRA_PROD $CI_BUILD_REF ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $SSV_EXPORTER_CPU_LIMIT $SSV_EXPORTER_MEM_LIMIT
+
   only:
     - main
+

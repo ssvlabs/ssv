@@ -204,7 +204,7 @@ func setupGlobal(cmd *cobra.Command) (*zap.Logger, error) {
 	}
 	if globalArgs.ShareConfigPath != "" {
 		if err := cleanenv.ReadConfig(globalArgs.ShareConfigPath, &cfg); err != nil {
-			return nil, fmt.Errorf("could not read share config: %W", err)
+			return nil, fmt.Errorf("could not read share config: %w", err)
 		}
 	}
 
@@ -392,8 +392,7 @@ func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.IDb,
 	metricsHandler := metrics.NewMetricsHandler(ctx, db, enableProf, operatorNode.(metrics.HealthCheckAgent))
 	addr := fmt.Sprintf(":%d", port)
 	if err := metricsHandler.Start(logger, http.NewServeMux(), addr); err != nil {
-		// TODO: stop node if metrics setup failed?
-		logger.Error("failed to start", zap.Error(err))
+		logger.Panic("failed to serve metrics", zap.Error(err))
 	}
 }
 
