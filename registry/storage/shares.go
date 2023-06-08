@@ -109,12 +109,7 @@ func (s *sharesStorage) Save(logger *zap.Logger, shares ...*types.SSVShare) erro
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	for _, share := range shares {
-		key := hex.EncodeToString(share.ValidatorPubKey)
-		s.shares[key] = share
-	}
-
-	return s.db.SetMany(s.prefix, len(shares), func(i int) (basedb.Obj, error) {
+	err := s.db.SetMany(s.prefix, len(shares), func(i int) (basedb.Obj, error) {
 		value, err := shares[i].Encode()
 		if err != nil {
 			logger.Error("failed to serialize share", zap.Error(err))
@@ -122,14 +117,28 @@ func (s *sharesStorage) Save(logger *zap.Logger, shares ...*types.SSVShare) erro
 		}
 		return basedb.Obj{Key: s.storageKey(shares[i].ValidatorPubKey), Value: value}, nil
 	})
+	if err != nil {
+		return err
+	}
+
+	for _, share := range shares {
+		key := hex.EncodeToString(share.ValidatorPubKey)
+		s.shares[key] = share
+	}
+	return nil
 }
 
 func (s *sharesStorage) Delete(pubKey []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	err := s.db.Delete(s.prefix, s.storageKey(pubKey))
+	if err != nil {
+		return err
+	}
+
 	delete(s.shares, hex.EncodeToString(pubKey))
-	return s.db.Delete(s.prefix, s.storageKey(pubKey))
+	return nil
 }
 
 // UpdateValidatorMetadata updates the metadata of the given validator
@@ -148,7 +157,12 @@ func (s *sharesStorage) UpdateValidatorMetadata(logger *zap.Logger, pk string, m
 
 // CleanRegistryData clears all registry data
 func (s *sharesStorage) CleanRegistryData() error {
-	return s.db.RemoveAllByCollection(sharesPrefix)
+	err := s.db.RemoveAllByCollection(sharesPrefix)
+	if err != nil {
+		return err
+	}
+	s.shares = make(map[string]*types.SSVShare)
+	return nil
 }
 
 // storageKey builds share key using sharesPrefix & validator public key, e.g. "shares/0x00..01"
