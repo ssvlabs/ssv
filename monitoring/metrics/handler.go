@@ -86,7 +86,8 @@ func (mh *metricsHandler) Start(logger *zap.Logger, mux *http.ServeMux, addr str
 	mux.HandleFunc("/database/count-by-collection", mh.handleCountByCollection)
 	mux.HandleFunc("/health", mh.handleHealth)
 
-	const timeout = 3 * time.Second
+	// Set a high timeout to allow for long-running pprof requests.
+	const timeout = 600 * time.Second
 
 	httpServer := &http.Server{
 		Addr:         addr,

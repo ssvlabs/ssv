@@ -620,7 +620,7 @@ func (c *controller) onShareCreate(logger *zap.Logger, validatorEvent abiparser.
 	}
 
 	// save validator data
-	if err := c.sharesStorage.Save(logger, share); err != nil {
+	if err := c.sharesStorage.Save(share); err != nil {
 		return nil, errors.Wrap(err, "could not save validator share")
 	}
 

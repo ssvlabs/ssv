@@ -67,42 +67,37 @@ func (c *controller) Eth1EventHandler(logger *zap.Logger, ongoingSync bool) eth1
 
 // handleOperatorAddedEvent parses the given event and saves operator data
 func (c *controller) handleOperatorAddedEvent(logger *zap.Logger, event abiparser.OperatorAddedEvent) ([]zap.Field, error) {
-	// throw an error if there is an existing operator with the same public key and different operator id
-	if c.operatorData.ID != 0 && bytes.Equal(c.operatorData.PublicKey, event.PublicKey) &&
-		c.operatorData.ID != event.OperatorId {
-		return nil, &abiparser.MalformedEventError{
-			Err: errors.New("operator registered with the same operator public key"),
-		}
-	}
-
-	isOperatorEvent := false
 	od := &registrystorage.OperatorData{
 		PublicKey:    event.PublicKey,
 		OwnerAddress: event.Owner,
 		ID:           event.OperatorId,
 	}
+	logFields := []zap.Field{
+		zap.Uint64("operatorId", od.ID),
+		zap.String("operatorPubKey", string(od.PublicKey)),
+		zap.String("ownerAddress", od.OwnerAddress.String()),
+	}
+
+	// throw an error if there is an existing operator with the same public key and different operator id
+	if c.operatorData.ID != 0 && bytes.Equal(c.operatorData.PublicKey, event.PublicKey) &&
+		c.operatorData.ID != event.OperatorId {
+		return logFields, &abiparser.MalformedEventError{
+			Err: errors.New("operator registered with the same operator public key"),
+		}
+	}
 
 	exists, err := c.operatorsStorage.SaveOperatorData(logger, od)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not save operator data")
+		return logFields, errors.Wrap(err, "could not save operator data")
 	}
 	if exists {
-		return nil, nil
+		return logFields, nil
 	}
 
 	if bytes.Equal(event.PublicKey, c.operatorData.PublicKey) {
-		isOperatorEvent = true
 		c.operatorData = od
 	}
 
-	logFields := make([]zap.Field, 0)
-	if isOperatorEvent || c.validatorOptions.FullNode {
-		logFields = append(logFields,
-			zap.Uint64("operatorId", od.ID),
-			zap.String("operatorPubKey", string(od.PublicKey)),
-			zap.String("ownerAddress", od.OwnerAddress.String()),
-		)
-	}
 	exporter.ReportOperatorIndex(logger, od)
 	return logFields, nil
 }
@@ -427,7 +422,7 @@ func (c *controller) processClusterEvent(
 	}
 
 	if len(toUpdate) > 0 {
-		if err = c.sharesStorage.Save(logger, toUpdate...); err != nil {
+		if err = c.sharesStorage.Save(toUpdate...); err != nil {
 			return nil, nil, errors.Wrapf(err, "could not save validator shares")
 		}
 	}
