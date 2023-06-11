@@ -427,7 +427,7 @@ func (c *controller) processClusterEvent(
 	}
 
 	if len(toUpdate) > 0 {
-		if err = c.sharesStorage.Save(logger, toUpdate...); err != nil {
+		if err = c.sharesStorage.Save(toUpdate...); err != nil {
 			return nil, nil, errors.Wrapf(err, "could not save validator shares")
 		}
 	}
