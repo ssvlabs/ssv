@@ -44,7 +44,7 @@ _IBFT was first defined in EIP-650 and discussed at length in_ [_The Istanbul BF
 
 #### START Procedure
 
-START procedure is initiated at the beginning of an instance, and only once per instance. It includes the instance's height, λ (which is also used as the instance identifier) and the duty data inputValue taken from the Eth2 node.
+START procedure is initiated at the beginning of an instance, and only once per instance. It includes the instance height λ and the duty data inputValue taken from the Eth2 node.
 
 When the START procedure is initiated, all of the validator nodes set the timer to expire after t(r).
 
