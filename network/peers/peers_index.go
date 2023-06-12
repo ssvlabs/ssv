@@ -7,14 +7,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bloxapp/ssv/network/records"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/network/records"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
 const (
@@ -205,7 +206,7 @@ func (pi *peersIndex) GetNodeInfo(id peer.ID) (*records.NodeInfo, error) {
 	}
 	// if in good state -> get node info
 	ni, err := pi.nodeInfoStore.Get(id)
-	if err == peerstore.ErrNotFound {
+	if errors.Is(err, peerstore.ErrNotFound) {
 		return nil, ErrNotFound
 	}
 

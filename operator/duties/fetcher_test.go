@@ -127,8 +127,8 @@ func createIndexFetcher(ctrl *gomock.Controller, result []phase0.ValidatorIndex)
 	return indexFetcher
 }
 
-func createBeaconDutiesClient(ctrl *gomock.Controller, result []*spectypes.Duty, err error) *beacon.MockBeacon {
-	client := beacon.NewMockBeacon(ctrl)
+func createBeaconDutiesClient(ctrl *gomock.Controller, result []*spectypes.Duty, err error) *beacon.MockBeaconNode {
+	client := beacon.NewMockBeaconNode(ctrl)
 	client.EXPECT().GetDuties(gomock.Any(), gomock.Any(), gomock.Any()).Return(result, err).MaxTimes(1)
 	client.EXPECT().SubscribeToCommitteeSubnet(gomock.Any()).Return(nil).MaxTimes(1)
 

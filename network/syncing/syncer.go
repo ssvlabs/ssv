@@ -5,15 +5,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/bloxapp/ssv/logging/fields"
-
-	"github.com/bloxapp/ssv-spec/qbft"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
-	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging/fields"
+	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
+	"github.com/bloxapp/ssv/utils/tasks"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/syncer.go -source=./syncer.go
@@ -123,7 +122,7 @@ func (s *syncer) SyncDecidedByRange(
 	ctx context.Context,
 	logger *zap.Logger,
 	id spectypes.MessageID,
-	from, to qbft.Height,
+	from, to specqbft.Height,
 	handler MessageHandler,
 ) error {
 	if ctx.Err() != nil {

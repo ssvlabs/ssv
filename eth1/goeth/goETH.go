@@ -159,8 +159,7 @@ func (ec *eth1Client) reconnect(logger *zap.Logger) {
 	}, 1*time.Second, limit+(1*time.Second))
 	logger.Debug("managed to reconnect")
 	if err := ec.streamSmartContractEvents(logger); err != nil {
-		// TODO: panic?
-		logger.Error("failed to stream events after reconnection", zap.Error(err))
+		logger.Panic("failed to stream events after reconnection", zap.Error(err))
 	}
 }
 
@@ -174,7 +173,12 @@ func (ec *eth1Client) fireEvent(log types.Log, name string, data interface{}) {
 
 // streamSmartContractEvents sync events history of the given contract
 func (ec *eth1Client) streamSmartContractEvents(logger *zap.Logger) error {
-	logger.Debug("streaming smart contract events")
+	currentBlock, err := ec.conn.BlockNumber(ec.ctx)
+	if err != nil {
+		return errors.Wrap(err, "failed to get current block")
+	}
+	logger.Debug("streaming smart contract events",
+		zap.Uint64("current_block", currentBlock))
 
 	contractAbi, err := abi.JSON(strings.NewReader(ec.contractABI))
 	if err != nil {

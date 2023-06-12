@@ -6,19 +6,17 @@ import (
 	"reflect"
 	"testing"
 
-	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv-spec/types/testingutils"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
+	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
 )
 
 func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
@@ -83,7 +81,7 @@ func testProcessMsg(
 
 	// verify sync decided by range calls
 	if runData.ExpectedDecidedState.CalledSyncDecidedByRange {
-		require.EqualValues(t, runData.ExpectedDecidedState.DecidedByRangeValues, config.GetNetwork().(*testingutils.TestingNetwork).DecidedByRange)
+		require.EqualValues(t, runData.ExpectedDecidedState.DecidedByRangeValues, config.GetNetwork().(*spectestingutils.TestingNetwork).DecidedByRange)
 	} else {
 		require.EqualValues(t, [2]specqbft.Height{0, 0}, config.GetNetwork().(*spectestingutils.TestingNetwork).DecidedByRange)
 	}
@@ -99,7 +97,7 @@ func testBroadcastedDecided(
 ) {
 	if runData.ExpectedDecidedState.BroadcastedDecided != nil {
 		// test broadcasted
-		broadcastedMsgs := config.GetNetwork().(*testingutils.TestingNetwork).BroadcastedMsgs
+		broadcastedMsgs := config.GetNetwork().(*spectestingutils.TestingNetwork).BroadcastedMsgs
 		require.Greater(t, len(broadcastedMsgs), 0)
 		found := false
 		for _, msg := range broadcastedMsgs {

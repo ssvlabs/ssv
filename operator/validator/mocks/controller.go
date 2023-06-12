@@ -84,18 +84,17 @@ func (mr *MockControllerMockRecorder) GetOperatorData() *gomock.Call {
 }
 
 // GetOperatorShares mocks base method.
-func (m *MockController) GetOperatorShares(logger *zap.Logger) ([]*types.SSVShare, error) {
+func (m *MockController) GetOperatorShares() []*types.SSVShare {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetOperatorShares", logger)
+	ret := m.ctrl.Call(m, "GetOperatorShares")
 	ret0, _ := ret[0].([]*types.SSVShare)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	return ret0
 }
 
 // GetOperatorShares indicates an expected call of GetOperatorShares.
-func (mr *MockControllerMockRecorder) GetOperatorShares(logger interface{}) *gomock.Call {
+func (mr *MockControllerMockRecorder) GetOperatorShares() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorShares", reflect.TypeOf((*MockController)(nil).GetOperatorShares), logger)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorShares", reflect.TypeOf((*MockController)(nil).GetOperatorShares))
 }
 
 // GetValidator mocks base method.
@@ -114,9 +113,9 @@ func (mr *MockControllerMockRecorder) GetValidator(pubKey interface{}) *gomock.C
 }
 
 // GetValidatorStats mocks base method.
-func (m *MockController) GetValidatorStats(logger *zap.Logger) (uint64, uint64, uint64, error) {
+func (m *MockController) GetValidatorStats() (uint64, uint64, uint64, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetValidatorStats", logger)
+	ret := m.ctrl.Call(m, "GetValidatorStats")
 	ret0, _ := ret[0].(uint64)
 	ret1, _ := ret[1].(uint64)
 	ret2, _ := ret[2].(uint64)
@@ -125,9 +124,9 @@ func (m *MockController) GetValidatorStats(logger *zap.Logger) (uint64, uint64, 
 }
 
 // GetValidatorStats indicates an expected call of GetValidatorStats.
-func (mr *MockControllerMockRecorder) GetValidatorStats(logger interface{}) *gomock.Call {
+func (mr *MockControllerMockRecorder) GetValidatorStats() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidatorStats", reflect.TypeOf((*MockController)(nil).GetValidatorStats), logger)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidatorStats", reflect.TypeOf((*MockController)(nil).GetValidatorStats))
 }
 
 // ListenToEth1Events mocks base method.
