@@ -261,7 +261,7 @@ func (n *p2pNetwork) makeSyncRequest(logger *zap.Logger, peers []peer.ID, mid sp
 		if err != nil {
 			// TODO: is this how to check for ErrNotSupported?
 			var e multistream.ErrNotSupported[libp2p_protocol.ID]
-			if errors.Is(err, e) {
+			if !errors.Is(err, e) {
 				logger.Debug("could not make stream request", zap.Error(err))
 			}
 			continue

@@ -30,9 +30,8 @@ const (
 
 // Config holds the configuration options for p2p network
 type Config struct {
-	Ctx context.Context
-	// prod enr
-	Bootnodes string `yaml:"Bootnodes" env:"BOOTNODES" env-description:"Bootnodes to use to start discovery, seperated with ';'" env-default:"enr:-Li4QO2k62g1tiwitaoFVMT8zN-sSNPp8cg8Kv-5lg6_6VLjVZREhxVMSmerOTptlKbBaO2iszi7rvKBYzbGf38HpcSGAYLoed50h2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCLdWuKJc2VjcDI1NmsxoQITQ1OchoBl5XW9RfBembdN9Er1qNEOIc5ohrQ0rT9B-YN0Y3CCE4iDdWRwgg-g;enr:-Li4QAxqhjjQN2zMAAEtOF5wlcr2SFnPKINvvlwMXztJhClrfRYLrqNy2a_dMUwDPKcvM7bebq3uptRoGSV0LpYEJuyGAYRZG5n5h2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhBLb3g2Jc2VjcDI1NmsxoQLbXMJi_Pq3imTq11EwH8MbxmXlHYvH2Drz_rsqP1rNyoN0Y3CCE4iDdWRwgg-g"`
+	Ctx       context.Context
+	Bootnodes string `yaml:"Bootnodes" env:"BOOTNODES" env-description:"Bootnodes to use to start discovery, seperated with ';'" env-default:""`
 	Discovery string `yaml:"Discovery" env:"P2P_DISCOVERY" env-description:"Discovery system to use" env-default:"discv5"`
 
 	TCPPort     int    `yaml:"TcpPort" env:"TCP_PORT" env-default:"13001" env-description:"TCP port for p2p transport"`
@@ -79,18 +78,12 @@ type Config struct {
 
 	GetValidatorStats network.GetValidatorStats
 
-	PermissionedActivateEpoch   uint64 `yaml:"PermissionedActivateEpoch" env:"PERMISSIONED_ACTIVE_EPOCH" env-default:"99999999999999" env-description:"On which epoch to start only accepting peers that are operators registered in the contract"`
-	PermissionedDeactivateEpoch uint64 `yaml:"PermissionedDeactivateEpoch" env:"PERMISSIONED_DEACTIVE_EPOCH" env-default:"0" env-description:"On which epoch to start accepting operators all peers"`
+	PermissionedActivateEpoch   uint64 `yaml:"PermissionedActivateEpoch" env:"PERMISSIONED_ACTIVE_EPOCH" env-default:"0" env-description:"On which epoch to start only accepting peers that are operators registered in the contract"`
+	PermissionedDeactivateEpoch uint64 `yaml:"PermissionedDeactivateEpoch" env:"PERMISSIONED_DEACTIVE_EPOCH" env-default:"99999999999999" env-description:"On which epoch to start accepting operators all peers"`
 
 	Permissioned func() bool // this is not loaded from config file but set up in full node setup
 	// WhitelistedOperatorKeys is an array of Operator Public Key PEMs not registered in the contract with which the node will accept connections
 	WhitelistedOperatorKeys []string `yaml:"WhitelistedOperatorKeys" env:"WHITELISTED_KEYS" env-description:"Operators' keys not registered in the contract with which the node will accept connections"`
-}
-
-// StageExporterPubkeys is used to whitelist the exporters  TODO: Add to mainnet/testnet configs
-var StageExporterPubkeys = []string{
-	"LS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBd01Lck9lU1ZzMDRaSk00OFZuZGgKMmJqVmtSMFRiblZxZVBrZVA4L3RDMUVOTFhHYW5zb0cvUzRYdEQ3Y25zbE1Dekwvb0RuTFZLL2lBVndtelNJQQpUZTZOWXdMY3hQVzhiNlo2d0ZBZ0RjSm1ZeVBYRUxYMGJ1UWhOL01ZSFE0bnJvRlpwdmRhUXBGS0w3Tjk1cHhzCnlkeXArUmJjVzcyWnFjamlmR1cvVytsblpzZStmVjRlODU3a1pSY29UQUJHdGxsQ1p0N3BNeGU4blYxSmRFaEoKenFSNDdabjQ0SE4zVUZIbFFSMjBTNWxkSlRzSFdkMExJcjNlYmJWSnV0Uzd2ZmxEbThYOWhoUXErYnpjZ2JQOQplejlZTjVFdzRaRE8xcGFkVlkzOFdiVzFEZWxoUkpLTFNhRjN0RXlpZE1mNkk2bmJJekRQVWpIZ1lYSjZLQ3I5CjJ3SURBUUFCCi0tLS0tRU5EIFJTQSBQVUJMSUMgS0VZLS0tLS0K",
-	"LS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBbk9aQzNieDkyUE50WU93VnpDa2IKa3djZk84VGRsaW1vYjNzTEZtUE1VTzhNai9IUEp1N2RUU1JpMWpkTDZQNVNLbVNtMzl2cXdIRURxM3dtQzFjVwpsTzlTWlg5bDNORDNmM1VBN1JIK283WUFRa0VpakVTMUE0RUVmOTdKSkdqdE1SUTExRWFpelZkUnVSamRxU1RSClVIdE80Z3ZZK0NGTnEzSDZOdXh2OFVmL2lOV3ZyQWxleDdzWFlzUHF6SUQveHR6UGJGbXduZlE1bC9kUlgwYUEKYkpLVzJraElBdmpxSitkam5PMWdkWE9zc0xQZEFHM3pySkdJQnBWenpIaERtRUVmSVFrQUd5Mi9WYVBkcHd3dQpCNTlNRGJ2TmtLakdWR1c1VGl4R2hzaWN6Mmh4b3dhSlJjaHF1V042djZrcEpPTEFUYVkySHMzL1pSTlNwRmZJCjFRSURBUUFCCi0tLS0tRU5EIFJTQSBQVUJMSUMgS0VZLS0tLS0K",
 }
 
 // Libp2pOptions creates options list for the libp2p host
@@ -174,11 +167,14 @@ func (c *Config) configureAddrs(logger *zap.Logger, opts []libp2p.Option) ([]lib
 
 // TransformBootnodes converts bootnodes string and convert it to slice
 func (c *Config) TransformBootnodes() []string {
-	items := strings.Split(c.Bootnodes, ";")
-	if len(items) == 0 {
-		items = append(items, c.Network.Bootnodes...)
+
+	if c.Bootnodes == "" {
+		return c.Network.Bootnodes
 	}
-	return items
+
+	// extend additional bootnodes from config
+	extraBootnodes := strings.Split(c.Bootnodes, ";")
+	return append(extraBootnodes, c.Network.Bootnodes...)
 }
 
 func userAgent(fromCfg string) string {

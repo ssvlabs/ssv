@@ -13,42 +13,42 @@ import (
 	zap "go.uber.org/zap"
 )
 
-// MockTicker is a mock of Ticker interface
+// MockTicker is a mock of Ticker interface.
 type MockTicker struct {
 	ctrl     *gomock.Controller
 	recorder *MockTickerMockRecorder
 }
 
-// MockTickerMockRecorder is the mock recorder for MockTicker
+// MockTickerMockRecorder is the mock recorder for MockTicker.
 type MockTickerMockRecorder struct {
 	mock *MockTicker
 }
 
-// NewMockTicker creates a new mock instance
+// NewMockTicker creates a new mock instance.
 func NewMockTicker(ctrl *gomock.Controller) *MockTicker {
 	mock := &MockTicker{ctrl: ctrl}
 	mock.recorder = &MockTickerMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockTicker) EXPECT() *MockTickerMockRecorder {
 	return m.recorder
 }
 
-// Start mocks base method
+// Start mocks base method.
 func (m *MockTicker) Start(logger *zap.Logger) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Start", logger)
 }
 
-// Start indicates an expected call of Start
+// Start indicates an expected call of Start.
 func (mr *MockTickerMockRecorder) Start(logger interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockTicker)(nil).Start), logger)
 }
 
-// Subscribe mocks base method
+// Subscribe mocks base method.
 func (m *MockTicker) Subscribe(subscription chan phase0.Slot) event.Subscription {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Subscribe", subscription)
@@ -56,7 +56,7 @@ func (m *MockTicker) Subscribe(subscription chan phase0.Slot) event.Subscription
 	return ret0
 }
 
-// Subscribe indicates an expected call of Subscribe
+// Subscribe indicates an expected call of Subscribe.
 func (mr *MockTickerMockRecorder) Subscribe(subscription interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Subscribe", reflect.TypeOf((*MockTicker)(nil).Subscribe), subscription)

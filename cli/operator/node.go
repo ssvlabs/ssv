@@ -108,7 +108,7 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		cfg.P2pNetworkConfig.Permissioned = permissioned
-		cfg.P2pNetworkConfig.WhitelistedOperatorKeys = append(cfg.P2pNetworkConfig.WhitelistedOperatorKeys, p2pv1.StageExporterPubkeys...) // TODO: get whitelisted from network config
+		cfg.P2pNetworkConfig.WhitelistedOperatorKeys = append(cfg.P2pNetworkConfig.WhitelistedOperatorKeys, networkConfig.WhitelistedOperatorKeys...)
 
 		p2pNetwork := setupP2P(forkVersion, operatorData, db, logger, networkConfig)
 
@@ -131,7 +131,6 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.Network = p2pNetwork
 		cfg.SSVOptions.ValidatorOptions.Beacon = el
 		cfg.SSVOptions.ValidatorOptions.KeyManager = keyManager
-		cfg.SSVOptions.ValidatorOptions.CleanRegistryData = cfg.ETH1Options.CleanRegistryData
 
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = nodeStorage.GetPrivateKey
 		cfg.SSVOptions.ValidatorOptions.OperatorData = operatorData
@@ -177,7 +176,7 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, uint64, error) {
-			return validatorCtrl.GetValidatorStats(logger)
+			return validatorCtrl.GetValidatorStats()
 		}
 		if err := p2pNetwork.Setup(logger); err != nil {
 			logger.Fatal("failed to setup network", zap.Error(err))
@@ -205,7 +204,7 @@ func setupGlobal(cmd *cobra.Command) (*zap.Logger, error) {
 	}
 	if globalArgs.ShareConfigPath != "" {
 		if err := cleanenv.ReadConfig(globalArgs.ShareConfigPath, &cfg); err != nil {
-			return nil, fmt.Errorf("could not read share config: %W", err)
+			return nil, fmt.Errorf("could not read share config: %w", err)
 		}
 	}
 
@@ -270,7 +269,10 @@ func setupDb(logger *zap.Logger, eth2Network beaconprotocol.Network) (basedb.IDb
 }
 
 func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.Storage, *registrystorage.OperatorData) {
-	nodeStorage := operatorstorage.NewNodeStorage(db)
+	nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)
+	if err != nil {
+		logger.Fatal("failed to create node storage", zap.Error(err))
+	}
 	operatorPubKey, err := nodeStorage.SetupPrivateKey(logger, cfg.OperatorPrivateKey, cfg.GenerateOperatorPrivateKey)
 	if err != nil {
 		logger.Fatal("could not setup operator private key", zap.Error(err))
@@ -327,9 +329,12 @@ func setupP2P(
 		logger.Fatal("failed to setup network private key", zap.Error(err))
 	}
 
-	cfg.P2pNetworkConfig.NodeStorage = operatorstorage.NewNodeStorage(db)
+	cfg.P2pNetworkConfig.NodeStorage, err = operatorstorage.NewNodeStorage(logger, db)
+	if err != nil {
+		logger.Fatal("failed to create node storage", zap.Error(err))
+	}
 	if len(cfg.P2pNetworkConfig.Subnets) == 0 {
-		subnets := getNodeSubnets(logger, cfg.P2pNetworkConfig.NodeStorage.GetFilteredShares, forkVersion, operatorData.ID)
+		subnets := getNodeSubnets(logger, cfg.P2pNetworkConfig.NodeStorage.Shares().List, forkVersion, operatorData.ID)
 		cfg.P2pNetworkConfig.Subnets = subnets.String()
 	}
 
@@ -387,8 +392,7 @@ func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.IDb,
 	metricsHandler := metrics.NewMetricsHandler(ctx, db, enableProf, operatorNode.(metrics.HealthCheckAgent))
 	addr := fmt.Sprintf(":%d", port)
 	if err := metricsHandler.Start(logger, http.NewServeMux(), addr); err != nil {
-		// TODO: stop node if metrics setup failed?
-		logger.Error("failed to start", zap.Error(err))
+		logger.Panic("failed to serve metrics", zap.Error(err))
 	}
 }
 
@@ -396,17 +400,13 @@ func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.IDb,
 // note that we'll trigger another update once finished processing registry events
 func getNodeSubnets(
 	logger *zap.Logger,
-	getFiltered registrystorage.FilteredSharesFunc,
+	getFiltered registrystorage.SharesListFunc,
 	ssvForkVersion forksprotocol.ForkVersion,
 	operatorID spectypes.OperatorID,
 ) records.Subnets {
 	f := forksfactory.NewFork(ssvForkVersion)
 	subnetsMap := make(map[int]bool)
-	shares, err := getFiltered(logger, registrystorage.ByOperatorIDAndNotLiquidated(operatorID))
-	if err != nil {
-		logger.Warn("could not read validators to bootstrap subnets")
-		return nil
-	}
+	shares := getFiltered(registrystorage.ByOperatorID(operatorID), registrystorage.ByNotLiquidated())
 	for _, share := range shares {
 		subnet := f.ValidatorSubnet(hex.EncodeToString(share.ValidatorPubKey))
 		if subnet < 0 {

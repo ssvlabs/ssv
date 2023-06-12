@@ -173,7 +173,7 @@ More information regarding the protocol can be found in [iBFT annotated paper (B
 
 `SignedMessage` is a wrapper for QBFT messages, it holds a message and its signature with a list of signer IDs:
 
-More details can be found in the [QBFT spec](https://github.com/bloxapp/ssv/blob/ssv_spec/docs/spec/qbft/messages.go).
+More details can be found in the [QBFT spec](https://github.com/bloxapp/ssv-spec/blob/main/qbft/messages.go).
 
 <details>
   <summary><b>protobuf</b></summary>

@@ -2,6 +2,7 @@ package p2pv1
 
 import (
 	"encoding/hex"
+	"fmt"
 	"math/rand"
 	"net"
 	"strings"
@@ -59,7 +60,9 @@ func (n *p2pNetwork) Setup(logger *zap.Logger) error {
 	rand.Seed(time.Now().UnixNano()) // nolint: staticcheck
 	logger.Info("configuring")
 
-	n.initCfg()
+	if err := n.initCfg(); err != nil {
+		return fmt.Errorf("init config: %w", err)
+	}
 
 	err := n.SetupHost(logger)
 	if err != nil {
@@ -78,7 +81,7 @@ func (n *p2pNetwork) Setup(logger *zap.Logger) error {
 	return nil
 }
 
-func (n *p2pNetwork) initCfg() {
+func (n *p2pNetwork) initCfg() error {
 	if n.cfg.RequestTimeout == 0 {
 		n.cfg.RequestTimeout = defaultReqTimeout
 	}
@@ -89,8 +92,7 @@ func (n *p2pNetwork) initCfg() {
 		s := make(records.Subnets, 0)
 		subnets, err := s.FromString(strings.Replace(n.cfg.Subnets, "0x", "", 1))
 		if err != nil {
-			// TODO: handle
-			return
+			return fmt.Errorf("parse subnet: %w", err)
 		}
 		n.subnets = subnets
 	}
@@ -100,6 +102,8 @@ func (n *p2pNetwork) initCfg() {
 	if n.cfg.TopicMaxPeers <= 0 {
 		n.cfg.TopicMaxPeers = minPeersBuffer / 2
 	}
+
+	return nil
 }
 
 // SetupHost configures a libp2p host and backoff connector utility

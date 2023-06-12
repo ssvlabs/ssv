@@ -122,13 +122,13 @@ func TestDutyFetcher_AddMissingSlots(t *testing.T) {
 
 func createIndexFetcher(ctrl *gomock.Controller, result []phase0.ValidatorIndex) *mocks.MockvalidatorsIndicesFetcher {
 	indexFetcher := mocks.NewMockvalidatorsIndicesFetcher(ctrl)
-	indexFetcher.EXPECT().GetValidatorsIndices(gomock.Any()).Return(result).Times(1)
+	indexFetcher.EXPECT().ActiveValidatorIndices(gomock.Any()).Return(result).Times(1)
 
 	return indexFetcher
 }
 
-func createBeaconDutiesClient(ctrl *gomock.Controller, result []*spectypes.Duty, err error) *beacon.MockBeacon {
-	client := beacon.NewMockBeacon(ctrl)
+func createBeaconDutiesClient(ctrl *gomock.Controller, result []*spectypes.Duty, err error) *beacon.MockBeaconNode {
+	client := beacon.NewMockBeaconNode(ctrl)
 	client.EXPECT().GetDuties(gomock.Any(), gomock.Any(), gomock.Any()).Return(result, err).MaxTimes(1)
 	client.EXPECT().SubscribeToCommitteeSubnet(gomock.Any()).Return(nil).MaxTimes(1)
 
