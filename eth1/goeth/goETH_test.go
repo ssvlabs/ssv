@@ -10,7 +10,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/prysmaticlabs/prysm/async/event"
+	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/eth1"

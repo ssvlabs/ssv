@@ -6,7 +6,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/prysmaticlabs/prysm/async/event"
+	"github.com/prysmaticlabs/prysm/v4/async/event"
 )
 
 //go:generate mockgen -package=eth1 -destination=./mock_client.go -source=./client.go

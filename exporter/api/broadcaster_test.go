@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/prysmaticlabs/prysm/async/event"
+	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 )

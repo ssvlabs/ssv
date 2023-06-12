@@ -9,7 +9,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	event "github.com/prysmaticlabs/prysm/async/event"
+	event "github.com/prysmaticlabs/prysm/v4/async/event"
 	zap "go.uber.org/zap"
 )
 

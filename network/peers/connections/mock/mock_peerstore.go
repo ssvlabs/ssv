@@ -7,6 +7,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
+	libp2p_protocol "github.com/libp2p/go-libp2p/core/protocol"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/pkg/errors"
 )
@@ -15,7 +16,7 @@ var _ peerstore.Peerstore = Peerstore{}
 
 type Peerstore struct {
 	ExistingPIDs               []peer.ID
-	MockFirstSupportedProtocol string
+	MockFirstSupportedProtocol libp2p_protocol.ID
 }
 
 func (p Peerstore) Close() error {
@@ -117,32 +118,32 @@ func (p Peerstore) LatencyEWMA(id peer.ID) time.Duration {
 	panic("implement me")
 }
 
-func (p Peerstore) GetProtocols(id peer.ID) ([]string, error) {
+func (p Peerstore) GetProtocols(id peer.ID) ([]libp2p_protocol.ID, error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (p Peerstore) AddProtocols(id peer.ID, s ...string) error {
+func (p Peerstore) AddProtocols(id peer.ID, s ...libp2p_protocol.ID) error {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (p Peerstore) SetProtocols(id peer.ID, s ...string) error {
+func (p Peerstore) SetProtocols(id peer.ID, s ...libp2p_protocol.ID) error {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (p Peerstore) RemoveProtocols(id peer.ID, s ...string) error {
+func (p Peerstore) RemoveProtocols(id peer.ID, s ...libp2p_protocol.ID) error {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (p Peerstore) SupportsProtocols(id peer.ID, s ...string) ([]string, error) {
+func (p Peerstore) SupportsProtocols(id peer.ID, s ...libp2p_protocol.ID) ([]libp2p_protocol.ID, error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (p Peerstore) FirstSupportedProtocol(id peer.ID, s ...string) (string, error) {
+func (p Peerstore) FirstSupportedProtocol(id peer.ID, s ...libp2p_protocol.ID) (libp2p_protocol.ID, error) {
 	if len(p.MockFirstSupportedProtocol) != 0 {
 		return p.MockFirstSupportedProtocol, nil
 	} else {

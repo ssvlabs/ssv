@@ -14,7 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/prysm/async/event"
+	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth1"
@@ -620,7 +620,7 @@ func (c *controller) onShareCreate(logger *zap.Logger, validatorEvent abiparser.
 	}
 
 	// save validator data
-	if err := c.sharesStorage.Save(logger, share); err != nil {
+	if err := c.sharesStorage.Save(share); err != nil {
 		return nil, errors.Wrap(err, "could not save validator share")
 	}
 
