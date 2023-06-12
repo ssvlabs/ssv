@@ -185,6 +185,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 		if err != nil {
 			return errors.Wrap(err, "could not create ID service")
 		}
+		ids.Start()
 	}
 
 	subnetsProvider := func() records.Subnets {
