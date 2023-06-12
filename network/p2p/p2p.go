@@ -216,7 +216,8 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 	for range ticker.C {
 		start := time.Now()
 
-		addedSubnets, removedSubnets, err := n.subscriber.Update(logger)
+		// Subscribe/Unsubscribe to subnets according to changes in the active validators.
+		subnets, addedSubnets, removedSubnets, err := n.subscriber.Update(logger)
 		if err != nil {
 			logger.Warn("could not update subnets", zap.Error(err))
 		}
@@ -224,12 +225,14 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 			// Nothing changed.
 			continue
 		}
-		n.subnets = n.subscriber.Subnets()
 
+		// Update our own node record.
+		n.subnets = subnets
 		self := n.idx.Self()
 		self.Metadata.Subnets = records.Subnets(n.subnets).String()
 		n.idx.UpdateSelfRecord(self)
 
+		// Register/Deregister to subnets via discovery.
 		if len(addedSubnets) > 0 {
 			err = n.disc.RegisterSubnets(logger.Named(logging.NameDiscoveryService), addedSubnets...)
 			if err != nil {

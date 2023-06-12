@@ -83,34 +83,21 @@ func (s *subscriber) RemoveValidator(pk spectypes.ValidatorPK) {
 	}
 }
 
-func (s *subscriber) Subnets() []byte {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	subnets := make([]byte, s.fork.Subnets())
-	for subnet, validators := range s.subscriptions {
-		if validators > 0 {
-			subnets[subnet] = 1
-		}
-	}
-	return subnets
-}
-
 // Update subscribes/unsubscribes from subnets based on the current state of
 // the validator set.
 //
 // Update always keeps the subnets specified in `constantSubnets` active.
-func (s *subscriber) Update(logger *zap.Logger) (addedSubnets []int, removedSubnets []int, err error) {
-	addedSubnets, removedSubnets = s.changes()
+func (s *subscriber) Update(logger *zap.Logger) (subnets []byte, added []int, removed []int, err error) {
+	subnets, added, removed = s.changes()
 
 	// Subscribe to new subnets.
-	for subnet := range addedSubnets {
+	for subnet := range added {
 		subscribeErr := s.topicsCtrl.Subscribe(logger, s.fork.SubnetTopicID(subnet))
 		err = errors.Join(err, subscribeErr)
 	}
 
 	// Unsubscribe from inactive subnets.
-	for _, subnet := range removedSubnets {
+	for _, subnet := range removed {
 		unsubscribeErr := s.topicsCtrl.Unsubscribe(logger, s.fork.SubnetTopicID(subnet), false)
 		err = errors.Join(err, unsubscribeErr)
 	}
@@ -119,11 +106,30 @@ func (s *subscriber) Update(logger *zap.Logger) (addedSubnets []int, removedSubn
 
 // changes returns the list of subnets that should be subscribed to and
 // unsubscribed from.
-func (s *subscriber) changes() (addSubnets []int, removeSubnets []int) {
+func (s *subscriber) changes() (subnets []byte, added []int, removed []int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	addSubnets, removeSubnets = s.addSubnets, s.removeSubnets
+	added, removed = s.addSubnets, s.removeSubnets
 	s.addSubnets, s.removeSubnets = nil, nil
+	subnets = s.subnets()
 	return
+}
+
+func (s *subscriber) subnets() []byte {
+	subnets := make([]byte, len(s.subscriptions))
+	for subnet, validators := range s.subscriptions {
+		if validators > 0 {
+			subnets[subnet] = 1
+		}
+	}
+	return subnets
+}
+
+// Subnets returns the list of currently active subnets.
+func (s *subscriber) Subnets() []byte {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.subnets()
 }

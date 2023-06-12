@@ -41,6 +41,7 @@ func TestSubscriber(t *testing.T) {
 		mockTopicCtrl.EXPECT().Unsubscribe(logger, string("test-id-0"), false).Return(nil).Times(1)
 		mockTopicCtrl.EXPECT().Unsubscribe(logger, string("test-id-1"), false).Return(nil).Times(1)
 
+		// Add 3 validators (2 subnets)
 		subscriber.AddValidator(pk1)
 		assert.Equal(t, 1, countOnes(subscriber.Subnets()))
 		subscriber.AddValidator(pk2)
@@ -48,34 +49,41 @@ func TestSubscriber(t *testing.T) {
 		subscriber.AddValidator(pk3)
 		assert.Equal(t, 2, countOnes(subscriber.Subnets()))
 
-		newSubnets, inactiveSubnets, err := subscriber.Update(logger)
+		subnets, added, removed, err := subscriber.Update(logger)
 		assert.Nil(t, err)
-		assert.ElementsMatch(t, []int{0, 1}, newSubnets)
-		assert.Empty(t, inactiveSubnets)
+		assert.ElementsMatch(t, []int{0, 1}, added)
+		assert.Empty(t, removed)
+		assert.True(t, subnets[0] == 1 && subnets[1] == 1)
 
+		// Remove validator #1
 		subscriber.RemoveValidator(pk1)
 		assert.Equal(t, 2, countOnes(subscriber.Subnets()))
 
-		newSubnets, inactiveSubnets, err = subscriber.Update(logger)
+		subnets, added, removed, err = subscriber.Update(logger)
 		assert.Nil(t, err)
-		assert.Empty(t, newSubnets)
-		assert.Empty(t, inactiveSubnets)
+		assert.Empty(t, added)
+		assert.Empty(t, removed)
+		assert.True(t, subnets[0] == 1 && subnets[1] == 1)
 
+		// Remove validator #2
 		subscriber.RemoveValidator(pk2)
 		assert.Equal(t, 1, countOnes(subscriber.Subnets()))
 
-		newSubnets, inactiveSubnets, err = subscriber.Update(logger)
+		subnets, added, removed, err = subscriber.Update(logger)
 		assert.Nil(t, err)
-		assert.Empty(t, newSubnets)
-		assert.Equal(t, []int{0}, inactiveSubnets)
+		assert.Empty(t, added)
+		assert.Equal(t, []int{0}, removed)
+		assert.True(t, subnets[0] == 0 && subnets[1] == 1)
 
+		// Remove validator #3
 		subscriber.RemoveValidator(pk3)
 		assert.Equal(t, 0, countOnes(subscriber.Subnets()))
 
-		newSubnets, inactiveSubnets, err = subscriber.Update(logger)
+		subnets, added, removed, err = subscriber.Update(logger)
 		assert.Nil(t, err)
-		assert.Empty(t, newSubnets)
-		assert.ElementsMatch(t, []int{1}, inactiveSubnets)
+		assert.Empty(t, added)
+		assert.ElementsMatch(t, []int{1}, removed)
+		assert.True(t, subnets[0] == 0 && subnets[1] == 0)
 	})
 }
 
