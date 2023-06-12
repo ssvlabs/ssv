@@ -106,9 +106,9 @@ fi
 DIR=".k8/stage"
 DEPLOY_FILES=(
   "ssv-node-v3-1-deployment.yml"
-#  "ssv-node-v3-2-deployment.yml"
-#  "ssv-node-v3-3-deployment.yml"
-#  "ssv-node-v3-4-deployment.yml"
+  "ssv-node-v3-2-deployment.yml"
+  "ssv-node-v3-3-deployment.yml"
+  "ssv-node-v3-4-deployment.yml"
 )
 
 if [[ -d $DIR ]]; then
