@@ -207,25 +207,22 @@ func (n *p2pNetwork) isReady() bool {
 	return atomic.LoadInt32(&n.state) == stateReady
 }
 
-var fakeRoutine sync.Once
-
 // UpdateSubnets will update the registered subnets according to active validators
 // NOTE: it won't subscribe to the subnets (use subscribeToSubnets for that)
 func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
-	start := time.Now()
 	logger = logger.Named(logging.NameP2PNetwork)
-	ticker := time.NewTicker(2 * time.Second)
+	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 	for range ticker.C {
 		start := time.Now()
 
-		newSubnets, inactiveSubnets, err := n.subscriber.Update(logger)
+		addedSubnets, removedSubnets, err := n.subscriber.Update(logger)
 		if err != nil {
 			logger.Warn("could not update subnets", zap.Error(err))
 		}
-		if len(newSubnets) == 0 && len(inactiveSubnets) == 0 {
+		if len(addedSubnets) == 0 && len(removedSubnets) == 0 {
 			// Nothing changed.
-			return
+			continue
 		}
 		n.subnets = n.subscriber.Subnets()
 
@@ -233,27 +230,24 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 		self.Metadata.Subnets = records.Subnets(n.subnets).String()
 		n.idx.UpdateSelfRecord(self)
 
-		if len(newSubnets) > 0 {
-			err = n.disc.RegisterSubnets(logger.Named(logging.NameDiscoveryService), newSubnets...)
+		if len(addedSubnets) > 0 {
+			err = n.disc.RegisterSubnets(logger.Named(logging.NameDiscoveryService), addedSubnets...)
 			if err != nil {
 				logger.Warn("could not register subnets", zap.Error(err))
-				return
 			}
 		}
-		if len(inactiveSubnets) > 0 {
-			err = n.disc.DeregisterSubnets(logger.Named(logging.NameDiscoveryService), inactiveSubnets...)
+		if len(removedSubnets) > 0 {
+			err = n.disc.DeregisterSubnets(logger.Named(logging.NameDiscoveryService), removedSubnets...)
 			if err != nil {
 				logger.Warn("could not deregister subnets", zap.Error(err))
-				return
 			}
 		}
 
 		allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
-		subnetsList := records.SharedSubnets(allSubs, n.subnets, 0)
-		logger.Debug("updated subnets (node-info)",
-			zap.Any("subnets", subnetsList),
-			zap.Ints("new_subnets", newSubnets),
-			zap.Ints("inactive_subnets", inactiveSubnets),
+		logger.Debug("updated subntes",
+			zap.Any("subnets", records.SharedSubnets(allSubs, n.subnets, 0)),
+			zap.Ints("added", addedSubnets),
+			zap.Ints("removed", removedSubnets),
 			zap.Duration("took", time.Since(start)),
 		)
 	}
