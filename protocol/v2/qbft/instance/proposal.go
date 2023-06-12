@@ -35,6 +35,7 @@ func (i *Instance) uponProposal(logger *zap.Logger, signedProposal *specqbft.Sig
 	if signedProposal.Message.Round > i.State.Round {
 		i.config.GetTimer().TimeoutForRound(signedProposal.Message.Round)
 	}
+	logger.Debug("bumping round", fields.Round(newRound), zap.String("where", "(i *Instance) uponProposal"))
 	i.bumpToRound(newRound)
 
 	i.metrics.EndStageProposal()

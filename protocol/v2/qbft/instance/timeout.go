@@ -1,9 +1,10 @@
 package instance
 
 import (
-	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging/fields"
 )
 
 func (i *Instance) UponRoundTimeout(logger *zap.Logger) error {
@@ -15,6 +16,7 @@ func (i *Instance) UponRoundTimeout(logger *zap.Logger) error {
 	// Remember to track the impact of this change and revert/modify if necessary.
 	defer func() {
 		i.bumpToRound(newRound)
+		logger.Debug("bumping round", fields.Round(newRound), zap.String("where", "(i *Instance) UponRoundTimeout"))
 		i.State.ProposalAcceptedForCurrentRound = nil
 		i.config.GetTimer().TimeoutForRound(i.State.Round)
 	}()
