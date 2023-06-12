@@ -35,19 +35,16 @@
 ### Common Commands
 
 #### Build
-
 ```bash
 $ make build
 ```
 
 #### Test
-
 ```bash
 $ make full-test
 ```
 
 #### Lint
-
 ```bash
 $ make lint-prepare
 $ make lint
@@ -95,12 +92,11 @@ This section details the steps to run a local network of operator nodes.
 #### Prerequisites
 
 In order to run a local environment, install the following:
-
-- git
-- go (1.20)
-- docker
-- make
-- yq
+* git
+* go (1.20)
+* docker
+* make
+* yq
 
 #### Clone Repository
 
@@ -119,31 +115,31 @@ $ make build
 #### Use script:
 
 1. Download the latest executable from [ssv-keys](https://github.com/bloxapp/ssv-keys/releases)
-   1. Adjust permissions for ssv-keys executable `chmod +x ssv-keys-mac`
+   1. Adjust permissions for ssv-keys executable ```chmod +x ssv-keys-mac```
    2. Locate the executable in the same folder you are running the script
 2. Generate local config using [script](../scripts/generate_local_config.sh) \
-   1. Adjust permissions for the script `chmod +x generate_local_config.sh`
-   2. Execute `./generate_local_config.sh $OP_SIZE $KS_PATH $KS_PASSWORD $SSV_KEYS_PATH` \
+   1. Adjust permissions for the script ```chmod +x generate_local_config.sh```
+   2. Execute ```./generate_local_config.sh $OP_SIZE $KS_PATH $KS_PASSWORD $SSV_KEYS_PATH``` \
       `OP_SIZE` - number of operators to create [3f+1]. (e.g. 4 or 7 or 10 ...) \
       `KS_PATH` - path to keystore.json (e.g. ./keystore-m_12381_3600_0_0_0-1639058279.json)\
       `KS_PASSWORD` - keystore password (e.g. 12345678)
       `SSV_KEYS_PATH` - path to ssv-keys executable (default. ./bin/ssv-keys-mac)
 3. Place the generated yaml files to `./config` [directory](../config)
 4. Add the local events path to [config.yaml](../config/config.yaml) file
-   ```yaml
-   LocalEventsPath: ./config/events.yaml
-   ```
+    ```yaml
+    LocalEventsPath: ./config/events.yaml
+    ```
 5. Add the discovery "mdns" under p2p to [config.yaml](../config/config.yaml) file
-   ```yaml
-   p2p:
-     Discovery: mdns
-   ```
+    ```yaml
+    p2p:
+      Discovery: mdns
+    ```
 6. Add debug services to [config.yaml](../config/config.yaml) file, use the following to debug all components:
-   `yaml 
+    ```yaml 
     global:
       DebugServices: ssv/.*
-    `  
-   7Build and run 4 local nodes `docker-compose up --build ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4`
+    ```   
+7Build and run 4 local nodes ```docker-compose up --build ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4```
 
 #### Use manual steps:
 
@@ -157,20 +153,20 @@ $ make build
    2. fill the validator registration event with the data generated in section 4
 6. Place the `events.yaml` file in the `./config` directory (`./config/events.yaml`)
 7. Add the local events path to [config.yaml](../config/config.yaml) file
-   ```yaml
-   LocalEventsPath: ./config/events.yaml
-   ```
-8. Add debug services to [config.yaml](../config/config.yaml) file, use the following to debug all components:
-   ```yaml
-   global:
-     DebugServices: ssv/.*
-   ```
+    ```yaml
+    LocalEventsPath: ./config/events.yaml
+    ```
+8. Add debug services to [config.yaml](../config/config.yaml) file, use the following to debug all components: 
+    ```yaml 
+    global:
+      DebugServices: ssv/.*
+    ```
 9. Add the discovery "mdns" under p2p to [config.yaml](../config/config.yaml) file
-   ```yaml
-   p2p:
-     Discovery: mdns
-   ```
-10. Build and run 4 local nodes `docker-compose up --build ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4`
+    ```yaml
+    p2p:
+      Discovery: mdns
+    ```
+10. Build and run 4 local nodes ```docker-compose up --build ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4```
 
 ### Run
 
@@ -191,7 +187,6 @@ $ make docker-debug
 #### Prometheus and Grafana for local network
 
 In order to spin up local prometheus and grafana use:
-
 ```shell
 $ make docker-monitor
 ```
@@ -202,8 +197,8 @@ For a grafana dashboard, use the [SSV Operator dashboard](../monitoring/grafana/
 
 Please make sure your contributions adhere to our coding guidelines:
 
-- Code must adhere to the official Go [formatting](https://golang.org/doc/effective_go.html#formatting)
+* Code must adhere to the official Go [formatting](https://golang.org/doc/effective_go.html#formatting)
   guidelines (i.e. uses [gofmt](https://golang.org/cmd/gofmt/)).
-- Code must be documented adhering to the official Go [commentary](https://golang.org/doc/effective_go.html#commentary)
+* Code must be documented adhering to the official Go [commentary](https://golang.org/doc/effective_go.html#commentary)
   guidelines.
-- Pull requests need to be based on and opened against the `stage` branch, and its commits should be squashed on merge.
+* Pull requests need to be based on and opened against the `stage` branch, and its commits should be squashed on merge.
