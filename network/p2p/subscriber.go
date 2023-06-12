@@ -2,12 +2,12 @@ package p2pv1
 
 import (
 	"encoding/hex"
+	"errors"
 	"sync"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/network/topics"
-	"go.uber.org/multierr"
 	"go.uber.org/zap"
 )
 
@@ -106,13 +106,13 @@ func (s *subscriber) Update(logger *zap.Logger) (addedSubnets []int, removedSubn
 	// Subscribe to new subnets.
 	for subnet := range addedSubnets {
 		subscribeErr := s.topicsCtrl.Subscribe(logger, s.fork.SubnetTopicID(subnet))
-		err = multierr.Append(err, subscribeErr)
+		err = errors.Join(err, subscribeErr)
 	}
 
 	// Unsubscribe from inactive subnets.
 	for _, subnet := range removedSubnets {
 		unsubscribeErr := s.topicsCtrl.Unsubscribe(logger, s.fork.SubnetTopicID(subnet), false)
-		err = multierr.Append(err, unsubscribeErr)
+		err = errors.Join(err, unsubscribeErr)
 	}
 	return
 }
