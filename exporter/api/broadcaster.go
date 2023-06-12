@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/prysm/async/event"
+	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"go.uber.org/zap"
 )
 

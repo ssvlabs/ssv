@@ -3,10 +3,10 @@ package kv
 import (
 	"fmt"
 
-	"github.com/bloxapp/ssv/logging"
-
-	"github.com/dgraph-io/badger/v3"
+	"github.com/dgraph-io/badger/v4"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging"
 )
 
 // badgerLogger is a wrapper for badger.Logger

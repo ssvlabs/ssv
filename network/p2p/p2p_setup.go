@@ -16,7 +16,7 @@ import (
 	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/prysm/async"
+	"github.com/prysmaticlabs/prysm/v4/async"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging"
@@ -189,6 +189,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 		if err != nil {
 			return errors.Wrap(err, "could not create ID service")
 		}
+		ids.Start()
 	}
 
 	subnetsProvider := func() records.Subnets {
