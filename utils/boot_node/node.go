@@ -16,7 +16,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
-	"github.com/prysmaticlabs/prysm/network"
+	"github.com/prysmaticlabs/prysm/v4/network"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/beacon/goclient"
