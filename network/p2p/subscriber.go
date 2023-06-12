@@ -1,6 +1,7 @@
 package p2pv1
 
 import (
+	"context"
 	"encoding/hex"
 	"sync"
 
@@ -9,21 +10,19 @@ import (
 	"github.com/bloxapp/ssv/network/topics"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
-	"golang.org/x/exp/maps"
 )
 
 // subscriber keeps track of active validators and their corresponding subnets
 // and automatically subscribes/unsubscribes from subnets accordingly.
 type subscriber struct {
-	topicsCtrl      topics.Controller
-	fork            forks.Fork
-	constantSubnets []byte
+	topicsCtrl topics.Controller
+	fork       forks.Fork
 
-	validators       map[string]struct{}
-	subscriptions    map[int]int
-	newSubscriptions map[int]struct{}
-	subscriptionsMu  sync.Mutex
-	updateMu         sync.Mutex
+	validators                map[string]struct{}
+	subscriptions             []int
+	addSubnets, removeSubnets []int
+	changed                   chan struct{}
+	mu                        sync.Mutex
 }
 
 // newSubscriber creates a new subscriber.
@@ -31,19 +30,25 @@ type subscriber struct {
 // `constantSubnets` is a list of subnets that should always remain subscribed to,
 // regardless of they have active validators or not.
 func newSubscriber(topicsCtrl topics.Controller, fork forks.Fork, constantSubnets []byte) *subscriber {
-	return &subscriber{
-		topicsCtrl:       topicsCtrl,
-		fork:             fork,
-		constantSubnets:  constantSubnets,
-		validators:       make(map[string]struct{}),
-		subscriptions:    make(map[int]int),
-		newSubscriptions: make(map[int]struct{}),
+	s := &subscriber{
+		topicsCtrl:    topicsCtrl,
+		fork:          fork,
+		validators:    make(map[string]struct{}),
+		subscriptions: make([]int, fork.Subnets()),
+		changed:       make(chan struct{}, 1),
 	}
+	for subnet, active := range constantSubnets {
+		if active == 1 {
+			s.subscriptions[subnet] = 1
+			s.addSubnets = append(s.addSubnets, subnet)
+		}
+	}
+	return s
 }
 
 func (s *subscriber) AddValidator(pk spectypes.ValidatorPK) {
-	s.subscriptionsMu.Lock()
-	defer s.subscriptionsMu.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	pkHex := hex.EncodeToString(pk)
 	if _, ok := s.validators[pkHex]; ok {
@@ -54,17 +59,15 @@ func (s *subscriber) AddValidator(pk spectypes.ValidatorPK) {
 
 	// Increment subscriptions.
 	subnet := s.fork.ValidatorSubnet(pkHex)
-	if _, ok := s.subscriptions[subnet]; ok {
-		s.subscriptions[subnet]++
-	} else {
-		s.subscriptions[subnet] = 1
-		s.newSubscriptions[subnet] = struct{}{}
+	s.subscriptions[subnet]++
+	if s.subscriptions[subnet] == 1 {
+		s.addSubnets = append(s.addSubnets, subnet)
 	}
 }
 
 func (s *subscriber) RemoveValidator(logger *zap.Logger, pk spectypes.ValidatorPK) {
-	s.subscriptionsMu.Lock()
-	defer s.subscriptionsMu.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	pkHex := hex.EncodeToString(pk)
 	if _, ok := s.validators[pkHex]; !ok {
@@ -75,14 +78,15 @@ func (s *subscriber) RemoveValidator(logger *zap.Logger, pk spectypes.ValidatorP
 
 	// Decrement subscriptions.
 	subnet := s.fork.ValidatorSubnet(pkHex)
-	if _, ok := s.subscriptions[subnet]; ok {
-		s.subscriptions[subnet]--
+	s.subscriptions[subnet]--
+	if s.subscriptions[subnet] == 0 {
+		s.removeSubnets = append(s.removeSubnets, subnet)
 	}
 }
 
 func (s *subscriber) Subnets() []byte {
-	s.subscriptionsMu.Lock()
-	defer s.subscriptionsMu.Unlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	subnets := make([]byte, s.fork.Subnets())
 	for subnet, validators := range s.subscriptions {
@@ -97,42 +101,30 @@ func (s *subscriber) Subnets() []byte {
 // the validator set.
 //
 // Update always keeps the subnets specified in `constantSubnets` active.
-func (s *subscriber) Update(logger *zap.Logger) (newSubnets []int, inactiveSubnets []int, err error) {
-	s.updateMu.Lock()
-	defer s.updateMu.Unlock()
-
-	newSubnets, inactiveSubnets = s.updates()
+func (s *subscriber) Update(ctx context.Context, logger *zap.Logger) (addedSubnets []int, removedSubnets []int, err error) {
+	addedSubnets, removedSubnets = s.changes()
 
 	// Subscribe to new subnets.
-	for subnet := range newSubnets {
+	for subnet := range addedSubnets {
 		subscribeErr := s.topicsCtrl.Subscribe(logger, s.fork.SubnetTopicID(subnet))
 		err = multierr.Append(err, subscribeErr)
 	}
 
 	// Unsubscribe from inactive subnets.
-	for _, subnet := range inactiveSubnets {
+	for _, subnet := range removedSubnets {
 		unsubscribeErr := s.topicsCtrl.Unsubscribe(logger, s.fork.SubnetTopicID(subnet), false)
 		err = multierr.Append(err, unsubscribeErr)
 	}
 	return
 }
 
-// updates returns the list of new subnets and newly inactive subnets.
-func (s *subscriber) updates() (newSubnets []int, inactiveSubnets []int) {
-	s.subscriptionsMu.Lock()
-	defer s.subscriptionsMu.Unlock()
+// changes returns the list of subnets that should be subscribed to and
+// unsubscribed from.
+func (s *subscriber) changes() (addSubnets []int, removeSubnets []int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	// Get new subnets.
-	newSubnets = maps.Keys(s.newSubscriptions)
-	s.newSubscriptions = make(map[int]struct{})
-
-	// Compute inactive subnets.
-	inactiveSubnets = make([]int, 0, len(s.subscriptions))
-	for subnet, validators := range s.subscriptions {
-		if validators == 0 && s.constantSubnets[subnet] != 1 {
-			inactiveSubnets = append(inactiveSubnets, subnet)
-			delete(s.subscriptions, subnet)
-		}
-	}
+	addSubnets, removeSubnets = s.addSubnets, s.removeSubnets
+	s.addSubnets, s.removeSubnets = nil, nil
 	return
 }
