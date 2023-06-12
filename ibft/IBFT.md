@@ -24,7 +24,7 @@ _IBFT was first defined in EIP-650 and discussed at length in_ [_The Istanbul BF
 
 - **f** : the amount of faulty validator nodes that can be tolerated (and still reach consensus) out of n validator nodes, according to n≥3f+1 (f must be a whole number and is always rounded down); e.g., if there are 7 validator nodes (n=7), it is still possible to reach consensus with 2 faulty nodes (f=2), and if there are 4, 5 or 6 validator nodes, it is possible to reach consensus with 1 faulty node.
 - **p(i)**: process - a single validator node in a committee. (i) is the index identifier of the specific node.
-- **λ** : IBFT instance (changes for every slot); in the beacon chain system, λ corresponds to the slot number.
+- **λ** : IBFT instance (changes for every run); λ corresponds to the number of runs the instance has finished, this value is also known as the instance height.
 - **r:** IBFT round within an instance (starts with r=1 and resets every instance; in a perfect situation, there will be only one round per instance).
 - **inputValue** : the duty data from the beacon chain (for attestation/proposal); when it&#39;s sent by a validator node rather than fetched directly from the beacon chain, it&#39;s referred to as &quot;value&quot; (or &quot;v&quot;) rather than inputValue.
 - **pr** : used only in ROUND-CHANGE messages, indicates the highest round in which the node received a quorum of valid PREPARE messages; pr must always be lower than r (because in round change message, r is always the NEXT round) in a valid ROUND-CHANGE message. If the round change happens before the node receives a quorum of valid PREPARE messages during the current instance, pr will retain the default value of ⊥ (null).
@@ -44,7 +44,7 @@ _IBFT was first defined in EIP-650 and discussed at length in_ [_The Istanbul BF
 
 #### START Procedure
 
-START procedure is initiated at the beginning of an instance, and only once per instance. It includes the slot number λ (which is also used as the instance identifier) and the duty data inputValue. Both are taken from the Eth2 node.
+START procedure is initiated at the beginning of an instance, and only once per instance. It includes the instance height λ and the duty data inputValue taken from the Eth2 node.
 
 When the START procedure is initiated, all of the validator nodes set the timer to expire after t(r).
 
@@ -54,13 +54,11 @@ Leader selection occurs right after the START procedure is initiated.
 
 The leader is the validator node responsible for broadcasting the PROPOSAL message in a given round.
 
-At the beginning of each instance (when START procedure is initiated), one of the validator nodes is chosen to be the leader based on two values - the slot number λand the round number r.
+At the beginning of each instance (when START procedure is initiated), one of the validator nodes is chosen to be the leader based on two values - the instance height (λ) and the round number (r).
 
-The leader choosing mechanism is deterministic, i.e., for a given round and slot, there can be only one specific leader, which is crucial because each node must always know who should be the correct leader each round, and discard any PROPOSAL message broadcasted by an incorrect leader.
+The leader choosing mechanism is deterministic, i.e., for a given round and height (λ), there can be only one specific leader, which is crucial because each node must always know who should be the correct leader each round, and discard any PROPOSAL message broadcasted by an incorrect leader.
 
-As there is no way to predict future slot numbers for which the validator will have a duty (beyond the very next slot), there is no way to predict future leaders, which makes this deterministic mechanism secure.
-
-When there is more than one round in an instance, a new leader is chosen each round. In this case, only the round number r changes (the slot number λ always remains the same throughout all rounds in an instance), and leaders subsequent to the first will be selected according to their node indexes (e.g., if in round r=1 the node with index 2 (p(2)) is selected as the leader, in round r=2 the node with index 3 (p(3)) will be the leader).
+When there is more than one round in an instance, a new leader is chosen each round. In this case, only the round number r changes (the height, λ, always remains the same throughout all rounds in an instance), and leaders subsequent to the first will be selected according to their node indexes (e.g., if in round r=1 the node with index 2 (p(2)) is selected as the leader, in round r=2 the node with index 3 (p(3)) will be the leader).
 
 Once the leader node is selected, it broadcasts the PROPOSAL message <PROPOSAL, λ, r, inputValue> to all nodes.
 
