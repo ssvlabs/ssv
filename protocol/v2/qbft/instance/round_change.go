@@ -84,7 +84,6 @@ func (i *Instance) uponRoundChange(
 
 func (i *Instance) uponChangeRoundPartialQuorum(logger *zap.Logger, newRound specqbft.Round, instanceStartValue []byte) error {
 	i.bumpToRound(newRound)
-	logger.Debug("bumping round", fields.Round(newRound), zap.String("where", "(i *Instance) uponChangeRoundPartialQuorum"))
 	i.State.ProposalAcceptedForCurrentRound = nil
 	i.config.GetTimer().TimeoutForRound(i.State.Round)
 	roundChange, err := CreateRoundChange(i.State, i.config, newRound, instanceStartValue)

@@ -57,7 +57,6 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Heigh
 	i.startOnce.Do(func() {
 		i.StartValue = value
 		i.bumpToRound(specqbft.FirstRound)
-		logger.Debug("bumping round", fields.Round(specqbft.FirstRound), zap.String("where", "(i *Instance) Start"))
 		i.State.Height = height
 		i.metrics.StartStage()
 
