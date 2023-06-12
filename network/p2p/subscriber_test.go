@@ -53,7 +53,7 @@ func TestSubscriber(t *testing.T) {
 		assert.ElementsMatch(t, []int{0, 1}, newSubnets)
 		assert.Empty(t, inactiveSubnets)
 
-		subscriber.RemoveValidator(nil, pk1)
+		subscriber.RemoveValidator(pk1)
 		assert.Equal(t, 2, countOnes(subscriber.Subnets()))
 
 		newSubnets, inactiveSubnets, err = subscriber.Update(logger)
@@ -61,7 +61,7 @@ func TestSubscriber(t *testing.T) {
 		assert.Empty(t, newSubnets)
 		assert.Empty(t, inactiveSubnets)
 
-		subscriber.RemoveValidator(nil, pk2)
+		subscriber.RemoveValidator(pk2)
 		assert.Equal(t, 1, countOnes(subscriber.Subnets()))
 
 		newSubnets, inactiveSubnets, err = subscriber.Update(logger)
@@ -69,7 +69,7 @@ func TestSubscriber(t *testing.T) {
 		assert.Empty(t, newSubnets)
 		assert.Equal(t, []int{0}, inactiveSubnets)
 
-		subscriber.RemoveValidator(nil, pk3)
+		subscriber.RemoveValidator(pk3)
 		assert.Equal(t, 0, countOnes(subscriber.Subnets()))
 
 		newSubnets, inactiveSubnets, err = subscriber.Update(logger)

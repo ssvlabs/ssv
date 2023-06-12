@@ -71,19 +71,7 @@ func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) e
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
-	n.subscriber.RemoveValidator(logger, pk)
-	return nil
-}
-
-// subscribe to validator topics, as defined in the fork
-func (n *p2pNetwork) subscribe(logger *zap.Logger, pk spectypes.ValidatorPK) error {
-	topics := n.fork.ValidatorTopicID(pk)
-	for _, topic := range topics {
-		if err := n.topicsCtrl.Subscribe(logger, topic); err != nil {
-			// return errors.Wrap(err, "could not broadcast message")
-			return err
-		}
-	}
+	n.subscriber.RemoveValidator(pk)
 	return nil
 }
 

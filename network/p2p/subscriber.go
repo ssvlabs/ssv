@@ -1,7 +1,6 @@
 package p2pv1
 
 import (
-	"context"
 	"encoding/hex"
 	"sync"
 
@@ -65,7 +64,7 @@ func (s *subscriber) AddValidator(pk spectypes.ValidatorPK) {
 	}
 }
 
-func (s *subscriber) RemoveValidator(logger *zap.Logger, pk spectypes.ValidatorPK) {
+func (s *subscriber) RemoveValidator(pk spectypes.ValidatorPK) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -101,7 +100,7 @@ func (s *subscriber) Subnets() []byte {
 // the validator set.
 //
 // Update always keeps the subnets specified in `constantSubnets` active.
-func (s *subscriber) Update(ctx context.Context, logger *zap.Logger) (addedSubnets []int, removedSubnets []int, err error) {
+func (s *subscriber) Update(logger *zap.Logger) (addedSubnets []int, removedSubnets []int, err error) {
 	addedSubnets, removedSubnets = s.changes()
 
 	// Subscribe to new subnets.
