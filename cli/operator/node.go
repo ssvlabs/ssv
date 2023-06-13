@@ -128,7 +128,7 @@ var StartNodeCmd = &cobra.Command{
 			eth2Client.(nodeprobe.StatusChecker),
 		)
 
-		go nodeChecker.Run(ctx)
+		nodeChecker.Start(ctx)
 
 		cfg.SSVOptions.ForkVersion = forkVersion
 		cfg.SSVOptions.Context = ctx
