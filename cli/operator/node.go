@@ -167,7 +167,7 @@ var StartNodeCmd = &cobra.Command{
 			go startMetricsHandler(cmd.Context(), logger, db, cfg.MetricsAPIPort, cfg.EnableProfile)
 		}
 
-		nodeChecker.Wait()
+		//nodeChecker.Wait()
 		// TODO: use metrics in IsReady and remove metrics.WaitUntilHealthy
 		metrics.WaitUntilHealthy(logger, cfg.SSVOptions.Eth1Client, "execution client")
 		metrics.WaitUntilHealthy(logger, cfg.SSVOptions.BeaconNode, "consensus client")
