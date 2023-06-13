@@ -2,6 +2,7 @@ package nodeprobe
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -12,9 +13,8 @@ import (
 func TestProber(t *testing.T) {
 	ctx := context.Background()
 
-	checker := &statusChecker{
-		ready: true,
-	}
+	checker := &statusChecker{}
+	checker.ready.Store(true)
 
 	prober := NewProber(zap.L(), checker)
 	prober.interval = 1 * time.Millisecond
@@ -30,7 +30,7 @@ func TestProber(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, ready)
 
-	checker.ready = false
+	checker.ready.Store(false)
 	time.Sleep(2 * time.Second)
 
 	ready, err = prober.IsReady(ctx)
@@ -39,9 +39,9 @@ func TestProber(t *testing.T) {
 }
 
 type statusChecker struct {
-	ready bool
+	ready atomic.Bool
 }
 
 func (sc *statusChecker) IsReady(context.Context) (bool, error) {
-	return sc.ready, nil
+	return sc.ready.Load(), nil
 }
