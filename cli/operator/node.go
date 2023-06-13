@@ -31,6 +31,7 @@ import (
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/nodeprober"
 	"github.com/bloxapp/ssv/operator"
 	"github.com/bloxapp/ssv/operator/slot_ticker"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
@@ -118,6 +119,15 @@ var StartNodeCmd = &cobra.Command{
 		cfg.ETH2Options.Context = cmd.Context()
 		eth2Client, eth1Client := setupNodes(logger, operatorData.ID, networkConfig, slotTicker)
 
+		nodeChecker := nodeprober.NewProber(
+			logger,
+			eth1Client,
+			// Underlying options.Beacon's value implements nodechecker.StatusChecker.
+			// However, as it uses spec's specssv.BeaconNode interface, avoiding type assertion requires modifications in spec.
+			// If options.Beacon doesn't implement nodechecker.StatusChecker due to a mistake, this would panic early.
+			eth2Client.(nodeprober.StatusChecker),
+		)
+
 		cfg.SSVOptions.ForkVersion = forkVersion
 		cfg.SSVOptions.Context = ctx
 		cfg.SSVOptions.DB = db
@@ -130,9 +140,10 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.Context = ctx
 		cfg.SSVOptions.ValidatorOptions.DB = db
 		cfg.SSVOptions.ValidatorOptions.Network = p2pNetwork
+		cfg.SSVOptions.ValidatorOptions.KeyManager = keyManager
 		cfg.SSVOptions.ValidatorOptions.Beacon = eth2Client
 		cfg.SSVOptions.ValidatorOptions.Eth1Client = eth1Client
-		cfg.SSVOptions.ValidatorOptions.KeyManager = keyManager
+		cfg.SSVOptions.ValidatorOptions.NodeChecker = nodeChecker
 
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = nodeStorage.GetPrivateKey
 		cfg.SSVOptions.ValidatorOptions.OperatorData = operatorData
@@ -156,6 +167,8 @@ var StartNodeCmd = &cobra.Command{
 			go startMetricsHandler(cmd.Context(), logger, db, cfg.MetricsAPIPort, cfg.EnableProfile)
 		}
 
+		nodeChecker.Wait()
+		// TODO: use metrics in IsReady and remove metrics.WaitUntilHealthy
 		metrics.WaitUntilHealthy(logger, cfg.SSVOptions.Eth1Client, "execution client")
 		metrics.WaitUntilHealthy(logger, cfg.SSVOptions.BeaconNode, "consensus client")
 		metrics.ReportSSVNodeHealthiness(true)

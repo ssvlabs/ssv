@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	healthCheckTimeout        = 10 * time.Second
+	healthCheckTimeout        = 500 * time.Millisecond
 	blocksInBatch      uint64 = 100000
 )
 
@@ -103,15 +103,21 @@ func (ec *eth1Client) Sync(logger *zap.Logger, fromBlock *big.Int) error {
 }
 
 // IsReady returns if eth1 is currently ready: responds to requests and not in the syncing state.
-func (ec *eth1Client) IsReady() bool {
-	ctx, cancel := context.WithTimeout(ec.ctx, healthCheckTimeout)
+// TODO: add metrics
+func (ec *eth1Client) IsReady(ctx context.Context) (bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, healthCheckTimeout)
 	defer cancel()
 
 	sp, err := ec.conn.SyncProgress(ctx)
-	return err == nil && sp == nil
+	if err != nil {
+		return false, err
+	}
+
+	return sp == nil, nil
 }
 
 // HealthCheck provides health status of eth1 node
+// TODO: remove
 func (ec *eth1Client) HealthCheck() []string {
 	if ec.conn == nil {
 		return []string{"not connected to eth1 node"}

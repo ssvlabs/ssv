@@ -6,6 +6,7 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	"github.com/bloxapp/ssv/ibft/storage"
+	"github.com/bloxapp/ssv/nodeprober"
 	qbftctrl "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/types"
@@ -15,15 +16,11 @@ const (
 	DefaultQueueSize = 32
 )
 
-type NodeStatusChecker interface {
-	IsReady() bool
-}
-
 // Options represents options that should be passed to a new instance of Validator.
 type Options struct {
 	Network           specqbft.Network
 	Beacon            specssv.BeaconNode
-	Eth1              NodeStatusChecker
+	NodeChecker       nodeprober.StatusChecker
 	BeaconNetwork     spectypes.BeaconNetwork
 	Storage           *storage.QBFTStores
 	SSVShare          *types.SSVShare

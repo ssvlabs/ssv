@@ -218,9 +218,9 @@ func createValidator(t *testing.T, pCtx context.Context, id spectypes.OperatorID
 				Liquidated:   false,
 			},
 		},
-		Beacon: spectestingutils.NewTestingBeaconNode(),
-		Eth1:   ssvtesting.StatusChecker{},
-		Signer: km,
+		Beacon:      spectestingutils.NewTestingBeaconNode(),
+		NodeChecker: ssvtesting.StatusChecker{},
+		Signer:      km,
 	}
 
 	options.DutyRunners = validator.SetupRunners(ctx, logger, options)

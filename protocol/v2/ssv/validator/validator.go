@@ -13,6 +13,7 @@ import (
 
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/nodeprober"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
@@ -29,8 +30,7 @@ type Validator struct {
 
 	DutyRunners runner.DutyRunners
 	Network     specqbft.Network
-	Beacon      NodeStatusChecker
-	Eth1        NodeStatusChecker
+	NodeChecker nodeprober.StatusChecker
 	Share       *types.SSVShare
 	Signer      spectypes.KeyManager
 
@@ -53,18 +53,13 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		cancel:      cancel,
 		DutyRunners: options.DutyRunners,
 		Network:     options.Network,
-		Eth1:        options.Eth1,
+		NodeChecker: options.NodeChecker,
 		Storage:     options.Storage,
 		Share:       options.SSVShare,
 		Signer:      options.Signer,
 		Queues:      make(map[spectypes.BeaconRole]queueContainer),
 		state:       uint32(NotStarted),
 		dutyIDs:     hashmap.New[spectypes.BeaconRole, string](),
-	}
-
-	// Changing specssv.BeaconNode requires modifications in spec.
-	if beaconStatusChecker, ok := options.Beacon.(NodeStatusChecker); ok {
-		v.Beacon = beaconStatusChecker
 	}
 
 	for _, dutyRunner := range options.DutyRunners {
@@ -91,12 +86,8 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 
 // StartDuty starts a duty for the validator
 func (v *Validator) StartDuty(logger *zap.Logger, duty *spectypes.Duty) error {
-	eth1Ready, eth2Ready := v.Eth1.IsReady(), v.Beacon.IsReady()
-	if !eth1Ready || !eth2Ready {
-		logger.Panic("eth1 and eth2 nodes must be ready, otherwise there's a risk of getting slashed",
-			zap.Bool("eth1_ready", eth1Ready),
-			zap.Bool("eth2_ready", eth2Ready),
-		)
+	if ready, err := v.NodeChecker.IsReady(v.ctx); err != nil || !ready {
+		logger.Panic("nodes must be ready, otherwise there's a risk of getting slashed")
 	}
 
 	dutyRunner := v.DutyRunners[duty.Type]
