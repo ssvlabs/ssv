@@ -4,9 +4,9 @@ import (
 	"context"
 )
 
-type StatusChecker struct {
+type SuccessfulStatusChecker struct {
 }
 
-func (StatusChecker) IsReady(context.Context) (bool, error) {
+func (SuccessfulStatusChecker) IsReady(context.Context) (bool, error) {
 	return true, nil
 }

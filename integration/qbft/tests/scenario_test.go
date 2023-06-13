@@ -219,7 +219,7 @@ func createValidator(t *testing.T, pCtx context.Context, id spectypes.OperatorID
 			},
 		},
 		Beacon:      spectestingutils.NewTestingBeaconNode(),
-		NodeChecker: ssvtesting.StatusChecker{},
+		NodeChecker: ssvtesting.SuccessfulStatusChecker{},
 		Signer:      km,
 	}
 
