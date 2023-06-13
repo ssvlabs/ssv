@@ -171,15 +171,14 @@ func (gc *goClient) IsReady(ctx context.Context) (bool, error) {
 		return false, err
 	}
 
-	// TODO: also check if !syncState.ElOffline when github.com/attestantio/go-eth2-client supports it
-	ready := syncState != nil && !syncState.IsSyncing && !syncState.IsOptimistic
-	if !ready {
+	// TODO: also check if syncState.ElOffline when github.com/attestantio/go-eth2-client supports it
+	if syncState == nil || syncState.IsSyncing || syncState.IsOptimistic {
 		metricsBeaconNodeStatus.Set(float64(statusSyncing))
-	} else {
-		metricsBeaconNodeStatus.Set(float64(statusOK))
+		return false, nil
 	}
 
-	return ready, nil
+	metricsBeaconNodeStatus.Set(float64(statusOK))
+	return true, nil
 }
 
 // HealthCheck provides health status of beacon node

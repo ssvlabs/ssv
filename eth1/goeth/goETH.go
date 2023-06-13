@@ -113,14 +113,13 @@ func (ec *eth1Client) IsReady(ctx context.Context) (bool, error) {
 		return false, err
 	}
 
-	ready := sp == nil
-	if !ready {
+	if sp != nil {
 		reportNodeStatus(statusSyncing)
-	} else {
-		reportNodeStatus(statusOK)
+		return false, nil
 	}
 
-	return ready, nil
+	reportNodeStatus(statusOK)
+	return true, nil
 }
 
 // HealthCheck provides health status of eth1 node
