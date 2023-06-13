@@ -84,6 +84,8 @@ func (p *Prober) probe(ctx context.Context) {
 				p.logger.Error("node is not ready", zap.Error(err))
 			} else if syncing {
 				p.logger.Error("node is syncing")
+			} else {
+				p.logger.Info("node is ready")
 			}
 		}(node)
 	}
