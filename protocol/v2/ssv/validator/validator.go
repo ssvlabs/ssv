@@ -13,7 +13,7 @@ import (
 
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/nodeprober"
+	"github.com/bloxapp/ssv/nodeprobe"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
@@ -30,7 +30,7 @@ type Validator struct {
 
 	DutyRunners runner.DutyRunners
 	Network     specqbft.Network
-	NodeChecker nodeprober.StatusChecker
+	NodeChecker nodeprobe.StatusChecker
 	Share       *types.SSVShare
 	Signer      spectypes.KeyManager
 

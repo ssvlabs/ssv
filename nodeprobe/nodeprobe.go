@@ -1,4 +1,4 @@
-package nodeprober
+package nodeprobe
 
 import (
 	"context"
@@ -19,17 +19,19 @@ type StatusChecker interface {
 }
 
 type Prober struct {
-	logger *zap.Logger
-	nodes  []StatusChecker
-	ready  atomic.Bool
-	cond   *sync.Cond
+	logger   *zap.Logger
+	interval time.Duration
+	nodes    []StatusChecker
+	ready    atomic.Bool
+	cond     *sync.Cond
 }
 
 func NewProber(logger *zap.Logger, nodes ...StatusChecker) *Prober {
 	return &Prober{
-		logger: logger,
-		nodes:  nodes,
-		cond:   sync.NewCond(&sync.Mutex{}),
+		logger:   logger,
+		interval: probeInterval,
+		nodes:    nodes,
+		cond:     sync.NewCond(&sync.Mutex{}),
 	}
 }
 
@@ -37,8 +39,16 @@ func (p *Prober) IsReady(context.Context) (bool, error) {
 	return p.ready.Load(), nil
 }
 
+func (p *Prober) Start(ctx context.Context) {
+	go func() {
+		if err := p.Run(ctx); err != nil {
+			p.logger.Error("finished probing nodes", zap.Error(err))
+		}
+	}()
+}
+
 func (p *Prober) Run(ctx context.Context) error {
-	ticker := time.NewTicker(probeInterval)
+	ticker := time.NewTicker(p.interval)
 	defer ticker.Stop()
 
 	for {
@@ -55,7 +65,7 @@ func (p *Prober) Run(ctx context.Context) error {
 
 func (p *Prober) probe(ctx context.Context) {
 	// Query all nodes in parallel.
-	ctx, cancel := context.WithTimeout(ctx, probeInterval)
+	ctx, cancel := context.WithTimeout(ctx, p.interval)
 	defer cancel()
 
 	var allNodesReady atomic.Bool
@@ -79,13 +89,16 @@ func (p *Prober) probe(ctx context.Context) {
 					cancel()
 				}
 			}()
+
+			nodeKind := zap.String("kind", fmt.Sprintf("%T", node))
+
 			ready, err = node.IsReady(ctx)
 			if err != nil {
-				p.logger.Error("node is not ready", zap.Error(err))
+				p.logger.Error("failed to check if node is ready", nodeKind, zap.Error(err))
 			} else if !ready {
-				p.logger.Error("node is syncing")
+				p.logger.Error("node is not ready", nodeKind)
 			} else {
-				p.logger.Info("node is ready")
+				p.logger.Info("node is ready", nodeKind)
 			}
 		}(node)
 	}
@@ -94,19 +107,25 @@ func (p *Prober) probe(ctx context.Context) {
 	// Update readiness.
 	p.cond.L.Lock()
 	defer p.cond.L.Unlock()
+
 	p.ready.Store(allNodesReady.Load())
 
 	// Wake up any waiters.
 	if p.ready.Load() {
+		p.logger.Info("all nodes are ready")
 		p.cond.Broadcast()
 	}
 }
 
 func (p *Prober) Wait() {
+	p.logger.Info("waiting until nodes are healthy")
+
 	p.cond.L.Lock()
 	defer p.cond.L.Unlock()
 
 	for !p.ready.Load() {
 		p.cond.Wait()
 	}
+
+	p.logger.Info("nodes are healthy")
 }

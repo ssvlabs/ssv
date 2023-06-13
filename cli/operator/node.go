@@ -31,7 +31,7 @@ import (
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/nodeprober"
+	"github.com/bloxapp/ssv/nodeprobe"
 	"github.com/bloxapp/ssv/operator"
 	"github.com/bloxapp/ssv/operator/slot_ticker"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
@@ -119,14 +119,16 @@ var StartNodeCmd = &cobra.Command{
 		cfg.ETH2Options.Context = cmd.Context()
 		eth2Client, eth1Client := setupNodes(logger, operatorData.ID, networkConfig, slotTicker)
 
-		nodeChecker := nodeprober.NewProber(
+		nodeChecker := nodeprobe.NewProber(
 			logger,
 			eth1Client,
 			// Underlying options.Beacon's value implements nodechecker.StatusChecker.
 			// However, as it uses spec's specssv.BeaconNode interface, avoiding type assertion requires modifications in spec.
 			// If options.Beacon doesn't implement nodechecker.StatusChecker due to a mistake, this would panic early.
-			eth2Client.(nodeprober.StatusChecker),
+			eth2Client.(nodeprobe.StatusChecker),
 		)
+
+		go nodeChecker.Run(ctx)
 
 		cfg.SSVOptions.ForkVersion = forkVersion
 		cfg.SSVOptions.Context = ctx
@@ -168,9 +170,6 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		nodeChecker.Wait()
-		// TODO: use metrics in IsReady and remove metrics.WaitUntilHealthy
-		metrics.WaitUntilHealthy(logger, cfg.SSVOptions.Eth1Client, "execution client")
-		metrics.WaitUntilHealthy(logger, cfg.SSVOptions.BeaconNode, "consensus client")
 		metrics.ReportSSVNodeHealthiness(true)
 
 		// load & parse local events yaml if exists, otherwise sync from contract
