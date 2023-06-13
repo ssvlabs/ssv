@@ -183,7 +183,6 @@ func (gc *goClient) IsReady(ctx context.Context) (bool, error) {
 }
 
 // HealthCheck provides health status of beacon node
-// TODO: remove
 func (gc *goClient) HealthCheck() []string {
 	if gc.client == nil {
 		return []string{"not connected to beacon node"}

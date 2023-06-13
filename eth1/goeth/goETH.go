@@ -103,21 +103,27 @@ func (ec *eth1Client) Sync(logger *zap.Logger, fromBlock *big.Int) error {
 }
 
 // IsReady returns if eth1 is currently ready: responds to requests and not in the syncing state.
-// TODO: add metrics
 func (ec *eth1Client) IsReady(ctx context.Context) (bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, healthCheckTimeout)
 	defer cancel()
 
 	sp, err := ec.conn.SyncProgress(ctx)
 	if err != nil {
+		reportNodeStatus(statusUnknown)
 		return false, err
 	}
 
-	return sp == nil, nil
+	ready := sp == nil
+	if !ready {
+		reportNodeStatus(statusSyncing)
+	} else {
+		reportNodeStatus(statusOK)
+	}
+
+	return ready, nil
 }
 
 // HealthCheck provides health status of eth1 node
-// TODO: remove
 func (ec *eth1Client) HealthCheck() []string {
 	if ec.conn == nil {
 		return []string{"not connected to eth1 node"}
