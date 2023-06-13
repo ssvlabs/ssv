@@ -16,6 +16,7 @@ import (
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/exporter"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
@@ -295,12 +296,13 @@ func (c *controller) handleValidatorRemovedEvent(
 	}
 
 	// remove decided messages
-	messageID := spectypes.NewMsgID(types.GetDefaultDomain(), share.ValidatorPubKey, spectypes.BNRoleAttester)
-	store := c.ibftStorageMap.Get(messageID.GetRoleType())
-	if store != nil {
-		if err := store.CleanAllInstances(logger, messageID[:]); err != nil { // TODO need to delete for multi duty as well
-			return nil, errors.Wrap(err, "could not clean all decided messages")
-		}
+	err := c.ibftStorageMap.Each(func(role spectypes.BeaconRole, store qbftstorage.QBFTStore) error {
+		messageID := spectypes.NewMsgID(types.GetDefaultDomain(), share.ValidatorPubKey, role)
+		err := store.CleanAllInstances(logger, messageID[:])
+		return errors.Wrap(err, "could not clean all decided messages")
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	// remove from storage
