@@ -19,14 +19,18 @@ type StatusChecker interface {
 }
 
 type Prober struct {
-	logger zap.Logger
+	logger *zap.Logger
 	nodes  []StatusChecker
 	ready  atomic.Bool
-	cond   sync.Cond
+	cond   *sync.Cond
 }
 
 func NewProber(logger *zap.Logger, nodes ...StatusChecker) *Prober {
-	return &Prober{nodes: nodes}
+	return &Prober{
+		logger: logger,
+		nodes:  nodes,
+		cond:   sync.NewCond(&sync.Mutex{}),
+	}
 }
 
 func (p *Prober) IsReady(context.Context) (bool, error) {
