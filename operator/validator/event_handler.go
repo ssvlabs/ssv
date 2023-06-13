@@ -298,11 +298,10 @@ func (c *controller) handleValidatorRemovedEvent(
 	// remove decided messages
 	err := c.ibftStorageMap.Each(func(role spectypes.BeaconRole, store qbftstorage.QBFTStore) error {
 		messageID := spectypes.NewMsgID(types.GetDefaultDomain(), share.ValidatorPubKey, role)
-		err := store.CleanAllInstances(logger, messageID[:])
-		return errors.Wrap(err, "could not clean all decided messages")
+		return store.CleanAllInstances(logger, messageID[:])
 	})
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "could not clean all decided messages")
 	}
 
 	// remove from storage
