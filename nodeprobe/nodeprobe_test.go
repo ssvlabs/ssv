@@ -34,6 +34,7 @@ func TestProber(t *testing.T) {
 	time.Sleep(2 * time.Second)
 
 	ready, err = prober.IsReady(ctx)
+	require.NoError(t, err)
 	require.False(t, ready)
 }
 
