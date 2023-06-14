@@ -118,7 +118,7 @@ func (p *Prober) probe(ctx context.Context) {
 }
 
 func (p *Prober) Wait() {
-	p.logger.Info("waiting until nodes are healthy")
+	p.logger.Info("waiting until nodes are ready")
 
 	p.cond.L.Lock()
 	defer p.cond.L.Unlock()
@@ -127,5 +127,5 @@ func (p *Prober) Wait() {
 		p.cond.Wait()
 	}
 
-	p.logger.Info("nodes are healthy")
+	p.logger.Info("checked node readiness")
 }
