@@ -43,8 +43,6 @@ services:
       - 17001:15001
     volumes:
       - ./data/ssv-node-1/data:/data
-      - /Users/guymurochold1/Desktop/test/private_key.pem:/private_key.pem
-      - /Users/guymurochold1/Desktop/test/password.pass:/password.pass
 
   ssv-node-2:
     <<: *default-base
