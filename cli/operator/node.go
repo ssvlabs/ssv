@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"time"
@@ -280,12 +281,18 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.St
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
 	if cfg.KeyStore.OperatorPrivateKeyFile != "" {
-		pk, err := rsaencryption.ExtractKeysFromFile(cfg.KeyStore.OperatorPrivateKeyFilePassword)
+		pemData, err := ioutil.ReadFile(cfg.KeyStore.OperatorPrivateKeyFile)
 		if err != nil {
-			logger.Fatal("failed to extract rsa key from file", zap.Error(err))
+			logger.Fatal("Error reading PEM file: %v\n", zap.Error(err))
 		}
-		cfg.OperatorPrivateKey = pk
+
+		privateKey, err := rsaencryption.ConvertEncryptedPemToPrivateKey(string(pemData), cfg.KeyStore.OperatorPrivateKeyFilePassword)
+		if err != nil {
+			logger.Fatal("could not decrypt operator private key", zap.Error(err))
+		}
+		cfg.OperatorPrivateKey = rsaencryption.ExtractPrivateKey(privateKey)
 	}
+
 	operatorPubKey, err := nodeStorage.SetupPrivateKey(logger, cfg.OperatorPrivateKey, cfg.GenerateOperatorPrivateKey)
 	if err != nil {
 		logger.Fatal("could not setup operator private key", zap.Error(err))
