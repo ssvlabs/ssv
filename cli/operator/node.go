@@ -48,8 +48,8 @@ import (
 )
 
 type KeyStore struct {
-	OperatorPrivateKeyFile         string `yaml:"OperatorPrivateKeyFile" env:"OPERATOR_KEY_FILE" env-description:"Operator private key file, used to decrypt contract events"`
-	OperatorPrivateKeyFilePassword string `yaml:"OperatorPrivateKeyFilePassword" env:"OPERATOR_KEY_FILE_PASSWORD" env-description:"Password for operator private file decryption"`
+	PrivateKeyFile string `yaml:"PrivateKeyFile" env:"PRIVATE_KEY_FILE" env-description:"Operator private key file"`
+	PasswordFile   string `yaml:"PasswordFile" env:"PASSWORD_FILE" env-description:"Password for operator private key file decryption"`
 }
 
 type config struct {
@@ -280,13 +280,17 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.St
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
-	if cfg.KeyStore.OperatorPrivateKeyFile != "" {
-		pemData, err := ioutil.ReadFile(cfg.KeyStore.OperatorPrivateKeyFile)
+	if cfg.KeyStore.PrivateKeyFile != "" {
+		pemData, err := ioutil.ReadFile(cfg.KeyStore.PrivateKeyFile)
 		if err != nil {
 			logger.Fatal("Error reading PEM file: %v\n", zap.Error(err))
 		}
+		keyStorePassword, err := ioutil.ReadFile(cfg.KeyStore.PasswordFile)
+		if err != nil {
+			logger.Fatal("Error reading Password file: %v\n", zap.Error(err))
+		}
 
-		privateKey, err := rsaencryption.ConvertEncryptedPemToPrivateKey(string(pemData), cfg.KeyStore.OperatorPrivateKeyFilePassword)
+		privateKey, err := rsaencryption.ConvertEncryptedPemToPrivateKey(string(pemData), string(keyStorePassword))
 		if err != nil {
 			logger.Fatal("could not decrypt operator private key", zap.Error(err))
 		}

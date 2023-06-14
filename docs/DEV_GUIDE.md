@@ -95,8 +95,8 @@ Operator private key can be pass in the config.yaml in 2 ways:
 2) as keystore pem file encrypted by password:
     ```yaml
     KeyStore:
-     OperatorPrivateKeyFile: /path/to/your/file
-     OperatorPrivateKeyFilePassword: 12345678
+     PrivateKeyFile: /path/to/your/file
+     PasswordFile: 12345678
     ```
 
 ## Running a Local Network of Operators
