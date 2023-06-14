@@ -1,7 +1,12 @@
 package rsaencryption
 
 import (
+	"bytes"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
 	"encoding/base64"
+	"encoding/pem"
 	"testing"
 
 	testingspace "github.com/bloxapp/ssv/utils/rsaencryption/testingspace"
@@ -45,4 +50,25 @@ func TestPrivateKeyToByte(t *testing.T) {
 	b := PrivateKeyToByte(sk)
 	require.NotNil(t, b)
 	require.Greater(t, len(b), 1024)
+}
+
+func TestConvertEncryptedPemToPrivateKey(t *testing.T) {
+	keystorePassword := "123123123"
+	generatedPrivateKey, err := rsa.GenerateKey(rand.Reader, keySize)
+	require.NoError(t, err)
+	privDER := x509.MarshalPKCS1PrivateKey(generatedPrivateKey)
+
+	block, err := x509.EncryptPEMBlock(rand.Reader, "RSA PRIVATE KEY", privDER, []byte(keystorePassword), x509.PEMCipherAES256)
+	require.NoError(t, err)
+
+	var pemData bytes.Buffer
+	err = pem.Encode(&pemData, block)
+	require.NoError(t, err)
+
+	// Now pemData.String() contains your PEM data as a string
+	pemString := pemData.String()
+
+	privateKey, err := ConvertEncryptedPemToPrivateKey(pemString, keystorePassword)
+	require.NoError(t, err)
+	require.Equal(t, privateKey, generatedPrivateKey)
 }
