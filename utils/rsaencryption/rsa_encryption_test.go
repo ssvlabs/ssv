@@ -71,4 +71,11 @@ func TestConvertEncryptedPemToPrivateKey(t *testing.T) {
 	privateKey, err := ConvertEncryptedPemToPrivateKey(pemString, keystorePassword)
 	require.NoError(t, err)
 	require.Equal(t, privateKey, generatedPrivateKey)
+
+	// fails positive
+	_, err = ConvertEncryptedPemToPrivateKey(pemString, keystorePassword+"1")
+	require.Error(t, err)
+
+	_, err = ConvertEncryptedPemToPrivateKey(pemString)
+	require.Error(t, err)
 }
