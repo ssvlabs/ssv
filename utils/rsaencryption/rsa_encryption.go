@@ -11,6 +11,9 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
+	"fmt"
+	"io/ioutil"
+	"strings"
 
 	"github.com/pkg/errors"
 )
@@ -57,20 +60,31 @@ func DecodeKey(sk *rsa.PrivateKey, hash []byte) ([]byte, error) {
 }
 
 // ConvertPemToPrivateKey return rsa private key from secret key
-func ConvertPemToPrivateKey(skPem string) (*rsa.PrivateKey, error) {
+func ConvertPemToPrivateKey(skPem string, password ...string) (*rsa.PrivateKey, error) {
 	block, _ := pem.Decode([]byte(skPem))
-	// TODO: resolve deprecation https://github.com/golang/go/issues/8860
-	enc := x509.IsEncryptedPEMBlock(block) //nolint
+	if block == nil {
+		return nil, errors.New("Failed to decode PEM block")
+	}
+
 	b := block.Bytes
-	if enc {
-		var err error
-		// TODO: resolve deprecation https://github.com/golang/go/issues/8860
-		b, err = x509.DecryptPEMBlock(block, nil) //nolint
-		if err != nil {
-			return nil, errors.Wrap(err, "Failed to decrypt private key")
+	if x509.IsEncryptedPEMBlock(block) {
+		if len(password) > 0 {
+			println(strings.TrimSpace(password[0]))
+			b, err := x509.DecryptPEMBlock(block, []byte(strings.TrimSpace(password[0])))
+			if err != nil {
+				return nil, errors.Wrap(err, "Failed to decrypt private key")
+			}
+			return parsePrivateKey(b)
+		} else {
+			return nil, errors.New("Password required for encrypted PEM block")
 		}
 	}
-	parsedSk, err := x509.ParsePKCS1PrivateKey(b)
+
+	return parsePrivateKey(b)
+}
+
+func parsePrivateKey(derBytes []byte) (*rsa.PrivateKey, error) {
+	parsedSk, err := x509.ParsePKCS1PrivateKey(derBytes)
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to parse private key")
 	}
@@ -120,4 +134,23 @@ func ExtractPublicKey(sk *rsa.PrivateKey) (string, error) {
 	)
 
 	return base64.StdEncoding.EncodeToString(pemByte), nil
+}
+
+// ExtractKeysFromFile extract rsa private key from pem file with password encryption
+func ExtractKeysFromFile(password string) (string, error) {
+	pemData, err := ioutil.ReadFile("private_key.pem")
+	if err != nil {
+		fmt.Printf("Error reading PEM file: %v\n", err)
+	}
+	privateKey, err := ConvertPemToPrivateKey(string(pemData), password)
+	// convert to bytes
+	skPem := pem.EncodeToMemory(
+		&pem.Block{
+			Type:  "RSA PRIVATE KEY",
+			Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
+		},
+	)
+
+	// Print out the public part of the key
+	return base64.StdEncoding.EncodeToString(skPem), nil
 }

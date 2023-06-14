@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"log"
 	"net/http"
 	"time"
@@ -45,6 +46,11 @@ import (
 	"github.com/bloxapp/ssv/utils/format"
 )
 
+type KeyStore struct {
+	OperatorPrivateKeyFile         string `yaml:"OperatorPrivateKeyFile" env:"OPERATOR_KEY_FILE" env-description:"Operator private key file, used to decrypt contract events"`
+	OperatorPrivateKeyFilePassword string `yaml:"OperatorPrivateKeyFilePassword" env:"OPERATOR_KEY_FILE_PASSWORD" env-description:"Password for operator private file decryption"`
+}
+
 type config struct {
 	global_config.GlobalConfig `yaml:"global"`
 	DBOptions                  basedb.Options         `yaml:"db"`
@@ -52,12 +58,12 @@ type config struct {
 	ETH1Options                eth1.Options           `yaml:"eth1"`
 	ETH2Options                beaconprotocol.Options `yaml:"eth2"`
 	P2pNetworkConfig           p2pv1.Config           `yaml:"p2p"`
-
-	OperatorPrivateKey         string `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
-	GenerateOperatorPrivateKey bool   `yaml:"GenerateOperatorPrivateKey" env:"GENERATE_OPERATOR_KEY" env-description:"Whether to generate operator key if none is passed by config"`
-	MetricsAPIPort             int    `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
-	EnableProfile              bool   `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
-	NetworkPrivateKey          string `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
+	KeyStore                   KeyStore               `yaml:"KeyStore"`
+	OperatorPrivateKey         string                 `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
+	GenerateOperatorPrivateKey bool                   `yaml:"GenerateOperatorPrivateKey" env:"GENERATE_OPERATOR_KEY" env-description:"Whether to generate operator key if none is passed by config"`
+	MetricsAPIPort             int                    `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
+	EnableProfile              bool                   `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
+	NetworkPrivateKey          string                 `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
 
 	WsAPIPort int  `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"port of WS API"`
 	WithPing  bool `yaml:"WithPing" env:"WITH_PING" env-description:"Whether to send websocket ping messages'"`
@@ -272,6 +278,13 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.St
 	nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
+	}
+	if cfg.KeyStore.OperatorPrivateKeyFile != "" {
+		pk, err := rsaencryption.ExtractKeysFromFile(cfg.KeyStore.OperatorPrivateKeyFilePassword)
+		if err != nil {
+			logger.Fatal("failed to extract rsa key from file", zap.Error(err))
+		}
+		cfg.OperatorPrivateKey = pk
 	}
 	operatorPubKey, err := nodeStorage.SetupPrivateKey(logger, cfg.OperatorPrivateKey, cfg.GenerateOperatorPrivateKey)
 	if err != nil {
