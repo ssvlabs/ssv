@@ -5,9 +5,9 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
-	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -281,11 +281,11 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.St
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
 	if cfg.KeyStore.PrivateKeyFile != "" {
-		pemData, err := ioutil.ReadFile(cfg.KeyStore.PrivateKeyFile)
+		pemData, err := os.ReadFile(cfg.KeyStore.PrivateKeyFile)
 		if err != nil {
 			logger.Fatal("Error reading PEM file: %v\n", zap.Error(err))
 		}
-		keyStorePassword, err := ioutil.ReadFile(cfg.KeyStore.PasswordFile)
+		keyStorePassword, err := os.ReadFile(cfg.KeyStore.PasswordFile)
 		if err != nil {
 			logger.Fatal("Error reading Password file: %v\n", zap.Error(err))
 		}
