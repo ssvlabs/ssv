@@ -96,7 +96,7 @@ Operator private key can be pass in the config.yaml in 2 ways:
     ```yaml
     KeyStore:
      PrivateKeyFile: /path/to/your/file
-     PasswordFile: 12345678
+     PasswordFile: /path/to/your/file
     ```
 
 ## Running a Local Network of Operators
