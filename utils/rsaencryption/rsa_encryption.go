@@ -80,9 +80,8 @@ func ConvertEncryptedPemToPrivateKey(skPem string, password ...string) (*rsa.Pri
 			return nil, errors.Wrap(err, "Failed to decrypt private key")
 		}
 		return parsePrivateKey(b)
-	} else {
-		return nil, errors.New("Password required for encrypted PEM block")
 	}
+	return nil, errors.New("Password required for encrypted PEM block")
 }
 
 func parsePrivateKey(derBytes []byte) (*rsa.PrivateKey, error) {
