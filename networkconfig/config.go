@@ -8,6 +8,7 @@ import (
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	ethcommon "github.com/ethereum/go-ethereum/common"
 
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
@@ -32,7 +33,7 @@ type NetworkConfig struct {
 	Domain                  spectypes.DomainType
 	GenesisEpoch            spec.Epoch
 	ETH1SyncOffset          *big.Int
-	RegistryContractAddr    string
+	RegistryContractAddr    ethcommon.Address
 	Bootnodes               []string
 	WhitelistedOperatorKeys []string
 }
