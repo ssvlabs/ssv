@@ -96,7 +96,7 @@ spec:
           - name: HOST_ADDRESS
             value: ""
           - name: DB_PATH
-            value: "./data/db-mainnet"
+            value: "./data/db-mainnet--2023-06-18--19-10"
           - name: METRICS_API_PORT
             value: "15020"
           - name: ENABLE_PROFILE
