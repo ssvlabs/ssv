@@ -35,3 +35,8 @@ func (m IDService) Close() error {
 	//TODO implement me
 	panic("implement me")
 }
+
+func (m IDService) Start() {
+	//TODO implement me
+	panic("implement me")
+}
