@@ -11,6 +11,7 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
+	"golang.org/x/crypto/ssh"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -68,20 +69,22 @@ func ConvertPemToPrivateKey(skPem string) (*rsa.PrivateKey, error) {
 }
 
 // ConvertEncryptedPemToPrivateKey return rsa private key from secret key
-func ConvertEncryptedPemToPrivateKey(skPem string, password ...string) (*rsa.PrivateKey, error) {
-	block, _ := pem.Decode([]byte(skPem))
-	if block == nil {
-		return nil, errors.New("Failed to decode PEM block")
+func ConvertEncryptedPemToPrivateKey(pemData []byte, password string) (*rsa.PrivateKey, error) {
+	if strings.TrimSpace(password) == "" {
+		return nil, errors.New("Password required for encrypted PEM block")
 	}
 
-	if len(password) > 0 && len(password[0]) > 0 {
-		b, err := x509.DecryptPEMBlock(block, []byte(strings.TrimSpace(password[0])))
-		if err != nil {
-			return nil, errors.Wrap(err, "Failed to decrypt private key")
-		}
-		return parsePrivateKey(b)
+	key, err := ssh.ParseRawPrivateKeyWithPassphrase(pemData, []byte(password))
+	if err != nil {
+		return nil, errors.Wrap(err, "Failed to decrypt private key")
 	}
-	return nil, errors.New("Password required for encrypted PEM block")
+
+	rsaKey, ok := key.(*rsa.PrivateKey)
+	if !ok {
+		return nil, errors.New("Failed to parse RSA private key")
+	}
+
+	return rsaKey, nil
 }
 
 func parsePrivateKey(derBytes []byte) (*rsa.PrivateKey, error) {
