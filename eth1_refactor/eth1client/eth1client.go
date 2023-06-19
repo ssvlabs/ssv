@@ -32,9 +32,8 @@ type Eth1Client struct {
 	reconnectionMaxInterval     time.Duration
 
 	// variables
-	client           atomic.Pointer[ethclient.Client]
-	lastFetchedBlock atomic.Uint64
-	closed           chan struct{}
+	client atomic.Pointer[ethclient.Client]
+	closed chan struct{}
 }
 
 // New creates a new instance of Eth1Client.
@@ -84,12 +83,12 @@ func (ec *Eth1Client) Close() error {
 }
 
 // FetchHistoricalLogs retrieves historical logs emitted by the contract starting from fromBlock.
-func (ec *Eth1Client) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) ([]ethtypes.Log, error) {
+func (ec *Eth1Client) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs []ethtypes.Log, lastBlock uint64, err error) {
 	client := ec.client.Load()
 
 	currentBlock, err := client.BlockNumber(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("get current block: %w", err)
+		return nil, 0, fmt.Errorf("get current block: %w", err)
 	}
 
 	query := ethereum.FilterQuery{
@@ -98,18 +97,20 @@ func (ec *Eth1Client) FetchHistoricalLogs(ctx context.Context, fromBlock uint64)
 		ToBlock:   new(big.Int).SetUint64(currentBlock - ec.finalizationOffset),
 	}
 
-	logs, err := client.FilterLogs(ctx, query)
+	logs, err = client.FilterLogs(ctx, query)
 	if err != nil {
-		return nil, fmt.Errorf("fetch logs: %w", err)
+		return nil, 0, fmt.Errorf("fetch logs: %w", err)
 	}
 
-	ec.setLastFetchedBlock(query.ToBlock.Uint64())
+	lastBlock = query.ToBlock.Uint64()
+	ec.logger.Info("last fetched block", fields.BlockNumber(lastBlock))
+	ec.metrics.LastFetchedBlock(lastBlock)
 
-	return logs, nil
+	return logs, lastBlock, nil
 }
 
 // StreamLogs subscribes to events emitted by the contract.
-func (ec *Eth1Client) StreamLogs(ctx context.Context) <-chan ethtypes.Log {
+func (ec *Eth1Client) StreamLogs(ctx context.Context, fromBlock uint64) <-chan ethtypes.Log {
 	logs := make(chan ethtypes.Log)
 
 	go func() {
@@ -126,10 +127,13 @@ func (ec *Eth1Client) StreamLogs(ctx context.Context) <-chan ethtypes.Log {
 				return
 
 			default:
-				if err := ec.streamLogsToChan(ctx, logs); err != nil {
+				lastBlock, err := ec.streamLogsToChan(ctx, logs, fromBlock)
+				if err != nil {
 					ec.logger.Error("log streaming failed", zap.Error(err))
 					ec.reconnect(ctx)
 				}
+
+				fromBlock = lastBlock + 1
 			}
 		}
 	}()
@@ -173,38 +177,40 @@ func (ec *Eth1Client) isClosed() bool {
 	}
 }
 
-func (ec *Eth1Client) streamLogsToChan(ctx context.Context, logs chan ethtypes.Log) error {
+func (ec *Eth1Client) streamLogsToChan(ctx context.Context, logs chan ethtypes.Log, fromBlock uint64) (lastBlock uint64, err error) {
 	client := ec.client.Load()
 
 	heads := make(chan *ethtypes.Header)
 
 	sub, err := client.SubscribeNewHead(ctx, heads)
 	if err != nil {
-		return fmt.Errorf("subscribe heads: %w", err)
+		return fromBlock, fmt.Errorf("subscribe heads: %w", err)
 	}
 
 	for {
 		select {
 		case err := <-sub.Err():
-			return fmt.Errorf("subscription: %w", err)
+			return fromBlock, fmt.Errorf("subscription: %w", err)
 
 		case header := <-heads:
 			query := ethereum.FilterQuery{
 				Addresses: []ethcommon.Address{ec.contractAddress},
-				FromBlock: new(big.Int).SetUint64(ec.lastFetchedBlock.Load() + 1),
+				FromBlock: new(big.Int).SetUint64(fromBlock),
 				ToBlock:   header.Number,
 			}
 
 			newLogs, err := client.FilterLogs(ctx, query)
 			if err != nil {
-				return fmt.Errorf("fetch logs: %w", err)
+				return fromBlock, fmt.Errorf("fetch logs: %w", err)
 			}
 
 			for _, log := range newLogs {
 				logs <- log
 			}
 
-			ec.setLastFetchedBlock(query.ToBlock.Uint64())
+			fromBlock = query.ToBlock.Uint64()
+			ec.logger.Info("last fetched block", fields.BlockNumber(fromBlock))
+			ec.metrics.LastFetchedBlock(fromBlock)
 		}
 	}
 }
@@ -259,10 +265,4 @@ func (ec *Eth1Client) reconnect(ctx context.Context) {
 	}, ec.reconnectionInitialInterval, ec.reconnectionMaxInterval+(ec.reconnectionInitialInterval))
 
 	logger.Info("reconnected")
-}
-
-func (ec *Eth1Client) setLastFetchedBlock(block uint64) {
-	ec.lastFetchedBlock.Store(block)
-	ec.logger.Info("last fetched block", fields.BlockNumber(block))
-	ec.metrics.LastFetchedBlock(block)
 }
