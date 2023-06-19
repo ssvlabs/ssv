@@ -161,9 +161,6 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 // IsReady returns if beacon node is currently ready: responds to requests, not in the syncing state, not optimistic
 // (for optimistic see https://github.com/ethereum/consensus-specs/blob/dev/sync/optimistic.md#block-production).
 func (gc *goClient) IsReady(ctx context.Context) (bool, error) {
-	ctx, cancel := context.WithTimeout(ctx, healthCheckTimeout)
-	defer cancel()
-
 	syncState, err := gc.client.NodeSyncing(ctx)
 	if err != nil {
 		// TODO: get rid of global variable, pass metrics to goClient
