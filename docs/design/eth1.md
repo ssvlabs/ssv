@@ -202,12 +202,13 @@ Interacts with the underlying eth1 client and returns data prepared in a conveni
 
 - `FetchPastLogs(ctx context.Context, fromBlock uint64) ([]ethtypes.Log, error)`
 
-Fetches past blocks.
+Fetches past blocks. 
+Instead of FilterLogs it should call a wrapper that calls FilterLogs multiple times and batches results to avoid fetching enormous amount of events.
 
 - `StreamLogs(ctx context.Context) <-chan ethtypes.Log`
 
 Streams logs to the returned channel. Subscribes to block notifications and then requests logs with FilterLogs from `previous_processed_block+1` to `block_from_notification`. Supports offset for `block_from_notification` (8 by default). Might be useful: https://github.com/hydroscan/hydroscan-api/blob/master/task/event_subscriber.go.
-
+Instead of FilterLogs it should call a wrapper that calls FilterLogs multiple times and batches results to avoid fetching enormous amount of events.
 If streaming fails, it should reconnect to the node and continue streaming.
 
 - `IsReady(ctx context.Context) (bool, error)`
@@ -268,7 +269,8 @@ Adds a subscriber for batched events. Consider replacing it with another pattern
 
 - `ongoingEventBatcher(events <-chan Event)`
 
-Batches ongoing events from channel and streams batches to subscribers (HandleOngoingBlockEvents) as `<-chan BlockEvents` (BlockEvents represents a batch of events for one block)
+Batches ongoing events from channel and streams batches to subscribers (HandleOngoingBlockEvents) as `<-chan BlockEvents` (BlockEvents represents a batch of events for one block).
+It should also dispatch tasks (pass to TaskExecutor) after DB changes are done by HandleOngoingBlockEvents.
 
 - `pastEventBatcher(events []Event)`
 
@@ -290,13 +292,9 @@ Gets batched events from EventDispatcher (EventBatcher). Updates SyncOffset (Las
 
 #### Has methods:
 
-- `HandleOngoingBlockEvents(BlockEventsCh <-chan BlockEvents)`
+- `HandleEventLog(blockEvents <-chan BlockEvents)`
 
-Goes over the channel and sends each BlockEvents for execution to processEvent asyncronously. After each BlockEvents it notifies subscribers about a new task.
-
-- `HandlePastBlockEvents(blockEvents []BlockEvents)`
-
-Handles past event batches. It goes over each batch, it atomically processes each and updates DB. After all batches are processed, it notifies subscribers about a new task.
+Goes over the channel and calls processEvent for each BlockEvents synchronously.
 
 - `processEvent(blockEvents BlockEvents) error`
 
