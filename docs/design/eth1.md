@@ -89,24 +89,24 @@ ex: https://geth.ethereum.org/docs/developers/dapp-developer/native-bindings
 client := eth1client.New(grpcURL, contractADDR, contractABI, contractBlock)
 
 
-type EventBatch struct {
+type BlockEvents struct {
     BlockNumber bigint
     Events []Event
 }
 
 // option 1
-func EventsBatcher() <-chan EventBatch{} {
-batches := make(chan EventBatch{})
+func EventsBatcher() <-chan BlockEvents{} {
+batches := make(chan BlockEvents{})
     go func() {
         blockNumber := begin
 
-        batch := EventBatch{blockNumber}
+        batch := BlockEvents{blockNumber}
 
         for log,err := client.StreamLogs(begin); err == nil         {
             if log.BlockNumber > blockNumber {
                 batches <- batch
                 blockNumber = log.BlockNumber
-                batch = EventBatch{log.BlockNumber}
+                batch = BlockEvents{log.BlockNumber}
             }
 
             batch.Events = append(batch.Events, log)
@@ -116,12 +116,12 @@ batches := make(chan EventBatch{})
 }
 
 // option2
-func EventsBatcher() <-chan EventBatch{} {
-batches := make(chan EventBatch{})
+func EventsBatcher() <-chan BlockEvents{} {
+batches := make(chan BlockEvents{})
     go func() {
         blockNumber := begin
 
-        batch := EventBatch{blockNumber}
+        batch := BlockEvents{blockNumber}
 
         for block,err := client.WaitForFinalizedBlockAfter(begin); err == nil         {
             if block.BlockNumber > blockNumber {
@@ -268,11 +268,11 @@ Adds a subscriber for batched events. Consider replacing it with another pattern
 
 - `ongoingEventBatcher(events <-chan Event)`
 
-Batches ongoing events from channel and streams batches to subscribers (HandleOngoingEventBatch) as `<-chan EventBatch` (EventBatch represents a batch of events for one block)
+Batches ongoing events from channel and streams batches to subscribers (HandleOngoingBlockEvents) as `<-chan BlockEvents` (BlockEvents represents a batch of events for one block)
 
 - `pastEventBatcher(events []Event)`
 
-Batches past events from channel in `[]EventBatch` and passes the batches to subscribers (HandlePastEventBatches)
+Batches past events from channel in `[]BlockEvents` and passes the batches to subscribers (HandlePastBlockEvents)
 
 #### Metrics:
 
@@ -290,15 +290,15 @@ Gets batched events from EventDispatcher (EventBatcher). Updates SyncOffset (Las
 
 #### Has methods:
 
-- `HandleOngoingEventBatch(eventBatchCh <-chan EventBatch)`
+- `HandleOngoingBlockEvents(BlockEventsCh <-chan BlockEvents)`
 
-Goes over the channel and sends each EventBatch for execution to processEvent asyncronously. After each EventBatch it notifies subscribers about a new task.
+Goes over the channel and sends each BlockEvents for execution to processEvent asyncronously. After each BlockEvents it notifies subscribers about a new task.
 
-- `HandlePastEventBatches(eventBatches []EventBatch)`
+- `HandlePastBlockEvents(blockEvents []BlockEvents)`
 
 Handles past event batches. It goes over each batch, it atomically processes each and updates DB. After all batches are processed, it notifies subscribers about a new task.
 
-- `processEvent(eventBatch EventBatch) error`
+- `processEvent(blockEvents BlockEvents) error`
 
 Processes event batch as a DB transaction doing event-specific actions and updating SyncOffset in the DB (EventDB.SetSyncOffset).
 
