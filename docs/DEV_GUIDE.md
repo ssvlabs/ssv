@@ -114,7 +114,8 @@ $ make build
 
 #### Use script
 
-By using this script, developers can simulate a real SSV environment, run multiple nodes, and start those nodes performing duties with the passed validator's keystore. This is incredibly beneficial for debugging, testing functionalities, or preparing for deployment in a live setting. It provides a realistic but controlled environment where developers can observe the interaction of multiple nodes in the SSV network.
+By using this script, developers can simulate a real SSV environment, run multiple nodes, and start those nodes performing duties with the passed validator's keystore. This is incredibly beneficial for debugging, testing functionalities, or preparing for deployment in a live setting. It provides a realistic but controlled environment where developers can observe the interaction of multiple nodes in the SSV network. \
+The script simplifies configuration by automatically generating YAML files for each operator and an 'events.yaml' file. The 'events.yaml' emulates a 'happy flow' scenario, which includes the registration of four operators and one validator
 
 1. Download the latest executable version (v1.0.0 or later) from [ssv-keys](https://github.com/bloxapp/ssv-keys/releases).
     - After downloading, follow these [steps](https://github.com/bloxapp/ssv-keys#option-1-running-an-executable-recommended-route) to provide the necessary permissions to the executable.
