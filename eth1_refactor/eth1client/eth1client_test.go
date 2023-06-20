@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethrpc "github.com/ethereum/go-ethereum/rpc"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -24,7 +25,7 @@ func TestEth1Client(t *testing.T) {
 	require.NoError(t, err)
 
 	addr := "ws://" + l.Addr().String()
-	contractAddr := networkconfig.TestNetwork.RegistryContractAddr
+	contractAddr := ethcommon.HexToAddress(networkconfig.TestNetwork.RegistryContractAddr)
 	logger := zaptest.NewLogger(t)
 
 	client := New(addr, contractAddr, WithLogger(logger))
