@@ -38,7 +38,6 @@ services:
     environment:
       CONFIG_PATH: ./config/config.yaml
       SHARE_CONFIG: ./config/share1.yaml
-      NETWORK: jato-v2-stage
     ports:
       - 16001:16000
       - 17001:15001
@@ -51,7 +50,6 @@ services:
     environment:
       CONFIG_PATH: ./config/config.yaml
       SHARE_CONFIG: ./config/share2.yaml
-      NETWORK: jato-v2-stage
     ports:
       - 16002:16000
       - 17002:15002
@@ -64,7 +62,6 @@ services:
     environment:
       CONFIG_PATH: ./config/config.yaml
       SHARE_CONFIG: ./config/share3.yaml
-      NETWORK: jato-v2-stage
     ports:
       - 16003:16000
       - 17003:15003
@@ -77,7 +74,6 @@ services:
     environment:
       CONFIG_PATH: ./config/config.yaml
       SHARE_CONFIG: ./config/share4.yaml
-      NETWORK: jato-v2-stage
     ports:
       - 16004:16000
       - 17004:15004
