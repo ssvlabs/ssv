@@ -200,14 +200,17 @@ Interacts with the underlying eth1 client and returns data prepared in a conveni
 
 ##### Exported:
 
-- `FetchPastLogs(ctx context.Context, fromBlock uint64) ([]ethtypes.Log, error)`
+- `FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs []ethtypes.Log, lastBlock uint64, err error)`
 
 Fetches past blocks. 
 Instead of FilterLogs it should call a wrapper that calls FilterLogs multiple times and batches results to avoid fetching enormous amount of events.
 
-- `StreamLogs(ctx context.Context) <-chan ethtypes.Log`
+- `StreamLogs(ctx context.Context, fromBlock uint64) <-chan ethtypes.Log`
 
-Streams logs to the returned channel. Subscribes to block notifications and then requests logs with FilterLogs from `previous_processed_block+1` to `block_from_notification`. Supports offset for `block_from_notification` (8 by default). Might be useful: https://github.com/hydroscan/hydroscan-api/blob/master/task/event_subscriber.go.
+Streams logs to the returned channel. 
+Subscribes to block notifications and then requests logs with FilterLogs from `fromBlock` (or `previous_processed_block+1`) to `block_from_notification`. 
+Supports offset for `block_from_notification` (8 by default). 
+Might be useful: https://github.com/hydroscan/hydroscan-api/blob/master/task/event_subscriber.go.
 Instead of FilterLogs it should call a wrapper that calls FilterLogs multiple times and batches results to avoid fetching enormous amount of events.
 If streaming fails, it should reconnect to the node and continue streaming.
 
