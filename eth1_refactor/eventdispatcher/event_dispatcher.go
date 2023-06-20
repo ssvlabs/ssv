@@ -61,9 +61,9 @@ func (ed *EventDispatcher) Start(ctx context.Context, fromBlock uint64) error {
 	}
 
 	go func() {
-		logs := ed.eth1Client.StreamLogs(ctx, lastBlock+1)
-		blockEvents := ed.eventBatcher.BatchOngoingEvents(logs)
-		if err := ed.eventDataHandler.HandleBlockEventsStream(blockEvents); err != nil {
+		logsStream := ed.eth1Client.StreamLogs(ctx, lastBlock+1)
+		blockEventsStream := ed.eventBatcher.BatchOngoingEvents(logsStream)
+		if err := ed.eventDataHandler.HandleBlockEventsStream(blockEventsStream); err != nil {
 			// TODO: think how to handle this
 			ed.logger.Error("failed to handle ongoing block event", zap.Error(err))
 			return
