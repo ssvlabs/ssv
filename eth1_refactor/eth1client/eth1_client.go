@@ -97,6 +97,7 @@ func (ec *Eth1Client) FetchHistoricalLogs(ctx context.Context, fromBlock uint64)
 		ToBlock:   new(big.Int).SetUint64(currentBlock - ec.finalizationOffset),
 	}
 
+	// TODO: Instead of FilterLogs it should call a wrapper that calls FilterLogs multiple times and batches results to avoid fetching enormous amount of events.
 	logs, err = client.FilterLogs(ctx, query)
 	if err != nil {
 		return nil, 0, fmt.Errorf("fetch logs: %w", err)
@@ -199,6 +200,7 @@ func (ec *Eth1Client) streamLogsToChan(ctx context.Context, logs chan ethtypes.L
 				ToBlock:   header.Number,
 			}
 
+			// TODO: Instead of FilterLogs it should call a wrapper that calls FilterLogs multiple times and batches results to avoid fetching enormous amount of events.
 			newLogs, err := client.FilterLogs(ctx, query)
 			if err != nil {
 				return fromBlock, fmt.Errorf("fetch logs: %w", err)
