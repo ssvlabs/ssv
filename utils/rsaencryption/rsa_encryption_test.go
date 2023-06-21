@@ -1,12 +1,13 @@
 package rsaencryption
 
 import (
-	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
+	"os"
+	"os/exec"
 	"testing"
 
 	testingspace "github.com/bloxapp/ssv/utils/rsaencryption/testingspace"
@@ -58,24 +59,47 @@ func TestConvertEncryptedPemToPrivateKey(t *testing.T) {
 	require.NoError(t, err)
 	privDER := x509.MarshalPKCS1PrivateKey(generatedPrivateKey)
 
-	block, err := x509.EncryptPEMBlock(rand.Reader, "RSA PRIVATE KEY", privDER, []byte(keystorePassword), x509.PEMCipherAES256)
+	// Create a pem.Block with the private key.
+	privateBlock := pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: privDER,
+	}
+
+	// Encode the pem.Block with the private key into a temporary file.
+	tmpPrivateFile, err := os.CreateTemp("", "private_key.pem")
+	require.NoError(t, err)
+	err = pem.Encode(tmpPrivateFile, &privateBlock)
+	require.NoError(t, err)
+	err = tmpPrivateFile.Close()
 	require.NoError(t, err)
 
-	var pemData bytes.Buffer
-	err = pem.Encode(&pemData, block)
+	// Encrypt the private key file using OpenSSL.
+	passString := "pass:" + keystorePassword
+	cmd := exec.Command("openssl", "rsa", "-aes256", "-in", tmpPrivateFile.Name(), "-out", "encrypted_private_key.pem", "-passout", passString)
+	err = cmd.Run()
 	require.NoError(t, err)
 
-	// Now pemData.String() contains your PEM data as a string
-	pemString := pemData.String()
+	// Delete the temporary unencrypted private key file.
+	err = os.Remove(tmpPrivateFile.Name())
+	require.NoError(t, err)
 
-	privateKey, err := ConvertEncryptedPemToPrivateKey(pemString, keystorePassword)
+	// Read the encrypted private key file.
+	pemBytes, err := os.ReadFile("encrypted_private_key.pem")
+	require.NoError(t, err)
+
+	// Convert encrypted PEM to private key.
+	privateKey, err := ConvertEncryptedPemToPrivateKey(pemBytes, keystorePassword)
 	require.NoError(t, err)
 	require.Equal(t, privateKey, generatedPrivateKey)
 
-	// fails positive
-	_, err = ConvertEncryptedPemToPrivateKey(pemString, keystorePassword+"1")
+	// Test with incorrect password.
+	_, err = ConvertEncryptedPemToPrivateKey(pemBytes, keystorePassword+"1")
 	require.Error(t, err)
 
-	_, err = ConvertEncryptedPemToPrivateKey(pemString)
+	_, err = ConvertEncryptedPemToPrivateKey(pemBytes, "")
 	require.Error(t, err)
+
+	// Clean up the encrypted private key file.
+	err = os.Remove("encrypted_private_key.pem")
+	require.NoError(t, err)
 }
