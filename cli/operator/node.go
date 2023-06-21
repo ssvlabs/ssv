@@ -281,8 +281,6 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.St
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
 	if cfg.KeyStore.PrivateKeyFile != "" {
-		//file can be generated with the following command: ssh-keygen -t rsa -b 2048 -f private_key.pem -N your_password
-
 		pemData, err := os.ReadFile(cfg.KeyStore.PrivateKeyFile)
 		if err != nil {
 			log.Fatalf("Error reading PEM file: %v\n", err)

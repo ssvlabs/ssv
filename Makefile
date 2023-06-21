@@ -112,11 +112,11 @@ docker-image:
 	@echo "node ${NODES_ID}"
 	@sudo docker rm -f ssv_node && docker run -d --env-file .env --restart unless-stopped --name=ssv_node -p 13000:13000 -p 12000:12000/udp 'bloxstaking/ssv-node:latest' make BUILD_PATH=/go/bin/ssvnode start-node
 
-NODESs=ssv-node-1
+NODES=ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4
 .PHONY: docker-all
 docker-all:
-	@echo "nodes $(NODESs)"
-	@docker-compose up --build $(NODESs)
+	@echo "nodes $(NODES)"
+	@docker-compose up --build $(NODES)
 
 NODES=ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4
 .PHONY: docker-local

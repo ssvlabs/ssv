@@ -73,7 +73,6 @@ func ConvertEncryptedPemToPrivateKey(pemData []byte, password string) (*rsa.Priv
 	if strings.TrimSpace(password) == "" {
 		return nil, errors.New("Password required for encrypted PEM block")
 	}
-
 	key, err := ssh.ParseRawPrivateKeyWithPassphrase(pemData, []byte(password))
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to decrypt private key")
