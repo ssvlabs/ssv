@@ -6,7 +6,9 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/pem"
+	"fmt"
 	"os"
 	"os/exec"
 	"testing"
@@ -88,7 +90,7 @@ func TestConvertEncryptedPemToPrivateKey(t *testing.T) {
 	pemBytes, err := os.ReadFile("encrypted_private_key.pem")
 	require.NoError(t, err)
 	hash := sha256.Sum256(pemBytes)
-	println("SHA-256: %x\n", hash)
+	fmt.Printf("SHA-256: %s\n", hex.EncodeToString(hash[:]))
 
 	// Convert encrypted PEM to private key.
 	privateKey, err := ConvertEncryptedPemToPrivateKey(pemBytes, keystorePassword)
