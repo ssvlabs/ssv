@@ -3,6 +3,7 @@ package rsaencryption
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/pem"
@@ -86,8 +87,8 @@ func TestConvertEncryptedPemToPrivateKey(t *testing.T) {
 	// Read the encrypted private key file.
 	pemBytes, err := os.ReadFile("encrypted_private_key.pem")
 	require.NoError(t, err)
-
-	println(pemBytes)
+	hash := sha256.Sum256(pemBytes)
+	println("SHA-256: %x\n", hash)
 
 	// Convert encrypted PEM to private key.
 	privateKey, err := ConvertEncryptedPemToPrivateKey(pemBytes, keystorePassword)
