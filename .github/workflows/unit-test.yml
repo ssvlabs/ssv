@@ -29,12 +29,12 @@ jobs:
           make
           sudo make install
 
-          - name: Set OpenSSL version to LibreSSL
-            run: |
-              echo "/usr/local/bin" >> $GITHUB_PATH
+      - name: Set OpenSSL version to LibreSSL
+        run: |
+          echo "/usr/local/bin" >> $GITHUB_PATH
 
-          - name: Verify LibreSSL
-            run: openssl version
+      - name: Verify LibreSSL
+        run: openssl version
 
       - name: Setup Go
         uses: actions/setup-go@v3
