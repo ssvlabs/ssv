@@ -87,6 +87,8 @@ func TestConvertEncryptedPemToPrivateKey(t *testing.T) {
 	pemBytes, err := os.ReadFile("encrypted_private_key.pem")
 	require.NoError(t, err)
 
+	println(pemBytes)
+
 	// Convert encrypted PEM to private key.
 	privateKey, err := ConvertEncryptedPemToPrivateKey(pemBytes, keystorePassword)
 	require.NoError(t, err)
