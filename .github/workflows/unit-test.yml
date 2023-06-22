@@ -20,13 +20,17 @@ jobs:
       - name: Setup make
         run: sudo apt-get update && sudo apt-get install make
 
+      - name: Setup Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: 1.19
       - name: Download and install LibreSSL
         run: |
-          wget https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/libressl-3.3.3.tar.gz
-          tar -xzvf libressl-3.3.3.tar.gz
-          cd libressl-3.3.3
-          ./configure --prefix=/usr/local
-          make
+          wget https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/libressl-3.3.3.tar.gz; 
+          tar -xzvf libressl-3.3.3.tar.gz; 
+          cd libressl-3.3.3; 
+          ./configure --prefix=/usr/local; 
+          make; 
           sudo make install
 
       - name: Set OpenSSL version to LibreSSL
@@ -35,11 +39,6 @@ jobs:
 
       - name: Verify LibreSSL
         run: openssl version
-
-      - name: Setup Go
-        uses: actions/setup-go@v3
-        with:
-          go-version: 1.19
 
       - name: Run unit tests
         run: make unit-test
