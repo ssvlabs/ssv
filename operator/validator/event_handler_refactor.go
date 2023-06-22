@@ -23,20 +23,19 @@ import (
 // TODO: consider extracting from controller
 
 func (c *controller) HandleOperatorAdded(event *contract.ContractOperatorAdded) error {
+	logger := c.defaultLogger.With(
+		fields.OperatorID(event.OperatorId),
+		// TODO: move to fields package (check other places in this file)
+		zap.String("operator_pub_key", string(event.PublicKey)),
+		zap.String("owner_address", event.Owner.String()),
+	)
+	logger.Info("processing OperatorAdded event")
+
 	od := &registrystorage.OperatorData{
 		PublicKey:    event.PublicKey,
 		OwnerAddress: event.Owner,
 		ID:           event.OperatorId,
 	}
-
-	logger := c.defaultLogger.With(
-		fields.OperatorID(od.ID),
-		// TODO: move to fields package
-		zap.String("operator_pub_key", string(od.PublicKey)),
-		zap.String("owner_address", od.OwnerAddress.String()),
-	)
-
-	logger.Info("processing OperatorAddedEvent")
 
 	// throw an error if there is an existing operator with the same public key and different operator id
 	if c.operatorData.ID != 0 && bytes.Equal(c.operatorData.PublicKey, event.PublicKey) &&
@@ -60,13 +59,16 @@ func (c *controller) HandleOperatorAdded(event *contract.ContractOperatorAdded) 
 
 	exporter.ReportOperatorIndex(logger, od)
 
-	logger.Info("processed OperatorAddedEvent")
+	logger.Info("processed OperatorAdded event")
 
 	return nil
 }
 
 func (c *controller) HandleOperatorRemoved(event *contract.ContractOperatorRemoved) error {
-	c.defaultLogger.Info("processing OperatorRemovedEvent") // TODO: consider adding more fields
+	logger := c.defaultLogger.With(
+		fields.OperatorID(event.OperatorId),
+	)
+	logger.Info("processing OperatorRemoved event")
 
 	od, found, err := c.operatorsStorage.GetOperatorData(event.OperatorId)
 	if err != nil {
@@ -78,16 +80,26 @@ func (c *controller) HandleOperatorRemoved(event *contract.ContractOperatorRemov
 		}
 	}
 
-	c.defaultLogger.With(
-		zap.Uint64("operatorId", od.ID),
-		zap.String("operatorPubKey", string(od.PublicKey)),
-		zap.String("ownerAddress", od.OwnerAddress.String()),
-	).Info("processed OperatorRemovedEvent")
+	logger.With(
+		zap.String("operator_pub_key", string(od.PublicKey)),
+		zap.String("owner_address", od.OwnerAddress.String()),
+	).Info("processed OperatorRemoved event")
 
 	return nil
 }
 
 func (c *controller) HandleValidatorAdded(event *contract.ContractValidatorAdded) (err error) {
+	logger := c.defaultLogger.With(
+		zap.String("owner_address", event.Owner.String()),
+		zap.Uint64s("operator_ids", event.OperatorIds),
+		zap.String("operator_pub_key", string(event.PublicKey)),
+	)
+	logger.Info("processing ValidatorAdded event")
+
+	defer func() {
+		logger.Info("processed ValidatorAdded event")
+	}()
+
 	var valid bool
 	defer func() {
 		err = c.validatorAddedDefer(valid, err, event)
@@ -309,6 +321,13 @@ func validatorAddedEventToShare(
 }
 
 func (c *controller) HandleValidatorRemoved(event *contract.ContractValidatorRemoved) error {
+	logger := c.defaultLogger.With(
+		zap.String("owner_address", event.Owner.String()),
+		zap.Uint64s("operator_ids", event.OperatorIds),
+		zap.String("operator_pub_key", string(event.PublicKey)),
+	)
+	logger.Info("processing ValidatorRemoved event")
+
 	// TODO: handle metrics
 	share := c.sharesStorage.Get(event.PublicKey)
 	if share == nil {
@@ -352,53 +371,64 @@ func (c *controller) HandleValidatorRemoved(event *contract.ContractValidatorRem
 		metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusRemoved))
 	}
 
-	// TODO: print logs here and in other places with logFields
-	logFields := make([]zap.Field, 0)
 	if isOperatorShare || c.validatorOptions.FullNode {
-		logFields = append(logFields,
-			zap.String("validatorPubKey", hex.EncodeToString(share.ValidatorPubKey)),
-			zap.String("ownerAddress", share.OwnerAddress.String()),
-		)
+		logger = logger.With(zap.String("validatorPubKey", hex.EncodeToString(share.ValidatorPubKey)))
 	}
+
+	logger.Info("processed ValidatorRemoved event")
 
 	return nil
 }
 
 func (c *controller) HandleClusterLiquidated(event *contract.ContractClusterLiquidated) ([]*ssvtypes.SSVShare, error) {
+	logger := c.defaultLogger.With(
+		zap.String("owner_address", event.Owner.String()),
+		zap.Uint64s("operator_ids", event.OperatorIds),
+	)
+	logger.Info("processing ClusterLiquidated event")
+
 	toLiquidate, liquidatedPubKeys, err := c.processClusterEvent(c.defaultLogger, event.Owner, event.OperatorIds, true)
 	if err != nil {
 		return nil, fmt.Errorf("could not process cluster event: %w", err)
 	}
 
-	logFields := make([]zap.Field, 0)
 	if len(liquidatedPubKeys) > 0 {
-		logFields = append(logFields,
-			zap.String("ownerAddress", event.Owner.String()),
-			zap.Strings("liquidatedValidators", liquidatedPubKeys),
-		)
+		logger = logger.With(zap.Strings("liquidatedValidators", liquidatedPubKeys))
 	}
+
+	logger.Info("processed ClusterLiquidated event")
 
 	return toLiquidate, nil
 }
 
 func (c *controller) HandleClusterReactivated(event *contract.ContractClusterReactivated) ([]*ssvtypes.SSVShare, error) {
+	logger := c.defaultLogger.With(
+		zap.String("owner_address", event.Owner.String()),
+		zap.Uint64s("operator_ids", event.OperatorIds),
+	)
+	logger.Info("processing ClusterReactivated event")
+
 	toEnable, enabledPubKeys, err := c.processClusterEvent(c.defaultLogger, event.Owner, event.OperatorIds, false)
 	if err != nil {
 		return nil, fmt.Errorf("could not process cluster event: %w", err)
 	}
 
-	logFields := make([]zap.Field, 0)
 	if len(enabledPubKeys) > 0 {
-		logFields = append(logFields,
-			zap.String("ownerAddress", event.Owner.String()),
-			zap.Strings("enabledValidators", enabledPubKeys),
-		)
+		logger = logger.With(zap.Strings("enabledValidators", enabledPubKeys))
 	}
+
+	logger.Info("processed ClusterReactivated event")
 
 	return toEnable, nil
 }
 
 func (c *controller) HandleFeeRecipientAddressUpdated(event *contract.ContractFeeRecipientAddressUpdated) error {
+	logger := c.defaultLogger.With(
+		zap.String("owner_address", event.Owner.String()),
+		fields.FeeRecipient(event.RecipientAddress.Bytes()),
+	)
+	logger.Info("processing FeeRecipientAddressUpdated event")
+
 	recipientData := &registrystorage.RecipientData{
 		Owner: event.Owner,
 	}
@@ -409,24 +439,7 @@ func (c *controller) HandleFeeRecipientAddressUpdated(event *contract.ContractFe
 		return fmt.Errorf("could not save recipient data: %w", err)
 	}
 
-	var isOperatorEvent bool
-	if c.operatorData.ID != 0 {
-		shares := c.sharesStorage.List(registrystorage.ByOperatorID(c.operatorData.ID))
-		for _, share := range shares {
-			if share.OwnerAddress == event.Owner {
-				isOperatorEvent = true
-				break
-			}
-		}
-	}
-
-	logFields := make([]zap.Field, 0)
-	if isOperatorEvent || c.validatorOptions.FullNode {
-		logFields = append(logFields,
-			zap.String("ownerAddress", event.Owner.String()),
-			zap.String("feeRecipient", event.RecipientAddress.String()),
-		)
-	}
+	logger.Info("processed FeeRecipientAddressUpdated event")
 
 	return nil
 }
