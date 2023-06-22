@@ -116,7 +116,6 @@ var StartNodeCmd = &cobra.Command{
 		slotTicker := slot_ticker.NewTicker(ctx, networkConfig)
 
 		cfg.ETH2Options.Context = cmd.Context()
-		//el, cl := setupNodes(logger, operatorData.ID, networkConfig, slotTicker)
 
 		cfg.ETH2Options.Graffiti = []byte("SSV.Network")
 		cfg.ETH2Options.GasLimit = spectypes.DefaultGasLimit
