@@ -29,6 +29,7 @@ func (c *controller) HandleOperatorAdded(event *contract.ContractOperatorAdded) 
 		zap.String("operator_pub_key", string(event.PublicKey)),
 		zap.String("owner_address", event.Owner.String()),
 	)
+	// TODO: move OperatorAdded to log field
 	logger.Info("processing OperatorAdded event")
 
 	od := &registrystorage.OperatorData{
