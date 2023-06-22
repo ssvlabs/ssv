@@ -38,12 +38,12 @@ jobs:
         run: |
           echo "/usr/local/bin" >> $GITHUB_PATH
 
-      - name: Verify LibreSSL
-        run: openssl version
-
       - name: Update LD_LIBRARY_PATH
         run: |
           echo "LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+
+      - name: Verify LibreSSL
+        run: openssl version
 
       - name: Run unit tests
         run: make unit-test
