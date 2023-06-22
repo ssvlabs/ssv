@@ -215,7 +215,7 @@ func (edh *EventDataHandler) processEvent(event ethtypes.Log) (Task, error) {
 		}
 
 		task := func() error {
-			edh.logger.Info("reactivating cluster", zap.Stringer("owner", feeRecipientAddressUpdatedEvent.Owner)) // TODO: add to fields package
+			edh.logger.Info("updating recipient address", zap.Stringer("owner", feeRecipientAddressUpdatedEvent.Owner)) // TODO: add to fields package
 
 			return edh.taskExecutor.UpdateFeeRecipient(feeRecipientAddressUpdatedEvent)
 		}
