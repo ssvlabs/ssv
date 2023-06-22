@@ -116,7 +116,14 @@ var StartNodeCmd = &cobra.Command{
 		slotTicker := slot_ticker.NewTicker(ctx, networkConfig)
 
 		cfg.ETH2Options.Context = cmd.Context()
-		el, cl := setupNodes(logger, operatorData.ID, networkConfig, slotTicker)
+		//el, cl := setupNodes(logger, operatorData.ID, networkConfig, slotTicker)
+
+		cfg.ETH2Options.Graffiti = []byte("SSV.Network")
+		cfg.ETH2Options.GasLimit = spectypes.DefaultGasLimit
+		cfg.ETH2Options.Network = networkConfig.Beacon
+
+		el := setupEth2(logger, operatorData.ID, slotTicker)
+		cl := setupEth1(logger, networkConfig.RegistryContractAddr)
 
 		cfg.SSVOptions.ForkVersion = forkVersion
 		cfg.SSVOptions.Context = ctx
@@ -347,27 +354,25 @@ func setupP2P(
 	return p2pv1.New(logger, &cfg.P2pNetworkConfig)
 }
 
-func setupNodes(
+func setupEth2(
 	logger *zap.Logger,
 	operatorID spectypes.OperatorID,
-	network networkconfig.NetworkConfig,
 	slotTicker slot_ticker.Ticker,
-) (beaconprotocol.BeaconNode, eth1.Client) {
-	// consensus client
-	cfg.ETH2Options.Graffiti = []byte("SSV.Network")
-	cfg.ETH2Options.GasLimit = spectypes.DefaultGasLimit
-	cfg.ETH2Options.Network = network.Beacon
+) beaconprotocol.BeaconNode {
 	cl, err := goclient.New(logger, cfg.ETH2Options, operatorID, slotTicker)
 	if err != nil {
 		logger.Fatal("failed to create beacon go-client", zap.Error(err),
 			fields.Address(cfg.ETH2Options.BeaconNodeAddr))
 	}
 
-	// execution client
-	logger.Info("using registry contract address", fields.Address(network.RegistryContractAddr), fields.ABIVersion(cfg.ETH1Options.AbiVersion.String()))
+	return cl
+}
+
+func setupEth1(logger *zap.Logger, contractAddr string) eth1.Client {
+	logger.Info("using registry contract address", fields.Address(contractAddr), fields.ABIVersion(cfg.ETH1Options.AbiVersion.String()))
 	if len(cfg.ETH1Options.RegistryContractABI) > 0 {
 		logger.Info("using registry contract abi", fields.ABI(cfg.ETH1Options.RegistryContractABI))
-		if err = eth1.LoadABI(logger, cfg.ETH1Options.RegistryContractABI); err != nil {
+		if err := eth1.LoadABI(logger, cfg.ETH1Options.RegistryContractABI); err != nil {
 			logger.Fatal("failed to load ABI JSON", zap.Error(err))
 		}
 	}
@@ -376,14 +381,14 @@ func setupNodes(
 		NodeAddr:             cfg.ETH1Options.ETH1Addr,
 		ConnectionTimeout:    cfg.ETH1Options.ETH1ConnectionTimeout,
 		ContractABI:          eth1.ContractABI(cfg.ETH1Options.AbiVersion),
-		RegistryContractAddr: network.RegistryContractAddr,
+		RegistryContractAddr: contractAddr,
 		AbiVersion:           cfg.ETH1Options.AbiVersion,
 	})
 	if err != nil {
 		logger.Fatal("failed to create eth1 client", zap.Error(err))
 	}
 
-	return cl, el
+	return el
 }
 
 func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.IDb, port int, enableProf bool) {
