@@ -24,6 +24,7 @@ jobs:
         uses: actions/setup-go@v3
         with:
           go-version: 1.19
+
       - name: Download and install LibreSSL
         run: |
           wget https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/libressl-3.3.3.tar.gz; 
@@ -39,6 +40,10 @@ jobs:
 
       - name: Verify LibreSSL
         run: openssl version
+
+      - name: Update LD_LIBRARY_PATH
+        run: |
+          echo "LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
 
       - name: Run unit tests
         run: make unit-test
