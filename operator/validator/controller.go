@@ -125,6 +125,8 @@ type nonCommitteeValidator struct {
 type controller struct {
 	context context.Context
 
+	defaultLogger *zap.Logger
+
 	eventHandler      EventHandler
 	sharesStorage     registrystorage.Shares
 	operatorsStorage  registrystorage.Operators
@@ -203,6 +205,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	}
 
 	ctrl := controller{
+		defaultLogger:              logger,
 		sharesStorage:              options.RegistryStorage.Shares(),
 		operatorsStorage:           options.RegistryStorage,
 		recipientsStorage:          options.RegistryStorage,

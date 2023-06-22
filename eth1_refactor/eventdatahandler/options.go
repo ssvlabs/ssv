@@ -4,7 +4,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// Option defines edn EventDispatcher configuration option.
+// Option defines EventDataHandler configuration option.
 type Option func(*EventDataHandler)
 
 // WithLogger enables logging.

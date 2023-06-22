@@ -5,12 +5,6 @@ import (
 )
 
 type BlockEvents struct {
-	BlockNumber uint64 // TODO: check if it's needed
+	BlockNumber uint64
 	Events      []ethtypes.Log
-}
-
-// TODO: decide on its location.
-func (be *BlockEvents) CreateTasks() []EventTask {
-	// TODO: implement
-	return nil
 }
