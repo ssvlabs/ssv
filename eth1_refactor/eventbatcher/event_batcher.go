@@ -38,6 +38,10 @@ func (eb *EventBatcher) BatchHistoricalEvents(events []ethtypes.Log) <-chan Bloc
 
 			currentBlockEvents.Events = append(currentBlockEvents.Events, event)
 		}
+
+		if len(currentBlockEvents.Events) != 0 {
+			blockEvents <- currentBlockEvents
+		}
 	}()
 
 	return blockEvents
@@ -69,6 +73,10 @@ func (eb *EventBatcher) BatchOngoingEvents(events <-chan ethtypes.Log) <-chan Bl
 			}
 
 			currentBlockEvents.Events = append(currentBlockEvents.Events, event)
+		}
+
+		if len(currentBlockEvents.Events) != 0 {
+			blockEvents <- currentBlockEvents
 		}
 	}()
 
