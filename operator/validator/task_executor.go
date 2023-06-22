@@ -11,7 +11,7 @@ import (
 // TODO: consider extracting from controller
 // TODO: finish, refactor
 
-func (c *controller) StartValidator(validatorAddedEvent *contract.ContractValidatorAdded) error {
+func (c *controller) AddValidator(validatorAddedEvent *contract.ContractValidatorAdded) error {
 	if _, ok := c.validatorsMap.GetValidator(hex.EncodeToString(validatorAddedEvent.PublicKey)); ok {
 		return nil
 	}
@@ -29,12 +29,12 @@ func (c *controller) StartValidator(validatorAddedEvent *contract.ContractValida
 	return nil
 }
 
-func (c *controller) StopValidator(validatorRemovedEvent *contract.ContractValidatorRemoved) error {
+func (c *controller) RemoveValidator(validatorRemovedEvent *contract.ContractValidatorRemoved) error {
 	if _, ok := c.validatorsMap.GetValidator(hex.EncodeToString(validatorRemovedEvent.PublicKey)); ok {
 		return nil
 	}
 
-	// TODO: it's already removed from storage, consider passing share to StopValidator
+	// TODO: it's already removed from storage, consider passing share to RemoveValidator
 	validatorShare := c.sharesStorage.Get(validatorRemovedEvent.PublicKey)
 	isOperatorShare := validatorShare.BelongsToOperator(c.operatorData.ID)
 	if !isOperatorShare {
@@ -50,7 +50,7 @@ func (c *controller) StopValidator(validatorRemovedEvent *contract.ContractValid
 	return nil
 }
 
-func (c *controller) LiquidateCluster(liquidated *contract.ContractClusterLiquidated, toLiquidate []*ssvtypes.SSVShare) error {
+func (c *controller) LiquidateCluster(_ *contract.ContractClusterLiquidated, toLiquidate []*ssvtypes.SSVShare) error {
 	for _, share := range toLiquidate {
 		// we can't remove the share secret from key-manager
 		// due to the fact that after activating the validators (ClusterReactivated)
@@ -63,7 +63,7 @@ func (c *controller) LiquidateCluster(liquidated *contract.ContractClusterLiquid
 	return nil
 }
 
-func (c *controller) ReactivateCluster(reactivated *contract.ContractClusterReactivated, toEnable []*ssvtypes.SSVShare) error {
+func (c *controller) ReactivateCluster(_ *contract.ContractClusterReactivated, toEnable []*ssvtypes.SSVShare) error {
 	for _, share := range toEnable {
 		if _, err := c.onShareStart(c.defaultLogger, share); err != nil {
 			return err

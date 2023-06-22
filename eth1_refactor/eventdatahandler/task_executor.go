@@ -6,8 +6,8 @@ import (
 )
 
 type taskExecutor interface {
-	StartValidator(*contract.ContractValidatorAdded) error
-	StopValidator(*contract.ContractValidatorRemoved) error
+	AddValidator(*contract.ContractValidatorAdded) error
+	RemoveValidator(*contract.ContractValidatorRemoved) error
 	LiquidateCluster(*contract.ContractClusterLiquidated, []*ssvtypes.SSVShare) error
 	ReactivateCluster(*contract.ContractClusterReactivated, []*ssvtypes.SSVShare) error
 	UpdateFeeRecipient(*contract.ContractFeeRecipientAddressUpdated) error

@@ -143,7 +143,7 @@ func (edh *EventDataHandler) processEvent(event ethtypes.Log) (Task, error) {
 		task := func() error {
 			edh.logger.Info("starting validator", fields.PubKey(validatorAddedEvent.PublicKey)) // TODO: move logs to taskExecutor
 
-			return edh.taskExecutor.StartValidator(validatorAddedEvent)
+			return edh.taskExecutor.AddValidator(validatorAddedEvent)
 		}
 
 		return task, nil
@@ -161,7 +161,7 @@ func (edh *EventDataHandler) processEvent(event ethtypes.Log) (Task, error) {
 		task := func() error {
 			edh.logger.Info("stopping validator", fields.PubKey(validatorRemovedEvent.PublicKey))
 
-			return edh.taskExecutor.StopValidator(validatorRemovedEvent)
+			return edh.taskExecutor.RemoveValidator(validatorRemovedEvent)
 		}
 
 		return task, nil
