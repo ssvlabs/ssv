@@ -6,7 +6,6 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	"github.com/bloxapp/ssv/ibft/storage"
-	"github.com/bloxapp/ssv/nodeprobe"
 	qbftctrl "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/types"
@@ -20,7 +19,6 @@ const (
 type Options struct {
 	Network           specqbft.Network
 	Beacon            specssv.BeaconNode
-	NodeChecker       nodeprobe.StatusChecker
 	BeaconNetwork     spectypes.BeaconNetwork
 	Storage           *storage.QBFTStores
 	SSVShare          *types.SSVShare

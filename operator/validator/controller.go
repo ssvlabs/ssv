@@ -24,7 +24,6 @@ import (
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/network"
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
-	"github.com/bloxapp/ssv/nodeprobe"
 	nodestorage "github.com/bloxapp/ssv/operator/storage"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
@@ -70,7 +69,6 @@ type ControllerOptions struct {
 	BeaconNetwork              beaconprotocol.Network
 	Network                    network.P2PNetwork
 	Beacon                     beaconprotocol.BeaconNode
-	NodeChecker                nodeprobe.StatusChecker
 	Eth1Client                 eth1.Client
 	ShareEncryptionKeyProvider ShareEncryptionKeyProvider
 	FullNode                   bool `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Save decided history rather than just highest messages"`
@@ -181,7 +179,6 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	validatorOptions := &validator.Options{ //TODO add vars
 		Network:       options.Network,
 		Beacon:        options.Beacon,
-		NodeChecker:   options.NodeChecker,
 		BeaconNetwork: options.BeaconNetwork.BeaconNetwork,
 		Storage:       storageMap,
 		//Share:   nil,  // set per validator

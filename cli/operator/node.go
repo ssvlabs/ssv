@@ -145,7 +145,6 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.KeyManager = keyManager
 		cfg.SSVOptions.ValidatorOptions.Beacon = eth2Client
 		cfg.SSVOptions.ValidatorOptions.Eth1Client = eth1Client
-		cfg.SSVOptions.ValidatorOptions.NodeChecker = nodeChecker
 
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = nodeStorage.GetPrivateKey
 		cfg.SSVOptions.ValidatorOptions.OperatorData = operatorData
@@ -170,6 +169,12 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		nodeChecker.Wait()
+
+		nodeUnreadyHandler := func() {
+			logger.Panic("nodes must be ready, otherwise there's a risk of getting slashed")
+		}
+		nodeChecker.SetUnreadyHandler(nodeUnreadyHandler)
+
 		metrics.ReportSSVNodeHealthiness(true)
 
 		// load & parse local events yaml if exists, otherwise sync from contract

@@ -19,11 +19,12 @@ type StatusChecker interface {
 }
 
 type Prober struct {
-	logger   *zap.Logger
-	interval time.Duration
-	nodes    []StatusChecker
-	ready    atomic.Bool
-	cond     *sync.Cond
+	logger         *zap.Logger
+	interval       time.Duration
+	nodes          []StatusChecker
+	ready          atomic.Bool
+	cond           *sync.Cond
+	unreadyHandler atomic.Pointer[func()]
 }
 
 func NewProber(logger *zap.Logger, nodes ...StatusChecker) *Prober {
@@ -110,11 +111,18 @@ func (p *Prober) probe(ctx context.Context) {
 
 	p.ready.Store(allNodesReady.Load())
 
-	// Wake up any waiters.
-	if p.ready.Load() {
-		p.logger.Info("all nodes are ready")
-		p.cond.Broadcast()
+	if !p.ready.Load() {
+		p.logger.Debug("not all nodes are ready")
+		if h := p.unreadyHandler.Load(); h != nil {
+			(*h)()
+		}
+		return
 	}
+
+	p.logger.Info("all nodes are ready")
+
+	// Wake up any waiters.
+	p.cond.Broadcast()
 }
 
 func (p *Prober) Wait() {
@@ -128,4 +136,8 @@ func (p *Prober) Wait() {
 	}
 
 	p.logger.Info("checked node readiness")
+}
+
+func (p *Prober) SetUnreadyHandler(h func()) {
+	p.unreadyHandler.Store(&h)
 }

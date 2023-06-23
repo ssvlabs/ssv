@@ -13,7 +13,6 @@ import (
 
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/nodeprobe"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
@@ -30,7 +29,6 @@ type Validator struct {
 
 	DutyRunners runner.DutyRunners
 	Network     specqbft.Network
-	NodeChecker nodeprobe.StatusChecker
 	Share       *types.SSVShare
 	Signer      spectypes.KeyManager
 
@@ -53,7 +51,6 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		cancel:      cancel,
 		DutyRunners: options.DutyRunners,
 		Network:     options.Network,
-		NodeChecker: options.NodeChecker,
 		Storage:     options.Storage,
 		Share:       options.SSVShare,
 		Signer:      options.Signer,
@@ -86,10 +83,6 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 
 // StartDuty starts a duty for the validator
 func (v *Validator) StartDuty(logger *zap.Logger, duty *spectypes.Duty) error {
-	if ready, err := v.NodeChecker.IsReady(v.ctx); err != nil || !ready {
-		logger.Panic("nodes must be ready, otherwise there's a risk of getting slashed")
-	}
-
 	dutyRunner := v.DutyRunners[duty.Type]
 	if dutyRunner == nil {
 		return errors.Errorf("no runner for duty type %s", duty.Type.String())
