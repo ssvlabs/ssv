@@ -21,8 +21,6 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
-
-	"github.com/bloxapp/ssv/networkconfig"
 )
 
 var (
@@ -33,6 +31,8 @@ var (
 	testAddr = crypto.PubkeyToAddress(testKey.PublicKey)
 
 	testBalance = big.NewInt(2e18)
+
+	contractAddr = ethcommon.HexToAddress("0xdB7d6AB1f17c6b31909aE466702703dAEf9269Cf")
 )
 
 var genesis = &core.Genesis{
@@ -59,14 +59,14 @@ var testTx2 = types.MustSignNewTx(testKey, types.LatestSigner(genesis.Config), &
 	Data:     ethcommon.FromHex(abiBin),
 })
 
-// var testTx3 = types.MustSignNewTx(testKey, types.LatestSigner(genesis.Config), &types.LegacyTx{
-// 	Nonce:    1,
-// 	Value:    big.NewInt(0),
-// 	GasPrice: big.NewInt(params.InitialBaseFee),
-// 	Gas:      100000,
-// 	To: ethcommon.HexToAddress(),
-// 	Data:     ethcommon.FromHex(abiBin),
-// })
+var testTx3 = types.MustSignNewTx(testKey, types.LatestSigner(genesis.Config), &types.LegacyTx{
+	Nonce:    2,
+	Value:    big.NewInt(0),
+	GasPrice: big.NewInt(params.InitialBaseFee),
+	Gas:      100000,
+	To:       &contractAddr,
+	Data:     ethcommon.FromHex("0xa69b6ed0000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000010100000000000000000000000000000000000000000000000000000000000000"),
+})
 
 // the following is based on this contract:
 //
@@ -95,7 +95,7 @@ func TestEth1Client(t *testing.T) {
 	defer httpsrv.Close()
 
 	addr := "ws:" + strings.TrimPrefix(httpsrv.URL, "http:")
-	contractAddr := ethcommon.HexToAddress(networkconfig.TestNetwork.RegistryContractAddr)
+	// contractAddr := ethcommon.HexToAddress(networkconfig.TestNetwork.RegistryContractAddr)
 	logger := zaptest.NewLogger(t)
 
 	client := New(addr, contractAddr, WithLogger(logger))
@@ -156,7 +156,6 @@ func newTestBackend(t *testing.T) (*node.Node, []*types.Block) {
 	if _, err := ethservice.BlockChain().InsertChain(blocks[1:]); err != nil {
 		t.Fatalf("can't import test blocks: %v", err)
 	}
-	ethservice.BlockChain()
 	return n, blocks
 }
 
@@ -167,9 +166,10 @@ func generateTestChain() []*types.Block {
 		if i == 1 {
 			g.AddTx(testTx1)
 			g.AddTx(testTx2)
+			g.AddTx(testTx3)
 		}
 	}
-	_, blocks, _ := core.GenerateChainWithGenesis(genesis, ethash.NewFaker(), 10, generate)
+	_, blocks, _ := core.GenerateChainWithGenesis(genesis, ethash.NewFaker(), 20, generate)
 
 	return append([]*types.Block{genesis.ToBlock()}, blocks...)
 }
@@ -177,7 +177,7 @@ func generateTestChain() []*types.Block {
 func testFetchHistoricalLogs(t *testing.T, client *Eth1Client, addr string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
-	logs, _, err := client.FetchHistoricalLogs(ctx, 1)
+	logs, _, err := client.FetchHistoricalLogs(ctx, 0)
 	if err != nil {
 		t.Fatalf("FetchHistoricalLogs error = %q", err)
 	}
