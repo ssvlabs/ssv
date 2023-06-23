@@ -69,7 +69,6 @@ type ControllerOptions struct {
 	BeaconNetwork              beaconprotocol.Network
 	Network                    network.P2PNetwork
 	Beacon                     beaconprotocol.BeaconNode
-	Eth1Client                 eth1.Client
 	ShareEncryptionKeyProvider ShareEncryptionKeyProvider
 	FullNode                   bool `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Save decided history rather than just highest messages"`
 	Exporter                   bool `yaml:"Exporter" env:"EXPORTER" env-default:"false" env-description:""`
