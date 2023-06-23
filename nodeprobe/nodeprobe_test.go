@@ -36,6 +36,15 @@ func TestProber(t *testing.T) {
 	ready, err = prober.IsReady(ctx)
 	require.NoError(t, err)
 	require.False(t, ready)
+
+	var unreadyHandlerCalled atomic.Bool
+	unreadyHandler := func() {
+		unreadyHandlerCalled.Store(true)
+	}
+
+	prober.SetUnreadyHandler(unreadyHandler)
+	time.Sleep(prober.interval * 2)
+	require.True(t, unreadyHandlerCalled.Load())
 }
 
 type statusChecker struct {
