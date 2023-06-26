@@ -1,7 +1,7 @@
 package eventdatahandler
 
 import (
-	"github.com/bloxapp/ssv/eth1_refactor/eventdb"
+	"github.com/bloxapp/ssv/eth/eventdb"
 )
 
 type eventDB interface {

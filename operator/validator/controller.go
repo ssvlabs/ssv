@@ -9,7 +9,7 @@ import (
 
 	"github.com/jellydator/ttlcache/v3"
 
-	"github.com/bloxapp/ssv/eth1_refactor/contract"
+	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
 

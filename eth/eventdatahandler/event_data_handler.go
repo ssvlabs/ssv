@@ -9,8 +9,8 @@ import (
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/eth1_refactor/contract"
-	"github.com/bloxapp/ssv/eth1_refactor/eventbatcher"
+	"github.com/bloxapp/ssv/eth/contract"
+	"github.com/bloxapp/ssv/eth/eventbatcher"
 	"github.com/bloxapp/ssv/logging/fields"
 )
 

@@ -3,7 +3,7 @@ package validator
 import (
 	"encoding/hex"
 
-	"github.com/bloxapp/ssv/eth1_refactor/contract"
+	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )

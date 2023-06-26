@@ -18,13 +18,13 @@ import (
 	"github.com/bloxapp/ssv/beacon/goclient"
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/ekm"
+	"github.com/bloxapp/ssv/eth/eventbatcher"
+	"github.com/bloxapp/ssv/eth/eventdatahandler"
+	"github.com/bloxapp/ssv/eth/eventdb"
+	"github.com/bloxapp/ssv/eth/eventdispatcher"
+	"github.com/bloxapp/ssv/eth/executionclient"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/goeth"
-	"github.com/bloxapp/ssv/eth1_refactor/eth1client"
-	"github.com/bloxapp/ssv/eth1_refactor/eventbatcher"
-	"github.com/bloxapp/ssv/eth1_refactor/eventdatahandler"
-	"github.com/bloxapp/ssv/eth1_refactor/eventdb"
-	"github.com/bloxapp/ssv/eth1_refactor/eventdispatcher"
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/api/decided"
 	ssv_identity "github.com/bloxapp/ssv/identity"
@@ -56,8 +56,8 @@ type config struct {
 	global_config.GlobalConfig `yaml:"global"`
 	DBOptions                  basedb.Options         `yaml:"db"`
 	SSVOptions                 operator.Options       `yaml:"ssv"`
-	ETH1Options                eth1.Options           `yaml:"eth1"`
-	ETH2Options                beaconprotocol.Options `yaml:"eth2"`
+	ETH1Options                eth1.Options           `yaml:"eth1"` // TODO: execution_client
+	ETH2Options                beaconprotocol.Options `yaml:"eth2"` // TODO: consensus_client
 	P2pNetworkConfig           p2pv1.Config           `yaml:"p2p"`
 
 	OperatorPrivateKey         string `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
@@ -132,17 +132,17 @@ var StartNodeCmd = &cobra.Command{
 		cfg.ETH2Options.Network = networkConfig.Beacon
 
 		el := setupEth2(logger, operatorData.ID, slotTicker)
-		cl := setupEth1(logger, networkConfig.RegistryContractAddr)
+		cl := setupEth1(logger, networkConfig.RegistryContractAddr) // TODO: get rid of
 
-		eth1Client_ref := eth1client.New(
+		executionClient := executionclient.New(
 			cfg.ETH1Options.ETH1Addr,
 			ethcommon.HexToAddress(networkConfig.RegistryContractAddr),
-			eth1client.WithLogger(logger),
+			executionclient.WithLogger(logger),
 			//eth1client.WithMetrics(metrics), // TODO: implement
-			eth1client.WithFinalizationOffset(eth1client.DefaultFinalizationOffset),
-			eth1client.WithConnectionTimeout(cfg.ETH1Options.ETH1ConnectionTimeout),
-			eth1client.WithReconnectionInitialInterval(eth1client.DefaultReconnectionInitialInterval),
-			eth1client.WithReconnectionMaxInterval(eth1client.DefaultReconnectionMaxInterval),
+			executionclient.WithFinalizationOffset(executionclient.DefaultFinalizationOffset),
+			executionclient.WithConnectionTimeout(cfg.ETH1Options.ETH1ConnectionTimeout),
+			executionclient.WithReconnectionInitialInterval(executionclient.DefaultReconnectionInitialInterval),
+			executionclient.WithReconnectionMaxInterval(executionclient.DefaultReconnectionMaxInterval),
 		)
 
 		cfg.SSVOptions.ForkVersion = forkVersion
@@ -165,7 +165,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.GasLimit = cfg.ETH2Options.GasLimit
 
 		cfg.SSVOptions.Eth1Client = cl
-		cfg.SSVOptions.Eth1Client_ref = eth1Client_ref
+		cfg.SSVOptions.ExecutionClient = executionClient
 
 		if cfg.WsAPIPort != 0 {
 			ws := api.NewWsServer(cmd.Context(), nil, http.NewServeMux(), cfg.WithPing)
@@ -186,10 +186,10 @@ var StartNodeCmd = &cobra.Command{
 
 		if eth1Refactor {
 			// TODO: Node prober needs to be merged to wait until ready.
-			// Now the code is just checking if eth1 is ready and crash if not.
+			// Now the code is just checking if execution client is ready and crash if not.
 			// When prober is merged, it needs to be used instead of the code below.
-			if ready, err := eth1Client_ref.IsReady(cmd.Context()); err != nil || !ready {
-				logger.Fatal("eth node is not ready")
+			if ready, err := executionClient.IsReady(cmd.Context()); err != nil || !ready {
+				logger.Fatal("execution client is not ready")
 			}
 		} else {
 			metrics.WaitUntilHealthy(logger, cfg.SSVOptions.Eth1Client, "execution client")
@@ -202,7 +202,7 @@ var StartNodeCmd = &cobra.Command{
 			eventDB := eventdb.NewEventDB(db.(*kv.BadgerDb).Badger()) // TODO: get rid of type assertion
 			eventDataHandler := eventdatahandler.New(eventDB, validatorCtrl)
 			eventBatcher := eventbatcher.NewEventBatcher()
-			eventDispatcher := eventdispatcher.New(eth1Client_ref, eventBatcher, eventDataHandler)
+			eventDispatcher := eventdispatcher.New(executionClient, eventBatcher, eventDataHandler)
 			fromBlock, err := eventDB.ROTxn().GetLastProcessedBlock()
 			if err != nil {
 				logger.Fatal("could not get last processed block")

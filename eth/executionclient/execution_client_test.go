@@ -1,4 +1,4 @@
-package eth1client
+package executionclient
 
 import (
 	"context"
@@ -16,7 +16,7 @@ import (
 	"github.com/bloxapp/ssv/networkconfig"
 )
 
-func TestEth1Client(t *testing.T) {
+func TestExecutionClient(t *testing.T) {
 	const testTimeout = 100 * time.Millisecond
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()

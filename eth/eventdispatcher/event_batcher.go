@@ -3,7 +3,7 @@ package eventdispatcher
 import (
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 
-	"github.com/bloxapp/ssv/eth1_refactor/eventbatcher"
+	"github.com/bloxapp/ssv/eth/eventbatcher"
 )
 
 type eventBatcher interface {

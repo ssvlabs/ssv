@@ -11,8 +11,8 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/eth1/abiparser"
-	"github.com/bloxapp/ssv/eth1_refactor/contract"
 	"github.com/bloxapp/ssv/exporter"
 	"github.com/bloxapp/ssv/logging/fields"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
