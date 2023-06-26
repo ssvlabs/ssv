@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/bloxapp/ssv/eth1_refactor/eth1client"
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/networkconfig"
 
@@ -43,6 +44,7 @@ type Options struct {
 	P2PNetwork          network.P2PNetwork
 	Context             context.Context
 	Eth1Client          eth1.Client
+	Eth1Client_ref      *eth1client.Eth1Client
 	DB                  basedb.IDb
 	ValidatorController validator.Controller
 	DutyExec            duties.DutyExecutor

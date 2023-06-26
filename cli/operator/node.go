@@ -9,6 +9,7 @@ import (
 	"time"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -19,6 +20,11 @@ import (
 	"github.com/bloxapp/ssv/ekm"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/goeth"
+	"github.com/bloxapp/ssv/eth1_refactor/eth1client"
+	"github.com/bloxapp/ssv/eth1_refactor/eventbatcher"
+	"github.com/bloxapp/ssv/eth1_refactor/eventdatahandler"
+	"github.com/bloxapp/ssv/eth1_refactor/eventdb"
+	"github.com/bloxapp/ssv/eth1_refactor/eventdispatcher"
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/api/decided"
 	ssv_identity "github.com/bloxapp/ssv/identity"
@@ -41,6 +47,7 @@ import (
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/format"
 )
@@ -70,6 +77,9 @@ var cfg config
 var globalArgs global_config.Args
 
 var operatorNode operator.Node
+
+// TODO: get rid of
+const eth1Refactor = true
 
 // StartNodeCmd is the command to start SSV node
 var StartNodeCmd = &cobra.Command{
@@ -124,6 +134,17 @@ var StartNodeCmd = &cobra.Command{
 		el := setupEth2(logger, operatorData.ID, slotTicker)
 		cl := setupEth1(logger, networkConfig.RegistryContractAddr)
 
+		eth1Client_ref := eth1client.New(
+			cfg.ETH1Options.ETH1Addr,
+			ethcommon.HexToAddress(networkConfig.RegistryContractAddr),
+			eth1client.WithLogger(logger),
+			//eth1client.WithMetrics(metrics), // TODO: implement
+			eth1client.WithFinalizationOffset(eth1client.DefaultFinalizationOffset),
+			eth1client.WithConnectionTimeout(cfg.ETH1Options.ETH1ConnectionTimeout),
+			eth1client.WithReconnectionInitialInterval(eth1client.DefaultReconnectionInitialInterval),
+			eth1client.WithReconnectionMaxInterval(eth1client.DefaultReconnectionMaxInterval),
+		)
+
 		cfg.SSVOptions.ForkVersion = forkVersion
 		cfg.SSVOptions.Context = ctx
 		cfg.SSVOptions.DB = db
@@ -144,6 +165,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.GasLimit = cfg.ETH2Options.GasLimit
 
 		cfg.SSVOptions.Eth1Client = cl
+		cfg.SSVOptions.Eth1Client_ref = eth1Client_ref
 
 		if cfg.WsAPIPort != 0 {
 			ws := api.NewWsServer(cmd.Context(), nil, http.NewServeMux(), cfg.WithPing)
@@ -162,22 +184,49 @@ var StartNodeCmd = &cobra.Command{
 			go startMetricsHandler(cmd.Context(), logger, db, cfg.MetricsAPIPort, cfg.EnableProfile)
 		}
 
-		metrics.WaitUntilHealthy(logger, cfg.SSVOptions.Eth1Client, "execution client")
+		if eth1Refactor {
+			// TODO: Node prober needs to be merged to wait until ready.
+			// Now the code is just checking if eth1 is ready and crash if not.
+			// When prober is merged, it needs to be used instead of the code below.
+			if ready, err := eth1Client_ref.IsReady(cmd.Context()); err != nil || !ready {
+				logger.Fatal("eth node is not ready")
+			}
+		} else {
+			metrics.WaitUntilHealthy(logger, cfg.SSVOptions.Eth1Client, "execution client")
+		}
 		metrics.WaitUntilHealthy(logger, cfg.SSVOptions.BeaconNode, "consensus client")
 		metrics.ReportSSVNodeHealthiness(true)
 
-		// load & parse local events yaml if exists, otherwise sync from contract
-		if len(cfg.LocalEventsPath) > 0 {
-			if err := validator.LoadLocalEvents(
-				logger,
-				validatorCtrl.Eth1EventHandler(logger, false),
-				cfg.LocalEventsPath,
-			); err != nil {
-				logger.Fatal("failed to load local events", zap.Error(err))
+		if eth1Refactor {
+			// TODO: handle local events
+			eventDB := eventdb.NewEventDB(db.(*kv.BadgerDb).Badger()) // TODO: get rid of type assertion
+			eventDataHandler := eventdatahandler.New(eventDB, validatorCtrl)
+			eventBatcher := eventbatcher.NewEventBatcher()
+			eventDispatcher := eventdispatcher.New(eth1Client_ref, eventBatcher, eventDataHandler)
+			fromBlock, err := eventDB.ROTxn().GetLastProcessedBlock()
+			if err != nil {
+				logger.Fatal("could not get last processed block")
+			}
+			if fromBlock == nil {
+				fromBlock = networkConfig.ETH1SyncOffset
+			}
+			if err := eventDispatcher.Start(cmd.Context(), fromBlock.Uint64()); err != nil {
+				logger.Fatal("could not start event dispatcher", zap.Error(err))
 			}
 		} else {
-			if err := operatorNode.StartEth1(logger, networkConfig.ETH1SyncOffset); err != nil {
-				logger.Fatal("failed to start eth1", zap.Error(err))
+			// load & parse local events yaml if exists, otherwise sync from contract
+			if len(cfg.LocalEventsPath) > 0 {
+				if err := validator.LoadLocalEvents(
+					logger,
+					validatorCtrl.Eth1EventHandler(logger, false),
+					cfg.LocalEventsPath,
+				); err != nil {
+					logger.Fatal("failed to load local events", zap.Error(err))
+				}
+			} else {
+				if err := operatorNode.StartEth1(logger, networkConfig.ETH1SyncOffset); err != nil {
+					logger.Fatal("failed to start eth1", zap.Error(err))
+				}
 			}
 		}
 

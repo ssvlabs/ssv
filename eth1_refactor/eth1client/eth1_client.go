@@ -43,10 +43,10 @@ func New(nodeAddr string, contractAddr ethcommon.Address, opts ...Option) *Eth1C
 		contractAddress:             contractAddr,
 		logger:                      zap.NewNop(),
 		metrics:                     nopMetrics{},
-		finalizationOffset:          finalizationOffset,
-		connectionTimeout:           defaultConnectionTimeout,
-		reconnectionInitialInterval: defaultReconnectionInitialInterval,
-		reconnectionMaxInterval:     defaultReconnectionMaxInterval,
+		finalizationOffset:          DefaultFinalizationOffset,
+		connectionTimeout:           DefaultConnectionTimeout,
+		reconnectionInitialInterval: DefaultReconnectionInitialInterval,
+		reconnectionMaxInterval:     DefaultReconnectionMaxInterval,
 		closed:                      make(chan struct{}),
 	}
 

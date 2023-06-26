@@ -25,14 +25,14 @@ type EventDataHandler struct {
 	metrics metrics
 }
 
-func NewEventDataHandler(eventDB eventDB, taskExecutor taskExecutor) *EventDataHandler {
+func New(eventDB eventDB, taskExecutor taskExecutor) *EventDataHandler {
 	// Parse the contract's ABI
 	abi, err := contract.ContractMetaData.GetAbi()
 	if err != nil {
 		log.Fatal(err) // TODO: handle
 	}
 
-	// TODO: zero values don't look well, think of a workaround, perhaps pass Eth1Client with Filterer method to NewEventDataHandler
+	// TODO: zero values don't look well, think of a workaround, perhaps pass Eth1Client with Filterer method to New
 	filterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
 	if err != nil {
 		panic(err) // TODO: handle
@@ -79,13 +79,14 @@ func (edh *EventDataHandler) HandleBlockEventsStream(blockEventsCh <-chan eventb
 }
 
 func (edh *EventDataHandler) processBlockEvents(blockEvents eventbatcher.BlockEvents) ([]Task, error) {
-	edh.eventDB.BeginTx()
+	// TODO: fix
+	//edh.eventDB.BeginTx()
 
 	var tasks []Task
 	for _, event := range blockEvents.Events {
 		task, err := edh.processEvent(event)
 		if err != nil {
-			edh.eventDB.Rollback()
+			//edh.eventDB.Rollback()
 			return nil, err
 		}
 
@@ -94,7 +95,7 @@ func (edh *EventDataHandler) processBlockEvents(blockEvents eventbatcher.BlockEv
 		}
 	}
 
-	edh.eventDB.EndTx()
+	//edh.eventDB.EndTx()
 
 	return tasks, nil
 }
