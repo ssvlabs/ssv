@@ -103,8 +103,11 @@ The operator private key can be provided in the `config.yaml` file in two differ
     ```
    You can convert the base64-encoded private key to an encrypted PEM file using the following OpenSSL command:
     ```yaml
+   Set OpenSSL version to LibreSSL first. This is the only pem format that can be decrypted.
+   
     openssl rsa -aes256 -in <path-to-base64-private-key-file> -out <path-to-encrypted-pem-file> -passout pass:<password>
     ```
+   
    Replace <path-to-base64-private-key-file> with the path of your base64 private key file, <path-to-encrypted-pem-file> with your desired output file for the encrypted PEM file, and <password> with the password you want to use for encrypting the PEM file. This command will generate an encrypted PEM file that can be used securely in the config.yaml file.
 ## Running a Local Network of Operators
 
