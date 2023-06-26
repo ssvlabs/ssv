@@ -170,7 +170,7 @@ var StartNodeCmd = &cobra.Command{
 		nodeChecker.Wait()
 
 		nodeUnreadyHandler := func() {
-			logger.Panic("nodes must be ready, otherwise there's a risk of getting slashed")
+			logger.Fatal("Ethereum nodes are out of sync. Usage of unsynchronized nodes can lead to undefined behavior, such as wrongly marking removed validators as active. Ensure the nodes are synced to resume.")
 		}
 		nodeChecker.SetUnreadyHandler(nodeUnreadyHandler)
 
