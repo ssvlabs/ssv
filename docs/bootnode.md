@@ -52,8 +52,10 @@ Create a directory called `ssv-bootnode` and `cd` into it. Please make sure not 
    docker rm -f ssv_bootnode && docker run -d --restart unless-stopped --name=ssv_bootnode -e \
        CONFIG_PATH=/config.yaml -p 5000:5000 -p 4000:4000/udp -v \
        $(pwd)/config/config.bootnode.yaml:/config.yaml -v $(pwd):/data -it \
-       'mosheblox/ssv-preview:jato-v2' make BUILD_PATH=/go/bin/ssvnode start-boot-node
+       'bloxstaking/ssv-node-unstable:latest' make BUILD_PATH=/go/bin/ssvnode start-boot-node
    ```
+
+   _Note: `/data` must be a persistent volume to preserve the ENR across restarts!_
 
 2. Monitor the logs to verify that the bootnode is running correctly with the following command:
 
