@@ -65,7 +65,7 @@ func newTestBackend(t *testing.T, done <-chan interface{}, blockStream <-chan []
 		Service:   filters.NewFilterAPI(filterSystem, false),
 	}})
 
-	// Import the test chain.
+	// Start eth1 node
 	if err := n.Start(); err != nil {
 		t.Fatalf("can't start test node: %v", err)
 	}
@@ -76,6 +76,7 @@ func newTestBackend(t *testing.T, done <-chan interface{}, blockStream <-chan []
 		case <-done:
 			return
 		case blocks := <-blockStream:
+			// Batch block processing because events are fired only after all blocks in the batch processed
 			for _, block := range blocks {
 				var blocksToProcess []*types.Block
 				blocksToProcess = append(blocksToProcess, block)
@@ -90,6 +91,7 @@ func newTestBackend(t *testing.T, done <-chan interface{}, blockStream <-chan []
 	return n, processedStream
 }
 
+// Generate blocks with transactions
 func generateInitialTestChain(t *testing.T, done <-chan interface{}, blockStream chan []*types.Block, n int) {
 	generate := func(i int, g *core.BlockGen) {
 		g.OffsetTime(5)
@@ -97,6 +99,7 @@ func generateInitialTestChain(t *testing.T, done <-chan interface{}, blockStream
 		if i == 0 {
 			return
 		}
+		// Add contract deployment to the firs block
 		if i == 1 {
 			tx := types.MustSignNewTx(testKey, types.LatestSigner(genesis.Config), &types.LegacyTx{
 				Nonce:    uint64(i - 1),
@@ -106,19 +109,18 @@ func generateInitialTestChain(t *testing.T, done <-chan interface{}, blockStream
 				Data:     ethcommon.FromHex(callableBin),
 			})
 			g.AddTx(tx)
-			// t.Log("Tx hash", tx.Hash().Hex())
 		} else {
-			to := ethcommon.HexToAddress("0x3A220f351252089D385b29beca14e27F204c296A")
+			// Transactions to Callable contract
 			tx := types.MustSignNewTx(testKey, types.LatestSigner(genesis.Config), &types.LegacyTx{
-				To:       &to,
+				To:       &contractAddr,
 				Nonce:    uint64(i - 1),
 				Value:    big.NewInt(0),
 				GasPrice: big.NewInt(params.InitialBaseFee),
 				Gas:      100000,
+				// Call to function Call() which emits event Called()
 				Data:     ethcommon.FromHex("0x34e22921"),
 			})
 			g.AddTx(tx)
-			// t.Log("Tx hash", tx.Hash().Hex())
 		}
 	}
 	_, blocks, _ := core.GenerateChainWithGenesis(genesis, ethash.NewFaker(), n, generate)
@@ -154,15 +156,17 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	blockStream := make(chan []*types.Block)
 	defer close(blockStream)
 
-	// Generate test chain.
+	// Generate test chain before we read historical logs
 	generateInitialTestChain(t, done, blockStream, 100)
 	backend, processedStream := newTestBackend(t, done, blockStream, time.Microsecond)
 
 	for blocks := range processedStream {
-		t.Log("Processed block: ", len(blocks))
+		t.Log("Processed blocks: ", len(blocks))
 	}
 
+	// Create JSON-RPC handler
 	rpcServer, _ := backend.RPCHandler()
+	// Expose handler on a test server with ws open
 	httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
 	defer rpcServer.Stop()
 	defer httpsrv.Close()
@@ -179,6 +183,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, ready)
 
+	// Fetch all logs history starting from block 0
 	logs, lastBlock, err := client.FetchHistoricalLogs(ctx, 0)
 	require.NoError(t, err)
 	require.NotEmpty(t, logs)
@@ -199,7 +204,7 @@ func TestStreamLogs(t *testing.T) {
 
 	blockStream := make(chan []*types.Block)
 	defer close(blockStream)
-
+	// Create sim instance with a delay between block execution
 	backend, processedStream := newTestBackend(t, done, blockStream, time.Microsecond * 50)
 
 	rpcServer, _ := backend.RPCHandler()
@@ -221,16 +226,18 @@ func TestStreamLogs(t *testing.T) {
 
 	logs := client.StreamLogs(ctx, 0)
 	var streamedLogs []types.Log
+	// Receive emited events
 	go func() {
 		for log := range logs {
 			streamedLogs = append(streamedLogs, log)
 		}
 	}()
 
-	// Generate test chain
+	// Generate test chain after a connection to the server.
+	// While processing blocks the events will be emited which is read by subscription
 	generateInitialTestChain(t, done, blockStream, 20)
 	for blocks := range processedStream {
-		t.Log("Processed block: ", len(blocks))
+		t.Log("Processed blocks: ", len(blocks))
 	}
 
 	require.NotEmpty(t, streamedLogs)
