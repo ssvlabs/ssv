@@ -178,6 +178,7 @@ func (ec *ExecutionClient) isClosed() bool {
 	}
 }
 
+// TODO: consider handling "websocket: read limit exceeded" error and reducing batch size (syncSmartContractsEvents has code for this)
 func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan ethtypes.Log, fromBlock uint64) (lastBlock uint64, err error) {
 	client := ec.client.Load()
 
