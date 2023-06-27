@@ -1,4 +1,4 @@
-package eth1client
+package executionclient
 
 import (
 	"context"
@@ -17,8 +17,8 @@ import (
 	"github.com/bloxapp/ssv/utils/tasks"
 )
 
-// Eth1Client represents a client for interacting with eth1 node.
-type Eth1Client struct {
+// ExecutionClient represents a client for interacting with Ethereum execution client.
+type ExecutionClient struct {
 	// mandatory
 	nodeAddr        string
 	contractAddress ethcommon.Address
@@ -36,17 +36,17 @@ type Eth1Client struct {
 	closed chan struct{}
 }
 
-// New creates a new instance of Eth1Client.
-func New(nodeAddr string, contractAddr ethcommon.Address, opts ...Option) *Eth1Client {
-	client := &Eth1Client{
+// New creates a new instance of ExecutionClient.
+func New(nodeAddr string, contractAddr ethcommon.Address, opts ...Option) *ExecutionClient {
+	client := &ExecutionClient{
 		nodeAddr:                    nodeAddr,
 		contractAddress:             contractAddr,
 		logger:                      zap.NewNop(),
 		metrics:                     nopMetrics{},
-		finalizationOffset:          finalizationOffset,
-		connectionTimeout:           defaultConnectionTimeout,
-		reconnectionInitialInterval: defaultReconnectionInitialInterval,
-		reconnectionMaxInterval:     defaultReconnectionMaxInterval,
+		finalizationOffset:          DefaultFinalizationOffset,
+		connectionTimeout:           DefaultConnectionTimeout,
+		reconnectionInitialInterval: DefaultReconnectionInitialInterval,
+		reconnectionMaxInterval:     DefaultReconnectionMaxInterval,
 		closed:                      make(chan struct{}),
 	}
 
@@ -57,8 +57,8 @@ func New(nodeAddr string, contractAddr ethcommon.Address, opts ...Option) *Eth1C
 	return client
 }
 
-// Connect connects to eth1 node.
-func (ec *Eth1Client) Connect(ctx context.Context) error {
+// Connect connects to Ethereum execution client.
+func (ec *ExecutionClient) Connect(ctx context.Context) error {
 	if ec.client.Load() != nil {
 		ec.reconnect(ctx)
 		return nil
@@ -71,8 +71,8 @@ func (ec *Eth1Client) Connect(ctx context.Context) error {
 	return nil
 }
 
-// Close shuts down Eth1Client.
-func (ec *Eth1Client) Close() error {
+// Close shuts down ExecutionClient.
+func (ec *ExecutionClient) Close() error {
 	close(ec.closed)
 
 	if client := ec.client.Load(); client != nil {
@@ -83,7 +83,7 @@ func (ec *Eth1Client) Close() error {
 }
 
 // FetchHistoricalLogs retrieves historical logs emitted by the contract starting from fromBlock.
-func (ec *Eth1Client) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs []ethtypes.Log, lastBlock uint64, err error) {
+func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs []ethtypes.Log, lastBlock uint64, err error) {
 	client := ec.client.Load()
 
 	currentBlock, err := client.BlockNumber(ctx)
@@ -111,7 +111,7 @@ func (ec *Eth1Client) FetchHistoricalLogs(ctx context.Context, fromBlock uint64)
 }
 
 // StreamLogs subscribes to events emitted by the contract.
-func (ec *Eth1Client) StreamLogs(ctx context.Context, fromBlock uint64) <-chan ethtypes.Log {
+func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan ethtypes.Log {
 	logs := make(chan ethtypes.Log)
 
 	go func() {
@@ -142,8 +142,8 @@ func (ec *Eth1Client) StreamLogs(ctx context.Context, fromBlock uint64) <-chan e
 	return logs
 }
 
-// IsReady returns if eth1 is currently ready: responds to requests and not in the syncing state.
-func (ec *Eth1Client) IsReady(ctx context.Context) (bool, error) {
+// IsReady returns if execution client is currently ready: responds to requests and not in the syncing state.
+func (ec *ExecutionClient) IsReady(ctx context.Context) (bool, error) {
 	if ec.isClosed() {
 		return false, nil
 	}
@@ -155,21 +155,21 @@ func (ec *Eth1Client) IsReady(ctx context.Context) (bool, error) {
 
 	sp, err := client.SyncProgress(ctx)
 	if err != nil {
-		ec.metrics.Eth1Failure()
+		ec.metrics.ExecutionClientFailure()
 		return false, err
 	}
 
 	if sp != nil {
-		ec.metrics.Eth1Syncing()
+		ec.metrics.ExecutionClientSyncing()
 		return false, nil
 	}
 
-	ec.metrics.Eth1Ready()
+	ec.metrics.ExecutionClientReady()
 
 	return true, nil
 }
 
-func (ec *Eth1Client) isClosed() bool {
+func (ec *ExecutionClient) isClosed() bool {
 	select {
 	case <-ec.closed:
 		return true
@@ -178,7 +178,7 @@ func (ec *Eth1Client) isClosed() bool {
 	}
 }
 
-func (ec *Eth1Client) streamLogsToChan(ctx context.Context, logs chan ethtypes.Log, fromBlock uint64) (lastBlock uint64, err error) {
+func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan ethtypes.Log, fromBlock uint64) (lastBlock uint64, err error) {
 	client := ec.client.Load()
 
 	heads := make(chan *ethtypes.Header)
@@ -217,9 +217,9 @@ func (ec *Eth1Client) streamLogsToChan(ctx context.Context, logs chan ethtypes.L
 	}
 }
 
-// connect connects to eth1.
+// connect connects to Ethereum execution client.
 // It must not be called twice in parallel.
-func (ec *Eth1Client) connect(ctx context.Context) error {
+func (ec *ExecutionClient) connect(ctx context.Context) error {
 	logger := ec.logger.With(fields.Address(ec.nodeAddr))
 
 	ctx, cancel := context.WithTimeout(ctx, ec.connectionTimeout)
@@ -242,7 +242,7 @@ func (ec *Eth1Client) connect(ctx context.Context) error {
 // reconnect tries to reconnect multiple times with an exponent interval.
 // It panics when reconnecting limit is reached.
 // It must not be called twice in parallel.
-func (ec *Eth1Client) reconnect(ctx context.Context) {
+func (ec *ExecutionClient) reconnect(ctx context.Context) {
 	logger := ec.logger.With(fields.Address(ec.nodeAddr))
 
 	if cl := ec.client.Load(); cl != nil {
@@ -255,7 +255,7 @@ func (ec *Eth1Client) reconnect(ctx context.Context) {
 			if ec.isClosed() {
 				return true, false
 			}
-			// continue until reaching to limit, and then panic as eth1 connection is required
+			// continue until reaching to limit, and then panic as Ethereum execution client connection is required
 			if lastTick >= ec.reconnectionMaxInterval {
 				logger.Panic("failed to reconnect", zap.Error(err))
 			} else {

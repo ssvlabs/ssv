@@ -1,7 +1,6 @@
 package eth1
 
 import (
-	"encoding/base64"
 	"encoding/hex"
 	"strings"
 
@@ -29,11 +28,10 @@ type OperatorRemovedEventYAML struct {
 }
 
 type validatorAddedEventYAML struct {
-	PublicKey       string   `yaml:"PublicKey"`
-	Owner           string   `yaml:"Owner"`
-	OperatorIds     []uint64 `yaml:"OperatorIds"`
-	SharePublicKeys []string `yaml:"SharePublicKeys"`
-	EncryptedKeys   []string `yaml:"EncryptedKeys"`
+	PublicKey   string   `yaml:"PublicKey"`
+	Owner       string   `yaml:"Owner"`
+	OperatorIds []uint64 `yaml:"OperatorIds"`
+	Shares      string   `yaml:"Shares"`
 }
 
 type ValidatorRemovedEventYAML struct {
@@ -76,20 +74,17 @@ func (e *validatorAddedEventYAML) toEventData() (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	sharePubKeys, err := toByteArr(e.SharePublicKeys, "hex")
+
+	shares, err := hex.DecodeString(strings.TrimPrefix(e.Shares, "0x"))
 	if err != nil {
 		return nil, err
 	}
-	encryptedKeys, err := toByteArr(e.EncryptedKeys, "base64")
-	if err != nil {
-		return nil, err
-	}
+
 	return abiparser.ValidatorAddedEvent{
-		PublicKey:       pubKey,
-		Owner:           common.HexToAddress(e.Owner),
-		OperatorIds:     e.OperatorIds,
-		SharePublicKeys: sharePubKeys,
-		EncryptedKeys:   encryptedKeys,
+		PublicKey:   pubKey,
+		Owner:       common.HexToAddress(e.Owner),
+		OperatorIds: e.OperatorIds,
+		Shares:      shares,
 	}, nil
 }
 
@@ -195,27 +190,4 @@ func (e *Event) UnmarshalYAML(value *yaml.Node) error {
 	e.Data = data
 
 	return nil
-}
-
-func toByteArr(orig []string, decode string) ([][]byte, error) {
-	res := make([][]byte, len(orig))
-	for i, v := range orig {
-		switch decode {
-		case "hex":
-			d, err := hex.DecodeString(strings.TrimPrefix(v, "0x"))
-			if err != nil {
-				return nil, err
-			}
-			res[i] = d
-		case "base64":
-			hash, err := base64.StdEncoding.DecodeString(v)
-			if err != nil {
-				return nil, err
-			}
-			res[i] = hash
-		default:
-			res[i] = []byte(v)
-		}
-	}
-	return res, nil
 }

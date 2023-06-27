@@ -130,7 +130,7 @@ spec:
           - name: NETWORK
             value: "jato-v2"
           - name: DB_PATH
-            value: "./data/db-jato-v2"
+            value: "./data/db-jato-v2-2"
           - name: METRICS_API_PORT
             value: "15010"
           - name: ENABLE_PROFILE

@@ -9,6 +9,7 @@ import (
 
 	"github.com/jellydator/ttlcache/v3"
 
+	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
 
@@ -105,7 +106,15 @@ type Controller interface {
 	//  - the amount of validators assigned to this operator
 	GetValidatorStats() (uint64, uint64, uint64, error)
 	GetOperatorData() *registrystorage.OperatorData
-	//OnFork(forkVersion forksprotocol.ForkVersion) error
+	TaskExecutor
+}
+
+type TaskExecutor interface {
+	AddValidator(*contract.ContractValidatorAdded) error
+	RemoveValidator(*contract.ContractValidatorRemoved) error
+	LiquidateCluster(*contract.ContractClusterLiquidated, []*types.SSVShare) error
+	ReactivateCluster(*contract.ContractClusterReactivated, []*types.SSVShare) error
+	UpdateFeeRecipient(*contract.ContractFeeRecipientAddressUpdated) error
 }
 
 // EventHandler represents the interface for compatible storage event handlers
@@ -124,6 +133,8 @@ type nonCommitteeValidator struct {
 // controller implements Controller
 type controller struct {
 	context context.Context
+
+	defaultLogger *zap.Logger
 
 	eventHandler      EventHandler
 	sharesStorage     registrystorage.Shares
@@ -203,6 +214,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	}
 
 	ctrl := controller{
+		defaultLogger:              logger,
 		sharesStorage:              options.RegistryStorage.Shares(),
 		operatorsStorage:           options.RegistryStorage,
 		recipientsStorage:          options.RegistryStorage,

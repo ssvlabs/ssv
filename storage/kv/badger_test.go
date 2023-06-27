@@ -8,15 +8,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
+
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/stretchr/testify/require"
 )
 
 func TestBadgerEndToEnd(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	logger := logging.TestLogger(t)
+	zapCore, observedLogs := observer.New(zap.DebugLevel)
+	logger := zap.New(zapCore)
 	options := basedb.Options{
 		Type:      "badger-memory",
 		Path:      "",
@@ -73,7 +77,10 @@ func TestBadgerEndToEnd(t *testing.T) {
 	require.EqualValues(t, toSave[2].key, obj.Key)
 	require.EqualValues(t, toSave[2].value, obj.Value)
 
+	logCountBeforeReport := observedLogs.Len()
 	db.(*BadgerDb).report(logger)
+	logCountAfterReport := observedLogs.Len()
+	require.Equal(t, logCountBeforeReport+1, logCountAfterReport)
 
 	require.NoError(t, db.Delete(toSave[0].prefix, toSave[0].key))
 	obj, found, err = db.Get(toSave[0].prefix, toSave[0].key)

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -17,6 +18,11 @@ import (
 	"github.com/bloxapp/ssv/beacon/goclient"
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/ekm"
+	"github.com/bloxapp/ssv/eth/eventbatcher"
+	"github.com/bloxapp/ssv/eth/eventdatahandler"
+	"github.com/bloxapp/ssv/eth/eventdb"
+	"github.com/bloxapp/ssv/eth/eventdispatcher"
+	"github.com/bloxapp/ssv/eth/executionclient"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/goeth"
 	"github.com/bloxapp/ssv/exporter/api"
@@ -41,6 +47,7 @@ import (
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/format"
 )
@@ -49,8 +56,8 @@ type config struct {
 	global_config.GlobalConfig `yaml:"global"`
 	DBOptions                  basedb.Options         `yaml:"db"`
 	SSVOptions                 operator.Options       `yaml:"ssv"`
-	ETH1Options                eth1.Options           `yaml:"eth1"`
-	ETH2Options                beaconprotocol.Options `yaml:"eth2"`
+	ETH1Options                eth1.Options           `yaml:"eth1"` // TODO: execution_client
+	ETH2Options                beaconprotocol.Options `yaml:"eth2"` // TODO: consensus_client
 	P2pNetworkConfig           p2pv1.Config           `yaml:"p2p"`
 
 	OperatorPrivateKey         string `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
@@ -70,6 +77,9 @@ var cfg config
 var globalArgs global_config.Args
 
 var operatorNode operator.Node
+
+// TODO: get rid of
+const eth1Refactor = true
 
 // StartNodeCmd is the command to start SSV node
 var StartNodeCmd = &cobra.Command{
@@ -116,7 +126,24 @@ var StartNodeCmd = &cobra.Command{
 		slotTicker := slot_ticker.NewTicker(ctx, networkConfig)
 
 		cfg.ETH2Options.Context = cmd.Context()
-		el, cl := setupNodes(logger, operatorData.ID, networkConfig, slotTicker)
+
+		cfg.ETH2Options.Graffiti = []byte("SSV.Network")
+		cfg.ETH2Options.GasLimit = spectypes.DefaultGasLimit
+		cfg.ETH2Options.Network = networkConfig.Beacon
+
+		el := setupEth2(logger, operatorData.ID, slotTicker)
+		cl := setupEth1(logger, networkConfig.RegistryContractAddr) // TODO: get rid of
+
+		executionClient := executionclient.New(
+			cfg.ETH1Options.ETH1Addr,
+			ethcommon.HexToAddress(networkConfig.RegistryContractAddr),
+			executionclient.WithLogger(logger),
+			//eth1client.WithMetrics(metrics), // TODO: implement
+			executionclient.WithFinalizationOffset(executionclient.DefaultFinalizationOffset),
+			executionclient.WithConnectionTimeout(cfg.ETH1Options.ETH1ConnectionTimeout),
+			executionclient.WithReconnectionInitialInterval(executionclient.DefaultReconnectionInitialInterval),
+			executionclient.WithReconnectionMaxInterval(executionclient.DefaultReconnectionMaxInterval),
+		)
 
 		cfg.SSVOptions.ForkVersion = forkVersion
 		cfg.SSVOptions.Context = ctx
@@ -138,6 +165,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.GasLimit = cfg.ETH2Options.GasLimit
 
 		cfg.SSVOptions.Eth1Client = cl
+		cfg.SSVOptions.ExecutionClient = executionClient
 
 		if cfg.WsAPIPort != 0 {
 			ws := api.NewWsServer(cmd.Context(), nil, http.NewServeMux(), cfg.WithPing)
@@ -156,22 +184,49 @@ var StartNodeCmd = &cobra.Command{
 			go startMetricsHandler(cmd.Context(), logger, db, cfg.MetricsAPIPort, cfg.EnableProfile)
 		}
 
-		metrics.WaitUntilHealthy(logger, cfg.SSVOptions.Eth1Client, "execution client")
+		if eth1Refactor {
+			// TODO: Node prober needs to be merged to wait until ready.
+			// Now the code is just checking if execution client is ready and crash if not.
+			// When prober is merged, it needs to be used instead of the code below.
+			if ready, err := executionClient.IsReady(cmd.Context()); err != nil || !ready {
+				logger.Fatal("execution client is not ready")
+			}
+		} else {
+			metrics.WaitUntilHealthy(logger, cfg.SSVOptions.Eth1Client, "execution client")
+		}
 		metrics.WaitUntilHealthy(logger, cfg.SSVOptions.BeaconNode, "consensus client")
 		metrics.ReportSSVNodeHealthiness(true)
 
-		// load & parse local events yaml if exists, otherwise sync from contract
-		if len(cfg.LocalEventsPath) > 0 {
-			if err := validator.LoadLocalEvents(
-				logger,
-				validatorCtrl.Eth1EventHandler(logger, false),
-				cfg.LocalEventsPath,
-			); err != nil {
-				logger.Fatal("failed to load local events", zap.Error(err))
+		if eth1Refactor {
+			// TODO: handle local events
+			eventDB := eventdb.NewEventDB(db.(*kv.BadgerDb).Badger()) // TODO: get rid of type assertion
+			eventDataHandler := eventdatahandler.New(eventDB, validatorCtrl)
+			eventBatcher := eventbatcher.NewEventBatcher()
+			eventDispatcher := eventdispatcher.New(executionClient, eventBatcher, eventDataHandler)
+			fromBlock, err := eventDB.ROTxn().GetLastProcessedBlock()
+			if err != nil {
+				logger.Fatal("could not get last processed block")
+			}
+			if fromBlock == nil {
+				fromBlock = networkConfig.ETH1SyncOffset
+			}
+			if err := eventDispatcher.Start(cmd.Context(), fromBlock.Uint64()); err != nil {
+				logger.Fatal("could not start event dispatcher", zap.Error(err))
 			}
 		} else {
-			if err := operatorNode.StartEth1(logger, networkConfig.ETH1SyncOffset); err != nil {
-				logger.Fatal("failed to start eth1", zap.Error(err))
+			// load & parse local events yaml if exists, otherwise sync from contract
+			if len(cfg.LocalEventsPath) > 0 {
+				if err := validator.LoadLocalEvents(
+					logger,
+					validatorCtrl.Eth1EventHandler(logger, false),
+					cfg.LocalEventsPath,
+				); err != nil {
+					logger.Fatal("failed to load local events", zap.Error(err))
+				}
+			} else {
+				if err := operatorNode.StartEth1(logger, networkConfig.ETH1SyncOffset); err != nil {
+					logger.Fatal("failed to start eth1", zap.Error(err))
+				}
 			}
 		}
 
@@ -347,27 +402,25 @@ func setupP2P(
 	return p2pv1.New(logger, &cfg.P2pNetworkConfig)
 }
 
-func setupNodes(
+func setupEth2(
 	logger *zap.Logger,
 	operatorID spectypes.OperatorID,
-	network networkconfig.NetworkConfig,
 	slotTicker slot_ticker.Ticker,
-) (beaconprotocol.BeaconNode, eth1.Client) {
-	// consensus client
-	cfg.ETH2Options.Graffiti = []byte("SSV.Network")
-	cfg.ETH2Options.GasLimit = spectypes.DefaultGasLimit
-	cfg.ETH2Options.Network = network.Beacon
+) beaconprotocol.BeaconNode {
 	cl, err := goclient.New(logger, cfg.ETH2Options, operatorID, slotTicker)
 	if err != nil {
 		logger.Fatal("failed to create beacon go-client", zap.Error(err),
 			fields.Address(cfg.ETH2Options.BeaconNodeAddr))
 	}
 
-	// execution client
-	logger.Info("using registry contract address", fields.Address(network.RegistryContractAddr), fields.ABIVersion(cfg.ETH1Options.AbiVersion.String()))
+	return cl
+}
+
+func setupEth1(logger *zap.Logger, contractAddr string) eth1.Client {
+	logger.Info("using registry contract address", fields.Address(contractAddr), fields.ABIVersion(cfg.ETH1Options.AbiVersion.String()))
 	if len(cfg.ETH1Options.RegistryContractABI) > 0 {
 		logger.Info("using registry contract abi", fields.ABI(cfg.ETH1Options.RegistryContractABI))
-		if err = eth1.LoadABI(logger, cfg.ETH1Options.RegistryContractABI); err != nil {
+		if err := eth1.LoadABI(logger, cfg.ETH1Options.RegistryContractABI); err != nil {
 			logger.Fatal("failed to load ABI JSON", zap.Error(err))
 		}
 	}
@@ -376,14 +429,14 @@ func setupNodes(
 		NodeAddr:             cfg.ETH1Options.ETH1Addr,
 		ConnectionTimeout:    cfg.ETH1Options.ETH1ConnectionTimeout,
 		ContractABI:          eth1.ContractABI(cfg.ETH1Options.AbiVersion),
-		RegistryContractAddr: network.RegistryContractAddr,
+		RegistryContractAddr: contractAddr,
 		AbiVersion:           cfg.ETH1Options.AbiVersion,
 	})
 	if err != nil {
 		logger.Fatal("failed to create eth1 client", zap.Error(err))
 	}
 
-	return cl, el
+	return el
 }
 
 func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.IDb, port int, enableProf bool) {

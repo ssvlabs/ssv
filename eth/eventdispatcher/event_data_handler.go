@@ -1,7 +1,7 @@
 package eventdispatcher
 
 import (
-	"github.com/bloxapp/ssv/eth1_refactor/eventbatcher"
+	"github.com/bloxapp/ssv/eth/eventbatcher"
 )
 
 type eventDataHandler interface {

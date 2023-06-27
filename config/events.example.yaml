@@ -27,19 +27,9 @@
   Name: ValidatorAdded
   Data:
     PublicKey: <validator-public-key>
-    OwnerAddress: <owner-address>
+    Owner: <owner-address>
     OperatorIds: <operator-ids e.g. [5, 6, 7, 8]>
-    SharePublicKeys:
-      - <share-public-key [bls hex encoded] e.g. 0x8355e175f60d5bd83218a6ab319d67f397c1d0285948d5a3b2301ffa283cf145237d5ca532dba9575ec729897a1cf89f>
-      - <share-public-key>
-      - <share-public-key>
-      - <share-public-key>
-    EncryptedKeys:
-      - <encrypted-key [b64 encoded] e.g. LqWGlGleqouKBRvt3iJ43hMu/T8YIOpEeTgPuYSFEad1SH42PZQzGRUD/DKHfenW0i8ARXVWzZCdWRcfF8+2wph+J4MW7EvGnJpVd/ETcdrq9Ep0M0ypU+GxlfqeB/LdXskLn7XGSuAkWDyg2oLjwSlGVbWSB5Yd4zuU/VSwkfTDckmxIjdmvGLgBbhBic2PragYoHYKs3U6uz9PUUapavhlRBaSgqayTEm5/u8uT+X6IraaDAGzzh7i3lztLulj8zq1WWXArxfWXmPlCZt2N654elJSzmwF14+22Y691NgEc2NazRp9lukU8PfwolrRm7w9wzTtpl3UOnwuPtBOxw==>
-      - <encrypted-key [b64 encoded]>
-      - <encrypted-key [b64 encoded]>
-      - <encrypted-key [b64 encoded]>
-
+    Shares: <shares>
 
 ## all possible events
 - Log: <log>
@@ -56,18 +46,9 @@
   Name: ValidatorAdded
   Data:
     PublicKey: <validator-public-key>
-    OwnerAddress: <owner-address>
+    Owner: <owner-address>
     OperatorIds: <operator-ids e.g. [5, 6, 7, 8]>
-    SharePublicKeys:
-      - <share-public-key [bls hex encoded] e.g. 0x8355e175f60d5bd83218a6ab319d67f397c1d0285948d5a3b2301ffa283cf145237d5ca532dba9575ec729897a1cf89f>
-      - <share-public-key>
-      - <share-public-key>
-      - <share-public-key>
-    EncryptedKeys:
-      - <encrypted-key [b64 encoded] e.g. LqWGlGleqouKBRvt3iJ43hMu/T8YIOpEeTgPuYSFEad1SH42PZQzGRUD/DKHfenW0i8ARXVWzZCdWRcfF8+2wph+J4MW7EvGnJpVd/ETcdrq9Ep0M0ypU+GxlfqeB/LdXskLn7XGSuAkWDyg2oLjwSlGVbWSB5Yd4zuU/VSwkfTDckmxIjdmvGLgBbhBic2PragYoHYKs3U6uz9PUUapavhlRBaSgqayTEm5/u8uT+X6IraaDAGzzh7i3lztLulj8zq1WWXArxfWXmPlCZt2N654elJSzmwF14+22Y691NgEc2NazRp9lukU8PfwolrRm7w9wzTtpl3UOnwuPtBOxw==>
-      - <encrypted-key [b64 encoded]>
-      - <encrypted-key [b64 encoded]>
-      - <encrypted-key [b64 encoded]>
+    Shares: <shares>
 - Log:
   Name: ValidatorRemoved
   Data:
@@ -77,15 +58,15 @@
 - Log:
   Name: ClusterLiquidated
   Data:
-    OwnerAddress: <owner-address>
+    Owner: <owner-address>
     OperatorIds: <operator-ids e.g. [5, 6, 7, 8]>
 - Log:
   Name: ClusterReactivated
   Data:
-    OwnerAddress: <owner-address>
+    Owner: <owner-address>
     OperatorIds: <operator-ids e.g. [5, 6, 7, 8]>
 - Log:
   Name: FeeRecipientAddressUpdated
   Data:
-    OwnerAddress: <owner-address>
+    Owner: <owner-address>
     RecipientAddress: <recipient-address>

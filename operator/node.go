@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/bloxapp/ssv/eth/executionclient"
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/networkconfig"
 
@@ -39,10 +40,11 @@ type Options struct {
 	// NetworkName is the network name of this node
 	NetworkName         string `yaml:"Network" env:"NETWORK" env-default:"mainnet" env-description:"Network is the network of this node"`
 	Network             networkconfig.NetworkConfig
-	BeaconNode          beaconprotocol.BeaconNode
+	BeaconNode          beaconprotocol.BeaconNode // TODO: consider renaming to ConsensusClient
 	P2PNetwork          network.P2PNetwork
 	Context             context.Context
-	Eth1Client          eth1.Client
+	Eth1Client          eth1.Client // TODO: get rid of
+	ExecutionClient     *executionclient.ExecutionClient
 	DB                  basedb.IDb
 	ValidatorController validator.Controller
 	DutyExec            duties.DutyExecutor
