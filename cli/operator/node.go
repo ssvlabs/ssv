@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"log"
 	"net/http"
 	"os"
@@ -45,6 +44,7 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/format"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
 type KeyStore struct {
@@ -283,17 +283,14 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.St
 	if cfg.KeyStore.PrivateKeyFile != "" {
 		pemData, err := os.ReadFile(cfg.KeyStore.PrivateKeyFile)
 		if err != nil {
-			log.Fatalf("Error reading PEM file: %v\n", err)
+			log.Fatal("Error reading PEM file", zap.Error(err))
 		}
 		keyStorePassword, err := os.ReadFile(cfg.KeyStore.PasswordFile)
 		if err != nil {
-			log.Fatalf("Error reading Password file: %v\n", err)
+			log.Fatal("Error reading Password file", zap.Error(err))
 		}
 
 		privateKey, err := rsaencryption.ConvertEncryptedPemToPrivateKey(pemData, string(keyStorePassword))
-		if err != nil {
-			log.Fatalf("Error converting encrypted PEM to private key: %v\n", err)
-		}
 		if err != nil {
 			logger.Fatal("could not decrypt operator private key", zap.Error(err))
 		}
