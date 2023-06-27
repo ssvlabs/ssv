@@ -82,6 +82,7 @@ type ControllerOptions struct {
 	ForkVersion                forksprotocol.ForkVersion
 	NewDecidedHandler          qbftcontroller.NewDecidedHandler
 	DutyRoles                  []spectypes.BeaconRole
+	StorageMap                 *storage.QBFTStores
 
 	// worker flags
 	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of goroutines to use for message workers"`
@@ -169,13 +170,6 @@ type controller struct {
 // NewController creates a new validator controller instance
 func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	logger.Debug("CreatingController", zap.Bool("full_node", options.FullNode), fields.BuilderProposals(options.BuilderProposals))
-	storageMap := storage.NewStores()
-	storageMap.Add(spectypes.BNRoleAttester, storage.New(options.DB, spectypes.BNRoleAttester.String(), options.ForkVersion))
-	storageMap.Add(spectypes.BNRoleProposer, storage.New(options.DB, spectypes.BNRoleProposer.String(), options.ForkVersion))
-	storageMap.Add(spectypes.BNRoleAggregator, storage.New(options.DB, spectypes.BNRoleAggregator.String(), options.ForkVersion))
-	storageMap.Add(spectypes.BNRoleSyncCommittee, storage.New(options.DB, spectypes.BNRoleSyncCommittee.String(), options.ForkVersion))
-	storageMap.Add(spectypes.BNRoleSyncCommitteeContribution, storage.New(options.DB, spectypes.BNRoleSyncCommitteeContribution.String(), options.ForkVersion))
-	storageMap.Add(spectypes.BNRoleValidatorRegistration, storage.New(options.DB, spectypes.BNRoleValidatorRegistration.String(), options.ForkVersion))
 
 	// lookup in a map that holds all relevant operators
 	operatorsIDs := &sync.Map{}
@@ -192,7 +186,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		Network:       options.Network,
 		Beacon:        options.Beacon,
 		BeaconNetwork: options.BeaconNetwork.BeaconNetwork,
-		Storage:       storageMap,
+		Storage:       options.StorageMap,
 		//Share:   nil,  // set per validator
 		Signer: options.KeyManager,
 		//Mode: validator.ModeRW // set per validator
@@ -219,7 +213,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		operatorsStorage:           options.RegistryStorage,
 		recipientsStorage:          options.RegistryStorage,
 		eventHandler:               options.RegistryStorage,
-		ibftStorageMap:             storageMap,
+		ibftStorageMap:             options.StorageMap,
 		context:                    options.Context,
 		beacon:                     options.Beacon,
 		shareEncryptionKeyProvider: options.ShareEncryptionKeyProvider,

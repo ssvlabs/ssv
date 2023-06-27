@@ -1,9 +1,11 @@
 package eventdatahandler
 
 import (
+	"crypto/rsa"
 	"fmt"
 	"log"
 
+	"github.com/bloxapp/ssv-spec/types"
 	ethabi "github.com/ethereum/go-ethereum/accounts/abi"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
@@ -11,22 +13,44 @@ import (
 
 	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/eth/eventbatcher"
+	"github.com/bloxapp/ssv/eth/eventdb"
+	"github.com/bloxapp/ssv/eth/sharestorage"
+	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging/fields"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	"github.com/bloxapp/ssv/registry/storage"
 )
 
 type EventDataHandler struct {
-	eventDB       eventDB
-	taskExecutor  taskExecutor
-	abi           *ethabi.ABI
-	filterer      *contract.ContractFilterer
-	eventHandlers eventHandlers
-
-	logger  *zap.Logger
-	metrics metrics
+	eventDB                    eventDB
+	taskExecutor               taskExecutor
+	abi                        *ethabi.ABI
+	shares                     *sharestorage.ShareStorage
+	filterer                   *contract.ContractFilterer
+	operatorData               *storage.OperatorData
+	shareEncryptionKeyProvider ShareEncryptionKeyProvider
+	keyManager                 types.KeyManager
+	beacon                     beaconprotocol.BeaconNode
+	storageMap                 *qbftstorage.QBFTStores
+	fullNode                   bool
+	logger                     *zap.Logger
+	metrics                    metrics
 }
 
-func New(eventDB eventDB, taskExecutor taskExecutor) *EventDataHandler {
-	// Parse the contract's ABI
+type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
+
+// TODO: try to reduce amount of input parameters
+
+func New(
+	eventDB eventDB,
+	taskExecutor taskExecutor,
+	operatorData *storage.OperatorData,
+	shareEncryptionKeyProvider ShareEncryptionKeyProvider,
+	keyManager types.KeyManager,
+	beacon beaconprotocol.BeaconNode,
+	storageMap *qbftstorage.QBFTStores,
+	opts ...Option,
+) *EventDataHandler {
 	abi, err := contract.ContractMetaData.GetAbi()
 	if err != nil {
 		log.Fatal(err) // TODO: handle
@@ -38,15 +62,26 @@ func New(eventDB eventDB, taskExecutor taskExecutor) *EventDataHandler {
 		panic(err) // TODO: handle
 	}
 
-	return &EventDataHandler{
-		eventDB:       eventDB,
-		taskExecutor:  taskExecutor,
-		abi:           abi,
-		filterer:      filterer,
-		logger:        zap.NewNop(),
-		metrics:       nopMetrics{},
-		eventHandlers: nil, // TODO: create nopHandler
+	edh := &EventDataHandler{
+		eventDB:                    eventDB,
+		taskExecutor:               taskExecutor,
+		abi:                        abi,
+		filterer:                   filterer,
+		operatorData:               operatorData,
+		shareEncryptionKeyProvider: shareEncryptionKeyProvider,
+		keyManager:                 keyManager,
+		beacon:                     beacon,
+		storageMap:                 storageMap,
+		logger:                     zap.NewNop(),
+		metrics:                    nopMetrics{},
+		shares:                     sharestorage.New(),
 	}
+
+	for _, opt := range opts {
+		opt(edh)
+	}
+
+	return edh
 }
 
 func (edh *EventDataHandler) HandleBlockEventsStream(blockEventsCh <-chan eventbatcher.BlockEvents) error {
@@ -60,7 +95,10 @@ func (edh *EventDataHandler) HandleBlockEventsStream(blockEventsCh <-chan eventb
 			continue
 		}
 
-		logger := edh.logger.With(fields.BlockNumber(blockEvents.BlockNumber))
+		logger := edh.logger.With(
+			fields.BlockNumber(blockEvents.BlockNumber),
+			fields.Count(len(tasks)),
+		)
 		logger.Info("executing tasks")
 
 		// TODO:
@@ -82,9 +120,10 @@ func (edh *EventDataHandler) processBlockEvents(blockEvents eventbatcher.BlockEv
 	// TODO: fix
 	//edh.eventDB.BeginTx()
 
+	txn := edh.eventDB.RWTxn()
 	var tasks []Task
 	for _, event := range blockEvents.Events {
-		task, err := edh.processEvent(event)
+		task, err := edh.processEvent(txn, event)
 		if err != nil {
 			//edh.eventDB.Rollback()
 			return nil, err
@@ -100,7 +139,7 @@ func (edh *EventDataHandler) processBlockEvents(blockEvents eventbatcher.BlockEv
 	return tasks, nil
 }
 
-func (edh *EventDataHandler) processEvent(event ethtypes.Log) (Task, error) {
+func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (Task, error) {
 	abiEvent, err := edh.abi.EventByID(event.Topics[0])
 	if err != nil {
 		return nil, err
@@ -113,7 +152,7 @@ func (edh *EventDataHandler) processEvent(event ethtypes.Log) (Task, error) {
 			return nil, fmt.Errorf("parse OperatorAdded: %w", err)
 		}
 
-		if err := edh.eventHandlers.HandleOperatorAdded(operatorAddedEvent); err != nil {
+		if err := edh.HandleOperatorAdded(txn, operatorAddedEvent); err != nil {
 			return nil, fmt.Errorf("handle OperatorAdded: %w", err)
 		}
 
@@ -125,7 +164,7 @@ func (edh *EventDataHandler) processEvent(event ethtypes.Log) (Task, error) {
 			return nil, fmt.Errorf("parse OperatorRemoved: %w", err)
 		}
 
-		if err := edh.eventHandlers.HandleOperatorRemoved(operatorRemovedEvent); err != nil {
+		if err := edh.HandleOperatorRemoved(txn, operatorRemovedEvent); err != nil {
 			return nil, fmt.Errorf("handle OperatorRemoved: %w", err)
 		}
 
@@ -137,7 +176,7 @@ func (edh *EventDataHandler) processEvent(event ethtypes.Log) (Task, error) {
 			return nil, fmt.Errorf("parse ValidatorAdded: %w", err)
 		}
 
-		if err := edh.eventHandlers.HandleValidatorAdded(validatorAddedEvent); err != nil {
+		if err := edh.HandleValidatorAdded(txn, validatorAddedEvent); err != nil {
 			return nil, fmt.Errorf("handle ValidatorAdded: %w", err)
 		}
 
@@ -155,7 +194,7 @@ func (edh *EventDataHandler) processEvent(event ethtypes.Log) (Task, error) {
 			return nil, fmt.Errorf("parse ValidatorRemoved: %w", err)
 		}
 
-		if err := edh.eventHandlers.HandleValidatorRemoved(validatorRemovedEvent); err != nil {
+		if err := edh.HandleValidatorRemoved(txn, validatorRemovedEvent); err != nil {
 			return nil, fmt.Errorf("handle ValidatorRemoved: %w", err)
 		}
 
@@ -173,7 +212,7 @@ func (edh *EventDataHandler) processEvent(event ethtypes.Log) (Task, error) {
 			return nil, fmt.Errorf("parse ClusterLiquidated: %w", err)
 		}
 
-		sharesToLiquidate, err := edh.eventHandlers.HandleClusterLiquidated(clusterLiquidatedEvent)
+		sharesToLiquidate, err := edh.HandleClusterLiquidated(txn, clusterLiquidatedEvent)
 		if err != nil {
 			return nil, fmt.Errorf("handle ClusterLiquidated: %w", err)
 		}
@@ -192,7 +231,7 @@ func (edh *EventDataHandler) processEvent(event ethtypes.Log) (Task, error) {
 			return nil, fmt.Errorf("parse ClusterReactivated: %w", err)
 		}
 
-		sharesToEnable, err := edh.eventHandlers.HandleClusterReactivated(clusterReactivatedEvent)
+		sharesToEnable, err := edh.HandleClusterReactivated(txn, clusterReactivatedEvent)
 		if err != nil {
 			return nil, fmt.Errorf("handle ClusterReactivated: %w", err)
 		}
@@ -211,11 +250,16 @@ func (edh *EventDataHandler) processEvent(event ethtypes.Log) (Task, error) {
 			return nil, fmt.Errorf("parse FeeRecipientAddressUpdated: %w", err)
 		}
 
-		if err := edh.eventHandlers.HandleFeeRecipientAddressUpdated(feeRecipientAddressUpdatedEvent); err != nil {
+		updated, err := edh.HandleFeeRecipientAddressUpdated(txn, feeRecipientAddressUpdatedEvent)
+		if err != nil {
 			return nil, fmt.Errorf("handle FeeRecipientAddressUpdated: %w", err)
 		}
 
 		task := func() error {
+			if !updated {
+				return nil
+			}
+
 			edh.logger.Info("updating recipient address", zap.Stringer("owner", feeRecipientAddressUpdatedEvent.Owner)) // TODO: add to fields package
 
 			return edh.taskExecutor.UpdateFeeRecipient(feeRecipientAddressUpdatedEvent)

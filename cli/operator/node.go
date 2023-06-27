@@ -27,6 +27,7 @@ import (
 	"github.com/bloxapp/ssv/eth1/goeth"
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/api/decided"
+	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
 	ssv_identity "github.com/bloxapp/ssv/identity"
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
@@ -131,8 +132,8 @@ var StartNodeCmd = &cobra.Command{
 		cfg.ETH2Options.GasLimit = spectypes.DefaultGasLimit
 		cfg.ETH2Options.Network = networkConfig.Beacon
 
-		el := setupEth2(logger, operatorData.ID, slotTicker)
-		cl := setupEth1(logger, networkConfig.RegistryContractAddr) // TODO: get rid of
+		cl := setupEth2(logger, operatorData.ID, slotTicker)
+		el := setupEth1(logger, networkConfig.RegistryContractAddr) // TODO: get rid of
 
 		executionClient := executionclient.New(
 			cfg.ETH1Options.ETH1Addr,
@@ -148,7 +149,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ForkVersion = forkVersion
 		cfg.SSVOptions.Context = ctx
 		cfg.SSVOptions.DB = db
-		cfg.SSVOptions.BeaconNode = el
+		cfg.SSVOptions.BeaconNode = cl
 		cfg.SSVOptions.Network = networkConfig
 		cfg.SSVOptions.P2PNetwork = p2pNetwork
 		cfg.SSVOptions.ValidatorOptions.ForkVersion = forkVersion
@@ -156,7 +157,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.Context = ctx
 		cfg.SSVOptions.ValidatorOptions.DB = db
 		cfg.SSVOptions.ValidatorOptions.Network = p2pNetwork
-		cfg.SSVOptions.ValidatorOptions.Beacon = el
+		cfg.SSVOptions.ValidatorOptions.Beacon = cl
 		cfg.SSVOptions.ValidatorOptions.KeyManager = keyManager
 
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = nodeStorage.GetPrivateKey
@@ -164,7 +165,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.RegistryStorage = nodeStorage
 		cfg.SSVOptions.ValidatorOptions.GasLimit = cfg.ETH2Options.GasLimit
 
-		cfg.SSVOptions.Eth1Client = cl
+		cfg.SSVOptions.Eth1Client = el
 		cfg.SSVOptions.ExecutionClient = executionClient
 
 		if cfg.WsAPIPort != 0 {
@@ -175,6 +176,21 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		cfg.SSVOptions.ValidatorOptions.DutyRoles = []spectypes.BeaconRole{spectypes.BNRoleAttester} // TODO could be better to set in other place
+
+		storageRoles := []spectypes.BeaconRole{
+			spectypes.BNRoleAttester,
+			spectypes.BNRoleProposer,
+			spectypes.BNRoleAggregator,
+			spectypes.BNRoleSyncCommittee,
+			spectypes.BNRoleSyncCommitteeContribution,
+			spectypes.BNRoleValidatorRegistration,
+		}
+		storageMap := ibftstorage.NewStores()
+
+		for _, storageRole := range storageRoles {
+			storageMap.Add(storageRole, ibftstorage.New(cfg.SSVOptions.ValidatorOptions.DB, storageRole.String(), cfg.SSVOptions.ValidatorOptions.ForkVersion))
+		}
+
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 
@@ -200,7 +216,17 @@ var StartNodeCmd = &cobra.Command{
 		if eth1Refactor {
 			// TODO: handle local events
 			eventDB := eventdb.NewEventDB(db.(*kv.BadgerDb).Badger()) // TODO: get rid of type assertion
-			eventDataHandler := eventdatahandler.New(eventDB, validatorCtrl)
+			eventDataHandler := eventdatahandler.New(
+				eventDB,
+				validatorCtrl,
+				cfg.SSVOptions.ValidatorOptions.OperatorData,
+				cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider,
+				cfg.SSVOptions.ValidatorOptions.KeyManager,
+				cfg.SSVOptions.ValidatorOptions.Beacon,
+				storageMap,
+				eventdatahandler.WithFullNode(),
+				eventdatahandler.WithLogger(logger),
+			)
 			eventBatcher := eventbatcher.NewEventBatcher()
 			eventDispatcher := eventdispatcher.New(executionClient, eventBatcher, eventDataHandler)
 			fromBlock, err := eventDB.ROTxn().GetLastProcessedBlock()
