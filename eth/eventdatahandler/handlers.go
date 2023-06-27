@@ -26,7 +26,7 @@ import (
 // b64 encrypted key length is 256
 const encryptedKeyLength = 256
 
-func (edh *EventDataHandler) HandleOperatorAdded(txn eventdb.RW, event *contract.ContractOperatorAdded) error {
+func (edh *EventDataHandler) handleOperatorAdded(txn eventdb.RW, event *contract.ContractOperatorAdded) error {
 	logger := edh.logger.With(
 		fields.OperatorID(event.OperatorId),
 		// TODO: move to fields package (check other places in this file)
@@ -70,7 +70,7 @@ func (edh *EventDataHandler) HandleOperatorAdded(txn eventdb.RW, event *contract
 	return nil
 }
 
-func (edh *EventDataHandler) HandleOperatorRemoved(txn eventdb.RW, event *contract.ContractOperatorRemoved) error {
+func (edh *EventDataHandler) handleOperatorRemoved(txn eventdb.RW, event *contract.ContractOperatorRemoved) error {
 	logger := edh.logger.With(
 		fields.OperatorID(event.OperatorId),
 	)
@@ -102,7 +102,7 @@ func (edh *EventDataHandler) HandleOperatorRemoved(txn eventdb.RW, event *contra
 	return nil
 }
 
-func (edh *EventDataHandler) HandleValidatorAdded(txn eventdb.RW, event *contract.ContractValidatorAdded) (err error) {
+func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contract.ContractValidatorAdded) (err error) {
 	logger := edh.logger.With(
 		zap.String("owner_address", event.Owner.String()),
 		zap.Uint64s("operator_ids", event.OperatorIds),
@@ -247,7 +247,7 @@ func (edh *EventDataHandler) handleShareCreation(
 		logger := edh.logger.With(fields.PubKey(share.ValidatorPubKey))
 
 		// get metadata
-		if updated, err := UpdateShareMetadata(share, edh.beacon); err != nil {
+		if updated, err := updateShareMetadata(share, edh.beacon); err != nil {
 			logger.Warn("could not add validator metadata", zap.Error(err))
 		} else if !updated {
 			logger.Warn("could not find validator metadata")
@@ -270,7 +270,7 @@ func (edh *EventDataHandler) handleShareCreation(
 }
 
 // TODO: consider getting rid of or refactoring
-func UpdateShareMetadata(share *ssvtypes.SSVShare, bc beaconprotocol.BeaconNode) (bool, error) {
+func updateShareMetadata(share *ssvtypes.SSVShare, bc beaconprotocol.BeaconNode) (bool, error) {
 	pk := hex.EncodeToString(share.ValidatorPubKey)
 	results, err := beaconprotocol.FetchValidatorsMetadata(bc, [][]byte{share.ValidatorPubKey})
 	if err != nil {
@@ -350,7 +350,7 @@ func validatorAddedEventToShare(
 	return &validatorShare, shareSecret, nil
 }
 
-func (edh *EventDataHandler) HandleValidatorRemoved(txn eventdb.RW, event *contract.ContractValidatorRemoved) error {
+func (edh *EventDataHandler) handleValidatorRemoved(txn eventdb.RW, event *contract.ContractValidatorRemoved) error {
 	logger := edh.logger.With(
 		zap.String("owner_address", event.Owner.String()),
 		zap.Uint64s("operator_ids", event.OperatorIds),
@@ -411,7 +411,7 @@ func (edh *EventDataHandler) HandleValidatorRemoved(txn eventdb.RW, event *contr
 	return nil
 }
 
-func (edh *EventDataHandler) HandleClusterLiquidated(txn eventdb.RW, event *contract.ContractClusterLiquidated) ([]*ssvtypes.SSVShare, error) {
+func (edh *EventDataHandler) handleClusterLiquidated(txn eventdb.RW, event *contract.ContractClusterLiquidated) ([]*ssvtypes.SSVShare, error) {
 	logger := edh.logger.With(
 		zap.String("owner_address", event.Owner.String()),
 		zap.Uint64s("operator_ids", event.OperatorIds),
@@ -432,7 +432,7 @@ func (edh *EventDataHandler) HandleClusterLiquidated(txn eventdb.RW, event *cont
 	return toLiquidate, nil
 }
 
-func (edh *EventDataHandler) HandleClusterReactivated(txn eventdb.RW, event *contract.ContractClusterReactivated) ([]*ssvtypes.SSVShare, error) {
+func (edh *EventDataHandler) handleClusterReactivated(txn eventdb.RW, event *contract.ContractClusterReactivated) ([]*ssvtypes.SSVShare, error) {
 	logger := edh.logger.With(
 		zap.String("owner_address", event.Owner.String()),
 		zap.Uint64s("operator_ids", event.OperatorIds),
@@ -453,7 +453,7 @@ func (edh *EventDataHandler) HandleClusterReactivated(txn eventdb.RW, event *con
 	return toEnable, nil
 }
 
-func (edh *EventDataHandler) HandleFeeRecipientAddressUpdated(txn eventdb.RW, event *contract.ContractFeeRecipientAddressUpdated) (bool, error) {
+func (edh *EventDataHandler) handleFeeRecipientAddressUpdated(txn eventdb.RW, event *contract.ContractFeeRecipientAddressUpdated) (bool, error) {
 	logger := edh.logger.With(
 		zap.String("owner_address", event.Owner.String()),
 		fields.FeeRecipient(event.RecipientAddress.Bytes()),

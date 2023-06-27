@@ -117,10 +117,8 @@ func (edh *EventDataHandler) HandleBlockEventsStream(blockEventsCh <-chan eventb
 }
 
 func (edh *EventDataHandler) processBlockEvents(blockEvents eventbatcher.BlockEvents) ([]Task, error) {
-	// TODO: fix
-	//edh.eventDB.BeginTx()
-
 	txn := edh.eventDB.RWTxn()
+
 	var tasks []Task
 	for _, event := range blockEvents.Events {
 		task, err := edh.processEvent(txn, event)
@@ -133,8 +131,6 @@ func (edh *EventDataHandler) processBlockEvents(blockEvents eventbatcher.BlockEv
 			tasks = append(tasks, task)
 		}
 	}
-
-	//edh.eventDB.EndTx()
 
 	return tasks, nil
 }
@@ -152,7 +148,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 			return nil, fmt.Errorf("parse OperatorAdded: %w", err)
 		}
 
-		if err := edh.HandleOperatorAdded(txn, operatorAddedEvent); err != nil {
+		if err := edh.handleOperatorAdded(txn, operatorAddedEvent); err != nil {
 			return nil, fmt.Errorf("handle OperatorAdded: %w", err)
 		}
 
@@ -164,7 +160,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 			return nil, fmt.Errorf("parse OperatorRemoved: %w", err)
 		}
 
-		if err := edh.HandleOperatorRemoved(txn, operatorRemovedEvent); err != nil {
+		if err := edh.handleOperatorRemoved(txn, operatorRemovedEvent); err != nil {
 			return nil, fmt.Errorf("handle OperatorRemoved: %w", err)
 		}
 
@@ -176,7 +172,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 			return nil, fmt.Errorf("parse ValidatorAdded: %w", err)
 		}
 
-		if err := edh.HandleValidatorAdded(txn, validatorAddedEvent); err != nil {
+		if err := edh.handleValidatorAdded(txn, validatorAddedEvent); err != nil {
 			return nil, fmt.Errorf("handle ValidatorAdded: %w", err)
 		}
 
@@ -194,7 +190,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 			return nil, fmt.Errorf("parse ValidatorRemoved: %w", err)
 		}
 
-		if err := edh.HandleValidatorRemoved(txn, validatorRemovedEvent); err != nil {
+		if err := edh.handleValidatorRemoved(txn, validatorRemovedEvent); err != nil {
 			return nil, fmt.Errorf("handle ValidatorRemoved: %w", err)
 		}
 
@@ -212,7 +208,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 			return nil, fmt.Errorf("parse ClusterLiquidated: %w", err)
 		}
 
-		sharesToLiquidate, err := edh.HandleClusterLiquidated(txn, clusterLiquidatedEvent)
+		sharesToLiquidate, err := edh.handleClusterLiquidated(txn, clusterLiquidatedEvent)
 		if err != nil {
 			return nil, fmt.Errorf("handle ClusterLiquidated: %w", err)
 		}
@@ -231,7 +227,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 			return nil, fmt.Errorf("parse ClusterReactivated: %w", err)
 		}
 
-		sharesToEnable, err := edh.HandleClusterReactivated(txn, clusterReactivatedEvent)
+		sharesToEnable, err := edh.handleClusterReactivated(txn, clusterReactivatedEvent)
 		if err != nil {
 			return nil, fmt.Errorf("handle ClusterReactivated: %w", err)
 		}
@@ -250,7 +246,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 			return nil, fmt.Errorf("parse FeeRecipientAddressUpdated: %w", err)
 		}
 
-		updated, err := edh.HandleFeeRecipientAddressUpdated(txn, feeRecipientAddressUpdatedEvent)
+		updated, err := edh.handleFeeRecipientAddressUpdated(txn, feeRecipientAddressUpdatedEvent)
 		if err != nil {
 			return nil, fmt.Errorf("handle FeeRecipientAddressUpdated: %w", err)
 		}
