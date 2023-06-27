@@ -23,7 +23,7 @@ Create a directory called `ssv-bootnode` and `cd` into it. Please make sure not 
      PrivateKey: [Your Private Key]
      ExternalIP: [Your External IP]
      DbPath: ./data/bootnode
-     Network: prater
+     Network: jato-v2
    ```
 
    **Note:** The content above is an example. Replace the placeholders with your actual data as explained below:
