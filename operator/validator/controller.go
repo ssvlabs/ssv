@@ -452,6 +452,13 @@ func (c *controller) setupValidators(logger *zap.Logger, shares []*types.SSVShar
 // to start consensus flow which would save the highest decided instance
 // and sync any gaps (in protocol/v2/qbft/controller/decided.go).
 func (c *controller) setupNonCommitteeValidators(logger *zap.Logger) {
+	// Subscribe to all subnets.
+	err := c.network.SubscribeAll(logger)
+	if err != nil {
+		logger.Error("failed to subscribe to all subnets", zap.Error(err))
+		return
+	}
+
 	nonCommitteeShares := c.sharesStorage.List(registrystorage.ByNotLiquidated())
 	if len(nonCommitteeShares) == 0 {
 		logger.Info("could not find non-committee validators")
@@ -469,13 +476,8 @@ func (c *controller) setupNonCommitteeValidators(logger *zap.Logger) {
 			spectypes.BNRoleSyncCommitteeContribution,
 		}
 		for _, role := range allRoles {
-			role := role
-			err := c.network.Subscribe(validatorShare.ValidatorPubKey)
-			if err != nil {
-				logger.Error("failed to subscribe to network", zap.Error(err))
-			}
 			messageID := spectypes.NewMsgID(types.GetDefaultDomain(), validatorShare.ValidatorPubKey, role)
-			err = c.network.SyncHighestDecided(messageID)
+			err := c.network.SyncHighestDecided(messageID)
 			if err != nil {
 				logger.Error("failed to sync highest decided", zap.Error(err))
 			}
