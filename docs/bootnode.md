@@ -8,7 +8,7 @@ Follow the steps below to configure and run your SSV bootnode.
 - CPU: 2 cores
 - RAM: 1 GB
 
-_Note: While the bootnode might operate with less robust hardware, we highly advise using the recommended specifications (or better) to ensure optimal performance and stability._
+_Note: While the bootnode might operate with less robust hardware, we advise using the recommended specifications (or better) to ensure optimal performance and stability._
 
 ## Getting Started
 
@@ -16,51 +16,53 @@ Create a directory called `ssv-bootnode` and `cd` into it. Please make sure not 
 
 ## Configuration
 
-1. Within the `ssv-bootnode` directory, create a file named `config.yaml` and populate it with the following:
+Within the `ssv-bootnode` directory, create a file named `config.yaml` and populate it with the following:
 
-   ```yaml
-   bootnode:
-     PrivateKey: [Your Private Key]
-     ExternalIP: [Your External IP]
-     DbPath: ./data/bootnode
-     Network: jato-v2
-   ```
+```yaml
+bootnode:
+  PrivateKey: [Your Private Key]
+  ExternalIP: [Your External IP]
+  DbPath: ./data/bootnode
+  Network: jato-v2
+```
 
-   **Note:** The content above is an example. Replace the placeholders with your actual data as explained below:
+_Note: This is an example. Replace the placeholders as explained below._
 
-   **PrivateKey**
+**PrivateKey**
 
-   - Generate a private key using the command below:
-     ```bash
-     openssl rand -hex 32
-     ```
-     Copy the output and paste it into `config.yaml` as the value for `PrivateKey`.
+- Generate a private key using the command below:
 
-   **ExternalIP**
+  ```bash
+  openssl rand -hex 32
+  ```
 
-   - Determine your server's external IP by executing the following command:
-     ```bash
-     curl ifconfig.me
-     ```
-     Copy the IP address and paste it into `config.yaml` as the value for `ExternalIP`.
+  Copy the output and paste it into `config.yaml` as the value for `PrivateKey`.
+
+**ExternalIP**
+
+- Determine your server's external IP by executing the following command:
+  ```bash
+  curl ifconfig.me
+  ```
+  Copy the IP address and paste it into `config.yaml` as the value for `ExternalIP`.
 
 ## Running the Bootnode
 
 1. Execute the command below to run the bootnode:
 
    ```bash
-   docker rm -f ssv_bootnode && docker run -d --restart unless-stopped --name=ssv_bootnode -e \
-       CONFIG_PATH=/config.yaml -p 5000:5000 -p 4000:4000/udp -v \
-       $(pwd)/config/config.bootnode.yaml:/config.yaml -v $(pwd):/data -it \
+   docker rm -f ssv_bootnode && docker run -d --restart unless-stopped --name=ssv_bootnode \
+       -e CONFIG_PATH=/config.yaml -p 5000:5000 -p 4000:4000/udp \
+       -v $(pwd)/config.yaml:/config.yaml -v $(pwd):/data -it \
        'bloxstaking/ssv-node-unstable:latest' make BUILD_PATH=/go/bin/ssvnode start-boot-node
    ```
 
    _Note: `/data` must be a persistent volume to preserve the ENR across restarts!_
 
-2. Monitor the logs to verify that the bootnode is running correctly with the following command:
+2. View the logs to verify that the bootnode is running correctly with the following command:
 
    ```bash
-   docker logs -f ssv_bootnode
+   docker logs ssv_bootnode
    ```
 
    You should see your external IP and ENR (Ethereum Node Record) as follows:
