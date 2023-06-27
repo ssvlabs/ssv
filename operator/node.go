@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/bloxapp/ssv/eth/executionclient"
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/networkconfig"
 
@@ -44,7 +43,6 @@ type Options struct {
 	P2PNetwork          network.P2PNetwork
 	Context             context.Context
 	Eth1Client          eth1.Client // TODO: get rid of
-	ExecutionClient     *executionclient.ExecutionClient
 	DB                  basedb.IDb
 	ValidatorController validator.Controller
 	DutyExec            duties.DutyExecutor

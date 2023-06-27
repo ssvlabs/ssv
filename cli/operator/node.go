@@ -166,7 +166,6 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.GasLimit = cfg.ETH2Options.GasLimit
 
 		cfg.SSVOptions.Eth1Client = el
-		cfg.SSVOptions.ExecutionClient = executionClient
 
 		if cfg.WsAPIPort != 0 {
 			ws := api.NewWsServer(cmd.Context(), nil, http.NewServeMux(), cfg.WithPing)
