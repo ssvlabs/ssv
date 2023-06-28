@@ -77,15 +77,19 @@ func newTestBackend(t *testing.T, done <-chan interface{}, blockStream <-chan []
 			return
 		case blocks := <-blockStream:
 			// Batch block processing because events are fired only after all blocks in the batch processed
-			for _, block := range blocks {
-				var blocksToProcess []*types.Block
-				blocksToProcess = append(blocksToProcess, block)
-				if _, err := ethservice.BlockChain().InsertChain(blocksToProcess); err != nil {
-					return
-				}
-				processedStream <- blocksToProcess
-				time.Sleep(delay)
+			// for _, block := range blocks {
+			// 	var blocksToProcess []*types.Block
+			// 	blocksToProcess = append(blocksToProcess, block)
+			// 	if _, err := ethservice.BlockChain().InsertChain(blocksToProcess); err != nil {
+			// 		return
+			// 	}
+			// 	processedStream <- blocksToProcess
+			// 	time.Sleep(delay)
+			// }
+			if _, err := ethservice.BlockChain().InsertChain(blocks); err != nil {
+				return
 			}
+			processedStream <- blocks
 		}
 	}()
 	return n, processedStream
@@ -146,7 +150,7 @@ const callableAbi = "[{\"anonymous\":false,\"inputs\":[],\"name\":\"Called\",\"t
 const callableBin = "6080604052348015600f57600080fd5b5060998061001e6000396000f3fe6080604052348015600f57600080fd5b506004361060285760003560e01c806334e2292114602d575b600080fd5b60336035565b005b7f81fab7a4a0aa961db47eefc81f143a5220e8c8495260dd65b1356f1d19d3c7b860405160405180910390a156fea2646970667358221220029436d24f3ac598ceca41d4d712e13ced6d70727f4cdc580667de66d2f51d8b64736f6c63430008010033"
 
 func TestFetchHistoricalLogs(t *testing.T) {
-	const testTimeout = 100 * time.Millisecond
+	const testTimeout = 1000 * time.Millisecond
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
 
@@ -156,13 +160,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	blockStream := make(chan []*types.Block)
 	defer close(blockStream)
 
-	// Generate test chain before we read historical logs
-	generateInitialTestChain(t, done, blockStream, 100)
 	backend, processedStream := newTestBackend(t, done, blockStream, time.Microsecond)
-
-	for blocks := range processedStream {
-		t.Log("Processed blocks: ", len(blocks))
-	}
 
 	// Create JSON-RPC handler
 	rpcServer, _ := backend.RPCHandler()
@@ -183,6 +181,11 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, ready)
 
+	// Generate test chain before we read historical logs
+	generateInitialTestChain(t, done, blockStream, 1008)
+	for blocks := range processedStream {
+		t.Log("Processed blocks: ", len(blocks))
+	}
 	// Fetch all logs history starting from block 0
 	logs, lastBlock, err := client.FetchHistoricalLogs(ctx, 0)
 	require.NoError(t, err)
@@ -195,7 +198,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 }
 
 func TestStreamLogs(t *testing.T) {
-	const testTimeout = 100 * time.Millisecond
+	const testTimeout = 1000 * time.Millisecond
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
 
@@ -235,7 +238,7 @@ func TestStreamLogs(t *testing.T) {
 
 	// Generate test chain after a connection to the server.
 	// While processing blocks the events will be emited which is read by subscription
-	generateInitialTestChain(t, done, blockStream, 20)
+	generateInitialTestChain(t, done, blockStream, 1000)
 	for blocks := range processedStream {
 		t.Log("Processed blocks: ", len(blocks))
 	}
