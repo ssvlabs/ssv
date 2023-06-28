@@ -32,45 +32,48 @@ func (t *RWTxn) SetLastProcessedBlock(block *big.Int) error {
 
 func (t *RWTxn) SaveOperatorData(operatorData *registrystorage.OperatorData) (bool, error) {
 	_, err := t.txn.Get([]byte(fmt.Sprintf("%s%s/%d", storagePrefix, operatorsPrefix, operatorData.ID)))
-	if err != nil && !errors.Is(err, badger.ErrKeyNotFound) {
+
+	if errors.Is(err, badger.ErrKeyNotFound) {
+		jsonOperatorData, err := json.Marshal(operatorData)
+		if err != nil {
+			return false, fmt.Errorf("marshal operator data: %w", err)
+		}
+
+		if err := t.txn.Set([]byte(fmt.Sprintf("%s%s/%d", storagePrefix, operatorsPrefix, operatorData.ID)), jsonOperatorData); err != nil {
+			return false, fmt.Errorf("set item: %w", err)
+		}
+		return false, nil
+	}
+
+	if err != nil {
 		return false, fmt.Errorf("get item: %w", err)
 	}
-	if err == nil {
-		return true, nil
-	}
 
-	jsonOperatorData, err := json.Marshal(operatorData)
-	if err != nil {
-		return false, fmt.Errorf("marshal operator data: %w", err)
-	}
-
-	if err := t.txn.Set([]byte(fmt.Sprintf("%s%s/%d", storagePrefix, operatorsPrefix, operatorData.ID)), jsonOperatorData); err != nil {
-		return false, fmt.Errorf("set item: %w", err)
-	}
-
-	return false, nil
+	return true, nil
 }
 
 // SaveEventData saves event data and return it.
 // if the event already exists return nil
 func (t *RWTxn) SaveEventData(txHash ethcommon.Hash) error {
 	_, err := t.txn.Get(append([]byte(fmt.Sprintf("%s%s/", storagePrefix, eventsPrefix)), txHash.Bytes()...))
-	if err != nil && !errors.Is(err, badger.ErrKeyNotFound) {
-		return fmt.Errorf("get item: %w", err)
-	}
-	if err == nil {
+
+	if errors.Is(err, badger.ErrKeyNotFound) {
+		rawJSON, err := json.Marshal(&EventData{
+			TxHash: txHash,
+		})
+		if err != nil {
+			return fmt.Errorf("marshal: %w", err)
+		}
+
+		if err := t.txn.Set(append([]byte(fmt.Sprintf("%s%s/", storagePrefix, eventsPrefix)), txHash.Bytes()...), rawJSON); err != nil {
+			return fmt.Errorf("set item: %w", err)
+		}
+
 		return nil
 	}
 
-	rawJSON, err := json.Marshal(&EventData{
-		TxHash: txHash,
-	})
 	if err != nil {
-		return fmt.Errorf("marshal: %w", err)
-	}
-
-	if err := t.txn.Set(append([]byte(fmt.Sprintf("%s%s/", storagePrefix, eventsPrefix)), txHash.Bytes()...), rawJSON); err != nil {
-		return fmt.Errorf("set item: %w", err)
+		return fmt.Errorf("get item: %w", err)
 	}
 
 	return nil

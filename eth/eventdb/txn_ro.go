@@ -31,12 +31,11 @@ func (t *ROTxn) Commit() error {
 // GetLastProcessedBlock returns last processed block from DB or nil if it doesn't exist.
 func (t *ROTxn) GetLastProcessedBlock() (*big.Int, error) {
 	blockItem, err := t.txn.Get([]byte(storagePrefix + lastProcessedBlockKey))
-	if err != nil {
-		return nil, fmt.Errorf("get item: %w", err)
-	}
-
 	if errors.Is(err, badger.ErrKeyNotFound) {
 		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get item: %w", err)
 	}
 
 	blockValue, err := blockItem.ValueCopy(nil)

@@ -86,19 +86,21 @@ func New(
 
 func (edh *EventDataHandler) HandleBlockEventsStream(blockEventsCh <-chan eventbatcher.BlockEvents) error {
 	for blockEvents := range blockEventsCh {
+		logger := edh.logger.With(fields.BlockNumber(blockEvents.BlockNumber))
+
+		logger.Info("processing block events")
 		tasks, err := edh.processBlockEvents(blockEvents)
 		if err != nil {
 			return fmt.Errorf("process block events: %w", err)
 		}
 
+		logger = logger.With(fields.Count(len(tasks)))
+		logger.Info("processed block events")
+
 		if len(tasks) == 0 {
 			continue
 		}
 
-		logger := edh.logger.With(
-			fields.BlockNumber(blockEvents.BlockNumber),
-			fields.Count(len(tasks)),
-		)
 		logger.Info("executing tasks")
 
 		// TODO:
@@ -106,6 +108,7 @@ func (edh *EventDataHandler) HandleBlockEventsStream(blockEventsCh <-chan eventb
 		// 2) find superseding tasks and remove superseded ones (updateFee-updateFee)
 		for _, task := range tasks {
 			if err := task(); err != nil {
+				// TODO: Log failed task until we discuss how we want to handle this case. We likely need to crash the node in this case.
 				return fmt.Errorf("execute task: %w", err)
 			}
 		}
@@ -118,18 +121,22 @@ func (edh *EventDataHandler) HandleBlockEventsStream(blockEventsCh <-chan eventb
 
 func (edh *EventDataHandler) processBlockEvents(blockEvents eventbatcher.BlockEvents) ([]Task, error) {
 	txn := edh.eventDB.RWTxn()
+	defer txn.Discard()
 
 	var tasks []Task
 	for _, event := range blockEvents.Events {
 		task, err := edh.processEvent(txn, event)
 		if err != nil {
-			//edh.eventDB.Rollback()
 			return nil, err
 		}
 
 		if task != nil {
 			tasks = append(tasks, task)
 		}
+	}
+
+	if err := txn.Commit(); err != nil {
+		return nil, fmt.Errorf("commit transaction: %w", err)
 	}
 
 	return tasks, nil
@@ -264,6 +271,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 		return task, nil
 
 	default:
-		return nil, fmt.Errorf("unknown event name %q", abiEvent.Name)
+		edh.logger.Warn("unknown event name", fields.Name(abiEvent.Name))
+		return nil, nil
 	}
 }

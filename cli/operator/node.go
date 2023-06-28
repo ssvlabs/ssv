@@ -146,6 +146,10 @@ var StartNodeCmd = &cobra.Command{
 			executionclient.WithReconnectionMaxInterval(executionclient.DefaultReconnectionMaxInterval),
 		)
 
+		if err := executionClient.Connect(ctx); err != nil {
+			logger.Fatal("failed to connect to execution client", zap.Error(err))
+		}
+
 		cfg.SSVOptions.ForkVersion = forkVersion
 		cfg.SSVOptions.Context = ctx
 		cfg.SSVOptions.DB = db
@@ -190,6 +194,8 @@ var StartNodeCmd = &cobra.Command{
 			storageMap.Add(storageRole, ibftstorage.New(cfg.SSVOptions.ValidatorOptions.DB, storageRole.String(), cfg.SSVOptions.ValidatorOptions.ForkVersion))
 		}
 
+		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
+
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 
@@ -201,11 +207,7 @@ var StartNodeCmd = &cobra.Command{
 
 		if eth1Refactor {
 			// TODO: Node prober needs to be merged to wait until ready.
-			// Now the code is just checking if execution client is ready and crash if not.
-			// When prober is merged, it needs to be used instead of the code below.
-			if ready, err := executionClient.IsReady(cmd.Context()); err != nil || !ready {
-				logger.Fatal("execution client is not ready")
-			}
+			// nodeProber.Wait()
 		} else {
 			metrics.WaitUntilHealthy(logger, cfg.SSVOptions.Eth1Client, "execution client")
 		}
@@ -227,14 +229,30 @@ var StartNodeCmd = &cobra.Command{
 				eventdatahandler.WithLogger(logger),
 			)
 			eventBatcher := eventbatcher.NewEventBatcher()
-			eventDispatcher := eventdispatcher.New(executionClient, eventBatcher, eventDataHandler)
-			fromBlock, err := eventDB.ROTxn().GetLastProcessedBlock()
+			eventDispatcher := eventdispatcher.New(
+				executionClient,
+				eventBatcher,
+				eventDataHandler,
+				eventdispatcher.WithLogger(logger),
+			)
+
+			txn := eventDB.ROTxn()
+			defer txn.Discard()
+
+			fromBlock, err := txn.GetLastProcessedBlock()
 			if err != nil {
-				logger.Fatal("could not get last processed block")
+				logger.Fatal("could not get last processed block", zap.Error(err))
 			}
+
 			if fromBlock == nil {
 				fromBlock = networkConfig.ETH1SyncOffset
+				logger.Info("no last processed block in DB found, using last processed block from network config",
+					fields.BlockNumber(fromBlock.Uint64()))
+			} else {
+				logger.Info("using last processed block from DB",
+					fields.BlockNumber(fromBlock.Uint64()))
 			}
+
 			if err := eventDispatcher.Start(cmd.Context(), fromBlock.Uint64()); err != nil {
 				logger.Fatal("could not start event dispatcher", zap.Error(err))
 			}

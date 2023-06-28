@@ -22,8 +22,8 @@ type EventDispatcher struct {
 	nodeProber nodeProber
 }
 
-func New(eth1Client eth1Client, eventBatcher eventBatcher, eventDataHandler eventDataHandler) *EventDispatcher {
-	return &EventDispatcher{
+func New(eth1Client eth1Client, eventBatcher eventBatcher, eventDataHandler eventDataHandler, opts ...Option) *EventDispatcher {
+	ed := &EventDispatcher{
 		eth1Client:       eth1Client,
 		eventBatcher:     eventBatcher,
 		eventDataHandler: eventDataHandler,
@@ -32,6 +32,12 @@ func New(eth1Client eth1Client, eventBatcher eventBatcher, eventDataHandler even
 		metrics:    nopMetrics{},
 		nodeProber: nil,
 	}
+
+	for _, opt := range opts {
+		opt(ed)
+	}
+
+	return ed
 }
 
 // Start starts EventDispatcher.
@@ -39,6 +45,8 @@ func New(eth1Client eth1Client, eventBatcher eventBatcher, eventDataHandler even
 // Then it asynchronously runs a loop which retrieves data from Eth1Client event stream and passes them for processing.
 // Start blocks until historical logs are processed.
 func (ed *EventDispatcher) Start(ctx context.Context, fromBlock uint64) error {
+	ed.logger.Info("starting event dispatcher")
+
 	if ed.nodeProber != nil {
 		ready, err := ed.nodeProber.IsReady(ctx)
 		if err != nil {
@@ -50,12 +58,16 @@ func (ed *EventDispatcher) Start(ctx context.Context, fromBlock uint64) error {
 		}
 	}
 
+	ed.logger.Info("going to fetch historical logs")
 	logs, lastBlock, err := ed.eth1Client.FetchHistoricalLogs(ctx, fromBlock)
 	if err != nil {
 		return err
 	}
 
+	ed.logger.Info("going to batch historical logs")
 	blockEvents := ed.eventBatcher.BatchHistoricalEvents(logs)
+
+	ed.logger.Info("going to handle historical logs")
 	if err := ed.eventDataHandler.HandleBlockEventsStream(blockEvents); err != nil {
 		return fmt.Errorf("handle historical block events: %w", err)
 	}

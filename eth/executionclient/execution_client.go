@@ -91,10 +91,18 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 		return nil, 0, fmt.Errorf("get current block: %w", err)
 	}
 
+	lastBlock = currentBlock - ec.finalizationOffset
+	logger := ec.logger.With(
+		zap.Uint64("from", fromBlock),
+		zap.Uint64("to", lastBlock))
+
+	logger.Info("determined current block number, fetching historical logs",
+		zap.Uint64("current_block", currentBlock))
+
 	query := ethereum.FilterQuery{
 		Addresses: []ethcommon.Address{ec.contractAddress},
 		FromBlock: new(big.Int).SetUint64(fromBlock),
-		ToBlock:   new(big.Int).SetUint64(currentBlock - ec.finalizationOffset),
+		ToBlock:   new(big.Int).SetUint64(lastBlock),
 	}
 
 	// TODO: Instead of FilterLogs it should call a wrapper that calls FilterLogs multiple times and batches results to avoid fetching enormous amount of events.
@@ -103,8 +111,7 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 		return nil, 0, fmt.Errorf("fetch logs: %w", err)
 	}
 
-	lastBlock = query.ToBlock.Uint64()
-	ec.logger.Info("last fetched block", fields.BlockNumber(lastBlock))
+	logger.Info("fetched historical blocks")
 	ec.metrics.LastFetchedBlock(lastBlock)
 
 	return logs, lastBlock, nil

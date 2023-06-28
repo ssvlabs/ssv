@@ -40,8 +40,6 @@ type RO interface {
 
 func (e *EventDB) ROTxn() RO {
 	txn := e.db.NewTransaction(false)
-	defer txn.Discard()
-
 	return NewROTxn(txn)
 }
 
@@ -58,8 +56,6 @@ type RW interface {
 
 func (e *EventDB) RWTxn() RW {
 	txn := e.db.NewTransaction(true)
-	defer txn.Discard()
-
 	return NewRWTxn(txn)
 }
 
