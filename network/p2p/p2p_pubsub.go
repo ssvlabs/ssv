@@ -6,6 +6,7 @@ import (
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/network/records"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
@@ -61,6 +62,20 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 		if err := n.topicsCtrl.Broadcast(topic, raw, n.cfg.RequestTimeout); err != nil {
 			n.interfaceLogger.Debug("could not broadcast msg", fields.PubKey(vpk), zap.Error(err))
 			return errors.Wrap(err, "could not broadcast msg")
+		}
+	}
+	return nil
+}
+
+func (n *p2pNetwork) SubscribeAll(logger *zap.Logger) error {
+	if !n.isReady() {
+		return p2pprotocol.ErrNetworkIsNotReady
+	}
+	n.subnets, _ = records.Subnets{}.FromString(records.AllSubnets)
+	for subnet := 0; subnet < n.fork.Subnets(); subnet++ {
+		err := n.topicsCtrl.Subscribe(logger, n.fork.SubnetTopicID(subnet))
+		if err != nil {
+			return err
 		}
 	}
 	return nil

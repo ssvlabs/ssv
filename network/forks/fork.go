@@ -25,6 +25,8 @@ type nodeRecord interface {
 }
 
 type pubSubMapping interface {
+	// SubnetTopicID returns the topic id for the given subnet
+	SubnetTopicID(subnet int) string
 	// ValidatorTopicID maps the given validator public key to the corresponding pubsub topic
 	ValidatorTopicID(pk []byte) []string
 	// GetTopicFullName returns the topic full name, including prefix
