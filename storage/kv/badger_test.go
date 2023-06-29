@@ -78,7 +78,7 @@ func TestBadgerEndToEnd(t *testing.T) {
 	require.EqualValues(t, toSave[2].value, obj.Value)
 
 	logCountBeforeReport := observedLogs.Len()
-	db.(*BadgerDb).report(logger)
+	db.report(logger)
 	logCountAfterReport := observedLogs.Len()
 	require.Equal(t, logCountBeforeReport+1, logCountAfterReport)
 

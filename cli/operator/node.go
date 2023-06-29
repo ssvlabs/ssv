@@ -219,7 +219,7 @@ var StartNodeCmd = &cobra.Command{
 
 		if eth1Refactor {
 			// TODO: handle local events
-			eventDB := eventdb.NewEventDB(db.(*kv.BadgerDb).Badger()) // TODO: get rid of type assertion
+			eventDB := eventdb.NewEventDB(db.Badger())
 			eventDataHandler, err := eventdatahandler.New(
 				eventDB,
 				validatorCtrl,
@@ -320,7 +320,7 @@ func setupGlobal(cmd *cobra.Command) (*zap.Logger, error) {
 	return zap.L(), nil
 }
 
-func setupDb(logger *zap.Logger, eth2Network beaconprotocol.Network) (basedb.IDb, error) {
+func setupDb(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.BadgerDb, error) {
 	db, err := storage.GetStorageFactory(logger, cfg.DBOptions)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open db")
@@ -348,27 +348,25 @@ func setupDb(logger *zap.Logger, eth2Network beaconprotocol.Network) (basedb.IDb
 
 	// If migrations were applied, we run a full garbage collection cycle
 	// to reclaim any space that may have been freed up.
-	if _, ok := db.(basedb.GarbageCollector); ok {
-		// Close & reopen the database to trigger any unknown internal
-		// startup/shutdown procedures that the storage engine may have.
-		start := time.Now()
-		if err := reopenDb(); err != nil {
-			return nil, err
-		}
-
-		// Run a long garbage collection cycle with a timeout.
-		ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
-		defer cancel()
-		if err := db.(basedb.GarbageCollector).FullGC(ctx); err != nil {
-			return nil, errors.Wrap(err, "failed to collect garbage")
-		}
-
-		// Close & reopen again.
-		if err := reopenDb(); err != nil {
-			return nil, err
-		}
-		logger.Info("post-migrations garbage collection completed", fields.Duration(start))
+	// Close & reopen the database to trigger any unknown internal
+	// startup/shutdown procedures that the storage engine may have.
+	start := time.Now()
+	if err := reopenDb(); err != nil {
+		return nil, err
 	}
+
+	// Run a long garbage collection cycle with a timeout.
+	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	defer cancel()
+	if err := db.FullGC(ctx); err != nil {
+		return nil, errors.Wrap(err, "failed to collect garbage")
+	}
+
+	// Close & reopen again.
+	if err := reopenDb(); err != nil {
+		return nil, err
+	}
+	logger.Info("post-migrations garbage collection completed", fields.Duration(start))
 
 	return db, nil
 }
