@@ -107,7 +107,12 @@ func NewPubsub(ctx context.Context, logger *zap.Logger, cfg *PububConfig, fork f
 		return nil, nil, err
 	}
 
+	// Set up a SubFilter with a whitelist of known topics.
 	sf := newSubFilter(logger, fork, subscriptionRequestLimit)
+	for subnet := 0; subnet < fork.Subnets(); subnet++ {
+		sf.(Whitelist).Register(fork.GetTopicFullName(fork.SubnetTopicID(subnet)))
+	}
+
 	psOpts := []pubsub.Option{
 		pubsub.WithSeenMessagesTTL(cfg.MsgIDCacheTTL),
 		pubsub.WithPeerOutboundQueueSize(cfg.OutboundQueueSize),
