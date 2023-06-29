@@ -178,6 +178,7 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 				return
 			}
 			logger.Debug("rvrt: subscribed to validator", fields.PubKey(randomPK))
+			time.Sleep(time.Second * 10)
 		}
 	}()
 
