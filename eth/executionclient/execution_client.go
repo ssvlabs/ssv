@@ -113,7 +113,7 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 
 // Calls FilterLogs multiple times and batches results to avoid fetching enormous amount of events
 func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, client *ethclient.Client, fromBlock, toBlock uint64) (<-chan ethtypes.Log, <-chan error) {
-	logCh := make(chan ethtypes.Log, DefaultHistoricalLogsBatchSize*8)
+	logCh := make(chan ethtypes.Log, defaultLogBuf)
 	fetchErrCh := make(chan error, 1)
 
 	go func() {

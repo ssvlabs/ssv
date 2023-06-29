@@ -10,4 +10,5 @@ const (
 	DefaultReconnectionMaxInterval     = 64 * time.Second
 	DefaultFinalizationOffset          = 8
 	DefaultHistoricalLogsBatchSize     = 100
+	defaultLogBuf                      = 1024 * 1024
 )
