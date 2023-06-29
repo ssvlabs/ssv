@@ -277,6 +277,8 @@ func (h *handshaker) nodeInfoFromStream(logger *zap.Logger, conn libp2pnetwork.C
 	}
 
 	if len(res) == 0 {
+		protocols, err := h.net.Peerstore().GetProtocols(conn.RemotePeer())
+		logger.Debug("peer doesn't support handshake protocol", zap.String("peer", conn.RemotePeer().String()), zap.Any("protocols", protocols), zap.Error(err))
 		return nil, errors.Errorf("peer [%s] doesn't supports handshake protocol", conn.RemotePeer().String())
 	}
 	resBytes, err := h.streams.Request(logger, conn.RemotePeer(), peers.NodeInfoProtocol, data)
