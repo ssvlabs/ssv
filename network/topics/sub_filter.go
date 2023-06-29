@@ -37,7 +37,6 @@ func (sf *subFilter) CanSubscribe(topic string) bool {
 		// not of the same fork
 		return false
 	}
-	zap.L().Debug("whitelisted", zap.String("topic", topic), zap.Bool("whitelisted", sf.Whitelisted(topic)))
 	return sf.Whitelisted(topic)
 }
 

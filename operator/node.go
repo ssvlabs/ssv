@@ -2,13 +2,9 @@ package operator
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
-	"strings"
-	"time"
 
 	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/networkconfig"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -159,28 +155,6 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 	go n.validatorsCtrl.UpdateValidatorMetaDataLoop(logger)
 	go n.listenForCurrentSlot(logger)
 	go n.reportOperators(logger)
-
-	go func() {
-		time.Sleep(time.Minute)
-		pks := strings.Split(`ee4ee10bddf8cf3d31e43cebc3a54de86ea2222ba5de9ddff36c283b8118a87a2fa886698d47965214e44cb9ea1845ce,a87e23bafa49de0ff2f4174534db434a57612d35d3e4e19d7ee6e54feb691bfca0a768eeeebad7cc40af9c455f823bd8,28d4e451a6b351ed0d183a0f01795bcc4bcd10d7a6466d3e450dec4ce8d2a8f7fb0fa492fd4ec03db28e73a980db0928,fad74bc2e04507e9014b85c3af09276339c8c3a9c7652fd1a4b1250db94e938552de1030e4d76b37e2fcda006ce4ac8e,df128c30994df64cff7dd163e782b17f3057154916407689572f6f948a5629fff4d4fce8b5011cd2bf95fafad37a09e3,1ae2ecd3111555e4df15d6c6908f835a9882db033d18a4d1dea67bc0885ff165d5825277726a8c78670bba3c65b52389,3bcab5b07171181db75067bfa3fe1d1a0b0bd1d6f1acb213d114018805152b47e01def7448a2b42d73dc4f1254a623e4,a25e2750a7303886f786d0a2f4c9fb4207974b596c75c6042343c684feebb9da13f521f1e5e5b61ec0efe2524e980126,ce651001d8c82e2ffd1033d61b4953f71ffac532582cf66f43dddc6d662c1343c01edd1415fad4ee2ed122af1adb1fcf,05a075ead9e86bdfd82dda4784364252c947dc70487ebb8de4cb6d3a3c787ece5859df3457104dcabd042efac91b24bb,2b666a48f923bca6d2797d11dd55a9117125ae5e8f7bbd3b5a9d208cae4bbbd66be34a47ebd9fe6793c828c305b249f5,0e5f81f6da277f77134eaea0cbc25bc2681fa3ba091bbb4417b21aa32d738e937165b6910fa3a3601b34296f374c39ec,fa3953122b8a313b83dc4418f71683c95c17c30adc894d4126af5be31232a04360c19cb010d924646d17b4b74945926a,e2412e80275a028219dcb6dfb65c882482e0d34af6fda72237f9fb9c6002c1d57da01823677e16f7c85522f6d2b1ca69,ff1de1cb866ecab95cb4112bf9fef6e775b33c4ac4366220925674620043f97516f07fe706c8ed2a293e556231255e4b,81c3d6c86d8db25fc303fff641716588b3dd8b05e2157938a408e2176caf8e625bd541a10aad1b60871c9121a91ad692`, ",")
-		for _, s := range pks {
-			randomPK, err := hex.DecodeString(s)
-			if err != nil {
-				logger.Error("rvrt: failed to decode random pk", zap.Error(err))
-			}
-			if len(randomPK) != 48 {
-				logger.Error("rvrt: failed to generate random pk", zap.Int("n", len(randomPK)))
-				return
-			}
-			err = n.net.Subscribe(randomPK)
-			if err != nil {
-				logger.Error("rvrt: failed to subscribe to random pk", zap.Error(err))
-				return
-			}
-			logger.Debug("rvrt: subscribed to validator", fields.PubKey(randomPK))
-			time.Sleep(time.Second * 10)
-		}
-	}()
 
 	go n.feeRecipientCtrl.Start(logger)
 	n.dutyCtrl.Start(logger)
