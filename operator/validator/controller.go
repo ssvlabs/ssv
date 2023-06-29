@@ -9,7 +9,7 @@ import (
 
 	"github.com/jellydator/ttlcache/v3"
 
-	"github.com/bloxapp/ssv/eth/contract"
+	"github.com/bloxapp/ssv/eth/eventdatahandler"
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
 
@@ -107,15 +107,7 @@ type Controller interface {
 	//  - the amount of validators assigned to this operator
 	GetValidatorStats() (uint64, uint64, uint64, error)
 	GetOperatorData() *registrystorage.OperatorData
-	TaskExecutor
-}
-
-type TaskExecutor interface {
-	AddValidator(*contract.ContractValidatorAdded) error
-	RemoveValidator(*contract.ContractValidatorRemoved) error
-	LiquidateCluster(*contract.ContractClusterLiquidated, []*types.SSVShare) error
-	ReactivateCluster(*contract.ContractClusterReactivated, []*types.SSVShare) error
-	UpdateFeeRecipient(*contract.ContractFeeRecipientAddressUpdated) error
+	eventdatahandler.TaskExecutor
 }
 
 // EventHandler represents the interface for compatible storage event handlers

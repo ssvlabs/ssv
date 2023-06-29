@@ -164,7 +164,7 @@ func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contrac
 		return nil
 	}
 
-	validatorShare := edh.shares.Get(event.PublicKey)
+	validatorShare := edh.shareMap.Get(event.PublicKey)
 
 	if event.Owner != validatorShare.OwnerAddress {
 		// Prevent multiple registration of the same validator with different owner address
@@ -263,7 +263,7 @@ func (edh *EventDataHandler) handleShareCreation(
 		}
 	}
 
-	edh.shares.Save(share)
+	edh.shareMap.Save(share)
 
 	// save validator data
 	if err := txn.SaveShares(share); err != nil {
@@ -363,7 +363,7 @@ func (edh *EventDataHandler) handleValidatorRemoved(txn eventdb.RW, event *contr
 	logger.Info("processing ValidatorRemoved event")
 
 	// TODO: handle metrics
-	share := edh.shares.Get(event.PublicKey)
+	share := edh.shareMap.Get(event.PublicKey)
 	if share == nil {
 		edh.logger.Warn("malformed ValidatorRemoved event: could not find validator share")
 		return nil
@@ -391,7 +391,7 @@ func (edh *EventDataHandler) handleValidatorRemoved(txn eventdb.RW, event *contr
 		}
 	}
 
-	edh.shares.Delete(share.ValidatorPubKey)
+	edh.shareMap.Delete(share.ValidatorPubKey)
 
 	// remove from storage
 	if err := txn.DeleteShare(share.ValidatorPubKey); err != nil {
@@ -524,7 +524,7 @@ func (edh *EventDataHandler) processClusterEvent(
 		return nil, nil, fmt.Errorf("could not compute share cluster id: %w", err)
 	}
 
-	shares := edh.shares.List(registrystorage.ByClusterID(clusterID))
+	shares := edh.shareMap.List(registrystorage.ByClusterID(clusterID))
 	toUpdate := make([]*ssvtypes.SSVShare, 0)
 	updatedPubKeys := make([]string, 0)
 
@@ -540,7 +540,7 @@ func (edh *EventDataHandler) processClusterEvent(
 	}
 
 	if len(toUpdate) > 0 {
-		edh.shares.Save(toUpdate...)
+		edh.shareMap.Save(toUpdate...)
 		if err = txn.SaveShares(toUpdate...); err != nil {
 			return nil, nil, fmt.Errorf("could not save validator shares: %w", err)
 		}

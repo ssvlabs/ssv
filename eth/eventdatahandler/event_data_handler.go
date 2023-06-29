@@ -14,7 +14,7 @@ import (
 	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/eth/eventbatcher"
 	"github.com/bloxapp/ssv/eth/eventdb"
-	"github.com/bloxapp/ssv/eth/sharestorage"
+	"github.com/bloxapp/ssv/eth/sharemap"
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging/fields"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
@@ -23,9 +23,9 @@ import (
 
 type EventDataHandler struct {
 	eventDB                    eventDB
-	taskExecutor               taskExecutor
+	taskExecutor               TaskExecutor
 	abi                        *ethabi.ABI
-	shares                     *sharestorage.ShareStorage
+	shareMap                   *sharemap.ShareMap
 	filterer                   *contract.ContractFilterer
 	operatorData               *storage.OperatorData
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider
@@ -43,7 +43,7 @@ type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
 
 func New(
 	eventDB eventDB,
-	taskExecutor taskExecutor,
+	taskExecutor TaskExecutor,
 	operatorData *storage.OperatorData,
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider,
 	keyManager types.KeyManager,
@@ -74,7 +74,7 @@ func New(
 		storageMap:                 storageMap,
 		logger:                     zap.NewNop(),
 		metrics:                    nopMetrics{},
-		shares:                     sharestorage.New(),
+		shareMap:                   sharemap.New(),
 	}
 
 	for _, opt := range opts {

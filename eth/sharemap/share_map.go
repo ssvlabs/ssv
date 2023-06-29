@@ -1,4 +1,4 @@
-package sharestorage
+package sharemap
 
 import (
 	"github.com/cornelk/hashmap"
@@ -7,17 +7,17 @@ import (
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
-type ShareStorage struct {
+type ShareMap struct {
 	shares *hashmap.Map[string, *ssvtypes.SSVShare]
 }
 
-func New() *ShareStorage {
-	return &ShareStorage{
+func New() *ShareMap {
+	return &ShareMap{
 		shares: hashmap.New[string, *ssvtypes.SSVShare](),
 	}
 }
 
-func (s *ShareStorage) Get(pubKey []byte) *ssvtypes.SSVShare {
+func (s *ShareMap) Get(pubKey []byte) *ssvtypes.SSVShare {
 	validatorShare, ok := s.shares.Get(string(pubKey))
 	if ok {
 		return nil
@@ -26,7 +26,7 @@ func (s *ShareStorage) Get(pubKey []byte) *ssvtypes.SSVShare {
 	return validatorShare
 }
 
-func (s *ShareStorage) List(filters ...func(*ssvtypes.SSVShare) bool) []*ssvtypes.SSVShare {
+func (s *ShareMap) List(filters ...func(*ssvtypes.SSVShare) bool) []*ssvtypes.SSVShare {
 	var shares []*ssvtypes.SSVShare
 
 	if len(filters) == 0 {
@@ -45,12 +45,12 @@ func (s *ShareStorage) List(filters ...func(*ssvtypes.SSVShare) bool) []*ssvtype
 	return shares
 }
 
-func (s *ShareStorage) Save(shares ...*types.SSVShare) {
+func (s *ShareMap) Save(shares ...*types.SSVShare) {
 	for _, share := range shares {
 		s.shares.Set(string(share.ValidatorPubKey), share)
 	}
 }
 
-func (s *ShareStorage) Delete(pubKey []byte) {
+func (s *ShareMap) Delete(pubKey []byte) {
 	s.shares.Del(string(pubKey))
 }
