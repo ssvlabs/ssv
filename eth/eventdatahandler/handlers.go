@@ -282,34 +282,37 @@ func validatorAddedEventToShare(
 			OperatorID: operatorID,
 			PubKey:     sharePublicKeys[i],
 		})
-		if operatorID == operatorData.ID {
-			validatorShare.OperatorID = operatorID
-			validatorShare.SharePubKey = sharePublicKeys[i]
 
-			operatorPrivateKey, found, err := shareEncryptionKeyProvider()
-			if err != nil {
-				return nil, nil, fmt.Errorf("could not get operator private key: %w", err)
-			}
-			if !found {
-				return nil, nil, errors.New("could not find operator private key")
-			}
+		if operatorID != operatorData.ID {
+			continue
+		}
 
-			shareSecret = &bls.SecretKey{}
-			decryptedSharePrivateKey, err := rsaencryption.DecodeKey(operatorPrivateKey, encryptedKeys[i])
-			if err != nil {
-				return nil, nil, &abiparser.MalformedEventError{
-					Err: fmt.Errorf("could not decrypt share private key: %w", err),
-				}
+		validatorShare.OperatorID = operatorID
+		validatorShare.SharePubKey = sharePublicKeys[i]
+
+		operatorPrivateKey, found, err := shareEncryptionKeyProvider()
+		if err != nil {
+			return nil, nil, fmt.Errorf("could not get operator private key: %w", err)
+		}
+		if !found {
+			return nil, nil, errors.New("could not find operator private key")
+		}
+
+		shareSecret = &bls.SecretKey{}
+		decryptedSharePrivateKey, err := rsaencryption.DecodeKey(operatorPrivateKey, encryptedKeys[i])
+		if err != nil {
+			return nil, nil, &abiparser.MalformedEventError{
+				Err: fmt.Errorf("could not decrypt share private key: %w", err),
 			}
-			if err = shareSecret.SetHexString(string(decryptedSharePrivateKey)); err != nil {
-				return nil, nil, &abiparser.MalformedEventError{
-					Err: fmt.Errorf("could not set decrypted share private key: %w", err),
-				}
+		}
+		if err = shareSecret.SetHexString(string(decryptedSharePrivateKey)); err != nil {
+			return nil, nil, &abiparser.MalformedEventError{
+				Err: fmt.Errorf("could not set decrypted share private key: %w", err),
 			}
-			if !bytes.Equal(shareSecret.GetPublicKey().Serialize(), validatorShare.SharePubKey) {
-				return nil, nil, &abiparser.MalformedEventError{
-					Err: errors.New("share private key does not match public key"),
-				}
+		}
+		if !bytes.Equal(shareSecret.GetPublicKey().Serialize(), validatorShare.SharePubKey) {
+			return nil, nil, &abiparser.MalformedEventError{
+				Err: errors.New("share private key does not match public key"),
 			}
 		}
 	}

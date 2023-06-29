@@ -15,7 +15,7 @@ type metrics interface {
 // nopMetrics is no-op metrics.
 type nopMetrics struct{}
 
-func (n nopMetrics) OperatorHasPublicKey(operatorID spectypes.OperatorID, publicKey []byte) {}
-func (n nopMetrics) ValidatorInactive(publicKey []byte)                                     {}
-func (n nopMetrics) ValidatorError(publicKey []byte)                                        {}
-func (n nopMetrics) ValidatorRemoved(publicKey []byte)                                      {}
+func (n nopMetrics) OperatorHasPublicKey(spectypes.OperatorID, []byte) {}
+func (n nopMetrics) ValidatorInactive([]byte)                          {}
+func (n nopMetrics) ValidatorError([]byte)                             {}
+func (n nopMetrics) ValidatorRemoved([]byte)                           {}

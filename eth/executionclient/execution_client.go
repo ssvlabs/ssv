@@ -17,6 +17,10 @@ import (
 	"github.com/bloxapp/ssv/utils/tasks"
 )
 
+var (
+	ErrClosed = fmt.Errorf("closed")
+)
+
 // ExecutionClient represents a client for interacting with Ethereum execution client.
 type ExecutionClient struct {
 	// mandatory
@@ -159,7 +163,7 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, client *ethcl
 
 			case <-ec.closed:
 				ec.logger.Debug("closed")
-				fetchErrCh <- fmt.Errorf("closed")
+				fetchErrCh <- ErrClosed
 				return
 
 			default:
@@ -343,17 +347,3 @@ func (ec *ExecutionClient) reconnect(ctx context.Context) {
 
 	logger.Info("reconnected")
 }
-
-// func spitToRanges(start uint64, stop uint64, n uint64) []struct{} {
-// 	var a []struct{}
-
-// 	q, r := (stop-start)/n, (stop-start)%n
-// 	if r == 0 {
-// 		for i := 0; i < int(q); i++ {
-// 			a = append(a)
-// 		}
-// 	} else {
-
-// 	}
-// 	return nil
-// }

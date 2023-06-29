@@ -61,7 +61,7 @@ func (ed *EventDispatcher) Start(ctx context.Context, fromBlock uint64) error {
 	ed.logger.Info("going to fetch historical logs")
 	logStream, errorStream, err := ed.executionClient.FetchHistoricalLogs(ctx, fromBlock)
 	if err != nil {
-		return err
+		return fmt.Errorf("fetch historical logs: %w", err)
 	}
 
 	ed.logger.Info("going to batch historical logs")
@@ -74,7 +74,7 @@ func (ed *EventDispatcher) Start(ctx context.Context, fromBlock uint64) error {
 	}
 
 	if err := <-errorStream; err != nil {
-		return fmt.Errorf("error occured while fetching historical logs: %w", err)
+		return fmt.Errorf("error occurred while fetching historical logs: %w", err)
 	}
 
 	ed.logger.Info("finished handling historical logs",

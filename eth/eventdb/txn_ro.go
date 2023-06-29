@@ -75,7 +75,7 @@ func (t *ROTxn) GetRecipientData(owner ethcommon.Address) (*registrystorage.Reci
 		return nil, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get item: %w", err)
 	}
 
 	rawJSON, err := rawItem.ValueCopy(nil)

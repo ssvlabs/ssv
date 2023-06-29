@@ -197,7 +197,11 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 		}
 
 		task := func() error {
-			return edh.taskExecutor.AddValidator(validatorAddedEvent)
+			if err := edh.taskExecutor.AddValidator(validatorAddedEvent); err != nil {
+				return fmt.Errorf("add validator: %w", err)
+			}
+
+			return nil
 		}
 
 		return task, nil
@@ -213,7 +217,11 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 		}
 
 		task := func() error {
-			return edh.taskExecutor.RemoveValidator(validatorRemovedEvent)
+			if err := edh.taskExecutor.RemoveValidator(validatorRemovedEvent); err != nil {
+				return fmt.Errorf("remove validator: %w", err)
+			}
+
+			return nil
 		}
 
 		return task, nil
@@ -230,7 +238,11 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 		}
 
 		task := func() error {
-			return edh.taskExecutor.LiquidateCluster(clusterLiquidatedEvent, sharesToLiquidate)
+			if err := edh.taskExecutor.LiquidateCluster(clusterLiquidatedEvent, sharesToLiquidate); err != nil {
+				return fmt.Errorf("liquidate cluster: %w", err)
+			}
+
+			return nil
 		}
 
 		return task, nil
@@ -247,7 +259,11 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 		}
 
 		task := func() error {
-			return edh.taskExecutor.ReactivateCluster(clusterReactivatedEvent, sharesToEnable)
+			if err := edh.taskExecutor.ReactivateCluster(clusterReactivatedEvent, sharesToEnable); err != nil {
+				return fmt.Errorf("reactivate cluster: %w", err)
+			}
+
+			return nil
 		}
 
 		return task, nil
@@ -268,7 +284,11 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 				return nil
 			}
 
-			return edh.taskExecutor.UpdateFeeRecipient(feeRecipientAddressUpdatedEvent)
+			if err := edh.taskExecutor.UpdateFeeRecipient(feeRecipientAddressUpdatedEvent); err != nil {
+				return fmt.Errorf("update fee recipient: %w", err)
+			}
+
+			return nil
 		}
 
 		return task, nil

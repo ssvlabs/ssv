@@ -228,7 +228,7 @@ func TestStreamLogs(t *testing.T) {
 
 	logs := client.StreamLogs(ctx, 0)
 	var streamedLogs []types.Log
-	// Receive emited events
+	// Receive emitted events
 	go func() {
 		for log := range logs {
 			streamedLogs = append(streamedLogs, log)
@@ -236,7 +236,7 @@ func TestStreamLogs(t *testing.T) {
 	}()
 
 	// Generate test chain after a connection to the server.
-	// While processing blocks the events will be emited which is read by subscription
+	// While processing blocks the events will be emitted which is read by subscription
 	generateInitialTestChain(t, done, blockStream, 1000)
 	for blocks := range processedStream {
 		t.Log("Processed blocks: ", len(blocks))
