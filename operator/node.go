@@ -2,9 +2,12 @@ package operator
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
+	"time"
 
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/networkconfig"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -158,6 +161,28 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 
 	go n.feeRecipientCtrl.Start(logger)
 	n.dutyCtrl.Start(logger)
+
+	go func() {
+		time.Sleep(time.Minute)
+		for i := 0; i < 16; i++ {
+			randomPK := make(spectypes.ValidatorPK, 48)
+			numBytes, err := rand.Read(randomPK)
+			if err != nil {
+				logger.Error("rvrt: failed to generate random pk", zap.Error(err))
+				return
+			}
+			if numBytes != 48 {
+				logger.Error("rvrt: failed to generate random pk", zap.Int("n", numBytes))
+				return
+			}
+			err = n.net.Subscribe(randomPK)
+			if err != nil {
+				logger.Error("rvrt: failed to subscribe to random pk", zap.Error(err))
+				return
+			}
+			logger.Debug("rvrt: subscribed to validator", fields.PubKey(randomPK))
+		}
+	}()
 
 	return nil
 }
