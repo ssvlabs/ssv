@@ -7,7 +7,6 @@ import (
 
 	"github.com/dgraph-io/badger/v4"
 	"github.com/ethereum/go-ethereum/common"
-	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 
 	"github.com/bloxapp/ssv/protocol/v2/types"
@@ -50,33 +49,6 @@ func (t *RWTxn) SaveOperatorData(operatorData *registrystorage.OperatorData) (bo
 	}
 
 	return true, nil
-}
-
-// SaveEventData saves event data and return it.
-// if the event already exists return nil
-func (t *RWTxn) SaveEventData(txHash ethcommon.Hash) error {
-	_, err := t.txn.Get(append([]byte(fmt.Sprintf("%s%s/", storagePrefix, eventsPrefix)), txHash.Bytes()...))
-
-	if errors.Is(err, badger.ErrKeyNotFound) {
-		rawJSON, err := json.Marshal(&EventData{
-			TxHash: txHash,
-		})
-		if err != nil {
-			return fmt.Errorf("marshal: %w", err)
-		}
-
-		if err := t.txn.Set(append([]byte(fmt.Sprintf("%s%s/", storagePrefix, eventsPrefix)), txHash.Bytes()...), rawJSON); err != nil {
-			return fmt.Errorf("set item: %w", err)
-		}
-
-		return nil
-	}
-
-	if err != nil {
-		return fmt.Errorf("get item: %w", err)
-	}
-
-	return nil
 }
 
 func (t *RWTxn) BumpNonce(owner common.Address) error {

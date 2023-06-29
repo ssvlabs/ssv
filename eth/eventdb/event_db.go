@@ -33,7 +33,6 @@ type RO interface {
 	Commit() error
 	GetLastProcessedBlock() (*big.Int, error)
 	GetOperatorData(id uint64) (*registrystorage.OperatorData, error)
-	GetEventData(txHash ethcommon.Hash) (*EventData, error)
 	GetRecipientData(owner ethcommon.Address) (*RecipientData, error)
 	GetNextNonce(owner ethcommon.Address) (Nonce, error)
 }
@@ -47,7 +46,6 @@ type RW interface {
 	RO
 	SetLastProcessedBlock(block *big.Int) error
 	SaveOperatorData(od *registrystorage.OperatorData) (bool, error)
-	SaveEventData(txHash ethcommon.Hash) error
 	BumpNonce(owner ethcommon.Address) error
 	SaveRecipientData(recipientData *RecipientData) (*RecipientData, error)
 	SaveShares(shares ...*ssvtypes.SSVShare) error
@@ -60,11 +58,6 @@ func (e *EventDB) RWTxn() RW {
 }
 
 // TODO: get rid of duplication
-
-// EventData the public data of an event
-type EventData struct {
-	TxHash ethcommon.Hash `json:"txHash"`
-}
 
 type Nonce uint16
 

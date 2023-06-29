@@ -69,29 +69,6 @@ func (t *ROTxn) GetOperatorData(id uint64) (*registrystorage.OperatorData, error
 	return &od, nil
 }
 
-// GetEventData returns data of the given event by txHash
-func (t *ROTxn) GetEventData(txHash ethcommon.Hash) (*EventData, error) {
-	rawItem, err := t.txn.Get(append([]byte(fmt.Sprintf("%s%s/", storagePrefix, eventsPrefix)), txHash.Bytes()...))
-	if errors.Is(err, badger.ErrKeyNotFound) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	rawJSON, err := rawItem.ValueCopy(nil)
-	if err != nil {
-		return nil, fmt.Errorf("raw copy: %w", err)
-	}
-
-	var eventData EventData
-	if err := json.Unmarshal(rawJSON, &eventData); err != nil {
-		return nil, fmt.Errorf("unmarshal: %w", err)
-	}
-
-	return &eventData, nil
-}
-
 func (t *ROTxn) GetRecipientData(owner ethcommon.Address) (*RecipientData, error) {
 	rawItem, err := t.txn.Get(append([]byte(fmt.Sprintf("%s%s/", storagePrefix, recipientsPrefix)), owner.Bytes()...))
 	if errors.Is(err, badger.ErrKeyNotFound) {

@@ -110,15 +110,6 @@ func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contrac
 	logger.Debug("processing ValidatorAdded event")
 	defer logger.Debug("processed ValidatorAdded event")
 
-	eventData, eventErr := txn.GetEventData(event.Raw.TxHash)
-	if eventErr != nil {
-		return fmt.Errorf("failed to get event data: %w", eventErr)
-	}
-	if eventData != nil {
-		// skip
-		return nil
-	}
-
 	// get nonce
 	nonce, nonceErr := txn.GetNextNonce(event.Owner)
 	if nonceErr != nil {
@@ -137,8 +128,8 @@ func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contrac
 			zap.Int("expected", sharesExpectedLength),
 			zap.Int("got", len(event.Shares)))
 
-		if err := edh.saveEvent(txn, event); err != nil {
-			return fmt.Errorf("save event: %w", err)
+		if err := txn.BumpNonce(event.Owner); err != nil {
+			return fmt.Errorf("bump nonce: %w", err)
 		}
 
 		return nil
@@ -153,8 +144,8 @@ func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contrac
 		edh.logger.Warn("malformed ValidatorAdded event: failed to verify signature",
 			zap.Error(err))
 
-		if err := edh.saveEvent(txn, event); err != nil {
-			return fmt.Errorf("save event: %w", err)
+		if err := txn.BumpNonce(event.Owner); err != nil {
+			return fmt.Errorf("bump nonce: %w", err)
 		}
 
 		return nil
@@ -177,8 +168,8 @@ func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contrac
 
 		validatorShare = createdShare
 
-		if err := edh.saveEvent(txn, event); err != nil {
-			return fmt.Errorf("save event: %w", err)
+		if err := txn.BumpNonce(event.Owner); err != nil {
+			return fmt.Errorf("bump nonce: %w", err)
 		}
 	} else if event.Owner != validatorShare.OwnerAddress {
 		// Prevent multiple registration of the same validator with different owner address
@@ -188,8 +179,8 @@ func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contrac
 			zap.String("expected", validatorShare.OwnerAddress.String()),
 			zap.String("got", event.Owner.String()))
 
-		if err := edh.saveEvent(txn, event); err != nil {
-			return fmt.Errorf("save event: %w", err)
+		if err := txn.BumpNonce(event.Owner); err != nil {
+			return fmt.Errorf("bump nonce: %w", err)
 		}
 
 		return nil
@@ -198,22 +189,6 @@ func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contrac
 	isOperatorShare := validatorShare.BelongsToOperator(edh.operatorData.ID)
 	if isOperatorShare {
 		edh.metrics.ValidatorInactive(event.PublicKey)
-	}
-
-	return nil
-}
-
-func (edh *EventDataHandler) saveEvent(txn eventdb.RW, event *contract.ContractValidatorAdded) error {
-	if err := txn.SaveEventData(event.Raw.TxHash); err != nil {
-		wrappedErr := fmt.Errorf("could not save event data: %w", err)
-		if err == nil {
-			return wrappedErr
-		}
-		return err
-	}
-
-	if err := txn.BumpNonce(event.Owner); err != nil {
-		return fmt.Errorf("failed to bump the nonce: %w", err)
 	}
 
 	return nil
