@@ -42,6 +42,8 @@ type pubSubConfig interface {
 	MsgID() MsgIDFunc
 	// Subnets returns the subnets count for this fork
 	Subnets() int
+	// Topics returns the available topics for this fork.
+	Topics() []string
 }
 
 type libp2pConfig interface {

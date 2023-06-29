@@ -1,9 +1,8 @@
 package topics
 
 import (
-	"sync"
-
 	"github.com/bloxapp/ssv/network/forks"
+	"github.com/cornelk/hashmap"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -81,28 +80,28 @@ type Whitelist interface {
 
 // dynamicWhitelist helps to maintain a filter based on some whitelist
 type dynamicWhitelist struct {
-	whitelist *sync.Map
+	whitelist *hashmap.Map[string, struct{}]
 }
 
 // newWhitelist creates a new whitelist
 func newWhitelist() *dynamicWhitelist {
 	return &dynamicWhitelist{
-		whitelist: &sync.Map{},
+		whitelist: hashmap.New[string, struct{}](),
 	}
 }
 
 // Register adds the given topic to the whitelist
 func (wl *dynamicWhitelist) Register(name string) {
-	wl.whitelist.Store(name, true)
+	wl.whitelist.Set(name, struct{}{})
 }
 
 // Deregister removes the given topic from the whitelist
 func (wl *dynamicWhitelist) Deregister(name string) {
-	wl.whitelist.Delete(name)
+	wl.whitelist.Del(name)
 }
 
 // Whitelisted checks if the given name was whitelisted
 func (wl *dynamicWhitelist) Whitelisted(name string) bool {
-	_, ok := wl.whitelist.Load(name)
+	_, ok := wl.whitelist.Get(name)
 	return ok
 }
