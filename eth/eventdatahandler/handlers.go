@@ -23,8 +23,6 @@ import (
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
-// TODO: review and make sure that we log and return no error in each case where we don't want to stop share processing (e.g. malformed event)
-
 // b64 encrypted key length is 256
 const encryptedKeyLength = 256
 
@@ -74,7 +72,7 @@ func (edh *EventDataHandler) handleOperatorRemoved(txn eventdb.RW, event *contra
 		fields.OperatorID(event.OperatorId),
 	)
 	logger.Debug("processing OperatorRemoved event")
-	defer logger.Debug("processed OperatorRemoved event")
+	defer func() { logger.Debug("processed OperatorRemoved event") }()
 
 	od, err := txn.GetOperatorData(event.OperatorId)
 	if err != nil {
@@ -108,7 +106,7 @@ func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contrac
 		zap.String("operator_pub_key", ethcommon.Bytes2Hex(event.PublicKey)),
 	)
 	logger.Debug("processing ValidatorAdded event")
-	defer logger.Debug("processed ValidatorAdded event")
+	defer func() { logger.Debug("processed ValidatorAdded event") }()
 
 	// get nonce
 	nonce, nonceErr := txn.GetNextNonce(event.Owner)
@@ -330,7 +328,7 @@ func (edh *EventDataHandler) handleValidatorRemoved(txn eventdb.RW, event *contr
 		fields.PubKey(event.PublicKey),
 	)
 	logger.Debug("processing ValidatorRemoved event")
-	defer logger.Debug("processed ValidatorRemoved event")
+	defer func() { logger.Debug("processed ValidatorRemoved event") }()
 
 	// TODO: handle metrics
 	share := edh.shareMap.Get(event.PublicKey)
@@ -386,7 +384,7 @@ func (edh *EventDataHandler) handleClusterLiquidated(txn eventdb.RW, event *cont
 		zap.Uint64s("operator_ids", event.OperatorIds),
 	)
 	logger.Debug("processing ClusterLiquidated event")
-	defer logger.Debug("processed ClusterLiquidated event")
+	defer func() { logger.Debug("processed ClusterLiquidated event") }()
 
 	toLiquidate, liquidatedPubKeys, err := edh.processClusterEvent(txn, event.Owner, event.OperatorIds, true)
 	if err != nil {
@@ -406,7 +404,7 @@ func (edh *EventDataHandler) handleClusterReactivated(txn eventdb.RW, event *con
 		zap.Uint64s("operator_ids", event.OperatorIds),
 	)
 	logger.Debug("processing ClusterReactivated event")
-	defer logger.Debug("processed ClusterReactivated event")
+	defer func() { logger.Debug("processed ClusterReactivated event") }()
 
 	toEnable, enabledPubKeys, err := edh.processClusterEvent(txn, event.Owner, event.OperatorIds, false)
 	if err != nil {
@@ -426,9 +424,9 @@ func (edh *EventDataHandler) handleFeeRecipientAddressUpdated(txn eventdb.RW, ev
 		fields.FeeRecipient(event.RecipientAddress.Bytes()),
 	)
 	logger.Debug("processing FeeRecipientAddressUpdated event")
-	defer logger.Debug("processed FeeRecipientAddressUpdated event")
+	defer func() { logger.Debug("processed FeeRecipientAddressUpdated event") }()
 
-	recipientData := &eventdb.RecipientData{
+	recipientData := &registrystorage.RecipientData{
 		Owner: event.Owner,
 	}
 	copy(recipientData.FeeRecipient[:], event.RecipientAddress.Bytes())
@@ -456,7 +454,7 @@ func splitBytes(buf []byte, lim int) [][]byte {
 
 // verify signature of the ValidatorAddedEvent shares data
 // todo(align-contract-v0.3.1-rc.0): move to crypto package in ssv protocol?
-func verifySignature(sig []byte, owner ethcommon.Address, pubKey []byte, nonce eventdb.Nonce) error {
+func verifySignature(sig []byte, owner ethcommon.Address, pubKey []byte, nonce registrystorage.Nonce) error {
 	data := fmt.Sprintf("%s:%d", owner.String(), nonce)
 	hash := crypto.Keccak256([]byte(data))
 
