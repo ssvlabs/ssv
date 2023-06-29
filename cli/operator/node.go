@@ -27,6 +27,7 @@ import (
 	"github.com/bloxapp/ssv/eth1/goeth"
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/api/decided"
+	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
 	ssv_identity "github.com/bloxapp/ssv/identity"
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
@@ -131,8 +132,8 @@ var StartNodeCmd = &cobra.Command{
 		cfg.ETH2Options.GasLimit = spectypes.DefaultGasLimit
 		cfg.ETH2Options.Network = networkConfig.Beacon
 
-		el := setupEth2(logger, operatorData.ID, slotTicker)
-		cl := setupEth1(logger, networkConfig.RegistryContractAddr) // TODO: get rid of
+		cl := setupEth2(logger, operatorData.ID, slotTicker)
+		el := setupEth1(logger, networkConfig.RegistryContractAddr) // TODO: get rid of
 
 		executionClient := executionclient.New(
 			cfg.ETH1Options.ETH1Addr,
@@ -145,10 +146,14 @@ var StartNodeCmd = &cobra.Command{
 			executionclient.WithReconnectionMaxInterval(executionclient.DefaultReconnectionMaxInterval),
 		)
 
+		if err := executionClient.Connect(ctx); err != nil {
+			logger.Fatal("failed to connect to execution client", zap.Error(err))
+		}
+
 		cfg.SSVOptions.ForkVersion = forkVersion
 		cfg.SSVOptions.Context = ctx
 		cfg.SSVOptions.DB = db
-		cfg.SSVOptions.BeaconNode = el
+		cfg.SSVOptions.BeaconNode = cl
 		cfg.SSVOptions.Network = networkConfig
 		cfg.SSVOptions.P2PNetwork = p2pNetwork
 		cfg.SSVOptions.ValidatorOptions.ForkVersion = forkVersion
@@ -156,7 +161,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.Context = ctx
 		cfg.SSVOptions.ValidatorOptions.DB = db
 		cfg.SSVOptions.ValidatorOptions.Network = p2pNetwork
-		cfg.SSVOptions.ValidatorOptions.Beacon = el
+		cfg.SSVOptions.ValidatorOptions.Beacon = cl
 		cfg.SSVOptions.ValidatorOptions.KeyManager = keyManager
 
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = nodeStorage.GetPrivateKey
@@ -164,8 +169,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.RegistryStorage = nodeStorage
 		cfg.SSVOptions.ValidatorOptions.GasLimit = cfg.ETH2Options.GasLimit
 
-		cfg.SSVOptions.Eth1Client = cl
-		cfg.SSVOptions.ExecutionClient = executionClient
+		cfg.SSVOptions.Eth1Client = el
 
 		if cfg.WsAPIPort != 0 {
 			ws := api.NewWsServer(cmd.Context(), nil, http.NewServeMux(), cfg.WithPing)
@@ -175,6 +179,23 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		cfg.SSVOptions.ValidatorOptions.DutyRoles = []spectypes.BeaconRole{spectypes.BNRoleAttester} // TODO could be better to set in other place
+
+		storageRoles := []spectypes.BeaconRole{
+			spectypes.BNRoleAttester,
+			spectypes.BNRoleProposer,
+			spectypes.BNRoleAggregator,
+			spectypes.BNRoleSyncCommittee,
+			spectypes.BNRoleSyncCommitteeContribution,
+			spectypes.BNRoleValidatorRegistration,
+		}
+		storageMap := ibftstorage.NewStores()
+
+		for _, storageRole := range storageRoles {
+			storageMap.Add(storageRole, ibftstorage.New(cfg.SSVOptions.ValidatorOptions.DB, storageRole.String(), cfg.SSVOptions.ValidatorOptions.ForkVersion))
+		}
+
+		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
+
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 
@@ -186,11 +207,7 @@ var StartNodeCmd = &cobra.Command{
 
 		if eth1Refactor {
 			// TODO: Node prober needs to be merged to wait until ready.
-			// Now the code is just checking if execution client is ready and crash if not.
-			// When prober is merged, it needs to be used instead of the code below.
-			if ready, err := executionClient.IsReady(cmd.Context()); err != nil || !ready {
-				logger.Fatal("execution client is not ready")
-			}
+			// nodeProber.Wait()
 		} else {
 			metrics.WaitUntilHealthy(logger, cfg.SSVOptions.Eth1Client, "execution client")
 		}
@@ -200,16 +217,42 @@ var StartNodeCmd = &cobra.Command{
 		if eth1Refactor {
 			// TODO: handle local events
 			eventDB := eventdb.NewEventDB(db.(*kv.BadgerDb).Badger()) // TODO: get rid of type assertion
-			eventDataHandler := eventdatahandler.New(eventDB, validatorCtrl)
+			eventDataHandler := eventdatahandler.New(
+				eventDB,
+				validatorCtrl,
+				cfg.SSVOptions.ValidatorOptions.OperatorData,
+				cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider,
+				cfg.SSVOptions.ValidatorOptions.KeyManager,
+				cfg.SSVOptions.ValidatorOptions.Beacon,
+				storageMap,
+				eventdatahandler.WithFullNode(),
+				eventdatahandler.WithLogger(logger),
+			)
 			eventBatcher := eventbatcher.NewEventBatcher()
-			eventDispatcher := eventdispatcher.New(executionClient, eventBatcher, eventDataHandler)
-			fromBlock, err := eventDB.ROTxn().GetLastProcessedBlock()
+			eventDispatcher := eventdispatcher.New(
+				executionClient,
+				eventBatcher,
+				eventDataHandler,
+				eventdispatcher.WithLogger(logger),
+			)
+
+			txn := eventDB.ROTxn()
+			defer txn.Discard()
+
+			fromBlock, err := txn.GetLastProcessedBlock()
 			if err != nil {
-				logger.Fatal("could not get last processed block")
+				logger.Fatal("could not get last processed block", zap.Error(err))
 			}
+
 			if fromBlock == nil {
 				fromBlock = networkConfig.ETH1SyncOffset
+				logger.Info("no last processed block in DB found, using last processed block from network config",
+					fields.BlockNumber(fromBlock.Uint64()))
+			} else {
+				logger.Info("using last processed block from DB",
+					fields.BlockNumber(fromBlock.Uint64()))
 			}
+
 			if err := eventDispatcher.Start(cmd.Context(), fromBlock.Uint64()); err != nil {
 				logger.Fatal("could not start event dispatcher", zap.Error(err))
 			}

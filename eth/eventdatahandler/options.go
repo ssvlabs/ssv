@@ -20,3 +20,10 @@ func WithMetrics(metrics metrics) Option {
 		edh.metrics = metrics
 	}
 }
+
+// WithFullNode signals that node works in a full node state.
+func WithFullNode() Option {
+	return func(edh *EventDataHandler) {
+		edh.fullNode = true
+	}
+}

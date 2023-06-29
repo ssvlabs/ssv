@@ -94,11 +94,19 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 	if err != nil {
 		return nil, 0, fmt.Errorf("get current block: %w", err)
 	}
-	ec.logger.Info("current block", fields.BlockNumber(currentBlock))
+
+	lastBlock = currentBlock - ec.finalizationOffset
+	logger := ec.logger.With(
+		zap.Uint64("from", fromBlock),
+		zap.Uint64("to", lastBlock))
+
+	logger.Info("determined current block number, fetching historical logs",
+		zap.Uint64("current_block", currentBlock))
+
 	query := ethereum.FilterQuery{
 		Addresses: []ethcommon.Address{ec.contractAddress},
 		FromBlock: new(big.Int).SetUint64(fromBlock),
-		ToBlock:   new(big.Int).SetUint64(currentBlock - ec.finalizationOffset),
+		ToBlock:   new(big.Int).SetUint64(lastBlock),
 	}
 
 	inLogs := ec.batchedFilterLogs(ctx, client, query)
@@ -110,7 +118,7 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 		logs = append(logs, l.logs...)
 	}
 
-	ec.logger.Info("last fetched block", fields.BlockNumber(lastBlock))
+	logger.Info("fetched historical blocks")
 	ec.metrics.LastFetchedBlock(lastBlock)
 
 	return logs, lastBlock, nil
@@ -244,6 +252,7 @@ func (ec *ExecutionClient) isClosed() bool {
 	}
 }
 
+// TODO: consider handling "websocket: read limit exceeded" error and reducing batch size (syncSmartContractsEvents has code for this)
 func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan ethtypes.Log, fromBlock uint64) (lastBlock uint64, err error) {
 	client := ec.client.Load()
 
