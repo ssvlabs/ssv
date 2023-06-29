@@ -84,12 +84,6 @@ func (ec *ExecutionClient) Close() error {
 	return nil
 }
 
-type LogStream struct {
-	LogCh       <-chan ethtypes.Log
-	ErrorCh     <-chan error
-	TargetBlock uint64
-}
-
 // FetchHistoricalLogs retrieves historical logs emitted by the contract starting from fromBlock.
 func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logCh <-chan ethtypes.Log, fetchErrCh <-chan error, err error) {
 	client := ec.client.Load()
