@@ -171,6 +171,7 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, client *ethcl
 			default:
 				for _, log := range logs {
 					if log.Removed {
+						// TODO: test this case
 						continue
 					}
 					logCh <- log
