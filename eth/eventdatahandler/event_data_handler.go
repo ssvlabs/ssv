@@ -112,11 +112,12 @@ func (edh *EventDataHandler) HandleBlockEventsStream(blockEventsCh <-chan eventb
 		// 1) find and remove opposite tasks (start-stop, stop-start, liquidate-reactivate, reactivate-liquidate)
 		// 2) find superseding tasks and remove superseded ones (updateFee-updateFee)
 		for _, task := range tasks {
+			edh.logger.Debug("going to execute task") // TODO: add more task details
 			if err := task(); err != nil {
 				// TODO: We log failed task until we discuss how we want to handle this case. We likely need to crash the node in this case.
 				edh.logger.Error("failed to execute task", zap.Error(err))
 			} else {
-				edh.logger.Info("executed task") // TODO: add more task details
+				edh.logger.Debug("executed task") // TODO: add more task details
 			}
 		}
 
@@ -196,8 +197,6 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 		}
 
 		task := func() error {
-			edh.logger.Info("starting validator", fields.PubKey(validatorAddedEvent.PublicKey)) // TODO: move logs to taskExecutor
-
 			return edh.taskExecutor.AddValidator(validatorAddedEvent)
 		}
 
@@ -214,8 +213,6 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 		}
 
 		task := func() error {
-			edh.logger.Info("stopping validator", fields.PubKey(validatorRemovedEvent.PublicKey))
-
 			return edh.taskExecutor.RemoveValidator(validatorRemovedEvent)
 		}
 
@@ -233,8 +230,6 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 		}
 
 		task := func() error {
-			edh.logger.Info("liquidating cluster", zap.Uint64("index", clusterLiquidatedEvent.Cluster.Index)) // TODO: add to fields package
-
 			return edh.taskExecutor.LiquidateCluster(clusterLiquidatedEvent, sharesToLiquidate)
 		}
 
@@ -252,8 +247,6 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 		}
 
 		task := func() error {
-			edh.logger.Info("reactivating cluster", zap.Uint64("index", clusterReactivatedEvent.Cluster.Index)) // TODO: add to fields package
-
 			return edh.taskExecutor.ReactivateCluster(clusterReactivatedEvent, sharesToEnable)
 		}
 
@@ -274,8 +267,6 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 			if !updated {
 				return nil
 			}
-
-			edh.logger.Info("updating recipient address", zap.Stringer("owner", feeRecipientAddressUpdatedEvent.Owner)) // TODO: add to fields package
 
 			return edh.taskExecutor.UpdateFeeRecipient(feeRecipientAddressUpdatedEvent)
 		}
