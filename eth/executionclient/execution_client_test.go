@@ -122,7 +122,7 @@ func generateInitialTestChain(t *testing.T, done <-chan interface{}, blockStream
 				GasPrice: big.NewInt(params.InitialBaseFee),
 				Gas:      100000,
 				// Call to function Call() which emits event Called()
-				Data:     ethcommon.FromHex("0x34e22921"),
+				Data: ethcommon.FromHex("0x34e22921"),
 			})
 			g.AddTx(tx)
 		}
@@ -145,7 +145,6 @@ Example contract to test event emission:
 		function Call() public { emit Called(); }
 	}
 */
-const callableAbi = "[{\"anonymous\":false,\"inputs\":[],\"name\":\"Called\",\"type\":\"event\"},{\"inputs\":[],\"name\":\"Call\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
 
 const callableBin = "6080604052348015600f57600080fd5b5060998061001e6000396000f3fe6080604052348015600f57600080fd5b506004361060285760003560e01c806334e2292114602d575b600080fd5b60336035565b005b7f81fab7a4a0aa961db47eefc81f143a5220e8c8495260dd65b1356f1d19d3c7b860405160405180910390a156fea2646970667358221220029436d24f3ac598ceca41d4d712e13ced6d70727f4cdc580667de66d2f51d8b64736f6c63430008010033"
 
@@ -208,7 +207,7 @@ func TestStreamLogs(t *testing.T) {
 	blockStream := make(chan []*types.Block)
 	defer close(blockStream)
 	// Create sim instance with a delay between block execution
-	backend, processedStream := newTestBackend(t, done, blockStream, time.Microsecond * 50)
+	backend, processedStream := newTestBackend(t, done, blockStream, time.Microsecond*50)
 
 	rpcServer, _ := backend.RPCHandler()
 	httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
