@@ -17,11 +17,19 @@ const (
 // subnetsCount returns the subnet count for genesis
 var subnetsCount uint64 = 128
 
+// SubnetTopicID returns the topic to use for the given subnet
+func (genesis *ForkGenesis) SubnetTopicID(subnet int) string {
+	if subnet < 0 {
+		return UnknownSubnet
+	}
+	return fmt.Sprintf("%d", subnet)
+}
+
 // ValidatorTopicID returns the topic to use for the given validator
 func (genesis *ForkGenesis) ValidatorTopicID(pkByts []byte) []string {
 	pkHex := hex.EncodeToString(pkByts)
 	subnet := genesis.ValidatorSubnet(pkHex)
-	return []string{topicOf(subnet)}
+	return []string{genesis.SubnetTopicID(subnet)}
 }
 
 // GetTopicFullName returns the topic full name, including prefix
@@ -32,14 +40,6 @@ func (genesis *ForkGenesis) GetTopicFullName(baseName string) string {
 // GetTopicBaseName return the base topic name of the topic, w/o ssv prefix
 func (genesis *ForkGenesis) GetTopicBaseName(topicName string) string {
 	return strings.Replace(topicName, fmt.Sprintf("%s.", topicPrefix), "", 1)
-}
-
-// topicOf returns the topic for the given subnet
-func topicOf(subnet int) string {
-	if subnet < 0 {
-		return UnknownSubnet
-	}
-	return fmt.Sprintf("%d", subnet)
 }
 
 // ValidatorSubnet returns the subnet for the given validator
