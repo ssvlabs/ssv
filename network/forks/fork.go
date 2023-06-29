@@ -19,9 +19,11 @@ type Fork interface {
 	libp2pConfig
 }
 
+type NodeRecordDecoration func(*enode.LocalNode) error
+
 type nodeRecord interface {
 	// DecorateNode will enrich the local node record with more entries, according to current fork
-	DecorateNode(node *enode.LocalNode, args map[string]interface{}) error
+	DecorateNode(node *enode.LocalNode, decorations ...NodeRecordDecoration) error
 }
 
 type pubSubMapping interface {

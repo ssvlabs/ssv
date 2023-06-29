@@ -13,6 +13,7 @@ import (
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/forks"
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
+	"github.com/bloxapp/ssv/network/forks/genesis"
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/records"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
@@ -21,6 +22,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
 var (
@@ -57,9 +60,10 @@ type DiscV5Service struct {
 	publishState int32
 	conn         *net.UDPConn
 
-	fork    forks.Fork
-	forkv   forksprotocol.ForkVersion
-	subnets []byte
+	domainType spectypes.DomainType
+	fork       forks.Fork
+	forkv      forksprotocol.ForkVersion
+	subnets    []byte
 }
 
 func newDiscV5Service(pctx context.Context, logger *zap.Logger, discOpts *Options) (Service, error) {
@@ -70,6 +74,7 @@ func newDiscV5Service(pctx context.Context, logger *zap.Logger, discOpts *Option
 		publishState: publishStateReady,
 		conns:        discOpts.ConnIndex,
 		subnetsIdx:   discOpts.SubnetsIdx,
+		domainType:   discOpts.DomainType,
 		forkv:        discOpts.ForkVersion,
 		fork:         forksfactory.NewFork(discOpts.ForkVersion),
 		subnets:      discOpts.DiscV5Opts.Subnets,
@@ -148,15 +153,33 @@ func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) e
 	zeroSubnets, _ := records.Subnets{}.FromString(records.ZeroSubnets)
 
 	dvs.discover(dvs.ctx, func(e PeerEvent) {
+		logger := logger.With(
+			fields.ENR(e.Node),
+			fields.PeerID(e.AddrInfo.ID),
+		)
+
+		// Get the peer's domain type, skipping if it mismatches ours.
+		nodeDomainType, err := records.GetDomainTypeEntry(e.Node.Record())
+		if err != nil {
+			logger.Debug("could not read domain type")
+			return
+		}
+		if nodeDomainType != dvs.domainType {
+			logger.Debug("skipping node with different domain type")
+			return
+		}
+
+		// Get the peer's subnets, skipping if it has none.
 		nodeSubnets, err := records.GetSubnetsEntry(e.Node.Record())
 		if err != nil {
-			logger.Debug("could not read subnets", fields.ENR(e.Node))
+			logger.Debug("could not read subnets")
 			return
 		}
 		if bytes.Equal(zeroSubnets, nodeSubnets) {
-			logger.Debug("skipping zero subnets", fields.ENR(e.Node))
+			logger.Debug("skipping zero subnets")
 			return
 		}
+
 		updated := dvs.subnetsIdx.UpdatePeerSubnets(e.AddrInfo.ID, nodeSubnets)
 		if updated {
 			logger.Debug("[discv5] peer subnets were updated", fields.ENR(e.Node),
@@ -208,7 +231,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 	dvs.bootnodes = dv5Cfg.Bootnodes
 
 	logger.Debug("started discv5 listener (UDP)", fields.BindIP(bindIP),
-		zap.Int("UdpPort", opts.Port), fields.ENRLocalNode(localNode), fields.OperatorIDStr(opts.OperatorID))
+		zap.Int("UdpPort", opts.Port), fields.ENRLocalNode(localNode), fields.Domain(discOpts.DomainType))
 
 	return nil
 }
@@ -331,15 +354,18 @@ func (dvs *DiscV5Service) createLocalNode(logger *zap.Logger, discOpts *Options,
 		return nil, errors.Wrap(err, "could not add configured addresses")
 	}
 	f := forksfactory.NewFork(discOpts.ForkVersion)
-	err = f.DecorateNode(localNode, map[string]interface{}{
-		"operatorID": opts.OperatorID,
-		"subnets":    opts.Subnets,
-	})
+	err = f.DecorateNode(
+		localNode,
+
+		// Satisfy decorations of forks supported by this node.
+		genesis.DecorateWithDomainType(dvs.domainType),
+		genesis.DecorateWithSubnets(opts.Subnets),
+	)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not decorate local node")
 	}
 
-	logger.Debug("node record is ready", fields.ENRLocalNode(localNode), fields.OperatorIDStr(opts.OperatorID), fields.Subnets(opts.Subnets))
+	logger.Debug("node record is ready", fields.ENRLocalNode(localNode), fields.Domain(dvs.domainType), fields.Subnets(opts.Subnets))
 
 	return localNode, nil
 }
