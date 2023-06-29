@@ -4,6 +4,7 @@ import (
 	"crypto/rsa"
 	"fmt"
 	"log"
+	"math/big"
 
 	"github.com/bloxapp/ssv-spec/types"
 	ethabi "github.com/ethereum/go-ethereum/accounts/abi"
@@ -133,6 +134,10 @@ func (edh *EventDataHandler) processBlockEvents(blockEvents eventbatcher.BlockEv
 		if task != nil {
 			tasks = append(tasks, task)
 		}
+	}
+
+	if err := txn.SetLastProcessedBlock(new(big.Int).SetUint64(blockEvents.BlockNumber)); err != nil {
+		return nil, fmt.Errorf("set last processed block: %w", err)
 	}
 
 	if err := txn.Commit(); err != nil {
