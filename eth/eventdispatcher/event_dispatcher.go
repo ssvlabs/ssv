@@ -13,7 +13,7 @@ var (
 )
 
 type EventDispatcher struct {
-	eth1Client       eth1Client
+	executionClient  executionClient
 	eventBatcher     eventBatcher
 	eventDataHandler eventDataHandler
 
@@ -22,9 +22,9 @@ type EventDispatcher struct {
 	nodeProber nodeProber
 }
 
-func New(eth1Client eth1Client, eventBatcher eventBatcher, eventDataHandler eventDataHandler, opts ...Option) *EventDispatcher {
+func New(executionClient executionClient, eventBatcher eventBatcher, eventDataHandler eventDataHandler, opts ...Option) *EventDispatcher {
 	ed := &EventDispatcher{
-		eth1Client:       eth1Client,
+		executionClient:  executionClient,
 		eventBatcher:     eventBatcher,
 		eventDataHandler: eventDataHandler,
 
@@ -59,27 +59,41 @@ func (ed *EventDispatcher) Start(ctx context.Context, fromBlock uint64) error {
 	}
 
 	ed.logger.Info("going to fetch historical logs")
-	logs, lastBlock, err := ed.eth1Client.FetchHistoricalLogs(ctx, fromBlock)
+	logStream, errorStream, err := ed.executionClient.FetchHistoricalLogs(ctx, fromBlock)
 	if err != nil {
 		return err
 	}
 
 	ed.logger.Info("going to batch historical logs")
-	blockEvents := ed.eventBatcher.BatchHistoricalEvents(logs)
+	blockEvents := ed.eventBatcher.BatchEvents(logStream)
 
 	ed.logger.Info("going to handle historical logs")
-	if err := ed.eventDataHandler.HandleBlockEventsStream(blockEvents); err != nil {
+	lastProcessedBlock, err := ed.eventDataHandler.HandleBlockEventsStream(blockEvents, false)
+	if err != nil {
 		return fmt.Errorf("handle historical block events: %w", err)
 	}
 
+	if err := <-errorStream; err != nil {
+		return fmt.Errorf("error occured while fetching historical logs: %w", err)
+	}
+
+	ed.logger.Info("finished handling historical logs",
+		zap.Uint64("last_processed_block", lastProcessedBlock))
+
 	go func() {
-		logsStream := ed.eth1Client.StreamLogs(ctx, lastBlock+1)
-		blockEventsStream := ed.eventBatcher.BatchOngoingEvents(logsStream)
-		if err := ed.eventDataHandler.HandleBlockEventsStream(blockEventsStream); err != nil {
+		ed.logger.Info("going to handle ongoing logs")
+
+		logsStream := ed.executionClient.StreamLogs(ctx, lastProcessedBlock+1)
+		blockEventsStream := ed.eventBatcher.BatchEvents(logsStream)
+		lastProcessedBlock, err := ed.eventDataHandler.HandleBlockEventsStream(blockEventsStream, true)
+		if err != nil {
 			// TODO: think how to handle this
 			ed.logger.Error("failed to handle ongoing block event", zap.Error(err))
 			return
 		}
+
+		ed.logger.Info("finished handling ongoing logs",
+			zap.Uint64("last_processed_block", lastProcessedBlock))
 	}()
 
 	return nil

@@ -7,6 +7,5 @@ import (
 )
 
 type eventBatcher interface {
-	BatchHistoricalEvents(events []ethtypes.Log) <-chan eventbatcher.BlockEvents
-	BatchOngoingEvents(events <-chan ethtypes.Log) <-chan eventbatcher.BlockEvents
+	BatchEvents(events <-chan ethtypes.Log) <-chan eventbatcher.BlockEvents
 }

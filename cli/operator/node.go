@@ -254,7 +254,7 @@ var StartNodeCmd = &cobra.Command{
 			}
 
 			if err := eventDispatcher.Start(cmd.Context(), fromBlock.Uint64()); err != nil {
-				logger.Fatal("could not start event dispatcher", zap.Error(err))
+				logger.Fatal("error occurred while running event dispatcher", zap.Error(err))
 			}
 		} else {
 			// load & parse local events yaml if exists, otherwise sync from contract
