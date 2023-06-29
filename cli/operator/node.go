@@ -133,7 +133,10 @@ var StartNodeCmd = &cobra.Command{
 		cfg.ETH2Options.Network = networkConfig.Beacon
 
 		cl := setupEth2(logger, operatorData.ID, slotTicker)
-		el := setupEth1(logger, networkConfig.RegistryContractAddr) // TODO: get rid of
+		var el eth1.Client
+		if !eth1Refactor {
+			el = setupEth1(logger, networkConfig.RegistryContractAddr) // TODO: get rid of
+		}
 
 		executionClient := executionclient.New(
 			cfg.ETH1Options.ETH1Addr,
