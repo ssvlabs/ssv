@@ -3,7 +3,6 @@ package eventdatahandler
 import (
 	"crypto/rsa"
 	"fmt"
-	"log"
 	"math/big"
 
 	"github.com/bloxapp/ssv-spec/types"
@@ -40,8 +39,6 @@ type EventDataHandler struct {
 
 type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
 
-// TODO: try to reduce amount of input parameters
-
 func New(
 	eventDB eventDB,
 	taskExecutor TaskExecutor,
@@ -51,16 +48,16 @@ func New(
 	beacon beaconprotocol.BeaconNode,
 	storageMap *qbftstorage.QBFTStores,
 	opts ...Option,
-) *EventDataHandler {
+) (*EventDataHandler, error) {
 	abi, err := contract.ContractMetaData.GetAbi()
 	if err != nil {
-		log.Fatal(err) // TODO: handle
+		return nil, fmt.Errorf("get contract ABI: %w", err)
 	}
 
 	// TODO: zero values don't look well, think of a workaround, perhaps pass Eth1Client with Filterer method to New
 	filterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
 	if err != nil {
-		panic(err) // TODO: handle
+		return nil, fmt.Errorf("create contract filterer: %w", err)
 	}
 
 	edh := &EventDataHandler{
@@ -82,7 +79,7 @@ func New(
 		opt(edh)
 	}
 
-	return edh
+	return edh, nil
 }
 
 func (edh *EventDataHandler) HandleBlockEventsStream(blockEventsCh <-chan eventbatcher.BlockEvents, executeTasks bool) (uint64, error) {
