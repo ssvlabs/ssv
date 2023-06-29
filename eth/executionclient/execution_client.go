@@ -3,6 +3,7 @@ package executionclient
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/big"
 	"sync/atomic"
 	"time"
@@ -30,6 +31,7 @@ type ExecutionClient struct {
 	connectionTimeout           time.Duration
 	reconnectionInitialInterval time.Duration
 	reconnectionMaxInterval     time.Duration
+	logBatchSize                uint64
 
 	// variables
 	client atomic.Pointer[ethclient.Client]
@@ -47,6 +49,7 @@ func New(nodeAddr string, contractAddr ethcommon.Address, opts ...Option) *Execu
 		connectionTimeout:           DefaultConnectionTimeout,
 		reconnectionInitialInterval: DefaultReconnectionInitialInterval,
 		reconnectionMaxInterval:     DefaultReconnectionMaxInterval,
+		logBatchSize:                DefaultHistoricalLogsBatchSize, // TODO Make batch of logs adaptive depending on "websocket: read limit"
 		closed:                      make(chan struct{}),
 	}
 
@@ -84,6 +87,7 @@ func (ec *ExecutionClient) Close() error {
 
 // FetchHistoricalLogs retrieves historical logs emitted by the contract starting from fromBlock.
 func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs []ethtypes.Log, lastBlock uint64, err error) {
+
 	client := ec.client.Load()
 
 	currentBlock, err := client.BlockNumber(ctx)
@@ -105,16 +109,79 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 		ToBlock:   new(big.Int).SetUint64(lastBlock),
 	}
 
-	// TODO: Instead of FilterLogs it should call a wrapper that calls FilterLogs multiple times and batches results to avoid fetching enormous amount of events.
-	logs, err = client.FilterLogs(ctx, query)
-	if err != nil {
-		return nil, 0, fmt.Errorf("fetch logs: %w", err)
+	inLogs := ec.batchedFilterLogs(ctx, client, query)
+	for l := range inLogs {
+		if l.err != nil {
+			return nil, 0, fmt.Errorf("fetch logs error: %w", l.err)
+		}
+		lastBlock = l.lastBlock
+		logs = append(logs, l.logs...)
 	}
 
 	logger.Info("fetched historical blocks")
 	ec.metrics.LastFetchedBlock(lastBlock)
 
 	return logs, lastBlock, nil
+}
+
+type FetchedLogs struct {
+	logs      []ethtypes.Log
+	lastBlock uint64
+	err       error
+}
+
+// Calls FilterLogs multiple times and batches results to avoid fetching enormous amount of events
+func (ec *ExecutionClient) batchedFilterLogs(ctx context.Context, client *ethclient.Client, query ethereum.FilterQuery) <-chan FetchedLogs {
+
+	logsChan := make(chan FetchedLogs)
+
+	go func() {
+		defer close(logsChan)
+
+		q := math.Floor(float64((query.ToBlock.Uint64() - query.FromBlock.Uint64()) / ec.logBatchSize))
+		r := (query.ToBlock.Uint64() - query.FromBlock.Uint64()) % ec.logBatchSize
+
+		if r != 0 {
+			q++
+		}
+
+		for i := 0; i < int(q); i++ {
+
+			var blockFrom uint64
+			var blockTo uint64
+			
+			if i == int(q-1) && r != 0 {
+				blockFrom = query.FromBlock.Uint64() + ec.logBatchSize*uint64(i)
+				blockTo = blockFrom + r
+			} else {
+				blockFrom = query.FromBlock.Uint64() + ec.logBatchSize*uint64(i)
+				blockTo = blockFrom + ec.logBatchSize
+			}
+
+			ec.logger.Info("Fetching :", zap.Uint64("from block", blockFrom), zap.Uint64("to block", blockTo))
+			batchOfLogs, err := client.FilterLogs(ctx, ethereum.FilterQuery{
+				Addresses: []ethcommon.Address{ec.contractAddress},
+				FromBlock: new(big.Int).SetUint64(blockFrom),
+				ToBlock:   new(big.Int).SetUint64(blockTo),
+			})
+			if err != nil {
+				ec.logger.Error("log fetching err:", zap.Error(err))
+			}
+			select {
+			case <-ctx.Done():
+				ec.logger.Debug("log fetching canceled")
+				return
+
+			case <-ec.closed:
+				ec.logger.Debug("closed")
+				return
+
+			case logsChan <- FetchedLogs{logs: batchOfLogs, lastBlock: blockTo, err: err}:
+			}
+		}
+	}()
+
+	return logsChan
 }
 
 // StreamLogs subscribes to events emitted by the contract.
@@ -276,3 +343,17 @@ func (ec *ExecutionClient) reconnect(ctx context.Context) {
 
 	logger.Info("reconnected")
 }
+
+// func spitToRanges(start uint64, stop uint64, n uint64) []struct{} {
+// 	var a []struct{}
+
+// 	q, r := (stop-start)/n, (stop-start)%n
+// 	if r == 0 {
+// 		for i := 0; i < int(q); i++ {
+// 			a = append(a)
+// 		}
+// 	} else {
+
+// 	}
+// 	return nil
+// }
