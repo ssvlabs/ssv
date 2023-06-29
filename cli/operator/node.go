@@ -31,6 +31,7 @@ import (
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/nodeprobe"
 	"github.com/bloxapp/ssv/operator"
 	"github.com/bloxapp/ssv/operator/slot_ticker"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
@@ -116,12 +117,24 @@ var StartNodeCmd = &cobra.Command{
 		slotTicker := slot_ticker.NewTicker(ctx, networkConfig)
 
 		cfg.ETH2Options.Context = cmd.Context()
-		el, cl := setupNodes(logger, operatorData.ID, networkConfig, slotTicker)
+		eth2Client, eth1Client := setupNodes(logger, operatorData.ID, networkConfig, slotTicker)
+
+		nodeChecker := nodeprobe.NewProber(
+			logger,
+			eth1Client,
+			// Underlying options.Beacon's value implements nodechecker.StatusChecker.
+			// However, as it uses spec's specssv.BeaconNode interface, avoiding type assertion requires modifications in spec.
+			// If options.Beacon doesn't implement nodechecker.StatusChecker due to a mistake, this would panic early.
+			eth2Client.(nodeprobe.StatusChecker),
+		)
+
+		nodeChecker.Start(ctx)
 
 		cfg.SSVOptions.ForkVersion = forkVersion
 		cfg.SSVOptions.Context = ctx
 		cfg.SSVOptions.DB = db
-		cfg.SSVOptions.BeaconNode = el
+		cfg.SSVOptions.BeaconNode = eth2Client
+		cfg.SSVOptions.Eth1Client = eth1Client
 		cfg.SSVOptions.Network = networkConfig
 		cfg.SSVOptions.P2PNetwork = p2pNetwork
 		cfg.SSVOptions.ValidatorOptions.ForkVersion = forkVersion
@@ -129,15 +142,13 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.Context = ctx
 		cfg.SSVOptions.ValidatorOptions.DB = db
 		cfg.SSVOptions.ValidatorOptions.Network = p2pNetwork
-		cfg.SSVOptions.ValidatorOptions.Beacon = el
 		cfg.SSVOptions.ValidatorOptions.KeyManager = keyManager
+		cfg.SSVOptions.ValidatorOptions.Beacon = eth2Client
 
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = nodeStorage.GetPrivateKey
 		cfg.SSVOptions.ValidatorOptions.OperatorData = operatorData
 		cfg.SSVOptions.ValidatorOptions.RegistryStorage = nodeStorage
 		cfg.SSVOptions.ValidatorOptions.GasLimit = cfg.ETH2Options.GasLimit
-
-		cfg.SSVOptions.Eth1Client = cl
 
 		if cfg.WsAPIPort != 0 {
 			ws := api.NewWsServer(cmd.Context(), nil, http.NewServeMux(), cfg.WithPing)
@@ -156,8 +167,13 @@ var StartNodeCmd = &cobra.Command{
 			go startMetricsHandler(cmd.Context(), logger, db, cfg.MetricsAPIPort, cfg.EnableProfile)
 		}
 
-		metrics.WaitUntilHealthy(logger, cfg.SSVOptions.Eth1Client, "execution client")
-		metrics.WaitUntilHealthy(logger, cfg.SSVOptions.BeaconNode, "consensus client")
+		nodeChecker.Wait()
+
+		nodeUnreadyHandler := func() {
+			logger.Fatal("Ethereum node(s) are either out of sync or down. Ensure the nodes are ready to resume.")
+		}
+		nodeChecker.SetUnreadyHandler(nodeUnreadyHandler)
+
 		metrics.ReportSSVNodeHealthiness(true)
 
 		// load & parse local events yaml if exists, otherwise sync from contract
@@ -357,7 +373,7 @@ func setupNodes(
 	cfg.ETH2Options.Graffiti = []byte("SSV.Network")
 	cfg.ETH2Options.GasLimit = spectypes.DefaultGasLimit
 	cfg.ETH2Options.Network = network.Beacon
-	cl, err := goclient.New(logger, cfg.ETH2Options, operatorID, slotTicker)
+	eth2Client, err := goclient.New(logger, cfg.ETH2Options, operatorID, slotTicker)
 	if err != nil {
 		logger.Fatal("failed to create beacon go-client", zap.Error(err),
 			fields.Address(cfg.ETH2Options.BeaconNodeAddr))
@@ -371,7 +387,7 @@ func setupNodes(
 			logger.Fatal("failed to load ABI JSON", zap.Error(err))
 		}
 	}
-	el, err := goeth.NewEth1Client(logger, goeth.ClientOptions{
+	eth1Client, err := goeth.NewEth1Client(logger, goeth.ClientOptions{
 		Ctx:                  cfg.ETH2Options.Context,
 		NodeAddr:             cfg.ETH1Options.ETH1Addr,
 		ConnectionTimeout:    cfg.ETH1Options.ETH1ConnectionTimeout,
@@ -383,7 +399,7 @@ func setupNodes(
 		logger.Fatal("failed to create eth1 client", zap.Error(err))
 	}
 
-	return cl, el
+	return eth2Client, eth1Client
 }
 
 func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.IDb, port int, enableProf bool) {

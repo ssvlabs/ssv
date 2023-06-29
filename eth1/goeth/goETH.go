@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	healthCheckTimeout        = 10 * time.Second
+	healthCheckTimeout        = 500 * time.Millisecond
 	blocksInBatch      uint64 = 100000
 )
 
@@ -100,6 +100,23 @@ func (ec *eth1Client) Sync(logger *zap.Logger, fromBlock *big.Int) error {
 		logger.Error("Failed to sync contract events", zap.Error(err))
 	}
 	return err
+}
+
+// IsReady returns if eth1 is currently ready: responds to requests and not in the syncing state.
+func (ec *eth1Client) IsReady(ctx context.Context) (bool, error) {
+	sp, err := ec.conn.SyncProgress(ctx)
+	if err != nil {
+		reportNodeStatus(statusUnknown)
+		return false, err
+	}
+
+	if sp != nil {
+		reportNodeStatus(statusSyncing)
+		return false, nil
+	}
+
+	reportNodeStatus(statusOK)
+	return true, nil
 }
 
 // HealthCheck provides health status of eth1 node
