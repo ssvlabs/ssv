@@ -69,7 +69,7 @@ func (t *ROTxn) GetOperatorData(id uint64) (*registrystorage.OperatorData, error
 	return &od, nil
 }
 
-func (t *ROTxn) GetRecipientData(owner ethcommon.Address) (*RecipientData, error) {
+func (t *ROTxn) GetRecipientData(owner ethcommon.Address) (*registrystorage.RecipientData, error) {
 	rawItem, err := t.txn.Get(append([]byte(fmt.Sprintf("%s%s/", storagePrefix, recipientsPrefix)), owner.Bytes()...))
 	if errors.Is(err, badger.ErrKeyNotFound) {
 		return nil, nil
@@ -83,7 +83,7 @@ func (t *ROTxn) GetRecipientData(owner ethcommon.Address) (*RecipientData, error
 		return nil, fmt.Errorf("raw copy: %w", err)
 	}
 
-	var recipientData RecipientData
+	var recipientData registrystorage.RecipientData
 	if err := json.Unmarshal(rawJSON, &recipientData); err != nil {
 		return nil, fmt.Errorf("unmarshal: %w", err)
 	}
@@ -91,14 +91,14 @@ func (t *ROTxn) GetRecipientData(owner ethcommon.Address) (*RecipientData, error
 	return &recipientData, nil
 }
 
-func (t *ROTxn) GetNextNonce(owner ethcommon.Address) (Nonce, error) {
+func (t *ROTxn) GetNextNonce(owner ethcommon.Address) (registrystorage.Nonce, error) {
 	data, err := t.GetRecipientData(owner)
 	if err != nil {
-		return Nonce(0), fmt.Errorf("could not get recipient data: %w", err)
+		return registrystorage.Nonce(0), fmt.Errorf("could not get recipient data: %w", err)
 	}
 
 	if data == nil || data.Nonce == nil {
-		return Nonce(0), nil
+		return registrystorage.Nonce(0), nil
 	}
 
 	return *data.Nonce + 1, nil

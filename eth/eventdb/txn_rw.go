@@ -59,10 +59,10 @@ func (t *RWTxn) BumpNonce(owner common.Address) error {
 
 	if recipientData == nil {
 		// Create a variable of type Nonce
-		nonce := Nonce(0)
+		nonce := registrystorage.Nonce(0)
 
 		// Create an instance of RecipientData and assign the Nonce and Owner address values
-		recipientData = &RecipientData{
+		recipientData = &registrystorage.RecipientData{
 			Owner: owner,
 			Nonce: &nonce, // Assign the address of nonceValue to Nonce field
 		}
@@ -70,7 +70,7 @@ func (t *RWTxn) BumpNonce(owner common.Address) error {
 	}
 
 	if recipientData.Nonce == nil {
-		nonce := Nonce(0)
+		nonce := registrystorage.Nonce(0)
 		recipientData.Nonce = &nonce
 	} else if recipientData == nil {
 		// Bump the nonce
@@ -91,7 +91,7 @@ func (t *RWTxn) BumpNonce(owner common.Address) error {
 
 // SaveRecipientData saves recipient data and return it.
 // if the recipient already exists and the fee didn't change return nil
-func (t *RWTxn) SaveRecipientData(recipientData *RecipientData) (*RecipientData, error) {
+func (t *RWTxn) SaveRecipientData(recipientData *registrystorage.RecipientData) (*registrystorage.RecipientData, error) {
 	r, err := t.GetRecipientData(recipientData.Owner)
 	if err != nil {
 		return nil, fmt.Errorf("could not get recipient data: %w", err)
