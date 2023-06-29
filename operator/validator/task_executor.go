@@ -115,7 +115,6 @@ func (c *controller) UpdateFeeRecipient(feeRecipientUpdatedEvent *contract.Contr
 	)
 	logger.Debug("executing task")
 
-	// TODO: move to event handler?
 	err := c.validatorsMap.ForEach(func(v *validator.Validator) error {
 		if v.Share.OwnerAddress == feeRecipientUpdatedEvent.Owner {
 			v.Share.FeeRecipientAddress = feeRecipientUpdatedEvent.RecipientAddress

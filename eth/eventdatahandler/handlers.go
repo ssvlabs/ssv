@@ -242,7 +242,6 @@ func (edh *EventDataHandler) handleShareCreation(
 	return share, nil
 }
 
-// TODO: consider getting rid of or refactoring
 func updateShareMetadata(share *ssvtypes.SSVShare, bc beaconprotocol.BeaconNode) (bool, error) {
 	pk := hex.EncodeToString(share.ValidatorPubKey)
 	results, err := beaconprotocol.FetchValidatorsMetadata(bc, [][]byte{share.ValidatorPubKey})
