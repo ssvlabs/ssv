@@ -109,6 +109,7 @@ func NewPubsub(ctx context.Context, logger *zap.Logger, cfg *PububConfig, fork f
 
 	// Set up a SubFilter with a whitelist of known topics.
 	sf := newSubFilter(logger, fork, subscriptionRequestLimit)
+	logger.Debug("rvrt: got topics", zap.Strings("topics", fork.Topics()))
 	for _, topic := range fork.Topics() {
 		sf.(Whitelist).Register(topic)
 	}
