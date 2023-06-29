@@ -12,9 +12,6 @@ import (
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
-// TODO: consider extracting from controller
-// TODO: finish, refactor
-
 func (c *controller) AddValidator(validatorAddedEvent *contract.ContractValidatorAdded) error {
 	logger := c.defaultLogger.Named("AddValidator").
 		With(fields.PubKey(validatorAddedEvent.PublicKey))

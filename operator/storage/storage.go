@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"context"
 	"crypto/rsa"
 	"encoding/base64"
 	"math/big"
@@ -21,9 +20,8 @@ import (
 )
 
 var (
-	storagePrefix         = []byte("operator/")
-	syncOffsetKey         = []byte("syncOffset")
-	lastProcessedBlockKey = []byte("syncOffset") // TODO: left as syncOffset for compatibility, consider renaming
+	storagePrefix = []byte("operator/")
+	syncOffsetKey = []byte("syncOffset")
 )
 
 // Storage represents the interface for ssv node storage
@@ -194,21 +192,6 @@ func (s *storage) GetSyncOffset() (*eth1.SyncOffset, bool, error) {
 	offset := new(big.Int)
 	offset.SetBytes(obj.Value)
 	return offset, found, nil
-}
-
-func (s *storage) GetLastProcessedBlock(ctx context.Context) (*big.Int, bool, error) {
-	obj, found, err := s.db.Get(storagePrefix, lastProcessedBlockKey)
-	if !found {
-		return nil, found, nil
-	}
-	if err != nil {
-		return nil, found, err
-	}
-	return new(big.Int).SetBytes(obj.Value), found, nil
-}
-
-func (s *storage) SetLastProcessedBlock(block *big.Int) error {
-	return s.db.Set(storagePrefix, lastProcessedBlockKey, block.Bytes())
 }
 
 // GetPrivateKey return rsa private key
