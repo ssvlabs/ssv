@@ -181,19 +181,32 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	require.True(t, ready)
 
 	// Generate test chain before we read historical logs
-	generateInitialTestChain(t, done, blockStream, 1008)
+	createdLogCount := 1008
+	generateInitialTestChain(t, done, blockStream, createdLogCount)
 	for blocks := range processedStream {
 		t.Log("Processed blocks: ", len(blocks))
 	}
 	// Fetch all logs history starting from block 0
-	logs, lastBlock, err := client.FetchHistoricalLogs(ctx, 0)
+	seenLogs := 0
+	logs, fetchErrCh, err := client.FetchHistoricalLogs(ctx, 0)
+	for log := range logs {
+		seenLogs++
+		require.NotNil(t, log)
+	}
+
 	require.NoError(t, err)
-	require.NotEmpty(t, logs)
-	require.NotEmpty(t, lastBlock)
+	expectedSeenLogs := createdLogCount - 1 // first block doesn't have logs
+	require.Equal(t, expectedSeenLogs, seenLogs)
+
+	select {
+	case err := <-fetchErrCh:
+		require.NoError(t, err)
+	case <-ctx.Done():
+		require.Fail(t, "timeout")
+	}
 
 	require.NoError(t, client.Close())
 	require.NoError(t, backend.Close())
-
 }
 
 func TestStreamLogs(t *testing.T) {
