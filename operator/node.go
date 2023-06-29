@@ -159,9 +159,6 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 	go n.listenForCurrentSlot(logger)
 	go n.reportOperators(logger)
 
-	go n.feeRecipientCtrl.Start(logger)
-	n.dutyCtrl.Start(logger)
-
 	go func() {
 		time.Sleep(time.Minute)
 		for i := 0; i < 16; i++ {
@@ -183,6 +180,9 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 			logger.Debug("rvrt: subscribed to validator", fields.PubKey(randomPK))
 		}
 	}()
+
+	go n.feeRecipientCtrl.Start(logger)
+	n.dutyCtrl.Start(logger)
 
 	return nil
 }
