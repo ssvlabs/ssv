@@ -7,17 +7,20 @@ import (
 	"github.com/bloxapp/ssv/api"
 	"github.com/bloxapp/ssv/api/node"
 	"github.com/go-chi/chi/v5"
+	"go.uber.org/zap"
 )
 
 type Server struct {
-	addr string
-	node *node.Handler
+	logger *zap.Logger
+	addr   string
+	node   *node.Handler
 }
 
-func New(addr string, nodeHandler *node.Handler) *Server {
+func New(logger *zap.Logger, addr string, nodeHandler *node.Handler) *Server {
 	return &Server{
-		addr: addr,
-		node: nodeHandler,
+		logger: logger,
+		addr:   addr,
+		node:   nodeHandler,
 	}
 }
 
@@ -25,6 +28,8 @@ func (s *Server) Run() error {
 	router := chi.NewRouter()
 
 	router.Get("/v1/node/peers", api.Handler(s.node.Peers))
+
+	s.logger.Info("Serving SSV API", zap.String("addr", s.addr))
 
 	server := &http.Server{
 		Addr:         s.addr,

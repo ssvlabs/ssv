@@ -206,7 +206,8 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		if cfg.SSVAPIPort > 0 {
-			go apiserver.New(
+			apiServer := apiserver.New(
+				logger,
 				fmt.Sprintf(":%d", cfg.SSVAPIPort),
 				&apinode.Handler{
 					// TODO: replace with narrower interface! (instead of accessing the entire PeersIndex)
@@ -214,6 +215,12 @@ var StartNodeCmd = &cobra.Command{
 					Network:    p2pNetwork.(p2pv1.HostProvider).Host().Network(),
 				},
 			)
+			go func() {
+				err := apiServer.Run()
+				if err != nil {
+					logger.Fatal("failed to start API server", zap.Error(err))
+				}
+			}()
 		}
 
 		if err := operatorNode.Start(logger); err != nil {
