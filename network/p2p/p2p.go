@@ -106,6 +106,11 @@ func (n *p2pNetwork) Host() host.Host {
 	return n.host
 }
 
+// PeersIndex returns the peers index
+func (n *p2pNetwork) PeersIndex() peers.Index {
+	return n.idx
+}
+
 // Close implements io.Closer
 func (n *p2pNetwork) Close() error {
 	atomic.SwapInt32(&n.state, stateClosing)
