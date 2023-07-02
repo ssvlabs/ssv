@@ -204,9 +204,6 @@ var StartNodeCmd = &cobra.Command{
 		if err := p2pNetwork.Start(logger); err != nil {
 			logger.Fatal("failed to start network", zap.Error(err))
 		}
-		if err := operatorNode.Start(logger); err != nil {
-			logger.Fatal("failed to start SSV node", zap.Error(err))
-		}
 
 		if cfg.SSVAPIPort > 0 {
 			go apiserver.New(
@@ -217,6 +214,10 @@ var StartNodeCmd = &cobra.Command{
 					Network:    p2pNetwork.(p2pv1.HostProvider).Host().Network(),
 				},
 			)
+		}
+
+		if err := operatorNode.Start(logger); err != nil {
+			logger.Fatal("failed to start SSV node", zap.Error(err))
 		}
 	},
 }
