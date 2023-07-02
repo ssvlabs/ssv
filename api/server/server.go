@@ -27,6 +27,7 @@ func New(logger *zap.Logger, addr string, nodeHandler *node.Handler) *Server {
 func (s *Server) Run() error {
 	router := chi.NewRouter()
 
+	router.Get("/v1/node/identity", api.Handler(s.node.Identity))
 	router.Get("/v1/node/peers", api.Handler(s.node.Peers))
 
 	s.logger.Info("Serving SSV API", zap.String("addr", s.addr))
