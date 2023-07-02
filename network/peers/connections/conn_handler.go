@@ -65,14 +65,15 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 
 	onNewConnection := func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) error {
 		id := conn.RemotePeer()
-		logger := logger.With(zap.String("targetPeer", id.String()))
+		logger := logger.With(
+			zap.String("targetPeer", id.String()),
+			zap.String("remoteAddr", conn.RemoteMultiaddr().String()),
+			zap.String("dir", conn.Stat().Direction.String()),
+		)
 		ok, err := ch.handshake(logger, conn)
-		if err != nil {
-			logger.Debug("could not handshake with peer", zap.Error(err))
-		}
 		if !ok {
 			disconnect(net, conn)
-			return err
+			return errors.Wrap(err, "could not handshake")
 		}
 		if ch.connIdx.Limit(conn.Stat().Direction) {
 			disconnect(net, conn)
@@ -94,8 +95,17 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 				return
 			}
 			id := conn.RemotePeer()
+			logger.With(
+				zap.String("targetPeer", id.String()),
+				zap.String("remoteAddr", conn.RemoteMultiaddr().String()),
+				zap.String("dir", conn.Stat().Direction.String()),
+			)
 			q.QueueDistinct(func() error {
-				return onNewConnection(net, conn)
+				err := onNewConnection(net, conn)
+				if err != nil {
+					logger.Debug("could not handle new connection", zap.Error(err))
+				}
+				return err
 			}, id.String())
 		},
 		DisconnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
@@ -128,9 +138,11 @@ func (ch *connHandler) handshake(logger *zap.Logger, conn libp2pnetwork.Conn) (b
 		switch {
 		case errors.Is(err, peers.ErrIndexingInProcess), errors.Is(err, errHandshakeInProcess), errors.Is(err, peerstore.ErrNotFound):
 			// ignored errors
+			logger.Debug("could not handshake: ignored error", zap.Error(err))
 			return true, nil
 		case errors.Is(err, errPeerWasFiltered), errors.Is(err, errUnknownUserAgent):
 			// ignored errors but we still close connection
+			logger.Debug("could not handshake: ignored error (close connection)", zap.Error(err))
 			return false, nil
 		default:
 		}

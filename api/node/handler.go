@@ -14,11 +14,17 @@ type Handler struct {
 	Network    network.Network
 }
 
+type connectionJSON struct {
+	Address   string `json:"address"`
+	Direction string `json:"direction"`
+}
+
 type peerJSON struct {
-	ID            peer.ID  `json:"id"`
-	Addresses     []string `json:"addresses"`
-	Connectedness string   `json:"connectedness"`
-	Subnets       string   `json:"subnets"`
+	ID            peer.ID          `json:"id"`
+	Addresses     []string         `json:"addresses"`
+	Connections   []connectionJSON `json:"connections"`
+	Connectedness string           `json:"connectedness"`
+	Subnets       string           `json:"subnets"`
 }
 
 func (h *Handler) Peers(w http.ResponseWriter, r *http.Request) error {
@@ -32,6 +38,13 @@ func (h *Handler) Peers(w http.ResponseWriter, r *http.Request) error {
 		}
 		for _, addr := range h.Network.Peerstore().Addrs(id) {
 			resp[i].Addresses = append(resp[i].Addresses, addr.String())
+		}
+		conns := h.Network.ConnsToPeer(id)
+		for _, conn := range conns {
+			resp[i].Connections = append(resp[i].Connections, connectionJSON{
+				Address:   conn.RemoteMultiaddr().String(),
+				Direction: conn.Stat().Direction.String(),
+			})
 		}
 	}
 	render.JSON(w, r, resp)
