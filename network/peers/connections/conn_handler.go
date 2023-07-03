@@ -53,7 +53,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 		<-c.Done()
 	}()
 
-	disconnect := func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
+	disconnect := func(logger *zap.Logger, net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
 		id := conn.RemotePeer()
 		errClose := net.ClosePeer(id)
 		if errClose == nil {
@@ -63,24 +63,18 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 		logger.Debug("peer was disconnected", zap.String("selfPeer", conn.LocalPeer().String()), zap.String("otherPeer", id.String()))
 	}
 
-	onNewConnection := func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) error {
-		id := conn.RemotePeer()
-		logger := logger.With(
-			zap.String("targetPeer", id.String()),
-			zap.String("remoteAddr", conn.RemoteMultiaddr().String()),
-			zap.String("dir", conn.Stat().Direction.String()),
-		)
+	onNewConnection := func(logger *zap.Logger, net libp2pnetwork.Network, conn libp2pnetwork.Conn) error {
 		ok, err := ch.handshake(logger, conn)
 		if !ok {
-			disconnect(net, conn)
+			disconnect(logger, net, conn)
 			return errors.Wrap(err, "could not handshake")
 		}
 		if ch.connIdx.Limit(conn.Stat().Direction) {
-			disconnect(net, conn)
+			disconnect(logger, net, conn)
 			return errors.New("reached peers limit")
 		}
 		if !ch.checkSubnets(logger, conn) && conn.Stat().Direction != libp2pnetwork.DirOutbound {
-			disconnect(net, conn)
+			disconnect(logger, net, conn)
 			return errors.New("peer doesn't share enough subnets")
 		}
 		//logger.Debug("new connection is ready",
@@ -95,13 +89,13 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 				return
 			}
 			id := conn.RemotePeer()
-			logger.With(
-				zap.String("targetPeer", id.String()),
-				zap.String("remoteAddr", conn.RemoteMultiaddr().String()),
-				zap.String("dir", conn.Stat().Direction.String()),
+			logger := logger.With(
+				fields.PeerID(id),
+				zap.String("remote_addr", conn.RemoteMultiaddr().String()),
+				zap.String("conn_dir", conn.Stat().Direction.String()),
 			)
 			q.QueueDistinct(func() error {
-				err := onNewConnection(net, conn)
+				err := onNewConnection(logger, net, conn)
 				if err != nil {
 					logger.Debug("could not handle new connection", zap.Error(err))
 				}
@@ -142,7 +136,7 @@ func (ch *connHandler) handshake(logger *zap.Logger, conn libp2pnetwork.Conn) (b
 			return true, nil
 		case errors.Is(err, errPeerWasFiltered), errors.Is(err, errUnknownUserAgent):
 			// ignored errors but we still close connection
-			logger.Debug("could not handshake: ignored error (close connection)", zap.Error(err))
+			logger.Debug("could not handshake: ignored error", zap.Bool("closing_connection", true), zap.Error(err))
 			return false, nil
 		default:
 		}
@@ -160,8 +154,7 @@ func (ch *connHandler) checkSubnets(logger *zap.Logger, conn libp2pnetwork.Conn)
 	}
 	mySubnets := ch.subnetsProvider()
 
-	logger = logger.With(fields.PeerID(pid), fields.Subnets(subnets),
-		zap.String("mySubnets", mySubnets.String()))
+	logger = logger.With(fields.Subnets(subnets), zap.String("my_subnets", mySubnets.String()))
 
 	if mySubnets.String() == records.ZeroSubnets { // this node has no subnets
 		return true
