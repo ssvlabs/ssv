@@ -156,7 +156,7 @@ func (n *p2pNetwork) SetupServices(logger *zap.Logger) error {
 }
 
 func (n *p2pNetwork) setupStreamCtrl(logger *zap.Logger) error {
-	n.streamCtrl = streams.NewStreamController(n.ctx, n.host, n.fork, n.cfg.RequestTimeout)
+	n.streamCtrl = streams.NewStreamController(n.ctx, n.host, n.fork, n.cfg.RequestTimeout, n.cfg.RequestTimeout)
 	logger.Debug("stream controller is ready")
 	return nil
 }

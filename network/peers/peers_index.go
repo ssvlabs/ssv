@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jellydator/ttlcache/v3"
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -34,9 +35,9 @@ type peersIndex struct {
 	netKeyProvider NetworkKeyProvider
 	network        libp2pnetwork.Network
 
-	states        *nodeStates
-	scoreIdx      ScoreIndex
-	subnets       SubnetsIndex
+	states   *ttlcache.Cache[peer.ID, NodeState]
+	scoreIdx ScoreIndex
+	SubnetsIndex
 	nodeInfoStore *nodeInfoStore
 
 	selfLock *sync.RWMutex
@@ -49,10 +50,12 @@ type peersIndex struct {
 func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *records.NodeInfo, maxPeers MaxPeersProvider,
 	netKeyProvider NetworkKeyProvider, subnetsCount int, pruneTTL time.Duration) *peersIndex {
 	return &peersIndex{
-		network:        network,
-		states:         newNodeStates(pruneTTL),
+		network: network,
+		states: ttlcache.New[peer.ID, NodeState](
+			ttlcache.WithTTL[peer.ID, NodeState](pruneTTL),
+		),
 		scoreIdx:       newScoreIndex(),
-		subnets:        newSubnetsIndex(subnetsCount),
+		SubnetsIndex:   newSubnetsIndex(subnetsCount),
 		nodeInfoStore:  newNodeInfoStore(network),
 		self:           self,
 		selfLock:       &sync.RWMutex{},
@@ -167,7 +170,7 @@ func (pi *peersIndex) SelfSealed(sender, recipient peer.ID, permissioned bool, o
 
 // AddNodeInfo adds a new node info
 func (pi *peersIndex) AddNodeInfo(logger *zap.Logger, id peer.ID, nodeInfo *records.NodeInfo) (bool, error) {
-	switch pi.states.State(id) {
+	switch pi.State(id) {
 	case StateReady:
 		return true, nil
 	case StateIndexing:
@@ -191,7 +194,7 @@ func (pi *peersIndex) AddNodeInfo(logger *zap.Logger, id peer.ID, nodeInfo *reco
 
 // GetNodeInfo returns the node info of the given peer
 func (pi *peersIndex) GetNodeInfo(id peer.ID) (*records.NodeInfo, error) {
-	switch pi.states.State(id) {
+	switch pi.State(id) {
 	case StateIndexing:
 		return nil, ErrIndexingInProcess
 	case StatePruned:
@@ -210,7 +213,10 @@ func (pi *peersIndex) GetNodeInfo(id peer.ID) (*records.NodeInfo, error) {
 }
 
 func (pi *peersIndex) State(id peer.ID) NodeState {
-	return pi.states.State(id)
+	if state := pi.states.Get(id); state != nil {
+		return state.Value()
+	}
+	return StateUnknown
 }
 
 // Score adds score to the given peer
@@ -221,7 +227,7 @@ func (pi *peersIndex) Score(id peer.ID, scores ...*NodeScore) error {
 // GetScore returns the desired score for the given peer
 func (pi *peersIndex) GetScore(id peer.ID, names ...string) ([]NodeScore, error) {
 	var scores []NodeScore
-	switch pi.states.State(id) {
+	switch pi.State(id) {
 	case StateIndexing:
 		// TODO: handle
 		return scores, nil
@@ -235,39 +241,12 @@ func (pi *peersIndex) GetScore(id peer.ID, names ...string) ([]NodeScore, error)
 	return pi.scoreIdx.GetScore(id, names...)
 }
 
-// Prune set prune state for the given peer
-func (pi *peersIndex) Prune(id peer.ID) error {
-	return pi.states.Prune(id)
-}
-
-// EvictPruned changes to ready state instead of pruned
-func (pi *peersIndex) EvictPruned(id peer.ID) {
-	pi.states.EvictPruned(id)
-}
-
-// GC does garbage collection on current peers and states
-func (pi *peersIndex) GC() {
-	pi.states.GC()
-}
-
-func (pi *peersIndex) UpdatePeerSubnets(id peer.ID, s records.Subnets) bool {
-	return pi.subnets.UpdatePeerSubnets(id, s)
-}
-
-func (pi *peersIndex) GetSubnetPeers(subnet int) []peer.ID {
-	return pi.subnets.GetSubnetPeers(subnet)
-}
-
-func (pi *peersIndex) GetPeerSubnets(id peer.ID) records.Subnets {
-	return pi.subnets.GetPeerSubnets(id)
-}
-
 func (pi *peersIndex) GetSubnetsStats() *SubnetsStats {
 	mySubnets, err := records.Subnets{}.FromString(pi.self.Metadata.Subnets)
 	if err != nil {
 		mySubnets, _ = records.Subnets{}.FromString(records.ZeroSubnets)
 	}
-	stats := pi.subnets.GetSubnetsStats()
+	stats := pi.SubnetsIndex.GetSubnetsStats()
 	if stats == nil {
 		return nil
 	}
@@ -276,7 +255,7 @@ func (pi *peersIndex) GetSubnetsStats() *SubnetsStats {
 	for subnet, count := range stats.PeersCount {
 		metricsSubnetsKnownPeers.WithLabelValues(strconv.Itoa(subnet)).Set(float64(count))
 		metricsMySubnets.WithLabelValues(strconv.Itoa(subnet)).Set(float64(mySubnets[subnet]))
-		peers := pi.subnets.GetSubnetPeers(subnet)
+		peers := pi.SubnetsIndex.GetSubnetPeers(subnet)
 		connectedCount := 0
 		for _, p := range peers {
 			if pi.Connectedness(p) == libp2pnetwork.Connected {
