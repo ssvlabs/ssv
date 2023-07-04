@@ -2,6 +2,7 @@ package p2pv1
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"net"
@@ -94,7 +95,11 @@ func (n *p2pNetwork) initCfg() error {
 		if err != nil {
 			return fmt.Errorf("parse subnet: %w", err)
 		}
-		n.interfaceLogger.Debug("subnets configured", fields.Subnets(subnets))
+		b, err := json.Marshal(n.cfg.Subnets)
+		if err != nil {
+			return fmt.Errorf("marshal subnets: %w", err)
+		}
+		n.interfaceLogger.Debug("subnets configured", fields.Subnets(subnets), zap.String("str", string(b)))
 		n.subnets = subnets
 	}
 	if n.cfg.MaxPeers <= 0 {
