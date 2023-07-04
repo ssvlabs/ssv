@@ -2,11 +2,11 @@ package connections
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"testing"
 
+	"github.com/bloxapp/ssv/utils/rsaencryption"
+
 	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/peers/connections/mock"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/stretchr/testify/require"
@@ -23,22 +23,7 @@ func TestHandshakeTestData(t *testing.T) {
 	t.Run("wrong NodeInfoIndex", func(t *testing.T) {
 		td := getTestingData(t)
 
-		td.Handshaker.nodeInfoIdx = mock.NodeInfoIndex{}
-		require.Error(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn))
-	})
-
-	t.Run("wrong NodeStates", func(t *testing.T) {
-		td := getTestingData(t)
-
-		nii := mock.NodeInfoIndex{
-			MockNodeInfo: &records.NodeInfo{},
-		}
-
-		td.Handshaker.nodeInfoIdx = nii
-
-		td.Handshaker.states = mock.NodeStates{
-			MockNodeState: peers.StatePruned,
-		}
+		td.Handshaker.nodeInfos = mock.NodeInfoIndex{}
 		require.Error(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn))
 	})
 
@@ -68,53 +53,6 @@ func TestHandshakeTestData(t *testing.T) {
 		td.Handshaker.streams = mock.StreamController{}
 		require.Error(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn))
 	})
-}
-
-// TestHandshakePeerIsKnownFlow tests Handshake() PeerIsKnown flow
-func TestHandshakePeerIsKnownFlow(t *testing.T) {
-	type test struct {
-		name        string
-		state       peers.NodeState
-		expectedErr error
-	}
-
-	testCases := []test{
-		{
-			name:        "peer is known and indexing",
-			state:       peers.StateIndexing,
-			expectedErr: errHandshakeInProcess,
-		},
-		{
-			name:        "peer is known and pruned",
-			state:       peers.StatePruned,
-			expectedErr: errPeerPruned,
-		},
-		{
-			name:        "peer is known and ready",
-			state:       peers.StateReady,
-			expectedErr: nil,
-		},
-	}
-
-	for _, tc := range testCases {
-		td := getTestingData(t)
-
-		td.Handshaker.nodeInfoIdx = mock.NodeInfoIndex{
-			MockNodeInfo: td.NodeInfo,
-		}
-
-		td.Handshaker.states = mock.NodeStates{
-			MockNodeState: tc.state,
-		}
-
-		td.Handshaker.net = mock.Net{ // it needs to fail on a next row after isPeerKnow check
-			MockPeerstore: mock.Peerstore{
-				MockFirstSupportedProtocol: "",
-			},
-		}
-
-		require.ErrorIs(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn), tc.expectedErr)
-	}
 }
 
 // TestHandshakePermissionedFlow tests Handshake() Permissioned flow
@@ -261,17 +199,5 @@ func TestHandshakeProcessIncomingNodeInfoFlow(t *testing.T) {
 		}
 
 		require.ErrorIs(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn), errPeerWasFiltered)
-	})
-
-	t.Run("error add node info", func(t *testing.T) {
-		td := getTestingData(t)
-
-		td.Handshaker.nodeInfoIdx = mock.NodeInfoIndex{
-			MockNodeInfo:          nil,
-			MockSelfSealed:        []byte("something"),
-			MockAddNodeInfoResult: false,
-		}
-
-		require.Equal(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn).Error(), "AddNodeInfo error")
 	})
 }

@@ -82,12 +82,11 @@ func getTestingData(t *testing.T) TestData {
 	}
 
 	nii := mock.NodeInfoIndex{
-		MockNodeInfo:          nil,
-		MockSelfSealed:        []byte("something"),
-		MockAddNodeInfoResult: true,
+		MockNodeInfo:   nil,
+		MockSelfSealed: []byte("something"),
 	}
-	ns := mock.NodeStates{
-		MockNodeState: peers.StateReady,
+	ns := mock.PeerInfoIndex{
+		MockNodeState: peers.StateConnected,
 	}
 	ch := make(chan struct{})
 	close(ch)
@@ -120,8 +119,8 @@ func getTestingData(t *testing.T) TestData {
 
 	mockHandshaker := handshaker{
 		ctx:          context.Background(),
-		nodeInfoIdx:  nii,
-		states:       ns,
+		nodeInfos:    nii,
+		peerInfos:    ns,
 		ids:          ids,
 		net:          net,
 		nodeStorage:  nst,

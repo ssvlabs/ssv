@@ -2,14 +2,15 @@ package connections
 
 import (
 	"context"
+	"time"
 
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/cornelk/hashmap"
+	"github.com/libp2p/go-libp2p/core/network"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -27,22 +28,24 @@ type connHandler struct {
 	subnetsProvider SubnetsProvider
 	subnetsIndex    peers.SubnetsIndex
 	connIdx         peers.ConnectionIndex
+	peerInfos       peers.PeerInfoIndex
 }
 
 // NewConnHandler creates a new connection handler
-func NewConnHandler(ctx context.Context, handshaker Handshaker, subnetsProvider SubnetsProvider, subnetsIndex peers.SubnetsIndex, connIdx peers.ConnectionIndex) ConnHandler {
+func NewConnHandler(ctx context.Context, handshaker Handshaker, subnetsProvider SubnetsProvider, subnetsIndex peers.SubnetsIndex, connIdx peers.ConnectionIndex, peerInfos peers.PeerInfoIndex) ConnHandler {
 	return &connHandler{
 		ctx:             ctx,
 		handshaker:      handshaker,
 		subnetsProvider: subnetsProvider,
 		subnetsIndex:    subnetsIndex,
 		connIdx:         connIdx,
+		peerInfos:       peerInfos,
 	}
 }
 
 // Handle configures a network notifications handler that handshakes and tracks all p2p connections
 func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
-	disconnect := func(logger *zap.Logger, net libp2pnetwork.Network, conn libp2pnetwork.Conn, err error) {
+	disconnect := func(logger *zap.Logger, net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
 		id := conn.RemotePeer()
 		errClose := net.ClosePeer(id)
 		if errClose == nil {
@@ -61,8 +64,49 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 			ongoingHandshakes.Del(conn.RemotePeer())
 		}()
 
-		ok, err := ch.handshake(logger, conn)
-		if !ok {
+		pid := conn.RemotePeer()
+		switch ch.peerInfos.State(pid) {
+		case peers.StateConnected, peers.StateConnecting:
+			logger.Debug("peer is already connected or connecting")
+			return nil
+		}
+		ch.peerInfos.AddPeerInfo(pid, conn.RemoteMultiaddr(), conn.Stat().Direction)
+
+		// Wait for successful handshake request from inbound connections.
+		if conn.Stat().Direction == network.DirInbound {
+			startTime := time.Now()
+
+			// Wait for peer to initiate handshake.
+			time.Sleep(20 * time.Second)
+
+			// Exit if we are disconnected with the peer.
+			if net.Connectedness(pid) != network.Connected {
+				return nil
+			}
+
+			// Disconnect if peer hasn't sent a handshake request.
+			peerInfo := ch.peerInfos.PeerInfo(pid)
+			if peerInfo == nil {
+				return errors.New("failed to get PeerInfo")
+			}
+			if !peerInfo.LastHandshake.After(startTime) {
+				return errors.New("peer hasn't sent a handshake request")
+			}
+
+			// Disconnect if handshake failed.
+			if peerInfo.LastHandshakeError != nil {
+				return errors.Wrap(peerInfo.LastHandshakeError, "peer failed handshake")
+			}
+
+			// Successfully connected.
+			ch.peerInfos.SetState(pid, peers.StateConnected)
+			return nil
+		}
+
+		// Perform handshake with outbound connections.
+		ch.peerInfos.SetState(pid, peers.StateConnecting)
+		err := ch.handshaker.Handshake(logger, conn)
+		if err != nil {
 			return errors.Wrap(err, "could not handshake")
 		}
 		if ch.connIdx.Limit(conn.Stat().Direction) {
@@ -71,29 +115,31 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 		if !ch.checkSubnets(logger, conn) && conn.Stat().Direction != libp2pnetwork.DirOutbound {
 			return errors.New("peer doesn't share enough subnets")
 		}
-		//logger.Debug("new connection is ready",
-		//	zap.String("dir", conn.Stat().Direction.String()))
+		ch.peerInfos.SetState(pid, peers.StateConnected)
 		metricsConnections.Inc()
+		logger.Debug("peer connected")
 		return nil
 	}
 
+	connLogger := func(conn libp2pnetwork.Conn) *zap.Logger {
+		return logger.With(
+			fields.PeerID(conn.RemotePeer()),
+			zap.String("remote_addr", conn.RemoteMultiaddr().String()),
+			zap.String("conn_dir", conn.Stat().Direction.String()),
+		)
+	}
 	return &libp2pnetwork.NotifyBundle{
 		ConnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
 			if conn == nil || conn.RemoteMultiaddr() == nil {
 				return
 			}
-			id := conn.RemotePeer()
-			logger := logger.With(
-				fields.PeerID(id),
-				zap.String("remote_addr", conn.RemoteMultiaddr().String()),
-				zap.String("conn_dir", conn.Stat().Direction.String()),
-			)
 
 			// Handle connection without blocking.
 			go func() {
+				logger := connLogger(conn)
 				err := handleConnection(logger, net, conn)
 				if err != nil {
-					disconnect(logger, net, conn, err)
+					disconnect(logger, net, conn)
 					logger.Debug("failed to handle new connection", zap.Error(err))
 				}
 			}()
@@ -102,32 +148,19 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 			if conn == nil || conn.RemoteMultiaddr() == nil {
 				return
 			}
-			// skip if we are still connected to the peer
+
+			// Skip if we are still connected to the peer.
 			if net.Connectedness(conn.RemotePeer()) == libp2pnetwork.Connected {
 				return
 			}
+
 			metricsConnections.Dec()
+			ch.peerInfos.SetState(conn.RemotePeer(), peers.StateDisconnected)
+
+			logger := connLogger(conn)
+			logger.Debug("peer disconnected", zap.String("remote_addr", conn.RemoteMultiaddr().String()))
 		},
 	}
-}
-
-func (ch *connHandler) handshake(logger *zap.Logger, conn libp2pnetwork.Conn) (bool, error) {
-	err := ch.handshaker.Handshake(logger, conn)
-	if err != nil {
-		switch {
-		case errors.Is(err, peers.ErrIndexingInProcess), errors.Is(err, errHandshakeInProcess), errors.Is(err, peerstore.ErrNotFound):
-			// ignored errors
-			logger.Debug("could not handshake: ignored error", zap.Error(err))
-			return true, nil
-		case errors.Is(err, errPeerWasFiltered), errors.Is(err, errUnknownUserAgent):
-			// ignored errors but we still close connection
-			logger.Debug("could not handshake: ignored error", zap.Bool("closing_connection", true), zap.Error(err))
-			return false, nil
-		default:
-		}
-		return false, err
-	}
-	return true, nil
 }
 
 func (ch *connHandler) checkSubnets(logger *zap.Logger, conn libp2pnetwork.Conn) bool {

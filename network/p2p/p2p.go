@@ -43,7 +43,6 @@ const (
 const (
 	connManagerGCInterval           = time.Minute
 	connManagerGCTimeout            = time.Minute
-	peerIndexGCInterval             = 15 * time.Minute
 	peersReportingInterval          = 60 * time.Second
 	peerIdentitiesReportingInterval = 5 * time.Minute
 	topicsReportingInterval         = 180 * time.Second
@@ -145,8 +144,6 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 	go n.startDiscovery(logger)
 
 	async.Interval(n.ctx, connManagerGCInterval, n.peersBalancing(logger))
-
-	async.Interval(n.ctx, peerIndexGCInterval, n.idx.GC)
 
 	async.Interval(n.ctx, peersReportingInterval, n.reportAllPeers(logger))
 

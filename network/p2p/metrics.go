@@ -93,8 +93,8 @@ func (n *p2pNetwork) reportTopicPeers(logger *zap.Logger, name string) {
 
 func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
 	opPKHash, opIndex, forkv, nodeVersion, nodeType := unknown, unknown, unknown, unknown, unknown
-	ni, err := n.idx.GetNodeInfo(pid)
-	if err == nil && ni != nil {
+	ni := n.idx.NodeInfo(pid)
+	if ni != nil {
 		opPKHash = unknown
 		nodeVersion = unknown
 		forkv = ni.ForkVersion.String()

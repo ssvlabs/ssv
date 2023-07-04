@@ -1,7 +1,6 @@
 package node
 
 import (
-	"errors"
 	"net/http"
 
 	networkpeers "github.com/bloxapp/ssv/network/peers"
@@ -72,12 +71,9 @@ func (h *Handler) Peers(w http.ResponseWriter, r *http.Request) error {
 			})
 		}
 
-		nodeInfo, err := h.PeersIndex.GetNodeInfo(id)
-		if err != nil {
-			if errors.Is(err, networkpeers.ErrNotFound) {
-				continue
-			}
-			return err
+		nodeInfo := h.PeersIndex.NodeInfo(id)
+		if nodeInfo == nil {
+			continue
 		}
 		resp[i].Version = nodeInfo.Metadata.NodeVersion
 	}

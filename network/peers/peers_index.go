@@ -7,20 +7,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jellydator/ttlcache/v3"
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/network"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/libp2p/go-libp2p/core/peerstore"
+	ma "github.com/multiformats/go-multiaddr"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
-)
-
-const (
-	nodeInfoKey = "nodeInfo"
 )
 
 // MaxPeersProvider returns the max peers for the given topic.
@@ -35,10 +31,10 @@ type peersIndex struct {
 	netKeyProvider NetworkKeyProvider
 	network        libp2pnetwork.Network
 
-	states   *ttlcache.Cache[peer.ID, NodeState]
-	scoreIdx ScoreIndex
+	store      map[peer.ID]*PeerInfo
+	storeMutex *sync.RWMutex
+	scoreIdx   ScoreIndex
 	SubnetsIndex
-	nodeInfoStore *nodeInfoStore
 
 	selfLock *sync.RWMutex
 	self     *records.NodeInfo
@@ -50,13 +46,10 @@ type peersIndex struct {
 func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *records.NodeInfo, maxPeers MaxPeersProvider,
 	netKeyProvider NetworkKeyProvider, subnetsCount int, pruneTTL time.Duration) *peersIndex {
 	return &peersIndex{
-		network: network,
-		states: ttlcache.New[peer.ID, NodeState](
-			ttlcache.WithTTL[peer.ID, NodeState](pruneTTL),
-		),
+		network:        network,
+		store:          map[peer.ID]*PeerInfo{},
 		scoreIdx:       newScoreIndex(),
 		SubnetsIndex:   newSubnetsIndex(subnetsCount),
-		nodeInfoStore:  newNodeInfoStore(network),
 		self:           self,
 		selfLock:       &sync.RWMutex{},
 		maxPeers:       maxPeers,
@@ -69,10 +62,6 @@ func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *reco
 // - pruned (that was not expired)
 // - bad score
 func (pi *peersIndex) IsBad(logger *zap.Logger, id peer.ID) bool {
-	if pi.states.pruned(id.String()) {
-		logger.Debug("bad peer (pruned)")
-		return true
-	}
 	// TODO: check scores
 	threshold := -10000.0
 	scores, err := pi.GetScore(id, "")
@@ -168,55 +157,61 @@ func (pi *peersIndex) SelfSealed(sender, recipient peer.ID, permissioned bool, o
 
 }
 
-// AddNodeInfo adds a new node info
-func (pi *peersIndex) AddNodeInfo(logger *zap.Logger, id peer.ID, nodeInfo *records.NodeInfo) (bool, error) {
-	switch pi.State(id) {
-	case StateReady:
-		return true, nil
-	case StateIndexing:
-		// TODO: handle
-		return true, nil
-	case StatePruned:
-		return false, ErrWasPruned
-	case StateUnknown:
-	default:
-	}
-	pid := id.String()
-	pi.states.setState(pid, StateIndexing)
-	added, err := pi.nodeInfoStore.Add(logger, id, nodeInfo)
-	if err != nil || !added {
-		pi.states.setState(pid, StateUnknown)
-	} else {
-		pi.states.setState(pid, StateReady)
-	}
-	return added, err
+func (pi *peersIndex) AddPeerInfo(id peer.ID, address ma.Multiaddr, direction network.Direction) {
+	pi.UpdatePeerInfo(id, func(info *PeerInfo) {
+		info.Address = address
+		info.Direction = direction
+		info.State = StateDisconnected
+	})
 }
 
-// GetNodeInfo returns the node info of the given peer
-func (pi *peersIndex) GetNodeInfo(id peer.ID) (*records.NodeInfo, error) {
-	switch pi.State(id) {
-	case StateIndexing:
-		return nil, ErrIndexingInProcess
-	case StatePruned:
-		return nil, ErrWasPruned
-	case StateUnknown:
-		return nil, ErrNotFound
-	default:
-	}
-	// if in good state -> get node info
-	ni, err := pi.nodeInfoStore.Get(id)
-	if errors.Is(err, peerstore.ErrNotFound) {
-		return nil, ErrNotFound
-	}
+func (pi *peersIndex) PeerInfo(id peer.ID) *PeerInfo {
+	pi.storeMutex.RLock()
+	defer pi.storeMutex.RUnlock()
 
-	return ni, err
+	if info, ok := pi.store[id]; ok {
+		return info
+	}
+	return nil
 }
 
-func (pi *peersIndex) State(id peer.ID) NodeState {
-	if state := pi.states.Get(id); state != nil {
-		return state.Value()
+func (pi *peersIndex) SetNodeInfo(id peer.ID, nodeInfo *records.NodeInfo) {
+	pi.UpdatePeerInfo(id, func(info *PeerInfo) {
+		info.NodeInfo = nodeInfo
+	})
+}
+
+func (pi *peersIndex) NodeInfo(id peer.ID) *records.NodeInfo {
+	return pi.PeerInfo(id).NodeInfo
+}
+
+func (pi *peersIndex) State(id peer.ID) PeerState {
+	pi.storeMutex.RLock()
+	defer pi.storeMutex.RUnlock()
+
+	if info, ok := pi.store[id]; ok {
+		return info.State
 	}
 	return StateUnknown
+}
+
+func (pi *peersIndex) SetState(id peer.ID, state PeerState) {
+	pi.UpdatePeerInfo(id, func(info *PeerInfo) {
+		info.State = state
+	})
+}
+
+func (pi *peersIndex) UpdatePeerInfo(id peer.ID, update func(*PeerInfo)) {
+	pi.storeMutex.Lock()
+	defer pi.storeMutex.Unlock()
+
+	info, ok := pi.store[id]
+	if !ok {
+		info = &PeerInfo{
+			ID: id,
+		}
+	}
+	update(info)
 }
 
 // Score adds score to the given peer
@@ -226,16 +221,9 @@ func (pi *peersIndex) Score(id peer.ID, scores ...*NodeScore) error {
 
 // GetScore returns the desired score for the given peer
 func (pi *peersIndex) GetScore(id peer.ID, names ...string) ([]NodeScore, error) {
-	var scores []NodeScore
 	switch pi.State(id) {
-	case StateIndexing:
-		// TODO: handle
-		return scores, nil
-	case StatePruned:
-		return nil, ErrWasPruned
 	case StateUnknown:
 		return nil, ErrNotFound
-	default:
 	}
 
 	return pi.scoreIdx.GetScore(id, names...)
@@ -275,7 +263,6 @@ func (pi *peersIndex) GetSubnetsStats() *SubnetsStats {
 
 // Close closes peer index
 func (pi *peersIndex) Close() error {
-	_ = pi.states.Close()
 	if err := pi.network.Peerstore().Close(); err != nil {
 		return errors.Wrap(err, "could not close peerstore")
 	}
