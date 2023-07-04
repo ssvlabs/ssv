@@ -55,14 +55,17 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 
 	ongoingHandshakes := hashmap.New[peer.ID, struct{}]()
 	acceptConnection := func(logger *zap.Logger, net libp2pnetwork.Network, conn libp2pnetwork.Conn) error {
+		logger.Debug("checking connection")
 		if _, ongoing := ongoingHandshakes.GetOrInsert(conn.RemotePeer(), struct{}{}); ongoing {
 			// Another connection with the same peer is already being handled.
+			logger.Debug("checking connection: already handled")
 			return nil
 		}
 		defer func() {
 			// Unset this peer as being handled.
 			ongoingHandshakes.Del(conn.RemotePeer())
 		}()
+		logger.Debug("checking connection: handling")
 
 		pid := conn.RemotePeer()
 		switch ch.peerInfos.State(pid) {
