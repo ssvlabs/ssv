@@ -223,10 +223,13 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 	for range ticker.C {
 		start := time.Now()
 
-		last := make([]byte, len(n.subnets))
+		// Get a copy of the current subnets.
+		currentSubnets := make([]byte, len(n.subnets))
 		if len(n.subnets) > 0 {
-			copy(last, n.subnets)
+			copy(currentSubnets, n.subnets)
 		}
+
+		// Compute the new subnets according to the active validators.
 		newSubnets := make([]byte, n.fork.Subnets())
 		n.activeValidators.Range(func(pkHex string, status validatorStatus) bool {
 			if status == validatorStatusInactive {
@@ -236,17 +239,19 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 			newSubnets[subnet] = byte(1)
 			return true
 		})
-		subnetsToAdd := make([]int, 0)
-		if !bytes.Equal(newSubnets, last) { // have changes
+
+		// Compute the difference (newly added subnets).
+		addedSubnets := make([]int, 0)
+		if !bytes.Equal(newSubnets, currentSubnets) { // have changes
 			n.subnets = newSubnets
-			for i, b := range newSubnets {
-				if b == byte(1) {
-					subnetsToAdd = append(subnetsToAdd, i)
+			for subnet, active := range newSubnets {
+				if active == byte(1) && currentSubnets[subnet] == byte(0) {
+					addedSubnets = append(addedSubnets, subnet)
 				}
 			}
 		}
 
-		if len(subnetsToAdd) == 0 {
+		if len(addedSubnets) == 0 {
 			continue
 		}
 
@@ -254,7 +259,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 		self.Metadata.Subnets = records.Subnets(n.subnets).String()
 		n.idx.UpdateSelfRecord(self)
 
-		err := n.disc.RegisterSubnets(logger.Named(logging.NameDiscoveryService), subnetsToAdd...)
+		err := n.disc.RegisterSubnets(logger.Named(logging.NameDiscoveryService), addedSubnets...)
 		if err != nil {
 			logger.Warn("could not register subnets", zap.Error(err))
 			continue
@@ -262,7 +267,9 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 		allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
 		subnetsList := records.SharedSubnets(allSubs, n.subnets, 0)
 		logger.Debug("updated subnets (node-info)",
+			zap.Any("added", addedSubnets),
 			zap.Any("subnets", subnetsList),
+			zap.Int("total_subnets", len(subnetsList)),
 			zap.Duration("took", time.Since(start)),
 		)
 	}
