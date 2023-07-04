@@ -60,13 +60,17 @@ func (n *streamCtrl) Request(logger *zap.Logger, peerID peer.ID, protocol protoc
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		if err := s.Reset(); err != nil {
+			logger.Error("could not close stream", zap.Error(err))
+		}
+	}()
 	stream := NewStream(s)
 	metricsStreamOutgoingRequests.WithLabelValues(string(protocol)).Inc()
 	metricsStreamRequestsActive.WithLabelValues(string(protocol)).Inc()
 	defer metricsStreamRequestsActive.WithLabelValues(string(protocol)).Dec()
 
 	if err := stream.WriteWithTimeout(data, n.readWriteTimeout); err != nil {
-		stream.Reset() //nolint
 		return nil, errors.Wrap(err, "could not write to stream")
 	}
 	if err := s.CloseWrite(); err != nil {
@@ -74,7 +78,6 @@ func (n *streamCtrl) Request(logger *zap.Logger, peerID peer.ID, protocol protoc
 	}
 	res, err := stream.ReadWithTimeout(n.readWriteTimeout)
 	if err != nil {
-		stream.Reset() //nolint
 		return nil, errors.Wrap(err, "could not read stream msg")
 	}
 	metricsStreamRequestsSuccess.WithLabelValues(string(protocol)).Inc()
