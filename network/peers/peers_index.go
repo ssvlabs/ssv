@@ -216,6 +216,7 @@ func (pi *peersIndex) UpdatePeerInfo(id peer.ID, update func(*PeerInfo)) {
 		}
 	}
 	update(info)
+	pi.store[id] = info
 }
 
 // Score adds score to the given peer
