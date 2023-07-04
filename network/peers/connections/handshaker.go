@@ -214,12 +214,6 @@ func (h *handshaker) updateNodeSubnets(logger *zap.Logger, pid peer.ID, ni *reco
 }
 
 func (h *handshaker) requestNodeInfo(logger *zap.Logger, conn libp2pnetwork.Conn) (records.AnyNodeInfo, error) {
-	res, err := h.net.Peerstore().FirstSupportedProtocol(conn.RemotePeer(), peers.NodeInfoProtocol)
-	if err != nil {
-		return nil, errors.Wrapf(err, "could not check supported protocols of peer %s",
-			conn.RemotePeer().String())
-	}
-
 	permissioned := h.Permissioned()
 
 	privateKey, found, err := h.nodeStorage.GetPrivateKey()
@@ -231,9 +225,6 @@ func (h *handshaker) requestNodeInfo(logger *zap.Logger, conn libp2pnetwork.Conn
 		return nil, err
 	}
 
-	if len(res) == 0 {
-		return nil, errors.Errorf("peer [%s] doesn't supports handshake protocol", conn.RemotePeer().String())
-	}
 	resBytes, err := h.streams.Request(logger, conn.RemotePeer(), peers.NodeInfoProtocol, data)
 	if err != nil {
 		return nil, err
