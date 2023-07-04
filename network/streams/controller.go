@@ -61,8 +61,8 @@ func (n *streamCtrl) Request(logger *zap.Logger, peerID peer.ID, protocol protoc
 		return nil, err
 	}
 	defer func() {
-		if err := s.Reset(); err != nil {
-			logger.Error("could not close stream", zap.Error(err))
+		if err := s.Close(); err != nil {
+			logger.Debug("could not close stream", zap.Error(err))
 		}
 	}()
 	stream := NewStream(s)
