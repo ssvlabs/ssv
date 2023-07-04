@@ -218,7 +218,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 	// there is a pending PR to replace this: https://github.com/bloxapp/ssv/pull/990
 	logger = logger.Named(logging.NameP2PNetwork)
 	ticker := time.NewTicker(2 * time.Second)
-	lastRegisteredSubnets := make([]byte, len(n.subnets))
+	registeredSubnets := make([]byte, n.fork.Subnets())
 	defer ticker.Stop()
 	for range ticker.C {
 		start := time.Now()
@@ -232,16 +232,16 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 		})
 		n.subnets = newSubnets
 
-		// Compute the unregistered subnets.
-		addedSubnets := make([]int, 0)
+		// Compute the not yet registered subnets.
+		unregisteredSubnets := make([]int, 0)
 		for subnet, active := range newSubnets {
-			if active == byte(1) && lastRegisteredSubnets[subnet] == byte(0) {
-				addedSubnets = append(addedSubnets, subnet)
+			if active == byte(1) && registeredSubnets[subnet] == byte(0) {
+				unregisteredSubnets = append(unregisteredSubnets, subnet)
 			}
 		}
-		lastRegisteredSubnets = newSubnets
+		registeredSubnets = newSubnets
 
-		if len(addedSubnets) == 0 {
+		if len(unregisteredSubnets) == 0 {
 			continue
 		}
 
@@ -249,15 +249,15 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 		self.Metadata.Subnets = records.Subnets(n.subnets).String()
 		n.idx.UpdateSelfRecord(self)
 
-		err := n.disc.RegisterSubnets(logger.Named(logging.NameDiscoveryService), addedSubnets...)
+		err := n.disc.RegisterSubnets(logger.Named(logging.NameDiscoveryService), unregisteredSubnets...)
 		if err != nil {
 			logger.Warn("could not register subnets", zap.Error(err))
 			continue
 		}
 		allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
 		subnetsList := records.SharedSubnets(allSubs, n.subnets, 0)
-		logger.Debug("updated subnets (node-info)",
-			zap.Any("added", addedSubnets),
+		logger.Debug("updated subnets",
+			zap.Any("added", unregisteredSubnets),
 			zap.Any("subnets", subnetsList),
 			zap.Int("total_subnets", len(subnetsList)),
 			zap.Duration("took", time.Since(start)),
