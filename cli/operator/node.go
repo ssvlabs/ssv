@@ -217,8 +217,9 @@ var StartNodeCmd = &cobra.Command{
 		if eth1Refactor {
 			// TODO: handle local events
 			eventDB := eventdb.NewEventDB(db.(*kv.BadgerDb).Badger()) // TODO: get rid of type assertion
-			eventDataHandler := eventdatahandler.New(
+			eventDataHandler, err := eventdatahandler.New(
 				eventDB,
+				executionClient,
 				validatorCtrl,
 				cfg.SSVOptions.ValidatorOptions.OperatorData,
 				cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider,
@@ -235,7 +236,9 @@ var StartNodeCmd = &cobra.Command{
 				eventDataHandler,
 				eventdispatcher.WithLogger(logger),
 			)
-
+			if err != nil {
+				logger.Fatal("could not create datahandler instance", zap.Error(err))
+			}
 			txn := eventDB.ROTxn()
 			defer txn.Discard()
 

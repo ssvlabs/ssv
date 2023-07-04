@@ -136,9 +136,10 @@ func NewEventDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger) 
 		DB:              db,
 		RegistryStorage: nodeStorage,
 	})
-
-	edh := eventdatahandler.New(
+	cl := executionclient.New("test", ethcommon.Address{})
+	edh, err := eventdatahandler.New(
 		eventDB,
+		cl,
 		validatorCtrl,
 		operatorData,
 		nodeStorage.GetPrivateKey,
@@ -147,6 +148,10 @@ func NewEventDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger) 
 		storageMap,
 		eventdatahandler.WithFullNode(),
 		eventdatahandler.WithLogger(logger))
+
+	if err != nil {
+		t.Fatal(err)
+	}
 	return edh
 }
 

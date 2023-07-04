@@ -14,6 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/utils/tasks"
 )
@@ -344,16 +345,8 @@ func (ec *ExecutionClient) reconnect(ctx context.Context) {
 	logger.Info("reconnected")
 }
 
-// func spitToRanges(start uint64, stop uint64, n uint64) []struct{} {
-// 	var a []struct{}
-
-// 	q, r := (stop-start)/n, (stop-start)%n
-// 	if r == 0 {
-// 		for i := 0; i < int(q); i++ {
-// 			a = append(a)
-// 		}
-// 	} else {
-
-// 	}
-// 	return nil
-// }
+func(ec *ExecutionClient) Filterer() (*contract.ContractFilterer, error) {
+	client := ec.client.Load()
+	filterer, err := contract.NewContractFilterer(ethcommon.Address{}, client)
+	return filterer, err
+}
