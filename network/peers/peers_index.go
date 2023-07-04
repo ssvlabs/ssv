@@ -182,7 +182,11 @@ func (pi *peersIndex) SetNodeInfo(id peer.ID, nodeInfo *records.NodeInfo) {
 }
 
 func (pi *peersIndex) NodeInfo(id peer.ID) *records.NodeInfo {
-	return pi.PeerInfo(id).NodeInfo
+	info := pi.PeerInfo(id)
+	if info != nil {
+		return info.NodeInfo
+	}
+	return nil
 }
 
 func (pi *peersIndex) State(id peer.ID) PeerState {
