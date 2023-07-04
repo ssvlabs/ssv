@@ -251,6 +251,13 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 			}
 		}
 
+		allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
+		logger.Debug("subnetdump",
+			zap.Any("current_subnets", records.SharedSubnets(allSubs, currentSubnets, 128)),
+			zap.Any("new_subnets", records.SharedSubnets(allSubs, newSubnets, 128)),
+			zap.Any("added_subnets", addedSubnets),
+		)
+
 		if len(addedSubnets) == 0 {
 			continue
 		}
@@ -264,7 +271,6 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 			logger.Warn("could not register subnets", zap.Error(err))
 			continue
 		}
-		allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
 		subnetsList := records.SharedSubnets(allSubs, n.subnets, 0)
 		logger.Debug("updated subnets (node-info)",
 			zap.Any("added", addedSubnets),

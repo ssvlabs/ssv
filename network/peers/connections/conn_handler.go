@@ -74,28 +74,33 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 
 		// Connection is inbound: wait for successful handshake request.
 		if conn.Stat().Direction == network.DirInbound {
-			startTime := time.Now()
-
 			// Wait for peer to initiate handshake.
-			time.Sleep(20 * time.Second)
+			start := time.Now()
+			deadline := time.NewTimer(20 * time.Second)
+			ticker := time.NewTicker(1 * time.Second)
+			defer deadline.Stop()
+			defer ticker.Stop()
+		Wait:
+			for {
+				select {
+				case <-deadline.C:
+					return errors.New("peer hasn't sent a handshake request")
+				case <-ticker.C:
+					if net.Connectedness(pid) != network.Connected {
+						return errors.New("lost connection")
+					}
 
-			// Exit if we are disconnected with the peer.
-			if net.Connectedness(pid) != network.Connected {
-				return nil
-			}
+					// Check if peer has sent a handshake request.
+					if pi := ch.peerInfos.PeerInfo(pid); pi != nil && pi.LastHandshake.After(start) {
+						if pi.LastHandshakeError != nil {
+							// Handshake failed.
+							return errors.Wrap(pi.LastHandshakeError, "peer failed handshake")
+						}
 
-			// Disconnect if peer hasn't sent a handshake request.
-			peerInfo := ch.peerInfos.PeerInfo(pid)
-			if peerInfo == nil {
-				return errors.New("failed to get PeerInfo")
-			}
-			if !peerInfo.LastHandshake.After(startTime) {
-				return errors.New("peer hasn't sent a handshake request")
-			}
-
-			// Disconnect if handshake failed.
-			if peerInfo.LastHandshakeError != nil {
-				return errors.Wrap(peerInfo.LastHandshakeError, "peer failed handshake")
+						// Handshake succeeded.
+						break Wait
+					}
+				}
 			}
 
 			if !ch.sharesEnoughSubnets(logger, conn) {
