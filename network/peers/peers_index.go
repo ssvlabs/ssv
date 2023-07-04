@@ -32,7 +32,7 @@ type peersIndex struct {
 	network        libp2pnetwork.Network
 
 	store      map[peer.ID]*PeerInfo
-	storeMutex *sync.RWMutex
+	storeMutex sync.RWMutex
 	scoreIdx   ScoreIndex
 	SubnetsIndex
 
