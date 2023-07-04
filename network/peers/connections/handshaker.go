@@ -230,21 +230,16 @@ func (h *handshaker) requestNodeInfo(logger *zap.Logger, conn libp2pnetwork.Conn
 		return nil, err
 	}
 
-	var ani records.AnyNodeInfo
+	var nodeInfo records.AnyNodeInfo
 	if permissioned {
-		sni := &records.SignedNodeInfo{}
-		err = sni.Consume(resBytes)
-		ani = sni
+		nodeInfo = &records.SignedNodeInfo{}
 	} else {
-		ni := &records.NodeInfo{}
-		err = ni.Consume(resBytes)
-		ani = ni
+		nodeInfo = &records.NodeInfo{}
 	}
-
-	if err != nil {
+	if err := nodeInfo.Consume(resBytes); err != nil {
 		return nil, errors.Wrap(errConsumingMessage, err.Error())
 	}
-	return ani, nil
+	return nodeInfo, nil
 }
 
 func (h *handshaker) applyFilters(sender peer.ID, ani records.AnyNodeInfo) error {
