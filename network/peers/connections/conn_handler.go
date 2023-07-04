@@ -73,7 +73,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 	acceptConnection := func(logger *zap.Logger, net libp2pnetwork.Network, conn libp2pnetwork.Conn) error {
 		pid := conn.RemotePeer()
 
-		logger.Debug("checking connection")
+		logger.Debug("checking connection", zap.Int("len", len(ongoingHandshakes)))
 		if !beginHandshake(pid) {
 			// Another connection with the same peer is already being handled.
 			logger.Debug("checking connection: already handled")
