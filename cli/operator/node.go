@@ -2,7 +2,6 @@ package operator
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
 	"log"
 	"net/http"
@@ -29,9 +28,7 @@ import (
 	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network"
-	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
-	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/nodeprobe"
 	"github.com/bloxapp/ssv/operator"
@@ -373,10 +370,6 @@ func setupP2P(
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
-	if len(cfg.P2pNetworkConfig.Subnets) == 0 {
-		subnets := getNodeSubnets(logger, cfg.P2pNetworkConfig.NodeStorage.Shares().List, forkVersion, operatorData.ID)
-		cfg.P2pNetworkConfig.Subnets = subnets.String()
-	}
 
 	cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
 	cfg.P2pNetworkConfig.ForkVersion = forkVersion
@@ -434,31 +427,4 @@ func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.IDb,
 	if err := metricsHandler.Start(logger, http.NewServeMux(), addr); err != nil {
 		logger.Panic("failed to serve metrics", zap.Error(err))
 	}
-}
-
-// getNodeSubnets reads all shares and calculates the subnets for this node
-// note that we'll trigger another update once finished processing registry events
-func getNodeSubnets(
-	logger *zap.Logger,
-	getFiltered registrystorage.SharesListFunc,
-	ssvForkVersion forksprotocol.ForkVersion,
-	operatorID spectypes.OperatorID,
-) records.Subnets {
-	f := forksfactory.NewFork(ssvForkVersion)
-	subnetsMap := make(map[int]bool)
-	shares := getFiltered(registrystorage.ByOperatorID(operatorID), registrystorage.ByNotLiquidated())
-	for _, share := range shares {
-		subnet := f.ValidatorSubnet(hex.EncodeToString(share.ValidatorPubKey))
-		if subnet < 0 {
-			continue
-		}
-		if !subnetsMap[subnet] {
-			subnetsMap[subnet] = true
-		}
-	}
-	subnets := make([]byte, f.Subnets())
-	for subnet := range subnetsMap {
-		subnets[subnet] = 1
-	}
-	return subnets
 }

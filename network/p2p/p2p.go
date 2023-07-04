@@ -1,7 +1,6 @@
 package p2pv1
 
 import (
-	"bytes"
 	"context"
 	"sync"
 	"sync/atomic"
@@ -219,51 +218,28 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 	// there is a pending PR to replace this: https://github.com/bloxapp/ssv/pull/990
 	logger = logger.Named(logging.NameP2PNetwork)
 	ticker := time.NewTicker(2 * time.Second)
+	lastRegisteredSubnets := make([]byte, len(n.subnets))
 	defer ticker.Stop()
 	for range ticker.C {
 		start := time.Now()
 
-		// Get a copy of the current subnets.
-		currentSubnets := make([]byte, len(n.subnets))
-		if len(n.subnets) > 0 {
-			copy(currentSubnets, n.subnets)
-		}
-		allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
-		logger.Debug("subnetdump1",
-			zap.Any("current_subnets", records.SharedSubnets(allSubs, currentSubnets, 128)),
-			zap.Int("current_subnets_len", len(records.SharedSubnets(allSubs, currentSubnets, 128))),
-			zap.String("current_subnets_str", records.Subnets(currentSubnets).String()),
-			zap.Int("n_subnets_len", len(n.subnets)),
-			zap.String("all_subnets_str", allSubs.String()),
-		)
-
 		// Compute the new subnets according to the active validators.
 		newSubnets := make([]byte, n.fork.Subnets())
 		n.activeValidators.Range(func(pkHex string, status validatorStatus) bool {
-			if status == validatorStatusInactive {
-				return true
-			}
 			subnet := n.fork.ValidatorSubnet(pkHex)
 			newSubnets[subnet] = byte(1)
 			return true
 		})
+		n.subnets = newSubnets
 
-		// Compute the difference (newly added subnets).
+		// Compute the unregistered subnets.
 		addedSubnets := make([]int, 0)
-		if !bytes.Equal(newSubnets, currentSubnets) { // have changes
-			n.subnets = newSubnets
-			for subnet, active := range newSubnets {
-				if active == byte(1) && currentSubnets[subnet] == byte(0) {
-					addedSubnets = append(addedSubnets, subnet)
-				}
+		for subnet, active := range newSubnets {
+			if active == byte(1) && lastRegisteredSubnets[subnet] == byte(0) {
+				addedSubnets = append(addedSubnets, subnet)
 			}
 		}
-
-		logger.Debug("subnetdump2",
-			zap.Any("current_subnets", records.SharedSubnets(allSubs, currentSubnets, 128)),
-			zap.Any("new_subnets", records.SharedSubnets(allSubs, newSubnets, 128)),
-			zap.Any("added_subnets", addedSubnets),
-		)
+		lastRegisteredSubnets = newSubnets
 
 		if len(addedSubnets) == 0 {
 			continue
@@ -278,6 +254,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 			logger.Warn("could not register subnets", zap.Error(err))
 			continue
 		}
+		allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
 		subnetsList := records.SharedSubnets(allSubs, n.subnets, 0)
 		logger.Debug("updated subnets (node-info)",
 			zap.Any("added", addedSubnets),
