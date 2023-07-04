@@ -101,6 +101,9 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 			if !ch.sharesEnoughSubnets(logger, conn) {
 				return errors.New("peer doesn't share enough subnets")
 			}
+			if ch.connIdx.Limit(conn.Stat().Direction) {
+				return errors.New("reached peers limit")
+			}
 			return nil
 		}
 
