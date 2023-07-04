@@ -228,6 +228,12 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 		if len(n.subnets) > 0 {
 			copy(currentSubnets, n.subnets)
 		}
+		allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
+		logger.Debug("subnetdump1",
+			zap.Any("current_subnets", records.SharedSubnets(allSubs, currentSubnets, 128)),
+			zap.String("current_subnets_str", records.Subnets(currentSubnets).String()),
+			zap.String("all_subnets_str", allSubs.String()),
+		)
 
 		// Compute the new subnets according to the active validators.
 		newSubnets := make([]byte, n.fork.Subnets())
@@ -251,8 +257,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 			}
 		}
 
-		allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
-		logger.Debug("subnetdump",
+		logger.Debug("subnetdump2",
 			zap.Any("current_subnets", records.SharedSubnets(allSubs, currentSubnets, 128)),
 			zap.Any("new_subnets", records.SharedSubnets(allSubs, newSubnets, 128)),
 			zap.Any("added_subnets", addedSubnets),
