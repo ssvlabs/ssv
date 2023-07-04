@@ -73,17 +73,15 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 	acceptConnection := func(logger *zap.Logger, net libp2pnetwork.Network, conn libp2pnetwork.Conn) error {
 		pid := conn.RemotePeer()
 
-		logger.Debug("checking connection", zap.Int("ongoing_handshakes", len(ongoingHandshakes)))
 		if !beginHandshake(pid) {
 			// Another connection with the same peer is already being handled.
-			logger.Debug("checking connection: already handled")
+			logger.Debug("peer is already being handled")
 			return nil
 		}
 		defer func() {
 			// Unset this peer as being handled.
 			endHandshake(pid)
 		}()
-		logger.Debug("checking connection: handling")
 
 		switch ch.peerInfos.State(pid) {
 		case peers.StateConnected, peers.StateConnecting:
@@ -92,7 +90,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 		}
 		ch.peerInfos.AddPeerInfo(pid, conn.RemoteMultiaddr(), conn.Stat().Direction)
 
-		// Connection is inbound: wait for successful handshake request.
+		// Connection is inbound -> Wait for successful handshake request.
 		if conn.Stat().Direction == network.DirInbound {
 			// Wait for peer to initiate handshake.
 			start := time.Now()
@@ -126,20 +124,14 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 			if !ch.sharesEnoughSubnets(logger, conn) {
 				return errors.New("peer doesn't share enough subnets")
 			}
-			if ch.connIdx.Limit(conn.Stat().Direction) {
-				return errors.New("reached peers limit")
-			}
 			return nil
 		}
 
-		// Connection is outbound: initiate handshake.
+		// Connection is outbound -> Initiate handshake.
 		ch.peerInfos.SetState(pid, peers.StateConnecting)
 		err := ch.handshaker.Handshake(logger, conn)
 		if err != nil {
 			return errors.Wrap(err, "could not handshake")
-		}
-		if ch.connIdx.Limit(conn.Stat().Direction) {
-			return errors.New("reached peers limit")
 		}
 		return nil
 	}
@@ -161,6 +153,11 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 			go func() {
 				logger := connLogger(conn)
 				err := acceptConnection(logger, net, conn)
+				if err == nil {
+					if ch.connIdx.Limit(conn.Stat().Direction) {
+						err = errors.New("reached peers limit")
+					}
+				}
 				if err != nil {
 					disconnect(logger, net, conn)
 					logger.Debug("failed to accept connection", zap.Error(err))
