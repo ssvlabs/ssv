@@ -146,10 +146,7 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 			if r := recover(); r != nil {
 				err = errors.Errorf("panic: %v", r)
 			}
-			h.peerInfos.UpdatePeerInfo(pid, func(info *peers.PeerInfo) {
-				info.LastHandshake = time.Now()
-				info.LastHandshakeError = err
-			})
+			h.updatePeerInfo(logger, pid, err)
 		}()
 
 		// Handle the handshake request.
@@ -169,20 +166,37 @@ func (h *handshaker) verifyTheirNodeInfo(logger *zap.Logger, sender peer.ID, ani
 }
 
 // Handshake initiates handshake with the given conn
-func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) error {
+func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) (err error) {
 	pid := conn.RemotePeer()
-	var ani records.AnyNodeInfo
+	var nodeInfo records.AnyNodeInfo
 
-	ani, err := h.requestNodeInfo(logger, conn)
+	// Update PeerInfo with the result of this handshake.
+	defer func() {
+		if r := recover(); r != nil {
+			err = errors.Errorf("panic: %v", r)
+		}
+		h.updatePeerInfo(logger, pid, err)
+	}()
+
+	nodeInfo, err = h.requestNodeInfo(logger, conn)
 	if err != nil {
-		return err
+		err = errors.Wrap(err, "failed requesting node info")
+		return
 	}
 
-	err = h.verifyTheirNodeInfo(logger, pid, ani)
+	err = h.verifyTheirNodeInfo(logger, pid, nodeInfo)
 	if err != nil {
-		return errors.Wrap(err, "failed verifying their node info")
+		err = errors.Wrap(err, "failed verifying their node info")
+		return
 	}
-	return nil
+	return
+}
+
+func (h *handshaker) updatePeerInfo(logger *zap.Logger, pid peer.ID, handshakeErr error) {
+	h.peerInfos.UpdatePeerInfo(pid, func(info *peers.PeerInfo) {
+		info.LastHandshake = time.Now()
+		info.LastHandshakeError = handshakeErr
+	})
 }
 
 // updateNodeSubnets tries to update the subnets of the given peer

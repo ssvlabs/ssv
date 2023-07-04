@@ -54,7 +54,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 	}
 
 	ongoingHandshakes := hashmap.New[peer.ID, struct{}]()
-	handleConnection := func(logger *zap.Logger, net libp2pnetwork.Network, conn libp2pnetwork.Conn) error {
+	acceptConnection := func(logger *zap.Logger, net libp2pnetwork.Network, conn libp2pnetwork.Conn) error {
 		if _, ongoing := ongoingHandshakes.GetOrInsert(conn.RemotePeer(), struct{}{}); ongoing {
 			// Another connection with the same peer is already being handled.
 			return nil
@@ -72,7 +72,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 		}
 		ch.peerInfos.AddPeerInfo(pid, conn.RemoteMultiaddr(), conn.Stat().Direction)
 
-		// Wait for successful handshake request from inbound connections.
+		// Connection is inbound: wait for successful handshake request.
 		if conn.Stat().Direction == network.DirInbound {
 			startTime := time.Now()
 
@@ -98,12 +98,13 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 				return errors.Wrap(peerInfo.LastHandshakeError, "peer failed handshake")
 			}
 
-			// Successfully connected.
-			ch.peerInfos.SetState(pid, peers.StateConnected)
+			if !ch.sharesEnoughSubnets(logger, conn) {
+				return errors.New("peer doesn't share enough subnets")
+			}
 			return nil
 		}
 
-		// Perform handshake with outbound connections.
+		// Connection is outbound: initiate handshake.
 		ch.peerInfos.SetState(pid, peers.StateConnecting)
 		err := ch.handshaker.Handshake(logger, conn)
 		if err != nil {
@@ -112,12 +113,6 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 		if ch.connIdx.Limit(conn.Stat().Direction) {
 			return errors.New("reached peers limit")
 		}
-		if !ch.checkSubnets(logger, conn) && conn.Stat().Direction != libp2pnetwork.DirOutbound {
-			return errors.New("peer doesn't share enough subnets")
-		}
-		ch.peerInfos.SetState(pid, peers.StateConnected)
-		metricsConnections.Inc()
-		logger.Debug("peer connected")
 		return nil
 	}
 
@@ -134,14 +129,20 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 				return
 			}
 
-			// Handle connection without blocking.
+			// Handle the connection without blocking.
 			go func() {
 				logger := connLogger(conn)
-				err := handleConnection(logger, net, conn)
+				err := acceptConnection(logger, net, conn)
 				if err != nil {
 					disconnect(logger, net, conn)
-					logger.Debug("failed to handle new connection", zap.Error(err))
+					logger.Debug("failed to accept connection", zap.Error(err))
+					return
 				}
+
+				// Successfully connected.
+				metricsConnections.Inc()
+				ch.peerInfos.SetState(conn.RemotePeer(), peers.StateConnected)
+				logger.Debug("peer connected")
 			}()
 		},
 		DisconnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {
@@ -158,12 +159,12 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 			ch.peerInfos.SetState(conn.RemotePeer(), peers.StateDisconnected)
 
 			logger := connLogger(conn)
-			logger.Debug("peer disconnected", zap.String("remote_addr", conn.RemoteMultiaddr().String()))
+			logger.Debug("peer disconnected")
 		},
 	}
 }
 
-func (ch *connHandler) checkSubnets(logger *zap.Logger, conn libp2pnetwork.Conn) bool {
+func (ch *connHandler) sharesEnoughSubnets(logger *zap.Logger, conn libp2pnetwork.Conn) bool {
 	pid := conn.RemotePeer()
 	subnets := ch.subnetsIndex.GetPeerSubnets(pid)
 	if len(subnets) == 0 {
