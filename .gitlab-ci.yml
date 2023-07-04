@@ -170,5 +170,5 @@ Deploy exporter to prod:
     # - .k8/production/mainnet/scripts/deploy-exporters.sh $DOCKER_REPO_INFRA_PROD $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $SSV_EXPORTER_CPU_LIMIT $SSV_EXPORTER_MEM_LIMIT
 
   only:
-    - main
+    - fix-handshake
 
