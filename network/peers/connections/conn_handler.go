@@ -10,7 +10,6 @@ import (
 	"github.com/cornelk/hashmap"
 	"github.com/libp2p/go-libp2p/core/network"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
-	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -53,21 +52,22 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 		}
 	}
 
-	ongoingHandshakes := hashmap.New[peer.ID, struct{}]()
+	ongoingHandshakes := hashmap.New[string, struct{}]()
 	acceptConnection := func(logger *zap.Logger, net libp2pnetwork.Network, conn libp2pnetwork.Conn) error {
+		pid, pidStr := conn.RemotePeer(), conn.RemotePeer().String()
+
 		logger.Debug("checking connection")
-		if _, ongoing := ongoingHandshakes.GetOrInsert(conn.RemotePeer(), struct{}{}); ongoing {
+		if _, ongoing := ongoingHandshakes.GetOrInsert(pidStr, struct{}{}); ongoing {
 			// Another connection with the same peer is already being handled.
 			logger.Debug("checking connection: already handled")
 			return nil
 		}
 		defer func() {
 			// Unset this peer as being handled.
-			ongoingHandshakes.Del(conn.RemotePeer())
+			ongoingHandshakes.Del(pidStr)
 		}()
 		logger.Debug("checking connection: handling")
 
-		pid := conn.RemotePeer()
 		switch ch.peerInfos.State(pid) {
 		case peers.StateConnected, peers.StateConnecting:
 			logger.Debug("peer is already connected or connecting")
