@@ -94,6 +94,7 @@ func (n *p2pNetwork) initCfg() error {
 		if err != nil {
 			return fmt.Errorf("parse subnet: %w", err)
 		}
+		n.interfaceLogger.Debug("subnets configured", fields.Subnets(subnets))
 		n.subnets = subnets
 	}
 	if n.cfg.MaxPeers <= 0 {
