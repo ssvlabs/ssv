@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -92,6 +93,7 @@ type Controller interface {
 	ListenToEth1Events(logger *zap.Logger, feed *event.Feed)
 	StartValidators(logger *zap.Logger)
 	ActiveValidatorIndices(logger *zap.Logger) []phase0.ValidatorIndex
+	ActiveIndices(logger *zap.Logger, epoch phase0.Epoch) []phase0.ValidatorIndex
 	GetValidator(pubKey string) (*validator.Validator, bool)
 	UpdateValidatorMetaDataLoop(logger *zap.Logger)
 	StartNetworkHandlers(logger *zap.Logger)
@@ -104,6 +106,8 @@ type Controller interface {
 	GetValidatorStats() (uint64, uint64, uint64, error)
 	GetOperatorData() *registrystorage.OperatorData
 	//OnFork(forkVersion forksprotocol.ForkVersion) error
+
+	GetIndicesChangeChan() chan bool
 }
 
 // EventHandler represents the interface for compatible storage event handlers
@@ -151,6 +155,8 @@ type controller struct {
 	// nonCommittees is a cache of initialized nonCommitteeValidator instances
 	nonCommitteeValidators *ttlcache.Cache[spectypes.MessageID, *nonCommitteeValidator]
 	nonCommitteeMutex      sync.Mutex
+
+	indicesChange chan bool
 }
 
 // NewController creates a new validator controller instance
@@ -229,6 +235,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		nonCommitteeValidators: ttlcache.New(
 			ttlcache.WithTTL[spectypes.MessageID, *nonCommitteeValidator](time.Minute * 13),
 		),
+		indicesChange: make(chan bool),
 	}
 
 	// Start automatic expired item deletion in nonCommitteeValidators.
@@ -270,6 +277,10 @@ func (c *controller) GetOperatorShares() []*types.SSVShare {
 
 func (c *controller) GetOperatorData() *registrystorage.OperatorData {
 	return c.operatorData
+}
+
+func (c *controller) GetIndicesChangeChan() chan bool {
+	return c.indicesChange
 }
 
 func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
@@ -564,6 +575,25 @@ func (c *controller) ActiveValidatorIndices(logger *zap.Logger) []phase0.Validat
 	return indices
 }
 
+func (c *controller) ActiveIndices(logger *zap.Logger, epoch phase0.Epoch) []phase0.ValidatorIndex {
+	logger = logger.Named(logging.NameController)
+
+	indices := make([]phase0.ValidatorIndex, 0, len(c.validatorsMap.validatorsMap))
+	err := c.validatorsMap.ForEach(func(v *validator.Validator) error {
+		// Beacon node throws error when trying to fetch duties for non-existing validators.
+		if (v.Share.BeaconMetadata.IsAttesting() || v.Share.BeaconMetadata.Status == v1.ValidatorStatePendingQueued) &&
+			v.Share.BeaconMetadata.ActivationEpoch <= epoch {
+			indices = append(indices, v.Share.BeaconMetadata.Index)
+		}
+		return nil
+	})
+	if err != nil {
+		logger.Warn("failed to get all validators public keys", zap.Error(err))
+	}
+
+	return indices
+}
+
 // onMetadataUpdated is called when validator's metadata was updated
 func (c *controller) onMetadataUpdated(logger *zap.Logger, pk string, meta *beaconprotocol.ValidatorMetadata) {
 	if meta == nil {
@@ -577,6 +607,7 @@ func (c *controller) onMetadataUpdated(logger *zap.Logger, pk string, meta *beac
 		if !v.Share.BeaconMetadata.Equals(meta) {
 			v.Share.BeaconMetadata.Status = meta.Status
 			v.Share.BeaconMetadata.Balance = meta.Balance
+			v.Share.BeaconMetadata.ActivationEpoch = meta.ActivationEpoch
 			logger.Debug("metadata was updated")
 		}
 		_, err := c.startValidator(logger, v)
