@@ -9,9 +9,18 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
+type TopicIndex interface {
+	PeersByTopic() map[string][]peer.ID
+}
 type Handler struct {
 	PeersIndex networkpeers.Index
 	Network    network.Network
+	TopicIndex TopicIndex
+}
+
+type topicIndexJSON struct {
+	TopicName string    `json:"topic"`
+	Peers     []peer.ID `json:"peers"`
 }
 
 type connectionJSON struct {
@@ -78,5 +87,16 @@ func (h *Handler) Peers(w http.ResponseWriter, r *http.Request) error {
 		resp[i].Version = nodeInfo.Metadata.NodeVersion
 	}
 	render.JSON(w, r, resp)
+	return nil
+}
+
+func (h *Handler) Topics(w http.ResponseWriter, r *http.Request) error {
+	peerbytpc := h.TopicIndex.PeersByTopic()
+	tpcs := []topicIndexJSON{}
+	for topic, peerz := range peerbytpc {
+		tpcs = append(tpcs, topicIndexJSON{TopicName: topic, Peers: peerz})
+	}
+
+	render.JSON(w, r, tpcs)
 	return nil
 }

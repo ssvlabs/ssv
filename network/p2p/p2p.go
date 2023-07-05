@@ -109,6 +109,20 @@ func (n *p2pNetwork) PeersIndex() peers.Index {
 	return n.idx
 }
 
+func (n *p2pNetwork) PeersByTopic() map[string][]peer.ID {
+	var err error
+	tpcs := n.topicsCtrl.Topics()
+	peerz := make(map[string][]peer.ID, len(tpcs))
+	for _, tpc := range tpcs {
+		peerz[tpc], err = n.topicsCtrl.Peers(tpc)
+		if err != nil {
+			n.interfaceLogger.Error("Cant get peers from topics")
+			return nil
+		}
+	}
+	return peerz
+}
+
 // Close implements io.Closer
 func (n *p2pNetwork) Close() error {
 	atomic.SwapInt32(&n.state, stateClosing)
