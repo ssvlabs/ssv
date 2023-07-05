@@ -25,7 +25,7 @@ func NewValidatorRegistrationHandler() *ValidatorRegistrationHandler {
 }
 
 func (h *ValidatorRegistrationHandler) Name() string {
-	return "VALIDATOR_REGISTRATION"
+	return spectypes.BNRoleValidatorRegistration.String()
 }
 
 func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context, logger *zap.Logger) {

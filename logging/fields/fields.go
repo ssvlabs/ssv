@@ -65,6 +65,7 @@ const (
 	FieldPubKey              = "pubkey"
 	FieldRole                = "role"
 	FieldRound               = "round"
+	FieldEpoch               = "epoch"
 	FieldSlot                = "slot"
 	FieldStartTimeUnixMilli  = "start_time_unix_milli"
 	FieldSubnets             = "subnets"
@@ -245,6 +246,10 @@ func ConsensusTime(val time.Duration) zap.Field {
 
 func DutyID(val string) zap.Field {
 	return zap.String(FieldDutyID, val)
+}
+
+func Epoch(val phase0.Epoch) zap.Field {
+	return zap.Uint64(FieldEpoch, uint64(val))
 }
 
 func Slot(val phase0.Slot) zap.Field {

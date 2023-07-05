@@ -275,7 +275,7 @@ func (s *Scheduler) loggerWithDutyContext(logger *zap.Logger, duty *spectypes.Du
 		With(zap.Uint64("committee_index", uint64(duty.CommitteeIndex))).
 		With(fields.CurrentSlot(s.network.Beacon)).
 		With(fields.Slot(duty.Slot)).
-		With(zap.Uint64("epoch", uint64(duty.Slot)/32)).
+		With(fields.Epoch(s.network.Beacon.EstimatedEpochAtSlot(duty.Slot))).
 		With(fields.PubKey(duty.PubKey[:])).
 		With(fields.StartTimeUnixMilli(s.network.Beacon, duty.Slot))
 }

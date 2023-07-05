@@ -35,7 +35,7 @@ func NewSyncCommitteeHandler() *SyncCommitteeHandler {
 }
 
 func (h *SyncCommitteeHandler) Name() string {
-	return "SYNC_COMMITTEE"
+	return spectypes.BNRoleSyncCommittee.String()
 }
 
 type SyncCommitteeDuties[K ~uint64, D any] struct {
@@ -236,6 +236,7 @@ func (h *SyncCommitteeHandler) prepareDutiesResultLog(logger *zap.Logger, period
 	}
 	logger.Debug("👥 got duties",
 		zap.Int("count", len(duties)),
+		zap.String("period", fmt.Sprintf("p%v-e%v-e%v", period, firstEpoch, lastEpoch)),
 		zap.Any("duties", b.String()),
 		fields.Duration(start))
 }

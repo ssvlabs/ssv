@@ -28,7 +28,7 @@ func NewProposerHandler() *ProposerHandler {
 }
 
 func (h *ProposerHandler) Name() string {
-	return "PROPOSER"
+	return spectypes.BNRoleProposer.String()
 }
 
 // HandleDuties manages the duty lifecycle, handling different cases:
@@ -148,11 +148,12 @@ func (h *ProposerHandler) prepareDutiesResultLog(logger *zap.Logger, epoch phase
 		if i > 0 {
 			b.WriteString(", ")
 		}
-		tmp := fmt.Sprintf("%v-e%v-s%v-#%v-v%v", h.Name(), epoch, duty.Slot, duty.Slot%32+1, duty.ValidatorIndex)
+		tmp := fmt.Sprintf("%v-e%v-s%v-v%v", h.Name(), epoch, duty.Slot, duty.ValidatorIndex)
 		b.WriteString(tmp)
 	}
 	logger.Debug("📚 got duties",
 		zap.Int("count", len(duties)),
+		fields.Epoch(epoch),
 		zap.Any("duties", b.String()),
 		fields.Duration(start))
 }
