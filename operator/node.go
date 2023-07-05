@@ -66,7 +66,7 @@ type operatorNode struct {
 	storage          storage.Storage
 	qbftStorage      *qbftstorage.QBFTStores
 	eth1Client       eth1.Client
-	dutyCtrl         duties.DutyController
+	dutyScheduler    duties.Scheduler
 	feeRecipientCtrl fee_recipient.RecipientController
 	// fork           *forks.Forker
 
@@ -102,16 +102,15 @@ func New(logger *zap.Logger, opts Options, slotTicker slot_ticker.Ticker) Node {
 		eth1Client:     opts.Eth1Client,
 		storage:        opts.ValidatorOptions.RegistryStorage,
 		qbftStorage:    storageMap,
-		dutyCtrl: duties.NewDutyController(logger, &duties.ControllerOptions{
+		dutyScheduler: duties.NewScheduler(&duties.SchedulerOptions{
 			Ctx:                 opts.Context,
 			BeaconClient:        opts.BeaconNode,
 			Network:             opts.Network,
 			ValidatorController: opts.ValidatorController,
-			DutyLimit:           opts.DutyLimit,
-			Executor:            opts.DutyExec,
-			ForkVersion:         opts.ForkVersion,
-			Ticker:              slotTicker,
-			BuilderProposals:    opts.ValidatorOptions.BuilderProposals,
+			//DutyLimit:           opts.DutyLimit,
+			Executor:         opts.DutyExec,
+			Ticker:           slotTicker,
+			BuilderProposals: opts.ValidatorOptions.BuilderProposals,
 		}),
 		feeRecipientCtrl: fee_recipient.NewController(&fee_recipient.ControllerOptions{
 			Ctx:              opts.Context,
@@ -156,7 +155,9 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 	go n.reportOperators(logger)
 
 	go n.feeRecipientCtrl.Start(logger)
-	n.dutyCtrl.Start(logger)
+	if err := n.dutyScheduler.Run(n.context, logger); err != nil {
+		return errors.Wrap(err, "failed to run duty scheduler")
+	}
 
 	return nil
 }
