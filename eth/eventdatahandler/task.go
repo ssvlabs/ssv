@@ -4,7 +4,6 @@ import (
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
-	"go.uber.org/zap"
 )
 
 type Task struct {
@@ -25,7 +24,7 @@ func (t *Task) Execute() error {
 		if err != nil {
 			return err
 		}
-		t.Edh.logger.Info("starting validator", fields.PubKey(validatorAddedEvent.PublicKey))
+		t.Edh.logger.Info("starting validator ", fields.PubKey(validatorAddedEvent.PublicKey))
 		return t.Edh.taskExecutor.AddValidator(validatorAddedEvent)
 	case ValidatorRemoved:
 		validatorRemovedEvent, err := t.Edh.filterer.ParseValidatorRemoved(t.Ev)
@@ -39,21 +38,21 @@ func (t *Task) Execute() error {
 		if err != nil {
 			return err
 		}
-		t.Edh.logger.Info("liquidating cluster", zap.Uint64("index", clusterLiquidatedEvent.Cluster.Index)) // TODO: add to fields package
+		t.Edh.logger.Info("liquidating cluster", fields.ClusterIndex(clusterLiquidatedEvent.Cluster))
 		return t.Edh.taskExecutor.LiquidateCluster(clusterLiquidatedEvent, t.Shares)
 	case ClusterReactivated:
 		clusterReactivatedEvent, err := t.Edh.filterer.ParseClusterReactivated(t.Ev)
 		if err != nil {
 			return err
 		}
-		t.Edh.logger.Info("reactivating cluster", zap.Uint64("index", clusterReactivatedEvent.Cluster.Index)) // TODO: add to fields package
+		t.Edh.logger.Info("reactivating cluster", fields.ClusterIndex(clusterReactivatedEvent.Cluster))
 		return t.Edh.taskExecutor.ReactivateCluster(clusterReactivatedEvent, t.Shares)
 	case FeeRecipientAddressUpdated:
 		feeRecipientAddressUpdatedEvent, err := t.Edh.filterer.ParseFeeRecipientAddressUpdated(t.Ev)
 		if err != nil {
 			return err
 		}
-		t.Edh.logger.Info("updating recipient address", zap.Stringer("owner", feeRecipientAddressUpdatedEvent.Owner)) // TODO: add to fields package
+		t.Edh.logger.Info("updating recipient address", fields.Owner(feeRecipientAddressUpdatedEvent.Owner))
 		return t.Edh.taskExecutor.UpdateFeeRecipient(feeRecipientAddressUpdatedEvent)
 	default:
 		return nil

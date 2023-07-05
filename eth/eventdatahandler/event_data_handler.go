@@ -110,12 +110,12 @@ func (edh *EventDataHandler) HandleBlockEventsStream(blockEventsCh <-chan eventb
 		// 2) find superseding tasks and remove superseded ones (updateFee-updateFee)
 		cleanTaskList := cleanTaskList(tasks)
 		for _, task := range cleanTaskList {
-			edh.logger.Debug("going to execute task") // TODO: add more task details
+			edh.logger.Debug("going to execute task ", zap.String("event_type", task.EventType.String()),  zap.String("contract_address", task.Ev.Address.Hex()), zap.String("contract_address", task.Ev.Address.Hex()), zap.Uint64("block_number", task.Ev.BlockNumber))
 			if err := task.Execute(); err != nil {
 				// TODO: We log failed task until we discuss how we want to handle this case. We likely need to crash the node in this case.
 				edh.logger.Error("failed to execute task", zap.Error(err))
 			} else {
-				edh.logger.Debug("executed task") // TODO: add more task details
+				edh.logger.Debug("executed task ", zap.String("event_type", task.EventType.String()),  zap.String("contract_address", task.Ev.Address.Hex()), zap.Uint64("block_number", task.Ev.BlockNumber))
 			}
 		}
 

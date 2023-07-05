@@ -14,11 +14,13 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/dgraph-io/ristretto"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
+	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/logging/fields/stringer"
 	"github.com/bloxapp/ssv/network/records"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
@@ -77,6 +79,8 @@ const (
 	FieldUpdatedENRLocalNode = "updated_enr"
 	FieldValidator           = "validator"
 	FieldValidatorMetadata   = "validator_metadata"
+	FieldCusterIndex         = "cluster_index"
+	FieldOwnerAddress        = "owner_address"
 )
 
 func FromBlock(val fmt.Stringer) zapcore.Field {
@@ -297,4 +301,12 @@ func Root(r [32]byte) zap.Field {
 
 func Config(val fmt.Stringer) zap.Field {
 	return zap.Stringer(FieldConfig, val)
+}
+
+func ClusterIndex(cluster contract.ISSVNetworkCoreCluster) zap.Field {
+	return zap.Uint64(FieldCusterIndex, cluster.Index)
+}
+
+func Owner(addr common.Address) zap.Field {
+	return zap.String(FieldOwnerAddress, addr.Hex())
 }
