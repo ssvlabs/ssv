@@ -16,29 +16,10 @@ func (eb *EventBatcher) BatchHistoricalEvents(events []ethtypes.Log) <-chan Bloc
 	blockEvents := make(chan BlockEvents)
 	go func() {
 		defer close(blockEvents)
-
 		var currentBlockEvents BlockEvents
-
 		for _, event := range events {
-			if currentBlockEvents.BlockNumber == 0 {
-				currentBlockEvents.BlockNumber = event.BlockNumber
-				currentBlockEvents.Events = []ethtypes.Log{event}
-
-				continue
-			}
-
-			if event.BlockNumber > currentBlockEvents.BlockNumber {
-				blockEvents <- currentBlockEvents
-
-				currentBlockEvents.BlockNumber = event.BlockNumber
-				currentBlockEvents.Events = []ethtypes.Log{event}
-
-				continue
-			}
-
-			currentBlockEvents.Events = append(currentBlockEvents.Events, event)
+			processEvents(event, &currentBlockEvents, blockEvents)
 		}
-
 		if len(currentBlockEvents.Events) != 0 {
 			blockEvents <- currentBlockEvents
 		}
@@ -52,33 +33,32 @@ func (eb *EventBatcher) BatchOngoingEvents(events <-chan ethtypes.Log) <-chan Bl
 
 	go func() {
 		defer close(blockEvents)
-
 		var currentBlockEvents BlockEvents
-
 		for event := range events {
-			if currentBlockEvents.BlockNumber == 0 {
-				currentBlockEvents.BlockNumber = event.BlockNumber
-				currentBlockEvents.Events = []ethtypes.Log{event}
-
-				continue
-			}
-
-			if event.BlockNumber > currentBlockEvents.BlockNumber {
-				blockEvents <- currentBlockEvents
-
-				currentBlockEvents.BlockNumber = event.BlockNumber
-				currentBlockEvents.Events = []ethtypes.Log{event}
-
-				continue
-			}
-
-			currentBlockEvents.Events = append(currentBlockEvents.Events, event)
+			processEvents(event, &currentBlockEvents, blockEvents)
 		}
-
 		if len(currentBlockEvents.Events) != 0 {
 			blockEvents <- currentBlockEvents
 		}
 	}()
 
 	return blockEvents
+}
+
+func processEvents(event ethtypes.Log, currentBlockEvents *BlockEvents, blockEvents chan BlockEvents) {
+	if currentBlockEvents.BlockNumber == 0 {
+		currentBlockEvents.BlockNumber = event.BlockNumber
+		currentBlockEvents.Events = []ethtypes.Log{event}
+		return
+	}
+
+	if event.BlockNumber > currentBlockEvents.BlockNumber {
+		blockEvents <- *currentBlockEvents
+
+		currentBlockEvents.BlockNumber = event.BlockNumber
+		currentBlockEvents.Events = []ethtypes.Log{event}
+		return
+	}
+
+	currentBlockEvents.Events = append(currentBlockEvents.Events, event)
 }
