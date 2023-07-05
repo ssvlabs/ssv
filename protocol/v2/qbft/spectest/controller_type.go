@@ -130,7 +130,7 @@ func testBroadcastedDecided(
 }
 
 func runInstanceWithData(t *testing.T, logger *zap.Logger, contr *controller.Controller, config *qbft.Config, identifier []byte, runData *spectests.RunInstanceData) error {
-	err := contr.StartNewInstance(logger, runData.InputValue)
+	err := contr.StartNewInstance(logger, 0, runData.InputValue)
 	var lastErr error
 	if err != nil {
 		lastErr = err

@@ -101,7 +101,7 @@ func TestRegular10CommitteeScenario(t *testing.T) {
 
 func regularValidator() func(t *testing.T, committee int, actual *protocolstorage.StoredInstance) {
 	return func(t *testing.T, committee int, actual *protocolstorage.StoredInstance) {
-		require.Equal(t, int(qbft.FirstHeight), int(actual.State.Height), "height not matching") //int conversion needs to show correct output from require
+		require.Equal(t, int(DefaultSlot), int(actual.State.Height), "height not matching") //int conversion needs to show correct output from require
 		require.Equal(t, int(qbft.FirstRound), int(actual.State.Round), "round not matching")
 
 		require.NotNil(t, actual.DecidedMessage, "no decided message")
