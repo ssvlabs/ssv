@@ -1,4 +1,4 @@
-package eventdatahandler_test
+package eventdatahandler
 
 import (
 	"context"
@@ -9,7 +9,6 @@ import (
 	"github.com/bloxapp/ssv/ekm"
 	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/eth/eventbatcher"
-	"github.com/bloxapp/ssv/eth/eventdatahandler"
 	"github.com/bloxapp/ssv/eth/eventdb"
 	"github.com/bloxapp/ssv/eth/executionclient"
 	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
@@ -67,22 +66,35 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	edh, err := setupDataHandler(t, ctx, logger)
+	if err != nil {
+		t.Fatal(err)
+	}
+	blockEvents := eb.BatchHistoricalEvents(events)
+	err = edh.HandleBlockEventsStream(blockEvents)
+	require.NoError(t, err)
+}
+
+func setupDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger) (*EventDataHandler, error) {
 	options := basedb.Options{
-		Type:      "badger-memory",
-		Path:      "",
-		Reporting: true,
-		Ctx:       ctx,
+		Type:       "badger-memory",
+		Path:       "",
+		Reporting:  true,
+		GCInterval: 0,
+		Ctx:        ctx,
 	}
 
 	db, err := kv.New(logger, options)
-	require.NoError(t, err)
+	if err != nil {
+		return nil, err
+	}
 
 	eventDB := eventdb.NewEventDB(db.(*kv.BadgerDb).Badger())
 	storageMap := ibftstorage.NewStores()
 	nodeStorage, operatorData := setupOperatorStorage(logger, db)
 	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkconfig.NetworkConfig{}, true)
 	if err != nil {
-		logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
+		return nil, err
 	}
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -96,7 +108,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 	cl := executionclient.New("test", common.Address{})
 
-	edh, err := eventdatahandler.New(
+	edh, err := New(
 		eventDB,
 		cl,
 		validatorCtrl,
@@ -105,14 +117,12 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		keyManager,
 		bc,
 		storageMap,
-		eventdatahandler.WithFullNode(),
-		eventdatahandler.WithLogger(logger))
+		WithFullNode(),
+		WithLogger(logger))
 	if err != nil {
-		t.Fatal(err)
+		return nil, err
 	}
-	blockEvents := eb.BatchHistoricalEvents(events)
-	err = edh.HandleBlockEventsStream(blockEvents)
-	require.NoError(t, err)
+	return edh, nil
 }
 
 func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.Storage, *registrystorage.OperatorData) {

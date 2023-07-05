@@ -263,32 +263,23 @@ func cleanTaskList(tasks []*Task) []*Task {
 		}
 	}
 	for i, task := range tasks {
-		for j := i + 1; j < len(tasks)-1; j++ {
-			if task.EventType == EventType(2) && tasks[j].EventType == EventType(3) {
-				taskMap[tasks[j]] = false
-				taskMap[task] = false
+		for j := i + 1; j < len(tasks); j++ {
+			if task.EventType == EventType(2) && tasks[j].EventType == EventType(3) || task.EventType == EventType(3) && tasks[j].EventType == EventType(2) {
+				fmt.Printf("Task event to delete %s \n", tasks[j].EventType.String())
+				delete(taskMap, tasks[j])
+				delete(taskMap, task)
 			}
-			if task.EventType == EventType(3) && tasks[j].EventType == EventType(2) {
-				taskMap[tasks[j]] = false
-				taskMap[task] = false
-			}
-			if task.EventType == EventType(4) && tasks[j].EventType == EventType(5) {
-				taskMap[tasks[j]] = false
-				taskMap[task] = false
-			}
-			if task.EventType == EventType(5) && tasks[j].EventType == EventType(4) {
-				taskMap[tasks[j]] = false
-				taskMap[task] = false
+			if task.EventType == EventType(4) && tasks[j].EventType == EventType(5) || task.EventType == EventType(5) && tasks[j].EventType == EventType(4) {
+				delete(taskMap, tasks[j])
+				delete(taskMap, task)
 			}
 			if task.EventType == EventType(6) && tasks[j].EventType == EventType(6) {
-				taskMap[task] = false
+				delete(taskMap, task)
 			}
 		}
 	}
-	for task, i := range taskMap {
-		if i == true {
-			resTask = append(resTask, task)
-		}
+	for task, _ := range taskMap {
+		resTask = append(resTask, task)
 	}
 	return resTask
 }
