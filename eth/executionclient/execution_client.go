@@ -280,16 +280,18 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan ethty
 				ToBlock:   header.Number,
 			}
 
-			// TODO: Instead of FilterLogs it should call a wrapper that calls FilterLogs multiple times and batches results to avoid fetching enormous amount of events.
-			newLogs, err := client.FilterLogs(ctx, query)
-			if err != nil {
-				return fromBlock, fmt.Errorf("fetch logs: %w", err)
-			}
+			// TODO: Instead of FilterLogs it should call a wrapper that calls FilterLogs multiple times and batches results to avoid fetching enormous amount of events
+			logStream, fetchErrors := ec.fetchLogsInBatches(ctx, client, fromBlock, header.Number.Uint64())
 
-			for _, log := range newLogs {
+			for log := range logStream {
 				logs <- log
 			}
 
+			err = <-fetchErrors
+
+			if err != nil {
+				return fromBlock, fmt.Errorf("fetch logs: %w", err)
+			}
 			fromBlock = query.ToBlock.Uint64()
 			ec.logger.Info("last fetched block", fields.BlockNumber(fromBlock))
 			ec.metrics.LastFetchedBlock(fromBlock)
@@ -349,7 +351,7 @@ func (ec *ExecutionClient) reconnect(ctx context.Context) {
 	logger.Info("reconnected")
 }
 
-func(ec *ExecutionClient) Filterer() (*contract.ContractFilterer, error) {
+func (ec *ExecutionClient) Filterer() (*contract.ContractFilterer, error) {
 	client := ec.client.Load()
 	filterer, err := contract.NewContractFilterer(ethcommon.Address{}, client)
 	return filterer, err

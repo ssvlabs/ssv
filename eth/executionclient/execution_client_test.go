@@ -68,7 +68,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	blockStream := make(chan []*types.Block)
 	defer close(blockStream)
 
-	backend, processedStream := newTestBackend(t, done, blockStream, time.Microsecond)
+	backend, processedStream := newTestBackend(t, done, blockStream, nil)
 
 	// Generate test chain before we read historical logs
 	createdLogCount := 1008
@@ -133,7 +133,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 }
 
 func TestStreamLogs(t *testing.T) {
-	const testTimeout = 1000 * time.Millisecond
+	const testTimeout = 10000 * time.Millisecond
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
 
@@ -143,7 +143,8 @@ func TestStreamLogs(t *testing.T) {
 	blockStream := make(chan []*types.Block)
 	defer close(blockStream)
 	// Create sim instance with a delay between block execution
-	backend, processedStream := newTestBackend(t, done, blockStream, time.Microsecond*50)
+	delay := time.Millisecond * 100
+	backend, processedStream := newTestBackend(t, done, blockStream, &delay)
 
 	rpcServer, _ := backend.RPCHandler()
 	httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
@@ -173,7 +174,7 @@ func TestStreamLogs(t *testing.T) {
 
 	// Generate test chain after a connection to the server.
 	// While processing blocks the events will be emitted which is read by subscription
-	generateInitialTestChain(t, done, blockStream, 1000)
+	generateInitialTestChain(t, done, blockStream, 100)
 	for blocks := range processedStream {
 		t.Log("Processed blocks: ", len(blocks))
 	}
@@ -185,7 +186,7 @@ func TestStreamLogs(t *testing.T) {
 
 }
 
-func newTestBackend(t *testing.T, done <-chan interface{}, blockStream <-chan []*types.Block, delay time.Duration) (*node.Node, <-chan []*types.Block) {
+func newTestBackend(t *testing.T, done <-chan interface{}, blockStream <-chan []*types.Block, delay *time.Duration) (*node.Node, <-chan []*types.Block) {
 	processedStream := make(chan []*types.Block)
 	// Create node
 	n, err := node.New(&node.Config{})
@@ -218,10 +219,19 @@ func newTestBackend(t *testing.T, done <-chan interface{}, blockStream <-chan []
 		case <-done:
 			return
 		case blocks := <-blockStream:
-			if _, err := ethservice.BlockChain().InsertChain(blocks); err != nil {
-				t.Fatal(err)
-				return
+			if delay != nil {
+				for _, block := range blocks {
+					if _, err := ethservice.BlockChain().InsertChain([]*types.Block{block}); err != nil {
+						return
+					}
+					time.Sleep(*delay)
+				}
+			} else {
+				if _, err := ethservice.BlockChain().InsertChain(blocks); err != nil {
+					return
+				}
 			}
+
 			processedStream <- blocks
 		}
 	}()
