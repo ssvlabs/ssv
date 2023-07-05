@@ -120,7 +120,7 @@ func NewEventDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger) 
 	db, err := kv.New(logger, options)
 	require.NoError(t, err)
 
-	eventDB := eventdb.NewEventDB(db.(*kv.BadgerDb).Badger())
+	eventDB := eventdb.NewEventDB(db.Badger())
 	storageMap := ibftstorage.NewStores()
 	nodeStorage, operatorData := setupOperatorStorage(logger, db)
 	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkconfig.NetworkConfig{}, true)

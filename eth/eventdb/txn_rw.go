@@ -7,7 +7,6 @@ import (
 
 	"github.com/dgraph-io/badger/v4"
 	"github.com/ethereum/go-ethereum/common"
-	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 
 	"github.com/bloxapp/ssv/protocol/v2/types"
@@ -52,33 +51,6 @@ func (t *RWTxn) SaveOperatorData(operatorData *registrystorage.OperatorData) (bo
 	return true, nil
 }
 
-// SaveEventData saves event data and return it.
-// if the event already exists return nil
-func (t *RWTxn) SaveEventData(txHash ethcommon.Hash) error {
-	_, err := t.txn.Get(append([]byte(fmt.Sprintf("%s%s/", storagePrefix, eventsPrefix)), txHash.Bytes()...))
-
-	if errors.Is(err, badger.ErrKeyNotFound) {
-		rawJSON, err := json.Marshal(&EventData{
-			TxHash: txHash,
-		})
-		if err != nil {
-			return fmt.Errorf("marshal: %w", err)
-		}
-
-		if err := t.txn.Set(append([]byte(fmt.Sprintf("%s%s/", storagePrefix, eventsPrefix)), txHash.Bytes()...), rawJSON); err != nil {
-			return fmt.Errorf("set item: %w", err)
-		}
-
-		return nil
-	}
-
-	if err != nil {
-		return fmt.Errorf("get item: %w", err)
-	}
-
-	return nil
-}
-
 func (t *RWTxn) BumpNonce(owner common.Address) error {
 	recipientData, err := t.GetRecipientData(owner)
 	if err != nil {
@@ -87,10 +59,10 @@ func (t *RWTxn) BumpNonce(owner common.Address) error {
 
 	if recipientData == nil {
 		// Create a variable of type Nonce
-		nonce := Nonce(0)
+		nonce := registrystorage.Nonce(0)
 
 		// Create an instance of RecipientData and assign the Nonce and Owner address values
-		recipientData = &RecipientData{
+		recipientData = &registrystorage.RecipientData{
 			Owner: owner,
 			Nonce: &nonce, // Assign the address of nonceValue to Nonce field
 		}
@@ -98,7 +70,7 @@ func (t *RWTxn) BumpNonce(owner common.Address) error {
 	}
 
 	if recipientData.Nonce == nil {
-		nonce := Nonce(0)
+		nonce := registrystorage.Nonce(0)
 		recipientData.Nonce = &nonce
 	} else if recipientData == nil {
 		// Bump the nonce
@@ -119,7 +91,7 @@ func (t *RWTxn) BumpNonce(owner common.Address) error {
 
 // SaveRecipientData saves recipient data and return it.
 // if the recipient already exists and the fee didn't change return nil
-func (t *RWTxn) SaveRecipientData(recipientData *RecipientData) (*RecipientData, error) {
+func (t *RWTxn) SaveRecipientData(recipientData *registrystorage.RecipientData) (*registrystorage.RecipientData, error) {
 	r, err := t.GetRecipientData(recipientData.Owner)
 	if err != nil {
 		return nil, fmt.Errorf("could not get recipient data: %w", err)

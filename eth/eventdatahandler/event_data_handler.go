@@ -3,6 +3,7 @@ package eventdatahandler
 import (
 	"crypto/rsa"
 	"fmt"
+	"math/big"
 
 	"github.com/bloxapp/ssv-spec/types"
 	ethabi "github.com/ethereum/go-ethereum/accounts/abi"
@@ -38,7 +39,6 @@ type EventDataHandler struct {
 
 type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
 
-// TODO: try to reduce amount of input parameters
 func New(
 	eventDB eventDB,
 	client *executionclient.ExecutionClient,
@@ -52,12 +52,12 @@ func New(
 ) (*EventDataHandler, error) {
 	abi, err := contract.ContractMetaData.GetAbi()
 	if err != nil {
-		return nil, fmt.Errorf("error handling contract ABI %s", err.Error())
+		return nil, fmt.Errorf("get contract ABI: %w", err)
 	}
 
 	filterer, err := client.Filterer()
 	if err != nil {
-		return nil, fmt.Errorf("error binding contract filterer %s", err.Error())
+		return nil, fmt.Errorf("create contract filterer: %w", err)
 	}
 
 	edh := &EventDataHandler{
@@ -82,23 +82,27 @@ func New(
 	return edh, nil
 }
 
-func (edh *EventDataHandler) HandleBlockEventsStream(blockEventsCh <-chan eventbatcher.BlockEvents) error {
+func (edh *EventDataHandler) HandleBlockEventsStream(blockEventsCh <-chan eventbatcher.BlockEvents, executeTasks bool) (uint64, error) {
+	var lastProcessedBlock uint64
+
 	for blockEvents := range blockEventsCh {
 		logger := edh.logger.With(fields.BlockNumber(blockEvents.BlockNumber))
 
 		logger.Info("processing block events")
 		tasks, err := edh.processBlockEvents(blockEvents)
 		if err != nil {
-			return fmt.Errorf("process block events: %w", err)
+			return 0, fmt.Errorf("process block events: %w", err)
 		}
 
-		logger = logger.With(fields.Count(len(tasks)))
+		lastProcessedBlock = blockEvents.BlockNumber
+
 		logger.Info("processed block events")
 
-		if len(tasks) == 0 {
+		if !executeTasks || len(tasks) == 0 {
 			continue
 		}
 
+		logger = logger.With(fields.Count(len(tasks)))
 		logger.Info("executing tasks")
 
 		// TODO:
@@ -106,16 +110,19 @@ func (edh *EventDataHandler) HandleBlockEventsStream(blockEventsCh <-chan eventb
 		// 2) find superseding tasks and remove superseded ones (updateFee-updateFee)
 		cleanTaskList := cleanTaskList(tasks)
 		for _, task := range cleanTaskList {
+			edh.logger.Debug("going to execute task") // TODO: add more task details
 			if err := task.Execute(); err != nil {
-				// TODO: Log failed task until we discuss how we want to handle this case. We likely need to crash the node in this case.
-				return fmt.Errorf("execute task: %w", err)
+				// TODO: We log failed task until we discuss how we want to handle this case. We likely need to crash the node in this case.
+				edh.logger.Error("failed to execute task", zap.Error(err))
+			} else {
+				edh.logger.Debug("executed task") // TODO: add more task details
 			}
 		}
 
-		logger.Info("executed tasks")
+		logger.Info("task execution finished")
 	}
 
-	return nil
+	return lastProcessedBlock, nil
 }
 
 func (edh *EventDataHandler) processBlockEvents(blockEvents eventbatcher.BlockEvents) ([]*Task, error) {
@@ -134,6 +141,10 @@ func (edh *EventDataHandler) processBlockEvents(blockEvents eventbatcher.BlockEv
 		}
 	}
 
+	if err := txn.SetLastProcessedBlock(new(big.Int).SetUint64(blockEvents.BlockNumber)); err != nil {
+		return nil, fmt.Errorf("set last processed block: %w", err)
+	}
+
 	if err := txn.Commit(); err != nil {
 		return nil, fmt.Errorf("commit transaction: %w", err)
 	}
@@ -144,7 +155,8 @@ func (edh *EventDataHandler) processBlockEvents(blockEvents eventbatcher.BlockEv
 func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (*Task, error) {
 	abiEvent, err := edh.abi.EventByID(event.Topics[0])
 	if err != nil {
-		return nil, err
+		edh.logger.Error("failed to find event by ID", zap.String("hash", event.Topics[0].String()))
+		return nil, nil
 	}
 
 	switch abiEvent.Name {

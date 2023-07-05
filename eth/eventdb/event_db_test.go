@@ -11,9 +11,9 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/registry/storage"
+	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
-	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
@@ -38,7 +38,7 @@ func TestEventDbLastBlock(t *testing.T) {
 	db, err := kv.New(logger, options)
 	require.NoError(t, err)
 
-	eventDB := NewEventDB(db.(*kv.BadgerDb).Badger())
+	eventDB := NewEventDB(db.Badger())
 	txnW := eventDB.RWTxn()
 	defer txnW.Discard()
 
@@ -52,38 +52,6 @@ func TestEventDbLastBlock(t *testing.T) {
 	lastBlock, err := txnR.GetLastProcessedBlock()
 	require.NoError(t, err)
 	require.Equal(t, big.NewInt(1001), lastBlock)
-}
-
-func TestEventDbEventData(t *testing.T) {
-	logger := zaptest.NewLogger(t)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	options := basedb.Options{
-		Type:      "badger-memory",
-		Path:      "",
-		Reporting: true,
-		Ctx:       ctx,
-	}
-
-	db, err := kv.New(logger, options)
-	require.NoError(t, err)
-
-	eventDB := NewEventDB(db.(*kv.BadgerDb).Badger())
-	txnW := eventDB.RWTxn()
-	defer txnW.Discard()
-
-	hash := crypto.NewKeccakState().Sum([]byte("Hello World"))
-	err = txnW.SaveEventData(ethcommon.BytesToHash(hash))
-	require.NoError(t, err)
-	err = txnW.Commit()
-	require.NoError(t, err)
-
-	txnR := eventDB.ROTxn()
-	defer txnR.Discard()
-	data, err := txnR.GetEventData(ethcommon.BytesToHash(hash))
-	require.NoError(t, err)
-	exp := &EventData{TxHash: ethcommon.BytesToHash(hash)}
-	require.Equal(t, exp, data)
 }
 
 func TestEventDbOperatorData(t *testing.T) {
@@ -100,7 +68,7 @@ func TestEventDbOperatorData(t *testing.T) {
 	db, err := kv.New(logger, options)
 	require.NoError(t, err)
 
-	eventDB := NewEventDB(db.(*kv.BadgerDb).Badger())
+	eventDB := NewEventDB(db.Badger())
 	txnW := eventDB.RWTxn()
 	defer txnW.Discard()
 	dataToSave := storage.OperatorData{ID: 1, PublicKey: crypto.CompressPubkey(&testKey.PublicKey), OwnerAddress: testAddress}
@@ -130,11 +98,11 @@ func TestEventDbRecipientData(t *testing.T) {
 	db, err := kv.New(logger, options)
 	require.NoError(t, err)
 
-	eventDB := NewEventDB(db.(*kv.BadgerDb).Badger())
+	eventDB := NewEventDB(db.Badger())
 	txnW := eventDB.RWTxn()
 	defer txnW.Discard()
-	nonce := Nonce(0)
-	dataToSave := RecipientData{Owner: testAddress, FeeRecipient: bellatrix.ExecutionAddress(testAddress), Nonce: &nonce}
+	nonce := registrystorage.Nonce(0)
+	dataToSave := registrystorage.RecipientData{Owner: testAddress, FeeRecipient: bellatrix.ExecutionAddress(testAddress), Nonce: &nonce}
 	_, err = txnW.SaveRecipientData(&dataToSave)
 	require.NoError(t, err)
 	err = txnW.Commit()
@@ -161,7 +129,7 @@ func TestEventDbShares(t *testing.T) {
 	db, err := kv.New(logger, options)
 	require.NoError(t, err)
 
-	eventDB := NewEventDB(db.(*kv.BadgerDb).Badger())
+	eventDB := NewEventDB(db.Badger())
 	txnW := eventDB.RWTxn()
 	defer txnW.Discard()
 
@@ -179,4 +147,34 @@ func TestEventDbShares(t *testing.T) {
 	require.NoError(t, err)
 	err = txnW.Commit()
 	require.NoError(t, err)
+}
+
+func TestEventDbBumpNonce(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	options := basedb.Options{
+		Type:      "badger-memory",
+		Path:      "",
+		Reporting: true,
+		Ctx:       ctx,
+	}
+
+	db, err := kv.New(logger, options)
+	require.NoError(t, err)
+
+	eventDB := NewEventDB(db.Badger())
+	txnW := eventDB.RWTxn()
+	defer txnW.Discard()
+	nonce := registrystorage.Nonce(0)
+	err = txnW.BumpNonce(testAddress)
+	require.NoError(t, err)
+	err = txnW.Commit()
+	require.NoError(t, err)
+
+	txnR := eventDB.ROTxn()
+	defer txnR.Discard()
+	newNonce, err := txnR.GetNextNonce(testAddress)
+	require.NoError(t, err)
+	require.Equal(t, newNonce, nonce + 1)
 }

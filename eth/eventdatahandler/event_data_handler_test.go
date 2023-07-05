@@ -70,8 +70,15 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	blockEvents := eb.BatchHistoricalEvents(events)
-	err = edh.HandleBlockEventsStream(blockEvents)
+	eventsCh := make(chan ethtypes.Log)
+	go func() {
+		defer close(eventsCh)
+		for _, event := range events {
+			eventsCh <- event
+		}
+	}()
+	lastProcessedBlock, err := edh.HandleBlockEventsStream(eb.BatchEvents(eventsCh), false)
+	require.Equal(t, uint64(0x89EBFF), lastProcessedBlock)
 	require.NoError(t, err)
 }
 
@@ -89,7 +96,7 @@ func setupDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger) (*E
 		return nil, err
 	}
 
-	eventDB := eventdb.NewEventDB(db.(*kv.BadgerDb).Badger())
+	eventDB := eventdb.NewEventDB(db.Badger())
 	storageMap := ibftstorage.NewStores()
 	nodeStorage, operatorData := setupOperatorStorage(logger, db)
 	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkconfig.NetworkConfig{}, true)

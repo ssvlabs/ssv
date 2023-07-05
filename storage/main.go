@@ -3,13 +3,14 @@ package storage
 import (
 	"fmt"
 
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
-	"go.uber.org/zap"
 )
 
 // GetStorageFactory resolve and returns db instance based on db type
-func GetStorageFactory(logger *zap.Logger, options basedb.Options) (basedb.IDb, error) {
+func GetStorageFactory(logger *zap.Logger, options basedb.Options) (*kv.BadgerDb, error) {
 	switch options.Type {
 	case "badger-db":
 		db, err := kv.New(logger, options)

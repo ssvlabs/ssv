@@ -6,7 +6,7 @@ import (
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 )
 
-type eth1Client interface {
-	FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs []ethtypes.Log, lastBlock uint64, err error)
+type executionClient interface {
+	FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logCh <-chan ethtypes.Log, fetchErrCh <-chan error, err error)
 	StreamLogs(ctx context.Context, fromBlock uint64) <-chan ethtypes.Log
 }

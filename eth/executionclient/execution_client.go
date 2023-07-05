@@ -3,7 +3,6 @@ package executionclient
 import (
 	"context"
 	"fmt"
-	"math"
 	"math/big"
 	"sync/atomic"
 	"time"
@@ -17,6 +16,10 @@ import (
 	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/utils/tasks"
+)
+
+var (
+	ErrClosed = fmt.Errorf("closed")
 )
 
 // ExecutionClient represents a client for interacting with Ethereum execution client.
@@ -87,16 +90,15 @@ func (ec *ExecutionClient) Close() error {
 }
 
 // FetchHistoricalLogs retrieves historical logs emitted by the contract starting from fromBlock.
-func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs []ethtypes.Log, lastBlock uint64, err error) {
-
+func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logCh <-chan ethtypes.Log, fetchErrCh <-chan error, err error) {
 	client := ec.client.Load()
 
 	currentBlock, err := client.BlockNumber(ctx)
 	if err != nil {
-		return nil, 0, fmt.Errorf("get current block: %w", err)
+		return nil, nil, fmt.Errorf("get current block: %w", err)
 	}
 
-	lastBlock = currentBlock - ec.finalizationOffset
+	lastBlock := currentBlock - ec.finalizationOffset
 	logger := ec.logger.With(
 		zap.Uint64("from", fromBlock),
 		zap.Uint64("to", lastBlock))
@@ -104,85 +106,87 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 	logger.Info("determined current block number, fetching historical logs",
 		zap.Uint64("current_block", currentBlock))
 
-	query := ethereum.FilterQuery{
-		Addresses: []ethcommon.Address{ec.contractAddress},
-		FromBlock: new(big.Int).SetUint64(fromBlock),
-		ToBlock:   new(big.Int).SetUint64(lastBlock),
-	}
-
-	inLogs := ec.batchedFilterLogs(ctx, client, query)
-	for l := range inLogs {
-		if l.err != nil {
-			return nil, 0, fmt.Errorf("fetch logs error: %w", l.err)
-		}
-		lastBlock = l.lastBlock
-		logs = append(logs, l.logs...)
-	}
-
-	logger.Info("fetched historical blocks")
-	ec.metrics.LastFetchedBlock(lastBlock)
-
-	return logs, lastBlock, nil
-}
-
-type FetchedLogs struct {
-	logs      []ethtypes.Log
-	lastBlock uint64
-	err       error
+	logStream, fetchErrors := ec.fetchLogsInBatches(ctx, client, fromBlock, lastBlock)
+	return logStream, fetchErrors, nil
 }
 
 // Calls FilterLogs multiple times and batches results to avoid fetching enormous amount of events
-func (ec *ExecutionClient) batchedFilterLogs(ctx context.Context, client *ethclient.Client, query ethereum.FilterQuery) <-chan FetchedLogs {
-
-	logsChan := make(chan FetchedLogs)
+func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, client *ethclient.Client, fromBlock, toBlock uint64) (<-chan ethtypes.Log, <-chan error) {
+	logCh := make(chan ethtypes.Log, defaultLogBuf)
+	fetchErrCh := make(chan error, 1)
 
 	go func() {
-		defer close(logsChan)
+		defer close(logCh)
+		defer close(fetchErrCh)
 
-		q := math.Floor(float64((query.ToBlock.Uint64() - query.FromBlock.Uint64()) / ec.logBatchSize))
-		r := (query.ToBlock.Uint64() - query.FromBlock.Uint64()) % ec.logBatchSize
+		batchCount := (toBlock - fromBlock) / ec.logBatchSize
+		lastBatchSize := (toBlock - fromBlock) % ec.logBatchSize
 
-		if r != 0 {
-			q++
+		if lastBatchSize != 0 {
+			batchCount++
 		}
 
-		for i := 0; i < int(q); i++ {
+		for i := uint64(0); i < batchCount; i++ {
+			var batchFrom uint64
+			var batchTo uint64
 
-			var blockFrom uint64
-			var blockTo uint64
-			
-			if i == int(q-1) && r != 0 {
-				blockFrom = query.FromBlock.Uint64() + ec.logBatchSize*uint64(i)
-				blockTo = blockFrom + r
+			if i == batchCount-1 && lastBatchSize != 0 {
+				batchFrom = fromBlock + i*ec.logBatchSize
+				batchTo = batchFrom + lastBatchSize
 			} else {
-				blockFrom = query.FromBlock.Uint64() + ec.logBatchSize*uint64(i)
-				blockTo = blockFrom + ec.logBatchSize
+				batchFrom = fromBlock + i*ec.logBatchSize
+				batchTo = batchFrom + ec.logBatchSize
 			}
 
-			ec.logger.Info("Fetching :", zap.Uint64("from block", blockFrom), zap.Uint64("to block", blockTo))
-			batchOfLogs, err := client.FilterLogs(ctx, ethereum.FilterQuery{
+			logger := ec.logger.With(
+				zap.Uint64("from", batchFrom),
+				zap.Uint64("to", batchTo),
+				zap.Uint64("target", toBlock),
+				zap.String("progress", fmt.Sprintf("%.2f%%", float64(batchFrom-fromBlock)/float64(toBlock-fromBlock)*100)),
+			)
+
+			logger.Info("fetching logs batch")
+			logs, err := client.FilterLogs(ctx, ethereum.FilterQuery{
 				Addresses: []ethcommon.Address{ec.contractAddress},
-				FromBlock: new(big.Int).SetUint64(blockFrom),
-				ToBlock:   new(big.Int).SetUint64(blockTo),
+				FromBlock: new(big.Int).SetUint64(batchFrom),
+				ToBlock:   new(big.Int).SetUint64(batchTo),
 			})
 			if err != nil {
-				ec.logger.Error("log fetching err:", zap.Error(err))
+				ec.logger.Error("failed to fetch log batch", zap.Error(err))
+				fetchErrCh <- err
+				return
 			}
 			select {
 			case <-ctx.Done():
-				ec.logger.Debug("log fetching canceled")
+				ec.logger.Debug("batched log fetching canceled")
+				fetchErrCh <- ctx.Err()
 				return
 
 			case <-ec.closed:
 				ec.logger.Debug("closed")
+				fetchErrCh <- ErrClosed
 				return
 
-			case logsChan <- FetchedLogs{logs: batchOfLogs, lastBlock: blockTo, err: err}:
+			default:
+				for _, log := range logs {
+					if log.Removed {
+						// TODO: test this case
+						continue
+					}
+					logCh <- log
+				}
 			}
 		}
+
+		ec.logger.Info("fetched historical blocks",
+			zap.Uint64("from", fromBlock),
+			zap.Uint64("to", toBlock),
+		)
+
+		ec.metrics.LastFetchedBlock(toBlock)
 	}()
 
-	return logsChan
+	return logCh, fetchErrCh
 }
 
 // StreamLogs subscribes to events emitted by the contract.

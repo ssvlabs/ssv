@@ -71,7 +71,8 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	backend, processedStream := newTestBackend(t, done, blockStream, time.Microsecond)
 
 	// Generate test chain before we read historical logs
-	generateInitialTestChain(t, done, blockStream, 1008)
+	createdLogCount := 1008
+	generateInitialTestChain(t, done, blockStream, createdLogCount)
 	for blocks := range processedStream {
 		t.Log("Processed blocks: ", len(blocks))
 	}
@@ -109,14 +110,26 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	require.True(t, ready)
 
 	// Fetch all logs history starting from block 0
-	logs, lastBlock, err := client.FetchHistoricalLogs(ctx, 0)
+	seenLogs := 0
+	logs, fetchErrCh, err := client.FetchHistoricalLogs(ctx, 0)
+	for log := range logs {
+		seenLogs++
+		require.NotNil(t, log)
+	}
+
 	require.NoError(t, err)
-	require.NotEmpty(t, logs)
-	require.NotEmpty(t, lastBlock)
+	expectedSeenLogs := createdLogCount - 1 // first block doesn't have logs
+	require.Equal(t, expectedSeenLogs, seenLogs)
+
+	select {
+	case err := <-fetchErrCh:
+		require.NoError(t, err)
+	case <-ctx.Done():
+		require.Fail(t, "timeout")
+	}
 
 	require.NoError(t, client.Close())
 	require.NoError(t, backend.Close())
-
 }
 
 func TestStreamLogs(t *testing.T) {
@@ -151,7 +164,7 @@ func TestStreamLogs(t *testing.T) {
 
 	logs := client.StreamLogs(ctx, 0)
 	var streamedLogs []types.Log
-	// Receive emited events
+	// Receive emitted events
 	go func() {
 		for log := range logs {
 			streamedLogs = append(streamedLogs, log)
@@ -159,7 +172,7 @@ func TestStreamLogs(t *testing.T) {
 	}()
 
 	// Generate test chain after a connection to the server.
-	// While processing blocks the events will be emited which is read by subscription
+	// While processing blocks the events will be emitted which is read by subscription
 	generateInitialTestChain(t, done, blockStream, 1000)
 	for blocks := range processedStream {
 		t.Log("Processed blocks: ", len(blocks))

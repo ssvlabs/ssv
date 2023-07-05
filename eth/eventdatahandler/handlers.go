@@ -23,20 +23,19 @@ import (
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
-// TODO: review and make sure that we log and return no error in each case where we don't want to stop share processing (e.g. malformed event)
-
 // b64 encrypted key length is 256
 const encryptedKeyLength = 256
 
 func (edh *EventDataHandler) handleOperatorAdded(txn eventdb.RW, event *contract.ContractOperatorAdded) error {
 	logger := edh.logger.With(
 		fields.OperatorID(event.OperatorId),
-		// TODO: move to fields package (check other places in this file)
-		zap.String("operator_pub_key", string(event.PublicKey)),
+		zap.String("operator_pub_key", ethcommon.Bytes2Hex(event.PublicKey)),
 		zap.String("owner_address", event.Owner.String()),
+		zap.String("event_type", EventType(0).String()),
 	)
-	// TODO: consider having something like `logger.Info("processing event", zap.String("kind", OperatorAdded))` in the whole package
-	logger.Info("processing OperatorAdded event")
+
+	logger.Debug("processing event")
+	defer logger.Debug("processed event")
 
 	od := &registrystorage.OperatorData{
 		PublicKey:    event.PublicKey,
@@ -46,7 +45,7 @@ func (edh *EventDataHandler) handleOperatorAdded(txn eventdb.RW, event *contract
 
 	// throw an error if there is an existing operator with the same public key and different operator id
 	if edh.operatorData.ID != 0 && bytes.Equal(edh.operatorData.PublicKey, event.PublicKey) && edh.operatorData.ID != event.OperatorId {
-		edh.logger.Warn("malformed OperatorAdded event: operator registered with the same operator public key")
+		edh.logger.Warn("malformed event: operator registered with the same operator public key")
 		return nil
 	}
 
@@ -65,31 +64,30 @@ func (edh *EventDataHandler) handleOperatorAdded(txn eventdb.RW, event *contract
 
 	edh.metrics.OperatorHasPublicKey(od.ID, od.PublicKey)
 
-	// TODO: consider logging in defer because early return in some events means successful processing
-	logger.Info("processed OperatorAdded event")
-
 	return nil
 }
 
 func (edh *EventDataHandler) handleOperatorRemoved(txn eventdb.RW, event *contract.ContractOperatorRemoved) error {
 	logger := edh.logger.With(
 		fields.OperatorID(event.OperatorId),
+		zap.String("event_type", EventType(1).String()),
 	)
-	logger.Info("processing OperatorRemoved event")
+	logger.Debug("processing event")
+	defer func() { logger.Debug("processed event") }()
 
 	od, err := txn.GetOperatorData(event.OperatorId)
 	if err != nil {
 		return fmt.Errorf("could not get operator data: %w", err)
 	}
 	if od == nil {
-		edh.logger.Warn("malformed OperatorRemoved event: could not find operator data")
+		edh.logger.Warn("malformed event: could not find operator data")
 		return nil
 	}
 
-	logger.With(
-		zap.String("operator_pub_key", string(od.PublicKey)),
+	logger = logger.With(
+		zap.String("operator_pub_key", ethcommon.Bytes2Hex(od.PublicKey)),
 		zap.String("owner_address", od.OwnerAddress.String()),
-	).Info("processed OperatorRemoved event")
+	)
 
 	// TODO: In original handler we didn't delete operator data, so this behavior was preserved. However we likely need to.
 	// TODO: Delete operator from all the shares.
@@ -106,22 +104,11 @@ func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contrac
 	logger := edh.logger.With(
 		zap.String("owner_address", event.Owner.String()),
 		zap.Uint64s("operator_ids", event.OperatorIds),
-		zap.String("operator_pub_key", string(event.PublicKey)),
+		zap.String("operator_pub_key", ethcommon.Bytes2Hex(event.PublicKey)),
+		zap.String("event_type", EventType(2).String()),
 	)
-	logger.Info("processing ValidatorAdded event")
-
-	defer func() {
-		logger.Info("processed ValidatorAdded event")
-	}()
-
-	eventData, eventErr := txn.GetEventData(event.Raw.TxHash)
-	if eventErr != nil {
-		return fmt.Errorf("failed to get event data: %w", eventErr)
-	}
-	if eventData != nil {
-		// skip
-		return nil
-	}
+	logger.Debug("processing event")
+	defer func() { logger.Debug("processed event") }()
 
 	// get nonce
 	nonce, nonceErr := txn.GetNextNonce(event.Owner)
@@ -137,12 +124,12 @@ func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contrac
 	sharesExpectedLength := encryptedKeyLength*operatorCount + pubKeysOffset
 
 	if sharesExpectedLength != len(event.Shares) {
-		edh.logger.Warn("malformed ValidatorAdded event: event shares length is not correct",
+		edh.logger.Warn("malformed event: event shares length is not correct",
 			zap.Int("expected", sharesExpectedLength),
 			zap.Int("got", len(event.Shares)))
 
-		if err := edh.saveEvent(txn, event); err != nil {
-			return fmt.Errorf("save event: %w", err)
+		if err := txn.BumpNonce(event.Owner); err != nil {
+			return fmt.Errorf("bump nonce: %w", err)
 		}
 
 		return nil
@@ -154,11 +141,11 @@ func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contrac
 
 	// verify sig
 	if err := verifySignature(signature, event.Owner, event.PublicKey, nonce); err != nil {
-		edh.logger.Warn("malformed ValidatorAdded event: failed to verify signature",
+		edh.logger.Warn("malformed event: failed to verify signature",
 			zap.Error(err))
 
-		if err := edh.saveEvent(txn, event); err != nil {
-			return fmt.Errorf("save event: %w", err)
+		if err := txn.BumpNonce(event.Owner); err != nil {
+			return fmt.Errorf("bump nonce: %w", err)
 		}
 
 		return nil
@@ -166,27 +153,12 @@ func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contrac
 
 	validatorShare := edh.shareMap.Get(event.PublicKey)
 
-	if event.Owner != validatorShare.OwnerAddress {
-		// Prevent multiple registration of the same validator with different owner address
-		// owner A registers validator with public key X (OK)
-		// owner B registers validator with public key X (NOT OK)
-		edh.logger.Warn("malformed ValidatorAdded event: validator share already exists with different owner address",
-			zap.String("expected", validatorShare.OwnerAddress.String()),
-			zap.String("got", event.Owner.String()))
-
-		if err := edh.saveEvent(txn, event); err != nil {
-			return fmt.Errorf("save event: %w", err)
-		}
-
-		return nil
-	}
-
 	if validatorShare == nil {
 		createdShare, err := edh.handleShareCreation(txn, event, sharePublicKeys, encryptedKeys)
 		if err != nil {
 			var malformedEventError *abiparser.MalformedEventError
 			if errors.As(err, &malformedEventError) {
-				edh.logger.Warn("malformed ValidatorAdded event", zap.Error(err))
+				edh.logger.Warn("malformed event", zap.Error(err))
 				return nil
 			}
 
@@ -196,30 +168,27 @@ func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contrac
 
 		validatorShare = createdShare
 
-		if err := edh.saveEvent(txn, event); err != nil {
-			return fmt.Errorf("save event: %w", err)
+		if err := txn.BumpNonce(event.Owner); err != nil {
+			return fmt.Errorf("bump nonce: %w", err)
 		}
+	} else if event.Owner != validatorShare.OwnerAddress {
+		// Prevent multiple registration of the same validator with different owner address
+		// owner A registers validator with public key X (OK)
+		// owner B registers validator with public key X (NOT OK)
+		edh.logger.Warn("malformed event: validator share already exists with different owner address",
+			zap.String("expected", validatorShare.OwnerAddress.String()),
+			zap.String("got", event.Owner.String()))
+
+		if err := txn.BumpNonce(event.Owner); err != nil {
+			return fmt.Errorf("bump nonce: %w", err)
+		}
+
+		return nil
 	}
 
 	isOperatorShare := validatorShare.BelongsToOperator(edh.operatorData.ID)
 	if isOperatorShare {
 		edh.metrics.ValidatorInactive(event.PublicKey)
-	}
-
-	return nil
-}
-
-func (edh *EventDataHandler) saveEvent(txn eventdb.RW, event *contract.ContractValidatorAdded) error {
-	if err := txn.SaveEventData(event.Raw.TxHash); err != nil {
-		wrappedErr := fmt.Errorf("could not save event data: %w", err)
-		if err == nil {
-			return wrappedErr
-		}
-		return err
-	}
-
-	if err := txn.BumpNonce(event.Owner); err != nil {
-		return fmt.Errorf("failed to bump the nonce: %w", err)
 	}
 
 	return nil
@@ -273,7 +242,6 @@ func (edh *EventDataHandler) handleShareCreation(
 	return share, nil
 }
 
-// TODO: consider getting rid of or refactoring
 func updateShareMetadata(share *ssvtypes.SSVShare, bc beaconprotocol.BeaconNode) (bool, error) {
 	pk := hex.EncodeToString(share.ValidatorPubKey)
 	results, err := beaconprotocol.FetchValidatorsMetadata(bc, [][]byte{share.ValidatorPubKey})
@@ -314,34 +282,37 @@ func validatorAddedEventToShare(
 			OperatorID: operatorID,
 			PubKey:     sharePublicKeys[i],
 		})
-		if operatorID == operatorData.ID {
-			validatorShare.OperatorID = operatorID
-			validatorShare.SharePubKey = sharePublicKeys[i]
 
-			operatorPrivateKey, found, err := shareEncryptionKeyProvider()
-			if err != nil {
-				return nil, nil, fmt.Errorf("could not get operator private key: %w", err)
-			}
-			if !found {
-				return nil, nil, errors.New("could not find operator private key")
-			}
+		if operatorID != operatorData.ID {
+			continue
+		}
 
-			shareSecret = &bls.SecretKey{}
-			decryptedSharePrivateKey, err := rsaencryption.DecodeKey(operatorPrivateKey, encryptedKeys[i])
-			if err != nil {
-				return nil, nil, &abiparser.MalformedEventError{
-					Err: fmt.Errorf("could not decrypt share private key: %w", err),
-				}
+		validatorShare.OperatorID = operatorID
+		validatorShare.SharePubKey = sharePublicKeys[i]
+
+		operatorPrivateKey, found, err := shareEncryptionKeyProvider()
+		if err != nil {
+			return nil, nil, fmt.Errorf("could not get operator private key: %w", err)
+		}
+		if !found {
+			return nil, nil, errors.New("could not find operator private key")
+		}
+
+		shareSecret = &bls.SecretKey{}
+		decryptedSharePrivateKey, err := rsaencryption.DecodeKey(operatorPrivateKey, encryptedKeys[i])
+		if err != nil {
+			return nil, nil, &abiparser.MalformedEventError{
+				Err: fmt.Errorf("could not decrypt share private key: %w", err),
 			}
-			if err = shareSecret.SetHexString(string(decryptedSharePrivateKey)); err != nil {
-				return nil, nil, &abiparser.MalformedEventError{
-					Err: fmt.Errorf("could not set decrypted share private key: %w", err),
-				}
+		}
+		if err = shareSecret.SetHexString(string(decryptedSharePrivateKey)); err != nil {
+			return nil, nil, &abiparser.MalformedEventError{
+				Err: fmt.Errorf("could not set decrypted share private key: %w", err),
 			}
-			if !bytes.Equal(shareSecret.GetPublicKey().Serialize(), validatorShare.SharePubKey) {
-				return nil, nil, &abiparser.MalformedEventError{
-					Err: errors.New("share private key does not match public key"),
-				}
+		}
+		if !bytes.Equal(shareSecret.GetPublicKey().Serialize(), validatorShare.SharePubKey) {
+			return nil, nil, &abiparser.MalformedEventError{
+				Err: errors.New("share private key does not match public key"),
 			}
 		}
 	}
@@ -359,13 +330,15 @@ func (edh *EventDataHandler) handleValidatorRemoved(txn eventdb.RW, event *contr
 		zap.String("owner_address", event.Owner.String()),
 		zap.Uint64s("operator_ids", event.OperatorIds),
 		fields.PubKey(event.PublicKey),
+		zap.String("event_type", EventType(3).String()),
 	)
-	logger.Info("processing ValidatorRemoved event")
+	logger.Debug("processing event")
+	defer func() { logger.Debug("processed event") }()
 
 	// TODO: handle metrics
 	share := edh.shareMap.Get(event.PublicKey)
 	if share == nil {
-		edh.logger.Warn("malformed ValidatorRemoved event: could not find validator share")
+		edh.logger.Warn("malformed event: could not find validator share")
 		return nil
 	}
 
@@ -375,7 +348,7 @@ func (edh *EventDataHandler) handleValidatorRemoved(txn eventdb.RW, event *contr
 	// owner A removes validator with public key X (OK)
 	// owner B removes validator with public key X (NOT OK)
 	if event.Owner != share.OwnerAddress {
-		edh.logger.Warn("validator share already exists with different owner address",
+		edh.logger.Warn("malformed event: validator share already exists with different owner address",
 			zap.String("expected", share.OwnerAddress.String()),
 			zap.String("got", event.Owner.String()))
 
@@ -404,10 +377,8 @@ func (edh *EventDataHandler) handleValidatorRemoved(txn eventdb.RW, event *contr
 	}
 
 	if isOperatorShare || edh.fullNode {
-		logger = logger.With(zap.String("validatorPubKey", hex.EncodeToString(share.ValidatorPubKey)))
+		logger = logger.With(zap.String("validator_pubkey", hex.EncodeToString(share.ValidatorPubKey)))
 	}
-
-	logger.Info("processed ValidatorRemoved event")
 
 	return nil
 }
@@ -416,8 +387,10 @@ func (edh *EventDataHandler) handleClusterLiquidated(txn eventdb.RW, event *cont
 	logger := edh.logger.With(
 		zap.String("owner_address", event.Owner.String()),
 		zap.Uint64s("operator_ids", event.OperatorIds),
+		zap.String("event_type", EventType(4).String()),
 	)
-	logger.Info("processing ClusterLiquidated event")
+	logger.Debug("processing event")
+	defer func() { logger.Debug("processed event") }()
 
 	toLiquidate, liquidatedPubKeys, err := edh.processClusterEvent(txn, event.Owner, event.OperatorIds, true)
 	if err != nil {
@@ -425,10 +398,8 @@ func (edh *EventDataHandler) handleClusterLiquidated(txn eventdb.RW, event *cont
 	}
 
 	if len(liquidatedPubKeys) > 0 {
-		logger = logger.With(zap.Strings("liquidatedValidators", liquidatedPubKeys))
+		logger = logger.With(zap.Strings("liquidated_validators", liquidatedPubKeys))
 	}
-
-	logger.Info("processed ClusterLiquidated event")
 
 	return toLiquidate, nil
 }
@@ -437,8 +408,10 @@ func (edh *EventDataHandler) handleClusterReactivated(txn eventdb.RW, event *con
 	logger := edh.logger.With(
 		zap.String("owner_address", event.Owner.String()),
 		zap.Uint64s("operator_ids", event.OperatorIds),
+		zap.String("event_type", EventType(5).String()),
 	)
-	logger.Info("processing ClusterReactivated event")
+	logger.Debug("processing event")
+	defer func() { logger.Debug("processed event") }()
 
 	toEnable, enabledPubKeys, err := edh.processClusterEvent(txn, event.Owner, event.OperatorIds, false)
 	if err != nil {
@@ -446,10 +419,8 @@ func (edh *EventDataHandler) handleClusterReactivated(txn eventdb.RW, event *con
 	}
 
 	if len(enabledPubKeys) > 0 {
-		logger = logger.With(zap.Strings("enabledValidators", enabledPubKeys))
+		logger = logger.With(zap.Strings("enabled_validators", enabledPubKeys))
 	}
-
-	logger.Info("processed ClusterReactivated event")
 
 	return toEnable, nil
 }
@@ -458,10 +429,12 @@ func (edh *EventDataHandler) handleFeeRecipientAddressUpdated(txn eventdb.RW, ev
 	logger := edh.logger.With(
 		zap.String("owner_address", event.Owner.String()),
 		fields.FeeRecipient(event.RecipientAddress.Bytes()),
+		zap.String("event_type", EventType(6).String()),
 	)
-	logger.Info("processing FeeRecipientAddressUpdated event")
+	logger.Debug("processing event")
+	defer func() { logger.Debug("processed event") }()
 
-	recipientData := &eventdb.RecipientData{
+	recipientData := &registrystorage.RecipientData{
 		Owner: event.Owner,
 	}
 	copy(recipientData.FeeRecipient[:], event.RecipientAddress.Bytes())
@@ -470,8 +443,6 @@ func (edh *EventDataHandler) handleFeeRecipientAddressUpdated(txn eventdb.RW, ev
 	if err != nil {
 		return false, fmt.Errorf("could not save recipient data: %w", err)
 	}
-
-	logger.Info("processed FeeRecipientAddressUpdated event")
 
 	return r != nil, nil
 }
@@ -491,7 +462,7 @@ func splitBytes(buf []byte, lim int) [][]byte {
 
 // verify signature of the ValidatorAddedEvent shares data
 // todo(align-contract-v0.3.1-rc.0): move to crypto package in ssv protocol?
-func verifySignature(sig []byte, owner ethcommon.Address, pubKey []byte, nonce eventdb.Nonce) error {
+func verifySignature(sig []byte, owner ethcommon.Address, pubKey []byte, nonce registrystorage.Nonce) error {
 	data := fmt.Sprintf("%s:%d", owner.String(), nonce)
 	hash := crypto.Keccak256([]byte(data))
 
