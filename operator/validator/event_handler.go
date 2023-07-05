@@ -218,11 +218,15 @@ func (c *controller) handleValidatorAddedEvent(
 	if isOperatorShare {
 		metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusInactive))
 		if ongoingSync {
-			if _, startErr := c.onShareStart(logger, validatorShare); startErr != nil {
+			started, startErr := c.onShareStart(logger, validatorShare)
+			if startErr != nil {
 				logger.Warn("could not start validator",
 					zap.String("pubkey", hex.EncodeToString(validatorShare.ValidatorPubKey)),
 					zap.Error(startErr),
 				)
+			}
+			if started {
+				c.indicesChange <- true
 			}
 		}
 	}
@@ -375,11 +379,15 @@ func (c *controller) handleClusterReactivatedEvent(
 	}
 
 	if ongoingSync && len(toEnable) > 0 {
+		var started bool
 		for _, share := range toEnable {
-			_, err = c.onShareStart(logger, share)
+			started, err = c.onShareStart(logger, share)
 			if err != nil {
 				logger.Warn("could not start validator", zap.String("pubkey", hex.EncodeToString(share.ValidatorPubKey)), zap.Error(err))
 			}
+		}
+		if started {
+			c.indicesChange <- true
 		}
 	}
 
