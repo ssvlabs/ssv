@@ -5,6 +5,7 @@ import (
 	"crypto/rsa"
 	"encoding/base64"
 	"fmt"
+	"github.com/bloxapp/ssv/logging/fields"
 	"time"
 
 	"github.com/bloxapp/ssv/network/records"
@@ -95,6 +96,9 @@ func RegisteredOperatorsFilter(logger *zap.Logger, nodeStorage storage.Storage, 
 		if !found || data == nil {
 			return errors.Wrap(err, "operator wasn't found, probably not registered to a contract")
 		}
+
+		logger.Info("Handshaking with this guy", fields.PeerID(sender), fields.OperatorID(data.ID))
+
 		return nil
 	}
 }

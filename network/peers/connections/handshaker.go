@@ -162,6 +162,9 @@ func (h *handshaker) verifyTheirNodeInfo(logger *zap.Logger, sender peer.ID, ani
 	}
 
 	h.nodeInfos.SetNodeInfo(sender, ani.GetNodeInfo())
+
+	logger.Info("Verified handshake nodeinfo ", fields.PeerID(sender), fields.OperatorIDStr(ani.GetNodeInfo().Metadata.OperatorID))
+
 	return nil
 }
 
