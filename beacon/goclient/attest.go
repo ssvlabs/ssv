@@ -1,8 +1,10 @@
 package goclient
 
 import (
+	"context"
 	"time"
 
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -10,8 +12,12 @@ import (
 	"github.com/pkg/errors"
 )
 
+// AttesterDuties returns attester duties for a given epoch.
+func (gc *goClient) AttesterDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error) {
+	return gc.client.AttesterDuties(ctx, epoch, validatorIndices)
+}
+
 func (gc *goClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (ssz.Marshaler, spec.DataVersion, error) {
-	gc.waitOneThirdOrValidBlock(slot)
 
 	startTime := time.Now()
 	attestationData, err := gc.client.AttestationData(gc.ctx, slot, committeeIndex)
