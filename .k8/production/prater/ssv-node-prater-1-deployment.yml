@@ -91,7 +91,7 @@ spec:
           - name: DB_REPORTING
             value: "false"
           - name: PUBSUB_TRACE
-            value: "false"
+            value: "true"
           - name: DISCOVERY_TYPE_KEY
             value: "discv5"
           - name: NETWORK
