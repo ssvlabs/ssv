@@ -2,12 +2,17 @@ package topics
 
 import (
 	"context"
+	"fmt"
 	"net"
+	"strconv"
+	"strings"
 	"time"
 
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/network/peers"
+	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/network/topics/params"
 	"github.com/bloxapp/ssv/utils/async"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -113,6 +118,8 @@ func NewPubsub(ctx context.Context, logger *zap.Logger, cfg *PububConfig, fork f
 		sf.(Whitelist).Register(topic)
 	}
 
+	// peerSubsCache := hashmap.New[string, string]()
+
 	psOpts := []pubsub.Option{
 		pubsub.WithSeenMessagesTTL(cfg.MsgIDCacheTTL),
 		pubsub.WithPeerOutboundQueueSize(cfg.OutboundQueueSize),
@@ -121,6 +128,44 @@ func NewPubsub(ctx context.Context, logger *zap.Logger, cfg *PububConfig, fork f
 		pubsub.WithSubscriptionFilter(sf),
 		pubsub.WithGossipSubParams(params.GossipSubParams()),
 		pubsub.WithMessageSignaturePolicy(pubsub.StrictNoSign),
+		pubsub.WithAppSpecificRpcInspector(func(pid peer.ID, r *pubsub.RPC) error {
+			subsKey := ""
+			subs := make(map[string]bool)
+			for _, s := range r.GetSubscriptions() {
+				subs[s.GetTopicid()] = s.GetSubscribe()
+				subsKey += fmt.Sprintf("%s:%t,", s.GetTopicid(), s.GetSubscribe())
+			}
+			// if v, ok := peerSubsCache.Get(pid.String()); ok && v == subsKey {
+			// 	// Subscriptions are the same, no need to inspect
+			// 	return nil
+			// }
+			// peerSubsCache.Set(pid.String(), subsKey)
+
+			subnets := make(records.Subnets, 128)
+			var errs []error
+			for topic, subscribe := range subs {
+				subnetStr := strings.Replace(topic, "ssv.v2.", "", 1)
+				subnet, err := strconv.Atoi(subnetStr)
+				if err == nil {
+					if subscribe {
+						subnets[subnet] = 1
+					}
+				} else {
+					errs = append(errs, err)
+				}
+			}
+			allSubnets, _ := records.Subnets{}.FromString(records.AllSubnets)
+			logger.Debug(
+				"got RPC from peer",
+				fields.PeerID(pid),
+				zap.Int("publish_messages", len(r.GetPublish())),
+				zap.Any("subscriptions", subs),
+				zap.String("subnets_hex", subnets.String()),
+				zap.Ints("subnets", records.SharedSubnets(allSubnets, subnets, 128)),
+				zap.Errors("errors", errs),
+			)
+			return nil
+		}),
 		// pubsub.WithPeerFilter(func(pid peer.ID, topic string) bool {
 		//	logger.Debug("pubsubTrace: filtering peer", zap.String("id", pid.String()), zap.String("topic", topic))
 		//	return true

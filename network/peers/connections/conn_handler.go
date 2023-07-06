@@ -93,6 +93,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 		// Connection is inbound -> Wait for successful handshake request.
 		if conn.Stat().Direction == network.DirInbound {
 			// Wait for peer to initiate handshake.
+			logger.Debug("waiting for peer to initiate handshake")
 			start := time.Now()
 			deadline := time.NewTimer(20 * time.Second)
 			ticker := time.NewTicker(1 * time.Second)
@@ -104,10 +105,6 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 				case <-deadline.C:
 					return errors.New("peer hasn't sent a handshake request")
 				case <-ticker.C:
-					if net.Connectedness(pid) != network.Connected {
-						return errors.New("lost connection")
-					}
-
 					// Check if peer has sent a handshake request.
 					if pi := ch.peerInfos.PeerInfo(pid); pi != nil && pi.LastHandshake.After(start) {
 						if pi.LastHandshakeError != nil {
@@ -117,6 +114,10 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 
 						// Handshake succeeded.
 						break Wait
+					}
+
+					if net.Connectedness(pid) != network.Connected {
+						return errors.New("lost connection")
 					}
 				}
 			}
@@ -128,6 +129,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 		}
 
 		// Connection is outbound -> Initiate handshake.
+		logger.Debug("initiating handshake")
 		ch.peerInfos.SetState(pid, peers.StateConnecting)
 		err := ch.handshaker.Handshake(logger, conn)
 		if err != nil {
