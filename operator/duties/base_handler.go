@@ -21,7 +21,7 @@ type DutyExecutor interface {
 }
 
 type dutyHandler interface {
-	Setup(beaconprotocol.BeaconNode, networkconfig.NetworkConfig, validator.Controller, ValidatorIndicesFetcher, ExecuteDutiesFunc, chan phase0.Slot, chan ReorgEvent, chan bool)
+	Setup(beaconprotocol.BeaconNode, networkconfig.NetworkConfig, ValidatorIndicesFetcher, ExecuteDutiesFunc, chan phase0.Slot, chan ReorgEvent, chan bool)
 	HandleDuties(context.Context, *zap.Logger)
 	Name() string
 	IndicesChangeChannel() chan bool
@@ -46,7 +46,6 @@ type baseHandler struct {
 func (h *baseHandler) Setup(
 	beaconNode beaconprotocol.BeaconNode,
 	network networkconfig.NetworkConfig,
-	validatorController validator.Controller,
 	indicesFetcher ValidatorIndicesFetcher,
 	executeDuties ExecuteDutiesFunc,
 	ticker chan phase0.Slot,
@@ -55,7 +54,6 @@ func (h *baseHandler) Setup(
 ) {
 	h.beaconNode = beaconNode
 	h.network = network
-	h.validatorController = validatorController
 	h.indicesFetcher = indicesFetcher
 	h.executeDuties = executeDuties
 	h.ticker = ticker

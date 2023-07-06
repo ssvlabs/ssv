@@ -110,7 +110,7 @@ func (s *Scheduler) Run(ctx context.Context, logger *zap.Logger) error {
 
 		indicesChangeCh := make(chan bool)
 		reorgCh := make(chan ReorgEvent)
-		handler.Setup(s.beaconNode, s.network, s.validatorController, s.indicesFetcher, s.ExecuteDuties, slotTicker, reorgCh, indicesChangeCh)
+		handler.Setup(s.beaconNode, s.network, s.indicesFetcher, s.ExecuteDuties, slotTicker, reorgCh, indicesChangeCh)
 
 		wg.Add(1)
 		go func(h dutyHandler) {
