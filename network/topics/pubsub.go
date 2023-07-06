@@ -22,8 +22,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-
-	logging "github.com/ipfs/go-log/v2"
 )
 
 const (
@@ -213,10 +211,10 @@ func NewPubsub(ctx context.Context, logger *zap.Logger, cfg *PububConfig, fork f
 	}
 
 	//TODO: REVERT
-	err := logging.SetLogLevel("pubsub", "debug")
-	if err != nil {
-		return nil, nil, err
-	}
+	// err := logging.SetLogLevel("pubsub", "debug")
+	// if err != nil {
+	// 	return nil, nil, err
+	// }
 
 	ps, err := pubsub.NewGossipSub(ctx, cfg.Host, psOpts...)
 	if err != nil {
