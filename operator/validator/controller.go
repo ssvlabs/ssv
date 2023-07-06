@@ -107,7 +107,7 @@ type Controller interface {
 	GetOperatorData() *registrystorage.OperatorData
 	//OnFork(forkVersion forksprotocol.ForkVersion) error
 
-	GetIndicesChangeChan() chan bool
+	IndicesChangeChan() chan bool
 }
 
 // EventHandler represents the interface for compatible storage event handlers
@@ -279,7 +279,7 @@ func (c *controller) GetOperatorData() *registrystorage.OperatorData {
 	return c.operatorData
 }
 
-func (c *controller) GetIndicesChangeChan() chan bool {
+func (c *controller) IndicesChangeChan() chan bool {
 	return c.indicesChange
 }
 
