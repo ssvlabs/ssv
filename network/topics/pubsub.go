@@ -159,6 +159,7 @@ func NewPubsub(ctx context.Context, logger *zap.Logger, cfg *PububConfig, fork f
 			logger.Debug(
 				"got RPC from peer",
 				fields.PeerID(pid),
+				zap.Int("subscriptions_len", len(r.GetSubscriptions())),
 				zap.Int("publish_messages", len(r.GetPublish())),
 				zap.Any("subscriptions", subs),
 				zap.String("subnets_hex", subnets.String()),
