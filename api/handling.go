@@ -1,8 +1,9 @@
 package api
 
 import (
-	"github.com/go-chi/render"
 	"net/http"
+
+	"github.com/go-chi/render"
 )
 
 type HandlerFunc func(http.ResponseWriter, *http.Request) error
@@ -19,4 +20,9 @@ func Handler(h HandlerFunc) http.HandlerFunc {
 			}
 		}
 	}
+}
+
+func Render(w http.ResponseWriter, r *http.Request, response any) error {
+	render.JSON(w, r, response)
+	return nil
 }
