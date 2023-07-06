@@ -10,12 +10,17 @@ import (
 )
 
 type TopicIndex interface {
-	PeersByTopic() map[string][]peer.ID
+	PeersByTopic() ([]peer.ID, map[string][]peer.ID)
 }
 type Handler struct {
 	PeersIndex networkpeers.Index
 	Network    network.Network
 	TopicIndex TopicIndex
+}
+
+type AllPeersAndTopicsJSON struct {
+	AllPeers     []peer.ID        `json:"all_peers"`
+	PeersByTopic []topicIndexJSON `json:"peers_by_topic"`
 }
 
 type topicIndexJSON struct {
@@ -91,12 +96,15 @@ func (h *Handler) Peers(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (h *Handler) Topics(w http.ResponseWriter, r *http.Request) error {
-	peerbytpc := h.TopicIndex.PeersByTopic()
+	allpeers, peerbytpc := h.TopicIndex.PeersByTopic()
+	alland := AllPeersAndTopicsJSON{}
 	tpcs := []topicIndexJSON{}
 	for topic, peerz := range peerbytpc {
 		tpcs = append(tpcs, topicIndexJSON{TopicName: topic, Peers: peerz})
 	}
+	alland.AllPeers = allpeers
+	alland.PeersByTopic = tpcs
 
-	render.JSON(w, r, tpcs)
+	render.JSON(w, r, alland)
 	return nil
 }

@@ -109,7 +109,7 @@ func (n *p2pNetwork) PeersIndex() peers.Index {
 	return n.idx
 }
 
-func (n *p2pNetwork) PeersByTopic() map[string][]peer.ID {
+func (n *p2pNetwork) PeersByTopic() ([]peer.ID, map[string][]peer.ID) {
 	var err error
 	tpcs := n.topicsCtrl.Topics()
 	peerz := make(map[string][]peer.ID, len(tpcs))
@@ -117,10 +117,15 @@ func (n *p2pNetwork) PeersByTopic() map[string][]peer.ID {
 		peerz[tpc], err = n.topicsCtrl.Peers(tpc)
 		if err != nil {
 			n.interfaceLogger.Error("Cant get peers from topics")
-			return nil
+			return nil, nil
 		}
 	}
-	return peerz
+	allpeers, err := n.topicsCtrl.Peers("")
+	if err != nil {
+		n.interfaceLogger.Error("Cant all peers")
+		return nil, nil
+	}
+	return allpeers, peerz
 }
 
 // Close implements io.Closer
