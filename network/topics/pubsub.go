@@ -15,6 +15,7 @@ import (
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/network/topics/params"
 	"github.com/bloxapp/ssv/utils/async"
+	"github.com/cornelk/hashmap"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -118,7 +119,7 @@ func NewPubsub(ctx context.Context, logger *zap.Logger, cfg *PububConfig, fork f
 		sf.(Whitelist).Register(topic)
 	}
 
-	// peerSubsCache := hashmap.New[string, string]()
+	peerSubsCache := hashmap.New[string, string]()
 
 	psOpts := []pubsub.Option{
 		pubsub.WithSeenMessagesTTL(cfg.MsgIDCacheTTL),
@@ -129,17 +130,17 @@ func NewPubsub(ctx context.Context, logger *zap.Logger, cfg *PububConfig, fork f
 		pubsub.WithGossipSubParams(params.GossipSubParams()),
 		pubsub.WithMessageSignaturePolicy(pubsub.StrictNoSign),
 		pubsub.WithAppSpecificRpcInspector(func(pid peer.ID, r *pubsub.RPC) error {
-			subsKey := ""
+			subsHash := ""
 			subs := make(map[string]bool)
 			for _, s := range r.GetSubscriptions() {
 				subs[s.GetTopicid()] = s.GetSubscribe()
-				subsKey += fmt.Sprintf("%s:%t,", s.GetTopicid(), s.GetSubscribe())
+				subsHash += fmt.Sprintf("%s:%t,", s.GetTopicid(), s.GetSubscribe())
 			}
-			// if v, ok := peerSubsCache.Get(pid.String()); ok && v == subsKey {
-			// 	// Subscriptions are the same, no need to inspect
-			// 	return nil
-			// }
-			// peerSubsCache.Set(pid.String(), subsKey)
+			if v, ok := peerSubsCache.Get(pid.String()); ok && v == subsHash {
+				// Subscriptions are the same, no need to inspect
+				return nil
+			}
+			peerSubsCache.Set(pid.String(), subsHash)
 
 			subnets := make(records.Subnets, 128)
 			var errs []error
