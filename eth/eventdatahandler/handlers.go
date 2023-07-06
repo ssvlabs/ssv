@@ -339,6 +339,7 @@ func (edh *EventDataHandler) handleValidatorRemoved(txn eventdb.RW, event *contr
 	share := edh.shareMap.Get(event.PublicKey)
 	if share == nil {
 		edh.logger.Warn("malformed event: could not find validator share")
+		edh.metrics.ValidatorError(event.PublicKey)
 		return nil
 	}
 
