@@ -23,6 +23,7 @@ import (
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
+	validator2 "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
@@ -41,8 +42,7 @@ type SchedulerOptions struct {
 type Scheduler struct {
 	beaconNode          beaconprotocol.BeaconNode
 	network             networkconfig.NetworkConfig
-	validatorController validator.Controller
-	indicesFetcher      ValidatorIndicesFetcher
+	validatorController ValidatorController
 	slotTicker          slot_ticker.Ticker
 	executor            DutyExecutor
 
@@ -57,8 +57,16 @@ type Scheduler struct {
 	builderProposals          bool
 }
 
-type ValidatorIndicesFetcher interface {
+// DutyExecutor represents the component that executes duties
+type DutyExecutor interface {
+	ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) error
+}
+
+// ValidatorController represents the component that controls validators via the scheduler
+type ValidatorController interface {
 	ActiveIndices(logger *zap.Logger, epoch phase0.Epoch) []phase0.ValidatorIndex
+	GetValidator(pubKey string) (*validator2.Validator, bool)
+	IndicesChangeChan() chan bool
 }
 
 func NewScheduler(opts *SchedulerOptions) Scheduler {
@@ -67,7 +75,6 @@ func NewScheduler(opts *SchedulerOptions) Scheduler {
 		network:             opts.Network,
 		slotTicker:          opts.Ticker,
 		executor:            opts.Executor,
-		indicesFetcher:      opts.ValidatorController,
 		validatorController: opts.ValidatorController,
 		builderProposals:    opts.BuilderProposals,
 	}
@@ -110,7 +117,7 @@ func (s *Scheduler) Run(ctx context.Context, logger *zap.Logger) error {
 
 		indicesChangeCh := make(chan bool)
 		reorgCh := make(chan ReorgEvent)
-		handler.Setup(s.beaconNode, s.network, s.indicesFetcher, s.ExecuteDuties, slotTicker, reorgCh, indicesChangeCh)
+		handler.Setup(s.beaconNode, s.network, s.validatorController, s.ExecuteDuties, slotTicker, reorgCh, indicesChangeCh)
 
 		wg.Add(1)
 		go func(h dutyHandler) {
@@ -120,7 +127,7 @@ func (s *Scheduler) Run(ctx context.Context, logger *zap.Logger) error {
 	}
 
 	go func() {
-		for change := range s.validatorController.GetIndicesChangeChan() {
+		for change := range s.validatorController.IndicesChangeChan() {
 			for _, h := range handlers {
 				h.IndicesChangeChannel() <- change
 			}
@@ -225,7 +232,7 @@ func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []*spectypes.Duty) 
 
 		dutyToExecute := duty
 		go func() {
-			err := s.executeDuty(loggerWithContext, dutyToExecute)
+			err := s.ExecuteDuty(loggerWithContext, dutyToExecute)
 			if err != nil {
 				loggerWithContext.Error("failed to execute duty", zap.Error(err))
 			}
@@ -233,7 +240,7 @@ func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []*spectypes.Duty) 
 	}
 }
 
-func (s *Scheduler) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
+func (s *Scheduler) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 	if s.executor != nil {
 		// enables to work with a custom executor, e.g. readOnlyDutyExec
 		return s.executor.ExecuteDuty(logger, duty)

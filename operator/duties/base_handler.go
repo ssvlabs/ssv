@@ -15,13 +15,8 @@ import (
 // ExecuteDutiesFunc is a non-blocking functions which executes the given duties.
 type ExecuteDutiesFunc func(logger *zap.Logger, duties []*spectypes.Duty)
 
-// DutyExecutor represents the component that executes duties
-type DutyExecutor interface {
-	ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) error
-}
-
 type dutyHandler interface {
-	Setup(beaconprotocol.BeaconNode, networkconfig.NetworkConfig, ValidatorIndicesFetcher, ExecuteDutiesFunc, chan phase0.Slot, chan ReorgEvent, chan bool)
+	Setup(beaconprotocol.BeaconNode, networkconfig.NetworkConfig, ValidatorController, ExecuteDutiesFunc, chan phase0.Slot, chan ReorgEvent, chan bool)
 	HandleDuties(context.Context, *zap.Logger)
 	Name() string
 	IndicesChangeChannel() chan bool
@@ -32,7 +27,7 @@ type baseHandler struct {
 	beaconNode          beaconprotocol.BeaconNode
 	network             networkconfig.NetworkConfig
 	validatorController validator.Controller
-	indicesFetcher      ValidatorIndicesFetcher
+	indicesFetcher      ValidatorController
 	executeDuties       ExecuteDutiesFunc
 	ticker              chan phase0.Slot
 
@@ -46,7 +41,7 @@ type baseHandler struct {
 func (h *baseHandler) Setup(
 	beaconNode beaconprotocol.BeaconNode,
 	network networkconfig.NetworkConfig,
-	indicesFetcher ValidatorIndicesFetcher,
+	indicesFetcher ValidatorController,
 	executeDuties ExecuteDutiesFunc,
 	ticker chan phase0.Slot,
 	reorgEvents chan ReorgEvent,
