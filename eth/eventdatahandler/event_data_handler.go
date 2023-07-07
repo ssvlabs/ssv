@@ -2,11 +2,13 @@ package eventdatahandler
 
 import (
 	"crypto/rsa"
+	"encoding/hex"
 	"fmt"
 	"math/big"
 
 	"github.com/bloxapp/ssv-spec/types"
 	ethabi "github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"go.uber.org/zap"
 
@@ -14,6 +16,7 @@ import (
 	"github.com/bloxapp/ssv/eth/eventbatcher"
 	"github.com/bloxapp/ssv/eth/eventdb"
 	"github.com/bloxapp/ssv/eth/executionclient"
+	"github.com/bloxapp/ssv/eth/localevents"
 	"github.com/bloxapp/ssv/eth/sharemap"
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging/fields"
@@ -107,12 +110,12 @@ func (edh *EventDataHandler) HandleBlockEventsStream(blockEventsCh <-chan eventb
 
 		cleanTaskList := cleanTaskList(tasks)
 		for _, task := range cleanTaskList {
-			edh.logger.Debug("going to execute task ", zap.String("event_type", task.EventType.String()),  zap.String("contract_address", task.Ev.Address.Hex()), zap.Uint64("block_number", task.Ev.BlockNumber))
+			edh.logger.Debug("going to execute task ", zap.String("event_type", task.EventType.String()), zap.String("contract_address", task.Ev.Address.Hex()), zap.Uint64("block_number", task.Ev.BlockNumber))
 			if err := task.Execute(); err != nil {
 				// TODO: We log failed task until we discuss how we want to handle this case. We likely need to crash the node in this case.
 				edh.logger.Error("failed to execute task", zap.Error(err), zap.String("event_type", task.EventType.String()), zap.Uint64("block_number", task.Ev.BlockNumber))
 			} else {
-				edh.logger.Debug("executed task ", zap.String("event_type", task.EventType.String()),  zap.String("contract_address", task.Ev.Address.Hex()), zap.Uint64("block_number", task.Ev.BlockNumber))
+				edh.logger.Debug("executed task ", zap.String("event_type", task.EventType.String()), zap.String("contract_address", task.Ev.Address.Hex()), zap.Uint64("block_number", task.Ev.BlockNumber))
 			}
 		}
 
@@ -291,4 +294,80 @@ func cleanTaskList(tasks []*Task) []*Task {
 		resTask = append(resTask, task)
 	}
 	return resTask
+}
+
+func (edh *EventDataHandler) HandleLocalEventsStream(localEventsCh <-chan []localevents.LocalEvent, executeTasks bool) error {
+
+	for localevents := range localEventsCh {
+
+		tasks, err := edh.processLocalEvents(localevents)
+		if err != nil {
+			return fmt.Errorf("process local events: %w", err)
+		}
+
+		if !executeTasks || len(tasks) == 0 {
+			continue
+		}
+
+		cleanTaskList := cleanTaskList(tasks)
+		for _, task := range cleanTaskList {
+			edh.logger.Debug("going to execute task ", zap.String("event_type", task.EventType.String()), zap.String("contract_address", task.Ev.Address.Hex()), zap.Uint64("block_number", task.Ev.BlockNumber))
+			if err := task.Execute(); err != nil {
+				// TODO: We log failed task until we discuss how we want to handle this case. We likely need to crash the node in this case.
+				edh.logger.Error("failed to execute task", zap.Error(err), zap.String("event_type", task.EventType.String()), zap.Uint64("block_number", task.Ev.BlockNumber))
+			} else {
+				edh.logger.Debug("executed task ", zap.String("event_type", task.EventType.String()), zap.String("contract_address", task.Ev.Address.Hex()), zap.Uint64("block_number", task.Ev.BlockNumber))
+			}
+		}
+
+		edh.logger.Info("task execution finished")
+	}
+
+	return nil
+}
+
+func (edh *EventDataHandler) processLocalEvent(txn eventdb.RW, event localevents.LocalEvent) (*Task, error) {
+	switch event.Name {
+	case "OperatorAdded":
+		e := event.Data.(localevents.OperatorAddedEventYAML)
+		var operatorAddedEvent *contract.ContractOperatorAdded
+		operatorAddedEvent.OperatorId = e.ID
+		operatorAddedEvent.Owner = common.HexToAddress(e.Owner)
+		pub, err := hex.DecodeString(e.PublicKey)
+		if err != nil {
+			return nil, err
+		}
+		operatorAddedEvent.PublicKey = pub
+		if err := edh.handleOperatorAdded(txn, operatorAddedEvent); err != nil {
+			return nil, fmt.Errorf("handle OperatorAdded: %w", err)
+		}
+
+		return nil, nil
+	default:
+		edh.logger.Warn("unknown event name", fields.Name(event.Name))
+		return nil, nil
+	}
+}
+
+func (edh *EventDataHandler) processLocalEvents(localEvents []localevents.LocalEvent) ([]*Task, error) {
+	txn := edh.eventDB.RWTxn()
+	defer txn.Discard()
+
+	var tasks []*Task
+	for _, event := range localEvents {
+		task, err := edh.processLocalEvent(txn, event)
+		if err != nil {
+			return nil, err
+		}
+
+		if task != nil {
+			tasks = append(tasks, task)
+		}
+	}
+
+	if err := txn.Commit(); err != nil {
+		return nil, fmt.Errorf("commit transaction: %w", err)
+	}
+
+	return tasks, nil
 }
