@@ -21,6 +21,10 @@ spec:
       protocol: TCP
       targetPort: 15019
       name: port-15019
+    - port: 16019
+      protocol: TCP
+      targetPort: 16019
+      name: port-16019
   selector:
     app: ssv-node-mainnet-3
 ---
@@ -76,6 +80,9 @@ spec:
         - containerPort: 15019
           name: port-15019
           hostPort: 15019
+        - containerPort: 16019
+          name: port-16019
+          hostPort: 16019
         env:
           - name: SHARE_CONFIG
             value: "./data1/share.yaml"
@@ -99,6 +106,8 @@ spec:
             value: "./data/db-mainnet"
           - name: METRICS_API_PORT
             value: "15019"
+          - name: SSV_API_PORT
+            value: "16019"
           - name: ENABLE_PROFILE
             value: "true"
         volumeMounts:
