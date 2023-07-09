@@ -15,6 +15,7 @@ import (
 
 var BaseValidator = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) *validator.Validator {
 	ctx, cancel := context.WithCancel(context.TODO())
+
 	return validator.NewValidator(
 		ctx,
 		cancel,

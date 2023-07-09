@@ -21,6 +21,10 @@ spec:
       protocol: TCP
       targetPort: 15010
       name: port-15010
+    - port: 16010
+      protocol: TCP
+      targetPort: 16010
+      name: port-16010
   selector:
     app: ssv-node-10
 ---
@@ -72,6 +76,9 @@ spec:
         - containerPort: 15010
           name: port-15010
           hostPort: 15010
+        - containerPort: 16010
+          name: port-16010
+          hostPort: 16010
         env:
         - name: SHARE_CONFIG
           value: "./data/share.yaml"
@@ -106,6 +113,8 @@ spec:
           value: "false"
         - name: METRICS_API_PORT
           value: "15010"
+        - name: SSV_API_PORT
+          value: "16010"
         - name: ENABLE_PROFILE
           value: "true"
         - name: DISCOVERY_TRACE

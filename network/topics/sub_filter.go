@@ -43,13 +43,13 @@ func (sf *subFilter) CanSubscribe(topic string) bool {
 // FilterIncomingSubscriptions is invoked for all RPCs containing subscription notifications.
 // It should filter only the subscriptions of interest and my return an error if (for instance)
 // there are too many subscriptions.
-func (sf *subFilter) FilterIncomingSubscriptions(pi peer.ID, subs []*ps_pb.RPC_SubOpts) ([]*ps_pb.RPC_SubOpts, error) {
+func (sf *subFilter) FilterIncomingSubscriptions(pi peer.ID, subs []*ps_pb.RPC_SubOpts) (res []*ps_pb.RPC_SubOpts, err error) {
 	if len(subs) > subscriptionRequestLimit {
-		return nil, pubsub.ErrTooManySubscriptions
+		err = pubsub.ErrTooManySubscriptions
+		return
 	}
 
-	res := pubsub.FilterSubscriptions(subs, sf.CanSubscribe)
-
+	res = pubsub.FilterSubscriptions(subs, sf.CanSubscribe)
 	return res, nil
 }
 

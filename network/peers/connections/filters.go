@@ -95,6 +95,7 @@ func RegisteredOperatorsFilter(logger *zap.Logger, nodeStorage storage.Storage, 
 		if !found || data == nil {
 			return errors.Wrap(err, "operator wasn't found, probably not registered to a contract")
 		}
+
 		return nil
 	}
 }
