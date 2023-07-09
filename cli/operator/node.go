@@ -8,6 +8,8 @@ import (
 	"time"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/api/handlers"
+	apiserver "github.com/bloxapp/ssv/api/server"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -18,7 +20,7 @@ import (
 	"github.com/bloxapp/ssv/ekm"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/goeth"
-	"github.com/bloxapp/ssv/exporter/api"
+	exporterapi "github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/api/decided"
 	ssv_identity "github.com/bloxapp/ssv/identity"
 	"github.com/bloxapp/ssv/logging"
@@ -53,12 +55,14 @@ type config struct {
 
 	OperatorPrivateKey         string `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
 	GenerateOperatorPrivateKey bool   `yaml:"GenerateOperatorPrivateKey" env:"GENERATE_OPERATOR_KEY" env-description:"Whether to generate operator key if none is passed by config"`
-	MetricsAPIPort             int    `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"port of metrics api"`
+	MetricsAPIPort             int    `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port to listen on for the metrics API."`
 	EnableProfile              bool   `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
 	NetworkPrivateKey          string `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
 
-	WsAPIPort int  `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"port of WS API"`
+	WsAPIPort int  `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"Port to listen on for the websocket API."`
 	WithPing  bool `yaml:"WithPing" env:"WITH_PING" env-description:"Whether to send websocket ping messages'"`
+
+	SSVAPIPort int `yaml:"SSVAPIPort" env:"SSV_API_PORT" env-description:"Port to listen on for the SSV API."`
 
 	LocalEventsPath string `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"path to local events"`
 }
@@ -148,7 +152,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.GasLimit = cfg.ETH2Options.GasLimit
 
 		if cfg.WsAPIPort != 0 {
-			ws := api.NewWsServer(cmd.Context(), nil, http.NewServeMux(), cfg.WithPing)
+			ws := exporterapi.NewWsServer(cmd.Context(), nil, http.NewServeMux(), cfg.WithPing)
 			cfg.SSVOptions.WS = ws
 			cfg.SSVOptions.WsAPIPort = cfg.WsAPIPort
 			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(logger, ws)
@@ -197,6 +201,29 @@ var StartNodeCmd = &cobra.Command{
 		if err := p2pNetwork.Start(logger); err != nil {
 			logger.Fatal("failed to start network", zap.Error(err))
 		}
+
+		if cfg.SSVAPIPort > 0 {
+			apiServer := apiserver.New(
+				logger,
+				fmt.Sprintf(":%d", cfg.SSVAPIPort),
+				&handlers.Node{
+					// TODO: replace with narrower interface! (instead of accessing the entire PeersIndex)
+					PeersIndex: p2pNetwork.(p2pv1.PeersIndexProvider).PeersIndex(),
+					Network:    p2pNetwork.(p2pv1.HostProvider).Host().Network(),
+					TopicIndex: p2pNetwork.(handlers.TopicIndex),
+				},
+				&handlers.Validators{
+					Shares: nodeStorage.Shares(),
+				},
+			)
+			go func() {
+				err := apiServer.Run()
+				if err != nil {
+					logger.Fatal("failed to start API server", zap.Error(err))
+				}
+			}()
+		}
+
 		if err := operatorNode.Start(logger); err != nil {
 			logger.Fatal("failed to start SSV node", zap.Error(err))
 		}
@@ -209,7 +236,8 @@ func init() {
 
 func setupGlobal(cmd *cobra.Command) (*zap.Logger, error) {
 	commons.SetBuildData(cmd.Parent().Short, cmd.Parent().Version)
-	log.Printf("starting %s", commons.GetBuildData())
+	log.Printf("starting SSV node (version %s)", commons.GetBuildData())
+
 	if globalArgs.ConfigPath != "" {
 		if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
 			return nil, fmt.Errorf("could not read config: %w", err)

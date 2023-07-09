@@ -104,6 +104,30 @@ func (n *p2pNetwork) Host() host.Host {
 	return n.host
 }
 
+// PeersIndex returns the peers index
+func (n *p2pNetwork) PeersIndex() peers.Index {
+	return n.idx
+}
+
+func (n *p2pNetwork) PeersByTopic() ([]peer.ID, map[string][]peer.ID) {
+	var err error
+	tpcs := n.topicsCtrl.Topics()
+	peerz := make(map[string][]peer.ID, len(tpcs))
+	for _, tpc := range tpcs {
+		peerz[tpc], err = n.topicsCtrl.Peers(tpc)
+		if err != nil {
+			n.interfaceLogger.Error("Cant get peers from topics")
+			return nil, nil
+		}
+	}
+	allpeers, err := n.topicsCtrl.Peers("")
+	if err != nil {
+		n.interfaceLogger.Error("Cant all peers")
+		return nil, nil
+	}
+	return allpeers, peerz
+}
+
 // Close implements io.Closer
 func (n *p2pNetwork) Close() error {
 	atomic.SwapInt32(&n.state, stateClosing)
