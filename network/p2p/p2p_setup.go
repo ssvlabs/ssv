@@ -212,8 +212,8 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 
 	handshaker := connections.NewHandshaker(n.ctx, &connections.HandshakerCfg{
 		Streams:         n.streamCtrl,
-		NodeInfoIdx:     n.idx,
-		States:          n.idx,
+		NodeInfos:       n.idx,
+		PeerInfos:       n.idx,
 		ConnIdx:         n.idx,
 		SubnetsIdx:      n.idx,
 		IDService:       ids,
@@ -226,7 +226,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler(logger))
 	logger.Debug("handshaker is ready")
 
-	n.connHandler = connections.NewConnHandler(n.ctx, handshaker, subnetsProvider, n.idx, n.idx)
+	n.connHandler = connections.NewConnHandler(n.ctx, handshaker, subnetsProvider, n.idx, n.idx, n.idx)
 	n.host.Network().Notify(n.connHandler.Handle(logger))
 	logger.Debug("connection handler is ready")
 
