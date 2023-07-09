@@ -100,11 +100,14 @@ func (pi *peerInfoIndex) UpdatePeerInfo(id peer.ID, update func(*PeerInfo)) {
 	pi.mutex.Lock()
 	defer pi.mutex.Unlock()
 
-	info, ok := pi.store[id]
-	if !ok {
+	info := pi.store[id]
+	if info == nil {
 		info = &PeerInfo{
 			ID: id,
 		}
+	} else {
+		cpy := *info
+		info = &cpy
 	}
 	update(info)
 	pi.store[id] = info
