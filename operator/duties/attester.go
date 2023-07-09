@@ -172,7 +172,7 @@ func (h *AttesterHandler) processExecution(logger *zap.Logger, epoch phase0.Epoc
 
 func (h *AttesterHandler) fetchDuties(ctx context.Context, logger *zap.Logger, epoch phase0.Epoch) error {
 	start := time.Now()
-	indices := h.indicesFetcher.ActiveIndices(logger, epoch)
+	indices := h.validatorController.ActiveIndices(logger, epoch)
 	duties, err := h.beaconNode.AttesterDuties(ctx, epoch, indices)
 	if err != nil {
 		return errors.Wrap(err, "failed to fetch attester duties")

@@ -8,7 +8,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/operator/validator"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
@@ -26,8 +25,7 @@ type dutyHandler interface {
 type baseHandler struct {
 	beaconNode          beaconprotocol.BeaconNode
 	network             networkconfig.NetworkConfig
-	validatorController validator.Controller
-	indicesFetcher      ValidatorController
+	validatorController ValidatorController
 	executeDuties       ExecuteDutiesFunc
 	ticker              chan phase0.Slot
 
@@ -41,7 +39,7 @@ type baseHandler struct {
 func (h *baseHandler) Setup(
 	beaconNode beaconprotocol.BeaconNode,
 	network networkconfig.NetworkConfig,
-	indicesFetcher ValidatorController,
+	validatorController ValidatorController,
 	executeDuties ExecuteDutiesFunc,
 	ticker chan phase0.Slot,
 	reorgEvents chan ReorgEvent,
@@ -49,7 +47,7 @@ func (h *baseHandler) Setup(
 ) {
 	h.beaconNode = beaconNode
 	h.network = network
-	h.indicesFetcher = indicesFetcher
+	h.validatorController = validatorController
 	h.executeDuties = executeDuties
 	h.ticker = ticker
 	h.reorg = reorgEvents

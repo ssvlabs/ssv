@@ -202,7 +202,7 @@ func (h *SyncCommitteeHandler) fetchDuties(ctx context.Context, logger *zap.Logg
 	}
 	lastEpoch := h.network.Beacon.FirstEpochOfSyncPeriod(period+1) - 1
 
-	indices := h.indicesFetcher.ActiveIndices(logger, firstEpoch)
+	indices := h.validatorController.ActiveIndices(logger, firstEpoch)
 	duties, err := h.beaconNode.SyncCommitteeDuties(ctx, firstEpoch, indices)
 	if err != nil {
 		return errors.Wrap(err, "failed to fetch syncCommittee duties")

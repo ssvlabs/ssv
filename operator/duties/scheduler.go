@@ -19,7 +19,6 @@ import (
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/slot_ticker"
-	"github.com/bloxapp/ssv/operator/validator"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
@@ -31,7 +30,7 @@ type SchedulerOptions struct {
 	Ctx                 context.Context
 	BeaconClient        beaconprotocol.BeaconNode
 	Network             networkconfig.NetworkConfig
-	ValidatorController validator.Controller
+	ValidatorController ValidatorController
 	Executor            DutyExecutor
 	//DutyLimit           uint64
 	Ticker           slot_ticker.Ticker
@@ -67,6 +66,7 @@ type ValidatorController interface {
 	ActiveIndices(logger *zap.Logger, epoch phase0.Epoch) []phase0.ValidatorIndex
 	GetValidator(pubKey string) (*validator2.Validator, bool)
 	IndicesChangeChan() chan bool
+	GetOperatorShares() []*types.SSVShare
 }
 
 func NewScheduler(opts *SchedulerOptions) Scheduler {
