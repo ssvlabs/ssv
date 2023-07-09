@@ -2,20 +2,14 @@ package topics
 
 import (
 	"context"
-	"fmt"
 	"net"
-	"strconv"
-	"strings"
 	"time"
 
-	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/network/peers"
-	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/network/topics/params"
 	"github.com/bloxapp/ssv/utils/async"
-	"github.com/cornelk/hashmap"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -119,8 +113,6 @@ func NewPubsub(ctx context.Context, logger *zap.Logger, cfg *PububConfig, fork f
 		sf.(Whitelist).Register(topic)
 	}
 
-	peerSubsCache := hashmap.New[string, string]()
-
 	psOpts := []pubsub.Option{
 		pubsub.WithSeenMessagesTTL(cfg.MsgIDCacheTTL),
 		pubsub.WithPeerOutboundQueueSize(cfg.OutboundQueueSize),
@@ -129,45 +121,6 @@ func NewPubsub(ctx context.Context, logger *zap.Logger, cfg *PububConfig, fork f
 		pubsub.WithSubscriptionFilter(sf),
 		pubsub.WithGossipSubParams(params.GossipSubParams()),
 		pubsub.WithMessageSignaturePolicy(pubsub.StrictNoSign),
-		pubsub.WithAppSpecificRpcInspector(func(pid peer.ID, r *pubsub.RPC) error {
-			subsHash := ""
-			subs := make(map[string]bool)
-			for _, s := range r.GetSubscriptions() {
-				subs[s.GetTopicid()] = s.GetSubscribe()
-				subsHash += fmt.Sprintf("%s:%t,", s.GetTopicid(), s.GetSubscribe())
-			}
-			if v, ok := peerSubsCache.Get(pid.String()); ok && v == subsHash {
-				// Subscriptions are the same, no need to inspect
-				return nil
-			}
-			peerSubsCache.Set(pid.String(), subsHash)
-
-			subnets := make(records.Subnets, 128)
-			var errs []error
-			for topic, subscribe := range subs {
-				subnetStr := strings.Replace(topic, "ssv.v2.", "", 1)
-				subnet, err := strconv.Atoi(subnetStr)
-				if err == nil {
-					if subscribe {
-						subnets[subnet] = 1
-					}
-				} else {
-					errs = append(errs, err)
-				}
-			}
-			allSubnets, _ := records.Subnets{}.FromString(records.AllSubnets)
-			logger.Debug(
-				"got RPC from peer",
-				fields.PeerID(pid),
-				zap.Int("subscriptions_len", len(r.GetSubscriptions())),
-				zap.Int("publish_messages", len(r.GetPublish())),
-				zap.Any("subscriptions", subs),
-				zap.String("subnets_hex", subnets.String()),
-				zap.Ints("subnets", records.SharedSubnets(allSubnets, subnets, 128)),
-				zap.Errors("errors", errs),
-			)
-			return nil
-		}),
 		// pubsub.WithPeerFilter(func(pid peer.ID, topic string) bool {
 		//	logger.Debug("pubsubTrace: filtering peer", zap.String("id", pid.String()), zap.String("topic", topic))
 		//	return true
@@ -209,12 +162,6 @@ func NewPubsub(ctx context.Context, logger *zap.Logger, cfg *PububConfig, fork f
 	if cfg.TraceLog {
 		psOpts = append(psOpts, pubsub.WithEventTracer(newTracer(logger)))
 	}
-
-	//TODO: REVERT
-	// err := logging.SetLogLevel("pubsub", "debug")
-	// if err != nil {
-	// 	return nil, nil, err
-	// }
 
 	ps, err := pubsub.NewGossipSub(ctx, cfg.Host, psOpts...)
 	if err != nil {
