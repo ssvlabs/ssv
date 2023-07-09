@@ -14,36 +14,6 @@ import (
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )
 
-type validatorJSON struct {
-	PubKey        api.Hex                `json:"public_key"`
-	Committee     []spectypes.OperatorID `json:"committee"`
-	Quorum        uint64                 `json:"quorum"`
-	PartialQuorum uint64                 `json:"partial_quorum"`
-	Grafitti      string                 `json:"grafitti"`
-	Liquidated    bool                   `json:"liquidated"`
-}
-
-// requestClusters is a space-separated list of comma-separated lists of operator IDs.
-type requestClusters [][]uint64
-
-func (c *requestClusters) Bind(value string) error {
-	if value == "" {
-		return nil
-	}
-	for _, s := range strings.Split(value, " ") {
-		var cluster []uint64
-		for _, s := range strings.Split(s, ",") {
-			n, err := strconv.ParseUint(s, 10, 64)
-			if err != nil {
-				return err
-			}
-			cluster = append(cluster, n)
-		}
-		*c = append(*c, cluster)
-	}
-	return nil
-}
-
 type Validators struct {
 	Shares registrystorage.Shares
 }
@@ -137,6 +107,36 @@ func byIndices(indices []uint64) registrystorage.SharesFilter {
 		}
 		return false
 	}
+}
+
+// requestClusters is a space-separated list of comma-separated lists of operator IDs.
+type requestClusters [][]uint64
+
+func (c *requestClusters) Bind(value string) error {
+	if value == "" {
+		return nil
+	}
+	for _, s := range strings.Split(value, " ") {
+		var cluster []uint64
+		for _, s := range strings.Split(s, ",") {
+			n, err := strconv.ParseUint(s, 10, 64)
+			if err != nil {
+				return err
+			}
+			cluster = append(cluster, n)
+		}
+		*c = append(*c, cluster)
+	}
+	return nil
+}
+
+type validatorJSON struct {
+	PubKey        api.Hex                `json:"public_key"`
+	Committee     []spectypes.OperatorID `json:"committee"`
+	Quorum        uint64                 `json:"quorum"`
+	PartialQuorum uint64                 `json:"partial_quorum"`
+	Grafitti      string                 `json:"grafitti"`
+	Liquidated    bool                   `json:"liquidated"`
 }
 
 func validatorFromShare(share *types.SSVShare) *validatorJSON {
