@@ -210,7 +210,7 @@ var StartNodeCmd = &cobra.Command{
 					// TODO: replace with narrower interface! (instead of accessing the entire PeersIndex)
 					PeersIndex: p2pNetwork.(p2pv1.PeersIndexProvider).PeersIndex(),
 					Network:    p2pNetwork.(p2pv1.HostProvider).Host().Network(),
-					TopicIndex: p2pNetwork.(apinode.TopicIndex),
+					TopicIndex: p2pNetwork.(handlers.TopicIndex),
 				},
 				&handlers.Validators{
 					Shares: nodeStorage.Shares(),
