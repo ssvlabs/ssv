@@ -92,11 +92,9 @@ func (n *p2pNetwork) reportTopicPeers(logger *zap.Logger, name string) {
 }
 
 func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
-	opPKHash, opIndex, forkv, nodeVersion, nodeType := unknown, unknown, unknown, unknown, unknown
-	ni, err := n.idx.GetNodeInfo(pid)
-	if err == nil && ni != nil {
-		opPKHash = unknown
-		nodeVersion = unknown
+	opPKHash, opID, forkv, nodeVersion, nodeType := unknown, unknown, unknown, unknown, unknown
+	ni := n.idx.NodeInfo(pid)
+	if ni != nil {
 		forkv = ni.ForkVersion.String()
 		if ni.Metadata != nil {
 			opPKHash = ni.Metadata.OperatorID
@@ -111,7 +109,7 @@ func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
 	if pubKey, ok := n.operatorPKCache.Load(opPKHash); ok {
 		operatorData, found, opDataErr := n.nodeStorage.GetOperatorDataByPubKey(logger, pubKey.([]byte))
 		if opDataErr == nil && found {
-			opIndex = strconv.FormatUint(operatorData.ID, 10)
+			opID = strconv.FormatUint(operatorData.ID, 10)
 		}
 	} else {
 		operators, err := n.nodeStorage.ListOperators(logger, 0, 0)
@@ -123,22 +121,20 @@ func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
 			pubKeyHash := format.OperatorID(operator.PublicKey)
 			n.operatorPKCache.Store(pubKeyHash, operator.PublicKey)
 			if pubKeyHash == opPKHash {
-				opIndex = strconv.FormatUint(operator.ID, 10)
+				opID = strconv.FormatUint(operator.ID, 10)
 			}
 		}
 	}
 
-	nodeState := n.idx.State(pid)
+	state := n.idx.State(pid)
 	logger.Debug("peer identity",
 		fields.PeerID(pid),
-		zap.String("forkv", forkv),
-		zap.String("nodeVersion", nodeVersion),
-		zap.String("opPKHash", opPKHash),
-		zap.String("opIndex", opIndex),
-		zap.String("nodeType", nodeType),
-		zap.String("nodeState", nodeState.String()),
+		zap.String("fork_version", forkv),
+		zap.String("node_version", nodeVersion),
+		zap.String("operator_id", opID),
+		zap.String("state", state.String()),
 	)
-	MetricsPeersIdentity.WithLabelValues(opPKHash, opIndex, nodeVersion, pid.String(), nodeType).Set(1)
+	MetricsPeersIdentity.WithLabelValues(opPKHash, opID, nodeVersion, pid.String(), nodeType).Set(1)
 }
 
 //
