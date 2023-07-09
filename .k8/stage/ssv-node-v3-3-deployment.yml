@@ -25,6 +25,10 @@ spec:
       protocol: TCP
       targetPort: 16303
       name: port-16303
+    - port: 16303
+      protocol: TCP
+      targetPort: 16303
+      name: port-16303
   selector:
     app: ssv-node-v3-3
 ---
@@ -76,6 +80,9 @@ spec:
         - containerPort: 15303
           name: port-15303
           hostPort: 15303
+        - containerPort: 16303
+          name: port-16303
+          hostPort: 16303
         env:
         - name: SHARE_CONFIG
           value: "./data/share.yaml"
@@ -112,6 +119,8 @@ spec:
           value: "jato-v2-stage"
         - name: METRICS_API_PORT
           value: "15303"
+        - name: SSV_API_PORT
+          value: "16303"
         - name: ENABLE_PROFILE
           value: "true"
         - name: WS_API_PORT
