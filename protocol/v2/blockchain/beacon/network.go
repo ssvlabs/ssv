@@ -32,8 +32,9 @@ func NewNetworkWithLocalTestNet(network spectypes.BeaconNetwork, localTestNet bo
 
 // CustomMinGenesisTime returns min genesis time value
 func (n Network) CustomMinGenesisTime() uint64 {
+	//TODO: get from config
 	if n.LocalTestNet {
-		return 1688454743
+		return 1688914691
 	}
 	return n.BeaconNetwork.MinGenesisTime()
 }
