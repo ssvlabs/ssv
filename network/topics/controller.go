@@ -110,6 +110,9 @@ func (ctrl *topicsCtrl) Close() error {
 
 // Peers returns the peers subscribed to the given topic
 func (ctrl *topicsCtrl) Peers(name string) ([]peer.ID, error) {
+	if name == "" {
+		return ctrl.ps.ListPeers(""), nil
+	}
 	name = ctrl.fork.GetTopicFullName(name)
 	topic := ctrl.container.Get(name)
 	if topic == nil {
