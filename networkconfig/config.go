@@ -13,10 +13,10 @@ import (
 )
 
 var SupportedConfigs = map[string]NetworkConfig{
-	Mainnet.Name:     Mainnet,
-	JatoV2Stage.Name: JatoV2Stage,
-	JatoV2.Name:      JatoV2,
-	TestNetwork.Name: TestNetwork,
+	Mainnet.Name:      Mainnet,
+	JatoV2Stage.Name:  JatoV2Stage,
+	JatoV2.Name:       JatoV2,
+	LocalNetwork.Name: LocalNetwork,
 }
 
 func GetNetworkConfigByName(name string) (NetworkConfig, error) {
