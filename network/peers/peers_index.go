@@ -8,10 +8,8 @@ import (
 	"time"
 
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
-	"github.com/libp2p/go-libp2p/core/network"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	ma "github.com/multiformats/go-multiaddr"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -31,10 +29,9 @@ type peersIndex struct {
 	netKeyProvider NetworkKeyProvider
 	network        libp2pnetwork.Network
 
-	store      map[peer.ID]*PeerInfo
-	storeMutex sync.RWMutex
-	scoreIdx   ScoreIndex
+	scoreIdx ScoreIndex
 	SubnetsIndex
+	PeerInfoIndex
 
 	selfLock *sync.RWMutex
 	self     *records.NodeInfo
@@ -47,9 +44,9 @@ func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *reco
 	netKeyProvider NetworkKeyProvider, subnetsCount int, pruneTTL time.Duration) *peersIndex {
 	return &peersIndex{
 		network:        network,
-		store:          map[peer.ID]*PeerInfo{},
 		scoreIdx:       newScoreIndex(),
 		SubnetsIndex:   newSubnetsIndex(subnetsCount),
+		PeerInfoIndex:  NewPeerInfoIndex(),
 		self:           self,
 		selfLock:       &sync.RWMutex{},
 		maxPeers:       maxPeers,
@@ -157,24 +154,6 @@ func (pi *peersIndex) SelfSealed(sender, recipient peer.ID, permissioned bool, o
 
 }
 
-func (pi *peersIndex) AddPeerInfo(id peer.ID, address ma.Multiaddr, direction network.Direction) {
-	pi.UpdatePeerInfo(id, func(info *PeerInfo) {
-		info.Address = address
-		info.Direction = direction
-		info.State = StateDisconnected
-	})
-}
-
-func (pi *peersIndex) PeerInfo(id peer.ID) *PeerInfo {
-	pi.storeMutex.RLock()
-	defer pi.storeMutex.RUnlock()
-
-	if info, ok := pi.store[id]; ok {
-		return info
-	}
-	return nil
-}
-
 func (pi *peersIndex) SetNodeInfo(id peer.ID, nodeInfo *records.NodeInfo) {
 	pi.UpdatePeerInfo(id, func(info *PeerInfo) {
 		info.NodeInfo = nodeInfo
@@ -187,36 +166,6 @@ func (pi *peersIndex) NodeInfo(id peer.ID) *records.NodeInfo {
 		return info.NodeInfo
 	}
 	return nil
-}
-
-func (pi *peersIndex) State(id peer.ID) PeerState {
-	pi.storeMutex.RLock()
-	defer pi.storeMutex.RUnlock()
-
-	if info, ok := pi.store[id]; ok {
-		return info.State
-	}
-	return StateUnknown
-}
-
-func (pi *peersIndex) SetState(id peer.ID, state PeerState) {
-	pi.UpdatePeerInfo(id, func(info *PeerInfo) {
-		info.State = state
-	})
-}
-
-func (pi *peersIndex) UpdatePeerInfo(id peer.ID, update func(*PeerInfo)) {
-	pi.storeMutex.Lock()
-	defer pi.storeMutex.Unlock()
-
-	info, ok := pi.store[id]
-	if !ok {
-		info = &PeerInfo{
-			ID: id,
-		}
-	}
-	update(info)
-	pi.store[id] = info
 }
 
 // Score adds score to the given peer

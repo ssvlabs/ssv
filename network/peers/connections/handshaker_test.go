@@ -1,10 +1,12 @@
 package connections
 
 import (
-	"context"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/bloxapp/ssv/utils/rsaencryption"
+	"github.com/libp2p/go-libp2p/core/peer"
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network/peers/connections/mock"
@@ -17,29 +19,26 @@ func TestHandshakeTestData(t *testing.T) {
 	t.Run("happy flow", func(t *testing.T) {
 		td := getTestingData(t)
 
+		beforeHandshake := time.Now()
 		require.NoError(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn))
+
+		pi := td.Handshaker.peerInfos.PeerInfo(td.SenderPeerID)
+		require.NotNil(t, pi)
+		require.True(t, pi.LastHandshake.After(beforeHandshake) && pi.LastHandshake.Before(time.Now()))
+		require.Nil(t, pi.LastHandshakeError)
 	})
 
 	t.Run("wrong NodeInfoIndex", func(t *testing.T) {
 		td := getTestingData(t)
 
+		beforeHandshake := time.Now()
 		td.Handshaker.nodeInfos = mock.NodeInfoIndex{}
 		require.Error(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn))
-	})
 
-	t.Run("wrong IDService", func(t *testing.T) {
-		td := getTestingData(t)
-
-		ch := make(chan struct{})
-		td.Handshaker.ids = mock.IDService{
-			MockIdentifyWait: ch,
-		}
-
-		ctx, cancel := context.WithCancel(context.Background())
-		cancel()
-
-		td.Handshaker.ctx = ctx
-		require.Error(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn))
+		pi := td.Handshaker.peerInfos.PeerInfo(td.SenderPeerID)
+		require.NotNil(t, pi)
+		require.True(t, pi.LastHandshake.After(beforeHandshake) && pi.LastHandshake.Before(time.Now()))
+		require.ErrorContains(t, pi.LastHandshakeError, "failed requesting node info")
 	})
 
 	t.Run("wrong NodeStorage", func(t *testing.T) {
@@ -52,6 +51,37 @@ func TestHandshakeTestData(t *testing.T) {
 		td := getTestingData(t)
 		td.Handshaker.streams = mock.StreamController{}
 		require.Error(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn))
+	})
+
+	t.Run("filtered peer", func(t *testing.T) {
+		td := getTestingData(t)
+
+		beforeHandshake := time.Now()
+		td.Handshaker.filters = func() []HandshakeFilter {
+			return []HandshakeFilter{
+				func(senderID peer.ID, nodeInfo records.AnyNodeInfo) error {
+					return fmt.Errorf("peer filtered")
+				},
+			}
+		}
+		require.Error(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn))
+
+		pi := td.Handshaker.peerInfos.PeerInfo(td.SenderPeerID)
+		require.NotNil(t, pi)
+		require.True(t, pi.LastHandshake.After(beforeHandshake) && pi.LastHandshake.Before(time.Now()))
+		require.ErrorContains(t, pi.LastHandshakeError, "failed verifying their node info: peer filtered")
+
+		// Test that happy flow works correctly after failing prior handshake.
+		beforeHandshake = time.Now()
+		td.Handshaker.filters = func() []HandshakeFilter {
+			return []HandshakeFilter{}
+		}
+		require.NoError(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn))
+
+		pi = td.Handshaker.peerInfos.PeerInfo(td.SenderPeerID)
+		require.NotNil(t, pi)
+		require.True(t, pi.LastHandshake.After(beforeHandshake) && pi.LastHandshake.Before(time.Now()))
+		require.Nil(t, pi.LastHandshakeError)
 	})
 }
 

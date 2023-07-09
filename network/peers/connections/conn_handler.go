@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/records"
@@ -139,11 +140,12 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 	}
 
 	connLogger := func(conn libp2pnetwork.Conn) *zap.Logger {
-		return logger.With(
-			fields.PeerID(conn.RemotePeer()),
-			zap.String("remote_addr", conn.RemoteMultiaddr().String()),
-			zap.String("conn_dir", conn.Stat().Direction.String()),
-		)
+		return logger.Named(logging.NameConnHandler).
+			With(
+				fields.PeerID(conn.RemotePeer()),
+				zap.String("remote_addr", conn.RemoteMultiaddr().String()),
+				zap.String("conn_dir", conn.Stat().Direction.String()),
+			)
 	}
 	return &libp2pnetwork.NotifyBundle{
 		ConnectedF: func(net libp2pnetwork.Network, conn libp2pnetwork.Conn) {

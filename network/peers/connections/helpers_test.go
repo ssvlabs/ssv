@@ -85,9 +85,7 @@ func getTestingData(t *testing.T) TestData {
 		MockNodeInfo:   nil,
 		MockSelfSealed: []byte("something"),
 	}
-	ns := mock.PeerInfoIndex{
-		MockNodeState: peers.StateConnected,
-	}
+	ns := peers.NewPeerInfoIndex()
 	ch := make(chan struct{})
 	close(ch)
 	ids := mock.IDService{
