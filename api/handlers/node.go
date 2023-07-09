@@ -1,21 +1,16 @@
-package node
+package handlers
 
 import (
 	"net/http"
 
+	"github.com/bloxapp/ssv/api"
 	networkpeers "github.com/bloxapp/ssv/network/peers"
-	"github.com/go-chi/render"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 type TopicIndex interface {
 	PeersByTopic() ([]peer.ID, map[string][]peer.ID)
-}
-type Handler struct {
-	PeersIndex networkpeers.Index
-	Network    network.Network
-	TopicIndex TopicIndex
 }
 
 type AllPeersAndTopicsJSON struct {
@@ -49,7 +44,13 @@ type identityJSON struct {
 	Version   string   `json:"version"`
 }
 
-func (h *Handler) Identity(w http.ResponseWriter, r *http.Request) error {
+type Node struct {
+	PeersIndex networkpeers.Index
+	TopicIndex TopicIndex
+	Network    network.Network
+}
+
+func (h *Node) Identity(w http.ResponseWriter, r *http.Request) error {
 	nodeInfo := h.PeersIndex.Self()
 	resp := identityJSON{
 		PeerID:  h.Network.LocalPeer(),
@@ -59,11 +60,10 @@ func (h *Handler) Identity(w http.ResponseWriter, r *http.Request) error {
 	for _, addr := range h.Network.ListenAddresses() {
 		resp.Addresses = append(resp.Addresses, addr.String())
 	}
-	render.JSON(w, r, resp)
-	return nil
+	return api.Render(w, r, resp)
 }
 
-func (h *Handler) Peers(w http.ResponseWriter, r *http.Request) error {
+func (h *Node) Peers(w http.ResponseWriter, r *http.Request) error {
 	peers := h.Network.Peers()
 	resp := make([]peerJSON, len(peers))
 	for i, id := range peers {
@@ -91,11 +91,10 @@ func (h *Handler) Peers(w http.ResponseWriter, r *http.Request) error {
 		}
 		resp[i].Version = nodeInfo.Metadata.NodeVersion
 	}
-	render.JSON(w, r, resp)
-	return nil
+	return api.Render(w, r, resp)
 }
 
-func (h *Handler) Topics(w http.ResponseWriter, r *http.Request) error {
+func (h *Node) Topics(w http.ResponseWriter, r *http.Request) error {
 	allpeers, peerbytpc := h.TopicIndex.PeersByTopic()
 	alland := AllPeersAndTopicsJSON{}
 	tpcs := []topicIndexJSON{}
@@ -105,6 +104,5 @@ func (h *Handler) Topics(w http.ResponseWriter, r *http.Request) error {
 	alland.AllPeers = allpeers
 	alland.PeersByTopic = tpcs
 
-	render.JSON(w, r, alland)
-	return nil
+	return api.Render(w, r, alland)
 }
