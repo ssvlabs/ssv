@@ -5,22 +5,22 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
 	"gopkg.in/yaml.v3"
 )
 
-type LocalEvent struct {
-	// Log is the raw event log
-	Log types.Log
-	// Name is the event name used for internal representation.
+type Event struct {
 	Name string
-	// Data is the parsed event
 	Data interface{}
 }
-
 type eventData interface {
 	toEventData() (interface{}, error)
+}
+
+type eventDataUnmarshaler struct {
+	name string
+	data eventData
 }
 
 type OperatorAddedEventYAML struct {
@@ -33,7 +33,7 @@ type OperatorRemovedEventYAML struct {
 	ID uint64 `yaml:"ID"`
 }
 
-type validatorAddedEventYAML struct {
+type ValidatorAddedEventYAML struct {
 	PublicKey   string   `yaml:"PublicKey"`
 	Owner       string   `yaml:"Owner"`
 	OperatorIds []uint64 `yaml:"OperatorIds"`
@@ -62,7 +62,7 @@ type FeeRecipientAddressUpdatedEventYAML struct {
 }
 
 func (e *OperatorAddedEventYAML) toEventData() (interface{}, error) {
-	return OperatorAddedEvent{
+	return contract.ContractOperatorAdded{
 		OperatorId: e.ID,
 		Owner:      common.HexToAddress(e.Owner),
 		PublicKey:  []byte(e.PublicKey),
@@ -70,12 +70,12 @@ func (e *OperatorAddedEventYAML) toEventData() (interface{}, error) {
 }
 
 func (e *OperatorRemovedEventYAML) toEventData() (interface{}, error) {
-	return OperatorRemovedEvent{
+	return contract.ContractOperatorRemoved{
 		OperatorId: e.ID,
 	}, nil
 }
 
-func (e *validatorAddedEventYAML) toEventData() (interface{}, error) {
+func (e *ValidatorAddedEventYAML) toEventData() (interface{}, error) {
 	pubKey, err := hex.DecodeString(strings.TrimPrefix(e.PublicKey, "0x"))
 	if err != nil {
 		return nil, err
@@ -86,7 +86,7 @@ func (e *validatorAddedEventYAML) toEventData() (interface{}, error) {
 		return nil, err
 	}
 
-	return ValidatorAddedEvent{
+	return contract.ContractValidatorAdded{
 		PublicKey:   pubKey,
 		Owner:       common.HexToAddress(e.Owner),
 		OperatorIds: e.OperatorIds,
@@ -95,7 +95,7 @@ func (e *validatorAddedEventYAML) toEventData() (interface{}, error) {
 }
 
 func (e *ValidatorRemovedEventYAML) toEventData() (interface{}, error) {
-	return ValidatorRemovedEvent{
+	return contract.ContractValidatorRemoved{
 		Owner:       common.HexToAddress(e.Owner),
 		OperatorIds: e.OperatorIds,
 		PublicKey:   []byte(strings.TrimPrefix(e.PublicKey, "0x")),
@@ -103,29 +103,24 @@ func (e *ValidatorRemovedEventYAML) toEventData() (interface{}, error) {
 }
 
 func (e *ClusterLiquidatedEventYAML) toEventData() (interface{}, error) {
-	return ClusterLiquidatedEvent{
+	return contract.ContractClusterLiquidated{
 		Owner:       common.HexToAddress(e.Owner),
 		OperatorIds: e.OperatorIds,
 	}, nil
 }
 
 func (e *ClusterReactivatedEventYAML) toEventData() (interface{}, error) {
-	return ClusterReactivatedEvent{
+	return contract.ContractClusterReactivated{
 		Owner:       common.HexToAddress(e.Owner),
 		OperatorIds: e.OperatorIds,
 	}, nil
 }
 
 func (e *FeeRecipientAddressUpdatedEventYAML) toEventData() (interface{}, error) {
-	return FeeRecipientAddressUpdatedEvent{
+	return contract.ContractFeeRecipientAddressUpdated{
 		Owner:            common.HexToAddress(e.Owner),
 		RecipientAddress: common.HexToAddress(e.RecipientAddress),
 	}, nil
-}
-
-type eventDataUnmarshaler struct {
-	name string
-	data eventData
 }
 
 func (u *eventDataUnmarshaler) UnmarshalYAML(value *yaml.Node) error {
@@ -140,7 +135,7 @@ func (u *eventDataUnmarshaler) UnmarshalYAML(value *yaml.Node) error {
 		err = value.Decode(&v)
 		u.data = &v
 	case "ValidatorAdded":
-		var v validatorAddedEventYAML
+		var v ValidatorAddedEventYAML
 		err = value.Decode(&v)
 		u.data = &v
 	case "ValidatorRemoved":
@@ -166,7 +161,7 @@ func (u *eventDataUnmarshaler) UnmarshalYAML(value *yaml.Node) error {
 	return err
 }
 
-func (e *LocalEvent) UnmarshalYAML(value *yaml.Node) error {
+func (e *Event) UnmarshalYAML(value *yaml.Node) error {
 	var evName struct {
 		Name string `yaml:"Name"`
 	}
@@ -194,5 +189,6 @@ func (e *LocalEvent) UnmarshalYAML(value *yaml.Node) error {
 		return err
 	}
 	e.Data = data
+
 	return nil
 }

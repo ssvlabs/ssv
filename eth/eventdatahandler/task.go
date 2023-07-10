@@ -1,23 +1,29 @@
 package eventdatahandler
 
 import (
+	"github.com/bloxapp/ssv/eth/contract"
+	"github.com/bloxapp/ssv/eth/localevents"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 )
 
-type Task struct {
+type Task interface {
+	GetEventType() EventType
+	Execute() error
+}
+type RemoteTask struct {
 	EventType
 	Edh    *EventDataHandler
 	Ev     ethtypes.Log
 	Shares []*types.SSVShare
 }
 
-func NewTask(EventType EventType, Edh *EventDataHandler, Ev ethtypes.Log, Shares []*types.SSVShare) *Task {
-	return &Task{EventType, Edh, Ev, Shares}
+func NewRemoteTask(EventType EventType, Edh *EventDataHandler, Ev ethtypes.Log, Shares []*types.SSVShare) Task {
+	return &RemoteTask{EventType, Edh, Ev, Shares}
 }
 
-func (t *Task) Execute() error {
+func (t RemoteTask) Execute() error {
 	switch t.EventType {
 	case ValidatorAdded:
 		validatorAddedEvent, err := t.Edh.filterer.ParseValidatorAdded(t.Ev)
@@ -58,3 +64,45 @@ func (t *Task) Execute() error {
 		return nil
 	}
 }
+
+func (t RemoteTask) GetEventType() EventType { return t.EventType }
+
+type LocalTask struct {
+	EventType
+	Edh    *EventDataHandler
+	Ev     *localevents.Event
+	Shares []*types.SSVShare
+}
+
+func NewLocalTask(EventType EventType, Edh *EventDataHandler, localEvent *localevents.Event, Shares []*types.SSVShare) Task {
+	return &LocalTask{EventType, Edh, localEvent, Shares}
+}
+
+func (t LocalTask) Execute() error {
+	switch t.EventType {
+	case ValidatorAdded:
+		e := t.Ev.Data.(contract.ContractValidatorAdded)
+		t.Edh.logger.Info("starting validator ", fields.PubKey(e.PublicKey))
+		return t.Edh.taskExecutor.AddValidator(&e)
+	case ValidatorRemoved:
+		e := t.Ev.Data.(contract.ContractValidatorRemoved)
+		t.Edh.logger.Info("stopping validator", fields.PubKey(e.PublicKey))
+		return t.Edh.taskExecutor.RemoveValidator(&e)
+	case ClusterLiquidated:
+		e := t.Ev.Data.(contract.ContractClusterLiquidated)
+		t.Edh.logger.Info("liquidating cluster", fields.ClusterIndex(e.Cluster))
+		return t.Edh.taskExecutor.LiquidateCluster(&e, t.Shares)
+	case ClusterReactivated:
+		e := t.Ev.Data.(contract.ContractClusterReactivated)
+		t.Edh.logger.Info("reactivating cluster", fields.ClusterIndex(e.Cluster))
+		return t.Edh.taskExecutor.ReactivateCluster(&e, t.Shares)
+	case FeeRecipientAddressUpdated:
+		e := t.Ev.Data.(contract.ContractFeeRecipientAddressUpdated)
+		t.Edh.logger.Info("updating recipient address", fields.Owner(e.Owner))
+		return t.Edh.taskExecutor.UpdateFeeRecipient(&e)
+	default:
+		return nil
+	}
+}
+
+func (t LocalTask) GetEventType() EventType { return t.EventType }

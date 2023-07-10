@@ -12,21 +12,21 @@ import (
 )
 
 func TestCleanExecutionQueue(t *testing.T) {
-	tasks := []*Task{
-		NewTask(EventType(0), &EventDataHandler{}, types.Log{}, nil),
-		NewTask(EventType(2), &EventDataHandler{}, types.Log{}, nil),
-		NewTask(EventType(3), &EventDataHandler{}, types.Log{}, nil),
-		NewTask(EventType(3), &EventDataHandler{}, types.Log{}, nil),
-		NewTask(EventType(4), &EventDataHandler{}, types.Log{}, nil),
-		NewTask(EventType(5), &EventDataHandler{}, types.Log{}, nil),
-		NewTask(EventType(5), &EventDataHandler{}, types.Log{}, nil),
-		NewTask(EventType(4), &EventDataHandler{}, types.Log{}, nil),
-		NewTask(EventType(6), &EventDataHandler{}, types.Log{}, nil),
-		NewTask(EventType(6), &EventDataHandler{}, types.Log{}, nil),
-		NewTask(EventType(6), &EventDataHandler{}, types.Log{}, nil),
+	tasks := []Task{
+		NewRemoteTask(EventType(0), &EventDataHandler{}, types.Log{}, nil),
+		NewRemoteTask(EventType(2), &EventDataHandler{}, types.Log{}, nil),
+		NewRemoteTask(EventType(3), &EventDataHandler{}, types.Log{}, nil),
+		NewRemoteTask(EventType(3), &EventDataHandler{}, types.Log{}, nil),
+		NewRemoteTask(EventType(4), &EventDataHandler{}, types.Log{}, nil),
+		NewRemoteTask(EventType(5), &EventDataHandler{}, types.Log{}, nil),
+		NewRemoteTask(EventType(5), &EventDataHandler{}, types.Log{}, nil),
+		NewRemoteTask(EventType(4), &EventDataHandler{}, types.Log{}, nil),
+		NewRemoteTask(EventType(6), &EventDataHandler{}, types.Log{}, nil),
+		NewRemoteTask(EventType(6), &EventDataHandler{}, types.Log{}, nil),
+		NewRemoteTask(EventType(6), &EventDataHandler{}, types.Log{}, nil),
 	}
 	cleanedTask := cleanTaskList(tasks)
-	require.DeepEqual(t, cleanedTask, []*Task{NewTask(EventType(0), &EventDataHandler{}, types.Log{}, nil), NewTask(EventType(6), &EventDataHandler{}, types.Log{}, nil)})
+	require.DeepEqual(t, cleanedTask, []Task{NewRemoteTask(EventType(0), &EventDataHandler{}, types.Log{}, nil), NewRemoteTask(EventType(6), &EventDataHandler{}, types.Log{}, nil)})
 }
 
 func TestExecuteTask(t *testing.T) {
@@ -47,7 +47,7 @@ func TestExecuteTask(t *testing.T) {
 	LogValidatorAdded := unmarshalLog(t, rawValidatorAdded)
 	edh, err := setupDataHandler(t, ctx, logger)
 	require.NoError(t, err)
-	task := NewTask(EventType(2), edh, *LogValidatorAdded, nil)
+	task := NewRemoteTask(EventType(2), edh, *LogValidatorAdded, nil)
 	err = task.Execute()
 	require.NoError(t, err)
 }
