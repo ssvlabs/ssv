@@ -26,7 +26,7 @@ import (
 
 const (
 	healthCheckTimeout        = 500 * time.Millisecond
-	blocksInBatch      uint64 = 5_000
+	blocksInBatch      uint64 = 5000
 )
 
 // ClientOptions are the options for the client
@@ -305,7 +305,7 @@ func (ec *eth1Client) syncSmartContractsEvents(logger *zap.Logger, fromBlock *bi
 			break
 		}
 
-		fromBlock.Set(toBlock)
+		fromBlock.SetUint64(toBlock.Uint64() + 1)
 	}
 
 	logger.Debug("finished syncing registry contract",
@@ -328,14 +328,16 @@ func (ec *eth1Client) fetchAndProcessEvents(logger *zap.Logger, fromBlock, toBlo
 		logger = logger.With(fields.ToBlock(toBlock))
 	}
 	logger.Debug("fetching event logs")
+	start := time.Now()
 	logs, err := ec.conn.FilterLogs(ec.ctx, query)
 	if err != nil {
 		return nil, 0, errors.Wrap(err, "failed to get event logs")
 	}
 	nSuccess := len(logs)
 	logger = logger.With(zap.Int("results", len(logs)))
-	logger.Debug("got event logs")
+	logger.Debug("got event logs", zap.Duration("took", time.Since(start)))
 
+	start = time.Now()
 	for _, vLog := range logs {
 		eventName, err := ec.handleEvent(logger, vLog, contractAbi)
 		if err != nil {
@@ -356,7 +358,8 @@ func (ec *eth1Client) fetchAndProcessEvents(logger *zap.Logger, fromBlock, toBlo
 		}
 	}
 	logger.Debug("event logs were received and parsed successfully",
-		zap.Int("successCount", nSuccess))
+		zap.Int("successCount", nSuccess),
+		zap.Duration("took", time.Since(start)))
 
 	return logs, nSuccess, nil
 }

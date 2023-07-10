@@ -40,19 +40,21 @@ func splitBytes(buf []byte, lim int) [][]byte {
 // Eth1EventHandler is a factory function for creating eth1 event handler
 func (c *controller) Eth1EventHandler(logger *zap.Logger, ongoingSync bool) eth1.SyncEventHandler {
 	return func(e eth1.Event) (logs []zap.Field, err error) {
+		_, exist, err := c.eventHandler.GetEventData(e.Log.TxHash)
+		if exist {
+			logger.Fatal("event already exists", zap.String("tx_hash", e.Log.TxHash.Hex()))
+			return nil, nil
+		}
 		defer func() {
-			var malformedEventErr *abiparser.MalformedEventError
-			if err == nil || errors.As(err, &malformedEventErr) {
-				saveErr := c.eventHandler.SaveEventData(e.Log.TxHash)
-				if saveErr != nil {
-					wrappedErr := errors.Wrap(saveErr, "could not save event data")
-					if err == nil {
-						err = wrappedErr
-						return
-					}
-					err = errors.Wrap(err, wrappedErr.Error())
+			saveErr := c.eventHandler.SaveEventData(e.Log.TxHash)
+			if saveErr != nil {
+				wrappedErr := errors.Wrap(saveErr, "could not save event data")
+				if err == nil {
+					err = wrappedErr
 					return
 				}
+				err = errors.Wrap(err, wrappedErr.Error())
+				return
 			}
 		}()
 
