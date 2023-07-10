@@ -39,29 +39,45 @@ func splitBytes(buf []byte, lim int) [][]byte {
 
 // Eth1EventHandler is a factory function for creating eth1 event handler
 func (c *controller) Eth1EventHandler(logger *zap.Logger, ongoingSync bool) eth1.SyncEventHandler {
-	return func(e eth1.Event) ([]zap.Field, error) {
+	return func(e eth1.Event) (logs []zap.Field, err error) {
+		defer func() {
+			var malformedEventErr *abiparser.MalformedEventError
+			if err == nil || errors.As(err, &malformedEventErr) {
+				saveErr := c.eventHandler.SaveEventData(e.Log.TxHash)
+				if saveErr != nil {
+					wrappedErr := errors.Wrap(saveErr, "could not save event data")
+					if err == nil {
+						err = wrappedErr
+						return
+					}
+					err = errors.Wrap(err, wrappedErr.Error())
+					return
+				}
+			}
+		}()
+
 		switch ev := e.Data.(type) {
 		case abiparser.OperatorAddedEvent:
-			return c.handleOperatorAddedEvent(logger, ev)
+			logs, err = c.handleOperatorAddedEvent(logger, ev)
 		case abiparser.OperatorRemovedEvent:
-			return c.handleOperatorRemovedEvent(logger, ev, ongoingSync)
+			logs, err = c.handleOperatorRemovedEvent(logger, ev, ongoingSync)
 		case abiparser.ValidatorAddedEvent:
-			return c.handleValidatorAddedEvent(logger, ev, ongoingSync)
+			logs, err = c.handleValidatorAddedEvent(logger, ev, ongoingSync)
 		case abiparser.ValidatorRemovedEvent:
-			return c.handleValidatorRemovedEvent(logger, ev, ongoingSync)
+			logs, err = c.handleValidatorRemovedEvent(logger, ev, ongoingSync)
 		case abiparser.ClusterLiquidatedEvent:
-			return c.handleClusterLiquidatedEvent(logger, ev, ongoingSync)
+			logs, err = c.handleClusterLiquidatedEvent(logger, ev, ongoingSync)
 		case abiparser.ClusterReactivatedEvent:
-			return c.handleClusterReactivatedEvent(logger, ev, ongoingSync)
+			logs, err = c.handleClusterReactivatedEvent(logger, ev, ongoingSync)
 		case abiparser.FeeRecipientAddressUpdatedEvent:
-			return c.handleFeeRecipientAddressUpdatedEvent(logger, ev, ongoingSync)
+			logs, err = c.handleFeeRecipientAddressUpdatedEvent(logger, ev, ongoingSync)
 		default:
 			logger.Debug("could not handle unknown event",
 				zap.String("event_name", e.Name),
 				zap.String("event_type", fmt.Sprintf("%T", ev)),
 			)
 		}
-		return nil, nil
+		return
 	}
 }
 
@@ -243,15 +259,6 @@ func (c *controller) handleValidatorAddedEventDefer(valid bool, err error, event
 	var malformedEventErr *abiparser.MalformedEventError
 
 	if valid || errors.As(err, &malformedEventErr) {
-		saveErr := c.eventHandler.SaveEventData(event.TxHash)
-		if saveErr != nil {
-			wrappedErr := errors.Wrap(saveErr, "could not save event data")
-			if err == nil {
-				return wrappedErr
-			}
-			return errors.Wrap(err, wrappedErr.Error())
-		}
-
 		bumpErr := c.eventHandler.BumpNonce(event.Owner)
 		if bumpErr != nil {
 			wrappedErr := errors.Wrap(bumpErr, "failed to bump the nonce")

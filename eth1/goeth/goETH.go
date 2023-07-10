@@ -26,7 +26,7 @@ import (
 
 const (
 	healthCheckTimeout        = 500 * time.Millisecond
-	blocksInBatch      uint64 = 100000
+	blocksInBatch      uint64 = 5_000
 )
 
 // ClientOptions are the options for the client
@@ -257,7 +257,6 @@ func (ec *eth1Client) listenToSubscription(logger *zap.Logger, logs chan types.L
 	}
 }
 
-// syncSmartContractsEvents sync events history of the given contract
 func (ec *eth1Client) syncSmartContractsEvents(logger *zap.Logger, fromBlock *big.Int) error {
 	logger.Debug("syncing smart contract events", fields.FromBlock(fromBlock))
 
@@ -265,55 +264,54 @@ func (ec *eth1Client) syncSmartContractsEvents(logger *zap.Logger, fromBlock *bi
 	if err != nil {
 		return errors.Wrap(err, "failed to parse ABI interface")
 	}
-	currentBlock, err := ec.conn.BlockNumber(ec.ctx)
+	highestBlock, err := ec.conn.BlockNumber(ec.ctx)
 	if err != nil {
 		return errors.Wrap(err, "failed to get current block")
 	}
+
 	var logs []types.Log
 	var nSuccess int
+
 	for {
-		var toBlock *big.Int
-		if currentBlock-fromBlock.Uint64() > blocksInBatch {
-			toBlock = big.NewInt(int64(fromBlock.Uint64() + blocksInBatch))
-		} else { // no more batches are required -> setting toBlock to nil
-			toBlock = nil
+		toBlock := new(big.Int).SetUint64(fromBlock.Uint64() + blocksInBatch)
+		if toBlock.Uint64() > highestBlock {
+			toBlock.SetUint64(highestBlock)
 		}
+
 		_logs, _nSuccess, err := ec.fetchAndProcessEvents(logger, fromBlock, toBlock, contractAbi)
 		if err != nil {
-			// in case request exceeded limit, try again with less blocks
-			// will stop after log(blocksInBatch) tries
-			if !strings.Contains(err.Error(), "websocket: read limit exceeded") {
-				return errors.Wrap(err, "failed to get events")
-			}
-			currentBatchSize := int64(blocksInBatch)
-		retryLoop:
-			for currentBatchSize > 1 {
-				currentBatchSize /= 2
-				logger.Debug("using a lower batch size", zap.Int64("currentBatchSize", currentBatchSize))
-				toBlock = big.NewInt(int64(fromBlock.Uint64()) + currentBatchSize)
-				_logs, _nSuccess, err = ec.fetchAndProcessEvents(logger, fromBlock, toBlock, contractAbi)
-				if err != nil {
-					if !strings.Contains(err.Error(), "websocket: read limit exceeded") {
-						return errors.Wrap(err, "failed to get events")
-					}
-					// limit exceeded
-					continue retryLoop
-				}
-				// done
-				break retryLoop
-			}
+			return errors.Wrap(err, "failed to get events")
 		}
+
 		nSuccess += _nSuccess
 		logs = append(logs, _logs...)
-		if toBlock == nil { // finished
+
+		// If toBlock reached the highest block, check for new blocks
+		if toBlock.Uint64() >= highestBlock {
+			currentBlock, err := ec.conn.BlockNumber(ec.ctx)
+			if err != nil {
+				return errors.Wrap(err, "failed to get current block")
+			}
+
+			// If Eth1 advanced while we were syncing, let's sync the new blocks.
+			if currentBlock > highestBlock {
+				logger.Debug("syncing new blocks", zap.Uint64("currentBlock", currentBlock), zap.Uint64("highestBlock", highestBlock))
+				fromBlock.SetUint64(highestBlock + 1)
+				highestBlock = currentBlock
+				continue
+			}
+
+			// Finished.
 			break
 		}
-		fromBlock = toBlock
+
+		fromBlock.Set(toBlock)
 	}
+
 	logger.Debug("finished syncing registry contract",
 		zap.Int("total events", len(logs)), zap.Int("total success", nSuccess))
-	// publishing SyncEndedEvent so other components could track the sync
-	ec.fireEvent(types.Log{}, "SyncEndedEvent", eth1.SyncEndedEvent{Logs: logs, Success: nSuccess == len(logs)})
+
+	ec.fireEvent(types.Log{}, "SyncEndedEvent", eth1.SyncEndedEvent{Block: highestBlock, Success: nSuccess == len(logs)})
 
 	return nil
 }

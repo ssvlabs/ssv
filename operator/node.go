@@ -179,6 +179,8 @@ func (n *operatorNode) StartEth1(logger *zap.Logger, syncOffset *eth1.SyncOffset
 	if err := eth1.SyncEth1Events(logger, n.eth1Client, n.storage, n.network, syncOffset, handler); err != nil {
 		return errors.Wrap(err, "failed to sync contract events")
 	}
+	defer logger.Fatal("RVRT: DONE SYNCING")
+
 	logger.Info("manage to sync contract events")
 	shares := n.storage.Shares().List()
 	operators, err := n.storage.ListOperators(logger, 0, 0)
