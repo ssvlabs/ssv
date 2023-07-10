@@ -25,6 +25,10 @@ spec:
       protocol: TCP
       targetPort: 16301
       name: port-16301
+    - port: 16301
+      protocol: TCP
+      targetPort: 16301
+      name: port-16301
   selector:
     app: ssv-node-v3-1
 ---
@@ -76,6 +80,9 @@ spec:
         - containerPort: 15301
           name: port-15301
           hostPort: 15301
+        - containerPort: 16301
+          name: port-16301
+          hostPort: 16301
         env:
         - name: SHARE_CONFIG
           value: "./data/share.yaml"
@@ -112,6 +119,8 @@ spec:
           value: "jato-v2-stage"
         - name: METRICS_API_PORT
           value: "15301"
+        - name: SSV_API_PORT
+          value: "16301"
         - name: ENABLE_PROFILE
           value: "true"
         - name: WS_API_PORT

@@ -1,6 +1,7 @@
 package eth1
 
 import (
+	"context"
 	"math/big"
 
 	"go.uber.org/zap"
@@ -34,4 +35,5 @@ type Client interface {
 	EventsFeed() *event.Feed
 	Start(logger *zap.Logger) error
 	Sync(logger *zap.Logger, fromBlock *big.Int) error
+	IsReady(ctx context.Context) (bool, error)
 }

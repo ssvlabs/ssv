@@ -7,24 +7,22 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jellydator/ttlcache/v3"
-
-	"github.com/bloxapp/ssv/eth/eventdatahandler"
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/logging/fields"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/eth/eventdatahandler"
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/ibft/storage"
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/network"
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	nodestorage "github.com/bloxapp/ssv/operator/storage"
@@ -450,6 +448,13 @@ func (c *controller) setupValidators(logger *zap.Logger, shares []*types.SSVShar
 // to start consensus flow which would save the highest decided instance
 // and sync any gaps (in protocol/v2/qbft/controller/decided.go).
 func (c *controller) setupNonCommitteeValidators(logger *zap.Logger) {
+	// Subscribe to all subnets.
+	err := c.network.SubscribeAll(logger)
+	if err != nil {
+		logger.Error("failed to subscribe to all subnets", zap.Error(err))
+		return
+	}
+
 	nonCommitteeShares := c.sharesStorage.List(registrystorage.ByNotLiquidated())
 	if len(nonCommitteeShares) == 0 {
 		logger.Info("could not find non-committee validators")
@@ -467,13 +472,8 @@ func (c *controller) setupNonCommitteeValidators(logger *zap.Logger) {
 			spectypes.BNRoleSyncCommitteeContribution,
 		}
 		for _, role := range allRoles {
-			role := role
-			err := c.network.Subscribe(validatorShare.ValidatorPubKey)
-			if err != nil {
-				logger.Error("failed to subscribe to network", zap.Error(err))
-			}
 			messageID := spectypes.NewMsgID(types.GetDefaultDomain(), validatorShare.ValidatorPubKey, role)
-			err = c.network.SyncHighestDecided(messageID)
+			err := c.network.SyncHighestDecided(messageID)
 			if err != nil {
 				logger.Error("failed to sync highest decided", zap.Error(err))
 			}

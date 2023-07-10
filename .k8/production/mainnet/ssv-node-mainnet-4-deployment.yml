@@ -21,6 +21,10 @@ spec:
       protocol: TCP
       targetPort: 15020
       name: port-15020
+    - port: 16020
+      protocol: TCP
+      targetPort: 16020
+      name: port-16020
   selector:
     app: ssv-node-mainnet-4
 ---
@@ -76,6 +80,9 @@ spec:
         - containerPort: 15020
           name: port-15020
           hostPort: 15020
+        - containerPort: 16020
+          name: port-16020
+          hostPort: 16020
         env:
           - name: SHARE_CONFIG
             value: "./data1/share.yaml"
@@ -99,6 +106,8 @@ spec:
             value: "./data/db-mainnet"
           - name: METRICS_API_PORT
             value: "15020"
+          - name: SSV_API_PORT
+            value: "16020"
           - name: ENABLE_PROFILE
             value: "true"
         volumeMounts:

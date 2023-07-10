@@ -1,7 +1,6 @@
 package p2pv1
 
 import (
-	"bytes"
 	"context"
 	"sync"
 	"sync/atomic"
@@ -43,7 +42,6 @@ const (
 const (
 	connManagerGCInterval           = time.Minute
 	connManagerGCTimeout            = time.Minute
-	peerIndexGCInterval             = 15 * time.Minute
 	peersReportingInterval          = 60 * time.Second
 	peerIdentitiesReportingInterval = 5 * time.Minute
 	topicsReportingInterval         = 180 * time.Second
@@ -106,6 +104,30 @@ func (n *p2pNetwork) Host() host.Host {
 	return n.host
 }
 
+// PeersIndex returns the peers index
+func (n *p2pNetwork) PeersIndex() peers.Index {
+	return n.idx
+}
+
+func (n *p2pNetwork) PeersByTopic() ([]peer.ID, map[string][]peer.ID) {
+	var err error
+	tpcs := n.topicsCtrl.Topics()
+	peerz := make(map[string][]peer.ID, len(tpcs))
+	for _, tpc := range tpcs {
+		peerz[tpc], err = n.topicsCtrl.Peers(tpc)
+		if err != nil {
+			n.interfaceLogger.Error("Cant get peers from topics")
+			return nil, nil
+		}
+	}
+	allpeers, err := n.topicsCtrl.Peers("")
+	if err != nil {
+		n.interfaceLogger.Error("Cant all peers")
+		return nil, nil
+	}
+	return allpeers, peerz
+}
+
 // Close implements io.Closer
 func (n *p2pNetwork) Close() error {
 	atomic.SwapInt32(&n.state, stateClosing)
@@ -140,8 +162,6 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 	go n.startDiscovery(logger)
 
 	async.Interval(n.ctx, connManagerGCInterval, n.peersBalancing(logger))
-
-	async.Interval(n.ctx, peerIndexGCInterval, n.idx.GC)
 
 	async.Interval(n.ctx, peersReportingInterval, n.reportAllPeers(logger))
 
@@ -217,34 +237,30 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 	// there is a pending PR to replace this: https://github.com/bloxapp/ssv/pull/990
 	logger = logger.Named(logging.NameP2PNetwork)
 	ticker := time.NewTicker(2 * time.Second)
+	registeredSubnets := make([]byte, n.fork.Subnets())
 	defer ticker.Stop()
 	for range ticker.C {
 		start := time.Now()
 
-		last := make([]byte, len(n.subnets))
-		if len(n.subnets) > 0 {
-			copy(last, n.subnets)
-		}
+		// Compute the new subnets according to the active validators.
 		newSubnets := make([]byte, n.fork.Subnets())
 		n.activeValidators.Range(func(pkHex string, status validatorStatus) bool {
-			if status == validatorStatusInactive {
-				return true
-			}
 			subnet := n.fork.ValidatorSubnet(pkHex)
 			newSubnets[subnet] = byte(1)
 			return true
 		})
-		subnetsToAdd := make([]int, 0)
-		if !bytes.Equal(newSubnets, last) { // have changes
-			n.subnets = newSubnets
-			for i, b := range newSubnets {
-				if b == byte(1) {
-					subnetsToAdd = append(subnetsToAdd, i)
-				}
+		n.subnets = newSubnets
+
+		// Compute the not yet registered subnets.
+		unregisteredSubnets := make([]int, 0)
+		for subnet, active := range newSubnets {
+			if active == byte(1) && registeredSubnets[subnet] == byte(0) {
+				unregisteredSubnets = append(unregisteredSubnets, subnet)
 			}
 		}
+		registeredSubnets = newSubnets
 
-		if len(subnetsToAdd) == 0 {
+		if len(unregisteredSubnets) == 0 {
 			continue
 		}
 
@@ -252,15 +268,17 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 		self.Metadata.Subnets = records.Subnets(n.subnets).String()
 		n.idx.UpdateSelfRecord(self)
 
-		err := n.disc.RegisterSubnets(logger.Named(logging.NameDiscoveryService), subnetsToAdd...)
+		err := n.disc.RegisterSubnets(logger.Named(logging.NameDiscoveryService), unregisteredSubnets...)
 		if err != nil {
 			logger.Warn("could not register subnets", zap.Error(err))
 			continue
 		}
 		allSubs, _ := records.Subnets{}.FromString(records.AllSubnets)
 		subnetsList := records.SharedSubnets(allSubs, n.subnets, 0)
-		logger.Debug("updated subnets (node-info)",
+		logger.Debug("updated subnets",
+			zap.Any("added", unregisteredSubnets),
 			zap.Any("subnets", subnetsList),
+			zap.Int("total_subnets", len(subnetsList)),
 			zap.Duration("took", time.Since(start)),
 		)
 	}
