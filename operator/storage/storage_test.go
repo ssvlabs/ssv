@@ -4,10 +4,10 @@ import (
 	"encoding/base64"
 	"testing"
 
-	"github.com/bloxapp/ssv/logging"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/eth1"
+	"github.com/bloxapp/ssv/logging"
+
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
@@ -164,27 +164,4 @@ func TestSetupPrivateKey(t *testing.T) {
 			require.Equal(t, string(passedKeyByte), string(rsaencryption.PrivateKeyToByte(sk)))
 		})
 	}
-}
-
-func TestStorage_SaveAndGetSyncOffset(t *testing.T) {
-	logger := logging.TestLogger(t)
-	db, err := ssvstorage.GetStorageFactory(logger, basedb.Options{
-		Type: "badger-memory",
-		Path: "",
-	})
-	require.NoError(t, err)
-	s, err := NewNodeStorage(logger, db)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	offset := new(eth1.SyncOffset)
-	offset.SetString("49e08f", 16)
-	err = s.SaveSyncOffset(offset)
-	require.NoError(t, err)
-
-	o, found, err := s.GetSyncOffset()
-	require.True(t, found)
-	require.NoError(t, err)
-	require.Zero(t, offset.Cmp(o))
 }

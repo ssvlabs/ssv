@@ -2,6 +2,7 @@ package metricsreporter
 
 import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
@@ -10,13 +11,40 @@ import (
 // TODO: implement all methods
 
 const (
+	ssvNodeNotHealthy = float64(0)
+	ssvNodeHealthy    = float64(1)
+
 	executionClientFailure = float64(0)
 	executionClientSyncing = float64(1)
 	executionClientOK      = float64(2)
+
+	validatorInactive     = float64(0)
+	validatorNoIndex      = float64(1)
+	validatorError        = float64(2)
+	validatorReady        = float64(3)
+	validatorNotActivated = float64(4)
+	validatorExiting      = float64(5)
+	validatorSlashed      = float64(6)
+	validatorNotFound     = float64(7)
+	validatorPending      = float64(8)
+	validatorRemoved      = float64(9)
+	validatorUnknown      = float64(10)
 )
 
 var (
+	ssvNodeStatus = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "ssv_node_status",
+		Help: "Status of the operator node",
+	})
 	// TODO: rename "eth1" in metrics
+	executionClientStatus = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "ssv_eth1_status",
+		Help: "Status of the connected execution client",
+	})
+	validatorStatus = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:validator:v2:status",
+		Help: "Validator status",
+	}, []string{"pubKey"})
 	eventProcessed = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_eth1_sync_count_success",
 		Help: "Count succeeded execution client events",
@@ -25,10 +53,6 @@ var (
 		Name: "ssv_eth1_sync_count_failed",
 		Help: "Count failed execution client events",
 	}, []string{"etype"})
-	executionClientStatus = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv_eth1_status",
-		Help: "Status of the connected execution client",
-	})
 )
 
 type MetricsReporter struct {
@@ -44,20 +68,34 @@ func New(opts ...Option) *MetricsReporter {
 		opt(mr)
 	}
 
+	// TODO: think how to register all metrics without adding them all to the slice
 	allMetrics := []prometheus.Collector{
+		ssvNodeStatus,
+		executionClientStatus,
+		validatorStatus,
 		eventProcessed,
 		eventProcessingFailed,
-		executionClientStatus,
 	}
 
 	for i, c := range allMetrics {
 		if err := prometheus.Register(c); err != nil {
 			// TODO: think how to print metric name
-			mr.logger.Warn("could not register prometheus collector", zap.Int("index", i))
+			mr.logger.Warn("could not register prometheus collector",
+				zap.Int("index", i),
+				zap.Error(err),
+			)
 		}
 	}
 
 	return &MetricsReporter{}
+}
+
+func (m MetricsReporter) SSVNodeHealthy() {
+	ssvNodeStatus.Set(ssvNodeHealthy)
+}
+
+func (m MetricsReporter) SSVNodeNotHealthy() {
+	ssvNodeStatus.Set(ssvNodeNotHealthy)
 }
 
 func (m MetricsReporter) ExecutionClientReady() {
@@ -73,23 +111,45 @@ func (m MetricsReporter) ExecutionClientFailure() {
 }
 
 func (m MetricsReporter) LastFetchedBlock(block uint64) {
-
+	// TODO: implement
 }
 
 func (m MetricsReporter) OperatorHasPublicKey(operatorID spectypes.OperatorID, publicKey []byte) {
-
+	// TODO: implement
 }
 
 func (m MetricsReporter) ValidatorInactive(publicKey []byte) {
-
+	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorInactive)
 }
-
+func (m MetricsReporter) ValidatorNoIndex(publicKey []byte) {
+	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorNoIndex)
+}
 func (m MetricsReporter) ValidatorError(publicKey []byte) {
-
+	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorError)
 }
-
+func (m MetricsReporter) ValidatorReady(publicKey []byte) {
+	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorReady)
+}
+func (m MetricsReporter) ValidatorNotActivated(publicKey []byte) {
+	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorNotActivated)
+}
+func (m MetricsReporter) ValidatorExiting(publicKey []byte) {
+	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorExiting)
+}
+func (m MetricsReporter) ValidatorSlashed(publicKey []byte) {
+	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorSlashed)
+}
+func (m MetricsReporter) ValidatorNotFound(publicKey []byte) {
+	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorNotFound)
+}
+func (m MetricsReporter) ValidatorPending(publicKey []byte) {
+	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorPending)
+}
 func (m MetricsReporter) ValidatorRemoved(publicKey []byte) {
-
+	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorRemoved)
+}
+func (m MetricsReporter) ValidatorUnknown(publicKey []byte) {
+	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorUnknown)
 }
 
 func (m MetricsReporter) EventProcessed(eventName string) {

@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -14,12 +15,9 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth/eventdatahandler"
-	"github.com/bloxapp/ssv/eth1"
-	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
@@ -81,6 +79,7 @@ type ControllerOptions struct {
 	NewDecidedHandler          qbftcontroller.NewDecidedHandler
 	DutyRoles                  []spectypes.BeaconRole
 	StorageMap                 *storage.QBFTStores
+	Metrics                    validatorMetrics
 
 	// worker flags
 	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of goroutines to use for message workers"`
@@ -91,13 +90,11 @@ type ControllerOptions struct {
 // Controller represent the validators controller,
 // it takes care of bootstrapping, updating and managing existing validators and their shares
 type Controller interface {
-	ListenToEth1Events(logger *zap.Logger, feed *event.Feed)
 	StartValidators(logger *zap.Logger)
 	ActiveValidatorIndices(logger *zap.Logger) []phase0.ValidatorIndex
 	GetValidator(pubKey string) (*validator.Validator, bool)
 	UpdateValidatorMetaDataLoop(logger *zap.Logger)
 	StartNetworkHandlers(logger *zap.Logger)
-	Eth1EventHandler(logger *zap.Logger, ongoingSync bool) eth1.SyncEventHandler
 	GetOperatorShares() []*types.SSVShare
 	// GetValidatorStats returns stats of validators, including the following:
 	//  - the amount of validators in the network
@@ -126,6 +123,7 @@ type controller struct {
 	context context.Context
 
 	defaultLogger *zap.Logger
+	metrics       validatorMetrics
 
 	eventHandler      EventHandler
 	sharesStorage     registrystorage.Shares
@@ -197,8 +195,13 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		}
 	}
 
+	if options.Metrics == nil {
+		options.Metrics = nopMetrics{}
+	}
+
 	ctrl := controller{
 		defaultLogger:              logger,
+		metrics:                    options.Metrics,
 		sharesStorage:              options.RegistryStorage.Shares(),
 		operatorsStorage:           options.RegistryStorage,
 		recipientsStorage:          options.RegistryStorage,
@@ -369,26 +372,6 @@ func (c *controller) handleWorkerMessages(logger *zap.Logger, msg *spectypes.SSV
 	ncv.ProcessMessage(logger, msg)
 
 	return nil
-}
-
-// ListenToEth1Events is listening to events coming from eth1 client
-func (c *controller) ListenToEth1Events(logger *zap.Logger, feed *event.Feed) {
-	logger = logger.Named(logging.NameController)
-	cn := make(chan *eth1.Event)
-	sub := feed.Subscribe(cn)
-	defer sub.Unsubscribe()
-
-	handler := c.Eth1EventHandler(logger, true)
-
-	for {
-		select {
-		case e := <-cn:
-			logFields, err := handler(*e)
-			_ = eth1.HandleEventResult(logger, *e, logFields, err, true)
-		case err := <-sub.Err():
-			logger.Warn("event feed subscription error", zap.Error(err))
-		}
-	}
 }
 
 // StartValidators loads all persisted shares and setup the corresponding validators
@@ -586,45 +569,6 @@ func (c *controller) onMetadataUpdated(logger *zap.Logger, pk string, meta *beac
 	}
 }
 
-// onShareCreate is called when a validator was added/updated during registry sync
-func (c *controller) onShareCreate(logger *zap.Logger, validatorEvent abiparser.ValidatorAddedEvent) (*types.SSVShare, error) {
-	share, shareSecret, err := ShareFromValidatorEvent(
-		validatorEvent,
-		c.shareEncryptionKeyProvider,
-		c.operatorData,
-	)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not extract validator share from event")
-	}
-
-	if share.BelongsToOperator(c.operatorData.ID) {
-		if shareSecret == nil {
-			return nil, errors.New("could not decode shareSecret")
-		}
-
-		logger := logger.With(fields.PubKey(share.ValidatorPubKey))
-
-		// get metadata
-		if updated, err := UpdateShareMetadata(share, c.beacon); err != nil {
-			logger.Warn("could not add validator metadata", zap.Error(err))
-		} else if !updated {
-			logger.Warn("could not find validator metadata")
-		}
-
-		// save secret key
-		if err := c.keyManager.AddShare(shareSecret); err != nil {
-			return nil, errors.Wrap(err, "could not add share secret to key manager")
-		}
-	}
-
-	// save validator data
-	if err := c.sharesStorage.Save(share); err != nil {
-		return nil, errors.Wrap(err, "could not save validator share")
-	}
-
-	return share, nil
-}
-
 // onShareRemove is called when a validator was removed
 // TODO: think how we can make this function atomic (i.e. failing wouldn't stop the removal of the share)
 func (c *controller) onShareRemove(pk string, removeSecret bool) error {
@@ -651,7 +595,7 @@ func (c *controller) onShareStart(logger *zap.Logger, share *types.SSVShare) (bo
 		return false, nil
 	}
 
-	if err := SetShareFeeRecipient(logger, share, c.recipientsStorage.GetRecipientData); err != nil {
+	if err := setShareFeeRecipient(logger, share, c.recipientsStorage.GetRecipientData); err != nil {
 		return false, errors.Wrap(err, "could not set share fee recipient")
 	}
 
@@ -663,14 +607,34 @@ func (c *controller) onShareStart(logger *zap.Logger, share *types.SSVShare) (bo
 	return c.startValidator(logger, v)
 }
 
+func setShareFeeRecipient(logger *zap.Logger, share *types.SSVShare, getRecipientData GetRecipientDataFunc) error {
+	var feeRecipient bellatrix.ExecutionAddress
+	data, found, err := getRecipientData(share.OwnerAddress)
+	if err != nil {
+		return errors.Wrap(err, "could not get recipient data")
+	}
+	if !found {
+		logger.Debug("setting fee recipient to owner address",
+			fields.Validator(share.ValidatorPubKey), fields.FeeRecipient(share.OwnerAddress.Bytes()))
+		copy(feeRecipient[:], share.OwnerAddress.Bytes())
+	} else {
+		logger.Debug("setting fee recipient to storage data",
+			fields.Validator(share.ValidatorPubKey), fields.FeeRecipient(data.FeeRecipient[:]))
+		feeRecipient = data.FeeRecipient
+	}
+	share.SetFeeRecipient(feeRecipient)
+
+	return nil
+}
+
 // startValidator will start the given validator if applicable
 func (c *controller) startValidator(logger *zap.Logger, v *validator.Validator) (bool, error) {
-	ReportValidatorStatus(hex.EncodeToString(v.Share.ValidatorPubKey), v.Share.BeaconMetadata, logger)
+	c.reportValidatorStatus(v.Share.ValidatorPubKey, v.Share.BeaconMetadata, logger)
 	if v.Share.BeaconMetadata.Index == 0 {
 		return false, errors.New("could not start validator: index not found")
 	}
 	if err := v.Start(logger); err != nil {
-		metricsValidatorStatus.WithLabelValues(hex.EncodeToString(v.Share.ValidatorPubKey)).Set(float64(validatorStatusError))
+		c.metrics.ValidatorError(v.Share.ValidatorPubKey)
 		return false, errors.Wrap(err, "could not start validator")
 	}
 	return true, nil

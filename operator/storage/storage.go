@@ -11,7 +11,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	registry "github.com/bloxapp/ssv/protocol/v2/blockchain/eth1"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
@@ -28,7 +27,6 @@ var (
 type Storage interface {
 	// TODO: de-anonymize the sub-storages, like Shares() below
 
-	eth1.SyncOffsetStorage
 	registry.RegistryStore
 
 	registrystorage.Operators
@@ -156,8 +154,10 @@ func (s *storage) CleanRegistryData() error {
 	return nil
 }
 
+// TODO: review what's not needed anymore and delete
+
 // SaveSyncOffset saves the offset
-func (s *storage) SaveSyncOffset(offset *eth1.SyncOffset) error {
+func (s *storage) SaveSyncOffset(offset *big.Int) error {
 	return s.db.Set(storagePrefix, syncOffsetKey, offset.Bytes())
 }
 
@@ -181,7 +181,7 @@ func (s *storage) cleanEvents() error {
 }
 
 // GetSyncOffset returns the offset
-func (s *storage) GetSyncOffset() (*eth1.SyncOffset, bool, error) {
+func (s *storage) GetSyncOffset() (*big.Int, bool, error) {
 	obj, found, err := s.db.Get(storagePrefix, syncOffsetKey)
 	if !found {
 		return nil, found, nil

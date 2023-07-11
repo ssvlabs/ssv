@@ -19,13 +19,12 @@ import (
 	"github.com/bloxapp/ssv/beacon/goclient"
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/ekm"
+	"github.com/bloxapp/ssv/eth"
 	"github.com/bloxapp/ssv/eth/eventbatcher"
 	"github.com/bloxapp/ssv/eth/eventdatahandler"
 	"github.com/bloxapp/ssv/eth/eventdb"
 	"github.com/bloxapp/ssv/eth/eventdispatcher"
 	"github.com/bloxapp/ssv/eth/executionclient"
-	"github.com/bloxapp/ssv/eth1"
-	"github.com/bloxapp/ssv/eth1/goeth"
 	exporterapi "github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/api/decided"
 	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
@@ -58,8 +57,8 @@ type config struct {
 	global_config.GlobalConfig `yaml:"global"`
 	DBOptions                  basedb.Options         `yaml:"db"`
 	SSVOptions                 operator.Options       `yaml:"ssv"`
-	ETH1Options                eth1.Options           `yaml:"eth1"` // TODO: execution_client
-	ETH2Options                beaconprotocol.Options `yaml:"eth2"` // TODO: consensus_client
+	ExecutionClient            eth.ExecutionOptions   `yaml:"eth1"` // TODO: execution_client in yaml
+	ConsensusClient            beaconprotocol.Options `yaml:"eth2"` // TODO: consensus_client in yaml
 	P2pNetworkConfig           p2pv1.Config           `yaml:"p2p"`
 
 	OperatorPrivateKey         string `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
@@ -81,9 +80,6 @@ var cfg config
 var globalArgs global_config.Args
 
 var operatorNode operator.Node
-
-// TODO: get rid of
-const eth1Refactor = true
 
 var StartNodeCmd = &cobra.Command{
 	Use:   "start-node",
@@ -125,70 +121,65 @@ var StartNodeCmd = &cobra.Command{
 
 		p2pNetwork := setupP2P(forkVersion, operatorData, db, logger, networkConfig)
 
-		ctx := cmd.Context()
-		slotTicker := slot_ticker.NewTicker(ctx, networkConfig)
-
-		cfg.ETH2Options.Context = cmd.Context()
-
-		cfg.ETH2Options.Graffiti = []byte("SSV.Network")
-		cfg.ETH2Options.GasLimit = spectypes.DefaultGasLimit
-		cfg.ETH2Options.Network = networkConfig.Beacon
-
-		cl := setupEth2(logger, operatorData.ID, slotTicker)
-		var el eth1.Client
-		if !eth1Refactor {
-			el = setupEth1(logger, networkConfig.RegistryContractAddr) // TODO: get rid of
-		}
+		slotTicker := slot_ticker.NewTicker(cmd.Context(), networkConfig)
 
 		metricsReporter := metricsreporter.New(
 			metricsreporter.WithLogger(logger),
 		)
 
+		cfg.ConsensusClient.Context = cmd.Context()
+
+		cfg.ConsensusClient.Graffiti = []byte("SSV.Network")
+		cfg.ConsensusClient.GasLimit = spectypes.DefaultGasLimit
+		cfg.ConsensusClient.Network = networkConfig.Beacon
+
+		consensusClient := setupConsensusClient(logger, operatorData.ID, slotTicker)
+
 		executionClient := executionclient.New(
-			cfg.ETH1Options.ETH1Addr,
+			cfg.ExecutionClient.ETH1Addr,
 			ethcommon.HexToAddress(networkConfig.RegistryContractAddr),
 			executionclient.WithLogger(logger),
 			executionclient.WithMetrics(metricsReporter),
 			executionclient.WithFinalizationOffset(executionclient.DefaultFinalizationOffset),
-			executionclient.WithConnectionTimeout(cfg.ETH1Options.ETH1ConnectionTimeout),
+			executionclient.WithConnectionTimeout(cfg.ExecutionClient.ETH1ConnectionTimeout),
 			executionclient.WithReconnectionInitialInterval(executionclient.DefaultReconnectionInitialInterval),
 			executionclient.WithReconnectionMaxInterval(executionclient.DefaultReconnectionMaxInterval),
 		)
 
-		if err := executionClient.Connect(ctx); err != nil {
+		if err := executionClient.Connect(cmd.Context()); err != nil {
 			logger.Fatal("failed to connect to execution client", zap.Error(err))
 		}
 
-		nodeChecker := nodeprobe.NewProber(
+		nodeProber := nodeprobe.NewProber(
 			logger,
 			executionClient,
-			// Underlying options.Beacon's value implements nodechecker.StatusChecker.
+			// Underlying options.Beacon's value implements nodeprobe.StatusChecker.
 			// However, as it uses spec's specssv.BeaconNode interface, avoiding type assertion requires modifications in spec.
-			// If options.Beacon doesn't implement nodechecker.StatusChecker due to a mistake, this would panic early.
-			el.(nodeprobe.StatusChecker),
+			// If options.Beacon doesn't implement nodeprobe.StatusChecker due to a mistake, this would panic early.
+			consensusClient.(nodeprobe.StatusChecker),
 		)
 
-		nodeChecker.Start(ctx)
+		nodeProber.Start(cmd.Context())
 
 		cfg.SSVOptions.ForkVersion = forkVersion
-		cfg.SSVOptions.Context = ctx
+		cfg.SSVOptions.Context = cmd.Context()
 		cfg.SSVOptions.DB = db
-		cfg.SSVOptions.BeaconNode = cl
-		cfg.SSVOptions.Eth1Client = el
+		cfg.SSVOptions.BeaconNode = consensusClient
+		cfg.SSVOptions.ExecutionClient = executionClient
 		cfg.SSVOptions.Network = networkConfig
 		cfg.SSVOptions.P2PNetwork = p2pNetwork
 		cfg.SSVOptions.ValidatorOptions.ForkVersion = forkVersion
 		cfg.SSVOptions.ValidatorOptions.BeaconNetwork = networkConfig.Beacon
-		cfg.SSVOptions.ValidatorOptions.Context = ctx
+		cfg.SSVOptions.ValidatorOptions.Context = cmd.Context()
 		cfg.SSVOptions.ValidatorOptions.DB = db
 		cfg.SSVOptions.ValidatorOptions.Network = p2pNetwork
-		cfg.SSVOptions.ValidatorOptions.Beacon = cl
+		cfg.SSVOptions.ValidatorOptions.Beacon = consensusClient
 		cfg.SSVOptions.ValidatorOptions.KeyManager = keyManager
 
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = nodeStorage.GetPrivateKey
 		cfg.SSVOptions.ValidatorOptions.OperatorData = operatorData
 		cfg.SSVOptions.ValidatorOptions.RegistryStorage = nodeStorage
-		cfg.SSVOptions.ValidatorOptions.GasLimit = cfg.ETH2Options.GasLimit
+		cfg.SSVOptions.ValidatorOptions.GasLimit = cfg.ConsensusClient.GasLimit
 
 		if cfg.WsAPIPort != 0 {
 			ws := exporterapi.NewWsServer(cmd.Context(), nil, http.NewServeMux(), cfg.WithPing)
@@ -214,86 +205,92 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
+		cfg.SSVOptions.ValidatorOptions.Metrics = metricsReporter
 
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
+		cfg.SSVOptions.Metrics = metricsReporter
 
 		operatorNode = operator.New(logger, cfg.SSVOptions, slotTicker)
 
 		if cfg.MetricsAPIPort > 0 {
-			go startMetricsHandler(cmd.Context(), logger, db, cfg.MetricsAPIPort, cfg.EnableProfile)
+			go startMetricsHandler(cmd.Context(), logger, db, metricsReporter, cfg.MetricsAPIPort, cfg.EnableProfile)
 		}
 
-		nodeChecker.Wait()
+		nodeProber.Wait()
 
-		nodeChecker.SetUnreadyHandler(func() {
+		nodeProber.SetUnreadyHandler(func() {
 			logger.Fatal("Ethereum node(s) are either out of sync or down. Ensure the nodes are ready to resume.")
 		})
 
-		metrics.ReportSSVNodeHealthiness(true)
+		metricsReporter.SSVNodeHealthy()
 
-		if eth1Refactor {
-			// TODO: handle local events
-			eventDB := eventdb.NewEventDB(db.Badger())
-			eventDataHandler, err := eventdatahandler.New(
-				eventDB,
-				validatorCtrl,
-				cfg.SSVOptions.ValidatorOptions.OperatorData,
-				cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider,
-				cfg.SSVOptions.ValidatorOptions.KeyManager,
-				cfg.SSVOptions.ValidatorOptions.Beacon,
-				storageMap,
-				eventdatahandler.WithFullNode(),
-				eventdatahandler.WithLogger(logger),
-				eventdatahandler.WithMetrics(metricsReporter),
-			)
-			if err != nil {
-				logger.Fatal("failed to setup event data handler", zap.Error(err))
-			}
+		eventDB := eventdb.NewEventDB(db.Badger())
+		eventDataHandler, err := eventdatahandler.New(
+			eventDB,
+			validatorCtrl,
+			cfg.SSVOptions.ValidatorOptions.OperatorData,
+			cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider,
+			cfg.SSVOptions.ValidatorOptions.KeyManager,
+			cfg.SSVOptions.ValidatorOptions.Beacon,
+			storageMap,
+			eventdatahandler.WithFullNode(),
+			eventdatahandler.WithLogger(logger),
+			eventdatahandler.WithMetrics(metricsReporter),
+		)
+		if err != nil {
+			logger.Fatal("failed to setup event data handler", zap.Error(err))
+		}
 
-			eventBatcher := eventbatcher.NewEventBatcher()
-			eventDispatcher := eventdispatcher.New(
-				executionClient,
-				eventBatcher,
-				eventDataHandler,
-				eventdispatcher.WithLogger(logger),
-				eventdispatcher.WithMetrics(metricsReporter),
-			)
+		eventBatcher := eventbatcher.NewEventBatcher()
+		eventDispatcher := eventdispatcher.New(
+			executionClient,
+			eventBatcher,
+			eventDataHandler,
+			eventdispatcher.WithLogger(logger),
+			eventdispatcher.WithMetrics(metricsReporter),
+			eventdispatcher.WithNodeProber(nodeProber),
+		)
 
-			txn := eventDB.ROTxn()
-			defer txn.Discard()
+		txn := eventDB.ROTxn()
+		defer txn.Discard()
 
-			fromBlock, err := txn.GetLastProcessedBlock()
-			if err != nil {
-				logger.Fatal("could not get last processed block", zap.Error(err))
-			}
+		fromBlock, err := txn.GetLastProcessedBlock()
+		if err != nil {
+			logger.Fatal("could not get last processed block", zap.Error(err))
+		}
 
-			if fromBlock == nil {
-				fromBlock = networkConfig.ETH1SyncOffset
-				logger.Info("no last processed block in DB found, using last processed block from network config",
-					fields.BlockNumber(fromBlock.Uint64()))
-			} else {
-				logger.Info("using last processed block from DB",
-					fields.BlockNumber(fromBlock.Uint64()))
-			}
+		if fromBlock == nil {
+			fromBlock = networkConfig.ETH1SyncOffset
+			logger.Info("no last processed block in DB found, using last processed block from network config",
+				fields.BlockNumber(fromBlock.Uint64()))
+		} else {
+			logger.Info("using last processed block from DB",
+				fields.BlockNumber(fromBlock.Uint64()))
+		}
 
+		// load & parse local events yaml if exists, otherwise sync from contract
+		if len(cfg.LocalEventsPath) != 0 {
+			// TODO: fix type mismatch
+			//if err := validator.LoadLocalEvents(
+			//	logger,
+			//	validatorCtrl.Eth1EventHandler(logger, false),
+			//	cfg.LocalEventsPath,
+			//); err != nil {
+			//	logger.Fatal("failed to load local events", zap.Error(err))
+			//}
+			//
+			//localEvents, err := localevents.Load(cfg.LocalEventsPath)
+			//if err != nil {
+			//	logger.Fatal("failed to load local events", zap.Error(err))
+			//}
+			//
+			//if err := eventDispatcher.StartWithLocalEvents(cmd.Context(), localEvents); err != nil {
+			//	logger.Fatal("error occurred while running event dispatcher", zap.Error(err))
+			//}
+		} else {
 			if err := eventDispatcher.Start(cmd.Context(), fromBlock.Uint64()); err != nil {
 				logger.Fatal("error occurred while running event dispatcher", zap.Error(err))
-			}
-		} else {
-			// load & parse local events yaml if exists, otherwise sync from contract
-			if len(cfg.LocalEventsPath) > 0 {
-				if err := validator.LoadLocalEvents(
-					logger,
-					validatorCtrl.Eth1EventHandler(logger, false),
-					cfg.LocalEventsPath,
-				); err != nil {
-					logger.Fatal("failed to load local events", zap.Error(err))
-				}
-			} else {
-				if err := operatorNode.StartEth1(logger, networkConfig.ETH1SyncOffset); err != nil {
-					logger.Fatal("failed to start eth1", zap.Error(err))
-				}
 			}
 		}
 
@@ -487,47 +484,24 @@ func setupP2P(
 	return p2pv1.New(logger, &cfg.P2pNetworkConfig)
 }
 
-func setupEth2(
+func setupConsensusClient(
 	logger *zap.Logger,
 	operatorID spectypes.OperatorID,
 	slotTicker slot_ticker.Ticker,
 ) beaconprotocol.BeaconNode {
-	cl, err := goclient.New(logger, cfg.ETH2Options, operatorID, slotTicker)
+	cl, err := goclient.New(logger, cfg.ConsensusClient, operatorID, slotTicker)
 	if err != nil {
 		logger.Fatal("failed to create beacon go-client", zap.Error(err),
-			fields.Address(cfg.ETH2Options.BeaconNodeAddr))
+			fields.Address(cfg.ConsensusClient.BeaconNodeAddr))
 	}
 
 	return cl
 }
 
-func setupEth1(logger *zap.Logger, contractAddr string) eth1.Client {
-	logger.Info("using registry contract address", fields.Address(contractAddr), fields.ABIVersion(cfg.ETH1Options.AbiVersion.String()))
-	if len(cfg.ETH1Options.RegistryContractABI) > 0 {
-		logger.Info("using registry contract abi", fields.ABI(cfg.ETH1Options.RegistryContractABI))
-		if err := eth1.LoadABI(logger, cfg.ETH1Options.RegistryContractABI); err != nil {
-			logger.Fatal("failed to load ABI JSON", zap.Error(err))
-		}
-	}
-	el, err := goeth.NewEth1Client(logger, goeth.ClientOptions{
-		Ctx:                  cfg.ETH2Options.Context,
-		NodeAddr:             cfg.ETH1Options.ETH1Addr,
-		ConnectionTimeout:    cfg.ETH1Options.ETH1ConnectionTimeout,
-		ContractABI:          eth1.ContractABI(cfg.ETH1Options.AbiVersion),
-		RegistryContractAddr: contractAddr,
-		AbiVersion:           cfg.ETH1Options.AbiVersion,
-	})
-	if err != nil {
-		logger.Fatal("failed to create eth1 client", zap.Error(err))
-	}
-
-	return el
-}
-
-func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.IDb, port int, enableProf bool) {
+func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.IDb, metricsReporter *metricsreporter.MetricsReporter, port int, enableProf bool) {
 	logger = logger.Named(logging.NameMetricsHandler)
 	// init and start HTTP handler
-	metricsHandler := metrics.NewMetricsHandler(ctx, db, enableProf, operatorNode.(metrics.HealthCheckAgent))
+	metricsHandler := metrics.NewMetricsHandler(ctx, db, metricsReporter, enableProf, operatorNode.(metrics.HealthCheckAgent))
 	addr := fmt.Sprintf(":%d", port)
 	if err := metricsHandler.Start(logger, http.NewServeMux(), addr); err != nil {
 		logger.Panic("failed to serve metrics", zap.Error(err))

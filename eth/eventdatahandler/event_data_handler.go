@@ -54,7 +54,7 @@ func New(
 		return nil, fmt.Errorf("get contract ABI: %w", err)
 	}
 
-	// TODO: zero values don't look well, think of a workaround, perhaps pass Eth1Client with Filterer method to New
+	// TODO: zero values don't look well, think of a workaround, perhaps pass ExecutionClient with Filterer method to New
 	filterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create contract filterer: %w", err)
@@ -193,6 +193,8 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 		if err := edh.handleValidatorAdded(txn, validatorAddedEvent); err != nil {
 			return nil, fmt.Errorf("handle ValidatorAdded: %w", err)
 		}
+
+		// TODO: if event is malformed, we don't need to create a task, so in this case we need to return a sentinel error (ErrMalformedEvent?)
 
 		task := func() error {
 			if err := edh.taskExecutor.AddValidator(validatorAddedEvent); err != nil {

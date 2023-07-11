@@ -15,7 +15,6 @@ import (
 
 	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/eth/eventdb"
-	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/logging/fields"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
@@ -114,6 +113,16 @@ func (edh *EventDataHandler) handleOperatorRemoved(txn eventdb.RW, event *contra
 	return nil
 }
 
+// MalformedEventError is returned when event is malformed
+// TODO: consider removing
+type MalformedEventError struct {
+	Err error
+}
+
+func (e *MalformedEventError) Error() string {
+	return e.Err.Error()
+}
+
 func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contract.ContractValidatorAdded) error {
 	logger := edh.logger.With(
 		zap.String("owner_address", event.Owner.String()),
@@ -177,7 +186,7 @@ func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contrac
 		if err != nil {
 			edh.metrics.EventProcessingFailed(ValidatorAdded)
 
-			var malformedEventError *abiparser.MalformedEventError
+			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
 				edh.logger.Warn("malformed event", zap.Error(err))
 				return nil
@@ -220,7 +229,7 @@ func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contrac
 	return nil
 }
 
-// onShareCreate is called when a validator was added/updated during registry sync
+// handleShareCreation is called when a validator was added/updated during registry sync
 func (edh *EventDataHandler) handleShareCreation(
 	txn eventdb.RW,
 	validatorEvent *contract.ContractValidatorAdded,
@@ -293,7 +302,7 @@ func validatorAddedEventToShare(
 
 	publicKey, err := ssvtypes.DeserializeBLSPublicKey(event.PublicKey)
 	if err != nil {
-		return nil, nil, &abiparser.MalformedEventError{
+		return nil, nil, &MalformedEventError{
 			Err: fmt.Errorf("failed to deserialize validator public key: %w", err),
 		}
 	}
@@ -327,17 +336,17 @@ func validatorAddedEventToShare(
 		shareSecret = &bls.SecretKey{}
 		decryptedSharePrivateKey, err := rsaencryption.DecodeKey(operatorPrivateKey, encryptedKeys[i])
 		if err != nil {
-			return nil, nil, &abiparser.MalformedEventError{
+			return nil, nil, &MalformedEventError{
 				Err: fmt.Errorf("could not decrypt share private key: %w", err),
 			}
 		}
 		if err = shareSecret.SetHexString(string(decryptedSharePrivateKey)); err != nil {
-			return nil, nil, &abiparser.MalformedEventError{
+			return nil, nil, &MalformedEventError{
 				Err: fmt.Errorf("could not set decrypted share private key: %w", err),
 			}
 		}
 		if !bytes.Equal(shareSecret.GetPublicKey().Serialize(), validatorShare.SharePubKey) {
-			return nil, nil, &abiparser.MalformedEventError{
+			return nil, nil, &MalformedEventError{
 				Err: errors.New("share private key does not match public key"),
 			}
 		}

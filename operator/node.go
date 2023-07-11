@@ -6,10 +6,9 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/eth1"
+	"github.com/bloxapp/ssv/eth/executionclient"
 	"github.com/bloxapp/ssv/exporter"
 	"github.com/bloxapp/ssv/exporter/api"
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
@@ -30,7 +29,6 @@ import (
 // Node represents the behavior of SSV node
 type Node interface {
 	Start(logger *zap.Logger) error
-	StartEth1(logger *zap.Logger, syncOffset *eth1.SyncOffset) error
 }
 
 // Options contains options to create the node
@@ -39,7 +37,7 @@ type Options struct {
 	NetworkName         string `yaml:"Network" env:"NETWORK" env-default:"mainnet" env-description:"Network is the network of this node"`
 	Network             networkconfig.NetworkConfig
 	BeaconNode          beaconprotocol.BeaconNode // TODO: consider renaming to ConsensusClient
-	Eth1Client          eth1.Client               // TODO: get rid of
+	ExecutionClient     *executionclient.ExecutionClient
 	P2PNetwork          network.P2PNetwork
 	Context             context.Context
 	DB                  basedb.IDb
@@ -53,6 +51,8 @@ type Options struct {
 
 	WS        api.WebSocketServer
 	WsAPIPort int
+
+	Metrics nodeMetrics
 }
 
 // operatorNode implements Node interface
@@ -61,11 +61,11 @@ type operatorNode struct {
 	context          context.Context
 	ticker           slot_ticker.Ticker
 	validatorsCtrl   validator.Controller
-	beacon           beaconprotocol.BeaconNode
+	consensusClient  beaconprotocol.BeaconNode
+	executionClient  metrics.HealthCheckAgent
 	net              network.P2PNetwork
 	storage          storage.Storage
 	qbftStorage      *qbftstorage.QBFTStores
-	eth1Client       eth1.Client
 	dutyCtrl         duties.DutyController
 	feeRecipientCtrl fee_recipient.RecipientController
 	// fork           *forks.Forker
@@ -74,6 +74,8 @@ type operatorNode struct {
 
 	ws        api.WebSocketServer
 	wsAPIPort int
+
+	metrics nodeMetrics
 }
 
 // New is the constructor of operatorNode
@@ -93,15 +95,15 @@ func New(logger *zap.Logger, opts Options, slotTicker slot_ticker.Ticker) Node {
 	}
 
 	node := &operatorNode{
-		context:        opts.Context,
-		ticker:         slotTicker,
-		validatorsCtrl: opts.ValidatorController,
-		network:        opts.Network,
-		beacon:         opts.BeaconNode,
-		net:            opts.P2PNetwork,
-		eth1Client:     opts.Eth1Client,
-		storage:        opts.ValidatorOptions.RegistryStorage,
-		qbftStorage:    storageMap,
+		context:         opts.Context,
+		ticker:          slotTicker,
+		validatorsCtrl:  opts.ValidatorController,
+		network:         opts.Network,
+		consensusClient: opts.BeaconNode,
+		executionClient: opts.ExecutionClient,
+		net:             opts.P2PNetwork,
+		storage:         opts.ValidatorOptions.RegistryStorage,
+		qbftStorage:     storageMap,
 		dutyCtrl: duties.NewDutyController(logger, &duties.ControllerOptions{
 			Ctx:                 opts.Context,
 			BeaconClient:        opts.BeaconNode,
@@ -126,6 +128,12 @@ func New(logger *zap.Logger, opts Options, slotTicker slot_ticker.Ticker) Node {
 
 		ws:        opts.WS,
 		wsAPIPort: opts.WsAPIPort,
+
+		metrics: opts.Metrics,
+	}
+
+	if node.metrics == nil {
+		node.metrics = nopMetrics{}
 	}
 
 	return node
@@ -170,61 +178,22 @@ func (n *operatorNode) listenForCurrentSlot(logger *zap.Logger) {
 	}
 }
 
-// StartEth1 starts the eth1 events sync and streaming
-func (n *operatorNode) StartEth1(logger *zap.Logger, syncOffset *eth1.SyncOffset) error {
-	logger.Info("starting operator node syncing with eth1")
-
-	handler := n.validatorsCtrl.Eth1EventHandler(logger, false)
-	// sync past events
-	if err := eth1.SyncEth1Events(logger, n.eth1Client, n.storage, n.network, syncOffset, handler); err != nil {
-		return errors.Wrap(err, "failed to sync contract events")
-	}
-	logger.Info("manage to sync contract events")
-	shares := n.storage.Shares().List()
-	operators, err := n.storage.ListOperators(logger, 0, 0)
-	if err != nil {
-		logger.Error("failed to get operators", zap.Error(err))
-	}
-	operatorID := n.validatorsCtrl.GetOperatorData().ID
-	operatorValidatorsCount := 0
-	if operatorID != 0 {
-		for _, share := range shares {
-			if share.BelongsToOperator(operatorID) {
-				operatorValidatorsCount++
-			}
-		}
-	}
-
-	logger.Info("ETH1 sync history stats",
-		zap.Int("validators count", len(shares)),
-		zap.Int("operators count", len(operators)),
-		zap.Int("my validators count", operatorValidatorsCount),
-	)
-
-	// setup validator controller to listen to new events
-	go n.validatorsCtrl.ListenToEth1Events(logger, n.eth1Client.EventsFeed())
-
-	// starts the eth1 events subscription
-	if err := n.eth1Client.Start(logger); err != nil {
-		return errors.Wrap(err, "failed to start eth1 client")
-	}
-
-	return nil
-}
-
 // HealthCheck returns a list of issues regards the state of the operator node
 func (n *operatorNode) HealthCheck() []string {
 	errs := metrics.ProcessAgents(n.healthAgents())
-	metrics.ReportSSVNodeHealthiness(len(errs) == 0)
+	if len(errs) == 0 {
+		n.metrics.SSVNodeHealthy()
+	} else {
+		n.metrics.SSVNodeNotHealthy()
+	}
 	return errs
 }
 
 func (n *operatorNode) healthAgents() []metrics.HealthCheckAgent {
-	var agents []metrics.HealthCheckAgent
-	if agent, ok := n.eth1Client.(metrics.HealthCheckAgent); ok {
-		agents = append(agents, agent)
+	agents := []metrics.HealthCheckAgent{
+		n.executionClient,
 	}
-	if agent, ok := n.beacon.(metrics.HealthCheckAgent); ok {
+	if agent, ok := n.consensusClient.(metrics.HealthCheckAgent); ok {
 		agents = append(agents, agent)
 	}
 	return agents
