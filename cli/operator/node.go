@@ -34,6 +34,7 @@ import (
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
+	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/network"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/networkconfig"
@@ -139,11 +140,13 @@ var StartNodeCmd = &cobra.Command{
 			el = setupEth1(logger, networkConfig.RegistryContractAddr) // TODO: get rid of
 		}
 
+		metricsReporter := metricsreporter.New()
+
 		executionClient := executionclient.New(
 			cfg.ETH1Options.ETH1Addr,
 			ethcommon.HexToAddress(networkConfig.RegistryContractAddr),
 			executionclient.WithLogger(logger),
-			//eth1client.WithMetrics(metrics), // TODO: implement
+			executionclient.WithMetrics(metricsReporter),
 			executionclient.WithFinalizationOffset(executionclient.DefaultFinalizationOffset),
 			executionclient.WithConnectionTimeout(cfg.ETH1Options.ETH1ConnectionTimeout),
 			executionclient.WithReconnectionInitialInterval(executionclient.DefaultReconnectionInitialInterval),
@@ -240,6 +243,7 @@ var StartNodeCmd = &cobra.Command{
 				storageMap,
 				eventdatahandler.WithFullNode(),
 				eventdatahandler.WithLogger(logger),
+				eventdatahandler.WithMetrics(metricsReporter),
 			)
 			if err != nil {
 				logger.Fatal("failed to setup event data handler", zap.Error(err))
@@ -251,6 +255,7 @@ var StartNodeCmd = &cobra.Command{
 				eventBatcher,
 				eventDataHandler,
 				eventdispatcher.WithLogger(logger),
+				eventdispatcher.WithMetrics(metricsReporter),
 			)
 
 			txn := eventDB.ROTxn()
