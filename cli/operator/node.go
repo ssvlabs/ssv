@@ -19,7 +19,7 @@ import (
 	"github.com/bloxapp/ssv/beacon/goclient"
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/ekm"
-	"github.com/bloxapp/ssv/eth"
+	config2 "github.com/bloxapp/ssv/eth/config"
 	"github.com/bloxapp/ssv/eth/eventbatcher"
 	"github.com/bloxapp/ssv/eth/eventdatahandler"
 	"github.com/bloxapp/ssv/eth/eventdb"
@@ -55,11 +55,11 @@ import (
 
 type config struct {
 	global_config.GlobalConfig `yaml:"global"`
-	DBOptions                  basedb.Options         `yaml:"db"`
-	SSVOptions                 operator.Options       `yaml:"ssv"`
-	ExecutionClient            eth.ExecutionOptions   `yaml:"eth1"` // TODO: execution_client in yaml
-	ConsensusClient            beaconprotocol.Options `yaml:"eth2"` // TODO: consensus_client in yaml
-	P2pNetworkConfig           p2pv1.Config           `yaml:"p2p"`
+	DBOptions                  basedb.Options           `yaml:"db"`
+	SSVOptions                 operator.Options         `yaml:"ssv"`
+	ExecutionClient            config2.ExecutionOptions `yaml:"eth1"` // TODO: execution_client in yaml
+	ConsensusClient            beaconprotocol.Options   `yaml:"eth2"` // TODO: consensus_client in yaml
+	P2pNetworkConfig           p2pv1.Config             `yaml:"p2p"`
 
 	OperatorPrivateKey         string `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
 	GenerateOperatorPrivateKey bool   `yaml:"GenerateOperatorPrivateKey" env:"GENERATE_OPERATOR_KEY" env-description:"Whether to generate operator key if none is passed by config"`
@@ -136,12 +136,12 @@ var StartNodeCmd = &cobra.Command{
 		consensusClient := setupConsensusClient(logger, operatorData.ID, slotTicker)
 
 		executionClient := executionclient.New(
-			cfg.ExecutionClient.ETH1Addr,
+			cfg.ExecutionClient.Addr,
 			ethcommon.HexToAddress(networkConfig.RegistryContractAddr),
 			executionclient.WithLogger(logger),
 			executionclient.WithMetrics(metricsReporter),
 			executionclient.WithFinalizationOffset(executionclient.DefaultFinalizationOffset),
-			executionclient.WithConnectionTimeout(cfg.ExecutionClient.ETH1ConnectionTimeout),
+			executionclient.WithConnectionTimeout(cfg.ExecutionClient.ConnectionTimeout),
 			executionclient.WithReconnectionInitialInterval(executionclient.DefaultReconnectionInitialInterval),
 			executionclient.WithReconnectionMaxInterval(executionclient.DefaultReconnectionMaxInterval),
 		)
