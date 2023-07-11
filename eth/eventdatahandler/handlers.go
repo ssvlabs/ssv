@@ -114,16 +114,6 @@ func (edh *EventDataHandler) handleOperatorRemoved(txn eventdb.RW, event *contra
 	return nil
 }
 
-// MalformedEventError is returned when event is malformed
-// TODO: consider removing
-type MalformedEventError struct {
-	Err error
-}
-
-func (e *MalformedEventError) Error() string {
-	return e.Err.Error()
-}
-
 func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contract.ContractValidatorAdded) error {
 	logger := edh.logger.With(
 		zap.String("owner_address", event.Owner.String()),
@@ -543,4 +533,13 @@ func (edh *EventDataHandler) processClusterEvent(
 	}
 
 	return toUpdate, updatedPubKeys, nil
+}
+
+// MalformedEventError is returned when event is malformed
+type MalformedEventError struct {
+	Err error
+}
+
+func (e *MalformedEventError) Error() string {
+	return e.Err.Error()
 }
