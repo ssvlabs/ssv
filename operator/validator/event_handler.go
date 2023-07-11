@@ -16,6 +16,7 @@ import (
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/exporter"
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
@@ -42,10 +43,9 @@ func (c *controller) Eth1EventHandler(logger *zap.Logger, ongoingSync bool) eth1
 	return func(e eth1.Event) (logs []zap.Field, err error) {
 		_, exist, err := c.eventHandler.GetEventData(e.Log.TxHash)
 		if exist {
-			logger.Fatal("event already exists", zap.String("tx_hash", e.Log.TxHash.Hex()))
+			logger.Debug("ignoring already synced event", fields.TxHash(e.Log.TxHash))
 			return nil, nil
 		}
-		// logger.Debug("new event", zap.String("tx_hash", e.Log.TxHash.Hex()))
 		defer func() {
 			saveErr := c.eventHandler.SaveEventData(e.Log.TxHash)
 			if saveErr != nil {

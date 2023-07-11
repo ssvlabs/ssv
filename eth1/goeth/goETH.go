@@ -3,9 +3,7 @@ package goeth
 import (
 	"context"
 	"fmt"
-	"log"
 	"math/big"
-	"net/http"
 	"strings"
 	"time"
 
@@ -274,14 +272,6 @@ func (ec *eth1Client) syncSmartContractsEvents(logger *zap.Logger, fromBlock *bi
 	var logs []types.Log
 	var nSuccess int
 
-	lockForAndrew := make(chan struct{})
-	go func() {
-		http.HandleFunc("/release-pls", func(w http.ResponseWriter, r *http.Request) {
-			lockForAndrew <- struct{}{}
-		})
-		log.Fatal(http.ListenAndServe(":9123", nil))
-	}()
-
 	for {
 		toBlock := new(big.Int).SetUint64(fromBlock.Uint64() + blocksInBatch)
 		if toBlock.Uint64() > highestBlock {
@@ -298,10 +288,6 @@ func (ec *eth1Client) syncSmartContractsEvents(logger *zap.Logger, fromBlock *bi
 
 		// If toBlock reached the highest block, check for new blocks
 		if toBlock.Uint64() >= highestBlock {
-			logger.Debug("locking for Andrew")
-			<-lockForAndrew
-			logger.Debug("released lock for Andrew")
-
 			currentBlock, err := ec.conn.BlockNumber(ec.ctx)
 			if err != nil {
 				return errors.Wrap(err, "failed to get current block")
@@ -347,8 +333,8 @@ func (ec *eth1Client) fetchAndProcessEvents(logger *zap.Logger, fromBlock, toBlo
 	if err != nil {
 		return nil, 0, errors.Wrap(err, "failed to get event logs")
 	}
-	nSuccess := len(logs)
-	logger = logger.With(zap.Int("results", len(logs)))
+	fails := 0
+	logger = logger.With(zap.Int("logs", len(logs)))
 	logger.Debug("got event logs", zap.Duration("took", time.Since(start)))
 
 	start = time.Now()
@@ -366,16 +352,16 @@ func (ec *eth1Client) fetchAndProcessEvents(logger *zap.Logger, fromBlock, toBlo
 				loggerWith.Warn("could not parse history sync event, the event is malformed")
 			} else {
 				loggerWith.Error("could not parse history sync event")
-				nSuccess--
+				fails++
 			}
 			continue
 		}
 	}
 	logger.Debug("event logs were received and parsed successfully",
-		zap.Int("successCount", nSuccess),
+		zap.Int("fails", fails),
 		zap.Duration("took", time.Since(start)))
 
-	return logs, nSuccess, nil
+	return logs, len(logs) - fails, nil
 }
 
 func (ec *eth1Client) handleEvent(logger *zap.Logger, vLog types.Log, contractAbi abi.ABI) (string, error) {
