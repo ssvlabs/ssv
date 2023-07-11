@@ -280,7 +280,6 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan ethty
 				ToBlock:   header.Number,
 			}
 
-			// TODO: Instead of FilterLogs it should call a wrapper that calls FilterLogs multiple times and batches results to avoid fetching enormous amount of events
 			logStream, fetchErrors := ec.fetchLogsInBatches(ctx, client, fromBlock, header.Number.Uint64())
 
 			for log := range logStream {
