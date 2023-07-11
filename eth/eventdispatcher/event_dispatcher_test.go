@@ -60,7 +60,7 @@ func TestEventDispatcher(t *testing.T) {
 	defer close(done)
 
 	// Create sim instance with a delay between block execution
-	backend, processedStream := newTestBackend(t, done, blockStream, time.Microsecond*50)
+	backend, processedStream := newTestBackend(t, done, blockStream)
 
 	rpcServer, _ := backend.RPCHandler()
 	httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
@@ -91,17 +91,17 @@ func TestEventDispatcher(t *testing.T) {
 	client := executionclient.New(addr, contractAddr, executionclient.WithLogger(logger))
 	client.Connect(ctx)
 
-	_, err = client.IsReady(ctx)
+	isReady, err := client.IsReady(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-
+	require.True(t, isReady)
 	eb := eventbatcher.NewEventBatcher()
-	ehd := NewEventDataHandler(t, ctx, logger)
+	edh := NewEventDataHandler(t, ctx, logger)
 	eventDispatcher := New(
 		client,
 		eb,
-		ehd,
+		edh,
 		WithLogger(logger),
 	)
 
@@ -163,7 +163,7 @@ var genesis = &core.Genesis{
 	BaseFee:   big.NewInt(params.InitialBaseFee),
 }
 
-func newTestBackend(t *testing.T, done <-chan struct{}, blockStream <-chan []*ethtypes.Block, delay time.Duration) (*node.Node, <-chan []*ethtypes.Block) {
+func newTestBackend(t *testing.T, done <-chan struct{}, blockStream <-chan []*ethtypes.Block) (*node.Node, <-chan []*ethtypes.Block) {
 	processedStream := make(chan []*ethtypes.Block)
 	// Create node
 	n, err := node.New(&node.Config{})
@@ -213,7 +213,7 @@ func generateInitialTestChain(t *testing.T, done <-chan struct{}, blockStream ch
 		if i == 0 {
 			return
 		}
-		// Add contract deployment to the firs block
+		// Add contract deployment to the first block
 		if i == 1 {
 			tx := ethtypes.MustSignNewTx(testKey, ethtypes.LatestSigner(genesis.Config), &ethtypes.LegacyTx{
 				Nonce:    uint64(i - 1),

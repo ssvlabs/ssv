@@ -24,7 +24,7 @@ var (
 	testAddress = crypto.PubkeyToAddress(testKey.PublicKey)
 )
 
-func TestEventDbLastBlock(t *testing.T) {
+func TestEventDBLastBlock(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -54,7 +54,7 @@ func TestEventDbLastBlock(t *testing.T) {
 	require.Equal(t, big.NewInt(1001), lastBlock)
 }
 
-func TestEventDbOperatorData(t *testing.T) {
+func TestEventDBOperatorData(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -84,7 +84,7 @@ func TestEventDbOperatorData(t *testing.T) {
 	require.Equal(t, &dataToSave, data)
 }
 
-func TestEventDbRecipientData(t *testing.T) {
+func TestEventDBRecipientData(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -115,7 +115,7 @@ func TestEventDbRecipientData(t *testing.T) {
 	require.Equal(t, &dataToSave, data)
 }
 
-func TestEventDbShares(t *testing.T) {
+func TestEventDBShares(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -149,7 +149,7 @@ func TestEventDbShares(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestEventDbBumpNonce(t *testing.T) {
+func TestEventDBBumpNonce(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

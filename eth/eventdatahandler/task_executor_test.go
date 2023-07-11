@@ -52,7 +52,7 @@ func TestExecuteTask(t *testing.T) {
 	LogValidatorAdded := unmarshalLog(t, rawValidatorAdded)
 	edh, err := setupDataHandler(t, ctx, logger)
 	require.NoError(t, err)
-	validatorAddedEvent, err := edh.filterer.ParseValidatorAdded(*LogValidatorAdded)
+	validatorAddedEvent, err := edh.filterer.ParseValidatorAdded(LogValidatorAdded)
 	if err != nil {
 		t.Fatal("parse ValidatorAdded", err)
 	}
@@ -77,7 +77,7 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 
 	LogValidatorAdded := unmarshalLog(t, rawValidatorAdded)
 	events := []ethtypes.Log{}
-	events = append(events, *LogValidatorAdded)
+	events = append(events, LogValidatorAdded)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

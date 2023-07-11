@@ -105,9 +105,9 @@ func TestFetchHistoricalLogs(t *testing.T) {
 
 	require.NoError(t, client.Connect(ctx))
 
-	ready, err := client.IsReady(ctx)
+	isReady, err := client.IsReady(ctx)
 	require.NoError(t, err)
-	require.True(t, ready)
+	require.True(t, isReady)
 
 	// Fetch all logs history starting from block 0
 	seenLogs := 0
@@ -159,9 +159,9 @@ func TestStreamLogs(t *testing.T) {
 
 	require.NoError(t, client.Connect(ctx))
 
-	ready, err := client.IsReady(ctx)
+	isReady, err := client.IsReady(ctx)
 	require.NoError(t, err)
-	require.True(t, ready)
+	require.True(t, isReady)
 
 	logs := client.StreamLogs(ctx, 0)
 	var streamedLogs []ethtypes.Log
@@ -247,7 +247,7 @@ func generateInitialTestChain(t *testing.T, done <-chan struct{}, blockStream ch
 		if i == 0 {
 			return
 		}
-		// Add contract deployment to the firs block
+		// Add contract deployment to the first block
 		if i == 1 {
 			tx := ethtypes.MustSignNewTx(testKey, ethtypes.LatestSigner(genesis.Config), &ethtypes.LegacyTx{
 				Nonce:    uint64(i - 1),

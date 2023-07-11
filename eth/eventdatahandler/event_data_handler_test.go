@@ -60,8 +60,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 	events := []ethtypes.Log{}
 
-	events = append(events, *LogOperatorAdded)
-	events = append(events, *LogValidatorAdded)
+	events = append(events, LogOperatorAdded)
+	events = append(events, LogValidatorAdded)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -159,12 +159,12 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.St
 	return nodeStorage, operatorData
 }
 
-func unmarshalLog(t *testing.T, rawOperatorAdded string) *ethtypes.Log {
+func unmarshalLog(t *testing.T, rawOperatorAdded string) ethtypes.Log {
 	var vLogOperatorAdded ethtypes.Log
 	err := json.Unmarshal([]byte(rawOperatorAdded), &vLogOperatorAdded)
 	require.NoError(t, err)
-	contractAbi, err := abi.JSON(strings.NewReader(contract.ContractABI))
+	contractAbi, err := abi.JSON(strings.NewReader(contract.ContractMetaData.ABI))
 	require.NoError(t, err)
 	require.NotNil(t, contractAbi)
-	return &vLogOperatorAdded
+	return vLogOperatorAdded
 }
