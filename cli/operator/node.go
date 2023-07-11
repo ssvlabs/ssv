@@ -243,9 +243,7 @@ var StartNodeCmd = &cobra.Command{
 				eventDataHandler,
 				eventdispatcher.WithLogger(logger),
 			)
-			if err != nil {
-				logger.Fatal("could not create datahandler instance", zap.Error(err))
-			}
+
 			txn := eventDB.ROTxn()
 			defer txn.Discard()
 
