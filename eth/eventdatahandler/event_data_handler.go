@@ -162,6 +162,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 	case OperatorAdded:
 		operatorAddedEvent, err := edh.filterer.ParseOperatorAdded(event)
 		if err != nil {
+			edh.metrics.EventProcessingFailed(abiEvent.Name)
 			return nil, fmt.Errorf("parse OperatorAdded: %w", err)
 		}
 

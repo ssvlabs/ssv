@@ -10,6 +10,8 @@ type metrics interface {
 	ValidatorInactive(publicKey []byte)
 	ValidatorError(publicKey []byte)
 	ValidatorRemoved(publicKey []byte)
+	EventProcessed(eventName string)
+	EventProcessingFailed(eventName string)
 }
 
 // nopMetrics is no-op metrics.
@@ -19,3 +21,5 @@ func (n nopMetrics) OperatorHasPublicKey(spectypes.OperatorID, []byte) {}
 func (n nopMetrics) ValidatorInactive([]byte)                          {}
 func (n nopMetrics) ValidatorError([]byte)                             {}
 func (n nopMetrics) ValidatorRemoved([]byte)                           {}
+func (n nopMetrics) EventProcessed(string)                             {}
+func (n nopMetrics) EventProcessingFailed(string)                      {}
