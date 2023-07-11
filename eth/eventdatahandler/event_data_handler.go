@@ -2,6 +2,7 @@ package eventdatahandler
 
 import (
 	"crypto/rsa"
+	"errors"
 	"fmt"
 	"math/big"
 
@@ -167,9 +168,16 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 		}
 
 		if err := edh.handleOperatorAdded(txn, operatorAddedEvent); err != nil {
+			edh.metrics.EventProcessingFailed(abiEvent.Name)
+
+			var malformedEventError *MalformedEventError
+			if errors.As(err, &malformedEventError) {
+				return nil, nil
+			}
 			return nil, fmt.Errorf("handle OperatorAdded: %w", err)
 		}
 
+		edh.metrics.EventProcessed(abiEvent.Name)
 		return nil, nil
 
 	case OperatorRemoved:
@@ -179,9 +187,16 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 		}
 
 		if err := edh.handleOperatorRemoved(txn, operatorRemovedEvent); err != nil {
+			edh.metrics.EventProcessingFailed(abiEvent.Name)
+
+			var malformedEventError *MalformedEventError
+			if errors.As(err, &malformedEventError) {
+				return nil, nil
+			}
 			return nil, fmt.Errorf("handle OperatorRemoved: %w", err)
 		}
 
+		edh.metrics.EventProcessed(abiEvent.Name)
 		return nil, nil
 
 	case ValidatorAdded:
@@ -191,10 +206,14 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 		}
 
 		if err := edh.handleValidatorAdded(txn, validatorAddedEvent); err != nil {
+			edh.metrics.EventProcessingFailed(abiEvent.Name)
+
+			var malformedEventError *MalformedEventError
+			if errors.As(err, &malformedEventError) {
+				return nil, nil
+			}
 			return nil, fmt.Errorf("handle ValidatorAdded: %w", err)
 		}
-
-		// TODO: if event is malformed, we don't need to create a task, so in this case we need to return a sentinel error (ErrMalformedEvent?)
 
 		task := func() error {
 			if err := edh.taskExecutor.AddValidator(validatorAddedEvent); err != nil {
@@ -204,6 +223,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 			return nil
 		}
 
+		edh.metrics.EventProcessed(abiEvent.Name)
 		return task, nil
 
 	case ValidatorRemoved:
@@ -213,6 +233,12 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 		}
 
 		if err := edh.handleValidatorRemoved(txn, validatorRemovedEvent); err != nil {
+			edh.metrics.EventProcessingFailed(abiEvent.Name)
+
+			var malformedEventError *MalformedEventError
+			if errors.As(err, &malformedEventError) {
+				return nil, nil
+			}
 			return nil, fmt.Errorf("handle ValidatorRemoved: %w", err)
 		}
 
@@ -224,6 +250,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 			return nil
 		}
 
+		edh.metrics.EventProcessed(abiEvent.Name)
 		return task, nil
 
 	case ClusterLiquidated:
@@ -234,6 +261,12 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 
 		sharesToLiquidate, err := edh.handleClusterLiquidated(txn, clusterLiquidatedEvent)
 		if err != nil {
+			edh.metrics.EventProcessingFailed(abiEvent.Name)
+
+			var malformedEventError *MalformedEventError
+			if errors.As(err, &malformedEventError) {
+				return nil, nil
+			}
 			return nil, fmt.Errorf("handle ClusterLiquidated: %w", err)
 		}
 
@@ -245,6 +278,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 			return nil
 		}
 
+		edh.metrics.EventProcessed(abiEvent.Name)
 		return task, nil
 
 	case ClusterReactivated:
@@ -255,6 +289,12 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 
 		sharesToEnable, err := edh.handleClusterReactivated(txn, clusterReactivatedEvent)
 		if err != nil {
+			edh.metrics.EventProcessingFailed(abiEvent.Name)
+
+			var malformedEventError *MalformedEventError
+			if errors.As(err, &malformedEventError) {
+				return nil, nil
+			}
 			return nil, fmt.Errorf("handle ClusterReactivated: %w", err)
 		}
 
@@ -266,6 +306,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 			return nil
 		}
 
+		edh.metrics.EventProcessed(abiEvent.Name)
 		return task, nil
 
 	case FeeRecipientAddressUpdated:
@@ -276,6 +317,12 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 
 		updated, err := edh.handleFeeRecipientAddressUpdated(txn, feeRecipientAddressUpdatedEvent)
 		if err != nil {
+			edh.metrics.EventProcessingFailed(abiEvent.Name)
+
+			var malformedEventError *MalformedEventError
+			if errors.As(err, &malformedEventError) {
+				return nil, nil
+			}
 			return nil, fmt.Errorf("handle FeeRecipientAddressUpdated: %w", err)
 		}
 
@@ -291,6 +338,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 			return nil
 		}
 
+		edh.metrics.EventProcessed(abiEvent.Name)
 		return task, nil
 
 	default:

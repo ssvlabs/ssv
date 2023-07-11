@@ -2,12 +2,12 @@ package eventdb
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 
 	"github.com/dgraph-io/badger/v4"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/pkg/errors"
 
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
@@ -79,7 +79,7 @@ func (t *RWTxn) BumpNonce(owner common.Address) error {
 
 	rawJSON, err := json.Marshal(recipientData)
 	if err != nil {
-		return errors.Wrap(err, "could not marshal recipient data")
+		return fmt.Errorf("could not marshal recipient data: %w", err)
 	}
 
 	if err := t.txn.Set(append([]byte(fmt.Sprintf("%s%s/", storagePrefix, recipientsPrefix)), owner.Bytes()...), rawJSON); err != nil {
