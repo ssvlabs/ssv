@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"net/http"
 	"strings"
 	"time"
 
@@ -272,6 +273,14 @@ func (ec *eth1Client) syncSmartContractsEvents(logger *zap.Logger, fromBlock *bi
 	var logs []types.Log
 	var nSuccess int
 
+	lockForAndrew := make(chan struct{})
+	go func() {
+		http.HandleFunc("/release-pls", func(w http.ResponseWriter, r *http.Request) {
+			lockForAndrew <- struct{}{}
+		})
+		http.ListenAndServe(":9123", nil)
+	}()
+
 	for {
 		toBlock := new(big.Int).SetUint64(fromBlock.Uint64() + blocksInBatch)
 		if toBlock.Uint64() > highestBlock {
@@ -288,6 +297,8 @@ func (ec *eth1Client) syncSmartContractsEvents(logger *zap.Logger, fromBlock *bi
 
 		// If toBlock reached the highest block, check for new blocks
 		if toBlock.Uint64() >= highestBlock {
+			<-lockForAndrew
+
 			currentBlock, err := ec.conn.BlockNumber(ec.ctx)
 			if err != nil {
 				return errors.Wrap(err, "failed to get current block")

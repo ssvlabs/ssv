@@ -56,15 +56,15 @@ func SyncEth1Events(
 
 	// Stop once SyncEndedEvent arrives
 	var errs []error
-	var syncEndedEvent SyncEndedEvent
+	// var syncEndedEvent SyncEndedEvent
 	var syncWg sync.WaitGroup
 	syncWg.Add(1)
 	go func() {
-		var ok bool
+		// var ok bool
 		defer syncWg.Done()
 		defer sub.Unsubscribe()
 		for event := range cn {
-			if syncEndedEvent, ok = event.Data.(SyncEndedEvent); ok {
+			if _, ok := event.Data.(SyncEndedEvent); ok {
 				return
 			}
 			if handler != nil {
@@ -85,10 +85,10 @@ func SyncEth1Events(
 		return errors.New("could not handle some of the events during history sync")
 	}
 
-	syncOffset.SetUint64(syncEndedEvent.Block)
-	if err := storage.SaveSyncOffset(syncOffset); err != nil {
-		return errors.Wrap(err, "could not upgrade sync offset")
-	}
+	// syncOffset.SetUint64(syncEndedEvent.Block)
+	// if err := storage.SaveSyncOffset(syncOffset); err != nil {
+	// 	return errors.Wrap(err, "could not upgrade sync offset")
+	// }
 	return nil
 }
 

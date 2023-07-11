@@ -45,6 +45,7 @@ func (c *controller) Eth1EventHandler(logger *zap.Logger, ongoingSync bool) eth1
 			logger.Fatal("event already exists", zap.String("tx_hash", e.Log.TxHash.Hex()))
 			return nil, nil
 		}
+		// logger.Debug("new event", zap.String("tx_hash", e.Log.TxHash.Hex()))
 		defer func() {
 			saveErr := c.eventHandler.SaveEventData(e.Log.TxHash)
 			if saveErr != nil {
@@ -156,15 +157,6 @@ func (c *controller) handleValidatorAddedEvent(
 	defer func() {
 		err = c.handleValidatorAddedEventDefer(valid, err, event)
 	}()
-
-	_, found, eventErr := c.eventHandler.GetEventData(event.TxHash)
-	if eventErr != nil {
-		return nil, errors.Wrap(eventErr, "failed to get event data")
-	}
-	if found {
-		// skip
-		return nil, nil
-	}
 
 	// get nonce
 	nonce, nonceErr := c.eventHandler.GetNextNonce(event.Owner)
