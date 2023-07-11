@@ -62,7 +62,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
 
-	done := make(chan interface{})
+	done := make(chan struct{})
 	defer close(done)
 
 	blockStream := make(chan []*ethtypes.Block)
@@ -137,7 +137,7 @@ func TestStreamLogs(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
 
-	done := make(chan interface{})
+	done := make(chan struct{})
 	defer close(done)
 
 	blockStream := make(chan []*ethtypes.Block)
@@ -186,7 +186,7 @@ func TestStreamLogs(t *testing.T) {
 
 }
 
-func newTestBackend(t *testing.T, done <-chan interface{}, blockStream <-chan []*ethtypes.Block, delay *time.Duration) (*node.Node, <-chan []*ethtypes.Block) {
+func newTestBackend(t *testing.T, done <-chan struct{}, blockStream <-chan []*ethtypes.Block, delay *time.Duration) (*node.Node, <-chan []*ethtypes.Block) {
 	processedStream := make(chan []*ethtypes.Block)
 	// Create node
 	n, err := node.New(&node.Config{})
@@ -239,7 +239,7 @@ func newTestBackend(t *testing.T, done <-chan interface{}, blockStream <-chan []
 }
 
 // Generate blocks with transactions
-func generateInitialTestChain(t *testing.T, done <-chan interface{}, blockStream chan []*ethtypes.Block, n int) {
+func generateInitialTestChain(t *testing.T, done <-chan struct{}, blockStream chan []*ethtypes.Block, n int) {
 
 	generate := func(i int, g *core.BlockGen) {
 		g.OffsetTime(5)
