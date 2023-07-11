@@ -46,6 +46,9 @@ func (c *controller) Eth1EventHandler(logger *zap.Logger, ongoingSync bool) eth1
 			logger.Debug("ignoring already synced event", fields.TxHash(e.Log.TxHash))
 			return nil, nil
 		}
+		if err != nil {
+			return nil, errors.Wrap(err, "could not get event data")
+		}
 		defer func() {
 			saveErr := c.eventHandler.SaveEventData(e.Log.TxHash)
 			if saveErr != nil {
