@@ -110,7 +110,7 @@ spec:
         - name: UDP_PORT
           value: "12003"
         - name: DB_PATH
-          value: "./data/heightsnewdb"
+          value: "./data/jato-v2-slots-new"
         - name: NETWORK
           value: "jato-v2-stage"
         - name: DB_REPORTING
