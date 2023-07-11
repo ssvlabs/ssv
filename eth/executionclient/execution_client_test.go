@@ -11,7 +11,7 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/core/types"
+	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
@@ -65,7 +65,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	done := make(chan interface{})
 	defer close(done)
 
-	blockStream := make(chan []*types.Block)
+	blockStream := make(chan []*ethtypes.Block)
 	defer close(blockStream)
 
 	backend, processedStream := newTestBackend(t, done, blockStream, nil)
@@ -140,7 +140,7 @@ func TestStreamLogs(t *testing.T) {
 	done := make(chan interface{})
 	defer close(done)
 
-	blockStream := make(chan []*types.Block)
+	blockStream := make(chan []*ethtypes.Block)
 	defer close(blockStream)
 	// Create sim instance with a delay between block execution
 	delay := time.Millisecond * 100
@@ -164,7 +164,7 @@ func TestStreamLogs(t *testing.T) {
 	require.True(t, ready)
 
 	logs := client.StreamLogs(ctx, 0)
-	var streamedLogs []types.Log
+	var streamedLogs []ethtypes.Log
 	// Receive emitted events
 	go func() {
 		for log := range logs {
@@ -186,8 +186,8 @@ func TestStreamLogs(t *testing.T) {
 
 }
 
-func newTestBackend(t *testing.T, done <-chan interface{}, blockStream <-chan []*types.Block, delay *time.Duration) (*node.Node, <-chan []*types.Block) {
-	processedStream := make(chan []*types.Block)
+func newTestBackend(t *testing.T, done <-chan interface{}, blockStream <-chan []*ethtypes.Block, delay *time.Duration) (*node.Node, <-chan []*ethtypes.Block) {
+	processedStream := make(chan []*ethtypes.Block)
 	// Create node
 	n, err := node.New(&node.Config{})
 
@@ -221,7 +221,7 @@ func newTestBackend(t *testing.T, done <-chan interface{}, blockStream <-chan []
 		case blocks := <-blockStream:
 			if delay != nil {
 				for _, block := range blocks {
-					if _, err := ethservice.BlockChain().InsertChain([]*types.Block{block}); err != nil {
+					if _, err := ethservice.BlockChain().InsertChain([]*ethtypes.Block{block}); err != nil {
 						return
 					}
 					time.Sleep(*delay)
@@ -239,7 +239,7 @@ func newTestBackend(t *testing.T, done <-chan interface{}, blockStream <-chan []
 }
 
 // Generate blocks with transactions
-func generateInitialTestChain(t *testing.T, done <-chan interface{}, blockStream chan []*types.Block, n int) {
+func generateInitialTestChain(t *testing.T, done <-chan interface{}, blockStream chan []*ethtypes.Block, n int) {
 
 	generate := func(i int, g *core.BlockGen) {
 		g.OffsetTime(5)
@@ -249,7 +249,7 @@ func generateInitialTestChain(t *testing.T, done <-chan interface{}, blockStream
 		}
 		// Add contract deployment to the firs block
 		if i == 1 {
-			tx := types.MustSignNewTx(testKey, types.LatestSigner(genesis.Config), &types.LegacyTx{
+			tx := ethtypes.MustSignNewTx(testKey, ethtypes.LatestSigner(genesis.Config), &ethtypes.LegacyTx{
 				Nonce:    uint64(i - 1),
 				Value:    big.NewInt(0),
 				GasPrice: big.NewInt(params.InitialBaseFee),
@@ -259,7 +259,7 @@ func generateInitialTestChain(t *testing.T, done <-chan interface{}, blockStream
 			g.AddTx(tx)
 		} else {
 			// Transactions to contract
-			tx := types.MustSignNewTx(testKey, types.LatestSigner(genesis.Config), &types.LegacyTx{
+			tx := ethtypes.MustSignNewTx(testKey, ethtypes.LatestSigner(genesis.Config), &ethtypes.LegacyTx{
 				To:       &contractAddr,
 				Nonce:    uint64(i - 1),
 				Value:    big.NewInt(0),

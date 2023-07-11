@@ -6,7 +6,7 @@ import (
 	"math/big"
 
 	"github.com/dgraph-io/badger/v4"
-	"github.com/ethereum/go-ethereum/common"
+	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 
 	"github.com/bloxapp/ssv/protocol/v2/types"
@@ -51,7 +51,7 @@ func (t *RWTxn) SaveOperatorData(operatorData *registrystorage.OperatorData) (bo
 	return true, nil
 }
 
-func (t *RWTxn) BumpNonce(owner common.Address) error {
+func (t *RWTxn) BumpNonce(owner ethcommon.Address) error {
 	recipientData, err := t.GetRecipientData(owner)
 	if err != nil {
 		return fmt.Errorf("get recipient data: %w", err)

@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/bloxapp/ssv/eth/eventbatcher"
-	"github.com/ethereum/go-ethereum/core/types"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/prysmaticlabs/prysm/v4/testing/require"
 	"go.uber.org/zap/zaptest"
@@ -13,20 +12,20 @@ import (
 
 func TestCleanExecutionQueue(t *testing.T) {
 	tasks := []Task{
-		NewRemoteTask(EventType(0), &EventDataHandler{}, types.Log{}, nil),
-		NewRemoteTask(EventType(2), &EventDataHandler{}, types.Log{}, nil),
-		NewRemoteTask(EventType(3), &EventDataHandler{}, types.Log{}, nil),
-		NewRemoteTask(EventType(3), &EventDataHandler{}, types.Log{}, nil),
-		NewRemoteTask(EventType(4), &EventDataHandler{}, types.Log{}, nil),
-		NewRemoteTask(EventType(5), &EventDataHandler{}, types.Log{}, nil),
-		NewRemoteTask(EventType(5), &EventDataHandler{}, types.Log{}, nil),
-		NewRemoteTask(EventType(4), &EventDataHandler{}, types.Log{}, nil),
-		NewRemoteTask(EventType(6), &EventDataHandler{}, types.Log{}, nil),
-		NewRemoteTask(EventType(6), &EventDataHandler{}, types.Log{}, nil),
-		NewRemoteTask(EventType(6), &EventDataHandler{}, types.Log{}, nil),
+		NewRemoteTask(EventType(0), &EventDataHandler{}, ethtypes.Log{}, nil),
+		NewRemoteTask(EventType(2), &EventDataHandler{}, ethtypes.Log{}, nil),
+		NewRemoteTask(EventType(3), &EventDataHandler{}, ethtypes.Log{}, nil),
+		NewRemoteTask(EventType(3), &EventDataHandler{}, ethtypes.Log{}, nil),
+		NewRemoteTask(EventType(4), &EventDataHandler{}, ethtypes.Log{}, nil),
+		NewRemoteTask(EventType(5), &EventDataHandler{}, ethtypes.Log{}, nil),
+		NewRemoteTask(EventType(5), &EventDataHandler{}, ethtypes.Log{}, nil),
+		NewRemoteTask(EventType(4), &EventDataHandler{}, ethtypes.Log{}, nil),
+		NewRemoteTask(EventType(6), &EventDataHandler{}, ethtypes.Log{}, nil),
+		NewRemoteTask(EventType(6), &EventDataHandler{}, ethtypes.Log{}, nil),
+		NewRemoteTask(EventType(6), &EventDataHandler{}, ethtypes.Log{}, nil),
 	}
 	cleanedTask := cleanTaskList(tasks)
-	require.DeepEqual(t, cleanedTask, []Task{NewRemoteTask(EventType(0), &EventDataHandler{}, types.Log{}, nil), NewRemoteTask(EventType(6), &EventDataHandler{}, types.Log{}, nil)})
+	require.DeepEqual(t, cleanedTask, []Task{NewRemoteTask(EventType(0), &EventDataHandler{}, ethtypes.Log{}, nil), NewRemoteTask(EventType(6), &EventDataHandler{}, ethtypes.Log{}, nil)})
 }
 
 func TestExecuteTask(t *testing.T) {

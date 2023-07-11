@@ -20,8 +20,7 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
+	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
@@ -113,7 +112,7 @@ func setupDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger) (*E
 		RegistryStorage: nodeStorage,
 	})
 
-	cl := executionclient.New("test", common.Address{})
+	cl := executionclient.New("test", ethcommon.Address{})
 
 	edh, err := New(
 		eventDB,
@@ -160,8 +159,8 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.St
 	return nodeStorage, operatorData
 }
 
-func unmarshalLog(t *testing.T, rawOperatorAdded string) *types.Log {
-	var vLogOperatorAdded types.Log
+func unmarshalLog(t *testing.T, rawOperatorAdded string) *ethtypes.Log {
+	var vLogOperatorAdded ethtypes.Log
 	err := json.Unmarshal([]byte(rawOperatorAdded), &vLogOperatorAdded)
 	require.NoError(t, err)
 	contractAbi, err := abi.JSON(strings.NewReader(contract.ContractABI))

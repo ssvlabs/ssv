@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/bloxapp/ssv/eth/contract"
-	"github.com/ethereum/go-ethereum/common"
+	ethcommon "github.com/ethereum/go-ethereum/common"
 	"gopkg.in/yaml.v3"
 )
 
@@ -64,7 +64,7 @@ type FeeRecipientAddressUpdatedEventYAML struct {
 func (e *OperatorAddedEventYAML) toEventData() (interface{}, error) {
 	return contract.ContractOperatorAdded{
 		OperatorId: e.ID,
-		Owner:      common.HexToAddress(e.Owner),
+		Owner:      ethcommon.HexToAddress(e.Owner),
 		PublicKey:  []byte(e.PublicKey),
 	}, nil
 }
@@ -88,7 +88,7 @@ func (e *ValidatorAddedEventYAML) toEventData() (interface{}, error) {
 
 	return contract.ContractValidatorAdded{
 		PublicKey:   pubKey,
-		Owner:       common.HexToAddress(e.Owner),
+		Owner:       ethcommon.HexToAddress(e.Owner),
 		OperatorIds: e.OperatorIds,
 		Shares:      shares,
 	}, nil
@@ -96,7 +96,7 @@ func (e *ValidatorAddedEventYAML) toEventData() (interface{}, error) {
 
 func (e *ValidatorRemovedEventYAML) toEventData() (interface{}, error) {
 	return contract.ContractValidatorRemoved{
-		Owner:       common.HexToAddress(e.Owner),
+		Owner:       ethcommon.HexToAddress(e.Owner),
 		OperatorIds: e.OperatorIds,
 		PublicKey:   []byte(strings.TrimPrefix(e.PublicKey, "0x")),
 	}, nil
@@ -104,22 +104,22 @@ func (e *ValidatorRemovedEventYAML) toEventData() (interface{}, error) {
 
 func (e *ClusterLiquidatedEventYAML) toEventData() (interface{}, error) {
 	return contract.ContractClusterLiquidated{
-		Owner:       common.HexToAddress(e.Owner),
+		Owner:       ethcommon.HexToAddress(e.Owner),
 		OperatorIds: e.OperatorIds,
 	}, nil
 }
 
 func (e *ClusterReactivatedEventYAML) toEventData() (interface{}, error) {
 	return contract.ContractClusterReactivated{
-		Owner:       common.HexToAddress(e.Owner),
+		Owner:       ethcommon.HexToAddress(e.Owner),
 		OperatorIds: e.OperatorIds,
 	}, nil
 }
 
 func (e *FeeRecipientAddressUpdatedEventYAML) toEventData() (interface{}, error) {
 	return contract.ContractFeeRecipientAddressUpdated{
-		Owner:            common.HexToAddress(e.Owner),
-		RecipientAddress: common.HexToAddress(e.RecipientAddress),
+		Owner:            ethcommon.HexToAddress(e.Owner),
+		RecipientAddress: ethcommon.HexToAddress(e.RecipientAddress),
 	}, nil
 }
 

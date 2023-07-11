@@ -24,7 +24,7 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/core/types"
+	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
@@ -54,7 +54,7 @@ func TestEventDispatcher(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
 
-	blockStream := make(chan []*types.Block)
+	blockStream := make(chan []*ethtypes.Block)
 	defer close(blockStream)
 	done := make(chan interface{})
 	defer close(done)
@@ -163,8 +163,8 @@ var genesis = &core.Genesis{
 	BaseFee:   big.NewInt(params.InitialBaseFee),
 }
 
-func newTestBackend(t *testing.T, done <-chan interface{}, blockStream <-chan []*types.Block, delay time.Duration) (*node.Node, <-chan []*types.Block) {
-	processedStream := make(chan []*types.Block)
+func newTestBackend(t *testing.T, done <-chan interface{}, blockStream <-chan []*ethtypes.Block, delay time.Duration) (*node.Node, <-chan []*ethtypes.Block) {
+	processedStream := make(chan []*ethtypes.Block)
 	// Create node
 	n, err := node.New(&node.Config{})
 
@@ -206,7 +206,7 @@ func newTestBackend(t *testing.T, done <-chan interface{}, blockStream <-chan []
 }
 
 // Generate blocks with transactions
-func generateInitialTestChain(t *testing.T, done <-chan interface{}, blockStream chan []*types.Block, n int) {
+func generateInitialTestChain(t *testing.T, done <-chan interface{}, blockStream chan []*ethtypes.Block, n int) {
 	generate := func(i int, g *core.BlockGen) {
 		g.OffsetTime(5)
 		g.SetExtra([]byte("test"))
@@ -215,7 +215,7 @@ func generateInitialTestChain(t *testing.T, done <-chan interface{}, blockStream
 		}
 		// Add contract deployment to the firs block
 		if i == 1 {
-			tx := types.MustSignNewTx(testKey, types.LatestSigner(genesis.Config), &types.LegacyTx{
+			tx := ethtypes.MustSignNewTx(testKey, ethtypes.LatestSigner(genesis.Config), &ethtypes.LegacyTx{
 				Nonce:    uint64(i - 1),
 				Value:    big.NewInt(0),
 				GasPrice: big.NewInt(params.InitialBaseFee),
@@ -226,7 +226,7 @@ func generateInitialTestChain(t *testing.T, done <-chan interface{}, blockStream
 			t.Log("Tx hash", tx.Hash().Hex())
 		} else {
 			// Transactions to contract
-			tx := types.MustSignNewTx(testKey, types.LatestSigner(genesis.Config), &types.LegacyTx{
+			tx := ethtypes.MustSignNewTx(testKey, ethtypes.LatestSigner(genesis.Config), &ethtypes.LegacyTx{
 				To:       &contractAddr,
 				Nonce:    uint64(i - 1),
 				Value:    big.NewInt(0),
