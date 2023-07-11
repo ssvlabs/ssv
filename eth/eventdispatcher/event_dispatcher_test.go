@@ -74,7 +74,7 @@ func TestEventDispatcher(t *testing.T) {
 		t.Log("Processed blocks: ", len(blocks))
 	}
 
-	// Check if the contract is deployes successfuly with a standard eth1 client
+	// Check if the contract is deployed successfully with a standard eth1 client
 	ec, err := backend.Attach()
 	require.NoError(t, err)
 	cl := ethclient.NewClient(ec)
