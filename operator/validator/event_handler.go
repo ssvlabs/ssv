@@ -16,6 +16,7 @@ import (
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/exporter"
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
@@ -39,29 +40,50 @@ func splitBytes(buf []byte, lim int) [][]byte {
 
 // Eth1EventHandler is a factory function for creating eth1 event handler
 func (c *controller) Eth1EventHandler(logger *zap.Logger, ongoingSync bool) eth1.SyncEventHandler {
-	return func(e eth1.Event) ([]zap.Field, error) {
+	return func(e eth1.Event) (logs []zap.Field, err error) {
+		_, exist, err := c.eventHandler.GetEventData(e.Log.TxHash)
+		if exist {
+			logger.Debug("ignoring already synced event", fields.TxHash(e.Log.TxHash))
+			return nil, nil
+		}
+		if err != nil {
+			return nil, errors.Wrap(err, "could not get event data")
+		}
+		defer func() {
+			saveErr := c.eventHandler.SaveEventData(e.Log.TxHash)
+			if saveErr != nil {
+				wrappedErr := errors.Wrap(saveErr, "could not save event data")
+				if err == nil {
+					err = wrappedErr
+					return
+				}
+				err = errors.Wrap(err, wrappedErr.Error())
+				return
+			}
+		}()
+
 		switch ev := e.Data.(type) {
 		case abiparser.OperatorAddedEvent:
-			return c.handleOperatorAddedEvent(logger, ev)
+			logs, err = c.handleOperatorAddedEvent(logger, ev)
 		case abiparser.OperatorRemovedEvent:
-			return c.handleOperatorRemovedEvent(logger, ev, ongoingSync)
+			logs, err = c.handleOperatorRemovedEvent(logger, ev, ongoingSync)
 		case abiparser.ValidatorAddedEvent:
-			return c.handleValidatorAddedEvent(logger, ev, ongoingSync)
+			logs, err = c.handleValidatorAddedEvent(logger, ev, ongoingSync)
 		case abiparser.ValidatorRemovedEvent:
-			return c.handleValidatorRemovedEvent(logger, ev, ongoingSync)
+			logs, err = c.handleValidatorRemovedEvent(logger, ev, ongoingSync)
 		case abiparser.ClusterLiquidatedEvent:
-			return c.handleClusterLiquidatedEvent(logger, ev, ongoingSync)
+			logs, err = c.handleClusterLiquidatedEvent(logger, ev, ongoingSync)
 		case abiparser.ClusterReactivatedEvent:
-			return c.handleClusterReactivatedEvent(logger, ev, ongoingSync)
+			logs, err = c.handleClusterReactivatedEvent(logger, ev, ongoingSync)
 		case abiparser.FeeRecipientAddressUpdatedEvent:
-			return c.handleFeeRecipientAddressUpdatedEvent(logger, ev, ongoingSync)
+			logs, err = c.handleFeeRecipientAddressUpdatedEvent(logger, ev, ongoingSync)
 		default:
 			logger.Debug("could not handle unknown event",
 				zap.String("event_name", e.Name),
 				zap.String("event_type", fmt.Sprintf("%T", ev)),
 			)
 		}
-		return nil, nil
+		return
 	}
 }
 
@@ -138,15 +160,6 @@ func (c *controller) handleValidatorAddedEvent(
 	defer func() {
 		err = c.handleValidatorAddedEventDefer(valid, err, event)
 	}()
-
-	_, found, eventErr := c.eventHandler.GetEventData(event.TxHash)
-	if eventErr != nil {
-		return nil, errors.Wrap(eventErr, "failed to get event data")
-	}
-	if found {
-		// skip
-		return nil, nil
-	}
 
 	// get nonce
 	nonce, nonceErr := c.eventHandler.GetNextNonce(event.Owner)
@@ -243,15 +256,6 @@ func (c *controller) handleValidatorAddedEventDefer(valid bool, err error, event
 	var malformedEventErr *abiparser.MalformedEventError
 
 	if valid || errors.As(err, &malformedEventErr) {
-		saveErr := c.eventHandler.SaveEventData(event.TxHash)
-		if saveErr != nil {
-			wrappedErr := errors.Wrap(saveErr, "could not save event data")
-			if err == nil {
-				return wrappedErr
-			}
-			return errors.Wrap(err, wrappedErr.Error())
-		}
-
 		bumpErr := c.eventHandler.BumpNonce(event.Owner)
 		if bumpErr != nil {
 			wrappedErr := errors.Wrap(bumpErr, "failed to bump the nonce")
