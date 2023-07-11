@@ -60,10 +60,10 @@ func SyncEth1Events(
 	var syncWg sync.WaitGroup
 	syncWg.Add(1)
 	go func() {
-		var ok bool
 		defer syncWg.Done()
 		defer sub.Unsubscribe()
 		for event := range cn {
+			var ok bool
 			if syncEndedEvent, ok = event.Data.(SyncEndedEvent); ok {
 				return
 			}
@@ -85,22 +85,9 @@ func SyncEth1Events(
 		return errors.New("could not handle some of the events during history sync")
 	}
 
-	return upgradeSyncOffset(logger, storage, syncOffset, syncEndedEvent)
-}
-
-// upgradeSyncOffset updates the sync offset after a sync
-func upgradeSyncOffset(logger *zap.Logger, storage SyncOffsetStorage, syncOffset *SyncOffset, syncEndedEvent SyncEndedEvent) error {
-	nResults := len(syncEndedEvent.Logs)
-	if nResults > 0 {
-		if !syncEndedEvent.Success {
-			logger.Warn("could not parse all events from eth1")
-		} else if rawOffset := syncEndedEvent.Logs[nResults-1].BlockNumber; rawOffset > syncOffset.Uint64() {
-			logger.Info("upgrading sync offset", zap.Uint64("syncOffset", rawOffset))
-			syncOffset.SetUint64(rawOffset)
-			if err := storage.SaveSyncOffset(syncOffset); err != nil {
-				return errors.Wrap(err, "could not upgrade sync offset")
-			}
-		}
+	syncOffset.SetUint64(syncEndedEvent.Block)
+	if err := storage.SaveSyncOffset(syncOffset); err != nil {
+		return errors.Wrap(err, "could not upgrade sync offset")
 	}
 	return nil
 }

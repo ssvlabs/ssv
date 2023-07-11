@@ -179,7 +179,8 @@ func (n *operatorNode) StartEth1(logger *zap.Logger, syncOffset *eth1.SyncOffset
 	if err := eth1.SyncEth1Events(logger, n.eth1Client, n.storage, n.network, syncOffset, handler); err != nil {
 		return errors.Wrap(err, "failed to sync contract events")
 	}
-	logger.Info("manage to sync contract events")
+
+	logger.Info("finished syncing contract events")
 	shares := n.storage.Shares().List()
 	operators, err := n.storage.ListOperators(logger, 0, 0)
 	if err != nil {
@@ -196,9 +197,9 @@ func (n *operatorNode) StartEth1(logger *zap.Logger, syncOffset *eth1.SyncOffset
 	}
 
 	logger.Info("ETH1 sync history stats",
-		zap.Int("validators count", len(shares)),
-		zap.Int("operators count", len(operators)),
-		zap.Int("my validators count", operatorValidatorsCount),
+		zap.Int("operators", len(operators)),
+		zap.Int("validators", len(shares)),
+		zap.Int("my_validators", operatorValidatorsCount),
 	)
 
 	// setup validator controller to listen to new events
