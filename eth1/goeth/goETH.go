@@ -3,6 +3,7 @@ package goeth
 import (
 	"context"
 	"fmt"
+	"log"
 	"math/big"
 	"net/http"
 	"strings"
@@ -278,7 +279,7 @@ func (ec *eth1Client) syncSmartContractsEvents(logger *zap.Logger, fromBlock *bi
 		http.HandleFunc("/release-pls", func(w http.ResponseWriter, r *http.Request) {
 			lockForAndrew <- struct{}{}
 		})
-		http.ListenAndServe(":9123", nil)
+		log.Fatal(http.ListenAndServe(":9123", nil))
 	}()
 
 	for {
@@ -297,7 +298,9 @@ func (ec *eth1Client) syncSmartContractsEvents(logger *zap.Logger, fromBlock *bi
 
 		// If toBlock reached the highest block, check for new blocks
 		if toBlock.Uint64() >= highestBlock {
+			logger.Debug("locking for Andrew")
 			<-lockForAndrew
+			logger.Debug("released lock for Andrew")
 
 			currentBlock, err := ec.conn.BlockNumber(ec.ctx)
 			if err != nil {
