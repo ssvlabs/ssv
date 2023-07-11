@@ -140,7 +140,9 @@ var StartNodeCmd = &cobra.Command{
 			el = setupEth1(logger, networkConfig.RegistryContractAddr) // TODO: get rid of
 		}
 
-		metricsReporter := metricsreporter.New()
+		metricsReporter := metricsreporter.New(
+			metricsreporter.WithLogger(logger),
+		)
 
 		executionClient := executionclient.New(
 			cfg.ETH1Options.ETH1Addr,
