@@ -43,7 +43,6 @@ func (edh *EventDataHandler) handleOperatorAdded(txn eventdb.RW, event *contract
 	)
 
 	logger.Debug("processing event")
-	defer logger.Debug("processed event")
 
 	od := &registrystorage.OperatorData{
 		PublicKey:    event.PublicKey,
@@ -64,6 +63,7 @@ func (edh *EventDataHandler) handleOperatorAdded(txn eventdb.RW, event *contract
 		return fmt.Errorf("save operator data: %w", err)
 	}
 	if exists {
+		logger.Debug("operator data already exists")
 		return nil
 	}
 
@@ -73,6 +73,7 @@ func (edh *EventDataHandler) handleOperatorAdded(txn eventdb.RW, event *contract
 
 	edh.metrics.OperatorHasPublicKey(od.ID, od.PublicKey)
 
+	logger.Debug("processed event")
 	return nil
 }
 
@@ -82,7 +83,6 @@ func (edh *EventDataHandler) handleOperatorRemoved(txn eventdb.RW, event *contra
 		zap.String("event_type", OperatorRemoved),
 	)
 	logger.Debug("processing event")
-	defer func() { logger.Debug("processed event") }()
 
 	od, err := txn.GetOperatorData(event.OperatorId)
 	if err != nil {
@@ -107,6 +107,7 @@ func (edh *EventDataHandler) handleOperatorRemoved(txn eventdb.RW, event *contra
 	//	}
 	//	nodeStorage.Shares().Save(shares)
 
+	logger.Debug("processed event")
 	return nil
 }
 
@@ -128,7 +129,6 @@ func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contrac
 		zap.String("event_type", ValidatorAdded),
 	)
 	logger.Debug("processing event")
-	defer func() { logger.Debug("processed event") }()
 
 	// get nonce
 	nonce, nonceErr := txn.GetNextNonce(event.Owner)
@@ -212,6 +212,7 @@ func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contrac
 		edh.metrics.ValidatorInactive(event.PublicKey)
 	}
 
+	logger.Debug("processed event")
 	return nil
 }
 
@@ -354,7 +355,6 @@ func (edh *EventDataHandler) handleValidatorRemoved(txn eventdb.RW, event *contr
 		zap.String("event_type", ValidatorRemoved),
 	)
 	logger.Debug("processing event")
-	defer func() { logger.Debug("processed event") }()
 
 	// TODO: handle metrics
 	share := edh.shareMap.Get(event.PublicKey)
@@ -401,6 +401,7 @@ func (edh *EventDataHandler) handleValidatorRemoved(txn eventdb.RW, event *contr
 		logger = logger.With(zap.String("validator_pubkey", hex.EncodeToString(share.ValidatorPubKey)))
 	}
 
+	logger.Debug("processed event")
 	return nil
 }
 
@@ -411,7 +412,6 @@ func (edh *EventDataHandler) handleClusterLiquidated(txn eventdb.RW, event *cont
 		zap.String("event_type", ClusterLiquidated),
 	)
 	logger.Debug("processing event")
-	defer func() { logger.Debug("processed event") }()
 
 	toLiquidate, liquidatedPubKeys, err := edh.processClusterEvent(txn, event.Owner, event.OperatorIds, true)
 	if err != nil {
@@ -422,6 +422,7 @@ func (edh *EventDataHandler) handleClusterLiquidated(txn eventdb.RW, event *cont
 		logger = logger.With(zap.Strings("liquidated_validators", liquidatedPubKeys))
 	}
 
+	logger.Debug("processed event")
 	return toLiquidate, nil
 }
 
@@ -432,7 +433,6 @@ func (edh *EventDataHandler) handleClusterReactivated(txn eventdb.RW, event *con
 		zap.String("event_type", ClusterReactivated),
 	)
 	logger.Debug("processing event")
-	defer func() { logger.Debug("processed event") }()
 
 	toEnable, enabledPubKeys, err := edh.processClusterEvent(txn, event.Owner, event.OperatorIds, false)
 	if err != nil {
@@ -443,6 +443,7 @@ func (edh *EventDataHandler) handleClusterReactivated(txn eventdb.RW, event *con
 		logger = logger.With(zap.Strings("enabled_validators", enabledPubKeys))
 	}
 
+	logger.Debug("processed event")
 	return toEnable, nil
 }
 
@@ -453,7 +454,6 @@ func (edh *EventDataHandler) handleFeeRecipientAddressUpdated(txn eventdb.RW, ev
 		zap.String("event_type", FeeRecipientAddressUpdated),
 	)
 	logger.Debug("processing event")
-	defer func() { logger.Debug("processed event") }()
 
 	recipientData := &registrystorage.RecipientData{
 		Owner: event.Owner,
@@ -465,6 +465,7 @@ func (edh *EventDataHandler) handleFeeRecipientAddressUpdated(txn eventdb.RW, ev
 		return false, fmt.Errorf("could not save recipient data: %w", err)
 	}
 
+	logger.Debug("processed event")
 	return r != nil, nil
 }
 
