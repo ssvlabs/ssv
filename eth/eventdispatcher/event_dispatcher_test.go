@@ -81,9 +81,9 @@ func TestEventDispatcher(t *testing.T) {
 	receipt, err := cl.TransactionReceipt(ctx, ethcommon.HexToHash("0x348887eab2e1c27dcce22b81482be5ad0e0dbc6fa2f7bea314ec84c819aa0d29"))
 	require.NoError(t, err)
 	require.Equal(t, uint64(1), receipt.Status)
-	contracctCode, err := cl.CodeAt(ctx, receipt.ContractAddress, nil)
+	contractCode, err := cl.CodeAt(ctx, receipt.ContractAddress, nil)
 	require.NoError(t, err)
-	if len(contracctCode) == 0 {
+	if len(contractCode) == 0 {
 		t.Fatal("got code for account that does not have contract code")
 	}
 

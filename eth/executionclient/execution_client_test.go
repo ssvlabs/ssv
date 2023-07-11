@@ -91,9 +91,9 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	receipt, err := cl.TransactionReceipt(ctx, ethcommon.HexToHash("0x0a854d0edf6b757240d5ef2cbfc3fe355525ad1656bf7ce0fbcfa27077a1246a"))
 	require.NoError(t, err)
 	require.Equal(t, uint64(1), receipt.Status)
-	contracctCode, err := cl.CodeAt(ctx, receipt.ContractAddress, nil)
+	contractCode, err := cl.CodeAt(ctx, receipt.ContractAddress, nil)
 	require.NoError(t, err)
-	if len(contracctCode) == 0 {
+	if len(contractCode) == 0 {
 		t.Fatal("got code for account that does not have contract code")
 	}
 
