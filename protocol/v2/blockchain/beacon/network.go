@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-
 	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
@@ -23,18 +22,17 @@ func NewNetwork(network spectypes.BeaconNetwork) Network {
 }
 
 // NewNetworkWithLocalTestNet creates a new beacon chain network.
-func NewNetworkWithLocalTestNet(network spectypes.BeaconNetwork, localTestNet bool) Network {
+func NewNetworkWithLocalTestNet(network spectypes.BeaconNetwork) Network {
 	return Network{
 		BeaconNetwork: network,
-		LocalTestNet:  localTestNet,
+		LocalTestNet:  true,
 	}
 }
 
-// CustomMinGenesisTime returns min genesis time value
-func (n Network) CustomMinGenesisTime() uint64 {
-	//TODO: get from config
+// MinGenesisTime returns min genesis time value
+func (n Network) MinGenesisTime() uint64 {
 	if n.LocalTestNet {
-		return 1688914691
+		return 1689072978
 	}
 	return n.BeaconNetwork.MinGenesisTime()
 }
@@ -42,7 +40,7 @@ func (n Network) CustomMinGenesisTime() uint64 {
 // GetSlotStartTime returns the start time for the given slot
 func (n Network) GetSlotStartTime(slot phase0.Slot) time.Time {
 	timeSinceGenesisStart := uint64(slot) * uint64(n.SlotDurationSec().Seconds())
-	start := time.Unix(int64(n.CustomMinGenesisTime()+timeSinceGenesisStart), 0)
+	start := time.Unix(int64(n.MinGenesisTime()+timeSinceGenesisStart), 0)
 	return start
 }
 
@@ -53,7 +51,7 @@ func (n Network) EstimatedCurrentSlot() phase0.Slot {
 
 // EstimatedSlotAtTime estimates slot at the given time
 func (n Network) EstimatedSlotAtTime(time int64) phase0.Slot {
-	genesis := int64(n.CustomMinGenesisTime())
+	genesis := int64(n.MinGenesisTime())
 	if time < genesis {
 		return 0
 	}

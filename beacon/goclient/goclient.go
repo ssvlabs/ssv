@@ -188,7 +188,7 @@ func (gc *goClient) GetBeaconNetwork() spectypes.BeaconNetwork {
 // value.
 func (gc *goClient) slotStartTime(slot phase0.Slot) time.Time {
 	duration := time.Second * time.Duration(uint64(slot)*uint64(gc.network.SlotDurationSec().Seconds()))
-	startTime := time.Unix(int64(gc.network.CustomMinGenesisTime()), 0).Add(duration)
+	startTime := time.Unix(int64(gc.network.MinGenesisTime()), 0).Add(duration)
 	return startTime
 }
 

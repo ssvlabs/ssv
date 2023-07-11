@@ -40,7 +40,7 @@ func NewTicker(ctx context.Context, network networkconfig.NetworkConfig) Ticker 
 
 // Start slot ticker
 func (t *ticker) Start(logger *zap.Logger) {
-	genesisTime := time.Unix(int64(t.network.Beacon.CustomMinGenesisTime()), 0)
+	genesisTime := time.Unix(int64(t.network.Beacon.MinGenesisTime()), 0)
 	slotTicker := NewSlotTicker(genesisTime, uint64(t.network.SlotDurationSec().Seconds()))
 	t.listenToTicker(logger, slotTicker.C())
 }
