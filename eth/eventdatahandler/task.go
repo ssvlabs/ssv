@@ -9,17 +9,17 @@ import (
 )
 
 type Task interface {
-	GetEventType() EventType
+	GetEventType() string
 	Execute() error
 }
 type RemoteTask struct {
-	EventType
-	Edh    *EventDataHandler
-	Ev     ethtypes.Log
-	Shares []*types.SSVShare
+	EventType string
+	Edh       *EventDataHandler
+	Ev        ethtypes.Log
+	Shares    []*types.SSVShare
 }
 
-func NewRemoteTask(EventType EventType, Edh *EventDataHandler, Ev ethtypes.Log, Shares []*types.SSVShare) Task {
+func NewRemoteTask(EventType string, Edh *EventDataHandler, Ev ethtypes.Log, Shares []*types.SSVShare) Task {
 	return &RemoteTask{EventType, Edh, Ev, Shares}
 }
 
@@ -30,7 +30,7 @@ func (t RemoteTask) Execute() error {
 		if err != nil {
 			return err
 		}
-		t.Edh.logger.Info("starting validator ", fields.PubKey(validatorAddedEvent.PublicKey))
+		t.Edh.logger.Info("starting validator", fields.PubKey(validatorAddedEvent.PublicKey))
 		return t.Edh.taskExecutor.AddValidator(validatorAddedEvent)
 	case ValidatorRemoved:
 		validatorRemovedEvent, err := t.Edh.filterer.ParseValidatorRemoved(t.Ev)
@@ -65,16 +65,16 @@ func (t RemoteTask) Execute() error {
 	}
 }
 
-func (t RemoteTask) GetEventType() EventType { return t.EventType }
+func (t RemoteTask) GetEventType() string { return t.EventType }
 
 type LocalTask struct {
-	EventType
-	Edh    *EventDataHandler
-	Ev     *localevents.Event
-	Shares []*types.SSVShare
+	EventType string
+	Edh       *EventDataHandler
+	Ev        *localevents.Event
+	Shares    []*types.SSVShare
 }
 
-func NewLocalTask(EventType EventType, Edh *EventDataHandler, localEvent *localevents.Event, Shares []*types.SSVShare) Task {
+func NewLocalTask(EventType string, Edh *EventDataHandler, localEvent *localevents.Event, Shares []*types.SSVShare) Task {
 	return &LocalTask{EventType, Edh, localEvent, Shares}
 }
 
@@ -82,7 +82,7 @@ func (t LocalTask) Execute() error {
 	switch t.EventType {
 	case ValidatorAdded:
 		e := t.Ev.Data.(contract.ContractValidatorAdded)
-		t.Edh.logger.Info("starting validator ", fields.PubKey(e.PublicKey))
+		t.Edh.logger.Info("starting validator", fields.PubKey(e.PublicKey))
 		return t.Edh.taskExecutor.AddValidator(&e)
 	case ValidatorRemoved:
 		e := t.Ev.Data.(contract.ContractValidatorRemoved)
@@ -105,4 +105,4 @@ func (t LocalTask) Execute() error {
 	}
 }
 
-func (t LocalTask) GetEventType() EventType { return t.EventType }
+func (t LocalTask) GetEventType() string { return t.EventType }

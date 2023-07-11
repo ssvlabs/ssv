@@ -31,7 +31,7 @@ func (edh *EventDataHandler) handleOperatorAdded(txn eventdb.RW, event *contract
 		fields.OperatorID(event.OperatorId),
 		zap.String("operator_pub_key", ethcommon.Bytes2Hex(event.PublicKey)),
 		zap.String("owner_address", event.Owner.String()),
-		zap.String("event_type", EventType(0).String()),
+		zap.String("event_type", OperatorAdded),
 	)
 
 	logger.Debug("processing event")
@@ -70,7 +70,7 @@ func (edh *EventDataHandler) handleOperatorAdded(txn eventdb.RW, event *contract
 func (edh *EventDataHandler) handleOperatorRemoved(txn eventdb.RW, event *contract.ContractOperatorRemoved) error {
 	logger := edh.logger.With(
 		fields.OperatorID(event.OperatorId),
-		zap.String("event_type", EventType(1).String()),
+		zap.String("event_type", OperatorRemoved),
 	)
 	logger.Debug("processing event")
 	defer func() { logger.Debug("processed event") }()
@@ -105,7 +105,7 @@ func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contrac
 		zap.String("owner_address", event.Owner.String()),
 		zap.Uint64s("operator_ids", event.OperatorIds),
 		zap.String("operator_pub_key", ethcommon.Bytes2Hex(event.PublicKey)),
-		zap.String("event_type", EventType(2).String()),
+		zap.String("event_type", ValidatorAdded),
 	)
 	logger.Debug("processing event")
 	defer func() { logger.Debug("processed event") }()
@@ -330,7 +330,7 @@ func (edh *EventDataHandler) handleValidatorRemoved(txn eventdb.RW, event *contr
 		zap.String("owner_address", event.Owner.String()),
 		zap.Uint64s("operator_ids", event.OperatorIds),
 		fields.PubKey(event.PublicKey),
-		zap.String("event_type", EventType(3).String()),
+		zap.String("event_type", ValidatorRemoved),
 	)
 	logger.Debug("processing event")
 	defer func() { logger.Debug("processed event") }()
@@ -388,7 +388,7 @@ func (edh *EventDataHandler) handleClusterLiquidated(txn eventdb.RW, event *cont
 	logger := edh.logger.With(
 		zap.String("owner_address", event.Owner.String()),
 		zap.Uint64s("operator_ids", event.OperatorIds),
-		zap.String("event_type", EventType(4).String()),
+		zap.String("event_type", ClusterLiquidated),
 	)
 	logger.Debug("processing event")
 	defer func() { logger.Debug("processed event") }()
@@ -409,7 +409,7 @@ func (edh *EventDataHandler) handleClusterReactivated(txn eventdb.RW, event *con
 	logger := edh.logger.With(
 		zap.String("owner_address", event.Owner.String()),
 		zap.Uint64s("operator_ids", event.OperatorIds),
-		zap.String("event_type", EventType(5).String()),
+		zap.String("event_type", ClusterReactivated),
 	)
 	logger.Debug("processing event")
 	defer func() { logger.Debug("processed event") }()
@@ -430,7 +430,7 @@ func (edh *EventDataHandler) handleFeeRecipientAddressUpdated(txn eventdb.RW, ev
 	logger := edh.logger.With(
 		zap.String("owner_address", event.Owner.String()),
 		fields.FeeRecipient(event.RecipientAddress.Bytes()),
-		zap.String("event_type", EventType(6).String()),
+		zap.String("event_type", FeeRecipientAddressUpdated),
 	)
 	logger.Debug("processing event")
 	defer func() { logger.Debug("processed event") }()

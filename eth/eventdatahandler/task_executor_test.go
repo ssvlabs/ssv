@@ -6,26 +6,30 @@ import (
 
 	"github.com/bloxapp/ssv/eth/eventbatcher"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
-	"github.com/prysmaticlabs/prysm/v4/testing/require"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 )
 
 func TestCleanExecutionQueue(t *testing.T) {
 	tasks := []Task{
-		NewRemoteTask(EventType(0), &EventDataHandler{}, ethtypes.Log{}, nil),
-		NewRemoteTask(EventType(2), &EventDataHandler{}, ethtypes.Log{}, nil),
-		NewRemoteTask(EventType(3), &EventDataHandler{}, ethtypes.Log{}, nil),
-		NewRemoteTask(EventType(3), &EventDataHandler{}, ethtypes.Log{}, nil),
-		NewRemoteTask(EventType(4), &EventDataHandler{}, ethtypes.Log{}, nil),
-		NewRemoteTask(EventType(5), &EventDataHandler{}, ethtypes.Log{}, nil),
-		NewRemoteTask(EventType(5), &EventDataHandler{}, ethtypes.Log{}, nil),
-		NewRemoteTask(EventType(4), &EventDataHandler{}, ethtypes.Log{}, nil),
-		NewRemoteTask(EventType(6), &EventDataHandler{}, ethtypes.Log{}, nil),
-		NewRemoteTask(EventType(6), &EventDataHandler{}, ethtypes.Log{}, nil),
-		NewRemoteTask(EventType(6), &EventDataHandler{}, ethtypes.Log{}, nil),
+		NewRemoteTask(OperatorAdded, &EventDataHandler{}, ethtypes.Log{}, nil),
+		NewRemoteTask(ValidatorAdded, &EventDataHandler{}, ethtypes.Log{}, nil),
+		NewRemoteTask(ValidatorRemoved, &EventDataHandler{}, ethtypes.Log{}, nil),
+		NewRemoteTask(ValidatorRemoved, &EventDataHandler{}, ethtypes.Log{}, nil),
+		NewRemoteTask(ClusterLiquidated, &EventDataHandler{}, ethtypes.Log{}, nil),
+		NewRemoteTask(ClusterReactivated, &EventDataHandler{}, ethtypes.Log{}, nil),
+		NewRemoteTask(ClusterReactivated, &EventDataHandler{}, ethtypes.Log{}, nil),
+		NewRemoteTask(ClusterLiquidated, &EventDataHandler{}, ethtypes.Log{}, nil),
+		NewRemoteTask(FeeRecipientAddressUpdated, &EventDataHandler{}, ethtypes.Log{}, nil),
+		NewRemoteTask(FeeRecipientAddressUpdated, &EventDataHandler{}, ethtypes.Log{}, nil),
+		NewRemoteTask(FeeRecipientAddressUpdated, &EventDataHandler{}, ethtypes.Log{}, nil),
 	}
-	cleanedTask := cleanTaskList(tasks)
-	require.DeepEqual(t, cleanedTask, []Task{NewRemoteTask(EventType(0), &EventDataHandler{}, ethtypes.Log{}, nil), NewRemoteTask(EventType(6), &EventDataHandler{}, ethtypes.Log{}, nil)})
+	var resTaskNames []string
+	cleanedTasks := cleanTaskList(tasks)
+	for _, task := range(cleanedTasks) {
+		resTaskNames = append(resTaskNames, task.GetEventType())
+	}
+	require.Equal(t, []string{OperatorAdded, FeeRecipientAddressUpdated}, resTaskNames)
 }
 
 func TestExecuteTask(t *testing.T) {
@@ -46,7 +50,7 @@ func TestExecuteTask(t *testing.T) {
 	LogValidatorAdded := unmarshalLog(t, rawValidatorAdded)
 	edh, err := setupDataHandler(t, ctx, logger)
 	require.NoError(t, err)
-	task := NewRemoteTask(EventType(2), edh, *LogValidatorAdded, nil)
+	task := NewRemoteTask(ValidatorAdded, edh, *LogValidatorAdded, nil)
 	err = task.Execute()
 	require.NoError(t, err)
 }
