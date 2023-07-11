@@ -5,6 +5,7 @@
 package eth1
 
 import (
+	context "context"
 	big "math/big"
 	reflect "reflect"
 
@@ -48,6 +49,21 @@ func (m *MockClient) EventsFeed() *event.Feed {
 func (mr *MockClientMockRecorder) EventsFeed() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EventsFeed", reflect.TypeOf((*MockClient)(nil).EventsFeed))
+}
+
+// IsReady mocks base method.
+func (m *MockClient) IsReady(ctx context.Context) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsReady", ctx)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// IsReady indicates an expected call of IsReady.
+func (mr *MockClientMockRecorder) IsReady(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsReady", reflect.TypeOf((*MockClient)(nil).IsReady), ctx)
 }
 
 // Start mocks base method.

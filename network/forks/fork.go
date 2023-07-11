@@ -25,6 +25,8 @@ type nodeRecord interface {
 }
 
 type pubSubMapping interface {
+	// SubnetTopicID returns the topic id for the given subnet
+	SubnetTopicID(subnet int) string
 	// ValidatorTopicID maps the given validator public key to the corresponding pubsub topic
 	ValidatorTopicID(pk []byte) []string
 	// GetTopicFullName returns the topic full name, including prefix
@@ -40,6 +42,8 @@ type pubSubConfig interface {
 	MsgID() MsgIDFunc
 	// Subnets returns the subnets count for this fork
 	Subnets() int
+	// Topics returns the available topics for this fork.
+	Topics() []string
 }
 
 type libp2pConfig interface {

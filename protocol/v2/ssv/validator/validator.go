@@ -6,7 +6,6 @@ import (
 	"sync"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
 	"github.com/pkg/errors"
@@ -30,7 +29,6 @@ type Validator struct {
 
 	DutyRunners runner.DutyRunners
 	Network     specqbft.Network
-	Beacon      specssv.BeaconNode
 	Share       *types.SSVShare
 	Signer      spectypes.KeyManager
 
@@ -53,7 +51,6 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		cancel:      cancel,
 		DutyRunners: options.DutyRunners,
 		Network:     options.Network,
-		Beacon:      options.Beacon,
 		Storage:     options.Storage,
 		Share:       options.SSVShare,
 		Signer:      options.Signer,
