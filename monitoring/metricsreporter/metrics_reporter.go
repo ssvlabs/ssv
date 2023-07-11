@@ -1,6 +1,10 @@
 package metricsreporter
 
 import (
+	"crypto/sha256"
+	"fmt"
+	"strconv"
+
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/prometheus/client_golang/prometheus"
@@ -41,6 +45,10 @@ var (
 		Name: "ssv_eth1_status",
 		Help: "Status of the connected execution client",
 	})
+	executionClientLastFetchBlock = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "ssv_execution_client_last_fetched_block",
+		Help: "Last fetched block by execution client",
+	})
 	validatorStatus = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:validator:v2:status",
 		Help: "Validator status",
@@ -53,6 +61,10 @@ var (
 		Name: "ssv_eth1_sync_count_failed",
 		Help: "Count failed execution client events",
 	}, []string{"etype"})
+	operatorIndex = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:exporter:operator_index",
+		Help: "operator footprint",
+	}, []string{"pubKey", "index"})
 )
 
 type MetricsReporter struct {
@@ -110,12 +122,13 @@ func (m MetricsReporter) ExecutionClientFailure() {
 	executionClientStatus.Set(executionClientFailure)
 }
 
-func (m MetricsReporter) LastFetchedBlock(block uint64) {
-	// TODO: implement
+func (m MetricsReporter) ExecutionClientLastFetchedBlock(block uint64) {
+	executionClientLastFetchBlock.Set(float64(block))
 }
 
-func (m MetricsReporter) OperatorHasPublicKey(operatorID spectypes.OperatorID, publicKey []byte) {
-	// TODO: implement
+func (m MetricsReporter) OperatorPublicKey(operatorID spectypes.OperatorID, publicKey []byte) {
+	pkHash := fmt.Sprintf("%x", sha256.Sum256(publicKey))
+	operatorIndex.WithLabelValues(pkHash, strconv.FormatUint(operatorID, 10)).Set(float64(operatorID))
 }
 
 func (m MetricsReporter) ValidatorInactive(publicKey []byte) {

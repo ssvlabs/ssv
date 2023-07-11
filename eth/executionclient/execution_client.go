@@ -182,7 +182,7 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, client *ethcl
 			zap.Uint64("to", toBlock),
 		)
 
-		ec.metrics.LastFetchedBlock(toBlock)
+		ec.metrics.ExecutionClientLastFetchedBlock(toBlock)
 	}()
 
 	return logCh, fetchErrCh
@@ -305,7 +305,7 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan ethty
 
 			fromBlock = query.ToBlock.Uint64()
 			ec.logger.Info("last fetched block", fields.BlockNumber(fromBlock))
-			ec.metrics.LastFetchedBlock(fromBlock)
+			ec.metrics.ExecutionClientLastFetchedBlock(fromBlock)
 		}
 	}
 }

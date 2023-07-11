@@ -71,7 +71,10 @@ func (edh *EventDataHandler) handleOperatorAdded(txn eventdb.RW, event *contract
 		edh.operatorData = od
 	}
 
-	edh.metrics.OperatorHasPublicKey(od.ID, od.PublicKey)
+	edh.metrics.OperatorPublicKey(od.ID, od.PublicKey)
+	logger.Debug("report operator public key",
+		fields.OperatorID(od.ID),
+		fields.PubKey(od.PublicKey))
 
 	logger.Debug("processed event")
 	return nil

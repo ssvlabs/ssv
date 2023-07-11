@@ -5,7 +5,7 @@ import (
 )
 
 type metrics interface {
-	OperatorHasPublicKey(operatorID spectypes.OperatorID, publicKey []byte)
+	OperatorPublicKey(operatorID spectypes.OperatorID, publicKey []byte)
 	ValidatorInactive(publicKey []byte)
 	ValidatorError(publicKey []byte)
 	ValidatorRemoved(publicKey []byte)
@@ -16,9 +16,9 @@ type metrics interface {
 // nopMetrics is no-op metrics.
 type nopMetrics struct{}
 
-func (n nopMetrics) OperatorHasPublicKey(spectypes.OperatorID, []byte) {}
-func (n nopMetrics) ValidatorInactive([]byte)                          {}
-func (n nopMetrics) ValidatorError([]byte)                             {}
-func (n nopMetrics) ValidatorRemoved([]byte)                           {}
-func (n nopMetrics) EventProcessed(string)                             {}
-func (n nopMetrics) EventProcessingFailed(string)                      {}
+func (n nopMetrics) OperatorPublicKey(spectypes.OperatorID, []byte) {}
+func (n nopMetrics) ValidatorInactive([]byte)                       {}
+func (n nopMetrics) ValidatorError([]byte)                          {}
+func (n nopMetrics) ValidatorRemoved([]byte)                        {}
+func (n nopMetrics) EventProcessed(string)                          {}
+func (n nopMetrics) EventProcessingFailed(string)                   {}

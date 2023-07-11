@@ -9,10 +9,10 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth/executionclient"
-	"github.com/bloxapp/ssv/exporter"
 	"github.com/bloxapp/ssv/exporter/api"
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/networkconfig"
@@ -238,6 +238,9 @@ func (n *operatorNode) reportOperators(logger *zap.Logger) {
 	}
 	logger.Debug("reporting operators", zap.Int("count", len(operators)))
 	for i := range operators {
-		exporter.ReportOperatorIndex(logger, &operators[i])
+		n.metrics.OperatorPublicKey(operators[i].ID, operators[i].PublicKey)
+		logger.Debug("report operator public key",
+			fields.OperatorID(operators[i].ID),
+			fields.PubKey(operators[i].PublicKey))
 	}
 }
