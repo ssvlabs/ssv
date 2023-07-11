@@ -113,7 +113,7 @@ func NewEventDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger) 
 	options := basedb.Options{
 		Type:      "badger-memory",
 		Path:      "",
-		Reporting: true,
+		Reporting: false,
 		Ctx:       ctx,
 	}
 

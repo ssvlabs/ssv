@@ -85,7 +85,7 @@ func setupDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger) (*E
 	options := basedb.Options{
 		Type:       "badger-memory",
 		Path:       "",
-		Reporting:  true,
+		Reporting:  false,
 		GCInterval: 0,
 		Ctx:        ctx,
 	}

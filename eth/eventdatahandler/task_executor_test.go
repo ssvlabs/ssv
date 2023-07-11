@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/eth/eventbatcher"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/stretchr/testify/require"
@@ -11,22 +12,23 @@ import (
 )
 
 func TestCleanExecutionQueue(t *testing.T) {
-	tasks := []Task{
-		NewRemoteTask(OperatorAdded, &EventDataHandler{}, ethtypes.Log{}, nil),
-		NewRemoteTask(ValidatorAdded, &EventDataHandler{}, ethtypes.Log{}, nil),
-		NewRemoteTask(ValidatorRemoved, &EventDataHandler{}, ethtypes.Log{}, nil),
-		NewRemoteTask(ValidatorRemoved, &EventDataHandler{}, ethtypes.Log{}, nil),
-		NewRemoteTask(ClusterLiquidated, &EventDataHandler{}, ethtypes.Log{}, nil),
-		NewRemoteTask(ClusterReactivated, &EventDataHandler{}, ethtypes.Log{}, nil),
-		NewRemoteTask(ClusterReactivated, &EventDataHandler{}, ethtypes.Log{}, nil),
-		NewRemoteTask(ClusterLiquidated, &EventDataHandler{}, ethtypes.Log{}, nil),
-		NewRemoteTask(FeeRecipientAddressUpdated, &EventDataHandler{}, ethtypes.Log{}, nil),
-		NewRemoteTask(FeeRecipientAddressUpdated, &EventDataHandler{}, ethtypes.Log{}, nil),
-		NewRemoteTask(FeeRecipientAddressUpdated, &EventDataHandler{}, ethtypes.Log{}, nil),
+	tasks := []*Task{
+		NewTask(&EventDataHandler{}, &contract.ContractOperatorAdded{}, nil),
+		NewTask(&EventDataHandler{}, &contract.ContractValidatorAdded{}, nil),
+		NewTask(&EventDataHandler{}, &contract.ContractValidatorRemoved{}, nil),
+		NewTask(&EventDataHandler{}, &contract.ContractValidatorRemoved{}, nil),
+		NewTask(&EventDataHandler{}, &contract.ContractValidatorAdded{}, nil),
+		NewTask(&EventDataHandler{}, &contract.ContractClusterLiquidated{}, nil),
+		NewTask(&EventDataHandler{}, &contract.ContractClusterReactivated{}, nil),
+		NewTask(&EventDataHandler{}, &contract.ContractClusterReactivated{}, nil),
+		NewTask(&EventDataHandler{}, &contract.ContractClusterLiquidated{}, nil),
+		NewTask(&EventDataHandler{}, &contract.ContractFeeRecipientAddressUpdated{}, nil),
+		NewTask(&EventDataHandler{}, &contract.ContractFeeRecipientAddressUpdated{}, nil),
 	}
 	var resTaskNames []string
 	cleanedTasks := cleanTaskList(tasks)
-	for _, task := range(cleanedTasks) {
+	for _, task := range cleanedTasks {
+		t.Log(task.GetEventType())
 		resTaskNames = append(resTaskNames, task.GetEventType())
 	}
 	require.Equal(t, []string{OperatorAdded, FeeRecipientAddressUpdated}, resTaskNames)
@@ -50,7 +52,11 @@ func TestExecuteTask(t *testing.T) {
 	LogValidatorAdded := unmarshalLog(t, rawValidatorAdded)
 	edh, err := setupDataHandler(t, ctx, logger)
 	require.NoError(t, err)
-	task := NewRemoteTask(ValidatorAdded, edh, *LogValidatorAdded, nil)
+	validatorAddedEvent, err := edh.filterer.ParseValidatorAdded(*LogValidatorAdded)
+	if err != nil {
+		t.Fatal("parse ValidatorAdded", err)
+	}
+	task := NewTask(edh, validatorAddedEvent, nil)
 	err = task.Execute()
 	require.NoError(t, err)
 }

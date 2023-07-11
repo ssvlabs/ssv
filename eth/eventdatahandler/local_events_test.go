@@ -73,7 +73,7 @@ func TestHandleLocalOperatorAddedEvent(t *testing.T) {
 			localEventsCh <- parsedData
 		}()
 	
-		err = edh.HandleLocalEventsStream(localEventsCh, false)
+		err = edh.HandleLocalEventsStream(localEventsCh, true)
 		require.NoError(t, err)
 	})
 }

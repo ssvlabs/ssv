@@ -108,11 +108,8 @@ func (edh *EventDataHandler) HandleBlockEventsStream(blockEventsCh <-chan eventb
 
 		cleanTaskList := cleanTaskList(tasks)
 		for _, task := range cleanTaskList {
-			t := task.(RemoteTask)
 			edh.logger.With(
-				zap.String("event_type", t.EventType),
-				zap.String("contract_address", t.Ev.Address.Hex()),
-				zap.Uint64("block_number", t.Ev.BlockNumber),
+				zap.String("event_type", task.GetEventType()),
 			)
 			edh.logger.Debug("going to execute remote task")
 			if err := task.Execute(); err != nil {
@@ -128,11 +125,11 @@ func (edh *EventDataHandler) HandleBlockEventsStream(blockEventsCh <-chan eventb
 	return lastProcessedBlock, nil
 }
 
-func (edh *EventDataHandler) processBlockEvents(blockEvents eventbatcher.BlockEvents) ([]Task, error) {
+func (edh *EventDataHandler) processBlockEvents(blockEvents eventbatcher.BlockEvents) ([]*Task, error) {
 	txn := edh.eventDB.RWTxn()
 	defer txn.Discard()
 
-	var tasks []Task
+	var tasks []*Task
 	for _, event := range blockEvents.Events {
 		task, err := edh.processEvent(txn, event)
 		if err != nil {
@@ -155,7 +152,7 @@ func (edh *EventDataHandler) processBlockEvents(blockEvents eventbatcher.BlockEv
 	return tasks, nil
 }
 
-func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (Task, error) {
+func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (*Task, error) {
 	abiEvent, err := edh.abi.EventByID(event.Topics[0])
 	if err != nil {
 		edh.logger.Error("failed to find event by ID", zap.String("hash", event.Topics[0].String()))
@@ -196,7 +193,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 		if err := edh.handleValidatorAdded(txn, validatorAddedEvent); err != nil {
 			return nil, fmt.Errorf("handle ValidatorAdded: %w", err)
 		}
-		task := NewRemoteTask(ValidatorAdded, edh, event, nil)
+		task := NewTask(edh, event, nil)
 		return task, nil
 
 	case ValidatorRemoved:
@@ -208,7 +205,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 		if err := edh.handleValidatorRemoved(txn, validatorRemovedEvent); err != nil {
 			return nil, fmt.Errorf("handle ValidatorRemoved: %w", err)
 		}
-		task := NewRemoteTask(ValidatorRemoved, edh, event, nil)
+		task := NewTask(edh, event, nil)
 
 		return task, nil
 
@@ -223,7 +220,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 			return nil, fmt.Errorf("handle ClusterLiquidated: %w", err)
 		}
 
-		task := NewRemoteTask(ClusterLiquidated, edh, event, sharesToLiquidate)
+		task := NewTask(edh, event, sharesToLiquidate)
 
 		return task, nil
 
@@ -238,7 +235,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 			return nil, fmt.Errorf("handle ClusterReactivated: %w", err)
 		}
 
-		task := NewRemoteTask(ClusterReactivated, edh, event, sharesToEnable)
+		task := NewTask(edh, event, sharesToEnable)
 
 		return task, nil
 
@@ -257,7 +254,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 			return nil, fmt.Errorf("provided recipient address is the same")
 		}
 
-		task := NewRemoteTask(FeeRecipientAddressUpdated, edh, event, nil)
+		task := NewTask(edh, event, nil)
 
 		return task, nil
 
@@ -269,9 +266,9 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 
 // find and remove opposite tasks (start-stop, stop-start, liquidate-reactivate, reactivate-liquidate)
 // find superseding tasks and remove superseded ones (updateFee-updateFee)
-func cleanTaskList(tasks []Task) []Task {
-	taskMap := make(map[Task]bool)
-	var resTask []Task
+func cleanTaskList(tasks []*Task) []*Task {
+	taskMap := make(map[*Task]bool)
+	var resTask []*Task
 	for _, task := range tasks {
 		if _, exist := taskMap[task]; !exist {
 			taskMap[task] = true
@@ -313,8 +310,7 @@ func (edh *EventDataHandler) HandleLocalEventsStream(localEventsCh <-chan []loca
 
 		cleanTaskList := cleanTaskList(tasks)
 		for _, task := range cleanTaskList {
-			t := task.(LocalTask)
-			edh.logger.With(zap.String("event_type", t.EventType))
+			edh.logger.With(zap.String("event_type", task.GetEventType()))
 			edh.logger.Debug("going to execute local task")
 			if err := task.Execute(); err != nil {
 				// TODO: We log failed task until we discuss how we want to handle this case. We likely need to crash the node in this case.
@@ -330,7 +326,7 @@ func (edh *EventDataHandler) HandleLocalEventsStream(localEventsCh <-chan []loca
 	return nil
 }
 
-func (edh *EventDataHandler) processLocalEvent(txn eventdb.RW, event localevents.Event) (Task, error) {
+func (edh *EventDataHandler) processLocalEvent(txn eventdb.RW, event localevents.Event) (*Task, error) {
 	switch event.Name {
 	case OperatorAdded:
 		e := event.Data.(contract.ContractOperatorAdded)
@@ -349,14 +345,14 @@ func (edh *EventDataHandler) processLocalEvent(txn eventdb.RW, event localevents
 		if err := edh.handleValidatorAdded(txn, &e); err != nil {
 			return nil, fmt.Errorf("handle ValidatorAdded: %w", err)
 		}
-		task := NewLocalTask(ValidatorAdded, edh, &event, nil)
+		task := NewTask(edh, &event, nil)
 		return task, nil
 	case ValidatorRemoved:
 		e := event.Data.(contract.ContractValidatorRemoved)
 		if err := edh.handleValidatorRemoved(txn, &e); err != nil {
 			return nil, fmt.Errorf("handle ValidatorRemoved: %w", err)
 		}
-		task := NewLocalTask(ValidatorRemoved, edh, &event, nil)
+		task := NewTask(edh, &event, nil)
 		return task, nil
 	case ClusterLiquidated:
 		e := event.Data.(contract.ContractClusterLiquidated)
@@ -364,7 +360,7 @@ func (edh *EventDataHandler) processLocalEvent(txn eventdb.RW, event localevents
 		if err != nil {
 			return nil, fmt.Errorf("handle ClusterLiquidated: %w", err)
 		}
-		task := NewLocalTask(ClusterLiquidated, edh, &event, sharesToLiquidate)
+		task := NewTask(edh, &event, sharesToLiquidate)
 		return task, nil
 	case ClusterReactivated:
 		e := event.Data.(contract.ContractClusterReactivated)
@@ -372,7 +368,7 @@ func (edh *EventDataHandler) processLocalEvent(txn eventdb.RW, event localevents
 		if err != nil {
 			return nil, fmt.Errorf("handle ClusterReactivated: %w", err)
 		}
-		task := NewLocalTask(ClusterReactivated, edh, &event, sharesToEnable)
+		task := NewTask(edh, &event, sharesToEnable)
 		return task, nil
 	case FeeRecipientAddressUpdated:
 		e := event.Data.(contract.ContractFeeRecipientAddressUpdated)
@@ -381,9 +377,9 @@ func (edh *EventDataHandler) processLocalEvent(txn eventdb.RW, event localevents
 			return nil, fmt.Errorf("handle FeeRecipientAddressUpdated: %w", err)
 		}
 		if !updated {
-			return nil, fmt.Errorf("provided receipeint address is the same")
+			return nil, fmt.Errorf("provided recipient address is the same")
 		}
-		task := NewLocalTask(FeeRecipientAddressUpdated, edh, &event, nil)
+		task := NewTask(edh, &event, nil)
 		return task, nil
 	default:
 		edh.logger.Warn("unknown event name", fields.Name(event.Name))
@@ -391,11 +387,11 @@ func (edh *EventDataHandler) processLocalEvent(txn eventdb.RW, event localevents
 	}
 }
 
-func (edh *EventDataHandler) processLocalEvents(localEvents []localevents.Event) ([]Task, error) {
+func (edh *EventDataHandler) processLocalEvents(localEvents []localevents.Event) ([]*Task, error) {
 	txn := edh.eventDB.RWTxn()
 	defer txn.Discard()
 
-	var tasks []Task
+	var tasks []*Task
 	for _, event := range localEvents {
 		task, err := edh.processLocalEvent(txn, event)
 		if err != nil {

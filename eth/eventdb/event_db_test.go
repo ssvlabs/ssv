@@ -31,7 +31,7 @@ func TestEventDbLastBlock(t *testing.T) {
 	options := basedb.Options{
 		Type:      "badger-memory",
 		Path:      "",
-		Reporting: true,
+		Reporting: false,
 		Ctx:       ctx,
 	}
 
@@ -61,7 +61,7 @@ func TestEventDbOperatorData(t *testing.T) {
 	options := basedb.Options{
 		Type:      "badger-memory",
 		Path:      "",
-		Reporting: true,
+		Reporting: false,
 		Ctx:       ctx,
 	}
 
@@ -91,7 +91,7 @@ func TestEventDbRecipientData(t *testing.T) {
 	options := basedb.Options{
 		Type:      "badger-memory",
 		Path:      "",
-		Reporting: true,
+		Reporting: false,
 		Ctx:       ctx,
 	}
 
@@ -122,7 +122,7 @@ func TestEventDbShares(t *testing.T) {
 	options := basedb.Options{
 		Type:      "badger-memory",
 		Path:      "",
-		Reporting: true,
+		Reporting: false,
 		Ctx:       ctx,
 	}
 
@@ -156,7 +156,7 @@ func TestEventDbBumpNonce(t *testing.T) {
 	options := basedb.Options{
 		Type:      "badger-memory",
 		Path:      "",
-		Reporting: true,
+		Reporting: false,
 		Ctx:       ctx,
 	}
 
