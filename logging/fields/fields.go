@@ -40,7 +40,7 @@ const (
 	FieldBlockVersion        = "block_version"
 	FieldBlockCacheMetrics   = "block_cache_metrics_field"
 	FieldBuilderProposals    = "builder_proposals"
-	FieldClusterIndex         = "cluster_index"
+	FieldClusterIndex        = "cluster_index"
 	FieldConfig              = "config"
 	FieldConnectionID        = "connection_id"
 	FieldConsensusTime       = "consensus_time"

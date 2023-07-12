@@ -8,19 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv/ekm"
-	"github.com/bloxapp/ssv/eth/eventbatcher"
-	"github.com/bloxapp/ssv/eth/eventdatahandler"
-	"github.com/bloxapp/ssv/eth/eventdb"
-	"github.com/bloxapp/ssv/eth/executionclient"
-	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
-	"github.com/bloxapp/ssv/networkconfig"
-	operatorstorage "github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/operator/validator"
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
@@ -37,6 +24,20 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
+
+	"github.com/bloxapp/ssv/ekm"
+	"github.com/bloxapp/ssv/eth/eventbatcher"
+	"github.com/bloxapp/ssv/eth/eventdatahandler"
+	"github.com/bloxapp/ssv/eth/eventdb"
+	"github.com/bloxapp/ssv/eth/executionclient"
+	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
+	"github.com/bloxapp/ssv/networkconfig"
+	operatorstorage "github.com/bloxapp/ssv/operator/storage"
+	"github.com/bloxapp/ssv/operator/validator"
+	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	registrystorage "github.com/bloxapp/ssv/registry/storage"
+	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/kv"
 )
 
 var (
@@ -50,7 +51,7 @@ var (
 
 func TestEventDispatcher(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	const testTimeout = 10000 * time.Millisecond
+	const testTimeout = 1000 * time.Millisecond
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
 

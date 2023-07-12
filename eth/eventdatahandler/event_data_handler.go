@@ -302,6 +302,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (*
 		}
 
 		if !updated {
+			edh.metrics.EventProcessed(abiEvent.Name)
 			return nil, nil
 		}
 
