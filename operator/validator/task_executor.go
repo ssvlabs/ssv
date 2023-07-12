@@ -4,26 +4,26 @@ import (
 	"encoding/hex"
 	"fmt"
 
+	"github.com/ethereum/go-ethereum/common"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
-func (c *controller) AddValidator(validatorAddedEvent *contract.ContractValidatorAdded) error {
+func (c *controller) AddValidator(publicKey []byte) error {
 	logger := c.defaultLogger.Named("AddValidator").
-		With(fields.PubKey(validatorAddedEvent.PublicKey))
+		With(fields.PubKey(publicKey))
 
-	logger.Debug("executing task")
+	logger.Info("executing task")
 
-	if _, ok := c.validatorsMap.GetValidator(hex.EncodeToString(validatorAddedEvent.PublicKey)); ok {
+	if _, ok := c.validatorsMap.GetValidator(hex.EncodeToString(publicKey)); ok {
 		logger.Debug("validator has already started")
 		return nil
 	}
 
-	validatorShare := c.sharesStorage.Get(validatorAddedEvent.PublicKey)
+	validatorShare := c.sharesStorage.Get(publicKey)
 	isOperatorShare := validatorShare.BelongsToOperator(c.operatorData.ID)
 	if !isOperatorShare {
 		logger.Debug("not operator share")
@@ -35,45 +35,45 @@ func (c *controller) AddValidator(validatorAddedEvent *contract.ContractValidato
 		return err
 	}
 
-	logger.Info("started share")
+	logger.Info("started validator")
 	return nil
 }
 
-func (c *controller) RemoveValidator(validatorRemovedEvent *contract.ContractValidatorRemoved) error {
+func (c *controller) RemoveValidator(publicKey []byte) error {
 	logger := c.defaultLogger.Named("RemoveValidator").
-		With(fields.PubKey(validatorRemovedEvent.PublicKey))
+		With(fields.PubKey(publicKey))
 
-	logger.Debug("executing task")
+	logger.Info("executing task")
 
-	if _, ok := c.validatorsMap.GetValidator(hex.EncodeToString(validatorRemovedEvent.PublicKey)); ok {
+	if _, ok := c.validatorsMap.GetValidator(hex.EncodeToString(publicKey)); ok {
 		logger.Debug("validator has not started")
 		return nil
 	}
 
 	// TODO: it's already removed from storage, consider passing share to RemoveValidator
-	validatorShare := c.sharesStorage.Get(validatorRemovedEvent.PublicKey)
+	validatorShare := c.sharesStorage.Get(publicKey)
 	isOperatorShare := validatorShare.BelongsToOperator(c.operatorData.ID)
 	if !isOperatorShare {
 		logger.Debug("not operator share")
 		return nil
 	}
 
-	c.metrics.ValidatorRemoved(validatorRemovedEvent.PublicKey)
+	c.metrics.ValidatorRemoved(publicKey)
 	if err := c.onShareRemove(hex.EncodeToString(validatorShare.ValidatorPubKey), true); err != nil {
 		return err
 	}
 
-	logger.Info("removed share")
+	logger.Info("removed validator")
 
 	return nil
 }
 
-func (c *controller) LiquidateCluster(liquidateClusterEvent *contract.ContractClusterLiquidated, toLiquidate []*ssvtypes.SSVShare) error {
+func (c *controller) LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error {
 	logger := c.defaultLogger.Named("LiquidateCluster").With(
-		zap.String("owner", liquidateClusterEvent.Owner.String()),
-		zap.Uint64s("operator_ids", liquidateClusterEvent.OperatorIds),
+		zap.String("owner", owner.String()),
+		zap.Uint64s("operator_ids", operatorIDs),
 	)
-	logger.Debug("executing task")
+	logger.Info("executing task")
 
 	for _, share := range toLiquidate {
 		// we can't remove the share secret from key-manager
@@ -85,16 +85,16 @@ func (c *controller) LiquidateCluster(liquidateClusterEvent *contract.ContractCl
 		logger.With(fields.PubKey(share.ValidatorPubKey)).Debug("removed share")
 	}
 
-	logger.Debug("executed task")
+	logger.Info("executed task")
 	return nil
 }
 
-func (c *controller) ReactivateCluster(reactivateClusterEvent *contract.ContractClusterReactivated, toEnable []*ssvtypes.SSVShare) error {
+func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []uint64, toEnable []*ssvtypes.SSVShare) error {
 	logger := c.defaultLogger.Named("ReactivateCluster").With(
-		zap.String("owner", reactivateClusterEvent.Owner.String()),
-		zap.Uint64s("operator_ids", reactivateClusterEvent.OperatorIds),
+		zap.String("owner", owner.String()),
+		zap.Uint64s("operator_ids", operatorIDs),
 	)
-	logger.Debug("executing task")
+	logger.Info("executing task")
 
 	for _, share := range toEnable {
 		if _, err := c.onShareStart(c.defaultLogger, share); err != nil {
@@ -103,20 +103,20 @@ func (c *controller) ReactivateCluster(reactivateClusterEvent *contract.Contract
 		logger.Info("started share")
 	}
 
-	logger.Debug("executed task")
+	logger.Info("executed task")
 	return nil
 }
 
-func (c *controller) UpdateFeeRecipient(feeRecipientUpdatedEvent *contract.ContractFeeRecipientAddressUpdated) error {
+func (c *controller) UpdateFeeRecipient(owner, recipient common.Address) error {
 	logger := c.defaultLogger.Named("UpdateFeeRecipient").With(
-		zap.String("owner", feeRecipientUpdatedEvent.Owner.String()),
-		zap.String("fee_recipient", feeRecipientUpdatedEvent.RecipientAddress.String()),
+		zap.String("owner", owner.String()),
+		zap.String("fee_recipient", recipient.String()),
 	)
-	logger.Debug("executing task")
+	logger.Info("executing task")
 
 	err := c.validatorsMap.ForEach(func(v *validator.Validator) error {
-		if v.Share.OwnerAddress == feeRecipientUpdatedEvent.Owner {
-			v.Share.FeeRecipientAddress = feeRecipientUpdatedEvent.RecipientAddress
+		if v.Share.OwnerAddress == owner {
+			v.Share.FeeRecipientAddress = recipient
 
 			logger.Debug("updated recipient address")
 		}
@@ -126,6 +126,6 @@ func (c *controller) UpdateFeeRecipient(feeRecipientUpdatedEvent *contract.Contr
 		return fmt.Errorf("update validators map: %w", err)
 	}
 
-	logger.Debug("executed task")
+	logger.Info("executed task")
 	return nil
 }

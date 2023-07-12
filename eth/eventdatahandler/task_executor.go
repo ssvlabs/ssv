@@ -1,14 +1,15 @@
 package eventdatahandler
 
 import (
-	"github.com/bloxapp/ssv/eth/contract"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ethereum/go-ethereum/common"
+
+	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 type TaskExecutor interface {
-	AddValidator(*contract.ContractValidatorAdded) error
-	RemoveValidator(*contract.ContractValidatorRemoved) error
-	LiquidateCluster(*contract.ContractClusterLiquidated, []*types.SSVShare) error
-	ReactivateCluster(*contract.ContractClusterReactivated, []*types.SSVShare) error
-	UpdateFeeRecipient(*contract.ContractFeeRecipientAddressUpdated) error
+	AddValidator(publicKey []byte) error
+	RemoveValidator(publicKey []byte) error
+	LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
+	ReactivateCluster(owner common.Address, operatorIDs []uint64, toEnable []*ssvtypes.SSVShare) error
+	UpdateFeeRecipient(owner, recipient common.Address) error
 }

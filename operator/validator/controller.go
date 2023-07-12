@@ -17,7 +17,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
@@ -103,11 +102,11 @@ type Controller interface {
 	GetValidatorStats() (uint64, uint64, uint64, error)
 	GetOperatorData() *registrystorage.OperatorData
 	// Methods for execution
-	AddValidator(*contract.ContractValidatorAdded) error
-	RemoveValidator(*contract.ContractValidatorRemoved) error
-	LiquidateCluster(*contract.ContractClusterLiquidated, []*types.SSVShare) error
-	ReactivateCluster(*contract.ContractClusterReactivated, []*types.SSVShare) error
-	UpdateFeeRecipient(*contract.ContractFeeRecipientAddressUpdated) error
+	AddValidator(publicKey []byte) error
+	RemoveValidator(publicKey []byte) error
+	LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*types.SSVShare) error
+	ReactivateCluster(owner common.Address, operatorIDs []uint64, toEnable []*types.SSVShare) error
+	UpdateFeeRecipient(owner, recipient common.Address) error
 }
 
 // EventHandler represents the interface for compatible storage event handlers

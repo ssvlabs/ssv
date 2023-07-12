@@ -1,42 +1,101 @@
 package eventdatahandler
 
 import (
-	"fmt"
+	"github.com/ethereum/go-ethereum/common"
 
-	"github.com/bloxapp/ssv/eth/contract"
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
-type Task struct {
-	Edh    *EventDataHandler
-	Event  interface{}
-	Shares []*types.SSVShare
+type Task interface {
+	Execute() error
 }
 
-func NewTask(edh *EventDataHandler, event interface{}, shares []*types.SSVShare) *Task {
-	// TODO: change event type from interface{}
-	return &Task{Edh: edh, Event: event, Shares: shares}
+type AddValidatorTask struct {
+	executor  TaskExecutor
+	publicKey []byte
 }
 
-func (t *Task) Execute() error {
-	switch e := t.Event.(type) {
-	case *contract.ContractValidatorAdded:
-		t.Edh.logger.Info("starting validator", fields.PubKey(e.PublicKey))
-		return t.Edh.taskExecutor.AddValidator(e)
-	case *contract.ContractValidatorRemoved:
-		t.Edh.logger.Info("stopping validator", fields.PubKey(e.PublicKey))
-		return t.Edh.taskExecutor.RemoveValidator(e)
-	case *contract.ContractClusterLiquidated:
-		t.Edh.logger.Info("liquidating cluster", fields.ClusterIndex(e.Cluster))
-		return t.Edh.taskExecutor.LiquidateCluster(e, t.Shares)
-	case *contract.ContractClusterReactivated:
-		t.Edh.logger.Info("reactivating cluster", fields.ClusterIndex(e.Cluster))
-		return t.Edh.taskExecutor.ReactivateCluster(e, t.Shares)
-	case *contract.ContractFeeRecipientAddressUpdated:
-		t.Edh.logger.Info("updating recipient address", fields.Owner(e.Owner))
-		return t.Edh.taskExecutor.UpdateFeeRecipient(e)
-	default:
-		return fmt.Errorf("failed to infer task type")
+func NewAddValidatorTask(executor TaskExecutor, publicKey []byte) *AddValidatorTask {
+	return &AddValidatorTask{
+		executor:  executor,
+		publicKey: publicKey,
 	}
+}
+
+func (t AddValidatorTask) Execute() error {
+	return t.executor.AddValidator(t.publicKey)
+}
+
+type RemoveValidatorTask struct {
+	executor  TaskExecutor
+	publicKey []byte
+}
+
+func NewRemoveValidatorTask(executor TaskExecutor, publicKey []byte) *RemoveValidatorTask {
+	return &RemoveValidatorTask{
+		executor:  executor,
+		publicKey: publicKey,
+	}
+}
+
+func (t RemoveValidatorTask) Execute() error {
+	return t.executor.RemoveValidator(t.publicKey)
+}
+
+type LiquidateClusterTask struct {
+	executor    TaskExecutor
+	owner       common.Address
+	operatorIDs []uint64
+	toLiquidate []*ssvtypes.SSVShare
+}
+
+func NewLiquidateClusterTask(executor TaskExecutor, owner common.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) *LiquidateClusterTask {
+	return &LiquidateClusterTask{
+		executor:    executor,
+		owner:       owner,
+		operatorIDs: operatorIDs,
+		toLiquidate: toLiquidate,
+	}
+}
+
+func (t LiquidateClusterTask) Execute() error {
+	return t.executor.LiquidateCluster(t.owner, t.operatorIDs, t.toLiquidate)
+}
+
+type ReactivateClusterTask struct {
+	executor    TaskExecutor
+	owner       common.Address
+	operatorIDs []uint64
+	toEnable    []*ssvtypes.SSVShare
+}
+
+func NewReactivateClusterTask(executor TaskExecutor, owner common.Address, operatorIDs []uint64, toEnable []*ssvtypes.SSVShare) *ReactivateClusterTask {
+	return &ReactivateClusterTask{
+		executor:    executor,
+		owner:       owner,
+		operatorIDs: operatorIDs,
+		toEnable:    toEnable,
+	}
+}
+
+func (t ReactivateClusterTask) Execute() error {
+	return t.executor.ReactivateCluster(t.owner, t.operatorIDs, t.toEnable)
+}
+
+type FeeRecipientTask struct {
+	executor  TaskExecutor
+	owner     common.Address
+	recipient common.Address
+}
+
+func NewFeeRecipientTask(executor TaskExecutor, owner, recipient common.Address) *FeeRecipientTask {
+	return &FeeRecipientTask{
+		executor:  executor,
+		owner:     owner,
+		recipient: recipient,
+	}
+}
+
+func (t FeeRecipientTask) Execute() error {
+	return t.executor.UpdateFeeRecipient(t.owner, t.recipient)
 }

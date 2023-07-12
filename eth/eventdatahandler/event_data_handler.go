@@ -110,7 +110,7 @@ func (edh *EventDataHandler) HandleBlockEventsStream(blockEventsCh <-chan eventb
 		// find and remove opposite tasks (start-stop, stop-start, liquidate-reactivate, reactivate-liquidate)
 		// find superseding tasks and remove superseded ones (updateFee-updateFee)
 		for _, task := range tasks {
-			logger = logger.With(zap.String("event_type", fmt.Sprintf("%T", task.Event)))
+			logger = logger.With(zap.String("task_type", fmt.Sprintf("%T", task)))
 			logger.Debug("going to execute task")
 			if err := task.Execute(); err != nil {
 				// TODO: We log failed task until we discuss how we want to handle this case. We likely need to crash the node in this case.
@@ -126,11 +126,11 @@ func (edh *EventDataHandler) HandleBlockEventsStream(blockEventsCh <-chan eventb
 	return lastProcessedBlock, nil
 }
 
-func (edh *EventDataHandler) processBlockEvents(blockEvents eventbatcher.BlockEvents) ([]*Task, error) {
+func (edh *EventDataHandler) processBlockEvents(blockEvents eventbatcher.BlockEvents) ([]Task, error) {
 	txn := edh.eventDB.RWTxn()
 	defer txn.Discard()
 
-	var tasks []*Task
+	var tasks []Task
 	for _, event := range blockEvents.Events {
 		task, err := edh.processEvent(txn, event)
 		if err != nil {
@@ -153,7 +153,7 @@ func (edh *EventDataHandler) processBlockEvents(blockEvents eventbatcher.BlockEv
 	return tasks, nil
 }
 
-func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (*Task, error) {
+func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (Task, error) {
 	abiEvent, err := edh.abi.EventByID(event.Topics[0])
 	if err != nil {
 		edh.logger.Error("failed to find event by ID", zap.String("hash", event.Topics[0].String()))
@@ -215,7 +215,8 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (*
 			}
 			return nil, fmt.Errorf("handle ValidatorAdded: %w", err)
 		}
-		task := NewTask(edh, validatorAddedEvent, nil)
+
+		task := NewAddValidatorTask(edh.taskExecutor, validatorAddedEvent.PublicKey)
 
 		edh.metrics.EventProcessed(abiEvent.Name)
 		return task, nil
@@ -235,7 +236,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (*
 			}
 			return nil, fmt.Errorf("handle ValidatorRemoved: %w", err)
 		}
-		task := NewTask(edh, validatorRemovedEvent, nil)
+		task := NewRemoveValidatorTask(edh.taskExecutor, validatorRemovedEvent.PublicKey)
 
 		edh.metrics.EventProcessed(abiEvent.Name)
 		return task, nil
@@ -257,7 +258,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (*
 			return nil, fmt.Errorf("handle ClusterLiquidated: %w", err)
 		}
 
-		task := NewTask(edh, clusterLiquidatedEvent, sharesToLiquidate)
+		task := NewLiquidateClusterTask(edh.taskExecutor, clusterLiquidatedEvent.Owner, clusterLiquidatedEvent.OperatorIds, sharesToLiquidate)
 
 		edh.metrics.EventProcessed(abiEvent.Name)
 		return task, nil
@@ -279,7 +280,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (*
 			return nil, fmt.Errorf("handle ClusterReactivated: %w", err)
 		}
 
-		task := NewTask(edh, clusterReactivatedEvent, sharesToEnable)
+		task := NewReactivateClusterTask(edh.taskExecutor, clusterReactivatedEvent.Owner, clusterReactivatedEvent.OperatorIds, sharesToEnable)
 
 		edh.metrics.EventProcessed(abiEvent.Name)
 		return task, nil
@@ -306,7 +307,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (*
 			return nil, nil
 		}
 
-		task := NewTask(edh, feeRecipientAddressUpdatedEvent, nil)
+		task := NewFeeRecipientTask(edh.taskExecutor, feeRecipientAddressUpdatedEvent.Owner, feeRecipientAddressUpdatedEvent.RecipientAddress)
 
 		edh.metrics.EventProcessed(abiEvent.Name)
 		return task, nil
