@@ -15,6 +15,7 @@ import (
 )
 
 // Event represents an eth1 event log in the system
+// TODO: make sure Data can be unmarshaled
 type Event struct {
 	// Log is the raw event log
 	Log ethtypes.Log
