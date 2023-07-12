@@ -25,25 +25,5 @@ jobs:
         with:
           go-version: 1.19
 
-      - name: Download and install LibreSSL
-        run: |
-          wget https://ftp.openbsd.org/pub/OpenBSD/LibreSSL/libressl-3.3.3.tar.gz; 
-          tar -xzvf libressl-3.3.3.tar.gz; 
-          cd libressl-3.3.3; 
-          ./configure --prefix=/usr/local; 
-          make; 
-          sudo make install
-
-      - name: Set OpenSSL version to LibreSSL
-        run: |
-          echo "/usr/local/bin" >> $GITHUB_PATH
-
-      - name: Update LD_LIBRARY_PATH
-        run: |
-          echo "LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
-
-      - name: Verify LibreSSL
-        run: openssl version
-
       - name: Run unit tests
         run: make unit-test
