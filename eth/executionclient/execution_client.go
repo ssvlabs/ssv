@@ -13,6 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/utils/tasks"
 )
@@ -293,16 +294,17 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan ethty
 				ToBlock:   header.Number,
 			}
 
-			// TODO: Instead of FilterLogs it should call a wrapper that calls FilterLogs multiple times and batches results to avoid fetching enormous amount of events.
-			newLogs, err := client.FilterLogs(ctx, query)
-			if err != nil {
-				return fromBlock, fmt.Errorf("fetch logs: %w", err)
-			}
+			logStream, fetchErrors := ec.fetchLogsInBatches(ctx, client, fromBlock, header.Number.Uint64())
 
-			for _, log := range newLogs {
+			for log := range logStream {
 				logs <- log
 			}
 
+			err = <-fetchErrors
+
+			if err != nil {
+				return fromBlock, fmt.Errorf("fetch logs: %w", err)
+			}
 			fromBlock = query.ToBlock.Uint64()
 			ec.logger.Info("last fetched block", fields.BlockNumber(fromBlock))
 			ec.metrics.ExecutionClientLastFetchedBlock(fromBlock)
@@ -360,4 +362,10 @@ func (ec *ExecutionClient) reconnect(ctx context.Context) {
 	}, ec.reconnectionInitialInterval, ec.reconnectionMaxInterval+(ec.reconnectionInitialInterval))
 
 	logger.Info("reconnected")
+}
+
+func (ec *ExecutionClient) Filterer() (*contract.ContractFilterer, error) {
+	client := ec.client.Load()
+	filterer, err := contract.NewContractFilterer(ec.contractAddress, client)
+	return filterer, err
 }

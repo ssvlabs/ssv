@@ -172,3 +172,7 @@ func (m MetricsReporter) EventProcessed(eventName string) {
 func (m MetricsReporter) EventProcessingFailed(eventName string) {
 	eventProcessingFailed.WithLabelValues(eventName).Inc()
 }
+
+// TODO implement
+func (m MetricsReporter) LastBlockProcessed(uint64) {}
+func (m MetricsReporter) LogsProcessingError(error) {}

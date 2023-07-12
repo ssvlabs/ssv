@@ -14,14 +14,11 @@ func (eb *EventBatcher) BatchEvents(events <-chan ethtypes.Log) <-chan BlockEven
 	blockEvents := make(chan BlockEvents)
 	go func() {
 		defer close(blockEvents)
-
 		var currentBlockEvents BlockEvents
-
 		for event := range events {
 			if currentBlockEvents.BlockNumber == 0 {
 				currentBlockEvents.BlockNumber = event.BlockNumber
 				currentBlockEvents.Events = []ethtypes.Log{event}
-
 				continue
 			}
 
@@ -30,13 +27,10 @@ func (eb *EventBatcher) BatchEvents(events <-chan ethtypes.Log) <-chan BlockEven
 
 				currentBlockEvents.BlockNumber = event.BlockNumber
 				currentBlockEvents.Events = []ethtypes.Log{event}
-
 				continue
 			}
-
 			currentBlockEvents.Events = append(currentBlockEvents.Events, event)
 		}
-
 		if len(currentBlockEvents.Events) != 0 {
 			blockEvents <- currentBlockEvents
 		}

@@ -73,6 +73,7 @@ func (ed *EventDispatcher) Start(ctx context.Context, fromBlock uint64) error {
 	if err != nil {
 		return fmt.Errorf("handle historical block events: %w", err)
 	}
+	ed.metrics.LastBlockProcessed(lastProcessedBlock)
 
 	if err := <-errorStream; err != nil {
 		return fmt.Errorf("error occurred while fetching historical logs: %w", err)
@@ -112,9 +113,10 @@ func (ed *EventDispatcher) Start(ctx context.Context, fromBlock uint64) error {
 		if err != nil {
 			// TODO: think how to handle this
 			ed.logger.Error("failed to handle ongoing block event", zap.Error(err))
+			ed.metrics.LogsProcessingError(err)
 			return
 		}
-
+		ed.metrics.LastBlockProcessed(lastProcessedBlock)
 		ed.logger.Info("finished handling ongoing logs",
 			zap.Uint64("last_processed_block", lastProcessedBlock))
 	}()

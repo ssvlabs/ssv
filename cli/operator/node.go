@@ -228,6 +228,7 @@ var StartNodeCmd = &cobra.Command{
 		eventDB := eventdb.NewEventDB(db.Badger())
 		eventDataHandler, err := eventdatahandler.New(
 			eventDB,
+			executionClient,
 			validatorCtrl,
 			cfg.SSVOptions.ValidatorOptions.OperatorData,
 			cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider,
