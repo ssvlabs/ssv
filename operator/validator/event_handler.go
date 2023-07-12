@@ -443,7 +443,7 @@ func (c *controller) handleFeeRecipientAddressUpdatedEvent(
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get recipient data")
 	}
-	if !found {
+	if !found || recipientData == nil {
 		recipientData = &registrystorage.RecipientData{
 			Owner: event.Owner,
 		}
