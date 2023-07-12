@@ -215,7 +215,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (*
 			}
 			return nil, fmt.Errorf("handle ValidatorAdded: %w", err)
 		}
-		task := NewTask(edh, event, nil)
+		task := NewTask(edh, validatorAddedEvent, nil)
 
 		edh.metrics.EventProcessed(abiEvent.Name)
 		return task, nil
@@ -235,7 +235,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (*
 			}
 			return nil, fmt.Errorf("handle ValidatorRemoved: %w", err)
 		}
-		task := NewTask(edh, event, nil)
+		task := NewTask(edh, validatorRemovedEvent, nil)
 
 		edh.metrics.EventProcessed(abiEvent.Name)
 		return task, nil
@@ -257,7 +257,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (*
 			return nil, fmt.Errorf("handle ClusterLiquidated: %w", err)
 		}
 
-		task := NewTask(edh, event, sharesToLiquidate)
+		task := NewTask(edh, clusterLiquidatedEvent, sharesToLiquidate)
 
 		edh.metrics.EventProcessed(abiEvent.Name)
 		return task, nil
@@ -279,7 +279,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (*
 			return nil, fmt.Errorf("handle ClusterReactivated: %w", err)
 		}
 
-		task := NewTask(edh, event, sharesToEnable)
+		task := NewTask(edh, clusterReactivatedEvent, sharesToEnable)
 
 		edh.metrics.EventProcessed(abiEvent.Name)
 		return task, nil
@@ -302,10 +302,10 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (*
 		}
 
 		if !updated {
-			return nil, fmt.Errorf("provided recipient address is the same")
+			return nil, nil
 		}
 
-		task := NewTask(edh, event, nil)
+		task := NewTask(edh, feeRecipientAddressUpdatedEvent, nil)
 
 		edh.metrics.EventProcessed(abiEvent.Name)
 		return task, nil
@@ -399,14 +399,14 @@ func (edh *EventDataHandler) processLocalEvent(txn eventdb.RW, event localevents
 		if err := edh.handleValidatorAdded(txn, &e); err != nil {
 			return nil, fmt.Errorf("handle ValidatorAdded: %w", err)
 		}
-		task := NewTask(edh, &event, nil)
+		task := NewTask(edh, &e, nil)
 		return task, nil
 	case ValidatorRemoved:
 		e := event.Data.(contract.ContractValidatorRemoved)
 		if err := edh.handleValidatorRemoved(txn, &e); err != nil {
 			return nil, fmt.Errorf("handle ValidatorRemoved: %w", err)
 		}
-		task := NewTask(edh, &event, nil)
+		task := NewTask(edh, &e, nil)
 		return task, nil
 	case ClusterLiquidated:
 		e := event.Data.(contract.ContractClusterLiquidated)
@@ -414,7 +414,7 @@ func (edh *EventDataHandler) processLocalEvent(txn eventdb.RW, event localevents
 		if err != nil {
 			return nil, fmt.Errorf("handle ClusterLiquidated: %w", err)
 		}
-		task := NewTask(edh, &event, sharesToLiquidate)
+		task := NewTask(edh, &e, sharesToLiquidate)
 		return task, nil
 	case ClusterReactivated:
 		e := event.Data.(contract.ContractClusterReactivated)
@@ -422,7 +422,7 @@ func (edh *EventDataHandler) processLocalEvent(txn eventdb.RW, event localevents
 		if err != nil {
 			return nil, fmt.Errorf("handle ClusterReactivated: %w", err)
 		}
-		task := NewTask(edh, &event, sharesToEnable)
+		task := NewTask(edh, &e, sharesToEnable)
 		return task, nil
 	case FeeRecipientAddressUpdated:
 		e := event.Data.(contract.ContractFeeRecipientAddressUpdated)
@@ -433,7 +433,7 @@ func (edh *EventDataHandler) processLocalEvent(txn eventdb.RW, event localevents
 		if !updated {
 			return nil, fmt.Errorf("provided recipient address is the same")
 		}
-		task := NewTask(edh, &event, nil)
+		task := NewTask(edh, &e, nil)
 		return task, nil
 	default:
 		edh.logger.Warn("unknown event name", fields.Name(event.Name))
