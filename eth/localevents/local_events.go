@@ -14,6 +14,7 @@ import (
 )
 
 // Event represents an eth1 event log in the system
+// TODO: It has no Log field because it's not used and seems unnecessary. However, we need to make sure we don't need it.
 type Event struct {
 	// Name is the event name used for internal representation.
 	Name string
