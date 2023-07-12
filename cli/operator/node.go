@@ -9,6 +9,7 @@ import (
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
+	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -25,6 +26,7 @@ import (
 	"github.com/bloxapp/ssv/eth/eventdb"
 	"github.com/bloxapp/ssv/eth/eventdispatcher"
 	"github.com/bloxapp/ssv/eth/executionclient"
+	"github.com/bloxapp/ssv/eth/localevents"
 	exporterapi "github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/exporter/api/decided"
 	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
@@ -272,15 +274,20 @@ var StartNodeCmd = &cobra.Command{
 
 		// load & parse local events yaml if exists, otherwise sync from contract
 		if len(cfg.LocalEventsPath) != 0 {
-			// TODO: fix type mismatch
-			//localEvents, err := localevents.Load(cfg.LocalEventsPath)
-			//if err != nil {
-			//	logger.Fatal("failed to load local events", zap.Error(err))
-			//}
-			//
-			//if err := eventDispatcher.StartWithLocalEvents(cmd.Context(), localEvents); err != nil {
-			//	logger.Fatal("error occurred while running event dispatcher", zap.Error(err))
-			//}
+			localEvents, err := localevents.Load(cfg.LocalEventsPath)
+			if err != nil {
+				logger.Fatal("failed to load local events", zap.Error(err))
+			}
+
+			// TODO: use parsed event instead of encoded one
+			var events []ethtypes.Log
+			for _, event := range localEvents {
+				events = append(events, event.Log)
+			}
+
+			if err := eventDispatcher.StartWithLocalEvents(cmd.Context(), events); err != nil {
+				logger.Fatal("error occurred while running event dispatcher", zap.Error(err))
+			}
 		} else {
 			if err := eventDispatcher.Start(cmd.Context(), fromBlock.Uint64()); err != nil {
 				logger.Fatal("error occurred while running event dispatcher", zap.Error(err))
