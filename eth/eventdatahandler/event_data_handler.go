@@ -104,8 +104,7 @@ func (edh *EventDataHandler) HandleBlockEventsStream(blockEventsCh <-chan eventb
 			continue
 		}
 
-		logger = logger.With(fields.Count(len(tasks)))
-		logger.Info("executing tasks")
+		logger.Info("executing tasks", fields.Count(len(tasks)))
 
 		cleanTaskList := cleanTaskList(tasks)
 		for _, task := range cleanTaskList {
@@ -120,7 +119,8 @@ func (edh *EventDataHandler) HandleBlockEventsStream(blockEventsCh <-chan eventb
 				edh.logger.Debug("executed remote task")
 			}
 		}
-		logger.Info("task execution finished")
+
+		logger.Info("task execution finished", fields.Count(len(tasks)))
 	}
 
 	return lastProcessedBlock, nil
