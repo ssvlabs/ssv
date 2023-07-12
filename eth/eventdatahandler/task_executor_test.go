@@ -58,7 +58,7 @@ func TestExecuteTask(t *testing.T) {
 	if err != nil {
 		t.Fatal("parse ValidatorAdded", err)
 	}
-	task := NewTask(edh, validatorAddedEvent, nil)
+	task := NewAddValidatorTask(edh.taskExecutor, validatorAddedEvent.PublicKey)
 	err = task.Execute()
 	require.NoError(t, err)
 }
