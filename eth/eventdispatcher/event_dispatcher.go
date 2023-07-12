@@ -8,6 +8,8 @@ import (
 	"go.uber.org/zap"
 )
 
+// TODO: check if something from https://github.com/bloxapp/ssv/pull/1053 needs to be ported
+
 var (
 	// ErrNodeNotReady is returned when node is not ready.
 	ErrNodeNotReady = fmt.Errorf("node not ready")
