@@ -66,6 +66,36 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 		require.NotNil(t, rdFromDB)
 	})
 
+	t.Run("save/get/save fee recipient address without overwriting nonce", func(t *testing.T) {
+		var nonce storage.Nonce
+		rdToSave := &storage.RecipientData{
+			Owner: common.BytesToAddress([]byte("0x3")),
+			Nonce: &nonce,
+		}
+		copy(rdToSave.FeeRecipient[:], "0x3")
+
+		rd, err := storageCollection.SaveRecipientData(rdToSave)
+		require.NoError(t, err)
+		require.NotNil(t, rd)
+		require.NotNil(t, rd.Nonce)
+		require.Equal(t, storage.Nonce(0), *rd.Nonce)
+
+		rdToSave, found, err := storageCollection.GetRecipientData(rd.Owner)
+		require.NoError(t, err)
+		require.True(t, found)
+		rdDup, err := storageCollection.SaveRecipientData(rdToSave)
+		require.NoError(t, err)
+		require.Nil(t, rdDup)
+		require.NotNil(t, rd.Nonce)
+		require.Equal(t, storage.Nonce(0), *rd.Nonce)
+
+		rdFromDB, found, err := storageCollection.GetRecipientData(rd.Owner)
+		require.NoError(t, err)
+		require.True(t, found)
+		require.NotNil(t, rdFromDB.Nonce)
+		require.Equal(t, storage.Nonce(0), *rdFromDB.Nonce)
+	})
+
 	t.Run("update existing recipient", func(t *testing.T) {
 		rdToSave := &storage.RecipientData{
 			Owner: common.BytesToAddress([]byte("0x3")),
@@ -75,17 +105,20 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 		rd, err := storageCollection.SaveRecipientData(rdToSave)
 		require.NoError(t, err)
 		require.NotNil(t, rd)
+		require.Nil(t, rd.Nonce)
 
 		copy(rdToSave.FeeRecipient[:], "0x3")
 		rdNew, err := storageCollection.SaveRecipientData(rdToSave)
 		require.NoError(t, err)
 		require.NotNil(t, rdNew)
+		require.Nil(t, rd.Nonce)
 
 		rdFromDB, found, err := storageCollection.GetRecipientData(rd.Owner)
 		require.NoError(t, err)
 		require.True(t, found)
 		require.Equal(t, rdNew.Owner, rdFromDB.Owner)
 		require.Equal(t, rdNew.FeeRecipient, rdFromDB.FeeRecipient)
+		require.Nil(t, rd.Nonce)
 	})
 
 	t.Run("delete recipient", func(t *testing.T) {
