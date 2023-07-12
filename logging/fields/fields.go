@@ -40,6 +40,7 @@ const (
 	FieldBlockVersion        = "block_version"
 	FieldBlockCacheMetrics   = "block_cache_metrics_field"
 	FieldBuilderProposals    = "builder_proposals"
+	FieldClusterIndex         = "cluster_index"
 	FieldConfig              = "config"
 	FieldConnectionID        = "connection_id"
 	FieldConsensusTime       = "consensus_time"
@@ -62,6 +63,7 @@ const (
 	FieldName                = "name"
 	FieldNetwork             = "network"
 	FieldOperatorId          = "operator_id"
+	FieldOwnerAddress        = "owner_address"
 	FieldPeerID              = "peer_id"
 	FieldPrivateKey          = "privkey"
 	FieldPubKey              = "pubkey"
@@ -79,8 +81,6 @@ const (
 	FieldUpdatedENRLocalNode = "updated_enr"
 	FieldValidator           = "validator"
 	FieldValidatorMetadata   = "validator_metadata"
-	FieldCusterIndex         = "cluster_index"
-	FieldOwnerAddress        = "owner_address"
 )
 
 func FromBlock(val fmt.Stringer) zapcore.Field {
@@ -304,7 +304,7 @@ func Config(val fmt.Stringer) zap.Field {
 }
 
 func ClusterIndex(cluster contract.ISSVNetworkCoreCluster) zap.Field {
-	return zap.Uint64(FieldCusterIndex, cluster.Index)
+	return zap.Uint64(FieldClusterIndex, cluster.Index)
 }
 
 func Owner(addr common.Address) zap.Field {
