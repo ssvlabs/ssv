@@ -5,9 +5,9 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
-var LocalNetwork = NetworkConfig{
+var LocalTestnet = NetworkConfig{
 	Name:                 "local-testnet",
-	Beacon:               beacon.NewNetworkWithLocalTestNet(spectypes.PraterNetwork),
+	Beacon:               beacon.NewLocalTestNetwork(spectypes.PraterNetwork),
 	Domain:               spectypes.DomainType{0x0, 0x0, 0x4, 0x1},
 	GenesisEpoch:         1,
 	RegistryContractAddr: "0xC3CD9A0aE89Fff83b71b58b6512D43F8a41f363D",

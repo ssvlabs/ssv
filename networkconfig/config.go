@@ -16,7 +16,7 @@ var SupportedConfigs = map[string]NetworkConfig{
 	Mainnet.Name:      Mainnet,
 	JatoV2Stage.Name:  JatoV2Stage,
 	JatoV2.Name:       JatoV2,
-	LocalNetwork.Name: LocalNetwork,
+	LocalTestnet.Name: LocalTestnet,
 }
 
 func GetNetworkConfigByName(name string) (NetworkConfig, error) {

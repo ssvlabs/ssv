@@ -21,8 +21,8 @@ func NewNetwork(network spectypes.BeaconNetwork) Network {
 	}
 }
 
-// NewNetworkWithLocalTestNet creates a new beacon chain network.
-func NewNetworkWithLocalTestNet(network spectypes.BeaconNetwork) Network {
+// NewLocalTestNetwork creates a new beacon chain network.
+func NewLocalTestNetwork(network spectypes.BeaconNetwork) Network {
 	return Network{
 		BeaconNetwork: network,
 		LocalTestNet:  true,
