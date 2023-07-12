@@ -18,12 +18,3 @@ func ProcessAgents(agents []HealthCheckAgent) []string {
 
 	return errs
 }
-
-// ReportSSVNodeHealthiness reports SSV node healthiness.
-func ReportSSVNodeHealthiness(healthy bool) {
-	if healthy {
-		metricsNodeStatus.Set(float64(statusHealthy))
-	} else {
-		metricsNodeStatus.Set(float64(statusNotHealthy))
-	}
-}

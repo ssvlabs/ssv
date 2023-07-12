@@ -58,8 +58,7 @@ func (c *controller) RemoveValidator(validatorRemovedEvent *contract.ContractVal
 		return nil
 	}
 
-	pubKey := hex.EncodeToString(validatorRemovedEvent.PublicKey)
-	metricsValidatorStatus.WithLabelValues(pubKey).Set(float64(validatorStatusRemoved))
+	c.metrics.ValidatorRemoved(validatorRemovedEvent.PublicKey)
 	if err := c.onShareRemove(hex.EncodeToString(validatorShare.ValidatorPubKey), true); err != nil {
 		return err
 	}

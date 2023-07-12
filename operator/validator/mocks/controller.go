@@ -8,7 +8,6 @@ import (
 	reflect "reflect"
 
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
-	eth1 "github.com/bloxapp/ssv/eth1"
 	validator "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	types "github.com/bloxapp/ssv/protocol/v2/types"
 	storage "github.com/bloxapp/ssv/registry/storage"
@@ -53,20 +52,6 @@ func (m *MockController) ActiveValidatorIndices(logger *zap.Logger) []phase0.Val
 func (mr *MockControllerMockRecorder) ActiveValidatorIndices(logger interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ActiveValidatorIndices", reflect.TypeOf((*MockController)(nil).ActiveValidatorIndices), logger)
-}
-
-// Eth1EventHandler mocks base method.
-func (m *MockController) Eth1EventHandler(logger *zap.Logger, ongoingSync bool) eth1.SyncEventHandler {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Eth1EventHandler", logger, ongoingSync)
-	ret0, _ := ret[0].(eth1.SyncEventHandler)
-	return ret0
-}
-
-// Eth1EventHandler indicates an expected call of Eth1EventHandler.
-func (mr *MockControllerMockRecorder) Eth1EventHandler(logger, ongoingSync interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Eth1EventHandler", reflect.TypeOf((*MockController)(nil).Eth1EventHandler), logger, ongoingSync)
 }
 
 // GetOperatorData mocks base method.

@@ -145,7 +145,7 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, client *ethcl
 				zap.String("progress", fmt.Sprintf("%.2f%%", float64(batchFrom-fromBlock)/float64(toBlock-fromBlock)*100)),
 			)
 
-			logger.Info("fetching logs batch")
+			logger.Info("fetching log batch")
 			logs, err := client.FilterLogs(ctx, ethereum.FilterQuery{
 				Addresses: []ethcommon.Address{ec.contractAddress},
 				FromBlock: new(big.Int).SetUint64(batchFrom),
@@ -183,7 +183,7 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, client *ethcl
 			zap.Uint64("to", toBlock),
 		)
 
-		ec.metrics.LastFetchedBlock(toBlock)
+		ec.metrics.ExecutionClientLastFetchedBlock(toBlock)
 	}()
 
 	return logCh, fetchErrCh
@@ -248,6 +248,20 @@ func (ec *ExecutionClient) IsReady(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
+// HealthCheck is left for compatibility, TODO: consider removing
+func (ec *ExecutionClient) HealthCheck() []string {
+	ready, err := ec.IsReady(context.Background())
+	if err != nil {
+		return []string{err.Error()}
+	}
+
+	if !ready {
+		return []string{"syncing"}
+	}
+
+	return []string{}
+}
+
 func (ec *ExecutionClient) isClosed() bool {
 	select {
 	case <-ec.closed:
@@ -293,7 +307,7 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan ethty
 			}
 			fromBlock = query.ToBlock.Uint64()
 			ec.logger.Info("last fetched block", fields.BlockNumber(fromBlock))
-			ec.metrics.LastFetchedBlock(fromBlock)
+			ec.metrics.ExecutionClientLastFetchedBlock(fromBlock)
 		}
 	}
 }

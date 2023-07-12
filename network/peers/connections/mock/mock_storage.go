@@ -3,6 +3,7 @@ package mock
 import (
 	"bytes"
 	"crypto/rsa"
+	"math/big"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -10,7 +11,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/operator/storage"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )
@@ -47,12 +47,12 @@ func (m NodeStorage) GetEventsPrefix() []byte {
 	panic("implement me")
 }
 
-func (m NodeStorage) SaveSyncOffset(offset *eth1.SyncOffset) error {
+func (m NodeStorage) SaveSyncOffset(offset *big.Int) error {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (m NodeStorage) GetSyncOffset() (*eth1.SyncOffset, bool, error) {
+func (m NodeStorage) GetSyncOffset() (*big.Int, bool, error) {
 	//TODO implement me
 	panic("implement me")
 }
