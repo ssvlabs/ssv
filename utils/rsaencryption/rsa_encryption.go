@@ -10,8 +10,9 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/json"
 	"encoding/pem"
-	"golang.org/x/crypto/ssh"
+	"github.com/bloxapp/eth2-key-manager/encryptor/keystorev4"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -73,14 +74,29 @@ func ConvertEncryptedPemToPrivateKey(pemData []byte, password string) (*rsa.Priv
 	if strings.TrimSpace(password) == "" {
 		return nil, errors.New("Password required for encrypted PEM block")
 	}
-	key, err := ssh.ParseRawPrivateKeyWithPassphrase(pemData, []byte(password))
+
+	// Unmarshal the JSON-encoded data
+	var data map[string]interface{}
+	if err := json.Unmarshal(pemData, &data); err != nil {
+		return nil, errors.Wrap(err, "Failed to parse JSON data")
+	}
+
+	// Decrypt the private key using keystorev4
+	decryptedBytes, err := keystorev4.New().Decrypt(data, password)
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to decrypt private key")
 	}
 
-	rsaKey, ok := key.(*rsa.PrivateKey)
-	if !ok {
-		return nil, errors.New("Failed to parse RSA private key")
+	// Parse the decrypted PEM data
+	block, _ := pem.Decode(decryptedBytes)
+	if block == nil {
+		return nil, errors.New("Failed to parse PEM block")
+	}
+
+	// Parse the RSA private key
+	rsaKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	if err != nil {
+		return nil, errors.Wrap(err, "Failed to parse RSA private key")
 	}
 
 	return rsaKey, nil

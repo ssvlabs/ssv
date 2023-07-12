@@ -281,7 +281,7 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.St
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
 	if cfg.KeyStore.PrivateKeyFile != "" {
-		pemData, err := os.ReadFile(cfg.KeyStore.PrivateKeyFile)
+		encryptedJSON, err := os.ReadFile(cfg.KeyStore.PrivateKeyFile)
 		if err != nil {
 			log.Fatal("Error reading PEM file", zap.Error(err))
 		}
@@ -290,7 +290,7 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.St
 			log.Fatal("Error reading Password file", zap.Error(err))
 		}
 
-		privateKey, err := rsaencryption.ConvertEncryptedPemToPrivateKey(pemData, string(keyStorePassword))
+		privateKey, err := rsaencryption.ConvertEncryptedPemToPrivateKey(encryptedJSON, string(keyStorePassword))
 		if err != nil {
 			logger.Fatal("could not decrypt operator private key", zap.Error(err))
 		}

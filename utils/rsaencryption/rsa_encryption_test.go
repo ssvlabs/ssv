@@ -3,15 +3,14 @@ package rsaencryption
 import (
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
-	"encoding/hex"
+	"encoding/json"
 	"encoding/pem"
 	"os"
-	"os/exec"
 	"testing"
 
+	"github.com/bloxapp/eth2-key-manager/encryptor/keystorev4"
 	testingspace "github.com/bloxapp/ssv/utils/rsaencryption/testingspace"
 	"github.com/stretchr/testify/require"
 )
@@ -56,72 +55,47 @@ func TestPrivateKeyToByte(t *testing.T) {
 }
 
 func TestConvertEncryptedPemToPrivateKey(t *testing.T) {
-	var tmpPrivateFile *os.File
-
-	t.Run("CreateTempFile", func(t *testing.T) {
-		var err error
-		tmpPrivateFile, err = os.CreateTemp("", "private_key.pem")
-		require.NoError(t, err)
-	})
-
+	fileName := "encrypted_private_key.json"
 	defer func() {
-		if err := os.Remove(tmpPrivateFile.Name()); err != nil {
-			t.Logf("Could not delete temporary file: %v", err)
-		}
-		if err := os.Remove("encrypted_private_key.pem"); err != nil {
+		if err := os.Remove(fileName); err != nil {
 			t.Logf("Could not delete encrypted private key file: %v", err)
 		}
 	}()
+	password := "123123123"
+	privateKey, err := rsa.GenerateKey(rand.Reader, keySize)
+	require.NoError(t, err)
 
-	var generatedPrivateKey *rsa.PrivateKey
-	t.Run("GeneratePrivateKey", func(t *testing.T) {
-		var err error
-		generatedPrivateKey, err = rsa.GenerateKey(rand.Reader, keySize)
-		require.NoError(t, err)
-	})
+	privDER := x509.MarshalPKCS1PrivateKey(privateKey)
 
-	t.Run("EncodePrivateKey", func(t *testing.T) {
-		// Create a pem.Block with the private key.
-		privDER := x509.MarshalPKCS1PrivateKey(generatedPrivateKey)
-		privateBlock := pem.Block{
-			Type:  "RSA PRIVATE KEY",
-			Bytes: privDER,
-		}
+	privateBlock := pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: privDER,
+	}
 
-		// Encode the pem.Block with the private key into a temporary file.
-		err := pem.Encode(tmpPrivateFile, &privateBlock)
-		require.NoError(t, err)
-		err = tmpPrivateFile.Close()
-		require.NoError(t, err)
-	})
+	pemBytes := pem.EncodeToMemory(&privateBlock)
 
-	t.Run("RunOpenSSL", func(t *testing.T) {
-		keystorePassword := "123123123"
-		// Encrypt the private key file using OpenSSL.
-		passString := "pass:" + keystorePassword
-		cmd := exec.Command("openssl", "rsa", "-aes256", "-in", tmpPrivateFile.Name(), "-out", "encrypted_private_key.pem", "-passout", passString)
-		err := cmd.Run()
-		require.NoError(t, err)
-	})
+	encryptedData, err := keystorev4.New().Encrypt(pemBytes, password)
+	require.NoError(t, err)
 
-	t.Run("ConvertEncryptedPemToPrivateKey", func(t *testing.T) {
-		keystorePassword := "123123123"
-		// Read the encrypted private key file.
-		pemBytes, err := os.ReadFile("encrypted_private_key.pem")
-		require.NoError(t, err)
-		hash := sha256.Sum256(pemBytes)
-		t.Logf("SHA-256: %s", hex.EncodeToString(hash[:]))
+	encryptedJSON, err := json.Marshal(encryptedData)
+	require.NoError(t, err)
 
-		// Convert encrypted PEM to private key.
-		privateKey, err := ConvertEncryptedPemToPrivateKey(pemBytes, keystorePassword)
-		require.NoError(t, err)
-		require.Equal(t, privateKey, generatedPrivateKey)
+	err = os.WriteFile(fileName, encryptedJSON, 0600)
+	require.NoError(t, err)
 
-		// Test with incorrect password.
-		_, err = ConvertEncryptedPemToPrivateKey(pemBytes, keystorePassword+"1")
-		require.Error(t, err)
+	// Read and decrypt the private key
+	encryptedJSON, err = os.ReadFile(fileName)
+	require.NoError(t, err)
 
-		_, err = ConvertEncryptedPemToPrivateKey(pemBytes, "")
-		require.Error(t, err)
-	})
+	key, err := ConvertEncryptedPemToPrivateKey(encryptedJSON, password)
+	require.NoError(t, err)
+	require.Equal(t, privateKey, key)
+
+	// Convert encrypted PEM to private key.
+	_, err = ConvertEncryptedPemToPrivateKey(encryptedJSON, password+"1")
+	require.Error(t, err)
+
+	// Test with incorrect password.
+	_, err = ConvertEncryptedPemToPrivateKey(pemBytes, "")
+	require.Error(t, err)
 }
