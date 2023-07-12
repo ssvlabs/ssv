@@ -4,11 +4,12 @@ import (
 	"context"
 	"testing"
 
-	"github.com/bloxapp/ssv/eth/contract"
-	"github.com/bloxapp/ssv/eth/localevents"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 	"gopkg.in/yaml.v3"
+
+	"github.com/bloxapp/ssv/eth/contract"
+	"github.com/bloxapp/ssv/eth/localevents"
 )
 
 func TestHandleLocalOperatorAddedEvent(t *testing.T) {
@@ -44,7 +45,7 @@ func TestHandleLocalOperatorAddedEvent(t *testing.T) {
 			defer close(localEventsCh)
 			localEventsCh <- parsedData
 		}()
-	
+
 		err = edh.HandleLocalEventsStream(localEventsCh, false)
 		require.NoError(t, err)
 	})
@@ -72,7 +73,7 @@ func TestHandleLocalOperatorAddedEvent(t *testing.T) {
 			defer close(localEventsCh)
 			localEventsCh <- parsedData
 		}()
-	
+
 		err = edh.HandleLocalEventsStream(localEventsCh, true)
 		require.NoError(t, err)
 	})

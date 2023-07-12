@@ -4,13 +4,14 @@ import (
 	"context"
 	"testing"
 
-	"github.com/bloxapp/ssv/eth/eventbatcher"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
+
+	"github.com/bloxapp/ssv/eth/eventbatcher"
 )
 
-// TODO: Test function to remove opposite ans superseding  tasks 
+// TODO: Test function to remove opposite and superseding tasks
 
 // func TestCleanExecutionQueue(t *testing.T) {
 // 	tasks := []*Task{

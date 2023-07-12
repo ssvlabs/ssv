@@ -8,15 +8,16 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zaptest"
+
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/registry/storage"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zaptest"
 )
 
 var (
@@ -176,5 +177,5 @@ func TestEventDBBumpNonce(t *testing.T) {
 	defer txnR.Discard()
 	newNonce, err := txnR.GetNextNonce(testAddress)
 	require.NoError(t, err)
-	require.Equal(t, newNonce, nonce + 1)
+	require.Equal(t, newNonce, nonce+1)
 }
