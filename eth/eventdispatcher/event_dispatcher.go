@@ -7,7 +7,10 @@ import (
 	"go.uber.org/zap"
 )
 
-// TODO: check if something from https://github.com/bloxapp/ssv/pull/1053 needs to be ported
+// TODO: check if something from these PRs need to be ported:
+// https://github.com/bloxapp/ssv/pull/1053
+// https://github.com/bloxapp/ssv/pull/1055
+// https://github.com/bloxapp/ssv/pull/1056
 
 var (
 	// ErrNodeNotReady is returned when node is not ready.

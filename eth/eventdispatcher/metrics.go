@@ -1,6 +1,5 @@
 package eventdispatcher
 
-// TODO: define
 type metrics interface {
 	LastBlockProcessed(uint64)
 	LogsProcessingError(error)
