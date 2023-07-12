@@ -4,35 +4,36 @@ import (
 	"context"
 	"testing"
 
-	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/eth/eventbatcher"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 )
 
-func TestCleanExecutionQueue(t *testing.T) {
-	tasks := []*Task{
-		NewTask(&EventDataHandler{}, &contract.ContractOperatorAdded{}, nil),
-		NewTask(&EventDataHandler{}, &contract.ContractValidatorAdded{}, nil),
-		NewTask(&EventDataHandler{}, &contract.ContractValidatorRemoved{}, nil),
-		NewTask(&EventDataHandler{}, &contract.ContractValidatorRemoved{}, nil),
-		NewTask(&EventDataHandler{}, &contract.ContractValidatorAdded{}, nil),
-		NewTask(&EventDataHandler{}, &contract.ContractClusterLiquidated{}, nil),
-		NewTask(&EventDataHandler{}, &contract.ContractClusterReactivated{}, nil),
-		NewTask(&EventDataHandler{}, &contract.ContractClusterReactivated{}, nil),
-		NewTask(&EventDataHandler{}, &contract.ContractClusterLiquidated{}, nil),
-		NewTask(&EventDataHandler{}, &contract.ContractFeeRecipientAddressUpdated{}, nil),
-		NewTask(&EventDataHandler{}, &contract.ContractFeeRecipientAddressUpdated{}, nil),
-	}
-	var resTaskNames []string
-	cleanedTasks := cleanTaskList(tasks)
-	for _, task := range cleanedTasks {
-		t.Log(task.GetEventType())
-		resTaskNames = append(resTaskNames, task.GetEventType())
-	}
-	require.Equal(t, []string{OperatorAdded, FeeRecipientAddressUpdated}, resTaskNames)
-}
+// TODO: Test function to remove opposite ans superseding  tasks 
+
+// func TestCleanExecutionQueue(t *testing.T) {
+// 	tasks := []*Task{
+// 		NewTask(&EventDataHandler{}, &contract.ContractOperatorAdded{}, nil),
+// 		NewTask(&EventDataHandler{}, &contract.ContractValidatorAdded{}, nil),
+// 		NewTask(&EventDataHandler{}, &contract.ContractValidatorRemoved{}, nil),
+// 		NewTask(&EventDataHandler{}, &contract.ContractValidatorRemoved{}, nil),
+// 		NewTask(&EventDataHandler{}, &contract.ContractValidatorAdded{}, nil),
+// 		NewTask(&EventDataHandler{}, &contract.ContractClusterLiquidated{}, nil),
+// 		NewTask(&EventDataHandler{}, &contract.ContractClusterReactivated{}, nil),
+// 		NewTask(&EventDataHandler{}, &contract.ContractClusterReactivated{}, nil),
+// 		NewTask(&EventDataHandler{}, &contract.ContractClusterLiquidated{}, nil),
+// 		NewTask(&EventDataHandler{}, &contract.ContractFeeRecipientAddressUpdated{}, nil),
+// 		NewTask(&EventDataHandler{}, &contract.ContractFeeRecipientAddressUpdated{}, nil),
+// 	}
+// 	var resTaskNames []string
+// 	cleanedTasks := cleanTaskList(tasks)
+// 	for _, task := range cleanedTasks {
+// 		t.Log(task.GetEventType())
+// 		resTaskNames = append(resTaskNames, task.GetEventType())
+// 	}
+// 	require.Equal(t, []string{OperatorAdded, FeeRecipientAddressUpdated}, resTaskNames)
+// }
 
 func TestExecuteTask(t *testing.T) {
 	logger := zaptest.NewLogger(t)

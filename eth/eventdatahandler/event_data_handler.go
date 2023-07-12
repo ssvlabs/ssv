@@ -106,17 +106,17 @@ func (edh *EventDataHandler) HandleBlockEventsStream(blockEventsCh <-chan eventb
 
 		logger.Info("executing tasks", fields.Count(len(tasks)))
 
-		cleanTaskList := cleanTaskList(tasks)
-		for _, task := range cleanTaskList {
-			edh.logger.With(
-				zap.String("event_type", task.GetEventType()),
-			)
-			edh.logger.Debug("going to execute remote task")
+		// TODO:
+		// find and remove opposite tasks (start-stop, stop-start, liquidate-reactivate, reactivate-liquidate)
+		// find superseding tasks and remove superseded ones (updateFee-updateFee)
+		for _, task := range tasks {
+			logger = logger.With(zap.String("event_type", task.GetEventType()))
+			logger.Debug("going to execute task")
 			if err := task.Execute(); err != nil {
 				// TODO: We log failed task until we discuss how we want to handle this case. We likely need to crash the node in this case.
-				edh.logger.Error("failed to execute remote task")
+				logger.Error("failed to execute task", zap.Error(err))
 			} else {
-				edh.logger.Debug("executed remote task")
+				logger.Debug("executed task")
 			}
 		}
 
@@ -316,36 +316,36 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (*
 	}
 }
 
-// find and remove opposite tasks (start-stop, stop-start, liquidate-reactivate, reactivate-liquidate)
-// find superseding tasks and remove superseded ones (updateFee-updateFee)
-func cleanTaskList(tasks []*Task) []*Task {
-	taskMap := make(map[*Task]bool)
-	var resTask []*Task
-	for _, task := range tasks {
-		if _, exist := taskMap[task]; !exist {
-			taskMap[task] = true
-		}
-	}
-	for i, task := range tasks {
-		for j := i + 1; j < len(tasks); j++ {
-			if task.GetEventType() == ValidatorAdded && tasks[j].GetEventType() == ValidatorRemoved || task.GetEventType() == ValidatorRemoved && tasks[j].GetEventType() == ValidatorAdded {
-				delete(taskMap, tasks[j])
-				delete(taskMap, task)
-			}
-			if task.GetEventType() == ClusterLiquidated && tasks[j].GetEventType() == ClusterReactivated || task.GetEventType() == ClusterReactivated && tasks[j].GetEventType() == ClusterLiquidated {
-				delete(taskMap, tasks[j])
-				delete(taskMap, task)
-			}
-			if task.GetEventType() == FeeRecipientAddressUpdated && tasks[j].GetEventType() == FeeRecipientAddressUpdated {
-				delete(taskMap, task)
-			}
-		}
-	}
-	for task := range taskMap {
-		resTask = append(resTask, task)
-	}
-	return resTask
-}
+// TODO: rewrite to remove opposite and superseding tasks
+
+// func cleanTaskList(tasks []*Task) []*Task {
+// 	taskMap := make(map[*Task]bool)
+// 	var resTask []*Task
+// 	for _, task := range tasks {
+// 		if _, exist := taskMap[task]; !exist {
+// 			taskMap[task] = true
+// 		}
+// 	}
+// 	for i, task := range tasks {
+// 		for j := i + 1; j < len(tasks); j++ {
+// 			if task.GetEventType() == ValidatorAdded && tasks[j].GetEventType() == ValidatorRemoved || task.GetEventType() == ValidatorRemoved && tasks[j].GetEventType() == ValidatorAdded {
+// 				delete(taskMap, tasks[j])
+// 				delete(taskMap, task)
+// 			}
+// 			if task.GetEventType() == ClusterLiquidated && tasks[j].GetEventType() == ClusterReactivated || task.GetEventType() == ClusterReactivated && tasks[j].GetEventType() == ClusterLiquidated {
+// 				delete(taskMap, tasks[j])
+// 				delete(taskMap, task)
+// 			}
+// 			if task.GetEventType() == FeeRecipientAddressUpdated && tasks[j].GetEventType() == FeeRecipientAddressUpdated {
+// 				delete(taskMap, task)
+// 			}
+// 		}
+// 	}
+// 	for task := range taskMap {
+// 		resTask = append(resTask, task)
+// 	}
+// 	return resTask
+// }
 
 func (edh *EventDataHandler) HandleLocalEventsStream(localEventsCh <-chan []localevents.Event, executeTasks bool) error {
 
@@ -360,15 +360,17 @@ func (edh *EventDataHandler) HandleLocalEventsStream(localEventsCh <-chan []loca
 			continue
 		}
 
-		cleanTaskList := cleanTaskList(tasks)
-		for _, task := range cleanTaskList {
-			edh.logger.With(zap.String("event_type", task.GetEventType()))
-			edh.logger.Debug("going to execute local task")
+		// TODO:
+		// find and remove opposite tasks (start-stop, stop-start, liquidate-reactivate, reactivate-liquidate)
+		// find superseding tasks and remove superseded ones (updateFee-updateFee)
+		for _, task := range tasks {
+			logger := edh.logger.With(zap.String("event_type", task.GetEventType()))
+			logger.Debug("going to execute task")
 			if err := task.Execute(); err != nil {
 				// TODO: We log failed task until we discuss how we want to handle this case. We likely need to crash the node in this case.
-				edh.logger.Error("failed to execute local task")
+				logger.Error("failed to execute task", zap.Error(err))
 			} else {
-				edh.logger.Debug("executed local task")
+				logger.Debug("executed task")
 			}
 		}
 

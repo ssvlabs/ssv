@@ -73,7 +73,7 @@ func (ed *EventDispatcher) Start(ctx context.Context, fromBlock uint64) error {
 	if err != nil {
 		return fmt.Errorf("handle historical block events: %w", err)
 	}
-	ed.metrics.HistoricalLogsProcessed(lastProcessedBlock-fromBlock)
+	ed.metrics.LastBlockProcessed(lastProcessedBlock)
 
 	if err := <-errorStream; err != nil {
 		return fmt.Errorf("error occurred while fetching historical logs: %w", err)

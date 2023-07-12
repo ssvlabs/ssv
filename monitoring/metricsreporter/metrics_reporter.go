@@ -174,6 +174,5 @@ func (m MetricsReporter) EventProcessingFailed(eventName string) {
 }
 
 // TODO implement
-func (n MetricsReporter) HistoricalLogsProcessed(uint64) {}
-func (n MetricsReporter) LastBlockProcessed(uint64)      {}
-func (n MetricsReporter) LogsProcessingError(error)      {}
+func (m MetricsReporter) LastBlockProcessed(uint64) {}
+func (m MetricsReporter) LogsProcessingError(error) {}
