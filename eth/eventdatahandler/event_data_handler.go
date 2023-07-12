@@ -110,7 +110,7 @@ func (edh *EventDataHandler) HandleBlockEventsStream(blockEventsCh <-chan eventb
 		// find and remove opposite tasks (start-stop, stop-start, liquidate-reactivate, reactivate-liquidate)
 		// find superseding tasks and remove superseded ones (updateFee-updateFee)
 		for _, task := range tasks {
-			logger = logger.With(zap.String("event_type", task.GetEventType()))
+			logger = logger.With(zap.String("event_type", fmt.Sprintf("%T", task.Event)))
 			logger.Debug("going to execute task")
 			if err := task.Execute(); err != nil {
 				// TODO: We log failed task until we discuss how we want to handle this case. We likely need to crash the node in this case.
@@ -317,150 +317,72 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (*
 	}
 }
 
-// TODO: rewrite to remove opposite and superseding tasks
+func (edh *EventDataHandler) HandleLocalEvents(localEvents []localevents.Event) error {
+	txn := edh.eventDB.RWTxn()
+	defer txn.Discard()
 
-// func cleanTaskList(tasks []*Task) []*Task {
-// 	taskMap := make(map[*Task]bool)
-// 	var resTask []*Task
-// 	for _, task := range tasks {
-// 		if _, exist := taskMap[task]; !exist {
-// 			taskMap[task] = true
-// 		}
-// 	}
-// 	for i, task := range tasks {
-// 		for j := i + 1; j < len(tasks); j++ {
-// 			if task.GetEventType() == ValidatorAdded && tasks[j].GetEventType() == ValidatorRemoved || task.GetEventType() == ValidatorRemoved && tasks[j].GetEventType() == ValidatorAdded {
-// 				delete(taskMap, tasks[j])
-// 				delete(taskMap, task)
-// 			}
-// 			if task.GetEventType() == ClusterLiquidated && tasks[j].GetEventType() == ClusterReactivated || task.GetEventType() == ClusterReactivated && tasks[j].GetEventType() == ClusterLiquidated {
-// 				delete(taskMap, tasks[j])
-// 				delete(taskMap, task)
-// 			}
-// 			if task.GetEventType() == FeeRecipientAddressUpdated && tasks[j].GetEventType() == FeeRecipientAddressUpdated {
-// 				delete(taskMap, task)
-// 			}
-// 		}
-// 	}
-// 	for task := range taskMap {
-// 		resTask = append(resTask, task)
-// 	}
-// 	return resTask
-// }
-
-func (edh *EventDataHandler) HandleLocalEventsStream(localEventsCh <-chan []localevents.Event, executeTasks bool) error {
-
-	for localevents := range localEventsCh {
-
-		tasks, err := edh.processLocalEvents(localevents)
-		if err != nil {
-			return fmt.Errorf("process local events: %w", err)
+	for _, event := range localEvents {
+		if err := edh.processLocalEvent(txn, event); err != nil {
+			return fmt.Errorf("process local event: %w", err)
 		}
+	}
 
-		if !executeTasks || len(tasks) == 0 {
-			continue
-		}
-
-		// TODO:
-		// find and remove opposite tasks (start-stop, stop-start, liquidate-reactivate, reactivate-liquidate)
-		// find superseding tasks and remove superseded ones (updateFee-updateFee)
-		for _, task := range tasks {
-			logger := edh.logger.With(zap.String("event_type", task.GetEventType()))
-			logger.Debug("going to execute task")
-			if err := task.Execute(); err != nil {
-				// TODO: We log failed task until we discuss how we want to handle this case. We likely need to crash the node in this case.
-				logger.Error("failed to execute task", zap.Error(err))
-			} else {
-				logger.Debug("executed task")
-			}
-		}
-
-		edh.logger.Info("task execution finished")
+	if err := txn.Commit(); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
 	}
 
 	return nil
 }
 
-func (edh *EventDataHandler) processLocalEvent(txn eventdb.RW, event localevents.Event) (*Task, error) {
+func (edh *EventDataHandler) processLocalEvent(txn eventdb.RW, event localevents.Event) error {
 	switch event.Name {
 	case OperatorAdded:
-		e := event.Data.(contract.ContractOperatorAdded)
-		if err := edh.handleOperatorAdded(txn, &e); err != nil {
-			return nil, fmt.Errorf("handle OperatorAdded: %w", err)
+		data := event.Data.(contract.ContractOperatorAdded)
+		if err := edh.handleOperatorAdded(txn, &data); err != nil {
+			return fmt.Errorf("handle OperatorAdded: %w", err)
 		}
-		return nil, nil
+		return nil
 	case OperatorRemoved:
-		e := event.Data.(contract.ContractOperatorRemoved)
-		if err := edh.handleOperatorRemoved(txn, &e); err != nil {
-			return nil, fmt.Errorf("handle OperatorRemoved: %w", err)
+		data := event.Data.(contract.ContractOperatorRemoved)
+		if err := edh.handleOperatorRemoved(txn, &data); err != nil {
+			return fmt.Errorf("handle OperatorRemoved: %w", err)
 		}
-		return nil, nil
+		return nil
 	case ValidatorAdded:
-		e := event.Data.(contract.ContractValidatorAdded)
-		if err := edh.handleValidatorAdded(txn, &e); err != nil {
-			return nil, fmt.Errorf("handle ValidatorAdded: %w", err)
+		data := event.Data.(contract.ContractValidatorAdded)
+		if err := edh.handleValidatorAdded(txn, &data); err != nil {
+			return fmt.Errorf("handle ValidatorAdded: %w", err)
 		}
-		task := NewTask(edh, &e, nil)
-		return task, nil
+		return nil
 	case ValidatorRemoved:
-		e := event.Data.(contract.ContractValidatorRemoved)
-		if err := edh.handleValidatorRemoved(txn, &e); err != nil {
-			return nil, fmt.Errorf("handle ValidatorRemoved: %w", err)
+		data := event.Data.(contract.ContractValidatorRemoved)
+		if err := edh.handleValidatorRemoved(txn, &data); err != nil {
+			return fmt.Errorf("handle ValidatorRemoved: %w", err)
 		}
-		task := NewTask(edh, &e, nil)
-		return task, nil
+		return nil
 	case ClusterLiquidated:
-		e := event.Data.(contract.ContractClusterLiquidated)
-		sharesToLiquidate, err := edh.handleClusterLiquidated(txn, &e)
+		data := event.Data.(contract.ContractClusterLiquidated)
+		_, err := edh.handleClusterLiquidated(txn, &data)
 		if err != nil {
-			return nil, fmt.Errorf("handle ClusterLiquidated: %w", err)
+			return fmt.Errorf("handle ClusterLiquidated: %w", err)
 		}
-		task := NewTask(edh, &e, sharesToLiquidate)
-		return task, nil
+		return nil
 	case ClusterReactivated:
-		e := event.Data.(contract.ContractClusterReactivated)
-		sharesToEnable, err := edh.handleClusterReactivated(txn, &e)
+		data := event.Data.(contract.ContractClusterReactivated)
+		_, err := edh.handleClusterReactivated(txn, &data)
 		if err != nil {
-			return nil, fmt.Errorf("handle ClusterReactivated: %w", err)
+			return fmt.Errorf("handle ClusterReactivated: %w", err)
 		}
-		task := NewTask(edh, &e, sharesToEnable)
-		return task, nil
+		return nil
 	case FeeRecipientAddressUpdated:
-		e := event.Data.(contract.ContractFeeRecipientAddressUpdated)
-		updated, err := edh.handleFeeRecipientAddressUpdated(txn, &e)
+		data := event.Data.(contract.ContractFeeRecipientAddressUpdated)
+		_, err := edh.handleFeeRecipientAddressUpdated(txn, &data)
 		if err != nil {
-			return nil, fmt.Errorf("handle FeeRecipientAddressUpdated: %w", err)
+			return fmt.Errorf("handle FeeRecipientAddressUpdated: %w", err)
 		}
-		if !updated {
-			return nil, fmt.Errorf("provided recipient address is the same")
-		}
-		task := NewTask(edh, &e, nil)
-		return task, nil
+		return nil
 	default:
-		edh.logger.Warn("unknown event name", fields.Name(event.Name))
-		return nil, nil
+		edh.logger.Warn("unknown local event name", fields.Name(event.Name))
+		return nil
 	}
-}
-
-func (edh *EventDataHandler) processLocalEvents(localEvents []localevents.Event) ([]*Task, error) {
-	txn := edh.eventDB.RWTxn()
-	defer txn.Discard()
-
-	var tasks []*Task
-	for _, event := range localEvents {
-		task, err := edh.processLocalEvent(txn, event)
-		if err != nil {
-			return nil, err
-		}
-
-		if task != nil {
-			tasks = append(tasks, task)
-		}
-	}
-
-	if err := txn.Commit(); err != nil {
-		return nil, fmt.Errorf("commit transaction: %w", err)
-	}
-
-	return tasks, nil
 }

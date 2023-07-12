@@ -24,13 +24,13 @@ type Event struct {
 	Data interface{}
 }
 
-func Load(path string) ([]*Event, error) {
+func Load(path string) ([]Event, error) {
 	yamlFile, err := os.ReadFile(filepath.Clean(path))
 	if err != nil {
 		return nil, err
 	}
 
-	var events []*Event
+	var events []Event
 	if err := yaml.Unmarshal(yamlFile, &events); err != nil {
 		return nil, err
 	}

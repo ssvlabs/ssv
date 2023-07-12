@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"go.uber.org/zap"
 )
 
@@ -122,54 +121,6 @@ func (ed *EventDispatcher) Start(ctx context.Context, fromBlock uint64) error {
 		ed.logger.Info("finished handling ongoing logs",
 			zap.Uint64("last_processed_block", lastProcessedBlock))
 	}()
-
-	return nil
-}
-
-// TODO: consider reducing code duplication between start functions
-
-// StartWithLocalEvents starts EventDispatcher with local events instead of getting them from execution client.
-func (ed *EventDispatcher) StartWithLocalEvents(ctx context.Context, events []ethtypes.Log) error {
-	ed.logger.Info("starting event dispatcher with local events")
-
-	if ed.nodeProber != nil {
-		ready, err := ed.nodeProber.IsReady(ctx)
-		if err != nil {
-			return fmt.Errorf("check node readiness: %w", err)
-		}
-
-		if !ready {
-			return ErrNodeNotReady
-		}
-	}
-
-	logStream := make(chan ethtypes.Log)
-	go func() {
-		defer close(logStream)
-
-		for _, event := range events {
-			logStream <- event
-		}
-	}()
-
-	ed.logger.Info("going to batch local events")
-	blockEvents := ed.eventBatcher.BatchEvents(logStream)
-
-	ed.logger.Info("going to handle local events")
-	lastProcessedBlock, err := ed.eventDataHandler.HandleBlockEventsStream(blockEvents, false)
-	if err != nil {
-		return fmt.Errorf("handle historical block events: %w", err)
-	}
-
-	ed.logger.Info("finished handling local events",
-		zap.Uint64("last_processed_block", lastProcessedBlock))
-
-	// TODO: log shares, operators, my validators
-	//ed.logger.Info("ETH1 sync history stats",
-	//	zap.Int("validators count", len(shares)),
-	//	zap.Int("operators count", len(operators)),
-	//	zap.Int("my validators count", operatorValidatorsCount),
-	//)
 
 	return nil
 }

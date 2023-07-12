@@ -40,13 +40,8 @@ func TestHandleLocalOperatorAddedEvent(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		localEventsCh := make(chan []localevents.Event)
-		go func() {
-			defer close(localEventsCh)
-			localEventsCh <- parsedData
-		}()
 
-		err = edh.HandleLocalEventsStream(localEventsCh, false)
+		err = edh.HandleLocalEvents(parsedData)
 		require.NoError(t, err)
 	})
 	t.Run("Successfully unmarshal ValidatorAdded event", func(t *testing.T) {
@@ -68,13 +63,8 @@ func TestHandleLocalOperatorAddedEvent(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		localEventsCh := make(chan []localevents.Event)
-		go func() {
-			defer close(localEventsCh)
-			localEventsCh <- parsedData
-		}()
 
-		err = edh.HandleLocalEventsStream(localEventsCh, true)
+		err = edh.HandleLocalEvents(parsedData)
 		require.NoError(t, err)
 	})
 }

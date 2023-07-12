@@ -9,7 +9,6 @@ import (
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -20,7 +19,6 @@ import (
 	"github.com/bloxapp/ssv/beacon/goclient"
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/ekm"
-	config2 "github.com/bloxapp/ssv/eth/config"
 	"github.com/bloxapp/ssv/eth/eventbatcher"
 	"github.com/bloxapp/ssv/eth/eventdatahandler"
 	"github.com/bloxapp/ssv/eth/eventdb"
@@ -57,11 +55,11 @@ import (
 
 type config struct {
 	global_config.GlobalConfig `yaml:"global"`
-	DBOptions                  basedb.Options           `yaml:"db"`
-	SSVOptions                 operator.Options         `yaml:"ssv"`
-	ExecutionClient            config2.ExecutionOptions `yaml:"eth1"` // TODO: execution_client in yaml
-	ConsensusClient            beaconprotocol.Options   `yaml:"eth2"` // TODO: consensus_client in yaml
-	P2pNetworkConfig           p2pv1.Config             `yaml:"p2p"`
+	DBOptions                  basedb.Options                   `yaml:"db"`
+	SSVOptions                 operator.Options                 `yaml:"ssv"`
+	ExecutionClient            executionclient.ExecutionOptions `yaml:"eth1"` // TODO: execution_client in yaml
+	ConsensusClient            beaconprotocol.Options           `yaml:"eth2"` // TODO: consensus_client in yaml
+	P2pNetworkConfig           p2pv1.Config                     `yaml:"p2p"`
 
 	OperatorPrivateKey         string `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
 	GenerateOperatorPrivateKey bool   `yaml:"GenerateOperatorPrivateKey" env:"GENERATE_OPERATOR_KEY" env-description:"Whether to generate operator key if none is passed by config"`
@@ -279,13 +277,7 @@ var StartNodeCmd = &cobra.Command{
 				logger.Fatal("failed to load local events", zap.Error(err))
 			}
 
-			// TODO: use parsed event instead of encoded one
-			var events []ethtypes.Log
-			for _, event := range localEvents {
-				events = append(events, event.Log)
-			}
-
-			if err := eventDispatcher.StartWithLocalEvents(cmd.Context(), events); err != nil {
+			if err := eventDataHandler.HandleLocalEvents(localEvents); err != nil {
 				logger.Fatal("error occurred while running event dispatcher", zap.Error(err))
 			}
 		} else {

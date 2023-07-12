@@ -14,8 +14,9 @@ type Task struct {
 	Shares []*types.SSVShare
 }
 
-func NewTask(Edh *EventDataHandler, Event interface{}, Shares []*types.SSVShare) *Task {
-	return &Task{Edh, Event, Shares}
+func NewTask(edh *EventDataHandler, event interface{}, shares []*types.SSVShare) *Task {
+	// TODO: change event type from interface{}
+	return &Task{Edh: edh, Event: event, Shares: shares}
 }
 
 func (t *Task) Execute() error {
@@ -37,22 +38,5 @@ func (t *Task) Execute() error {
 		return t.Edh.taskExecutor.UpdateFeeRecipient(e)
 	default:
 		return fmt.Errorf("failed to infer task type")
-	}
-}
-
-func (t *Task) GetEventType() string {
-	switch t.Event.(type) {
-	case *contract.ContractValidatorAdded:
-		return OperatorAdded
-	case *contract.ContractValidatorRemoved:
-		return ValidatorRemoved
-	case *contract.ContractClusterLiquidated:
-		return ClusterLiquidated
-	case *contract.ContractClusterReactivated:
-		return ClusterReactivated
-	case *contract.ContractFeeRecipientAddressUpdated:
-		return FeeRecipientAddressUpdated
-	default:
-		return ""
 	}
 }
