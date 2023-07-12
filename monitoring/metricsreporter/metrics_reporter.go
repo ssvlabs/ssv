@@ -45,7 +45,7 @@ var (
 		Name: "ssv_eth1_status",
 		Help: "Status of the connected execution client",
 	})
-	executionClientLastFetchBlock = promauto.NewGauge(prometheus.GaugeOpts{
+	executionClientLastFetchedBlock = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "ssv_execution_client_last_fetched_block",
 		Help: "Last fetched block by execution client",
 	})
@@ -123,7 +123,7 @@ func (m MetricsReporter) ExecutionClientFailure() {
 }
 
 func (m MetricsReporter) ExecutionClientLastFetchedBlock(block uint64) {
-	executionClientLastFetchBlock.Set(float64(block))
+	executionClientLastFetchedBlock.Set(float64(block))
 }
 
 func (m MetricsReporter) OperatorPublicKey(operatorID spectypes.OperatorID, publicKey []byte) {
