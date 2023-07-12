@@ -69,10 +69,10 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 	t.Run("save/get/save fee recipient address without overwriting nonce", func(t *testing.T) {
 		var nonce storage.Nonce
 		rdToSave := &storage.RecipientData{
-			Owner: common.BytesToAddress([]byte("0x2")),
+			Owner: common.BytesToAddress([]byte("0x3")),
 			Nonce: &nonce,
 		}
-		copy(rdToSave.FeeRecipient[:], "0x2")
+		copy(rdToSave.FeeRecipient[:], "0x3")
 
 		rd, err := storageCollection.SaveRecipientData(rdToSave)
 		require.NoError(t, err)
