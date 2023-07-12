@@ -439,8 +439,14 @@ func (c *controller) handleFeeRecipientAddressUpdatedEvent(
 	event abiparser.FeeRecipientAddressUpdatedEvent,
 	ongoingSync bool,
 ) ([]zap.Field, error) {
-	recipientData := &registrystorage.RecipientData{
-		Owner: event.Owner,
+	recipientData, found, err := c.recipientsStorage.GetRecipientData(event.Owner)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get recipient data")
+	}
+	if !found {
+		recipientData = &registrystorage.RecipientData{
+			Owner: event.Owner,
+		}
 	}
 	copy(recipientData.FeeRecipient[:], event.RecipientAddress.Bytes())
 	r, err := c.recipientsStorage.SaveRecipientData(recipientData)
