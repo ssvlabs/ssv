@@ -8,17 +8,13 @@ import (
 	"strings"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"gopkg.in/yaml.v3"
 
 	"github.com/bloxapp/ssv/eth/contract"
 )
 
 // Event represents an eth1 event log in the system
-// TODO: make sure Data can be unmarshaled
 type Event struct {
-	// Log is the raw event log
-	Log ethtypes.Log
 	// Name is the event name used for internal representation.
 	Name string
 	// Data is the parsed event
