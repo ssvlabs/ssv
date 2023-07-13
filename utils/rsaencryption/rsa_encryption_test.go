@@ -55,7 +55,7 @@ func TestPrivateKeyToByte(t *testing.T) {
 }
 
 func TestConvertEncryptedPemToPrivateKey(t *testing.T) {
-	fileName := "encrypted_private_key.json"
+	fileName := os.TempDir() + "/encrypted_private_key.json"
 	defer func() {
 		if err := os.Remove(fileName); err != nil {
 			t.Logf("Could not delete encrypted private key file: %v", err)
