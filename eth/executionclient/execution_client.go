@@ -124,26 +124,26 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, client *ethcl
 			batchCount++
 		}
 
+		logCount := 0
 		for i := uint64(0); i < batchCount; i++ {
 			var batchFrom uint64
 			var batchTo uint64
 
 			if i == batchCount-1 && lastBatchSize != 0 {
 				batchFrom = fromBlock + i*ec.logBatchSize
-				batchTo = batchFrom + lastBatchSize
+				batchTo = batchFrom + lastBatchSize - 1
 			} else {
 				batchFrom = fromBlock + i*ec.logBatchSize
-				batchTo = batchFrom + ec.logBatchSize
+				batchTo = batchFrom + ec.logBatchSize - 1
 			}
 
-			logger := ec.logger.With(
+			ec.logger.Info("fetching log batch",
 				zap.Uint64("from", batchFrom),
 				zap.Uint64("to", batchTo),
 				zap.Uint64("target", toBlock),
 				zap.String("progress", fmt.Sprintf("%.2f%%", float64(batchFrom-fromBlock)/float64(toBlock-fromBlock)*100)),
 			)
 
-			logger.Info("fetching log batch")
 			logs, err := client.FilterLogs(ctx, ethereum.FilterQuery{
 				Addresses: []ethcommon.Address{ec.contractAddress},
 				FromBlock: new(big.Int).SetUint64(batchFrom),
@@ -166,12 +166,18 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, client *ethcl
 				return
 
 			default:
+				ec.logger.Debug("fetched log batch",
+					zap.Uint64("from", batchFrom),
+					zap.Uint64("to", batchTo),
+					fields.Count(len(logs)),
+				)
 				for _, log := range logs {
 					if log.Removed {
 						// TODO: test this case
 						continue
 					}
 					logCh <- log
+					logCount++
 				}
 			}
 		}
@@ -179,6 +185,7 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, client *ethcl
 		ec.logger.Info("fetched historical blocks",
 			zap.Uint64("from", fromBlock),
 			zap.Uint64("to", toBlock),
+			fields.Count(logCount),
 		)
 
 		ec.metrics.ExecutionClientLastFetchedBlock(toBlock)
