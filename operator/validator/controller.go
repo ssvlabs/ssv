@@ -699,6 +699,7 @@ func (c *controller) UpdateValidatorMetaDataLoop(logger *zap.Logger) {
 
 		filters := []registrystorage.SharesFilter{registrystorage.ByNotLiquidated()}
 		if !c.validatorOptions.Exporter {
+			// If we're not an exporter node, fetch only for validators of our operator.
 			filters = append(filters, registrystorage.ByOperatorID(c.operatorData.ID))
 		}
 		shares := c.sharesStorage.List(filters...)
