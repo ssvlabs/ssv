@@ -90,7 +90,7 @@ func (s *syncer) SyncHighestDecided(
 
 	lastDecided, err := s.network.LastDecided(logger, id)
 	if err != nil {
-		logger.Debug("sync failed", zap.Error(err))
+		logger.Debug("last decided sync failed", zap.Error(err))
 		return errors.Wrap(err, "could not sync last decided")
 	}
 	if len(lastDecided) == 0 {
@@ -119,7 +119,7 @@ func (s *syncer) SyncHighestDecided(
 		})
 		return false
 	})
-	logger.Debug("synced last decided", zap.Uint64("highest_height", uint64(maxHeight)))
+	logger.Debug("synced last decided", zap.Uint64("highest_height", uint64(maxHeight)), zap.Int("messages", len(lastDecided)))
 	return nil
 }
 
