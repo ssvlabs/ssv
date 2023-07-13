@@ -18,12 +18,7 @@ var generateOperatorKeysCmd = &cobra.Command{
 	Use:   "generate-operator-keys",
 	Short: "generates ssv operator keys",
 	Run: func(cmd *cobra.Command, args []string) {
-		encrypted, _ := cmd.Flags().GetBool("encrypted")
-		password, _ := cmd.Flags().GetString("password")
-
-		if (encrypted && password == "") || (!encrypted && password != "") {
-			log.Fatal("Both encrypted and password flags must be provided together")
-		}
+		encryptionPassword, _ := cmd.Flags().GetString("encryption-password")
 
 		if err := logging.SetGlobalLogger("debug", "capital", "console", ""); err != nil {
 			log.Fatal(err)
@@ -36,8 +31,8 @@ var generateOperatorKeysCmd = &cobra.Command{
 		}
 		logger.Info("generated public key (base64)", zap.String("pk", base64.StdEncoding.EncodeToString(pk)))
 
-		if encrypted {
-			encryptedData, err := keystorev4.New().Encrypt(sk, password)
+		if encryptionPassword != "" {
+			encryptedData, err := keystorev4.New().Encrypt(sk, encryptionPassword)
 			if err != nil {
 				logger.Fatal("Failed to encrypt private key", zap.Error(err))
 			}
@@ -61,7 +56,6 @@ var generateOperatorKeysCmd = &cobra.Command{
 }
 
 func init() {
-	generateOperatorKeysCmd.Flags().BoolP("encrypted", "e", false, "Encrypt the private key")
-	generateOperatorKeysCmd.Flags().StringP("password", "p", "", "Password for the encrypted private key")
+	generateOperatorKeysCmd.Flags().StringP("encryption-password", "e", "", "Password to encrypt the private key")
 	RootCmd.AddCommand(generateOperatorKeysCmd)
 }
