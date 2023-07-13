@@ -57,9 +57,10 @@ Example contract to test event emission:
 */
 
 const callableBin = "6080604052348015600f57600080fd5b5060998061001e6000396000f3fe6080604052348015600f57600080fd5b506004361060285760003560e01c806334e2292114602d575b600080fd5b60336035565b005b7f81fab7a4a0aa961db47eefc81f143a5220e8c8495260dd65b1356f1d19d3c7b860405160405180910390a156fea2646970667358221220029436d24f3ac598ceca41d4d712e13ced6d70727f4cdc580667de66d2f51d8b64736f6c63430008010033"
+const chainLength = 30
 
 func TestFetchHistoricalLogs(t *testing.T) {
-	const testTimeout = 1000 * time.Millisecond
+	const testTimeout = 1 * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
 
@@ -72,8 +73,8 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	backend, processedStream := newTestBackend(t, done, blockStream, 0)
 
 	// Generate test chain before we read historical logs
-	createdLogCount := 1008
-	generateInitialTestChain(t, done, blockStream, createdLogCount)
+	createdLogCount := 30
+	generateInitialTestChain(done, blockStream, createdLogCount)
 	for blocks := range processedStream {
 		t.Log("Processed blocks: ", len(blocks))
 	}
@@ -102,7 +103,8 @@ func TestFetchHistoricalLogs(t *testing.T) {
 
 	logger := zaptest.NewLogger(t)
 
-	client := New(addr, receipt.ContractAddress, WithLogger(logger))
+	const finalizationOffset = 8
+	client := New(addr, receipt.ContractAddress, WithLogger(logger), WithFinalizationOffset(finalizationOffset))
 	client.Connect(ctx)
 
 	isReady, err := client.IsReady(ctx)
@@ -118,7 +120,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	}
 
 	require.NoError(t, err)
-	expectedSeenLogs := createdLogCount - 1 // first block doesn't have logs
+	expectedSeenLogs := createdLogCount - finalizationOffset - 2 // blocks 0 and 1 don't have logs
 	require.Equal(t, expectedSeenLogs, seenLogs)
 
 	select {
@@ -133,7 +135,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 }
 
 func TestStreamLogs(t *testing.T) {
-	const testTimeout = 1000 * time.Millisecond
+	const testTimeout = 1 * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
 
@@ -176,7 +178,7 @@ func TestStreamLogs(t *testing.T) {
 
 	// Generate test chain after a connection to the server.
 	// While processing blocks the events will be emitted which is read by subscription
-	generateInitialTestChain(t, done, blockStream, 30)
+	generateInitialTestChain(done, blockStream, chainLength)
 	for blocks := range processedStream {
 		t.Log("Processed blocks: ", len(blocks))
 	}
@@ -191,10 +193,10 @@ func newTestBackend(t *testing.T, done <-chan struct{}, blockStream <-chan []*et
 	processedStream := make(chan []*ethtypes.Block)
 	// Create node
 	n, err := node.New(&node.Config{})
-
 	if err != nil {
 		t.Fatalf("can't create new node: %v", err)
 	}
+
 	// Create Ethereum Service
 	config := &ethconfig.Config{Genesis: genesis, Miner: miner.DefaultConfig}
 	ethservice, err := eth.New(n, config)
@@ -240,8 +242,7 @@ func newTestBackend(t *testing.T, done <-chan struct{}, blockStream <-chan []*et
 }
 
 // Generate blocks with transactions
-func generateInitialTestChain(t *testing.T, done <-chan struct{}, blockStream chan []*ethtypes.Block, n int) {
-
+func generateInitialTestChain(done <-chan struct{}, blockStream chan []*ethtypes.Block, n int) {
 	generate := func(i int, g *core.BlockGen) {
 		g.OffsetTime(5)
 		g.SetExtra([]byte("test"))
