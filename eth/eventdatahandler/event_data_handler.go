@@ -8,6 +8,7 @@ import (
 
 	"github.com/bloxapp/ssv-spec/types"
 	ethabi "github.com/ethereum/go-ethereum/accounts/abi"
+	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"go.uber.org/zap"
 
@@ -20,12 +21,28 @@ import (
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging/fields"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/registry/storage"
 )
 
+type taskExecutor interface {
+	AddValidator(publicKey []byte) error
+	RemoveValidator(publicKey []byte) error
+	LiquidateCluster(owner ethcommon.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
+	ReactivateCluster(owner ethcommon.Address, operatorIDs []uint64, toEnable []*ssvtypes.SSVShare) error
+	UpdateFeeRecipient(owner, recipient ethcommon.Address) error
+}
+
+type eventDB interface {
+	ROTxn() eventdb.RO
+	RWTxn() eventdb.RW
+}
+
+type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
+
 type EventDataHandler struct {
 	eventDB                    eventDB
-	taskExecutor               TaskExecutor
+	taskExecutor               taskExecutor
 	abi                        *ethabi.ABI
 	shareMap                   *sharemap.ShareMap
 	filterer                   *contract.ContractFilterer
@@ -39,12 +56,10 @@ type EventDataHandler struct {
 	metrics                    metrics
 }
 
-type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
-
 func New(
 	eventDB eventDB,
 	client *executionclient.ExecutionClient,
-	taskExecutor TaskExecutor,
+	taskExecutor taskExecutor,
 	operatorData *storage.OperatorData,
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider,
 	keyManager types.KeyManager,

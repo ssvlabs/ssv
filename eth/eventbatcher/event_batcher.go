@@ -10,6 +10,11 @@ func NewEventBatcher() *EventBatcher {
 	return &EventBatcher{}
 }
 
+type BlockEvents struct {
+	BlockNumber uint64
+	Events      []ethtypes.Log
+}
+
 func (eb *EventBatcher) BatchEvents(events <-chan ethtypes.Log) <-chan BlockEvents {
 	blockEvents := make(chan BlockEvents)
 	go func() {

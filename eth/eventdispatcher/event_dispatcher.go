@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/eth/eventbatcher"
 )
 
 // TODO: check if something from these PRs need to be ported:
@@ -16,6 +19,23 @@ var (
 	// ErrNodeNotReady is returned when node is not ready.
 	ErrNodeNotReady = fmt.Errorf("node not ready")
 )
+
+type executionClient interface {
+	FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logCh <-chan ethtypes.Log, fetchErrCh <-chan error, err error)
+	StreamLogs(ctx context.Context, fromBlock uint64) <-chan ethtypes.Log
+}
+
+type eventBatcher interface {
+	BatchEvents(events <-chan ethtypes.Log) <-chan eventbatcher.BlockEvents
+}
+
+type eventDataHandler interface {
+	HandleBlockEventsStream(blockEvents <-chan eventbatcher.BlockEvents, executeTasks bool) (uint64, error)
+}
+
+type nodeProber interface {
+	IsReady(ctx context.Context) (bool, error)
+}
 
 type EventDispatcher struct {
 	executionClient  executionClient

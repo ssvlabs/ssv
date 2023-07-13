@@ -1,7 +1,7 @@
 package eventdatahandler
 
 import (
-	"github.com/ethereum/go-ethereum/common"
+	ethcommon "github.com/ethereum/go-ethereum/common"
 
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -10,12 +10,16 @@ type Task interface {
 	Execute() error
 }
 
+type addValidatorExecutor interface {
+	AddValidator(publicKey []byte) error
+}
+
 type AddValidatorTask struct {
-	executor  TaskExecutor
+	executor  addValidatorExecutor
 	publicKey []byte
 }
 
-func NewAddValidatorTask(executor TaskExecutor, publicKey []byte) *AddValidatorTask {
+func NewAddValidatorTask(executor addValidatorExecutor, publicKey []byte) *AddValidatorTask {
 	return &AddValidatorTask{
 		executor:  executor,
 		publicKey: publicKey,
@@ -26,12 +30,16 @@ func (t AddValidatorTask) Execute() error {
 	return t.executor.AddValidator(t.publicKey)
 }
 
+type removeValidatorExecutor interface {
+	RemoveValidator(publicKey []byte) error
+}
+
 type RemoveValidatorTask struct {
-	executor  TaskExecutor
+	executor  removeValidatorExecutor
 	publicKey []byte
 }
 
-func NewRemoveValidatorTask(executor TaskExecutor, publicKey []byte) *RemoveValidatorTask {
+func NewRemoveValidatorTask(executor removeValidatorExecutor, publicKey []byte) *RemoveValidatorTask {
 	return &RemoveValidatorTask{
 		executor:  executor,
 		publicKey: publicKey,
@@ -42,14 +50,23 @@ func (t RemoveValidatorTask) Execute() error {
 	return t.executor.RemoveValidator(t.publicKey)
 }
 
+type liquidateClusterExecutor interface {
+	LiquidateCluster(owner ethcommon.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
+}
+
 type LiquidateClusterTask struct {
-	executor    TaskExecutor
-	owner       common.Address
+	executor    liquidateClusterExecutor
+	owner       ethcommon.Address
 	operatorIDs []uint64
 	toLiquidate []*ssvtypes.SSVShare
 }
 
-func NewLiquidateClusterTask(executor TaskExecutor, owner common.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) *LiquidateClusterTask {
+func NewLiquidateClusterTask(
+	executor liquidateClusterExecutor,
+	owner ethcommon.Address,
+	operatorIDs []uint64,
+	toLiquidate []*ssvtypes.SSVShare,
+) *LiquidateClusterTask {
 	return &LiquidateClusterTask{
 		executor:    executor,
 		owner:       owner,
@@ -62,14 +79,23 @@ func (t LiquidateClusterTask) Execute() error {
 	return t.executor.LiquidateCluster(t.owner, t.operatorIDs, t.toLiquidate)
 }
 
+type reactivateClusterExecutor interface {
+	ReactivateCluster(owner ethcommon.Address, operatorIDs []uint64, toEnable []*ssvtypes.SSVShare) error
+}
+
 type ReactivateClusterTask struct {
-	executor    TaskExecutor
-	owner       common.Address
+	executor    reactivateClusterExecutor
+	owner       ethcommon.Address
 	operatorIDs []uint64
 	toEnable    []*ssvtypes.SSVShare
 }
 
-func NewReactivateClusterTask(executor TaskExecutor, owner common.Address, operatorIDs []uint64, toEnable []*ssvtypes.SSVShare) *ReactivateClusterTask {
+func NewReactivateClusterTask(
+	executor reactivateClusterExecutor,
+	owner ethcommon.Address,
+	operatorIDs []uint64,
+	toEnable []*ssvtypes.SSVShare,
+) *ReactivateClusterTask {
 	return &ReactivateClusterTask{
 		executor:    executor,
 		owner:       owner,
@@ -82,13 +108,17 @@ func (t ReactivateClusterTask) Execute() error {
 	return t.executor.ReactivateCluster(t.owner, t.operatorIDs, t.toEnable)
 }
 
-type FeeRecipientTask struct {
-	executor  TaskExecutor
-	owner     common.Address
-	recipient common.Address
+type updateFeeRecipientExecutor interface {
+	UpdateFeeRecipient(owner, feeRecipient ethcommon.Address) error
 }
 
-func NewFeeRecipientTask(executor TaskExecutor, owner, recipient common.Address) *FeeRecipientTask {
+type FeeRecipientTask struct {
+	executor  updateFeeRecipientExecutor
+	owner     ethcommon.Address
+	recipient ethcommon.Address
+}
+
+func NewFeeRecipientTask(executor updateFeeRecipientExecutor, owner, recipient ethcommon.Address) *FeeRecipientTask {
 	return &FeeRecipientTask{
 		executor:  executor,
 		owner:     owner,
