@@ -61,7 +61,7 @@ func (c *Controller) StartNewInstance(logger *zap.Logger, height specqbft.Height
 	}
 
 	if height < c.Height {
-		return errors.New("attempting to start an instace with past height")
+		return errors.New("attempting to start an instance with a past height")
 	}
 
 	if c.StoredInstances.FindInstance(height) != nil {
