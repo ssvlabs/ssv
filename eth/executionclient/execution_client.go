@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -19,7 +20,8 @@ import (
 )
 
 var (
-	ErrClosed = fmt.Errorf("closed")
+	ErrClosed       = fmt.Errorf("closed")
+	ErrNotConnected = fmt.Errorf("not connected")
 )
 
 // ExecutionClient represents a client for interacting with Ethereum execution client.
@@ -38,8 +40,9 @@ type ExecutionClient struct {
 	logBatchSize                uint64
 
 	// variables
-	client atomic.Pointer[ethclient.Client]
-	closed chan struct{}
+	client    atomic.Pointer[ethclient.Client]
+	connectMu sync.Mutex
+	closed    chan struct{}
 }
 
 // New creates a new instance of ExecutionClient.
@@ -66,6 +69,9 @@ func New(nodeAddr string, contractAddr ethcommon.Address, opts ...Option) *Execu
 
 // Connect connects to Ethereum execution client.
 func (ec *ExecutionClient) Connect(ctx context.Context) {
+	ec.connectMu.Lock()
+	defer ec.connectMu.Unlock()
+
 	if ec.client.Load() != nil {
 		ec.reconnect(ctx)
 		return
@@ -89,7 +95,12 @@ func (ec *ExecutionClient) Close() error {
 
 // FetchHistoricalLogs retrieves historical logs emitted by the contract starting from fromBlock.
 func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logCh <-chan ethtypes.Log, fetchErrCh <-chan error, err error) {
-	currentBlock, err := ec.client.Load().BlockNumber(ctx)
+	client := ec.client.Load()
+	if client == nil {
+		return nil, nil, ErrNotConnected
+	}
+
+	currentBlock, err := client.BlockNumber(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("get current block: %w", err)
 	}
@@ -133,7 +144,13 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 				zap.String("progress", fmt.Sprintf("%.2f%%", float64(fromBlock-startBlock)/float64(endBlock-startBlock)*100)),
 			)
 
-			batchLogs, err := ec.client.Load().FilterLogs(context.Background(), ethereum.FilterQuery{
+			client := ec.client.Load()
+			if client == nil {
+				fetchErrCh <- ErrNotConnected
+				return
+			}
+
+			batchLogs, err := client.FilterLogs(context.Background(), ethereum.FilterQuery{
 				Addresses: []ethcommon.Address{ec.contractAddress},
 				FromBlock: new(big.Int).SetUint64(fromBlock),
 				ToBlock:   new(big.Int).SetUint64(toBlock),
@@ -227,6 +244,9 @@ func (ec *ExecutionClient) IsReady(ctx context.Context) (bool, error) {
 	}
 
 	client := ec.client.Load()
+	if client == nil {
+		return false, ErrNotConnected
+	}
 
 	ctx, cancel := context.WithTimeout(ctx, ec.connectionTimeout)
 	defer cancel()
@@ -273,6 +293,9 @@ func (ec *ExecutionClient) isClosed() bool {
 // TODO: consider handling "websocket: read limit exceeded" error and reducing batch size (syncSmartContractsEvents has code for this)
 func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan ethtypes.Log, fromBlock uint64) (lastBlock uint64, err error) {
 	client := ec.client.Load()
+	if client == nil {
+		return 0, ErrNotConnected
+	}
 
 	heads := make(chan *ethtypes.Header)
 
@@ -365,6 +388,10 @@ func (ec *ExecutionClient) reconnect(ctx context.Context) {
 
 func (ec *ExecutionClient) Filterer() (*contract.ContractFilterer, error) {
 	client := ec.client.Load()
+	if client == nil {
+		return nil, ErrNotConnected
+	}
+
 	filterer, err := contract.NewContractFilterer(ec.contractAddress, client)
 	return filterer, err
 }
