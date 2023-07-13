@@ -463,10 +463,7 @@ func (c *controller) setupNonCommitteeValidators(logger *zap.Logger) {
 		return
 	}
 
-	pubKeys := make([][]byte, 0, len(nonCommitteeShares))
 	for _, validatorShare := range nonCommitteeShares {
-		pubKeys = append(pubKeys, validatorShare.ValidatorPubKey)
-
 		opts := *c.validatorOptions
 		opts.SSVShare = validatorShare
 		allRoles := []spectypes.BeaconRole{
@@ -482,13 +479,6 @@ func (c *controller) setupNonCommitteeValidators(logger *zap.Logger) {
 			if err != nil {
 				logger.Error("failed to sync highest decided", zap.Error(err))
 			}
-		}
-	}
-
-	if len(pubKeys) > 0 {
-		logger.Debug("updating metadata for non-committee validators", zap.Int("count", len(pubKeys)))
-		if err := beaconprotocol.UpdateValidatorsMetadata(logger, pubKeys, c, c.beacon, c.onMetadataUpdated); err != nil {
-			logger.Warn("could not update all validators", zap.Error(err))
 		}
 	}
 }
@@ -697,11 +687,7 @@ func (c *controller) UpdateValidatorMetaDataLoop(logger *zap.Logger) {
 	for {
 		time.Sleep(c.metadataUpdateInterval)
 
-		filters := []registrystorage.SharesFilter{registrystorage.ByNotLiquidated()}
-		if !c.validatorOptions.Exporter {
-			filters = append(filters, registrystorage.ByOperatorID(c.operatorData.ID))
-		}
-		shares := c.sharesStorage.List(filters...)
+		shares := c.sharesStorage.List(registrystorage.ByOperatorID(c.operatorData.ID), registrystorage.ByNotLiquidated())
 		var pks [][]byte
 		for _, share := range shares {
 			pks = append(pks, share.ValidatorPubKey)

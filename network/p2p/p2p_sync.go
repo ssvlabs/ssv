@@ -74,7 +74,7 @@ func (n *p2pNetwork) LastDecided(logger *zap.Logger, mid spectypes.MessageID) ([
 		return nil, p2pprotocol.ErrNetworkIsNotReady
 	}
 	pid, maxPeers := n.fork.ProtocolID(p2pprotocol.LastDecidedProtocol)
-	peers, err := n.waitSubsetOfPeers(logger, mid.GetPubKey(), 3, maxPeers, time.Second*24, allPeersFilter)
+	peers, err := waitSubsetOfPeers(logger, n.getSubsetOfPeers, mid.GetPubKey(), 3, maxPeers, time.Second*24, allPeersFilter)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get subset of peers")
 	}
@@ -222,38 +222,6 @@ func (n *p2pNetwork) getSubsetOfPeers(logger *zap.Logger, vpk spectypes.Validato
 	return peers[:maxPeers], nil
 }
 
-func (n *p2pNetwork) waitSubsetOfPeers(logger *zap.Logger, vpk spectypes.ValidatorPK, minPeers, maxPeers int, timeout time.Duration, filter func(peer.ID) bool) ([]peer.ID, error) {
-	if minPeers > maxPeers {
-		return nil, fmt.Errorf("minPeers should not be greater than maxPeers")
-	}
-	if minPeers < 0 || maxPeers < 0 {
-		return nil, fmt.Errorf("minPeers and maxPeers should not be negative")
-	}
-	if timeout <= 0 {
-		return nil, fmt.Errorf("timeout should be positive")
-	}
-
-	// Wait for minPeers with a deadline.
-	deadline := time.Now().Add(timeout)
-	for {
-		peers, err := n.getSubsetOfPeers(logger, vpk, maxPeers, filter)
-		if err != nil {
-			return nil, err
-		}
-		if len(peers) >= minPeers || minPeers == 0 {
-			// Found enough peers.
-			return peers, nil
-		}
-		if time.Now().After(deadline) {
-			// Timeout.
-			return peers, nil
-		}
-
-		// Wait for a bit before trying again.
-		time.Sleep(timeout/3 - timeout/10) // 3 retries with 10% margin.
-	}
-}
-
 func (n *p2pNetwork) makeSyncRequest(logger *zap.Logger, peers []peer.ID, mid spectypes.MessageID, protocol libp2p_protocol.ID, syncMsg *message.SyncMessage) ([]p2pprotocol.SyncResult, error) {
 	var results []p2pprotocol.SyncResult
 	data, err := syncMsg.Encode()
@@ -316,4 +284,43 @@ func (n *p2pNetwork) peersWithProtocolsFilter(protocols ...libp2p_protocol.ID) f
 // allPeersFilter is used to accept all peers in a given subnet
 func allPeersFilter(id peer.ID) bool {
 	return true
+}
+
+func waitSubsetOfPeers(
+	logger *zap.Logger,
+	getSubsetOfPeers func(logger *zap.Logger, vpk spectypes.ValidatorPK, maxPeers int, filter func(peer.ID) bool) (peers []peer.ID, err error),
+	vpk spectypes.ValidatorPK,
+	minPeers, maxPeers int,
+	timeout time.Duration,
+	filter func(peer.ID) bool,
+) ([]peer.ID, error) {
+	if minPeers > maxPeers {
+		return nil, fmt.Errorf("minPeers should not be greater than maxPeers")
+	}
+	if minPeers < 0 || maxPeers < 0 {
+		return nil, fmt.Errorf("minPeers and maxPeers should not be negative")
+	}
+	if timeout <= 0 {
+		return nil, fmt.Errorf("timeout should be positive")
+	}
+
+	// Wait for minPeers with a deadline.
+	deadline := time.Now().Add(timeout)
+	for {
+		peers, err := getSubsetOfPeers(logger, vpk, maxPeers, filter)
+		if err != nil {
+			return nil, err
+		}
+		if len(peers) >= minPeers || minPeers == 0 {
+			// Found enough peers.
+			return peers, nil
+		}
+		if time.Now().After(deadline) {
+			// Timeout.
+			return peers, nil
+		}
+
+		// Wait for a bit before trying again.
+		time.Sleep(timeout/3 - timeout/10) // 3 retries with 10% margin.
+	}
 }
