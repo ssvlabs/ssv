@@ -241,12 +241,10 @@ func newTestBackend(t *testing.T, done <-chan struct{}, blockStream <-chan []*et
 }
 
 func TestFetchLogsInBatches(t *testing.T) {
-	// Create a context with a timeout
 	const testTimeout = 1 * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
 
-	// Start the test Ethereum backend
 	done := make(chan struct{})
 	defer close(done)
 
@@ -272,51 +270,63 @@ func TestFetchLogsInBatches(t *testing.T) {
 	client := New(addr, contractAddr, WithLogger(logger), WithLogBatchSize(2))
 	client.Connect(ctx)
 
-	// Test the case where fromBlock is greater than toBlock
-	logChan, errChan := client.fetchLogsInBatches(ctx, 10, 5)
-	select {
-	case <-logChan:
-		require.Fail(t, "Should not receive log when startBlock > endBlock")
-	case err := <-errChan:
-		require.ErrorIs(t, err, ErrBadInput)
-	case <-ctx.Done():
-		require.Fail(t, "fetchLogsInBatches did not return in time when startBlock > endBlock")
-	}
+	t.Run("startBlock is greater than endBlock", func(t *testing.T) {
+		logChan, errChan := client.fetchLogsInBatches(ctx, 10, 5)
+		select {
+		case <-logChan:
+			require.Fail(t, "Should not receive log when startBlock > endBlock")
+		case err := <-errChan:
+			require.ErrorIs(t, err, ErrBadInput)
+		case <-ctx.Done():
+			require.Fail(t, "fetchLogsInBatches did not return in time when startBlock > endBlock")
+		}
+	})
 
-	var blockNumbers []uint64
+	t.Run("startBlock is same as endBlock", func(t *testing.T) {
+		var blockNumbers []uint64
 
-	// Test the case where fromBlock is equal to toBlock
-	logChan, errChan = client.fetchLogsInBatches(ctx, 5, 5)
-	select {
-	case log := <-logChan:
-		blockNumbers = append(blockNumbers, log.BlockNumber)
-	case err := <-errChan:
-		t.Fatalf("fetchLogsInBatches failed: %v", err)
-	case <-ctx.Done():
-		require.Fail(t, "fetchLogsInBatches did not return in time when fromBlock == toBlock")
-	}
+		logChan, errChan := client.fetchLogsInBatches(ctx, 5, 5)
+		select {
+		case log := <-logChan:
+			blockNumbers = append(blockNumbers, log.BlockNumber)
+		case err := <-errChan:
+			t.Fatalf("fetchLogsInBatches failed: %v", err)
+		case <-ctx.Done():
+			require.Fail(t, "fetchLogsInBatches did not return in time when fromBlock == toBlock")
+		}
 
-	require.Equal(t, []uint64{5}, blockNumbers)
-	blockNumbers = nil
+		require.Equal(t, []uint64{5}, blockNumbers)
+	})
 
-	// Test the case where fromBlock < toBlock (normal case)
-	logChan, errChan = client.fetchLogsInBatches(ctx, 3, 11)
-	for log := range logChan {
-		blockNumbers = append(blockNumbers, log.BlockNumber)
-	}
-	require.Equal(t, []uint64{3, 4, 5, 6, 7, 8, 9, 10, 11}, blockNumbers)
+	t.Run("startBlock is less than endBlock", func(t *testing.T) {
+		var blockNumbers []uint64
 
-	// Test the case where context is canceled
-	canceledCtx, cancel := context.WithCancel(ctx)
-	cancel() // cancel the context immediately
-	logChan, errChan = client.fetchLogsInBatches(canceledCtx, 0, 5)
-	select {
-	case <-logChan:
-		require.Fail(t, "Should not receive log when context is canceled")
-	case err := <-errChan:
-		require.Error(t, err, "fetchLogsInBatches should return an error when context is canceled")
-	case <-canceledCtx.Done():
-	}
+		logChan, errChan := client.fetchLogsInBatches(ctx, 3, 11)
+		for log := range logChan {
+			blockNumbers = append(blockNumbers, log.BlockNumber)
+		}
+		require.Equal(t, []uint64{3, 4, 5, 6, 7, 8, 9, 10, 11}, blockNumbers)
+
+		select {
+		case err := <-errChan:
+			require.NoError(t, err)
+		default:
+		}
+	})
+
+	t.Run("context is canceled", func(t *testing.T) {
+		canceledCtx, cancel := context.WithCancel(ctx)
+		cancel()
+
+		logChan, errChan := client.fetchLogsInBatches(canceledCtx, 0, 5)
+		select {
+		case <-logChan:
+			require.Fail(t, "Should not receive log when context is canceled")
+		case err := <-errChan:
+			require.Error(t, err, "fetchLogsInBatches should return an error when context is canceled")
+		case <-canceledCtx.Done():
+		}
+	})
 
 	require.NoError(t, backend.Close())
 }
