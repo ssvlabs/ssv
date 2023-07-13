@@ -89,9 +89,7 @@ func (ec *ExecutionClient) Close() error {
 
 // FetchHistoricalLogs retrieves historical logs emitted by the contract starting from fromBlock.
 func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logCh <-chan ethtypes.Log, fetchErrCh <-chan error, err error) {
-	client := ec.client.Load()
-
-	currentBlock, err := client.BlockNumber(ctx)
+	currentBlock, err := ec.client.Load().BlockNumber(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("get current block: %w", err)
 	}
@@ -104,12 +102,13 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 	logger.Info("determined current block number, fetching historical logs",
 		zap.Uint64("current_block", currentBlock))
 
-	logStream, fetchErrors := ec.fetchLogsInBatches(ctx, client, fromBlock, lastBlock)
+	logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, lastBlock)
 	return logStream, fetchErrors, nil
 }
 
 // Calls FilterLogs multiple times and batches results to avoid fetching enormous amount of events
-func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, client *ethclient.Client, fromBlock, toBlock uint64) (<-chan ethtypes.Log, <-chan error) {
+// TODO: write edgy test cases for it
+func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, endBlock uint64) (<-chan ethtypes.Log, <-chan error) {
 	logCh := make(chan ethtypes.Log, defaultLogBuf)
 	fetchErrCh := make(chan error, 1)
 
@@ -117,38 +116,33 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, client *ethcl
 		defer close(logCh)
 		defer close(fetchErrCh)
 
-		batchCount := (toBlock - fromBlock) / ec.logBatchSize
-		lastBatchSize := (toBlock - fromBlock) % ec.logBatchSize
-
-		if lastBatchSize != 0 {
-			batchCount++
-		}
-
 		logCount := 0
-		for i := uint64(0); i < batchCount; i++ {
-			var batchFrom uint64
-			var batchTo uint64
 
-			if i == batchCount-1 && lastBatchSize != 0 {
-				batchFrom = fromBlock + i*ec.logBatchSize
-				batchTo = batchFrom + lastBatchSize - 1
+		for fromBlock := startBlock; fromBlock <= endBlock; fromBlock += ec.logBatchSize {
+			var toBlock uint64
+			if fromBlock+ec.logBatchSize-1 > endBlock {
+				toBlock = endBlock
 			} else {
-				batchFrom = fromBlock + i*ec.logBatchSize
-				batchTo = batchFrom + ec.logBatchSize - 1
+				toBlock = fromBlock + ec.logBatchSize - 1
 			}
 
 			ec.logger.Info("fetching log batch",
-				zap.Uint64("from", batchFrom),
-				zap.Uint64("to", batchTo),
-				zap.Uint64("target", toBlock),
-				zap.String("progress", fmt.Sprintf("%.2f%%", float64(batchFrom-fromBlock)/float64(toBlock-fromBlock)*100)),
+				zap.Uint64("from", fromBlock),
+				zap.Uint64("to", toBlock),
+				zap.Uint64("target", endBlock),
+				zap.String("progress", fmt.Sprintf("%.2f%%", float64(fromBlock-startBlock)/float64(endBlock-startBlock)*100)),
 			)
 
-			logs, err := client.FilterLogs(ctx, ethereum.FilterQuery{
+			batchLogs, err := ec.client.Load().FilterLogs(context.Background(), ethereum.FilterQuery{
 				Addresses: []ethcommon.Address{ec.contractAddress},
-				FromBlock: new(big.Int).SetUint64(batchFrom),
-				ToBlock:   new(big.Int).SetUint64(batchTo),
+				FromBlock: new(big.Int).SetUint64(fromBlock),
+				ToBlock:   new(big.Int).SetUint64(toBlock),
 			})
+			if err != nil {
+				fetchErrCh <- err
+				return
+			}
+
 			if err != nil {
 				ec.logger.Error("failed to fetch log batch", zap.Error(err))
 				fetchErrCh <- err
@@ -167,11 +161,11 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, client *ethcl
 
 			default:
 				ec.logger.Debug("fetched log batch",
-					zap.Uint64("from", batchFrom),
-					zap.Uint64("to", batchTo),
-					fields.Count(len(logs)),
+					zap.Uint64("from", fromBlock),
+					zap.Uint64("to", toBlock),
+					fields.Count(len(batchLogs)),
 				)
-				for _, log := range logs {
+				for _, log := range batchLogs {
 					if log.Removed {
 						// TODO: test this case
 						continue
@@ -183,12 +177,12 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, client *ethcl
 		}
 
 		ec.logger.Info("fetched historical blocks",
-			zap.Uint64("from", fromBlock),
-			zap.Uint64("to", toBlock),
+			zap.Uint64("from", startBlock),
+			zap.Uint64("to", endBlock),
 			fields.Count(logCount),
 		)
 
-		ec.metrics.ExecutionClientLastFetchedBlock(toBlock)
+		ec.metrics.ExecutionClientLastFetchedBlock(endBlock)
 	}()
 
 	return logCh, fetchErrCh
@@ -299,7 +293,7 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan ethty
 				ToBlock:   header.Number,
 			}
 
-			logStream, fetchErrors := ec.fetchLogsInBatches(ctx, client, fromBlock, header.Number.Uint64())
+			logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, header.Number.Uint64())
 
 			for log := range logStream {
 				logs <- log
