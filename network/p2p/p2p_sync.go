@@ -240,9 +240,12 @@ func (n *p2pNetwork) waitSubsetOfPeers(logger *zap.Logger, vpk spectypes.Validat
 		if err != nil {
 			return nil, err
 		}
-		logger.Debug("getSubsetOfPeers", zap.Any("peers", peers), zap.Int("peers_count", len(peers)), zap.Int("minPeers", minPeers), zap.Int("maxPeers", maxPeers), zap.Time("deadline", deadline))
-		if len(peers) >= minPeers || minPeers == 0 || time.Now().After(deadline) {
+		if len(peers) >= minPeers || minPeers == 0 {
 			// Found enough peers.
+			return peers, nil
+		}
+		if time.Now().After(deadline) {
+			// Timeout.
 			return peers, nil
 		}
 
