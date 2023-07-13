@@ -4,11 +4,13 @@ import (
 	"context"
 	"testing"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
 	"github.com/bloxapp/ssv/eth/eventbatcher"
+	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // TODO: Test function to remove opposite and superseding tasks
@@ -58,7 +60,13 @@ func TestExecuteTask(t *testing.T) {
 	if err != nil {
 		t.Fatal("parse ValidatorAdded", err)
 	}
-	task := NewAddValidatorTask(edh.taskExecutor, validatorAddedEvent.PublicKey)
+
+	share := &ssvtypes.SSVShare{
+		Share: spectypes.Share{
+			ValidatorPubKey: validatorAddedEvent.PublicKey,
+		},
+	}
+	task := NewStartValidatorTask(edh.taskExecutor, share)
 	err = task.Execute()
 	require.NoError(t, err)
 }

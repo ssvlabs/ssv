@@ -114,7 +114,7 @@ func (edh *EventDataHandler) handleOperatorRemoved(txn eventdb.RW, event *contra
 	return nil
 }
 
-func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contract.ContractValidatorAdded) error {
+func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contract.ContractValidatorAdded) (*ssvtypes.SSVShare, error) {
 	logger := edh.logger.With(
 		zap.String("owner_address", event.Owner.String()),
 		zap.Uint64s("operator_ids", event.OperatorIds),
@@ -126,7 +126,7 @@ func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contrac
 	// get nonce
 	nonce, nonceErr := txn.GetNextNonce(event.Owner)
 	if nonceErr != nil {
-		return fmt.Errorf("failed to get next nonce: %w", nonceErr)
+		return nil, fmt.Errorf("failed to get next nonce: %w", nonceErr)
 	}
 
 	// Calculate the expected length of constructed shares based on the number of operator IDs,
@@ -142,10 +142,10 @@ func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contrac
 			zap.Int("got", len(event.Shares)))
 
 		if err := txn.BumpNonce(event.Owner); err != nil {
-			return fmt.Errorf("bump nonce: %w", err)
+			return nil, fmt.Errorf("bump nonce: %w", err)
 		}
 
-		return &MalformedEventError{Err: ErrIncorrectSharesLength}
+		return nil, &MalformedEventError{Err: ErrIncorrectSharesLength}
 	}
 
 	signature := event.Shares[:signatureOffset]
@@ -158,10 +158,10 @@ func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contrac
 			zap.Error(err))
 
 		if err := txn.BumpNonce(event.Owner); err != nil {
-			return fmt.Errorf("bump nonce: %w", err)
+			return nil, fmt.Errorf("bump nonce: %w", err)
 		}
 
-		return &MalformedEventError{Err: ErrSignatureVerification}
+		return nil, &MalformedEventError{Err: ErrSignatureVerification}
 	}
 
 	validatorShare := edh.shareMap.Get(event.PublicKey)
@@ -173,17 +173,17 @@ func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contrac
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
 				logger.Warn("malformed event", zap.Error(err))
-				return err
+				return nil, err
 			}
 
 			edh.metrics.ValidatorError(event.PublicKey)
-			return err
+			return nil, err
 		}
 
 		validatorShare = createdShare
 
 		if err := txn.BumpNonce(event.Owner); err != nil {
-			return fmt.Errorf("bump nonce: %w", err)
+			return nil, fmt.Errorf("bump nonce: %w", err)
 		}
 	} else if event.Owner != validatorShare.OwnerAddress {
 		// Prevent multiple registration of the same validator with different owner address
@@ -194,19 +194,21 @@ func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contrac
 			zap.String("got", event.Owner.String()))
 
 		if err := txn.BumpNonce(event.Owner); err != nil {
-			return fmt.Errorf("bump nonce: %w", err)
+			return nil, fmt.Errorf("bump nonce: %w", err)
 		}
 
-		return &MalformedEventError{Err: ErrShareBelongsToDifferentOwner}
+		return nil, &MalformedEventError{Err: ErrShareBelongsToDifferentOwner}
 	}
 
 	isOperatorShare := validatorShare.BelongsToOperator(edh.operatorData.ID)
 	if isOperatorShare {
 		edh.metrics.ValidatorInactive(event.PublicKey)
+		logger.Debug("processed event")
+		return validatorShare, nil
 	}
 
 	logger.Debug("processed event")
-	return nil
+	return nil, nil
 }
 
 // handleShareCreation is called when a validator was added/updated during registry sync
@@ -340,7 +342,7 @@ func validatorAddedEventToShare(
 	return &validatorShare, shareSecret, nil
 }
 
-func (edh *EventDataHandler) handleValidatorRemoved(txn eventdb.RW, event *contract.ContractValidatorRemoved) error {
+func (edh *EventDataHandler) handleValidatorRemoved(txn eventdb.RW, event *contract.ContractValidatorRemoved) ([]byte, error) {
 	logger := edh.logger.With(
 		zap.String("owner_address", event.Owner.String()),
 		zap.Uint64s("operator_ids", event.OperatorIds),
@@ -353,7 +355,7 @@ func (edh *EventDataHandler) handleValidatorRemoved(txn eventdb.RW, event *contr
 	share := edh.shareMap.Get(event.PublicKey)
 	if share == nil {
 		logger.Warn("malformed event: could not find validator share")
-		return &MalformedEventError{Err: ErrValidatorShareNotFound}
+		return nil, &MalformedEventError{Err: ErrValidatorShareNotFound}
 	}
 
 	// Prevent removal of the validator registered with different owner address
@@ -366,7 +368,7 @@ func (edh *EventDataHandler) handleValidatorRemoved(txn eventdb.RW, event *contr
 			zap.String("expected", share.OwnerAddress.String()),
 			zap.String("got", event.Owner.String()))
 
-		return &MalformedEventError{Err: ErrShareBelongsToDifferentOwner}
+		return nil, &MalformedEventError{Err: ErrShareBelongsToDifferentOwner}
 	}
 
 	// remove decided messages
@@ -374,7 +376,7 @@ func (edh *EventDataHandler) handleValidatorRemoved(txn eventdb.RW, event *contr
 	store := edh.storageMap.Get(messageID.GetRoleType())
 	if store != nil {
 		if err := store.CleanAllInstances(logger, messageID[:]); err != nil { // TODO need to delete for multi duty as well
-			return fmt.Errorf("could not clean all decided messages: %w", err)
+			return nil, fmt.Errorf("could not clean all decided messages: %w", err)
 		}
 	}
 
@@ -382,20 +384,21 @@ func (edh *EventDataHandler) handleValidatorRemoved(txn eventdb.RW, event *contr
 
 	// remove from storage
 	if err := txn.DeleteShare(share.ValidatorPubKey); err != nil {
-		return fmt.Errorf("could not remove validator share: %w", err)
+		return nil, fmt.Errorf("could not remove validator share: %w", err)
 	}
 
 	isOperatorShare := share.BelongsToOperator(edh.operatorData.ID)
-	if isOperatorShare {
-		edh.metrics.ValidatorRemoved(event.PublicKey)
-	}
-
 	if isOperatorShare || edh.fullNode {
 		logger = logger.With(zap.String("validator_pubkey", hex.EncodeToString(share.ValidatorPubKey)))
 	}
+	if isOperatorShare {
+		edh.metrics.ValidatorRemoved(event.PublicKey)
+		logger.Debug("processed event")
+		return share.ValidatorPubKey, nil
+	}
 
 	logger.Debug("processed event")
-	return nil
+	return nil, nil
 }
 
 func (edh *EventDataHandler) handleClusterLiquidated(txn eventdb.RW, event *contract.ContractClusterLiquidated) ([]*ssvtypes.SSVShare, error) {

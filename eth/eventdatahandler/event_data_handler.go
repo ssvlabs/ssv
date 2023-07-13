@@ -26,8 +26,8 @@ import (
 )
 
 type taskExecutor interface {
-	AddValidator(publicKey []byte) error
-	RemoveValidator(publicKey []byte) error
+	StartValidator(share *ssvtypes.SSVShare) error
+	StopValidator(publicKey []byte) error
 	LiquidateCluster(owner ethcommon.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
 	ReactivateCluster(owner ethcommon.Address, operatorIDs []uint64, toEnable []*ssvtypes.SSVShare) error
 	UpdateFeeRecipient(owner, recipient ethcommon.Address) error
@@ -221,7 +221,8 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 			return nil, fmt.Errorf("parse ValidatorAdded: %w", err)
 		}
 
-		if err := edh.handleValidatorAdded(txn, validatorAddedEvent); err != nil {
+		share, err := edh.handleValidatorAdded(txn, validatorAddedEvent)
+		if err != nil {
 			edh.metrics.EventProcessingFailed(abiEvent.Name)
 
 			var malformedEventError *MalformedEventError
@@ -231,9 +232,14 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 			return nil, fmt.Errorf("handle ValidatorAdded: %w", err)
 		}
 
-		task := NewAddValidatorTask(edh.taskExecutor, validatorAddedEvent.PublicKey)
+		defer edh.metrics.EventProcessed(abiEvent.Name)
 
-		edh.metrics.EventProcessed(abiEvent.Name)
+		if share == nil {
+			return nil, nil
+		}
+
+		task := NewStartValidatorTask(edh.taskExecutor, share)
+
 		return task, nil
 
 	case ValidatorRemoved:
@@ -242,7 +248,8 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 			return nil, fmt.Errorf("parse ValidatorRemoved: %w", err)
 		}
 
-		if err := edh.handleValidatorRemoved(txn, validatorRemovedEvent); err != nil {
+		sharePK, err := edh.handleValidatorRemoved(txn, validatorRemovedEvent)
+		if err != nil {
 			edh.metrics.EventProcessingFailed(abiEvent.Name)
 
 			var malformedEventError *MalformedEventError
@@ -251,9 +258,15 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 			}
 			return nil, fmt.Errorf("handle ValidatorRemoved: %w", err)
 		}
-		task := NewRemoveValidatorTask(edh.taskExecutor, validatorRemovedEvent.PublicKey)
 
-		edh.metrics.EventProcessed(abiEvent.Name)
+		defer edh.metrics.EventProcessed(abiEvent.Name)
+
+		if sharePK == nil {
+			return nil, nil
+		}
+
+		task := NewStopValidatorTask(edh.taskExecutor, validatorRemovedEvent.PublicKey)
+
 		return task, nil
 
 	case ClusterLiquidated:
@@ -273,9 +286,14 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 			return nil, fmt.Errorf("handle ClusterLiquidated: %w", err)
 		}
 
+		defer edh.metrics.EventProcessed(abiEvent.Name)
+
+		if len(sharesToLiquidate) == 0 {
+			return nil, nil
+		}
+
 		task := NewLiquidateClusterTask(edh.taskExecutor, clusterLiquidatedEvent.Owner, clusterLiquidatedEvent.OperatorIds, sharesToLiquidate)
 
-		edh.metrics.EventProcessed(abiEvent.Name)
 		return task, nil
 
 	case ClusterReactivated:
@@ -295,9 +313,14 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 			return nil, fmt.Errorf("handle ClusterReactivated: %w", err)
 		}
 
+		defer edh.metrics.EventProcessed(abiEvent.Name)
+
+		if len(sharesToEnable) == 0 {
+			return nil, nil
+		}
+
 		task := NewReactivateClusterTask(edh.taskExecutor, clusterReactivatedEvent.Owner, clusterReactivatedEvent.OperatorIds, sharesToEnable)
 
-		edh.metrics.EventProcessed(abiEvent.Name)
 		return task, nil
 
 	case FeeRecipientAddressUpdated:
@@ -317,14 +340,13 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 			return nil, fmt.Errorf("handle FeeRecipientAddressUpdated: %w", err)
 		}
 
+		defer edh.metrics.EventProcessed(abiEvent.Name)
+
 		if !updated {
-			edh.metrics.EventProcessed(abiEvent.Name)
 			return nil, nil
 		}
 
 		task := NewFeeRecipientTask(edh.taskExecutor, feeRecipientAddressUpdatedEvent.Owner, feeRecipientAddressUpdatedEvent.RecipientAddress)
-
-		edh.metrics.EventProcessed(abiEvent.Name)
 		return task, nil
 
 	default:
@@ -366,13 +388,13 @@ func (edh *EventDataHandler) processLocalEvent(txn eventdb.RW, event localevents
 		return nil
 	case ValidatorAdded:
 		data := event.Data.(contract.ContractValidatorAdded)
-		if err := edh.handleValidatorAdded(txn, &data); err != nil {
+		if _, err := edh.handleValidatorAdded(txn, &data); err != nil {
 			return fmt.Errorf("handle ValidatorAdded: %w", err)
 		}
 		return nil
 	case ValidatorRemoved:
 		data := event.Data.(contract.ContractValidatorRemoved)
-		if err := edh.handleValidatorRemoved(txn, &data); err != nil {
+		if _, err := edh.handleValidatorRemoved(txn, &data); err != nil {
 			return fmt.Errorf("handle ValidatorRemoved: %w", err)
 		}
 		return nil

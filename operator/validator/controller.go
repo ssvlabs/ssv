@@ -35,7 +35,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/sync/handlers"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/tasks"
@@ -54,7 +54,7 @@ type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
 type GetRecipientDataFunc func(owner common.Address) (*registrystorage.RecipientData, bool, error)
 
 // ShareEventHandlerFunc is a function that handles event in an extended mode
-type ShareEventHandlerFunc func(share *types.SSVShare)
+type ShareEventHandlerFunc func(share *ssvtypes.SSVShare)
 
 // ControllerOptions for creating a validator controller
 type ControllerOptions struct {
@@ -94,18 +94,18 @@ type Controller interface {
 	GetValidator(pubKey string) (*validator.Validator, bool)
 	UpdateValidatorMetaDataLoop(logger *zap.Logger)
 	StartNetworkHandlers(logger *zap.Logger)
-	GetOperatorShares() []*types.SSVShare
+	GetOperatorShares() []*ssvtypes.SSVShare
 	// GetValidatorStats returns stats of validators, including the following:
 	//  - the amount of validators in the network
 	//  - the amount of active validators (i.e. not slashed or existed)
 	//  - the amount of validators assigned to this operator
 	GetValidatorStats() (uint64, uint64, uint64, error)
 	GetOperatorData() *registrystorage.OperatorData
-	// Methods for execution
-	AddValidator(publicKey []byte) error
-	RemoveValidator(publicKey []byte) error
-	LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*types.SSVShare) error
-	ReactivateCluster(owner common.Address, operatorIDs []uint64, toEnable []*types.SSVShare) error
+
+	StartValidator(share *ssvtypes.SSVShare) error
+	StopValidator(publicKey []byte) error
+	LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
+	ReactivateCluster(owner common.Address, operatorIDs []uint64, toEnable []*ssvtypes.SSVShare) error
 	UpdateFeeRecipient(owner, recipient common.Address) error
 }
 
@@ -269,7 +269,7 @@ func (c *controller) setupNetworkHandlers(logger *zap.Logger) error {
 	return nil
 }
 
-func (c *controller) GetOperatorShares() []*types.SSVShare {
+func (c *controller) GetOperatorShares() []*ssvtypes.SSVShare {
 	return c.sharesStorage.List(registrystorage.ByOperatorID(c.operatorData.ID), registrystorage.ByActiveValidator())
 }
 
@@ -397,7 +397,7 @@ func (c *controller) StartValidators(logger *zap.Logger) {
 
 // setupValidators setup and starts validators from the given shares.
 // shares w/o validator's metadata won't start, but the metadata will be fetched and the validator will start afterwards
-func (c *controller) setupValidators(logger *zap.Logger, shares []*types.SSVShare) {
+func (c *controller) setupValidators(logger *zap.Logger, shares []*ssvtypes.SSVShare) {
 	logger.Info("starting validators setup...", zap.Int("shares count", len(shares)))
 	var started int
 	var errs []error
@@ -459,7 +459,7 @@ func (c *controller) setupNonCommitteeValidators(logger *zap.Logger) {
 			spectypes.BNRoleSyncCommitteeContribution,
 		}
 		for _, role := range allRoles {
-			messageID := spectypes.NewMsgID(types.GetDefaultDomain(), validatorShare.ValidatorPubKey, role)
+			messageID := spectypes.NewMsgID(ssvtypes.GetDefaultDomain(), validatorShare.ValidatorPubKey, role)
 			err := c.network.SyncHighestDecided(messageID)
 			if err != nil {
 				logger.Error("failed to sync highest decided", zap.Error(err))
@@ -593,7 +593,7 @@ func (c *controller) onShareRemove(pk string, removeSecret bool) error {
 	return nil
 }
 
-func (c *controller) onShareStart(logger *zap.Logger, share *types.SSVShare) (bool, error) {
+func (c *controller) onShareStart(logger *zap.Logger, share *ssvtypes.SSVShare) (bool, error) {
 	if !share.HasBeaconMetadata() { // fetching index and status in case not exist
 		logger.Warn("skipping validator until it becomes active", fields.PubKey(share.ValidatorPubKey))
 		return false, nil
@@ -611,7 +611,7 @@ func (c *controller) onShareStart(logger *zap.Logger, share *types.SSVShare) (bo
 	return c.startValidator(logger, v)
 }
 
-func setShareFeeRecipient(logger *zap.Logger, share *types.SSVShare, getRecipientData GetRecipientDataFunc) error {
+func setShareFeeRecipient(logger *zap.Logger, share *ssvtypes.SSVShare, getRecipientData GetRecipientDataFunc) error {
 	var feeRecipient bellatrix.ExecutionAddress
 	data, found, err := getRecipientData(share.OwnerAddress)
 	if err != nil {
@@ -680,7 +680,7 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 		spectypes.BNRoleValidatorRegistration,
 	}
 
-	domainType := types.GetDefaultDomain()
+	domainType := ssvtypes.GetDefaultDomain()
 	buildController := func(role spectypes.BeaconRole, valueCheckF specqbft.ProposedValueCheckF) *qbftcontroller.Controller {
 		config := &qbft.Config{
 			Signer:      options.Signer,
@@ -698,7 +698,7 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 		}
 		config.ValueCheckF = valueCheckF
 
-		identifier := spectypes.NewMsgID(types.GetDefaultDomain(), options.SSVShare.Share.ValidatorPubKey, role)
+		identifier := spectypes.NewMsgID(ssvtypes.GetDefaultDomain(), options.SSVShare.Share.ValidatorPubKey, role)
 		qbftCtrl := qbftcontroller.NewController(identifier[:], &options.SSVShare.Share, domainType, config, options.FullNode)
 		qbftCtrl.NewDecidedHandler = options.NewDecidedHandler
 		return qbftCtrl

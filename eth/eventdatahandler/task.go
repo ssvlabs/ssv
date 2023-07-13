@@ -10,44 +10,44 @@ type Task interface {
 	Execute() error
 }
 
-type addValidatorExecutor interface {
-	AddValidator(publicKey []byte) error
+type startValidatorExecutor interface {
+	StartValidator(share *ssvtypes.SSVShare) error
 }
 
-type AddValidatorTask struct {
-	executor  addValidatorExecutor
+type StartValidatorTask struct {
+	executor startValidatorExecutor
+	share    *ssvtypes.SSVShare
+}
+
+func NewStartValidatorTask(executor startValidatorExecutor, share *ssvtypes.SSVShare) *StartValidatorTask {
+	return &StartValidatorTask{
+		executor: executor,
+		share:    share,
+	}
+}
+
+func (t StartValidatorTask) Execute() error {
+	return t.executor.StartValidator(t.share)
+}
+
+type stopValidatorExecutor interface {
+	StopValidator(publicKey []byte) error
+}
+
+type StopValidatorTask struct {
+	executor  stopValidatorExecutor
 	publicKey []byte
 }
 
-func NewAddValidatorTask(executor addValidatorExecutor, publicKey []byte) *AddValidatorTask {
-	return &AddValidatorTask{
+func NewStopValidatorTask(executor stopValidatorExecutor, publicKey []byte) *StopValidatorTask {
+	return &StopValidatorTask{
 		executor:  executor,
 		publicKey: publicKey,
 	}
 }
 
-func (t AddValidatorTask) Execute() error {
-	return t.executor.AddValidator(t.publicKey)
-}
-
-type removeValidatorExecutor interface {
-	RemoveValidator(publicKey []byte) error
-}
-
-type RemoveValidatorTask struct {
-	executor  removeValidatorExecutor
-	publicKey []byte
-}
-
-func NewRemoveValidatorTask(executor removeValidatorExecutor, publicKey []byte) *RemoveValidatorTask {
-	return &RemoveValidatorTask{
-		executor:  executor,
-		publicKey: publicKey,
-	}
-}
-
-func (t RemoveValidatorTask) Execute() error {
-	return t.executor.RemoveValidator(t.publicKey)
+func (t StopValidatorTask) Execute() error {
+	return t.executor.StopValidator(t.publicKey)
 }
 
 type liquidateClusterExecutor interface {

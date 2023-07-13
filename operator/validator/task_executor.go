@@ -12,54 +12,40 @@ import (
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
-func (c *controller) AddValidator(publicKey []byte) error {
-	logger := c.defaultLogger.Named("AddValidator").
-		With(fields.PubKey(publicKey))
+func (c *controller) StartValidator(share *ssvtypes.SSVShare) error {
+	logger := c.defaultLogger.Named("StartValidator").
+		With(fields.PubKey(share.SharePubKey))
 
 	logger.Info("executing task")
 
-	if _, ok := c.validatorsMap.GetValidator(hex.EncodeToString(publicKey)); ok {
+	if _, ok := c.validatorsMap.GetValidator(hex.EncodeToString(share.ValidatorPubKey)); ok {
 		logger.Debug("validator has already started")
 		return nil
 	}
 
-	validatorShare := c.sharesStorage.Get(publicKey)
-	isOperatorShare := validatorShare.BelongsToOperator(c.operatorData.ID)
-	if !isOperatorShare {
-		logger.Debug("not operator share")
-		return nil
-	}
-
 	logger.Debug("going to start validator")
-	if _, err := c.onShareStart(c.defaultLogger, validatorShare); err != nil {
+	started, err := c.onShareStart(c.defaultLogger, share)
+	if err != nil {
 		return err
 	}
 
-	logger.Info("started validator")
+	if started {
+		logger.Info("started validator")
+	} else {
+		logger.Debug("validator wasn't started")
+	}
+
 	return nil
 }
 
-func (c *controller) RemoveValidator(publicKey []byte) error {
-	logger := c.defaultLogger.Named("RemoveValidator").
+func (c *controller) StopValidator(publicKey []byte) error {
+	logger := c.defaultLogger.Named("StopValidator").
 		With(fields.PubKey(publicKey))
 
 	logger.Info("executing task")
 
-	if _, ok := c.validatorsMap.GetValidator(hex.EncodeToString(publicKey)); ok {
-		logger.Debug("validator has not started")
-		return nil
-	}
-
-	// TODO: it's already removed from storage, consider passing share to RemoveValidator
-	validatorShare := c.sharesStorage.Get(publicKey)
-	isOperatorShare := validatorShare.BelongsToOperator(c.operatorData.ID)
-	if !isOperatorShare {
-		logger.Debug("not operator share")
-		return nil
-	}
-
 	c.metrics.ValidatorRemoved(publicKey)
-	if err := c.onShareRemove(hex.EncodeToString(validatorShare.ValidatorPubKey), true); err != nil {
+	if err := c.onShareRemove(hex.EncodeToString(publicKey), true); err != nil {
 		return err
 	}
 
