@@ -74,7 +74,7 @@ func (n *p2pNetwork) LastDecided(logger *zap.Logger, mid spectypes.MessageID) ([
 		return nil, p2pprotocol.ErrNetworkIsNotReady
 	}
 	pid, maxPeers := n.fork.ProtocolID(p2pprotocol.LastDecidedProtocol)
-	peers, err := n.waitSubsetOfPeers(logger, mid.GetPubKey(), 3, maxPeers, time.Second*12, allPeersFilter)
+	peers, err := n.waitSubsetOfPeers(logger, mid.GetPubKey(), 3, maxPeers, time.Second*24, allPeersFilter)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get subset of peers")
 	}
