@@ -13,7 +13,7 @@ import (
 )
 
 func TestHandleLocalEvent(t *testing.T) {
-	t.Run("Successfully handle OperatorAdded event", func(t *testing.T) {
+	t.Run("correct OperatorAdded event", func(t *testing.T) {
 		input := []byte(`
 - Log:
   Name: OperatorAdded
@@ -46,7 +46,8 @@ func TestHandleLocalEvent(t *testing.T) {
 		require.NoError(t, edh.HandleLocalEvents(parsedData))
 	})
 
-	t.Run("Successfully handle ValidatorAdded event", func(t *testing.T) {
+	// TODO: test correct signature
+	t.Run("ValidatorAdded event with incorrect signature", func(t *testing.T) {
 		input := []byte(`
 - Log:
   Name: ValidatorAdded
@@ -68,6 +69,6 @@ func TestHandleLocalEvent(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		require.NoError(t, edh.HandleLocalEvents(parsedData))
+		require.ErrorIs(t, edh.HandleLocalEvents(parsedData), ErrSignatureVerification)
 	})
 }

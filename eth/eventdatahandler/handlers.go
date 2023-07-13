@@ -543,3 +543,7 @@ type MalformedEventError struct {
 func (e *MalformedEventError) Error() string {
 	return e.Err.Error()
 }
+
+func (e *MalformedEventError) Unwrap() error {
+	return e.Err
+}
