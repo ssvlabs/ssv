@@ -65,17 +65,15 @@ func New(nodeAddr string, contractAddr ethcommon.Address, opts ...Option) *Execu
 }
 
 // Connect connects to Ethereum execution client.
-func (ec *ExecutionClient) Connect(ctx context.Context) error {
+func (ec *ExecutionClient) Connect(ctx context.Context) {
 	if ec.client.Load() != nil {
 		ec.reconnect(ctx)
-		return nil
+		return
 	}
 
 	if err := ec.connect(ctx); err != nil {
 		ec.reconnect(ctx)
 	}
-
-	return nil
 }
 
 // Close shuts down ExecutionClient.

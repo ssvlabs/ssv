@@ -103,8 +103,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
 	client := New(addr, receipt.ContractAddress, WithLogger(logger))
-
-	require.NoError(t, client.Connect(ctx))
+	client.Connect(ctx)
 
 	isReady, err := client.IsReady(ctx)
 	require.NoError(t, err)
@@ -157,8 +156,7 @@ func TestStreamLogs(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
 	client := New(addr, contractAddr, WithLogger(logger))
-
-	require.NoError(t, client.Connect(ctx))
+	client.Connect(ctx)
 
 	isReady, err := client.IsReady(ctx)
 	require.NoError(t, err)

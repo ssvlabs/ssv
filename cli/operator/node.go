@@ -146,9 +146,7 @@ var StartNodeCmd = &cobra.Command{
 			executionclient.WithReconnectionMaxInterval(executionclient.DefaultReconnectionMaxInterval),
 		)
 
-		if err := executionClient.Connect(cmd.Context()); err != nil {
-			logger.Fatal("failed to connect to execution client", zap.Error(err))
-		}
+		executionClient.Connect(cmd.Context())
 
 		nodeProber := nodeprobe.NewProber(
 			logger,

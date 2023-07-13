@@ -51,7 +51,7 @@ var (
 
 func TestEventDispatcher(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	const testTimeout = 1000 * time.Millisecond
+	const testTimeout = 1 * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
 
@@ -61,16 +61,17 @@ func TestEventDispatcher(t *testing.T) {
 	defer close(done)
 
 	// Create sim instance with a delay between block execution
-	backend, processedStream := newTestBackend(t, done, blockStream)
+	backend, processedStream := setupTestBackend(t, done, blockStream)
 
 	rpcServer, _ := backend.RPCHandler()
-	httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
+	httpSrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
 	defer rpcServer.Stop()
-	defer httpsrv.Close()
+	defer httpSrv.Close()
 
+	const chainLength = 30
 	// Generate test chain after a connection to the server.
-	// While processing blocks the events will be emited which is read by subscription
-	generateInitialTestChain(t, done, blockStream, 1000)
+	// While processing blocks the events will be emitted which is read by subscription
+	generateInitialTestChain(t, done, blockStream, chainLength)
 	for blocks := range processedStream {
 		t.Log("Processed blocks: ", len(blocks))
 	}
@@ -88,7 +89,7 @@ func TestEventDispatcher(t *testing.T) {
 		t.Fatal("got code for account that does not have contract code")
 	}
 
-	addr := "ws:" + strings.TrimPrefix(httpsrv.URL, "http:")
+	addr := "ws:" + strings.TrimPrefix(httpSrv.URL, "http:")
 	client := executionclient.New(addr, contractAddr, executionclient.WithLogger(logger))
 	client.Connect(ctx)
 
@@ -97,8 +98,9 @@ func TestEventDispatcher(t *testing.T) {
 		t.Fatal(err)
 	}
 	require.True(t, isReady)
+
 	eb := eventbatcher.NewEventBatcher()
-	edh := NewEventDataHandler(t, ctx, logger)
+	edh := setupEventDataHandler(t, ctx, logger)
 	eventDispatcher := New(
 		client,
 		eb,
@@ -106,11 +108,11 @@ func TestEventDispatcher(t *testing.T) {
 		WithLogger(logger),
 	)
 
-	err = eventDispatcher.Start(ctx, 0)
-	require.NoError(t, err)
+	require.NoError(t, eventDispatcher.Start(ctx, 0))
+	require.NoError(t, client.Close())
 }
 
-func NewEventDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger) *eventdatahandler.EventDataHandler {
+func setupEventDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger) *eventdatahandler.EventDataHandler {
 	options := basedb.Options{
 		Type:      "badger-memory",
 		Path:      "",
@@ -164,7 +166,7 @@ var genesis = &core.Genesis{
 	BaseFee:   big.NewInt(params.InitialBaseFee),
 }
 
-func newTestBackend(t *testing.T, done <-chan struct{}, blockStream <-chan []*ethtypes.Block) (*node.Node, <-chan []*ethtypes.Block) {
+func setupTestBackend(t *testing.T, done <-chan struct{}, blockStream <-chan []*ethtypes.Block) (*node.Node, <-chan []*ethtypes.Block) {
 	processedStream := make(chan []*ethtypes.Block)
 	// Create node
 	n, err := node.New(&node.Config{})
