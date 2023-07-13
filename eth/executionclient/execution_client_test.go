@@ -5,6 +5,7 @@ import (
 	"math/big"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -133,8 +134,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 }
 
 func TestStreamLogs(t *testing.T) {
-	// TODO: make it shorter
-	const testTimeout = 10000 * time.Millisecond
+	const testTimeout = 1000 * time.Millisecond
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
 
@@ -144,7 +144,7 @@ func TestStreamLogs(t *testing.T) {
 	blockStream := make(chan []*ethtypes.Block)
 	defer close(blockStream)
 	// Create sim instance with a delay between block execution
-	delay := time.Millisecond * 100
+	delay := time.Millisecond * 10
 	backend, processedStream := newTestBackend(t, done, blockStream, delay)
 
 	rpcServer, _ := backend.RPCHandler()
@@ -165,9 +165,12 @@ func TestStreamLogs(t *testing.T) {
 	require.True(t, isReady)
 
 	logs := client.StreamLogs(ctx, 0)
+	var wg sync.WaitGroup
 	var streamedLogs []ethtypes.Log
 	// Receive emitted events
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		for log := range logs {
 			streamedLogs = append(streamedLogs, log)
 		}
@@ -175,16 +178,15 @@ func TestStreamLogs(t *testing.T) {
 
 	// Generate test chain after a connection to the server.
 	// While processing blocks the events will be emitted which is read by subscription
-	generateInitialTestChain(t, done, blockStream, 100)
+	generateInitialTestChain(t, done, blockStream, 30)
 	for blocks := range processedStream {
 		t.Log("Processed blocks: ", len(blocks))
 	}
 
-	require.NotEmpty(t, streamedLogs)
-
 	require.NoError(t, client.Close())
 	require.NoError(t, backend.Close())
-
+	wg.Wait()
+	require.NotEmpty(t, streamedLogs)
 }
 
 func newTestBackend(t *testing.T, done <-chan struct{}, blockStream <-chan []*ethtypes.Block, delay time.Duration) (*node.Node, <-chan []*ethtypes.Block) {
