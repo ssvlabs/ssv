@@ -99,9 +99,13 @@ func (s *syncer) SyncHighestDecided(
 	}
 
 	results := protocolp2p.SyncResults(lastDecided)
+	var maxHeight specqbft.Height
 	results.ForEachSignedMessage(func(m *specqbft.SignedMessage) (stop bool) {
 		if ctx.Err() != nil {
 			return true
+		}
+		if m.Message.Height > maxHeight {
+			maxHeight = m.Message.Height
 		}
 		raw, err := m.Encode()
 		if err != nil {
@@ -115,6 +119,7 @@ func (s *syncer) SyncHighestDecided(
 		})
 		return false
 	})
+	logger.Debug("synced last decided", zap.Uint64("highest_height", uint64(maxHeight)))
 	return nil
 }
 
