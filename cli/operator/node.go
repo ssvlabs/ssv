@@ -254,9 +254,9 @@ var StartNodeCmd = &cobra.Command{
 		)
 
 		txn := eventDB.ROTxn()
-		defer txn.Discard()
-
 		fromBlock, err := txn.GetLastProcessedBlock()
+		txn.Discard()
+
 		if err != nil {
 			logger.Fatal("could not get last processed block", zap.Error(err))
 		}
