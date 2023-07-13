@@ -97,13 +97,13 @@ func (s *syncer) SyncHighestDecided(
 		logger.Debug("no messages were synced")
 		return nil
 	}
-	logger.Debug("synced last decided", zap.Int("count", len(lastDecided)))
 
 	results := protocolp2p.SyncResults(lastDecided)
 	results.ForEachSignedMessage(func(m *specqbft.SignedMessage) (stop bool) {
 		if ctx.Err() != nil {
 			return true
 		}
+		logger.Debug("synced last decided", zap.Uint64("height", uint64(m.Message.Height)))
 		raw, err := m.Encode()
 		if err != nil {
 			logger.Debug("could not encode signed message", zap.Error(err))
