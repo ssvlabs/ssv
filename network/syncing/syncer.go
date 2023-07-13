@@ -97,6 +97,7 @@ func (s *syncer) SyncHighestDecided(
 		logger.Debug("no messages were synced")
 		return nil
 	}
+	logger.Debug("synced last decided", zap.Int("count", len(lastDecided)))
 
 	results := protocolp2p.SyncResults(lastDecided)
 	results.ForEachSignedMessage(func(m *specqbft.SignedMessage) (stop bool) {
