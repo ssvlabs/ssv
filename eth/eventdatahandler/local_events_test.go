@@ -12,8 +12,8 @@ import (
 	"github.com/bloxapp/ssv/eth/localevents"
 )
 
-func TestHandleLocalOperatorAddedEvent(t *testing.T) {
-	t.Run("Successfully unmarshal OperatorAdded event", func(t *testing.T) {
+func TestHandleLocalEvent(t *testing.T) {
+	t.Run("Successfully handle OperatorAdded event", func(t *testing.T) {
 		input := []byte(`
 - Log:
   Name: OperatorAdded
@@ -33,18 +33,20 @@ func TestHandleLocalOperatorAddedEvent(t *testing.T) {
 		require.Equal(t, uint64(1), eventData.OperatorId)
 		require.Equal(t, "0x97a6C1f3aaB5427B901fb135ED492749191C0f1F", eventData.Owner.String())
 		require.Equal(t, []byte("LS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBdVRFMVpuZGtubjdqOHR0VmNwd1cKRWFJNnJaZHh1VzM4L01URmdCRTN2Q3g0TTVMNzdRb3dhZVEwQ0lqTkhEdzNDZlhoM3pQRVp1c05ER1cwcGVEbwp6QkN1Ykk0UlBQd1JaaThaejdRS0ZxdFNUNUZYa3FjVEdYVmNPb2dla3dXRG5LMVU2OTkxc2VJZ01tVTBxbTc4CklpSW8zZDQrVG9Dd3J5MDdKNkprNVZGY1N2MHVmVlNvN0FicE5HWFp2aldqN2NWSWZIZENONGljcHhFaUhuWEsKNVlWem8zVXBaRGRVZUlSS1daeUVLczdSejdUKytFNWY0eWp4eThmTG56VlVSMFd4Yys4UjBNMm5GRUczZ1NJTApSaTRoVTFRK2x6K1d1cEFwcFVMU2MwUFJOVFBQQkRTQWM5RXlVQjAzSmkzMnhwdmJDc05hNHhDZzNrZjgyZk1pCjV3SURBUUFCCi0tLS0tRU5EIFJTQSBQVUJMSUMgS0VZLS0tLS0K"), eventData.PublicKey)
+
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
+
 		logger := zaptest.NewLogger(t)
 		edh, err := setupDataHandler(t, ctx, logger)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		err = edh.HandleLocalEvents(parsedData)
-		require.NoError(t, err)
+		require.NoError(t, edh.HandleLocalEvents(parsedData))
 	})
-	t.Run("Successfully unmarshal ValidatorAdded event", func(t *testing.T) {
+
+	t.Run("Successfully handle ValidatorAdded event", func(t *testing.T) {
 		input := []byte(`
 - Log:
   Name: ValidatorAdded
@@ -56,15 +58,16 @@ func TestHandleLocalOperatorAddedEvent(t *testing.T) {
 `)
 		var parsedData []localevents.Event
 		require.NoError(t, yaml.Unmarshal(input, &parsedData))
+
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
+
 		logger := zaptest.NewLogger(t)
 		edh, err := setupDataHandler(t, ctx, logger)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		err = edh.HandleLocalEvents(parsedData)
-		require.NoError(t, err)
+		require.NoError(t, edh.HandleLocalEvents(parsedData))
 	})
 }

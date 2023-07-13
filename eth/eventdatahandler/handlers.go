@@ -29,7 +29,7 @@ var (
 	ErrAlreadyRegistered            = fmt.Errorf("operator registered with the same operator public key")
 	ErrOperatorDataNotFound         = fmt.Errorf("operator data not found")
 	ErrIncorrectSharesLength        = fmt.Errorf("shares length is not correct")
-	ErrSignatureVerification        = fmt.Errorf("signature cannot be verified")
+	ErrSignatureVerification        = fmt.Errorf("signature verification failed")
 	ErrShareBelongsToDifferentOwner = fmt.Errorf("share already exists and belongs to different owner")
 	ErrValidatorShareNotFound       = fmt.Errorf("validator share not found")
 )
