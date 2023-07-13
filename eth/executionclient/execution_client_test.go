@@ -240,43 +240,125 @@ func newTestBackend(t *testing.T, done <-chan struct{}, blockStream <-chan []*et
 	return n, processedStream
 }
 
-// Generate blocks with transactions
-func generateInitialTestChain(done <-chan struct{}, blockStream chan []*ethtypes.Block, n int) {
-	generate := func(i int, g *core.BlockGen) {
-		g.OffsetTime(5)
-		g.SetExtra([]byte("test"))
-		if i == 0 {
-			return
-		}
-		// Add contract deployment to the first block
-		if i == 1 {
-			tx := ethtypes.MustSignNewTx(testKey, ethtypes.LatestSigner(genesis.Config), &ethtypes.LegacyTx{
-				Nonce:    uint64(i - 1),
-				Value:    big.NewInt(0),
-				GasPrice: big.NewInt(params.InitialBaseFee),
-				Gas:      300000,
-				Data:     ethcommon.FromHex(callableBin),
-			})
-			g.AddTx(tx)
-		} else {
-			// Transactions to contract
-			tx := ethtypes.MustSignNewTx(testKey, ethtypes.LatestSigner(genesis.Config), &ethtypes.LegacyTx{
-				To:       &contractAddr,
-				Nonce:    uint64(i - 1),
-				Value:    big.NewInt(0),
-				GasPrice: big.NewInt(params.InitialBaseFee),
-				Gas:      302916,
-				// Call to function which emits event
-				Data: ethcommon.FromHex("0x34e22921"),
-			})
-			g.AddTx(tx)
-		}
+func TestFetchLogsInBatches(t *testing.T) {
+	// Create a context with a timeout
+	const testTimeout = 1 * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	defer cancel()
+
+	// Start the test Ethereum backend
+	done := make(chan struct{})
+	defer close(done)
+
+	blockStream := make(chan []*ethtypes.Block)
+	defer close(blockStream)
+
+	backend, processedStream := newTestBackend(t, done, blockStream, 0)
+
+	generateInitialTestChain(done, blockStream, chainLength)
+
+	for blocks := range processedStream {
+		t.Log("Processed blocks: ", len(blocks))
 	}
-	_, blocks, _ := core.GenerateChainWithGenesis(genesis, ethash.NewFaker(), n, generate)
+
+	rpcServer, _ := backend.RPCHandler()
+	httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
+	defer rpcServer.Stop()
+	defer httpsrv.Close()
+
+	addr := "ws:" + strings.TrimPrefix(httpsrv.URL, "http:")
+	logger := zaptest.NewLogger(t)
+
+	client := New(addr, contractAddr, WithLogger(logger), WithLogBatchSize(2))
+	client.Connect(ctx)
+
+	// Test the case where fromBlock is greater than toBlock
+	logChan, errChan := client.fetchLogsInBatches(ctx, 10, 5)
+	select {
+	case <-logChan:
+		require.Fail(t, "Should not receive log when startBlock > endBlock")
+	case err := <-errChan:
+		require.ErrorIs(t, err, ErrBadInput)
+	case <-ctx.Done():
+		require.Fail(t, "fetchLogsInBatches did not return in time when startBlock > endBlock")
+	}
+
+	var blockNumbers []uint64
+
+	// Test the case where fromBlock is equal to toBlock
+	logChan, errChan = client.fetchLogsInBatches(ctx, 5, 5)
+	select {
+	case log := <-logChan:
+		blockNumbers = append(blockNumbers, log.BlockNumber)
+	case err := <-errChan:
+		t.Fatalf("fetchLogsInBatches failed: %v", err)
+	case <-ctx.Done():
+		require.Fail(t, "fetchLogsInBatches did not return in time when fromBlock == toBlock")
+	}
+
+	require.Equal(t, []uint64{5}, blockNumbers)
+	blockNumbers = nil
+
+	// Test the case where fromBlock < toBlock (normal case)
+	logChan, errChan = client.fetchLogsInBatches(ctx, 3, 11)
+	for log := range logChan {
+		blockNumbers = append(blockNumbers, log.BlockNumber)
+	}
+	require.Equal(t, []uint64{3, 4, 5, 6, 7, 8, 9, 10, 11}, blockNumbers)
+
+	// Test the case where context is canceled
+	canceledCtx, cancel := context.WithCancel(ctx)
+	cancel() // cancel the context immediately
+	logChan, errChan = client.fetchLogsInBatches(canceledCtx, 0, 5)
+	select {
+	case <-logChan:
+		require.Fail(t, "Should not receive log when context is canceled")
+	case err := <-errChan:
+		require.Error(t, err, "fetchLogsInBatches should return an error when context is canceled")
+	case <-canceledCtx.Done():
+	}
+
+	require.NoError(t, backend.Close())
+}
+
+// Generate blocks with transactions
+func generateInitialTestChain(done <-chan struct{}, blockStream chan []*ethtypes.Block, count int) {
+	_, blocks, _ := core.GenerateChainWithGenesis(genesis, ethash.NewFaker(), count, blockGenerator)
 	go func() {
 		select {
 		case <-done:
 		case blockStream <- blocks:
 		}
 	}()
+}
+
+func blockGenerator(i int, g *core.BlockGen) {
+	g.OffsetTime(5)
+	g.SetExtra([]byte("test"))
+	if i == 0 {
+		return
+	}
+	// Add contract deployment to the first block
+	if i == 1 {
+		tx := ethtypes.MustSignNewTx(testKey, ethtypes.LatestSigner(genesis.Config), &ethtypes.LegacyTx{
+			Nonce:    uint64(i - 1),
+			Value:    big.NewInt(0),
+			GasPrice: big.NewInt(params.InitialBaseFee),
+			Gas:      300000,
+			Data:     ethcommon.FromHex(callableBin),
+		})
+		g.AddTx(tx)
+	} else {
+		// Transactions to contract
+		tx := ethtypes.MustSignNewTx(testKey, ethtypes.LatestSigner(genesis.Config), &ethtypes.LegacyTx{
+			To:       &contractAddr,
+			Nonce:    uint64(i - 1),
+			Value:    big.NewInt(0),
+			GasPrice: big.NewInt(params.InitialBaseFee),
+			Gas:      302916,
+			// Call to function which emits event
+			Data: ethcommon.FromHex("0x34e22921"),
+		})
+		g.AddTx(tx)
+	}
 }

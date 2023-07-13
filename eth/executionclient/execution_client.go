@@ -22,6 +22,7 @@ import (
 var (
 	ErrClosed       = fmt.Errorf("closed")
 	ErrNotConnected = fmt.Errorf("not connected")
+	ErrBadInput     = fmt.Errorf("bad input")
 )
 
 // ExecutionClient represents a client for interacting with Ethereum execution client.
@@ -118,7 +119,6 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 }
 
 // Calls FilterLogs multiple times and batches results to avoid fetching enormous amount of events
-// TODO: write edgy test cases for it
 func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, endBlock uint64) (<-chan ethtypes.Log, <-chan error) {
 	logCh := make(chan ethtypes.Log, defaultLogBuf)
 	fetchErrCh := make(chan error, 1)
@@ -126,6 +126,11 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 	go func() {
 		defer close(logCh)
 		defer close(fetchErrCh)
+
+		if startBlock > endBlock {
+			fetchErrCh <- ErrBadInput
+			return
+		}
 
 		logCount := 0
 
@@ -155,11 +160,6 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 				FromBlock: new(big.Int).SetUint64(fromBlock),
 				ToBlock:   new(big.Int).SetUint64(toBlock),
 			})
-			if err != nil {
-				fetchErrCh <- err
-				return
-			}
-
 			if err != nil {
 				ec.logger.Error("failed to fetch log batch", zap.Error(err))
 				fetchErrCh <- err

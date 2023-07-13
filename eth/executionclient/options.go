@@ -51,3 +51,10 @@ func WithReconnectionMaxInterval(interval time.Duration) Option {
 		s.reconnectionMaxInterval = interval
 	}
 }
+
+// WithLogBatchSize sets log batch size.
+func WithLogBatchSize(size uint64) Option {
+	return func(s *ExecutionClient) {
+		s.logBatchSize = size
+	}
+}
