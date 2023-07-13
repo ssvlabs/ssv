@@ -211,7 +211,6 @@ func (n *p2pNetwork) getSubsetOfPeers(logger *zap.Logger, vpk spectypes.Validato
 		return nil, errors.Wrapf(err, "could not read peers for validator %s", hex.EncodeToString(vpk))
 	}
 	if len(peers) == 0 {
-		logger.Debug("could not find peers", zap.Any("topics", topics))
 		return nil, nil
 	}
 	if maxPeers > len(peers) {
