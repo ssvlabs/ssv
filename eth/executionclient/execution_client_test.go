@@ -73,8 +73,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	backend, processedStream := newTestBackend(t, done, blockStream, 0)
 
 	// Generate test chain before we read historical logs
-	createdLogCount := 30
-	generateInitialTestChain(done, blockStream, createdLogCount)
+	generateInitialTestChain(done, blockStream, chainLength)
 	for blocks := range processedStream {
 		t.Log("Processed blocks: ", len(blocks))
 	}
@@ -120,7 +119,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	}
 
 	require.NoError(t, err)
-	expectedSeenLogs := createdLogCount - finalizationOffset - 2 // blocks 0 and 1 don't have logs
+	expectedSeenLogs := chainLength - finalizationOffset - 2 // blocks 0 and 1 don't have logs
 	require.Equal(t, expectedSeenLogs, seenLogs)
 
 	select {
