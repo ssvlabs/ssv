@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
@@ -24,7 +25,7 @@ const rawValidatorAdded = `{
 		"transactionHash": "0x921a3f836fb873a40aa4f83097e52b69225334c49674dc262b2bb90d27e3a801"
 	  }`
 
-func TestExecuteTask(t *testing.T) {
+func TestExecuteStartValidatorTask(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -44,6 +45,65 @@ func TestExecuteTask(t *testing.T) {
 		},
 	}
 	task := NewStartValidatorTask(edh.taskExecutor, share)
+	require.NoError(t, task.Execute())
+}
+
+func TestExecuteStopValidatorTask(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	edh, err := setupDataHandler(t, ctx, logger)
+	require.NoError(t, err)
+
+	task := NewStopValidatorTask(edh.taskExecutor, ethcommon.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"))
+	require.NoError(t, task.Execute())
+}
+
+func TestExecuteLiquidateClusterTask(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	edh, err := setupDataHandler(t, ctx, logger)
+	require.NoError(t, err)
+	var shares []*ssvtypes.SSVShare
+	share := &ssvtypes.SSVShare{
+		Share: spectypes.Share{
+			ValidatorPubKey: ethcommon.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"),
+		},
+	}
+	shares = append(shares, share)
+	task := NewLiquidateClusterTask(edh.taskExecutor, ethcommon.HexToAddress("0x0000000000000000000000000000000000000001"), []uint64{1,2,3}, shares)
+	require.NoError(t, task.Execute())
+}
+
+func TestExecuteReactivateClusterTask(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	edh, err := setupDataHandler(t, ctx, logger)
+	require.NoError(t, err)
+	var shares []*ssvtypes.SSVShare
+	share := &ssvtypes.SSVShare{
+		Share: spectypes.Share{
+			ValidatorPubKey: ethcommon.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"),
+		},
+	}
+	shares = append(shares, share)
+	task := NewReactivateClusterTask(edh.taskExecutor, ethcommon.HexToAddress("0x0000000000000000000000000000000000000001"), []uint64{1,2,3}, shares)
+	require.NoError(t, task.Execute())
+}
+
+func TestExecuteUpdateFeeRecipientTask(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	edh, err := setupDataHandler(t, ctx, logger)
+	require.NoError(t, err)
+	task := NewFeeRecipientTask(edh.taskExecutor, ethcommon.HexToAddress("0x0000000000000000000000000000000000000001"), ethcommon.HexToAddress("0x0000000000000000000000000000000000000002"))
 	require.NoError(t, task.Execute())
 }
 
