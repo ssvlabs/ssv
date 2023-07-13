@@ -236,16 +236,12 @@ func (n *p2pNetwork) waitSubsetOfPeers(logger *zap.Logger, vpk spectypes.Validat
 	// Wait for minPeers with a deadline.
 	deadline := time.Now().Add(timeout)
 	for {
-		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("deadline exceeded while waiting for peers")
-		}
-
 		peers, err := n.getSubsetOfPeers(logger, vpk, maxPeers, filter)
 		if err != nil {
 			return nil, err
 		}
 		logger.Debug("getSubsetOfPeers", zap.Any("peers", peers), zap.Int("peers_count", len(peers)), zap.Int("minPeers", minPeers), zap.Int("maxPeers", maxPeers), zap.Time("deadline", deadline))
-		if len(peers) >= minPeers || minPeers == 0 {
+		if len(peers) >= minPeers || minPeers == 0 || time.Now().After(deadline) {
 			// Found enough peers.
 			return peers, nil
 		}
