@@ -14,7 +14,7 @@ import (
 
 func (c *controller) StartValidator(share *ssvtypes.SSVShare) error {
 	logger := c.defaultLogger.Named("StartValidator").
-		With(fields.PubKey(share.SharePubKey))
+		With(fields.PubKey(share.ValidatorPubKey))
 
 	logger.Info("executing task")
 

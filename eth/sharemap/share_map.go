@@ -19,7 +19,7 @@ func New() *ShareMap {
 
 func (s *ShareMap) Get(pubKey []byte) *ssvtypes.SSVShare {
 	validatorShare, ok := s.shares.Get(string(pubKey))
-	if ok {
+	if !ok {
 		return nil
 	}
 
@@ -29,18 +29,16 @@ func (s *ShareMap) Get(pubKey []byte) *ssvtypes.SSVShare {
 func (s *ShareMap) List(filters ...func(*ssvtypes.SSVShare) bool) []*ssvtypes.SSVShare {
 	var shares []*ssvtypes.SSVShare
 
-	if len(filters) == 0 {
-		s.shares.Range(func(s string, share *ssvtypes.SSVShare) bool {
-			for _, filter := range filters {
-				if !filter(share) {
-					return true
-				}
+	s.shares.Range(func(s string, share *ssvtypes.SSVShare) bool {
+		for _, filter := range filters {
+			if !filter(share) {
+				return true
 			}
-			shares = append(shares, share)
+		}
+		shares = append(shares, share)
 
-			return true
-		})
-	}
+		return true
+	})
 
 	return shares
 }
