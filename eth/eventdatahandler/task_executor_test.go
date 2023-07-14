@@ -76,7 +76,6 @@ func TestExecuteTask(t *testing.T) {
 	})
 
 	t.Run("test StopValidator task execution", func(t *testing.T) {
-		edh, err := setupDataHandler(t, ctx, logger)
 		require.NoError(t, err)
 		task := NewStopValidatorTask(edh.taskExecutor, ethcommon.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"))
 		require.NoError(t, task.Execute())
