@@ -451,9 +451,17 @@ func (edh *EventDataHandler) handleFeeRecipientAddressUpdated(txn eventdb.RW, ev
 	)
 	logger.Debug("processing event")
 
-	recipientData := &registrystorage.RecipientData{
-		Owner: event.Owner,
+	recipientData, err := txn.GetRecipientData(event.Owner)
+	if err != nil {
+		return false, fmt.Errorf("get recipient data: %w", err)
 	}
+
+	if recipientData == nil {
+		recipientData = &registrystorage.RecipientData{
+			Owner: event.Owner,
+		}
+	}
+
 	copy(recipientData.FeeRecipient[:], event.RecipientAddress.Bytes())
 
 	r, err := txn.SaveRecipientData(recipientData)
