@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
@@ -24,6 +25,7 @@ import (
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
@@ -168,4 +170,158 @@ func unmarshalLog(t *testing.T, rawOperatorAdded string) ethtypes.Log {
 	require.NoError(t, err)
 	require.NotNil(t, contractAbi)
 	return vLogOperatorAdded
+}
+
+func shareWithPK(pk string) *ssvtypes.SSVShare {
+	return &ssvtypes.SSVShare{Share: spectypes.Share{ValidatorPubKey: ethcommon.FromHex(pk)}}
+}
+
+var mockStartTask1 = &StartValidatorTask{share: shareWithPK("0x1")}
+var mockStartTask2 = &StartValidatorTask{share: shareWithPK("0x2")}
+var mockStopTask1 = &StopValidatorTask{publicKey: ethcommon.FromHex("0x1")}
+var mockStopTask2 = &StopValidatorTask{publicKey: ethcommon.FromHex("0x2")}
+var mockLiquidateTask1 = &LiquidateClusterTask{toLiquidate: []*ssvtypes.SSVShare{shareWithPK("0x1"), shareWithPK("0x2")}}
+var mockLiquidateTask2 = &LiquidateClusterTask{toLiquidate: []*ssvtypes.SSVShare{shareWithPK("0x3"), shareWithPK("0x4")}}
+var mockReactivateTask1 = &ReactivateClusterTask{toReactivate: []*ssvtypes.SSVShare{shareWithPK("0x1"), shareWithPK("0x2")}}
+var mockReactivateTask2 = &ReactivateClusterTask{toReactivate: []*ssvtypes.SSVShare{shareWithPK("0x3"), shareWithPK("0x4")}}
+var mockUpdateFeeTask1 = &UpdateFeeRecipientTask{owner: ethcommon.HexToAddress("0x1"), recipient: ethcommon.HexToAddress("0x1")}
+var mockUpdateFeeTask2 = &UpdateFeeRecipientTask{owner: ethcommon.HexToAddress("0x2"), recipient: ethcommon.HexToAddress("0x2")}
+var mockUpdateFeeTask3 = &UpdateFeeRecipientTask{owner: ethcommon.HexToAddress("0x2"), recipient: ethcommon.HexToAddress("0x3")}
+
+func TestFilterSupersedingTasks_SingleStartTask(t *testing.T) {
+	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+
+	tasks := []Task{mockStartTask1}
+	result := edh.filterSupersedingTasks(tasks)
+
+	require.Equal(t, 1, len(result), "Single StartTask: expected the result length to be 1")
+	require.Equal(t, mockStartTask1, result[0], "Single StartTask: expected the task to be equal to mockStartTask1")
+}
+
+func TestFilterSupersedingTasks_SingleStopTask(t *testing.T) {
+	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+
+	tasks := []Task{mockStopTask1}
+	result := edh.filterSupersedingTasks(tasks)
+
+	require.Equal(t, 1, len(result), "Single StopTask: expected the result length to be 1")
+	require.Equal(t, mockStopTask1, result[0], "Single StopTask: expected the task to be equal to mockStopTask1")
+}
+
+func TestFilterSupersedingTasks_StartAndStopTasks(t *testing.T) {
+	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+
+	tasks := []Task{mockStartTask1, mockStopTask1}
+	result := edh.filterSupersedingTasks(tasks)
+
+	require.Equal(t, 0, len(result), "Start and Stop tasks: expected the result length to be 0")
+}
+
+func TestFilterSupersedingTasks_SingleLiquidateTask(t *testing.T) {
+	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+
+	tasks := []Task{mockLiquidateTask1}
+	result := edh.filterSupersedingTasks(tasks)
+
+	require.Equal(t, 1, len(result), "Single LiquidateTask: expected the result length to be 1")
+	require.Equal(t, mockLiquidateTask1, result[0], "Single LiquidateTask: expected the task to be equal to mockLiquidateTask1")
+}
+
+func TestFilterSupersedingTasks_SingleReactivateTask(t *testing.T) {
+	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+
+	tasks := []Task{mockReactivateTask1}
+	result := edh.filterSupersedingTasks(tasks)
+
+	require.Equal(t, 1, len(result), "Single ReactivateTask: expected the result length to be 1")
+	require.Equal(t, mockReactivateTask1, result[0], "Single ReactivateTask: expected the task to be equal to mockReactivateTask1")
+}
+
+func TestFilterSupersedingTasks_LiquidateAndReactivateTasks(t *testing.T) {
+	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+
+	tasks := []Task{mockLiquidateTask1, mockReactivateTask1}
+	result := edh.filterSupersedingTasks(tasks)
+
+	require.Equal(t, 0, len(result), "Liquidate and Reactivate tasks: expected the result length to be 0")
+}
+
+func TestFilterSupersedingTasks_SingleUpdateFeeTask(t *testing.T) {
+	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+
+	tasks := []Task{mockUpdateFeeTask1}
+	result := edh.filterSupersedingTasks(tasks)
+
+	require.Equal(t, 1, len(result), "Single UpdateFeeTask: expected the result length to be 1")
+	require.Equal(t, mockUpdateFeeTask1, result[0], "Single UpdateFeeTask: expected the task to be equal to mockUpdateFeeTask1")
+}
+
+func TestFilterSupersedingTasks_MultipleUpdateFeeTasks(t *testing.T) {
+	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+
+	tasks := []Task{mockUpdateFeeTask2, mockUpdateFeeTask3}
+	result := edh.filterSupersedingTasks(tasks)
+
+	require.Equal(t, 1, len(result), "Multiple UpdateFeeTasks: expected the result length to be 1")
+	require.Equal(t, mockUpdateFeeTask3, result[0], "Multiple UpdateFeeTasks: expected the task to be equal to mockUpdateFeeTask3")
+}
+
+func TestFilterSupersedingTasks_MixedTasks(t *testing.T) {
+	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+
+	tasks := []Task{mockStartTask1, mockStartTask2, mockStopTask1, mockLiquidateTask2, mockReactivateTask1, mockUpdateFeeTask1}
+	result := edh.filterSupersedingTasks(tasks)
+
+	require.Equal(t, 4, len(result), "Mixed tasks: expected the result length to be 3")
+	require.Contains(t, result, mockStartTask2, "Mixed tasks: expected the tasks to contain mockStartTask2")
+	require.Contains(t, result, mockLiquidateTask2, "Mixed tasks: expected the tasks to contain mockLiquidateTask2")
+	require.Contains(t, result, mockReactivateTask1, "Mixed tasks: expected the tasks to contain mockReactivateTask1")
+	require.Contains(t, result, mockUpdateFeeTask1, "Mixed tasks: expected the tasks to contain mockUpdateFeeTask1")
+}
+
+func TestFilterSupersedingTasks_MultipleDifferentStopTasks(t *testing.T) {
+	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+
+	tasks := []Task{mockStopTask1, mockStopTask2}
+	result := edh.filterSupersedingTasks(tasks)
+
+	require.Equal(t, 2, len(result), "Multiple different StopTasks: expected the result length to be 2")
+	require.Contains(t, result, mockStopTask1, "Multiple different StopTasks: expected the tasks to contain mockStopTask1")
+	require.Contains(t, result, mockStopTask2, "Multiple different StopTasks: expected the tasks to contain mockStopTask2")
+}
+
+func TestFilterSupersedingTasks_MultipleDifferentReactivateTasks(t *testing.T) {
+	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+
+	tasks := []Task{mockReactivateTask1, mockReactivateTask2}
+	result := edh.filterSupersedingTasks(tasks)
+
+	require.Equal(t, 2, len(result), "Multiple different ReactivateTasks: expected the result length to be 2")
+	require.Contains(t, result, mockReactivateTask1, "Multiple different ReactivateTasks: expected the tasks to contain mockReactivateTask1")
+	require.Contains(t, result, mockReactivateTask2, "Multiple different ReactivateTasks: expected the tasks to contain mockReactivateTask2")
+}
+
+func TestFilterSupersedingTasks_MultipleDifferentUpdateFeeTasks(t *testing.T) {
+	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+
+	tasks := []Task{mockUpdateFeeTask1, mockUpdateFeeTask2}
+	result := edh.filterSupersedingTasks(tasks)
+
+	require.Equal(t, 2, len(result), "Multiple different UpdateFeeTasks: expected the result length to be 2")
+	require.Contains(t, result, mockUpdateFeeTask1, "Multiple different UpdateFeeTasks: expected the tasks to contain mockUpdateFeeTask1")
+	require.Contains(t, result, mockUpdateFeeTask2, "Multiple different UpdateFeeTasks: expected the tasks to contain mockUpdateFeeTask2")
+}
+
+func TestFilterSupersedingTasks_MixedTasks_Different(t *testing.T) {
+	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+
+	tasks := []Task{mockStartTask1, mockStopTask2, mockLiquidateTask1, mockReactivateTask2, mockUpdateFeeTask1}
+	result := edh.filterSupersedingTasks(tasks)
+
+	require.Equal(t, 5, len(result), "Mixed different tasks: expected the result length to be 5")
+	require.Contains(t, result, mockStartTask1, "Mixed different tasks: expected the tasks to contain mockStartTask1")
+	require.Contains(t, result, mockStopTask2, "Mixed different tasks: expected the tasks to contain mockStopTask2")
+	require.Contains(t, result, mockLiquidateTask1, "Mixed different tasks: expected the tasks to contain mockLiquidateTask1")
+	require.Contains(t, result, mockReactivateTask2, "Mixed different tasks: expected the tasks to contain mockReactivateTask2")
+	require.Contains(t, result, mockUpdateFeeTask1, "Mixed different tasks: expected the tasks to contain mockUpdateFeeTask1")
 }

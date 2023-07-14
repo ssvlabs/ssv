@@ -78,6 +78,7 @@ const (
 	FieldToBlock             = "to_block"
 	FieldTopic               = "topic"
 	FieldTxHash              = "tx_hash"
+	FieldType                = "type"
 	FieldUpdatedENRLocalNode = "updated_enr"
 	FieldValidator           = "validator"
 	FieldValidatorMetadata   = "validator_metadata"
@@ -309,4 +310,8 @@ func ClusterIndex(cluster contract.ISSVNetworkCoreCluster) zap.Field {
 
 func Owner(addr common.Address) zap.Field {
 	return zap.String(FieldOwnerAddress, addr.Hex())
+}
+
+func Type(v any) zapcore.Field {
+	return zap.String(FieldType, fmt.Sprintf("%T", v))
 }

@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strings"
 
 	"github.com/bloxapp/ssv-spec/types"
 	ethabi "github.com/ethereum/go-ethereum/accounts/abi"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"go.uber.org/zap"
+	"golang.org/x/exp/slices"
 
 	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/eth/eventbatcher"
@@ -29,7 +31,7 @@ type taskExecutor interface {
 	StartValidator(share *ssvtypes.SSVShare) error
 	StopValidator(publicKey []byte) error
 	LiquidateCluster(owner ethcommon.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
-	ReactivateCluster(owner ethcommon.Address, operatorIDs []uint64, toEnable []*ssvtypes.SSVShare) error
+	ReactivateCluster(owner ethcommon.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error
 	UpdateFeeRecipient(owner, recipient ethcommon.Address) error
 }
 
@@ -121,11 +123,9 @@ func (edh *EventDataHandler) HandleBlockEventsStream(blockEventsCh <-chan eventb
 
 		logger.Info("executing tasks", fields.Count(len(tasks)))
 
-		// TODO:
-		// find and remove opposite tasks (start-stop, stop-start, liquidate-reactivate, reactivate-liquidate)
-		// find superseding tasks and remove superseded ones (updateFee-updateFee)
+		tasks = edh.filterSupersedingTasks(tasks)
 		for _, task := range tasks {
-			logger = logger.With(zap.String("task_type", fmt.Sprintf("%T", task)))
+			logger = logger.With(fields.Type(task))
 			logger.Debug("going to execute task")
 			if err := task.Execute(); err != nil {
 				// TODO: We log failed task until we discuss how we want to handle this case. We likely need to crash the node in this case.
@@ -302,7 +302,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 			return nil, fmt.Errorf("parse ClusterReactivated: %w", err)
 		}
 
-		sharesToEnable, err := edh.handleClusterReactivated(txn, clusterReactivatedEvent)
+		sharesToReactivate, err := edh.handleClusterReactivated(txn, clusterReactivatedEvent)
 		if err != nil {
 			edh.metrics.EventProcessingFailed(abiEvent.Name)
 
@@ -315,11 +315,11 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 
 		defer edh.metrics.EventProcessed(abiEvent.Name)
 
-		if len(sharesToEnable) == 0 {
+		if len(sharesToReactivate) == 0 {
 			return nil, nil
 		}
 
-		task := NewReactivateClusterTask(edh.taskExecutor, clusterReactivatedEvent.Owner, clusterReactivatedEvent.OperatorIds, sharesToEnable)
+		task := NewReactivateClusterTask(edh.taskExecutor, clusterReactivatedEvent.Owner, clusterReactivatedEvent.OperatorIds, sharesToReactivate)
 
 		return task, nil
 
@@ -346,7 +346,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 			return nil, nil
 		}
 
-		task := NewFeeRecipientTask(edh.taskExecutor, feeRecipientAddressUpdatedEvent.Owner, feeRecipientAddressUpdatedEvent.RecipientAddress)
+		task := NewUpdateFeeRecipientTask(edh.taskExecutor, feeRecipientAddressUpdatedEvent.Owner, feeRecipientAddressUpdatedEvent.RecipientAddress)
 		return task, nil
 
 	default:
@@ -423,4 +423,114 @@ func (edh *EventDataHandler) processLocalEvent(txn eventdb.RW, event localevents
 		edh.logger.Warn("unknown local event name", fields.Name(event.Name))
 		return nil
 	}
+}
+
+// filterSupersedingTasks filters out tasks that are superseded by other tasks:
+// - opposite tasks (start-stop, stop-start, liquidate-reactivate, reactivate-liquidate)
+// - superseding tasks (updateFee-updateFee)
+// TODO: check if start-stop can be superseded by reactivate-liquidate
+func (edh *EventDataHandler) filterSupersedingTasks(tasks []Task) []Task {
+	toBeStarted := map[string]int{}
+	toBeStopped := map[string]int{}
+	toBeReactivated := map[string]int{}
+	toBeLiquidated := map[string]int{}
+	toUpdateFeeRecipient := map[ethcommon.Address]int{}
+
+	tasksCopy := make([]Task, len(tasks))
+	copy(tasksCopy, tasks)
+
+	for i, task := range tasksCopy {
+		switch t := task.(type) {
+		case *StartValidatorTask:
+			key := string(t.share.ValidatorPubKey)
+
+			if _, ok := toBeStarted[key]; ok {
+				tasksCopy[i] = nil
+				continue
+			}
+
+			if previousTaskIndex, ok := toBeStopped[key]; ok {
+				tasksCopy[previousTaskIndex] = nil
+				tasksCopy[i] = nil
+				delete(toBeStopped, key)
+				continue
+			}
+
+			toBeStarted[key] = i
+
+		case *StopValidatorTask:
+			key := string(t.publicKey)
+
+			if _, ok := toBeStopped[key]; ok {
+				tasksCopy[i] = nil
+				continue
+			}
+
+			if startTaskIndex, ok := toBeStarted[key]; ok {
+				tasksCopy[startTaskIndex] = nil
+				tasksCopy[i] = nil
+				delete(toBeStarted, key)
+				continue
+			}
+
+			toBeStopped[key] = i
+
+		case *LiquidateClusterTask:
+			var validatorKeys []string
+			for _, share := range t.toLiquidate {
+				validatorKeys = append(validatorKeys, string(share.ValidatorPubKey))
+			}
+			key := strings.Join(validatorKeys, ",")
+
+			if _, ok := toBeLiquidated[key]; ok {
+				tasksCopy[i] = nil
+				continue
+			}
+
+			if previousTaskIndex, ok := toBeReactivated[key]; ok {
+				tasksCopy[previousTaskIndex] = nil
+				tasksCopy[i] = nil
+				delete(toBeReactivated, key)
+				continue
+			}
+
+			toBeLiquidated[key] = i
+
+		case *ReactivateClusterTask:
+			var validatorKeys []string
+			for _, share := range t.toReactivate {
+				validatorKeys = append(validatorKeys, string(share.ValidatorPubKey))
+			}
+			key := strings.Join(validatorKeys, ",")
+
+			if _, ok := toBeReactivated[key]; ok {
+				tasksCopy[i] = nil
+				continue
+			}
+
+			if liquidateTaskIndex, ok := toBeLiquidated[key]; ok {
+				tasksCopy[liquidateTaskIndex] = nil
+				tasksCopy[i] = nil
+				delete(toBeLiquidated, key)
+				continue
+			}
+
+			toBeReactivated[key] = i
+
+		case *UpdateFeeRecipientTask:
+			key := t.owner
+
+			if previousTaskIndex, ok := toUpdateFeeRecipient[key]; ok {
+				tasksCopy[previousTaskIndex] = nil
+			}
+
+			toUpdateFeeRecipient[key] = i
+
+		default:
+			edh.logger.Warn("unknown task type", fields.Type(task))
+			tasksCopy[i] = nil
+		}
+	}
+
+	return slices.DeleteFunc(tasksCopy, func(t Task) bool { return t == nil })
 }

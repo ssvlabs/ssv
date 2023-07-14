@@ -75,14 +75,14 @@ func (c *controller) LiquidateCluster(owner common.Address, operatorIDs []uint64
 	return nil
 }
 
-func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []uint64, toEnable []*ssvtypes.SSVShare) error {
+func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error {
 	logger := c.defaultLogger.Named("ReactivateCluster").With(
 		zap.String("owner", owner.String()),
 		zap.Uint64s("operator_ids", operatorIDs),
 	)
 	logger.Info("executing task")
 
-	for _, share := range toEnable {
+	for _, share := range toReactivate {
 		if _, err := c.onShareStart(c.defaultLogger, share); err != nil {
 			return err
 		}

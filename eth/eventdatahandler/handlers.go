@@ -430,7 +430,7 @@ func (edh *EventDataHandler) handleClusterReactivated(txn eventdb.RW, event *con
 	)
 	logger.Debug("processing event")
 
-	toEnable, enabledPubKeys, err := edh.processClusterEvent(txn, event.Owner, event.OperatorIds, false)
+	toReactivate, enabledPubKeys, err := edh.processClusterEvent(txn, event.Owner, event.OperatorIds, false)
 	if err != nil {
 		return nil, fmt.Errorf("could not process cluster event: %w", err)
 	}
@@ -440,7 +440,7 @@ func (edh *EventDataHandler) handleClusterReactivated(txn eventdb.RW, event *con
 	}
 
 	logger.Debug("processed event")
-	return toEnable, nil
+	return toReactivate, nil
 }
 
 func (edh *EventDataHandler) handleFeeRecipientAddressUpdated(txn eventdb.RW, event *contract.ContractFeeRecipientAddressUpdated) (bool, error) {

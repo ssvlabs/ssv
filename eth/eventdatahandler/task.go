@@ -80,52 +80,52 @@ func (t LiquidateClusterTask) Execute() error {
 }
 
 type reactivateClusterExecutor interface {
-	ReactivateCluster(owner ethcommon.Address, operatorIDs []uint64, toEnable []*ssvtypes.SSVShare) error
+	ReactivateCluster(owner ethcommon.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error
 }
 
 type ReactivateClusterTask struct {
-	executor    reactivateClusterExecutor
-	owner       ethcommon.Address
-	operatorIDs []uint64
-	toEnable    []*ssvtypes.SSVShare
+	executor     reactivateClusterExecutor
+	owner        ethcommon.Address
+	operatorIDs  []uint64
+	toReactivate []*ssvtypes.SSVShare
 }
 
 func NewReactivateClusterTask(
 	executor reactivateClusterExecutor,
 	owner ethcommon.Address,
 	operatorIDs []uint64,
-	toEnable []*ssvtypes.SSVShare,
+	toReactivate []*ssvtypes.SSVShare,
 ) *ReactivateClusterTask {
 	return &ReactivateClusterTask{
-		executor:    executor,
-		owner:       owner,
-		operatorIDs: operatorIDs,
-		toEnable:    toEnable,
+		executor:     executor,
+		owner:        owner,
+		operatorIDs:  operatorIDs,
+		toReactivate: toReactivate,
 	}
 }
 
 func (t ReactivateClusterTask) Execute() error {
-	return t.executor.ReactivateCluster(t.owner, t.operatorIDs, t.toEnable)
+	return t.executor.ReactivateCluster(t.owner, t.operatorIDs, t.toReactivate)
 }
 
 type updateFeeRecipientExecutor interface {
 	UpdateFeeRecipient(owner, feeRecipient ethcommon.Address) error
 }
 
-type FeeRecipientTask struct {
+type UpdateFeeRecipientTask struct {
 	executor  updateFeeRecipientExecutor
 	owner     ethcommon.Address
 	recipient ethcommon.Address
 }
 
-func NewFeeRecipientTask(executor updateFeeRecipientExecutor, owner, recipient ethcommon.Address) *FeeRecipientTask {
-	return &FeeRecipientTask{
+func NewUpdateFeeRecipientTask(executor updateFeeRecipientExecutor, owner, recipient ethcommon.Address) *UpdateFeeRecipientTask {
+	return &UpdateFeeRecipientTask{
 		executor:  executor,
 		owner:     owner,
 		recipient: recipient,
 	}
 }
 
-func (t FeeRecipientTask) Execute() error {
+func (t UpdateFeeRecipientTask) Execute() error {
 	return t.executor.UpdateFeeRecipient(t.owner, t.recipient)
 }

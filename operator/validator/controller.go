@@ -105,7 +105,7 @@ type Controller interface {
 	StartValidator(share *ssvtypes.SSVShare) error
 	StopValidator(publicKey []byte) error
 	LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
-	ReactivateCluster(owner common.Address, operatorIDs []uint64, toEnable []*ssvtypes.SSVShare) error
+	ReactivateCluster(owner common.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error
 	UpdateFeeRecipient(owner, recipient common.Address) error
 }
 

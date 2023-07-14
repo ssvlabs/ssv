@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging/fields"
 )
 
 const (
@@ -91,15 +93,15 @@ func (p *Prober) probe(ctx context.Context) {
 				}
 			}()
 
-			nodeKind := zap.String("kind", fmt.Sprintf("%T", node))
+			logger := p.logger.With(fields.Type(node))
 
 			ready, err = node.IsReady(ctx)
 			if err != nil {
-				p.logger.Error("failed to check if node is ready", nodeKind, zap.Error(err))
+				logger.Error("failed to check if node is ready", zap.Error(err))
 			} else if !ready {
-				p.logger.Error("node is not ready", nodeKind)
+				logger.Error("node is not ready")
 			} else {
-				p.logger.Info("node is ready", nodeKind)
+				logger.Info("node is ready")
 			}
 		}(node)
 	}
