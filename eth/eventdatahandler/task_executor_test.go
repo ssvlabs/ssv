@@ -25,135 +25,89 @@ const rawValidatorAdded = `{
 		"transactionHash": "0x921a3f836fb873a40aa4f83097e52b69225334c49674dc262b2bb90d27e3a801"
 	  }`
 
-func TestExecuteStartValidatorTask(t *testing.T) {
-	logger, logs := setupLogsCapture()
+func TestExecuteTask(t *testing.T) {
+	logger, observedLogs := setupLogsCapture()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
 	edh, err := setupDataHandler(t, ctx, logger)
 	require.NoError(t, err)
-
-	logValidatorAdded := unmarshalLog(t, rawValidatorAdded)
-	validatorAddedEvent, err := edh.filterer.ParseValidatorAdded(logValidatorAdded)
-	if err != nil {
-		t.Fatal("parse ValidatorAdded", err)
-	}
-
-	share := &ssvtypes.SSVShare{
-		Share: spectypes.Share{
-			ValidatorPubKey: validatorAddedEvent.PublicKey,
-		},
-	}
-	task := NewStartValidatorTask(edh.taskExecutor, share)
-	require.NoError(t, task.Execute())
-	if logs.Len() == 0 {
-		t.Errorf("No logs")
-	} else {
-		entry := logs.All()[len(logs.All())-1]
+	t.Run("test AddValidator task execution", func(t *testing.T) {
+		logValidatorAdded := unmarshalLog(t, rawValidatorAdded)
+		validatorAddedEvent, err := edh.filterer.ParseValidatorAdded(logValidatorAdded)
+		if err != nil {
+			t.Fatal("parse ValidatorAdded", err)
+		}
+		share := &ssvtypes.SSVShare{
+			Share: spectypes.Share{
+				ValidatorPubKey: validatorAddedEvent.PublicKey,
+			},
+		}
+		task := NewStartValidatorTask(edh.taskExecutor, share)
+		require.NoError(t, task.Execute())
+		require.NotZero(t, observedLogs.Len())
+		entry := observedLogs.All()[len(observedLogs.All())-1]
 		require.Equal(t, "validator wasn't started", entry.Message)
-	}
-}
-
-func TestExecuteStopValidatorTask(t *testing.T) {
-	logger, logs := setupLogsCapture()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	edh, err := setupDataHandler(t, ctx, logger)
-	require.NoError(t, err)
-
-	task := NewStopValidatorTask(edh.taskExecutor, ethcommon.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"))
-	require.NoError(t, task.Execute())
-	if logs.Len() == 0 {
-		t.Errorf("No logs")
-	} else {
-		entry := logs.All()[len(logs.All())-1]
+	})
+	t.Run("test StopValidator task execution", func(t *testing.T) {
+		edh, err := setupDataHandler(t, ctx, logger)
+		require.NoError(t, err)
+		task := NewStopValidatorTask(edh.taskExecutor, ethcommon.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"))
+		require.NoError(t, task.Execute())
+		require.NotZero(t, observedLogs.Len())
+		entry := observedLogs.All()[len(observedLogs.All())-1]
 		require.Equal(t, "removed validator", entry.Message)
-	}
-}
+	})
 
-func TestExecuteLiquidateClusterTask(t *testing.T) {
-	logger, logs := setupLogsCapture()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	edh, err := setupDataHandler(t, ctx, logger)
-	require.NoError(t, err)
-	var shares []*ssvtypes.SSVShare
-	share := &ssvtypes.SSVShare{
-		Share: spectypes.Share{
-			ValidatorPubKey: ethcommon.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"),
-		},
-	}
-	shares = append(shares, share)
-	task := NewLiquidateClusterTask(edh.taskExecutor, ethcommon.HexToAddress("0x0000000000000000000000000000000000000001"), []uint64{1, 2, 3}, shares)
-	require.NoError(t, task.Execute())
-	if logs.Len() == 0 {
-		t.Errorf("No logs")
-	} else {
-		entry := logs.All()[len(logs.All())-1]
+	t.Run("test LiquidateCluster task execution", func(t *testing.T) {
+		var shares []*ssvtypes.SSVShare
+		share := &ssvtypes.SSVShare{
+			Share: spectypes.Share{
+				ValidatorPubKey: ethcommon.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"),
+			},
+		}
+		shares = append(shares, share)
+		task := NewLiquidateClusterTask(edh.taskExecutor, ethcommon.HexToAddress("0x1"), []uint64{1, 2, 3}, shares)
+		require.NoError(t, task.Execute())
+		require.NotZero(t, observedLogs.Len())
+		entry := observedLogs.All()[len(observedLogs.All())-1]
 		require.Equal(t, "executed task", entry.Message)
-	}
-}
-
-func TestExecuteReactivateClusterTask(t *testing.T) {
-	logger, logs := setupLogsCapture()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	edh, err := setupDataHandler(t, ctx, logger)
-	require.NoError(t, err)
-	var shares []*ssvtypes.SSVShare
-	share := &ssvtypes.SSVShare{
-		Share: spectypes.Share{
-			ValidatorPubKey: ethcommon.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"),
-		},
-	}
-	shares = append(shares, share)
-	task := NewReactivateClusterTask(edh.taskExecutor, ethcommon.HexToAddress("0x0000000000000000000000000000000000000001"), []uint64{1, 2, 3}, shares)
-	require.NoError(t, task.Execute())
-	if logs.Len() == 0 {
-		t.Errorf("No logs")
-	} else {
-		entry := logs.All()[len(logs.All())-1]
+	})
+	t.Run("test ReactivateCluster task execution", func(t *testing.T) {
+		var shares []*ssvtypes.SSVShare
+		share := &ssvtypes.SSVShare{
+			Share: spectypes.Share{
+				ValidatorPubKey: ethcommon.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"),
+			},
+		}
+		shares = append(shares, share)
+		task := NewReactivateClusterTask(edh.taskExecutor, ethcommon.HexToAddress("0x1"), []uint64{1, 2, 3}, shares)
+		require.NoError(t, task.Execute())
+		require.NotZero(t, observedLogs.Len())
+		entry := observedLogs.All()[len(observedLogs.All())-1]
 		require.Equal(t, "executed task", entry.Message)
-	}
-}
-
-func TestExecuteUpdateFeeRecipientTask(t *testing.T) {
-	logger, logs := setupLogsCapture()
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	edh, err := setupDataHandler(t, ctx, logger)
-	require.NoError(t, err)
-	task := NewFeeRecipientTask(edh.taskExecutor, ethcommon.HexToAddress("0x0000000000000000000000000000000000000001"), ethcommon.HexToAddress("0x0000000000000000000000000000000000000002"))
-	require.NoError(t, task.Execute())
-	if logs.Len() == 0 {
-		t.Errorf("No logs")
-	} else {
-		entry := logs.All()[len(logs.All())-1]
+	})
+	t.Run("test UpdateFeeRecipient task execution", func(t *testing.T) {
+		task := NewFeeRecipientTask(edh.taskExecutor, ethcommon.HexToAddress("0x1"), ethcommon.HexToAddress("0x2"))
+		require.NoError(t, task.Execute())
+		require.NotZero(t, observedLogs.Len())
+		entry := observedLogs.All()[len(observedLogs.All())-1]
 		require.Equal(t, "executed task", entry.Message)
-	}
+	})
 }
 
 func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
-	logger, logs := setupLogsCapture()
+	logger, observedLogs := setupLogsCapture()
 	eb := eventbatcher.NewEventBatcher()
-
 	logValidatorAdded := unmarshalLog(t, rawValidatorAdded)
 	events := []ethtypes.Log{
 		logValidatorAdded,
 	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
 	edh, err := setupDataHandler(t, ctx, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	eventsCh := make(chan ethtypes.Log)
 	go func() {
 		defer close(eventsCh)
@@ -161,15 +115,21 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 			eventsCh <- event
 		}
 	}()
-
 	lastProcessedBlock, err := edh.HandleBlockEventsStream(eb.BatchEvents(eventsCh), true)
 	require.Equal(t, uint64(0x89EBFF), lastProcessedBlock)
 	require.NoError(t, err)
-	var logFlow []string
-	for _, entry := range logs.All() {
-		logFlow = append(logFlow, entry.Message)
+	var oservedLogsFlow []string
+	for _, entry := range observedLogs.All() {
+		oservedLogsFlow = append(oservedLogsFlow, entry.Message)
 	}
-	require.Equal(t, []string{"setup operator privateKey is DONE!", "CreatingController", "processing block events", "processing event", "malformed event: failed to verify signature", "processed block events"}, logFlow)
+	happyFlow := []string{
+		"setup operator privateKey is DONE!",
+		"CreatingController",
+		"processing block events",
+		"processing event",
+		"malformed event: failed to verify signature",
+		"processed block events"}
+	require.Equal(t, happyFlow, oservedLogsFlow)
 }
 
 func setupLogsCapture() (*zap.Logger, *observer.ObservedLogs) {
