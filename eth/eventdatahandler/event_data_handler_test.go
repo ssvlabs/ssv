@@ -113,6 +113,7 @@ func setupDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger) (*E
 		Context:         ctx,
 		DB:              db,
 		RegistryStorage: nodeStorage,
+		KeyManager:      keyManager,
 	})
 
 	cl := executionclient.New("test", ethcommon.Address{})

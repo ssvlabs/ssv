@@ -5,12 +5,13 @@ import (
 	"testing"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	ethtypes "github.com/ethereum/go-ethereum/core/types"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zaptest"
-
 	"github.com/bloxapp/ssv/eth/eventbatcher"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
+	ethcommon "github.com/ethereum/go-ethereum/common"
+	ethtypes "github.com/ethereum/go-ethereum/core/types"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 const rawValidatorAdded = `{
@@ -25,45 +26,88 @@ const rawValidatorAdded = `{
 	  }`
 
 func TestExecuteTask(t *testing.T) {
-	logger := zaptest.NewLogger(t)
+	logger, observedLogs := setupLogsCapture()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
 	edh, err := setupDataHandler(t, ctx, logger)
 	require.NoError(t, err)
+	t.Run("test AddValidator task execution", func(t *testing.T) {
+		logValidatorAdded := unmarshalLog(t, rawValidatorAdded)
+		validatorAddedEvent, err := edh.filterer.ParseValidatorAdded(logValidatorAdded)
+		if err != nil {
+			t.Fatal("parse ValidatorAdded", err)
+		}
+		share := &ssvtypes.SSVShare{
+			Share: spectypes.Share{
+				ValidatorPubKey: validatorAddedEvent.PublicKey,
+			},
+		}
+		task := NewStartValidatorTask(edh.taskExecutor, share)
+		require.NoError(t, task.Execute())
+		require.NotZero(t, observedLogs.Len())
+		entry := observedLogs.All()[len(observedLogs.All())-1]
+		require.Equal(t, "validator wasn't started", entry.Message)
+	})
+	t.Run("test StopValidator task execution", func(t *testing.T) {
+		edh, err := setupDataHandler(t, ctx, logger)
+		require.NoError(t, err)
+		task := NewStopValidatorTask(edh.taskExecutor, ethcommon.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"))
+		require.NoError(t, task.Execute())
+		require.NotZero(t, observedLogs.Len())
+		entry := observedLogs.All()[len(observedLogs.All())-1]
+		require.Equal(t, "removed validator", entry.Message)
+	})
 
-	logValidatorAdded := unmarshalLog(t, rawValidatorAdded)
-	validatorAddedEvent, err := edh.filterer.ParseValidatorAdded(logValidatorAdded)
-	if err != nil {
-		t.Fatal("parse ValidatorAdded", err)
-	}
-
-	share := &ssvtypes.SSVShare{
-		Share: spectypes.Share{
-			ValidatorPubKey: validatorAddedEvent.PublicKey,
-		},
-	}
-	task := NewStartValidatorTask(edh.taskExecutor, share)
-	require.NoError(t, task.Execute())
+	t.Run("test LiquidateCluster task execution", func(t *testing.T) {
+		var shares []*ssvtypes.SSVShare
+		share := &ssvtypes.SSVShare{
+			Share: spectypes.Share{
+				ValidatorPubKey: ethcommon.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"),
+			},
+		}
+		shares = append(shares, share)
+		task := NewLiquidateClusterTask(edh.taskExecutor, ethcommon.HexToAddress("0x1"), []uint64{1, 2, 3}, shares)
+		require.NoError(t, task.Execute())
+		require.NotZero(t, observedLogs.Len())
+		entry := observedLogs.All()[len(observedLogs.All())-1]
+		require.Equal(t, "executed task", entry.Message)
+	})
+	t.Run("test ReactivateCluster task execution", func(t *testing.T) {
+		var shares []*ssvtypes.SSVShare
+		share := &ssvtypes.SSVShare{
+			Share: spectypes.Share{
+				ValidatorPubKey: ethcommon.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"),
+			},
+		}
+		shares = append(shares, share)
+		task := NewReactivateClusterTask(edh.taskExecutor, ethcommon.HexToAddress("0x1"), []uint64{1, 2, 3}, shares)
+		require.NoError(t, task.Execute())
+		require.NotZero(t, observedLogs.Len())
+		entry := observedLogs.All()[len(observedLogs.All())-1]
+		require.Equal(t, "executed task", entry.Message)
+	})
+	t.Run("test UpdateFeeRecipient task execution", func(t *testing.T) {
+		task := NewFeeRecipientTask(edh.taskExecutor, ethcommon.HexToAddress("0x1"), ethcommon.HexToAddress("0x2"))
+		require.NoError(t, task.Execute())
+		require.NotZero(t, observedLogs.Len())
+		entry := observedLogs.All()[len(observedLogs.All())-1]
+		require.Equal(t, "executed task", entry.Message)
+	})
 }
 
 func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
-	logger := zaptest.NewLogger(t)
+	logger, observedLogs := setupLogsCapture()
 	eb := eventbatcher.NewEventBatcher()
-
 	logValidatorAdded := unmarshalLog(t, rawValidatorAdded)
 	events := []ethtypes.Log{
 		logValidatorAdded,
 	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
 	edh, err := setupDataHandler(t, ctx, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	eventsCh := make(chan ethtypes.Log)
 	go func() {
 		defer close(eventsCh)
@@ -71,8 +115,24 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 			eventsCh <- event
 		}
 	}()
-
 	lastProcessedBlock, err := edh.HandleBlockEventsStream(eb.BatchEvents(eventsCh), true)
 	require.Equal(t, uint64(0x89EBFF), lastProcessedBlock)
 	require.NoError(t, err)
+	var oservedLogsFlow []string
+	for _, entry := range observedLogs.All() {
+		oservedLogsFlow = append(oservedLogsFlow, entry.Message)
+	}
+	happyFlow := []string{
+		"setup operator privateKey is DONE!",
+		"CreatingController",
+		"processing block events",
+		"processing event",
+		"malformed event: failed to verify signature",
+		"processed block events"}
+	require.Equal(t, happyFlow, oservedLogsFlow)
+}
+
+func setupLogsCapture() (*zap.Logger, *observer.ObservedLogs) {
+	core, logs := observer.New(zap.DebugLevel)
+	return zap.New(core), logs
 }
