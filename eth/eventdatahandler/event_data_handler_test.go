@@ -31,11 +31,7 @@ import (
 	"github.com/bloxapp/ssv/storage/kv"
 )
 
-func TestHandleBlockEventsStream(t *testing.T) {
-	logger := zaptest.NewLogger(t)
-	eb := eventbatcher.NewEventBatcher()
-
-	var rawOperatorAdded = `{
+const rawOperatorAdded = `{
 		"address": "0x3A23a7F455E853058d900f5dc86f1Bb1589b54F9",
 		"topics": [
 		  "0xd839f31c14bd632f424e307b36abff63ca33684f77f28e35dc13718ef338f7f4",
@@ -47,7 +43,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		"transactionHash": "0x4f4f9c1e37cf0800a201227e8fa3cad6f8f246ac1cca1cb90e2c3311538b300c"
 	  }`
 
-	var rawValidatorAdded = `{
+const rawValidatorAdded = `{
 		"address": "0x4b133c68a084b8a88f72edcd7944b69c8d545f03",
 		"topics": [
 		  "0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5",
@@ -58,13 +54,17 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		"transactionHash": "0x921a3f836fb873a40aa4f83097e52b69225334c49674dc262b2bb90d27e3a801"
 	  }`
 
-	LogOperatorAdded := unmarshalLog(t, rawOperatorAdded)
-	LogValidatorAdded := unmarshalLog(t, rawValidatorAdded)
+func TestHandleBlockEventsStream(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	eb := eventbatcher.NewEventBatcher()
 
-	events := []ethtypes.Log{}
+	logOperatorAdded := unmarshalLog(t, rawOperatorAdded)
+	logValidatorAdded := unmarshalLog(t, rawValidatorAdded)
 
-	events = append(events, LogOperatorAdded)
-	events = append(events, LogValidatorAdded)
+	events := []ethtypes.Log{
+		logOperatorAdded,
+		logValidatorAdded,
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -326,4 +326,18 @@ func TestFilterSupersedingTasks_MixedTasks_Different(t *testing.T) {
 	require.Contains(t, result, mockLiquidateTask1, "Mixed different tasks: expected the tasks to contain mockLiquidateTask1")
 	require.Contains(t, result, mockReactivateTask2, "Mixed different tasks: expected the tasks to contain mockReactivateTask2")
 	require.Contains(t, result, mockUpdateFeeTask1, "Mixed different tasks: expected the tasks to contain mockUpdateFeeTask1")
+}
+
+type unknownTask struct{}
+
+func (u unknownTask) Execute() error { return nil }
+
+func TestFilterSupersedingTasks_UnknownTask(t *testing.T) {
+	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+
+	tasks := []Task{mockStartTask1, unknownTask{}}
+	result := edh.filterSupersedingTasks(tasks)
+
+	require.Equal(t, 1, len(result), "Unknown task: expected the result length to be 1")
+	require.Contains(t, result, mockStartTask1, "Unknown task: expected the tasks to contain mockStartTask1")
 }
