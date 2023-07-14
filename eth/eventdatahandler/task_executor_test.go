@@ -8,10 +8,10 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zaptest"
-
 	"github.com/bloxapp/ssv/eth/eventbatcher"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 const rawValidatorAdded = `{
@@ -26,7 +26,7 @@ const rawValidatorAdded = `{
 	  }`
 
 func TestExecuteStartValidatorTask(t *testing.T) {
-	logger := zaptest.NewLogger(t)
+	logger, logs := setupLogsCapture()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -46,10 +46,16 @@ func TestExecuteStartValidatorTask(t *testing.T) {
 	}
 	task := NewStartValidatorTask(edh.taskExecutor, share)
 	require.NoError(t, task.Execute())
+	if logs.Len() == 0 {
+        t.Errorf("No logs")
+    } else {
+        entry := logs.All()[len(logs.All())-1]
+		require.Equal(t, "validator wasn't started", entry.Message)
+    }
 }
 
 func TestExecuteStopValidatorTask(t *testing.T) {
-	logger := zaptest.NewLogger(t)
+	logger, logs := setupLogsCapture()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -58,10 +64,16 @@ func TestExecuteStopValidatorTask(t *testing.T) {
 
 	task := NewStopValidatorTask(edh.taskExecutor, ethcommon.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"))
 	require.NoError(t, task.Execute())
+	if logs.Len() == 0 {
+        t.Errorf("No logs")
+    } else {
+        entry := logs.All()[len(logs.All())-1]
+		require.Equal(t, "removed validator", entry.Message)
+    }
 }
 
 func TestExecuteLiquidateClusterTask(t *testing.T) {
-	logger := zaptest.NewLogger(t)
+	logger, logs := setupLogsCapture()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -76,10 +88,16 @@ func TestExecuteLiquidateClusterTask(t *testing.T) {
 	shares = append(shares, share)
 	task := NewLiquidateClusterTask(edh.taskExecutor, ethcommon.HexToAddress("0x0000000000000000000000000000000000000001"), []uint64{1,2,3}, shares)
 	require.NoError(t, task.Execute())
+	if logs.Len() == 0 {
+        t.Errorf("No logs")
+    } else {
+        entry := logs.All()[len(logs.All())-1]
+		require.Equal(t, "executed task", entry.Message)
+    }
 }
 
 func TestExecuteReactivateClusterTask(t *testing.T) {
-	logger := zaptest.NewLogger(t)
+	logger, logs := setupLogsCapture()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -94,10 +112,16 @@ func TestExecuteReactivateClusterTask(t *testing.T) {
 	shares = append(shares, share)
 	task := NewReactivateClusterTask(edh.taskExecutor, ethcommon.HexToAddress("0x0000000000000000000000000000000000000001"), []uint64{1,2,3}, shares)
 	require.NoError(t, task.Execute())
+	if logs.Len() == 0 {
+        t.Errorf("No logs")
+    } else {
+        entry := logs.All()[len(logs.All())-1]
+		require.Equal(t, "executed task", entry.Message)
+    }
 }
 
 func TestExecuteUpdateFeeRecipientTask(t *testing.T) {
-	logger := zaptest.NewLogger(t)
+	logger, logs := setupLogsCapture()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -105,10 +129,16 @@ func TestExecuteUpdateFeeRecipientTask(t *testing.T) {
 	require.NoError(t, err)
 	task := NewFeeRecipientTask(edh.taskExecutor, ethcommon.HexToAddress("0x0000000000000000000000000000000000000001"), ethcommon.HexToAddress("0x0000000000000000000000000000000000000002"))
 	require.NoError(t, task.Execute())
+	if logs.Len() == 0 {
+        t.Errorf("No logs")
+    } else {
+        entry := logs.All()[len(logs.All())-1]
+		require.Equal(t, "executed task", entry.Message)
+    }
 }
 
 func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
-	logger := zaptest.NewLogger(t)
+	logger, logs := setupLogsCapture()
 	eb := eventbatcher.NewEventBatcher()
 
 	logValidatorAdded := unmarshalLog(t, rawValidatorAdded)
@@ -135,4 +165,14 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 	lastProcessedBlock, err := edh.HandleBlockEventsStream(eb.BatchEvents(eventsCh), true)
 	require.Equal(t, uint64(0x89EBFF), lastProcessedBlock)
 	require.NoError(t, err)
+	var logFlow []string
+	for _, entry := range logs.All() {
+		logFlow = append(logFlow, entry.Message)
+	}
+	require.Equal(t, []string{"setup operator privateKey is DONE!", "CreatingController", "processing block events", "processing event", "malformed event: failed to verify signature", "processed block events"}, logFlow)
+}
+
+func setupLogsCapture() (*zap.Logger, *observer.ObservedLogs) {
+    core, logs := observer.New(zap.DebugLevel)
+    return zap.New(core), logs
 }
