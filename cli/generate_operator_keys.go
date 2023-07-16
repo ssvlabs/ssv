@@ -18,7 +18,7 @@ var generateOperatorKeysCmd = &cobra.Command{
 	Use:   "generate-operator-keys",
 	Short: "generates ssv operator keys",
 	Run: func(cmd *cobra.Command, args []string) {
-		encryptionPassword, _ := cmd.Flags().GetString("encryption-password")
+		encryptionPassword, _ := cmd.Flags().GetString("password")
 
 		if err := logging.SetGlobalLogger("debug", "capital", "console", ""); err != nil {
 			log.Fatal(err)
@@ -56,6 +56,6 @@ var generateOperatorKeysCmd = &cobra.Command{
 }
 
 func init() {
-	generateOperatorKeysCmd.Flags().StringP("encryption-password", "e", "", "Password to encrypt the private key")
+	generateOperatorKeysCmd.Flags().StringP("password", "p", "", "Password to encrypt the private key")
 	RootCmd.AddCommand(generateOperatorKeysCmd)
 }

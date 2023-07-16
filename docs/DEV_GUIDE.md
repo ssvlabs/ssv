@@ -85,10 +85,10 @@ This will generate an operator key in raw format.
 
 **Encrypted Operator Key Generation:**
 
-To generate an operator key in encrypted format, use the `--encrypted-password option` followed by your desired password.
+To generate an operator key in encrypted format, use the `--password option` followed by your desired password.
 
 ```bash
-$ ./bin/ssvnode generate-operator-keys --encrypted-password=<your-password-here>
+$ ./bin/ssvnode generate-operator-keys --password=<your-password-here>
 ```
 
 Please replace `<your-password-here>` with your chosen password. This will generate an operator key in encrypted format.
@@ -125,7 +125,7 @@ The operator private key can be provided in the `config.yaml` file in two differ
      PasswordFile: /path/to/your/file
     ```
    In this approach, the private key is not only encoded but also encrypted, adding an extra layer of security.
-   To generate the encrypted keystore file, run the ./bin/ssvnode generate-operator-keys command with the --encrypted=true flag.
+   To generate the encrypted keystore file, run the ./bin/ssvnode generate-operator-keys command with the --password=**** flag.
    Replace <path/to/your/file> with your desired output file path for the encrypted keystore and the corresponding password file.
    This command will generate an encrypted keystore file that can be used securely in the config.yaml file.
    It's a more secure approach because the private key is not only encoded but also encrypted, adding an extra layer of security.
