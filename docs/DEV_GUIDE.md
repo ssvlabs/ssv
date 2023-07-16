@@ -72,10 +72,30 @@ $ ./bin/ssvnode create-threshold --count <number of ssv nodes> --private-key <pr
 ```
 
 #### Generating an Operator Key
+To generate an operator key, you can use the `ssvnode generate-operator-keys command`. This command can generate the key in two ways: raw format or encrypted format.
 
+**IMPORTANT**: The raw format is **NOT recommended** for production use, as it can expose sensitive data. Use the encrypted format for added security.
+
+**Raw Operator Key Generation:**
+This is the default mode of operation and does not require any additional parameters.
 ```bash
 $ ./bin/ssvnode generate-operator-keys
 ```
+This will generate an operator key in raw format.
+
+**Encrypted Operator Key Generation:**
+
+To generate an operator key in encrypted format, use the `--encrypted-password option` followed by your desired password.
+
+```bash
+$ ./bin/ssvnode generate-operator-keys --encrypted-password=<your-password-here>
+```
+
+Please replace `<your-password-here>` with your chosen password. This will generate an operator key in encrypted format.
+
+Keep your password safe as it will be required to decrypt the operator key for use.
+
+
 
 ### Config Files
 
