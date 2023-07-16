@@ -22,7 +22,7 @@ var JatoV2 = NetworkConfig{
 		// Taiga (@zkTaiga)
 		"enr:-Li4QKQeGeb4yuUkNnVoxT0kjkDcBZN83GRyQkKrQhwqAU7wFitJzjjKIz2IB3Xnwj6hROj7h6Kli1hOmdJ1jVLPDlaGAYj8K5Hvh2F0dG5ldHOIAAAAAAAAAACEZXRoMpDkvpOTAAAQIP__________gmlkgnY0gmlwhJbmcQeJc2VjcDI1NmsxoQIYVg92mRyqn519Og6VA6fdgqeFxKgQO87IX64zJcmqhoN0Y3CCE4iDdWRwgg-g",
 
-		// ONEInfra (www.0neinfra.io)
+		// 0NEinfra (www.0neinfra.io)
 		"enr:-Li4QMCh155TJ9K7xL_2gnmyi9IPQkuqRLG8U5rW1S2wmpukDrFX7WaThIihMRWWizsp-GILZIeqa0nZrmV3tVOVHPKGAYj8ICi3h2F0dG5ldHOIAAAAAAAAAACEZXRoMpDkvpOTAAAQIP__________gmlkgnY0gmlwhDaTS0mJc2VjcDI1NmsxoQMoexiUvxbufU3x0fAQXtbMzM9XIq0Es16K0Hkfa682k4N0Y3CCE4iDdWRwgg-g",
 
 		// CryptoManufaktur (cryptomanufaktur.io)
