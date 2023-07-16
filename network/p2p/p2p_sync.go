@@ -314,7 +314,7 @@ func waitSubsetOfPeers(
 		if err != nil {
 			return nil, err
 		}
-		if len(peers) >= minPeers || minPeers == 0 {
+		if len(peers) >= minPeers {
 			// Found enough peers.
 			return peers, nil
 		}
