@@ -8,7 +8,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/golang/mock/gomock"
-	"github.com/prysmaticlabs/prysm/async/event"
+	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -32,7 +32,7 @@ func TestSyncEth1(t *testing.T) {
 		logs := []types.Log{{BlockNumber: rawOffset - 1}, {BlockNumber: rawOffset}}
 		eventsFeed.Send(&Event{Data: struct{}{}, Log: logs[0]})
 		eventsFeed.Send(&Event{Data: struct{}{}, Log: logs[1]})
-		eventsFeed.Send(&Event{Data: SyncEndedEvent{Logs: logs, Success: true}})
+		eventsFeed.Send(&Event{Data: SyncEndedEvent{Block: rawOffset, Success: true}})
 	}()
 	err := SyncEth1Events(logger, eth1Client, storage, networkconfig.TestNetwork, nil, nil)
 	require.NoError(t, err)
@@ -55,7 +55,7 @@ func TestSyncEth1Error(t *testing.T) {
 		logs := []types.Log{{}, {BlockNumber: networkconfig.TestNetwork.ETH1SyncOffset.Uint64()}}
 		eventsFeed.Send(&Event{Data: struct{}{}, Log: logs[0]})
 		eventsFeed.Send(&Event{Data: struct{}{}, Log: logs[1]})
-		eventsFeed.Send(&Event{Data: SyncEndedEvent{Logs: logs, Success: false}})
+		eventsFeed.Send(&Event{Data: SyncEndedEvent{Block: networkconfig.TestNetwork.ETH1SyncOffset.Uint64(), Success: false}})
 	}()
 	err := SyncEth1Events(logger, eth1Client, storage, networkconfig.TestNetwork, nil, nil)
 	require.EqualError(t, err, "failed to sync contract events: eth1-sync-test")
@@ -80,7 +80,7 @@ func TestSyncEth1HandlerError(t *testing.T) {
 		logs := []types.Log{{BlockNumber: blockNumber - 1}, {BlockNumber: blockNumber}}
 		eventsFeed.Send(&Event{Data: struct{}{}, Log: logs[0]})
 		eventsFeed.Send(&Event{Data: struct{}{}, Log: logs[1]})
-		eventsFeed.Send(&Event{Data: SyncEndedEvent{Logs: logs, Success: false}})
+		eventsFeed.Send(&Event{Data: SyncEndedEvent{Block: blockNumber, Success: false}})
 	}()
 	err := SyncEth1Events(logger, eth1Client, storage, networkconfig.TestNetwork, nil, func(event Event) ([]zap.Field, error) {
 		return nil, errors.New("test")

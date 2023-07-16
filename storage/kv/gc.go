@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/dgraph-io/badger/v3"
+	"github.com/dgraph-io/badger/v4"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -35,7 +35,7 @@ func (b *BadgerDb) QuickGC(ctx context.Context) error {
 	defer b.gcMutex.Unlock()
 
 	err := b.db.RunValueLogGC(0.5)
-	if err == badger.ErrNoRewrite {
+	if errors.Is(err, badger.ErrNoRewrite) {
 		// No garbage to collect.
 		return nil
 	}
@@ -50,7 +50,7 @@ func (b *BadgerDb) FullGC(ctx context.Context) error {
 
 	for ctx.Err() == nil {
 		err := b.db.RunValueLogGC(0.1)
-		if err == badger.ErrNoRewrite {
+		if errors.Is(err, badger.ErrNoRewrite) {
 			// No more garbage to collect.
 			break
 		}

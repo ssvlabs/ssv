@@ -18,8 +18,11 @@ import (
 
 var sharesPrefix = []byte("shares")
 
+// SharesFilter is a function that filters shares.
+type SharesFilter func(*types.SSVShare) bool
+
 // SharesListFunc is a function that returns a filtered list of shares.
-type SharesListFunc = func(filters ...func(share *types.SSVShare) bool) []*types.SSVShare
+type SharesListFunc = func(filters ...SharesFilter) []*types.SSVShare
 
 // Shares is the interface for managing shares.
 type Shares interface {
@@ -29,10 +32,10 @@ type Shares interface {
 	Get(pubKey []byte) *types.SSVShare
 
 	// List returns a list of shares, filtered by the given filters (if any).
-	List(filters ...func(*types.SSVShare) bool) []*types.SSVShare
+	List(filters ...SharesFilter) []*types.SSVShare
 
 	// Save saves the given shares.
-	Save(logger *zap.Logger, shares ...*types.SSVShare) error
+	Save(shares ...*types.SSVShare) error
 
 	// Delete deletes the share for the given public key.
 	Delete(pubKey []byte) error
@@ -80,7 +83,7 @@ func (s *sharesStorage) Get(pubKey []byte) *types.SSVShare {
 	return s.shares[hex.EncodeToString(pubKey)]
 }
 
-func (s *sharesStorage) List(filters ...func(*types.SSVShare) bool) []*types.SSVShare {
+func (s *sharesStorage) List(filters ...SharesFilter) []*types.SSVShare {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -101,7 +104,7 @@ Shares:
 	return shares
 }
 
-func (s *sharesStorage) Save(logger *zap.Logger, shares ...*types.SSVShare) error {
+func (s *sharesStorage) Save(shares ...*types.SSVShare) error {
 	if len(shares) == 0 {
 		return nil
 	}
@@ -109,27 +112,35 @@ func (s *sharesStorage) Save(logger *zap.Logger, shares ...*types.SSVShare) erro
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	err := s.db.SetMany(s.prefix, len(shares), func(i int) (basedb.Obj, error) {
+		value, err := shares[i].Encode()
+		if err != nil {
+			return basedb.Obj{}, fmt.Errorf("failed to serialize share: %w", err)
+		}
+		return basedb.Obj{Key: s.storageKey(shares[i].ValidatorPubKey), Value: value}, nil
+	})
+	if err != nil {
+		return err
+	}
+
 	for _, share := range shares {
 		key := hex.EncodeToString(share.ValidatorPubKey)
 		s.shares[key] = share
 	}
-
-	return s.db.SetMany(s.prefix, len(shares), func(i int) (basedb.Obj, error) {
-		value, err := shares[i].Encode()
-		if err != nil {
-			logger.Error("failed to serialize share", zap.Error(err))
-			return basedb.Obj{}, err
-		}
-		return basedb.Obj{Key: s.storageKey(shares[i].ValidatorPubKey), Value: value}, nil
-	})
+	return nil
 }
 
 func (s *sharesStorage) Delete(pubKey []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	err := s.db.Delete(s.prefix, s.storageKey(pubKey))
+	if err != nil {
+		return err
+	}
+
 	delete(s.shares, hex.EncodeToString(pubKey))
-	return s.db.Delete(s.prefix, s.storageKey(pubKey))
+	return nil
 }
 
 // UpdateValidatorMetadata updates the metadata of the given validator
@@ -143,12 +154,18 @@ func (s *sharesStorage) UpdateValidatorMetadata(logger *zap.Logger, pk string, m
 		return nil
 	}
 	share.BeaconMetadata = metadata
-	return s.Save(logger, share)
+	return s.Save(share)
 }
 
 // CleanRegistryData clears all registry data
 func (s *sharesStorage) CleanRegistryData() error {
-	return s.db.RemoveAllByCollection(sharesPrefix)
+	err := s.db.RemoveAllByCollection(sharesPrefix)
+	if err != nil {
+		return err
+	}
+
+	s.shares = make(map[string]*types.SSVShare)
+	return nil
 }
 
 // storageKey builds share key using sharesPrefix & validator public key, e.g. "shares/0x00..01"
@@ -157,28 +174,28 @@ func (s *sharesStorage) storageKey(pk []byte) []byte {
 }
 
 // ByOperatorID filters by operator ID.
-func ByOperatorID(operatorID spectypes.OperatorID) func(share *types.SSVShare) bool {
+func ByOperatorID(operatorID spectypes.OperatorID) SharesFilter {
 	return func(share *types.SSVShare) bool {
 		return share.BelongsToOperator(operatorID)
 	}
 }
 
 // ByNotLiquidated filters for not liquidated.
-func ByNotLiquidated() func(share *types.SSVShare) bool {
+func ByNotLiquidated() SharesFilter {
 	return func(share *types.SSVShare) bool {
 		return !share.Liquidated
 	}
 }
 
 // ByActiveValidator filters for active validators.
-func ByActiveValidator() func(share *types.SSVShare) bool {
+func ByActiveValidator() SharesFilter {
 	return func(share *types.SSVShare) bool {
 		return share.HasBeaconMetadata()
 	}
 }
 
 // ByClusterID filters by cluster id.
-func ByClusterID(clusterID []byte) func(share *types.SSVShare) bool {
+func ByClusterID(clusterID []byte) SharesFilter {
 	return func(share *types.SSVShare) bool {
 		var operatorIDs []uint64
 		for _, op := range share.Committee {

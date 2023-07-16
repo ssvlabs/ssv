@@ -7,23 +7,21 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jellydator/ttlcache/v3"
-
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/logging/fields"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/prysm/async/event"
+	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/ibft/storage"
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/network"
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	nodestorage "github.com/bloxapp/ssv/operator/storage"
@@ -452,13 +450,23 @@ func (c *controller) setupValidators(logger *zap.Logger, shares []*types.SSVShar
 // to start consensus flow which would save the highest decided instance
 // and sync any gaps (in protocol/v2/qbft/controller/decided.go).
 func (c *controller) setupNonCommitteeValidators(logger *zap.Logger) {
+	// Subscribe to all subnets.
+	err := c.network.SubscribeAll(logger)
+	if err != nil {
+		logger.Error("failed to subscribe to all subnets", zap.Error(err))
+		return
+	}
+
 	nonCommitteeShares := c.sharesStorage.List(registrystorage.ByNotLiquidated())
 	if len(nonCommitteeShares) == 0 {
 		logger.Info("could not find non-committee validators")
 		return
 	}
 
+	pubKeys := make([][]byte, 0, len(nonCommitteeShares))
 	for _, validatorShare := range nonCommitteeShares {
+		pubKeys = append(pubKeys, validatorShare.ValidatorPubKey)
+
 		opts := *c.validatorOptions
 		opts.SSVShare = validatorShare
 		allRoles := []spectypes.BeaconRole{
@@ -469,16 +477,18 @@ func (c *controller) setupNonCommitteeValidators(logger *zap.Logger) {
 			spectypes.BNRoleSyncCommitteeContribution,
 		}
 		for _, role := range allRoles {
-			role := role
-			err := c.network.Subscribe(validatorShare.ValidatorPubKey)
-			if err != nil {
-				logger.Error("failed to subscribe to network", zap.Error(err))
-			}
 			messageID := spectypes.NewMsgID(types.GetDefaultDomain(), validatorShare.ValidatorPubKey, role)
-			err = c.network.SyncHighestDecided(messageID)
+			err := c.network.SyncHighestDecided(messageID)
 			if err != nil {
 				logger.Error("failed to sync highest decided", zap.Error(err))
 			}
+		}
+	}
+
+	if len(pubKeys) > 0 {
+		logger.Debug("updating metadata for non-committee validators", zap.Int("count", len(pubKeys)))
+		if err := beaconprotocol.UpdateValidatorsMetadata(logger, pubKeys, c, c.beacon, c.onMetadataUpdated); err != nil {
+			logger.Warn("could not update all validators", zap.Error(err))
 		}
 	}
 }
@@ -620,7 +630,7 @@ func (c *controller) onShareCreate(logger *zap.Logger, validatorEvent abiparser.
 	}
 
 	// save validator data
-	if err := c.sharesStorage.Save(logger, share); err != nil {
+	if err := c.sharesStorage.Save(share); err != nil {
 		return nil, errors.Wrap(err, "could not save validator share")
 	}
 
@@ -687,7 +697,12 @@ func (c *controller) UpdateValidatorMetaDataLoop(logger *zap.Logger) {
 	for {
 		time.Sleep(c.metadataUpdateInterval)
 
-		shares := c.sharesStorage.List(registrystorage.ByOperatorID(c.operatorData.ID), registrystorage.ByNotLiquidated())
+		filters := []registrystorage.SharesFilter{registrystorage.ByNotLiquidated()}
+		if !c.validatorOptions.Exporter {
+			// If we're not an exporter node, fetch only for validators of our operator.
+			filters = append(filters, registrystorage.ByOperatorID(c.operatorData.ID))
+		}
+		shares := c.sharesStorage.List(filters...)
 		var pks [][]byte
 		for _, share := range shares {
 			pks = append(pks, share.ValidatorPubKey)

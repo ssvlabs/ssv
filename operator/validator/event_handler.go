@@ -16,6 +16,7 @@ import (
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/exporter"
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
@@ -39,74 +40,86 @@ func splitBytes(buf []byte, lim int) [][]byte {
 
 // Eth1EventHandler is a factory function for creating eth1 event handler
 func (c *controller) Eth1EventHandler(logger *zap.Logger, ongoingSync bool) eth1.SyncEventHandler {
-	return func(e eth1.Event) ([]zap.Field, error) {
-		switch e.Name {
-		case abiparser.OperatorAdded:
-			ev := e.Data.(abiparser.OperatorAddedEvent)
-			return c.handleOperatorAddedEvent(logger, ev)
-		case abiparser.OperatorRemoved:
-			ev := e.Data.(abiparser.OperatorRemovedEvent)
-			return c.handleOperatorRemovedEvent(logger, ev, ongoingSync)
-		case abiparser.ValidatorAdded:
-			ev := e.Data.(abiparser.ValidatorAddedEvent)
-			return c.handleValidatorAddedEvent(logger, ev, ongoingSync)
-		case abiparser.ValidatorRemoved:
-			ev := e.Data.(abiparser.ValidatorRemovedEvent)
-			return c.handleValidatorRemovedEvent(logger, ev, ongoingSync)
-		case abiparser.ClusterLiquidated:
-			ev := e.Data.(abiparser.ClusterLiquidatedEvent)
-			return c.handleClusterLiquidatedEvent(logger, ev, ongoingSync)
-		case abiparser.ClusterReactivated:
-			ev := e.Data.(abiparser.ClusterReactivatedEvent)
-			return c.handleClusterReactivatedEvent(logger, ev, ongoingSync)
-		case abiparser.FeeRecipientAddressUpdated:
-			ev := e.Data.(abiparser.FeeRecipientAddressUpdatedEvent)
-			return c.handleFeeRecipientAddressUpdatedEvent(logger, ev, ongoingSync)
-		default:
-			logger.Debug("could not handle unknown event")
+	return func(e eth1.Event) (logs []zap.Field, err error) {
+		_, exist, err := c.eventHandler.GetEventData(e.Log.TxHash)
+		if exist {
+			logger.Debug("ignoring already synced event", fields.TxHash(e.Log.TxHash))
+			return nil, nil
 		}
-		return nil, nil
+		if err != nil {
+			return nil, errors.Wrap(err, "could not get event data")
+		}
+		defer func() {
+			saveErr := c.eventHandler.SaveEventData(e.Log.TxHash)
+			if saveErr != nil {
+				wrappedErr := errors.Wrap(saveErr, "could not save event data")
+				if err == nil {
+					err = wrappedErr
+					return
+				}
+				err = errors.Wrap(err, wrappedErr.Error())
+				return
+			}
+		}()
+
+		switch ev := e.Data.(type) {
+		case abiparser.OperatorAddedEvent:
+			logs, err = c.handleOperatorAddedEvent(logger, ev)
+		case abiparser.OperatorRemovedEvent:
+			logs, err = c.handleOperatorRemovedEvent(logger, ev, ongoingSync)
+		case abiparser.ValidatorAddedEvent:
+			logs, err = c.handleValidatorAddedEvent(logger, ev, ongoingSync)
+		case abiparser.ValidatorRemovedEvent:
+			logs, err = c.handleValidatorRemovedEvent(logger, ev, ongoingSync)
+		case abiparser.ClusterLiquidatedEvent:
+			logs, err = c.handleClusterLiquidatedEvent(logger, ev, ongoingSync)
+		case abiparser.ClusterReactivatedEvent:
+			logs, err = c.handleClusterReactivatedEvent(logger, ev, ongoingSync)
+		case abiparser.FeeRecipientAddressUpdatedEvent:
+			logs, err = c.handleFeeRecipientAddressUpdatedEvent(logger, ev, ongoingSync)
+		default:
+			logger.Debug("could not handle unknown event",
+				zap.String("event_name", e.Name),
+				zap.String("event_type", fmt.Sprintf("%T", ev)),
+			)
+		}
+		return
 	}
 }
 
 // handleOperatorAddedEvent parses the given event and saves operator data
 func (c *controller) handleOperatorAddedEvent(logger *zap.Logger, event abiparser.OperatorAddedEvent) ([]zap.Field, error) {
-	// throw an error if there is an existing operator with the same public key and different operator id
-	if c.operatorData.ID != 0 && bytes.Equal(c.operatorData.PublicKey, event.PublicKey) &&
-		c.operatorData.ID != event.OperatorId {
-		return nil, &abiparser.MalformedEventError{
-			Err: errors.New("operator registered with the same operator public key"),
-		}
-	}
-
-	isOperatorEvent := false
 	od := &registrystorage.OperatorData{
 		PublicKey:    event.PublicKey,
 		OwnerAddress: event.Owner,
 		ID:           event.OperatorId,
 	}
+	logFields := []zap.Field{
+		zap.Uint64("operatorId", od.ID),
+		zap.String("operatorPubKey", string(od.PublicKey)),
+		zap.String("ownerAddress", od.OwnerAddress.String()),
+	}
+
+	// throw an error if there is an existing operator with the same public key and different operator id
+	if c.operatorData.ID != 0 && bytes.Equal(c.operatorData.PublicKey, event.PublicKey) &&
+		c.operatorData.ID != event.OperatorId {
+		return logFields, &abiparser.MalformedEventError{
+			Err: errors.New("operator registered with the same operator public key"),
+		}
+	}
 
 	exists, err := c.operatorsStorage.SaveOperatorData(logger, od)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not save operator data")
+		return logFields, errors.Wrap(err, "could not save operator data")
 	}
 	if exists {
-		return nil, nil
+		return logFields, nil
 	}
 
 	if bytes.Equal(event.PublicKey, c.operatorData.PublicKey) {
-		isOperatorEvent = true
 		c.operatorData = od
 	}
 
-	logFields := make([]zap.Field, 0)
-	if isOperatorEvent || c.validatorOptions.FullNode {
-		logFields = append(logFields,
-			zap.Uint64("operatorId", od.ID),
-			zap.String("operatorPubKey", string(od.PublicKey)),
-			zap.String("ownerAddress", od.OwnerAddress.String()),
-		)
-	}
 	exporter.ReportOperatorIndex(logger, od)
 	return logFields, nil
 }
@@ -147,15 +160,6 @@ func (c *controller) handleValidatorAddedEvent(
 	defer func() {
 		err = c.handleValidatorAddedEventDefer(valid, err, event)
 	}()
-
-	_, found, eventErr := c.eventHandler.GetEventData(event.TxHash)
-	if eventErr != nil {
-		return nil, errors.Wrap(eventErr, "failed to get event data")
-	}
-	if found {
-		// skip
-		return nil, nil
-	}
 
 	// get nonce
 	nonce, nonceErr := c.eventHandler.GetNextNonce(event.Owner)
@@ -252,15 +256,6 @@ func (c *controller) handleValidatorAddedEventDefer(valid bool, err error, event
 	var malformedEventErr *abiparser.MalformedEventError
 
 	if valid || errors.As(err, &malformedEventErr) {
-		saveErr := c.eventHandler.SaveEventData(event.TxHash)
-		if saveErr != nil {
-			wrappedErr := errors.Wrap(saveErr, "could not save event data")
-			if err == nil {
-				return wrappedErr
-			}
-			return errors.Wrap(err, wrappedErr.Error())
-		}
-
 		bumpErr := c.eventHandler.BumpNonce(event.Owner)
 		if bumpErr != nil {
 			wrappedErr := errors.Wrap(bumpErr, "failed to bump the nonce")
@@ -431,7 +426,7 @@ func (c *controller) processClusterEvent(
 	}
 
 	if len(toUpdate) > 0 {
-		if err = c.sharesStorage.Save(logger, toUpdate...); err != nil {
+		if err = c.sharesStorage.Save(toUpdate...); err != nil {
 			return nil, nil, errors.Wrapf(err, "could not save validator shares")
 		}
 	}
@@ -444,8 +439,14 @@ func (c *controller) handleFeeRecipientAddressUpdatedEvent(
 	event abiparser.FeeRecipientAddressUpdatedEvent,
 	ongoingSync bool,
 ) ([]zap.Field, error) {
-	recipientData := &registrystorage.RecipientData{
-		Owner: event.Owner,
+	recipientData, found, err := c.recipientsStorage.GetRecipientData(event.Owner)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get recipient data")
+	}
+	if !found || recipientData == nil {
+		recipientData = &registrystorage.RecipientData{
+			Owner: event.Owner,
+		}
 	}
 	copy(recipientData.FeeRecipient[:], event.RecipientAddress.Bytes())
 	r, err := c.recipientsStorage.SaveRecipientData(recipientData)

@@ -64,10 +64,10 @@ func TestSaveAndGetValidatorStorage(t *testing.T) {
 	require.NoError(t, err)
 
 	validatorShare, _ := generateRandomValidatorShare(splitKeys)
-	require.NoError(t, shareStorage.Save(logger, validatorShare))
+	require.NoError(t, shareStorage.Save(validatorShare))
 
 	validatorShare2, _ := generateRandomValidatorShare(splitKeys)
-	require.NoError(t, shareStorage.Save(logger, validatorShare2))
+	require.NoError(t, shareStorage.Save(validatorShare2))
 
 	validatorShareByKey := shareStorage.Get(validatorShare.ValidatorPubKey)
 	require.NotNil(t, validatorShareByKey)

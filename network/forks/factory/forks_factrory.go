@@ -10,8 +10,8 @@ import (
 func NewFork(forkVersion forksprotocol.ForkVersion) forks.Fork {
 	switch forkVersion {
 	case forksprotocol.GenesisForkVersion:
-		return &genesis.ForkGenesis{}
+		return genesis.New()
 	default:
-		return &genesis.ForkGenesis{}
+		return genesis.New()
 	}
 }

@@ -8,7 +8,7 @@ import (
 
 	"github.com/bloxapp/ssv/logging/fields"
 
-	"github.com/dgraph-io/badger/v3"
+	"github.com/dgraph-io/badger/v4"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -250,17 +250,15 @@ func (b *BadgerDb) Close(logger *zap.Logger) error {
 }
 
 // report the db size and metrics
-func (b *BadgerDb) report(logger *zap.Logger) func() {
+func (b *BadgerDb) report(logger *zap.Logger) {
 	logger = logger.Named(logging.NameBadgerDBReporting)
-	return func() {
-		lsm, vlog := b.db.Size()
-		blockCache := b.db.BlockCacheMetrics()
-		indexCache := b.db.IndexCacheMetrics()
+	lsm, vlog := b.db.Size()
+	blockCache := b.db.BlockCacheMetrics()
+	indexCache := b.db.IndexCacheMetrics()
 
-		logger.Debug("BadgerDBReport", zap.Int64("lsm", lsm), zap.Int64("vlog", vlog),
-			fields.BlockCacheMetrics(blockCache),
-			fields.IndexCacheMetrics(indexCache))
-	}
+	logger.Debug("BadgerDBReport", zap.Int64("lsm", lsm), zap.Int64("vlog", vlog),
+		fields.BlockCacheMetrics(blockCache),
+		fields.IndexCacheMetrics(indexCache))
 }
 
 func (b *BadgerDb) periodicallyReport(logger *zap.Logger, interval time.Duration) {

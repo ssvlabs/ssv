@@ -2,6 +2,7 @@ package p2pv1
 
 import (
 	"encoding/hex"
+	"fmt"
 	"math/rand"
 	"net"
 	"strings"
@@ -15,7 +16,7 @@ import (
 	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/prysm/async"
+	"github.com/prysmaticlabs/prysm/v4/async"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging"
@@ -59,7 +60,9 @@ func (n *p2pNetwork) Setup(logger *zap.Logger) error {
 	rand.Seed(time.Now().UnixNano()) // nolint: staticcheck
 	logger.Info("configuring")
 
-	n.initCfg()
+	if err := n.initCfg(); err != nil {
+		return fmt.Errorf("init config: %w", err)
+	}
 
 	err := n.SetupHost(logger)
 	if err != nil {
@@ -78,7 +81,7 @@ func (n *p2pNetwork) Setup(logger *zap.Logger) error {
 	return nil
 }
 
-func (n *p2pNetwork) initCfg() {
+func (n *p2pNetwork) initCfg() error {
 	if n.cfg.RequestTimeout == 0 {
 		n.cfg.RequestTimeout = defaultReqTimeout
 	}
@@ -89,8 +92,7 @@ func (n *p2pNetwork) initCfg() {
 		s := make(records.Subnets, 0)
 		subnets, err := s.FromString(strings.Replace(n.cfg.Subnets, "0x", "", 1))
 		if err != nil {
-			// TODO: handle
-			return
+			return fmt.Errorf("parse subnet: %w", err)
 		}
 		n.subnets = subnets
 	}
@@ -100,6 +102,8 @@ func (n *p2pNetwork) initCfg() {
 	if n.cfg.TopicMaxPeers <= 0 {
 		n.cfg.TopicMaxPeers = minPeersBuffer / 2
 	}
+
+	return nil
 }
 
 // SetupHost configures a libp2p host and backoff connector utility
@@ -152,7 +156,7 @@ func (n *p2pNetwork) SetupServices(logger *zap.Logger) error {
 }
 
 func (n *p2pNetwork) setupStreamCtrl(logger *zap.Logger) error {
-	n.streamCtrl = streams.NewStreamController(n.ctx, n.host, n.fork, n.cfg.RequestTimeout)
+	n.streamCtrl = streams.NewStreamController(n.ctx, n.host, n.fork, n.cfg.RequestTimeout, n.cfg.RequestTimeout)
 	logger.Debug("stream controller is ready")
 	return nil
 }
@@ -185,6 +189,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 		if err != nil {
 			return errors.Wrap(err, "could not create ID service")
 		}
+		ids.Start()
 	}
 
 	subnetsProvider := func() records.Subnets {
@@ -207,8 +212,8 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 
 	handshaker := connections.NewHandshaker(n.ctx, &connections.HandshakerCfg{
 		Streams:         n.streamCtrl,
-		NodeInfoIdx:     n.idx,
-		States:          n.idx,
+		NodeInfos:       n.idx,
+		PeerInfos:       n.idx,
 		ConnIdx:         n.idx,
 		SubnetsIdx:      n.idx,
 		IDService:       ids,
@@ -221,7 +226,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler(logger))
 	logger.Debug("handshaker is ready")
 
-	n.connHandler = connections.NewConnHandler(n.ctx, handshaker, subnetsProvider, n.idx, n.idx)
+	n.connHandler = connections.NewConnHandler(n.ctx, handshaker, subnetsProvider, n.idx, n.idx, n.idx)
 	n.host.Network().Notify(n.connHandler.Handle(logger))
 	logger.Debug("connection handler is ready")
 

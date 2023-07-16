@@ -6,29 +6,29 @@
 # SSV - Development Guide
 
 - [SSV - Development Guide](#ssv---development-guide)
-    - [Usage](#usage)
-        - [Common Commands](#common-commands)
-            - [Build](#build)
-            - [Test](#test)
-            - [Lint](#lint)
-            - [Specify Version](#specify-version)
-            - [Splitting a Validator Key](#splitting-a-validator-key)
-            - [Generating an Operator Key](#generating-an-operator-key)
-        - [Config Files](#config-files)
-            - [Node Config](#node-config)
-    - [Running a Local Network of Operators](#running-a-local-network-of-operators)
-        - [Install](#install)
-            - [Prerequisites](#prerequisites)
-            - [Clone Repository](#clone-repository)
-            - [Build Binary](#build-binary)
-        - [Configuration](#configuration)
-            - [Use script:](#use-script)
-            - [Use manual steps:](#use-manual-steps)
-        - [Run](#run)
-            - [Local network with 4 nodes with Docker Compose](#local-network-with-4-nodes-with-docker-compose)
-            - [Local network with 4 nodes for debugging with Docker Compose](#local-network-with-4-nodes-for-debugging-with-docker-compose)
-            - [Prometheus and Grafana for local network](#prometheus-and-grafana-for-local-network)
-    - [Coding Standards](#coding-standards)
+  - [Usage](#usage)
+    - [Common Commands](#common-commands)
+      - [Build](#build)
+      - [Test](#test)
+      - [Lint](#lint)
+      - [Specify Version](#specify-version)
+      - [Splitting a Validator Key](#splitting-a-validator-key)
+      - [Generating an Operator Key](#generating-an-operator-key)
+    - [Config Files](#config-files)
+      - [Node Config](#node-config)
+  - [Running a Local Network of Operators](#running-a-local-network-of-operators)
+    - [Install](#install)
+      - [Prerequisites](#prerequisites)
+      - [Clone Repository](#clone-repository)
+      - [Build Binary](#build-binary)
+    - [Configuration](#configuration)
+      - [Use script](#use-script)
+      - [Use manual steps](#use-manual-steps)
+    - [Run](#run)
+      - [Local network with 4 nodes with Docker Compose](#local-network-with-4-nodes-with-docker-compose)
+      - [Local network with 4 nodes for debugging with Docker Compose](#local-network-with-4-nodes-for-debugging-with-docker-compose)
+      - [Prometheus and Grafana for local network](#prometheus-and-grafana-for-local-network)
+  - [Coding Standards](#coding-standards)
 
 ## Usage
 
@@ -160,65 +160,91 @@ $ make build
 
 ### Configuration
 
-#### Use script:
+#### Use script
 
-1. Download the latest executable from [ssv-keys](https://github.com/bloxapp/ssv-keys/releases)
-    1. Adjust permissions for ssv-keys executable ```chmod +x ssv-keys-mac```
-    2. Locate the executable in the same folder you are running the script
-2. Generate local config using [script](../scripts/generate_local_config.sh) \
-    1. Adjust permissions for the script ```chmod +x generate_local_config.sh```
-    2. Execute ```./generate_local_config.sh $OP_SIZE $KS_PATH $KS_PASSWORD $SSV_KEYS_PATH``` \
-       `OP_SIZE` - number of operators to create [3f+1]. (e.g. 4 or 7 or 10 ...) \
-       `KS_PATH` - path to keystore.json (e.g. ./keystore-m_12381_3600_0_0_0-1639058279.json)\
-       `KS_PASSWORD` - keystore password (e.g. 12345678)
-       `SSV_KEYS_PATH` - path to ssv-keys executable (default. ./bin/ssv-keys-mac)
-3. Place the generated yaml files to `./config` [directory](../config)
-4. Add the local events path to [config.yaml](../config/config.yaml) file
+By using this script, developers can simulate a real SSV environment, run multiple nodes, and start those nodes performing duties with the passed validator's keystore. This is incredibly beneficial for debugging, testing functionalities, or preparing for deployment in a live setting. It provides a realistic but controlled environment where developers can observe the interaction of multiple nodes in the SSV network. \
+The script simplifies configuration by automatically generating YAML files for each operator and an 'events.yaml' file. The 'events.yaml' emulates a 'happy flow' scenario, which includes the registration of four operators and one validator
+
+1. Download the latest executable version (v1.0.0 or later) from [ssv-keys](https://github.com/bloxapp/ssv-keys/releases).
+    - After downloading, follow these [steps](https://github.com/bloxapp/ssv-keys#option-1-running-an-executable-recommended-route) to provide the necessary permissions to the executable.
+
+2. Generate a local configuration using the provided [script](../scripts/generate_local_config.sh).
+    - Execute the script by typing the following command in your terminal:
+      ```shell
+        ./generate_local_config.sh $OP_SIZE $KS_PATH $KS_PASSWORD $OA $NONCE $SSV_KEYS_PATH
+      ```
+    - Please replace each variable with the following details:
+        - `OP_SIZE`: Number of operators to create [3f+1]. (e.g., 4 or 7 or 10, etc.)
+        - `KS_PATH`: Path to your keystore.json file (e.g., ./keystore-m_12381_3600_0_0_0-1639058279.json).
+        - `KS_PASSWORD`: Your keystore password (e.g., 12345678).
+        - `OA`: Owner address (e.g., 0x1234567890123456789012345678901234567890).
+        - `NONCE`: Nonce (e.g., 0).
+        - `SSV_KEYS_PATH`: Path to ssv-keys executable [optional]. The default path is ./bin/ssv-keys-mac.
+
+3. Move the generated .yaml files to the `./config` [directory](../config).
+
+4. Update the [config.yaml](../config/config.yaml) file to include the local events path:
     ```yaml
     LocalEventsPath: ./config/events.yaml
     ```
-5. Add the discovery "mdns" under p2p to [config.yaml](../config/config.yaml) file
+
+5. Add "mdns" under the p2p configuration in the [config.yaml](../config/config.yaml) file:
     ```yaml
     p2p:
       Discovery: mdns
     ```
-6. Add debug services to [config.yaml](../config/config.yaml) file, use the following to debug all components:
+
+6. To enable debugging for all components, add the debug services line in the [config.yaml](../config/config.yaml) file:
     ```yaml 
     global:
       DebugServices: ssv/.*
     ```   
 
-7Build and run 4 local nodes ```docker-compose up --build ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4```
+7. Finally, build and run 4 local nodes with this command:
+    ```shell
+    docker-compose up --build ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4
+    ``` 
 
-#### Use manual steps:
+#### Use manual steps
 
-1. Generate 4 operator keys - [Generating an Operator Key](#generating-an-operator-key)
-2. Create 4 .yaml files with the corresponding configuration, based on
-   the [template file](../config/example_share.yaml). \
-   The files should be placed in the `./config` directory (`./config/share1.yaml`, `./config/share2.yaml`, etc.)
-3. Populate the `OperatorPrivateKey` in the created share[1..4].yaml with operator private keys generated in section 1
-4. Generate share keys using 4 operator public keys generated in section 1
-   using [ssv-keys](https://github.com/bloxapp/ssv-keys#option-1-running-an-executable-recommended-route)
-5. Create `events.yaml` file with the corresponding configuration [use validator registration happy flow example], based
-   on the [template file](../config/events.example.yaml)
-    1. fill the operator registration events with the data generated in section 4
-    2. fill the validator registration event with the data generated in section 4
-6. Place the `events.yaml` file in the `./config` directory (`./config/events.yaml`)
-7. Add the local events path to [config.yaml](../config/config.yaml) file
+These steps offer a detailed manual alternative to the script. They provide a step-by-step guide for setting up a local SSV environment, generating the necessary keys, creating and configuring YAML files, and building and running multiple SSV nodes. They are beneficial for those who prefer more control over the setup process or need to understand it in greater detail.
+
+1. Generate 4 operator keys. You can refer to the [Generating an Operator Key](#generating-an-operator-key) section for guidance.
+
+2. Create 4 .yaml files (`share1.yaml`, `share2.yaml`, `share3.yaml`, `share4.yaml`) with the corresponding configurations, based on the provided [template file](../config/example_share.yaml).
+    - Save these files in the `./config` directory.
+
+3. Populate the `OperatorPrivateKey` field in the `share[1..4].yaml` files with the operator private keys that you generated in step 1.
+
+4. Generate share keys using the 4 operator public keys generated in step 1. You can do this using [ssv-keys](https://github.com/bloxapp/ssv-keys#example).
+
+5. Create an `events.yaml` file based on the provided [template file](../config/events.example.yaml). Follow the validator registration happy flow example for proper configuration.
+    - Populate the operator registration events with the data generated in step 4.
+    - Populate the validator registration event with the data generated in step 4.
+
+6. Place the `events.yaml` file in the `./config` directory (`./config/events.yaml`).
+
+7. Add the local events path to the [config.yaml](../config/config.yaml) file:
     ```yaml
     LocalEventsPath: ./config/events.yaml
     ```
-8. Add debug services to [config.yaml](../config/config.yaml) file, use the following to debug all components:
+
+8. If you want to debug all components, add debug services to the [config.yaml](../config/config.yaml) file:
     ```yaml 
     global:
       DebugServices: ssv/.*
     ```
-9. Add the discovery "mdns" under p2p to [config.yaml](../config/config.yaml) file
+
+9. Add the discovery "mdns" under the p2p section in the [config.yaml](../config/config.yaml) file:
     ```yaml
     p2p:
       Discovery: mdns
     ```
-10. Build and run 4 local nodes ```docker-compose up --build ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4```
+
+10. Finally, build and run 4 local nodes with the following command:
+    ```bash
+    docker-compose up --build ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4
+    ```
 
 ### Run
 

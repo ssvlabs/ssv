@@ -110,6 +110,9 @@ func (ctrl *topicsCtrl) Close() error {
 
 // Peers returns the peers subscribed to the given topic
 func (ctrl *topicsCtrl) Peers(name string) ([]peer.ID, error) {
+	if name == "" {
+		return ctrl.ps.ListPeers(""), nil
+	}
 	name = ctrl.fork.GetTopicFullName(name)
 	topic := ctrl.container.Get(name)
 	if topic == nil {
@@ -217,7 +220,7 @@ func (ctrl *topicsCtrl) listen(logger *zap.Logger, sub *pubsub.Subscription) err
 			if ctx.Err() != nil {
 				logger.Debug("stop listening to topic: context is done")
 				return nil
-			} else if err == pubsub.ErrSubscriptionCancelled || err == pubsub.ErrTopicClosed {
+			} else if errors.Is(err, pubsub.ErrSubscriptionCancelled) || errors.Is(err, pubsub.ErrTopicClosed) {
 				logger.Debug("stop listening to topic", zap.Error(err))
 				return nil
 			}

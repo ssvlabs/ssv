@@ -23,3 +23,8 @@ func (genesis *ForkGenesis) MsgID() forks.MsgIDFunc {
 func (genesis *ForkGenesis) Subnets() int {
 	return int(subnetsCount)
 }
+
+// Topics returns the available topics for this fork.
+func (genesis *ForkGenesis) Topics() []string {
+	return genesis.topics
+}

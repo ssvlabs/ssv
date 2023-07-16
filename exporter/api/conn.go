@@ -246,8 +246,8 @@ func (c *conn) logMsg(logger *zap.Logger, message []byte, byteWritten int) {
 
 // isCloseError determines whether the given error is of CloseError type
 func isCloseError(err error) bool {
-	_, ok := err.(*websocket.CloseError)
-	return ok
+	var closeError *websocket.CloseError
+	return errors.As(err, &closeError)
 }
 
 // pingMsg construct a ping message

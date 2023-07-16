@@ -9,20 +9,20 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
-
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/networkconfig"
+	"time"
 
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
-	"github.com/prysmaticlabs/prysm/network"
+	"github.com/prysmaticlabs/prysm/v4/network"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/beacon/goclient"
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/utils"
 )
 
@@ -121,9 +121,16 @@ func (n *bootNode) Start(ctx context.Context, logger *zap.Logger) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/p2p", handler.httpHandler(logger))
 
-	// TODO: enable lint (G114: Use of net/http serve function that has no support for setting timeouts (gosec))
-	// nolint: gosec
-	if err := http.ListenAndServe(fmt.Sprintf(":%d", n.tcpPort), mux); err != nil {
+	const timeout = 3 * time.Second
+
+	httpServer := &http.Server{
+		Addr:         fmt.Sprintf(":%d", n.tcpPort),
+		Handler:      mux,
+		ReadTimeout:  timeout,
+		WriteTimeout: timeout,
+	}
+
+	if err := httpServer.ListenAndServe(); err != nil {
 		log.Fatalf("Failed to start server %v", err)
 	}
 

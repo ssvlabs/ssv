@@ -13,7 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/golang/mock/gomock"
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/prysm/async/event"
+	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -139,11 +139,11 @@ func populateStorage(t *testing.T, logger *zap.Logger, storage registrystorage.S
 	}
 
 	for i := 0; i < 1000; i++ {
-		require.NoError(t, storage.Save(logger, createShare(i, operatorData.ID)))
+		require.NoError(t, storage.Save(createShare(i, operatorData.ID)))
 	}
 
 	// add none committee share
-	require.NoError(t, storage.Save(logger, createShare(2000, spectypes.OperatorID(1))))
+	require.NoError(t, storage.Save(createShare(2000, spectypes.OperatorID(1))))
 
 	all := storage.List(registrystorage.ByOperatorID(operatorData.ID), registrystorage.ByNotLiquidated())
 	require.Equal(t, 1000, len(all))

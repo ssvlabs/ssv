@@ -20,13 +20,13 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/prysm/async/event"
+	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"go.uber.org/zap"
 )
 
 const (
-	healthCheckTimeout        = 10 * time.Second
-	blocksInBatch      uint64 = 100000
+	healthCheckTimeout        = 500 * time.Millisecond
+	blocksInBatch      uint64 = 5000
 )
 
 // ClientOptions are the options for the client
@@ -102,6 +102,23 @@ func (ec *eth1Client) Sync(logger *zap.Logger, fromBlock *big.Int) error {
 	return err
 }
 
+// IsReady returns if eth1 is currently ready: responds to requests and not in the syncing state.
+func (ec *eth1Client) IsReady(ctx context.Context) (bool, error) {
+	sp, err := ec.conn.SyncProgress(ctx)
+	if err != nil {
+		reportNodeStatus(statusUnknown)
+		return false, err
+	}
+
+	if sp != nil {
+		reportNodeStatus(statusSyncing)
+		return false, nil
+	}
+
+	reportNodeStatus(statusOK)
+	return true, nil
+}
+
 // HealthCheck provides health status of eth1 node
 func (ec *eth1Client) HealthCheck() []string {
 	if ec.conn == nil {
@@ -159,8 +176,7 @@ func (ec *eth1Client) reconnect(logger *zap.Logger) {
 	}, 1*time.Second, limit+(1*time.Second))
 	logger.Debug("managed to reconnect")
 	if err := ec.streamSmartContractEvents(logger); err != nil {
-		// TODO: panic?
-		logger.Error("failed to stream events after reconnection", zap.Error(err))
+		logger.Panic("failed to stream events after reconnection", zap.Error(err))
 	}
 }
 
@@ -174,7 +190,12 @@ func (ec *eth1Client) fireEvent(log types.Log, name string, data interface{}) {
 
 // streamSmartContractEvents sync events history of the given contract
 func (ec *eth1Client) streamSmartContractEvents(logger *zap.Logger) error {
-	logger.Debug("streaming smart contract events")
+	currentBlock, err := ec.conn.BlockNumber(ec.ctx)
+	if err != nil {
+		return errors.Wrap(err, "failed to get current block")
+	}
+	logger.Debug("streaming smart contract events",
+		zap.Uint64("current_block", currentBlock))
 
 	contractAbi, err := abi.JSON(strings.NewReader(ec.contractABI))
 	if err != nil {
@@ -236,7 +257,6 @@ func (ec *eth1Client) listenToSubscription(logger *zap.Logger, logs chan types.L
 	}
 }
 
-// syncSmartContractsEvents sync events history of the given contract
 func (ec *eth1Client) syncSmartContractsEvents(logger *zap.Logger, fromBlock *big.Int) error {
 	logger.Debug("syncing smart contract events", fields.FromBlock(fromBlock))
 
@@ -244,55 +264,54 @@ func (ec *eth1Client) syncSmartContractsEvents(logger *zap.Logger, fromBlock *bi
 	if err != nil {
 		return errors.Wrap(err, "failed to parse ABI interface")
 	}
-	currentBlock, err := ec.conn.BlockNumber(ec.ctx)
+	highestBlock, err := ec.conn.BlockNumber(ec.ctx)
 	if err != nil {
 		return errors.Wrap(err, "failed to get current block")
 	}
+
 	var logs []types.Log
 	var nSuccess int
+
 	for {
-		var toBlock *big.Int
-		if currentBlock-fromBlock.Uint64() > blocksInBatch {
-			toBlock = big.NewInt(int64(fromBlock.Uint64() + blocksInBatch))
-		} else { // no more batches are required -> setting toBlock to nil
-			toBlock = nil
+		toBlock := new(big.Int).SetUint64(fromBlock.Uint64() + blocksInBatch)
+		if toBlock.Uint64() > highestBlock {
+			toBlock.SetUint64(highestBlock)
 		}
+
 		_logs, _nSuccess, err := ec.fetchAndProcessEvents(logger, fromBlock, toBlock, contractAbi)
 		if err != nil {
-			// in case request exceeded limit, try again with less blocks
-			// will stop after log(blocksInBatch) tries
-			if !strings.Contains(err.Error(), "websocket: read limit exceeded") {
-				return errors.Wrap(err, "failed to get events")
-			}
-			currentBatchSize := int64(blocksInBatch)
-		retryLoop:
-			for currentBatchSize > 1 {
-				currentBatchSize /= 2
-				logger.Debug("using a lower batch size", zap.Int64("currentBatchSize", currentBatchSize))
-				toBlock = big.NewInt(int64(fromBlock.Uint64()) + currentBatchSize)
-				_logs, _nSuccess, err = ec.fetchAndProcessEvents(logger, fromBlock, toBlock, contractAbi)
-				if err != nil {
-					if !strings.Contains(err.Error(), "websocket: read limit exceeded") {
-						return errors.Wrap(err, "failed to get events")
-					}
-					// limit exceeded
-					continue retryLoop
-				}
-				// done
-				break retryLoop
-			}
+			return errors.Wrap(err, "failed to get events")
 		}
+
 		nSuccess += _nSuccess
 		logs = append(logs, _logs...)
-		if toBlock == nil { // finished
+
+		// If toBlock reached the highest block, check for new blocks
+		if toBlock.Uint64() >= highestBlock {
+			currentBlock, err := ec.conn.BlockNumber(ec.ctx)
+			if err != nil {
+				return errors.Wrap(err, "failed to get current block")
+			}
+
+			// If Eth1 advanced while we were syncing, let's sync the new blocks.
+			if currentBlock > highestBlock {
+				logger.Debug("syncing new blocks", zap.Uint64("currentBlock", currentBlock), zap.Uint64("highestBlock", highestBlock))
+				fromBlock.SetUint64(highestBlock + 1)
+				highestBlock = currentBlock
+				continue
+			}
+
+			// Finished.
 			break
 		}
-		fromBlock = toBlock
+
+		fromBlock.SetUint64(toBlock.Uint64() + 1)
 	}
+
 	logger.Debug("finished syncing registry contract",
 		zap.Int("total events", len(logs)), zap.Int("total success", nSuccess))
-	// publishing SyncEndedEvent so other components could track the sync
-	ec.fireEvent(types.Log{}, "SyncEndedEvent", eth1.SyncEndedEvent{Logs: logs, Success: nSuccess == len(logs)})
+
+	ec.fireEvent(types.Log{}, "SyncEndedEvent", eth1.SyncEndedEvent{Block: highestBlock, Success: nSuccess == len(logs)})
 
 	return nil
 }
@@ -309,14 +328,16 @@ func (ec *eth1Client) fetchAndProcessEvents(logger *zap.Logger, fromBlock, toBlo
 		logger = logger.With(fields.ToBlock(toBlock))
 	}
 	logger.Debug("fetching event logs")
+	start := time.Now()
 	logs, err := ec.conn.FilterLogs(ec.ctx, query)
 	if err != nil {
 		return nil, 0, errors.Wrap(err, "failed to get event logs")
 	}
-	nSuccess := len(logs)
-	logger = logger.With(zap.Int("results", len(logs)))
-	logger.Debug("got event logs")
+	fails := 0
+	logger = logger.With(zap.Int("logs", len(logs)))
+	logger.Debug("got event logs", zap.Duration("took", time.Since(start)))
 
+	start = time.Now()
 	for _, vLog := range logs {
 		eventName, err := ec.handleEvent(logger, vLog, contractAbi)
 		if err != nil {
@@ -331,15 +352,16 @@ func (ec *eth1Client) fetchAndProcessEvents(logger *zap.Logger, fromBlock, toBlo
 				loggerWith.Warn("could not parse history sync event, the event is malformed")
 			} else {
 				loggerWith.Error("could not parse history sync event")
-				nSuccess--
+				fails++
 			}
 			continue
 		}
 	}
 	logger.Debug("event logs were received and parsed successfully",
-		zap.Int("successCount", nSuccess))
+		zap.Int("fails", fails),
+		zap.Duration("took", time.Since(start)))
 
-	return logs, nSuccess, nil
+	return logs, len(logs) - fails, nil
 }
 
 func (ec *eth1Client) handleEvent(logger *zap.Logger, vLog types.Log, contractAbi abi.ABI) (string, error) {

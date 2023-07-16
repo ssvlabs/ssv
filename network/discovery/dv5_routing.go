@@ -4,12 +4,13 @@ import (
 	"context"
 	"time"
 
-	"github.com/bloxapp/ssv/logging/fields"
-
-	"github.com/bloxapp/ssv/logging"
 	"github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
 )
 
 // implementing discovery.Discovery
@@ -25,9 +26,9 @@ func (dvs *DiscV5Service) Advertise(ctx context.Context, ns string, opt ...disco
 	if opts.Ttl == 0 {
 		opts.Ttl = time.Hour
 	}
-	subnet := nsToSubnet(ns)
-	if subnet < 0 {
-		logger.Debug("not a subnet", fields.Topic(ns))
+	subnet, err := dvs.nsToSubnet(ns)
+	if err != nil {
+		logger.Debug("not a subnet", fields.Topic(ns), zap.Error(err))
 		return opts.Ttl, nil
 	}
 
@@ -42,9 +43,9 @@ func (dvs *DiscV5Service) Advertise(ctx context.Context, ns string, opt ...disco
 // implementation of discovery.Discoverer
 func (dvs *DiscV5Service) FindPeers(ctx context.Context, ns string, opt ...discovery.Option) (<-chan peer.AddrInfo, error) {
 	logger := logging.FromContext(ctx).Named(logging.NameDiscoveryService)
-	subnet := nsToSubnet(ns)
-	if subnet < 0 {
-		logger.Debug("not a subnet", fields.Topic(ns))
+	subnet, err := dvs.nsToSubnet(ns)
+	if err != nil {
+		logger.Debug("not a subnet", fields.Topic(ns), zap.Error(err))
 		return nil, nil
 	}
 	cn := make(chan peer.AddrInfo, 32)
