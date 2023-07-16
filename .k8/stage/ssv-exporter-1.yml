@@ -140,7 +140,7 @@ spec:
             - name: DISCOVERY_TYPE_KEY
               value: "discv5"
             - name: DB_PATH
-              value: "./data/jato-v2-slots-new"
+              value: "./data/jato-v2-testslots"
             - name: NETWORK
               value: "jato-v2-stage"
             - name: DB_REPORTING
