@@ -34,7 +34,7 @@ type ExecutionClient struct {
 	// optional
 	logger                      *zap.Logger
 	metrics                     metrics
-	finalizationOffset          uint64
+	finalizationOffset          uint64 // TODO: consider reading the finalized checkpoint from consensus layer
 	connectionTimeout           time.Duration
 	reconnectionInitialInterval time.Duration
 	reconnectionMaxInterval     time.Duration
