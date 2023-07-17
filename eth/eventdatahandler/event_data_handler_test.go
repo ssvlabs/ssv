@@ -119,9 +119,16 @@ func setupDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger) (*E
 
 	cl := executionclient.New("test", ethcommon.Address{})
 
+	contractFilterer, err := cl.Filterer()
+	require.NoError(t, err)
+
+	contractABI, err := contract.ContractMetaData.GetAbi()
+	require.NoError(t, err)
+
 	edh, err := New(
 		eventDB,
-		cl,
+		contractFilterer,
+		contractABI,
 		validatorCtrl,
 		operatorData,
 		nodeStorage.GetPrivateKey,

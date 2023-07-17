@@ -387,6 +387,5 @@ func (ec *ExecutionClient) reconnect(ctx context.Context) {
 }
 
 func (ec *ExecutionClient) Filterer() (*contract.ContractFilterer, error) {
-	filterer, err := contract.NewContractFilterer(ec.contractAddress, ec.client.Load())
-	return filterer, err
+	return contract.NewContractFilterer(ec.contractAddress, ec.client.Load())
 }

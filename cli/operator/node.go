@@ -19,6 +19,7 @@ import (
 	"github.com/bloxapp/ssv/beacon/goclient"
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/ekm"
+	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/eth/eventbatcher"
 	"github.com/bloxapp/ssv/eth/eventdatahandler"
 	"github.com/bloxapp/ssv/eth/eventdb"
@@ -451,9 +452,21 @@ func setupEventHandling(
 	networkConfig networkconfig.NetworkConfig,
 ) {
 	eventDB := eventdb.NewEventDB(db.Badger())
+
+	eventFilterer, err := executionClient.Filterer()
+	if err != nil {
+		logger.Fatal("failed to set up event filterer", zap.Error(err))
+	}
+
+	contractABI, err := contract.ContractMetaData.GetAbi()
+	if err != nil {
+		logger.Fatal("failed to get contract ABI", zap.Error(err))
+	}
+
 	eventDataHandler, err := eventdatahandler.New(
 		eventDB,
-		executionClient,
+		eventFilterer,
+		contractABI,
 		validatorCtrl,
 		cfg.SSVOptions.ValidatorOptions.OperatorData,
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider,

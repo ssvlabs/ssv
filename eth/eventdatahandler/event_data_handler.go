@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/bloxapp/ssv-spec/types"
-	ethabi "github.com/ethereum/go-ethereum/accounts/abi"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"go.uber.org/zap"
@@ -17,7 +16,6 @@ import (
 	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/eth/eventbatcher"
 	"github.com/bloxapp/ssv/eth/eventdb"
-	"github.com/bloxapp/ssv/eth/executionclient"
 	"github.com/bloxapp/ssv/eth/localevents"
 	"github.com/bloxapp/ssv/eth/sharemap"
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
@@ -45,9 +43,9 @@ type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
 type EventDataHandler struct {
 	eventDB                    eventDB
 	taskExecutor               taskExecutor
-	abi                        *ethabi.ABI
+	contractABI                ethEventGetter
 	shareMap                   *sharemap.ShareMap
-	filterer                   *contract.ContractFilterer
+	eventFilterer              eventFilterer
 	operatorData               *storage.OperatorData
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider
 	keyManager                 types.KeyManager
@@ -60,7 +58,8 @@ type EventDataHandler struct {
 
 func New(
 	eventDB eventDB,
-	client *executionclient.ExecutionClient,
+	eventFilterer eventFilterer,
+	contractABI ethEventGetter,
 	taskExecutor taskExecutor,
 	operatorData *storage.OperatorData,
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider,
@@ -69,21 +68,11 @@ func New(
 	storageMap *qbftstorage.QBFTStores,
 	opts ...Option,
 ) (*EventDataHandler, error) {
-	abi, err := contract.ContractMetaData.GetAbi()
-	if err != nil {
-		return nil, fmt.Errorf("get contract ABI: %w", err)
-	}
-
-	filterer, err := client.Filterer()
-	if err != nil {
-		return nil, fmt.Errorf("create contract filterer: %w", err)
-	}
-
 	edh := &EventDataHandler{
 		eventDB:                    eventDB,
 		taskExecutor:               taskExecutor,
-		abi:                        abi,
-		filterer:                   filterer,
+		contractABI:                contractABI,
+		eventFilterer:              eventFilterer,
 		operatorData:               operatorData,
 		shareEncryptionKeyProvider: shareEncryptionKeyProvider,
 		keyManager:                 keyManager,
@@ -169,7 +158,7 @@ func (edh *EventDataHandler) processBlockEvents(blockEvents eventbatcher.BlockEv
 }
 
 func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (Task, error) {
-	abiEvent, err := edh.abi.EventByID(event.Topics[0])
+	abiEvent, err := edh.contractABI.EventByID(event.Topics[0])
 	if err != nil {
 		edh.logger.Error("failed to find event by ID", zap.String("hash", event.Topics[0].String()))
 		return nil, nil
@@ -177,7 +166,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 
 	switch abiEvent.Name {
 	case OperatorAdded:
-		operatorAddedEvent, err := edh.filterer.ParseOperatorAdded(event)
+		operatorAddedEvent, err := edh.eventFilterer.ParseOperatorAdded(event)
 		if err != nil {
 			edh.metrics.EventProcessingFailed(abiEvent.Name)
 			return nil, fmt.Errorf("parse OperatorAdded: %w", err)
@@ -197,7 +186,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 		return nil, nil
 
 	case OperatorRemoved:
-		operatorRemovedEvent, err := edh.filterer.ParseOperatorRemoved(event)
+		operatorRemovedEvent, err := edh.eventFilterer.ParseOperatorRemoved(event)
 		if err != nil {
 			return nil, fmt.Errorf("parse OperatorRemoved: %w", err)
 		}
@@ -216,7 +205,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 		return nil, nil
 
 	case ValidatorAdded:
-		validatorAddedEvent, err := edh.filterer.ParseValidatorAdded(event)
+		validatorAddedEvent, err := edh.eventFilterer.ParseValidatorAdded(event)
 		if err != nil {
 			return nil, fmt.Errorf("parse ValidatorAdded: %w", err)
 		}
@@ -243,7 +232,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 		return task, nil
 
 	case ValidatorRemoved:
-		validatorRemovedEvent, err := edh.filterer.ParseValidatorRemoved(event)
+		validatorRemovedEvent, err := edh.eventFilterer.ParseValidatorRemoved(event)
 		if err != nil {
 			return nil, fmt.Errorf("parse ValidatorRemoved: %w", err)
 		}
@@ -270,7 +259,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 		return task, nil
 
 	case ClusterLiquidated:
-		clusterLiquidatedEvent, err := edh.filterer.ParseClusterLiquidated(event)
+		clusterLiquidatedEvent, err := edh.eventFilterer.ParseClusterLiquidated(event)
 		if err != nil {
 			return nil, fmt.Errorf("parse ClusterLiquidated: %w", err)
 		}
@@ -297,7 +286,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 		return task, nil
 
 	case ClusterReactivated:
-		clusterReactivatedEvent, err := edh.filterer.ParseClusterReactivated(event)
+		clusterReactivatedEvent, err := edh.eventFilterer.ParseClusterReactivated(event)
 		if err != nil {
 			return nil, fmt.Errorf("parse ClusterReactivated: %w", err)
 		}
@@ -324,7 +313,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 		return task, nil
 
 	case FeeRecipientAddressUpdated:
-		feeRecipientAddressUpdatedEvent, err := edh.filterer.ParseFeeRecipientAddressUpdated(event)
+		feeRecipientAddressUpdatedEvent, err := edh.eventFilterer.ParseFeeRecipientAddressUpdated(event)
 		if err != nil {
 			return nil, fmt.Errorf("parse FeeRecipientAddressUpdated: %w", err)
 		}
