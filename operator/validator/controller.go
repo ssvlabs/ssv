@@ -448,7 +448,10 @@ func (c *controller) setupNonCommitteeValidators(logger *zap.Logger) {
 		return
 	}
 
+	pubKeys := make([][]byte, 0, len(nonCommitteeShares))
 	for _, validatorShare := range nonCommitteeShares {
+		pubKeys = append(pubKeys, validatorShare.ValidatorPubKey)
+
 		opts := *c.validatorOptions
 		opts.SSVShare = validatorShare
 		allRoles := []spectypes.BeaconRole{
@@ -464,6 +467,13 @@ func (c *controller) setupNonCommitteeValidators(logger *zap.Logger) {
 			if err != nil {
 				logger.Error("failed to sync highest decided", zap.Error(err))
 			}
+		}
+	}
+
+	if len(pubKeys) > 0 {
+		logger.Debug("updating metadata for non-committee validators", zap.Int("count", len(pubKeys)))
+		if err := beaconprotocol.UpdateValidatorsMetadata(logger, pubKeys, c, c.beacon, c.onMetadataUpdated); err != nil {
+			logger.Warn("could not update all validators", zap.Error(err))
 		}
 	}
 }
@@ -495,7 +505,20 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 		return errors.Wrap(err, "could not update validator metadata")
 	}
 
-	// Update metadata in memory, and start validator if needed.
+	// If this validator is not ours, don't start it.
+	pkBytes, err := hex.DecodeString(pk)
+	if err != nil {
+		return errors.Wrap(err, "could not decode public key")
+	}
+	share := c.sharesStorage.Get(pkBytes)
+	if share == nil {
+		return errors.New("share was not found")
+	}
+	if !share.BelongsToOperator(c.operatorData.ID) {
+		return nil
+	}
+
+	// Start validator (if not already started).
 	if v, found := c.validatorsMap.GetValidator(pk); found {
 		v.Share.BeaconMetadata = metadata
 		_, err := c.startValidator(c.logger, v)
@@ -505,15 +528,7 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 	} else {
 		c.logger.Info("starting new validator", zap.String("pubKey", pk))
 
-		pkBytes, err := hex.DecodeString(pk)
-		if err != nil {
-			return errors.Wrap(err, "could not decode public key")
-		}
-		share := c.sharesStorage.Get(nil, pkBytes)
-		if share == nil {
-			return errors.New("share was not found")
-		}
-		started, err := c.onShareStart(c.logger, share)
+		started, err := c.onShareStart(logger, share)
 		if err != nil {
 			return errors.Wrap(err, "could not start validator")
 		}
@@ -653,7 +668,12 @@ func (c *controller) UpdateValidatorMetaDataLoop(logger *zap.Logger) {
 	for {
 		time.Sleep(c.metadataUpdateInterval)
 
-		shares := c.sharesStorage.List(nil, registrystorage.ByOperatorID(c.operatorData.ID), registrystorage.ByNotLiquidated())
+		filters := []registrystorage.SharesFilter{registrystorage.ByNotLiquidated()}
+		if !c.validatorOptions.Exporter {
+			// If we're not an exporter node, fetch only for validators of our operator.
+			filters = append(filters, registrystorage.ByOperatorID(c.operatorData.ID))
+		}
+		shares := c.sharesStorage.List(nil, filters...)
 		var pks [][]byte
 		for _, share := range shares {
 			pks = append(pks, share.ValidatorPubKey)
