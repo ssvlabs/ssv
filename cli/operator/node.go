@@ -223,66 +223,17 @@ var StartNodeCmd = &cobra.Command{
 
 		metricsReporter.SSVNodeHealthy()
 
-		eventDB := eventdb.NewEventDB(db.Badger())
-		eventDataHandler, err := eventdatahandler.New(
-			eventDB,
+		setupEventHandling(
+			cmd.Context(),
+			logger,
+			db,
 			executionClient,
 			validatorCtrl,
-			cfg.SSVOptions.ValidatorOptions.OperatorData,
-			cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider,
-			cfg.SSVOptions.ValidatorOptions.KeyManager,
-			cfg.SSVOptions.ValidatorOptions.Beacon,
 			storageMap,
-			eventdatahandler.WithFullNode(),
-			eventdatahandler.WithLogger(logger),
-			eventdatahandler.WithMetrics(metricsReporter),
+			metricsReporter,
+			nodeProber,
+			networkConfig,
 		)
-		if err != nil {
-			logger.Fatal("failed to setup event data handler", zap.Error(err))
-		}
-
-		eventBatcher := eventbatcher.NewEventBatcher()
-		eventDispatcher := eventdispatcher.New(
-			executionClient,
-			eventBatcher,
-			eventDataHandler,
-			eventdispatcher.WithLogger(logger),
-			eventdispatcher.WithMetrics(metricsReporter),
-			eventdispatcher.WithNodeProber(nodeProber),
-		)
-
-		txn := eventDB.ROTxn()
-		fromBlock, err := txn.GetLastProcessedBlock()
-		txn.Discard()
-
-		if err != nil {
-			logger.Fatal("could not get last processed block", zap.Error(err))
-		}
-
-		if fromBlock == nil {
-			fromBlock = networkConfig.ETH1SyncOffset
-			logger.Info("no last processed block in DB found, using last processed block from network config",
-				fields.BlockNumber(fromBlock.Uint64()))
-		} else {
-			logger.Info("using last processed block from DB",
-				fields.BlockNumber(fromBlock.Uint64()))
-		}
-
-		// load & parse local events yaml if exists, otherwise sync from contract
-		if len(cfg.LocalEventsPath) != 0 {
-			localEvents, err := localevents.Load(cfg.LocalEventsPath)
-			if err != nil {
-				logger.Fatal("failed to load local events", zap.Error(err))
-			}
-
-			if err := eventDataHandler.HandleLocalEvents(localEvents); err != nil {
-				logger.Fatal("error occurred while running event dispatcher", zap.Error(err))
-			}
-		} else {
-			if err := eventDispatcher.Start(cmd.Context(), fromBlock.Uint64()); err != nil {
-				logger.Fatal("error occurred while running event dispatcher", zap.Error(err))
-			}
-		}
 
 		cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, uint64, error) {
 			return validatorCtrl.GetValidatorStats()
@@ -486,6 +437,79 @@ func setupConsensusClient(
 	}
 
 	return cl
+}
+
+func setupEventHandling(
+	ctx context.Context,
+	logger *zap.Logger,
+	db *kv.BadgerDb,
+	executionClient *executionclient.ExecutionClient,
+	validatorCtrl validator.Controller,
+	storageMap *ibftstorage.QBFTStores,
+	metricsReporter *metricsreporter.MetricsReporter,
+	nodeProber *nodeprobe.Prober,
+	networkConfig networkconfig.NetworkConfig,
+) {
+	eventDB := eventdb.NewEventDB(db.Badger())
+	eventDataHandler, err := eventdatahandler.New(
+		eventDB,
+		executionClient,
+		validatorCtrl,
+		cfg.SSVOptions.ValidatorOptions.OperatorData,
+		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider,
+		cfg.SSVOptions.ValidatorOptions.KeyManager,
+		cfg.SSVOptions.ValidatorOptions.Beacon,
+		storageMap,
+		eventdatahandler.WithFullNode(),
+		eventdatahandler.WithLogger(logger),
+		eventdatahandler.WithMetrics(metricsReporter),
+	)
+	if err != nil {
+		logger.Fatal("failed to setup event data handler", zap.Error(err))
+	}
+
+	eventBatcher := eventbatcher.NewEventBatcher()
+	eventDispatcher := eventdispatcher.New(
+		executionClient,
+		eventBatcher,
+		eventDataHandler,
+		eventdispatcher.WithLogger(logger),
+		eventdispatcher.WithMetrics(metricsReporter),
+		eventdispatcher.WithNodeProber(nodeProber),
+	)
+
+	txn := eventDB.ROTxn()
+	fromBlock, err := txn.GetLastProcessedBlock()
+	txn.Discard()
+
+	if err != nil {
+		logger.Fatal("could not get last processed block", zap.Error(err))
+	}
+
+	if fromBlock == nil {
+		fromBlock = networkConfig.ETH1SyncOffset
+		logger.Info("no last processed block in DB found, using last processed block from network config",
+			fields.BlockNumber(fromBlock.Uint64()))
+	} else {
+		logger.Info("using last processed block from DB",
+			fields.BlockNumber(fromBlock.Uint64()))
+	}
+
+	// load & parse local events yaml if exists, otherwise sync from contract
+	if len(cfg.LocalEventsPath) != 0 {
+		localEvents, err := localevents.Load(cfg.LocalEventsPath)
+		if err != nil {
+			logger.Fatal("failed to load local events", zap.Error(err))
+		}
+
+		if err := eventDataHandler.HandleLocalEvents(localEvents); err != nil {
+			logger.Fatal("error occurred while running event dispatcher", zap.Error(err))
+		}
+	} else {
+		if err := eventDispatcher.Start(ctx, fromBlock.Uint64()); err != nil {
+			logger.Fatal("error occurred while running event dispatcher", zap.Error(err))
+		}
+	}
 }
 
 func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.IDb, metricsReporter *metricsreporter.MetricsReporter, port int, enableProf bool) {
