@@ -196,7 +196,9 @@ var mockUpdateFeeTask2 = &UpdateFeeRecipientTask{owner: ethcommon.HexToAddress("
 var mockUpdateFeeTask3 = &UpdateFeeRecipientTask{owner: ethcommon.HexToAddress("0x2"), recipient: ethcommon.HexToAddress("0x3")}
 
 func TestFilterSupersedingTasks_SingleStartTask(t *testing.T) {
-	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+	edh := &EventDataHandler{}
+	WithLogger(zaptest.NewLogger(t))(edh)
+	WithTaskOptimizer()(edh)
 
 	tasks := []Task{mockStartTask1}
 	result := edh.filterSupersedingTasks(tasks)
@@ -206,7 +208,9 @@ func TestFilterSupersedingTasks_SingleStartTask(t *testing.T) {
 }
 
 func TestFilterSupersedingTasks_SingleStopTask(t *testing.T) {
-	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+	edh := &EventDataHandler{}
+	WithLogger(zaptest.NewLogger(t))(edh)
+	WithTaskOptimizer()(edh)
 
 	tasks := []Task{mockStopTask1}
 	result := edh.filterSupersedingTasks(tasks)
@@ -216,7 +220,9 @@ func TestFilterSupersedingTasks_SingleStopTask(t *testing.T) {
 }
 
 func TestFilterSupersedingTasks_StartAndStopTasks(t *testing.T) {
-	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+	edh := &EventDataHandler{}
+	WithLogger(zaptest.NewLogger(t))(edh)
+	WithTaskOptimizer()(edh)
 
 	tasks := []Task{mockStartTask1, mockStopTask1}
 	result := edh.filterSupersedingTasks(tasks)
@@ -225,7 +231,9 @@ func TestFilterSupersedingTasks_StartAndStopTasks(t *testing.T) {
 }
 
 func TestFilterSupersedingTasks_SingleLiquidateTask(t *testing.T) {
-	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+	edh := &EventDataHandler{}
+	WithLogger(zaptest.NewLogger(t))(edh)
+	WithTaskOptimizer()(edh)
 
 	tasks := []Task{mockLiquidateTask1}
 	result := edh.filterSupersedingTasks(tasks)
@@ -235,7 +243,9 @@ func TestFilterSupersedingTasks_SingleLiquidateTask(t *testing.T) {
 }
 
 func TestFilterSupersedingTasks_SingleReactivateTask(t *testing.T) {
-	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+	edh := &EventDataHandler{}
+	WithLogger(zaptest.NewLogger(t))(edh)
+	WithTaskOptimizer()(edh)
 
 	tasks := []Task{mockReactivateTask1}
 	result := edh.filterSupersedingTasks(tasks)
@@ -245,7 +255,9 @@ func TestFilterSupersedingTasks_SingleReactivateTask(t *testing.T) {
 }
 
 func TestFilterSupersedingTasks_LiquidateAndReactivateTasks(t *testing.T) {
-	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+	edh := &EventDataHandler{}
+	WithLogger(zaptest.NewLogger(t))(edh)
+	WithTaskOptimizer()(edh)
 
 	tasks := []Task{mockLiquidateTask1, mockReactivateTask1}
 	result := edh.filterSupersedingTasks(tasks)
@@ -254,7 +266,9 @@ func TestFilterSupersedingTasks_LiquidateAndReactivateTasks(t *testing.T) {
 }
 
 func TestFilterSupersedingTasks_SingleUpdateFeeTask(t *testing.T) {
-	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+	edh := &EventDataHandler{}
+	WithLogger(zaptest.NewLogger(t))(edh)
+	WithTaskOptimizer()(edh)
 
 	tasks := []Task{mockUpdateFeeTask1}
 	result := edh.filterSupersedingTasks(tasks)
@@ -264,7 +278,9 @@ func TestFilterSupersedingTasks_SingleUpdateFeeTask(t *testing.T) {
 }
 
 func TestFilterSupersedingTasks_MultipleUpdateFeeTasks(t *testing.T) {
-	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+	edh := &EventDataHandler{}
+	WithLogger(zaptest.NewLogger(t))(edh)
+	WithTaskOptimizer()(edh)
 
 	tasks := []Task{mockUpdateFeeTask2, mockUpdateFeeTask3}
 	result := edh.filterSupersedingTasks(tasks)
@@ -274,7 +290,9 @@ func TestFilterSupersedingTasks_MultipleUpdateFeeTasks(t *testing.T) {
 }
 
 func TestFilterSupersedingTasks_MixedTasks(t *testing.T) {
-	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+	edh := &EventDataHandler{}
+	WithLogger(zaptest.NewLogger(t))(edh)
+	WithTaskOptimizer()(edh)
 
 	tasks := []Task{mockStartTask1, mockStartTask2, mockStopTask1, mockLiquidateTask2, mockReactivateTask1, mockUpdateFeeTask1}
 	result := edh.filterSupersedingTasks(tasks)
@@ -287,7 +305,9 @@ func TestFilterSupersedingTasks_MixedTasks(t *testing.T) {
 }
 
 func TestFilterSupersedingTasks_MultipleDifferentStopTasks(t *testing.T) {
-	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+	edh := &EventDataHandler{}
+	WithLogger(zaptest.NewLogger(t))(edh)
+	WithTaskOptimizer()(edh)
 
 	tasks := []Task{mockStopTask1, mockStopTask2}
 	result := edh.filterSupersedingTasks(tasks)
@@ -298,7 +318,9 @@ func TestFilterSupersedingTasks_MultipleDifferentStopTasks(t *testing.T) {
 }
 
 func TestFilterSupersedingTasks_MultipleDifferentReactivateTasks(t *testing.T) {
-	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+	edh := &EventDataHandler{}
+	WithLogger(zaptest.NewLogger(t))(edh)
+	WithTaskOptimizer()(edh)
 
 	tasks := []Task{mockReactivateTask1, mockReactivateTask2}
 	result := edh.filterSupersedingTasks(tasks)
@@ -309,7 +331,9 @@ func TestFilterSupersedingTasks_MultipleDifferentReactivateTasks(t *testing.T) {
 }
 
 func TestFilterSupersedingTasks_MultipleDifferentUpdateFeeTasks(t *testing.T) {
-	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+	edh := &EventDataHandler{}
+	WithLogger(zaptest.NewLogger(t))(edh)
+	WithTaskOptimizer()(edh)
 
 	tasks := []Task{mockUpdateFeeTask1, mockUpdateFeeTask2}
 	result := edh.filterSupersedingTasks(tasks)
@@ -320,7 +344,9 @@ func TestFilterSupersedingTasks_MultipleDifferentUpdateFeeTasks(t *testing.T) {
 }
 
 func TestFilterSupersedingTasks_MixedTasks_Different(t *testing.T) {
-	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+	edh := &EventDataHandler{}
+	WithLogger(zaptest.NewLogger(t))(edh)
+	WithTaskOptimizer()(edh)
 
 	tasks := []Task{mockStartTask1, mockStopTask2, mockLiquidateTask1, mockReactivateTask2, mockUpdateFeeTask1}
 	result := edh.filterSupersedingTasks(tasks)
@@ -338,7 +364,9 @@ type unknownTask struct{}
 func (u unknownTask) Execute() error { return nil }
 
 func TestFilterSupersedingTasks_UnknownTask(t *testing.T) {
-	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+	edh := &EventDataHandler{}
+	WithLogger(zaptest.NewLogger(t))(edh)
+	WithTaskOptimizer()(edh)
 
 	tasks := []Task{mockStartTask1, unknownTask{}}
 	result := edh.filterSupersedingTasks(tasks)

@@ -63,6 +63,7 @@ type EventDataHandler struct {
 	beacon                     beaconprotocol.BeaconNode
 	storageMap                 *qbftstorage.QBFTStores
 	fullNode                   bool
+	taskOptimization           bool
 	logger                     *zap.Logger
 	metrics                    metrics
 }
@@ -122,7 +123,9 @@ func (edh *EventDataHandler) HandleBlockEventsStream(blockEventsCh <-chan eventb
 
 		logger.Info("executing tasks", fields.Count(len(tasks)))
 
-		tasks = edh.filterSupersedingTasks(tasks)
+		if edh.taskOptimization {
+			tasks = edh.filterSupersedingTasks(tasks)
+		}
 		for _, task := range tasks {
 			logger = logger.With(fields.Type(task))
 			logger.Debug("going to execute task")

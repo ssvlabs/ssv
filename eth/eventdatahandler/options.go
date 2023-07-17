@@ -27,3 +27,12 @@ func WithFullNode() Option {
 		edh.fullNode = true
 	}
 }
+
+// WithTaskOptimizer enables task optimization.
+// NOTE: EXPERIMENTAL, not for production use
+// TODO: check if start-stop can be superseded by reactivate-liquidate
+func WithTaskOptimizer() Option {
+	return func(edh *EventDataHandler) {
+		edh.taskOptimization = true
+	}
+}
