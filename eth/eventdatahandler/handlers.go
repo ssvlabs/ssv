@@ -17,6 +17,8 @@ import (
 	"github.com/bloxapp/ssv/eth/eventdb"
 	"github.com/bloxapp/ssv/logging/fields"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
@@ -372,12 +374,12 @@ func (edh *EventDataHandler) handleValidatorRemoved(txn eventdb.RW, event *contr
 	}
 
 	// remove decided messages
-	messageID := spectypes.NewMsgID(ssvtypes.GetDefaultDomain(), share.ValidatorPubKey, spectypes.BNRoleAttester)
-	store := edh.storageMap.Get(messageID.GetRoleType())
-	if store != nil {
-		if err := store.CleanAllInstances(logger, messageID[:]); err != nil { // TODO need to delete for multi duty as well
-			return nil, fmt.Errorf("could not clean all decided messages: %w", err)
-		}
+	err := edh.storageMap.Each(func(role spectypes.BeaconRole, store qbftstorage.QBFTStore) error {
+		messageID := spectypes.NewMsgID(types.GetDefaultDomain(), share.ValidatorPubKey, role)
+		return store.CleanAllInstances(logger, messageID[:])
+	})
+	if err != nil {
+		return nil, fmt.Errorf("could not clean all decided messages: %w", err)
 	}
 
 	edh.shareMap.Delete(share.ValidatorPubKey)
