@@ -14,13 +14,13 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth/contract"
-	"github.com/bloxapp/ssv/eth/eventdb"
 	"github.com/bloxapp/ssv/logging/fields"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
+	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
@@ -36,7 +36,7 @@ var (
 	ErrValidatorShareNotFound       = fmt.Errorf("validator share not found")
 )
 
-func (edh *EventDataHandler) handleOperatorAdded(txn eventdb.RW, event *contract.ContractOperatorAdded) error {
+func (edh *EventDataHandler) handleOperatorAdded(txn basedb.Txn, event *contract.ContractOperatorAdded) error {
 	logger := edh.logger.With(
 		fields.OperatorID(event.OperatorId),
 		zap.String("operator_pub_key", ethcommon.Bytes2Hex(event.PublicKey)),
@@ -60,7 +60,7 @@ func (edh *EventDataHandler) handleOperatorAdded(txn eventdb.RW, event *contract
 	}
 
 	// TODO: consider saving other operators as well
-	exists, err := txn.SaveOperatorData(od)
+	exists, err := edh.nodeStorage.SaveOperatorData(txn, od)
 	if err != nil {
 		return fmt.Errorf("save operator data: %w", err)
 	}
@@ -82,18 +82,18 @@ func (edh *EventDataHandler) handleOperatorAdded(txn eventdb.RW, event *contract
 	return nil
 }
 
-func (edh *EventDataHandler) handleOperatorRemoved(txn eventdb.RW, event *contract.ContractOperatorRemoved) error {
+func (edh *EventDataHandler) handleOperatorRemoved(txn basedb.Txn, event *contract.ContractOperatorRemoved) error {
 	logger := edh.logger.With(
 		fields.OperatorID(event.OperatorId),
 		zap.String("event_type", OperatorRemoved),
 	)
 	logger.Debug("processing event")
 
-	od, err := txn.GetOperatorData(event.OperatorId)
+	od, found, err := edh.nodeStorage.GetOperatorData(txn, event.OperatorId)
 	if err != nil {
 		return fmt.Errorf("could not get operator data: %w", err)
 	}
-	if od == nil {
+	if !found || od == nil {
 		logger.Warn("malformed event: could not find operator data")
 		return &MalformedEventError{Err: ErrOperatorDataNotFound}
 	}
@@ -116,7 +116,7 @@ func (edh *EventDataHandler) handleOperatorRemoved(txn eventdb.RW, event *contra
 	return nil
 }
 
-func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contract.ContractValidatorAdded) (*ssvtypes.SSVShare, error) {
+func (edh *EventDataHandler) handleValidatorAdded(txn basedb.Txn, event *contract.ContractValidatorAdded) (*ssvtypes.SSVShare, error) {
 	logger := edh.logger.With(
 		zap.String("owner_address", event.Owner.String()),
 		zap.Uint64s("operator_ids", event.OperatorIds),
@@ -126,7 +126,7 @@ func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contrac
 	logger.Debug("processing event")
 
 	// get nonce
-	nonce, nonceErr := txn.GetNextNonce(event.Owner)
+	nonce, nonceErr := edh.nodeStorage.GetNextNonce(txn, event.Owner)
 	if nonceErr != nil {
 		return nil, fmt.Errorf("failed to get next nonce: %w", nonceErr)
 	}
@@ -143,7 +143,7 @@ func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contrac
 			zap.Int("expected", sharesExpectedLength),
 			zap.Int("got", len(event.Shares)))
 
-		if err := txn.BumpNonce(event.Owner); err != nil {
+		if err := edh.nodeStorage.BumpNonce(txn, event.Owner); err != nil {
 			return nil, fmt.Errorf("bump nonce: %w", err)
 		}
 
@@ -159,14 +159,14 @@ func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contrac
 		logger.Warn("malformed event: failed to verify signature",
 			zap.Error(err))
 
-		if err := txn.BumpNonce(event.Owner); err != nil {
+		if err := edh.nodeStorage.BumpNonce(txn, event.Owner); err != nil {
 			return nil, fmt.Errorf("bump nonce: %w", err)
 		}
 
 		return nil, &MalformedEventError{Err: ErrSignatureVerification}
 	}
 
-	validatorShare := edh.shareMap.Get(event.PublicKey)
+	validatorShare := edh.nodeStorage.Shares().Get(txn, event.PublicKey)
 
 	if validatorShare == nil {
 		createdShare, err := edh.handleShareCreation(txn, event, sharePublicKeys, encryptedKeys)
@@ -184,7 +184,7 @@ func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contrac
 
 		validatorShare = createdShare
 
-		if err := txn.BumpNonce(event.Owner); err != nil {
+		if err := edh.nodeStorage.BumpNonce(txn, event.Owner); err != nil {
 			return nil, fmt.Errorf("bump nonce: %w", err)
 		}
 	} else if event.Owner != validatorShare.OwnerAddress {
@@ -195,7 +195,7 @@ func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contrac
 			zap.String("expected", validatorShare.OwnerAddress.String()),
 			zap.String("got", event.Owner.String()))
 
-		if err := txn.BumpNonce(event.Owner); err != nil {
+		if err := edh.nodeStorage.BumpNonce(txn, event.Owner); err != nil {
 			return nil, fmt.Errorf("bump nonce: %w", err)
 		}
 
@@ -215,7 +215,7 @@ func (edh *EventDataHandler) handleValidatorAdded(txn eventdb.RW, event *contrac
 
 // handleShareCreation is called when a validator was added/updated during registry sync
 func (edh *EventDataHandler) handleShareCreation(
-	txn eventdb.RW,
+	txn basedb.Txn,
 	validatorEvent *contract.ContractValidatorAdded,
 	sharePublicKeys [][]byte,
 	encryptedKeys [][]byte,
@@ -251,10 +251,8 @@ func (edh *EventDataHandler) handleShareCreation(
 		}
 	}
 
-	edh.shareMap.Save(share)
-
 	// save validator data
-	if err := txn.SaveShares(share); err != nil {
+	if err := edh.nodeStorage.Shares().Save(txn, share); err != nil {
 		return nil, fmt.Errorf("could not save validator share: %w", err)
 	}
 
@@ -267,10 +265,12 @@ func updateShareMetadata(share *ssvtypes.SSVShare, bc beaconprotocol.BeaconNode)
 	if err != nil {
 		return false, fmt.Errorf("failed to fetch metadata for share: %w", err)
 	}
+
 	meta, ok := results[pk]
 	if !ok {
 		return false, nil
 	}
+
 	share.BeaconMetadata = meta
 	return true, nil
 }
@@ -344,7 +344,7 @@ func validatorAddedEventToShare(
 	return &validatorShare, shareSecret, nil
 }
 
-func (edh *EventDataHandler) handleValidatorRemoved(txn eventdb.RW, event *contract.ContractValidatorRemoved) ([]byte, error) {
+func (edh *EventDataHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.ContractValidatorRemoved) ([]byte, error) {
 	logger := edh.logger.With(
 		zap.String("owner_address", event.Owner.String()),
 		zap.Uint64s("operator_ids", event.OperatorIds),
@@ -354,7 +354,7 @@ func (edh *EventDataHandler) handleValidatorRemoved(txn eventdb.RW, event *contr
 	logger.Debug("processing event")
 
 	// TODO: handle metrics
-	share := edh.shareMap.Get(event.PublicKey)
+	share := edh.nodeStorage.Shares().Get(txn, event.PublicKey)
 	if share == nil {
 		logger.Warn("malformed event: could not find validator share")
 		return nil, &MalformedEventError{Err: ErrValidatorShareNotFound}
@@ -373,19 +373,16 @@ func (edh *EventDataHandler) handleValidatorRemoved(txn eventdb.RW, event *contr
 		return nil, &MalformedEventError{Err: ErrShareBelongsToDifferentOwner}
 	}
 
-	// remove decided messages
-	err := edh.storageMap.Each(func(role spectypes.BeaconRole, store qbftstorage.QBFTStore) error {
+	removeDecidedMessages := func(role spectypes.BeaconRole, store qbftstorage.QBFTStore) error {
 		messageID := spectypes.NewMsgID(types.GetDefaultDomain(), share.ValidatorPubKey, role)
 		return store.CleanAllInstances(logger, messageID[:])
-	})
+	}
+	err := edh.storageMap.Each(removeDecidedMessages)
 	if err != nil {
 		return nil, fmt.Errorf("could not clean all decided messages: %w", err)
 	}
 
-	edh.shareMap.Delete(share.ValidatorPubKey)
-
-	// remove from storage
-	if err := txn.DeleteShare(share.ValidatorPubKey); err != nil {
+	if err := edh.nodeStorage.Shares().Delete(txn, share.ValidatorPubKey); err != nil {
 		return nil, fmt.Errorf("could not remove validator share: %w", err)
 	}
 
@@ -403,7 +400,7 @@ func (edh *EventDataHandler) handleValidatorRemoved(txn eventdb.RW, event *contr
 	return nil, nil
 }
 
-func (edh *EventDataHandler) handleClusterLiquidated(txn eventdb.RW, event *contract.ContractClusterLiquidated) ([]*ssvtypes.SSVShare, error) {
+func (edh *EventDataHandler) handleClusterLiquidated(txn basedb.Txn, event *contract.ContractClusterLiquidated) ([]*ssvtypes.SSVShare, error) {
 	logger := edh.logger.With(
 		zap.String("owner_address", event.Owner.String()),
 		zap.Uint64s("operator_ids", event.OperatorIds),
@@ -424,7 +421,7 @@ func (edh *EventDataHandler) handleClusterLiquidated(txn eventdb.RW, event *cont
 	return toLiquidate, nil
 }
 
-func (edh *EventDataHandler) handleClusterReactivated(txn eventdb.RW, event *contract.ContractClusterReactivated) ([]*ssvtypes.SSVShare, error) {
+func (edh *EventDataHandler) handleClusterReactivated(txn basedb.Txn, event *contract.ContractClusterReactivated) ([]*ssvtypes.SSVShare, error) {
 	logger := edh.logger.With(
 		zap.String("owner_address", event.Owner.String()),
 		zap.Uint64s("operator_ids", event.OperatorIds),
@@ -445,7 +442,7 @@ func (edh *EventDataHandler) handleClusterReactivated(txn eventdb.RW, event *con
 	return toReactivate, nil
 }
 
-func (edh *EventDataHandler) handleFeeRecipientAddressUpdated(txn eventdb.RW, event *contract.ContractFeeRecipientAddressUpdated) (bool, error) {
+func (edh *EventDataHandler) handleFeeRecipientAddressUpdated(txn basedb.Txn, event *contract.ContractFeeRecipientAddressUpdated) (bool, error) {
 	logger := edh.logger.With(
 		zap.String("owner_address", event.Owner.String()),
 		fields.FeeRecipient(event.RecipientAddress.Bytes()),
@@ -453,12 +450,12 @@ func (edh *EventDataHandler) handleFeeRecipientAddressUpdated(txn eventdb.RW, ev
 	)
 	logger.Debug("processing event")
 
-	recipientData, err := txn.GetRecipientData(event.Owner)
+	recipientData, found, err := edh.nodeStorage.GetRecipientData(txn, event.Owner)
 	if err != nil {
 		return false, fmt.Errorf("get recipient data: %w", err)
 	}
 
-	if recipientData == nil {
+	if !found || recipientData == nil {
 		recipientData = &registrystorage.RecipientData{
 			Owner: event.Owner,
 		}
@@ -466,7 +463,7 @@ func (edh *EventDataHandler) handleFeeRecipientAddressUpdated(txn eventdb.RW, ev
 
 	copy(recipientData.FeeRecipient[:], event.RecipientAddress.Bytes())
 
-	r, err := txn.SaveRecipientData(recipientData)
+	r, err := edh.eventDB.SaveRecipientData(txn, recipientData)
 	if err != nil {
 		return false, fmt.Errorf("could not save recipient data: %w", err)
 	}
@@ -513,7 +510,7 @@ func verifySignature(sig []byte, owner ethcommon.Address, pubKey []byte, nonce r
 
 // processClusterEvent handles registry contract event for cluster
 func (edh *EventDataHandler) processClusterEvent(
-	txn eventdb.RW,
+	txn basedb.Txn,
 	owner ethcommon.Address,
 	operatorIDs []uint64,
 	toLiquidate bool,
@@ -523,7 +520,7 @@ func (edh *EventDataHandler) processClusterEvent(
 		return nil, nil, fmt.Errorf("could not compute share cluster id: %w", err)
 	}
 
-	shares := edh.shareMap.List(registrystorage.ByClusterID(clusterID))
+	shares := edh.nodeStorage.Shares().List(txn, registrystorage.ByClusterID(clusterID))
 	toUpdate := make([]*ssvtypes.SSVShare, 0)
 	updatedPubKeys := make([]string, 0)
 
@@ -539,8 +536,7 @@ func (edh *EventDataHandler) processClusterEvent(
 	}
 
 	if len(toUpdate) > 0 {
-		edh.shareMap.Save(toUpdate...)
-		if err = txn.SaveShares(toUpdate...); err != nil {
+		if err = edh.nodeStorage.Shares().Save(txn, toUpdate...); err != nil {
 			return nil, nil, fmt.Errorf("could not save validator shares: %w", err)
 		}
 	}

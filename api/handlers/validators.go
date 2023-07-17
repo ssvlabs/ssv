@@ -47,7 +47,7 @@ func (h *Validators) List(w http.ResponseWriter, r *http.Request) error {
 		filters = append(filters, byIndices(request.Indices))
 	}
 
-	shares := h.Shares.List(filters...)
+	shares := h.Shares.List(nil, filters...)
 	response.Data = make([]*validatorJSON, len(shares))
 	for i, share := range shares {
 		response.Data[i] = validatorFromShare(share)

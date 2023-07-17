@@ -45,11 +45,12 @@ func (eb *EventBatcher) BatchEvents(events <-chan ethtypes.Log) <-chan BlockEven
 
 			if event.BlockNumber > currentBlockEvents.BlockNumber {
 				blockEvents <- currentBlockEvents
+				eb.logger.Debug("batched block events", fields.BlockNumber(currentBlockEvents.BlockNumber))
+
 				currentBlockEvents = BlockEvents{
 					BlockNumber: event.BlockNumber,
 					Events:      []ethtypes.Log{event},
 				}
-				eb.logger.Debug("batched block events", fields.BlockNumber(currentBlockEvents.BlockNumber))
 			} else {
 				currentBlockEvents.Events = append(currentBlockEvents.Events, event)
 			}

@@ -29,19 +29,23 @@ type Shares interface {
 	eth1.RegistryStore
 
 	// Get returns the share for the given public key, or nil if not found.
-	Get(pubKey []byte) *types.SSVShare
+	Get(txn basedb.Txn, pubKey []byte) *types.SSVShare
 
 	// List returns a list of shares, filtered by the given filters (if any).
-	List(filters ...SharesFilter) []*types.SSVShare
+	List(txn basedb.Txn, filters ...SharesFilter) []*types.SSVShare
 
 	// Save saves the given shares.
-	Save(shares ...*types.SSVShare) error
+	Save(txn basedb.Txn, shares ...*types.SSVShare) error
 
 	// Delete deletes the share for the given public key.
-	Delete(pubKey []byte) error
+	Delete(txn basedb.Txn, pubKey []byte) error
+
+	// UpdateValidatorMetadata updates validator metadata.
+	UpdateValidatorMetadata(pk string, metadata *beaconprotocol.ValidatorMetadata) error
 }
 
 type sharesStorage struct {
+	logger *zap.Logger
 	db     basedb.IDb
 	prefix []byte
 	shares map[string]*types.SSVShare
@@ -50,11 +54,12 @@ type sharesStorage struct {
 
 func NewSharesStorage(logger *zap.Logger, db basedb.IDb, prefix []byte) (Shares, error) {
 	storage := &sharesStorage{
+		logger: logger,
 		shares: make(map[string]*types.SSVShare),
 		db:     db,
 		prefix: prefix,
 	}
-	err := storage.load(logger)
+	err := storage.load()
 	if err != nil {
 		return nil, err
 	}
@@ -62,11 +67,11 @@ func NewSharesStorage(logger *zap.Logger, db basedb.IDb, prefix []byte) (Shares,
 }
 
 // load reads all shares from db.
-func (s *sharesStorage) load(logger *zap.Logger) error {
+func (s *sharesStorage) load() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return s.db.GetAll(logger, append(s.prefix, sharesPrefix...), func(i int, obj basedb.Obj) error {
+	return s.db.GetAll(append(s.prefix, sharesPrefix...), func(i int, obj basedb.Obj) error {
 		val := &types.SSVShare{}
 		if err := val.Decode(obj.Value); err != nil {
 			return fmt.Errorf("failed to deserialize share: %w", err)
@@ -76,14 +81,14 @@ func (s *sharesStorage) load(logger *zap.Logger) error {
 	})
 }
 
-func (s *sharesStorage) Get(pubKey []byte) *types.SSVShare {
+func (s *sharesStorage) Get(_ basedb.Txn, pubKey []byte) *types.SSVShare {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	return s.shares[hex.EncodeToString(pubKey)]
 }
 
-func (s *sharesStorage) List(filters ...SharesFilter) []*types.SSVShare {
+func (s *sharesStorage) List(_ basedb.Txn, filters ...SharesFilter) []*types.SSVShare {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -104,7 +109,7 @@ Shares:
 	return shares
 }
 
-func (s *sharesStorage) Save(shares ...*types.SSVShare) error {
+func (s *sharesStorage) Save(txn basedb.Txn, shares ...*types.SSVShare) error {
 	if len(shares) == 0 {
 		return nil
 	}
@@ -112,7 +117,12 @@ func (s *sharesStorage) Save(shares ...*types.SSVShare) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	err := s.db.SetMany(s.prefix, len(shares), func(i int) (basedb.Obj, error) {
+	setter := s.db.SetMany
+	if txn != nil {
+		setter = txn.SetMany
+	}
+
+	err := setter(s.prefix, len(shares), func(i int) (basedb.Obj, error) {
 		value, err := shares[i].Encode()
 		if err != nil {
 			return basedb.Obj{}, fmt.Errorf("failed to serialize share: %w", err)
@@ -130,11 +140,16 @@ func (s *sharesStorage) Save(shares ...*types.SSVShare) error {
 	return nil
 }
 
-func (s *sharesStorage) Delete(pubKey []byte) error {
+func (s *sharesStorage) Delete(txn basedb.Txn, pubKey []byte) error {
+	deleter := s.db.Delete
+	if txn != nil {
+		deleter = txn.Delete
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	err := s.db.Delete(s.prefix, s.storageKey(pubKey))
+	err := deleter(s.prefix, s.storageKey(pubKey))
 	if err != nil {
 		return err
 	}
@@ -144,17 +159,19 @@ func (s *sharesStorage) Delete(pubKey []byte) error {
 }
 
 // UpdateValidatorMetadata updates the metadata of the given validator
-func (s *sharesStorage) UpdateValidatorMetadata(logger *zap.Logger, pk string, metadata *beaconprotocol.ValidatorMetadata) error {
+func (s *sharesStorage) UpdateValidatorMetadata(pk string, metadata *beaconprotocol.ValidatorMetadata) error {
 	key, err := hex.DecodeString(pk)
 	if err != nil {
 		return err
 	}
-	share := s.Get(key)
+
+	share := s.Get(nil, key)
 	if share == nil {
 		return nil
 	}
+
 	share.BeaconMetadata = metadata
-	return s.Save(share)
+	return s.Save(nil, share)
 }
 
 // CleanRegistryData clears all registry data

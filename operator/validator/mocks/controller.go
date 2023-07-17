@@ -11,9 +11,9 @@ import (
 	validator "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	types "github.com/bloxapp/ssv/protocol/v2/types"
 	storage "github.com/bloxapp/ssv/registry/storage"
+	basedb "github.com/bloxapp/ssv/storage/basedb"
 	common "github.com/ethereum/go-ethereum/common"
 	gomock "github.com/golang/mock/gomock"
-	event "github.com/prysmaticlabs/prysm/v4/async/event"
 	zap "go.uber.org/zap"
 )
 
@@ -114,16 +114,32 @@ func (mr *MockControllerMockRecorder) GetValidatorStats() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidatorStats", reflect.TypeOf((*MockController)(nil).GetValidatorStats))
 }
 
-// ListenToEth1Events mocks base method.
-func (m *MockController) ListenToEth1Events(logger *zap.Logger, feed *event.Feed) {
+// LiquidateCluster mocks base method.
+func (m *MockController) LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*types.SSVShare) error {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ListenToEth1Events", logger, feed)
+	ret := m.ctrl.Call(m, "LiquidateCluster", owner, operatorIDs, toLiquidate)
+	ret0, _ := ret[0].(error)
+	return ret0
 }
 
-// ListenToEth1Events indicates an expected call of ListenToEth1Events.
-func (mr *MockControllerMockRecorder) ListenToEth1Events(logger, feed interface{}) *gomock.Call {
+// LiquidateCluster indicates an expected call of LiquidateCluster.
+func (mr *MockControllerMockRecorder) LiquidateCluster(owner, operatorIDs, toLiquidate interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListenToEth1Events", reflect.TypeOf((*MockController)(nil).ListenToEth1Events), logger, feed)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LiquidateCluster", reflect.TypeOf((*MockController)(nil).LiquidateCluster), owner, operatorIDs, toLiquidate)
+}
+
+// ReactivateCluster mocks base method.
+func (m *MockController) ReactivateCluster(owner common.Address, operatorIDs []uint64, toReactivate []*types.SSVShare) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReactivateCluster", owner, operatorIDs, toReactivate)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ReactivateCluster indicates an expected call of ReactivateCluster.
+func (mr *MockControllerMockRecorder) ReactivateCluster(owner, operatorIDs, toReactivate interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReactivateCluster", reflect.TypeOf((*MockController)(nil).ReactivateCluster), owner, operatorIDs, toReactivate)
 }
 
 // StartNetworkHandlers mocks base method.
@@ -138,6 +154,20 @@ func (mr *MockControllerMockRecorder) StartNetworkHandlers(logger interface{}) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartNetworkHandlers", reflect.TypeOf((*MockController)(nil).StartNetworkHandlers), logger)
 }
 
+// StartValidator mocks base method.
+func (m *MockController) StartValidator(share *types.SSVShare) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StartValidator", share)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// StartValidator indicates an expected call of StartValidator.
+func (mr *MockControllerMockRecorder) StartValidator(share interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartValidator", reflect.TypeOf((*MockController)(nil).StartValidator), share)
+}
+
 // StartValidators mocks base method.
 func (m *MockController) StartValidators(logger *zap.Logger) {
 	m.ctrl.T.Helper()
@@ -148,6 +178,34 @@ func (m *MockController) StartValidators(logger *zap.Logger) {
 func (mr *MockControllerMockRecorder) StartValidators(logger interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartValidators", reflect.TypeOf((*MockController)(nil).StartValidators), logger)
+}
+
+// StopValidator mocks base method.
+func (m *MockController) StopValidator(publicKey []byte) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StopValidator", publicKey)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// StopValidator indicates an expected call of StopValidator.
+func (mr *MockControllerMockRecorder) StopValidator(publicKey interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopValidator", reflect.TypeOf((*MockController)(nil).StopValidator), publicKey)
+}
+
+// UpdateFeeRecipient mocks base method.
+func (m *MockController) UpdateFeeRecipient(owner, recipient common.Address) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateFeeRecipient", owner, recipient)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateFeeRecipient indicates an expected call of UpdateFeeRecipient.
+func (mr *MockControllerMockRecorder) UpdateFeeRecipient(owner, recipient interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateFeeRecipient", reflect.TypeOf((*MockController)(nil).UpdateFeeRecipient), owner, recipient)
 }
 
 // UpdateValidatorMetaDataLoop mocks base method.
@@ -186,17 +244,17 @@ func (m *MockEventHandler) EXPECT() *MockEventHandlerMockRecorder {
 }
 
 // BumpNonce mocks base method.
-func (m *MockEventHandler) BumpNonce(owner common.Address) error {
+func (m *MockEventHandler) BumpNonce(txn basedb.Txn, owner common.Address) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "BumpNonce", owner)
+	ret := m.ctrl.Call(m, "BumpNonce", txn, owner)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // BumpNonce indicates an expected call of BumpNonce.
-func (mr *MockEventHandlerMockRecorder) BumpNonce(owner interface{}) *gomock.Call {
+func (mr *MockEventHandlerMockRecorder) BumpNonce(txn, owner interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BumpNonce", reflect.TypeOf((*MockEventHandler)(nil).BumpNonce), owner)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BumpNonce", reflect.TypeOf((*MockEventHandler)(nil).BumpNonce), txn, owner)
 }
 
 // GetEventData mocks base method.
@@ -216,18 +274,18 @@ func (mr *MockEventHandlerMockRecorder) GetEventData(txHash interface{}) *gomock
 }
 
 // GetNextNonce mocks base method.
-func (m *MockEventHandler) GetNextNonce(owner common.Address) (storage.Nonce, error) {
+func (m *MockEventHandler) GetNextNonce(txn basedb.Txn, owner common.Address) (storage.Nonce, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNextNonce", owner)
+	ret := m.ctrl.Call(m, "GetNextNonce", txn, owner)
 	ret0, _ := ret[0].(storage.Nonce)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetNextNonce indicates an expected call of GetNextNonce.
-func (mr *MockEventHandlerMockRecorder) GetNextNonce(owner interface{}) *gomock.Call {
+func (mr *MockEventHandlerMockRecorder) GetNextNonce(txn, owner interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNextNonce", reflect.TypeOf((*MockEventHandler)(nil).GetNextNonce), owner)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNextNonce", reflect.TypeOf((*MockEventHandler)(nil).GetNextNonce), txn, owner)
 }
 
 // SaveEventData mocks base method.

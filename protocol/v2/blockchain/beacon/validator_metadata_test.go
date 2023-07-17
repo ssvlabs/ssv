@@ -10,10 +10,11 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv/logging"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging"
 
 	"github.com/bloxapp/ssv/utils/tasks"
 )
@@ -113,7 +114,7 @@ func TestUpdateValidatorsMetadata(t *testing.T) {
 
 	// storage := NewMockValidatorMetadataStorage()
 	storage := NewMockValidatorMetadataStorage(ctrl)
-	storage.EXPECT().UpdateValidatorMetadata(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(logger *zap.Logger, pk string, metadata *ValidatorMetadata) error {
+	storage.EXPECT().UpdateValidatorMetadata(gomock.Any(), gomock.Any()).DoAndReturn(func(pk string, metadata *ValidatorMetadata) error {
 		storageMu.Lock()
 		defer storageMu.Unlock()
 

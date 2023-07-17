@@ -15,14 +15,14 @@ import (
 
 	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/eth/eventbatcher"
-	"github.com/bloxapp/ssv/eth/eventdb"
 	"github.com/bloxapp/ssv/eth/localevents"
-	"github.com/bloxapp/ssv/eth/sharemap"
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging/fields"
+	nodestorage "github.com/bloxapp/ssv/operator/storage"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/registry/storage"
+	"github.com/bloxapp/ssv/storage/basedb"
 )
 
 type taskExecutor interface {
@@ -34,17 +34,28 @@ type taskExecutor interface {
 }
 
 type eventDB interface {
-	ROTxn() eventdb.RO
-	RWTxn() eventdb.RW
+	ROTxn() basedb.Txn
+	RWTxn() basedb.Txn
+
+	GetLastProcessedBlock(txn basedb.Txn) (*big.Int, error)
+	GetOperatorData(txn basedb.Txn, id uint64) (*storage.OperatorData, error)
+	GetRecipientData(txn basedb.Txn, owner ethcommon.Address) (*storage.RecipientData, error)
+	GetNextNonce(txn basedb.Txn, owner ethcommon.Address) (storage.Nonce, error)
+	SetLastProcessedBlock(txn basedb.Txn, block *big.Int) error
+	SaveOperatorData(txn basedb.Txn, od *storage.OperatorData) (bool, error)
+	BumpNonce(txn basedb.Txn, owner ethcommon.Address) error
+	SaveRecipientData(txn basedb.Txn, recipientData *storage.RecipientData) (*storage.RecipientData, error)
+	SaveShares(txn basedb.Txn, shares ...*ssvtypes.SSVShare) error
+	DeleteShare(txn basedb.Txn, pubKey []byte) error
 }
 
 type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
 
 type EventDataHandler struct {
+	nodeStorage                nodestorage.Storage
 	eventDB                    eventDB
 	taskExecutor               taskExecutor
 	contractABI                ethEventGetter
-	shareMap                   *sharemap.ShareMap
 	eventFilterer              eventFilterer
 	operatorData               *storage.OperatorData
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider
@@ -57,7 +68,7 @@ type EventDataHandler struct {
 }
 
 func New(
-	eventDB eventDB,
+	nodeStorage nodestorage.Storage,
 	eventFilterer eventFilterer,
 	contractABI ethEventGetter,
 	taskExecutor taskExecutor,
@@ -69,7 +80,7 @@ func New(
 	opts ...Option,
 ) (*EventDataHandler, error) {
 	edh := &EventDataHandler{
-		eventDB:                    eventDB,
+		nodeStorage:                nodeStorage,
 		taskExecutor:               taskExecutor,
 		contractABI:                contractABI,
 		eventFilterer:              eventFilterer,
@@ -80,7 +91,6 @@ func New(
 		storageMap:                 storageMap,
 		logger:                     zap.NewNop(),
 		metrics:                    nopMetrics{},
-		shareMap:                   sharemap.New(),
 	}
 
 	for _, opt := range opts {
@@ -131,7 +141,7 @@ func (edh *EventDataHandler) HandleBlockEventsStream(blockEventsCh <-chan eventb
 }
 
 func (edh *EventDataHandler) processBlockEvents(blockEvents eventbatcher.BlockEvents) ([]Task, error) {
-	txn := edh.eventDB.RWTxn()
+	txn := edh.nodeStorage.RWTxn()
 	defer txn.Discard()
 
 	var tasks []Task
@@ -146,7 +156,7 @@ func (edh *EventDataHandler) processBlockEvents(blockEvents eventbatcher.BlockEv
 		}
 	}
 
-	if err := txn.SetLastProcessedBlock(new(big.Int).SetUint64(blockEvents.BlockNumber)); err != nil {
+	if err := edh.nodeStorage.SaveLastProcessedBlock(txn, new(big.Int).SetUint64(blockEvents.BlockNumber)); err != nil {
 		return nil, fmt.Errorf("set last processed block: %w", err)
 	}
 
@@ -157,7 +167,7 @@ func (edh *EventDataHandler) processBlockEvents(blockEvents eventbatcher.BlockEv
 	return tasks, nil
 }
 
-func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (Task, error) {
+func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, error) {
 	abiEvent, err := edh.contractABI.EventByID(event.Topics[0])
 	if err != nil {
 		edh.logger.Error("failed to find event by ID", zap.String("hash", event.Topics[0].String()))
@@ -345,7 +355,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 }
 
 func (edh *EventDataHandler) HandleLocalEvents(localEvents []localevents.Event) error {
-	txn := edh.eventDB.RWTxn()
+	txn := edh.nodeStorage.RWTxn()
 	defer txn.Discard()
 
 	for _, event := range localEvents {
@@ -361,7 +371,7 @@ func (edh *EventDataHandler) HandleLocalEvents(localEvents []localevents.Event) 
 	return nil
 }
 
-func (edh *EventDataHandler) processLocalEvent(txn eventdb.RW, event localevents.Event) error {
+func (edh *EventDataHandler) processLocalEvent(txn basedb.Txn, event localevents.Event) error {
 	switch event.Name {
 	case OperatorAdded:
 		data := event.Data.(contract.ContractOperatorAdded)

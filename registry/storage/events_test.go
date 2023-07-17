@@ -51,8 +51,8 @@ func newEventStorageForTest(logger *zap.Logger) (storage.Events, func()) {
 	if err != nil {
 		return nil, func() {}
 	}
-	s := storage.NewEventsStorage(db, []byte("test"))
+	s := storage.NewEventsStorage(logger, db, []byte("test"))
 	return s, func() {
-		db.Close(logger)
+		db.Close()
 	}
 }

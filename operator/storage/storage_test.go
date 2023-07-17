@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zaptest"
 
 	"github.com/bloxapp/ssv/logging"
 
@@ -28,7 +29,7 @@ func TestSaveAndGetPrivateKey(t *testing.T) {
 
 	db, err := ssvstorage.GetStorageFactory(logger, options)
 	require.NoError(t, err)
-	defer db.Close(logger)
+	defer db.Close()
 
 	operatorStorage := storage{
 		db: db,
@@ -115,10 +116,11 @@ func TestSetupPrivateKey(t *testing.T) {
 			logger := logging.TestLogger(t)
 			db, err := ssvstorage.GetStorageFactory(logger, options)
 			require.NoError(t, err)
-			defer db.Close(logger)
+			defer db.Close()
 
 			operatorStorage := storage{
-				db: db,
+				logger: zaptest.NewLogger(t),
+				db:     db,
 			}
 
 			if test.existKey != "" { // mock exist key
@@ -135,7 +137,7 @@ func TestSetupPrivateKey(t *testing.T) {
 				require.Equal(t, string(existKeyByte), string(rsaencryption.PrivateKeyToByte(sk)))
 			}
 
-			pk, err := operatorStorage.SetupPrivateKey(logger, test.passedKey, test.generateIfNone)
+			pk, err := operatorStorage.SetupPrivateKey(test.passedKey, test.generateIfNone)
 			if test.expectedError != "" {
 				require.NotNil(t, err)
 				require.Equal(t, test.expectedError, err.Error())

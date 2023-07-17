@@ -10,6 +10,8 @@ import (
 	"github.com/bloxapp/ssv/eth/eventbatcher"
 )
 
+// TODO: add a test that makes sure our batch size limit is enforced
+
 func TestEventBatcher_BatchEvents(t *testing.T) {
 	t.Run("NoEvents", func(t *testing.T) {
 		eb := eventbatcher.NewEventBatcher()

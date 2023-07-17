@@ -37,7 +37,7 @@ func TestSubmitProposal(t *testing.T) {
 	}
 
 	db, shareStorage, recipientStorage := createStorage(t)
-	defer db.Close(logger)
+	defer db.Close()
 	network := networkconfig.TestNetwork
 	populateStorage(t, logger, shareStorage, operatorData)
 
@@ -117,7 +117,7 @@ func createStorage(t *testing.T) (basedb.IDb, registrystorage.Shares, registryst
 	if err != nil {
 		t.Fatal(err)
 	}
-	return db, shareStorage, registrystorage.NewRecipientsStorage(db, []byte("test"))
+	return db, shareStorage, registrystorage.NewRecipientsStorage(logger, db, []byte("test"))
 }
 
 func populateStorage(t *testing.T, logger *zap.Logger, storage registrystorage.Shares, operatorData *registrystorage.OperatorData) {
@@ -139,12 +139,12 @@ func populateStorage(t *testing.T, logger *zap.Logger, storage registrystorage.S
 	}
 
 	for i := 0; i < 1000; i++ {
-		require.NoError(t, storage.Save(createShare(i, operatorData.ID)))
+		require.NoError(t, storage.Save(nil, createShare(i, operatorData.ID)))
 	}
 
 	// add none committee share
-	require.NoError(t, storage.Save(createShare(2000, spectypes.OperatorID(1))))
+	require.NoError(t, storage.Save(nil, createShare(2000, spectypes.OperatorID(1))))
 
-	all := storage.List(registrystorage.ByOperatorID(operatorData.ID), registrystorage.ByNotLiquidated())
+	all := storage.List(nil, registrystorage.ByOperatorID(operatorData.ID), registrystorage.ByNotLiquidated())
 	require.Equal(t, 1000, len(all))
 }
