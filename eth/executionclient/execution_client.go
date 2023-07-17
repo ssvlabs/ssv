@@ -306,8 +306,11 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan ethty
 
 	for {
 		select {
+		case <-ctx.Done():
+			return 0, ctx.Err()
+
 		case err := <-sub.Err():
-			return fromBlock, fmt.Errorf("subscription: %w", err)
+			return 0, fmt.Errorf("subscription: %w", err)
 
 		case header := <-heads:
 			query := ethereum.FilterQuery{
