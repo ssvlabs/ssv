@@ -36,6 +36,9 @@ var (
 	ErrValidatorShareNotFound       = fmt.Errorf("validator share not found")
 )
 
+// TODO: make sure all handlers are tested properly:
+// set up a mock DB where we test that after running the handler we check that the DB state is as expected
+
 func (edh *EventDataHandler) handleOperatorAdded(txn basedb.Txn, event *contract.ContractOperatorAdded) error {
 	logger := edh.logger.With(
 		fields.OperatorID(event.OperatorId),
