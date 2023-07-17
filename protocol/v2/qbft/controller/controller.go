@@ -65,7 +65,7 @@ func (c *Controller) StartNewInstance(logger *zap.Logger, height specqbft.Height
 	}
 
 	if c.StoredInstances.FindInstance(height) != nil {
-		return errors.New("instance already started")
+		return errors.New("instance already running")
 	}
 
 	c.Height = height
@@ -176,10 +176,6 @@ func (c *Controller) InstanceForHeight(logger *zap.Logger, height specqbft.Heigh
 	inst := instance.NewInstance(c.config, c.Share, c.Identifier, storedInst.State.Height)
 	inst.State = storedInst.State
 	return inst
-}
-
-func (c *Controller) bumpHeight() {
-	c.Height++
 }
 
 // GetIdentifier returns QBFT Identifier, used to identify messages

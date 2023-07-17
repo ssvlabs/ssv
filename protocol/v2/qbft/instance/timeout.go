@@ -12,6 +12,7 @@ func (i *Instance) UponRoundTimeout(logger *zap.Logger) error {
 	if !i.CanProcessMessages() {
 		return errors.New("instance stopped processing timeouts")
 	}
+
 	newRound := i.State.Round + 1
 	logger.Debug("⌛ round timed out", fields.Round(newRound))
 
