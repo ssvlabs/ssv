@@ -3,7 +3,7 @@ package cli
 import (
 	"encoding/base64"
 	"encoding/json"
-	"github.com/bloxapp/eth2-key-manager/encryptor/keystorev4"
+	"github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
 	"log"
 	"os"
 
@@ -18,7 +18,7 @@ var generateOperatorKeysCmd = &cobra.Command{
 	Use:   "generate-operator-keys",
 	Short: "generates ssv operator keys",
 	Run: func(cmd *cobra.Command, args []string) {
-		encryptionPassword, _ := cmd.Flags().GetString("password")
+		encryptionPassword, _ := cmd.Flags().GetString("--password-file")
 
 		if err := logging.SetGlobalLogger("debug", "capital", "console", ""); err != nil {
 			log.Fatal(err)
@@ -56,6 +56,6 @@ var generateOperatorKeysCmd = &cobra.Command{
 }
 
 func init() {
-	generateOperatorKeysCmd.Flags().StringP("password", "p", "", "Password to encrypt the private key")
+	generateOperatorKeysCmd.Flags().StringP("--password-file", "p", "", "Password to encrypt the private key")
 	RootCmd.AddCommand(generateOperatorKeysCmd)
 }

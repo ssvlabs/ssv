@@ -22,7 +22,6 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.2
 	github.com/herumi/bls-eth-go-binary v1.29.1
 	github.com/ilyakaznacheev/cleanenv v1.4.2
-	github.com/ipfs/go-log/v2 v2.5.1
 	github.com/jellydator/ttlcache/v3 v3.0.1
 	github.com/libp2p/go-libp2p v0.28.1
 	github.com/libp2p/go-libp2p-kad-dht v0.23.0
@@ -38,6 +37,7 @@ require (
 	github.com/spf13/cobra v1.7.0
 	github.com/stretchr/testify v1.8.4
 	github.com/wealdtech/go-eth2-util v1.8.1
+	github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4 v1.1.3
 	go.uber.org/zap v1.24.0
 	golang.org/x/exp v0.0.0-20230321023759-10a507213a29
 	golang.org/x/mod v0.10.0
@@ -92,6 +92,7 @@ require (
 	github.com/ipfs/go-datastore v0.6.0 // indirect
 	github.com/ipfs/go-ipfs-util v0.0.2 // indirect
 	github.com/ipfs/go-log v1.0.5 // indirect
+	github.com/ipfs/go-log/v2 v2.5.1 // indirect
 	github.com/ipld/go-ipld-prime v0.20.0 // indirect
 	github.com/jackpal/go-nat-pmp v1.0.2 // indirect
 	github.com/jbenet/go-temp-err-catcher v0.1.0 // indirect

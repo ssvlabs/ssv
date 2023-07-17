@@ -10,9 +10,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/bloxapp/eth2-key-manager/encryptor/keystorev4"
 	testingspace "github.com/bloxapp/ssv/utils/rsaencryption/testingspace"
 	"github.com/stretchr/testify/require"
+	"github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
 )
 
 func TestGenerateKeys(t *testing.T) {

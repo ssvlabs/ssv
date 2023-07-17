@@ -12,7 +12,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
-	"github.com/bloxapp/eth2-key-manager/encryptor/keystorev4"
+	"github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
 	"strings"
 
 	"github.com/pkg/errors"
