@@ -40,17 +40,17 @@ func (m *MockvalidatorsIndicesFetcher) EXPECT() *MockvalidatorsIndicesFetcherMoc
 }
 
 // ActiveValidatorIndices mocks base method.
-func (m *MockvalidatorsIndicesFetcher) ActiveValidatorIndices(logger *zap.Logger) []phase0.ValidatorIndex {
+func (m *MockvalidatorsIndicesFetcher) ActiveValidatorIndices() []phase0.ValidatorIndex {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ActiveValidatorIndices", logger)
+	ret := m.ctrl.Call(m, "ActiveValidatorIndices")
 	ret0, _ := ret[0].([]phase0.ValidatorIndex)
 	return ret0
 }
 
 // ActiveValidatorIndices indicates an expected call of ActiveValidatorIndices.
-func (mr *MockvalidatorsIndicesFetcherMockRecorder) ActiveValidatorIndices(logger interface{}) *gomock.Call {
+func (mr *MockvalidatorsIndicesFetcherMockRecorder) ActiveValidatorIndices() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ActiveValidatorIndices", reflect.TypeOf((*MockvalidatorsIndicesFetcher)(nil).ActiveValidatorIndices), logger)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ActiveValidatorIndices", reflect.TypeOf((*MockvalidatorsIndicesFetcher)(nil).ActiveValidatorIndices))
 }
 
 // MockDutyFetcher is a mock of DutyFetcher interface.

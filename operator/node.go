@@ -156,10 +156,10 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 	// slot ticker init
 	go n.ticker.Start(logger)
 
-	n.validatorsCtrl.StartNetworkHandlers(logger)
-	n.validatorsCtrl.StartValidators(logger)
+	n.validatorsCtrl.StartNetworkHandlers()
+	n.validatorsCtrl.StartValidators()
 	go n.net.UpdateSubnets(logger)
-	go n.validatorsCtrl.UpdateValidatorMetaDataLoop(logger)
+	go n.validatorsCtrl.UpdateValidatorMetaDataLoop()
 	go n.listenForCurrentSlot(logger)
 	go n.reportOperators(logger)
 

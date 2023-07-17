@@ -25,7 +25,7 @@ func init() {
 }
 
 // MsgHandler func that receive message.SSVMessage to handle
-type MsgHandler func(logger *zap.Logger, msg *spectypes.SSVMessage) error
+type MsgHandler func(msg *spectypes.SSVMessage) error
 
 // ErrorHandler func that handles an error for a specific message
 type ErrorHandler func(msg *spectypes.SSVMessage, err error) error
@@ -131,7 +131,7 @@ func (w *Worker) process(logger *zap.Logger, msg *spectypes.SSVMessage) {
 		logger.Warn("❗ no handler for worker")
 		return
 	}
-	if err := w.handler(logger, msg); err != nil {
+	if err := w.handler(msg); err != nil {
 		if handlerErr := w.errHandler(msg, err); handlerErr != nil {
 			logger.Debug("❌ failed to handle message", zap.Error(handlerErr))
 			return

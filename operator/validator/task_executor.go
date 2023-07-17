@@ -24,7 +24,7 @@ func (c *controller) StartValidator(share *ssvtypes.SSVShare) error {
 	}
 
 	logger.Debug("going to start validator")
-	started, err := c.onShareStart(c.logger, share)
+	started, err := c.onShareStart(share)
 	if err != nil {
 		return err
 	}
@@ -83,7 +83,7 @@ func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []uint6
 	logger.Info("executing task")
 
 	for _, share := range toReactivate {
-		if _, err := c.onShareStart(c.logger, share); err != nil {
+		if _, err := c.onShareStart(share); err != nil {
 			return err
 		}
 		logger.Info("started share")

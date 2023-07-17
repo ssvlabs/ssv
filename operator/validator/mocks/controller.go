@@ -14,7 +14,6 @@ import (
 	basedb "github.com/bloxapp/ssv/storage/basedb"
 	common "github.com/ethereum/go-ethereum/common"
 	gomock "github.com/golang/mock/gomock"
-	zap "go.uber.org/zap"
 )
 
 // MockController is a mock of Controller interface.
@@ -41,17 +40,17 @@ func (m *MockController) EXPECT() *MockControllerMockRecorder {
 }
 
 // ActiveValidatorIndices mocks base method.
-func (m *MockController) ActiveValidatorIndices(logger *zap.Logger) []phase0.ValidatorIndex {
+func (m *MockController) ActiveValidatorIndices() []phase0.ValidatorIndex {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ActiveValidatorIndices", logger)
+	ret := m.ctrl.Call(m, "ActiveValidatorIndices")
 	ret0, _ := ret[0].([]phase0.ValidatorIndex)
 	return ret0
 }
 
 // ActiveValidatorIndices indicates an expected call of ActiveValidatorIndices.
-func (mr *MockControllerMockRecorder) ActiveValidatorIndices(logger interface{}) *gomock.Call {
+func (mr *MockControllerMockRecorder) ActiveValidatorIndices() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ActiveValidatorIndices", reflect.TypeOf((*MockController)(nil).ActiveValidatorIndices), logger)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ActiveValidatorIndices", reflect.TypeOf((*MockController)(nil).ActiveValidatorIndices))
 }
 
 // GetOperatorData mocks base method.
@@ -143,15 +142,15 @@ func (mr *MockControllerMockRecorder) ReactivateCluster(owner, operatorIDs, toRe
 }
 
 // StartNetworkHandlers mocks base method.
-func (m *MockController) StartNetworkHandlers(logger *zap.Logger) {
+func (m *MockController) StartNetworkHandlers() {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "StartNetworkHandlers", logger)
+	m.ctrl.Call(m, "StartNetworkHandlers")
 }
 
 // StartNetworkHandlers indicates an expected call of StartNetworkHandlers.
-func (mr *MockControllerMockRecorder) StartNetworkHandlers(logger interface{}) *gomock.Call {
+func (mr *MockControllerMockRecorder) StartNetworkHandlers() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartNetworkHandlers", reflect.TypeOf((*MockController)(nil).StartNetworkHandlers), logger)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartNetworkHandlers", reflect.TypeOf((*MockController)(nil).StartNetworkHandlers))
 }
 
 // StartValidator mocks base method.
@@ -169,15 +168,15 @@ func (mr *MockControllerMockRecorder) StartValidator(share interface{}) *gomock.
 }
 
 // StartValidators mocks base method.
-func (m *MockController) StartValidators(logger *zap.Logger) {
+func (m *MockController) StartValidators() {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "StartValidators", logger)
+	m.ctrl.Call(m, "StartValidators")
 }
 
 // StartValidators indicates an expected call of StartValidators.
-func (mr *MockControllerMockRecorder) StartValidators(logger interface{}) *gomock.Call {
+func (mr *MockControllerMockRecorder) StartValidators() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartValidators", reflect.TypeOf((*MockController)(nil).StartValidators), logger)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartValidators", reflect.TypeOf((*MockController)(nil).StartValidators))
 }
 
 // StopValidator mocks base method.
@@ -209,15 +208,15 @@ func (mr *MockControllerMockRecorder) UpdateFeeRecipient(owner, recipient interf
 }
 
 // UpdateValidatorMetaDataLoop mocks base method.
-func (m *MockController) UpdateValidatorMetaDataLoop(logger *zap.Logger) {
+func (m *MockController) UpdateValidatorMetaDataLoop() {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "UpdateValidatorMetaDataLoop", logger)
+	m.ctrl.Call(m, "UpdateValidatorMetaDataLoop")
 }
 
 // UpdateValidatorMetaDataLoop indicates an expected call of UpdateValidatorMetaDataLoop.
-func (mr *MockControllerMockRecorder) UpdateValidatorMetaDataLoop(logger interface{}) *gomock.Call {
+func (mr *MockControllerMockRecorder) UpdateValidatorMetaDataLoop() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateValidatorMetaDataLoop", reflect.TypeOf((*MockController)(nil).UpdateValidatorMetaDataLoop), logger)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateValidatorMetaDataLoop", reflect.TypeOf((*MockController)(nil).UpdateValidatorMetaDataLoop))
 }
 
 // MockEventHandler is a mock of EventHandler interface.

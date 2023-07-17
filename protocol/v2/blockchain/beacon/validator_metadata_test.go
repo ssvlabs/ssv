@@ -12,7 +12,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging"
 
@@ -123,7 +122,7 @@ func TestUpdateValidatorsMetadata(t *testing.T) {
 		return nil
 	}).AnyTimes()
 
-	onUpdated := func(logger *zap.Logger, pk string, meta *ValidatorMetadata) {
+	onUpdated := func(pk string, meta *ValidatorMetadata) {
 		joined := strings.Join(pks, ":")
 		require.True(t, strings.Contains(joined, pk))
 		require.True(t, meta.Index == phase0.ValidatorIndex(210961) || meta.Index == phase0.ValidatorIndex(213820))
