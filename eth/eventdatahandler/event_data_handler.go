@@ -53,7 +53,6 @@ type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
 
 type EventDataHandler struct {
 	nodeStorage                nodestorage.Storage
-	eventDB                    eventDB
 	taskExecutor               taskExecutor
 	contractABI                ethEventGetter
 	eventFilterer              eventFilterer

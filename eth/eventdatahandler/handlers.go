@@ -466,7 +466,7 @@ func (edh *EventDataHandler) handleFeeRecipientAddressUpdated(txn basedb.Txn, ev
 
 	copy(recipientData.FeeRecipient[:], event.RecipientAddress.Bytes())
 
-	r, err := edh.eventDB.SaveRecipientData(txn, recipientData)
+	r, err := edh.nodeStorage.SaveRecipientData(txn, recipientData)
 	if err != nil {
 		return false, fmt.Errorf("could not save recipient data: %w", err)
 	}
