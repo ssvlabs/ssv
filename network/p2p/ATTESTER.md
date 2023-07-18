@@ -16,7 +16,7 @@ Node can react to a message in three ways:
 - Message round is in range [1, 12].
 - Message round is equal to estimated current round.
 - If message slot is greater than current slot, message epoch is greater than current epoch.
-- If current stage is `proposal`, next messages cannot be `proposal'`.
+- If current stage is `proposal`, next messages cannot be `proposal`.
 - If current stage is `prepare`, next messages cannot be `prepare`.
 - If current stage is `commit`, next messages cannot be `proposal`, nor `prepare`, nor `commit`.
 - If current stage is `quorum`, next messages cannot be `proposal`, nor `prepare`, nor `commit`. Each message increases quorum count which must be less than or equal to 3f+1.
