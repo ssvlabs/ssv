@@ -172,13 +172,12 @@ func TestStreamLogs(t *testing.T) {
 		time.Sleep(delay)
 	}
 
-	require.NoError(t, client.Close())
+
 	wg.Wait()
-
-	require.Equal(t, blocksWithLogsLength, len(streamedLogs))
-
-	require.NoError(t, sim.Close())
 	require.NotEmpty(t, streamedLogs)
+	require.Equal(t, blocksWithLogsLength, len(streamedLogs))
+	require.NoError(t, client.Close())
+	require.NoError(t, sim.Close())
 }
 
 func TestFetchLogsInBatches(t *testing.T) {
@@ -289,8 +288,7 @@ func TestFetchLogsInBatches(t *testing.T) {
 //  6. Fork by using the parent block as ancestor.
 //  7. Mine two blocks to trigger a reorg.
 //  8. Check that the event was removed.
-//  9. Re-send the transaction and mine a block.
-//  10. Check that the event was reborn.
+
 func TestForkLogs(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
