@@ -59,7 +59,7 @@ type SignerState struct {
 ```go
 func calculateEstimatedRound() uint64 {
     firstRoundStart := slot.StartTime() + waitAfterSlotStart
-    sinceFirstRound := message.Time() - firstRoundStart`
+    sinceFirstRound := message.Time() - firstRoundStart
     if currentQuickRound := 1 + sinceFirstRound / quickRoundDuration; currentQuickRound <= lastQuickRound {
         return currentQuickRound
     }
