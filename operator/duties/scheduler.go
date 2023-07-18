@@ -122,6 +122,7 @@ func (s *Scheduler) Run(ctx context.Context, logger *zap.Logger, ready chan<- st
 	var reorgChs []chan<- ReorgEvent
 	var indicesChangeChs []chan<- bool
 	for _, handler := range s.handlers {
+		h := handler
 		slotTicker := make(chan phase0.Slot, 32)
 		s.slotTicker.Subscribe(slotTicker)
 
@@ -129,10 +130,10 @@ func (s *Scheduler) Run(ctx context.Context, logger *zap.Logger, ready chan<- st
 		indicesChangeChs = append(indicesChangeChs, indicesChangeCh)
 		reorgCh := make(chan ReorgEvent)
 		reorgChs = append(reorgChs, reorgCh)
-		handler.Setup(s.beaconNode, s.network, s.validatorController, s.ExecuteDuties, slotTicker, reorgCh, indicesChangeCh)
+		h.Setup(s.beaconNode, s.network, s.validatorController, s.ExecuteDuties, slotTicker, reorgCh, indicesChangeCh)
 
 		handlerPool.Go(func(ctx context.Context) error {
-			handler.HandleDuties(ctx, logger)
+			h.HandleDuties(ctx, logger)
 			return nil
 		})
 	}
