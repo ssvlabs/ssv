@@ -33,22 +33,6 @@ type taskExecutor interface {
 	UpdateFeeRecipient(owner, recipient ethcommon.Address) error
 }
 
-type eventDB interface {
-	ROTxn() basedb.Txn
-	RWTxn() basedb.Txn
-
-	GetLastProcessedBlock(txn basedb.Txn) (*big.Int, error)
-	GetOperatorData(txn basedb.Txn, id uint64) (*storage.OperatorData, error)
-	GetRecipientData(txn basedb.Txn, owner ethcommon.Address) (*storage.RecipientData, error)
-	GetNextNonce(txn basedb.Txn, owner ethcommon.Address) (storage.Nonce, error)
-	SetLastProcessedBlock(txn basedb.Txn, block *big.Int) error
-	SaveOperatorData(txn basedb.Txn, od *storage.OperatorData) (bool, error)
-	BumpNonce(txn basedb.Txn, owner ethcommon.Address) error
-	SaveRecipientData(txn basedb.Txn, recipientData *storage.RecipientData) (*storage.RecipientData, error)
-	SaveShares(txn basedb.Txn, shares ...*ssvtypes.SSVShare) error
-	DeleteShare(txn basedb.Txn, pubKey []byte) error
-}
-
 type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
 
 type EventDataHandler struct {
