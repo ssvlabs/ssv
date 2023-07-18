@@ -47,6 +47,7 @@ const (
 	FieldDuration            = "duration"
 	FieldDutyID              = "duty_id"
 	FieldENR                 = "enr"
+	FieldEpoch               = "epoch"
 	FieldErrors              = "errors"
 	FieldEvent               = "event"
 	FieldEventID             = "event_id"
@@ -65,7 +66,6 @@ const (
 	FieldPubKey              = "pubkey"
 	FieldRole                = "role"
 	FieldRound               = "round"
-	FieldEpoch               = "epoch"
 	FieldSlot                = "slot"
 	FieldStartTimeUnixMilli  = "start_time_unix_milli"
 	FieldSubnets             = "subnets"
@@ -152,14 +152,14 @@ func Duration(val time.Time) zapcore.Field {
 	return zap.Stringer(FieldDuration, stringer.Float64Stringer{Val: time.Since(val).Seconds()})
 }
 
-func CurrentSlot(network beacon.Network) zapcore.Field {
-	return zap.Stringer(FieldCurrentSlot, stringer.Uint64Stringer{Val: uint64(network.EstimatedCurrentSlot())})
+func CurrentSlot(slot phase0.Slot) zapcore.Field {
+	return zap.Stringer(FieldCurrentSlot, stringer.Uint64Stringer{Val: uint64(slot)})
 }
 
-func StartTimeUnixMilli(network beacon.Network, slot phase0.Slot) zapcore.Field {
+func StartTimeUnixMilli(time time.Time) zapcore.Field {
 	return zap.Stringer(FieldStartTimeUnixMilli, stringer.FuncStringer{
 		Fn: func() string {
-			return strconv.Itoa(int(network.GetSlotStartTime(slot).UnixMilli()))
+			return strconv.Itoa(int(time.UnixMilli()))
 		},
 	})
 }

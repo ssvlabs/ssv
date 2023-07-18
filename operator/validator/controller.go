@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rsa"
 	"encoding/hex"
+	"encoding/json"
 	"sync"
 	"time"
 
@@ -35,6 +36,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	utilsprotocol "github.com/bloxapp/ssv/protocol/v2/queue"
 	"github.com/bloxapp/ssv/protocol/v2/queue/worker"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/sync/handlers"
@@ -95,6 +97,7 @@ type Controller interface {
 	ActiveValidatorIndices(logger *zap.Logger) []phase0.ValidatorIndex
 	ActiveIndices(logger *zap.Logger, epoch phase0.Epoch) []phase0.ValidatorIndex
 	GetValidator(pubKey string) (*validator.Validator, bool)
+	ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty)
 	UpdateValidatorMetaDataLoop(logger *zap.Logger)
 	StartNetworkHandlers(logger *zap.Logger)
 	Eth1EventHandler(logger *zap.Logger, ongoingSync bool) eth1.SyncEventHandler
@@ -553,6 +556,54 @@ func (c *controller) UpdateValidatorMetadata(logger *zap.Logger, pk string, meta
 // GetValidator returns a validator instance from validatorsMap
 func (c *controller) GetValidator(pubKey string) (*validator.Validator, bool) {
 	return c.validatorsMap.GetValidator(pubKey)
+}
+
+func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) {
+	// because we're using the same duty for more than 1 duty (e.g. attest + aggregator) there is an error in bls.Deserialize func for cgo pointer to pointer.
+	// so we need to copy the pubkey val to avoid pointer
+	var pk phase0.BLSPubKey
+	copy(pk[:], duty.PubKey[:])
+
+	if v, ok := c.GetValidator(hex.EncodeToString(pk[:])); ok {
+		ssvMsg, err := CreateDutyExecuteMsg(duty, pk, types.GetDefaultDomain())
+		if err != nil {
+			logger.Error("could not create duty execute msg", zap.Error(err))
+			return
+		}
+		dec, err := queue.DecodeSSVMessage(logger, ssvMsg)
+		if err != nil {
+			logger.Error("could not decode duty execute msg", zap.Error(err))
+			return
+		}
+		if pushed := v.Queues[duty.Type].Q.TryPush(dec); !pushed {
+			logger.Warn("dropping ExecuteDuty message because the queue is full")
+		}
+		// logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
+	} else {
+		logger.Warn("could not find validator")
+	}
+}
+
+// CreateDutyExecuteMsg returns ssvMsg with event type of duty execute
+func CreateDutyExecuteMsg(duty *spectypes.Duty, pubKey phase0.BLSPubKey, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
+	executeDutyData := types.ExecuteDutyData{Duty: duty}
+	edd, err := json.Marshal(executeDutyData)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to marshal execute duty data")
+	}
+	msg := types.EventMsg{
+		Type: types.ExecuteDuty,
+		Data: edd,
+	}
+	data, err := msg.Encode()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to encode event msg")
+	}
+	return &spectypes.SSVMessage{
+		MsgType: message.SSVEventMsgType,
+		MsgID:   spectypes.NewMsgID(domain, pubKey[:], duty.Type),
+		Data:    data,
+	}, nil
 }
 
 // ActiveValidatorIndices returns a list of all the active validators indices

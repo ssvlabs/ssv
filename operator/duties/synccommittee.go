@@ -95,6 +95,9 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context, logger *zap.Log
 
 	for {
 		select {
+		case <-ctx.Done():
+			return
+
 		case slot := <-h.ticker:
 			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
@@ -130,7 +133,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context, logger *zap.Log
 			period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, reorgEvent.Slot, reorgEvent.Slot%32+1)
-			logger.Info("🔀 reorg event received", zap.String("period_epoch_slot_sequence", buildStr), zap.Any("event", reorgEvent))
+			logger.Info("🔀 reorg event received", zap.String("period_epoch_slot_seq", buildStr), zap.Any("event", reorgEvent))
 
 			// reset current epoch duties
 			if reorgEvent.Current && h.shouldFetchNextPeriod(reorgEvent.Slot, epoch) {
@@ -143,7 +146,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context, logger *zap.Log
 			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
-			logger.Info("🔁 indices change received", zap.String("period_epoch_slot_sequence", buildStr))
+			logger.Info("🔁 indices change received", zap.String("period_epoch_slot_seq", buildStr))
 
 			h.indicesChanged = true
 			h.fetchCurrentPeriod = true
@@ -176,10 +179,6 @@ func (h *SyncCommitteeHandler) processFetching(ctx context.Context, logger *zap.
 }
 
 func (h *SyncCommitteeHandler) processExecution(logger *zap.Logger, period uint64, slot phase0.Slot) {
-	//currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
-	//buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, currentEpoch, slot, slot%32+1)
-	//logger.Debug("🛠 process execution", zap.String("period_epoch_slot_sequence", buildStr))
-
 	// range over duties and execute
 	if duties, ok := h.duties.m[period]; ok {
 		toExecute := make([]*spectypes.Duty, 0, len(duties)*2)

@@ -44,7 +44,6 @@ type Options struct {
 	Context             context.Context
 	DB                  basedb.IDb
 	ValidatorController validator.Controller
-	DutyExec            duties.DutyExecutor
 	// max slots for duty to wait
 	DutyLimit        uint64                      `yaml:"DutyLimit" env:"DUTY_LIMIT" env-default:"32" env-description:"max slots to wait for duty to start"`
 	ValidatorOptions validator.ControllerOptions `yaml:"ValidatorOptions"`
@@ -66,7 +65,7 @@ type operatorNode struct {
 	storage          storage.Storage
 	qbftStorage      *qbftstorage.QBFTStores
 	eth1Client       eth1.Client
-	dutyScheduler    duties.Scheduler
+	dutyScheduler    *duties.Scheduler
 	feeRecipientCtrl fee_recipient.RecipientController
 	// fork           *forks.Forker
 
@@ -104,13 +103,13 @@ func New(logger *zap.Logger, opts Options, slotTicker slot_ticker.Ticker) Node {
 		qbftStorage:    storageMap,
 		dutyScheduler: duties.NewScheduler(&duties.SchedulerOptions{
 			Ctx:                 opts.Context,
-			BeaconClient:        opts.BeaconNode,
+			BeaconNode:          opts.BeaconNode,
 			Network:             opts.Network,
 			ValidatorController: opts.ValidatorController,
-			//DutyLimit:           opts.DutyLimit,
-			Executor:         opts.DutyExec,
-			Ticker:           slotTicker,
-			BuilderProposals: opts.ValidatorOptions.BuilderProposals,
+			IndicesChg:          opts.ValidatorController.IndicesChangeChan(),
+			ExecuteDuty:         opts.ValidatorController.ExecuteDuty,
+			Ticker:              slotTicker,
+			BuilderProposals:    opts.ValidatorOptions.BuilderProposals,
 		}),
 		feeRecipientCtrl: fee_recipient.NewController(&fee_recipient.ControllerOptions{
 			Ctx:              opts.Context,
@@ -155,8 +154,8 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 	go n.reportOperators(logger)
 
 	go n.feeRecipientCtrl.Start(logger)
-	if err := n.dutyScheduler.Run(n.context, logger); err != nil {
-		return errors.Wrap(err, "failed to run duty scheduler")
+	if err := n.dutyScheduler.Run(n.context, logger, nil); err != nil {
+		return fmt.Errorf("failed to run duty scheduler: %w", err)
 	}
 
 	return nil

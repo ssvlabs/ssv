@@ -8,22 +8,19 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/networkconfig"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
 // ExecuteDutiesFunc is a non-blocking functions which executes the given duties.
 type ExecuteDutiesFunc func(logger *zap.Logger, duties []*spectypes.Duty)
 
 type dutyHandler interface {
-	Setup(beaconprotocol.BeaconNode, networkconfig.NetworkConfig, ValidatorController, ExecuteDutiesFunc, chan phase0.Slot, chan ReorgEvent, chan bool)
+	Setup(BeaconNode, networkconfig.NetworkConfig, ValidatorController, ExecuteDutiesFunc, chan phase0.Slot, chan ReorgEvent, chan bool)
 	HandleDuties(context.Context, *zap.Logger)
 	Name() string
-	IndicesChangeChannel() chan bool
-	ReorgChannel() chan ReorgEvent
 }
 
 type baseHandler struct {
-	beaconNode          beaconprotocol.BeaconNode
+	beaconNode          BeaconNode
 	network             networkconfig.NetworkConfig
 	validatorController ValidatorController
 	executeDuties       ExecuteDutiesFunc
@@ -37,7 +34,7 @@ type baseHandler struct {
 }
 
 func (h *baseHandler) Setup(
-	beaconNode beaconprotocol.BeaconNode,
+	beaconNode BeaconNode,
 	network networkconfig.NetworkConfig,
 	validatorController ValidatorController,
 	executeDuties ExecuteDutiesFunc,
@@ -52,14 +49,6 @@ func (h *baseHandler) Setup(
 	h.ticker = ticker
 	h.reorg = reorgEvents
 	h.indicesChange = indicesChange
-}
-
-func (h *baseHandler) IndicesChangeChannel() chan bool {
-	return h.indicesChange
-}
-
-func (h *baseHandler) ReorgChannel() chan ReorgEvent {
-	return h.reorg
 }
 
 type Duties[K ~uint64, D any] struct {

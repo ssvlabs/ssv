@@ -55,7 +55,7 @@ func (t *ticker) listenToTicker(logger *zap.Logger, slots <-chan phase0.Slot) {
 	for currentSlot := range slots {
 		currentEpoch := t.network.Beacon.EstimatedEpochAtSlot(currentSlot)
 		buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, currentSlot%32+1)
-		logger.Debug("📅 slot ticker", zap.String("epoch_slot_sequence", buildStr))
+		logger.Debug("📅 slot ticker", zap.String("epoch_slot_seq", buildStr))
 		if !t.genesisEpochEffective(logger) {
 			continue
 		}

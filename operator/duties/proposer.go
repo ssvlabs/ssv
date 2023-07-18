@@ -57,6 +57,9 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context, logger *zap.Logger) 
 
 	for {
 		select {
+		case <-ctx.Done():
+			return
+
 		case slot := <-h.ticker:
 			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 
@@ -82,7 +85,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context, logger *zap.Logger) 
 		case reorgEvent := <-h.reorg:
 			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(reorgEvent.Slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, reorgEvent.Slot, reorgEvent.Slot%32+1)
-			logger.Info("🔀 reorg event received", zap.String("epoch_slot_sequence", buildStr), zap.Any("event", reorgEvent))
+			logger.Info("🔀 reorg event received", zap.String("epoch_slot_seq", buildStr), zap.Any("event", reorgEvent))
 
 			// reset current epoch duties
 			if reorgEvent.Current {
@@ -94,7 +97,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context, logger *zap.Logger) 
 			slot := h.network.Beacon.EstimatedCurrentSlot()
 			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
-			logger.Info("🔁 indices change received", zap.String("epoch_slot_sequence", buildStr))
+			logger.Info("🔁 indices change received", zap.String("epoch_slot_seq", buildStr))
 
 			h.indicesChanged = true
 		}
@@ -109,9 +112,6 @@ func (h *ProposerHandler) processFetching(ctx context.Context, logger *zap.Logge
 }
 
 func (h *ProposerHandler) processExecution(logger *zap.Logger, epoch phase0.Epoch, slot phase0.Slot) {
-	//buildStr := fmt.Sprintf("e%v-s%v-#%v", epoch, slot, slot%32+1)
-	//logger.Debug("🛠️process execution", zap.String("epoch_slot_sequence", buildStr))
-
 	// range over duties and execute
 	if slotMap, ok := h.duties.m[epoch]; ok {
 		if duties, ok := slotMap[slot]; ok {
@@ -172,7 +172,8 @@ func (h *ProposerHandler) shouldExecute(logger *zap.Logger, duty *eth2apiv1.Prop
 	// execute task if slot already began and not pass 1 epoch
 	if currentSlot == duty.Slot {
 		return true
-	} else if currentSlot+1 == duty.Slot {
+	}
+	if currentSlot+1 == duty.Slot {
 		logger.Debug("current slot and duty slot are not aligned, "+
 			"assuming diff caused by a time drift - ignoring and executing duty", zap.String("type", duty.String()))
 		return true
