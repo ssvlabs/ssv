@@ -8,14 +8,51 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
+//go:generate mockgen -package=mocks -destination=./mocks/network.go -source=./network.go
+
 // Network is a beacon chain network.
 type Network struct {
 	spectypes.BeaconNetwork
 }
 
+type NetworkInfo interface {
+	ForkVersion() [4]byte
+	MinGenesisTime() uint64
+	SlotDurationSec() time.Duration
+	SlotsPerEpoch() uint64
+	EstimatedCurrentSlot() phase0.Slot
+	EstimatedSlotAtTime(time int64) phase0.Slot
+	EstimatedTimeAtSlot(slot phase0.Slot) int64
+	EstimatedCurrentEpoch() phase0.Epoch
+	EstimatedEpochAtSlot(slot phase0.Slot) phase0.Epoch
+	FirstSlotAtEpoch(epoch phase0.Epoch) phase0.Slot
+	EpochStartTime(epoch phase0.Epoch) time.Time
+
+	GetSlotStartTime(slot phase0.Slot) time.Time
+	IsFirstSlotOfEpoch(slot phase0.Slot) bool
+	GetEpochFirstSlot(epoch phase0.Epoch) phase0.Slot
+
+	EstimatedSyncCommitteePeriodAtEpoch(epoch phase0.Epoch) uint64
+	FirstEpochOfSyncPeriod(period uint64) phase0.Epoch
+	LastSlotOfSyncPeriod(period uint64) phase0.Slot
+
+	GetNetwork() Network
+	GetBeaconNetwork() spectypes.BeaconNetwork
+}
+
 // NewNetwork creates a new beacon chain network.
 func NewNetwork(network spectypes.BeaconNetwork) Network {
 	return Network{network}
+}
+
+// GetNetwork returns the network
+func (n Network) GetNetwork() Network {
+	return n
+}
+
+// GetBeaconNetwork returns the beacon network the node is on
+func (n Network) GetBeaconNetwork() spectypes.BeaconNetwork {
+	return n.BeaconNetwork
 }
 
 // GetSlotStartTime returns the start time for the given slot

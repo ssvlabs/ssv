@@ -28,7 +28,7 @@ func GetNetworkConfigByName(name string) (NetworkConfig, error) {
 
 type NetworkConfig struct {
 	Name                    string
-	Beacon                  beacon.Network
+	Beacon                  beacon.NetworkInfo
 	Domain                  spectypes.DomainType
 	GenesisEpoch            spec.Epoch
 	ETH1SyncOffset          *big.Int
