@@ -12,6 +12,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
 	"strings"
 
@@ -84,19 +85,19 @@ func ConvertEncryptedPemToPrivateKey(pemData []byte, password string) (*rsa.Priv
 	// Decrypt the private key using keystorev4
 	decryptedBytes, err := keystorev4.New().Decrypt(data, password)
 	if err != nil {
-		return nil, errors.Wrap(err, "Failed to decrypt private key")
+		return nil, fmt.Errorf("decrypt private key: %w", err)
 	}
 
 	// Parse the decrypted PEM data
 	block, _ := pem.Decode(decryptedBytes)
 	if block == nil {
-		return nil, errors.New("Failed to parse PEM block")
+		return nil, errors.New("parse PEM block")
 	}
 
 	// Parse the RSA private key
 	rsaKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
 	if err != nil {
-		return nil, errors.Wrap(err, "Failed to parse RSA private key")
+		return nil, fmt.Errorf("parse RSA private key: %w", err)
 	}
 
 	return rsaKey, nil
@@ -155,7 +156,7 @@ func ExtractPublicKey(sk *rsa.PrivateKey) (string, error) {
 	return base64.StdEncoding.EncodeToString(pemByte), nil
 }
 
-// ExtractPrivateKey get private key and return base64 encoded private key
+// ExtractPrivateKey gets private key and returns base64 encoded private key
 func ExtractPrivateKey(sk *rsa.PrivateKey) string {
 	pemByte := pem.EncodeToMemory(
 		&pem.Block{
