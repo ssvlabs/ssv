@@ -10,6 +10,8 @@ import (
 	"github.com/bloxapp/ssv/networkconfig"
 )
 
+//go:generate mockgen -package=duties -destination=./base_handler_mock.go -source=./base_handler.go
+
 // ExecuteDutiesFunc is a non-blocking functions which executes the given duties.
 type ExecuteDutiesFunc func(logger *zap.Logger, duties []*spectypes.Duty)
 

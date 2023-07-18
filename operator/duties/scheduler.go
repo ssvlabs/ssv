@@ -21,6 +21,8 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
+//go:generate mockgen -package=mocks -destination=./mocks/scheduler.go -source=./scheduler.go
+
 type SlotTicker interface {
 	Subscribe(subscription chan phase0.Slot) event.Subscription
 }
