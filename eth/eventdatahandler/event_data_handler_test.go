@@ -18,7 +18,6 @@ import (
 	"github.com/bloxapp/ssv/ekm"
 	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/eth/eventbatcher"
-	"github.com/bloxapp/ssv/eth/eventdb"
 	"github.com/bloxapp/ssv/eth/executionclient"
 	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/networkconfig"
@@ -98,13 +97,15 @@ func setupDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger) (*E
 		return nil, err
 	}
 
-	eventDB := eventdb.NewEventDB(db.Badger())
 	storageMap := ibftstorage.NewStores()
 	nodeStorage, operatorData := setupOperatorStorage(logger, db)
-	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkconfig.NetworkConfig{}, true)
+	testNetworkConfig := networkconfig.TestNetwork
+
+	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, true)
 	if err != nil {
 		return nil, err
 	}
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -126,10 +127,11 @@ func setupDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger) (*E
 	require.NoError(t, err)
 
 	edh, err := New(
-		eventDB,
+		nodeStorage,
 		contractFilterer,
 		contractABI,
 		validatorCtrl,
+		testNetworkConfig.Domain,
 		operatorData,
 		nodeStorage.GetPrivateKey,
 		keyManager,
@@ -148,7 +150,7 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.St
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
-	operatorPubKey, err := nodeStorage.SetupPrivateKey(logger, "", true)
+	operatorPubKey, err := nodeStorage.SetupPrivateKey("", true)
 	if err != nil {
 		logger.Fatal("could not setup operator private key", zap.Error(err))
 	}
@@ -158,7 +160,7 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.St
 		logger.Fatal("failed to get operator private key", zap.Error(err))
 	}
 	var operatorData *registrystorage.OperatorData
-	operatorData, found, err = nodeStorage.GetOperatorDataByPubKey(logger, operatorPubKey)
+	operatorData, found, err = nodeStorage.GetOperatorDataByPubKey(nil, operatorPubKey)
 	if err != nil {
 		logger.Fatal("could not get operator data by public key", zap.Error(err))
 	}
@@ -198,7 +200,9 @@ var mockUpdateFeeTask2 = &UpdateFeeRecipientTask{owner: ethcommon.HexToAddress("
 var mockUpdateFeeTask3 = &UpdateFeeRecipientTask{owner: ethcommon.HexToAddress("0x2"), recipient: ethcommon.HexToAddress("0x3")}
 
 func TestFilterSupersedingTasks_SingleStartTask(t *testing.T) {
-	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+	edh := &EventDataHandler{}
+	WithLogger(zaptest.NewLogger(t))(edh)
+	WithTaskOptimizer()(edh)
 
 	tasks := []Task{mockStartTask1}
 	result := edh.filterSupersedingTasks(tasks)
@@ -208,7 +212,9 @@ func TestFilterSupersedingTasks_SingleStartTask(t *testing.T) {
 }
 
 func TestFilterSupersedingTasks_SingleStopTask(t *testing.T) {
-	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+	edh := &EventDataHandler{}
+	WithLogger(zaptest.NewLogger(t))(edh)
+	WithTaskOptimizer()(edh)
 
 	tasks := []Task{mockStopTask1}
 	result := edh.filterSupersedingTasks(tasks)
@@ -218,7 +224,9 @@ func TestFilterSupersedingTasks_SingleStopTask(t *testing.T) {
 }
 
 func TestFilterSupersedingTasks_StartAndStopTasks(t *testing.T) {
-	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+	edh := &EventDataHandler{}
+	WithLogger(zaptest.NewLogger(t))(edh)
+	WithTaskOptimizer()(edh)
 
 	tasks := []Task{mockStartTask1, mockStopTask1}
 	result := edh.filterSupersedingTasks(tasks)
@@ -227,7 +235,9 @@ func TestFilterSupersedingTasks_StartAndStopTasks(t *testing.T) {
 }
 
 func TestFilterSupersedingTasks_SingleLiquidateTask(t *testing.T) {
-	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+	edh := &EventDataHandler{}
+	WithLogger(zaptest.NewLogger(t))(edh)
+	WithTaskOptimizer()(edh)
 
 	tasks := []Task{mockLiquidateTask1}
 	result := edh.filterSupersedingTasks(tasks)
@@ -237,7 +247,9 @@ func TestFilterSupersedingTasks_SingleLiquidateTask(t *testing.T) {
 }
 
 func TestFilterSupersedingTasks_SingleReactivateTask(t *testing.T) {
-	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+	edh := &EventDataHandler{}
+	WithLogger(zaptest.NewLogger(t))(edh)
+	WithTaskOptimizer()(edh)
 
 	tasks := []Task{mockReactivateTask1}
 	result := edh.filterSupersedingTasks(tasks)
@@ -247,7 +259,9 @@ func TestFilterSupersedingTasks_SingleReactivateTask(t *testing.T) {
 }
 
 func TestFilterSupersedingTasks_LiquidateAndReactivateTasks(t *testing.T) {
-	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+	edh := &EventDataHandler{}
+	WithLogger(zaptest.NewLogger(t))(edh)
+	WithTaskOptimizer()(edh)
 
 	tasks := []Task{mockLiquidateTask1, mockReactivateTask1}
 	result := edh.filterSupersedingTasks(tasks)
@@ -256,7 +270,9 @@ func TestFilterSupersedingTasks_LiquidateAndReactivateTasks(t *testing.T) {
 }
 
 func TestFilterSupersedingTasks_SingleUpdateFeeTask(t *testing.T) {
-	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+	edh := &EventDataHandler{}
+	WithLogger(zaptest.NewLogger(t))(edh)
+	WithTaskOptimizer()(edh)
 
 	tasks := []Task{mockUpdateFeeTask1}
 	result := edh.filterSupersedingTasks(tasks)
@@ -266,7 +282,9 @@ func TestFilterSupersedingTasks_SingleUpdateFeeTask(t *testing.T) {
 }
 
 func TestFilterSupersedingTasks_MultipleUpdateFeeTasks(t *testing.T) {
-	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+	edh := &EventDataHandler{}
+	WithLogger(zaptest.NewLogger(t))(edh)
+	WithTaskOptimizer()(edh)
 
 	tasks := []Task{mockUpdateFeeTask2, mockUpdateFeeTask3}
 	result := edh.filterSupersedingTasks(tasks)
@@ -276,7 +294,9 @@ func TestFilterSupersedingTasks_MultipleUpdateFeeTasks(t *testing.T) {
 }
 
 func TestFilterSupersedingTasks_MixedTasks(t *testing.T) {
-	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+	edh := &EventDataHandler{}
+	WithLogger(zaptest.NewLogger(t))(edh)
+	WithTaskOptimizer()(edh)
 
 	tasks := []Task{mockStartTask1, mockStartTask2, mockStopTask1, mockLiquidateTask2, mockReactivateTask1, mockUpdateFeeTask1}
 	result := edh.filterSupersedingTasks(tasks)
@@ -289,7 +309,9 @@ func TestFilterSupersedingTasks_MixedTasks(t *testing.T) {
 }
 
 func TestFilterSupersedingTasks_MultipleDifferentStopTasks(t *testing.T) {
-	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+	edh := &EventDataHandler{}
+	WithLogger(zaptest.NewLogger(t))(edh)
+	WithTaskOptimizer()(edh)
 
 	tasks := []Task{mockStopTask1, mockStopTask2}
 	result := edh.filterSupersedingTasks(tasks)
@@ -300,7 +322,9 @@ func TestFilterSupersedingTasks_MultipleDifferentStopTasks(t *testing.T) {
 }
 
 func TestFilterSupersedingTasks_MultipleDifferentReactivateTasks(t *testing.T) {
-	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+	edh := &EventDataHandler{}
+	WithLogger(zaptest.NewLogger(t))(edh)
+	WithTaskOptimizer()(edh)
 
 	tasks := []Task{mockReactivateTask1, mockReactivateTask2}
 	result := edh.filterSupersedingTasks(tasks)
@@ -311,7 +335,9 @@ func TestFilterSupersedingTasks_MultipleDifferentReactivateTasks(t *testing.T) {
 }
 
 func TestFilterSupersedingTasks_MultipleDifferentUpdateFeeTasks(t *testing.T) {
-	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+	edh := &EventDataHandler{}
+	WithLogger(zaptest.NewLogger(t))(edh)
+	WithTaskOptimizer()(edh)
 
 	tasks := []Task{mockUpdateFeeTask1, mockUpdateFeeTask2}
 	result := edh.filterSupersedingTasks(tasks)
@@ -322,7 +348,9 @@ func TestFilterSupersedingTasks_MultipleDifferentUpdateFeeTasks(t *testing.T) {
 }
 
 func TestFilterSupersedingTasks_MixedTasks_Different(t *testing.T) {
-	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+	edh := &EventDataHandler{}
+	WithLogger(zaptest.NewLogger(t))(edh)
+	WithTaskOptimizer()(edh)
 
 	tasks := []Task{mockStartTask1, mockStopTask2, mockLiquidateTask1, mockReactivateTask2, mockUpdateFeeTask1}
 	result := edh.filterSupersedingTasks(tasks)
@@ -340,7 +368,9 @@ type unknownTask struct{}
 func (u unknownTask) Execute() error { return nil }
 
 func TestFilterSupersedingTasks_UnknownTask(t *testing.T) {
-	edh := &EventDataHandler{logger: zaptest.NewLogger(t)}
+	edh := &EventDataHandler{}
+	WithLogger(zaptest.NewLogger(t))(edh)
+	WithTaskOptimizer()(edh)
 
 	tasks := []Task{mockStartTask1, unknownTask{}}
 	result := edh.filterSupersedingTasks(tasks)

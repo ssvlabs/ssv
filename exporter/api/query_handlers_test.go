@@ -191,7 +191,7 @@ func newDBAndLoggerForTest(logger *zap.Logger) (basedb.IDb, *zap.Logger, func())
 		return nil, nil, func() {}
 	}
 	return db, logger, func() {
-		db.Close(logger)
+		db.Close()
 	}
 }
 

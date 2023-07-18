@@ -208,6 +208,10 @@ func MessageType(val spectypes.MsgType) zap.Field {
 	return zap.String(FieldMessageType, message.MsgTypeToString(val))
 }
 
+func QBFTMessageType(val specqbft.MessageType) zap.Field {
+	return zap.String(FieldMessageType, message.QBFTMsgTypeToString(val))
+}
+
 func EventName(val string) zap.Field {
 	return zap.String(FieldEvent, val)
 }

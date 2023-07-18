@@ -29,7 +29,7 @@ type cacheEntry struct {
 // validatorsIndicesFetcher represents the interface for retrieving indices.
 // It have a minimal interface instead of working with the complete validator.IController interface
 type validatorsIndicesFetcher interface {
-	ActiveValidatorIndices(logger *zap.Logger) []phase0.ValidatorIndex
+	ActiveValidatorIndices() []phase0.ValidatorIndex
 }
 
 // DutyFetcher represents the component that manages duties
@@ -128,7 +128,7 @@ func (df *dutyFetcher) updateDutiesFromBeacon(logger *zap.Logger, slot phase0.Sl
 
 // fetchDuties fetches duties for the epoch of the given slot
 func (df *dutyFetcher) fetchDuties(logger *zap.Logger, slot phase0.Slot) ([]*spectypes.Duty, error) {
-	if indices := df.indicesFetcher.ActiveValidatorIndices(logger); len(indices) > 0 {
+	if indices := df.indicesFetcher.ActiveValidatorIndices(); len(indices) > 0 {
 		logger.Debug("got indices for existing validators",
 			zap.Int("count", len(indices)), zap.Any("indices", indices))
 		epoch := df.ethNetwork.EstimatedEpochAtSlot(slot)

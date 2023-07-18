@@ -22,7 +22,6 @@ import (
 	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/eth/eventbatcher"
 	"github.com/bloxapp/ssv/eth/eventdatahandler"
-	"github.com/bloxapp/ssv/eth/eventdb"
 	"github.com/bloxapp/ssv/eth/eventdispatcher"
 	"github.com/bloxapp/ssv/eth/executionclient"
 	"github.com/bloxapp/ssv/eth/localevents"
@@ -99,7 +98,7 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		cfg.DBOptions.Ctx = cmd.Context()
-		db, err := setupDb(logger, networkConfig.Beacon)
+		db, err := setupDB(logger, networkConfig.Beacon)
 		if err != nil {
 			logger.Fatal("could not setup db", zap.Error(err))
 		}
@@ -227,13 +226,13 @@ var StartNodeCmd = &cobra.Command{
 		setupEventHandling(
 			cmd.Context(),
 			logger,
-			db,
 			executionClient,
 			validatorCtrl,
 			storageMap,
 			metricsReporter,
 			nodeProber,
 			networkConfig,
+			nodeStorage,
 		)
 
 		cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, uint64, error) {
@@ -300,13 +299,13 @@ func setupGlobal(cmd *cobra.Command) (*zap.Logger, error) {
 	return zap.L(), nil
 }
 
-func setupDb(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.BadgerDb, error) {
+func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.BadgerDB, error) {
 	db, err := storage.GetStorageFactory(logger, cfg.DBOptions)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open db")
 	}
 	reopenDb := func() error {
-		if err := db.Close(logger); err != nil {
+		if err := db.Close(); err != nil {
 			return errors.Wrap(err, "failed to close db")
 		}
 		db, err = storage.GetStorageFactory(logger, cfg.DBOptions)
@@ -356,7 +355,7 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.St
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
-	operatorPubKey, err := nodeStorage.SetupPrivateKey(logger, cfg.OperatorPrivateKey, cfg.GenerateOperatorPrivateKey)
+	operatorPubKey, err := nodeStorage.SetupPrivateKey(cfg.OperatorPrivateKey, cfg.GenerateOperatorPrivateKey)
 	if err != nil {
 		logger.Fatal("could not setup operator private key", zap.Error(err))
 	}
@@ -366,7 +365,7 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.St
 		logger.Fatal("failed to get operator private key", zap.Error(err))
 	}
 	var operatorData *registrystorage.OperatorData
-	operatorData, found, err = nodeStorage.GetOperatorDataByPubKey(logger, operatorPubKey)
+	operatorData, found, err = nodeStorage.GetOperatorDataByPubKey(nil, operatorPubKey)
 	if err != nil {
 		logger.Fatal("could not get operator data by public key", zap.Error(err))
 	}
@@ -443,16 +442,14 @@ func setupConsensusClient(
 func setupEventHandling(
 	ctx context.Context,
 	logger *zap.Logger,
-	db *kv.BadgerDb,
 	executionClient *executionclient.ExecutionClient,
 	validatorCtrl validator.Controller,
 	storageMap *ibftstorage.QBFTStores,
 	metricsReporter *metricsreporter.MetricsReporter,
 	nodeProber *nodeprobe.Prober,
 	networkConfig networkconfig.NetworkConfig,
+	nodeStorage operatorstorage.Storage,
 ) {
-	eventDB := eventdb.NewEventDB(db.Badger())
-
 	eventFilterer, err := executionClient.Filterer()
 	if err != nil {
 		logger.Fatal("failed to set up event filterer", zap.Error(err))
@@ -464,10 +461,11 @@ func setupEventHandling(
 	}
 
 	eventDataHandler, err := eventdatahandler.New(
-		eventDB,
+		nodeStorage,
 		eventFilterer,
 		contractABI,
 		validatorCtrl,
+		networkConfig.Domain,
 		cfg.SSVOptions.ValidatorOptions.OperatorData,
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider,
 		cfg.SSVOptions.ValidatorOptions.KeyManager,
@@ -491,15 +489,12 @@ func setupEventHandling(
 		eventdispatcher.WithNodeProber(nodeProber),
 	)
 
-	txn := eventDB.ROTxn()
-	fromBlock, err := txn.GetLastProcessedBlock()
-	txn.Discard()
-
+	fromBlock, found, err := nodeStorage.GetLastProcessedBlock(nil)
 	if err != nil {
 		logger.Fatal("could not get last processed block", zap.Error(err))
 	}
 
-	if fromBlock == nil {
+	if !found || fromBlock == nil {
 		fromBlock = networkConfig.ETH1SyncOffset
 		logger.Info("no last processed block in DB found, using last processed block from network config",
 			fields.BlockNumber(fromBlock.Uint64()))

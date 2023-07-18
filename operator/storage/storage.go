@@ -19,13 +19,19 @@ import (
 )
 
 var (
-	storagePrefix = []byte("operator/")
-	syncOffsetKey = []byte("syncOffset")
+	storagePrefix         = []byte("operator/")
+	lastProcessedBlockKey = []byte("syncOffset") // TODO: temporarily left as syncOffset for compatibility, consider renaming
 )
 
 // Storage represents the interface for ssv node storage
 type Storage interface {
 	// TODO: de-anonymize the sub-storages, like Shares() below
+
+	ROTxn() basedb.Txn
+	RWTxn() basedb.Txn
+
+	SaveLastProcessedBlock(txn basedb.Txn, offset *big.Int) error
+	GetLastProcessedBlock(txn basedb.Txn) (*big.Int, bool, error)
 
 	registry.RegistryStore
 
@@ -35,11 +41,12 @@ type Storage interface {
 	registrystorage.Events
 
 	GetPrivateKey() (*rsa.PrivateKey, bool, error)
-	SetupPrivateKey(logger *zap.Logger, operatorKeyBase64 string, generateIfNone bool) ([]byte, error)
+	SetupPrivateKey(operatorKeyBase64 string, generateIfNone bool) ([]byte, error)
 }
 
 type storage struct {
-	db basedb.IDb
+	logger *zap.Logger
+	db     basedb.IDb
 
 	operatorStore  registrystorage.Operators
 	recipientStore registrystorage.Recipients
@@ -50,10 +57,11 @@ type storage struct {
 // NewNodeStorage creates a new instance of Storage
 func NewNodeStorage(logger *zap.Logger, db basedb.IDb) (Storage, error) {
 	stg := &storage{
+		logger:         logger,
 		db:             db,
-		operatorStore:  registrystorage.NewOperatorsStorage(db, storagePrefix),
-		recipientStore: registrystorage.NewRecipientsStorage(db, storagePrefix),
-		eventStore:     registrystorage.NewEventsStorage(db, storagePrefix),
+		operatorStore:  registrystorage.NewOperatorsStorage(logger, db, storagePrefix),
+		recipientStore: registrystorage.NewRecipientsStorage(logger, db, storagePrefix),
+		eventStore:     registrystorage.NewEventsStorage(logger, db, storagePrefix),
 	}
 	var err error
 	stg.shareStore, err = registrystorage.NewSharesStorage(logger, db, storagePrefix)
@@ -63,56 +71,64 @@ func NewNodeStorage(logger *zap.Logger, db basedb.IDb) (Storage, error) {
 	return stg, nil
 }
 
+func (s *storage) ROTxn() basedb.Txn {
+	return s.db.ROTxn()
+}
+
+func (s *storage) RWTxn() basedb.Txn {
+	return s.db.RWTxn()
+}
+
 func (s *storage) Shares() registrystorage.Shares {
 	return s.shareStore
 }
 
-func (s *storage) GetOperatorDataByPubKey(logger *zap.Logger, operatorPubKey []byte) (*registrystorage.OperatorData, bool, error) {
-	return s.operatorStore.GetOperatorDataByPubKey(logger, operatorPubKey)
+func (s *storage) GetOperatorDataByPubKey(txn basedb.Txn, operatorPubKey []byte) (*registrystorage.OperatorData, bool, error) {
+	return s.operatorStore.GetOperatorDataByPubKey(txn, operatorPubKey)
 }
 
-func (s *storage) GetOperatorData(id spectypes.OperatorID) (*registrystorage.OperatorData, bool, error) {
-	return s.operatorStore.GetOperatorData(id)
+func (s *storage) GetOperatorData(txn basedb.Txn, id spectypes.OperatorID) (*registrystorage.OperatorData, bool, error) {
+	return s.operatorStore.GetOperatorData(txn, id)
 }
 
-func (s *storage) SaveOperatorData(logger *zap.Logger, operatorData *registrystorage.OperatorData) (bool, error) {
-	return s.operatorStore.SaveOperatorData(logger, operatorData)
+func (s *storage) SaveOperatorData(txn basedb.Txn, operatorData *registrystorage.OperatorData) (bool, error) {
+	return s.operatorStore.SaveOperatorData(txn, operatorData)
 }
 
-func (s *storage) DeleteOperatorData(id spectypes.OperatorID) error {
-	return s.operatorStore.DeleteOperatorData(id)
+func (s *storage) DeleteOperatorData(txn basedb.Txn, id spectypes.OperatorID) error {
+	return s.operatorStore.DeleteOperatorData(txn, id)
 }
 
-func (s *storage) ListOperators(logger *zap.Logger, from uint64, to uint64) ([]registrystorage.OperatorData, error) {
-	return s.operatorStore.ListOperators(logger, from, to)
+func (s *storage) ListOperators(txn basedb.Txn, from uint64, to uint64) ([]registrystorage.OperatorData, error) {
+	return s.operatorStore.ListOperators(txn, from, to)
 }
 
 func (s *storage) GetOperatorsPrefix() []byte {
 	return s.operatorStore.GetOperatorsPrefix()
 }
 
-func (s *storage) GetRecipientData(owner common.Address) (*registrystorage.RecipientData, bool, error) {
-	return s.recipientStore.GetRecipientData(owner)
+func (s *storage) GetRecipientData(txn basedb.Txn, owner common.Address) (*registrystorage.RecipientData, bool, error) {
+	return s.recipientStore.GetRecipientData(txn, owner)
 }
 
-func (s *storage) GetRecipientDataMany(logger *zap.Logger, owners []common.Address) (map[common.Address]bellatrix.ExecutionAddress, error) {
-	return s.recipientStore.GetRecipientDataMany(logger, owners)
+func (s *storage) GetRecipientDataMany(txn basedb.Txn, owners []common.Address) (map[common.Address]bellatrix.ExecutionAddress, error) {
+	return s.recipientStore.GetRecipientDataMany(txn, owners)
 }
 
-func (s *storage) SaveRecipientData(recipientData *registrystorage.RecipientData) (*registrystorage.RecipientData, error) {
-	return s.recipientStore.SaveRecipientData(recipientData)
+func (s *storage) SaveRecipientData(txn basedb.Txn, recipientData *registrystorage.RecipientData) (*registrystorage.RecipientData, error) {
+	return s.recipientStore.SaveRecipientData(txn, recipientData)
 }
 
-func (s *storage) DeleteRecipientData(owner common.Address) error {
-	return s.recipientStore.DeleteRecipientData(owner)
+func (s *storage) DeleteRecipientData(txn basedb.Txn, owner common.Address) error {
+	return s.recipientStore.DeleteRecipientData(txn, owner)
 }
 
-func (s *storage) GetNextNonce(owner common.Address) (registrystorage.Nonce, error) {
-	return s.recipientStore.GetNextNonce(owner)
+func (s *storage) GetNextNonce(txn basedb.Txn, owner common.Address) (registrystorage.Nonce, error) {
+	return s.recipientStore.GetNextNonce(txn, owner)
 }
 
-func (s *storage) BumpNonce(owner common.Address) error {
-	return s.recipientStore.BumpNonce(owner)
+func (s *storage) BumpNonce(txn basedb.Txn, owner common.Address) error {
+	return s.recipientStore.BumpNonce(txn, owner)
 }
 
 func (s *storage) GetRecipientsPrefix() []byte {
@@ -132,7 +148,7 @@ func (s *storage) GetEventsPrefix() []byte {
 }
 
 func (s *storage) CleanRegistryData() error {
-	err := s.cleanSyncOffset()
+	err := s.cleanLastProcessedBlock()
 	if err != nil {
 		return errors.Wrap(err, "could not clean sync offset")
 	}
@@ -156,13 +172,17 @@ func (s *storage) CleanRegistryData() error {
 
 // TODO: review what's not needed anymore and delete
 
-// SaveSyncOffset saves the offset
-func (s *storage) SaveSyncOffset(offset *big.Int) error {
-	return s.db.Set(storagePrefix, syncOffsetKey, offset.Bytes())
+func (s *storage) SaveLastProcessedBlock(txn basedb.Txn, offset *big.Int) error {
+	setter := s.db.Set
+	if txn != nil {
+		setter = txn.Set
+	}
+
+	return setter(storagePrefix, lastProcessedBlockKey, offset.Bytes())
 }
 
-func (s *storage) cleanSyncOffset() error {
-	return s.db.RemoveAllByCollection(append(storagePrefix, syncOffsetKey...))
+func (s *storage) cleanLastProcessedBlock() error {
+	return s.db.RemoveAllByCollection(append(storagePrefix, lastProcessedBlockKey...))
 }
 
 func (s *storage) cleanOperators() error {
@@ -180,17 +200,22 @@ func (s *storage) cleanEvents() error {
 	return s.db.RemoveAllByCollection(append(storagePrefix, eventsPrefix...))
 }
 
-// GetSyncOffset returns the offset
-func (s *storage) GetSyncOffset() (*big.Int, bool, error) {
-	obj, found, err := s.db.Get(storagePrefix, syncOffsetKey)
+// GetLastProcessedBlock returns the last processed block.
+func (s *storage) GetLastProcessedBlock(txn basedb.Txn) (*big.Int, bool, error) {
+	getter := s.db.Get
+	if txn != nil {
+		getter = txn.Get
+	}
+
+	obj, found, err := getter(storagePrefix, lastProcessedBlockKey)
 	if !found {
 		return nil, found, nil
 	}
 	if err != nil {
 		return nil, found, err
 	}
-	offset := new(big.Int)
-	offset.SetBytes(obj.Value)
+
+	offset := new(big.Int).SetBytes(obj.Value)
 	return offset, found, nil
 }
 
@@ -211,14 +236,13 @@ func (s *storage) GetPrivateKey() (*rsa.PrivateKey, bool, error) {
 }
 
 // SetupPrivateKey setup operator private key at the init of the node and set OperatorPublicKey config
-func (s *storage) SetupPrivateKey(logger *zap.Logger, operatorKeyBase64 string, generateIfNone bool) ([]byte, error) {
+func (s *storage) SetupPrivateKey(operatorKeyBase64 string, generateIfNone bool) ([]byte, error) {
 	operatorKeyByte, err := base64.StdEncoding.DecodeString(operatorKeyBase64)
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to decode base64")
 	}
-	var operatorKey = string(operatorKeyByte)
 
-	if err := s.validateKey(generateIfNone, operatorKey); err != nil {
+	if err := s.validateKey(generateIfNone, string(operatorKeyByte)); err != nil {
 		return nil, err
 	}
 
@@ -229,12 +253,14 @@ func (s *storage) SetupPrivateKey(logger *zap.Logger, operatorKeyBase64 string, 
 	if !found {
 		return nil, errors.New("failed to find operator private key")
 	}
+
 	operatorPublicKey, err := rsaencryption.ExtractPublicKey(sk)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to extract operator public key")
 	}
+
 	//TODO change the log to generated/loaded private key to indicate better on the action
-	logger.Info("setup operator privateKey is DONE!", zap.Any("public-key", operatorPublicKey))
+	s.logger.Info("setup operator privateKey is DONE!", zap.Any("public-key", operatorPublicKey))
 	return []byte(operatorPublicKey), nil
 }
 
@@ -273,6 +299,6 @@ func (s *storage) savePrivateKey(operatorKey string) error {
 	return nil
 }
 
-func (s *storage) UpdateValidatorMetadata(logger *zap.Logger, pk string, metadata *beacon.ValidatorMetadata) error {
-	return s.shareStore.(beacon.ValidatorMetadataStorage).UpdateValidatorMetadata(logger, pk, metadata)
+func (s *storage) UpdateValidatorMetadata(pk string, metadata *beacon.ValidatorMetadata) error {
+	return s.shareStore.UpdateValidatorMetadata(pk, metadata)
 }

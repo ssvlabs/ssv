@@ -10,7 +10,7 @@ import (
 )
 
 // GetStorageFactory resolve and returns db instance based on db type
-func GetStorageFactory(logger *zap.Logger, options basedb.Options) (*kv.BadgerDb, error) {
+func GetStorageFactory(logger *zap.Logger, options basedb.Options) (*kv.BadgerDB, error) {
 	switch options.Type {
 	case "badger-db":
 		db, err := kv.New(logger, options)

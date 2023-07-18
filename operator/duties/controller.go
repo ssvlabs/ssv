@@ -102,7 +102,7 @@ func NewDutyController(logger *zap.Logger, opts *ControllerOptions) DutyControll
 func (dc *dutyController) Start(logger *zap.Logger) {
 	logger = logger.Named(logging.NameDutyController)
 	// warmup
-	indices := dc.validatorController.ActiveValidatorIndices(logger)
+	indices := dc.validatorController.ActiveValidatorIndices()
 	logger.Debug("warming up indices", fields.Count(len(indices)))
 
 	// Subscribe to head events.  This allows us to go early for attestations if a block arrives, as well as
@@ -121,7 +121,7 @@ func (dc *dutyController) Start(logger *zap.Logger) {
 // this is done to avoid missing duties for the current epoch when the node starts
 // for now we are fetching duties in this way for sync committees only
 func (dc *dutyController) warmUpDuties(logger *zap.Logger) {
-	indices := dc.validatorController.ActiveValidatorIndices(logger)
+	indices := dc.validatorController.ActiveValidatorIndices()
 	currentEpoch := dc.network.Beacon.EstimatedCurrentEpoch()
 
 	thisSyncCommitteePeriodStartEpoch := dc.network.Beacon.FirstEpochOfSyncPeriod(uint64(currentEpoch) / goclient.EpochsPerSyncCommitteePeriod)
@@ -320,7 +320,7 @@ func (dc *dutyController) handleSyncCommittee(logger *zap.Logger, slot phase0.Sl
 
 		// Update the next period if we close to an EPOCHS_PER_SYNC_COMMITTEE_PERIOD boundary.
 		if uint64(currentEpoch)%goclient.EpochsPerSyncCommitteePeriod == goclient.EpochsPerSyncCommitteePeriod-syncCommitteePreparationEpochs {
-			indices := dc.validatorController.ActiveValidatorIndices(logger)
+			indices := dc.validatorController.ActiveValidatorIndices()
 			go dc.scheduleSyncCommitteeMessages(logger, currentEpoch+phase0.Epoch(syncCommitteePreparationEpochs), indices)
 		}
 	}
@@ -331,7 +331,7 @@ func (dc *dutyController) handleCurrentDependentRootChanged(logger *zap.Logger) 
 	// at the appropriate boundary.
 	currentEpoch := dc.network.Beacon.EstimatedCurrentEpoch()
 	if uint64(currentEpoch)%goclient.EpochsPerSyncCommitteePeriod == 0 {
-		indices := dc.validatorController.ActiveValidatorIndices(logger)
+		indices := dc.validatorController.ActiveValidatorIndices()
 		syncPeriod := dc.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(currentEpoch)
 		dc.syncCommitteeDutiesMap.Del(syncPeriod)
 		go dc.scheduleSyncCommitteeMessages(logger, dc.network.Beacon.EstimatedCurrentEpoch()+phase0.Epoch(syncCommitteePreparationEpochs), indices)

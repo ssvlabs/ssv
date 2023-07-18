@@ -51,7 +51,7 @@ const (
 // ShareEncryptionKeyProvider is a function that returns the operator private key
 type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
 
-type GetRecipientDataFunc func(owner common.Address) (*registrystorage.RecipientData, bool, error)
+type GetRecipientDataFunc func(txn basedb.Txn, owner common.Address) (*registrystorage.RecipientData, bool, error)
 
 // ShareEventHandlerFunc is a function that handles event in an extended mode
 type ShareEventHandlerFunc func(share *ssvtypes.SSVShare)
@@ -89,11 +89,11 @@ type ControllerOptions struct {
 // Controller represent the validators controller,
 // it takes care of bootstrapping, updating and managing existing validators and their shares
 type Controller interface {
-	StartValidators(logger *zap.Logger)
-	ActiveValidatorIndices(logger *zap.Logger) []phase0.ValidatorIndex
+	StartValidators()
+	ActiveValidatorIndices() []phase0.ValidatorIndex
 	GetValidator(pubKey string) (*validator.Validator, bool)
-	UpdateValidatorMetaDataLoop(logger *zap.Logger)
-	StartNetworkHandlers(logger *zap.Logger)
+	UpdateValidatorMetaDataLoop()
+	StartNetworkHandlers()
 	GetOperatorShares() []*ssvtypes.SSVShare
 	// GetValidatorStats returns stats of validators, including the following:
 	//  - the amount of validators in the network
@@ -113,8 +113,8 @@ type Controller interface {
 type EventHandler interface {
 	GetEventData(txHash common.Hash) (*registrystorage.EventData, bool, error)
 	SaveEventData(txHash common.Hash) error
-	GetNextNonce(owner common.Address) (registrystorage.Nonce, error)
-	BumpNonce(owner common.Address) error
+	GetNextNonce(txn basedb.Txn, owner common.Address) (registrystorage.Nonce, error)
+	BumpNonce(txn basedb.Txn, owner common.Address) error
 }
 
 type nonCommitteeValidator struct {
@@ -126,8 +126,8 @@ type nonCommitteeValidator struct {
 type controller struct {
 	context context.Context
 
-	defaultLogger *zap.Logger
-	metrics       validatorMetrics
+	logger  *zap.Logger
+	metrics validatorMetrics
 
 	eventHandler      EventHandler
 	sharesStorage     registrystorage.Shares
@@ -204,7 +204,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	}
 
 	ctrl := controller{
-		defaultLogger:              logger,
+		logger:                     logger.Named(logging.NameController),
 		metrics:                    options.Metrics,
 		sharesStorage:              options.RegistryStorage.Shares(),
 		operatorsStorage:           options.RegistryStorage,
@@ -243,11 +243,11 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 }
 
 // setupNetworkHandlers registers all the required handlers for sync protocols
-func (c *controller) setupNetworkHandlers(logger *zap.Logger) error {
+func (c *controller) setupNetworkHandlers() error {
 	syncHandlers := []*p2pprotocol.SyncHandler{
 		p2pprotocol.WithHandler(
 			p2pprotocol.LastDecidedProtocol,
-			handlers.LastDecidedHandler(logger, c.ibftStorageMap, c.network),
+			handlers.LastDecidedHandler(c.logger, c.ibftStorageMap, c.network),
 		),
 	}
 	if c.validatorOptions.FullNode {
@@ -256,21 +256,21 @@ func (c *controller) setupNetworkHandlers(logger *zap.Logger) error {
 			p2pprotocol.WithHandler(
 				p2pprotocol.DecidedHistoryProtocol,
 				// TODO: extract maxBatch to config
-				handlers.HistoryHandler(logger, c.ibftStorageMap, c.network, c.historySyncBatchSize),
+				handlers.HistoryHandler(c.logger, c.ibftStorageMap, c.network, c.historySyncBatchSize),
 			),
 		)
 	}
-	logger.Debug("setting up network handlers",
+	c.logger.Debug("setting up network handlers",
 		zap.Int("count", len(syncHandlers)),
 		zap.Bool("full_node", c.validatorOptions.FullNode),
 		zap.Bool("exporter", c.validatorOptions.Exporter),
 		zap.Int("queue_size", c.validatorOptions.QueueSize))
-	c.network.RegisterHandlers(logger, syncHandlers...)
+	c.network.RegisterHandlers(c.logger, syncHandlers...)
 	return nil
 }
 
 func (c *controller) GetOperatorShares() []*ssvtypes.SSVShare {
-	return c.sharesStorage.List(registrystorage.ByOperatorID(c.operatorData.ID), registrystorage.ByActiveValidator())
+	return c.sharesStorage.List(nil, registrystorage.ByOperatorID(c.operatorData.ID), registrystorage.ByActiveValidator())
 }
 
 func (c *controller) GetOperatorData() *registrystorage.OperatorData {
@@ -278,7 +278,7 @@ func (c *controller) GetOperatorData() *registrystorage.OperatorData {
 }
 
 func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
-	allShares := c.sharesStorage.List()
+	allShares := c.sharesStorage.List(nil)
 	operatorShares := uint64(0)
 	active := uint64(0)
 	for _, s := range allShares {
@@ -292,7 +292,7 @@ func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
 	return uint64(len(allShares)), active, operatorShares, nil
 }
 
-func (c *controller) handleRouterMessages(logger *zap.Logger) {
+func (c *controller) handleRouterMessages() {
 	ctx, cancel := context.WithCancel(c.context)
 	defer cancel()
 	ch := c.messageRouter.GetMessageChan()
@@ -300,7 +300,7 @@ func (c *controller) handleRouterMessages(logger *zap.Logger) {
 	for {
 		select {
 		case <-ctx.Done():
-			logger.Debug("router message handler stopped")
+			c.logger.Debug("router message handler stopped")
 			return
 		case msg := <-ch:
 			// TODO temp solution to prevent getting event msgs from network. need to to add validation in p2p
@@ -311,13 +311,13 @@ func (c *controller) handleRouterMessages(logger *zap.Logger) {
 			pk := msg.GetID().GetPubKey()
 			hexPK := hex.EncodeToString(pk)
 			if v, ok := c.validatorsMap.GetValidator(hexPK); ok {
-				v.HandleMessage(logger, &msg)
+				v.HandleMessage(c.logger, &msg)
 			} else {
 				if msg.MsgType != spectypes.SSVConsensusMsgType {
 					continue // not supporting other types
 				}
 				if !c.messageWorker.TryEnqueue(&msg) { // start to save non committee decided messages only post fork
-					logger.Warn("Failed to enqueue post consensus message: buffer is full")
+					c.logger.Warn("Failed to enqueue post consensus message: buffer is full")
 				}
 			}
 		}
@@ -332,7 +332,7 @@ var nonCommitteeValidatorTTLs = map[spectypes.BeaconRole]phase0.Slot{
 	spectypes.BNRoleSyncCommitteeContribution: 4,
 }
 
-func (c *controller) handleWorkerMessages(logger *zap.Logger, msg *spectypes.SSVMessage) error {
+func (c *controller) handleWorkerMessages(msg *spectypes.SSVMessage) error {
 	// Get or create a nonCommitteeValidator for this MessageID, and lock it to prevent
 	// other handlers from processing
 	var ncv *nonCommitteeValidator
@@ -345,7 +345,7 @@ func (c *controller) handleWorkerMessages(logger *zap.Logger, msg *spectypes.SSV
 			ncv = item.Value()
 		} else {
 			// Create a new nonCommitteeValidator and cache it.
-			share := c.sharesStorage.Get(msg.GetID().GetPubKey())
+			share := c.sharesStorage.Get(nil, msg.GetID().GetPubKey())
 			if share == nil {
 				return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetID().GetPubKey()))
 			}
@@ -353,7 +353,7 @@ func (c *controller) handleWorkerMessages(logger *zap.Logger, msg *spectypes.SSV
 			opts := *c.validatorOptions
 			opts.SSVShare = share
 			ncv = &nonCommitteeValidator{
-				NonCommitteeValidator: validator.NewNonCommitteeValidator(logger, msg.GetID(), opts),
+				NonCommitteeValidator: validator.NewNonCommitteeValidator(c.logger, msg.GetID(), opts),
 			}
 
 			ttlSlots := nonCommitteeValidatorTTLs[msg.MsgID.GetRoleType()]
@@ -373,39 +373,37 @@ func (c *controller) handleWorkerMessages(logger *zap.Logger, msg *spectypes.SSV
 
 	// Process the message.
 	defer ncv.Unlock()
-	ncv.ProcessMessage(logger, msg)
+	ncv.ProcessMessage(c.logger, msg)
 
 	return nil
 }
 
 // StartValidators loads all persisted shares and setup the corresponding validators
-func (c *controller) StartValidators(logger *zap.Logger) {
-	logger = logger.Named(logging.NameController)
-
+func (c *controller) StartValidators() {
 	if c.validatorOptions.Exporter {
-		c.setupNonCommitteeValidators(logger)
+		c.setupNonCommitteeValidators()
 		return
 	}
 
-	shares := c.sharesStorage.List(registrystorage.ByOperatorID(c.operatorData.ID), registrystorage.ByNotLiquidated())
+	shares := c.sharesStorage.List(nil, registrystorage.ByOperatorID(c.operatorData.ID), registrystorage.ByNotLiquidated())
 	if len(shares) == 0 {
-		logger.Info("could not find validators")
+		c.logger.Info("could not find validators")
 		return
 	}
-	c.setupValidators(logger, shares)
+	c.setupValidators(shares)
 }
 
 // setupValidators setup and starts validators from the given shares.
 // shares w/o validator's metadata won't start, but the metadata will be fetched and the validator will start afterwards
-func (c *controller) setupValidators(logger *zap.Logger, shares []*ssvtypes.SSVShare) {
-	logger.Info("starting validators setup...", zap.Int("shares count", len(shares)))
+func (c *controller) setupValidators(shares []*ssvtypes.SSVShare) {
+	c.logger.Info("starting validators setup...", zap.Int("shares count", len(shares)))
 	var started int
 	var errs []error
 	var fetchMetadata [][]byte
 	for _, validatorShare := range shares {
-		isStarted, err := c.onShareStart(logger, validatorShare)
+		isStarted, err := c.onShareStart(validatorShare)
 		if err != nil {
-			logger.Warn("could not start validator", fields.PubKey(validatorShare.ValidatorPubKey), zap.Error(err))
+			c.logger.Warn("could not start validator", fields.PubKey(validatorShare.ValidatorPubKey), zap.Error(err))
 			errs = append(errs, err)
 		}
 		if !isStarted && err == nil {
@@ -416,16 +414,16 @@ func (c *controller) setupValidators(logger *zap.Logger, shares []*ssvtypes.SSVS
 			started++
 		}
 	}
-	logger.Info("setup validators done", zap.Int("map size", c.validatorsMap.Size()),
+	c.logger.Info("setup validators done", zap.Int("map size", c.validatorsMap.Size()),
 		zap.Int("failures", len(errs)), zap.Int("missing metadata", len(fetchMetadata)),
 		zap.Int("shares count", len(shares)), zap.Int("started", started))
 
 	// Try to fetch metadata once for validators that don't have it.
 	if len(fetchMetadata) > 0 {
 		go func() {
-			logger.Debug("updating validators metadata", zap.Int("count", len(fetchMetadata)))
-			if err := beaconprotocol.UpdateValidatorsMetadata(logger, fetchMetadata, c, c.beacon, c.onMetadataUpdated); err != nil {
-				logger.Warn("could not update all validators", zap.Error(err))
+			c.logger.Debug("updating validators metadata", zap.Int("count", len(fetchMetadata)))
+			if err := beaconprotocol.UpdateValidatorsMetadata(c.logger, fetchMetadata, c, c.beacon, c.onMetadataUpdated); err != nil {
+				c.logger.Warn("could not update all validators", zap.Error(err))
 			}
 		}()
 	}
@@ -434,21 +432,24 @@ func (c *controller) setupValidators(logger *zap.Logger, shares []*ssvtypes.SSVS
 // setupNonCommitteeValidators trigger SyncHighestDecided for each validator
 // to start consensus flow which would save the highest decided instance
 // and sync any gaps (in protocol/v2/qbft/controller/decided.go).
-func (c *controller) setupNonCommitteeValidators(logger *zap.Logger) {
+func (c *controller) setupNonCommitteeValidators() {
 	// Subscribe to all subnets.
-	err := c.network.SubscribeAll(logger)
+	err := c.network.SubscribeAll(c.logger)
 	if err != nil {
-		logger.Error("failed to subscribe to all subnets", zap.Error(err))
+		c.logger.Error("failed to subscribe to all subnets", zap.Error(err))
 		return
 	}
 
-	nonCommitteeShares := c.sharesStorage.List(registrystorage.ByNotLiquidated())
+	nonCommitteeShares := c.sharesStorage.List(nil, registrystorage.ByNotLiquidated())
 	if len(nonCommitteeShares) == 0 {
-		logger.Info("could not find non-committee validators")
+		c.logger.Info("could not find non-committee validators")
 		return
 	}
 
+	pubKeys := make([][]byte, 0, len(nonCommitteeShares))
 	for _, validatorShare := range nonCommitteeShares {
+		pubKeys = append(pubKeys, validatorShare.ValidatorPubKey)
+
 		opts := *c.validatorOptions
 		opts.SSVShare = validatorShare
 		allRoles := []spectypes.BeaconRole{
@@ -462,63 +463,74 @@ func (c *controller) setupNonCommitteeValidators(logger *zap.Logger) {
 			messageID := spectypes.NewMsgID(ssvtypes.GetDefaultDomain(), validatorShare.ValidatorPubKey, role)
 			err := c.network.SyncHighestDecided(messageID)
 			if err != nil {
-				logger.Error("failed to sync highest decided", zap.Error(err))
+				c.logger.Error("failed to sync highest decided", zap.Error(err))
 			}
+		}
+	}
+
+	if len(pubKeys) > 0 {
+		c.logger.Debug("updating metadata for non-committee validators", zap.Int("count", len(pubKeys)))
+		if err := beaconprotocol.UpdateValidatorsMetadata(c.logger, pubKeys, c, c.beacon, c.onMetadataUpdated); err != nil {
+			c.logger.Warn("could not update all validators", zap.Error(err))
 		}
 	}
 }
 
 // StartNetworkHandlers init msg worker that handles network messages
-func (c *controller) StartNetworkHandlers(logger *zap.Logger) {
-	logger = logger.Named(logging.NameController)
-
+func (c *controller) StartNetworkHandlers() {
 	// first, set stream handlers
-	if err := c.setupNetworkHandlers(logger); err != nil {
-		logger.Panic("could not register stream handlers", zap.Error(err))
+	if err := c.setupNetworkHandlers(); err != nil {
+		c.logger.Panic("could not register stream handlers", zap.Error(err))
 	}
 	c.network.UseMessageRouter(c.messageRouter)
 	for i := 0; i < networkRouterConcurrency; i++ {
-		go c.handleRouterMessages(logger)
+		go c.handleRouterMessages()
 	}
 	c.messageWorker.UseHandler(c.handleWorkerMessages)
 }
 
 // UpdateValidatorMetadata updates a given validator with metadata (implements ValidatorMetadataStorage)
-func (c *controller) UpdateValidatorMetadata(logger *zap.Logger, pk string, metadata *beaconprotocol.ValidatorMetadata) error {
+func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol.ValidatorMetadata) error {
 	if metadata == nil {
 		return errors.New("could not update empty metadata")
 	}
 
 	// Save metadata to share storage.
-	err := c.sharesStorage.(beaconprotocol.ValidatorMetadataStorage).UpdateValidatorMetadata(logger, pk, metadata)
+	err := c.sharesStorage.UpdateValidatorMetadata(pk, metadata)
 	if err != nil {
 		return errors.Wrap(err, "could not update validator metadata")
 	}
 
-	// Update metadata in memory, and start validator if needed.
+	// If this validator is not ours, don't start it.
+	pkBytes, err := hex.DecodeString(pk)
+	if err != nil {
+		return errors.Wrap(err, "could not decode public key")
+	}
+
+	share := c.sharesStorage.Get(nil, pkBytes)
+	if share == nil {
+		return errors.New("share was not found")
+	}
+	if !share.BelongsToOperator(c.operatorData.ID) {
+		return nil
+	}
+
+	// Start validator (if not already started).
 	if v, found := c.validatorsMap.GetValidator(pk); found {
 		v.Share.BeaconMetadata = metadata
-		_, err := c.startValidator(logger, v)
+		_, err := c.startValidator(v)
 		if err != nil {
-			logger.Warn("could not start validator", zap.Error(err))
+			c.logger.Warn("could not start validator", zap.Error(err))
 		}
 	} else {
-		logger.Info("starting new validator", zap.String("pubKey", pk))
+		c.logger.Info("starting new validator", zap.String("pubKey", pk))
 
-		pkBytes, err := hex.DecodeString(pk)
-		if err != nil {
-			return errors.Wrap(err, "could not decode public key")
-		}
-		share := c.sharesStorage.Get(pkBytes)
-		if share == nil {
-			return errors.New("share was not found")
-		}
-		started, err := c.onShareStart(logger, share)
+		started, err := c.onShareStart(share)
 		if err != nil {
 			return errors.Wrap(err, "could not start validator")
 		}
 		if started {
-			logger.Debug("started share after metadata update", zap.Bool("started", started))
+			c.logger.Debug("started share after metadata update", zap.Bool("started", started))
 		}
 	}
 	return nil
@@ -531,9 +543,7 @@ func (c *controller) GetValidator(pubKey string) (*validator.Validator, bool) {
 
 // ActiveValidatorIndices returns a list of all the active validators indices
 // and fetch indices for missing once (could be first time attesting or non active once)
-func (c *controller) ActiveValidatorIndices(logger *zap.Logger) []phase0.ValidatorIndex {
-	logger = logger.Named(logging.NameController)
-
+func (c *controller) ActiveValidatorIndices() []phase0.ValidatorIndex {
 	indices := make([]phase0.ValidatorIndex, 0, len(c.validatorsMap.validatorsMap))
 	err := c.validatorsMap.ForEach(func(v *validator.Validator) error {
 		// Beacon node throws error when trying to fetch duties for non-existing validators.
@@ -543,18 +553,18 @@ func (c *controller) ActiveValidatorIndices(logger *zap.Logger) []phase0.Validat
 		return nil
 	})
 	if err != nil {
-		logger.Warn("failed to get all validators public keys", zap.Error(err))
+		c.logger.Warn("failed to get all validators public keys", zap.Error(err))
 	}
 
 	return indices
 }
 
 // onMetadataUpdated is called when validator's metadata was updated
-func (c *controller) onMetadataUpdated(logger *zap.Logger, pk string, meta *beaconprotocol.ValidatorMetadata) {
+func (c *controller) onMetadataUpdated(pk string, meta *beaconprotocol.ValidatorMetadata) {
 	if meta == nil {
 		return
 	}
-	logger = logger.With(zap.String("pk", pk))
+	logger := c.logger.With(zap.String("pk", pk))
 
 	if v, exist := c.GetValidator(pk); exist {
 		// update share object owned by the validator
@@ -564,7 +574,7 @@ func (c *controller) onMetadataUpdated(logger *zap.Logger, pk string, meta *beac
 			v.Share.BeaconMetadata.Balance = meta.Balance
 			logger.Debug("metadata was updated")
 		}
-		_, err := c.startValidator(logger, v)
+		_, err := c.startValidator(v)
 		if err != nil {
 			logger.Warn("could not start validator after metadata update",
 				zap.String("pk", pk), zap.Error(err), zap.Any("metadata", meta))
@@ -593,36 +603,36 @@ func (c *controller) onShareRemove(pk string, removeSecret bool) error {
 	return nil
 }
 
-func (c *controller) onShareStart(logger *zap.Logger, share *ssvtypes.SSVShare) (bool, error) {
+func (c *controller) onShareStart(share *ssvtypes.SSVShare) (bool, error) {
 	if !share.HasBeaconMetadata() { // fetching index and status in case not exist
-		logger.Warn("skipping validator until it becomes active", fields.PubKey(share.ValidatorPubKey))
+		c.logger.Warn("skipping validator until it becomes active", fields.PubKey(share.ValidatorPubKey))
 		return false, nil
 	}
 
-	if err := setShareFeeRecipient(logger, share, c.recipientsStorage.GetRecipientData); err != nil {
+	if err := c.setShareFeeRecipient(share, c.recipientsStorage.GetRecipientData); err != nil {
 		return false, errors.Wrap(err, "could not set share fee recipient")
 	}
 
 	// Start a committee validator.
-	v, err := c.validatorsMap.GetOrCreateValidator(logger.Named("validatorsMap"), share)
+	v, err := c.validatorsMap.GetOrCreateValidator(c.logger.Named("validatorsMap"), share)
 	if err != nil {
 		return false, errors.Wrap(err, "could not get or create validator")
 	}
-	return c.startValidator(logger, v)
+	return c.startValidator(v)
 }
 
-func setShareFeeRecipient(logger *zap.Logger, share *ssvtypes.SSVShare, getRecipientData GetRecipientDataFunc) error {
+func (c *controller) setShareFeeRecipient(share *ssvtypes.SSVShare, getRecipientData GetRecipientDataFunc) error {
 	var feeRecipient bellatrix.ExecutionAddress
-	data, found, err := getRecipientData(share.OwnerAddress)
+	data, found, err := getRecipientData(nil, share.OwnerAddress)
 	if err != nil {
 		return errors.Wrap(err, "could not get recipient data")
 	}
 	if !found {
-		logger.Debug("setting fee recipient to owner address",
+		c.logger.Debug("setting fee recipient to owner address",
 			fields.Validator(share.ValidatorPubKey), fields.FeeRecipient(share.OwnerAddress.Bytes()))
 		copy(feeRecipient[:], share.OwnerAddress.Bytes())
 	} else {
-		logger.Debug("setting fee recipient to storage data",
+		c.logger.Debug("setting fee recipient to storage data",
 			fields.Validator(share.ValidatorPubKey), fields.FeeRecipient(data.FeeRecipient[:]))
 		feeRecipient = data.FeeRecipient
 	}
@@ -632,12 +642,12 @@ func setShareFeeRecipient(logger *zap.Logger, share *ssvtypes.SSVShare, getRecip
 }
 
 // startValidator will start the given validator if applicable
-func (c *controller) startValidator(logger *zap.Logger, v *validator.Validator) (bool, error) {
-	c.reportValidatorStatus(v.Share.ValidatorPubKey, v.Share.BeaconMetadata, logger)
+func (c *controller) startValidator(v *validator.Validator) (bool, error) {
+	c.reportValidatorStatus(v.Share.ValidatorPubKey, v.Share.BeaconMetadata)
 	if v.Share.BeaconMetadata.Index == 0 {
 		return false, errors.New("could not start validator: index not found")
 	}
-	if err := v.Start(logger); err != nil {
+	if err := v.Start(c.logger); err != nil {
 		c.metrics.ValidatorError(v.Share.ValidatorPubKey)
 		return false, errors.Wrap(err, "could not start validator")
 	}
@@ -645,21 +655,24 @@ func (c *controller) startValidator(logger *zap.Logger, v *validator.Validator) 
 }
 
 // UpdateValidatorMetaDataLoop updates metadata of validators in an interval
-func (c *controller) UpdateValidatorMetaDataLoop(logger *zap.Logger) {
-	logger = logger.Named(logging.NameController)
-
+func (c *controller) UpdateValidatorMetaDataLoop() {
 	go c.metadataUpdateQueue.Start()
 
 	for {
 		time.Sleep(c.metadataUpdateInterval)
 
-		shares := c.sharesStorage.List(registrystorage.ByOperatorID(c.operatorData.ID), registrystorage.ByNotLiquidated())
+		filters := []registrystorage.SharesFilter{registrystorage.ByNotLiquidated()}
+		if !c.validatorOptions.Exporter {
+			// If we're not an exporter node, fetch only for validators of our operator.
+			filters = append(filters, registrystorage.ByOperatorID(c.operatorData.ID))
+		}
+		shares := c.sharesStorage.List(nil, filters...)
 		var pks [][]byte
 		for _, share := range shares {
 			pks = append(pks, share.ValidatorPubKey)
 		}
-		logger.Debug("updating metadata in loop", zap.Int("shares count", len(shares)))
-		beaconprotocol.UpdateValidatorsMetadataBatch(logger, pks, c.metadataUpdateQueue, c,
+		c.logger.Debug("updating metadata in loop", zap.Int("shares count", len(shares)))
+		beaconprotocol.UpdateValidatorsMetadataBatch(c.logger, pks, c.metadataUpdateQueue, c,
 			c.beacon, c.onMetadataUpdated, metadataBatchSize)
 	}
 }

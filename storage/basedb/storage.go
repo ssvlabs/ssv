@@ -3,8 +3,6 @@ package basedb
 import (
 	"context"
 	"time"
-
-	"go.uber.org/zap"
 )
 
 // Options for creating all db type
@@ -17,26 +15,37 @@ type Options struct {
 }
 
 // Txn interface for badger transaction like functions
+// TODO: think about refactoring
 type Txn interface {
 	Set(prefix []byte, key []byte, value []byte) error
 	Get(prefix []byte, key []byte) (Obj, bool, error)
+	GetMany(prefix []byte, keys [][]byte, iterator func(Obj) error) error
+	SetMany(prefix []byte, n int, next func(int) (Obj, error)) error
 	Delete(prefix []byte, key []byte) error
+	GetAll(prefix []byte, handler func(int, Obj) error) error
 	// TODO: add iterator
+
+	Commit() error
+	Discard()
 }
 
 // IDb interface for all db kind
+// TODO: rename
 type IDb interface {
+	ROTxn() Txn
+	RWTxn() Txn
+
 	Set(prefix []byte, key []byte, value []byte) error
 	SetMany(prefix []byte, n int, next func(int) (Obj, error)) error
 	Get(prefix []byte, key []byte) (Obj, bool, error)
-	GetMany(logger *zap.Logger, prefix []byte, keys [][]byte, iterator func(Obj) error) error
+	GetMany(prefix []byte, keys [][]byte, iterator func(Obj) error) error
 	Delete(prefix []byte, key []byte) error
 	DeleteByPrefix(prefix []byte) (int, error)
-	GetAll(logger *zap.Logger, prefix []byte, handler func(int, Obj) error) error
+	GetAll(prefix []byte, handler func(int, Obj) error) error
 	CountByCollection(prefix []byte) (int64, error)
 	RemoveAllByCollection(prefix []byte) error
 	Update(fn func(Txn) error) error
-	Close(logger *zap.Logger) error
+	Close() error
 }
 
 // GarbageCollector is an interface implemented by storage engines which demand garbage collection.

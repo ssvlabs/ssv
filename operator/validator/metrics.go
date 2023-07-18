@@ -1,14 +1,12 @@
 package validator
 
 import (
-	"go.uber.org/zap"
-
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
-func (c *controller) reportValidatorStatus(pk []byte, meta *beacon.ValidatorMetadata, logger *zap.Logger) {
-	logger = logger.With(fields.PubKey(pk), fields.ValidatorMetadata(meta))
+func (c *controller) reportValidatorStatus(pk []byte, meta *beacon.ValidatorMetadata) {
+	logger := c.logger.With(fields.PubKey(pk), fields.ValidatorMetadata(meta))
 	if meta == nil {
 		logger.Debug("validator metadata not found")
 		c.metrics.ValidatorNotFound(pk)

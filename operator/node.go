@@ -156,10 +156,10 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 	// slot ticker init
 	go n.ticker.Start(logger)
 
-	n.validatorsCtrl.StartNetworkHandlers(logger)
-	n.validatorsCtrl.StartValidators(logger)
+	n.validatorsCtrl.StartNetworkHandlers()
+	n.validatorsCtrl.StartValidators()
 	go n.net.UpdateSubnets(logger)
-	go n.validatorsCtrl.UpdateValidatorMetaDataLoop(logger)
+	go n.validatorsCtrl.UpdateValidatorMetaDataLoop()
 	go n.listenForCurrentSlot(logger)
 	go n.reportOperators(logger)
 
@@ -231,7 +231,7 @@ func (n *operatorNode) startWSServer(logger *zap.Logger) error {
 }
 
 func (n *operatorNode) reportOperators(logger *zap.Logger) {
-	operators, err := n.storage.ListOperators(logger, 0, 1000) // TODO more than 1000?
+	operators, err := n.storage.ListOperators(nil, 0, 1000) // TODO more than 1000?
 	if err != nil {
 		logger.Warn("failed to get all operators for reporting", zap.Error(err))
 		return

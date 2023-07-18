@@ -13,7 +13,7 @@ import (
 )
 
 func (c *controller) StartValidator(share *ssvtypes.SSVShare) error {
-	logger := c.defaultLogger.Named("StartValidator").
+	logger := c.logger.Named("StartValidator").
 		With(fields.PubKey(share.ValidatorPubKey))
 
 	logger.Info("executing task")
@@ -24,7 +24,7 @@ func (c *controller) StartValidator(share *ssvtypes.SSVShare) error {
 	}
 
 	logger.Debug("going to start validator")
-	started, err := c.onShareStart(c.defaultLogger, share)
+	started, err := c.onShareStart(share)
 	if err != nil {
 		return err
 	}
@@ -39,7 +39,7 @@ func (c *controller) StartValidator(share *ssvtypes.SSVShare) error {
 }
 
 func (c *controller) StopValidator(publicKey []byte) error {
-	logger := c.defaultLogger.Named("StopValidator").
+	logger := c.logger.Named("StopValidator").
 		With(fields.PubKey(publicKey))
 
 	logger.Info("executing task")
@@ -55,7 +55,7 @@ func (c *controller) StopValidator(publicKey []byte) error {
 }
 
 func (c *controller) LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error {
-	logger := c.defaultLogger.Named("LiquidateCluster").With(
+	logger := c.logger.Named("LiquidateCluster").With(
 		zap.String("owner", owner.String()),
 		zap.Uint64s("operator_ids", operatorIDs),
 	)
@@ -76,14 +76,14 @@ func (c *controller) LiquidateCluster(owner common.Address, operatorIDs []uint64
 }
 
 func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error {
-	logger := c.defaultLogger.Named("ReactivateCluster").With(
+	logger := c.logger.Named("ReactivateCluster").With(
 		zap.String("owner", owner.String()),
 		zap.Uint64s("operator_ids", operatorIDs),
 	)
 	logger.Info("executing task")
 
 	for _, share := range toReactivate {
-		if _, err := c.onShareStart(c.defaultLogger, share); err != nil {
+		if _, err := c.onShareStart(share); err != nil {
 			return err
 		}
 		logger.Info("started share")
@@ -94,7 +94,7 @@ func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []uint6
 }
 
 func (c *controller) UpdateFeeRecipient(owner, recipient common.Address) error {
-	logger := c.defaultLogger.Named("UpdateFeeRecipient").With(
+	logger := c.logger.Named("UpdateFeeRecipient").With(
 		zap.String("owner", owner.String()),
 		zap.String("fee_recipient", recipient.String()),
 	)

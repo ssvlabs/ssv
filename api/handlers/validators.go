@@ -20,6 +20,7 @@ type Validators struct {
 
 func (h *Validators) List(w http.ResponseWriter, r *http.Request) error {
 	var request struct {
+		Owners    api.HexSlice    `json:"owners" form:"owners"`
 		Operators api.Uint64Slice `json:"operators" form:"operators"`
 		Clusters  requestClusters `json:"clusters" form:"clusters"`
 		PubKeys   api.HexSlice    `json:"pubkeys" form:"pubkeys"`
@@ -34,6 +35,9 @@ func (h *Validators) List(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var filters []registrystorage.SharesFilter
+	if len(request.Owners) > 0 {
+		filters = append(filters, byOwners(request.Owners))
+	}
 	if len(request.Operators) > 0 {
 		filters = append(filters, byOperators(request.Operators))
 	}
@@ -47,12 +51,23 @@ func (h *Validators) List(w http.ResponseWriter, r *http.Request) error {
 		filters = append(filters, byIndices(request.Indices))
 	}
 
-	shares := h.Shares.List(filters...)
+	shares := h.Shares.List(nil, filters...)
 	response.Data = make([]*validatorJSON, len(shares))
 	for i, share := range shares {
 		response.Data[i] = validatorFromShare(share)
 	}
 	return api.Render(w, r, response)
+}
+
+func byOwners(owners []api.Hex) registrystorage.SharesFilter {
+	return func(share *types.SSVShare) bool {
+		for _, a := range owners {
+			if bytes.Equal(a, share.OwnerAddress[:]) {
+				return true
+			}
+		}
+		return false
+	}
 }
 
 func byOperators(operators []uint64) registrystorage.SharesFilter {
@@ -132,6 +147,9 @@ func (c *requestClusters) Bind(value string) error {
 
 type validatorJSON struct {
 	PubKey        api.Hex                `json:"public_key"`
+	Index         phase0.ValidatorIndex  `json:"index"`
+	Status        string                 `json:"status"`
+	Owner         api.Hex                `json:"owner"`
 	Committee     []spectypes.OperatorID `json:"committee"`
 	Quorum        uint64                 `json:"quorum"`
 	PartialQuorum uint64                 `json:"partial_quorum"`
@@ -142,6 +160,7 @@ type validatorJSON struct {
 func validatorFromShare(share *types.SSVShare) *validatorJSON {
 	v := &validatorJSON{
 		PubKey: api.Hex(share.ValidatorPubKey),
+		Owner:  api.Hex(share.OwnerAddress[:]),
 		Committee: func() []spectypes.OperatorID {
 			committee := make([]spectypes.OperatorID, len(share.Committee))
 			for i, op := range share.Committee {
@@ -153,6 +172,10 @@ func validatorFromShare(share *types.SSVShare) *validatorJSON {
 		PartialQuorum: share.PartialQuorum,
 		Grafitti:      string(share.Graffiti),
 		Liquidated:    share.Liquidated,
+	}
+	if share.HasBeaconMetadata() {
+		v.Index = share.Metadata.BeaconMetadata.Index
+		v.Status = share.Metadata.BeaconMetadata.Status.String()
 	}
 	return v
 }

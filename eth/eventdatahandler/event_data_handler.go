@@ -7,7 +7,7 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"go.uber.org/zap"
@@ -15,14 +15,14 @@ import (
 
 	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/eth/eventbatcher"
-	"github.com/bloxapp/ssv/eth/eventdb"
 	"github.com/bloxapp/ssv/eth/localevents"
-	"github.com/bloxapp/ssv/eth/sharemap"
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging/fields"
+	nodestorage "github.com/bloxapp/ssv/operator/storage"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/registry/storage"
+	"github.com/bloxapp/ssv/storage/basedb"
 )
 
 type taskExecutor interface {
@@ -33,46 +33,45 @@ type taskExecutor interface {
 	UpdateFeeRecipient(owner, recipient ethcommon.Address) error
 }
 
-type eventDB interface {
-	ROTxn() eventdb.RO
-	RWTxn() eventdb.RW
-}
-
 type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
 
 type EventDataHandler struct {
-	eventDB                    eventDB
+	nodeStorage                nodestorage.Storage
 	taskExecutor               taskExecutor
 	contractABI                ethEventGetter
-	shareMap                   *sharemap.ShareMap
 	eventFilterer              eventFilterer
+	domain                     spectypes.DomainType
 	operatorData               *storage.OperatorData
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider
-	keyManager                 types.KeyManager
+	keyManager                 spectypes.KeyManager
 	beacon                     beaconprotocol.BeaconNode
 	storageMap                 *qbftstorage.QBFTStores
-	fullNode                   bool
-	logger                     *zap.Logger
-	metrics                    metrics
+
+	fullNode         bool
+	taskOptimization bool
+	logger           *zap.Logger
+	metrics          metrics
 }
 
 func New(
-	eventDB eventDB,
+	nodeStorage nodestorage.Storage,
 	eventFilterer eventFilterer,
 	contractABI ethEventGetter,
 	taskExecutor taskExecutor,
+	domain spectypes.DomainType,
 	operatorData *storage.OperatorData,
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider,
-	keyManager types.KeyManager,
+	keyManager spectypes.KeyManager,
 	beacon beaconprotocol.BeaconNode,
 	storageMap *qbftstorage.QBFTStores,
 	opts ...Option,
 ) (*EventDataHandler, error) {
 	edh := &EventDataHandler{
-		eventDB:                    eventDB,
+		nodeStorage:                nodeStorage,
 		taskExecutor:               taskExecutor,
 		contractABI:                contractABI,
 		eventFilterer:              eventFilterer,
+		domain:                     domain,
 		operatorData:               operatorData,
 		shareEncryptionKeyProvider: shareEncryptionKeyProvider,
 		keyManager:                 keyManager,
@@ -80,7 +79,6 @@ func New(
 		storageMap:                 storageMap,
 		logger:                     zap.NewNop(),
 		metrics:                    nopMetrics{},
-		shareMap:                   sharemap.New(),
 	}
 
 	for _, opt := range opts {
@@ -112,7 +110,9 @@ func (edh *EventDataHandler) HandleBlockEventsStream(blockEventsCh <-chan eventb
 
 		logger.Info("executing tasks", fields.Count(len(tasks)))
 
-		tasks = edh.filterSupersedingTasks(tasks)
+		if edh.taskOptimization {
+			tasks = edh.filterSupersedingTasks(tasks)
+		}
 		for _, task := range tasks {
 			logger = logger.With(fields.Type(task))
 			logger.Debug("going to execute task")
@@ -131,7 +131,7 @@ func (edh *EventDataHandler) HandleBlockEventsStream(blockEventsCh <-chan eventb
 }
 
 func (edh *EventDataHandler) processBlockEvents(blockEvents eventbatcher.BlockEvents) ([]Task, error) {
-	txn := edh.eventDB.RWTxn()
+	txn := edh.nodeStorage.RWTxn()
 	defer txn.Discard()
 
 	var tasks []Task
@@ -146,7 +146,7 @@ func (edh *EventDataHandler) processBlockEvents(blockEvents eventbatcher.BlockEv
 		}
 	}
 
-	if err := txn.SetLastProcessedBlock(new(big.Int).SetUint64(blockEvents.BlockNumber)); err != nil {
+	if err := edh.nodeStorage.SaveLastProcessedBlock(txn, new(big.Int).SetUint64(blockEvents.BlockNumber)); err != nil {
 		return nil, fmt.Errorf("set last processed block: %w", err)
 	}
 
@@ -157,7 +157,7 @@ func (edh *EventDataHandler) processBlockEvents(blockEvents eventbatcher.BlockEv
 	return tasks, nil
 }
 
-func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (Task, error) {
+func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, error) {
 	abiEvent, err := edh.contractABI.EventByID(event.Topics[0])
 	if err != nil {
 		edh.logger.Error("failed to find event by ID", zap.String("hash", event.Topics[0].String()))
@@ -345,7 +345,7 @@ func (edh *EventDataHandler) processEvent(txn eventdb.RW, event ethtypes.Log) (T
 }
 
 func (edh *EventDataHandler) HandleLocalEvents(localEvents []localevents.Event) error {
-	txn := edh.eventDB.RWTxn()
+	txn := edh.nodeStorage.RWTxn()
 	defer txn.Discard()
 
 	for _, event := range localEvents {
@@ -361,7 +361,7 @@ func (edh *EventDataHandler) HandleLocalEvents(localEvents []localevents.Event) 
 	return nil
 }
 
-func (edh *EventDataHandler) processLocalEvent(txn eventdb.RW, event localevents.Event) error {
+func (edh *EventDataHandler) processLocalEvent(txn basedb.Txn, event localevents.Event) error {
 	switch event.Name {
 	case OperatorAdded:
 		data := event.Data.(contract.ContractOperatorAdded)

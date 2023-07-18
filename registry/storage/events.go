@@ -7,6 +7,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/storage/basedb"
 )
@@ -28,14 +29,16 @@ type Events interface {
 }
 
 type eventsStorage struct {
+	logger *zap.Logger
 	db     basedb.IDb
 	lock   sync.RWMutex
 	prefix []byte
 }
 
 // NewEventsStorage creates a new instance of Storage
-func NewEventsStorage(db basedb.IDb, prefix []byte) Events {
+func NewEventsStorage(logger *zap.Logger, db basedb.IDb, prefix []byte) Events {
 	return &eventsStorage{
+		logger: logger,
 		db:     db,
 		prefix: prefix,
 	}

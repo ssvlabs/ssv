@@ -29,7 +29,6 @@ import (
 	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/eth/eventbatcher"
 	"github.com/bloxapp/ssv/eth/eventdatahandler"
-	"github.com/bloxapp/ssv/eth/eventdb"
 	"github.com/bloxapp/ssv/eth/executionclient"
 	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/networkconfig"
@@ -124,13 +123,15 @@ func setupEventDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger
 	db, err := kv.New(logger, options)
 	require.NoError(t, err)
 
-	eventDB := eventdb.NewEventDB(db.Badger())
 	storageMap := ibftstorage.NewStores()
 	nodeStorage, operatorData := setupOperatorStorage(logger, db)
-	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkconfig.NetworkConfig{}, true)
+	testNetworkConfig := networkconfig.TestNetwork
+
+	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, true)
 	if err != nil {
 		logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 	}
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -149,10 +150,11 @@ func setupEventDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger
 	require.NoError(t, err)
 
 	edh, err := eventdatahandler.New(
-		eventDB,
+		nodeStorage,
 		filterer,
 		abi,
 		validatorCtrl,
+		testNetworkConfig.Domain,
 		operatorData,
 		nodeStorage.GetPrivateKey,
 		keyManager,
@@ -264,7 +266,7 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.St
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
-	operatorPubKey, err := nodeStorage.SetupPrivateKey(logger, "", true)
+	operatorPubKey, err := nodeStorage.SetupPrivateKey("", true)
 	if err != nil {
 		logger.Fatal("could not setup operator private key", zap.Error(err))
 	}
@@ -274,7 +276,7 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.St
 		logger.Fatal("failed to get operator private key", zap.Error(err))
 	}
 	var operatorData *registrystorage.OperatorData
-	operatorData, found, err = nodeStorage.GetOperatorDataByPubKey(logger, operatorPubKey)
+	operatorData, found, err = nodeStorage.GetOperatorDataByPubKey(nil, operatorPubKey)
 	if err != nil {
 		logger.Fatal("could not get operator data by public key", zap.Error(err))
 	}
