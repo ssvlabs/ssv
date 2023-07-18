@@ -11,6 +11,7 @@ Node can react to a message in three ways:
 
 - Message validator maintains a state for each validator.
 - Validator attests only once per epoch.
+  - TODO: Need to check if upon reorg there can be more than one duty per epoch.
 - Validator submits messages for slot N within slots [N, N+32).
   - According to spec, attestation must be submitted within an epoch (32 slots).
   - Consequence: Validator submits messages for slot N in within [0, 384) seconds after slot start.
