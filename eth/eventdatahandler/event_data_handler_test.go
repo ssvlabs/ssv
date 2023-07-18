@@ -99,10 +99,13 @@ func setupDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger) (*E
 
 	storageMap := ibftstorage.NewStores()
 	nodeStorage, operatorData := setupOperatorStorage(logger, db)
-	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkconfig.NetworkConfig{}, true)
+	testNetworkConfig := networkconfig.TestNetwork
+
+	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, true)
 	if err != nil {
 		return nil, err
 	}
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -128,6 +131,7 @@ func setupDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger) (*E
 		contractFilterer,
 		contractABI,
 		validatorCtrl,
+		testNetworkConfig.Domain,
 		operatorData,
 		nodeStorage.GetPrivateKey,
 		keyManager,

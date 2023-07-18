@@ -7,7 +7,7 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"go.uber.org/zap"
@@ -56,15 +56,17 @@ type EventDataHandler struct {
 	taskExecutor               taskExecutor
 	contractABI                ethEventGetter
 	eventFilterer              eventFilterer
+	domain                     spectypes.DomainType
 	operatorData               *storage.OperatorData
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider
-	keyManager                 types.KeyManager
+	keyManager                 spectypes.KeyManager
 	beacon                     beaconprotocol.BeaconNode
 	storageMap                 *qbftstorage.QBFTStores
-	fullNode                   bool
-	taskOptimization           bool
-	logger                     *zap.Logger
-	metrics                    metrics
+
+	fullNode         bool
+	taskOptimization bool
+	logger           *zap.Logger
+	metrics          metrics
 }
 
 func New(
@@ -72,9 +74,10 @@ func New(
 	eventFilterer eventFilterer,
 	contractABI ethEventGetter,
 	taskExecutor taskExecutor,
+	domain spectypes.DomainType,
 	operatorData *storage.OperatorData,
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider,
-	keyManager types.KeyManager,
+	keyManager spectypes.KeyManager,
 	beacon beaconprotocol.BeaconNode,
 	storageMap *qbftstorage.QBFTStores,
 	opts ...Option,
@@ -84,6 +87,7 @@ func New(
 		taskExecutor:               taskExecutor,
 		contractABI:                contractABI,
 		eventFilterer:              eventFilterer,
+		domain:                     domain,
 		operatorData:               operatorData,
 		shareEncryptionKeyProvider: shareEncryptionKeyProvider,
 		keyManager:                 keyManager,

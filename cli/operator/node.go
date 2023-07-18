@@ -465,6 +465,7 @@ func setupEventHandling(
 		eventFilterer,
 		contractABI,
 		validatorCtrl,
+		networkConfig.Domain,
 		cfg.SSVOptions.ValidatorOptions.OperatorData,
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider,
 		cfg.SSVOptions.ValidatorOptions.KeyManager,

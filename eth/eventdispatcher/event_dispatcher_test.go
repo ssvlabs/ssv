@@ -125,10 +125,13 @@ func setupEventDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger
 
 	storageMap := ibftstorage.NewStores()
 	nodeStorage, operatorData := setupOperatorStorage(logger, db)
-	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkconfig.NetworkConfig{}, true)
+	testNetworkConfig := networkconfig.TestNetwork
+
+	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, true)
 	if err != nil {
 		logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 	}
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -151,6 +154,7 @@ func setupEventDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger
 		filterer,
 		abi,
 		validatorCtrl,
+		testNetworkConfig.Domain,
 		operatorData,
 		nodeStorage.GetPrivateKey,
 		keyManager,
