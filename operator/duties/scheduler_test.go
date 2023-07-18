@@ -2,6 +2,7 @@ package duties
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -198,7 +199,9 @@ func waitForDutyExecution(t *testing.T, logger *zap.Logger, attesterDutiesCalls 
 }
 
 func TestScheduler_Attester_Same_Slot(t *testing.T) {
-	currentSlot := phase0.Slot(0)
+	currentSlot := &SlotValue{
+		slot: phase0.Slot(0),
+	}
 	pubKey := phase0.BLSPubKey{1, 2, 3}
 	baseEpoch := phase0.Epoch(0)
 
@@ -211,18 +214,18 @@ func TestScheduler_Attester_Same_Slot(t *testing.T) {
 		},
 	}
 
-	s, mockTicker, logger, executeDutyCalls, attesterDutiesCalls, cancel, schedulerPool := setupSchedulerAndMocks(t, dutiesMap, currentSlot)
+	s, mockTicker, logger, executeDutyCalls, attesterDutiesCalls, cancel, schedulerPool := setupSchedulerAndMocks(t, dutiesMap, currentSlot.GetSlot())
 
 	s.network.Beacon.(*mocknetwork.MockNetworkInfo).EXPECT().EstimatedCurrentSlot().DoAndReturn(
 		func() phase0.Slot {
-			return currentSlot
+			return currentSlot.GetSlot()
 		},
 	).AnyTimes()
 
 	timeout := 100 * time.Millisecond
 
 	// STEP 1: wait for attester duties to be fetched and executed at the same slot
-	mockTicker.Send(currentSlot)
+	mockTicker.Send(currentSlot.GetSlot())
 	waitForAttesterDuties(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 	waitForDutyExecution(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 
@@ -232,7 +235,9 @@ func TestScheduler_Attester_Same_Slot(t *testing.T) {
 }
 
 func TestScheduler_Attester_Diff_Slots(t *testing.T) {
-	currentSlot := phase0.Slot(0)
+	currentSlot := &SlotValue{
+		slot: phase0.Slot(0),
+	}
 	pubKey := phase0.BLSPubKey{1, 2, 3}
 	currentEpoch := phase0.Epoch(0)
 
@@ -245,27 +250,27 @@ func TestScheduler_Attester_Diff_Slots(t *testing.T) {
 		},
 	}
 
-	s, mockTicker, logger, executeDutyCalls, attesterDutiesCalls, cancel, schedulerPool := setupSchedulerAndMocks(t, dutiesMap, currentSlot)
+	s, mockTicker, logger, executeDutyCalls, attesterDutiesCalls, cancel, schedulerPool := setupSchedulerAndMocks(t, dutiesMap, currentSlot.GetSlot())
 	s.network.Beacon.(*mocknetwork.MockNetworkInfo).EXPECT().EstimatedCurrentSlot().DoAndReturn(
 		func() phase0.Slot {
-			return currentSlot
+			return currentSlot.GetSlot()
 		},
 	).AnyTimes()
 
 	timeout := 100 * time.Millisecond
 
 	// STEP 1: wait for attester duties to be fetched
-	mockTicker.Send(currentSlot)
+	mockTicker.Send(currentSlot.GetSlot())
 	waitForAttesterDuties(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 
 	// STEP 2: wait for no action to be taken
-	currentSlot = phase0.Slot(1)
-	mockTicker.Send(currentSlot)
+	currentSlot.SetSlot(phase0.Slot(1))
+	mockTicker.Send(currentSlot.GetSlot())
 	waitForNoAction(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 
 	// STEP 3: wait for attester duties to be executed
-	currentSlot = phase0.Slot(2)
-	mockTicker.Send(currentSlot)
+	currentSlot.SetSlot(phase0.Slot(2))
+	mockTicker.Send(currentSlot.GetSlot())
 	waitForDutyExecution(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 
 	// Stop scheduler & wait for graceful exit.
@@ -274,7 +279,10 @@ func TestScheduler_Attester_Diff_Slots(t *testing.T) {
 }
 
 func TestScheduler_Attester_Indices_Changed(t *testing.T) {
-	currentSlot := phase0.Slot(0)
+	currentSlot := &SlotValue{
+		slot: phase0.Slot(0),
+	}
+
 	pubKey := phase0.BLSPubKey{1, 2, 3}
 	currentEpoch := phase0.Epoch(0)
 
@@ -287,17 +295,17 @@ func TestScheduler_Attester_Indices_Changed(t *testing.T) {
 		},
 	}
 
-	s, mockTicker, logger, executeDutyCalls, attesterDutiesCalls, cancel, schedulerPool := setupSchedulerAndMocks(t, dutiesMap, currentSlot)
+	s, mockTicker, logger, executeDutyCalls, attesterDutiesCalls, cancel, schedulerPool := setupSchedulerAndMocks(t, dutiesMap, currentSlot.GetSlot())
 	s.network.Beacon.(*mocknetwork.MockNetworkInfo).EXPECT().EstimatedCurrentSlot().DoAndReturn(
 		func() phase0.Slot {
-			return currentSlot
+			return currentSlot.GetSlot()
 		},
 	).AnyTimes()
 
 	timeout := 100 * time.Millisecond
 
 	// STEP 1: wait for attester duties to be fetched
-	mockTicker.Send(currentSlot)
+	mockTicker.Send(currentSlot.GetSlot())
 	waitForAttesterDuties(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 
 	// STEP 2: trigger a change in active indices
@@ -305,18 +313,18 @@ func TestScheduler_Attester_Indices_Changed(t *testing.T) {
 	waitForNoAction(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 
 	// STEP 3: wait for attester duties to be fetched again
-	currentSlot = phase0.Slot(1)
+	currentSlot.SetSlot(phase0.Slot(1))
 	dutiesMap[currentEpoch] = append(dutiesMap[currentEpoch], &v1.AttesterDuty{
 		PubKey:         phase0.BLSPubKey{1, 2, 4},
 		Slot:           2,
 		ValidatorIndex: phase0.ValidatorIndex(2),
 	})
-	mockTicker.Send(currentSlot)
+	mockTicker.Send(currentSlot.GetSlot())
 	waitForAttesterDuties(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 
 	// STEP 4: wait for attester duties to be executed
-	currentSlot = phase0.Slot(2)
-	mockTicker.Send(currentSlot)
+	currentSlot.SetSlot(phase0.Slot(2))
+	mockTicker.Send(currentSlot.GetSlot())
 	waitForDutyExecution(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 	waitForDutyExecution(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 
@@ -327,7 +335,9 @@ func TestScheduler_Attester_Indices_Changed(t *testing.T) {
 
 // reorg previous dependent root changed
 func TestScheduler_Attester_Reorg_Previous_Epoch_Transition(t *testing.T) {
-	currentSlot := phase0.Slot(63)
+	currentSlot := &SlotValue{
+		slot: phase0.Slot(63),
+	}
 	pubKey := phase0.BLSPubKey{1, 2, 3}
 	currentEpoch := phase0.Epoch(1)
 
@@ -340,25 +350,25 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition(t *testing.T) {
 		},
 	}
 
-	s, mockTicker, logger, executeDutyCalls, attesterDutiesCalls, cancel, schedulerPool := setupSchedulerAndMocks(t, dutiesMap, currentSlot)
+	s, mockTicker, logger, executeDutyCalls, attesterDutiesCalls, cancel, schedulerPool := setupSchedulerAndMocks(t, dutiesMap, currentSlot.GetSlot())
 	handleEventFunc := s.HandleHeadEvent(logger)
 	s.network.Beacon.(*mocknetwork.MockNetworkInfo).EXPECT().EstimatedCurrentSlot().DoAndReturn(
 		func() phase0.Slot {
-			return currentSlot
+			return currentSlot.GetSlot()
 		},
 	).AnyTimes()
 
 	timeout := 100 * time.Millisecond
 
 	// STEP 1: wait for attester duties to be fetched for current and next epoch
-	mockTicker.Send(currentSlot) // slot = 63
+	mockTicker.Send(currentSlot.GetSlot()) // slot = 63
 	waitForAttesterDuties(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 	waitForAttesterDuties(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 
 	// STEP 2: trigger head event
 	e := &v1.Event{
 		Data: &v1.HeadEvent{
-			Slot:                      currentSlot,
+			Slot:                      currentSlot.GetSlot(),
 			CurrentDutyDependentRoot:  phase0.Root{0x01},
 			PreviousDutyDependentRoot: phase0.Root{0x01},
 		},
@@ -367,14 +377,14 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition(t *testing.T) {
 	waitForNoAction(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 
 	// STEP 3: Ticker with no action
-	currentSlot++ // slot = 64
-	mockTicker.Send(currentSlot)
+	currentSlot.SetSlot(phase0.Slot(64))
+	mockTicker.Send(currentSlot.GetSlot())
 	waitForNoAction(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 
 	// STEP 4: trigger reorg on epoch transition
 	e = &v1.Event{
 		Data: &v1.HeadEvent{
-			Slot:                      currentSlot,
+			Slot:                      currentSlot.GetSlot(),
 			PreviousDutyDependentRoot: phase0.Root{0x02},
 		},
 	}
@@ -382,7 +392,7 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition(t *testing.T) {
 	waitForNoAction(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 
 	// STEP 5: wait for attester duties to be fetched again for the current epoch
-	currentSlot++ // slot = 65
+	currentSlot.SetSlot(phase0.Slot(65))
 	dutiesMap[currentEpoch+1] = []*v1.AttesterDuty{
 		{
 			PubKey:         pubKey,
@@ -390,17 +400,17 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition(t *testing.T) {
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	}
-	mockTicker.Send(currentSlot)
+	mockTicker.Send(currentSlot.GetSlot())
 	waitForAttesterDuties(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 
 	// STEP 6: The first assigned duty should not be executed
-	currentSlot++ // slot = 66
-	mockTicker.Send(currentSlot)
+	currentSlot.SetSlot(phase0.Slot(66))
+	mockTicker.Send(currentSlot.GetSlot())
 	waitForNoAction(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 
 	// STEP 7: The second assigned duty should be executed
-	currentSlot++ // slot = 36
-	mockTicker.Send(currentSlot)
+	currentSlot.SetSlot(phase0.Slot(67))
+	mockTicker.Send(currentSlot.GetSlot())
 	waitForDutyExecution(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 
 	// Stop scheduler & wait for graceful exit.
@@ -410,7 +420,9 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition(t *testing.T) {
 
 // reorg previous dependent root changed
 func TestScheduler_Attester_Reorg_Previous(t *testing.T) {
-	currentSlot := phase0.Slot(32)
+	currentSlot := &SlotValue{
+		slot: phase0.Slot(32),
+	}
 	pubKey := phase0.BLSPubKey{1, 2, 3}
 	currentEpoch := phase0.Epoch(1)
 
@@ -423,24 +435,24 @@ func TestScheduler_Attester_Reorg_Previous(t *testing.T) {
 		},
 	}
 
-	s, mockTicker, logger, executeDutyCalls, attesterDutiesCalls, cancel, schedulerPool := setupSchedulerAndMocks(t, dutiesMap, currentSlot)
+	s, mockTicker, logger, executeDutyCalls, attesterDutiesCalls, cancel, schedulerPool := setupSchedulerAndMocks(t, dutiesMap, currentSlot.GetSlot())
 	handleEventFunc := s.HandleHeadEvent(logger)
 	s.network.Beacon.(*mocknetwork.MockNetworkInfo).EXPECT().EstimatedCurrentSlot().DoAndReturn(
 		func() phase0.Slot {
-			return currentSlot
+			return currentSlot.GetSlot()
 		},
 	).AnyTimes()
 
 	timeout := 100 * time.Millisecond
 
 	// STEP 1: wait for attester duties to be fetched
-	mockTicker.Send(currentSlot) // slot = 32
+	mockTicker.Send(currentSlot.GetSlot()) // slot = 32
 	waitForAttesterDuties(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 
 	// STEP 2: trigger head event
 	e := &v1.Event{
 		Data: &v1.HeadEvent{
-			Slot:                      currentSlot,
+			Slot:                      currentSlot.GetSlot(),
 			PreviousDutyDependentRoot: phase0.Root{0x01},
 		},
 	}
@@ -448,14 +460,14 @@ func TestScheduler_Attester_Reorg_Previous(t *testing.T) {
 	waitForNoAction(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 
 	// STEP 3: Ticker with no action
-	currentSlot++ // slot = 33
-	mockTicker.Send(currentSlot)
+	currentSlot.SetSlot(phase0.Slot(33))
+	mockTicker.Send(currentSlot.GetSlot())
 	waitForNoAction(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 
 	// STEP 4: trigger reorg
 	e = &v1.Event{
 		Data: &v1.HeadEvent{
-			Slot:                      currentSlot,
+			Slot:                      currentSlot.GetSlot(),
 			PreviousDutyDependentRoot: phase0.Root{0x02},
 		},
 	}
@@ -463,7 +475,7 @@ func TestScheduler_Attester_Reorg_Previous(t *testing.T) {
 	waitForNoAction(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 
 	// STEP 5: wait for attester duties to be fetched again for the current epoch
-	currentSlot++ // slot = 34
+	currentSlot.SetSlot(phase0.Slot(34))
 	dutiesMap[currentEpoch] = []*v1.AttesterDuty{
 		{
 			PubKey:         pubKey,
@@ -471,17 +483,17 @@ func TestScheduler_Attester_Reorg_Previous(t *testing.T) {
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	}
-	mockTicker.Send(currentSlot)
+	mockTicker.Send(currentSlot.GetSlot())
 	waitForAttesterDuties(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 
 	// STEP 6: The first assigned duty should not be executed
-	currentSlot++ // slot = 35
-	mockTicker.Send(currentSlot)
+	currentSlot.SetSlot(phase0.Slot(35))
+	mockTicker.Send(currentSlot.GetSlot())
 	waitForNoAction(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 
 	// STEP 7: The second assigned duty should be executed
-	currentSlot++ // slot = 36
-	mockTicker.Send(currentSlot)
+	currentSlot.SetSlot(phase0.Slot(36))
+	mockTicker.Send(currentSlot.GetSlot())
 	waitForDutyExecution(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 
 	// Stop scheduler & wait for graceful exit.
@@ -491,7 +503,9 @@ func TestScheduler_Attester_Reorg_Previous(t *testing.T) {
 
 // reorg current dependent root changed
 func TestScheduler_Attester_Reorg_Current(t *testing.T) {
-	currentSlot := phase0.Slot(47)
+	currentSlot := &SlotValue{
+		slot: phase0.Slot(47),
+	}
 	pubKey := phase0.BLSPubKey{1, 2, 3}
 	currentEpoch := phase0.Epoch(1)
 
@@ -504,25 +518,25 @@ func TestScheduler_Attester_Reorg_Current(t *testing.T) {
 		},
 	}
 
-	s, mockTicker, logger, executeDutyCalls, attesterDutiesCalls, cancel, schedulerPool := setupSchedulerAndMocks(t, dutiesMap, currentSlot)
+	s, mockTicker, logger, executeDutyCalls, attesterDutiesCalls, cancel, schedulerPool := setupSchedulerAndMocks(t, dutiesMap, currentSlot.GetSlot())
 	handleEventFunc := s.HandleHeadEvent(logger)
 	s.network.Beacon.(*mocknetwork.MockNetworkInfo).EXPECT().EstimatedCurrentSlot().DoAndReturn(
 		func() phase0.Slot {
-			return currentSlot
+			return currentSlot.GetSlot()
 		},
 	).AnyTimes()
 
 	timeout := 50 * time.Millisecond
 
 	// STEP 1: wait for attester duties to be fetched
-	mockTicker.Send(currentSlot) // slot = 47
+	mockTicker.Send(currentSlot.GetSlot()) // slot = 47
 	waitForAttesterDuties(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 	waitForAttesterDuties(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 
 	// STEP 2: trigger head event
 	e := &v1.Event{
 		Data: &v1.HeadEvent{
-			Slot:                     currentSlot,
+			Slot:                     currentSlot.GetSlot(),
 			CurrentDutyDependentRoot: phase0.Root{0x01},
 		},
 	}
@@ -530,14 +544,14 @@ func TestScheduler_Attester_Reorg_Current(t *testing.T) {
 	waitForNoAction(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 
 	// STEP 3: Ticker with no action
-	currentSlot++ // slot = 48
-	mockTicker.Send(currentSlot)
+	currentSlot.SetSlot(phase0.Slot(48))
+	mockTicker.Send(currentSlot.GetSlot())
 	waitForNoAction(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 
 	// STEP 4: trigger reorg
 	e = &v1.Event{
 		Data: &v1.HeadEvent{
-			Slot:                     currentSlot,
+			Slot:                     currentSlot.GetSlot(),
 			CurrentDutyDependentRoot: phase0.Root{0x02},
 		},
 	}
@@ -545,7 +559,7 @@ func TestScheduler_Attester_Reorg_Current(t *testing.T) {
 	waitForNoAction(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 
 	// STEP 5: wait for attester duties to be fetched again for the current epoch
-	currentSlot++ // slot = 49
+	currentSlot.SetSlot(phase0.Slot(49))
 	dutiesMap[currentEpoch+1] = []*v1.AttesterDuty{
 		{
 			PubKey:         pubKey,
@@ -553,26 +567,45 @@ func TestScheduler_Attester_Reorg_Current(t *testing.T) {
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	}
-	mockTicker.Send(currentSlot)
+	mockTicker.Send(currentSlot.GetSlot())
 	waitForAttesterDuties(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 
 	// STEP 6: skip to the next epoch
-	for currentSlot = 50; currentSlot < 64; currentSlot++ {
-		mockTicker.Send(currentSlot)
+	currentSlot.SetSlot(phase0.Slot(50))
+	for slot := currentSlot.GetSlot(); slot < 64; slot++ {
+		mockTicker.Send(slot)
 		waitForNoAction(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
+		currentSlot.SetSlot(slot + 1)
 	}
 
 	// STEP 7: The first assigned duty should not be executed
 	// slot = 64
-	mockTicker.Send(currentSlot)
+	mockTicker.Send(currentSlot.GetSlot())
 	waitForNoAction(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 
 	// STEP 8: The second assigned duty should be executed
-	currentSlot++ // slot = 65
-	mockTicker.Send(currentSlot)
+	currentSlot.SetSlot(phase0.Slot(65))
+	mockTicker.Send(currentSlot.GetSlot())
 	waitForDutyExecution(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
 	require.NoError(t, schedulerPool.Wait())
+}
+
+type SlotValue struct {
+	mu   sync.Mutex
+	slot phase0.Slot
+}
+
+func (sv *SlotValue) SetSlot(s phase0.Slot) {
+	sv.mu.Lock()
+	defer sv.mu.Unlock()
+	sv.slot = s
+}
+
+func (sv *SlotValue) GetSlot() phase0.Slot {
+	sv.mu.Lock()
+	defer sv.mu.Unlock()
+	return sv.slot
 }
