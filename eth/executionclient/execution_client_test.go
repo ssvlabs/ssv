@@ -9,42 +9,32 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/eth"
-	"github.com/ethereum/go-ethereum/eth/ethconfig"
-	"github.com/ethereum/go-ethereum/eth/filters"
-	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/ethereum/go-ethereum/miner"
-	"github.com/ethereum/go-ethereum/node"
-	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
+
+	"github.com/bloxapp/ssv/eth/simulator"
 )
 
 var (
 	// testKey is a private key to use for funding a tester account.
 	testKey, _ = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
-
 	// testAddr is the Ethereum address of the tester account.
 	testAddr = crypto.PubkeyToAddress(testKey.PublicKey)
-
-	testBalance = big.NewInt(2e18)
-
-	contractAddr = ethcommon.HexToAddress("0x3A220f351252089D385b29beca14e27F204c296A")
-
-	genesis = &core.Genesis{
-		Config:    params.AllEthashProtocolChanges,
-		Alloc:     core.GenesisAlloc{testAddr: {Balance: testBalance}},
-		ExtraData: []byte("test genesis"),
-		Timestamp: 9000,
-		BaseFee:   big.NewInt(params.InitialBaseFee),
-	}
 )
+
+func simTestBackend(testAddr ethcommon.Address) *simulator.SimulatedBackend {
+	return simulator.NewSimulatedBackend(
+		core.GenesisAlloc{
+			testAddr: {Balance: big.NewInt(10000000000000000)},
+		}, 10000000,
+	)
+}
 
 /*
 Example contract to test event emission:
@@ -55,72 +45,65 @@ Example contract to test event emission:
 		function Call() public { emit Called(); }
 	}
 */
-
+const callableAbi = "[{\"anonymous\":false,\"inputs\":[],\"name\":\"Called\",\"type\":\"event\"},{\"inputs\":[],\"name\":\"Call\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
 const callableBin = "6080604052348015600f57600080fd5b5060998061001e6000396000f3fe6080604052348015600f57600080fd5b506004361060285760003560e01c806334e2292114602d575b600080fd5b60336035565b005b7f81fab7a4a0aa961db47eefc81f143a5220e8c8495260dd65b1356f1d19d3c7b860405160405180910390a156fea2646970667358221220029436d24f3ac598ceca41d4d712e13ced6d70727f4cdc580667de66d2f51d8b64736f6c63430008010033"
-const chainLength = 30
+
+const blocksWithLogsLength = 30
 
 func TestFetchHistoricalLogs(t *testing.T) {
+	logger := zaptest.NewLogger(t)
 	const testTimeout = 1 * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
 
-	done := make(chan struct{})
-	defer close(done)
-
-	blockStream := make(chan []*ethtypes.Block)
-	defer close(blockStream)
-
-	backend, processedStream := newTestBackend(t, done, blockStream, 0)
-
-	// Generate test chain before we read historical logs
-	generateInitialTestChain(done, blockStream, chainLength)
-	for blocks := range processedStream {
-		t.Log("Processed blocks: ", len(blocks))
-	}
+	// Create simulator instance
+	sim := simTestBackend(testAddr)
 
 	// Create JSON-RPC handler
-	rpcServer, _ := backend.RPCHandler()
+	rpcServer, _ := sim.Node.RPCHandler()
 	// Expose handler on a test server with ws open
 	httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
 	defer rpcServer.Stop()
 	defer httpsrv.Close()
-
-	// Check if the contract is deployed successfully with a standard eth1 client
-	ec, err := backend.Attach()
-	require.NoError(t, err)
-	cl := ethclient.NewClient(ec)
-	receipt, err := cl.TransactionReceipt(ctx, ethcommon.HexToHash("0x0a854d0edf6b757240d5ef2cbfc3fe355525ad1656bf7ce0fbcfa27077a1246a"))
-	require.NoError(t, err)
-	require.Equal(t, uint64(1), receipt.Status)
-	contractCode, err := cl.CodeAt(ctx, receipt.ContractAddress, nil)
-	require.NoError(t, err)
-	if len(contractCode) == 0 {
-		t.Fatal("got code for account that does not have contract code")
-	}
-
 	addr := "ws:" + strings.TrimPrefix(httpsrv.URL, "http:")
 
-	logger := zaptest.NewLogger(t)
+	parsed, _ := abi.JSON(strings.NewReader(callableAbi))
+	auth, _ := bind.NewKeyedTransactorWithChainID(testKey, big.NewInt(1337))
+	contractAddr, _, contract, err := bind.DeployContract(auth, parsed, ethcommon.FromHex(callableBin), sim)
+	if err != nil {
+		t.Errorf("deploying contract: %v", err)
+	}
+	sim.Commit()
 
+	// Create a client and connect to the simulator
 	const finalizationOffset = 8
-	client := New(addr, receipt.ContractAddress, WithLogger(logger), WithFinalizationOffset(finalizationOffset))
+	client := New(addr, contractAddr, WithLogger(logger), WithFinalizationOffset(finalizationOffset))
 	client.Connect(ctx)
 
 	isReady, err := client.IsReady(ctx)
 	require.NoError(t, err)
 	require.True(t, isReady)
 
-	// Fetch all logs history starting from block 0
-	seenLogs := 0
-	logs, fetchErrCh, err := client.FetchHistoricalLogs(ctx, 0)
-	for log := range logs {
-		seenLogs++
-		require.NotNil(t, log)
+	// Create blocks with transactions
+	for i := 0; i < blocksWithLogsLength; i++ {
+		_, err := contract.Transact(auth, "Call")
+		if err != nil {
+			t.Errorf("transacting: %v", err)
+		}
+		sim.Commit()
 	}
 
+	// Fetch all logs history starting from block 0
+	var fetchedLogs []ethtypes.Log
+	logs, fetchErrCh, err := client.FetchHistoricalLogs(ctx, 0)
+	for log := range logs {
+		fetchedLogs = append(fetchedLogs, log)
+	}
 	require.NoError(t, err)
-	expectedSeenLogs := chainLength - finalizationOffset - 2 // blocks 0 and 1 don't have logs
-	require.Equal(t, expectedSeenLogs, seenLogs)
+	require.NotEmpty(t, fetchedLogs)
+
+	expectedSeenLogs := blocksWithLogsLength - finalizationOffset
+	require.Equal(t, expectedSeenLogs, len(fetchedLogs))
 
 	select {
 	case err := <-fetchErrCh:
@@ -130,32 +113,35 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	}
 
 	require.NoError(t, client.Close())
-	require.NoError(t, backend.Close())
+	require.NoError(t, sim.Close())
 }
 
 func TestStreamLogs(t *testing.T) {
+	logger := zaptest.NewLogger(t)
 	const testTimeout = 1 * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
 
-	done := make(chan struct{})
-	defer close(done)
-
-	blockStream := make(chan []*ethtypes.Block)
-	defer close(blockStream)
 	// Create sim instance with a delay between block execution
 	delay := time.Millisecond * 10
-	backend, processedStream := newTestBackend(t, done, blockStream, delay)
+	sim := simTestBackend(testAddr)
 
-	rpcServer, _ := backend.RPCHandler()
+	rpcServer, _ := sim.Node.RPCHandler()
 	httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
 	defer rpcServer.Stop()
 	defer httpsrv.Close()
-
 	addr := "ws:" + strings.TrimPrefix(httpsrv.URL, "http:")
 
-	logger := zaptest.NewLogger(t)
+	// Deploy the contract
+	parsed, _ := abi.JSON(strings.NewReader(callableAbi))
+	auth, _ := bind.NewKeyedTransactorWithChainID(testKey, big.NewInt(1337))
+	contractAddr, _, contract, err := bind.DeployContract(auth, parsed, ethcommon.FromHex(callableBin), sim)
+	if err != nil {
+		t.Errorf("deploying contract: %v", err)
+	}
+	sim.Commit()
 
+	// Create a client and connect to the simulator
 	client := New(addr, contractAddr, WithLogger(logger))
 	client.Connect(ctx)
 
@@ -166,6 +152,7 @@ func TestStreamLogs(t *testing.T) {
 	logs := client.StreamLogs(ctx, 0)
 	var wg sync.WaitGroup
 	var streamedLogs []ethtypes.Log
+
 	// Receive emitted events
 	wg.Add(1)
 	go func() {
@@ -175,100 +162,60 @@ func TestStreamLogs(t *testing.T) {
 		}
 	}()
 
-	// Generate test chain after a connection to the server.
-	// While processing blocks the events will be emitted which is read by subscription
-	generateInitialTestChain(done, blockStream, chainLength)
-	for blocks := range processedStream {
-		t.Log("Processed blocks: ", len(blocks))
+	// Create blocks with transactions
+	for i := 0; i < blocksWithLogsLength; i++ {
+		_, err := contract.Transact(auth, "Call")
+		if err != nil {
+			t.Errorf("transacting: %v", err)
+		}
+		sim.Commit()
+		time.Sleep(delay)
 	}
 
 	require.NoError(t, client.Close())
-	require.NoError(t, backend.Close())
 	wg.Wait()
+
+	require.Equal(t, blocksWithLogsLength, len(streamedLogs))
+
+	require.NoError(t, sim.Close())
 	require.NotEmpty(t, streamedLogs)
 }
 
-func newTestBackend(t *testing.T, done <-chan struct{}, blockStream <-chan []*ethtypes.Block, delay time.Duration) (*node.Node, <-chan []*ethtypes.Block) {
-	processedStream := make(chan []*ethtypes.Block)
-	// Create node
-	n, err := node.New(&node.Config{})
-	if err != nil {
-		t.Fatalf("can't create new node: %v", err)
-	}
-
-	// Create Ethereum Service
-	config := &ethconfig.Config{Genesis: genesis, Miner: miner.DefaultConfig}
-	ethservice, err := eth.New(n, config)
-	if err != nil {
-		t.Fatalf("can't create new ethereum service: %v", err)
-	}
-
-	// Add required APIs
-	filterSystem := filters.NewFilterSystem(ethservice.APIBackend, filters.Config{})
-	n.RegisterAPIs([]rpc.API{{
-		Namespace: "eth",
-		Service:   filters.NewFilterAPI(filterSystem, false),
-	}})
-
-	// Start eth1 node
-	if err := n.Start(); err != nil {
-		t.Fatalf("can't start test node: %v", err)
-	}
-
-	go func() {
-		defer close(processedStream)
-		select {
-		case <-done:
-			return
-		case blocks := <-blockStream:
-			if delay != time.Duration(0) {
-				for _, block := range blocks {
-					if _, err := ethservice.BlockChain().InsertChain([]*ethtypes.Block{block}); err != nil {
-						return
-					}
-					time.Sleep(delay)
-				}
-			} else {
-				if _, err := ethservice.BlockChain().InsertChain(blocks); err != nil {
-					return
-				}
-			}
-
-			processedStream <- blocks
-		}
-	}()
-	return n, processedStream
-}
-
 func TestFetchLogsInBatches(t *testing.T) {
+	logger := zaptest.NewLogger(t)
 	const testTimeout = 1 * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
 
-	done := make(chan struct{})
-	defer close(done)
+	// Create simulator instance
+	sim := simTestBackend(testAddr)
 
-	blockStream := make(chan []*ethtypes.Block)
-	defer close(blockStream)
-
-	backend, processedStream := newTestBackend(t, done, blockStream, 0)
-
-	generateInitialTestChain(done, blockStream, chainLength)
-
-	for blocks := range processedStream {
-		t.Log("Processed blocks: ", len(blocks))
-	}
-
-	rpcServer, _ := backend.RPCHandler()
+	rpcServer, _ := sim.Node.RPCHandler()
 	httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
 	defer rpcServer.Stop()
 	defer httpsrv.Close()
-
 	addr := "ws:" + strings.TrimPrefix(httpsrv.URL, "http:")
-	logger := zaptest.NewLogger(t)
+
+	// Deploy the contract
+	parsed, _ := abi.JSON(strings.NewReader(callableAbi))
+	auth, _ := bind.NewKeyedTransactorWithChainID(testKey, big.NewInt(1337))
+	contractAddr, _, contract, err := bind.DeployContract(auth, parsed, ethcommon.FromHex(callableBin), sim)
+	if err != nil {
+		t.Errorf("deploying contract: %v", err)
+	}
+	sim.Commit()
 
 	client := New(addr, contractAddr, WithLogger(logger), WithLogBatchSize(2))
 	client.Connect(ctx)
+
+	// Create blocks with transactions
+	for i := 0; i < blocksWithLogsLength; i++ {
+		_, err := contract.Transact(auth, "Call")
+		if err != nil {
+			t.Errorf("transacting: %v", err)
+		}
+		sim.Commit()
+	}
 
 	t.Run("startBlock is greater than endBlock", func(t *testing.T) {
 		logChan, errChan := client.fetchLogsInBatches(ctx, 10, 5)
@@ -328,47 +275,96 @@ func TestFetchLogsInBatches(t *testing.T) {
 		}
 	})
 
-	require.NoError(t, backend.Close())
+	require.NoError(t, sim.Close())
 }
 
-// Generate blocks with transactions
-func generateInitialTestChain(done <-chan struct{}, blockStream chan []*ethtypes.Block, count int) {
-	_, blocks, _ := core.GenerateChainWithGenesis(genesis, ethash.NewFaker(), count, blockGenerator)
-	go func() {
-		select {
-		case <-done:
-		case blockStream <- blocks:
-		}
-	}()
-}
+// TestForkLogs check that the simulated reorgs
+// correctly remove logs.
+// Steps:
+//  1. Deploy the Callable contract.
+//  2. Set up an event subscription.
+//  3. Save the current block which will serve as parent for the fork.
+//  4. Send a transaction.
+//  5. Check that the event was included.
+//  6. Fork by using the parent block as ancestor.
+//  7. Mine two blocks to trigger a reorg.
+//  8. Check that the event was removed.
+//  9. Re-send the transaction and mine a block.
+//  10. Check that the event was reborn.
+func TestForkLogs(t *testing.T) {
+	logger := zaptest.NewLogger(t)
 
-func blockGenerator(i int, g *core.BlockGen) {
-	g.OffsetTime(5)
-	g.SetExtra([]byte("test"))
-	if i == 0 {
-		return
+	const testTimeout = 10 * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	defer cancel()
+
+	testAddr := crypto.PubkeyToAddress(testKey.PublicKey)
+
+	sim := simTestBackend(testAddr)
+	defer sim.Close()
+
+	rpcServer, _ := sim.Node.RPCHandler()
+	httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
+	defer rpcServer.Stop()
+	defer httpsrv.Close()
+
+	addr := "ws:" + strings.TrimPrefix(httpsrv.URL, "http:")
+
+	// 1.
+	parsed, _ := abi.JSON(strings.NewReader(callableAbi))
+	auth, _ := bind.NewKeyedTransactorWithChainID(testKey, big.NewInt(1337))
+	contractAddr, _, contract, err := bind.DeployContract(auth, parsed, ethcommon.FromHex(callableBin), sim)
+	if err != nil {
+		t.Errorf("deploying contract: %v", err)
 	}
-	// Add contract deployment to the first block
-	if i == 1 {
-		tx := ethtypes.MustSignNewTx(testKey, ethtypes.LatestSigner(genesis.Config), &ethtypes.LegacyTx{
-			Nonce:    uint64(i - 1),
-			Value:    big.NewInt(0),
-			GasPrice: big.NewInt(params.InitialBaseFee),
-			Gas:      300000,
-			Data:     ethcommon.FromHex(callableBin),
-		})
-		g.AddTx(tx)
-	} else {
-		// Transactions to contract
-		tx := ethtypes.MustSignNewTx(testKey, ethtypes.LatestSigner(genesis.Config), &ethtypes.LegacyTx{
-			To:       &contractAddr,
-			Nonce:    uint64(i - 1),
-			Value:    big.NewInt(0),
-			GasPrice: big.NewInt(params.InitialBaseFee),
-			Gas:      302916,
-			// Call to function which emits event
-			Data: ethcommon.FromHex("0x34e22921"),
-		})
-		g.AddTx(tx)
+	sim.Commit()
+
+	// Connect the client
+	client := New(addr, contractAddr, WithLogger(logger))
+	client.Connect(ctx)
+
+	isReady, err := client.IsReady(ctx)
+	require.NoError(t, err)
+	require.True(t, isReady)
+
+	// 2.
+	logs := client.StreamLogs(ctx, 0)
+
+	// 3.
+	parent := sim.Blockchain.CurrentBlock()
+
+	// 4.
+	for i := 0; i < 10; i++ {
+		if i == 0 {
+			_, err := contract.Transact(auth, "Call")
+			if err != nil {
+				t.Errorf("transacting: %v", err)
+			}
+		}
+		sim.Commit()
+	}
+
+	// 5.
+	log := <-logs
+	if log.Removed {
+		t.Error("Event should be included")
+	}
+
+	// 6.
+	if err := sim.Fork(context.Background(), parent.Hash()); err != nil {
+		t.Errorf("forking: %v", err)
+	}
+	// 7.
+	for i := 0; i < 12; i++ {
+		sim.Commit()
+	}
+
+	// 8.
+	log = <-logs
+	if !log.Removed {
+		t.Error("Event should be removed")
+	}
+	if sim.Blockchain.CurrentBlock().Number.Uint64() != uint64(13) {
+		t.Error("wrong chain length")
 	}
 }

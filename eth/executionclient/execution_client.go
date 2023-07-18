@@ -209,27 +209,27 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan ethtypes.Log {
 	logs := make(chan ethtypes.Log)
 
+	sub, err := ec.streamLogsToChan(ctx, logs, fromBlock)
+
 	go func() {
 		defer close(logs)
-
+		defer sub.Unsubscribe()
 		for {
 			select {
 			case <-ctx.Done():
 				ec.logger.Debug("log streaming canceled")
 				return
-
 			case <-ec.closed:
 				ec.logger.Debug("closed")
 				return
-
+			case <-sub.Err():
+				ec.logger.Error("subscription error", zap.Error(err))
+				ec.reconnect(ctx)
 			default:
-				lastBlock, err := ec.streamLogsToChan(ctx, logs, fromBlock)
 				if err != nil {
 					ec.logger.Error("log streaming failed", zap.Error(err))
 					ec.reconnect(ctx)
 				}
-
-				fromBlock = lastBlock + 1
 			}
 		}
 	}()
@@ -291,47 +291,18 @@ func (ec *ExecutionClient) isClosed() bool {
 }
 
 // TODO: consider handling "websocket: read limit exceeded" error and reducing batch size (syncSmartContractsEvents has code for this)
-func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan ethtypes.Log, fromBlock uint64) (lastBlock uint64, err error) {
+func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan ethtypes.Log, fromBlock uint64) (sub ethereum.Subscription, err error) {
 	client := ec.client.Load()
 	if client == nil {
-		return 0, ErrNotConnected
+		return nil, ErrNotConnected
 	}
 
-	heads := make(chan *ethtypes.Header)
-
-	sub, err := client.SubscribeNewHead(ctx, heads)
-	if err != nil {
-		return fromBlock, fmt.Errorf("subscribe heads: %w", err)
+	query := ethereum.FilterQuery{
+		Addresses: []ethcommon.Address{ec.contractAddress},
+		FromBlock: new(big.Int).SetUint64(fromBlock),
 	}
 
-	for {
-		select {
-		case err := <-sub.Err():
-			return fromBlock, fmt.Errorf("subscription: %w", err)
-
-		case header := <-heads:
-			query := ethereum.FilterQuery{
-				Addresses: []ethcommon.Address{ec.contractAddress},
-				FromBlock: new(big.Int).SetUint64(fromBlock),
-				ToBlock:   header.Number,
-			}
-
-			logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, header.Number.Uint64())
-
-			for log := range logStream {
-				logs <- log
-			}
-
-			err = <-fetchErrors
-
-			if err != nil {
-				return fromBlock, fmt.Errorf("fetch logs: %w", err)
-			}
-			fromBlock = query.ToBlock.Uint64()
-			ec.logger.Info("last fetched block", fields.BlockNumber(fromBlock))
-			ec.metrics.ExecutionClientLastFetchedBlock(fromBlock)
-		}
-	}
+	return client.SubscribeFilterLogs(ctx, query, logs)
 }
 
 // connect connects to Ethereum execution client.

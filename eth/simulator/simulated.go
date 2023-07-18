@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
-package backends
+package simulator
 
 import (
 	"context"
@@ -37,7 +37,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
-	eth1 "github.com/ethereum/go-ethereum/eth"
+	"github.com/ethereum/go-ethereum/eth"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/eth/filters"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -64,9 +64,9 @@ var (
 // ChainReader, ChainStateReader, ContractBackend, ContractCaller, ContractFilterer, ContractTransactor,
 // DeployBackend, GasEstimator, GasPricer, LogFilterer, PendingContractCaller, TransactionReader, and TransactionSender
 type SimulatedBackend struct {
-	database   ethdb.Database   // In memory database to store our testing data
-	blockchain *core.BlockChain // Ethereum blockchain to handle the consensus
-	node       *node.Node
+	Database   ethdb.Database   // In memory database to store our testing data
+	Blockchain *core.BlockChain // Ethereum blockchain to handle the consensus
+	Node       *node.Node
 
 	mu              sync.Mutex
 	pendingBlock    *types.Block   // Currently pending block that will be imported on request
@@ -87,12 +87,14 @@ func NewSimulatedBackendWithDatabase(database ethdb.Database, alloc core.Genesis
 		Config:   params.AllEthashProtocolChanges,
 		GasLimit: gasLimit,
 		Alloc:    alloc,
+		ExtraData: []byte("test genesis"),
+		Timestamp: 9000,
+		BaseFee:   big.NewInt(params.InitialBaseFee),
 	}
-	// blockchain, _ := core.NewBlockChain(database, nil, &genesis, nil, ethash.NewFaker(), vm.Config{}, nil, nil)
 
 	n, _ := node.New(&node.Config{})
 	config := &ethconfig.Config{Genesis: &genesis, Miner: miner.DefaultConfig}
-	ethservice, err := eth1.New(n, config)
+	ethservice, err := eth.New(n, config)
 	if err != nil {
 		panic(err)
 	}
@@ -105,18 +107,18 @@ func NewSimulatedBackendWithDatabase(database ethdb.Database, alloc core.Genesis
 	}})
 
 	backend := &SimulatedBackend{
-		database:   ethservice.ChainDb(),
-		blockchain: ethservice.BlockChain(),
+		Database:   ethservice.ChainDb(),
+		Blockchain: ethservice.BlockChain(),
 		config:     genesis.Config,
-		node: n,
+		Node: n,
 	}
 
 	filterBackend := &filterBackend{ethservice.ChainDb(), ethservice.BlockChain(), backend}
 	backend.filterSystem = filters.NewFilterSystem(filterBackend, filters.Config{})
 	backend.events = filters.NewEventSystem(backend.filterSystem, false)
 
-	header := backend.blockchain.CurrentBlock()
-	block := backend.blockchain.GetBlock(header.Hash(), header.Number.Uint64())
+	header := backend.Blockchain.CurrentBlock()
+	block := backend.Blockchain.GetBlock(header.Hash(), header.Number.Uint64())
 
 	backend.rollback(block)
 	// Start eth1 node
@@ -135,7 +137,7 @@ func NewSimulatedBackend(alloc core.GenesisAlloc, gasLimit uint64) *SimulatedBac
 
 // Close terminates the underlying blockchain's update loop.
 func (b *SimulatedBackend) Close() error {
-	b.blockchain.Stop()
+	b.Blockchain.Stop()
 	return nil
 }
 
@@ -145,7 +147,7 @@ func (b *SimulatedBackend) Commit() common.Hash {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	if _, err := b.blockchain.InsertChain([]*types.Block{b.pendingBlock}); err != nil {
+	if _, err := b.Blockchain.InsertChain([]*types.Block{b.pendingBlock}); err != nil {
 		panic(err) // This cannot happen unless the simulator is wrong, fail in that case
 	}
 	blockHash := b.pendingBlock.Hash()
@@ -162,17 +164,17 @@ func (b *SimulatedBackend) Rollback() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	header := b.blockchain.CurrentBlock()
-	block := b.blockchain.GetBlock(header.Hash(), header.Number.Uint64())
+	header := b.Blockchain.CurrentBlock()
+	block := b.Blockchain.GetBlock(header.Hash(), header.Number.Uint64())
 
 	b.rollback(block)
 }
 
 func (b *SimulatedBackend) rollback(parent *types.Block) {
-	blocks, _ := core.GenerateChain(b.config, parent, ethash.NewFaker(), b.database, 1, func(int, *core.BlockGen) {})
+	blocks, _ := core.GenerateChain(b.config, parent, ethash.NewFaker(), b.Database, 1, func(int, *core.BlockGen) {})
 
 	b.pendingBlock = blocks[0]
-	b.pendingState, _ = state.New(b.pendingBlock.Root(), b.blockchain.StateCache(), nil)
+	b.pendingState, _ = state.New(b.pendingBlock.Root(), b.Blockchain.StateCache(), nil)
 }
 
 // Fork creates a side-chain that can be used to simulate reorgs.
@@ -204,14 +206,14 @@ func (b *SimulatedBackend) Fork(ctx context.Context, parent common.Hash) error {
 
 // stateByBlockNumber retrieves a state by a given blocknumber.
 func (b *SimulatedBackend) stateByBlockNumber(ctx context.Context, blockNumber *big.Int) (*state.StateDB, error) {
-	if blockNumber == nil || blockNumber.Cmp(b.blockchain.CurrentBlock().Number) == 0 {
-		return b.blockchain.State()
+	if blockNumber == nil || blockNumber.Cmp(b.Blockchain.CurrentBlock().Number) == 0 {
+		return b.Blockchain.State()
 	}
 	block, err := b.blockByNumber(ctx, blockNumber)
 	if err != nil {
 		return nil, err
 	}
-	return b.blockchain.StateAt(block.Root())
+	return b.Blockchain.StateAt(block.Root())
 }
 
 // CodeAt returns the code associated with a certain account in the blockchain.
@@ -272,7 +274,7 @@ func (b *SimulatedBackend) TransactionReceipt(ctx context.Context, txHash common
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	receipt, _, _, _ := rawdb.ReadReceipt(b.database, txHash, b.config)
+	receipt, _, _, _ := rawdb.ReadReceipt(b.Database, txHash, b.config)
 	if receipt == nil {
 		return nil, ethereum.NotFound
 	}
@@ -291,7 +293,7 @@ func (b *SimulatedBackend) TransactionByHash(ctx context.Context, txHash common.
 	if tx != nil {
 		return tx, true, nil
 	}
-	tx, _, _, _ = rawdb.ReadTransaction(b.database, txHash)
+	tx, _, _, _ = rawdb.ReadTransaction(b.Database, txHash)
 	if tx != nil {
 		return tx, false, nil
 	}
@@ -312,7 +314,7 @@ func (b *SimulatedBackend) blockByHash(ctx context.Context, hash common.Hash) (*
 		return b.pendingBlock, nil
 	}
 
-	block := b.blockchain.GetBlockByHash(hash)
+	block := b.Blockchain.GetBlockByHash(hash)
 	if block != nil {
 		return block, nil
 	}
@@ -333,10 +335,10 @@ func (b *SimulatedBackend) BlockByNumber(ctx context.Context, number *big.Int) (
 // (associated with its hash) if found without Lock.
 func (b *SimulatedBackend) blockByNumber(ctx context.Context, number *big.Int) (*types.Block, error) {
 	if number == nil || number.Cmp(b.pendingBlock.Number()) == 0 {
-		return b.blockByHash(ctx, b.blockchain.CurrentBlock().Hash())
+		return b.blockByHash(ctx, b.Blockchain.CurrentBlock().Hash())
 	}
 
-	block := b.blockchain.GetBlockByNumber(uint64(number.Int64()))
+	block := b.Blockchain.GetBlockByNumber(uint64(number.Int64()))
 	if block == nil {
 		return nil, errBlockDoesNotExist
 	}
@@ -353,7 +355,7 @@ func (b *SimulatedBackend) HeaderByHash(ctx context.Context, hash common.Hash) (
 		return b.pendingBlock.Header(), nil
 	}
 
-	header := b.blockchain.GetHeaderByHash(hash)
+	header := b.Blockchain.GetHeaderByHash(hash)
 	if header == nil {
 		return nil, errBlockDoesNotExist
 	}
@@ -368,10 +370,10 @@ func (b *SimulatedBackend) HeaderByNumber(ctx context.Context, block *big.Int) (
 	defer b.mu.Unlock()
 
 	if block == nil || block.Cmp(b.pendingBlock.Number()) == 0 {
-		return b.blockchain.CurrentHeader(), nil
+		return b.Blockchain.CurrentHeader(), nil
 	}
 
-	return b.blockchain.GetHeaderByNumber(uint64(block.Int64())), nil
+	return b.Blockchain.GetHeaderByNumber(uint64(block.Int64())), nil
 }
 
 // TransactionCount returns the number of transactions in a given block.
@@ -383,7 +385,7 @@ func (b *SimulatedBackend) TransactionCount(ctx context.Context, blockHash commo
 		return uint(b.pendingBlock.Transactions().Len()), nil
 	}
 
-	block := b.blockchain.GetBlockByHash(blockHash)
+	block := b.Blockchain.GetBlockByHash(blockHash)
 	if block == nil {
 		return uint(0), errBlockDoesNotExist
 	}
@@ -405,7 +407,7 @@ func (b *SimulatedBackend) TransactionInBlock(ctx context.Context, blockHash com
 		return transactions[index], nil
 	}
 
-	block := b.blockchain.GetBlockByHash(blockHash)
+	block := b.Blockchain.GetBlockByHash(blockHash)
 	if block == nil {
 		return nil, errBlockDoesNotExist
 	}
@@ -461,14 +463,14 @@ func (b *SimulatedBackend) CallContract(ctx context.Context, call ethereum.CallM
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	if blockNumber != nil && blockNumber.Cmp(b.blockchain.CurrentBlock().Number) != 0 {
+	if blockNumber != nil && blockNumber.Cmp(b.Blockchain.CurrentBlock().Number) != 0 {
 		return nil, errBlockNumberUnsupported
 	}
-	stateDB, err := b.blockchain.State()
+	stateDB, err := b.Blockchain.State()
 	if err != nil {
 		return nil, err
 	}
-	res, err := b.callContract(ctx, call, b.blockchain.CurrentBlock(), stateDB)
+	res, err := b.callContract(ctx, call, b.Blockchain.CurrentBlock(), stateDB)
 	if err != nil {
 		return nil, err
 	}
@@ -634,8 +636,8 @@ func (b *SimulatedBackend) callContract(ctx context.Context, call ethereum.CallM
 	if call.GasPrice != nil && (call.GasFeeCap != nil || call.GasTipCap != nil) {
 		return nil, errors.New("both gasPrice and (maxFeePerGas or maxPriorityFeePerGas) specified")
 	}
-	head := b.blockchain.CurrentHeader()
-	if !b.blockchain.Config().IsLondon(head.Number) {
+	head := b.Blockchain.CurrentHeader()
+	if !b.Blockchain.Config().IsLondon(head.Number) {
 		// If there's no basefee, then it must be a non-1559 execution
 		if call.GasPrice == nil {
 			call.GasPrice = new(big.Int)
@@ -690,7 +692,7 @@ func (b *SimulatedBackend) callContract(ctx context.Context, call ethereum.CallM
 	// Create a new environment which holds all relevant information
 	// about the transaction and calling mechanisms.
 	txContext := core.NewEVMTxContext(msg)
-	evmContext := core.NewEVMBlockContext(header, b.blockchain, nil)
+	evmContext := core.NewEVMBlockContext(header, b.Blockchain, nil)
 	vmEnv := vm.NewEVM(evmContext, txContext, stateDB, b.config, vm.Config{NoBaseFee: true})
 	gasPool := new(core.GasPool).AddGas(math.MaxUint64)
 
@@ -708,7 +710,7 @@ func (b *SimulatedBackend) SendTransaction(ctx context.Context, tx *types.Transa
 		return errors.New("could not fetch parent")
 	}
 	// Check transaction validity
-	signer := types.MakeSigner(b.blockchain.Config(), block.Number(), block.Time())
+	signer := types.MakeSigner(b.Blockchain.Config(), block.Number(), block.Time())
 	sender, err := types.Sender(signer, tx)
 	if err != nil {
 		return fmt.Errorf("invalid transaction: %v", err)
@@ -718,13 +720,13 @@ func (b *SimulatedBackend) SendTransaction(ctx context.Context, tx *types.Transa
 		return fmt.Errorf("invalid transaction nonce: got %d, want %d", tx.Nonce(), nonce)
 	}
 	// Include tx in chain
-	blocks, receipts := core.GenerateChain(b.config, block, ethash.NewFaker(), b.database, 1, func(number int, block *core.BlockGen) {
+	blocks, receipts := core.GenerateChain(b.config, block, ethash.NewFaker(), b.Database, 1, func(number int, block *core.BlockGen) {
 		for _, tx := range b.pendingBlock.Transactions() {
-			block.AddTxWithChain(b.blockchain, tx)
+			block.AddTxWithChain(b.Blockchain, tx)
 		}
-		block.AddTxWithChain(b.blockchain, tx)
+		block.AddTxWithChain(b.Blockchain, tx)
 	})
-	stateDB, _ := b.blockchain.State()
+	stateDB, _ := b.Blockchain.State()
 
 	b.pendingBlock = blocks[0]
 	b.pendingState, _ = state.New(b.pendingBlock.Root(), stateDB.Database(), nil)
@@ -837,25 +839,20 @@ func (b *SimulatedBackend) AdjustTime(adjustment time.Duration) error {
 		return errors.New("Could not adjust time on non-empty block")
 	}
 	// Get the last block
-	block := b.blockchain.GetBlockByHash(b.pendingBlock.ParentHash())
+	block := b.Blockchain.GetBlockByHash(b.pendingBlock.ParentHash())
 	if block == nil {
 		return errors.New("could not find parent")
 	}
 
-	blocks, _ := core.GenerateChain(b.config, block, ethash.NewFaker(), b.database, 1, func(number int, block *core.BlockGen) {
+	blocks, _ := core.GenerateChain(b.config, block, ethash.NewFaker(), b.Database, 1, func(number int, block *core.BlockGen) {
 		block.OffsetTime(int64(adjustment.Seconds()))
 	})
-	stateDB, _ := b.blockchain.State()
+	stateDB, _ := b.Blockchain.State()
 
 	b.pendingBlock = blocks[0]
 	b.pendingState, _ = state.New(b.pendingBlock.Root(), stateDB.Database(), nil)
 
 	return nil
-}
-
-// Blockchain returns the underlying blockchain.
-func (b *SimulatedBackend) Blockchain() *core.BlockChain {
-	return b.blockchain
 }
 
 // filterBackend implements filters.Backend to support filtering for logs without
