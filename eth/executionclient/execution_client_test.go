@@ -172,7 +172,6 @@ func TestStreamLogs(t *testing.T) {
 		time.Sleep(delay)
 	}
 
-
 	wg.Wait()
 	require.NotEmpty(t, streamedLogs)
 	require.Equal(t, blocksWithLogsLength, len(streamedLogs))
@@ -274,6 +273,7 @@ func TestFetchLogsInBatches(t *testing.T) {
 		}
 	})
 
+	require.NoError(t, client.Close())
 	require.NoError(t, sim.Close())
 }
 
@@ -289,17 +289,13 @@ func TestFetchLogsInBatches(t *testing.T) {
 //  7. Mine two blocks to trigger a reorg.
 //  8. Check that the event was removed.
 
-func TestForkLogs(t *testing.T) {
+func TestChainReorganizationLogs(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-
-	const testTimeout = 10 * time.Second
+	const testTimeout = 1 * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
 
-	testAddr := crypto.PubkeyToAddress(testKey.PublicKey)
-
 	sim := simTestBackend(testAddr)
-	defer sim.Close()
 
 	rpcServer, _ := sim.Node.RPCHandler()
 	httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
@@ -324,15 +320,13 @@ func TestForkLogs(t *testing.T) {
 	isReady, err := client.IsReady(ctx)
 	require.NoError(t, err)
 	require.True(t, isReady)
-
 	// 2.
 	logs := client.StreamLogs(ctx, 0)
-
 	// 3.
 	parent := sim.Blockchain.CurrentBlock()
-
 	// 4.
 	for i := 0; i < 10; i++ {
+		// Call contract to trigger event emit
 		if i == 0 {
 			_, err := contract.Transact(auth, "Call")
 			if err != nil {
@@ -341,13 +335,11 @@ func TestForkLogs(t *testing.T) {
 		}
 		sim.Commit()
 	}
-
 	// 5.
 	log := <-logs
 	if log.Removed {
 		t.Error("Event should be included")
 	}
-
 	// 6.
 	if err := sim.Fork(context.Background(), parent.Hash()); err != nil {
 		t.Errorf("forking: %v", err)
@@ -356,7 +348,6 @@ func TestForkLogs(t *testing.T) {
 	for i := 0; i < 12; i++ {
 		sim.Commit()
 	}
-
 	// 8.
 	log = <-logs
 	if !log.Removed {
@@ -365,4 +356,6 @@ func TestForkLogs(t *testing.T) {
 	if sim.Blockchain.CurrentBlock().Number.Uint64() != uint64(13) {
 		t.Error("wrong chain length")
 	}
+	require.NoError(t, client.Close())
+	require.NoError(t, sim.Close())
 }
