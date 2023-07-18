@@ -9,7 +9,6 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/beacon/goclient"
@@ -204,7 +203,7 @@ func (h *SyncCommitteeHandler) fetchDuties(ctx context.Context, logger *zap.Logg
 	indices := h.validatorController.ActiveIndices(logger, firstEpoch)
 	duties, err := h.beaconNode.SyncCommitteeDuties(ctx, firstEpoch, indices)
 	if err != nil {
-		return errors.Wrap(err, "failed to fetch syncCommittee duties")
+		return fmt.Errorf("failed to fetch sync committee duties: %w", err)
 	}
 
 	for _, d := range duties {

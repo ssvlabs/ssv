@@ -9,7 +9,6 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
@@ -175,7 +174,7 @@ func (h *AttesterHandler) fetchDuties(ctx context.Context, logger *zap.Logger, e
 	indices := h.validatorController.ActiveIndices(logger, epoch)
 	duties, err := h.beaconNode.AttesterDuties(ctx, epoch, indices)
 	if err != nil {
-		return errors.Wrap(err, "failed to fetch attester duties")
+		return fmt.Errorf("failed to fetch attester duties: %w", err)
 	}
 
 	for _, d := range duties {
