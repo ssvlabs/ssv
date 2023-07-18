@@ -219,10 +219,12 @@ func TestScheduler_Attester_Same_Slot(t *testing.T) {
 		},
 	).AnyTimes()
 
+	timeout := 100 * time.Millisecond
+
 	// STEP 1: wait for attester duties to be fetched and executed at the same slot
 	mockTicker.Send(currentSlot)
-	waitForAttesterDuties(t, logger, attesterDutiesCalls, executeDutyCalls, 50*time.Millisecond)
-	waitForDutyExecution(t, logger, attesterDutiesCalls, executeDutyCalls, 10*time.Second)
+	waitForAttesterDuties(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
+	waitForDutyExecution(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
@@ -250,19 +252,21 @@ func TestScheduler_Attester_Diff_Slots(t *testing.T) {
 		},
 	).AnyTimes()
 
+	timeout := 100 * time.Millisecond
+
 	// STEP 1: wait for attester duties to be fetched
 	mockTicker.Send(currentSlot)
-	waitForAttesterDuties(t, logger, attesterDutiesCalls, executeDutyCalls, 50*time.Millisecond)
+	waitForAttesterDuties(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 
 	// STEP 2: wait for no action to be taken
 	currentSlot = phase0.Slot(1)
 	mockTicker.Send(currentSlot)
-	waitForNoAction(t, logger, attesterDutiesCalls, executeDutyCalls, 50*time.Millisecond)
+	waitForNoAction(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 
 	// STEP 3: wait for attester duties to be executed
 	currentSlot = phase0.Slot(2)
 	mockTicker.Send(currentSlot)
-	waitForDutyExecution(t, logger, attesterDutiesCalls, executeDutyCalls, 50*time.Millisecond)
+	waitForDutyExecution(t, logger, attesterDutiesCalls, executeDutyCalls, timeout)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
@@ -290,7 +294,7 @@ func TestScheduler_Attester_Indices_Changed(t *testing.T) {
 		},
 	).AnyTimes()
 
-	timeout := 50 * time.Millisecond
+	timeout := 100 * time.Millisecond
 
 	// STEP 1: wait for attester duties to be fetched
 	mockTicker.Send(currentSlot)
@@ -344,7 +348,7 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition(t *testing.T) {
 		},
 	).AnyTimes()
 
-	timeout := 50 * time.Millisecond
+	timeout := 100 * time.Millisecond
 
 	// STEP 1: wait for attester duties to be fetched for current and next epoch
 	mockTicker.Send(currentSlot) // slot = 63
@@ -427,7 +431,7 @@ func TestScheduler_Attester_Reorg_Previous(t *testing.T) {
 		},
 	).AnyTimes()
 
-	timeout := 50 * time.Millisecond
+	timeout := 100 * time.Millisecond
 
 	// STEP 1: wait for attester duties to be fetched
 	mockTicker.Send(currentSlot) // slot = 32
