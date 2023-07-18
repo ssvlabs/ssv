@@ -277,8 +277,7 @@ func TestFetchLogsInBatches(t *testing.T) {
 	require.NoError(t, sim.Close())
 }
 
-// TestForkLogs check that the simulated reorgs
-// correctly remove logs.
+// TestChainReorganizationLogs check that the client receives removed logs correctly.
 // Steps:
 //  1. Deploy the Callable contract.
 //  2. Set up an event subscription.
