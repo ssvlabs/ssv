@@ -61,6 +61,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context, logger *zap.Logger) 
 
 		case slot := <-h.ticker:
 			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
+			logger.Debug("🛠 ticker event", zap.Uint64("slot", uint64(slot)), zap.Uint64("epoch", uint64(currentEpoch)), zap.Uint64("estimated_slot", uint64(h.network.Beacon.EstimatedCurrentSlot())))
 
 			if h.fetchFirst {
 				h.processFetching(ctx, logger, currentEpoch)
