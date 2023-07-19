@@ -28,6 +28,7 @@ var generateOperatorKeysCmd = &cobra.Command{
 		}
 
 		// Now read the file
+		// #nosec G304
 		passwordBytes, err := os.ReadFile(absPath)
 		if err != nil {
 			log.Fatal(err)
