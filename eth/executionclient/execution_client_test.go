@@ -336,6 +336,7 @@ func TestChainReorganizationLogs(t *testing.T) {
 	}
 	// 5.
 	log := <-logs
+	require.NotEmpty(t, log)
 	if log.Removed {
 		t.Error("Event should be included")
 	}
@@ -349,6 +350,7 @@ func TestChainReorganizationLogs(t *testing.T) {
 	}
 	// 8.
 	log = <-logs
+	require.NotEmpty(t, log)
 	if !log.Removed {
 		t.Error("Event should be removed")
 	}
