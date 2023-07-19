@@ -31,8 +31,8 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 	)
 
 	var lastErr error
-	for _, runData := range test.RunInstanceData {
-		if err := runInstanceWithData(t, logger, contr, config, identifier, runData); err != nil {
+	for i, runData := range test.RunInstanceData {
+		if err := runInstanceWithData(t, logger, specqbft.Height(i), contr, config, identifier, runData); err != nil {
 			lastErr = err
 		}
 	}
@@ -64,7 +64,7 @@ func testProcessMsg(
 	config *qbft.Config,
 	runData *spectests.RunInstanceData,
 ) error {
-	decidedCnt := 0
+	decidedCnt := uint(0)
 	var lastErr error
 	for _, msg := range runData.InputMessages {
 		decided, err := contr.ProcessMsg(logger, msg)
@@ -77,7 +77,7 @@ func testProcessMsg(
 			require.EqualValues(t, runData.ExpectedDecidedState.DecidedVal, decided.FullData)
 		}
 	}
-	require.EqualValues(t, runData.ExpectedDecidedState.DecidedCnt, decidedCnt)
+	require.EqualValues(t, runData.ExpectedDecidedState.DecidedCnt, decidedCnt, lastErr)
 
 	// verify sync decided by range calls
 	if runData.ExpectedDecidedState.CalledSyncDecidedByRange {
@@ -129,8 +129,8 @@ func testBroadcastedDecided(
 	}
 }
 
-func runInstanceWithData(t *testing.T, logger *zap.Logger, contr *controller.Controller, config *qbft.Config, identifier []byte, runData *spectests.RunInstanceData) error {
-	err := contr.StartNewInstance(logger, runData.InputValue)
+func runInstanceWithData(t *testing.T, logger *zap.Logger, height specqbft.Height, contr *controller.Controller, config *qbft.Config, identifier []byte, runData *spectests.RunInstanceData) error {
+	err := contr.StartNewInstance(logger, height, runData.InputValue)
 	var lastErr error
 	if err != nil {
 		lastErr = err
