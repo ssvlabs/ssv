@@ -12,7 +12,7 @@ var Mainnet = NetworkConfig{
 	Name:                 "mainnet",
 	Beacon:               beacon.NewNetwork(spectypes.MainNetwork),
 	Domain:               spectypes.GenesisMainnet,
-	GenesisEpoch:         1,
+	GenesisEpoch:         218450,
 	ETH1SyncOffset:       new(big.Int).SetInt64(17507487),
 	RegistryContractAddr: "0xDD9BC35aE942eF0cFa76930954a156B3fF30a4E1",
 	Bootnodes: []string{
