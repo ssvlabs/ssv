@@ -114,7 +114,7 @@ The operator private key can be provided in the `config.yaml` file in two differ
      ```yaml
     OperatorPrivateKey: LS0tLS1CRUdJTiBSU0EgUFJJVkFURSBLRVktLS0tLQpNSUlFb3dJQkFBS0NBUUVBbCtQT05ocUxpMDRtMUVpMlVjV0NEbzVaRE5SNzVaamF3cTZ1elFnTkFwb0E5aUxNClJ0ZzU2SHF3d0x3NnpIYWVVZmRHMlRNQm5sL0YwQW54MWFtd2RUcGRLcEIvbDNjRnpHWXl2Z3FZaVFpaDYxalYKNU1IV1JqTG9NWjFiQUJLWmJ5OGZaYnYvRi9oQVVNditRZ3EyMWw2SDVMeUF1UEhqSDhoczJGS0RDWUxWelRhdgpXWGYremRQdGZMdExoSURTd3lvYnQrS0pJTHlabjR1Mzl0M1E2WFFSSjNWNHBXOVNHNGw4TUJVMmVSRDgvV3lRCmVrb3dQUm1CSUw0dVhQU01oR3EzQUhTdWxVYnFYZ1R4TFBnTWxUYkNvWXFvU00wYXIvME9XOWpPV3AvSGllMW4KSTRFTC9VRXhpV2dhV0kwTENYTTZ6Z0NLdzI4cE1SNDgzTnBmQVFJREFRQUJBb0lCQUZkWUdnSkUyNUFkUGZqLwpZMUM4cW1DaWZSVUNyOGpGVUs5NWNtM1hQbHdMb1pmcFJOMU1oR2hxL1crb0RvdjdmbW1XTURqQXV5S080cHNTCnpPM1lhZS9Qd3pteDVKMStSV2hZTUwvV0tnZExYb21QQ1ZsR0dtazk1d1o0L1phYUczK3pjbk8zV3ljMmpBMnEKY1NrYkxpOHlKeVZqUFFhZG1zVnhKUjUwdklQZnhUWmYxQkVSbjBUa2sybmhkWlZkWmxFS3VWN3NLY2FTRkFtWAp2eElKazFjUzZWN2xFTk1iazlITXpwbjkxYm1vK3JITEd0R1dsZHN6dXRTTHcxNXE3N3ZyZm0xZ29rdE9YUlFqCmNCU3RIZGVkdEJYUE1EYnMyS3V1WFVYR3JZeWtKZUkwb1hLNjIzU0JRcmlSa0wxQ2cydCtZdEVWd1RhWWtOakgKcmZYTWlFRUNnWUVBeFpCY1NSYzQ0amhFLzV6VDBZVERuangyVEV4c2pHL3VvY2ZPRWRSUHVKTEJuL3VTNXRhNAoxTlZMcDBSTnFGYlNxNHppbHByS1F1ZU1US0VoSlJjMWxwZ2M1MzhyT2srYkZXM1lJUlJweldzWHQxNnNOdXdLCnRlSGFNTUNrbkxpRTNWMEgva1BXOGlkZkVoRkJTTkhFWXEzZHdzMGpDL0c5SzRSWk9WRTVrUWtDZ1lFQXhORDcKdU00MUZVeUF2S29lcHJsVE9lY3YyMy93QWhESDZ4MkMxUnZPTUhaV0Rwdjd5VXZ2YlZLRXhkNmE5bUxkZ3ZsbApEWlo3TWorZTFzVUlJQXdsMUdVU1MrcDVFUzNtRll3K0pZY3lBUDN1TVRkQ0Y4cXpScGdWOEhTUFhWS0NYWXh1CjZ5UzN5WUljRlpTSHJNQmlqcTVTUjNWNUpMZVYxTytubHRnSmREa0NnWUVBd3oxYzFpYUs0cFQxS3g3Uy9aV1UKdEVYUUtxckVBeTJDeUlKcWxaZ1ppTEFQaFlqYXJpRzQyeXhHN1hCRXhuMjNDQzNjcHpVbGVXVFdjOHd3c3pUeQprbmFVNmZuMHdGVjNUNEFVUE95dGVvSEJHRWdKTE9XcjEvN3czNGtocEhkOVpqM1A3bWtnZklLSUk1VEZ6YTd2Cnd3MUx3SDExaXhKRS9rSjI0bnZ3eGZFQ2dZQUw0N0FCSnZ2UDhKSXFVNENNZzgrQ1JQUUFKNGRoS0pCYkpLbzkKbzNOZVBCZlF4QjErdUlhYkxRdjJSQTlLYVFpR20vZzl6T1JlVWJlUHM5RmMxajhHeUtCRlU4SENodXBLVFBHSQpKTldoZDdXRzVaYXBoMFl6TW9iSXd0SFNTbVN6c0FNWFUxMkMzOGhBaVh0MHRSNS9EZ3JNWkUxUUtZTDBuUkdiCnJDdE9DUUtCZ0FJL0dtd2tUcHlVNHBNWEFsRWU0UXFuZjVoS09vMXp3NHJXTTBQaGFXRnRlZzJ1aUR2ODNHYXMKbUxOMkx0NGcyb0dYZDM5RGFZazFsdG5taU1ScUJBTG5JdUhSMjFiR1pMQ3RCWUtUMllNRDRBUlRyd0I4bzJiSQpMQlFwN3FLRC9BVzZhbkVYT1hLbE9zT01vZG5QZjUyS3o2STZMMXpyVmhlVWlXc2NBancxCi0tLS0tRU5EIFJTQSBQUklWQVRFIEtFWS0tLS0tCg==
     ```
-   This private key can be generated using the CLI command ./bin/ssvnode generate-operator-keys. However,
+   This private key can be generated using the CLI command `./bin/ssvnode generate-operator-keys`. However,
    this method merely encodes the private key, it doesn't provide additional encryption.
    For a more secure approach, it's recommended to use an encrypted keystore file with a password.
 
@@ -125,9 +125,9 @@ The operator private key can be provided in the `config.yaml` file in two differ
      PasswordFile: /path/to/your/file
     ```
    In this approach, the private key is not only encoded but also encrypted, adding an extra layer of security.
-   To generate the encrypted keystore file, run the ./bin/ssvnode generate-operator-keys command with the --password-file=**** flag.
+   To generate the encrypted keystore file, run the `./bin/ssvnode generate-operator-keys` command with the `--password-file=****` flag.
    Replace <path/to/your/file> with your desired output file path for the encrypted keystore and the corresponding password file.
-   This command will generate an encrypted keystore file that can be used securely in the config.yaml file.
+   This command will generate an encrypted keystore file that can be used securely in the `config.yaml` file.
    It's a more secure approach because the private key is not only encoded but also encrypted, adding an extra layer of security.
 
 ## Running a Local Network of Operators

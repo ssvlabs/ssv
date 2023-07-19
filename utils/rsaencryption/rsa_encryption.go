@@ -13,10 +13,10 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
-	"github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
 	"strings"
 
 	"github.com/pkg/errors"
+	"github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
 )
 
 var keySize = 2048
@@ -64,7 +64,7 @@ func DecodeKey(sk *rsa.PrivateKey, hash []byte) ([]byte, error) {
 func ConvertPemToPrivateKey(skPem string) (*rsa.PrivateKey, error) {
 	block, _ := pem.Decode([]byte(skPem))
 	if block == nil {
-		return nil, errors.New("Failed to decode PEM block")
+		return nil, errors.New("decode PEM block")
 	}
 	b := block.Bytes
 	return parsePrivateKey(b)
@@ -79,7 +79,7 @@ func ConvertEncryptedPemToPrivateKey(pemData []byte, password string) (*rsa.Priv
 	// Unmarshal the JSON-encoded data
 	var data map[string]interface{}
 	if err := json.Unmarshal(pemData, &data); err != nil {
-		return nil, errors.Wrap(err, "Failed to parse JSON data")
+		return nil, fmt.Errorf("parse JSON data: %w", err)
 	}
 
 	// Decrypt the private key using keystorev4
