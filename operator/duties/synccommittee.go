@@ -11,7 +11,6 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/beacon/goclient"
 	"github.com/bloxapp/ssv/logging/fields"
 )
 
@@ -86,8 +85,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context, logger *zap.Log
 
 	h.fetchCurrentPeriod = true
 	currentSlot := h.network.Beacon.EstimatedCurrentSlot()
-	currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(currentSlot)
-	if h.shouldFetchNextPeriod(currentSlot, currentEpoch) {
+	if h.shouldFetchNextPeriod(currentSlot) {
 		h.fetchNextPeriod = true
 	}
 	h.fetchFirst = true
@@ -100,9 +98,11 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context, logger *zap.Log
 		case slot := <-h.ticker:
 			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+			buildStr := fmt.Sprintf("p%v-%v-s%v-#%v", period, epoch, slot, slot%32+1)
+			logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_seq", buildStr))
 
 			if h.fetchFirst {
-				h.processFetching(ctx, logger, period)
+				h.processFetching(ctx, logger, period, slot)
 				h.fetchFirst = false
 				h.processExecution(logger, period, slot)
 			} else {
@@ -111,14 +111,15 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context, logger *zap.Log
 					h.duties.Reset(period)
 					h.indicesChanged = false
 				}
-				h.processFetching(ctx, logger, period)
+				h.processFetching(ctx, logger, period, slot)
 			}
 
 			// Get next period's sync committee duties, but wait until half-way through the epoch
 			// This allows us to set them up at a time when the beacon node should be less busy.
+			epochsPerPeriod := h.network.Beacon.EpochsPerSyncCommitteePeriod()
 			if uint64(slot)%h.network.Beacon.SlotsPerEpoch() == h.network.Beacon.SlotsPerEpoch()/2-2 &&
 				// Update the next period if we close to an EPOCHS_PER_SYNC_COMMITTEE_PERIOD boundary.
-				uint64(epoch)%goclient.EpochsPerSyncCommitteePeriod == goclient.EpochsPerSyncCommitteePeriod-syncCommitteePreparationEpochs {
+				uint64(epoch)%epochsPerPeriod == epochsPerPeriod-syncCommitteePreparationEpochs {
 				h.fetchNextPeriod = true
 			}
 
@@ -135,7 +136,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context, logger *zap.Log
 			logger.Info("🔀 reorg event received", zap.String("period_epoch_slot_seq", buildStr), zap.Any("event", reorgEvent))
 
 			// reset current epoch duties
-			if reorgEvent.Current && h.shouldFetchNextPeriod(reorgEvent.Slot, epoch) {
+			if reorgEvent.Current && h.shouldFetchNextPeriod(reorgEvent.Slot) {
 				h.duties.Reset(period + 1)
 				h.fetchNextPeriod = true
 			}
@@ -151,7 +152,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context, logger *zap.Log
 			h.fetchCurrentPeriod = true
 
 			// reset next period duties if in appropriate slot range
-			if h.shouldFetchNextPeriod(slot, epoch) {
+			if h.shouldFetchNextPeriod(slot) {
 				h.duties.Reset(period + 1)
 				h.fetchNextPeriod = true
 			}
@@ -159,7 +160,10 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context, logger *zap.Log
 	}
 }
 
-func (h *SyncCommitteeHandler) processFetching(ctx context.Context, logger *zap.Logger, period uint64) {
+func (h *SyncCommitteeHandler) processFetching(ctx context.Context, logger *zap.Logger, period uint64, slot phase0.Slot) {
+	ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
+	defer cancel()
+
 	if h.fetchCurrentPeriod {
 		if err := h.fetchDuties(ctx, logger, period); err != nil {
 			logger.Error("failed to fetch duties for current epoch", zap.Error(err))
@@ -210,7 +214,7 @@ func (h *SyncCommitteeHandler) fetchDuties(ctx context.Context, logger *zap.Logg
 		h.duties.Add(period, d)
 	}
 
-	h.prepareDutiesResultLog(logger, period, firstEpoch, lastEpoch, duties, start)
+	h.prepareDutiesResultLog(logger, period, duties, start)
 
 	// lastEpoch + 1 due to the fact that we need to subscribe "until" the end of the period
 	syncCommitteeSubscriptions := calculateSubscriptions(lastEpoch+1, duties)
@@ -223,18 +227,18 @@ func (h *SyncCommitteeHandler) fetchDuties(ctx context.Context, logger *zap.Logg
 	return nil
 }
 
-func (h *SyncCommitteeHandler) prepareDutiesResultLog(logger *zap.Logger, period uint64, firstEpoch, lastEpoch phase0.Epoch, duties []*eth2apiv1.SyncCommitteeDuty, start time.Time) {
+func (h *SyncCommitteeHandler) prepareDutiesResultLog(logger *zap.Logger, period uint64, duties []*eth2apiv1.SyncCommitteeDuty, start time.Time) {
 	var b strings.Builder
 	for i, duty := range duties {
 		if i > 0 {
 			b.WriteString(", ")
 		}
-		tmp := fmt.Sprintf("%v-p%v-e%v-e%v-v%v", h.Name(), period, firstEpoch, lastEpoch, duty.ValidatorIndex)
+		tmp := fmt.Sprintf("%v-p%v-v%v", h.Name(), period, duty.ValidatorIndex)
 		b.WriteString(tmp)
 	}
 	logger.Debug("👥 got duties",
 		zap.Int("count", len(duties)),
-		zap.String("period", fmt.Sprintf("p%v-e%v-e%v", period, firstEpoch, lastEpoch)),
+		zap.String("period", fmt.Sprintf("p%v", period)),
 		zap.Any("duties", b.String()),
 		fields.Duration(start))
 }
@@ -271,7 +275,9 @@ func calculateSubscriptions(endEpoch phase0.Epoch, duties []*eth2apiv1.SyncCommi
 	return subscriptions
 }
 
-func (h *SyncCommitteeHandler) shouldFetchNextPeriod(slot phase0.Slot, epoch phase0.Epoch) bool {
+func (h *SyncCommitteeHandler) shouldFetchNextPeriod(slot phase0.Slot) bool {
+	epochsPerPeriod := h.network.Beacon.EpochsPerSyncCommitteePeriod()
+	epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 	return uint64(slot)%h.network.SlotsPerEpoch() >= h.network.SlotsPerEpoch()/2-1 &&
-		uint64(epoch)%goclient.EpochsPerSyncCommitteePeriod >= goclient.EpochsPerSyncCommitteePeriod-syncCommitteePreparationEpochs
+		uint64(epoch)%epochsPerPeriod >= epochsPerPeriod-syncCommitteePreparationEpochs
 }

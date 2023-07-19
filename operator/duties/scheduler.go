@@ -23,6 +23,10 @@ import (
 
 //go:generate mockgen -package=mocks -destination=./mocks/scheduler.go -source=./scheduler.go
 
+// blockPropagateDelay time to propagate around the nodes
+// before kicking off duties for the block's slot.
+var blockPropagateDelay = 200 * time.Millisecond
+
 type SlotTicker interface {
 	Subscribe(subscription chan phase0.Slot) event.Subscription
 }
@@ -34,6 +38,12 @@ type BeaconNode interface {
 	Events(ctx context.Context, topics []string, handler eth2client.EventHandlerFunc) error
 	SubscribeToCommitteeSubnet(subscription []*eth2apiv1.BeaconCommitteeSubscription) error
 	SubmitSyncCommitteeSubscriptions(subscription []*eth2apiv1.SyncCommitteeSubscription) error
+}
+
+// ValidatorController represents the component that controls validators via the scheduler
+type ValidatorController interface {
+	ActiveIndices(logger *zap.Logger, epoch phase0.Epoch) []phase0.ValidatorIndex
+	GetOperatorShares() []*types.SSVShare
 }
 
 type ExecuteDutyFunc func(logger *zap.Logger, duty *spectypes.Duty)
@@ -56,24 +66,18 @@ type Scheduler struct {
 	slotTicker          SlotTicker
 	executeDuty         ExecuteDutyFunc
 
-	handlers []dutyHandler
+	handlers            []dutyHandler
+	blockPropagateDelay time.Duration
 
 	reorg      chan ReorgEvent
 	indicesChg chan bool
-
-	waitMutex sync.Mutex
-	waitCond  *sync.Cond
+	ticker     chan phase0.Slot
+	waitCond   *sync.Cond
 
 	lastBlockEpoch            phase0.Epoch
 	currentDutyDependentRoot  phase0.Root
 	previousDutyDependentRoot phase0.Root
 	builderProposals          bool
-}
-
-// ValidatorController represents the component that controls validators via the scheduler
-type ValidatorController interface {
-	ActiveIndices(logger *zap.Logger, epoch phase0.Epoch) []phase0.ValidatorIndex
-	GetOperatorShares() []*types.SSVShare
 }
 
 func NewScheduler(opts *SchedulerOptions) *Scheduler {
@@ -85,6 +89,8 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 		validatorController: opts.ValidatorController,
 		builderProposals:    opts.BuilderProposals,
 		indicesChg:          opts.IndicesChg,
+		blockPropagateDelay: blockPropagateDelay,
+		ticker:              make(chan phase0.Slot),
 	}
 	s.handlers = []dutyHandler{
 		NewAttesterHandler(),
@@ -110,7 +116,7 @@ func (s *Scheduler) Run(ctx context.Context, logger *zap.Logger, ready chan<- st
 	// Initialize the reorg channel
 	s.reorg = make(chan ReorgEvent)
 
-	s.waitCond = sync.NewCond(&s.waitMutex)
+	s.waitCond = sync.NewCond(&sync.Mutex{})
 
 	// Subscribe to head events.  This allows us to go early for attestations if a block arrives, as well as
 	// re-request duties if there is a change in beacon block.
@@ -123,7 +129,7 @@ func (s *Scheduler) Run(ctx context.Context, logger *zap.Logger, ready chan<- st
 	var indicesChangeChs []chan<- bool
 	for _, handler := range s.handlers {
 		h := handler
-		slotTicker := make(chan phase0.Slot, 32)
+		slotTicker := make(chan phase0.Slot)
 		s.slotTicker.Subscribe(slotTicker)
 
 		indicesChangeCh := make(chan bool)
@@ -137,6 +143,9 @@ func (s *Scheduler) Run(ctx context.Context, logger *zap.Logger, ready chan<- st
 			return nil
 		})
 	}
+
+	s.slotTicker.Subscribe(s.ticker)
+	go s.SlotTicker(ctx, logger)
 
 	go fanOut(ctx, s.indicesChg, indicesChangeChs)
 	go fanOut(ctx, s.reorg, reorgChs)
@@ -160,6 +169,33 @@ func fanOut[T any](ctx context.Context, in <-chan T, subscribers []chan<- T) {
 				case s <- item:
 				case <-ctx.Done():
 				}
+			}
+		}
+	}
+}
+
+// SlotTicker handles the "head" events from the beacon node.
+func (s *Scheduler) SlotTicker(ctx context.Context, logger *zap.Logger) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case slot := <-s.ticker:
+
+			logger.Debug("slot ticker", zap.Uint64("slot", uint64(slot)))
+
+			delay := s.network.SlotDurationSec() / 3 /* a third of the slot duration */
+			finalTime := s.network.Beacon.GetSlotStartTime(slot).Add(delay)
+			waitDuration := time.Until(finalTime)
+
+			if waitDuration > 0 {
+				time.Sleep(waitDuration)
+
+				// Lock the mutex before broadcasting
+				s.waitCond.L.Lock()
+				s.waitCond.Broadcast()
+				s.waitCond.L.Unlock()
+
 			}
 		}
 	}
@@ -237,9 +273,14 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.Ev
 		slotStartTimeWithDelay := s.network.Beacon.GetSlotStartTime(data.Slot).Add(delay)
 		if currentTime.Before(slotStartTimeWithDelay) {
 			logger.Debug("🏁 Head event: Block arrived before 1/3 slot", zap.Duration("time_saved", slotStartTimeWithDelay.Sub(currentTime)))
-			s.waitMutex.Lock()
+
+			// We give the block some time to propagate around the rest of the
+			// nodes before kicking off duties for the block's slot.
+			time.Sleep(s.blockPropagateDelay)
+
+			s.waitCond.L.Lock()
 			s.waitCond.Broadcast()
-			s.waitMutex.Unlock()
+			s.waitCond.L.Unlock()
 		}
 	}
 }
@@ -272,27 +313,29 @@ func (s *Scheduler) loggerWithDutyContext(logger *zap.Logger, duty *spectypes.Du
 
 // waitOneThirdOrValidBlock waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)
 func (s *Scheduler) waitOneThirdOrValidBlock(slot phase0.Slot) {
-	s.waitMutex.Lock()
-	defer s.waitMutex.Unlock()
+	//s.waitMutex.Lock()
+	//defer s.waitMutex.Unlock()
 
-	delay := s.network.SlotDurationSec() / 3 /* a third of the slot duration */
-	finalTime := s.network.Beacon.GetSlotStartTime(slot).Add(delay)
-	waitDuration := time.Until(finalTime)
-
-	if waitDuration <= 0 {
-		return
-	}
-
-	go func() {
-		// Sleep for the specified duration
-		time.Sleep(waitDuration)
-
-		// Lock the mutex before broadcasting
-		s.waitMutex.Lock()
-		s.waitCond.Broadcast()
-		s.waitMutex.Unlock()
-	}()
+	//delay := s.network.SlotDurationSec() / 3 /* a third of the slot duration */
+	//finalTime := s.network.Beacon.GetSlotStartTime(slot).Add(delay)
+	//waitDuration := time.Until(finalTime)
+	//
+	//if waitDuration <= 0 {
+	//	return
+	//}
+	//
+	//go func() {
+	//	// Sleep for the specified duration
+	//	time.Sleep(waitDuration)
+	//
+	//	// Lock the mutex before broadcasting
+	//	s.waitMutex.Lock()
+	//	s.waitCond.Broadcast()
+	//	s.waitMutex.Unlock()
+	//}()
 
 	// Wait for the event or signal
+	s.waitCond.L.Lock()
 	s.waitCond.Wait()
+	s.waitCond.L.Unlock()
 }

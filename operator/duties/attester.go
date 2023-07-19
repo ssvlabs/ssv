@@ -74,9 +74,11 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context, logger *zap.Logger) 
 
 		case slot := <-h.ticker:
 			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
+			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
+			logger.Debug("🛠 ticker event", zap.String("epoch_slot_seq", buildStr))
 
 			if h.fetchFirst {
-				h.processFetching(ctx, logger, currentEpoch)
+				h.processFetching(ctx, logger, currentEpoch, slot)
 				h.fetchFirst = false
 				h.processExecution(logger, currentEpoch, slot)
 			} else {
@@ -85,7 +87,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context, logger *zap.Logger) 
 					h.duties.Reset(currentEpoch)
 					h.indicesChanged = false
 				}
-				h.processFetching(ctx, logger, currentEpoch)
+				h.processFetching(ctx, logger, currentEpoch, slot)
 			}
 
 			// Get next epoch's attester duties, but wait until half-way through the epoch
@@ -135,7 +137,10 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context, logger *zap.Logger) 
 	}
 }
 
-func (h *AttesterHandler) processFetching(ctx context.Context, logger *zap.Logger, epoch phase0.Epoch) {
+func (h *AttesterHandler) processFetching(ctx context.Context, logger *zap.Logger, epoch phase0.Epoch, slot phase0.Slot) {
+	ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
+	defer cancel()
+
 	if h.fetchCurrentEpoch {
 		if err := h.fetchDuties(ctx, logger, epoch); err != nil {
 			logger.Error("failed to fetch duties for current epoch", zap.Error(err))
@@ -200,7 +205,7 @@ func (h *AttesterHandler) prepareDutiesResultLog(logger *zap.Logger, epoch phase
 		if i > 0 {
 			b.WriteString(", ")
 		}
-		tmp := fmt.Sprintf("%v-e%v-s%v-v%v", h.Name(), epoch, duty.Slot, duty.ValidatorIndex)
+		tmp := fmt.Sprintf("%v-e%v-s%v-v%v-#%v", h.Name(), epoch, duty.Slot, duty.ValidatorIndex, uint64(duty.Slot)%h.network.Beacon.SlotsPerEpoch()+1)
 		b.WriteString(tmp)
 	}
 	logger.Debug("🗂 got duties",

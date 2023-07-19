@@ -61,10 +61,11 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context, logger *zap.Logger) 
 
 		case slot := <-h.ticker:
 			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
-			logger.Debug("🛠 ticker event", zap.Uint64("slot", uint64(slot)), zap.Uint64("epoch", uint64(currentEpoch)), zap.Uint64("estimated_slot", uint64(h.network.Beacon.EstimatedCurrentSlot())))
+			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
+			logger.Debug("🛠 ticker event", zap.String("epoch_slot_seq", buildStr))
 
 			if h.fetchFirst {
-				h.processFetching(ctx, logger, currentEpoch)
+				h.processFetching(ctx, logger, currentEpoch, slot)
 				h.fetchFirst = false
 				h.processExecution(logger, currentEpoch, slot)
 			} else {
@@ -72,7 +73,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context, logger *zap.Logger) 
 				if h.indicesChanged {
 					h.duties.Reset(currentEpoch)
 					h.indicesChanged = false
-					h.processFetching(ctx, logger, currentEpoch)
+					h.processFetching(ctx, logger, currentEpoch, slot)
 				}
 			}
 
@@ -104,7 +105,10 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context, logger *zap.Logger) 
 	}
 }
 
-func (h *ProposerHandler) processFetching(ctx context.Context, logger *zap.Logger, epoch phase0.Epoch) {
+func (h *ProposerHandler) processFetching(ctx context.Context, logger *zap.Logger, epoch phase0.Epoch, slot phase0.Slot) {
+	ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
+	defer cancel()
+
 	if err := h.fetchDuties(ctx, logger, epoch); err != nil {
 		logger.Error("failed to fetch duties for current epoch", zap.Error(err))
 		return

@@ -51,6 +51,20 @@ func (mr *MockNetworkInfoMockRecorder) EpochStartTime(epoch interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EpochStartTime", reflect.TypeOf((*MockNetworkInfo)(nil).EpochStartTime), epoch)
 }
 
+// EpochsPerSyncCommitteePeriod mocks base method.
+func (m *MockNetworkInfo) EpochsPerSyncCommitteePeriod() uint64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EpochsPerSyncCommitteePeriod")
+	ret0, _ := ret[0].(uint64)
+	return ret0
+}
+
+// EpochsPerSyncCommitteePeriod indicates an expected call of EpochsPerSyncCommitteePeriod.
+func (mr *MockNetworkInfoMockRecorder) EpochsPerSyncCommitteePeriod() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EpochsPerSyncCommitteePeriod", reflect.TypeOf((*MockNetworkInfo)(nil).EpochsPerSyncCommitteePeriod))
+}
+
 // EstimatedCurrentEpoch mocks base method.
 func (m *MockNetworkInfo) EstimatedCurrentEpoch() phase0.Epoch {
 	m.ctrl.T.Helper()
