@@ -19,6 +19,7 @@ import (
 	"go.uber.org/zap/zaptest"
 
 	"github.com/bloxapp/ssv/eth/simulator"
+	simcontract "github.com/bloxapp/ssv/eth/simulator/contract"
 )
 
 var (
@@ -357,6 +358,81 @@ func TestChainReorganizationLogs(t *testing.T) {
 	if sim.Blockchain.CurrentBlock().Number.Uint64() != uint64(13) {
 		t.Error("wrong chain length")
 	}
+	require.NoError(t, client.Close())
+	require.NoError(t, sim.Close())
+}
+
+// TestSimFullSSV deploys the full fledged SSVNetwork contract to the simulator to generate events
+func TestSimFullSSV(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	const testTimeout = 1 * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	defer cancel()
+
+	// Create simulator instance
+	sim := simTestBackend(testAddr)
+
+	// Create JSON-RPC handler
+	rpcServer, _ := sim.Node.RPCHandler()
+	// Expose handler on a test server with ws open
+	httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
+	defer rpcServer.Stop()
+	defer httpsrv.Close()
+	addr := "ws:" + strings.TrimPrefix(httpsrv.URL, "http:")
+
+	parsed, _ := abi.JSON(strings.NewReader(simcontract.ContractMetaData.ABI))
+	auth, _ := bind.NewKeyedTransactorWithChainID(testKey, big.NewInt(1337))
+	contractAddr, _, boundContract, err := bind.DeployContract(auth, parsed, ethcommon.FromHex(simcontract.ContractMetaData.Bin), sim)
+	if err != nil {
+		t.Errorf("deploying contract: %v", err)
+	}
+	sim.Commit()
+
+	// Check contract code at the simulated blockchain
+	contractCode, err := sim.CodeAt(ctx, contractAddr, nil)
+	if err != nil {
+		t.Errorf("getting contract code: %v", err)
+	}
+	require.NotEmpty(t, contractCode)
+	
+	// Create a client and connect to the simulator
+	client := New(addr, contractAddr, WithLogger(logger))
+	client.Connect(ctx)
+
+	isReady, err := client.IsReady(ctx)
+	require.NoError(t, err)
+	require.True(t, isReady)
+	
+	// Create blocks with transactions
+	tx, err := boundContract.Transact(auth, "registerOperator", ethcommon.Hex2Bytes("0xb24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"), big.NewInt(100_000_000))
+	if err != nil {
+		t.Errorf("transacting: %v", err)
+	}
+	sim.Commit()
+	
+	receipt, err := sim.TransactionReceipt(ctx, tx.Hash())
+	if err != nil {
+		t.Errorf("get receipt: %v", err)
+	}
+	require.Equal(t, uint64(0x1), receipt.Status)
+
+	// Fetch all logs history starting from block 0
+	var fetchedLogs []ethtypes.Log
+	
+	logs, fetchErrCh, err := client.FetchHistoricalLogs(ctx, 0)
+	for log := range logs {
+		fetchedLogs = append(fetchedLogs, log)
+	}
+	require.NoError(t, err)
+	require.NotEmpty(t, fetchedLogs)
+
+	select {
+	case err := <-fetchErrCh:
+		require.NoError(t, err)
+	case <-ctx.Done():
+		require.Fail(t, "timeout")
+	}
+
 	require.NoError(t, client.Close())
 	require.NoError(t, sim.Close())
 }
