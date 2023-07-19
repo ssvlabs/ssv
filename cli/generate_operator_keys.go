@@ -6,6 +6,7 @@ import (
 	"github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
 	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
@@ -20,7 +21,17 @@ var generateOperatorKeysCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		passwordFilePath, _ := cmd.Flags().GetString("password-file")
 
-		passwordBytes, err := os.ReadFile(passwordFilePath)
+		// Resolve to absolute path
+		absPath, err := filepath.Abs(passwordFilePath)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		// Now read the file
+		passwordBytes, err := os.ReadFile(absPath)
+		if err != nil {
+			log.Fatal(err)
+		}
 		if err != nil {
 			log.Fatal(err)
 		}
