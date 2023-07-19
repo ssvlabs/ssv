@@ -1,4 +1,4 @@
-# Attester message validation
+# Sync committee message validation
 
 ## Semantic assertions
 
