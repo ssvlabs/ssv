@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec"
@@ -45,6 +46,7 @@ const (
 	FieldCurrentSlot         = "current_slot"
 	FieldDomain              = "domain"
 	FieldDuration            = "duration"
+	FieldDuties              = "duties"
 	FieldDutyID              = "duty_id"
 	FieldENR                 = "enr"
 	FieldEpoch               = "epoch"
@@ -298,6 +300,17 @@ func BuilderProposals(v bool) zap.Field {
 
 func FormatDutyID(epoch phase0.Epoch, duty *spectypes.Duty) string {
 	return fmt.Sprintf("%v-e%v-s%v-v%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
+}
+
+func Duties(epoch phase0.Epoch, duties []*spectypes.Duty) zap.Field {
+	var b strings.Builder
+	for i, duty := range duties {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteString(FormatDutyID(epoch, duty))
+	}
+	return zap.String(FieldDuties, b.String())
 }
 
 func Root(r [32]byte) zap.Field {

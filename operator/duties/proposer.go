@@ -3,7 +3,6 @@ package duties
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -23,6 +22,9 @@ type ProposerHandler struct {
 func NewProposerHandler() *ProposerHandler {
 	return &ProposerHandler{
 		duties: NewDuties[*eth2apiv1.ProposerDuty](),
+		baseHandler: baseHandler{
+			fetchFirst: true,
+		},
 	}
 }
 
@@ -51,8 +53,6 @@ func (h *ProposerHandler) Name() string {
 func (h *ProposerHandler) HandleDuties(ctx context.Context, logger *zap.Logger) {
 	logger = logger.With(zap.String("handler", h.Name()))
 	logger.Info("starting duty handler")
-
-	h.fetchFirst = true
 
 	for {
 		select {
@@ -138,28 +138,19 @@ func (h *ProposerHandler) fetchDuties(ctx context.Context, logger *zap.Logger, e
 		return fmt.Errorf("failed to fetch proposer duties: %w", err)
 	}
 
+	specDuties := make([]*spectypes.Duty, 0, len(duties))
 	for _, d := range duties {
 		h.duties.Add(epoch, d.Slot, d)
+		specDuties = append(specDuties, h.toSpecDuty(d, spectypes.BNRoleProposer))
 	}
-	h.prepareDutiesResultLog(logger, epoch, duties, start)
+
+	logger.Debug("📚 got duties",
+		fields.Count(len(duties)),
+		fields.Epoch(epoch),
+		fields.Duties(epoch, specDuties),
+		fields.Duration(start))
 
 	return nil
-}
-
-func (h *ProposerHandler) prepareDutiesResultLog(logger *zap.Logger, epoch phase0.Epoch, duties []*eth2apiv1.ProposerDuty, start time.Time) {
-	var b strings.Builder
-	for i, duty := range duties {
-		if i > 0 {
-			b.WriteString(", ")
-		}
-		tmp := fmt.Sprintf("%v-e%v-s%v-v%v", h.Name(), epoch, duty.Slot, duty.ValidatorIndex)
-		b.WriteString(tmp)
-	}
-	logger.Debug("📚 got duties",
-		zap.Int("count", len(duties)),
-		fields.Epoch(epoch),
-		zap.Any("duties", b.String()),
-		fields.Duration(start))
 }
 
 func (h *ProposerHandler) toSpecDuty(duty *eth2apiv1.ProposerDuty, role spectypes.BeaconRole) *spectypes.Duty {
@@ -173,7 +164,7 @@ func (h *ProposerHandler) toSpecDuty(duty *eth2apiv1.ProposerDuty, role spectype
 
 func (h *ProposerHandler) shouldExecute(logger *zap.Logger, duty *eth2apiv1.ProposerDuty) bool {
 	currentSlot := h.network.Beacon.EstimatedCurrentSlot()
-	// execute task if slot already began and not pass 1 epoch
+	// execute task if slot already began and not pass 1 slot
 	if currentSlot == duty.Slot {
 		return true
 	}

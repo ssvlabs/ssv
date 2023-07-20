@@ -27,9 +27,12 @@ type SyncCommitteeHandler struct {
 }
 
 func NewSyncCommitteeHandler() *SyncCommitteeHandler {
-	return &SyncCommitteeHandler{
+	h := &SyncCommitteeHandler{
 		duties: NewSyncCommitteeDuties[uint64, *eth2apiv1.SyncCommitteeDuty](),
 	}
+	h.fetchCurrentPeriod = true
+	h.fetchFirst = true
+	return h
 }
 
 func (h *SyncCommitteeHandler) Name() string {
@@ -83,12 +86,9 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context, logger *zap.Log
 	logger = logger.With(zap.String("handler", h.Name()))
 	logger.Info("starting duty handler")
 
-	h.fetchCurrentPeriod = true
-	currentSlot := h.network.Beacon.EstimatedCurrentSlot()
-	if h.shouldFetchNextPeriod(currentSlot) {
+	if h.shouldFetchNextPeriod(h.network.Beacon.EstimatedCurrentSlot()) {
 		h.fetchNextPeriod = true
 	}
-	h.fetchFirst = true
 
 	for {
 		select {
@@ -186,7 +186,7 @@ func (h *SyncCommitteeHandler) processExecution(logger *zap.Logger, period uint6
 	if duties, ok := h.duties.m[period]; ok {
 		toExecute := make([]*spectypes.Duty, 0, len(duties)*2)
 		for _, d := range duties {
-			if h.shouldExecute(logger, d) {
+			if h.shouldExecute(logger, d, slot) {
 				toExecute = append(toExecute, h.toSpecDuty(d, slot, spectypes.BNRoleSyncCommittee))
 				toExecute = append(toExecute, h.toSpecDuty(d, slot, spectypes.BNRoleSyncCommitteeContribution))
 			}
@@ -237,7 +237,7 @@ func (h *SyncCommitteeHandler) prepareDutiesResultLog(logger *zap.Logger, period
 		b.WriteString(tmp)
 	}
 	logger.Debug("👥 got duties",
-		zap.Int("count", len(duties)),
+		fields.Count(len(duties)),
 		zap.String("period", fmt.Sprintf("p%v", period)),
 		zap.Any("duties", b.String()),
 		fields.Duration(start))
@@ -257,8 +257,18 @@ func (h *SyncCommitteeHandler) toSpecDuty(duty *eth2apiv1.SyncCommitteeDuty, slo
 	}
 }
 
-func (h *SyncCommitteeHandler) shouldExecute(logger *zap.Logger, duty *eth2apiv1.SyncCommitteeDuty) bool {
-	return true
+func (h *SyncCommitteeHandler) shouldExecute(logger *zap.Logger, duty *eth2apiv1.SyncCommitteeDuty, slot phase0.Slot) bool {
+	currentSlot := h.network.Beacon.EstimatedCurrentSlot()
+	// execute task if slot already began and not pass 1 slot
+	if currentSlot == slot {
+		return true
+	}
+	if currentSlot+1 == slot {
+		logger.Debug("current slot and duty slot are not aligned, "+
+			"assuming diff caused by a time drift - ignoring and executing duty", zap.String("type", duty.String()))
+		return true
+	}
+	return false
 }
 
 // calculateSubscriptions calculates the sync committee subscriptions given a set of duties.

@@ -3,7 +3,6 @@ package duties
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -91,14 +90,16 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context, logger *zap.Logger) 
 				h.processFetching(ctx, logger, currentEpoch, slot)
 			}
 
+			slotsPerEpoch := h.network.Beacon.SlotsPerEpoch()
+
 			// Get next epoch's attester duties, but wait until half-way through the epoch
 			// This allows us to set them up at a time when the beacon node should be less busy.
-			if uint64(slot)%h.network.Beacon.SlotsPerEpoch() == h.network.Beacon.SlotsPerEpoch()/2-2 {
+			if uint64(slot)%slotsPerEpoch == slotsPerEpoch/2-2 {
 				h.fetchNextEpoch = true
 			}
 
 			// last slot of epoch
-			if uint64(slot)%h.network.Beacon.SlotsPerEpoch() == h.network.Beacon.SlotsPerEpoch()-1 {
+			if uint64(slot)%slotsPerEpoch == slotsPerEpoch-1 {
 				h.duties.Reset(currentEpoch)
 			}
 
@@ -184,11 +185,17 @@ func (h *AttesterHandler) fetchDuties(ctx context.Context, logger *zap.Logger, e
 		return fmt.Errorf("failed to fetch attester duties: %w", err)
 	}
 
+	specDuties := make([]*spectypes.Duty, 0, len(duties))
 	for _, d := range duties {
 		h.duties.Add(epoch, d.Slot, d)
+		specDuties = append(specDuties, h.toSpecDuty(d, spectypes.BNRoleAttester))
 	}
 
-	h.prepareDutiesResultLog(logger, epoch, duties, start)
+	logger.Debug("🗂 got duties",
+		fields.Count(len(duties)),
+		fields.Epoch(epoch),
+		fields.Duties(epoch, specDuties),
+		fields.Duration(start))
 
 	// calculate subscriptions
 	subscriptions := calculateSubscriptionInfo(duties)
@@ -199,22 +206,6 @@ func (h *AttesterHandler) fetchDuties(ctx context.Context, logger *zap.Logger, e
 	}
 
 	return nil
-}
-
-func (h *AttesterHandler) prepareDutiesResultLog(logger *zap.Logger, epoch phase0.Epoch, duties []*eth2apiv1.AttesterDuty, start time.Time) {
-	var b strings.Builder
-	for i, duty := range duties {
-		if i > 0 {
-			b.WriteString(", ")
-		}
-		tmp := fmt.Sprintf("%v-e%v-s%v-v%v-#%v", h.Name(), epoch, duty.Slot, duty.ValidatorIndex, uint64(duty.Slot)%h.network.Beacon.SlotsPerEpoch()+1)
-		b.WriteString(tmp)
-	}
-	logger.Debug("🗂 got duties",
-		zap.Int("count", len(duties)),
-		fields.Epoch(epoch),
-		zap.Any("duties", b.String()),
-		fields.Duration(start))
 }
 
 func (h *AttesterHandler) toSpecDuty(duty *eth2apiv1.AttesterDuty, role spectypes.BeaconRole) *spectypes.Duty {
