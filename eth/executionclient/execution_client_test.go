@@ -405,9 +405,10 @@ func TestSimSSV(t *testing.T) {
 
 	logs := client.StreamLogs(ctx, 0)
 
-	// Emit event OperatorAdded
 	boundContract, err := simcontract.NewSimcontract(contractAddr, sim)
 	require.NoError(t, err)
+	
+	// Emit event OperatorAdded
 	tx, err := boundContract.SimcontractTransactor.RegisterOperator(auth, ethcommon.Hex2Bytes("0xb24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"), big.NewInt(100_000_000))
 	require.NoError(t, err)
 	sim.Commit()
