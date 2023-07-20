@@ -19,7 +19,7 @@ import (
 	"go.uber.org/zap/zaptest"
 
 	"github.com/bloxapp/ssv/eth/simulator"
-	simcontract "github.com/bloxapp/ssv/eth/simulator/contract"
+	"github.com/bloxapp/ssv/eth/simulator/simcontract"
 )
 
 var (
@@ -362,8 +362,8 @@ func TestChainReorganizationLogs(t *testing.T) {
 	require.NoError(t, sim.Close())
 }
 
-// TestSimFullSSV deploys the full fledged SSVNetwork contract to the simulator to generate events
-func TestSimFullSSV(t *testing.T) {
+// TestSimSSV deploys the simplified SSVNetwork contract to generate events and receive at the client
+func TestSimSSV(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	const testTimeout = 1 * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
@@ -380,9 +380,9 @@ func TestSimFullSSV(t *testing.T) {
 	defer httpsrv.Close()
 	addr := "ws:" + strings.TrimPrefix(httpsrv.URL, "http:")
 
-	parsed, _ := abi.JSON(strings.NewReader(simcontract.ContractMetaData.ABI))
+	parsed, _ := abi.JSON(strings.NewReader(simcontract.SimcontractMetaData.ABI))
 	auth, _ := bind.NewKeyedTransactorWithChainID(testKey, big.NewInt(1337))
-	contractAddr, _, boundContract, err := bind.DeployContract(auth, parsed, ethcommon.FromHex(simcontract.ContractMetaData.Bin), sim)
+	contractAddr, _, _, err := bind.DeployContract(auth, parsed, ethcommon.FromHex(simcontract.SimcontractMetaData.Bin), sim)
 	if err != nil {
 		t.Errorf("deploying contract: %v", err)
 	}
@@ -394,44 +394,146 @@ func TestSimFullSSV(t *testing.T) {
 		t.Errorf("getting contract code: %v", err)
 	}
 	require.NotEmpty(t, contractCode)
-	
+
 	// Create a client and connect to the simulator
-	client := New(addr, contractAddr, WithLogger(logger))
+	client := New(addr, contractAddr, WithLogger(logger), WithFinalizationOffset(0))
 	client.Connect(ctx)
 
 	isReady, err := client.IsReady(ctx)
 	require.NoError(t, err)
 	require.True(t, isReady)
-	
-	// Create blocks with transactions
-	tx, err := boundContract.Transact(auth, "registerOperator", ethcommon.Hex2Bytes("0xb24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"), big.NewInt(100_000_000))
-	if err != nil {
-		t.Errorf("transacting: %v", err)
-	}
+
+	logs := client.StreamLogs(ctx, 0)
+
+	// Emit event OperatorAdded
+	boundContract, err := simcontract.NewSimcontract(contractAddr, sim)
+	require.NoError(t, err)
+	tx, err := boundContract.SimcontractTransactor.RegisterOperator(auth, ethcommon.Hex2Bytes("0xb24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"), big.NewInt(100_000_000))
+	require.NoError(t, err)
 	sim.Commit()
-	
 	receipt, err := sim.TransactionReceipt(ctx, tx.Hash())
 	if err != nil {
 		t.Errorf("get receipt: %v", err)
 	}
 	require.Equal(t, uint64(0x1), receipt.Status)
+	log := <-logs
+	require.Equal(t, ethcommon.HexToHash("0xd839f31c14bd632f424e307b36abff63ca33684f77f28e35dc13718ef338f7f4"), log.Topics[0])
 
-	// Fetch all logs history starting from block 0
-	var fetchedLogs []ethtypes.Log
-	
-	logs, fetchErrCh, err := client.FetchHistoricalLogs(ctx, 0)
-	for log := range logs {
-		fetchedLogs = append(fetchedLogs, log)
-	}
+	// Emit event OperatorRemoved
+	tx, err = boundContract.SimcontractTransactor.RemoveOperator(auth, 1)
 	require.NoError(t, err)
-	require.NotEmpty(t, fetchedLogs)
-
-	select {
-	case err := <-fetchErrCh:
-		require.NoError(t, err)
-	case <-ctx.Done():
-		require.Fail(t, "timeout")
+	sim.Commit()
+	receipt, err = sim.TransactionReceipt(ctx, tx.Hash())
+	if err != nil {
+		t.Errorf("get receipt: %v", err)
 	}
+	require.Equal(t, uint64(0x1), receipt.Status)
+	log = <-logs
+	require.Equal(t, ethcommon.HexToHash("0x0e0ba6c2b04de36d6d509ec5bd155c43a9fe862f8052096dd54f3902a74cca3e"), log.Topics[0])
+
+	// Emit event ValidatorAdded
+	tx, err = boundContract.SimcontractTransactor.RegisterValidator(
+		auth, ethcommon.Hex2Bytes("0x1"),
+		[]uint64{1, 2, 3},
+		ethcommon.Hex2Bytes("0x2"),
+		big.NewInt(100_000_000),
+		simcontract.CallableCluster{
+			ValidatorCount:  3,
+			NetworkFeeIndex: 1,
+			Index:           1,
+			Active:          true,
+			Balance:         big.NewInt(100_000_000),
+		})
+	require.NoError(t, err)
+	sim.Commit()
+	receipt, err = sim.TransactionReceipt(ctx, tx.Hash())
+	if err != nil {
+		t.Errorf("get receipt: %v", err)
+	}
+	require.Equal(t, uint64(0x1), receipt.Status)
+	log = <-logs
+	require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), log.Topics[0])
+
+	// Emit event ValidatorRemoved
+	tx, err = boundContract.SimcontractTransactor.RemoveValidator(
+		auth,
+		ethcommon.Hex2Bytes("0x1"),
+		[]uint64{1, 2, 3},
+		simcontract.CallableCluster{
+			ValidatorCount:  3,
+			NetworkFeeIndex: 1,
+			Index:           1,
+			Active:          true,
+			Balance:         big.NewInt(100_000_000),
+		})
+	require.NoError(t, err)
+	sim.Commit()
+	receipt, err = sim.TransactionReceipt(ctx, tx.Hash())
+	if err != nil {
+		t.Errorf("get receipt: %v", err)
+	}
+	require.Equal(t, uint64(0x1), receipt.Status)
+	log = <-logs
+	require.Equal(t, ethcommon.HexToHash("0xccf4370403e5fbbde0cd3f13426479dcd8a5916b05db424b7a2c04978cf8ce6e"), log.Topics[0])
+
+	// Emit event ClusterLiquidated
+	tx, err = boundContract.SimcontractTransactor.Liquidate(
+		auth,
+		ethcommon.HexToAddress("0x1"),
+		[]uint64{1, 2, 3},
+		simcontract.CallableCluster{
+			ValidatorCount:  3,
+			NetworkFeeIndex: 1,
+			Index:           1,
+			Active:          true,
+			Balance:         big.NewInt(100_000_000),
+		})
+	require.NoError(t, err)
+	sim.Commit()
+	receipt, err = sim.TransactionReceipt(ctx, tx.Hash())
+	if err != nil {
+		t.Errorf("get receipt: %v", err)
+	}
+	require.Equal(t, uint64(0x1), receipt.Status)
+	log = <-logs
+	require.Equal(t, ethcommon.HexToHash("0x1fce24c373e07f89214e9187598635036111dbb363e99f4ce498488cdc66e688"), log.Topics[0])
+
+	// Emit event ClusterReactivated
+	tx, err = boundContract.SimcontractTransactor.Reactivate(
+		auth,
+		[]uint64{1, 2, 3},
+		big.NewInt(100_000_000),
+		simcontract.CallableCluster{
+			ValidatorCount:  3,
+			NetworkFeeIndex: 1,
+			Index:           1,
+			Active:          true,
+			Balance:         big.NewInt(100_000_000),
+		})
+	require.NoError(t, err)
+	sim.Commit()
+	receipt, err = sim.TransactionReceipt(ctx, tx.Hash())
+	if err != nil {
+		t.Errorf("get receipt: %v", err)
+	}
+	require.Equal(t, uint64(0x1), receipt.Status)
+	log = <-logs
+	require.Equal(t, ethcommon.HexToHash("0xc803f8c01343fcdaf32068f4c283951623ef2b3fa0c547551931356f456b6859"), log.Topics[0])
+
+	// Emit event FeeRecipientAddressUpdated
+	tx, err = boundContract.SimcontractTransactor.SetFeeRecipientAddress(
+		auth,
+		ethcommon.HexToAddress("0x1"),
+	)
+	require.NoError(t, err)
+	sim.Commit()
+	receipt, err = sim.TransactionReceipt(ctx, tx.Hash())
+	if err != nil {
+		t.Errorf("get receipt: %v", err)
+	}
+	require.Equal(t, uint64(0x1), receipt.Status)
+	log = <-logs
+	require.Equal(t, ethcommon.HexToHash("0x259235c230d57def1521657e7c7951d3b385e76193378bc87ef6b56bc2ec3548"), log.Topics[0])
 
 	require.NoError(t, client.Close())
 	require.NoError(t, sim.Close())
