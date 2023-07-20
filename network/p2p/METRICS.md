@@ -1,0 +1,30 @@
+# Message validation metrics
+
+- Received message count 
+  - by validator, slot, round, type
+- Ignored message count
+  - by validator, slot, round, type
+- Rejected message count
+  - by validator, slot, round, type
+- Unknown type message count
+  - by validator, slot, round, type
+- Wrongly signed message count
+  - by validator, slot, round, type
+- Late message count
+  - by validator, slot, round, type
+- Violation count
+  - by validator, peer, slot, round
+- Message queue size/capacity
+- Dropped queue message count
+- Time in queue  
+- Message size
+  - by validator, slot, round, type
+- Message processing time
+  - by validator, slot, round, type, stage
+- Message arrival rate
+- Message processing rate
+- Queue fill rate
+- Queue consumption rate
+- Margin of message-per-slot/round violations
+  - by committee size
+- 
