@@ -158,11 +158,10 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 	if err := n.dutyScheduler.Start(n.context, logger); err != nil {
 		return fmt.Errorf("failed to run duty scheduler: %w", err)
 	}
-	go func() {
-		if err := n.dutyScheduler.Wait(); err != nil {
-			logger.Fatal("duty scheduler exited with error", zap.Error(err))
-		}
-	}()
+
+	if err := n.dutyScheduler.Wait(); err != nil {
+		logger.Fatal("duty scheduler exited with error", zap.Error(err))
+	}
 
 	return nil
 }
