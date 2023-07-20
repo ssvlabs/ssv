@@ -1,0 +1,40 @@
+# Message validation unit tests
+
+- MessageCounts is initialized correctly and is reset each round/slot
+- MessageCounts is incremented correctly
+- MessageCountsExceeds works correctly
+  - Test when exceeded
+  - Test when not exceeded
+- SignerState is initialized correctly and is reset each round/slot
+- knownValidator works correctly
+- validRole works correctly
+- validSigners works correctly
+- MessageCountsRecord increments all counters correctly
+  - Test each message type
+- lateMessage works correctly
+  - Test each role
+  - Test message on time
+  - Test early message
+  - Test late message
+  - Test lateMessageMargin
+  - Test clockErrorTolerance
+- earlyMessage works correctly
+  - Test message on time
+  - Test early message
+  - Test late message
+  - Test clockErrorTolerance
+- consensusState works correctly for existing and non-existing ID
+- ValidateMessage
+  - Unknown validator
+  - role is invalid
+  - message is malformed
+  - signers are invalid
+  - message is early
+  - message is late
+  - signer behavior is bad
+- validateSignerBehavior
+  - signer has already advanced to a later slot
+  - signer has already advanced to a later round
+  - message's round is not sensible according to the roundTimeout and the slot
+  - message's round is sensible according to the roundTimeout and the slot
+  - message count is exceeded for a signer
