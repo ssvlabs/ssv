@@ -218,15 +218,15 @@ func TestScheduler_SyncCommittee_Indices_Changed(t *testing.T) {
 	// STEP 2: trigger a change in active indices
 	s.indicesChg <- true
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+
+	// STEP 3: wait for sync committee duties to be fetched again
+	currentSlot.SetSlot(phase0.Slot(256*32 - 2))
 	dutiesMap[period] = []*v1.SyncCommitteeDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 4},
 			ValidatorIndex: phase0.ValidatorIndex(2),
 		},
 	}
-
-	// STEP 3: wait for sync committee duties to be fetched again
-	currentSlot.SetSlot(phase0.Slot(256*32 - 2))
 	mockTicker.Send(currentSlot.GetSlot())
 	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
