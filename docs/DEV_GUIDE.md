@@ -69,10 +69,7 @@ $ ./bin/ssvnode create-threshold --count <number of ssv nodes> --private-key <pr
 ```
 
 #### Generating an Operator Key
-
-```bash
-$ ./bin/ssvnode generate-operator-keys
-```
+To generate an operator key, you can use the `ssvnode generate-operator-keys`.
 
 ### Config Files
 
