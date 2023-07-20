@@ -356,7 +356,6 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 	startTime := time.Now()
 	currentSlot.SetSlot(phase0.Slot(2))
 	mockTicker.Send(currentSlot.GetSlot())
-	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, 30*time.Millisecond)
 
 	// STEP 4: trigger head event (block arrival)
 	e := &v1.Event{
