@@ -53,25 +53,23 @@ func (h *baseHandler) Setup(
 	h.indicesChange = indicesChange
 }
 
-type Duties[K ~uint64, D any] struct {
-	m map[K]map[phase0.Slot][]D
+type Duties[D any] struct {
+	m map[phase0.Epoch]map[phase0.Slot][]D
 }
 
-func NewDuties[K ~uint64, D any]() *Duties[K, D] {
-	return &Duties[K, D]{
-		m: make(map[K]map[phase0.Slot][]D),
+func NewDuties[D any]() *Duties[D] {
+	return &Duties[D]{
+		m: make(map[phase0.Epoch]map[phase0.Slot][]D),
 	}
 }
 
-func (d *Duties[K, D]) Add(key K, slot phase0.Slot, duty D) {
-	if _, ok := d.m[key]; !ok {
-		d.m[key] = make(map[phase0.Slot][]D)
+func (d *Duties[D]) Add(epoch phase0.Epoch, slot phase0.Slot, duty D) {
+	if _, ok := d.m[epoch]; !ok {
+		d.m[epoch] = make(map[phase0.Slot][]D)
 	}
-	d.m[key][slot] = append(d.m[key][slot], duty)
+	d.m[epoch][slot] = append(d.m[epoch][slot], duty)
 }
 
-func (d *Duties[K, D]) Reset(key K) {
-	if _, ok := d.m[key]; ok {
-		d.m[key] = make(map[phase0.Slot][]D)
-	}
+func (d *Duties[D]) Reset(epoch phase0.Epoch) {
+	delete(d.m, epoch)
 }

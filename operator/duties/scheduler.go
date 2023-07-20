@@ -23,9 +23,11 @@ import (
 
 //go:generate mockgen -package=mocks -destination=./mocks/scheduler.go -source=./scheduler.go
 
-// blockPropagateDelay time to propagate around the nodes
-// before kicking off duties for the block's slot.
-var blockPropagateDelay = 200 * time.Millisecond
+const (
+	// blockPropagationDelay time to propagate around the nodes
+	// before kicking off duties for the block's slot.
+	blockPropagationDelay = 200 * time.Millisecond
+)
 
 type SlotTicker interface {
 	Subscribe(subscription chan phase0.Slot) event.Subscription
@@ -65,6 +67,7 @@ type Scheduler struct {
 	validatorController ValidatorController
 	slotTicker          SlotTicker
 	executeDuty         ExecuteDutyFunc
+	builderProposals    bool
 
 	handlers            []dutyHandler
 	blockPropagateDelay time.Duration
@@ -73,11 +76,12 @@ type Scheduler struct {
 	indicesChg chan bool
 	ticker     chan phase0.Slot
 	waitCond   *sync.Cond
+	pool       *pool.ContextPool
 
+	headSlot                  phase0.Slot
 	lastBlockEpoch            phase0.Epoch
 	currentDutyDependentRoot  phase0.Root
 	previousDutyDependentRoot phase0.Root
-	builderProposals          bool
 }
 
 func NewScheduler(opts *SchedulerOptions) *Scheduler {
@@ -89,13 +93,17 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 		validatorController: opts.ValidatorController,
 		builderProposals:    opts.BuilderProposals,
 		indicesChg:          opts.IndicesChg,
-		blockPropagateDelay: blockPropagateDelay,
-		ticker:              make(chan phase0.Slot),
-	}
-	s.handlers = []dutyHandler{
-		NewAttesterHandler(),
-		NewProposerHandler(),
-		NewSyncCommitteeHandler(),
+		blockPropagateDelay: blockPropagationDelay,
+
+		handlers: []dutyHandler{
+			NewAttesterHandler(),
+			NewProposerHandler(),
+			NewSyncCommitteeHandler(),
+		},
+
+		ticker:   make(chan phase0.Slot),
+		reorg:    make(chan ReorgEvent),
+		waitCond: sync.NewCond(&sync.Mutex{}),
 	}
 	if s.builderProposals {
 		s.handlers = append(s.handlers, NewValidatorRegistrationHandler())
@@ -109,26 +117,27 @@ type ReorgEvent struct {
 	Current  bool
 }
 
-func (s *Scheduler) Run(ctx context.Context, logger *zap.Logger, ready chan<- struct{}) error {
+func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 	logger = logger.Named(logging.NameDutyScheduler)
-	logger.Info("starting scheduler")
+	logger.Info("duty scheduler started")
 
-	// Initialize the reorg channel
-	s.reorg = make(chan ReorgEvent)
-
-	s.waitCond = sync.NewCond(&sync.Mutex{})
-
-	// Subscribe to head events.  This allows us to go early for attestations if a block arrives, as well as
+	// Subscribe to head events.  This allows us to go early for attestations & sync committees if a block arrives, as well as
 	// re-request duties if there is a change in beacon block.
-	if err := s.beaconNode.Events(ctx, []string{"head"}, s.HandleHeadEvent(logger)); err != nil {
-		return fmt.Errorf("failed to subscribe to head events: %w", err)
-	}
+	s.pool = pool.New().WithContext(ctx).WithCancelOnError()
+	subscriptionCtx, subscribed := context.WithCancel(ctx)
+	s.pool.Go(func(ctx context.Context) error {
+		defer subscribed()
+		err := s.beaconNode.Events(ctx, []string{"head"}, s.HandleHeadEvent(logger))
+		if err != nil {
+			return fmt.Errorf("failed to subscribe to head events: %w", err)
+		}
+		return nil
+	})
 
-	handlerPool := pool.New().WithContext(ctx)
 	var reorgChs []chan<- ReorgEvent
 	var indicesChangeChs []chan<- bool
 	for _, handler := range s.handlers {
-		h := handler
+		handler := handler
 		slotTicker := make(chan phase0.Slot)
 		s.slotTicker.Subscribe(slotTicker)
 
@@ -136,10 +145,12 @@ func (s *Scheduler) Run(ctx context.Context, logger *zap.Logger, ready chan<- st
 		indicesChangeChs = append(indicesChangeChs, indicesChangeCh)
 		reorgCh := make(chan ReorgEvent)
 		reorgChs = append(reorgChs, reorgCh)
-		h.Setup(s.beaconNode, s.network, s.validatorController, s.ExecuteDuties, slotTicker, reorgCh, indicesChangeCh)
+		handler.Setup(s.beaconNode, s.network, s.validatorController, s.ExecuteDuties, slotTicker, reorgCh, indicesChangeCh)
 
-		handlerPool.Go(func(ctx context.Context) error {
-			h.HandleDuties(ctx, logger)
+		s.pool.Go(func(ctx context.Context) error {
+			// Wait for the head event subscription to complete before starting the handler.
+			<-subscriptionCtx.Done()
+			handler.HandleDuties(ctx, logger)
 			return nil
 		})
 	}
@@ -150,10 +161,11 @@ func (s *Scheduler) Run(ctx context.Context, logger *zap.Logger, ready chan<- st
 	go fanOut(ctx, s.indicesChg, indicesChangeChs)
 	go fanOut(ctx, s.reorg, reorgChs)
 
-	if ready != nil {
-		ready <- struct{}{}
-	}
-	return handlerPool.Wait()
+	return nil
+}
+
+func (s *Scheduler) Wait() error {
+	return s.pool.Wait()
 }
 
 // TODO: use a fan out package or Prysm's event.Feed, because sends in this implementation are blocking
@@ -181,9 +193,6 @@ func (s *Scheduler) SlotTicker(ctx context.Context, logger *zap.Logger) {
 		case <-ctx.Done():
 			return
 		case slot := <-s.ticker:
-
-			logger.Debug("slot ticker", zap.Uint64("slot", uint64(slot)))
-
 			delay := s.network.SlotDurationSec() / 3 /* a third of the slot duration */
 			finalTime := s.network.Beacon.GetSlotStartTime(slot).Add(delay)
 			waitDuration := time.Until(finalTime)
@@ -193,9 +202,9 @@ func (s *Scheduler) SlotTicker(ctx context.Context, logger *zap.Logger) {
 
 				// Lock the mutex before broadcasting
 				s.waitCond.L.Lock()
+				s.headSlot = slot
 				s.waitCond.Broadcast()
 				s.waitCond.L.Unlock()
-
 			}
 		}
 	}
@@ -279,6 +288,7 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.Ev
 			time.Sleep(s.blockPropagateDelay)
 
 			s.waitCond.L.Lock()
+			s.headSlot = data.Slot
 			s.waitCond.Broadcast()
 			s.waitCond.L.Unlock()
 		}
@@ -313,29 +323,10 @@ func (s *Scheduler) loggerWithDutyContext(logger *zap.Logger, duty *spectypes.Du
 
 // waitOneThirdOrValidBlock waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)
 func (s *Scheduler) waitOneThirdOrValidBlock(slot phase0.Slot) {
-	//s.waitMutex.Lock()
-	//defer s.waitMutex.Unlock()
-
-	//delay := s.network.SlotDurationSec() / 3 /* a third of the slot duration */
-	//finalTime := s.network.Beacon.GetSlotStartTime(slot).Add(delay)
-	//waitDuration := time.Until(finalTime)
-	//
-	//if waitDuration <= 0 {
-	//	return
-	//}
-	//
-	//go func() {
-	//	// Sleep for the specified duration
-	//	time.Sleep(waitDuration)
-	//
-	//	// Lock the mutex before broadcasting
-	//	s.waitMutex.Lock()
-	//	s.waitCond.Broadcast()
-	//	s.waitMutex.Unlock()
-	//}()
-
 	// Wait for the event or signal
 	s.waitCond.L.Lock()
-	s.waitCond.Wait()
+	for s.headSlot < slot {
+		s.waitCond.Wait()
+	}
 	s.waitCond.L.Unlock()
 }

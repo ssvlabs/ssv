@@ -17,12 +17,12 @@ import (
 type ProposerHandler struct {
 	baseHandler
 
-	duties *Duties[phase0.Epoch, *eth2apiv1.ProposerDuty]
+	duties *Duties[*eth2apiv1.ProposerDuty]
 }
 
 func NewProposerHandler() *ProposerHandler {
 	return &ProposerHandler{
-		duties: NewDuties[phase0.Epoch, *eth2apiv1.ProposerDuty](),
+		duties: NewDuties[*eth2apiv1.ProposerDuty](),
 	}
 }
 

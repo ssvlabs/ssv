@@ -57,7 +57,7 @@ func expectedAttesterDuties(handler *AttesterHandler, duties []*v1.AttesterDuty)
 func TestScheduler_Attester_Same_Slot(t *testing.T) {
 	handler := NewAttesterHandler()
 	currentSlot := &SlotValue{
-		slot: phase0.Slot(0),
+		slot: phase0.Slot(1),
 	}
 	currentEpoch := phase0.Epoch(0)
 	pubKey := phase0.BLSPubKey{1, 2, 3}
@@ -66,7 +66,7 @@ func TestScheduler_Attester_Same_Slot(t *testing.T) {
 	dutiesMap[currentEpoch] = []*v1.AttesterDuty{
 		{
 			PubKey:         pubKey,
-			Slot:           0,
+			Slot:           1,
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
 	}

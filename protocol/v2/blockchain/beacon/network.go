@@ -15,7 +15,7 @@ type Network struct {
 	LocalTestNet bool
 }
 
-type NetworkInfo interface {
+type BeaconNetwork interface {
 	ForkVersion() [4]byte
 	MinGenesisTime() uint64
 	SlotDurationSec() time.Duration

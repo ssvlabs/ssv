@@ -17,15 +17,18 @@ import (
 type AttesterHandler struct {
 	baseHandler
 
-	duties            *Duties[phase0.Epoch, *eth2apiv1.AttesterDuty]
+	duties            *Duties[*eth2apiv1.AttesterDuty]
 	fetchCurrentEpoch bool
 	fetchNextEpoch    bool
 }
 
 func NewAttesterHandler() *AttesterHandler {
-	return &AttesterHandler{
-		duties: NewDuties[phase0.Epoch, *eth2apiv1.AttesterDuty](),
+	h := &AttesterHandler{
+		duties: NewDuties[*eth2apiv1.AttesterDuty](),
 	}
+	h.fetchCurrentEpoch = true
+	h.fetchFirst = true
+	return h
 }
 
 func (h *AttesterHandler) Name() string {
@@ -61,11 +64,9 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context, logger *zap.Logger) 
 	logger = logger.With(zap.String("handler", h.Name()))
 	logger.Info("starting duty handler")
 
-	h.fetchCurrentEpoch = true
 	if h.shouldFetchNexEpoch(h.network.Beacon.EstimatedCurrentSlot()) {
 		h.fetchNextEpoch = true
 	}
-	h.fetchFirst = true
 
 	for {
 		select {
@@ -78,8 +79,8 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context, logger *zap.Logger) 
 			logger.Debug("🛠 ticker event", zap.String("epoch_slot_seq", buildStr))
 
 			if h.fetchFirst {
-				h.processFetching(ctx, logger, currentEpoch, slot)
 				h.fetchFirst = false
+				h.processFetching(ctx, logger, currentEpoch, slot)
 				h.processExecution(logger, currentEpoch, slot)
 			} else {
 				h.processExecution(logger, currentEpoch, slot)
@@ -112,7 +113,8 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context, logger *zap.Logger) 
 				h.fetchFirst = true
 				h.fetchCurrentEpoch = true
 			} else if reorgEvent.Current {
-				// reset next epoch duties if in appropriate slot range
+				// reset & re-fetch next epoch duties if in appropriate slot range,
+				// otherwise they will be fetched by the appropriate slot tick.
 				if h.shouldFetchNexEpoch(reorgEvent.Slot) {
 					h.duties.Reset(currentEpoch + 1)
 					h.fetchNextEpoch = true
@@ -231,7 +233,8 @@ func (h *AttesterHandler) toSpecDuty(duty *eth2apiv1.AttesterDuty, role spectype
 func (h *AttesterHandler) shouldExecute(logger *zap.Logger, duty *eth2apiv1.AttesterDuty) bool {
 	currentSlot := h.network.Beacon.EstimatedCurrentSlot()
 	// execute task if slot already began and not pass 1 epoch
-	if currentSlot >= duty.Slot && currentSlot-duty.Slot <= phase0.Slot(h.network.Beacon.SlotsPerEpoch()) {
+	var attestationPropagationSlotRange = phase0.Slot(h.network.Beacon.SlotsPerEpoch())
+	if currentSlot >= duty.Slot && currentSlot-duty.Slot <= attestationPropagationSlotRange {
 		return true
 	}
 	if currentSlot+1 == duty.Slot {

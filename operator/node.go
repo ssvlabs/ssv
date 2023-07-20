@@ -152,9 +152,17 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 	go n.reportOperators(logger)
 
 	go n.feeRecipientCtrl.Start(logger)
-	if err := n.dutyScheduler.Run(n.context, logger, nil); err != nil {
+
+	// Start the duty scheduler, and a background goroutine to crash the node
+	// in case there were any errors.
+	if err := n.dutyScheduler.Start(n.context, logger); err != nil {
 		return fmt.Errorf("failed to run duty scheduler: %w", err)
 	}
+	go func() {
+		if err := n.dutyScheduler.Wait(); err != nil {
+			logger.Fatal("duty scheduler exited with error", zap.Error(err))
+		}
+	}()
 
 	return nil
 }

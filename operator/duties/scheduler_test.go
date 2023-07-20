@@ -112,12 +112,14 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Slot
 
 	s.network.Beacon.(*mocknetwork.MockNetworkInfo).EXPECT().EpochsPerSyncCommitteePeriod().Return(uint64(256)).AnyTimes()
 
+	err := s.Start(ctx, logger)
+	require.NoError(t, err)
+
+	// Create a pool to wait for the scheduler to finish.
 	schedulerPool := pool.New().WithErrors().WithContext(ctx)
-	schedulerReady := make(chan struct{})
 	schedulerPool.Go(func(ctx context.Context) error {
-		return s.Run(ctx, logger, schedulerReady)
+		return s.Wait()
 	})
-	<-schedulerReady
 
 	return s, mockTicker, logger, executeDutiesCall, cancel, schedulerPool
 }
@@ -184,7 +186,7 @@ func TestScheduler_Run(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
 	logger := logging.TestLogger(t)
 
 	mockBeaconNode := mocks.NewMockBeaconNode(ctrl)
@@ -213,8 +215,16 @@ func TestScheduler_Run(t *testing.T) {
 	// setup mock duty handler expectations
 	for _, mockDutyHandler := range s.handlers {
 		mockDutyHandler.(*MockdutyHandler).EXPECT().Setup(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
-		mockDutyHandler.(*MockdutyHandler).EXPECT().HandleDuties(gomock.Any(), gomock.Any()).Times(1)
+		mockDutyHandler.(*MockdutyHandler).EXPECT().HandleDuties(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(ctx context.Context, logger *zap.Logger) {
+				<-ctx.Done()
+			}).
+			Times(1)
 	}
 
-	require.NoError(t, s.Run(ctx, logger, nil))
+	require.NoError(t, s.Start(ctx, logger))
+
+	// Cancel the context and test that the scheduler stops.
+	cancel()
+	require.NoError(t, s.Wait())
 }
