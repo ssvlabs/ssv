@@ -63,9 +63,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context, logger *zap.Logger) 
 	logger = logger.With(zap.String("handler", h.Name()))
 	logger.Info("starting duty handler")
 
-	if h.shouldFetchNexEpoch(h.network.Beacon.EstimatedCurrentSlot()) {
-		h.fetchNextEpoch = true
-	}
+	h.fetchNextEpoch = true
 
 	for {
 		select {
@@ -152,7 +150,7 @@ func (h *AttesterHandler) processFetching(ctx context.Context, logger *zap.Logge
 		h.fetchCurrentEpoch = false
 	}
 
-	if h.fetchNextEpoch {
+	if h.fetchNextEpoch && h.shouldFetchNexEpoch(slot) {
 		if err := h.fetchDuties(ctx, logger, epoch+1); err != nil {
 			logger.Error("failed to fetch duties for next epoch", zap.Error(err))
 			return

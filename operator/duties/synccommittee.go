@@ -21,14 +21,14 @@ var syncCommitteePreparationEpochs = uint64(2)
 type SyncCommitteeHandler struct {
 	baseHandler
 
-	duties             *SyncCommitteeDuties[uint64, *eth2apiv1.SyncCommitteeDuty]
+	duties             *SyncCommitteeDuties
 	fetchCurrentPeriod bool
 	fetchNextPeriod    bool
 }
 
 func NewSyncCommitteeHandler() *SyncCommitteeHandler {
 	h := &SyncCommitteeHandler{
-		duties: NewSyncCommitteeDuties[uint64, *eth2apiv1.SyncCommitteeDuty](),
+		duties: NewSyncCommitteeDuties(),
 	}
 	h.fetchCurrentPeriod = true
 	h.fetchFirst = true
@@ -39,27 +39,25 @@ func (h *SyncCommitteeHandler) Name() string {
 	return spectypes.BNRoleSyncCommittee.String()
 }
 
-type SyncCommitteeDuties[K ~uint64, D any] struct {
-	m map[K][]D
+type SyncCommitteeDuties struct {
+	m map[uint64][]*eth2apiv1.SyncCommitteeDuty
 }
 
-func NewSyncCommitteeDuties[K ~uint64, D any]() *SyncCommitteeDuties[K, D] {
-	return &SyncCommitteeDuties[K, D]{
-		m: make(map[K][]D),
+func NewSyncCommitteeDuties() *SyncCommitteeDuties {
+	return &SyncCommitteeDuties{
+		m: make(map[uint64][]*eth2apiv1.SyncCommitteeDuty),
 	}
 }
 
-func (d *SyncCommitteeDuties[K, D]) Add(key K, duty D) {
-	if _, ok := d.m[key]; !ok {
-		d.m[key] = []D{}
+func (d *SyncCommitteeDuties) Add(period uint64, duty *eth2apiv1.SyncCommitteeDuty) {
+	if _, ok := d.m[period]; !ok {
+		d.m[period] = []*eth2apiv1.SyncCommitteeDuty{}
 	}
-	d.m[key] = append(d.m[key], duty)
+	d.m[period] = append(d.m[period], duty)
 }
 
-func (d *SyncCommitteeDuties[K, D]) Reset(key K) {
-	if _, ok := d.m[key]; ok {
-		d.m[key] = []D{}
-	}
+func (d *SyncCommitteeDuties) Reset(period uint64) {
+	delete(d.m, period)
 }
 
 // HandleDuties manages the duty lifecycle, handling different cases:
@@ -102,8 +100,8 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context, logger *zap.Log
 			logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_seq", buildStr))
 
 			if h.fetchFirst {
-				h.processFetching(ctx, logger, period, slot)
 				h.fetchFirst = false
+				h.processFetching(ctx, logger, period, slot)
 				h.processExecution(logger, period, slot)
 			} else {
 				h.processExecution(logger, period, slot)

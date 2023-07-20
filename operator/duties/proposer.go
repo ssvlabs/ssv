@@ -65,8 +65,8 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context, logger *zap.Logger) 
 			logger.Debug("🛠 ticker event", zap.String("epoch_slot_seq", buildStr))
 
 			if h.fetchFirst {
-				h.processFetching(ctx, logger, currentEpoch, slot)
 				h.fetchFirst = false
+				h.processFetching(ctx, logger, currentEpoch, slot)
 				h.processExecution(logger, currentEpoch, slot)
 			} else {
 				h.processExecution(logger, currentEpoch, slot)
@@ -119,7 +119,7 @@ func (h *ProposerHandler) processExecution(logger *zap.Logger, epoch phase0.Epoc
 	// range over duties and execute
 	if slotMap, ok := h.duties.m[epoch]; ok {
 		if duties, ok := slotMap[slot]; ok {
-			toExecute := make([]*spectypes.Duty, 0, len(duties)*2)
+			toExecute := make([]*spectypes.Duty, 0, len(duties))
 			for _, d := range duties {
 				if h.shouldExecute(logger, d) {
 					toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleProposer))
