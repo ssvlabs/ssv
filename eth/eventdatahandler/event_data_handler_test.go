@@ -31,10 +31,12 @@ import (
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	ssvvalidator "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
+	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
+	"github.com/bloxapp/ssv/utils/blskeygen"
 )
 
 var (
@@ -91,8 +93,12 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	boundContract, err := simcontract.NewSimcontract(contractAddr, sim)
 	require.NoError(t, err)
 
+	// Generate operator key
+	_, pk := blskeygen.GenBLSKeyPair()
+
 	t.Run("test OperatorAdded event handle", func(t *testing.T) {
-		_, err := boundContract.SimcontractTransactor.RegisterOperator(auth, ethcommon.Hex2Bytes("0xb24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"), big.NewInt(100_000_000))
+		// Call the contract method
+		_, err := boundContract.SimcontractTransactor.RegisterOperator(auth, pk.Serialize(), big.NewInt(100_000_000))
 		require.NoError(t, err)
 		sim.Commit()
 
@@ -105,15 +111,32 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			eventsCh <- log
 		}()
 
+		// Check that there is no registered operators
+		operators, err := edh.nodeStorage.ListOperators(nil, 0, 10)
+		require.NoError(t, err)
+		require.Equal(t, 0, len(operators))
+
+		// Hanlde the event
 		lastProcessedBlock, err := edh.HandleBlockEventsStream(eb.BatchEvents(eventsCh), false)
 		require.Equal(t, uint64(0x2), lastProcessedBlock)
 		require.NoError(t, err)
-		// Check storage
-		data, _, err := edh.nodeStorage.GetEventData(log.TxHash)
+
+		// Check storage for a new operator
+		operators, err = edh.nodeStorage.ListOperators(nil, 0, 10)
 		require.NoError(t, err)
-		require.NotEmpty(t, data)
+		require.Equal(t, 1, len(operators))
+
+		// Check if an operator in the storage has same attributes
+		operatorAddedEvent, err := edh.eventFilterer.ParseOperatorAdded(log)
+		require.NoError(t, err)
+		data, _, err := edh.nodeStorage.GetOperatorData(nil, operatorAddedEvent.OperatorId)
+		require.NoError(t, err)
+		require.Equal(t, operatorAddedEvent.OperatorId, data.ID)
+		require.Equal(t, operatorAddedEvent.Owner, data.OwnerAddress)
+		require.Equal(t, pk.Serialize(), data.PublicKey)
 	})
 	t.Run("test OperatorRemoved event handle", func(t *testing.T) {
+		// Call the contract method
 		_, err = boundContract.SimcontractTransactor.RemoveOperator(auth, 1)
 		require.NoError(t, err)
 		sim.Commit()
@@ -127,23 +150,40 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			eventsCh <- log
 		}()
 
+		// Check that there is 1 registered operator
+		operators, err := edh.nodeStorage.ListOperators(nil, 0, 10)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(operators))
+
+		// Hanlde the event
 		lastProcessedBlock, err := edh.HandleBlockEventsStream(eb.BatchEvents(eventsCh), false)
 		require.Equal(t, uint64(0x3), lastProcessedBlock)
 		require.NoError(t, err)
-		// Check storage
-		data, _, err := edh.nodeStorage.GetEventData(log.TxHash)
+
+		// Check if the operator was removed successfuly
+		// TODO: this should be adjusted when eth/eventdatahandler/handlers.go#L109 is resolved
+		operators, err = edh.nodeStorage.ListOperators(nil, 0, 10)
 		require.NoError(t, err)
-		require.NotEmpty(t, data)
+		require.Equal(t, 1, len(operators))
 	})
 
 	t.Run("test ValidatorAdded event handle", func(t *testing.T) {
+		data, _, err := edh.nodeStorage.GetOperatorData(nil, 1)
+		require.NoError(t, err)
+		validatorToAdd := newValidator(&beacon.ValidatorMetadata{
+			Balance: 0,
+			Status:  4, // ValidatorStateActiveExiting
+			Index:   4,
+		})
+		// Call the contract method
 		_, err = boundContract.SimcontractTransactor.RegisterValidator(
-			auth, ethcommon.Hex2Bytes("0x1"),
-			[]uint64{1, 2, 3},
-			ethcommon.Hex2Bytes("0x2"),
+			auth,
+			data.PublicKey,
+			[]uint64{1},
+			validatorToAdd.Share.SharePubKey,
 			big.NewInt(100_000_000),
 			simcontract.CallableCluster{
-				ValidatorCount:  3,
+				ValidatorCount:  1,
 				NetworkFeeIndex: 1,
 				Index:           1,
 				Active:          true,
@@ -164,10 +204,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		lastProcessedBlock, err := edh.HandleBlockEventsStream(eb.BatchEvents(eventsCh), false)
 		require.Equal(t, uint64(0x4), lastProcessedBlock)
 		require.NoError(t, err)
-		// Check storage
-		data, _, err := edh.nodeStorage.GetEventData(log.TxHash)
-		require.NoError(t, err)
-		require.NotEmpty(t, data)
 	})
 
 	t.Run("test ValidatorRemoved event handle", func(t *testing.T) {
@@ -294,7 +330,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		require.NotEmpty(t, data)
 	})
-
 }
 
 func setupDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger) (*EventDataHandler, error) {
@@ -306,10 +341,7 @@ func setupDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger) (*E
 		Ctx:        ctx,
 	}
 
-	db, err := kv.New(logger, options)
-	if err != nil {
-		return nil, err
-	}
+	db, err := ssvstorage.GetStorageFactory(logger, options)
 
 	storageMap := ibftstorage.NewStores()
 	nodeStorage, operatorData := setupOperatorStorage(logger, db)
@@ -599,4 +631,14 @@ func simTestBackend(testAddr ethcommon.Address) *simulator.SimulatedBackend {
 			testAddr: {Balance: big.NewInt(10000000000000000)},
 		}, 10000000,
 	)
+}
+
+func newValidator(metaData *beacon.ValidatorMetadata) *ssvvalidator.Validator {
+	return &ssvvalidator.Validator{
+		Share: &ssvtypes.SSVShare{
+			Metadata: ssvtypes.Metadata{
+				BeaconMetadata: metaData,
+			},
+		},
+	}
 }

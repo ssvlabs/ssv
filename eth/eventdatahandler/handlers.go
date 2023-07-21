@@ -111,7 +111,7 @@ func (edh *EventDataHandler) handleOperatorRemoved(txn basedb.Txn, event *contra
 	//	var shares []Share
 	//	for _, s := range nodeStorage.Shares().List() {
 	//		// if operator in committee, delete him from it:
-	//		//     shares = aopend(shares, s)
+	//		//     shares = append(shares, s)
 	//	}
 	//	nodeStorage.Shares().Save(shares)
 
