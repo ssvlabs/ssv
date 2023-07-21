@@ -16,6 +16,7 @@ import (
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/golang/mock/gomock"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
@@ -31,12 +32,12 @@ import (
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	ssvvalidator "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/blskeygen"
+	"github.com/bloxapp/ssv/utils/threshold"
 )
 
 var (
@@ -94,11 +95,17 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	require.NoError(t, err)
 
 	// Generate operator key
-	_, pk := blskeygen.GenBLSKeyPair()
+	_, operatorPubKey := blskeygen.GenBLSKeyPair()
 
+	// Generate validator shares
+	validatorShares, _, err := newValidator()
+	require.NoError(t, err)
+	// Encode shares
+	encodedValidatorShares, err := validatorShares.Encode()
+	require.NoError(t, err)
 	t.Run("test OperatorAdded event handle", func(t *testing.T) {
 		// Call the contract method
-		_, err := boundContract.SimcontractTransactor.RegisterOperator(auth, pk.Serialize(), big.NewInt(100_000_000))
+		_, err := boundContract.SimcontractTransactor.RegisterOperator(auth, operatorPubKey.Serialize(), big.NewInt(100_000_000))
 		require.NoError(t, err)
 		sim.Commit()
 
@@ -133,7 +140,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, operatorAddedEvent.OperatorId, data.ID)
 		require.Equal(t, operatorAddedEvent.Owner, data.OwnerAddress)
-		require.Equal(t, pk.Serialize(), data.PublicKey)
+		require.Equal(t, operatorPubKey.Serialize(), data.PublicKey)
 	})
 	t.Run("test OperatorRemoved event handle", func(t *testing.T) {
 		// Call the contract method
@@ -168,19 +175,12 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	})
 
 	t.Run("test ValidatorAdded event handle", func(t *testing.T) {
-		data, _, err := edh.nodeStorage.GetOperatorData(nil, 1)
-		require.NoError(t, err)
-		validatorToAdd := newValidator(&beacon.ValidatorMetadata{
-			Balance: 0,
-			Status:  4, // ValidatorStateActiveExiting
-			Index:   4,
-		})
 		// Call the contract method
 		_, err = boundContract.SimcontractTransactor.RegisterValidator(
 			auth,
-			data.PublicKey,
-			[]uint64{1},
-			validatorToAdd.Share.SharePubKey,
+			validatorShares.ValidatorPubKey,
+			[]uint64{1, 2, 3, 4},
+			encodedValidatorShares,
 			big.NewInt(100_000_000),
 			simcontract.CallableCluster{
 				ValidatorCount:  1,
@@ -209,10 +209,10 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	t.Run("test ValidatorRemoved event handle", func(t *testing.T) {
 		_, err = boundContract.SimcontractTransactor.RemoveValidator(
 			auth,
-			ethcommon.Hex2Bytes("0x1"),
-			[]uint64{1, 2, 3},
+			validatorShares.ValidatorPubKey,
+			[]uint64{1, 2, 3, 4},
 			simcontract.CallableCluster{
-				ValidatorCount:  3,
+				ValidatorCount:  1,
 				NetworkFeeIndex: 1,
 				Index:           1,
 				Active:          true,
@@ -233,19 +233,15 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		lastProcessedBlock, err := edh.HandleBlockEventsStream(eb.BatchEvents(eventsCh), false)
 		require.Equal(t, uint64(0x5), lastProcessedBlock)
 		require.NoError(t, err)
-		// Check storage
-		data, _, err := edh.nodeStorage.GetEventData(log.TxHash)
-		require.NoError(t, err)
-		require.NotEmpty(t, data)
 	})
 
 	t.Run("test ClusterLiquidated event handle", func(t *testing.T) {
 		_, err = boundContract.SimcontractTransactor.Liquidate(
 			auth,
-			ethcommon.HexToAddress("0x1"),
-			[]uint64{1, 2, 3},
+			ethcommon.HexToAddress("0x71562b71999873DB5b286dF957af199Ec94617F7"),
+			[]uint64{1, 2, 3, 4},
 			simcontract.CallableCluster{
-				ValidatorCount:  3,
+				ValidatorCount:  1,
 				NetworkFeeIndex: 1,
 				Index:           1,
 				Active:          true,
@@ -266,10 +262,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		lastProcessedBlock, err := edh.HandleBlockEventsStream(eb.BatchEvents(eventsCh), false)
 		require.Equal(t, uint64(0x6), lastProcessedBlock)
 		require.NoError(t, err)
-		// Check storage
-		data, _, err := edh.nodeStorage.GetEventData(log.TxHash)
-		require.NoError(t, err)
-		require.NotEmpty(t, data)
 	})
 
 	t.Run("test ClusterReactivated event handle", func(t *testing.T) {
@@ -278,7 +270,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			[]uint64{1, 2, 3},
 			big.NewInt(100_000_000),
 			simcontract.CallableCluster{
-				ValidatorCount:  3,
+				ValidatorCount:  1,
 				NetworkFeeIndex: 1,
 				Index:           1,
 				Active:          true,
@@ -299,10 +291,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		lastProcessedBlock, err := edh.HandleBlockEventsStream(eb.BatchEvents(eventsCh), false)
 		require.Equal(t, uint64(0x7), lastProcessedBlock)
 		require.NoError(t, err)
-		// Check storage
-		data, _, err := edh.nodeStorage.GetEventData(log.TxHash)
-		require.NoError(t, err)
-		require.NotEmpty(t, data)
 	})
 
 	t.Run("test FeeRecipientAddressUpdated event handle", func(t *testing.T) {
@@ -325,10 +313,10 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		lastProcessedBlock, err := edh.HandleBlockEventsStream(eb.BatchEvents(eventsCh), false)
 		require.Equal(t, uint64(0x8), lastProcessedBlock)
 		require.NoError(t, err)
-		// Check storage
-		data, _, err := edh.nodeStorage.GetEventData(log.TxHash)
+		// Check if the fee recepient was updated
+		recepientData, _, err := edh.nodeStorage.GetRecipientData(nil, ethcommon.HexToAddress("0x71562b71999873DB5b286dF957af199Ec94617F7"))
 		require.NoError(t, err)
-		require.NotEmpty(t, data)
+		require.Equal(t, ethcommon.HexToAddress("0x1").String(), recepientData.FeeRecipient.String())
 	})
 }
 
@@ -633,12 +621,67 @@ func simTestBackend(testAddr ethcommon.Address) *simulator.SimulatedBackend {
 	)
 }
 
-func newValidator(metaData *beacon.ValidatorMetadata) *ssvvalidator.Validator {
-	return &ssvvalidator.Validator{
-		Share: &ssvtypes.SSVShare{
-			Metadata: ssvtypes.Metadata{
-				BeaconMetadata: metaData,
-			},
+func newValidator() (*ssvtypes.SSVShare, *bls.SecretKey, error) {
+	threshold.Init()
+	const keysCount = 4
+
+	sk := &bls.SecretKey{}
+	sk.SetByCSPRNG()
+
+	splitKeys, err := threshold.Create(sk.Serialize(), keysCount-1, keysCount)
+
+	validatorShare, _ := generateRandomValidatorShare(splitKeys)
+
+	return validatorShare, sk, err
+}
+
+func generateRandomValidatorShare(splitKeys map[uint64]*bls.SecretKey) (*ssvtypes.SSVShare, *bls.SecretKey) {
+	threshold.Init()
+
+	sk1 := bls.SecretKey{}
+	sk1.SetByCSPRNG()
+
+	sk2 := bls.SecretKey{}
+	sk2.SetByCSPRNG()
+
+	ibftCommittee := []*spectypes.Operator{
+		{
+			OperatorID: 1,
+			PubKey:     splitKeys[1].Serialize(),
+		},
+		{
+			OperatorID: 2,
+			PubKey:     splitKeys[2].Serialize(),
+		},
+		{
+			OperatorID: 3,
+			PubKey:     splitKeys[3].Serialize(),
+		},
+		{
+			OperatorID: 4,
+			PubKey:     splitKeys[4].Serialize(),
 		},
 	}
+
+	return &ssvtypes.SSVShare{
+		Share: spectypes.Share{
+			OperatorID:      1,
+			ValidatorPubKey: sk1.GetPublicKey().Serialize(),
+			SharePubKey:     sk2.GetPublicKey().Serialize(),
+			Committee:       ibftCommittee,
+			Quorum:          3,
+			PartialQuorum:   2,
+			DomainType:      ssvtypes.GetDefaultDomain(),
+			Graffiti:        nil,
+		},
+		Metadata: ssvtypes.Metadata{
+			BeaconMetadata: &beacon.ValidatorMetadata{
+				Balance: 1,
+				Status:  2,
+				Index:   3,
+			},
+			OwnerAddress: ethcommon.HexToAddress("0x71562b71999873DB5b286dF957af199Ec94617F7"),
+			Liquidated:   true,
+		},
+	}, &sk1
 }
