@@ -44,7 +44,7 @@ type BeaconNode interface {
 
 // ValidatorController represents the component that controls validators via the scheduler
 type ValidatorController interface {
-	ActiveIndices(logger *zap.Logger, epoch phase0.Epoch) []phase0.ValidatorIndex
+	ActiveValidatorIndices(logger *zap.Logger, epoch phase0.Epoch) []phase0.ValidatorIndex
 	GetOperatorShares() []*types.SSVShare
 }
 

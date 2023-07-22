@@ -187,18 +187,18 @@ func (m *MockValidatorController) EXPECT() *MockValidatorControllerMockRecorder 
 	return m.recorder
 }
 
-// ActiveIndices mocks base method.
-func (m *MockValidatorController) ActiveIndices(logger *zap.Logger, epoch phase0.Epoch) []phase0.ValidatorIndex {
+// ActiveValidatorIndices mocks base method.
+func (m *MockValidatorController) ActiveValidatorIndices(logger *zap.Logger, epoch phase0.Epoch) []phase0.ValidatorIndex {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ActiveIndices", logger, epoch)
+	ret := m.ctrl.Call(m, "ActiveValidatorIndices", logger, epoch)
 	ret0, _ := ret[0].([]phase0.ValidatorIndex)
 	return ret0
 }
 
-// ActiveIndices indicates an expected call of ActiveIndices.
-func (mr *MockValidatorControllerMockRecorder) ActiveIndices(logger, epoch interface{}) *gomock.Call {
+// ActiveValidatorIndices indicates an expected call of ActiveValidatorIndices.
+func (mr *MockValidatorControllerMockRecorder) ActiveValidatorIndices(logger, epoch interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ActiveIndices", reflect.TypeOf((*MockValidatorController)(nil).ActiveIndices), logger, epoch)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ActiveValidatorIndices", reflect.TypeOf((*MockValidatorController)(nil).ActiveValidatorIndices), logger, epoch)
 }
 
 // GetOperatorShares mocks base method.
