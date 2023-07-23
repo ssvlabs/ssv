@@ -88,8 +88,12 @@ Regarding pre-consensus for each duty, we have:
 The final number of expected messages per slot becomes
 $$E(messages\,per\,slot) = P(Attestation\,per\,slot) * E(messages|Attestation) +\\ P(Aggregator) * E(messages|Aggreator) +\\ P(Proposer) * E(messages|Proposer) +\\ P(SyncCommittee) * E(messages|SyncCommittee) +\\ P(SyncCommitteeAggregator) * E(messages|SyncCommitteeAggregator)$$
 
-Using the highest probability for being an attestaion aggreator, we have (for one validator with 4 operators):
+To get the highest estimation, we set the aggreator attestation to its higher probability (lowest committee size) and set each consensus step to have their maximum number of messages. Then, we have (for one validator with 4 operators):
 $$E(messages\,per\,slot) = 0.6781$$
+
+If we set each consensus step to their minimum number of messages, we would have:
+$$E(messages\,per\,slot) = 0.4543$$
+
 
 ## Expected messages in subnet
 
@@ -97,16 +101,44 @@ Suppose an operator belongs to a subnet. In this subnet, there are $V$ validator
 
 Note: Here, it doesn't matter if all validators assigned the same 4 operators or not. The total number of messages is determined by the number of validators and how operators eadch assinged. Of course, it impacts the processing time of an operator whether it's must answer to all messages or not. But it doesn't impact how many messages it receives.
 
-Suppose we keep active only one validator (and 4 operators). The expected number of messages is still 0.6781.
+Suppose we keep active only one validator (and 4 operators). The expected number of messages is $E(messages\,per\,slot)$.
 
-If we activate one more validator, then, it becomes $0.6781\times2$, and so on.
+If we activate one more validator, then, it becomes $E(messages\,per\,slot)\times2$, and so on.
 
 ## Expected messages for all subnets
 
-Expanding the view, supposing an operator may belong to numerous subnets. The number of expected messages becomes $0.6781 \times V$ where V is the total number of validators in all subnets (supposing each validator has 4 operators assigned).
+Expanding the view, supposing an operator may belong to numerous subnets. The number of expected messages becomes $E(messages\,per\,slot) \times V$ where V is the total number of validators in all subnets (supposing each validator has 4 operators assigned).
 
-For example, if there were $10000$ validators, we would have
+For example, if there were $10000$ validators, we would have with our highest estimation:
 $$10000 \times 0.6781 = 6781 \text{ messages per slot} = 565 \text{ messages per second}$$
 
+And with the lowest estimation:
+$$10000 \times 0.4543 = 4543 \text{ messages per slot} = 378 \text{ messages per second}$$
+
+## Duty weight on expected number of messages
 
 
+| Duty | Weight |
+| ---- | ------ |
+| Attestation | 0.99927 |
+| Aggregate Attestation | 0.00066 |
+| Proposer | 0.00005529 |
+| Sync Committee| 0.00000011 |
+| Sync Committee Aggregatio| 0.0000000000610 |
+
+## Number of expected messages by number of operators
+
+The table below shows how the expected number of messages grows as the number of operators hired by validators grows. The expected number of messages was computed as the average between the higher and lower estimation.
+
+| $f$ | $N = (3f+1)$ | $E(messages\,per\,slot)$ | $E(messages)$ for 10000 validators per second|
+| ---- | ----- | ---- | ---- |
+1 | 4 | 0.5661944351375915 | 471.8286959479929 |
+2 | 7 | 1.0632497473032632 | 886.0414560860527 |
+3 | 10 | 1.6541112918036796 | 1378.4260765030665 |
+4 | 13 | 2.338779068638841 | 1948.982557199034 |
+5 | 16 | 3.1172530778087464 | 2597.7108981739552 |
+6 | 19 | 3.9895333193133973 | 3324.611099427831 |
+7 | 22 | 4.955619793152793 | 4129.683160960661 |
+8 | 25 | 6.015512499326932 | 5012.927082772443 |
+9 | 28 | 7.169211437835817 | 5974.342864863181 |
+10 | 31 | 8.416716608679447 | 7013.9305072328725 |
