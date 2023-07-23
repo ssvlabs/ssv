@@ -142,7 +142,7 @@ func (h *AttesterHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 	defer cancel()
 
 	if h.fetchCurrentEpoch {
-		if err := h.fetchDuties(ctx, epoch); err != nil {
+		if err := h.fetchAndProcessDuties(ctx, epoch); err != nil {
 			h.logger.Error("failed to fetch duties for current epoch", zap.Error(err))
 			return
 		}
@@ -150,7 +150,7 @@ func (h *AttesterHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 	}
 
 	if h.fetchNextEpoch && h.shouldFetchNexEpoch(slot) {
-		if err := h.fetchDuties(ctx, epoch+1); err != nil {
+		if err := h.fetchAndProcessDuties(ctx, epoch+1); err != nil {
 			h.logger.Error("failed to fetch duties for next epoch", zap.Error(err))
 			return
 		}
@@ -174,7 +174,7 @@ func (h *AttesterHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 	}
 }
 
-func (h *AttesterHandler) fetchDuties(ctx context.Context, epoch phase0.Epoch) error {
+func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch) error {
 	start := time.Now()
 	indices := h.validatorController.ActiveValidatorIndices(h.logger, epoch)
 	duties, err := h.beaconNode.AttesterDuties(ctx, epoch, indices)

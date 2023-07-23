@@ -162,7 +162,7 @@ func (h *SyncCommitteeHandler) processFetching(ctx context.Context, period uint6
 	defer cancel()
 
 	if h.fetchCurrentPeriod {
-		if err := h.fetchDuties(ctx, period); err != nil {
+		if err := h.fetchAndProcessDuties(ctx, period); err != nil {
 			h.logger.Error("failed to fetch duties for current epoch", zap.Error(err))
 			return
 		}
@@ -170,7 +170,7 @@ func (h *SyncCommitteeHandler) processFetching(ctx context.Context, period uint6
 	}
 
 	if h.fetchNextPeriod {
-		if err := h.fetchDuties(ctx, period+1); err != nil {
+		if err := h.fetchAndProcessDuties(ctx, period+1); err != nil {
 			h.logger.Error("failed to fetch duties for next epoch", zap.Error(err))
 			return
 		}
@@ -192,7 +192,7 @@ func (h *SyncCommitteeHandler) processExecution(period uint64, slot phase0.Slot)
 	}
 }
 
-func (h *SyncCommitteeHandler) fetchDuties(ctx context.Context, period uint64) error {
+func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period uint64) error {
 	start := time.Now()
 	firstEpoch := h.network.Beacon.FirstEpochOfSyncPeriod(period)
 	currentEpoch := h.network.Beacon.EstimatedCurrentEpoch()

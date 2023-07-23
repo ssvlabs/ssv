@@ -108,7 +108,7 @@ func (h *ProposerHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 	ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
 	defer cancel()
 
-	if err := h.fetchDuties(ctx, epoch); err != nil {
+	if err := h.fetchAndProcessDuties(ctx, epoch); err != nil {
 		h.logger.Error("failed to fetch duties for current epoch", zap.Error(err))
 		return
 	}
@@ -129,7 +129,7 @@ func (h *ProposerHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 	}
 }
 
-func (h *ProposerHandler) fetchDuties(ctx context.Context, epoch phase0.Epoch) error {
+func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch) error {
 	start := time.Now()
 	indices := h.validatorController.ActiveValidatorIndices(h.logger, epoch)
 	duties, err := h.beaconNode.ProposerDuties(ctx, epoch, indices)
