@@ -83,7 +83,7 @@ fi
 DIR=".k8/stage"
 DEPLOY_FILES=(
   "ssv-exporter-1.yml"
-  "ssv-exporter-2.yml"
+  # "ssv-exporter-2.yml"
 )
 
 if [[ -d $DIR ]]; then
