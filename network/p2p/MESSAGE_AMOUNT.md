@@ -86,7 +86,7 @@ Regarding pre-consensus for each duty, we have:
 ## Number of expected messages per slot
 
 The final number of expected messages per slot becomes
-$$E(messages\,per\,slot) = P(Attestation\,per\,slot) * E(messages|Attestation) +\newline P(Aggregator) * E(messages|Aggreator) +\newline P(Proposer) * E(messages|Proposer) +\newline P(SyncCommittee) * E(messages|SyncCommittee) +\newline P(SyncCommitteeAggregator) * E(messages|SyncCommitteeAggregator)$$
+$$E(messages\,per\,slot) = P(Attestation\,per\,slot) * E(messages|Attestation) +\\ P(Aggregator) * E(messages|Aggreator) +\\ P(Proposer) * E(messages|Proposer) +\\ P(SyncCommittee) * E(messages|SyncCommittee) +\\ P(SyncCommitteeAggregator) * E(messages|SyncCommitteeAggregator)$$
 
 Using the highest probability for being an attestaion aggreator, we have (for one validator with 4 operators):
 $$E(messages\,per\,slot) = 0.6781$$
