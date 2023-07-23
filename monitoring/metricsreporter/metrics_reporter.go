@@ -92,7 +92,7 @@ func New(opts ...Option) *MetricsReporter {
 	for i, c := range allMetrics {
 		if err := prometheus.Register(c); err != nil {
 			// TODO: think how to print metric name
-			mr.logger.Warn("could not register prometheus collector",
+			mr.logger.Debug("could not register prometheus collector",
 				zap.Int("index", i),
 				zap.Error(err),
 			)
