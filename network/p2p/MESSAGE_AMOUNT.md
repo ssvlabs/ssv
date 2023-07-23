@@ -47,40 +47,27 @@ Suppose there are N operators running a validator.
 Each duty may has 3 steps: pre-consensus, consensus, post-consensus.
 
 In one operator perspective, the interval of possible number of messages received are:
-- Pre-consensus: [$\frac{(N+f)}{2}+1$, N]
-- Post-consensus: [$\frac{(N+f)}{2}+1$, N]
+- Pre-consensus: $[\frac{(N+f)}{2}+1, N]$
+- Post-consensus: $[\frac{(N+f)}{2}+1$, N]$
 - Consensus: $\infty$ in theory (actually, the maximum number of rounds is 12 what limitates the total number of messages)
 
 Let's consider the consensus to have $0.95$ probability of sucess. Considering each as a Bernoulli trial, the geometric distribution becomes
 
-$$
-\begin{aligned}
-P(X=k) = (1-0.95)^{k-1}*(0.95)
-\end{aligned}
-$$
+$$\begin{aligned}P(X=k) = (1-0.95)^{k-1}*(0.95)\end{aligned}$$
 with expected value given by $E(X) = 1/p$.
 
 In a successful round, the interval of possibile messages received is
-$$
-[1 + \lfloor\frac{(N+f)}{2}\rfloor+1 + \lfloor\frac{(N+f)}{2}\rfloor + 1, 1 + N + N] = [3 + 2\times\lfloor\frac{N+f}{2}\rfloor, 2N + 1]
-$$
+$$[1 + \lfloor\frac{(N+f)}{2}\rfloor+1 + \lfloor\frac{(N+f)}{2}\rfloor + 1, 1 + N + N] = [3 + 2\times\lfloor\frac{N+f}{2}\rfloor, 2N + 1]$$
 
 In an unsuccessful round, the number of messages are
-$$
-[4 + 3\times\lfloor\frac{N+f}{2}\rfloor,3N+1]
-$$
+$$[4 + 3\times\lfloor\frac{N+f}{2}\rfloor,3N+1]$$
 
 
 Let's take the maximum number of messages for each case. The expected number of messages in a round is
-$$
-E(messages\,per\,round) = 0.95 * (2N+1) + 0.05 * (3N+1)
-$$
+$$E(messages\,per\,round) = 0.95 * (2N+1) + 0.05 * (3N+1)$$
 
 So the expected number of messages for the protocol is
-
-$$
-E(messages) = \frac{1}{0.95}\times (0.95 * (2N+1) + 0.05 * (3N+1))
-$$
+$$E(messages) = \frac{1}{0.95}\times (0.95 * (2N+1) + 0.05 * (3N+1))$$
 
 Also, once consensus is reached, decided message may be received. It node can send f+1 decided messages with different committees sizes. Thus, we have up to:
 - Decided: $N \times (f+1)$
@@ -99,18 +86,14 @@ Regarding pre-consensus for each duty, we have:
 ## Number of expected messages per slot
 
 The final number of expected messages per slot becomes
-$$
-E(messages\,per\,slot) = P(Attestation\,per\,slot) * E(messages|Attestation) +\newline
+$$E(messages\,per\,slot) = P(Attestation\,per\,slot) * E(messages|Attestation) +\newline
 P(Aggregator) * E(messages|Aggreator) +\newline
 P(Proposer) * E(messages|Proposer) +\newline
 P(SyncCommittee) * E(messages|SyncCommittee) +\newline
-P(SyncCommitteeAggregator) * E(messages|SyncCommitteeAggregator)\newline
-$$
+P(SyncCommitteeAggregator) * E(messages|SyncCommitteeAggregator)$$
 
 Using the highest probability for being an attestaion aggreator, we have (for one validator with 4 operators):
-$$
-E(messages\,per\,slot) = 0.6781
-$$
+$$E(messages\,per\,slot) = 0.6781$$
 
 ## Expected messages in subnet
 
@@ -127,9 +110,7 @@ If we activate one more validator, then, it becomes $0.6781\times2$, and so on.
 Expanding the view, supposing an operator may belong to numerous subnets. The number of expected messages becomes $0.6781 \times V$ where V is the total number of validators in all subnets (supposing each validator has 4 operators assigned).
 
 For example, if there were $10000$ validators, we would have
-$$
-10000 \times 0.6781 = 6781 \text{ messages per slot} = 565 \text{ messages per second}
-$$
+$$10000 \times 0.6781 = 6781 \text{ messages per slot} = 565 \text{ messages per second}$$
 
 
 
