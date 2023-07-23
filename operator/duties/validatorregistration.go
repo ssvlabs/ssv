@@ -28,9 +28,8 @@ func (h *ValidatorRegistrationHandler) Name() string {
 	return spectypes.BNRoleValidatorRegistration.String()
 }
 
-func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context, logger *zap.Logger) {
-	logger = logger.With(zap.String("handler", h.Name()))
-	logger.Info("starting duty handler")
+func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
+	h.logger.Info("starting duty handler")
 
 	for {
 		select {
@@ -60,7 +59,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context, logger 
 				pk := phase0.BLSPubKey{}
 				copy(pk[:], share.ValidatorPubKey)
 
-				h.executeDuties(logger, []*spectypes.Duty{{
+				h.executeDuties(h.logger, []*spectypes.Duty{{
 					Type:   spectypes.BNRoleValidatorRegistration,
 					PubKey: pk,
 					Slot:   slot,
@@ -70,7 +69,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context, logger 
 				sent++
 				h.validatorsPassedFirstRegistration[string(share.ValidatorPubKey)] = struct{}{}
 			}
-			logger.Debug("validator registration duties sent", zap.Uint64("slot", uint64(slot)), fields.Count(sent))
+			h.logger.Debug("validator registration duties sent", zap.Uint64("slot", uint64(slot)), fields.Count(sent))
 		}
 	}
 }

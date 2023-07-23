@@ -145,18 +145,28 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 		indicesChangeChs = append(indicesChangeChs, indicesChangeCh)
 		reorgCh := make(chan ReorgEvent)
 		reorgChs = append(reorgChs, reorgCh)
-		handler.Setup(s.beaconNode, s.network, s.validatorController, s.ExecuteDuties, slotTicker, reorgCh, indicesChangeCh)
+		handler.Setup(
+			handler.Name(),
+			logger,
+			s.beaconNode,
+			s.network,
+			s.validatorController,
+			s.ExecuteDuties,
+			slotTicker,
+			reorgCh,
+			indicesChangeCh,
+		)
 
 		s.pool.Go(func(ctx context.Context) error {
 			// Wait for the head event subscription to complete before starting the handler.
 			<-subscriptionCtx.Done()
-			handler.HandleDuties(ctx, logger)
+			handler.HandleDuties(ctx)
 			return nil
 		})
 	}
 
 	s.slotTicker.Subscribe(s.ticker)
-	go s.SlotTicker(ctx, logger)
+	go s.SlotTicker(ctx)
 
 	go fanOut(ctx, s.indicesChg, indicesChangeChs)
 	go fanOut(ctx, s.reorg, reorgChs)
@@ -187,7 +197,7 @@ func fanOut[T any](ctx context.Context, in <-chan T, subscribers []chan<- T) {
 }
 
 // SlotTicker handles the "head" events from the beacon node.
-func (s *Scheduler) SlotTicker(ctx context.Context, logger *zap.Logger) {
+func (s *Scheduler) SlotTicker(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():

@@ -38,15 +38,15 @@ func (m *MockdutyHandler) EXPECT() *MockdutyHandlerMockRecorder {
 }
 
 // HandleDuties mocks base method.
-func (m *MockdutyHandler) HandleDuties(arg0 context.Context, arg1 *zap.Logger) {
+func (m *MockdutyHandler) HandleDuties(arg0 context.Context) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "HandleDuties", arg0, arg1)
+	m.ctrl.Call(m, "HandleDuties", arg0)
 }
 
 // HandleDuties indicates an expected call of HandleDuties.
-func (mr *MockdutyHandlerMockRecorder) HandleDuties(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockdutyHandlerMockRecorder) HandleDuties(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleDuties", reflect.TypeOf((*MockdutyHandler)(nil).HandleDuties), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleDuties", reflect.TypeOf((*MockdutyHandler)(nil).HandleDuties), arg0)
 }
 
 // Name mocks base method.
@@ -64,13 +64,13 @@ func (mr *MockdutyHandlerMockRecorder) Name() *gomock.Call {
 }
 
 // Setup mocks base method.
-func (m *MockdutyHandler) Setup(arg0 BeaconNode, arg1 networkconfig.NetworkConfig, arg2 ValidatorController, arg3 ExecuteDutiesFunc, arg4 chan phase0.Slot, arg5 chan ReorgEvent, arg6 chan bool) {
+func (m *MockdutyHandler) Setup(arg0 string, arg1 *zap.Logger, arg2 BeaconNode, arg3 networkconfig.NetworkConfig, arg4 ValidatorController, arg5 ExecuteDutiesFunc, arg6 chan phase0.Slot, arg7 chan ReorgEvent, arg8 chan bool) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Setup", arg0, arg1, arg2, arg3, arg4, arg5, arg6)
+	m.ctrl.Call(m, "Setup", arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8)
 }
 
 // Setup indicates an expected call of Setup.
-func (mr *MockdutyHandlerMockRecorder) Setup(arg0, arg1, arg2, arg3, arg4, arg5, arg6 interface{}) *gomock.Call {
+func (mr *MockdutyHandlerMockRecorder) Setup(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Setup", reflect.TypeOf((*MockdutyHandler)(nil).Setup), arg0, arg1, arg2, arg3, arg4, arg5, arg6)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Setup", reflect.TypeOf((*MockdutyHandler)(nil).Setup), arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8)
 }

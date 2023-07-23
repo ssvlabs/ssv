@@ -16,12 +16,13 @@ import (
 type ExecuteDutiesFunc func(logger *zap.Logger, duties []*spectypes.Duty)
 
 type dutyHandler interface {
-	Setup(BeaconNode, networkconfig.NetworkConfig, ValidatorController, ExecuteDutiesFunc, chan phase0.Slot, chan ReorgEvent, chan bool)
-	HandleDuties(context.Context, *zap.Logger)
+	Setup(string, *zap.Logger, BeaconNode, networkconfig.NetworkConfig, ValidatorController, ExecuteDutiesFunc, chan phase0.Slot, chan ReorgEvent, chan bool)
+	HandleDuties(context.Context)
 	Name() string
 }
 
 type baseHandler struct {
+	logger              *zap.Logger
 	beaconNode          BeaconNode
 	network             networkconfig.NetworkConfig
 	validatorController ValidatorController
@@ -36,6 +37,8 @@ type baseHandler struct {
 }
 
 func (h *baseHandler) Setup(
+	name string,
+	logger *zap.Logger,
 	beaconNode BeaconNode,
 	network networkconfig.NetworkConfig,
 	validatorController ValidatorController,
@@ -44,6 +47,7 @@ func (h *baseHandler) Setup(
 	reorgEvents chan ReorgEvent,
 	indicesChange chan bool,
 ) {
+	h.logger = logger.With(zap.String("handler", name))
 	h.beaconNode = beaconNode
 	h.network = network
 	h.validatorController = validatorController
