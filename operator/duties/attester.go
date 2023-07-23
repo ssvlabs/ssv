@@ -89,7 +89,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 
 			slotsPerEpoch := h.network.Beacon.SlotsPerEpoch()
 
-			// Get next epoch's attester duties, but wait until half-way through the epoch
+			// If we have reached the mid-point of the epoch, fetch the duties for the next epoch in the next slot.
 			// This allows us to set them up at a time when the beacon node should be less busy.
 			if uint64(slot)%slotsPerEpoch == slotsPerEpoch/2-2 {
 				h.fetchNextEpoch = true

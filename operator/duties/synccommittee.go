@@ -111,7 +111,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 				h.processFetching(ctx, period, slot)
 			}
 
-			// Get next period's sync committee duties, but wait until half-way through the epoch
+			// If we have reached the mid-point of the epoch, fetch the duties for the next period in the next slot.
 			// This allows us to set them up at a time when the beacon node should be less busy.
 			epochsPerPeriod := h.network.Beacon.EpochsPerSyncCommitteePeriod()
 			if uint64(slot)%h.network.Beacon.SlotsPerEpoch() == h.network.Beacon.SlotsPerEpoch()/2-2 &&
