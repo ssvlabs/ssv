@@ -1,5 +1,7 @@
 # Estimation of amount of messages
 
+To play with the below formulas, follow this [google sheet link](https://docs.google.com/spreadsheets/d/1TpXnVFzF4eGiQarXuPBrOIU4tJXhzOHav9PkGve3_Qc/edit#gid=0).
+
 ## Expected messages for duty
 
 Consider a subnet with only 4 operators that works for a single validator.
