@@ -42,7 +42,7 @@ var (
 func (edh *EventDataHandler) handleOperatorAdded(txn basedb.Txn, event *contract.ContractOperatorAdded) error {
 	logger := edh.logger.With(
 		fields.OperatorID(event.OperatorId),
-		zap.String("operator_pub_key", ethcommon.Bytes2Hex(event.PublicKey)),
+		fields.OperatorPubKey(event.PublicKey),
 		zap.String("owner_address", event.Owner.String()),
 		zap.String("event_type", OperatorAdded),
 	)
@@ -74,12 +74,10 @@ func (edh *EventDataHandler) handleOperatorAdded(txn basedb.Txn, event *contract
 
 	if bytes.Equal(event.PublicKey, edh.operatorData.PublicKey) {
 		edh.operatorData = od
+		logger = logger.With(zap.Bool("own_operator", true))
 	}
 
 	edh.metrics.OperatorPublicKey(od.ID, od.PublicKey)
-	logger.Debug("report operator public key",
-		fields.OperatorID(od.ID),
-		fields.PubKey(od.PublicKey))
 
 	logger.Debug("processed event")
 	return nil
@@ -119,11 +117,11 @@ func (edh *EventDataHandler) handleOperatorRemoved(txn basedb.Txn, event *contra
 	return nil
 }
 
-func (edh *EventDataHandler) handleValidatorAdded(txn basedb.Txn, event *contract.ContractValidatorAdded) (*ssvtypes.SSVShare, error) {
+func (edh *EventDataHandler) handleValidatorAdded(txn basedb.Txn, event *contract.ContractValidatorAdded) (ownShare *ssvtypes.SSVShare, err error) {
 	logger := edh.logger.With(
-		zap.String("owner_address", event.Owner.String()),
+		fields.Owner(event.Owner),
 		zap.Uint64s("operator_ids", event.OperatorIds),
-		zap.String("operator_pub_key", ethcommon.Bytes2Hex(event.PublicKey)),
+		fields.Validator(event.PublicKey),
 		zap.String("event_type", ValidatorAdded),
 	)
 	logger.Debug("processing event")
@@ -208,12 +206,12 @@ func (edh *EventDataHandler) handleValidatorAdded(txn basedb.Txn, event *contrac
 	isOperatorShare := validatorShare.BelongsToOperator(edh.operatorData.ID)
 	if isOperatorShare {
 		edh.metrics.ValidatorInactive(event.PublicKey)
-		logger.Debug("processed event")
-		return validatorShare, nil
+		ownShare = validatorShare
+		logger = logger.With(zap.Bool("own_validator", true))
 	}
 
 	logger.Debug("processed event")
-	return nil, nil
+	return
 }
 
 // handleShareCreation is called when a validator was added/updated during registry sync
