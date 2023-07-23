@@ -48,12 +48,12 @@ Each duty may has 3 steps: pre-consensus, consensus, post-consensus.
 
 In one operator perspective, the interval of possible number of messages received are:
 - Pre-consensus: $[\frac{(N+f)}{2}+1, N]$
-- Post-consensus: $[\frac{(N+f)}{2}+1$, N]$
+- Post-consensus: $[\frac{(N+f)}{2}+1, N]$
 - Consensus: $\infty$ in theory (actually, the maximum number of rounds is 12 what limitates the total number of messages)
 
 Let's consider the consensus to have $0.95$ probability of sucess. Considering each as a Bernoulli trial, the geometric distribution becomes
+$$P(X=k) = (1-0.95)^{k-1}*(0.95)$$
 
-$$\begin{aligned}P(X=k) = (1-0.95)^{k-1}*(0.95)\end{aligned}$$
 with expected value given by $E(X) = 1/p$.
 
 In a successful round, the interval of possibile messages received is
@@ -86,11 +86,7 @@ Regarding pre-consensus for each duty, we have:
 ## Number of expected messages per slot
 
 The final number of expected messages per slot becomes
-$$E(messages\,per\,slot) = P(Attestation\,per\,slot) * E(messages|Attestation) +\newline
-P(Aggregator) * E(messages|Aggreator) +\newline
-P(Proposer) * E(messages|Proposer) +\newline
-P(SyncCommittee) * E(messages|SyncCommittee) +\newline
-P(SyncCommitteeAggregator) * E(messages|SyncCommitteeAggregator)$$
+$$E(messages\,per\,slot) = P(Attestation\,per\,slot) * E(messages|Attestation) +\newline P(Aggregator) * E(messages|Aggreator) +\newline P(Proposer) * E(messages|Proposer) +\newline P(SyncCommittee) * E(messages|SyncCommittee) +\newline P(SyncCommitteeAggregator) * E(messages|SyncCommitteeAggregator)$$
 
 Using the highest probability for being an attestaion aggreator, we have (for one validator with 4 operators):
 $$E(messages\,per\,slot) = 0.6781$$
