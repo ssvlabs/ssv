@@ -49,15 +49,16 @@ func (edh *EventDataHandler) handleOperatorAdded(txn basedb.Txn, event *contract
 		zap.String("own_operator_pubkey", string(edh.operatorData.PublicKey)),
 	)
 
+	logger.Debug("processing event")
+
 	decodedPubKey, err := base64.StdEncoding.DecodeString(string(event.PublicKey))
 	if err != nil {
-		logger.Warn("malformed event: operator public key is not encoded in base64")
+		logger.Warn("malformed event: operator public key is not encoded in base64",
+			zap.Error(err))
 		return &MalformedEventError{Err: ErrNotBase64}
 	}
 
 	logger = logger.With(fields.OperatorPubKey(decodedPubKey))
-
-	logger.Debug("processing event")
 
 	od := &registrystorage.OperatorData{
 		PublicKey:    decodedPubKey,
