@@ -2,8 +2,6 @@ package worker
 
 import (
 	"context"
-	"log"
-
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -19,8 +17,9 @@ var (
 )
 
 func init() {
+	logger := zap.L()
 	if err := prometheus.Register(metricsMsgProcessing); err != nil {
-		log.Println("could not register prometheus collector")
+		logger.Debug("could not register prometheus collector")
 	}
 }
 

@@ -390,11 +390,15 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, forksprot
 	forkVersion := forksprotocol.GetCurrentForkVersion(currentEpoch)
 
 	logger.Info("setting ssv network",
-		fields.Network(cfg.SSVOptions.NetworkName),
+		fields.Network(networkConfig.Name),
 		fields.Domain(networkConfig.Domain),
 		fields.Fork(forkVersion),
-		fields.Config(networkConfig),
+		zap.Any("beaconNetwork", networkConfig.Beacon.BeaconNetwork),
+		zap.Uint64("genesisEpoch", uint64(networkConfig.GenesisEpoch)),
+		zap.String("registryContract", networkConfig.RegistryContractAddr),
+		zap.Int64("registrySyncOffset", networkConfig.RegistrySyncOffset.Int64()),
 	)
+
 	return networkConfig, forkVersion, nil
 }
 
@@ -491,15 +495,15 @@ func setupEventHandling(
 
 	fromBlock, found, err := nodeStorage.GetLastProcessedBlock(nil)
 	if err != nil {
-		logger.Fatal("could not get last processed block", zap.Error(err))
+		logger.Fatal("syncing registry contract events failed, could not get last processed block", zap.Error(err))
 	}
 
 	if !found || fromBlock == nil {
-		fromBlock = networkConfig.ETH1SyncOffset
-		logger.Info("no last processed block in DB found, using last processed block from network config",
+		fromBlock = networkConfig.RegistrySyncOffset
+		logger.Info("syncing registry contract events from genesis block, no history events found",
 			fields.BlockNumber(fromBlock.Uint64()))
 	} else {
-		logger.Info("using last processed block from DB",
+		logger.Info("syncing registry contract events from last processed block",
 			fields.BlockNumber(fromBlock.Uint64()))
 	}
 

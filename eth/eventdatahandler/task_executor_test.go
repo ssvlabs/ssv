@@ -138,12 +138,12 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 		observedLogsFlow = append(observedLogsFlow, entry.Message)
 	}
 	happyFlow := []string{
-		"setup operator privateKey is DONE!",
+		"setup operator key is DONE!",
 		"CreatingController",
-		"processing block events",
+		"processing events from block",
 		"processing event",
 		"malformed event: failed to verify signature",
-		"processed block events"}
+	}
 	require.Equal(t, happyFlow, observedLogsFlow)
 }
 

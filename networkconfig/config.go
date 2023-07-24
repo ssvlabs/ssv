@@ -13,9 +13,10 @@ import (
 )
 
 var SupportedConfigs = map[string]NetworkConfig{
-	Mainnet.Name:     Mainnet,
-	JatoV2Stage.Name: JatoV2Stage,
-	JatoV2.Name:      JatoV2,
+	Mainnet.Name:      Mainnet,
+	JatoV2Stage.Name:  JatoV2Stage,
+	JatoV2.Name:       JatoV2,
+	LocalTestnet.Name: LocalTestnet,
 }
 
 func GetNetworkConfigByName(name string) (NetworkConfig, error) {
@@ -31,7 +32,7 @@ type NetworkConfig struct {
 	Beacon                  beacon.Network
 	Domain                  spectypes.DomainType
 	GenesisEpoch            spec.Epoch
-	ETH1SyncOffset          *big.Int
+	RegistrySyncOffset      *big.Int
 	RegistryContractAddr    string // TODO: ethcommon.Address
 	Bootnodes               []string
 	WhitelistedOperatorKeys []string
