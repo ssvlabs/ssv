@@ -114,7 +114,7 @@ func (p *Prober) probe(ctx context.Context) {
 	p.ready.Store(allNodesReady.Load())
 
 	if !p.ready.Load() {
-		p.logger.Warn("not all nodes are ready")
+		p.logger.Error("not all nodes are ready")
 		if h := p.unreadyHandler.Load(); h != nil {
 			(*h)()
 		}
