@@ -114,15 +114,12 @@ func (p *Prober) probe(ctx context.Context) {
 	p.ready.Store(allNodesReady.Load())
 
 	if !p.ready.Load() {
-		p.logger.Debug("not all nodes are ready")
+		p.logger.Error("not all nodes are ready")
 		if h := p.unreadyHandler.Load(); h != nil {
 			(*h)()
 		}
 		return
 	}
-
-	p.logger.Info("all nodes are ready")
-
 	// Wake up any waiters.
 	p.cond.Broadcast()
 }
@@ -136,8 +133,6 @@ func (p *Prober) Wait() {
 	for !p.ready.Load() {
 		p.cond.Wait()
 	}
-
-	p.logger.Info("checked node readiness")
 }
 
 func (p *Prober) SetUnreadyHandler(h func()) {

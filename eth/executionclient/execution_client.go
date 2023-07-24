@@ -111,7 +111,7 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 		zap.Uint64("from", fromBlock),
 		zap.Uint64("to", lastBlock))
 
-	logger.Info("determined current block number, fetching historical logs",
+	logger.Info("fetching registry events in batches",
 		zap.Uint64("current_block", currentBlock))
 
 	logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, lastBlock)
@@ -142,13 +142,6 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 				toBlock = fromBlock + ec.logBatchSize - 1
 			}
 
-			ec.logger.Info("fetching log batch",
-				zap.Uint64("from", fromBlock),
-				zap.Uint64("to", toBlock),
-				zap.Uint64("target", endBlock),
-				zap.String("progress", fmt.Sprintf("%.2f%%", float64(fromBlock-startBlock)/float64(endBlock-startBlock)*100)),
-			)
-
 			client := ec.client.Load()
 			if client == nil {
 				fetchErrCh <- ErrNotConnected
@@ -161,10 +154,19 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 				ToBlock:   new(big.Int).SetUint64(toBlock),
 			})
 			if err != nil {
-				ec.logger.Error("failed to fetch log batch", zap.Error(err))
+				ec.logger.Error("failed to fetch events batch", zap.Error(err))
 				fetchErrCh <- err
 				return
 			}
+
+			ec.logger.Info("fetched events in batch",
+				zap.Uint64("from", fromBlock),
+				zap.Uint64("to", toBlock),
+				zap.Uint64("target", endBlock),
+				zap.String("progress", fmt.Sprintf("%.2f%%", float64(fromBlock-startBlock)/float64(endBlock-startBlock)*100)),
+				fields.Count(len(batchLogs)),
+			)
+
 			select {
 			case <-ctx.Done():
 				ec.logger.Debug("batched log fetching canceled")
@@ -193,9 +195,10 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 			}
 		}
 
-		ec.logger.Info("fetched historical blocks",
+		ec.logger.Debug("fetching registry events in batches completed",
 			zap.Uint64("from", startBlock),
 			zap.Uint64("to", endBlock),
+			zap.String("progress", "100%"),
 			fields.Count(logCount),
 		)
 

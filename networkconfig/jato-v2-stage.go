@@ -13,7 +13,7 @@ var JatoV2Stage = NetworkConfig{
 	Beacon:               beacon.NewNetwork(spectypes.PraterNetwork),
 	Domain:               [4]byte{0x00, 0x00, 0x30, 0x12},
 	GenesisEpoch:         152834,
-	ETH1SyncOffset:       new(big.Int).SetInt64(9249887),
+	RegistrySyncOffset:   new(big.Int).SetInt64(9249887),
 	RegistryContractAddr: "0xd6b633304Db2DD59ce93753FA55076DA367e5b2c",
 	Bootnodes: []string{
 		"enr:-Li4QO86ZMZr_INMW_WQBsP2jS56yjrHnZXxAUOKJz4_qFPKD1Cr3rghQD2FtXPk2_VPnJUi8BBiMngOGVXC0wTYpJGGAYgqnGSNh2F0dG5ldHOIAAAAAAAAAACEZXRoMpDkvpOTAAAQIP__________gmlkgnY0gmlwhArqAsGJc2VjcDI1NmsxoQKNW0Mf-xTXcevRSkZOvoN0Q0T9OkTjGZQyQeOl3bYU3YN0Y3CCE4iDdWRwgg-g",
