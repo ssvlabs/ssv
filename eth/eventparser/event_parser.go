@@ -50,11 +50,15 @@ func (e *EventParser) ParseOperatorAdded(log ethtypes.Log) (*contract.ContractOp
 		return nil, err
 	}
 
+	// Since event.PublicKey is not the operator public key itself
+	// (https://github.com/bloxapp/automation-Tools/blob/6f25a4bd67b6d01e13e300f8585eeb34f37070eb/helpers/contract-integration/register-operators.ts#L33)
+	// but packed operator public key, it needs to be unpacked.
 	unpackedPubKey, err := unpackOperatorPublicKey(event.PublicKey)
 	if err != nil {
 		return nil, fmt.Errorf("unpack OperatorAdded: %w", err)
 	}
 
+	// Contract stores a base64-encoded operator public key instead of plain one
 	decodedPubKey, err := base64.StdEncoding.DecodeString(string(unpackedPubKey))
 	if err != nil {
 		return nil, fmt.Errorf("decode OperatorAdded: %w", err)
