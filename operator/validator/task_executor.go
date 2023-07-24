@@ -13,9 +13,9 @@ import (
 )
 
 func (c *controller) taskLogger(taskName string, fields ...zap.Field) *zap.Logger {
-	logger := c.logger.Named("TaskExecutor").With(zap.String("task", taskName))
-	logger.Debug("executing task")
-	return logger
+	return c.logger.Named("TaskExecutor").
+		With(zap.String("task", taskName)).
+		With(fields...)
 }
 
 func (c *controller) StartValidator(share *ssvtypes.SSVShare) error {

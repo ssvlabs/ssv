@@ -56,11 +56,10 @@ type OperatorRemovedEventYAML struct {
 }
 
 type ValidatorAddedEventYAML struct {
-	PublicKey   string      `yaml:"PublicKey"`
-	TxHash      ethcommon.Hash `yaml:"TxHash"`
-	Owner       string      `yaml:"Owner"`
-	OperatorIds []uint64    `yaml:"OperatorIds"`
-	Shares      string      `yaml:"Shares"`
+	PublicKey   string   `yaml:"PublicKey"`
+	Owner       string   `yaml:"Owner"`
+	OperatorIds []uint64 `yaml:"OperatorIds"`
+	Shares      string   `yaml:"Shares"`
 }
 
 type ValidatorRemovedEventYAML struct {
@@ -114,7 +113,6 @@ func (e *ValidatorAddedEventYAML) toEventData() (interface{}, error) {
 		Owner:       ethcommon.HexToAddress(e.Owner),
 		OperatorIds: e.OperatorIds,
 		Shares:      shares,
-		TxHash:      e.TxHash,
 	}, nil
 }
 

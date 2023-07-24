@@ -207,8 +207,8 @@ func (edh *EventDataHandler) handleValidatorAdded(txn basedb.Txn, event *contrac
 	if isOperatorShare {
 		edh.metrics.ValidatorInactive(event.PublicKey)
 		ownShare = validatorShare
-		logger = logger.With(zap.Bool("own_validator", true))
 	}
+	logger = logger.With(zap.Bool("own_validator", isOperatorShare))
 
 	logger.Debug("processed event")
 	return
