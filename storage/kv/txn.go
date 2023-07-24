@@ -81,3 +81,19 @@ func (t badgerTxn) GetAll(prefix []byte, handler func(int, basedb.Obj) error) er
 func (t badgerTxn) Delete(prefix []byte, key []byte) error {
 	return t.txn.Delete(append(prefix, key...))
 }
+
+func (t badgerTxn) CountByCollection(prefix []byte) (int64, error) {
+	return t.db.CountByCollection(prefix)
+}
+
+func (t badgerTxn) DeleteByPrefix(prefix []byte) (int, error) {
+	return t.db.DeleteByPrefix(prefix)
+}
+
+func (t badgerTxn) RemoveAllByCollection(prefix []byte) error {
+	return t.db.RemoveAllByCollection(prefix)
+}
+
+func (t badgerTxn) Update(fn func(basedb.Txn) error) error {
+	return t.db.Update(fn)
+}

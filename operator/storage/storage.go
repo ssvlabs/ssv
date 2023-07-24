@@ -27,7 +27,7 @@ var (
 type Storage interface {
 	// TODO: de-anonymize the sub-storages, like Shares() below
 
-	ROTxn() basedb.Txn
+	ROTxn() basedb.Reader
 	RWTxn() basedb.Txn
 
 	SaveLastProcessedBlock(txn basedb.Txn, offset *big.Int) error
@@ -46,7 +46,7 @@ type Storage interface {
 
 type storage struct {
 	logger *zap.Logger
-	db     basedb.IDb
+	db     basedb.Database
 
 	operatorStore  registrystorage.Operators
 	recipientStore registrystorage.Recipients
@@ -55,7 +55,7 @@ type storage struct {
 }
 
 // NewNodeStorage creates a new instance of Storage
-func NewNodeStorage(logger *zap.Logger, db basedb.IDb) (Storage, error) {
+func NewNodeStorage(logger *zap.Logger, db basedb.Database) (Storage, error) {
 	stg := &storage{
 		logger:         logger,
 		db:             db,
@@ -71,7 +71,7 @@ func NewNodeStorage(logger *zap.Logger, db basedb.IDb) (Storage, error) {
 	return stg, nil
 }
 
-func (s *storage) ROTxn() basedb.Txn {
+func (s *storage) ROTxn() basedb.Reader {
 	return s.db.ROTxn()
 }
 

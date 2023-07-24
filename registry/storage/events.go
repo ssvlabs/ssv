@@ -30,13 +30,13 @@ type Events interface {
 
 type eventsStorage struct {
 	logger *zap.Logger
-	db     basedb.IDb
+	db     basedb.Database
 	lock   sync.RWMutex
 	prefix []byte
 }
 
 // NewEventsStorage creates a new instance of Storage
-func NewEventsStorage(logger *zap.Logger, db basedb.IDb, prefix []byte) Events {
+func NewEventsStorage(logger *zap.Logger, db basedb.Database, prefix []byte) Events {
 	return &eventsStorage{
 		logger: logger,
 		db:     db,

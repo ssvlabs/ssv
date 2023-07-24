@@ -40,7 +40,7 @@ type Options struct {
 	ExecutionClient     *executionclient.ExecutionClient
 	P2PNetwork          network.P2PNetwork
 	Context             context.Context
-	DB                  basedb.IDb
+	DB                  basedb.Database
 	ValidatorController validator.Controller
 	DutyExec            duties.DutyExecutor
 	// max slots for duty to wait

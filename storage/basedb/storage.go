@@ -14,37 +14,41 @@ type Options struct {
 	Ctx        context.Context
 }
 
-// Txn interface for badger transaction like functions
-// TODO: think about refactoring
-type Txn interface {
-	Set(prefix []byte, key []byte, value []byte) error
+// Reader is a read-only accessor to the database.
+type Reader interface {
 	Get(prefix []byte, key []byte) (Obj, bool, error)
 	GetMany(prefix []byte, keys [][]byte, iterator func(Obj) error) error
+	GetAll(prefix []byte, handler func(int, Obj) error) error
+	CountByCollection(prefix []byte) (int64, error)
+}
+
+// ReadWrite is a read-write accessor to the database.
+// NOTE TO REMOVE: there is no just `Writer` in addition to `ReadWriter` because write transactions always allow for both read & write (at least in Badger)
+type ReadWriter interface {
+	Reader
+	Set(prefix []byte, key []byte, value []byte) error
 	SetMany(prefix []byte, n int, next func(int) (Obj, error)) error
 	Delete(prefix []byte, key []byte) error
-	GetAll(prefix []byte, handler func(int, Obj) error) error
-	// TODO: add iterator
+	DeleteByPrefix(prefix []byte) (int, error)
+	RemoveAllByCollection(prefix []byte) error
+	Update(fn func(Txn) error) error
+}
 
+// Txn is a read-write transaction.
+// TODO: think about refactoring
+type Txn interface {
+	ReadWriter
+	// TODO: add iterator
 	Commit() error
 	Discard()
 }
 
-// IDb interface for all db kind
-// TODO: rename
-type IDb interface {
-	ROTxn() Txn
+// Database interface for Badger DB
+type Database interface {
 	RWTxn() Txn
-
-	Set(prefix []byte, key []byte, value []byte) error
-	SetMany(prefix []byte, n int, next func(int) (Obj, error)) error
-	Get(prefix []byte, key []byte) (Obj, bool, error)
-	GetMany(prefix []byte, keys [][]byte, iterator func(Obj) error) error
-	Delete(prefix []byte, key []byte) error
-	DeleteByPrefix(prefix []byte) (int, error)
-	GetAll(prefix []byte, handler func(int, Obj) error) error
-	CountByCollection(prefix []byte) (int64, error)
-	RemoveAllByCollection(prefix []byte) error
-	Update(fn func(Txn) error) error
+	ROTxn() Reader // TODO: afaik there is no effect for Commit/Discard on read-only transactions so a `Reader` is sufficient?
+	ReadWriter
+	// TODO: consider moving these functions into Reader and ReadWriter interfaces?
 	Close() error
 }
 

@@ -41,13 +41,13 @@ type Operators interface {
 
 type operatorsStorage struct {
 	logger *zap.Logger
-	db     basedb.IDb
+	db     basedb.Database
 	lock   sync.RWMutex
 	prefix []byte
 }
 
 // NewOperatorsStorage creates a new instance of Storage
-func NewOperatorsStorage(logger *zap.Logger, db basedb.IDb, prefix []byte) Operators {
+func NewOperatorsStorage(logger *zap.Logger, db basedb.Database, prefix []byte) Operators {
 	return &operatorsStorage{
 		logger: logger,
 		db:     db,

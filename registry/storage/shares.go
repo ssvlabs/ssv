@@ -46,13 +46,13 @@ type Shares interface {
 
 type sharesStorage struct {
 	logger *zap.Logger
-	db     basedb.IDb
+	db     basedb.Database
 	prefix []byte
 	shares map[string]*types.SSVShare
 	mu     sync.RWMutex
 }
 
-func NewSharesStorage(logger *zap.Logger, db basedb.IDb, prefix []byte) (Shares, error) {
+func NewSharesStorage(logger *zap.Logger, db basedb.Database, prefix []byte) (Shares, error) {
 	storage := &sharesStorage{
 		logger: logger,
 		shares: make(map[string]*types.SSVShare),
