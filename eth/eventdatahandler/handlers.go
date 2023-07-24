@@ -72,14 +72,16 @@ func (edh *EventDataHandler) handleOperatorAdded(txn basedb.Txn, event *contract
 		return nil
 	}
 
-	if bytes.Equal(event.PublicKey, edh.operatorData.PublicKey) {
+	ownOperator := bytes.Equal(event.PublicKey, edh.operatorData.PublicKey)
+	if ownOperator {
 		edh.operatorData = od
-		logger = logger.With(zap.Bool("own_operator", true))
 	}
 
 	edh.metrics.OperatorPublicKey(od.ID, od.PublicKey)
 
+	logger = logger.With(zap.Bool("own_operator", ownOperator))
 	logger.Debug("processed event")
+
 	return nil
 }
 
