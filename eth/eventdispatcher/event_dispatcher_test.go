@@ -26,7 +26,6 @@ import (
 	"go.uber.org/zap/zaptest"
 
 	"github.com/bloxapp/ssv/ekm"
-	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/eth/eventbatcher"
 	"github.com/bloxapp/ssv/eth/eventdatahandler"
 	"github.com/bloxapp/ssv/eth/eventparser"
@@ -147,10 +146,7 @@ func setupEventDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger
 	filterer, err := cl.Filterer()
 	require.NoError(t, err)
 
-	abi, err := contract.ContractMetaData.GetAbi()
-	require.NoError(t, err)
-
-	parser := eventparser.New(filterer, abi)
+	parser := eventparser.New(filterer)
 
 	edh, err := eventdatahandler.New(
 		nodeStorage,

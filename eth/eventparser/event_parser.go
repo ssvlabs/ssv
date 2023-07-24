@@ -2,7 +2,6 @@ package eventparser
 
 import (
 	"fmt"
-	"strings"
 
 	ethabi "github.com/ethereum/go-ethereum/accounts/abi"
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -14,6 +13,7 @@ import (
 type EventParser struct {
 	eventFilterer
 	eventByIDGetter
+	operatorPublicKeyABI *ethabi.ABI
 }
 
 type Parser interface {
@@ -35,10 +35,21 @@ type eventByIDGetter interface {
 	EventByID(topic ethcommon.Hash) (*ethabi.Event, error)
 }
 
-func New(eventFilterer eventFilterer, contractABI eventByIDGetter) *EventParser {
+func New(eventFilterer eventFilterer) *EventParser {
+	contractABI, err := contract.ContractMetaData.GetAbi()
+	if err != nil {
+		panic(err)
+	}
+
+	operatorPublicKeyABI, err := contract.OperatorPublicKeyMetaData.GetAbi()
+	if err != nil {
+		panic(err)
+	}
+
 	return &EventParser{
-		eventFilterer:   eventFilterer,
-		eventByIDGetter: contractABI,
+		eventFilterer:        eventFilterer,
+		eventByIDGetter:      contractABI,
+		operatorPublicKeyABI: operatorPublicKeyABI,
 	}
 }
 
@@ -51,7 +62,7 @@ func (e *EventParser) ParseOperatorAdded(log ethtypes.Log) (*contract.ContractOp
 	// Since event.PublicKey is not the operator public key itself
 	// (https://github.com/bloxapp/automation-Tools/blob/6f25a4bd67b6d01e13e300f8585eeb34f37070eb/helpers/contract-integration/register-operators.ts#L33)
 	// but packed operator public key, it needs to be unpacked.
-	unpackedPubKey, err := unpackOperatorPublicKey(event.PublicKey)
+	unpackedPubKey, err := e.unpackOperatorPublicKey(event.PublicKey)
 	if err != nil {
 		return nil, err
 	}
@@ -61,15 +72,8 @@ func (e *EventParser) ParseOperatorAdded(log ethtypes.Log) (*contract.ContractOp
 	return event, nil
 }
 
-func unpackOperatorPublicKey(fieldBytes []byte) ([]byte, error) {
-	def := `[{ "name" : "method", "type": "function", "outputs": [{"type": "bytes"}]}]`
-	// TODO: abigen?
-	outAbi, err := ethabi.JSON(strings.NewReader(def))
-	if err != nil {
-		return nil, fmt.Errorf("define ABI: %w", err)
-	}
-
-	outField, err := outAbi.Unpack("method", fieldBytes)
+func (e *EventParser) unpackOperatorPublicKey(fieldBytes []byte) ([]byte, error) {
+	outField, err := e.operatorPublicKeyABI.Unpack("method", fieldBytes)
 	if err != nil {
 		return nil, fmt.Errorf("unpack: %w", err)
 	}

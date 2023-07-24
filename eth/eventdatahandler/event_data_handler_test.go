@@ -124,10 +124,7 @@ func setupDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger) (*E
 	contractFilterer, err := cl.Filterer()
 	require.NoError(t, err)
 
-	contractABI, err := contract.ContractMetaData.GetAbi()
-	require.NoError(t, err)
-
-	parser := eventparser.New(contractFilterer, contractABI)
+	parser := eventparser.New(contractFilterer)
 
 	edh, err := New(
 		nodeStorage,

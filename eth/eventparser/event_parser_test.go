@@ -9,7 +9,6 @@ import (
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/eth/eventparser"
 	"github.com/bloxapp/ssv/eth/executionclient"
 )
@@ -20,10 +19,7 @@ func TestEventParser(t *testing.T) {
 	contractFilterer, err := cl.Filterer()
 	require.NoError(t, err)
 
-	contractABI, err := contract.ContractMetaData.GetAbi()
-	require.NoError(t, err)
-
-	parser := eventparser.New(contractFilterer, contractABI)
+	parser := eventparser.New(contractFilterer)
 
 	t.Run("OperatorAdded", func(t *testing.T) {
 		const event = `{
