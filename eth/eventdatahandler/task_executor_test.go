@@ -25,7 +25,7 @@ func TestExecuteTask(t *testing.T) {
 
 	t.Run("test AddValidator task execution - not started", func(t *testing.T) {
 		logValidatorAdded := unmarshalLog(t, rawValidatorAdded)
-		validatorAddedEvent, err := edh.eventFilterer.ParseValidatorAdded(logValidatorAdded)
+		validatorAddedEvent, err := edh.eventParser.ParseValidatorAdded(logValidatorAdded)
 		if err != nil {
 			t.Fatal("parse ValidatorAdded", err)
 		}
@@ -43,7 +43,7 @@ func TestExecuteTask(t *testing.T) {
 
 	t.Run("test AddValidator task execution - started", func(t *testing.T) {
 		logValidatorAdded := unmarshalLog(t, rawValidatorAdded)
-		validatorAddedEvent, err := edh.eventFilterer.ParseValidatorAdded(logValidatorAdded)
+		validatorAddedEvent, err := edh.eventParser.ParseValidatorAdded(logValidatorAdded)
 		if err != nil {
 			t.Fatal("parse ValidatorAdded", err)
 		}

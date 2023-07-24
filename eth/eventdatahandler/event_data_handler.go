@@ -2,7 +2,6 @@ package eventdatahandler
 
 import (
 	"crypto/rsa"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"math/big"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/eth/eventbatcher"
+	"github.com/bloxapp/ssv/eth/eventparser"
 	"github.com/bloxapp/ssv/eth/localevents"
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging/fields"
@@ -24,6 +24,17 @@ import (
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
+)
+
+// Event names
+const (
+	OperatorAdded              = "OperatorAdded"
+	OperatorRemoved            = "OperatorRemoved"
+	ValidatorAdded             = "ValidatorAdded"
+	ValidatorRemoved           = "ValidatorRemoved"
+	ClusterLiquidated          = "ClusterLiquidated"
+	ClusterReactivated         = "ClusterReactivated"
+	FeeRecipientAddressUpdated = "FeeRecipientAddressUpdated"
 )
 
 type taskExecutor interface {
@@ -39,8 +50,7 @@ type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
 type EventDataHandler struct {
 	nodeStorage                nodestorage.Storage
 	taskExecutor               taskExecutor
-	contractABI                ethEventGetter
-	eventFilterer              eventFilterer
+	eventParser                eventparser.Parser
 	domain                     spectypes.DomainType
 	operatorData               *storage.OperatorData
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider
@@ -56,8 +66,7 @@ type EventDataHandler struct {
 
 func New(
 	nodeStorage nodestorage.Storage,
-	eventFilterer eventFilterer,
-	contractABI ethEventGetter,
+	eventParser eventparser.Parser,
 	taskExecutor taskExecutor,
 	domain spectypes.DomainType,
 	operatorData *storage.OperatorData,
@@ -70,8 +79,7 @@ func New(
 	edh := &EventDataHandler{
 		nodeStorage:                nodeStorage,
 		taskExecutor:               taskExecutor,
-		contractABI:                contractABI,
-		eventFilterer:              eventFilterer,
+		eventParser:                eventParser,
 		domain:                     domain,
 		operatorData:               operatorData,
 		shareEncryptionKeyProvider: shareEncryptionKeyProvider,
@@ -157,7 +165,7 @@ func (edh *EventDataHandler) processBlockEvents(blockEvents eventbatcher.BlockEv
 }
 
 func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, error) {
-	abiEvent, err := edh.contractABI.EventByID(event.Topics[0])
+	abiEvent, err := edh.eventParser.EventByID(event.Topics[0])
 	if err != nil {
 		edh.logger.Error("failed to find event by ID", zap.String("hash", event.Topics[0].String()))
 		return nil, nil
@@ -165,24 +173,11 @@ func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (T
 
 	switch abiEvent.Name {
 	case OperatorAdded:
-		operatorAddedEvent, err := edh.eventFilterer.ParseOperatorAdded(event)
+		operatorAddedEvent, err := edh.eventParser.ParseOperatorAdded(event)
 		if err != nil {
 			edh.metrics.EventProcessingFailed(abiEvent.Name)
 			return nil, fmt.Errorf("parse OperatorAdded: %w", err)
 		}
-
-		// TODO: extract event parser component and unpack it there
-		unpackedPubKey, err := unpackOperatorPublicKey(operatorAddedEvent.PublicKey)
-		if err != nil {
-			return nil, fmt.Errorf("unpack OperatorAdded: %w", err)
-		}
-
-		decodedPubKey, err := base64.StdEncoding.DecodeString(string(unpackedPubKey))
-		if err != nil {
-			return nil, fmt.Errorf("decode OperatorAdded: %w", err)
-		}
-
-		operatorAddedEvent.PublicKey = decodedPubKey
 
 		if err := edh.handleOperatorAdded(txn, operatorAddedEvent); err != nil {
 			edh.metrics.EventProcessingFailed(abiEvent.Name)
@@ -198,7 +193,7 @@ func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (T
 		return nil, nil
 
 	case OperatorRemoved:
-		operatorRemovedEvent, err := edh.eventFilterer.ParseOperatorRemoved(event)
+		operatorRemovedEvent, err := edh.eventParser.ParseOperatorRemoved(event)
 		if err != nil {
 			return nil, fmt.Errorf("parse OperatorRemoved: %w", err)
 		}
@@ -217,7 +212,7 @@ func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (T
 		return nil, nil
 
 	case ValidatorAdded:
-		validatorAddedEvent, err := edh.eventFilterer.ParseValidatorAdded(event)
+		validatorAddedEvent, err := edh.eventParser.ParseValidatorAdded(event)
 		if err != nil {
 			return nil, fmt.Errorf("parse ValidatorAdded: %w", err)
 		}
@@ -244,7 +239,7 @@ func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (T
 		return task, nil
 
 	case ValidatorRemoved:
-		validatorRemovedEvent, err := edh.eventFilterer.ParseValidatorRemoved(event)
+		validatorRemovedEvent, err := edh.eventParser.ParseValidatorRemoved(event)
 		if err != nil {
 			return nil, fmt.Errorf("parse ValidatorRemoved: %w", err)
 		}
@@ -271,7 +266,7 @@ func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (T
 		return task, nil
 
 	case ClusterLiquidated:
-		clusterLiquidatedEvent, err := edh.eventFilterer.ParseClusterLiquidated(event)
+		clusterLiquidatedEvent, err := edh.eventParser.ParseClusterLiquidated(event)
 		if err != nil {
 			return nil, fmt.Errorf("parse ClusterLiquidated: %w", err)
 		}
@@ -298,7 +293,7 @@ func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (T
 		return task, nil
 
 	case ClusterReactivated:
-		clusterReactivatedEvent, err := edh.eventFilterer.ParseClusterReactivated(event)
+		clusterReactivatedEvent, err := edh.eventParser.ParseClusterReactivated(event)
 		if err != nil {
 			return nil, fmt.Errorf("parse ClusterReactivated: %w", err)
 		}
@@ -325,7 +320,7 @@ func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (T
 		return task, nil
 
 	case FeeRecipientAddressUpdated:
-		feeRecipientAddressUpdatedEvent, err := edh.eventFilterer.ParseFeeRecipientAddressUpdated(event)
+		feeRecipientAddressUpdatedEvent, err := edh.eventParser.ParseFeeRecipientAddressUpdated(event)
 		if err != nil {
 			return nil, fmt.Errorf("parse FeeRecipientAddressUpdated: %w", err)
 		}

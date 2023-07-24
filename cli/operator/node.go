@@ -23,6 +23,7 @@ import (
 	"github.com/bloxapp/ssv/eth/eventbatcher"
 	"github.com/bloxapp/ssv/eth/eventdatahandler"
 	"github.com/bloxapp/ssv/eth/eventdispatcher"
+	"github.com/bloxapp/ssv/eth/eventparser"
 	"github.com/bloxapp/ssv/eth/executionclient"
 	"github.com/bloxapp/ssv/eth/localevents"
 	exporterapi "github.com/bloxapp/ssv/exporter/api"
@@ -464,10 +465,11 @@ func setupEventHandling(
 		logger.Fatal("failed to get contract ABI", zap.Error(err))
 	}
 
+	eventParser := eventparser.New(eventFilterer, contractABI)
+
 	eventDataHandler, err := eventdatahandler.New(
 		nodeStorage,
-		eventFilterer,
-		contractABI,
+		eventParser,
 		validatorCtrl,
 		networkConfig.Domain,
 		cfg.SSVOptions.ValidatorOptions.OperatorData,

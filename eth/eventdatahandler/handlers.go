@@ -5,11 +5,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/ethereum/go-ethereum/accounts/abi"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -86,30 +84,6 @@ func (edh *EventDataHandler) handleOperatorAdded(txn basedb.Txn, event *contract
 	logger.Debug("processed event")
 
 	return nil
-}
-
-func unpackOperatorPublicKey(fieldBytes []byte) ([]byte, error) {
-	def := `[{ "name" : "method", "type": "function", "outputs": [{"type": "bytes"}]}]`
-	outAbi, err := abi.JSON(strings.NewReader(def))
-	if err != nil {
-		return nil, fmt.Errorf("define ABI: %w", err)
-	}
-
-	outField, err := outAbi.Unpack("method", fieldBytes)
-	if err != nil {
-		return nil, &MalformedEventError{
-			Err: fmt.Errorf("unpack OperatorPublicKey: %w", err),
-		}
-	}
-
-	unpacked, ok := outField[0].([]byte)
-	if !ok {
-		return nil, &MalformedEventError{
-			Err: fmt.Errorf("cast OperatorPublicKey to []byte: %w", err),
-		}
-	}
-
-	return unpacked, nil
 }
 
 func (edh *EventDataHandler) handleOperatorRemoved(txn basedb.Txn, event *contract.ContractOperatorRemoved) error {
