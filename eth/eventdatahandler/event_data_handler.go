@@ -175,9 +175,11 @@ func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (T
 	case OperatorAdded:
 		operatorAddedEvent, err := edh.eventParser.ParseOperatorAdded(event)
 		if err != nil {
+			edh.logger.Warn("could not parse event",
+				fields.EventName(abiEvent.Name),
+				zap.Error(err))
 			edh.metrics.EventProcessingFailed(abiEvent.Name)
-			// TODO: return no error?
-			return nil, fmt.Errorf("parse OperatorAdded: %w", err)
+			return nil, nil
 		}
 
 		if err := edh.handleOperatorAdded(txn, operatorAddedEvent); err != nil {
@@ -196,8 +198,11 @@ func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (T
 	case OperatorRemoved:
 		operatorRemovedEvent, err := edh.eventParser.ParseOperatorRemoved(event)
 		if err != nil {
-			// TODO: return no error?
-			return nil, fmt.Errorf("parse OperatorRemoved: %w", err)
+			edh.logger.Warn("could not parse event",
+				fields.EventName(abiEvent.Name),
+				zap.Error(err))
+			edh.metrics.EventProcessingFailed(abiEvent.Name)
+			return nil, nil
 		}
 
 		if err := edh.handleOperatorRemoved(txn, operatorRemovedEvent); err != nil {
@@ -216,8 +221,11 @@ func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (T
 	case ValidatorAdded:
 		validatorAddedEvent, err := edh.eventParser.ParseValidatorAdded(event)
 		if err != nil {
-			// TODO: return no error?
-			return nil, fmt.Errorf("parse ValidatorAdded: %w", err)
+			edh.logger.Warn("could not parse event",
+				fields.EventName(abiEvent.Name),
+				zap.Error(err))
+			edh.metrics.EventProcessingFailed(abiEvent.Name)
+			return nil, nil
 		}
 
 		share, err := edh.handleValidatorAdded(txn, validatorAddedEvent)
@@ -244,8 +252,11 @@ func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (T
 	case ValidatorRemoved:
 		validatorRemovedEvent, err := edh.eventParser.ParseValidatorRemoved(event)
 		if err != nil {
-			// TODO: return no error?
-			return nil, fmt.Errorf("parse ValidatorRemoved: %w", err)
+			edh.logger.Warn("could not parse event",
+				fields.EventName(abiEvent.Name),
+				zap.Error(err))
+			edh.metrics.EventProcessingFailed(abiEvent.Name)
+			return nil, nil
 		}
 
 		sharePK, err := edh.handleValidatorRemoved(txn, validatorRemovedEvent)
@@ -272,8 +283,11 @@ func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (T
 	case ClusterLiquidated:
 		clusterLiquidatedEvent, err := edh.eventParser.ParseClusterLiquidated(event)
 		if err != nil {
-			// TODO: return no error?
-			return nil, fmt.Errorf("parse ClusterLiquidated: %w", err)
+			edh.logger.Warn("could not parse event",
+				fields.EventName(abiEvent.Name),
+				zap.Error(err))
+			edh.metrics.EventProcessingFailed(abiEvent.Name)
+			return nil, nil
 		}
 
 		sharesToLiquidate, err := edh.handleClusterLiquidated(txn, clusterLiquidatedEvent)
@@ -300,8 +314,11 @@ func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (T
 	case ClusterReactivated:
 		clusterReactivatedEvent, err := edh.eventParser.ParseClusterReactivated(event)
 		if err != nil {
-			// TODO: return no error?
-			return nil, fmt.Errorf("parse ClusterReactivated: %w", err)
+			edh.logger.Warn("could not parse event",
+				fields.EventName(abiEvent.Name),
+				zap.Error(err))
+			edh.metrics.EventProcessingFailed(abiEvent.Name)
+			return nil, nil
 		}
 
 		sharesToReactivate, err := edh.handleClusterReactivated(txn, clusterReactivatedEvent)
@@ -328,8 +345,11 @@ func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (T
 	case FeeRecipientAddressUpdated:
 		feeRecipientAddressUpdatedEvent, err := edh.eventParser.ParseFeeRecipientAddressUpdated(event)
 		if err != nil {
-			// TODO: return no error?
-			return nil, fmt.Errorf("parse FeeRecipientAddressUpdated: %w", err)
+			edh.logger.Warn("could not parse event",
+				fields.EventName(abiEvent.Name),
+				zap.Error(err))
+			edh.metrics.EventProcessingFailed(abiEvent.Name)
+			return nil, nil
 		}
 
 		updated, err := edh.handleFeeRecipientAddressUpdated(txn, feeRecipientAddressUpdatedEvent)
