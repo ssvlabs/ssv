@@ -2,7 +2,6 @@ package eventdatahandler
 
 import (
 	"crypto/rsa"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -170,10 +169,6 @@ func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (T
 			edh.metrics.EventProcessingFailed(abiEvent.Name)
 			return nil, fmt.Errorf("parse OperatorAdded: %w", err)
 		}
-
-		eventJSON, _ := json.Marshal(operatorAddedEvent)
-
-		fmt.Println("parsed OperatorAdded", string(eventJSON))
 
 		if err := edh.handleOperatorAdded(txn, operatorAddedEvent); err != nil {
 			edh.metrics.EventProcessingFailed(abiEvent.Name)
