@@ -94,15 +94,13 @@ func (edh *EventDataHandler) HandleBlockEventsStream(blockEventsCh <-chan eventb
 	for blockEvents := range blockEventsCh {
 		logger := edh.logger.With(fields.BlockNumber(blockEvents.BlockNumber))
 
-		logger.Info("processing block events")
+		logger.Debug("processing events from block", fields.Count(len(blockEvents.Events)))
 		tasks, err := edh.processBlockEvents(blockEvents)
 		if err != nil {
 			return 0, fmt.Errorf("process block events: %w", err)
 		}
 
 		lastProcessedBlock = blockEvents.BlockNumber
-
-		logger.Info("processed block events")
 
 		if !executeTasks || len(tasks) == 0 {
 			continue

@@ -68,7 +68,7 @@ func New(executionClient executionClient, eventBatcher eventBatcher, eventDataHa
 // Then it asynchronously runs a loop which retrieves data from ExecutionClient event stream and passes them for processing.
 // Start blocks until historical logs are processed.
 func (ed *EventDispatcher) Start(ctx context.Context, fromBlock uint64) error {
-	ed.logger.Info("starting event dispatcher")
+	ed.logger.Debug("starting event dispatcher")
 
 	if ed.nodeProber != nil {
 		ready, err := ed.nodeProber.IsReady(ctx)
@@ -81,16 +81,14 @@ func (ed *EventDispatcher) Start(ctx context.Context, fromBlock uint64) error {
 		}
 	}
 
-	ed.logger.Info("going to fetch historical logs")
 	logStream, errorStream, err := ed.executionClient.FetchHistoricalLogs(ctx, fromBlock)
 	if err != nil {
-		return fmt.Errorf("fetch historical logs: %w", err)
+		return fmt.Errorf("fetching registry events failed: %w", err)
 	}
 
-	ed.logger.Info("going to batch historical logs")
 	blockEvents := ed.eventBatcher.BatchEvents(logStream)
 
-	ed.logger.Info("going to process historical logs")
+	ed.logger.Debug("batching events by block")
 	lastProcessedBlock, err := ed.eventDataHandler.HandleBlockEventsStream(blockEvents, false)
 	if err != nil {
 		return fmt.Errorf("handle historical block events: %w", err)
@@ -101,7 +99,7 @@ func (ed *EventDispatcher) Start(ctx context.Context, fromBlock uint64) error {
 		return fmt.Errorf("error occurred while fetching historical logs: %w", err)
 	}
 
-	ed.logger.Info("finished processing historical logs",
+	ed.logger.Info("finished processing registry events in batches",
 		zap.Uint64("last_processed_block", lastProcessedBlock))
 
 	// TODO: log shares, operators, my validators

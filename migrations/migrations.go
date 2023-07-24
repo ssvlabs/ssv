@@ -73,7 +73,7 @@ func (o Options) signerStorage(logger *zap.Logger) ekm.Storage {
 
 // Run executes the migrations.
 func (m Migrations) Run(ctx context.Context, logger *zap.Logger, opt Options) (applied int, err error) {
-	logger.Info("Running migrations")
+	logger.Info("running migrations")
 	for _, migration := range m {
 		// Skip the migration if it's already completed.
 		obj, _, err := opt.Db.Get(migrationsPrefix, []byte(migration.Name))

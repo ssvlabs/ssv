@@ -495,15 +495,15 @@ func setupEventHandling(
 
 	fromBlock, found, err := nodeStorage.GetLastProcessedBlock(nil)
 	if err != nil {
-		logger.Fatal("could not get last processed block", zap.Error(err))
+		logger.Fatal("syncing registry contract events failed, could not get last processed block", zap.Error(err))
 	}
 
 	if !found || fromBlock == nil {
 		fromBlock = networkConfig.RegistrySyncOffset
-		logger.Info("no last processed block in DB found, using last processed block from network config",
+		logger.Info("syncing registry contract events from genesis block, no history events found",
 			fields.BlockNumber(fromBlock.Uint64()))
 	} else {
-		logger.Info("using last processed block from DB",
+		logger.Info("syncing registry contract events from last processed block",
 			fields.BlockNumber(fromBlock.Uint64()))
 	}
 
