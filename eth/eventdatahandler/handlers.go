@@ -188,6 +188,8 @@ func (edh *EventDataHandler) handleValidatorAdded(txn basedb.Txn, event *contrac
 
 		validatorShare = createdShare
 
+		logger.Debug("share not found, created a new one", fields.OperatorID(validatorShare.OperatorID))
+
 		if err := edh.nodeStorage.BumpNonce(txn, event.Owner); err != nil {
 			return nil, fmt.Errorf("bump nonce: %w", err)
 		}
