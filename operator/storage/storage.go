@@ -20,7 +20,7 @@ import (
 
 var (
 	storagePrefix         = []byte("operator/")
-	lastProcessedBlockKey = []byte("syncOffset") // TODO: temporarily left as syncOffset for compatibility, consider renaming
+	lastProcessedBlockKey = []byte("syncOffset") // TODO: temporarily left as syncOffset for compatibility, consider renaming and adding a migration for that
 )
 
 // Storage represents the interface for ssv node storage
