@@ -47,6 +47,7 @@ func (edh *EventDataHandler) handleOperatorAdded(txn basedb.Txn, event *contract
 		zap.String("owner_address", event.Owner.String()),
 		zap.String("event_type", OperatorAdded),
 		zap.String("own_operator_pubkey", string(edh.operatorData.PublicKey)),
+		fields.OperatorPubKey(event.PublicKey),
 	)
 
 	logger.Debug("processing event")
@@ -57,8 +58,6 @@ func (edh *EventDataHandler) handleOperatorAdded(txn basedb.Txn, event *contract
 			zap.Error(err))
 		return &MalformedEventError{Err: ErrNotBase64}
 	}
-
-	logger = logger.With(fields.OperatorPubKey(decodedPubKey))
 
 	od := &registrystorage.OperatorData{
 		PublicKey:    decodedPubKey,
