@@ -74,6 +74,7 @@ func (edh *EventDataHandler) handleOperatorAdded(txn basedb.Txn, event *contract
 
 	ownOperator := bytes.Equal(event.PublicKey, edh.operatorData.PublicKey)
 	if ownOperator {
+		logger.Debug("operator is own")
 		edh.operatorData = od
 	}
 
@@ -204,6 +205,11 @@ func (edh *EventDataHandler) handleValidatorAdded(txn basedb.Txn, event *contrac
 
 		return nil, &MalformedEventError{Err: ErrShareBelongsToDifferentOwner}
 	}
+
+	logger = logger.With(
+		zap.Uint64("share_operator_id", validatorShare.OperatorID),
+		zap.Uint64("own_operator_id", edh.operatorData.ID),
+	)
 
 	isOperatorShare := validatorShare.BelongsToOperator(edh.operatorData.ID)
 	if isOperatorShare {
