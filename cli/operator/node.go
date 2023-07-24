@@ -388,15 +388,24 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, forksprot
 
 	currentEpoch := networkConfig.Beacon.EstimatedCurrentEpoch()
 	forkVersion := forksprotocol.GetCurrentForkVersion(currentEpoch)
+	nodeType := "light"
+	if cfg.SSVOptions.ValidatorOptions.FullNode {
+		nodeType = "full"
+	}
+	builderProposals := "disabled"
+	if cfg.SSVOptions.ValidatorOptions.BuilderProposals {
+		builderProposals = "enabled"
+	}
 
 	logger.Info("setting ssv network",
 		fields.Network(networkConfig.Name),
 		fields.Domain(networkConfig.Domain),
-		fields.Fork(forkVersion),
+		zap.String("nodeType", nodeType),
+		zap.String("builderProposals(MEV)", builderProposals),
 		zap.Any("beaconNetwork", networkConfig.Beacon.BeaconNetwork),
+		fields.Fork(forkVersion),
 		zap.Uint64("genesisEpoch", uint64(networkConfig.GenesisEpoch)),
 		zap.String("registryContract", networkConfig.RegistryContractAddr),
-		zap.Int64("registrySyncOffset", networkConfig.RegistrySyncOffset.Int64()),
 	)
 
 	return networkConfig, forkVersion, nil
