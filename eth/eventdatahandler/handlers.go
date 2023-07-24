@@ -2,6 +2,7 @@ package eventdatahandler
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -28,6 +29,7 @@ import (
 const encryptedKeyLength = 256
 
 var (
+	ErrNotBase64                    = fmt.Errorf("operator public key is not encoded in base64")
 	ErrAlreadyRegistered            = fmt.Errorf("operator registered with the same operator public key")
 	ErrOperatorDataNotFound         = fmt.Errorf("operator data not found")
 	ErrIncorrectSharesLength        = fmt.Errorf("shares length is not correct")
@@ -42,21 +44,29 @@ var (
 func (edh *EventDataHandler) handleOperatorAdded(txn basedb.Txn, event *contract.ContractOperatorAdded) error {
 	logger := edh.logger.With(
 		fields.OperatorID(event.OperatorId),
-		fields.OperatorPubKey(event.PublicKey),
 		zap.String("owner_address", event.Owner.String()),
 		zap.String("event_type", OperatorAdded),
+		zap.String("own_operator_pubkey", string(edh.operatorData.PublicKey)),
 	)
+
+	decodedPubKey, err := base64.StdEncoding.DecodeString(string(event.PublicKey))
+	if err != nil {
+		logger.Warn("malformed event: operator public key is not encoded in base64")
+		return &MalformedEventError{Err: ErrNotBase64}
+	}
+
+	logger = logger.With(fields.OperatorPubKey(decodedPubKey))
 
 	logger.Debug("processing event")
 
 	od := &registrystorage.OperatorData{
-		PublicKey:    event.PublicKey,
+		PublicKey:    decodedPubKey,
 		OwnerAddress: event.Owner,
 		ID:           event.OperatorId,
 	}
 
 	// throw an error if there is an existing operator with the same public key and different operator id
-	if edh.operatorData.ID != 0 && bytes.Equal(edh.operatorData.PublicKey, event.PublicKey) && edh.operatorData.ID != event.OperatorId {
+	if edh.operatorData.ID != 0 && bytes.Equal(edh.operatorData.PublicKey, decodedPubKey) && edh.operatorData.ID != event.OperatorId {
 		logger.Warn("malformed event: operator registered with the same operator public key",
 			zap.Uint64("expected_operator_id", edh.operatorData.ID))
 		return &MalformedEventError{Err: ErrAlreadyRegistered}
@@ -72,15 +82,14 @@ func (edh *EventDataHandler) handleOperatorAdded(txn basedb.Txn, event *contract
 		return nil
 	}
 
-	ownOperator := bytes.Equal(event.PublicKey, edh.operatorData.PublicKey)
+	ownOperator := bytes.Equal(decodedPubKey, edh.operatorData.PublicKey)
+	logger = logger.With(zap.Bool("own_operator", ownOperator))
 	if ownOperator {
-		logger.Debug("operator is own")
 		edh.operatorData = od
 	}
 
 	edh.metrics.OperatorPublicKey(od.ID, od.PublicKey)
 
-	logger = logger.With(zap.Bool("own_operator", ownOperator))
 	logger.Debug("processed event")
 
 	return nil
