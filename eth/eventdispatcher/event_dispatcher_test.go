@@ -29,6 +29,7 @@ import (
 	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/eth/eventbatcher"
 	"github.com/bloxapp/ssv/eth/eventdatahandler"
+	"github.com/bloxapp/ssv/eth/eventparser"
 	"github.com/bloxapp/ssv/eth/executionclient"
 	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/networkconfig"
@@ -149,10 +150,11 @@ func setupEventDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger
 	abi, err := contract.ContractMetaData.GetAbi()
 	require.NoError(t, err)
 
+	parser := eventparser.New(filterer, abi)
+
 	edh, err := eventdatahandler.New(
 		nodeStorage,
-		filterer,
-		abi,
+		parser,
 		validatorCtrl,
 		testNetworkConfig.Domain,
 		operatorData,
@@ -294,6 +296,7 @@ Example contract to test event emission:
 
 	pragma solidity >=0.7.0 <0.9.0;
 	contract SSVTest {
+		// TODO: try this public key to fix the test: '\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000 \u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0002dLS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBMWplSExYNFh1WXR5M09wYnJNNFUKcTBHbisvTGhrQWxieTkvTmxIMm5LRkFjZmVkeFAraXhyYTRVdUZSM3lvTGpSWTE0aEg1TFNHWFprTE91N3A0ZQpwZjF1aEdlWW5zZ1R5STlSd0dZaFg2b3QybWV4djlqbXMvbnRJT1BNcFpoSkNPT1ppQjJsL1c1TWZFWi9xanQrCjNqZ2JZc0ZLZkNEbExITkd4L3RPS1pBdXV4WGE1QkoyUU5aZ1BNMlpudzI1aDdxaEZVaTZ4SFM1MUFqVm43RlcKTVl0MkFjb245ZG1ZbmYvSDIrRlA0aFRhOVM1bUFEZ3c5OWpaRXpYSC90T3AycGI0QUg5RGFKdTVPQ01tZHZSbQpNYVpKMnRIR0sxZzJDMHAvQWhQNTNlc2Fwd1NMMkY5MjA5aWNEUHZHOWRCNjBIRnV0V255enN3dmVlL1FoNThXCjlRSURBUUFCCi0tLS0tRU5EIFJTQSBQVUJMSUMgS0VZLS0tLS0K\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0000'
 		event OperatorAdded(uint64 indexed operatorId, address indexed owner, bytes publicKey, uint256 fee);
 		function registerOperator() public { emit OperatorAdded(1, address(0), '0xabcd', 1000); }
 	}

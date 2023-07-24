@@ -55,13 +55,13 @@ func (e *EventParser) ParseOperatorAdded(log ethtypes.Log) (*contract.ContractOp
 	// but packed operator public key, it needs to be unpacked.
 	unpackedPubKey, err := unpackOperatorPublicKey(event.PublicKey)
 	if err != nil {
-		return nil, fmt.Errorf("unpack OperatorAdded: %w", err)
+		return nil, err
 	}
 
 	// Contract stores a base64-encoded operator public key instead of plain one
 	decodedPubKey, err := base64.StdEncoding.DecodeString(string(unpackedPubKey))
 	if err != nil {
-		return nil, fmt.Errorf("decode OperatorAdded: %w", err)
+		return nil, fmt.Errorf("decode: %w", err)
 	}
 
 	event.PublicKey = decodedPubKey
