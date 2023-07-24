@@ -123,7 +123,7 @@ func (edh *EventDataHandler) handleValidatorAdded(txn basedb.Txn, event *contrac
 	logger := edh.logger.With(
 		zap.String("owner_address", event.Owner.String()),
 		zap.Uint64s("operator_ids", event.OperatorIds),
-		zap.String("operator_pub_key", ethcommon.Bytes2Hex(event.PublicKey)),
+		fields.PubKey(event.PublicKey),
 		zap.String("event_type", ValidatorAdded),
 	)
 	logger.Debug("processing event")
