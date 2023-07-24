@@ -2,8 +2,6 @@ package migrations
 
 import (
 	"context"
-	"fmt"
-
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -32,7 +30,7 @@ var migrationExample2 = Migration{
 			if !found {
 				return errors.Errorf("the key %s is not found", string(obj.Key))
 			}
-			fmt.Printf("the key %s is found. value = %s", string(obj.Key), string(obj.Key))
+			logger.Debug("migration_1_example: key found", zap.String("key", string(obj.Key)), zap.String("value", string(obj.Value)))
 			return txn.Set(migrationsPrefix, key, migrationCompleted)
 		})
 	},

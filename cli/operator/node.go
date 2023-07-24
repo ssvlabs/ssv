@@ -345,7 +345,7 @@ func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.Badger
 	if err := reopenDb(); err != nil {
 		return nil, err
 	}
-	logger.Info("post-migrations garbage collection completed", fields.Duration(start))
+	logger.Debug("post-migrations garbage collection completed", fields.Duration(start))
 
 	return db, nil
 }

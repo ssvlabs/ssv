@@ -73,7 +73,7 @@ func (o Options) signerStorage(logger *zap.Logger) ekm.Storage {
 
 // Run executes the migrations.
 func (m Migrations) Run(ctx context.Context, logger *zap.Logger, opt Options) (applied int, err error) {
-	logger.Info("running migrations")
+	logger.Info("applying migrations", fields.Count(len(m)))
 	for _, migration := range m {
 		// Skip the migration if it's already completed.
 		obj, _, err := opt.Db.Get(migrationsPrefix, []byte(migration.Name))
@@ -87,17 +87,16 @@ func (m Migrations) Run(ctx context.Context, logger *zap.Logger, opt Options) (a
 
 		// Execute the migration.
 		start := time.Now()
-		logger = logger.With(zap.String("migration", migration.Name))
 		err = migration.Run(ctx, logger, opt, []byte(migration.Name))
 		if err != nil {
 			return applied, errors.Wrapf(err, "migration %q failed", migration.Name)
 		}
 		applied++
 
-		logger.Info("migration applied successfully", fields.Name(migration.Name), fields.Duration(start))
+		logger.Debug("migration applied successfully", fields.Name(migration.Name), fields.Duration(start))
 	}
-	if applied == 0 {
-		logger.Info("no migrations to apply")
-	}
+
+	logger.Info("applied migrations successfully", fields.Count(applied))
+
 	return applied, nil
 }
