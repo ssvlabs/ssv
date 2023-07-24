@@ -1,7 +1,6 @@
 package fields
 
 import (
-	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"math/big"
@@ -64,11 +63,11 @@ const (
 	FieldName                = "name"
 	FieldNetwork             = "network"
 	FieldOperatorId          = "operator_id"
+	FieldOperatorPubKey      = "operator_pubkey"
 	FieldOwnerAddress        = "owner_address"
 	FieldPeerID              = "peer_id"
 	FieldPrivKey             = "privkey"
 	FieldPubKey              = "pubkey"
-	FieldOperatorPubKey      = "operator_pubkey"
 	FieldRole                = "role"
 	FieldRound               = "round"
 	FieldSlot                = "slot"
@@ -111,7 +110,7 @@ func PubKey(pubKey []byte) zapcore.Field {
 }
 
 func OperatorPubKey(pubKey []byte) zapcore.Field {
-	return zap.String(FieldOperatorPubKey, base64.StdEncoding.EncodeToString(pubKey))
+	return zap.String(FieldOperatorPubKey, string(pubKey))
 }
 
 func Validator(pubKey []byte) zapcore.Field {

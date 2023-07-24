@@ -176,6 +176,7 @@ func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (T
 		operatorAddedEvent, err := edh.eventParser.ParseOperatorAdded(event)
 		if err != nil {
 			edh.metrics.EventProcessingFailed(abiEvent.Name)
+			// TODO: return no error?
 			return nil, fmt.Errorf("parse OperatorAdded: %w", err)
 		}
 
@@ -195,6 +196,7 @@ func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (T
 	case OperatorRemoved:
 		operatorRemovedEvent, err := edh.eventParser.ParseOperatorRemoved(event)
 		if err != nil {
+			// TODO: return no error?
 			return nil, fmt.Errorf("parse OperatorRemoved: %w", err)
 		}
 
@@ -214,6 +216,7 @@ func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (T
 	case ValidatorAdded:
 		validatorAddedEvent, err := edh.eventParser.ParseValidatorAdded(event)
 		if err != nil {
+			// TODO: return no error?
 			return nil, fmt.Errorf("parse ValidatorAdded: %w", err)
 		}
 
@@ -241,6 +244,7 @@ func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (T
 	case ValidatorRemoved:
 		validatorRemovedEvent, err := edh.eventParser.ParseValidatorRemoved(event)
 		if err != nil {
+			// TODO: return no error?
 			return nil, fmt.Errorf("parse ValidatorRemoved: %w", err)
 		}
 
@@ -268,6 +272,7 @@ func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (T
 	case ClusterLiquidated:
 		clusterLiquidatedEvent, err := edh.eventParser.ParseClusterLiquidated(event)
 		if err != nil {
+			// TODO: return no error?
 			return nil, fmt.Errorf("parse ClusterLiquidated: %w", err)
 		}
 
@@ -295,6 +300,7 @@ func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (T
 	case ClusterReactivated:
 		clusterReactivatedEvent, err := edh.eventParser.ParseClusterReactivated(event)
 		if err != nil {
+			// TODO: return no error?
 			return nil, fmt.Errorf("parse ClusterReactivated: %w", err)
 		}
 
@@ -322,6 +328,7 @@ func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (T
 	case FeeRecipientAddressUpdated:
 		feeRecipientAddressUpdatedEvent, err := edh.eventParser.ParseFeeRecipientAddressUpdated(event)
 		if err != nil {
+			// TODO: return no error?
 			return nil, fmt.Errorf("parse FeeRecipientAddressUpdated: %w", err)
 		}
 

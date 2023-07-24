@@ -1,7 +1,6 @@
 package eventparser_test
 
 import (
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"testing"
@@ -48,10 +47,7 @@ func TestEventParser(t *testing.T) {
 		require.NoError(t, err)
 
 		require.NotNil(t, parsedEvent)
-
-		base64PublicKey := base64.StdEncoding.EncodeToString(parsedEvent.PublicKey)
-		require.Equal(t, expectedOperatorPublicKeyBase64, base64PublicKey)
-
+		require.Equal(t, expectedOperatorPublicKeyBase64, string(parsedEvent.PublicKey))
 		require.Equal(t, expectedOwner, parsedEvent.Owner.Hex())
 		require.Equal(t, uint64(1), parsedEvent.OperatorId)
 	})

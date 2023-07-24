@@ -1,7 +1,6 @@
 package eventparser
 
 import (
-	"encoding/base64"
 	"fmt"
 	"strings"
 
@@ -57,13 +56,7 @@ func (e *EventParser) ParseOperatorAdded(log ethtypes.Log) (*contract.ContractOp
 		return nil, err
 	}
 
-	// Contract stores a base64-encoded operator public key instead of plain one
-	decodedPubKey, err := base64.StdEncoding.DecodeString(string(unpackedPubKey))
-	if err != nil {
-		return nil, fmt.Errorf("decode: %w", err)
-	}
-
-	event.PublicKey = decodedPubKey
+	event.PublicKey = unpackedPubKey
 
 	return event, nil
 }
