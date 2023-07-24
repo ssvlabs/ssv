@@ -47,7 +47,7 @@ func (edh *EventDataHandler) handleOperatorAdded(txn basedb.Txn, event *contract
 		zap.String("owner_address", event.Owner.String()),
 		zap.String("event_type", OperatorAdded),
 		zap.String("own_operator_pubkey", string(edh.operatorData.PublicKey)),
-		fields.OperatorPubKey(event.PublicKey),
+		zap.String("operator_pubkey", string(event.PublicKey)),
 	)
 
 	logger.Debug("processing event")
