@@ -6,9 +6,11 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -41,6 +43,34 @@ var (
 // TODO: make sure all handlers are tested properly:
 // set up a mock DB where we test that after running the handler we check that the DB state is as expected
 
+func unpackField(fieldBytes []byte) ([]byte, error) {
+	outAbi, err := getOutAbi()
+	if err != nil {
+		return nil, fmt.Errorf("could not define ABI: %w", err)
+	}
+
+	outField, err := outAbi.Unpack("method", fieldBytes)
+	if err != nil {
+		return nil, &MalformedEventError{
+			Err: err,
+		}
+	}
+
+	unpacked, ok := outField[0].([]byte)
+	if !ok {
+		return nil, &MalformedEventError{
+			Err: fmt.Errorf("could not cast OperatorPublicKey: %w", err),
+		}
+	}
+
+	return unpacked, nil
+}
+
+func getOutAbi() (abi.ABI, error) {
+	def := `[{ "name" : "method", "type": "function", "outputs": [{"type": "bytes"}]}]`
+	return abi.JSON(strings.NewReader(def))
+}
+
 func (edh *EventDataHandler) handleOperatorAdded(txn basedb.Txn, event *contract.ContractOperatorAdded) error {
 	logger := edh.logger.With(
 		fields.OperatorID(event.OperatorId),
@@ -52,12 +82,22 @@ func (edh *EventDataHandler) handleOperatorAdded(txn basedb.Txn, event *contract
 
 	logger.Debug("processing event")
 
-	decodedPubKey, err := base64.StdEncoding.DecodeString(string(event.PublicKey))
+	unpackedPubKey, err := unpackField(event.PublicKey)
+	if err != nil {
+		logger.Warn("malformed event: operator public key cannot be unpacked",
+			zap.Error(err))
+		return &MalformedEventError{Err: fmt.Errorf("cannot unpack public key: %w", err)}
+	}
+	logger.Debug("unpacked pubkey", zap.String("pubkey", string(unpackedPubKey)))
+
+	decodedPubKey, err := base64.StdEncoding.DecodeString(string(unpackedPubKey))
 	if err != nil {
 		logger.Warn("malformed event: operator public key is not encoded in base64",
 			zap.Error(err))
 		return &MalformedEventError{Err: ErrNotBase64}
 	}
+
+	logger.Debug("decoded pubkey", zap.String("pubkey", string(decodedPubKey)))
 
 	od := &registrystorage.OperatorData{
 		PublicKey:    decodedPubKey,
