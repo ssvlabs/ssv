@@ -44,8 +44,6 @@ func New(eventFilterer eventFilterer, contractABI eventByIDGetter) *EventParser 
 	}
 }
 
-// TODO: cover with tests
-
 func (e *EventParser) ParseOperatorAdded(log ethtypes.Log) (*contract.ContractOperatorAdded, error) {
 	event, err := e.eventFilterer.ParseOperatorAdded(log)
 	if err != nil {
@@ -86,8 +84,4 @@ func unpackOperatorPublicKey(fieldBytes []byte) ([]byte, error) {
 	}
 
 	return unpacked, nil
-}
-
-func (e *EventParser) ParseValidatorAdded(log ethtypes.Log) (*contract.ContractValidatorAdded, error) {
-	return e.eventFilterer.ParseValidatorAdded(log)
 }
