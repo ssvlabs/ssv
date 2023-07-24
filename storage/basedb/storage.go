@@ -35,7 +35,6 @@ type ReadWriter interface {
 }
 
 // Txn is a read-write transaction.
-// TODO: think about refactoring
 type Txn interface {
 	ReadWriter
 	// TODO: add iterator
@@ -48,7 +47,6 @@ type Database interface {
 	RWTxn() Txn
 	ROTxn() Reader // TODO: afaik there is no effect for Commit/Discard on read-only transactions so a `Reader` is sufficient?
 	ReadWriter
-	// TODO: consider moving these functions into Reader and ReadWriter interfaces?
 	Close() error
 }
 
