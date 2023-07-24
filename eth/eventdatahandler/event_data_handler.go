@@ -2,6 +2,7 @@ package eventdatahandler
 
 import (
 	"crypto/rsa"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"math/big"
@@ -169,6 +170,19 @@ func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (T
 			edh.metrics.EventProcessingFailed(abiEvent.Name)
 			return nil, fmt.Errorf("parse OperatorAdded: %w", err)
 		}
+
+		// TODO: extract event parser component and unpack it there
+		unpackedPubKey, err := unpackOperatorPublicKey(operatorAddedEvent.PublicKey)
+		if err != nil {
+			return nil, fmt.Errorf("unpack OperatorAdded: %w", err)
+		}
+
+		decodedPubKey, err := base64.StdEncoding.DecodeString(string(unpackedPubKey))
+		if err != nil {
+			return nil, fmt.Errorf("decode OperatorAdded: %w", err)
+		}
+
+		operatorAddedEvent.PublicKey = decodedPubKey
 
 		if err := edh.handleOperatorAdded(txn, operatorAddedEvent); err != nil {
 			edh.metrics.EventProcessingFailed(abiEvent.Name)

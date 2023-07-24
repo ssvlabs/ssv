@@ -2,7 +2,6 @@ package eventdatahandler
 
 import (
 	"bytes"
-	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -43,70 +42,25 @@ var (
 // TODO: make sure all handlers are tested properly:
 // set up a mock DB where we test that after running the handler we check that the DB state is as expected
 
-func unpackField(fieldBytes []byte) ([]byte, error) {
-	outAbi, err := getOutAbi()
-	if err != nil {
-		return nil, fmt.Errorf("could not define ABI: %w", err)
-	}
-
-	outField, err := outAbi.Unpack("method", fieldBytes)
-	if err != nil {
-		return nil, &MalformedEventError{
-			Err: err,
-		}
-	}
-
-	unpacked, ok := outField[0].([]byte)
-	if !ok {
-		return nil, &MalformedEventError{
-			Err: fmt.Errorf("could not cast OperatorPublicKey: %w", err),
-		}
-	}
-
-	return unpacked, nil
-}
-
-func getOutAbi() (abi.ABI, error) {
-	def := `[{ "name" : "method", "type": "function", "outputs": [{"type": "bytes"}]}]`
-	return abi.JSON(strings.NewReader(def))
-}
-
 func (edh *EventDataHandler) handleOperatorAdded(txn basedb.Txn, event *contract.ContractOperatorAdded) error {
 	logger := edh.logger.With(
 		fields.OperatorID(event.OperatorId),
 		zap.String("owner_address", event.Owner.String()),
 		zap.String("event_type", OperatorAdded),
 		zap.String("own_operator_pubkey", string(edh.operatorData.PublicKey)),
-		zap.String("operator_pubkey", string(event.PublicKey)),
+		fields.OperatorPubKey(event.PublicKey),
 	)
 
 	logger.Debug("processing event")
 
-	unpackedPubKey, err := unpackField(event.PublicKey)
-	if err != nil {
-		logger.Warn("malformed event: operator public key cannot be unpacked",
-			zap.Error(err))
-		return &MalformedEventError{Err: fmt.Errorf("cannot unpack public key: %w", err)}
-	}
-	logger.Debug("unpacked pubkey", zap.String("pubkey", string(unpackedPubKey)))
-
-	decodedPubKey, err := base64.StdEncoding.DecodeString(string(unpackedPubKey))
-	if err != nil {
-		logger.Warn("malformed event: operator public key is not encoded in base64",
-			zap.Error(err))
-		return &MalformedEventError{Err: ErrNotBase64}
-	}
-
-	logger.Debug("decoded pubkey", zap.String("pubkey", string(decodedPubKey)))
-
 	od := &registrystorage.OperatorData{
-		PublicKey:    decodedPubKey,
+		PublicKey:    event.PublicKey,
 		OwnerAddress: event.Owner,
 		ID:           event.OperatorId,
 	}
 
 	// throw an error if there is an existing operator with the same public key and different operator id
-	if edh.operatorData.ID != 0 && bytes.Equal(edh.operatorData.PublicKey, decodedPubKey) && edh.operatorData.ID != event.OperatorId {
+	if edh.operatorData.ID != 0 && bytes.Equal(edh.operatorData.PublicKey, event.PublicKey) && edh.operatorData.ID != event.OperatorId {
 		logger.Warn("malformed event: operator registered with the same operator public key",
 			zap.Uint64("expected_operator_id", edh.operatorData.ID))
 		return &MalformedEventError{Err: ErrAlreadyRegistered}
@@ -122,17 +76,40 @@ func (edh *EventDataHandler) handleOperatorAdded(txn basedb.Txn, event *contract
 		return nil
 	}
 
-	ownOperator := bytes.Equal(decodedPubKey, edh.operatorData.PublicKey)
-	logger = logger.With(zap.Bool("own_operator", ownOperator))
+	ownOperator := bytes.Equal(event.PublicKey, edh.operatorData.PublicKey)
 	if ownOperator {
 		edh.operatorData = od
 	}
 
 	edh.metrics.OperatorPublicKey(od.ID, od.PublicKey)
-
+	logger = logger.With(zap.Bool("own_operator", ownOperator))
 	logger.Debug("processed event")
 
 	return nil
+}
+
+func unpackOperatorPublicKey(fieldBytes []byte) ([]byte, error) {
+	def := `[{ "name" : "method", "type": "function", "outputs": [{"type": "bytes"}]}]`
+	outAbi, err := abi.JSON(strings.NewReader(def))
+	if err != nil {
+		return nil, fmt.Errorf("define ABI: %w", err)
+	}
+
+	outField, err := outAbi.Unpack("method", fieldBytes)
+	if err != nil {
+		return nil, &MalformedEventError{
+			Err: fmt.Errorf("unpack OperatorPublicKey: %w", err),
+		}
+	}
+
+	unpacked, ok := outField[0].([]byte)
+	if !ok {
+		return nil, &MalformedEventError{
+			Err: fmt.Errorf("cast OperatorPublicKey to []byte: %w", err),
+		}
+	}
+
+	return unpacked, nil
 }
 
 func (edh *EventDataHandler) handleOperatorRemoved(txn basedb.Txn, event *contract.ContractOperatorRemoved) error {
