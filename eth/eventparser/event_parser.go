@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ethereum/go-ethereum/accounts/abi"
 	ethabi "github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/common"
+	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 
 	"github.com/bloxapp/ssv/eth/contract"
@@ -34,7 +33,7 @@ type eventFilterer interface {
 }
 
 type eventByIDGetter interface {
-	EventByID(topic common.Hash) (*ethabi.Event, error)
+	EventByID(topic ethcommon.Hash) (*ethabi.Event, error)
 }
 
 func New(eventFilterer eventFilterer, contractABI eventByIDGetter) *EventParser {
@@ -72,7 +71,7 @@ func (e *EventParser) ParseOperatorAdded(log ethtypes.Log) (*contract.ContractOp
 func unpackOperatorPublicKey(fieldBytes []byte) ([]byte, error) {
 	def := `[{ "name" : "method", "type": "function", "outputs": [{"type": "bytes"}]}]`
 	// TODO: abigen?
-	outAbi, err := abi.JSON(strings.NewReader(def))
+	outAbi, err := ethabi.JSON(strings.NewReader(def))
 	if err != nil {
 		return nil, fmt.Errorf("define ABI: %w", err)
 	}
