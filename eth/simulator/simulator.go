@@ -619,7 +619,7 @@ func (b *SimulatedBackend) EstimateGas(ctx context.Context, call ethereum.CallMs
 			return 0, err
 		}
 		if failed {
-			if result != nil && result.Err != vm.ErrOutOfGas {
+			if result != nil && !errors.Is(result.Err, vm.ErrOutOfGas) {
 				if len(result.Revert()) > 0 {
 					return 0, newRevertError(result)
 				}
@@ -716,7 +716,7 @@ func (b *SimulatedBackend) SendTransaction(ctx context.Context, tx *types.Transa
 	signer := types.MakeSigner(b.Blockchain.Config(), block.Number(), block.Time())
 	sender, err := types.Sender(signer, tx)
 	if err != nil {
-		return fmt.Errorf("invalid transaction: %v", err)
+		return fmt.Errorf("invalid transaction: %w", err)
 	}
 	nonce := b.pendingState.GetNonce(sender)
 	if tx.Nonce() != nonce {
@@ -868,7 +868,7 @@ type filterBackend struct {
 
 func (fb *filterBackend) ChainDb() ethdb.Database { return fb.db }
 
-func (fb *filterBackend) EventMux() *event.TypeMux { panic("not supported") }
+func (fb *filterBackend) EventMux() *event.Feed { panic("not supported") }
 
 func (fb *filterBackend) HeaderByNumber(ctx context.Context, number rpc.BlockNumber) (*types.Header, error) {
 	switch number {

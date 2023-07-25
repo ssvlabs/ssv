@@ -2,7 +2,6 @@ package eventdispatcher
 
 import (
 	"context"
-	"fmt"
 	"math/big"
 	"net/http/httptest"
 	"strings"
@@ -21,7 +20,6 @@ import (
 	"go.uber.org/zap/zaptest"
 
 	"github.com/bloxapp/ssv/ekm"
-	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/eth/eventbatcher"
 	"github.com/bloxapp/ssv/eth/eventdatahandler"
 	"github.com/bloxapp/ssv/eth/eventparser"
@@ -37,7 +35,6 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/blskeygen"
-	// "github.com/bloxapp/ssv/eth/contract"
 )
 
 var (
@@ -228,19 +225,4 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.St
 	}
 
 	return nodeStorage, operatorData
-}
-
-func packOperatorPublicKey(fieldBytes []byte) ([]byte, error) {
-
-	operatorPublicKeyABI, err := contract.OperatorPublicKeyMetaData.GetAbi()
-	if err != nil {
-		panic(err)
-	}
-
-	outField, err := operatorPublicKeyABI.Pack("method", fieldBytes)
-	if err != nil {
-		return nil, fmt.Errorf("pack: %w", err)
-	}
-
-	return outField, nil
 }
