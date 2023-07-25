@@ -135,7 +135,7 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 		logCount := 0
 
 		for fromBlock := startBlock; fromBlock <= endBlock; fromBlock += ec.logBatchSize {
-			toBlock := fromBlock+ec.logBatchSize-1
+			toBlock := fromBlock + ec.logBatchSize - 1
 			if toBlock > endBlock {
 				toBlock = endBlock
 			}
