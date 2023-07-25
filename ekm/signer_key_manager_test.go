@@ -1,6 +1,16 @@
 package ekm
 
 import (
+	"crypto/md5"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/hex"
+	"github.com/bloxapp/eth2-key-manager/core"
+	"github.com/bloxapp/eth2-key-manager/wallets/hd"
+	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
@@ -32,7 +42,7 @@ func testKeyManager(t *testing.T) spectypes.KeyManager {
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 
-	km, err := NewETHKeyManagerSigner(logger, db, networkconfig.TestNetwork, true)
+	km, err := NewETHKeyManagerSigner(logger, db, networkconfig.TestNetwork, true, "")
 	require.NoError(t, err)
 
 	sk1 := &bls.SecretKey{}
@@ -45,6 +55,57 @@ func testKeyManager(t *testing.T) spectypes.KeyManager {
 	require.NoError(t, km.AddShare(sk2))
 
 	return km
+}
+
+func TestEncryptedKeyManager(t *testing.T) {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	// Convert RSA private key to bytes
+	keyBytes := x509.MarshalPKCS1PrivateKey(privateKey)
+	// Compute the MD5 hash of the bytes
+	hasher := md5.New()
+	hasher.Write(keyBytes)
+	encryptionKey := hex.EncodeToString(hasher.Sum(nil))
+	threshold.Init()
+	sk := bls.SecretKey{}
+	sk.SetByCSPRNG()
+	index := 1
+
+	logger := logging.TestLogger(t)
+	db, err := getBaseStorage(logger)
+	require.NoError(t, err)
+	signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon, logger)
+	signerStorage.SetEncryptionKey(encryptionKey)
+	defer func(db basedb.IDb, logger *zap.Logger) {
+		err := db.Close(logger)
+		if err != nil {
+
+		}
+	}(db, logging.TestLogger(t))
+
+	hdwallet := hd.NewWallet(&core.WalletContext{Storage: signerStorage})
+	require.NoError(t, signerStorage.SaveWallet(hdwallet))
+
+	a, err := hdwallet.CreateValidatorAccountFromPrivateKey(sk.Serialize(), &index)
+	require.NoError(t, err)
+
+	wallet, err := signerStorage.OpenWallet()
+	require.NoError(t, err)
+	// open
+	_, err = wallet.AccountByPublicKey(hex.EncodeToString(a.ValidatorPublicKey()))
+	require.NoError(t, err)
+
+	wallet2, err := signerStorage.OpenWallet()
+	require.NoError(t, err)
+	signerStorage.SetEncryptionKey(encryptionKey + "1")
+	_, err = wallet2.AccountByPublicKey(hex.EncodeToString(a.ValidatorPublicKey()))
+	require.True(t, errors.Is(err, ErrCantDecrypt))
+
+	wallet3, err := signerStorage.OpenWallet()
+	require.NoError(t, err)
+	signerStorage.SetEncryptionKey(encryptionKey)
+
+	_, err = wallet3.AccountByPublicKey(hex.EncodeToString(a.ValidatorPublicKey()))
+	require.NoError(t, err)
 }
 
 func TestSlashing(t *testing.T) {

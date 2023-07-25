@@ -44,8 +44,9 @@ type ethKeyManagerSigner struct {
 }
 
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
-func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.IDb, network networkconfig.NetworkConfig, builderProposals bool) (spectypes.KeyManager, error) {
+func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.IDb, network networkconfig.NetworkConfig, builderProposals bool, encryptionKey string) (spectypes.KeyManager, error) {
 	signerStore := NewSignerStorage(db, network.Beacon, logger)
+	signerStore.SetEncryptionKey(encryptionKey)
 	options := &eth2keymanager.KeyVaultOptions{}
 	options.SetStorage(signerStore)
 	options.SetWalletType(core.NDWallet)
