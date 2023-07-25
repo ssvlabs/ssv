@@ -161,6 +161,9 @@ func (edh *EventDataHandler) handleValidatorAdded(txn basedb.Txn, event *contrac
 	// verify sig
 	if err := verifySignature(signature, event.Owner, event.PublicKey, nonce); err != nil {
 		logger.Warn("malformed event: failed to verify signature",
+			zap.String("signature", hex.EncodeToString(signature)),
+			zap.String("owner", event.Owner.String()),
+			zap.String("validator_public_key", hex.EncodeToString(event.PublicKey)),
 			zap.Error(err))
 
 		if err := edh.nodeStorage.BumpNonce(txn, event.Owner); err != nil {
