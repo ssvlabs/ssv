@@ -28,7 +28,6 @@ import (
 const encryptedKeyLength = 256
 
 var (
-	ErrNotBase64                    = fmt.Errorf("operator public key is not encoded in base64")
 	ErrAlreadyRegistered            = fmt.Errorf("operator registered with the same operator public key")
 	ErrOperatorDataNotFound         = fmt.Errorf("operator data not found")
 	ErrIncorrectSharesLength        = fmt.Errorf("shares length is not correct")
