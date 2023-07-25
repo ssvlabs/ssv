@@ -81,12 +81,24 @@ func TestEventBatcher_BatchEvents(t *testing.T) {
 			Data:        []byte{},
 		}
 		event2 := ethtypes.Log{
-			BlockNumber: 2,
+			BlockNumber: 1,
 			Address:     common.Address{},
 			Topics:      []common.Hash{},
 			Data:        []byte{},
 		}
 		event3 := ethtypes.Log{
+			BlockNumber: 2,
+			Address:     common.Address{},
+			Topics:      []common.Hash{},
+			Data:        []byte{},
+		}
+		event4 := ethtypes.Log{
+			BlockNumber: 3,
+			Address:     common.Address{},
+			Topics:      []common.Hash{},
+			Data:        []byte{},
+		}
+		event5 := ethtypes.Log{
 			BlockNumber: 3,
 			Address:     common.Address{},
 			Topics:      []common.Hash{},
@@ -96,6 +108,8 @@ func TestEventBatcher_BatchEvents(t *testing.T) {
 		events <- event1
 		events <- event2
 		events <- event3
+		events <- event4
+		events <- event5
 
 		close(events)
 
@@ -104,13 +118,13 @@ func TestEventBatcher_BatchEvents(t *testing.T) {
 		blockEvents3 := <-blockEventsCh
 
 		require.Equal(t, uint64(1), blockEvents1.BlockNumber)
-		require.Equal(t, []ethtypes.Log{event1}, blockEvents1.Events)
+		require.Equal(t, []ethtypes.Log{event1, event2}, blockEvents1.Events)
 
 		require.Equal(t, uint64(2), blockEvents2.BlockNumber)
-		require.Equal(t, []ethtypes.Log{event2}, blockEvents2.Events)
+		require.Equal(t, []ethtypes.Log{event3}, blockEvents2.Events)
 
 		require.Equal(t, uint64(3), blockEvents3.BlockNumber)
-		require.Equal(t, []ethtypes.Log{event3}, blockEvents3.Events)
+		require.Equal(t, []ethtypes.Log{event4, event5}, blockEvents3.Events)
 
 		_, more := <-blockEventsCh
 		require.False(t, more)
