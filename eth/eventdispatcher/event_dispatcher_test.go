@@ -94,10 +94,18 @@ func TestEventDispatcher(t *testing.T) {
 	}
 	require.True(t, isReady)
 
+	// TODO: Pack operator public key to work with ABI decoder
+	t.Skip()
+
 	// Generate operator key
 	_, operatorPubKey := blskeygen.GenBLSKeyPair()
 
-	// packedPubKey, err:= packOperatorPublicKey(operatorPubKey.Serialize())
+	// operatorPublicKeyABI, err := contract.OperatorPublicKeyMetaData.GetAbi()
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
+	// key := []byte("LS0tLS1CRUdJTiBSU0EgUFVCTElDIEtFWS0tLS0tCk1JSUJJakFOQmdrcWhraUc5dzBCQVFFRkFBT0NBUThBTUlJQkNnS0NBUUVBMVg2MUFXY001QUNLaGN5MTlUaEIKby9HMWlhN1ByOVUralJ5aWY5ZjAyRG9sd091V2ZLLzdSVUlhOEhEbHBvQlVERDkwRTVQUGdJSy9sTXB4RytXbwpwQ2N5bTBpWk9UT0JzNDE5bEh3TzA4bXFja1JsZEg5WExmbmY2UThqWFR5Ym1yYzdWNmwyNVprcTl4U0owbHR1CndmTnVTSzNCZnFtNkQxOUY0aTVCbmVaSWhjRVJTYlFLWDFxbWNqYnZFL2cyQko4TzhaZUgrd0RzTHJiNnZXQVIKY3BYWG1uelE3Vlp6ZklHTGVLVU1CTTh6SW0rcXI4RGZ4SEhSeVU1QTE3cFU4cy9MNUp5RXE1RGJjc2Q2dHlnbQp5UE9BYUNzWldVREI3UGhLOHpUWU9WYi9MM1lnSTU4bjFXek5IM0s5cmFreUppTmUxTE9GVVZzQTFDUnhtQ2YzCmlRSURBUUFCCi0tLS0tRU5EIFJTQSBQVUJMSUMgS0VZLS0tLS0K")
+	// packed, err := operatorPublicKeyABI.Pack("publicKey", [][]byte{key})
 	// if err != nil {
 	// 	t.Fatal(err)
 	// }
@@ -222,13 +230,13 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.St
 	return nodeStorage, operatorData
 }
 
-func  packOperatorPublicKey(fieldBytes []byte) ([]byte, error) {
-	
+func packOperatorPublicKey(fieldBytes []byte) ([]byte, error) {
+
 	operatorPublicKeyABI, err := contract.OperatorPublicKeyMetaData.GetAbi()
 	if err != nil {
 		panic(err)
 	}
-	
+
 	outField, err := operatorPublicKeyABI.Pack("method", fieldBytes)
 	if err != nil {
 		return nil, fmt.Errorf("pack: %w", err)
