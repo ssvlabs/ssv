@@ -316,16 +316,16 @@ func (b *BadgerDB) manyGetter(prefix []byte, keys [][]byte, iterator func(basedb
 	}
 }
 
-// With returns the given ReadWriter, falling back to the database if it's nil.
-func (b *BadgerDB) WithReadWriter(rw basedb.ReadWriter) basedb.ReadWriter {
+// UsingReadWriter returns the given ReadWriter, falling back to the database if it's nil.
+func (b *BadgerDB) UsingReadWriter(rw basedb.ReadWriter) basedb.ReadWriter {
 	if rw == nil {
 		return b
 	}
 	return rw
 }
 
-// With returns the given Reader, falling back to the database if it's nil.
-func (b *BadgerDB) WithReader(r basedb.Reader) basedb.Reader {
+// UsingReader returns the given Reader, falling back to the database if it's nil.
+func (b *BadgerDB) UsingReader(r basedb.Reader) basedb.Reader {
 	if r == nil {
 		return b
 	}

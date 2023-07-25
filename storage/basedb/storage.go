@@ -19,7 +19,6 @@ type Reader interface {
 	Get(prefix []byte, key []byte) (Obj, bool, error)
 	GetMany(prefix []byte, keys [][]byte, iterator func(Obj) error) error
 	GetAll(prefix []byte, handler func(int, Obj) error) error
-	CountByCollection(prefix []byte) (int64, error)
 }
 
 // ReadWrite is a read-write accessor to the database.
@@ -29,9 +28,6 @@ type ReadWriter interface {
 	Set(prefix []byte, key []byte, value []byte) error
 	SetMany(prefix []byte, n int, next func(int) (Obj, error)) error
 	Delete(prefix []byte, key []byte) error
-	DeleteByPrefix(prefix []byte) (int, error)
-	RemoveAllByCollection(prefix []byte) error
-	Update(fn func(Txn) error) error
 }
 
 // Txn is a read-write transaction.
@@ -47,6 +43,11 @@ type Database interface {
 	RWTxn() Txn
 	ROTxn() Reader // TODO: afaik there is no effect for Commit/Discard on read-only transactions so a `Reader` is sufficient?
 	ReadWriter
+	// TODO: consider moving these functions into Reader and ReadWriter interfaces?
+	CountByCollection(prefix []byte) (int64, error)
+	DeleteByPrefix(prefix []byte) (int, error)
+	RemoveAllByCollection(prefix []byte) error
+	Update(fn func(Txn) error) error
 	Close() error
 }
 
