@@ -196,7 +196,6 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 		ec.logger.Debug("fetching registry events in batches completed",
 			zap.Uint64("from", startBlock),
 			zap.Uint64("to", endBlock),
-			zap.String("progress", "100%"),
 			fields.Count(logCount),
 		)
 
