@@ -216,8 +216,17 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period
 	// lastEpoch + 1 due to the fact that we need to subscribe "until" the end of the period
 	subscriptions := calculateSubscriptions(lastEpoch+1, duties)
 	if len(subscriptions) > 0 {
-		if err := h.beaconNode.SubmitSyncCommitteeSubscriptions(ctx, subscriptions); err != nil {
-			h.logger.Warn("failed to subscribe sync committee to subnet", zap.Error(err))
+		if deadline, ok := ctx.Deadline(); ok {
+			go func(h *SyncCommitteeHandler, subscriptions []*eth2apiv1.SyncCommitteeSubscription) {
+				// Create a new subscription context with a deadline from parent context.
+				subscriptionCtx, cancel := context.WithDeadline(context.Background(), deadline)
+				defer cancel()
+				if err := h.beaconNode.SubmitSyncCommitteeSubscriptions(subscriptionCtx, subscriptions); err != nil {
+					h.logger.Warn("failed to subscribe sync committee to subnet", zap.Error(err))
+				}
+			}(h, subscriptions)
+		} else {
+			h.logger.Warn("failed to get context deadline")
 		}
 	}
 

@@ -197,8 +197,17 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	// calculate subscriptions
 	subscriptions := calculateSubscriptionInfo(duties)
 	if len(subscriptions) > 0 {
-		if err := h.beaconNode.SubmitBeaconCommitteeSubscriptions(ctx, subscriptions); err != nil {
-			h.logger.Warn("failed to submit beacon committee subscription", zap.Error(err))
+		if deadline, ok := ctx.Deadline(); ok {
+			go func(h *AttesterHandler, subscriptions []*eth2apiv1.BeaconCommitteeSubscription) {
+				// Create a new subscription context with a deadline from parent context.
+				subscriptionCtx, cancel := context.WithDeadline(context.Background(), deadline)
+				defer cancel()
+				if err := h.beaconNode.SubmitBeaconCommitteeSubscriptions(subscriptionCtx, subscriptions); err != nil {
+					h.logger.Warn("failed to submit beacon committee subscription", zap.Error(err))
+				}
+			}(h, subscriptions)
+		} else {
+			h.logger.Warn("failed to get context deadline")
 		}
 	}
 
