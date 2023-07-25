@@ -3,7 +3,6 @@ package ekm
 import (
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/md5"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -45,13 +44,13 @@ type Storage interface {
 
 	RemoveHighestAttestation(pubKey []byte) error
 	RemoveHighestProposal(pubKey []byte) error
-	SetEncryptionKey(newKey string)
+	SetEncryptionKey(newKey string) error
 }
 
 type storage struct {
 	db            basedb.IDb
 	network       beacon.Network
-	encryptionKey string
+	encryptionKey []byte
 	logger        *zap.Logger // struct logger is used because core.Storage does not support passing a logger
 	lock          sync.RWMutex
 }
@@ -66,10 +65,25 @@ func NewSignerStorage(db basedb.IDb, network beacon.Network, logger *zap.Logger)
 }
 
 // SetEncryptionKey Add a new method to the storage type
-func (s *storage) SetEncryptionKey(newKey string) {
+
+func (s *storage) SetEncryptionKey(newKey string) error {
 	s.lock.Lock()
-	s.encryptionKey = newKey
-	s.lock.Unlock()
+	defer s.lock.Unlock()
+
+	// check if the newKey is a valid SHA-256 hash
+	if len(newKey) != 64 {
+		return errors.New("the key must be a 64-character string")
+	}
+
+	// Decode hexadecimal string into byte array
+	keyBytes, err := hex.DecodeString(newKey)
+	if err != nil {
+		return errors.New("the key must be a valid hexadecimal string")
+	}
+
+	// Set the encryption key
+	s.encryptionKey = keyBytes
+	return nil
 }
 
 func (s *storage) CleanRegistryData() error {
@@ -328,43 +342,37 @@ func (s *storage) RemoveHighestProposal(pubKey []byte) error {
 	return s.db.Delete(s.objPrefix(highestProposalPrefix), pubKey)
 }
 
-func createHash(key string) string {
-	hasher := md5.New()
-	hasher.Write([]byte(key))
-	return hex.EncodeToString(hasher.Sum(nil))
-}
-
 func (s *storage) decryptData(objectValue []byte) ([]byte, error) {
-	var decryptedData []byte
-	var err error
-	if s.encryptionKey != "" {
-		println("decrypting wallet")
-		decryptedData, err = decrypt(objectValue, s.encryptionKey)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to decrypt wallet")
-		}
-	} else {
-		println("not decrypting wallet")
-		decryptedData = objectValue
+	if s.encryptionKey == nil || len(s.encryptionKey) == 0 {
+		return objectValue, nil
 	}
+
+	decryptedData, err := s.decrypt(objectValue)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to decrypt wallet")
+	}
+
 	return decryptedData, nil
 }
+
 func (s *storage) encryptData(objectValue []byte) ([]byte, error) {
-	var encryptedData []byte
-	var err error
-	if s.encryptionKey != "" {
-		encryptedData, err = encrypt(objectValue, s.encryptionKey)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed to encrypt wallet")
-		}
-	} else {
-		encryptedData = objectValue
+	if s.encryptionKey == nil || len(s.encryptionKey) == 0 {
+		return objectValue, nil
 	}
+
+	encryptedData, err := s.encrypt(objectValue)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to encrypt wallet")
+	}
+
 	return encryptedData, nil
 }
 
-func encrypt(data []byte, passphrase string) ([]byte, error) {
-	block, _ := aes.NewCipher([]byte(createHash(passphrase)))
+func (s *storage) encrypt(data []byte) ([]byte, error) {
+	block, err := aes.NewCipher(s.encryptionKey)
+	if err != nil {
+		return nil, err
+	}
 	gcm, err := cipher.NewGCM(block)
 	if err != nil {
 		return nil, err
@@ -373,13 +381,11 @@ func encrypt(data []byte, passphrase string) ([]byte, error) {
 	if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
 		return nil, err
 	}
-	ciphertext := gcm.Seal(nonce, nonce, data, nil)
-	return ciphertext, nil
+	return gcm.Seal(nonce, nonce, data, nil), nil
 }
 
-func decrypt(data []byte, passphrase string) ([]byte, error) {
-	key := []byte(createHash(passphrase))
-	block, err := aes.NewCipher(key)
+func (s *storage) decrypt(data []byte) ([]byte, error) {
+	block, err := aes.NewCipher(s.encryptionKey)
 	if err != nil {
 		return nil, err
 	}
@@ -393,9 +399,5 @@ func decrypt(data []byte, passphrase string) ([]byte, error) {
 	}
 
 	nonce, ciphertext := data[:nonceSize], data[nonceSize:]
-	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
-	if err != nil {
-		return nil, err
-	}
-	return plaintext, nil
+	return gcm.Open(nil, nonce, ciphertext, nil)
 }

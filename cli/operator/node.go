@@ -2,9 +2,8 @@ package operator
 
 import (
 	"context"
-	"crypto/md5"
+	"crypto/sha256"
 	"crypto/x509"
-	"encoding/hex"
 	"fmt"
 	"log"
 	"net/http"
@@ -101,13 +100,11 @@ var StartNodeCmd = &cobra.Command{
 		nodeStorage, operatorData := setupOperatorStorage(logger, db)
 
 		operatorKey, _, err := nodeStorage.GetPrivateKey()
-		// Convert RSA private key to bytes
 		keyBytes := x509.MarshalPKCS1PrivateKey(operatorKey)
-		// Compute the MD5 hash of the bytes
-		hasher := md5.New()
-		hasher.Write(keyBytes)
-		keyMD5 := hex.EncodeToString(hasher.Sum(nil))
-		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkConfig, cfg.SSVOptions.ValidatorOptions.BuilderProposals, keyMD5)
+		hash := sha256.Sum256(keyBytes)
+		keyString := fmt.Sprintf("%x", hash)
+
+		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkConfig, cfg.SSVOptions.ValidatorOptions.BuilderProposals, keyString)
 
 		if err != nil {
 			logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
