@@ -2,6 +2,7 @@ package eventdispatcher
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 	"net/http/httptest"
 	"strings"
@@ -35,6 +36,8 @@ import (
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
+	"github.com/bloxapp/ssv/utils/blskeygen"
+	// "github.com/bloxapp/ssv/eth/contract"
 )
 
 var (
@@ -91,12 +94,20 @@ func TestEventDispatcher(t *testing.T) {
 	}
 	require.True(t, isReady)
 
+	// Generate operator key
+	_, operatorPubKey := blskeygen.GenBLSKeyPair()
+
+	// packedPubKey, err:= packOperatorPublicKey(operatorPubKey.Serialize())
+	// if err != nil {
+	// 	t.Fatal(err)
+	// }
+
 	// Generate test chain after a connection to the server.
 	// While processing blocks the events will be emitted which is read by subscription
 	const chainLength = 30
 	for i := 0; i <= chainLength; i++ {
 		// Emit event OperatorAdded
-		tx, err := boundContract.SimcontractTransactor.RegisterOperator(auth, ethcommon.Hex2Bytes("0xb24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"), big.NewInt(100_000_000))
+		tx, err := boundContract.SimcontractTransactor.RegisterOperator(auth, operatorPubKey.Serialize(), big.NewInt(100_000_000))
 		require.NoError(t, err)
 		sim.Commit()
 		receipt, err := sim.TransactionReceipt(ctx, tx.Hash())
@@ -209,4 +220,19 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.St
 	}
 
 	return nodeStorage, operatorData
+}
+
+func  packOperatorPublicKey(fieldBytes []byte) ([]byte, error) {
+	
+	operatorPublicKeyABI, err := contract.OperatorPublicKeyMetaData.GetAbi()
+	if err != nil {
+		panic(err)
+	}
+	
+	outField, err := operatorPublicKeyABI.Pack("method", fieldBytes)
+	if err != nil {
+		return nil, fmt.Errorf("pack: %w", err)
+	}
+
+	return outField, nil
 }
