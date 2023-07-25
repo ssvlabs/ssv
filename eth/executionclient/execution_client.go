@@ -157,13 +157,15 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 				return
 			}
 
-			ec.logger.Info("fetched events in batch",
-				zap.Uint64("from", fromBlock),
-				zap.Uint64("to", toBlock),
-				zap.Uint64("target", endBlock),
-				zap.String("progress", fmt.Sprintf("%.2f%%", float64(toBlock-startBlock+1)/float64(endBlock-startBlock+1)*100)),
-				fields.Count(len(batchLogs)),
-			)
+			if len(batchLogs) != 0 {
+				ec.logger.Info("fetched events in batch",
+					zap.Uint64("from", fromBlock),
+					zap.Uint64("to", toBlock),
+					zap.Uint64("target", endBlock),
+					zap.String("progress", fmt.Sprintf("%.2f%%", float64(toBlock-startBlock+1)/float64(endBlock-startBlock+1)*100)),
+					fields.Count(len(batchLogs)),
+				)
+			}
 
 			select {
 			case <-ctx.Done():
