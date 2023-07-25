@@ -65,15 +65,9 @@ func NewSignerStorage(db basedb.IDb, network beacon.Network, logger *zap.Logger)
 }
 
 // SetEncryptionKey Add a new method to the storage type
-
 func (s *storage) SetEncryptionKey(newKey string) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
-
-	// check if the newKey is a valid SHA-256 hash
-	if len(newKey) != 64 {
-		return errors.New("the key must be a 64-character string")
-	}
 
 	// Decode hexadecimal string into byte array
 	keyBytes, err := hex.DecodeString(newKey)
