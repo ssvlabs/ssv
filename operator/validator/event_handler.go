@@ -239,7 +239,7 @@ func (c *controller) handleValidatorAddedEvent(
 				)
 			}
 			if started {
-				c.indicesChange <- true
+				c.indicesChange <- struct{}{}
 			}
 		}
 	}
@@ -383,15 +383,18 @@ func (c *controller) handleClusterReactivatedEvent(
 	}
 
 	if ongoingSync && len(toEnable) > 0 {
-		var started bool
+		var atLeastOneStarted bool
 		for _, share := range toEnable {
-			started, err = c.onShareStart(logger, share)
+			started, err := c.onShareStart(logger, share)
 			if err != nil {
 				logger.Warn("could not start validator", zap.String("pubkey", hex.EncodeToString(share.ValidatorPubKey)), zap.Error(err))
 			}
+			if started {
+				atLeastOneStarted = true
+			}
 		}
-		if started {
-			c.indicesChange <- true
+		if atLeastOneStarted {
+			c.indicesChange <- struct{}{}
 		}
 	}
 

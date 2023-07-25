@@ -24,10 +24,10 @@ type beaconDuties interface {
 
 // beaconSubscriber interface serves all committee subscribe to subnet (p2p topic)
 type beaconSubscriber interface {
-	// SubscribeToCommitteeSubnet subscribe committee to subnet
-	SubscribeToCommitteeSubnet(subscription []*eth2apiv1.BeaconCommitteeSubscription) error
+	// SubmitBeaconCommitteeSubscriptions subscribe committee to subnet
+	SubmitBeaconCommitteeSubscriptions(ctx context.Context, subscription []*eth2apiv1.BeaconCommitteeSubscription) error
 	// SubmitSyncCommitteeSubscriptions subscribe to sync committee subnet
-	SubmitSyncCommitteeSubscriptions(subscription []*eth2apiv1.SyncCommitteeSubscription) error
+	SubmitSyncCommitteeSubscriptions(ctx context.Context, subscription []*eth2apiv1.SyncCommitteeSubscription) error
 }
 
 type beaconValidator interface {

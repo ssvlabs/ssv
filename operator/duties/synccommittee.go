@@ -214,9 +214,9 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period
 	h.prepareDutiesResultLog(period, duties, start)
 
 	// lastEpoch + 1 due to the fact that we need to subscribe "until" the end of the period
-	syncCommitteeSubscriptions := calculateSubscriptions(lastEpoch+1, duties)
-	if len(syncCommitteeSubscriptions) > 0 {
-		if err := h.beaconNode.SubmitSyncCommitteeSubscriptions(syncCommitteeSubscriptions); err != nil {
+	subscriptions := calculateSubscriptions(lastEpoch+1, duties)
+	if len(subscriptions) > 0 {
+		if err := h.beaconNode.SubmitSyncCommitteeSubscriptions(ctx, subscriptions); err != nil {
 			h.logger.Warn("failed to subscribe sync committee to subnet", zap.Error(err))
 		}
 	}

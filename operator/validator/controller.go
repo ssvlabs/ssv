@@ -109,7 +109,7 @@ type Controller interface {
 	GetOperatorData() *registrystorage.OperatorData
 	//OnFork(forkVersion forksprotocol.ForkVersion) error
 
-	IndicesChangeChan() chan bool
+	IndicesChangeChan() chan struct{}
 }
 
 // EventHandler represents the interface for compatible storage event handlers
@@ -158,7 +158,7 @@ type controller struct {
 	nonCommitteeValidators *ttlcache.Cache[spectypes.MessageID, *nonCommitteeValidator]
 	nonCommitteeMutex      sync.Mutex
 
-	indicesChange chan bool
+	indicesChange chan struct{}
 }
 
 // NewController creates a new validator controller instance
@@ -237,7 +237,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		nonCommitteeValidators: ttlcache.New(
 			ttlcache.WithTTL[spectypes.MessageID, *nonCommitteeValidator](time.Minute * 13),
 		),
-		indicesChange: make(chan bool),
+		indicesChange: make(chan struct{}),
 	}
 
 	// Start automatic expired item deletion in nonCommitteeValidators.
@@ -281,7 +281,7 @@ func (c *controller) GetOperatorData() *registrystorage.OperatorData {
 	return c.operatorData
 }
 
-func (c *controller) IndicesChangeChan() chan bool {
+func (c *controller) IndicesChangeChan() chan struct{} {
 	return c.indicesChange
 }
 

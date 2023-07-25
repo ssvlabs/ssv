@@ -16,7 +16,7 @@ import (
 	mocknetwork "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon/mocks"
 )
 
-func setupSyncCommitteeDutiesMock(s *Scheduler, dutiesMap map[uint64][]*v1.SyncCommitteeDuty, currentSlot *SlotValue) chan struct{} {
+func setupSyncCommitteeDutiesMock(s *Scheduler, dutiesMap map[uint64][]*v1.SyncCommitteeDuty) chan struct{} {
 	fetchDutiesCall := make(chan struct{})
 
 	s.network.Beacon.(*mocknetwork.MockNetworkInfo).EXPECT().EstimatedSyncCommitteePeriodAtEpoch(gomock.Any()).DoAndReturn(
@@ -70,7 +70,7 @@ func setupSyncCommitteeDutiesMock(s *Scheduler, dutiesMap map[uint64][]*v1.SyncC
 			return indices
 		}).AnyTimes()
 
-	s.beaconNode.(*mocks.MockBeaconNode).EXPECT().SubmitSyncCommitteeSubscriptions(gomock.Any()).Return(nil).AnyTimes()
+	s.beaconNode.(*mocks.MockBeaconNode).EXPECT().SubmitSyncCommitteeSubscriptions(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
 	return fetchDutiesCall
 }
@@ -102,7 +102,7 @@ func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 
 	expectedBufferSize := 2
 	s, mockTicker, logger, executeDutiesCall, cancel, schedulerPool := setupSchedulerAndMocks(t, handler, currentSlot, expectedBufferSize)
-	fetchDutiesCall := setupSyncCommitteeDutiesMock(s, dutiesMap, currentSlot)
+	fetchDutiesCall := setupSyncCommitteeDutiesMock(s, dutiesMap)
 
 	timeout := 100 * time.Millisecond
 
@@ -156,7 +156,7 @@ func TestScheduler_SyncCommittee_Current_Next_Periods(t *testing.T) {
 
 	expectedBufferSize := 2
 	s, mockTicker, logger, executeDutiesCall, cancel, schedulerPool := setupSchedulerAndMocks(t, handler, currentSlot, expectedBufferSize)
-	fetchDutiesCall := setupSyncCommitteeDutiesMock(s, dutiesMap, currentSlot)
+	fetchDutiesCall := setupSyncCommitteeDutiesMock(s, dutiesMap)
 
 	timeout := 100 * time.Millisecond
 
@@ -206,7 +206,7 @@ func TestScheduler_SyncCommittee_Indices_Changed(t *testing.T) {
 
 	expectedBufferSize := 2
 	s, mockTicker, logger, executeDutiesCall, cancel, schedulerPool := setupSchedulerAndMocks(t, handler, currentSlot, expectedBufferSize)
-	fetchDutiesCall := setupSyncCommitteeDutiesMock(s, dutiesMap, currentSlot)
+	fetchDutiesCall := setupSyncCommitteeDutiesMock(s, dutiesMap)
 
 	timeout := 100 * time.Millisecond
 
@@ -216,7 +216,7 @@ func TestScheduler_SyncCommittee_Indices_Changed(t *testing.T) {
 	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger a change in active indices
-	s.indicesChg <- true
+	s.indicesChg <- struct{}{}
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: wait for sync committee duties to be fetched again
@@ -265,7 +265,7 @@ func TestScheduler_SyncCommittee_Reorg_Current(t *testing.T) {
 
 	expectedBufferSize := 2
 	s, mockTicker, logger, executeDutiesCall, cancel, schedulerPool := setupSchedulerAndMocks(t, handler, currentSlot, expectedBufferSize)
-	fetchDutiesCall := setupSyncCommitteeDutiesMock(s, dutiesMap, currentSlot)
+	fetchDutiesCall := setupSyncCommitteeDutiesMock(s, dutiesMap)
 
 	timeout := 100 * time.Millisecond
 
@@ -338,7 +338,7 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 
 	expectedBufferSize := 2
 	s, mockTicker, logger, executeDutiesCall, cancel, schedulerPool := setupSchedulerAndMocks(t, handler, currentSlot, expectedBufferSize)
-	fetchDutiesCall := setupSyncCommitteeDutiesMock(s, dutiesMap, currentSlot)
+	fetchDutiesCall := setupSyncCommitteeDutiesMock(s, dutiesMap)
 
 	timeout := 100 * time.Millisecond
 

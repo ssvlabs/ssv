@@ -197,7 +197,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	// calculate subscriptions
 	subscriptions := calculateSubscriptionInfo(duties)
 	if len(subscriptions) > 0 {
-		if err := h.beaconNode.SubscribeToCommitteeSubnet(subscriptions); err != nil {
+		if err := h.beaconNode.SubmitBeaconCommitteeSubscriptions(ctx, subscriptions); err != nil {
 			h.logger.Warn("failed to submit beacon committee subscription", zap.Error(err))
 		}
 	}
@@ -235,7 +235,6 @@ func (h *AttesterHandler) shouldExecute(duty *eth2apiv1.AttesterDuty) bool {
 
 // calculateSubscriptionInfo calculates the attester subscriptions given a set of duties.
 func calculateSubscriptionInfo(duties []*eth2apiv1.AttesterDuty) []*eth2apiv1.BeaconCommitteeSubscription {
-	// TODO(duty-scheduler): explain why *2
 	subscriptions := make([]*eth2apiv1.BeaconCommitteeSubscription, 0, len(duties)*2)
 	for _, duty := range duties {
 		// Append a subscription for the attester role

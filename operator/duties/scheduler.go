@@ -15,6 +15,7 @@ import (
 	"github.com/sourcegraph/conc/pool"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/beacon/goclient"
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/networkconfig"
@@ -38,8 +39,8 @@ type BeaconNode interface {
 	ProposerDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.ProposerDuty, error)
 	SyncCommitteeDuties(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*eth2apiv1.SyncCommitteeDuty, error)
 	Events(ctx context.Context, topics []string, handler eth2client.EventHandlerFunc) error
-	SubscribeToCommitteeSubnet(subscription []*eth2apiv1.BeaconCommitteeSubscription) error
-	SubmitSyncCommitteeSubscriptions(subscription []*eth2apiv1.SyncCommitteeSubscription) error
+	SubmitBeaconCommitteeSubscriptions(ctx context.Context, subscription []*eth2apiv1.BeaconCommitteeSubscription) error
+	SubmitSyncCommitteeSubscriptions(ctx context.Context, subscription []*eth2apiv1.SyncCommitteeSubscription) error
 }
 
 // ValidatorController represents the component that controls validators via the scheduler
@@ -56,7 +57,7 @@ type SchedulerOptions struct {
 	Network             networkconfig.NetworkConfig
 	ValidatorController ValidatorController
 	ExecuteDuty         ExecuteDutyFunc
-	IndicesChg          chan bool
+	IndicesChg          chan struct{}
 	Ticker              SlotTicker
 	BuilderProposals    bool
 }
@@ -73,7 +74,7 @@ type Scheduler struct {
 	blockPropagateDelay time.Duration
 
 	reorg      chan ReorgEvent
-	indicesChg chan bool
+	indicesChg chan struct{}
 	ticker     chan phase0.Slot
 	waitCond   *sync.Cond
 	pool       *pool.ContextPool
@@ -134,17 +135,19 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 		return nil
 	})
 
-	var reorgChs []chan<- ReorgEvent
-	var indicesChangeChs []chan<- bool
+	indicesChangeFeed := NewEventFeed[struct{}]()
+	reorgFeed := NewEventFeed[ReorgEvent]()
+
 	for _, handler := range s.handlers {
 		handler := handler
 		slotTicker := make(chan phase0.Slot)
 		s.slotTicker.Subscribe(slotTicker)
 
-		indicesChangeCh := make(chan bool)
-		indicesChangeChs = append(indicesChangeChs, indicesChangeCh)
+		indicesChangeCh := make(chan struct{})
+		indicesChangeFeed.Subscribe(indicesChangeCh)
 		reorgCh := make(chan ReorgEvent)
-		reorgChs = append(reorgChs, reorgCh)
+		reorgFeed.Subscribe(reorgCh)
+
 		handler.Setup(
 			handler.Name(),
 			logger,
@@ -168,8 +171,8 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 	s.slotTicker.Subscribe(s.ticker)
 	go s.SlotTicker(ctx)
 
-	go fanOut(ctx, s.indicesChg, indicesChangeChs)
-	go fanOut(ctx, s.reorg, reorgChs)
+	go indicesChangeFeed.FanOut(ctx, s.indicesChg)
+	go reorgFeed.FanOut(ctx, s.reorg)
 
 	return nil
 }
@@ -178,20 +181,35 @@ func (s *Scheduler) Wait() error {
 	return s.pool.Wait()
 }
 
-// TODO: use a fan out package or Prysm's event.Feed, because sends in this implementation are blocking
-func fanOut[T any](ctx context.Context, in <-chan T, subscribers []chan<- T) {
+type EventFeed[T any] struct {
+	feed *event.Feed
+}
+
+func NewEventFeed[T any]() *EventFeed[T] {
+	return &EventFeed[T]{
+		feed: &event.Feed{},
+	}
+}
+
+func (f *EventFeed[T]) Subscribe(ch chan<- T) event.Subscription {
+	return f.feed.Subscribe(ch)
+}
+
+func (f *EventFeed[T]) Send(item T) {
+	_ = f.feed.Send(item)
+}
+
+func (f *EventFeed[T]) FanOut(ctx context.Context, in <-chan T) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case item := <-in:
-			for _, s := range subscribers {
-				// Fan out the message to all subscribers.
-				select {
-				case s <- item:
-				case <-ctx.Done():
-				}
+		case item, ok := <-in:
+			if !ok {
+				return
 			}
+			// Fan out the message to all subscribers.
+			f.Send(item)
 		}
 	}
 }
@@ -203,7 +221,7 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case slot := <-s.ticker:
-			delay := s.network.SlotDurationSec() / 3 /* a third of the slot duration */
+			delay := s.network.SlotDurationSec() / time.Duration(goclient.IntervalsPerSlot) /* a third of the slot duration */
 			finalTime := s.network.Beacon.GetSlotStartTime(slot).Add(delay)
 			waitDuration := time.Until(finalTime)
 
@@ -288,7 +306,7 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.Ev
 		s.currentDutyDependentRoot = data.CurrentDutyDependentRoot
 
 		currentTime := time.Now()
-		delay := s.network.SlotDurationSec() / 3 /* a third of the slot duration */
+		delay := s.network.SlotDurationSec() / time.Duration(goclient.IntervalsPerSlot) /* a third of the slot duration */
 		slotStartTimeWithDelay := s.network.Beacon.GetSlotStartTime(data.Slot).Add(delay)
 		if currentTime.Before(slotStartTimeWithDelay) {
 			logger.Debug("🏁 Head event: Block arrived before 1/3 slot", zap.Duration("time_saved", slotStartTimeWithDelay.Sub(currentTime)))

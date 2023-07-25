@@ -16,7 +16,7 @@ import (
 type ExecuteDutiesFunc func(logger *zap.Logger, duties []*spectypes.Duty)
 
 type dutyHandler interface {
-	Setup(string, *zap.Logger, BeaconNode, networkconfig.NetworkConfig, ValidatorController, ExecuteDutiesFunc, chan phase0.Slot, chan ReorgEvent, chan bool)
+	Setup(string, *zap.Logger, BeaconNode, networkconfig.NetworkConfig, ValidatorController, ExecuteDutiesFunc, chan phase0.Slot, chan ReorgEvent, chan struct{})
 	HandleDuties(context.Context)
 	Name() string
 }
@@ -30,7 +30,7 @@ type baseHandler struct {
 	ticker              chan phase0.Slot
 
 	reorg         chan ReorgEvent
-	indicesChange chan bool
+	indicesChange chan struct{}
 
 	fetchFirst     bool
 	indicesChanged bool
@@ -45,7 +45,7 @@ func (h *baseHandler) Setup(
 	executeDuties ExecuteDutiesFunc,
 	ticker chan phase0.Slot,
 	reorgEvents chan ReorgEvent,
-	indicesChange chan bool,
+	indicesChange chan struct{},
 ) {
 	h.logger = logger.With(zap.String("handler", name))
 	h.beaconNode = beaconNode

@@ -40,7 +40,7 @@ func setupAttesterDutiesMock(s *Scheduler, dutiesMap map[phase0.Epoch][]*v1.Atte
 			return indices
 		}).AnyTimes()
 
-	s.beaconNode.(*mocks.MockBeaconNode).EXPECT().SubscribeToCommitteeSubnet(gomock.Any()).Return(nil).AnyTimes()
+	s.beaconNode.(*mocks.MockBeaconNode).EXPECT().SubmitBeaconCommitteeSubscriptions(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
 	return fetchDutiesCall
 }
@@ -163,7 +163,7 @@ func TestScheduler_Attester_Indices_Changed(t *testing.T) {
 	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger a change in active indices
-	s.indicesChg <- true
+	s.indicesChg <- struct{}{}
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 3: wait for attester duties to be fetched again

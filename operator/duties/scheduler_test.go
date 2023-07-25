@@ -79,7 +79,7 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Slot
 
 	s := NewScheduler(opts)
 	s.blockPropagateDelay = 1 * time.Millisecond
-	s.indicesChg = make(chan bool)
+	s.indicesChg = make(chan struct{})
 	s.handlers = []dutyHandler{handler}
 
 	mockBeaconNode.EXPECT().Events(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
