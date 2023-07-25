@@ -60,6 +60,7 @@ func testKeyManager(t *testing.T) spectypes.KeyManager {
 
 func TestEncryptedKeyManager(t *testing.T) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
 	// Convert RSA private key to bytes
 	keyBytes := x509.MarshalPKCS1PrivateKey(privateKey)
 	hash := sha256.Sum256(keyBytes)
@@ -73,6 +74,7 @@ func TestEncryptedKeyManager(t *testing.T) {
 	require.NoError(t, err)
 	signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon, logger)
 	err = signerStorage.SetEncryptionKey(encryptionKey)
+	require.NoError(t, err)
 	defer func(db basedb.IDb, logger *zap.Logger) {
 		err := db.Close(logger)
 		if err != nil {
