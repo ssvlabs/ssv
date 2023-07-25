@@ -161,7 +161,7 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 				zap.Uint64("from", fromBlock),
 				zap.Uint64("to", toBlock),
 				zap.Uint64("target", endBlock),
-				zap.String("progress", fmt.Sprintf("%.2f%%", float64(fromBlock-startBlock)/float64(endBlock-startBlock)*100)),
+				zap.String("progress", fmt.Sprintf("%.2f%%", float64(toBlock-startBlock)/float64(endBlock-startBlock)*100)),
 				fields.Count(len(batchLogs)),
 			)
 
