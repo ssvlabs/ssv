@@ -3,6 +3,7 @@ package eventdispatcher
 import (
 	"context"
 	"encoding/base64"
+	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"math/big"
 	"net/http/httptest"
