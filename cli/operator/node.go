@@ -140,7 +140,7 @@ var StartNodeCmd = &cobra.Command{
 			ethcommon.HexToAddress(networkConfig.RegistryContractAddr),
 			executionclient.WithLogger(logger),
 			executionclient.WithMetrics(metricsReporter),
-			executionclient.WithFinalizationOffset(executionclient.DefaultFinalizationOffset),
+			executionclient.WithFollowDistance(executionclient.DefaultFollowDistance),
 			executionclient.WithConnectionTimeout(cfg.ExecutionClient.ConnectionTimeout),
 			executionclient.WithReconnectionInitialInterval(executionclient.DefaultReconnectionInitialInterval),
 			executionclient.WithReconnectionMaxInterval(executionclient.DefaultReconnectionMaxInterval),
@@ -234,6 +234,9 @@ var StartNodeCmd = &cobra.Command{
 			networkConfig,
 			nodeStorage,
 		)
+
+		// TODO: revert
+		select {}
 
 		cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, uint64, error) {
 			return validatorCtrl.GetValidatorStats()
@@ -496,11 +499,6 @@ func setupEventHandling(
 
 	if !found || fromBlock == nil {
 		fromBlock = networkConfig.RegistrySyncOffset
-		logger.Info("syncing registry contract events from genesis block, no history events found",
-			fields.BlockNumber(fromBlock.Uint64()))
-	} else {
-		logger.Info("syncing registry contract events from last processed block",
-			fields.BlockNumber(fromBlock.Uint64()))
 	}
 
 	// load & parse local events yaml if exists, otherwise sync from contract
@@ -523,7 +521,7 @@ func setupEventHandling(
 func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.IDb, metricsReporter *metricsreporter.MetricsReporter, port int, enableProf bool) {
 	logger = logger.Named(logging.NameMetricsHandler)
 	// init and start HTTP handler
-	metricsHandler := metrics.NewMetricsHandler(ctx, db, metricsReporter, enableProf, operatorNode.(metrics.HealthCheckAgent))
+	metricsHandler := metrics.NewMetricsHandler(ctx, db, metricsReporter, enableProf, operatorNode.(metrics.HealthChecker))
 	addr := fmt.Sprintf(":%d", port)
 	if err := metricsHandler.Start(logger, http.NewServeMux(), addr); err != nil {
 		logger.Panic("failed to serve metrics", zap.Error(err))

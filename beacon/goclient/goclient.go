@@ -2,7 +2,6 @@ package goclient
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"sync"
 	"time"
@@ -120,7 +119,7 @@ type goClient struct {
 }
 
 // verifies that the client implements HealthCheckAgent
-var _ metrics.HealthCheckAgent = &goClient{}
+var _ metrics.HealthChecker = &goClient{}
 
 // New init new client and go-client instance
 func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.OperatorID, slotTicker slot_ticker.Ticker) (beaconprotocol.BeaconNode, error) {
@@ -176,27 +175,6 @@ func (gc *goClient) IsReady(ctx context.Context) (bool, error) {
 
 	metricsBeaconNodeStatus.Set(float64(statusOK))
 	return true, nil
-}
-
-// HealthCheck provides health status of beacon node
-func (gc *goClient) HealthCheck() []string {
-	if gc.client == nil {
-		return []string{"not connected to beacon node"}
-	}
-	ctx, cancel := context.WithTimeout(gc.ctx, healthCheckTimeout)
-	defer cancel()
-	syncState, err := gc.client.NodeSyncing(ctx)
-	if err != nil {
-		metricsBeaconNodeStatus.Set(float64(statusUnknown))
-		return []string{"could not get beacon node sync state"}
-	}
-	if syncState != nil && syncState.IsSyncing {
-		metricsBeaconNodeStatus.Set(float64(statusSyncing))
-		return []string{fmt.Sprintf("beacon node is currently syncing: head=%d, distance=%d",
-			syncState.HeadSlot, syncState.SyncDistance)}
-	}
-	metricsBeaconNodeStatus.Set(float64(statusOK))
-	return []string{}
 }
 
 // GetBeaconNetwork returns the beacon network the node is on

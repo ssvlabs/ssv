@@ -30,11 +30,11 @@ type metricsHandler struct {
 	db            basedb.IDb
 	reporter      nodeMetrics
 	enableProf    bool
-	healthChecker HealthCheckAgent
+	healthChecker HealthChecker
 }
 
 // NewMetricsHandler returns a new metrics handler.
-func NewMetricsHandler(ctx context.Context, db basedb.IDb, reporter nodeMetrics, enableProf bool, healthChecker HealthCheckAgent) Handler {
+func NewMetricsHandler(ctx context.Context, db basedb.IDb, reporter nodeMetrics, enableProf bool, healthChecker HealthChecker) Handler {
 	if reporter == nil {
 		reporter = nopMetrics{}
 	}
@@ -127,11 +127,10 @@ func (mh *metricsHandler) handleCountByCollection(w http.ResponseWriter, r *http
 }
 
 func (mh *metricsHandler) handleHealth(res http.ResponseWriter, req *http.Request) {
-	// TODO: consider using IsReady instead of HealthCheck
-	if errs := mh.healthChecker.HealthCheck(); len(errs) > 0 {
+	if err := mh.healthChecker.HealthCheck(); err != nil {
 		mh.reporter.SSVNodeNotHealthy()
 		result := map[string][]string{
-			"errors": errs,
+			"errors": {err.Error()},
 		}
 		if raw, err := json.Marshal(result); err != nil {
 			http.Error(res, err.Error(), http.StatusInternalServerError)

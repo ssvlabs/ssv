@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/big"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
@@ -34,101 +33,72 @@ type ExecutionClient struct {
 	// optional
 	logger                      *zap.Logger
 	metrics                     metrics
-	finalizationOffset          uint64 // TODO: consider reading the finalized checkpoint from consensus layer
+	followDistance              uint64 // TODO: consider reading the finalized checkpoint from consensus layer
 	connectionTimeout           time.Duration
 	reconnectionInitialInterval time.Duration
 	reconnectionMaxInterval     time.Duration
 	logBatchSize                uint64
 
 	// variables
-	client    atomic.Pointer[ethclient.Client]
+	client    *ethclient.Client
 	connectMu sync.Mutex
 	closed    chan struct{}
 }
 
 // New creates a new instance of ExecutionClient.
-func New(nodeAddr string, contractAddr ethcommon.Address, opts ...Option) *ExecutionClient {
+func New(ctx context.Context, logger *zap.Logger, nodeAddr string, contractAddr ethcommon.Address, opts ...Option) (*ExecutionClient, error) {
 	client := &ExecutionClient{
 		nodeAddr:                    nodeAddr,
 		contractAddress:             contractAddr,
-		logger:                      zap.NewNop(),
+		logger:                      logger,
 		metrics:                     nopMetrics{},
-		finalizationOffset:          DefaultFinalizationOffset,
+		followDistance:              DefaultFollowDistance,
 		connectionTimeout:           DefaultConnectionTimeout,
 		reconnectionInitialInterval: DefaultReconnectionInitialInterval,
 		reconnectionMaxInterval:     DefaultReconnectionMaxInterval,
 		logBatchSize:                DefaultHistoricalLogsBatchSize, // TODO Make batch of logs adaptive depending on "websocket: read limit"
 		closed:                      make(chan struct{}),
 	}
-
 	for _, opt := range opts {
 		opt(client)
 	}
-
-	return client
-}
-
-// Connect connects to Ethereum execution client.
-func (ec *ExecutionClient) Connect(ctx context.Context) {
-	ec.connectMu.Lock()
-	defer ec.connectMu.Unlock()
-
-	if ec.client.Load() != nil {
-		ec.reconnect(ctx)
-		return
+	err := client.connect(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to execution client: %w", err)
 	}
-
-	if err := ec.connect(ctx); err != nil {
-		ec.reconnect(ctx)
-	}
+	return client, nil
 }
 
 // Close shuts down ExecutionClient.
 func (ec *ExecutionClient) Close() error {
 	close(ec.closed)
-
-	if client := ec.client.Load(); client != nil {
-		client.Close()
-	}
-
+	ec.client.Close()
 	return nil
 }
 
 // FetchHistoricalLogs retrieves historical logs emitted by the contract starting from fromBlock.
-func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logCh <-chan ethtypes.Log, fetchErrCh <-chan error, err error) {
-	client := ec.client.Load()
-	if client == nil {
-		return nil, nil, ErrNotConnected
-	}
-
-	currentBlock, err := client.BlockNumber(ctx)
+func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan ethtypes.Log, errors <-chan error, err error) {
+	currentBlock, err := ec.client.BlockNumber(ctx)
 	if err != nil {
-		return nil, nil, fmt.Errorf("get current block: %w", err)
+		return nil, nil, fmt.Errorf("failed to get current block: %w", err)
 	}
+	toBlock := currentBlock - ec.followDistance
 
-	lastBlock := currentBlock - ec.finalizationOffset
-	logger := ec.logger.With(
-		zap.Uint64("from", fromBlock),
-		zap.Uint64("to", lastBlock))
-
-	logger.Info("fetching registry events in batches",
-		zap.Uint64("current_block", currentBlock))
-
-	logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, lastBlock)
-	return logStream, fetchErrors, nil
+	logs, errors = ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
+	return
 }
 
 // Calls FilterLogs multiple times and batches results to avoid fetching enormous amount of events
 func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, endBlock uint64) (<-chan ethtypes.Log, <-chan error) {
-	logCh := make(chan ethtypes.Log, defaultLogBuf)
-	fetchErrCh := make(chan error, 1)
+	logs := make(chan ethtypes.Log, defaultLogBuf)
+	errors := make(chan error, 1)
 
 	go func() {
-		defer close(logCh)
-		defer close(fetchErrCh)
+		defer close(logs)
+		defer close(errors)
 
 		if startBlock > endBlock {
-			fetchErrCh <- ErrBadInput
+			errors <- ErrBadInput
 			return
 		}
 
@@ -140,26 +110,19 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 				toBlock = endBlock
 			}
 
-			client := ec.client.Load()
-			if client == nil {
-				fetchErrCh <- ErrNotConnected
-				return
-			}
-
-			batchLogs, err := client.FilterLogs(context.Background(), ethereum.FilterQuery{
+			batchLogs, err := ec.client.FilterLogs(context.Background(), ethereum.FilterQuery{
 				Addresses: []ethcommon.Address{ec.contractAddress},
 				FromBlock: new(big.Int).SetUint64(fromBlock),
 				ToBlock:   new(big.Int).SetUint64(toBlock),
 			})
 			if err != nil {
-				ec.logger.Error("failed to fetch events batch", zap.Error(err))
-				fetchErrCh <- err
+				errors <- err
 				return
 			}
 
-			ec.logger.Info("fetched events in batch",
-				zap.Uint64("from", fromBlock),
-				zap.Uint64("to", toBlock),
+			ec.logger.Info("fetched registry events batch",
+				fields.FromBlock(fromBlock),
+				fields.ToBlock(toBlock),
 				zap.Uint64("target", endBlock),
 				zap.String("progress", fmt.Sprintf("%.2f%%", float64(toBlock-startBlock+1)/float64(endBlock-startBlock+1)*100)),
 				fields.Count(len(batchLogs)),
@@ -167,42 +130,29 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 
 			select {
 			case <-ctx.Done():
-				ec.logger.Debug("batched log fetching canceled")
-				fetchErrCh <- ctx.Err()
+				errors <- ctx.Err()
 				return
 
 			case <-ec.closed:
-				ec.logger.Debug("closed")
-				fetchErrCh <- ErrClosed
+				errors <- ErrClosed
 				return
 
 			default:
-				ec.logger.Debug("fetched log batch",
-					zap.Uint64("from", fromBlock),
-					zap.Uint64("to", toBlock),
-					fields.Count(len(batchLogs)),
-				)
 				for _, log := range batchLogs {
 					if log.Removed {
 						// TODO: test this case
 						continue
 					}
-					logCh <- log
+					logs <- log
 					logCount++
 				}
 			}
 		}
 
-		ec.logger.Debug("fetching registry events in batches completed",
-			zap.Uint64("from", startBlock),
-			zap.Uint64("to", endBlock),
-			fields.Count(logCount),
-		)
-
 		ec.metrics.ExecutionClientLastFetchedBlock(endBlock)
 	}()
 
-	return logCh, fetchErrCh
+	return logs, errors
 }
 
 // StreamLogs subscribes to events emitted by the contract.
@@ -212,20 +162,23 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 	go func() {
 		defer close(logs)
 
+		tries := 0
 		for {
 			select {
 			case <-ctx.Done():
-				ec.logger.Debug("log streaming canceled")
 				return
 
 			case <-ec.closed:
-				ec.logger.Debug("closed")
 				return
 
 			default:
 				lastBlock, err := ec.streamLogsToChan(ctx, logs, fromBlock)
 				if err != nil {
-					ec.logger.Error("log streaming failed", zap.Error(err))
+					tries++
+					if tries > 3 {
+
+					}
+					ec.logger.Error("failed to stream registry events, reconnecting", zap.Error(err))
 					ec.reconnect(ctx)
 				}
 
@@ -243,15 +196,10 @@ func (ec *ExecutionClient) IsReady(ctx context.Context) (bool, error) {
 		return false, nil
 	}
 
-	client := ec.client.Load()
-	if client == nil {
-		return false, ErrNotConnected
-	}
-
 	ctx, cancel := context.WithTimeout(ctx, ec.connectionTimeout)
 	defer cancel()
 
-	sp, err := client.SyncProgress(ctx)
+	sp, err := ec.client.SyncProgress(ctx)
 	if err != nil {
 		ec.metrics.ExecutionClientFailure()
 		return false, err
@@ -267,20 +215,6 @@ func (ec *ExecutionClient) IsReady(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-// HealthCheck is left for compatibility, TODO: consider removing
-func (ec *ExecutionClient) HealthCheck() []string {
-	ready, err := ec.IsReady(context.Background())
-	if err != nil {
-		return []string{err.Error()}
-	}
-
-	if !ready {
-		return []string{"syncing"}
-	}
-
-	return []string{}
-}
-
 func (ec *ExecutionClient) isClosed() bool {
 	select {
 	case <-ec.closed:
@@ -292,14 +226,9 @@ func (ec *ExecutionClient) isClosed() bool {
 
 // TODO: consider handling "websocket: read limit exceeded" error and reducing batch size (syncSmartContractsEvents has code for this)
 func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan ethtypes.Log, fromBlock uint64) (lastBlock uint64, err error) {
-	client := ec.client.Load()
-	if client == nil {
-		return 0, ErrNotConnected
-	}
-
 	heads := make(chan *ethtypes.Header)
 
-	sub, err := client.SubscribeNewHead(ctx, heads)
+	sub, err := ec.client.SubscribeNewHead(ctx, heads)
 	if err != nil {
 		return fromBlock, fmt.Errorf("subscribe heads: %w", err)
 	}
@@ -313,25 +242,18 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan ethty
 			return 0, fmt.Errorf("subscription: %w", err)
 
 		case header := <-heads:
-			query := ethereum.FilterQuery{
-				Addresses: []ethcommon.Address{ec.contractAddress},
-				FromBlock: new(big.Int).SetUint64(fromBlock),
-				ToBlock:   header.Number,
+			toBlock := header.Number.Uint64() - ec.followDistance
+			if toBlock < fromBlock {
+				continue
 			}
-
-			logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, header.Number.Uint64())
-
+			logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
 			for log := range logStream {
 				logs <- log
 			}
-
-			err = <-fetchErrors
-
-			if err != nil {
+			if err := <-fetchErrors; err != nil {
 				return fromBlock, fmt.Errorf("fetch logs: %w", err)
 			}
-			fromBlock = query.ToBlock.Uint64()
-			ec.logger.Info("last fetched block", fields.BlockNumber(fromBlock))
+			fromBlock = toBlock + 1
 			ec.metrics.ExecutionClientLastFetchedBlock(fromBlock)
 		}
 	}
@@ -345,17 +267,14 @@ func (ec *ExecutionClient) connect(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, ec.connectionTimeout)
 	defer cancel()
 
-	logger.Info("connecting", zap.Duration("timeout", ec.connectionTimeout))
-
-	client, err := ethclient.DialContext(ctx, ec.nodeAddr)
+	start := time.Now()
+	var err error
+	ec.client, err = ethclient.DialContext(ctx, ec.nodeAddr)
 	if err != nil {
-		logger.Error("connection failed", zap.Error(err))
 		return err
 	}
 
-	logger.Info("connected")
-	ec.client.Store(client)
-
+	logger.Info("connected to execution client", zap.Duration("took", time.Since(start)))
 	return nil
 }
 
@@ -365,10 +284,7 @@ func (ec *ExecutionClient) connect(ctx context.Context) error {
 func (ec *ExecutionClient) reconnect(ctx context.Context) {
 	logger := ec.logger.With(fields.Address(ec.nodeAddr))
 
-	if cl := ec.client.Load(); cl != nil {
-		cl.Close()
-	}
-
+	start := time.Now()
 	tasks.ExecWithInterval(func(lastTick time.Duration) (stop bool, cont bool) {
 		logger.Info("reconnecting")
 		if err := ec.connect(ctx); err != nil {
@@ -386,9 +302,9 @@ func (ec *ExecutionClient) reconnect(ctx context.Context) {
 		return true, false
 	}, ec.reconnectionInitialInterval, ec.reconnectionMaxInterval+(ec.reconnectionInitialInterval))
 
-	logger.Info("reconnected")
+	logger.Info("reconnected to execution client", zap.Duration("took", time.Since(start)))
 }
 
 func (ec *ExecutionClient) Filterer() (*contract.ContractFilterer, error) {
-	return contract.NewContractFilterer(ec.contractAddress, ec.client.Load())
+	return contract.NewContractFilterer(ec.contractAddress, ec.client)
 }

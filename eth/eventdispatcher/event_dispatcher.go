@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth/eventbatcher"
+	"github.com/bloxapp/ssv/logging/fields"
 )
 
 // TODO: check if something from these PRs need to be ported:
@@ -18,8 +19,14 @@ var (
 	ErrNodeNotReady = fmt.Errorf("node not ready")
 )
 
+type Event struct {
+	BlockNumber uint64
+	Logs        []*ethtypes.Log
+	Err         error
+}
+
 type executionClient interface {
-	FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logCh <-chan ethtypes.Log, fetchErrCh <-chan error, err error)
+	FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan ethtypes.Log, errors <-chan error, err error)
 	StreamLogs(ctx context.Context, fromBlock uint64) <-chan ethtypes.Log
 }
 
@@ -68,38 +75,33 @@ func New(executionClient executionClient, eventBatcher eventBatcher, eventDataHa
 // Then it asynchronously runs a loop which retrieves data from ExecutionClient event stream and passes them for processing.
 // Start blocks until historical logs are processed.
 func (ed *EventDispatcher) Start(ctx context.Context, fromBlock uint64) error {
-	ed.logger.Debug("starting event dispatcher")
-
 	if ed.nodeProber != nil {
 		ready, err := ed.nodeProber.IsReady(ctx)
 		if err != nil {
 			return fmt.Errorf("check node readiness: %w", err)
 		}
-
 		if !ready {
 			return ErrNodeNotReady
 		}
 	}
 
-	logStream, errorStream, err := ed.executionClient.FetchHistoricalLogs(ctx, fromBlock)
+	fetchLogs, fetchError, err := ed.executionClient.FetchHistoricalLogs(ctx, fromBlock)
 	if err != nil {
-		return fmt.Errorf("fetching registry events failed: %w", err)
+		return fmt.Errorf("failed to fetch historical events: %w", err)
 	}
 
-	blockEvents := ed.eventBatcher.BatchEvents(logStream)
-
-	ed.logger.Debug("batching events by block")
+	blockEvents := ed.eventBatcher.BatchEvents(fetchLogs)
 	lastProcessedBlock, err := ed.eventDataHandler.HandleBlockEventsStream(blockEvents, false)
 	if err != nil {
 		return fmt.Errorf("handle historical block events: %w", err)
 	}
 	ed.metrics.LastBlockProcessed(lastProcessedBlock)
 
-	if err := <-errorStream; err != nil {
+	if err := <-fetchError; err != nil {
 		return fmt.Errorf("error occurred while fetching historical logs: %w", err)
 	}
 
-	ed.logger.Info("finished processing registry events in batches",
+	ed.logger.Info("finished syncing historical events",
 		zap.Uint64("last_processed_block", lastProcessedBlock))
 
 	// TODO: log shares, operators, my validators
@@ -125,20 +127,14 @@ func (ed *EventDispatcher) Start(ctx context.Context, fromBlock uint64) error {
 	//)
 
 	go func() {
-		ed.logger.Info("going to handle ongoing logs")
+		ed.logger.Info("subscribing to ongoing registry events", fields.FromBlock(lastProcessedBlock+1))
 
 		logsStream := ed.executionClient.StreamLogs(ctx, lastProcessedBlock+1)
 		blockEventsStream := ed.eventBatcher.BatchEvents(logsStream)
 		lastProcessedBlock, err := ed.eventDataHandler.HandleBlockEventsStream(blockEventsStream, true)
-		if err != nil {
-			// TODO: think how to handle this
-			ed.logger.Error("failed to handle ongoing block event", zap.Error(err))
-			ed.metrics.LogsProcessingError(err)
-			return
-		}
-		ed.metrics.LastBlockProcessed(lastProcessedBlock)
-		ed.logger.Info("finished handling ongoing logs",
-			zap.Uint64("last_processed_block", lastProcessedBlock))
+		ed.logger.Fatal("failed syncing ongoing registry events",
+			zap.Uint64("last_processed_block", lastProcessedBlock),
+			zap.Error(err))
 	}()
 
 	return nil

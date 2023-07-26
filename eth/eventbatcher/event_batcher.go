@@ -3,8 +3,6 @@ package eventbatcher
 import (
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/logging/fields"
 )
 
 const defaultEventBuf = 1024
@@ -31,8 +29,6 @@ type BlockEvents struct {
 }
 
 func (eb *EventBatcher) BatchEvents(events <-chan ethtypes.Log) <-chan BlockEvents {
-	eb.logger.Debug("starting event batching")
-
 	blockEvents := make(chan BlockEvents, defaultEventBuf)
 	go func() {
 		defer close(blockEvents)
@@ -45,22 +41,22 @@ func (eb *EventBatcher) BatchEvents(events <-chan ethtypes.Log) <-chan BlockEven
 
 			if event.BlockNumber > currentBlockEvents.BlockNumber {
 				blockEvents <- currentBlockEvents
-				eb.logger.Debug("batched block events", fields.BlockNumber(currentBlockEvents.BlockNumber))
 
 				currentBlockEvents = BlockEvents{
 					BlockNumber: event.BlockNumber,
 					Events:      []ethtypes.Log{event},
 				}
+			} else if event.BlockNumber < currentBlockEvents.BlockNumber {
+				eb.logger.Fatal("received event from previous block, should never happen!",
+					zap.Uint64("event_block", event.BlockNumber),
+					zap.Uint64("current_block", currentBlockEvents.BlockNumber))
 			} else {
 				currentBlockEvents.Events = append(currentBlockEvents.Events, event)
 			}
 		}
 		if len(currentBlockEvents.Events) != 0 {
 			blockEvents <- currentBlockEvents
-			eb.logger.Debug("batched block events", fields.BlockNumber(currentBlockEvents.BlockNumber))
 		}
-
-		eb.logger.Debug("finished event batching")
 	}()
 
 	return blockEvents

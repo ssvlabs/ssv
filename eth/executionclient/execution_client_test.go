@@ -102,8 +102,8 @@ func TestFetchHistoricalLogs(t *testing.T) {
 
 	logger := zaptest.NewLogger(t)
 
-	const finalizationOffset = 8
-	client := New(addr, receipt.ContractAddress, WithLogger(logger), WithFinalizationOffset(finalizationOffset))
+	const followDistance = 8
+	client := New(addr, receipt.ContractAddress, WithLogger(logger), WithFollowDistance(followDistance))
 	client.Connect(ctx)
 
 	isReady, err := client.IsReady(ctx)
@@ -119,7 +119,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	}
 
 	require.NoError(t, err)
-	expectedSeenLogs := chainLength - finalizationOffset - 2 // blocks 0 and 1 don't have logs
+	expectedSeenLogs := chainLength - followDistance - 2 // blocks 0 and 1 don't have logs
 	require.Equal(t, expectedSeenLogs, seenLogs)
 
 	select {

@@ -11,7 +11,7 @@ func TestProcessAgents(t *testing.T) {
 	a2 := mockAgent{errs: []string{}}
 	a3 := mockAgent{errs: []string{"another error 3"}}
 
-	errs := ProcessAgents([]HealthCheckAgent{&a1, &a2, &a3})
+	errs := ProcessAgents([]HealthChecker{&a1, &a2, &a3})
 	require.Len(t, errs, 3)
 }
 

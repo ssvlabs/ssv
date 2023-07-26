@@ -62,7 +62,7 @@ type operatorNode struct {
 	ticker           slot_ticker.Ticker
 	validatorsCtrl   validator.Controller
 	consensusClient  beaconprotocol.BeaconNode
-	executionClient  metrics.HealthCheckAgent
+	executionClient  metrics.HealthChecker
 	net              network.P2PNetwork
 	storage          storage.Storage
 	qbftStorage      *qbftstorage.QBFTStores
@@ -179,24 +179,11 @@ func (n *operatorNode) listenForCurrentSlot(logger *zap.Logger) {
 }
 
 // HealthCheck returns a list of issues regards the state of the operator node
-func (n *operatorNode) HealthCheck() []string {
-	errs := metrics.ProcessAgents(n.healthAgents())
-	if len(errs) == 0 {
-		n.metrics.SSVNodeHealthy()
-	} else {
-		n.metrics.SSVNodeNotHealthy()
-	}
-	return errs
-}
-
-func (n *operatorNode) healthAgents() []metrics.HealthCheckAgent {
-	agents := []metrics.HealthCheckAgent{
-		n.executionClient,
-	}
-	if agent, ok := n.consensusClient.(metrics.HealthCheckAgent); ok {
-		agents = append(agents, agent)
-	}
-	return agents
+func (n *operatorNode) HealthCheck() error {
+	// TODO: previously this checked availability of consensus & execution clients.
+	// However, currently the node crashes when those clients are down,
+	// so this health check is currently a positive no-op.
+	return nil
 }
 
 // handleQueryRequests waits for incoming messages and
