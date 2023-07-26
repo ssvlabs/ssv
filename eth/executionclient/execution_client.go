@@ -118,13 +118,13 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 				return
 			}
 
-      ec.logger.Info("fetched registry events batch",
-        fields.FromBlock(fromBlock),
-        fields.ToBlock(toBlock),
-        zap.Uint64("target", endBlock),
-        zap.String("progress", fmt.Sprintf("%.2f%%", float64(toBlock-startBlock+1)/float64(endBlock-startBlock+1)*100)),
-        zap.Int("log_count", len(batchLogs)),
-      )
+			ec.logger.Info("fetched registry events batch",
+				fields.FromBlock(fromBlock),
+				fields.ToBlock(toBlock),
+				zap.Uint64("target", endBlock),
+				zap.String("progress", fmt.Sprintf("%.2f%%", float64(toBlock-startBlock+1)/float64(endBlock-startBlock+1)*100)),
+				zap.Int("log_count", len(batchLogs)),
+			)
 
 			select {
 			case <-ctx.Done():
