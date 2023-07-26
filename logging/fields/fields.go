@@ -3,7 +3,6 @@ package fields
 import (
 	"encoding/hex"
 	"fmt"
-	"math/big"
 	"net"
 	"net/url"
 	"strconv"
@@ -85,8 +84,8 @@ const (
 	FieldValidatorMetadata   = "validator_metadata"
 )
 
-func FromBlock(val fmt.Stringer) zapcore.Field {
-	return zap.Stringer(FieldFromBlock, val)
+func FromBlock(val uint64) zapcore.Field {
+	return zap.Uint64(FieldFromBlock, val)
 }
 
 func SyncOffset(val fmt.Stringer) zapcore.Field {
@@ -289,8 +288,8 @@ func Errors(val []error) zap.Field {
 	return zap.Errors(FieldErrors, val)
 }
 
-func ToBlock(val *big.Int) zap.Field {
-	return zap.Int64(FieldToBlock, val.Int64())
+func ToBlock(val uint64) zap.Field {
+	return zap.Uint64(FieldToBlock, val)
 }
 
 func FeeRecipient(pubKey []byte) zap.Field {

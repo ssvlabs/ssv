@@ -26,6 +26,7 @@ import (
 	"go.uber.org/zap/zaptest"
 
 	"github.com/bloxapp/ssv/ekm"
+	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/eth/eventbatcher"
 	"github.com/bloxapp/ssv/eth/eventdatahandler"
 	"github.com/bloxapp/ssv/eth/eventparser"
@@ -90,8 +91,8 @@ func TestEventDispatcher(t *testing.T) {
 	}
 
 	addr := "ws:" + strings.TrimPrefix(httpSrv.URL, "http:")
-	client := executionclient.New(addr, contractAddr, executionclient.WithLogger(logger))
-	client.Connect(ctx)
+	client, err := executionclient.New(ctx, addr, contractAddr, executionclient.WithLogger(logger))
+	require.NoError(t, err)
 
 	isReady, err := client.IsReady(ctx)
 	if err != nil {
@@ -108,8 +109,10 @@ func TestEventDispatcher(t *testing.T) {
 		WithLogger(logger),
 	)
 
-	require.NoError(t, eventDispatcher.Start(ctx, 0))
+	lastProcessedBlock, err := eventDispatcher.SyncHistory(ctx, 0)
+	require.NoError(t, err)
 	require.NoError(t, client.Close())
+	require.NoError(t, eventDispatcher.SyncOngoing(ctx, lastProcessedBlock+1))
 }
 
 func setupEventDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger) *eventdatahandler.EventDataHandler {
@@ -142,11 +145,10 @@ func setupEventDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger
 		RegistryStorage: nodeStorage,
 	})
 
-	cl := executionclient.New("test", ethcommon.Address{})
-	filterer, err := cl.Filterer()
+	contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
 	require.NoError(t, err)
 
-	parser := eventparser.New(filterer)
+	parser := eventparser.New(contractFilterer)
 
 	edh, err := eventdatahandler.New(
 		nodeStorage,

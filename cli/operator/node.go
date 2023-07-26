@@ -135,18 +135,20 @@ var StartNodeCmd = &cobra.Command{
 
 		consensusClient := setupConsensusClient(logger, operatorData.ID, slotTicker)
 
-		executionClient := executionclient.New(
+		executionClient, err := executionclient.New(
+			cmd.Context(),
 			cfg.ExecutionClient.Addr,
 			ethcommon.HexToAddress(networkConfig.RegistryContractAddr),
 			executionclient.WithLogger(logger),
 			executionclient.WithMetrics(metricsReporter),
-			executionclient.WithFinalizationOffset(executionclient.DefaultFinalizationOffset),
+			executionclient.WithFollowDistance(executionclient.DefaultFollowDistance),
 			executionclient.WithConnectionTimeout(cfg.ExecutionClient.ConnectionTimeout),
 			executionclient.WithReconnectionInitialInterval(executionclient.DefaultReconnectionInitialInterval),
 			executionclient.WithReconnectionMaxInterval(executionclient.DefaultReconnectionMaxInterval),
 		)
-
-		executionClient.Connect(cmd.Context())
+		if err != nil {
+			logger.Fatal("could not connect to execution client", zap.Error(err))
+		}
 
 		cfg.SSVOptions.ForkVersion = forkVersion
 		cfg.SSVOptions.Context = cmd.Context()
@@ -505,11 +507,6 @@ func setupEventHandling(
 
 	if !found || fromBlock == nil {
 		fromBlock = networkConfig.RegistrySyncOffset
-		logger.Info("syncing registry contract events from genesis block, no history events found",
-			fields.BlockNumber(fromBlock.Uint64()))
-	} else {
-		logger.Info("syncing registry contract events from last processed block",
-			fields.BlockNumber(fromBlock.Uint64()))
 	}
 
 	// load & parse local events yaml if exists, otherwise sync from contract
@@ -523,16 +520,25 @@ func setupEventHandling(
 			logger.Fatal("error occurred while running event dispatcher", zap.Error(err))
 		}
 	} else {
-		if err := eventDispatcher.Start(ctx, fromBlock.Uint64()); err != nil {
-			logger.Fatal("error occurred while running event dispatcher", zap.Error(err))
+		lastProcessedBlock, err := eventDispatcher.SyncHistory(ctx, fromBlock.Uint64())
+		if err != nil {
+			logger.Fatal("failed to sync historical registry events", zap.Error(err))
 		}
+		go func() {
+			err = eventDispatcher.SyncOngoing(ctx, lastProcessedBlock+1)
+			if err != nil {
+				logger.Fatal("failed syncing ongoing registry events",
+					zap.Uint64("last_processed_block", lastProcessedBlock),
+					zap.Error(err))
+			}
+		}()
 	}
 }
 
 func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.IDb, metricsReporter *metricsreporter.MetricsReporter, port int, enableProf bool) {
 	logger = logger.Named(logging.NameMetricsHandler)
 	// init and start HTTP handler
-	metricsHandler := metrics.NewMetricsHandler(ctx, db, metricsReporter, enableProf, operatorNode.(metrics.HealthCheckAgent))
+	metricsHandler := metrics.NewMetricsHandler(ctx, db, metricsReporter, enableProf, operatorNode.(metrics.HealthChecker))
 	addr := fmt.Sprintf(":%d", port)
 	if err := metricsHandler.Start(logger, http.NewServeMux(), addr); err != nil {
 		logger.Panic("failed to serve metrics", zap.Error(err))
