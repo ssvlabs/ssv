@@ -176,7 +176,7 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 				if err != nil {
 					tries++
 					if tries > 3 {
-
+						ec.logger.Fatal("failed to stream registry events", zap.Error(err))
 					}
 					ec.logger.Error("failed to stream registry events, reconnecting", zap.Error(err))
 					ec.reconnect(ctx)
@@ -242,6 +242,9 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan ethty
 			return 0, fmt.Errorf("subscription: %w", err)
 
 		case header := <-heads:
+			if header.Number.Uint64() < ec.followDistance {
+				continue
+			}
 			toBlock := header.Number.Uint64() - ec.followDistance
 			if toBlock < fromBlock {
 				continue

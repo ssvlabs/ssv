@@ -27,10 +27,6 @@ import (
 // Don't check for it, check for errors or nil data instead.
 const DataVersionNil spec.DataVersion = math.MaxUint64
 
-const (
-	healthCheckTimeout = 500 * time.Millisecond
-)
-
 type beaconNodeStatus int32
 
 var (
