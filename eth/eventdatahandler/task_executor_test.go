@@ -141,7 +141,6 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 		"setup operator key is DONE!",
 		"setting validator controller",
 		"processing events from block",
-		"processing event",
 		"malformed event: failed to verify signature",
 	}
 	require.Equal(t, happyFlow, observedLogsFlow)
