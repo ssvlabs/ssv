@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -48,7 +47,6 @@ func (edh *EventDataHandler) handleOperatorAdded(txn basedb.Txn, event *contract
 		zap.String("own_operator_pubkey", string(edh.operatorData.PublicKey)),
 		fields.OperatorPubKey(event.PublicKey),
 	)
-
 	logger.Debug("processing event")
 
 	od := &registrystorage.OperatorData{
