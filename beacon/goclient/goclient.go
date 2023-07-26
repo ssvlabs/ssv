@@ -2,7 +2,6 @@ package goclient
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"sync"
 	"time"
@@ -20,7 +19,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/operator/slot_ticker"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
@@ -119,9 +117,6 @@ type goClient struct {
 	registrationCache    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration
 }
 
-// verifies that the client implements HealthCheckAgent
-var _ metrics.HealthCheckAgent = &goClient{}
-
 // New init new client and go-client instance
 func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.OperatorID, slotTicker slot_ticker.Ticker) (beaconprotocol.BeaconNode, error) {
 	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(string(opt.Network.BeaconNetwork)))
@@ -176,27 +171,6 @@ func (gc *goClient) IsReady(ctx context.Context) (bool, error) {
 
 	metricsBeaconNodeStatus.Set(float64(statusOK))
 	return true, nil
-}
-
-// HealthCheck provides health status of beacon node
-func (gc *goClient) HealthCheck() []string {
-	if gc.client == nil {
-		return []string{"not connected to beacon node"}
-	}
-	ctx, cancel := context.WithTimeout(gc.ctx, healthCheckTimeout)
-	defer cancel()
-	syncState, err := gc.client.NodeSyncing(ctx)
-	if err != nil {
-		metricsBeaconNodeStatus.Set(float64(statusUnknown))
-		return []string{"could not get beacon node sync state"}
-	}
-	if syncState != nil && syncState.IsSyncing {
-		metricsBeaconNodeStatus.Set(float64(statusSyncing))
-		return []string{fmt.Sprintf("beacon node is currently syncing: head=%d, distance=%d",
-			syncState.HeadSlot, syncState.SyncDistance)}
-	}
-	metricsBeaconNodeStatus.Set(float64(statusOK))
-	return []string{}
 }
 
 // GetBeaconNetwork returns the beacon network the node is on

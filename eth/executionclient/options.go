@@ -23,11 +23,11 @@ func WithMetrics(metrics metrics) Option {
 	}
 }
 
-// WithFinalizationOffset sets finalization offset.
+// WithFollowDistance sets finalization offset.
 // It defines how many blocks in the past the latest block we want to process is.
-func WithFinalizationOffset(offset uint64) Option {
+func WithFollowDistance(offset uint64) Option {
 	return func(s *ExecutionClient) {
-		s.finalizationOffset = offset
+		s.followDistance = offset
 	}
 }
 

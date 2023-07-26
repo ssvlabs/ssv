@@ -9,14 +9,12 @@ import (
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/stretchr/testify/require"
 
+	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/eth/eventparser"
-	"github.com/bloxapp/ssv/eth/executionclient"
 )
 
 func TestEventParser(t *testing.T) {
-	cl := executionclient.New("test", ethcommon.Address{})
-
-	contractFilterer, err := cl.Filterer()
+	contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
 	require.NoError(t, err)
 
 	parser := eventparser.New(contractFilterer)

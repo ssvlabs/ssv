@@ -102,9 +102,9 @@ func TestFetchHistoricalLogs(t *testing.T) {
 
 	logger := zaptest.NewLogger(t)
 
-	const finalizationOffset = 8
-	client := New(addr, receipt.ContractAddress, WithLogger(logger), WithFinalizationOffset(finalizationOffset))
-	client.Connect(ctx)
+	const followDistance = 8
+	client, err := New(ctx, addr, receipt.ContractAddress, WithLogger(logger), WithFollowDistance(followDistance))
+	require.NoError(t, err)
 
 	isReady, err := client.IsReady(ctx)
 	require.NoError(t, err)
@@ -119,7 +119,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	}
 
 	require.NoError(t, err)
-	expectedSeenLogs := chainLength - finalizationOffset - 2 // blocks 0 and 1 don't have logs
+	expectedSeenLogs := chainLength - followDistance - 2 // blocks 0 and 1 don't have logs
 	require.Equal(t, expectedSeenLogs, seenLogs)
 
 	select {
@@ -156,8 +156,8 @@ func TestStreamLogs(t *testing.T) {
 
 	logger := zaptest.NewLogger(t)
 
-	client := New(addr, contractAddr, WithLogger(logger))
-	client.Connect(ctx)
+	client, err := New(ctx, addr, contractAddr, WithLogger(logger))
+	require.NoError(t, err)
 
 	isReady, err := client.IsReady(ctx)
 	require.NoError(t, err)
@@ -267,8 +267,8 @@ func TestFetchLogsInBatches(t *testing.T) {
 	addr := "ws:" + strings.TrimPrefix(httpsrv.URL, "http:")
 	logger := zaptest.NewLogger(t)
 
-	client := New(addr, contractAddr, WithLogger(logger), WithLogBatchSize(2))
-	client.Connect(ctx)
+	client, err := New(ctx, addr, contractAddr, WithLogger(logger), WithLogBatchSize(2))
+	require.NoError(t, err)
 
 	t.Run("startBlock is greater than endBlock", func(t *testing.T) {
 		logChan, errChan := client.fetchLogsInBatches(ctx, 10, 5)

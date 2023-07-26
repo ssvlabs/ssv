@@ -5,10 +5,10 @@ import (
 )
 
 const (
-	DefaultConnectionTimeout           = 500 * time.Millisecond
+	DefaultConnectionTimeout           = 5 * time.Second
 	DefaultReconnectionInitialInterval = 1 * time.Second
 	DefaultReconnectionMaxInterval     = 64 * time.Second
-	DefaultFinalizationOffset          = 8
+	DefaultFollowDistance              = 8
 	DefaultHistoricalLogsBatchSize     = 5000
-	defaultLogBuf                      = 1024 * 1024
+	defaultLogBuf                      = 8 * 1024
 )
