@@ -100,8 +100,6 @@ func (p *Prober) probe(ctx context.Context) {
 				logger.Error("failed to check if node is ready", zap.Error(err))
 			} else if !ready {
 				logger.Error("node is not ready")
-			} else {
-				logger.Info("node is ready")
 			}
 		}(node)
 	}

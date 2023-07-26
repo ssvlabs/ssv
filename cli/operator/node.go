@@ -148,17 +148,6 @@ var StartNodeCmd = &cobra.Command{
 
 		executionClient.Connect(cmd.Context())
 
-		nodeProber := nodeprobe.NewProber(
-			logger,
-			executionClient,
-			// Underlying options.Beacon's value implements nodeprobe.StatusChecker.
-			// However, as it uses spec's specssv.BeaconNode interface, avoiding type assertion requires modifications in spec.
-			// If options.Beacon doesn't implement nodeprobe.StatusChecker due to a mistake, this would panic early.
-			consensusClient.(nodeprobe.StatusChecker),
-		)
-
-		nodeProber.Start(cmd.Context())
-
 		cfg.SSVOptions.ForkVersion = forkVersion
 		cfg.SSVOptions.Context = cmd.Context()
 		cfg.SSVOptions.DB = db
@@ -215,10 +204,21 @@ var StartNodeCmd = &cobra.Command{
 			go startMetricsHandler(cmd.Context(), logger, db, metricsReporter, cfg.MetricsAPIPort, cfg.EnableProfile)
 		}
 
+		nodeProber := nodeprobe.NewProber(
+			logger,
+			executionClient,
+			// Underlying options.Beacon's value implements nodeprobe.StatusChecker.
+			// However, as it uses spec's specssv.BeaconNode interface, avoiding type assertion requires modifications in spec.
+			// If options.Beacon doesn't implement nodeprobe.StatusChecker due to a mistake, this would panic early.
+			consensusClient.(nodeprobe.StatusChecker),
+		)
+
+		nodeProber.Start(cmd.Context())
 		nodeProber.Wait()
+		logger.Info("ethereum node(s) are ready")
 
 		nodeProber.SetUnreadyHandler(func() {
-			logger.Fatal("Ethereum node(s) are either out of sync or down. Ensure the nodes are ready to resume.")
+			logger.Fatal("ethereum node(s) are either out of sync or down. Ensure the nodes are ready to resume.")
 		})
 
 		metricsReporter.SSVNodeHealthy()
