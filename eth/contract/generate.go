@@ -2,3 +2,4 @@
 package contract
 
 //go:generate abigen --abi contract.abi --pkg contract --out contract.go
+//go:generate abigen --abi operator_public_key.abi --pkg contract --out operator_public_key.go --type OperatorPublicKey

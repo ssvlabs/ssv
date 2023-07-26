@@ -18,6 +18,7 @@ import (
 	"github.com/bloxapp/ssv/ekm"
 	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/eth/eventbatcher"
+	"github.com/bloxapp/ssv/eth/eventparser"
 	"github.com/bloxapp/ssv/eth/executionclient"
 	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/networkconfig"
@@ -123,13 +124,11 @@ func setupDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger) (*E
 	contractFilterer, err := cl.Filterer()
 	require.NoError(t, err)
 
-	contractABI, err := contract.ContractMetaData.GetAbi()
-	require.NoError(t, err)
+	parser := eventparser.New(contractFilterer)
 
 	edh, err := New(
 		nodeStorage,
-		contractFilterer,
-		contractABI,
+		parser,
 		validatorCtrl,
 		testNetworkConfig.Domain,
 		operatorData,

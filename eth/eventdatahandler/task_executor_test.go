@@ -25,7 +25,7 @@ func TestExecuteTask(t *testing.T) {
 
 	t.Run("test AddValidator task execution - not started", func(t *testing.T) {
 		logValidatorAdded := unmarshalLog(t, rawValidatorAdded)
-		validatorAddedEvent, err := edh.eventFilterer.ParseValidatorAdded(logValidatorAdded)
+		validatorAddedEvent, err := edh.eventParser.ParseValidatorAdded(logValidatorAdded)
 		if err != nil {
 			t.Fatal("parse ValidatorAdded", err)
 		}
@@ -43,7 +43,7 @@ func TestExecuteTask(t *testing.T) {
 
 	t.Run("test AddValidator task execution - started", func(t *testing.T) {
 		logValidatorAdded := unmarshalLog(t, rawValidatorAdded)
-		validatorAddedEvent, err := edh.eventFilterer.ParseValidatorAdded(logValidatorAdded)
+		validatorAddedEvent, err := edh.eventParser.ParseValidatorAdded(logValidatorAdded)
 		if err != nil {
 			t.Fatal("parse ValidatorAdded", err)
 		}
@@ -85,7 +85,7 @@ func TestExecuteTask(t *testing.T) {
 		require.NoError(t, task.Execute())
 		require.NotZero(t, observedLogs.Len())
 		entry := observedLogs.All()[len(observedLogs.All())-1]
-		require.Equal(t, "executed task", entry.Message)
+		require.Equal(t, "removed share", entry.Message)
 	})
 	t.Run("test ReactivateCluster task execution", func(t *testing.T) {
 		var shares []*ssvtypes.SSVShare
@@ -99,14 +99,14 @@ func TestExecuteTask(t *testing.T) {
 		require.NoError(t, task.Execute())
 		require.NotZero(t, observedLogs.Len())
 		entry := observedLogs.All()[len(observedLogs.All())-1]
-		require.Equal(t, "executed task", entry.Message)
+		require.Equal(t, "started share", entry.Message)
 	})
 	t.Run("test UpdateFeeRecipient task execution", func(t *testing.T) {
 		task := NewUpdateFeeRecipientTask(edh.taskExecutor, ethcommon.HexToAddress("0x1"), ethcommon.HexToAddress("0x2"))
 		require.NoError(t, task.Execute())
 		require.NotZero(t, observedLogs.Len())
 		entry := observedLogs.All()[len(observedLogs.All())-1]
-		require.Equal(t, "executed task", entry.Message)
+		require.Equal(t, "started share", entry.Message) // no new logs
 	})
 }
 

@@ -63,9 +63,10 @@ const (
 	FieldName                = "name"
 	FieldNetwork             = "network"
 	FieldOperatorId          = "operator_id"
+	FieldOperatorPubKey      = "operator_pubkey"
 	FieldOwnerAddress        = "owner_address"
 	FieldPeerID              = "peer_id"
-	FieldPrivateKey          = "privkey"
+	FieldPrivKey             = "privkey"
 	FieldPubKey              = "pubkey"
 	FieldRole                = "role"
 	FieldRound               = "round"
@@ -100,12 +101,16 @@ func EventID(val fmt.Stringer) zapcore.Field {
 	return zap.Stringer(FieldEventID, val)
 }
 
+func PrivKey(val []byte) zapcore.Field {
+	return zap.Stringer(FieldPrivKey, stringer.HexStringer{Val: val})
+}
+
 func PubKey(pubKey []byte) zapcore.Field {
 	return zap.Stringer(FieldPubKey, stringer.HexStringer{Val: pubKey})
 }
 
-func PrivKey(val []byte) zapcore.Field {
-	return zap.Stringer(FieldPrivateKey, stringer.HexStringer{Val: val})
+func OperatorPubKey(pubKey []byte) zapcore.Field {
+	return zap.String(FieldOperatorPubKey, string(pubKey))
 }
 
 func Validator(pubKey []byte) zapcore.Field {
