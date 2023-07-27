@@ -156,7 +156,7 @@ func NewLocalNet(ctx context.Context, logger *zap.Logger, n int, forkVersion for
 		}
 	}
 	i := 0
-	nodes, keys, err := testing.NewLocalNetwork(ctx, n, func(pctx context.Context, keys testing.NodeKeys) network.P2PNetwork {
+	nodes, keys, err := testing.NewLocalTestnet(ctx, n, func(pctx context.Context, keys testing.NodeKeys) network.P2PNetwork {
 		i++
 		logger := logger.Named(fmt.Sprintf("node-%d", i))
 		p, err := ln.NewTestP2pNetwork(pctx, keys, logger, forkVersion, n)

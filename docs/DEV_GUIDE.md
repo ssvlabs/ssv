@@ -95,8 +95,6 @@ Please replace `<your-password-here>` with your chosen password. This will gener
 
 Keep your password safe as it will be required to decrypt the operator key for use.
 
-
-
 ### Config Files
 
 Config files are located in `./config` directory:

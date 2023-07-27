@@ -520,7 +520,20 @@ func (c *controller) UpdateValidatorMetadata(logger *zap.Logger, pk string, meta
 		return errors.Wrap(err, "could not update validator metadata")
 	}
 
-	// Update metadata in memory, and start validator if needed.
+	// If this validator is not ours, don't start it.
+	pkBytes, err := hex.DecodeString(pk)
+	if err != nil {
+		return errors.Wrap(err, "could not decode public key")
+	}
+	share := c.sharesStorage.Get(pkBytes)
+	if share == nil {
+		return errors.New("share was not found")
+	}
+	if !share.BelongsToOperator(c.operatorData.ID) {
+		return nil
+	}
+
+	// Start validator (if not already started).
 	if v, found := c.validatorsMap.GetValidator(pk); found {
 		v.Share.BeaconMetadata = metadata
 		_, err := c.startValidator(logger, v)
@@ -530,14 +543,6 @@ func (c *controller) UpdateValidatorMetadata(logger *zap.Logger, pk string, meta
 	} else {
 		logger.Info("starting new validator", zap.String("pubKey", pk))
 
-		pkBytes, err := hex.DecodeString(pk)
-		if err != nil {
-			return errors.Wrap(err, "could not decode public key")
-		}
-		share := c.sharesStorage.Get(pkBytes)
-		if share == nil {
-			return errors.New("share was not found")
-		}
 		started, err := c.onShareStart(logger, share)
 		if err != nil {
 			return errors.Wrap(err, "could not start validator")
