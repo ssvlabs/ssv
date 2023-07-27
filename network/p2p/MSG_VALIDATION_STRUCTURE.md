@@ -1,4 +1,4 @@
-# Message Validation Properties
+# Message Validation Structure
 
 
 ### Problem
@@ -149,6 +149,8 @@ flowchart LR
 | Wrong Singature | ERR_WRONG_SIG | Reject | 5 |
 | No Signer | ERR_NO_SIG | Reject | 5 |
 | Non Unique Signer | ERR_NON_UNIQUE_SIG | Reject | 5 |
+| Signers Not Sorted | ERR_SIGNERS_NOT_SORTED | Reject | 5 |
+| Validator Liquidated | ERR_VALIDATOR_LIQUIDATED | Reject | 5 |
 
 - ERR_VALIDATOR_ID_MISMATCH: Validator PubKey mismatch. May have been sent by peer that belongs to subnet but works for other validator (?).
 - ERR_SIG_SIZE: Signature size is invalid. May have been tampered.
@@ -156,6 +158,8 @@ flowchart LR
 - ERR_WRONG_SIG: Signature mismatch. Message may have been tampered.
 - ERR_NO_SIG: No signer in the message. Message can have been tampered.
 - ERR_NON_UNIQUE_SIG: List of signer contains duplicate signer. Message can have been tampered.
+- ERR_SIGNERS_NOT_SORTED: List of signers isn't sorted.
+- ERR_VALIDATOR_LIQUIDATED: Validator ID was liquidated.
 
 
 
@@ -193,7 +197,7 @@ flowchart LR
 | Verification | Error | Classification | Score |
 | ------ | ----| ---- | --- |
 | Not leader | ERR_CONS_NOT_LEADER | Reject | 15 |
-| Wrong Hash | ERR_CONS_WRONG_HASH | Reject | 5 |
+| Wrong Hash _(removed)_ | ERR_CONS_WRONG_HASH | Reject | 5 |
 | Invalid Proposal | ERR_CONS_INVALID_PROPOSAL | Reject | 15 |
 | Invalid RC Justification | ERR_CONS_INVALID_RC_JUSTIFICATION | Reject | 15 |
 | Doubled proposal with different data | ERR_CONS_DOUBLE_PROPOSAL_DATA | Reject | 20 |
@@ -206,7 +210,7 @@ flowchart LR
 | Impossible future message | ERR_CONS_IMPOSSIBLE_FUTURE_MSG | Reject | 20 |
 
 - ERR_CONS_NOT_LEADER: Non leader making proposals.
-- ERR_CONS_WRONG_HASH: Prepare or commit message with hash different from the one stored as the proposal message. Leader could have sent different proposals.
+- ERR_CONS_WRONG_HASH: (removed)Prepare or commit message with hash different from the one stored as the proposal message. Leader could have sent different proposals.
 - ERR_CONS_INVALID_PROPOSAL: Proposal has invalid justification.
 - ERR_CONS_INVALID_ROUND_CHANGE: Round-Change with invalid justification.
 - ERR_CONS_DOUBLE_PROPOSAL_DATA: Leader sent two different proposal messages.
@@ -251,11 +255,13 @@ Attestations for slot N can be sent within slots $[N,N+32)$. Maximum number of r
 | No attestation duty | ERR_NO_ATTESTATION | Reject | 10 |
 | Late message | ERR_LATE_ATTESTATION_MSG | Reject | 10 |
 | Impossible future round | ERR_IMPOSSIBLE_ATTESTATION_ROUND | Reject | 10 |
+| Already done attestation for such epoch | ERR_DOUBLE_ATTESTATION | Reject | 10
 
 - ERR_NO_ATTESTATION: Message sent for attestation duty but there's no current attestation duty.
 - ERR_LATE_ATTESTATION_MSG: Attestation duty message sent after 2 slots from its last possible slot (32 + 2).
     - Suggestion: later the message, higher the penalty score (even for valid slots, since reward decreases).
 - ERR_IMPOSSIBLE_ATTESTATION_ROUND: Impossible attestation consensus round.
+- ERR_DOUBLE_ATTESTATION: Attestation for validator was already done in epoch.
 
 #### Attestation Aggregation
 
@@ -266,11 +272,13 @@ Attestation Aggregation for slot N can be sent within slots $[N,N+32)$. Maximum 
 | No attestation aggregation duty | ERR_NO_ATTESTATION_AGGREGATION | Reject | 10 |
 | Late message | ERR_LATE_ATTESTATION_AGGREGATION_MSG | Reject | 10 |
 | Impossible future round | ERR_IMPOSSIBLE_ATTESTATION_AGG_ROUND | Reject | 10 |
+| Already done attestation aggreation for such epoch | ERR_DOUBLE_ATTESTATION_AGGREGATION | Reject | 10
 
 - ERR_NO_ATTESTATION_AGGREGATION: No attestation aggregation duty.
 - ERR_LATE_ATTESTATION_AGGREGATION_MSG: Attestation duty message sent after 2 slots from its last possible slot (32 + 2).
     - Same suggestion as above. Need to check on specification.
 - ERR_IMPOSSIBLE_ATTESTATION_AGG_ROUND: Impossible attestation aggregation consensus round.
+- ERR_DOUBLE_ATTESTATION_AGGREGATION: Attestation aggregation already done for validator was already done in epoch.
 
 #### Proposal
 
