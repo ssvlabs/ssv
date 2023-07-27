@@ -3,13 +3,14 @@ package eventdispatcher
 import (
 	"context"
 	"encoding/base64"
-	"github.com/bloxapp/ssv/eth/contract"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"math/big"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/bloxapp/ssv/eth/contract"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -93,20 +94,12 @@ func TestEventDispatcher(t *testing.T) {
 	}
 	require.True(t, isReady)
 
-	// TODO: Pack operator public key to work with ABI decoder
-	//t.Skip()
-
 	// Generate operator key
 	_, operatorPubKey, err := rsaencryption.GenerateKeys()
 	require.NoError(t, err)
 
-	require.NoError(t, err)
-
 	pkstr := base64.StdEncoding.EncodeToString(operatorPubKey)
-	typ, err := abi.NewType("string[]", "string[]", nil)
-	require.NoError(t, err)
-	pkarg := abi.Arguments{{Type: typ, Name: "publicKey"}}
-	pcked, err := pkarg.Pack([]string{pkstr})
+	pckd, err := eventparser.PackOperatorPublicKey([]byte(pkstr))
 	require.NoError(t, err)
 
 	// Generate test chain after a connection to the server.
@@ -114,7 +107,7 @@ func TestEventDispatcher(t *testing.T) {
 	const chainLength = 30
 	for i := 0; i <= chainLength; i++ {
 		// Emit event OperatorAdded
-		tx, err := boundContract.SimcontractTransactor.RegisterOperator(auth, pcked, big.NewInt(100_000_000))
+		tx, err := boundContract.SimcontractTransactor.RegisterOperator(auth, pckd, big.NewInt(100_000_000))
 		require.NoError(t, err)
 		sim.Commit()
 		receipt, err := sim.TransactionReceipt(ctx, tx.Hash())
