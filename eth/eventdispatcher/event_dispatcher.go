@@ -100,6 +100,7 @@ func (ed *EventDispatcher) SyncHistory(ctx context.Context, fromBlock uint64) (l
 	}
 
 	ed.logger.Info("finished syncing historical events",
+		zap.Uint64("from_block", fromBlock),
 		zap.Uint64("last_processed_block", lastProcessedBlock))
 	return
 
