@@ -5,7 +5,7 @@ import (
 )
 
 const (
-	DefaultConnectionTimeout           = 5 * time.Second
+	DefaultConnectionTimeout           = 10 * time.Second
 	DefaultReconnectionInitialInterval = 1 * time.Second
 	DefaultReconnectionMaxInterval     = 64 * time.Second
 	DefaultFollowDistance              = 8
