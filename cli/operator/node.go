@@ -524,6 +524,28 @@ func setupEventHandling(
 		if err != nil {
 			logger.Fatal("failed to sync historical registry events", zap.Error(err))
 		}
+
+		shares := nodeStorage.Shares().List(nil)
+		operators, err := nodeStorage.ListOperators(nil, 0, 0)
+		if err != nil {
+			logger.Error("failed to get operators", zap.Error(err))
+		}
+		operatorID := validatorCtrl.GetOperatorData().ID
+		operatorValidatorsCount := 0
+		if operatorID != 0 {
+			for _, share := range shares {
+				if share.BelongsToOperator(operatorID) {
+					operatorValidatorsCount++
+				}
+			}
+		}
+
+		logger.Info("Execution layer sync history stats",
+			zap.Int("validators count", len(shares)),
+			zap.Int("operators count", len(operators)),
+			zap.Int("my validators count", operatorValidatorsCount),
+		)
+
 		go func() {
 			err = eventDispatcher.SyncOngoing(ctx, lastProcessedBlock+1)
 			if err != nil {

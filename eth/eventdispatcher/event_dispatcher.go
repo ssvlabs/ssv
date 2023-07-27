@@ -103,28 +103,6 @@ func (ed *EventDispatcher) SyncHistory(ctx context.Context, fromBlock uint64) (l
 		zap.Uint64("from_block", fromBlock),
 		zap.Uint64("last_processed_block", lastProcessedBlock))
 	return
-
-	// TODO: log shares, operators, my validators
-	//shares := n.storage.Shares().List()
-	//operators, err := n.storage.ListOperators(logger, 0, 0)
-	//if err != nil {
-	//	logger.Error("failed to get operators", zap.Error(err))
-	//}
-	//operatorID := n.validatorsCtrl.GetOperatorData().ID
-	//operatorValidatorsCount := 0
-	//if operatorID != 0 {
-	//	for _, share := range shares {
-	//		if share.BelongsToOperator(operatorID) {
-	//			operatorValidatorsCount++
-	//		}
-	//	}
-	//}
-	//
-	//ed.logger.Info("ETH1 sync history stats",
-	//	zap.Int("validators count", len(shares)),
-	//	zap.Int("operators count", len(operators)),
-	//	zap.Int("my validators count", operatorValidatorsCount),
-	//)
 }
 
 // SyncOngoing runs a loop which retrieves data from ExecutionClient event stream and passes them for processing.
