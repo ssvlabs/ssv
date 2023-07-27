@@ -76,6 +76,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 
 			if h.fetchFirst {
 				h.fetchFirst = false
+				h.indicesChanged = false
 				h.processFetching(ctx, currentEpoch, slot)
 				h.processExecution(currentEpoch, slot)
 			} else {
@@ -110,6 +111,10 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 				h.duties.Reset(currentEpoch)
 				h.fetchFirst = true
 				h.fetchCurrentEpoch = true
+				if h.shouldFetchNexEpoch(reorgEvent.Slot) {
+					h.duties.Reset(currentEpoch + 1)
+					h.fetchNextEpoch = true
+				}
 			} else if reorgEvent.Current {
 				// reset & re-fetch next epoch duties if in appropriate slot range,
 				// otherwise they will be fetched by the appropriate slot tick.

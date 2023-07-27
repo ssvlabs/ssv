@@ -100,6 +100,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 
 			if h.fetchFirst {
 				h.fetchFirst = false
+				h.indicesChanged = false
 				h.processFetching(ctx, period, slot)
 				h.processExecution(period, slot)
 			} else {

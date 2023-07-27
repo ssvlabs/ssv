@@ -29,15 +29,16 @@ func (m *mockSlotTicker) Subscribe(subscriber chan phase0.Slot) event.Subscripti
 	return m.Feed.Subscribe(subscriber)
 }
 
-func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *SlotValue, bufferSize int) (
+func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *SlotValue) (
 	*Scheduler,
-	*mockSlotTicker,
 	*zap.Logger,
-	chan []*spectypes.Duty,
+	*mockSlotTicker,
+	time.Duration,
 	context.CancelFunc,
 	*pool.ContextPool,
 ) {
 	ctrl := gomock.NewController(t)
+	timeout := 100 * time.Millisecond
 
 	ctx, cancel := context.WithCancel(context.Background())
 	logger := logging.TestLogger(t)
@@ -49,32 +50,13 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Slot
 		Beacon: mocknetwork.NewMockNetworkInfo(ctrl),
 	}
 
-	executeDutiesBuffer := make(chan *spectypes.Duty, bufferSize)
-	executeDutiesCall := make(chan []*spectypes.Duty)
 	opts := &SchedulerOptions{
 		Ctx:                 ctx,
 		BeaconNode:          mockBeaconNode,
 		Network:             mockNetworkConfig,
 		ValidatorController: mockValidatorController,
-		ExecuteDuty: func(logger *zap.Logger, duty *spectypes.Duty) {
-			logger.Debug("🏃 Executing duty", zap.Any("duty", duty))
-			executeDutiesBuffer <- duty
-
-			// Check if all expected duties have been received
-			if len(executeDutiesBuffer) == bufferSize {
-				// Build the array of duties
-				var duties []*spectypes.Duty
-				for i := 0; i < bufferSize; i++ {
-					d := <-executeDutiesBuffer
-					duties = append(duties, d)
-				}
-
-				// Send the array of duties to executeDutiesCall
-				executeDutiesCall <- duties
-			}
-		},
-		Ticker:           mockTicker,
-		BuilderProposals: false,
+		Ticker:              mockTicker,
+		BuilderProposals:    false,
 	}
 
 	s := NewScheduler(opts)
@@ -121,7 +103,28 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Slot
 		return s.Wait()
 	})
 
-	return s, mockTicker, logger, executeDutiesCall, cancel, schedulerPool
+	return s, logger, mockTicker, timeout, cancel, schedulerPool
+}
+
+func setExecuteDutyFunc(s *Scheduler, executeDutiesCall chan []*spectypes.Duty, executeDutiesCallSize int) {
+	executeDutiesBuffer := make(chan *spectypes.Duty, executeDutiesCallSize)
+	s.executeDuty = func(logger *zap.Logger, duty *spectypes.Duty) {
+		logger.Debug("🏃 Executing duty", zap.Any("duty", duty))
+		executeDutiesBuffer <- duty
+
+		// Check if all expected duties have been received
+		if len(executeDutiesBuffer) == executeDutiesCallSize {
+			// Build the array of duties
+			var duties []*spectypes.Duty
+			for i := 0; i < executeDutiesCallSize; i++ {
+				d := <-executeDutiesBuffer
+				duties = append(duties, d)
+			}
+
+			// Send the array of duties to executeDutiesCall
+			executeDutiesCall <- duties
+		}
+	}
 }
 
 func waitForDutiesFetch(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*spectypes.Duty, timeout time.Duration) {
@@ -146,7 +149,7 @@ func waitForNoAction(t *testing.T, logger *zap.Logger, fetchDutiesCall chan stru
 	}
 }
 
-func waitForDutyExecution(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*spectypes.Duty, timeout time.Duration, expectedDuties []*spectypes.Duty) {
+func waitForDutiesExecution(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*spectypes.Duty, timeout time.Duration, expectedDuties []*spectypes.Duty) {
 	select {
 	case <-fetchDutiesCall:
 		require.FailNow(t, "unexpected duties call")
@@ -154,12 +157,17 @@ func waitForDutyExecution(t *testing.T, logger *zap.Logger, fetchDutiesCall chan
 		logger.Debug("duties executed", zap.Any("duties", duties))
 		logger.Debug("expected duties", zap.Any("duties", expectedDuties))
 		require.Len(t, duties, len(expectedDuties))
-		//for i, duty := range duties {
-		//	require.Equal(t, expectedDuties[i].ValidatorIndex, duty.ValidatorIndex)
-		//	require.Equal(t, expectedDuties[i].Slot, duty.Slot)
-		//	require.Equal(t, expectedDuties[i].PubKey, duty.PubKey)
-		//}
-		//logger.Debug("duty executed")
+		for _, e := range expectedDuties {
+			found := false
+			for _, d := range duties {
+				if e.Type == d.Type && e.PubKey == d.PubKey && e.ValidatorIndex == d.ValidatorIndex && e.Slot == d.Slot {
+					found = true
+					break
+				}
+			}
+			require.True(t, found)
+		}
+
 	case <-time.After(timeout):
 		require.FailNow(t, "timed out waiting for duty to be executed")
 	}
