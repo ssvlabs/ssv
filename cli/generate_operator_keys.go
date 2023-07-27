@@ -33,9 +33,6 @@ var generateOperatorKeysCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
-		if err != nil {
-			log.Fatal(err)
-		}
 		encryptionPassword := string(passwordBytes)
 
 		if err := logging.SetGlobalLogger("debug", "capital", "console", ""); err != nil {

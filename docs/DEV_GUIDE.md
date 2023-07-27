@@ -72,7 +72,7 @@ $ ./bin/ssvnode create-threshold --count <number of ssv nodes> --private-key <pr
 ```
 
 #### Generating an Operator Key
-To generate an operator key, you can use `ssvnode generate-operator-keys`. This command can generate the key in two ways: raw format or encrypted format.
+To generate an operator key, you can use `./bin/ssvnode generate-operator-keys`. This command can generate the key in two ways: raw format or encrypted format.
 
 **IMPORTANT**: The raw format is **NOT recommended** for production use, as it can expose sensitive data. Use the encrypted format for added security.
 
@@ -85,13 +85,13 @@ This will generate an operator key in raw format.
 
 **Encrypted Operator Key Generation:**
 
-To generate an operator key in encrypted format, use the `--password-file option` followed by your desired password.
+To generate an operator key in encrypted format, use the `--password-file` option followed by your password file.
 
 ```bash
-$ ./bin/ssvnode generate-operator-keys --password-file=<your-password-here>
+$ ./bin/ssvnode generate-operator-keys --password-file=path/to/your/file
 ```
 
-Please replace `<your-password-here>` with your chosen password. This will generate an operator key in encrypted format.
+Please replace `path/to/your/file` with your password file. This will generate an operator key in encrypted format.
 
 Keep your password safe as it will be required to decrypt the operator key for use.
 
@@ -123,8 +123,8 @@ The operator private key can be provided in the `config.yaml` file in two differ
      PasswordFile: /path/to/your/file
     ```
    In this approach, the private key is not only encoded but also encrypted, adding an extra layer of security.
-   To generate the encrypted keystore file, run the `./bin/ssvnode generate-operator-keys` command with the `--password-file=****` flag.
-   Replace <path/to/your/file> with your desired output file path for the encrypted keystore and the corresponding password file.
+   To generate the encrypted keystore file, run the `./bin/ssvnode generate-operator-keys` command with the `--password-file=path/to/your/file` flag.
+   Replace `path/to/your/file` with password file path.
    This command will generate an encrypted keystore file that can be used securely in the `config.yaml` file.
    It's a more secure approach because the private key is not only encoded but also encrypted, adding an extra layer of security.
 
