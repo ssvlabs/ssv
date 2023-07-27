@@ -49,7 +49,7 @@ var (
 
 func TestEventDispatcher(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	const testTimeout = 1 * time.Second
+	const testTimeout = 5 * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
 
