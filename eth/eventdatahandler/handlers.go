@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -75,7 +76,6 @@ func (edh *EventDataHandler) handleOperatorAdded(txn basedb.Txn, event *contract
 	if ownOperator {
 		edh.operatorData = od
 		logger = logger.With(zap.Bool("own_operator", ownOperator))
-
 	}
 
 	edh.metrics.OperatorPublicKey(od.ID, od.PublicKey)
@@ -209,17 +209,12 @@ func (edh *EventDataHandler) handleValidatorAdded(txn basedb.Txn, event *contrac
 		return nil, &MalformedEventError{Err: ErrShareBelongsToDifferentOwner}
 	}
 
-	logger = logger.With(
-		zap.Uint64("share_operator_id", validatorShare.OperatorID),
-		zap.Uint64("own_operator_id", edh.operatorData.ID),
-	)
-
 	isOperatorShare := validatorShare.BelongsToOperator(edh.operatorData.ID)
 	if isOperatorShare {
 		edh.metrics.ValidatorInactive(event.PublicKey)
 		ownShare = validatorShare
+		logger = logger.With(zap.Bool("own_validator", isOperatorShare))
 	}
-	logger = logger.With(zap.Bool("own_validator", isOperatorShare))
 
 	logger.Debug("processed event")
 	return

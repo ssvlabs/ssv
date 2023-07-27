@@ -81,6 +81,7 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 		return nil, nil, fmt.Errorf("failed to get current block: %w", err)
 	}
 	toBlock := currentBlock - ec.followDistance
+	toBlock = 9249887 + 20e3
 
 	logs, errors = ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
 	return
