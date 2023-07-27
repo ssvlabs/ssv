@@ -149,7 +149,7 @@ func (s *operatorsStorage) SaveOperatorData(txn basedb.Txn, operatorData *Operat
 	}
 	if found {
 		s.logger.Debug("operator already exist",
-			fields.PubKey(operatorData.PublicKey),
+			fields.OperatorPubKey(operatorData.PublicKey),
 			zap.Uint64("index", operatorData.ID))
 		return found, nil
 	}

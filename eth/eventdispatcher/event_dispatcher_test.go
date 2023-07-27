@@ -2,35 +2,34 @@ package eventdispatcher
 
 import (
 	"context"
+	"encoding/base64"
 	"math/big"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/bloxapp/ssv/eth/contract"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
+
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/eth"
-	"github.com/ethereum/go-ethereum/eth/ethconfig"
-	"github.com/ethereum/go-ethereum/eth/filters"
-	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/ethereum/go-ethereum/node"
-	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 
 	"github.com/bloxapp/ssv/ekm"
-	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/eth/eventbatcher"
 	"github.com/bloxapp/ssv/eth/eventdatahandler"
 	"github.com/bloxapp/ssv/eth/eventparser"
 	"github.com/bloxapp/ssv/eth/executionclient"
+	"github.com/bloxapp/ssv/eth/simulator"
+	"github.com/bloxapp/ssv/eth/simulator/simcontract"
 	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/networkconfig"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
@@ -45,14 +44,12 @@ var (
 	// testKey is a private key to use for funding a tester account.
 	testKey, _ = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
 	// testAddr is the Ethereum address of the tester account.
-	testAddr     = crypto.PubkeyToAddress(testKey.PublicKey)
-	testBalance  = big.NewInt(2e18)
-	contractAddr = ethcommon.HexToAddress("0x3A220f351252089D385b29beca14e27F204c296A")
+	testAddr = crypto.PubkeyToAddress(testKey.PublicKey)
 )
 
 func TestEventDispatcher(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	const testTimeout = 1 * time.Second
+	const testTimeout = 5 * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
 
@@ -62,33 +59,30 @@ func TestEventDispatcher(t *testing.T) {
 	defer close(done)
 
 	// Create sim instance with a delay between block execution
-	backend, processedStream := setupTestBackend(t, done, blockStream)
+	sim := simTestBackend(testAddr)
 
-	rpcServer, _ := backend.RPCHandler()
+	rpcServer, _ := sim.Node.RPCHandler()
 	httpSrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
 	defer rpcServer.Stop()
 	defer httpSrv.Close()
 
-	const chainLength = 30
-	// Generate test chain after a connection to the server.
-	// While processing blocks the events will be emitted which is read by subscription
-	generateInitialTestChain(t, done, blockStream, chainLength)
-	for blocks := range processedStream {
-		t.Log("Processed blocks: ", len(blocks))
+	parsed, _ := abi.JSON(strings.NewReader(simcontract.SimcontractMetaData.ABI))
+	auth, _ := bind.NewKeyedTransactorWithChainID(testKey, big.NewInt(1337))
+	contractAddr, _, _, err := bind.DeployContract(auth, parsed, ethcommon.FromHex(simcontract.SimcontractMetaData.Bin), sim)
+	if err != nil {
+		t.Errorf("deploying contract: %v", err)
 	}
+	sim.Commit()
 
-	// Check if the contract is deployed successfully with a standard eth1 client
-	ec, err := backend.Attach()
-	require.NoError(t, err)
-	cl := ethclient.NewClient(ec)
-	receipt, err := cl.TransactionReceipt(ctx, ethcommon.HexToHash("0x348887eab2e1c27dcce22b81482be5ad0e0dbc6fa2f7bea314ec84c819aa0d29"))
-	require.NoError(t, err)
-	require.Equal(t, uint64(1), receipt.Status)
-	contractCode, err := cl.CodeAt(ctx, receipt.ContractAddress, nil)
-	require.NoError(t, err)
-	if len(contractCode) == 0 {
-		t.Fatal("got code for account that does not have contract code")
+	// Check contract code at the simulated blockchain
+	contractCode, err := sim.CodeAt(ctx, contractAddr, nil)
+	if err != nil {
+		t.Errorf("getting contract code: %v", err)
 	}
+	require.NotEmpty(t, contractCode)
+
+	boundContract, err := simcontract.NewSimcontract(contractAddr, sim)
+	require.NoError(t, err)
 
 	addr := "ws:" + strings.TrimPrefix(httpSrv.URL, "http:")
 	client, err := executionclient.New(ctx, addr, contractAddr, executionclient.WithLogger(logger))
@@ -99,6 +93,29 @@ func TestEventDispatcher(t *testing.T) {
 		t.Fatal(err)
 	}
 	require.True(t, isReady)
+
+	// Generate operator key
+	_, operatorPubKey, err := rsaencryption.GenerateKeys()
+	require.NoError(t, err)
+
+	pkstr := base64.StdEncoding.EncodeToString(operatorPubKey)
+	pckd, err := eventparser.PackOperatorPublicKey([]byte(pkstr))
+	require.NoError(t, err)
+
+	// Generate test chain after a connection to the server.
+	// While processing blocks the events will be emitted which is read by subscription
+	const chainLength = 30
+	for i := 0; i <= chainLength; i++ {
+		// Emit event OperatorAdded
+		tx, err := boundContract.SimcontractTransactor.RegisterOperator(auth, pckd, big.NewInt(100_000_000))
+		require.NoError(t, err)
+		sim.Commit()
+		receipt, err := sim.TransactionReceipt(ctx, tx.Hash())
+		if err != nil {
+			t.Errorf("get receipt: %v", err)
+		}
+		require.Equal(t, uint64(0x1), receipt.Status)
+	}
 
 	eb := eventbatcher.NewEventBatcher()
 	edh := setupEventDataHandler(t, ctx, logger)
@@ -169,96 +186,12 @@ func setupEventDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger
 	return edh
 }
 
-var genesis = &core.Genesis{
-	Config:    params.AllEthashProtocolChanges,
-	Alloc:     core.GenesisAlloc{testAddr: {Balance: testBalance}},
-	ExtraData: []byte("test genesis"),
-	Timestamp: 9000,
-	BaseFee:   big.NewInt(params.InitialBaseFee),
-}
-
-func setupTestBackend(t *testing.T, done <-chan struct{}, blockStream <-chan []*ethtypes.Block) (*node.Node, <-chan []*ethtypes.Block) {
-	processedStream := make(chan []*ethtypes.Block)
-	// Create node
-	n, err := node.New(&node.Config{})
-
-	if err != nil {
-		t.Fatalf("can't create new node: %v", err)
-	}
-	// Create Ethereum Service
-	config := &ethconfig.Config{Genesis: genesis}
-	ethservice, err := eth.New(n, config)
-	if err != nil {
-		t.Fatalf("can't create new ethereum service: %v", err)
-	}
-
-	// Add required APIs
-	filterSystem := filters.NewFilterSystem(ethservice.APIBackend, filters.Config{})
-	n.RegisterAPIs([]rpc.API{{
-		Namespace: "eth",
-		Service:   filters.NewFilterAPI(filterSystem, false),
-	}})
-
-	// Start eth1 node
-	if err := n.Start(); err != nil {
-		t.Fatalf("can't start test node: %v", err)
-	}
-
-	go func() {
-		defer close(processedStream)
-		select {
-		case <-done:
-			return
-		case blocks := <-blockStream:
-			if _, err := ethservice.BlockChain().InsertChain(blocks); err != nil {
-				return
-			}
-			processedStream <- blocks
-		}
-	}()
-	return n, processedStream
-}
-
-// Generate blocks with transactions
-func generateInitialTestChain(t *testing.T, done <-chan struct{}, blockStream chan []*ethtypes.Block, n int) {
-	generate := func(i int, g *core.BlockGen) {
-		g.OffsetTime(5)
-		g.SetExtra([]byte("test"))
-		if i == 0 {
-			return
-		}
-		// Add contract deployment to the first block
-		if i == 1 {
-			tx := ethtypes.MustSignNewTx(testKey, ethtypes.LatestSigner(genesis.Config), &ethtypes.LegacyTx{
-				Nonce:    uint64(i - 1),
-				Value:    big.NewInt(0),
-				GasPrice: big.NewInt(params.InitialBaseFee),
-				Gas:      1000000,
-				Data:     ethcommon.FromHex(callableBin),
-			})
-			g.AddTx(tx)
-			t.Log("Tx hash", tx.Hash().Hex())
-		} else {
-			// Transactions to contract
-			tx := ethtypes.MustSignNewTx(testKey, ethtypes.LatestSigner(genesis.Config), &ethtypes.LegacyTx{
-				To:       &contractAddr,
-				Nonce:    uint64(i - 1),
-				Value:    big.NewInt(0),
-				GasPrice: big.NewInt(params.InitialBaseFee),
-				Gas:      1000000,
-				// Call to function which emits event
-				Data: ethcommon.FromHex("0x2acde098"),
-			})
-			g.AddTx(tx)
-		}
-	}
-	_, blocks, _ := core.GenerateChainWithGenesis(genesis, ethash.NewFaker(), n, generate)
-	go func() {
-		select {
-		case <-done:
-		case blockStream <- blocks:
-		}
-	}()
+func simTestBackend(testAddr ethcommon.Address) *simulator.SimulatedBackend {
+	return simulator.NewSimulatedBackend(
+		core.GenesisAlloc{
+			testAddr: {Balance: big.NewInt(10000000000000000)},
+		}, 10000000,
+	)
 }
 
 func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.Storage, *registrystorage.OperatorData) {
@@ -288,16 +221,3 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.St
 
 	return nodeStorage, operatorData
 }
-
-/*
-Example contract to test event emission:
-
-	pragma solidity >=0.7.0 <0.9.0;
-	contract SSVTest {
-		// TODO: try this public key to fix the test: '0x000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000002644c5330744c5331435255644a54694253553045675546564354456c4449457446575330744c533074436b314a53554a4a616b464f516d64726357687261556335647a424351564646526b464254304e425554684254556c4a516b4e6e53304e42555556424e32705863457872656d643254586476527a684e64455679556a494b524768554d6b313164456c6d59556430566d784d654456574b326734616d7772646e6c7854315976636d784b5245566c517939484d7a567056304d3057455533526e464b55566331516d707651575a315458685165677052517a5a364d45453162314933656e52755748553263305633546b684a534668335245464954486c54645664514d334247596c6f30516e63356231465a54554a6d62564e734c33685852307379566e4e336156686b436b4e4663555a4b526d644e55466b334e6c4a5159306f325232646b545763725756525257565646616d6c52546a4670646d4a4b5a6a5257615570435254637262564e7465465a4e4e54417a566d6c7951575a6e646b494b656e426e64544e7a64485a496448705256315a3265484a304e545230526d39444d48526d5745315252584e53553056745456526f566b686f63566f725a544a434f43396b545751325231466f646e45355a58523152517068516b786f536c704655586c704d6b6c7055553032556c6732613031765a476447556d6376656d747454465a5851305649547a457a61465635526b6f78616e67314c304d3562454979553256454e57396a64316834436d4a525355524255554643436930744c5330745255354549464a545153425156554a4d53554d675330565a4c5330744c53304b00000000000000000000000000000000000000000000000000000000'
-		event OperatorAdded(uint64 indexed operatorId, address indexed owner, bytes publicKey, uint256 fee);
-		function registerOperator() public { emit OperatorAdded(1, address(0), '0xabcd', 1000); }
-	}
-*/
-
-const callableBin = "0x608060405234801561001057600080fd5b5061019f806100206000396000f3fe608060405234801561001057600080fd5b506004361061002b5760003560e01c80632acde09814610030575b600080fd5b61003861003a565b005b600073ffffffffffffffffffffffffffffffffffffffff1660017fd839f31c14bd632f424e307b36abff63ca33684f77f28e35dc13718ef338f7f46103e8604051610085919061013b565b60405180910390a3565b600082825260208201905092915050565b7f3078616263640000000000000000000000000000000000000000000000000000600082015250565b60006100d660068361008f565b91506100e1826100a0565b602082019050919050565b6000819050919050565b6000819050919050565b6000819050919050565b600061012561012061011b846100ec565b610100565b6100f6565b9050919050565b6101358161010a565b82525050565b60006040820190508181036000830152610154816100c9565b9050610163602083018461012c565b9291505056fea26469706673582212209166a516a1bda4d10d473e246b349a414899539a15f0bf0188024af020ff265064736f6c63430008120033"

@@ -3,11 +3,10 @@ package eventparser
 import (
 	"fmt"
 
+	"github.com/bloxapp/ssv/eth/contract"
 	ethabi "github.com/ethereum/go-ethereum/accounts/abi"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
-
-	"github.com/bloxapp/ssv/eth/contract"
 )
 
 type EventParser struct {
@@ -62,12 +61,11 @@ func (e *EventParser) ParseOperatorAdded(log ethtypes.Log) (*contract.ContractOp
 	// Since event.PublicKey is not the operator public key itself
 	// (https://github.com/bloxapp/automation-Tools/blob/6f25a4bd67b6d01e13e300f8585eeb34f37070eb/helpers/contract-integration/register-operators.ts#L33)
 	// but packed operator public key, it needs to be unpacked.
-	unpackedPubKey, err := e.unpackOperatorPublicKey(event.PublicKey)
+	unp, err := e.unpackOperatorPublicKey(event.PublicKey)
 	if err != nil {
 		return nil, err
 	}
-
-	event.PublicKey = unpackedPubKey
+	event.PublicKey = unp
 
 	return event, nil
 }
@@ -84,4 +82,26 @@ func (e *EventParser) unpackOperatorPublicKey(fieldBytes []byte) ([]byte, error)
 	}
 
 	return unpacked, nil
+}
+
+// PackOperatorPublicKey is used for testing only, packing the operator pubkey bytes into an event.
+func PackOperatorPublicKey(fieldBytes []byte) ([]byte, error) {
+	byts, err := ethabi.NewType("bytes", "bytes", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	args := ethabi.Arguments{
+		{
+			Name: "publicKey",
+			Type: byts,
+		},
+	}
+
+	outField, err := args.Pack(fieldBytes)
+	if err != nil {
+		return nil, fmt.Errorf("pack: %w", err)
+	}
+
+	return outField, nil
 }
