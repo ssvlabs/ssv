@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/big"
 	"strings"
+	"time"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -103,19 +104,23 @@ func (edh *EventDataHandler) HandleBlockEventsStream(blockEventsCh <-chan eventb
 	for blockEvents := range blockEventsCh {
 		logger := edh.logger.With(fields.BlockNumber(blockEvents.BlockNumber))
 
-		logger.Debug("processing events from block", fields.Count(len(blockEvents.Events)))
+		start := time.Now()
 		tasks, err := edh.processBlockEvents(blockEvents)
+		logger.Debug("processed events from block",
+			fields.Count(len(blockEvents.Events)),
+			fields.Took(time.Since(start)),
+			zap.Error(err))
+
 		if err != nil {
 			return 0, fmt.Errorf("process block events: %w", err)
 		}
 
 		lastProcessedBlock = blockEvents.BlockNumber
-
 		if !executeTasks || len(tasks) == 0 {
 			continue
 		}
 
-		logger.Info("executing tasks", fields.Count(len(tasks)))
+		logger.Debug("executing tasks", fields.Count(len(tasks)))
 
 		if edh.taskOptimization {
 			tasks = edh.filterSupersedingTasks(tasks)
@@ -130,8 +135,6 @@ func (edh *EventDataHandler) HandleBlockEventsStream(blockEventsCh <-chan eventb
 				logger.Debug("executed task")
 			}
 		}
-
-		logger.Info("task execution finished", fields.Count(len(tasks)))
 	}
 
 	return lastProcessedBlock, nil

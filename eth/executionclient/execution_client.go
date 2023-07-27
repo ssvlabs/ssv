@@ -2,6 +2,7 @@ package executionclient
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 	"time"
@@ -18,9 +19,10 @@ import (
 )
 
 var (
-	ErrClosed       = fmt.Errorf("closed")
-	ErrNotConnected = fmt.Errorf("not connected")
-	ErrBadInput     = fmt.Errorf("bad input")
+	ErrClosed        = fmt.Errorf("closed")
+	ErrNotConnected  = fmt.Errorf("not connected")
+	ErrBadInput      = fmt.Errorf("bad input")
+	ErrNothingToSync = errors.New("nothing to sync")
 )
 
 // ExecutionClient represents a client for interacting with Ethereum execution client.
@@ -80,8 +82,13 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get current block: %w", err)
 	}
+	if currentBlock < ec.followDistance {
+		return nil, nil, ErrNothingToSync
+	}
 	toBlock := currentBlock - ec.followDistance
-	toBlock = 9249887 + 20e3
+	if toBlock < fromBlock {
+		return nil, nil, ErrNothingToSync
+	}
 
 	logs, errors = ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
 	return

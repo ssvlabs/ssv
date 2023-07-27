@@ -44,6 +44,7 @@ const (
 	FieldConnectionID        = "connection_id"
 	FieldConsensusTime       = "consensus_time"
 	FieldCount               = "count"
+	FieldTook                = "took"
 	FieldCurrentSlot         = "current_slot"
 	FieldDomain              = "domain"
 	FieldDuration            = "duration"
@@ -246,6 +247,10 @@ func ConnectionID(val string) zap.Field {
 
 func Count(val int) zap.Field {
 	return zap.Int(FieldCount, val)
+}
+
+func Took(duration time.Duration) zap.Field {
+	return zap.Duration(FieldTook, duration)
 }
 
 func Topic(val string) zap.Field {

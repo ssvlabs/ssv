@@ -2,12 +2,14 @@ package eventdispatcher
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth/eventbatcher"
+	"github.com/bloxapp/ssv/eth/executionclient"
 	"github.com/bloxapp/ssv/logging/fields"
 )
 
@@ -84,6 +86,10 @@ func (ed *EventDispatcher) SyncHistory(ctx context.Context, fromBlock uint64) (l
 	}
 
 	fetchLogs, fetchError, err := ed.executionClient.FetchHistoricalLogs(ctx, fromBlock)
+	if errors.Is(err, executionclient.ErrNothingToSync) {
+		// Nothing to sync, should keep ongoing sync from the given fromBlock.
+		return fromBlock, nil
+	}
 	if err != nil {
 		return 0, fmt.Errorf("failed to fetch historical events: %w", err)
 	}
