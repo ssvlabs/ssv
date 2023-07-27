@@ -123,13 +123,12 @@ func (edh *EventDataHandler) handleOperatorRemoved(txn basedb.Txn, event *contra
 
 func (edh *EventDataHandler) handleValidatorAdded(txn basedb.Txn, event *contract.ContractValidatorAdded) (ownShare *ssvtypes.SSVShare, err error) {
 	logger := edh.logger.With(
+		zap.String("event_type", ValidatorAdded),
 		fields.TxHash(event.Raw.TxHash),
 		fields.Owner(event.Owner),
 		zap.Uint64s("operator_ids", event.OperatorIds),
 		fields.Validator(event.PublicKey),
-		zap.String("event_type", ValidatorAdded),
 	)
-	logger.Debug("processing event")
 
 	// get nonce
 	nonce, nonceErr := edh.nodeStorage.GetNextNonce(txn, event.Owner)

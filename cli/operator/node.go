@@ -150,17 +150,6 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not connect to execution client", zap.Error(err))
 		}
 
-		nodeProber := nodeprobe.NewProber(
-			logger,
-			executionClient,
-			// Underlying options.Beacon's value implements nodeprobe.StatusChecker.
-			// However, as it uses spec's specssv.BeaconNode interface, avoiding type assertion requires modifications in spec.
-			// If options.Beacon doesn't implement nodeprobe.StatusChecker due to a mistake, this would panic early.
-			consensusClient.(nodeprobe.StatusChecker),
-		)
-
-		nodeProber.Start(cmd.Context())
-
 		cfg.SSVOptions.ForkVersion = forkVersion
 		cfg.SSVOptions.Context = cmd.Context()
 		cfg.SSVOptions.DB = db
@@ -217,10 +206,21 @@ var StartNodeCmd = &cobra.Command{
 			go startMetricsHandler(cmd.Context(), logger, db, metricsReporter, cfg.MetricsAPIPort, cfg.EnableProfile)
 		}
 
+		nodeProber := nodeprobe.NewProber(
+			logger,
+			executionClient,
+			// Underlying options.Beacon's value implements nodeprobe.StatusChecker.
+			// However, as it uses spec's specssv.BeaconNode interface, avoiding type assertion requires modifications in spec.
+			// If options.Beacon doesn't implement nodeprobe.StatusChecker due to a mistake, this would panic early.
+			consensusClient.(nodeprobe.StatusChecker),
+		)
+
+		nodeProber.Start(cmd.Context())
 		nodeProber.Wait()
+		logger.Info("ethereum node(s) are ready")
 
 		nodeProber.SetUnreadyHandler(func() {
-			logger.Fatal("Ethereum node(s) are either out of sync or down. Ensure the nodes are ready to resume.")
+			logger.Fatal("ethereum node(s) are either out of sync or down. Ensure the nodes are ready to resume.")
 		})
 
 		metricsReporter.SSVNodeHealthy()
@@ -347,7 +347,7 @@ func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.Badger
 	if err := reopenDb(); err != nil {
 		return nil, err
 	}
-	logger.Info("post-migrations garbage collection completed", fields.Duration(start))
+	logger.Debug("post-migrations garbage collection completed", fields.Duration(start))
 
 	return db, nil
 }
@@ -390,15 +390,24 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, forksprot
 
 	currentEpoch := networkConfig.Beacon.EstimatedCurrentEpoch()
 	forkVersion := forksprotocol.GetCurrentForkVersion(currentEpoch)
+	nodeType := "light"
+	if cfg.SSVOptions.ValidatorOptions.FullNode {
+		nodeType = "full"
+	}
+	builderProposals := "disabled"
+	if cfg.SSVOptions.ValidatorOptions.BuilderProposals {
+		builderProposals = "enabled"
+	}
 
 	logger.Info("setting ssv network",
 		fields.Network(networkConfig.Name),
 		fields.Domain(networkConfig.Domain),
-		fields.Fork(forkVersion),
+		zap.String("nodeType", nodeType),
+		zap.String("builderProposals(MEV)", builderProposals),
 		zap.Any("beaconNetwork", networkConfig.Beacon.BeaconNetwork),
+		fields.Fork(forkVersion),
 		zap.Uint64("genesisEpoch", uint64(networkConfig.GenesisEpoch)),
 		zap.String("registryContract", networkConfig.RegistryContractAddr),
-		zap.Int64("registrySyncOffset", networkConfig.RegistrySyncOffset.Int64()),
 	)
 
 	return networkConfig, forkVersion, nil
