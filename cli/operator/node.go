@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"math/big"
 	"net/http"
 	"time"
 
@@ -504,9 +505,13 @@ func setupEventHandling(
 	if err != nil {
 		logger.Fatal("syncing registry contract events failed, could not get last processed block", zap.Error(err))
 	}
-
-	if !found || fromBlock == nil {
+	if !found {
 		fromBlock = networkConfig.RegistrySyncOffset
+	} else if fromBlock == nil {
+		logger.Fatal("syncing registry contract events failed, last processed block is nil")
+	} else {
+		// Start from the next block.
+		fromBlock = big.NewInt(fromBlock.Int64() + 1)
 	}
 
 	// load & parse local events yaml if exists, otherwise sync from contract

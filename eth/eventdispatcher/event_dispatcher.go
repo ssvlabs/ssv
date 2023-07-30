@@ -99,8 +99,12 @@ func (ed *EventDispatcher) SyncHistory(ctx context.Context, fromBlock uint64) (l
 	if err != nil {
 		return 0, fmt.Errorf("handle historical block events: %w", err)
 	}
-	if fromBlock > lastProcessedBlock {
+	if lastProcessedBlock == 0 {
+		// No events were processed, so lastProcessedBlock remains fromBlock.
 		lastProcessedBlock = fromBlock
+	} else if lastProcessedBlock < fromBlock {
+		// Event replay: this should never happen!
+		return 0, fmt.Errorf("event replay: lastProcessedBlock (%d) is lower than fromBlock (%d)", lastProcessedBlock, fromBlock)
 	}
 	ed.metrics.LastBlockProcessed(lastProcessedBlock)
 
