@@ -217,7 +217,7 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 	}
 	cfg := &PububConfig{
 		Host:         h,
-		TraceLog:     true,
+		TraceLog:     false,
 		MsgIDHandler: midHandler,
 		MsgHandler: func(topic string, msg *pubsub.Message) error {
 			p.saveMsg(topic, msg)

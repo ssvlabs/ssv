@@ -144,7 +144,7 @@ func setupEventDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger
 	require.NoError(t, err)
 
 	storageMap := ibftstorage.NewStores()
-	nodeStorage, _ := setupOperatorStorage(logger, db)
+	nodeStorage, operatorData := setupOperatorStorage(logger, db)
 	testNetworkConfig := networkconfig.TestNetwork
 
 	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, true)
@@ -160,6 +160,7 @@ func setupEventDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger
 		Context:         ctx,
 		DB:              db,
 		RegistryStorage: nodeStorage,
+		OperatorData:    operatorData,
 	})
 
 	contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)

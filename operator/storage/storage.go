@@ -260,7 +260,7 @@ func (s *storage) SetupPrivateKey(operatorKeyBase64 string, generateIfNone bool)
 	}
 
 	//TODO change the log to generated/loaded private key to indicate better on the action
-	s.logger.Info("setup operator key is DONE!", zap.Any("public-key", operatorPublicKey))
+	s.logger.Info("successfully setup operator keys", zap.String("pubkey", operatorPublicKey))
 	return []byte(operatorPublicKey), nil
 }
 

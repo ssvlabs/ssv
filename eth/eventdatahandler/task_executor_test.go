@@ -138,10 +138,10 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 		observedLogsFlow = append(observedLogsFlow, entry.Message)
 	}
 	happyFlow := []string{
-		"setup operator key is DONE!",
+		"successfully setup operator keys",
 		"setting validator controller",
-		"processing events from block",
 		"malformed event: failed to verify signature",
+		"processed events from block",
 	}
 	require.Equal(t, happyFlow, observedLogsFlow)
 }

@@ -98,7 +98,7 @@ func setupDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger) (*E
 	}
 
 	storageMap := ibftstorage.NewStores()
-	nodeStorage, _ := setupOperatorStorage(logger, db)
+	nodeStorage, operatorData := setupOperatorStorage(logger, db)
 	testNetworkConfig := networkconfig.TestNetwork
 
 	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, true)
@@ -116,6 +116,7 @@ func setupDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger) (*E
 		RegistryStorage: nodeStorage,
 		KeyManager:      keyManager,
 		StorageMap:      storageMap,
+		OperatorData:    operatorData,
 	})
 
 	contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
