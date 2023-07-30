@@ -168,12 +168,10 @@ func (i *ibftStorage) CleanAllInstances(logger *zap.Logger, msgID []byte) error 
 	prefix := i.prefix
 	prefix = append(prefix, msgID[:]...)
 	prefix = append(prefix, []byte(instanceKey)...)
-	n, err := i.db.DeleteByPrefix(prefix)
+	_, err := i.db.DeleteByPrefix(prefix)
 	if err != nil {
 		return errors.Wrap(err, "failed to remove decided")
 	}
-
-	logger.Debug("removed decided", zap.Int("count", n))
 
 	if err := i.delete(highestInstanceKey, msgID[:]); err != nil {
 		return errors.Wrap(err, "failed to remove last decided")

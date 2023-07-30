@@ -1,6 +1,7 @@
 package eventdatahandler
 
 import (
+	"github.com/bloxapp/ssv/logging"
 	"go.uber.org/zap"
 )
 
@@ -10,7 +11,7 @@ type Option func(*EventDataHandler)
 // WithLogger enables logging.
 func WithLogger(logger *zap.Logger) Option {
 	return func(edh *EventDataHandler) {
-		edh.logger = logger.Named("event_data_handler")
+		edh.logger = logger.Named(logging.NameEventHandler)
 	}
 }
 

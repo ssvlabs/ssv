@@ -540,10 +540,10 @@ func setupEventHandling(
 			}
 		}
 
-		logger.Info("Execution layer sync history stats",
-			zap.Int("validators count", len(shares)),
-			zap.Int("operators count", len(operators)),
-			zap.Int("my validators count", operatorValidatorsCount),
+		logger.Info("historical registry sync stats",
+			zap.Int("validators", len(shares)),
+			zap.Int("operators", len(operators)),
+			zap.Int("my_validators", operatorValidatorsCount),
 		)
 
 		go func() {
@@ -554,6 +554,9 @@ func setupEventHandling(
 					zap.Error(err))
 			}
 		}()
+
+		// TODO: revert
+		select {}
 	}
 }
 

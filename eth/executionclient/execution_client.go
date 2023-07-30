@@ -116,6 +116,7 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 				toBlock = endBlock
 			}
 
+			start := time.Now()
 			batchLogs, err := ec.client.FilterLogs(context.Background(), ethereum.FilterQuery{
 				Addresses: []ethcommon.Address{ec.contractAddress},
 				FromBlock: new(big.Int).SetUint64(fromBlock),
@@ -132,6 +133,7 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 				zap.Uint64("target", endBlock),
 				zap.String("progress", fmt.Sprintf("%.2f%%", float64(toBlock-startBlock+1)/float64(endBlock-startBlock+1)*100)),
 				zap.Int("log_count", len(batchLogs)),
+				fields.Took(time.Since(start)),
 			)
 
 			select {
@@ -146,7 +148,8 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 			default:
 				for _, log := range batchLogs {
 					if log.Removed {
-						// TODO: test this case
+						// This shouldn't happen unless there was a reorg!
+						ec.logger.Warn("log is removed", fields.TxHash(log.TxHash), zap.Uint("log_index", log.Index))
 						continue
 					}
 					logs <- log
