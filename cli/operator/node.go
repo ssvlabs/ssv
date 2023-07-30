@@ -511,7 +511,7 @@ func setupEventHandling(
 		logger.Fatal("syncing registry contract events failed, last processed block is nil")
 	} else {
 		// Start from the next block.
-		fromBlock = big.NewInt(fromBlock.Int64() + 1)
+		fromBlock = new(big.Int).SetUint64(fromBlock.Uint64() + 1)
 	}
 
 	// load & parse local events yaml if exists, otherwise sync from contract
