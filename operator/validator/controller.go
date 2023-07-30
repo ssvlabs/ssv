@@ -51,7 +51,7 @@ const (
 // ShareEncryptionKeyProvider is a function that returns the operator private key
 type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
 
-type GetRecipientDataFunc func(txn basedb.Txn, owner common.Address) (*registrystorage.RecipientData, bool, error)
+type GetRecipientDataFunc func(r basedb.Reader, owner common.Address) (*registrystorage.RecipientData, bool, error)
 
 // ShareEventHandlerFunc is a function that handles event in an extended mode
 type ShareEventHandlerFunc func(share *ssvtypes.SSVShare)
@@ -110,14 +110,6 @@ type Controller interface {
 	UpdateFeeRecipient(owner, recipient common.Address) error
 }
 
-// EventHandler represents the interface for compatible storage event handlers
-type EventHandler interface {
-	GetEventData(txHash common.Hash) (*registrystorage.EventData, bool, error)
-	SaveEventData(txHash common.Hash) error
-	GetNextNonce(txn basedb.Txn, owner common.Address) (registrystorage.Nonce, error)
-	BumpNonce(txn basedb.Txn, owner common.Address) error
-}
-
 type nonCommitteeValidator struct {
 	*validator.NonCommitteeValidator
 	sync.Mutex
@@ -130,7 +122,6 @@ type controller struct {
 	logger  *zap.Logger
 	metrics validatorMetrics
 
-	eventHandler      EventHandler
 	sharesStorage     registrystorage.Shares
 	operatorsStorage  registrystorage.Operators
 	recipientsStorage registrystorage.Recipients
@@ -211,7 +202,6 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		sharesStorage:              options.RegistryStorage.Shares(),
 		operatorsStorage:           options.RegistryStorage,
 		recipientsStorage:          options.RegistryStorage,
-		eventHandler:               options.RegistryStorage,
 		ibftStorageMap:             options.StorageMap,
 		context:                    options.Context,
 		beacon:                     options.Beacon,

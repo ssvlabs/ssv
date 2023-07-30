@@ -90,15 +90,15 @@ func (b *BadgerDB) Badger() *badger.DB {
 	return b.db
 }
 
-// ROTxn creates a read-only transaction.
-func (b *BadgerDB) ROTxn() basedb.Reader {
-	txn := b.db.NewTransaction(false)
+// Begin creates a read-write transaction.
+func (b *BadgerDB) Begin() basedb.Txn {
+	txn := b.db.NewTransaction(true)
 	return newTxn(txn, b)
 }
 
-// RWTxn creates a read-write transaction.
-func (b *BadgerDB) RWTxn() basedb.Txn {
-	txn := b.db.NewTransaction(true)
+// BeginRead creates a read-only transaction.
+func (b *BadgerDB) BeginRead() basedb.ReadTxn {
+	txn := b.db.NewTransaction(false)
 	return newTxn(txn, b)
 }
 
@@ -316,8 +316,8 @@ func (b *BadgerDB) manyGetter(prefix []byte, keys [][]byte, iterator func(basedb
 	}
 }
 
-// UsingReadWriter returns the given ReadWriter, falling back to the database if it's nil.
-func (b *BadgerDB) UsingReadWriter(rw basedb.ReadWriter) basedb.ReadWriter {
+// Using returns the given ReadWriter, falling back to the database if it's nil.
+func (b *BadgerDB) Using(rw basedb.ReadWriter) basedb.ReadWriter {
 	if rw == nil {
 		return b
 	}

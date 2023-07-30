@@ -29,16 +29,16 @@ type Shares interface {
 	eth1.RegistryStore
 
 	// Get returns the share for the given public key, or nil if not found.
-	Get(txn basedb.Txn, pubKey []byte) *types.SSVShare
+	Get(txn basedb.Reader, pubKey []byte) *types.SSVShare
 
 	// List returns a list of shares, filtered by the given filters (if any).
-	List(txn basedb.Txn, filters ...SharesFilter) []*types.SSVShare
+	List(txn basedb.Reader, filters ...SharesFilter) []*types.SSVShare
 
 	// Save saves the given shares.
-	Save(txn basedb.Txn, shares ...*types.SSVShare) error
+	Save(txn basedb.ReadWriter, shares ...*types.SSVShare) error
 
 	// Delete deletes the share for the given public key.
-	Delete(txn basedb.Txn, pubKey []byte) error
+	Delete(txn basedb.ReadWriter, pubKey []byte) error
 
 	// UpdateValidatorMetadata updates validator metadata.
 	UpdateValidatorMetadata(pk string, metadata *beaconprotocol.ValidatorMetadata) error
@@ -81,14 +81,14 @@ func (s *sharesStorage) load() error {
 	})
 }
 
-func (s *sharesStorage) Get(_ basedb.Txn, pubKey []byte) *types.SSVShare {
+func (s *sharesStorage) Get(_ basedb.Reader, pubKey []byte) *types.SSVShare {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	return s.shares[hex.EncodeToString(pubKey)]
 }
 
-func (s *sharesStorage) List(_ basedb.Txn, filters ...SharesFilter) []*types.SSVShare {
+func (s *sharesStorage) List(_ basedb.Reader, filters ...SharesFilter) []*types.SSVShare {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -109,20 +109,14 @@ Shares:
 	return shares
 }
 
-func (s *sharesStorage) Save(txn basedb.Txn, shares ...*types.SSVShare) error {
+func (s *sharesStorage) Save(rw basedb.ReadWriter, shares ...*types.SSVShare) error {
 	if len(shares) == 0 {
 		return nil
 	}
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	setter := s.db.SetMany
-	if txn != nil {
-		setter = txn.SetMany
-	}
-
-	err := setter(s.prefix, len(shares), func(i int) (basedb.Obj, error) {
+	err := s.db.Using(rw).SetMany(s.prefix, len(shares), func(i int) (basedb.Obj, error) {
 		value, err := shares[i].Encode()
 		if err != nil {
 			return basedb.Obj{}, fmt.Errorf("failed to serialize share: %w", err)
@@ -140,16 +134,11 @@ func (s *sharesStorage) Save(txn basedb.Txn, shares ...*types.SSVShare) error {
 	return nil
 }
 
-func (s *sharesStorage) Delete(txn basedb.Txn, pubKey []byte) error {
-	deleter := s.db.Delete
-	if txn != nil {
-		deleter = txn.Delete
-	}
-
+func (s *sharesStorage) Delete(rw basedb.ReadWriter, pubKey []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	err := deleter(s.prefix, s.storageKey(pubKey))
+	err := s.db.Using(rw).Delete(s.prefix, s.storageKey(pubKey))
 	if err != nil {
 		return err
 	}

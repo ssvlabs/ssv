@@ -22,7 +22,6 @@ type Reader interface {
 }
 
 // ReadWrite is a read-write accessor to the database.
-// NOTE TO REMOVE: there is no just `Writer` in addition to `ReadWriter` because write transactions always allow for both read & write (at least in Badger)
 type ReadWriter interface {
 	Reader
 	Set(prefix []byte, key []byte, value []byte) error
@@ -38,11 +37,21 @@ type Txn interface {
 	Discard()
 }
 
+type ReadTxn interface {
+	Reader
+	Discard()
+}
+
 // Database interface for Badger DB
 type Database interface {
-	RWTxn() Txn
-	ROTxn() Reader // TODO: afaik there is no effect for Commit/Discard on read-only transactions so a `Reader` is sufficient?
 	ReadWriter
+
+	Begin() Txn
+	BeginRead() ReadTxn
+
+	Using(rw ReadWriter) ReadWriter
+	UsingReader(r Reader) Reader
+
 	// TODO: consider moving these functions into Reader and ReadWriter interfaces?
 	CountByCollection(prefix []byte) (int64, error)
 	DeleteByPrefix(prefix []byte) (int, error)

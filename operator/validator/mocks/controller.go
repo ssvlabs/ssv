@@ -11,7 +11,6 @@ import (
 	validator "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	types "github.com/bloxapp/ssv/protocol/v2/types"
 	storage "github.com/bloxapp/ssv/registry/storage"
-	basedb "github.com/bloxapp/ssv/storage/basedb"
 	common "github.com/ethereum/go-ethereum/common"
 	gomock "github.com/golang/mock/gomock"
 )
@@ -141,6 +140,18 @@ func (mr *MockControllerMockRecorder) ReactivateCluster(owner, operatorIDs, toRe
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReactivateCluster", reflect.TypeOf((*MockController)(nil).ReactivateCluster), owner, operatorIDs, toReactivate)
 }
 
+// SetOperatorData mocks base method.
+func (m *MockController) SetOperatorData(data *storage.OperatorData) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetOperatorData", data)
+}
+
+// SetOperatorData indicates an expected call of SetOperatorData.
+func (mr *MockControllerMockRecorder) SetOperatorData(data interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetOperatorData", reflect.TypeOf((*MockController)(nil).SetOperatorData), data)
+}
+
 // StartNetworkHandlers mocks base method.
 func (m *MockController) StartNetworkHandlers() {
 	m.ctrl.T.Helper()
@@ -217,86 +228,4 @@ func (m *MockController) UpdateValidatorMetaDataLoop() {
 func (mr *MockControllerMockRecorder) UpdateValidatorMetaDataLoop() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateValidatorMetaDataLoop", reflect.TypeOf((*MockController)(nil).UpdateValidatorMetaDataLoop))
-}
-
-// MockEventHandler is a mock of EventHandler interface.
-type MockEventHandler struct {
-	ctrl     *gomock.Controller
-	recorder *MockEventHandlerMockRecorder
-}
-
-// MockEventHandlerMockRecorder is the mock recorder for MockEventHandler.
-type MockEventHandlerMockRecorder struct {
-	mock *MockEventHandler
-}
-
-// NewMockEventHandler creates a new mock instance.
-func NewMockEventHandler(ctrl *gomock.Controller) *MockEventHandler {
-	mock := &MockEventHandler{ctrl: ctrl}
-	mock.recorder = &MockEventHandlerMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockEventHandler) EXPECT() *MockEventHandlerMockRecorder {
-	return m.recorder
-}
-
-// BumpNonce mocks base method.
-func (m *MockEventHandler) BumpNonce(txn basedb.Txn, owner common.Address) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "BumpNonce", txn, owner)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// BumpNonce indicates an expected call of BumpNonce.
-func (mr *MockEventHandlerMockRecorder) BumpNonce(txn, owner interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BumpNonce", reflect.TypeOf((*MockEventHandler)(nil).BumpNonce), txn, owner)
-}
-
-// GetEventData mocks base method.
-func (m *MockEventHandler) GetEventData(txHash common.Hash) (*storage.EventData, bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetEventData", txHash)
-	ret0, _ := ret[0].(*storage.EventData)
-	ret1, _ := ret[1].(bool)
-	ret2, _ := ret[2].(error)
-	return ret0, ret1, ret2
-}
-
-// GetEventData indicates an expected call of GetEventData.
-func (mr *MockEventHandlerMockRecorder) GetEventData(txHash interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEventData", reflect.TypeOf((*MockEventHandler)(nil).GetEventData), txHash)
-}
-
-// GetNextNonce mocks base method.
-func (m *MockEventHandler) GetNextNonce(txn basedb.Txn, owner common.Address) (storage.Nonce, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNextNonce", txn, owner)
-	ret0, _ := ret[0].(storage.Nonce)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetNextNonce indicates an expected call of GetNextNonce.
-func (mr *MockEventHandlerMockRecorder) GetNextNonce(txn, owner interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNextNonce", reflect.TypeOf((*MockEventHandler)(nil).GetNextNonce), txn, owner)
-}
-
-// SaveEventData mocks base method.
-func (m *MockEventHandler) SaveEventData(txHash common.Hash) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SaveEventData", txHash)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SaveEventData indicates an expected call of SaveEventData.
-func (mr *MockEventHandlerMockRecorder) SaveEventData(txHash interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveEventData", reflect.TypeOf((*MockEventHandler)(nil).SaveEventData), txHash)
 }

@@ -31,11 +31,11 @@ type GetOperatorData = func(index uint64) (*OperatorData, bool, error)
 
 // Operators is the interface for managing operators data
 type Operators interface {
-	GetOperatorDataByPubKey(txn basedb.Txn, operatorPubKey []byte) (*OperatorData, bool, error)
-	GetOperatorData(txn basedb.Txn, id spectypes.OperatorID) (*OperatorData, bool, error)
-	SaveOperatorData(txn basedb.Txn, operatorData *OperatorData) (bool, error)
-	DeleteOperatorData(txn basedb.Txn, id spectypes.OperatorID) error
-	ListOperators(txn basedb.Txn, from uint64, to uint64) ([]OperatorData, error)
+	GetOperatorDataByPubKey(r basedb.Reader, operatorPubKey []byte) (*OperatorData, bool, error)
+	GetOperatorData(r basedb.Reader, id spectypes.OperatorID) (*OperatorData, bool, error)
+	SaveOperatorData(rw basedb.ReadWriter, operatorData *OperatorData) (bool, error)
+	DeleteOperatorData(rw basedb.ReadWriter, id spectypes.OperatorID) error
+	ListOperators(r basedb.Reader, from uint64, to uint64) ([]OperatorData, error)
 	GetOperatorsPrefix() []byte
 }
 
@@ -62,31 +62,44 @@ func (s *operatorsStorage) GetOperatorsPrefix() []byte {
 
 // ListOperators returns data of the all known operators by index range (from, to)
 // when 'to' equals zero, all operators will be returned
-func (s *operatorsStorage) ListOperators(txn basedb.Txn, from uint64, to uint64) ([]OperatorData, error) {
+func (s *operatorsStorage) ListOperators(
+	r basedb.Reader,
+	from uint64,
+	to uint64,
+) ([]OperatorData, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	return s.listOperators(txn, from, to)
+	return s.listOperators(r, from, to)
 }
 
 // GetOperatorData returns data of the given operator by index
-func (s *operatorsStorage) GetOperatorData(txn basedb.Txn, id spectypes.OperatorID) (*OperatorData, bool, error) {
+func (s *operatorsStorage) GetOperatorData(
+	r basedb.Reader,
+	id spectypes.OperatorID,
+) (*OperatorData, bool, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	return s.getOperatorData(txn, id)
+	return s.getOperatorData(r, id)
 }
 
 // GetOperatorDataByPubKey returns data of the given operator by public key
-func (s *operatorsStorage) GetOperatorDataByPubKey(txn basedb.Txn, operatorPubKey []byte) (*OperatorData, bool, error) {
+func (s *operatorsStorage) GetOperatorDataByPubKey(
+	r basedb.Reader,
+	operatorPubKey []byte,
+) (*OperatorData, bool, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	return s.getOperatorDataByPubKey(txn, operatorPubKey)
+	return s.getOperatorDataByPubKey(r, operatorPubKey)
 }
 
-func (s *operatorsStorage) getOperatorDataByPubKey(txn basedb.Txn, operatorPubKey []byte) (*OperatorData, bool, error) {
-	operatorsData, err := s.listOperators(txn, 0, 0)
+func (s *operatorsStorage) getOperatorDataByPubKey(
+	r basedb.Reader,
+	operatorPubKey []byte,
+) (*OperatorData, bool, error) {
+	operatorsData, err := s.listOperators(r, 0, 0)
 	if err != nil {
 		return nil, false, errors.Wrap(err, "could not get all operators")
 	}
@@ -98,13 +111,11 @@ func (s *operatorsStorage) getOperatorDataByPubKey(txn basedb.Txn, operatorPubKe
 	return nil, false, nil
 }
 
-func (s *operatorsStorage) getOperatorData(txn basedb.Txn, id spectypes.OperatorID) (*OperatorData, bool, error) {
-	getter := s.db.Get
-	if txn != nil {
-		getter = txn.Get
-	}
-
-	obj, found, err := getter(s.prefix, buildOperatorKey(id))
+func (s *operatorsStorage) getOperatorData(
+	r basedb.Reader,
+	id spectypes.OperatorID,
+) (*OperatorData, bool, error) {
+	obj, found, err := s.db.UsingReader(r).Get(s.prefix, buildOperatorKey(id))
 	if err != nil {
 		return nil, found, err
 	}
@@ -117,29 +128,28 @@ func (s *operatorsStorage) getOperatorData(txn basedb.Txn, id spectypes.Operator
 	return &operatorInformation, found, err
 }
 
-func (s *operatorsStorage) listOperators(txn basedb.Txn, from, to uint64) ([]OperatorData, error) {
-	getter := s.db.GetAll
-	if txn != nil {
-		getter = txn.GetAll
-	}
-
+func (s *operatorsStorage) listOperators(r basedb.Reader, from, to uint64) ([]OperatorData, error) {
 	var operators []OperatorData
-	err := getter(append(s.prefix, operatorsPrefix...), func(i int, obj basedb.Obj) error {
-		var od OperatorData
-		if err := json.Unmarshal(obj.Value, &od); err != nil {
-			return err
-		}
-		if (od.ID >= from && od.ID <= to) || (to == 0) {
-			operators = append(operators, od)
-		}
-		return nil
-	})
+	err := s.db.UsingReader(r).
+		GetAll(append(s.prefix, operatorsPrefix...), func(i int, obj basedb.Obj) error {
+			var od OperatorData
+			if err := json.Unmarshal(obj.Value, &od); err != nil {
+				return err
+			}
+			if (od.ID >= from && od.ID <= to) || (to == 0) {
+				operators = append(operators, od)
+			}
+			return nil
+		})
 
 	return operators, err
 }
 
 // SaveOperatorData saves operator data
-func (s *operatorsStorage) SaveOperatorData(txn basedb.Txn, operatorData *OperatorData) (bool, error) {
+func (s *operatorsStorage) SaveOperatorData(
+	rw basedb.ReadWriter,
+	operatorData *OperatorData,
+) (bool, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -159,24 +169,14 @@ func (s *operatorsStorage) SaveOperatorData(txn basedb.Txn, operatorData *Operat
 		return found, errors.Wrap(err, "could not marshal operator data")
 	}
 
-	setter := s.db.Set
-	if txn != nil {
-		setter = txn.Set
-	}
-
-	return found, setter(s.prefix, buildOperatorKey(operatorData.ID), raw)
+	return found, s.db.Using(rw).Set(s.prefix, buildOperatorKey(operatorData.ID), raw)
 }
 
-func (s *operatorsStorage) DeleteOperatorData(txn basedb.Txn, id spectypes.OperatorID) error {
+func (s *operatorsStorage) DeleteOperatorData(rw basedb.ReadWriter, id spectypes.OperatorID) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	deleter := s.db.Delete
-	if txn != nil {
-		deleter = txn.Delete
-	}
-
-	return deleter(s.prefix, buildOperatorKey(id))
+	return s.db.Using(rw).Delete(s.prefix, buildOperatorKey(id))
 }
 
 // buildOperatorKey builds operator key using operatorsPrefix & index, e.g. "operators/1"

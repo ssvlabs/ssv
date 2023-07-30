@@ -146,7 +146,7 @@ func (edh *EventDataHandler) HandleBlockEventsStream(blockEventsCh <-chan eventb
 }
 
 func (edh *EventDataHandler) processBlockEvents(blockEvents eventbatcher.BlockEvents) ([]Task, error) {
-	txn := edh.nodeStorage.RWTxn()
+	txn := edh.nodeStorage.Begin()
 	defer txn.Discard()
 
 	var tasks []Task
@@ -387,7 +387,7 @@ func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (T
 }
 
 func (edh *EventDataHandler) HandleLocalEvents(localEvents []localevents.Event) error {
-	txn := edh.nodeStorage.RWTxn()
+	txn := edh.nodeStorage.Begin()
 	defer txn.Discard()
 
 	for _, event := range localEvents {

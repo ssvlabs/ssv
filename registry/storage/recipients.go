@@ -35,12 +35,12 @@ type RecipientData struct {
 
 // Recipients is the interface for managing recipients data
 type Recipients interface {
-	GetRecipientData(txn basedb.Txn, owner common.Address) (*RecipientData, bool, error)
-	GetRecipientDataMany(txn basedb.Txn, owners []common.Address) (map[common.Address]bellatrix.ExecutionAddress, error)
-	GetNextNonce(txn basedb.Txn, owner common.Address) (Nonce, error)
-	BumpNonce(txn basedb.Txn, owner common.Address) error
-	SaveRecipientData(txn basedb.Txn, recipientData *RecipientData) (*RecipientData, error)
-	DeleteRecipientData(txn basedb.Txn, owner common.Address) error
+	GetRecipientData(r basedb.Reader, owner common.Address) (*RecipientData, bool, error)
+	GetRecipientDataMany(r basedb.Reader, owners []common.Address) (map[common.Address]bellatrix.ExecutionAddress, error)
+	GetNextNonce(r basedb.Reader, owner common.Address) (Nonce, error)
+	BumpNonce(rw basedb.ReadWriter, owner common.Address) error
+	SaveRecipientData(rw basedb.ReadWriter, recipientData *RecipientData) (*RecipientData, error)
+	DeleteRecipientData(rw basedb.ReadWriter, owner common.Address) error
 	GetRecipientsPrefix() []byte
 }
 
@@ -66,20 +66,15 @@ func (s *recipientsStorage) GetRecipientsPrefix() []byte {
 }
 
 // GetRecipientData returns data of the given recipient by owner address, if not found returns owner address as a default fee recipient
-func (s *recipientsStorage) GetRecipientData(txn basedb.Txn, owner common.Address) (*RecipientData, bool, error) {
+func (s *recipientsStorage) GetRecipientData(r basedb.Reader, owner common.Address) (*RecipientData, bool, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	return s.getRecipientData(txn, owner)
+	return s.getRecipientData(r, owner)
 }
 
-func (s *recipientsStorage) getRecipientData(txn basedb.Txn, owner common.Address) (*RecipientData, bool, error) {
-	getter := s.db.Get
-	if txn != nil {
-		getter = txn.Get
-	}
-
-	obj, found, err := getter(s.prefix, buildRecipientKey(owner))
+func (s *recipientsStorage) getRecipientData(r basedb.Reader, owner common.Address) (*RecipientData, bool, error) {
+	obj, found, err := s.db.UsingReader(r).Get(s.prefix, buildRecipientKey(owner))
 	if err != nil {
 		return nil, found, err
 	}
@@ -92,12 +87,7 @@ func (s *recipientsStorage) getRecipientData(txn basedb.Txn, owner common.Addres
 	return &recipientData, found, err
 }
 
-func (s *recipientsStorage) GetRecipientDataMany(txn basedb.Txn, owners []common.Address) (map[common.Address]bellatrix.ExecutionAddress, error) {
-	getter := s.db.GetMany
-	if txn != nil {
-		getter = txn.GetMany
-	}
-
+func (s *recipientsStorage) GetRecipientDataMany(r basedb.Reader, owners []common.Address) (map[common.Address]bellatrix.ExecutionAddress, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
@@ -106,7 +96,7 @@ func (s *recipientsStorage) GetRecipientDataMany(txn basedb.Txn, owners []common
 		keys = append(keys, buildRecipientKey(owner))
 	}
 	results := make(map[common.Address]bellatrix.ExecutionAddress)
-	err := getter(s.prefix, keys, func(obj basedb.Obj) error {
+	err := s.db.UsingReader(r).GetMany(s.prefix, keys, func(obj basedb.Obj) error {
 		var recipient RecipientData
 		err := json.Unmarshal(obj.Value, &recipient)
 		if err != nil {
@@ -122,8 +112,8 @@ func (s *recipientsStorage) GetRecipientDataMany(txn basedb.Txn, owners []common
 	return results, nil
 }
 
-func (s *recipientsStorage) GetNextNonce(txn basedb.Txn, owner common.Address) (Nonce, error) {
-	data, found, err := s.GetRecipientData(txn, owner)
+func (s *recipientsStorage) GetNextNonce(r basedb.Reader, owner common.Address) (Nonce, error) {
+	data, found, err := s.GetRecipientData(r, owner)
 	if err != nil {
 		return Nonce(0), errors.Wrap(err, "could not get recipient data")
 	}
@@ -140,8 +130,8 @@ func (s *recipientsStorage) GetNextNonce(txn basedb.Txn, owner common.Address) (
 	return *data.Nonce + 1, nil
 }
 
-func (s *recipientsStorage) BumpNonce(txn basedb.Txn, owner common.Address) error {
-	rData, found, err := s.GetRecipientData(txn, owner)
+func (s *recipientsStorage) BumpNonce(rw basedb.ReadWriter, owner common.Address) error {
+	rData, found, err := s.GetRecipientData(rw, owner)
 	if err != nil {
 		return errors.Wrap(err, "could not get recipient data")
 	}
@@ -175,21 +165,16 @@ func (s *recipientsStorage) BumpNonce(txn basedb.Txn, owner common.Address) erro
 		return errors.Wrap(err, "could not marshal recipient data")
 	}
 
-	setter := s.db.Set
-	if txn != nil {
-		setter = txn.Set
-	}
-
-	return setter(s.prefix, buildRecipientKey(rData.Owner), raw)
+	return s.db.Using(rw).Set(s.prefix, buildRecipientKey(rData.Owner), raw)
 }
 
 // SaveRecipientData saves recipient data and return it.
 // if the recipient already exists and the fee didn't change return nil
-func (s *recipientsStorage) SaveRecipientData(txn basedb.Txn, recipientData *RecipientData) (*RecipientData, error) {
+func (s *recipientsStorage) SaveRecipientData(rw basedb.ReadWriter, recipientData *RecipientData) (*RecipientData, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	r, found, err := s.getRecipientData(txn, recipientData.Owner)
+	r, found, err := s.getRecipientData(rw, recipientData.Owner)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get recipient data")
 	}
@@ -203,24 +188,14 @@ func (s *recipientsStorage) SaveRecipientData(txn basedb.Txn, recipientData *Rec
 		return nil, errors.Wrap(err, "could not marshal recipient data")
 	}
 
-	setter := s.db.Set
-	if txn != nil {
-		setter = txn.Set
-	}
-
-	return recipientData, setter(s.prefix, buildRecipientKey(recipientData.Owner), raw)
+	return recipientData, s.db.Using(rw).Set(s.prefix, buildRecipientKey(recipientData.Owner), raw)
 }
 
-func (s *recipientsStorage) DeleteRecipientData(txn basedb.Txn, owner common.Address) error {
+func (s *recipientsStorage) DeleteRecipientData(rw basedb.ReadWriter, owner common.Address) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	deleter := s.db.Delete
-	if txn != nil {
-		deleter = txn.Delete
-	}
-
-	return deleter(s.prefix, buildRecipientKey(owner))
+	return s.db.Using(rw).Delete(s.prefix, buildRecipientKey(owner))
 }
 
 // buildRecipientKey builds recipient key using recipientsPrefix & owner address, e.g. "recipients/0x00..01"
