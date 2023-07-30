@@ -27,14 +27,14 @@ type Handler interface {
 
 type metricsHandler struct {
 	ctx           context.Context
-	db            basedb.IDb
+	db            basedb.Database
 	reporter      nodeMetrics
 	enableProf    bool
 	healthChecker HealthChecker
 }
 
 // NewMetricsHandler returns a new metrics handler.
-func NewMetricsHandler(ctx context.Context, db basedb.IDb, reporter nodeMetrics, enableProf bool, healthChecker HealthChecker) Handler {
+func NewMetricsHandler(ctx context.Context, db basedb.Database, reporter nodeMetrics, enableProf bool, healthChecker HealthChecker) Handler {
 	if reporter == nil {
 		reporter = nopMetrics{}
 	}

@@ -42,13 +42,13 @@ type Storage interface {
 }
 
 type storage struct {
-	db      basedb.IDb
+	db      basedb.Database
 	network beacon.Network
 	logger  *zap.Logger // struct logger is used because core.Storage does not support passing a logger
 	lock    sync.RWMutex
 }
 
-func NewSignerStorage(db basedb.IDb, network beacon.Network, logger *zap.Logger) Storage {
+func NewSignerStorage(db basedb.Database, network beacon.Network, logger *zap.Logger) Storage {
 	return &storage{
 		db:      db,
 		network: network,

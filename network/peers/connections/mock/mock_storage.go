@@ -22,7 +22,7 @@ type NodeStorage struct {
 	RegisteredOperatorPublicKeyPEMs []string
 }
 
-func (m NodeStorage) ROTxn() basedb.Txn {
+func (m NodeStorage) ROTxn() basedb.Reader {
 	//TODO implement me
 	panic("implement me")
 }

@@ -103,7 +103,7 @@ func TestSubmitProposal(t *testing.T) {
 	})
 }
 
-func createStorage(t *testing.T) (basedb.IDb, registrystorage.Shares, registrystorage.Recipients) {
+func createStorage(t *testing.T) (basedb.Database, registrystorage.Shares, registrystorage.Recipients) {
 	logger := logging.TestLogger(t)
 	options := basedb.Options{
 		Type: "badger-memory",

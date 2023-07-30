@@ -29,7 +29,7 @@ func _byteArray(input string) []byte {
 	return res
 }
 
-func getBaseStorage(logger *zap.Logger) (basedb.IDb, error) {
+func getBaseStorage(logger *zap.Logger) (basedb.Database, error) {
 	return ssvstorage.GetStorageFactory(logger, basedb.Options{
 		Type: "badger-memory",
 		Path: "",

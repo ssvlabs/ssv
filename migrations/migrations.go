@@ -47,7 +47,7 @@ type Migrations []Migration
 
 // Options is the options for running migrations.
 type Options struct {
-	Db      basedb.IDb
+	Db      basedb.Database
 	DbPath  string
 	Network beacon.Network
 }

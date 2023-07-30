@@ -41,13 +41,13 @@ func init() {
 // instanceType is what separates different iBFT eth2 duty types (attestation, proposal and aggregation)
 type ibftStorage struct {
 	prefix   []byte
-	db       basedb.IDb
+	db       basedb.Database
 	fork     forks.Fork
 	forkLock *sync.RWMutex
 }
 
 // New create new ibft storage
-func New(db basedb.IDb, prefix string, forkVersion forksprotocol.ForkVersion) qbftstorage.QBFTStore {
+func New(db basedb.Database, prefix string, forkVersion forksprotocol.ForkVersion) qbftstorage.QBFTStore {
 	return &ibftStorage{
 		prefix:   []byte(prefix),
 		db:       db,

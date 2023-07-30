@@ -46,13 +46,13 @@ type Recipients interface {
 
 type recipientsStorage struct {
 	logger *zap.Logger
-	db     basedb.IDb
+	db     basedb.Database
 	lock   sync.RWMutex
 	prefix []byte
 }
 
 // NewRecipientsStorage creates a new instance of Storage
-func NewRecipientsStorage(logger *zap.Logger, db basedb.IDb, prefix []byte) Recipients {
+func NewRecipientsStorage(logger *zap.Logger, db basedb.Database, prefix []byte) Recipients {
 	return &recipientsStorage{
 		logger: logger,
 		db:     db,

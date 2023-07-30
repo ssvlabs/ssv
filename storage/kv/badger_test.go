@@ -186,7 +186,7 @@ func uInt64ToByteSlice(n uint64) []byte {
 	return b
 }
 
-func getAllTest(t *testing.T, n int, db basedb.IDb) {
+func getAllTest(t *testing.T, n int, db basedb.Database) {
 	// populating DB
 	prefix := []byte("test")
 	for i := 0; i < n; i++ {

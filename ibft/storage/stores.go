@@ -20,7 +20,7 @@ func NewStores() *QBFTStores {
 	}
 }
 
-func NewStoresFromRoles(db basedb.IDb, roles ...spectypes.BeaconRole) *QBFTStores {
+func NewStoresFromRoles(db basedb.Database, roles ...spectypes.BeaconRole) *QBFTStores {
 	stores := NewStores()
 	for _, role := range roles {
 		stores.Add(role, New(db, role.String(), forksprotocol.GenesisForkVersion))

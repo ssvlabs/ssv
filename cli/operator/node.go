@@ -353,7 +353,7 @@ func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.Badger
 	return db, nil
 }
 
-func setupOperatorStorage(logger *zap.Logger, db basedb.IDb) (operatorstorage.Storage, *registrystorage.OperatorData) {
+func setupOperatorStorage(logger *zap.Logger, db basedb.Database) (operatorstorage.Storage, *registrystorage.OperatorData) {
 	nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
@@ -417,7 +417,7 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, forksprot
 func setupP2P(
 	forkVersion forksprotocol.ForkVersion,
 	operatorData *registrystorage.OperatorData,
-	db basedb.IDb,
+	db basedb.Database,
 	logger *zap.Logger,
 	network networkconfig.NetworkConfig,
 ) network.P2PNetwork {
@@ -568,7 +568,7 @@ func setupEventHandling(
 	}
 }
 
-func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.IDb, metricsReporter *metricsreporter.MetricsReporter, port int, enableProf bool) {
+func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.Database, metricsReporter *metricsreporter.MetricsReporter, port int, enableProf bool) {
 	logger = logger.Named(logging.NameMetricsHandler)
 	// init and start HTTP handler
 	metricsHandler := metrics.NewMetricsHandler(ctx, db, metricsReporter, enableProf, operatorNode.(metrics.HealthChecker))
