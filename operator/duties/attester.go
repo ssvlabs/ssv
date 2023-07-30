@@ -182,6 +182,11 @@ func (h *AttesterHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch) error {
 	start := time.Now()
 	indices := h.validatorController.ActiveValidatorIndices(h.logger, epoch)
+
+	if len(indices) == 0 {
+		return nil
+	}
+
 	duties, err := h.beaconNode.AttesterDuties(ctx, epoch, indices)
 	if err != nil {
 		return fmt.Errorf("failed to fetch attester duties: %w", err)

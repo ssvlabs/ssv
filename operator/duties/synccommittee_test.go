@@ -231,9 +231,8 @@ func TestScheduler_SyncCommittee_Indices_Changed(t *testing.T) {
 		},
 	})
 
-	// STEP 1: wait for sync committee duties to be fetched for current and next period
+	// STEP 1: wait for sync committee duties to be fetched for next period
 	ticker.Send(currentSlot.GetSlot())
-	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger a change in active indices
@@ -248,7 +247,6 @@ func TestScheduler_SyncCommittee_Indices_Changed(t *testing.T) {
 	// STEP 3: wait for sync committee duties to be fetched again
 	currentSlot.SetSlot(phase0.Slot(256*32 - 2))
 	ticker.Send(currentSlot.GetSlot())
-	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 4: no action should be taken
@@ -280,14 +278,9 @@ func TestScheduler_SyncCommittee_Multiple_Indices_Changed_Same_Slot(t *testing.T
 	scheduler, logger, ticker, timeout, cancel, schedulerPool := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, dutiesMap)
 
-	// STEP 1: wait for sync committee duties to be fetched and executed at the same slot
+	// STEP 1: wait for no action to be taken
 	ticker.Send(currentSlot.GetSlot())
-	duties, _ := dutiesMap.Get(1)
-	expected := expectedExecutedSyncCommitteeDuties(handler, duties, currentSlot.GetSlot())
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
-
-	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger a change in active indices
 	scheduler.indicesChg <- struct{}{}
@@ -301,7 +294,7 @@ func TestScheduler_SyncCommittee_Multiple_Indices_Changed_Same_Slot(t *testing.T
 
 	// STEP 3: trigger a change in active indices
 	scheduler.indicesChg <- struct{}{}
-	duties, _ = dutiesMap.Get(1)
+	duties, _ := dutiesMap.Get(1)
 	dutiesMap.Set(1, append(duties, &v1.SyncCommitteeDuty{
 		PubKey:         phase0.BLSPubKey{1, 2, 4},
 		ValidatorIndex: phase0.ValidatorIndex(2),
@@ -312,7 +305,6 @@ func TestScheduler_SyncCommittee_Multiple_Indices_Changed_Same_Slot(t *testing.T
 	currentSlot.SetSlot(phase0.Slot(256*32 - 2))
 	ticker.Send(currentSlot.GetSlot())
 	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 5: no action should be taken
 	currentSlot.SetSlot(phase0.Slot(256*32 - 1))
@@ -322,7 +314,7 @@ func TestScheduler_SyncCommittee_Multiple_Indices_Changed_Same_Slot(t *testing.T
 	// STEP 6: The first assigned duty should not be executed, but the second one should
 	currentSlot.SetSlot(phase0.Slot(256 * 32))
 	duties, _ = dutiesMap.Get(1)
-	expected = expectedExecutedSyncCommitteeDuties(handler, duties, currentSlot.GetSlot())
+	expected := expectedExecutedSyncCommitteeDuties(handler, duties, currentSlot.GetSlot())
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.GetSlot())
@@ -353,7 +345,6 @@ func TestScheduler_SyncCommittee_Reorg_Current(t *testing.T) {
 
 	// STEP 1: wait for sync committee duties to be fetched and executed at the same slot
 	ticker.Send(currentSlot.GetSlot())
-	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger head event
@@ -427,7 +418,6 @@ func TestScheduler_SyncCommittee_Reorg_Current_Indices_Changed(t *testing.T) {
 	// STEP 1: wait for sync committee duties to be fetched and executed at the same slot
 	ticker.Send(currentSlot.GetSlot())
 	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger head event
 	e := &v1.Event{
@@ -472,7 +462,6 @@ func TestScheduler_SyncCommittee_Reorg_Current_Indices_Changed(t *testing.T) {
 	// STEP 5: wait for sync committee duties to be fetched again for the current epoch
 	currentSlot.SetSlot(phase0.Slot(256*32 - 1))
 	ticker.Send(currentSlot.GetSlot())
-	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 6: The first assigned duty should not be executed, but the second and the new from indices change should

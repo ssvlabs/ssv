@@ -203,6 +203,11 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period
 	lastEpoch := h.network.Beacon.FirstEpochOfSyncPeriod(period+1) - 1
 
 	indices := h.validatorController.ActiveValidatorIndices(h.logger, firstEpoch)
+
+	if len(indices) == 0 {
+		return nil
+	}
+
 	duties, err := h.beaconNode.SyncCommitteeDuties(ctx, firstEpoch, indices)
 	if err != nil {
 		return fmt.Errorf("failed to fetch sync committee duties: %w", err)

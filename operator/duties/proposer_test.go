@@ -138,9 +138,9 @@ func TestScheduler_Proposer_Indices_Changed(t *testing.T) {
 	scheduler, logger, ticker, timeout, cancel, schedulerPool := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupProposerDutiesMock(scheduler, dutiesMap)
 
-	// STEP 1: wait for proposer duties to be fetched
+	// STEP 1: wait for no action to be taken
 	ticker.Send(currentSlot.GetSlot())
-	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: wait for no action to be taken
 	currentSlot.SetSlot(phase0.Slot(1))

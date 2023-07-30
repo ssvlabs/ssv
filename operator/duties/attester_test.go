@@ -145,9 +145,8 @@ func TestScheduler_Attester_Indices_Changed(t *testing.T) {
 	scheduler, logger, mockTicker, timeout, cancel, schedulerPool := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap)
 
-	// STEP 1: wait for attester duties to be fetched
+	// STEP 1: wait for no action to be taken
 	mockTicker.Send(currentSlot.GetSlot())
-	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger a change in active indices
@@ -203,9 +202,9 @@ func TestScheduler_Attester_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 	scheduler, logger, mockTicker, timeout, cancel, schedulerPool := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap)
 
-	// STEP 1: wait for attester duties to be fetched
+	// STEP 1: wait for no action to be taken
 	mockTicker.Send(currentSlot.GetSlot())
-	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: wait for no action to be taken
 	currentSlot.SetSlot(phase0.Slot(1))
@@ -279,9 +278,8 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition(t *testing.T) {
 		},
 	})
 
-	// STEP 1: wait for attester duties to be fetched for current and next epoch
+	// STEP 1: wait for attester duties to be fetched for next epoch
 	mockTicker.Send(currentSlot.GetSlot())
-	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger head event
@@ -360,10 +358,10 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition_Indices_Changed(t *t
 		},
 	})
 
-	// STEP 1: wait for attester duties to be fetched for current and next epoch
+	// STEP 1: wait for attester duties to be fetched for next epoch
 	mockTicker.Send(currentSlot.GetSlot())
 	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger head event
 	e := &v1.Event{
@@ -619,9 +617,8 @@ func TestScheduler_Attester_Reorg_Current(t *testing.T) {
 		},
 	})
 
-	// STEP 1: wait for attester duties to be fetched
+	// STEP 1: wait for attester duties to be fetched for next epoch
 	mockTicker.Send(currentSlot.GetSlot())
-	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger head event
@@ -707,9 +704,8 @@ func TestScheduler_Attester_Reorg_Current_Indices_Changed(t *testing.T) {
 		},
 	})
 
-	// STEP 1: wait for attester duties to be fetched
+	// STEP 1: wait for attester duties to be fetched for next epoch
 	mockTicker.Send(currentSlot.GetSlot())
-	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger head event
@@ -754,10 +750,9 @@ func TestScheduler_Attester_Reorg_Current_Indices_Changed(t *testing.T) {
 	}))
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
-	// STEP 6: wait for attester duties to be fetched again for the current epoch and for next epoch due to indices change
+	// STEP 6: wait for attester duties to be fetched again for the next epoch due to indices change
 	currentSlot.SetSlot(phase0.Slot(49))
 	mockTicker.Send(currentSlot.GetSlot())
-	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 7: skip to the next epoch
@@ -855,11 +850,8 @@ func TestScheduler_Attester_Start_In_The_End_Of_The_Epoch(t *testing.T) {
 		},
 	})
 
-	// STEP 1: wait for attester duties to be fetched
+	// STEP 1: wait for attester duties to be fetched for the next epoch
 	mockTicker.Send(currentSlot.GetSlot())
-	// one request for current epoch
-	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
-	// one request for next epoch
 	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: wait for attester duties to be executed
@@ -894,9 +886,9 @@ func TestScheduler_Attester_Fetch_Execute_Next_Epoch_Duty(t *testing.T) {
 		},
 	})
 
-	// STEP 1: wait for attester duties to be fetched
+	// STEP 1: wait for no action to be taken
 	mockTicker.Send(currentSlot.GetSlot())
-	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: wait for no action to be taken
 	currentSlot.SetSlot(phase0.Slot(14))
