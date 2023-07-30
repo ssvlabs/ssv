@@ -99,6 +99,9 @@ func (ed *EventDispatcher) SyncHistory(ctx context.Context, fromBlock uint64) (l
 	if err != nil {
 		return 0, fmt.Errorf("handle historical block events: %w", err)
 	}
+	if fromBlock > lastProcessedBlock {
+		lastProcessedBlock = fromBlock
+	}
 	ed.metrics.LastBlockProcessed(lastProcessedBlock)
 
 	if err := <-fetchError; err != nil {
@@ -108,7 +111,7 @@ func (ed *EventDispatcher) SyncHistory(ctx context.Context, fromBlock uint64) (l
 	ed.logger.Info("finished syncing historical events",
 		zap.Uint64("from_block", fromBlock),
 		zap.Uint64("last_processed_block", lastProcessedBlock))
-	return
+	return lastProcessedBlock, nil
 }
 
 // SyncOngoing runs a loop which retrieves data from ExecutionClient event stream and passes them for processing.

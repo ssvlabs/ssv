@@ -15,7 +15,6 @@ import (
 
 	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/logging/fields"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
@@ -177,7 +176,6 @@ func (edh *EventDataHandler) handleValidatorAdded(txn basedb.Txn, event *contrac
 	if validatorShare == nil {
 		createdShare, err := edh.handleShareCreation(txn, event, sharePublicKeys, encryptedKeys)
 		if err != nil {
-
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
 				logger.Warn("malformed event", zap.Error(err))
@@ -244,43 +242,18 @@ func (edh *EventDataHandler) handleShareCreation(
 			return nil, errors.New("could not decode shareSecret")
 		}
 
-		logger := edh.logger.With(fields.PubKey(share.ValidatorPubKey))
-
-		// get metadata
-		if updated, err := updateShareMetadata(share, edh.beacon); err != nil {
-			logger.Warn("could not add validator metadata", zap.Error(err))
-		} else if !updated {
-			logger.Warn("could not find validator metadata")
-		}
-
-		// save secret key
+		// Save secret key into KeyManager.
 		if err := edh.keyManager.AddShare(shareSecret); err != nil {
 			return nil, fmt.Errorf("could not add share secret to key manager: %w", err)
 		}
 	}
 
-	// save validator data
+	// Save share.
 	if err := edh.nodeStorage.Shares().Save(txn, share); err != nil {
 		return nil, fmt.Errorf("could not save validator share: %w", err)
 	}
 
 	return share, nil
-}
-
-func updateShareMetadata(share *ssvtypes.SSVShare, bc beaconprotocol.BeaconNode) (bool, error) {
-	pk := hex.EncodeToString(share.ValidatorPubKey)
-	results, err := beaconprotocol.FetchValidatorsMetadata(bc, [][]byte{share.ValidatorPubKey})
-	if err != nil {
-		return false, fmt.Errorf("failed to fetch metadata for share: %w", err)
-	}
-
-	meta, ok := results[pk]
-	if !ok {
-		return false, nil
-	}
-
-	share.BeaconMetadata = meta
-	return true, nil
 }
 
 func validatorAddedEventToShare(
