@@ -477,7 +477,7 @@ func setupEventHandling(
 		eventParser,
 		validatorCtrl,
 		networkConfig.Domain,
-		cfg.SSVOptions.ValidatorOptions.OperatorData,
+		validatorCtrl,
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider,
 		cfg.SSVOptions.ValidatorOptions.KeyManager,
 		cfg.SSVOptions.ValidatorOptions.Beacon,
@@ -520,11 +520,13 @@ func setupEventHandling(
 			logger.Fatal("error occurred while running event dispatcher", zap.Error(err))
 		}
 	} else {
+		// Sync historical registry events.
 		lastProcessedBlock, err := eventDispatcher.SyncHistory(ctx, fromBlock.Uint64())
 		if err != nil {
 			logger.Fatal("failed to sync historical registry events", zap.Error(err))
 		}
 
+		// Print registry stats.
 		shares := nodeStorage.Shares().List(nil)
 		operators, err := nodeStorage.ListOperators(nil, 0, 0)
 		if err != nil {
@@ -539,7 +541,6 @@ func setupEventHandling(
 				}
 			}
 		}
-
 		logger.Info("historical registry sync stats",
 			zap.Int("validators", len(shares)),
 			zap.Int("operators", len(operators)),
@@ -547,6 +548,7 @@ func setupEventHandling(
 			zap.Int("my_validators", operatorValidatorsCount),
 		)
 
+		// Sync ongoing registry events in the background.
 		go func() {
 			err = eventDispatcher.SyncOngoing(ctx, lastProcessedBlock+1)
 			if err != nil {

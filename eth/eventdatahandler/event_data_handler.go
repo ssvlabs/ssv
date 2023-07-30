@@ -48,12 +48,17 @@ type taskExecutor interface {
 
 type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
 
+type OperatorData interface {
+	GetOperatorData() *storage.OperatorData
+	SetOperatorData(*storage.OperatorData)
+}
+
 type EventDataHandler struct {
 	nodeStorage                nodestorage.Storage
 	taskExecutor               taskExecutor
 	eventParser                eventparser.Parser
 	domain                     spectypes.DomainType
-	operatorData               *storage.OperatorData
+	operatorData               OperatorData
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider
 	keyManager                 spectypes.KeyManager
 	beacon                     beaconprotocol.BeaconNode
@@ -70,7 +75,7 @@ func New(
 	eventParser eventparser.Parser,
 	taskExecutor taskExecutor,
 	domain spectypes.DomainType,
-	operatorData *storage.OperatorData,
+	operatorData OperatorData,
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider,
 	keyManager spectypes.KeyManager,
 	beacon beaconprotocol.BeaconNode,

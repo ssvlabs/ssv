@@ -101,6 +101,7 @@ type Controller interface {
 	//  - the amount of validators assigned to this operator
 	GetValidatorStats() (uint64, uint64, uint64, error)
 	GetOperatorData() *registrystorage.OperatorData
+	SetOperatorData(data *registrystorage.OperatorData)
 
 	StartValidator(share *ssvtypes.SSVShare) error
 	StopValidator(publicKey []byte) error
@@ -140,6 +141,7 @@ type controller struct {
 
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider
 	operatorData               *registrystorage.OperatorData
+	operatorDataMutex          sync.RWMutex
 
 	validatorsMap    *validatorsMap
 	validatorOptions *validator.Options
@@ -270,11 +272,19 @@ func (c *controller) setupNetworkHandlers() error {
 }
 
 func (c *controller) GetOperatorShares() []*ssvtypes.SSVShare {
-	return c.sharesStorage.List(nil, registrystorage.ByOperatorID(c.operatorData.ID), registrystorage.ByActiveValidator())
+	return c.sharesStorage.List(nil, registrystorage.ByOperatorID(c.GetOperatorData().ID), registrystorage.ByActiveValidator())
 }
 
 func (c *controller) GetOperatorData() *registrystorage.OperatorData {
+	c.operatorDataMutex.RLock()
+	defer c.operatorDataMutex.RUnlock()
 	return c.operatorData
+}
+
+func (c *controller) SetOperatorData(data *registrystorage.OperatorData) {
+	c.operatorDataMutex.Lock()
+	defer c.operatorDataMutex.Unlock()
+	c.operatorData = data
 }
 
 func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
@@ -282,7 +292,7 @@ func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
 	operatorShares := uint64(0)
 	active := uint64(0)
 	for _, s := range allShares {
-		if ok := s.BelongsToOperator(c.operatorData.ID); ok {
+		if ok := s.BelongsToOperator(c.GetOperatorData().ID); ok {
 			operatorShares++
 		}
 		if s.HasBeaconMetadata() && s.BeaconMetadata.IsAttesting() {
@@ -385,7 +395,7 @@ func (c *controller) StartValidators() {
 		return
 	}
 
-	shares := c.sharesStorage.List(nil, registrystorage.ByOperatorID(c.operatorData.ID), registrystorage.ByNotLiquidated())
+	shares := c.sharesStorage.List(nil, registrystorage.ByOperatorID(c.GetOperatorData().ID), registrystorage.ByNotLiquidated())
 	if len(shares) == 0 {
 		c.logger.Info("could not find validators")
 		return
@@ -511,7 +521,7 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 	if share == nil {
 		return errors.New("share was not found")
 	}
-	if !share.BelongsToOperator(c.operatorData.ID) {
+	if !share.BelongsToOperator(c.GetOperatorData().ID) {
 		return nil
 	}
 
@@ -664,7 +674,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 		filters := []registrystorage.SharesFilter{registrystorage.ByNotLiquidated()}
 		if !c.validatorOptions.Exporter {
 			// If we're not an exporter node, fetch only for validators of our operator.
-			filters = append(filters, registrystorage.ByOperatorID(c.operatorData.ID))
+			filters = append(filters, registrystorage.ByOperatorID(c.GetOperatorData().ID))
 		}
 		shares := c.sharesStorage.List(nil, filters...)
 		var pks [][]byte
