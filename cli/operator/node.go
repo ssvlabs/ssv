@@ -543,6 +543,7 @@ func setupEventHandling(
 		logger.Info("historical registry sync stats",
 			zap.Int("validators", len(shares)),
 			zap.Int("operators", len(operators)),
+			zap.Uint64("my_operator_id", operatorID),
 			zap.Int("my_validators", operatorValidatorsCount),
 		)
 
