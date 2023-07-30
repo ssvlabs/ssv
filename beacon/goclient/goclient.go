@@ -31,7 +31,7 @@ import (
 const DataVersionNil spec.DataVersion = math.MaxUint64
 
 const (
-	healthCheckTimeout = 10 * time.Second
+	healthCheckTimeout = 500 * time.Millisecond
 )
 
 type beaconNodeStatus int32
@@ -156,6 +156,26 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 	go client.registrationSubmitter(tickerChan)
 
 	return client, nil
+}
+
+// IsReady returns if beacon node is currently ready: responds to requests, not in the syncing state, not optimistic
+// (for optimistic see https://github.com/ethereum/consensus-specs/blob/dev/sync/optimistic.md#block-production).
+func (gc *goClient) IsReady(ctx context.Context) (bool, error) {
+	syncState, err := gc.client.NodeSyncing(ctx)
+	if err != nil {
+		// TODO: get rid of global variable, pass metrics to goClient
+		metricsBeaconNodeStatus.Set(float64(statusUnknown))
+		return false, err
+	}
+
+	// TODO: also check if syncState.ElOffline when github.com/attestantio/go-eth2-client supports it
+	if syncState == nil || syncState.IsSyncing || syncState.IsOptimistic {
+		metricsBeaconNodeStatus.Set(float64(statusSyncing))
+		return false, nil
+	}
+
+	metricsBeaconNodeStatus.Set(float64(statusOK))
+	return true, nil
 }
 
 // HealthCheck provides health status of beacon node

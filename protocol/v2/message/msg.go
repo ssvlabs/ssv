@@ -3,6 +3,7 @@ package message
 import (
 	"fmt"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
@@ -27,7 +28,22 @@ func MsgTypeToString(mt spectypes.MsgType) string {
 	case SSVEventMsgType:
 		return "event"
 	default:
-		return fmt.Sprintf("unknown - %d", mt)
+		return fmt.Sprintf("unknown(%d)", mt)
+	}
+}
+
+func QBFTMsgTypeToString(mt specqbft.MessageType) string {
+	switch mt {
+	case specqbft.ProposalMsgType:
+		return "proposal"
+	case specqbft.PrepareMsgType:
+		return "prepare"
+	case specqbft.CommitMsgType:
+		return "commit"
+	case specqbft.RoundChangeMsgType:
+		return "round_change"
+	default:
+		return fmt.Sprintf("unknown(%d)", mt)
 	}
 }
 

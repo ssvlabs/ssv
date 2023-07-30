@@ -20,8 +20,8 @@ func TestStreamCtrl(t *testing.T) {
 	prot := protocol.ID("/test/protocol")
 
 	logger := logging.TestLogger(t)
-	ctrl0 := NewStreamController(context.Background(), hosts[0], genesis.New(), time.Second)
-	ctrl1 := NewStreamController(context.Background(), hosts[1], genesis.New(), time.Second)
+	ctrl0 := NewStreamController(context.Background(), hosts[0], genesis.New(), time.Second, time.Second)
+	ctrl1 := NewStreamController(context.Background(), hosts[1], genesis.New(), time.Second, time.Second)
 
 	t.Run("handle request", func(t *testing.T) {
 		hosts[0].SetStreamHandler(prot, func(stream libp2pnetwork.Stream) {
@@ -43,7 +43,7 @@ func TestStreamCtrl(t *testing.T) {
 
 	t.Run("request deadline", func(t *testing.T) {
 		timeout := time.Millisecond * 10
-		ctrl0.(*streamCtrl).requestTimeout = timeout
+		ctrl0.(*streamCtrl).readWriteTimeout = timeout
 		hosts[1].SetStreamHandler(prot, func(stream libp2pnetwork.Stream) {
 			msg, s, done, err := ctrl0.HandleStream(logger, stream)
 			done()

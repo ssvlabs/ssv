@@ -4,9 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/networkconfig"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
@@ -16,8 +13,10 @@ import (
 	"github.com/bloxapp/ssv/exporter"
 	"github.com/bloxapp/ssv/exporter/api"
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/duties"
 	"github.com/bloxapp/ssv/operator/fee_recipient"
 	"github.com/bloxapp/ssv/operator/slot_ticker"
@@ -40,9 +39,9 @@ type Options struct {
 	NetworkName         string `yaml:"Network" env:"NETWORK" env-default:"mainnet" env-description:"Network is the network of this node"`
 	Network             networkconfig.NetworkConfig
 	BeaconNode          beaconprotocol.BeaconNode
+	Eth1Client          eth1.Client
 	P2PNetwork          network.P2PNetwork
 	Context             context.Context
-	Eth1Client          eth1.Client
 	DB                  basedb.IDb
 	ValidatorController validator.Controller
 	DutyExec            duties.DutyExecutor
@@ -180,7 +179,8 @@ func (n *operatorNode) StartEth1(logger *zap.Logger, syncOffset *eth1.SyncOffset
 	if err := eth1.SyncEth1Events(logger, n.eth1Client, n.storage, n.network, syncOffset, handler); err != nil {
 		return errors.Wrap(err, "failed to sync contract events")
 	}
-	logger.Info("manage to sync contract events")
+
+	logger.Info("finished syncing contract events")
 	shares := n.storage.Shares().List()
 	operators, err := n.storage.ListOperators(logger, 0, 0)
 	if err != nil {
@@ -197,9 +197,9 @@ func (n *operatorNode) StartEth1(logger *zap.Logger, syncOffset *eth1.SyncOffset
 	}
 
 	logger.Info("ETH1 sync history stats",
-		zap.Int("validators count", len(shares)),
-		zap.Int("operators count", len(operators)),
-		zap.Int("my validators count", operatorValidatorsCount),
+		zap.Int("operators", len(operators)),
+		zap.Int("validators", len(shares)),
+		zap.Int("my_validators", operatorValidatorsCount),
 	)
 
 	// setup validator controller to listen to new events

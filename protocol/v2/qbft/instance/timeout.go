@@ -6,7 +6,13 @@ import (
 	"go.uber.org/zap"
 )
 
+var CutoffRound = 15 // stop processing instances after 8*2+120*6 = 14.2 min (~ 2 epochs)
+
 func (i *Instance) UponRoundTimeout(logger *zap.Logger) error {
+	if !i.CanProcessMessages() {
+		return errors.New("instance stopped processing timeouts")
+	}
+
 	newRound := i.State.Round + 1
 	logger.Debug("⌛ round timed out", fields.Round(newRound))
 

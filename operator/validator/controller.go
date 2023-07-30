@@ -7,16 +7,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jellydator/ttlcache/v3"
-
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/logging/fields"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"go.uber.org/zap"
@@ -24,6 +20,8 @@ import (
 	"github.com/bloxapp/ssv/eth1"
 	"github.com/bloxapp/ssv/eth1/abiparser"
 	"github.com/bloxapp/ssv/ibft/storage"
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/network"
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	nodestorage "github.com/bloxapp/ssv/operator/storage"
@@ -465,7 +463,10 @@ func (c *controller) setupNonCommitteeValidators(logger *zap.Logger) {
 		return
 	}
 
+	pubKeys := make([][]byte, 0, len(nonCommitteeShares))
 	for _, validatorShare := range nonCommitteeShares {
+		pubKeys = append(pubKeys, validatorShare.ValidatorPubKey)
+
 		opts := *c.validatorOptions
 		opts.SSVShare = validatorShare
 		allRoles := []spectypes.BeaconRole{
@@ -481,6 +482,13 @@ func (c *controller) setupNonCommitteeValidators(logger *zap.Logger) {
 			if err != nil {
 				logger.Error("failed to sync highest decided", zap.Error(err))
 			}
+		}
+	}
+
+	if len(pubKeys) > 0 {
+		logger.Debug("updating metadata for non-committee validators", zap.Int("count", len(pubKeys)))
+		if err := beaconprotocol.UpdateValidatorsMetadata(logger, pubKeys, c, c.beacon, c.onMetadataUpdated); err != nil {
+			logger.Warn("could not update all validators", zap.Error(err))
 		}
 	}
 }
@@ -512,7 +520,20 @@ func (c *controller) UpdateValidatorMetadata(logger *zap.Logger, pk string, meta
 		return errors.Wrap(err, "could not update validator metadata")
 	}
 
-	// Update metadata in memory, and start validator if needed.
+	// If this validator is not ours, don't start it.
+	pkBytes, err := hex.DecodeString(pk)
+	if err != nil {
+		return errors.Wrap(err, "could not decode public key")
+	}
+	share := c.sharesStorage.Get(pkBytes)
+	if share == nil {
+		return errors.New("share was not found")
+	}
+	if !share.BelongsToOperator(c.operatorData.ID) {
+		return nil
+	}
+
+	// Start validator (if not already started).
 	if v, found := c.validatorsMap.GetValidator(pk); found {
 		v.Share.BeaconMetadata = metadata
 		_, err := c.startValidator(logger, v)
@@ -522,14 +543,6 @@ func (c *controller) UpdateValidatorMetadata(logger *zap.Logger, pk string, meta
 	} else {
 		logger.Info("starting new validator", zap.String("pubKey", pk))
 
-		pkBytes, err := hex.DecodeString(pk)
-		if err != nil {
-			return errors.Wrap(err, "could not decode public key")
-		}
-		share := c.sharesStorage.Get(pkBytes)
-		if share == nil {
-			return errors.New("share was not found")
-		}
 		started, err := c.onShareStart(logger, share)
 		if err != nil {
 			return errors.Wrap(err, "could not start validator")
@@ -689,7 +702,12 @@ func (c *controller) UpdateValidatorMetaDataLoop(logger *zap.Logger) {
 	for {
 		time.Sleep(c.metadataUpdateInterval)
 
-		shares := c.sharesStorage.List(registrystorage.ByOperatorID(c.operatorData.ID), registrystorage.ByNotLiquidated())
+		filters := []registrystorage.SharesFilter{registrystorage.ByNotLiquidated()}
+		if !c.validatorOptions.Exporter {
+			// If we're not an exporter node, fetch only for validators of our operator.
+			filters = append(filters, registrystorage.ByOperatorID(c.operatorData.ID))
+		}
+		shares := c.sharesStorage.List(filters...)
 		var pks [][]byte
 		for _, share := range shares {
 			pks = append(pks, share.ValidatorPubKey)

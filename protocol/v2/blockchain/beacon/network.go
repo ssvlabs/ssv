@@ -4,18 +4,37 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-
 	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
 // Network is a beacon chain network.
 type Network struct {
 	spectypes.BeaconNetwork
+	LocalTestNet bool
 }
 
 // NewNetwork creates a new beacon chain network.
 func NewNetwork(network spectypes.BeaconNetwork) Network {
-	return Network{network}
+	return Network{
+		BeaconNetwork: network,
+		LocalTestNet:  false,
+	}
+}
+
+// NewLocalTestNetwork creates a new local beacon chain network.
+func NewLocalTestNetwork(network spectypes.BeaconNetwork) Network {
+	return Network{
+		BeaconNetwork: network,
+		LocalTestNet:  true,
+	}
+}
+
+// MinGenesisTime returns min genesis time value
+func (n Network) MinGenesisTime() uint64 {
+	if n.LocalTestNet {
+		return 1689072978
+	}
+	return n.BeaconNetwork.MinGenesisTime()
 }
 
 // GetSlotStartTime returns the start time for the given slot

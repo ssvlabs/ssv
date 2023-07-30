@@ -1,6 +1,7 @@
 package eth1
 
 import (
+	"context"
 	"math/big"
 
 	"go.uber.org/zap"
@@ -25,8 +26,8 @@ type Event struct {
 type SyncEndedEvent struct {
 	// Success returns true if the sync went well (all events were parsed)
 	Success bool
-	// Logs is the actual logs that we got from eth1
-	Logs []types.Log
+	// Block is the block number of the last block synced
+	Block uint64
 }
 
 // Client represents the required interface for eth1 client
@@ -34,4 +35,5 @@ type Client interface {
 	EventsFeed() *event.Feed
 	Start(logger *zap.Logger) error
 	Sync(logger *zap.Logger, fromBlock *big.Int) error
+	IsReady(ctx context.Context) (bool, error)
 }

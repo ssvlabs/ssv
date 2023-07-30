@@ -15,12 +15,18 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"
+	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/peers/connections/mock"
 	"github.com/bloxapp/ssv/network/testing"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
+
+// PeersIndexProvider holds peers index instance
+type PeersIndexProvider interface {
+	PeersIndex() peers.Index
+}
 
 // HostProvider holds host instance
 type HostProvider interface {
@@ -150,7 +156,7 @@ func NewLocalNet(ctx context.Context, logger *zap.Logger, n int, forkVersion for
 		}
 	}
 	i := 0
-	nodes, keys, err := testing.NewLocalNetwork(ctx, n, func(pctx context.Context, keys testing.NodeKeys) network.P2PNetwork {
+	nodes, keys, err := testing.NewLocalTestnet(ctx, n, func(pctx context.Context, keys testing.NodeKeys) network.P2PNetwork {
 		i++
 		logger := logger.Named(fmt.Sprintf("node-%d", i))
 		p, err := ln.NewTestP2pNetwork(pctx, keys, logger, forkVersion, n)

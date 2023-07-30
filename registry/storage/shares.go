@@ -18,8 +18,11 @@ import (
 
 var sharesPrefix = []byte("shares")
 
+// SharesFilter is a function that filters shares.
+type SharesFilter func(*types.SSVShare) bool
+
 // SharesListFunc is a function that returns a filtered list of shares.
-type SharesListFunc = func(filters ...func(share *types.SSVShare) bool) []*types.SSVShare
+type SharesListFunc = func(filters ...SharesFilter) []*types.SSVShare
 
 // Shares is the interface for managing shares.
 type Shares interface {
@@ -29,7 +32,7 @@ type Shares interface {
 	Get(pubKey []byte) *types.SSVShare
 
 	// List returns a list of shares, filtered by the given filters (if any).
-	List(filters ...func(*types.SSVShare) bool) []*types.SSVShare
+	List(filters ...SharesFilter) []*types.SSVShare
 
 	// Save saves the given shares.
 	Save(shares ...*types.SSVShare) error
@@ -80,7 +83,7 @@ func (s *sharesStorage) Get(pubKey []byte) *types.SSVShare {
 	return s.shares[hex.EncodeToString(pubKey)]
 }
 
-func (s *sharesStorage) List(filters ...func(*types.SSVShare) bool) []*types.SSVShare {
+func (s *sharesStorage) List(filters ...SharesFilter) []*types.SSVShare {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -171,28 +174,28 @@ func (s *sharesStorage) storageKey(pk []byte) []byte {
 }
 
 // ByOperatorID filters by operator ID.
-func ByOperatorID(operatorID spectypes.OperatorID) func(share *types.SSVShare) bool {
+func ByOperatorID(operatorID spectypes.OperatorID) SharesFilter {
 	return func(share *types.SSVShare) bool {
 		return share.BelongsToOperator(operatorID)
 	}
 }
 
 // ByNotLiquidated filters for not liquidated.
-func ByNotLiquidated() func(share *types.SSVShare) bool {
+func ByNotLiquidated() SharesFilter {
 	return func(share *types.SSVShare) bool {
 		return !share.Liquidated
 	}
 }
 
 // ByActiveValidator filters for active validators.
-func ByActiveValidator() func(share *types.SSVShare) bool {
+func ByActiveValidator() SharesFilter {
 	return func(share *types.SSVShare) bool {
 		return share.HasBeaconMetadata()
 	}
 }
 
 // ByClusterID filters by cluster id.
-func ByClusterID(clusterID []byte) func(share *types.SSVShare) bool {
+func ByClusterID(clusterID []byte) SharesFilter {
 	return func(share *types.SSVShare) bool {
 		var operatorIDs []uint64
 		for _, op := range share.Committee {

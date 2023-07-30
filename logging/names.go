@@ -12,6 +12,7 @@ const (
 	NameSignerStorage    = "SignerStorage"
 	NameValidator        = "Validator"
 	NameWSServer         = "WSServer"
+	NameConnHandler      = "ConnHandler"
 
 	NameBadgerDBLog       = "BadgerDBLog"
 	NameBadgerDBReporting = "BadgerDBReporting"
