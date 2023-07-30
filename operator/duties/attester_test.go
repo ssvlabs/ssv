@@ -8,6 +8,7 @@ import (
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/cornelk/hashmap"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -15,21 +16,23 @@ import (
 	"github.com/bloxapp/ssv/operator/duties/mocks"
 )
 
-func setupAttesterDutiesMock(s *Scheduler, dutiesMap map[phase0.Epoch][]*v1.AttesterDuty) (chan struct{}, chan []*spectypes.Duty) {
+func setupAttesterDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[phase0.Epoch, []*v1.AttesterDuty]) (chan struct{}, chan []*spectypes.Duty) {
 	fetchDutiesCall := make(chan struct{})
 	executeDutiesCall := make(chan []*spectypes.Duty)
 
 	s.beaconNode.(*mocks.MockBeaconNode).EXPECT().AttesterDuties(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*v1.AttesterDuty, error) {
 			fetchDutiesCall <- struct{}{}
-			return dutiesMap[epoch], nil
+			duties, _ := dutiesMap.Get(epoch)
+			return duties, nil
 		}).AnyTimes()
 
 	s.validatorController.(*mocks.MockValidatorController).EXPECT().ActiveValidatorIndices(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(logger *zap.Logger, epoch phase0.Epoch) []phase0.ValidatorIndex {
 			uniqueIndices := make(map[phase0.ValidatorIndex]bool)
 
-			for _, d := range dutiesMap[epoch] {
+			duties, _ := dutiesMap.Get(epoch)
+			for _, d := range duties {
 				uniqueIndices[d.ValidatorIndex] = true
 			}
 
@@ -59,22 +62,23 @@ func TestScheduler_Attester_Same_Slot(t *testing.T) {
 	var (
 		handler     = NewAttesterHandler()
 		currentSlot = &SlotValue{}
-		dutiesMap   = make(map[phase0.Epoch][]*v1.AttesterDuty)
+		dutiesMap   = hashmap.New[phase0.Epoch, []*v1.AttesterDuty]()
 	)
 	currentSlot.SetSlot(phase0.Slot(1))
 	scheduler, logger, ticker, timeout, cancel, schedulerPool := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap)
 
-	dutiesMap[phase0.Epoch(0)] = []*v1.AttesterDuty{
+	dutiesMap.Set(phase0.Epoch(0), []*v1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
 			Slot:           phase0.Slot(1),
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
-	}
+	})
 
 	// STEP 1: wait for attester duties to be fetched and executed at the same slot
-	expected := expectedExecutedAttesterDuties(handler, dutiesMap[phase0.Epoch(0)])
+	duties, _ := dutiesMap.Get(phase0.Epoch(0))
+	expected := expectedExecutedAttesterDuties(handler, duties)
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	startTime := time.Now()
@@ -94,19 +98,19 @@ func TestScheduler_Attester_Diff_Slots(t *testing.T) {
 	var (
 		handler     = NewAttesterHandler()
 		currentSlot = &SlotValue{}
-		dutiesMap   = make(map[phase0.Epoch][]*v1.AttesterDuty)
+		dutiesMap   = hashmap.New[phase0.Epoch, []*v1.AttesterDuty]()
 	)
 	currentSlot.SetSlot(phase0.Slot(0))
 	scheduler, logger, ticker, timeout, cancel, schedulerPool := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap)
 
-	dutiesMap[phase0.Epoch(0)] = []*v1.AttesterDuty{
+	dutiesMap.Set(phase0.Epoch(0), []*v1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
 			Slot:           phase0.Slot(2),
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
-	}
+	})
 
 	// STEP 1: wait for attester duties to be fetched
 	ticker.Send(currentSlot.GetSlot())
@@ -119,7 +123,8 @@ func TestScheduler_Attester_Diff_Slots(t *testing.T) {
 
 	// STEP 3: wait for attester duties to be executed
 	currentSlot.SetSlot(phase0.Slot(2))
-	expected := expectedExecutedAttesterDuties(handler, dutiesMap[phase0.Epoch(0)])
+	duties, _ := dutiesMap.Get(phase0.Epoch(0))
+	expected := expectedExecutedAttesterDuties(handler, duties)
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.GetSlot())
@@ -134,7 +139,7 @@ func TestScheduler_Attester_Indices_Changed(t *testing.T) {
 	var (
 		handler     = NewAttesterHandler()
 		currentSlot = &SlotValue{}
-		dutiesMap   = make(map[phase0.Epoch][]*v1.AttesterDuty)
+		dutiesMap   = hashmap.New[phase0.Epoch, []*v1.AttesterDuty]()
 	)
 	currentSlot.SetSlot(phase0.Slot(0))
 	scheduler, logger, mockTicker, timeout, cancel, schedulerPool := setupSchedulerAndMocks(t, handler, currentSlot)
@@ -143,10 +148,13 @@ func TestScheduler_Attester_Indices_Changed(t *testing.T) {
 	// STEP 1: wait for attester duties to be fetched
 	mockTicker.Send(currentSlot.GetSlot())
 	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 2: trigger a change in active indices
 	scheduler.indicesChg <- struct{}{}
-	dutiesMap[phase0.Epoch(0)] = []*v1.AttesterDuty{
+	// no execution should happen in slot 0
+	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	dutiesMap.Set(phase0.Epoch(0), []*v1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
 			Slot:           phase0.Slot(0),
@@ -162,9 +170,7 @@ func TestScheduler_Attester_Indices_Changed(t *testing.T) {
 			Slot:           phase0.Slot(2),
 			ValidatorIndex: phase0.ValidatorIndex(3),
 		},
-	}
-	// no execution should happen in slot 0
-	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
+	})
 
 	// STEP 3: wait for attester duties to be fetched again
 	currentSlot.SetSlot(phase0.Slot(1))
@@ -175,7 +181,8 @@ func TestScheduler_Attester_Indices_Changed(t *testing.T) {
 
 	// STEP 4: wait for attester duties to be executed
 	currentSlot.SetSlot(phase0.Slot(2))
-	expected := expectedExecutedAttesterDuties(handler, []*v1.AttesterDuty{dutiesMap[phase0.Epoch(0)][2]})
+	duties, _ := dutiesMap.Get(phase0.Epoch(0))
+	expected := expectedExecutedAttesterDuties(handler, []*v1.AttesterDuty{duties[2]})
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	mockTicker.Send(currentSlot.GetSlot())
@@ -190,7 +197,7 @@ func TestScheduler_Attester_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 	var (
 		handler     = NewAttesterHandler()
 		currentSlot = &SlotValue{}
-		dutiesMap   = make(map[phase0.Epoch][]*v1.AttesterDuty)
+		dutiesMap   = hashmap.New[phase0.Epoch, []*v1.AttesterDuty]()
 	)
 	currentSlot.SetSlot(phase0.Slot(0))
 	scheduler, logger, mockTicker, timeout, cancel, schedulerPool := setupSchedulerAndMocks(t, handler, currentSlot)
@@ -207,20 +214,22 @@ func TestScheduler_Attester_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 
 	// STEP 3: trigger a change in active indices
 	scheduler.indicesChg <- struct{}{}
-	dutiesMap[phase0.Epoch(0)] = append(dutiesMap[phase0.Epoch(0)], &v1.AttesterDuty{
+	duties, _ := dutiesMap.Get(phase0.Epoch(0))
+	dutiesMap.Set(phase0.Epoch(0), append(duties, &v1.AttesterDuty{
 		PubKey:         phase0.BLSPubKey{1, 2, 3},
 		Slot:           phase0.Slot(3),
 		ValidatorIndex: phase0.ValidatorIndex(1),
-	})
+	}))
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 4: trigger a change in active indices in the same slot
 	scheduler.indicesChg <- struct{}{}
-	dutiesMap[phase0.Epoch(0)] = append(dutiesMap[phase0.Epoch(0)], &v1.AttesterDuty{
+	duties, _ = dutiesMap.Get(phase0.Epoch(0))
+	dutiesMap.Set(phase0.Epoch(0), append(duties, &v1.AttesterDuty{
 		PubKey:         phase0.BLSPubKey{1, 2, 4},
 		Slot:           phase0.Slot(4),
 		ValidatorIndex: phase0.ValidatorIndex(2),
-	})
+	}))
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 5: wait for attester duties to be fetched
@@ -230,7 +239,8 @@ func TestScheduler_Attester_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 
 	// STEP 6: wait for attester duties to be executed
 	currentSlot.SetSlot(phase0.Slot(3))
-	expected := expectedExecutedAttesterDuties(handler, []*v1.AttesterDuty{dutiesMap[phase0.Epoch(0)][0]})
+	duties, _ = dutiesMap.Get(phase0.Epoch(0))
+	expected := expectedExecutedAttesterDuties(handler, []*v1.AttesterDuty{duties[0]})
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	mockTicker.Send(currentSlot.GetSlot())
@@ -238,7 +248,8 @@ func TestScheduler_Attester_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 
 	// STEP 7: wait for attester duties to be executed
 	currentSlot.SetSlot(phase0.Slot(4))
-	expected = expectedExecutedAttesterDuties(handler, []*v1.AttesterDuty{dutiesMap[phase0.Epoch(0)][1]})
+	duties, _ = dutiesMap.Get(phase0.Epoch(0))
+	expected = expectedExecutedAttesterDuties(handler, []*v1.AttesterDuty{duties[1]})
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	mockTicker.Send(currentSlot.GetSlot())
@@ -254,19 +265,19 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition(t *testing.T) {
 	var (
 		handler     = NewAttesterHandler()
 		currentSlot = &SlotValue{}
-		dutiesMap   = make(map[phase0.Epoch][]*v1.AttesterDuty)
+		dutiesMap   = hashmap.New[phase0.Epoch, []*v1.AttesterDuty]()
 	)
 	currentSlot.SetSlot(phase0.Slot(63))
 	scheduler, logger, mockTicker, timeout, cancel, schedulerPool := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap)
 
-	dutiesMap[phase0.Epoch(2)] = []*v1.AttesterDuty{
+	dutiesMap.Set(phase0.Epoch(2), []*v1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
 			Slot:           phase0.Slot(66),
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
-	}
+	})
 
 	// STEP 1: wait for attester duties to be fetched for current and next epoch
 	mockTicker.Send(currentSlot.GetSlot())
@@ -296,13 +307,13 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition(t *testing.T) {
 			PreviousDutyDependentRoot: phase0.Root{0x02},
 		},
 	}
-	dutiesMap[phase0.Epoch(2)] = []*v1.AttesterDuty{
+	dutiesMap.Set(phase0.Epoch(2), []*v1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
 			Slot:           phase0.Slot(67),
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
-	}
+	})
 	scheduler.HandleHeadEvent(logger)(e)
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
@@ -318,7 +329,8 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition(t *testing.T) {
 
 	// STEP 7: The second assigned duty should be executed
 	currentSlot.SetSlot(phase0.Slot(67))
-	expected := expectedExecutedAttesterDuties(handler, dutiesMap[phase0.Epoch(2)])
+	duties, _ := dutiesMap.Get(phase0.Epoch(2))
+	expected := expectedExecutedAttesterDuties(handler, duties)
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	mockTicker.Send(currentSlot.GetSlot())
@@ -334,19 +346,19 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition_Indices_Changed(t *t
 	var (
 		handler     = NewAttesterHandler()
 		currentSlot = &SlotValue{}
-		dutiesMap   = make(map[phase0.Epoch][]*v1.AttesterDuty)
+		dutiesMap   = hashmap.New[phase0.Epoch, []*v1.AttesterDuty]()
 	)
 	currentSlot.SetSlot(phase0.Slot(63))
 	scheduler, logger, mockTicker, timeout, cancel, schedulerPool := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap)
 
-	dutiesMap[phase0.Epoch(2)] = []*v1.AttesterDuty{
+	dutiesMap.Set(phase0.Epoch(2), []*v1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
 			Slot:           phase0.Slot(66),
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
-	}
+	})
 
 	// STEP 1: wait for attester duties to be fetched for current and next epoch
 	mockTicker.Send(currentSlot.GetSlot())
@@ -376,23 +388,24 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition_Indices_Changed(t *t
 			PreviousDutyDependentRoot: phase0.Root{0x02},
 		},
 	}
-	dutiesMap[phase0.Epoch(2)] = []*v1.AttesterDuty{
+	dutiesMap.Set(phase0.Epoch(2), []*v1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
 			Slot:           phase0.Slot(67),
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
-	}
+	})
 	scheduler.HandleHeadEvent(logger)(e)
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 5: trigger indices change
 	scheduler.indicesChg <- struct{}{}
-	dutiesMap[phase0.Epoch(2)] = append(dutiesMap[phase0.Epoch(2)], &v1.AttesterDuty{
+	duties, _ := dutiesMap.Get(phase0.Epoch(2))
+	dutiesMap.Set(phase0.Epoch(2), append(duties, &v1.AttesterDuty{
 		PubKey:         phase0.BLSPubKey{1, 2, 4},
 		Slot:           phase0.Slot(67),
 		ValidatorIndex: phase0.ValidatorIndex(2),
-	})
+	}))
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 6: wait for attester duties to be fetched again for the current epoch
@@ -407,7 +420,8 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition_Indices_Changed(t *t
 
 	// STEP 8: The second assigned duty should be executed
 	currentSlot.SetSlot(phase0.Slot(67))
-	expected := expectedExecutedAttesterDuties(handler, dutiesMap[phase0.Epoch(2)])
+	duties, _ = dutiesMap.Get(phase0.Epoch(2))
+	expected := expectedExecutedAttesterDuties(handler, duties)
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	mockTicker.Send(currentSlot.GetSlot())
@@ -423,19 +437,19 @@ func TestScheduler_Attester_Reorg_Previous(t *testing.T) {
 	var (
 		handler     = NewAttesterHandler()
 		currentSlot = &SlotValue{}
-		dutiesMap   = make(map[phase0.Epoch][]*v1.AttesterDuty)
+		dutiesMap   = hashmap.New[phase0.Epoch, []*v1.AttesterDuty]()
 	)
 	currentSlot.SetSlot(phase0.Slot(32))
 	scheduler, logger, mockTicker, timeout, cancel, schedulerPool := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap)
 
-	dutiesMap[phase0.Epoch(1)] = []*v1.AttesterDuty{
+	dutiesMap.Set(phase0.Epoch(1), []*v1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
 			Slot:           phase0.Slot(35),
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
-	}
+	})
 
 	// STEP 1: wait for attester duties to be fetched
 	mockTicker.Send(currentSlot.GetSlot())
@@ -463,13 +477,13 @@ func TestScheduler_Attester_Reorg_Previous(t *testing.T) {
 			PreviousDutyDependentRoot: phase0.Root{0x02},
 		},
 	}
-	dutiesMap[phase0.Epoch(1)] = []*v1.AttesterDuty{
+	dutiesMap.Set(phase0.Epoch(1), []*v1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
 			Slot:           phase0.Slot(36),
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
-	}
+	})
 	scheduler.HandleHeadEvent(logger)(e)
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
@@ -485,7 +499,8 @@ func TestScheduler_Attester_Reorg_Previous(t *testing.T) {
 
 	// STEP 7: The second assigned duty should be executed
 	currentSlot.SetSlot(phase0.Slot(36))
-	expected := expectedExecutedAttesterDuties(handler, dutiesMap[phase0.Epoch(1)])
+	duties, _ := dutiesMap.Get(phase0.Epoch(1))
+	expected := expectedExecutedAttesterDuties(handler, duties)
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	mockTicker.Send(currentSlot.GetSlot())
@@ -501,19 +516,19 @@ func TestScheduler_Attester_Reorg_Previous_Indices_Change_Same_Slot(t *testing.T
 	var (
 		handler     = NewAttesterHandler()
 		currentSlot = &SlotValue{}
-		dutiesMap   = make(map[phase0.Epoch][]*v1.AttesterDuty)
+		dutiesMap   = hashmap.New[phase0.Epoch, []*v1.AttesterDuty]()
 	)
 	currentSlot.SetSlot(phase0.Slot(32))
 	scheduler, logger, mockTicker, timeout, cancel, schedulerPool := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap)
 
-	dutiesMap[phase0.Epoch(1)] = []*v1.AttesterDuty{
+	dutiesMap.Set(phase0.Epoch(1), []*v1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
 			Slot:           phase0.Slot(35),
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
-	}
+	})
 
 	// STEP 1: wait for attester duties to be fetched
 	mockTicker.Send(currentSlot.GetSlot())
@@ -541,23 +556,24 @@ func TestScheduler_Attester_Reorg_Previous_Indices_Change_Same_Slot(t *testing.T
 			PreviousDutyDependentRoot: phase0.Root{0x02},
 		},
 	}
-	dutiesMap[phase0.Epoch(1)] = []*v1.AttesterDuty{
+	dutiesMap.Set(phase0.Epoch(1), []*v1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
 			Slot:           phase0.Slot(36),
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
-	}
+	})
 	scheduler.HandleHeadEvent(logger)(e)
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 5: trigger indices change
 	scheduler.indicesChg <- struct{}{}
-	dutiesMap[phase0.Epoch(1)] = append(dutiesMap[phase0.Epoch(1)], &v1.AttesterDuty{
+	duties, _ := dutiesMap.Get(phase0.Epoch(1))
+	dutiesMap.Set(phase0.Epoch(1), append(duties, &v1.AttesterDuty{
 		PubKey:         phase0.BLSPubKey{1, 2, 4},
 		Slot:           phase0.Slot(36),
 		ValidatorIndex: phase0.ValidatorIndex(2),
-	})
+	}))
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 6: wait for attester duties to be fetched again for the current epoch
@@ -572,7 +588,8 @@ func TestScheduler_Attester_Reorg_Previous_Indices_Change_Same_Slot(t *testing.T
 
 	// STEP 8: The second and new from indices change assigned duties should be executed
 	currentSlot.SetSlot(phase0.Slot(36))
-	expected := expectedExecutedAttesterDuties(handler, dutiesMap[phase0.Epoch(1)])
+	duties, _ = dutiesMap.Get(phase0.Epoch(1))
+	expected := expectedExecutedAttesterDuties(handler, duties)
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	mockTicker.Send(currentSlot.GetSlot())
@@ -588,19 +605,19 @@ func TestScheduler_Attester_Reorg_Current(t *testing.T) {
 	var (
 		handler     = NewAttesterHandler()
 		currentSlot = &SlotValue{}
-		dutiesMap   = make(map[phase0.Epoch][]*v1.AttesterDuty)
+		dutiesMap   = hashmap.New[phase0.Epoch, []*v1.AttesterDuty]()
 	)
 	currentSlot.SetSlot(phase0.Slot(47))
 	scheduler, logger, mockTicker, timeout, cancel, schedulerPool := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap)
 
-	dutiesMap[phase0.Epoch(2)] = []*v1.AttesterDuty{
+	dutiesMap.Set(phase0.Epoch(2), []*v1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
 			Slot:           phase0.Slot(64),
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
-	}
+	})
 
 	// STEP 1: wait for attester duties to be fetched
 	mockTicker.Send(currentSlot.GetSlot())
@@ -629,13 +646,13 @@ func TestScheduler_Attester_Reorg_Current(t *testing.T) {
 			CurrentDutyDependentRoot: phase0.Root{0x02},
 		},
 	}
-	dutiesMap[phase0.Epoch(2)] = []*v1.AttesterDuty{
+	dutiesMap.Set(phase0.Epoch(2), []*v1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
 			Slot:           phase0.Slot(65),
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
-	}
+	})
 	scheduler.HandleHeadEvent(logger)(e)
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
@@ -659,9 +676,11 @@ func TestScheduler_Attester_Reorg_Current(t *testing.T) {
 
 	// STEP 8: The second assigned duty should be executed
 	currentSlot.SetSlot(phase0.Slot(65))
-	mockTicker.Send(currentSlot.GetSlot())
-	expected := expectedExecutedAttesterDuties(handler, dutiesMap[phase0.Epoch(2)])
+	duties, _ := dutiesMap.Get(phase0.Epoch(2))
+	expected := expectedExecutedAttesterDuties(handler, duties)
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+
+	mockTicker.Send(currentSlot.GetSlot())
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// Stop scheduler & wait for graceful exit.
@@ -674,19 +693,19 @@ func TestScheduler_Attester_Reorg_Current_Indices_Changed(t *testing.T) {
 	var (
 		handler     = NewAttesterHandler()
 		currentSlot = &SlotValue{}
-		dutiesMap   = make(map[phase0.Epoch][]*v1.AttesterDuty)
+		dutiesMap   = hashmap.New[phase0.Epoch, []*v1.AttesterDuty]()
 	)
 	currentSlot.SetSlot(phase0.Slot(47))
 	scheduler, logger, mockTicker, timeout, cancel, schedulerPool := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap)
 
-	dutiesMap[phase0.Epoch(2)] = []*v1.AttesterDuty{
+	dutiesMap.Set(phase0.Epoch(2), []*v1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
 			Slot:           phase0.Slot(64),
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
-	}
+	})
 
 	// STEP 1: wait for attester duties to be fetched
 	mockTicker.Send(currentSlot.GetSlot())
@@ -715,23 +734,24 @@ func TestScheduler_Attester_Reorg_Current_Indices_Changed(t *testing.T) {
 			CurrentDutyDependentRoot: phase0.Root{0x02},
 		},
 	}
-	dutiesMap[phase0.Epoch(2)] = []*v1.AttesterDuty{
+	dutiesMap.Set(phase0.Epoch(2), []*v1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
 			Slot:           phase0.Slot(65),
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
-	}
+	})
 	scheduler.HandleHeadEvent(logger)(e)
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 5: trigger indices change
 	scheduler.indicesChg <- struct{}{}
-	dutiesMap[phase0.Epoch(2)] = append(dutiesMap[phase0.Epoch(2)], &v1.AttesterDuty{
+	duties, _ := dutiesMap.Get(phase0.Epoch(2))
+	dutiesMap.Set(phase0.Epoch(2), append(duties, &v1.AttesterDuty{
 		PubKey:         phase0.BLSPubKey{1, 2, 4},
 		Slot:           phase0.Slot(65),
 		ValidatorIndex: phase0.ValidatorIndex(2),
-	})
+	}))
 	waitForNoAction(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
 
 	// STEP 6: wait for attester duties to be fetched again for the current epoch and for next epoch due to indices change
@@ -755,9 +775,11 @@ func TestScheduler_Attester_Reorg_Current_Indices_Changed(t *testing.T) {
 
 	// STEP 8: The second assigned duty should be executed
 	currentSlot.SetSlot(phase0.Slot(65))
-	mockTicker.Send(currentSlot.GetSlot())
-	expected := expectedExecutedAttesterDuties(handler, dutiesMap[phase0.Epoch(2)])
+	duties, _ = dutiesMap.Get(phase0.Epoch(2))
+	expected := expectedExecutedAttesterDuties(handler, duties)
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+
+	mockTicker.Send(currentSlot.GetSlot())
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// Stop scheduler & wait for graceful exit.
@@ -769,19 +791,19 @@ func TestScheduler_Attester_Early_Block(t *testing.T) {
 	var (
 		handler     = NewAttesterHandler()
 		currentSlot = &SlotValue{}
-		dutiesMap   = make(map[phase0.Epoch][]*v1.AttesterDuty)
+		dutiesMap   = hashmap.New[phase0.Epoch, []*v1.AttesterDuty]()
 	)
 	currentSlot.SetSlot(phase0.Slot(0))
 	scheduler, logger, mockTicker, timeout, cancel, schedulerPool := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap)
 
-	dutiesMap[phase0.Epoch(0)] = []*v1.AttesterDuty{
+	dutiesMap.Set(phase0.Epoch(0), []*v1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
 			Slot:           phase0.Slot(2),
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
-	}
+	})
 
 	// STEP 1: wait for attester duties to be fetched
 	mockTicker.Send(currentSlot.GetSlot())
@@ -796,7 +818,8 @@ func TestScheduler_Attester_Early_Block(t *testing.T) {
 	startTime := time.Now()
 	currentSlot.SetSlot(phase0.Slot(2))
 	mockTicker.Send(currentSlot.GetSlot())
-	expected := expectedExecutedAttesterDuties(handler, dutiesMap[phase0.Epoch(0)])
+	duties, _ := dutiesMap.Get(phase0.Epoch(0))
+	expected := expectedExecutedAttesterDuties(handler, duties)
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	// STEP 4: trigger head event (block arrival)
@@ -818,19 +841,19 @@ func TestScheduler_Attester_Start_In_The_End_Of_The_Epoch(t *testing.T) {
 	var (
 		handler     = NewAttesterHandler()
 		currentSlot = &SlotValue{}
-		dutiesMap   = make(map[phase0.Epoch][]*v1.AttesterDuty)
+		dutiesMap   = hashmap.New[phase0.Epoch, []*v1.AttesterDuty]()
 	)
 	currentSlot.SetSlot(phase0.Slot(31))
 	scheduler, logger, mockTicker, timeout, cancel, schedulerPool := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap)
 
-	dutiesMap[phase0.Epoch(1)] = []*v1.AttesterDuty{
+	dutiesMap.Set(phase0.Epoch(1), []*v1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
 			Slot:           phase0.Slot(32),
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
-	}
+	})
 
 	// STEP 1: wait for attester duties to be fetched
 	mockTicker.Send(currentSlot.GetSlot())
@@ -841,7 +864,8 @@ func TestScheduler_Attester_Start_In_The_End_Of_The_Epoch(t *testing.T) {
 
 	// STEP 2: wait for attester duties to be executed
 	currentSlot.SetSlot(phase0.Slot(32))
-	expected := expectedExecutedAttesterDuties(handler, dutiesMap[phase0.Epoch(1)])
+	duties, _ := dutiesMap.Get(phase0.Epoch(1))
+	expected := expectedExecutedAttesterDuties(handler, duties)
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	mockTicker.Send(currentSlot.GetSlot())
@@ -856,19 +880,19 @@ func TestScheduler_Attester_Fetch_Execute_Next_Epoch_Duty(t *testing.T) {
 	var (
 		handler     = NewAttesterHandler()
 		currentSlot = &SlotValue{}
-		dutiesMap   = make(map[phase0.Epoch][]*v1.AttesterDuty)
+		dutiesMap   = hashmap.New[phase0.Epoch, []*v1.AttesterDuty]()
 	)
 	currentSlot.SetSlot(phase0.Slot(13))
 	scheduler, logger, mockTicker, timeout, cancel, schedulerPool := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupAttesterDutiesMock(scheduler, dutiesMap)
 
-	dutiesMap[phase0.Epoch(1)] = []*v1.AttesterDuty{
+	dutiesMap.Set(phase0.Epoch(1), []*v1.AttesterDuty{
 		{
 			PubKey:         phase0.BLSPubKey{1, 2, 3},
 			Slot:           phase0.Slot(32),
 			ValidatorIndex: phase0.ValidatorIndex(1),
 		},
-	}
+	})
 
 	// STEP 1: wait for attester duties to be fetched
 	mockTicker.Send(currentSlot.GetSlot())
@@ -886,7 +910,8 @@ func TestScheduler_Attester_Fetch_Execute_Next_Epoch_Duty(t *testing.T) {
 
 	// STEP 3: wait for attester duties to be executed
 	currentSlot.SetSlot(phase0.Slot(32))
-	expected := expectedExecutedAttesterDuties(handler, dutiesMap[phase0.Epoch(1)])
+	duties, _ := dutiesMap.Get(phase0.Epoch(1))
+	expected := expectedExecutedAttesterDuties(handler, duties)
 	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
 
 	mockTicker.Send(currentSlot.GetSlot())
