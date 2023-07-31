@@ -77,7 +77,7 @@ func (ec *ExecutionClient) Close() error {
 }
 
 // FetchHistoricalLogs retrieves historical logs emitted by the contract starting from fromBlock.
-func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan ethtypes.Log, errors <-chan error, err error) {
+func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan BlockLogs, errors <-chan error, err error) {
 	currentBlock, err := ec.client.BlockNumber(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get current block: %w", err)
@@ -95,8 +95,8 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 }
 
 // Calls FilterLogs multiple times and batches results to avoid fetching enormous amount of events
-func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, endBlock uint64) (<-chan ethtypes.Log, <-chan error) {
-	logs := make(chan ethtypes.Log, defaultLogBuf)
+func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, endBlock uint64) (<-chan BlockLogs, <-chan error) {
+	logs := make(chan BlockLogs, defaultLogBuf)
 	errors := make(chan error, 1)
 
 	go func() {
@@ -108,8 +108,6 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 			return
 		}
 
-		logCount := 0
-
 		for fromBlock := startBlock; fromBlock <= endBlock; fromBlock += ec.logBatchSize {
 			toBlock := fromBlock + ec.logBatchSize - 1
 			if toBlock > endBlock {
@@ -117,7 +115,7 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 			}
 
 			start := time.Now()
-			batchLogs, err := ec.client.FilterLogs(context.Background(), ethereum.FilterQuery{
+			results, err := ec.client.FilterLogs(context.Background(), ethereum.FilterQuery{
 				Addresses: []ethcommon.Address{ec.contractAddress},
 				FromBlock: new(big.Int).SetUint64(fromBlock),
 				ToBlock:   new(big.Int).SetUint64(toBlock),
@@ -132,7 +130,7 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 				fields.ToBlock(toBlock),
 				zap.Uint64("target_block", endBlock),
 				zap.String("progress", fmt.Sprintf("%.2f%%", float64(toBlock-startBlock+1)/float64(endBlock-startBlock+1)*100)),
-				zap.Int("events", len(batchLogs)),
+				zap.Int("events", len(results)),
 				fields.Took(time.Since(start)),
 			)
 
@@ -146,14 +144,20 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 				return
 
 			default:
-				for _, log := range batchLogs {
+				validLogs := make([]ethtypes.Log, 0, len(results))
+				for _, log := range results {
 					if log.Removed {
 						// This shouldn't happen unless there was a reorg!
-						ec.logger.Warn("log is removed", fields.TxHash(log.TxHash), zap.Uint("log_index", log.Index))
+						ec.logger.Warn("log is removed",
+							zap.String("block_hash", log.BlockHash.Hex()),
+							fields.TxHash(log.TxHash),
+							zap.Uint("log_index", log.Index))
 						continue
 					}
-					logs <- log
-					logCount++
+					validLogs = append(validLogs, log)
+				}
+				for _, blockLogs := range PackLogs(validLogs) {
+					logs <- blockLogs
 				}
 			}
 		}
@@ -165,8 +169,8 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 }
 
 // StreamLogs subscribes to events emitted by the contract.
-func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan ethtypes.Log {
-	logs := make(chan ethtypes.Log)
+func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-chan BlockLogs {
+	logs := make(chan BlockLogs)
 
 	go func() {
 		defer close(logs)
@@ -234,7 +238,7 @@ func (ec *ExecutionClient) isClosed() bool {
 }
 
 // TODO: consider handling "websocket: read limit exceeded" error and reducing batch size (syncSmartContractsEvents has code for this)
-func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan ethtypes.Log, fromBlock uint64) (lastBlock uint64, err error) {
+func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (lastBlock uint64, err error) {
 	heads := make(chan *ethtypes.Header)
 
 	sub, err := ec.client.SubscribeNewHead(ctx, heads)
@@ -266,8 +270,8 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan ethty
 				continue
 			}
 			logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
-			for log := range logStream {
-				logs <- log
+			for v := range logStream {
+				logs <- v
 			}
 			if err := <-fetchErrors; err != nil {
 				return fromBlock, fmt.Errorf("fetch logs: %w", err)

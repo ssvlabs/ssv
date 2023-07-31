@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
-	"github.com/bloxapp/ssv/eth/eventbatcher"
+	"github.com/bloxapp/ssv/eth/executionclient"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -135,7 +135,6 @@ func TestExecuteTask(t *testing.T) {
 
 func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 	logger, observedLogs := setupLogsCapture()
-	eb := eventbatcher.NewEventBatcher()
 	logValidatorAdded := unmarshalLog(t, rawValidatorAdded)
 	events := []ethtypes.Log{
 		logValidatorAdded,
@@ -146,14 +145,14 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	eventsCh := make(chan ethtypes.Log)
+	eventsCh := make(chan executionclient.BlockLogs)
 	go func() {
 		defer close(eventsCh)
-		for _, event := range events {
-			eventsCh <- event
+		for _, blockLogs := range executionclient.PackLogs(events) {
+			eventsCh <- blockLogs
 		}
 	}()
-	lastProcessedBlock, err := edh.HandleBlockEventsStream(eb.BatchEvents(eventsCh), true)
+	lastProcessedBlock, err := edh.HandleBlockEventsStream(eventsCh, true)
 	require.Equal(t, uint64(0x89EBFF), lastProcessedBlock)
 	require.NoError(t, err)
 	var observedLogsFlow []string

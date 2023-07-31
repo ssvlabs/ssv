@@ -15,8 +15,8 @@ import (
 	"golang.org/x/exp/slices"
 
 	"github.com/bloxapp/ssv/eth/contract"
-	"github.com/bloxapp/ssv/eth/eventbatcher"
 	"github.com/bloxapp/ssv/eth/eventparser"
+	"github.com/bloxapp/ssv/eth/executionclient"
 	"github.com/bloxapp/ssv/eth/localevents"
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging/fields"
@@ -103,16 +103,16 @@ func New(
 	return edh, nil
 }
 
-func (edh *EventDataHandler) HandleBlockEventsStream(blockEventsCh <-chan eventbatcher.BlockEvents, executeTasks bool) (uint64, error) {
+func (edh *EventDataHandler) HandleBlockEventsStream(logs <-chan executionclient.BlockLogs, executeTasks bool) (uint64, error) {
 	var lastProcessedBlock uint64
 
-	for blockEvents := range blockEventsCh {
-		logger := edh.logger.With(fields.BlockNumber(blockEvents.BlockNumber))
+	for blockLogs := range logs {
+		logger := edh.logger.With(fields.BlockNumber(blockLogs.BlockNumber))
 
 		start := time.Now()
-		tasks, err := edh.processBlockEvents(blockEvents)
+		tasks, err := edh.processBlockEvents(blockLogs)
 		logger.Debug("processed events from block",
-			fields.Count(len(blockEvents.Events)),
+			fields.Count(len(blockLogs.Logs)),
 			fields.Took(time.Since(start)),
 			zap.Error(err))
 
@@ -120,7 +120,7 @@ func (edh *EventDataHandler) HandleBlockEventsStream(blockEventsCh <-chan eventb
 			return 0, fmt.Errorf("process block events: %w", err)
 		}
 
-		lastProcessedBlock = blockEvents.BlockNumber
+		lastProcessedBlock = blockLogs.BlockNumber
 		if !executeTasks || len(tasks) == 0 {
 			continue
 		}
@@ -145,13 +145,13 @@ func (edh *EventDataHandler) HandleBlockEventsStream(blockEventsCh <-chan eventb
 	return lastProcessedBlock, nil
 }
 
-func (edh *EventDataHandler) processBlockEvents(blockEvents eventbatcher.BlockEvents) ([]Task, error) {
+func (edh *EventDataHandler) processBlockEvents(block executionclient.BlockLogs) ([]Task, error) {
 	txn := edh.nodeStorage.Begin()
 	defer txn.Discard()
 
 	var tasks []Task
-	for _, event := range blockEvents.Events {
-		task, err := edh.processEvent(txn, event)
+	for _, log := range block.Logs {
+		task, err := edh.processEvent(txn, log)
 		if err != nil {
 			return nil, err
 		}
@@ -161,7 +161,7 @@ func (edh *EventDataHandler) processBlockEvents(blockEvents eventbatcher.BlockEv
 		}
 	}
 
-	if err := edh.nodeStorage.SaveLastProcessedBlock(txn, new(big.Int).SetUint64(blockEvents.BlockNumber)); err != nil {
+	if err := edh.nodeStorage.SaveLastProcessedBlock(txn, new(big.Int).SetUint64(block.BlockNumber)); err != nil {
 		return nil, fmt.Errorf("set last processed block: %w", err)
 	}
 

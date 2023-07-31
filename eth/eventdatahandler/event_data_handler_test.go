@@ -24,7 +24,7 @@ import (
 
 	"github.com/bloxapp/ssv/ekm"
 	"github.com/bloxapp/ssv/eth/contract"
-	"github.com/bloxapp/ssv/eth/eventbatcher"
+
 	"github.com/bloxapp/ssv/eth/eventparser"
 	"github.com/bloxapp/ssv/eth/executionclient"
 	"github.com/bloxapp/ssv/eth/simulator"
@@ -53,7 +53,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	eb := eventbatcher.NewEventBatcher()
 	edh, err := setupDataHandler(t, ctx, logger)
 	if err != nil {
 		t.Fatal(err)
@@ -116,13 +115,14 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		sim.Commit()
 
-		log := <-logs
-		require.Equal(t, ethcommon.HexToHash("0xd839f31c14bd632f424e307b36abff63ca33684f77f28e35dc13718ef338f7f4"), log.Topics[0])
+		block := <-logs
+		require.NotEmpty(t, block.Logs)
+		require.Equal(t, ethcommon.HexToHash("0xd839f31c14bd632f424e307b36abff63ca33684f77f28e35dc13718ef338f7f4"), block.Logs[0].Topics[0])
 
-		eventsCh := make(chan ethtypes.Log)
+		eventsCh := make(chan executionclient.BlockLogs)
 		go func() {
 			defer close(eventsCh)
-			eventsCh <- log
+			eventsCh <- block
 		}()
 
 		// Check that there is no registered operators
@@ -131,7 +131,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.Equal(t, 0, len(operators))
 
 		// Hanlde the event
-		lastProcessedBlock, err := edh.HandleBlockEventsStream(eb.BatchEvents(eventsCh), false)
+		lastProcessedBlock, err := edh.HandleBlockEventsStream(eventsCh, false)
 		require.Equal(t, uint64(0x2), lastProcessedBlock)
 		require.NoError(t, err)
 
@@ -141,7 +141,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.Equal(t, 1, len(operators))
 
 		// Check if an operator in the storage has same attributes
-		operatorAddedEvent, err := contractFilterer.ParseOperatorAdded(log)
+		operatorAddedEvent, err := contractFilterer.ParseOperatorAdded(block.Logs[0])
 		require.NoError(t, err)
 		data, _, err := edh.nodeStorage.GetOperatorData(nil, operatorAddedEvent.OperatorId)
 		require.NoError(t, err)
@@ -155,13 +155,14 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		sim.Commit()
 
-		log := <-logs
-		require.Equal(t, ethcommon.HexToHash("0x0e0ba6c2b04de36d6d509ec5bd155c43a9fe862f8052096dd54f3902a74cca3e"), log.Topics[0])
+		block := <-logs
+		require.NotEmpty(t, block.Logs)
+		require.Equal(t, ethcommon.HexToHash("0x0e0ba6c2b04de36d6d509ec5bd155c43a9fe862f8052096dd54f3902a74cca3e"), block.Logs[0].Topics[0])
 
-		eventsCh := make(chan ethtypes.Log)
+		eventsCh := make(chan executionclient.BlockLogs)
 		go func() {
 			defer close(eventsCh)
-			eventsCh <- log
+			eventsCh <- block
 		}()
 
 		// Check that there is 1 registered operator
@@ -170,7 +171,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.Equal(t, 1, len(operators))
 
 		// Hanlde the event
-		lastProcessedBlock, err := edh.HandleBlockEventsStream(eb.BatchEvents(eventsCh), false)
+		lastProcessedBlock, err := edh.HandleBlockEventsStream(eventsCh, false)
 		require.Equal(t, uint64(0x3), lastProcessedBlock)
 		require.NoError(t, err)
 
@@ -209,16 +210,17 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		sim.Commit()
 
-		log := <-logs
-		require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), log.Topics[0])
+		block := <-logs
+		require.NotEmpty(t, block.Logs)
+		require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
 
-		eventsCh := make(chan ethtypes.Log)
+		eventsCh := make(chan executionclient.BlockLogs)
 		go func() {
 			defer close(eventsCh)
-			eventsCh <- log
+			eventsCh <- block
 		}()
 
-		lastProcessedBlock, err := edh.HandleBlockEventsStream(eb.BatchEvents(eventsCh), false)
+		lastProcessedBlock, err := edh.HandleBlockEventsStream(eventsCh, false)
 		require.Equal(t, uint64(0x4), lastProcessedBlock)
 		require.NoError(t, err)
 	})
@@ -238,16 +240,17 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		sim.Commit()
 
-		log := <-logs
-		require.Equal(t, ethcommon.HexToHash("0xccf4370403e5fbbde0cd3f13426479dcd8a5916b05db424b7a2c04978cf8ce6e"), log.Topics[0])
+		block := <-logs
+		require.NotEmpty(t, block.Logs)
+		require.Equal(t, ethcommon.HexToHash("0xccf4370403e5fbbde0cd3f13426479dcd8a5916b05db424b7a2c04978cf8ce6e"), block.Logs[0].Topics[0])
 
-		eventsCh := make(chan ethtypes.Log)
+		eventsCh := make(chan executionclient.BlockLogs)
 		go func() {
 			defer close(eventsCh)
-			eventsCh <- log
+			eventsCh <- block
 		}()
 
-		lastProcessedBlock, err := edh.HandleBlockEventsStream(eb.BatchEvents(eventsCh), false)
+		lastProcessedBlock, err := edh.HandleBlockEventsStream(eventsCh, false)
 		require.Equal(t, uint64(0x5), lastProcessedBlock)
 		require.NoError(t, err)
 	})
@@ -267,16 +270,17 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		sim.Commit()
 
-		log := <-logs
-		require.Equal(t, ethcommon.HexToHash("0x1fce24c373e07f89214e9187598635036111dbb363e99f4ce498488cdc66e688"), log.Topics[0])
+		block := <-logs
+		require.NotEmpty(t, block.Logs)
+		require.Equal(t, ethcommon.HexToHash("0x1fce24c373e07f89214e9187598635036111dbb363e99f4ce498488cdc66e688"), block.Logs[0].Topics[0])
 
-		eventsCh := make(chan ethtypes.Log)
+		eventsCh := make(chan executionclient.BlockLogs)
 		go func() {
 			defer close(eventsCh)
-			eventsCh <- log
+			eventsCh <- block
 		}()
 
-		lastProcessedBlock, err := edh.HandleBlockEventsStream(eb.BatchEvents(eventsCh), false)
+		lastProcessedBlock, err := edh.HandleBlockEventsStream(eventsCh, false)
 		require.Equal(t, uint64(0x6), lastProcessedBlock)
 		require.NoError(t, err)
 	})
@@ -296,16 +300,17 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		sim.Commit()
 
-		log := <-logs
-		require.Equal(t, ethcommon.HexToHash("0xc803f8c01343fcdaf32068f4c283951623ef2b3fa0c547551931356f456b6859"), log.Topics[0])
+		block := <-logs
+		require.NotEmpty(t, block.Logs)
+		require.Equal(t, ethcommon.HexToHash("0xc803f8c01343fcdaf32068f4c283951623ef2b3fa0c547551931356f456b6859"), block.Logs[0].Topics[0])
 
-		eventsCh := make(chan ethtypes.Log)
+		eventsCh := make(chan executionclient.BlockLogs)
 		go func() {
 			defer close(eventsCh)
-			eventsCh <- log
+			eventsCh <- block
 		}()
 
-		lastProcessedBlock, err := edh.HandleBlockEventsStream(eb.BatchEvents(eventsCh), false)
+		lastProcessedBlock, err := edh.HandleBlockEventsStream(eventsCh, false)
 		require.Equal(t, uint64(0x7), lastProcessedBlock)
 		require.NoError(t, err)
 	})
@@ -318,16 +323,17 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		sim.Commit()
 
-		log := <-logs
-		require.Equal(t, ethcommon.HexToHash("0x259235c230d57def1521657e7c7951d3b385e76193378bc87ef6b56bc2ec3548"), log.Topics[0])
+		block := <-logs
+		require.NotEmpty(t, block.Logs)
+		require.Equal(t, ethcommon.HexToHash("0x259235c230d57def1521657e7c7951d3b385e76193378bc87ef6b56bc2ec3548"), block.Logs[0].Topics[0])
 
-		eventsCh := make(chan ethtypes.Log)
+		eventsCh := make(chan executionclient.BlockLogs)
 		go func() {
 			defer close(eventsCh)
-			eventsCh <- log
+			eventsCh <- block
 		}()
 
-		lastProcessedBlock, err := edh.HandleBlockEventsStream(eb.BatchEvents(eventsCh), false)
+		lastProcessedBlock, err := edh.HandleBlockEventsStream(eventsCh, false)
 		require.Equal(t, uint64(0x8), lastProcessedBlock)
 		require.NoError(t, err)
 		// Check if the fee recepient was updated

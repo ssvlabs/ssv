@@ -5,10 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/eth/eventbatcher"
 	"github.com/bloxapp/ssv/eth/executionclient"
 	"github.com/bloxapp/ssv/logging/fields"
 )
@@ -21,24 +19,13 @@ var (
 	ErrNodeNotReady = fmt.Errorf("node not ready")
 )
 
-// TODO: still working on it
-// type Event struct {
-// 	BlockNumber uint64
-// 	Logs        []*ethtypes.Log
-// 	Err         error
-// }
-
 type executionClient interface {
-	FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan ethtypes.Log, errors <-chan error, err error)
-	StreamLogs(ctx context.Context, fromBlock uint64) <-chan ethtypes.Log
-}
-
-type eventBatcher interface {
-	BatchEvents(events <-chan ethtypes.Log) <-chan eventbatcher.BlockEvents
+	FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan executionclient.BlockLogs, errors <-chan error, err error)
+	StreamLogs(ctx context.Context, fromBlock uint64) <-chan executionclient.BlockLogs
 }
 
 type eventDataHandler interface {
-	HandleBlockEventsStream(blockEvents <-chan eventbatcher.BlockEvents, executeTasks bool) (uint64, error)
+	HandleBlockEventsStream(logs <-chan executionclient.BlockLogs, executeTasks bool) (uint64, error)
 }
 
 type nodeProber interface {
@@ -47,7 +34,6 @@ type nodeProber interface {
 
 type EventDispatcher struct {
 	executionClient  executionClient
-	eventBatcher     eventBatcher
 	eventDataHandler eventDataHandler
 
 	logger     *zap.Logger
@@ -55,10 +41,9 @@ type EventDispatcher struct {
 	nodeProber nodeProber
 }
 
-func New(executionClient executionClient, eventBatcher eventBatcher, eventDataHandler eventDataHandler, opts ...Option) *EventDispatcher {
+func New(executionClient executionClient, eventDataHandler eventDataHandler, opts ...Option) *EventDispatcher {
 	ed := &EventDispatcher{
 		executionClient:  executionClient,
-		eventBatcher:     eventBatcher,
 		eventDataHandler: eventDataHandler,
 
 		logger:     zap.NewNop(),
@@ -94,8 +79,7 @@ func (ed *EventDispatcher) SyncHistory(ctx context.Context, fromBlock uint64) (l
 		return 0, fmt.Errorf("failed to fetch historical events: %w", err)
 	}
 
-	blockEvents := ed.eventBatcher.BatchEvents(fetchLogs)
-	lastProcessedBlock, err = ed.eventDataHandler.HandleBlockEventsStream(blockEvents, false)
+	lastProcessedBlock, err = ed.eventDataHandler.HandleBlockEventsStream(fetchLogs, false)
 	if err != nil {
 		return 0, fmt.Errorf("handle historical block events: %w", err)
 	}
@@ -122,8 +106,7 @@ func (ed *EventDispatcher) SyncHistory(ctx context.Context, fromBlock uint64) (l
 func (ed *EventDispatcher) SyncOngoing(ctx context.Context, fromBlock uint64) error {
 	ed.logger.Info("subscribing to ongoing registry events", fields.FromBlock(fromBlock))
 
-	logsStream := ed.executionClient.StreamLogs(ctx, fromBlock)
-	blockEventsStream := ed.eventBatcher.BatchEvents(logsStream)
-	_, err := ed.eventDataHandler.HandleBlockEventsStream(blockEventsStream, true)
+	logs := ed.executionClient.StreamLogs(ctx, fromBlock)
+	_, err := ed.eventDataHandler.HandleBlockEventsStream(logs, true)
 	return err
 }

@@ -25,7 +25,7 @@ import (
 	"go.uber.org/zap/zaptest"
 
 	"github.com/bloxapp/ssv/ekm"
-	"github.com/bloxapp/ssv/eth/eventbatcher"
+
 	"github.com/bloxapp/ssv/eth/eventdatahandler"
 	"github.com/bloxapp/ssv/eth/eventparser"
 	"github.com/bloxapp/ssv/eth/executionclient"
@@ -117,11 +117,9 @@ func TestEventDispatcher(t *testing.T) {
 		require.Equal(t, uint64(0x1), receipt.Status)
 	}
 
-	eb := eventbatcher.NewEventBatcher()
 	edh := setupEventDataHandler(t, ctx, logger)
 	eventDispatcher := New(
 		client,
-		eb,
 		edh,
 		WithLogger(logger),
 	)

@@ -98,8 +98,10 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	// Fetch all logs history starting from block 0
 	var fetchedLogs []ethtypes.Log
 	logs, fetchErrCh, err := client.FetchHistoricalLogs(ctx, 0)
-	for log := range logs {
-		fetchedLogs = append(fetchedLogs, log)
+	for block := range logs {
+		for _, log := range block.Logs {
+			fetchedLogs = append(fetchedLogs, log)
+		}
 	}
 	require.NoError(t, err)
 	require.NotEmpty(t, fetchedLogs)
@@ -161,8 +163,10 @@ func TestStreamLogs(t *testing.T) {
 	var streamedLogsCount atomic.Int64
 	go func() {
 		defer wg.Done()
-		for log := range logs {
-			streamedLogs = append(streamedLogs, log)
+		for block := range logs {
+			for _, log := range block.Logs {
+				streamedLogs = append(streamedLogs, log)
+			}
 			streamedLogsCount.Add(1)
 		}
 	}()
@@ -257,8 +261,8 @@ func TestFetchLogsInBatches(t *testing.T) {
 
 		logChan, errChan := client.fetchLogsInBatches(ctx, 5, 5)
 		select {
-		case log := <-logChan:
-			blockNumbers = append(blockNumbers, log.BlockNumber)
+		case block := <-logChan:
+			blockNumbers = append(blockNumbers, block.BlockNumber)
 		case err := <-errChan:
 			t.Fatalf("fetchLogsInBatches failed: %v", err)
 		case <-ctx.Done():
@@ -272,8 +276,8 @@ func TestFetchLogsInBatches(t *testing.T) {
 		var blockNumbers []uint64
 
 		logChan, errChan := client.fetchLogsInBatches(ctx, 3, 11)
-		for log := range logChan {
-			blockNumbers = append(blockNumbers, log.BlockNumber)
+		for block := range logChan {
+			blockNumbers = append(blockNumbers, block.BlockNumber)
 		}
 		require.Equal(t, []uint64{3, 4, 5, 6, 7, 8, 9, 10, 11}, blockNumbers)
 
@@ -458,8 +462,9 @@ func TestSimSSV(t *testing.T) {
 		t.Errorf("get receipt: %v", err)
 	}
 	require.Equal(t, uint64(0x1), receipt.Status)
-	log := <-logs
-	require.Equal(t, ethcommon.HexToHash("0xd839f31c14bd632f424e307b36abff63ca33684f77f28e35dc13718ef338f7f4"), log.Topics[0])
+	block := <-logs
+	require.NotEmpty(t, block.Logs)
+	require.Equal(t, ethcommon.HexToHash("0xd839f31c14bd632f424e307b36abff63ca33684f77f28e35dc13718ef338f7f4"), block.Logs[0].Topics[0])
 
 	// Emit event OperatorRemoved
 	tx, err = boundContract.SimcontractTransactor.RemoveOperator(auth, 1)
@@ -470,8 +475,9 @@ func TestSimSSV(t *testing.T) {
 		t.Errorf("get receipt: %v", err)
 	}
 	require.Equal(t, uint64(0x1), receipt.Status)
-	log = <-logs
-	require.Equal(t, ethcommon.HexToHash("0x0e0ba6c2b04de36d6d509ec5bd155c43a9fe862f8052096dd54f3902a74cca3e"), log.Topics[0])
+	block = <-logs
+	require.NotEmpty(t, block.Logs)
+	require.Equal(t, ethcommon.HexToHash("0x0e0ba6c2b04de36d6d509ec5bd155c43a9fe862f8052096dd54f3902a74cca3e"), block.Logs[0].Topics[0])
 
 	// Emit event ValidatorAdded
 	tx, err = boundContract.SimcontractTransactor.RegisterValidator(
@@ -493,8 +499,9 @@ func TestSimSSV(t *testing.T) {
 		t.Errorf("get receipt: %v", err)
 	}
 	require.Equal(t, uint64(0x1), receipt.Status)
-	log = <-logs
-	require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), log.Topics[0])
+	block = <-logs
+	require.NotEmpty(t, block.Logs)
+	require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
 
 	// Emit event ValidatorRemoved
 	tx, err = boundContract.SimcontractTransactor.RemoveValidator(
@@ -515,8 +522,9 @@ func TestSimSSV(t *testing.T) {
 		t.Errorf("get receipt: %v", err)
 	}
 	require.Equal(t, uint64(0x1), receipt.Status)
-	log = <-logs
-	require.Equal(t, ethcommon.HexToHash("0xccf4370403e5fbbde0cd3f13426479dcd8a5916b05db424b7a2c04978cf8ce6e"), log.Topics[0])
+	block = <-logs
+	require.NotEmpty(t, block.Logs)
+	require.Equal(t, ethcommon.HexToHash("0xccf4370403e5fbbde0cd3f13426479dcd8a5916b05db424b7a2c04978cf8ce6e"), block.Logs[0].Topics[0])
 
 	// Emit event ClusterLiquidated
 	tx, err = boundContract.SimcontractTransactor.Liquidate(
@@ -537,8 +545,9 @@ func TestSimSSV(t *testing.T) {
 		t.Errorf("get receipt: %v", err)
 	}
 	require.Equal(t, uint64(0x1), receipt.Status)
-	log = <-logs
-	require.Equal(t, ethcommon.HexToHash("0x1fce24c373e07f89214e9187598635036111dbb363e99f4ce498488cdc66e688"), log.Topics[0])
+	block = <-logs
+	require.NotEmpty(t, block.Logs)
+	require.Equal(t, ethcommon.HexToHash("0x1fce24c373e07f89214e9187598635036111dbb363e99f4ce498488cdc66e688"), block.Logs[0].Topics[0])
 
 	// Emit event ClusterReactivated
 	tx, err = boundContract.SimcontractTransactor.Reactivate(
@@ -559,8 +568,9 @@ func TestSimSSV(t *testing.T) {
 		t.Errorf("get receipt: %v", err)
 	}
 	require.Equal(t, uint64(0x1), receipt.Status)
-	log = <-logs
-	require.Equal(t, ethcommon.HexToHash("0xc803f8c01343fcdaf32068f4c283951623ef2b3fa0c547551931356f456b6859"), log.Topics[0])
+	block = <-logs
+	require.NotEmpty(t, block.Logs)
+	require.Equal(t, ethcommon.HexToHash("0xc803f8c01343fcdaf32068f4c283951623ef2b3fa0c547551931356f456b6859"), block.Logs[0].Topics[0])
 
 	// Emit event FeeRecipientAddressUpdated
 	tx, err = boundContract.SimcontractTransactor.SetFeeRecipientAddress(
@@ -574,8 +584,9 @@ func TestSimSSV(t *testing.T) {
 		t.Errorf("get receipt: %v", err)
 	}
 	require.Equal(t, uint64(0x1), receipt.Status)
-	log = <-logs
-	require.Equal(t, ethcommon.HexToHash("0x259235c230d57def1521657e7c7951d3b385e76193378bc87ef6b56bc2ec3548"), log.Topics[0])
+	block = <-logs
+	require.NotEmpty(t, block.Logs)
+	require.Equal(t, ethcommon.HexToHash("0x259235c230d57def1521657e7c7951d3b385e76193378bc87ef6b56bc2ec3548"), block.Logs[0].Topics[0])
 
 	require.NoError(t, client.Close())
 	require.NoError(t, sim.Close())

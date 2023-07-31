@@ -20,7 +20,6 @@ import (
 	"github.com/bloxapp/ssv/beacon/goclient"
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/ekm"
-	"github.com/bloxapp/ssv/eth/eventbatcher"
 	"github.com/bloxapp/ssv/eth/eventdatahandler"
 	"github.com/bloxapp/ssv/eth/eventdispatcher"
 	"github.com/bloxapp/ssv/eth/eventparser"
@@ -491,10 +490,8 @@ func setupEventHandling(
 		logger.Fatal("failed to setup event data handler", zap.Error(err))
 	}
 
-	eventBatcher := eventbatcher.NewEventBatcher()
 	eventDispatcher := eventdispatcher.New(
 		executionClient,
-		eventBatcher,
 		eventDataHandler,
 		eventdispatcher.WithLogger(logger),
 		eventdispatcher.WithMetrics(metricsReporter),
