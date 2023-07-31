@@ -24,6 +24,7 @@ var (
 	defaultMigrations = Migrations{
 		migrationExample1,
 		migrationExample2,
+		encryptSharesMigration,
 	}
 )
 
