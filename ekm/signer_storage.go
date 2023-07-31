@@ -157,7 +157,7 @@ func (s *storage) ListAccountsTxn(txn basedb.IDb) ([]core.ValidatorAccount, erro
 	err := getter.GetAll(s.logger, s.objPrefix(accountsPrefix), func(i int, obj basedb.Obj) error {
 		value, err := s.decryptData(obj.Value)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "failed to decrypt accounts")
 		}
 		acc, err := s.decodeAccount(value)
 		if err != nil {
