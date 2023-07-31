@@ -9,19 +9,23 @@ import (
 	"go.uber.org/zap"
 )
 
-// This migration is an Example migration
 var encryptSharesMigration = Migration{
 	Name: "encrypt_shares",
 	Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte) error {
-		// Example to clean registry data for specific storage
 		nodeStorage, err := opt.nodeStorage(logger)
+		if err != nil {
+			return fmt.Errorf("failed to get node storage: %w", err)
+		}
 		signerStorage := opt.signerStorage(logger)
 		accounts, err := signerStorage.ListAccounts()
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to list accounts: %w", err)
 		}
 
 		operatorKey, found, err := nodeStorage.GetPrivateKey()
+		if err != nil {
+			return fmt.Errorf("failed to get private key: %w", err)
+		}
 		if !found {
 			return nil
 		}
@@ -30,16 +34,13 @@ var encryptSharesMigration = Migration{
 		keyString := fmt.Sprintf("%x", hash)
 		err = signerStorage.SetEncryptionKey(keyString)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to set encryption key: %w", err)
 		}
 		for _, account := range accounts {
 			err := signerStorage.SaveAccount(account)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to save account %s: %w", account, err)
 			}
-		}
-		if err != nil {
-			return err
 		}
 		return nil
 	},
