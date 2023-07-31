@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/bloxapp/ssv/eth/contract"
+	"github.com/bloxapp/ssv/eth/simulator"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -28,7 +29,6 @@ import (
 	"github.com/bloxapp/ssv/eth/eventdatahandler"
 	"github.com/bloxapp/ssv/eth/eventparser"
 	"github.com/bloxapp/ssv/eth/executionclient"
-	"github.com/bloxapp/ssv/eth/simulator"
 	"github.com/bloxapp/ssv/eth/simulator/simcontract"
 	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/networkconfig"

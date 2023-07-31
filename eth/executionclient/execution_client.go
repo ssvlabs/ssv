@@ -170,18 +170,19 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 
 	go func() {
 		defer close(logs)
-
 		tries := 0
 		for {
 			select {
 			case <-ctx.Done():
 				return
-
 			case <-ec.closed:
 				return
-
 			default:
 				lastBlock, err := ec.streamLogsToChan(ctx, logs, fromBlock)
+				if errors.Is(err, ErrClosed) || errors.Is(err, context.Canceled) {
+					// Closed gracefully.
+					return
+				}
 				if err != nil {
 					tries++
 					if tries > 3 {
@@ -190,7 +191,6 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 					ec.logger.Error("failed to stream registry events, reconnecting", zap.Error(err))
 					ec.reconnect(ctx)
 				}
-
 				fromBlock = lastBlock + 1
 			}
 		}
@@ -241,13 +241,20 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan ethty
 	if err != nil {
 		return fromBlock, fmt.Errorf("subscribe heads: %w", err)
 	}
+	defer sub.Unsubscribe()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return 0, ctx.Err()
 
+		case <-ec.closed:
+			return 0, ErrClosed
+
 		case err := <-sub.Err():
+			if err == nil {
+				return 0, ErrClosed
+			}
 			return 0, fmt.Errorf("subscription: %w", err)
 
 		case header := <-heads:

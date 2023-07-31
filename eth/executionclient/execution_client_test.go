@@ -6,45 +6,37 @@ import (
 	"net/http/httptest"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/eth"
-	"github.com/ethereum/go-ethereum/eth/ethconfig"
-	"github.com/ethereum/go-ethereum/eth/filters"
-	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/ethereum/go-ethereum/miner"
-	"github.com/ethereum/go-ethereum/node"
-	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
+
+	"github.com/bloxapp/ssv/eth/simulator"
+	"github.com/bloxapp/ssv/eth/simulator/simcontract"
 )
 
 var (
 	// testKey is a private key to use for funding a tester account.
 	testKey, _ = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
-
 	// testAddr is the Ethereum address of the tester account.
 	testAddr = crypto.PubkeyToAddress(testKey.PublicKey)
-
-	testBalance = big.NewInt(2e18)
-
-	contractAddr = ethcommon.HexToAddress("0x3A220f351252089D385b29beca14e27F204c296A")
-
-	genesis = &core.Genesis{
-		Config:    params.AllEthashProtocolChanges,
-		Alloc:     core.GenesisAlloc{testAddr: {Balance: testBalance}},
-		ExtraData: []byte("test genesis"),
-		Timestamp: 9000,
-		BaseFee:   big.NewInt(params.InitialBaseFee),
-	}
 )
+
+func simTestBackend(testAddr ethcommon.Address) *simulator.SimulatedBackend {
+	return simulator.NewSimulatedBackend(
+		core.GenesisAlloc{
+			testAddr: {Balance: big.NewInt(10000000000000000)},
+		}, 10000000,
+	)
+}
 
 /*
 Example contract to test event emission:
@@ -55,72 +47,65 @@ Example contract to test event emission:
 		function Call() public { emit Called(); }
 	}
 */
-
+const callableAbi = "[{\"anonymous\":false,\"inputs\":[],\"name\":\"Called\",\"type\":\"event\"},{\"inputs\":[],\"name\":\"Call\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
 const callableBin = "6080604052348015600f57600080fd5b5060998061001e6000396000f3fe6080604052348015600f57600080fd5b506004361060285760003560e01c806334e2292114602d575b600080fd5b60336035565b005b7f81fab7a4a0aa961db47eefc81f143a5220e8c8495260dd65b1356f1d19d3c7b860405160405180910390a156fea2646970667358221220029436d24f3ac598ceca41d4d712e13ced6d70727f4cdc580667de66d2f51d8b64736f6c63430008010033"
-const chainLength = 30
+
+const blocksWithLogsLength = 30
 
 func TestFetchHistoricalLogs(t *testing.T) {
+	logger := zaptest.NewLogger(t)
 	const testTimeout = 1 * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
 
-	done := make(chan struct{})
-	defer close(done)
-
-	blockStream := make(chan []*ethtypes.Block)
-	defer close(blockStream)
-
-	backend, processedStream := newTestBackend(t, done, blockStream, 0)
-
-	// Generate test chain before we read historical logs
-	generateInitialTestChain(done, blockStream, chainLength)
-	for blocks := range processedStream {
-		t.Log("Processed blocks: ", len(blocks))
-	}
+	// Create simulator instance
+	sim := simTestBackend(testAddr)
 
 	// Create JSON-RPC handler
-	rpcServer, _ := backend.RPCHandler()
+	rpcServer, _ := sim.Node.RPCHandler()
 	// Expose handler on a test server with ws open
 	httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
 	defer rpcServer.Stop()
 	defer httpsrv.Close()
-
-	// Check if the contract is deployed successfully with a standard eth1 client
-	ec, err := backend.Attach()
-	require.NoError(t, err)
-	cl := ethclient.NewClient(ec)
-	receipt, err := cl.TransactionReceipt(ctx, ethcommon.HexToHash("0x0a854d0edf6b757240d5ef2cbfc3fe355525ad1656bf7ce0fbcfa27077a1246a"))
-	require.NoError(t, err)
-	require.Equal(t, uint64(1), receipt.Status)
-	contractCode, err := cl.CodeAt(ctx, receipt.ContractAddress, nil)
-	require.NoError(t, err)
-	if len(contractCode) == 0 {
-		t.Fatal("got code for account that does not have contract code")
-	}
-
 	addr := "ws:" + strings.TrimPrefix(httpsrv.URL, "http:")
 
-	logger := zaptest.NewLogger(t)
+	parsed, _ := abi.JSON(strings.NewReader(callableAbi))
+	auth, _ := bind.NewKeyedTransactorWithChainID(testKey, big.NewInt(1337))
+	contractAddr, _, contract, err := bind.DeployContract(auth, parsed, ethcommon.FromHex(callableBin), sim)
+	if err != nil {
+		t.Errorf("deploying contract: %v", err)
+	}
+	sim.Commit()
 
+	// Create a client and connect to the simulator
 	const followDistance = 8
-	client, err := New(ctx, addr, receipt.ContractAddress, WithLogger(logger), WithFollowDistance(followDistance))
+	client, err := New(ctx, addr, contractAddr, WithLogger(logger), WithFollowDistance(followDistance))
 	require.NoError(t, err)
 
 	isReady, err := client.IsReady(ctx)
 	require.NoError(t, err)
 	require.True(t, isReady)
 
-	// Fetch all logs history starting from block 0
-	seenLogs := 0
-	logs, fetchErrCh, err := client.FetchHistoricalLogs(ctx, 0)
-	for log := range logs {
-		seenLogs++
-		require.NotNil(t, log)
+	// Create blocks with transactions
+	for i := 0; i < blocksWithLogsLength; i++ {
+		_, err := contract.Transact(auth, "Call")
+		if err != nil {
+			t.Errorf("transacting: %v", err)
+		}
+		sim.Commit()
 	}
 
+	// Fetch all logs history starting from block 0
+	var fetchedLogs []ethtypes.Log
+	logs, fetchErrCh, err := client.FetchHistoricalLogs(ctx, 0)
+	for log := range logs {
+		fetchedLogs = append(fetchedLogs, log)
+	}
 	require.NoError(t, err)
-	expectedSeenLogs := chainLength - followDistance - 2 // blocks 0 and 1 don't have logs
-	require.Equal(t, expectedSeenLogs, seenLogs)
+	require.NotEmpty(t, fetchedLogs)
+
+	expectedSeenLogs := blocksWithLogsLength - followDistance
+	require.Equal(t, expectedSeenLogs, len(fetchedLogs))
 
 	select {
 	case err := <-fetchErrCh:
@@ -130,33 +115,37 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	}
 
 	require.NoError(t, client.Close())
-	require.NoError(t, backend.Close())
+	require.NoError(t, sim.Close())
 }
 
 func TestStreamLogs(t *testing.T) {
-	const testTimeout = 1 * time.Second
+	logger := zaptest.NewLogger(t)
+	const testTimeout = 2 * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
 
-	done := make(chan struct{})
-	defer close(done)
-
-	blockStream := make(chan []*ethtypes.Block)
-	defer close(blockStream)
 	// Create sim instance with a delay between block execution
 	delay := time.Millisecond * 10
-	backend, processedStream := newTestBackend(t, done, blockStream, delay)
+	sim := simTestBackend(testAddr)
 
-	rpcServer, _ := backend.RPCHandler()
+	rpcServer, _ := sim.Node.RPCHandler()
 	httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
 	defer rpcServer.Stop()
 	defer httpsrv.Close()
-
 	addr := "ws:" + strings.TrimPrefix(httpsrv.URL, "http:")
 
-	logger := zaptest.NewLogger(t)
+	// Deploy the contract
+	parsed, _ := abi.JSON(strings.NewReader(callableAbi))
+	auth, _ := bind.NewKeyedTransactorWithChainID(testKey, big.NewInt(1337))
+	contractAddr, _, contract, err := bind.DeployContract(auth, parsed, ethcommon.FromHex(callableBin), sim)
+	if err != nil {
+		t.Errorf("deploying contract: %v", err)
+	}
+	sim.Commit()
 
-	client, err := New(ctx, addr, contractAddr, WithLogger(logger))
+	// Create a client and connect to the simulator
+	const followDistance = 2
+	client, err := New(ctx, addr, contractAddr, WithLogger(logger), WithFollowDistance(followDistance))
 	require.NoError(t, err)
 
 	isReady, err := client.IsReady(ctx)
@@ -166,109 +155,90 @@ func TestStreamLogs(t *testing.T) {
 	logs := client.StreamLogs(ctx, 0)
 	var wg sync.WaitGroup
 	var streamedLogs []ethtypes.Log
+
 	// Receive emitted events
 	wg.Add(1)
+	var streamedLogsCount atomic.Int64
 	go func() {
 		defer wg.Done()
 		for log := range logs {
 			streamedLogs = append(streamedLogs, log)
+			streamedLogsCount.Add(1)
 		}
 	}()
 
-	// Generate test chain after a connection to the server.
-	// While processing blocks the events will be emitted which is read by subscription
-	generateInitialTestChain(done, blockStream, chainLength)
-	for blocks := range processedStream {
-		t.Log("Processed blocks: ", len(blocks))
+	// Create blocks with transactions
+	for i := 0; i < blocksWithLogsLength; i++ {
+		_, err := contract.Transact(auth, "Call")
+		if err != nil {
+			t.Errorf("transacting: %v", err)
+		}
+		sim.Commit()
+		time.Sleep(delay)
+	}
+
+	// Wait for blocksWithLogsLength-followDistance blocks to be streamed.
+Unfollowed:
+	for {
+		select {
+		case <-ctx.Done():
+			require.Equal(t, streamedLogsCount.Load(), int64(blocksWithLogsLength-followDistance))
+		default:
+			if streamedLogsCount.Load() == int64(blocksWithLogsLength-followDistance) {
+				break Unfollowed
+			}
+		}
+	}
+
+	// Create empty blocks with no transactions to advance the chain
+	// to followDistance blocks behind the head.
+	for i := 0; i < followDistance; i++ {
+		sim.Commit()
+		time.Sleep(delay)
 	}
 
 	require.NoError(t, client.Close())
-	require.NoError(t, backend.Close())
 	wg.Wait()
 	require.NotEmpty(t, streamedLogs)
-}
-
-func newTestBackend(t *testing.T, done <-chan struct{}, blockStream <-chan []*ethtypes.Block, delay time.Duration) (*node.Node, <-chan []*ethtypes.Block) {
-	processedStream := make(chan []*ethtypes.Block)
-	// Create node
-	n, err := node.New(&node.Config{})
-	if err != nil {
-		t.Fatalf("can't create new node: %v", err)
-	}
-
-	// Create Ethereum Service
-	config := &ethconfig.Config{Genesis: genesis, Miner: miner.DefaultConfig}
-	ethservice, err := eth.New(n, config)
-	if err != nil {
-		t.Fatalf("can't create new ethereum service: %v", err)
-	}
-
-	// Add required APIs
-	filterSystem := filters.NewFilterSystem(ethservice.APIBackend, filters.Config{})
-	n.RegisterAPIs([]rpc.API{{
-		Namespace: "eth",
-		Service:   filters.NewFilterAPI(filterSystem, false),
-	}})
-
-	// Start eth1 node
-	if err := n.Start(); err != nil {
-		t.Fatalf("can't start test node: %v", err)
-	}
-
-	go func() {
-		defer close(processedStream)
-		select {
-		case <-done:
-			return
-		case blocks := <-blockStream:
-			if delay != time.Duration(0) {
-				for _, block := range blocks {
-					if _, err := ethservice.BlockChain().InsertChain([]*ethtypes.Block{block}); err != nil {
-						return
-					}
-					time.Sleep(delay)
-				}
-			} else {
-				if _, err := ethservice.BlockChain().InsertChain(blocks); err != nil {
-					return
-				}
-			}
-
-			processedStream <- blocks
-		}
-	}()
-	return n, processedStream
+	require.Equal(t, blocksWithLogsLength, len(streamedLogs))
+	require.NoError(t, sim.Close())
 }
 
 func TestFetchLogsInBatches(t *testing.T) {
+	logger := zaptest.NewLogger(t)
 	const testTimeout = 1 * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
 
-	done := make(chan struct{})
-	defer close(done)
+	// Create simulator instance
+	sim := simTestBackend(testAddr)
 
-	blockStream := make(chan []*ethtypes.Block)
-	defer close(blockStream)
-
-	backend, processedStream := newTestBackend(t, done, blockStream, 0)
-
-	generateInitialTestChain(done, blockStream, chainLength)
-
-	for blocks := range processedStream {
-		t.Log("Processed blocks: ", len(blocks))
-	}
-
-	rpcServer, _ := backend.RPCHandler()
+	rpcServer, _ := sim.Node.RPCHandler()
 	httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
 	defer rpcServer.Stop()
 	defer httpsrv.Close()
-
 	addr := "ws:" + strings.TrimPrefix(httpsrv.URL, "http:")
-	logger := zaptest.NewLogger(t)
+
+	// Deploy the contract
+	parsed, _ := abi.JSON(strings.NewReader(callableAbi))
+	auth, _ := bind.NewKeyedTransactorWithChainID(testKey, big.NewInt(1337))
+	contractAddr, _, contract, err := bind.DeployContract(auth, parsed, ethcommon.FromHex(callableBin), sim)
+	if err != nil {
+		t.Errorf("deploying contract: %v", err)
+	}
+	sim.Commit()
 
 	client, err := New(ctx, addr, contractAddr, WithLogger(logger), WithLogBatchSize(2))
 	require.NoError(t, err)
+
+	// Create blocks with transactions
+	for i := 0; i < blocksWithLogsLength; i++ {
+		_, err := contract.Transact(auth, "Call")
+		if err != nil {
+			t.Errorf("transacting: %v", err)
+		}
+		sim.Commit()
+	}
 
 	t.Run("startBlock is greater than endBlock", func(t *testing.T) {
 		logChan, errChan := client.fetchLogsInBatches(ctx, 10, 5)
@@ -328,47 +298,285 @@ func TestFetchLogsInBatches(t *testing.T) {
 		}
 	})
 
-	require.NoError(t, backend.Close())
+	require.NoError(t, client.Close())
+	require.NoError(t, sim.Close())
 }
 
-// Generate blocks with transactions
-func generateInitialTestChain(done <-chan struct{}, blockStream chan []*ethtypes.Block, count int) {
-	_, blocks, _ := core.GenerateChainWithGenesis(genesis, ethash.NewFaker(), count, blockGenerator)
-	go func() {
-		select {
-		case <-done:
-		case blockStream <- blocks:
-		}
-	}()
+// TestChainReorganizationLogs check that the client receives removed logs correctly.
+// Steps:
+//  1. Deploy the Callable contract.
+//  2. Set up an event subscription.
+//  3. Save the current block which will serve as parent for the fork.
+//  4. Send a transaction.
+//  5. Check that the event was included.
+//  6. Fork by using the parent block as ancestor.
+//  7. Mine two blocks to trigger a reorg.
+//  8. Check that the event was removed.
+
+func TestChainReorganizationLogs(t *testing.T) {
+	// TODO: fix reorg test
+	// logger := zaptest.NewLogger(t)
+	// const testTimeout = 2 * time.Second
+	// ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	// defer cancel()
+
+	// sim := simTestBackend(testAddr)
+
+	// rpcServer, _ := sim.Node.RPCHandler()
+	// httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
+	// defer rpcServer.Stop()
+	// defer httpsrv.Close()
+
+	// addr := "ws:" + strings.TrimPrefix(httpsrv.URL, "http:")
+
+	// // 1.
+	// parsed, _ := abi.JSON(strings.NewReader(callableAbi))
+	// auth, _ := bind.NewKeyedTransactorWithChainID(testKey, big.NewInt(1337))
+	// contractAddr, _, contract, err := bind.DeployContract(auth, parsed, ethcommon.FromHex(callableBin), sim)
+	// if err != nil {
+	// 	t.Errorf("deploying contract: %v", err)
+	// }
+	// sim.Commit()
+
+	// // Connect the client
+	// const followDistance = 8
+	// client, err := New(ctx, addr, contractAddr, WithLogger(logger), WithFollowDistance(followDistance))
+	// require.NoError(t, err)
+
+	// isReady, err := client.IsReady(ctx)
+	// require.NoError(t, err)
+	// require.True(t, isReady)
+	// // 2.
+	// logs := client.StreamLogs(ctx, 0)
+	// // 3.
+	// var parent *ethtypes.Header
+	// var goodTransactions []ethcommon.Hash
+	// // 4. Send some transactions
+	// for i := 0; i < followDistance/2; i++ {
+	// 	// Call contract to trigger event emit
+	// 	tx, err := contract.Transact(auth, "Call")
+	// 	if err != nil {
+	// 		t.Errorf("transacting: %v", err)
+	// 	}
+	// 	sim.Commit()
+	// 	if i == 0 {
+	// 		goodTransactions = append(goodTransactions, tx.Hash())
+	// 		parent = sim.Blockchain.CurrentBlock()
+	// 	}
+	// }
+	// // 5. Fork off the chain after the first transaction
+	// if err := sim.Fork(context.Background(), parent.Hash()); err != nil {
+	// 	t.Errorf("forking: %v", err)
+	// }
+	// // 6. Add more blocks and 1 transaction after the fork
+	// for i := 0; i < followDistance; i++ {
+	// 	if i == 1 {
+	// 		tx, err := contract.Transact(auth, "Call")
+	// 		if err != nil {
+	// 			t.Errorf("transacting: %v", err)
+	// 		}
+	// 		goodTransactions = append(goodTransactions, tx.Hash())
+	// 	}
+	// 	sim.Commit()
+	// 	t.Log("committed block")
+	// }
+	// // 5.
+	// for i, hash := range goodTransactions {
+	// 	select {
+	// 	case log := <-logs:
+	// 		require.NotEmpty(t, log)
+	// 		require.Equal(t, hash, log.TxHash)
+	// 		t.Logf("got log from good transaction %d", i)
+	// 	case <-ctx.Done():
+	// 		t.Fatal("context canceled")
+	// 	}
+	// }
+	// select {
+	// case <-logs:
+	// 	t.Fatal("should not receive log")
+	// case <-ctx.Done():
+	// }
+	// if sim.Blockchain.CurrentBlock().Number.Uint64() != uint64(13) {
+	// 	t.Error("wrong chain length")
+	// }
+	// require.NoError(t, client.Close())
+	// require.NoError(t, sim.Close())
 }
 
-func blockGenerator(i int, g *core.BlockGen) {
-	g.OffsetTime(5)
-	g.SetExtra([]byte("test"))
-	if i == 0 {
-		return
+// TestSimSSV deploys the simplified SSVNetwork contract to generate events and receive at the client
+func TestSimSSV(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	const testTimeout = 1 * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	defer cancel()
+
+	// Create simulator instance
+	sim := simTestBackend(testAddr)
+
+	// Create JSON-RPC handler
+	rpcServer, _ := sim.Node.RPCHandler()
+	// Expose handler on a test server with ws open
+	httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
+	defer rpcServer.Stop()
+	defer httpsrv.Close()
+	addr := "ws:" + strings.TrimPrefix(httpsrv.URL, "http:")
+
+	parsed, _ := abi.JSON(strings.NewReader(simcontract.SimcontractMetaData.ABI))
+	auth, _ := bind.NewKeyedTransactorWithChainID(testKey, big.NewInt(1337))
+	contractAddr, _, _, err := bind.DeployContract(auth, parsed, ethcommon.FromHex(simcontract.SimcontractMetaData.Bin), sim)
+	if err != nil {
+		t.Errorf("deploying contract: %v", err)
 	}
-	// Add contract deployment to the first block
-	if i == 1 {
-		tx := ethtypes.MustSignNewTx(testKey, ethtypes.LatestSigner(genesis.Config), &ethtypes.LegacyTx{
-			Nonce:    uint64(i - 1),
-			Value:    big.NewInt(0),
-			GasPrice: big.NewInt(params.InitialBaseFee),
-			Gas:      300000,
-			Data:     ethcommon.FromHex(callableBin),
-		})
-		g.AddTx(tx)
-	} else {
-		// Transactions to contract
-		tx := ethtypes.MustSignNewTx(testKey, ethtypes.LatestSigner(genesis.Config), &ethtypes.LegacyTx{
-			To:       &contractAddr,
-			Nonce:    uint64(i - 1),
-			Value:    big.NewInt(0),
-			GasPrice: big.NewInt(params.InitialBaseFee),
-			Gas:      302916,
-			// Call to function which emits event
-			Data: ethcommon.FromHex("0x34e22921"),
-		})
-		g.AddTx(tx)
+	sim.Commit()
+
+	// Check contract code at the simulated blockchain
+	contractCode, err := sim.CodeAt(ctx, contractAddr, nil)
+	if err != nil {
+		t.Errorf("getting contract code: %v", err)
 	}
+	require.NotEmpty(t, contractCode)
+
+	// Create a client and connect to the simulator
+	client, err := New(ctx, addr, contractAddr, WithLogger(logger), WithFollowDistance(0))
+	require.NoError(t, err)
+
+	isReady, err := client.IsReady(ctx)
+	require.NoError(t, err)
+	require.True(t, isReady)
+
+	logs := client.StreamLogs(ctx, 0)
+
+	boundContract, err := simcontract.NewSimcontract(contractAddr, sim)
+	require.NoError(t, err)
+
+	// Emit event OperatorAdded
+	tx, err := boundContract.SimcontractTransactor.RegisterOperator(auth, ethcommon.Hex2Bytes("0xb24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"), big.NewInt(100_000_000))
+	require.NoError(t, err)
+	sim.Commit()
+	receipt, err := sim.TransactionReceipt(ctx, tx.Hash())
+	if err != nil {
+		t.Errorf("get receipt: %v", err)
+	}
+	require.Equal(t, uint64(0x1), receipt.Status)
+	log := <-logs
+	require.Equal(t, ethcommon.HexToHash("0xd839f31c14bd632f424e307b36abff63ca33684f77f28e35dc13718ef338f7f4"), log.Topics[0])
+
+	// Emit event OperatorRemoved
+	tx, err = boundContract.SimcontractTransactor.RemoveOperator(auth, 1)
+	require.NoError(t, err)
+	sim.Commit()
+	receipt, err = sim.TransactionReceipt(ctx, tx.Hash())
+	if err != nil {
+		t.Errorf("get receipt: %v", err)
+	}
+	require.Equal(t, uint64(0x1), receipt.Status)
+	log = <-logs
+	require.Equal(t, ethcommon.HexToHash("0x0e0ba6c2b04de36d6d509ec5bd155c43a9fe862f8052096dd54f3902a74cca3e"), log.Topics[0])
+
+	// Emit event ValidatorAdded
+	tx, err = boundContract.SimcontractTransactor.RegisterValidator(
+		auth, ethcommon.Hex2Bytes("0x1"),
+		[]uint64{1, 2, 3},
+		ethcommon.Hex2Bytes("0x2"),
+		big.NewInt(100_000_000),
+		simcontract.CallableCluster{
+			ValidatorCount:  3,
+			NetworkFeeIndex: 1,
+			Index:           1,
+			Active:          true,
+			Balance:         big.NewInt(100_000_000),
+		})
+	require.NoError(t, err)
+	sim.Commit()
+	receipt, err = sim.TransactionReceipt(ctx, tx.Hash())
+	if err != nil {
+		t.Errorf("get receipt: %v", err)
+	}
+	require.Equal(t, uint64(0x1), receipt.Status)
+	log = <-logs
+	require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), log.Topics[0])
+
+	// Emit event ValidatorRemoved
+	tx, err = boundContract.SimcontractTransactor.RemoveValidator(
+		auth,
+		ethcommon.Hex2Bytes("0x1"),
+		[]uint64{1, 2, 3},
+		simcontract.CallableCluster{
+			ValidatorCount:  3,
+			NetworkFeeIndex: 1,
+			Index:           1,
+			Active:          true,
+			Balance:         big.NewInt(100_000_000),
+		})
+	require.NoError(t, err)
+	sim.Commit()
+	receipt, err = sim.TransactionReceipt(ctx, tx.Hash())
+	if err != nil {
+		t.Errorf("get receipt: %v", err)
+	}
+	require.Equal(t, uint64(0x1), receipt.Status)
+	log = <-logs
+	require.Equal(t, ethcommon.HexToHash("0xccf4370403e5fbbde0cd3f13426479dcd8a5916b05db424b7a2c04978cf8ce6e"), log.Topics[0])
+
+	// Emit event ClusterLiquidated
+	tx, err = boundContract.SimcontractTransactor.Liquidate(
+		auth,
+		ethcommon.HexToAddress("0x1"),
+		[]uint64{1, 2, 3},
+		simcontract.CallableCluster{
+			ValidatorCount:  3,
+			NetworkFeeIndex: 1,
+			Index:           1,
+			Active:          true,
+			Balance:         big.NewInt(100_000_000),
+		})
+	require.NoError(t, err)
+	sim.Commit()
+	receipt, err = sim.TransactionReceipt(ctx, tx.Hash())
+	if err != nil {
+		t.Errorf("get receipt: %v", err)
+	}
+	require.Equal(t, uint64(0x1), receipt.Status)
+	log = <-logs
+	require.Equal(t, ethcommon.HexToHash("0x1fce24c373e07f89214e9187598635036111dbb363e99f4ce498488cdc66e688"), log.Topics[0])
+
+	// Emit event ClusterReactivated
+	tx, err = boundContract.SimcontractTransactor.Reactivate(
+		auth,
+		[]uint64{1, 2, 3},
+		big.NewInt(100_000_000),
+		simcontract.CallableCluster{
+			ValidatorCount:  3,
+			NetworkFeeIndex: 1,
+			Index:           1,
+			Active:          true,
+			Balance:         big.NewInt(100_000_000),
+		})
+	require.NoError(t, err)
+	sim.Commit()
+	receipt, err = sim.TransactionReceipt(ctx, tx.Hash())
+	if err != nil {
+		t.Errorf("get receipt: %v", err)
+	}
+	require.Equal(t, uint64(0x1), receipt.Status)
+	log = <-logs
+	require.Equal(t, ethcommon.HexToHash("0xc803f8c01343fcdaf32068f4c283951623ef2b3fa0c547551931356f456b6859"), log.Topics[0])
+
+	// Emit event FeeRecipientAddressUpdated
+	tx, err = boundContract.SimcontractTransactor.SetFeeRecipientAddress(
+		auth,
+		ethcommon.HexToAddress("0x1"),
+	)
+	require.NoError(t, err)
+	sim.Commit()
+	receipt, err = sim.TransactionReceipt(ctx, tx.Hash())
+	if err != nil {
+		t.Errorf("get receipt: %v", err)
+	}
+	require.Equal(t, uint64(0x1), receipt.Status)
+	log = <-logs
+	require.Equal(t, ethcommon.HexToHash("0x259235c230d57def1521657e7c7951d3b385e76193378bc87ef6b56bc2ec3548"), log.Topics[0])
+
+	require.NoError(t, client.Close())
+	require.NoError(t, sim.Close())
 }

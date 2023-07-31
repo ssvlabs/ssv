@@ -556,11 +556,11 @@ func setupEventHandling(
 		// Sync ongoing registry events in the background.
 		go func() {
 			err = eventDispatcher.SyncOngoing(ctx, lastProcessedBlock+1)
-			if err != nil {
-				logger.Fatal("failed syncing ongoing registry events",
-					zap.Uint64("last_processed_block", lastProcessedBlock),
-					zap.Error(err))
-			}
+
+			// Crash if ongoing sync has stopped, regardless of the reason.
+			logger.Fatal("failed syncing ongoing registry events",
+				zap.Uint64("last_processed_block", lastProcessedBlock),
+				zap.Error(err))
 		}()
 
 		// TODO: revert
