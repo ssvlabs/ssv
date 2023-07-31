@@ -164,10 +164,8 @@ func TestStreamLogs(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for block := range logs {
-			for _, log := range block.Logs {
-				streamedLogs = append(streamedLogs, log)
-			}
-			streamedLogsCount.Add(1)
+			streamedLogs = append(streamedLogs, block.Logs...)
+			streamedLogsCount.Add(int64(len(block.Logs)))
 		}
 	}()
 
@@ -186,8 +184,8 @@ Unfollowed:
 	for {
 		select {
 		case <-ctx.Done():
-			require.Equal(t, streamedLogsCount.Load(), int64(blocksWithLogsLength-followDistance))
-		default:
+			require.Equal(t, int64(blocksWithLogsLength-followDistance), streamedLogsCount.Load())
+		case <-time.After(time.Millisecond * 5):
 			if streamedLogsCount.Load() == int64(blocksWithLogsLength-followDistance) {
 				break Unfollowed
 			}

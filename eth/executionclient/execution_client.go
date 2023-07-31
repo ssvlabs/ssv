@@ -156,8 +156,13 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 					}
 					validLogs = append(validLogs, log)
 				}
-				for _, blockLogs := range PackLogs(validLogs) {
-					logs <- blockLogs
+				if len(validLogs) == 0 {
+					// Emit empty block logs to indicate that we have advanced to this block.
+					logs <- BlockLogs{BlockNumber: toBlock}
+				} else {
+					for _, blockLogs := range PackLogs(validLogs) {
+						logs <- blockLogs
+					}
 				}
 			}
 		}

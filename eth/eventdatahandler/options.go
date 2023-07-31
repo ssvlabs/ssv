@@ -28,11 +28,3 @@ func WithFullNode() Option {
 		edh.fullNode = true
 	}
 }
-
-// WithTaskOptimizer enables task optimization.
-// NOTE: EXPERIMENTAL, not for production use
-func WithTaskOptimizer() Option {
-	return func(edh *EventDataHandler) {
-		edh.taskOptimization = true
-	}
-}

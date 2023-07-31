@@ -495,7 +495,6 @@ func setupEventHandling(
 		eventDataHandler,
 		eventdispatcher.WithLogger(logger),
 		eventdispatcher.WithMetrics(metricsReporter),
-		eventdispatcher.WithNodeProber(nodeProber),
 	)
 
 	fromBlock, found, err := nodeStorage.GetLastProcessedBlock(nil)
@@ -507,7 +506,7 @@ func setupEventHandling(
 	} else if fromBlock == nil {
 		logger.Fatal("syncing registry contract events failed, last processed block is nil")
 	} else {
-		// Start from the next block.
+		// Start syncing from the next block.
 		fromBlock = new(big.Int).SetUint64(fromBlock.Uint64() + 1)
 	}
 
@@ -523,8 +522,15 @@ func setupEventHandling(
 		}
 	} else {
 		// Sync historical registry events.
+		logger.Debug("syncing historical registry events", zap.Uint64("fromBlock", fromBlock.Uint64()))
 		lastProcessedBlock, err := eventDispatcher.SyncHistory(ctx, fromBlock.Uint64())
-		if err != nil {
+		switch {
+		case errors.Is(err, executionclient.ErrNothingToSync):
+			// Nothing was synced, keep the fromBlock as is.
+		case err == nil:
+			// Advance the fromBlock to the block after lastProcessedBlock.
+			fromBlock = new(big.Int).SetUint64(lastProcessedBlock + 1)
+		default:
 			logger.Fatal("failed to sync historical registry events", zap.Error(err))
 		}
 
@@ -552,7 +558,7 @@ func setupEventHandling(
 
 		// Sync ongoing registry events in the background.
 		go func() {
-			err = eventDispatcher.SyncOngoing(ctx, lastProcessedBlock+1)
+			err = eventDispatcher.SyncOngoing(ctx, fromBlock.Uint64())
 
 			// Crash if ongoing sync has stopped, regardless of the reason.
 			logger.Fatal("failed syncing ongoing registry events",
@@ -561,7 +567,7 @@ func setupEventHandling(
 		}()
 
 		// TODO: revert
-		// select {}
+		select {}
 	}
 }
 

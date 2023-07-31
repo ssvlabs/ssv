@@ -20,10 +20,3 @@ func WithMetrics(metrics metrics) Option {
 		ed.metrics = metrics
 	}
 }
-
-// WithNodeProber uses a node prober that checks node status.
-func WithNodeProber(nodeProber nodeProber) Option {
-	return func(ed *EventDispatcher) {
-		ed.nodeProber = nodeProber
-	}
-}

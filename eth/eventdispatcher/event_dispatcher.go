@@ -28,17 +28,12 @@ type eventDataHandler interface {
 	HandleBlockEventsStream(logs <-chan executionclient.BlockLogs, executeTasks bool) (uint64, error)
 }
 
-type nodeProber interface {
-	IsReady(ctx context.Context) (bool, error)
-}
-
 type EventDispatcher struct {
 	executionClient  executionClient
 	eventDataHandler eventDataHandler
 
-	logger     *zap.Logger
-	metrics    metrics
-	nodeProber nodeProber
+	logger  *zap.Logger
+	metrics metrics
 }
 
 func New(executionClient executionClient, eventDataHandler eventDataHandler, opts ...Option) *EventDispatcher {
@@ -46,9 +41,8 @@ func New(executionClient executionClient, eventDataHandler eventDataHandler, opt
 		executionClient:  executionClient,
 		eventDataHandler: eventDataHandler,
 
-		logger:     zap.NewNop(),
-		metrics:    nopMetrics{},
-		nodeProber: nil,
+		logger:  zap.NewNop(),
+		metrics: nopMetrics{},
 	}
 
 	for _, opt := range opts {
@@ -60,20 +54,10 @@ func New(executionClient executionClient, eventDataHandler eventDataHandler, opt
 
 // SyncHistory fetches historical logs since fromBlock and passes them for processing.
 func (ed *EventDispatcher) SyncHistory(ctx context.Context, fromBlock uint64) (lastProcessedBlock uint64, err error) {
-	if ed.nodeProber != nil {
-		ready, err := ed.nodeProber.IsReady(ctx)
-		if err != nil {
-			return 0, fmt.Errorf("check node readiness: %w", err)
-		}
-		if !ready {
-			return 0, ErrNodeNotReady
-		}
-	}
-
 	fetchLogs, fetchError, err := ed.executionClient.FetchHistoricalLogs(ctx, fromBlock)
 	if errors.Is(err, executionclient.ErrNothingToSync) {
 		// Nothing to sync, should keep ongoing sync from the given fromBlock.
-		return fromBlock, nil
+		return 0, executionclient.ErrNothingToSync
 	}
 	if err != nil {
 		return 0, fmt.Errorf("failed to fetch historical events: %w", err)
@@ -84,9 +68,9 @@ func (ed *EventDispatcher) SyncHistory(ctx context.Context, fromBlock uint64) (l
 		return 0, fmt.Errorf("handle historical block events: %w", err)
 	}
 	if lastProcessedBlock == 0 {
-		// No events were processed, so lastProcessedBlock remains fromBlock.
-		lastProcessedBlock = fromBlock
-	} else if lastProcessedBlock < fromBlock {
+		return 0, fmt.Errorf("handle historical block events: lastProcessedBlock is 0")
+	}
+	if lastProcessedBlock < fromBlock {
 		// Event replay: this should never happen!
 		return 0, fmt.Errorf("event replay: lastProcessedBlock (%d) is lower than fromBlock (%d)", lastProcessedBlock, fromBlock)
 	}
