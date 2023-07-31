@@ -16,18 +16,17 @@ var encryptSharesMigration = Migration{
 		if err != nil {
 			return fmt.Errorf("failed to get node storage: %w", err)
 		}
-		signerStorage := opt.signerStorage(logger)
-		accounts, err := signerStorage.ListAccounts()
-		if err != nil {
-			return fmt.Errorf("failed to list accounts: %w", err)
-		}
-
 		operatorKey, found, err := nodeStorage.GetPrivateKey()
 		if err != nil {
 			return fmt.Errorf("failed to get private key: %w", err)
 		}
 		if !found {
 			return nil
+		}
+		signerStorage := opt.signerStorage(logger)
+		accounts, err := signerStorage.ListAccounts()
+		if err != nil {
+			return fmt.Errorf("failed to list accounts: %w", err)
 		}
 		keyBytes := x509.MarshalPKCS1PrivateKey(operatorKey)
 		hash := sha256.Sum256(keyBytes)
