@@ -14,6 +14,10 @@ var encryptSharesMigration = Migration{
 	Name: "encrypt_shares",
 	Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte) error {
 		return opt.Db.Update(func(txn basedb.Txn) error {
+			err := txn.Set(migrationsPrefix, key, migrationCompleted)
+			if err != nil {
+				return err
+			}
 			nodeStorage, err := opt.nodeStorage(logger)
 			if err != nil {
 				return fmt.Errorf("failed to get node storage: %w", err)
