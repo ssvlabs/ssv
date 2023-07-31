@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/network/syncing"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
 
 type mockSyncer struct{}
@@ -30,7 +31,7 @@ type mockMessageHandler struct {
 
 func newMockMessageHandler() *mockMessageHandler {
 	m := &mockMessageHandler{}
-	m.handler = func(msg spectypes.SSVMessage) {
+	m.handler = func(msg *queue.DecodedSSVMessage) {
 		m.calls++
 	}
 	return m
@@ -38,13 +39,13 @@ func newMockMessageHandler() *mockMessageHandler {
 
 func TestThrottle(t *testing.T) {
 	var calls int
-	handler := syncing.Throttle(func(msg spectypes.SSVMessage) {
+	handler := syncing.Throttle(func(msg *queue.DecodedSSVMessage) {
 		calls++
 	}, 10*time.Millisecond)
 
 	start := time.Now()
 	for i := 0; i < 10; i++ {
-		handler(spectypes.SSVMessage{})
+		handler(&queue.DecodedSSVMessage{})
 	}
 	end := time.Now()
 

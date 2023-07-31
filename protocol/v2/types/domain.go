@@ -12,6 +12,7 @@ var (
 )
 
 // GetDefaultDomain returns the global domain used across the system
+// DEPRECATED: use networkconfig.NetworkConfig.Domain instead
 func GetDefaultDomain() spectypes.DomainType {
 	return domain
 }

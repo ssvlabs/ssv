@@ -11,16 +11,18 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zaptest"
 
 	"github.com/bloxapp/ssv/network/forks/genesis"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
 
 func TestMsgValidator(t *testing.T) {
 	pks := createSharePublicKeys(4)
 	f := genesis.ForkGenesis{}
-	mv := NewSSVMsgValidator(&f)
+	// TODO: use a validator, adjust the message for it
+	mv := NewSSVMsgValidator(zaptest.NewLogger(t), &f, nil)
 	require.NotNil(t, mv)
 
 	t.Run("valid consensus msg", func(t *testing.T) {
@@ -99,7 +101,7 @@ func dummySSVConsensusMsg(pkHex string, height int) (*spectypes.SSVMessage, erro
 	if err != nil {
 		return nil, err
 	}
-	id := spectypes.NewMsgID(types.GetDefaultDomain(), pk, spectypes.BNRoleAttester)
+	id := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, pk, spectypes.BNRoleAttester)
 	msgData := fmt.Sprintf(`{
 	  "message": {
 		"type": 3,

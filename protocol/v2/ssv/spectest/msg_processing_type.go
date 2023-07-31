@@ -45,7 +45,7 @@ func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
 		lastErr = v.StartDuty(logger, test.Duty)
 	}
 	for _, msg := range test.Messages {
-		dmsg, err := queue.DecodeSSVMessage(logger, msg)
+		dmsg, err := queue.DecodeSSVMessage(msg)
 		if err != nil {
 			lastErr = err
 			continue

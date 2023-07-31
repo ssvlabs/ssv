@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 
 	"github.com/multiformats/go-multistream"
 
@@ -25,8 +26,8 @@ import (
 )
 
 func (n *p2pNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
-	return n.syncer.SyncHighestDecided(context.Background(), n.interfaceLogger, mid, func(msg spectypes.SSVMessage) {
-		n.msgRouter.Route(n.interfaceLogger, msg)
+	return n.syncer.SyncHighestDecided(context.Background(), n.interfaceLogger, mid, func(msg *queue.DecodedSSVMessage) {
+		n.msgRouter.Route(msg)
 	})
 }
 
@@ -60,8 +61,8 @@ func (n *p2pNetwork) SyncDecidedByRange(mid spectypes.MessageID, from, to qbft.H
 		return
 	}
 
-	err := n.syncer.SyncDecidedByRange(context.Background(), n.interfaceLogger, mid, from, to, func(msg spectypes.SSVMessage) {
-		n.msgRouter.Route(n.interfaceLogger, msg)
+	err := n.syncer.SyncDecidedByRange(context.Background(), n.interfaceLogger, mid, from, to, func(msg *queue.DecodedSSVMessage) {
+		n.msgRouter.Route(msg)
 	})
 	if err != nil {
 		n.interfaceLogger.Error("failed to sync decided by range", zap.Error(err))

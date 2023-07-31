@@ -11,14 +11,16 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/message/validation"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/utils/tasks"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/syncer.go -source=./syncer.go
 
 // MessageHandler reacts to a message received from Syncer.
-type MessageHandler func(msg spectypes.SSVMessage)
+type MessageHandler func(msg *queue.DecodedSSVMessage)
 
 // Throttle returns a MessageHandler that throttles the given handler.
 func Throttle(handler MessageHandler, throttle time.Duration) MessageHandler {
@@ -26,7 +28,7 @@ func Throttle(handler MessageHandler, throttle time.Duration) MessageHandler {
 	now := time.Now()
 	last.Store(&now)
 
-	return func(msg spectypes.SSVMessage) {
+	return func(msg *queue.DecodedSSVMessage) {
 		delta := time.Since(*last.Load())
 		if delta < throttle {
 			time.Sleep(throttle - delta)
@@ -63,13 +65,15 @@ type Network interface {
 }
 
 type syncer struct {
-	network Network
+	network      Network
+	msgValidator *validation.MessageValidator
 }
 
 // New returns a standard implementation of Syncer.
-func New(network Network) Syncer {
+func New(network Network, msgValidator *validation.MessageValidator) Syncer {
 	return &syncer{
-		network: network,
+		network:      network,
+		msgValidator: msgValidator,
 	}
 }
 
@@ -112,11 +116,20 @@ func (s *syncer) SyncHighestDecided(
 			logger.Debug("could not encode signed message", zap.Error(err))
 			return false
 		}
-		handler(spectypes.SSVMessage{
+
+		ssvMessage := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
 			MsgID:   id,
 			Data:    raw,
-		})
+		}
+
+		decodedMsg, err := s.msgValidator.ValidateMessage(ssvMessage)
+		if err != nil {
+			logger.Debug("could not validate ssv message", zap.Error(err))
+			return false
+		}
+
+		handler(decodedMsg)
 		return false
 	})
 	logger.Debug("synced last decided", zap.Uint64("highest_height", uint64(maxHeight)), zap.Int("messages", len(lastDecided)))
@@ -154,11 +167,20 @@ func (s *syncer) SyncDecidedByRange(
 				logger.Debug("could not encode signed message", zap.Error(err))
 				return nil
 			}
-			handler(spectypes.SSVMessage{
+
+			ssvMessage := &spectypes.SSVMessage{
 				MsgType: spectypes.SSVConsensusMsgType,
 				MsgID:   id,
 				Data:    raw,
-			})
+			}
+
+			decodedMsg, err := s.msgValidator.ValidateMessage(ssvMessage)
+			if err != nil {
+				logger.Debug("could not validate ssv message", zap.Error(err))
+				return nil
+			}
+
+			handler(decodedMsg)
 			return nil
 		},
 	)

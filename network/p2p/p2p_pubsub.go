@@ -5,12 +5,14 @@ import (
 	"fmt"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/network/records"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/network/records"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/protocol/v2/message"
@@ -141,26 +143,28 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(topic string,
 			return nil
 		}
 
-		var ssvMsg *spectypes.SSVMessage
+		var decodedMsg *queue.DecodedSSVMessage
 		if msg.ValidatorData != nil {
-			m, ok := msg.ValidatorData.(spectypes.SSVMessage)
+			m, ok := msg.ValidatorData.(*queue.DecodedSSVMessage)
 			if ok {
-				ssvMsg = &m
+				decodedMsg = m
 			}
 		}
-		if ssvMsg == nil {
+		if decodedMsg == nil {
 			return errors.New("message was not decoded")
 		}
 
-		p2pID := ssvMsg.GetID().String()
+		p2pID := decodedMsg.GetID().String()
 
 		//	logger.With(
 		// 		zap.String("pubKey", hex.EncodeToString(ssvMsg.MsgID.GetPubKey())),
 		// 		zap.String("role", ssvMsg.MsgID.GetRoleType().String()),
 		// 	).Debug("handlePubsubMessages")
 
-		metricsRouterIncoming.WithLabelValues(p2pID, message.MsgTypeToString(ssvMsg.MsgType)).Inc()
-		n.msgRouter.Route(logger, *ssvMsg)
+		metricsRouterIncoming.WithLabelValues(p2pID, message.MsgTypeToString(decodedMsg.MsgType)).Inc()
+
+		n.msgRouter.Route(decodedMsg)
+
 		return nil
 	}
 }

@@ -211,7 +211,9 @@ func (ctrl *topicsCtrl) start(logger *zap.Logger, name string, sub *pubsub.Subsc
 func (ctrl *topicsCtrl) listen(logger *zap.Logger, sub *pubsub.Subscription) error {
 	ctx, cancel := context.WithCancel(ctrl.ctx)
 	defer cancel()
+
 	topicName := sub.Topic()
+
 	logger = logger.With(zap.String("topic", topicName))
 	logger.Debug("start listening to topic")
 	for ctx.Err() == nil {

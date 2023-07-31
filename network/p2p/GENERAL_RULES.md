@@ -10,15 +10,12 @@ Node can react to a message in three ways:
 ## Semantic assertions
 
 - Message validator maintains a state for each validator.
-- Generally, if violation happens by a small margin, the message is ignored. 
+- If violation happens by a small margin, the message is ignored. 
   - If an assertion has a rule for ignoring, the rule has higher priority than this one.
-- Generally, If violation happens by a large margin, the message is rejected. 
+- If violation happens by a large margin, the message is rejected. 
   - If an assertion has a rule for rejecting, the rule has higher priority than this one.
 - If violation count reaches a certain threshold, all further messages from the validator for current round are rejected.
 - Each round resets violation count to 0.
-- Validator attests only once per epoch.
-  - TODO: Need to check if upon reorg there can be more than one duty per epoch.
-  - First violation is ignored. Further ones are rejected.
 - Message round is equal to estimated current round.
 - Violation by [1; ceil(MAX_POSSIBLE_ROUND * 0.2)] rounds is ignored. Violations above that are rejected.
 - If message slot is greater than current slot, message epoch is greater than current epoch.

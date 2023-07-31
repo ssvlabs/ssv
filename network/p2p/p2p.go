@@ -6,9 +6,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cornelk/hashmap"
+
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/cornelk/hashmap"
+	"github.com/bloxapp/ssv/message/validation"
 
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -57,14 +59,15 @@ type p2pNetwork struct {
 	fork            forks.Fork
 	cfg             *Config
 
-	host        host.Host
-	streamCtrl  streams.StreamController
-	idx         peers.Index
-	disc        discovery.Service
-	topicsCtrl  topics.Controller
-	msgRouter   network.MessageRouter
-	msgResolver topics.MsgPeersResolver
-	connHandler connections.ConnHandler
+	host         host.Host
+	streamCtrl   streams.StreamController
+	idx          peers.Index
+	disc         discovery.Service
+	topicsCtrl   topics.Controller
+	msgRouter    network.MessageRouter
+	msgResolver  topics.MsgPeersResolver
+	msgValidator *validation.MessageValidator
+	connHandler  connections.ConnHandler
 
 	state int32
 
@@ -92,6 +95,7 @@ func New(logger *zap.Logger, cfg *Config) network.P2PNetwork {
 		fork:             forksfactory.NewFork(cfg.ForkVersion),
 		cfg:              cfg,
 		msgRouter:        cfg.Router,
+		msgValidator:     cfg.MessageValidator,
 		state:            stateClosed,
 		activeValidators: hashmap.New[string, validatorStatus](),
 		nodeStorage:      cfg.NodeStorage,
@@ -174,7 +178,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 	}
 
 	// Create & start ConcurrentSyncer.
-	syncer := syncing.NewConcurrent(n.ctx, syncing.New(n), 16, syncing.DefaultTimeouts, nil)
+	syncer := syncing.NewConcurrent(n.ctx, syncing.New(n, n.msgValidator), 16, syncing.DefaultTimeouts, nil)
 	go syncer.Run(logger)
 	n.syncer = syncer
 

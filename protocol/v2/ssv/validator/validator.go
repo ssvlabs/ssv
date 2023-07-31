@@ -111,7 +111,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 		return fmt.Errorf("could not get duty runner for msg ID %v", messageID)
 	}
 
-	if err := validateMessage(v.Share.Share, msg.SSVMessage); err != nil {
+	if err := validateMessage(v.Share.Share, msg); err != nil {
 		return fmt.Errorf("message invalid for msg ID %v: %w", messageID, err)
 	}
 
@@ -143,7 +143,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 	}
 }
 
-func validateMessage(share spectypes.Share, msg *spectypes.SSVMessage) error {
+func validateMessage(share spectypes.Share, msg *queue.DecodedSSVMessage) error {
 	if !share.ValidatorPubKey.MessageIDBelongs(msg.GetID()) {
 		return errors.New("msg ID doesn't match validator ID")
 	}

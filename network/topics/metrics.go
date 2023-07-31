@@ -60,6 +60,7 @@ type msgValidationResult string
 var (
 	validationResultNoData   msgValidationResult = "no_data"
 	validationResultEncoding msgValidationResult = "encoding"
+	validationResultInvalid  msgValidationResult = "invalid"
 )
 
 func reportValidationResult(result msgValidationResult) {

@@ -24,7 +24,7 @@ func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCo
 
 	lastErr := v.StartDuty(logger, &testingutils.TestingSyncCommitteeContributionDuty)
 	for _, msg := range test.Messages {
-		dmsg, err := queue.DecodeSSVMessage(logger, msg)
+		dmsg, err := queue.DecodeSSVMessage(msg)
 		if err != nil {
 			lastErr = err
 			continue

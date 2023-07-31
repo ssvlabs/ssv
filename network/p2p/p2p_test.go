@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -21,7 +23,6 @@ import (
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	protcolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 func TestGetMaxPeers(t *testing.T) {
@@ -121,7 +122,7 @@ func TestP2pNetwork_Stream(t *testing.T) {
 
 	pk, err := hex.DecodeString(pkHex)
 	require.NoError(t, err)
-	mid := spectypes.NewMsgID(types.GetDefaultDomain(), pk, spectypes.BNRoleAttester)
+	mid := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, pk, spectypes.BNRoleAttester)
 	rounds := []specqbft.Round{
 		1, 1, 1,
 		1, 2, 2,
@@ -253,7 +254,10 @@ func createNetworkAndSubscribe(t *testing.T, ctx context.Context, n int, forkVer
 	// for now, skip routers for v0
 	// if forkVersion != forksprotocol.GenesisForkVersion {
 	for i, node := range ln.Nodes {
-		routers[i] = &dummyRouter{i: i}
+		routers[i] = &dummyRouter{
+			logger: logger,
+			i:      i,
+		}
 		node.UseMessageRouter(routers[i])
 	}
 
@@ -299,13 +303,14 @@ func createNetworkAndSubscribe(t *testing.T, ctx context.Context, n int, forkVer
 }
 
 type dummyRouter struct {
-	count uint64
-	i     int
+	logger *zap.Logger
+	count  uint64
+	i      int
 }
 
-func (r *dummyRouter) Route(logger *zap.Logger, message spectypes.SSVMessage) {
+func (r *dummyRouter) Route(message *queue.DecodedSSVMessage) {
 	c := atomic.AddUint64(&r.count, 1)
-	logger.Debug("got message", zap.Uint64("count", c))
+	r.logger.Debug("got message", zap.Uint64("count", c))
 }
 
 func dummyMsg(pkHex string, height int) (*spectypes.SSVMessage, error) {
@@ -313,7 +318,7 @@ func dummyMsg(pkHex string, height int) (*spectypes.SSVMessage, error) {
 	if err != nil {
 		return nil, err
 	}
-	id := spectypes.NewMsgID(types.GetDefaultDomain(), pk, spectypes.BNRoleAttester)
+	id := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, pk, spectypes.BNRoleAttester)
 	signedMsg := &specqbft.SignedMessage{
 		Message: specqbft.Message{
 			MsgType:    specqbft.CommitMsgType,

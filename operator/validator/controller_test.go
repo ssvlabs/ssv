@@ -6,17 +6,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv/logging"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network/forks/genesis"
+	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/queue/worker"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -31,37 +32,45 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 
 	var wg sync.WaitGroup
 
-	ctr.messageWorker.UseHandler(func(logger *zap.Logger, msg *spectypes.SSVMessage) error {
+	ctr.messageWorker.UseHandler(func(msg *queue.DecodedSSVMessage) error {
 		wg.Done()
 		return nil
 	})
 
 	wg.Add(2)
 
-	identifier := spectypes.NewMsgID(types.GetDefaultDomain(), []byte("pk"), spectypes.BNRoleAttester)
+	identifier := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, []byte("pk"), spectypes.BNRoleAttester)
 
-	ctr.messageRouter.Route(logger, spectypes.SSVMessage{
-		MsgType: spectypes.SSVConsensusMsgType,
-		MsgID:   identifier,
-		Data:    generateDecidedMessage(t, identifier),
+	ctr.messageRouter.Route(&queue.DecodedSSVMessage{
+		SSVMessage: &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   identifier,
+			Data:    generateDecidedMessage(t, identifier),
+		},
 	})
 
-	ctr.messageRouter.Route(logger, spectypes.SSVMessage{
-		MsgType: spectypes.SSVConsensusMsgType,
-		MsgID:   identifier,
-		Data:    generateChangeRoundMsg(t, identifier),
+	ctr.messageRouter.Route(&queue.DecodedSSVMessage{
+		SSVMessage: &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   identifier,
+			Data:    generateChangeRoundMsg(t, identifier),
+		},
 	})
 
-	ctr.messageRouter.Route(logger, spectypes.SSVMessage{ // checks that not process unnecessary message
-		MsgType: message.SSVSyncMsgType,
-		MsgID:   identifier,
-		Data:    []byte("data"),
+	ctr.messageRouter.Route(&queue.DecodedSSVMessage{
+		SSVMessage: &spectypes.SSVMessage{ // checks that not process unnecessary message
+			MsgType: message.SSVSyncMsgType,
+			MsgID:   identifier,
+			Data:    []byte("data"),
+		},
 	})
 
-	ctr.messageRouter.Route(logger, spectypes.SSVMessage{ // checks that not process unnecessary message
-		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID:   identifier,
-		Data:    []byte("data"),
+	ctr.messageRouter.Route(&queue.DecodedSSVMessage{
+		SSVMessage: &spectypes.SSVMessage{ // checks that not process unnecessary message
+			MsgType: spectypes.SSVPartialSignatureMsgType,
+			MsgID:   identifier,
+			Data:    []byte("data"),
+		},
 	})
 
 	go func() {
@@ -149,7 +158,7 @@ func setupController(logger *zap.Logger, validators map[string]*validator.Valida
 		},
 		metadataUpdateQueue:    nil,
 		metadataUpdateInterval: 0,
-		messageRouter:          newMessageRouter(genesis.New().MsgID()),
+		messageRouter:          newMessageRouter(logger, genesis.New().MsgID()),
 		messageWorker: worker.NewWorker(logger, &worker.Config{
 			Ctx:          context.Background(),
 			WorkersCount: 1,

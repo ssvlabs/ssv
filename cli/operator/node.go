@@ -8,12 +8,14 @@ import (
 	"time"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/api/handlers"
-	apiserver "github.com/bloxapp/ssv/api/server"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/api/handlers"
+	apiserver "github.com/bloxapp/ssv/api/server"
+	"github.com/bloxapp/ssv/message/validation"
 
 	"github.com/bloxapp/ssv/beacon/goclient"
 	global_config "github.com/bloxapp/ssv/cli/config"
@@ -112,7 +114,8 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.Permissioned = permissioned
 		cfg.P2pNetworkConfig.WhitelistedOperatorKeys = append(cfg.P2pNetworkConfig.WhitelistedOperatorKeys, networkConfig.WhitelistedOperatorKeys...)
 
-		p2pNetwork := setupP2P(forkVersion, operatorData, db, logger, networkConfig)
+		messageValidator := validation.NewMessageValidator(networkConfig.Beacon)
+		p2pNetwork := setupP2P(forkVersion, operatorData, db, logger, networkConfig, messageValidator)
 
 		ctx := cmd.Context()
 		slotTicker := slot_ticker.NewTicker(ctx, networkConfig)
@@ -363,6 +366,7 @@ func setupP2P(
 	db basedb.IDb,
 	logger *zap.Logger,
 	network networkconfig.NetworkConfig,
+	messageValidator *validation.MessageValidator,
 ) network.P2PNetwork {
 	istore := ssv_identity.NewIdentityStore(db)
 	netPrivKey, err := istore.SetupNetworkKey(logger, cfg.NetworkPrivateKey)
@@ -380,6 +384,7 @@ func setupP2P(
 	cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorData.PublicKey)
 	cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
 	cfg.P2pNetworkConfig.Network = network
+	cfg.P2pNetworkConfig.MessageValidator = messageValidator
 
 	return p2pv1.New(logger, &cfg.P2pNetworkConfig)
 }

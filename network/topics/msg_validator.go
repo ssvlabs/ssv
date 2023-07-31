@@ -3,9 +3,12 @@ package topics
 import (
 	"context"
 
-	"github.com/bloxapp/ssv/network/forks"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/message/validation"
+	"github.com/bloxapp/ssv/network/forks"
 )
 
 // MsgValidatorFunc represents a message validator
@@ -14,7 +17,7 @@ type MsgValidatorFunc = func(ctx context.Context, p peer.ID, msg *pubsub.Message
 // NewSSVMsgValidator creates a new msg validator that validates message structure,
 // and checks that the message was sent on the right topic.
 // TODO: enable post SSZ change, remove logs, break into smaller validators?
-func NewSSVMsgValidator(fork forks.Fork) func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
+func NewSSVMsgValidator(logger *zap.Logger, fork forks.Fork, validator *validation.MessageValidator) func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
 	return func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 		topic := pmsg.GetTopic()
 		metricPubsubActiveMsgValidation.WithLabelValues(topic).Inc()
@@ -34,8 +37,6 @@ func NewSSVMsgValidator(fork forks.Fork) func(ctx context.Context, p peer.ID, ms
 			reportValidationResult(validationResultEncoding)
 			return pubsub.ValidationReject
 		}
-		pmsg.ValidatorData = *msg
-		return pubsub.ValidationAccept
 
 		// Check if the message was sent on the right topic.
 		// currentTopic := pmsg.GetTopic()
@@ -49,6 +50,20 @@ func NewSSVMsgValidator(fork forks.Fork) func(ctx context.Context, p peer.ID, ms
 		//}
 		// reportValidationResult(validationResultTopic)
 		// return pubsub.ValidationReject
+
+		if validator != nil {
+			decodedMessage, err := validator.ValidateMessage(msg)
+			if err != nil {
+				logger.Debug("rejecting invalid message", zap.Error(err))
+				// TODO: pass metrics to NewSSVMsgValidator
+				reportValidationResult(validationResultInvalid)
+				return pubsub.ValidationReject
+			}
+
+			pmsg.ValidatorData = decodedMessage
+		}
+
+		return pubsub.ValidationAccept
 	}
 }
 

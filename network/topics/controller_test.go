@@ -10,19 +10,19 @@ import (
 	"time"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/logging"
-
-	"github.com/bloxapp/ssv/network/forks/genesis"
-	"github.com/bloxapp/ssv/protocol/v2/types"
-
-	"github.com/bloxapp/ssv/network/discovery"
-	"github.com/bloxapp/ssv/network/forks"
 	"github.com/libp2p/go-libp2p"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/message/validation"
+	"github.com/bloxapp/ssv/network/discovery"
+	"github.com/bloxapp/ssv/network/forks"
+	"github.com/bloxapp/ssv/network/forks/genesis"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 func TestTopicManager(t *testing.T) {
@@ -41,7 +41,8 @@ func TestTopicManager(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	f := genesis.New()
-	peers := newPeers(ctx, logger, t, nPeers, false, true, f)
+
+	peers := newPeers(ctx, logger, t, nPeers, nil, true, f)
 	baseTest(t, ctx, logger, peers, pks, f, 1, 2)
 }
 
@@ -181,7 +182,7 @@ func (p *P) saveMsg(t string, msg *pubsub.Message) {
 }
 
 // TODO: use p2p/testing
-func newPeers(ctx context.Context, logger *zap.Logger, t *testing.T, n int, msgValidator, msgID bool, fork forks.Fork) []*P {
+func newPeers(ctx context.Context, logger *zap.Logger, t *testing.T, n int, msgValidator *validation.MessageValidator, msgID bool, fork forks.Fork) []*P {
 	peers := make([]*P, n)
 	for i := 0; i < n; i++ {
 		peers[i] = newPeer(ctx, logger, t, msgValidator, msgID, fork)
@@ -203,7 +204,7 @@ func newPeers(ctx context.Context, logger *zap.Logger, t *testing.T, n int, msgV
 	return peers
 }
 
-func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator, msgID bool, fork forks.Fork) *P {
+func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator *validation.MessageValidator, msgID bool, fork forks.Fork) *P {
 	h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
 	require.NoError(t, err)
 	ds, err := discovery.NewLocalDiscovery(ctx, logger, h)
@@ -231,9 +232,9 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 		// TODO: add mock for peers.ScoreIndex
 	}
 	//
-	if msgValidator {
+	if msgValidator != nil {
 		cfg.MsgValidatorFactory = func(s string) MsgValidatorFunc {
-			return NewSSVMsgValidator(fork)
+			return NewSSVMsgValidator(logger, fork, msgValidator)
 		}
 	}
 	ps, tm, err := NewPubsub(ctx, logger, cfg, fork)

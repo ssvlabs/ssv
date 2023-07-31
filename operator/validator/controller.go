@@ -34,6 +34,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	utilsprotocol "github.com/bloxapp/ssv/protocol/v2/queue"
 	"github.com/bloxapp/ssv/protocol/v2/queue/worker"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/sync/handlers"
@@ -222,7 +223,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 
 		operatorsIDs: operatorsIDs,
 
-		messageRouter:        newMessageRouter(msgID),
+		messageRouter:        newMessageRouter(logger, msgID),
 		messageWorker:        worker.NewWorker(logger, workerCfg),
 		historySyncBatchSize: options.HistorySyncBatchSize,
 
@@ -306,12 +307,12 @@ func (c *controller) handleRouterMessages(logger *zap.Logger) {
 			pk := msg.GetID().GetPubKey()
 			hexPK := hex.EncodeToString(pk)
 			if v, ok := c.validatorsMap.GetValidator(hexPK); ok {
-				v.HandleMessage(logger, &msg)
+				v.HandleMessage(logger, msg)
 			} else {
 				if msg.MsgType != spectypes.SSVConsensusMsgType {
 					continue // not supporting other types
 				}
-				if !c.messageWorker.TryEnqueue(&msg) { // start to save non committee decided messages only post fork
+				if !c.messageWorker.TryEnqueue(msg) { // start to save non committee decided messages only post fork
 					logger.Warn("Failed to enqueue post consensus message: buffer is full")
 				}
 			}
@@ -327,7 +328,10 @@ var nonCommitteeValidatorTTLs = map[spectypes.BeaconRole]phase0.Slot{
 	spectypes.BNRoleSyncCommitteeContribution: 4,
 }
 
-func (c *controller) handleWorkerMessages(logger *zap.Logger, msg *spectypes.SSVMessage) error {
+func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
+	// TODO: pass logger to controller's constructor, then use it here
+	logger := zap.L()
+
 	// Get or create a nonCommitteeValidator for this MessageID, and lock it to prevent
 	// other handlers from processing
 	var ncv *nonCommitteeValidator
