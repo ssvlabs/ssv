@@ -45,6 +45,8 @@ type Storage interface {
 	RemoveHighestAttestation(pubKey []byte) error
 	RemoveHighestProposal(pubKey []byte) error
 	SetEncryptionKey(newKey string) error
+	ListAccountsTxn(txn basedb.IDb) ([]core.ValidatorAccount, error)
+	SaveAccountTxn(txn basedb.IDb, account core.ValidatorAccount) error
 }
 
 type storage struct {
@@ -138,15 +140,24 @@ func (s *storage) OpenWallet() (core.Wallet, error) {
 
 // ListAccounts returns an empty array for no accounts
 func (s *storage) ListAccounts() ([]core.ValidatorAccount, error) {
+	return s.ListAccountsTxn(nil)
+}
+
+// ListAccountsTxn returns an empty array for no accounts
+func (s *storage) ListAccountsTxn(txn basedb.IDb) ([]core.ValidatorAccount, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
 	ret := make([]core.ValidatorAccount, 0)
 
-	err := s.db.GetAll(s.logger, s.objPrefix(accountsPrefix), func(i int, obj basedb.Obj) error {
+	getter := s.db
+	if txn != nil {
+		getter = txn
+	}
+	err := getter.GetAll(s.logger, s.objPrefix(accountsPrefix), func(i int, obj basedb.Obj) error {
 		value, err := s.decryptData(obj.Value)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "failed to decrypt accounts")
 		}
 		acc, err := s.decodeAccount(value)
 		if err != nil {
@@ -159,11 +170,14 @@ func (s *storage) ListAccounts() ([]core.ValidatorAccount, error) {
 	return ret, err
 }
 
-// SaveAccount saves the given account
-func (s *storage) SaveAccount(account core.ValidatorAccount) error {
+func (s *storage) SaveAccountTxn(txn basedb.IDb, account core.ValidatorAccount) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
+	setter := s.db
+	if txn != nil {
+		setter = txn
+	}
 	data, err := json.Marshal(account)
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal account")
@@ -175,7 +189,12 @@ func (s *storage) SaveAccount(account core.ValidatorAccount) error {
 	if err != nil {
 		return err
 	}
-	return s.db.Set(s.objPrefix(accountsPrefix), []byte(key), encryptedValue)
+	return setter.Set(s.objPrefix(accountsPrefix), []byte(key), encryptedValue)
+}
+
+// SaveAccount saves the given account
+func (s *storage) SaveAccount(account core.ValidatorAccount) error {
+	return s.SaveAccountTxn(nil, account)
 }
 
 // DeleteAccount deletes account by uuid
