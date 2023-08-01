@@ -48,7 +48,7 @@ var migrationEncryptShares = Migration{
 					return fmt.Errorf("failed to save account %s: %w", account, err)
 				}
 			}
-			return txn.Set(migrationsPrefix, key, migrationCompleted)
+			return nil
 		})
 	},
 }
