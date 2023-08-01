@@ -163,6 +163,11 @@ func (edh *EventDataHandler) processBlockEvents(block executionclient.BlockLogs)
 		// implement reorg support or only process finalized blocks.
 		return nil, ErrBlockAlreadyProcessed
 	}
+	if lastProcessedBlock.Uint64()+1 < block.BlockNumber {
+		edh.logger.Warn("skipped blocks",
+			zap.Uint64("last_processed_block", lastProcessedBlock.Uint64()),
+			zap.Uint64("block_number", block.BlockNumber))
+	}
 
 	var tasks []Task
 	for _, log := range block.Logs {
