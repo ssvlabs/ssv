@@ -45,8 +45,8 @@ type Storage interface {
 	RemoveHighestAttestation(pubKey []byte) error
 	RemoveHighestProposal(pubKey []byte) error
 	SetEncryptionKey(newKey string) error
-	ListAccountsTxn(txn basedb.Reader) ([]core.ValidatorAccount, error)
-	SaveAccountTxn(txn basedb.ReadWriter, account core.ValidatorAccount) error
+	ListAccountsTxn(r basedb.Reader) ([]core.ValidatorAccount, error)
+	SaveAccountTxn(rw basedb.ReadWriter, account core.ValidatorAccount) error
 }
 
 type storage struct {

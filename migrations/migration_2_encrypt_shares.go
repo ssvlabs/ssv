@@ -31,7 +31,7 @@ var migrationEncryptShares = Migration{
 				return nil
 			}
 			signerStorage := opt.signerStorage(logger)
-			accounts, err := signerStorage.ListAccountsTxn(opt.Db)
+			accounts, err := signerStorage.ListAccountsTxn(txn)
 			if err != nil {
 				return fmt.Errorf("failed to list accounts: %w", err)
 			}
@@ -43,7 +43,7 @@ var migrationEncryptShares = Migration{
 				return fmt.Errorf("failed to set encryption key: %w", err)
 			}
 			for _, account := range accounts {
-				err := signerStorage.SaveAccountTxn(opt.Db, account)
+				err := signerStorage.SaveAccountTxn(txn, account)
 				if err != nil {
 					return fmt.Errorf("failed to save account %s: %w", account, err)
 				}
