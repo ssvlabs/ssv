@@ -23,7 +23,7 @@ type messageRouter struct {
 	msgID  forks.MsgIDFunc
 }
 
-func (r *messageRouter) Route(message *queue.DecodedSSVMessage) {
+func (r *messageRouter) Route(logger *zap.Logger, message *queue.DecodedSSVMessage) {
 	select {
 	case r.ch <- message:
 	default:

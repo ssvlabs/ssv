@@ -163,7 +163,7 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(topic string,
 
 		metricsRouterIncoming.WithLabelValues(p2pID, message.MsgTypeToString(decodedMsg.MsgType)).Inc()
 
-		n.msgRouter.Route(decodedMsg)
+		n.msgRouter.Route(logger, decodedMsg)
 
 		return nil
 	}

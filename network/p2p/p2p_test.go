@@ -255,8 +255,7 @@ func createNetworkAndSubscribe(t *testing.T, ctx context.Context, n int, forkVer
 	// if forkVersion != forksprotocol.GenesisForkVersion {
 	for i, node := range ln.Nodes {
 		routers[i] = &dummyRouter{
-			logger: logger,
-			i:      i,
+			i: i,
 		}
 		node.UseMessageRouter(routers[i])
 	}
@@ -303,14 +302,13 @@ func createNetworkAndSubscribe(t *testing.T, ctx context.Context, n int, forkVer
 }
 
 type dummyRouter struct {
-	logger *zap.Logger
-	count  uint64
-	i      int
+	count uint64
+	i     int
 }
 
-func (r *dummyRouter) Route(message *queue.DecodedSSVMessage) {
+func (r *dummyRouter) Route(logger *zap.Logger, message *queue.DecodedSSVMessage) {
 	c := atomic.AddUint64(&r.count, 1)
-	r.logger.Debug("got message", zap.Uint64("count", c))
+	logger.Debug("got message", zap.Uint64("count", c))
 }
 
 func dummyMsg(pkHex string, height int) (*spectypes.SSVMessage, error) {

@@ -1,14 +1,18 @@
 package validation
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"golang.org/x/exp/slices"
 
+	"github.com/bloxapp/ssv/operator/validator"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
@@ -21,6 +25,9 @@ const (
 
 	// clockErrorTolerance is the maximum amount of clock error we expect to see between nodes.
 	clockErrorTolerance = time.Millisecond * 50
+
+	maxConsensusMsgSize        = math.MaxUint64 // TODO: define
+	maxPartialSignatureMsgSize = math.MaxUint64 // TODO: define
 )
 
 var (
@@ -43,17 +50,19 @@ type ConsensusState struct {
 type MessageValidator struct {
 	network beaconprotocol.Network
 	index   map[ConsensusID]*ConsensusState
+	ctrl    validator.Controller
 }
 
-func NewMessageValidator(network beaconprotocol.Network) *MessageValidator {
+func NewMessageValidator(network beaconprotocol.Network, ctrl validator.Controller) *MessageValidator {
 	return &MessageValidator{
 		network: network,
 		index:   make(map[ConsensusID]*ConsensusState),
+		ctrl:    ctrl,
 	}
 }
 
-func (v *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, error) {
-	if err := v.validateSSVMessage(ssvMessage); err != nil {
+func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, error) {
+	if err := mv.validateSSVMessage(ssvMessage); err != nil {
 		return nil, err
 	}
 
@@ -64,15 +73,15 @@ func (v *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage) (*q
 
 	switch ssvMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
-		if err := v.validateConsensusMessage(msg); err != nil {
+		if err := mv.validateConsensusMessage(msg); err != nil {
 			return nil, err
 		}
 	case spectypes.SSVPartialSignatureMsgType:
-		if err := v.validatePartialSignatureMessage(msg); err != nil {
+		if err := mv.validatePartialSignatureMessage(msg); err != nil {
 			return nil, err
 		}
 	case ssvmessage.SSVEventMsgType:
-		if err := v.validateEventMessage(msg); err != nil {
+		if err := mv.validateEventMessage(msg); err != nil {
 			return nil, err
 		}
 	}
@@ -80,21 +89,25 @@ func (v *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage) (*q
 	return msg, nil
 }
 
-func (v *MessageValidator) validateSSVMessage(msg *spectypes.SSVMessage) error {
-	if !v.knownValidator(msg.MsgID.GetPubKey()) {
+func (mv *MessageValidator) validateSSVMessage(msg *spectypes.SSVMessage) error {
+	if !mv.knownValidator(msg.MsgID.GetPubKey()) {
 		// Validator doesn't exist or is liquidated.
-		return ErrUnknownValidator
+		return ErrUnknownValidator // ERR_VALIDATOR_ID_MISMATCH
 	}
-	if !v.validRole(msg.MsgID.GetRoleType()) {
+	if !mv.validRole(msg.MsgID.GetRoleType()) {
 		return ErrInvalidRole
+	}
+
+	if len(msg.Data) == 0 {
+		return fmt.Errorf("empty data") // ERR_NO_DATA
 	}
 
 	return nil
 }
 
-func (v *MessageValidator) validateConsensusMessage(msg *queue.DecodedSSVMessage) error {
+func (mv *MessageValidator) validateConsensusMessage(msg *queue.DecodedSSVMessage) error {
 	// TODO: consider having a slice of checks like this:
-	//for _, check := range v.consensusChecks {
+	//for _, check := range mv.consensusChecks {
 	//	if err := check(); err != nil {
 	//		return err
 	//	}
@@ -105,20 +118,24 @@ func (v *MessageValidator) validateConsensusMessage(msg *queue.DecodedSSVMessage
 		return fmt.Errorf("expected consensus message")
 	}
 
+	if len(msg.Data) > maxPartialSignatureMsgSize {
+		return fmt.Errorf("size exceeded")
+	}
+
 	msgID := msg.GetID()
 
 	// Validate that the specified signers belong in the validator's committee.
-	if !v.validSigners(msgID.GetPubKey(), msg) {
+	if !mv.validSigners(msgID.GetPubKey(), msg) {
 		return ErrInvalidSigners
 	}
 
 	// TODO: check if height can be used as slot
 	slot := phase0.Slot(signedMsg.Message.Height)
 	// Validate timing.
-	if v.earlyMessage(slot) {
+	if mv.earlyMessage(slot) {
 		return ErrEarlyMessage
 	}
-	if v.lateMessage(slot, msgID.GetRoleType()) {
+	if mv.lateMessage(slot, msgID.GetRoleType()) {
 		return ErrLateMessage
 	}
 
@@ -128,12 +145,12 @@ func (v *MessageValidator) validateConsensusMessage(msg *queue.DecodedSSVMessage
 		Role:   msgID.GetRoleType(),
 	}
 	// Validate each signer's behavior.
-	state := v.consensusState(consensusID)
+	state := mv.consensusState(consensusID)
 	for _, signer := range signedMsg.Signers {
 		// TODO: should we verify signature before doing this validation?
 		//    Reason being that this modifies the signer's state and so message fakers
 		//    would be able to alter states of any signer using invalid signatures.
-		if err := v.validateSignerBehavior(state, signer, msg); err != nil {
+		if err := mv.validateSignerBehavior(state, signer, msg); err != nil {
 			return fmt.Errorf("bad signed behavior: %w", err)
 		}
 	}
@@ -141,17 +158,20 @@ func (v *MessageValidator) validateConsensusMessage(msg *queue.DecodedSSVMessage
 	return nil
 }
 
-func (v *MessageValidator) validatePartialSignatureMessage(msg *queue.DecodedSSVMessage) error {
+func (mv *MessageValidator) validatePartialSignatureMessage(msg *queue.DecodedSSVMessage) error {
 	signedMsg, ok := msg.Body.(*spectypes.PartialSignatureMessage)
 	if !ok {
 		return fmt.Errorf("expected partial signature message")
 	}
 
+	if len(msg.Data) > maxPartialSignatureMsgSize {
+		return fmt.Errorf("size exceeded") // ERR_PSIG_MSG_SIZE
+	}
 	_ = signedMsg // TODO: validate it
 
 	return nil
 }
-func (v *MessageValidator) validateEventMessage(msg *queue.DecodedSSVMessage) error {
+func (mv *MessageValidator) validateEventMessage(msg *queue.DecodedSSVMessage) error {
 	signedMsg, ok := msg.Body.(*ssvtypes.EventMsg)
 	if !ok {
 		return fmt.Errorf("expected event message")
@@ -162,12 +182,12 @@ func (v *MessageValidator) validateEventMessage(msg *queue.DecodedSSVMessage) er
 	return nil
 }
 
-func (v *MessageValidator) earlyMessage(slot phase0.Slot) bool {
-	return v.network.GetSlotEndTime(v.network.EstimatedCurrentSlot()).
-		Add(-clockErrorTolerance).Before(v.network.GetSlotStartTime(slot))
+func (mv *MessageValidator) earlyMessage(slot phase0.Slot) bool {
+	return mv.network.GetSlotEndTime(mv.network.EstimatedCurrentSlot()).
+		Add(-clockErrorTolerance).Before(mv.network.GetSlotStartTime(slot))
 }
 
-func (v *MessageValidator) lateMessage(slot phase0.Slot, role spectypes.BeaconRole) bool {
+func (mv *MessageValidator) lateMessage(slot phase0.Slot, role spectypes.BeaconRole) bool {
 	// Note: this is just an example, should be according to ssv-spec.
 	var ttl phase0.Slot
 	switch role {
@@ -179,22 +199,22 @@ func (v *MessageValidator) lateMessage(slot phase0.Slot, role spectypes.BeaconRo
 		ttl = 1
 		// ...
 	}
-	deadline := v.network.GetSlotStartTime(slot + ttl).
+	deadline := mv.network.GetSlotStartTime(slot + ttl).
 		Add(lateMessageMargin + clockErrorTolerance)
-	return v.network.GetSlotStartTime(v.network.EstimatedCurrentSlot()).
+	return mv.network.GetSlotStartTime(mv.network.EstimatedCurrentSlot()).
 		After(deadline)
 }
 
-func (v *MessageValidator) consensusState(id ConsensusID) *ConsensusState {
-	if _, ok := v.index[id]; !ok {
-		v.index[id] = &ConsensusState{
+func (mv *MessageValidator) consensusState(id ConsensusID) *ConsensusState {
+	if _, ok := mv.index[id]; !ok {
+		mv.index[id] = &ConsensusState{
 			Signers: make(map[spectypes.OperatorID]*SignerState),
 		}
 	}
-	return v.index[id]
+	return mv.index[id]
 }
 
-func (v *MessageValidator) validateSignerBehavior(
+func (mv *MessageValidator) validateSignerBehavior(
 	state *ConsensusState,
 	signer spectypes.OperatorID,
 	msg *queue.DecodedSSVMessage,
@@ -234,6 +254,8 @@ func (v *MessageValidator) validateSignerBehavior(
 	//
 	//     maxRound := (currentTime-messageSlotTime)/roundTimeout
 	//     assert msg.Round < maxRound
+	messageSlotTime := mv.network.GetSlotStartTime(phase0.Slot(signedMsg.Message.Height)) // TODO: check if height == slot
+	_ = messageSlotTime                                                                   // TODO: use
 
 	// Advance slot & round, if needed.
 	if signerState.Slot < messageSlot || signerState.Round < msgRound {
@@ -250,17 +272,67 @@ func (v *MessageValidator) validateSignerBehavior(
 	return nil
 }
 
-func (v *MessageValidator) knownValidator(key []byte) bool {
-	// TODO: implement
+func (mv *MessageValidator) knownValidator(pubKey []byte) bool {
+	_, known := mv.ctrl.GetValidator(hex.EncodeToString(pubKey))
+	return known
+}
+
+func (mv *MessageValidator) validSigners(pubKey []byte, msg *queue.DecodedSSVMessage) bool {
+	// TODO: consider having different validation functions for each message type
+	// TODO: consider returning error
+
+	v, known := mv.ctrl.GetValidator(hex.EncodeToString(pubKey))
+	if !known || mv == nil {
+		return false
+	}
+
+	contains := func(signer spectypes.OperatorID) func(operator *spectypes.Operator) bool {
+		return func(operator *spectypes.Operator) bool {
+			return operator.OperatorID == signer
+		}
+	}
+
+	switch m := msg.Body.(type) {
+	case *specqbft.SignedMessage:
+		if len(m.Signers) == 0 {
+			return false // ERR_NO_SIG
+		}
+
+		if !slices.IsSorted(m.Signers) {
+			return false // ERR_SIGNERS_NOT_SORTED
+		}
+
+		seen := map[spectypes.OperatorID]struct{}{}
+		for _, signer := range m.Signers {
+			if signer == 0 {
+				return false // ERR_SIG_ID
+			}
+
+			if _, ok := seen[signer]; ok {
+				return false // ERR_NON_UNIQUE_SIG
+			}
+			seen[signer] = struct{}{}
+
+			if !slices.ContainsFunc(v.Share.Committee, contains(signer)) {
+				return false // ERR_SIG_ID
+			}
+		}
+	case *spectypes.PartialSignatureMessage:
+		if m.Signer == 0 {
+			return false // ERR_SIG_ID
+		}
+
+		if !slices.ContainsFunc(v.Share.Committee, contains(m.Signer)) {
+			return false // ERR_SIG_ID
+		}
+	default:
+		return false
+	}
+
 	return true
 }
 
-func (v *MessageValidator) validSigners(key []byte, msg *queue.DecodedSSVMessage) bool {
-	// TODO: implement
-	return true
-}
-
-func (v *MessageValidator) validRole(roleType spectypes.BeaconRole) bool {
+func (mv *MessageValidator) validRole(roleType spectypes.BeaconRole) bool {
 	switch roleType {
 	case spectypes.BNRoleAttester,
 		spectypes.BNRoleAggregator,

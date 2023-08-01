@@ -114,7 +114,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.Permissioned = permissioned
 		cfg.P2pNetworkConfig.WhitelistedOperatorKeys = append(cfg.P2pNetworkConfig.WhitelistedOperatorKeys, networkConfig.WhitelistedOperatorKeys...)
 
-		messageValidator := validation.NewMessageValidator(networkConfig.Beacon)
+		messageValidator := validation.NewMessageValidator(networkConfig.Beacon, nil) // TODO: pass validator controller
 		p2pNetwork := setupP2P(forkVersion, operatorData, db, logger, networkConfig, messageValidator)
 
 		ctx := cmd.Context()

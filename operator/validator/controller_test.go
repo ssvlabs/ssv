@@ -41,7 +41,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 
 	identifier := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, []byte("pk"), spectypes.BNRoleAttester)
 
-	ctr.messageRouter.Route(&queue.DecodedSSVMessage{
+	ctr.messageRouter.Route(nil, &queue.DecodedSSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
 			MsgID:   identifier,
@@ -49,7 +49,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 		},
 	})
 
-	ctr.messageRouter.Route(&queue.DecodedSSVMessage{
+	ctr.messageRouter.Route(nil, &queue.DecodedSSVMessage{
 		SSVMessage: &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
 			MsgID:   identifier,
@@ -57,7 +57,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 		},
 	})
 
-	ctr.messageRouter.Route(&queue.DecodedSSVMessage{
+	ctr.messageRouter.Route(nil, &queue.DecodedSSVMessage{
 		SSVMessage: &spectypes.SSVMessage{ // checks that not process unnecessary message
 			MsgType: message.SSVSyncMsgType,
 			MsgID:   identifier,
@@ -65,7 +65,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 		},
 	})
 
-	ctr.messageRouter.Route(&queue.DecodedSSVMessage{
+	ctr.messageRouter.Route(nil, &queue.DecodedSSVMessage{
 		SSVMessage: &spectypes.SSVMessage{ // checks that not process unnecessary message
 			MsgType: spectypes.SSVPartialSignatureMsgType,
 			MsgID:   identifier,

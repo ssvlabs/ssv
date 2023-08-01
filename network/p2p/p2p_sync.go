@@ -27,7 +27,7 @@ import (
 
 func (n *p2pNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
 	return n.syncer.SyncHighestDecided(context.Background(), n.interfaceLogger, mid, func(msg *queue.DecodedSSVMessage) {
-		n.msgRouter.Route(msg)
+		n.msgRouter.Route(n.interfaceLogger, msg)
 	})
 }
 
@@ -62,7 +62,7 @@ func (n *p2pNetwork) SyncDecidedByRange(mid spectypes.MessageID, from, to qbft.H
 	}
 
 	err := n.syncer.SyncDecidedByRange(context.Background(), n.interfaceLogger, mid, from, to, func(msg *queue.DecodedSSVMessage) {
-		n.msgRouter.Route(msg)
+		n.msgRouter.Route(n.interfaceLogger, msg)
 	})
 	if err != nil {
 		n.interfaceLogger.Error("failed to sync decided by range", zap.Error(err))

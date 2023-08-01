@@ -50,9 +50,9 @@ func TestRouter(t *testing.T) {
 			},
 		}
 
-		router.Route(msg)
+		router.Route(nil, msg)
 		if i%2 == 0 {
-			go router.Route(msg)
+			go router.Route(nil, msg)
 		}
 	}
 
