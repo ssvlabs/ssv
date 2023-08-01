@@ -106,13 +106,6 @@ func (mv *MessageValidator) validateSSVMessage(msg *spectypes.SSVMessage) error 
 }
 
 func (mv *MessageValidator) validateConsensusMessage(msg *queue.DecodedSSVMessage) error {
-	// TODO: consider having a slice of checks like this:
-	//for _, check := range mv.consensusChecks {
-	//	if err := check(); err != nil {
-	//		return err
-	//	}
-	//}
-
 	signedMsg, ok := msg.Body.(*specqbft.SignedMessage)
 	if !ok {
 		return fmt.Errorf("expected consensus message")
