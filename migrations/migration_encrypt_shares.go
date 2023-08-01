@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap"
 )
 
-var encryptSharesMigration = Migration{
+var migrationEncryptShares = Migration{
 	Name: "encrypt_shares",
 	Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte) error {
 		return opt.Db.Update(func(txn basedb.Txn) error {
