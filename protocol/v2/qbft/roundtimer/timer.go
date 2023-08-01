@@ -7,11 +7,10 @@ import (
 	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 )
 
 type RoundTimeoutFunc func(specqbft.Round) time.Duration
+type OnRoundTimeoutF func(round specqbft.Round)
 
 var (
 	quickTimeoutThreshold = specqbft.Round(8)
@@ -38,7 +37,7 @@ type RoundTimer struct {
 	// timer is the underlying time.Timer
 	timer *time.Timer
 	// result holds the result of the timer
-	done runner.OnTimeoutF
+	done OnRoundTimeoutF
 	// round is the current round of the timer
 	round int64
 
@@ -46,7 +45,7 @@ type RoundTimer struct {
 }
 
 // New creates a new instance of RoundTimer.
-func New(pctx context.Context, done runner.OnTimeoutF) *RoundTimer {
+func New(pctx context.Context, done OnRoundTimeoutF) *RoundTimer {
 	ctx, cancelCtx := context.WithCancel(pctx)
 	return &RoundTimer{
 		mtx:          &sync.RWMutex{},
@@ -59,7 +58,7 @@ func New(pctx context.Context, done runner.OnTimeoutF) *RoundTimer {
 }
 
 // OnTimeout sets a function called on timeout.
-func (t *RoundTimer) OnTimeout(done runner.OnTimeoutF) {
+func (t *RoundTimer) OnTimeout(done OnRoundTimeoutF) {
 	t.mtx.Lock() // write to t.done
 	defer t.mtx.Unlock()
 
