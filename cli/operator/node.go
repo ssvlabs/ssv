@@ -22,7 +22,7 @@ import (
 	"github.com/bloxapp/ssv/beacon/goclient"
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/ekm"
-	"github.com/bloxapp/ssv/eth/eventdatahandler"
+	"github.com/bloxapp/ssv/eth/eventhandler"
 	"github.com/bloxapp/ssv/eth/eventparser"
 	"github.com/bloxapp/ssv/eth/eventsyncer"
 	"github.com/bloxapp/ssv/eth/executionclient"
@@ -479,7 +479,7 @@ func setupEventHandling(
 
 	eventParser := eventparser.New(eventFilterer)
 
-	eventDataHandler, err := eventdatahandler.New(
+	eventHandler, err := eventhandler.New(
 		nodeStorage,
 		eventParser,
 		validatorCtrl,
@@ -489,9 +489,9 @@ func setupEventHandling(
 		cfg.SSVOptions.ValidatorOptions.KeyManager,
 		cfg.SSVOptions.ValidatorOptions.Beacon,
 		storageMap,
-		eventdatahandler.WithFullNode(),
-		eventdatahandler.WithLogger(logger),
-		eventdatahandler.WithMetrics(metricsReporter),
+		eventhandler.WithFullNode(),
+		eventhandler.WithLogger(logger),
+		eventhandler.WithMetrics(metricsReporter),
 	)
 	if err != nil {
 		logger.Fatal("failed to setup event data handler", zap.Error(err))
@@ -499,7 +499,7 @@ func setupEventHandling(
 
 	eventSyncer := eventsyncer.New(
 		executionClient,
-		eventDataHandler,
+		eventHandler,
 		eventsyncer.WithLogger(logger),
 		eventsyncer.WithMetrics(metricsReporter),
 	)
@@ -524,7 +524,7 @@ func setupEventHandling(
 			logger.Fatal("failed to load local events", zap.Error(err))
 		}
 
-		if err := eventDataHandler.HandleLocalEvents(localEvents); err != nil {
+		if err := eventHandler.HandleLocalEvents(localEvents); err != nil {
 			logger.Fatal("error occurred while running event data handler", zap.Error(err))
 		}
 	} else {

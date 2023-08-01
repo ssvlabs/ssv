@@ -26,7 +26,7 @@ import (
 
 	"github.com/bloxapp/ssv/ekm"
 
-	"github.com/bloxapp/ssv/eth/eventdatahandler"
+	"github.com/bloxapp/ssv/eth/eventhandler"
 	"github.com/bloxapp/ssv/eth/eventparser"
 	"github.com/bloxapp/ssv/eth/executionclient"
 	"github.com/bloxapp/ssv/eth/simulator/simcontract"
@@ -117,10 +117,10 @@ func TestEventSyncer(t *testing.T) {
 		require.Equal(t, uint64(0x1), receipt.Status)
 	}
 
-	edh := setupEventDataHandler(t, ctx, logger)
+	eh := setupEventHandler(t, ctx, logger)
 	eventSyncer := New(
 		client,
-		edh,
+		eh,
 		WithLogger(logger),
 	)
 
@@ -130,7 +130,7 @@ func TestEventSyncer(t *testing.T) {
 	require.NoError(t, eventSyncer.SyncOngoing(ctx, lastProcessedBlock+1))
 }
 
-func setupEventDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger) *eventdatahandler.EventDataHandler {
+func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger) *eventhandler.EventHandler {
 	options := basedb.Options{
 		Type:      "badger-memory",
 		Path:      "",
@@ -166,7 +166,7 @@ func setupEventDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger
 
 	parser := eventparser.New(contractFilterer)
 
-	edh, err := eventdatahandler.New(
+	eh, err := eventhandler.New(
 		nodeStorage,
 		parser,
 		validatorCtrl,
@@ -176,13 +176,13 @@ func setupEventDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger
 		keyManager,
 		bc,
 		storageMap,
-		eventdatahandler.WithFullNode(),
-		eventdatahandler.WithLogger(logger))
+		eventhandler.WithFullNode(),
+		eventhandler.WithLogger(logger))
 
 	if err != nil {
 		t.Fatal(err)
 	}
-	return edh
+	return eh
 }
 
 func simTestBackend(testAddr ethcommon.Address) *simulator.SimulatedBackend {

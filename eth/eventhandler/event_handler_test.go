@@ -1,4 +1,4 @@
-package eventdatahandler
+package eventhandler
 
 import (
 	"context"
@@ -53,7 +53,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	edh, err := setupDataHandler(t, ctx, logger)
+	eh, err := setupHandler(t, ctx, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,24 +126,24 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		}()
 
 		// Check that there is no registered operators
-		operators, err := edh.nodeStorage.ListOperators(nil, 0, 10)
+		operators, err := eh.nodeStorage.ListOperators(nil, 0, 10)
 		require.NoError(t, err)
 		require.Equal(t, 0, len(operators))
 
 		// Hanlde the event
-		lastProcessedBlock, err := edh.HandleBlockEventsStream(eventsCh, false)
+		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
 		require.Equal(t, uint64(0x2), lastProcessedBlock)
 		require.NoError(t, err)
 
 		// Check storage for a new operator
-		operators, err = edh.nodeStorage.ListOperators(nil, 0, 10)
+		operators, err = eh.nodeStorage.ListOperators(nil, 0, 10)
 		require.NoError(t, err)
 		require.Equal(t, 1, len(operators))
 
 		// Check if an operator in the storage has same attributes
 		operatorAddedEvent, err := contractFilterer.ParseOperatorAdded(block.Logs[0])
 		require.NoError(t, err)
-		data, _, err := edh.nodeStorage.GetOperatorData(nil, operatorAddedEvent.OperatorId)
+		data, _, err := eh.nodeStorage.GetOperatorData(nil, operatorAddedEvent.OperatorId)
 		require.NoError(t, err)
 		require.Equal(t, operatorAddedEvent.OperatorId, data.ID)
 		require.Equal(t, operatorAddedEvent.Owner, data.OwnerAddress)
@@ -166,18 +166,18 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		}()
 
 		// Check that there is 1 registered operator
-		operators, err := edh.nodeStorage.ListOperators(nil, 0, 10)
+		operators, err := eh.nodeStorage.ListOperators(nil, 0, 10)
 		require.NoError(t, err)
 		require.Equal(t, 1, len(operators))
 
 		// Hanlde the event
-		lastProcessedBlock, err := edh.HandleBlockEventsStream(eventsCh, false)
+		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
 		require.Equal(t, uint64(0x3), lastProcessedBlock)
 		require.NoError(t, err)
 
 		// Check if the operator was removed successfuly
-		// TODO: this should be adjusted when eth/eventdatahandler/handlers.go#L109 is resolved
-		operators, err = edh.nodeStorage.ListOperators(nil, 0, 10)
+		// TODO: this should be adjusted when eth/eventhandler/handlers.go#L109 is resolved
+		operators, err = eh.nodeStorage.ListOperators(nil, 0, 10)
 		require.NoError(t, err)
 		require.Equal(t, 1, len(operators))
 	})
@@ -220,7 +220,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			eventsCh <- block
 		}()
 
-		lastProcessedBlock, err := edh.HandleBlockEventsStream(eventsCh, false)
+		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
 		require.Equal(t, uint64(0x4), lastProcessedBlock)
 		require.NoError(t, err)
 	})
@@ -250,7 +250,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			eventsCh <- block
 		}()
 
-		lastProcessedBlock, err := edh.HandleBlockEventsStream(eventsCh, false)
+		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
 		require.Equal(t, uint64(0x5), lastProcessedBlock)
 		require.NoError(t, err)
 	})
@@ -280,7 +280,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			eventsCh <- block
 		}()
 
-		lastProcessedBlock, err := edh.HandleBlockEventsStream(eventsCh, false)
+		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
 		require.Equal(t, uint64(0x6), lastProcessedBlock)
 		require.NoError(t, err)
 	})
@@ -310,7 +310,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			eventsCh <- block
 		}()
 
-		lastProcessedBlock, err := edh.HandleBlockEventsStream(eventsCh, false)
+		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
 		require.Equal(t, uint64(0x7), lastProcessedBlock)
 		require.NoError(t, err)
 	})
@@ -333,17 +333,17 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			eventsCh <- block
 		}()
 
-		lastProcessedBlock, err := edh.HandleBlockEventsStream(eventsCh, false)
+		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
 		require.Equal(t, uint64(0x8), lastProcessedBlock)
 		require.NoError(t, err)
 		// Check if the fee recepient was updated
-		recepientData, _, err := edh.nodeStorage.GetRecipientData(nil, ethcommon.HexToAddress("0x71562b71999873DB5b286dF957af199Ec94617F7"))
+		recepientData, _, err := eh.nodeStorage.GetRecipientData(nil, ethcommon.HexToAddress("0x71562b71999873DB5b286dF957af199Ec94617F7"))
 		require.NoError(t, err)
 		require.Equal(t, ethcommon.HexToAddress("0x1").String(), recepientData.FeeRecipient.String())
 	})
 }
 
-func setupDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger) (*EventDataHandler, error) {
+func setupHandler(t *testing.T, ctx context.Context, logger *zap.Logger) (*EventHandler, error) {
 	options := basedb.Options{
 		Type:       "badger-memory",
 		Path:       "",
@@ -381,7 +381,7 @@ func setupDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger) (*E
 
 	parser := eventparser.New(contractFilterer)
 
-	edh, err := New(
+	eh, err := New(
 		nodeStorage,
 		parser,
 		validatorCtrl,
@@ -396,7 +396,7 @@ func setupDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger) (*E
 	if err != nil {
 		return nil, err
 	}
-	return edh, nil
+	return eh, nil
 }
 
 func setupOperatorStorage(logger *zap.Logger, db basedb.Database) (operatorstorage.Storage, *registrystorage.OperatorData) {

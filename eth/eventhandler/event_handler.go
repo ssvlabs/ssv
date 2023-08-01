@@ -1,4 +1,6 @@
-package eventdatahandler
+// Package eventhandler implements functions to handle registry contract events
+// and persist them to the database.
+package eventhandler
 
 import (
 	"crypto/rsa"
@@ -57,7 +59,7 @@ type OperatorData interface {
 	SetOperatorData(*storage.OperatorData)
 }
 
-type EventDataHandler struct {
+type EventHandler struct {
 	nodeStorage                nodestorage.Storage
 	taskExecutor               taskExecutor
 	eventParser                eventparser.Parser
@@ -84,8 +86,8 @@ func New(
 	beacon beaconprotocol.BeaconNode,
 	storageMap *qbftstorage.QBFTStores,
 	opts ...Option,
-) (*EventDataHandler, error) {
-	edh := &EventDataHandler{
+) (*EventHandler, error) {
+	eh := &EventHandler{
 		nodeStorage:                nodeStorage,
 		taskExecutor:               taskExecutor,
 		eventParser:                eventParser,
@@ -100,18 +102,18 @@ func New(
 	}
 
 	for _, opt := range opts {
-		opt(edh)
+		opt(eh)
 	}
 
-	return edh, nil
+	return eh, nil
 }
 
-func (edh *EventDataHandler) HandleBlockEventsStream(logs <-chan executionclient.BlockLogs, executeTasks bool) (lastProcessedBlock uint64, err error) {
+func (eh *EventHandler) HandleBlockEventsStream(logs <-chan executionclient.BlockLogs, executeTasks bool) (lastProcessedBlock uint64, err error) {
 	for blockLogs := range logs {
-		logger := edh.logger.With(fields.BlockNumber(blockLogs.BlockNumber))
+		logger := eh.logger.With(fields.BlockNumber(blockLogs.BlockNumber))
 
 		start := time.Now()
-		tasks, err := edh.processBlockEvents(blockLogs)
+		tasks, err := eh.processBlockEvents(blockLogs)
 		logger.Debug("processed events from block",
 			fields.Count(len(blockLogs.Logs)),
 			fields.Took(time.Since(start)),
@@ -143,11 +145,11 @@ func (edh *EventDataHandler) HandleBlockEventsStream(logs <-chan executionclient
 	return
 }
 
-func (edh *EventDataHandler) processBlockEvents(block executionclient.BlockLogs) ([]Task, error) {
-	txn := edh.nodeStorage.Begin()
+func (eh *EventHandler) processBlockEvents(block executionclient.BlockLogs) ([]Task, error) {
+	txn := eh.nodeStorage.Begin()
 	defer txn.Discard()
 
-	lastProcessedBlock, found, err := edh.nodeStorage.GetLastProcessedBlock(txn)
+	lastProcessedBlock, found, err := eh.nodeStorage.GetLastProcessedBlock(txn)
 	if err != nil {
 		return nil, fmt.Errorf("get last processed block: %w", err)
 	}
@@ -168,7 +170,7 @@ func (edh *EventDataHandler) processBlockEvents(block executionclient.BlockLogs)
 
 	var tasks []Task
 	for _, log := range block.Logs {
-		task, err := edh.processEvent(txn, log)
+		task, err := eh.processEvent(txn, log)
 		if err != nil {
 			return nil, err
 		}
@@ -177,7 +179,7 @@ func (edh *EventDataHandler) processBlockEvents(block executionclient.BlockLogs)
 		}
 	}
 
-	if err := edh.nodeStorage.SaveLastProcessedBlock(txn, new(big.Int).SetUint64(block.BlockNumber)); err != nil {
+	if err := eh.nodeStorage.SaveLastProcessedBlock(txn, new(big.Int).SetUint64(block.BlockNumber)); err != nil {
 		return nil, fmt.Errorf("set last processed block: %w", err)
 	}
 
@@ -188,26 +190,26 @@ func (edh *EventDataHandler) processBlockEvents(block executionclient.BlockLogs)
 	return tasks, nil
 }
 
-func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, error) {
-	abiEvent, err := edh.eventParser.EventByID(event.Topics[0])
+func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, error) {
+	abiEvent, err := eh.eventParser.EventByID(event.Topics[0])
 	if err != nil {
-		edh.logger.Error("failed to find event by ID", zap.String("hash", event.Topics[0].String()))
+		eh.logger.Error("failed to find event by ID", zap.String("hash", event.Topics[0].String()))
 		return nil, nil
 	}
 
 	switch abiEvent.Name {
 	case OperatorAdded:
-		operatorAddedEvent, err := edh.eventParser.ParseOperatorAdded(event)
+		operatorAddedEvent, err := eh.eventParser.ParseOperatorAdded(event)
 		if err != nil {
-			edh.logger.Warn("could not parse event",
+			eh.logger.Warn("could not parse event",
 				fields.EventName(abiEvent.Name),
 				zap.Error(err))
-			edh.metrics.EventProcessingFailed(abiEvent.Name)
+			eh.metrics.EventProcessingFailed(abiEvent.Name)
 			return nil, nil
 		}
 
-		if err := edh.handleOperatorAdded(txn, operatorAddedEvent); err != nil {
-			edh.metrics.EventProcessingFailed(abiEvent.Name)
+		if err := eh.handleOperatorAdded(txn, operatorAddedEvent); err != nil {
+			eh.metrics.EventProcessingFailed(abiEvent.Name)
 
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
@@ -216,21 +218,21 @@ func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (T
 			return nil, fmt.Errorf("handle OperatorAdded: %w", err)
 		}
 
-		edh.metrics.EventProcessed(abiEvent.Name)
+		eh.metrics.EventProcessed(abiEvent.Name)
 		return nil, nil
 
 	case OperatorRemoved:
-		operatorRemovedEvent, err := edh.eventParser.ParseOperatorRemoved(event)
+		operatorRemovedEvent, err := eh.eventParser.ParseOperatorRemoved(event)
 		if err != nil {
-			edh.logger.Warn("could not parse event",
+			eh.logger.Warn("could not parse event",
 				fields.EventName(abiEvent.Name),
 				zap.Error(err))
-			edh.metrics.EventProcessingFailed(abiEvent.Name)
+			eh.metrics.EventProcessingFailed(abiEvent.Name)
 			return nil, nil
 		}
 
-		if err := edh.handleOperatorRemoved(txn, operatorRemovedEvent); err != nil {
-			edh.metrics.EventProcessingFailed(abiEvent.Name)
+		if err := eh.handleOperatorRemoved(txn, operatorRemovedEvent); err != nil {
+			eh.metrics.EventProcessingFailed(abiEvent.Name)
 
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
@@ -239,22 +241,22 @@ func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (T
 			return nil, fmt.Errorf("handle OperatorRemoved: %w", err)
 		}
 
-		edh.metrics.EventProcessed(abiEvent.Name)
+		eh.metrics.EventProcessed(abiEvent.Name)
 		return nil, nil
 
 	case ValidatorAdded:
-		validatorAddedEvent, err := edh.eventParser.ParseValidatorAdded(event)
+		validatorAddedEvent, err := eh.eventParser.ParseValidatorAdded(event)
 		if err != nil {
-			edh.logger.Warn("could not parse event",
+			eh.logger.Warn("could not parse event",
 				fields.EventName(abiEvent.Name),
 				zap.Error(err))
-			edh.metrics.EventProcessingFailed(abiEvent.Name)
+			eh.metrics.EventProcessingFailed(abiEvent.Name)
 			return nil, nil
 		}
 
-		share, err := edh.handleValidatorAdded(txn, validatorAddedEvent)
+		share, err := eh.handleValidatorAdded(txn, validatorAddedEvent)
 		if err != nil {
-			edh.metrics.EventProcessingFailed(abiEvent.Name)
+			eh.metrics.EventProcessingFailed(abiEvent.Name)
 
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
@@ -263,29 +265,29 @@ func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (T
 			return nil, fmt.Errorf("handle ValidatorAdded: %w", err)
 		}
 
-		defer edh.metrics.EventProcessed(abiEvent.Name)
+		defer eh.metrics.EventProcessed(abiEvent.Name)
 
 		if share == nil {
 			return nil, nil
 		}
 
-		task := NewStartValidatorTask(edh.taskExecutor, share)
+		task := NewStartValidatorTask(eh.taskExecutor, share)
 
 		return task, nil
 
 	case ValidatorRemoved:
-		validatorRemovedEvent, err := edh.eventParser.ParseValidatorRemoved(event)
+		validatorRemovedEvent, err := eh.eventParser.ParseValidatorRemoved(event)
 		if err != nil {
-			edh.logger.Warn("could not parse event",
+			eh.logger.Warn("could not parse event",
 				fields.EventName(abiEvent.Name),
 				zap.Error(err))
-			edh.metrics.EventProcessingFailed(abiEvent.Name)
+			eh.metrics.EventProcessingFailed(abiEvent.Name)
 			return nil, nil
 		}
 
-		sharePK, err := edh.handleValidatorRemoved(txn, validatorRemovedEvent)
+		sharePK, err := eh.handleValidatorRemoved(txn, validatorRemovedEvent)
 		if err != nil {
-			edh.metrics.EventProcessingFailed(abiEvent.Name)
+			eh.metrics.EventProcessingFailed(abiEvent.Name)
 
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
@@ -294,29 +296,29 @@ func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (T
 			return nil, fmt.Errorf("handle ValidatorRemoved: %w", err)
 		}
 
-		defer edh.metrics.EventProcessed(abiEvent.Name)
+		defer eh.metrics.EventProcessed(abiEvent.Name)
 
 		if sharePK == nil {
 			return nil, nil
 		}
 
-		task := NewStopValidatorTask(edh.taskExecutor, validatorRemovedEvent.PublicKey)
+		task := NewStopValidatorTask(eh.taskExecutor, validatorRemovedEvent.PublicKey)
 
 		return task, nil
 
 	case ClusterLiquidated:
-		clusterLiquidatedEvent, err := edh.eventParser.ParseClusterLiquidated(event)
+		clusterLiquidatedEvent, err := eh.eventParser.ParseClusterLiquidated(event)
 		if err != nil {
-			edh.logger.Warn("could not parse event",
+			eh.logger.Warn("could not parse event",
 				fields.EventName(abiEvent.Name),
 				zap.Error(err))
-			edh.metrics.EventProcessingFailed(abiEvent.Name)
+			eh.metrics.EventProcessingFailed(abiEvent.Name)
 			return nil, nil
 		}
 
-		sharesToLiquidate, err := edh.handleClusterLiquidated(txn, clusterLiquidatedEvent)
+		sharesToLiquidate, err := eh.handleClusterLiquidated(txn, clusterLiquidatedEvent)
 		if err != nil {
-			edh.metrics.EventProcessingFailed(abiEvent.Name)
+			eh.metrics.EventProcessingFailed(abiEvent.Name)
 
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
@@ -325,29 +327,29 @@ func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (T
 			return nil, fmt.Errorf("handle ClusterLiquidated: %w", err)
 		}
 
-		defer edh.metrics.EventProcessed(abiEvent.Name)
+		defer eh.metrics.EventProcessed(abiEvent.Name)
 
 		if len(sharesToLiquidate) == 0 {
 			return nil, nil
 		}
 
-		task := NewLiquidateClusterTask(edh.taskExecutor, clusterLiquidatedEvent.Owner, clusterLiquidatedEvent.OperatorIds, sharesToLiquidate)
+		task := NewLiquidateClusterTask(eh.taskExecutor, clusterLiquidatedEvent.Owner, clusterLiquidatedEvent.OperatorIds, sharesToLiquidate)
 
 		return task, nil
 
 	case ClusterReactivated:
-		clusterReactivatedEvent, err := edh.eventParser.ParseClusterReactivated(event)
+		clusterReactivatedEvent, err := eh.eventParser.ParseClusterReactivated(event)
 		if err != nil {
-			edh.logger.Warn("could not parse event",
+			eh.logger.Warn("could not parse event",
 				fields.EventName(abiEvent.Name),
 				zap.Error(err))
-			edh.metrics.EventProcessingFailed(abiEvent.Name)
+			eh.metrics.EventProcessingFailed(abiEvent.Name)
 			return nil, nil
 		}
 
-		sharesToReactivate, err := edh.handleClusterReactivated(txn, clusterReactivatedEvent)
+		sharesToReactivate, err := eh.handleClusterReactivated(txn, clusterReactivatedEvent)
 		if err != nil {
-			edh.metrics.EventProcessingFailed(abiEvent.Name)
+			eh.metrics.EventProcessingFailed(abiEvent.Name)
 
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
@@ -356,29 +358,29 @@ func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (T
 			return nil, fmt.Errorf("handle ClusterReactivated: %w", err)
 		}
 
-		defer edh.metrics.EventProcessed(abiEvent.Name)
+		defer eh.metrics.EventProcessed(abiEvent.Name)
 
 		if len(sharesToReactivate) == 0 {
 			return nil, nil
 		}
 
-		task := NewReactivateClusterTask(edh.taskExecutor, clusterReactivatedEvent.Owner, clusterReactivatedEvent.OperatorIds, sharesToReactivate)
+		task := NewReactivateClusterTask(eh.taskExecutor, clusterReactivatedEvent.Owner, clusterReactivatedEvent.OperatorIds, sharesToReactivate)
 
 		return task, nil
 
 	case FeeRecipientAddressUpdated:
-		feeRecipientAddressUpdatedEvent, err := edh.eventParser.ParseFeeRecipientAddressUpdated(event)
+		feeRecipientAddressUpdatedEvent, err := eh.eventParser.ParseFeeRecipientAddressUpdated(event)
 		if err != nil {
-			edh.logger.Warn("could not parse event",
+			eh.logger.Warn("could not parse event",
 				fields.EventName(abiEvent.Name),
 				zap.Error(err))
-			edh.metrics.EventProcessingFailed(abiEvent.Name)
+			eh.metrics.EventProcessingFailed(abiEvent.Name)
 			return nil, nil
 		}
 
-		updated, err := edh.handleFeeRecipientAddressUpdated(txn, feeRecipientAddressUpdatedEvent)
+		updated, err := eh.handleFeeRecipientAddressUpdated(txn, feeRecipientAddressUpdatedEvent)
 		if err != nil {
-			edh.metrics.EventProcessingFailed(abiEvent.Name)
+			eh.metrics.EventProcessingFailed(abiEvent.Name)
 
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
@@ -387,27 +389,27 @@ func (edh *EventDataHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (T
 			return nil, fmt.Errorf("handle FeeRecipientAddressUpdated: %w", err)
 		}
 
-		defer edh.metrics.EventProcessed(abiEvent.Name)
+		defer eh.metrics.EventProcessed(abiEvent.Name)
 
 		if !updated {
 			return nil, nil
 		}
 
-		task := NewUpdateFeeRecipientTask(edh.taskExecutor, feeRecipientAddressUpdatedEvent.Owner, feeRecipientAddressUpdatedEvent.RecipientAddress)
+		task := NewUpdateFeeRecipientTask(eh.taskExecutor, feeRecipientAddressUpdatedEvent.Owner, feeRecipientAddressUpdatedEvent.RecipientAddress)
 		return task, nil
 
 	default:
-		edh.logger.Warn("unknown event name", fields.Name(abiEvent.Name))
+		eh.logger.Warn("unknown event name", fields.Name(abiEvent.Name))
 		return nil, nil
 	}
 }
 
-func (edh *EventDataHandler) HandleLocalEvents(localEvents []localevents.Event) error {
-	txn := edh.nodeStorage.Begin()
+func (eh *EventHandler) HandleLocalEvents(localEvents []localevents.Event) error {
+	txn := eh.nodeStorage.Begin()
 	defer txn.Discard()
 
 	for _, event := range localEvents {
-		if err := edh.processLocalEvent(txn, event); err != nil {
+		if err := eh.processLocalEvent(txn, event); err != nil {
 			return fmt.Errorf("process local event: %w", err)
 		}
 	}
@@ -419,55 +421,55 @@ func (edh *EventDataHandler) HandleLocalEvents(localEvents []localevents.Event) 
 	return nil
 }
 
-func (edh *EventDataHandler) processLocalEvent(txn basedb.Txn, event localevents.Event) error {
+func (eh *EventHandler) processLocalEvent(txn basedb.Txn, event localevents.Event) error {
 	switch event.Name {
 	case OperatorAdded:
 		data := event.Data.(contract.ContractOperatorAdded)
-		if err := edh.handleOperatorAdded(txn, &data); err != nil {
+		if err := eh.handleOperatorAdded(txn, &data); err != nil {
 			return fmt.Errorf("handle OperatorAdded: %w", err)
 		}
 		return nil
 	case OperatorRemoved:
 		data := event.Data.(contract.ContractOperatorRemoved)
-		if err := edh.handleOperatorRemoved(txn, &data); err != nil {
+		if err := eh.handleOperatorRemoved(txn, &data); err != nil {
 			return fmt.Errorf("handle OperatorRemoved: %w", err)
 		}
 		return nil
 	case ValidatorAdded:
 		data := event.Data.(contract.ContractValidatorAdded)
-		if _, err := edh.handleValidatorAdded(txn, &data); err != nil {
+		if _, err := eh.handleValidatorAdded(txn, &data); err != nil {
 			return fmt.Errorf("handle ValidatorAdded: %w", err)
 		}
 		return nil
 	case ValidatorRemoved:
 		data := event.Data.(contract.ContractValidatorRemoved)
-		if _, err := edh.handleValidatorRemoved(txn, &data); err != nil {
+		if _, err := eh.handleValidatorRemoved(txn, &data); err != nil {
 			return fmt.Errorf("handle ValidatorRemoved: %w", err)
 		}
 		return nil
 	case ClusterLiquidated:
 		data := event.Data.(contract.ContractClusterLiquidated)
-		_, err := edh.handleClusterLiquidated(txn, &data)
+		_, err := eh.handleClusterLiquidated(txn, &data)
 		if err != nil {
 			return fmt.Errorf("handle ClusterLiquidated: %w", err)
 		}
 		return nil
 	case ClusterReactivated:
 		data := event.Data.(contract.ContractClusterReactivated)
-		_, err := edh.handleClusterReactivated(txn, &data)
+		_, err := eh.handleClusterReactivated(txn, &data)
 		if err != nil {
 			return fmt.Errorf("handle ClusterReactivated: %w", err)
 		}
 		return nil
 	case FeeRecipientAddressUpdated:
 		data := event.Data.(contract.ContractFeeRecipientAddressUpdated)
-		_, err := edh.handleFeeRecipientAddressUpdated(txn, &data)
+		_, err := eh.handleFeeRecipientAddressUpdated(txn, &data)
 		if err != nil {
 			return fmt.Errorf("handle FeeRecipientAddressUpdated: %w", err)
 		}
 		return nil
 	default:
-		edh.logger.Warn("unknown local event name", fields.Name(event.Name))
+		eh.logger.Warn("unknown local event name", fields.Name(event.Name))
 		return nil
 	}
 }

@@ -1,4 +1,4 @@
-package eventdatahandler
+package eventhandler
 
 import (
 	"context"
@@ -38,12 +38,12 @@ func TestHandleLocalEvent(t *testing.T) {
 		defer cancel()
 
 		logger := zaptest.NewLogger(t)
-		edh, err := setupDataHandler(t, ctx, logger)
+		eh, err := setupHandler(t, ctx, logger)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		require.NoError(t, edh.HandleLocalEvents(parsedData))
+		require.NoError(t, eh.HandleLocalEvents(parsedData))
 	})
 
 	// TODO: test correct signature
@@ -64,11 +64,11 @@ func TestHandleLocalEvent(t *testing.T) {
 		defer cancel()
 
 		logger := zaptest.NewLogger(t)
-		edh, err := setupDataHandler(t, ctx, logger)
+		eh, err := setupHandler(t, ctx, logger)
 		if err != nil {
 			t.Fatal(err)
 		}
 
-		require.ErrorIs(t, edh.HandleLocalEvents(parsedData), ErrSignatureVerification)
+		require.ErrorIs(t, eh.HandleLocalEvents(parsedData), ErrSignatureVerification)
 	})
 }

@@ -1,4 +1,4 @@
-package eventdatahandler
+package eventhandler
 
 import (
 	spectypes "github.com/bloxapp/ssv-spec/types"

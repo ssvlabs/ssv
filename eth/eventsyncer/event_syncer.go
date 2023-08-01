@@ -24,22 +24,22 @@ type executionClient interface {
 	StreamLogs(ctx context.Context, fromBlock uint64) <-chan executionclient.BlockLogs
 }
 
-type eventDataHandler interface {
+type eventHandler interface {
 	HandleBlockEventsStream(logs <-chan executionclient.BlockLogs, executeTasks bool) (uint64, error)
 }
 
 type EventSyncer struct {
-	executionClient  executionClient
-	eventDataHandler eventDataHandler
+	executionClient executionClient
+	eventHandler    eventHandler
 
 	logger  *zap.Logger
 	metrics metrics
 }
 
-func New(executionClient executionClient, eventDataHandler eventDataHandler, opts ...Option) *EventSyncer {
+func New(executionClient executionClient, eventHandler eventHandler, opts ...Option) *EventSyncer {
 	es := &EventSyncer{
-		executionClient:  executionClient,
-		eventDataHandler: eventDataHandler,
+		executionClient: executionClient,
+		eventHandler:    eventHandler,
 
 		logger:  zap.NewNop(),
 		metrics: nopMetrics{},
@@ -63,7 +63,7 @@ func (es *EventSyncer) SyncHistory(ctx context.Context, fromBlock uint64) (lastP
 		return 0, fmt.Errorf("failed to fetch historical events: %w", err)
 	}
 
-	lastProcessedBlock, err = es.eventDataHandler.HandleBlockEventsStream(fetchLogs, false)
+	lastProcessedBlock, err = es.eventHandler.HandleBlockEventsStream(fetchLogs, false)
 	if err != nil {
 		return 0, fmt.Errorf("handle historical block events: %w", err)
 	}
@@ -91,6 +91,6 @@ func (es *EventSyncer) SyncOngoing(ctx context.Context, fromBlock uint64) error 
 	es.logger.Info("subscribing to ongoing registry events", fields.FromBlock(fromBlock))
 
 	logs := es.executionClient.StreamLogs(ctx, fromBlock)
-	_, err := es.eventDataHandler.HandleBlockEventsStream(logs, true)
+	_, err := es.eventHandler.HandleBlockEventsStream(logs, true)
 	return err
 }

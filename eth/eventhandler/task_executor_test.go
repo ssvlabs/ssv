@@ -1,4 +1,4 @@
-package eventdatahandler
+package eventhandler
 
 import (
 	"context"
@@ -43,12 +43,12 @@ func TestExecuteTask(t *testing.T) {
 	logger, observedLogs := setupLogsCapture()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	edh, err := setupDataHandler(t, ctx, logger)
+	eh, err := setupHandler(t, ctx, logger)
 	require.NoError(t, err)
 
 	t.Run("test AddValidator task execution - not started", func(t *testing.T) {
 		logValidatorAdded := unmarshalLog(t, rawValidatorAdded)
-		validatorAddedEvent, err := edh.eventParser.ParseValidatorAdded(logValidatorAdded)
+		validatorAddedEvent, err := eh.eventParser.ParseValidatorAdded(logValidatorAdded)
 		if err != nil {
 			t.Fatal("parse ValidatorAdded", err)
 		}
@@ -57,7 +57,7 @@ func TestExecuteTask(t *testing.T) {
 				ValidatorPubKey: validatorAddedEvent.PublicKey,
 			},
 		}
-		task := NewStartValidatorTask(edh.taskExecutor, share)
+		task := NewStartValidatorTask(eh.taskExecutor, share)
 		require.NoError(t, task.Execute())
 		require.NotZero(t, observedLogs.Len())
 		entry := observedLogs.All()[len(observedLogs.All())-1]
@@ -66,7 +66,7 @@ func TestExecuteTask(t *testing.T) {
 
 	t.Run("test AddValidator task execution - started", func(t *testing.T) {
 		logValidatorAdded := unmarshalLog(t, rawValidatorAdded)
-		validatorAddedEvent, err := edh.eventParser.ParseValidatorAdded(logValidatorAdded)
+		validatorAddedEvent, err := eh.eventParser.ParseValidatorAdded(logValidatorAdded)
 		if err != nil {
 			t.Fatal("parse ValidatorAdded", err)
 		}
@@ -80,7 +80,7 @@ func TestExecuteTask(t *testing.T) {
 				},
 			},
 		}
-		task := NewStartValidatorTask(edh.taskExecutor, share)
+		task := NewStartValidatorTask(eh.taskExecutor, share)
 		require.NoError(t, task.Execute())
 		require.NotZero(t, observedLogs.Len())
 		entry := observedLogs.All()[len(observedLogs.All())-1]
@@ -89,7 +89,7 @@ func TestExecuteTask(t *testing.T) {
 
 	t.Run("test StopValidator task execution", func(t *testing.T) {
 		require.NoError(t, err)
-		task := NewStopValidatorTask(edh.taskExecutor, ethcommon.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"))
+		task := NewStopValidatorTask(eh.taskExecutor, ethcommon.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"))
 		require.NoError(t, task.Execute())
 		require.NotZero(t, observedLogs.Len())
 		entry := observedLogs.All()[len(observedLogs.All())-1]
@@ -104,7 +104,7 @@ func TestExecuteTask(t *testing.T) {
 			},
 		}
 		shares = append(shares, share)
-		task := NewLiquidateClusterTask(edh.taskExecutor, ethcommon.HexToAddress("0x1"), []uint64{1, 2, 3}, shares)
+		task := NewLiquidateClusterTask(eh.taskExecutor, ethcommon.HexToAddress("0x1"), []uint64{1, 2, 3}, shares)
 		require.NoError(t, task.Execute())
 		require.NotZero(t, observedLogs.Len())
 		entry := observedLogs.All()[len(observedLogs.All())-1]
@@ -118,14 +118,14 @@ func TestExecuteTask(t *testing.T) {
 			},
 		}
 		shares = append(shares, share)
-		task := NewReactivateClusterTask(edh.taskExecutor, ethcommon.HexToAddress("0x1"), []uint64{1, 2, 3}, shares)
+		task := NewReactivateClusterTask(eh.taskExecutor, ethcommon.HexToAddress("0x1"), []uint64{1, 2, 3}, shares)
 		require.NoError(t, task.Execute())
 		require.NotZero(t, observedLogs.Len())
 		entry := observedLogs.All()[len(observedLogs.All())-1]
 		require.Equal(t, "started share", entry.Message)
 	})
 	t.Run("test UpdateFeeRecipient task execution", func(t *testing.T) {
-		task := NewUpdateFeeRecipientTask(edh.taskExecutor, ethcommon.HexToAddress("0x1"), ethcommon.HexToAddress("0x2"))
+		task := NewUpdateFeeRecipientTask(eh.taskExecutor, ethcommon.HexToAddress("0x1"), ethcommon.HexToAddress("0x2"))
 		require.NoError(t, task.Execute())
 		require.NotZero(t, observedLogs.Len())
 		entry := observedLogs.All()[len(observedLogs.All())-1]
@@ -141,7 +141,7 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	edh, err := setupDataHandler(t, ctx, logger)
+	eh, err := setupHandler(t, ctx, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +152,7 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 			eventsCh <- blockLogs
 		}
 	}()
-	lastProcessedBlock, err := edh.HandleBlockEventsStream(eventsCh, true)
+	lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, true)
 	require.Equal(t, uint64(0x89EBFF), lastProcessedBlock)
 	require.NoError(t, err)
 	var observedLogsFlow []string

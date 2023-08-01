@@ -1,4 +1,4 @@
-package eventdatahandler
+package eventhandler
 
 import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
