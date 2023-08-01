@@ -5,13 +5,14 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"fmt"
+
 	"github.com/bloxapp/ssv/storage/basedb"
 
 	"go.uber.org/zap"
 )
 
 var migrationEncryptShares = Migration{
-	Name: "encrypt_shares",
+	Name: "migration_2_encrypt_shares",
 	Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte) error {
 		return opt.Db.Update(func(txn basedb.Txn) error {
 			err := txn.Set(migrationsPrefix, key, migrationCompleted)
