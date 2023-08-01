@@ -533,9 +533,9 @@ func setupEventHandling(
 		lastProcessedBlock, err := eventDispatcher.SyncHistory(ctx, fromBlock.Uint64())
 		switch {
 		case errors.Is(err, executionclient.ErrNothingToSync):
-			// Nothing was synced, keep the fromBlock as is.
+			// Nothing was synced, keep fromBlock as is.
 		case err == nil:
-			// Advance the fromBlock to the block after lastProcessedBlock.
+			// Advance fromBlock to the block after lastProcessedBlock.
 			fromBlock = new(big.Int).SetUint64(lastProcessedBlock + 1)
 		default:
 			logger.Fatal("failed to sync historical registry events", zap.Error(err))
