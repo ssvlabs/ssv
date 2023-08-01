@@ -145,7 +145,7 @@ func setupEventDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger
 	nodeStorage, operatorData := setupOperatorStorage(logger, db)
 	testNetworkConfig := networkconfig.TestNetwork
 
-	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, true)
+	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, true, "")
 	if err != nil {
 		logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 	}
