@@ -122,18 +122,13 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 	logger = logger.Named(logging.NameDutyScheduler)
 	logger.Info("duty scheduler started")
 
-	// Subscribe to head events.  This allows us to go early for attestations & sync committees if a block arrives, as well as
-	// re-request duties if there is a change in beacon block.
+	// Subscribe to head events. This allows us to go early for attestations & sync committees if a block arrives,
+	// as well as re-request duties if there is a change in beacon block.
+	if err := s.beaconNode.Events(ctx, []string{"head"}, s.HandleHeadEvent(logger)); err != nil {
+		return fmt.Errorf("failed to subscribe to head events: %w", err)
+	}
+
 	s.pool = pool.New().WithContext(ctx).WithCancelOnError()
-	subscriptionCtx, subscribed := context.WithCancel(ctx)
-	s.pool.Go(func(ctx context.Context) error {
-		defer subscribed()
-		err := s.beaconNode.Events(ctx, []string{"head"}, s.HandleHeadEvent(logger))
-		if err != nil {
-			return fmt.Errorf("failed to subscribe to head events: %w", err)
-		}
-		return nil
-	})
 
 	indicesChangeFeed := NewEventFeed[struct{}]()
 	reorgFeed := NewEventFeed[ReorgEvent]()
@@ -162,7 +157,6 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 
 		s.pool.Go(func(ctx context.Context) error {
 			// Wait for the head event subscription to complete before starting the handler.
-			<-subscriptionCtx.Done()
 			handler.HandleDuties(ctx)
 			return nil
 		})
