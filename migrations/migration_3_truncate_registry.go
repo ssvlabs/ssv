@@ -8,7 +8,7 @@ import (
 )
 
 var migration_3_drop_registry_data = Migration{
-	Name: "migration_3_truncate_registry",
+	Name: "migration_3_drop_registry_data",
 	Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte, completed CompletedFunc) error {
 		storage, err := opt.nodeStorage(logger)
 		if err != nil {

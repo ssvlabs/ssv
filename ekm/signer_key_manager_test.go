@@ -251,6 +251,12 @@ func TestSlashing(t *testing.T) {
 		require.EqualError(t, err, "slashable proposal (HighestProposalVote), not signing")
 		require.Equal(t, [32]byte{}, sig)
 	})
+	t.Run("slashable sign after duplicate AddShare, fail", func(t *testing.T) {
+		require.NoError(t, km.AddShare(sk1))
+		_, sig, err := km.(*ethKeyManagerSigner).SignBeaconObject(beaconBlock, phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainProposer)
+		require.EqualError(t, err, "slashable proposal (HighestProposalVote), not signing")
+		require.Equal(t, [32]byte{}, sig)
+	})
 }
 
 func TestSignRoot(t *testing.T) {
