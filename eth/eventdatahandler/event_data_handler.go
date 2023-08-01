@@ -36,6 +36,12 @@ const (
 	FeeRecipientAddressUpdated = "FeeRecipientAddressUpdated"
 )
 
+var (
+	// ErrBlockAlreadyProcessed is returned when trying to process the same block or older block
+	// than the last processed block.
+	ErrBlockAlreadyProcessed = errors.New("same or higher block has already been processed")
+)
+
 type taskExecutor interface {
 	StartValidator(share *ssvtypes.SSVShare) error
 	StopValidator(publicKey []byte) error
@@ -140,6 +146,23 @@ func (edh *EventDataHandler) HandleBlockEventsStream(logs <-chan executionclient
 func (edh *EventDataHandler) processBlockEvents(block executionclient.BlockLogs) ([]Task, error) {
 	txn := edh.nodeStorage.Begin()
 	defer txn.Discard()
+
+	lastProcessedBlock, found, err := edh.nodeStorage.GetLastProcessedBlock(txn)
+	if err != nil {
+		return nil, fmt.Errorf("get last processed block: %w", err)
+	}
+	if !found {
+		lastProcessedBlock = new(big.Int).SetUint64(0)
+	} else if lastProcessedBlock == nil {
+		return nil, fmt.Errorf("last processed block is nil")
+	}
+	if lastProcessedBlock.Uint64() >= block.BlockNumber {
+		// Same or higher block has already been processed, this should never happen!
+		//
+		// TODO: this may happen during reorgs, and we should either
+		// implement reorg support or only process finalized blocks.
+		return nil, ErrBlockAlreadyProcessed
+	}
 
 	var tasks []Task
 	for _, log := range block.Logs {
