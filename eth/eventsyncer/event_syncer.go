@@ -1,4 +1,4 @@
-package eventdispatcher
+package eventsyncer
 
 import (
 	"context"
@@ -28,7 +28,7 @@ type eventDataHandler interface {
 	HandleBlockEventsStream(logs <-chan executionclient.BlockLogs, executeTasks bool) (uint64, error)
 }
 
-type EventDispatcher struct {
+type EventSyncer struct {
 	executionClient  executionClient
 	eventDataHandler eventDataHandler
 
@@ -36,8 +36,8 @@ type EventDispatcher struct {
 	metrics metrics
 }
 
-func New(executionClient executionClient, eventDataHandler eventDataHandler, opts ...Option) *EventDispatcher {
-	ed := &EventDispatcher{
+func New(executionClient executionClient, eventDataHandler eventDataHandler, opts ...Option) *EventSyncer {
+	es := &EventSyncer{
 		executionClient:  executionClient,
 		eventDataHandler: eventDataHandler,
 
@@ -46,15 +46,15 @@ func New(executionClient executionClient, eventDataHandler eventDataHandler, opt
 	}
 
 	for _, opt := range opts {
-		opt(ed)
+		opt(es)
 	}
 
-	return ed
+	return es
 }
 
 // SyncHistory fetches historical logs since fromBlock and passes them for processing.
-func (ed *EventDispatcher) SyncHistory(ctx context.Context, fromBlock uint64) (lastProcessedBlock uint64, err error) {
-	fetchLogs, fetchError, err := ed.executionClient.FetchHistoricalLogs(ctx, fromBlock)
+func (es *EventSyncer) SyncHistory(ctx context.Context, fromBlock uint64) (lastProcessedBlock uint64, err error) {
+	fetchLogs, fetchError, err := es.executionClient.FetchHistoricalLogs(ctx, fromBlock)
 	if errors.Is(err, executionclient.ErrNothingToSync) {
 		// Nothing to sync, should keep ongoing sync from the given fromBlock.
 		return 0, executionclient.ErrNothingToSync
@@ -63,7 +63,7 @@ func (ed *EventDispatcher) SyncHistory(ctx context.Context, fromBlock uint64) (l
 		return 0, fmt.Errorf("failed to fetch historical events: %w", err)
 	}
 
-	lastProcessedBlock, err = ed.eventDataHandler.HandleBlockEventsStream(fetchLogs, false)
+	lastProcessedBlock, err = es.eventDataHandler.HandleBlockEventsStream(fetchLogs, false)
 	if err != nil {
 		return 0, fmt.Errorf("handle historical block events: %w", err)
 	}
@@ -74,23 +74,23 @@ func (ed *EventDispatcher) SyncHistory(ctx context.Context, fromBlock uint64) (l
 		// Event replay: this should never happen!
 		return 0, fmt.Errorf("event replay: lastProcessedBlock (%d) is lower than fromBlock (%d)", lastProcessedBlock, fromBlock)
 	}
-	ed.metrics.LastBlockProcessed(lastProcessedBlock)
+	es.metrics.LastBlockProcessed(lastProcessedBlock)
 
 	if err := <-fetchError; err != nil {
 		return 0, fmt.Errorf("error occurred while fetching historical logs: %w", err)
 	}
 
-	ed.logger.Info("finished syncing historical events",
+	es.logger.Info("finished syncing historical events",
 		zap.Uint64("from_block", fromBlock),
 		zap.Uint64("last_processed_block", lastProcessedBlock))
 	return lastProcessedBlock, nil
 }
 
 // SyncOngoing runs a loop which retrieves data from ExecutionClient event stream and passes them for processing.
-func (ed *EventDispatcher) SyncOngoing(ctx context.Context, fromBlock uint64) error {
-	ed.logger.Info("subscribing to ongoing registry events", fields.FromBlock(fromBlock))
+func (es *EventSyncer) SyncOngoing(ctx context.Context, fromBlock uint64) error {
+	es.logger.Info("subscribing to ongoing registry events", fields.FromBlock(fromBlock))
 
-	logs := ed.executionClient.StreamLogs(ctx, fromBlock)
-	_, err := ed.eventDataHandler.HandleBlockEventsStream(logs, true)
+	logs := es.executionClient.StreamLogs(ctx, fromBlock)
+	_, err := es.eventDataHandler.HandleBlockEventsStream(logs, true)
 	return err
 }

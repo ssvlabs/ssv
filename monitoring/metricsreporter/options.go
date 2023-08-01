@@ -4,7 +4,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// Option defines EventDispatcher configuration option.
+// Option defines EventSyncer configuration option.
 type Option func(reporter *MetricsReporter)
 
 // WithLogger enables logging.

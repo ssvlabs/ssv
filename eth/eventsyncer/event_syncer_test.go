@@ -1,4 +1,4 @@
-package eventdispatcher
+package eventsyncer
 
 import (
 	"context"
@@ -47,7 +47,7 @@ var (
 	testAddr = crypto.PubkeyToAddress(testKey.PublicKey)
 )
 
-func TestEventDispatcher(t *testing.T) {
+func TestEventSyncer(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	const testTimeout = 5 * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
@@ -118,16 +118,16 @@ func TestEventDispatcher(t *testing.T) {
 	}
 
 	edh := setupEventDataHandler(t, ctx, logger)
-	eventDispatcher := New(
+	eventSyncer := New(
 		client,
 		edh,
 		WithLogger(logger),
 	)
 
-	lastProcessedBlock, err := eventDispatcher.SyncHistory(ctx, 0)
+	lastProcessedBlock, err := eventSyncer.SyncHistory(ctx, 0)
 	require.NoError(t, err)
 	require.NoError(t, client.Close())
-	require.NoError(t, eventDispatcher.SyncOngoing(ctx, lastProcessedBlock+1))
+	require.NoError(t, eventSyncer.SyncOngoing(ctx, lastProcessedBlock+1))
 }
 
 func setupEventDataHandler(t *testing.T, ctx context.Context, logger *zap.Logger) *eventdatahandler.EventDataHandler {

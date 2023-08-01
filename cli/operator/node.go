@@ -23,8 +23,8 @@ import (
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/ekm"
 	"github.com/bloxapp/ssv/eth/eventdatahandler"
-	"github.com/bloxapp/ssv/eth/eventdispatcher"
 	"github.com/bloxapp/ssv/eth/eventparser"
+	"github.com/bloxapp/ssv/eth/eventsyncer"
 	"github.com/bloxapp/ssv/eth/executionclient"
 	"github.com/bloxapp/ssv/eth/localevents"
 	exporterapi "github.com/bloxapp/ssv/exporter/api"
@@ -497,11 +497,11 @@ func setupEventHandling(
 		logger.Fatal("failed to setup event data handler", zap.Error(err))
 	}
 
-	eventDispatcher := eventdispatcher.New(
+	eventSyncer := eventsyncer.New(
 		executionClient,
 		eventDataHandler,
-		eventdispatcher.WithLogger(logger),
-		eventdispatcher.WithMetrics(metricsReporter),
+		eventsyncer.WithLogger(logger),
+		eventsyncer.WithMetrics(metricsReporter),
 	)
 
 	fromBlock, found, err := nodeStorage.GetLastProcessedBlock(nil)
@@ -525,12 +525,12 @@ func setupEventHandling(
 		}
 
 		if err := eventDataHandler.HandleLocalEvents(localEvents); err != nil {
-			logger.Fatal("error occurred while running event dispatcher", zap.Error(err))
+			logger.Fatal("error occurred while running event data handler", zap.Error(err))
 		}
 	} else {
 		// Sync historical registry events.
 		logger.Debug("syncing historical registry events", zap.Uint64("fromBlock", fromBlock.Uint64()))
-		lastProcessedBlock, err := eventDispatcher.SyncHistory(ctx, fromBlock.Uint64())
+		lastProcessedBlock, err := eventSyncer.SyncHistory(ctx, fromBlock.Uint64())
 		switch {
 		case errors.Is(err, executionclient.ErrNothingToSync):
 			// Nothing was synced, keep fromBlock as is.
@@ -570,7 +570,7 @@ func setupEventHandling(
 
 		// Sync ongoing registry events in the background.
 		go func() {
-			err = eventDispatcher.SyncOngoing(ctx, fromBlock.Uint64())
+			err = eventSyncer.SyncOngoing(ctx, fromBlock.Uint64())
 
 			// Crash if ongoing sync has stopped, regardless of the reason.
 			logger.Fatal("failed syncing ongoing registry events",

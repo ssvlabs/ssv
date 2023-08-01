@@ -1,4 +1,4 @@
-package eventdispatcher
+package eventsyncer
 
 type metrics interface {
 	LastBlockProcessed(uint64)
