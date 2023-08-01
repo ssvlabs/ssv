@@ -4,14 +4,20 @@ import (
 	"encoding/base64"
 	"testing"
 
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
+
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )
 
 var (
@@ -166,4 +172,82 @@ func TestSetupPrivateKey(t *testing.T) {
 			require.Equal(t, string(passedKeyByte), string(rsaencryption.PrivateKeyToByte(sk)))
 		})
 	}
+}
+
+func TestDropRegistryData(t *testing.T) {
+	options := basedb.Options{
+		Type: "badger-memory",
+		Path: "",
+	}
+	logger := logging.TestLogger(t)
+	db, err := ssvstorage.GetStorageFactory(logger, options)
+	require.NoError(t, err)
+	defer db.Close()
+	storage, err := NewNodeStorage(logger, db)
+	require.NoError(t, err)
+
+	// Save operators, shares and recipients.
+	var (
+		operatorIDs     = []uint64{1, 2, 3}
+		sharePubKeys    = [][]byte{{1}, {2}, {3}}
+		recipientOwners = []common.Address{{1}, {2}, {3}}
+	)
+	for _, id := range operatorIDs {
+		found, err := storage.SaveOperatorData(nil, &registrystorage.OperatorData{
+			ID:           id,
+			PublicKey:    []byte("publicKey"),
+			OwnerAddress: common.Address{byte(id)},
+		})
+		require.NoError(t, err)
+		require.False(t, found)
+	}
+	for _, pk := range sharePubKeys {
+		err := storage.Shares().Save(nil, &types.SSVShare{
+			Share: spectypes.Share{
+				SharePubKey:     pk,
+				ValidatorPubKey: spectypes.ValidatorPK(append([]byte{1}, pk...)),
+			},
+		})
+		require.NoError(t, err)
+	}
+	for _, owner := range recipientOwners {
+		_, err := storage.SaveRecipientData(nil, &registrystorage.RecipientData{
+			Owner:        owner,
+			FeeRecipient: bellatrix.ExecutionAddress(append([]byte{1}, owner[:]...)),
+		})
+		require.NoError(t, err)
+	}
+
+	// Check that everything was saved.
+	requireSaved := func(t *testing.T, operators, shares, recipients int) {
+		allOperators, err := storage.ListOperators(nil, 0, 0)
+		require.NoError(t, err)
+		require.Len(t, allOperators, operators)
+
+		allShares := storage.Shares().List(nil)
+		require.NoError(t, err)
+		require.Len(t, allShares, shares)
+
+		allRecipients, err := storage.GetRecipientDataMany(nil, recipientOwners)
+		require.NoError(t, err)
+		require.Len(t, allRecipients, recipients)
+	}
+	requireSaved(t, len(operatorIDs), len(sharePubKeys), len(recipientOwners))
+
+	// Re-open storage and check again that everything is still saved.
+	// Re-opening helps ensure that the changes were persisted and not just cached.
+	storage, err = NewNodeStorage(logger, db)
+	require.NoError(t, err)
+	requireSaved(t, len(operatorIDs), len(sharePubKeys), len(recipientOwners))
+
+	// Drop registry data.
+	err = storage.DropRegistryData()
+	require.NoError(t, err)
+
+	// Check that everything was dropped.
+	requireSaved(t, 0, 0, 0)
+
+	// Re-open storage and check again that everything is still dropped.
+	storage, err = NewNodeStorage(logger, db)
+	require.NoError(t, err)
 }

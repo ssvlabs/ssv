@@ -37,6 +37,7 @@ type Operators interface {
 	DeleteOperatorData(rw basedb.ReadWriter, id spectypes.OperatorID) error
 	ListOperators(r basedb.Reader, from uint64, to uint64) ([]OperatorData, error)
 	GetOperatorsPrefix() []byte
+	DropOperators() error
 }
 
 type operatorsStorage struct {
@@ -177,6 +178,16 @@ func (s *operatorsStorage) DeleteOperatorData(rw basedb.ReadWriter, id spectypes
 	defer s.lock.Unlock()
 
 	return s.db.Using(rw).Delete(s.prefix, buildOperatorKey(id))
+}
+
+func (s *operatorsStorage) DropOperators() error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	return s.db.DropPrefix(bytes.Join(
+		[][]byte{s.prefix, operatorsPrefix, []byte("/")},
+		nil,
+	))
 }
 
 // buildOperatorKey builds operator key using operatorsPrefix & index, e.g. "operators/1"

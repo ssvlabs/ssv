@@ -52,7 +52,7 @@ func (m NodeStorage) GetLastProcessedBlock(txn basedb.Reader) (*big.Int, bool, e
 	panic("implement me")
 }
 
-func (m NodeStorage) CleanRegistryData() error {
+func (m NodeStorage) DropRegistryData() error {
 	//TODO implement me
 	panic("implement me")
 }
@@ -118,6 +118,21 @@ func (m NodeStorage) GetRecipientsPrefix() []byte {
 }
 
 func (m NodeStorage) Shares() registrystorage.Shares {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m NodeStorage) DropOperators() error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m NodeStorage) DropRecipients() error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m NodeStorage) DropShares() error {
 	//TODO implement me
 	panic("implement me")
 }

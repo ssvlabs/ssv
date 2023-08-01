@@ -132,22 +132,23 @@ func (s *storage) GetRecipientsPrefix() []byte {
 	return s.recipientStore.GetRecipientsPrefix()
 }
 
-func (s *storage) CleanRegistryData() error {
-	err := s.cleanLastProcessedBlock()
+func (s *storage) DropRegistryData() error {
+	err := s.dropLastProcessedBlock()
 	if err != nil {
-		return errors.Wrap(err, "could not clean sync offset")
+		return errors.Wrap(err, "failed to drop last processed block")
 	}
-
-	err = s.cleanOperators()
+	err = s.DropShares()
 	if err != nil {
-		return errors.Wrap(err, "could not clean operators")
+		return errors.Wrap(err, "failed to drop operators")
 	}
-
-	err = s.cleanRecipients()
+	err = s.DropOperators()
 	if err != nil {
-		return errors.Wrap(err, "could not clean recipients")
+		return errors.Wrap(err, "failed to drop recipients")
 	}
-
+	err = s.DropRecipients()
+	if err != nil {
+		return errors.Wrap(err, "failed to drop shares")
+	}
 	return nil
 }
 
@@ -157,18 +158,20 @@ func (s *storage) SaveLastProcessedBlock(rw basedb.ReadWriter, offset *big.Int) 
 	return s.db.Using(rw).Set(storagePrefix, lastProcessedBlockKey, offset.Bytes())
 }
 
-func (s *storage) cleanLastProcessedBlock() error {
-	return s.db.RemoveAllByCollection(append(storagePrefix, lastProcessedBlockKey...))
+func (s *storage) dropLastProcessedBlock() error {
+	return s.db.DropPrefix(append(storagePrefix, lastProcessedBlockKey...))
 }
 
-func (s *storage) cleanOperators() error {
-	operatorsPrefix := s.GetOperatorsPrefix()
-	return s.db.RemoveAllByCollection(append(storagePrefix, operatorsPrefix...))
+func (s *storage) DropOperators() error {
+	return s.operatorStore.DropOperators()
 }
 
-func (s *storage) cleanRecipients() error {
-	recipientsPrefix := s.GetRecipientsPrefix()
-	return s.db.RemoveAllByCollection(append(storagePrefix, recipientsPrefix...))
+func (s *storage) DropRecipients() error {
+	return s.recipientStore.DropRecipients()
+}
+
+func (s *storage) DropShares() error {
+	return s.shareStore.Drop()
 }
 
 // GetLastProcessedBlock returns the last processed block.

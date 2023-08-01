@@ -53,9 +53,9 @@ type Database interface {
 	UsingReader(r Reader) Reader
 
 	// TODO: consider moving these functions into Reader and ReadWriter interfaces?
-	CountByCollection(prefix []byte) (int64, error)
-	DeleteByPrefix(prefix []byte) (int, error)
-	RemoveAllByCollection(prefix []byte) error
+	CountPrefix(prefix []byte) (int64, error)
+	DeletePrefix(prefix []byte) (int, error)
+	DropPrefix(prefix []byte) error
 	Update(fn func(Txn) error) error
 	Close() error
 }

@@ -149,8 +149,8 @@ func (b *BadgerDB) Delete(prefix []byte, key []byte) error {
 	})
 }
 
-// DeleteByPrefix all items with this prefix
-func (b *BadgerDB) DeleteByPrefix(prefix []byte) (int, error) {
+// DeletePrefix all items with this prefix
+func (b *BadgerDB) DeletePrefix(prefix []byte) (int, error) {
 	count := 0
 	err := b.db.Update(func(txn *badger.Txn) error {
 		rawKeys := b.listRawKeys(prefix, txn)
@@ -174,8 +174,8 @@ func (b *BadgerDB) GetAll(prefix []byte, handler func(int, basedb.Obj) error) er
 	return err
 }
 
-// CountByCollection return the object count for all keys under specified prefix(bucket)
-func (b *BadgerDB) CountByCollection(prefix []byte) (int64, error) {
+// CountPrefix return the object count for all keys under specified prefix(bucket)
+func (b *BadgerDB) CountPrefix(prefix []byte) (int64, error) {
 	var res int64
 	err := b.db.View(func(txn *badger.Txn) error {
 		opt := badger.DefaultIteratorOptions
@@ -190,8 +190,8 @@ func (b *BadgerDB) CountByCollection(prefix []byte) (int64, error) {
 	return res, err
 }
 
-// RemoveAllByCollection cleans all items in a collection
-func (b *BadgerDB) RemoveAllByCollection(prefix []byte) error {
+// DropPrefix cleans all items in a collection
+func (b *BadgerDB) DropPrefix(prefix []byte) error {
 	return b.db.DropPrefix(prefix)
 }
 

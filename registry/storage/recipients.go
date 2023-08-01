@@ -41,6 +41,7 @@ type Recipients interface {
 	BumpNonce(rw basedb.ReadWriter, owner common.Address) error
 	SaveRecipientData(rw basedb.ReadWriter, recipientData *RecipientData) (*RecipientData, error)
 	DeleteRecipientData(rw basedb.ReadWriter, owner common.Address) error
+	DropRecipients() error
 	GetRecipientsPrefix() []byte
 }
 
@@ -196,6 +197,16 @@ func (s *recipientsStorage) DeleteRecipientData(rw basedb.ReadWriter, owner comm
 	defer s.lock.Unlock()
 
 	return s.db.Using(rw).Delete(s.prefix, buildRecipientKey(owner))
+}
+
+func (s *recipientsStorage) DropRecipients() error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	return s.db.DropPrefix(bytes.Join(
+		[][]byte{s.prefix, recipientsPrefix, []byte("/")},
+		nil,
+	))
 }
 
 // buildRecipientKey builds recipient key using recipientsPrefix & owner address, e.g. "recipients/0x00..01"

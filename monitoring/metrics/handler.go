@@ -113,7 +113,7 @@ func (mh *metricsHandler) handleCountByCollection(w http.ResponseWriter, r *http
 		}
 	}
 
-	n, err := mh.db.CountByCollection(prefix)
+	n, err := mh.db.CountPrefix(prefix)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

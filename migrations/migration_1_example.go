@@ -2,6 +2,7 @@ package migrations
 
 import (
 	"context"
+
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -10,9 +11,9 @@ import (
 
 // This migration is an Example of atomic
 // View/Update transactions usage
-var migrationExample2 = Migration{
+var migration_1_example = Migration{
 	Name: "migration_1_example",
-	Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte) error {
+	Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte, completed CompletedFunc) error {
 		return opt.Db.Update(func(txn basedb.Txn) error {
 			var (
 				testPrefix = []byte("test_prefix/")
@@ -31,7 +32,7 @@ var migrationExample2 = Migration{
 				return errors.Errorf("the key %s is not found", string(obj.Key))
 			}
 			logger.Debug("migration_1_example: key found", zap.String("key", string(obj.Key)), zap.String("value", string(obj.Value)))
-			return txn.Set(migrationsPrefix, key, migrationCompleted)
+			return completed(txn)
 		})
 	},
 }

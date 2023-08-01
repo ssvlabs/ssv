@@ -11,7 +11,6 @@ import (
 	"golang.org/x/exp/maps"
 
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/eth1"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
@@ -26,8 +25,6 @@ type SharesListFunc = func(filters ...SharesFilter) []*types.SSVShare
 
 // Shares is the interface for managing shares.
 type Shares interface {
-	eth1.RegistryStore
-
 	// Get returns the share for the given public key, or nil if not found.
 	Get(txn basedb.Reader, pubKey []byte) *types.SSVShare
 
@@ -39,6 +36,9 @@ type Shares interface {
 
 	// Delete deletes the share for the given public key.
 	Delete(txn basedb.ReadWriter, pubKey []byte) error
+
+	// Drop deletes all shares.
+	Drop() error
 
 	// UpdateValidatorMetadata updates validator metadata.
 	UpdateValidatorMetadata(pk string, metadata *beaconprotocol.ValidatorMetadata) error
@@ -163,9 +163,15 @@ func (s *sharesStorage) UpdateValidatorMetadata(pk string, metadata *beaconproto
 	return s.Save(nil, share)
 }
 
-// CleanRegistryData clears all registry data
-func (s *sharesStorage) CleanRegistryData() error {
-	err := s.db.RemoveAllByCollection(sharesPrefix)
+// Drop deletes all shares.
+func (s *sharesStorage) Drop() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	err := s.db.DropPrefix(bytes.Join(
+		[][]byte{s.prefix, sharesPrefix, []byte("/")},
+		nil,
+	))
 	if err != nil {
 		return err
 	}

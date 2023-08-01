@@ -87,8 +87,8 @@ func TestBadgerEndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, found)
 
-	require.NoError(t, db.RemoveAllByCollection([]byte("prefix2")))
-	deleted, err := db.DeleteByPrefix([]byte("prefix1"))
+	require.NoError(t, db.DropPrefix([]byte("prefix2")))
+	deleted, err := db.DeletePrefix([]byte("prefix1"))
 	require.NoError(t, err)
 	require.Equal(t, 1, deleted)
 }
@@ -207,7 +207,7 @@ func getAllTest(t *testing.T, n int, db basedb.Database) {
 		visited[string(item.Key)] = item.Value
 	}
 	require.Equal(t, n, len(visited))
-	count, err := db.DeleteByPrefix(prefix)
+	count, err := db.DeletePrefix(prefix)
 	require.NoError(t, err)
 	require.Equal(t, n, count)
 }

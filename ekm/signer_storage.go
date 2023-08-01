@@ -82,8 +82,8 @@ func (s *storage) SetEncryptionKey(newKey string) error {
 	return nil
 }
 
-func (s *storage) CleanRegistryData() error {
-	return s.db.RemoveAllByCollection(s.objPrefix(accountsPrefix))
+func (s *storage) DropRegistryData() error {
+	return s.db.DropPrefix(s.objPrefix(accountsPrefix))
 }
 
 func (s *storage) objPrefix(obj string) []byte {

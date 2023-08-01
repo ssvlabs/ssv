@@ -11,14 +11,10 @@ import (
 	"go.uber.org/zap"
 )
 
-var migrationEncryptShares = Migration{
+var migration_2_encrypt_shares = Migration{
 	Name: "migration_2_encrypt_shares",
-	Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte) error {
+	Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte, completed CompletedFunc) error {
 		return opt.Db.Update(func(txn basedb.Txn) error {
-			err := txn.Set(migrationsPrefix, key, migrationCompleted)
-			if err != nil {
-				return err
-			}
 			nodeStorage, err := opt.nodeStorage(logger)
 			if err != nil {
 				return fmt.Errorf("failed to get node storage: %w", err)
@@ -28,7 +24,7 @@ var migrationEncryptShares = Migration{
 				return fmt.Errorf("failed to get private key: %w", err)
 			}
 			if !found {
-				return nil
+				return completed(txn)
 			}
 			signerStorage := opt.signerStorage(logger)
 			accounts, err := signerStorage.ListAccountsTxn(txn)
@@ -48,7 +44,7 @@ var migrationEncryptShares = Migration{
 					return fmt.Errorf("failed to save account %s: %w", account, err)
 				}
 			}
-			return nil
+			return completed(txn)
 		})
 	},
 }
