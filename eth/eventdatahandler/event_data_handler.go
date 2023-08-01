@@ -37,9 +37,9 @@ const (
 )
 
 var (
-	// ErrBlockAlreadyProcessed is returned when trying to process the same block or older block
-	// than the last processed block.
-	ErrBlockAlreadyProcessed = errors.New("same or higher block has already been processed")
+	// ErrInferiorBlock is returned when trying to process a block that is
+	// not higher than the last processed block.
+	ErrInferiorBlock = errors.New("block is not higher than the last processed block")
 )
 
 type taskExecutor interface {
@@ -158,15 +158,12 @@ func (edh *EventDataHandler) processBlockEvents(block executionclient.BlockLogs)
 	}
 	if lastProcessedBlock.Uint64() >= block.BlockNumber {
 		// Same or higher block has already been processed, this should never happen!
+		// Returning an error to signal that we should stop processing and
+		// investigate the issue.
 		//
 		// TODO: this may happen during reorgs, and we should either
 		// implement reorg support or only process finalized blocks.
-		return nil, ErrBlockAlreadyProcessed
-	}
-	if lastProcessedBlock.Uint64()+1 < block.BlockNumber {
-		edh.logger.Warn("skipped blocks",
-			zap.Uint64("last_processed_block", lastProcessedBlock.Uint64()),
-			zap.Uint64("block_number", block.BlockNumber))
+		return nil, ErrInferiorBlock
 	}
 
 	var tasks []Task
@@ -175,7 +172,6 @@ func (edh *EventDataHandler) processBlockEvents(block executionclient.BlockLogs)
 		if err != nil {
 			return nil, err
 		}
-
 		if task != nil {
 			tasks = append(tasks, task)
 		}

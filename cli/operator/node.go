@@ -548,19 +548,24 @@ func setupEventHandling(
 			logger.Error("failed to get operators", zap.Error(err))
 		}
 		operatorID := validatorCtrl.GetOperatorData().ID
-		operatorValidatorsCount := 0
+		operatorValidators := 0
+		liquidatedValidators := 0
 		if operatorID != 0 {
 			for _, share := range shares {
 				if share.BelongsToOperator(operatorID) {
-					operatorValidatorsCount++
+					operatorValidators++
+				}
+				if share.Liquidated {
+					liquidatedValidators++
 				}
 			}
 		}
 		logger.Info("historical registry sync stats",
-			zap.Int("validators", len(shares)),
-			zap.Int("operators", len(operators)),
 			zap.Uint64("my_operator_id", operatorID),
-			zap.Int("my_validators", operatorValidatorsCount),
+			zap.Int("operators", len(operators)),
+			zap.Int("validators", len(shares)),
+			zap.Int("liquidated_validators", liquidatedValidators),
+			zap.Int("my_validators", operatorValidators),
 		)
 
 		// Sync ongoing registry events in the background.
