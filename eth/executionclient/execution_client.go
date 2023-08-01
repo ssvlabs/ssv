@@ -1,3 +1,4 @@
+// Package executionclient implements functions for interacting with Ethereum execution clients.
 package executionclient
 
 import (

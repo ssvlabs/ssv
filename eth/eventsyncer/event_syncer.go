@@ -1,3 +1,5 @@
+// Package eventsyncer implements functions for syncing registry contract events
+// by reading them using executionclient and processing them using eventhandler.
 package eventsyncer
 
 import (
@@ -19,24 +21,26 @@ var (
 	ErrNodeNotReady = fmt.Errorf("node not ready")
 )
 
-type executionClient interface {
+type ExecutionClient interface {
 	FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan executionclient.BlockLogs, errors <-chan error, err error)
 	StreamLogs(ctx context.Context, fromBlock uint64) <-chan executionclient.BlockLogs
 }
 
-type eventHandler interface {
+type EventHandler interface {
 	HandleBlockEventsStream(logs <-chan executionclient.BlockLogs, executeTasks bool) (uint64, error)
 }
 
+// EventSyncer syncs registry contract events from the given ExecutionClient
+// and passes them to the given EventHandler for processing.
 type EventSyncer struct {
-	executionClient executionClient
-	eventHandler    eventHandler
+	executionClient ExecutionClient
+	eventHandler    EventHandler
 
 	logger  *zap.Logger
 	metrics metrics
 }
 
-func New(executionClient executionClient, eventHandler eventHandler, opts ...Option) *EventSyncer {
+func New(executionClient ExecutionClient, eventHandler EventHandler, opts ...Option) *EventSyncer {
 	es := &EventSyncer{
 		executionClient: executionClient,
 		eventHandler:    eventHandler,
@@ -52,7 +56,7 @@ func New(executionClient executionClient, eventHandler eventHandler, opts ...Opt
 	return es
 }
 
-// SyncHistory fetches historical logs since fromBlock and passes them for processing.
+// SyncHistory reads and processes historical events since the given fromBlock.
 func (es *EventSyncer) SyncHistory(ctx context.Context, fromBlock uint64) (lastProcessedBlock uint64, err error) {
 	fetchLogs, fetchError, err := es.executionClient.FetchHistoricalLogs(ctx, fromBlock)
 	if errors.Is(err, executionclient.ErrNothingToSync) {
@@ -86,7 +90,7 @@ func (es *EventSyncer) SyncHistory(ctx context.Context, fromBlock uint64) (lastP
 	return lastProcessedBlock, nil
 }
 
-// SyncOngoing runs a loop which retrieves data from ExecutionClient event stream and passes them for processing.
+// SyncOngoing streams and processes ongoing events as they come since the given fromBlock.
 func (es *EventSyncer) SyncOngoing(ctx context.Context, fromBlock uint64) error {
 	es.logger.Info("subscribing to ongoing registry events", fields.FromBlock(fromBlock))
 

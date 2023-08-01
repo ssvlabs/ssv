@@ -1,5 +1,5 @@
-// Package eventhandler implements functions to handle registry contract events
-// and persist them to the database.
+// Package eventhandler provides support for handling registry contract events
+// and persisting them to the database.
 package eventhandler
 
 import (

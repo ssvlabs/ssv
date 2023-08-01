@@ -1,3 +1,5 @@
+// Package eventparser implements functions for parsing registry contract events from
+// Ethereum logs into their respective structured types.
 package eventparser
 
 import (
