@@ -15,6 +15,7 @@ import (
 	"github.com/bloxapp/ssv/operator/validator"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -247,8 +248,23 @@ func (mv *MessageValidator) validateSignerBehavior(
 	//
 	//     maxRound := (currentTime-messageSlotTime)/roundTimeout
 	//     assert msg.Round < maxRound
-	messageSlotTime := mv.network.GetSlotStartTime(phase0.Slot(signedMsg.Message.Height)) // TODO: check if height == slot
-	_ = messageSlotTime                                                                   // TODO: use
+
+	role := msg.MsgID.GetRoleType()
+	maxRound := mv.maxRound(role)
+	if signedMsg.Message.Round > maxRound {
+		return fmt.Errorf("round too high")
+	}
+
+	estimatedRound := mv.currentEstimatedRound(role, phase0.Slot(signedMsg.Message.Height)) // TODO: check if height == slot
+	if signedMsg.Message.Round != estimatedRound {
+		return fmt.Errorf("message round differs from estimated, want %v, got %v", estimatedRound, signedMsg.Message.Round)
+	}
+
+	if estimatedRound > maxRound {
+		return fmt.Errorf("estimated round too high")
+	}
+
+	// TODO: check current estimated round
 
 	// Advance slot & round, if needed.
 	if signerState.Slot < messageSlot || signerState.Round < msgRound {
@@ -263,6 +279,41 @@ func (mv *MessageValidator) validateSignerBehavior(
 	}
 
 	return nil
+}
+
+func (mv *MessageValidator) maxRound(role spectypes.BeaconRole) specqbft.Round {
+	switch role {
+	case spectypes.BNRoleAttester:
+		return 12
+	// TODO: other roles
+	default:
+		panic("unknown role")
+	}
+}
+
+func (mv *MessageValidator) currentEstimatedRound(role spectypes.BeaconRole, slot phase0.Slot) specqbft.Round {
+	slotStartTime := mv.network.GetSlotStartTime(slot)
+
+	firstRoundStart := slotStartTime.Add(mv.waitAfterSlotStart(role))
+	messageTime := time.Now() // TODO: attach it to the message when it's received
+
+	sinceFirstRound := messageTime.Sub(firstRoundStart)
+	if currentQuickRound := 1 + specqbft.Round(sinceFirstRound/roundtimer.QuickTimeout); currentQuickRound <= roundtimer.QuickTimeoutThreshold {
+		return currentQuickRound
+	}
+
+	sinceFirstSlowRound := messageTime.Sub(firstRoundStart.Add(time.Duration(roundtimer.QuickTimeoutThreshold) * roundtimer.QuickTimeout))
+	return roundtimer.QuickTimeoutThreshold + 1 + specqbft.Round(sinceFirstSlowRound/roundtimer.SlowTimeout)
+}
+
+func (mv *MessageValidator) waitAfterSlotStart(role spectypes.BeaconRole) time.Duration {
+	switch role {
+	case spectypes.BNRoleAttester:
+		return mv.network.SlotDurationSec() / 3
+	// TODO: other roles
+	default:
+		panic("unknown role")
+	}
 }
 
 func (mv *MessageValidator) knownValidator(pubKey []byte) bool {
