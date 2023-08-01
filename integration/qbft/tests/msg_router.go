@@ -12,7 +12,6 @@ type msgRouter struct {
 }
 
 func (m *msgRouter) Route(logger *zap.Logger, message *queue.DecodedSSVMessage) {
-	// TODO: get rid of passing logger to HandleMessage
 	m.validator.HandleMessage(logger, message)
 }
 
