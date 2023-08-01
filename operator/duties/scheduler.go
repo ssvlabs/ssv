@@ -127,11 +127,11 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 	s.pool = pool.New().WithContext(ctx).WithCancelOnError()
 	subscriptionCtx, subscribed := context.WithCancel(ctx)
 	s.pool.Go(func(ctx context.Context) error {
-		if err := s.beaconNode.Events(ctx, []string{"head"}, s.HandleHeadEvent(logger)); err != nil {
+		defer subscribed()
+		err := s.beaconNode.Events(ctx, []string{"head"}, s.HandleHeadEvent(logger))
+		if err != nil {
 			return fmt.Errorf("failed to subscribe to head events: %w", err)
 		}
-		// Only call subscribed if there was no error
-		subscribed()
 		return nil
 	})
 
