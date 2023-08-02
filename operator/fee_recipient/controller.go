@@ -107,7 +107,7 @@ func (rc *recipientController) prepareAndSubmit(logger *zap.Logger, slot phase0.
 		submitted += count
 	}
 
-	logger.Debug("✅ successfully submitted proposal preparations",
+	logger.Debug("✅  successfully submitted proposal preparations",
 		zap.Int("submitted", submitted),
 		zap.Int("total", len(shares)),
 	)

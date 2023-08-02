@@ -41,10 +41,7 @@ type Options struct {
 	Context             context.Context
 	DB                  basedb.Database
 	ValidatorController validator.Controller
-	DutyExec            duties.DutyExecutor
-	// max slots for duty to wait
-	DutyLimit        uint64                      `yaml:"DutyLimit" env:"DUTY_LIMIT" env-default:"32" env-description:"max slots to wait for duty to start"`
-	ValidatorOptions validator.ControllerOptions `yaml:"ValidatorOptions"`
+	ValidatorOptions    validator.ControllerOptions `yaml:"ValidatorOptions"`
 
 	ForkVersion forksprotocol.ForkVersion
 
@@ -65,7 +62,7 @@ type operatorNode struct {
 	net              network.P2PNetwork
 	storage          storage.Storage
 	qbftStorage      *qbftstorage.QBFTStores
-	dutyCtrl         duties.DutyController
+	dutyScheduler    *duties.Scheduler
 	feeRecipientCtrl fee_recipient.RecipientController
 	// fork           *forks.Forker
 
@@ -103,14 +100,13 @@ func New(logger *zap.Logger, opts Options, slotTicker slot_ticker.Ticker) Node {
 		net:             opts.P2PNetwork,
 		storage:         opts.ValidatorOptions.RegistryStorage,
 		qbftStorage:     storageMap,
-		dutyCtrl: duties.NewDutyController(logger, &duties.ControllerOptions{
+		dutyScheduler: duties.NewScheduler(&duties.SchedulerOptions{
 			Ctx:                 opts.Context,
-			BeaconClient:        opts.BeaconNode,
+			BeaconNode:          opts.BeaconNode,
 			Network:             opts.Network,
 			ValidatorController: opts.ValidatorController,
-			DutyLimit:           opts.DutyLimit,
-			Executor:            opts.DutyExec,
-			ForkVersion:         opts.ForkVersion,
+			IndicesChg:          opts.ValidatorController.IndicesChangeChan(),
+			ExecuteDuty:         opts.ValidatorController.ExecuteDuty,
 			Ticker:              slotTicker,
 			BuilderProposals:    opts.ValidatorOptions.BuilderProposals,
 		}),
@@ -163,7 +159,16 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 	go n.reportOperators(logger)
 
 	go n.feeRecipientCtrl.Start(logger)
-	n.dutyCtrl.Start(logger)
+
+	// Start the duty scheduler, and a background goroutine to crash the node
+	// in case there were any errors.
+	if err := n.dutyScheduler.Start(n.context, logger); err != nil {
+		return fmt.Errorf("failed to run duty scheduler: %w", err)
+	}
+
+	if err := n.dutyScheduler.Wait(); err != nil {
+		logger.Fatal("duty scheduler exited with error", zap.Error(err))
+	}
 
 	return nil
 }

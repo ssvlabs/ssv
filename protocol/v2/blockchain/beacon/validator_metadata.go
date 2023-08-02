@@ -21,9 +21,10 @@ type ValidatorMetadataStorage interface {
 
 // ValidatorMetadata represents validator metdata from beacon
 type ValidatorMetadata struct {
-	Balance phase0.Gwei              `json:"balance"`
-	Status  eth2apiv1.ValidatorState `json:"status"`
-	Index   phase0.ValidatorIndex    `json:"index"` // pointer in order to support nil
+	Balance         phase0.Gwei              `json:"balance"`
+	Status          eth2apiv1.ValidatorState `json:"status"`
+	Index           phase0.ValidatorIndex    `json:"index"` // pointer in order to support nil
+	ActivationEpoch phase0.Epoch             `json:"activation_epoch"`
 }
 
 // Equals returns true if the given metadata is equal to current
@@ -31,7 +32,8 @@ func (m *ValidatorMetadata) Equals(other *ValidatorMetadata) bool {
 	return other != nil &&
 		m.Status == other.Status &&
 		m.Index == other.Index &&
-		m.Balance == other.Balance
+		m.Balance == other.Balance &&
+		m.ActivationEpoch == other.ActivationEpoch
 }
 
 // Pending returns true if the validator is pending
@@ -119,9 +121,10 @@ func FetchValidatorsMetadata(bc BeaconNode, pubKeys [][]byte) (map[string]*Valid
 	for _, v := range validatorsIndexMap {
 		pk := hex.EncodeToString(v.Validator.PublicKey[:])
 		meta := &ValidatorMetadata{
-			Balance: v.Balance,
-			Status:  v.Status,
-			Index:   v.Index,
+			Balance:         v.Balance,
+			Status:          v.Status,
+			Index:           v.Index,
+			ActivationEpoch: v.Validator.ActivationEpoch,
 		}
 		ret[pk] = meta
 	}

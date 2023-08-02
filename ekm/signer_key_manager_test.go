@@ -9,23 +9,22 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/bloxapp/eth2-key-manager/core"
-	"github.com/bloxapp/eth2-key-manager/wallets/hd"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/bloxapp/eth2-key-manager/core"
+	"github.com/bloxapp/eth2-key-manager/wallets/hd"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
 
@@ -73,7 +72,7 @@ func TestEncryptedKeyManager(t *testing.T) {
 	logger := logging.TestLogger(t)
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
-	signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon, logger)
+	signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon.GetNetwork(), logger)
 	err = signerStorage.SetEncryptionKey(encryptionKey)
 	require.NoError(t, err)
 	defer func(db basedb.Database, logger *zap.Logger) {

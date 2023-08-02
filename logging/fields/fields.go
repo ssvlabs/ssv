@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec"
@@ -48,8 +49,10 @@ const (
 	FieldCurrentSlot         = "current_slot"
 	FieldDomain              = "domain"
 	FieldDuration            = "duration"
+	FieldDuties              = "duties"
 	FieldDutyID              = "duty_id"
 	FieldENR                 = "enr"
+	FieldEpoch               = "epoch"
 	FieldErrors              = "errors"
 	FieldEvent               = "event"
 	FieldEventID             = "event_id"
@@ -161,14 +164,14 @@ func Duration(val time.Time) zapcore.Field {
 	return zap.Stringer(FieldDuration, stringer.Float64Stringer{Val: time.Since(val).Seconds()})
 }
 
-func CurrentSlot(network beacon.Network) zapcore.Field {
-	return zap.Stringer(FieldCurrentSlot, stringer.Uint64Stringer{Val: uint64(network.EstimatedCurrentSlot())})
+func CurrentSlot(slot phase0.Slot) zapcore.Field {
+	return zap.Stringer(FieldCurrentSlot, stringer.Uint64Stringer{Val: uint64(slot)})
 }
 
-func StartTimeUnixMilli(network beacon.Network, slot phase0.Slot) zapcore.Field {
+func StartTimeUnixMilli(time time.Time) zapcore.Field {
 	return zap.Stringer(FieldStartTimeUnixMilli, stringer.FuncStringer{
 		Fn: func() string {
-			return strconv.Itoa(int(network.GetSlotStartTime(slot).UnixMilli()))
+			return strconv.Itoa(int(time.UnixMilli()))
 		},
 	})
 }
@@ -265,6 +268,10 @@ func DutyID(val string) zap.Field {
 	return zap.String(FieldDutyID, val)
 }
 
+func Epoch(val phase0.Epoch) zap.Field {
+	return zap.Uint64(FieldEpoch, uint64(val))
+}
+
 func Slot(val phase0.Slot) zap.Field {
 	return zap.Uint64(FieldSlot, uint64(val))
 }
@@ -307,6 +314,17 @@ func BuilderProposals(v bool) zap.Field {
 
 func FormatDutyID(epoch phase0.Epoch, duty *spectypes.Duty) string {
 	return fmt.Sprintf("%v-e%v-s%v-v%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
+}
+
+func Duties(epoch phase0.Epoch, duties []*spectypes.Duty) zap.Field {
+	var b strings.Builder
+	for i, duty := range duties {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteString(FormatDutyID(epoch, duty))
+	}
+	return zap.String(FieldDuties, b.String())
 }
 
 func Root(r [32]byte) zap.Field {
