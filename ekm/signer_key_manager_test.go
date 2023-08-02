@@ -7,12 +7,14 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"fmt"
+	"testing"
+
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/eth2-key-manager/wallets/hd"
-	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"testing"
+
+	"github.com/bloxapp/ssv/storage/basedb"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
@@ -72,7 +74,7 @@ func TestEncryptedKeyManager(t *testing.T) {
 	logger := logging.TestLogger(t)
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
-	signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon, logger)
+	signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon.GetNetwork(), logger)
 	err = signerStorage.SetEncryptionKey(encryptionKey)
 	require.NoError(t, err)
 	defer func(db basedb.IDb, logger *zap.Logger) {

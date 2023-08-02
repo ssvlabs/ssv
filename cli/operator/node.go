@@ -10,12 +10,13 @@ import (
 	"time"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/api/handlers"
-	apiserver "github.com/bloxapp/ssv/api/server"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/api/handlers"
+	apiserver "github.com/bloxapp/ssv/api/server"
 
 	"github.com/bloxapp/ssv/beacon/goclient"
 	global_config "github.com/bloxapp/ssv/cli/config"
@@ -93,7 +94,7 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		cfg.DBOptions.Ctx = cmd.Context()
-		db, err := setupDb(logger, networkConfig.Beacon)
+		db, err := setupDb(logger, networkConfig.Beacon.GetNetwork())
 		if err != nil {
 			logger.Fatal("could not setup db", zap.Error(err))
 		}
@@ -146,7 +147,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.Network = networkConfig
 		cfg.SSVOptions.P2PNetwork = p2pNetwork
 		cfg.SSVOptions.ValidatorOptions.ForkVersion = forkVersion
-		cfg.SSVOptions.ValidatorOptions.BeaconNetwork = networkConfig.Beacon
+		cfg.SSVOptions.ValidatorOptions.BeaconNetwork = networkConfig.Beacon.GetNetwork()
 		cfg.SSVOptions.ValidatorOptions.Context = ctx
 		cfg.SSVOptions.ValidatorOptions.DB = db
 		cfg.SSVOptions.ValidatorOptions.Network = p2pNetwork
@@ -400,7 +401,7 @@ func setupNodes(
 	// consensus client
 	cfg.ETH2Options.Graffiti = []byte("SSV.Network")
 	cfg.ETH2Options.GasLimit = spectypes.DefaultGasLimit
-	cfg.ETH2Options.Network = network.Beacon
+	cfg.ETH2Options.Network = network.Beacon.GetNetwork()
 	eth2Client, err := goclient.New(logger, cfg.ETH2Options, operatorID, slotTicker)
 	if err != nil {
 		logger.Fatal("failed to create beacon go-client", zap.Error(err),

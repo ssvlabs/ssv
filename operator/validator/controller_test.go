@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+
 	"github.com/bloxapp/ssv/logging"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -73,66 +75,81 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 }
 
 func TestGetIndices(t *testing.T) {
+	farFutureEpoch := phase0.Epoch(99999)
+	currentEpoch := phase0.Epoch(100)
 	validators := map[string]*validator.Validator{
 		"0": newValidator(&beacon.ValidatorMetadata{
-			Balance: 0,
-			Status:  0, // ValidatorStateUnknown
-			Index:   3,
+			Balance:         0,
+			Status:          0, // ValidatorStateUnknown
+			Index:           0,
+			ActivationEpoch: farFutureEpoch,
 		}),
 		"1": newValidator(&beacon.ValidatorMetadata{
-			Balance: 0,
-			Status:  1, // ValidatorStatePendingInitialized
-			Index:   3,
+			Balance:         0,
+			Status:          1, // ValidatorStatePendingInitialized
+			Index:           0,
+			ActivationEpoch: farFutureEpoch,
 		}),
 		"2": newValidator(&beacon.ValidatorMetadata{
-			Balance: 0,
-			Status:  2, // ValidatorStatePendingQueued
-			Index:   3,
+			Balance:         0,
+			Status:          2, // ValidatorStatePendingQueued
+			Index:           3,
+			ActivationEpoch: phase0.Epoch(101),
 		}),
 
 		"3": newValidator(&beacon.ValidatorMetadata{
-			Balance: 0,
-			Status:  3, // ValidatorStateActiveOngoing
-			Index:   3,
+			Balance:         0,
+			Status:          3, // ValidatorStateActiveOngoing
+			Index:           3,
+			ActivationEpoch: phase0.Epoch(100),
 		}),
 		"4": newValidator(&beacon.ValidatorMetadata{
-			Balance: 0,
-			Status:  4, // ValidatorStateActiveExiting
-			Index:   4,
+			Balance:         0,
+			Status:          4, // ValidatorStateActiveExiting
+			Index:           4,
+			ActivationEpoch: phase0.Epoch(100),
 		}),
 		"5": newValidator(&beacon.ValidatorMetadata{
-			Balance: 0,
-			Status:  5, // ValidatorStateActiveSlashed
-			Index:   5,
+			Balance:         0,
+			Status:          5, // ValidatorStateActiveSlashed
+			Index:           5,
+			ActivationEpoch: phase0.Epoch(100),
 		}),
 
 		"6": newValidator(&beacon.ValidatorMetadata{
-			Balance: 0,
-			Status:  6, // ValidatorStateExitedUnslashed
-			Index:   6,
+			Balance:         0,
+			Status:          6, // ValidatorStateExitedUnslashed
+			Index:           6,
+			ActivationEpoch: phase0.Epoch(100),
 		}),
 		"7": newValidator(&beacon.ValidatorMetadata{
-			Balance: 0,
-			Status:  7, // ValidatorStateExitedSlashed
-			Index:   7,
+			Balance:         0,
+			Status:          7, // ValidatorStateExitedSlashed
+			Index:           7,
+			ActivationEpoch: phase0.Epoch(100),
 		}),
 		"8": newValidator(&beacon.ValidatorMetadata{
-			Balance: 0,
-			Status:  8, // ValidatorStateWithdrawalPossible
-			Index:   8,
+			Balance:         0,
+			Status:          8, // ValidatorStateWithdrawalPossible
+			Index:           8,
+			ActivationEpoch: phase0.Epoch(100),
 		}),
 		"9": newValidator(&beacon.ValidatorMetadata{
-			Balance: 0,
-			Status:  9, // ValidatorStateWithdrawalDone
-			Index:   9,
+			Balance:         0,
+			Status:          9, // ValidatorStateWithdrawalDone
+			Index:           9,
+			ActivationEpoch: phase0.Epoch(100),
 		}),
 	}
 
 	logger := logging.TestLogger(t)
 	ctr := setupController(logger, validators)
-	indices := ctr.ActiveValidatorIndices(logger)
-	logger.Info("result", zap.Any("indices", indices))
-	require.Equal(t, 2, len(indices)) // should return only active indices
+
+	activeIndicesForCurrentEpoch := ctr.ActiveValidatorIndices(logger, currentEpoch)
+	require.Equal(t, 2, len(activeIndicesForCurrentEpoch)) // should return only active indices
+
+	activeIndicesForNextEpoch := ctr.ActiveValidatorIndices(logger, currentEpoch+1)
+	require.Equal(t, 3, len(activeIndicesForNextEpoch)) // should return including ValidatorStatePendingQueued
 }
 
 func setupController(logger *zap.Logger, validators map[string]*validator.Validator) controller {
