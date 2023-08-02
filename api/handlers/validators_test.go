@@ -64,6 +64,20 @@ func TestByClusters(t *testing.T) {
 			shares:    []*types.SSVShare{mockShare(10, 20), mockShare(40, 50, 60)},
 			expectRes: []bool{false, false},
 		},
+		{
+			name:      "Multiple Clusters",
+			clusters:  requestClusters{{20, 30, 40}, {80, 90, 100}},
+			contains:  false,
+			shares:    []*types.SSVShare{mockShare(20, 30, 40), mockShare(40, 50, 60), mockShare(80, 90, 100), mockShare(70, 80, 90, 100), mockShare(60, 80, 100), mockShare(20, 30, 40)},
+			expectRes: []bool{true, false, true, false, false, true},
+		},
+		{
+			name:      "Multiple Clusters With Contains",
+			clusters:  requestClusters{{20, 30, 40}, {80, 90, 100}},
+			contains:  true,
+			shares:    []*types.SSVShare{mockShare(10, 20, 30, 40, 50), mockShare(10, 30, 40), mockShare(40, 50, 60), mockShare(70, 80, 90, 100), mockShare(60, 80, 100), mockShare(20, 30, 40)},
+			expectRes: []bool{true, false, false, true, false, true},
+		},
 	}
 
 	for _, tc := range testCases {
