@@ -3,7 +3,6 @@ package handlers
 import (
 	"bytes"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -20,11 +19,12 @@ type Validators struct {
 
 func (h *Validators) List(w http.ResponseWriter, r *http.Request) error {
 	var request struct {
-		Owners    api.HexSlice    `json:"owners" form:"owners"`
-		Operators api.Uint64Slice `json:"operators" form:"operators"`
-		Clusters  requestClusters `json:"clusters" form:"clusters"`
-		PubKeys   api.HexSlice    `json:"pubkeys" form:"pubkeys"`
-		Indices   api.Uint64Slice `json:"indices" form:"indices"`
+		Owners      api.HexSlice    `json:"owners" form:"owners"`
+		Operators   api.Uint64Slice `json:"operators" form:"operators"`
+		Clusters    requestClusters `json:"clusters" form:"clusters"`
+		Subclusters requestClusters `json:"subclusters" form:"subclusters"`
+		PubKeys     api.HexSlice    `json:"pubkeys" form:"pubkeys"`
+		Indices     api.Uint64Slice `json:"indices" form:"indices"`
 	}
 	var response struct {
 		Data []*validatorJSON `json:"data"`
@@ -42,7 +42,10 @@ func (h *Validators) List(w http.ResponseWriter, r *http.Request) error {
 		filters = append(filters, byOperators(request.Operators))
 	}
 	if len(request.Clusters) > 0 {
-		filters = append(filters, byClusters(request.Clusters))
+		filters = append(filters, byClusters(request.Clusters, false))
+	}
+	if len(request.Subclusters) > 0 {
+		filters = append(filters, byClusters(request.Subclusters, true))
 	}
 	if len(request.PubKeys) > 0 {
 		filters = append(filters, byPubKeys(request.PubKeys))
@@ -83,20 +86,30 @@ func byOperators(operators []uint64) registrystorage.SharesFilter {
 	}
 }
 
-func byClusters(clusters requestClusters) registrystorage.SharesFilter {
+func byClusters(clusters requestClusters, contains bool) registrystorage.SharesFilter {
 	return func(share *types.SSVShare) bool {
-	Filter:
+		// Create a string from share.Committee
+		shareCommittee := make([]string, len(share.Committee))
+		for i, c := range share.Committee {
+			shareCommittee[i] = strconv.FormatUint(c.OperatorID, 10)
+		}
+		shareStr := strings.Join(shareCommittee, ",")
+
 		for _, cluster := range clusters {
-			if len(cluster) != len(share.Committee) {
-				continue
+			// Create a string from cluster
+			clusterStrs := make([]string, len(cluster))
+			for i, c := range cluster {
+				clusterStrs[i] = strconv.FormatUint(c, 10)
 			}
-			sort.Slice(cluster, func(i, j int) bool { return cluster[i] < cluster[j] })
-			for i, c := range share.Committee {
-				if cluster[i] != c.OperatorID {
-					continue Filter
-				}
+			clusterStr := strings.Join(clusterStrs, ",")
+
+			// If 'contains' option is set, check if shareStr contains clusterStr
+			if contains && strings.Contains(shareStr, clusterStr) {
+				return true
 			}
-			return true
+			if !contains && shareStr == clusterStr {
+				return true
+			}
 		}
 		return false
 	}
