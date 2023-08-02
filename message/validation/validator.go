@@ -91,6 +91,7 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage) (*
 }
 
 func (mv *MessageValidator) validateSSVMessage(msg *spectypes.SSVMessage) error {
+	// TODO: check domain
 	if !mv.knownValidator(msg.MsgID.GetPubKey()) {
 		// Validator doesn't exist or is liquidated.
 		return ErrUnknownValidator // ERR_VALIDATOR_ID_MISMATCH
