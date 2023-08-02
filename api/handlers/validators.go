@@ -86,9 +86,9 @@ func byOperators(operators []uint64) registrystorage.SharesFilter {
 	}
 }
 
+// byClusters returns a filter that matches shares that match or contain any of the given clusters.
 func byClusters(clusters requestClusters, contains bool) registrystorage.SharesFilter {
 	return func(share *types.SSVShare) bool {
-		// Create a string from share.Committee
 		shareCommittee := make([]string, len(share.Committee))
 		for i, c := range share.Committee {
 			shareCommittee[i] = strconv.FormatUint(c.OperatorID, 10)
@@ -96,14 +96,12 @@ func byClusters(clusters requestClusters, contains bool) registrystorage.SharesF
 		shareStr := strings.Join(shareCommittee, ",")
 
 		for _, cluster := range clusters {
-			// Create a string from cluster
 			clusterStrs := make([]string, len(cluster))
 			for i, c := range cluster {
 				clusterStrs[i] = strconv.FormatUint(c, 10)
 			}
 			clusterStr := strings.Join(clusterStrs, ",")
 
-			// If 'contains' option is set, check if shareStr contains clusterStr
 			if contains && strings.Contains(shareStr, clusterStr) {
 				return true
 			}
