@@ -8,11 +8,13 @@ import (
 	reflect "reflect"
 
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
+	types "github.com/bloxapp/ssv-spec/types"
 	validator "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
-	types "github.com/bloxapp/ssv/protocol/v2/types"
+	types0 "github.com/bloxapp/ssv/protocol/v2/types"
 	storage "github.com/bloxapp/ssv/registry/storage"
 	common "github.com/ethereum/go-ethereum/common"
 	gomock "github.com/golang/mock/gomock"
+	zap "go.uber.org/zap"
 )
 
 // MockController is a mock of Controller interface.
@@ -39,17 +41,29 @@ func (m *MockController) EXPECT() *MockControllerMockRecorder {
 }
 
 // ActiveValidatorIndices mocks base method.
-func (m *MockController) ActiveValidatorIndices() []phase0.ValidatorIndex {
+func (m *MockController) ActiveValidatorIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ActiveValidatorIndices")
+	ret := m.ctrl.Call(m, "ActiveValidatorIndices", epoch)
 	ret0, _ := ret[0].([]phase0.ValidatorIndex)
 	return ret0
 }
 
 // ActiveValidatorIndices indicates an expected call of ActiveValidatorIndices.
-func (mr *MockControllerMockRecorder) ActiveValidatorIndices() *gomock.Call {
+func (mr *MockControllerMockRecorder) ActiveValidatorIndices(epoch interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ActiveValidatorIndices", reflect.TypeOf((*MockController)(nil).ActiveValidatorIndices))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ActiveValidatorIndices", reflect.TypeOf((*MockController)(nil).ActiveValidatorIndices), epoch)
+}
+
+// ExecuteDuty mocks base method.
+func (m *MockController) ExecuteDuty(logger *zap.Logger, duty *types.Duty) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ExecuteDuty", logger, duty)
+}
+
+// ExecuteDuty indicates an expected call of ExecuteDuty.
+func (mr *MockControllerMockRecorder) ExecuteDuty(logger, duty interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteDuty", reflect.TypeOf((*MockController)(nil).ExecuteDuty), logger, duty)
 }
 
 // GetOperatorData mocks base method.
@@ -67,10 +81,10 @@ func (mr *MockControllerMockRecorder) GetOperatorData() *gomock.Call {
 }
 
 // GetOperatorShares mocks base method.
-func (m *MockController) GetOperatorShares() []*types.SSVShare {
+func (m *MockController) GetOperatorShares() []*types0.SSVShare {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetOperatorShares")
-	ret0, _ := ret[0].([]*types.SSVShare)
+	ret0, _ := ret[0].([]*types0.SSVShare)
 	return ret0
 }
 
@@ -112,8 +126,22 @@ func (mr *MockControllerMockRecorder) GetValidatorStats() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidatorStats", reflect.TypeOf((*MockController)(nil).GetValidatorStats))
 }
 
+// IndicesChangeChan mocks base method.
+func (m *MockController) IndicesChangeChan() chan struct{} {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IndicesChangeChan")
+	ret0, _ := ret[0].(chan struct{})
+	return ret0
+}
+
+// IndicesChangeChan indicates an expected call of IndicesChangeChan.
+func (mr *MockControllerMockRecorder) IndicesChangeChan() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IndicesChangeChan", reflect.TypeOf((*MockController)(nil).IndicesChangeChan))
+}
+
 // LiquidateCluster mocks base method.
-func (m *MockController) LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*types.SSVShare) error {
+func (m *MockController) LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*types0.SSVShare) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "LiquidateCluster", owner, operatorIDs, toLiquidate)
 	ret0, _ := ret[0].(error)
@@ -127,7 +155,7 @@ func (mr *MockControllerMockRecorder) LiquidateCluster(owner, operatorIDs, toLiq
 }
 
 // ReactivateCluster mocks base method.
-func (m *MockController) ReactivateCluster(owner common.Address, operatorIDs []uint64, toReactivate []*types.SSVShare) error {
+func (m *MockController) ReactivateCluster(owner common.Address, operatorIDs []uint64, toReactivate []*types0.SSVShare) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReactivateCluster", owner, operatorIDs, toReactivate)
 	ret0, _ := ret[0].(error)
@@ -165,7 +193,7 @@ func (mr *MockControllerMockRecorder) StartNetworkHandlers() *gomock.Call {
 }
 
 // StartValidator mocks base method.
-func (m *MockController) StartValidator(share *types.SSVShare) error {
+func (m *MockController) StartValidator(share *types0.SSVShare) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StartValidator", share)
 	ret0, _ := ret[0].(error)

@@ -14,7 +14,6 @@ import (
 	types "github.com/bloxapp/ssv/protocol/v2/types"
 	gomock "github.com/golang/mock/gomock"
 	event "github.com/prysmaticlabs/prysm/v4/async/event"
-	zap "go.uber.org/zap"
 )
 
 // MockSlotTicker is a mock of SlotTicker interface.
@@ -188,17 +187,17 @@ func (m *MockValidatorController) EXPECT() *MockValidatorControllerMockRecorder 
 }
 
 // ActiveValidatorIndices mocks base method.
-func (m *MockValidatorController) ActiveValidatorIndices(logger *zap.Logger, epoch phase0.Epoch) []phase0.ValidatorIndex {
+func (m *MockValidatorController) ActiveValidatorIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ActiveValidatorIndices", logger, epoch)
+	ret := m.ctrl.Call(m, "ActiveValidatorIndices", epoch)
 	ret0, _ := ret[0].([]phase0.ValidatorIndex)
 	return ret0
 }
 
 // ActiveValidatorIndices indicates an expected call of ActiveValidatorIndices.
-func (mr *MockValidatorControllerMockRecorder) ActiveValidatorIndices(logger, epoch interface{}) *gomock.Call {
+func (mr *MockValidatorControllerMockRecorder) ActiveValidatorIndices(epoch interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ActiveValidatorIndices", reflect.TypeOf((*MockValidatorController)(nil).ActiveValidatorIndices), logger, epoch)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ActiveValidatorIndices", reflect.TypeOf((*MockValidatorController)(nil).ActiveValidatorIndices), epoch)
 }
 
 // GetOperatorShares mocks base method.

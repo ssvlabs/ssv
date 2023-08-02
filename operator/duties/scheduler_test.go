@@ -47,7 +47,7 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Slot
 	mockValidatorController := mocks.NewMockValidatorController(ctrl)
 	mockTicker := &mockSlotTicker{}
 	mockNetworkConfig := networkconfig.NetworkConfig{
-		Beacon: mocknetwork.NewMockNetworkInfo(ctrl),
+		Beacon: mocknetwork.NewMockBeaconNetwork(ctrl),
 	}
 
 	opts := &SchedulerOptions{
@@ -66,33 +66,33 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Slot
 
 	mockBeaconNode.EXPECT().Events(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 
-	mockNetworkConfig.Beacon.(*mocknetwork.MockNetworkInfo).EXPECT().MinGenesisTime().Return(uint64(0)).AnyTimes()
-	mockNetworkConfig.Beacon.(*mocknetwork.MockNetworkInfo).EXPECT().SlotDurationSec().Return(150 * time.Millisecond).AnyTimes()
-	mockNetworkConfig.Beacon.(*mocknetwork.MockNetworkInfo).EXPECT().SlotsPerEpoch().Return(uint64(32)).AnyTimes()
-	mockNetworkConfig.Beacon.(*mocknetwork.MockNetworkInfo).EXPECT().GetSlotStartTime(gomock.Any()).DoAndReturn(
+	mockNetworkConfig.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().MinGenesisTime().Return(uint64(0)).AnyTimes()
+	mockNetworkConfig.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().SlotDurationSec().Return(150 * time.Millisecond).AnyTimes()
+	mockNetworkConfig.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().SlotsPerEpoch().Return(uint64(32)).AnyTimes()
+	mockNetworkConfig.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().GetSlotStartTime(gomock.Any()).DoAndReturn(
 		func(slot phase0.Slot) time.Time {
 			return time.Now()
 		},
 	).AnyTimes()
-	mockNetworkConfig.Beacon.(*mocknetwork.MockNetworkInfo).EXPECT().EstimatedEpochAtSlot(gomock.Any()).DoAndReturn(
+	mockNetworkConfig.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().EstimatedEpochAtSlot(gomock.Any()).DoAndReturn(
 		func(slot phase0.Slot) phase0.Epoch {
 			return phase0.Epoch(uint64(slot) / s.network.SlotsPerEpoch())
 		},
 	).AnyTimes()
 
-	s.network.Beacon.(*mocknetwork.MockNetworkInfo).EXPECT().EstimatedCurrentSlot().DoAndReturn(
+	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().EstimatedCurrentSlot().DoAndReturn(
 		func() phase0.Slot {
 			return currentSlot.GetSlot()
 		},
 	).AnyTimes()
 
-	s.network.Beacon.(*mocknetwork.MockNetworkInfo).EXPECT().EstimatedCurrentEpoch().DoAndReturn(
+	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().EstimatedCurrentEpoch().DoAndReturn(
 		func() phase0.Epoch {
 			return phase0.Epoch(uint64(currentSlot.GetSlot()) / s.network.SlotsPerEpoch())
 		},
 	).AnyTimes()
 
-	s.network.Beacon.(*mocknetwork.MockNetworkInfo).EXPECT().EpochsPerSyncCommitteePeriod().Return(uint64(256)).AnyTimes()
+	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().EpochsPerSyncCommitteePeriod().Return(uint64(256)).AnyTimes()
 
 	err := s.Start(ctx, logger)
 	require.NoError(t, err)

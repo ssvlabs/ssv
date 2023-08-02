@@ -20,9 +20,6 @@ import (
 	"github.com/bloxapp/ssv/api/handlers"
 	apiserver "github.com/bloxapp/ssv/api/server"
 
-	"github.com/bloxapp/ssv/api/handlers"
-	apiserver "github.com/bloxapp/ssv/api/server"
-
 	"github.com/bloxapp/ssv/beacon/goclient"
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/ekm"
@@ -142,7 +139,7 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.ConsensusClient.Graffiti = []byte("SSV.Network")
 		cfg.ConsensusClient.GasLimit = spectypes.DefaultGasLimit
-		cfg.ConsensusClient.Network = networkConfig.Beacon
+		cfg.ConsensusClient.Network = networkConfig.Beacon.GetNetwork()
 
 		consensusClient := setupConsensusClient(logger, operatorData.ID, slotTicker)
 
@@ -415,7 +412,7 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, forksprot
 		fields.Domain(networkConfig.Domain),
 		zap.String("nodeType", nodeType),
 		zap.String("builderProposals(MEV)", builderProposals),
-		zap.Any("beaconNetwork", networkConfig.Beacon.BeaconNetwork),
+		zap.Any("beaconNetwork", networkConfig.Beacon.GetNetwork().BeaconNetwork),
 		fields.Fork(forkVersion),
 		zap.Uint64("genesisEpoch", uint64(networkConfig.GenesisEpoch)),
 		zap.String("registryContract", networkConfig.RegistryContractAddr),

@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -38,6 +38,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/sync/handlers"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -93,7 +94,7 @@ type ControllerOptions struct {
 // it takes care of bootstrapping, updating and managing existing validators and their shares
 type Controller interface {
 	StartValidators()
-	ActiveValidatorIndices(, epoch phase0.Epoch) []phase0.ValidatorIndex
+	ActiveValidatorIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
 	GetValidator(pubKey string) (*validator.Validator, bool)
 	ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty)
 	UpdateValidatorMetaDataLoop()
@@ -107,7 +108,6 @@ type Controller interface {
 	GetOperatorData() *registrystorage.OperatorData
 	SetOperatorData(data *registrystorage.OperatorData)
 	IndicesChangeChan() chan struct{}
-}
 
 	StartValidator(share *ssvtypes.SSVShare) error
 	StopValidator(publicKey []byte) error
