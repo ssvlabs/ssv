@@ -38,7 +38,7 @@ func TestHandleLocalEvent(t *testing.T) {
 		defer cancel()
 
 		logger := zaptest.NewLogger(t)
-		eh, err := setupHandler(t, ctx, logger)
+		eh, err := setupEventHandler(t, ctx, logger)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -64,7 +64,7 @@ func TestHandleLocalEvent(t *testing.T) {
 		defer cancel()
 
 		logger := zaptest.NewLogger(t)
-		eh, err := setupHandler(t, ctx, logger)
+		eh, err := setupEventHandler(t, ctx, logger)
 		if err != nil {
 			t.Fatal(err)
 		}

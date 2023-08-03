@@ -99,9 +99,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	var fetchedLogs []ethtypes.Log
 	logs, fetchErrCh, err := client.FetchHistoricalLogs(ctx, 0)
 	for block := range logs {
-		for _, log := range block.Logs {
-			fetchedLogs = append(fetchedLogs, log)
-		}
+		fetchedLogs = append(fetchedLogs, block.Logs...)
 	}
 	require.NoError(t, err)
 	require.NotEmpty(t, fetchedLogs)

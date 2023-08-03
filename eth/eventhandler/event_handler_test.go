@@ -53,7 +53,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	eh, err := setupHandler(t, ctx, logger)
+	eh, err := setupEventHandler(t, ctx, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,6 +193,9 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		for _, op := range validatorShares.Committee {
 			tmpShares = append(tmpShares, op.PubKey...)
 		}
+		// TODO: do we need the currently unused tmpShares?
+		_ = tmpShares
+
 		// Call the contract method
 		_, err = boundContract.SimcontractTransactor.RegisterValidator(
 			auth,
@@ -343,7 +346,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	})
 }
 
-func setupHandler(t *testing.T, ctx context.Context, logger *zap.Logger) (*EventHandler, error) {
+func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger) (*EventHandler, error) {
 	options := basedb.Options{
 		Type:       "badger-memory",
 		Path:       "",
@@ -353,6 +356,7 @@ func setupHandler(t *testing.T, ctx context.Context, logger *zap.Logger) (*Event
 	}
 
 	db, err := ssvstorage.GetStorageFactory(logger, options)
+	require.NoError(t, err)
 
 	storageMap := ibftstorage.NewStores()
 	nodeStorage, operatorData := setupOperatorStorage(logger, db)
@@ -435,10 +439,6 @@ func unmarshalLog(t *testing.T, rawOperatorAdded string) ethtypes.Log {
 	require.NoError(t, err)
 	require.NotNil(t, contractAbi)
 	return vLogOperatorAdded
-}
-
-func shareWithPK(pk string) *ssvtypes.SSVShare {
-	return &ssvtypes.SSVShare{Share: spectypes.Share{ValidatorPubKey: ethcommon.FromHex(pk)}}
 }
 
 func simTestBackend(testAddr ethcommon.Address) *simulator.SimulatedBackend {
