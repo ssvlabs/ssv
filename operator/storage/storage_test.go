@@ -141,7 +141,6 @@ func TestSetupPrivateKey(t *testing.T) {
 				require.Equal(t, test.expectedError, err.Error())
 				return
 			}
-
 			require.NoError(t, err)
 			sk, found, err := operatorStorage.GetPrivateKey()
 			require.NoError(t, err)

@@ -251,12 +251,15 @@ func (s *storage) SetupPrivateKey(logger *zap.Logger, operatorKeyBase64 string, 
 // validateKey validate provided and exist key. save if needed.
 func (s *storage) validateKey(generateIfNone bool, operatorKey string) error {
 	// check if passed new key. if so, save new key (force to always save key when provided)
-	storedPrivateKey, _, err := s.GetHashedPrivateKey()
+	storedPrivateKey, privateKeyExist, err := s.GetHashedPrivateKey()
+	if err != nil {
+		return errors.New("Can't Get Operator private key from storage")
+	}
 	hashedKey, err := rsaencryption.HashRsaKey([]byte(operatorKey))
 	if err != nil {
 		return errors.New("Cannot hash Operator private key")
 	}
-	if storedPrivateKey != nil && hashedKey != string(storedPrivateKey) {
+	if privateKeyExist && hashedKey != string(storedPrivateKey) {
 		return errors.New("Operator private key is not matching the one encrypted the storage")
 	}
 	if operatorKey != "" {
