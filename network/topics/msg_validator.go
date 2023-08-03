@@ -20,13 +20,26 @@ type MsgValidatorFunc = func(ctx context.Context, p peer.ID, msg *pubsub.Message
 func NewSSVMsgValidator(logger *zap.Logger, fork forks.Fork, validator *validation.MessageValidator) func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
 	return func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 		topic := pmsg.GetTopic()
+
 		metricPubsubActiveMsgValidation.WithLabelValues(topic).Inc()
 		defer metricPubsubActiveMsgValidation.WithLabelValues(topic).Dec()
-		if len(pmsg.GetData()) == 0 {
+
+		messageData := pmsg.GetData()
+		if len(messageData) == 0 {
 			reportValidationResult(validationResultNoData)
 			return pubsub.ValidationReject
 		}
-		msg, err := fork.DecodeNetworkMsg(pmsg.GetData())
+
+		// Max possible MsgType + MsgID + Data plus 10% for encoding overhead
+		// TODO: check if we need to add 10% here
+		const maxMsgSize = 4 + 56 + 8388668
+		const maxEncodedMsgSize = maxMsgSize + maxMsgSize/10
+		if len(messageData) > maxEncodedMsgSize {
+			reportValidationResult(validationResultTooBig)
+			return pubsub.ValidationReject
+		}
+
+		msg, err := fork.DecodeNetworkMsg(messageData)
 		if err != nil {
 			// can't decode message
 			// logger.Debug("invalid: can't decode message", zap.Error(err))

@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -30,8 +29,9 @@ const (
 	// clockErrorTolerance is the maximum amount of clock error we expect to see between nodes.
 	clockErrorTolerance = time.Millisecond * 50
 
-	maxConsensusMsgSize        = math.MaxUint64 // TODO: define
-	maxPartialSignatureMsgSize = math.MaxUint64 // TODO: define
+	maxMessageSize             = 8388608        // TODO: define
+	maxConsensusMsgSize        = maxMessageSize // TODO: define
+	maxPartialSignatureMsgSize = maxMessageSize // TODO: define
 	allowedRoundsInFuture      = 2
 )
 
@@ -41,6 +41,7 @@ var (
 	ErrEarlyMessage     = errors.New("early message")
 	ErrLateMessage      = errors.New("late message")
 	ErrInvalidSigners   = errors.New("invalid signers")
+	ErrNoSigners        = errors.New("no signers")
 )
 
 type ConsensusID struct {
@@ -67,6 +68,10 @@ func NewMessageValidator(netCfg networkconfig.NetworkConfig, shareStorage regist
 }
 
 func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, error) {
+	if len(ssvMessage.Data) > maxMessageSize {
+		return nil, fmt.Errorf("message to big, got %d bytes, limit %d bytes", len(ssvMessage.Data), maxMessageSize)
+	}
+
 	if !bytes.Equal(ssvMessage.MsgID.GetDomain(), mv.netCfg.Domain[:]) {
 		return nil, fmt.Errorf("wrong domain, got %v, expected %v", hex.EncodeToString(ssvMessage.MsgID.GetDomain()), hex.EncodeToString(mv.netCfg.Domain[:]))
 	}
@@ -119,8 +124,8 @@ func (mv *MessageValidator) validateConsensusMessage(msg *queue.DecodedSSVMessag
 	msgID := msg.GetID()
 
 	// Validate that the specified signers belong in the validator's committee.
-	if !mv.validSigners(msgID.GetPubKey(), msg) {
-		return ErrInvalidSigners
+	if err := mv.validSigners(msgID.GetPubKey(), msg); err != nil {
+		return err
 	}
 
 	// TODO: check if height can be used as slot
@@ -266,7 +271,7 @@ func (mv *MessageValidator) validateSignerBehavior(
 		return fmt.Errorf("round too high")
 	}
 
-	estimatedRound := mv.currentEstimatedRound(role, phase0.Slot(signedMsg.Message.Height)) // TODO: check if height == slot
+	estimatedRound := mv.currentEstimatedRound(role, phase0.Slot(signedMsg.Message.Height))
 	// msgRound - 2 <= estimatedRound <= msgRound + 1
 	if estimatedRound-msgRound > 2 || msgRound-estimatedRound > 1 {
 		return fmt.Errorf("message round is too far from estimated, current %v, got %v", estimatedRound, msgRound)
@@ -300,7 +305,7 @@ func (mv *MessageValidator) validateSignerBehavior(
 func (mv *MessageValidator) maxRound(role spectypes.BeaconRole) specqbft.Round {
 	switch role {
 	case spectypes.BNRoleAttester:
-		return 12
+		return 12 // TODO: consider calculating based on quick timeout and slow timeout
 	// TODO: other roles
 	default:
 		panic("unknown role")
@@ -337,13 +342,17 @@ func (mv *MessageValidator) knownValidator(pubKey []byte) bool {
 	return share != nil && share.BeaconMetadata.IsAttesting() // TODO: return ERR_VALIDATOR_LIQUIDATED if liquidated
 }
 
-func (mv *MessageValidator) validSigners(pubKey []byte, msg *queue.DecodedSSVMessage) bool {
+func (mv *MessageValidator) validSigners(pubKey []byte, msg *queue.DecodedSSVMessage) error {
 	// TODO: consider having different validation functions for each message type
 	// TODO: consider returning error
 
 	share := mv.shareStorage.Get(pubKey)
-	if share == nil || !share.BeaconMetadata.IsAttesting() {
-		return false
+	if share == nil {
+		return fmt.Errorf("pubkey not found")
+	}
+
+	if !share.BeaconMetadata.IsAttesting() {
+		return fmt.Errorf("validator not active")
 	}
 
 	contains := func(signer spectypes.OperatorID) func(operator *spectypes.Operator) bool {
@@ -355,11 +364,15 @@ func (mv *MessageValidator) validSigners(pubKey []byte, msg *queue.DecodedSSVMes
 	switch m := msg.Body.(type) {
 	case *specqbft.SignedMessage:
 		if len(m.Signers) == 0 {
-			return false // ERR_NO_SIG
+			return ErrNoSigners
+		}
+
+		if len(m.Signers) > 1 && m.Message.MsgType != specqbft.CommitMsgType {
+			return fmt.Errorf("non-decided with multiple signers, len: %d", len(m.Signers))
 		}
 
 		if !slices.IsSorted(m.Signers) {
-			return false // ERR_SIGNERS_NOT_SORTED
+			return fmt.Errorf("signers not sorted") // ERR_SIGNERS_NOT_SORTED
 		}
 
 		// TODO: if decided, check if previous decided had less or equal signers
@@ -367,31 +380,31 @@ func (mv *MessageValidator) validSigners(pubKey []byte, msg *queue.DecodedSSVMes
 		seen := map[spectypes.OperatorID]struct{}{}
 		for _, signer := range m.Signers {
 			if signer == 0 {
-				return false // ERR_SIG_ID
+				return fmt.Errorf("zero signer ID") // ERR_SIG_ID
 			}
 
 			if _, ok := seen[signer]; ok {
-				return false // ERR_NON_UNIQUE_SIG
+				return fmt.Errorf("non-unique signer") // ERR_NON_UNIQUE_SIG
 			}
 			seen[signer] = struct{}{}
 
 			if !slices.ContainsFunc(share.Committee, contains(signer)) {
-				return false // ERR_SIG_ID
+				return fmt.Errorf("signer not in committee") // ERR_SIG_ID
 			}
 		}
 	case *spectypes.PartialSignatureMessage:
 		if m.Signer == 0 {
-			return false // ERR_SIG_ID
+			return fmt.Errorf("zero signer ID") // ERR_SIG_ID
 		}
 
 		if !slices.ContainsFunc(share.Committee, contains(m.Signer)) {
-			return false // ERR_SIG_ID
+			return fmt.Errorf("signer not in committee") // ERR_SIG_ID
 		}
 	default:
-		return false
+		return fmt.Errorf("unknown message type: %T", m)
 	}
 
-	return true
+	return nil
 }
 
 func (mv *MessageValidator) validRole(roleType spectypes.BeaconRole) bool {

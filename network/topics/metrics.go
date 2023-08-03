@@ -59,6 +59,7 @@ type msgValidationResult string
 
 var (
 	validationResultNoData   msgValidationResult = "no_data"
+	validationResultTooBig   msgValidationResult = "too_big"
 	validationResultEncoding msgValidationResult = "encoding"
 	validationResultInvalid  msgValidationResult = "invalid"
 )
