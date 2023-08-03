@@ -201,13 +201,6 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 
 					ec.logger.Error("failed to stream registry events, reconnecting", zap.Error(err))
 					ec.reconnect(ctx)
-
-					// If streamLogsToChan processed fetched any logs, it would return the last block number,
-					// so we should continue from there.
-					if lastBlock+1 > fromBlock {
-						fromBlock = lastBlock + 1
-					}
-					continue
 				}
 				fromBlock = lastBlock + 1
 			}
@@ -251,6 +244,8 @@ func (ec *ExecutionClient) isClosed() bool {
 	}
 }
 
+// streamLogsToChan streams ongoing logs from the given block to the given channel.
+// streamLogsToChan *always* returns the last block it fetched, even if it errored.
 // TODO: consider handling "websocket: read limit exceeded" error and reducing batch size (syncSmartContractsEvents has code for this)
 func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (lastBlock uint64, err error) {
 	heads := make(chan *ethtypes.Header)
