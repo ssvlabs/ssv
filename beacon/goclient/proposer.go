@@ -1,6 +1,7 @@
 package goclient
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -23,6 +24,11 @@ import (
 const (
 	batchSize = 500
 )
+
+// ProposerDuties returns proposer duties for the given epoch.
+func (gc *goClient) ProposerDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.ProposerDuty, error) {
+	return gc.client.ProposerDuties(ctx, epoch, validatorIndices)
+}
 
 // GetBeaconBlock returns beacon block by the given slot, graffiti, and randao.
 func (gc *goClient) GetBeaconBlock(slot phase0.Slot, graffiti, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
