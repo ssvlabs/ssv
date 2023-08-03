@@ -34,6 +34,7 @@ func (c *controller) StartValidator(share *ssvtypes.SSVShare) error {
 
 	if started {
 		logger.Info("started validator")
+		c.indicesChange <- struct{}{}
 	} else {
 		logger.Debug("validator wasn't started")
 	}
@@ -77,11 +78,19 @@ func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []uint6
 		zap.String("owner", owner.String()),
 		zap.Uint64s("operator_ids", operatorIDs))
 
+	var anyStarted bool
 	for _, share := range toReactivate {
-		if _, err := c.onShareStart(share); err != nil {
+		started, err := c.onShareStart(share)
+		if err != nil {
 			return err
 		}
-		logger.Info("started share")
+		if started {
+			logger.Info("started re-activated validator")
+			anyStarted = true
+		}
+	}
+	if anyStarted {
+		c.indicesChange <- struct{}{}
 	}
 
 	return nil

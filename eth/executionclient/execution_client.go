@@ -193,15 +193,24 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 					// Closed gracefully.
 					return
 				}
-				if err != nil {
-					tries++
-					if tries > 2 {
-						ec.logger.Fatal("failed to stream registry events", zap.Error(err))
-					}
 
-					ec.logger.Error("failed to stream registry events, reconnecting", zap.Error(err))
-					ec.reconnect(ctx)
+				// streamLogsToChan should never return without an error,
+				// so we treat a nil error as a an error by itself.
+				if err == nil {
+					err = errors.New("streamLogsToChan halted without an error")
 				}
+
+				tries++
+				if tries > 2 {
+					ec.logger.Fatal("failed to stream registry events", zap.Error(err))
+				}
+				if lastBlock > fromBlock {
+					// Successfully streamed some logs, reset tries.
+					tries = 0
+				}
+
+				ec.logger.Error("failed to stream registry events, reconnecting", zap.Error(err))
+				ec.reconnect(ctx)
 				fromBlock = lastBlock + 1
 			}
 		}
@@ -256,8 +265,12 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 	}
 	defer sub.Unsubscribe()
 
+	fakeErr := time.NewTicker(26 * time.Second)
 	for {
 		select {
+		case <-fakeErr.C:
+			ec.client.Close()
+			return fromBlock, fmt.Errorf("fake error")
 		case <-ctx.Done():
 			return fromBlock, context.Canceled
 
@@ -286,6 +299,12 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 			if err := <-fetchErrors; err != nil {
 				// If we get an error while fetching, we return the last block we fetched.
 				return lastBlock, fmt.Errorf("fetch logs: %w", err)
+			}
+			select {
+			case <-fakeErr.C:
+				ec.client.Close()
+				return lastBlock, fmt.Errorf("fake error")
+			default:
 			}
 			fromBlock = toBlock + 1
 			ec.metrics.ExecutionClientLastFetchedBlock(fromBlock)
