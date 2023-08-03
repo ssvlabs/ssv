@@ -211,9 +211,11 @@ func TestDropRegistryData(t *testing.T) {
 		require.NoError(t, err)
 	}
 	for _, owner := range recipientOwners {
+		var fr bellatrix.ExecutionAddress
+		copy(fr[:], append([]byte{1}, owner[:]...))
 		_, err := storage.SaveRecipientData(nil, &registrystorage.RecipientData{
 			Owner:        owner,
-			FeeRecipient: bellatrix.ExecutionAddress(append([]byte{1}, owner[:]...)),
+			FeeRecipient: fr,
 		})
 		require.NoError(t, err)
 	}
