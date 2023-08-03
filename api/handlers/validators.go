@@ -8,6 +8,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+
 	"github.com/bloxapp/ssv/api"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
@@ -157,15 +158,16 @@ func (c *requestClusters) Bind(value string) error {
 }
 
 type validatorJSON struct {
-	PubKey        api.Hex                `json:"public_key"`
-	Index         phase0.ValidatorIndex  `json:"index"`
-	Status        string                 `json:"status"`
-	Owner         api.Hex                `json:"owner"`
-	Committee     []spectypes.OperatorID `json:"committee"`
-	Quorum        uint64                 `json:"quorum"`
-	PartialQuorum uint64                 `json:"partial_quorum"`
-	Grafitti      string                 `json:"grafitti"`
-	Liquidated    bool                   `json:"liquidated"`
+	PubKey          api.Hex                `json:"public_key"`
+	Index           phase0.ValidatorIndex  `json:"index"`
+	Status          string                 `json:"status"`
+	ActivationEpoch phase0.Epoch           `json:"activation_epoch"`
+	Owner           api.Hex                `json:"owner"`
+	Committee       []spectypes.OperatorID `json:"committee"`
+	Quorum          uint64                 `json:"quorum"`
+	PartialQuorum   uint64                 `json:"partial_quorum"`
+	Graffiti        string                 `json:"graffiti"`
+	Liquidated      bool                   `json:"liquidated"`
 }
 
 func validatorFromShare(share *types.SSVShare) *validatorJSON {
@@ -181,12 +183,13 @@ func validatorFromShare(share *types.SSVShare) *validatorJSON {
 		}(),
 		Quorum:        share.Quorum,
 		PartialQuorum: share.PartialQuorum,
-		Grafitti:      string(share.Graffiti),
+		Graffiti:      string(share.Graffiti),
 		Liquidated:    share.Liquidated,
 	}
 	if share.HasBeaconMetadata() {
 		v.Index = share.Metadata.BeaconMetadata.Index
 		v.Status = share.Metadata.BeaconMetadata.Status.String()
+		v.ActivationEpoch = share.Metadata.BeaconMetadata.ActivationEpoch
 	}
 	return v
 }
