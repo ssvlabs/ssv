@@ -3,13 +3,12 @@ package ekm
 import (
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha256"
 	"crypto/x509"
 	"encoding/hex"
-	"fmt"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/eth2-key-manager/wallets/hd"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"testing"
@@ -61,10 +60,9 @@ func testKeyManager(t *testing.T) spectypes.KeyManager {
 func TestEncryptedKeyManager(t *testing.T) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	// Convert RSA private key to bytes
 	keyBytes := x509.MarshalPKCS1PrivateKey(privateKey)
-	hash := sha256.Sum256(keyBytes)
-	encryptionKey := fmt.Sprintf("%x", hash)
+	encryptionKey, err := rsaencryption.HashRsaKey(keyBytes)
+	require.NoError(t, err)
 	threshold.Init()
 	sk := bls.SecretKey{}
 	sk.SetByCSPRNG()

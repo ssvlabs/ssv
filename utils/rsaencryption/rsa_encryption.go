@@ -8,6 +8,7 @@ package rsaencryption
 import (
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
@@ -68,6 +69,13 @@ func ConvertPemToPrivateKey(skPem string) (*rsa.PrivateKey, error) {
 	}
 	b := block.Bytes
 	return parsePrivateKey(b)
+}
+
+// HashRsaKey return sha256 hash of rsa private key
+func HashRsaKey(keyBytes []byte) (string, error) {
+	hash := sha256.Sum256(keyBytes)
+	keyString := fmt.Sprintf("%x", hash)
+	return keyString, nil
 }
 
 // ConvertEncryptedPemToPrivateKey return rsa private key from secret key

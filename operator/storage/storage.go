@@ -43,10 +43,11 @@ type Storage interface {
 type storage struct {
 	db basedb.IDb
 
-	operatorStore  registrystorage.Operators
-	recipientStore registrystorage.Recipients
-	shareStore     registrystorage.Shares
-	eventStore     registrystorage.Events
+	operatorPrivateKey []byte
+	operatorStore      registrystorage.Operators
+	recipientStore     registrystorage.Recipients
+	shareStore         registrystorage.Shares
+	eventStore         registrystorage.Events
 }
 
 // NewNodeStorage creates a new instance of Storage
@@ -194,20 +195,29 @@ func (s *storage) GetSyncOffset() (*eth1.SyncOffset, bool, error) {
 	return offset, found, nil
 }
 
-// GetPrivateKey return rsa private key
-func (s *storage) GetPrivateKey() (*rsa.PrivateKey, bool, error) {
-	obj, found, err := s.db.Get(storagePrefix, []byte("private-key"))
-	if err != nil {
-		return nil, false, err
-	}
+// GetHashedPrivateKey return sha256 hashed private key
+func (s *storage) GetHashedPrivateKey() ([]byte, bool, error) {
+	obj, found, err := s.db.Get(storagePrefix, []byte("hashed-private-key"))
 	if !found {
 		return nil, found, nil
 	}
-	sk, err := rsaencryption.ConvertPemToPrivateKey(string(obj.Value))
+	if err != nil {
+		return nil, found, err
+	}
+	return obj.Value, found, nil
+}
+
+// GetPrivateKey return rsa private key
+func (s *storage) GetPrivateKey() (*rsa.PrivateKey, bool, error) {
+	privateKey := s.operatorPrivateKey
+	if privateKey == nil {
+		return nil, false, nil
+	}
+	sk, err := rsaencryption.ConvertPemToPrivateKey(string(privateKey))
 	if err != nil {
 		return nil, false, err
 	}
-	return sk, found, nil
+	return sk, true, nil
 }
 
 // SetupPrivateKey setup operator private key at the init of the node and set OperatorPublicKey config
@@ -241,6 +251,14 @@ func (s *storage) SetupPrivateKey(logger *zap.Logger, operatorKeyBase64 string, 
 // validateKey validate provided and exist key. save if needed.
 func (s *storage) validateKey(generateIfNone bool, operatorKey string) error {
 	// check if passed new key. if so, save new key (force to always save key when provided)
+	storedPrivateKey, _, err := s.GetHashedPrivateKey()
+	hashedKey, err := rsaencryption.HashRsaKey([]byte(operatorKey))
+	if err != nil {
+		return errors.New("Cannot hash Operator private key")
+	}
+	if storedPrivateKey != nil && hashedKey != string(storedPrivateKey) {
+		return errors.New("Operator private key is not matching the one encrypted the storage")
+	}
 	if operatorKey != "" {
 		return s.savePrivateKey(operatorKey)
 	}
@@ -249,7 +267,7 @@ func (s *storage) validateKey(generateIfNone bool, operatorKey string) error {
 	if err != nil {
 		return err
 	}
-	// if no, check if need to generate. if no, return error
+	// if no, check  if you need to generate. if no, return error
 	if !found {
 		if !generateIfNone {
 			return errors.New("key not exist or provided")
@@ -267,9 +285,14 @@ func (s *storage) validateKey(generateIfNone bool, operatorKey string) error {
 
 // SavePrivateKey save operator private key
 func (s *storage) savePrivateKey(operatorKey string) error {
-	if err := s.db.Set(storagePrefix, []byte("private-key"), []byte(operatorKey)); err != nil {
+	hashedKey, err := rsaencryption.HashRsaKey([]byte(operatorKey))
+	if err != nil {
 		return err
 	}
+	if err := s.db.Set(storagePrefix, []byte("hashed-private-key"), []byte(hashedKey)); err != nil {
+		return err
+	}
+	s.operatorPrivateKey = []byte(operatorKey)
 	return nil
 }
 

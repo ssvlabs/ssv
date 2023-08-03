@@ -2,7 +2,6 @@ package operator
 
 import (
 	"context"
-	"crypto/sha256"
 	"crypto/x509"
 	"fmt"
 	"log"
@@ -91,27 +90,23 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal("could not create logger", err)
 		}
-
 		defer logging.CapturePanic(logger)
-
 		networkConfig, forkVersion, err := setupSSVNetwork(logger)
 		if err != nil {
 			log.Fatal("could not setup network", err)
 		}
-
 		cfg.DBOptions.Ctx = cmd.Context()
 		db, err := setupDb(logger, networkConfig.Beacon)
 		if err != nil {
 			logger.Fatal("could not setup db", zap.Error(err))
 		}
+
 		nodeStorage, operatorData := setupOperatorStorage(logger, db)
 
 		operatorKey, _, _ := nodeStorage.GetPrivateKey()
 		keyBytes := x509.MarshalPKCS1PrivateKey(operatorKey)
-		hash := sha256.Sum256(keyBytes)
-		keyString := fmt.Sprintf("%x", hash)
-
-		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkConfig, cfg.SSVOptions.ValidatorOptions.BuilderProposals, keyString)
+		hashedKey, _ := rsaencryption.HashRsaKey(keyBytes)
+		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkConfig, cfg.SSVOptions.ValidatorOptions.BuilderProposals, hashedKey)
 		if err != nil {
 			logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 		}
