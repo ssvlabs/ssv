@@ -10,6 +10,7 @@ import (
 )
 
 // DecodedSSVMessage is a bundle of SSVMessage and it's decoding.
+// TODO: try to make it generic
 type DecodedSSVMessage struct {
 	*spectypes.SSVMessage
 

@@ -114,9 +114,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.Permissioned = permissioned
 		cfg.P2pNetworkConfig.WhitelistedOperatorKeys = append(cfg.P2pNetworkConfig.WhitelistedOperatorKeys, networkConfig.WhitelistedOperatorKeys...)
 
-		messageValidator := validation.NewMessageValidator(networkConfig.Beacon, nil) // TODO: pass validator controller
-		// TODO: move messageValidator inside setupP2P
-		p2pNetwork := setupP2P(forkVersion, operatorData, db, logger, networkConfig, messageValidator)
+		p2pNetwork := setupP2P(forkVersion, operatorData, db, logger, networkConfig, nodeStorage.Shares())
 
 		ctx := cmd.Context()
 		slotTicker := slot_ticker.NewTicker(ctx, networkConfig)
@@ -367,7 +365,7 @@ func setupP2P(
 	db basedb.IDb,
 	logger *zap.Logger,
 	network networkconfig.NetworkConfig,
-	messageValidator *validation.MessageValidator,
+	shareStorage registrystorage.Shares,
 ) network.P2PNetwork {
 	istore := ssv_identity.NewIdentityStore(db)
 	netPrivKey, err := istore.SetupNetworkKey(logger, cfg.NetworkPrivateKey)
@@ -385,7 +383,7 @@ func setupP2P(
 	cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorData.PublicKey)
 	cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
 	cfg.P2pNetworkConfig.Network = network
-	cfg.P2pNetworkConfig.MessageValidator = messageValidator
+	cfg.P2pNetworkConfig.MessageValidator = validation.NewMessageValidator(network, shareStorage)
 
 	return p2pv1.New(logger, &cfg.P2pNetworkConfig)
 }

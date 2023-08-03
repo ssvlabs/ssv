@@ -1,5 +1,7 @@
 package validation
 
+// signer_state.go describes state of a signer.
+
 import (
 	"time"
 

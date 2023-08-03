@@ -1,6 +1,9 @@
 package validation
 
+// validator.go contains main code for validation and most of the rule checks.
+
 import (
+	"bytes"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -12,12 +15,12 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"golang.org/x/exp/slices"
 
-	"github.com/bloxapp/ssv/operator/validator"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	"github.com/bloxapp/ssv/networkconfig"
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
+	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )
 
 const (
@@ -29,6 +32,7 @@ const (
 
 	maxConsensusMsgSize        = math.MaxUint64 // TODO: define
 	maxPartialSignatureMsgSize = math.MaxUint64 // TODO: define
+	allowedRoundsInFuture      = 2
 )
 
 var (
@@ -49,22 +53,34 @@ type ConsensusState struct {
 }
 
 type MessageValidator struct {
-	network beaconprotocol.Network
-	index   map[ConsensusID]*ConsensusState
-	ctrl    validator.Controller
+	netCfg       networkconfig.NetworkConfig
+	index        map[ConsensusID]*ConsensusState
+	shareStorage registrystorage.Shares
 }
 
-func NewMessageValidator(network beaconprotocol.Network, ctrl validator.Controller) *MessageValidator {
+func NewMessageValidator(netCfg networkconfig.NetworkConfig, shareStorage registrystorage.Shares) *MessageValidator {
 	return &MessageValidator{
-		network: network,
-		index:   make(map[ConsensusID]*ConsensusState),
-		ctrl:    ctrl,
+		netCfg:       netCfg,
+		index:        make(map[ConsensusID]*ConsensusState),
+		shareStorage: shareStorage,
 	}
 }
 
 func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, error) {
-	if err := mv.validateSSVMessage(ssvMessage); err != nil {
-		return nil, err
+	if !bytes.Equal(ssvMessage.MsgID.GetDomain(), mv.netCfg.Domain[:]) {
+		return nil, fmt.Errorf("wrong domain, got %v, expected %v", hex.EncodeToString(ssvMessage.MsgID.GetDomain()), hex.EncodeToString(mv.netCfg.Domain[:]))
+	}
+
+	if !mv.knownValidator(ssvMessage.MsgID.GetPubKey()) {
+		// Validator doesn't exist or is liquidated.
+		return nil, ErrUnknownValidator // ERR_VALIDATOR_ID_MISMATCH
+	}
+	if !mv.validRole(ssvMessage.MsgID.GetRoleType()) {
+		return nil, ErrInvalidRole
+	}
+
+	if len(ssvMessage.Data) == 0 {
+		return nil, fmt.Errorf("empty data") // ERR_NO_DATA
 	}
 
 	msg, err := queue.DecodeSSVMessage(ssvMessage)
@@ -90,30 +106,13 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage) (*
 	return msg, nil
 }
 
-func (mv *MessageValidator) validateSSVMessage(msg *spectypes.SSVMessage) error {
-	// TODO: check domain
-	if !mv.knownValidator(msg.MsgID.GetPubKey()) {
-		// Validator doesn't exist or is liquidated.
-		return ErrUnknownValidator // ERR_VALIDATOR_ID_MISMATCH
-	}
-	if !mv.validRole(msg.MsgID.GetRoleType()) {
-		return ErrInvalidRole
-	}
-
-	if len(msg.Data) == 0 {
-		return fmt.Errorf("empty data") // ERR_NO_DATA
-	}
-
-	return nil
-}
-
 func (mv *MessageValidator) validateConsensusMessage(msg *queue.DecodedSSVMessage) error {
 	signedMsg, ok := msg.Body.(*specqbft.SignedMessage)
 	if !ok {
 		return fmt.Errorf("expected consensus message")
 	}
 
-	if len(msg.Data) > maxPartialSignatureMsgSize {
+	if len(msg.Data) > maxConsensusMsgSize {
 		return fmt.Errorf("size exceeded")
 	}
 
@@ -134,7 +133,6 @@ func (mv *MessageValidator) validateConsensusMessage(msg *queue.DecodedSSVMessag
 		return ErrLateMessage
 	}
 
-	// TODO: consider using just msgID as it's an array and can be a key of a map
 	consensusID := ConsensusID{
 		PubKey: phase0.BLSPubKey(msgID.GetPubKey()),
 		Role:   msgID.GetRoleType(),
@@ -150,6 +148,8 @@ func (mv *MessageValidator) validateConsensusMessage(msg *queue.DecodedSSVMessag
 		}
 	}
 
+	// TODO: check signature
+
 	return nil
 }
 
@@ -163,6 +163,8 @@ func (mv *MessageValidator) validatePartialSignatureMessage(msg *queue.DecodedSS
 		return fmt.Errorf("size exceeded") // ERR_PSIG_MSG_SIZE
 	}
 	_ = signedMsg // TODO: validate it
+
+	// TODO: check signature
 
 	return nil
 }
@@ -178,8 +180,8 @@ func (mv *MessageValidator) validateEventMessage(msg *queue.DecodedSSVMessage) e
 }
 
 func (mv *MessageValidator) earlyMessage(slot phase0.Slot) bool {
-	return mv.network.GetSlotEndTime(mv.network.EstimatedCurrentSlot()).
-		Add(-clockErrorTolerance).Before(mv.network.GetSlotStartTime(slot))
+	return mv.netCfg.Beacon.GetSlotEndTime(mv.netCfg.Beacon.EstimatedCurrentSlot()).
+		Add(-clockErrorTolerance).Before(mv.netCfg.Beacon.GetSlotStartTime(slot))
 }
 
 func (mv *MessageValidator) lateMessage(slot phase0.Slot, role spectypes.BeaconRole) bool {
@@ -194,9 +196,9 @@ func (mv *MessageValidator) lateMessage(slot phase0.Slot, role spectypes.BeaconR
 		ttl = 1
 		// ...
 	}
-	deadline := mv.network.GetSlotStartTime(slot + ttl).
+	deadline := mv.netCfg.Beacon.GetSlotStartTime(slot + ttl).
 		Add(lateMessageMargin + clockErrorTolerance)
-	return mv.network.GetSlotStartTime(mv.network.EstimatedCurrentSlot()).
+	return mv.netCfg.Beacon.GetSlotStartTime(mv.netCfg.Beacon.EstimatedCurrentSlot()).
 		After(deadline)
 }
 
@@ -244,6 +246,14 @@ func (mv *MessageValidator) validateSignerBehavior(
 		return errors.New("signer has already advanced to a later round")
 	}
 
+	if signerState.Slot < messageSlot && signerState.Round >= msgRound || signerState.Round < msgRound && signerState.Slot >= messageSlot {
+		return errors.New("if slot is in future, round must be also in future and vice versa")
+	}
+
+	if msgRound-signerState.Round > allowedRoundsInFuture {
+		return fmt.Errorf("round is too far in the future, current %d, got %d", signerState.Round, msgRound)
+	}
+
 	// TODO: check that the message's round is sensible according to the roundTimeout
 	// and the slot. For example:
 	//
@@ -252,20 +262,19 @@ func (mv *MessageValidator) validateSignerBehavior(
 
 	role := msg.MsgID.GetRoleType()
 	maxRound := mv.maxRound(role)
-	if signedMsg.Message.Round > maxRound {
+	if msgRound > maxRound {
 		return fmt.Errorf("round too high")
 	}
 
 	estimatedRound := mv.currentEstimatedRound(role, phase0.Slot(signedMsg.Message.Height)) // TODO: check if height == slot
-	if signedMsg.Message.Round != estimatedRound {
-		return fmt.Errorf("message round differs from estimated, want %v, got %v", estimatedRound, signedMsg.Message.Round)
+	// msgRound - 2 <= estimatedRound <= msgRound + 1
+	if estimatedRound-msgRound > 2 || msgRound-estimatedRound > 1 {
+		return fmt.Errorf("message round is too far from estimated, current %v, got %v", estimatedRound, msgRound)
 	}
 
 	if estimatedRound > maxRound {
 		return fmt.Errorf("estimated round too high")
 	}
-
-	// TODO: check current estimated round
 
 	// Advance slot & round, if needed.
 	if signerState.Slot < messageSlot || signerState.Round < msgRound {
@@ -274,8 +283,14 @@ func (mv *MessageValidator) validateSignerBehavior(
 
 	// TODO: if this is a round change message, we should somehow validate that it's not being sent too frequently.
 
+	if err := signerState.MessageCounts.Validate(msg); err != nil {
+		return err
+	}
+
+	signerState.MessageCounts.Record(msg)
+
 	// Validate message counts within the current round.
-	if !signerState.MessageCounts.Record(msg, maxMessageCounts(len(signedMsg.Signers))) {
+	if signerState.MessageCounts.Exceeds(maxMessageCounts(len(signedMsg.Signers))) {
 		return errors.New("too many messages")
 	}
 
@@ -293,7 +308,7 @@ func (mv *MessageValidator) maxRound(role spectypes.BeaconRole) specqbft.Round {
 }
 
 func (mv *MessageValidator) currentEstimatedRound(role spectypes.BeaconRole, slot phase0.Slot) specqbft.Round {
-	slotStartTime := mv.network.GetSlotStartTime(slot)
+	slotStartTime := mv.netCfg.Beacon.GetSlotStartTime(slot)
 
 	firstRoundStart := slotStartTime.Add(mv.waitAfterSlotStart(role))
 	messageTime := time.Now() // TODO: attach it to the message when it's received
@@ -310,7 +325,7 @@ func (mv *MessageValidator) currentEstimatedRound(role spectypes.BeaconRole, slo
 func (mv *MessageValidator) waitAfterSlotStart(role spectypes.BeaconRole) time.Duration {
 	switch role {
 	case spectypes.BNRoleAttester:
-		return mv.network.SlotDurationSec() / 3
+		return mv.netCfg.Beacon.SlotDurationSec() / 3
 	// TODO: other roles
 	default:
 		panic("unknown role")
@@ -318,16 +333,16 @@ func (mv *MessageValidator) waitAfterSlotStart(role spectypes.BeaconRole) time.D
 }
 
 func (mv *MessageValidator) knownValidator(pubKey []byte) bool {
-	_, known := mv.ctrl.GetValidator(hex.EncodeToString(pubKey))
-	return known
+	share := mv.shareStorage.Get(pubKey)
+	return share != nil && share.BeaconMetadata.IsAttesting() // TODO: return ERR_VALIDATOR_LIQUIDATED if liquidated
 }
 
 func (mv *MessageValidator) validSigners(pubKey []byte, msg *queue.DecodedSSVMessage) bool {
 	// TODO: consider having different validation functions for each message type
 	// TODO: consider returning error
 
-	v, known := mv.ctrl.GetValidator(hex.EncodeToString(pubKey))
-	if !known || mv == nil {
+	share := mv.shareStorage.Get(pubKey)
+	if share == nil || !share.BeaconMetadata.IsAttesting() {
 		return false
 	}
 
@@ -347,6 +362,8 @@ func (mv *MessageValidator) validSigners(pubKey []byte, msg *queue.DecodedSSVMes
 			return false // ERR_SIGNERS_NOT_SORTED
 		}
 
+		// TODO: if decided, check if previous decided had less or equal signers
+
 		seen := map[spectypes.OperatorID]struct{}{}
 		for _, signer := range m.Signers {
 			if signer == 0 {
@@ -358,7 +375,7 @@ func (mv *MessageValidator) validSigners(pubKey []byte, msg *queue.DecodedSSVMes
 			}
 			seen[signer] = struct{}{}
 
-			if !slices.ContainsFunc(v.Share.Committee, contains(signer)) {
+			if !slices.ContainsFunc(share.Committee, contains(signer)) {
 				return false // ERR_SIG_ID
 			}
 		}
@@ -367,7 +384,7 @@ func (mv *MessageValidator) validSigners(pubKey []byte, msg *queue.DecodedSSVMes
 			return false // ERR_SIG_ID
 		}
 
-		if !slices.ContainsFunc(v.Share.Committee, contains(m.Signer)) {
+		if !slices.ContainsFunc(share.Committee, contains(m.Signer)) {
 			return false // ERR_SIG_ID
 		}
 	default:
