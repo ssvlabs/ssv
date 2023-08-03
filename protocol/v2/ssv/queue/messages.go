@@ -1,6 +1,8 @@
 package queue
 
 import (
+	"fmt"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
@@ -40,6 +42,9 @@ func DecodeSSVMessage(m *spectypes.SSVMessage) (*DecodedSSVMessage, error) {
 			return nil, errors.Wrap(err, "failed to decode EventMsg")
 		}
 		body = msg
+	case spectypes.DKGMsgType: // TODO: handle
+	default:
+		return nil, fmt.Errorf("unknown message type: %d", m.MsgType)
 	}
 	return &DecodedSSVMessage{
 		SSVMessage: m,

@@ -106,6 +106,7 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage) (*
 		if err := mv.validateEventMessage(msg); err != nil {
 			return nil, err
 		}
+	case spectypes.DKGMsgType: // TODO: handle
 	}
 
 	return msg, nil
