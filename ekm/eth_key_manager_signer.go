@@ -45,7 +45,7 @@ type ethKeyManagerSigner struct {
 
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
 func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.IDb, network networkconfig.NetworkConfig, builderProposals bool, encryptionKey string) (spectypes.KeyManager, error) {
-	signerStore := NewSignerStorage(db, network.Beacon, logger)
+	signerStore := NewSignerStorage(db, network.Beacon.GetNetwork(), logger)
 	if encryptionKey != "" {
 		err := signerStore.SetEncryptionKey(encryptionKey)
 		if err != nil {
@@ -72,7 +72,7 @@ func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.IDb, network networkco
 	}
 
 	slashingProtector := slashingprotection.NewNormalProtection(signerStore)
-	beaconSigner := signer.NewSimpleSigner(wallet, slashingProtector, core.Network(network.Beacon.BeaconNetwork))
+	beaconSigner := signer.NewSimpleSigner(wallet, slashingProtector, core.Network(network.Beacon.GetBeaconNetwork()))
 
 	return &ethKeyManagerSigner{
 		wallet:            wallet,
