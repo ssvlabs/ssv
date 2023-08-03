@@ -280,10 +280,11 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 			}
 			logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
 			for block := range logStream {
-				lastBlock = block.BlockNumber
 				logs <- block
+				lastBlock = block.BlockNumber
 			}
 			if err := <-fetchErrors; err != nil {
+				// If we get an error while fetching, we return the last block we fetched.
 				return lastBlock, fmt.Errorf("fetch logs: %w", err)
 			}
 			fromBlock = toBlock + 1
