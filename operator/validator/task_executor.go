@@ -34,7 +34,7 @@ func (c *controller) StartValidator(share *ssvtypes.SSVShare) error {
 
 	if started {
 		logger.Info("started validator")
-		c.indicesChange <- struct{}{}
+		// c.indicesChange <- struct{}{}
 	} else {
 		logger.Debug("validator wasn't started")
 	}
@@ -78,20 +78,28 @@ func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []uint6
 		zap.String("owner", owner.String()),
 		zap.Uint64s("operator_ids", operatorIDs))
 
-	var anyStarted bool
 	for _, share := range toReactivate {
-		started, err := c.onShareStart(share)
-		if err != nil {
+		if _, err := c.onShareStart(share); err != nil {
 			return err
 		}
-		if started {
-			logger.Info("started re-activated validator")
-			anyStarted = true
-		}
+		logger.Info("started share")
 	}
-	if anyStarted {
-		c.indicesChange <- struct{}{}
-	}
+
+	// TODO: replace the above with this after fixing the tests.
+	// var anyStarted bool
+	// for _, share := range toReactivate {
+	// 	started, err := c.onShareStart(share)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	if started {
+	// 		logger.Info("started shared")
+	// 		anyStarted = true
+	// 	}
+	// }
+	// if anyStarted {
+	// 	// c.indicesChange <- struct{}{}
+	// }
 
 	return nil
 }

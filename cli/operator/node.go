@@ -580,7 +580,7 @@ func setupEventHandling(
 		}()
 
 		// TODO: revert
-		select {}
+		// select {}
 	}
 }
 

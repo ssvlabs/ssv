@@ -122,7 +122,7 @@ func TestExecuteTask(t *testing.T) {
 		require.NoError(t, task.Execute())
 		require.NotZero(t, observedLogs.Len())
 		entry := observedLogs.All()[len(observedLogs.All())-1]
-		require.Equal(t, "started share", entry.Message)
+		require.Equal(t, "started share", entry.Message) // TODO: fix
 	})
 	t.Run("test UpdateFeeRecipient task execution", func(t *testing.T) {
 		task := NewUpdateFeeRecipientTask(eh.taskExecutor, ethcommon.HexToAddress("0x1"), ethcommon.HexToAddress("0x2"))

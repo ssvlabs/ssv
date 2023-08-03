@@ -265,12 +265,8 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 	}
 	defer sub.Unsubscribe()
 
-	fakeErr := time.NewTicker(26 * time.Second)
 	for {
 		select {
-		case <-fakeErr.C:
-			ec.client.Close()
-			return fromBlock, fmt.Errorf("fake error")
 		case <-ctx.Done():
 			return fromBlock, context.Canceled
 
@@ -299,12 +295,6 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 			if err := <-fetchErrors; err != nil {
 				// If we get an error while fetching, we return the last block we fetched.
 				return lastBlock, fmt.Errorf("fetch logs: %w", err)
-			}
-			select {
-			case <-fakeErr.C:
-				ec.client.Close()
-				return lastBlock, fmt.Errorf("fake error")
-			default:
 			}
 			fromBlock = toBlock + 1
 			ec.metrics.ExecutionClientLastFetchedBlock(fromBlock)
