@@ -195,11 +195,19 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 				}
 				if err != nil {
 					tries++
-					if tries > 3 {
+					if tries > 2 {
 						ec.logger.Fatal("failed to stream registry events", zap.Error(err))
 					}
+
 					ec.logger.Error("failed to stream registry events, reconnecting", zap.Error(err))
 					ec.reconnect(ctx)
+
+					// If streamLogsToChan processed fetched any logs, it would return the last block number,
+					// so we should continue from there.
+					if lastBlock+1 > fromBlock {
+						fromBlock = lastBlock + 1
+					}
+					continue
 				}
 				fromBlock = lastBlock + 1
 			}
@@ -256,16 +264,16 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 	for {
 		select {
 		case <-ctx.Done():
-			return 0, ctx.Err()
+			return fromBlock, context.Canceled
 
 		case <-ec.closed:
-			return 0, ErrClosed
+			return fromBlock, ErrClosed
 
 		case err := <-sub.Err():
 			if err == nil {
-				return 0, ErrClosed
+				return fromBlock, ErrClosed
 			}
-			return 0, fmt.Errorf("subscription: %w", err)
+			return fromBlock, fmt.Errorf("subscription: %w", err)
 
 		case header := <-heads:
 			if header.Number.Uint64() < ec.followDistance {
@@ -276,11 +284,12 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 				continue
 			}
 			logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
-			for v := range logStream {
-				logs <- v
+			for block := range logStream {
+				lastBlock = block.BlockNumber
+				logs <- block
 			}
 			if err := <-fetchErrors; err != nil {
-				return fromBlock, fmt.Errorf("fetch logs: %w", err)
+				return lastBlock, fmt.Errorf("fetch logs: %w", err)
 			}
 			fromBlock = toBlock + 1
 			ec.metrics.ExecutionClientLastFetchedBlock(fromBlock)

@@ -120,7 +120,7 @@ func (eh *EventHandler) HandleBlockEventsStream(logs <-chan executionclient.Bloc
 			zap.Error(err))
 
 		if err != nil {
-			return 0, fmt.Errorf("process block events: %w", err)
+			return 0, fmt.Errorf("failed to process block events: %w", err)
 		}
 
 		lastProcessedBlock = blockLogs.BlockNumber
