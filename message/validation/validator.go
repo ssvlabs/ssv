@@ -76,10 +76,15 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage) (*
 		return nil, fmt.Errorf("wrong domain, got %v, expected %v", hex.EncodeToString(ssvMessage.MsgID.GetDomain()), hex.EncodeToString(mv.netCfg.Domain[:]))
 	}
 
-	if !mv.knownValidator(ssvMessage.MsgID.GetPubKey()) {
-		// Validator doesn't exist or is liquidated.
+	share := mv.shareStorage.Get(ssvMessage.MsgID.GetPubKey())
+	if share != nil {
 		return nil, ErrUnknownValidator // ERR_VALIDATOR_ID_MISMATCH
 	}
+
+	if !share.BeaconMetadata.IsAttesting() {
+		return nil, fmt.Errorf("validator is not active")
+	}
+
 	if !mv.validRole(ssvMessage.MsgID.GetRoleType()) {
 		return nil, ErrInvalidRole
 	}
@@ -95,7 +100,7 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage) (*
 
 	switch ssvMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
-		if err := mv.validateConsensusMessage(msg); err != nil {
+		if err := mv.validateConsensusMessage(share, msg); err != nil {
 			return nil, err
 		}
 	case spectypes.SSVPartialSignatureMsgType:
@@ -112,7 +117,7 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage) (*
 	return msg, nil
 }
 
-func (mv *MessageValidator) validateConsensusMessage(msg *queue.DecodedSSVMessage) error {
+func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, msg *queue.DecodedSSVMessage) error {
 	signedMsg, ok := msg.Body.(*specqbft.SignedMessage)
 	if !ok {
 		return fmt.Errorf("expected consensus message")
@@ -122,10 +127,14 @@ func (mv *MessageValidator) validateConsensusMessage(msg *queue.DecodedSSVMessag
 		return fmt.Errorf("size exceeded")
 	}
 
+	if len(signedMsg.Signature) != 96 {
+		return fmt.Errorf("wrong signature size: %d", len(signedMsg.Signature))
+	}
+
 	msgID := msg.GetID()
 
 	// Validate that the specified signers belong in the validator's committee.
-	if err := mv.validSigners(msgID.GetPubKey(), msg); err != nil {
+	if err := mv.validSigners(share, msg); err != nil {
 		return err
 	}
 
@@ -137,6 +146,15 @@ func (mv *MessageValidator) validateConsensusMessage(msg *queue.DecodedSSVMessag
 	}
 	if mv.lateMessage(slot, msgID.GetRoleType()) {
 		return ErrLateMessage
+	}
+
+	if bytes.Equal(signedMsg.Signature, bytes.Repeat([]byte{0}, len(signedMsg.Signature))) {
+		return fmt.Errorf("zero signature")
+	}
+
+	// verify signature
+	if err := ssvtypes.VerifyByOperators(signedMsg.Signature, signedMsg, mv.netCfg.Domain, spectypes.QBFTSignatureType, share.Committee); err != nil {
+		return fmt.Errorf("invalid signature: %w", err)
 	}
 
 	consensusID := ConsensusID{
@@ -153,8 +171,6 @@ func (mv *MessageValidator) validateConsensusMessage(msg *queue.DecodedSSVMessag
 			return fmt.Errorf("bad signed behavior: %w", err)
 		}
 	}
-
-	// TODO: check signature
 
 	return nil
 }
@@ -338,20 +354,9 @@ func (mv *MessageValidator) waitAfterSlotStart(role spectypes.BeaconRole) time.D
 	}
 }
 
-func (mv *MessageValidator) knownValidator(pubKey []byte) bool {
-	share := mv.shareStorage.Get(pubKey)
-	return share != nil && share.BeaconMetadata.IsAttesting() // TODO: return ERR_VALIDATOR_LIQUIDATED if liquidated
-}
-
-func (mv *MessageValidator) validSigners(pubKey []byte, msg *queue.DecodedSSVMessage) error {
+func (mv *MessageValidator) validSigners(share *ssvtypes.SSVShare, msg *queue.DecodedSSVMessage) error {
 	// TODO: consider having different validation functions for each message type
 	// TODO: consider returning error
-
-	share := mv.shareStorage.Get(pubKey)
-	if share == nil {
-		return fmt.Errorf("pubkey not found")
-	}
-
 	if !share.BeaconMetadata.IsAttesting() {
 		return fmt.Errorf("validator not active")
 	}
