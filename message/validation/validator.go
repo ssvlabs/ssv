@@ -33,6 +33,7 @@ const (
 	maxConsensusMsgSize        = maxMessageSize // TODO: define
 	maxPartialSignatureMsgSize = maxMessageSize // TODO: define
 	allowedRoundsInFuture      = 2
+	allowedRoundsInPast        = 1
 )
 
 var (
@@ -40,7 +41,6 @@ var (
 	ErrInvalidRole      = errors.New("invalid role")
 	ErrEarlyMessage     = errors.New("early message")
 	ErrLateMessage      = errors.New("late message")
-	ErrInvalidSigners   = errors.New("invalid signers")
 	ErrNoSigners        = errors.New("no signers")
 )
 
@@ -68,12 +68,20 @@ func NewMessageValidator(netCfg networkconfig.NetworkConfig, shareStorage regist
 }
 
 func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, error) {
+	if len(ssvMessage.Data) == 0 {
+		return nil, fmt.Errorf("empty data") // ERR_NO_DATA
+	}
+
 	if len(ssvMessage.Data) > maxMessageSize {
-		return nil, fmt.Errorf("message to big, got %d bytes, limit %d bytes", len(ssvMessage.Data), maxMessageSize)
+		return nil, fmt.Errorf("message is too big, got %d bytes, limit %d bytes", len(ssvMessage.Data), maxMessageSize)
 	}
 
 	if !bytes.Equal(ssvMessage.MsgID.GetDomain(), mv.netCfg.Domain[:]) {
 		return nil, fmt.Errorf("wrong domain, got %v, expected %v", hex.EncodeToString(ssvMessage.MsgID.GetDomain()), hex.EncodeToString(mv.netCfg.Domain[:]))
+	}
+
+	if !mv.validRole(ssvMessage.MsgID.GetRoleType()) {
+		return nil, ErrInvalidRole
 	}
 
 	share := mv.shareStorage.Get(ssvMessage.MsgID.GetPubKey())
@@ -83,14 +91,6 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage) (*
 
 	if !share.BeaconMetadata.IsAttesting() {
 		return nil, fmt.Errorf("validator is not active")
-	}
-
-	if !mv.validRole(ssvMessage.MsgID.GetRoleType()) {
-		return nil, ErrInvalidRole
-	}
-
-	if len(ssvMessage.Data) == 0 {
-		return nil, fmt.Errorf("empty data") // ERR_NO_DATA
 	}
 
 	msg, err := queue.DecodeSSVMessage(ssvMessage)
@@ -131,6 +131,8 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		return fmt.Errorf("wrong signature size: %d", len(signedMsg.Signature))
 	}
 
+	// TODO: check if has running duty
+
 	msgID := msg.GetID()
 
 	// Validate that the specified signers belong in the validator's committee.
@@ -138,9 +140,8 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		return err
 	}
 
-	// TODO: check if height can be used as slot
 	slot := phase0.Slot(signedMsg.Message.Height)
-	// Validate timing.
+
 	if mv.earlyMessage(slot) {
 		return ErrEarlyMessage
 	}
@@ -152,10 +153,23 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		return fmt.Errorf("zero signature")
 	}
 
-	// verify signature
+	pj, err := signedMsg.Message.GetPrepareJustifications()
+	if err != nil {
+		return fmt.Errorf("malfrormed prepare justifications: %w", err)
+	}
+
+	rcj, err := signedMsg.Message.GetRoundChangeJustifications()
+	if err != nil {
+		return fmt.Errorf("malfrormed round change justifications: %w", err)
+	}
+
 	if err := ssvtypes.VerifyByOperators(signedMsg.Signature, signedMsg, mv.netCfg.Domain, spectypes.QBFTSignatureType, share.Committee); err != nil {
 		return fmt.Errorf("invalid signature: %w", err)
 	}
+
+	// TODO: checks for pj and rcj
+	_ = pj
+	_ = rcj
 
 	consensusID := ConsensusID{
 		PubKey: phase0.BLSPubKey(msgID.GetPubKey()),
@@ -164,9 +178,6 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 	// Validate each signer's behavior.
 	state := mv.consensusState(consensusID)
 	for _, signer := range signedMsg.Signers {
-		// TODO: should we verify signature before doing this validation?
-		//    Reason being that this modifies the signer's state and so message fakers
-		//    would be able to alter states of any signer using invalid signatures.
 		if err := mv.validateSignerBehavior(state, signer, msg); err != nil {
 			return fmt.Errorf("bad signed behavior: %w", err)
 		}
@@ -210,13 +221,12 @@ func (mv *MessageValidator) lateMessage(slot phase0.Slot, role spectypes.BeaconR
 	// Note: this is just an example, should be according to ssv-spec.
 	var ttl phase0.Slot
 	switch role {
-	case spectypes.BNRoleProposer:
+	case spectypes.BNRoleProposer, spectypes.BNRoleSyncCommittee, spectypes.BNRoleSyncCommitteeContribution:
+		ttl = 1 + 1
+	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator:
+		ttl = 32 + 2
+	case spectypes.BNRoleValidatorRegistration:
 		ttl = 1
-	case spectypes.BNRoleAttester:
-		ttl = 32
-	case spectypes.BNRoleSyncCommittee:
-		ttl = 1
-		// ...
 	}
 	deadline := mv.netCfg.Beacon.GetSlotStartTime(slot + ttl).
 		Add(lateMessageMargin + clockErrorTolerance)
@@ -250,7 +260,6 @@ func (mv *MessageValidator) validateSignerBehavior(
 	}
 
 	// Validate slot.
-	// TODO: check if height can be used as slot
 	messageSlot := phase0.Slot(signedMsg.Message.Height)
 	if signerState.Slot > messageSlot {
 		// Signers aren't allowed to decrease their slot.
@@ -272,25 +281,19 @@ func (mv *MessageValidator) validateSignerBehavior(
 		return errors.New("if slot is in future, round must be also in future and vice versa")
 	}
 
-	if msgRound-signerState.Round > allowedRoundsInFuture {
-		return fmt.Errorf("round is too far in the future, current %d, got %d", signerState.Round, msgRound)
-	}
-
-	// TODO: check that the message's round is sensible according to the roundTimeout
-	// and the slot. For example:
-	//
-	//     maxRound := (currentTime-messageSlotTime)/roundTimeout
-	//     assert msg.Round < maxRound
-
 	role := msg.MsgID.GetRoleType()
 	maxRound := mv.maxRound(role)
 	if msgRound > maxRound {
 		return fmt.Errorf("round too high")
 	}
 
+	if msgRound-signerState.Round > allowedRoundsInFuture {
+		return fmt.Errorf("round is too far in the future, current %d, got %d", signerState.Round, msgRound)
+	}
+
 	estimatedRound := mv.currentEstimatedRound(role, phase0.Slot(signedMsg.Message.Height))
 	// msgRound - 2 <= estimatedRound <= msgRound + 1
-	if estimatedRound-msgRound > 2 || msgRound-estimatedRound > 1 {
+	if estimatedRound-msgRound > allowedRoundsInFuture || msgRound-estimatedRound > allowedRoundsInPast {
 		return fmt.Errorf("message round is too far from estimated, current %v, got %v", estimatedRound, msgRound)
 	}
 
@@ -304,6 +307,28 @@ func (mv *MessageValidator) validateSignerBehavior(
 	}
 
 	// TODO: if this is a round change message, we should somehow validate that it's not being sent too frequently.
+
+	// TODO: move to MessageCounts?
+	if signerState.ProposalData == nil {
+		signerState.ProposalData = signedMsg.FullData
+	} else if !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
+		return fmt.Errorf("duplicated proposal with different data")
+	}
+
+	hashedFullData, err := specqbft.HashDataRoot(signedMsg.FullData)
+	if err != nil {
+		return fmt.Errorf("hash data root: %w", err)
+	}
+
+	if hashedFullData != signedMsg.Message.Root {
+		return fmt.Errorf("root doesn't match full data hash")
+	}
+
+	if len(signedMsg.Signers) <= signerState.LastDecidedQuorumSize {
+		return fmt.Errorf("decided must have more signers than previous decided")
+	}
+
+	signerState.LastDecidedQuorumSize = len(signedMsg.Signers)
 
 	if err := signerState.MessageCounts.Validate(msg); err != nil {
 		return err
@@ -321,9 +346,12 @@ func (mv *MessageValidator) validateSignerBehavior(
 
 func (mv *MessageValidator) maxRound(role spectypes.BeaconRole) specqbft.Round {
 	switch role {
-	case spectypes.BNRoleAttester:
+	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator:
 		return 12 // TODO: consider calculating based on quick timeout and slow timeout
-	// TODO: other roles
+	case spectypes.BNRoleProposer, spectypes.BNRoleSyncCommittee, spectypes.BNRoleSyncCommitteeContribution:
+		return 6
+	case spectypes.BNRoleValidatorRegistration:
+		return 0
 	default:
 		panic("unknown role")
 	}
@@ -346,9 +374,12 @@ func (mv *MessageValidator) currentEstimatedRound(role spectypes.BeaconRole, slo
 
 func (mv *MessageValidator) waitAfterSlotStart(role spectypes.BeaconRole) time.Duration {
 	switch role {
-	case spectypes.BNRoleAttester:
+	case spectypes.BNRoleAttester, spectypes.BNRoleSyncCommittee:
 		return mv.netCfg.Beacon.SlotDurationSec() / 3
-	// TODO: other roles
+	case spectypes.BNRoleAggregator, spectypes.BNRoleSyncCommitteeContribution:
+		return mv.netCfg.Beacon.SlotDurationSec() / 3 * 2
+	case spectypes.BNRoleProposer, spectypes.BNRoleValidatorRegistration:
+		return 0
 	default:
 		panic("unknown role")
 	}
@@ -356,7 +387,6 @@ func (mv *MessageValidator) waitAfterSlotStart(role spectypes.BeaconRole) time.D
 
 func (mv *MessageValidator) validSigners(share *ssvtypes.SSVShare, msg *queue.DecodedSSVMessage) error {
 	// TODO: consider having different validation functions for each message type
-	// TODO: consider returning error
 	if !share.BeaconMetadata.IsAttesting() {
 		return fmt.Errorf("validator not active")
 	}
@@ -373,7 +403,16 @@ func (mv *MessageValidator) validSigners(share *ssvtypes.SSVShare, msg *queue.De
 			return ErrNoSigners
 		}
 
-		if len(m.Signers) > 1 && m.Message.MsgType != specqbft.CommitMsgType {
+		if len(m.Signers) == 1 {
+			qbftState := &specqbft.State{
+				Height: m.Message.Height,
+				Share:  &share.Share,
+			}
+			leader := specqbft.RoundRobinProposer(qbftState, m.Message.Round)
+			if m.Signers[0] != leader {
+				return fmt.Errorf("not leader")
+			}
+		} else if m.Message.MsgType != specqbft.CommitMsgType {
 			return fmt.Errorf("non-decided with multiple signers, len: %d", len(m.Signers))
 		}
 
@@ -398,6 +437,7 @@ func (mv *MessageValidator) validSigners(share *ssvtypes.SSVShare, msg *queue.De
 				return fmt.Errorf("signer not in committee") // ERR_SIG_ID
 			}
 		}
+
 	case *spectypes.PartialSignatureMessage:
 		if m.Signer == 0 {
 			return fmt.Errorf("zero signer ID") // ERR_SIG_ID

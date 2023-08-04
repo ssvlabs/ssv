@@ -54,15 +54,23 @@ func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage) error {
 			if c.RoundChange > 0 {
 				return fmt.Errorf("round change is not expected")
 			}
-
 		}
-	case *spectypes.PartialSigMsgType:
-		if c.PostConsensus > 0 { // TODO: do we need this check?
-			return fmt.Errorf("post-consensus is not expected")
+	case *spectypes.SignedPartialSignatureMessage:
+		switch m.Message.Type {
+		case spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig:
+			if c.PreConsensus > 0 {
+				return fmt.Errorf("pre-consensus is not expected")
+			}
+		case spectypes.PostConsensusPartialSig:
+			if c.PostConsensus > 0 { // TODO: do we need this check?
+				return fmt.Errorf("post-consensus is not expected")
+			}
+		default:
+			// TODO: handle
 		}
 	//TODO: other cases
 	default:
-		return fmt.Errorf("unexpected message type: %")
+		return fmt.Errorf("unexpected message type: %d", m)
 	}
 
 	return nil
@@ -96,6 +104,9 @@ func (c *MessageCounts) Record(msg *queue.DecodedSSVMessage) {
 		default:
 			// TODO: handle
 		}
+		//TODO: other cases
+	default:
+		panic("unexpected message type")
 	}
 }
 

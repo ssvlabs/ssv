@@ -10,10 +10,12 @@ import (
 )
 
 type SignerState struct {
-	Start         time.Time
-	Slot          phase0.Slot
-	Round         specqbft.Round
-	MessageCounts MessageCounts
+	Start                 time.Time
+	Slot                  phase0.Slot
+	Round                 specqbft.Round
+	MessageCounts         MessageCounts
+	ProposalData          []byte
+	LastDecidedQuorumSize int
 }
 
 func (s *SignerState) Reset(slot phase0.Slot, round specqbft.Round) {
@@ -21,4 +23,6 @@ func (s *SignerState) Reset(slot phase0.Slot, round specqbft.Round) {
 	s.Slot = slot
 	s.Round = round
 	s.MessageCounts = MessageCounts{}
+	s.ProposalData = nil
+	s.LastDecidedQuorumSize = 0
 }
