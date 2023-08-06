@@ -767,7 +767,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 			beaconprotocol.UpdateValidatorsMetadataBatch(c.logger, pks, c.metadataUpdateQueue, c,
 				c.beacon, c.onMetadataUpdated, metadataBatchSize)
 		}
-		started := c.recentlyStartedValidators.Swap(0)
+		started := c.recentlyStartedValidators.Load()
 		c.logger.Debug("updated validators metadata",
 			zap.Int("validators", len(shares)),
 			zap.Int64("started_validators", started),
