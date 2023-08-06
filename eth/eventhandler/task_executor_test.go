@@ -122,14 +122,16 @@ func TestExecuteTask(t *testing.T) {
 		require.NoError(t, task.Execute())
 		require.NotZero(t, observedLogs.Len())
 		entry := observedLogs.All()[len(observedLogs.All())-1]
-		require.Equal(t, "started share", entry.Message) // TODO: fix
+		require.Equal(t, "reactivated cluster", entry.Message) // TODO: fix
+		require.Equal(t, int64(1), entry.ContextMap()["cluster_validators"])
 	})
 	t.Run("test UpdateFeeRecipient task execution", func(t *testing.T) {
 		task := NewUpdateFeeRecipientTask(eh.taskExecutor, ethcommon.HexToAddress("0x1"), ethcommon.HexToAddress("0x2"))
 		require.NoError(t, task.Execute())
 		require.NotZero(t, observedLogs.Len())
 		entry := observedLogs.All()[len(observedLogs.All())-1]
-		require.Equal(t, "started share", entry.Message) // no new logs
+		require.Equal(t, "reactivated cluster", entry.Message) // no new logs
+		require.Equal(t, int64(1), entry.ContextMap()["cluster_validators"])
 	})
 }
 
