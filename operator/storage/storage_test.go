@@ -75,25 +75,25 @@ func TestSetupPrivateKey(t *testing.T) {
 			expectedError:  "",
 		},
 		{
-			name:           "key exist, passing key in env", // expected - override current key with the passed one
+			name:           "key exist, passing key in env", // expected - throw ERROR of data encrypted with different key
 			existKey:       skPem,
 			passedKey:      skPem2,
 			generateIfNone: false,
-			expectedError:  "",
+			expectedError:  "Operator private key is not matching the one encrypted the storage",
 		},
 		{
-			name:           "key exist, passing nothing", // expected - do nothing
+			name:           "key exist, passing nothing", // expected - throw ERROR of data encrypted with different key
 			existKey:       skPem,
 			passedKey:      "",
 			generateIfNone: false,
-			expectedError:  "",
+			expectedError:  "Operator private key is not matching the one encrypted the storage",
 		},
 		{
-			name:           "key exist, passing nothing (with generate flag)", // expected - do nothing
+			name:           "key exist, passing nothing (with generate flag)", // expected - throw ERROR of data encrypted with different key
 			existKey:       skPem,
 			passedKey:      "",
 			generateIfNone: true,
-			expectedError:  "",
+			expectedError:  "Operator private key is not matching the one encrypted the storage",
 		},
 		{
 			name:           "error raised", // expected - throw an error
