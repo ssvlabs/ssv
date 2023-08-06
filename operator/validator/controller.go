@@ -47,7 +47,6 @@ import (
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
 
 const (
-	metadataBatchSize        = 500
 	networkRouterConcurrency = 2048
 )
 
@@ -759,8 +758,11 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 
 		c.recentlyStartedValidators.Store(0)
 		if len(pks) > 0 {
-			beaconprotocol.UpdateValidatorsMetadataBatch(c.logger, pks, c,
-				c.beacon, c.onMetadataUpdated, metadataBatchSize)
+			err := beaconprotocol.UpdateValidatorsMetadata(c.logger, pks, c, c.beacon, c.onMetadataUpdated)
+			if err != nil {
+				c.logger.Warn("failed to update validators metadata", zap.Error(err))
+				continue
+			}
 		}
 		started := c.recentlyStartedValidators.Load()
 		c.logger.Debug("updated validators metadata",

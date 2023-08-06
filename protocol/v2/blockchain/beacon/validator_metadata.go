@@ -127,24 +127,3 @@ func FetchValidatorsMetadata(bc BeaconNode, pubKeys [][]byte) (map[string]*Valid
 	}
 	return ret, nil
 }
-
-// UpdateValidatorsMetadataBatch updates the given public keys in batches
-func UpdateValidatorsMetadataBatch(logger *zap.Logger,
-	pubKeys [][]byte,
-	collection ValidatorMetadataStorage,
-	bc BeaconNode,
-	onUpdated OnUpdated,
-	batchSize int,
-) {
-	for i := 0; i < len(pubKeys); i += batchSize {
-		j := i + batchSize
-		if j > len(pubKeys) {
-			j = len(pubKeys)
-		}
-		err := UpdateValidatorsMetadata(logger, pubKeys[i:j], collection, bc, onUpdated)
-		if err != nil {
-			logger.Error("failed to update validators metadata batch",
-				zap.Error(err))
-		}
-	}
-}
