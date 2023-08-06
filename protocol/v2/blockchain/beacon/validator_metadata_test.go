@@ -6,7 +6,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -14,8 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/logging"
-
-	"github.com/bloxapp/ssv/utils/tasks"
 )
 
 func TestValidatorMetadata_Status(t *testing.T) {
@@ -157,40 +154,4 @@ func TestBatch(t *testing.T) {
 		decodeds = append(decodeds, decoded)
 		blsPubKeys[i] = blsPubKey
 	}
-
-	t.Run("multiple batches", func(t *testing.T) {
-		called := make([][]byte, 0)
-		var wg sync.WaitGroup
-		wg.Add(2)
-		batch(decodeds, tasks.NewExecutionQueue(time.Millisecond), func(pks [][]byte) func() error {
-			defer wg.Done()
-			require.True(t, len(pks) > 0)
-			called = append(called, pks...)
-			return nil
-		}, 4)
-		wg.Wait()
-		require.Equal(t, len(pks), len(called))
-	})
-
-	t.Run("single batch", func(t *testing.T) {
-		called := make([][]byte, 0)
-		var wg sync.WaitGroup
-		wg.Add(1)
-		batch(decodeds, tasks.NewExecutionQueue(time.Millisecond), func(pks [][]byte) func() error {
-			defer wg.Done()
-			require.Equal(t, len(decodeds), len(pks))
-			called = append(called, pks...)
-			return nil
-		}, 25)
-		wg.Wait()
-		require.Equal(t, len(pks), len(called))
-	})
-
-	t.Run("no items", func(t *testing.T) {
-		batch(make([][]byte, 0), tasks.NewExecutionQueue(time.Millisecond), func(pks [][]byte) func() error {
-			t.Fail()
-			return nil
-		}, 4)
-		time.Sleep(10 * time.Millisecond) // to be sure the function has finished
-	})
 }

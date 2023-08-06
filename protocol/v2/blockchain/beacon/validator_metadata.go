@@ -2,14 +2,11 @@ package beacon
 
 import (
 	"encoding/hex"
-	"math"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/protocol/v2/queue"
 )
 
 //go:generate mockgen -package=beacon -destination=./mock_validator_metadata.go -source=./validator_metadata.go
@@ -134,33 +131,20 @@ func FetchValidatorsMetadata(bc BeaconNode, pubKeys [][]byte) (map[string]*Valid
 // UpdateValidatorsMetadataBatch updates the given public keys in batches
 func UpdateValidatorsMetadataBatch(logger *zap.Logger,
 	pubKeys [][]byte,
-	queue queue.Queue,
 	collection ValidatorMetadataStorage,
 	bc BeaconNode,
 	onUpdated OnUpdated,
-	batchSize int) {
-	batch(pubKeys, queue, func(pks [][]byte) func() error {
-		return func() error {
-			return UpdateValidatorsMetadata(logger, pks, collection, bc, onUpdated)
+	batchSize int,
+) {
+	for i := 0; i < len(pubKeys); i += batchSize {
+		j := i + batchSize
+		if j > len(pubKeys) {
+			j = len(pubKeys)
 		}
-	}, batchSize)
-}
-
-type batchTask func(pks [][]byte) func() error
-
-func batch(pubKeys [][]byte, queue queue.Queue, task batchTask, batchSize int) {
-	n := float64(len(pubKeys))
-	// in case the amount of public keys is lower than the batch size
-	batchSize = int(math.Min(n, float64(batchSize)))
-	batches := int(math.Ceil(n / float64(batchSize)))
-	start := 0
-	end := int(math.Min(n, float64(batchSize)))
-
-	for i := 0; i < batches; i++ {
-		// run task
-		queue.Queue(task(pubKeys[start:end]))
-		// reset start and end
-		start = end
-		end = int(math.Min(n, float64(start+batchSize)))
+		err := UpdateValidatorsMetadata(logger, pubKeys[i:j], collection, bc, onUpdated)
+		if err != nil {
+			logger.Error("failed to update validators metadata batch",
+				zap.Error(err))
+		}
 	}
 }

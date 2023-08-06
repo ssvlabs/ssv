@@ -164,7 +164,6 @@ func setupController(logger *zap.Logger, validators map[string]*validator.Valida
 			lock:          sync.RWMutex{},
 			validatorsMap: validators,
 		},
-		metadataUpdateQueue:    nil,
 		metadataUpdateInterval: 0,
 		messageRouter:          newMessageRouter(genesis.New().MsgID()),
 		messageWorker: worker.NewWorker(logger, &worker.Config{

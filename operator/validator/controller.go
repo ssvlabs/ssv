@@ -33,7 +33,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	qbftcontroller "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-	utilsprotocol "github.com/bloxapp/ssv/protocol/v2/queue"
 	"github.com/bloxapp/ssv/protocol/v2/queue/worker"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
@@ -43,13 +42,12 @@ import (
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils/tasks"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
 
 const (
-	metadataBatchSize        = 100
+	metadataBatchSize        = 500
 	networkRouterConcurrency = 2048
 )
 
@@ -144,7 +142,6 @@ type controller struct {
 	validatorsMap    *validatorsMap
 	validatorOptions *validator.Options
 
-	metadataUpdateQueue    utilsprotocol.Queue
 	metadataUpdateInterval time.Duration
 
 	operatorsIDs         *sync.Map
@@ -224,7 +221,6 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		validatorsMap:    newValidatorsMap(options.Context, validatorOptions),
 		validatorOptions: validatorOptions,
 
-		metadataUpdateQueue:    tasks.NewExecutionQueue(10 * time.Millisecond),
 		metadataUpdateInterval: options.MetadataUpdateInterval,
 
 		operatorsIDs: operatorsIDs,
@@ -729,7 +725,6 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 // UpdateValidatorMetaDataLoop updates metadata of validators in an interval
 func (c *controller) UpdateValidatorMetaDataLoop() {
 	var interval = c.beacon.GetBeaconNetwork().SlotDurationSec()
-	go c.metadataUpdateQueue.Start()
 
 	lastUpdated := make(map[string]time.Time)
 	for {
@@ -764,7 +759,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 
 		c.recentlyStartedValidators.Store(0)
 		if len(pks) > 0 {
-			beaconprotocol.UpdateValidatorsMetadataBatch(c.logger, pks, c.metadataUpdateQueue, c,
+			beaconprotocol.UpdateValidatorsMetadataBatch(c.logger, pks, c,
 				c.beacon, c.onMetadataUpdated, metadataBatchSize)
 		}
 		started := c.recentlyStartedValidators.Load()
