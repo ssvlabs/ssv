@@ -104,6 +104,16 @@ var StartNodeCmd = &cobra.Command{
 
 		nodeStorage, operatorData := setupOperatorStorage(logger, db)
 
+		migrationOpts := migrations.Options{
+			Db:          db,
+			NodeStorage: nodeStorage,
+			DbPath:      cfg.DBOptions.Path,
+			Network:     networkConfig.Beacon.GetNetwork(),
+		}
+		_, err = migrations.RunPostStorage(cfg.DBOptions.Ctx, logger, migrationOpts)
+		if err != nil {
+			logger.Fatal("could not run post storage migrations", zap.Error(err))
+		}
 		operatorKey, _, _ := nodeStorage.GetPrivateKey()
 		keyBytes := x509.MarshalPKCS1PrivateKey(operatorKey)
 		hashedKey, _ := rsaencryption.HashRsaKey(keyBytes)

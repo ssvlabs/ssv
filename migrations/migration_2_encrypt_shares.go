@@ -19,11 +19,7 @@ var migrationEncryptShares = Migration{
 			if err != nil {
 				return err
 			}
-			nodeStorage, err := opt.nodeStorage(logger)
-			if err != nil {
-				return fmt.Errorf("failed to get node storage: %w", err)
-			}
-			operatorKey, found, err := nodeStorage.GetPrivateKey()
+			operatorKey, found, err := opt.NodeStorage.GetPrivateKey()
 			if err != nil {
 				return fmt.Errorf("failed to get private key: %w", err)
 			}

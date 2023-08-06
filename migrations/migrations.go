@@ -24,6 +24,9 @@ var (
 	defaultMigrations = Migrations{
 		migrationExample1,
 		migrationExample2,
+	}
+
+	postStorageSetup = Migrations{
 		migrationEncryptShares,
 	}
 )
@@ -31,6 +34,11 @@ var (
 // Run executes the default migrations.
 func Run(ctx context.Context, logger *zap.Logger, opt Options) (applied int, err error) {
 	return defaultMigrations.Run(ctx, logger, opt)
+}
+
+// RunPostStorage executes the postStorageSetup migrations.
+func RunPostStorage(ctx context.Context, logger *zap.Logger, opt Options) (applied int, err error) {
+	return postStorageSetup.Run(ctx, logger, opt)
 }
 
 // MigrationFunc is a function that performs a migration.
@@ -48,9 +56,10 @@ type Migrations []Migration
 
 // Options is the options for running migrations.
 type Options struct {
-	Db      basedb.IDb
-	DbPath  string
-	Network beacon.Network
+	Db          basedb.IDb
+	NodeStorage operatorstorage.Storage
+	DbPath      string
+	Network     beacon.Network
 }
 
 // nolint
@@ -74,6 +83,37 @@ func (o Options) signerStorage(logger *zap.Logger) ekm.Storage {
 
 // Run executes the migrations.
 func (m Migrations) Run(ctx context.Context, logger *zap.Logger, opt Options) (applied int, err error) {
+	logger.Info("Running migrations")
+	for _, migration := range m {
+		// Skip the migration if it's already completed.
+		obj, _, err := opt.Db.Get(migrationsPrefix, []byte(migration.Name))
+		if err != nil {
+			return applied, err
+		}
+		if bytes.Equal(obj.Value, migrationCompleted) {
+			logger.Debug("migration already applied, skipping", fields.Name(migration.Name))
+			continue
+		}
+
+		// Execute the migration.
+		start := time.Now()
+		logger = logger.With(zap.String("migration", migration.Name))
+		err = migration.Run(ctx, logger, opt, []byte(migration.Name))
+		if err != nil {
+			return applied, errors.Wrapf(err, "migration %q failed", migration.Name)
+		}
+		applied++
+
+		logger.Info("migration applied successfully", fields.Name(migration.Name), fields.Duration(start))
+	}
+	if applied == 0 {
+		logger.Info("no migrations to apply")
+	}
+	return applied, nil
+}
+
+// RunWithStorage executes the migrations.
+func (m Migrations) RunWithStorage(ctx context.Context, logger *zap.Logger, opt Options) (applied int, err error) {
 	logger.Info("Running migrations")
 	for _, migration := range m {
 		// Skip the migration if it's already completed.
