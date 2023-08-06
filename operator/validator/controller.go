@@ -762,6 +762,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 
 		// TODO: continue if there is nothing to update.
 
+		c.recentlyStartedValidators.Store(0)
 		if len(pks) > 0 {
 			beaconprotocol.UpdateValidatorsMetadataBatch(c.logger, pks, c.metadataUpdateQueue, c,
 				c.beacon, c.onMetadataUpdated, metadataBatchSize)
