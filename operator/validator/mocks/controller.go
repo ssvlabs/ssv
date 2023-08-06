@@ -207,11 +207,9 @@ func (mr *MockControllerMockRecorder) StartValidator(share interface{}) *gomock.
 }
 
 // StartValidators mocks base method.
-func (m *MockController) StartValidators() <-chan struct{} {
+func (m *MockController) StartValidators() {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "StartValidators")
-	ret0, _ := ret[0].(<-chan struct{})
-	return ret0
+	m.ctrl.Call(m, "StartValidators")
 }
 
 // StartValidators indicates an expected call of StartValidators.

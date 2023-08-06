@@ -94,7 +94,7 @@ type ControllerOptions struct {
 // Controller represent the validators controller,
 // it takes care of bootstrapping, updating and managing existing validators and their shares
 type Controller interface {
-	StartValidators() (metadataFetched <-chan struct{})
+	StartValidators()
 	ActiveValidatorIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
 	GetValidator(pubKey string) (*validator.Validator, bool)
 	ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty)
@@ -394,26 +394,23 @@ func (c *controller) handleWorkerMessages(msg *spectypes.SSVMessage) error {
 }
 
 // StartValidators loads all persisted shares and setup the corresponding validators
-func (c *controller) StartValidators() (metadataFetched <-chan struct{}) {
-	ch := make(chan struct{})
-	close(ch)
-
+func (c *controller) StartValidators() {
 	if c.validatorOptions.Exporter {
 		c.setupNonCommitteeValidators()
-		return ch
+		return
 	}
 
 	shares := c.sharesStorage.List(nil, registrystorage.ByOperatorID(c.GetOperatorData().ID), registrystorage.ByNotLiquidated())
 	if len(shares) == 0 {
 		c.logger.Info("could not find validators")
-		return ch
+		return
 	}
-	return c.setupValidators(shares)
+	c.setupValidators(shares)
 }
 
 // setupValidators setup and starts validators from the given shares.
 // shares w/o validator's metadata won't start, but the metadata will be fetched and the validator will start afterwards
-func (c *controller) setupValidators(shares []*ssvtypes.SSVShare) (metadataFetched <-chan struct{}) {
+func (c *controller) setupValidators(shares []*ssvtypes.SSVShare) {
 	c.logger.Info("starting validators setup...", zap.Int("shares count", len(shares)))
 	var started int
 	var errs []error
@@ -434,22 +431,18 @@ func (c *controller) setupValidators(shares []*ssvtypes.SSVShare) (metadataFetch
 	}
 	c.logger.Info("setup validators done", zap.Int("map size", c.validatorsMap.Size()),
 		zap.Int("failures", len(errs)), zap.Int("missing metadata", len(fetchMetadata)),
-		zap.Int("shares count", len(shares)), zap.Int("started", started))
+		zap.Int("shares", len(shares)), zap.Int("started", started))
 
 	// Try to fetch metadata once for validators that don't have it.
-	ch := make(chan struct{})
 	if len(fetchMetadata) > 0 {
-		go func() {
-			defer close(ch)
-			c.logger.Debug("updating validators metadata", zap.Int("count", len(fetchMetadata)))
-			if err := beaconprotocol.UpdateValidatorsMetadata(c.logger, fetchMetadata, c, c.beacon, c.onMetadataUpdated); err != nil {
-				c.logger.Warn("could not update all validators", zap.Error(err))
-			}
-		}()
-	} else {
-		close(ch)
+		start := time.Now()
+		if err := beaconprotocol.UpdateValidatorsMetadata(c.logger, fetchMetadata, c, c.beacon, c.onMetadataUpdated); err != nil {
+			c.logger.Warn("could not update all validators", zap.Error(err))
+		}
+		c.logger.Debug("updated validators metadata",
+			zap.Int("shares", len(fetchMetadata)),
+			fields.Took(time.Since(start)))
 	}
-	return ch
 }
 
 // setupNonCommitteeValidators trigger SyncHighestDecided for each validator

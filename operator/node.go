@@ -148,21 +148,12 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 		}
 	}()
 
-	// slot ticker init
 	go n.ticker.Start(logger)
-
-	n.validatorsCtrl.StartNetworkHandlers()
-	validatorMetadataFetched := n.validatorsCtrl.StartValidators()
-	go n.net.UpdateSubnets(logger)
 	go n.listenForCurrentSlot(logger)
+	n.validatorsCtrl.StartNetworkHandlers()
+	n.validatorsCtrl.StartValidators()
+	go n.net.UpdateSubnets(logger)
 	go n.reportOperators(logger)
-
-	// Wait for validator metadata to be fetched before starting
-	// the FeeRecipientController and DutyScheduler.
-	select {
-	case <-validatorMetadataFetched:
-	case <-n.context.Done():
-	}
 
 	go n.feeRecipientCtrl.Start(logger)
 	go n.validatorsCtrl.UpdateValidatorMetaDataLoop()
