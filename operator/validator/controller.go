@@ -728,11 +728,12 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 
 // UpdateValidatorMetaDataLoop updates metadata of validators in an interval
 func (c *controller) UpdateValidatorMetaDataLoop() {
+	var interval = c.beacon.GetBeaconNetwork().SlotDurationSec()
 	go c.metadataUpdateQueue.Start()
 
 	lastUpdated := make(map[string]time.Time)
 	for {
-		time.Sleep(c.beacon.GetBeaconNetwork().SlotDurationSec())
+		time.Sleep(interval)
 
 		// Prepare filters.
 		filters := []registrystorage.SharesFilter{
@@ -765,7 +766,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 			beaconprotocol.UpdateValidatorsMetadataBatch(c.logger, pks, c.metadataUpdateQueue, c,
 				c.beacon, c.onMetadataUpdated, metadataBatchSize)
 		}
-		started := c.recentlyStartedValidators.Load()
+		started := c.recentlyStartedValidators.Swap(0)
 		c.logger.Debug("updated validators metadata",
 			zap.Int("validators", len(shares)),
 			zap.Int64("started_validators", started),
@@ -773,8 +774,11 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 
 		// Notify DutyScheduler of new validators.
 		if started > 0 {
-			c.recentlyStartedValidators.Store(0)
-			c.indicesChange <- struct{}{}
+			select {
+			case c.indicesChange <- struct{}{}:
+			case <-time.After(interval):
+				c.logger.Warn("timed out while notifying DutyScheduler of new validators")
+			}
 		}
 	}
 }
