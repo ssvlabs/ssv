@@ -134,24 +134,3 @@ func TestUpdateValidatorsMetadata(t *testing.T) {
 	storageMu.Unlock()
 	require.Equal(t, 2, storageSize)
 }
-
-func TestBatch(t *testing.T) {
-	pks := []string{
-		"a17bb48a3f8f558e29d08ede97d6b7b73823d8dc2e0530fe8b747c93d7d6c2755957b7ffb94a7cec830456fd5492ba19",
-		"a0cf5642ed5aa82178a5f79e00292c5b700b67fbf59630ce4f542c392495d9835a99c826aa2459a67bc80867245386c6",
-		"8bafb7165f42e1179f83b7fcd8fe940e60ed5933fac176fdf75a60838c688eaa3b57717be637bde1d5cebdadb8e39865",
-		"aaafb7165f42e1179f83b7fcd8fe940e60ed5933fac176fdf75a60838c688eaa3b57717be637bde1d5cebdadb8e39865",
-		"bbbfb7165f42e1179f83b7fcd8fe940e60ed5933fac176fdf75a60838c688eaa3b57717be637bde1d5cebdadb8e39865",
-		"cccfb7165f42e1179f83b7fcd8fe940e60ed5933fac176fdf75a60838c688eaa3b57717be637bde1d5cebdadb8e39865",
-	}
-
-	decodeds := make([][]byte, 0)
-	blsPubKeys := make([]phase0.BLSPubKey, len(pks))
-	for i, pk := range pks {
-		blsPubKey := phase0.BLSPubKey{}
-		decoded, _ := hex.DecodeString(pk)
-		copy(blsPubKey[:], decoded)
-		decodeds = append(decodeds, decoded)
-		blsPubKeys[i] = blsPubKey
-	}
-}
