@@ -11,7 +11,6 @@ import (
 	"github.com/cornelk/hashmap"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/operator/duties/mocks"
 	mocknetwork "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon/mocks"
@@ -21,19 +20,19 @@ func setupSyncCommitteeDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[uint64, [
 	fetchDutiesCall := make(chan struct{})
 	executeDutiesCall := make(chan []*spectypes.Duty)
 
-	s.network.Beacon.(*mocknetwork.MockNetworkInfo).EXPECT().EstimatedSyncCommitteePeriodAtEpoch(gomock.Any()).DoAndReturn(
+	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().EstimatedSyncCommitteePeriodAtEpoch(gomock.Any()).DoAndReturn(
 		func(epoch phase0.Epoch) uint64 {
 			return uint64(epoch) / s.network.Beacon.EpochsPerSyncCommitteePeriod()
 		},
 	).AnyTimes()
 
-	s.network.Beacon.(*mocknetwork.MockNetworkInfo).EXPECT().FirstEpochOfSyncPeriod(gomock.Any()).DoAndReturn(
+	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().FirstEpochOfSyncPeriod(gomock.Any()).DoAndReturn(
 		func(period uint64) phase0.Epoch {
 			return phase0.Epoch(period * s.network.Beacon.EpochsPerSyncCommitteePeriod())
 		},
 	).AnyTimes()
 
-	s.network.Beacon.(*mocknetwork.MockNetworkInfo).EXPECT().LastSlotOfSyncPeriod(gomock.Any()).DoAndReturn(
+	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().LastSlotOfSyncPeriod(gomock.Any()).DoAndReturn(
 		func(period uint64) phase0.Slot {
 			lastEpoch := s.network.Beacon.FirstEpochOfSyncPeriod(period+1) - 1
 			// If we are in the sync committee that ends at slot x we do not generate a message during slot x-1
@@ -42,7 +41,7 @@ func setupSyncCommitteeDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[uint64, [
 		},
 	).AnyTimes()
 
-	s.network.Beacon.(*mocknetwork.MockNetworkInfo).EXPECT().GetEpochFirstSlot(gomock.Any()).DoAndReturn(
+	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().GetEpochFirstSlot(gomock.Any()).DoAndReturn(
 		func(epoch phase0.Epoch) phase0.Slot {
 			return phase0.Slot(uint64(epoch) * s.network.Beacon.SlotsPerEpoch())
 		},
@@ -56,8 +55,8 @@ func setupSyncCommitteeDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[uint64, [
 			return duties, nil
 		}).AnyTimes()
 
-	s.validatorController.(*mocks.MockValidatorController).EXPECT().ActiveValidatorIndices(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(logger *zap.Logger, epoch phase0.Epoch) []phase0.ValidatorIndex {
+	s.validatorController.(*mocks.MockValidatorController).EXPECT().ActiveValidatorIndices(gomock.Any()).DoAndReturn(
+		func(epoch phase0.Epoch) []phase0.ValidatorIndex {
 			uniqueIndices := make(map[phase0.ValidatorIndex]bool)
 
 			period := s.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)

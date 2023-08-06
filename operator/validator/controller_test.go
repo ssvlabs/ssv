@@ -29,11 +29,11 @@ import (
 func TestHandleNonCommitteeMessages(t *testing.T) {
 	logger := logging.TestLogger(t)
 	ctr := setupController(logger, map[string]*validator.Validator{}) // none committee
-	go ctr.handleRouterMessages(logger)
+	go ctr.handleRouterMessages()
 
 	var wg sync.WaitGroup
 
-	ctr.messageWorker.UseHandler(func(logger *zap.Logger, msg *spectypes.SSVMessage) error {
+	ctr.messageWorker.UseHandler(func(msg *spectypes.SSVMessage) error {
 		wg.Done()
 		return nil
 	})
@@ -145,10 +145,10 @@ func TestGetIndices(t *testing.T) {
 	logger := logging.TestLogger(t)
 	ctr := setupController(logger, validators)
 
-	activeIndicesForCurrentEpoch := ctr.ActiveValidatorIndices(logger, currentEpoch)
+	activeIndicesForCurrentEpoch := ctr.ActiveValidatorIndices(currentEpoch)
 	require.Equal(t, 2, len(activeIndicesForCurrentEpoch)) // should return only active indices
 
-	activeIndicesForNextEpoch := ctr.ActiveValidatorIndices(logger, currentEpoch+1)
+	activeIndicesForNextEpoch := ctr.ActiveValidatorIndices(currentEpoch + 1)
 	require.Equal(t, 3, len(activeIndicesForNextEpoch)) // should return including ValidatorStatePendingQueued
 }
 

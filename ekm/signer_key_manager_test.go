@@ -9,24 +9,22 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/bloxapp/eth2-key-manager/core"
-	"github.com/bloxapp/eth2-key-manager/wallets/hd"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/storage/basedb"
-
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/bloxapp/eth2-key-manager/core"
+	"github.com/bloxapp/eth2-key-manager/wallets/hd"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
 
@@ -77,8 +75,8 @@ func TestEncryptedKeyManager(t *testing.T) {
 	signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon.GetNetwork(), logger)
 	err = signerStorage.SetEncryptionKey(encryptionKey)
 	require.NoError(t, err)
-	defer func(db basedb.IDb, logger *zap.Logger) {
-		err := db.Close(logger)
+	defer func(db basedb.Database, logger *zap.Logger) {
+		err := db.Close()
 		if err != nil {
 
 		}
@@ -248,6 +246,12 @@ func TestSlashing(t *testing.T) {
 		require.NotEqual(t, [32]byte{}, sig)
 	})
 	t.Run("slashable sign, fail", func(t *testing.T) {
+		_, sig, err := km.(*ethKeyManagerSigner).SignBeaconObject(beaconBlock, phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainProposer)
+		require.EqualError(t, err, "slashable proposal (HighestProposalVote), not signing")
+		require.Equal(t, [32]byte{}, sig)
+	})
+	t.Run("slashable sign after duplicate AddShare, fail", func(t *testing.T) {
+		require.NoError(t, km.AddShare(sk1))
 		_, sig, err := km.(*ethKeyManagerSigner).SignBeaconObject(beaconBlock, phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainProposer)
 		require.EqualError(t, err, "slashable proposal (HighestProposalVote), not signing")
 		require.Equal(t, [32]byte{}, sig)

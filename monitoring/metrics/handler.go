@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	http_pprof "net/http/pprof"
 	"runtime"
@@ -13,7 +12,6 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 
@@ -27,35 +25,23 @@ type Handler interface {
 	Start(logger *zap.Logger, mux *http.ServeMux, addr string) error
 }
 
-type nodeStatus int32
-
-var (
-	metricsNodeStatus = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv_node_status",
-		Help: "Status of the operator node",
-	})
-	statusNotHealthy nodeStatus = 0
-	statusHealthy    nodeStatus = 1
-)
-
-func init() {
-	if err := prometheus.Register(metricsNodeStatus); err != nil {
-		log.Println("could not register prometheus collector")
-	}
-}
-
 type metricsHandler struct {
 	ctx           context.Context
-	db            basedb.IDb
+	db            basedb.Database
+	reporter      nodeMetrics
 	enableProf    bool
-	healthChecker HealthCheckAgent
+	healthChecker HealthChecker
 }
 
 // NewMetricsHandler returns a new metrics handler.
-func NewMetricsHandler(ctx context.Context, db basedb.IDb, enableProf bool, healthChecker HealthCheckAgent) Handler {
+func NewMetricsHandler(ctx context.Context, db basedb.Database, reporter nodeMetrics, enableProf bool, healthChecker HealthChecker) Handler {
+	if reporter == nil {
+		reporter = nopMetrics{}
+	}
 	mh := metricsHandler{
 		ctx:           ctx,
 		db:            db,
+		reporter:      reporter,
 		enableProf:    enableProf,
 		healthChecker: healthChecker,
 	}
@@ -127,7 +113,7 @@ func (mh *metricsHandler) handleCountByCollection(w http.ResponseWriter, r *http
 		}
 	}
 
-	n, err := mh.db.CountByCollection(prefix)
+	n, err := mh.db.CountPrefix(prefix)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -141,11 +127,10 @@ func (mh *metricsHandler) handleCountByCollection(w http.ResponseWriter, r *http
 }
 
 func (mh *metricsHandler) handleHealth(res http.ResponseWriter, req *http.Request) {
-	// TODO: consider using IsReady instead of HealthCheck
-	if errs := mh.healthChecker.HealthCheck(); len(errs) > 0 {
-		metricsNodeStatus.Set(float64(statusNotHealthy))
+	if err := mh.healthChecker.HealthCheck(); err != nil {
+		mh.reporter.SSVNodeNotHealthy()
 		result := map[string][]string{
-			"errors": errs,
+			"errors": {err.Error()},
 		}
 		if raw, err := json.Marshal(result); err != nil {
 			http.Error(res, err.Error(), http.StatusInternalServerError)
@@ -153,7 +138,7 @@ func (mh *metricsHandler) handleHealth(res http.ResponseWriter, req *http.Reques
 			http.Error(res, string(raw), http.StatusInternalServerError)
 		}
 	} else {
-		metricsNodeStatus.Set(float64(statusHealthy))
+		mh.reporter.SSVNodeHealthy()
 		if _, err := fmt.Fprintln(res, ""); err != nil {
 			http.Error(res, err.Error(), http.StatusInternalServerError)
 		}

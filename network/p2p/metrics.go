@@ -1,7 +1,6 @@
 package p2pv1
 
 import (
-	"log"
 	"strconv"
 
 	"github.com/bloxapp/ssv/logging/fields"
@@ -37,17 +36,18 @@ var (
 )
 
 func init() {
+	logger := zap.L()
 	if err := prometheus.Register(MetricsAllConnectedPeers); err != nil {
-		log.Println("could not register prometheus collector")
+		logger.Debug("could not register prometheus collector")
 	}
 	if err := prometheus.Register(MetricsPeersIdentity); err != nil {
-		log.Println("could not register prometheus collector")
+		logger.Debug("could not register prometheus collector")
 	}
 	if err := prometheus.Register(MetricsConnectedPeers); err != nil {
-		log.Println("could not register prometheus collector")
+		logger.Debug("could not register prometheus collector")
 	}
 	if err := prometheus.Register(metricsRouterIncoming); err != nil {
-		log.Println("could not register prometheus collector")
+		logger.Debug("could not register prometheus collector")
 	}
 }
 
@@ -107,12 +107,12 @@ func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
 	}
 
 	if pubKey, ok := n.operatorPKCache.Load(opPKHash); ok {
-		operatorData, found, opDataErr := n.nodeStorage.GetOperatorDataByPubKey(logger, pubKey.([]byte))
+		operatorData, found, opDataErr := n.nodeStorage.GetOperatorDataByPubKey(nil, pubKey.([]byte))
 		if opDataErr == nil && found {
 			opID = strconv.FormatUint(operatorData.ID, 10)
 		}
 	} else {
-		operators, err := n.nodeStorage.ListOperators(logger, 0, 0)
+		operators, err := n.nodeStorage.ListOperators(nil, 0, 0)
 		if err != nil {
 			logger.Warn("failed to get all operators for reporting", zap.Error(err))
 		}

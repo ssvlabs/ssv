@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging/fields"
 )
 
 const (
@@ -91,15 +93,13 @@ func (p *Prober) probe(ctx context.Context) {
 				}
 			}()
 
-			nodeKind := zap.String("kind", fmt.Sprintf("%T", node))
+			logger := p.logger.With(fields.Type(node))
 
 			ready, err = node.IsReady(ctx)
 			if err != nil {
-				p.logger.Error("failed to check if node is ready", nodeKind, zap.Error(err))
+				logger.Error("failed to check if node is ready", zap.Error(err))
 			} else if !ready {
-				p.logger.Error("node is not ready", nodeKind)
-			} else {
-				p.logger.Info("node is ready", nodeKind)
+				logger.Error("node is not ready")
 			}
 		}(node)
 	}
@@ -112,15 +112,12 @@ func (p *Prober) probe(ctx context.Context) {
 	p.ready.Store(allNodesReady.Load())
 
 	if !p.ready.Load() {
-		p.logger.Debug("not all nodes are ready")
+		p.logger.Error("not all nodes are ready")
 		if h := p.unreadyHandler.Load(); h != nil {
 			(*h)()
 		}
 		return
 	}
-
-	p.logger.Info("all nodes are ready")
-
 	// Wake up any waiters.
 	p.cond.Broadcast()
 }
@@ -134,8 +131,6 @@ func (p *Prober) Wait() {
 	for !p.ready.Load() {
 		p.cond.Wait()
 	}
-
-	p.logger.Info("checked node readiness")
 }
 
 func (p *Prober) SetUnreadyHandler(h func()) {

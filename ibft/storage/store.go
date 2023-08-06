@@ -2,7 +2,6 @@ package storage
 
 import (
 	"encoding/binary"
-	"log"
 	"sync"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -32,8 +31,9 @@ var (
 )
 
 func init() {
+	logger := zap.L()
 	if err := prometheus.Register(metricsHighestDecided); err != nil {
-		log.Println("could not register prometheus collector")
+		logger.Debug("could not register prometheus collector")
 	}
 }
 
@@ -41,13 +41,13 @@ func init() {
 // instanceType is what separates different iBFT eth2 duty types (attestation, proposal and aggregation)
 type ibftStorage struct {
 	prefix   []byte
-	db       basedb.IDb
+	db       basedb.Database
 	fork     forks.Fork
 	forkLock *sync.RWMutex
 }
 
 // New create new ibft storage
-func New(db basedb.IDb, prefix string, forkVersion forksprotocol.ForkVersion) qbftstorage.QBFTStore {
+func New(db basedb.Database, prefix string, forkVersion forksprotocol.ForkVersion) qbftstorage.QBFTStore {
 	return &ibftStorage{
 		prefix:   []byte(prefix),
 		db:       db,
@@ -168,12 +168,10 @@ func (i *ibftStorage) CleanAllInstances(logger *zap.Logger, msgID []byte) error 
 	prefix := i.prefix
 	prefix = append(prefix, msgID[:]...)
 	prefix = append(prefix, []byte(instanceKey)...)
-	n, err := i.db.DeleteByPrefix(prefix)
+	_, err := i.db.DeletePrefix(prefix)
 	if err != nil {
 		return errors.Wrap(err, "failed to remove decided")
 	}
-
-	logger.Debug("removed decided", zap.Int("count", n))
 
 	if err := i.delete(highestInstanceKey, msgID[:]); err != nil {
 		return errors.Wrap(err, "failed to remove last decided")

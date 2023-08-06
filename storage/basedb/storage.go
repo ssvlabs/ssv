@@ -3,8 +3,6 @@ package basedb
 import (
 	"context"
 	"time"
-
-	"go.uber.org/zap"
 )
 
 // Options for creating all db type
@@ -16,27 +14,50 @@ type Options struct {
 	Ctx        context.Context
 }
 
-// Txn interface for badger transaction like functions
-type Txn interface {
-	Set(prefix []byte, key []byte, value []byte) error
+// Reader is a read-only accessor to the database.
+type Reader interface {
 	Get(prefix []byte, key []byte) (Obj, bool, error)
-	Delete(prefix []byte, key []byte) error
-	// TODO: add iterator
+	GetMany(prefix []byte, keys [][]byte, iterator func(Obj) error) error
+	GetAll(prefix []byte, handler func(int, Obj) error) error
 }
 
-// IDb interface for all db kind
-type IDb interface {
+// ReadWrite is a read-write accessor to the database.
+type ReadWriter interface {
+	Reader
 	Set(prefix []byte, key []byte, value []byte) error
 	SetMany(prefix []byte, n int, next func(int) (Obj, error)) error
-	Get(prefix []byte, key []byte) (Obj, bool, error)
-	GetMany(logger *zap.Logger, prefix []byte, keys [][]byte, iterator func(Obj) error) error
 	Delete(prefix []byte, key []byte) error
-	DeleteByPrefix(prefix []byte) (int, error)
-	GetAll(logger *zap.Logger, prefix []byte, handler func(int, Obj) error) error
-	CountByCollection(prefix []byte) (int64, error)
-	RemoveAllByCollection(prefix []byte) error
+}
+
+// Txn is a read-write transaction.
+type Txn interface {
+	ReadWriter
+	// TODO: add iterator
+	Commit() error
+	Discard()
+}
+
+type ReadTxn interface {
+	Reader
+	Discard()
+}
+
+// Database interface for Badger DB
+type Database interface {
+	ReadWriter
+
+	Begin() Txn
+	BeginRead() ReadTxn
+
+	Using(rw ReadWriter) ReadWriter
+	UsingReader(r Reader) Reader
+
+	// TODO: consider moving these functions into Reader and ReadWriter interfaces?
+	CountPrefix(prefix []byte) (int64, error)
+	DeletePrefix(prefix []byte) (int, error)
+	DropPrefix(prefix []byte) error
 	Update(fn func(Txn) error) error
-	Close(logger *zap.Logger) error
+	Close() error
 }
 
 // GarbageCollector is an interface implemented by storage engines which demand garbage collection.

@@ -3,7 +3,6 @@ package fields
 import (
 	"encoding/hex"
 	"fmt"
-	"math/big"
 	"net"
 	"net/url"
 	"strconv"
@@ -15,11 +14,13 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/dgraph-io/ristretto"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
+	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/logging/fields/stringer"
 	"github.com/bloxapp/ssv/network/records"
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
@@ -39,10 +40,12 @@ const (
 	FieldBlockVersion        = "block_version"
 	FieldBlockCacheMetrics   = "block_cache_metrics_field"
 	FieldBuilderProposals    = "builder_proposals"
+	FieldClusterIndex        = "cluster_index"
 	FieldConfig              = "config"
 	FieldConnectionID        = "connection_id"
 	FieldConsensusTime       = "consensus_time"
 	FieldCount               = "count"
+	FieldTook                = "took"
 	FieldCurrentSlot         = "current_slot"
 	FieldDomain              = "domain"
 	FieldDuration            = "duration"
@@ -63,8 +66,10 @@ const (
 	FieldName                = "name"
 	FieldNetwork             = "network"
 	FieldOperatorId          = "operator_id"
+	FieldOperatorPubKey      = "operator_pubkey"
+	FieldOwnerAddress        = "owner_address"
 	FieldPeerID              = "peer_id"
-	FieldPrivateKey          = "privkey"
+	FieldPrivKey             = "privkey"
 	FieldPubKey              = "pubkey"
 	FieldRole                = "role"
 	FieldRound               = "round"
@@ -77,13 +82,14 @@ const (
 	FieldToBlock             = "to_block"
 	FieldTopic               = "topic"
 	FieldTxHash              = "tx_hash"
+	FieldType                = "type"
 	FieldUpdatedENRLocalNode = "updated_enr"
 	FieldValidator           = "validator"
 	FieldValidatorMetadata   = "validator_metadata"
 )
 
-func FromBlock(val fmt.Stringer) zapcore.Field {
-	return zap.Stringer(FieldFromBlock, val)
+func FromBlock(val uint64) zapcore.Field {
+	return zap.Uint64(FieldFromBlock, val)
 }
 
 func SyncOffset(val fmt.Stringer) zapcore.Field {
@@ -98,12 +104,16 @@ func EventID(val fmt.Stringer) zapcore.Field {
 	return zap.Stringer(FieldEventID, val)
 }
 
+func PrivKey(val []byte) zapcore.Field {
+	return zap.Stringer(FieldPrivKey, stringer.HexStringer{Val: val})
+}
+
 func PubKey(pubKey []byte) zapcore.Field {
 	return zap.Stringer(FieldPubKey, stringer.HexStringer{Val: pubKey})
 }
 
-func PrivKey(val []byte) zapcore.Field {
-	return zap.Stringer(FieldPrivateKey, stringer.HexStringer{Val: val})
+func OperatorPubKey(pubKey []byte) zapcore.Field {
+	return zap.String(FieldOperatorPubKey, string(pubKey))
 }
 
 func Validator(pubKey []byte) zapcore.Field {
@@ -242,6 +252,10 @@ func Count(val int) zap.Field {
 	return zap.Int(FieldCount, val)
 }
 
+func Took(duration time.Duration) zap.Field {
+	return zap.Duration(FieldTook, duration)
+}
+
 func Topic(val string) zap.Field {
 	return zap.String(FieldTopic, val)
 }
@@ -286,8 +300,8 @@ func Errors(val []error) zap.Field {
 	return zap.Errors(FieldErrors, val)
 }
 
-func ToBlock(val *big.Int) zap.Field {
-	return zap.Int64(FieldToBlock, val.Int64())
+func ToBlock(val uint64) zap.Field {
+	return zap.Uint64(FieldToBlock, val)
 }
 
 func FeeRecipient(pubKey []byte) zap.Field {
@@ -319,4 +333,16 @@ func Root(r [32]byte) zap.Field {
 
 func Config(val fmt.Stringer) zap.Field {
 	return zap.Stringer(FieldConfig, val)
+}
+
+func ClusterIndex(cluster contract.ISSVNetworkCoreCluster) zap.Field {
+	return zap.Uint64(FieldClusterIndex, cluster.Index)
+}
+
+func Owner(addr common.Address) zap.Field {
+	return zap.String(FieldOwnerAddress, addr.Hex())
+}
+
+func Type(v any) zapcore.Field {
+	return zap.String(FieldType, fmt.Sprintf("%T", v))
 }
