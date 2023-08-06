@@ -578,9 +578,6 @@ func setupEventHandling(
 				zap.Uint64("last_processed_block", lastProcessedBlock),
 				zap.Error(err))
 		}()
-
-		// TODO: revert
-		// select {}
 	}
 }
 
