@@ -152,13 +152,20 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 	go n.ticker.Start(logger)
 
 	n.validatorsCtrl.StartNetworkHandlers()
-	n.validatorsCtrl.StartValidators()
+	validatorMetadataFetched := n.validatorsCtrl.StartValidators()
 	go n.net.UpdateSubnets(logger)
-	go n.validatorsCtrl.UpdateValidatorMetaDataLoop()
 	go n.listenForCurrentSlot(logger)
 	go n.reportOperators(logger)
 
+	// Wait for validator metadata to be fetched before starting
+	// the FeeRecipientController and DutyScheduler.
+	select {
+	case <-validatorMetadataFetched:
+	case <-n.context.Done():
+	}
+
 	go n.feeRecipientCtrl.Start(logger)
+	go n.validatorsCtrl.UpdateValidatorMetaDataLoop()
 
 	// Start the duty scheduler, and a background goroutine to crash the node
 	// in case there were any errors.

@@ -132,7 +132,7 @@ func (eh *EventHandler) HandleBlockEventsStream(logs <-chan executionclient.Bloc
 
 		for _, task := range tasks {
 			logger = logger.With(fields.Type(task))
-			logger.Debug("going to execute task")
+			logger.Debug("executing task")
 			if err := task.Execute(); err != nil {
 				// TODO: We log failed task until we discuss how we want to handle this case. We likely need to crash the node in this case.
 				logger.Error("failed to execute task", zap.Error(err))

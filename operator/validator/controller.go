@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -93,7 +94,7 @@ type ControllerOptions struct {
 // Controller represent the validators controller,
 // it takes care of bootstrapping, updating and managing existing validators and their shares
 type Controller interface {
-	StartValidators()
+	StartValidators() (metadataFetched <-chan struct{})
 	ActiveValidatorIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
 	GetValidator(pubKey string) (*validator.Validator, bool)
 	ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty)
@@ -157,7 +158,8 @@ type controller struct {
 	nonCommitteeValidators *ttlcache.Cache[spectypes.MessageID, *nonCommitteeValidator]
 	nonCommitteeMutex      sync.Mutex
 
-	indicesChange chan struct{}
+	recentlyStartedValidators atomic.Int64
+	indicesChange             chan struct{}
 }
 
 // NewController creates a new validator controller instance
@@ -392,23 +394,26 @@ func (c *controller) handleWorkerMessages(msg *spectypes.SSVMessage) error {
 }
 
 // StartValidators loads all persisted shares and setup the corresponding validators
-func (c *controller) StartValidators() {
+func (c *controller) StartValidators() (metadataFetched <-chan struct{}) {
+	ch := make(chan struct{})
+	close(ch)
+
 	if c.validatorOptions.Exporter {
 		c.setupNonCommitteeValidators()
-		return
+		return ch
 	}
 
 	shares := c.sharesStorage.List(nil, registrystorage.ByOperatorID(c.GetOperatorData().ID), registrystorage.ByNotLiquidated())
 	if len(shares) == 0 {
 		c.logger.Info("could not find validators")
-		return
+		return ch
 	}
-	c.setupValidators(shares)
+	return c.setupValidators(shares)
 }
 
 // setupValidators setup and starts validators from the given shares.
 // shares w/o validator's metadata won't start, but the metadata will be fetched and the validator will start afterwards
-func (c *controller) setupValidators(shares []*ssvtypes.SSVShare) {
+func (c *controller) setupValidators(shares []*ssvtypes.SSVShare) (metadataFetched <-chan struct{}) {
 	c.logger.Info("starting validators setup...", zap.Int("shares count", len(shares)))
 	var started int
 	var errs []error
@@ -432,14 +437,19 @@ func (c *controller) setupValidators(shares []*ssvtypes.SSVShare) {
 		zap.Int("shares count", len(shares)), zap.Int("started", started))
 
 	// Try to fetch metadata once for validators that don't have it.
+	ch := make(chan struct{})
 	if len(fetchMetadata) > 0 {
 		go func() {
+			defer close(ch)
 			c.logger.Debug("updating validators metadata", zap.Int("count", len(fetchMetadata)))
 			if err := beaconprotocol.UpdateValidatorsMetadata(c.logger, fetchMetadata, c, c.beacon, c.onMetadataUpdated); err != nil {
 				c.logger.Warn("could not update all validators", zap.Error(err))
 			}
 		}()
+	} else {
+		close(ch)
 	}
+	return ch
 }
 
 // setupNonCommitteeValidators trigger SyncHighestDecided for each validator
@@ -714,6 +724,7 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 		c.metrics.ValidatorError(v.Share.ValidatorPubKey)
 		return false, errors.Wrap(err, "could not start validator")
 	}
+	c.recentlyStartedValidators.Add(1)
 	return true, nil
 }
 
@@ -721,22 +732,46 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 func (c *controller) UpdateValidatorMetaDataLoop() {
 	go c.metadataUpdateQueue.Start()
 
+	lastUpdated := make(map[string]time.Time)
 	for {
-		time.Sleep(c.metadataUpdateInterval)
+		time.Sleep(time.Second * 12)
 
-		filters := []registrystorage.SharesFilter{registrystorage.ByNotLiquidated()}
+		// Prepare filters.
+		filters := []registrystorage.SharesFilter{
+			registrystorage.ByNotLiquidated(),
+
+			// Filter out validators that were recently updated.
+			func(s *ssvtypes.SSVShare) bool {
+				last, ok := lastUpdated[string(s.ValidatorPubKey)]
+				return !ok || time.Since(last) > c.metadataUpdateInterval
+			},
+		}
+
+		// Filter out validators which don't belong to us.
 		if !c.validatorOptions.Exporter {
-			// If we're not an exporter node, fetch only for validators of our operator.
 			filters = append(filters, registrystorage.ByOperatorID(c.GetOperatorData().ID))
 		}
+
+		// Get the shares to fetch metadata for.
 		shares := c.sharesStorage.List(nil, filters...)
 		var pks [][]byte
 		for _, share := range shares {
 			pks = append(pks, share.ValidatorPubKey)
+			lastUpdated[string(share.ValidatorPubKey)] = time.Now()
 		}
-		c.logger.Debug("updating metadata in loop", zap.Int("shares count", len(shares)))
+
 		beaconprotocol.UpdateValidatorsMetadataBatch(c.logger, pks, c.metadataUpdateQueue, c,
 			c.beacon, c.onMetadataUpdated, metadataBatchSize)
+		started := c.recentlyStartedValidators.Load()
+		c.logger.Debug("updated metadata in loop",
+			zap.Int("shares", len(shares)),
+			zap.Int64("started_validators", started))
+
+		// Notify DutyScheduler of new validators.
+		if started > 0 {
+			c.recentlyStartedValidators.Store(0)
+			c.indicesChange <- struct{}{}
+		}
 	}
 }
 
