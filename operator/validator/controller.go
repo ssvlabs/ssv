@@ -739,18 +739,18 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 		// Prepare filters.
 		filters := []registrystorage.SharesFilter{
 			registrystorage.ByNotLiquidated(),
-
-			// Filter for validators which haven't been updated recently.
-			func(s *ssvtypes.SSVShare) bool {
-				last, ok := lastUpdated[string(s.ValidatorPubKey)]
-				return !ok || time.Since(last) > c.metadataUpdateInterval
-			},
 		}
 
 		// Filter for validators who belong to our operator.
 		if !c.validatorOptions.Exporter {
 			filters = append(filters, registrystorage.ByOperatorID(c.GetOperatorData().ID))
 		}
+
+		// Filter for validators which haven't been updated recently.
+		filters = append(filters, func(s *ssvtypes.SSVShare) bool {
+			last, ok := lastUpdated[string(s.ValidatorPubKey)]
+			return !ok || time.Since(last) > c.metadataUpdateInterval
+		})
 
 		// Get the shares to fetch metadata for.
 		shares := c.sharesStorage.List(nil, filters...)
