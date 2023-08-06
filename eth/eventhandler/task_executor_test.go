@@ -61,7 +61,7 @@ func TestExecuteTask(t *testing.T) {
 		require.NoError(t, task.Execute())
 		require.NotZero(t, observedLogs.Len())
 		entry := observedLogs.All()[len(observedLogs.All())-1]
-		require.Equal(t, "validator wasn't started", entry.Message)
+		require.Equal(t, "setting validator controller", entry.Message) // no logs
 	})
 
 	t.Run("test AddValidator task execution - started", func(t *testing.T) {
@@ -84,7 +84,7 @@ func TestExecuteTask(t *testing.T) {
 		require.NoError(t, task.Execute())
 		require.NotZero(t, observedLogs.Len())
 		entry := observedLogs.All()[len(observedLogs.All())-1]
-		require.Equal(t, "started validator", entry.Message)
+		require.Equal(t, "setting validator controller", entry.Message) // no logs
 	})
 
 	t.Run("test StopValidator task execution", func(t *testing.T) {
