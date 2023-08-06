@@ -430,18 +430,23 @@ func (c *controller) setupValidators(shares []*ssvtypes.SSVShare) {
 		}
 	}
 	c.logger.Info("setup validators done", zap.Int("map size", c.validatorsMap.Size()),
-		zap.Int("failures", len(errs)), zap.Int("missing metadata", len(fetchMetadata)),
+		zap.Int("failures", len(errs)), zap.Int("missing_metadata", len(fetchMetadata)),
 		zap.Int("shares", len(shares)), zap.Int("started", started))
 
 	// Try to fetch metadata once for validators that don't have it.
 	if len(fetchMetadata) > 0 {
 		start := time.Now()
-		if err := beaconprotocol.UpdateValidatorsMetadata(c.logger, fetchMetadata, c, c.beacon, c.onMetadataUpdated); err != nil {
-			c.logger.Warn("could not update all validators", zap.Error(err))
+		err := beaconprotocol.UpdateValidatorsMetadata(c.logger, fetchMetadata, c, c.beacon, c.onMetadataUpdated)
+		if err != nil {
+			c.logger.Error("failed to update validators metadata",
+				zap.Int("shares", len(fetchMetadata)),
+				fields.Took(time.Since(start)),
+				zap.Error(err))
+		} else {
+			c.logger.Debug("updated validators metadata",
+				zap.Int("shares", len(fetchMetadata)),
+				fields.Took(time.Since(start)))
 		}
-		c.logger.Debug("updated validators metadata",
-			zap.Int("shares", len(fetchMetadata)),
-			fields.Took(time.Since(start)))
 	}
 }
 
