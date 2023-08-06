@@ -7,8 +7,8 @@ import (
 	"encoding/hex"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/eth2-key-manager/wallets/hd"
-	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
+	"testing"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
