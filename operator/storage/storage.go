@@ -19,6 +19,8 @@ import (
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
+var HashedPrivateKey = "hashed-private-key"
+
 var (
 	storagePrefix = []byte("operator/")
 	syncOffsetKey = []byte("syncOffset")
@@ -197,7 +199,7 @@ func (s *storage) GetSyncOffset() (*eth1.SyncOffset, bool, error) {
 
 // GetHashedPrivateKey return sha256 hashed private key
 func (s *storage) GetHashedPrivateKey() ([]byte, bool, error) {
-	obj, found, err := s.db.Get(storagePrefix, []byte("hashed-private-key"))
+	obj, found, err := s.db.Get(storagePrefix, []byte(HashedPrivateKey))
 	if !found {
 		return nil, found, nil
 	}
@@ -292,7 +294,7 @@ func (s *storage) savePrivateKey(operatorKey string) error {
 	if err != nil {
 		return err
 	}
-	if err := s.db.Set(storagePrefix, []byte("hashed-private-key"), []byte(hashedKey)); err != nil {
+	if err := s.db.Set(storagePrefix, []byte(HashedPrivateKey), []byte(hashedKey)); err != nil {
 		return err
 	}
 	s.operatorPrivateKey = []byte(operatorKey)
