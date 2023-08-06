@@ -734,6 +734,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 	lastUpdated := make(map[string]time.Time)
 	for {
 		time.Sleep(interval)
+		start := time.Now()
 
 		// Prepare filters.
 		filters := []registrystorage.SharesFilter{
@@ -761,7 +762,6 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 
 		// TODO: continue if there is nothing to update.
 
-		start := time.Now()
 		if len(pks) > 0 {
 			beaconprotocol.UpdateValidatorsMetadataBatch(c.logger, pks, c.metadataUpdateQueue, c,
 				c.beacon, c.onMetadataUpdated, metadataBatchSize)
