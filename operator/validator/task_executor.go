@@ -2,6 +2,7 @@ package validator
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -19,23 +20,11 @@ func (c *controller) taskLogger(taskName string, fields ...zap.Field) *zap.Logge
 }
 
 func (c *controller) StartValidator(share *ssvtypes.SSVShare) error {
-	logger := c.taskLogger("StartValidator", fields.PubKey(share.ValidatorPubKey))
+	// logger := c.taskLogger("StartValidator", fields.PubKey(share.ValidatorPubKey))
 
-	if _, ok := c.validatorsMap.GetValidator(hex.EncodeToString(share.ValidatorPubKey)); ok {
-		logger.Debug("validator has already started")
-		return nil
-	}
-
-	started, err := c.onShareStart(share)
-	if err != nil {
-		return err
-	}
-
-	if started {
-		logger.Info("started validator")
-	} else {
-		logger.Debug("validator wasn't started")
-	}
+	// Since we don't yet have the Beacon metadata for this validator,
+	// we can't yet start it. Starting happens in `UpdateValidatorMetaDataLoop`,
+	// so this task is currently a no-op.
 
 	return nil
 }
@@ -77,10 +66,12 @@ func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []uint6
 		zap.Uint64s("operator_ids", operatorIDs))
 
 	var startedValidators int
+	var errs error
 	for _, share := range toReactivate {
 		started, err := c.onShareStart(share)
 		if err != nil {
-			return err
+			errs = errors.Join(errs, err)
+			continue
 		}
 		if started {
 			startedValidators++
@@ -93,7 +84,7 @@ func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []uint6
 		zap.Int("cluster_validators", len(toReactivate)),
 		zap.Int("started_validators", startedValidators))
 
-	return nil
+	return errs
 }
 
 func (c *controller) UpdateFeeRecipient(owner, recipient common.Address) error {

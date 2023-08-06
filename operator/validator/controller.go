@@ -438,12 +438,12 @@ func (c *controller) setupValidators(shares []*ssvtypes.SSVShare) {
 		start := time.Now()
 		err := beaconprotocol.UpdateValidatorsMetadata(c.logger, fetchMetadata, c, c.beacon, c.onMetadataUpdated)
 		if err != nil {
-			c.logger.Error("failed to update validators metadata",
+			c.logger.Error("failed to update validators metadata after setup",
 				zap.Int("shares", len(fetchMetadata)),
 				fields.Took(time.Since(start)),
 				zap.Error(err))
 		} else {
-			c.logger.Debug("updated validators metadata",
+			c.logger.Debug("updated validators metadata after setup",
 				zap.Int("shares", len(fetchMetadata)),
 				fields.Took(time.Since(start)))
 		}
@@ -732,20 +732,20 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 
 	lastUpdated := make(map[string]time.Time)
 	for {
-		time.Sleep(time.Second * 12)
+		time.Sleep(c.beacon.GetBeaconNetwork().SlotDurationSec())
 
 		// Prepare filters.
 		filters := []registrystorage.SharesFilter{
 			registrystorage.ByNotLiquidated(),
 
-			// Filter out validators that were recently updated.
+			// Filter for validators which haven't been updated recently.
 			func(s *ssvtypes.SSVShare) bool {
 				last, ok := lastUpdated[string(s.ValidatorPubKey)]
 				return !ok || time.Since(last) > c.metadataUpdateInterval
 			},
 		}
 
-		// Filter out validators which don't belong to us.
+		// Filter for validators who belong to our operator.
 		if !c.validatorOptions.Exporter {
 			filters = append(filters, registrystorage.ByOperatorID(c.GetOperatorData().ID))
 		}
@@ -758,12 +758,18 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 			lastUpdated[string(share.ValidatorPubKey)] = time.Now()
 		}
 
-		beaconprotocol.UpdateValidatorsMetadataBatch(c.logger, pks, c.metadataUpdateQueue, c,
-			c.beacon, c.onMetadataUpdated, metadataBatchSize)
+		// TODO: continue if there is nothing to update.
+
+		start := time.Now()
+		if len(pks) > 0 {
+			beaconprotocol.UpdateValidatorsMetadataBatch(c.logger, pks, c.metadataUpdateQueue, c,
+				c.beacon, c.onMetadataUpdated, metadataBatchSize)
+		}
 		started := c.recentlyStartedValidators.Load()
-		c.logger.Debug("updated metadata in loop",
-			zap.Int("shares", len(shares)),
-			zap.Int64("started_validators", started))
+		c.logger.Debug("updated validators metadata",
+			zap.Int("validators", len(shares)),
+			zap.Int64("started_validators", started),
+			fields.Took(time.Since(start)))
 
 		// Notify DutyScheduler of new validators.
 		if started > 0 {
