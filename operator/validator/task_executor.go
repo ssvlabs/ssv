@@ -2,10 +2,10 @@ package validator
 
 import (
 	"encoding/hex"
-	"errors"
 	"fmt"
 
 	"github.com/ethereum/go-ethereum/common"
+	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
@@ -70,7 +70,7 @@ func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []uint6
 	for _, share := range toReactivate {
 		started, err := c.onShareStart(share)
 		if err != nil {
-			errs = errors.Join(errs, err)
+			errs = multierr.Append(errs, err)
 			continue
 		}
 		if started {
