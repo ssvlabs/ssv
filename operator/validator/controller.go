@@ -713,11 +713,14 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 	if v.Share.BeaconMetadata.Index == 0 {
 		return false, errors.New("could not start validator: index not found")
 	}
-	if err := v.Start(c.logger); err != nil {
+	started, err := v.Start(c.logger)
+	if err != nil {
 		c.metrics.ValidatorError(v.Share.ValidatorPubKey)
 		return false, errors.Wrap(err, "could not start validator")
 	}
-	c.recentlyStartedValidators.Add(1)
+	if started {
+		c.recentlyStartedValidators.Add(1)
+	}
 	return true, nil
 }
 
