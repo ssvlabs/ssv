@@ -128,7 +128,8 @@ func populateStorage(t *testing.T, logger *zap.Logger, storage registrystorage.S
 
 		return &types.SSVShare{
 			Share: spectypes.Share{ValidatorPubKey: []byte(fmt.Sprintf("pk%d", index)), OperatorID: operatorID},
-			Metadata: types.Metadata{
+			Metadata: types.
+				Metadata{
 				BeaconMetadata: &beacon.ValidatorMetadata{
 					Index: phase0.ValidatorIndex(index),
 				},

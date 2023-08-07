@@ -37,12 +37,36 @@ const (
 	lateSlotAllowance          = 2
 )
 
+type validationError struct {
+	text string
+	got  any
+	want any
+}
+
+func (ve validationError) Error() string {
+	result := ve.text
+	if ve.got != nil {
+		result += fmt.Sprintf(", got %v", ve.got)
+	}
+	if ve.want != nil {
+		result += fmt.Sprintf(", want %v", ve.want)
+	}
+
+	return result
+}
+
 var (
-	ErrUnknownValidator = errors.New("unknown validator")
-	ErrInvalidRole      = errors.New("invalid role")
-	ErrEarlyMessage     = errors.New("early message")
-	ErrLateMessage      = errors.New("late message")
-	ErrNoSigners        = errors.New("no signers")
+	ErrEmptyData             = validationError{text: "empty data"}
+	ErrDataTooBig            = validationError{text: "data too big", want: maxMessageSize}
+	ErrUnknownValidator      = validationError{text: "unknown validator"}
+	ErrInvalidRole           = validationError{text: "invalid role"}
+	ErrEarlyMessage          = validationError{text: "early message"}
+	ErrLateMessage           = validationError{text: "late message"}
+	ErrNoSigners             = validationError{text: "no signers"}
+	ErrSignerNotLeader       = validationError{text: "signer is not leader"}
+	ErrWrongDomain           = validationError{text: "wrong domain"}
+	ErrValidatorLiquidated   = validationError{text: "validator is liquidated"}
+	ErrValidatorNotAttesting = validationError{text: "validator is not attesting"}
 )
 
 type ConsensusID struct {
@@ -68,17 +92,22 @@ func NewMessageValidator(netCfg networkconfig.NetworkConfig, shareStorage regist
 	}
 }
 
-func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, error) {
+func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, receivedAt time.Time) (*queue.DecodedSSVMessage, error) {
 	if len(ssvMessage.Data) == 0 {
-		return nil, fmt.Errorf("empty data")
+		return nil, ErrEmptyData
 	}
 
 	if len(ssvMessage.Data) > maxMessageSize {
-		return nil, fmt.Errorf("message is too big, got %d bytes, limit %d bytes", len(ssvMessage.Data), maxMessageSize)
+		err := ErrDataTooBig
+		err.got = len(ssvMessage.Data)
+		return nil, err
 	}
 
 	if !bytes.Equal(ssvMessage.MsgID.GetDomain(), mv.netCfg.Domain[:]) {
-		return nil, fmt.Errorf("wrong domain, got %v, expected %v", hex.EncodeToString(ssvMessage.MsgID.GetDomain()), hex.EncodeToString(mv.netCfg.Domain[:]))
+		err := ErrWrongDomain
+		err.got = hex.EncodeToString(ssvMessage.MsgID.GetDomain())
+		err.want = hex.EncodeToString(mv.netCfg.Domain[:])
+		return nil, err
 	}
 
 	if !mv.validRole(ssvMessage.MsgID.GetRoleType()) {
@@ -90,8 +119,12 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage) (*
 		return nil, ErrUnknownValidator
 	}
 
+	if share.Liquidated {
+		return nil, ErrValidatorLiquidated
+	}
+
 	if !share.BeaconMetadata.IsAttesting() {
-		return nil, fmt.Errorf("validator is not active")
+		return nil, ErrValidatorNotAttesting
 	}
 
 	msg, err := queue.DecodeSSVMessage(ssvMessage)
@@ -101,7 +134,7 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage) (*
 
 	switch ssvMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
-		if err := mv.validateConsensusMessage(share, msg); err != nil {
+		if err := mv.validateConsensusMessage(share, msg, receivedAt); err != nil {
 			return nil, err
 		}
 	case spectypes.SSVPartialSignatureMsgType:
@@ -118,7 +151,7 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage) (*
 	return msg, nil
 }
 
-func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, msg *queue.DecodedSSVMessage) error {
+func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, msg *queue.DecodedSSVMessage, receivedAt time.Time) error {
 	signedMsg, ok := msg.Body.(*specqbft.SignedMessage)
 	if !ok {
 		return fmt.Errorf("expected consensus message")
@@ -141,12 +174,12 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		return err
 	}
 
-	slot := phase0.Slot(signedMsg.Message.Height)
+	messageSlot := phase0.Slot(signedMsg.Message.Height)
 
-	if mv.earlyMessage(slot) {
+	if mv.earlyMessage(messageSlot, receivedAt) {
 		return ErrEarlyMessage
 	}
-	if mv.lateMessage(slot, msgID.GetRoleType()) {
+	if mv.lateMessage(messageSlot, msgID.GetRoleType(), receivedAt) { // TODO: use estimated slot here?
 		return ErrLateMessage
 	}
 
@@ -179,7 +212,7 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 	// Validate each signer's behavior.
 	state := mv.consensusState(consensusID)
 	for _, signer := range signedMsg.Signers {
-		if err := mv.validateSignerBehavior(state, signer, msg); err != nil {
+		if err := mv.validateSignerBehavior(state, signer, msg, receivedAt); err != nil {
 			return fmt.Errorf("bad signed behavior: %w", err)
 		}
 	}
@@ -211,12 +244,12 @@ func (mv *MessageValidator) validateEventMessage(msg *queue.DecodedSSVMessage) e
 	return fmt.Errorf("event messages are not broadcast")
 }
 
-func (mv *MessageValidator) earlyMessage(slot phase0.Slot) bool {
-	return mv.netCfg.Beacon.GetSlotEndTime(mv.netCfg.Beacon.EstimatedCurrentSlot()).
+func (mv *MessageValidator) earlyMessage(slot phase0.Slot, receivedAt time.Time) bool {
+	return mv.netCfg.Beacon.GetSlotEndTime(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Unix())).
 		Add(-clockErrorTolerance).Before(mv.netCfg.Beacon.GetSlotStartTime(slot))
 }
 
-func (mv *MessageValidator) lateMessage(slot phase0.Slot, role spectypes.BeaconRole) bool {
+func (mv *MessageValidator) lateMessage(slot phase0.Slot, role spectypes.BeaconRole, receivedAt time.Time) bool {
 	// Note: this is just an example, should be according to ssv-spec.
 	var ttl phase0.Slot
 	switch role {
@@ -228,8 +261,8 @@ func (mv *MessageValidator) lateMessage(slot phase0.Slot, role spectypes.BeaconR
 		ttl = 1
 	}
 	deadline := mv.netCfg.Beacon.GetSlotStartTime(slot + ttl).
-		Add(lateMessageMargin + clockErrorTolerance)
-	return mv.netCfg.Beacon.GetSlotStartTime(mv.netCfg.Beacon.EstimatedCurrentSlot()).
+		Add(lateMessageMargin).Add(clockErrorTolerance)
+	return mv.netCfg.Beacon.GetSlotStartTime(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Unix())).
 		After(deadline)
 }
 
@@ -246,6 +279,7 @@ func (mv *MessageValidator) validateSignerBehavior(
 	state *ConsensusState,
 	signer spectypes.OperatorID,
 	msg *queue.DecodedSSVMessage,
+	receivedAt time.Time,
 ) error {
 	signedMsg, ok := msg.Body.(*specqbft.SignedMessage)
 	if !ok {
@@ -290,7 +324,7 @@ func (mv *MessageValidator) validateSignerBehavior(
 		return fmt.Errorf("round is too far in the future, current %d, got %d", signerState.Round, msgRound)
 	}
 
-	estimatedRound := mv.currentEstimatedRound(role, phase0.Slot(signedMsg.Message.Height))
+	estimatedRound := mv.currentEstimatedRound(role, messageSlot, receivedAt)
 	// msgRound - 2 <= estimatedRound <= msgRound + 1
 	if estimatedRound-msgRound > allowedRoundsInFuture || msgRound-estimatedRound > allowedRoundsInPast {
 		return fmt.Errorf("message round is too far from estimated, current %v, got %v", estimatedRound, msgRound)
@@ -366,18 +400,18 @@ func (mv *MessageValidator) maxRound(role spectypes.BeaconRole) specqbft.Round {
 	}
 }
 
-func (mv *MessageValidator) currentEstimatedRound(role spectypes.BeaconRole, slot phase0.Slot) specqbft.Round {
+// TODO: cover with tests
+func (mv *MessageValidator) currentEstimatedRound(role spectypes.BeaconRole, slot phase0.Slot, receivedAt time.Time) specqbft.Round {
 	slotStartTime := mv.netCfg.Beacon.GetSlotStartTime(slot)
 
 	firstRoundStart := slotStartTime.Add(mv.waitAfterSlotStart(role))
-	messageTime := time.Now() // TODO: attach it to the message when it's received
 
-	sinceFirstRound := messageTime.Sub(firstRoundStart)
+	sinceFirstRound := receivedAt.Sub(firstRoundStart)
 	if currentQuickRound := 1 + specqbft.Round(sinceFirstRound/roundtimer.QuickTimeout); currentQuickRound <= roundtimer.QuickTimeoutThreshold {
 		return currentQuickRound
 	}
 
-	sinceFirstSlowRound := messageTime.Sub(firstRoundStart.Add(time.Duration(roundtimer.QuickTimeoutThreshold) * roundtimer.QuickTimeout))
+	sinceFirstSlowRound := receivedAt.Sub(firstRoundStart.Add(time.Duration(roundtimer.QuickTimeoutThreshold) * roundtimer.QuickTimeout))
 	return roundtimer.QuickTimeoutThreshold + 1 + specqbft.Round(sinceFirstSlowRound/roundtimer.SlowTimeout)
 }
 
@@ -414,7 +448,10 @@ func (mv *MessageValidator) validSigners(share *ssvtypes.SSVShare, msg *queue.De
 			}
 			leader := specqbft.RoundRobinProposer(qbftState, m.Message.Round)
 			if m.Signers[0] != leader {
-				return fmt.Errorf("not leader")
+				err := ErrSignerNotLeader
+				err.got = m.Signers[0]
+				err.want = leader
+				return err
 			}
 		} else if m.Message.MsgType != specqbft.CommitMsgType {
 			return fmt.Errorf("non-decided with multiple signers, len: %d", len(m.Signers))

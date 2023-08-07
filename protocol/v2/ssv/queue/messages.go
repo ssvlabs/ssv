@@ -11,6 +11,10 @@ import (
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
+var (
+	ErrUnknownMessageType = fmt.Errorf("unknown message type")
+)
+
 // DecodedSSVMessage is a bundle of SSVMessage and it's decoding.
 // TODO: try to make it generic
 type DecodedSSVMessage struct {
@@ -44,7 +48,7 @@ func DecodeSSVMessage(m *spectypes.SSVMessage) (*DecodedSSVMessage, error) {
 		body = msg
 	case spectypes.DKGMsgType: // TODO: handle
 	default:
-		return nil, fmt.Errorf("unknown message type: %d", m.MsgType)
+		return nil, ErrUnknownMessageType
 	}
 	return &DecodedSSVMessage{
 		SSVMessage: m,
