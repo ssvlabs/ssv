@@ -233,7 +233,8 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		nonCommitteeValidators: ttlcache.New(
 			ttlcache.WithTTL[spectypes.MessageID, *nonCommitteeValidator](time.Minute * 13),
 		),
-		indicesChange: make(chan struct{}),
+		metadataLastUpdated: hashmap.New[string, time.Time](),
+		indicesChange:       make(chan struct{}),
 	}
 
 	// Start automatic expired item deletion in nonCommitteeValidators.
