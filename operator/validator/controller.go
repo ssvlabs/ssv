@@ -15,6 +15,7 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/cornelk/hashmap"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
@@ -155,6 +156,7 @@ type controller struct {
 	nonCommitteeMutex      sync.Mutex
 
 	recentlyStartedValidators atomic.Int64
+	metadataLastUpdated       *hashmap.Map[string, time.Time]
 	indicesChange             chan struct{}
 }
 
@@ -726,35 +728,34 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 
 // UpdateValidatorMetaDataLoop updates metadata of validators in an interval
 func (c *controller) UpdateValidatorMetaDataLoop() {
-	var interval = c.beacon.GetBeaconNetwork().SlotDurationSec()
+	var interval = c.beacon.GetBeaconNetwork().SlotDurationSec() * 2
 
-	lastUpdated := make(map[string]time.Time)
+	// Prepare share filters.
+	filters := []registrystorage.SharesFilter{
+		registrystorage.ByNotLiquidated(),
+	}
+
+	// Filter for validators who belong to our operator.
+	if !c.validatorOptions.Exporter {
+		filters = append(filters, registrystorage.ByOperatorID(c.GetOperatorData().ID))
+	}
+
+	// Filter for validators which haven't been updated recently.
+	filters = append(filters, func(s *ssvtypes.SSVShare) bool {
+		last, ok := c.metadataLastUpdated.Get(string(s.ValidatorPubKey))
+		return !ok || time.Since(last) > c.metadataUpdateInterval
+	})
+
 	for {
 		time.Sleep(interval)
 		start := time.Now()
-
-		// Prepare filters.
-		filters := []registrystorage.SharesFilter{
-			registrystorage.ByNotLiquidated(),
-		}
-
-		// Filter for validators who belong to our operator.
-		if !c.validatorOptions.Exporter {
-			filters = append(filters, registrystorage.ByOperatorID(c.GetOperatorData().ID))
-		}
-
-		// Filter for validators which haven't been updated recently.
-		filters = append(filters, func(s *ssvtypes.SSVShare) bool {
-			last, ok := lastUpdated[string(s.ValidatorPubKey)]
-			return !ok || time.Since(last) > c.metadataUpdateInterval
-		})
 
 		// Get the shares to fetch metadata for.
 		shares := c.sharesStorage.List(nil, filters...)
 		var pks [][]byte
 		for _, share := range shares {
 			pks = append(pks, share.ValidatorPubKey)
-			lastUpdated[string(share.ValidatorPubKey)] = time.Now()
+			c.metadataLastUpdated.Set(string(share.ValidatorPubKey), time.Now())
 		}
 
 		// TODO: continue if there is nothing to update.
