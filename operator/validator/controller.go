@@ -520,6 +520,8 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 		return errors.Wrap(err, "could not update validator metadata")
 	}
 
+	c.metadataLastUpdated.Set(pk, time.Now())
+
 	// If this validator is not ours, don't start it.
 	pkBytes, err := hex.DecodeString(pk)
 	if err != nil {
@@ -756,7 +758,6 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 		var pks [][]byte
 		for _, share := range shares {
 			pks = append(pks, share.ValidatorPubKey)
-			c.metadataLastUpdated.Set(string(share.ValidatorPubKey), time.Now())
 		}
 
 		// TODO: continue if there is nothing to update.
