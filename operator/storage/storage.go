@@ -53,7 +53,6 @@ type storage struct {
 	operatorStore      registrystorage.Operators
 	recipientStore     registrystorage.Recipients
 	shareStore         registrystorage.Shares
-
 }
 
 // NewNodeStorage creates a new instance of Storage
