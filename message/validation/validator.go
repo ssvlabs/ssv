@@ -29,11 +29,12 @@ const (
 	// clockErrorTolerance is the maximum amount of clock error we expect to see between nodes.
 	clockErrorTolerance = time.Millisecond * 50
 
-	maxMessageSize             = 8388608        // TODO: define
-	maxConsensusMsgSize        = maxMessageSize // TODO: define
-	maxPartialSignatureMsgSize = maxMessageSize // TODO: define
+	maxMessageSize             = maxConsensusMsgSize
+	maxConsensusMsgSize        = 8388608
+	maxPartialSignatureMsgSize = 1952
 	allowedRoundsInFuture      = 2
 	allowedRoundsInPast        = 1
+	lateSlotAllowance          = 2
 )
 
 var (
@@ -69,7 +70,7 @@ func NewMessageValidator(netCfg networkconfig.NetworkConfig, shareStorage regist
 
 func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, error) {
 	if len(ssvMessage.Data) == 0 {
-		return nil, fmt.Errorf("empty data") // ERR_NO_DATA
+		return nil, fmt.Errorf("empty data")
 	}
 
 	if len(ssvMessage.Data) > maxMessageSize {
@@ -85,8 +86,8 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage) (*
 	}
 
 	share := mv.shareStorage.Get(ssvMessage.MsgID.GetPubKey())
-	if share != nil {
-		return nil, ErrUnknownValidator // ERR_VALIDATOR_ID_MISMATCH
+	if share == nil {
+		return nil, ErrUnknownValidator
 	}
 
 	if !share.BeaconMetadata.IsAttesting() {
@@ -187,13 +188,13 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 }
 
 func (mv *MessageValidator) validatePartialSignatureMessage(msg *queue.DecodedSSVMessage) error {
-	signedMsg, ok := msg.Body.(*spectypes.PartialSignatureMessage)
+	signedMsg, ok := msg.Body.(*spectypes.SignedPartialSignatureMessage)
 	if !ok {
 		return fmt.Errorf("expected partial signature message")
 	}
 
 	if len(msg.Data) > maxPartialSignatureMsgSize {
-		return fmt.Errorf("size exceeded") // ERR_PSIG_MSG_SIZE
+		return fmt.Errorf("size exceeded")
 	}
 	_ = signedMsg // TODO: validate it
 
@@ -202,14 +203,12 @@ func (mv *MessageValidator) validatePartialSignatureMessage(msg *queue.DecodedSS
 	return nil
 }
 func (mv *MessageValidator) validateEventMessage(msg *queue.DecodedSSVMessage) error {
-	signedMsg, ok := msg.Body.(*ssvtypes.EventMsg)
+	_, ok := msg.Body.(*ssvtypes.EventMsg)
 	if !ok {
 		return fmt.Errorf("expected event message")
 	}
 
-	_ = signedMsg // TODO: validate it
-
-	return nil
+	return fmt.Errorf("event messages are not broadcast")
 }
 
 func (mv *MessageValidator) earlyMessage(slot phase0.Slot) bool {
@@ -222,9 +221,9 @@ func (mv *MessageValidator) lateMessage(slot phase0.Slot, role spectypes.BeaconR
 	var ttl phase0.Slot
 	switch role {
 	case spectypes.BNRoleProposer, spectypes.BNRoleSyncCommittee, spectypes.BNRoleSyncCommitteeContribution:
-		ttl = 1 + 1
+		ttl = 1 + lateSlotAllowance
 	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator:
-		ttl = 32 + 2
+		ttl = 32 + lateSlotAllowance
 	case spectypes.BNRoleValidatorRegistration:
 		ttl = 1
 	}
@@ -315,16 +314,22 @@ func (mv *MessageValidator) validateSignerBehavior(
 		return fmt.Errorf("duplicated proposal with different data")
 	}
 
-	hashedFullData, err := specqbft.HashDataRoot(signedMsg.FullData)
-	if err != nil {
-		return fmt.Errorf("hash data root: %w", err)
+	hasFullData := signedMsg.Message.MsgType == specqbft.ProposalMsgType ||
+		signedMsg.Message.MsgType == specqbft.RoundChangeMsgType ||
+		mv.isDecidedMessage(signedMsg)
+
+	if hasFullData {
+		hashedFullData, err := specqbft.HashDataRoot(signedMsg.FullData)
+		if err != nil {
+			return fmt.Errorf("hash data root: %w", err)
+		}
+
+		if hashedFullData != signedMsg.Message.Root {
+			return fmt.Errorf("root doesn't match full data hash")
+		}
 	}
 
-	if hashedFullData != signedMsg.Message.Root {
-		return fmt.Errorf("root doesn't match full data hash")
-	}
-
-	if len(signedMsg.Signers) <= signerState.LastDecidedQuorumSize {
+	if mv.isDecidedMessage(signedMsg) && len(signedMsg.Signers) <= signerState.LastDecidedQuorumSize {
 		return fmt.Errorf("decided must have more signers than previous decided")
 	}
 
@@ -342,6 +347,10 @@ func (mv *MessageValidator) validateSignerBehavior(
 	}
 
 	return nil
+}
+
+func (mv *MessageValidator) isDecidedMessage(signedMsg *specqbft.SignedMessage) bool {
+	return signedMsg.Message.MsgType == specqbft.CommitMsgType && len(signedMsg.Signers) > 1
 }
 
 func (mv *MessageValidator) maxRound(role spectypes.BeaconRole) specqbft.Round {
@@ -386,11 +395,6 @@ func (mv *MessageValidator) waitAfterSlotStart(role spectypes.BeaconRole) time.D
 }
 
 func (mv *MessageValidator) validSigners(share *ssvtypes.SSVShare, msg *queue.DecodedSSVMessage) error {
-	// TODO: consider having different validation functions for each message type
-	if !share.BeaconMetadata.IsAttesting() {
-		return fmt.Errorf("validator not active")
-	}
-
 	contains := func(signer spectypes.OperatorID) func(operator *spectypes.Operator) bool {
 		return func(operator *spectypes.Operator) bool {
 			return operator.OperatorID == signer
@@ -414,10 +418,12 @@ func (mv *MessageValidator) validSigners(share *ssvtypes.SSVShare, msg *queue.De
 			}
 		} else if m.Message.MsgType != specqbft.CommitMsgType {
 			return fmt.Errorf("non-decided with multiple signers, len: %d", len(m.Signers))
+		} else if uint64(len(m.Signers)) < share.PartialQuorum || uint64(len(m.Signers)) > share.Quorum {
+			return fmt.Errorf("decided signers size is not between partial quorum and quorum size")
 		}
 
 		if !slices.IsSorted(m.Signers) {
-			return fmt.Errorf("signers not sorted") // ERR_SIGNERS_NOT_SORTED
+			return fmt.Errorf("signers not sorted")
 		}
 
 		// TODO: if decided, check if previous decided had less or equal signers
@@ -425,26 +431,26 @@ func (mv *MessageValidator) validSigners(share *ssvtypes.SSVShare, msg *queue.De
 		seen := map[spectypes.OperatorID]struct{}{}
 		for _, signer := range m.Signers {
 			if signer == 0 {
-				return fmt.Errorf("zero signer ID") // ERR_SIG_ID
+				return fmt.Errorf("zero signer ID")
 			}
 
 			if _, ok := seen[signer]; ok {
-				return fmt.Errorf("non-unique signer") // ERR_NON_UNIQUE_SIG
+				return fmt.Errorf("non-unique signer")
 			}
 			seen[signer] = struct{}{}
 
 			if !slices.ContainsFunc(share.Committee, contains(signer)) {
-				return fmt.Errorf("signer not in committee") // ERR_SIG_ID
+				return fmt.Errorf("signer not in committee")
 			}
 		}
 
 	case *spectypes.PartialSignatureMessage:
 		if m.Signer == 0 {
-			return fmt.Errorf("zero signer ID") // ERR_SIG_ID
+			return fmt.Errorf("zero signer ID")
 		}
 
 		if !slices.ContainsFunc(share.Committee, contains(m.Signer)) {
-			return fmt.Errorf("signer not in committee") // ERR_SIG_ID
+			return fmt.Errorf("signer not in committee")
 		}
 	default:
 		return fmt.Errorf("unknown message type: %T", m)

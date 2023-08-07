@@ -62,7 +62,7 @@ func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage) error {
 				return fmt.Errorf("pre-consensus is not expected")
 			}
 		case spectypes.PostConsensusPartialSig:
-			if c.PostConsensus > 0 { // TODO: do we need this check?
+			if c.PostConsensus > 0 {
 				return fmt.Errorf("post-consensus is not expected")
 			}
 		default:
