@@ -758,6 +758,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 		var pks [][]byte
 		for _, share := range shares {
 			pks = append(pks, share.ValidatorPubKey)
+			c.metadataLastUpdated.Set(string(share.ValidatorPubKey), time.Now())
 		}
 
 		// TODO: continue if there is nothing to update.
