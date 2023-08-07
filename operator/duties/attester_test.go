@@ -11,7 +11,6 @@ import (
 	"github.com/cornelk/hashmap"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/operator/duties/mocks"
 )
@@ -27,8 +26,8 @@ func setupAttesterDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[phase0.Epoch, 
 			return duties, nil
 		}).AnyTimes()
 
-	s.validatorController.(*mocks.MockValidatorController).EXPECT().ActiveValidatorIndices(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(logger *zap.Logger, epoch phase0.Epoch) []phase0.ValidatorIndex {
+	s.validatorController.(*mocks.MockValidatorController).EXPECT().ActiveValidatorIndices(gomock.Any()).DoAndReturn(
+		func(epoch phase0.Epoch) []phase0.ValidatorIndex {
 			uniqueIndices := make(map[phase0.ValidatorIndex]bool)
 
 			duties, _ := dutiesMap.Get(epoch)

@@ -23,4 +23,5 @@ const (
 	NameP2PStorage        = "P2PStorage"
 	NamePubsubTrace       = "PubsubTrace"
 	NameScoreInspector    = "ScoreInspector"
+	NameEventHandler      = "EventHandler"
 )

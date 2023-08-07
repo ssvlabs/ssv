@@ -163,7 +163,7 @@ func TestHandshakeProcessIncomingNodeInfoFlow(t *testing.T) {
 		require.NoError(t, err)
 		storgmock := mock.NodeStorage{RegisteredOperatorPublicKeyPEMs: []string{senderPublicKey}}
 		td.Handshaker.filters = func() []HandshakeFilter {
-			return []HandshakeFilter{RegisteredOperatorsFilter(logging.TestLogger(t), storgmock, []string{})}
+			return []HandshakeFilter{RegisteredOperatorsFilter(storgmock, []string{})}
 		}
 
 		require.ErrorIs(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn), nil)
@@ -181,7 +181,7 @@ func TestHandshakeProcessIncomingNodeInfoFlow(t *testing.T) {
 		storgmock := mock.NodeStorage{RegisteredOperatorPublicKeyPEMs: []string{}}
 
 		td.Handshaker.filters = func() []HandshakeFilter {
-			return []HandshakeFilter{RegisteredOperatorsFilter(logging.TestLogger(t), storgmock, []string{senderPublicKey})}
+			return []HandshakeFilter{RegisteredOperatorsFilter(storgmock, []string{senderPublicKey})}
 		}
 
 		require.ErrorIs(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn), nil)
@@ -196,7 +196,7 @@ func TestHandshakeProcessIncomingNodeInfoFlow(t *testing.T) {
 
 		storgmock := mock.NodeStorage{RegisteredOperatorPublicKeyPEMs: []string{}}
 		td.Handshaker.filters = func() []HandshakeFilter {
-			return []HandshakeFilter{RegisteredOperatorsFilter(logging.TestLogger(t), storgmock, []string{})}
+			return []HandshakeFilter{RegisteredOperatorsFilter(storgmock, []string{})}
 		}
 
 		require.ErrorIs(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn), errPeerWasFiltered)

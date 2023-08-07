@@ -13,7 +13,7 @@ var JatoV2 = NetworkConfig{
 	Beacon:               beacon.NewNetwork(spectypes.PraterNetwork),
 	Domain:               spectypes.DomainType{0x0, 0x0, 0x4, 0x1},
 	GenesisEpoch:         192100,
-	ETH1SyncOffset:       new(big.Int).SetInt64(9203578),
+	RegistrySyncOffset:   new(big.Int).SetInt64(9203578),
 	RegistryContractAddr: "0xC3CD9A0aE89Fff83b71b58b6512D43F8a41f363D",
 	Bootnodes: []string{
 		// Blox (ssv.network)

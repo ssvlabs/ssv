@@ -5,29 +5,35 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"fmt"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 
 	"github.com/bloxapp/ssv/storage/basedb"
 
 	"go.uber.org/zap"
 )
 
-var migrationEncryptShares = Migration{
+var migration_2_encrypt_shares = Migration{
 	Name: "migration_2_encrypt_shares",
-	Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte) error {
+	Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte, completed CompletedFunc) error {
 		return opt.Db.Update(func(txn basedb.Txn) error {
 			err := txn.Set(migrationsPrefix, key, migrationCompleted)
 			if err != nil {
 				return err
 			}
-			operatorKey, found, err := opt.NodeStorage.GetPrivateKey()
+			obj, found, err := opt.Db.Get([]byte("operator/"), []byte("private-key"))
 			if err != nil {
 				return fmt.Errorf("failed to get private key: %w", err)
 			}
 			if !found {
-				return nil
+				return completed(txn)
 			}
+			operatorKey, err := rsaencryption.ConvertPemToPrivateKey(string(obj.Value))
+			if err != nil {
+				return fmt.Errorf("failed to get private key: %w", err)
+			}
+
 			signerStorage := opt.signerStorage(logger)
-			accounts, err := signerStorage.ListAccountsTxn(opt.Db)
+			accounts, err := signerStorage.ListAccountsTxn(txn)
 			if err != nil {
 				return fmt.Errorf("failed to list accounts: %w", err)
 			}
@@ -39,12 +45,12 @@ var migrationEncryptShares = Migration{
 				return fmt.Errorf("failed to set encryption key: %w", err)
 			}
 			for _, account := range accounts {
-				err := signerStorage.SaveAccountTxn(opt.Db, account)
+				err := signerStorage.SaveAccountTxn(txn, account)
 				if err != nil {
 					return fmt.Errorf("failed to save account %s: %w", account, err)
 				}
 			}
-			return nil
+			return completed(txn)
 		})
 	},
 }
