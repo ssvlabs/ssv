@@ -215,6 +215,28 @@ func Test_Validation(t *testing.T) {
 		require.Error(t, err)
 	})
 
+	t.Run("zero signature", func(t *testing.T) {
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		height := specqbft.Height(slot)
+
+		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
+		zeroSignature := [signatureSize]byte{}
+		validSignedMessage.Signature = zeroSignature[:]
+
+		encoded, err := validSignedMessage.Encode()
+		require.NoError(t, err)
+
+		message := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
+			Data:    encoded,
+		}
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
+		_, err = validator.ValidateMessage(message, receivedAt)
+		require.ErrorIs(t, err, ErrZeroSignature)
+	})
+
 	t.Run("late message", func(t *testing.T) {
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)

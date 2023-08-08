@@ -40,30 +40,42 @@ func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage) error {
 		switch m.Message.MsgType {
 		case specqbft.ProposalMsgType:
 			if c.Proposal > 0 || c.Commit > 0 || c.Decided > 0 || c.PostConsensus > 0 {
-				return fmt.Errorf("proposal is not expected")
+				err := ErrUnexpectedMessageType
+				err.got = "proposal"
+				return err
 			}
 		case specqbft.PrepareMsgType:
 			if c.Prepare > 0 || c.Commit > 0 || c.Decided > 0 || c.PostConsensus > 0 {
-				return fmt.Errorf("prepare is not expected")
+				err := ErrUnexpectedMessageType
+				err.got = "prepare"
+				return err
 			}
 		case specqbft.CommitMsgType:
 			if c.Commit > 0 || c.Decided > 0 || c.PostConsensus > 0 {
-				return fmt.Errorf("commit is not expected")
+				err := ErrUnexpectedMessageType
+				err.got = "commit"
+				return err
 			}
 		case specqbft.RoundChangeMsgType:
 			if c.RoundChange > 0 {
-				return fmt.Errorf("round change is not expected")
+				err := ErrUnexpectedMessageType
+				err.got = "round change"
+				return err
 			}
 		}
 	case *spectypes.SignedPartialSignatureMessage:
 		switch m.Message.Type {
 		case spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig:
 			if c.PreConsensus > 0 {
-				return fmt.Errorf("pre-consensus is not expected")
+				err := ErrUnexpectedMessageType
+				err.got = "pre-consensus"
+				return err
 			}
 		case spectypes.PostConsensusPartialSig:
 			if c.PostConsensus > 0 {
-				return fmt.Errorf("post-consensus is not expected")
+				err := ErrUnexpectedMessageType
+				err.got = "post-consensus"
+				return err
 			}
 		default:
 			// TODO: handle
