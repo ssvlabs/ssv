@@ -2,12 +2,12 @@ package operator
 
 import (
 	"context"
-	"crypto/sha256"
 	"crypto/x509"
 	"fmt"
 	"log"
 	"math/big"
 	"net/http"
+	"os"
 	"time"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -54,7 +54,13 @@ import (
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/format"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
+
+type KeyStore struct {
+	PrivateKeyFile string `yaml:"PrivateKeyFile" env:"PRIVATE_KEY_FILE" env-description:"Operator private key file"`
+	PasswordFile   string `yaml:"PasswordFile" env:"PASSWORD_FILE" env-description:"Password for operator private key file decryption"`
+}
 
 type config struct {
 	global_config.GlobalConfig `yaml:"global"`
@@ -63,12 +69,12 @@ type config struct {
 	ExecutionClient            executionclient.ExecutionOptions `yaml:"eth1"` // TODO: execution_client in yaml
 	ConsensusClient            beaconprotocol.Options           `yaml:"eth2"` // TODO: consensus_client in yaml
 	P2pNetworkConfig           p2pv1.Config                     `yaml:"p2p"`
-
-	OperatorPrivateKey         string `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
-	GenerateOperatorPrivateKey bool   `yaml:"GenerateOperatorPrivateKey" env:"GENERATE_OPERATOR_KEY" env-description:"Whether to generate operator key if none is passed by config"`
-	MetricsAPIPort             int    `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port to listen on for the metrics API."`
-	EnableProfile              bool   `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
-	NetworkPrivateKey          string `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
+	KeyStore                   KeyStore                         `yaml:"KeyStore"`
+	OperatorPrivateKey         string                           `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
+	GenerateOperatorPrivateKey bool                             `yaml:"GenerateOperatorPrivateKey" env:"GENERATE_OPERATOR_KEY" env-description:"Whether to generate operator key if none is passed by config"`
+	MetricsAPIPort             int                              `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port to listen on for the metrics API."`
+	EnableProfile              bool                             `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
+	NetworkPrivateKey          string                           `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
 
 	WsAPIPort int  `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"Port to listen on for the websocket API."`
 	WithPing  bool `yaml:"WithPing" env:"WITH_PING" env-description:"Whether to send websocket ping messages'"`
@@ -84,6 +90,7 @@ var globalArgs global_config.Args
 
 var operatorNode operator.Node
 
+// StartNodeCmd is the command to start SSV node
 var StartNodeCmd = &cobra.Command{
 	Use:   "start-node",
 	Short: "Starts an instance of SSV node",
@@ -92,27 +99,26 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal("could not create logger", err)
 		}
-
 		defer logging.CapturePanic(logger)
-
 		networkConfig, forkVersion, err := setupSSVNetwork(logger)
 		if err != nil {
 			log.Fatal("could not setup network", err)
 		}
-
 		cfg.DBOptions.Ctx = cmd.Context()
 		db, err := setupDB(logger, networkConfig.Beacon.GetNetwork())
 		if err != nil {
 			logger.Fatal("could not setup db", zap.Error(err))
 		}
+
 		nodeStorage, operatorData := setupOperatorStorage(logger, db)
 
+		if err != nil {
+			logger.Fatal("could not run post storage migrations", zap.Error(err))
+		}
 		operatorKey, _, _ := nodeStorage.GetPrivateKey()
 		keyBytes := x509.MarshalPKCS1PrivateKey(operatorKey)
-		hash := sha256.Sum256(keyBytes)
-		keyString := fmt.Sprintf("%x", hash)
-
-		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkConfig, cfg.SSVOptions.ValidatorOptions.BuilderProposals, keyString)
+		hashedKey, _ := rsaencryption.HashRsaKey(keyBytes)
+		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkConfig, cfg.SSVOptions.ValidatorOptions.BuilderProposals, hashedKey)
 		if err != nil {
 			logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 		}
@@ -365,6 +371,23 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database) (operatorstora
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
+	if cfg.KeyStore.PrivateKeyFile != "" {
+		encryptedJSON, err := os.ReadFile(cfg.KeyStore.PrivateKeyFile)
+		if err != nil {
+			log.Fatal("Error reading PEM file", zap.Error(err))
+		}
+		keyStorePassword, err := os.ReadFile(cfg.KeyStore.PasswordFile)
+		if err != nil {
+			log.Fatal("Error reading Password file", zap.Error(err))
+		}
+
+		privateKey, err := rsaencryption.ConvertEncryptedPemToPrivateKey(encryptedJSON, string(keyStorePassword))
+		if err != nil {
+			logger.Fatal("could not decrypt operator private key", zap.Error(err))
+		}
+		cfg.OperatorPrivateKey = rsaencryption.ExtractPrivateKey(privateKey)
+	}
+
 	operatorPubKey, err := nodeStorage.SetupPrivateKey(cfg.OperatorPrivateKey, cfg.GenerateOperatorPrivateKey)
 	if err != nil {
 		logger.Fatal("could not setup operator private key", zap.Error(err))

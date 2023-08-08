@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"fmt"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 
 	"github.com/bloxapp/ssv/storage/basedb"
 
@@ -15,17 +16,22 @@ var migration_2_encrypt_shares = Migration{
 	Name: "migration_2_encrypt_shares",
 	Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte, completed CompletedFunc) error {
 		return opt.Db.Update(func(txn basedb.Txn) error {
-			nodeStorage, err := opt.nodeStorage(logger)
+			err := txn.Set(migrationsPrefix, key, migrationCompleted)
 			if err != nil {
-				return fmt.Errorf("failed to get node storage: %w", err)
+				return err
 			}
-			operatorKey, found, err := nodeStorage.GetPrivateKey()
+			obj, found, err := txn.Get([]byte("operator/"), []byte("private-key"))
 			if err != nil {
 				return fmt.Errorf("failed to get private key: %w", err)
 			}
 			if !found {
 				return completed(txn)
 			}
+			operatorKey, err := rsaencryption.ConvertPemToPrivateKey(string(obj.Value))
+			if err != nil {
+				return fmt.Errorf("failed to get private key: %w", err)
+			}
+
 			signerStorage := opt.signerStorage(logger)
 			accounts, err := signerStorage.ListAccountsTxn(txn)
 			if err != nil {
@@ -43,6 +49,10 @@ var migration_2_encrypt_shares = Migration{
 				if err != nil {
 					return fmt.Errorf("failed to save account %s: %w", account, err)
 				}
+			}
+			err = txn.Delete([]byte("operator/"), []byte("private-key"))
+			if err != nil {
+				return fmt.Errorf("failed to delete private key: %w", err)
 			}
 			return completed(txn)
 		})

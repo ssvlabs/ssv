@@ -18,6 +18,8 @@ import (
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
+var HashedPrivateKey = "hashed-private-key"
+
 var (
 	storagePrefix         = []byte("operator/")
 	lastProcessedBlockKey = []byte("syncOffset") // TODO: temporarily left as syncOffset for compatibility, consider renaming and adding a migration for that
@@ -47,9 +49,10 @@ type storage struct {
 	logger *zap.Logger
 	db     basedb.Database
 
-	operatorStore  registrystorage.Operators
-	recipientStore registrystorage.Recipients
-	shareStore     registrystorage.Shares
+	operatorPrivateKey []byte
+	operatorStore      registrystorage.Operators
+	recipientStore     registrystorage.Recipients
+	shareStore         registrystorage.Shares
 }
 
 // NewNodeStorage creates a new instance of Storage
@@ -188,20 +191,29 @@ func (s *storage) GetLastProcessedBlock(r basedb.Reader) (*big.Int, bool, error)
 	return offset, found, nil
 }
 
-// GetPrivateKey return rsa private key
-func (s *storage) GetPrivateKey() (*rsa.PrivateKey, bool, error) {
-	obj, found, err := s.db.Get(storagePrefix, []byte("private-key"))
-	if err != nil {
-		return nil, false, err
-	}
+// GetHashedPrivateKey return sha256 hashed private key
+func (s *storage) GetHashedPrivateKey() ([]byte, bool, error) {
+	obj, found, err := s.db.Get(storagePrefix, []byte(HashedPrivateKey))
 	if !found {
 		return nil, found, nil
 	}
-	sk, err := rsaencryption.ConvertPemToPrivateKey(string(obj.Value))
+	if err != nil {
+		return nil, found, err
+	}
+	return obj.Value, found, nil
+}
+
+// GetPrivateKey return rsa private key
+func (s *storage) GetPrivateKey() (*rsa.PrivateKey, bool, error) {
+	privateKey := s.operatorPrivateKey
+	if privateKey == nil {
+		return nil, false, nil
+	}
+	sk, err := rsaencryption.ConvertPemToPrivateKey(string(privateKey))
 	if err != nil {
 		return nil, false, err
 	}
-	return sk, found, nil
+	return sk, true, nil
 }
 
 // SetupPrivateKey setup operator private key at the init of the node and set OperatorPublicKey config
@@ -210,8 +222,9 @@ func (s *storage) SetupPrivateKey(operatorKeyBase64 string, generateIfNone bool)
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to decode base64")
 	}
+	var operatorKey = string(operatorKeyByte)
 
-	if err := s.validateKey(generateIfNone, string(operatorKeyByte)); err != nil {
+	if err := s.validateKey(generateIfNone, operatorKey); err != nil {
 		return nil, err
 	}
 
@@ -236,6 +249,17 @@ func (s *storage) SetupPrivateKey(operatorKeyBase64 string, generateIfNone bool)
 // validateKey validate provided and exist key. save if needed.
 func (s *storage) validateKey(generateIfNone bool, operatorKey string) error {
 	// check if passed new key. if so, save new key (force to always save key when provided)
+	storedPrivateKey, privateKeyExist, err := s.GetHashedPrivateKey()
+	if err != nil {
+		return errors.New("Can't Get Operator private key from storage")
+	}
+	hashedKey, err := rsaencryption.HashRsaKey([]byte(operatorKey))
+	if err != nil {
+		return errors.New("Cannot hash Operator private key")
+	}
+	if privateKeyExist && hashedKey != string(storedPrivateKey) {
+		return errors.New("Operator private key is not matching the one encrypted the storage")
+	}
 	if operatorKey != "" {
 		return s.savePrivateKey(operatorKey)
 	}
@@ -244,7 +268,7 @@ func (s *storage) validateKey(generateIfNone bool, operatorKey string) error {
 	if err != nil {
 		return err
 	}
-	// if no, check if need to generate. if no, return error
+	// if no, check  if you need to generate. if no, return error
 	if !found {
 		if !generateIfNone {
 			return errors.New("key not exist or provided")
@@ -262,9 +286,14 @@ func (s *storage) validateKey(generateIfNone bool, operatorKey string) error {
 
 // SavePrivateKey save operator private key
 func (s *storage) savePrivateKey(operatorKey string) error {
-	if err := s.db.Set(storagePrefix, []byte("private-key"), []byte(operatorKey)); err != nil {
+	hashedKey, err := rsaencryption.HashRsaKey([]byte(operatorKey))
+	if err != nil {
 		return err
 	}
+	if err := s.db.Set(storagePrefix, []byte(HashedPrivateKey), []byte(hashedKey)); err != nil {
+		return err
+	}
+	s.operatorPrivateKey = []byte(operatorKey)
 	return nil
 }
 
