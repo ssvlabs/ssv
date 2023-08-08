@@ -455,7 +455,7 @@ func (mv *MessageValidator) validSigners(share *ssvtypes.SSVShare, msg *queue.De
 			}
 		} else if m.Message.MsgType != specqbft.CommitMsgType {
 			return fmt.Errorf("non-decided with multiple signers, len: %d", len(m.Signers))
-		} else if uint64(len(m.Signers)) < share.PartialQuorum || uint64(len(m.Signers)) > share.Quorum {
+		} else if uint64(len(m.Signers)) < share.Quorum || len(m.Signers) > len(share.Committee) {
 			return fmt.Errorf("decided signers size is not between partial quorum and quorum size")
 		}
 
