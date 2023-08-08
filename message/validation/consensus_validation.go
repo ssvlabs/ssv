@@ -87,6 +87,7 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 	_ = pj
 	_ = rcj
 
+	// TODO: do read-only behavior checks before checking signature and then update the state if signature is correct
 	if err := ssvtypes.VerifyByOperators(signedMsg.Signature, signedMsg, mv.netCfg.Domain, spectypes.QBFTSignatureType, share.Committee); err != nil {
 		return fmt.Errorf("invalid signature: %w", err)
 	}
