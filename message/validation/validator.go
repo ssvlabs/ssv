@@ -442,16 +442,18 @@ func (mv *MessageValidator) validSigners(share *ssvtypes.SSVShare, msg *queue.De
 		}
 
 		if len(m.Signers) == 1 {
-			qbftState := &specqbft.State{
-				Height: m.Message.Height,
-				Share:  &share.Share,
-			}
-			leader := specqbft.RoundRobinProposer(qbftState, m.Message.Round)
-			if m.Signers[0] != leader {
-				err := ErrSignerNotLeader
-				err.got = m.Signers[0]
-				err.want = leader
-				return err
+			if m.Message.MsgType == specqbft.ProposalMsgType {
+				qbftState := &specqbft.State{
+					Height: m.Message.Height,
+					Share:  &share.Share,
+				}
+				leader := specqbft.RoundRobinProposer(qbftState, m.Message.Round)
+				if m.Signers[0] != leader {
+					err := ErrSignerNotLeader
+					err.got = m.Signers[0]
+					err.want = leader
+					return err
+				}
 			}
 		} else if m.Message.MsgType != specqbft.CommitMsgType {
 			return fmt.Errorf("non-decided with multiple signers, len: %d", len(m.Signers))
