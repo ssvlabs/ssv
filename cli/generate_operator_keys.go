@@ -73,7 +73,7 @@ var generateOperatorKeysCmd = &cobra.Command{
 					},
 				)
 
-				operatorPublicKey, err := rsaencryption.ExtractPublicKey(rsaKey)
+				operatorPublicKey, _ := rsaencryption.ExtractPublicKey(rsaKey)
 				publicKey, _ := base64.StdEncoding.DecodeString(operatorPublicKey)
 				sk = skPem
 				pk = publicKey
