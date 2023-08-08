@@ -179,7 +179,7 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 	validatorShare := eh.nodeStorage.Shares().Get(txn, event.PublicKey)
 
 	if validatorShare == nil {
-		createdShare, err := eh.handleShareCreation(txn, event, sharePublicKeys, encryptedKeys)
+		shareCreated, err := eh.handleShareCreation(txn, event, sharePublicKeys, encryptedKeys)
 		if err != nil {
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
@@ -191,7 +191,7 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 			return nil, err
 		}
 
-		validatorShare = createdShare
+		validatorShare = shareCreated
 
 		logger.Debug("share not found, created a new one", fields.OperatorID(validatorShare.OperatorID))
 
@@ -479,6 +479,9 @@ func splitBytes(buf []byte, lim int) [][]byte {
 // todo(align-contract-v0.3.1-rc.0): move to crypto package in ssv protocol?
 func verifySignature(sig []byte, owner ethcommon.Address, pubKey []byte, nonce registrystorage.Nonce) error {
 	data := fmt.Sprintf("%s:%d", owner.String(), nonce)
+	println("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
+	println(data)
+	println("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
 	hash := crypto.Keccak256([]byte(data))
 
 	sign := &bls.Sign{}
