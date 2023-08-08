@@ -20,7 +20,7 @@ var migration_2_encrypt_shares = Migration{
 			if err != nil {
 				return err
 			}
-			obj, found, err := opt.Db.Get([]byte("operator/"), []byte("private-key"))
+			obj, found, err := txn.Get([]byte("operator/"), []byte("private-key"))
 			if err != nil {
 				return fmt.Errorf("failed to get private key: %w", err)
 			}
@@ -50,7 +50,7 @@ var migration_2_encrypt_shares = Migration{
 					return fmt.Errorf("failed to save account %s: %w", account, err)
 				}
 			}
-			err = opt.Db.Delete([]byte("operator/"), []byte("private-key"))
+			err = txn.Delete([]byte("operator/"), []byte("private-key"))
 			if err != nil {
 				return fmt.Errorf("failed to delete private key: %w", err)
 			}
