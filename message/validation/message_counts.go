@@ -122,12 +122,12 @@ func (c *MessageCounts) Record(msg *queue.DecodedSSVMessage) {
 	}
 }
 
-func (c *MessageCounts) Exceeds(limits MessageCounts) bool {
-	return c.PreConsensus > limits.PreConsensus ||
-		c.Proposal > limits.Proposal ||
-		c.Prepare > limits.Prepare ||
-		c.Commit > limits.Commit ||
-		c.Decided > limits.Decided ||
-		c.RoundChange > limits.RoundChange ||
-		c.PostConsensus > limits.PostConsensus
+func (c *MessageCounts) ReachedLimits(limits MessageCounts) bool {
+	return c.PreConsensus >= limits.PreConsensus ||
+		c.Proposal >= limits.Proposal ||
+		c.Prepare >= limits.Prepare ||
+		c.Commit >= limits.Commit ||
+		c.Decided >= limits.Decided ||
+		c.RoundChange >= limits.RoundChange ||
+		c.PostConsensus >= limits.PostConsensus
 }

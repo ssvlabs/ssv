@@ -34,11 +34,6 @@ func (mv *MessageValidator) validatePartialSignatureMessage(share *ssvtypes.SSVS
 
 	// TODO: check running duty
 
-	// TODO: do read-only behavior checks before checking signature and then update the state if signature is correct
-	if err := mv.validPartialSignatures(share, signedMsg); err != nil {
-		return err
-	}
-
 	consensusID := ConsensusID{
 		PubKey: phase0.BLSPubKey(msg.GetID().GetPubKey()),
 		Role:   role,
@@ -46,6 +41,11 @@ func (mv *MessageValidator) validatePartialSignatureMessage(share *ssvtypes.SSVS
 
 	consensusState := mv.consensusState(consensusID)
 	if err := mv.validateSlotState(consensusState.SignerState(signedMsg.Signer), signedMsg.Message.Slot); err != nil {
+		return err
+	}
+
+	// TODO: do read-only behavior checks before checking signature and then update the state if signature is correct
+	if err := mv.validPartialSignatures(share, signedMsg); err != nil {
 		return err
 	}
 

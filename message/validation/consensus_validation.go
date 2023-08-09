@@ -87,11 +87,6 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 	_ = pj
 	_ = rcj
 
-	// TODO: do read-only behavior checks before checking signature and then update the state if signature is correct
-	if err := ssvtypes.VerifyByOperators(signedMsg.Signature, signedMsg, mv.netCfg.Domain, spectypes.QBFTSignatureType, share.Committee); err != nil {
-		return fmt.Errorf("invalid signature: %w", err)
-	}
-
 	consensusID := ConsensusID{
 		PubKey: phase0.BLSPubKey(msg.GetID().GetPubKey()),
 		Role:   role,
@@ -102,6 +97,14 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		if err := mv.validateSignerBehavior(state, signer, msg); err != nil {
 			return fmt.Errorf("bad signed behavior: %w", err)
 		}
+	}
+
+	if err := ssvtypes.VerifyByOperators(signedMsg.Signature, signedMsg, mv.netCfg.Domain, spectypes.QBFTSignatureType, share.Committee); err != nil {
+		return fmt.Errorf("invalid signature: %w", err)
+	}
+
+	for _, signer := range signedMsg.Signers {
+		state.SignerState(signer).MessageCounts.Record(msg)
 	}
 
 	return nil
@@ -144,10 +147,8 @@ func (mv *MessageValidator) validateSignerBehavior(
 		return err
 	}
 
-	signerState.MessageCounts.Record(msg)
-
 	// Validate message counts within the current round.
-	if signerState.MessageCounts.Exceeds(maxMessageCounts(len(signedMsg.Signers))) {
+	if signerState.MessageCounts.ReachedLimits(maxMessageCounts(len(signedMsg.Signers))) {
 		return ErrTooManyMessagesPerRound
 	}
 
