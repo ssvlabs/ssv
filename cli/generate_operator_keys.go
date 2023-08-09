@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
+
 	"os"
 	"path/filepath"
 
