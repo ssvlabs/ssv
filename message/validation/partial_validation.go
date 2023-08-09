@@ -23,6 +23,11 @@ func (mv *MessageValidator) validatePartialSignatureMessage(share *ssvtypes.SSVS
 		return fmt.Errorf("size exceeded")
 	}
 
+	role := msg.GetID().GetRoleType()
+	if !mv.partialSignatureTypeMatchesRole(signedMsg.Message.Type, role) {
+		return fmt.Errorf("partial signature type and role don't match")
+	}
+
 	if err := mv.validPartialSigners(share, signedMsg); err != nil {
 		return err
 	}
@@ -34,7 +39,6 @@ func (mv *MessageValidator) validatePartialSignatureMessage(share *ssvtypes.SSVS
 		return err
 	}
 
-	role := msg.GetID().GetRoleType()
 	consensusID := ConsensusID{
 		PubKey: phase0.BLSPubKey(msg.GetID().GetPubKey()),
 		Role:   role,
@@ -48,6 +52,25 @@ func (mv *MessageValidator) validatePartialSignatureMessage(share *ssvtypes.SSVS
 	return nil
 }
 
+func (mv *MessageValidator) partialSignatureTypeMatchesRole(msgType spectypes.PartialSigMsgType, role spectypes.BeaconRole) bool {
+	switch role {
+	case spectypes.BNRoleAttester:
+		return msgType == spectypes.PostConsensusPartialSig
+	case spectypes.BNRoleAggregator:
+		return msgType == spectypes.PostConsensusPartialSig || msgType == spectypes.SelectionProofPartialSig
+	case spectypes.BNRoleProposer:
+		return msgType == spectypes.PostConsensusPartialSig || msgType == spectypes.RandaoPartialSig
+	case spectypes.BNRoleSyncCommittee:
+		return msgType == spectypes.PostConsensusPartialSig
+	case spectypes.BNRoleSyncCommitteeContribution:
+		return msgType == spectypes.PostConsensusPartialSig || msgType == spectypes.ContributionProofs
+	case spectypes.BNRoleValidatorRegistration:
+		return msgType == spectypes.ValidatorRegistrationPartialSig
+	default:
+		panic("unknown role")
+	}
+}
+
 func (mv *MessageValidator) validPartialSignatures(share *ssvtypes.SSVShare, signedMsg *spectypes.SignedPartialSignatureMessage) error {
 	if err := mv.validateSignatureFormat(signedMsg.Signature); err != nil {
 		return err
@@ -57,7 +80,13 @@ func (mv *MessageValidator) validPartialSignatures(share *ssvtypes.SSVShare, sig
 		return fmt.Errorf("invalid signature: %w", err)
 	}
 
+	seen := map[[32]byte]struct{}{}
 	for _, message := range signedMsg.Message.Messages {
+		if _, ok := seen[message.SigningRoot]; ok {
+			return fmt.Errorf("duplicated partial signature message")
+		}
+		seen[message.SigningRoot] = struct{}{}
+
 		if err := mv.validateSignatureFormat(message.PartialSignature); err != nil {
 			return err
 		}

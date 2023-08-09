@@ -170,7 +170,7 @@ func (mv *MessageValidator) validateSlotState(signerState *SignerState, msgSlot 
 
 	// Advance slot & round, if needed.
 	if signerState.Slot < msgSlot {
-		signerState.Reset(msgSlot, 0) // TODO: 0 or specqbft.FirstRound?
+		signerState.Reset(msgSlot, specqbft.FirstRound)
 	}
 
 	return nil
