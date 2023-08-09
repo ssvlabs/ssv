@@ -17,6 +17,8 @@ var Mainnet = NetworkConfig{
 	RegistryContractAddr: "0xDD9BC35aE942eF0cFa76930954a156B3fF30a4E1",
 	Bootnodes: []string{
 		"enr:-Li4QHEPYASj5ZY3BXXKXAoWcoIw0ChgUlTtfOSxgNlYxlmpEWUR_K6Nr04VXsMpWSQxWWM4QHDyypnl92DQNpWkMS-GAYiWUvo8h2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCzmKVSJc2VjcDI1NmsxoQOW29na1pUAQw4jF3g0zsPgJG89ViHJOOkHFFklnC2UyIN0Y3CCE4qDdWRwgg-i",
+		// Taiga
+		"enr:-Li4QOg_lfX8uhSKGfm0RDbARe9j1ujim6JiQ-h8E1QB175DWIaGAvzXLxa-OsLjrX24zYstxMQkDHkQTdm-Qq406wuGAYj8K5H3h2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhJbmcQeJc2VjcDI1NmsxoQIYVg92mRyqn519Og6VA6fdgqeFxKgQO87IX64zJcmqhoN0Y3CCE4mDdWRwgg-h",
 	},
 	WhitelistedOperatorKeys: []string{
 		// Blox's exporter nodes.
