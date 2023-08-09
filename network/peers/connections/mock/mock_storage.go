@@ -145,7 +145,7 @@ func (m NodeStorage) GetPrivateKey() (*rsa.PrivateKey, bool, error) {
 	}
 }
 
-func (m NodeStorage) SetupPrivateKey(operatorKeyBase64 string, generateIfNone bool) ([]byte, error) {
+func (m NodeStorage) SetupPrivateKey(operatorKeyBase64 string) ([]byte, error) {
 	//TODO implement me
 	panic("implement me")
 }

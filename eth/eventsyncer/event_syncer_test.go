@@ -198,7 +198,11 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database) (operatorstora
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
-	operatorPubKey, err := nodeStorage.SetupPrivateKey("", true)
+	_, pv, err := rsaencryption.GenerateKeys()
+	if err != nil {
+		logger.Fatal("failed generating operator key %v", zap.Error(err))
+	}
+	operatorPubKey, err := nodeStorage.SetupPrivateKey(base64.StdEncoding.EncodeToString(pv))
 	if err != nil {
 		logger.Fatal("could not setup operator private key", zap.Error(err))
 	}
