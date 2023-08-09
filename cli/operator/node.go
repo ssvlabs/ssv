@@ -132,8 +132,13 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.P2pNetworkConfig.Permissioned = permissioned
 		cfg.P2pNetworkConfig.WhitelistedOperatorKeys = append(cfg.P2pNetworkConfig.WhitelistedOperatorKeys, networkConfig.WhitelistedOperatorKeys...)
+		cfg.P2pNetworkConfig.NodeStorage = nodeStorage
+		cfg.P2pNetworkConfig.ForkVersion = forkVersion
+		cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorData.PublicKey)
+		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
+		cfg.P2pNetworkConfig.Network = networkConfig
 
-		p2pNetwork := setupP2P(forkVersion, operatorData, db, logger, networkConfig)
+		p2pNetwork := setupP2P(logger, db)
 
 		slotTicker := slot_ticker.NewTicker(cmd.Context(), networkConfig)
 
@@ -445,28 +450,15 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, forksprot
 }
 
 func setupP2P(
-	forkVersion forksprotocol.ForkVersion,
-	operatorData *registrystorage.OperatorData,
-	db basedb.Database,
 	logger *zap.Logger,
-	network networkconfig.NetworkConfig,
+	db basedb.Database,
 ) network.P2PNetwork {
 	istore := ssv_identity.NewIdentityStore(db)
 	netPrivKey, err := istore.SetupNetworkKey(logger, cfg.NetworkPrivateKey)
 	if err != nil {
 		logger.Fatal("failed to setup network private key", zap.Error(err))
 	}
-
-	cfg.P2pNetworkConfig.NodeStorage, err = operatorstorage.NewNodeStorage(logger, db)
-	if err != nil {
-		logger.Fatal("failed to create node storage", zap.Error(err))
-	}
-
 	cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
-	cfg.P2pNetworkConfig.ForkVersion = forkVersion
-	cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorData.PublicKey)
-	cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
-	cfg.P2pNetworkConfig.Network = network
 
 	return p2pv1.New(logger, &cfg.P2pNetworkConfig)
 }
