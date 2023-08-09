@@ -1,12 +1,14 @@
 #
 # STEP 1: Prepare environment
 #
-FROM golang:1.19 AS preparer
+FROM golang:1.20.5-bookworm AS preparer
 
-RUN apt-get update                                                        && \
-  DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
-  curl git zip unzip wget g++ gcc-aarch64-linux-gnu bzip2 make      \
-  && rm -rf /var/lib/apt/lists/*
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update
+RUN apt-get install -yq --no-install-recommends \
+  curl git bzip2 g++ gcc-aarch64-linux-gnu make
+RUN rm -rf /var/lib/apt/lists/*
+
 # install jemalloc
 WORKDIR /tmp/jemalloc-temp
 RUN curl -s -L "https://github.com/jemalloc/jemalloc/releases/download/5.2.1/jemalloc-5.2.1.tar.bz2" -o jemalloc.tar.bz2 \
@@ -45,7 +47,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 #
 # STEP 3: Prepare image to run the binary
 #
-FROM alpine:3.12 AS runner
+FROM alpine:3.18 AS runner
 
 # Install ca-certificates, bash
 RUN apk -v --update add ca-certificates bash make  bind-tools && \

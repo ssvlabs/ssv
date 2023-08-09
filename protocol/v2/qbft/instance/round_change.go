@@ -10,7 +10,6 @@ import (
 
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // uponRoundChange process round change messages.
@@ -30,8 +29,11 @@ func (i *Instance) uponRoundChange(
 		return nil // UponCommit was already called
 	}
 
-	logger = logger.With(fields.Round(i.State.Round),
-		fields.Height(i.State.Height))
+	logger = logger.With(
+		fields.Round(i.State.Round),
+		fields.Height(i.State.Height),
+		zap.Uint64("msg_round", uint64(signedRoundChange.Message.Round)),
+	)
 
 	logger.Debug("🔄 got round change",
 		fields.Root(signedRoundChange.Message.Root),
@@ -247,9 +249,10 @@ func validRoundChangeForData(
 		return errors.New("msg allows 1 signer")
 	}
 
-	if err := types.VerifyByOperators(signedMsg.Signature, signedMsg, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, state.Share.Committee); err != nil {
-		return errors.Wrap(err, "msg signature invalid")
-	}
+	// TODO: remove as it's done in message validator
+	//if err := types.VerifyByOperators(signedMsg.Signature, signedMsg, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, state.Share.Committee); err != nil {
+	//	return errors.Wrap(err, "msg signature invalid")
+	//}
 
 	if err := signedMsg.Message.Validate(); err != nil {
 		return errors.Wrap(err, "roundChange invalid")

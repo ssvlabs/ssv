@@ -4,6 +4,8 @@ import (
 	"fmt"
 )
 
+// TODO: add rejection flag or create a separate type
+// TODO: add inner error
 type validationError struct {
 	text string
 	got  any
