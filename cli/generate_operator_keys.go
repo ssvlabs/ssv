@@ -24,6 +24,9 @@ var generateOperatorKeysCmd = &cobra.Command{
 		passwordFilePath, _ := cmd.Flags().GetString("password-file")
 		privateKeyFilePath, _ := cmd.Flags().GetString("operator-key-file")
 		pk, sk, err := rsaencryption.GenerateKeys()
+		if err != nil && privateKeyFilePath == "" {
+			logger.Fatal("Failed to create key and operator key wasn't provided", zap.Error(err))
+		}
 
 		// Resolve to absolute path
 		passwordAbsPath, err := filepath.Abs(passwordFilePath)
