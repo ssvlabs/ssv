@@ -10,6 +10,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/record"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
 type AnyNodeInfo interface {
@@ -142,5 +143,6 @@ func (sni *SignedNodeInfo) Consume(data []byte) error {
 		return errors.New("could not convert to NodeRecord")
 	}
 	*sni = *rec
+	zap.L().Debug("Consumed record", zap.Any("sni", sni))
 	return nil
 }

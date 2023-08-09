@@ -125,6 +125,7 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 		if err != nil {
 			return errors.Wrap(err, "could not seal self node info")
 		}
+		logger.Debug("sending self node info", zap.Any("node_info", self))
 		if err := respond(self); err != nil {
 			return errors.Wrap(err, "could not send self node info")
 		}
