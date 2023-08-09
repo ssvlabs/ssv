@@ -2,6 +2,7 @@ package topics
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -68,10 +69,18 @@ func NewSSVMsgValidator(logger *zap.Logger, fork forks.Fork, validator *validati
 		if validator != nil {
 			decodedMessage, err := validator.ValidateMessage(msg, time.Now())
 			if err != nil {
-				logger.Debug("rejecting invalid message", zap.Error(err))
+				var valErr validation.Error
+				if errors.As(err, &valErr) && valErr.Reject() {
+					logger.Debug("rejecting invalid message", zap.Error(err))
+					// TODO: pass metrics to NewSSVMsgValidator
+					reportValidationResult(validationResultInvalidRejected)
+					return pubsub.ValidationReject
+				}
+
+				logger.Debug("ignoring invalid message", zap.Error(err))
 				// TODO: pass metrics to NewSSVMsgValidator
-				reportValidationResult(validationResultInvalid)
-				return pubsub.ValidationReject
+				reportValidationResult(validationResultInvalidIgnored)
+				return pubsub.ValidationIgnore
 			}
 
 			pmsg.ValidatorData = decodedMessage

@@ -58,10 +58,11 @@ func init() {
 type msgValidationResult string
 
 var (
-	validationResultNoData   msgValidationResult = "no_data"
-	validationResultTooBig   msgValidationResult = "too_big"
-	validationResultEncoding msgValidationResult = "encoding"
-	validationResultInvalid  msgValidationResult = "invalid"
+	validationResultNoData          msgValidationResult = "no_data"
+	validationResultTooBig          msgValidationResult = "too_big"
+	validationResultEncoding        msgValidationResult = "encoding"
+	validationResultInvalidRejected msgValidationResult = "invalid_rejected"
+	validationResultInvalidIgnored  msgValidationResult = "invalid_ignored"
 )
 
 func reportValidationResult(result msgValidationResult) {
