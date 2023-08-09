@@ -115,6 +115,7 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 		if err != nil {
 			return errors.Wrap(err, "could not consume node info request")
 		}
+		logger.Debug("handleHandshake: consumed record", zap.Any("node_info", nodeInfo))
 
 		// Respond with our own NodeInfo.
 		privateKey, found, err := h.nodeStorage.GetPrivateKey()
@@ -125,7 +126,7 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 		if err != nil {
 			return errors.Wrap(err, "could not seal self node info")
 		}
-		logger.Debug("sending self node info", zap.Any("node_info", self))
+		logger.Debug("sending self node info", zap.Any("node_info", self), fields.PeerID(pid))
 		if err := respond(self); err != nil {
 			return errors.Wrap(err, "could not send self node info")
 		}
@@ -156,6 +157,7 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 }
 
 func (h *handshaker) verifyTheirNodeInfo(logger *zap.Logger, sender peer.ID, ani records.AnyNodeInfo) error {
+	logger.Debug("verifyTheirNodeInfo", zap.Any("node_info", ani))
 	h.updateNodeSubnets(logger, sender, ani.GetNodeInfo())
 
 	if err := h.applyFilters(sender, ani); err != nil {
@@ -243,6 +245,7 @@ func (h *handshaker) requestNodeInfo(logger *zap.Logger, conn libp2pnetwork.Conn
 	if err := nodeInfo.Consume(resBytes); err != nil {
 		return nil, errors.Wrap(errConsumingMessage, err.Error())
 	}
+	logger.Debug("requestNodeInfo: consumed record", zap.Any("node_info", nodeInfo))
 	return nodeInfo, nil
 }
 
