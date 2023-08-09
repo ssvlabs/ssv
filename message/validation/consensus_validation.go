@@ -95,7 +95,7 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 	state := mv.consensusState(consensusID)
 	for _, signer := range signedMsg.Signers {
 		if err := mv.validateSignerBehavior(state, signer, msg); err != nil {
-			return fmt.Errorf("bad signed behavior: %w", err)
+			return fmt.Errorf("bad signer behavior: %w", err)
 		}
 	}
 
