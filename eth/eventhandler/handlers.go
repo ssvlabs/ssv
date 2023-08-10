@@ -138,7 +138,7 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 		return nil, fmt.Errorf("failed to get next nonce: %w", nonceErr)
 	}
 
-	// Bump nonce. This would be reverted later if the handling fails,
+	// Bump nonce. This transaction would be reverted later if the handling fails,
 	// unless the failure is due to a malformed event.
 	if err := eh.nodeStorage.BumpNonce(txn, event.Owner); err != nil {
 		return nil, err
