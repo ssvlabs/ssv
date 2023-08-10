@@ -183,10 +183,6 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 			if errors.As(err, &malformedEventError) {
 				logger.Warn("malformed event", zap.Error(err))
 
-				if err := eh.nodeStorage.BumpNonce(txn, event.Owner); err != nil {
-					return nil, fmt.Errorf("bump nonce: %w", err)
-				}
-
 				return nil, err
 			}
 
