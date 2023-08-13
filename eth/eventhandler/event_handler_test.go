@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/bloxapp/ssv/operator/validator"
+	"github.com/bloxapp/ssv/operator/validator/mocks"
 	"math/big"
 	"net/http/httptest"
 	"strings"
@@ -32,7 +34,6 @@ import (
 	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/networkconfig"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/operator/validator"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
@@ -107,6 +108,9 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	// Encode shares
 	encodedValidatorShares, err := validatorShares.Encode()
 	require.NoError(t, err)
+
+	// Receive event, unmarshall, parse, check parse event is not nil or with error,
+	// public key is correct, owner is correct, operator id is correct
 	t.Run("test OperatorAdded event handle", func(t *testing.T) {
 		// Call the contract method
 		packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(operatorPubKey.Serialize())
@@ -149,6 +153,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.Equal(t, operatorAddedEvent.Owner, data.OwnerAddress)
 		require.Equal(t, operatorPubKey.Serialize(), data.PublicKey)
 	})
+
+	// Receive event, unmarshall, parse, check parse event is not nil or with error, operator id is correct
 	t.Run("test OperatorRemoved event handle", func(t *testing.T) {
 		// Call the contract method
 		_, err = boundContract.SimcontractTransactor.RemoveOperator(auth, 1)
@@ -182,6 +188,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.Equal(t, 1, len(operators))
 	})
 
+	// Receive event, unmarshall, parse, check parse event is not nil or with an error,
+	// public key is correct, owner is correct, operator ids are correct, shares are correct
 	t.Run("test ValidatorAdded event handle", func(t *testing.T) {
 		// pubKey, err := hex.DecodeString(strings.TrimPrefix("0x89913833b5533c1089a957ea185daecc0c5719165f7cbb7ba971c2dcf916be32d6c620dab56888bc278515bf27aebc5f", "0x"))
 		// require.NoError(t, err)
@@ -228,6 +236,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	// Receive event, unmarshall, parse, check parse event is not nil or with an error,
+	// public key is correct, owner is correct, operator ids are correct
 	t.Run("test ValidatorRemoved event handle", func(t *testing.T) {
 		_, err = boundContract.SimcontractTransactor.RemoveValidator(
 			auth,
@@ -258,6 +268,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	// Receive event, unmarshall, parse, check parse event is not nil or with an error, owner is correct, operator ids are correct
 	t.Run("test ClusterLiquidated event handle", func(t *testing.T) {
 		_, err = boundContract.SimcontractTransactor.Liquidate(
 			auth,
@@ -288,6 +299,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	// Receive event, unmarshall, parse, check parse event is not nil or with an error, owner is correct, operator ids are correct
 	t.Run("test ClusterReactivated event handle", func(t *testing.T) {
 		_, err = boundContract.SimcontractTransactor.Reactivate(
 			auth,
@@ -318,6 +330,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	// Receive event, unmarshall, parse, check parse event is not nil or with an error, owner is correct, fee recipient is correct
 	t.Run("test FeeRecipientAddressUpdated event handle", func(t *testing.T) {
 		_, err = boundContract.SimcontractTransactor.SetFeeRecipientAddress(
 			auth,
@@ -343,6 +356,65 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		recepientData, _, err := eh.nodeStorage.GetRecipientData(nil, ethcommon.HexToAddress("0x71562b71999873DB5b286dF957af199Ec94617F7"))
 		require.NoError(t, err)
 		require.Equal(t, ethcommon.HexToAddress("0x1").String(), recepientData.FeeRecipient.String())
+	})
+
+	// Receive ValidatorAdded and ValidatorRemoved in one block,
+	t.Run("test ValidatorAdded + ValidatorRemoved events handling in the same block", func(t *testing.T) {
+		var tmpShares []byte
+		sig := operatorPrivKey.Sign(fmt.Sprintf("%s:%d", ethcommon.HexToAddress("0x71562b71999873DB5b286dF957af199Ec94617F7"), 1))
+		tmpShares = append(tmpShares, sig.Serialize()...)
+		for _, op := range validatorShares.Committee {
+			tmpShares = append(tmpShares, op.PubKey...)
+		}
+
+		// create validators cluster instance
+		callableCluster := &simcontract.CallableCluster{
+			ValidatorCount:  1,
+			NetworkFeeIndex: 1,
+			Index:           1,
+			Active:          true,
+			Balance:         big.NewInt(100_000_000),
+		}
+
+		// Call the contract methods, check no err
+		_, err = boundContract.SimcontractTransactor.RegisterValidator(
+			auth,
+			validatorShares.ValidatorPubKey,
+			[]uint64{1, 2, 3, 4},
+			encodedValidatorShares,
+			big.NewInt(100_000_000),
+			*callableCluster,
+		)
+		require.NoError(t, err)
+
+		_, err = boundContract.SimcontractTransactor.RemoveValidator(
+			auth,
+			validatorShares.ValidatorPubKey,
+			[]uint64{1, 2, 3, 4},
+			*callableCluster,
+		)
+		require.NoError(t, err)
+
+		// Execute the required txs to the contract
+		sim.Commit()
+
+		// testing util shares
+		block := <-logs
+		require.NotEmpty(t, block.Logs)
+		require.Equal(t, 2, len(block.Logs))
+		require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
+		require.Equal(t, ethcommon.HexToHash("0xccf4370403e5fbbde0cd3f13426479dcd8a5916b05db424b7a2c04978cf8ce6e"), block.Logs[1].Topics[0])
+
+		eventsCh := make(chan executionclient.BlockLogs)
+
+		go func() {
+			defer close(eventsCh)
+			eventsCh <- block
+		}()
+
+		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+		require.Equal(t, uint64(0x9), lastProcessedBlock)
+		require.NoError(t, err)
 	})
 }
 
@@ -401,6 +473,59 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger) (*
 		return nil, err
 	}
 	return eh, nil
+}
+
+// Copy of setupEventHandler, but with a mocked Validator Controller
+func setupEventHandlerWithMockedCtrl(t *testing.T, ctx context.Context, logger *zap.Logger) (*EventHandler, *mocks.MockController, error) {
+	options := basedb.Options{
+		Type:       "badger-memory",
+		Path:       "",
+		Reporting:  false,
+		GCInterval: 0,
+		Ctx:        ctx,
+	}
+
+	db, err := ssvstorage.GetStorageFactory(logger, options)
+	require.NoError(t, err)
+
+	storageMap := ibftstorage.NewStores()
+	nodeStorage, _ := setupOperatorStorage(logger, db)
+	testNetworkConfig := networkconfig.TestNetwork
+
+	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, true, "")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	bc := beacon.NewMockBeaconNode(ctrl)
+	validatorCtrl := mocks.NewMockController(ctrl)
+
+	contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
+	require.NoError(t, err)
+
+	parser := eventparser.New(contractFilterer)
+
+	eh, err := New(
+		nodeStorage,
+		parser,
+		validatorCtrl,
+		testNetworkConfig.Domain,
+		validatorCtrl,
+		nodeStorage.GetPrivateKey,
+		keyManager,
+		bc,
+		storageMap,
+		WithFullNode(),
+		WithLogger(logger))
+	if err != nil {
+		return nil, nil, err
+	}
+	validatorCtrl.EXPECT().GetOperatorData().Return(&registrystorage.OperatorData{}).AnyTimes()
+
+	return eh, validatorCtrl, nil
 }
 
 func setupOperatorStorage(logger *zap.Logger, db basedb.Database) (operatorstorage.Storage, *registrystorage.OperatorData) {
