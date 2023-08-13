@@ -360,13 +360,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 	// Receive ValidatorAdded and ValidatorRemoved in one block,
 	t.Run("test ValidatorAdded + ValidatorRemoved events handling in the same block", func(t *testing.T) {
-		var tmpShares []byte
-		sig := operatorPrivKey.Sign(fmt.Sprintf("%s:%d", ethcommon.HexToAddress("0x71562b71999873DB5b286dF957af199Ec94617F7"), 1))
-		tmpShares = append(tmpShares, sig.Serialize()...)
-		for _, op := range validatorShares.Committee {
-			tmpShares = append(tmpShares, op.PubKey...)
-		}
-
 		// create validators cluster instance
 		callableCluster := &simcontract.CallableCluster{
 			ValidatorCount:  1,
