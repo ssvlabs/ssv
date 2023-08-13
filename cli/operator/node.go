@@ -71,7 +71,6 @@ type config struct {
 	P2pNetworkConfig           p2pv1.Config                     `yaml:"p2p"`
 	KeyStore                   KeyStore                         `yaml:"KeyStore"`
 	OperatorPrivateKey         string                           `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
-	GenerateOperatorPrivateKey bool                             `yaml:"GenerateOperatorPrivateKey" env:"GENERATE_OPERATOR_KEY" env-description:"Whether to generate operator key if none is passed by config"`
 	MetricsAPIPort             int                              `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port to listen on for the metrics API."`
 	EnableProfile              bool                             `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
 	NetworkPrivateKey          string                           `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
@@ -132,8 +131,13 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.P2pNetworkConfig.Permissioned = permissioned
 		cfg.P2pNetworkConfig.WhitelistedOperatorKeys = append(cfg.P2pNetworkConfig.WhitelistedOperatorKeys, networkConfig.WhitelistedOperatorKeys...)
+		cfg.P2pNetworkConfig.NodeStorage = nodeStorage
+		cfg.P2pNetworkConfig.ForkVersion = forkVersion
+		cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorData.PublicKey)
+		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
+		cfg.P2pNetworkConfig.Network = networkConfig
 
-		p2pNetwork := setupP2P(forkVersion, operatorData, db, logger, networkConfig)
+		p2pNetwork := setupP2P(logger, db)
 
 		slotTicker := slot_ticker.NewTicker(cmd.Context(), networkConfig)
 
@@ -388,7 +392,7 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database) (operatorstora
 		cfg.OperatorPrivateKey = rsaencryption.ExtractPrivateKey(privateKey)
 	}
 
-	operatorPubKey, err := nodeStorage.SetupPrivateKey(cfg.OperatorPrivateKey, cfg.GenerateOperatorPrivateKey)
+	operatorPubKey, err := nodeStorage.SetupPrivateKey(cfg.OperatorPrivateKey)
 	if err != nil {
 		logger.Fatal("could not setup operator private key", zap.Error(err))
 	}
@@ -445,28 +449,15 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, forksprot
 }
 
 func setupP2P(
-	forkVersion forksprotocol.ForkVersion,
-	operatorData *registrystorage.OperatorData,
-	db basedb.Database,
 	logger *zap.Logger,
-	network networkconfig.NetworkConfig,
+	db basedb.Database,
 ) network.P2PNetwork {
 	istore := ssv_identity.NewIdentityStore(db)
 	netPrivKey, err := istore.SetupNetworkKey(logger, cfg.NetworkPrivateKey)
 	if err != nil {
 		logger.Fatal("failed to setup network private key", zap.Error(err))
 	}
-
-	cfg.P2pNetworkConfig.NodeStorage, err = operatorstorage.NewNodeStorage(logger, db)
-	if err != nil {
-		logger.Fatal("failed to create node storage", zap.Error(err))
-	}
-
 	cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
-	cfg.P2pNetworkConfig.ForkVersion = forkVersion
-	cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorData.PublicKey)
-	cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
-	cfg.P2pNetworkConfig.Network = network
 
 	return p2pv1.New(logger, &cfg.P2pNetworkConfig)
 }

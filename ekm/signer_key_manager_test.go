@@ -5,10 +5,11 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/hex"
+	"testing"
+
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/eth2-key-manager/wallets/hd"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
-	"testing"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -59,11 +60,14 @@ func testKeyManager(t *testing.T) spectypes.KeyManager {
 }
 
 func TestEncryptedKeyManager(t *testing.T) {
+	// Generate key 1.
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 	keyBytes := x509.MarshalPKCS1PrivateKey(privateKey)
 	encryptionKey, err := rsaencryption.HashRsaKey(keyBytes)
 	require.NoError(t, err)
+
+	// Create account with key 1.
 	threshold.Init()
 	sk := bls.SecretKey{}
 	sk.SetByCSPRNG()
@@ -77,7 +81,7 @@ func TestEncryptedKeyManager(t *testing.T) {
 	defer func(db basedb.Database, logger *zap.Logger) {
 		err := db.Close()
 		if err != nil {
-
+			t.Fatal(err)
 		}
 	}(db, logging.TestLogger(t))
 	hdwallet := hd.NewWallet(&core.WalletContext{Storage: signerStorage})
@@ -85,18 +89,28 @@ func TestEncryptedKeyManager(t *testing.T) {
 	a, err := hdwallet.CreateValidatorAccountFromPrivateKey(sk.Serialize(), &index)
 	require.NoError(t, err)
 
+	// Load account with key 1 (should succeed).
 	wallet, err := signerStorage.OpenWallet()
 	require.NoError(t, err)
-	// open
 	_, err = wallet.AccountByPublicKey(hex.EncodeToString(a.ValidatorPublicKey()))
 	require.NoError(t, err)
+
+	// Generate key 2.
+	privateKey2, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	keyBytes2 := x509.MarshalPKCS1PrivateKey(privateKey2)
+	encryptionKey2, err := rsaencryption.HashRsaKey(keyBytes2)
+	require.NoError(t, err)
+
+	// Load account with key 2 (should fail).
 	wallet2, err := signerStorage.OpenWallet()
 	require.NoError(t, err)
-	err = signerStorage.SetEncryptionKey(encryptionKey[:len(encryptionKey)-1] + "a")
+	err = signerStorage.SetEncryptionKey(encryptionKey2)
 	require.NoError(t, err)
 	_, err = wallet2.AccountByPublicKey(hex.EncodeToString(a.ValidatorPublicKey()))
 	require.True(t, errors.Is(err, ErrCantDecrypt))
 
+	// Retry with key 1 (should succeed).
 	wallet3, err := signerStorage.OpenWallet()
 	require.NoError(t, err)
 	err = signerStorage.SetEncryptionKey(encryptionKey)

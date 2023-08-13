@@ -42,7 +42,7 @@ type Storage interface {
 	Shares() registrystorage.Shares
 
 	GetPrivateKey() (*rsa.PrivateKey, bool, error)
-	SetupPrivateKey(operatorKeyBase64 string, generateIfNone bool) ([]byte, error)
+	SetupPrivateKey(operatorKeyBase64 string) ([]byte, error)
 }
 
 type storage struct {
@@ -217,14 +217,14 @@ func (s *storage) GetPrivateKey() (*rsa.PrivateKey, bool, error) {
 }
 
 // SetupPrivateKey setup operator private key at the init of the node and set OperatorPublicKey config
-func (s *storage) SetupPrivateKey(operatorKeyBase64 string, generateIfNone bool) ([]byte, error) {
+func (s *storage) SetupPrivateKey(operatorKeyBase64 string) ([]byte, error) {
 	operatorKeyByte, err := base64.StdEncoding.DecodeString(operatorKeyBase64)
 	if err != nil {
 		return nil, errors.Wrap(err, "Failed to decode base64")
 	}
 	var operatorKey = string(operatorKeyByte)
 
-	if err := s.validateKey(generateIfNone, operatorKey); err != nil {
+	if err := s.validateKey(operatorKey); err != nil {
 		return nil, err
 	}
 
@@ -247,7 +247,7 @@ func (s *storage) SetupPrivateKey(operatorKeyBase64 string, generateIfNone bool)
 }
 
 // validateKey validate provided and exist key. save if needed.
-func (s *storage) validateKey(generateIfNone bool, operatorKey string) error {
+func (s *storage) validateKey(operatorKey string) error {
 	// check if passed new key. if so, save new key (force to always save key when provided)
 	storedPrivateKey, privateKeyExist, err := s.GetHashedPrivateKey()
 	if err != nil {
@@ -270,14 +270,7 @@ func (s *storage) validateKey(generateIfNone bool, operatorKey string) error {
 	}
 	// if no, check  if you need to generate. if no, return error
 	if !found {
-		if !generateIfNone {
-			return errors.New("key not exist or provided")
-		}
-		_, skByte, err := rsaencryption.GenerateKeys()
-		if err != nil {
-			return errors.WithMessage(err, "failed to generate new key")
-		}
-		return s.savePrivateKey(string(skByte))
+		return errors.New("key not exist or provided")
 	}
 
 	// key exist in storage.

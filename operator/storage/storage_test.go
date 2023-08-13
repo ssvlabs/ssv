@@ -54,60 +54,40 @@ func TestSaveAndGetPrivateKey(t *testing.T) {
 
 func TestSetupPrivateKey(t *testing.T) {
 	tests := []struct {
-		name           string
-		existKey       string
-		passedKey      string
-		generateIfNone bool
-		expectedError  string
+		name          string
+		existKey      string
+		passedKey     string
+		expectedError string
 	}{
 		{
-			name:           "key not exist, passing nothing", // expected - raise an error
-			existKey:       "",
-			passedKey:      "",
-			generateIfNone: false,
-			expectedError:  "key not exist or provided",
+			name:          "key not exist, passing nothing", // expected - raise an error
+			existKey:      "",
+			passedKey:     "",
+			expectedError: "key not exist or provided",
 		},
 		{
-			name:           "key not exist passing, nothing (with generate flag)", // expected - generate new key
-			existKey:       "",
-			passedKey:      "",
-			generateIfNone: true,
-			expectedError:  "",
+			name:          "key not exist, passing key in env", // expected - set the passed key
+			existKey:      "",
+			passedKey:     skPem2,
+			expectedError: "",
 		},
 		{
-			name:           "key not exist, passing key in env", // expected - set the passed key
-			existKey:       "",
-			passedKey:      skPem2,
-			generateIfNone: false,
-			expectedError:  "",
+			name:          "key exist, passing key in env", // expected - throw ERROR of data encrypted with different key
+			existKey:      skPem,
+			passedKey:     skPem2,
+			expectedError: "Operator private key is not matching the one encrypted the storage",
 		},
 		{
-			name:           "key exist, passing key in env", // expected - throw ERROR of data encrypted with different key
-			existKey:       skPem,
-			passedKey:      skPem2,
-			generateIfNone: false,
-			expectedError:  "Operator private key is not matching the one encrypted the storage",
+			name:          "key exist, passing nothing", // expected - throw ERROR of data encrypted with different key
+			existKey:      skPem,
+			passedKey:     "",
+			expectedError: "Operator private key is not matching the one encrypted the storage",
 		},
 		{
-			name:           "key exist, passing nothing", // expected - throw ERROR of data encrypted with different key
-			existKey:       skPem,
-			passedKey:      "",
-			generateIfNone: false,
-			expectedError:  "Operator private key is not matching the one encrypted the storage",
-		},
-		{
-			name:           "key exist, passing nothing (with generate flag)", // expected - throw ERROR of data encrypted with different key
-			existKey:       skPem,
-			passedKey:      "",
-			generateIfNone: true,
-			expectedError:  "Operator private key is not matching the one encrypted the storage",
-		},
-		{
-			name:           "error raised", // expected - throw an error
-			existKey:       "",
-			passedKey:      "xxx",
-			generateIfNone: false,
-			expectedError:  "Failed to decode base64: illegal base64 data at input byte 0",
+			name:          "error raised", // expected - throw an error
+			existKey:      "",
+			passedKey:     "xxx",
+			expectedError: "Failed to decode base64: illegal base64 data at input byte 0",
 		},
 	}
 
@@ -143,7 +123,7 @@ func TestSetupPrivateKey(t *testing.T) {
 				require.Equal(t, string(existKeyByte), string(rsaencryption.PrivateKeyToByte(sk)))
 			}
 
-			pk, err := operatorStorage.SetupPrivateKey(test.passedKey, test.generateIfNone)
+			pk, err := operatorStorage.SetupPrivateKey(test.passedKey)
 			if test.expectedError != "" {
 				require.NotNil(t, err)
 				require.Equal(t, test.expectedError, err.Error())
