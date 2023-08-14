@@ -29,11 +29,11 @@ func GetNetworkConfigByName(name string) (NetworkConfig, error) {
 
 type NetworkConfig struct {
 	Name                    string
-	Beacon                  beacon.Network
+	Beacon                  beacon.BeaconNetwork
 	Domain                  spectypes.DomainType
 	GenesisEpoch            spec.Epoch
-	ETH1SyncOffset          *big.Int
-	RegistryContractAddr    string
+	RegistrySyncOffset      *big.Int
+	RegistryContractAddr    string // TODO: ethcommon.Address
 	Bootnodes               []string
 	WhitelistedOperatorKeys []string
 }

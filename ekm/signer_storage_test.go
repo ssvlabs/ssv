@@ -29,7 +29,7 @@ func _byteArray(input string) []byte {
 	return res
 }
 
-func getBaseStorage(logger *zap.Logger) (basedb.IDb, error) {
+func getBaseStorage(logger *zap.Logger) (basedb.Database, error) {
 	return ssvstorage.GetStorageFactory(logger, basedb.Options{
 		Type: "badger-memory",
 		Path: "",
@@ -42,9 +42,9 @@ func newStorageForTest(t *testing.T) (Storage, func()) {
 	if err != nil {
 		return nil, func() {}
 	}
-	s := NewSignerStorage(db, networkconfig.TestNetwork.Beacon, logger)
+	s := NewSignerStorage(db, networkconfig.TestNetwork.Beacon.GetNetwork(), logger)
 	return s, func() {
-		db.Close(logging.TestLogger(t))
+		db.Close()
 	}
 }
 
