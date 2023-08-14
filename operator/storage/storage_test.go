@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
@@ -12,14 +13,10 @@ import (
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-
+	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
-
-	spectypes "github.com/bloxapp/ssv-spec/types"
-
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )
 
 var (
