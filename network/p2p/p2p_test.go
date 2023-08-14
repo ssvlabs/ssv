@@ -167,11 +167,11 @@ func TestWaitSubsetOfPeers(t *testing.T) {
 		expectedPeersLen int
 		expectedErr      string
 	}{
-		{"Valid input", 5, 5, time.Millisecond * 20, 5, ""},
-		{"Zero minPeers", 0, 10, time.Millisecond * 20, 0, ""},
-		{"maxPeers less than minPeers", 10, 5, time.Millisecond * 20, 0, "minPeers should not be greater than maxPeers"},
-		{"Negative minPeers", -1, 10, time.Millisecond * 20, 0, "minPeers and maxPeers should not be negative"},
-		{"Negative timeout", 10, 20, time.Duration(-1), 0, "timeout should be positive"},
+		{"Valid input", 5, 5, time.Millisecond * 50, 5, ""},
+		{"Zero minPeers", 0, 10, time.Millisecond * 50, 0, ""},
+		{"maxPeers less than minPeers", 10, 5, time.Millisecond * 50, 0, "minPeers should not be greater than maxPeers"},
+		{"Negative minPeers", -1, 10, time.Millisecond * 50, 0, "minPeers and maxPeers should not be negative"},
+		{"Negative timeout", 10, 50, time.Duration(-1), 0, "timeout should be positive"},
 	}
 
 	for _, tt := range tests {

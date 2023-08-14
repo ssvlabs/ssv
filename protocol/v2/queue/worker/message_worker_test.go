@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
-
-	"github.com/stretchr/testify/require"
 )
 
 func TestWorker(t *testing.T) {

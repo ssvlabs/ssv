@@ -91,7 +91,7 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 		return nil, ErrInvalidRole
 	}
 
-	share := mv.shareStorage.Get(ssvMessage.MsgID.GetPubKey())
+	share := mv.shareStorage.Get(nil, ssvMessage.MsgID.GetPubKey())
 	if share == nil {
 		return nil, ErrUnknownValidator
 	}

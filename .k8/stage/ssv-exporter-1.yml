@@ -151,8 +151,6 @@ spec:
               value: "16000"
             - name: ENABLE_PROFILE
               value: "true"
-            - name: GENERATE_OPERATOR_KEY
-              value: "true"
             - name: UDP_PORT
               value: "12000"
             - name: TCP_PORT

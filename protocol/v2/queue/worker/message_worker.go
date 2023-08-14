@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"log"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -19,8 +18,9 @@ var (
 )
 
 func init() {
+	logger := zap.L()
 	if err := prometheus.Register(metricsMsgProcessing); err != nil {
-		log.Println("could not register prometheus collector")
+		logger.Debug("could not register prometheus collector")
 	}
 }
 
