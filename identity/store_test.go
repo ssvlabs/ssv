@@ -58,7 +58,7 @@ func TestSetupPrivateKey(t *testing.T) {
 
 			db, err := ssvstorage.GetStorageFactory(logging.TestLogger(t), options)
 			require.NoError(t, err)
-			defer db.Close(logger)
+			defer db.Close()
 
 			p2pStorage := identityStore{
 				db: db,

@@ -1,20 +1,32 @@
 package ekm
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/hex"
 	"testing"
+
+	"github.com/bloxapp/eth2-key-manager/core"
+	"github.com/bloxapp/eth2-key-manager/wallets/hd"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
+
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/storage/basedb"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/prysmaticlabs/go-bitfield"
-	"github.com/stretchr/testify/require"
-
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/utils/threshold"
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/prysmaticlabs/go-bitfield"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -32,7 +44,7 @@ func testKeyManager(t *testing.T) spectypes.KeyManager {
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 
-	km, err := NewETHKeyManagerSigner(logger, db, networkconfig.TestNetwork, true)
+	km, err := NewETHKeyManagerSigner(logger, db, networkconfig.TestNetwork, true, "")
 	require.NoError(t, err)
 
 	sk1 := &bls.SecretKey{}
@@ -45,6 +57,66 @@ func testKeyManager(t *testing.T) spectypes.KeyManager {
 	require.NoError(t, km.AddShare(sk2))
 
 	return km
+}
+
+func TestEncryptedKeyManager(t *testing.T) {
+	// Generate key 1.
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	keyBytes := x509.MarshalPKCS1PrivateKey(privateKey)
+	encryptionKey, err := rsaencryption.HashRsaKey(keyBytes)
+	require.NoError(t, err)
+
+	// Create account with key 1.
+	threshold.Init()
+	sk := bls.SecretKey{}
+	sk.SetByCSPRNG()
+	index := 0
+	logger := logging.TestLogger(t)
+	db, err := getBaseStorage(logger)
+	require.NoError(t, err)
+	signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon.GetNetwork(), logger)
+	err = signerStorage.SetEncryptionKey(encryptionKey)
+	require.NoError(t, err)
+	defer func(db basedb.Database, logger *zap.Logger) {
+		err := db.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+	}(db, logging.TestLogger(t))
+	hdwallet := hd.NewWallet(&core.WalletContext{Storage: signerStorage})
+	require.NoError(t, signerStorage.SaveWallet(hdwallet))
+	a, err := hdwallet.CreateValidatorAccountFromPrivateKey(sk.Serialize(), &index)
+	require.NoError(t, err)
+
+	// Load account with key 1 (should succeed).
+	wallet, err := signerStorage.OpenWallet()
+	require.NoError(t, err)
+	_, err = wallet.AccountByPublicKey(hex.EncodeToString(a.ValidatorPublicKey()))
+	require.NoError(t, err)
+
+	// Generate key 2.
+	privateKey2, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	keyBytes2 := x509.MarshalPKCS1PrivateKey(privateKey2)
+	encryptionKey2, err := rsaencryption.HashRsaKey(keyBytes2)
+	require.NoError(t, err)
+
+	// Load account with key 2 (should fail).
+	wallet2, err := signerStorage.OpenWallet()
+	require.NoError(t, err)
+	err = signerStorage.SetEncryptionKey(encryptionKey2)
+	require.NoError(t, err)
+	_, err = wallet2.AccountByPublicKey(hex.EncodeToString(a.ValidatorPublicKey()))
+	require.True(t, errors.Is(err, ErrCantDecrypt))
+
+	// Retry with key 1 (should succeed).
+	wallet3, err := signerStorage.OpenWallet()
+	require.NoError(t, err)
+	err = signerStorage.SetEncryptionKey(encryptionKey)
+	require.NoError(t, err)
+	_, err = wallet3.AccountByPublicKey(hex.EncodeToString(a.ValidatorPublicKey()))
+	require.NoError(t, err)
 }
 
 func TestSlashing(t *testing.T) {
@@ -187,6 +259,12 @@ func TestSlashing(t *testing.T) {
 		require.NotEqual(t, [32]byte{}, sig)
 	})
 	t.Run("slashable sign, fail", func(t *testing.T) {
+		_, sig, err := km.(*ethKeyManagerSigner).SignBeaconObject(beaconBlock, phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainProposer)
+		require.EqualError(t, err, "slashable proposal (HighestProposalVote), not signing")
+		require.Equal(t, [32]byte{}, sig)
+	})
+	t.Run("slashable sign after duplicate AddShare, fail", func(t *testing.T) {
+		require.NoError(t, km.AddShare(sk1))
 		_, sig, err := km.(*ethKeyManagerSigner).SignBeaconObject(beaconBlock, phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainProposer)
 		require.EqualError(t, err, "slashable proposal (HighestProposalVote), not signing")
 		require.Equal(t, [32]byte{}, sig)

@@ -41,9 +41,9 @@ func Test_RunNotMigratingTwice(t *testing.T) {
 	migrations := Migrations{
 		{
 			Name: "not_migrating_twice",
-			Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte) error {
+			Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte, completed CompletedFunc) error {
 				count++
-				return opt.Db.Set(migrationsPrefix, key, migrationCompleted)
+				return completed(opt.Db)
 			},
 		},
 	}
@@ -112,9 +112,9 @@ func Test_NextMigrationNotExecutedOnFailure(t *testing.T) {
 func fakeMigration(name string, returnErr error) Migration {
 	return Migration{
 		Name: name,
-		Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte) error {
+		Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte, completed CompletedFunc) error {
 			return opt.Db.Update(func(txn basedb.Txn) error {
-				err := txn.Set(migrationsPrefix, key, migrationCompleted)
+				err := completed(txn)
 				if err != nil {
 					return err
 				}
