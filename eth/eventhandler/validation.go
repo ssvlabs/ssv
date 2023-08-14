@@ -7,6 +7,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/herumi/bls-eth-go-binary/bls"
 
+	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
@@ -24,11 +25,7 @@ func (eh *EventHandler) validateOperators(txn basedb.Txn, operators []uint64) er
 		return fmt.Errorf("no operators")
 	}
 
-	canBeQuorum := func(v int) bool {
-		return (v-1)%3 == 0 && (v-1)/3 != 0
-	}
-
-	if !canBeQuorum(len(operators)) {
+	if !ssvtypes.ValidCommitteeSize(len(operators)) {
 		return fmt.Errorf("given operator count (%d) cannot build a 3f+1 quorum", operatorCount)
 	}
 

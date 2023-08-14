@@ -84,6 +84,11 @@ func ComputeQuorumAndPartialQuorum(committeeSize int) (quorum uint64, partialQuo
 	return uint64(f*2 + 1), uint64(f + 1)
 }
 
+func ValidCommitteeSize(committeeSize int) bool {
+	f := (committeeSize - 1) / 3
+	return (committeeSize-1)%3 == 0 && f > 0 && f <= 4
+}
+
 // Metadata represents metadata of SSVShare.
 type Metadata struct {
 	BeaconMetadata *beaconprotocol.ValidatorMetadata

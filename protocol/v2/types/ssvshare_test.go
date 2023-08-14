@@ -1,6 +1,7 @@
 package types
 
 import (
+	"fmt"
 	"testing"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -55,6 +56,31 @@ func TestSSVShare_HasBeaconMetadata(t *testing.T) {
 		tc := tc
 		t.Run(tc.Name, func(t *testing.T) {
 			require.Equal(t, tc.Result, tc.ShareMetadata.HasBeaconMetadata())
+		})
+	}
+}
+
+func TestValidCommitteeSize(t *testing.T) {
+	tt := []struct {
+		sizes []int
+		valid bool
+	}{
+		{
+			sizes: []int{0, 1, 2, 3, 5, 6, 8, 9, 11, 12, 14, 15, 16, 17, 18, 19, -1, -4, -7},
+			valid: false,
+		},
+		{
+			sizes: []int{4, 7, 10, 13},
+			valid: true,
+		},
+	}
+
+	for _, tc := range tt {
+		tc := tc
+		t.Run(fmt.Sprintf("%v", tc.sizes), func(t *testing.T) {
+			for _, size := range tc.sizes {
+				require.Equal(t, tc.valid, ValidCommitteeSize(size))
+			}
 		})
 	}
 }
