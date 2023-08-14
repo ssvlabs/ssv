@@ -45,7 +45,7 @@ func Test_Validation(t *testing.T) {
 			Liquidated: false,
 		},
 	}
-	require.NoError(t, ns.Shares().Save(share))
+	require.NoError(t, ns.Shares().Save(nil, share))
 
 	netCfg := networkconfig.TestNetwork
 

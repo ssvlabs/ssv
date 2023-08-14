@@ -233,6 +233,20 @@ func (mr *MockBeaconNetworkMockRecorder) GetNetwork() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNetwork", reflect.TypeOf((*MockBeaconNetwork)(nil).GetNetwork))
 }
 
+// GetSlotEndTime mocks base method.
+func (m *MockBeaconNetwork) GetSlotEndTime(slot phase0.Slot) time.Time {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSlotEndTime", slot)
+	ret0, _ := ret[0].(time.Time)
+	return ret0
+}
+
+// GetSlotEndTime indicates an expected call of GetSlotEndTime.
+func (mr *MockBeaconNetworkMockRecorder) GetSlotEndTime(slot interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSlotEndTime", reflect.TypeOf((*MockBeaconNetwork)(nil).GetSlotEndTime), slot)
+}
+
 // GetSlotStartTime mocks base method.
 func (m *MockBeaconNetwork) GetSlotStartTime(slot phase0.Slot) time.Time {
 	m.ctrl.T.Helper()
