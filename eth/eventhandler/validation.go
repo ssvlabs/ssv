@@ -8,11 +8,12 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
+	"github.com/bloxapp/ssv/storage/basedb"
 )
 
 const maxOperators = 13
 
-func validateOperators(operators []uint64) error {
+func (eh *EventHandler) validateOperators(txn basedb.Txn, operators []uint64) error {
 	operatorCount := len(operators)
 
 	if operatorCount > maxOperators {
@@ -37,6 +38,15 @@ func validateOperators(operators []uint64) error {
 			return fmt.Errorf("duplicated operator ID (%d)", operatorID)
 		}
 		seenOperators[operatorID] = struct{}{}
+	}
+
+	exist, err := eh.nodeStorage.OperatorsExist(txn, operators)
+	if err != nil {
+		return fmt.Errorf("storage: %w", err)
+	}
+
+	if !exist {
+		return fmt.Errorf("not all operators exist")
 	}
 
 	return nil

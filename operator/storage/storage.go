@@ -91,6 +91,10 @@ func (s *storage) GetOperatorData(r basedb.Reader, id spectypes.OperatorID) (*re
 	return s.operatorStore.GetOperatorData(r, id)
 }
 
+func (s *storage) OperatorsExist(r basedb.Reader, ids []spectypes.OperatorID) (bool, error) {
+	return s.operatorStore.OperatorsExist(r, ids)
+}
+
 func (s *storage) SaveOperatorData(rw basedb.ReadWriter, operatorData *registrystorage.OperatorData) (bool, error) {
 	return s.operatorStore.SaveOperatorData(rw, operatorData)
 }

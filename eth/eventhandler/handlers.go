@@ -137,7 +137,7 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 		return nil, fmt.Errorf("failed to get next nonce: %w", nonceErr)
 	}
 
-	if err := validateOperators(event.OperatorIds); err != nil {
+	if err := eh.validateOperators(txn, event.OperatorIds); err != nil {
 		return nil, &MalformedEventError{Err: err}
 	}
 
