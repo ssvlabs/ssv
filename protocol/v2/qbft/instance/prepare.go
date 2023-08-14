@@ -95,6 +95,11 @@ func getRoundChangeJustification(state *specqbft.State, config qbft.IConfig, pre
 			ret = append(ret, msg)
 		}
 	}
+
+	if !specqbft.HasQuorum(state.Share, ret) {
+		return nil, nil
+	}
+
 	return ret, nil
 }
 
