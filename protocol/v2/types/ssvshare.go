@@ -86,7 +86,7 @@ func ComputeQuorumAndPartialQuorum(committeeSize int) (quorum uint64, partialQuo
 
 func ValidCommitteeSize(committeeSize int) bool {
 	f := (committeeSize - 1) / 3
-	return (committeeSize-1)%3 == 0 && f > 0 && f <= 4
+	return (committeeSize-1)%3 == 0 && f >= 1 && f <= 4
 }
 
 // Metadata represents metadata of SSVShare.
