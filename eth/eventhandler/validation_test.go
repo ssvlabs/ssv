@@ -1,4 +1,4 @@
-package validator
+package eventhandler
 
 import (
 	"testing"
