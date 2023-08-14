@@ -101,7 +101,7 @@ var StartNodeCmd = &cobra.Command{
 		defer logging.CapturePanic(logger)
 		networkConfig, forkVersion, err := setupSSVNetwork(logger)
 		if err != nil {
-			log.Fatal("could not setup network", err)
+			logger.Fatal("could not setup network", zap.Error(err))
 		}
 		cfg.DBOptions.Ctx = cmd.Context()
 		db, err := setupDB(logger, networkConfig.Beacon.GetNetwork())
@@ -111,9 +111,8 @@ var StartNodeCmd = &cobra.Command{
 
 		nodeStorage, operatorData := setupOperatorStorage(logger, db)
 
-		if err != nil {
-			logger.Fatal("could not run post storage migrations", zap.Error(err))
-		}
+		configMatches(logger, networkConfig, nodeStorage)
+
 		operatorKey, _, _ := nodeStorage.GetPrivateKey()
 		keyBytes := x509.MarshalPKCS1PrivateKey(operatorKey)
 		hashedKey, _ := rsaencryption.HashRsaKey(keyBytes)
@@ -250,7 +249,6 @@ var StartNodeCmd = &cobra.Command{
 			validatorCtrl,
 			storageMap,
 			metricsReporter,
-			nodeProber,
 			networkConfig,
 			nodeStorage,
 		)
@@ -291,6 +289,53 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("failed to start SSV node", zap.Error(err))
 		}
 	},
+}
+
+func configMatches(logger *zap.Logger, networkConfig networkconfig.NetworkConfig, nodeStorage operatorstorage.Storage) {
+	storedNetworkName, foundStoredNetwork, err := nodeStorage.GetNetworkConfig(nil)
+	if err != nil {
+		logger.Fatal("could not check saved network config")
+	}
+
+	storedUsingLocalEvents, foundStoredLocalEvents, err := nodeStorage.GetLocalEventsConfig(nil)
+	if err != nil {
+		logger.Fatal("could not check saved local events config")
+	}
+
+	if foundStoredNetwork && storedNetworkName != networkConfig.Name {
+		logger.Fatal("node was already run with a different network name, the database needs to be cleaned to switch the network",
+			zap.String("current_network", networkConfig.Name),
+			zap.String("stored_network", storedNetworkName),
+		)
+	}
+
+	usingLocalEvents := len(cfg.LocalEventsPath) != 0
+	if foundStoredLocalEvents {
+		if !storedUsingLocalEvents && usingLocalEvents {
+			logger.Fatal("node was already run with real events, the database needs to be cleaned to use local events")
+		} else if storedUsingLocalEvents && !usingLocalEvents {
+			logger.Fatal("node was already run with local events, the database needs to be cleaned to use real events")
+		}
+	}
+
+	txn := nodeStorage.Begin()
+	defer txn.Discard()
+
+	if !foundStoredNetwork {
+		if err := nodeStorage.SaveNetworkConfig(txn, networkConfig.Name); err != nil {
+			logger.Fatal("failed to save network config", zap.Error(err))
+		}
+	}
+
+	if !foundStoredLocalEvents {
+		if err := nodeStorage.SaveLocalEventsConfig(txn, usingLocalEvents); err != nil {
+			logger.Fatal("failed to save local events config", zap.Error(err))
+		}
+	}
+
+	if err := txn.Commit(); err != nil {
+		logger.Fatal("failed to commit changes to DB", zap.Error(err))
+	}
 }
 
 func init() {
@@ -483,7 +528,6 @@ func setupEventHandling(
 	validatorCtrl validator.Controller,
 	storageMap *ibftstorage.QBFTStores,
 	metricsReporter *metricsreporter.MetricsReporter,
-	nodeProber *nodeprobe.Prober,
 	networkConfig networkconfig.NetworkConfig,
 	nodeStorage operatorstorage.Storage,
 ) {

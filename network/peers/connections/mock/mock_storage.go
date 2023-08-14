@@ -149,3 +149,19 @@ func (m NodeStorage) SetupPrivateKey(operatorKeyBase64 string) ([]byte, error) {
 	//TODO implement me
 	panic("implement me")
 }
+
+func (m NodeStorage) SaveNetworkConfig(rw basedb.ReadWriter, networkName string) error {
+	panic("implement me")
+}
+
+func (m NodeStorage) GetNetworkConfig(rw basedb.ReadWriter) (networkName string, found bool, err error) {
+	panic("implement me")
+}
+
+func (m NodeStorage) SaveLocalEventsConfig(rw basedb.ReadWriter, usingLocalEvents bool) error {
+	panic("implement me")
+}
+
+func (m NodeStorage) GetLocalEventsConfig(rw basedb.ReadWriter) (usingLocalEvents bool, found bool, err error) {
+	panic("implement me")
+}
