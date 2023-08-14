@@ -39,8 +39,11 @@ type Storage interface {
 
 	SaveNetworkConfig(rw basedb.ReadWriter, networkName string) error
 	GetNetworkConfig(rw basedb.ReadWriter) (networkName string, found bool, err error)
+	DeleteNetworkConfig(rw basedb.ReadWriter) error
+
 	SaveLocalEventsConfig(rw basedb.ReadWriter, usingLocalEvents bool) error
 	GetLocalEventsConfig(rw basedb.ReadWriter) (usingLocalEvents bool, found bool, err error)
+	DeleteLocalEventsConfig(rw basedb.ReadWriter) error
 
 	registry.RegistryStore
 
@@ -301,13 +304,22 @@ func (s *storage) UpdateValidatorMetadata(pk string, metadata *beacon.ValidatorM
 	return s.shareStore.UpdateValidatorMetadata(pk, metadata)
 }
 
+func (s *storage) GetNetworkConfig(rw basedb.ReadWriter) (networkName string, found bool, err error) {
+	obj, found, err := s.db.Using(rw).Get(storagePrefix, networkNameKey)
+	return string(obj.Value), found, err
+}
+
 func (s *storage) SaveNetworkConfig(rw basedb.ReadWriter, networkName string) error {
 	return s.db.Using(rw).Set(storagePrefix, networkNameKey, []byte(networkName))
 }
 
-func (s *storage) GetNetworkConfig(rw basedb.ReadWriter) (networkName string, found bool, err error) {
-	obj, found, err := s.db.Using(rw).Get(storagePrefix, networkNameKey)
-	return string(obj.Value), found, err
+func (s *storage) DeleteNetworkConfig(rw basedb.ReadWriter) error {
+	return s.db.Using(rw).Delete(storagePrefix, networkNameKey)
+}
+
+func (s *storage) GetLocalEventsConfig(rw basedb.ReadWriter) (usingLocalEvents bool, found bool, err error) {
+	obj, found, err := s.db.Using(rw).Get(storagePrefix, localEventsKey)
+	return len(obj.Value) == 1 && obj.Value[0] != 0, found, err
 }
 
 func (s *storage) SaveLocalEventsConfig(rw basedb.ReadWriter, usingLocalEvents bool) error {
@@ -319,7 +331,6 @@ func (s *storage) SaveLocalEventsConfig(rw basedb.ReadWriter, usingLocalEvents b
 	return s.db.Using(rw).Set(storagePrefix, localEventsKey, []byte{usingLocalEventsValue})
 }
 
-func (s *storage) GetLocalEventsConfig(rw basedb.ReadWriter) (usingLocalEvents bool, found bool, err error) {
-	obj, found, err := s.db.Using(rw).Get(storagePrefix, localEventsKey)
-	return len(obj.Value) == 1 && obj.Value[0] != 0, found, err
+func (s *storage) DeleteLocalEventsConfig(rw basedb.ReadWriter) error {
+	return s.db.Using(rw).Delete(storagePrefix, localEventsKey)
 }

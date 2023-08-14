@@ -111,7 +111,9 @@ var StartNodeCmd = &cobra.Command{
 
 		nodeStorage, operatorData := setupOperatorStorage(logger, db)
 
-		configMatches(logger, networkConfig, nodeStorage)
+		usingLocalEvents := len(cfg.LocalEventsPath) != 0
+
+		ensureNoConfigBreakingChanges(logger, nodeStorage, networkConfig.Name, usingLocalEvents)
 
 		operatorKey, _, _ := nodeStorage.GetPrivateKey()
 		keyBytes := x509.MarshalPKCS1PrivateKey(operatorKey)
@@ -291,7 +293,7 @@ var StartNodeCmd = &cobra.Command{
 	},
 }
 
-func configMatches(logger *zap.Logger, networkConfig networkconfig.NetworkConfig, nodeStorage operatorstorage.Storage) {
+func ensureNoConfigBreakingChanges(logger *zap.Logger, nodeStorage operatorstorage.Storage, networkName string, usingLocalEvents bool) {
 	storedNetworkName, foundStoredNetwork, err := nodeStorage.GetNetworkConfig(nil)
 	if err != nil {
 		logger.Fatal("could not check saved network config")
@@ -302,14 +304,13 @@ func configMatches(logger *zap.Logger, networkConfig networkconfig.NetworkConfig
 		logger.Fatal("could not check saved local events config")
 	}
 
-	if foundStoredNetwork && storedNetworkName != networkConfig.Name {
+	if foundStoredNetwork && storedNetworkName != networkName {
 		logger.Fatal("node was already run with a different network name, the database needs to be cleaned to switch the network",
-			zap.String("current_network", networkConfig.Name),
+			zap.String("current_network", networkName),
 			zap.String("stored_network", storedNetworkName),
 		)
 	}
 
-	usingLocalEvents := len(cfg.LocalEventsPath) != 0
 	if foundStoredLocalEvents {
 		if !storedUsingLocalEvents && usingLocalEvents {
 			logger.Fatal("node was already run with real events, the database needs to be cleaned to use local events")
@@ -322,7 +323,7 @@ func configMatches(logger *zap.Logger, networkConfig networkconfig.NetworkConfig
 	defer txn.Discard()
 
 	if !foundStoredNetwork {
-		if err := nodeStorage.SaveNetworkConfig(txn, networkConfig.Name); err != nil {
+		if err := nodeStorage.SaveNetworkConfig(txn, networkName); err != nil {
 			logger.Fatal("failed to save network config", zap.Error(err))
 		}
 	}

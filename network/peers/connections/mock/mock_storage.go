@@ -158,10 +158,18 @@ func (m NodeStorage) GetNetworkConfig(rw basedb.ReadWriter) (networkName string,
 	panic("implement me")
 }
 
+func (m NodeStorage) DeleteNetworkConfig(rw basedb.ReadWriter) error {
+	panic("implement me")
+}
+
 func (m NodeStorage) SaveLocalEventsConfig(rw basedb.ReadWriter, usingLocalEvents bool) error {
 	panic("implement me")
 }
 
 func (m NodeStorage) GetLocalEventsConfig(rw basedb.ReadWriter) (usingLocalEvents bool, found bool, err error) {
+	panic("implement me")
+}
+
+func (m NodeStorage) DeleteLocalEventsConfig(rw basedb.ReadWriter) error {
 	panic("implement me")
 }
