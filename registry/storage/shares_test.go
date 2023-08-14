@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"sort"
+	"strconv"
 	"testing"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -49,6 +50,10 @@ func TestValidatorSerializer(t *testing.T) {
 	require.Equal(t, v1.BeaconMetadata, validatorShare.BeaconMetadata)
 	require.Equal(t, v1.OwnerAddress, validatorShare.OwnerAddress)
 	require.Equal(t, v1.Liquidated, validatorShare.Liquidated)
+
+	tooBigEncodedShare := bytes.Repeat(obj.Value, 10)
+	require.ErrorContains(t, v1.Decode(tooBigEncodedShare),
+		"share size is too big, got "+strconv.Itoa(len(tooBigEncodedShare))+", max allowed "+strconv.Itoa(ssvtypes.MaxAllowedShareSize))
 }
 
 func TestMaxPossibleShareSize(t *testing.T) {
