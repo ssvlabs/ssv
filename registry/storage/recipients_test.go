@@ -11,8 +11,8 @@ import (
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/registry/storage"
-	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/kv"
 )
 
 func TestStorage_SaveAndGetRecipientData(t *testing.T) {
@@ -338,13 +338,11 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 }
 
 func newRecipientStorageForTest(logger *zap.Logger) (storage.Recipients, func()) {
-	db, err := ssvstorage.GetStorageFactory(logger, basedb.Options{
-		Type: "badger-memory",
-		Path: "",
-	})
+	db, err := kv.NewInMemory(logger, basedb.Options{})
 	if err != nil {
 		return nil, func() {}
 	}
+
 	s := storage.NewRecipientsStorage(logger, db, []byte("test"))
 	return s, func() {
 		db.Close()

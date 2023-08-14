@@ -5,14 +5,16 @@ import (
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/storage/kv"
+
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
@@ -171,13 +173,12 @@ func TestSaveAndFetchState(t *testing.T) {
 }
 
 func newTestIbftStorage(logger *zap.Logger, prefix string, forkVersion forksprotocol.ForkVersion) (qbftstorage.QBFTStore, error) {
-	db, err := ssvstorage.GetStorageFactory(logger.Named(logging.NameBadgerDBLog), basedb.Options{
-		Type:      "badger-memory",
-		Path:      "",
+	db, err := kv.NewInMemory(logger.Named(logging.NameBadgerDBLog), basedb.Options{
 		Reporting: true,
 	})
 	if err != nil {
 		return nil, err
 	}
+
 	return New(db, prefix, forkVersion), nil
 }

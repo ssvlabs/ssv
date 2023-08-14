@@ -5,7 +5,10 @@ import (
 	"testing"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
+
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/storage/kv"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
@@ -13,7 +16,6 @@ import (
 
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
@@ -136,17 +138,16 @@ func generateRandomValidatorShare(splitKeys map[uint64]*bls.SecretKey) (*types.S
 }
 
 func newShareStorageForTest(logger *zap.Logger) (Shares, func()) {
-	db, err := ssvstorage.GetStorageFactory(logger, basedb.Options{
-		Type: "badger-memory",
-		Path: "",
-	})
+	db, err := kv.NewInMemory(logger, basedb.Options{})
 	if err != nil {
 		return nil, func() {}
 	}
+
 	s, err := NewSharesStorage(logger, db, []byte("test"))
 	if err != nil {
 		return nil, func() {}
 	}
+
 	return s, func() {
 		db.Close()
 	}

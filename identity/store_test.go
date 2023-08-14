@@ -5,11 +5,12 @@ import (
 	"testing"
 
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/storage/kv"
+
 	gcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/network/commons"
-	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
@@ -51,12 +52,7 @@ func TestSetupPrivateKey(t *testing.T) {
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
-			options := basedb.Options{
-				Type: "badger-memory",
-				Path: "",
-			}
-
-			db, err := ssvstorage.GetStorageFactory(logging.TestLogger(t), options)
+			db, err := kv.NewInMemory(logging.TestLogger(t), basedb.Options{})
 			require.NoError(t, err)
 			defer db.Close()
 
