@@ -5,15 +5,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/bloxapp/ssv/logging/fields"
-
-	"github.com/bloxapp/ssv-spec/qbft"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
-	"github.com/bloxapp/ssv/utils/tasks"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging/fields"
+	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
+	"github.com/bloxapp/ssv/utils/tasks"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/syncer.go -source=./syncer.go
@@ -91,7 +90,7 @@ func (s *syncer) SyncHighestDecided(
 
 	lastDecided, err := s.network.LastDecided(logger, id)
 	if err != nil {
-		logger.Debug("sync failed", zap.Error(err))
+		logger.Debug("last decided sync failed", zap.Error(err))
 		return errors.Wrap(err, "could not sync last decided")
 	}
 	if len(lastDecided) == 0 {
@@ -100,9 +99,13 @@ func (s *syncer) SyncHighestDecided(
 	}
 
 	results := protocolp2p.SyncResults(lastDecided)
+	var maxHeight specqbft.Height
 	results.ForEachSignedMessage(func(m *specqbft.SignedMessage) (stop bool) {
 		if ctx.Err() != nil {
 			return true
+		}
+		if m.Message.Height > maxHeight {
+			maxHeight = m.Message.Height
 		}
 		raw, err := m.Encode()
 		if err != nil {
@@ -116,6 +119,7 @@ func (s *syncer) SyncHighestDecided(
 		})
 		return false
 	})
+	logger.Debug("synced last decided", zap.Uint64("highest_height", uint64(maxHeight)), zap.Int("messages", len(lastDecided)))
 	return nil
 }
 
@@ -123,7 +127,7 @@ func (s *syncer) SyncDecidedByRange(
 	ctx context.Context,
 	logger *zap.Logger,
 	id spectypes.MessageID,
-	from, to qbft.Height,
+	from, to specqbft.Height,
 	handler MessageHandler,
 ) error {
 	if ctx.Err() != nil {

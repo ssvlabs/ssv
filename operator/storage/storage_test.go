@@ -4,13 +4,20 @@ import (
 	"encoding/base64"
 	"testing"
 
-	"github.com/bloxapp/ssv/logging"
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zaptest"
 
-	"github.com/bloxapp/ssv/eth1"
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/protocol/v2/types"
+
 	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
+
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )
 
 var (
@@ -28,7 +35,7 @@ func TestSaveAndGetPrivateKey(t *testing.T) {
 
 	db, err := ssvstorage.GetStorageFactory(logger, options)
 	require.NoError(t, err)
-	defer db.Close(logger)
+	defer db.Close()
 
 	operatorStorage := storage{
 		db: db,
@@ -47,60 +54,40 @@ func TestSaveAndGetPrivateKey(t *testing.T) {
 
 func TestSetupPrivateKey(t *testing.T) {
 	tests := []struct {
-		name           string
-		existKey       string
-		passedKey      string
-		generateIfNone bool
-		expectedError  string
+		name          string
+		existKey      string
+		passedKey     string
+		expectedError string
 	}{
 		{
-			name:           "key not exist, passing nothing", // expected - raise an error
-			existKey:       "",
-			passedKey:      "",
-			generateIfNone: false,
-			expectedError:  "key not exist or provided",
+			name:          "key not exist, passing nothing", // expected - raise an error
+			existKey:      "",
+			passedKey:     "",
+			expectedError: "key not exist or provided",
 		},
 		{
-			name:           "key not exist passing, nothing (with generate flag)", // expected - generate new key
-			existKey:       "",
-			passedKey:      "",
-			generateIfNone: true,
-			expectedError:  "",
+			name:          "key not exist, passing key in env", // expected - set the passed key
+			existKey:      "",
+			passedKey:     skPem2,
+			expectedError: "",
 		},
 		{
-			name:           "key not exist, passing key in env", // expected - set the passed key
-			existKey:       "",
-			passedKey:      skPem2,
-			generateIfNone: false,
-			expectedError:  "",
+			name:          "key exist, passing key in env", // expected - throw ERROR of data encrypted with different key
+			existKey:      skPem,
+			passedKey:     skPem2,
+			expectedError: "Operator private key is not matching the one encrypted the storage",
 		},
 		{
-			name:           "key exist, passing key in env", // expected - override current key with the passed one
-			existKey:       skPem,
-			passedKey:      skPem2,
-			generateIfNone: false,
-			expectedError:  "",
+			name:          "key exist, passing nothing", // expected - throw ERROR of data encrypted with different key
+			existKey:      skPem,
+			passedKey:     "",
+			expectedError: "Operator private key is not matching the one encrypted the storage",
 		},
 		{
-			name:           "key exist, passing nothing", // expected - do nothing
-			existKey:       skPem,
-			passedKey:      "",
-			generateIfNone: false,
-			expectedError:  "",
-		},
-		{
-			name:           "key exist, passing nothing (with generate flag)", // expected - do nothing
-			existKey:       skPem,
-			passedKey:      "",
-			generateIfNone: true,
-			expectedError:  "",
-		},
-		{
-			name:           "error raised", // expected - throw an error
-			existKey:       "",
-			passedKey:      "xxx",
-			generateIfNone: false,
-			expectedError:  "Failed to decode base64: illegal base64 data at input byte 0",
+			name:          "error raised", // expected - throw an error
+			existKey:      "",
+			passedKey:     "xxx",
+			expectedError: "Failed to decode base64: illegal base64 data at input byte 0",
 		},
 	}
 
@@ -115,10 +102,11 @@ func TestSetupPrivateKey(t *testing.T) {
 			logger := logging.TestLogger(t)
 			db, err := ssvstorage.GetStorageFactory(logger, options)
 			require.NoError(t, err)
-			defer db.Close(logger)
+			defer db.Close()
 
 			operatorStorage := storage{
-				db: db,
+				logger: zaptest.NewLogger(t),
+				db:     db,
 			}
 
 			if test.existKey != "" { // mock exist key
@@ -135,13 +123,12 @@ func TestSetupPrivateKey(t *testing.T) {
 				require.Equal(t, string(existKeyByte), string(rsaencryption.PrivateKeyToByte(sk)))
 			}
 
-			pk, err := operatorStorage.SetupPrivateKey(logger, test.passedKey, test.generateIfNone)
+			pk, err := operatorStorage.SetupPrivateKey(test.passedKey)
 			if test.expectedError != "" {
 				require.NotNil(t, err)
 				require.Equal(t, test.expectedError, err.Error())
 				return
 			}
-
 			require.NoError(t, err)
 			sk, found, err := operatorStorage.GetPrivateKey()
 			require.NoError(t, err)
@@ -166,22 +153,82 @@ func TestSetupPrivateKey(t *testing.T) {
 	}
 }
 
-func TestStorage_SaveAndGetSyncOffset(t *testing.T) {
-	logger := logging.TestLogger(t)
-	db, err := ssvstorage.GetStorageFactory(logger, basedb.Options{
+func TestDropRegistryData(t *testing.T) {
+	options := basedb.Options{
 		Type: "badger-memory",
 		Path: "",
-	})
+	}
+	logger := logging.TestLogger(t)
+	db, err := ssvstorage.GetStorageFactory(logger, options)
 	require.NoError(t, err)
-	s := NewNodeStorage(db)
+	defer db.Close()
+	storage, err := NewNodeStorage(logger, db)
+	require.NoError(t, err)
 
-	offset := new(eth1.SyncOffset)
-	offset.SetString("49e08f", 16)
-	err = s.SaveSyncOffset(offset)
+	// Save operators, shares and recipients.
+	var (
+		operatorIDs     = []uint64{1, 2, 3}
+		sharePubKeys    = [][]byte{{1}, {2}, {3}}
+		recipientOwners = []common.Address{{1}, {2}, {3}}
+	)
+	for _, id := range operatorIDs {
+		found, err := storage.SaveOperatorData(nil, &registrystorage.OperatorData{
+			ID:           id,
+			PublicKey:    []byte("publicKey"),
+			OwnerAddress: common.Address{byte(id)},
+		})
+		require.NoError(t, err)
+		require.False(t, found)
+	}
+	for _, pk := range sharePubKeys {
+		err := storage.Shares().Save(nil, &types.SSVShare{
+			Share: spectypes.Share{
+				SharePubKey:     pk,
+				ValidatorPubKey: spectypes.ValidatorPK(append([]byte{1}, pk...)),
+			},
+		})
+		require.NoError(t, err)
+	}
+	for _, owner := range recipientOwners {
+		var fr bellatrix.ExecutionAddress
+		copy(fr[:], append([]byte{1}, owner[:]...))
+		_, err := storage.SaveRecipientData(nil, &registrystorage.RecipientData{
+			Owner:        owner,
+			FeeRecipient: fr,
+		})
+		require.NoError(t, err)
+	}
+
+	// Check that everything was saved.
+	requireSaved := func(t *testing.T, operators, shares, recipients int) {
+		allOperators, err := storage.ListOperators(nil, 0, 0)
+		require.NoError(t, err)
+		require.Len(t, allOperators, operators)
+
+		allShares := storage.Shares().List(nil)
+		require.NoError(t, err)
+		require.Len(t, allShares, shares)
+
+		allRecipients, err := storage.GetRecipientDataMany(nil, recipientOwners)
+		require.NoError(t, err)
+		require.Len(t, allRecipients, recipients)
+	}
+	requireSaved(t, len(operatorIDs), len(sharePubKeys), len(recipientOwners))
+
+	// Re-open storage and check again that everything is still saved.
+	// Re-opening helps ensure that the changes were persisted and not just cached.
+	storage, err = NewNodeStorage(logger, db)
+	require.NoError(t, err)
+	requireSaved(t, len(operatorIDs), len(sharePubKeys), len(recipientOwners))
+
+	// Drop registry data.
+	err = storage.DropRegistryData()
 	require.NoError(t, err)
 
-	o, found, err := s.GetSyncOffset()
-	require.True(t, found)
+	// Check that everything was dropped.
+	requireSaved(t, 0, 0, 0)
+
+	// Re-open storage and check again that everything is still dropped.
+	storage, err = NewNodeStorage(logger, db)
 	require.NoError(t, err)
-	require.Zero(t, offset.Cmp(o))
 }

@@ -5,18 +5,18 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	http_pprof "net/http/pprof"
 	"runtime"
 	"strings"
+	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"go.uber.org/zap"
 )
 
 // Handler handles incoming metrics requests
@@ -25,35 +25,23 @@ type Handler interface {
 	Start(logger *zap.Logger, mux *http.ServeMux, addr string) error
 }
 
-type nodeStatus int32
-
-var (
-	metricsNodeStatus = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv_node_status",
-		Help: "Status of the operator node",
-	})
-	statusNotHealthy nodeStatus = 0
-	statusHealthy    nodeStatus = 1
-)
-
-func init() {
-	if err := prometheus.Register(metricsNodeStatus); err != nil {
-		log.Println("could not register prometheus collector")
-	}
-}
-
 type metricsHandler struct {
 	ctx           context.Context
-	db            basedb.IDb
+	db            basedb.Database
+	reporter      nodeMetrics
 	enableProf    bool
-	healthChecker HealthCheckAgent
+	healthChecker HealthChecker
 }
 
 // NewMetricsHandler returns a new metrics handler.
-func NewMetricsHandler(ctx context.Context, db basedb.IDb, enableProf bool, healthChecker HealthCheckAgent) Handler {
+func NewMetricsHandler(ctx context.Context, db basedb.Database, reporter nodeMetrics, enableProf bool, healthChecker HealthChecker) Handler {
+	if reporter == nil {
+		reporter = nopMetrics{}
+	}
 	mh := metricsHandler{
 		ctx:           ctx,
 		db:            db,
+		reporter:      reporter,
 		enableProf:    enableProf,
 		healthChecker: healthChecker,
 	}
@@ -84,13 +72,19 @@ func (mh *metricsHandler) Start(logger *zap.Logger, mux *http.ServeMux, addr str
 	mux.HandleFunc("/database/count-by-collection", mh.handleCountByCollection)
 	mux.HandleFunc("/health", mh.handleHealth)
 
-	go func() {
-		// TODO: enable lint (G114: Use of net/http serve function that has no support for setting timeouts (gosec))
-		// nolint: gosec
-		if err := http.ListenAndServe(addr, mux); err != nil {
-			logger.Error("failed to start http end-point", zap.Error(err))
-		}
-	}()
+	// Set a high timeout to allow for long-running pprof requests.
+	const timeout = 600 * time.Second
+
+	httpServer := &http.Server{
+		Addr:         addr,
+		Handler:      mux,
+		ReadTimeout:  timeout,
+		WriteTimeout: timeout,
+	}
+
+	if err := httpServer.ListenAndServe(); err != nil {
+		return fmt.Errorf("listen to %s: %w", addr, err)
+	}
 
 	return nil
 }
@@ -119,7 +113,7 @@ func (mh *metricsHandler) handleCountByCollection(w http.ResponseWriter, r *http
 		}
 	}
 
-	n, err := mh.db.CountByCollection(prefix)
+	n, err := mh.db.CountPrefix(prefix)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -133,10 +127,10 @@ func (mh *metricsHandler) handleCountByCollection(w http.ResponseWriter, r *http
 }
 
 func (mh *metricsHandler) handleHealth(res http.ResponseWriter, req *http.Request) {
-	if errs := mh.healthChecker.HealthCheck(); len(errs) > 0 {
-		metricsNodeStatus.Set(float64(statusNotHealthy))
+	if err := mh.healthChecker.HealthCheck(); err != nil {
+		mh.reporter.SSVNodeNotHealthy()
 		result := map[string][]string{
-			"errors": errs,
+			"errors": {err.Error()},
 		}
 		if raw, err := json.Marshal(result); err != nil {
 			http.Error(res, err.Error(), http.StatusInternalServerError)
@@ -144,7 +138,7 @@ func (mh *metricsHandler) handleHealth(res http.ResponseWriter, req *http.Reques
 			http.Error(res, string(raw), http.StatusInternalServerError)
 		}
 	} else {
-		metricsNodeStatus.Set(float64(statusHealthy))
+		mh.reporter.SSVNodeHealthy()
 		if _, err := fmt.Fprintln(res, ""); err != nil {
 			http.Error(res, err.Error(), http.StatusInternalServerError)
 		}

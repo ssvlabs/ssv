@@ -9,11 +9,15 @@ import (
 )
 
 // This migration is an Example migration
-var migrationExample1 = Migration{
+var migration_0_example = Migration{
 	Name: "migration_0_example",
-	Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte) error {
+	Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte, completed CompletedFunc) error {
 		// Example to clean registry data for specific storage
-		if err := opt.nodeStorage().CleanRegistryData(); err != nil {
+		nodeStorage, err := opt.nodeStorage(logger)
+		if err != nil {
+			return err
+		}
+		if err := nodeStorage.DropRegistryData(); err != nil {
 			return err
 		}
 

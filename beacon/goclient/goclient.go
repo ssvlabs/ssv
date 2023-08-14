@@ -2,8 +2,6 @@ package goclient
 
 import (
 	"context"
-	"fmt"
-	"log"
 	"math"
 	"sync"
 	"time"
@@ -21,7 +19,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/operator/slot_ticker"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
@@ -29,10 +26,6 @@ import (
 // DataVersionNil is just a placeholder for a nil data version.
 // Don't check for it, check for errors or nil data instead.
 const DataVersionNil spec.DataVersion = math.MaxUint64
-
-const (
-	healthCheckTimeout = 10 * time.Second
-)
 
 type beaconNodeStatus int32
 
@@ -65,9 +58,10 @@ var (
 )
 
 func init() {
+	logger := zap.L()
 	for _, c := range allMetrics {
 		if err := prometheus.Register(c); err != nil {
-			log.Println("could not register prometheus collector")
+			logger.Debug("could not register prometheus collector")
 		}
 	}
 }
@@ -119,9 +113,6 @@ type goClient struct {
 	registrationCache    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration
 }
 
-// verifies that the client implements HealthCheckAgent
-var _ metrics.HealthCheckAgent = &goClient{}
-
 // New init new client and go-client instance
 func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.OperatorID, slotTicker slot_ticker.Ticker) (beaconprotocol.BeaconNode, error) {
 	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(string(opt.Network.BeaconNetwork)))
@@ -158,25 +149,24 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 	return client, nil
 }
 
-// HealthCheck provides health status of beacon node
-func (gc *goClient) HealthCheck() []string {
-	if gc.client == nil {
-		return []string{"not connected to beacon node"}
-	}
-	ctx, cancel := context.WithTimeout(gc.ctx, healthCheckTimeout)
-	defer cancel()
+// IsReady returns if beacon node is currently ready: responds to requests, not in the syncing state, not optimistic
+// (for optimistic see https://github.com/ethereum/consensus-specs/blob/dev/sync/optimistic.md#block-production).
+func (gc *goClient) IsReady(ctx context.Context) (bool, error) {
 	syncState, err := gc.client.NodeSyncing(ctx)
 	if err != nil {
+		// TODO: get rid of global variable, pass metrics to goClient
 		metricsBeaconNodeStatus.Set(float64(statusUnknown))
-		return []string{"could not get beacon node sync state"}
+		return false, err
 	}
-	if syncState != nil && syncState.IsSyncing {
+
+	// TODO: also check if syncState.ElOffline when github.com/attestantio/go-eth2-client supports it
+	if syncState == nil || syncState.IsSyncing || syncState.IsOptimistic {
 		metricsBeaconNodeStatus.Set(float64(statusSyncing))
-		return []string{fmt.Sprintf("beacon node is currently syncing: head=%d, distance=%d",
-			syncState.HeadSlot, syncState.SyncDistance)}
+		return false, nil
 	}
+
 	metricsBeaconNodeStatus.Set(float64(statusOK))
-	return []string{}
+	return true, nil
 }
 
 // GetBeaconNetwork returns the beacon network the node is on

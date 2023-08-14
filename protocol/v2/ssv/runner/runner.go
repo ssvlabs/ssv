@@ -6,12 +6,12 @@ import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
-	"github.com/bloxapp/ssv-spec/types"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 )
 
 type Getters interface {
@@ -66,7 +66,7 @@ func (b *BaseRunner) SetHighestDecidedSlot(slot spec.Slot) {
 }
 
 // setupForNewDuty is sets the runner for a new duty
-func (b *BaseRunner) baseSetupForNewDuty(duty *types.Duty) {
+func (b *BaseRunner) baseSetupForNewDuty(duty *spectypes.Duty) {
 	state := NewRunnerState(b.Share.Quorum, duty)
 
 	// TODO: potentially incomplete locking of b.State. runner.Execute(duty) has access to
@@ -96,21 +96,8 @@ func NewBaseRunner(
 
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
 func (b *BaseRunner) baseStartNewDuty(logger *zap.Logger, runner Runner, duty *spectypes.Duty) error {
-	if err := b.canStartNewDuty(); err != nil {
-		return err
-	}
-
 	b.baseSetupForNewDuty(duty)
 	return runner.executeDuty(logger, duty)
-}
-
-// canStartNewDuty is a base func that all runner implementation can call to decide if a new duty can start
-func (b *BaseRunner) canStartNewDuty() error {
-	if b.State == nil {
-		return nil
-	}
-
-	return b.QBFTController.CanStartInstance()
 }
 
 // basePreConsensusMsgProcessing is a base func that all runner implementation can call for processing a pre-consensus msg
@@ -250,7 +237,10 @@ func (b *BaseRunner) decide(logger *zap.Logger, runner Runner, input *spectypes.
 
 	}
 
-	if err := runner.GetBaseRunner().QBFTController.StartNewInstance(logger, byts); err != nil {
+	if err := runner.GetBaseRunner().QBFTController.StartNewInstance(logger,
+		specqbft.Height(input.Duty.Slot),
+		byts,
+	); err != nil {
 		return errors.Wrap(err, "could not start new QBFT instance")
 	}
 	newInstance := runner.GetBaseRunner().QBFTController.InstanceForHeight(logger, runner.GetBaseRunner().QBFTController.Height)

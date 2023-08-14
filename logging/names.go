@@ -4,7 +4,7 @@ const (
 	NameBootNode         = "BootNode"
 	NameController       = "Controller"
 	NameDiscoveryService = "DiscoveryService"
-	NameDutyController   = "DutyController"
+	NameDutyScheduler    = "DutyScheduler"
 	NameEthClient        = "EthClient"
 	NameMetricsHandler   = "MetricsHandler"
 	NameOperator         = "Operator"
@@ -12,6 +12,7 @@ const (
 	NameSignerStorage    = "SignerStorage"
 	NameValidator        = "Validator"
 	NameWSServer         = "WSServer"
+	NameConnHandler      = "ConnHandler"
 
 	NameBadgerDBLog       = "BadgerDBLog"
 	NameBadgerDBReporting = "BadgerDBReporting"
@@ -22,4 +23,5 @@ const (
 	NameP2PStorage        = "P2PStorage"
 	NamePubsubTrace       = "PubsubTrace"
 	NameScoreInspector    = "ScoreInspector"
+	NameEventHandler      = "EventHandler"
 )

@@ -3,7 +3,9 @@ package p2pv1
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 	"math/rand"
+	"time"
 
 	"github.com/bloxapp/ssv/logging/fields"
 
@@ -21,10 +23,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 )
-
-// extremeLowPeerCount is the maximum number of peers considered as too low
-// when trying to get a subset of peers for a specific subnet.
-const extremelyLowPeerCount = 32
 
 func (n *p2pNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
 	return n.syncer.SyncHighestDecided(context.Background(), n.interfaceLogger, mid, func(msg spectypes.SSVMessage) {
@@ -72,11 +70,15 @@ func (n *p2pNetwork) SyncDecidedByRange(mid spectypes.MessageID, from, to qbft.H
 
 // LastDecided fetches last decided from a random set of peers
 func (n *p2pNetwork) LastDecided(logger *zap.Logger, mid spectypes.MessageID) ([]p2pprotocol.SyncResult, error) {
+	const (
+		minPeers = 3
+		waitTime = time.Second * 24
+	)
 	if !n.isReady() {
 		return nil, p2pprotocol.ErrNetworkIsNotReady
 	}
-	pid, peerCount := n.fork.ProtocolID(p2pprotocol.LastDecidedProtocol)
-	peers, err := n.getSubsetOfPeers(logger, mid.GetPubKey(), peerCount, allPeersFilter)
+	pid, maxPeers := n.fork.ProtocolID(p2pprotocol.LastDecidedProtocol)
+	peers, err := waitSubsetOfPeers(logger, n.getSubsetOfPeers, mid.GetPubKey(), minPeers, maxPeers, waitTime, allPeersFilter)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get subset of peers")
 	}
@@ -108,7 +110,7 @@ func (n *p2pNetwork) GetHistory(logger *zap.Logger, mid spectypes.MessageID, fro
 	}
 	// if no peers were provided -> select a random set of peers
 	if len(peers) == 0 {
-		random, err := n.getSubsetOfPeers(logger, mid.GetPubKey(), peerCount, n.peersWithProtocolsFilter(string(protocolID)))
+		random, err := n.getSubsetOfPeers(logger, mid.GetPubKey(), peerCount, n.peersWithProtocolsFilter(protocolID))
 		if err != nil {
 			return nil, 0, errors.Wrap(err, "could not get subset of peers")
 		}
@@ -192,7 +194,7 @@ func (n *p2pNetwork) handleStream(logger *zap.Logger, handler p2pprotocol.Reques
 }
 
 // getSubsetOfPeers returns a subset of the peers from that topic
-func (n *p2pNetwork) getSubsetOfPeers(logger *zap.Logger, vpk spectypes.ValidatorPK, peerCount int, filter func(peer.ID) bool) (peers []peer.ID, err error) {
+func (n *p2pNetwork) getSubsetOfPeers(logger *zap.Logger, vpk spectypes.ValidatorPK, maxPeers int, filter func(peer.ID) bool) (peers []peer.ID, err error) {
 	var ps []peer.ID
 	seen := make(map[peer.ID]struct{})
 	topics := n.fork.ValidatorTopicID(vpk)
@@ -213,28 +215,14 @@ func (n *p2pNetwork) getSubsetOfPeers(logger *zap.Logger, vpk spectypes.Validato
 		return nil, errors.Wrapf(err, "could not read peers for validator %s", hex.EncodeToString(vpk))
 	}
 	if len(peers) == 0 {
-		// Pubsub's topic/peers association is unreliable when there are few peers.
-		// So if we have few peers, we should just filter all of them (regardless of topic.)
-		allPeers := n.host.Network().Peers()
-		if len(allPeers) <= extremelyLowPeerCount {
-			for _, peer := range allPeers {
-				if filter(peer) {
-					peers = append(peers, peer)
-				}
-			}
-		}
-
-		if len(peers) == 0 {
-			logger.Debug("could not find peers", zap.Any("topics", topics))
-			return nil, nil
-		}
+		return nil, nil
 	}
-	if peerCount > len(peers) {
-		peerCount = len(peers)
+	if maxPeers > len(peers) {
+		maxPeers = len(peers)
 	} else {
 		rand.Shuffle(len(peers), func(i, j int) { peers[i], peers[j] = peers[j], peers[i] })
 	}
-	return peers[:peerCount], nil
+	return peers[:maxPeers], nil
 }
 
 func (n *p2pNetwork) makeSyncRequest(logger *zap.Logger, peers []peer.ID, mid spectypes.MessageID, protocol libp2p_protocol.ID, syncMsg *message.SyncMessage) ([]p2pprotocol.SyncResult, error) {
@@ -259,7 +247,9 @@ func (n *p2pNetwork) makeSyncRequest(logger *zap.Logger, peers []peer.ID, mid sp
 		logger := logger.With(fields.PeerID(pid))
 		raw, err := n.streamCtrl.Request(logger, pid, protocol, encoded)
 		if err != nil {
-			if err != multistream.ErrNotSupported {
+			// TODO: is this how to check for ErrNotSupported?
+			var e multistream.ErrNotSupported[libp2p_protocol.ID]
+			if !errors.Is(err, e) {
 				logger.Debug("could not make stream request", zap.Error(err))
 			}
 			continue
@@ -283,7 +273,7 @@ func (n *p2pNetwork) makeSyncRequest(logger *zap.Logger, peers []peer.ID, mid sp
 }
 
 // peersWithProtocolsFilter is used to accept peers that supports the given protocols
-func (n *p2pNetwork) peersWithProtocolsFilter(protocols ...string) func(peer.ID) bool {
+func (n *p2pNetwork) peersWithProtocolsFilter(protocols ...libp2p_protocol.ID) func(peer.ID) bool {
 	return func(id peer.ID) bool {
 		supported, err := n.host.Network().Peerstore().SupportsProtocols(id, protocols...)
 		if err != nil {
@@ -297,4 +287,43 @@ func (n *p2pNetwork) peersWithProtocolsFilter(protocols ...string) func(peer.ID)
 // allPeersFilter is used to accept all peers in a given subnet
 func allPeersFilter(id peer.ID) bool {
 	return true
+}
+
+func waitSubsetOfPeers(
+	logger *zap.Logger,
+	getSubsetOfPeers func(logger *zap.Logger, vpk spectypes.ValidatorPK, maxPeers int, filter func(peer.ID) bool) (peers []peer.ID, err error),
+	vpk spectypes.ValidatorPK,
+	minPeers, maxPeers int,
+	timeout time.Duration,
+	filter func(peer.ID) bool,
+) ([]peer.ID, error) {
+	if minPeers > maxPeers {
+		return nil, fmt.Errorf("minPeers should not be greater than maxPeers")
+	}
+	if minPeers < 0 || maxPeers < 0 {
+		return nil, fmt.Errorf("minPeers and maxPeers should not be negative")
+	}
+	if timeout <= 0 {
+		return nil, fmt.Errorf("timeout should be positive")
+	}
+
+	// Wait for minPeers with a deadline.
+	deadline := time.Now().Add(timeout)
+	for {
+		peers, err := getSubsetOfPeers(logger, vpk, maxPeers, filter)
+		if err != nil {
+			return nil, err
+		}
+		if len(peers) >= minPeers {
+			// Found enough peers.
+			return peers, nil
+		}
+		if time.Now().After(deadline) {
+			// Timeout.
+			return peers, nil
+		}
+
+		// Wait for a bit before trying again.
+		time.Sleep(timeout/3 - timeout/10) // 3 retries with 10% margin.
+	}
 }

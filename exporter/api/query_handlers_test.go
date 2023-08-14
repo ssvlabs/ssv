@@ -182,7 +182,7 @@ func newDecidedAPIMsg(pk string, role spectypes.BeaconRole, from, to uint64) *Ne
 	}
 }
 
-func newDBAndLoggerForTest(logger *zap.Logger) (basedb.IDb, *zap.Logger, func()) {
+func newDBAndLoggerForTest(logger *zap.Logger) (basedb.Database, *zap.Logger, func()) {
 	db, err := ssvstorage.GetStorageFactory(logger, basedb.Options{
 		Type: "badger-memory",
 		Path: "",
@@ -191,12 +191,15 @@ func newDBAndLoggerForTest(logger *zap.Logger) (basedb.IDb, *zap.Logger, func())
 		return nil, nil, func() {}
 	}
 	return db, logger, func() {
-		db.Close(logger)
+		db.Close()
 	}
 }
 
-func newStorageForTest(db basedb.IDb, logger *zap.Logger, roles ...spectypes.BeaconRole) (storage.Storage, *qbftstorage.QBFTStores) {
-	sExporter := storage.NewNodeStorage(db)
+func newStorageForTest(db basedb.Database, logger *zap.Logger, roles ...spectypes.BeaconRole) (storage.Storage, *qbftstorage.QBFTStores) {
+	sExporter, err := storage.NewNodeStorage(logger, db)
+	if err != nil {
+		panic(err)
+	}
 
 	storageMap := qbftstorage.NewStores()
 	for _, role := range roles {

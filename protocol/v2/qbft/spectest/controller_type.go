@@ -6,19 +6,17 @@ import (
 	"reflect"
 	"testing"
 
-	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv-spec/types/testingutils"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
+	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
 )
 
 func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
@@ -33,8 +31,8 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 	)
 
 	var lastErr error
-	for _, runData := range test.RunInstanceData {
-		if err := runInstanceWithData(t, logger, contr, config, identifier, runData); err != nil {
+	for i, runData := range test.RunInstanceData {
+		if err := runInstanceWithData(t, logger, specqbft.Height(i), contr, config, identifier, runData); err != nil {
 			lastErr = err
 		}
 	}
@@ -66,7 +64,7 @@ func testProcessMsg(
 	config *qbft.Config,
 	runData *spectests.RunInstanceData,
 ) error {
-	decidedCnt := 0
+	decidedCnt := uint(0)
 	var lastErr error
 	for _, msg := range runData.InputMessages {
 		decided, err := contr.ProcessMsg(logger, msg)
@@ -79,11 +77,11 @@ func testProcessMsg(
 			require.EqualValues(t, runData.ExpectedDecidedState.DecidedVal, decided.FullData)
 		}
 	}
-	require.EqualValues(t, runData.ExpectedDecidedState.DecidedCnt, decidedCnt)
+	require.EqualValues(t, runData.ExpectedDecidedState.DecidedCnt, decidedCnt, lastErr)
 
 	// verify sync decided by range calls
 	if runData.ExpectedDecidedState.CalledSyncDecidedByRange {
-		require.EqualValues(t, runData.ExpectedDecidedState.DecidedByRangeValues, config.GetNetwork().(*testingutils.TestingNetwork).DecidedByRange)
+		require.EqualValues(t, runData.ExpectedDecidedState.DecidedByRangeValues, config.GetNetwork().(*spectestingutils.TestingNetwork).DecidedByRange)
 	} else {
 		require.EqualValues(t, [2]specqbft.Height{0, 0}, config.GetNetwork().(*spectestingutils.TestingNetwork).DecidedByRange)
 	}
@@ -99,7 +97,7 @@ func testBroadcastedDecided(
 ) {
 	if runData.ExpectedDecidedState.BroadcastedDecided != nil {
 		// test broadcasted
-		broadcastedMsgs := config.GetNetwork().(*testingutils.TestingNetwork).BroadcastedMsgs
+		broadcastedMsgs := config.GetNetwork().(*spectestingutils.TestingNetwork).BroadcastedMsgs
 		require.Greater(t, len(broadcastedMsgs), 0)
 		found := false
 		for _, msg := range broadcastedMsgs {
@@ -131,8 +129,8 @@ func testBroadcastedDecided(
 	}
 }
 
-func runInstanceWithData(t *testing.T, logger *zap.Logger, contr *controller.Controller, config *qbft.Config, identifier []byte, runData *spectests.RunInstanceData) error {
-	err := contr.StartNewInstance(logger, runData.InputValue)
+func runInstanceWithData(t *testing.T, logger *zap.Logger, height specqbft.Height, contr *controller.Controller, config *qbft.Config, identifier []byte, runData *spectests.RunInstanceData) error {
+	err := contr.StartNewInstance(logger, height, runData.InputValue)
 	var lastErr error
 	if err != nil {
 		lastErr = err

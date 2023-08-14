@@ -12,10 +12,10 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
-var db basedb.IDb
+var db basedb.Database
 var dbOnce sync.Once
 
-func getDB(logger *zap.Logger) basedb.IDb {
+func getDB(logger *zap.Logger) basedb.Database {
 	dbOnce.Do(func() {
 		dbInstance, err := storage.GetStorageFactory(logger, basedb.Options{
 			Type:      "badger-memory",

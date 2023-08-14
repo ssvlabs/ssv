@@ -13,7 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/golang/mock/gomock"
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/prysm/async/event"
+	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -37,7 +37,7 @@ func TestSubmitProposal(t *testing.T) {
 	}
 
 	db, shareStorage, recipientStorage := createStorage(t)
-	defer db.Close(logger)
+	defer db.Close()
 	network := networkconfig.TestNetwork
 	populateStorage(t, logger, shareStorage, operatorData)
 
@@ -52,7 +52,7 @@ func TestSubmitProposal(t *testing.T) {
 	t.Run("submit first time or halfway through epoch", func(t *testing.T) {
 		numberOfRequests := 4
 		var wg sync.WaitGroup
-		client := beacon.NewMockBeacon(ctrl)
+		client := beacon.NewMockBeaconNode(ctrl)
 		client.EXPECT().SubmitProposalPreparation(gomock.Any()).DoAndReturn(func(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
 			wg.Done()
 			return nil
@@ -82,7 +82,7 @@ func TestSubmitProposal(t *testing.T) {
 
 	t.Run("error handling", func(t *testing.T) {
 		var wg sync.WaitGroup
-		client := beacon.NewMockBeacon(ctrl)
+		client := beacon.NewMockBeaconNode(ctrl)
 		client.EXPECT().SubmitProposalPreparation(gomock.Any()).DoAndReturn(func(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
 			wg.Done()
 			return errors.New("failed to submit")
@@ -103,7 +103,7 @@ func TestSubmitProposal(t *testing.T) {
 	})
 }
 
-func createStorage(t *testing.T) (basedb.IDb, registrystorage.Shares, registrystorage.Recipients) {
+func createStorage(t *testing.T) (basedb.Database, registrystorage.Shares, registrystorage.Recipients) {
 	logger := logging.TestLogger(t)
 	options := basedb.Options{
 		Type: "badger-memory",
@@ -113,7 +113,11 @@ func createStorage(t *testing.T) (basedb.IDb, registrystorage.Shares, registryst
 	db, err := storage.GetStorageFactory(logger, options)
 	require.NoError(t, err)
 
-	return db, registrystorage.NewSharesStorage(db, []byte("test")), registrystorage.NewRecipientsStorage(db, []byte("test"))
+	shareStorage, err := registrystorage.NewSharesStorage(logger, db, []byte("test"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return db, shareStorage, registrystorage.NewRecipientsStorage(logger, db, []byte("test"))
 }
 
 func populateStorage(t *testing.T, logger *zap.Logger, storage registrystorage.Shares, operatorData *registrystorage.OperatorData) {
@@ -135,13 +139,12 @@ func populateStorage(t *testing.T, logger *zap.Logger, storage registrystorage.S
 	}
 
 	for i := 0; i < 1000; i++ {
-		require.NoError(t, storage.SaveShare(logger, createShare(i, operatorData.ID)))
+		require.NoError(t, storage.Save(nil, createShare(i, operatorData.ID)))
 	}
 
 	// add none committee share
-	require.NoError(t, storage.SaveShare(logger, createShare(2000, spectypes.OperatorID(1))))
+	require.NoError(t, storage.Save(nil, createShare(2000, spectypes.OperatorID(1))))
 
-	all, err := storage.GetFilteredShares(logger, registrystorage.ByOperatorIDAndNotLiquidated(operatorData.ID))
-	require.NoError(t, err)
+	all := storage.List(nil, registrystorage.ByOperatorID(operatorData.ID), registrystorage.ByNotLiquidated())
 	require.Equal(t, 1000, len(all))
 }

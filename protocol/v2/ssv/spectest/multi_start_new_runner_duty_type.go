@@ -4,7 +4,6 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/bloxapp/ssv-spec/types"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
@@ -16,7 +15,7 @@ import (
 type StartNewRunnerDutySpecTest struct {
 	Name                    string
 	Runner                  runner.Runner
-	Duty                    *types.Duty
+	Duty                    *spectypes.Duty
 	PostDutyRunnerStateRoot string
 	OutputMessages          []*spectypes.SignedPartialSignatureMessage
 	ExpectedError           string
@@ -39,7 +38,7 @@ func (test *StartNewRunnerDutySpecTest) Run(t *testing.T, logger *zap.Logger) {
 	if len(broadcastedMsgs) > 0 {
 		index := 0
 		for _, msg := range broadcastedMsgs {
-			if msg.MsgType != types.SSVPartialSignatureMsgType {
+			if msg.MsgType != spectypes.SSVPartialSignatureMsgType {
 				continue
 			}
 
