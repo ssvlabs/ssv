@@ -305,7 +305,7 @@ func verifyConfig(logger *zap.Logger, nodeStorage operatorstorage.Storage, netwo
 
 	if foundConfig {
 		if err := storedConfig.EnsureSameWith(currentConfig); err != nil {
-			err = fmt.Errorf("stored config mismatch: %w", err)
+			err = fmt.Errorf("incompatible config change: %w", err)
 			logger.Fatal(err.Error())
 		}
 	} else {
