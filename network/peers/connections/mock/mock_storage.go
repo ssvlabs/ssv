@@ -154,3 +154,15 @@ func (m NodeStorage) SetupPrivateKey(operatorKeyBase64 string) ([]byte, error) {
 	//TODO implement me
 	panic("implement me")
 }
+
+func (m NodeStorage) GetConfig(rw basedb.ReadWriter) (*storage.ConfigLock, bool, error) {
+	panic("implement me")
+}
+
+func (m NodeStorage) SaveConfig(rw basedb.ReadWriter, config *storage.ConfigLock) error {
+	panic("implement me")
+}
+
+func (m NodeStorage) DeleteConfig(rw basedb.ReadWriter) error {
+	panic("implement me")
+}

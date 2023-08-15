@@ -3,6 +3,8 @@ package storage
 import (
 	"crypto/rsa"
 	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"math/big"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
@@ -23,6 +25,7 @@ var HashedPrivateKey = "hashed-private-key"
 var (
 	storagePrefix         = []byte("operator/")
 	lastProcessedBlockKey = []byte("syncOffset") // TODO: temporarily left as syncOffset for compatibility, consider renaming and adding a migration for that
+	configKey             = []byte("config")
 )
 
 // Storage represents the interface for ssv node storage
@@ -34,6 +37,10 @@ type Storage interface {
 
 	SaveLastProcessedBlock(rw basedb.ReadWriter, offset *big.Int) error
 	GetLastProcessedBlock(r basedb.Reader) (*big.Int, bool, error)
+
+	GetConfig(rw basedb.ReadWriter) (*ConfigLock, bool, error)
+	SaveConfig(rw basedb.ReadWriter, config *ConfigLock) error
+	DeleteConfig(rw basedb.ReadWriter) error
 
 	registry.RegistryStore
 
@@ -296,4 +303,38 @@ func (s *storage) savePrivateKey(operatorKey string) error {
 
 func (s *storage) UpdateValidatorMetadata(pk string, metadata *beacon.ValidatorMetadata) error {
 	return s.shareStore.UpdateValidatorMetadata(pk, metadata)
+}
+
+func (s *storage) GetConfig(rw basedb.ReadWriter) (*ConfigLock, bool, error) {
+	obj, found, err := s.db.Using(rw).Get(storagePrefix, configKey)
+	if err != nil {
+		return nil, false, fmt.Errorf("db: %w", err)
+	}
+	if !found {
+		return nil, false, nil
+	}
+
+	config := &ConfigLock{}
+	if err := json.Unmarshal(obj.Value, &config); err != nil {
+		return nil, false, fmt.Errorf("unmarshal: %w", err)
+	}
+
+	return config, true, nil
+}
+
+func (s *storage) SaveConfig(rw basedb.ReadWriter, config *ConfigLock) error {
+	b, err := json.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("marshal: %w", err)
+	}
+
+	if err := s.db.Using(rw).Set(storagePrefix, configKey, b); err != nil {
+		return fmt.Errorf("db: %w", err)
+	}
+
+	return nil
+}
+
+func (s *storage) DeleteConfig(rw basedb.ReadWriter) error {
+	return s.db.Using(rw).Delete(storagePrefix, configKey)
 }

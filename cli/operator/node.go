@@ -100,7 +100,7 @@ var StartNodeCmd = &cobra.Command{
 		defer logging.CapturePanic(logger)
 		networkConfig, forkVersion, err := setupSSVNetwork(logger)
 		if err != nil {
-			log.Fatal("could not setup network", err)
+			logger.Fatal("could not setup network", zap.Error(err))
 		}
 		cfg.DBOptions.Ctx = cmd.Context()
 		db, err := setupDB(logger, networkConfig.Beacon.GetNetwork())
@@ -110,9 +110,10 @@ var StartNodeCmd = &cobra.Command{
 
 		nodeStorage, operatorData := setupOperatorStorage(logger, db)
 
-		if err != nil {
-			logger.Fatal("could not run post storage migrations", zap.Error(err))
-		}
+		usingLocalEvents := len(cfg.LocalEventsPath) != 0
+
+		verifyConfig(logger, nodeStorage, networkConfig.Name, usingLocalEvents)
+
 		operatorKey, _, _ := nodeStorage.GetPrivateKey()
 		keyBytes := x509.MarshalPKCS1PrivateKey(operatorKey)
 		hashedKey, _ := rsaencryption.HashRsaKey(keyBytes)
@@ -249,7 +250,6 @@ var StartNodeCmd = &cobra.Command{
 			validatorCtrl,
 			storageMap,
 			metricsReporter,
-			nodeProber,
 			networkConfig,
 			nodeStorage,
 		)
@@ -290,6 +290,30 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("failed to start SSV node", zap.Error(err))
 		}
 	},
+}
+
+func verifyConfig(logger *zap.Logger, nodeStorage operatorstorage.Storage, networkName string, usingLocalEvents bool) {
+	storedConfig, foundConfig, err := nodeStorage.GetConfig(nil)
+	if err != nil {
+		logger.Fatal("could not check saved local events config", zap.Error(err))
+	}
+
+	currentConfig := &operatorstorage.ConfigLock{
+		NetworkName:      networkName,
+		UsingLocalEvents: usingLocalEvents,
+	}
+
+	if foundConfig {
+		if err := storedConfig.EnsureSameWith(currentConfig); err != nil {
+			err = fmt.Errorf("incompatible config change: %w", err)
+			logger.Fatal(err.Error())
+		}
+	} else {
+		if err := nodeStorage.SaveConfig(nil, currentConfig); err != nil {
+			err = fmt.Errorf("failed to store config: %w", err)
+			logger.Fatal(err.Error())
+		}
+	}
 }
 
 func init() {
@@ -482,7 +506,6 @@ func setupEventHandling(
 	validatorCtrl validator.Controller,
 	storageMap *ibftstorage.QBFTStores,
 	metricsReporter *metricsreporter.MetricsReporter,
-	nodeProber *nodeprobe.Prober,
 	networkConfig networkconfig.NetworkConfig,
 	nodeStorage operatorstorage.Storage,
 ) {

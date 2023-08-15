@@ -5,20 +5,18 @@ import (
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/storage/kv"
-
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
-
-	spectypes "github.com/bloxapp/ssv-spec/types"
-
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
+	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/kv"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
 var (
@@ -219,4 +217,41 @@ func TestDropRegistryData(t *testing.T) {
 	// Re-open storage and check again that everything is still dropped.
 	storage, err = NewNodeStorage(logger, db)
 	require.NoError(t, err)
+}
+
+func TestNetworkAndLocalEventsConfig(t *testing.T) {
+	logger := logging.TestLogger(t)
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	storage, err := NewNodeStorage(logger, db)
+	require.NoError(t, err)
+
+	storedCfg, found, err := storage.GetConfig(nil)
+	require.NoError(t, err)
+	require.False(t, found)
+	require.Nil(t, storedCfg)
+
+	c1 := &ConfigLock{
+		NetworkName:      networkconfig.TestNetwork.Name,
+		UsingLocalEvents: false,
+	}
+	require.NoError(t, storage.SaveConfig(nil, c1))
+
+	storedCfg, found, err = storage.GetConfig(nil)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, c1, storedCfg)
+
+	c2 := &ConfigLock{
+		NetworkName:      networkconfig.TestNetwork.Name + "1",
+		UsingLocalEvents: false,
+	}
+	require.NoError(t, storage.SaveConfig(nil, c2))
+
+	storedCfg, found, err = storage.GetConfig(nil)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, c2, storedCfg)
 }
