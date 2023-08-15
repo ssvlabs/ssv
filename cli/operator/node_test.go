@@ -65,7 +65,7 @@ func Test_verifyConfig(t *testing.T) {
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 
 		require.PanicsWithValue(t,
-			fmt.Sprintf("stored config mismatch: node was already run with a different network name, the database needs to be cleaned to switch the network, current %q, stored %q", testNetworkName, testNetworkName+"1"),
+			fmt.Sprintf("incompatible config change: can't change network from \"testnet1\" to \"testnet\" in an existing database, it must be removed first"),
 			func() { verifyConfig(logger, nodeStorage, testNetworkName, true) },
 		)
 
@@ -85,7 +85,7 @@ func Test_verifyConfig(t *testing.T) {
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 
 		require.PanicsWithValue(t,
-			fmt.Sprintf("stored config mismatch: node was already run with a different network name, the database needs to be cleaned to switch the network, current %q, stored %q", testNetworkName, testNetworkName+"1"),
+			fmt.Sprintf("incompatible config change: can't change network from \"testnet1\" to \"testnet\" in an existing database, it must be removed first"),
 			func() { verifyConfig(logger, nodeStorage, testNetworkName, true) },
 		)
 
@@ -105,7 +105,7 @@ func Test_verifyConfig(t *testing.T) {
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 
 		require.PanicsWithValue(t,
-			"stored config mismatch: node was already run with real events, the database needs to be cleaned to use local events",
+			"incompatible config change: can't switch on localevents, database must be removed first",
 			func() { verifyConfig(logger, nodeStorage, testNetworkName, true) },
 		)
 
@@ -125,7 +125,7 @@ func Test_verifyConfig(t *testing.T) {
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 
 		require.PanicsWithValue(t,
-			"stored config mismatch: node was already run with local events, the database needs to be cleaned to use real events",
+			"incompatible config change: can't switch off localevents, database must be removed first",
 			func() { verifyConfig(logger, nodeStorage, testNetworkName, false) },
 		)
 
