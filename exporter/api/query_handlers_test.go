@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/storage/kv"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -18,7 +19,6 @@ import (
 	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
@@ -183,10 +183,7 @@ func newDecidedAPIMsg(pk string, role spectypes.BeaconRole, from, to uint64) *Ne
 }
 
 func newDBAndLoggerForTest(logger *zap.Logger) (basedb.Database, *zap.Logger, func()) {
-	db, err := ssvstorage.GetStorageFactory(logger, basedb.Options{
-		Type: "badger-memory",
-		Path: "",
-	})
+	db, err := kv.NewInMemory(logger, basedb.Options{})
 	if err != nil {
 		return nil, nil, func() {}
 	}

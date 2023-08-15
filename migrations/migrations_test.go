@@ -5,23 +5,21 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/kv"
 )
 
 func setupOptions(ctx context.Context, t *testing.T) (Options, error) {
 	// Create in-memory test DB.
-	options := basedb.Options{
-		Type:      "badger-memory",
-		Path:      "",
+	db, err := kv.NewInMemory(logging.TestLogger(t), basedb.Options{
 		Reporting: true,
 		Ctx:       ctx,
-	}
-	db, err := kv.New(logging.TestLogger(t), options)
+	})
 	if err != nil {
 		return Options{}, err
 	}

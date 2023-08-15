@@ -18,8 +18,8 @@ import (
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/storage/kv"
 
-	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
@@ -30,10 +30,7 @@ func _byteArray(input string) []byte {
 }
 
 func getBaseStorage(logger *zap.Logger) (basedb.Database, error) {
-	return ssvstorage.GetStorageFactory(logger, basedb.Options{
-		Type: "badger-memory",
-		Path: "",
-	})
+	return kv.NewInMemory(logger, basedb.Options{})
 }
 
 func newStorageForTest(t *testing.T) (Storage, func()) {
@@ -42,6 +39,7 @@ func newStorageForTest(t *testing.T) (Storage, func()) {
 	if err != nil {
 		return nil, func() {}
 	}
+
 	s := NewSignerStorage(db, networkconfig.TestNetwork.Beacon.GetNetwork(), logger)
 	return s, func() {
 		db.Close()
