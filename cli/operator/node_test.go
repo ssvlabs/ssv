@@ -14,7 +14,7 @@ import (
 	"github.com/bloxapp/ssv/storage/kv"
 )
 
-func Test_ensureNoConfigBreakingChanges(t *testing.T) {
+func Test_verifyConfig(t *testing.T) {
 	logger := zap.New(zapcore.NewNopCore(), zap.WithFatalHook(zapcore.WriteThenPanic))
 
 	db, err := kv.NewInMemory(logger, basedb.Options{})
