@@ -1,7 +1,6 @@
 package operator
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -65,7 +64,7 @@ func Test_verifyConfig(t *testing.T) {
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 
 		require.PanicsWithValue(t,
-			fmt.Sprintf("incompatible config change: can't change network from \"testnet1\" to \"testnet\" in an existing database, it must be removed first"),
+			"incompatible config change: can't change network from \"testnet1\" to \"testnet\" in an existing database, it must be removed first",
 			func() { verifyConfig(logger, nodeStorage, testNetworkName, true) },
 		)
 
@@ -85,7 +84,7 @@ func Test_verifyConfig(t *testing.T) {
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 
 		require.PanicsWithValue(t,
-			fmt.Sprintf("incompatible config change: can't change network from \"testnet1\" to \"testnet\" in an existing database, it must be removed first"),
+			"incompatible config change: can't change network from \"testnet1\" to \"testnet\" in an existing database, it must be removed first",
 			func() { verifyConfig(logger, nodeStorage, testNetworkName, true) },
 		)
 
