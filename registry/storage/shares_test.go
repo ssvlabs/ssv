@@ -28,7 +28,7 @@ func TestValidatorSerializer(t *testing.T) {
 	sk := &bls.SecretKey{}
 	sk.SetByCSPRNG()
 
-	const keysCount = 4
+	const keysCount = 13
 
 	splitKeys, err := threshold.Create(sk.Serialize(), keysCount-1, keysCount)
 	require.NoError(t, err)
@@ -51,7 +51,7 @@ func TestValidatorSerializer(t *testing.T) {
 	require.Equal(t, v1.OwnerAddress, validatorShare.OwnerAddress)
 	require.Equal(t, v1.Liquidated, validatorShare.Liquidated)
 
-	tooBigEncodedShare := bytes.Repeat(obj.Value, 10)
+	tooBigEncodedShare := bytes.Repeat(obj.Value, 20)
 	require.ErrorContains(t, v1.Decode(tooBigEncodedShare),
 		"share size is too big, got "+strconv.Itoa(len(tooBigEncodedShare))+", max allowed "+strconv.Itoa(ssvtypes.MaxAllowedShareSize))
 }
