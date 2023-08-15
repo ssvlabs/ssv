@@ -151,7 +151,7 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 	go n.ticker.Start(logger)
 	go func() {
 		if err := n.listenForCurrentSlot(logger); err != nil {
-			logger.Fatal(err.Error())
+			logger.Fatal("unexpected error while listening for current slot", zap.Error(err))
 		}
 	}()
 	n.validatorsCtrl.StartNetworkHandlers()
