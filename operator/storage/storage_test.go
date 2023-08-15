@@ -244,41 +244,30 @@ func TestNetworkAndLocalEventsConfig(t *testing.T) {
 	storage, err := NewNodeStorage(logger, db)
 	require.NoError(t, err)
 
-	name, found, err := storage.GetNetworkConfig(nil)
+	storedCfg, found, err := storage.GetConfig(nil)
 	require.NoError(t, err)
 	require.False(t, found)
-	require.Empty(t, name)
+	require.Nil(t, storedCfg)
 
-	require.NoError(t, storage.SaveNetworkConfig(nil, networkconfig.TestNetwork.Name))
+	c1 := &ConfigLock{
+		NetworkName:      networkconfig.TestNetwork.Name,
+		UsingLocalEvents: false,
+	}
+	require.NoError(t, storage.SaveConfig(nil, c1))
 
-	name, found, err = storage.GetNetworkConfig(nil)
+	storedCfg, found, err = storage.GetConfig(nil)
 	require.NoError(t, err)
 	require.True(t, found)
-	require.Equal(t, networkconfig.TestNetwork.Name, name)
+	require.Equal(t, c1, storedCfg)
 
-	require.NoError(t, storage.SaveNetworkConfig(nil, networkconfig.TestNetwork.Name+"1"))
+	c2 := &ConfigLock{
+		NetworkName:      networkconfig.TestNetwork.Name + "1",
+		UsingLocalEvents: false,
+	}
+	require.NoError(t, storage.SaveConfig(nil, c2))
 
-	name, found, err = storage.GetNetworkConfig(nil)
+	storedCfg, found, err = storage.GetConfig(nil)
 	require.NoError(t, err)
 	require.True(t, found)
-	require.Equal(t, networkconfig.TestNetwork.Name+"1", name)
-
-	localEvents, found, err := storage.GetLocalEventsConfig(nil)
-	require.NoError(t, err)
-	require.False(t, found)
-	require.False(t, localEvents)
-
-	require.NoError(t, storage.SaveLocalEventsConfig(nil, true))
-
-	localEvents, found, err = storage.GetLocalEventsConfig(nil)
-	require.NoError(t, err)
-	require.True(t, found)
-	require.True(t, localEvents)
-
-	require.NoError(t, storage.SaveLocalEventsConfig(nil, false))
-
-	localEvents, found, err = storage.GetLocalEventsConfig(nil)
-	require.NoError(t, err)
-	require.True(t, found)
-	require.False(t, localEvents)
+	require.Equal(t, c2, storedCfg)
 }

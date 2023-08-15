@@ -3,6 +3,8 @@ package storage
 import (
 	"crypto/rsa"
 	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"math/big"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
@@ -23,8 +25,7 @@ var HashedPrivateKey = "hashed-private-key"
 var (
 	storagePrefix         = []byte("operator/")
 	lastProcessedBlockKey = []byte("syncOffset") // TODO: temporarily left as syncOffset for compatibility, consider renaming and adding a migration for that
-	networkNameKey        = []byte("networkName")
-	localEventsKey        = []byte("localEvents")
+	configKey             = []byte("config")
 )
 
 // Storage represents the interface for ssv node storage
@@ -37,13 +38,9 @@ type Storage interface {
 	SaveLastProcessedBlock(rw basedb.ReadWriter, offset *big.Int) error
 	GetLastProcessedBlock(r basedb.Reader) (*big.Int, bool, error)
 
-	SaveNetworkConfig(rw basedb.ReadWriter, networkName string) error
-	GetNetworkConfig(rw basedb.ReadWriter) (networkName string, found bool, err error)
-	DeleteNetworkConfig(rw basedb.ReadWriter) error
-
-	SaveLocalEventsConfig(rw basedb.ReadWriter, usingLocalEvents bool) error
-	GetLocalEventsConfig(rw basedb.ReadWriter) (usingLocalEvents bool, found bool, err error)
-	DeleteLocalEventsConfig(rw basedb.ReadWriter) error
+	GetConfig(rw basedb.ReadWriter) (*ConfigLock, bool, error)
+	SaveConfig(rw basedb.ReadWriter, config *ConfigLock) error
+	DeleteConfig(rw basedb.ReadWriter) error
 
 	registry.RegistryStore
 
@@ -304,33 +301,36 @@ func (s *storage) UpdateValidatorMetadata(pk string, metadata *beacon.ValidatorM
 	return s.shareStore.UpdateValidatorMetadata(pk, metadata)
 }
 
-func (s *storage) GetNetworkConfig(rw basedb.ReadWriter) (networkName string, found bool, err error) {
-	obj, found, err := s.db.Using(rw).Get(storagePrefix, networkNameKey)
-	return string(obj.Value), found, err
-}
-
-func (s *storage) SaveNetworkConfig(rw basedb.ReadWriter, networkName string) error {
-	return s.db.Using(rw).Set(storagePrefix, networkNameKey, []byte(networkName))
-}
-
-func (s *storage) DeleteNetworkConfig(rw basedb.ReadWriter) error {
-	return s.db.Using(rw).Delete(storagePrefix, networkNameKey)
-}
-
-func (s *storage) GetLocalEventsConfig(rw basedb.ReadWriter) (usingLocalEvents bool, found bool, err error) {
-	obj, found, err := s.db.Using(rw).Get(storagePrefix, localEventsKey)
-	return len(obj.Value) == 1 && obj.Value[0] != 0, found, err
-}
-
-func (s *storage) SaveLocalEventsConfig(rw basedb.ReadWriter, usingLocalEvents bool) error {
-	usingLocalEventsValue := byte(0)
-	if usingLocalEvents {
-		usingLocalEventsValue = 1
+func (s *storage) GetConfig(rw basedb.ReadWriter) (*ConfigLock, bool, error) {
+	obj, found, err := s.db.Using(rw).Get(storagePrefix, configKey)
+	if err != nil {
+		return nil, false, fmt.Errorf("db: %w", err)
+	}
+	if !found {
+		return nil, false, nil
 	}
 
-	return s.db.Using(rw).Set(storagePrefix, localEventsKey, []byte{usingLocalEventsValue})
+	config := &ConfigLock{}
+	if err := json.Unmarshal(obj.Value, &config); err != nil {
+		return nil, false, fmt.Errorf("unmarshal: %w", err)
+	}
+
+	return config, true, nil
 }
 
-func (s *storage) DeleteLocalEventsConfig(rw basedb.ReadWriter) error {
-	return s.db.Using(rw).Delete(storagePrefix, localEventsKey)
+func (s *storage) SaveConfig(rw basedb.ReadWriter, config *ConfigLock) error {
+	b, err := json.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("marshal: %w", err)
+	}
+
+	if err := s.db.Using(rw).Set(storagePrefix, configKey, b); err != nil {
+		return fmt.Errorf("db: %w", err)
+	}
+
+	return nil
+}
+
+func (s *storage) DeleteConfig(rw basedb.ReadWriter) error {
+	return s.db.Using(rw).Delete(storagePrefix, configKey)
 }

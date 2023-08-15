@@ -294,48 +294,26 @@ var StartNodeCmd = &cobra.Command{
 }
 
 func ensureNoConfigBreakingChanges(logger *zap.Logger, nodeStorage operatorstorage.Storage, networkName string, usingLocalEvents bool) {
-	storedNetworkName, foundStoredNetwork, err := nodeStorage.GetNetworkConfig(nil)
+	storedConfig, foundConfig, err := nodeStorage.GetConfig(nil)
 	if err != nil {
-		logger.Fatal("could not check saved network config")
+		logger.Fatal("could not check saved local events config", zap.Error(err))
 	}
 
-	storedUsingLocalEvents, foundStoredLocalEvents, err := nodeStorage.GetLocalEventsConfig(nil)
-	if err != nil {
-		logger.Fatal("could not check saved local events config")
+	currentConfig := &operatorstorage.ConfigLock{
+		NetworkName:      networkName,
+		UsingLocalEvents: usingLocalEvents,
 	}
 
-	if foundStoredNetwork && storedNetworkName != networkName {
-		logger.Fatal("node was already run with a different network name, the database needs to be cleaned to switch the network",
-			zap.String("current_network", networkName),
-			zap.String("stored_network", storedNetworkName),
-		)
-	}
-
-	if foundStoredLocalEvents {
-		if !storedUsingLocalEvents && usingLocalEvents {
-			logger.Fatal("node was already run with real events, the database needs to be cleaned to use local events")
-		} else if storedUsingLocalEvents && !usingLocalEvents {
-			logger.Fatal("node was already run with local events, the database needs to be cleaned to use real events")
+	if foundConfig {
+		if err := storedConfig.EnsureSameWith(currentConfig); err != nil {
+			err = fmt.Errorf("stored config mismatch: %w", err)
+			logger.Fatal(err.Error())
 		}
-	}
-
-	txn := nodeStorage.Begin()
-	defer txn.Discard()
-
-	if !foundStoredNetwork {
-		if err := nodeStorage.SaveNetworkConfig(txn, networkName); err != nil {
-			logger.Fatal("failed to save network config", zap.Error(err))
+	} else {
+		if err := nodeStorage.SaveConfig(nil, currentConfig); err != nil {
+			err = fmt.Errorf("failed to store config: %w", err)
+			logger.Fatal(err.Error())
 		}
-	}
-
-	if !foundStoredLocalEvents {
-		if err := nodeStorage.SaveLocalEventsConfig(txn, usingLocalEvents); err != nil {
-			logger.Fatal("failed to save local events config", zap.Error(err))
-		}
-	}
-
-	if err := txn.Commit(); err != nil {
-		logger.Fatal("failed to commit changes to DB", zap.Error(err))
 	}
 }
 

@@ -150,26 +150,14 @@ func (m NodeStorage) SetupPrivateKey(operatorKeyBase64 string) ([]byte, error) {
 	panic("implement me")
 }
 
-func (m NodeStorage) SaveNetworkConfig(rw basedb.ReadWriter, networkName string) error {
+func (m NodeStorage) GetConfig(rw basedb.ReadWriter) (*storage.ConfigLock, bool, error) {
 	panic("implement me")
 }
 
-func (m NodeStorage) GetNetworkConfig(rw basedb.ReadWriter) (networkName string, found bool, err error) {
+func (m NodeStorage) SaveConfig(rw basedb.ReadWriter, config *storage.ConfigLock) error {
 	panic("implement me")
 }
 
-func (m NodeStorage) DeleteNetworkConfig(rw basedb.ReadWriter) error {
-	panic("implement me")
-}
-
-func (m NodeStorage) SaveLocalEventsConfig(rw basedb.ReadWriter, usingLocalEvents bool) error {
-	panic("implement me")
-}
-
-func (m NodeStorage) GetLocalEventsConfig(rw basedb.ReadWriter) (usingLocalEvents bool, found bool, err error) {
-	panic("implement me")
-}
-
-func (m NodeStorage) DeleteLocalEventsConfig(rw basedb.ReadWriter) error {
+func (m NodeStorage) DeleteConfig(rw basedb.ReadWriter) error {
 	panic("implement me")
 }

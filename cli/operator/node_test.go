@@ -1,6 +1,7 @@
 package operator
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -28,131 +29,114 @@ func Test_ensureNoConfigBreakingChanges(t *testing.T) {
 	testNetworkName := networkconfig.TestNetwork.Name
 
 	t.Run("no config in DB", func(t *testing.T) {
-		ensureNoConfigBreakingChanges(logger, nodeStorage, testNetworkName, true)
+		c := &operatorstorage.ConfigLock{
+			NetworkName:      testNetworkName,
+			UsingLocalEvents: true,
+		}
+		ensureNoConfigBreakingChanges(logger, nodeStorage, c.NetworkName, c.UsingLocalEvents)
 
-		configName, found, err := nodeStorage.GetNetworkConfig(nil)
+		storedConfig, found, err := nodeStorage.GetConfig(nil)
 		require.NoError(t, err)
 		require.True(t, found)
-		require.Equal(t, testNetworkName, configName)
+		require.Equal(t, c, storedConfig)
 
-		le, found, err := nodeStorage.GetLocalEventsConfig(nil)
-		require.NoError(t, err)
-		require.True(t, found)
-		require.Equal(t, true, le)
-
-		require.NoError(t, nodeStorage.DeleteNetworkConfig(nil))
-		require.NoError(t, nodeStorage.DeleteLocalEventsConfig(nil))
+		require.NoError(t, nodeStorage.DeleteConfig(nil))
 	})
 
 	t.Run("has same config in DB", func(t *testing.T) {
-		require.NoError(t, nodeStorage.SaveNetworkConfig(nil, testNetworkName))
-		require.NoError(t, nodeStorage.SaveLocalEventsConfig(nil, true))
+		c := &operatorstorage.ConfigLock{
+			NetworkName:      testNetworkName,
+			UsingLocalEvents: true,
+		}
+		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 
 		ensureNoConfigBreakingChanges(logger, nodeStorage, testNetworkName, true)
 
-		configName, found, err := nodeStorage.GetNetworkConfig(nil)
+		storedConfig, found, err := nodeStorage.GetConfig(nil)
 		require.NoError(t, err)
 		require.True(t, found)
-		require.Equal(t, testNetworkName, configName)
+		require.Equal(t, c, storedConfig)
 
-		le, found, err := nodeStorage.GetLocalEventsConfig(nil)
-		require.NoError(t, err)
-		require.True(t, found)
-		require.Equal(t, true, le)
-
-		require.NoError(t, nodeStorage.DeleteNetworkConfig(nil))
-		require.NoError(t, nodeStorage.DeleteLocalEventsConfig(nil))
+		require.NoError(t, nodeStorage.DeleteConfig(nil))
 	})
 
 	t.Run("has different network name and events type in DB", func(t *testing.T) {
-		require.NoError(t, nodeStorage.SaveNetworkConfig(nil, testNetworkName+"1"))
-		require.NoError(t, nodeStorage.SaveLocalEventsConfig(nil, false))
+		c := &operatorstorage.ConfigLock{
+			NetworkName:      testNetworkName + "1",
+			UsingLocalEvents: false,
+		}
+		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 
 		require.PanicsWithValue(t,
-			"node was already run with a different network name, the database needs to be cleaned to switch the network",
+			fmt.Sprintf("stored config mismatch: node was already run with a different network name, the database needs to be cleaned to switch the network, current %q, stored %q", testNetworkName, testNetworkName+"1"),
 			func() { ensureNoConfigBreakingChanges(logger, nodeStorage, testNetworkName, true) },
 		)
 
-		configName, found, err := nodeStorage.GetNetworkConfig(nil)
+		storedConfig, found, err := nodeStorage.GetConfig(nil)
 		require.NoError(t, err)
 		require.True(t, found)
-		require.Equal(t, testNetworkName+"1", configName)
+		require.Equal(t, c, storedConfig)
 
-		le, found, err := nodeStorage.GetLocalEventsConfig(nil)
-		require.NoError(t, err)
-		require.True(t, found)
-		require.Equal(t, false, le)
-
-		require.NoError(t, nodeStorage.DeleteNetworkConfig(nil))
-		require.NoError(t, nodeStorage.DeleteLocalEventsConfig(nil))
+		require.NoError(t, nodeStorage.DeleteConfig(nil))
 	})
 
 	t.Run("has different network name in DB", func(t *testing.T) {
-		require.NoError(t, nodeStorage.SaveNetworkConfig(nil, testNetworkName+"1"))
-		require.NoError(t, nodeStorage.SaveLocalEventsConfig(nil, true))
+		c := &operatorstorage.ConfigLock{
+			NetworkName:      testNetworkName + "1",
+			UsingLocalEvents: true,
+		}
+		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 
 		require.PanicsWithValue(t,
-			"node was already run with a different network name, the database needs to be cleaned to switch the network",
+			fmt.Sprintf("stored config mismatch: node was already run with a different network name, the database needs to be cleaned to switch the network, current %q, stored %q", testNetworkName, testNetworkName+"1"),
 			func() { ensureNoConfigBreakingChanges(logger, nodeStorage, testNetworkName, true) },
 		)
 
-		configName, found, err := nodeStorage.GetNetworkConfig(nil)
+		storedConfig, found, err := nodeStorage.GetConfig(nil)
 		require.NoError(t, err)
 		require.True(t, found)
-		require.Equal(t, testNetworkName+"1", configName)
+		require.Equal(t, c, storedConfig)
 
-		le, found, err := nodeStorage.GetLocalEventsConfig(nil)
-		require.NoError(t, err)
-		require.True(t, found)
-		require.Equal(t, true, le)
-
-		require.NoError(t, nodeStorage.DeleteNetworkConfig(nil))
-		require.NoError(t, nodeStorage.DeleteLocalEventsConfig(nil))
+		require.NoError(t, nodeStorage.DeleteConfig(nil))
 	})
 
 	t.Run("has real events in DB but runs with local events", func(t *testing.T) {
-		require.NoError(t, nodeStorage.SaveNetworkConfig(nil, testNetworkName))
-		require.NoError(t, nodeStorage.SaveLocalEventsConfig(nil, false))
+		c := &operatorstorage.ConfigLock{
+			NetworkName:      testNetworkName,
+			UsingLocalEvents: false,
+		}
+		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 
 		require.PanicsWithValue(t,
-			"node was already run with real events, the database needs to be cleaned to use local events",
+			"stored config mismatch: node was already run with real events, the database needs to be cleaned to use local events",
 			func() { ensureNoConfigBreakingChanges(logger, nodeStorage, testNetworkName, true) },
 		)
 
-		configName, found, err := nodeStorage.GetNetworkConfig(nil)
+		storedConfig, found, err := nodeStorage.GetConfig(nil)
 		require.NoError(t, err)
 		require.True(t, found)
-		require.Equal(t, testNetworkName, configName)
+		require.Equal(t, c, storedConfig)
 
-		le, found, err := nodeStorage.GetLocalEventsConfig(nil)
-		require.NoError(t, err)
-		require.True(t, found)
-		require.Equal(t, false, le)
-
-		require.NoError(t, nodeStorage.DeleteNetworkConfig(nil))
-		require.NoError(t, nodeStorage.DeleteLocalEventsConfig(nil))
+		require.NoError(t, nodeStorage.DeleteConfig(nil))
 	})
 
 	t.Run("has local events in DB but runs with real events", func(t *testing.T) {
-		require.NoError(t, nodeStorage.SaveNetworkConfig(nil, testNetworkName))
-		require.NoError(t, nodeStorage.SaveLocalEventsConfig(nil, true))
+		c := &operatorstorage.ConfigLock{
+			NetworkName:      testNetworkName,
+			UsingLocalEvents: true,
+		}
+		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 
 		require.PanicsWithValue(t,
-			"node was already run with local events, the database needs to be cleaned to use real events",
+			"stored config mismatch: node was already run with local events, the database needs to be cleaned to use real events",
 			func() { ensureNoConfigBreakingChanges(logger, nodeStorage, testNetworkName, false) },
 		)
 
-		configName, found, err := nodeStorage.GetNetworkConfig(nil)
+		storedConfig, found, err := nodeStorage.GetConfig(nil)
 		require.NoError(t, err)
 		require.True(t, found)
-		require.Equal(t, testNetworkName, configName)
+		require.Equal(t, c, storedConfig)
 
-		le, found, err := nodeStorage.GetLocalEventsConfig(nil)
-		require.NoError(t, err)
-		require.True(t, found)
-		require.Equal(t, true, le)
-
-		require.NoError(t, nodeStorage.DeleteNetworkConfig(nil))
-		require.NoError(t, nodeStorage.DeleteLocalEventsConfig(nil))
+		require.NoError(t, nodeStorage.DeleteConfig(nil))
 	})
 }
