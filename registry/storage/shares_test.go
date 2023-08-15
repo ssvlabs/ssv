@@ -17,8 +17,9 @@ import (
 	"github.com/bloxapp/ssv/networkconfig"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
-	ssvstorage "github.com/bloxapp/ssv/storage"
+
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
 
@@ -167,17 +168,16 @@ func generateMaxPossibleShare() (*ssvtypes.SSVShare, error) {
 }
 
 func newShareStorageForTest(logger *zap.Logger) (Shares, func()) {
-	db, err := ssvstorage.GetStorageFactory(logger, basedb.Options{
-		Type: "badger-memory",
-		Path: "",
-	})
+	db, err := kv.NewInMemory(logger, basedb.Options{})
 	if err != nil {
 		return nil, func() {}
 	}
+
 	s, err := NewSharesStorage(logger, db, []byte("test"))
 	if err != nil {
 		return nil, func() {}
 	}
+
 	return s, func() {
 		db.Close()
 	}

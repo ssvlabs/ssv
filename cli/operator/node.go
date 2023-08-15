@@ -49,7 +49,6 @@ import (
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/commons"
@@ -344,7 +343,7 @@ func setupGlobal(cmd *cobra.Command) (*zap.Logger, error) {
 }
 
 func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.BadgerDB, error) {
-	db, err := storage.GetStorageFactory(logger, cfg.DBOptions)
+	db, err := kv.New(logger, cfg.DBOptions)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open db")
 	}
@@ -352,7 +351,7 @@ func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.Badger
 		if err := db.Close(); err != nil {
 			return errors.Wrap(err, "failed to close db")
 		}
-		db, err = storage.GetStorageFactory(logger, cfg.DBOptions)
+		db, err = kv.New(logger, cfg.DBOptions)
 		return errors.Wrap(err, "failed to reopen db")
 	}
 

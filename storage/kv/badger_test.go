@@ -19,16 +19,15 @@ import (
 func TestBadgerEndToEnd(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
 	zapCore, observedLogs := observer.New(zap.DebugLevel)
 	logger := zap.New(zapCore)
 	options := basedb.Options{
-		Type:      "badger-memory",
-		Path:      "",
 		Reporting: true,
 		Ctx:       ctx,
 	}
 
-	db, err := New(logger, options)
+	db, err := NewInMemory(logger, options)
 	require.NoError(t, err)
 
 	toSave := []struct {
@@ -95,13 +94,9 @@ func TestBadgerEndToEnd(t *testing.T) {
 
 func TestBadgerDb_GetAll(t *testing.T) {
 	logger := logging.TestLogger(t)
-	options := basedb.Options{
-		Type: "badger-memory",
-		Path: "",
-	}
 
 	t.Run("100_items", func(t *testing.T) {
-		db, err := New(logger, options)
+		db, err := NewInMemory(logger, basedb.Options{})
 		require.NoError(t, err)
 		defer db.Close()
 
@@ -109,7 +104,7 @@ func TestBadgerDb_GetAll(t *testing.T) {
 	})
 
 	t.Run("10K_items", func(t *testing.T) {
-		db, err := New(logger, options)
+		db, err := NewInMemory(logger, basedb.Options{})
 		require.NoError(t, err)
 		defer db.Close()
 
@@ -117,7 +112,7 @@ func TestBadgerDb_GetAll(t *testing.T) {
 	})
 
 	t.Run("100K_items", func(t *testing.T) {
-		db, err := New(logger, options)
+		db, err := NewInMemory(logger, basedb.Options{})
 		require.NoError(t, err)
 		defer db.Close()
 
@@ -127,11 +122,7 @@ func TestBadgerDb_GetAll(t *testing.T) {
 
 func TestBadgerDb_GetMany(t *testing.T) {
 	logger := logging.TestLogger(t)
-	options := basedb.Options{
-		Type: "badger-memory",
-		Path: "",
-	}
-	db, err := New(logger, options)
+	db, err := NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 	defer db.Close()
 
@@ -154,11 +145,7 @@ func TestBadgerDb_GetMany(t *testing.T) {
 
 func TestBadgerDb_SetMany(t *testing.T) {
 	logger := logging.TestLogger(t)
-	options := basedb.Options{
-		Type: "badger-memory",
-		Path: "",
-	}
-	db, err := New(logger, options)
+	db, err := NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 	defer db.Close()
 

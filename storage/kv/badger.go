@@ -30,13 +30,22 @@ type BadgerDB struct {
 	gcMutex sync.Mutex
 }
 
-// New create new instance of Badger db
+// New creates a persistent DB instance.
 func New(logger *zap.Logger, options basedb.Options) (*BadgerDB, error) {
+	return createDB(logger, options, false)
+}
+
+// NewInMemory creates an in-memory DB instance.
+func NewInMemory(logger *zap.Logger, options basedb.Options) (*BadgerDB, error) {
+	return createDB(logger, options, true)
+}
+
+func createDB(logger *zap.Logger, options basedb.Options, inMemory bool) (*BadgerDB, error) {
 	// Open the Badger database located in the /tmp/badger directory.
 	// It will be created if it doesn't exist.
 	opt := badger.DefaultOptions(options.Path)
 
-	if options.Type == "badger-memory" {
+	if inMemory {
 		opt.InMemory = true
 		opt.Dir = ""
 		opt.ValueDir = ""

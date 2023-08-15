@@ -14,8 +14,8 @@ import (
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
@@ -27,12 +27,7 @@ var (
 
 func TestSaveAndGetPrivateKey(t *testing.T) {
 	logger := logging.TestLogger(t)
-	options := basedb.Options{
-		Type: "badger-memory",
-		Path: "",
-	}
-
-	db, err := ssvstorage.GetStorageFactory(logger, options)
+	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 	defer db.Close()
 
@@ -93,13 +88,8 @@ func TestSetupPrivateKey(t *testing.T) {
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
-			options := basedb.Options{
-				Type: "badger-memory",
-				Path: "",
-			}
-
 			logger := logging.TestLogger(t)
-			db, err := ssvstorage.GetStorageFactory(logger, options)
+			db, err := kv.NewInMemory(logger, basedb.Options{})
 			require.NoError(t, err)
 			defer db.Close()
 
@@ -153,14 +143,11 @@ func TestSetupPrivateKey(t *testing.T) {
 }
 
 func TestDropRegistryData(t *testing.T) {
-	options := basedb.Options{
-		Type: "badger-memory",
-		Path: "",
-	}
 	logger := logging.TestLogger(t)
-	db, err := ssvstorage.GetStorageFactory(logger, options)
+	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 	defer db.Close()
+
 	storage, err := NewNodeStorage(logger, db)
 	require.NoError(t, err)
 
@@ -234,10 +221,7 @@ func TestDropRegistryData(t *testing.T) {
 
 func TestNetworkAndLocalEventsConfig(t *testing.T) {
 	logger := logging.TestLogger(t)
-	db, err := ssvstorage.GetStorageFactory(logger, basedb.Options{
-		Type: "badger-memory",
-		Path: "",
-	})
+	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 	defer db.Close()
 
