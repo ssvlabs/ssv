@@ -11,16 +11,16 @@ type ConfigLock struct {
 
 func (stored *ConfigLock) EnsureSameWith(current *ConfigLock) error {
 	if stored.NetworkName != current.NetworkName {
-		return fmt.Errorf("node was already run with a different network name, the database needs to be cleaned to switch the network, current %q, stored %q",
-			current.NetworkName, stored.NetworkName)
+		return fmt.Errorf("can't change network from %q to %q in an existing database, it must be removed first",
+			stored.NetworkName, current.NetworkName)
 	}
 
 	if stored.UsingLocalEvents && !current.UsingLocalEvents {
-		return fmt.Errorf("node was already run with local events, the database needs to be cleaned to use real events")
+		return fmt.Errorf("can't switch off localevents, database must be removed first")
 	}
 
 	if !stored.UsingLocalEvents && current.UsingLocalEvents {
-		return fmt.Errorf("node was already run with real events, the database needs to be cleaned to use local events")
+		return fmt.Errorf("can't switch on localevents, database must be removed first")
 	}
 
 	return nil
