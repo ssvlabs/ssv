@@ -85,7 +85,7 @@ func (rc *recipientController) listenToTicker(logger *zap.Logger, slots chan pha
 }
 
 func (rc *recipientController) prepareAndSubmit(logger *zap.Logger, slot phase0.Slot) error {
-	shares := rc.shareStorage.List(storage.ByOperatorID(rc.operatorData.ID), storage.ByActiveValidator())
+	shares := rc.shareStorage.List(nil, storage.ByOperatorID(rc.operatorData.ID), storage.ByActiveValidator())
 
 	const batchSize = 500
 	var submitted int
@@ -107,7 +107,7 @@ func (rc *recipientController) prepareAndSubmit(logger *zap.Logger, slot phase0.
 		submitted += count
 	}
 
-	logger.Debug("✅ successfully submitted proposal preparations",
+	logger.Debug("✅  successfully submitted proposal preparations",
 		zap.Int("submitted", submitted),
 		zap.Int("total", len(shares)),
 	)
@@ -115,7 +115,7 @@ func (rc *recipientController) prepareAndSubmit(logger *zap.Logger, slot phase0.
 }
 
 func (rc *recipientController) submit(logger *zap.Logger, shares []*types.SSVShare) (int, error) {
-	m, err := rc.toProposalPreparation(logger, shares)
+	m, err := rc.toProposalPreparation(shares)
 	if err != nil {
 		return 0, errors.Wrap(err, "could not build proposal preparation batch")
 	}
@@ -126,7 +126,7 @@ func (rc *recipientController) submit(logger *zap.Logger, shares []*types.SSVSha
 	return len(m), nil
 }
 
-func (rc *recipientController) toProposalPreparation(logger *zap.Logger, shares []*types.SSVShare) (map[phase0.ValidatorIndex]bellatrix.ExecutionAddress, error) {
+func (rc *recipientController) toProposalPreparation(shares []*types.SSVShare) (map[phase0.ValidatorIndex]bellatrix.ExecutionAddress, error) {
 	// build unique owners
 	keys := make(map[common.Address]bool)
 	var uniq []common.Address
@@ -138,7 +138,7 @@ func (rc *recipientController) toProposalPreparation(logger *zap.Logger, shares 
 	}
 
 	// get recipients
-	rds, err := rc.recipientStorage.GetRecipientDataMany(logger, uniq)
+	rds, err := rc.recipientStorage.GetRecipientDataMany(nil, uniq)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get recipients data")
 	}

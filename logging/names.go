@@ -4,7 +4,7 @@ const (
 	NameBootNode         = "BootNode"
 	NameController       = "Controller"
 	NameDiscoveryService = "DiscoveryService"
-	NameDutyController   = "DutyController"
+	NameDutyScheduler    = "DutyScheduler"
 	NameEthClient        = "EthClient"
 	NameMetricsHandler   = "MetricsHandler"
 	NameOperator         = "Operator"
@@ -23,4 +23,5 @@ const (
 	NameP2PStorage        = "P2PStorage"
 	NamePubsubTrace       = "PubsubTrace"
 	NameScoreInspector    = "ScoreInspector"
+	NameEventHandler      = "EventHandler"
 )

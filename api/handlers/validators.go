@@ -3,12 +3,12 @@ package handlers
 import (
 	"bytes"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+
 	"github.com/bloxapp/ssv/api"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
@@ -20,11 +20,12 @@ type Validators struct {
 
 func (h *Validators) List(w http.ResponseWriter, r *http.Request) error {
 	var request struct {
-		Owners    api.HexSlice    `json:"owners" form:"owners"`
-		Operators api.Uint64Slice `json:"operators" form:"operators"`
-		Clusters  requestClusters `json:"clusters" form:"clusters"`
-		PubKeys   api.HexSlice    `json:"pubkeys" form:"pubkeys"`
-		Indices   api.Uint64Slice `json:"indices" form:"indices"`
+		Owners      api.HexSlice    `json:"owners" form:"owners"`
+		Operators   api.Uint64Slice `json:"operators" form:"operators"`
+		Clusters    requestClusters `json:"clusters" form:"clusters"`
+		Subclusters requestClusters `json:"subclusters" form:"subclusters"`
+		PubKeys     api.HexSlice    `json:"pubkeys" form:"pubkeys"`
+		Indices     api.Uint64Slice `json:"indices" form:"indices"`
 	}
 	var response struct {
 		Data []*validatorJSON `json:"data"`
@@ -42,7 +43,10 @@ func (h *Validators) List(w http.ResponseWriter, r *http.Request) error {
 		filters = append(filters, byOperators(request.Operators))
 	}
 	if len(request.Clusters) > 0 {
-		filters = append(filters, byClusters(request.Clusters))
+		filters = append(filters, byClusters(request.Clusters, false))
+	}
+	if len(request.Subclusters) > 0 {
+		filters = append(filters, byClusters(request.Subclusters, true))
 	}
 	if len(request.PubKeys) > 0 {
 		filters = append(filters, byPubKeys(request.PubKeys))
@@ -51,7 +55,7 @@ func (h *Validators) List(w http.ResponseWriter, r *http.Request) error {
 		filters = append(filters, byIndices(request.Indices))
 	}
 
-	shares := h.Shares.List(filters...)
+	shares := h.Shares.List(nil, filters...)
 	response.Data = make([]*validatorJSON, len(shares))
 	for i, share := range shares {
 		response.Data[i] = validatorFromShare(share)
@@ -83,20 +87,28 @@ func byOperators(operators []uint64) registrystorage.SharesFilter {
 	}
 }
 
-func byClusters(clusters requestClusters) registrystorage.SharesFilter {
+// byClusters returns a filter that matches shares that match or contain any of the given clusters.
+func byClusters(clusters requestClusters, contains bool) registrystorage.SharesFilter {
 	return func(share *types.SSVShare) bool {
-	Filter:
+		shareCommittee := make([]string, len(share.Committee))
+		for i, c := range share.Committee {
+			shareCommittee[i] = strconv.FormatUint(c.OperatorID, 10)
+		}
+		shareStr := strings.Join(shareCommittee, ",")
+
 		for _, cluster := range clusters {
-			if len(cluster) != len(share.Committee) {
-				continue
+			clusterStrs := make([]string, len(cluster))
+			for i, c := range cluster {
+				clusterStrs[i] = strconv.FormatUint(c, 10)
 			}
-			sort.Slice(cluster, func(i, j int) bool { return cluster[i] < cluster[j] })
-			for i, c := range share.Committee {
-				if cluster[i] != c.OperatorID {
-					continue Filter
-				}
+			clusterStr := strings.Join(clusterStrs, ",")
+
+			if contains && strings.Contains(shareStr, clusterStr) {
+				return true
 			}
-			return true
+			if !contains && shareStr == clusterStr {
+				return true
+			}
 		}
 		return false
 	}
@@ -146,15 +158,16 @@ func (c *requestClusters) Bind(value string) error {
 }
 
 type validatorJSON struct {
-	PubKey        api.Hex                `json:"public_key"`
-	Index         phase0.ValidatorIndex  `json:"index"`
-	Status        string                 `json:"status"`
-	Owner         api.Hex                `json:"owner"`
-	Committee     []spectypes.OperatorID `json:"committee"`
-	Quorum        uint64                 `json:"quorum"`
-	PartialQuorum uint64                 `json:"partial_quorum"`
-	Grafitti      string                 `json:"grafitti"`
-	Liquidated    bool                   `json:"liquidated"`
+	PubKey          api.Hex                `json:"public_key"`
+	Index           phase0.ValidatorIndex  `json:"index"`
+	Status          string                 `json:"status"`
+	ActivationEpoch phase0.Epoch           `json:"activation_epoch"`
+	Owner           api.Hex                `json:"owner"`
+	Committee       []spectypes.OperatorID `json:"committee"`
+	Quorum          uint64                 `json:"quorum"`
+	PartialQuorum   uint64                 `json:"partial_quorum"`
+	Graffiti        string                 `json:"graffiti"`
+	Liquidated      bool                   `json:"liquidated"`
 }
 
 func validatorFromShare(share *types.SSVShare) *validatorJSON {
@@ -170,12 +183,13 @@ func validatorFromShare(share *types.SSVShare) *validatorJSON {
 		}(),
 		Quorum:        share.Quorum,
 		PartialQuorum: share.PartialQuorum,
-		Grafitti:      string(share.Graffiti),
+		Graffiti:      string(share.Graffiti),
 		Liquidated:    share.Liquidated,
 	}
 	if share.HasBeaconMetadata() {
 		v.Index = share.Metadata.BeaconMetadata.Index
 		v.Status = share.Metadata.BeaconMetadata.Status.String()
+		v.ActivationEpoch = share.Metadata.BeaconMetadata.ActivationEpoch
 	}
 	return v
 }

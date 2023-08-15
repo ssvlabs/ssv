@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/pkg/errors"
+
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
-	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 var AllowedDifference = 30 * time.Second
@@ -75,7 +75,7 @@ func SignatureCheckFilter() HandshakeFilter {
 	}
 }
 
-func RegisteredOperatorsFilter(logger *zap.Logger, nodeStorage storage.Storage, keysConfigWhitelist []string) HandshakeFilter {
+func RegisteredOperatorsFilter(nodeStorage storage.Storage, keysConfigWhitelist []string) HandshakeFilter {
 	return func(sender peer.ID, ani records.AnyNodeInfo) error {
 		sni, ok := ani.(*records.SignedNodeInfo)
 		if !ok {
@@ -91,7 +91,7 @@ func RegisteredOperatorsFilter(logger *zap.Logger, nodeStorage storage.Storage, 
 			}
 		}
 
-		data, found, err := nodeStorage.GetOperatorDataByPubKey(logger, sni.HandshakeData.SenderPublicKey)
+		data, found, err := nodeStorage.GetOperatorDataByPubKey(nil, sni.HandshakeData.SenderPublicKey)
 		if !found || data == nil {
 			return errors.Wrap(err, "operator wasn't found, probably not registered to a contract")
 		}
