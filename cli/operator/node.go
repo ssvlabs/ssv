@@ -112,7 +112,7 @@ var StartNodeCmd = &cobra.Command{
 
 		usingLocalEvents := len(cfg.LocalEventsPath) != 0
 
-		ensureNoConfigBreakingChanges(logger, nodeStorage, networkConfig.Name, usingLocalEvents)
+		verifyConfig(logger, nodeStorage, networkConfig.Name, usingLocalEvents)
 
 		operatorKey, _, _ := nodeStorage.GetPrivateKey()
 		keyBytes := x509.MarshalPKCS1PrivateKey(operatorKey)
@@ -292,7 +292,7 @@ var StartNodeCmd = &cobra.Command{
 	},
 }
 
-func ensureNoConfigBreakingChanges(logger *zap.Logger, nodeStorage operatorstorage.Storage, networkName string, usingLocalEvents bool) {
+func verifyConfig(logger *zap.Logger, nodeStorage operatorstorage.Storage, networkName string, usingLocalEvents bool) {
 	storedConfig, foundConfig, err := nodeStorage.GetConfig(nil)
 	if err != nil {
 		logger.Fatal("could not check saved local events config", zap.Error(err))

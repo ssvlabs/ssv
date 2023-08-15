@@ -30,7 +30,7 @@ func Test_ensureNoConfigBreakingChanges(t *testing.T) {
 			NetworkName:      testNetworkName,
 			UsingLocalEvents: true,
 		}
-		ensureNoConfigBreakingChanges(logger, nodeStorage, c.NetworkName, c.UsingLocalEvents)
+		verifyConfig(logger, nodeStorage, c.NetworkName, c.UsingLocalEvents)
 
 		storedConfig, found, err := nodeStorage.GetConfig(nil)
 		require.NoError(t, err)
@@ -47,7 +47,7 @@ func Test_ensureNoConfigBreakingChanges(t *testing.T) {
 		}
 		require.NoError(t, nodeStorage.SaveConfig(nil, c))
 
-		ensureNoConfigBreakingChanges(logger, nodeStorage, testNetworkName, true)
+		verifyConfig(logger, nodeStorage, testNetworkName, true)
 
 		storedConfig, found, err := nodeStorage.GetConfig(nil)
 		require.NoError(t, err)
@@ -66,7 +66,7 @@ func Test_ensureNoConfigBreakingChanges(t *testing.T) {
 
 		require.PanicsWithValue(t,
 			fmt.Sprintf("stored config mismatch: node was already run with a different network name, the database needs to be cleaned to switch the network, current %q, stored %q", testNetworkName, testNetworkName+"1"),
-			func() { ensureNoConfigBreakingChanges(logger, nodeStorage, testNetworkName, true) },
+			func() { verifyConfig(logger, nodeStorage, testNetworkName, true) },
 		)
 
 		storedConfig, found, err := nodeStorage.GetConfig(nil)
@@ -86,7 +86,7 @@ func Test_ensureNoConfigBreakingChanges(t *testing.T) {
 
 		require.PanicsWithValue(t,
 			fmt.Sprintf("stored config mismatch: node was already run with a different network name, the database needs to be cleaned to switch the network, current %q, stored %q", testNetworkName, testNetworkName+"1"),
-			func() { ensureNoConfigBreakingChanges(logger, nodeStorage, testNetworkName, true) },
+			func() { verifyConfig(logger, nodeStorage, testNetworkName, true) },
 		)
 
 		storedConfig, found, err := nodeStorage.GetConfig(nil)
@@ -106,7 +106,7 @@ func Test_ensureNoConfigBreakingChanges(t *testing.T) {
 
 		require.PanicsWithValue(t,
 			"stored config mismatch: node was already run with real events, the database needs to be cleaned to use local events",
-			func() { ensureNoConfigBreakingChanges(logger, nodeStorage, testNetworkName, true) },
+			func() { verifyConfig(logger, nodeStorage, testNetworkName, true) },
 		)
 
 		storedConfig, found, err := nodeStorage.GetConfig(nil)
@@ -126,7 +126,7 @@ func Test_ensureNoConfigBreakingChanges(t *testing.T) {
 
 		require.PanicsWithValue(t,
 			"stored config mismatch: node was already run with local events, the database needs to be cleaned to use real events",
-			func() { ensureNoConfigBreakingChanges(logger, nodeStorage, testNetworkName, false) },
+			func() { verifyConfig(logger, nodeStorage, testNetworkName, false) },
 		)
 
 		storedConfig, found, err := nodeStorage.GetConfig(nil)
