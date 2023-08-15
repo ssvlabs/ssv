@@ -28,7 +28,8 @@ eth1:
   ETH1Addr: ws://example.url:8546/ws
 
 p2p:
-  # Optionally provide the external IP address of the node, if it cannot be determined automatically.
+  # Optionally specify the external IP address of the node to be used for p2p discovery.
+  # Note: Unless the IP is static, it's recommended to leave this commented out.
   # HostAddress: 192.168.1.1
 
   # Optionally override the default TCP & UDP ports of the node.
