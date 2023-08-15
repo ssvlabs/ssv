@@ -9,7 +9,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"go.uber.org/zap"
 
@@ -142,6 +141,10 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 	// unless the failure is due to a malformed event.
 	if err := eh.nodeStorage.BumpNonce(txn, event.Owner); err != nil {
 		return nil, err
+	}
+
+	if err := eh.validateOperators(txn, event.OperatorIds); err != nil {
+		return nil, &MalformedEventError{Err: err}
 	}
 
 	// Calculate the expected length of constructed shares based on the number of operator IDs,
@@ -464,29 +467,6 @@ func splitBytes(buf []byte, lim int) [][]byte {
 		chunks = append(chunks, buf[:])
 	}
 	return chunks
-}
-
-// verify signature of the ValidatorAddedEvent shares data
-// todo(align-contract-v0.3.1-rc.0): move to crypto package in ssv protocol?
-func verifySignature(sig []byte, owner ethcommon.Address, pubKey []byte, nonce registrystorage.Nonce) error {
-	data := fmt.Sprintf("%s:%d", owner.String(), nonce)
-	hash := crypto.Keccak256([]byte(data))
-
-	sign := &bls.Sign{}
-	if err := sign.Deserialize(sig); err != nil {
-		return fmt.Errorf("failed to deserialize signature: %w", err)
-	}
-
-	pk := &bls.PublicKey{}
-	if err := pk.Deserialize(pubKey); err != nil {
-		return fmt.Errorf("failed to deserialize public key: %w", err)
-	}
-
-	if res := sign.VerifyByte(pk, hash); !res {
-		return errors.New("failed to verify signature")
-	}
-
-	return nil
 }
 
 // processClusterEvent handles registry contract event for cluster
