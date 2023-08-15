@@ -149,7 +149,11 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 	}()
 
 	go n.ticker.Start(logger)
-	go n.listenForCurrentSlot(logger)
+	go func() {
+		if err := n.listenForCurrentSlot(logger); err != nil {
+			logger.Fatal("unexpected error while listening for current slot", zap.Error(err))
+		}
+	}()
 	n.validatorsCtrl.StartNetworkHandlers()
 	n.validatorsCtrl.StartValidators()
 	go n.net.UpdateSubnets(logger)
@@ -172,12 +176,17 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 }
 
 // listenForCurrentSlot listens to current slot and trigger relevant components if needed
-func (n *operatorNode) listenForCurrentSlot(logger *zap.Logger) {
+func (n *operatorNode) listenForCurrentSlot(logger *zap.Logger) error {
 	tickerChan := make(chan phase0.Slot, 32)
 	n.ticker.Subscribe(tickerChan)
+
 	for slot := range tickerChan {
-		n.setFork(logger, slot)
+		if err := n.setFork(logger, slot); err != nil {
+			return err
+		}
 	}
+
+	return nil
 }
 
 // HealthCheck returns a list of issues regards the state of the operator node

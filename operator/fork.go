@@ -1,6 +1,8 @@
 package operator
 
 import (
+	"fmt"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.uber.org/zap"
 
@@ -14,10 +16,10 @@ func (n *operatorNode) getForkVersion(slot phase0.Slot) forksprotocol.ForkVersio
 }
 
 // listenForCurrentSlot updates forkVersion and checks if a fork is needed
-func (n *operatorNode) setFork(logger *zap.Logger, slot phase0.Slot) {
+func (n *operatorNode) setFork(logger *zap.Logger, slot phase0.Slot) error {
 	currentVersion := n.getForkVersion(slot)
 	if currentVersion == n.forkVersion {
-		return
+		return nil
 	}
 	logger = logger.With(zap.String("previousFork", string(n.forkVersion)),
 		zap.String("currentFork", string(currentVersion)))
@@ -28,18 +30,20 @@ func (n *operatorNode) setFork(logger *zap.Logger, slot phase0.Slot) {
 	// set network fork
 	netHandler, ok := n.net.(forksprotocol.ForkHandler)
 	if !ok {
-		logger.Panic("network instance is not a fork handler")
+		return fmt.Errorf("network instance is not a fork handler")
 	}
 	if err := netHandler.OnFork(logger, currentVersion); err != nil {
-		logger.Panic("could not fork network", zap.Error(err))
+		return fmt.Errorf("could not fork network: %w", err)
 	}
 
 	// set validator controller fork
 	vCtrlHandler, ok := n.validatorsCtrl.(forksprotocol.ForkHandler)
 	if !ok {
-		logger.Panic("network instance is not a fork handler")
+		return fmt.Errorf("network instance is not a fork handler")
 	}
 	if err := vCtrlHandler.OnFork(logger, currentVersion); err != nil {
-		logger.Panic("could not fork network", zap.Error(err))
+		return fmt.Errorf("could not fork network: %w", err)
 	}
+
+	return nil
 }
