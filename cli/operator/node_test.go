@@ -10,17 +10,14 @@ import (
 
 	"github.com/bloxapp/ssv/networkconfig"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
-	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/kv"
 )
 
 func Test_ensureNoConfigBreakingChanges(t *testing.T) {
 	logger := zap.New(zapcore.NewNopCore(), zap.WithFatalHook(zapcore.WriteThenPanic))
 
-	db, err := ssvstorage.GetStorageFactory(logger, basedb.Options{
-		Type: "badger-memory",
-		Path: "",
-	})
+	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
 	nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)
