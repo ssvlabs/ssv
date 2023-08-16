@@ -72,6 +72,7 @@ func NewSSVMsgValidator(logger *zap.Logger, fork forks.Fork, validator *validati
 				var valErr validation.Error
 				if errors.As(err, &valErr) && valErr.Reject() {
 					logger.Debug("rejecting invalid message", zap.Error(err))
+					// TODO: consider having metrics for each type of validation error
 					// TODO: pass metrics to NewSSVMsgValidator
 					reportValidationResult(validationResultInvalidRejected)
 					return pubsub.ValidationReject
