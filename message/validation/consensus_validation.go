@@ -48,8 +48,8 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 	maxRound := mv.maxRound(role)
 	if signedMsg.Message.Round > maxRound {
 		err := ErrRoundTooHigh
-		err.got = fmt.Sprintf("%v/%v", signedMsg.Message.Round, role)
-		err.want = fmt.Sprintf("%v/%v", maxRound, role)
+		err.got = fmt.Sprintf("%v (%v role)", signedMsg.Message.Round, role)
+		err.want = fmt.Sprintf("%v (%v role)", maxRound, role)
 		return err
 	}
 
@@ -106,7 +106,7 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 	if err := ssvtypes.VerifyByOperators(signedMsg.Signature, signedMsg, mv.netCfg.Domain, spectypes.QBFTSignatureType, share.Committee); err != nil {
 		signErr := ErrInvalidSignature
 		signErr.innerErr = err
-		signErr.got = fmt.Sprintf("%v/%v", hex.EncodeToString(mv.netCfg.Domain[:]), hex.EncodeToString(share.ValidatorPubKey))
+		signErr.got = fmt.Sprintf("domain %v from %v", hex.EncodeToString(mv.netCfg.Domain[:]), hex.EncodeToString(share.ValidatorPubKey))
 		return signErr
 	}
 
