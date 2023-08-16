@@ -118,10 +118,9 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 
 	switch ssvMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
-	// TODO: uncomment
-	//if err := mv.validateConsensusMessage(share, msg, receivedAt); err != nil {
-	//	return nil, err
-	//}
+		if err := mv.validateConsensusMessage(share, msg, receivedAt); err != nil {
+			return nil, err
+		}
 	case spectypes.SSVPartialSignatureMsgType:
 	// TODO: uncomment
 	//if err := mv.validatePartialSignatureMessage(share, msg); err != nil {
