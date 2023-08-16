@@ -103,8 +103,7 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 	}
 
 	if err := ssvtypes.VerifyByOperators(signedMsg.Signature, signedMsg, mv.netCfg.Domain, spectypes.QBFTSignatureType, share.Committee); err != nil {
-		// TODO: uncomment
-		//return fmt.Errorf("invalid signature: %w", err)
+		return fmt.Errorf("invalid signature: %w", err)
 	}
 
 	for _, signer := range signedMsg.Signers {
