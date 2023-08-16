@@ -44,11 +44,11 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		return err
 	}
 
-	maxRound := mv.maxRound(msg.MsgID.GetRoleType())
+	maxRound := mv.maxRound(role)
 	if signedMsg.Message.Round > maxRound {
 		err := ErrRoundTooHigh
-		err.got = signedMsg.Message.Round
-		err.want = maxRound
+		err.got = fmt.Sprintf("%v/%v", signedMsg.Message.Round, role)
+		err.want = fmt.Sprintf("%v/%v", maxRound, role)
 		return err
 	}
 
