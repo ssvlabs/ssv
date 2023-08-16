@@ -6,11 +6,13 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/cornelk/hashmap"
 	"golang.org/x/exp/slices"
 
 	"github.com/bloxapp/ssv/networkconfig"
@@ -42,14 +44,14 @@ type ConsensusID struct {
 }
 
 type ConsensusState struct {
-	Signers map[spectypes.OperatorID]*SignerState
+	Signers *hashmap.Map[spectypes.OperatorID, *SignerState]
 }
 
 func (cs *ConsensusState) SignerState(signer spectypes.OperatorID) *SignerState {
-	signerState, ok := cs.Signers[signer]
+	signerState, ok := cs.Signers.Get(signer)
 	if !ok {
 		signerState = &SignerState{}
-		cs.Signers[signer] = signerState
+		cs.Signers.Set(signer, signerState)
 	}
 
 	return signerState
@@ -57,6 +59,7 @@ func (cs *ConsensusState) SignerState(signer spectypes.OperatorID) *SignerState 
 
 type MessageValidator struct {
 	netCfg       networkconfig.NetworkConfig
+	indexMu      sync.Mutex
 	index        map[ConsensusID]*ConsensusState
 	shareStorage registrystorage.Shares
 }
@@ -254,9 +257,12 @@ func (mv *MessageValidator) lateMessage(slot phase0.Slot, role spectypes.BeaconR
 }
 
 func (mv *MessageValidator) consensusState(id ConsensusID) *ConsensusState {
+	mv.indexMu.Lock()
+	defer mv.indexMu.Unlock()
+
 	if _, ok := mv.index[id]; !ok {
 		mv.index[id] = &ConsensusState{
-			Signers: make(map[spectypes.OperatorID]*SignerState),
+			Signers: hashmap.New[spectypes.OperatorID, *SignerState](),
 		}
 	}
 	return mv.index[id]
