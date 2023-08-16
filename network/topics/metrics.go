@@ -63,6 +63,7 @@ var (
 	validationResultEncoding        msgValidationResult = "encoding"
 	validationResultInvalidRejected msgValidationResult = "invalid_rejected"
 	validationResultInvalidIgnored  msgValidationResult = "invalid_ignored"
+	validationResultOK              msgValidationResult = "ok"
 )
 
 func reportValidationResult(result msgValidationResult) {

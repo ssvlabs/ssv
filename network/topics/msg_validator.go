@@ -86,6 +86,8 @@ func NewSSVMsgValidator(logger *zap.Logger, fork forks.Fork, validator *validati
 			pmsg.ValidatorData = decodedMessage
 		}
 
+		reportValidationResult(validationResultOK)
+
 		return pubsub.ValidationAccept
 	}
 }
