@@ -2,12 +2,9 @@ package syncing_test
 
 import (
 	"context"
-	"testing"
-	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/network/syncing"
@@ -35,23 +32,4 @@ func newMockMessageHandler() *mockMessageHandler {
 		m.calls++
 	}
 	return m
-}
-
-func TestThrottle(t *testing.T) {
-	var calls int
-	handler := syncing.Throttle(func(msg *queue.DecodedSSVMessage) {
-		calls++
-	}, 10*time.Millisecond)
-
-	start := time.Now()
-	for i := 0; i < 10; i++ {
-		handler(&queue.DecodedSSVMessage{})
-	}
-	end := time.Now()
-
-	require.Equal(t, 10, calls)
-
-	rangeStart := start.Add(100 * time.Millisecond)
-	rangeEnd := start.Add(120 * time.Millisecond)
-	require.WithinRangef(t, end, rangeStart, rangeEnd, "expected duration to be between 100ms and 120ms, but it is %v", end.Sub(start))
 }

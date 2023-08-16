@@ -28,8 +28,8 @@ import (
 	protocolvalidator "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/sync/handlers"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/kv"
 )
 
 var (
@@ -168,10 +168,7 @@ func quorum(committee int) int {
 }
 
 func newStores(logger *zap.Logger) *qbftstorage.QBFTStores {
-	db, err := storage.GetStorageFactory(logger, basedb.Options{
-		Type: "badger-memory",
-		Path: "",
-	})
+	db, err := kv.NewInMemory(logger, basedb.Options{})
 	if err != nil {
 		panic(err)
 	}
