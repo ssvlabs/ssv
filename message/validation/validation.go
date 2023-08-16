@@ -119,7 +119,6 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 			return nil, err
 		}
 	case spectypes.SSVPartialSignatureMsgType:
-		// TODO: uncomment
 		if err := mv.validatePartialSignatureMessage(share, msg); err != nil {
 			return nil, err
 		}
