@@ -46,7 +46,9 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 
 	maxRound := mv.maxRound(msg.MsgID.GetRoleType())
 	if signedMsg.Message.Round > maxRound {
-		return fmt.Errorf("round too high")
+		// TODO: attach round to the error
+		// TODO: make sure check is correct
+		//return fmt.Errorf("round too high")
 	}
 
 	estimatedRound := mv.currentEstimatedRound(role, messageSlot, receivedAt)
