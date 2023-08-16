@@ -99,7 +99,8 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 
 	share := mv.shareStorage.Get(nil, ssvMessage.MsgID.GetPubKey())
 	if share == nil {
-		return nil, ErrUnknownValidator
+		// TODO: make sure the check is correct
+		//return nil, ErrUnknownValidator
 	}
 
 	if share.Liquidated {
