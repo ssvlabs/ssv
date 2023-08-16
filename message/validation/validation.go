@@ -232,7 +232,8 @@ func (mv *MessageValidator) validateSlotTime(messageSlot phase0.Slot, role spect
 	}
 
 	if mv.lateMessage(messageSlot, role, receivedAt) {
-		return ErrLateMessage
+		// TODO: make sure check is correct
+		//return ErrLateMessage
 	}
 
 	return nil
