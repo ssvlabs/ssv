@@ -11,6 +11,7 @@ import (
 
 	"github.com/bloxapp/ssv/message/validation"
 	"github.com/bloxapp/ssv/network/forks"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
 
 // MsgValidatorFunc represents a message validator
@@ -80,6 +81,16 @@ func NewSSVMsgValidator(logger *zap.Logger, fork forks.Fork, validator *validati
 
 				logger.Debug("ignoring invalid message", zap.Error(err))
 				// TODO: pass metrics to NewSSVMsgValidator
+				reportValidationResult(validationResultInvalidIgnored)
+				return pubsub.ValidationIgnore
+			}
+
+			pmsg.ValidatorData = decodedMessage
+		} else {
+			decodedMessage, err := queue.DecodeSSVMessage(msg)
+			if err != nil {
+				logger.Debug("ignoring invalid message", zap.Error(err))
+
 				reportValidationResult(validationResultInvalidIgnored)
 				return pubsub.ValidationIgnore
 			}

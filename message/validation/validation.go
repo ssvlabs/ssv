@@ -73,17 +73,6 @@ func NewMessageValidator(netCfg networkconfig.NetworkConfig, shareStorage regist
 }
 
 func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, receivedAt time.Time) (*queue.DecodedSSVMessage, error) {
-	enabled := false
-
-	if !enabled {
-		msg, err := queue.DecodeSSVMessage(ssvMessage)
-		if err != nil {
-			return nil, fmt.Errorf("malformed message: %w", err)
-		}
-
-		return msg, nil
-	}
-
 	mv.mu.Lock()
 	defer mv.mu.Unlock()
 
