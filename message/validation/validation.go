@@ -100,7 +100,8 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 		return nil, ErrValidatorLiquidated
 	}
 
-	if !share.BeaconMetadata.IsAttesting() {
+	// TODO: return error if no metadata?
+	if share.BeaconMetadata != nil && !share.BeaconMetadata.IsAttesting() {
 		return nil, ErrValidatorNotAttesting
 	}
 
