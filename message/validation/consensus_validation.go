@@ -58,11 +58,7 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		return fmt.Errorf("message round is too far from estimated, current %v, got %v", estimatedRound, signedMsg.Message.Round)
 	}
 
-	hasFullData := signedMsg.Message.MsgType == specqbft.ProposalMsgType ||
-		signedMsg.Message.MsgType == specqbft.RoundChangeMsgType ||
-		mv.isDecidedMessage(signedMsg)
-
-	if hasFullData {
+	if mv.hasFullData(signedMsg) {
 		hashedFullData, err := specqbft.HashDataRoot(signedMsg.FullData)
 		if err != nil {
 			return fmt.Errorf("hash data root: %w", err)
@@ -131,10 +127,12 @@ func (mv *MessageValidator) validateSignerBehavior(
 	// TODO: if this is a round change message, we should somehow validate that it's not being sent too frequently.
 
 	// TODO: move to MessageCounts?
-	if signerState.ProposalData == nil {
-		signerState.ProposalData = signedMsg.FullData
-	} else if !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
-		return fmt.Errorf("duplicated proposal with different data")
+	if mv.hasFullData(signedMsg) {
+		if signerState.ProposalData == nil {
+			signerState.ProposalData = signedMsg.FullData
+		} else if !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
+			return fmt.Errorf("duplicated proposal with different data")
+		}
 	}
 
 	if mv.isDecidedMessage(signedMsg) && len(signedMsg.Signers) <= signerState.LastDecidedQuorumSize {
@@ -153,6 +151,12 @@ func (mv *MessageValidator) validateSignerBehavior(
 	}
 
 	return nil
+}
+
+func (mv *MessageValidator) hasFullData(signedMsg *specqbft.SignedMessage) bool {
+	return signedMsg.Message.MsgType == specqbft.ProposalMsgType ||
+		signedMsg.Message.MsgType == specqbft.RoundChangeMsgType ||
+		mv.isDecidedMessage(signedMsg)
 }
 
 func (mv *MessageValidator) isDecidedMessage(signedMsg *specqbft.SignedMessage) bool {
