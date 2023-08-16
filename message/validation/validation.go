@@ -109,7 +109,8 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 
 	// TODO: return error if no metadata?
 	if share.BeaconMetadata != nil && !share.BeaconMetadata.IsAttesting() {
-		return nil, ErrValidatorNotAttesting
+		// TODO: enable
+		//return nil, ErrValidatorNotAttesting
 	}
 
 	msg, err := queue.DecodeSSVMessage(ssvMessage)
