@@ -56,4 +56,5 @@ var (
 	ErrRoundAlreadyAdvanced    = Error{text: "signer has already advanced to a later round"}
 	ErrFutureSlotRoundMismatch = Error{text: "if slot is in future, round must be also in future and vice versa"}
 	ErrRoundTooFarInTheFuture  = Error{text: "round is too far in the future"}
+	ErrRoundTooHigh            = Error{text: "round is too high"}
 )
