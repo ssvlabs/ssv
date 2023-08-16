@@ -58,16 +58,14 @@ func (cs *ConsensusState) SignerState(signer spectypes.OperatorID) *SignerState 
 }
 
 type MessageValidator struct {
-	mu           sync.Mutex
 	netCfg       networkconfig.NetworkConfig
-	index        map[ConsensusID]*ConsensusState
+	index        sync.Map
 	shareStorage registrystorage.Shares
 }
 
 func NewMessageValidator(netCfg networkconfig.NetworkConfig, shareStorage registrystorage.Shares) *MessageValidator {
 	return &MessageValidator{
 		netCfg:       netCfg,
-		index:        make(map[ConsensusID]*ConsensusState),
 		shareStorage: shareStorage,
 	}
 }
@@ -121,10 +119,10 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 			return nil, err
 		}
 	case spectypes.SSVPartialSignatureMsgType:
-	// TODO: uncomment
-	//if err := mv.validatePartialSignatureMessage(share, msg); err != nil {
-	//	return nil, err
-	//}
+		// TODO: uncomment
+		if err := mv.validatePartialSignatureMessage(share, msg); err != nil {
+			return nil, err
+		}
 	case ssvmessage.SSVEventMsgType:
 		if err := mv.validateEventMessage(msg); err != nil {
 			return nil, err
@@ -262,13 +260,13 @@ func (mv *MessageValidator) lateMessage(slot phase0.Slot, role spectypes.BeaconR
 }
 
 func (mv *MessageValidator) consensusState(id ConsensusID) *ConsensusState {
-	mv.mu.Lock()
-	defer mv.mu.Unlock()
-
-	if _, ok := mv.index[id]; !ok {
-		mv.index[id] = &ConsensusState{
+	if _, ok := mv.index.Load(id); !ok {
+		cs := &ConsensusState{
 			Signers: hashmap.New[spectypes.OperatorID, *SignerState](),
 		}
+		mv.index.Store(id, cs)
 	}
-	return mv.index[id]
+
+	cs, _ := mv.index.Load(id)
+	return cs.(*ConsensusState)
 }
