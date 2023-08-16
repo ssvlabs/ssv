@@ -207,9 +207,10 @@ func (mv *MessageValidator) validateRoundState(signerState *SignerState, msgRoun
 }
 
 func (mv *MessageValidator) validateSlotAndRoundState(signerState *SignerState, msgSlot phase0.Slot, msgRound specqbft.Round) error {
-	if signerState.Slot < msgSlot && signerState.Round >= msgRound || signerState.Round < msgRound && signerState.Slot >= msgSlot {
-		return ErrFutureSlotRoundMismatch
-	}
+	// TODO: make sure it's correct
+	//if signerState.Slot < msgSlot && signerState.Round >= msgRound || signerState.Round < msgRound && signerState.Slot >= msgSlot {
+	//return ErrFutureSlotRoundMismatch
+	//}
 
 	if err := mv.validateSlotState(signerState, msgSlot); err != nil {
 		return err
