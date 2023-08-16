@@ -84,6 +84,7 @@ func NewSSVMsgValidator(logger *zap.Logger, fork forks.Fork, validator *validati
 			}
 
 			pmsg.ValidatorData = decodedMessage
+			logger.Debug("accepting valid message", zap.Error(err))
 		}
 
 		reportValidationResult(validationResultOK)
