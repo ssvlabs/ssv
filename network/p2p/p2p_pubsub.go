@@ -144,7 +144,6 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(topic string,
 		}
 
 		var decodedMsg *queue.DecodedSSVMessage
-		logger.Debug("msg.ValidatorData type: " + fmt.Sprintf("%T", msg.ValidatorData))
 		if msg.ValidatorData != nil {
 			m, ok := msg.ValidatorData.(*queue.DecodedSSVMessage)
 			if ok {
