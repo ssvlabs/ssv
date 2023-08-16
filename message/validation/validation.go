@@ -16,6 +16,7 @@ import (
 	"golang.org/x/exp/slices"
 
 	"github.com/bloxapp/ssv/networkconfig"
+	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
@@ -115,22 +116,22 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 		return nil, fmt.Errorf("malformed message: %w", err)
 	}
 
+	switch ssvMessage.MsgType {
+	case spectypes.SSVConsensusMsgType:
 	// TODO: uncomment
-	//switch ssvMessage.MsgType {
-	//case spectypes.SSVConsensusMsgType:
-	//	if err := mv.validateConsensusMessage(share, msg, receivedAt); err != nil {
-	//		return nil, err
-	//	}
-	//case spectypes.SSVPartialSignatureMsgType:
-	//	if err := mv.validatePartialSignatureMessage(share, msg); err != nil {
-	//		return nil, err
-	//	}
-	//case ssvmessage.SSVEventMsgType:
-	//	if err := mv.validateEventMessage(msg); err != nil {
-	//		return nil, err
-	//	}
-	//case spectypes.DKGMsgType: // TODO: handle
+	//if err := mv.validateConsensusMessage(share, msg, receivedAt); err != nil {
+	//	return nil, err
 	//}
+	case spectypes.SSVPartialSignatureMsgType:
+		if err := mv.validatePartialSignatureMessage(share, msg); err != nil {
+			return nil, err
+		}
+	case ssvmessage.SSVEventMsgType:
+		if err := mv.validateEventMessage(msg); err != nil {
+			return nil, err
+		}
+	case spectypes.DKGMsgType: // TODO: handle
+	}
 
 	return msg, nil
 }
