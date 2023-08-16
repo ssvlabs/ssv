@@ -99,6 +99,7 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 
 	share := mv.shareStorage.Get(nil, publicKey.Serialize())
 	if share == nil {
+		// TODO: attach remote debugger and check why this happens
 		err := ErrUnknownValidator
 		err.got = publicKey.SerializeToHexStr()
 		return nil, err
@@ -108,10 +109,12 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 		return nil, ErrValidatorLiquidated
 	}
 
+	// TODO: check if need to return error if no metadata
 	if share.BeaconMetadata != nil && !share.BeaconMetadata.IsAttesting() {
-		// TODO: return error if no metadata?
 		// TODO: enable
-		//return nil, ErrValidatorNotAttesting
+		err := ErrValidatorNotAttesting
+		err.got = share.BeaconMetadata.Status.String()
+		return nil, err
 	}
 
 	msg, err := queue.DecodeSSVMessage(ssvMessage)
