@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
+	"go.uber.org/zap"
 	"golang.org/x/exp/slices"
 
 	"github.com/bloxapp/ssv/networkconfig"
@@ -92,9 +94,22 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 		return nil, ErrInvalidRole
 	}
 
-	share := mv.shareStorage.Get(nil, ssvMessage.MsgID.GetPubKey())
+	publicKey, err := ssvtypes.DeserializeBLSPublicKey(ssvMessage.MsgID.GetPubKey())
+	if err != nil {
+		return nil, fmt.Errorf("deserialize public key: %w", err)
+	}
+
+	share := mv.shareStorage.Get(nil, publicKey.Serialize())
 	if share == nil {
-		return nil, ErrUnknownValidator
+		shareList := mv.shareStorage.List(nil)
+		var pkList []string
+		for _, share := range shareList {
+			pkList = append(pkList, hex.EncodeToString(share.ValidatorPubKey))
+		}
+		zap.L().Warn("could not find pk " + publicKey.SerializeToHexStr() + "here: " + strings.Join(pkList, ","))
+		err := ErrUnknownValidator
+		err.got = publicKey.SerializeToHexStr()
+		return nil, err
 	}
 
 	if share.Liquidated {
