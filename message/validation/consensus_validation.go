@@ -176,7 +176,7 @@ func (mv *MessageValidator) isDecidedMessage(signedMsg *specqbft.SignedMessage) 
 
 func (mv *MessageValidator) maxRound(role spectypes.BeaconRole) specqbft.Round {
 	switch role {
-	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator:
+	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator: // TODO: check if value for aggregator is correct as there are messages on stage exceeding the limit
 		return 12 // TODO: consider calculating based on quick timeout and slow timeout
 	case spectypes.BNRoleProposer, spectypes.BNRoleSyncCommittee, spectypes.BNRoleSyncCommitteeContribution:
 		return 6
