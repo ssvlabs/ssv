@@ -99,11 +99,6 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 
 	share := mv.shareStorage.Get(nil, publicKey.Serialize())
 	if share == nil {
-		shareList := mv.shareStorage.List(nil)
-		var pkList []string
-		for _, share := range shareList {
-			pkList = append(pkList, hex.EncodeToString(share.ValidatorPubKey))
-		}
 		err := ErrUnknownValidator
 		err.got = publicKey.SerializeToHexStr()
 		return nil, err
