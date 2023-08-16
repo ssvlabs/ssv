@@ -147,7 +147,7 @@ func (mv *MessageValidator) validateSignerBehavior(
 
 	// Validate message counts within the current round.
 	if signerState.MessageCounts.ReachedLimits(maxMessageCounts(len(signedMsg.Signers))) {
-		return ErrTooManyMessagesPerRound
+		//return ErrTooManyMessagesPerRound
 	}
 
 	return nil
