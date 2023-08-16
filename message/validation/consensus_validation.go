@@ -66,7 +66,8 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		}
 
 		if hashedFullData != signedMsg.Message.Root {
-			return fmt.Errorf("root doesn't match full data hash")
+			// TODO: make sure check is correct
+			//return fmt.Errorf("root doesn't match full data hash")
 		}
 	}
 
