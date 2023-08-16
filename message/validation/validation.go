@@ -93,13 +93,15 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 	}
 
 	share := mv.shareStorage.Get(nil, ssvMessage.MsgID.GetPubKey())
-	// TODO: refactor if statements
 	if share == nil {
-		// TODO: make sure the check is correct
-		//return nil, ErrUnknownValidator
-	} else if share.Liquidated {
+		return nil, ErrUnknownValidator
+	}
+
+	if share.Liquidated {
 		return nil, ErrValidatorLiquidated
-	} else if share.BeaconMetadata != nil && !share.BeaconMetadata.IsAttesting() {
+	}
+
+	if share.BeaconMetadata != nil && !share.BeaconMetadata.IsAttesting() {
 		// TODO: return error if no metadata?
 		// TODO: enable
 		//return nil, ErrValidatorNotAttesting
