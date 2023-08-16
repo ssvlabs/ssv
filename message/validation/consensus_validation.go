@@ -55,7 +55,8 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 	}
 	// msgRound - 2 <= estimatedRound <= msgRound + 1
 	if estimatedRound-signedMsg.Message.Round > allowedRoundsInFuture || signedMsg.Message.Round-estimatedRound > allowedRoundsInPast {
-		return fmt.Errorf("message round is too far from estimated, current %v, got %v", estimatedRound, signedMsg.Message.Round)
+		// TODO: make sure check is correct
+		//return fmt.Errorf("message round is too far from estimated, current %v, got %v", estimatedRound, signedMsg.Message.Round)
 	}
 
 	if mv.hasFullData(signedMsg) {
