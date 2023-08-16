@@ -128,32 +128,6 @@ func (mv *MessageValidator) verifyPartialSignature(msg *spectypes.PartialSignatu
 	return ErrSignerNotInCommittee
 }
 
-//func (b *BaseRunner) verifyBeaconPartialSignature(msg *spectypes.PartialSignatureMessage) error {
-//	signer := msg.Signer
-//	signature := msg.PartialSignature
-//	root := msg.SigningRoot
-//
-//	for _, n := range b.Share.Committee {
-//		if n.GetID() == signer {
-//			pk, err := types.DeserializeBLSPublicKey(n.GetPublicKey())
-//			if err != nil {
-//				return errors.Wrap(err, "could not deserialized pk")
-//			}
-//			sig := &bls.Sign{}
-//			if err := sig.Deserialize(signature); err != nil {
-//				return errors.Wrap(err, "could not deserialized Signature")
-//			}
-//
-//			// verify
-//			if !sig.VerifyByte(&pk, root[:]) {
-//				return errors.New("wrong signature")
-//			}
-//			return nil
-//		}
-//	}
-//	return errors.New("unknown signer")
-//}
-
 func (mv *MessageValidator) validPartialSigners(share *ssvtypes.SSVShare, m *spectypes.SignedPartialSignatureMessage) error {
 	if err := mv.commonSignerValidation(m.Signer, share); err != nil {
 		return err
