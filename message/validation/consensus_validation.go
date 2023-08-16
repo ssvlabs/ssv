@@ -4,6 +4,7 @@ package validation
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -103,7 +104,10 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 	}
 
 	if err := ssvtypes.VerifyByOperators(signedMsg.Signature, signedMsg, mv.netCfg.Domain, spectypes.QBFTSignatureType, share.Committee); err != nil {
-		return fmt.Errorf("invalid signature: %w", err)
+		signErr := ErrInvalidSignature
+		signErr.innerErr = err
+		signErr.got = fmt.Sprintf("%v/%v", mv.netCfg.Domain, hex.EncodeToString(share.ValidatorPubKey))
+		return signErr
 	}
 
 	for _, signer := range signedMsg.Signers {
