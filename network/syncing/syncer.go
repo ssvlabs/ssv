@@ -103,23 +103,24 @@ func (s *syncer) SyncHighestDecided(
 			Data:    raw,
 		}
 
-		if s.msgValidator != nil {
-			decodedMsg, err := s.msgValidator.ValidateMessage(ssvMessage, time.Now())
-			if err != nil {
-				logger.Debug("could not validate ssv message", zap.Error(err))
-				return false
-			}
-
-			handler(decodedMsg)
-		} else {
-			decodedMsg, err := queue.DecodeSSVMessage(ssvMessage)
-			if err != nil {
-				logger.Debug("could not decode ssv message", zap.Error(err))
-				return false
-			}
-
-			handler(decodedMsg)
+		// TODO: consider uncommenting
+		//if s.msgValidator != nil {
+		//	decodedMsg, err := s.msgValidator.ValidateMessage(ssvMessage, time.Now())
+		//	if err != nil {
+		//		logger.Debug("could not validate ssv message", zap.Error(err))
+		//		return false
+		//	}
+		//
+		//	handler(decodedMsg)
+		//} else {
+		decodedMsg, err := queue.DecodeSSVMessage(ssvMessage)
+		if err != nil {
+			logger.Debug("could not decode ssv message", zap.Error(err))
+			return false
 		}
+
+		handler(decodedMsg)
+		//}
 
 		return false
 	})
@@ -165,23 +166,24 @@ func (s *syncer) SyncDecidedByRange(
 				Data:    raw,
 			}
 
-			if s.msgValidator != nil {
-				decodedMsg, err := s.msgValidator.ValidateMessage(ssvMessage, time.Now())
-				if err != nil {
-					logger.Debug("could not validate ssv message", zap.Error(err))
-					return nil
-				}
-
-				handler(decodedMsg)
-			} else {
-				decodedMsg, err := queue.DecodeSSVMessage(ssvMessage)
-				if err != nil {
-					logger.Debug("could not decode ssv message", zap.Error(err))
-					return nil
-				}
-
-				handler(decodedMsg)
+			// TODO: consider uncommenting
+			//if s.msgValidator != nil {
+			//	decodedMsg, err := s.msgValidator.ValidateMessage(ssvMessage, time.Now())
+			//	if err != nil {
+			//		logger.Debug("could not validate ssv message", zap.Error(err))
+			//		return nil
+			//	}
+			//
+			//	handler(decodedMsg)
+			//} else {
+			decodedMsg, err := queue.DecodeSSVMessage(ssvMessage)
+			if err != nil {
+				logger.Debug("could not decode ssv message", zap.Error(err))
+				return nil
 			}
+
+			handler(decodedMsg)
+			//}
 			return nil
 		},
 	)
