@@ -58,8 +58,8 @@ func (cs *ConsensusState) SignerState(signer spectypes.OperatorID) *SignerState 
 }
 
 type MessageValidator struct {
+	mu           sync.Mutex
 	netCfg       networkconfig.NetworkConfig
-	indexMu      sync.Mutex
 	index        map[ConsensusID]*ConsensusState
 	shareStorage registrystorage.Shares
 }
@@ -73,6 +73,9 @@ func NewMessageValidator(netCfg networkconfig.NetworkConfig, shareStorage regist
 }
 
 func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, receivedAt time.Time) (*queue.DecodedSSVMessage, error) {
+	mv.mu.Lock()
+	defer mv.mu.Unlock()
+
 	if len(ssvMessage.Data) == 0 {
 		return nil, ErrEmptyData
 	}
@@ -258,9 +261,6 @@ func (mv *MessageValidator) lateMessage(slot phase0.Slot, role spectypes.BeaconR
 }
 
 func (mv *MessageValidator) consensusState(id ConsensusID) *ConsensusState {
-	mv.indexMu.Lock()
-	defer mv.indexMu.Unlock()
-
 	if _, ok := mv.index[id]; !ok {
 		mv.index[id] = &ConsensusState{
 			Signers: hashmap.New[spectypes.OperatorID, *SignerState](),
