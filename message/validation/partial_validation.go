@@ -118,7 +118,6 @@ func (mv *MessageValidator) verifyPartialSignature(msg *spectypes.PartialSignatu
 			return fmt.Errorf("deserialize signature: %w", err)
 		}
 
-		// verify
 		if !sig.VerifyByte(&pk, root[:]) {
 			return fmt.Errorf("wrong signature")
 		}
