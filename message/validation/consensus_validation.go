@@ -47,21 +47,21 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 	maxRound := mv.maxRound(role)
 	if signedMsg.Message.Round > maxRound {
 		// TODO: enable
-		//err := ErrRoundTooHigh
-		//err.got = fmt.Sprintf("%v (%v role)", signedMsg.Message.Round, role)
-		//err.want = fmt.Sprintf("%v (%v role)", maxRound, role)
-		//return err
+		err := ErrRoundTooHigh
+		err.got = fmt.Sprintf("%v (%v role)", signedMsg.Message.Round, role)
+		err.want = fmt.Sprintf("%v (%v role)", maxRound, role)
+		return err
 	}
 
 	estimatedRound := mv.currentEstimatedRound(role, messageSlot, receivedAt)
 	if estimatedRound > maxRound {
 		// TODO: make sure check is correct
-		//return fmt.Errorf("estimated round too high")
+		return fmt.Errorf("estimated round too high")
 	}
 	// msgRound - 2 <= estimatedRound <= msgRound + 1
 	if estimatedRound-signedMsg.Message.Round > allowedRoundsInFuture || signedMsg.Message.Round-estimatedRound > allowedRoundsInPast {
 		// TODO: make sure check is correct
-		//return fmt.Errorf("message round is too far from estimated, current %v, got %v", estimatedRound, signedMsg.Message.Round)
+		return fmt.Errorf("message round is too far from estimated, current %v, got %v", estimatedRound, signedMsg.Message.Round)
 	}
 
 	if mv.hasFullData(signedMsg) {
