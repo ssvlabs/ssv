@@ -64,9 +64,6 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		//return fmt.Errorf("message round is too far from estimated, current %v, got %v", estimatedRound, signedMsg.Message.Round)
 	}
 
-	// TODO: do other checks
-	return nil
-
 	if mv.hasFullData(signedMsg) {
 		hashedFullData, err := specqbft.HashDataRoot(signedMsg.FullData)
 		if err != nil {
@@ -78,6 +75,9 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 			//return fmt.Errorf("root doesn't match full data hash")
 		}
 	}
+
+	// TODO: do other checks
+	return nil
 
 	pj, err := signedMsg.Message.GetPrepareJustifications()
 	if err != nil {
