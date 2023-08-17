@@ -44,6 +44,9 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		return err
 	}
 
+	// TODO: do other checks
+	return nil
+
 	maxRound := mv.maxRound(role)
 	if signedMsg.Message.Round > maxRound {
 		// TODO: enable
