@@ -44,9 +44,6 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		return err
 	}
 
-	// TODO: do other checks
-	return nil
-
 	maxRound := mv.maxRound(role)
 	if signedMsg.Message.Round > maxRound {
 		// TODO: enable
@@ -66,6 +63,9 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		// TODO: make sure check is correct
 		//return fmt.Errorf("message round is too far from estimated, current %v, got %v", estimatedRound, signedMsg.Message.Round)
 	}
+
+	// TODO: do other checks
+	return nil
 
 	if mv.hasFullData(signedMsg) {
 		hashedFullData, err := specqbft.HashDataRoot(signedMsg.FullData)
