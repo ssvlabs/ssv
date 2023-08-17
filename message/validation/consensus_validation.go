@@ -71,8 +71,7 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		}
 
 		if hashedFullData != signedMsg.Message.Root {
-			// TODO: make sure check is correct
-			//return fmt.Errorf("root doesn't match full data hash")
+			return fmt.Errorf("root doesn't match full data hash")
 		}
 	}
 
@@ -168,9 +167,9 @@ func (mv *MessageValidator) validateSignerBehavior(
 }
 
 func (mv *MessageValidator) hasFullData(signedMsg *specqbft.SignedMessage) bool {
-	return signedMsg.Message.MsgType == specqbft.ProposalMsgType ||
+	return (signedMsg.Message.MsgType == specqbft.ProposalMsgType ||
 		signedMsg.Message.MsgType == specqbft.RoundChangeMsgType ||
-		mv.isDecidedMessage(signedMsg)
+		mv.isDecidedMessage(signedMsg)) && len(signedMsg.FullData) != 0 // TODO: more complex check of FullData
 }
 
 func (mv *MessageValidator) isDecidedMessage(signedMsg *specqbft.SignedMessage) bool {
