@@ -3,8 +3,11 @@ package runner
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"strings"
 	"time"
 
+	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
+	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -105,9 +108,17 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 		// get block data
 		obj, ver, err = r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
 		if err != nil {
-			// Prysm currently doesn’t support MEV.
-			// TODO: Check Prysm MEV support after https://github.com/prysmaticlabs/prysm/issues/12103 is resolved.
-			return errors.Wrap(err, "failed to get Beacon block")
+			if strings.Contains(err.Error(), "Prepared beacon block is not blinded") {
+				// Retry with regular block
+				obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
+				if err != nil {
+					return errors.Wrap(err, "failed to get Beacon block")
+				}
+			} else {
+				// Prysm currently doesn’t support MEV.
+				// TODO: Check Prysm MEV support after https://github.com/prysmaticlabs/prysm/issues/12103 is resolved.
+				return errors.Wrap(err, "failed to get Beacon block")
+			}
 		}
 	} else {
 		// get block data
@@ -117,7 +128,15 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 		}
 	}
 
+	var blockHash phase0.Hash32
+	switch b := obj.(type) {
+	case *capella.BeaconBlock:
+		blockHash = b.Body.ExecutionPayload.BlockHash
+	case *apiv1capella.BlindedBeaconBlock:
+		blockHash = b.Body.ExecutionPayloadHeader.BlockHash
+	}
 	logger.Debug("🧊 got beacon block",
+		zap.Stringer("block_hash", blockHash),
 		zap.Duration("took", time.Since(start)))
 
 	byts, err := obj.MarshalSSZ()
