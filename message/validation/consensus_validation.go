@@ -132,8 +132,6 @@ func (mv *MessageValidator) validateSignerBehavior(
 		return err
 	}
 
-	return nil // TODO: remove
-
 	// TODO: if this is a round change message, we should somehow validate that it's not being sent too frequently.
 
 	// TODO: move to MessageCounts?
@@ -144,6 +142,8 @@ func (mv *MessageValidator) validateSignerBehavior(
 			return fmt.Errorf("duplicated proposal with different data")
 		}
 	}
+
+	return nil // TODO: remove
 
 	if mv.isDecidedMessage(signedMsg) && len(signedMsg.Signers) <= signerState.LastDecidedQuorumSize {
 		// TODO: make sure check is correct
