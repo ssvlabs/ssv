@@ -128,17 +128,15 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 		return nil, fmt.Errorf("malformed message: %w", err)
 	}
 
-	return msg, nil // TODO: remove
-
 	switch ssvMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
-		if err := mv.validateConsensusMessage(share, msg, receivedAt); err != nil {
-			return nil, err
-		}
+		//if err := mv.validateConsensusMessage(share, msg, receivedAt); err != nil {
+		//	return nil, err
+		//}
 	case spectypes.SSVPartialSignatureMsgType:
-		if err := mv.validatePartialSignatureMessage(share, msg); err != nil {
-			return nil, err
-		}
+		//if err := mv.validatePartialSignatureMessage(share, msg); err != nil {
+		//	return nil, err
+		//}
 	case ssvmessage.SSVEventMsgType:
 		if err := mv.validateEventMessage(msg); err != nil {
 			return nil, err
