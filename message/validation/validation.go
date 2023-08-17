@@ -134,9 +134,9 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 			return nil, err
 		}
 	case spectypes.SSVPartialSignatureMsgType:
-		//if err := mv.validatePartialSignatureMessage(share, msg); err != nil {
-		//	return nil, err
-		//}
+		if err := mv.validatePartialSignatureMessage(share, msg); err != nil {
+			return nil, err
+		}
 	case ssvmessage.SSVEventMsgType:
 		if err := mv.validateEventMessage(msg); err != nil {
 			return nil, err
