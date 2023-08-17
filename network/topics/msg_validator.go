@@ -2,6 +2,8 @@ package topics
 
 import (
 	"context"
+	"errors"
+	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -65,37 +67,36 @@ func NewSSVMsgValidator(logger *zap.Logger, fork forks.Fork, validator *validati
 		// reportValidationResult(validationResultTopic)
 		// return pubsub.ValidationReject
 
-		// TODO: enable message validation
-		//if validator != nil {
-		//	decodedMessage, err := validator.ValidateMessage(msg, time.Now())
-		//	if err != nil {
-		//		var valErr validation.Error
-		//		if errors.As(err, &valErr) && valErr.Reject() {
-		//			logger.Debug("rejecting invalid message", zap.Error(err))
-		//			// TODO: consider having metrics for each type of validation error
-		//			// TODO: pass metrics to NewSSVMsgValidator
-		//			reportValidationResult(validationResultInvalidRejected)
-		//			return pubsub.ValidationReject
-		//		}
-		//
-		//		logger.Debug("ignoring invalid message", zap.Error(err))
-		//		// TODO: pass metrics to NewSSVMsgValidator
-		//		reportValidationResult(validationResultInvalidIgnored)
-		//		return pubsub.ValidationIgnore
-		//	}
-		//
-		//	pmsg.ValidatorData = decodedMessage
-		//} else {
-		decodedMessage, err := queue.DecodeSSVMessage(msg)
-		if err != nil {
-			logger.Debug("ignoring invalid message", zap.Error(err))
+		if validator != nil {
+			decodedMessage, err := validator.ValidateMessage(msg, time.Now())
+			if err != nil {
+				var valErr validation.Error
+				if errors.As(err, &valErr) && valErr.Reject() {
+					logger.Debug("rejecting invalid message", zap.Error(err))
+					// TODO: consider having metrics for each type of validation error
+					// TODO: pass metrics to NewSSVMsgValidator
+					reportValidationResult(validationResultInvalidRejected)
+					return pubsub.ValidationReject
+				}
 
-			reportValidationResult(validationResultInvalidIgnored)
-			return pubsub.ValidationIgnore
+				logger.Debug("ignoring invalid message", zap.Error(err))
+				// TODO: pass metrics to NewSSVMsgValidator
+				reportValidationResult(validationResultInvalidIgnored)
+				return pubsub.ValidationIgnore
+			}
+
+			pmsg.ValidatorData = decodedMessage
+		} else {
+			decodedMessage, err := queue.DecodeSSVMessage(msg)
+			if err != nil {
+				logger.Debug("ignoring invalid message", zap.Error(err))
+
+				reportValidationResult(validationResultInvalidIgnored)
+				return pubsub.ValidationIgnore
+			}
+
+			pmsg.ValidatorData = decodedMessage
 		}
-
-		pmsg.ValidatorData = decodedMessage
-		//}
 
 		logger.Debug("accepting valid message", zap.Error(err))
 		reportValidationResult(validationResultOK)
