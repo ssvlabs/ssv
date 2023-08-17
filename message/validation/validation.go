@@ -99,10 +99,17 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 
 	share := mv.shareStorage.Get(nil, publicKey.Serialize())
 	if share == nil {
-		// TODO: attach remote debugger and check why this happens
-		err := ErrUnknownValidator
-		err.got = publicKey.SerializeToHexStr()
-		return nil, err
+		// TODO: fix this case
+		msg, err := queue.DecodeSSVMessage(ssvMessage)
+		if err != nil {
+			return nil, fmt.Errorf("malformed message: %w", err)
+		}
+
+		return msg, nil
+
+		//err := ErrUnknownValidator
+		//err.got = publicKey.SerializeToHexStr()
+		//return nil, err
 	}
 
 	if share.Liquidated {
