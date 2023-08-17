@@ -96,8 +96,7 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 	state := mv.consensusState(consensusID)
 	for _, signer := range signedMsg.Signers {
 		if err := mv.validateSignerBehavior(state, signer, msg); err != nil {
-			// TODO: uncomment
-			//return fmt.Errorf("bad signer behavior: %w", err)
+			return fmt.Errorf("bad signer behavior: %w", err)
 		}
 	}
 
@@ -132,6 +131,8 @@ func (mv *MessageValidator) validateSignerBehavior(
 	if err != nil {
 		return err
 	}
+
+	return nil // TODO: remove
 
 	// TODO: if this is a round change message, we should somehow validate that it's not being sent too frequently.
 
