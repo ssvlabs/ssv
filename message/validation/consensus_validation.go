@@ -86,6 +86,9 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		return fmt.Errorf("malfrormed round change justifications: %w", err)
 	}
 
+	// TODO: do other checks
+	return nil
+
 	// TODO: checks for pj and rcj
 	_ = pj
 	_ = rcj
