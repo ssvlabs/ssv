@@ -76,9 +76,6 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		}
 	}
 
-	// TODO: do other checks
-	return nil
-
 	pj, err := signedMsg.Message.GetPrepareJustifications()
 	if err != nil {
 		return fmt.Errorf("malfrormed prepare justifications: %w", err)
@@ -88,6 +85,9 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 	if err != nil {
 		return fmt.Errorf("malfrormed round change justifications: %w", err)
 	}
+
+	// TODO: do other checks
+	return nil
 
 	// TODO: checks for pj and rcj
 	_ = pj
