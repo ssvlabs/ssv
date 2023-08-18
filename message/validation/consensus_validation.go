@@ -10,6 +10,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"go.uber.org/zap"
 	"golang.org/x/exp/slices"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
@@ -53,6 +54,9 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 	}
 
 	estimatedRound := mv.currentEstimatedRound(role, messageSlot, receivedAt)
+
+	mv.logger.Debug("calculated estimated round",
+		zap.Any("estimated", estimatedRound), zap.Any("message", signedMsg.Message.Round))
 
 	if estimatedRound > maxRound {
 		// TODO: make sure check is correct
