@@ -13,6 +13,7 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
+	"go.uber.org/zap"
 	"golang.org/x/exp/slices"
 
 	"github.com/bloxapp/ssv/networkconfig"
@@ -58,15 +59,31 @@ func (cs *ConsensusState) SignerState(signer spectypes.OperatorID) *SignerState 
 }
 
 type MessageValidator struct {
+	logger       *zap.Logger
 	netCfg       networkconfig.NetworkConfig
 	index        sync.Map
 	shareStorage registrystorage.Shares
 }
 
-func NewMessageValidator(netCfg networkconfig.NetworkConfig, shareStorage registrystorage.Shares) *MessageValidator {
-	return &MessageValidator{
+func NewMessageValidator(netCfg networkconfig.NetworkConfig, shareStorage registrystorage.Shares, opts ...Option) *MessageValidator {
+	mv := &MessageValidator{
+		logger:       zap.NewNop(),
 		netCfg:       netCfg,
 		shareStorage: shareStorage,
+	}
+
+	for _, opt := range opts {
+		opt(mv)
+	}
+
+	return mv
+}
+
+type Option func(validator *MessageValidator)
+
+func WithLogger(logger *zap.Logger) Option {
+	return func(mv *MessageValidator) {
+		mv.logger = logger
 	}
 }
 

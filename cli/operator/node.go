@@ -136,7 +136,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorData.PublicKey)
 		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
 		cfg.P2pNetworkConfig.Network = networkConfig
-		cfg.P2pNetworkConfig.MessageValidator = validation.NewMessageValidator(networkConfig, nodeStorage.Shares())
+		cfg.P2pNetworkConfig.MessageValidator = validation.NewMessageValidator(networkConfig, nodeStorage.Shares(), validation.WithLogger(logger))
 
 		p2pNetwork := setupP2P(logger, db)
 
