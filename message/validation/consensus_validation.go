@@ -143,8 +143,6 @@ func (mv *MessageValidator) validateSignerBehavior(
 		}
 	}
 
-	return nil // TODO: remove
-
 	if mv.isDecidedMessage(signedMsg) && len(signedMsg.Signers) <= signerState.LastDecidedQuorumSize {
 		// TODO: make sure check is correct
 		//return fmt.Errorf("decided must have more signers than previous decided")
