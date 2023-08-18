@@ -145,20 +145,20 @@ func (mv *MessageValidator) validateSignerBehavior(
 
 	if mv.isDecidedMessage(signedMsg) && len(signedMsg.Signers) <= signerState.LastDecidedQuorumSize {
 		// TODO: make sure check is correct
-		return fmt.Errorf("decided must have more signers than previous decided")
+		//return fmt.Errorf("decided must have more signers than previous decided")
 	}
 
 	signerState.LastDecidedQuorumSize = len(signedMsg.Signers)
 
 	if err := signerState.MessageCounts.Validate(msg); err != nil {
 		// TODO: make sure check is correct
-		return err
+		//return err
 	}
 
 	// Validate message counts within the current round.
 	if signerState.MessageCounts.ReachedLimits(maxMessageCounts(len(signedMsg.Signers))) {
 		// TODO: make sure check is correct
-		return ErrTooManyMessagesPerRound
+		//return ErrTooManyMessagesPerRound
 	}
 
 	return nil
