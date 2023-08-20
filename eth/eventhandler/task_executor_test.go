@@ -2,8 +2,8 @@ package eventhandler
 
 import (
 	"context"
-	"github.com/golang/mock/gomock"
 	"encoding/binary"
+	"github.com/golang/mock/gomock"
 	"testing"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -124,11 +124,6 @@ func TestExecuteTask(t *testing.T) {
 		validatorCtrl.EXPECT().ReactivateCluster(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
 		require.NoError(t, task.Execute())
-
-		//require.NotZero(t, observedLogs.Len())
-		//entry := observedLogs.All()[len(observedLogs.All())-1]
-		//require.Equal(t, "reactivated cluster", entry.Message) // TODO: fix
-		//require.Equal(t, int64(1), entry.ContextMap()["cluster_validators"])
 	})
 	t.Run("test UpdateFeeRecipient task execution", func(t *testing.T) {
 		task := NewUpdateFeeRecipientTask(eh.taskExecutor, ethcommon.HexToAddress("0x1"), ethcommon.HexToAddress("0x2"))
