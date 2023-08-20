@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/api"
 	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
 	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -128,21 +129,13 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 		}
 	}
 
-	var (
-		blockHash phase0.Hash32
-		blinded   bool
-	)
-	switch b := obj.(type) {
-	case *capella.BeaconBlock:
-		blockHash = b.Body.ExecutionPayload.BlockHash
-	case *apiv1capella.BlindedBeaconBlock:
-		blockHash = b.Body.ExecutionPayloadHeader.BlockHash
-		blinded = true
-	}
+	// Log essentials about the block.
+	blockSummary, err := summarizeBlock(obj)
 	logger.Debug("🧊 got beacon block",
-		zap.Bool("blinded", blinded),
-		zap.Stringer("block_hash", blockHash),
-		zap.Duration("took", time.Since(start)))
+		zap.String("block_hash", blockSummary.Hash.String()),
+		zap.Bool("blinded", blockSummary.Blinded),
+		zap.Duration("took", time.Since(start)),
+		zap.NamedError("summarize_err", err))
 
 	byts, err := obj.MarshalSSZ()
 	if err != nil {
@@ -247,11 +240,13 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 
 		start := time.Now()
 		decidedBlockIsBlinded := r.decidedBlindedBlock()
+		var blk any
 		if decidedBlockIsBlinded {
 			vBlindedBlk, _, err := r.GetState().DecidedValue.GetBlindedBlockData()
 			if err != nil {
 				return errors.Wrap(err, "could not get blinded block")
 			}
+			blk = vBlindedBlk
 
 			if err := r.GetBeaconNode().SubmitBlindedBeaconBlock(vBlindedBlk, specSig); err != nil {
 				r.metrics.RoleSubmissionFailed()
@@ -263,6 +258,7 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 			if err != nil {
 				return errors.Wrap(err, "could not get block")
 			}
+			blk = vBlk
 
 			if err := r.GetBeaconNode().SubmitBeaconBlock(vBlk, specSig); err != nil {
 				r.metrics.RoleSubmissionFailed()
@@ -275,12 +271,15 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
 		r.metrics.RoleSubmitted()
 
+		blockSummary, err := summarizeBlock(blk)
 		logger.Info("✅ successfully submitted block proposal",
 			fields.Slot(signedMsg.Message.Slot),
 			fields.Height(r.BaseRunner.QBFTController.Height),
 			fields.Round(r.GetState().RunningInstance.State.Round),
-			fields.BuilderProposals(decidedBlockIsBlinded),
-			zap.Duration("took", time.Since(start)))
+			zap.String("block_hash", blockSummary.Hash.String()),
+			zap.Bool("blinded", blockSummary.Blinded),
+			zap.Duration("took", time.Since(start)),
+			zap.NamedError("summarize_err", err))
 	}
 	r.GetState().Finished = true
 	return nil
@@ -413,4 +412,35 @@ func (r *ProposerRunner) GetRoot() ([32]byte, error) {
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
+}
+
+type blockSummary struct {
+	Hash    phase0.Hash32
+	Blinded bool
+}
+
+func summarizeBlock(block any) (*blockSummary, error) {
+	if block == nil {
+		return nil, errors.New("block is nil")
+	}
+	var summary blockSummary
+	switch b := block.(type) {
+	case *api.VersionedBlindedBeaconBlock:
+		return summarizeBlock(b.Capella)
+	case *spec.VersionedBeaconBlock:
+		return summarizeBlock(b.Capella)
+
+	case *capella.BeaconBlock:
+		if b.Body == nil || b.Body.ExecutionPayload == nil {
+			return nil, errors.New("block body or execution payload is nil")
+		}
+		summary.Hash = b.Body.ExecutionPayload.BlockHash
+	case *apiv1capella.BlindedBeaconBlock:
+		if b.Body == nil || b.Body.ExecutionPayloadHeader == nil {
+			return nil, errors.New("block body or execution payload header is nil")
+		}
+		summary.Hash = b.Body.ExecutionPayloadHeader.BlockHash
+		summary.Blinded = true
+	}
+	return &summary, nil
 }

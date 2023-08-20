@@ -58,10 +58,6 @@ func (gc *goClient) GetBeaconBlock(slot phase0.Slot, graffiti, randao []byte) (s
 		if beaconBlock.Bellatrix.Body.ExecutionPayload == nil {
 			return nil, DataVersionNil, fmt.Errorf("bellatrix block execution payload is nil")
 		}
-		gc.log.Info("got beacon block",
-			fields.BlockHash(beaconBlock.Bellatrix.Body.ExecutionPayload.BlockHash),
-			fields.BlockVersion(beaconBlock.Version),
-			fields.Slot(beaconBlock.Bellatrix.Slot))
 		return beaconBlock.Bellatrix, beaconBlock.Version, nil
 	case spec.DataVersionCapella:
 		if beaconBlock.Capella.Body == nil {
@@ -70,10 +66,6 @@ func (gc *goClient) GetBeaconBlock(slot phase0.Slot, graffiti, randao []byte) (s
 		if beaconBlock.Capella.Body.ExecutionPayload == nil {
 			return nil, DataVersionNil, fmt.Errorf("capella block execution payload is nil")
 		}
-		gc.log.Info("got beacon block",
-			fields.BlockHash(beaconBlock.Capella.Body.ExecutionPayload.BlockHash),
-			fields.BlockVersion(beaconBlock.Version),
-			fields.Slot(beaconBlock.Capella.Slot))
 		return beaconBlock.Capella, beaconBlock.Version, nil
 	default:
 		return nil, DataVersionNil, fmt.Errorf("beacon block version %s not supported", beaconBlock.Version)
@@ -104,10 +96,6 @@ func (gc *goClient) GetBlindedBeaconBlock(slot phase0.Slot, graffiti, randao []b
 		if beaconBlock.Bellatrix.Body.ExecutionPayloadHeader == nil {
 			return nil, DataVersionNil, fmt.Errorf("bellatrix block execution payload header is nil")
 		}
-		gc.log.Info("got blinded beacon block",
-			fields.BlockHash(beaconBlock.Bellatrix.Body.ExecutionPayloadHeader.BlockHash),
-			fields.BlockVersion(beaconBlock.Version),
-			fields.Slot(beaconBlock.Bellatrix.Slot))
 		return beaconBlock.Bellatrix, beaconBlock.Version, nil
 	case spec.DataVersionCapella:
 		if beaconBlock.Capella.Body == nil {
@@ -116,10 +104,6 @@ func (gc *goClient) GetBlindedBeaconBlock(slot phase0.Slot, graffiti, randao []b
 		if beaconBlock.Capella.Body.ExecutionPayloadHeader == nil {
 			return nil, DataVersionNil, fmt.Errorf("capella block execution payload header is nil")
 		}
-		gc.log.Info("got blinded beacon block",
-			fields.BlockHash(beaconBlock.Capella.Body.ExecutionPayloadHeader.BlockHash),
-			fields.BlockVersion(beaconBlock.Version),
-			fields.Slot(beaconBlock.Capella.Slot))
 		return beaconBlock.Capella, beaconBlock.Version, nil
 	default:
 		return nil, DataVersionNil, fmt.Errorf("beacon block version %s not supported", beaconBlock.Version)
@@ -139,10 +123,6 @@ func (gc *goClient) SubmitBlindedBeaconBlock(block *api.VersionedBlindedBeaconBl
 			Message: block.Bellatrix,
 		}
 		copy(signedBlock.Bellatrix.Signature[:], sig[:])
-		gc.log.Info("submitting blinded beacon block",
-			fields.BlockHash(block.Bellatrix.Body.ExecutionPayloadHeader.BlockHash),
-			fields.BlockVersion(block.Version),
-			fields.Slot(block.Bellatrix.Slot))
 	case spec.DataVersionCapella:
 		if block.Capella == nil {
 			return errors.New("capella blinded block is nil")
@@ -151,10 +131,6 @@ func (gc *goClient) SubmitBlindedBeaconBlock(block *api.VersionedBlindedBeaconBl
 			Message: block.Capella,
 		}
 		copy(signedBlock.Capella.Signature[:], sig[:])
-		gc.log.Info("submitting blinded beacon block",
-			fields.BlockHash(block.Capella.Body.ExecutionPayloadHeader.BlockHash),
-			fields.BlockVersion(block.Version),
-			fields.Slot(block.Capella.Slot))
 	default:
 		return errors.New("unknown block version")
 	}
@@ -192,10 +168,6 @@ func (gc *goClient) SubmitBeaconBlock(block *spec.VersionedBeaconBlock, sig phas
 			Message: block.Bellatrix,
 		}
 		copy(signedBlock.Bellatrix.Signature[:], sig[:])
-		gc.log.Info("submitting block",
-			fields.BlockHash(block.Bellatrix.Body.ExecutionPayload.BlockHash),
-			fields.BlockVersion(block.Version),
-			fields.Slot(block.Bellatrix.Slot))
 	case spec.DataVersionCapella:
 		if block.Capella == nil {
 			return errors.New("capella block is nil")
@@ -204,10 +176,6 @@ func (gc *goClient) SubmitBeaconBlock(block *spec.VersionedBeaconBlock, sig phas
 			Message: block.Capella,
 		}
 		copy(signedBlock.Capella.Signature[:], sig[:])
-		gc.log.Info("submitting block",
-			fields.BlockHash(block.Capella.Body.ExecutionPayload.BlockHash),
-			fields.BlockVersion(block.Version),
-			fields.Slot(block.Capella.Slot))
 	default:
 		return errors.New("unknown block version")
 	}
