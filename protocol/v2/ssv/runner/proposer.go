@@ -413,12 +413,14 @@ func (r *ProposerRunner) GetRoot() ([32]byte, error) {
 	return ret, nil
 }
 
+// blockSummary contains essentials about a block. Useful for logging.
 type blockSummary struct {
 	Hash    phase0.Hash32
 	Blinded bool
 	Version spec.DataVersion
 }
 
+// summarizeBlock returns a blockSummary for the given block.
 func summarizeBlock(block any) (summary blockSummary, err error) {
 	if block == nil {
 		return summary, errors.New("block is nil")
