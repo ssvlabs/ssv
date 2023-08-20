@@ -130,12 +130,12 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 	}
 
 	// Log essentials about the block.
-	blockSummary, err := summarizeBlock(obj)
+	blockSummary, summarizeErr := summarizeBlock(obj)
 	logger.Debug("🧊 got beacon block",
 		zap.String("block_hash", blockSummary.Hash.String()),
 		zap.Bool("blinded", blockSummary.Blinded),
 		zap.Duration("took", time.Since(start)),
-		zap.NamedError("summarize_err", err))
+		zap.NamedError("summarize_err", summarizeErr))
 
 	byts, err := obj.MarshalSSZ()
 	if err != nil {
@@ -239,9 +239,8 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		blockSubmissionEnd := r.metrics.StartBeaconSubmission()
 
 		start := time.Now()
-		decidedBlockIsBlinded := r.decidedBlindedBlock()
 		var blk any
-		if decidedBlockIsBlinded {
+		if r.decidedBlindedBlock() {
 			vBlindedBlk, _, err := r.GetState().DecidedValue.GetBlindedBlockData()
 			if err != nil {
 				return errors.Wrap(err, "could not get blinded block")
@@ -271,7 +270,7 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
 		r.metrics.RoleSubmitted()
 
-		blockSummary, err := summarizeBlock(blk)
+		blockSummary, summarizeErr := summarizeBlock(blk)
 		logger.Info("✅ successfully submitted block proposal",
 			fields.Slot(signedMsg.Message.Slot),
 			fields.Height(r.BaseRunner.QBFTController.Height),
@@ -279,7 +278,7 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 			zap.String("block_hash", blockSummary.Hash.String()),
 			zap.Bool("blinded", blockSummary.Blinded),
 			zap.Duration("took", time.Since(start)),
-			zap.NamedError("summarize_err", err))
+			zap.NamedError("summarize_err", summarizeErr))
 	}
 	r.GetState().Finished = true
 	return nil
