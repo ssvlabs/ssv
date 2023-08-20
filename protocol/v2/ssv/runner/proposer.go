@@ -114,6 +114,7 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 			// https://github.com/prysmaticlabs/prysm/issues/12103
 			if nodeClientProvider, ok := r.GetBeaconNode().(goclient.NodeClientProvider); ok &&
 				nodeClientProvider.NodeClient() == goclient.NodePrysm {
+				logger.Debug("failed to get blinded beacon block, falling back to standard block")
 				obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
 				if err != nil {
 					return errors.Wrap(err, "failed falling back from blinded to standard beacon block")
