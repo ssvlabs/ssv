@@ -182,7 +182,7 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 	}
 	client.nodeClient = ParseNodeClient(client.nodeVersion)
 
-	logger.Info("consensus client: connected",
+	logger.Info("consensus client connected",
 		fields.Name(httpClient.Name()),
 		fields.Address(httpClient.Address()),
 		zap.String("client", string(client.nodeClient)),
