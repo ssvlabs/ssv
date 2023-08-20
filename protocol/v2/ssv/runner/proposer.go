@@ -108,41 +108,39 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 		// get block data
 		obj, ver, err = r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
 		if err != nil {
-			logger.Debug("🧊 [block-retry] failed to get blinded beacon block, retrying with regular block",
-				fields.Took(time.Since(start)),
-				zap.String("err", err.Error()))
+			// Prysm workaround: when Prysm can't retrieve an MEV block, it responds with an error
+			// saying the block isn't blinded, implying to request a standard block instead.
+			// https://github.com/prysmaticlabs/prysm/issues/12103
 			if strings.Contains(err.Error(), "Prepared beacon block is not blinded") {
-				// Retry with regular block
-				start2 := time.Now()
 				obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
 				if err != nil {
-					return errors.Wrap(err, "failed to get Beacon block")
+					return errors.Wrap(err, "failed falling back from blinded to standard beacon block")
 				}
-				logger.Debug("🧊 [block-retry] got regular beacon block after retry",
-					zap.Duration("retry_took", time.Since(start2)),
-					fields.Took(time.Since(start)))
 			} else {
-				// Prysm currently doesn’t support MEV.
-				// TODO: Check Prysm MEV support after https://github.com/prysmaticlabs/prysm/issues/12103 is resolved.
-				return errors.Wrap(err, "failed to get Beacon block")
+				return errors.Wrap(err, "failed to get blinded beacon block")
 			}
 		}
 	} else {
 		// get block data
 		obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
 		if err != nil {
-			return errors.Wrap(err, "failed to get Beacon block")
+			return errors.Wrap(err, "failed to get beacon block")
 		}
 	}
 
-	var blockHash phase0.Hash32
+	var (
+		blockHash phase0.Hash32
+		blinded   bool
+	)
 	switch b := obj.(type) {
 	case *capella.BeaconBlock:
 		blockHash = b.Body.ExecutionPayload.BlockHash
 	case *apiv1capella.BlindedBeaconBlock:
 		blockHash = b.Body.ExecutionPayloadHeader.BlockHash
+		blinded = true
 	}
 	logger.Debug("🧊 got beacon block",
+		zap.Bool("blinded", blinded),
 		zap.Stringer("block_hash", blockHash),
 		zap.Duration("took", time.Since(start)))
 
