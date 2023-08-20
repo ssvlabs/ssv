@@ -131,14 +131,9 @@ func TestEventSyncer(t *testing.T) {
 }
 
 func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger) *eventhandler.EventHandler {
-	options := basedb.Options{
-		Type:      "badger-memory",
-		Path:      "",
-		Reporting: false,
-		Ctx:       ctx,
-	}
-
-	db, err := kv.New(logger, options)
+	db, err := kv.NewInMemory(logger, basedb.Options{
+		Ctx: ctx,
+	})
 	require.NoError(t, err)
 
 	storageMap := ibftstorage.NewStores()

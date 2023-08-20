@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/bloxapp/ssv/operator/validator"
 	"github.com/bloxapp/ssv/operator/validator/mocks"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"math/big"
 	"net/http/httptest"
 	"strings"
@@ -28,7 +27,6 @@ import (
 
 	"github.com/bloxapp/ssv/ekm"
 	"github.com/bloxapp/ssv/eth/contract"
-
 	"github.com/bloxapp/ssv/eth/eventparser"
 	"github.com/bloxapp/ssv/eth/executionclient"
 	"github.com/bloxapp/ssv/eth/simulator"
@@ -39,9 +37,10 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/blskeygen"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
 
@@ -414,15 +413,9 @@ func TestHandleBlockEventsStream(t *testing.T) {
 }
 
 func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger) (*EventHandler, error) {
-	options := basedb.Options{
-		Type:       "badger-memory",
-		Path:       "",
-		Reporting:  false,
-		GCInterval: 0,
-		Ctx:        ctx,
-	}
-
-	db, err := ssvstorage.GetStorageFactory(logger, options)
+	db, err := kv.NewInMemory(logger, basedb.Options{
+		Ctx: ctx,
+	})
 	require.NoError(t, err)
 
 	storageMap := ibftstorage.NewStores()
@@ -472,15 +465,9 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger) (*
 
 // Copy of setupEventHandler, but with a mocked Validator Controller
 func setupEventHandlerWithMockedCtrl(t *testing.T, ctx context.Context, logger *zap.Logger) (*EventHandler, *mocks.MockController, error) {
-	options := basedb.Options{
-		Type:       "badger-memory",
-		Path:       "",
-		Reporting:  false,
-		GCInterval: 0,
-		Ctx:        ctx,
-	}
-
-	db, err := ssvstorage.GetStorageFactory(logger, options)
+	db, err := kv.NewInMemory(logger, basedb.Options{
+		Ctx: ctx,
+	})
 	require.NoError(t, err)
 
 	storageMap := ibftstorage.NewStores()
