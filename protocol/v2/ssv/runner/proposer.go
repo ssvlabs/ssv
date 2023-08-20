@@ -418,11 +418,10 @@ type blockSummary struct {
 	Blinded bool
 }
 
-func summarizeBlock(block any) (*blockSummary, error) {
+func summarizeBlock(block any) (summary blockSummary, err error) {
 	if block == nil {
-		return nil, errors.New("block is nil")
+		return summary, errors.New("block is nil")
 	}
-	var summary blockSummary
 	switch b := block.(type) {
 	case *api.VersionedBlindedBeaconBlock:
 		return summarizeBlock(b.Capella)
@@ -430,16 +429,16 @@ func summarizeBlock(block any) (*blockSummary, error) {
 		return summarizeBlock(b.Capella)
 
 	case *capella.BeaconBlock:
-		if b.Body == nil || b.Body.ExecutionPayload == nil {
-			return nil, errors.New("block body or execution payload is nil")
+		if b == nil || b.Body == nil || b.Body.ExecutionPayload == nil {
+			return summary, errors.New("block, body or execution payload is nil")
 		}
 		summary.Hash = b.Body.ExecutionPayload.BlockHash
 	case *apiv1capella.BlindedBeaconBlock:
-		if b.Body == nil || b.Body.ExecutionPayloadHeader == nil {
-			return nil, errors.New("block body or execution payload header is nil")
+		if b == nil || b.Body == nil || b.Body.ExecutionPayloadHeader == nil {
+			return summary, errors.New("block, body or execution payload header is nil")
 		}
 		summary.Hash = b.Body.ExecutionPayloadHeader.BlockHash
 		summary.Blinded = true
 	}
-	return &summary, nil
+	return
 }
