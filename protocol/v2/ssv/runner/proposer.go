@@ -129,9 +129,9 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 		}
 	}
 
-	// Log essentials about the block.
+	// Log essentials about the retrieved block.
 	blockSummary, summarizeErr := summarizeBlock(obj)
-	logger.Debug("🧊 got beacon block",
+	logger.Debug("🧊 got beacon block proposal",
 		zap.String("block_hash", blockSummary.Hash.String()),
 		zap.Bool("blinded", blockSummary.Blinded),
 		zap.Duration("took", time.Since(start)),
@@ -416,6 +416,7 @@ func (r *ProposerRunner) GetRoot() ([32]byte, error) {
 type blockSummary struct {
 	Hash    phase0.Hash32
 	Blinded bool
+	Version spec.DataVersion
 }
 
 func summarizeBlock(block any) (summary blockSummary, err error) {
@@ -424,21 +425,30 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 	}
 	switch b := block.(type) {
 	case *api.VersionedBlindedBeaconBlock:
-		return summarizeBlock(b.Capella)
+		switch b.Version {
+		case spec.DataVersionCapella:
+			return summarizeBlock(b.Capella)
+		}
 	case *spec.VersionedBeaconBlock:
-		return summarizeBlock(b.Capella)
+		switch b.Version {
+		case spec.DataVersionCapella:
+			return summarizeBlock(b.Capella)
+		}
 
 	case *capella.BeaconBlock:
 		if b == nil || b.Body == nil || b.Body.ExecutionPayload == nil {
 			return summary, errors.New("block, body or execution payload is nil")
 		}
 		summary.Hash = b.Body.ExecutionPayload.BlockHash
+		summary.Version = spec.DataVersionCapella
+
 	case *apiv1capella.BlindedBeaconBlock:
 		if b == nil || b.Body == nil || b.Body.ExecutionPayloadHeader == nil {
 			return summary, errors.New("block, body or execution payload header is nil")
 		}
 		summary.Hash = b.Body.ExecutionPayloadHeader.BlockHash
 		summary.Blinded = true
+		summary.Version = spec.DataVersionCapella
 	}
 	return
 }
