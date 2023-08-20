@@ -3,7 +3,6 @@ package runner
 import (
 	"crypto/sha256"
 	"encoding/json"
-	"strings"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -19,6 +18,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec"
 
+	"github.com/bloxapp/ssv/beacon/goclient"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
@@ -112,7 +112,8 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 			// Prysm workaround: when Prysm can't retrieve an MEV block, it responds with an error
 			// saying the block isn't blinded, implying to request a standard block instead.
 			// https://github.com/prysmaticlabs/prysm/issues/12103
-			if strings.Contains(err.Error(), "Prepared beacon block is not blinded") {
+			if nodeClientProvider, ok := r.GetBeaconNode().(goclient.NodeClientProvider); ok &&
+				nodeClientProvider.NodeClient() == goclient.NodePrysm {
 				obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
 				if err != nil {
 					return errors.Wrap(err, "failed falling back from blinded to standard beacon block")
