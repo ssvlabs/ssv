@@ -3,7 +3,6 @@ package types
 import (
 	"encoding/hex"
 	"runtime"
-	"runtime/debug"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -211,8 +210,6 @@ func NewBatchVerifier(concurrency, batchSize int, timeout time.Duration) *BatchV
 // AggregateVerify adds a request to the current batch or verifies it immediately if a similar one exists.
 // It returns the result of the signature verification.
 func (b *BatchVerifier) AggregateVerify(signature *bls.Sign, pks []bls.PublicKey, message [messageSize]byte) bool {
-	zap.L().Debug("AggregateVerify called", zap.Any("stack", string(debug.Stack())))
-
 	result := make(chan bool)
 
 	// If an identical message is already pending, aggregate it's request
