@@ -3,7 +3,6 @@ package validator
 import (
 	"context"
 	"fmt"
-	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -37,7 +36,7 @@ func (v *Validator) HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessa
 	// 	zap.Uint64("type", uint64(msg.MsgType)),
 	// 	fields.Role(msg.MsgID.GetRoleType()))
 
-	if _, err := v.messageValidator.ValidateDecodedMessage(msg, time.Now()); err != nil {
+	if err := v.messageValidator.ValidateConsensusMessageSignature(msg); err != nil {
 		logger.Error("validator: failed to validate ssv message", zap.Error(err))
 	}
 

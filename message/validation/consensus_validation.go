@@ -18,6 +18,22 @@ import (
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
+func (mv *MessageValidator) validateConsensusSignature(share *ssvtypes.SSVShare, msg *queue.DecodedSSVMessage) error {
+	signedMsg, ok := msg.Body.(*specqbft.SignedMessage)
+	if !ok {
+		return fmt.Errorf("expected consensus message")
+	}
+
+	if err := ssvtypes.VerifyByOperators(signedMsg.Signature, signedMsg, mv.netCfg.Domain, spectypes.QBFTSignatureType, share.Committee); err != nil {
+		signErr := ErrInvalidSignature
+		signErr.innerErr = err
+		signErr.got = fmt.Sprintf("domain %v from %v", hex.EncodeToString(mv.netCfg.Domain[:]), hex.EncodeToString(share.ValidatorPubKey))
+		return signErr
+	}
+
+	return nil
+}
+
 func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, msg *queue.DecodedSSVMessage, receivedAt time.Time) error {
 	signedMsg, ok := msg.Body.(*specqbft.SignedMessage)
 	if !ok {

@@ -68,7 +68,7 @@ func NewSSVMsgValidator(logger *zap.Logger, fork forks.Fork, validator *validati
 		// return pubsub.ValidationReject
 
 		if validator != nil {
-			decodedMessage, err := validator.DecodeMessage(msg, time.Now())
+			decodedMessage, err := validator.ValidateMessage(msg, time.Now())
 			if err != nil {
 				var valErr validation.Error
 				if errors.As(err, &valErr) && valErr.Reject() {
