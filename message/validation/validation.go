@@ -87,6 +87,15 @@ func WithLogger(logger *zap.Logger) Option {
 	}
 }
 
+func (mv *MessageValidator) DecodeMessage(ssvMessage *spectypes.SSVMessage, receivedAt time.Time) (*queue.DecodedSSVMessage, error) {
+	msg, err := queue.DecodeSSVMessage(ssvMessage)
+	if err != nil {
+		return nil, fmt.Errorf("malformed message: %w", err)
+	}
+
+	return msg, nil
+}
+
 func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, receivedAt time.Time) (*queue.DecodedSSVMessage, error) {
 	if len(ssvMessage.Data) == 0 {
 		return nil, ErrEmptyData
@@ -162,6 +171,73 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 	}
 
 	return msg, nil
+}
+
+func (mv *MessageValidator) ValidateDecodedMessage(decodedSSVMessage *queue.DecodedSSVMessage, receivedAt time.Time) (*queue.DecodedSSVMessage, error) {
+	if len(decodedSSVMessage.Data) == 0 {
+		return nil, ErrEmptyData
+	}
+
+	if len(decodedSSVMessage.Data) > maxMessageSize {
+		err := ErrDataTooBig
+		err.got = len(decodedSSVMessage.Data)
+		return nil, err
+	}
+
+	if !bytes.Equal(decodedSSVMessage.MsgID.GetDomain(), mv.netCfg.Domain[:]) {
+		err := ErrWrongDomain
+		err.got = hex.EncodeToString(decodedSSVMessage.MsgID.GetDomain())
+		err.want = hex.EncodeToString(mv.netCfg.Domain[:])
+		return nil, err
+	}
+
+	if !mv.validRole(decodedSSVMessage.MsgID.GetRoleType()) {
+		return nil, ErrInvalidRole
+	}
+
+	publicKey, err := ssvtypes.DeserializeBLSPublicKey(decodedSSVMessage.MsgID.GetPubKey())
+	if err != nil {
+		return nil, fmt.Errorf("deserialize public key: %w", err)
+	}
+
+	share := mv.shareStorage.Get(nil, publicKey.Serialize())
+	if share == nil {
+		// TODO: fix this case
+		return decodedSSVMessage, nil
+
+		//err := ErrUnknownValidator
+		//err.got = publicKey.SerializeToHexStr()
+		//return nil, err
+	}
+
+	if share.Liquidated {
+		return nil, ErrValidatorLiquidated
+	}
+
+	// TODO: check if need to return error if no metadata
+	if share.BeaconMetadata != nil && !share.BeaconMetadata.IsAttesting() {
+		err := ErrValidatorNotAttesting
+		err.got = share.BeaconMetadata.Status.String()
+		return nil, err
+	}
+
+	switch decodedSSVMessage.MsgType {
+	case spectypes.SSVConsensusMsgType:
+		if err := mv.validateConsensusMessage(share, decodedSSVMessage, receivedAt); err != nil {
+			return nil, err
+		}
+	case spectypes.SSVPartialSignatureMsgType:
+		if err := mv.validatePartialSignatureMessage(share, decodedSSVMessage); err != nil {
+			return nil, err
+		}
+	case ssvmessage.SSVEventMsgType:
+		if err := mv.validateEventMessage(decodedSSVMessage); err != nil {
+			return nil, err
+		}
+	case spectypes.DKGMsgType: // TODO: handle
+	}
+
+	return decodedSSVMessage, nil
 }
 
 func (mv *MessageValidator) containsSignerFunc(signer spectypes.OperatorID) func(operator *spectypes.Operator) bool {

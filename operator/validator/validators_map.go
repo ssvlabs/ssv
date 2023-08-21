@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/message/validation"
 
 	"go.uber.org/zap"
 
@@ -64,7 +65,7 @@ func (vm *validatorsMap) GetValidator(pubKey string) (*validator.Validator, bool
 }
 
 // GetOrCreateValidator creates a new validator instance if not exist
-func (vm *validatorsMap) GetOrCreateValidator(logger *zap.Logger, share *types.SSVShare) (*validator.Validator, error) {
+func (vm *validatorsMap) GetOrCreateValidator(logger *zap.Logger, share *types.SSVShare, messageValidator *validation.MessageValidator) (*validator.Validator, error) {
 	// main lock
 	vm.lock.Lock()
 	defer vm.lock.Unlock()
@@ -81,6 +82,7 @@ func (vm *validatorsMap) GetOrCreateValidator(logger *zap.Logger, share *types.S
 		// so that when the validator is stopped, the runners are stopped as well.
 		ctx, cancel := context.WithCancel(vm.ctx)
 		opts.DutyRunners = SetupRunners(ctx, logger, opts)
+		opts.MessageValidator = messageValidator
 		vm.validatorsMap[pubKey] = validator.NewValidator(ctx, cancel, opts)
 
 		printShare(share, logger, "setup validator done")

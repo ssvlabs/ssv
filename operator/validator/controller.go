@@ -23,6 +23,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/message/validation"
 	"github.com/bloxapp/ssv/network"
 	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	nodestorage "github.com/bloxapp/ssv/operator/storage"
@@ -84,6 +85,7 @@ type ControllerOptions struct {
 	DutyRoles                  []spectypes.BeaconRole
 	StorageMap                 *storage.QBFTStores
 	Metrics                    validatorMetrics
+	MessageValidator           *validation.MessageValidator
 
 	// worker flags
 	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of goroutines to use for message workers"`
@@ -153,6 +155,7 @@ type controller struct {
 	messageRouter        *messageRouter
 	messageWorker        *worker.Worker
 	historySyncBatchSize int
+	messageValidator     *validation.MessageValidator
 
 	// nonCommittees is a cache of initialized nonCommitteeValidator instances
 	nonCommitteeValidators *ttlcache.Cache[spectypes.MessageID, *nonCommitteeValidator]
@@ -237,6 +240,8 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 			ttlcache.WithTTL[spectypes.MessageID, *nonCommitteeValidator](time.Minute * 13),
 		),
 		indicesChange: make(chan struct{}),
+
+		messageValidator: options.MessageValidator,
 	}
 
 	// Start automatic expired item deletion in nonCommitteeValidators.
@@ -685,7 +690,7 @@ func (c *controller) onShareStart(share *ssvtypes.SSVShare) (bool, error) {
 	}
 
 	// Start a committee validator.
-	v, err := c.validatorsMap.GetOrCreateValidator(c.logger.Named("validatorsMap"), share)
+	v, err := c.validatorsMap.GetOrCreateValidator(c.logger.Named("validatorsMap"), share, c.messageValidator)
 	if err != nil {
 		return false, errors.Wrap(err, "could not get or create validator")
 	}

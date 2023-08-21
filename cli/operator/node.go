@@ -136,7 +136,8 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorData.PublicKey)
 		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
 		cfg.P2pNetworkConfig.Network = networkConfig
-		cfg.P2pNetworkConfig.MessageValidator = validation.NewMessageValidator(networkConfig, nodeStorage.Shares(), validation.WithLogger(logger))
+		messageValidator := validation.NewMessageValidator(networkConfig, nodeStorage.Shares(), validation.WithLogger(logger))
+		cfg.P2pNetworkConfig.MessageValidator = messageValidator
 
 		p2pNetwork := setupP2P(logger, db)
 
@@ -214,6 +215,7 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
 		cfg.SSVOptions.ValidatorOptions.Metrics = metricsReporter
+		cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
 
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
