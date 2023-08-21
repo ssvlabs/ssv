@@ -127,6 +127,7 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 		return nil, fmt.Errorf("deserialize public key: %w", err)
 	}
 
+	// TODO: handle non-committee validators properly
 	share := mv.validatorGetter(publicKey.Serialize())
 	if share == nil {
 		if ssvMessage.MsgType != spectypes.SSVConsensusMsgType {
