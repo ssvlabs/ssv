@@ -36,10 +36,6 @@ func (v *Validator) HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessa
 	// 	zap.Uint64("type", uint64(msg.MsgType)),
 	// 	fields.Role(msg.MsgID.GetRoleType()))
 
-	if err := v.messageValidator.ValidateConsensusMessageSignature(msg); err != nil {
-		logger.Error("validator: failed to validate ssv message", zap.Error(err))
-	}
-
 	if q, ok := v.Queues[msg.MsgID.GetRoleType()]; ok {
 		if pushed := q.Q.TryPush(msg); !pushed {
 			msgID := msg.MsgID.String()
