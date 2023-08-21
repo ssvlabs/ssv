@@ -323,7 +323,7 @@ func TestSlashing_Attestation(t *testing.T) {
 	// 1. Check a valid attestation.
 	signAttestation(secretKeys[1], phase0.Root{1}, createAttestationData(3, 4), false, "")
 
-	// 2. Same signing root -> slashing (stricter than spec).
+	// 2. Same signing root -> slashing (stricter than Eth spec).
 	signAttestation(secretKeys[1], phase0.Root{1}, createAttestationData(3, 4), true, "")
 
 	// 3. Lower than minimum source epoch -> expect slashing.
@@ -338,14 +338,14 @@ func TestSlashing_Attestation(t *testing.T) {
 	// 6. Different signing root, higher source epoch, higher target epoch -> no slashing.
 	signAttestation(secretKeys[1], phase0.Root{3}, createAttestationData(4, 5), false, "")
 
-	// 7. Different signing root, lower source epoch, higher target epoch -> slashing (stricter than spec).
+	// 7. Different signing root, lower source epoch, higher target epoch -> slashing (stricter than Eth spec).
 	signAttestation(secretKeys[1], phase0.Root{3}, createAttestationData(3, 5), true, "")
 
 	// 8. Different signing root, higher source epoch, higher target epoch (again) -> expect slashing (double vote).
 	signAttestation(secretKeys[1], phase0.Root{byte(4)}, createAttestationData(3, 5), true, "HighestAttestationVote")
 
 	// 9. Lower source epoch, higher target epoch -> expect slashing. Should fail due to surrounding,
-	// but since check 7 is stricter than spec, this will fail due to double vote.
+	// but since check 7 is stricter than Eth spec, this will fail due to double vote.
 	for root := 1; root <= 5; root++ {
 		signAttestation(secretKeys[1], phase0.Root{byte(root)}, createAttestationData(3, 6), true, "HighestAttestationVote")
 	}
