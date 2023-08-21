@@ -11,7 +11,6 @@ import (
 
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // UponCommit returns true if a quorum of commit messages was received.
@@ -159,9 +158,9 @@ func BaseCommitValidation(
 	}
 
 	// TODO: remove as it's done in message validator
-	if err := types.VerifyByOperators(signedCommit.Signature, signedCommit, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
-		return errors.Wrap(err, "msg signature invalid")
-	}
+	//if err := types.VerifyByOperators(signedCommit.Signature, signedCommit, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
+	//	return errors.Wrap(err, "msg signature invalid")
+	//}
 
 	return nil
 }
