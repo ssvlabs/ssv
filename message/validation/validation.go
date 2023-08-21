@@ -58,11 +58,14 @@ func (cs *ConsensusState) SignerState(signer spectypes.OperatorID) *SignerState 
 	return signerState
 }
 
+type validatorGetterFunc = func(pk []byte) *ssvtypes.SSVShare
+
 type MessageValidator struct {
-	logger       *zap.Logger
-	netCfg       networkconfig.NetworkConfig
-	index        sync.Map
-	shareStorage registrystorage.Shares
+	logger          *zap.Logger
+	netCfg          networkconfig.NetworkConfig
+	index           sync.Map
+	shareStorage    registrystorage.Shares
+	validatorGetter validatorGetterFunc
 }
 
 func NewMessageValidator(netCfg networkconfig.NetworkConfig, shareStorage registrystorage.Shares, opts ...Option) *MessageValidator {
@@ -85,6 +88,10 @@ func WithLogger(logger *zap.Logger) Option {
 	return func(mv *MessageValidator) {
 		mv.logger = logger
 	}
+}
+
+func (mv *MessageValidator) SetValidatorGetter(f validatorGetterFunc) {
+	mv.validatorGetter = f
 }
 
 func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, receivedAt time.Time) (*queue.DecodedSSVMessage, error) {
@@ -115,8 +122,12 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 	}
 
 	share := mv.shareStorage.Get(nil, publicKey.Serialize())
+	// TODO: fix no share case
+	if share == nil && mv.validatorGetter != nil {
+		share = mv.validatorGetter(publicKey.Serialize())
+	}
+
 	if share == nil {
-		// TODO: fix this case
 		msg, err := queue.DecodeSSVMessage(ssvMessage)
 		if err != nil {
 			return nil, fmt.Errorf("malformed message: %w", err)
