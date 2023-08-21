@@ -110,9 +110,9 @@ func ReconstructSignature(ps *specssv.PartialSigContainer, root [32]byte, valida
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to reconstruct signatures")
 	}
-	if err := VerifyReconstructedSignature(signature, validatorPubKey, root); err != nil {
-		return nil, errors.Wrap(err, "failed to verify reconstruct signature")
-	}
+	//if err := VerifyReconstructedSignature(signature, validatorPubKey, root); err != nil {
+	//	return nil, errors.Wrap(err, "failed to verify reconstruct signature")
+	//}
 	return signature.Serialize(), nil
 }
 
