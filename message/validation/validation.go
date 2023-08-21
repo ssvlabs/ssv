@@ -192,32 +192,6 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 	return msg, nil
 }
 
-func (mv *MessageValidator) ValidateConsensusMessageSignature(decodedSSVMessage *queue.DecodedSSVMessage) error {
-	publicKey, err := ssvtypes.DeserializeBLSPublicKey(decodedSSVMessage.MsgID.GetPubKey())
-	if err != nil {
-		return fmt.Errorf("deserialize public key: %w", err)
-	}
-
-	share := mv.shareStorage.Get(nil, publicKey.Serialize())
-	if share == nil {
-		// TODO: fix this case
-		return nil
-
-		//err := ErrUnknownValidator
-		//err.got = publicKey.SerializeToHexStr()
-		//return err
-	}
-
-	switch decodedSSVMessage.MsgType {
-	case spectypes.SSVConsensusMsgType:
-		if err := mv.validateConsensusSignature(share, decodedSSVMessage); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
 func (mv *MessageValidator) containsSignerFunc(signer spectypes.OperatorID) func(operator *spectypes.Operator) bool {
 	return func(operator *spectypes.Operator) bool {
 		return operator.OperatorID == signer
