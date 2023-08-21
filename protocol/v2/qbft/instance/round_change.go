@@ -381,7 +381,7 @@ func CreateRoundChange(state *specqbft.State, config qbft.IConfig, newRound spec
 	}
 	sig, err := config.GetSigner().SignRoot(msg, spectypes.QBFTSignatureType, state.Share.SharePubKey)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed signing prepare msg")
+		return nil, errors.Wrap(err, "failed signing round change msg")
 	}
 
 	signedMsg := &specqbft.SignedMessage{

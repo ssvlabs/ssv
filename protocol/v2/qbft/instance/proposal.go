@@ -257,7 +257,7 @@ func CreateProposal(state *specqbft.State, config qbft.IConfig, fullData []byte,
 	}
 	sig, err := config.GetSigner().SignRoot(msg, spectypes.QBFTSignatureType, state.Share.SharePubKey)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed signing prepare msg")
+		return nil, errors.Wrap(err, "failed signing proposal msg")
 	}
 
 	signedMsg := &specqbft.SignedMessage{
