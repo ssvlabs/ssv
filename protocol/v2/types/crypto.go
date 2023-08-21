@@ -58,7 +58,7 @@ func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, d
 	// 	return errors.New("failed to verify signature")
 	// }
 	if res := Verifier.AggregateVerify(sign, pks, computedRoot); !res {
-		return errors.New("failed to verify signature")
+		return SingleVerifyByOperators(s, data, domain, sigType, operators)
 	}
 	return nil
 }
