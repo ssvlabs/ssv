@@ -122,7 +122,7 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 	}
 
 	share := mv.shareStorage.Get(nil, publicKey.Serialize())
-	// TODO: fix no share case
+	// TODO: fix no share case, think how non-committee validators need to be handled
 	if share == nil && mv.validatorGetter != nil {
 		share = mv.validatorGetter(publicKey.Serialize())
 	}
