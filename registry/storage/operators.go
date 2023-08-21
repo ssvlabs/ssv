@@ -33,6 +33,7 @@ type GetOperatorData = func(index uint64) (*OperatorData, bool, error)
 type Operators interface {
 	GetOperatorDataByPubKey(r basedb.Reader, operatorPubKey []byte) (*OperatorData, bool, error)
 	GetOperatorData(r basedb.Reader, id spectypes.OperatorID) (*OperatorData, bool, error)
+	OperatorsExist(r basedb.Reader, ids []spectypes.OperatorID) (bool, error)
 	SaveOperatorData(rw basedb.ReadWriter, operatorData *OperatorData) (bool, error)
 	DeleteOperatorData(rw basedb.ReadWriter, id spectypes.OperatorID) error
 	ListOperators(r basedb.Reader, from uint64, to uint64) ([]OperatorData, error)
@@ -85,6 +86,17 @@ func (s *operatorsStorage) GetOperatorData(
 	return s.getOperatorData(r, id)
 }
 
+// OperatorsExist returns if operators exist
+func (s *operatorsStorage) OperatorsExist(
+	r basedb.Reader,
+	ids []spectypes.OperatorID,
+) (bool, error) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	return s.operatorsExist(r, ids)
+}
+
 // GetOperatorDataByPubKey returns data of the given operator by public key
 func (s *operatorsStorage) GetOperatorDataByPubKey(
 	r basedb.Reader,
@@ -127,6 +139,27 @@ func (s *operatorsStorage) getOperatorData(
 	var operatorInformation OperatorData
 	err = json.Unmarshal(obj.Value, &operatorInformation)
 	return &operatorInformation, found, err
+}
+
+func (s *operatorsStorage) operatorsExist(
+	r basedb.Reader,
+	ids []spectypes.OperatorID,
+) (bool, error) {
+	var keys [][]byte
+	for _, id := range ids {
+		keys = append(keys, buildOperatorKey(id))
+	}
+
+	seen := 0
+	err := s.db.UsingReader(r).GetMany(s.prefix, keys, func(obj basedb.Obj) error {
+		seen++
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+
+	return seen == len(ids), nil
 }
 
 func (s *operatorsStorage) listOperators(r basedb.Reader, from, to uint64) ([]OperatorData, error) {

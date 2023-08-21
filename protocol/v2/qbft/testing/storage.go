@@ -8,8 +8,8 @@ import (
 	"go.uber.org/zap"
 
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
-	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/kv"
 )
 
 var db basedb.Database
@@ -17,11 +17,8 @@ var dbOnce sync.Once
 
 func getDB(logger *zap.Logger) basedb.Database {
 	dbOnce.Do(func() {
-		dbInstance, err := storage.GetStorageFactory(logger, basedb.Options{
-			Type:      "badger-memory",
-			Path:      "",
-			Reporting: false,
-			Ctx:       context.TODO(),
+		dbInstance, err := kv.NewInMemory(logger, basedb.Options{
+			Ctx: context.TODO(),
 		})
 		if err != nil {
 			panic(err)
