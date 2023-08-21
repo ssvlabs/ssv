@@ -128,16 +128,9 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 	}
 
 	if share == nil {
-		msg, err := queue.DecodeSSVMessage(ssvMessage)
-		if err != nil {
-			return nil, fmt.Errorf("malformed message: %w", err)
-		}
-
-		return msg, nil
-
-		//err := ErrUnknownValidator
-		//err.got = publicKey.SerializeToHexStr()
-		//return nil, err
+		err := ErrUnknownValidator
+		err.got = publicKey.SerializeToHexStr()
+		return nil, err
 	}
 
 	if share.Liquidated {
