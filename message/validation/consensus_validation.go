@@ -118,7 +118,7 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		}
 	}
 
-	aggregateVerification := true
+	aggregateVerification := false
 	if aggregateVerification {
 		if err := ssvtypes.VerifyByOperators(signedMsg.Signature, signedMsg, mv.netCfg.Domain, spectypes.QBFTSignatureType, share.Committee); err != nil {
 			signErr := ErrInvalidSignature
