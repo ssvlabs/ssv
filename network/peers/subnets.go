@@ -57,7 +57,7 @@ diffLoop:
 					if len(peers) == 1 {
 						si.subnets[subnet] = make([]peer.ID, 0)
 					} else {
-						si.subnets[subnet] = peers[1:]
+						si.subnets[subnet] = peers[1:] //nolint:all
 					}
 					continue diffLoop
 				}
