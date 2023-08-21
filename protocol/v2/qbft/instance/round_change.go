@@ -10,7 +10,6 @@ import (
 
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // uponRoundChange process round change messages.
@@ -251,9 +250,9 @@ func validRoundChangeForData(
 	}
 
 	// TODO: remove as it's done in message validator
-	if err := types.VerifyByOperators(signedMsg.Signature, signedMsg, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, state.Share.Committee); err != nil {
-		return errors.Wrap(err, "msg signature invalid")
-	}
+	//if err := types.VerifyByOperators(signedMsg.Signature, signedMsg, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, state.Share.Committee); err != nil {
+	//	return errors.Wrap(err, "msg signature invalid")
+	//}
 
 	if err := signedMsg.Message.Validate(); err != nil {
 		return errors.Wrap(err, "roundChange invalid")
