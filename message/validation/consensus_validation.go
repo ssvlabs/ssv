@@ -4,7 +4,6 @@ package validation
 
 import (
 	"bytes"
-	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -102,22 +101,22 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		}
 	}
 
-	aggregateVerification := false
-	if aggregateVerification {
-		if err := ssvtypes.VerifyByOperators(signedMsg.Signature, signedMsg, mv.netCfg.Domain, spectypes.QBFTSignatureType, share.Committee); err != nil {
-			signErr := ErrInvalidSignature
-			signErr.innerErr = err
-			signErr.got = fmt.Sprintf("domain %v from %v", hex.EncodeToString(mv.netCfg.Domain[:]), hex.EncodeToString(share.ValidatorPubKey))
-			return signErr
-		}
-	} else {
-		if err := ssvtypes.SingleVerifyByOperators(signedMsg.Signature, signedMsg, mv.netCfg.Domain, spectypes.QBFTSignatureType, share.Committee); err != nil {
-			signErr := ErrInvalidSignature
-			signErr.innerErr = err
-			signErr.got = fmt.Sprintf("domain %v from %v", hex.EncodeToString(mv.netCfg.Domain[:]), hex.EncodeToString(share.ValidatorPubKey))
-			return signErr
-		}
-	}
+	//aggregateVerification := false
+	//if aggregateVerification {
+	//	if err := ssvtypes.VerifyByOperators(signedMsg.Signature, signedMsg, mv.netCfg.Domain, spectypes.QBFTSignatureType, share.Committee); err != nil {
+	//		signErr := ErrInvalidSignature
+	//		signErr.innerErr = err
+	//		signErr.got = fmt.Sprintf("domain %v from %v", hex.EncodeToString(mv.netCfg.Domain[:]), hex.EncodeToString(share.ValidatorPubKey))
+	//		return signErr
+	//	}
+	//} else {
+	//	if err := ssvtypes.SingleVerifyByOperators(signedMsg.Signature, signedMsg, mv.netCfg.Domain, spectypes.QBFTSignatureType, share.Committee); err != nil {
+	//		signErr := ErrInvalidSignature
+	//		signErr.innerErr = err
+	//		signErr.got = fmt.Sprintf("domain %v from %v", hex.EncodeToString(mv.netCfg.Domain[:]), hex.EncodeToString(share.ValidatorPubKey))
+	//		return signErr
+	//	}
+	//}
 
 	for _, signer := range signedMsg.Signers {
 		state.SignerState(signer).MessageCounts.Record(msg)
