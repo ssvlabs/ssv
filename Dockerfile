@@ -6,8 +6,13 @@ FROM golang:1.20.5-bookworm AS preparer
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update
 RUN apt-get install -yq --no-install-recommends \
-  curl git bzip2 g++ gcc-aarch64-linux-gnu make
-RUN rm -rf /var/lib/apt/lists/*
+  curl=7.88.1-10+deb12u1 \
+  git=1:2.39.2-1.1 \
+  bzip2=1.0.8-5+b1 \
+  g++=4:12.2.0-3 \
+  gcc-aarch64-linux-gnu=4:12.2.0-3 \
+  make=4.3-4.1 \
+  && rm -rf /var/lib/apt/lists/*
 
 # install jemalloc
 WORKDIR /tmp/jemalloc-temp
@@ -47,10 +52,14 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 #
 # STEP 3: Prepare image to run the binary
 #
-FROM alpine:3.18 AS runner
+FROM alpine:3.18.3 AS runner
 
 # Install ca-certificates, bash
-RUN apk -v --update add ca-certificates bash make  bind-tools && \
+RUN apk -v --update add \
+  ca-certificates=20230506-r0 \
+  bash=5.2.15-r5 \
+  make=4.4.1-r1 \
+  bind-tools=9.18.16-r0 && \
   rm /var/cache/apk/*
 
 COPY --from=builder /go/bin/ssvnode /go/bin/ssvnode
