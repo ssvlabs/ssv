@@ -4,6 +4,7 @@ package validation
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"time"
 
