@@ -328,9 +328,9 @@ func (c *controller) handleRouterMessages() {
 				continue
 			}
 
-			//if err := c.messageValidator.ValidateConsensusMessageSignature(msg); err != nil {
-			//	c.logger.Error("failed to validate ssv message", zap.Error(err))
-			//}
+			if err := c.messageValidator.ValidateConsensusMessageSignature(msg); err != nil {
+				c.logger.Error("failed to validate ssv message", zap.Error(err))
+			}
 
 			pk := msg.GetID().GetPubKey()
 			hexPK := hex.EncodeToString(pk)
