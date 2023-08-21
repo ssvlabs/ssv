@@ -128,7 +128,7 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 	}
 
 	share := mv.validatorGetter(publicKey.Serialize())
-	if share != nil {
+	if share == nil {
 		if ssvMessage.MsgType != spectypes.SSVConsensusMsgType {
 			return nil, fmt.Errorf("not supporting other types")
 		}
