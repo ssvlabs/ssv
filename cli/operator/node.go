@@ -231,6 +231,8 @@ var StartNodeCmd = &cobra.Command{
 			return v.Share
 		})
 
+		messageValidator.SetNonCommitteeEnqueueFunc(validatorCtrl.NonCommitteeEnqueueFunc())
+
 		operatorNode = operator.New(logger, cfg.SSVOptions, slotTicker)
 
 		if cfg.MetricsAPIPort > 0 {

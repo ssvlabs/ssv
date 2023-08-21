@@ -59,13 +59,15 @@ func (cs *ConsensusState) SignerState(signer spectypes.OperatorID) *SignerState 
 }
 
 type validatorGetterFunc = func(pk []byte) *ssvtypes.SSVShare
+type nonCommitteeEnqueueFunc = func(msg *queue.DecodedSSVMessage) bool
 
 type MessageValidator struct {
-	logger          *zap.Logger
-	netCfg          networkconfig.NetworkConfig
-	index           sync.Map
-	shareStorage    registrystorage.Shares
-	validatorGetter validatorGetterFunc
+	logger              *zap.Logger
+	netCfg              networkconfig.NetworkConfig
+	index               sync.Map
+	shareStorage        registrystorage.Shares
+	validatorGetter     validatorGetterFunc
+	nonCommitteeEnqueue nonCommitteeEnqueueFunc
 }
 
 func NewMessageValidator(netCfg networkconfig.NetworkConfig, shareStorage registrystorage.Shares, opts ...Option) *MessageValidator {
@@ -92,6 +94,10 @@ func WithLogger(logger *zap.Logger) Option {
 
 func (mv *MessageValidator) SetValidatorGetter(f validatorGetterFunc) {
 	mv.validatorGetter = f
+}
+
+func (mv *MessageValidator) SetNonCommitteeEnqueueFunc(f nonCommitteeEnqueueFunc) {
+	mv.nonCommitteeEnqueue = f
 }
 
 func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, receivedAt time.Time) (*queue.DecodedSSVMessage, error) {
@@ -121,17 +127,34 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 		return nil, fmt.Errorf("deserialize public key: %w", err)
 	}
 
-	share := mv.shareStorage.Get(nil, publicKey.Serialize())
-	// TODO: fix no share case, think how non-committee validators need to be handled
-	if share == nil && mv.validatorGetter != nil {
-		share = mv.validatorGetter(publicKey.Serialize())
+	share := mv.validatorGetter(publicKey.Serialize())
+	if share != nil {
+		if ssvMessage.MsgType != spectypes.SSVConsensusMsgType {
+			return nil, fmt.Errorf("not supporting other types")
+		}
+
+		decoded, err := queue.DecodeSSVMessage(ssvMessage)
+		if err != nil {
+			return nil, fmt.Errorf("malformed message: %w", err)
+		}
+
+		if !mv.nonCommitteeEnqueue(decoded) { // start to save non committee decided messages only post fork
+			mv.logger.Warn("Failed to enqueue post consensus message: buffer is full")
+		}
+		return nil, fmt.Errorf("not for further processing")
 	}
 
-	if share == nil {
-		err := ErrUnknownValidator
-		err.got = publicKey.SerializeToHexStr()
-		return nil, err
-	}
+	//share := mv.shareStorage.Get(nil, publicKey.Serialize())
+	//// TODO: fix no share case, think how non-committee validators need to be handled
+	//if share == nil && mv.validatorGetter != nil {
+	//	share = mv.validatorGetter(publicKey.Serialize())
+	//}
+	//
+	//if share == nil {
+	//	err := ErrUnknownValidator
+	//	err.got = publicKey.SerializeToHexStr()
+	//	return nil, err
+	//}
 
 	if share.Liquidated {
 		return nil, ErrValidatorLiquidated

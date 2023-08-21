@@ -99,6 +99,7 @@ type Controller interface {
 	StartValidators()
 	ActiveValidatorIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
 	GetValidator(pubKey string) (*validator.Validator, bool)
+	NonCommitteeEnqueueFunc() func(msg *queue.DecodedSSVMessage) bool
 	ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty)
 	UpdateValidatorMetaDataLoop()
 	StartNetworkHandlers()
@@ -569,6 +570,10 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 // GetValidator returns a validator instance from validatorsMap
 func (c *controller) GetValidator(pubKey string) (*validator.Validator, bool) {
 	return c.validatorsMap.GetValidator(pubKey)
+}
+
+func (c *controller) NonCommitteeEnqueueFunc() func(msg *queue.DecodedSSVMessage) bool {
+	return c.messageWorker.TryEnqueue
 }
 
 func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) {
