@@ -3,7 +3,6 @@ package operator
 import (
 	"context"
 	"crypto/x509"
-	"encoding/hex"
 	"fmt"
 	"log"
 	"math/big"
@@ -137,10 +136,8 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorData.PublicKey)
 		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
 		cfg.P2pNetworkConfig.Network = networkConfig
-
 		messageValidator := validation.NewMessageValidator(networkConfig, nodeStorage.Shares(), validation.WithLogger(logger))
 		cfg.P2pNetworkConfig.MessageValidator = messageValidator
-		cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
 
 		p2pNetwork := setupP2P(logger, db)
 
@@ -218,18 +215,11 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
 		cfg.SSVOptions.ValidatorOptions.Metrics = metricsReporter
-		cfg.SSVOptions.Metrics = metricsReporter
+		cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
 
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
-		messageValidator.SetValidatorGetter(func(pk []byte) *types.SSVShare {
-			v, ok := validatorCtrl.GetValidator(hex.EncodeToString(pk))
-			if !ok {
-				return nil
-			}
-
-			return v.Share
-		})
+		cfg.SSVOptions.Metrics = metricsReporter
 
 		operatorNode = operator.New(logger, cfg.SSVOptions, slotTicker)
 
