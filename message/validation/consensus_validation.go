@@ -70,11 +70,22 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		return err
 	}
 
-	estimatedRound, sinceFirstRound := mv.currentEstimatedRound(role, messageSlot, receivedAt)
+	slotStartTime := mv.netCfg.Beacon.GetSlotStartTime(messageSlot).
+		Add(mv.waitAfterSlotStart(role)) // TODO: do we need this?
+
+	if receivedAt.Before(slotStartTime) {
+		err := ErrReceivedBeforeSlotStart
+		err.want = slotStartTime.String()
+		err.got = receivedAt.String()
+		return err
+	}
+
+	sinceSlotStart := receivedAt.Sub(slotStartTime)
+	estimatedRound := mv.currentEstimatedRound(sinceSlotStart)
 
 	if estimatedRound > maxRound {
 		err := ErrEstimatedRoundTooHigh
-		err.got = fmt.Sprintf("%v (%v role) / %v passed", estimatedRound, role, sinceFirstRound)
+		err.got = fmt.Sprintf("%v (%v role) / %v passed", estimatedRound, role, sinceSlotStart)
 		err.want = fmt.Sprintf("%v (%v role)", maxRound, role)
 		return err
 	}
@@ -83,7 +94,7 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 	if msgRound < lowestAllowed || msgRound > highestAllowed {
 		err := ErrEstimatedRoundTooFar
 		err.got = fmt.Sprintf("%v (%v role)", msgRound, role)
-		err.want = fmt.Sprintf("between %v and %v (%v role) / %v passed", lowestAllowed, highestAllowed, role, sinceFirstRound)
+		err.want = fmt.Sprintf("between %v and %v (%v role) / %v passed", lowestAllowed, highestAllowed, role, sinceSlotStart)
 		return err
 	}
 
@@ -211,20 +222,14 @@ func (mv *MessageValidator) maxRound(role spectypes.BeaconRole) specqbft.Round {
 	}
 }
 
-// TODO: cover with tests
-func (mv *MessageValidator) currentEstimatedRound(role spectypes.BeaconRole, slot phase0.Slot, receivedAt time.Time) (specqbft.Round, time.Duration) {
-	slotStartTime := mv.netCfg.Beacon.GetSlotStartTime(slot)
-
-	firstRoundStart := slotStartTime.Add(mv.waitAfterSlotStart(role))
-
-	sinceFirstRound := receivedAt.Sub(firstRoundStart)
-	if currentQuickRound := 1 + specqbft.Round(sinceFirstRound/roundtimer.QuickTimeout); currentQuickRound <= roundtimer.QuickTimeoutThreshold {
-		return currentQuickRound, sinceFirstRound
+func (mv *MessageValidator) currentEstimatedRound(sinceSlotStart time.Duration) specqbft.Round {
+	if currentQuickRound := specqbft.FirstRound + specqbft.Round(sinceSlotStart/roundtimer.QuickTimeout); currentQuickRound <= roundtimer.QuickTimeoutThreshold {
+		return currentQuickRound
 	}
 
-	sinceFirstSlowRound := receivedAt.Sub(firstRoundStart.Add(time.Duration(roundtimer.QuickTimeoutThreshold) * roundtimer.QuickTimeout))
-	estimatedRound := roundtimer.QuickTimeoutThreshold + 1 + specqbft.Round(sinceFirstSlowRound/roundtimer.SlowTimeout)
-	return estimatedRound, sinceFirstRound
+	sinceFirstSlowRound := sinceSlotStart - (time.Duration(roundtimer.QuickTimeoutThreshold) * roundtimer.QuickTimeout)
+	estimatedRound := roundtimer.QuickTimeoutThreshold + specqbft.FirstRound + specqbft.Round(sinceFirstSlowRound/roundtimer.SlowTimeout)
+	return estimatedRound
 }
 
 func (mv *MessageValidator) waitAfterSlotStart(role spectypes.BeaconRole) time.Duration {

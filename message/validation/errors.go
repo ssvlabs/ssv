@@ -60,4 +60,5 @@ var (
 	ErrInvalidSignature        = Error{text: "invalid signature"}
 	ErrEstimatedRoundTooHigh   = Error{text: "estimated round too high"}
 	ErrEstimatedRoundTooFar    = Error{text: "estimated round too far from message round"}
+	ErrReceivedBeforeSlotStart = Error{text: "message received before slot start"}
 )
