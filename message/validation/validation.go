@@ -130,18 +130,11 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 	// TODO: handle non-committee validators properly
 	share := mv.validatorGetter(publicKey.Serialize())
 	if share == nil {
-		if ssvMessage.MsgType != spectypes.SSVConsensusMsgType {
-			return nil, fmt.Errorf("not supporting other types")
-		}
-
 		decoded, err := queue.DecodeSSVMessage(ssvMessage)
 		if err != nil {
 			return nil, fmt.Errorf("malformed message: %w", err)
 		}
 
-		//if !mv.nonCommitteeEnqueue(decoded) { // start to save non committee decided messages only post fork
-		//	mv.logger.Warn("Failed to enqueue post consensus message: buffer is full")
-		//}
 		return decoded, nil
 	}
 
