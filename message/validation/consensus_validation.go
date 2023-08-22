@@ -90,10 +90,10 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 	lowestAllowed, highestAllowed := estimatedRound-allowedRoundsInPast, estimatedRound+allowedRoundsInFuture
 	if msgRound < lowestAllowed || msgRound > highestAllowed {
 		// TODO: enable
-		err := ErrEstimatedRoundTooFar
-		err.got = fmt.Sprintf("%v (%v role)", msgRound, role)
-		err.want = fmt.Sprintf("between %v and %v (%v role) / %v passed", lowestAllowed, highestAllowed, role, sinceSlotStart)
-		return err
+		//err := ErrEstimatedRoundTooFar
+		//err.got = fmt.Sprintf("%v (%v role)", msgRound, role)
+		//err.want = fmt.Sprintf("between %v and %v (%v role) / %v passed", lowestAllowed, highestAllowed, role, sinceSlotStart)
+		//return err
 	}
 
 	if mv.hasFullData(signedMsg) {
