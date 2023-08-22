@@ -127,9 +127,16 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 		return nil, fmt.Errorf("deserialize public key: %w", err)
 	}
 
-	// TODO: handle non-committee validators properly
 	share := mv.validatorGetter(publicKey.Serialize())
 	if share == nil {
+		share = mv.shareStorage.Get(nil, publicKey.Serialize())
+		if share == nil {
+			err := ErrUnknownValidator
+			err.got = publicKey.SerializeToHexStr()
+			return nil, err
+		}
+
+		// TODO: handle non-committee validators properly
 		decoded, err := queue.DecodeSSVMessage(ssvMessage)
 		if err != nil {
 			return nil, fmt.Errorf("malformed message: %w", err)
@@ -137,18 +144,6 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 
 		return decoded, nil
 	}
-
-	//share := mv.shareStorage.Get(nil, publicKey.Serialize())
-	//// TODO: fix no share case, think how non-committee validators need to be handled
-	//if share == nil && mv.validatorGetter != nil {
-	//	share = mv.validatorGetter(publicKey.Serialize())
-	//}
-	//
-	//if share == nil {
-	//	err := ErrUnknownValidator
-	//	err.got = publicKey.SerializeToHexStr()
-	//	return nil, err
-	//}
 
 	if share.Liquidated {
 		return nil, ErrValidatorLiquidated
