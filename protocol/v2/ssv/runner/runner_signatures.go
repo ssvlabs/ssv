@@ -63,11 +63,12 @@ func (b *BaseRunner) validatePartialSigMsgForSlot(
 	//	return errors.Wrap(err, "failed to verify PartialSignature")
 	//}
 
-	for _, msg := range signedMsg.Message.Messages {
-		if err := b.verifyBeaconPartialSignature(msg); err != nil {
-			return errors.Wrap(err, "could not verify Beacon partial Signature")
-		}
-	}
+	// TODO: remove as it's done in message validator
+	//for _, msg := range signedMsg.Message.Messages {
+	//	if err := b.verifyBeaconPartialSignature(msg); err != nil {
+	//		return errors.Wrap(err, "could not verify Beacon partial Signature")
+	//	}
+	//}
 
 	return nil
 }

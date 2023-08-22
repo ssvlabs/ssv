@@ -45,10 +45,9 @@ func (mv *MessageValidator) validatePartialSignatureMessage(share *ssvtypes.SSVS
 	}
 
 	// TODO: do read-only behavior checks before checking signature and then update the state if signature is correct
-	// TODO: enable
-	//if err := mv.validPartialSignatures(share, signedMsg); err != nil {
-	//	return err
-	//}
+	if err := mv.validPartialSignatures(share, signedMsg); err != nil {
+		return err
+	}
 
 	return nil
 }
