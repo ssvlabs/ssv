@@ -73,7 +73,7 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 
 	if estimatedRound > maxRound {
 		// TODO: make sure check is correct
-		//return fmt.Errorf("estimated round too high")
+		return fmt.Errorf("estimated round too high")
 	}
 	// msgRound - 2 <= estimatedRound <= msgRound + 1
 	if estimatedRound-signedMsg.Message.Round > allowedRoundsInFuture || signedMsg.Message.Round-estimatedRound > allowedRoundsInPast {
