@@ -76,11 +76,6 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 	sinceSlotStart := time.Duration(0)
 	estimatedRound := specqbft.FirstRound
 	if receivedAt.After(slotStartTime) {
-		//	err := ErrReceivedBeforeSlotStart
-		//	err.want = slotStartTime.String()
-		//	err.got = receivedAt.String()
-		//	return err
-
 		sinceSlotStart = receivedAt.Sub(slotStartTime)
 		estimatedRound = mv.currentEstimatedRound(sinceSlotStart)
 	}
