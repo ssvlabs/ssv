@@ -2,6 +2,8 @@ package validator
 
 import (
 	"context"
+	"encoding/hex"
+	"github.com/ethereum/go-ethereum/common"
 	"sync"
 	"testing"
 	"time"
@@ -26,9 +28,17 @@ import (
 // TODO: increase test coverage, add more tests, e.g.:
 // 1. a validator with a non-empty share and empty metadata - test a scenario if we cannot get metadata from beacon node
 
+type MockControllerOptions struct {
+	validatorsMap map[string]*validator.Validator
+	sharesStorage SharesStorage
+}
+
 func TestHandleNonCommitteeMessages(t *testing.T) {
 	logger := logging.TestLogger(t)
-	ctr := setupController(logger, map[string]*validator.Validator{}) // none committee
+	controllerOptions := MockControllerOptions{
+		validatorsMap: map[string]*validator.Validator{},
+	}
+	ctr := setupController(logger, controllerOptions) // none committee
 	go ctr.handleRouterMessages()
 
 	var wg sync.WaitGroup
@@ -72,6 +82,45 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 	}()
 
 	wg.Wait()
+}
+
+func TestUpdateFeeRecipient(t *testing.T) {
+	// Setup logger for testing
+	logger := logging.TestLogger(t)
+
+	// Decode owner and fee recipient addresses from hex strings
+	ownerAddressBytes, err := hex.DecodeString("67Ce5c69260bd819B4e0AD13f4b873074D479811")
+	require.NoError(t, err, "Failed to decode owner address")
+
+	newFeeRecipientBytes, err := hex.DecodeString("45E668aba4b7fc8761331EC3CE77584B7A99A51A")
+	require.NoError(t, err, "Failed to decode new fee recipient address")
+
+	// Initialize a test validator with the decoded owner address
+	testValidator := &validator.Validator{
+		Share: &types.SSVShare{
+			Metadata: types.Metadata{
+				OwnerAddress: common.Address(ownerAddressBytes),
+			},
+		},
+	}
+
+	// Set up the controller with the initialized validator
+	controllerOptions := MockControllerOptions{
+		validatorsMap: map[string]*validator.Validator{
+			"0": testValidator,
+		},
+	}
+	ctr := setupController(logger, controllerOptions)
+
+	// Update the fee recipient in the controller and check for errors
+	err = ctr.UpdateFeeRecipient(common.Address(ownerAddressBytes), common.Address(newFeeRecipientBytes))
+	require.NoError(t, err, "Failed to update fee recipient")
+
+	// Convert the FeeRecipientAddress to a slice for comparison
+	actualFeeRecipient := testValidator.Share.FeeRecipientAddress[:]
+
+	// Assert that the fee recipient address was updated correctly
+	require.Equal(t, newFeeRecipientBytes, actualFeeRecipient, "Fee recipient address mismatch")
 }
 
 func TestGetIndices(t *testing.T) {
@@ -143,26 +192,33 @@ func TestGetIndices(t *testing.T) {
 	}
 
 	logger := logging.TestLogger(t)
-	ctr := setupController(logger, validators)
+	controllerOptions := MockControllerOptions{
+		validatorsMap: validators,
+	}
+	ctr := setupController(logger, controllerOptions)
 
 	activeIndicesForCurrentEpoch := ctr.ActiveValidatorIndices(currentEpoch)
+	println("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<,here")
+	println(len(activeIndicesForCurrentEpoch))
+	println("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<,here")
 	require.Equal(t, 2, len(activeIndicesForCurrentEpoch)) // should return only active indices
 
 	activeIndicesForNextEpoch := ctr.ActiveValidatorIndices(currentEpoch + 1)
 	require.Equal(t, 3, len(activeIndicesForNextEpoch)) // should return including ValidatorStatePendingQueued
 }
 
-func setupController(logger *zap.Logger, validators map[string]*validator.Validator) controller {
+func setupController(logger *zap.Logger, controllerOptions MockControllerOptions) controller {
 	return controller{
 		context:                    context.Background(),
-		sharesStorage:              nil,
+		sharesStorage:              controllerOptions.sharesStorage,
 		beacon:                     nil,
+		logger:                     logger,
 		keyManager:                 nil,
 		shareEncryptionKeyProvider: nil,
 		validatorsMap: &validatorsMap{
 			ctx:           context.Background(),
 			lock:          sync.RWMutex{},
-			validatorsMap: validators,
+			validatorsMap: controllerOptions.validatorsMap,
 		},
 		metadataUpdateQueue:    nil,
 		metadataUpdateInterval: 0,

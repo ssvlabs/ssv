@@ -9,9 +9,11 @@ import (
 
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	types "github.com/bloxapp/ssv-spec/types"
+	beacon "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	validator "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	types0 "github.com/bloxapp/ssv/protocol/v2/types"
 	storage "github.com/bloxapp/ssv/registry/storage"
+	basedb "github.com/bloxapp/ssv/storage/basedb"
 	common "github.com/ethereum/go-ethereum/common"
 	gomock "github.com/golang/mock/gomock"
 	zap "go.uber.org/zap"
@@ -256,4 +258,74 @@ func (m *MockController) UpdateValidatorMetaDataLoop() {
 func (mr *MockControllerMockRecorder) UpdateValidatorMetaDataLoop() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateValidatorMetaDataLoop", reflect.TypeOf((*MockController)(nil).UpdateValidatorMetaDataLoop))
+}
+
+// MockSharesStorage is a mock of SharesStorage interface.
+type MockSharesStorage struct {
+	ctrl     *gomock.Controller
+	recorder *MockSharesStorageMockRecorder
+}
+
+// MockSharesStorageMockRecorder is the mock recorder for MockSharesStorage.
+type MockSharesStorageMockRecorder struct {
+	mock *MockSharesStorage
+}
+
+// NewMockSharesStorage creates a new mock instance.
+func NewMockSharesStorage(ctrl *gomock.Controller) *MockSharesStorage {
+	mock := &MockSharesStorage{ctrl: ctrl}
+	mock.recorder = &MockSharesStorageMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockSharesStorage) EXPECT() *MockSharesStorageMockRecorder {
+	return m.recorder
+}
+
+// Get mocks base method.
+func (m *MockSharesStorage) Get(txn basedb.Reader, pubKey []byte) *types0.SSVShare {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Get", txn, pubKey)
+	ret0, _ := ret[0].(*types0.SSVShare)
+	return ret0
+}
+
+// Get indicates an expected call of Get.
+func (mr *MockSharesStorageMockRecorder) Get(txn, pubKey interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockSharesStorage)(nil).Get), txn, pubKey)
+}
+
+// List mocks base method.
+func (m *MockSharesStorage) List(txn basedb.Reader, filters ...storage.SharesFilter) []*types0.SSVShare {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{txn}
+	for _, a := range filters {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "List", varargs...)
+	ret0, _ := ret[0].([]*types0.SSVShare)
+	return ret0
+}
+
+// List indicates an expected call of List.
+func (mr *MockSharesStorageMockRecorder) List(txn interface{}, filters ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{txn}, filters...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*MockSharesStorage)(nil).List), varargs...)
+}
+
+// UpdateValidatorMetadata mocks base method.
+func (m *MockSharesStorage) UpdateValidatorMetadata(pk string, metadata *beacon.ValidatorMetadata) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateValidatorMetadata", pk, metadata)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateValidatorMetadata indicates an expected call of UpdateValidatorMetadata.
+func (mr *MockSharesStorageMockRecorder) UpdateValidatorMetadata(pk, metadata interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateValidatorMetadata", reflect.TypeOf((*MockSharesStorage)(nil).UpdateValidatorMetadata), pk, metadata)
 }

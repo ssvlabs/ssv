@@ -122,6 +122,12 @@ type nonCommitteeValidator struct {
 	sync.Mutex
 }
 
+type SharesStorage interface {
+	Get(txn basedb.Reader, pubKey []byte) *types.SSVShare
+	List(txn basedb.Reader, filters ...registrystorage.SharesFilter) []*types.SSVShare
+	UpdateValidatorMetadata(pk string, metadata *beaconprotocol.ValidatorMetadata) error
+}
+
 // controller implements Controller
 type controller struct {
 	context context.Context
@@ -129,7 +135,7 @@ type controller struct {
 	logger  *zap.Logger
 	metrics validatorMetrics
 
-	sharesStorage     registrystorage.Shares
+	sharesStorage     SharesStorage
 	operatorsStorage  registrystorage.Operators
 	recipientsStorage registrystorage.Recipients
 	ibftStorageMap    *storage.QBFTStores
