@@ -139,10 +139,10 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 			return nil, fmt.Errorf("malformed message: %w", err)
 		}
 
-		if !mv.nonCommitteeEnqueue(decoded) { // start to save non committee decided messages only post fork
-			mv.logger.Warn("Failed to enqueue post consensus message: buffer is full")
-		}
-		return nil, fmt.Errorf("not for further processing")
+		//if !mv.nonCommitteeEnqueue(decoded) { // start to save non committee decided messages only post fork
+		//	mv.logger.Warn("Failed to enqueue post consensus message: buffer is full")
+		//}
+		return decoded, nil
 	}
 
 	//share := mv.shareStorage.Get(nil, publicKey.Serialize())
