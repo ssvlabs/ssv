@@ -73,7 +73,6 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 	estimatedRound, sinceFirstRound := mv.currentEstimatedRound(role, messageSlot, receivedAt)
 
 	if estimatedRound > maxRound {
-		// TODO: make sure check is correct
 		err := ErrEstimatedRoundTooHigh
 		err.got = fmt.Sprintf("%v (%v role) / %v passed", estimatedRound, role, sinceFirstRound)
 		err.want = fmt.Sprintf("%v (%v role)", maxRound, role)
