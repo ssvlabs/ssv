@@ -81,10 +81,10 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 	}
 
 	if estimatedRound > maxRound {
-		//err := ErrEstimatedRoundTooHigh
-		//err.got = fmt.Sprintf("%v (%v role) / %v passed", estimatedRound, role, sinceSlotStart)
-		//err.want = fmt.Sprintf("%v (%v role)", maxRound, role)
-		//return err
+		err := ErrEstimatedRoundTooHigh
+		err.got = fmt.Sprintf("%v (%v role) / %v passed", estimatedRound, role, sinceSlotStart)
+		err.want = fmt.Sprintf("%v (%v role)", maxRound, role)
+		return err
 	}
 
 	lowestAllowed, highestAllowed := estimatedRound-allowedRoundsInPast, estimatedRound+allowedRoundsInFuture
