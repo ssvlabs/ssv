@@ -73,14 +73,15 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 	slotStartTime := mv.netCfg.Beacon.GetSlotStartTime(messageSlot).
 		Add(mv.waitAfterSlotStart(role)) // TODO: do we need this?
 
+	sinceSlotStart := time.Duration(0)
 	estimatedRound := specqbft.FirstRound
-	if receivedAt.Before(slotStartTime) {
+	if receivedAt.After(slotStartTime) {
 		//	err := ErrReceivedBeforeSlotStart
 		//	err.want = slotStartTime.String()
 		//	err.got = receivedAt.String()
 		//	return err
 
-		sinceSlotStart := receivedAt.Sub(slotStartTime)
+		sinceSlotStart = receivedAt.Sub(slotStartTime)
 		estimatedRound = mv.currentEstimatedRound(sinceSlotStart)
 	}
 
