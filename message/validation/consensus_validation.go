@@ -229,11 +229,9 @@ func (mv *MessageValidator) currentEstimatedRound(role spectypes.BeaconRole, slo
 
 func (mv *MessageValidator) waitAfterSlotStart(role spectypes.BeaconRole) time.Duration {
 	switch role {
-	case spectypes.BNRoleAttester, spectypes.BNRoleSyncCommittee:
-		return mv.netCfg.Beacon.SlotDurationSec() / 3
-	case spectypes.BNRoleAggregator, spectypes.BNRoleSyncCommitteeContribution:
-		return mv.netCfg.Beacon.SlotDurationSec() / 3 * 2
-	case spectypes.BNRoleProposer, spectypes.BNRoleValidatorRegistration:
+	case spectypes.BNRoleSyncCommitteeContribution:
+		return mv.netCfg.Beacon.SlotDurationSec() // TODO: do we need this?
+	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator, spectypes.BNRoleSyncCommittee, spectypes.BNRoleProposer, spectypes.BNRoleValidatorRegistration:
 		return 0
 	default:
 		panic("unknown role")
