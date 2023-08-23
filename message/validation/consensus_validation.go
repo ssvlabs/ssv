@@ -142,7 +142,7 @@ func (mv *MessageValidator) validateSignerBehavior(state *ConsensusState, signer
 
 	signerState := state.SignerState(signer)
 
-	if err := mv.validateDutiesCount(signerState, msg.MsgID.GetRoleType()); err != nil {
+	if err := mv.validateDuties(signerState, msg.MsgID.GetRoleType()); err != nil {
 		return err
 	}
 
@@ -179,7 +179,7 @@ func (mv *MessageValidator) validateSignerBehavior(state *ConsensusState, signer
 	return nil
 }
 
-func (mv *MessageValidator) validateDutiesCount(state *SignerState, role spectypes.BeaconRole) error {
+func (mv *MessageValidator) validateDuties(state *SignerState, role spectypes.BeaconRole) error {
 	switch role {
 	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator, spectypes.BNRoleValidatorRegistration:
 		if state.EpochDuties > maxDutiesPerEpoch {
@@ -188,6 +188,7 @@ func (mv *MessageValidator) validateDutiesCount(state *SignerState, role spectyp
 			err.want = maxDutiesPerEpoch
 			return err
 		}
+		// TODO: check other roles from beacon node where needed
 	}
 
 	return nil
