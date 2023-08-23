@@ -243,7 +243,7 @@ func (mv *MessageValidator) validateSlotState(signerState *SignerState, msgSlot 
 }
 
 func (mv *MessageValidator) validateRoundState(signerState *SignerState, msgRound specqbft.Round) error {
-	if signerState.Round > msgRound {
+	if msgRound < signerState.Round {
 		// Signers aren't allowed to decrease their round.
 		// If they've sent a future message due to clock error,
 		// they'd have to wait for the next slot/round to be accepted.
@@ -253,15 +253,16 @@ func (mv *MessageValidator) validateRoundState(signerState *SignerState, msgRoun
 		return err
 	}
 
-	if msgRound-signerState.Round > allowedRoundsInFuture {
-		err := ErrRoundTooFarInTheFuture
-		err.want = signerState.Round
-		err.got = msgRound
-		return err
-	}
+	// TODO: check if it's needed and consider removal
+	//if msgRound-signerState.Round > allowedRoundsInFuture {
+	//	err := ErrRoundTooFarInTheFuture
+	//	err.want = signerState.Round
+	//	err.got = msgRound
+	//	return err
+	//}
 
 	// Advance slot & round, if needed.
-	if signerState.Round < msgRound {
+	if msgRound > signerState.Round {
 		signerState.Reset(signerState.Slot, msgRound)
 	}
 
