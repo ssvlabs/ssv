@@ -3,8 +3,9 @@ package peers
 import (
 	"sync"
 
-	"github.com/bloxapp/ssv/network/records"
 	"github.com/libp2p/go-libp2p/core/peer"
+
+	"github.com/bloxapp/ssv/network/records"
 )
 
 // subnetsIndex implements SubnetsIndex
@@ -54,7 +55,7 @@ diffLoop:
 				}
 				// otherwise, remove peer from the subnet
 				if i == 0 {
-					if len(peers) == 1 {
+					if len(peers) <= 1 {
 						si.subnets[subnet] = make([]peer.ID, 0)
 					} else {
 						si.subnets[subnet] = peers[1:]
