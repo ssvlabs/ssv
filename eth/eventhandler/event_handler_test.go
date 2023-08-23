@@ -106,6 +106,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	require.NoError(t, err)
 	data, err := generateSharesData(ops)
 
+	blockNum := uint64(0x1)
+
 	t.Run("test OperatorAdded event handle", func(t *testing.T) {
 
 		for _, op := range ops.operators {
@@ -135,8 +137,9 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 		// Hanlde the event
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
-		require.Equal(t, uint64(0x2), lastProcessedBlock)
+		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
+		blockNum++
 
 		// Check storage for a new operator
 		operators, err = eh.nodeStorage.ListOperators(nil, 0, 10)
@@ -177,8 +180,9 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 		// Hanlde the event
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
-		require.Equal(t, uint64(0x3), lastProcessedBlock)
+		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
+		blockNum++
 
 		// Check if the operator was removed successfuly
 		// TODO: this should be adjusted when eth/eventhandler/handlers.go#L109 is resolved
@@ -217,10 +221,49 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		}()
 
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
-		require.Equal(t, uint64(0x4), lastProcessedBlock)
+		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
+		blockNum++
 		// Check that validator was registered
 		shares := eh.nodeStorage.Shares().List(nil)
+		require.Equal(t, 1, len(shares))
+
+		malformedShares := data
+		malformedShares[len(malformedShares)-1] = 0
+
+		// Call the contract method
+		_, err = boundContract.SimcontractTransactor.RegisterValidator(
+			auth,
+			ops.masterPubKey.Serialize(),
+			[]uint64{1, 2, 3, 4},
+			malformedShares,
+			big.NewInt(100_000_000),
+			simcontract.CallableCluster{
+				ValidatorCount:  1,
+				NetworkFeeIndex: 1,
+				Index:           2,
+				Active:          true,
+				Balance:         big.NewInt(100_000_000),
+			})
+		require.NoError(t, err)
+		sim.Commit()
+
+		block = <-logs
+		require.NotEmpty(t, block.Logs)
+		require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
+
+		eventsCh = make(chan executionclient.BlockLogs)
+		go func() {
+			defer close(eventsCh)
+			eventsCh <- block
+		}()
+
+		lastProcessedBlock, err = eh.HandleBlockEventsStream(eventsCh, false)
+		require.Equal(t, blockNum+1, lastProcessedBlock)
+		require.NoError(t, err)
+		blockNum++
+		// Check that validator was not registered with Malfrormed event!
+		shares = eh.nodeStorage.Shares().List(nil)
 		require.Equal(t, 1, len(shares))
 	})
 
@@ -250,8 +293,9 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		}()
 
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
-		require.Equal(t, uint64(0x5), lastProcessedBlock)
+		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
+		blockNum++
 	})
 
 	t.Run("test ClusterLiquidated event handle", func(t *testing.T) {
@@ -280,8 +324,9 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		}()
 
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
-		require.Equal(t, uint64(0x6), lastProcessedBlock)
+		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
+		blockNum++
 	})
 
 	t.Run("test ClusterReactivated event handle", func(t *testing.T) {
@@ -310,8 +355,9 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		}()
 
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
-		require.Equal(t, uint64(0x7), lastProcessedBlock)
+		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
+		blockNum++
 	})
 
 	t.Run("test FeeRecipientAddressUpdated event handle", func(t *testing.T) {
@@ -333,8 +379,9 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		}()
 
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
-		require.Equal(t, uint64(0x8), lastProcessedBlock)
+		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
+		blockNum++
 		// Check if the fee recepient was updated
 		recepientData, _, err := eh.nodeStorage.GetRecipientData(nil, ethcommon.HexToAddress("0x71562b71999873DB5b286dF957af199Ec94617F7"))
 		require.NoError(t, err)
@@ -448,7 +495,7 @@ func TestCreatingSharesData(t *testing.T) {
 	require.NoError(t, err)
 	data, err := generateSharesData(ops)
 	require.NoError(t, err)
-	operatorCount := int(4)
+	operatorCount := 4
 	signatureOffset := phase0.SignatureLength
 	pubKeysOffset := phase0.PublicKeyLength*operatorCount + signatureOffset
 	sharesExpectedLength := encryptedKeyLength*operatorCount + pubKeysOffset
@@ -545,7 +592,7 @@ func generateSharesData(data *testShareData) ([]byte, error) {
 	for i, op := range data.operators {
 		rsakey, err := rsaencryption.ConvertPemToPublicKey(op.pub)
 		if err != nil {
-			return nil, fmt.Errorf("cant convert publickey: %f", err)
+			return nil, fmt.Errorf("cant convert publickey: %w", err)
 		}
 
 		rawshare := op.share.sec.SerializeToHexStr()
