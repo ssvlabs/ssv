@@ -34,6 +34,18 @@ type MessageCounts struct {
 	PostConsensus int
 }
 
+func (c *MessageCounts) String() string {
+	return fmt.Sprintf("pre-consensus: %v, proposal: %v, prepare: %v, commit: %v, decided: %v, round change: %v, post-consensus: %v",
+		c.PreConsensus,
+		c.Proposal,
+		c.Prepare,
+		c.Commit,
+		c.Decided,
+		c.RoundChange,
+		c.PostConsensus,
+	)
+}
+
 func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage) error {
 	switch m := msg.Body.(type) {
 	case *specqbft.SignedMessage:
@@ -41,30 +53,30 @@ func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage) error {
 		case specqbft.ProposalMsgType:
 			if c.Commit > 0 || c.Decided > 0 || c.PostConsensus > 0 {
 				err := ErrUnexpectedMessageType
-				err.got = "proposal"
+				err.got = fmt.Sprintf("proposal, having %v", c.String())
 				return err
 			}
 		case specqbft.PrepareMsgType:
 			if c.Prepare > 0 || c.Commit > 0 || c.Decided > 0 || c.PostConsensus > 0 {
 				err := ErrUnexpectedMessageType
-				err.got = "prepare"
+				err.got = fmt.Sprintf("prepare, having %v", c.String())
 				return err
 			}
 		case specqbft.CommitMsgType:
 			if len(m.Signers) == 1 && c.Commit > 0 || c.Decided > 0 || c.PostConsensus > 0 {
 				err := ErrUnexpectedMessageType
-				err.got = "commit"
+				err.got = fmt.Sprintf("commit, having %v", c.String())
 				return err
 			}
 			if len(m.Signers) > 1 && c.Decided > 0 || c.PostConsensus > 0 {
 				err := ErrUnexpectedMessageType
-				err.got = "decided"
+				err.got = fmt.Sprintf("decided, having %v", c.String())
 				return err
 			}
 		case specqbft.RoundChangeMsgType:
 			if c.RoundChange > 0 {
 				err := ErrUnexpectedMessageType
-				err.got = "round change"
+				err.got = fmt.Sprintf("round change, having %v", c.String())
 				return err
 			}
 		}
@@ -73,13 +85,13 @@ func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage) error {
 		case spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig:
 			if c.PreConsensus > 0 {
 				err := ErrUnexpectedMessageType
-				err.got = "pre-consensus"
+				err.got = fmt.Sprintf("pre-consensus, having %v", c.String())
 				return err
 			}
 		case spectypes.PostConsensusPartialSig:
 			if c.PostConsensus > 0 {
 				err := ErrUnexpectedMessageType
-				err.got = "post-consensus"
+				err.got = fmt.Sprintf("post-consensus, having %v", c.String())
 				return err
 			}
 		default:
