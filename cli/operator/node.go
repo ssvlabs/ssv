@@ -45,7 +45,6 @@ import (
 	"github.com/bloxapp/ssv/operator/slot_ticker"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
@@ -98,7 +97,7 @@ var StartNodeCmd = &cobra.Command{
 			log.Fatal("could not create logger", err)
 		}
 		defer logging.CapturePanic(logger)
-		networkConfig, forkVersion, err := setupSSVNetwork(logger)
+		networkConfig, err := setupSSVNetwork(logger)
 		if err != nil {
 			logger.Fatal("could not setup network", zap.Error(err))
 		}
@@ -132,7 +131,6 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.Permissioned = permissioned
 		cfg.P2pNetworkConfig.WhitelistedOperatorKeys = append(cfg.P2pNetworkConfig.WhitelistedOperatorKeys, networkConfig.WhitelistedOperatorKeys...)
 		cfg.P2pNetworkConfig.NodeStorage = nodeStorage
-		cfg.P2pNetworkConfig.ForkVersion = forkVersion
 		cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorData.PublicKey)
 		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
 		cfg.P2pNetworkConfig.Network = networkConfig
@@ -168,14 +166,12 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not connect to execution client", zap.Error(err))
 		}
 
-		cfg.SSVOptions.ForkVersion = forkVersion
 		cfg.SSVOptions.Context = cmd.Context()
 		cfg.SSVOptions.DB = db
 		cfg.SSVOptions.BeaconNode = consensusClient
 		cfg.SSVOptions.ExecutionClient = executionClient
 		cfg.SSVOptions.Network = networkConfig
 		cfg.SSVOptions.P2PNetwork = p2pNetwork
-		cfg.SSVOptions.ValidatorOptions.ForkVersion = forkVersion
 		cfg.SSVOptions.ValidatorOptions.BeaconNetwork = networkConfig.Beacon.GetNetwork()
 		cfg.SSVOptions.ValidatorOptions.Context = cmd.Context()
 		cfg.SSVOptions.ValidatorOptions.DB = db
@@ -208,7 +204,7 @@ var StartNodeCmd = &cobra.Command{
 		storageMap := ibftstorage.NewStores()
 
 		for _, storageRole := range storageRoles {
-			storageMap.Add(storageRole, ibftstorage.New(cfg.SSVOptions.ValidatorOptions.DB, storageRole.String(), cfg.SSVOptions.ValidatorOptions.ForkVersion))
+			storageMap.Add(storageRole, ibftstorage.New(cfg.SSVOptions.ValidatorOptions.DB, storageRole.String()))
 		}
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
@@ -438,16 +434,14 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database) (operatorstora
 	return nodeStorage, operatorData
 }
 
-func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, forksprotocol.ForkVersion, error) {
+func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 	networkConfig, err := networkconfig.GetNetworkConfigByName(cfg.SSVOptions.NetworkName)
 	if err != nil {
-		return networkconfig.NetworkConfig{}, "", err
+		return networkconfig.NetworkConfig{}, err
 	}
 
 	types.SetDefaultDomain(networkConfig.Domain)
 
-	currentEpoch := networkConfig.Beacon.EstimatedCurrentEpoch()
-	forkVersion := forksprotocol.GetCurrentForkVersion(currentEpoch)
 	nodeType := "light"
 	if cfg.SSVOptions.ValidatorOptions.FullNode {
 		nodeType = "full"
@@ -463,12 +457,11 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, forksprot
 		zap.String("nodeType", nodeType),
 		zap.String("builderProposals(MEV)", builderProposals),
 		zap.Any("beaconNetwork", networkConfig.Beacon.GetNetwork().BeaconNetwork),
-		fields.Fork(forkVersion),
 		zap.Uint64("genesisEpoch", uint64(networkConfig.GenesisEpoch)),
 		zap.String("registryContract", networkConfig.RegistryContractAddr),
 	)
 
-	return networkConfig, forkVersion, nil
+	return networkConfig, nil
 }
 
 func setupP2P(
