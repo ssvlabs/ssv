@@ -192,7 +192,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	})
 
 	t.Run("test ValidatorAdded event handle", func(t *testing.T) {
-
 		// Call the contract method
 		_, err = boundContract.SimcontractTransactor.RegisterValidator(
 			auth,
@@ -262,7 +261,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
 		blockNum++
-		// Check that validator was not registered with Malfrormed event!
+		// Check that validator was not registered, but nonce was bumped even event is malformed!
 		shares = eh.nodeStorage.Shares().List(nil)
 		require.Equal(t, 1, len(shares))
 	})
