@@ -151,13 +151,6 @@ func (mv *MessageValidator) validateSignerBehavior(state *ConsensusState, signer
 		}
 	}
 
-	if mv.isDecidedMessage(signedMsg) && len(signedMsg.Signers) <= signerState.LastDecidedQuorumSize {
-		// TODO: make sure check is correct
-		//return fmt.Errorf("decided must have more signers than previous decided")
-	}
-
-	signerState.LastDecidedQuorumSize = len(signedMsg.Signers)
-
 	limits := maxMessageCounts(len(share.Committee), int(share.Quorum))
 	if err := signerState.MessageCounts.Validate(msg, limits); err != nil {
 		return err

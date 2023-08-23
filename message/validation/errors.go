@@ -67,4 +67,5 @@ var (
 	ErrNonDecidedWithMultipleSigners       = Error{text: "non-decided with multiple signers", reject: true}
 	ErrWrongSignersLength                  = Error{text: "decided signers size is not between quorum and committee size", reject: true}
 	ErrDuplicatedProposalWithDifferentData = Error{text: "duplicated proposal with different data", reject: true}
+	ErrDecidedSignersSequence              = Error{text: "decided must have more signers than previous decided", reject: true}
 )

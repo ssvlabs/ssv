@@ -25,13 +25,14 @@ func maxMessageCounts(committeeSize, quorumSize int) MessageCounts {
 }
 
 type MessageCounts struct {
-	PreConsensus  int
-	Proposal      int
-	Prepare       int
-	Commit        int
-	Decided       int
-	RoundChange   int
-	PostConsensus int
+	PreConsensus       int
+	Proposal           int
+	Prepare            int
+	Commit             int
+	Decided            int
+	RoundChange        int
+	PostConsensus      int
+	lastDecidedSigners int
 }
 
 func (c *MessageCounts) String() string {
@@ -68,10 +69,18 @@ func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage, limits MessageCou
 				err.got = fmt.Sprintf("commit, having %v", c.String())
 				return err
 			}
-			if len(m.Signers) > 1 && c.Decided > limits.Decided && c.PostConsensus > 0 {
-				err := ErrUnexpectedMessageType
-				err.got = fmt.Sprintf("decided, having %v", c.String())
-				return err
+			if len(m.Signers) > 1 {
+				if c.Decided > limits.Decided && c.PostConsensus > 0 {
+					err := ErrUnexpectedMessageType
+					err.got = fmt.Sprintf("decided, having %v", c.String())
+					return err
+				}
+				if len(m.Signers) <= c.lastDecidedSigners {
+					err := ErrDecidedSignersSequence
+					err.got = len(m.Signers)
+					err.want = fmt.Sprintf("more than %v", c.lastDecidedSigners)
+					return err
+				}
 			}
 		case specqbft.RoundChangeMsgType:
 			if c.RoundChange > 0 {
@@ -122,6 +131,7 @@ func (c *MessageCounts) Record(msg *queue.DecodedSSVMessage) {
 				c.Commit++
 			} else if len(m.Signers) > 1 {
 				c.Decided++
+				c.lastDecidedSigners = len(m.Signers)
 			} else {
 				panic("expected signers") // 0 length should be checked before
 			}
