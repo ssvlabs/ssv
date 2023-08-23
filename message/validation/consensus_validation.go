@@ -163,8 +163,7 @@ func (mv *MessageValidator) validateSignerBehavior(
 	signerState.LastDecidedQuorumSize = len(signedMsg.Signers)
 
 	if err := signerState.MessageCounts.Validate(msg); err != nil {
-		// TODO: make sure check is correct
-		//return err
+		return err
 	}
 
 	// Validate message counts within the current round.

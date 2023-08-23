@@ -39,7 +39,7 @@ func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage) error {
 	case *specqbft.SignedMessage:
 		switch m.Message.MsgType {
 		case specqbft.ProposalMsgType:
-			if c.Proposal > 0 || c.Commit > 0 || c.Decided > 0 || c.PostConsensus > 0 {
+			if c.Commit > 0 || c.Decided > 0 || c.PostConsensus > 0 {
 				err := ErrUnexpectedMessageType
 				err.got = "proposal"
 				return err
@@ -51,9 +51,14 @@ func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage) error {
 				return err
 			}
 		case specqbft.CommitMsgType:
-			if c.Commit > 0 || c.Decided > 0 || c.PostConsensus > 0 {
+			if len(m.Signers) == 1 && c.Commit > 0 || c.Decided > 0 || c.PostConsensus > 0 {
 				err := ErrUnexpectedMessageType
 				err.got = "commit"
+				return err
+			}
+			if len(m.Signers) > 1 && c.Decided > 0 || c.PostConsensus > 0 {
+				err := ErrUnexpectedMessageType
+				err.got = "decided"
 				return err
 			}
 		case specqbft.RoundChangeMsgType:
