@@ -24,9 +24,7 @@ import (
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/network"
-	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
 	nodestorage "github.com/bloxapp/ssv/operator/storage"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
@@ -79,7 +77,6 @@ type ControllerOptions struct {
 	KeyManager                 spectypes.KeyManager
 	OperatorData               *registrystorage.OperatorData
 	RegistryStorage            nodestorage.Storage
-	ForkVersion                forksprotocol.ForkVersion
 	NewDecidedHandler          qbftcontroller.NewDecidedHandler
 	DutyRoles                  []spectypes.BeaconRole
 	StorageMap                 *storage.QBFTStores
@@ -149,7 +146,6 @@ type controller struct {
 
 	operatorsIDs         *sync.Map
 	network              network.P2PNetwork
-	forkVersion          forksprotocol.ForkVersion
 	messageRouter        *messageRouter
 	messageWorker        *worker.Worker
 	historySyncBatchSize int
@@ -168,8 +164,6 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 
 	// lookup in a map that holds all relevant operators
 	operatorsIDs := &sync.Map{}
-
-	msgID := forksfactory.NewFork(options.ForkVersion).MsgID()
 
 	workerCfg := &worker.Config{
 		Ctx:          options.Context,
@@ -219,7 +213,6 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		operatorData:               options.OperatorData,
 		keyManager:                 options.KeyManager,
 		network:                    options.Network,
-		forkVersion:                options.ForkVersion,
 
 		validatorsMap:    newValidatorsMap(options.Context, validatorOptions),
 		validatorOptions: validatorOptions,
@@ -229,7 +222,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 
 		operatorsIDs: operatorsIDs,
 
-		messageRouter:        newMessageRouter(msgID),
+		messageRouter:        newMessageRouter(),
 		messageWorker:        worker.NewWorker(logger, workerCfg),
 		historySyncBatchSize: options.HistorySyncBatchSize,
 

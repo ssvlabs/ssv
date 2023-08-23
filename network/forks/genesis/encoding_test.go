@@ -8,6 +8,8 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/bloxapp/ssv/network/commons"
 )
 
 func TestForkV1_Encoding(t *testing.T) {
@@ -16,13 +18,12 @@ func TestForkV1_Encoding(t *testing.T) {
 		MsgID:   specqbft.ControllerIdToMessageID([]byte("xxxxxxxxxxx_ATTESTER")),
 		Data:    []byte("data"),
 	}
-	f := &ForkGenesis{}
 
-	b, err := f.EncodeNetworkMsg(msg)
+	b, err := commons.EncodeNetworkMsg(msg)
 	require.NoError(t, err)
 	require.Greater(t, len(b), 0)
 
-	res, err := f.DecodeNetworkMsg(b)
+	res, err := commons.DecodeNetworkMsg(b)
 	require.NoError(t, err)
 	require.Equal(t, msg.MsgType, res.MsgType)
 	require.True(t, bytes.Equal(msg.Data, res.Data))

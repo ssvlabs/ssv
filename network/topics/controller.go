@@ -12,7 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/network/forks"
+	"github.com/bloxapp/ssv/network/commons"
 )
 
 var (
@@ -50,15 +50,13 @@ type topicsCtrl struct {
 	msgHandler          PubsubMessageHandler
 	subFilter           SubFilter
 
-	fork forks.Fork
-
 	container *topicsContainer
 }
 
 // NewTopicsController creates an instance of Controller
 func NewTopicsController(ctx context.Context, logger *zap.Logger, msgHandler PubsubMessageHandler,
 	msgValidatorFactory func(string) MsgValidatorFunc, subFilter SubFilter, pubSub *pubsub.PubSub,
-	fork forks.Fork, scoreParams func(string) *pubsub.TopicScoreParams) Controller {
+	scoreParams func(string) *pubsub.TopicScoreParams) Controller {
 	ctrl := &topicsCtrl{
 		ctx:                 ctx,
 		logger:              logger,
@@ -68,8 +66,6 @@ func NewTopicsController(ctx context.Context, logger *zap.Logger, msgHandler Pub
 		msgHandler:          msgHandler,
 
 		subFilter: subFilter,
-
-		fork: fork,
 	}
 
 	ctrl.container = newTopicsContainer(pubSub, ctrl.onNewTopic(logger))
@@ -102,7 +98,7 @@ func (ctrl *topicsCtrl) onNewTopic(logger *zap.Logger) onTopicJoined {
 func (ctrl *topicsCtrl) Close() error {
 	topics := ctrl.ps.GetTopics()
 	for _, tp := range topics {
-		_ = ctrl.Unsubscribe(ctrl.logger, ctrl.fork.GetTopicBaseName(tp), true)
+		_ = ctrl.Unsubscribe(ctrl.logger, commons.GetTopicBaseName(tp), true)
 		_ = ctrl.container.Leave(tp)
 	}
 	return nil
@@ -113,7 +109,7 @@ func (ctrl *topicsCtrl) Peers(name string) ([]peer.ID, error) {
 	if name == "" {
 		return ctrl.ps.ListPeers(""), nil
 	}
-	name = ctrl.fork.GetTopicFullName(name)
+	name = commons.GetTopicFullName(name)
 	topic := ctrl.container.Get(name)
 	if topic == nil {
 		return nil, nil
@@ -125,7 +121,7 @@ func (ctrl *topicsCtrl) Peers(name string) ([]peer.ID, error) {
 func (ctrl *topicsCtrl) Topics() []string {
 	topics := ctrl.ps.GetTopics()
 	for i, tp := range topics {
-		topics[i] = ctrl.fork.GetTopicBaseName(tp)
+		topics[i] = commons.GetTopicBaseName(tp)
 	}
 	return topics
 }
@@ -133,7 +129,7 @@ func (ctrl *topicsCtrl) Topics() []string {
 // Subscribe subscribes to the given topic, it can handle multiple concurrent calls.
 // it will create a single goroutine and channel for every topic
 func (ctrl *topicsCtrl) Subscribe(logger *zap.Logger, name string) error {
-	name = ctrl.fork.GetTopicFullName(name)
+	name = commons.GetTopicFullName(name)
 	ctrl.subFilter.(Whitelist).Register(name)
 	sub, err := ctrl.container.Subscribe(name)
 	defer logger.Debug("subscribing to topic", zap.String("topic", name), zap.Bool("already_subscribed", sub == nil), zap.Error(err))
@@ -150,7 +146,7 @@ func (ctrl *topicsCtrl) Subscribe(logger *zap.Logger, name string) error {
 
 // Broadcast publishes the message on the given topic
 func (ctrl *topicsCtrl) Broadcast(name string, data []byte, timeout time.Duration) error {
-	name = ctrl.fork.GetTopicFullName(name)
+	name = commons.GetTopicFullName(name)
 
 	topic, err := ctrl.container.Join(name)
 	if err != nil {
@@ -234,7 +230,7 @@ func (ctrl *topicsCtrl) listen(logger *zap.Logger, sub *pubsub.Subscription) err
 
 		if ssvMsg, ok := msg.ValidatorData.(spectypes.SSVMessage); ok {
 			metricPubsubInbound.WithLabelValues(
-				ctrl.fork.GetTopicBaseName(topicName),
+				commons.GetTopicBaseName(topicName),
 				strconv.FormatUint(uint64(ssvMsg.MsgType), 10),
 			).Inc()
 		}

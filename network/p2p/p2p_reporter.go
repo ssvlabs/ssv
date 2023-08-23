@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/network/commons"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
@@ -18,7 +19,7 @@ func (n *p2pNetwork) ReportValidation(logger *zap.Logger, msg *spectypes.SSVMess
 	if !n.isReady() {
 		return
 	}
-	data, err := n.fork.EncodeNetworkMsg(msg)
+	data, err := commons.EncodeNetworkMsg(msg)
 	if err != nil {
 		logger.Warn("could not encode message", zap.Error(err))
 		return
