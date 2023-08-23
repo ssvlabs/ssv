@@ -54,25 +54,26 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		return err
 	}
 
-	slotStartTime := mv.netCfg.Beacon.GetSlotStartTime(messageSlot).
-		Add(mv.waitAfterSlotStart(role)) // TODO: do we need this?
-
-	sinceSlotStart := time.Duration(0)
-	estimatedRound := specqbft.FirstRound
-	if receivedAt.After(slotStartTime) {
-		sinceSlotStart = receivedAt.Sub(slotStartTime)
-		estimatedRound = mv.currentEstimatedRound(sinceSlotStart)
-	}
-
-	lowestAllowed := estimatedRound - allowedRoundsInPast
-	highestAllowed := estimatedRound + allowedRoundsInFuture
-
-	if msgRound < lowestAllowed || msgRound > highestAllowed {
-		err := ErrEstimatedRoundTooFar
-		err.got = fmt.Sprintf("%v (%v role)", msgRound, role)
-		err.want = fmt.Sprintf("between %v and %v (%v role) / %v passed", lowestAllowed, highestAllowed, role, sinceSlotStart)
-		return err
-	}
+	// TODO: think about correct implementation of estimated round checks and then enable it
+	//slotStartTime := mv.netCfg.Beacon.GetSlotStartTime(messageSlot).
+	//	Add(mv.waitAfterSlotStart(role)) // TODO: do we need this?
+	//
+	//sinceSlotStart := time.Duration(0)
+	//estimatedRound := specqbft.FirstRound
+	//if receivedAt.After(slotStartTime) {
+	//	sinceSlotStart = receivedAt.Sub(slotStartTime)
+	//	estimatedRound = mv.currentEstimatedRound(sinceSlotStart)
+	//}
+	//
+	//lowestAllowed := estimatedRound - allowedRoundsInPast
+	//highestAllowed := estimatedRound + allowedRoundsInFuture
+	//
+	//if msgRound < lowestAllowed || msgRound > highestAllowed {
+	//	err := ErrEstimatedRoundTooFar
+	//	err.got = fmt.Sprintf("%v (%v role)", msgRound, role)
+	//	err.want = fmt.Sprintf("between %v and %v (%v role) / %v passed", lowestAllowed, highestAllowed, role, sinceSlotStart)
+	//	return err
+	//}
 
 	if mv.hasFullData(signedMsg) {
 		hashedFullData, err := specqbft.HashDataRoot(signedMsg.FullData)
