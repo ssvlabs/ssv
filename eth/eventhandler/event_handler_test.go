@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha512"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -548,11 +547,26 @@ func generateSharesData(data *testShareData) ([]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("cant convert publickey: %f", err)
 		}
-		hash := sha512.New()
-		rawshare := op.share.sec.Serialize()
-		ciphertext, err := rsa.EncryptOAEP(hash, rand.Reader, rsakey, rawshare, nil)
+
+		rawshare := op.share.sec.SerializeToHexStr()
+		ciphertext, err := rsa.EncryptPKCS1v15(rand.Reader, rsakey, []byte(rawshare))
 		if err != nil {
 			return nil, errors.New("cant encrypt share")
+		}
+
+		rsapriv, err := rsaencryption.ConvertPemToPrivateKey(string(op.priv))
+		if err != nil {
+			return nil, err
+		}
+
+		// check that we encrypt right
+		shareSecret := &bls.SecretKey{}
+		decryptedSharePrivateKey, err := rsaencryption.DecodeKey(rsapriv, ciphertext)
+		if err != nil {
+			return nil, err
+		}
+		if err = shareSecret.SetHexString(string(decryptedSharePrivateKey)); err != nil {
+			return nil, err
 		}
 
 		pubkeys = append(pubkeys, data.masterPublicKeys[i].Serialize()...)
