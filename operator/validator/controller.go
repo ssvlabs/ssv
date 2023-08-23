@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -15,7 +14,6 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/cornelk/hashmap"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/pkg/errors"
@@ -155,8 +153,8 @@ type controller struct {
 	nonCommitteeValidators *ttlcache.Cache[spectypes.MessageID, *nonCommitteeValidator]
 	nonCommitteeMutex      sync.Mutex
 
-	recentlyStartedValidators atomic.Int64
-	metadataLastUpdated       *hashmap.Map[string, time.Time]
+	recentlyStartedValidators uint64
+	metadataLastUpdated       map[string]time.Time
 	indicesChange             chan struct{}
 }
 
@@ -233,7 +231,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		nonCommitteeValidators: ttlcache.New(
 			ttlcache.WithTTL[spectypes.MessageID, *nonCommitteeValidator](time.Minute * 13),
 		),
-		metadataLastUpdated: hashmap.New[string, time.Time](),
+		metadataLastUpdated: make(map[string]time.Time),
 		indicesChange:       make(chan struct{}),
 	}
 
@@ -510,7 +508,7 @@ func (c *controller) StartNetworkHandlers() {
 
 // UpdateValidatorMetadata updates a given validator with metadata (implements ValidatorMetadataStorage)
 func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol.ValidatorMetadata) error {
-	c.metadataLastUpdated.Set(pk, time.Now())
+	c.metadataLastUpdated[pk] = time.Now()
 
 	if metadata == nil {
 		return errors.New("could not update empty metadata")
@@ -724,7 +722,7 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 		return false, errors.Wrap(err, "could not start validator")
 	}
 	if started {
-		c.recentlyStartedValidators.Add(1)
+		c.recentlyStartedValidators++
 	}
 	return true, nil
 }
@@ -734,18 +732,19 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 	var interval = c.beacon.GetBeaconNetwork().SlotDurationSec() * 2
 
 	// Prepare share filters.
-	filters := []registrystorage.SharesFilter{
-		registrystorage.ByNotLiquidated(),
-	}
+	filters := []registrystorage.SharesFilter{}
 
 	// Filter for validators who belong to our operator.
 	if !c.validatorOptions.Exporter {
 		filters = append(filters, registrystorage.ByOperatorID(c.GetOperatorData().ID))
 	}
 
+	// Filter for validators who are not liquidated.
+	filters = append(filters, registrystorage.ByNotLiquidated())
+
 	// Filter for validators which haven't been updated recently.
 	filters = append(filters, func(s *ssvtypes.SSVShare) bool {
-		last, ok := c.metadataLastUpdated.Get(string(s.ValidatorPubKey))
+		last, ok := c.metadataLastUpdated[string(s.ValidatorPubKey)]
 		return !ok || time.Since(last) > c.metadataUpdateInterval
 	})
 
@@ -758,12 +757,12 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 		var pks [][]byte
 		for _, share := range shares {
 			pks = append(pks, share.ValidatorPubKey)
-			c.metadataLastUpdated.Set(string(share.ValidatorPubKey), time.Now())
+			c.metadataLastUpdated[string(share.ValidatorPubKey)] = time.Now()
 		}
 
 		// TODO: continue if there is nothing to update.
 
-		c.recentlyStartedValidators.Store(0)
+		c.recentlyStartedValidators = 0
 		if len(pks) > 0 {
 			err := beaconprotocol.UpdateValidatorsMetadata(c.logger, pks, c, c.beacon, c.onMetadataUpdated)
 			if err != nil {
@@ -771,14 +770,13 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 				continue
 			}
 		}
-		started := c.recentlyStartedValidators.Load()
 		c.logger.Debug("updated validators metadata",
 			zap.Int("validators", len(shares)),
-			zap.Int64("started_validators", started),
+			zap.Uint64("started_validators", c.recentlyStartedValidators),
 			fields.Took(time.Since(start)))
 
 		// Notify DutyScheduler of new validators.
-		if started > 0 {
+		if c.recentlyStartedValidators > 0 {
 			select {
 			case c.indicesChange <- struct{}{}:
 			case <-time.After(interval):
