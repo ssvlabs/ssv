@@ -2,22 +2,23 @@ package validator
 
 import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/network/forks"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/network/commons"
 )
 
 const bufSize = 1024
 
-func newMessageRouter(msgID forks.MsgIDFunc) *messageRouter {
+func newMessageRouter() *messageRouter {
 	return &messageRouter{
 		ch:    make(chan spectypes.SSVMessage, bufSize),
-		msgID: msgID,
+		msgID: commons.MsgID(),
 	}
 }
 
 type messageRouter struct {
 	ch    chan spectypes.SSVMessage
-	msgID forks.MsgIDFunc
+	msgID commons.MsgIDFunc
 }
 
 func (r *messageRouter) Route(logger *zap.Logger, message spectypes.SSVMessage) {

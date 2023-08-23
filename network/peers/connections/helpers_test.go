@@ -7,13 +7,14 @@ import (
 	"testing"
 	"time"
 
+	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/stretchr/testify/require"
+
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/peers/connections/mock"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
-	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
-	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/stretchr/testify/require"
 )
 
 type TestData struct {
@@ -51,8 +52,7 @@ func getTestingData(t *testing.T) TestData {
 	require.NoError(t, err)
 
 	nodeInfo := &records.NodeInfo{
-		ForkVersion: "some-fork",
-		NetworkID:   "some-network-id",
+		NetworkID: "some-network-id",
 		Metadata: &records.NodeMetadata{
 			NodeVersion:   "some-node-version",
 			OperatorID:    "some-operator-id",
