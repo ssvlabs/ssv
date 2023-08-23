@@ -59,7 +59,7 @@ var (
 	ErrRoundTooFarInTheFuture              = Error{text: "round is too far in the future"}
 	ErrRoundTooHigh                        = Error{text: "round is too high for this role"}
 	ErrInvalidSignature                    = Error{text: "invalid signature", reject: true}
-	ErrEstimatedRoundTooFar                = Error{text: "message round is far greater than estimated"}
+	ErrEstimatedRoundTooFar                = Error{text: "message round is too far from estimated"}
 	ErrMalformedMessage                    = Error{text: "message could not be decoded", reject: true}
 	ErrUnknownMessageType                  = Error{text: "unknown message type", reject: true}
 	ErrPartialSignatureTypeRoleMismatch    = Error{text: "partial signature type and role don't match", reject: true}

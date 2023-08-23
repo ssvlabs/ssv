@@ -35,7 +35,7 @@ const (
 	maxConsensusMsgSize        = 8388608
 	maxPartialSignatureMsgSize = 1952
 	allowedRoundsInFuture      = 1
-	allowedRoundsInPast        = 1
+	allowedRoundsInPast        = 2
 	lateSlotAllowance          = 2
 	signatureSize              = 96
 )
