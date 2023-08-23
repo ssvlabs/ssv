@@ -15,5 +15,5 @@ func (mv *MessageValidator) validateEventMessage(msg *queue.DecodedSSVMessage) e
 		return fmt.Errorf("expected event message")
 	}
 
-	return fmt.Errorf("event messages are not broadcast")
+	return ErrEventMessage
 }

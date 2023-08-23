@@ -129,8 +129,7 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 func (mv *MessageValidator) validateSignerBehavior(state *ConsensusState, signer spectypes.OperatorID, share *ssvtypes.SSVShare, msg *queue.DecodedSSVMessage) error {
 	signedMsg, ok := msg.Body.(*specqbft.SignedMessage)
 	if !ok {
-		// TODO: add support
-		return fmt.Errorf("not supported yet")
+		panic("validateSignerBehavior should be called on signed message")
 	}
 
 	signerState := state.SignerState(signer)

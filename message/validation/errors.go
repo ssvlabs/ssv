@@ -31,7 +31,6 @@ func (e Error) Reject() bool {
 	return e.reject
 }
 
-// TODO: add reject where needed
 var (
 	ErrEmptyData                           = Error{text: "empty data"}
 	ErrUnknownValidator                    = Error{text: "unknown validator"}
@@ -68,4 +67,5 @@ var (
 	ErrWrongSignersLength                  = Error{text: "decided signers size is not between quorum and committee size", reject: true}
 	ErrDuplicatedProposalWithDifferentData = Error{text: "duplicated proposal with different data", reject: true}
 	ErrDecidedSignersSequence              = Error{text: "decided must have more signers than previous decided", reject: true}
+	ErrEventMessage                        = Error{text: "event messages are not broadcast", reject: true}
 )
