@@ -64,21 +64,10 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		estimatedRound = mv.currentEstimatedRound(sinceSlotStart)
 	}
 
-	// TODO: it doesn't exist in rules, do we need it?
-	//if estimatedRound > maxRound {
-	//	err := ErrEstimatedRoundTooHigh
-	//	err.got = fmt.Sprintf("%v (%v role) / %v passed", estimatedRound, role, sinceSlotStart)
-	//	err.want = fmt.Sprintf("%v (%v role)", maxRound, role)
-	//	return err
-	//}
-
-	// TODO: this check doesn't exist in rules, do we need it?
-	//lowestAllowed := estimatedRound - allowedRoundsInPast
-	lowestAllowed := specqbft.FirstRound
+	lowestAllowed := estimatedRound - allowedRoundsInPast
 	highestAllowed := estimatedRound + allowedRoundsInFuture
 
 	if msgRound < lowestAllowed || msgRound > highestAllowed {
-		// TODO: enable
 		err := ErrEstimatedRoundTooFar
 		err.got = fmt.Sprintf("%v (%v role)", msgRound, role)
 		err.want = fmt.Sprintf("between %v and %v (%v role) / %v passed", lowestAllowed, highestAllowed, role, sinceSlotStart)
@@ -161,7 +150,7 @@ func (mv *MessageValidator) validateSignerBehavior(
 		if signerState.ProposalData == nil {
 			signerState.ProposalData = signedMsg.FullData
 		} else if !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
-			return fmt.Errorf("duplicated proposal with different data")
+			return ErrDuplicatedProposalWithDifferentData
 		}
 	}
 
