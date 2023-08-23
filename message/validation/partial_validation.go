@@ -3,6 +3,7 @@ package validation
 // partial_validation.go contains methods for validating partial signature messages
 
 import (
+	"encoding/hex"
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -23,9 +24,15 @@ func (mv *MessageValidator) validatePartialSignatureMessage(share *ssvtypes.SSVS
 		return fmt.Errorf("size exceeded")
 	}
 
+	if !mv.validPartialSigMsgType(signedMsg.Message.Type) {
+		e := ErrUnknownMessageType
+		e.got = signedMsg.Message.Type
+		return e
+	}
+
 	role := msg.GetID().GetRoleType()
 	if !mv.partialSignatureTypeMatchesRole(signedMsg.Message.Type, role) {
-		return fmt.Errorf("partial signature type and role don't match")
+		return ErrPartialSignatureTypeRoleMismatch
 	}
 
 	if err := mv.validPartialSigners(share, signedMsg); err != nil {
@@ -52,6 +59,19 @@ func (mv *MessageValidator) validatePartialSignatureMessage(share *ssvtypes.SSVS
 	return nil
 }
 
+func (mv *MessageValidator) validPartialSigMsgType(msgType spectypes.PartialSigMsgType) bool {
+	switch msgType {
+	case spectypes.PostConsensusPartialSig,
+		spectypes.RandaoPartialSig,
+		spectypes.SelectionProofPartialSig,
+		spectypes.ContributionProofs,
+		spectypes.ValidatorRegistrationPartialSig:
+		return true
+	default:
+		return false
+	}
+}
+
 func (mv *MessageValidator) partialSignatureTypeMatchesRole(msgType spectypes.PartialSigMsgType, role spectypes.BeaconRole) bool {
 	switch role {
 	case spectypes.BNRoleAttester:
@@ -67,7 +87,7 @@ func (mv *MessageValidator) partialSignatureTypeMatchesRole(msgType spectypes.Pa
 	case spectypes.BNRoleValidatorRegistration:
 		return msgType == spectypes.ValidatorRegistrationPartialSig
 	default:
-		panic("unknown role")
+		panic("invalid role") // role validity should be checked before
 	}
 }
 
@@ -77,7 +97,10 @@ func (mv *MessageValidator) validPartialSignatures(share *ssvtypes.SSVShare, sig
 	}
 
 	if err := ssvtypes.VerifyByOperators(signedMsg.Signature, signedMsg, mv.netCfg.Domain, spectypes.PartialSignatureType, share.Committee); err != nil {
-		return fmt.Errorf("invalid signature: %w", err)
+		signErr := ErrInvalidSignature
+		signErr.innerErr = err
+		signErr.got = fmt.Sprintf("domain %v from %v", hex.EncodeToString(mv.netCfg.Domain[:]), hex.EncodeToString(share.ValidatorPubKey))
+		return signErr
 	}
 
 	seen := map[[32]byte]struct{}{}

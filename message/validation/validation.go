@@ -200,7 +200,9 @@ func (mv *MessageValidator) containsSignerFunc(signer spectypes.OperatorID) func
 
 func (mv *MessageValidator) validateSignatureFormat(signature []byte) error {
 	if len(signature) != signatureSize {
-		return fmt.Errorf("wrong signature size: %d", len(signature))
+		e := ErrWrongSignatureSize
+		e.got = len(signature)
+		return e
 	}
 
 	if [signatureSize]byte(signature) == [signatureSize]byte{} {
