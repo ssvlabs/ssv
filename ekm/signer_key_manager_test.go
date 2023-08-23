@@ -320,38 +320,41 @@ func TestSlashing_Attestation(t *testing.T) {
 		}
 	}
 
+	// Note: in the current implementation, eth2-key-manager doesn't check the signing roots and is
+	// instead blocking the repeated signing of the same attestation.
+
 	// 1. Check a valid attestation.
-	signAttestation(secretKeys[1], phase0.Root{1}, createAttestationData(3, 4), false, "")
+	signAttestation(secretKeys[1], phase0.Root{1}, createAttestationData(3, 4), false, "HighestAttestationVote")
 
 	// 2. Same signing root -> slashing (stricter than Eth spec).
-	signAttestation(secretKeys[1], phase0.Root{1}, createAttestationData(3, 4), true, "")
+	signAttestation(secretKeys[1], phase0.Root{1}, createAttestationData(3, 4), true, "HighestAttestationVote")
 
-	// 3. Lower than minimum source epoch -> expect slashing.
-	signAttestation(secretKeys[1], phase0.Root{1}, createAttestationData(2, 5), true, "")
+	// 3. Lower than previous source epoch -> expect slashing.
+	signAttestation(secretKeys[1], phase0.Root{1}, createAttestationData(2, 5), true, "HighestAttestationVote")
 
 	// 4. Different signing root -> expect slashing.
-	signAttestation(secretKeys[1], phase0.Root{2}, createAttestationData(3, 4), true, "")
+	signAttestation(secretKeys[1], phase0.Root{2}, createAttestationData(3, 4), true, "HighestAttestationVote")
 
 	// 5. Different signing root, lower target epoch -> expect slashing.
-	signAttestation(secretKeys[1], phase0.Root{2}, createAttestationData(3, 3), true, "")
+	signAttestation(secretKeys[1], phase0.Root{2}, createAttestationData(3, 3), true, "HighestAttestationVote")
 
-	// 6. Different signing root, higher source epoch, higher target epoch -> no slashing.
-	signAttestation(secretKeys[1], phase0.Root{3}, createAttestationData(4, 5), false, "")
+	// 6. Different signing root, same source epoch, higher target epoch -> no slashing.
+	signAttestation(secretKeys[1], phase0.Root{3}, createAttestationData(3, 5), false, "HighestAttestationVote")
 
-	// 7. Different signing root, lower source epoch, higher target epoch -> slashing (stricter than Eth spec).
-	signAttestation(secretKeys[1], phase0.Root{3}, createAttestationData(3, 5), true, "")
+	// 7. Different signing root, higher source epoch, same target epoch -> expect slashing.
+	signAttestation(secretKeys[1], phase0.Root{3}, createAttestationData(4, 5), true, "HighestAttestationVote")
 
-	// 8. Different signing root, higher source epoch, higher target epoch (again) -> expect slashing (double vote).
-	signAttestation(secretKeys[1], phase0.Root{byte(4)}, createAttestationData(3, 5), true, "HighestAttestationVote")
+	// 8. Different signing root, lower source epoch, higher target epoch -> expect slashing.
+	//    This should fail due to surrounding, but since we're stricter than Eth spec,
+	//    this will fail due to the source epoch being lower than the previous.
+	signAttestation(secretKeys[1], phase0.Root{byte(4)}, createAttestationData(2, 6), true, "HighestAttestationVote")
 
-	// 9. Lower source epoch, higher target epoch -> expect slashing. Should fail due to surrounding,
-	// but since check 7 is stricter than Eth spec, this will fail due to double vote.
-	for root := 1; root <= 5; root++ {
-		signAttestation(secretKeys[1], phase0.Root{byte(root)}, createAttestationData(3, 6), true, "HighestAttestationVote")
-	}
+	// 9. Different public key, different signing root -> no slashing.
+	signAttestation(secretKeys[2], phase0.Root{4}, createAttestationData(3, 6), false, "HighestAttestationVote")
 
-	// 10. Different signing root, different public key -> no slashing.
-	signAttestation(secretKeys[2], phase0.Root{4}, createAttestationData(3, 4), false, "")
+	// 10. Different signing root, higher source epoch, lower target epoch -> expect slashing.
+	//     Same as 8, but in the opposite direction.
+	signAttestation(secretKeys[2], phase0.Root{5}, createAttestationData(4, 5), true, "HighestAttestationVote")
 }
 
 func TestSignRoot(t *testing.T) {
