@@ -82,7 +82,6 @@ func NewSSVMsgValidator(logger *zap.Logger, fork forks.Fork, validator *validati
 				logger.Debug("ignoring invalid message", zap.Error(err))
 				// TODO: pass metrics to NewSSVMsgValidator
 				reportValidationResult(validationResultInvalidIgnored)
-
 				return pubsub.ValidationIgnore
 			}
 
@@ -91,8 +90,8 @@ func NewSSVMsgValidator(logger *zap.Logger, fork forks.Fork, validator *validati
 			decodedMessage, err := queue.DecodeSSVMessage(msg)
 			if err != nil {
 				logger.Debug("ignoring invalid message", zap.Error(err))
-				reportValidationResult(validationResultInvalidIgnored)
 
+				reportValidationResult(validationResultInvalidIgnored)
 				return pubsub.ValidationIgnore
 			}
 
