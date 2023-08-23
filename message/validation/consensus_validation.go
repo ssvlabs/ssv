@@ -82,7 +82,7 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		}
 
 		if hashedFullData != signedMsg.Message.Root {
-			return fmt.Errorf("root doesn't match full data hash")
+			return ErrInvalidHash
 		}
 	}
 
@@ -96,7 +96,7 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		return fmt.Errorf("malfrormed round change justifications: %w", err)
 	}
 
-	// TODO: checks for pj and rcj
+	// TODO: checks for pj and rcj (reject if wrong)
 	_ = pj
 	_ = rcj
 

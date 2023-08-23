@@ -34,11 +34,11 @@ func (e Error) Reject() bool {
 // TODO: add reject where needed
 var (
 	ErrEmptyData                           = Error{text: "empty data"}
-	ErrDataTooBig                          = Error{text: "data too big", reject: true}
 	ErrUnknownValidator                    = Error{text: "unknown validator"}
-	ErrInvalidRole                         = Error{text: "invalid role", reject: true}
 	ErrEarlyMessage                        = Error{text: "early message"}
 	ErrLateMessage                         = Error{text: "late message"}
+	ErrDataTooBig                          = Error{text: "data too big", reject: true}
+	ErrInvalidRole                         = Error{text: "invalid role", reject: true}
 	ErrNoSigners                           = Error{text: "no signers", reject: true}
 	ErrWrongSignatureSize                  = Error{text: "wrong signature size", reject: true}
 	ErrZeroSignature                       = Error{text: "zero signature", reject: true}
@@ -58,6 +58,7 @@ var (
 	ErrFutureSlotRoundMismatch             = Error{text: "if slot is in future, round must be also in future and vice versa"}
 	ErrRoundTooFarInTheFuture              = Error{text: "round is too far in the future"}
 	ErrRoundTooHigh                        = Error{text: "round is too high for this role"}
+	ErrInvalidHash                         = Error{text: "root doesn't match full data hash", reject: true}
 	ErrInvalidSignature                    = Error{text: "invalid signature", reject: true}
 	ErrEstimatedRoundTooFar                = Error{text: "message round is too far from estimated"}
 	ErrMalformedMessage                    = Error{text: "message could not be decoded", reject: true}
