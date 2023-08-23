@@ -13,6 +13,7 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"golang.org/x/exp/slices"
 
@@ -108,6 +109,7 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 	if len(ssvMessage.Data) > maxMessageSize {
 		err := ErrDataTooBig
 		err.got = len(ssvMessage.Data)
+		err.want = maxMessageSize
 		return nil, err
 	}
 
@@ -139,7 +141,9 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 		// TODO: handle non-committee validators properly
 		decoded, err := queue.DecodeSSVMessage(ssvMessage)
 		if err != nil {
-			return nil, fmt.Errorf("malformed message: %w", err)
+			e := ErrMalformedMessage
+			e.innerErr = err
+			return nil, e
 		}
 
 		return decoded, nil
@@ -158,7 +162,15 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 
 	msg, err := queue.DecodeSSVMessage(ssvMessage)
 	if err != nil {
-		return nil, fmt.Errorf("malformed message: %w", err)
+		if errors.Is(err, queue.ErrUnknownMessageType) {
+			e := ErrUnknownMessageType
+			e.got = ssvMessage.GetType()
+			return nil, e
+		}
+
+		e := ErrMalformedMessage
+		e.innerErr = err
+		return nil, e
 	}
 
 	switch ssvMessage.MsgType {
@@ -174,7 +186,7 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 		if err := mv.validateEventMessage(msg); err != nil {
 			return nil, err
 		}
-	case spectypes.DKGMsgType: // TODO: handle
+	case spectypes.DKGMsgType:
 	}
 
 	return msg, nil
