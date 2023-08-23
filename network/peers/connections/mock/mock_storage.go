@@ -72,6 +72,11 @@ func (m NodeStorage) GetOperatorData(txn basedb.Reader, id spectypes.OperatorID)
 	panic("implement me")
 }
 
+func (m NodeStorage) OperatorsExist(r basedb.Reader, ids []spectypes.OperatorID) (bool, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (m NodeStorage) SaveOperatorData(txn basedb.ReadWriter, operatorData *registrystorage.OperatorData) (bool, error) {
 	//TODO implement me
 	panic("implement me")
@@ -145,7 +150,19 @@ func (m NodeStorage) GetPrivateKey() (*rsa.PrivateKey, bool, error) {
 	}
 }
 
-func (m NodeStorage) SetupPrivateKey(operatorKeyBase64 string, generateIfNone bool) ([]byte, error) {
+func (m NodeStorage) SetupPrivateKey(operatorKeyBase64 string) ([]byte, error) {
 	//TODO implement me
+	panic("implement me")
+}
+
+func (m NodeStorage) GetConfig(rw basedb.ReadWriter) (*storage.ConfigLock, bool, error) {
+	panic("implement me")
+}
+
+func (m NodeStorage) SaveConfig(rw basedb.ReadWriter, config *storage.ConfigLock) error {
+	panic("implement me")
+}
+
+func (m NodeStorage) DeleteConfig(rw basedb.ReadWriter) error {
 	panic("implement me")
 }

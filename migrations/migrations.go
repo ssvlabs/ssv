@@ -52,9 +52,10 @@ type Migrations []Migration
 
 // Options is the options for running migrations.
 type Options struct {
-	Db      basedb.Database
-	DbPath  string
-	Network beacon.Network
+	Db          basedb.Database
+	NodeStorage operatorstorage.Storage
+	DbPath      string
+	Network     beacon.Network
 }
 
 // nolint
