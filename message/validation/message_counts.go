@@ -59,12 +59,18 @@ func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage) error {
 		case specqbft.PrepareMsgType:
 			if c.Prepare > 0 || c.Commit > 0 || c.Decided > 0 || c.PostConsensus > 0 {
 				err := ErrUnexpectedMessageType
+				if c.Prepare > 0 {
+					err.reject = true
+				}
 				err.got = fmt.Sprintf("prepare, having %v", c.String())
 				return err
 			}
 		case specqbft.CommitMsgType:
 			if len(m.Signers) == 1 && c.Commit > 0 || c.Decided > 0 || c.PostConsensus > 0 {
 				err := ErrUnexpectedMessageType
+				if c.Commit > 0 {
+					err.reject = true
+				}
 				err.got = fmt.Sprintf("commit, having %v", c.String())
 				return err
 			}
@@ -76,9 +82,14 @@ func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage) error {
 		case specqbft.RoundChangeMsgType:
 			if c.RoundChange > 0 {
 				err := ErrUnexpectedMessageType
+				if c.RoundChange > 0 {
+					err.reject = true
+				}
 				err.got = fmt.Sprintf("round change, having %v", c.String())
 				return err
 			}
+		default:
+			panic("unexpected signed message type") // should be checked before
 		}
 	case *spectypes.SignedPartialSignatureMessage:
 		switch m.Message.Type {
@@ -95,11 +106,10 @@ func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage) error {
 				return err
 			}
 		default:
-			// TODO: handle
+			panic("unexpected partial signature message type") // should be checked before
 		}
-	//TODO: other cases
 	default:
-		return fmt.Errorf("unexpected message type: %d", m)
+		panic("unexpected ssv message type") // should be checked before
 	}
 
 	return nil
@@ -114,15 +124,17 @@ func (c *MessageCounts) Record(msg *queue.DecodedSSVMessage) {
 		case specqbft.PrepareMsgType:
 			c.Prepare++
 		case specqbft.CommitMsgType:
-			if l := len(msg.Body.(*specqbft.SignedMessage).Signers); l == 1 {
+			if len(m.Signers) == 1 {
 				c.Commit++
-			} else if l > 1 {
+			} else if len(m.Signers) > 1 {
 				c.Decided++
 			} else {
-				// TODO: panic because 0-length signers should be checked before
+				panic("expected signers") // 0 length should be checked before
 			}
 		case specqbft.RoundChangeMsgType:
 			c.RoundChange++
+		default:
+			panic("unexpected signed message type") // should be checked before
 		}
 	case *spectypes.SignedPartialSignatureMessage:
 		switch m.Message.Type {
@@ -131,11 +143,10 @@ func (c *MessageCounts) Record(msg *queue.DecodedSSVMessage) {
 		case spectypes.PostConsensusPartialSig:
 			c.PostConsensus++
 		default:
-			// TODO: handle
+			panic("unexpected partial signature message type") // should be checked before
 		}
-		//TODO: other cases
 	default:
-		panic("unexpected message type")
+		panic("unexpected ssv message type")
 	}
 }
 
