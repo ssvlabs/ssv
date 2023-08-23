@@ -6,7 +6,6 @@ import (
 	"crypto/rsa"
 	"crypto/sha512"
 	"encoding/base64"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -109,11 +108,15 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	data, err := generateSharesData(ops)
 
 	t.Run("test OperatorAdded event handle", func(t *testing.T) {
-		// Call the contract method
-		packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(ops.operators[0].pub)
-		require.NoError(t, err)
-		_, err = boundContract.SimcontractTransactor.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
-		require.NoError(t, err)
+
+		for _, op := range ops.operators {
+			// Call the contract method
+			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(op.pub)
+			require.NoError(t, err)
+			_, err = boundContract.SimcontractTransactor.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
+			require.NoError(t, err)
+
+		}
 		sim.Commit()
 
 		block := <-logs
@@ -139,16 +142,18 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		// Check storage for a new operator
 		operators, err = eh.nodeStorage.ListOperators(nil, 0, 10)
 		require.NoError(t, err)
-		require.Equal(t, 1, len(operators))
+		require.Equal(t, len(ops.operators), len(operators))
 
 		// Check if an operator in the storage has same attributes
-		operatorAddedEvent, err := contractFilterer.ParseOperatorAdded(block.Logs[0])
-		require.NoError(t, err)
-		data, _, err := eh.nodeStorage.GetOperatorData(nil, operatorAddedEvent.OperatorId)
-		require.NoError(t, err)
-		require.Equal(t, operatorAddedEvent.OperatorId, data.ID)
-		require.Equal(t, operatorAddedEvent.Owner, data.OwnerAddress)
-		require.Equal(t, ops.operators[0].pub, data.PublicKey)
+		for i, log := range block.Logs {
+			operatorAddedEvent, err := contractFilterer.ParseOperatorAdded(log)
+			require.NoError(t, err)
+			data, _, err := eh.nodeStorage.GetOperatorData(nil, operatorAddedEvent.OperatorId)
+			require.NoError(t, err)
+			require.Equal(t, operatorAddedEvent.OperatorId, data.ID)
+			require.Equal(t, operatorAddedEvent.Owner, data.OwnerAddress)
+			require.Equal(t, ops.operators[i].pub, data.PublicKey)
+		}
 	})
 	t.Run("test OperatorRemoved event handle", func(t *testing.T) {
 		// Call the contract method
@@ -169,7 +174,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		// Check that there is 1 registered operator
 		operators, err := eh.nodeStorage.ListOperators(nil, 0, 10)
 		require.NoError(t, err)
-		require.Equal(t, 1, len(operators))
+		require.Equal(t, len(ops.operators), len(operators))
 
 		// Hanlde the event
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
@@ -180,23 +185,10 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		// TODO: this should be adjusted when eth/eventhandler/handlers.go#L109 is resolved
 		operators, err = eh.nodeStorage.ListOperators(nil, 0, 10)
 		require.NoError(t, err)
-		require.Equal(t, 1, len(operators))
+		require.Equal(t, len(ops.operators), len(operators))
 	})
 
 	t.Run("test ValidatorAdded event handle", func(t *testing.T) {
-		// NOTE: 1 is already added in the operatorAdded event and not removed
-		// since operatorRemoved event doesn't take affect at the moment (see eth/eventhandler/handlers.go#L109)
-		for _, op := range ops.operators[1:] {
-			od := &registrystorage.OperatorData{
-				PublicKey:    binary.LittleEndian.AppendUint64(nil, op.id),
-				OwnerAddress: ethcommon.Address{},
-				ID:           op.id,
-			}
-
-			found, err := eh.nodeStorage.SaveOperatorData(nil, od)
-			require.NoError(t, err)
-			require.False(t, found, fmt.Sprintf("%v already exists", op.id))
-		}
 
 		// Call the contract method
 		_, err = boundContract.SimcontractTransactor.RegisterValidator(
