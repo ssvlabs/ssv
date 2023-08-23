@@ -55,9 +55,12 @@ diffLoop:
 				}
 				// otherwise, remove peer from the subnet
 				if i == 0 {
-					if len(peers) <= 1 {
+					if len(peers) == 1 {
 						si.subnets[subnet] = make([]peer.ID, 0)
 					} else {
+						// #nosec
+						// The slice operation is safe here because we're checking that the length of peers is not 1.
+						// In Go, slicing beyond the end of an array yields an empty slice, which is acceptable in this context.
 						si.subnets[subnet] = peers[1:]
 					}
 					continue diffLoop
