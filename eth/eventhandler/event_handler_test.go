@@ -2,17 +2,23 @@ package eventhandler
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/bloxapp/ssv/operator/validator"
-	"github.com/bloxapp/ssv/operator/validator/mocks"
 	"math/big"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/operator/validator"
+	"github.com/bloxapp/ssv/operator/validator/mocks"
+
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/bloxapp/ssv/utils/blskeygen"
+	"github.com/pkg/errors"
+
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -35,11 +41,9 @@ import (
 	"github.com/bloxapp/ssv/networkconfig"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
-	"github.com/bloxapp/ssv/utils/blskeygen"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
@@ -100,24 +104,22 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	boundContract, err := simcontract.NewSimcontract(contractAddr, sim)
 	require.NoError(t, err)
 
-	// Generate operator key
-	operatorPrivKey, operatorPubKey := blskeygen.GenBLSKeyPair()
-
-	// Generate validator shares
-	validatorShares, _, err := newValidator()
+	ops, err := createOperators(4)
 	require.NoError(t, err)
-	// Encode shares
-	encodedValidatorShares, err := validatorShares.Encode()
-	require.NoError(t, err)
+	data, err := generateSharesData(ops)
 
-	// Receive event, unmarshall, parse, check parse event is not nil or with error,
-	// public key is correct, owner is correct, operator id is correct
+	blockNum := uint64(0x1)
+
 	t.Run("test OperatorAdded event handle", func(t *testing.T) {
-		// Call the contract method
-		packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(operatorPubKey.Serialize())
-		require.NoError(t, err)
-		_, err = boundContract.SimcontractTransactor.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
-		require.NoError(t, err)
+
+		for _, op := range ops.operators {
+			// Call the contract method
+			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(op.pub)
+			require.NoError(t, err)
+			_, err = boundContract.SimcontractTransactor.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
+			require.NoError(t, err)
+
+		}
 		sim.Commit()
 
 		block := <-logs
@@ -137,22 +139,25 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 		// Hanlde the event
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
-		require.Equal(t, uint64(0x2), lastProcessedBlock)
+		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
+		blockNum++
 
 		// Check storage for a new operator
 		operators, err = eh.nodeStorage.ListOperators(nil, 0, 10)
 		require.NoError(t, err)
-		require.Equal(t, 1, len(operators))
+		require.Equal(t, len(ops.operators), len(operators))
 
 		// Check if an operator in the storage has same attributes
-		operatorAddedEvent, err := contractFilterer.ParseOperatorAdded(block.Logs[0])
-		require.NoError(t, err)
-		data, _, err := eh.nodeStorage.GetOperatorData(nil, operatorAddedEvent.OperatorId)
-		require.NoError(t, err)
-		require.Equal(t, operatorAddedEvent.OperatorId, data.ID)
-		require.Equal(t, operatorAddedEvent.Owner, data.OwnerAddress)
-		require.Equal(t, operatorPubKey.Serialize(), data.PublicKey)
+		for i, log := range block.Logs {
+			operatorAddedEvent, err := contractFilterer.ParseOperatorAdded(log)
+			require.NoError(t, err)
+			data, _, err := eh.nodeStorage.GetOperatorData(nil, operatorAddedEvent.OperatorId)
+			require.NoError(t, err)
+			require.Equal(t, operatorAddedEvent.OperatorId, data.ID)
+			require.Equal(t, operatorAddedEvent.Owner, data.OwnerAddress)
+			require.Equal(t, ops.operators[i].pub, data.PublicKey)
+		}
 	})
 
 	// Receive event, unmarshall, parse, check parse event is not nil or with error, operator id is correct
@@ -175,42 +180,30 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		// Check that there is 1 registered operator
 		operators, err := eh.nodeStorage.ListOperators(nil, 0, 10)
 		require.NoError(t, err)
-		require.Equal(t, 1, len(operators))
+		require.Equal(t, len(ops.operators), len(operators))
 
 		// Hanlde the event
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
-		require.Equal(t, uint64(0x3), lastProcessedBlock)
+		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
+		blockNum++
 
 		// Check if the operator was removed successfuly
 		// TODO: this should be adjusted when eth/eventhandler/handlers.go#L109 is resolved
 		operators, err = eh.nodeStorage.ListOperators(nil, 0, 10)
 		require.NoError(t, err)
-		require.Equal(t, 1, len(operators))
+		require.Equal(t, len(ops.operators), len(operators))
 	})
 
 	// Receive event, unmarshall, parse, check parse event is not nil or with an error,
 	// public key is correct, owner is correct, operator ids are correct, shares are correct
 	t.Run("test ValidatorAdded event handle", func(t *testing.T) {
-		// pubKey, err := hex.DecodeString(strings.TrimPrefix("0x89913833b5533c1089a957ea185daecc0c5719165f7cbb7ba971c2dcf916be32d6c620dab56888bc278515bf27aebc5f", "0x"))
-		// require.NoError(t, err)
-		// shares, err := hex.DecodeString(strings.TrimPrefix("0x8d9205986a9f0505daadeb124a4e89814e9174e471da0c8e5a3684c1b2bc7bfb36aca0abe4bf3c619268ce9bdac839d113ae2053f3ce8acbfd5793558efd44709282d423e9b03a1d37a70d27cc4f2a10677448879e6f45a5f8b259e08718b902b52de097cf98c9f6a5355a2060f827e320b1decfbbd974000277de3c65fdeebc4da212ec1def8ef298e7e1459a6ea912b04c8f48f50b65bf2475255cbf4c39b9d1d4dcc34b2959d7b07ed7c493edd22f290483f65f56038c1602d6210a0ad78cb5764bffb0972bc98de742d5f27cd714bbecaae9e398c5322a9b7ca7711c3ce5e952246090e05787f2f91aa2693e118b82bc1b261018b0eb9dcd3c737ccbffb55d726d72d3560d38525b83f882879065badd7cb9504b2e95a205b81c11334e7bab1a5a75539c0cca11e5cf44f51bd989a3ff5c17a68fab85a1f2ea702b667dd3e4526f476c97ad9d2826f291352ebbb8bf1cbd53d47b49ae3f16d75a6eff52184b06caf6662d61c04aca80c9f05e9cdaca8544292df8617a327d519057ace77fe72ba975d6d953d217208d644e5f9a8527f575296b712872c1932492d6bc5519eee9891b22cead112b35c7316070a6ab4c9225559023a3e57d19d7fcd9d9f1641c87d9693389ad50cc335f57f587c3ba4a18760eaea5026d217871192d58a156279b5c764476abe19af43d714474a3bc70af3fc16b0334ec0e411207290b80bd5d61b007e025cd7c640d4637a174e073bf8c357645450f85f614bf42b81dda5f1ebd165717d1c1f4da684f9520dae3702044d0fe84abda960aa1b58127a2aecbe819a9f70d9adbace7c555ec85b4e78b15d50c0b9564d9e0b6abb5e2ed249a8dca3c35fc23c1c71ae045316e95fe19cd24b960f4e1b4f498776dcd244823b5c15ca5000a7990519114dddba550fd457b2438b70ac2d8d62128536a3c5d086a1314a6129157eec322249c82084f2fed4cc6d702e06553c4288dd500463068949401543240bb2d90a57384c0c8a39e004c7ea2ca0f475dc0a0daa330d891198120ff6577c9938e2197c6fecb3974793965fda888bbe94ce6acb1a981e25ef4026d518794cad49e3bd96f7295b526389581b5f5f25de97475eb8c636bdcd4049bbd7bbc4bd8e021d8de33304d586ffb7f5d87f8000372de396d20db43458c91f7ef3e5da35177b1e438426c54235838fa3400fc85f5f5f9e49062ab082db0965e70ed163fa74ce045265c60ec2d86845028dec08e06359b0cd1ccfdf48b0b901cc8d23eecfb5cb6f558277200fffc560282260998a3d510f0e41ced979f5c7e402e41dce60628a23fa7ba68fe2a42921357de525b44d6932e57e65e084e4305bf4524fd06aa825a85ed9ad7db737db963db5deac3a5456a41c75e2848651fbcb04adb0e9c675cf9954f5a56fe3d4cc665b39b63b0011799c7a9a3e01f9a37d4885c05e49f2d5f0fa7559192b0287ad7882c09a08254e56bc4a2f9dc37d6640159596ff468697cd9fe41c1851a4adb92dd4ae8e23e2963adfed4a3a91c916f67e726f1f735a4b5b4309b923817edb668b94bf8462c6c99247e567c4a4ae0475c1c5c116b2622fd961eaf64ea4c9a6aa80f847e7c4a04eb5588d1c969be7bb23ed668e046e7ac14e72427b4cf27f37b44b4037d8cef02321d7b9beb1d7e7c1c08c4083d42c3bf579a97028d85b09aebb3f88aba882fedf8bfdbbb12c1d7221881d8688b95806800bbf1a32b08a81e629ff624fc865558dc6303bae0c74c04aa513b01248d4f22d732f60f7148080a7ccb5388f27fd902ef581b3131932e3997cfa551d61913f3c7a3ce1901ba77a2e61fd5025c4f5762e7d54048d4a9995f0ad6a6e5", "0x"))
-		// require.NoError(t, err)
-		var tmpShares []byte
-		sig := operatorPrivKey.Sign(fmt.Sprintf("%s:%d", ethcommon.HexToAddress("0x71562b71999873DB5b286dF957af199Ec94617F7"), 1))
-		tmpShares = append(tmpShares, sig.Serialize()...)
-		for _, op := range validatorShares.Committee {
-			tmpShares = append(tmpShares, op.PubKey...)
-		}
-		// TODO: do we need the currently unused tmpShares?
-		_ = tmpShares
-
 		// Call the contract method
 		_, err = boundContract.SimcontractTransactor.RegisterValidator(
 			auth,
-			validatorShares.ValidatorPubKey,
+			ops.masterPubKey.Serialize(),
 			[]uint64{1, 2, 3, 4},
-			encodedValidatorShares,
+			data,
 			big.NewInt(100_000_000),
 			simcontract.CallableCluster{
 				ValidatorCount:  1,
@@ -233,8 +226,50 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		}()
 
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
-		require.Equal(t, uint64(0x4), lastProcessedBlock)
+		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
+		blockNum++
+		// Check that validator was registered
+		shares := eh.nodeStorage.Shares().List(nil)
+		require.Equal(t, 1, len(shares))
+
+		malformedShares := data
+		malformedShares[len(malformedShares)-1] = 0
+
+		// Call the contract method
+		_, err = boundContract.SimcontractTransactor.RegisterValidator(
+			auth,
+			ops.masterPubKey.Serialize(),
+			[]uint64{1, 2, 3, 4},
+			malformedShares,
+			big.NewInt(100_000_000),
+			simcontract.CallableCluster{
+				ValidatorCount:  1,
+				NetworkFeeIndex: 1,
+				Index:           2,
+				Active:          true,
+				Balance:         big.NewInt(100_000_000),
+			})
+		require.NoError(t, err)
+		sim.Commit()
+
+		block = <-logs
+		require.NotEmpty(t, block.Logs)
+		require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
+
+		eventsCh = make(chan executionclient.BlockLogs)
+		go func() {
+			defer close(eventsCh)
+			eventsCh <- block
+		}()
+
+		lastProcessedBlock, err = eh.HandleBlockEventsStream(eventsCh, false)
+		require.Equal(t, blockNum+1, lastProcessedBlock)
+		require.NoError(t, err)
+		blockNum++
+		// Check that validator was not registered, but nonce was bumped even event is malformed!
+		shares = eh.nodeStorage.Shares().List(nil)
+		require.Equal(t, 1, len(shares))
 	})
 
 	// Receive event, unmarshall, parse, check parse event is not nil or with an error,
@@ -242,7 +277,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	t.Run("test ValidatorRemoved event handle", func(t *testing.T) {
 		_, err = boundContract.SimcontractTransactor.RemoveValidator(
 			auth,
-			validatorShares.ValidatorPubKey,
+			ops.masterPubKey.Serialize(),
 			[]uint64{1, 2, 3, 4},
 			simcontract.CallableCluster{
 				ValidatorCount:  1,
@@ -265,8 +300,9 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		}()
 
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
-		require.Equal(t, uint64(0x5), lastProcessedBlock)
+		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
+		blockNum++
 	})
 
 	// Receive event, unmarshall, parse, check parse event is not nil or with an error, owner is correct, operator ids are correct
@@ -296,8 +332,9 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		}()
 
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
-		require.Equal(t, uint64(0x6), lastProcessedBlock)
+		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
+		blockNum++
 	})
 
 	// Receive event, unmarshall, parse, check parse event is not nil or with an error, owner is correct, operator ids are correct
@@ -327,8 +364,9 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		}()
 
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
-		require.Equal(t, uint64(0x7), lastProcessedBlock)
+		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
+		blockNum++
 	})
 
 	// Receive event, unmarshall, parse, check parse event is not nil or with an error, owner is correct, fee recipient is correct
@@ -351,64 +389,13 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		}()
 
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
-		require.Equal(t, uint64(0x8), lastProcessedBlock)
+		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
+		blockNum++
 		// Check if the fee recepient was updated
 		recepientData, _, err := eh.nodeStorage.GetRecipientData(nil, ethcommon.HexToAddress("0x71562b71999873DB5b286dF957af199Ec94617F7"))
 		require.NoError(t, err)
 		require.Equal(t, ethcommon.HexToAddress("0x1").String(), recepientData.FeeRecipient.String())
-	})
-
-	// Receive ValidatorAdded and ValidatorRemoved in one block,
-	t.Run("test ValidatorAdded + ValidatorRemoved events handling in the same block", func(t *testing.T) {
-		// create validators cluster instance
-		callableCluster := &simcontract.CallableCluster{
-			ValidatorCount:  1,
-			NetworkFeeIndex: 1,
-			Index:           1,
-			Active:          true,
-			Balance:         big.NewInt(100_000_000),
-		}
-
-		// Call the contract methods, check no err
-		_, err = boundContract.SimcontractTransactor.RegisterValidator(
-			auth,
-			validatorShares.ValidatorPubKey,
-			[]uint64{1, 2, 3, 4},
-			encodedValidatorShares,
-			big.NewInt(100_000_000),
-			*callableCluster,
-		)
-		require.NoError(t, err)
-
-		_, err = boundContract.SimcontractTransactor.RemoveValidator(
-			auth,
-			validatorShares.ValidatorPubKey,
-			[]uint64{1, 2, 3, 4},
-			*callableCluster,
-		)
-		require.NoError(t, err)
-
-		// Execute the required txs to the contract
-		sim.Commit()
-
-		// testing util shares
-		block := <-logs
-		require.NotEmpty(t, block.Logs)
-		require.Equal(t, 2, len(block.Logs))
-		require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
-		require.Equal(t, ethcommon.HexToHash("0xccf4370403e5fbbde0cd3f13426479dcd8a5916b05db424b7a2c04978cf8ce6e"), block.Logs[1].Topics[0])
-
-		eventsCh := make(chan executionclient.BlockLogs)
-
-		go func() {
-			defer close(eventsCh)
-			eventsCh <- block
-		}()
-
-		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
-		require.Equal(t, uint64(0x9), lastProcessedBlock)
-		require.NoError(t, err)
 	})
 }
 
@@ -560,67 +547,148 @@ func simTestBackend(testAddr ethcommon.Address) *simulator.SimulatedBackend {
 	)
 }
 
-func newValidator() (*ssvtypes.SSVShare, *bls.SecretKey, error) {
-	threshold.Init()
-	const keysCount = 4
+func TestCreatingSharesData(t *testing.T) {
+	ops, err := createOperators(4)
+	require.NoError(t, err)
+	data, err := generateSharesData(ops)
+	require.NoError(t, err)
+	operatorCount := 4
+	signatureOffset := phase0.SignatureLength
+	pubKeysOffset := phase0.PublicKeyLength*operatorCount + signatureOffset
+	sharesExpectedLength := encryptedKeyLength*operatorCount + pubKeysOffset
 
-	sk := &bls.SecretKey{}
-	sk.SetByCSPRNG()
-
-	splitKeys, err := threshold.Create(sk.Serialize(), keysCount-1, keysCount)
-
-	validatorShare, _ := generateRandomValidatorShare(splitKeys)
-
-	return validatorShare, sk, err
+	require.Len(t, data, sharesExpectedLength)
 }
 
-func generateRandomValidatorShare(splitKeys map[uint64]*bls.SecretKey) (*ssvtypes.SSVShare, *bls.SecretKey) {
+type testShareData struct {
+	masterKey        *bls.SecretKey
+	masterPubKey     *bls.PublicKey
+	masterPublicKeys bls.PublicKeys
+	operators        []*testOperator
+}
+
+type testOperator struct {
+	id    uint64
+	pub   []byte
+	priv  []byte
+	share testShare
+}
+
+type testShare struct {
+	sec *bls.SecretKey
+	pub *bls.PublicKey
+}
+
+//func blsID(opID uint64) bls.ID { //yes, bls.ID is just a struct wrapping a byte array
+//	var id bls.ID
+//	id.SetDecString(fmt.Sprintf("%d", opID))
+//	return id
+//}
+
+func createOperators(num uint64) (*testShareData, error) {
+
+	opsAndShares := make(map[uint64]*testShare)
+
 	threshold.Init()
 
-	sk1 := bls.SecretKey{}
-	sk1.SetByCSPRNG()
-
-	sk2 := bls.SecretKey{}
-	sk2.SetByCSPRNG()
-
-	ibftCommittee := []*spectypes.Operator{
-		{
-			OperatorID: 1,
-			PubKey:     splitKeys[1].Serialize(),
-		},
-		{
-			OperatorID: 2,
-			PubKey:     splitKeys[2].Serialize(),
-		},
-		{
-			OperatorID: 3,
-			PubKey:     splitKeys[3].Serialize(),
-		},
-		{
-			OperatorID: 4,
-			PubKey:     splitKeys[4].Serialize(),
-		},
+	msk, pubk := blskeygen.GenBLSKeyPair()
+	secVec := msk.GetMasterSecretKey(int(num))
+	pubks := bls.GetMasterPublicKey(secVec)
+	splitKeys, err := threshold.Create(msk.Serialize(), num-1, num)
+	if err != nil {
+		return nil, err
+	}
+	// derive a `shareCount` number of shares
+	for i := uint64(1); i <= num; i++ {
+		var id bls.ID
+		err := id.SetDecString(fmt.Sprintf("%d", i))
+		if err != nil {
+			return nil, err
+		}
+		var contribPub bls.PublicKey
+		err = contribPub.Set(pubks, &id)
+		if err != nil {
+			return nil, err
+		}
+		opsAndShares[i] = &testShare{
+			sec: splitKeys[i],
+			pub: &contribPub,
+		}
 	}
 
-	return &ssvtypes.SSVShare{
-		Share: spectypes.Share{
-			OperatorID:      1,
-			ValidatorPubKey: sk1.GetPublicKey().Serialize(),
-			SharePubKey:     sk2.GetPublicKey().Serialize(),
-			Committee:       ibftCommittee,
-			Quorum:          3,
-			PartialQuorum:   2,
-			DomainType:      ssvtypes.GetDefaultDomain(),
-			Graffiti:        nil,
-		},
-		Metadata: ssvtypes.Metadata{
-			BeaconMetadata: &beacon.ValidatorMetadata{
-				Balance: 1,
-				Status:  2,
-				Index:   3,
+	testops := make([]*testOperator, num)
+
+	for i := uint64(1); i <= num; i++ {
+		pb, sk, err := rsaencryption.GenerateKeys()
+		if err != nil {
+			return nil, err
+		}
+		testops[i-1] = &testOperator{
+			id:   i,
+			pub:  pb,
+			priv: sk,
+			share: testShare{
+				opsAndShares[i].sec,
+				opsAndShares[i].pub,
 			},
-			OwnerAddress: ethcommon.HexToAddress("0x71562b71999873DB5b286dF957af199Ec94617F7"),
-			Liquidated:   true,
-		},
-	}, &sk1
+		}
+	}
+
+	return &testShareData{
+		masterKey:        msk,
+		masterPubKey:     pubk,
+		masterPublicKeys: pubks,
+		operators:        testops,
+	}, nil
+}
+
+func generateSharesData(data *testShareData) ([]byte, error) {
+	var pubkeys []byte
+	var encryptedShares []byte
+
+	for i, op := range data.operators {
+		rsakey, err := rsaencryption.ConvertPemToPublicKey(op.pub)
+		if err != nil {
+			return nil, fmt.Errorf("cant convert publickey: %w", err)
+		}
+
+		rawshare := op.share.sec.SerializeToHexStr()
+		ciphertext, err := rsa.EncryptPKCS1v15(rand.Reader, rsakey, []byte(rawshare))
+		if err != nil {
+			return nil, errors.New("cant encrypt share")
+		}
+
+		rsapriv, err := rsaencryption.ConvertPemToPrivateKey(string(op.priv))
+		if err != nil {
+			return nil, err
+		}
+
+		// check that we encrypt right
+		shareSecret := &bls.SecretKey{}
+		decryptedSharePrivateKey, err := rsaencryption.DecodeKey(rsapriv, ciphertext)
+		if err != nil {
+			return nil, err
+		}
+		if err = shareSecret.SetHexString(string(decryptedSharePrivateKey)); err != nil {
+			return nil, err
+		}
+
+		pubkeys = append(pubkeys, data.masterPublicKeys[i].Serialize()...)
+		encryptedShares = append(encryptedShares, ciphertext...)
+
+	}
+
+	tosign := fmt.Sprintf("%s:%d", testAddr.String(), 0)
+	msghash := crypto.Keccak256([]byte(tosign))
+	signed := data.masterKey.Sign(string(msghash))
+	sig := signed.Serialize()
+
+	if !signed.VerifyByte(data.masterPubKey, msghash) {
+		return nil, errors.New("couldn't sign correctly")
+	}
+
+	sharesData := append(pubkeys, encryptedShares...)
+	sharesDataSigned := append(sig, sharesData...)
+
+	return sharesDataSigned, nil
 }
