@@ -52,7 +52,7 @@ var (
 	ErrValidatorLiquidated                 = Error{text: "validator is liquidated"}
 	ErrValidatorNotAttesting               = Error{text: "validator is not attesting"}
 	ErrTooManyMessagesPerRound             = Error{text: "too many messages per round"}
-	ErrUnexpectedMessageType               = Error{text: "unexpected message type"}
+	ErrUnexpectedMessageType               = Error{text: "unexpected message type", reject: true}
 	ErrSlotAlreadyAdvanced                 = Error{text: "signer has already advanced to a later slot"}
 	ErrRoundAlreadyAdvanced                = Error{text: "signer has already advanced to a later round"}
 	ErrFutureSlotRoundMismatch             = Error{text: "if slot is in future, round must be also in future and vice versa"}

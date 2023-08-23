@@ -9,17 +9,16 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // maxMessageCounts is the maximum number of acceptable messages from a signer within a slot & round.
-func maxMessageCounts(committeeSize int) MessageCounts {
+func maxMessageCounts(committeeSize, quorumSize int) MessageCounts {
 	return MessageCounts{
 		PreConsensus:  1,
 		Proposal:      1,
 		Prepare:       1,
 		Commit:        1,
-		Decided:       committeeSize + 1,
+		Decided:       committeeSize - quorumSize + 1,
 		RoundChange:   1,
 		PostConsensus: 1,
 	}
@@ -47,35 +46,29 @@ func (c *MessageCounts) String() string {
 	)
 }
 
-func (c *MessageCounts) Validate(share *ssvtypes.SSVShare, msg *queue.DecodedSSVMessage) error {
+func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage, limits MessageCounts) error {
 	switch m := msg.Body.(type) {
 	case *specqbft.SignedMessage:
 		switch m.Message.MsgType {
 		case specqbft.ProposalMsgType:
-			if c.Commit > 0 || c.Decided > 0 || c.PostConsensus > 0 {
+			if c.Proposal >= limits.Proposal || c.Commit > 0 || c.Decided > 0 || c.PostConsensus > 0 {
 				err := ErrUnexpectedMessageType
 				err.got = fmt.Sprintf("proposal, having %v", c.String())
 				return err
 			}
 		case specqbft.PrepareMsgType:
-			if c.Prepare > 0 || c.Commit > 0 || c.Decided > 0 || c.PostConsensus > 0 {
+			if c.Prepare >= limits.Prepare || c.Commit > 0 || c.Decided > 0 || c.PostConsensus > 0 {
 				err := ErrUnexpectedMessageType
-				if c.Prepare > 0 {
-					err.reject = true
-				}
 				err.got = fmt.Sprintf("prepare, having %v", c.String())
 				return err
 			}
 		case specqbft.CommitMsgType:
-			if len(m.Signers) == 1 && c.Commit > 0 || c.Decided > 0 || c.PostConsensus > 0 {
+			if len(m.Signers) == 1 && c.Commit >= limits.Commit || c.Decided > 0 || c.PostConsensus > 0 {
 				err := ErrUnexpectedMessageType
-				if c.Commit > 0 {
-					err.reject = true
-				}
 				err.got = fmt.Sprintf("commit, having %v", c.String())
 				return err
 			}
-			if len(m.Signers) > 1 && c.Decided > (len(share.Committee)-int(share.Quorum)) && c.PostConsensus > 0 {
+			if len(m.Signers) > 1 && c.Decided > limits.Decided && c.PostConsensus > 0 {
 				err := ErrUnexpectedMessageType
 				err.got = fmt.Sprintf("decided, having %v", c.String())
 				return err
@@ -149,14 +142,4 @@ func (c *MessageCounts) Record(msg *queue.DecodedSSVMessage) {
 	default:
 		panic("unexpected ssv message type")
 	}
-}
-
-func (c *MessageCounts) ReachedLimits(limits MessageCounts) bool {
-	return c.PreConsensus >= limits.PreConsensus ||
-		c.Proposal >= limits.Proposal ||
-		c.Prepare >= limits.Prepare ||
-		c.Commit >= limits.Commit ||
-		c.Decided >= limits.Decided ||
-		c.RoundChange >= limits.RoundChange ||
-		c.PostConsensus >= limits.PostConsensus
 }

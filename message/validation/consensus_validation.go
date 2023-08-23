@@ -126,12 +126,7 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 	return nil
 }
 
-func (mv *MessageValidator) validateSignerBehavior(
-	state *ConsensusState,
-	signer spectypes.OperatorID,
-	share *ssvtypes.SSVShare,
-	msg *queue.DecodedSSVMessage,
-) error {
+func (mv *MessageValidator) validateSignerBehavior(state *ConsensusState, signer spectypes.OperatorID, share *ssvtypes.SSVShare, msg *queue.DecodedSSVMessage) error {
 	signedMsg, ok := msg.Body.(*specqbft.SignedMessage)
 	if !ok {
 		// TODO: add support
@@ -163,14 +158,9 @@ func (mv *MessageValidator) validateSignerBehavior(
 
 	signerState.LastDecidedQuorumSize = len(signedMsg.Signers)
 
-	if err := signerState.MessageCounts.Validate(share, msg); err != nil {
+	limits := maxMessageCounts(len(share.Committee), int(share.Quorum))
+	if err := signerState.MessageCounts.Validate(msg, limits); err != nil {
 		return err
-	}
-
-	// Validate message counts within the current round.
-	if signerState.MessageCounts.ReachedLimits(maxMessageCounts(len(signedMsg.Signers))) {
-		// TODO: make sure check is correct
-		//return ErrTooManyMessagesPerRound
 	}
 
 	return nil
