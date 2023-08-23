@@ -64,4 +64,6 @@ var (
 	ErrMalformedMessage                 = Error{text: "message could not be decoded", reject: true}
 	ErrUnknownMessageType               = Error{text: "unknown message type", reject: true}
 	ErrPartialSignatureTypeRoleMismatch = Error{text: "partial signature type and role don't match", reject: true}
+	ErrNonDecidedWithMultipleSigners    = Error{text: "non-decided with multiple signers", reject: true}
+	ErrWrongSignersLength               = Error{text: "decided signers size is not between quorum and committee size", reject: true}
 )

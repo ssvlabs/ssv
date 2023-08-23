@@ -258,16 +258,19 @@ func (mv *MessageValidator) validConsensusSigners(share *ssvtypes.SSVShare, m *s
 			}
 		}
 	} else if m.Message.MsgType != specqbft.CommitMsgType {
-		return fmt.Errorf("non-decided with multiple signers, len: %d", len(m.Signers))
+		e := ErrNonDecidedWithMultipleSigners
+		e.got = len(m.Signers)
+		return e
 	} else if uint64(len(m.Signers)) < share.Quorum || len(m.Signers) > len(share.Committee) {
-		return fmt.Errorf("decided signers size is not between partial quorum and quorum size")
+		e := ErrWrongSignersLength
+		e.want = fmt.Sprintf("between %v and %v", share.Quorum, share.Committee)
+		e.got = len(m.Signers)
+		return e
 	}
 
 	if !slices.IsSorted(m.Signers) {
 		return ErrSignersNotSorted
 	}
-
-	// TODO: if decided, check if previous decided had less or equal signers
 
 	seen := map[spectypes.OperatorID]struct{}{}
 	for _, signer := range m.Signers {
