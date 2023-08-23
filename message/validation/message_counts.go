@@ -74,7 +74,7 @@ func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage) error {
 				err.got = fmt.Sprintf("commit, having %v", c.String())
 				return err
 			}
-			if len(m.Signers) > 1 && c.Decided > 0 || c.PostConsensus > 0 {
+			if len(m.Signers) > 1 && c.PostConsensus > 0 {
 				err := ErrUnexpectedMessageType
 				err.got = fmt.Sprintf("decided, having %v", c.String())
 				return err
