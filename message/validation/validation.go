@@ -292,8 +292,7 @@ func (mv *MessageValidator) validateSlotTime(messageSlot phase0.Slot, role spect
 	}
 
 	if mv.lateMessage(messageSlot, role, receivedAt) {
-		// TODO: make sure check is correct
-		//return ErrLateMessage
+		return ErrLateMessage
 	}
 
 	return nil
@@ -305,7 +304,6 @@ func (mv *MessageValidator) earlyMessage(slot phase0.Slot, receivedAt time.Time)
 }
 
 func (mv *MessageValidator) lateMessage(slot phase0.Slot, role spectypes.BeaconRole, receivedAt time.Time) bool {
-	// Note: this is just an example, should be according to ssv-spec.
 	var ttl phase0.Slot
 	switch role {
 	case spectypes.BNRoleProposer, spectypes.BNRoleSyncCommittee, spectypes.BNRoleSyncCommitteeContribution:
@@ -313,10 +311,12 @@ func (mv *MessageValidator) lateMessage(slot phase0.Slot, role spectypes.BeaconR
 	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator:
 		ttl = 32 + lateSlotAllowance
 	case spectypes.BNRoleValidatorRegistration:
-		ttl = 1
+		return false
 	}
+
 	deadline := mv.netCfg.Beacon.GetSlotStartTime(slot + ttl).
 		Add(lateMessageMargin).Add(clockErrorTolerance)
+
 	return mv.netCfg.Beacon.GetSlotStartTime(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Unix())).
 		After(deadline)
 }
