@@ -38,6 +38,7 @@ const (
 	allowedRoundsInPast        = 2
 	lateSlotAllowance          = 2
 	signatureSize              = 96
+	maxDutiesPerEpoch          = 2
 )
 
 type ConsensusID struct {
@@ -234,11 +235,6 @@ func (mv *MessageValidator) validateSlotState(signerState *SignerState, msgSlot 
 		return err
 	}
 
-	// Advance slot & round, if needed.
-	if signerState.Slot < msgSlot {
-		signerState.Reset(msgSlot, specqbft.FirstRound)
-	}
-
 	return nil
 }
 
@@ -260,28 +256,6 @@ func (mv *MessageValidator) validateRoundState(signerState *SignerState, msgRoun
 	//	err.got = msgRound
 	//	return err
 	//}
-
-	// Advance slot & round, if needed.
-	if msgRound > signerState.Round {
-		signerState.Reset(signerState.Slot, msgRound)
-	}
-
-	return nil
-}
-
-func (mv *MessageValidator) validateSlotAndRoundState(signerState *SignerState, msgSlot phase0.Slot, msgRound specqbft.Round) error {
-	// TODO: make sure it's correct
-	//if signerState.Slot < msgSlot && signerState.Round >= msgRound || signerState.Round < msgRound && signerState.Slot >= msgSlot {
-	//return ErrFutureSlotRoundMismatch
-	//}
-
-	if err := mv.validateSlotState(signerState, msgSlot); err != nil {
-		return err
-	}
-
-	if err := mv.validateRoundState(signerState, msgRound); err != nil {
-		return err
-	}
 
 	return nil
 }
