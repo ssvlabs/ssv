@@ -107,7 +107,7 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 	// Validate each signer's behavior.
 	state := mv.consensusState(consensusID)
 	for _, signer := range signedMsg.Signers {
-		if err := mv.validateSignerBehavior(state, signer, msg); err != nil {
+		if err := mv.validateSignerBehavior(state, signer, share, msg); err != nil {
 			return fmt.Errorf("bad signer behavior: %w", err)
 		}
 	}
@@ -129,6 +129,7 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 func (mv *MessageValidator) validateSignerBehavior(
 	state *ConsensusState,
 	signer spectypes.OperatorID,
+	share *ssvtypes.SSVShare,
 	msg *queue.DecodedSSVMessage,
 ) error {
 	signedMsg, ok := msg.Body.(*specqbft.SignedMessage)
@@ -162,7 +163,7 @@ func (mv *MessageValidator) validateSignerBehavior(
 
 	signerState.LastDecidedQuorumSize = len(signedMsg.Signers)
 
-	if err := signerState.MessageCounts.Validate(msg); err != nil {
+	if err := signerState.MessageCounts.Validate(share, msg); err != nil {
 		return err
 	}
 

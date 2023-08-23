@@ -9,6 +9,7 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
+	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // maxMessageCounts is the maximum number of acceptable messages from a signer within a slot & round.
@@ -46,7 +47,7 @@ func (c *MessageCounts) String() string {
 	)
 }
 
-func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage) error {
+func (c *MessageCounts) Validate(share *ssvtypes.SSVShare, msg *queue.DecodedSSVMessage) error {
 	switch m := msg.Body.(type) {
 	case *specqbft.SignedMessage:
 		switch m.Message.MsgType {
@@ -74,7 +75,7 @@ func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage) error {
 				err.got = fmt.Sprintf("commit, having %v", c.String())
 				return err
 			}
-			if len(m.Signers) > 1 && c.PostConsensus > 0 {
+			if len(m.Signers) > 1 && c.Decided > (len(share.Committee)-int(share.Quorum)) && c.PostConsensus > 0 {
 				err := ErrUnexpectedMessageType
 				err.got = fmt.Sprintf("decided, having %v", c.String())
 				return err
