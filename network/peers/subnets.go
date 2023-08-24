@@ -58,8 +58,7 @@ diffLoop:
 						si.subnets[subnet] = make([]peer.ID, 0)
 					} else {
 						// #nosec
-						// The slice operation is safe here because we're checking that the length of peers is not 1.
-						// In Go, slicing beyond the end of an array yields an empty slice, which is acceptable in this context.
+						// False positive by the linter, it says potential out of bounds, but it can't be because we're inside a for on `peers`.
 						si.subnets[subnet] = peers[1:]
 					}
 					continue diffLoop
