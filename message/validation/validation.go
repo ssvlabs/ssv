@@ -50,13 +50,17 @@ type ConsensusState struct {
 	Signers *hashmap.Map[spectypes.OperatorID, *SignerState]
 }
 
-func (cs *ConsensusState) SignerState(signer spectypes.OperatorID) *SignerState {
-	// TODO: fix case if attacker creates a lot of states for each signer without correct signature
+func (cs *ConsensusState) GetSignerState(signer spectypes.OperatorID) *SignerState {
 	signerState, ok := cs.Signers.Get(signer)
 	if !ok {
-		signerState = &SignerState{}
-		cs.Signers.Set(signer, signerState)
+		return nil
 	}
+	return signerState
+}
+
+func (cs *ConsensusState) CreateSignerState(signer spectypes.OperatorID) *SignerState {
+	signerState := &SignerState{}
+	cs.Signers.Set(signer, signerState)
 
 	return signerState
 }

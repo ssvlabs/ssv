@@ -105,7 +105,10 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 	}
 
 	for _, signer := range signedMsg.Signers {
-		signerState := state.SignerState(signer)
+		signerState := state.GetSignerState(signer)
+		if signerState == nil {
+			state.CreateSignerState(signer)
+		}
 		if msgSlot > signerState.Slot {
 			newEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) > mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot)
 			signerState.ResetSlot(msgSlot, msgRound, newEpoch)
@@ -117,7 +120,7 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 			signerState.ProposalData = signedMsg.FullData
 		}
 
-		state.SignerState(signer).MessageCounts.Record(msg)
+		signerState.MessageCounts.Record(msg)
 	}
 
 	return nil
@@ -175,43 +178,45 @@ func (mv *MessageValidator) validateSignerBehavior(
 		panic("validateSignerBehavior should be called on signed message")
 	}
 
-	signerState := state.SignerState(signer)
+	signerState := state.GetSignerState(signer)
 
-	msgSlot := phase0.Slot(signedMsg.Message.Height)
-	msgRound := signedMsg.Message.Round
+	if signerState != nil {
+		msgSlot := phase0.Slot(signedMsg.Message.Height)
+		msgRound := signedMsg.Message.Round
 
-	if msgSlot < signerState.Slot {
-		// Signers aren't allowed to decrease their slot.
-		// If they've sent a future message due to clock error,
-		// this should be caught by the earlyMessage check.
-		err := ErrSlotAlreadyAdvanced
-		err.want = signerState.Slot
-		err.got = msgSlot
-		return err
-	}
-
-	if msgRound < signerState.Round {
-		// Signers aren't allowed to decrease their round.
-		// If they've sent a future message due to clock error,
-		// they'd have to wait for the next slot/round to be accepted.
-		err := ErrRoundAlreadyAdvanced
-		err.want = signerState.Round
-		err.got = msgRound
-		return err
-	}
-
-	if !(msgSlot > signerState.Slot || msgSlot == signerState.Slot && msgRound > signerState.Round) {
-		if err := mv.validateDutiesCount(signerState, msg.MsgID.GetRoleType()); err != nil {
+		if msgSlot < signerState.Slot {
+			// Signers aren't allowed to decrease their slot.
+			// If they've sent a future message due to clock error,
+			// this should be caught by the earlyMessage check.
+			err := ErrSlotAlreadyAdvanced
+			err.want = signerState.Slot
+			err.got = msgSlot
 			return err
 		}
 
-		if mv.hasFullData(signedMsg) && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
-			return ErrDuplicatedProposalWithDifferentData
+		if msgRound < signerState.Round {
+			// Signers aren't allowed to decrease their round.
+			// If they've sent a future message due to clock error,
+			// they'd have to wait for the next slot/round to be accepted.
+			err := ErrRoundAlreadyAdvanced
+			err.want = signerState.Round
+			err.got = msgRound
+			return err
 		}
 
-		limits := maxMessageCounts(len(share.Committee), int(share.Quorum))
-		if err := signerState.MessageCounts.Validate(msg, limits); err != nil {
-			return err
+		if !(msgSlot > signerState.Slot || msgSlot == signerState.Slot && msgRound > signerState.Round) {
+			if err := mv.validateDutiesCount(signerState, msg.MsgID.GetRoleType()); err != nil {
+				return err
+			}
+
+			if mv.hasFullData(signedMsg) && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
+				return ErrDuplicatedProposalWithDifferentData
+			}
+
+			limits := maxMessageCounts(len(share.Committee), int(share.Quorum))
+			if err := signerState.MessageCounts.Validate(msg, limits); err != nil {
+				return err
+			}
 		}
 	}
 

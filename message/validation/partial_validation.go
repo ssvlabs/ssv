@@ -48,22 +48,27 @@ func (mv *MessageValidator) validatePartialSignatureMessage(share *ssvtypes.SSVS
 	}
 
 	consensusState := mv.consensusState(consensusID)
-	signerState := consensusState.SignerState(signedMsg.Signer)
+	signerState := consensusState.GetSignerState(signedMsg.Signer)
 
-	if signedMsg.Message.Slot < signerState.Slot {
-		// Signers aren't allowed to decrease their slot.
-		// If they've sent a future message due to clock error,
-		// this should be caught by the earlyMessage check.
-		err := ErrSlotAlreadyAdvanced
-		err.want = signerState.Slot
-		err.got = signedMsg.Message.Slot
-		return err
+	if signerState != nil {
+		if signedMsg.Message.Slot < signerState.Slot {
+			// Signers aren't allowed to decrease their slot.
+			// If they've sent a future message due to clock error,
+			// this should be caught by the earlyMessage check.
+			err := ErrSlotAlreadyAdvanced
+			err.want = signerState.Slot
+			err.got = signedMsg.Message.Slot
+			return err
+		}
 	}
 
 	if err := mv.validPartialSignatures(share, signedMsg); err != nil {
 		return err
 	}
 
+	if signerState == nil {
+		signerState = consensusState.CreateSignerState(signedMsg.Signer)
+	}
 	msgSlot := signedMsg.Message.Slot
 	if msgSlot > signerState.Slot {
 		newEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) > mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot)
