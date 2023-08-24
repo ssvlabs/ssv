@@ -142,9 +142,9 @@ func (mv *MessageValidator) validateSignerBehavior(state *ConsensusState, signer
 
 	signerState := state.SignerState(signer)
 
-	//if err := mv.validateDutiesCount(signerState, msg.MsgID.GetRoleType()); err != nil {
-	//return err
-	//}
+	if err := mv.validateDutiesCount(signerState, msg.MsgID.GetRoleType()); err != nil {
+		return err
+	}
 
 	// TODO: make sure it's correct
 	//if signerState.Slot < msgSlot && signerState.Round >= msgRound || signerState.Round < msgRound && signerState.Slot >= msgSlot {
