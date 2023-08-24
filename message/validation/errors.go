@@ -77,4 +77,5 @@ var (
 	ErrMalformedRoundChangeJustifications  = Error{text: "malformed round change justifications", reject: true}
 	ErrUnexpectedRoundChangeJustifications = Error{text: "round change justifications unexpected for this message type", reject: true}
 	ErrInvalidJustifications               = Error{text: "invalid justifications", reject: true}
+	ErrTooManyDutiesPerEpoch               = Error{text: "too many duties per epoch", reject: true}
 )

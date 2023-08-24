@@ -37,6 +37,7 @@ const (
 	allowedRoundsInPast        = 2
 	lateSlotAllowance          = 2
 	signatureSize              = 96
+	maxDutiesPerEpoch          = 2
 )
 
 type ConsensusID struct {
