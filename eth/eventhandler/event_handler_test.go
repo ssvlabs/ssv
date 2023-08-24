@@ -104,9 +104,10 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	boundContract, err := simcontract.NewSimcontract(contractAddr, sim)
 	require.NoError(t, err)
 
+	// Creation of operators rsa keys
 	ops, err := createOperators(4)
 	require.NoError(t, err)
-	data, err := generateSharesData(ops)
+	sharesData, err := generateSharesData(ops)
 	require.NoError(t, err)
 	blockNum := uint64(0x1)
 
@@ -207,7 +208,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			auth,
 			ops.masterPubKey.Serialize(),
 			[]uint64{1, 2, 3, 4},
-			data,
+			sharesData,
 			big.NewInt(100_000_000),
 			simcontract.CallableCluster{
 				ValidatorCount:  1,
@@ -241,48 +242,52 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, registrystorage.Nonce(1), nonce)
 
-		malformedShares := data
-		malformedShares[len(malformedShares)-1] = 0
+		t.Run("test nonce bumping works correctly", func(t *testing.T) {
+			t.Run("test nonce bumping even for a malformed event", func(t *testing.T) {
+				malformedSharesData := sharesData
+				malformedSharesData[len(malformedSharesData)-1] = 0
 
-		// Call the contract method
-		_, err = boundContract.SimcontractTransactor.RegisterValidator(
-			auth,
-			ops.masterPubKey.Serialize(),
-			[]uint64{1, 2, 3, 4},
-			malformedShares,
-			big.NewInt(100_000_000),
-			simcontract.CallableCluster{
-				ValidatorCount:  1,
-				NetworkFeeIndex: 1,
-				Index:           2,
-				Active:          true,
-				Balance:         big.NewInt(100_000_000),
+				// Call the contract method
+				_, err = boundContract.SimcontractTransactor.RegisterValidator(
+					auth,
+					ops.masterPubKey.Serialize(),
+					[]uint64{1, 2, 3, 4},
+					malformedSharesData,
+					big.NewInt(100_000_000),
+					simcontract.CallableCluster{
+						ValidatorCount:  1,
+						NetworkFeeIndex: 1,
+						Index:           2,
+						Active:          true,
+						Balance:         big.NewInt(100_000_000),
+					})
+				require.NoError(t, err)
+				sim.Commit()
+
+				block = <-logs
+				require.NotEmpty(t, block.Logs)
+				require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
+
+				eventsCh = make(chan executionclient.BlockLogs)
+				go func() {
+					defer close(eventsCh)
+					eventsCh <- block
+				}()
+
+				lastProcessedBlock, err = eh.HandleBlockEventsStream(eventsCh, false)
+				require.Equal(t, blockNum+1, lastProcessedBlock)
+				require.NoError(t, err)
+				blockNum++
+
+				// Check that validator was not registered,
+				shares = eh.nodeStorage.Shares().List(nil)
+				require.Equal(t, 1, len(shares))
+				// but nonce was bumped even the event is malformed!
+				nonce, err = eh.nodeStorage.GetNextNonce(nil, testAddr)
+				require.NoError(t, err)
+				require.Equal(t, registrystorage.Nonce(2), nonce)
 			})
-		require.NoError(t, err)
-		sim.Commit()
-
-		block = <-logs
-		require.NotEmpty(t, block.Logs)
-		require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
-
-		eventsCh = make(chan executionclient.BlockLogs)
-		go func() {
-			defer close(eventsCh)
-			eventsCh <- block
-		}()
-
-		lastProcessedBlock, err = eh.HandleBlockEventsStream(eventsCh, false)
-		require.Equal(t, blockNum+1, lastProcessedBlock)
-		require.NoError(t, err)
-		blockNum++
-
-		// Check that validator was not registered,
-		shares = eh.nodeStorage.Shares().List(nil)
-		require.Equal(t, 1, len(shares))
-		// but nonce was bumped even the event is malformed!
-		nonce, err = eh.nodeStorage.GetNextNonce(nil, testAddr)
-		require.NoError(t, err)
-		require.Equal(t, registrystorage.Nonce(2), nonce)
+		})
 	})
 
 	// Receive event, unmarshall, parse, check parse event is not nil or with an error,
