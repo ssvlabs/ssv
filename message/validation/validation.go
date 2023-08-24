@@ -46,10 +46,12 @@ type ConsensusID struct {
 }
 
 type ConsensusState struct {
+	// TODO: consider evicting old data to avoid excessive memory consumption
 	Signers *hashmap.Map[spectypes.OperatorID, *SignerState]
 }
 
 func (cs *ConsensusState) SignerState(signer spectypes.OperatorID) *SignerState {
+	// TODO: fix case if attacker creates a lot of states for each signer without correct signature
 	signerState, ok := cs.Signers.Get(signer)
 	if !ok {
 		signerState = &SignerState{}
