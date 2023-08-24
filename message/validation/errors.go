@@ -60,7 +60,7 @@ var (
 	ErrSignersNotSorted                    = Error{text: "signers are not sorted", reject: true}
 	ErrUnexpectedSigner                    = Error{text: "signer is not expected", reject: true}
 	ErrTooManyMessagesPerRound             = Error{text: "too many messages per round"}
-	ErrUnexpectedMessageType               = Error{text: "unexpected message type", reject: true}
+	ErrUnexpectedMessageType               = Error{text: "unexpected message type"}
 	ErrInvalidHash                         = Error{text: "root doesn't match full data hash", reject: true}
 	ErrInvalidSignature                    = Error{text: "invalid signature", reject: true}
 	ErrEstimatedRoundTooFar                = Error{text: "message round is too far from estimated"}
