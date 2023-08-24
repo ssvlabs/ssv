@@ -201,6 +201,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		nonce, err := eh.nodeStorage.GetNextNonce(nil, testAddr)
 		require.NoError(t, err)
 		require.Equal(t, registrystorage.Nonce(0), nonce)
+
 		// Call the contract method
 		_, err = boundContract.SimcontractTransactor.RegisterValidator(
 			auth,
@@ -590,6 +591,7 @@ type testShare struct {
 	sec *bls.SecretKey
 	pub *bls.PublicKey
 }
+
 
 func createOperators(num uint64) (*testShareData, error) {
 
