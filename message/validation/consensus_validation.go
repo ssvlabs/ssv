@@ -33,8 +33,6 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		return err
 	}
 
-	// TODO: check if has running duty
-
 	if err := mv.validConsensusSigners(share, signedMsg); err != nil {
 		return err
 	}
@@ -91,7 +89,7 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		PubKey: phase0.BLSPubKey(msg.GetID().GetPubKey()),
 		Role:   role,
 	}
-	// Validate each signer's behavior.
+
 	state := mv.consensusState(consensusID)
 	for _, signer := range signedMsg.Signers {
 		if err := mv.validateSignerBehavior(state, signer, share, msg); err != nil {
@@ -112,6 +110,10 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		signerState := state.SignerState(signer)
 		if msgSlot > signerState.Slot || msgSlot == signerState.Slot && msgRound > signerState.Round {
 			signerState.Reset(msgSlot, msgRound)
+		}
+
+		if mv.hasFullData(signedMsg) && signerState.ProposalData == nil {
+			signerState.ProposalData = signedMsg.FullData
 		}
 
 		state.SignerState(signer).MessageCounts.Record(msg)
@@ -203,9 +205,7 @@ func (mv *MessageValidator) validateSignerBehavior(
 
 	if !(msgSlot > signerState.Slot || msgSlot == signerState.Slot && msgRound > signerState.Round) {
 		if mv.hasFullData(signedMsg) {
-			if signerState.ProposalData == nil {
-				signerState.ProposalData = signedMsg.FullData
-			} else if !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
+			if signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
 				return ErrDuplicatedProposalWithDifferentData
 			}
 		}
