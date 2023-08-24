@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 
@@ -47,12 +48,25 @@ func (mv *MessageValidator) validatePartialSignatureMessage(share *ssvtypes.SSVS
 	}
 
 	consensusState := mv.consensusState(consensusID)
-	if err := mv.validateSlotState(consensusState.SignerState(signedMsg.Signer), signedMsg.Message.Slot); err != nil {
+	signerState := consensusState.SignerState(signedMsg.Signer)
+
+	if signedMsg.Message.Slot < signerState.Slot {
+		// Signers aren't allowed to decrease their slot.
+		// If they've sent a future message due to clock error,
+		// this should be caught by the earlyMessage check.
+		err := ErrSlotAlreadyAdvanced
+		err.want = signerState.Slot
+		err.got = signedMsg.Message.Slot
 		return err
 	}
 
 	if err := mv.validPartialSignatures(share, signedMsg); err != nil {
 		return err
+	}
+
+	// Advance slot & round, if needed.
+	if signedMsg.Message.Slot > signerState.Slot {
+		signerState.Reset(signedMsg.Message.Slot, specqbft.FirstRound)
 	}
 
 	return nil
