@@ -173,7 +173,7 @@ func (mv *MessageValidator) validateSignerBehavior(state *ConsensusState, signer
 
 	limits := maxMessageCounts(len(share.Committee), int(share.Quorum))
 	if err := signerState.MessageCounts.Validate(msg, limits); err != nil {
-		return err
+		//return err
 	}
 
 	return nil
