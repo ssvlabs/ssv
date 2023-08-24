@@ -12,6 +12,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bloxapp/ssv/operator/validator"
+	"github.com/bloxapp/ssv/operator/validator/mocks"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/utils/blskeygen"
 	"github.com/pkg/errors"
@@ -37,7 +40,6 @@ import (
 	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/networkconfig"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/operator/validator"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -105,7 +107,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	ops, err := createOperators(4)
 	require.NoError(t, err)
 	data, err := generateSharesData(ops)
-
+	require.NoError(t, err)
 	blockNum := uint64(0x1)
 
 	t.Run("test OperatorAdded event handle", func(t *testing.T) {
@@ -157,6 +159,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.Equal(t, ops.operators[i].pub, data.PublicKey)
 		}
 	})
+
+	// Receive event, unmarshall, parse, check parse event is not nil or with error, operator id is correct
 	t.Run("test OperatorRemoved event handle", func(t *testing.T) {
 		// Call the contract method
 		_, err = boundContract.SimcontractTransactor.RemoveOperator(auth, 1)
@@ -191,7 +195,13 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.Equal(t, len(ops.operators), len(operators))
 	})
 
+	// Receive event, unmarshall, parse, check parse event is not nil or with an error,
+	// public key is correct, owner is correct, operator ids are correct, shares are correct
 	t.Run("test ValidatorAdded event handle", func(t *testing.T) {
+		nonce, err := eh.nodeStorage.GetNextNonce(nil, testAddr)
+		require.NoError(t, err)
+		require.Equal(t, registrystorage.Nonce(0), nonce)
+
 		// Call the contract method
 		_, err = boundContract.SimcontractTransactor.RegisterValidator(
 			auth,
@@ -226,6 +236,10 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		// Check that validator was registered
 		shares := eh.nodeStorage.Shares().List(nil)
 		require.Equal(t, 1, len(shares))
+		// Check the nonce was bumped
+		nonce, err = eh.nodeStorage.GetNextNonce(nil, testAddr)
+		require.NoError(t, err)
+		require.Equal(t, registrystorage.Nonce(1), nonce)
 
 		malformedShares := data
 		malformedShares[len(malformedShares)-1] = 0
@@ -261,11 +275,18 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
 		blockNum++
-		// Check that validator was not registered, but nonce was bumped even event is malformed!
+
+		// Check that validator was not registered,
 		shares = eh.nodeStorage.Shares().List(nil)
 		require.Equal(t, 1, len(shares))
+		// but nonce was bumped even the event is malformed!
+		nonce, err = eh.nodeStorage.GetNextNonce(nil, testAddr)
+		require.NoError(t, err)
+		require.Equal(t, registrystorage.Nonce(2), nonce)
 	})
 
+	// Receive event, unmarshall, parse, check parse event is not nil or with an error,
+	// public key is correct, owner is correct, operator ids are correct
 	t.Run("test ValidatorRemoved event handle", func(t *testing.T) {
 		_, err = boundContract.SimcontractTransactor.RemoveValidator(
 			auth,
@@ -297,6 +318,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		blockNum++
 	})
 
+	// Receive event, unmarshall, parse, check parse event is not nil or with an error, owner is correct, operator ids are correct
 	t.Run("test ClusterLiquidated event handle", func(t *testing.T) {
 		_, err = boundContract.SimcontractTransactor.Liquidate(
 			auth,
@@ -328,6 +350,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		blockNum++
 	})
 
+	// Receive event, unmarshall, parse, check parse event is not nil or with an error, owner is correct, operator ids are correct
 	t.Run("test ClusterReactivated event handle", func(t *testing.T) {
 		_, err = boundContract.SimcontractTransactor.Reactivate(
 			auth,
@@ -359,6 +382,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		blockNum++
 	})
 
+	// Receive event, unmarshall, parse, check parse event is not nil or with an error, owner is correct, fee recipient is correct
 	t.Run("test FeeRecipientAddressUpdated event handle", func(t *testing.T) {
 		_, err = boundContract.SimcontractTransactor.SetFeeRecipientAddress(
 			auth,
@@ -437,6 +461,53 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger) (*
 		return nil, err
 	}
 	return eh, nil
+}
+
+// Copy of setupEventHandler, but with a mocked Validator Controller
+func setupEventHandlerWithMockedCtrl(t *testing.T, ctx context.Context, logger *zap.Logger) (*EventHandler, *mocks.MockController, error) {
+	db, err := kv.NewInMemory(logger, basedb.Options{
+		Ctx: ctx,
+	})
+	require.NoError(t, err)
+
+	storageMap := ibftstorage.NewStores()
+	nodeStorage, _ := setupOperatorStorage(logger, db)
+	testNetworkConfig := networkconfig.TestNetwork
+
+	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, true, "")
+	if err != nil {
+		return nil, nil, err
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	bc := beacon.NewMockBeaconNode(ctrl)
+	validatorCtrl := mocks.NewMockController(ctrl)
+
+	contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
+	require.NoError(t, err)
+
+	parser := eventparser.New(contractFilterer)
+
+	eh, err := New(
+		nodeStorage,
+		parser,
+		validatorCtrl,
+		testNetworkConfig.Domain,
+		validatorCtrl,
+		nodeStorage.GetPrivateKey,
+		keyManager,
+		bc,
+		storageMap,
+		WithFullNode(),
+		WithLogger(logger))
+	if err != nil {
+		return nil, nil, err
+	}
+	validatorCtrl.EXPECT().GetOperatorData().Return(&registrystorage.OperatorData{}).AnyTimes()
+
+	return eh, validatorCtrl, nil
 }
 
 func setupOperatorStorage(logger *zap.Logger, db basedb.Database) (operatorstorage.Storage, *registrystorage.OperatorData) {
@@ -521,11 +592,6 @@ type testShare struct {
 	pub *bls.PublicKey
 }
 
-//func blsID(opID uint64) bls.ID { //yes, bls.ID is just a struct wrapping a byte array
-//	var id bls.ID
-//	id.SetDecString(fmt.Sprintf("%d", opID))
-//	return id
-//}
 
 func createOperators(num uint64) (*testShareData, error) {
 
