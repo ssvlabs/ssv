@@ -122,7 +122,7 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 
 	for _, signer := range signedMsg.Signers {
 		signerState := state.SignerState(signer)
-		if msgSlot > signerState.Slot || msgRound > signerState.Round {
+		if msgSlot > signerState.Slot || msgSlot == signerState.Slot && msgRound > signerState.Round {
 			signerState.Reset(msgSlot, msgRound)
 		}
 
