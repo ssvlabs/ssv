@@ -209,7 +209,7 @@ func (mv *MessageValidator) validateSignerBehavior(
 			return err
 		}
 
-		if mv.hasFullData(signedMsg) && !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
+		if mv.hasFullData(signedMsg) && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
 			return ErrDuplicatedProposalWithDifferentData
 		}
 
