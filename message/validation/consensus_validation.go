@@ -163,7 +163,7 @@ func (mv *MessageValidator) validateSignerBehavior(state *ConsensusState, signer
 		return err
 	}
 
-	if msgSlot > signerState.Slot || msgRound > signerState.Round {
+	if msgSlot > signerState.Slot || msgSlot == signerState.Slot && msgRound > signerState.Round {
 		// State needs to be reset, and it means that behavioral checks below would pass.
 		return nil
 	}
