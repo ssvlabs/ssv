@@ -107,7 +107,7 @@ DIR=".k8/stage"
 DEPLOY_FILES=(
   "ssv-node-v2-5-deployment.yml"
   "ssv-node-v2-6-deployment.yml"
-#  "ssv-node-v2-7-deployment.yml"
+  "ssv-node-v2-7-deployment.yml"
 #  "ssv-node-v2-8-deployment.yml"
 )
 
