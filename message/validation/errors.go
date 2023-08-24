@@ -33,15 +33,7 @@ func (e Error) Reject() bool {
 
 var (
 	ErrEmptyData                           = Error{text: "empty data"}
-	ErrWrongDomain                         = Error{text: "wrong domain"}
 	ErrUnknownValidator                    = Error{text: "unknown validator"}
-	ErrValidatorLiquidated                 = Error{text: "validator is liquidated"}
-	ErrValidatorNotAttesting               = Error{text: "validator is not attesting"}
-	ErrSlotAlreadyAdvanced                 = Error{text: "signer has already advanced to a later slot"}
-	ErrRoundAlreadyAdvanced                = Error{text: "signer has already advanced to a later round"}
-	ErrFutureSlotRoundMismatch             = Error{text: "if slot is in future, round must be also in future and vice versa"}
-	ErrRoundTooFarInTheFuture              = Error{text: "round is too far in the future"}
-	ErrRoundTooHigh                        = Error{text: "round is too high for this role" /*, reject: true*/} // TODO: enable reject
 	ErrEarlyMessage                        = Error{text: "early message"}
 	ErrLateMessage                         = Error{text: "late message"}
 	ErrDataTooBig                          = Error{text: "data too big", reject: true}
@@ -55,8 +47,16 @@ var (
 	ErrSignerNotLeader                     = Error{text: "signer is not leader", reject: true}
 	ErrSignersNotSorted                    = Error{text: "signers are not sorted", reject: true}
 	ErrUnexpectedSigner                    = Error{text: "signer is not expected", reject: true}
+	ErrWrongDomain                         = Error{text: "wrong domain"}
+	ErrValidatorLiquidated                 = Error{text: "validator is liquidated"}
+	ErrValidatorNotAttesting               = Error{text: "validator is not attesting"}
 	ErrTooManyMessagesPerRound             = Error{text: "too many messages per round"}
 	ErrUnexpectedMessageType               = Error{text: "unexpected message type", reject: true}
+	ErrSlotAlreadyAdvanced                 = Error{text: "signer has already advanced to a later slot"}
+	ErrRoundAlreadyAdvanced                = Error{text: "signer has already advanced to a later round"}
+	ErrFutureSlotRoundMismatch             = Error{text: "if slot is in future, round must be also in future and vice versa"}
+	ErrRoundTooFarInTheFuture              = Error{text: "round is too far in the future"}
+	ErrRoundTooHigh                        = Error{text: "round is too high for this role"}
 	ErrInvalidHash                         = Error{text: "root doesn't match full data hash", reject: true}
 	ErrInvalidSignature                    = Error{text: "invalid signature", reject: true}
 	ErrEstimatedRoundTooFar                = Error{text: "message round is too far from estimated"}
