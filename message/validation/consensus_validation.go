@@ -156,7 +156,7 @@ func (mv *MessageValidator) validateSignerBehavior(state *ConsensusState, signer
 	}
 
 	if msgSlot > signerState.Slot || signedMsg.Message.Round > signerState.Round {
-		// State needs to be reset, and it means that behavioral checks below are not needed.
+		// State needs to be reset, and it means that behavioral checks below would pass.
 		return nil
 	}
 
