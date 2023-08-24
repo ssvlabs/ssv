@@ -31,7 +31,7 @@ func NewSSVMsgValidator(logger *zap.Logger, fork forks.Fork, validator *validati
 
 		messageData := pmsg.GetData()
 		if len(messageData) == 0 {
-			reportValidationResult(validationStatusRejected, "no data", time.Since(startedAt), len(messageData))
+			reportValidationResult(validationStatusRejected, "no data", time.Since(startedAt))
 			return pubsub.ValidationReject
 		}
 
@@ -40,7 +40,7 @@ func NewSSVMsgValidator(logger *zap.Logger, fork forks.Fork, validator *validati
 		const maxMsgSize = 4 + 56 + 8388668
 		const maxEncodedMsgSize = maxMsgSize + maxMsgSize/10
 		if len(messageData) > maxEncodedMsgSize {
-			reportValidationResult(validationStatusRejected, "message is too big", time.Since(startedAt), len(messageData))
+			reportValidationResult(validationStatusRejected, "message is too big", time.Since(startedAt))
 			return pubsub.ValidationReject
 		}
 
@@ -48,11 +48,11 @@ func NewSSVMsgValidator(logger *zap.Logger, fork forks.Fork, validator *validati
 		if err != nil {
 			// can't decode message
 			// logger.Debug("invalid: can't decode message", zap.Error(err))
-			reportValidationResult(validationStatusRejected, "could not decode network message", time.Since(startedAt), len(messageData))
+			reportValidationResult(validationStatusRejected, "could not decode network message", time.Since(startedAt))
 			return pubsub.ValidationReject
 		}
 		if msg == nil {
-			reportValidationResult(validationStatusRejected, "message is nil", time.Since(startedAt), len(messageData))
+			reportValidationResult(validationStatusRejected, "message is nil", time.Since(startedAt))
 			return pubsub.ValidationReject
 		}
 
@@ -78,13 +78,13 @@ func NewSSVMsgValidator(logger *zap.Logger, fork forks.Fork, validator *validati
 						logger.Debug("rejecting invalid message", zap.Error(err))
 						// TODO: consider having metrics for each type of validation error
 						// TODO: pass metrics to NewSSVMsgValidator
-						reportValidationResult(validationStatusRejected, valErr.Text(), time.Since(startedAt), len(messageData))
+						reportValidationResult(validationStatusRejected, valErr.Text(), time.Since(startedAt))
 						return pubsub.ValidationReject
 					}
 
-					reportValidationResult(validationStatusIgnored, valErr.Text(), time.Since(startedAt), len(messageData))
+					reportValidationResult(validationStatusIgnored, valErr.Text(), time.Since(startedAt))
 				} else {
-					reportValidationResult(validationStatusIgnored, err.Error(), time.Since(startedAt), len(messageData))
+					reportValidationResult(validationStatusIgnored, err.Error(), time.Since(startedAt))
 				}
 
 				logger.Debug("ignoring invalid message", zap.Error(err))
@@ -97,14 +97,14 @@ func NewSSVMsgValidator(logger *zap.Logger, fork forks.Fork, validator *validati
 			if err != nil {
 				logger.Debug("ignoring invalid message", zap.Error(err))
 
-				reportValidationResult(validationStatusIgnored, err.Error(), time.Since(startedAt), len(messageData))
+				reportValidationResult(validationStatusIgnored, err.Error(), time.Since(startedAt))
 				return pubsub.ValidationIgnore
 			}
 
 			pmsg.ValidatorData = decodedMessage
 		}
 
-		reportValidationResult(validationStatusAccepted, "", time.Since(startedAt), len(messageData))
+		reportValidationResult(validationStatusAccepted, "", time.Since(startedAt))
 
 		return pubsub.ValidationAccept
 	}

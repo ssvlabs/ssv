@@ -1,7 +1,6 @@
 package topics
 
 import (
-	"strconv"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -17,7 +16,7 @@ var (
 	metricPubsubMsgValidationResults = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_message_validation",
 		Help: "Message validation results",
-	}, []string{"status", "reason", "duration", "size"})
+	}, []string{"status", "reason", "duration"})
 	metricPubsubOutbound = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:p2p:pubsub:msg:out",
 		Help: "Count broadcasted messages",
@@ -66,6 +65,6 @@ const (
 	validationStatusRejected msgValidationStatus = "rejected"
 )
 
-func reportValidationResult(status msgValidationStatus, reason string, duration time.Duration, size int) {
-	metricPubsubMsgValidationResults.WithLabelValues(string(status), reason, duration.String(), strconv.Itoa(size)).Inc()
+func reportValidationResult(status msgValidationStatus, reason string, duration time.Duration) {
+	metricPubsubMsgValidationResults.WithLabelValues(string(status), reason, duration.String()).Inc()
 }
