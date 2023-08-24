@@ -107,7 +107,7 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 	for _, signer := range signedMsg.Signers {
 		signerState := state.GetSignerState(signer)
 		if signerState == nil {
-			state.CreateSignerState(signer)
+			signerState = state.CreateSignerState(signer)
 		}
 		if msgSlot > signerState.Slot {
 			newEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) > mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot)
