@@ -323,9 +323,9 @@ func (dvs *DiscV5Service) createLocalNode(logger *zap.Logger, discOpts *Options,
 func DecorateNode(node *enode.LocalNode, args map[string]interface{}) error {
 	// TODO(fork-support): check how the forksprotocol.GenesisForkVersion.String() affect the node record
 	// TODO(fork-support): we should not use the forksprotocol.GenesisForkVersion.String()
-	if err := records.SetForkVersionEntry(node, commons.GenesisForkVersion); err != nil {
-		return err
-	}
+	//if err := records.SetForkVersionEntry(node, commons.GenesisForkVersion); err != nil {
+	//	return err
+	//}
 	var subnets []byte
 	raw, ok := args["subnets"]
 	if !ok {
