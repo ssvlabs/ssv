@@ -61,6 +61,7 @@ var (
 	ErrUnexpectedSigner                    = Error{text: "signer is not expected", reject: true}
 	ErrTooManyMessagesPerRound             = Error{text: "too many messages per round"}
 	ErrUnexpectedMessageType               = Error{text: "unexpected message type"}
+	ErrDecidedSignersSequence              = Error{text: "decided must have more signers than previous decided"}
 	ErrInvalidHash                         = Error{text: "root doesn't match full data hash", reject: true}
 	ErrInvalidSignature                    = Error{text: "invalid signature", reject: true}
 	ErrEstimatedRoundTooFar                = Error{text: "message round is too far from estimated"}
@@ -70,7 +71,6 @@ var (
 	ErrNonDecidedWithMultipleSigners       = Error{text: "non-decided with multiple signers", reject: true}
 	ErrWrongSignersLength                  = Error{text: "decided signers size is not between quorum and committee size", reject: true}
 	ErrDuplicatedProposalWithDifferentData = Error{text: "duplicated proposal with different data", reject: true}
-	ErrDecidedSignersSequence              = Error{text: "decided must have more signers than previous decided", reject: true}
 	ErrEventMessage                        = Error{text: "event messages are not broadcast", reject: true}
 	ErrMalformedPrepareJustifications      = Error{text: "malformed prepare justifications", reject: true}
 	ErrUnexpectedPrepareJustifications     = Error{text: "prepare justifications unexpected for this message type", reject: true}
