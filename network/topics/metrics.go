@@ -12,8 +12,8 @@ var (
 		Help: "Traces of pubsub messages",
 	}, []string{"type"})
 	metricPubsubMsgValidationResults = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv:network:pubsub:msg:validation",
-		Help: "Traces of pubsub message validation results",
+		Name: "ssv_message_validation",
+		Help: "Message validation results",
 	}, []string{"status", "reason"})
 	metricPubsubOutbound = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:p2p:pubsub:msg:out",
