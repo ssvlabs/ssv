@@ -48,7 +48,7 @@ var (
 	ErrRoundTooHigh                        = Error{text: "round is too high for this role" /*, reject: true*/} // TODO: enable reject
 	ErrEarlyMessage                        = Error{text: "early message"}
 	ErrLateMessage                         = Error{text: "late message"}
-	ErrTooManyMessagesPerRound             = Error{text: "too many messages per round"}
+	ErrTooManySameTypeMessagesPerRound     = Error{text: "too many messages of same type per round"}
 	ErrUnexpectedMessageType               = Error{text: "unexpected message type"}
 	ErrDecidedSignersSequence              = Error{text: "decided must have more signers than previous decided"}
 	ErrDataTooBig                          = Error{text: "data too big", reject: true}

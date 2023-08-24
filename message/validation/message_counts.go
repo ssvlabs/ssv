@@ -53,7 +53,7 @@ func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage, limits MessageCou
 		switch m.Message.MsgType {
 		case specqbft.ProposalMsgType:
 			if c.Proposal >= limits.Proposal {
-				err := ErrTooManyMessagesPerRound
+				err := ErrTooManySameTypeMessagesPerRound
 				err.got = fmt.Sprintf("proposal, having %v", c.String())
 				return err
 			}
@@ -64,7 +64,7 @@ func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage, limits MessageCou
 			}
 		case specqbft.PrepareMsgType:
 			if c.Prepare >= limits.Prepare {
-				err := ErrTooManyMessagesPerRound
+				err := ErrTooManySameTypeMessagesPerRound
 				err.got = fmt.Sprintf("prepare, having %v", c.String())
 				return err
 			}
@@ -76,7 +76,7 @@ func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage, limits MessageCou
 		case specqbft.CommitMsgType:
 			if len(m.Signers) == 1 {
 				if c.Commit >= limits.Commit {
-					err := ErrTooManyMessagesPerRound
+					err := ErrTooManySameTypeMessagesPerRound
 					err.got = fmt.Sprintf("commit, having %v", c.String())
 					return err
 				}
@@ -88,7 +88,7 @@ func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage, limits MessageCou
 			}
 			if len(m.Signers) > 1 {
 				if c.Decided >= limits.Decided {
-					err := ErrTooManyMessagesPerRound
+					err := ErrTooManySameTypeMessagesPerRound
 					err.got = fmt.Sprintf("decided, having %v", c.String())
 					return err
 				}
@@ -106,7 +106,7 @@ func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage, limits MessageCou
 			}
 		case specqbft.RoundChangeMsgType:
 			if c.RoundChange >= limits.RoundChange {
-				err := ErrTooManyMessagesPerRound
+				err := ErrTooManySameTypeMessagesPerRound
 				err.got = fmt.Sprintf("round change, having %v", c.String())
 				return err
 			}
@@ -122,7 +122,7 @@ func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage, limits MessageCou
 		switch m.Message.Type {
 		case spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig:
 			if c.PreConsensus > limits.PreConsensus {
-				err := ErrTooManyMessagesPerRound
+				err := ErrTooManySameTypeMessagesPerRound
 				err.got = fmt.Sprintf("pre-consensus, having %v", c.String())
 				return err
 			}
@@ -133,7 +133,7 @@ func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage, limits MessageCou
 			}
 		case spectypes.PostConsensusPartialSig:
 			if c.PostConsensus > limits.PostConsensus {
-				err := ErrTooManyMessagesPerRound
+				err := ErrTooManySameTypeMessagesPerRound
 				err.got = fmt.Sprintf("post-consensus, having %v", c.String())
 				return err
 			}
