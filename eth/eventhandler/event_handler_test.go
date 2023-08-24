@@ -108,10 +108,11 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	ops, err := createOperators(4)
 	require.NoError(t, err)
 	// Generate a new validator
-	validatorData, err := createNewValidator(ops)
+	validatorData1, err := createNewValidator(ops)
 	require.NoError(t, err)
-	sharesData, err := generateSharesData(validatorData, ops)
+	sharesData1, err := generateSharesData(validatorData1, ops, 0)
 	require.NoError(t, err)
+
 	blockNum := uint64(0x1)
 
 	t.Run("test OperatorAdded event handle", func(t *testing.T) {
@@ -209,9 +210,9 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		// Call the contract method
 		_, err = boundContract.SimcontractTransactor.RegisterValidator(
 			auth,
-			validatorData.masterPubKey.Serialize(),
+			validatorData1.masterPubKey.Serialize(),
 			[]uint64{1, 2, 3, 4},
-			sharesData,
+			sharesData1,
 			big.NewInt(100_000_000),
 			simcontract.CallableCluster{
 				ValidatorCount:  1,
@@ -245,51 +246,150 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, registrystorage.Nonce(1), nonce)
 
-		t.Run("test nonce bumping works correctly", func(t *testing.T) {
-			t.Run("test nonce bumping even for a malformed event", func(t *testing.T) {
-				malformedSharesData := sharesData
-				malformedSharesData[len(malformedSharesData)-1] = 0
+		validatorData2, err := createNewValidator(ops)
+		require.NoError(t, err)
+		sharesData2, err := generateSharesData(validatorData2, ops, 2)
+		require.NoError(t, err)
 
-				// Call the contract method
-				_, err = boundContract.SimcontractTransactor.RegisterValidator(
-					auth,
-					validatorData.masterPubKey.Serialize(),
-					[]uint64{1, 2, 3, 4},
-					malformedSharesData,
-					big.NewInt(100_000_000),
-					simcontract.CallableCluster{
-						ValidatorCount:  1,
-						NetworkFeeIndex: 1,
-						Index:           2,
-						Active:          true,
-						Balance:         big.NewInt(100_000_000),
-					})
-				require.NoError(t, err)
-				sim.Commit()
+		// SharesData length is incorrect. Nonce is bumped; Validator wasn't added
+		t.Run("test nonce bumping even for incorrect sharesData length", func(t *testing.T) {
+			// changing the length
+			malformedSharesData := sharesData2[:len(sharesData2)-1]
 
-				block = <-logs
-				require.NotEmpty(t, block.Logs)
-				require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
+			// Call the contract method
+			_, err = boundContract.SimcontractTransactor.RegisterValidator(
+				auth,
+				validatorData2.masterPubKey.Serialize(),
+				[]uint64{1, 2, 3, 4},
+				malformedSharesData,
+				big.NewInt(100_000_000),
+				simcontract.CallableCluster{
+					ValidatorCount:  1,
+					NetworkFeeIndex: 1,
+					Index:           2,
+					Active:          true,
+					Balance:         big.NewInt(100_000_000),
+				})
+			require.NoError(t, err)
+			sim.Commit()
 
-				eventsCh = make(chan executionclient.BlockLogs)
-				go func() {
-					defer close(eventsCh)
-					eventsCh <- block
-				}()
+			block = <-logs
+			require.NotEmpty(t, block.Logs)
+			require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
 
-				lastProcessedBlock, err = eh.HandleBlockEventsStream(eventsCh, false)
-				require.Equal(t, blockNum+1, lastProcessedBlock)
-				require.NoError(t, err)
-				blockNum++
+			eventsCh = make(chan executionclient.BlockLogs)
+			go func() {
+				defer close(eventsCh)
+				eventsCh <- block
+			}()
 
-				// Check that validator was not registered,
-				shares = eh.nodeStorage.Shares().List(nil)
-				require.Equal(t, 1, len(shares))
-				// but nonce was bumped even the event is malformed!
-				nonce, err = eh.nodeStorage.GetNextNonce(nil, testAddr)
-				require.NoError(t, err)
-				require.Equal(t, registrystorage.Nonce(2), nonce)
-			})
+			lastProcessedBlock, err = eh.HandleBlockEventsStream(eventsCh, false)
+			require.Equal(t, blockNum+1, lastProcessedBlock)
+			require.NoError(t, err)
+			blockNum++
+
+			// Check that validator was not registered,
+			shares = eh.nodeStorage.Shares().List(nil)
+			require.Equal(t, 1, len(shares))
+			// but nonce was bumped even the event is malformed!
+			nonce, err = eh.nodeStorage.GetNextNonce(nil, testAddr)
+			require.NoError(t, err)
+			require.Equal(t, registrystorage.Nonce(2), nonce)
+		})
+
+		// Length of the shares []byte is correct; nonce is bumped; validator is added
+		t.Run("test validator 1 doesnt check validator's 4 share", func(t *testing.T) {
+			malformedSharesData := sharesData2[:]
+			// make invalid last share. Let's change just one bit, but not the total length shareData
+			malformedSharesData[len(malformedSharesData)-1] ^= 1
+
+			// Call the contract method
+			_, err = boundContract.SimcontractTransactor.RegisterValidator(
+				auth,
+				validatorData2.masterPubKey.Serialize(),
+				[]uint64{1, 2, 3, 4},
+				malformedSharesData,
+				big.NewInt(100_000_000),
+				simcontract.CallableCluster{
+					ValidatorCount:  1,
+					NetworkFeeIndex: 1,
+					Index:           2,
+					Active:          true,
+					Balance:         big.NewInt(100_000_000),
+				})
+			require.NoError(t, err)
+			sim.Commit()
+
+			block = <-logs
+			require.NotEmpty(t, block.Logs)
+			require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
+
+			eventsCh = make(chan executionclient.BlockLogs)
+			go func() {
+				defer close(eventsCh)
+				eventsCh <- block
+			}()
+
+			lastProcessedBlock, err = eh.HandleBlockEventsStream(eventsCh, false)
+			require.Equal(t, blockNum+1, lastProcessedBlock)
+			require.NoError(t, err)
+			blockNum++
+
+			// Check that validator was registered for op1,
+			shares = eh.nodeStorage.Shares().List(nil)
+			require.Equal(t, 2, len(shares))
+			// and nonce was bumped
+			nonce, err = eh.nodeStorage.GetNextNonce(nil, testAddr)
+			require.NoError(t, err)
+			require.Equal(t, registrystorage.Nonce(3), nonce)
+		})
+
+		// Correct event; check nonce is bumped correctly; validator is added
+		t.Run("test correct ValidatorAdded again and nonce is bumped", func(t *testing.T) {
+			validatorData3, err := createNewValidator(ops)
+			require.NoError(t, err)
+			sharesData3, err := generateSharesData(validatorData3, ops, 3)
+			require.NoError(t, err)
+
+			// Call the contract method
+			_, err = boundContract.SimcontractTransactor.RegisterValidator(
+				auth,
+				validatorData3.masterPubKey.Serialize(),
+				[]uint64{1, 2, 3, 4},
+				sharesData3,
+				big.NewInt(100_000_000),
+				simcontract.CallableCluster{
+					ValidatorCount:  1,
+					NetworkFeeIndex: 1,
+					Index:           2,
+					Active:          true,
+					Balance:         big.NewInt(100_000_000),
+				})
+			require.NoError(t, err)
+			sim.Commit()
+
+			block = <-logs
+			require.NotEmpty(t, block.Logs)
+			require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
+
+			eventsCh = make(chan executionclient.BlockLogs)
+			go func() {
+				defer close(eventsCh)
+				eventsCh <- block
+			}()
+
+			lastProcessedBlock, err = eh.HandleBlockEventsStream(eventsCh, false)
+			require.Equal(t, blockNum+1, lastProcessedBlock)
+			require.NoError(t, err)
+			blockNum++
+
+			// Check that validator was registered
+			shares = eh.nodeStorage.Shares().List(nil)
+			require.Equal(t, 3, len(shares))
+			// and nonce was bumped
+			nonce, err = eh.nodeStorage.GetNextNonce(nil, testAddr)
+			require.NoError(t, err)
+			require.Equal(t, registrystorage.Nonce(4), nonce)
 		})
 	})
 
@@ -298,7 +398,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	t.Run("test ValidatorRemoved event handle", func(t *testing.T) {
 		_, err = boundContract.SimcontractTransactor.RemoveValidator(
 			auth,
-			validatorData.masterPubKey.Serialize(),
+			validatorData1.masterPubKey.Serialize(),
 			[]uint64{1, 2, 3, 4},
 			simcontract.CallableCluster{
 				ValidatorCount:  1,
@@ -575,7 +675,7 @@ func TestCreatingSharesData(t *testing.T) {
 	validatorData, err := createNewValidator(ops)
 	require.NoError(t, err)
 	// TODO: maybe we can merge createNewValidator and generateSharesData
-	sharesData, err := generateSharesData(validatorData, ops)
+	sharesData, err := generateSharesData(validatorData, ops, 0)
 	require.NoError(t, err)
 
 	operatorCount := len(ops)
@@ -665,7 +765,7 @@ func createOperators(num uint64) ([]*testOperator, error) {
 	return testops, nil
 }
 
-func generateSharesData(validatorData *testValidatorData, operators []*testOperator) ([]byte, error) {
+func generateSharesData(validatorData *testValidatorData, operators []*testOperator, nonce int) ([]byte, error) {
 	var pubkeys []byte
 	var encryptedShares []byte
 
@@ -701,7 +801,7 @@ func generateSharesData(validatorData *testValidatorData, operators []*testOpera
 
 	}
 
-	tosign := fmt.Sprintf("%s:%d", testAddr.String(), 0)
+	tosign := fmt.Sprintf("%s:%d", testAddr.String(), nonce)
 	msghash := crypto.Keccak256([]byte(tosign))
 	signed := validatorData.masterKey.Sign(string(msghash))
 	sig := signed.Serialize()
