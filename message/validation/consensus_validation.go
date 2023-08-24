@@ -13,6 +13,7 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"golang.org/x/exp/slices"
 
+	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
@@ -125,8 +126,6 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 func (mv *MessageValidator) validateJustifications(
 	share *ssvtypes.SSVShare,
 	signedMsg *specqbft.SignedMessage,
-	height specqbft.Height,
-	round specqbft.Round,
 ) error {
 	pj, err := signedMsg.Message.GetPrepareJustifications()
 	if err != nil {
@@ -154,14 +153,13 @@ func (mv *MessageValidator) validateJustifications(
 		return e
 	}
 
-	// TODO: enable
-	//if signedMsg.Message.MsgType == specqbft.ProposalMsgType {
-	//	if err := instance.IsProposalJustification(share, rcj, pj, height, round, signedMsg.FullData); err != nil {
-	//		e := ErrInvalidJustifications
-	//		e.innerErr = err
-	//		return e
-	//	}
-	//}
+	if signedMsg.Message.MsgType == specqbft.ProposalMsgType {
+		if err := instance.IsProposalJustification(share, rcj, pj, signedMsg.Message.Height, signedMsg.Message.Round, signedMsg.FullData); err != nil {
+			e := ErrInvalidJustifications
+			e.innerErr = err
+			return e
+		}
+	}
 
 	// TODO: other checks
 
@@ -219,7 +217,7 @@ func (mv *MessageValidator) validateSignerBehavior(
 		}
 	}
 
-	if err := mv.validateJustifications(share, signedMsg, specqbft.Height(signerState.Slot), signerState.Round); err != nil {
+	if err := mv.validateJustifications(share, signedMsg); err != nil {
 		return err
 	}
 
