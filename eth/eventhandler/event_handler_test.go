@@ -571,10 +571,14 @@ func simTestBackend(testAddr ethcommon.Address) *simulator.SimulatedBackend {
 func TestCreatingSharesData(t *testing.T) {
 	ops, err := createOperators(4)
 	require.NoError(t, err)
+
 	validatorData, err := createNewValidator(ops)
 	require.NoError(t, err)
+	// TODO: maybe we can merge createNewValidator and generateSharesData
 	sharesData, err := generateSharesData(validatorData, ops)
-	operatorCount := 4
+	require.NoError(t, err)
+
+	operatorCount := len(ops)
 	signatureOffset := phase0.SignatureLength
 	pubKeysOffset := phase0.PublicKeyLength*operatorCount + signatureOffset
 	sharesExpectedLength := encryptedKeyLength*operatorCount + pubKeysOffset
