@@ -161,8 +161,6 @@ func (mv *MessageValidator) validateJustifications(
 		}
 	}
 
-	// TODO: other checks
-
 	return nil
 }
 
