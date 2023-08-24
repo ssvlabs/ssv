@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
 	"github.com/pkg/errors"
@@ -220,6 +221,56 @@ func (mv *MessageValidator) commonSignerValidation(signer spectypes.OperatorID, 
 
 	if !slices.ContainsFunc(share.Committee, mv.containsSignerFunc(signer)) {
 		return ErrSignerNotInCommittee
+	}
+
+	return nil
+}
+
+func (mv *MessageValidator) validateSlotState(signerState *SignerState, msgSlot phase0.Slot) error {
+	if signerState.Slot > msgSlot {
+		// Signers aren't allowed to decrease their slot.
+		// If they've sent a future message due to clock error,
+		// this should be caught by the earlyMessage check.
+		err := ErrSlotAlreadyAdvanced
+		err.want = signerState.Slot
+		err.got = msgSlot
+		return err
+	}
+
+	// Advance slot & round, if needed.
+	if signerState.Slot < msgSlot {
+		signerState.Reset(msgSlot, specqbft.FirstRound)
+	}
+
+	return nil
+}
+
+func (mv *MessageValidator) validateRoundState(signerState *SignerState, msgRound specqbft.Round) error {
+	if msgRound < signerState.Round {
+		// Signers aren't allowed to decrease their round.
+		// If they've sent a future message due to clock error,
+		// they'd have to wait for the next slot/round to be accepted.
+		err := ErrRoundAlreadyAdvanced
+		err.want = signerState.Round
+		err.got = msgRound
+		return err
+	}
+
+	// Advance slot & round, if needed.
+	if msgRound > signerState.Round {
+		signerState.Reset(signerState.Slot, msgRound)
+	}
+
+	return nil
+}
+
+func (mv *MessageValidator) validateSlotAndRoundState(signerState *SignerState, msgSlot phase0.Slot, msgRound specqbft.Round) error {
+	if err := mv.validateSlotState(signerState, msgSlot); err != nil {
+		return err
+	}
+
+	if err := mv.validateRoundState(signerState, msgRound); err != nil {
+		return err
 	}
 
 	return nil
