@@ -215,7 +215,7 @@ func (mv *MessageValidator) validateSignerBehavior(
 
 		limits := maxMessageCounts(len(share.Committee), int(share.Quorum))
 		if err := signerState.MessageCounts.Validate(msg, limits); err != nil {
-			//return err
+			return err
 		}
 	}
 

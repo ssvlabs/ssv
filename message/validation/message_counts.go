@@ -52,25 +52,47 @@ func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage, limits MessageCou
 	case *specqbft.SignedMessage:
 		switch m.Message.MsgType {
 		case specqbft.ProposalMsgType:
-			if c.Proposal >= limits.Proposal || c.Commit > 0 || c.Decided > 0 || c.PostConsensus > 0 {
+			if c.Proposal >= limits.Proposal {
+				err := ErrTooManyMessagesPerRound
+				err.got = fmt.Sprintf("proposal, having %v", c.String())
+				return err
+			}
+			if c.Commit > 0 || c.Decided > 0 || c.PostConsensus > 0 {
 				err := ErrUnexpectedMessageType
 				err.got = fmt.Sprintf("proposal, having %v", c.String())
 				return err
 			}
 		case specqbft.PrepareMsgType:
-			if c.Prepare >= limits.Prepare || c.Commit > 0 || c.Decided > 0 || c.PostConsensus > 0 {
+			if c.Prepare >= limits.Prepare {
+				err := ErrTooManyMessagesPerRound
+				err.got = fmt.Sprintf("prepare, having %v", c.String())
+				return err
+			}
+			if c.Commit > 0 || c.Decided > 0 || c.PostConsensus > 0 {
 				err := ErrUnexpectedMessageType
 				err.got = fmt.Sprintf("prepare, having %v", c.String())
 				return err
 			}
 		case specqbft.CommitMsgType:
-			if len(m.Signers) == 1 && c.Commit >= limits.Commit || c.Decided > 0 || c.PostConsensus > 0 {
-				err := ErrUnexpectedMessageType
-				err.got = fmt.Sprintf("commit, having %v", c.String())
-				return err
+			if len(m.Signers) == 1 {
+				if c.Commit >= limits.Commit {
+					err := ErrTooManyMessagesPerRound
+					err.got = fmt.Sprintf("commit, having %v", c.String())
+					return err
+				}
+				if c.Decided > 0 || c.PostConsensus > 0 {
+					err := ErrUnexpectedMessageType
+					err.got = fmt.Sprintf("commit, having %v", c.String())
+					return err
+				}
 			}
 			if len(m.Signers) > 1 {
-				if c.Decided > limits.Decided && c.PostConsensus > 0 {
+				if c.Decided >= limits.Decided {
+					err := ErrTooManyMessagesPerRound
+					err.got = fmt.Sprintf("decided, having %v", c.String())
+					return err
+				}
+				if c.PostConsensus > 0 {
 					err := ErrUnexpectedMessageType
 					err.got = fmt.Sprintf("decided, having %v", c.String())
 					return err
@@ -83,11 +105,13 @@ func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage, limits MessageCou
 				}
 			}
 		case specqbft.RoundChangeMsgType:
-			if c.RoundChange > 0 {
+			if c.RoundChange >= limits.RoundChange {
+				err := ErrTooManyMessagesPerRound
+				err.got = fmt.Sprintf("round change, having %v", c.String())
+				return err
+			}
+			if c.Decided > 0 || c.PostConsensus > 0 {
 				err := ErrUnexpectedMessageType
-				if c.RoundChange > 0 {
-					err.reject = true
-				}
 				err.got = fmt.Sprintf("round change, having %v", c.String())
 				return err
 			}
@@ -97,14 +121,19 @@ func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage, limits MessageCou
 	case *spectypes.SignedPartialSignatureMessage:
 		switch m.Message.Type {
 		case spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig:
-			if c.PreConsensus > 0 {
+			if c.PreConsensus > limits.PreConsensus {
+				err := ErrTooManyMessagesPerRound
+				err.got = fmt.Sprintf("pre-consensus, having %v", c.String())
+				return err
+			}
+			if c.PostConsensus > 0 {
 				err := ErrUnexpectedMessageType
 				err.got = fmt.Sprintf("pre-consensus, having %v", c.String())
 				return err
 			}
 		case spectypes.PostConsensusPartialSig:
-			if c.PostConsensus > 0 {
-				err := ErrUnexpectedMessageType
+			if c.PostConsensus > limits.PostConsensus {
+				err := ErrTooManyMessagesPerRound
 				err.got = fmt.Sprintf("post-consensus, having %v", c.String())
 				return err
 			}
