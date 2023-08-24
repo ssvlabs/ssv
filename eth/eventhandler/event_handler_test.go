@@ -104,8 +104,11 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	boundContract, err := simcontract.NewSimcontract(contractAddr, sim)
 	require.NoError(t, err)
 
-	// Creation of operators rsa keys
-	validatorData, ops, err := createOperators(4)
+	// Create operators rsa keys
+	ops, err := createOperators(4)
+	require.NoError(t, err)
+	// Generate a new validator
+	validatorData, err := createNewValidator(ops)
 	require.NoError(t, err)
 	sharesData, err := generateSharesData(validatorData, ops)
 	require.NoError(t, err)
@@ -566,16 +569,17 @@ func simTestBackend(testAddr ethcommon.Address) *simulator.SimulatedBackend {
 }
 
 func TestCreatingSharesData(t *testing.T) {
-	validatorData, ops, err := createOperators(4)
+	ops, err := createOperators(4)
 	require.NoError(t, err)
-	data, err := generateSharesData(validatorData, ops)
+	validatorData, err := createNewValidator(ops)
 	require.NoError(t, err)
+	sharesData, err := generateSharesData(validatorData, ops)
 	operatorCount := 4
 	signatureOffset := phase0.SignatureLength
 	pubKeysOffset := phase0.PublicKeyLength*operatorCount + signatureOffset
 	sharesExpectedLength := encryptedKeyLength*operatorCount + pubKeysOffset
 
-	require.Len(t, data, sharesExpectedLength)
+	require.Len(t, sharesData, sharesExpectedLength)
 }
 
 type testValidatorData struct {
@@ -597,44 +601,55 @@ type testShare struct {
 	pub  *bls.PublicKey
 }
 
-func createOperators(num uint64) (*testValidatorData, []*testOperator, error) {
-
-	sharesData := make([]*testShare, 4)
-
+func createNewValidator(ops []*testOperator) (*testValidatorData, error) {
+	validatorData := &testValidatorData{}
+	sharesCount := uint64(len(ops))
 	threshold.Init()
 
 	msk, pubk := blskeygen.GenBLSKeyPair()
-	secVec := msk.GetMasterSecretKey(int(num))
+	secVec := msk.GetMasterSecretKey(int(sharesCount))
 	pubks := bls.GetMasterPublicKey(secVec)
-	splitKeys, err := threshold.Create(msk.Serialize(), num-1, num)
+	splitKeys, err := threshold.Create(msk.Serialize(), sharesCount-1, sharesCount)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	// derive a `shareCount` number of shares
+
+	num := uint64(len(ops))
+	validatorData.operatorsShares = make([]*testShare, num)
+
+	// derive a `hareCount` number of shares
 	for i := uint64(1); i <= num; i++ {
 		var id bls.ID
 		err := id.SetDecString(fmt.Sprintf("%d", i))
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		var contribPub bls.PublicKey
 		err = contribPub.Set(pubks, &id)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
-		sharesData[i-1] = &testShare{
+		validatorData.operatorsShares[i-1] = &testShare{
 			opId: i,
 			sec:  splitKeys[i],
 			pub:  &contribPub,
 		}
 	}
 
+	validatorData.masterKey = msk
+	validatorData.masterPubKey = pubk
+	validatorData.masterPublicKeys = pubks
+
+	return validatorData, nil
+}
+
+func createOperators(num uint64) ([]*testOperator, error) {
 	testops := make([]*testOperator, num)
 
 	for i := uint64(1); i <= num; i++ {
 		pb, sk, err := rsaencryption.GenerateKeys()
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		testops[i-1] = &testOperator{
 			id:   i,
@@ -643,12 +658,7 @@ func createOperators(num uint64) (*testValidatorData, []*testOperator, error) {
 		}
 	}
 
-	return &testValidatorData{
-		masterKey:        msk,
-		masterPubKey:     pubk,
-		masterPublicKeys: pubks,
-		operatorsShares:  sharesData,
-	}, testops, nil
+	return testops, nil
 }
 
 func generateSharesData(validatorData *testValidatorData, operators []*testOperator) ([]byte, error) {
