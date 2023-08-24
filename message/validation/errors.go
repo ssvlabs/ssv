@@ -48,6 +48,9 @@ var (
 	ErrRoundTooHigh                        = Error{text: "round is too high for this role" /*, reject: true*/} // TODO: enable reject
 	ErrEarlyMessage                        = Error{text: "early message"}
 	ErrLateMessage                         = Error{text: "late message"}
+	ErrTooManyMessagesPerRound             = Error{text: "too many messages per round"}
+	ErrUnexpectedMessageType               = Error{text: "unexpected message type"}
+	ErrDecidedSignersSequence              = Error{text: "decided must have more signers than previous decided"}
 	ErrDataTooBig                          = Error{text: "data too big", reject: true}
 	ErrInvalidRole                         = Error{text: "invalid role", reject: true}
 	ErrNoSigners                           = Error{text: "no signers", reject: true}
@@ -59,9 +62,6 @@ var (
 	ErrSignerNotLeader                     = Error{text: "signer is not leader", reject: true}
 	ErrSignersNotSorted                    = Error{text: "signers are not sorted", reject: true}
 	ErrUnexpectedSigner                    = Error{text: "signer is not expected", reject: true}
-	ErrTooManyMessagesPerRound             = Error{text: "too many messages per round"}
-	ErrUnexpectedMessageType               = Error{text: "unexpected message type"}
-	ErrDecidedSignersSequence              = Error{text: "decided must have more signers than previous decided"}
 	ErrInvalidHash                         = Error{text: "root doesn't match full data hash", reject: true}
 	ErrInvalidSignature                    = Error{text: "invalid signature", reject: true}
 	ErrEstimatedRoundTooFar                = Error{text: "message round is too far from estimated"}
