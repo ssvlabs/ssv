@@ -68,4 +68,5 @@ var (
 	ErrDuplicatedProposalWithDifferentData = Error{text: "duplicated proposal with different data", reject: true}
 	ErrDecidedSignersSequence              = Error{text: "decided must have more signers than previous decided", reject: true}
 	ErrEventMessage                        = Error{text: "event messages are not broadcast", reject: true}
+	ErrTooManyDutiesPerEpoch               = Error{text: "too many duties per epoch", reject: true}
 )

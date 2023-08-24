@@ -38,14 +38,14 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		return err
 	}
 
-	messageSlot := phase0.Slot(signedMsg.Message.Height)
+	msgSlot := phase0.Slot(signedMsg.Message.Height)
+	msgRound := signedMsg.Message.Round
 
 	role := msg.GetID().GetRoleType()
-	if err := mv.validateSlotTime(messageSlot, role, receivedAt); err != nil {
+	if err := mv.validateSlotTime(msgSlot, role, receivedAt); err != nil {
 		return err
 	}
 
-	msgRound := signedMsg.Message.Round
 	maxRound := mv.maxRound(role)
 	if msgRound > maxRound {
 		err := ErrRoundTooHigh
@@ -55,7 +55,7 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 	}
 
 	// TODO: think about correct implementation of estimated round checks and then enable it
-	//slotStartTime := mv.netCfg.Beacon.GetSlotStartTime(messageSlot).
+	//slotStartTime := mv.netCfg.Beacon.GetSlotStartTime(msgSlot).
 	//	Add(mv.waitAfterSlotStart(role)) // TODO: do we need this?
 	//
 	//sinceSlotStart := time.Duration(0)
@@ -120,7 +120,19 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 	}
 
 	for _, signer := range signedMsg.Signers {
-		state.SignerState(signer).MessageCounts.Record(msg)
+		signerState := state.SignerState(signer)
+		if msgSlot > signerState.Slot {
+			newEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) > mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot)
+			signerState.ResetSlot(msgSlot, msgRound, newEpoch)
+		} else if msgRound > signerState.Round {
+			signerState.ResetRound(msgRound)
+		}
+
+		if mv.hasFullData(signedMsg) && signerState.ProposalData == nil {
+			signerState.ProposalData = signedMsg.FullData
+		}
+
+		signerState.MessageCounts.Record(msg)
 	}
 
 	return nil
@@ -134,25 +146,46 @@ func (mv *MessageValidator) validateSignerBehavior(state *ConsensusState, signer
 
 	signerState := state.SignerState(signer)
 
-	err := mv.validateSlotAndRoundState(signerState, phase0.Slot(signedMsg.Message.Height), signedMsg.Message.Round)
-	if err != nil {
+	msgSlot := phase0.Slot(signedMsg.Message.Height)
+	if err := mv.validateSlotState(signerState, msgSlot); err != nil {
 		return err
 	}
 
-	// TODO: if this is a round change message, we should somehow validate that it's not being sent too frequently.
+	if err := mv.validateRoundState(signerState, signedMsg.Message.Round); err != nil {
+		return err
+	}
 
-	// TODO: move to MessageCounts?
-	if mv.hasFullData(signedMsg) {
-		if signerState.ProposalData == nil {
-			signerState.ProposalData = signedMsg.FullData
-		} else if !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
-			return ErrDuplicatedProposalWithDifferentData
-		}
+	// Advance slot & round, if needed.
+	if msgSlot > signerState.Slot || signedMsg.Message.Round > signerState.Round {
+		// State needs to be reset, and it means that behavioral checks below would pass.
+		return nil
+	}
+
+	if err := mv.validateDutiesCount(signerState, msg.MsgID.GetRoleType()); err != nil {
+		return err
+	}
+
+	if mv.hasFullData(signedMsg) && !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
+		return ErrDuplicatedProposalWithDifferentData
 	}
 
 	limits := maxMessageCounts(len(share.Committee), int(share.Quorum))
 	if err := signerState.MessageCounts.Validate(msg, limits); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func (mv *MessageValidator) validateDutiesCount(state *SignerState, role spectypes.BeaconRole) error {
+	switch role {
+	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator, spectypes.BNRoleValidatorRegistration:
+		if state.EpochDuties > maxDutiesPerEpoch {
+			err := ErrTooManyDutiesPerEpoch
+			err.got = fmt.Sprintf("%v (role %v)", state.EpochDuties, role)
+			err.want = maxDutiesPerEpoch
+			return err
+		}
 	}
 
 	return nil
