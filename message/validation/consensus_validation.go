@@ -3,7 +3,6 @@ package validation
 // consensus_validation.go contains methods for validating consensus messages
 
 import (
-	"bytes"
 	"encoding/hex"
 	"fmt"
 	"time"
@@ -119,7 +118,14 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		return signErr
 	}
 
+	msgSlot := phase0.Slot(signedMsg.Message.Height)
+
 	for _, signer := range signedMsg.Signers {
+		signerState := state.SignerState(signer)
+		if msgSlot > signerState.Slot || msgRound > signerState.Round {
+			signerState.Reset(msgSlot, msgRound)
+		}
+
 		state.SignerState(signer).MessageCounts.Record(msg)
 	}
 
@@ -134,21 +140,41 @@ func (mv *MessageValidator) validateSignerBehavior(state *ConsensusState, signer
 
 	signerState := state.SignerState(signer)
 
-	err := mv.validateSlotAndRoundState(signerState, phase0.Slot(signedMsg.Message.Height), signedMsg.Message.Round)
-	if err != nil {
+	msgSlot := phase0.Slot(signedMsg.Message.Height)
+	msgRound := signedMsg.Message.Round
+
+	if msgSlot < signerState.Slot {
+		// Signers aren't allowed to decrease their slot.
+		// If they've sent a future message due to clock error,
+		// this should be caught by the earlyMessage check.
+		err := ErrSlotAlreadyAdvanced
+		err.want = signerState.Slot
+		err.got = msgSlot
 		return err
 	}
 
-	// TODO: if this is a round change message, we should somehow validate that it's not being sent too frequently.
-
-	// TODO: move to MessageCounts?
-	if mv.hasFullData(signedMsg) {
-		if signerState.ProposalData == nil {
-			signerState.ProposalData = signedMsg.FullData
-		} else if !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
-			return ErrDuplicatedProposalWithDifferentData
-		}
+	if msgRound < signerState.Round {
+		// Signers aren't allowed to decrease their round.
+		// If they've sent a future message due to clock error,
+		// they'd have to wait for the next slot/round to be accepted.
+		err := ErrRoundAlreadyAdvanced
+		err.want = signerState.Round
+		err.got = msgRound
+		return err
 	}
+
+	if msgSlot > signerState.Slot || msgRound > signerState.Round {
+		// State needs to be reset, and it means that behavioral checks below would pass.
+		return nil
+	}
+
+	//if mv.hasFullData(signedMsg) {
+	//	if signerState.ProposalData == nil {
+	//		signerState.ProposalData = signedMsg.FullData
+	//	} else if !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
+	//		return ErrDuplicatedProposalWithDifferentData
+	//	}
+	//}
 
 	limits := maxMessageCounts(len(share.Committee), int(share.Quorum))
 	if err := signerState.MessageCounts.Validate(msg, limits); err != nil {
