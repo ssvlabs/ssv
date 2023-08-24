@@ -189,6 +189,7 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 			return nil, err
 		}
 	case spectypes.DKGMsgType:
+		// TODO: handle
 	}
 
 	return msg, nil
@@ -255,14 +256,6 @@ func (mv *MessageValidator) validateRoundState(signerState *SignerState, msgRoun
 		return err
 	}
 
-	// TODO: check if it's needed and consider removal
-	//if msgRound-signerState.Round > allowedRoundsInFuture {
-	//	err := ErrRoundTooFarInTheFuture
-	//	err.want = signerState.Round
-	//	err.got = msgRound
-	//	return err
-	//}
-
 	// Advance slot & round, if needed.
 	if msgRound > signerState.Round {
 		signerState.Reset(signerState.Slot, msgRound)
@@ -272,11 +265,6 @@ func (mv *MessageValidator) validateRoundState(signerState *SignerState, msgRoun
 }
 
 func (mv *MessageValidator) validateSlotAndRoundState(signerState *SignerState, msgSlot phase0.Slot, msgRound specqbft.Round) error {
-	// TODO: make sure it's correct
-	//if signerState.Slot < msgSlot && signerState.Round >= msgRound || signerState.Round < msgRound && signerState.Slot >= msgSlot {
-	//return ErrFutureSlotRoundMismatch
-	//}
-
 	if err := mv.validateSlotState(signerState, msgSlot); err != nil {
 		return err
 	}
