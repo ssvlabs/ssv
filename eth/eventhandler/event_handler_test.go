@@ -322,7 +322,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	t.Run("test ClusterLiquidated event handle", func(t *testing.T) {
 		_, err = boundContract.SimcontractTransactor.Liquidate(
 			auth,
-			ethcommon.HexToAddress("0x71562b71999873DB5b286dF957af199Ec94617F7"),
+			testAddr,
 			[]uint64{1, 2, 3, 4},
 			simcontract.CallableCluster{
 				ValidatorCount:  1,
@@ -406,7 +406,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		blockNum++
 		// Check if the fee recepient was updated
-		recepientData, _, err := eh.nodeStorage.GetRecipientData(nil, ethcommon.HexToAddress("0x71562b71999873DB5b286dF957af199Ec94617F7"))
+		recepientData, _, err := eh.nodeStorage.GetRecipientData(nil, testAddr)
 		require.NoError(t, err)
 		require.Equal(t, ethcommon.HexToAddress("0x1").String(), recepientData.FeeRecipient.String())
 	})
@@ -591,7 +591,6 @@ type testShare struct {
 	sec *bls.SecretKey
 	pub *bls.PublicKey
 }
-
 
 func createOperators(num uint64) (*testShareData, error) {
 
