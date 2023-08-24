@@ -29,10 +29,6 @@ const (
 	UnknownSubnet = "unknown"
 
 	topicPrefix = "ssv.v2"
-
-	// GenesisForkVersion
-	// TODO(fork-support): temporary, should be removed
-	GenesisForkVersion = "genesis"
 )
 
 // SubnetTopicID returns the topic to use for the given subnet
