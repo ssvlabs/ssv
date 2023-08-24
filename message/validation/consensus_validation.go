@@ -235,6 +235,7 @@ func (mv *MessageValidator) validateDutiesCount(state *SignerState, role spectyp
 			err.want = maxDutiesPerEpoch
 			return err
 		}
+		// TODO: check other roles
 	}
 
 	return nil
