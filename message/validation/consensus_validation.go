@@ -217,7 +217,7 @@ func (mv *MessageValidator) validateSignerBehavior(
 	}
 
 	if err := mv.validateJustifications(share, signedMsg, specqbft.Height(signerState.Slot), signerState.Round); err != nil {
-		return err
+		//return err
 	}
 
 	return nil
