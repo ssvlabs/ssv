@@ -235,9 +235,9 @@ func (mv *MessageValidator) validateSlotState(signerState *SignerState, msgSlot 
 	}
 
 	// Advance slot & round, if needed.
-	if signerState.Slot < msgSlot {
-		signerState.Reset(msgSlot, specqbft.FirstRound)
-	}
+	//if signerState.Slot < msgSlot {
+	//	signerState.Reset(msgSlot, specqbft.FirstRound)
+	//}
 
 	return nil
 }
@@ -262,9 +262,9 @@ func (mv *MessageValidator) validateRoundState(signerState *SignerState, msgRoun
 	//}
 
 	// Advance slot & round, if needed.
-	if msgRound > signerState.Round {
-		signerState.Reset(signerState.Slot, msgRound)
-	}
+	//if msgRound > signerState.Round {
+	//	signerState.Reset(signerState.Slot, msgRound)
+	//}
 
 	return nil
 }
