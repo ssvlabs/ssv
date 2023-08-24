@@ -107,7 +107,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	ops, err := createOperators(4)
 	require.NoError(t, err)
 	data, err := generateSharesData(ops)
-
+	require.NoError(t, err)
 	blockNum := uint64(0x1)
 
 	t.Run("test OperatorAdded event handle", func(t *testing.T) {
@@ -198,6 +198,9 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	// Receive event, unmarshall, parse, check parse event is not nil or with an error,
 	// public key is correct, owner is correct, operator ids are correct, shares are correct
 	t.Run("test ValidatorAdded event handle", func(t *testing.T) {
+		nonce, err := eh.nodeStorage.GetNextNonce(nil, testAddr)
+		require.NoError(t, err)
+		require.Equal(t, registrystorage.Nonce(0), nonce)
 		// Call the contract method
 		_, err = boundContract.SimcontractTransactor.RegisterValidator(
 			auth,
@@ -232,6 +235,10 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		// Check that validator was registered
 		shares := eh.nodeStorage.Shares().List(nil)
 		require.Equal(t, 1, len(shares))
+		// Check the nonce was bumped
+		nonce, err = eh.nodeStorage.GetNextNonce(nil, testAddr)
+		require.NoError(t, err)
+		require.Equal(t, registrystorage.Nonce(1), nonce)
 
 		malformedShares := data
 		malformedShares[len(malformedShares)-1] = 0
@@ -267,9 +274,14 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
 		blockNum++
-		// Check that validator was not registered, but nonce was bumped even event is malformed!
+
+		// Check that validator was not registered,
 		shares = eh.nodeStorage.Shares().List(nil)
 		require.Equal(t, 1, len(shares))
+		// but nonce was bumped even the event is malformed!
+		nonce, err = eh.nodeStorage.GetNextNonce(nil, testAddr)
+		require.NoError(t, err)
+		require.Equal(t, registrystorage.Nonce(2), nonce)
 	})
 
 	// Receive event, unmarshall, parse, check parse event is not nil or with an error,
@@ -578,12 +590,6 @@ type testShare struct {
 	sec *bls.SecretKey
 	pub *bls.PublicKey
 }
-
-//func blsID(opID uint64) bls.ID { //yes, bls.ID is just a struct wrapping a byte array
-//	var id bls.ID
-//	id.SetDecString(fmt.Sprintf("%d", opID))
-//	return id
-//}
 
 func createOperators(num uint64) (*testShareData, error) {
 
