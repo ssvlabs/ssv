@@ -72,4 +72,9 @@ var (
 	ErrDuplicatedProposalWithDifferentData = Error{text: "duplicated proposal with different data", reject: true}
 	ErrDecidedSignersSequence              = Error{text: "decided must have more signers than previous decided", reject: true}
 	ErrEventMessage                        = Error{text: "event messages are not broadcast", reject: true}
+	ErrMalformedPrepareJustifications      = Error{text: "malformed prepare justifications", reject: true}
+	ErrUnexpectedPrepareJustifications     = Error{text: "prepare justifications unexpected for this message type", reject: true}
+	ErrMalformedRoundChangeJustifications  = Error{text: "malformed round change justifications", reject: true}
+	ErrUnexpectedRoundChangeJustifications = Error{text: "round change justifications unexpected for this message type", reject: true}
+	ErrInvalidJustifications               = Error{text: "invalid justifications", reject: true}
 )

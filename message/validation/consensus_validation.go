@@ -13,6 +13,7 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"golang.org/x/exp/slices"
 
+	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
@@ -86,20 +87,6 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		}
 	}
 
-	pj, err := signedMsg.Message.GetPrepareJustifications()
-	if err != nil {
-		return fmt.Errorf("malfrormed prepare justifications: %w", err)
-	}
-
-	rcj, err := signedMsg.Message.GetRoundChangeJustifications()
-	if err != nil {
-		return fmt.Errorf("malfrormed round change justifications: %w", err)
-	}
-
-	// TODO: checks for pj and rcj (reject if wrong)
-	_ = pj
-	_ = rcj
-
 	consensusID := ConsensusID{
 		PubKey: phase0.BLSPubKey(msg.GetID().GetPubKey()),
 		Role:   role,
@@ -133,7 +120,57 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 	return nil
 }
 
-func (mv *MessageValidator) validateSignerBehavior(state *ConsensusState, signer spectypes.OperatorID, share *ssvtypes.SSVShare, msg *queue.DecodedSSVMessage) error {
+func (mv *MessageValidator) validateJustifications(
+	share *ssvtypes.SSVShare,
+	signedMsg *specqbft.SignedMessage,
+	height specqbft.Height,
+	round specqbft.Round,
+) error {
+	pj, err := signedMsg.Message.GetPrepareJustifications()
+	if err != nil {
+		e := ErrMalformedPrepareJustifications
+		e.innerErr = err
+		return e
+	}
+
+	if len(pj) != 0 && signedMsg.Message.MsgType != specqbft.ProposalMsgType {
+		e := ErrUnexpectedPrepareJustifications
+		e.got = signedMsg.Message.MsgType
+		return e
+	}
+
+	rcj, err := signedMsg.Message.GetRoundChangeJustifications()
+	if err != nil {
+		e := ErrMalformedRoundChangeJustifications
+		e.innerErr = err
+		return e
+	}
+
+	if len(rcj) != 0 && signedMsg.Message.MsgType != specqbft.ProposalMsgType && signedMsg.Message.MsgType != specqbft.RoundChangeMsgType {
+		e := ErrUnexpectedRoundChangeJustifications
+		e.got = signedMsg.Message.MsgType
+		return e
+	}
+
+	if signedMsg.Message.MsgType == specqbft.ProposalMsgType {
+		if err := instance.IsProposalJustification(share, rcj, pj, height, round, signedMsg.FullData); err != nil {
+			e := ErrInvalidJustifications
+			e.innerErr = err
+			return e
+		}
+	}
+
+	// TODO: other checks
+
+	return nil
+}
+
+func (mv *MessageValidator) validateSignerBehavior(
+	state *ConsensusState,
+	signer spectypes.OperatorID,
+	share *ssvtypes.SSVShare,
+	msg *queue.DecodedSSVMessage,
+) error {
 	signedMsg, ok := msg.Body.(*specqbft.SignedMessage)
 	if !ok {
 		panic("validateSignerBehavior should be called on signed message")
@@ -164,22 +201,23 @@ func (mv *MessageValidator) validateSignerBehavior(state *ConsensusState, signer
 		return err
 	}
 
-	if msgSlot > signerState.Slot || msgSlot == signerState.Slot && msgRound > signerState.Round {
-		// State needs to be reset, and it means that behavioral checks below would pass.
-		return nil
-	}
+	if !(msgSlot > signerState.Slot || msgSlot == signerState.Slot && msgRound > signerState.Round) {
+		if mv.hasFullData(signedMsg) {
+			if signerState.ProposalData == nil {
+				signerState.ProposalData = signedMsg.FullData
+			} else if !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
+				return ErrDuplicatedProposalWithDifferentData
+			}
+		}
 
-	if mv.hasFullData(signedMsg) {
-		if signerState.ProposalData == nil {
-			signerState.ProposalData = signedMsg.FullData
-		} else if !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
-			return ErrDuplicatedProposalWithDifferentData
+		limits := maxMessageCounts(len(share.Committee), int(share.Quorum))
+		if err := signerState.MessageCounts.Validate(msg, limits); err != nil {
+			//return err
 		}
 	}
 
-	limits := maxMessageCounts(len(share.Committee), int(share.Quorum))
-	if err := signerState.MessageCounts.Validate(msg, limits); err != nil {
-		//return err
+	if err := mv.validateJustifications(share, signedMsg, specqbft.Height(signerState.Slot), signerState.Round); err != nil {
+		return err
 	}
 
 	return nil

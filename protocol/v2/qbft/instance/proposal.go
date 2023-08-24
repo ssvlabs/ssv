@@ -10,6 +10,7 @@ import (
 
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
+	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // uponProposal process proposal message
@@ -119,6 +120,29 @@ func isValidProposal(
 		return nil
 	}
 	return errors.New("proposal is not valid with current state")
+}
+
+func IsProposalJustification(
+	share *ssvtypes.SSVShare,
+	roundChangeMsgs []*specqbft.SignedMessage,
+	prepareMsgs []*specqbft.SignedMessage,
+	height specqbft.Height,
+	round specqbft.Round,
+	fullData []byte,
+) error {
+	return isProposalJustification(
+		&specqbft.State{
+			Share:  &share.Share,
+			Height: height,
+		},
+		nil,
+		roundChangeMsgs,
+		prepareMsgs,
+		height,
+		round,
+		fullData,
+		func(data []byte) error { return nil },
+	)
 }
 
 // isProposalJustification returns nil if the proposal and round change messages are valid and justify a proposal message for the provided round, value and leader
