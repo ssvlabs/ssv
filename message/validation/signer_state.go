@@ -15,24 +15,11 @@ type SignerState struct {
 	Round         specqbft.Round
 	MessageCounts MessageCounts
 	ProposalData  []byte
-	EpochDuties   int
 }
 
-func (s *SignerState) ResetSlot(slot phase0.Slot, round specqbft.Round, newEpoch bool) {
+func (s *SignerState) Reset(slot phase0.Slot, round specqbft.Round) {
 	s.Start = time.Now()
 	s.Slot = slot
-	s.Round = round
-	s.MessageCounts = MessageCounts{}
-	s.ProposalData = nil
-	if newEpoch {
-		s.EpochDuties = 1
-	} else {
-		s.EpochDuties++
-	}
-}
-
-func (s *SignerState) ResetRound(round specqbft.Round) {
-	s.Start = time.Now()
 	s.Round = round
 	s.MessageCounts = MessageCounts{}
 	s.ProposalData = nil
