@@ -14,7 +14,7 @@ var (
 	metricPubsubMsgValidationResults = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:network:pubsub:msg:validation",
 		Help: "Traces of pubsub message validation results",
-	}, []string{"type"})
+	}, []string{"status", "reason"})
 	metricPubsubOutbound = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:p2p:pubsub:msg:out",
 		Help: "Count broadcasted messages",
@@ -55,17 +55,14 @@ func init() {
 	}
 }
 
-type msgValidationResult string
+type msgValidationStatus string
 
-var (
-	validationResultNoData          msgValidationResult = "no_data"
-	validationResultTooBig          msgValidationResult = "too_big"
-	validationResultEncoding        msgValidationResult = "encoding"
-	validationResultInvalidRejected msgValidationResult = "invalid_rejected"
-	validationResultInvalidIgnored  msgValidationResult = "invalid_ignored"
-	validationResultOK              msgValidationResult = "ok"
+const (
+	validationStatusAccepted msgValidationStatus = "accepted"
+	validationStatusIgnored  msgValidationStatus = "ignored"
+	validationStatusRejected msgValidationStatus = "rejected"
 )
 
-func reportValidationResult(result msgValidationResult) {
-	metricPubsubMsgValidationResults.WithLabelValues(string(result)).Inc()
+func reportValidationResult(status msgValidationStatus, reason string) {
+	metricPubsubMsgValidationResults.WithLabelValues(string(status), reason).Inc()
 }

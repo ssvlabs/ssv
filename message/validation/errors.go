@@ -31,6 +31,10 @@ func (e Error) Reject() bool {
 	return e.reject
 }
 
+func (e Error) Text() string {
+	return e.text
+}
+
 var (
 	ErrEmptyData                           = Error{text: "empty data"}
 	ErrWrongDomain                         = Error{text: "wrong domain"}
