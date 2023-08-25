@@ -233,6 +233,9 @@ var StartNodeCmd = &cobra.Command{
 
 		messageValidator.SetNonCommitteeValidatorGetter(func(msgID spectypes.MessageID) *types.SSVShare {
 			ncv := validatorCtrl.GetNonCommitteeValidator(msgID)
+			if ncv == nil {
+				return nil
+			}
 			return ncv.Share
 		})
 
