@@ -569,10 +569,17 @@ func (c *controller) GetValidator(pubKey string) (*validator.Validator, bool) {
 }
 
 func (c *controller) GetNonCommitteeValidator(msgID spectypes.MessageID) *validator.NonCommitteeValidator {
-	if v := c.nonCommitteeValidators.Get(msgID).Value(); v != nil {
-		return v.NonCommitteeValidator
+	item := c.nonCommitteeValidators.Get(msgID)
+	if item == nil {
+		return nil
 	}
-	return nil
+
+	value := item.Value()
+	if value == nil {
+		return nil
+	}
+
+	return value.NonCommitteeValidator
 }
 
 func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) {
