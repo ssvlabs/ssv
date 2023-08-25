@@ -146,9 +146,9 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 	}
 
 	if share == nil {
-		err := ErrUnknownValidator
-		err.got = publicKey.SerializeToHexStr()
-		return nil, err
+		e := ErrUnknownValidator
+		e.got = publicKey.SerializeToHexStr()
+		return nil, e
 	}
 
 	if share.Liquidated {
