@@ -151,18 +151,6 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 		return nil, err
 	}
 
-	if nonCommittee {
-		// TODO: handle non-committee validators properly
-		decoded, err := queue.DecodeSSVMessage(ssvMessage)
-		if err != nil {
-			e := ErrMalformedMessage
-			e.innerErr = err
-			return nil, e
-		}
-
-		return decoded, nil
-	}
-
 	if share.Liquidated {
 		return nil, ErrValidatorLiquidated
 	}
@@ -185,6 +173,10 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 		e := ErrMalformedMessage
 		e.innerErr = err
 		return nil, e
+	}
+
+	if nonCommittee && (ssvMessage.MsgType != spectypes.SSVConsensusMsgType) {
+		return nil, ErrNonCommitteeOnlyDecided
 	}
 
 	switch ssvMessage.MsgType {
