@@ -207,7 +207,7 @@ func (mv *MessageValidator) validateSignerBehavior(
 			return err
 		}
 
-		if msgRound < signerState.Round {
+		if msgSlot == signerState.Slot && msgRound < signerState.Round {
 			// Signers aren't allowed to decrease their round.
 			// If they've sent a future message due to clock error,
 			// they'd have to wait for the next slot/round to be accepted.
