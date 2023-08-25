@@ -51,6 +51,8 @@ var (
 	ErrTooManySameTypeMessagesPerRound     = Error{text: "too many messages of same type per round"}
 	ErrUnexpectedMessageType               = Error{text: "unexpected message type"}
 	ErrDecidedSignersSequence              = Error{text: "decided must have more signers than previous decided"}
+	ErrNonCommitteeOnlySignedMessage       = Error{text: "non-committee message can be only signed message"}
+	ErrNonCommitteeOnlyDecided             = Error{text: "non-committee message can be only decided"}
 	ErrDataTooBig                          = Error{text: "data too big", reject: true}
 	ErrInvalidRole                         = Error{text: "invalid role", reject: true}
 	ErrNoSigners                           = Error{text: "no signers", reject: true}
@@ -78,6 +80,4 @@ var (
 	ErrUnexpectedRoundChangeJustifications = Error{text: "round change justifications unexpected for this message type", reject: true}
 	ErrInvalidJustifications               = Error{text: "invalid justifications", reject: true}
 	ErrTooManyDutiesPerEpoch               = Error{text: "too many duties per epoch", reject: true}
-	ErrNonCommitteeOnlySignedMessage       = Error{text: "non-committee message can be only signed message"}
-	ErrNonCommitteeOnlyDecided             = Error{text: "non-committee message can be only decided"}
 )
