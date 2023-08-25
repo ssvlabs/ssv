@@ -73,6 +73,7 @@ func NewSSVMsgValidator(logger *zap.Logger, fork forks.Fork, validator *validati
 				var valErr validation.Error
 				if errors.As(err, &valErr) {
 					if valErr.Silent() {
+						// TODO: consider increasing metrics for silent error but not logging
 						return pubsub.ValidationIgnore
 					}
 					if valErr.Reject() {
