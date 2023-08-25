@@ -66,15 +66,15 @@ func (cs *ConsensusState) CreateSignerState(signer spectypes.OperatorID) *Signer
 }
 
 type validatorGetterFunc = func(pk []byte) *ssvtypes.SSVShare
-type nonCommitteeEnqueueFunc = func(msg *queue.DecodedSSVMessage) bool
+type nonCommitteeValidatorGetterFunc = func(msgID spectypes.MessageID) *ssvtypes.SSVShare
 
 type MessageValidator struct {
-	logger              *zap.Logger
-	netCfg              networkconfig.NetworkConfig
-	index               sync.Map
-	shareStorage        registrystorage.Shares
-	validatorGetter     validatorGetterFunc
-	nonCommitteeEnqueue nonCommitteeEnqueueFunc
+	logger                      *zap.Logger
+	netCfg                      networkconfig.NetworkConfig
+	index                       sync.Map
+	shareStorage                registrystorage.Shares
+	validatorGetter             validatorGetterFunc
+	nonCommitteeValidatorGetter nonCommitteeValidatorGetterFunc
 }
 
 func NewMessageValidator(netCfg networkconfig.NetworkConfig, shareStorage registrystorage.Shares, opts ...Option) *MessageValidator {
@@ -103,8 +103,8 @@ func (mv *MessageValidator) SetValidatorGetter(f validatorGetterFunc) {
 	mv.validatorGetter = f
 }
 
-func (mv *MessageValidator) SetNonCommitteeEnqueueFunc(f nonCommitteeEnqueueFunc) {
-	mv.nonCommitteeEnqueue = f
+func (mv *MessageValidator) SetNonCommitteeValidatorGetter(f nonCommitteeValidatorGetterFunc) {
+	mv.nonCommitteeValidatorGetter = f
 }
 
 func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, receivedAt time.Time) (*queue.DecodedSSVMessage, error) {
@@ -136,14 +136,22 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 	}
 
 	share := mv.validatorGetter(publicKey.Serialize())
+	nonCommittee := share == nil
+	if share == nil {
+		share = mv.nonCommitteeValidatorGetter(ssvMessage.MsgID)
+	}
+
 	if share == nil {
 		share = mv.shareStorage.Get(nil, publicKey.Serialize())
-		if share == nil {
-			err := ErrUnknownValidator
-			err.got = publicKey.SerializeToHexStr()
-			return nil, err
-		}
+	}
 
+	if share == nil {
+		err := ErrUnknownValidator
+		err.got = publicKey.SerializeToHexStr()
+		return nil, err
+	}
+
+	if nonCommittee {
 		// TODO: handle non-committee validators properly
 		decoded, err := queue.DecodeSSVMessage(ssvMessage)
 		if err != nil {

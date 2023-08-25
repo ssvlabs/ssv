@@ -231,7 +231,10 @@ var StartNodeCmd = &cobra.Command{
 			return v.Share
 		})
 
-		messageValidator.SetNonCommitteeEnqueueFunc(validatorCtrl.NonCommitteeEnqueueFunc())
+		messageValidator.SetNonCommitteeValidatorGetter(func(msgID spectypes.MessageID) *types.SSVShare {
+			ncv := validatorCtrl.GetNonCommitteeValidator(msgID)
+			return ncv.Share
+		})
 
 		operatorNode = operator.New(logger, cfg.SSVOptions, slotTicker)
 

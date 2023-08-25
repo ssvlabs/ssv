@@ -99,7 +99,7 @@ type Controller interface {
 	StartValidators()
 	ActiveValidatorIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
 	GetValidator(pubKey string) (*validator.Validator, bool)
-	NonCommitteeEnqueueFunc() func(msg *queue.DecodedSSVMessage) bool
+	GetNonCommitteeValidator(msgID spectypes.MessageID) *validator.NonCommitteeValidator
 	ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty)
 	UpdateValidatorMetaDataLoop()
 	StartNetworkHandlers()
@@ -568,8 +568,8 @@ func (c *controller) GetValidator(pubKey string) (*validator.Validator, bool) {
 	return c.validatorsMap.GetValidator(pubKey)
 }
 
-func (c *controller) NonCommitteeEnqueueFunc() func(msg *queue.DecodedSSVMessage) bool {
-	return c.messageWorker.TryEnqueue
+func (c *controller) GetNonCommitteeValidator(msgID spectypes.MessageID) *validator.NonCommitteeValidator {
+	return c.nonCommitteeValidators.Get(msgID).Value().NonCommitteeValidator
 }
 
 func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) {
