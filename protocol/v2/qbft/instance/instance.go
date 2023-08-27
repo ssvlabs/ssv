@@ -3,6 +3,9 @@ package instance
 import (
 	"encoding/json"
 	"sync"
+	"time"
+
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 
 	"github.com/bloxapp/ssv/logging/fields"
 
@@ -66,7 +69,8 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Heigh
 		i.State.Height = height
 		i.metrics.StartStage()
 
-		i.config.GetTimer().TimeoutForRound(specqbft.FirstRound)
+		dutyStartTime := time.Unix(i.config.GetBeaconNetwork().EstimatedTimeAtSlot(phase0.Slot(height)), 0)
+		i.config.GetTimer().TimeoutForRound(dutyStartTime, specqbft.FirstRound)
 
 		logger = logger.With(
 			fields.Round(i.State.Round),

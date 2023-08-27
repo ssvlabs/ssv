@@ -2,7 +2,9 @@ package instance
 
 import (
 	"bytes"
+	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
@@ -33,7 +35,8 @@ func (i *Instance) uponProposal(logger *zap.Logger, signedProposal *specqbft.Sig
 
 	// A future justified proposal should bump us into future round and reset timer
 	if signedProposal.Message.Round > i.State.Round {
-		i.config.GetTimer().TimeoutForRound(signedProposal.Message.Round)
+		dutyStartTime := time.Unix(i.config.GetBeaconNetwork().EstimatedTimeAtSlot(phase0.Slot(signedProposal.Message.Height)), 0)
+		i.config.GetTimer().TimeoutForRound(dutyStartTime, signedProposal.Message.Round)
 	}
 	i.bumpToRound(newRound)
 

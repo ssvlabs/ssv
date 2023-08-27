@@ -1,9 +1,13 @@
 package instance
 
 import (
-	"github.com/bloxapp/ssv/logging/fields"
+	"time"
+
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging/fields"
 )
 
 var CutoffRound = 15 // stop processing instances after 8*2+120*6 = 14.2 min (~ 2 epochs)
@@ -22,7 +26,8 @@ func (i *Instance) UponRoundTimeout(logger *zap.Logger) error {
 	defer func() {
 		i.bumpToRound(newRound)
 		i.State.ProposalAcceptedForCurrentRound = nil
-		i.config.GetTimer().TimeoutForRound(i.State.Round)
+		dutyStartTime := time.Unix(i.config.GetBeaconNetwork().EstimatedTimeAtSlot(phase0.Slot(i.State.Height)), 0)
+		i.config.GetTimer().TimeoutForRound(dutyStartTime, i.State.Round)
 	}()
 
 	roundChange, err := CreateRoundChange(i.State, i.config, newRound, i.StartValue)

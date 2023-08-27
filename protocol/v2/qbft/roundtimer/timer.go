@@ -7,12 +7,14 @@ import (
 	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
-type RoundTimeoutFunc func(specqbft.Round) time.Duration
+type RoundTimeoutFunc func(time.Time, spectypes.BeaconRole, specqbft.Round) time.Duration
 
 var (
 	quickTimeoutThreshold = specqbft.Round(8)
+	firstRoundTimeout     = 6 * time.Second
 	quickTimeout          = 2 * time.Second
 	slowTimeout           = 2 * time.Minute
 )
@@ -20,8 +22,12 @@ var (
 // RoundTimeout returns the number of seconds until next timeout for a give round.
 // if the round is smaller than 8 -> 2s; otherwise -> 2m
 // see SIP https://github.com/bloxapp/SIPs/pull/22
-func RoundTimeout(r specqbft.Round) time.Duration {
-	if r <= quickTimeoutThreshold {
+func RoundTimeout(dutyStartTime time.Time, role spectypes.BeaconRole, round specqbft.Round) time.Duration {
+	if round == specqbft.FirstRound && (role == spectypes.BNRoleAttester || role == spectypes.BNRoleSyncCommittee) {
+		return time.Until(dutyStartTime.Add(firstRoundTimeout))
+	}
+
+	if round <= quickTimeoutThreshold {
 		return quickTimeout
 	}
 	return slowTimeout
@@ -41,6 +47,8 @@ type RoundTimer struct {
 	round int64
 
 	roundTimeout RoundTimeoutFunc
+
+	role spectypes.BeaconRole
 }
 
 // New creates a new instance of RoundTimer.
@@ -70,9 +78,9 @@ func (t *RoundTimer) Round() specqbft.Round {
 }
 
 // TimeoutForRound times out for a given round.
-func (t *RoundTimer) TimeoutForRound(round specqbft.Round) {
+func (t *RoundTimer) TimeoutForRound(dutyStartTime time.Time, round specqbft.Round) {
 	atomic.StoreInt64(&t.round, int64(round))
-	timeout := t.roundTimeout(round)
+	timeout := t.roundTimeout(dutyStartTime, t.role, round)
 	// preparing the underlying timer
 	timer := t.timer
 	if timer == nil {

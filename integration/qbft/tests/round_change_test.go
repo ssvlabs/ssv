@@ -2,12 +2,14 @@ package tests
 
 import (
 	"testing"
+	"time"
 
 	"github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/stretchr/testify/require"
+
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	protocolstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
-	"github.com/stretchr/testify/require"
 )
 
 func TestRoundChange4CommitteeScenario(t *testing.T) {
@@ -18,8 +20,8 @@ func TestRoundChange4CommitteeScenario(t *testing.T) {
 		Duties: map[spectypes.OperatorID]DutyProperties{
 			2: {Slot: DefaultSlot, ValidatorIndex: 1, Delay: NoDelay},
 			1: {Slot: DefaultSlot, ValidatorIndex: 1, Delay: NoDelay},
-			3: {Slot: DefaultSlot, ValidatorIndex: 1, Delay: roundtimer.RoundTimeout(1)},
-			4: {Slot: DefaultSlot, ValidatorIndex: 1, Delay: roundtimer.RoundTimeout(1)},
+			3: {Slot: DefaultSlot, ValidatorIndex: 1, Delay: roundtimer.RoundTimeout(time.Now(), 0, 1)},
+			4: {Slot: DefaultSlot, ValidatorIndex: 1, Delay: roundtimer.RoundTimeout(time.Now(), 0, 1)},
 		},
 		ValidationFunctions: map[spectypes.OperatorID]func(*testing.T, int, *protocolstorage.StoredInstance){
 			1: roundChangeValidator(),
