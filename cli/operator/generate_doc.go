@@ -3,14 +3,15 @@ package operator
 import (
 	"os"
 	"reflect"
+	"strings"
 
 	"github.com/aquasecurity/table"
 	"github.com/spf13/cobra"
 )
 
 type ArgumentDoc struct {
-	FieldName   string
-	YAMLName    string
+	FieldPath   []string
+	YAMLPath    []string
 	EnvName     string
 	Default     string
 	Description string
@@ -24,40 +25,39 @@ var GenerateDocCmd = &cobra.Command{
 		t := reflect.TypeOf(cfg)
 
 		var docs []ArgumentDoc
-		getAllFields(t, "", "", &docs)
+		getAllFields(t, nil, nil, &docs)
 
 		tbl := table.New(os.Stdout)
 		tbl.SetHeaders("YAML", "ENV", "Default", "Description")
 		for _, doc := range docs {
-			tbl.AddRow(doc.YAMLName, doc.EnvName, doc.Default, doc.Description)
+			yamlName := strings.Join(doc.YAMLPath, ".")
+			tbl.AddRow(yamlName, doc.EnvName, doc.Default, doc.Description)
 		}
 		tbl.Render()
 	},
 }
 
 // Recursive function to get all fields with "env" or "yaml" tags.
-func getAllFields(rt reflect.Type, prefix string, yamlPrefix string, docs *[]ArgumentDoc) {
+func getAllFields(rt reflect.Type, fieldPath, yamlPath []string, docs *[]ArgumentDoc) {
 	for i := 0; i < rt.NumField(); i++ {
 		field := rt.Field(i)
 
-		// Generate the full path of field names for nested fields.
-		fieldName := prefix + field.Name
-		yamlName := yamlPrefix + field.Tag.Get("yaml")
-		envTag := field.Tag.Get("env")
+		yamlName := field.Tag.Get("yaml")
+		envName := field.Tag.Get("env")
 
-		if yamlName != yamlPrefix || envTag != "" {
+		if yamlName != "" || envName != "" {
 			*docs = append(*docs, ArgumentDoc{
-				FieldName:   fieldName,
-				YAMLName:    yamlName,
-				EnvName:     envTag,
+				FieldPath:   append(fieldPath, field.Name),
+				YAMLPath:    append(yamlPath, yamlName),
+				EnvName:     envName,
 				Default:     field.Tag.Get("env-default"),
 				Description: field.Tag.Get("env-description"),
 			})
 		}
 
 		// Recursion for nested structs.
-		if field.Type.Kind() == reflect.Struct {
-			getAllFields(field.Type, fieldName+".", yamlName+".", docs)
+		if yamlName != "" && field.Type.Kind() == reflect.Struct {
+			getAllFields(field.Type, append(fieldPath, field.Name), append(yamlPath, yamlName), docs)
 		}
 	}
 }
