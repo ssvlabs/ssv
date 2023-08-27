@@ -17,7 +17,7 @@ func (v *Validator) OnExecuteDuty(logger *zap.Logger, msg types.EventMsg) error 
 	logger = logger.With(fields.Slot(executeDutyData.Duty.Slot), fields.Role(executeDutyData.Duty.Type))
 
 	// force the validator to be started (subscribed to validator's topic and synced)
-	if err := v.Start(logger); err != nil {
+	if _, err := v.Start(logger); err != nil {
 		return errors.Wrap(err, "could not start validator")
 	}
 	if err := v.StartDuty(logger, executeDutyData.Duty); err != nil {
