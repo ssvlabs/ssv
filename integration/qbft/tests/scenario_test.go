@@ -19,7 +19,6 @@ import (
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/operator/duties"
 	"github.com/bloxapp/ssv/operator/validator"
 	protocolforks "github.com/bloxapp/ssv/protocol/forks"
 	protocolbeacon "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
@@ -29,8 +28,8 @@ import (
 	protocolvalidator "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/sync/handlers"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/kv"
 )
 
 var (
@@ -84,7 +83,7 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 				duty := createDuty(getKeySet(s.Committee).ValidatorPK.Serialize(), dutyProp.Slot, dutyProp.ValidatorIndex, role)
 				var pk spec.BLSPubKey
 				copy(pk[:], getKeySet(s.Committee).ValidatorPK.Serialize())
-				ssvMsg, err := duties.CreateDutyExecuteMsg(duty, pk, networkconfig.TestNetwork.Domain)
+				ssvMsg, err := validator.CreateDutyExecuteMsg(duty, pk, networkconfig.TestNetwork.Domain)
 				require.NoError(t, err)
 				dec, err := queue.DecodeSSVMessage(logger, ssvMsg)
 				require.NoError(t, err)
@@ -169,10 +168,7 @@ func quorum(committee int) int {
 }
 
 func newStores(logger *zap.Logger) *qbftstorage.QBFTStores {
-	db, err := storage.GetStorageFactory(logger, basedb.Options{
-		Type: "badger-memory",
-		Path: "",
-	})
+	db, err := kv.NewInMemory(logger, basedb.Options{})
 	if err != nil {
 		panic(err)
 	}
@@ -224,7 +220,9 @@ func createValidator(t *testing.T, pCtx context.Context, id spectypes.OperatorID
 	options.DutyRunners = validator.SetupRunners(ctx, logger, options)
 	val := protocolvalidator.NewValidator(ctx, cancel, options)
 	node.UseMessageRouter(newMsgRouter(val))
-	require.NoError(t, val.Start(logger))
+	started, err := val.Start(logger)
+	require.NoError(t, err)
+	require.True(t, started)
 
 	return val
 }

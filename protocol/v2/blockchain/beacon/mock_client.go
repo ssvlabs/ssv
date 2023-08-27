@@ -18,7 +18,6 @@ import (
 	types "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
 	gomock "github.com/golang/mock/gomock"
-	zap "go.uber.org/zap"
 )
 
 // MockbeaconDuties is a mock of beaconDuties interface.
@@ -44,6 +43,21 @@ func (m *MockbeaconDuties) EXPECT() *MockbeaconDutiesMockRecorder {
 	return m.recorder
 }
 
+// AttesterDuties mocks base method.
+func (m *MockbeaconDuties) AttesterDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*v1.AttesterDuty, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AttesterDuties", ctx, epoch, validatorIndices)
+	ret0, _ := ret[0].([]*v1.AttesterDuty)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AttesterDuties indicates an expected call of AttesterDuties.
+func (mr *MockbeaconDutiesMockRecorder) AttesterDuties(ctx, epoch, validatorIndices interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AttesterDuties", reflect.TypeOf((*MockbeaconDuties)(nil).AttesterDuties), ctx, epoch, validatorIndices)
+}
+
 // Events mocks base method.
 func (m *MockbeaconDuties) Events(ctx context.Context, topics []string, handler client.EventHandlerFunc) error {
 	m.ctrl.T.Helper()
@@ -58,34 +72,34 @@ func (mr *MockbeaconDutiesMockRecorder) Events(ctx, topics, handler interface{})
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Events", reflect.TypeOf((*MockbeaconDuties)(nil).Events), ctx, topics, handler)
 }
 
-// GetDuties mocks base method.
-func (m *MockbeaconDuties) GetDuties(logger *zap.Logger, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*types.Duty, error) {
+// ProposerDuties mocks base method.
+func (m *MockbeaconDuties) ProposerDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*v1.ProposerDuty, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetDuties", logger, epoch, validatorIndices)
-	ret0, _ := ret[0].([]*types.Duty)
+	ret := m.ctrl.Call(m, "ProposerDuties", ctx, epoch, validatorIndices)
+	ret0, _ := ret[0].([]*v1.ProposerDuty)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetDuties indicates an expected call of GetDuties.
-func (mr *MockbeaconDutiesMockRecorder) GetDuties(logger, epoch, validatorIndices interface{}) *gomock.Call {
+// ProposerDuties indicates an expected call of ProposerDuties.
+func (mr *MockbeaconDutiesMockRecorder) ProposerDuties(ctx, epoch, validatorIndices interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDuties", reflect.TypeOf((*MockbeaconDuties)(nil).GetDuties), logger, epoch, validatorIndices)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProposerDuties", reflect.TypeOf((*MockbeaconDuties)(nil).ProposerDuties), ctx, epoch, validatorIndices)
 }
 
 // SyncCommitteeDuties mocks base method.
-func (m *MockbeaconDuties) SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*v1.SyncCommitteeDuty, error) {
+func (m *MockbeaconDuties) SyncCommitteeDuties(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*v1.SyncCommitteeDuty, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SyncCommitteeDuties", epoch, indices)
+	ret := m.ctrl.Call(m, "SyncCommitteeDuties", ctx, epoch, indices)
 	ret0, _ := ret[0].([]*v1.SyncCommitteeDuty)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // SyncCommitteeDuties indicates an expected call of SyncCommitteeDuties.
-func (mr *MockbeaconDutiesMockRecorder) SyncCommitteeDuties(epoch, indices interface{}) *gomock.Call {
+func (mr *MockbeaconDutiesMockRecorder) SyncCommitteeDuties(ctx, epoch, indices interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncCommitteeDuties", reflect.TypeOf((*MockbeaconDuties)(nil).SyncCommitteeDuties), epoch, indices)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncCommitteeDuties", reflect.TypeOf((*MockbeaconDuties)(nil).SyncCommitteeDuties), ctx, epoch, indices)
 }
 
 // MockbeaconSubscriber is a mock of beaconSubscriber interface.
@@ -111,32 +125,32 @@ func (m *MockbeaconSubscriber) EXPECT() *MockbeaconSubscriberMockRecorder {
 	return m.recorder
 }
 
-// SubmitSyncCommitteeSubscriptions mocks base method.
-func (m *MockbeaconSubscriber) SubmitSyncCommitteeSubscriptions(subscription []*v1.SyncCommitteeSubscription) error {
+// SubmitBeaconCommitteeSubscriptions mocks base method.
+func (m *MockbeaconSubscriber) SubmitBeaconCommitteeSubscriptions(ctx context.Context, subscription []*v1.BeaconCommitteeSubscription) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubmitSyncCommitteeSubscriptions", subscription)
+	ret := m.ctrl.Call(m, "SubmitBeaconCommitteeSubscriptions", ctx, subscription)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SubmitBeaconCommitteeSubscriptions indicates an expected call of SubmitBeaconCommitteeSubscriptions.
+func (mr *MockbeaconSubscriberMockRecorder) SubmitBeaconCommitteeSubscriptions(ctx, subscription interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitBeaconCommitteeSubscriptions", reflect.TypeOf((*MockbeaconSubscriber)(nil).SubmitBeaconCommitteeSubscriptions), ctx, subscription)
+}
+
+// SubmitSyncCommitteeSubscriptions mocks base method.
+func (m *MockbeaconSubscriber) SubmitSyncCommitteeSubscriptions(ctx context.Context, subscription []*v1.SyncCommitteeSubscription) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubmitSyncCommitteeSubscriptions", ctx, subscription)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SubmitSyncCommitteeSubscriptions indicates an expected call of SubmitSyncCommitteeSubscriptions.
-func (mr *MockbeaconSubscriberMockRecorder) SubmitSyncCommitteeSubscriptions(subscription interface{}) *gomock.Call {
+func (mr *MockbeaconSubscriberMockRecorder) SubmitSyncCommitteeSubscriptions(ctx, subscription interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitSyncCommitteeSubscriptions", reflect.TypeOf((*MockbeaconSubscriber)(nil).SubmitSyncCommitteeSubscriptions), subscription)
-}
-
-// SubscribeToCommitteeSubnet mocks base method.
-func (m *MockbeaconSubscriber) SubscribeToCommitteeSubnet(subscription []*v1.BeaconCommitteeSubscription) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubscribeToCommitteeSubnet", subscription)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SubscribeToCommitteeSubnet indicates an expected call of SubscribeToCommitteeSubnet.
-func (mr *MockbeaconSubscriberMockRecorder) SubscribeToCommitteeSubnet(subscription interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeToCommitteeSubnet", reflect.TypeOf((*MockbeaconSubscriber)(nil).SubscribeToCommitteeSubnet), subscription)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitSyncCommitteeSubscriptions", reflect.TypeOf((*MockbeaconSubscriber)(nil).SubmitSyncCommitteeSubscriptions), ctx, subscription)
 }
 
 // MockbeaconValidator is a mock of beaconValidator interface.
@@ -275,6 +289,21 @@ func (m *MockBeaconNode) EXPECT() *MockBeaconNodeMockRecorder {
 	return m.recorder
 }
 
+// AttesterDuties mocks base method.
+func (m *MockBeaconNode) AttesterDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*v1.AttesterDuty, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AttesterDuties", ctx, epoch, validatorIndices)
+	ret0, _ := ret[0].([]*v1.AttesterDuty)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AttesterDuties indicates an expected call of AttesterDuties.
+func (mr *MockBeaconNodeMockRecorder) AttesterDuties(ctx, epoch, validatorIndices interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AttesterDuties", reflect.TypeOf((*MockBeaconNode)(nil).AttesterDuties), ctx, epoch, validatorIndices)
+}
+
 // ComputeSigningRoot mocks base method.
 func (m *MockBeaconNode) ComputeSigningRoot(object interface{}, domain phase0.Domain) ([32]byte, error) {
 	m.ctrl.T.Helper()
@@ -381,21 +410,6 @@ func (mr *MockBeaconNodeMockRecorder) GetBlindedBeaconBlock(slot, graffiti, rand
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBlindedBeaconBlock", reflect.TypeOf((*MockBeaconNode)(nil).GetBlindedBeaconBlock), slot, graffiti, randao)
 }
 
-// GetDuties mocks base method.
-func (m *MockBeaconNode) GetDuties(logger *zap.Logger, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*types.Duty, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetDuties", logger, epoch, validatorIndices)
-	ret0, _ := ret[0].([]*types.Duty)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetDuties indicates an expected call of GetDuties.
-func (mr *MockBeaconNodeMockRecorder) GetDuties(logger, epoch, validatorIndices interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDuties", reflect.TypeOf((*MockBeaconNode)(nil).GetDuties), logger, epoch, validatorIndices)
-}
-
 // GetSyncCommitteeContribution mocks base method.
 func (m *MockBeaconNode) GetSyncCommitteeContribution(slot phase0.Slot, selectionProofs []phase0.BLSSignature, subnetIDs []uint64) (ssz.Marshaler, spec.DataVersion, error) {
 	m.ctrl.T.Helper()
@@ -458,6 +472,21 @@ func (mr *MockBeaconNodeMockRecorder) IsSyncCommitteeAggregator(proof interface{
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsSyncCommitteeAggregator", reflect.TypeOf((*MockBeaconNode)(nil).IsSyncCommitteeAggregator), proof)
 }
 
+// ProposerDuties mocks base method.
+func (m *MockBeaconNode) ProposerDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*v1.ProposerDuty, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ProposerDuties", ctx, epoch, validatorIndices)
+	ret0, _ := ret[0].([]*v1.ProposerDuty)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ProposerDuties indicates an expected call of ProposerDuties.
+func (mr *MockBeaconNodeMockRecorder) ProposerDuties(ctx, epoch, validatorIndices interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProposerDuties", reflect.TypeOf((*MockBeaconNode)(nil).ProposerDuties), ctx, epoch, validatorIndices)
+}
+
 // SubmitAggregateSelectionProof mocks base method.
 func (m *MockBeaconNode) SubmitAggregateSelectionProof(slot phase0.Slot, committeeIndex phase0.CommitteeIndex, committeeLength uint64, index phase0.ValidatorIndex, slotSig []byte) (ssz.Marshaler, spec.DataVersion, error) {
 	m.ctrl.T.Helper()
@@ -500,6 +529,20 @@ func (m *MockBeaconNode) SubmitBeaconBlock(block *spec.VersionedBeaconBlock, sig
 func (mr *MockBeaconNodeMockRecorder) SubmitBeaconBlock(block, sig interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitBeaconBlock", reflect.TypeOf((*MockBeaconNode)(nil).SubmitBeaconBlock), block, sig)
+}
+
+// SubmitBeaconCommitteeSubscriptions mocks base method.
+func (m *MockBeaconNode) SubmitBeaconCommitteeSubscriptions(ctx context.Context, subscription []*v1.BeaconCommitteeSubscription) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubmitBeaconCommitteeSubscriptions", ctx, subscription)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SubmitBeaconCommitteeSubscriptions indicates an expected call of SubmitBeaconCommitteeSubscriptions.
+func (mr *MockBeaconNodeMockRecorder) SubmitBeaconCommitteeSubscriptions(ctx, subscription interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitBeaconCommitteeSubscriptions", reflect.TypeOf((*MockBeaconNode)(nil).SubmitBeaconCommitteeSubscriptions), ctx, subscription)
 }
 
 // SubmitBlindedBeaconBlock mocks base method.
@@ -559,17 +602,17 @@ func (mr *MockBeaconNodeMockRecorder) SubmitSignedContributionAndProof(contribut
 }
 
 // SubmitSyncCommitteeSubscriptions mocks base method.
-func (m *MockBeaconNode) SubmitSyncCommitteeSubscriptions(subscription []*v1.SyncCommitteeSubscription) error {
+func (m *MockBeaconNode) SubmitSyncCommitteeSubscriptions(ctx context.Context, subscription []*v1.SyncCommitteeSubscription) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubmitSyncCommitteeSubscriptions", subscription)
+	ret := m.ctrl.Call(m, "SubmitSyncCommitteeSubscriptions", ctx, subscription)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SubmitSyncCommitteeSubscriptions indicates an expected call of SubmitSyncCommitteeSubscriptions.
-func (mr *MockBeaconNodeMockRecorder) SubmitSyncCommitteeSubscriptions(subscription interface{}) *gomock.Call {
+func (mr *MockBeaconNodeMockRecorder) SubmitSyncCommitteeSubscriptions(ctx, subscription interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitSyncCommitteeSubscriptions", reflect.TypeOf((*MockBeaconNode)(nil).SubmitSyncCommitteeSubscriptions), subscription)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitSyncCommitteeSubscriptions", reflect.TypeOf((*MockBeaconNode)(nil).SubmitSyncCommitteeSubscriptions), ctx, subscription)
 }
 
 // SubmitSyncMessage mocks base method.
@@ -600,33 +643,19 @@ func (mr *MockBeaconNodeMockRecorder) SubmitValidatorRegistration(pubkey, feeRec
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitValidatorRegistration", reflect.TypeOf((*MockBeaconNode)(nil).SubmitValidatorRegistration), pubkey, feeRecipient, sig)
 }
 
-// SubscribeToCommitteeSubnet mocks base method.
-func (m *MockBeaconNode) SubscribeToCommitteeSubnet(subscription []*v1.BeaconCommitteeSubscription) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubscribeToCommitteeSubnet", subscription)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// SubscribeToCommitteeSubnet indicates an expected call of SubscribeToCommitteeSubnet.
-func (mr *MockBeaconNodeMockRecorder) SubscribeToCommitteeSubnet(subscription interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeToCommitteeSubnet", reflect.TypeOf((*MockBeaconNode)(nil).SubscribeToCommitteeSubnet), subscription)
-}
-
 // SyncCommitteeDuties mocks base method.
-func (m *MockBeaconNode) SyncCommitteeDuties(epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*v1.SyncCommitteeDuty, error) {
+func (m *MockBeaconNode) SyncCommitteeDuties(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*v1.SyncCommitteeDuty, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SyncCommitteeDuties", epoch, indices)
+	ret := m.ctrl.Call(m, "SyncCommitteeDuties", ctx, epoch, indices)
 	ret0, _ := ret[0].([]*v1.SyncCommitteeDuty)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // SyncCommitteeDuties indicates an expected call of SyncCommitteeDuties.
-func (mr *MockBeaconNodeMockRecorder) SyncCommitteeDuties(epoch, indices interface{}) *gomock.Call {
+func (mr *MockBeaconNodeMockRecorder) SyncCommitteeDuties(ctx, epoch, indices interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncCommitteeDuties", reflect.TypeOf((*MockBeaconNode)(nil).SyncCommitteeDuties), epoch, indices)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncCommitteeDuties", reflect.TypeOf((*MockBeaconNode)(nil).SyncCommitteeDuties), ctx, epoch, indices)
 }
 
 // SyncCommitteeSubnetID mocks base method.

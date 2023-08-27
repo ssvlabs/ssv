@@ -33,6 +33,8 @@ type P2PNetwork interface {
 	Start(logger *zap.Logger) error
 	// UpdateSubnets will update the registered subnets according to active validators
 	UpdateSubnets(logger *zap.Logger)
+	// SubscribeAll subscribes to all subnets
+	SubscribeAll(logger *zap.Logger) error
 }
 
 // GetValidatorStats returns stats of validators, including the following:

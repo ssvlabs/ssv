@@ -9,11 +9,17 @@ import (
 
 // ForkGenesis is the genesis version 0 implementation
 type ForkGenesis struct {
+	topics []string
 }
 
 // New returns an instance of ForkV0
 func New() forks.Fork {
-	return &ForkGenesis{}
+	g := &ForkGenesis{}
+	g.topics = make([]string, g.Subnets())
+	for i := 0; i < g.Subnets(); i++ {
+		g.topics[i] = g.GetTopicFullName(g.SubnetTopicID(i))
+	}
+	return g
 }
 
 // AddOptions implementation

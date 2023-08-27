@@ -33,11 +33,11 @@ type Store interface {
 }
 
 type identityStore struct {
-	db basedb.IDb
+	db basedb.Database
 }
 
 // NewIdentityStore creates a new identity store
-func NewIdentityStore(db basedb.IDb) Store {
+func NewIdentityStore(db basedb.Database) Store {
 	es := identityStore{db}
 	return &es
 }

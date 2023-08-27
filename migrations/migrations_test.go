@@ -5,23 +5,21 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/kv"
 )
 
 func setupOptions(ctx context.Context, t *testing.T) (Options, error) {
 	// Create in-memory test DB.
-	options := basedb.Options{
-		Type:      "badger-memory",
-		Path:      "",
+	db, err := kv.NewInMemory(logging.TestLogger(t), basedb.Options{
 		Reporting: true,
 		Ctx:       ctx,
-	}
-	db, err := kv.New(logging.TestLogger(t), options)
+	})
 	if err != nil {
 		return Options{}, err
 	}
@@ -41,9 +39,9 @@ func Test_RunNotMigratingTwice(t *testing.T) {
 	migrations := Migrations{
 		{
 			Name: "not_migrating_twice",
-			Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte) error {
+			Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte, completed CompletedFunc) error {
 				count++
-				return opt.Db.Set(migrationsPrefix, key, migrationCompleted)
+				return completed(opt.Db)
 			},
 		},
 	}
@@ -112,9 +110,9 @@ func Test_NextMigrationNotExecutedOnFailure(t *testing.T) {
 func fakeMigration(name string, returnErr error) Migration {
 	return Migration{
 		Name: name,
-		Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte) error {
+		Run: func(ctx context.Context, logger *zap.Logger, opt Options, key []byte, completed CompletedFunc) error {
 			return opt.Db.Update(func(txn basedb.Txn) error {
-				err := txn.Set(migrationsPrefix, key, migrationCompleted)
+				err := completed(txn)
 				if err != nil {
 					return err
 				}

@@ -21,6 +21,10 @@ spec:
       protocol: TCP
       targetPort: 15012
       name: port-15012
+    - port: 16012
+      protocol: TCP
+      targetPort: 16012
+      name: port-16012
   selector:
     app: ssv-node-prater-2
 ---
@@ -76,6 +80,9 @@ spec:
         - containerPort: 15012
           name: port-15012
           hostPort: 15012
+        - containerPort: 16012
+          name: port-16012
+          hostPort: 16012
         env:
           - name: SHARE_CONFIG
             value: "./data1/share.yaml"
@@ -99,7 +106,11 @@ spec:
             value: "./data/db-jato-v2"
           - name: METRICS_API_PORT
             value: "15012"
+          - name: SSV_API_PORT
+            value: "16012"
           - name: ENABLE_PROFILE
+            value: "true"
+          - name: BUILDER_PROPOSALS
             value: "true"
         volumeMounts:
         - mountPath: /data

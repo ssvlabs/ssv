@@ -1,35 +1,42 @@
 global:
+  # Console log level (debug, info, warn, error, fatal, panic)
   LogLevel: info
+  
+  # Debug logs file path
   LogFilePath: ./data/debug.log
 
 db:
+  # Path to a persistent directory to store the node's database.
   Path: ./data/db
 
+ssv:
+  # The SSV network to join to
+  # Mainnet = Network: mainnet (default)
+  # Testnet = Network: jato-v2
+  Network: mainnet
+
 eth2:
-  BeaconNodeAddr: example.url
+  # HTTP URL of the Beacon node to connect to.
+  BeaconNodeAddr: http://example.url:5052
+
+  ValidatorOptions:
+    # Whether to enable MEV block production. Requires the connected Beacon node to be MEV-enabled.
+    BuilderProposals: false
 
 eth1:
-  # ETH1 node WebSocket address
-  ETH1Addr: example.url
+  # WebSocket URL of the Eth1 node to connect to.
+  ETH1Addr: ws://example.url:8546/ws
 
 p2p:
-  # replace with your ip
-#  HostAddress: example.ip
-#  TcpPort:
-#  UdpPort:
-# mdns for local network setup
-#  Discovery: mdns
+  # Optionally specify the external IP address of the node, if it cannot be determined automatically.
+  # HostAddress: 192.168.1.1
 
-ssv:
-  GenesisEpoch:
-  DutyLimit: 32
-  ValidatorOptions:
-    SignatureCollectionTimeout: 5s
+  # Optionally override the default TCP & UDP ports of the node.
+  # TcpPort: 13001
+  # UdpPort: 12001
 
+# Note: Operator private key can be generated with the `generate-operator-keys` command.
 OperatorPrivateKey:
 
-bootnode:
-  ExternalIP:
-  PrivateKey:
-
-LocalEventsPath: # path to local events. used for running the node with custom local events
+# This enables monitoring at the specified port, see https://github.com/bloxapp/ssv/tree/main/monitoring
+MetricsAPIPort: 15000

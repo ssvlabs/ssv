@@ -155,6 +155,59 @@ func TestP2pNetwork_Stream(t *testing.T) {
 	require.GreaterOrEqual(t, msgCounter, int64(2))
 }
 
+func TestWaitSubsetOfPeers(t *testing.T) {
+	logger, _ := zap.NewProduction()
+
+	tests := []struct {
+		name             string
+		minPeers         int
+		maxPeers         int
+		timeout          time.Duration
+		expectedPeersLen int
+		expectedErr      string
+	}{
+		{"Valid input", 5, 5, time.Millisecond * 30, 5, ""},
+		{"Zero minPeers", 0, 10, time.Millisecond * 30, 0, ""},
+		{"maxPeers less than minPeers", 10, 5, time.Millisecond * 30, 0, "minPeers should not be greater than maxPeers"},
+		{"Negative minPeers", -1, 10, time.Millisecond * 30, 0, "minPeers and maxPeers should not be negative"},
+		{"Negative timeout", 10, 50, time.Duration(-1), 0, "timeout should be positive"},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			vpk := spectypes.ValidatorPK{} // replace with a valid value
+			// The mock function increments the number of peers by 1 for each call, up to maxPeers
+			peersCount := 0
+			start := time.Now()
+			mockGetSubsetOfPeers := func(logger *zap.Logger, vpk spectypes.ValidatorPK, maxPeers int, filter func(peer.ID) bool) (peers []peer.ID, err error) {
+				if tt.minPeers == 0 {
+					return []peer.ID{}, nil
+				}
+
+				peersCount++
+				if peersCount > maxPeers || time.Since(start) > (tt.timeout-tt.timeout/5) {
+					peersCount = maxPeers
+				}
+				peers = make([]peer.ID, peersCount)
+				return peers, nil
+			}
+
+			peers, err := waitSubsetOfPeers(logger, mockGetSubsetOfPeers, vpk, tt.minPeers, tt.maxPeers, tt.timeout, nil)
+			if err != nil && err.Error() != tt.expectedErr {
+				t.Errorf("waitSubsetOfPeers() error = %v, wantErr %v", err, tt.expectedErr)
+				return
+			}
+
+			if len(peers) != tt.expectedPeersLen {
+				t.Errorf("waitSubsetOfPeers() len(peers) = %v, want %v", len(peers), tt.expectedPeersLen)
+			}
+		})
+	}
+}
+
 func registerHandler(logger *zap.Logger, node network.P2PNetwork, mid spectypes.MessageID, height specqbft.Height, round specqbft.Round, counter *int64, errors chan<- error) {
 	node.RegisterHandlers(logger, &protcolp2p.SyncHandler{
 		Protocol: protcolp2p.LastDecidedProtocol,

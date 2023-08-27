@@ -40,7 +40,7 @@ func (gc *goClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 		return nil, DataVersionNil, errors.New("mismatching number of selection proofs and subnet IDs")
 	}
 
-	gc.waitOneThirdOrValidBlock(slot)
+	gc.waitForOneThirdSlotDuration(slot)
 
 	scDataReqStart := time.Now()
 	blockRoot, err := gc.client.BeaconBlockRoot(gc.ctx, fmt.Sprint(slot))
@@ -90,4 +90,15 @@ func (gc *goClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 // SubmitSignedContributionAndProof broadcasts to the network
 func (gc *goClient) SubmitSignedContributionAndProof(contribution *altair.SignedContributionAndProof) error {
 	return gc.client.SubmitSyncCommitteeContributions(gc.ctx, []*altair.SignedContributionAndProof{contribution})
+}
+
+// waitForOneThirdSlotDuration waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)
+func (gc *goClient) waitForOneThirdSlotDuration(slot phase0.Slot) {
+	delay := gc.network.SlotDurationSec() / 3 /* a third of the slot duration */
+	finalTime := gc.slotStartTime(slot).Add(delay)
+	wait := time.Until(finalTime)
+	if wait <= 0 {
+		return
+	}
+	time.Sleep(wait)
 }

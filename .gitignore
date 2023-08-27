@@ -20,6 +20,7 @@ vendor/
 /config/events.local.yaml
 /config/config.exporter.yaml
 /config/config.local.yaml
+/config/config.bootnode.yaml
 /config/config.yaml
 /config/config*/
 
@@ -58,3 +59,5 @@ bin/
 /scripts/spec_align_report/ssv-spec
 .vscode/
 patches/
+
+differ
