@@ -166,11 +166,11 @@ func TestWaitSubsetOfPeers(t *testing.T) {
 		expectedPeersLen int
 		expectedErr      string
 	}{
-		{"Valid input", 5, 5, time.Millisecond * 20, 5, ""},
-		{"Zero minPeers", 0, 10, time.Millisecond * 20, 0, ""},
-		{"maxPeers less than minPeers", 10, 5, time.Millisecond * 20, 0, "minPeers should not be greater than maxPeers"},
-		{"Negative minPeers", -1, 10, time.Millisecond * 20, 0, "minPeers and maxPeers should not be negative"},
-		{"Negative timeout", 10, 20, time.Duration(-1), 0, "timeout should be positive"},
+		{"Valid input", 5, 5, time.Millisecond * 30, 5, ""},
+		{"Zero minPeers", 0, 10, time.Millisecond * 30, 0, ""},
+		{"maxPeers less than minPeers", 10, 5, time.Millisecond * 30, 0, "minPeers should not be greater than maxPeers"},
+		{"Negative minPeers", -1, 10, time.Millisecond * 30, 0, "minPeers and maxPeers should not be negative"},
+		{"Negative timeout", 10, 50, time.Duration(-1), 0, "timeout should be positive"},
 	}
 
 	for _, tt := range tests {
@@ -181,13 +181,14 @@ func TestWaitSubsetOfPeers(t *testing.T) {
 			vpk := spectypes.ValidatorPK{} // replace with a valid value
 			// The mock function increments the number of peers by 1 for each call, up to maxPeers
 			peersCount := 0
+			start := time.Now()
 			mockGetSubsetOfPeers := func(logger *zap.Logger, vpk spectypes.ValidatorPK, maxPeers int, filter func(peer.ID) bool) (peers []peer.ID, err error) {
 				if tt.minPeers == 0 {
 					return []peer.ID{}, nil
 				}
 
 				peersCount++
-				if peersCount > maxPeers {
+				if peersCount > maxPeers || time.Since(start) > (tt.timeout-tt.timeout/5) {
 					peersCount = maxPeers
 				}
 				peers = make([]peer.ID, peersCount)

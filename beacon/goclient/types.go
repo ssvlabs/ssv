@@ -11,4 +11,5 @@ var (
 	EpochsPerSyncCommitteePeriod         uint64       = 256
 	TargetAggregatorsPerCommittee        uint64       = 16
 	FarFutureEpoch                       phase0.Epoch = 1<<64 - 1
+	IntervalsPerSlot                     uint64       = 3
 )

@@ -23,8 +23,8 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/kv"
 )
 
 func TestSubmitProposal(t *testing.T) {
@@ -37,7 +37,7 @@ func TestSubmitProposal(t *testing.T) {
 	}
 
 	db, shareStorage, recipientStorage := createStorage(t)
-	defer db.Close(logger)
+	defer db.Close()
 	network := networkconfig.TestNetwork
 	populateStorage(t, logger, shareStorage, operatorData)
 
@@ -103,21 +103,16 @@ func TestSubmitProposal(t *testing.T) {
 	})
 }
 
-func createStorage(t *testing.T) (basedb.IDb, registrystorage.Shares, registrystorage.Recipients) {
+func createStorage(t *testing.T) (basedb.Database, registrystorage.Shares, registrystorage.Recipients) {
 	logger := logging.TestLogger(t)
-	options := basedb.Options{
-		Type: "badger-memory",
-		Path: "",
-	}
-
-	db, err := storage.GetStorageFactory(logger, options)
+	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
 	shareStorage, err := registrystorage.NewSharesStorage(logger, db, []byte("test"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return db, shareStorage, registrystorage.NewRecipientsStorage(db, []byte("test"))
+	return db, shareStorage, registrystorage.NewRecipientsStorage(logger, db, []byte("test"))
 }
 
 func populateStorage(t *testing.T, logger *zap.Logger, storage registrystorage.Shares, operatorData *registrystorage.OperatorData) {
@@ -139,12 +134,12 @@ func populateStorage(t *testing.T, logger *zap.Logger, storage registrystorage.S
 	}
 
 	for i := 0; i < 1000; i++ {
-		require.NoError(t, storage.Save(createShare(i, operatorData.ID)))
+		require.NoError(t, storage.Save(nil, createShare(i, operatorData.ID)))
 	}
 
 	// add none committee share
-	require.NoError(t, storage.Save(createShare(2000, spectypes.OperatorID(1))))
+	require.NoError(t, storage.Save(nil, createShare(2000, spectypes.OperatorID(1))))
 
-	all := storage.List(registrystorage.ByOperatorID(operatorData.ID), registrystorage.ByNotLiquidated())
+	all := storage.List(nil, registrystorage.ByOperatorID(operatorData.ID), registrystorage.ByNotLiquidated())
 	require.Equal(t, 1000, len(all))
 }
