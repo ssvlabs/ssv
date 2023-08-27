@@ -271,6 +271,92 @@ func TestSlashing(t *testing.T) {
 	})
 }
 
+func TestSlashing_Attestation(t *testing.T) {
+	km := testKeyManager(t)
+
+	var secretKeys [4]*bls.SecretKey
+	for i := range secretKeys {
+		secretKeys[i] = &bls.SecretKey{}
+		secretKeys[i].SetByCSPRNG()
+
+		// Equivalent to AddShare but with a custom slot for minimal slashing protection.
+		minimalSlot := phase0.Slot(64)
+		err := km.(*ethKeyManagerSigner).saveMinimalSlashingProtection(secretKeys[i].GetPublicKey().Serialize(), minimalSlot)
+		require.NoError(t, err)
+		err = km.(*ethKeyManagerSigner).saveShare(secretKeys[i])
+		require.NoError(t, err)
+	}
+
+	var baseEpoch phase0.Epoch = 10
+	createAttestationData := func(sourceEpoch, targetEpoch phase0.Epoch) *phase0.AttestationData {
+		return &phase0.AttestationData{
+			Source: &phase0.Checkpoint{
+				Epoch: baseEpoch + sourceEpoch,
+			},
+			Target: &phase0.Checkpoint{
+				Epoch: baseEpoch + targetEpoch,
+			},
+		}
+	}
+
+	signAttestation := func(sk *bls.SecretKey, signingRoot phase0.Root, attestation *phase0.AttestationData, expectSlashing bool, expectReason string) {
+		sig, root, err := km.(*ethKeyManagerSigner).SignBeaconObject(
+			attestation,
+			phase0.Domain{},
+			sk.GetPublicKey().Serialize(),
+			spectypes.DomainAttester,
+		)
+		if expectSlashing {
+			require.Error(t, err, "expected slashing: %s", expectReason)
+			require.Zero(t, sig, "expected zero signature")
+			require.Zero(t, root, "expected zero root")
+			if expectReason != "" {
+				require.ErrorContains(t, err, expectReason, "expected slashing: %s", expectReason)
+			}
+		} else {
+			require.NoError(t, err, "expected no slashing")
+			require.NotZero(t, sig, "expected non-zero signature")
+			require.NotZero(t, root, "expected non-zero root")
+		}
+	}
+
+	// Note: in the current implementation, eth2-key-manager doesn't check the signing roots and is
+	// instead blocking the repeated signing of the same attestation.
+
+	// 1. Check a valid attestation.
+	signAttestation(secretKeys[1], phase0.Root{1}, createAttestationData(3, 4), false, "HighestAttestationVote")
+
+	// 2. Same signing root -> slashing (stricter than Eth spec).
+	signAttestation(secretKeys[1], phase0.Root{1}, createAttestationData(3, 4), true, "HighestAttestationVote")
+
+	// 3. Lower than previous source epoch -> expect slashing.
+	signAttestation(secretKeys[1], phase0.Root{1}, createAttestationData(2, 5), true, "HighestAttestationVote")
+
+	// 4. Different signing root -> expect slashing.
+	signAttestation(secretKeys[1], phase0.Root{2}, createAttestationData(3, 4), true, "HighestAttestationVote")
+
+	// 5. Different signing root, lower target epoch -> expect slashing.
+	signAttestation(secretKeys[1], phase0.Root{2}, createAttestationData(3, 3), true, "HighestAttestationVote")
+
+	// 6. Different signing root, same source epoch, higher target epoch -> no slashing.
+	signAttestation(secretKeys[1], phase0.Root{3}, createAttestationData(3, 5), false, "HighestAttestationVote")
+
+	// 7. Different signing root, higher source epoch, same target epoch -> expect slashing.
+	signAttestation(secretKeys[1], phase0.Root{3}, createAttestationData(4, 5), true, "HighestAttestationVote")
+
+	// 8. Different signing root, lower source epoch, higher target epoch -> expect slashing.
+	//    This should fail due to surrounding, but since we're stricter than Eth spec,
+	//    this will fail due to the source epoch being lower than the previous.
+	signAttestation(secretKeys[1], phase0.Root{byte(4)}, createAttestationData(2, 6), true, "HighestAttestationVote")
+
+	// 9. Different public key, different signing root -> no slashing.
+	signAttestation(secretKeys[2], phase0.Root{4}, createAttestationData(3, 6), false, "HighestAttestationVote")
+
+	// 10. Different signing root, higher source epoch, lower target epoch -> expect slashing.
+	//     Same as 8, but in the opposite direction.
+	signAttestation(secretKeys[2], phase0.Root{5}, createAttestationData(4, 5), true, "HighestAttestationVote")
+}
+
 func TestSignRoot(t *testing.T) {
 	require.NoError(t, bls.Init(bls.BLS12_381))
 
