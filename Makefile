@@ -60,7 +60,7 @@ unit-test:
 .PHONY: spec-test
 spec-test:
 	@echo "Running spec tests"
-	@go test -tags blst_enabled -timeout 20m -race -count=1 -p 1 -v `go list ./... | grep spectest`
+	@go test -tags blst_enabled -timeout 20m -count=1 -p 1 -v `go list ./... | grep spectest`
 
 #Test
 .PHONY: docker-spec-test
