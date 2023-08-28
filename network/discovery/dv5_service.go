@@ -147,7 +147,7 @@ func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) e
 		// Get the peer's subnets, skipping if it has none.
 		nodeSubnets, err := records.GetSubnetsEntry(e.Node.Record())
 		if err != nil {
-			logger.Debug("could not read subnets")
+			logger.Debug("could not read subnets", zap.Error(err))
 			return
 		}
 		if bytes.Equal(zeroSubnets, nodeSubnets) {
