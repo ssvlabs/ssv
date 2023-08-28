@@ -55,7 +55,7 @@ diffLoop:
 				}
 				// otherwise, remove peer from the subnet
 				if i == 0 {
-					if len(peers) <= 1 {
+					if len(peers) == 1 {
 						si.subnets[subnet] = make([]peer.ID, 0)
 					} else {
 						// #nosec
