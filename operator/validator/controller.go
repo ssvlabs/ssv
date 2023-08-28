@@ -816,7 +816,7 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 			},
 			Storage: options.Storage.Get(role),
 			Network: options.Network,
-			Timer:   roundtimer.New(ctx, role, options.BeaconNetwork, nil),
+			Timer:   roundtimer.New(ctx, role, options.BeaconNetwork.EstimatedTimeAtSlot, nil),
 		}
 		config.ValueCheckF = valueCheckF
 

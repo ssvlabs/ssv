@@ -11,7 +11,8 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
-type RoundTimeoutFunc func(specqbft.Round) time.Duration
+type TimeAtSlotFunc func(slot phase0.Slot) int64
+type RoundTimeoutFunc func(TimeAtSlotFunc, spectypes.BeaconRole, specqbft.Height, specqbft.Round) time.Duration
 
 var (
 	quickTimeoutThreshold = specqbft.Round(8)
@@ -29,7 +30,12 @@ type Timer interface {
 // RoundTimeout returns the number of seconds until next timeout for a give round.
 // if the round is smaller than 8 -> 2s; otherwise -> 2m
 // see SIP https://github.com/bloxapp/SIPs/pull/22
-func RoundTimeout(round specqbft.Round) time.Duration {
+func RoundTimeout(timeAtSlotF TimeAtSlotFunc, role spectypes.BeaconRole, height specqbft.Height, round specqbft.Round) time.Duration {
+	if round == specqbft.FirstRound && (role == spectypes.BNRoleAttester || role == spectypes.BNRoleSyncCommittee) {
+		dutyStartTime := time.Unix(timeAtSlotF(phase0.Slot(height)), 0)
+		return time.Until(dutyStartTime.Add(firstRoundTimeout))
+	}
+
 	if round <= quickTimeoutThreshold {
 		return quickTimeout
 	}
@@ -48,25 +54,26 @@ type RoundTimer struct {
 	done func()
 	// round is the current round of the timer
 	round int64
-
+	// roundTimeout is a function that returns the timeout for a given round
 	roundTimeout RoundTimeoutFunc
-
-	role          spectypes.BeaconRole
-	beaconNetwork spectypes.BeaconNetwork
+	// role is the role of the instance
+	role spectypes.BeaconRole
+	// timeAtSlotFunc is a function that returns the time at a given slot
+	timeAtSlotFunc TimeAtSlotFunc
 }
 
 // New creates a new instance of RoundTimer.
-func New(pctx context.Context, role spectypes.BeaconRole, beaconNetwork spectypes.BeaconNetwork, done func()) *RoundTimer {
+func New(pctx context.Context, role spectypes.BeaconRole, timeAtSlotFunc TimeAtSlotFunc, done func()) *RoundTimer {
 	ctx, cancelCtx := context.WithCancel(pctx)
 	return &RoundTimer{
-		mtx:           &sync.RWMutex{},
-		ctx:           ctx,
-		cancelCtx:     cancelCtx,
-		timer:         nil,
-		done:          done,
-		roundTimeout:  RoundTimeout,
-		role:          role,
-		beaconNetwork: beaconNetwork,
+		mtx:            &sync.RWMutex{},
+		ctx:            ctx,
+		cancelCtx:      cancelCtx,
+		timer:          nil,
+		done:           done,
+		roundTimeout:   RoundTimeout,
+		role:           role,
+		timeAtSlotFunc: timeAtSlotFunc,
 	}
 }
 
@@ -87,13 +94,7 @@ func (t *RoundTimer) Round() specqbft.Round {
 func (t *RoundTimer) TimeoutForRound(height specqbft.Height, round specqbft.Round) {
 	atomic.StoreInt64(&t.round, int64(round))
 
-	var timeout time.Duration
-	if round == specqbft.FirstRound && (t.role == spectypes.BNRoleAttester || t.role == spectypes.BNRoleSyncCommittee) {
-		dutyStartTime := time.Unix(t.beaconNetwork.EstimatedTimeAtSlot(phase0.Slot(height)), 0)
-		timeout = time.Until(dutyStartTime.Add(firstRoundTimeout))
-	} else {
-		timeout = t.roundTimeout(round)
-	}
+	timeout := t.roundTimeout(t.timeAtSlotFunc, t.role, height, round)
 
 	// preparing the underlying timer
 	timer := t.timer

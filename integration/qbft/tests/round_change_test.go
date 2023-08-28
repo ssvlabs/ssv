@@ -13,14 +13,15 @@ import (
 
 func TestRoundChange4CommitteeScenario(t *testing.T) {
 	t.SkipNow() // TODO: test is flakey
+	testNetwork := spectypes.BeaconTestNetwork
 
 	roundChange := &Scenario{
 		Committee: 4,
 		Duties: map[spectypes.OperatorID]DutyProperties{
 			2: {Slot: DefaultSlot, ValidatorIndex: 1, Delay: NoDelay},
 			1: {Slot: DefaultSlot, ValidatorIndex: 1, Delay: NoDelay},
-			3: {Slot: DefaultSlot, ValidatorIndex: 1, Delay: roundtimer.RoundTimeout(1)},
-			4: {Slot: DefaultSlot, ValidatorIndex: 1, Delay: roundtimer.RoundTimeout(1)},
+			3: {Slot: DefaultSlot, ValidatorIndex: 1, Delay: roundtimer.RoundTimeout(testNetwork.EstimatedTimeAtSlot, spectypes.BNRoleAttester, qbft.Height(DefaultSlot), 1)},
+			4: {Slot: DefaultSlot, ValidatorIndex: 1, Delay: roundtimer.RoundTimeout(testNetwork.EstimatedTimeAtSlot, spectypes.BNRoleAttester, qbft.Height(DefaultSlot), 1)},
 		},
 		ValidationFunctions: map[spectypes.OperatorID]func(*testing.T, int, *protocolstorage.StoredInstance){
 			1: roundChangeValidator(),
