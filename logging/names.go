@@ -19,7 +19,6 @@ const (
 	NameCreateThreshold   = "CreateThreshold"
 	NameDiscoveryV5Logger = "DiscoveryV5Logger"
 	NameExportKeys        = "ExportKeys"
-	NameOnFork            = "OnFork"
 	NameP2PStorage        = "P2PStorage"
 	NamePubsubTrace       = "PubsubTrace"
 	NameScoreInspector    = "ScoreInspector"

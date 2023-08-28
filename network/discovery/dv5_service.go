@@ -7,16 +7,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/bloxapp/ssv/logging/fields"
-
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/network/forks"
-	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
-	"github.com/bloxapp/ssv/network/forks/genesis"
-	"github.com/bloxapp/ssv/network/peers"
-	"github.com/bloxapp/ssv/network/records"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -24,6 +14,12 @@ import (
 	"go.uber.org/zap"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
+
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/network/commons"
+	"github.com/bloxapp/ssv/network/peers"
+	"github.com/bloxapp/ssv/network/records"
 )
 
 var (
@@ -61,8 +57,6 @@ type DiscV5Service struct {
 	conn         *net.UDPConn
 
 	domainType spectypes.DomainType
-	fork       forks.Fork
-	forkv      forksprotocol.ForkVersion
 	subnets    []byte
 }
 
@@ -75,8 +69,6 @@ func newDiscV5Service(pctx context.Context, logger *zap.Logger, discOpts *Option
 		conns:        discOpts.ConnIndex,
 		subnetsIdx:   discOpts.SubnetsIdx,
 		domainType:   discOpts.DomainType,
-		forkv:        discOpts.ForkVersion,
-		fork:         forksfactory.NewFork(discOpts.ForkVersion),
 		subnets:      discOpts.DiscV5Opts.Subnets,
 	}
 
@@ -106,23 +98,6 @@ func (dvs *DiscV5Service) Close() error {
 // Self returns self node
 func (dvs *DiscV5Service) Self() *enode.LocalNode {
 	return dvs.dv5Listener.LocalNode()
-}
-
-// UpdateForkVersion updates the fork version used to filter nodes, and also the entry in ENR
-func (dvs *DiscV5Service) UpdateForkVersion(logger *zap.Logger, forkv forksprotocol.ForkVersion) error {
-	logger = logger.Named(logging.NameDiscoveryService)
-
-	if dvs.forkv == forkv {
-		return nil
-	}
-	dvs.forkv = forkv
-	dvs.fork = forksfactory.NewFork(forkv)
-	err := records.SetForkVersionEntry(dvs.dv5Listener.LocalNode(), forkv.String())
-	if err != nil {
-		return err
-	}
-	go dvs.publishENR(logger)
-	return nil
 }
 
 // Node tries to find the enode.Node of the given peer
@@ -286,7 +261,7 @@ func (dvs *DiscV5Service) RegisterSubnets(logger *zap.Logger, subnets ...int) er
 	if len(subnets) == 0 {
 		return nil
 	}
-	updated, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), dvs.fork.Subnets(), subnets, nil)
+	updated, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), commons.Subnets(), subnets, nil)
 	if err != nil {
 		return errors.Wrap(err, "could not update ENR")
 	}
@@ -305,7 +280,7 @@ func (dvs *DiscV5Service) DeregisterSubnets(logger *zap.Logger, subnets ...int) 
 	if len(subnets) == 0 {
 		return nil
 	}
-	updated, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), dvs.fork.Subnets(), nil, subnets)
+	updated, err := records.UpdateSubnets(dvs.dv5Listener.LocalNode(), commons.Subnets(), nil, subnets)
 	if err != nil {
 		return errors.Wrap(err, "could not update ENR")
 	}
@@ -353,13 +328,12 @@ func (dvs *DiscV5Service) createLocalNode(logger *zap.Logger, discOpts *Options,
 	if err != nil {
 		return nil, errors.Wrap(err, "could not add configured addresses")
 	}
-	f := forksfactory.NewFork(discOpts.ForkVersion)
-	err = f.DecorateNode(
+	err = DecorateNode(
 		localNode,
 
 		// Satisfy decorations of forks supported by this node.
-		genesis.DecorateWithDomainType(dvs.domainType),
-		genesis.DecorateWithSubnets(opts.Subnets),
+		DecorateWithDomainType(dvs.domainType),
+		DecorateWithSubnets(opts.Subnets),
 	)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not decorate local node")
@@ -368,6 +342,18 @@ func (dvs *DiscV5Service) createLocalNode(logger *zap.Logger, discOpts *Options,
 	logger.Debug("node record is ready", fields.ENRLocalNode(localNode), fields.Domain(dvs.domainType), fields.Subnets(opts.Subnets))
 
 	return localNode, nil
+}
+
+// DecorateNode will enrich the local node record with more entries, according to current fork
+func DecorateNode(node *enode.LocalNode, args map[string]interface{}) error {
+	var subnets []byte
+	raw, ok := args["subnets"]
+	if !ok {
+		subnets = make([]byte, commons.Subnets())
+	} else {
+		subnets = raw.([]byte)
+	}
+	return records.SetSubnetsEntry(node, subnets)
 }
 
 // newUDPListener creates a udp server

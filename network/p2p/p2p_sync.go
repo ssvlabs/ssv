@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/network/commons"
 
 	"github.com/multiformats/go-multistream"
 
@@ -77,7 +78,7 @@ func (n *p2pNetwork) LastDecided(logger *zap.Logger, mid spectypes.MessageID) ([
 	if !n.isReady() {
 		return nil, p2pprotocol.ErrNetworkIsNotReady
 	}
-	pid, maxPeers := n.fork.ProtocolID(p2pprotocol.LastDecidedProtocol)
+	pid, maxPeers := commons.ProtocolID(p2pprotocol.LastDecidedProtocol)
 	peers, err := waitSubsetOfPeers(logger, n.getSubsetOfPeers, mid.GetPubKey(), minPeers, maxPeers, waitTime, allPeersFilter)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get subset of peers")
@@ -99,7 +100,7 @@ func (n *p2pNetwork) GetHistory(logger *zap.Logger, mid spectypes.MessageID, fro
 	if !n.isReady() {
 		return nil, 0, p2pprotocol.ErrNetworkIsNotReady
 	}
-	protocolID, peerCount := n.fork.ProtocolID(p2pprotocol.DecidedHistoryProtocol)
+	protocolID, peerCount := commons.ProtocolID(p2pprotocol.DecidedHistoryProtocol)
 	peers := make([]peer.ID, 0)
 	for _, t := range targets {
 		p, err := peer.Decode(t)
@@ -141,7 +142,7 @@ func (n *p2pNetwork) GetHistory(logger *zap.Logger, mid spectypes.MessageID, fro
 func (n *p2pNetwork) RegisterHandlers(logger *zap.Logger, handlers ...*p2pprotocol.SyncHandler) {
 	m := make(map[libp2p_protocol.ID][]p2pprotocol.RequestHandler)
 	for _, handler := range handlers {
-		pid, _ := n.fork.ProtocolID(handler.Protocol)
+		pid, _ := commons.ProtocolID(handler.Protocol)
 		current, ok := m[pid]
 		if !ok {
 			current = make([]p2pprotocol.RequestHandler, 0)
@@ -174,7 +175,7 @@ func (n *p2pNetwork) handleStream(logger *zap.Logger, handler p2pprotocol.Reques
 		if err != nil {
 			return errors.Wrap(err, "could not handle stream")
 		}
-		smsg, err := n.fork.DecodeNetworkMsg(req)
+		smsg, err := commons.DecodeNetworkMsg(req)
 		if err != nil {
 			return errors.Wrap(err, "could not decode msg from stream")
 		}
@@ -182,7 +183,7 @@ func (n *p2pNetwork) handleStream(logger *zap.Logger, handler p2pprotocol.Reques
 		if err != nil {
 			return errors.Wrap(err, "could not handle msg from stream")
 		}
-		resultBytes, err := n.fork.EncodeNetworkMsg(result)
+		resultBytes, err := commons.EncodeNetworkMsg(result)
 		if err != nil {
 			return errors.Wrap(err, "could not encode msg")
 		}
@@ -197,7 +198,7 @@ func (n *p2pNetwork) handleStream(logger *zap.Logger, handler p2pprotocol.Reques
 func (n *p2pNetwork) getSubsetOfPeers(logger *zap.Logger, vpk spectypes.ValidatorPK, maxPeers int, filter func(peer.ID) bool) (peers []peer.ID, err error) {
 	var ps []peer.ID
 	seen := make(map[peer.ID]struct{})
-	topics := n.fork.ValidatorTopicID(vpk)
+	topics := commons.ValidatorTopicID(vpk)
 	for _, topic := range topics {
 		ps, err = n.topicsCtrl.Peers(topic)
 		if err != nil {
@@ -236,12 +237,12 @@ func (n *p2pNetwork) makeSyncRequest(logger *zap.Logger, peers []peer.ID, mid sp
 		MsgID:   mid,
 		Data:    data,
 	}
-	encoded, err := n.fork.EncodeNetworkMsg(msg)
+	encoded, err := commons.EncodeNetworkMsg(msg)
 	if err != nil {
 		return nil, err
 	}
 	logger = logger.With(zap.String("protocol", string(protocol)))
-	msgID := n.fork.MsgID()
+	msgID := commons.MsgID()
 	distinct := make(map[string]struct{})
 	for _, pid := range peers {
 		logger := logger.With(fields.PeerID(pid))
@@ -259,7 +260,7 @@ func (n *p2pNetwork) makeSyncRequest(logger *zap.Logger, peers []peer.ID, mid sp
 			continue
 		}
 		distinct[mid] = struct{}{}
-		res, err := n.fork.DecodeNetworkMsg(raw)
+		res, err := commons.DecodeNetworkMsg(raw)
 		if err != nil {
 			logger.Debug("could not decode stream response", zap.Error(err))
 			continue

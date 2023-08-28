@@ -1,12 +1,13 @@
 package topics
 
 import (
-	"github.com/bloxapp/ssv/network/forks"
 	"github.com/cornelk/hashmap"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/network/commons"
 )
 
 // SubFilter is a wrapper on top of pubsub.SubscriptionFilter,
@@ -18,14 +19,12 @@ type SubFilter interface {
 }
 
 type subFilter struct {
-	fork      forks.Fork
 	whitelist *dynamicWhitelist
 	subsLimit int
 }
 
-func newSubFilter(logger *zap.Logger, fork forks.Fork, subsLimit int) SubFilter {
+func newSubFilter(logger *zap.Logger, subsLimit int) SubFilter {
 	return &subFilter{
-		fork:      fork,
 		whitelist: newWhitelist(),
 		subsLimit: subsLimit,
 	}
@@ -33,7 +32,7 @@ func newSubFilter(logger *zap.Logger, fork forks.Fork, subsLimit int) SubFilter 
 
 // CanSubscribe returns true if the topic is of interest and we can subscribe to it
 func (sf *subFilter) CanSubscribe(topic string) bool {
-	if sf.fork.GetTopicBaseName(topic) == topic {
+	if commons.GetTopicBaseName(topic) == topic {
 		// not of the same fork
 		return false
 	}
