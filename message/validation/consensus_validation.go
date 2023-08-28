@@ -71,8 +71,8 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		return consensusDescriptor, msgSlot, err
 	}
 
-	slotStartTime := mv.netCfg.Beacon.GetSlotStartTime(msgSlot).
-		Add(mv.waitAfterSlotStart(role))
+	slotStartTime := mv.netCfg.Beacon.GetSlotStartTime(msgSlot) /*.
+	Add(mv.waitAfterSlotStart(role))*/ // TODO: not supported yet because first round is non-deterministic now
 
 	sinceSlotStart := time.Duration(0)
 	estimatedRound := specqbft.FirstRound
