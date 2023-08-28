@@ -19,7 +19,7 @@ import (
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
-func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, msg *queue.DecodedSSVMessage, nonCommittee bool, receivedAt time.Time) error {
+func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, msg *queue.DecodedSSVMessage, receivedAt time.Time) error {
 	signedMsg, ok := msg.Body.(*specqbft.SignedMessage)
 	if !ok {
 		return fmt.Errorf("expected consensus message")
@@ -39,29 +39,21 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		return err
 	}
 
-	if nonCommittee && (signedMsg.Message.MsgType != specqbft.CommitMsgType || !share.HasQuorum(len(signedMsg.Signers))) {
-		e := ErrNonCommitteeOnlyDecided
-		e.got = fmt.Sprintf("%v (%v signers)", signedMsg.Message.MsgType, len(signedMsg.Signers))
-		return e
-	}
-
 	msgSlot := phase0.Slot(signedMsg.Message.Height)
 	msgRound := signedMsg.Message.Round
 
 	role := msg.GetID().GetRoleType()
 	maxRound := mv.maxRound(role)
 
-	if !nonCommittee {
-		if err := mv.validateSlotTime(msgSlot, role, receivedAt); err != nil {
-			return err
-		}
+	if err := mv.validateSlotTime(msgSlot, role, receivedAt); err != nil {
+		return err
+	}
 
-		if msgRound > maxRound {
-			err := ErrRoundTooHigh
-			err.got = fmt.Sprintf("%v (%v role)", msgRound, role)
-			err.want = fmt.Sprintf("%v (%v role)", maxRound, role)
-			return err
-		}
+	if msgRound > maxRound {
+		err := ErrRoundTooHigh
+		err.got = fmt.Sprintf("%v (%v role)", msgRound, role)
+		err.want = fmt.Sprintf("%v (%v role)", maxRound, role)
+		return err
 	}
 
 	slotStartTime := mv.netCfg.Beacon.GetSlotStartTime(msgSlot).
@@ -115,25 +107,23 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		return signErr
 	}
 
-	if !nonCommittee {
-		for _, signer := range signedMsg.Signers {
-			signerState := state.GetSignerState(signer)
-			if signerState == nil {
-				signerState = state.CreateSignerState(signer)
-			}
-			if msgSlot > signerState.Slot {
-				newEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) > mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot)
-				signerState.ResetSlot(msgSlot, msgRound, newEpoch)
-			} else if msgSlot == signerState.Slot && msgRound > signerState.Round {
-				signerState.ResetRound(msgRound)
-			}
-
-			if mv.hasFullData(signedMsg) && signerState.ProposalData == nil {
-				signerState.ProposalData = signedMsg.FullData
-			}
-
-			signerState.MessageCounts.Record(msg)
+	for _, signer := range signedMsg.Signers {
+		signerState := state.GetSignerState(signer)
+		if signerState == nil {
+			signerState = state.CreateSignerState(signer)
 		}
+		if msgSlot > signerState.Slot {
+			newEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) > mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot)
+			signerState.ResetSlot(msgSlot, msgRound, newEpoch)
+		} else if msgSlot == signerState.Slot && msgRound > signerState.Round {
+			signerState.ResetRound(msgRound)
+		}
+
+		if mv.hasFullData(signedMsg) && signerState.ProposalData == nil {
+			signerState.ProposalData = signedMsg.FullData
+		}
+
+		signerState.MessageCounts.Record(msg)
 	}
 
 	return nil

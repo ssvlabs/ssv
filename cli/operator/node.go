@@ -3,7 +3,6 @@ package operator
 import (
 	"context"
 	"crypto/x509"
-	"encoding/hex"
 	"fmt"
 	"log"
 	"math/big"
@@ -224,14 +223,6 @@ var StartNodeCmd = &cobra.Command{
 
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
-		messageValidator.SetValidatorGetter(func(pk []byte) *types.SSVShare {
-			v, ok := validatorCtrl.GetValidator(hex.EncodeToString(pk))
-			if !ok {
-				return nil
-			}
-
-			return v.Share
-		})
 
 		operatorNode = operator.New(logger, cfg.SSVOptions, slotTicker)
 
