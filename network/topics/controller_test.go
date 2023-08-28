@@ -40,7 +40,6 @@ func TestTopicManager(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-
 	peers := newPeers(ctx, logger, t, nPeers, nil, true)
 	baseTest(t, ctx, logger, peers, pks, 1, 2)
 }

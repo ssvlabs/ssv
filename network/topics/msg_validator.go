@@ -13,7 +13,6 @@ import (
 
 	"github.com/bloxapp/ssv/message/validation"
 	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
 

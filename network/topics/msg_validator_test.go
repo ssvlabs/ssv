@@ -14,7 +14,7 @@ import (
 	"go.uber.org/zap/zaptest"
 
 	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
 

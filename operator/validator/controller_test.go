@@ -13,7 +13,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/network/forks/genesis"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/message"

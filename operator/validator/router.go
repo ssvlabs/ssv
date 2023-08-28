@@ -1,11 +1,9 @@
 package validator
 
 import (
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
 
