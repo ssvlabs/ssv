@@ -231,14 +231,6 @@ var StartNodeCmd = &cobra.Command{
 			return v.Share
 		})
 
-		messageValidator.SetNonCommitteeValidatorGetter(func(msgID spectypes.MessageID) *types.SSVShare {
-			ncv := validatorCtrl.GetNonCommitteeValidator(msgID)
-			if ncv == nil {
-				return nil
-			}
-			return ncv.Share
-		})
-
 		operatorNode = operator.New(logger, cfg.SSVOptions, slotTicker)
 
 		if cfg.MetricsAPIPort > 0 {

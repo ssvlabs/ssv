@@ -66,15 +66,13 @@ func (cs *ConsensusState) CreateSignerState(signer spectypes.OperatorID) *Signer
 }
 
 type validatorGetterFunc = func(pk []byte) *ssvtypes.SSVShare
-type nonCommitteeValidatorGetterFunc = func(msgID spectypes.MessageID) *ssvtypes.SSVShare
 
 type MessageValidator struct {
-	logger                      *zap.Logger
-	netCfg                      networkconfig.NetworkConfig
-	index                       sync.Map
-	shareStorage                registrystorage.Shares
-	validatorGetter             validatorGetterFunc
-	nonCommitteeValidatorGetter nonCommitteeValidatorGetterFunc
+	logger          *zap.Logger
+	netCfg          networkconfig.NetworkConfig
+	index           sync.Map
+	shareStorage    registrystorage.Shares
+	validatorGetter validatorGetterFunc
 }
 
 func NewMessageValidator(netCfg networkconfig.NetworkConfig, shareStorage registrystorage.Shares, opts ...Option) *MessageValidator {
@@ -101,10 +99,6 @@ func WithLogger(logger *zap.Logger) Option {
 
 func (mv *MessageValidator) SetValidatorGetter(f validatorGetterFunc) {
 	mv.validatorGetter = f
-}
-
-func (mv *MessageValidator) SetNonCommitteeValidatorGetter(f nonCommitteeValidatorGetterFunc) {
-	mv.nonCommitteeValidatorGetter = f
 }
 
 func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, receivedAt time.Time) (*queue.DecodedSSVMessage, error) {
