@@ -3,7 +3,6 @@ package operator
 import (
 	"context"
 	"crypto/x509"
-	"encoding/hex"
 	"fmt"
 	"log"
 	"math/big"
@@ -141,7 +140,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
 		cfg.P2pNetworkConfig.Network = networkConfig
 
-		messageValidator := validation.NewMessageValidator(networkConfig, nodeStorage.Shares(), validation.WithLogger(logger), validation.WithMetrics(metricsReporter))
+		messageValidator := validation.NewMessageValidator(networkConfig, operatorData.ID, nodeStorage.Shares(), validation.WithLogger(logger), validation.WithMetrics(metricsReporter))
 		cfg.P2pNetworkConfig.Metrics = metricsReporter
 		cfg.P2pNetworkConfig.MessageValidator = messageValidator
 		cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
@@ -220,14 +219,6 @@ var StartNodeCmd = &cobra.Command{
 
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
-		messageValidator.SetValidatorGetter(func(pk []byte) *types.SSVShare {
-			v, ok := validatorCtrl.GetValidator(hex.EncodeToString(pk))
-			if !ok {
-				return nil
-			}
-
-			return v.Share
-		})
 
 		operatorNode = operator.New(logger, cfg.SSVOptions, slotTicker)
 

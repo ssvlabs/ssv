@@ -49,7 +49,7 @@ func Test_Validation(t *testing.T) {
 	roleAttester := spectypes.BNRoleAttester
 
 	t.Run("happy flow", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, ns.Shares())
+		validator := NewMessageValidator(netCfg, 0, ns.Shares())
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
@@ -70,7 +70,7 @@ func Test_Validation(t *testing.T) {
 	})
 
 	t.Run("no data", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, ns.Shares())
+		validator := NewMessageValidator(netCfg, 0, ns.Shares())
 
 		message := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
@@ -92,7 +92,7 @@ func Test_Validation(t *testing.T) {
 	})
 
 	t.Run("data too big", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, ns.Shares())
+		validator := NewMessageValidator(netCfg, 0, ns.Shares())
 
 		const tooBigMsgSize = maxMessageSize * 2
 
@@ -109,7 +109,7 @@ func Test_Validation(t *testing.T) {
 	})
 
 	t.Run("data size borderline / malformed message", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, ns.Shares())
+		validator := NewMessageValidator(netCfg, 0, ns.Shares())
 
 		message := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
@@ -122,7 +122,7 @@ func Test_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid SSV message type", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, ns.Shares())
+		validator := NewMessageValidator(netCfg, 0, ns.Shares())
 
 		message := &spectypes.SSVMessage{
 			MsgType: math.MaxUint64,
@@ -135,7 +135,7 @@ func Test_Validation(t *testing.T) {
 	})
 
 	t.Run("wrong domain", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, ns.Shares())
+		validator := NewMessageValidator(netCfg, 0, ns.Shares())
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
@@ -160,7 +160,7 @@ func Test_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid role", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, ns.Shares())
+		validator := NewMessageValidator(netCfg, 0, ns.Shares())
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
@@ -189,7 +189,7 @@ func Test_Validation(t *testing.T) {
 	})
 
 	t.Run("invalid QBFT message type", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, ns.Shares())
+		validator := NewMessageValidator(netCfg, 0, ns.Shares())
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
@@ -229,7 +229,7 @@ func Test_Validation(t *testing.T) {
 	})
 
 	t.Run("zero signature", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, ns.Shares())
+		validator := NewMessageValidator(netCfg, 0, ns.Shares())
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
@@ -253,7 +253,7 @@ func Test_Validation(t *testing.T) {
 	})
 
 	t.Run("late message", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, ns.Shares())
+		validator := NewMessageValidator(netCfg, 0, ns.Shares())
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
@@ -274,7 +274,7 @@ func Test_Validation(t *testing.T) {
 	})
 
 	t.Run("early message", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, ns.Shares())
+		validator := NewMessageValidator(netCfg, 0, ns.Shares())
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
@@ -295,7 +295,7 @@ func Test_Validation(t *testing.T) {
 	})
 
 	t.Run("not leader", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, ns.Shares())
+		validator := NewMessageValidator(netCfg, 0, ns.Shares())
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)

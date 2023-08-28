@@ -69,23 +69,22 @@ func (cs *ConsensusState) CreateSignerState(signer spectypes.OperatorID) *Signer
 	return signerState
 }
 
-type validatorGetterFunc = func(pk []byte) *ssvtypes.SSVShare
-
 type MessageValidator struct {
-	logger          *zap.Logger
-	metrics         metrics
-	netCfg          networkconfig.NetworkConfig
-	index           sync.Map
-	shareStorage    registrystorage.Shares
-	validatorGetter validatorGetterFunc
+	logger        *zap.Logger
+	metrics       metrics
+	ownOperatorID spectypes.OperatorID
+	netCfg        networkconfig.NetworkConfig
+	index         sync.Map
+	shareStorage  registrystorage.Shares
 }
 
-func NewMessageValidator(netCfg networkconfig.NetworkConfig, shareStorage registrystorage.Shares, opts ...Option) *MessageValidator {
+func NewMessageValidator(netCfg networkconfig.NetworkConfig, ownOperatorID spectypes.OperatorID, shareStorage registrystorage.Shares, opts ...Option) *MessageValidator {
 	mv := &MessageValidator{
-		logger:       zap.NewNop(),
-		metrics:      nopMetrics{},
-		netCfg:       netCfg,
-		shareStorage: shareStorage,
+		logger:        zap.NewNop(),
+		metrics:       nopMetrics{},
+		ownOperatorID: ownOperatorID,
+		netCfg:        netCfg,
+		shareStorage:  shareStorage,
 	}
 
 	for _, opt := range opts {
@@ -107,10 +106,6 @@ func WithMetrics(metrics metrics) Option {
 	return func(mv *MessageValidator) {
 		mv.metrics = metrics
 	}
-}
-
-func (mv *MessageValidator) SetValidatorGetter(f validatorGetterFunc) {
-	mv.validatorGetter = f
 }
 
 type ConsensusDescriptor struct {
@@ -221,7 +216,9 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 		return nil, descriptor, e
 	}
 
-	nonCommittee := mv.validatorGetter(publicKey.Serialize()) == nil
+	inCommittee := slices.ContainsFunc(share.Committee, func(operator *spectypes.Operator) bool {
+		return operator.OperatorID == mv.ownOperatorID
+	})
 
 	if share.Liquidated {
 		return nil, descriptor, ErrValidatorLiquidated
@@ -249,7 +246,7 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 
 	descriptor.SSVMessageType = ssvMessage.MsgType
 
-	if nonCommittee && (ssvMessage.MsgType != spectypes.SSVConsensusMsgType) {
+	if !inCommittee && (ssvMessage.MsgType != spectypes.SSVConsensusMsgType) {
 		e := ErrNonCommitteeOnlySignedMessage
 		e.got = ssvMessage.MsgType
 		return nil, descriptor, e
@@ -257,7 +254,7 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 
 	switch ssvMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
-		consensusDescriptor, slot, err := mv.validateConsensusMessage(share, msg, nonCommittee, receivedAt)
+		consensusDescriptor, slot, err := mv.validateConsensusMessage(share, msg, inCommittee, receivedAt)
 		descriptor.Consensus = &consensusDescriptor
 		descriptor.Slot = slot
 		if err != nil {

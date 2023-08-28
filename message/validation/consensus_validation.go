@@ -19,7 +19,7 @@ import (
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
-func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, msg *queue.DecodedSSVMessage, nonCommittee bool, receivedAt time.Time) (ConsensusDescriptor, phase0.Slot, error) {
+func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, msg *queue.DecodedSSVMessage, inCommittee bool, receivedAt time.Time) (ConsensusDescriptor, phase0.Slot, error) {
 	var consensusDescriptor ConsensusDescriptor
 
 	signedMsg, ok := msg.Body.(*specqbft.SignedMessage)
@@ -51,7 +51,7 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		return consensusDescriptor, msgSlot, err
 	}
 
-	if nonCommittee && (signedMsg.Message.MsgType != specqbft.CommitMsgType || !share.HasQuorum(len(signedMsg.Signers))) {
+	if !inCommittee && (signedMsg.Message.MsgType != specqbft.CommitMsgType || !share.HasQuorum(len(signedMsg.Signers))) {
 		e := ErrNonCommitteeOnlyDecided
 		e.got = fmt.Sprintf("%v (%v signers)", signedMsg.Message.MsgType, len(signedMsg.Signers))
 		return consensusDescriptor, msgSlot, e
