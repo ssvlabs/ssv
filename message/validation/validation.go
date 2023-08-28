@@ -135,21 +135,14 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 		return nil, fmt.Errorf("deserialize public key: %w", err)
 	}
 
-	share := mv.validatorGetter(publicKey.Serialize())
-	nonCommittee := share == nil
-	if share == nil {
-		share = mv.nonCommitteeValidatorGetter(ssvMessage.MsgID)
-	}
-
-	if share == nil {
-		share = mv.shareStorage.Get(nil, publicKey.Serialize())
-	}
-
+	share := mv.shareStorage.Get(nil, publicKey.Serialize())
 	if share == nil {
 		e := ErrUnknownValidator
 		e.got = publicKey.SerializeToHexStr()
 		return nil, e
 	}
+
+	nonCommittee := mv.validatorGetter(publicKey.Serialize()) == nil
 
 	if share.Liquidated {
 		return nil, ErrValidatorLiquidated
