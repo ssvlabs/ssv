@@ -69,12 +69,15 @@ func (cs *ConsensusState) CreateSignerState(signer spectypes.OperatorID) *Signer
 	return signerState
 }
 
+type validatorGetterFunc = func(pk []byte) *ssvtypes.SSVShare
+
 type MessageValidator struct {
-	logger       *zap.Logger
-	metrics      metrics
-	netCfg       networkconfig.NetworkConfig
-	index        sync.Map
-	shareStorage registrystorage.Shares
+	logger          *zap.Logger
+	metrics         metrics
+	netCfg          networkconfig.NetworkConfig
+	index           sync.Map
+	shareStorage    registrystorage.Shares
+	validatorGetter validatorGetterFunc
 }
 
 func NewMessageValidator(netCfg networkconfig.NetworkConfig, shareStorage registrystorage.Shares, opts ...Option) *MessageValidator {
@@ -104,6 +107,10 @@ func WithMetrics(metrics metrics) Option {
 	return func(mv *MessageValidator) {
 		mv.metrics = metrics
 	}
+}
+
+func (mv *MessageValidator) SetValidatorGetter(f validatorGetterFunc) {
+	mv.validatorGetter = f
 }
 
 type ConsensusDescriptor struct {
@@ -214,6 +221,8 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 		return nil, descriptor, e
 	}
 
+	nonCommittee := mv.validatorGetter(publicKey.Serialize()) == nil
+
 	if share.Liquidated {
 		return nil, descriptor, ErrValidatorLiquidated
 	}
@@ -240,9 +249,15 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 
 	descriptor.SSVMessageType = ssvMessage.MsgType
 
+	if nonCommittee && (ssvMessage.MsgType != spectypes.SSVConsensusMsgType) {
+		e := ErrNonCommitteeOnlySignedMessage
+		e.got = ssvMessage.MsgType
+		return nil, descriptor, e
+	}
+
 	switch ssvMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
-		consensusDescriptor, slot, err := mv.validateConsensusMessage(share, msg, receivedAt)
+		consensusDescriptor, slot, err := mv.validateConsensusMessage(share, msg, nonCommittee, receivedAt)
 		descriptor.Consensus = &consensusDescriptor
 		descriptor.Slot = slot
 		if err != nil {
