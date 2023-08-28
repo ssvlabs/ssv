@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/message/validation"
+	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
@@ -23,7 +24,7 @@ type MsgValidatorFunc = func(ctx context.Context, p peer.ID, msg *pubsub.Message
 // and checks that the message was sent on the right topic.
 // TODO: enable post SSZ change, remove logs, break into smaller validators?
 // TODO: consider making logging and metrics optional for tests
-func NewSSVMsgValidator(logger *zap.Logger, metrics metrics, fork forks.Fork, validator *validation.MessageValidator) func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
+func NewSSVMsgValidator(logger *zap.Logger, metrics metrics, validator *validation.MessageValidator) func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
 	return func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 		start := time.Now()
 		var validationDurationLabels []string // TODO: implement
@@ -54,7 +55,7 @@ func NewSSVMsgValidator(logger *zap.Logger, metrics metrics, fork forks.Fork, va
 			return pubsub.ValidationReject
 		}
 
-		msg, err := fork.DecodeNetworkMsg(messageData)
+		msg, err := commons.DecodeNetworkMsg(messageData)
 		if err != nil {
 			// can't decode message
 			// logger.Debug("invalid: can't decode message", zap.Error(err))

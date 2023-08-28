@@ -1,16 +1,18 @@
 #
 # STEP 1: Prepare environment
 #
-FROM golang:1.20.5-bookworm AS preparer
+FROM golang:1.20.7 AS preparer
 
-ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update
-RUN apt-get install -yq --no-install-recommends \
+RUN apt-get update                                                        && \
+  DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
   curl=7.88.1-10+deb12u1 \
   git=1:2.39.2-1.1 \
-  bzip2=1.0.8-5+b1 \
+  zip=3.0-13 \
+  unzip=6.0-28 \
+  wget=1.21.3-1+b2 \
   g++=4:12.2.0-3 \
   gcc-aarch64-linux-gnu=4:12.2.0-3 \
+  bzip2=1.0.8-5+b1 \
   make=4.3-4.1 \
   && rm -rf /var/lib/apt/lists/*
 

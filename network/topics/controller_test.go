@@ -19,9 +19,8 @@ import (
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/message/validation"
+	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"
-	"github.com/bloxapp/ssv/network/forks"
-	"github.com/bloxapp/ssv/network/forks/genesis"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
@@ -40,13 +39,13 @@ func TestTopicManager(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	f := genesis.New()
 
-	peers := newPeers(ctx, logger, t, nPeers, nil, true, f)
-	baseTest(t, ctx, logger, peers, pks, f, 1, 2)
+
+	peers := newPeers(ctx, logger, t, nPeers, nil, true)
+	baseTest(t, ctx, logger, peers, pks, 1, 2)
 }
 
-func baseTest(t *testing.T, ctx context.Context, logger *zap.Logger, peers []*P, pks []string, f forks.Fork, minMsgCount, maxMsgCount int) {
+func baseTest(t *testing.T, ctx context.Context, logger *zap.Logger, peers []*P, pks []string, minMsgCount, maxMsgCount int) {
 	nValidators := len(pks)
 	// nPeers := len(peers)
 
@@ -55,7 +54,7 @@ func baseTest(t *testing.T, ctx context.Context, logger *zap.Logger, peers []*P,
 		if err != nil {
 			return "invalid"
 		}
-		return f.ValidatorTopicID(pk)[0]
+		return commons.ValidatorTopicID(pk)[0]
 	}
 
 	t.Log("subscribing to topics")
@@ -110,11 +109,11 @@ func baseTest(t *testing.T, ctx context.Context, logger *zap.Logger, peers []*P,
 				defer wg.Done()
 				for _, p := range peers {
 					// wait for messages
-					for ctxReadMessages.Err() == nil && p.getCount(f.GetTopicFullName(validatorTopic(pk))) < minMsgCount {
+					for ctxReadMessages.Err() == nil && p.getCount(commons.GetTopicFullName(validatorTopic(pk))) < minMsgCount {
 						time.Sleep(time.Millisecond * 100)
 					}
 					require.NoError(t, ctxReadMessages.Err())
-					c := p.getCount(f.GetTopicFullName(validatorTopic(pk)))
+					c := p.getCount(commons.GetTopicFullName(validatorTopic(pk)))
 					require.GreaterOrEqual(t, c, minMsgCount)
 					// require.LessOrEqual(t, c, maxMsgCount)
 				}
@@ -182,10 +181,10 @@ func (p *P) saveMsg(t string, msg *pubsub.Message) {
 }
 
 // TODO: use p2p/testing
-func newPeers(ctx context.Context, logger *zap.Logger, t *testing.T, n int, msgValidator *validation.MessageValidator, msgID bool, fork forks.Fork) []*P {
+func newPeers(ctx context.Context, logger *zap.Logger, t *testing.T, n int, msgValidator *validation.MessageValidator, msgID bool) []*P {
 	peers := make([]*P, n)
 	for i := 0; i < n; i++ {
-		peers[i] = newPeer(ctx, logger, t, msgValidator, msgID, fork)
+		peers[i] = newPeer(ctx, logger, t, msgValidator, msgID)
 	}
 	t.Logf("%d peers were created", n)
 	th := uint64(n/2) + uint64(n/4)
@@ -204,7 +203,7 @@ func newPeers(ctx context.Context, logger *zap.Logger, t *testing.T, n int, msgV
 	return peers
 }
 
-func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator *validation.MessageValidator, msgID bool, fork forks.Fork) *P {
+func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator *validation.MessageValidator, msgID bool) *P {
 	h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
 	require.NoError(t, err)
 	ds, err := discovery.NewLocalDiscovery(ctx, logger, h)
@@ -213,7 +212,7 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 	var p *P
 	var midHandler MsgIDHandler
 	if msgID {
-		midHandler = NewMsgIDHandler(ctx, fork, 2*time.Minute)
+		midHandler = NewMsgIDHandler(ctx, 2*time.Minute)
 		go midHandler.Start()
 	}
 	cfg := &PububConfig{
@@ -234,10 +233,10 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 	//
 	if msgValidator != nil {
 		cfg.MsgValidatorFactory = func(s string) MsgValidatorFunc {
-			return NewSSVMsgValidator(logger, nopMetrics{}, fork, msgValidator)
+			return NewSSVMsgValidator(logger, nopMetrics{}, msgValidator)
 		}
 	}
-	ps, tm, err := NewPubsub(ctx, logger, cfg, fork)
+	ps, tm, err := NewPubsub(ctx, logger, cfg)
 	require.NoError(t, err)
 
 	p = &P{

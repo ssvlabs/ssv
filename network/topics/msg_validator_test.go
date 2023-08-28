@@ -13,16 +13,15 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
-	"github.com/bloxapp/ssv/network/forks/genesis"
-	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/network/commons"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
 
 func TestMsgValidator(t *testing.T) {
 	pks := createSharePublicKeys(4)
-	f := genesis.ForkGenesis{}
 	// TODO: use a validator, adjust the message for it
-	mv := NewSSVMsgValidator(zaptest.NewLogger(t), nopMetrics{}, &f, nil)
+	mv := NewSSVMsgValidator(zaptest.NewLogger(t), nopMetrics{}, nil)
 	require.NotNil(t, mv)
 
 	t.Run("valid consensus msg", func(t *testing.T) {
@@ -33,8 +32,8 @@ func TestMsgValidator(t *testing.T) {
 		require.NoError(t, err)
 		pk, err := hex.DecodeString(pkHex)
 		require.NoError(t, err)
-		topics := f.ValidatorTopicID(pk)
-		pmsg := newPBMsg(raw, f.GetTopicFullName(topics[0]), []byte("16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r"))
+		topics := commons.ValidatorTopicID(pk)
+		pmsg := newPBMsg(raw, commons.GetTopicFullName(topics[0]), []byte("16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r"))
 		res := mv(context.Background(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
 		require.Equal(t, res, pubsub.ValidationAccept)
 	})
@@ -48,7 +47,7 @@ func TestMsgValidator(t *testing.T) {
 	//	require.NoError(t, err)
 	//	pk, err := hex.DecodeString("a297599ccf617c3b6118bbd248494d7072bb8c6c1cc342ea442a289415987d306bad34415f89469221450a2501a832ec")
 	//	require.NoError(t, err)
-	//	topics := f.ValidatorTopicID(pk)
+	//	topics := commons.ValidatorTopicID(pk)
 	//	pmsg := newPBMsg(raw, topics[0], []byte("16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r"))
 	//	res := mv(context.Background(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
 	//	require.Equal(t, res, pubsub.ValidationReject)

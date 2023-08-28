@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/network/commons"
 
-	"github.com/bloxapp/ssv/network/forks"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
@@ -54,7 +54,6 @@ type msgIDEntry struct {
 // msgIDHandler implements MsgIDHandler
 type msgIDHandler struct {
 	ctx    context.Context
-	fork   forks.Fork
 	added  chan addedEvent
 	ids    map[string]*msgIDEntry
 	locker sync.Locker
@@ -62,10 +61,9 @@ type msgIDHandler struct {
 }
 
 // NewMsgIDHandler creates a new MsgIDHandler
-func NewMsgIDHandler(ctx context.Context, fork forks.Fork, ttl time.Duration) MsgIDHandler {
+func NewMsgIDHandler(ctx context.Context, ttl time.Duration) MsgIDHandler {
 	handler := &msgIDHandler{
 		ctx:    ctx,
-		fork:   fork,
 		added:  make(chan addedEvent, msgIDHandlerBufferSize),
 		ids:    make(map[string]*msgIDEntry),
 		locker: &sync.Mutex{},
@@ -106,7 +104,7 @@ func (handler *msgIDHandler) MsgID(logger *zap.Logger) func(pmsg *ps_pb.Message)
 		if err != nil {
 			return MsgIDBadPeerID
 		}
-		mid := handler.fork.MsgID()(pmsg.GetData())
+		mid := commons.MsgID()(pmsg.GetData())
 		if len(mid) == 0 {
 			logger.Debug("could not create msg_id",
 				zap.ByteString("seq_no", pmsg.GetSeqno()),
@@ -120,7 +118,7 @@ func (handler *msgIDHandler) MsgID(logger *zap.Logger) func(pmsg *ps_pb.Message)
 
 // GetPeers returns the peers that are related to the given msg
 func (handler *msgIDHandler) GetPeers(msg []byte) []peer.ID {
-	msgID := handler.fork.MsgID()(msg)
+	msgID := commons.MsgID()(msg)
 	handler.locker.Lock()
 	defer handler.locker.Unlock()
 	entry, ok := handler.ids[msgID]

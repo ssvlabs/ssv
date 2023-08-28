@@ -13,6 +13,7 @@ import (
 	"github.com/bloxapp/ssv/network/forks/genesis"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 func TestRouter(t *testing.T) {
@@ -21,7 +22,7 @@ func TestRouter(t *testing.T) {
 
 	logger := logging.TestLogger(t)
 
-	router := newMessageRouter(logger, genesis.New().MsgID())
+	router := newMessageRouter(logger)
 
 	expectedCount := 1000
 	count := 0
