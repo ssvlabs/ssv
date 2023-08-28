@@ -251,7 +251,7 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 
 	switch ssvMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
-		consensusDescriptor, slot, err := mv.validateConsensusMessage(share, msg, descriptor.InCommittee, receivedAt)
+		consensusDescriptor, slot, err := mv.validateConsensusMessage(share, msg, receivedAt)
 		descriptor.Consensus = &consensusDescriptor
 		descriptor.Slot = slot
 		if err != nil {
