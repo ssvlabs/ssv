@@ -249,12 +249,6 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 
 	descriptor.SSVMessageType = ssvMessage.MsgType
 
-	if !descriptor.InCommittee && (ssvMessage.MsgType != spectypes.SSVConsensusMsgType) {
-		e := ErrNonCommitteeOnlySignedMessage
-		e.got = ssvMessage.MsgType
-		return nil, descriptor, e
-	}
-
 	switch ssvMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
 		consensusDescriptor, slot, err := mv.validateConsensusMessage(share, msg, descriptor.InCommittee, receivedAt)
