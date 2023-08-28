@@ -136,6 +136,7 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 	}
 
 	share := mv.validatorGetter(publicKey.Serialize())
+	nonCommittee := share == nil
 	if share == nil {
 		share = mv.nonCommitteeValidatorGetter(ssvMessage.MsgID)
 	}
@@ -174,9 +175,15 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 		return nil, e
 	}
 
+	if nonCommittee && (ssvMessage.MsgType != spectypes.SSVConsensusMsgType) {
+		e := ErrNonCommitteeOnlySignedMessage
+		e.got = ssvMessage.MsgType
+		return nil, e
+	}
+
 	switch ssvMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
-		if err := mv.validateConsensusMessage(share, msg, receivedAt); err != nil {
+		if err := mv.validateConsensusMessage(share, msg, nonCommittee, receivedAt); err != nil {
 			return nil, err
 		}
 	case spectypes.SSVPartialSignatureMsgType:
