@@ -110,7 +110,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	// Generate a new validator
 	validatorData1, err := createNewValidator(ops)
 	require.NoError(t, err)
-	sharesData1, err := generateSharesData(validatorData1, ops, 0)
+	sharesData1, err := generateSharesData(validatorData1, ops, testAddr, 0)
 	require.NoError(t, err)
 
 	blockNum := uint64(0x1)
@@ -248,7 +248,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 		validatorData2, err := createNewValidator(ops)
 		require.NoError(t, err)
-		sharesData2, err := generateSharesData(validatorData2, ops, 2)
+		sharesData2, err := generateSharesData(validatorData2, ops, testAddr, 2)
 		require.NoError(t, err)
 
 		// SharesData length is incorrect. Nonce is bumped; Validator wasn't added
@@ -348,7 +348,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		t.Run("test correct ValidatorAdded again and nonce is bumped", func(t *testing.T) {
 			validatorData3, err := createNewValidator(ops)
 			require.NoError(t, err)
-			sharesData3, err := generateSharesData(validatorData3, ops, 3)
+			sharesData3, err := generateSharesData(validatorData3, ops, testAddr, 3)
 			require.NoError(t, err)
 
 			// Call the contract method
@@ -669,21 +669,42 @@ func simTestBackend(testAddr ethcommon.Address) *simulator.SimulatedBackend {
 }
 
 func TestCreatingSharesData(t *testing.T) {
+
+	owner := testAddr
+	nonce := 0
+	//
 	ops, err := createOperators(4)
 	require.NoError(t, err)
 
 	validatorData, err := createNewValidator(ops)
 	require.NoError(t, err)
 	// TODO: maybe we can merge createNewValidator and generateSharesData
-	sharesData, err := generateSharesData(validatorData, ops, 0)
-	require.NoError(t, err)
+	sharesData, err := generateSharesData(validatorData, ops, owner, nonce)
 
+	require.NoError(t, err)
 	operatorCount := len(ops)
 	signatureOffset := phase0.SignatureLength
 	pubKeysOffset := phase0.PublicKeyLength*operatorCount + signatureOffset
 	sharesExpectedLength := encryptedKeyLength*operatorCount + pubKeysOffset
 
 	require.Len(t, sharesData, sharesExpectedLength)
+
+	signature := sharesData[:signatureOffset]
+
+	err = verifySignature(signature, owner, validatorData.masterPubKey.Serialize(), registrystorage.Nonce(nonce))
+	require.NoError(t, err)
+
+	sharePublicKeys := splitBytes(sharesData[signatureOffset:pubKeysOffset], phase0.PublicKeyLength)
+	encryptedKeys := splitBytes(sharesData[pubKeysOffset:], len(sharesData[pubKeysOffset:])/operatorCount)
+
+	for i, enck := range encryptedKeys {
+		priv, err := rsaencryption.ConvertPemToPrivateKey(string(ops[i].priv))
+		require.NoError(t, err)
+		decryptedSharePrivateKey, err := rsaencryption.DecodeKey(priv, enck)
+		require.NoError(t, err)
+		require.Equal(t, validatorData.operatorsShares[i].sec.SerializeToHexStr(), string(decryptedSharePrivateKey))
+		require.Equal(t, validatorData.operatorsShares[i].pub.Serialize(), sharePublicKeys[i])
+	}
 }
 
 type testValidatorData struct {
@@ -765,7 +786,7 @@ func createOperators(num uint64) ([]*testOperator, error) {
 	return testops, nil
 }
 
-func generateSharesData(validatorData *testValidatorData, operators []*testOperator, nonce int) ([]byte, error) {
+func generateSharesData(validatorData *testValidatorData, operators []*testOperator, owner ethcommon.Address, nonce int) ([]byte, error) {
 	var pubkeys []byte
 	var encryptedShares []byte
 
@@ -796,12 +817,12 @@ func generateSharesData(validatorData *testValidatorData, operators []*testOpera
 			return nil, err
 		}
 
-		pubkeys = append(pubkeys, validatorData.masterPublicKeys[i].Serialize()...)
+		pubkeys = append(pubkeys, validatorData.operatorsShares[i].pub.Serialize()...)
 		encryptedShares = append(encryptedShares, ciphertext...)
 
 	}
 
-	tosign := fmt.Sprintf("%s:%d", testAddr.String(), nonce)
+	tosign := fmt.Sprintf("%s:%d", owner.String(), nonce)
 	msghash := crypto.Keccak256([]byte(tosign))
 	signed := validatorData.masterKey.Sign(string(msghash))
 	sig := signed.Serialize()
