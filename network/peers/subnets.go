@@ -57,6 +57,9 @@ diffLoop:
 					if len(peers) == 1 {
 						si.subnets[subnet] = make([]peer.ID, 0)
 					} else {
+						// #nosec
+						// False positive by the linter, it says potential out of bounds,
+						// but it can't be because we're inside a for on `peers`.
 						si.subnets[subnet] = peers[1:]
 					}
 					continue diffLoop
