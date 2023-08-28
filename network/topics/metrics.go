@@ -3,6 +3,8 @@ package topics
 import (
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -53,9 +55,9 @@ func init() {
 }
 
 type metrics interface {
-	MessageAccepted()
-	MessageIgnored(reason string)
-	MessageRejected(reason string)
+	MessageAccepted(validatorPK spectypes.ValidatorPK, role spectypes.BeaconRole, slot phase0.Slot, round specqbft.Round)
+	MessageIgnored(reason string, validatorPK spectypes.ValidatorPK, role spectypes.BeaconRole, slot phase0.Slot, round specqbft.Round)
+	MessageRejected(reason string, validatorPK spectypes.ValidatorPK, role spectypes.BeaconRole, slot phase0.Slot, round specqbft.Round)
 	SSVMessageType(msgType spectypes.MsgType)
 	MessageValidationDuration(duration time.Duration, labels ...string)
 	MessageSize(size int)
@@ -63,9 +65,12 @@ type metrics interface {
 
 type nopMetrics struct{}
 
-func (nopMetrics) MessageAccepted()                                   {}
-func (nopMetrics) MessageIgnored(string)                              {}
-func (nopMetrics) MessageRejected(string)                             {}
+func (nopMetrics) MessageAccepted(spectypes.ValidatorPK, spectypes.BeaconRole, phase0.Slot, specqbft.Round) {
+}
+func (nopMetrics) MessageIgnored(string, spectypes.ValidatorPK, spectypes.BeaconRole, phase0.Slot, specqbft.Round) {
+}
+func (nopMetrics) MessageRejected(string, spectypes.ValidatorPK, spectypes.BeaconRole, phase0.Slot, specqbft.Round) {
+}
 func (nopMetrics) SSVMessageType(spectypes.MsgType)                   {}
 func (nopMetrics) MessageValidationDuration(time.Duration, ...string) {}
 func (nopMetrics) MessageSize(int)                                    {}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
@@ -37,7 +38,7 @@ func NewSSVMsgValidator(logger *zap.Logger, metrics metrics, fork forks.Fork, va
 
 		messageData := pmsg.GetData()
 		if len(messageData) == 0 {
-			metrics.MessageRejected("no data")
+			metrics.MessageRejected("no data", nil, -1, 0, 0)
 			return pubsub.ValidationReject
 		}
 
@@ -48,7 +49,7 @@ func NewSSVMsgValidator(logger *zap.Logger, metrics metrics, fork forks.Fork, va
 		const maxMsgSize = 4 + 56 + 8388668
 		const maxEncodedMsgSize = maxMsgSize + maxMsgSize/10
 		if len(messageData) > maxEncodedMsgSize {
-			metrics.MessageRejected("message is too big")
+			metrics.MessageRejected("message is too big", nil, -1, 0, 0)
 			return pubsub.ValidationReject
 		}
 
@@ -56,11 +57,11 @@ func NewSSVMsgValidator(logger *zap.Logger, metrics metrics, fork forks.Fork, va
 		if err != nil {
 			// can't decode message
 			// logger.Debug("invalid: can't decode message", zap.Error(err))
-			metrics.MessageRejected("could not decode network message")
+			metrics.MessageRejected("could not decode network message", nil, -1, 0, 0)
 			return pubsub.ValidationReject
 		}
 		if msg == nil {
-			metrics.MessageRejected("message is nil")
+			metrics.MessageRejected("message is nil", nil, -1, 0, 0)
 			return pubsub.ValidationReject
 		}
 
@@ -82,6 +83,11 @@ func NewSSVMsgValidator(logger *zap.Logger, metrics metrics, fork forks.Fork, va
 		if validator != nil {
 			// TODO: consider merging NewSSVMsgValidator with validator.ValidateMessage
 			decodedMessage, descriptor, err := validator.ValidateMessage(msg, time.Now())
+			round := specqbft.Round(0)
+			if descriptor.Consensus != nil {
+				round = descriptor.Consensus.Round
+			}
+
 			if err != nil {
 				var valErr validation.Error
 				if errors.As(err, &valErr) {
@@ -90,18 +96,37 @@ func NewSSVMsgValidator(logger *zap.Logger, metrics metrics, fork forks.Fork, va
 							fields := append(descriptor.Fields(), zap.Error(err))
 							logger.Debug("rejecting invalid message", fields...)
 						}
-						metrics.MessageRejected(valErr.Text())
+
+						metrics.MessageRejected(
+							valErr.Text(),
+							descriptor.ValidatorPK,
+							descriptor.Role,
+							descriptor.Slot,
+							round,
+						)
 						return pubsub.ValidationReject
 					} else {
 						if !valErr.Silent() {
 							fields := append(descriptor.Fields(), zap.Error(err))
 							logger.Debug("ignoring invalid message", fields...)
 						}
-						metrics.MessageIgnored(valErr.Text())
+						metrics.MessageIgnored(
+							valErr.Text(),
+							descriptor.ValidatorPK,
+							descriptor.Role,
+							descriptor.Slot,
+							round,
+						)
 						return pubsub.ValidationIgnore
 					}
 				} else {
-					metrics.MessageIgnored(err.Error())
+					metrics.MessageIgnored(
+						err.Error(),
+						descriptor.ValidatorPK,
+						descriptor.Role,
+						descriptor.Slot,
+						round,
+					)
 					fields := append(descriptor.Fields(), zap.Error(err))
 					logger.Debug("ignoring invalid message", fields...)
 					return pubsub.ValidationIgnore
@@ -109,20 +134,28 @@ func NewSSVMsgValidator(logger *zap.Logger, metrics metrics, fork forks.Fork, va
 			}
 
 			pmsg.ValidatorData = decodedMessage
+
+			metrics.MessageAccepted(
+				descriptor.ValidatorPK,
+				descriptor.Role,
+				descriptor.Slot,
+				round,
+			)
+
+			return pubsub.ValidationAccept
 		} else {
 			decodedMessage, err := queue.DecodeSSVMessage(msg)
 			if err != nil {
 				logger.Debug("ignoring invalid message", zap.Error(err))
 
-				metrics.MessageIgnored(err.Error())
+				metrics.MessageIgnored(err.Error(), nil, -1, 0, 0)
 				return pubsub.ValidationIgnore
 			}
 
 			pmsg.ValidatorData = decodedMessage
 		}
 
-		metrics.MessageAccepted()
-
+		metrics.MessageAccepted(nil, -1, 0, 0)
 		return pubsub.ValidationAccept
 	}
 }

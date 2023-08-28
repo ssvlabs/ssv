@@ -2,10 +2,12 @@ package metricsreporter
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strconv"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -73,10 +75,10 @@ var (
 		Name: "ssv:exporter:operator_index",
 		Help: "operator footprint",
 	}, []string{"pubKey", "index"})
-	messageValidated = promauto.NewCounterVec(prometheus.CounterOpts{
+	messageValidationResult = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_message_validation",
-		Help: "Message validation results",
-	}, []string{"status", "reason"})
+		Help: "Message validation result",
+	}, []string{"status", "reason", "validator", "role", "slot", "round"})
 	messageValidationSSVType = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_message_validation_ssv_type",
 		Help: "SSV message type",
@@ -118,7 +120,7 @@ func New(opts ...Option) *MetricsReporter {
 		eventProcessed,
 		eventProcessingFailed,
 		operatorIndex,
-		messageValidated,
+		messageValidationResult,
 		messageValidationSSVType,
 		messageValidationConsensusType,
 		messageValidationDuration,
@@ -213,16 +215,54 @@ func (m MetricsReporter) EventProcessingFailed(eventName string) {
 func (m MetricsReporter) LastBlockProcessed(uint64) {}
 func (m MetricsReporter) LogsProcessingError(error) {}
 
-func (m MetricsReporter) MessageAccepted() {
-	messageValidated.WithLabelValues(messageAccepted, "").Inc()
+func (m MetricsReporter) MessageAccepted(
+	validatorPK spectypes.ValidatorPK,
+	role spectypes.BeaconRole,
+	slot phase0.Slot,
+	round specqbft.Round,
+) {
+	messageValidationResult.WithLabelValues(
+		messageAccepted,
+		"",
+		hex.EncodeToString(validatorPK),
+		role.String(),
+		strconv.FormatUint(uint64(slot), 10),
+		strconv.FormatUint(uint64(round), 10),
+	).Inc()
 }
 
-func (m MetricsReporter) MessageIgnored(reason string) {
-	messageValidated.WithLabelValues(messageIgnored, reason).Inc()
+func (m MetricsReporter) MessageIgnored(
+	reason string,
+	validatorPK spectypes.ValidatorPK,
+	role spectypes.BeaconRole,
+	slot phase0.Slot,
+	round specqbft.Round,
+) {
+	messageValidationResult.WithLabelValues(
+		messageIgnored,
+		reason,
+		hex.EncodeToString(validatorPK),
+		role.String(),
+		strconv.FormatUint(uint64(slot), 10),
+		strconv.FormatUint(uint64(round), 10),
+	).Inc()
 }
 
-func (m MetricsReporter) MessageRejected(reason string) {
-	messageValidated.WithLabelValues(messageRejected, reason).Inc()
+func (m MetricsReporter) MessageRejected(
+	reason string,
+	validatorPK spectypes.ValidatorPK,
+	role spectypes.BeaconRole,
+	slot phase0.Slot,
+	round specqbft.Round,
+) {
+	messageValidationResult.WithLabelValues(
+		messageRejected,
+		reason,
+		hex.EncodeToString(validatorPK),
+		role.String(),
+		strconv.FormatUint(uint64(slot), 10),
+		strconv.FormatUint(uint64(round), 10),
+	).Inc()
 }
 
 func (m MetricsReporter) SSVMessageType(msgType spectypes.MsgType) {
