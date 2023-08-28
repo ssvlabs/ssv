@@ -118,6 +118,7 @@ type ConsensusDescriptor struct {
 type Descriptor struct {
 	ValidatorPK    spectypes.ValidatorPK
 	Role           spectypes.BeaconRole
+	InCommittee    bool
 	SSVMessageType spectypes.MsgType
 	Slot           phase0.Slot
 	Consensus      *ConsensusDescriptor
@@ -127,6 +128,7 @@ func (d Descriptor) Fields() []zapcore.Field {
 	result := []zapcore.Field{
 		fields.Validator(d.ValidatorPK),
 		fields.Role(d.Role),
+		zap.Bool("in_committee", d.InCommittee),
 		zap.String("ssv_message_type", ssvmessage.MsgTypeToString(d.SSVMessageType)),
 		fields.Slot(d.Slot),
 	}
@@ -150,9 +152,10 @@ func (d Descriptor) Fields() []zapcore.Field {
 
 func (d Descriptor) String() string {
 	sb := strings.Builder{}
-	sb.WriteString(fmt.Sprintf("validator PK: %v, role: %v, ssv message type: %v, slot: %v",
+	sb.WriteString(fmt.Sprintf("validator PK: %v, role: %v, in committee: %v, ssv message type: %v, slot: %v",
 		hex.EncodeToString(d.ValidatorPK),
 		d.Role.String(),
+		d.InCommittee,
 		ssvmessage.MsgTypeToString(d.SSVMessageType),
 		d.Slot,
 	))
