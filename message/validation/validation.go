@@ -243,20 +243,18 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 	switch ssvMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
 		consensusDescriptor, slot, err := mv.validateConsensusMessage(share, msg, receivedAt)
+		descriptor.Consensus = &consensusDescriptor
+		descriptor.Slot = slot
 		if err != nil {
 			return nil, descriptor, err
 		}
-
-		descriptor.Consensus = &consensusDescriptor
-		descriptor.Slot = slot
 
 	case spectypes.SSVPartialSignatureMsgType:
 		slot, err := mv.validatePartialSignatureMessage(share, msg)
+		descriptor.Slot = slot
 		if err != nil {
 			return nil, descriptor, err
 		}
-
-		descriptor.Slot = slot
 
 	case ssvmessage.SSVEventMsgType:
 		return nil, descriptor, ErrEventMessage
