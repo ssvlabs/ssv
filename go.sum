@@ -54,6 +54,8 @@ github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=
 github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6rlkpw=
 github.com/bloxapp/eth2-key-manager v1.3.1 h1:1olQcOHRY2TN1o8JX9AN1siEIJXWnlM+BlknfBbXoo4=
 github.com/bloxapp/eth2-key-manager v1.3.1/go.mod h1:cT+qAJfnAzNz9StFoHQ8xAkyU2eyEukd6xfxvcBWuZA=
+github.com/bloxapp/ssv-spec v0.0.0-20230719131453-1c0044021800 h1:ikChvdYVw4GFSlnIS+u1qmNqOvgq2a2H3b2FZ44KBn8=
+github.com/bloxapp/ssv-spec v0.0.0-20230719131453-1c0044021800/go.mod h1:zPJR7YnG5iZ6I0h6EzfVly8bTBXaZwcx4TyJ8pzYVd8=
 github.com/bradfitz/go-smtpd v0.0.0-20170404230938-deb6d6237625/go.mod h1:HYsPBTaaSFSlLx/70C2HPIMNZpVV8+vt/A+FMnYP11g=
 github.com/btcsuite/btcd/btcec/v2 v2.3.2 h1:5n0X6hX0Zk+6omWcihdYvdAlGf2DfasC0GMf7DClJ3U=
 github.com/btcsuite/btcd/btcec/v2 v2.3.2/go.mod h1:zYzJ8etWJQIv1Ogk7OzpWjowwOdXY1W/17j2MW85J04=
@@ -543,8 +545,6 @@ github.com/neelance/sourcemap v0.0.0-20151028013722-8c68805598ab/go.mod h1:Qr6/a
 github.com/nxadm/tail v1.4.4/go.mod h1:kenIhsEOeOJmVchQTgglprH7qJGnHDVpk1VPCcaMI8A=
 github.com/nxadm/tail v1.4.8 h1:nPr65rt6Y5JFSKQO7qToXr7pePgD6Gwiw05lkbyAQTE=
 github.com/nxadm/tail v1.4.8/go.mod h1:+ncqLTQzXmGhMZNUePPaPqPvBxHAIsmXswZKocGu+AU=
-github.com/olegshmuelov/ssv-spec v0.0.0-20230827172351-cd1517515550 h1:WhoUoHl00Lj4HG0i/jhvyr73hTo7EbAkXx9f9LmcZQQ=
-github.com/olegshmuelov/ssv-spec v0.0.0-20230827172351-cd1517515550/go.mod h1:zPJR7YnG5iZ6I0h6EzfVly8bTBXaZwcx4TyJ8pzYVd8=
 github.com/olekukonko/tablewriter v0.0.5 h1:P2Ga83D34wi1o9J6Wh1mRuqd4mF/x/lgBS7N7AbDhec=
 github.com/olekukonko/tablewriter v0.0.5/go.mod h1:hPp6KlRPjbx+hW8ykQs1w3UBbZlj6HuIJcUGPhkA7kY=
 github.com/onsi/ginkgo v1.6.0/go.mod h1:lLunBs/Ym6LB5Z9jYTR76FiuTmxDTDusOGeTQH+WWjE=

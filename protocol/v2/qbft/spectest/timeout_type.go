@@ -7,8 +7,11 @@ import (
 
 	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
+
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,7 +35,7 @@ func RunTimeout(t *testing.T, test *SpecTest) {
 	}
 
 	// test calling timeout
-	timer, ok := test.Pre.GetConfig().GetTimer().(*testingutils.TestQBFTTimer)
+	timer, ok := test.Pre.GetConfig().GetTimer().(*roundtimer.TestQBFTTimer)
 	require.True(t, ok)
 	require.Equal(t, test.ExpectedTimerState.Timeouts, timer.State.Timeouts)
 	require.Equal(t, test.ExpectedTimerState.Round, timer.State.Round)

@@ -4,6 +4,7 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
+	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 )
 
@@ -22,24 +23,21 @@ type IConfig interface {
 	GetProposerF() specqbft.ProposerF
 	// GetNetwork returns a p2p Network instance
 	GetNetwork() specqbft.Network
-	// GetBeaconNetwork returns a beacon Network
-	GetBeaconNetwork() spectypes.BeaconNetwork
 	// GetStorage returns a storage instance
 	GetStorage() qbftstorage.QBFTStore
 	// GetTimer returns round timer
-	GetTimer() specqbft.Timer
+	GetTimer() roundtimer.Timer
 }
 
 type Config struct {
-	Signer        spectypes.SSVSigner
-	SigningPK     []byte
-	Domain        spectypes.DomainType
-	ValueCheckF   specqbft.ProposedValueCheckF
-	ProposerF     specqbft.ProposerF
-	Storage       qbftstorage.QBFTStore
-	Network       specqbft.Network
-	BeaconNetwork spectypes.BeaconNetwork
-	Timer         specqbft.Timer
+	Signer      spectypes.SSVSigner
+	SigningPK   []byte
+	Domain      spectypes.DomainType
+	ValueCheckF specqbft.ProposedValueCheckF
+	ProposerF   specqbft.ProposerF
+	Storage     qbftstorage.QBFTStore
+	Network     specqbft.Network
+	Timer       roundtimer.Timer
 }
 
 // GetSigner returns a Signer instance
@@ -72,17 +70,12 @@ func (c *Config) GetNetwork() specqbft.Network {
 	return c.Network
 }
 
-// GetBeaconNetwork returns a beacon Network
-func (c *Config) GetBeaconNetwork() spectypes.BeaconNetwork {
-	return c.BeaconNetwork
-}
-
 // GetStorage returns a storage instance
 func (c *Config) GetStorage() qbftstorage.QBFTStore {
 	return c.Storage
 }
 
 // GetTimer returns round timer
-func (c *Config) GetTimer() specqbft.Timer {
+func (c *Config) GetTimer() roundtimer.Timer {
 	return c.Timer
 }

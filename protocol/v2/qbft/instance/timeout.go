@@ -1,9 +1,6 @@
 package instance
 
 import (
-	"time"
-
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -26,8 +23,7 @@ func (i *Instance) UponRoundTimeout(logger *zap.Logger) error {
 	defer func() {
 		i.bumpToRound(newRound)
 		i.State.ProposalAcceptedForCurrentRound = nil
-		dutyStartTime := time.Unix(i.config.GetBeaconNetwork().EstimatedTimeAtSlot(phase0.Slot(i.State.Height)), 0)
-		i.config.GetTimer().TimeoutForRound(dutyStartTime, i.State.Round)
+		i.config.GetTimer().TimeoutForRound(i.State.Height, i.State.Round)
 	}()
 
 	roundChange, err := CreateRoundChange(i.State, i.config, newRound, i.StartValue)
