@@ -68,7 +68,6 @@ func (vm *validatorsMap) GetOrCreateValidator(logger *zap.Logger, share *types.S
 	// main lock
 	vm.lock.Lock()
 	defer vm.lock.Unlock()
-
 	pubKey := hex.EncodeToString(share.ValidatorPubKey)
 	if v, ok := vm.validatorsMap[pubKey]; !ok {
 		if !share.HasBeaconMetadata() {
@@ -76,13 +75,11 @@ func (vm *validatorsMap) GetOrCreateValidator(logger *zap.Logger, share *types.S
 		}
 		opts := *vm.optsTemplate
 		opts.SSVShare = share
-
 		// Share context with both the validator and the runners,
 		// so that when the validator is stopped, the runners are stopped as well.
 		ctx, cancel := context.WithCancel(vm.ctx)
 		opts.DutyRunners = SetupRunners(ctx, logger, opts)
 		vm.validatorsMap[pubKey] = validator.NewValidator(ctx, cancel, opts)
-
 		printShare(share, logger, "setup validator done")
 		opts.SSVShare = nil
 	} else {

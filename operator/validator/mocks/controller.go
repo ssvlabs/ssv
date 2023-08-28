@@ -260,6 +260,45 @@ func (mr *MockControllerMockRecorder) UpdateValidatorMetaDataLoop() *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateValidatorMetaDataLoop", reflect.TypeOf((*MockController)(nil).UpdateValidatorMetaDataLoop))
 }
 
+// MockRecipients is a mock of Recipients interface.
+type MockRecipients struct {
+	ctrl     *gomock.Controller
+	recorder *MockRecipientsMockRecorder
+}
+
+// MockRecipientsMockRecorder is the mock recorder for MockRecipients.
+type MockRecipientsMockRecorder struct {
+	mock *MockRecipients
+}
+
+// NewMockRecipients creates a new mock instance.
+func NewMockRecipients(ctrl *gomock.Controller) *MockRecipients {
+	mock := &MockRecipients{ctrl: ctrl}
+	mock.recorder = &MockRecipientsMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockRecipients) EXPECT() *MockRecipientsMockRecorder {
+	return m.recorder
+}
+
+// GetRecipientData mocks base method.
+func (m *MockRecipients) GetRecipientData(r basedb.Reader, owner common.Address) (*storage.RecipientData, bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRecipientData", r, owner)
+	ret0, _ := ret[0].(*storage.RecipientData)
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// GetRecipientData indicates an expected call of GetRecipientData.
+func (mr *MockRecipientsMockRecorder) GetRecipientData(r, owner interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRecipientData", reflect.TypeOf((*MockRecipients)(nil).GetRecipientData), r, owner)
+}
+
 // MockSharesStorage is a mock of SharesStorage interface.
 type MockSharesStorage struct {
 	ctrl     *gomock.Controller
