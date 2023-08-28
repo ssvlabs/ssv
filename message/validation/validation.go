@@ -317,8 +317,10 @@ func (mv *MessageValidator) validateSlotTime(messageSlot phase0.Slot, role spect
 		return ErrEarlyMessage
 	}
 
-	if mv.lateMessage(messageSlot, role, receivedAt) {
-		return ErrLateMessage
+	if lateness := mv.lateMessage(messageSlot, role, receivedAt); lateness > 0 {
+		e := ErrLateMessage
+		e.got = fmt.Sprintf("late by %v", lateness)
+		return e
 	}
 
 	return nil
@@ -329,7 +331,7 @@ func (mv *MessageValidator) earlyMessage(slot phase0.Slot, receivedAt time.Time)
 		Add(-clockErrorTolerance).Before(mv.netCfg.Beacon.GetSlotStartTime(slot))
 }
 
-func (mv *MessageValidator) lateMessage(slot phase0.Slot, role spectypes.BeaconRole, receivedAt time.Time) bool {
+func (mv *MessageValidator) lateMessage(slot phase0.Slot, role spectypes.BeaconRole, receivedAt time.Time) time.Duration {
 	var ttl phase0.Slot
 	switch role {
 	case spectypes.BNRoleProposer, spectypes.BNRoleSyncCommittee, spectypes.BNRoleSyncCommitteeContribution:
@@ -337,14 +339,14 @@ func (mv *MessageValidator) lateMessage(slot phase0.Slot, role spectypes.BeaconR
 	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator:
 		ttl = 32 + lateSlotAllowance
 	case spectypes.BNRoleValidatorRegistration:
-		return false
+		return 0
 	}
 
 	deadline := mv.netCfg.Beacon.GetSlotStartTime(slot + ttl).
 		Add(lateMessageMargin).Add(clockErrorTolerance)
 
 	return mv.netCfg.Beacon.GetSlotStartTime(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Unix())).
-		After(deadline)
+		Sub(deadline)
 }
 
 func (mv *MessageValidator) consensusState(id ConsensusID) *ConsensusState {
