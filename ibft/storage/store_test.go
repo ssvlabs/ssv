@@ -9,7 +9,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -19,7 +18,7 @@ import (
 func TestCleanInstances(t *testing.T) {
 	logger := logging.TestLogger(t)
 	msgID := spectypes.NewMsgID(types.GetDefaultDomain(), []byte("pk"), spectypes.BNRoleAttester)
-	storage, err := newTestIbftStorage(logger, "test", forksprotocol.GenesisForkVersion)
+	storage, err := newTestIbftStorage(logger, "test")
 	require.NoError(t, err)
 
 	generateInstance := func(id spectypes.MessageID, h specqbft.Height) *qbftstorage.StoredInstance {
@@ -112,7 +111,7 @@ func TestSaveAndFetchLastState(t *testing.T) {
 		},
 	}
 
-	storage, err := newTestIbftStorage(logging.TestLogger(t), "test", forksprotocol.GenesisForkVersion)
+	storage, err := newTestIbftStorage(logging.TestLogger(t), "test")
 	require.NoError(t, err)
 
 	require.NoError(t, storage.SaveHighestInstance(instance))
@@ -150,7 +149,7 @@ func TestSaveAndFetchState(t *testing.T) {
 		},
 	}
 
-	storage, err := newTestIbftStorage(logging.TestLogger(t), "test", forksprotocol.GenesisForkVersion)
+	storage, err := newTestIbftStorage(logging.TestLogger(t), "test")
 	require.NoError(t, err)
 
 	require.NoError(t, storage.SaveInstance(instance))
@@ -170,7 +169,7 @@ func TestSaveAndFetchState(t *testing.T) {
 	require.Equal(t, []byte("value"), savedInstance.State.DecidedValue)
 }
 
-func newTestIbftStorage(logger *zap.Logger, prefix string, forkVersion forksprotocol.ForkVersion) (qbftstorage.QBFTStore, error) {
+func newTestIbftStorage(logger *zap.Logger, prefix string) (qbftstorage.QBFTStore, error) {
 	db, err := kv.NewInMemory(logger.Named(logging.NameBadgerDBLog), basedb.Options{
 		Reporting: true,
 	})
@@ -178,5 +177,5 @@ func newTestIbftStorage(logger *zap.Logger, prefix string, forkVersion forksprot
 		return nil, err
 	}
 
-	return New(db, prefix, forkVersion), nil
+	return New(db, prefix), nil
 }

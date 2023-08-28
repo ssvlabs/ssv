@@ -3,9 +3,10 @@ package topics
 import (
 	"context"
 
-	"github.com/bloxapp/ssv/network/forks"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
+
+	"github.com/bloxapp/ssv/network/commons"
 )
 
 // MsgValidatorFunc represents a message validator
@@ -14,7 +15,7 @@ type MsgValidatorFunc = func(ctx context.Context, p peer.ID, msg *pubsub.Message
 // NewSSVMsgValidator creates a new msg validator that validates message structure,
 // and checks that the message was sent on the right topic.
 // TODO: enable post SSZ change, remove logs, break into smaller validators?
-func NewSSVMsgValidator(fork forks.Fork) func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
+func NewSSVMsgValidator() func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
 	return func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 		topic := pmsg.GetTopic()
 		metricPubsubActiveMsgValidation.WithLabelValues(topic).Inc()
@@ -23,7 +24,7 @@ func NewSSVMsgValidator(fork forks.Fork) func(ctx context.Context, p peer.ID, ms
 			reportValidationResult(validationResultNoData)
 			return pubsub.ValidationReject
 		}
-		msg, err := fork.DecodeNetworkMsg(pmsg.GetData())
+		msg, err := commons.DecodeNetworkMsg(pmsg.GetData())
 		if err != nil {
 			// can't decode message
 			// logger.Debug("invalid: can't decode message", zap.Error(err))

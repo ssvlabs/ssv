@@ -18,7 +18,6 @@ import (
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/peers/connections/mock"
 	"github.com/bloxapp/ssv/network/testing"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
@@ -71,9 +70,9 @@ func (ln *LocalNet) WithBootnode(ctx context.Context, logger *zap.Logger) error 
 // CreateAndStartLocalNet creates a new local network and starts it
 // if any errors occurs during starting local network CreateAndStartLocalNet trying
 // to create and start local net one more time until pCtx is not Done()
-func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, forkVersion forksprotocol.ForkVersion, nodesQuantity, minConnected int, useDiscv5 bool) (*LocalNet, error) {
-	attempt := func(pCtx context.Context, forkVersion forksprotocol.ForkVersion, nodesQuantity, minConnected int, useDiscv5 bool) (*LocalNet, error) {
-		ln, err := NewLocalNet(pCtx, logger, nodesQuantity, forkVersion, useDiscv5)
+func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, nodesQuantity, minConnected int, useDiscv5 bool) (*LocalNet, error) {
+	attempt := func(pCtx context.Context, nodesQuantity, minConnected int, useDiscv5 bool) (*LocalNet, error) {
+		ln, err := NewLocalNet(pCtx, logger, nodesQuantity, useDiscv5)
 		if err != nil {
 			return nil, err
 		}
@@ -109,7 +108,7 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, forkVersio
 		case <-pCtx.Done():
 			return nil, fmt.Errorf("context is done, network didn't start on time")
 		default:
-			ln, err := attempt(pCtx, forkVersion, nodesQuantity, minConnected, useDiscv5)
+			ln, err := attempt(pCtx, nodesQuantity, minConnected, useDiscv5)
 			if err != nil {
 				for _, node := range ln.Nodes {
 					_ = node.Close()
@@ -125,12 +124,12 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, forkVersio
 }
 
 // NewTestP2pNetwork creates a new network.P2PNetwork instance
-func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, keys testing.NodeKeys, logger *zap.Logger, forkVersion forksprotocol.ForkVersion, maxPeers int) (network.P2PNetwork, error) {
+func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, keys testing.NodeKeys, logger *zap.Logger, maxPeers int) (network.P2PNetwork, error) {
 	operatorPubkey, err := rsaencryption.ExtractPublicKey(keys.OperatorKey)
 	if err != nil {
 		return nil, err
 	}
-	cfg := NewNetConfig(keys.NetKey, format.OperatorID([]byte(operatorPubkey)), forkVersion, ln.Bootnode, testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), maxPeers)
+	cfg := NewNetConfig(keys.NetKey, format.OperatorID([]byte(operatorPubkey)), ln.Bootnode, testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), maxPeers)
 	cfg.Ctx = ctx
 	cfg.Subnets = "00000000000000000000020000000000" //PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
 	cfg.NodeStorage = mock.NodeStorage{
@@ -147,7 +146,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, keys testing.NodeKeys
 }
 
 // NewLocalNet creates a new mdns network
-func NewLocalNet(ctx context.Context, logger *zap.Logger, n int, forkVersion forksprotocol.ForkVersion, useDiscv5 bool) (*LocalNet, error) {
+func NewLocalNet(ctx context.Context, logger *zap.Logger, n int, useDiscv5 bool) (*LocalNet, error) {
 	ln := &LocalNet{}
 	ln.udpRand = make(testing.UDPPortsRandomizer)
 	if useDiscv5 {
@@ -159,7 +158,7 @@ func NewLocalNet(ctx context.Context, logger *zap.Logger, n int, forkVersion for
 	nodes, keys, err := testing.NewLocalTestnet(ctx, n, func(pctx context.Context, keys testing.NodeKeys) network.P2PNetwork {
 		i++
 		logger := logger.Named(fmt.Sprintf("node-%d", i))
-		p, err := ln.NewTestP2pNetwork(pctx, keys, logger, forkVersion, n)
+		p, err := ln.NewTestP2pNetwork(pctx, keys, logger, n)
 		if err != nil {
 			logger.Error("could not setup network", zap.Error(err))
 		}
@@ -175,7 +174,7 @@ func NewLocalNet(ctx context.Context, logger *zap.Logger, n int, forkVersion for
 }
 
 // NewNetConfig creates a new config for tests
-func NewNetConfig(netPrivKey *ecdsa.PrivateKey, operatorID string, forkVersion forksprotocol.ForkVersion, bn *discovery.Bootnode, tcpPort, udpPort, maxPeers int) *Config {
+func NewNetConfig(netPrivKey *ecdsa.PrivateKey, operatorID string, bn *discovery.Bootnode, tcpPort, udpPort, maxPeers int) *Config {
 	bns := ""
 	discT := "discv5"
 	if bn != nil {
@@ -196,7 +195,6 @@ func NewNetConfig(netPrivKey *ecdsa.PrivateKey, operatorID string, forkVersion f
 		PubSubTrace:       false,
 		NetworkPrivateKey: netPrivKey,
 		OperatorID:        operatorID,
-		ForkVersion:       forkVersion,
 		UserAgent:         ua,
 		Discovery:         discT,
 		Permissioned: func() bool {

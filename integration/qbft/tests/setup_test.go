@@ -6,13 +6,13 @@ import (
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
-	protocolforks "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 const (
@@ -42,7 +42,7 @@ func TestMain(m *testing.M) {
 
 	types.SetDefaultDomain(testingutils.TestingSSVDomainType)
 
-	ln, err := p2pv1.CreateAndStartLocalNet(ctx, logger, protocolforks.GenesisForkVersion, maxSupportedCommittee, maxSupportedQuorum, false)
+	ln, err := p2pv1.CreateAndStartLocalNet(ctx, logger, maxSupportedCommittee, maxSupportedQuorum, false)
 	if err != nil {
 		logger.Fatal("error creating and start local net", zap.Error(err))
 		return
