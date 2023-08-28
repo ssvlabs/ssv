@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/bloxapp/ssv/ekm"
+	"github.com/bloxapp/ssv/ibft/storage"
+	"github.com/bloxapp/ssv/network/forks/genesis"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/validator/mocks"
 	"github.com/bloxapp/ssv/protocol/v2/queue/worker"
@@ -45,7 +47,12 @@ type MockControllerOptions struct {
 
 func TestHandleNonCommitteeMessages(t *testing.T) {
 	logger := logging.TestLogger(t)
-	controllerOptions := MockControllerOptions{}
+	mockValidatorsMap := &validatorsMap{
+		ctx:           context.Background(),
+		lock:          sync.RWMutex{},
+		validatorsMap: nil,
+	}
+	controllerOptions := MockControllerOptions{validatorsMap: mockValidatorsMap}
 	ctr := setupController(logger, controllerOptions) // none committee
 	go ctr.handleRouterMessages()
 
@@ -98,7 +105,6 @@ func TestSetupValidators(t *testing.T) {
 	logger := logging.TestLogger(t)
 	ctrl := gomock.NewController(t)
 	recipientStorage := mocks.NewMockRecipients(ctrl)
-
 	recipientData := &registrystorage.RecipientData{
 		Owner:        common.Address([]byte("67Ce5c69260bd819B4e0AD13f4b873074D479811")),
 		FeeRecipient: bellatrix.ExecutionAddress([]byte("45E668aba4b7fc8761331EC3CE77584B7A99A51A")),
@@ -122,6 +128,17 @@ func TestSetupValidators(t *testing.T) {
 	recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(recipientData, true, nil).Times(1)
 
 	mockValidatorMap := &validatorsMap{
+		ctx: context.Background(),
+		optsTemplate: &validator.Options{
+			Network: nil,
+			Storage: &storage.QBFTStores{},
+			Signer:  nil,
+			SSVShare: &types.SSVShare{
+				Share: spectypes.Share{
+					ValidatorPubKey: nil,
+				},
+			},
+		},
 		validatorsMap: map[string]*validator.Validator{"0": testValidator},
 	}
 
@@ -198,8 +215,7 @@ func TestGetValidator(t *testing.T) {
 		},
 	}
 
-mockValidatorsMap:
-	&validatorsMap{
+	mockValidatorsMap := &validatorsMap{
 		ctx:  context.Background(),
 		lock: sync.RWMutex{},
 		validatorsMap: map[string]*validator.Validator{
@@ -456,7 +472,15 @@ func TestUpdateFeeRecipient(t *testing.T) {
 
 	t.Run("Test with right owner address", func(t *testing.T) {
 		testValidator := setupTestValidator(ownerAddressBytes, firstFeeRecipientBytes)
-		controllerOptions := MockControllerOptions{validatorsMap: map[string]*validator.Validator{"0": testValidator}}
+
+		mockValidatorsMap := &validatorsMap{
+			ctx:  context.Background(),
+			lock: sync.RWMutex{},
+			validatorsMap: map[string]*validator.Validator{
+				"0": testValidator,
+			},
+		}
+		controllerOptions := MockControllerOptions{validatorsMap: mockValidatorsMap}
 		ctr := setupController(logger, controllerOptions)
 
 		err := ctr.UpdateFeeRecipient(common.Address(ownerAddressBytes), common.Address(secondFeeRecipientBytes))
@@ -468,7 +492,15 @@ func TestUpdateFeeRecipient(t *testing.T) {
 
 	t.Run("Test with wrong owner address", func(t *testing.T) {
 		testValidator := setupTestValidator(ownerAddressBytes, firstFeeRecipientBytes)
-		controllerOptions := MockControllerOptions{validatorsMap: map[string]*validator.Validator{"0": testValidator}}
+
+		mockValidatorsMap := &validatorsMap{
+			ctx:  context.Background(),
+			lock: sync.RWMutex{},
+			validatorsMap: map[string]*validator.Validator{
+				"0": testValidator,
+			},
+		}
+		controllerOptions := MockControllerOptions{validatorsMap: mockValidatorsMap}
 		ctr := setupController(logger, controllerOptions)
 
 		err := ctr.UpdateFeeRecipient(common.Address(fakeOwnerAddressBytes), common.Address(secondFeeRecipientBytes))
@@ -546,10 +578,14 @@ func TestGetIndices(t *testing.T) {
 			ActivationEpoch: phase0.Epoch(100),
 		}),
 	}
-
+	mockValidatorsMap := &validatorsMap{
+		ctx:           context.Background(),
+		lock:          sync.RWMutex{},
+		validatorsMap: validators,
+	}
 	logger := logging.TestLogger(t)
 	controllerOptions := MockControllerOptions{
-		validatorsMap: validators,
+		validatorsMap: mockValidatorsMap,
 	}
 	ctr := setupController(logger, controllerOptions)
 
@@ -562,12 +598,18 @@ func TestGetIndices(t *testing.T) {
 
 func setupController(logger *zap.Logger, opts MockControllerOptions) controller {
 	return controller{
-		context:           context.Background(),
-		operatorData:      opts.operatorData,
-		recipientsStorage: opts.recipientsStorage,
-		sharesStorage:     opts.sharesStorage,
-		logger:            logger,
-		validatorsMap:     opts.validatorsMap,
+		beacon:                     nil,
+		keyManager:                 nil,
+		shareEncryptionKeyProvider: nil,
+		context:                    context.Background(),
+		operatorData:               opts.operatorData,
+		recipientsStorage:          opts.recipientsStorage,
+		sharesStorage:              opts.sharesStorage,
+		logger:                     logger,
+		validatorsMap:              opts.validatorsMap,
+		metadataUpdateQueue:        nil,
+		metadataUpdateInterval:     0,
+		messageRouter:              newMessageRouter(genesis.New().MsgID()),
 		messageWorker: worker.NewWorker(logger, &worker.Config{
 			Ctx:          context.Background(),
 			WorkersCount: 1,

@@ -5,6 +5,7 @@ import (
 	"crypto/rsa"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -32,7 +33,6 @@ import (
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	qbftcontroller "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	utilsprotocol "github.com/bloxapp/ssv/protocol/v2/queue"
 	"github.com/bloxapp/ssv/protocol/v2/queue/worker"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
@@ -697,17 +697,13 @@ func (c *controller) onShareRemove(pk string, removeSecret bool) error {
 }
 
 func (c *controller) onShareStart(share *ssvtypes.SSVShare) (bool, error) {
-	println("1.1>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>.")
 	if !share.HasBeaconMetadata() { // fetching index and status in case not exist
 		c.logger.Warn("skipping validator until it becomes active", fields.PubKey(share.ValidatorPubKey))
 		return false, nil
 	}
-	println("1.2>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>.")
 	if err := c.setShareFeeRecipient(share, c.recipientsStorage.GetRecipientData); err != nil {
-		println("1.2.1>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>.")
 		return false, errors.Wrap(err, "could not set share fee recipient")
 	}
-	println("1.3>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>.")
 	// Start a committee validator.
 	v, err := c.validatorsMap.GetOrCreateValidator(c.logger.Named("validatorsMap"), share)
 	println("1.4>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>.")
@@ -829,6 +825,7 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 	domainType := ssvtypes.GetDefaultDomain()
 	buildController := func(role spectypes.BeaconRole, valueCheckF specqbft.ProposedValueCheckF) *qbftcontroller.Controller {
 		println("guy.1>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>.")
+		println(valueCheckF)
 		println(options.Signer)
 		println(options.SSVShare.ValidatorPubKey)
 		println("guy.1>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>.")
@@ -839,7 +836,7 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 			ValueCheckF: nil, // sets per role type
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 				leader := specqbft.RoundRobinProposer(state, round)
-				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
+				logger.Debug("leader", zap.Int("operator_id", int(leader)))
 				return leader
 			},
 			Storage: options.Storage.Get(role),
