@@ -18,7 +18,7 @@ func maxMessageCounts(committeeSize, quorumSize int) MessageCounts {
 		Proposal:      1,
 		Prepare:       1,
 		Commit:        1,
-		Decided:       committeeSize - quorumSize + 1,
+		Decided:       10,
 		RoundChange:   1,
 		PostConsensus: 1,
 	}
