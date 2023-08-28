@@ -219,7 +219,7 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 		return nil, descriptor, e
 	}
 
-	inCommittee := slices.ContainsFunc(share.Committee, func(operator *spectypes.Operator) bool {
+	descriptor.InCommittee = slices.ContainsFunc(share.Committee, func(operator *spectypes.Operator) bool {
 		return operator.OperatorID == mv.ownOperatorID
 	})
 
@@ -249,7 +249,7 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 
 	descriptor.SSVMessageType = ssvMessage.MsgType
 
-	if !inCommittee && (ssvMessage.MsgType != spectypes.SSVConsensusMsgType) {
+	if !descriptor.InCommittee && (ssvMessage.MsgType != spectypes.SSVConsensusMsgType) {
 		e := ErrNonCommitteeOnlySignedMessage
 		e.got = ssvMessage.MsgType
 		return nil, descriptor, e
@@ -257,7 +257,7 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 
 	switch ssvMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
-		consensusDescriptor, slot, err := mv.validateConsensusMessage(share, msg, inCommittee, receivedAt)
+		consensusDescriptor, slot, err := mv.validateConsensusMessage(share, msg, descriptor.InCommittee, receivedAt)
 		descriptor.Consensus = &consensusDescriptor
 		descriptor.Slot = slot
 		if err != nil {
