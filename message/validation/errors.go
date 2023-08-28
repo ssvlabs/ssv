@@ -56,6 +56,7 @@ var (
 	ErrTooManySameTypeMessagesPerRound     = Error{text: "too many messages of same type per round"}
 	ErrUnexpectedMessageType               = Error{text: "unexpected message type"}
 	ErrDecidedSignersSequence              = Error{text: "decided must have more signers than previous decided", silent: true}
+	ErrNonCommitteeOnlySignedMessage       = Error{text: "non-committee message can be only signed message", silent: true}
 	ErrNonCommitteeOnlyDecided             = Error{text: "non-committee message can be only decided", silent: true}
 	ErrDataTooBig                          = Error{text: "data too big", reject: true}
 	ErrInvalidRole                         = Error{text: "invalid role", reject: true}
