@@ -234,7 +234,7 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 	//
 	if msgValidator != nil {
 		cfg.MsgValidatorFactory = func(s string) MsgValidatorFunc {
-			return NewSSVMsgValidator(logger, fork, msgValidator)
+			return NewSSVMsgValidator(logger, nopMetrics{}, fork, msgValidator)
 		}
 	}
 	ps, tm, err := NewPubsub(ctx, logger, cfg, fork)

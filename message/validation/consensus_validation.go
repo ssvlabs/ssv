@@ -25,6 +25,8 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		return fmt.Errorf("expected consensus message")
 	}
 
+	mv.metrics.ConsensusMsgType(signedMsg.Message.MsgType, len(signedMsg.Signers))
+
 	if len(msg.Data) > maxConsensusMsgSize {
 		return fmt.Errorf("size exceeded")
 	}

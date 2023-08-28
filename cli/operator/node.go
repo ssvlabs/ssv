@@ -99,6 +99,11 @@ var StartNodeCmd = &cobra.Command{
 			log.Fatal("could not create logger", err)
 		}
 		defer logging.CapturePanic(logger)
+
+		metricsReporter := metricsreporter.New(
+			metricsreporter.WithLogger(logger),
+		)
+
 		networkConfig, forkVersion, err := setupSSVNetwork(logger)
 		if err != nil {
 			logger.Fatal("could not setup network", zap.Error(err))
@@ -138,17 +143,14 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
 		cfg.P2pNetworkConfig.Network = networkConfig
 
-		messageValidator := validation.NewMessageValidator(networkConfig, nodeStorage.Shares(), validation.WithLogger(logger))
+		messageValidator := validation.NewMessageValidator(networkConfig, nodeStorage.Shares(), validation.WithLogger(logger), validation.WithMetrics(metricsReporter))
+		cfg.P2pNetworkConfig.Metrics = metricsReporter
 		cfg.P2pNetworkConfig.MessageValidator = messageValidator
 		cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
 
 		p2pNetwork := setupP2P(logger, db)
 
 		slotTicker := slot_ticker.NewTicker(cmd.Context(), networkConfig)
-
-		metricsReporter := metricsreporter.New(
-			metricsreporter.WithLogger(logger),
-		)
 
 		cfg.ConsensusClient.Context = cmd.Context()
 

@@ -4,12 +4,16 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"strconv"
+	"time"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
+
+	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
 )
 
 // TODO: implement all methods
@@ -33,6 +37,10 @@ const (
 	validatorPending      = float64(8)
 	validatorRemoved      = float64(9)
 	validatorUnknown      = float64(10)
+
+	messageAccepted = "accepted"
+	messageIgnored  = "ignored"
+	messageRejected = "rejected"
 )
 
 var (
@@ -65,6 +73,27 @@ var (
 		Name: "ssv:exporter:operator_index",
 		Help: "operator footprint",
 	}, []string{"pubKey", "index"})
+	messageValidated = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_message_validation",
+		Help: "Message validation results",
+	}, []string{"status", "reason"})
+	messageValidationSSVType = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_message_validation_ssv_type",
+		Help: "SSV message type",
+	}, []string{"type"})
+	messageValidationConsensusType = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_message_validation_consensus_type",
+		Help: "Consensus message type",
+	}, []string{"type", "signers"})
+	messageValidationDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "ssv_message_validation_duration_seconds",
+		Help:    "Message validation duration (seconds)",
+		Buckets: []float64{0.001, 0.005, 0.010, 0.050, 0.100, 0.500, 1},
+	}, []string{})
+	messageSize = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv_message_size",
+		Help: "Message size",
+	}, []string{})
 )
 
 type MetricsReporter struct {
@@ -84,9 +113,16 @@ func New(opts ...Option) *MetricsReporter {
 	allMetrics := []prometheus.Collector{
 		ssvNodeStatus,
 		executionClientStatus,
+		executionClientLastFetchedBlock,
 		validatorStatus,
 		eventProcessed,
 		eventProcessingFailed,
+		operatorIndex,
+		messageValidated,
+		messageValidationSSVType,
+		messageValidationConsensusType,
+		messageValidationDuration,
+		messageSize,
 	}
 
 	for i, c := range allMetrics {
@@ -176,3 +212,31 @@ func (m MetricsReporter) EventProcessingFailed(eventName string) {
 // TODO implement
 func (m MetricsReporter) LastBlockProcessed(uint64) {}
 func (m MetricsReporter) LogsProcessingError(error) {}
+
+func (m MetricsReporter) MessageAccepted() {
+	messageValidated.WithLabelValues(messageAccepted, "").Inc()
+}
+
+func (m MetricsReporter) MessageIgnored(reason string) {
+	messageValidated.WithLabelValues(messageIgnored, reason).Inc()
+}
+
+func (m MetricsReporter) MessageRejected(reason string) {
+	messageValidated.WithLabelValues(messageRejected, reason).Inc()
+}
+
+func (m MetricsReporter) SSVMessageType(msgType spectypes.MsgType) {
+	messageValidationSSVType.WithLabelValues(ssvmessage.MsgTypeToString(msgType)).Inc()
+}
+
+func (m MetricsReporter) ConsensusMsgType(msgType specqbft.MessageType, signers int) {
+	messageValidationConsensusType.WithLabelValues(ssvmessage.QBFTMsgTypeToString(msgType), strconv.Itoa(signers)).Inc()
+}
+
+func (m MetricsReporter) MessageValidationDuration(duration time.Duration, labels ...string) {
+	messageValidationDuration.WithLabelValues(labels...).Observe(duration.Seconds())
+}
+
+func (m MetricsReporter) MessageSize(size int) {
+	messageSize.WithLabelValues().Set(float64(size))
+}

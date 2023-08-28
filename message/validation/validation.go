@@ -69,6 +69,7 @@ type validatorGetterFunc = func(pk []byte) *ssvtypes.SSVShare
 
 type MessageValidator struct {
 	logger          *zap.Logger
+	metrics         metrics
 	netCfg          networkconfig.NetworkConfig
 	index           sync.Map
 	shareStorage    registrystorage.Shares
@@ -78,6 +79,7 @@ type MessageValidator struct {
 func NewMessageValidator(netCfg networkconfig.NetworkConfig, shareStorage registrystorage.Shares, opts ...Option) *MessageValidator {
 	mv := &MessageValidator{
 		logger:       zap.NewNop(),
+		metrics:      nopMetrics{},
 		netCfg:       netCfg,
 		shareStorage: shareStorage,
 	}
@@ -94,6 +96,12 @@ type Option func(validator *MessageValidator)
 func WithLogger(logger *zap.Logger) Option {
 	return func(mv *MessageValidator) {
 		mv.logger = logger
+	}
+}
+
+func WithMetrics(metrics metrics) Option {
+	return func(mv *MessageValidator) {
+		mv.metrics = metrics
 	}
 }
 

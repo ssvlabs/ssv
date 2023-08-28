@@ -22,7 +22,7 @@ func TestMsgValidator(t *testing.T) {
 	pks := createSharePublicKeys(4)
 	f := genesis.ForkGenesis{}
 	// TODO: use a validator, adjust the message for it
-	mv := NewSSVMsgValidator(zaptest.NewLogger(t), &f, nil)
+	mv := NewSSVMsgValidator(zaptest.NewLogger(t), nopMetrics{}, &f, nil)
 	require.NotNil(t, mv)
 
 	t.Run("valid consensus msg", func(t *testing.T) {

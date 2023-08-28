@@ -20,8 +20,16 @@ type MsgValidatorFunc = func(ctx context.Context, p peer.ID, msg *pubsub.Message
 // NewSSVMsgValidator creates a new msg validator that validates message structure,
 // and checks that the message was sent on the right topic.
 // TODO: enable post SSZ change, remove logs, break into smaller validators?
-func NewSSVMsgValidator(logger *zap.Logger, fork forks.Fork, validator *validation.MessageValidator) func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
+// TODO: consider making logging and metrics optional for tests
+func NewSSVMsgValidator(logger *zap.Logger, metrics metrics, fork forks.Fork, validator *validation.MessageValidator) func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
 	return func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+		start := time.Now()
+		var validationDurationLabels []string // TODO: implement
+
+		defer func() {
+			metrics.MessageValidationDuration(time.Since(start), validationDurationLabels...)
+		}()
+
 		topic := pmsg.GetTopic()
 
 		metricPubsubActiveMsgValidation.WithLabelValues(topic).Inc()
@@ -29,16 +37,18 @@ func NewSSVMsgValidator(logger *zap.Logger, fork forks.Fork, validator *validati
 
 		messageData := pmsg.GetData()
 		if len(messageData) == 0 {
-			reportValidationResult(validationStatusRejected, "no data")
+			metrics.MessageRejected("no data")
 			return pubsub.ValidationReject
 		}
+
+		metrics.MessageSize(len(messageData))
 
 		// Max possible MsgType + MsgID + Data plus 10% for encoding overhead
 		// TODO: check if we need to add 10% here
 		const maxMsgSize = 4 + 56 + 8388668
 		const maxEncodedMsgSize = maxMsgSize + maxMsgSize/10
 		if len(messageData) > maxEncodedMsgSize {
-			reportValidationResult(validationStatusRejected, "message is too big")
+			metrics.MessageRejected("message is too big")
 			return pubsub.ValidationReject
 		}
 
@@ -46,11 +56,11 @@ func NewSSVMsgValidator(logger *zap.Logger, fork forks.Fork, validator *validati
 		if err != nil {
 			// can't decode message
 			// logger.Debug("invalid: can't decode message", zap.Error(err))
-			reportValidationResult(validationStatusRejected, "could not decode network message")
+			metrics.MessageRejected("could not decode network message")
 			return pubsub.ValidationReject
 		}
 		if msg == nil {
-			reportValidationResult(validationStatusRejected, "message is nil")
+			metrics.MessageRejected("message is nil")
 			return pubsub.ValidationReject
 		}
 
@@ -67,9 +77,10 @@ func NewSSVMsgValidator(logger *zap.Logger, fork forks.Fork, validator *validati
 		// reportValidationResult(validationResultTopic)
 		// return pubsub.ValidationReject
 
-		reportSSVMsgType(msg.MsgType)
+		metrics.SSVMessageType(msg.MsgType)
 
 		if validator != nil {
+			// TODO: consider merging NewSSVMsgValidator with validator.ValidateMessage
 			decodedMessage, err := validator.ValidateMessage(msg, time.Now())
 			if err != nil {
 				var valErr validation.Error
@@ -82,13 +93,13 @@ func NewSSVMsgValidator(logger *zap.Logger, fork forks.Fork, validator *validati
 						logger.Debug("rejecting invalid message", zap.Error(err))
 						// TODO: consider having metrics for each type of validation error
 						// TODO: pass metrics to NewSSVMsgValidator
-						reportValidationResult(validationStatusRejected, valErr.Text())
+						metrics.MessageRejected(valErr.Text())
 						return pubsub.ValidationReject
 					}
 
-					reportValidationResult(validationStatusIgnored, valErr.Text())
+					metrics.MessageIgnored(valErr.Text())
 				} else {
-					reportValidationResult(validationStatusIgnored, err.Error())
+					metrics.MessageIgnored(err.Error())
 				}
 
 				logger.Debug("ignoring invalid message", zap.Error(err))
@@ -101,14 +112,14 @@ func NewSSVMsgValidator(logger *zap.Logger, fork forks.Fork, validator *validati
 			if err != nil {
 				logger.Debug("ignoring invalid message", zap.Error(err))
 
-				reportValidationResult(validationStatusIgnored, err.Error())
+				metrics.MessageIgnored(err.Error())
 				return pubsub.ValidationIgnore
 			}
 
 			pmsg.ValidatorData = decodedMessage
 		}
 
-		reportValidationResult(validationStatusAccepted, "")
+		metrics.MessageAccepted()
 
 		return pubsub.ValidationAccept
 	}
