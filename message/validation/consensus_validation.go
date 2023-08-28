@@ -225,7 +225,7 @@ func (mv *MessageValidator) validateSignerBehavior(
 				return ErrDuplicatedProposalWithDifferentData
 			}
 
-			limits := maxMessageCounts(len(share.Committee))
+			limits := maxMessageCounts(len(share.Committee), int(share.Quorum))
 			if err := signerState.MessageCounts.Validate(msg, limits); err != nil {
 				return err
 			}
