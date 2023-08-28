@@ -60,17 +60,15 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 	role := msg.GetID().GetRoleType()
 	maxRound := mv.maxRound(role)
 
-	if !nonCommittee {
-		if err := mv.validateSlotTime(msgSlot, role, receivedAt); err != nil {
-			return consensusDescriptor, msgSlot, err
-		}
+	if err := mv.validateSlotTime(msgSlot, role, receivedAt); err != nil {
+		return consensusDescriptor, msgSlot, err
+	}
 
-		if msgRound > maxRound {
-			err := ErrRoundTooHigh
-			err.got = fmt.Sprintf("%v (%v role)", msgRound, role)
-			err.want = fmt.Sprintf("%v (%v role)", maxRound, role)
-			return consensusDescriptor, msgSlot, err
-		}
+	if msgRound > maxRound {
+		err := ErrRoundTooHigh
+		err.got = fmt.Sprintf("%v (%v role)", msgRound, role)
+		err.want = fmt.Sprintf("%v (%v role)", maxRound, role)
+		return consensusDescriptor, msgSlot, err
 	}
 
 	slotStartTime := mv.netCfg.Beacon.GetSlotStartTime(msgSlot).
