@@ -3,6 +3,7 @@ package topics
 import (
 	"context"
 	"errors"
+	"math"
 	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -38,7 +39,7 @@ func NewSSVMsgValidator(logger *zap.Logger, metrics metrics, fork forks.Fork, va
 
 		messageData := pmsg.GetData()
 		if len(messageData) == 0 {
-			metrics.MessageRejected("no data", nil, -1, 0, 0)
+			metrics.MessageRejected("no data", nil, math.MaxUint64, 0, 0)
 			return pubsub.ValidationReject
 		}
 
@@ -49,7 +50,7 @@ func NewSSVMsgValidator(logger *zap.Logger, metrics metrics, fork forks.Fork, va
 		const maxMsgSize = 4 + 56 + 8388668
 		const maxEncodedMsgSize = maxMsgSize + maxMsgSize/10
 		if len(messageData) > maxEncodedMsgSize {
-			metrics.MessageRejected("message is too big", nil, -1, 0, 0)
+			metrics.MessageRejected("message is too big", nil, math.MaxUint64, 0, 0)
 			return pubsub.ValidationReject
 		}
 
@@ -57,11 +58,11 @@ func NewSSVMsgValidator(logger *zap.Logger, metrics metrics, fork forks.Fork, va
 		if err != nil {
 			// can't decode message
 			// logger.Debug("invalid: can't decode message", zap.Error(err))
-			metrics.MessageRejected("could not decode network message", nil, -1, 0, 0)
+			metrics.MessageRejected("could not decode network message", nil, math.MaxUint64, 0, 0)
 			return pubsub.ValidationReject
 		}
 		if msg == nil {
-			metrics.MessageRejected("message is nil", nil, -1, 0, 0)
+			metrics.MessageRejected("message is nil", nil, math.MaxUint64, 0, 0)
 			return pubsub.ValidationReject
 		}
 
@@ -148,14 +149,14 @@ func NewSSVMsgValidator(logger *zap.Logger, metrics metrics, fork forks.Fork, va
 			if err != nil {
 				logger.Debug("ignoring invalid message", zap.Error(err))
 
-				metrics.MessageIgnored(err.Error(), nil, -1, 0, 0)
+				metrics.MessageIgnored(err.Error(), nil, math.MaxUint64, 0, 0)
 				return pubsub.ValidationIgnore
 			}
 
 			pmsg.ValidatorData = decodedMessage
 		}
 
-		metrics.MessageAccepted(nil, -1, 0, 0)
+		metrics.MessageAccepted(nil, math.MaxUint64, 0, 0)
 		return pubsub.ValidationAccept
 	}
 }
