@@ -25,3 +25,4 @@ jobs:
 
       - name: Run spec tests
         run: make spec-test
+        timeout-minutes: 80
