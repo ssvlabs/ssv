@@ -162,12 +162,6 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 		return nil, e
 	}
 
-	if nonCommittee && (ssvMessage.MsgType != spectypes.SSVConsensusMsgType) {
-		e := ErrNonCommitteeOnlySignedMessage
-		e.got = ssvMessage.MsgType
-		return nil, e
-	}
-
 	switch ssvMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
 		if err := mv.validateConsensusMessage(share, msg, nonCommittee, receivedAt); err != nil {
