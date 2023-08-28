@@ -122,25 +122,23 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		return consensusDescriptor, msgSlot, signErr
 	}
 
-	if !nonCommittee {
-		for _, signer := range signedMsg.Signers {
-			signerState := state.GetSignerState(signer)
-			if signerState == nil {
-				signerState = state.CreateSignerState(signer)
-			}
-			if msgSlot > signerState.Slot {
-				newEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) > mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot)
-				signerState.ResetSlot(msgSlot, msgRound, newEpoch)
-			} else if msgSlot == signerState.Slot && msgRound > signerState.Round {
-				signerState.ResetRound(msgRound)
-			}
-
-			if mv.hasFullData(signedMsg) && signerState.ProposalData == nil {
-				signerState.ProposalData = signedMsg.FullData
-			}
-
-			signerState.MessageCounts.Record(msg)
+	for _, signer := range signedMsg.Signers {
+		signerState := state.GetSignerState(signer)
+		if signerState == nil {
+			signerState = state.CreateSignerState(signer)
 		}
+		if msgSlot > signerState.Slot {
+			newEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) > mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot)
+			signerState.ResetSlot(msgSlot, msgRound, newEpoch)
+		} else if msgSlot == signerState.Slot && msgRound > signerState.Round {
+			signerState.ResetRound(msgRound)
+		}
+
+		if mv.hasFullData(signedMsg) && signerState.ProposalData == nil {
+			signerState.ProposalData = signedMsg.FullData
+		}
+
+		signerState.MessageCounts.Record(msg)
 	}
 
 	return consensusDescriptor, msgSlot, nil
