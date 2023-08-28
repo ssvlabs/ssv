@@ -100,11 +100,9 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 	}
 	state := mv.consensusState(consensusID)
 
-	if !nonCommittee {
-		for _, signer := range signedMsg.Signers {
-			if err := mv.validateSignerBehavior(state, signer, share, msg); err != nil {
-				return fmt.Errorf("bad signer behavior: %w", err)
-			}
+	for _, signer := range signedMsg.Signers {
+		if err := mv.validateSignerBehavior(state, signer, share, msg); err != nil {
+			return fmt.Errorf("bad signer behavior: %w", err)
 		}
 	}
 
