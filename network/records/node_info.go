@@ -79,7 +79,7 @@ func (ni *NodeInfo) Codec() []byte {
 // MarshalRecord converts a Record instance to a []byte, so that it can be used as an Envelope payload
 func (ni *NodeInfo) MarshalRecord() ([]byte, error) {
 	parts := []string{
-		"", // deprecated ForkVersion
+		"", // Deprecated: ForkVersion is no longer used. Left for backward compatibility.
 		ni.NetworkID,
 	}
 	if ni.Metadata != nil {
@@ -105,7 +105,8 @@ func (ni *NodeInfo) UnmarshalRecord(data []byte) error {
 	if len(ser.Entries) < 1 {
 		return errors.New("not enough entries in node info, fork version is required")
 	}
-	//ni.ForkVersion = forksprotocol.ForkVersion(ser.Entries[0])
+	// Deprecated: ForkVersion is no longer used. Left for backward compatibility.
+	// ni.ForkVersion = forksprotocol.ForkVersion(ser.Entries[0])
 
 	if len(ser.Entries) < 2 {
 		return errors.New("not enough entries in node info, network ID is required")
