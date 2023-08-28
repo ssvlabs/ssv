@@ -2,6 +2,7 @@ package eventhandler
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -24,7 +25,6 @@ import (
 
 	"github.com/bloxapp/ssv/ekm"
 	"github.com/bloxapp/ssv/eth/contract"
-
 	"github.com/bloxapp/ssv/eth/eventparser"
 	"github.com/bloxapp/ssv/eth/executionclient"
 	"github.com/bloxapp/ssv/eth/simulator"
@@ -36,9 +36,10 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/blskeygen"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
 
@@ -347,15 +348,9 @@ func TestHandleBlockEventsStream(t *testing.T) {
 }
 
 func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger) (*EventHandler, error) {
-	options := basedb.Options{
-		Type:       "badger-memory",
-		Path:       "",
-		Reporting:  false,
-		GCInterval: 0,
-		Ctx:        ctx,
-	}
-
-	db, err := ssvstorage.GetStorageFactory(logger, options)
+	db, err := kv.NewInMemory(logger, basedb.Options{
+		Ctx: ctx,
+	})
 	require.NoError(t, err)
 
 	storageMap := ibftstorage.NewStores()
@@ -408,7 +403,11 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database) (operatorstora
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
-	operatorPubKey, err := nodeStorage.SetupPrivateKey("", true)
+	_, pv, err := rsaencryption.GenerateKeys()
+	if err != nil {
+		logger.Fatal("failed generating operator key %v", zap.Error(err))
+	}
+	operatorPubKey, err := nodeStorage.SetupPrivateKey(base64.StdEncoding.EncodeToString(pv))
 	if err != nil {
 		logger.Fatal("could not setup operator private key", zap.Error(err))
 	}

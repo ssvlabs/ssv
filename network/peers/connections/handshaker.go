@@ -2,6 +2,7 @@ package connections
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
@@ -220,8 +221,11 @@ func (h *handshaker) requestNodeInfo(logger *zap.Logger, conn libp2pnetwork.Conn
 	permissioned := h.Permissioned()
 
 	privateKey, found, err := h.nodeStorage.GetPrivateKey()
+	if err != nil {
+		return nil, fmt.Errorf("could not get private key: %w", err)
+	}
 	if !found {
-		return nil, err
+		return nil, errors.New("could not get private key")
 	}
 	data, err := h.nodeInfos.SelfSealed(h.net.LocalPeer(), conn.RemotePeer(), permissioned, privateKey)
 	if err != nil {

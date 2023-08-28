@@ -71,13 +71,14 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 		delete(ongoingHandshakes, pid)
 	}
 
+	var ignoredConnection = errors.New("ignored connection")
 	acceptConnection := func(logger *zap.Logger, net libp2pnetwork.Network, conn libp2pnetwork.Conn) error {
 		pid := conn.RemotePeer()
 
 		if !beginHandshake(pid) {
 			// Another connection with the same peer is already being handled.
 			logger.Debug("peer is already being handled")
-			return nil
+			return ignoredConnection
 		}
 		defer func() {
 			// Unset this peer as being handled.
@@ -87,7 +88,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 		switch ch.peerInfos.State(pid) {
 		case peers.StateConnected, peers.StateConnecting:
 			logger.Debug("peer is already connected or connecting")
-			return nil
+			return ignoredConnection
 		}
 		ch.peerInfos.AddPeerInfo(pid, conn.RemoteMultiaddr(), conn.Stat().Direction)
 
@@ -161,6 +162,9 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 					if ch.connIdx.Limit(conn.Stat().Direction) {
 						err = errors.New("reached peers limit")
 					}
+				}
+				if errors.Is(err, ignoredConnection) {
+					return
 				}
 				if err != nil {
 					disconnect(logger, net, conn)
