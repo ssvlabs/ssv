@@ -52,9 +52,9 @@ var (
 	ErrRoundTooFarInTheFuture              = Error{text: "round is too far in the future"}
 	ErrRoundTooHigh                        = Error{text: "round is too high for this role" /*, reject: true*/} // TODO: enable reject
 	ErrEarlyMessage                        = Error{text: "early message"}
-	ErrLateMessage                         = Error{text: "late message"}
-	ErrTooManySameTypeMessagesPerRound     = Error{text: "too many messages of same type per round"}
-	ErrUnexpectedMessageType               = Error{text: "unexpected message type"}
+	ErrLateMessage                         = Error{text: "late message", silent: true}
+	ErrTooManySameTypeMessagesPerRound     = Error{text: "too many messages of same type per round", silent: true}
+	ErrUnexpectedMessageType               = Error{text: "unexpected message type", silent: true}
 	ErrDecidedSignersSequence              = Error{text: "decided must have more signers than previous decided", silent: true}
 	ErrDataTooBig                          = Error{text: "data too big", reject: true}
 	ErrInvalidRole                         = Error{text: "invalid role", reject: true}
@@ -69,7 +69,7 @@ var (
 	ErrUnexpectedSigner                    = Error{text: "signer is not expected", reject: true}
 	ErrInvalidHash                         = Error{text: "root doesn't match full data hash", reject: true}
 	ErrInvalidSignature                    = Error{text: "invalid signature", reject: true}
-	ErrEstimatedRoundTooFar                = Error{text: "message round is too far from estimated"}
+	ErrEstimatedRoundTooFar                = Error{text: "message round is too far from estimated", silent: true}
 	ErrMalformedMessage                    = Error{text: "message could not be decoded", reject: true}
 	ErrUnknownMessageType                  = Error{text: "unknown message type", reject: true}
 	ErrPartialSignatureTypeRoleMismatch    = Error{text: "partial signature type and role don't match", reject: true}
