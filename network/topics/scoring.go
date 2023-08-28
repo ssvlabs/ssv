@@ -4,13 +4,14 @@ import (
 	"time"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/network/commons"
 
-	"github.com/bloxapp/ssv/network/forks"
-	"github.com/bloxapp/ssv/network/peers"
-	"github.com/bloxapp/ssv/network/topics/params"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/network/peers"
+	"github.com/bloxapp/ssv/network/topics/params"
 )
 
 // DefaultScoringConfig returns the default scoring config
@@ -53,7 +54,7 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.Extend
 }
 
 // topicScoreParams factory for creating scoring params for topics
-func topicScoreParams(logger *zap.Logger, cfg *PububConfig, f forks.Fork) func(string) *pubsub.TopicScoreParams {
+func topicScoreParams(logger *zap.Logger, cfg *PububConfig) func(string) *pubsub.TopicScoreParams {
 	return func(t string) *pubsub.TopicScoreParams {
 		totalValidators, activeValidators, myValidators, err := cfg.GetValidatorStats()
 		if err != nil {
@@ -63,7 +64,7 @@ func topicScoreParams(logger *zap.Logger, cfg *PububConfig, f forks.Fork) func(s
 		logger := logger.With(zap.String("topic", t), zap.Uint64("totalValidators", totalValidators),
 			zap.Uint64("activeValidators", activeValidators), zap.Uint64("myValidators", myValidators))
 		logger.Debug("got validator stats for score params")
-		opts := params.NewSubnetTopicOpts(int(totalValidators), f.Subnets())
+		opts := params.NewSubnetTopicOpts(int(totalValidators), commons.Subnets())
 		tp, err := params.TopicParams(opts)
 		if err != nil {
 			logger.Debug("ignoring topic score params", zap.Error(err))
