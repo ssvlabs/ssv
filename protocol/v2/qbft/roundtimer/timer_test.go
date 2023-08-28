@@ -44,4 +44,19 @@ func TestRoundTimer_TimeoutForRound(t *testing.T) {
 		<-time.After(timer.roundTimeout(timer.timeAtSlotFunc, timer.role, specqbft.FirstHeight, specqbft.Round(2)) + time.Millisecond*10)
 		require.Equal(t, int32(1), atomic.LoadInt32(&count))
 	})
+
+	t.Run("timeout for first round - ATTESTER", func(t *testing.T) {
+		testingNetwork := spectypes.BeaconTestNetwork
+		currentSlot := testingNetwork.EstimatedCurrentSlot()
+		count := int32(0)
+		onTimeout := func() {
+			atomic.AddInt32(&count, 1)
+		}
+		timer := New(context.Background(), spectypes.BNRoleAttester, testingNetwork.EstimatedTimeAtSlot, onTimeout)
+		timer.roundTimeout = RoundTimeout
+		timer.TimeoutForRound(specqbft.Height(currentSlot), specqbft.FirstRound)
+		require.Equal(t, int32(0), atomic.LoadInt32(&count))
+		<-time.After(timer.roundTimeout(timer.timeAtSlotFunc, timer.role, specqbft.Height(currentSlot), specqbft.FirstRound) + time.Millisecond*10)
+		require.Equal(t, int32(1), atomic.LoadInt32(&count))
+	})
 }
