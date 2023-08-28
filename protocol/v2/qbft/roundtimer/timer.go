@@ -16,9 +16,14 @@ type RoundTimeoutFunc func(TimeAtSlotFunc, spectypes.BeaconRole, specqbft.Height
 
 var (
 	quickTimeoutThreshold = specqbft.Round(8)
-	firstRoundTimeout     = 6 * time.Second
-	quickTimeout          = 2 * time.Second
-	slowTimeout           = 2 * time.Minute
+	// TODO: Update SIP for Deterministic Round Timeout
+	// firstRoundTimeout specifies the duration to wait after the dutyStartTime for ATTESTER/SYNC_COMMITTEE roles.
+	// before considering the first round as timed out. This ensures that all instances
+	// have a synchronized and predetermined amount of time to perform their first-round duties.
+	// the value is 6 sec (1/3 of the slot time [the duty should be executed from] + 2 sec [same as quickTimeout])
+	firstRoundTimeout = 6 * time.Second
+	quickTimeout      = 2 * time.Second
+	slowTimeout       = 2 * time.Minute
 )
 
 // Timer is an interface for a round timer, calling the UponRoundTimeout when times out
@@ -30,6 +35,12 @@ type Timer interface {
 // RoundTimeout returns the number of seconds until next timeout for a give round.
 // if the round is smaller than 8 -> 2s; otherwise -> 2m
 // see SIP https://github.com/bloxapp/SIPs/pull/22
+// TODO: Update SIP for Deterministic Round Timeout
+// The new logic accommodates starting instances based on block arrival (either as attester or sync committee).
+// This creates a scenario where each instance in a committee could initiate their timers at different times,
+// leading to varying timeouts for the first round across instances.
+// To synchronize timeouts across all instances, we'll base it on the duty start time,
+// which is calculated from the slot height.
 func RoundTimeout(timeAtSlotF TimeAtSlotFunc, role spectypes.BeaconRole, height specqbft.Height, round specqbft.Round) time.Duration {
 	if round == specqbft.FirstRound && (role == spectypes.BNRoleAttester || role == spectypes.BNRoleSyncCommittee) {
 		dutyStartTime := time.Unix(timeAtSlotF(phase0.Slot(height)), 0)
