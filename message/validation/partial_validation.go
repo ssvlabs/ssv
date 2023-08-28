@@ -64,9 +64,9 @@ func (mv *MessageValidator) validatePartialSignatureMessage(share *ssvtypes.SSVS
 		}
 	}
 
-	if err := mv.validPartialSignatures(share, signedMsg); err != nil {
-		return msgSlot, err
-	}
+	//if err := mv.validPartialSignatures(share, signedMsg); err != nil {
+	//	return msgSlot, err
+	//}
 
 	if signerState == nil {
 		signerState = consensusState.CreateSignerState(signedMsg.Signer)
