@@ -2,7 +2,6 @@ package metricsreporter
 
 import (
 	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"strconv"
 	"time"
@@ -78,7 +77,7 @@ var (
 	messageValidationResult = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_message_validation",
 		Help: "Message validation result",
-	}, []string{"status", "reason", "validator", "role", "slot", "round"})
+	}, []string{"status", "reason" /*, "validator", "role", "slot", "round"*/})
 	messageValidationSSVType = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_message_validation_ssv_type",
 		Help: "SSV message type",
@@ -224,10 +223,10 @@ func (m MetricsReporter) MessageAccepted(
 	messageValidationResult.WithLabelValues(
 		messageAccepted,
 		"",
-		hex.EncodeToString(validatorPK),
-		role.String(),
-		strconv.FormatUint(uint64(slot), 10),
-		strconv.FormatUint(uint64(round), 10),
+		//hex.EncodeToString(validatorPK),
+		//role.String(),
+		//strconv.FormatUint(uint64(slot), 10),
+		//strconv.FormatUint(uint64(round), 10),
 	).Inc()
 }
 
@@ -241,10 +240,10 @@ func (m MetricsReporter) MessageIgnored(
 	messageValidationResult.WithLabelValues(
 		messageIgnored,
 		reason,
-		hex.EncodeToString(validatorPK),
-		role.String(),
-		strconv.FormatUint(uint64(slot), 10),
-		strconv.FormatUint(uint64(round), 10),
+		//hex.EncodeToString(validatorPK),
+		//role.String(),
+		//strconv.FormatUint(uint64(slot), 10),
+		//strconv.FormatUint(uint64(round), 10),
 	).Inc()
 }
 
@@ -258,10 +257,10 @@ func (m MetricsReporter) MessageRejected(
 	messageValidationResult.WithLabelValues(
 		messageRejected,
 		reason,
-		hex.EncodeToString(validatorPK),
-		role.String(),
-		strconv.FormatUint(uint64(slot), 10),
-		strconv.FormatUint(uint64(round), 10),
+		//hex.EncodeToString(validatorPK),
+		//role.String(),
+		//strconv.FormatUint(uint64(slot), 10),
+		//strconv.FormatUint(uint64(round), 10),
 	).Inc()
 }
 
