@@ -21,7 +21,11 @@ var (
 	metricMsgValidationSSVType = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_message_validation_ssv_type",
 		Help: "SSV message type",
-	}, []string{"ssv_msg_type"})
+	}, []string{"type"})
+	metricMsgValidationConsensusType = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_message_validation_consensus_type",
+		Help: "Consensus message type",
+	}, []string{"type"})
 	metricPubsubOutbound = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:p2p:pubsub:msg:out",
 		Help: "Count broadcasted messages",
