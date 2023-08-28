@@ -344,18 +344,6 @@ func (dvs *DiscV5Service) createLocalNode(logger *zap.Logger, discOpts *Options,
 	return localNode, nil
 }
 
-// DecorateNode will enrich the local node record with more entries, according to current fork
-func DecorateNode(node *enode.LocalNode, args map[string]interface{}) error {
-	var subnets []byte
-	raw, ok := args["subnets"]
-	if !ok {
-		subnets = make([]byte, commons.Subnets())
-	} else {
-		subnets = raw.([]byte)
-	}
-	return records.SetSubnetsEntry(node, subnets)
-}
-
 // newUDPListener creates a udp server
 func newUDPListener(bindIP net.IP, port int, network string) (*net.UDPConn, error) {
 	udpAddr := &net.UDPAddr{
