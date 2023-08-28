@@ -15,29 +15,31 @@ import (
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
-func (mv *MessageValidator) validatePartialSignatureMessage(share *ssvtypes.SSVShare, msg *queue.DecodedSSVMessage) error {
+func (mv *MessageValidator) validatePartialSignatureMessage(share *ssvtypes.SSVShare, msg *queue.DecodedSSVMessage) (phase0.Slot, error) {
 	signedMsg, ok := msg.Body.(*spectypes.SignedPartialSignatureMessage)
 	if !ok {
-		return fmt.Errorf("expected partial signature message")
+		return 0, fmt.Errorf("expected partial signature message")
 	}
 
+	msgSlot := signedMsg.Message.Slot
+
 	if len(msg.Data) > maxPartialSignatureMsgSize {
-		return fmt.Errorf("size exceeded")
+		return msgSlot, fmt.Errorf("size exceeded")
 	}
 
 	if !mv.validPartialSigMsgType(signedMsg.Message.Type) {
 		e := ErrUnknownMessageType
 		e.got = signedMsg.Message.Type
-		return e
+		return msgSlot, e
 	}
 
 	role := msg.GetID().GetRoleType()
 	if !mv.partialSignatureTypeMatchesRole(signedMsg.Message.Type, role) {
-		return ErrPartialSignatureTypeRoleMismatch
+		return msgSlot, ErrPartialSignatureTypeRoleMismatch
 	}
 
 	if err := mv.validPartialSigners(share, signedMsg); err != nil {
-		return err
+		return msgSlot, err
 	}
 
 	// TODO: check running duty
@@ -51,31 +53,31 @@ func (mv *MessageValidator) validatePartialSignatureMessage(share *ssvtypes.SSVS
 	signerState := consensusState.GetSignerState(signedMsg.Signer)
 
 	if signerState != nil {
-		if signedMsg.Message.Slot < signerState.Slot {
+		if msgSlot < signerState.Slot {
 			// Signers aren't allowed to decrease their slot.
 			// If they've sent a future message due to clock error,
 			// this should be caught by the earlyMessage check.
 			err := ErrSlotAlreadyAdvanced
 			err.want = signerState.Slot
-			err.got = signedMsg.Message.Slot
-			return err
+			err.got = msgSlot
+			return msgSlot, err
 		}
 	}
 
 	if err := mv.validPartialSignatures(share, signedMsg); err != nil {
-		return err
+		return msgSlot, err
 	}
 
 	if signerState == nil {
 		signerState = consensusState.CreateSignerState(signedMsg.Signer)
 	}
-	msgSlot := signedMsg.Message.Slot
+
 	if msgSlot > signerState.Slot {
 		newEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) > mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot)
 		signerState.ResetSlot(msgSlot, specqbft.FirstRound, newEpoch)
 	}
 
-	return nil
+	return msgSlot, nil
 }
 
 func (mv *MessageValidator) validPartialSigMsgType(msgType spectypes.PartialSigMsgType) bool {

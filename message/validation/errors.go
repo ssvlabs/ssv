@@ -2,6 +2,7 @@ package validation
 
 import (
 	"fmt"
+	"strings"
 )
 
 type Error struct {
@@ -14,18 +15,20 @@ type Error struct {
 }
 
 func (e Error) Error() string {
-	result := e.text
+	var sb strings.Builder
+	sb.WriteString(e.text)
+
 	if e.got != nil {
-		result += fmt.Sprintf(", got %v", e.got)
+		sb.WriteString(fmt.Sprintf(", got %v", e.got))
 	}
 	if e.want != nil {
-		result += fmt.Sprintf(", want %v", e.want)
+		sb.WriteString(fmt.Sprintf(", want %v", e.want))
 	}
 	if e.innerErr != nil {
-		result += fmt.Sprintf(": %s", e.innerErr.Error())
+		sb.WriteString(fmt.Sprintf(": %s", e.innerErr.Error()))
 	}
 
-	return result
+	return sb.String()
 }
 
 func (e Error) Reject() bool {

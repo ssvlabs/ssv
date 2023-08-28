@@ -6,16 +6,20 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 	"golang.org/x/exp/slices"
 
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/networkconfig"
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
@@ -102,50 +106,123 @@ func WithMetrics(metrics metrics) Option {
 	}
 }
 
-func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, receivedAt time.Time) (*queue.DecodedSSVMessage, error) {
+type ConsensusDescriptor struct {
+	Round           specqbft.Round
+	QBFTMessageType specqbft.MessageType
+	Signers         []spectypes.OperatorID
+	Committee       []*spectypes.Operator
+}
+
+type Descriptor struct {
+	ValidatorPK    spectypes.ValidatorPK
+	Role           spectypes.BeaconRole
+	SSVMessageType spectypes.MsgType
+	Slot           phase0.Slot
+	Consensus      *ConsensusDescriptor
+}
+
+func (d Descriptor) Fields() []zapcore.Field {
+	result := []zapcore.Field{
+		fields.Validator(d.ValidatorPK),
+		fields.Role(d.Role),
+		zap.String("ssv_message_type", ssvmessage.MsgTypeToString(d.SSVMessageType)),
+		fields.Slot(d.Slot),
+	}
+
+	if d.Consensus != nil {
+		var committee []spectypes.OperatorID
+		for _, o := range d.Consensus.Committee {
+			committee = append(committee, o.OperatorID)
+		}
+
+		result = append(result,
+			fields.Round(d.Consensus.Round),
+			zap.String("qbft_message_type", ssvmessage.QBFTMsgTypeToString(d.Consensus.QBFTMessageType)),
+			zap.Uint64s("signers", d.Consensus.Signers),
+			zap.Uint64s("committee", committee),
+		)
+	}
+
+	return result
+}
+
+func (d Descriptor) String() string {
+	sb := strings.Builder{}
+	sb.WriteString(fmt.Sprintf("validator PK: %v, role: %v, ssv message type: %v, slot: %v",
+		hex.EncodeToString(d.ValidatorPK),
+		d.Role.String(),
+		ssvmessage.MsgTypeToString(d.SSVMessageType),
+		d.Slot,
+	))
+
+	if d.Consensus != nil {
+		var committee []spectypes.OperatorID
+		for _, o := range d.Consensus.Committee {
+			committee = append(committee, o.OperatorID)
+		}
+
+		sb.WriteString(fmt.Sprintf(", round: %v, qbft message type: %v, signers: %v, committee: %v",
+			d.Consensus.Round,
+			ssvmessage.QBFTMsgTypeToString(d.Consensus.QBFTMessageType),
+			d.Consensus.Signers,
+			committee,
+		))
+	}
+
+	return sb.String()
+}
+
+func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, receivedAt time.Time) (*queue.DecodedSSVMessage, Descriptor, error) {
+	var descriptor Descriptor
+
 	if len(ssvMessage.Data) == 0 {
-		return nil, ErrEmptyData
+		return nil, descriptor, ErrEmptyData
 	}
 
 	if len(ssvMessage.Data) > maxMessageSize {
 		err := ErrDataTooBig
 		err.got = len(ssvMessage.Data)
 		err.want = maxMessageSize
-		return nil, err
+		return nil, descriptor, err
 	}
 
 	if !bytes.Equal(ssvMessage.MsgID.GetDomain(), mv.netCfg.Domain[:]) {
 		err := ErrWrongDomain
 		err.got = hex.EncodeToString(ssvMessage.MsgID.GetDomain())
 		err.want = hex.EncodeToString(mv.netCfg.Domain[:])
-		return nil, err
+		return nil, descriptor, err
 	}
 
-	if !mv.validRole(ssvMessage.MsgID.GetRoleType()) {
-		return nil, ErrInvalidRole
+	validatorPK := ssvMessage.GetID().GetPubKey()
+	role := ssvMessage.GetID().GetRoleType()
+	descriptor.Role = role
+	descriptor.ValidatorPK = validatorPK
+
+	if !mv.validRole(role) {
+		return nil, descriptor, ErrInvalidRole
 	}
 
-	publicKey, err := ssvtypes.DeserializeBLSPublicKey(ssvMessage.MsgID.GetPubKey())
+	publicKey, err := ssvtypes.DeserializeBLSPublicKey(validatorPK)
 	if err != nil {
-		return nil, fmt.Errorf("deserialize public key: %w", err)
+		return nil, descriptor, fmt.Errorf("deserialize public key: %w", err)
 	}
 
 	share := mv.shareStorage.Get(nil, publicKey.Serialize())
 	if share == nil {
 		e := ErrUnknownValidator
 		e.got = publicKey.SerializeToHexStr()
-		return nil, e
+		return nil, descriptor, e
 	}
 
 	if share.Liquidated {
-		return nil, ErrValidatorLiquidated
+		return nil, descriptor, ErrValidatorLiquidated
 	}
 
 	// TODO: check if need to return error if no metadata
 	if share.BeaconMetadata != nil && !share.BeaconMetadata.IsAttesting() {
 		err := ErrValidatorNotAttesting
 		err.got = share.BeaconMetadata.Status.String()
-		return nil, err
+		return nil, descriptor, err
 	}
 
 	msg, err := queue.DecodeSSVMessage(ssvMessage)
@@ -153,32 +230,42 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 		if errors.Is(err, queue.ErrUnknownMessageType) {
 			e := ErrUnknownMessageType
 			e.got = ssvMessage.GetType()
-			return nil, e
+			return nil, descriptor, e
 		}
 
 		e := ErrMalformedMessage
 		e.innerErr = err
-		return nil, e
+		return nil, descriptor, e
 	}
+
+	descriptor.SSVMessageType = ssvMessage.MsgType
 
 	switch ssvMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
-		if err := mv.validateConsensusMessage(share, msg, receivedAt); err != nil {
-			return nil, err
+		consensusDescriptor, slot, err := mv.validateConsensusMessage(share, msg, receivedAt)
+		if err != nil {
+			return nil, descriptor, err
 		}
+
+		descriptor.Consensus = &consensusDescriptor
+		descriptor.Slot = slot
+
 	case spectypes.SSVPartialSignatureMsgType:
-		if err := mv.validatePartialSignatureMessage(share, msg); err != nil {
-			return nil, err
+		slot, err := mv.validatePartialSignatureMessage(share, msg)
+		if err != nil {
+			return nil, descriptor, err
 		}
+
+		descriptor.Slot = slot
+
 	case ssvmessage.SSVEventMsgType:
-		if err := mv.validateEventMessage(msg); err != nil {
-			return nil, err
-		}
+		return nil, descriptor, ErrEventMessage
+
 	case spectypes.DKGMsgType:
 		// TODO: handle
 	}
 
-	return msg, nil
+	return msg, descriptor, nil
 }
 
 func (mv *MessageValidator) containsSignerFunc(signer spectypes.OperatorID) func(operator *spectypes.Operator) bool {

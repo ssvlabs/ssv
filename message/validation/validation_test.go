@@ -65,7 +65,7 @@ func Test_Validation(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, err = validator.ValidateMessage(message, receivedAt)
+		_, _, err = validator.ValidateMessage(message, receivedAt)
 		require.NoError(t, err)
 	})
 
@@ -78,7 +78,7 @@ func Test_Validation(t *testing.T) {
 			Data:    []byte{},
 		}
 
-		_, err := validator.ValidateMessage(message, time.Now())
+		_, _, err := validator.ValidateMessage(message, time.Now())
 		require.ErrorIs(t, err, ErrEmptyData)
 
 		message = &spectypes.SSVMessage{
@@ -87,7 +87,7 @@ func Test_Validation(t *testing.T) {
 			Data:    nil,
 		}
 
-		_, err = validator.ValidateMessage(message, time.Now())
+		_, _, err = validator.ValidateMessage(message, time.Now())
 		require.ErrorIs(t, err, ErrEmptyData)
 	})
 
@@ -102,7 +102,7 @@ func Test_Validation(t *testing.T) {
 			Data:    bytes.Repeat([]byte{0x1}, tooBigMsgSize),
 		}
 
-		_, err := validator.ValidateMessage(message, time.Now())
+		_, _, err := validator.ValidateMessage(message, time.Now())
 		expectedErr := ErrDataTooBig
 		expectedErr.got = tooBigMsgSize
 		require.ErrorIs(t, err, expectedErr)
@@ -117,7 +117,7 @@ func Test_Validation(t *testing.T) {
 			Data:    bytes.Repeat([]byte{0x1}, maxMessageSize),
 		}
 
-		_, err := validator.ValidateMessage(message, time.Now())
+		_, _, err := validator.ValidateMessage(message, time.Now())
 		require.ErrorIs(t, err, ssz.ErrOffset)
 	})
 
@@ -130,7 +130,7 @@ func Test_Validation(t *testing.T) {
 			Data:    []byte{0x1},
 		}
 
-		_, err = validator.ValidateMessage(message, time.Now())
+		_, _, err = validator.ValidateMessage(message, time.Now())
 		require.ErrorIs(t, err, queue.ErrUnknownMessageType)
 	})
 
@@ -152,7 +152,7 @@ func Test_Validation(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, err = validator.ValidateMessage(message, receivedAt)
+		_, _, err = validator.ValidateMessage(message, receivedAt)
 		expectedErr := ErrWrongDomain
 		expectedErr.got = hex.EncodeToString(wrongDomain[:])
 		expectedErr.want = hex.EncodeToString(netCfg.Domain[:])
@@ -176,7 +176,7 @@ func Test_Validation(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, err = validator.ValidateMessage(message, receivedAt)
+		_, _, err = validator.ValidateMessage(message, receivedAt)
 		require.ErrorIs(t, err, ErrInvalidRole)
 	})
 
@@ -213,7 +213,7 @@ func Test_Validation(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, err = validator.ValidateMessage(message, receivedAt)
+		_, _, err = validator.ValidateMessage(message, receivedAt)
 		require.NoError(t, err)
 	})
 
@@ -248,7 +248,7 @@ func Test_Validation(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, err = validator.ValidateMessage(message, receivedAt)
+		_, _, err = validator.ValidateMessage(message, receivedAt)
 		require.ErrorIs(t, err, ErrZeroSignature)
 	})
 
@@ -269,7 +269,7 @@ func Test_Validation(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, err = validator.ValidateMessage(message, receivedAt.Add(50*netCfg.SlotDurationSec()))
+		_, _, err = validator.ValidateMessage(message, receivedAt.Add(50*netCfg.SlotDurationSec()))
 		require.ErrorIs(t, err, ErrLateMessage)
 	})
 
@@ -290,7 +290,7 @@ func Test_Validation(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot - 1)
-		_, err = validator.ValidateMessage(message, receivedAt)
+		_, _, err = validator.ValidateMessage(message, receivedAt)
 		require.ErrorIs(t, err, ErrEarlyMessage)
 	})
 
@@ -311,7 +311,7 @@ func Test_Validation(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, err = validator.ValidateMessage(message, receivedAt)
+		_, _, err = validator.ValidateMessage(message, receivedAt)
 		expectedErr := ErrSignerNotLeader
 		expectedErr.got = spectypes.OperatorID(2)
 		expectedErr.want = spectypes.OperatorID(1)

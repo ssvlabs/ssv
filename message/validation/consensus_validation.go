@@ -19,41 +19,50 @@ import (
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
-func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, msg *queue.DecodedSSVMessage, receivedAt time.Time) error {
+func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, msg *queue.DecodedSSVMessage, receivedAt time.Time) (ConsensusDescriptor, phase0.Slot, error) {
+	var consensusDescriptor ConsensusDescriptor
+
 	signedMsg, ok := msg.Body.(*specqbft.SignedMessage)
 	if !ok {
-		return fmt.Errorf("expected consensus message")
-	}
-
-	mv.metrics.ConsensusMsgType(signedMsg.Message.MsgType, len(signedMsg.Signers))
-
-	if len(msg.Data) > maxConsensusMsgSize {
-		return fmt.Errorf("size exceeded")
-	}
-
-	if err := mv.validateSignatureFormat(signedMsg.Signature); err != nil {
-		return err
-	}
-
-	if err := mv.validConsensusSigners(share, signedMsg); err != nil {
-		return err
+		return consensusDescriptor, 0, fmt.Errorf("expected consensus message")
 	}
 
 	msgSlot := phase0.Slot(signedMsg.Message.Height)
 	msgRound := signedMsg.Message.Round
 
+	consensusDescriptor = ConsensusDescriptor{
+		QBFTMessageType: signedMsg.Message.MsgType,
+		Round:           msgRound,
+		Signers:         signedMsg.Signers,
+		Committee:       share.Committee,
+	}
+
+	mv.metrics.ConsensusMsgType(signedMsg.Message.MsgType, len(signedMsg.Signers))
+
+	if len(msg.Data) > maxConsensusMsgSize {
+		return consensusDescriptor, msgSlot, fmt.Errorf("size exceeded")
+	}
+
+	if err := mv.validateSignatureFormat(signedMsg.Signature); err != nil {
+		return consensusDescriptor, msgSlot, err
+	}
+
+	if err := mv.validConsensusSigners(share, signedMsg); err != nil {
+		return consensusDescriptor, msgSlot, err
+	}
+
 	role := msg.GetID().GetRoleType()
 	maxRound := mv.maxRound(role)
 
 	if err := mv.validateSlotTime(msgSlot, role, receivedAt); err != nil {
-		return err
+		return consensusDescriptor, msgSlot, err
 	}
 
 	if msgRound > maxRound {
 		err := ErrRoundTooHigh
 		err.got = fmt.Sprintf("%v (%v role)", msgRound, role)
 		err.want = fmt.Sprintf("%v (%v role)", maxRound, role)
-		return err
+		return consensusDescriptor, msgSlot, err
 	}
 
 	slotStartTime := mv.netCfg.Beacon.GetSlotStartTime(msgSlot).
@@ -74,17 +83,17 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		err := ErrEstimatedRoundTooFar
 		err.got = fmt.Sprintf("%v (%v role)", msgRound, role)
 		err.want = fmt.Sprintf("between %v and %v (%v role) / %v passed", lowestAllowed, highestAllowed, role, sinceSlotStart)
-		return err
+		return consensusDescriptor, msgSlot, err
 	}
 
 	if mv.hasFullData(signedMsg) {
 		hashedFullData, err := specqbft.HashDataRoot(signedMsg.FullData)
 		if err != nil {
-			return fmt.Errorf("hash data root: %w", err)
+			return consensusDescriptor, msgSlot, fmt.Errorf("hash data root: %w", err)
 		}
 
 		if hashedFullData != signedMsg.Message.Root {
-			return ErrInvalidHash
+			return consensusDescriptor, msgSlot, ErrInvalidHash
 		}
 	}
 
@@ -96,7 +105,7 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 
 	for _, signer := range signedMsg.Signers {
 		if err := mv.validateSignerBehavior(state, signer, share, msg); err != nil {
-			return fmt.Errorf("bad signer behavior: %w", err)
+			return consensusDescriptor, msgSlot, fmt.Errorf("bad signer behavior: %w", err)
 		}
 	}
 
@@ -104,7 +113,7 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		signErr := ErrInvalidSignature
 		signErr.innerErr = err
 		signErr.got = fmt.Sprintf("domain %v from %v", hex.EncodeToString(mv.netCfg.Domain[:]), hex.EncodeToString(share.ValidatorPubKey))
-		return signErr
+		return consensusDescriptor, msgSlot, signErr
 	}
 
 	for _, signer := range signedMsg.Signers {
@@ -126,7 +135,7 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		signerState.MessageCounts.Record(msg)
 	}
 
-	return nil
+	return consensusDescriptor, msgSlot, nil
 }
 
 func (mv *MessageValidator) validateJustifications(

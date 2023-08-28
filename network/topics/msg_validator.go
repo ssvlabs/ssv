@@ -81,26 +81,29 @@ func NewSSVMsgValidator(logger *zap.Logger, metrics metrics, fork forks.Fork, va
 
 		if validator != nil {
 			// TODO: consider merging NewSSVMsgValidator with validator.ValidateMessage
-			decodedMessage, err := validator.ValidateMessage(msg, time.Now())
+			decodedMessage, descriptor, err := validator.ValidateMessage(msg, time.Now())
 			if err != nil {
 				var valErr validation.Error
 				if errors.As(err, &valErr) {
 					if valErr.Reject() {
 						if !valErr.Silent() {
-							logger.Debug("rejecting invalid message", zap.Error(err))
+							fields := append(descriptor.Fields(), zap.Error(err))
+							logger.Debug("rejecting invalid message", fields...)
 						}
 						metrics.MessageRejected(valErr.Text())
 						return pubsub.ValidationReject
 					} else {
 						if !valErr.Silent() {
-							logger.Debug("ignoring invalid message", zap.Error(err))
+							fields := append(descriptor.Fields(), zap.Error(err))
+							logger.Debug("ignoring invalid message", fields...)
 						}
 						metrics.MessageIgnored(valErr.Text())
 						return pubsub.ValidationIgnore
 					}
 				} else {
 					metrics.MessageIgnored(err.Error())
-					logger.Debug("ignoring invalid message", zap.Error(err))
+					fields := append(descriptor.Fields(), zap.Error(err))
+					logger.Debug("ignoring invalid message", fields...)
 					return pubsub.ValidationIgnore
 				}
 			}
