@@ -85,25 +85,24 @@ func NewSSVMsgValidator(logger *zap.Logger, metrics metrics, fork forks.Fork, va
 			if err != nil {
 				var valErr validation.Error
 				if errors.As(err, &valErr) {
-					if valErr.Silent() {
-						// TODO: consider increasing metrics for silent error but not logging
-						return pubsub.ValidationIgnore
-					}
 					if valErr.Reject() {
-						logger.Debug("rejecting invalid message", zap.Error(err))
-						// TODO: consider having metrics for each type of validation error
-						// TODO: pass metrics to NewSSVMsgValidator
+						if !valErr.Silent() {
+							logger.Debug("rejecting invalid message", zap.Error(err))
+						}
 						metrics.MessageRejected(valErr.Text())
 						return pubsub.ValidationReject
+					} else {
+						if !valErr.Silent() {
+							logger.Debug("ignoring invalid message", zap.Error(err))
+						}
+						metrics.MessageIgnored(valErr.Text())
+						return pubsub.ValidationIgnore
 					}
-
-					metrics.MessageIgnored(valErr.Text())
 				} else {
 					metrics.MessageIgnored(err.Error())
+					logger.Debug("ignoring invalid message", zap.Error(err))
+					return pubsub.ValidationIgnore
 				}
-
-				logger.Debug("ignoring invalid message", zap.Error(err))
-				return pubsub.ValidationIgnore
 			}
 
 			pmsg.ValidatorData = decodedMessage
