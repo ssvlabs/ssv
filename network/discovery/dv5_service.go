@@ -136,7 +136,7 @@ func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) e
 		// Get the peer's domain type, skipping if it mismatches ours.
 		nodeDomainType, err := records.GetDomainTypeEntry(e.Node.Record())
 		if err != nil {
-			logger.Debug("could not read domain type")
+			logger.Debug("could not read domain type", zap.Error(err))
 			return
 		}
 		if nodeDomainType != dvs.domainType {
