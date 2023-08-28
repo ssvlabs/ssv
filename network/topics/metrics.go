@@ -1,9 +1,12 @@
 package topics
 
 import (
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
+
+	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
 )
 
 var (
@@ -11,10 +14,14 @@ var (
 		Name: "ssv:network:pubsub:trace",
 		Help: "Traces of pubsub messages",
 	}, []string{"type"})
-	metricPubsubMsgValidationResults = promauto.NewCounterVec(prometheus.CounterOpts{
+	metricMsgValidation = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_message_validation",
 		Help: "Message validation results",
 	}, []string{"status", "reason"})
+	metricMsgValidationSSVType = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_message_validation_ssv_type",
+		Help: "SSV message type",
+	}, []string{"ssv_msg_type"})
 	metricPubsubOutbound = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:p2p:pubsub:msg:out",
 		Help: "Count broadcasted messages",
@@ -38,7 +45,7 @@ func init() {
 	if err := prometheus.Register(metricPubsubTrace); err != nil {
 		logger.Debug("could not register prometheus collector")
 	}
-	if err := prometheus.Register(metricPubsubMsgValidationResults); err != nil {
+	if err := prometheus.Register(metricMsgValidation); err != nil {
 		logger.Debug("could not register prometheus collector")
 	}
 	if err := prometheus.Register(metricPubsubOutbound); err != nil {
@@ -64,5 +71,24 @@ const (
 )
 
 func reportValidationResult(status msgValidationStatus, reason string) {
-	metricPubsubMsgValidationResults.WithLabelValues(string(status), reason).Inc()
+	metricMsgValidation.WithLabelValues(string(status), reason).Inc()
+}
+
+func reportSSVMsgType(ssvMsgType spectypes.MsgType) {
+	label := ""
+
+	switch ssvMsgType {
+	case spectypes.SSVConsensusMsgType:
+		label = "SSVConsensusMsgType"
+	case spectypes.SSVPartialSignatureMsgType:
+		label = "SSVPartialSignatureMsgType"
+	case spectypes.DKGMsgType:
+		label = "DKGMsgType"
+	case ssvmessage.SSVEventMsgType:
+		label = "SSVEventMsgType"
+	default:
+		label = "unknown"
+	}
+
+	metricMsgValidationSSVType.WithLabelValues(label).Inc()
 }
