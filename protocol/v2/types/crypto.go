@@ -277,13 +277,14 @@ func (b *BatchVerifier) AggregateVerify(signature *bls.Sign, pks []bls.PublicKey
 	if len(b.pending) == b.batchSize {
 		// Batch size reached: stop the timer and dispatch the batch.
 		b.timer.Stop()
+		previouslyStarted := b.started
 		b.started = time.Time{}
 		batch := b.pending
 		b.pending = make(requests)
 		b.mu.Unlock()
 
 		b.debug.Lock()
-		b.debug.batchPendingDurations.AddTime(time.Since(b.started))
+		b.debug.batchPendingDurations.AddTime(time.Since(previouslyStarted))
 		b.debug.Unlock()
 
 		b.batches <- maps.Values(batch)
@@ -373,13 +374,14 @@ func (b *BatchVerifier) worker() {
 		case <-b.ticker.C:
 			// Dispatch the pending requests when the timer expires.
 			b.mu.Lock()
+			previouslyStarted := b.started
 			batch := b.pending
 			b.pending = make(requests)
 			b.mu.Unlock()
 
 			if len(batch) > 0 {
 				b.debug.Lock()
-				b.debug.batchPendingDurations.AddTime(time.Since(b.started))
+				b.debug.batchPendingDurations.AddTime(time.Since(previouslyStarted))
 				b.debug.Unlock()
 
 				b.verify(maps.Values(batch))
