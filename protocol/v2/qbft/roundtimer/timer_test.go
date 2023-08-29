@@ -2,6 +2,7 @@ package roundtimer
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -58,5 +59,46 @@ func TestRoundTimer_TimeoutForRound(t *testing.T) {
 		require.Equal(t, int32(0), atomic.LoadInt32(&count))
 		<-time.After(timer.roundTimeout(timer.timeAtSlotFunc, timer.role, specqbft.Height(currentSlot), specqbft.FirstRound) + time.Millisecond*100)
 		require.Equal(t, int32(1), atomic.LoadInt32(&count))
+	})
+
+	t.Run("timeout for first round - multiple timers", func(t *testing.T) {
+		var count int32
+		var timestamps = make([]int64, 4)
+		var mu sync.Mutex
+
+		testingNetwork := spectypes.BeaconTestNetwork
+		currentSlot := testingNetwork.EstimatedCurrentSlot()
+
+		onTimeout := func(index int) {
+			atomic.AddInt32(&count, 1)
+			mu.Lock()
+			timestamps[index] = time.Now().UnixNano()
+			mu.Unlock()
+		}
+
+		var wg sync.WaitGroup
+		for i := 0; i < 4; i++ {
+			wg.Add(1)
+			go func(index int) {
+				timer := New(context.Background(), spectypes.BNRoleAttester, testingNetwork.EstimatedTimeAtSlot, func() { onTimeout(index) })
+				timer.roundTimeout = RoundTimeout
+				timer.TimeoutForRound(specqbft.Height(currentSlot), specqbft.FirstRound)
+				wg.Done()
+			}(i)
+			time.Sleep(time.Millisecond * 100) // Introduce a sleep between creating timers
+		}
+
+		wg.Wait() // Wait for all go-routines to finish
+
+		// Wait a bit more than the expected timeout to ensure all timers have triggered
+		<-time.After(RoundTimeout(testingNetwork.EstimatedTimeAtSlot, spectypes.BNRoleAttester, specqbft.Height(currentSlot), specqbft.FirstRound) + time.Millisecond*100)
+
+		require.Equal(t, int32(4), atomic.LoadInt32(&count), "All four timers should have triggered")
+
+		mu.Lock()
+		for i := 1; i < 4; i++ {
+			require.InDelta(t, timestamps[0], timestamps[i], float64(time.Millisecond*10), "All four timers should expire nearly at the same time")
+		}
+		mu.Unlock()
 	})
 }
