@@ -352,6 +352,8 @@ func (b *BatchVerifier) Start() {
 				zap.Int("failed_requests", stats.FailedRequests),
 				zap.String("request_total_durations", formatGauge(stats.RequestTotalDurations)),
 				zap.String("request_pending_durations", formatGauge(stats.RequestPendingDurations)),
+				zap.String("batch_durations", formatGauge(stats.BatchDurations)),
+				zap.String("batch_pending_durations", formatGauge(stats.BatchPendingDurations)),
 			)
 		}
 	}()
@@ -435,6 +437,8 @@ func (b *BatchVerifier) Stats() (stats Stats) {
 	stats.FailedRequests = b.debug.failReqs
 	stats.RequestTotalDurations = gaugeFromTachymeter(b.debug.requestTotalDurations)
 	stats.RequestPendingDurations = gaugeFromTachymeter(b.debug.requestPendingDurations)
+	stats.BatchDurations = gaugeFromTachymeter(b.debug.batchDurations)
+	stats.BatchPendingDurations = gaugeFromTachymeter(b.debug.batchPendingDurations)
 
 	// Calculate the average batch size.
 	lens := b.debug.lens[:]
