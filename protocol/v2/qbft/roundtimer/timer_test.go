@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
@@ -47,17 +48,19 @@ func TestRoundTimer_TimeoutForRound(t *testing.T) {
 	})
 
 	t.Run("timeout for first round - ATTESTER", func(t *testing.T) {
-		testingNetwork := spectypes.BeaconTestNetwork
 		count := int32(0)
 		onTimeout := func() {
 			atomic.AddInt32(&count, 1)
 		}
-		timer := New(context.Background(), spectypes.BNRoleAttester, testingNetwork.EstimatedTimeAtSlot, onTimeout)
+		timeAtSlotFunc := func(slot phase0.Slot) int64 {
+			return time.Now().Unix()
+		}
+
+		timer := New(context.Background(), spectypes.BNRoleAttester, timeAtSlotFunc, onTimeout)
 		timer.roundTimeout = RoundTimeout
-		currentSlot := testingNetwork.EstimatedCurrentSlot()
-		timer.TimeoutForRound(specqbft.Height(currentSlot), specqbft.FirstRound)
+		timer.TimeoutForRound(specqbft.Height(0), specqbft.FirstRound)
 		require.Equal(t, int32(0), atomic.LoadInt32(&count))
-		<-time.After(timer.roundTimeout(timer.timeAtSlotFunc, timer.role, specqbft.Height(currentSlot), specqbft.FirstRound) + time.Millisecond*100)
+		<-time.After(timer.roundTimeout(timer.timeAtSlotFunc, timer.role, specqbft.Height(0), specqbft.FirstRound) + time.Millisecond*100)
 		require.Equal(t, int32(1), atomic.LoadInt32(&count))
 	})
 
@@ -66,9 +69,6 @@ func TestRoundTimer_TimeoutForRound(t *testing.T) {
 		var timestamps = make([]int64, 4)
 		var mu sync.Mutex
 
-		testingNetwork := spectypes.BeaconTestNetwork
-		currentSlot := testingNetwork.EstimatedCurrentSlot()
-
 		onTimeout := func(index int) {
 			atomic.AddInt32(&count, 1)
 			mu.Lock()
@@ -76,13 +76,18 @@ func TestRoundTimer_TimeoutForRound(t *testing.T) {
 			mu.Unlock()
 		}
 
+		timeNow := time.Now()
+		timeAtSlotFunc := func(slot phase0.Slot) int64 {
+			return timeNow.Unix()
+		}
+
 		var wg sync.WaitGroup
 		for i := 0; i < 4; i++ {
 			wg.Add(1)
 			go func(index int) {
-				timer := New(context.Background(), spectypes.BNRoleAttester, testingNetwork.EstimatedTimeAtSlot, func() { onTimeout(index) })
+				timer := New(context.Background(), spectypes.BNRoleAttester, timeAtSlotFunc, func() { onTimeout(index) })
 				timer.roundTimeout = RoundTimeout
-				timer.TimeoutForRound(specqbft.Height(currentSlot), specqbft.FirstRound)
+				timer.TimeoutForRound(specqbft.Height(0), specqbft.FirstRound)
 				wg.Done()
 			}(i)
 			time.Sleep(time.Millisecond * 100) // Introduce a sleep between creating timers
@@ -91,7 +96,7 @@ func TestRoundTimer_TimeoutForRound(t *testing.T) {
 		wg.Wait() // Wait for all go-routines to finish
 
 		// Wait a bit more than the expected timeout to ensure all timers have triggered
-		<-time.After(RoundTimeout(testingNetwork.EstimatedTimeAtSlot, spectypes.BNRoleAttester, specqbft.Height(currentSlot), specqbft.FirstRound) + time.Millisecond*100)
+		<-time.After(RoundTimeout(timeAtSlotFunc, spectypes.BNRoleAttester, specqbft.Height(0), specqbft.FirstRound) + time.Millisecond*100)
 
 		require.Equal(t, int32(4), atomic.LoadInt32(&count), "All four timers should have triggered")
 
