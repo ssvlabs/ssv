@@ -10,7 +10,6 @@ import (
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/jamiealquiza/tachymeter"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 	"golang.org/x/exp/maps"
@@ -147,9 +146,6 @@ type SignatureRequest struct {
 	PubKeys   []bls.PublicKey
 	Message   [messageSize]byte
 	Results   []chan bool // Results are sent on these channels.
-
-	// timings keeps the start time of the request, multiple if it's aggregated.
-	timings []time.Time
 }
 
 func (r *SignatureRequest) Finish(result bool) {
@@ -181,17 +177,13 @@ type BatchVerifier struct {
 
 	// debug struct to calculate the average batch size.
 	debug struct {
-		lens                    [8 * 1024]byte         // Lengths of the batches.
-		batches                 int                    // Number of batches processed.
-		reqs                    int                    // Number of requests processed.
-		dups                    int                    // Number of duplicate message requests.
-		fails                   int                    // Number of failed batches.
-		failReqs                int                    // Number of requests in failed batches.
-		requestTotalDurations   *tachymeter.Tachymeter // Lifetime duration of individual requests.
-		requestPendingDurations *tachymeter.Tachymeter // Pending duration of individual requests.
-		batchDurations          *tachymeter.Tachymeter // Duration of batches.
-		batchPendingDurations   *tachymeter.Tachymeter // Pending duration of batches.
-		sync.Mutex                                     // Mutex to guard access to the debug fields.
+		lens       [8 * 1024]byte // Lengths of the batches.
+		n          int            // Number of batches processed.
+		reqs       int            // Number of requests processed.
+		dups       int            // Number of duplicate message requests.
+		fails      int            // Number of failed batches.
+		failReqs   int            // Number of requests in failed batches.
+		sync.Mutex                // Mutex to guard access to the debug fields.
 	}
 }
 
@@ -204,7 +196,7 @@ type BatchVerifier struct {
 // `timeout`: max batch wait time, adjusts based on load (see `adaptiveTimeout`).
 func NewBatchVerifier(concurrency, batchSize int, timeout time.Duration) *BatchVerifier {
 	nopTimer := time.NewTimer(0)
-	v := &BatchVerifier{
+	return &BatchVerifier{
 		concurrency: concurrency,
 		batchSize:   batchSize,
 		timeout:     timeout,
@@ -213,23 +205,11 @@ func NewBatchVerifier(concurrency, batchSize int, timeout time.Duration) *BatchV
 		pending:     make(requests),
 		batches:     make(chan []*SignatureRequest, concurrency*2),
 	}
-	n := concurrency * 1024
-	v.debug.requestTotalDurations = tachymeter.New(&tachymeter.Config{Size: batchSize * n})
-	v.debug.requestPendingDurations = tachymeter.New(&tachymeter.Config{Size: batchSize * n})
-	v.debug.batchDurations = tachymeter.New(&tachymeter.Config{Size: n})
-	v.debug.batchPendingDurations = tachymeter.New(&tachymeter.Config{Size: n})
-	return v
 }
 
 // AggregateVerify adds a request to the current batch or verifies it immediately if a similar one exists.
 // It returns the result of the signature verification.
 func (b *BatchVerifier) AggregateVerify(signature *bls.Sign, pks []bls.PublicKey, message [messageSize]byte) bool {
-	start := time.Now()
-	defer func() {
-		b.debug.Lock()
-		b.debug.requestTotalDurations.AddTime(time.Since(start))
-		b.debug.Unlock()
-	}()
 	result := make(chan bool)
 
 	// If an identical message is already pending, aggregate it's request
@@ -248,16 +228,7 @@ func (b *BatchVerifier) AggregateVerify(signature *bls.Sign, pks []bls.PublicKey
 		sig.Add(signature)
 		dup.Signature = &sig
 		dup.Results = append(dup.Results, result)
-		dup.timings = append(dup.timings, start)
-		valid := <-result
-		if !valid {
-			// If the aggregated verification failed, fall back to individual verification.
-			return b.verifySingle(&SignatureRequest{
-				Signature: signature,
-				PubKeys:   pks,
-				Message:   message,
-			})
-		}
+		return <-result
 	} else {
 		b.debug.Lock()
 		b.debug.reqs++
@@ -269,7 +240,6 @@ func (b *BatchVerifier) AggregateVerify(signature *bls.Sign, pks []bls.PublicKey
 		PubKeys:   pks,
 		Message:   message,
 		Results:   []chan bool{result},
-		timings:   []time.Time{start},
 	}
 	b.pending[message] = sr
 	if len(b.pending) == b.batchSize {
@@ -338,8 +308,6 @@ func (b *BatchVerifier) Start() {
 				zap.Any("recent_batch_sizes", stats.RecentBatchSizes),
 				zap.Int("failed_batches", stats.FailedBatches),
 				zap.Int("failed_requests", stats.FailedRequests),
-				zap.Any("request_total_durations", stats.RequestTotalDurations),
-				zap.Any("request_pending_durations", stats.RequestPendingDurations),
 			)
 		}
 	}()
@@ -370,42 +338,17 @@ func (b *BatchVerifier) worker() {
 	}
 }
 
-type Gauge[T any] struct {
-	Min  T
-	Max  T
-	Mean T
-	P99  T
-	P95  T
-	P50  T
-}
-
-func gaugeFromTachymeter(t *tachymeter.Tachymeter) Gauge[time.Duration] {
-	c := t.Calc()
-	return Gauge[time.Duration]{
-		Min:  c.Time.Min,
-		Max:  c.Time.Max,
-		Mean: c.Time.Avg,
-		P99:  c.Time.P99,
-		P95:  c.Time.P95,
-		P50:  c.Time.P50,
-	}
-}
-
 type Stats struct {
-	TotalRequests           int
-	DuplicateRequests       int
-	TotalBatches            int
-	AverageBatchSize        float64
-	PendingRequests         int
-	PendingBatches          int
-	BusyWorkers             int
-	FailedBatches           int
-	FailedRequests          int
-	RequestTotalDurations   Gauge[time.Duration]
-	RequestPendingDurations Gauge[time.Duration]
-	BatchDurations          Gauge[time.Duration]
-	BatchPendingDurations   Gauge[time.Duration]
-	RecentBatchSizes        [32]byte
+	TotalRequests     int
+	DuplicateRequests int
+	TotalBatches      int
+	AverageBatchSize  float64
+	PendingRequests   int
+	PendingBatches    int
+	BusyWorkers       int
+	FailedBatches     int
+	FailedRequests    int
+	RecentBatchSizes  [32]byte
 }
 
 func (b *BatchVerifier) Stats() (stats Stats) {
@@ -414,16 +357,14 @@ func (b *BatchVerifier) Stats() (stats Stats) {
 
 	stats.TotalRequests = b.debug.reqs
 	stats.DuplicateRequests = b.debug.dups
-	stats.TotalBatches = b.debug.batches
+	stats.TotalBatches = b.debug.n
 	stats.FailedBatches = b.debug.fails
 	stats.FailedRequests = b.debug.failReqs
-	stats.RequestTotalDurations = gaugeFromTachymeter(b.debug.requestTotalDurations)
-	stats.RequestPendingDurations = gaugeFromTachymeter(b.debug.requestPendingDurations)
 
 	// Calculate the average batch size.
 	lens := b.debug.lens[:]
-	if b.debug.batches < len(b.debug.lens) {
-		lens = lens[:b.debug.batches]
+	if b.debug.n < len(b.debug.lens) {
+		lens = lens[:b.debug.n]
 	}
 	var sum float64
 	for _, l := range lens {
@@ -448,12 +389,6 @@ func (b *BatchVerifier) Stats() (stats Stats) {
 func (b *BatchVerifier) verify(batch []*SignatureRequest) {
 	b.busyWorkers.Add(1)
 	defer b.busyWorkers.Add(-1)
-
-	for _, req := range batch {
-		b.debug.Lock()
-		b.debug.requestPendingDurations.AddTime(time.Since(req.timings[0]))
-		b.debug.Unlock()
-	}
 
 	if len(batch) == 1 {
 		batch[0].Finish(b.verifySingle(batch[0]))
@@ -484,8 +419,8 @@ func (b *BatchVerifier) verify(batch []*SignatureRequest) {
 
 	// Update the debug fields under lock.
 	b.debug.Lock()
-	b.debug.batches++
-	b.debug.lens[b.debug.batches%len(b.debug.lens)] = byte(len(batch))
+	b.debug.n++
+	b.debug.lens[b.debug.n%len(b.debug.lens)] = byte(len(batch))
 	if !valid {
 		b.debug.fails++
 		b.debug.failReqs += len(batch)
