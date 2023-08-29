@@ -258,6 +258,7 @@ func (b *BatchVerifier) AggregateVerify(signature *bls.Sign, pks []bls.PublicKey
 				Message:   message,
 			})
 		}
+		return valid
 	} else {
 		b.debug.Lock()
 		b.debug.reqs++
