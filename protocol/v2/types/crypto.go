@@ -161,6 +161,11 @@ func (r *SignatureRequest) Finish(result bool) {
 
 type requests map[[messageSize]byte]*SignatureRequest
 
+type batch struct {
+	start    time.Time
+	requests []*SignatureRequest
+}
+
 // BatchVerifier efficiently schedules and batches BLS signature verifications.
 // It accumulates requests into batches, which are verified
 // in aggregate (to reduce CPU cost) and concurrently
@@ -176,7 +181,7 @@ type BatchVerifier struct {
 	pending requests
 	mu      sync.Mutex
 
-	batches chan []*SignatureRequest // Channel to receive batches of requests.
+	batches chan batch // Channel to receive batches of requests.
 
 	busyWorkers atomic.Int32 // Count of currently busy workers.
 
@@ -212,7 +217,7 @@ func NewBatchVerifier(concurrency, batchSize int, timeout time.Duration) *BatchV
 		timer:       nopTimer,
 		ticker:      time.NewTicker(timeout),
 		pending:     make(requests),
-		batches:     make(chan []*SignatureRequest, concurrency*2*128),
+		batches:     make(chan batch, concurrency*2*128),
 	}
 	n := concurrency * 1024
 	v.debug.requestTotalDurations = tachymeter.New(&tachymeter.Config{Size: batchSize * n})
@@ -279,7 +284,7 @@ func (b *BatchVerifier) AggregateVerify(signature *bls.Sign, pks []bls.PublicKey
 		b.timer.Stop()
 		previouslyStarted := b.started
 		b.started = time.Time{}
-		batch := b.pending
+		pending := b.pending
 		b.pending = make(requests)
 		b.mu.Unlock()
 
@@ -287,7 +292,10 @@ func (b *BatchVerifier) AggregateVerify(signature *bls.Sign, pks []bls.PublicKey
 		b.debug.batchPendingDurations.AddTime(time.Since(previouslyStarted))
 		b.debug.Unlock()
 
-		b.batches <- maps.Values(batch)
+		b.batches <- batch{
+			start:    previouslyStarted,
+			requests: maps.Values(pending),
+		}
 	} else {
 		// Batch has grown: adjust the timer.
 		b.timer.Stop()
@@ -375,16 +383,19 @@ func (b *BatchVerifier) worker() {
 			// Dispatch the pending requests when the timer expires.
 			b.mu.Lock()
 			previouslyStarted := b.started
-			batch := b.pending
+			pending := b.pending
 			b.pending = make(requests)
 			b.mu.Unlock()
 
-			if len(batch) > 0 {
+			if len(pending) > 0 {
 				b.debug.Lock()
 				b.debug.batchPendingDurations.AddTime(time.Since(previouslyStarted))
 				b.debug.Unlock()
 
-				b.verify(maps.Values(batch))
+				b.verify(batch{
+					start:    previouslyStarted,
+					requests: maps.Values(pending),
+				})
 			}
 		}
 	}
@@ -467,28 +478,34 @@ func (b *BatchVerifier) Stats() (stats Stats) {
 }
 
 // verify verifies a batch of requests and sends the results back via the Result channels.
-func (b *BatchVerifier) verify(batch []*SignatureRequest) {
+func (b *BatchVerifier) verify(batch batch) {
 	b.busyWorkers.Add(1)
 	defer b.busyWorkers.Add(-1)
 
 	b.debug.Lock()
-	for _, req := range batch {
+	for _, req := range batch.requests {
 		for _, t := range req.timings {
 			b.debug.requestPendingDurations.AddTime(time.Since(t))
 		}
 	}
 	b.debug.Unlock()
 
-	if len(batch) == 1 {
-		batch[0].Finish(b.verifySingle(batch[0]))
+	defer func() {
+		b.debug.Lock()
+		b.debug.batchDurations.AddTime(time.Since(batch.start))
+		b.debug.Unlock()
+	}()
+
+	if len(batch.requests) == 1 {
+		batch.requests[0].Finish(b.verifySingle(batch.requests[0]))
 		return
 	}
 
 	// Prepare the signature, public keys, and messages for batch verification.
-	sig := *batch[0].Signature
-	pks := make([]bls.PublicKey, len(batch))
-	msgs := make([]byte, len(batch)*messageSize)
-	for i, req := range batch {
+	sig := *batch.requests[0].Signature
+	pks := make([]bls.PublicKey, len(batch.requests))
+	msgs := make([]byte, len(batch.requests)*messageSize)
+	for i, req := range batch.requests {
 		if i > 0 {
 			sig.Add(req.Signature)
 		}
@@ -502,17 +519,17 @@ func (b *BatchVerifier) verify(batch []*SignatureRequest) {
 
 	// Batch verify the signatures.
 	valid := sig.AggregateVerifyNoCheck(pks, msgs)
-	for _, req := range batch {
+	for _, req := range batch.requests {
 		req.Finish(valid)
 	}
 
 	// Update the debug fields under lock.
 	b.debug.Lock()
 	b.debug.batches++
-	b.debug.lens[b.debug.batches%len(b.debug.lens)] = byte(len(batch))
+	b.debug.lens[b.debug.batches%len(b.debug.lens)] = byte(len(batch.requests))
 	if !valid {
 		b.debug.fails++
-		b.debug.failReqs += len(batch)
+		b.debug.failReqs += len(batch.requests)
 	}
 	b.debug.Unlock()
 }
