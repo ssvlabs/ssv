@@ -46,6 +46,10 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		return consensusDescriptor, msgSlot, err
 	}
 
+	if !mv.validQBFTMsgType(signedMsg.Message.MsgType) {
+		return consensusDescriptor, msgSlot, ErrUnknownQBFTMessageType
+	}
+
 	if err := mv.validConsensusSigners(share, signedMsg); err != nil {
 		return consensusDescriptor, msgSlot, err
 	}
@@ -307,6 +311,14 @@ func (mv *MessageValidator) validRole(roleType spectypes.BeaconRole) bool {
 		spectypes.BNRoleSyncCommittee,
 		spectypes.BNRoleSyncCommitteeContribution,
 		spectypes.BNRoleValidatorRegistration:
+		return true
+	}
+	return false
+}
+
+func (mv *MessageValidator) validQBFTMsgType(msgType specqbft.MessageType) bool {
+	switch msgType {
+	case specqbft.ProposalMsgType, specqbft.PrepareMsgType, specqbft.CommitMsgType, specqbft.RoundChangeMsgType:
 		return true
 	}
 	return false

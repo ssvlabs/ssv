@@ -75,7 +75,9 @@ var (
 	ErrInvalidSignature                    = Error{text: "invalid signature", reject: true}
 	ErrEstimatedRoundTooFar                = Error{text: "message round is too far from estimated"}
 	ErrMalformedMessage                    = Error{text: "message could not be decoded", reject: true}
-	ErrUnknownMessageType                  = Error{text: "unknown message type", reject: true}
+	ErrUnknownSSVMessageType               = Error{text: "unknown SSV message type", reject: true}
+	ErrUnknownQBFTMessageType              = Error{text: "unknown QBFT message type", reject: true}
+	ErrUnknownPartialMessageType           = Error{text: "unknown partial signature message type", reject: true}
 	ErrPartialSignatureTypeRoleMismatch    = Error{text: "partial signature type and role don't match", reject: true}
 	ErrNonDecidedWithMultipleSigners       = Error{text: "non-decided with multiple signers", reject: true}
 	ErrWrongSignersLength                  = Error{text: "decided signers size is not between quorum and committee size", reject: true}

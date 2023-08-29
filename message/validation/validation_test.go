@@ -11,14 +11,12 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
-	ssz "github.com/ferranbt/fastssz"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/storage"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
@@ -105,6 +103,7 @@ func Test_Validation(t *testing.T) {
 		_, _, err := validator.ValidateMessage(message, time.Now())
 		expectedErr := ErrDataTooBig
 		expectedErr.got = tooBigMsgSize
+		expectedErr.want = maxMessageSize
 		require.ErrorIs(t, err, expectedErr)
 	})
 
@@ -118,7 +117,8 @@ func Test_Validation(t *testing.T) {
 		}
 
 		_, _, err := validator.ValidateMessage(message, time.Now())
-		require.ErrorIs(t, err, ssz.ErrOffset)
+		expectedErr := ErrMalformedMessage
+		require.ErrorAs(t, err, &expectedErr)
 	})
 
 	t.Run("invalid SSV message type", func(t *testing.T) {
@@ -131,7 +131,8 @@ func Test_Validation(t *testing.T) {
 		}
 
 		_, _, err = validator.ValidateMessage(message, time.Now())
-		require.ErrorIs(t, err, queue.ErrUnknownMessageType)
+		expectedErr := ErrUnknownSSVMessageType
+		require.ErrorAs(t, err, &expectedErr)
 	})
 
 	t.Run("wrong domain", func(t *testing.T) {
@@ -214,7 +215,8 @@ func Test_Validation(t *testing.T) {
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
 		_, _, err = validator.ValidateMessage(message, receivedAt)
-		require.NoError(t, err)
+		expectedErr := ErrUnknownQBFTMessageType
+		require.ErrorAs(t, err, &expectedErr)
 	})
 
 	t.Run("wrong signature size", func(t *testing.T) {
@@ -270,7 +272,8 @@ func Test_Validation(t *testing.T) {
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
 		_, _, err = validator.ValidateMessage(message, receivedAt.Add(50*netCfg.SlotDurationSec()))
-		require.ErrorIs(t, err, ErrLateMessage)
+		expectedErr := ErrLateMessage
+		require.ErrorAs(t, err, &expectedErr)
 	})
 
 	t.Run("early message", func(t *testing.T) {

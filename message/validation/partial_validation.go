@@ -28,7 +28,7 @@ func (mv *MessageValidator) validatePartialSignatureMessage(share *ssvtypes.SSVS
 	}
 
 	if !mv.validPartialSigMsgType(signedMsg.Message.Type) {
-		e := ErrUnknownMessageType
+		e := ErrUnknownPartialMessageType
 		e.got = signedMsg.Message.Type
 		return msgSlot, e
 	}

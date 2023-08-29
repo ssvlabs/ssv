@@ -237,7 +237,7 @@ func (mv *MessageValidator) ValidateMessage(ssvMessage *spectypes.SSVMessage, re
 	msg, err := queue.DecodeSSVMessage(ssvMessage)
 	if err != nil {
 		if errors.Is(err, queue.ErrUnknownMessageType) {
-			e := ErrUnknownMessageType
+			e := ErrUnknownSSVMessageType
 			e.got = ssvMessage.GetType()
 			return nil, descriptor, e
 		}
