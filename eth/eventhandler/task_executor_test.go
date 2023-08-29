@@ -46,7 +46,12 @@ func TestExecuteTask(t *testing.T) {
 	logger, _ := setupLogsCapture()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	eh, validatorCtrl, err := setupEventHandlerWithMockedCtrl(t, ctx, logger)
+	// Create operators rsa keys
+
+	ops, err := createOperators(1)
+	require.NoError(t, err)
+
+	eh, validatorCtrl, err := setupEventHandlerWithMockedCtrl(t, ctx, logger, ops[0])
 	require.NoError(t, err)
 
 	t.Run("test AddValidator task execution - not started", func(t *testing.T) {
@@ -140,7 +145,7 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 	defer cancel()
 
 	// Create operators rsa keys
-	ops, err := createOperators(4)
+	ops, err := createOperators(1)
 	require.NoError(t, err)
 
 	eh, err := setupEventHandler(t, ctx, logger, ops[0])

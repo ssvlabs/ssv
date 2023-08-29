@@ -205,23 +205,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	// Receive event, unmarshall, parse, check parse event is not nil or with an error,
 	// public key is correct, owner is correct, operator ids are correct, shares are correct
 	t.Run("test ValidatorAdded event handle", func(t *testing.T) {
-		// using some random private key for testing
-		operatorEthKey, err := crypto.HexToECDSA("42e14d227125f411d6d3285bb4a2e07c2dba2e210bd2f3f4e2a36633bd61bfe6")
-		require.NoError(t, err)
-		operatorEthAdr := crypto.PubkeyToAddress(operatorEthKey.PublicKey)
-
-		eh.operatorData.SetOperatorData(&registrystorage.OperatorData{
-			PublicKey:    ops[0].pub,
-			ID:           ops[0].id,
-			OwnerAddress: operatorEthAdr,
-		})
-		_, err = eh.nodeStorage.SetupPrivateKey(base64.StdEncoding.EncodeToString(ops[0].priv))
-		require.NoError(t, err)
-
-		_, found, err := eh.nodeStorage.GetPrivateKey()
-		require.NoError(t, err)
-		require.True(t, found)
-
 		nonce, err := eh.nodeStorage.GetNextNonce(nil, testAddr)
 		require.NoError(t, err)
 		require.Equal(t, registrystorage.Nonce(0), nonce)
@@ -591,16 +574,14 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, op
 }
 
 // Copy of setupEventHandler, but with a mocked Validator Controller
-func setupEventHandlerWithMockedCtrl(t *testing.T, ctx context.Context, logger *zap.Logger) (*EventHandler, *mocks.MockController, error) {
+func setupEventHandlerWithMockedCtrl(t *testing.T, ctx context.Context, logger *zap.Logger, operator *testOperator) (*EventHandler, *mocks.MockController, error) {
 	db, err := kv.NewInMemory(logger, basedb.Options{
 		Ctx: ctx,
 	})
 	require.NoError(t, err)
-	_, operatorSk, err := rsaencryption.GenerateKeys()
-	require.NoError(t, err)
 
 	storageMap := ibftstorage.NewStores()
-	nodeStorage, _ := setupOperatorStorage(logger, db, &testOperator{priv: operatorSk, id: 0})
+	nodeStorage, _ := setupOperatorStorage(logger, db, operator)
 	testNetworkConfig := networkconfig.TestNetwork
 
 	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, true, "")
@@ -660,6 +641,7 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, operator *test
 	}
 	var operatorData *registrystorage.OperatorData
 	operatorData, found, err = nodeStorage.GetOperatorDataByPubKey(nil, operatorPubKey)
+
 	if err != nil {
 		logger.Fatal("could not get operator data by public key", zap.Error(err))
 	}
