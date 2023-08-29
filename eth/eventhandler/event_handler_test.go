@@ -724,8 +724,12 @@ func TestCreatingSharesData(t *testing.T) {
 		require.NoError(t, err)
 		decryptedSharePrivateKey, err := rsaencryption.DecodeKey(priv, enck)
 		require.NoError(t, err)
+		share := &bls.SecretKey{}
+		require.NoError(t, share.SetHexString(string(decryptedSharePrivateKey)))
+
 		require.Equal(t, validatorData.operatorsShares[i].sec.SerializeToHexStr(), string(decryptedSharePrivateKey))
 		require.Equal(t, validatorData.operatorsShares[i].pub.Serialize(), sharePublicKeys[i])
+		require.Equal(t, share.GetPublicKey().Serialize(), sharePublicKeys[i])
 	}
 }
 
@@ -766,20 +770,10 @@ func createNewValidator(ops []*testOperator) (*testValidatorData, error) {
 
 	// derive a `hareCount` number of shares
 	for i := uint64(1); i <= num; i++ {
-		var id bls.ID
-		err := id.SetDecString(fmt.Sprintf("%d", i))
-		if err != nil {
-			return nil, err
-		}
-		var contribPub bls.PublicKey
-		err = contribPub.Set(pubks, &id)
-		if err != nil {
-			return nil, err
-		}
 		validatorData.operatorsShares[i-1] = &testShare{
 			opId: i,
 			sec:  splitKeys[i],
-			pub:  &contribPub,
+			pub:  splitKeys[i].GetPublicKey(),
 		}
 	}
 
