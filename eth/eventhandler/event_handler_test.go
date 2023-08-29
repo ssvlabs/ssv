@@ -59,7 +59,12 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	eh, err := setupEventHandler(t, ctx, logger)
+
+	// Create operators rsa keys
+	ops, err := createOperators(4)
+	require.NoError(t, err)
+
+	eh, err := setupEventHandler(t, ctx, logger, ops[0])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,9 +109,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	boundContract, err := simcontract.NewSimcontract(contractAddr, sim)
 	require.NoError(t, err)
 
-	// Create operators rsa keys
-	ops, err := createOperators(4)
-	require.NoError(t, err)
 	// Generate a new validator
 	validatorData1, err := createNewValidator(ops)
 	require.NoError(t, err)
@@ -520,14 +522,14 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	})
 }
 
-func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger) (*EventHandler, error) {
+func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, operator *testOperator) (*EventHandler, error) {
 	db, err := kv.NewInMemory(logger, basedb.Options{
 		Ctx: ctx,
 	})
 	require.NoError(t, err)
 
 	storageMap := ibftstorage.NewStores()
-	nodeStorage, operatorData := setupOperatorStorage(logger, db)
+	nodeStorage, operatorData := setupOperatorStorage(logger, db, operator)
 	testNetworkConfig := networkconfig.TestNetwork
 
 	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, true, "")
@@ -572,14 +574,14 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger) (*
 }
 
 // Copy of setupEventHandler, but with a mocked Validator Controller
-func setupEventHandlerWithMockedCtrl(t *testing.T, ctx context.Context, logger *zap.Logger) (*EventHandler, *mocks.MockController, error) {
+func setupEventHandlerWithMockedCtrl(t *testing.T, ctx context.Context, logger *zap.Logger, operator *testOperator) (*EventHandler, *mocks.MockController, error) {
 	db, err := kv.NewInMemory(logger, basedb.Options{
 		Ctx: ctx,
 	})
 	require.NoError(t, err)
 
 	storageMap := ibftstorage.NewStores()
-	nodeStorage, _ := setupOperatorStorage(logger, db)
+	nodeStorage, _ := setupOperatorStorage(logger, db, operator)
 	testNetworkConfig := networkconfig.TestNetwork
 
 	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, true, "")
@@ -618,16 +620,17 @@ func setupEventHandlerWithMockedCtrl(t *testing.T, ctx context.Context, logger *
 	return eh, validatorCtrl, nil
 }
 
-func setupOperatorStorage(logger *zap.Logger, db basedb.Database) (operatorstorage.Storage, *registrystorage.OperatorData) {
+func setupOperatorStorage(logger *zap.Logger, db basedb.Database, operator *testOperator) (operatorstorage.Storage, *registrystorage.OperatorData) {
+	if operator == nil {
+		logger.Fatal("empty test operator was passed", zap.Error(fmt.Errorf("empty test operator was passed")))
+	}
+
 	nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
-	_, pv, err := rsaencryption.GenerateKeys()
-	if err != nil {
-		logger.Fatal("failed generating operator key %v", zap.Error(err))
-	}
-	operatorPubKey, err := nodeStorage.SetupPrivateKey(base64.StdEncoding.EncodeToString(pv))
+
+	operatorPubKey, err := nodeStorage.SetupPrivateKey(base64.StdEncoding.EncodeToString(operator.priv))
 	if err != nil {
 		logger.Fatal("could not setup operator private key", zap.Error(err))
 	}
@@ -638,6 +641,7 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database) (operatorstora
 	}
 	var operatorData *registrystorage.OperatorData
 	operatorData, found, err = nodeStorage.GetOperatorDataByPubKey(nil, operatorPubKey)
+
 	if err != nil {
 		logger.Fatal("could not get operator data by public key", zap.Error(err))
 	}
