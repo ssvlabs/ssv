@@ -3,10 +3,11 @@ package topics
 import (
 	"context"
 	"encoding/hex"
-	"fmt"
 	"testing"
 
+	"github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
@@ -28,10 +29,13 @@ func TestMsgValidator(t *testing.T) {
 		pkHex := pks[0]
 		msg, err := dummySSVConsensusMsg(pkHex, 15160)
 		require.NoError(t, err)
+
 		raw, err := msg.Encode()
 		require.NoError(t, err)
+
 		pk, err := hex.DecodeString(pkHex)
 		require.NoError(t, err)
+
 		topics := commons.ValidatorTopicID(pk)
 		pmsg := newPBMsg(raw, commons.GetTopicFullName(topics[0]), []byte("16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r"))
 		res := mv(context.Background(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
@@ -100,21 +104,19 @@ func dummySSVConsensusMsg(pkHex string, height int) (*spectypes.SSVMessage, erro
 	if err != nil {
 		return nil, err
 	}
+
 	id := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, pk, spectypes.BNRoleAttester)
-	msgData := fmt.Sprintf(`{
-	  "message": {
-		"type": 3,
-		"round": 2,
-		"identifier": "%s",
-		"height": %d,
-		"value": "bk0iAAAAAAACAAAAAAAAAAbYXFSt2H7SQd5q5u+N0bp6PbbPTQjU25H1QnkbzTECahIBAAAAAADmi+NJfvXZ3iXp2cfs0vYVW+EgGD7DTTvr5EkLtiWq8WsSAQAAAAAAIC8dZTEdD3EvE38B9kDVWkSLy40j0T+TtSrrrBqVjo4="
-	  },
-	  "signature": "sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv2hMf2iRL5ZPKOSmMifHbd8yg4PeeceyN",
-	  "signer_ids": [1,3,4]
-	}`, id, height)
+	ks := spectestingutils.Testing4SharesSet()
+	validSignedMessage := spectestingutils.TestingRoundChangeMessageWithHeightAndIdentifier(ks.Shares[1], 1, qbft.Height(height), id[:])
+
+	encodedSignedMessage, err := validSignedMessage.Encode()
+	if err != nil {
+		return nil, err
+	}
+
 	return &spectypes.SSVMessage{
 		MsgType: spectypes.SSVConsensusMsgType,
 		MsgID:   id,
-		Data:    []byte(msgData),
+		Data:    encodedSignedMessage,
 	}, nil
 }
