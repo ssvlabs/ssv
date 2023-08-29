@@ -282,6 +282,10 @@ func (b *BatchVerifier) AggregateVerify(signature *bls.Sign, pks []bls.PublicKey
 		b.pending = make(requests)
 		b.mu.Unlock()
 
+		b.debug.Lock()
+		b.debug.batchPendingDurations.AddTime(time.Since(b.started))
+		b.debug.Unlock()
+
 		b.batches <- maps.Values(batch)
 	} else {
 		// Batch has grown: adjust the timer.
@@ -372,6 +376,10 @@ func (b *BatchVerifier) worker() {
 			b.mu.Unlock()
 
 			if len(batch) > 0 {
+				b.debug.Lock()
+				b.debug.batchPendingDurations.AddTime(time.Since(b.started))
+				b.debug.Unlock()
+
 				b.verify(maps.Values(batch))
 			}
 		}
@@ -457,11 +465,13 @@ func (b *BatchVerifier) verify(batch []*SignatureRequest) {
 	b.busyWorkers.Add(1)
 	defer b.busyWorkers.Add(-1)
 
+	b.debug.Lock()
 	for _, req := range batch {
-		b.debug.Lock()
-		b.debug.requestPendingDurations.AddTime(time.Since(req.timings[0]))
-		b.debug.Unlock()
+		for _, t := range req.timings {
+			b.debug.requestPendingDurations.AddTime(time.Since(t))
+		}
 	}
+	b.debug.Unlock()
 
 	if len(batch) == 1 {
 		batch[0].Finish(b.verifySingle(batch[0]))
