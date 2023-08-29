@@ -7,6 +7,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 func (c *Controller) UponFutureMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
@@ -38,10 +39,11 @@ func ValidateFutureMsg(
 		return errors.New("allows 1 signer")
 	}
 
-	// TODO: remove as it's done in message validator
-	//if err := types.VerifyByOperators(msg.Signature, msg, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
-	//	return errors.Wrap(err, "msg signature invalid")
-	//}
+	if config.CheckSignature() {
+		if err := types.VerifyByOperators(msg.Signature, msg, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
+			return errors.Wrap(err, "msg signature invalid")
+		}
+	}
 
 	return nil
 }
