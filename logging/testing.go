@@ -9,13 +9,13 @@ import (
 )
 
 func TestLogger(t *testing.T) *zap.Logger {
-	err := SetGlobalLogger(zapcore.InfoLevel.String(), "capital", "console", "")
+	err := SetGlobalLogger(zapcore.DebugLevel.String(), "capital", "console", "")
 	require.NoError(t, err)
 	return zap.L().Named(t.Name())
 }
 
 func BenchLogger(b *testing.B) *zap.Logger {
-	err := SetGlobalLogger(zapcore.InfoLevel.String(), "capital", "console", "")
+	err := SetGlobalLogger(zapcore.DebugLevel.String(), "capital", "console", "")
 	require.NoError(b, err)
 	return zap.L().Named(b.Name())
 }
