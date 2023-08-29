@@ -18,7 +18,7 @@ import (
 
 func TestHandleLocalEvent(t *testing.T) {
 	// Create operators rsa keys
-	ops, err := createOperators(4)
+	ops, err := createOperators(1)
 	require.NoError(t, err)
 
 	t.Run("correct OperatorAdded event", func(t *testing.T) {
