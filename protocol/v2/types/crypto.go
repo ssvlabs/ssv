@@ -212,7 +212,7 @@ func NewBatchVerifier(concurrency, batchSize int, timeout time.Duration) *BatchV
 		timer:       nopTimer,
 		ticker:      time.NewTicker(timeout),
 		pending:     make(requests),
-		batches:     make(chan []*SignatureRequest, concurrency*2),
+		batches:     make(chan []*SignatureRequest, concurrency*2*128),
 	}
 	n := concurrency * 1024
 	v.debug.requestTotalDurations = tachymeter.New(&tachymeter.Config{Size: batchSize * n})
