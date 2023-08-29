@@ -17,6 +17,10 @@ import (
 )
 
 func TestHandleLocalEvent(t *testing.T) {
+	// Create operators rsa keys
+	ops, err := createOperators(4)
+	require.NoError(t, err)
+
 	t.Run("correct OperatorAdded event", func(t *testing.T) {
 		input := []byte(`
 - Log:
@@ -42,7 +46,7 @@ func TestHandleLocalEvent(t *testing.T) {
 		defer cancel()
 
 		logger := zaptest.NewLogger(t)
-		eh, err := setupEventHandler(t, ctx, logger)
+		eh, err := setupEventHandler(t, ctx, logger, ops[0])
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -69,7 +73,7 @@ func TestHandleLocalEvent(t *testing.T) {
 		defer cancel()
 
 		logger := zaptest.NewLogger(t)
-		eh, err := setupEventHandler(t, ctx, logger)
+		eh, err := setupEventHandler(t, ctx, logger, ops[0])
 		if err != nil {
 			t.Fatal(err)
 		}

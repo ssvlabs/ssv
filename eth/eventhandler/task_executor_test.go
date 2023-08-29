@@ -139,7 +139,11 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	eh, err := setupEventHandler(t, ctx, logger)
+	// Create operators rsa keys
+	ops, err := createOperators(4)
+	require.NoError(t, err)
+
+	eh, err := setupEventHandler(t, ctx, logger, ops[0])
 	if err != nil {
 		t.Fatal(err)
 	}

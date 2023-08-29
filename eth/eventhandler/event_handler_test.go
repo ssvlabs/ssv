@@ -59,7 +59,12 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	eh, err := setupEventHandler(t, ctx, logger)
+
+	// Create operators rsa keys
+	ops, err := createOperators(4)
+	require.NoError(t, err)
+
+	eh, err := setupEventHandler(t, ctx, logger, ops[0])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,9 +109,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	boundContract, err := simcontract.NewSimcontract(contractAddr, sim)
 	require.NoError(t, err)
 
-	// Create operators rsa keys
-	ops, err := createOperators(4)
-	require.NoError(t, err)
 	// Generate a new validator
 	validatorData1, err := createNewValidator(ops)
 	require.NoError(t, err)
@@ -203,6 +205,23 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	// Receive event, unmarshall, parse, check parse event is not nil or with an error,
 	// public key is correct, owner is correct, operator ids are correct, shares are correct
 	t.Run("test ValidatorAdded event handle", func(t *testing.T) {
+		// using some random private key for testing
+		operatorEthKey, err := crypto.HexToECDSA("42e14d227125f411d6d3285bb4a2e07c2dba2e210bd2f3f4e2a36633bd61bfe6")
+		require.NoError(t, err)
+		operatorEthAdr := crypto.PubkeyToAddress(operatorEthKey.PublicKey)
+
+		eh.operatorData.SetOperatorData(&registrystorage.OperatorData{
+			PublicKey:    ops[0].pub,
+			ID:           ops[0].id,
+			OwnerAddress: operatorEthAdr,
+		})
+		_, err = eh.nodeStorage.SetupPrivateKey(base64.StdEncoding.EncodeToString(ops[0].priv))
+		require.NoError(t, err)
+
+		_, found, err := eh.nodeStorage.GetPrivateKey()
+		require.NoError(t, err)
+		require.True(t, found)
+
 		nonce, err := eh.nodeStorage.GetNextNonce(nil, testAddr)
 		require.NoError(t, err)
 		require.Equal(t, registrystorage.Nonce(0), nonce)
@@ -520,14 +539,14 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	})
 }
 
-func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger) (*EventHandler, error) {
+func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, operator *testOperator) (*EventHandler, error) {
 	db, err := kv.NewInMemory(logger, basedb.Options{
 		Ctx: ctx,
 	})
 	require.NoError(t, err)
 
 	storageMap := ibftstorage.NewStores()
-	nodeStorage, operatorData := setupOperatorStorage(logger, db)
+	nodeStorage, operatorData := setupOperatorStorage(logger, db, operator)
 	testNetworkConfig := networkconfig.TestNetwork
 
 	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, true, "")
@@ -577,9 +596,11 @@ func setupEventHandlerWithMockedCtrl(t *testing.T, ctx context.Context, logger *
 		Ctx: ctx,
 	})
 	require.NoError(t, err)
+	_, operatorSk, err := rsaencryption.GenerateKeys()
+	require.NoError(t, err)
 
 	storageMap := ibftstorage.NewStores()
-	nodeStorage, _ := setupOperatorStorage(logger, db)
+	nodeStorage, _ := setupOperatorStorage(logger, db, &testOperator{priv: operatorSk, id: 0})
 	testNetworkConfig := networkconfig.TestNetwork
 
 	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, true, "")
@@ -618,16 +639,17 @@ func setupEventHandlerWithMockedCtrl(t *testing.T, ctx context.Context, logger *
 	return eh, validatorCtrl, nil
 }
 
-func setupOperatorStorage(logger *zap.Logger, db basedb.Database) (operatorstorage.Storage, *registrystorage.OperatorData) {
+func setupOperatorStorage(logger *zap.Logger, db basedb.Database, operator *testOperator) (operatorstorage.Storage, *registrystorage.OperatorData) {
+	if operator == nil {
+		logger.Fatal("empty test operator was passed", zap.Error(fmt.Errorf("empty test operator was passed")))
+	}
+
 	nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
-	_, pv, err := rsaencryption.GenerateKeys()
-	if err != nil {
-		logger.Fatal("failed generating operator key %v", zap.Error(err))
-	}
-	operatorPubKey, err := nodeStorage.SetupPrivateKey(base64.StdEncoding.EncodeToString(pv))
+
+	operatorPubKey, err := nodeStorage.SetupPrivateKey(base64.StdEncoding.EncodeToString(operator.priv))
 	if err != nil {
 		logger.Fatal("could not setup operator private key", zap.Error(err))
 	}
