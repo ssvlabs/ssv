@@ -2,6 +2,7 @@ package types
 
 import (
 	"encoding/hex"
+	"fmt"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -328,6 +329,12 @@ func (b *BatchVerifier) Start() {
 		for {
 			time.Sleep(12 * time.Second)
 			stats := b.Stats()
+			formatGauge := func(g Gauge[time.Duration]) string {
+				ms := func(d time.Duration) string {
+					return fmt.Sprintf("%.1fms", d.Seconds()*1000)
+				}
+				return fmt.Sprintf("min: %s,\nmax: %s,\navg: %s,\np99: %s,\np95: %s,\np50: %s", ms(g.Min), ms(g.Max), ms(g.Avg), ms(g.P99), ms(g.P95), ms(g.P50))
+			}
 			zap.L().Debug("BatchVerifier stats",
 				zap.Int("total_requests", stats.TotalRequests),
 				zap.Int("duplicate_requests", stats.DuplicateRequests),
@@ -339,8 +346,8 @@ func (b *BatchVerifier) Start() {
 				zap.Any("recent_batch_sizes", stats.RecentBatchSizes),
 				zap.Int("failed_batches", stats.FailedBatches),
 				zap.Int("failed_requests", stats.FailedRequests),
-				zap.Any("request_total_durations", stats.RequestTotalDurations),
-				zap.Any("request_pending_durations", stats.RequestPendingDurations),
+				zap.String("request_total_durations", formatGauge(stats.RequestTotalDurations)),
+				zap.String("request_pending_durations", formatGauge(stats.RequestPendingDurations)),
 			)
 		}
 	}()
@@ -372,23 +379,23 @@ func (b *BatchVerifier) worker() {
 }
 
 type Gauge[T any] struct {
-	Min  T
-	Max  T
-	Mean T
-	P99  T
-	P95  T
-	P50  T
+	Min T
+	Max T
+	Avg T
+	P99 T
+	P95 T
+	P50 T
 }
 
 func gaugeFromTachymeter(t *tachymeter.Tachymeter) Gauge[time.Duration] {
 	c := t.Calc()
 	return Gauge[time.Duration]{
-		Min:  c.Time.Min,
-		Max:  c.Time.Max,
-		Mean: c.Time.Avg,
-		P99:  c.Time.P99,
-		P95:  c.Time.P95,
-		P50:  c.Time.P50,
+		Min: c.Time.Min,
+		Max: c.Time.Max,
+		Avg: c.Time.Avg,
+		P99: c.Time.P99,
+		P95: c.Time.P95,
+		P50: c.Time.P50,
 	}
 }
 
