@@ -159,30 +159,10 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 				}
 				if len(validLogs) == 0 {
 					// Emit empty block logs to indicate that we have advanced to this block.
-					select {
-					case <-ctx.Done():
-						errors <- ctx.Err()
-						return
-
-					case <-ec.closed:
-						errors <- ErrClosed
-						return
-
-					case logs <- BlockLogs{BlockNumber: toBlock}:
-					}
+					logs <- BlockLogs{BlockNumber: toBlock}
 				} else {
 					for _, blockLogs := range PackLogs(validLogs) {
-						select {
-						case <-ctx.Done():
-							errors <- ctx.Err()
-							return
-
-						case <-ec.closed:
-							errors <- ErrClosed
-							return
-
-						case logs <- blockLogs:
-						}
+						logs <- blockLogs
 					}
 				}
 			}
