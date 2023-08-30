@@ -3,6 +3,7 @@ package validation
 // partial_validation.go contains methods for validating partial signature messages
 
 import (
+	"encoding/hex"
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -116,12 +117,12 @@ func (mv *MessageValidator) validPartialSignatures(share *ssvtypes.SSVShare, sig
 		return err
 	}
 
-	//if err := ssvtypes.VerifyByOperators(signedMsg.Signature, signedMsg, mv.netCfg.Domain, spectypes.PartialSignatureType, share.Committee); err != nil {
-	//	signErr := ErrInvalidSignature
-	//	signErr.innerErr = err
-	//	signErr.got = fmt.Sprintf("domain %v from %v", hex.EncodeToString(mv.netCfg.Domain[:]), hex.EncodeToString(share.ValidatorPubKey))
-	//	return signErr
-	//}
+	if err := ssvtypes.VerifyByOperators(signedMsg.Signature, signedMsg, mv.netCfg.Domain, spectypes.PartialSignatureType, share.Committee); err != nil {
+		signErr := ErrInvalidSignature
+		signErr.innerErr = err
+		signErr.got = fmt.Sprintf("domain %v from %v", hex.EncodeToString(mv.netCfg.Domain[:]), hex.EncodeToString(share.ValidatorPubKey))
+		return signErr
+	}
 
 	seen := map[[32]byte]struct{}{}
 	for _, message := range signedMsg.Message.Messages {
