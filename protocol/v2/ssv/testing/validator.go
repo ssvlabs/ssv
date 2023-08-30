@@ -7,6 +7,7 @@ import (
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/testing"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
@@ -22,7 +23,7 @@ var BaseValidator = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet
 		validator.Options{
 			Network:       spectestingutils.NewTestingNetwork(),
 			Beacon:        spectestingutils.NewTestingBeaconNode(),
-			BeaconNetwork: spectypes.BeaconTestNetwork,
+			BeaconNetwork: networkconfig.TestNetwork.Beacon,
 			Storage:       testing.TestingStores(logger),
 			SSVShare: &types.SSVShare{
 				Share: *spectestingutils.TestingShare(keySet),
