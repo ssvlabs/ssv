@@ -134,7 +134,7 @@ func rootHex(r [32]byte) string {
 	return hex.EncodeToString(r[:])
 }
 
-var Verifier = NewBatchVerifier(runtime.NumCPU(), 9, time.Millisecond*5)
+var Verifier = NewBatchVerifier(runtime.NumCPU(), 10, time.Millisecond*5)
 
 func init() {
 	go Verifier.Start()
