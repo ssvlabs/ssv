@@ -117,9 +117,18 @@ func TestSetupValidators(t *testing.T) {
 	require.NoError(t, err)
 	km, keyManagerSignerError := ekm.NewETHKeyManagerSigner(logger, db, networkconfig.TestNetwork, true, "")
 	require.NoError(t, keyManagerSignerError)
-	validatorKey, err := createKey()
+	validatorKey, err := createKey() // Assuming createKey() returns ([]byte, error)
 	require.NoError(t, err)
-	validatorPublicKey := phase0.BLSPubKey(validatorKey)
+
+	var validatorPublicKey phase0.BLSPubKey // Assuming phase0.BLSPubKey is a type alias for [48]byte
+
+	// Check the length before copying
+	if len(validatorKey) == len(validatorPublicKey) {
+		copy(validatorPublicKey[:], validatorKey)
+	} else {
+		// Handle the error, lengths don't match
+		t.Fatalf("Length mismatch: validatorKey has length %d, but expected %d", len(validatorKey), len(validatorPublicKey))
+	}
 
 	operators := make([]*spectypes.Operator, len(operatorIds))
 	for i, id := range operatorIds {
@@ -848,9 +857,12 @@ func buildOperatorData(id uint64, ownerAddress string) *registrystorage.Operator
 }
 
 func buildFeeRecipient(Owner string, FeeRecipient string) *registrystorage.RecipientData {
+	feeRecipientSlice := []byte(FeeRecipient) // Assuming FeeRecipient is a string or similar
+	var executionAddress bellatrix.ExecutionAddress
+	copy(executionAddress[:], feeRecipientSlice)
 	return &registrystorage.RecipientData{
 		Owner:        common.BytesToAddress([]byte(Owner)),
-		FeeRecipient: bellatrix.ExecutionAddress([]byte(FeeRecipient)),
+		FeeRecipient: executionAddress,
 		Nonce:        nil,
 	}
 }
