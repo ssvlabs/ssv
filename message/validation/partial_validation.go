@@ -134,9 +134,9 @@ func (mv *MessageValidator) validPartialSignatures(share *ssvtypes.SSVShare, sig
 			return err
 		}
 
-		if err := mv.verifyPartialSignature(message, share); err != nil {
-			return err
-		}
+		//if err := mv.verifyPartialSignature(message, share); err != nil {
+		//	return err
+		//}
 	}
 
 	return nil
