@@ -479,9 +479,6 @@ func splitBytes(buf []byte, lim int) [][]byte {
 // todo(align-contract-v0.3.1-rc.0): move to crypto package in ssv protocol?
 func verifySignature(sig []byte, owner ethcommon.Address, pubKey []byte, nonce registrystorage.Nonce) error {
 	data := fmt.Sprintf("%s:%d", owner.String(), nonce)
-	println("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
-	println(data)
-	println("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<")
 	hash := crypto.Keccak256([]byte(data))
 
 	sign := &bls.Sign{}

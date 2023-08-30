@@ -53,6 +53,13 @@ const (
 	networkRouterConcurrency = 2048
 )
 
+type setUpValidatorsResult struct {
+	Failures        int `json:"failures"`
+	MissingMetadata int `json:"missing_metadata"`
+	Shares          int `json:"shares"`
+	Started         int `json:"started"`
+}
+
 // ShareEncryptionKeyProvider is a function that returns the operator private key
 type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
 
@@ -141,12 +148,26 @@ type ValidatorsMap interface {
 	UpdateValidatorMetadata(pk string, metadata *beaconprotocol.ValidatorMetadata) error
 }
 
+type Metrics interface {
+	ValidatorInactive(publicKey []byte)
+	ValidatorNoIndex(publicKey []byte)
+	ValidatorError(publicKey []byte)
+	ValidatorReady(publicKey []byte)
+	ValidatorNotActivated(publicKey []byte)
+	ValidatorExiting(publicKey []byte)
+	ValidatorSlashed(publicKey []byte)
+	ValidatorNotFound(publicKey []byte)
+	ValidatorPending(publicKey []byte)
+	ValidatorRemoved(publicKey []byte)
+	ValidatorUnknown(publicKey []byte)
+}
+
 // controller implements Controller
 type controller struct {
 	context context.Context
 
 	logger  *zap.Logger
-	metrics validatorMetrics
+	metrics Metrics
 
 	sharesStorage     SharesStorage
 	operatorsStorage  registrystorage.Operators
@@ -429,20 +450,17 @@ func (c *controller) StartValidators() {
 
 // setupValidators setup and starts validators from the given shares.
 // shares w/o validator's metadata won't start, but the metadata will be fetched and the validator will start afterwards
-func (c *controller) setupValidators(shares []*ssvtypes.SSVShare) {
+func (c *controller) setupValidators(shares []*ssvtypes.SSVShare) (*setUpValidatorsResult, error) {
 	c.logger.Info("starting validators setup...", zap.Int("shares count", len(shares)))
 	var started int
 	var errs []error
 	var fetchMetadata [][]byte
 	for _, validatorShare := range shares {
-		println("1>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>.")
 		isStarted, err := c.onShareStart(validatorShare)
-		println("2>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>.")
 		if err != nil {
 			c.logger.Warn("could not start validator", fields.PubKey(validatorShare.ValidatorPubKey), zap.Error(err))
 			errs = append(errs, err)
 		}
-		println("3>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>.")
 		if !isStarted && err == nil {
 			// Fetch metadata, if needed.
 			fetchMetadata = append(fetchMetadata, validatorShare.ValidatorPubKey)
@@ -464,12 +482,19 @@ func (c *controller) setupValidators(shares []*ssvtypes.SSVShare) {
 				zap.Int("shares", len(fetchMetadata)),
 				fields.Took(time.Since(start)),
 				zap.Error(err))
+			return nil, err
 		} else {
 			c.logger.Debug("updated validators metadata after setup",
 				zap.Int("shares", len(fetchMetadata)),
 				fields.Took(time.Since(start)))
 		}
 	}
+	return &setUpValidatorsResult{
+		Started:         started,
+		Failures:        len(errs),
+		MissingMetadata: len(fetchMetadata),
+		Shares:          len(shares),
+	}, nil
 }
 
 // setupNonCommitteeValidators trigger SyncHighestDecided for each validator
@@ -537,7 +562,6 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 	if metadata == nil {
 		return errors.New("could not update empty metadata")
 	}
-
 	// Save metadata to share storage.
 	err := c.sharesStorage.UpdateValidatorMetadata(pk, metadata)
 	if err != nil {
@@ -549,7 +573,6 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 	if err != nil {
 		return errors.Wrap(err, "could not decode public key")
 	}
-
 	share := c.sharesStorage.Get(nil, pkBytes)
 	if share == nil {
 		return errors.New("share was not found")
@@ -697,7 +720,8 @@ func (c *controller) onShareRemove(pk string, removeSecret bool) error {
 }
 
 func (c *controller) onShareStart(share *ssvtypes.SSVShare) (bool, error) {
-	if !share.HasBeaconMetadata() { // fetching index and status in case not exist
+	if !share.HasBeaconMetadata() {
+		// fetching index and status in case not exist
 		c.logger.Warn("skipping validator until it becomes active", fields.PubKey(share.ValidatorPubKey))
 		return false, nil
 	}
@@ -706,11 +730,9 @@ func (c *controller) onShareStart(share *ssvtypes.SSVShare) (bool, error) {
 	}
 	// Start a committee validator.
 	v, err := c.validatorsMap.GetOrCreateValidator(c.logger.Named("validatorsMap"), share)
-	println("1.4>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>.")
 	if err != nil {
 		return false, errors.Wrap(err, "could not get or create validator")
 	}
-	println("1.5>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>.")
 	return c.startValidator(v)
 }
 
@@ -727,7 +749,6 @@ func (c *controller) setShareFeeRecipient(share *ssvtypes.SSVShare, getRecipient
 	} else {
 		c.logger.Debug("setting fee recipient to storage data",
 			fields.Validator(share.ValidatorPubKey), fields.FeeRecipient(data.FeeRecipient[:]))
-		println(data.FeeRecipient.String())
 		feeRecipient = data.FeeRecipient
 	}
 	share.SetFeeRecipient(feeRecipient)
@@ -739,7 +760,7 @@ func (c *controller) setShareFeeRecipient(share *ssvtypes.SSVShare, getRecipient
 func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 	c.reportValidatorStatus(v.Share.ValidatorPubKey, v.Share.BeaconMetadata)
 	if v.Share.BeaconMetadata.Index == 0 {
-		return false, errors.New("could not start validator: index not found")
+		return false, errors.New("could not start validator: gdfindex not found")
 	}
 	if err := v.Start(c.logger); err != nil {
 		c.metrics.ValidatorError(v.Share.ValidatorPubKey)
@@ -824,11 +845,6 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 	}
 	domainType := ssvtypes.GetDefaultDomain()
 	buildController := func(role spectypes.BeaconRole, valueCheckF specqbft.ProposedValueCheckF) *qbftcontroller.Controller {
-		println("guy.1>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>.")
-		println(valueCheckF)
-		println(options.Signer)
-		println(options.SSVShare.ValidatorPubKey)
-		println("guy.1>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>.")
 		config := &qbft.Config{
 			Signer:      options.Signer,
 			SigningPK:   options.SSVShare.ValidatorPubKey, // TODO right val?
@@ -843,13 +859,9 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 			Network: options.Network,
 			Timer:   roundtimer.New(ctx, nil),
 		}
-		println("guy.2>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>.")
 		config.ValueCheckF = valueCheckF
-		println("guy.3>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>.")
 		identifier := spectypes.NewMsgID(ssvtypes.GetDefaultDomain(), options.SSVShare.Share.ValidatorPubKey, role)
-		println("guy.4>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>.")
 		qbftCtrl := qbftcontroller.NewController(identifier[:], &options.SSVShare.Share, domainType, config, options.FullNode)
-		println("guy.5>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>.")
 		qbftCtrl.NewDecidedHandler = options.NewDecidedHandler
 		return qbftCtrl
 	}
@@ -857,13 +869,9 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 	for _, role := range runnersType {
 		switch role {
 		case spectypes.BNRoleAttester:
-			println("1.3.7.5.1>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>.")
 			valCheck := specssv.AttesterValueCheckF(options.Signer, options.BeaconNetwork, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index, options.SSVShare.SharePubKey)
-			println("1.3.7.5.1.1>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>.")
 			qbftCtrl := buildController(spectypes.BNRoleAttester, valCheck)
-			println("1.3.7.5.1.2>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>.")
 			runners[role] = runner.NewAttesterRunnner(options.BeaconNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, valCheck, 0)
-			println("1.3.7.5.1.3>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>.")
 		case spectypes.BNRoleProposer:
 			proposedValueCheck := specssv.ProposerValueCheckF(options.Signer, options.BeaconNetwork, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index, options.SSVShare.SharePubKey, options.BuilderProposals)
 			qbftCtrl := buildController(spectypes.BNRoleProposer, proposedValueCheck)
@@ -886,6 +894,5 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 			runners[role] = runner.NewValidatorRegistrationRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer)
 		}
 	}
-	println("1.3.7.6>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>.")
 	return runners
 }

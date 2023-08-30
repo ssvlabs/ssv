@@ -2,10 +2,13 @@ package validator
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/hex"
+	"fmt"
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/bloxapp/ssv/ekm"
-	"github.com/bloxapp/ssv/ibft/storage"
+	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/network/forks/genesis"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/validator/mocks"
@@ -15,6 +18,7 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/golang/mock/gomock"
+	"github.com/pkg/errors"
 	"sync"
 	"testing"
 	"time"
@@ -38,11 +42,13 @@ import (
 // 1. a validator with a non-empty share and empty metadata - test a scenario if we cannot get metadata from beacon node
 
 type MockControllerOptions struct {
-	sharesStorage     SharesStorage
+	metrics           Metrics
 	recipientsStorage Recipients
+	sharesStorage     SharesStorage
+	validatorsMap     *validatorsMap
+	beacon            beacon.BeaconNode
 	signer            spectypes.KeyManager
 	operatorData      *registrystorage.OperatorData
-	validatorsMap     *validatorsMap
 }
 
 func TestHandleNonCommitteeMessages(t *testing.T) {
@@ -100,98 +106,249 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 }
 
 func TestSetupValidators(t *testing.T) {
-	passedEpoch := phase0.Epoch(1)
 	// Setup logger and mock controller
 	logger := logging.TestLogger(t)
-	ctrl := gomock.NewController(t)
-	recipientStorage := mocks.NewMockRecipients(ctrl)
-	recipientData := &registrystorage.RecipientData{
-		Owner:        common.Address([]byte("67Ce5c69260bd819B4e0AD13f4b873074D479811")),
-		FeeRecipient: bellatrix.ExecutionAddress([]byte("45E668aba4b7fc8761331EC3CE77584B7A99A51A")),
-		Nonce:        nil,
-	}
-	decodeHex := func(hexStr string, errMsg string) []byte {
-		bytes, err := hex.DecodeString(hexStr)
-		require.NoError(t, err, errMsg)
-		return bytes
-	}
+
+	// Init global variables
+	passedEpoch := phase0.Epoch(1)
+	operatorIds := []uint64{1, 2, 3, 4}
 
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
-
 	km, err := ekm.NewETHKeyManagerSigner(logger, db, networkconfig.TestNetwork, true, "")
+	validatorKey, err := createKey()
+	require.NoError(t, err)
+	validatorPublicKey := phase0.BLSPubKey(validatorKey)
 
-	ownerAddressBytes := decodeHex("67Ce5c69260bd819B4e0AD13f4b873074D479811", "Failed to decode owner address")
-	feeRecipientBytes := decodeHex("45E668aba4b7fc8761331EC3CE77584B7A99A51A", "Failed to decode second fee recipient address")
-
-	testValidator := setupTestValidator(ownerAddressBytes, feeRecipientBytes)
-	recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(recipientData, true, nil).Times(1)
-
-	mockValidatorMap := &validatorsMap{
-		ctx: context.Background(),
-		optsTemplate: &validator.Options{
-			Network: nil,
-			Storage: &storage.QBFTStores{},
-			Signer:  nil,
-			SSVShare: &types.SSVShare{
-				Share: spectypes.Share{
-					ValidatorPubKey: nil,
-				},
-			},
-		},
-		validatorsMap: map[string]*validator.Validator{"0": testValidator},
-	}
-
-	// Set up the controller with mock data
-	controllerOptions := MockControllerOptions{
-		signer:            km,
-		recipientsStorage: recipientStorage,
-		validatorsMap:     mockValidatorMap,
-	}
-
-	ctr := setupController(logger, controllerOptions)
-
-	operatorIds := []uint64{1, 2, 3, 4}
 	operators := make([]*spectypes.Operator, len(operatorIds))
 	for i, id := range operatorIds {
-		operators[i] = &spectypes.Operator{OperatorID: id}
+		operatorKey, keyError := createKey()
+		require.NoError(t, keyError)
+		operators[i] = &spectypes.Operator{OperatorID: id, PubKey: operatorKey}
 	}
 
-	sharesSlice := []*types.SSVShare{
-		{
-			Share: spectypes.Share{
-				OperatorID: 1,
-				Committee:  operators,
-			},
-			Metadata: types.Metadata{
-				OwnerAddress: common.Address([]byte("67Ce5c69260bd819B4e0AD13f4b873074D479811")),
-				BeaconMetadata: &beacon.ValidatorMetadata{
-					Balance:         0,
-					Status:          3, // ValidatorStatePendingInitialized
-					Index:           0,
-					ActivationEpoch: passedEpoch,
-				},
+	shareWithMetaData := &types.SSVShare{
+		Share: spectypes.Share{
+			OperatorID:      2,
+			Committee:       operators,
+			ValidatorPubKey: validatorKey,
+		},
+		Metadata: types.Metadata{
+			OwnerAddress: common.Address([]byte("67Ce5c69260bd819B4e0AD13f4b873074D479811")),
+			BeaconMetadata: &beacon.ValidatorMetadata{
+				Balance:         0,
+				Status:          3, // ValidatorStateActiveOngoing
+				Index:           1,
+				ActivationEpoch: passedEpoch,
 			},
 		},
 	}
 
-	ctr.setupValidators(sharesSlice)
+	shareWithoutMetaData := &types.SSVShare{
+		Share: spectypes.Share{
+			OperatorID:      2,
+			Committee:       operators,
+			ValidatorPubKey: validatorKey,
+		},
+		Metadata: types.Metadata{
+			OwnerAddress:   common.Address([]byte("62Ce5c69260bd819B4e0AD13f4b873074D479811")),
+			BeaconMetadata: nil,
+		},
+	}
+
+	operatorData := buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")
+	recipientData := buildFeeRecipient("67Ce5c69260bd819B4e0AD13f4b873074D479811", "45E668aba4b7fc8761331EC3CE77584B7A99A51A")
+	ownerAddressBytes := decodeHex(t, "67Ce5c69260bd819B4e0AD13f4b873074D479811", "Failed to decode owner address")
+	feeRecipientBytes := decodeHex(t, "45E668aba4b7fc8761331EC3CE77584B7A99A51A", "Failed to decode second fee recipient address")
+
+	storageMu := sync.Mutex{}
+	storageData := make(map[string]*beacon.ValidatorMetadata)
+	testValidator := setupTestValidator(ownerAddressBytes, feeRecipientBytes)
+	bcResponse := map[phase0.ValidatorIndex]*eth2apiv1.Validator{
+		0: {
+			Balance: 0,
+			Status:  3,
+			Index:   2,
+			Validator: &phase0.Validator{
+				ActivationEpoch: passedEpoch,
+				PublicKey:       validatorPublicKey,
+			},
+		},
+	}
+
+	testCases := []struct {
+		recipientMockTimes int
+		bcMockTimes        int
+		recipientFound     bool
+		recipientErr       error
+		bcResponseErr      error
+		name               string
+		shares             []*types.SSVShare
+		comparisonObject   *setUpValidatorsResult
+		recipientData      *registrystorage.RecipientData
+		bcResponse         map[phase0.ValidatorIndex]*eth2apiv1.Validator
+	}{
+		{
+			name:               "setting fee recipient to storage data",
+			shares:             []*types.SSVShare{shareWithMetaData, shareWithoutMetaData},
+			recipientData:      recipientData,
+			recipientFound:     true,
+			recipientErr:       nil,
+			recipientMockTimes: 1,
+			comparisonObject: &setUpValidatorsResult{
+				Shares:          2,
+				Started:         1,
+				Failures:        0,
+				MissingMetadata: 1,
+			},
+			bcResponse:    bcResponse,
+			bcResponseErr: nil,
+			bcMockTimes:   1,
+		},
+		{
+			name:               "setting fee recipient to owner address",
+			shares:             []*types.SSVShare{shareWithMetaData, shareWithoutMetaData},
+			recipientData:      nil,
+			recipientFound:     false,
+			recipientErr:       nil,
+			recipientMockTimes: 1,
+			comparisonObject: &setUpValidatorsResult{
+				Shares:          2,
+				Started:         1,
+				Failures:        0,
+				MissingMetadata: 1,
+			},
+			bcResponse:    bcResponse,
+			bcResponseErr: nil,
+			bcMockTimes:   1,
+		},
+		{
+			name:               "failed to set fee recipient",
+			shares:             []*types.SSVShare{shareWithMetaData},
+			recipientData:      nil,
+			recipientFound:     false,
+			recipientErr:       errors.New("some error"),
+			recipientMockTimes: 1,
+			comparisonObject: &setUpValidatorsResult{
+				Shares:          1,
+				Started:         0,
+				Failures:        1,
+				MissingMetadata: 0,
+			},
+			bcResponse:    bcResponse,
+			bcResponseErr: nil,
+			bcMockTimes:   0,
+		},
+		{
+			name:               "start share with metadata",
+			shares:             []*types.SSVShare{shareWithMetaData},
+			recipientData:      nil,
+			recipientFound:     false,
+			recipientErr:       nil,
+			recipientMockTimes: 1,
+			comparisonObject: &setUpValidatorsResult{
+				Shares:          1,
+				Started:         1,
+				Failures:        0,
+				MissingMetadata: 0,
+			},
+			bcResponse:    bcResponse,
+			bcResponseErr: nil,
+			bcMockTimes:   0,
+		},
+		{
+			name:               "start share without metadata",
+			bcMockTimes:        1,
+			bcResponseErr:      nil,
+			recipientMockTimes: 0,
+			recipientData:      nil,
+			recipientErr:       nil,
+			recipientFound:     false,
+			bcResponse:         bcResponse,
+			shares:             []*types.SSVShare{shareWithoutMetaData},
+			comparisonObject: &setUpValidatorsResult{
+				Shares:          1,
+				Started:         0,
+				Failures:        0,
+				MissingMetadata: 1,
+			},
+		},
+		{
+			name:               "failed to get GetValidatorData",
+			recipientMockTimes: 0,
+			bcMockTimes:        1,
+			recipientData:      nil,
+			recipientErr:       nil,
+			bcResponse:         nil,
+			recipientFound:     false,
+			comparisonObject:   nil,
+			bcResponseErr:      errors.New("some error"),
+			shares:             []*types.SSVShare{shareWithoutMetaData},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			bc := beacon.NewMockBeaconNode(ctrl)
+			metrics := mocks.NewMockMetrics(ctrl)
+			storageMap := ibftstorage.NewStores()
+			recipientStorage := mocks.NewMockRecipients(ctrl)
+			sharesStorage := mocks.NewMockSharesStorage(ctrl)
+
+			sharesStorage.EXPECT().Get(gomock.Any(), gomock.Any()).Return(shareWithMetaData).AnyTimes()
+			sharesStorage.EXPECT().UpdateValidatorMetadata(gomock.Any(), gomock.Any()).DoAndReturn(func(pk string, metadata *beacon.ValidatorMetadata) error {
+				storageMu.Lock()
+				defer storageMu.Unlock()
+
+				storageData[pk] = metadata
+
+				return nil
+			}).AnyTimes()
+
+			mockValidatorMap := &validatorsMap{
+				ctx: context.Background(),
+				optsTemplate: &validator.Options{
+					Network: nil,
+					Signer:  nil,
+					Storage: storageMap,
+				},
+				validatorsMap: map[string]*validator.Validator{"0": testValidator},
+			}
+
+			// Set up the controller with mock data
+			controllerOptions := MockControllerOptions{
+				beacon:            bc,
+				signer:            km,
+				metrics:           metrics,
+				sharesStorage:     sharesStorage,
+				operatorData:      operatorData,
+				recipientsStorage: recipientStorage,
+				validatorsMap:     mockValidatorMap,
+			}
+
+			recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(tc.recipientData, tc.recipientFound, tc.recipientErr).Times(tc.recipientMockTimes)
+			bc.EXPECT().GetValidatorData(gomock.Any()).Return(tc.bcResponse, tc.bcResponseErr).Times(tc.bcMockTimes)
+			ctr := setupController(logger, controllerOptions)
+			disableMetrics(metrics)
+			result, setupValidatorError := ctr.setupValidators(tc.shares)
+			require.Equal(t, tc.comparisonObject, result, "Unexpected result")
+			if tc.bcResponseErr != nil {
+				require.Error(t, setupValidatorError, "Unexpected error")
+			} else {
+				require.NoError(t, setupValidatorError, "Unexpected error")
+			}
+			// Add any assertions here to validate the behavior
+		})
+	}
 }
 
 func TestAssertionOperatorData(t *testing.T) {
 	// Setup logger and mock controller
 	logger := logging.TestLogger(t)
-	operatorData := &registrystorage.OperatorData{
-		ID:           1,
-		PublicKey:    []byte("samplePublicKeyData"),
-		OwnerAddress: common.Address([]byte("67Ce5c69260bd819B4e0AD13f4b873074D479811")),
-	}
-
-	newOperatorData := &registrystorage.OperatorData{
-		ID:           2,
-		PublicKey:    []byte("samplePublicKeyData2"),
-		OwnerAddress: common.Address([]byte("64Ce5c69260bd819B4e0AD13f4b873074D479811")),
-	}
+	operatorData := buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")
+	newOperatorData := buildOperatorData(2, "64Ce5c69260bd819B4e0AD13f4b873074D479811")
 
 	// Set up the controller with mock data
 	controllerOptions := MockControllerOptions{
@@ -288,11 +445,7 @@ func TestGetValidatorStats(t *testing.T) {
 		// Set up the controller with mock data for this subtest
 		controllerOptions := MockControllerOptions{
 			sharesStorage: sharesStorage,
-			operatorData: &registrystorage.OperatorData{
-				ID:           1,
-				PublicKey:    []byte("samplePublicKeyData"),
-				OwnerAddress: common.Address([]byte("67Ce5c69260bd819B4e0AD13f4b873074D479811")),
-			},
+			operatorData:  buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"),
 		}
 		ctr := setupController(logger, controllerOptions)
 
@@ -336,11 +489,7 @@ func TestGetValidatorStats(t *testing.T) {
 		// Set up the controller with mock data for this subtest
 		controllerOptions := MockControllerOptions{
 			sharesStorage: sharesStorage,
-			operatorData: &registrystorage.OperatorData{
-				ID:           1,
-				PublicKey:    []byte("samplePublicKeyData"),
-				OwnerAddress: common.Address([]byte("67Ce5c69260bd819B4e0AD13f4b873074D479811")),
-			},
+			operatorData:  buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"),
 		}
 		ctr := setupController(logger, controllerOptions)
 
@@ -376,11 +525,7 @@ func TestGetValidatorStats(t *testing.T) {
 		// Set up the controller with mock data for this subtest
 		controllerOptions := MockControllerOptions{
 			sharesStorage: sharesStorage,
-			operatorData: &registrystorage.OperatorData{
-				ID:           1,
-				PublicKey:    []byte("samplePublicKeyData"),
-				OwnerAddress: common.Address([]byte("67Ce5c69260bd819B4e0AD13f4b873074D479811")),
-			},
+			operatorData:  buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"),
 		}
 		ctr := setupController(logger, controllerOptions)
 
@@ -438,11 +583,7 @@ func TestGetValidatorStats(t *testing.T) {
 		// Set up the controller with mock data for this subtest
 		controllerOptions := MockControllerOptions{
 			sharesStorage: sharesStorage,
-			operatorData: &registrystorage.OperatorData{
-				ID:           1,
-				PublicKey:    []byte("samplePublicKeyData"),
-				OwnerAddress: common.Address([]byte("67Ce5c69260bd819B4e0AD13f4b873074D479811")),
-			},
+			operatorData:  buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"),
 		}
 		ctr := setupController(logger, controllerOptions)
 
@@ -459,16 +600,10 @@ func TestUpdateFeeRecipient(t *testing.T) {
 	// Setup logger for testing
 	logger := logging.TestLogger(t)
 
-	decodeHex := func(hexStr string, errMsg string) []byte {
-		bytes, err := hex.DecodeString(hexStr)
-		require.NoError(t, err, errMsg)
-		return bytes
-	}
-
-	ownerAddressBytes := decodeHex("67Ce5c69260bd819B4e0AD13f4b873074D479811", "Failed to decode owner address")
-	fakeOwnerAddressBytes := decodeHex("61Ce5c69260bd819B4e0AD13f4b873074D479811", "Failed to decode fake owner address")
-	firstFeeRecipientBytes := decodeHex("41E668aba4b7fc8761331EC3CE77584B7A99A51A", "Failed to decode first fee recipient address")
-	secondFeeRecipientBytes := decodeHex("45E668aba4b7fc8761331EC3CE77584B7A99A51A", "Failed to decode second fee recipient address")
+	ownerAddressBytes := decodeHex(t, "67Ce5c69260bd819B4e0AD13f4b873074D479811", "Failed to decode owner address")
+	fakeOwnerAddressBytes := decodeHex(t, "61Ce5c69260bd819B4e0AD13f4b873074D479811", "Failed to decode fake owner address")
+	firstFeeRecipientBytes := decodeHex(t, "41E668aba4b7fc8761331EC3CE77584B7A99A51A", "Failed to decode first fee recipient address")
+	secondFeeRecipientBytes := decodeHex(t, "45E668aba4b7fc8761331EC3CE77584B7A99A51A", "Failed to decode second fee recipient address")
 
 	t.Run("Test with right owner address", func(t *testing.T) {
 		testValidator := setupTestValidator(ownerAddressBytes, firstFeeRecipientBytes)
@@ -598,9 +733,10 @@ func TestGetIndices(t *testing.T) {
 
 func setupController(logger *zap.Logger, opts MockControllerOptions) controller {
 	return controller{
-		beacon:                     nil,
 		keyManager:                 nil,
 		shareEncryptionKeyProvider: nil,
+		beacon:                     opts.beacon,
+		metrics:                    opts.metrics,
 		context:                    context.Background(),
 		operatorData:               opts.operatorData,
 		recipientsStorage:          opts.recipientsStorage,
@@ -680,4 +816,50 @@ func getBaseStorage(logger *zap.Logger) (basedb.Database, error) {
 		Type: "badger-memory",
 		Path: "",
 	})
+}
+
+func disableMetrics(metrics *mocks.MockMetrics) {
+	metrics.EXPECT().ValidatorError(gomock.Any()).Return().AnyTimes()
+	metrics.EXPECT().ValidatorExiting(gomock.Any()).Return().AnyTimes()
+	metrics.EXPECT().ValidatorInactive(gomock.Any()).Return().AnyTimes()
+	metrics.EXPECT().ValidatorNotActivated(gomock.Any()).Return().AnyTimes()
+	metrics.EXPECT().ValidatorUnknown(gomock.Any()).Return().AnyTimes()
+	metrics.EXPECT().ValidatorSlashed(gomock.Any()).Return().AnyTimes()
+	metrics.EXPECT().ValidatorReady(gomock.Any()).Return().AnyTimes()
+	metrics.EXPECT().ValidatorPending(gomock.Any()).Return().AnyTimes()
+	metrics.EXPECT().ValidatorRemoved(gomock.Any()).Return().AnyTimes()
+	metrics.EXPECT().ValidatorError(gomock.Any()).Return().AnyTimes()
+	metrics.EXPECT().ValidatorNotFound(gomock.Any()).Return().AnyTimes()
+}
+
+func decodeHex(t *testing.T, hexStr string, errMsg string) []byte {
+	bytes, err := hex.DecodeString(hexStr)
+	require.NoError(t, err, errMsg)
+	return bytes
+}
+
+func buildOperatorData(id uint64, ownerAddress string) *registrystorage.OperatorData {
+	return &registrystorage.OperatorData{
+		ID:           id,
+		PublicKey:    []byte("samplePublicKey"),
+		OwnerAddress: common.Address([]byte(ownerAddress)),
+	}
+}
+
+func buildFeeRecipient(Owner string, FeeRecipient string) *registrystorage.RecipientData {
+	return &registrystorage.RecipientData{
+		Owner:        common.Address([]byte(Owner)),
+		FeeRecipient: bellatrix.ExecutionAddress([]byte(FeeRecipient)),
+		Nonce:        nil,
+	}
+}
+
+func createKey() ([]byte, error) {
+	pubKey := make([]byte, 48)
+	_, err := rand.Read(pubKey)
+	if err != nil {
+		fmt.Println("Error generating random bytes:", err)
+		return nil, err
+	}
+	return pubKey, nil
 }
