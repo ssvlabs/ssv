@@ -32,10 +32,10 @@ func (c *controller) StartValidator(share *ssvtypes.SSVShare) error {
 func (c *controller) StopValidator(publicKey []byte) error {
 	logger := c.taskLogger("StopValidator", fields.PubKey(publicKey))
 
+	c.metrics.ValidatorRemoved(publicKey)
 	if err := c.onShareRemove(hex.EncodeToString(publicKey), true); err != nil {
 		return err
 	}
-	c.metrics.ValidatorRemoved(publicKey)
 
 	logger.Info("removed validator")
 

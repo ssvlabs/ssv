@@ -720,8 +720,7 @@ func (c *controller) onShareRemove(pk string, removeSecret bool) error {
 }
 
 func (c *controller) onShareStart(share *ssvtypes.SSVShare) (bool, error) {
-	if !share.HasBeaconMetadata() {
-		// fetching index and status in case not exist
+	if !share.HasBeaconMetadata() { // fetching index and status in case not exist
 		c.logger.Warn("skipping validator until it becomes active", fields.PubKey(share.ValidatorPubKey))
 		return false, nil
 	}
@@ -760,7 +759,7 @@ func (c *controller) setShareFeeRecipient(share *ssvtypes.SSVShare, getRecipient
 func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 	c.reportValidatorStatus(v.Share.ValidatorPubKey, v.Share.BeaconMetadata)
 	if v.Share.BeaconMetadata.Index == 0 {
-		return false, errors.New("could not start validator: gdfindex not found")
+		return false, errors.New("could not start validator: index not found")
 	}
 	if err := v.Start(c.logger); err != nil {
 		c.metrics.ValidatorError(v.Share.ValidatorPubKey)
@@ -852,7 +851,7 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 			ValueCheckF: nil, // sets per role type
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 				leader := specqbft.RoundRobinProposer(state, round)
-				logger.Debug("leader", zap.Int("operator_id", int(leader)))
+				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
 				return leader
 			},
 			Storage: options.Storage.Get(role),
