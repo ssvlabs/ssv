@@ -445,7 +445,7 @@ func (c *controller) StartValidators() {
 		c.logger.Info("could not find validators")
 		return
 	}
-	c.setupValidators(shares)
+	_, _ = c.setupValidators(shares)
 }
 
 // setupValidators setup and starts validators from the given shares.

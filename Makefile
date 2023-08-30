@@ -32,7 +32,7 @@ UNFORMATTED=$(shell gofmt -s -l .)
 .PHONY: lint-prepare
 lint-prepare:
 	@echo "Preparing Linter"
-	curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s latest
+	curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s latest
 
 .PHONY: lint
 lint:

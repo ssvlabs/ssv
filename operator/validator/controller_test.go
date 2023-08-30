@@ -115,7 +115,8 @@ func TestSetupValidators(t *testing.T) {
 
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
-	km, err := ekm.NewETHKeyManagerSigner(logger, db, networkconfig.TestNetwork, true, "")
+	km, keyManagerSignerError := ekm.NewETHKeyManagerSigner(logger, db, networkconfig.TestNetwork, true, "")
+	require.NoError(t, keyManagerSignerError)
 	validatorKey, err := createKey()
 	require.NoError(t, err)
 	validatorPublicKey := phase0.BLSPubKey(validatorKey)
@@ -134,7 +135,7 @@ func TestSetupValidators(t *testing.T) {
 			ValidatorPubKey: validatorKey,
 		},
 		Metadata: types.Metadata{
-			OwnerAddress: common.Address([]byte("67Ce5c69260bd819B4e0AD13f4b873074D479811")),
+			OwnerAddress: common.BytesToAddress([]byte("67Ce5c69260bd819B4e0AD13f4b873074D479811")),
 			BeaconMetadata: &beacon.ValidatorMetadata{
 				Balance:         0,
 				Status:          3, // ValidatorStateActiveOngoing
@@ -151,7 +152,7 @@ func TestSetupValidators(t *testing.T) {
 			ValidatorPubKey: validatorKey,
 		},
 		Metadata: types.Metadata{
-			OwnerAddress:   common.Address([]byte("62Ce5c69260bd819B4e0AD13f4b873074D479811")),
+			OwnerAddress:   common.BytesToAddress([]byte("62Ce5c69260bd819B4e0AD13f4b873074D479811")),
 			BeaconMetadata: nil,
 		},
 	}
@@ -618,7 +619,7 @@ func TestUpdateFeeRecipient(t *testing.T) {
 		controllerOptions := MockControllerOptions{validatorsMap: mockValidatorsMap}
 		ctr := setupController(logger, controllerOptions)
 
-		err := ctr.UpdateFeeRecipient(common.Address(ownerAddressBytes), common.Address(secondFeeRecipientBytes))
+		err := ctr.UpdateFeeRecipient(common.BytesToAddress(ownerAddressBytes), common.BytesToAddress(secondFeeRecipientBytes))
 		require.NoError(t, err, "Unexpected error while updating fee recipient with correct owner address")
 
 		actualFeeRecipient := testValidator.Share.FeeRecipientAddress[:]
@@ -638,7 +639,7 @@ func TestUpdateFeeRecipient(t *testing.T) {
 		controllerOptions := MockControllerOptions{validatorsMap: mockValidatorsMap}
 		ctr := setupController(logger, controllerOptions)
 
-		err := ctr.UpdateFeeRecipient(common.Address(fakeOwnerAddressBytes), common.Address(secondFeeRecipientBytes))
+		err := ctr.UpdateFeeRecipient(common.BytesToAddress(fakeOwnerAddressBytes), common.BytesToAddress(secondFeeRecipientBytes))
 		require.NoError(t, err, "Unexpected error while updating fee recipient with incorrect owner address")
 
 		actualFeeRecipient := testValidator.Share.FeeRecipientAddress[:]
@@ -802,10 +803,10 @@ func setupTestValidator(ownerAddressBytes, feeRecipientBytes []byte) *validator.
 	return &validator.Validator{
 		Share: &types.SSVShare{
 			Share: spectypes.Share{
-				FeeRecipientAddress: common.Address(feeRecipientBytes),
+				FeeRecipientAddress: common.BytesToAddress(feeRecipientBytes),
 			},
 			Metadata: types.Metadata{
-				OwnerAddress: common.Address(ownerAddressBytes),
+				OwnerAddress: common.BytesToAddress(ownerAddressBytes),
 			},
 		},
 	}
@@ -842,13 +843,13 @@ func buildOperatorData(id uint64, ownerAddress string) *registrystorage.Operator
 	return &registrystorage.OperatorData{
 		ID:           id,
 		PublicKey:    []byte("samplePublicKey"),
-		OwnerAddress: common.Address([]byte(ownerAddress)),
+		OwnerAddress: common.BytesToAddress([]byte(ownerAddress)),
 	}
 }
 
 func buildFeeRecipient(Owner string, FeeRecipient string) *registrystorage.RecipientData {
 	return &registrystorage.RecipientData{
-		Owner:        common.Address([]byte(Owner)),
+		Owner:        common.BytesToAddress([]byte(Owner)),
 		FeeRecipient: bellatrix.ExecutionAddress([]byte(FeeRecipient)),
 		Nonce:        nil,
 	}
