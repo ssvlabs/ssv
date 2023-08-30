@@ -28,7 +28,7 @@ spec:
   selector:
     app: ssv-node-1
 ---
-apiVersion: apps/v1
+apiVersion: REPLACE_API_VERSION
 kind: Deployment
 metadata:
   labels:
@@ -36,7 +36,7 @@ metadata:
   name: ssv-node-1
   namespace: REPLACE_NAMESPACE
 spec:
-  replicas: REPLACE_REPLICAS
+  replicas: 1
   strategy:
     type: Recreate
   selector:
