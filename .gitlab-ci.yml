@@ -45,14 +45,15 @@ Deploy nodes to stage:
   stage: deploy
   tags:
     - hetzner-k8s-stage
+  image: bitnami/kubectl:1.27.5
   script:
-    - apk add bash
     - export K8S_API_VERSION=$INFRA_STAGE_K8_API_VERSION
     - export SSV_NODES_CPU_LIMIT=$STAGE_SSV_NODES_CPU_LIMIT
     - export SSV_NODES_MEM_LIMIT=$STAGE_SSV_NODES_MEM_LIMIT
-    - curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.17.0/bin/linux/amd64/kubectl
-    - chmod 755 kubectl
-    - mv kubectl /usr/bin/
+    - echo $HETZNER_KUBECONFIG | base64 -d > kubeconfig
+    - mv kubeconfig ~/.kube/
+    - export KUBECONFIG=~/.kube/kubeconfig
+    - kubectl config get-contexts
     #
     # +--------------------+
     # |  Deploy SSV nodes  |
