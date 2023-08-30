@@ -4,7 +4,6 @@ package validation
 
 import (
 	"bytes"
-	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -113,12 +112,12 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		}
 	}
 
-	if err := ssvtypes.VerifyByOperators(signedMsg.Signature, signedMsg, mv.netCfg.Domain, spectypes.QBFTSignatureType, share.Committee); err != nil {
-		signErr := ErrInvalidSignature
-		signErr.innerErr = err
-		signErr.got = fmt.Sprintf("domain %v from %v", hex.EncodeToString(mv.netCfg.Domain[:]), hex.EncodeToString(share.ValidatorPubKey))
-		return consensusDescriptor, msgSlot, signErr
-	}
+	//if err := ssvtypes.VerifyByOperators(signedMsg.Signature, signedMsg, mv.netCfg.Domain, spectypes.QBFTSignatureType, share.Committee); err != nil {
+	//	signErr := ErrInvalidSignature
+	//	signErr.innerErr = err
+	//	signErr.got = fmt.Sprintf("domain %v from %v", hex.EncodeToString(mv.netCfg.Domain[:]), hex.EncodeToString(share.ValidatorPubKey))
+	//	return consensusDescriptor, msgSlot, signErr
+	//}
 
 	for _, signer := range signedMsg.Signers {
 		signerState := state.GetSignerState(signer)
