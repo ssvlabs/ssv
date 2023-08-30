@@ -14,6 +14,7 @@ import (
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/valcheck"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
+	"github.com/sourcegraph/conc/pool"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -42,16 +43,20 @@ func TestSSVMapping(t *testing.T) {
 
 	types.SetDefaultDomain(testingutils.TestingSSVDomainType)
 
+	p := pool.New()
 	for name, test := range untypedTests {
 		name, test := name, test
 		r := prepareTest(t, logger, name, test)
 		if r != nil {
 			t.Run(r.name, func(t *testing.T) {
 				t.Parallel()
-				r.test(t)
+				p.Go(func() {
+					r.test(t)
+				})
 			})
 		}
 	}
+	p.Wait()
 }
 
 type runnable struct {
