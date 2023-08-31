@@ -360,11 +360,11 @@ func (mv *MessageValidator) validConsensusSigners(share *ssvtypes.SSVShare, m *s
 
 	var prevSigner spectypes.OperatorID
 	for _, signer := range m.Signers {
-		if signer == prevSigner {
-			return ErrDuplicatedSigner
-		}
 		if err := mv.commonSignerValidation(signer, share); err != nil {
 			return err
+		}
+		if signer == prevSigner {
+			return ErrDuplicatedSigner
 		}
 		prevSigner = signer
 	}
