@@ -61,7 +61,7 @@ func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage, limits MessageCou
 				return err
 			}
 			if c.Commit > 0 || c.Decided > 0 || c.PostConsensus > 0 {
-				err := ErrUnexpectedMessageType
+				err := ErrUnexpectedMessageOrder
 				err.got = fmt.Sprintf("proposal, having %v", c.String())
 				return err
 			}
@@ -72,7 +72,7 @@ func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage, limits MessageCou
 				return err
 			}
 			if c.Commit > 0 || c.Decided > 0 || c.PostConsensus > 0 {
-				err := ErrUnexpectedMessageType
+				err := ErrUnexpectedMessageOrder
 				err.got = fmt.Sprintf("prepare, having %v", c.String())
 				return err
 			}
@@ -84,7 +84,7 @@ func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage, limits MessageCou
 					return err
 				}
 				if c.Decided > 0 || c.PostConsensus > 0 {
-					err := ErrUnexpectedMessageType
+					err := ErrUnexpectedMessageOrder
 					err.got = fmt.Sprintf("commit, having %v", c.String())
 					return err
 				}
@@ -96,7 +96,7 @@ func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage, limits MessageCou
 					return err
 				}
 				if c.PostConsensus > 0 {
-					err := ErrUnexpectedMessageType
+					err := ErrUnexpectedMessageOrder
 					err.got = fmt.Sprintf("decided, having %v", c.String())
 					return err
 				}
@@ -114,7 +114,7 @@ func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage, limits MessageCou
 				return err
 			}
 			if c.Decided > 0 || c.PostConsensus > 0 {
-				err := ErrUnexpectedMessageType
+				err := ErrUnexpectedMessageOrder
 				err.got = fmt.Sprintf("round change, having %v", c.String())
 				return err
 			}
@@ -130,7 +130,7 @@ func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage, limits MessageCou
 				return err
 			}
 			if c.PostConsensus > 0 {
-				err := ErrUnexpectedMessageType
+				err := ErrUnexpectedMessageOrder
 				err.got = fmt.Sprintf("pre-consensus, having %v", c.String())
 				return err
 			}

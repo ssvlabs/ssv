@@ -57,7 +57,7 @@ var (
 	ErrEarlyMessage                        = Error{text: "early message"}
 	ErrLateMessage                         = Error{text: "late message"}
 	ErrTooManySameTypeMessagesPerRound     = Error{text: "too many messages of same type per round"}
-	ErrUnexpectedMessageType               = Error{text: "unexpected message type", silent: true}
+	ErrUnexpectedMessageOrder              = Error{text: "unexpected message order", silent: true}
 	ErrDecidedSignersSequence              = Error{text: "decided must have more signers than previous decided", silent: true}
 	ErrNonCommitteeOnlyDecided             = Error{text: "non-committee message can be only decided", silent: true}
 	ErrDataTooBig                          = Error{text: "data too big", reject: true}
