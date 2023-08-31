@@ -24,6 +24,9 @@ type MsgValidatorFunc = func(ctx context.Context, p peer.ID, msg *pubsub.Message
 // TODO: enable post SSZ change, remove logs, break into smaller validators?
 // TODO: consider making logging and metrics optional for tests
 func NewSSVMsgValidator(logger *zap.Logger, metrics metrics, validator *validation.MessageValidator) func(ctx context.Context, p peer.ID, msg *pubsub.Message) pubsub.ValidationResult {
+	if metrics == nil {
+		metrics = nopMetrics{}
+	}
 	return func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 		start := time.Now()
 		var validationDurationLabels []string // TODO: implement

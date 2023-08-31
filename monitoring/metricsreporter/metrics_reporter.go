@@ -139,82 +139,82 @@ func New(opts ...Option) *MetricsReporter {
 	return &MetricsReporter{}
 }
 
-func (m MetricsReporter) SSVNodeHealthy() {
+func (m *MetricsReporter) SSVNodeHealthy() {
 	ssvNodeStatus.Set(ssvNodeHealthy)
 }
 
-func (m MetricsReporter) SSVNodeNotHealthy() {
+func (m *MetricsReporter) SSVNodeNotHealthy() {
 	ssvNodeStatus.Set(ssvNodeNotHealthy)
 }
 
-func (m MetricsReporter) ExecutionClientReady() {
+func (m *MetricsReporter) ExecutionClientReady() {
 	executionClientStatus.Set(executionClientOK)
 }
 
-func (m MetricsReporter) ExecutionClientSyncing() {
+func (m *MetricsReporter) ExecutionClientSyncing() {
 	executionClientStatus.Set(executionClientSyncing)
 }
 
-func (m MetricsReporter) ExecutionClientFailure() {
+func (m *MetricsReporter) ExecutionClientFailure() {
 	executionClientStatus.Set(executionClientFailure)
 }
 
-func (m MetricsReporter) ExecutionClientLastFetchedBlock(block uint64) {
+func (m *MetricsReporter) ExecutionClientLastFetchedBlock(block uint64) {
 	executionClientLastFetchedBlock.Set(float64(block))
 }
 
-func (m MetricsReporter) OperatorPublicKey(operatorID spectypes.OperatorID, publicKey []byte) {
+func (m *MetricsReporter) OperatorPublicKey(operatorID spectypes.OperatorID, publicKey []byte) {
 	pkHash := fmt.Sprintf("%x", sha256.Sum256(publicKey))
 	operatorIndex.WithLabelValues(pkHash, strconv.FormatUint(operatorID, 10)).Set(float64(operatorID))
 }
 
-func (m MetricsReporter) ValidatorInactive(publicKey []byte) {
+func (m *MetricsReporter) ValidatorInactive(publicKey []byte) {
 	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorInactive)
 }
-func (m MetricsReporter) ValidatorNoIndex(publicKey []byte) {
+func (m *MetricsReporter) ValidatorNoIndex(publicKey []byte) {
 	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorNoIndex)
 }
-func (m MetricsReporter) ValidatorError(publicKey []byte) {
+func (m *MetricsReporter) ValidatorError(publicKey []byte) {
 	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorError)
 }
-func (m MetricsReporter) ValidatorReady(publicKey []byte) {
+func (m *MetricsReporter) ValidatorReady(publicKey []byte) {
 	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorReady)
 }
-func (m MetricsReporter) ValidatorNotActivated(publicKey []byte) {
+func (m *MetricsReporter) ValidatorNotActivated(publicKey []byte) {
 	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorNotActivated)
 }
-func (m MetricsReporter) ValidatorExiting(publicKey []byte) {
+func (m *MetricsReporter) ValidatorExiting(publicKey []byte) {
 	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorExiting)
 }
-func (m MetricsReporter) ValidatorSlashed(publicKey []byte) {
+func (m *MetricsReporter) ValidatorSlashed(publicKey []byte) {
 	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorSlashed)
 }
-func (m MetricsReporter) ValidatorNotFound(publicKey []byte) {
+func (m *MetricsReporter) ValidatorNotFound(publicKey []byte) {
 	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorNotFound)
 }
-func (m MetricsReporter) ValidatorPending(publicKey []byte) {
+func (m *MetricsReporter) ValidatorPending(publicKey []byte) {
 	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorPending)
 }
-func (m MetricsReporter) ValidatorRemoved(publicKey []byte) {
+func (m *MetricsReporter) ValidatorRemoved(publicKey []byte) {
 	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorRemoved)
 }
-func (m MetricsReporter) ValidatorUnknown(publicKey []byte) {
+func (m *MetricsReporter) ValidatorUnknown(publicKey []byte) {
 	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorUnknown)
 }
 
-func (m MetricsReporter) EventProcessed(eventName string) {
+func (m *MetricsReporter) EventProcessed(eventName string) {
 	eventProcessed.WithLabelValues(eventName).Inc()
 }
 
-func (m MetricsReporter) EventProcessingFailed(eventName string) {
+func (m *MetricsReporter) EventProcessingFailed(eventName string) {
 	eventProcessingFailed.WithLabelValues(eventName).Inc()
 }
 
 // TODO implement
-func (m MetricsReporter) LastBlockProcessed(uint64) {}
-func (m MetricsReporter) LogsProcessingError(error) {}
+func (m *MetricsReporter) LastBlockProcessed(uint64) {}
+func (m *MetricsReporter) LogsProcessingError(error) {}
 
-func (m MetricsReporter) MessageAccepted(
+func (m *MetricsReporter) MessageAccepted(
 	validatorPK spectypes.ValidatorPK,
 	role spectypes.BeaconRole,
 	slot phase0.Slot,
@@ -230,7 +230,7 @@ func (m MetricsReporter) MessageAccepted(
 	).Inc()
 }
 
-func (m MetricsReporter) MessageIgnored(
+func (m *MetricsReporter) MessageIgnored(
 	reason string,
 	validatorPK spectypes.ValidatorPK,
 	role spectypes.BeaconRole,
@@ -247,7 +247,7 @@ func (m MetricsReporter) MessageIgnored(
 	).Inc()
 }
 
-func (m MetricsReporter) MessageRejected(
+func (m *MetricsReporter) MessageRejected(
 	reason string,
 	validatorPK spectypes.ValidatorPK,
 	role spectypes.BeaconRole,
@@ -264,18 +264,18 @@ func (m MetricsReporter) MessageRejected(
 	).Inc()
 }
 
-func (m MetricsReporter) SSVMessageType(msgType spectypes.MsgType) {
+func (m *MetricsReporter) SSVMessageType(msgType spectypes.MsgType) {
 	messageValidationSSVType.WithLabelValues(ssvmessage.MsgTypeToString(msgType)).Inc()
 }
 
-func (m MetricsReporter) ConsensusMsgType(msgType specqbft.MessageType, signers int) {
+func (m *MetricsReporter) ConsensusMsgType(msgType specqbft.MessageType, signers int) {
 	messageValidationConsensusType.WithLabelValues(ssvmessage.QBFTMsgTypeToString(msgType), strconv.Itoa(signers)).Inc()
 }
 
-func (m MetricsReporter) MessageValidationDuration(duration time.Duration, labels ...string) {
+func (m *MetricsReporter) MessageValidationDuration(duration time.Duration, labels ...string) {
 	messageValidationDuration.WithLabelValues(labels...).Observe(duration.Seconds())
 }
 
-func (m MetricsReporter) MessageSize(size int) {
+func (m *MetricsReporter) MessageSize(size int) {
 	messageSize.WithLabelValues().Set(float64(size))
 }
