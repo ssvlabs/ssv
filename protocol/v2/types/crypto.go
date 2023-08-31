@@ -405,8 +405,8 @@ func (b *BatchVerifier) Start() {
 func (b *BatchVerifier) worker() {
 	for {
 		select {
-		case batch := <-b.batches:
-			b.verify(batch)
+		case newBatch := <-b.batches:
+			b.verify(newBatch)
 			// case <-b.timer.C:
 		case <-b.ticker.C:
 			// Dispatch the pending requests when the timer expires.

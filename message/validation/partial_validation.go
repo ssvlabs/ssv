@@ -142,6 +142,7 @@ func (mv *MessageValidator) validPartialSignatures(share *ssvtypes.SSVShare, sig
 	return nil
 }
 
+// nolint // TODO: remove nolint
 func (mv *MessageValidator) verifyPartialSignature(msg *spectypes.PartialSignatureMessage, share *ssvtypes.SSVShare) error {
 	signer := msg.Signer
 	signature := msg.PartialSignature
