@@ -11,6 +11,7 @@ import (
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/beacon/params"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/jamiealquiza/tachymeter"
 	"github.com/pkg/errors"
 	blsu "github.com/protolambda/bls12-381-util"
@@ -24,37 +25,24 @@ import (
 //
 // TODO: rethink this function and consider moving/refactoring it.
 func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, domain spectypes.DomainType, sigType spectypes.SignatureType, operators []*spectypes.Operator) error {
-	if len(s) != params.BLSSignatureSize {
-		return fmt.Errorf("wrong sig len: %v", len(s))
-	}
-
-	var messageSign [params.BLSSignatureSize]byte
-	copy(messageSign[:], s)
-
-	var blsuSign blsu.Signature
-	if err := blsuSign.Deserialize(&messageSign); err != nil {
+	// decode sig
+	sign := &bls.Sign{}
+	if err := sign.Deserialize(s); err != nil {
 		return errors.Wrap(err, "failed to deserialize signature")
 	}
 
 	// find operators
-	pks := make([]*blsu.Pubkey, 0)
+	pks := make([]bls.PublicKey, 0)
 	for _, id := range data.GetSigners() {
 		found := false
 		for _, n := range operators {
 			if id == n.GetID() {
-				if len(n.GetPublicKey()) != params.BLSPubkeySize {
-					return fmt.Errorf("wrong pubkey len: %v", len(n.GetPublicKey()))
-				}
-
-				var messagePubkey [params.BLSPubkeySize]byte
-				copy(messagePubkey[:], n.GetPublicKey())
-
-				blsuPubkey := new(blsu.Pubkey)
-				if err := blsuPubkey.Deserialize(&messagePubkey); err != nil {
+				pk, err := DeserializeBLSPublicKey(n.GetPublicKey())
+				if err != nil {
 					return errors.Wrap(err, "failed to deserialize public key")
 				}
 
-				pks = append(pks, blsuPubkey)
+				pks = append(pks, pk)
 				found = true
 			}
 		}
@@ -73,13 +61,13 @@ func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, d
 	// if res := sign.FastAggregateVerify(pks, computedRoot[:]); !res {
 	// 	return errors.New("failed to verify signature")
 	// }
-	if res := Verifier.AggregateVerify(&blsuSign, pks, computedRoot); !res {
+	if res := Verifier.AggregateVerify(sign, pks, computedRoot); !res {
 		return SingleVerifyByOperators(s, data, domain, sigType, operators)
 	}
 	return nil
 }
 
-func SingleVerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, domain spectypes.DomainType, sigType spectypes.SignatureType, operators []*spectypes.Operator) error {
+func VerifyBLSU(s spectypes.Signature, data spectypes.MessageSignature, domain spectypes.DomainType, sigType spectypes.SignatureType, operators []*spectypes.Operator) error {
 	if len(s) != params.BLSSignatureSize {
 		return fmt.Errorf("wrong sig len: %v", len(s))
 	}
@@ -131,28 +119,68 @@ func SingleVerifyByOperators(s spectypes.Signature, data spectypes.MessageSignat
 	return nil
 }
 
+func SingleVerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, domain spectypes.DomainType, sigType spectypes.SignatureType, operators []*spectypes.Operator) error {
+	// decode sig
+	sign := &bls.Sign{}
+	if err := sign.Deserialize(s); err != nil {
+		return errors.Wrap(err, "failed to deserialize signature")
+	}
+
+	// find operators
+	pks := make([]bls.PublicKey, 0)
+	for _, id := range data.GetSigners() {
+		found := false
+		for _, n := range operators {
+			if id == n.GetID() {
+				pk, err := DeserializeBLSPublicKey(n.GetPublicKey())
+				if err != nil {
+					return errors.Wrap(err, "failed to deserialize public key")
+				}
+
+				pks = append(pks, pk)
+				found = true
+			}
+		}
+		if !found {
+			return errors.New("unknown signer")
+		}
+	}
+
+	// compute root
+	computedRoot, err := spectypes.ComputeSigningRoot(data, spectypes.ComputeSignatureDomain(domain, sigType))
+	if err != nil {
+		return errors.Wrap(err, "could not compute signing root")
+	}
+
+	// verify
+	if res := sign.FastAggregateVerify(pks, computedRoot[:]); !res {
+		return errors.New("failed to verify signature")
+	}
+	return nil
+}
+
 func ReconstructSignature(ps *specssv.PartialSigContainer, root [32]byte, validatorPubKey []byte) ([]byte, error) {
 	// Reconstruct signatures
 	signature, err := spectypes.ReconstructSignatures(ps.Signatures[rootHex(root)])
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to reconstruct signatures")
 	}
-	//if err := VerifyReconstructedSignature(signature, validatorPubKey, root); err != nil {
-	//	return nil, errors.Wrap(err, "failed to verify reconstruct signature")
-	//}
+	if err := VerifyReconstructedSignature(signature, validatorPubKey, root); err != nil {
+		return nil, errors.Wrap(err, "failed to verify reconstruct signature")
+	}
 	return signature.Serialize(), nil
 }
 
-func VerifyReconstructedSignature(sig *blsu.Signature, validatorPubKey []byte, root [32]byte) error {
-	//pk, err := DeserializeBLSPublicKey(validatorPubKey)
-	//if err != nil {
-	//	return errors.Wrap(err, "could not deserialize validator pk")
-	//}
+func VerifyReconstructedSignature(sig *bls.Sign, validatorPubKey []byte, root [32]byte) error {
+	pk, err := DeserializeBLSPublicKey(validatorPubKey)
+	if err != nil {
+		return errors.Wrap(err, "could not deserialize validator pk")
+	}
 
 	// verify reconstructed sig
-	//if res := Verifier.AggregateVerify(sig, []bls.PublicKey{pk}, root); !res {
-	//	return errors.New("could not reconstruct a valid signature")
-	//}
+	if res := Verifier.AggregateVerify(sig, []bls.PublicKey{pk}, root); !res {
+		return errors.New("could not reconstruct a valid signature")
+	}
 	return nil
 }
 
@@ -170,8 +198,8 @@ const messageSize = 32
 
 // SignatureRequest represents a BLS signature request.
 type SignatureRequest struct {
-	Signature *blsu.Signature
-	PubKeys   []*blsu.Pubkey
+	Signature *bls.Sign
+	PubKeys   []bls.PublicKey
 	Message   [messageSize]byte
 	Results   []chan bool // Results are sent on these channels.
 
@@ -255,7 +283,7 @@ func NewBatchVerifier(concurrency, batchSize int, timeout time.Duration) *BatchV
 
 // AggregateVerify adds a request to the current batch or verifies it immediately if a similar one exists.
 // It returns the result of the signature verification.
-func (b *BatchVerifier) AggregateVerify(signature *blsu.Signature, pks []*blsu.Pubkey, message [messageSize]byte) bool {
+func (b *BatchVerifier) AggregateVerify(signature *bls.Sign, pks []bls.PublicKey, message [messageSize]byte) bool {
 	start := time.Now()
 	defer func() {
 		b.debug.Lock()
@@ -277,11 +305,8 @@ func (b *BatchVerifier) AggregateVerify(signature *blsu.Signature, pks []*blsu.P
 
 		dup.PubKeys = append(dup.PubKeys, pks...)
 		sig := *dup.Signature
-		aggSig, err := blsu.Aggregate([]*blsu.Signature{&sig, signature})
-		if err != nil {
-			panic(err)
-		}
-		dup.Signature = aggSig
+		sig.Add(signature)
+		dup.Signature = &sig
 		dup.Results = append(dup.Results, result)
 		dup.timings = append(dup.timings, start)
 		valid := <-result
@@ -531,32 +556,23 @@ func (b *BatchVerifier) verify(batch batch) {
 	}
 
 	// Prepare the signature, public keys, and messages for batch verification.
-	sig := batch.requests[0].Signature
-	pks := make([]*blsu.Pubkey, len(batch.requests))
-	msgs := make([][]byte, len(batch.requests))
+	sig := *batch.requests[0].Signature
+	pks := make([]bls.PublicKey, len(batch.requests))
+	msgs := make([]byte, len(batch.requests)*messageSize)
 	for i, req := range batch.requests {
 		if i > 0 {
-			aggSig, err := blsu.Aggregate([]*blsu.Signature{sig, req.Signature})
-			if err != nil {
-				panic(err)
-			}
-			sig = aggSig
-			batch.requests[0].Signature = aggSig
+			sig.Add(req.Signature)
 		}
 		pk := req.PubKeys[0]
 		for j := 1; j < len(req.PubKeys); j++ {
-			aggPK, err := blsu.AggregatePubkeys([]*blsu.Pubkey{pk, req.PubKeys[j]})
-			if err != nil {
-				panic(err)
-			}
-			pk = aggPK
+			pk.Add(&req.PubKeys[j])
 		}
 		pks[i] = pk
-		msgs = append(msgs, req.Message[:])
+		copy(msgs[messageSize*i:], req.Message[:])
 	}
 
 	// Batch verify the signatures.
-	valid := blsu.AggregateVerify(pks, msgs, sig)
+	valid := sig.AggregateVerifyNoCheck(pks, msgs)
 	for _, req := range batch.requests {
 		req.Finish(valid)
 	}
@@ -575,5 +591,5 @@ func (b *BatchVerifier) verify(batch batch) {
 // verifySingle verifies a single request and sends the result back via the Result channel.
 func (b *BatchVerifier) verifySingle(req *SignatureRequest) bool {
 	cpy := req.Message
-	return blsu.FastAggregateVerify(req.PubKeys, cpy[:], req.Signature)
+	return req.Signature.FastAggregateVerify(req.PubKeys, cpy[:])
 }
