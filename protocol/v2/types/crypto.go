@@ -144,6 +144,8 @@ const messageSize = 32
 
 // SignatureRequest represents a BLS signature request.
 type SignatureRequest struct {
+	mu sync.Mutex
+
 	Signature *bls.Sign
 	PubKeys   []bls.PublicKey
 	Message   [messageSize]byte
@@ -154,7 +156,11 @@ type SignatureRequest struct {
 }
 
 func (r *SignatureRequest) Finish(result bool) {
-	for _, res := range r.Results {
+	r.mu.Lock()
+	results := r.Results
+	r.mu.Unlock()
+
+	for _, res := range results {
 		res <- result
 	}
 }
@@ -290,12 +296,15 @@ func (b *BatchVerifier) AggregateVerify(signature *bls.Sign, pks []bls.PublicKey
 		b.debug.dups++
 		b.debug.Unlock()
 
+		dup.mu.Lock()
 		dup.PubKeys = append(dup.PubKeys, pks...)
 		sig := *dup.Signature
 		sig.Add(signature)
 		dup.Signature = &sig
 		dup.Results = append(dup.Results, result)
 		dup.timings = append(dup.timings, start)
+		dup.mu.Unlock()
+
 		valid := <-result
 		if !valid {
 			// If the aggregated verification failed, fall back to individual verification.
@@ -525,7 +534,10 @@ func (b *BatchVerifier) verify(batch batch) {
 
 	b.debug.Lock()
 	for _, req := range batch.requests {
-		for _, t := range req.timings {
+		req.mu.Lock()
+		timings := req.timings
+		req.mu.Unlock()
+		for _, t := range timings {
 			b.debug.requestPendingDurations.AddTime(time.Since(t))
 		}
 	}
@@ -547,6 +559,7 @@ func (b *BatchVerifier) verify(batch batch) {
 	pks := make([]bls.PublicKey, len(batch.requests))
 	msgs := make([]byte, len(batch.requests)*messageSize)
 	for i, req := range batch.requests {
+		req.mu.Lock()
 		if i > 0 {
 			sig.Add(req.Signature)
 		}
@@ -556,6 +569,7 @@ func (b *BatchVerifier) verify(batch batch) {
 		}
 		pks[i] = pk
 		copy(msgs[messageSize*i:], req.Message[:])
+		req.mu.Unlock()
 	}
 
 	// Batch verify the signatures.
@@ -577,6 +591,11 @@ func (b *BatchVerifier) verify(batch batch) {
 
 // verifySingle verifies a single request and sends the result back via the Result channel.
 func (b *BatchVerifier) verifySingle(req *SignatureRequest) bool {
-	cpy := req.Message
-	return req.Signature.FastAggregateVerify(req.PubKeys, cpy[:])
+	req.mu.Lock()
+	message := req.Message
+	signature := req.Signature
+	pubKeys := req.PubKeys
+	req.mu.Unlock()
+
+	return signature.FastAggregateVerify(pubKeys, message[:])
 }
