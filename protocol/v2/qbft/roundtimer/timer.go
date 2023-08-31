@@ -15,7 +15,7 @@ import (
 
 type RoundTimeoutFunc func(BeaconNetwork, spectypes.BeaconRole, specqbft.Height, specqbft.Round) time.Duration
 
-var (
+const (
 	quickTimeoutThreshold = specqbft.Round(8)
 	quickTimeout          = 2 * time.Second
 	slowTimeout           = 2 * time.Minute
@@ -32,28 +32,10 @@ type BeaconNetwork interface {
 	SlotDurationSec() time.Duration
 }
 
-// RoundTimeout returns the number of seconds until next timeout for a give round.
-// if the round is smaller than 8 -> 2s; otherwise -> 2m
-// see SIP https://github.com/bloxapp/SIPs/pull/22
-//
-// TODO: Update SIP for Deterministic Round Timeout
-// The new logic accommodates starting instances based on block arrival (either as attester or sync committee).
-// This creates a scenario where each instance in a committee could initiate their timers at different times,
-// leading to varying timeouts for the first round across instances.
-// To synchronize timeouts across all instances, we'll base it on the duty start time,
-// which is calculated from the slot height.
-// The timeout will be 1/3 of the slot time (the duty should be executed from) + 2 sec (quickTimeout).
-func RoundTimeout(beaconNetwork BeaconNetwork, role spectypes.BeaconRole, height specqbft.Height, round specqbft.Round) time.Duration {
-	if round == specqbft.FirstRound && (role == spectypes.BNRoleAttester || role == spectypes.BNRoleSyncCommittee) {
-		dutyStartTime := beaconNetwork.GetSlotStartTime(phase0.Slot(height))
-		duration := beaconNetwork.SlotDurationSec()/3 + quickTimeout
-		return time.Until(dutyStartTime.Add(duration))
-	}
-
-	if round <= quickTimeoutThreshold {
-		return quickTimeout
-	}
-	return slowTimeout
+type TimeoutOptions struct {
+	quickThreshold specqbft.Round
+	quick          time.Duration
+	slow           time.Duration
 }
 
 // RoundTimer helps to manage current instance rounds.
@@ -68,8 +50,8 @@ type RoundTimer struct {
 	done func()
 	// round is the current round of the timer
 	round int64
-	// roundTimeout is a function that returns the timeout for a given round
-	roundTimeout RoundTimeoutFunc
+	// timeoutOptions holds the timeoutOptions for the timer
+	timeoutOptions TimeoutOptions
 	// role is the role of the instance
 	role spectypes.BeaconRole
 	// beaconNetwork is the beacon network
@@ -85,10 +67,74 @@ func New(pctx context.Context, beaconNetwork BeaconNetwork, role spectypes.Beaco
 		cancelCtx:     cancelCtx,
 		timer:         nil,
 		done:          done,
-		roundTimeout:  RoundTimeout,
 		role:          role,
 		beaconNetwork: beaconNetwork,
+		timeoutOptions: TimeoutOptions{
+			quickThreshold: quickTimeoutThreshold,
+			quick:          quickTimeout,
+			slow:           slowTimeout,
+		},
 	}
+}
+
+// RoundTimeout calculates the timeout duration for a specific role, height, and round.
+//
+// Timeout Rules:
+// - For roles BNRoleAttester and BNRoleSyncCommittee, the base timeout is 1/3 of the slot duration.
+// - For roles BNRoleAggregator and BNRoleSyncCommitteeContribution, the base timeout is 2/3 of the slot duration.
+// - For role BNRoleProposer, the timeout is either quickTimeout or slowTimeout, depending on the round.
+//
+// Additional Timeout:
+// - For rounds less than or equal to quickThreshold, the additional timeout is 'quick' seconds.
+// - For rounds greater than quickThreshold, the additional timeout is 'slow' seconds.
+//
+// SIP Reference:
+// For more details, see SIP at https://github.com/bloxapp/SIPs/pull/22
+//
+// TODO: Update SIP for Deterministic Round Timeout
+// TODO: Decide if to make the proposer timeout deterministic
+//
+// Synchronization Note:
+// To ensure synchronized timeouts across instances, the timeout is based on the duty start time,
+// which is calculated from the slot height. The base timeout is set based on the role,
+// and the additional timeout is added based on the round number.
+func (t *RoundTimer) RoundTimeout(height specqbft.Height, round specqbft.Round) time.Duration {
+	// Initialize duration to zero
+	var timeoutDuration time.Duration
+
+	// Set base duration based on role
+	switch t.role {
+	case spectypes.BNRoleAttester, spectypes.BNRoleSyncCommittee:
+		// third of the slot time
+		timeoutDuration = t.beaconNetwork.SlotDurationSec() / 3
+	case spectypes.BNRoleAggregator, spectypes.BNRoleSyncCommitteeContribution:
+		// two-third of the slot time
+		timeoutDuration = t.beaconNetwork.SlotDurationSec() / 3 * 2
+	case spectypes.BNRoleProposer:
+		if round <= t.timeoutOptions.quickThreshold {
+			return t.timeoutOptions.quick
+		}
+		return t.timeoutOptions.slow
+	}
+
+	// Get the start time of the duty
+	dutyStartTime := t.beaconNetwork.GetSlotStartTime(phase0.Slot(height))
+
+	// Calculate additional timeout based on round
+	var additionalTimeout time.Duration
+	if round <= t.timeoutOptions.quickThreshold {
+		additionalTimeout = time.Duration(int(round)) * t.timeoutOptions.quick
+	} else {
+		quickPortion := time.Duration(t.timeoutOptions.quickThreshold) * t.timeoutOptions.quick
+		slowPortion := time.Duration(int(round-t.timeoutOptions.quickThreshold)) * t.timeoutOptions.slow
+		additionalTimeout = quickPortion + slowPortion
+	}
+
+	// Combine base duration and additional timeout
+	timeoutDuration += additionalTimeout
+
+	// Calculate the time until the duty should start plus the timeout duration
+	return time.Until(dutyStartTime.Add(timeoutDuration))
 }
 
 // OnTimeout sets a function called on timeout.
@@ -108,7 +154,7 @@ func (t *RoundTimer) Round() specqbft.Round {
 func (t *RoundTimer) TimeoutForRound(height specqbft.Height, round specqbft.Round) {
 	atomic.StoreInt64(&t.round, int64(round))
 
-	timeout := t.roundTimeout(t.beaconNetwork, t.role, height, round)
+	timeout := t.RoundTimeout(height, round)
 
 	// preparing the underlying timer
 	timer := t.timer
