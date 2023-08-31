@@ -91,9 +91,10 @@ var (
 		Help:    "Message validation duration (seconds)",
 		Buckets: []float64{0.001, 0.005, 0.010, 0.050, 0.100, 0.500, 1},
 	}, []string{})
-	messageSize = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv_message_size",
-		Help: "Message size",
+	messageSize = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "ssv_message_size",
+		Help:    "Message size",
+		Buckets: []float64{100, 500, 1_000, 5_000, 10_000, 50_000, 100_000, 500_000, 1_000_000, 5_000_000},
 	}, []string{})
 )
 
@@ -277,5 +278,5 @@ func (m *MetricsReporter) MessageValidationDuration(duration time.Duration, labe
 }
 
 func (m *MetricsReporter) MessageSize(size int) {
-	messageSize.WithLabelValues().Set(float64(size))
+	messageSize.WithLabelValues().Observe(float64(size))
 }
