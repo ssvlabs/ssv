@@ -36,6 +36,9 @@ func (test *MsgProcessingSpecTest) TestName() string {
 
 func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
 	logger := logging.TestLogger(t)
+
+	test.Runner.GetBaseRunner().CheckSignature = true
+
 	v := ssvtesting.BaseValidator(logger, spectestingutils.KeySetForShare(test.Runner.GetBaseRunner().Share))
 	v.DutyRunners[test.Runner.GetBaseRunner().BeaconRoleType] = test.Runner
 	v.Network = test.Runner.GetNetwork().(specqbft.Network) // TODO need to align
@@ -57,7 +60,7 @@ func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
 	}
 
 	if len(test.ExpectedError) != 0 {
-		require.EqualError(t, lastErr, test.ExpectedError)
+		require.EqualError(t, lastErr, test.ExpectedError, "expected: %v", test.ExpectedError)
 	} else {
 		require.NoError(t, lastErr)
 	}
