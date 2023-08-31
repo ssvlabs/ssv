@@ -10,11 +10,9 @@ import (
 
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/ethereum/go-ethereum/beacon/params"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/jamiealquiza/tachymeter"
 	"github.com/pkg/errors"
-	blsu "github.com/protolambda/bls12-381-util"
 	"go.uber.org/zap"
 	"golang.org/x/exp/maps"
 )
@@ -63,58 +61,6 @@ func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, d
 	// }
 	if res := Verifier.AggregateVerify(sign, pks, computedRoot); !res {
 		return SingleVerifyByOperators(s, data, domain, sigType, operators)
-	}
-	return nil
-}
-
-func VerifyBLSU(s spectypes.Signature, data spectypes.MessageSignature, domain spectypes.DomainType, sigType spectypes.SignatureType, operators []*spectypes.Operator) error {
-	if len(s) != params.BLSSignatureSize {
-		return fmt.Errorf("wrong sig len: %v", len(s))
-	}
-
-	var messageSign [params.BLSSignatureSize]byte
-	copy(messageSign[:], s)
-
-	var blsuSign blsu.Signature
-	if err := blsuSign.Deserialize(&messageSign); err != nil {
-		return errors.Wrap(err, "failed to deserialize signature")
-	}
-
-	// find operators
-	pks := make([]*blsu.Pubkey, 0)
-	for _, id := range data.GetSigners() {
-		found := false
-		for _, n := range operators {
-			if id == n.GetID() {
-				if len(n.GetPublicKey()) != params.BLSPubkeySize {
-					return fmt.Errorf("wrong pubkey len: %v", len(n.GetPublicKey()))
-				}
-
-				var messagePubkey [params.BLSPubkeySize]byte
-				copy(messagePubkey[:], n.GetPublicKey())
-
-				blsuPubkey := new(blsu.Pubkey)
-				if err := blsuPubkey.Deserialize(&messagePubkey); err != nil {
-					return errors.Wrap(err, "failed to deserialize public key")
-				}
-
-				pks = append(pks, blsuPubkey)
-				found = true
-			}
-		}
-		if !found {
-			return errors.New("unknown signer")
-		}
-	}
-
-	// compute root
-	computedRoot, err := spectypes.ComputeSigningRoot(data, spectypes.ComputeSignatureDomain(domain, sigType))
-	if err != nil {
-		return errors.Wrap(err, "could not compute signing root")
-	}
-
-	if res := blsu.FastAggregateVerify(pks, computedRoot[:], &blsuSign); !res {
-		return errors.New("failed to verify signature")
 	}
 	return nil
 }
