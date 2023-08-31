@@ -64,7 +64,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	ops, err := createOperators(4)
 	require.NoError(t, err)
 
-	eh, err := setupEventHandler(t, ctx, logger, ops[0])
+	eh, _, err := setupEventHandler(t, ctx, logger, ops[0], false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -302,7 +302,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		// Length of the shares []byte is correct; nonce is bumped; validator is added
 		t.Run("test validator 1 doesnt check validator's 4 share", func(t *testing.T) {
 			malformedSharesData := sharesData2[:]
-			// make invalid last share. Let's change just one bit, but not the total length shareData
+			// Corrupt the encrypted last share key of the 4th operator
 			malformedSharesData[len(malformedSharesData)-1] ^= 1
 
 			// Call the contract method
@@ -353,13 +353,13 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 		// Share for 1st operator is malformed; check nonce is bumped correctly; validator wasn't added
 		t.Run("test correct ValidatorAdded again and nonce is bumped", func(t *testing.T) {
-
 			malformedSharesData := sharesData3[:]
 
 			operatorCount := len(ops)
 			signatureOffset := phase0.SignatureLength
 			pubKeysOffset := phase0.PublicKeyLength*operatorCount + signatureOffset
 
+			// Corrupt the encrypted share key of the operator 1
 			malformedSharesData[pubKeysOffset+encryptedKeyLength-1] ^= 1
 
 			// Call the contract method
@@ -577,7 +577,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	})
 }
 
-func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, operator *testOperator) (*EventHandler, error) {
+func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, operator *testOperator, useMockCtrl bool) (*EventHandler, *mocks.MockController, error) {
 	db, err := kv.NewInMemory(logger, basedb.Options{
 		Ctx: ctx,
 	})
@@ -589,9 +589,40 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, op
 
 	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, true, "")
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
+	if useMockCtrl {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		bc := beacon.NewMockBeaconNode(ctrl)
+		validatorCtrl := mocks.NewMockController(ctrl)
+
+		contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
+		require.NoError(t, err)
+
+		parser := eventparser.New(contractFilterer)
+
+		eh, err := New(
+			nodeStorage,
+			parser,
+			validatorCtrl,
+			testNetworkConfig.Domain,
+			validatorCtrl,
+			nodeStorage.GetPrivateKey,
+			keyManager,
+			bc,
+			storageMap,
+			WithFullNode(),
+			WithLogger(logger))
+		if err != nil {
+			return nil, nil, err
+		}
+		validatorCtrl.EXPECT().GetOperatorData().Return(&registrystorage.OperatorData{}).AnyTimes()
+
+		return eh, validatorCtrl, nil
+	}
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -623,56 +654,9 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, op
 		WithFullNode(),
 		WithLogger(logger))
 	if err != nil {
-		return nil, err
-	}
-	return eh, nil
-}
-
-// Copy of setupEventHandler, but with a mocked Validator Controller
-func setupEventHandlerWithMockedCtrl(t *testing.T, ctx context.Context, logger *zap.Logger, operator *testOperator) (*EventHandler, *mocks.MockController, error) {
-	db, err := kv.NewInMemory(logger, basedb.Options{
-		Ctx: ctx,
-	})
-	require.NoError(t, err)
-
-	storageMap := ibftstorage.NewStores()
-	nodeStorage, _ := setupOperatorStorage(logger, db, operator)
-	testNetworkConfig := networkconfig.TestNetwork
-
-	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, true, "")
-	if err != nil {
 		return nil, nil, err
 	}
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	bc := beacon.NewMockBeaconNode(ctrl)
-	validatorCtrl := mocks.NewMockController(ctrl)
-
-	contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
-	require.NoError(t, err)
-
-	parser := eventparser.New(contractFilterer)
-
-	eh, err := New(
-		nodeStorage,
-		parser,
-		validatorCtrl,
-		testNetworkConfig.Domain,
-		validatorCtrl,
-		nodeStorage.GetPrivateKey,
-		keyManager,
-		bc,
-		storageMap,
-		WithFullNode(),
-		WithLogger(logger))
-	if err != nil {
-		return nil, nil, err
-	}
-	validatorCtrl.EXPECT().GetOperatorData().Return(&registrystorage.OperatorData{}).AnyTimes()
-
-	return eh, validatorCtrl, nil
+	return eh, nil, nil
 }
 
 func setupOperatorStorage(logger *zap.Logger, db basedb.Database, operator *testOperator) (operatorstorage.Storage, *registrystorage.OperatorData) {

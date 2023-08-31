@@ -51,7 +51,7 @@ func TestExecuteTask(t *testing.T) {
 	ops, err := createOperators(1)
 	require.NoError(t, err)
 
-	eh, validatorCtrl, err := setupEventHandlerWithMockedCtrl(t, ctx, logger, ops[0])
+	eh, validatorCtrl, err := setupEventHandler(t, ctx, logger, ops[0], true)
 	require.NoError(t, err)
 
 	t.Run("test AddValidator task execution - not started", func(t *testing.T) {
@@ -148,7 +148,7 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 	ops, err := createOperators(1)
 	require.NoError(t, err)
 
-	eh, err := setupEventHandler(t, ctx, logger, ops[0])
+	eh, _, err := setupEventHandler(t, ctx, logger, ops[0], false)
 	if err != nil {
 		t.Fatal(err)
 	}
