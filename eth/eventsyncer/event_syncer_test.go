@@ -95,10 +95,10 @@ func TestEventSyncer(t *testing.T) {
 	require.True(t, isReady)
 
 	// Generate operator key
-	_, operatorPubKey, err := rsaencryption.GenerateKeys()
+	opPubKey, _, err := rsaencryption.GenerateKeys()
 	require.NoError(t, err)
 
-	pkstr := base64.StdEncoding.EncodeToString(operatorPubKey)
+	pkstr := base64.StdEncoding.EncodeToString(opPubKey)
 	pckd, err := eventparser.PackOperatorPublicKey([]byte(pkstr))
 	require.NoError(t, err)
 
