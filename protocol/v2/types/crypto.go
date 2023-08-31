@@ -159,7 +159,48 @@ func (r *SignatureRequest) Finish(result bool) {
 	}
 }
 
-type requests map[[messageSize]byte]*SignatureRequest
+type requestsMap map[[messageSize]byte]*SignatureRequest
+
+type requests struct {
+	mu sync.RWMutex
+	rm requestsMap
+}
+
+func (r *requests) Len() int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	return len(r.rm)
+}
+
+func (r *requests) Values() []*SignatureRequest {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	return maps.Values(r.rm)
+}
+
+func (r *requests) Get(msg [messageSize]byte) (*SignatureRequest, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	v, ok := r.rm[msg]
+	return v, ok
+}
+
+func (r *requests) Set(msg [messageSize]byte, sr *SignatureRequest) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.rm[msg] = sr
+}
+
+func (r *requests) Reset() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.rm = make(requestsMap)
+}
 
 type batch struct {
 	start    time.Time
@@ -216,7 +257,7 @@ func NewBatchVerifier(concurrency, batchSize int, timeout time.Duration) *BatchV
 		timeout:     timeout,
 		timer:       nopTimer,
 		ticker:      time.NewTicker(timeout),
-		pending:     make(requests),
+		pending:     requests{rm: make(requestsMap)},
 		batches:     make(chan batch, concurrency*2*128),
 	}
 	n := concurrency * 1024
@@ -241,7 +282,7 @@ func (b *BatchVerifier) AggregateVerify(signature *bls.Sign, pks []bls.PublicKey
 	// If an identical message is already pending, aggregate it's request
 	// with the current one and return the result.
 	b.mu.Lock()
-	if dup, exists := b.pending[message]; exists {
+	if dup, exists := b.pending.Get(message); exists {
 		b.mu.Unlock()
 
 		b.debug.Lock()
@@ -278,14 +319,14 @@ func (b *BatchVerifier) AggregateVerify(signature *bls.Sign, pks []bls.PublicKey
 		Results:   []chan bool{result},
 		timings:   []time.Time{start},
 	}
-	b.pending[message] = sr
-	if len(b.pending) == b.batchSize {
+	b.pending.Set(message, sr)
+	if b.pending.Len() == b.batchSize {
 		// Batch size reached: stop the timer and dispatch the batch.
 		b.timer.Stop()
 		previouslyStarted := b.started
 		b.started = time.Time{}
-		pending := b.pending
-		b.pending = make(requests)
+		pending := b.pending.Values()
+		b.pending.Reset()
 		b.mu.Unlock()
 
 		b.debug.Lock()
@@ -294,12 +335,12 @@ func (b *BatchVerifier) AggregateVerify(signature *bls.Sign, pks []bls.PublicKey
 
 		b.batches <- batch{
 			start:    previouslyStarted,
-			requests: maps.Values(pending),
+			requests: pending,
 		}
 	} else {
 		// Batch has grown: adjust the timer.
 		b.timer.Stop()
-		t := b.adaptiveTimeout(len(b.pending))
+		t := b.adaptiveTimeout(b.pending.Len())
 		b.timer.Reset(t)
 		b.started = time.Now()
 		b.mu.Unlock()
@@ -383,8 +424,8 @@ func (b *BatchVerifier) worker() {
 			// Dispatch the pending requests when the timer expires.
 			b.mu.Lock()
 			previouslyStarted := b.started
-			pending := b.pending
-			b.pending = make(requests)
+			pending := b.pending.Values()
+			b.pending.Reset()
 			b.mu.Unlock()
 
 			if len(pending) > 0 {
@@ -394,7 +435,7 @@ func (b *BatchVerifier) worker() {
 
 				b.verify(batch{
 					start:    previouslyStarted,
-					requests: maps.Values(pending),
+					requests: pending,
 				})
 			}
 		}
@@ -464,7 +505,7 @@ func (b *BatchVerifier) Stats() (stats Stats) {
 	}
 	stats.AverageBatchSize = sum / float64(len(lens))
 
-	stats.PendingRequests = len(b.pending)
+	stats.PendingRequests = b.pending.Len()
 	stats.PendingBatches = len(b.batches)
 	stats.BusyWorkers = int(b.busyWorkers.Load())
 
