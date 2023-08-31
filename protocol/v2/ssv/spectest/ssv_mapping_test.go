@@ -45,16 +45,15 @@ func TestSSVMapping(t *testing.T) {
 
 	p := pool.New()
 	for name, test := range untypedTests {
-		name, test := name, test
-		r := prepareTest(t, logger, name, test)
-		if r != nil {
-			t.Run(r.name, func(t *testing.T) {
-				t.Parallel()
-				p.Go(func() {
+		p.Go(func() {
+			r := prepareTest(t, logger, name, test)
+			if r != nil {
+				t.Run(r.name, func(t *testing.T) {
+					t.Parallel()
 					r.test(t)
 				})
-			})
-		}
+			}
+		})
 	}
 	p.Wait()
 }
