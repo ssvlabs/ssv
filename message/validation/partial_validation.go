@@ -134,15 +134,14 @@ func (mv *MessageValidator) validPartialSignatures(share *ssvtypes.SSVShare, sig
 			return err
 		}
 
-		//if err := mv.verifyPartialSignature(message, share); err != nil {
-		//	return err
-		//}
+		if err := mv.verifyPartialSignature(message, share); err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
-// nolint // TODO: remove nolint
 func (mv *MessageValidator) verifyPartialSignature(msg *spectypes.PartialSignatureMessage, share *ssvtypes.SSVShare) error {
 	signer := msg.Signer
 	signature := msg.PartialSignature
@@ -162,8 +161,8 @@ func (mv *MessageValidator) verifyPartialSignature(msg *spectypes.PartialSignatu
 			return fmt.Errorf("deserialize signature: %w", err)
 		}
 
-		if !sig.VerifyByte(&pk, root[:]) {
-			return fmt.Errorf("wrong signature")
+		if !ssvtypes.Verifier.AggregateVerify(sig, []bls.PublicKey{pk}, root) {
+			return fmt.Errorf("wrong partial signature")
 		}
 		return nil
 	}
