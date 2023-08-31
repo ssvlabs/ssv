@@ -462,11 +462,13 @@ func (b *BatchVerifier) Stats() (stats Stats) {
 	for _, l := range lens {
 		sum += float64(l)
 	}
-	stats.AverageBatchSize = sum / float64(len(lens))
 
+	b.mu.Lock()
+	stats.AverageBatchSize = sum / float64(len(lens))
 	stats.PendingRequests = len(b.pending)
 	stats.PendingBatches = len(b.batches)
 	stats.BusyWorkers = int(b.busyWorkers.Load())
+	b.mu.Unlock()
 
 	startIndex := len(lens) - len(stats.RecentBatchSizes)
 	if startIndex < 0 {
