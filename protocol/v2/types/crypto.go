@@ -423,6 +423,7 @@ func gaugeFromTachymeter(t *tachymeter.Tachymeter) Gauge[time.Duration] {
 }
 
 type Stats struct {
+	mu                      sync.Mutex
 	TotalRequests           int
 	DuplicateRequests       int
 	TotalBatches            int
@@ -464,7 +465,11 @@ func (b *BatchVerifier) Stats() (stats Stats) {
 	}
 	stats.AverageBatchSize = sum / float64(len(lens))
 
-	stats.PendingRequests = len(b.pending)
+	b.mu.Lock()
+	pendingCount := len(b.pending)
+	b.mu.Unlock()
+
+	stats.PendingRequests = pendingCount
 	stats.PendingBatches = len(b.batches)
 	stats.BusyWorkers = int(b.busyWorkers.Load())
 
