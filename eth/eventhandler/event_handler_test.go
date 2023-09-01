@@ -69,6 +69,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Just creating one more key -> address for testing
 	wrongPk, err := crypto.HexToECDSA("42e14d227125f411d6d3285bb4a2e07c2dba2e210bd2f3f4e2a36633bd61bfe6")
 	require.NoError(t, err)
 	testAddr2 := crypto.PubkeyToAddress(wrongPk.PublicKey)
@@ -77,6 +78,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	testAddresses[0] = &testAddr
 	testAddresses[1] = &testAddr2
 
+	// Adding testAddresses to the genesis block mostly to specify some balances for them
 	sim := simTestBackend(testAddresses)
 
 	// Create JSON-RPC handler
@@ -124,6 +126,10 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	sharesData1, err := generateSharesData(validatorData1, ops, testAddr, 0)
 	require.NoError(t, err)
 
+	// Create another validator. We'll create the shares later in the tests
+	validatorData2, err := createNewValidator(ops)
+	require.NoError(t, err)
+
 	blockNum := uint64(0x1)
 
 	t.Run("test OperatorAdded event handle", func(t *testing.T) {
@@ -159,12 +165,12 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		blockNum++
 
-		// Check storage for a new operator
+		// Check storage for the new operators
 		operators, err = eh.nodeStorage.ListOperators(nil, 0, 10)
 		require.NoError(t, err)
 		require.Equal(t, len(ops), len(operators))
 
-		// Check if an operator in the storage has same attributes
+		// Check if operators in the storage have same attributes
 		for i, log := range block.Logs {
 			operatorAddedEvent, err := contractFilterer.ParseOperatorAdded(log)
 			require.NoError(t, err)
@@ -176,39 +182,114 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		}
 	})
 
-	// Receive event, unmarshall, parse, check parse event is not nil or with error, operator id is correct
 	t.Run("test OperatorRemoved event handle", func(t *testing.T) {
-		// Call the contract method
-		_, err = boundContract.SimcontractTransactor.RemoveOperator(auth, 1)
-		require.NoError(t, err)
-		sim.Commit()
 
-		block := <-logs
-		require.NotEmpty(t, block.Logs)
-		require.Equal(t, ethcommon.HexToHash("0x0e0ba6c2b04de36d6d509ec5bd155c43a9fe862f8052096dd54f3902a74cca3e"), block.Logs[0].Topics[0])
+		// Should return MalformedEventError and no changes to the state
+		t.Run("test OperatorRemoved incorrect operator ID", func(t *testing.T) {
+			// Call the contract method
+			_, err = boundContract.SimcontractTransactor.RemoveOperator(auth, 100500)
+			require.NoError(t, err)
+			sim.Commit()
 
-		eventsCh := make(chan executionclient.BlockLogs)
-		go func() {
-			defer close(eventsCh)
-			eventsCh <- block
-		}()
+			block := <-logs
+			require.NotEmpty(t, block.Logs)
+			require.Equal(t, ethcommon.HexToHash("0x0e0ba6c2b04de36d6d509ec5bd155c43a9fe862f8052096dd54f3902a74cca3e"), block.Logs[0].Topics[0])
 
-		// Check that there is 1 registered operator
-		operators, err := eh.nodeStorage.ListOperators(nil, 0, 10)
-		require.NoError(t, err)
-		require.Equal(t, len(ops), len(operators))
+			eventsCh := make(chan executionclient.BlockLogs)
+			go func() {
+				defer close(eventsCh)
+				eventsCh <- block
+			}()
 
-		// Hanlde the event
-		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
-		require.Equal(t, blockNum+1, lastProcessedBlock)
-		require.NoError(t, err)
-		blockNum++
+			// Check that there is 1 registered operator
+			operators, err := eh.nodeStorage.ListOperators(nil, 0, 10)
+			require.NoError(t, err)
+			require.Equal(t, len(ops), len(operators))
 
-		// Check if the operator was removed successfuly
-		// TODO: this should be adjusted when eth/eventhandler/handlers.go#L109 is resolved
-		operators, err = eh.nodeStorage.ListOperators(nil, 0, 10)
-		require.NoError(t, err)
-		require.Equal(t, len(ops), len(operators))
+			// Handle the event
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+			require.Equal(t, blockNum+1, lastProcessedBlock)
+			require.NoError(t, err)
+			blockNum++
+
+			// Check if the operator wasn't removed successfully
+			operators, err = eh.nodeStorage.ListOperators(nil, 0, 10)
+			require.NoError(t, err)
+			require.Equal(t, len(ops), len(operators))
+		})
+
+		// Receive event, unmarshall, parse, check parse event is not nil or with error, operator id is correct
+		// TODO: fix this test. It checks nothing, due the handleOperatorRemoved method is no-op currently
+		t.Run("test OperatorRemoved happy flow", func(t *testing.T) {
+			// Prepare a new operator to remove it later in this test
+			op, err := createOperators(1)
+			require.NoError(t, err)
+
+			// Call the contract method
+			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(op[0].pub)
+			require.NoError(t, err)
+			_, err = boundContract.SimcontractTransactor.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
+			require.NoError(t, err)
+
+			sim.Commit()
+
+			block := <-logs
+			require.NotEmpty(t, block.Logs)
+			require.Equal(t, ethcommon.HexToHash("0xd839f31c14bd632f424e307b36abff63ca33684f77f28e35dc13718ef338f7f4"), block.Logs[0].Topics[0])
+
+			eventsCh := make(chan executionclient.BlockLogs)
+			go func() {
+				defer close(eventsCh)
+				eventsCh <- block
+			}()
+
+			// Check that there is no registered operators
+			operators, err := eh.nodeStorage.ListOperators(nil, 0, 10)
+			require.NoError(t, err)
+			require.Equal(t, len(ops), len(operators))
+
+			// Handle OperatorAdded event
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+			require.Equal(t, blockNum+1, lastProcessedBlock)
+			require.NoError(t, err)
+			blockNum++
+			// Check storage for the new operator
+			operators, err = eh.nodeStorage.ListOperators(nil, 0, 10)
+			require.NoError(t, err)
+			require.Equal(t, len(ops)+1, len(operators))
+
+			// Now start the OperatorRemoved event handling
+			// Call the contract method
+			_, err = boundContract.SimcontractTransactor.RemoveOperator(auth, 4)
+			require.NoError(t, err)
+			sim.Commit()
+
+			block = <-logs
+			require.NotEmpty(t, block.Logs)
+			require.Equal(t, ethcommon.HexToHash("0x0e0ba6c2b04de36d6d509ec5bd155c43a9fe862f8052096dd54f3902a74cca3e"), block.Logs[0].Topics[0])
+
+			eventsCh = make(chan executionclient.BlockLogs)
+			go func() {
+				defer close(eventsCh)
+				eventsCh <- block
+			}()
+
+			operators, err = eh.nodeStorage.ListOperators(nil, 0, 10)
+			require.NoError(t, err)
+			require.Equal(t, len(ops)+1, len(operators))
+
+			// Handle OperatorRemoved event
+			lastProcessedBlock, err = eh.HandleBlockEventsStream(eventsCh, false)
+			require.Equal(t, blockNum+1, lastProcessedBlock)
+			require.NoError(t, err)
+			blockNum++
+
+			// TODO: this should be adjusted when eth/eventhandler/handlers.go#L109 is resolved
+			// Check if the operator was removed successfully
+			//operators, err = eh.nodeStorage.ListOperators(nil, 0, 10)
+			//require.NoError(t, err)
+			//require.Equal(t, len(ops), len(operators))
+		})
 	})
 
 	// Receive event, unmarshall, parse, check parse event is not nil or with an error,
@@ -257,8 +338,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, registrystorage.Nonce(1), nonce)
 
-		validatorData2, err := createNewValidator(ops)
-		require.NoError(t, err)
 		sharesData2, err := generateSharesData(validatorData2, ops, testAddr, 2)
 		require.NoError(t, err)
 
@@ -541,8 +620,9 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		// public key is correct, owner is correct, operator ids are correct
 		// event handler's own operator is responsible for removed validator
 		t.Run("ValidatorRemoved happy flow", func(t *testing.T) {
+			valPubKey := validatorData1.masterPubKey.Serialize()
 			// Check the validator's shares are present in the state before removing
-			valShare := eh.nodeStorage.Shares().Get(nil, validatorData1.masterPubKey.Serialize())
+			valShare := eh.nodeStorage.Shares().Get(nil, valPubKey)
 			require.NotNil(t, valShare)
 
 			_, err = boundContract.SimcontractTransactor.RemoveValidator(
@@ -579,7 +659,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			// Check the validator was removed from the validator shares storage.
 			shares := eh.nodeStorage.Shares().List(nil)
 			require.Equal(t, 2, len(shares))
-			valShare = eh.nodeStorage.Shares().Get(nil, validatorData1.masterPubKey.Serialize())
+			valShare = eh.nodeStorage.Shares().Get(nil, valPubKey)
 			require.Nil(t, valShare)
 
 			// TODO Check the validator was removed from the validator duties storage.
@@ -613,10 +693,20 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			eventsCh <- block
 		}()
 
+		valPubKey := validatorData2.masterPubKey.Serialize()
+
+		share := eh.nodeStorage.Shares().Get(nil, valPubKey)
+		require.NotNil(t, share)
+		require.False(t, share.Liquidated)
+
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
 		blockNum++
+
+		//share = eh.nodeStorage.Shares().Get(nil, valPubKey)
+		//require.NotNil(t, share)
+		//require.True(t, share.Liquidated)
 	})
 
 	// Receive event, unmarshall, parse, check parse event is not nil or with an error, owner is correct, operator ids are correct
@@ -655,7 +745,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	t.Run("test FeeRecipientAddressUpdated event handle", func(t *testing.T) {
 		_, err = boundContract.SimcontractTransactor.SetFeeRecipientAddress(
 			auth,
-			ethcommon.HexToAddress("0x1"),
+			testAddr2,
 		)
 		require.NoError(t, err)
 		sim.Commit()
@@ -677,7 +767,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		// Check if the fee recipient was updated
 		recipientData, _, err := eh.nodeStorage.GetRecipientData(nil, testAddr)
 		require.NoError(t, err)
-		require.Equal(t, ethcommon.HexToAddress("0x1").String(), recipientData.FeeRecipient.String())
+		require.Equal(t, testAddr2.String(), recipientData.FeeRecipient.String())
 	})
 
 }
