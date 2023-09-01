@@ -317,6 +317,7 @@ func (mv *MessageValidator) validateP2PMessage(ctx context.Context, p peer.ID, p
 func (mv *MessageValidator) ValidateSSVMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, Descriptor, error) {
 	return mv.validateSSVMessage(ssvMessage, time.Now())
 }
+
 func (mv *MessageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage, receivedAt time.Time) (*queue.DecodedSSVMessage, Descriptor, error) {
 	var descriptor Descriptor
 
@@ -349,7 +350,9 @@ func (mv *MessageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 
 	publicKey, err := ssvtypes.DeserializeBLSPublicKey(validatorPK)
 	if err != nil {
-		return nil, descriptor, fmt.Errorf("deserialize public key: %w", err)
+		e := ErrDeserializePublicKey
+		e.innerErr = err
+		return nil, descriptor, e
 	}
 
 	var share *ssvtypes.SSVShare

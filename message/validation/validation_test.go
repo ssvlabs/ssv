@@ -8,10 +8,12 @@ import (
 	"time"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
+	eth2types "github.com/wealdtech/go-eth2-types/v2"
 	"go.uber.org/zap/zaptest"
 
 	"github.com/bloxapp/ssv/networkconfig"
@@ -65,6 +67,24 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
 		_, _, err = validator.validateSSVMessage(message, receivedAt)
 		require.NoError(t, err)
+	})
+
+	t.Run("bad format", func(t *testing.T) {
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		message := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
+			Data:    bytes.Repeat([]byte{1}, 500),
+		}
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
+		_, _, err = validator.validateSSVMessage(message, receivedAt)
+
+		expectedErr := ErrDataTooBig
+		require.ErrorAs(t, err, &expectedErr)
 	})
 
 	t.Run("no data", func(t *testing.T) {
@@ -135,6 +155,37 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorAs(t, err, &expectedErr)
 	})
 
+	t.Run("malformed validator public key", func(t *testing.T) {
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+
+		message := &spectypes.SSVMessage{
+			MsgType: math.MaxUint64,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, spectypes.ValidatorPK{}, roleAttester),
+			Data:    []byte{0x1},
+		}
+
+		_, _, err = validator.validateSSVMessage(message, time.Now())
+		expectedErr := ErrDeserializePublicKey
+		require.ErrorAs(t, err, &expectedErr)
+	})
+
+	t.Run("inactive validator", func(t *testing.T) {
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+
+		sk, err := eth2types.GenerateBLSPrivateKey()
+		require.NoError(t, err)
+
+		message := &spectypes.SSVMessage{
+			MsgType: math.MaxUint64,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, sk.PublicKey().Marshal(), roleAttester),
+			Data:    []byte{0x1},
+		}
+
+		_, _, err = validator.validateSSVMessage(message, time.Now())
+		expectedErr := ErrUnknownValidator
+		require.ErrorAs(t, err, &expectedErr)
+	})
+
 	t.Run("wrong domain", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
 
@@ -182,11 +233,67 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("liquidated validator", func(t *testing.T) {
-		// TODO
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+
+		liquidatedSK, err := eth2types.GenerateBLSPrivateKey()
+		require.NoError(t, err)
+
+		liquidatedShare := &ssvtypes.SSVShare{
+			Share: *spectestingutils.TestingShare(ks),
+			Metadata: ssvtypes.Metadata{
+				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+					Status: v1.ValidatorStateActiveOngoing,
+				},
+				Liquidated: true,
+			},
+		}
+		liquidatedShare.ValidatorPubKey = liquidatedSK.PublicKey().Marshal()
+
+		require.NoError(t, ns.Shares().Save(nil, liquidatedShare))
+
+		message := &spectypes.SSVMessage{
+			MsgType: math.MaxUint64,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, liquidatedShare.ValidatorPubKey, roleAttester),
+			Data:    []byte{0x1},
+		}
+
+		_, _, err = validator.validateSSVMessage(message, time.Now())
+		expectedErr := ErrValidatorLiquidated
+		require.ErrorAs(t, err, &expectedErr)
+
+		require.NoError(t, ns.Shares().Delete(nil, liquidatedShare.ValidatorPubKey))
 	})
 
-	t.Run("not active validator", func(t *testing.T) {
-		// TODO
+	t.Run("inactive validator", func(t *testing.T) {
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+
+		inactiveSK, err := eth2types.GenerateBLSPrivateKey()
+		require.NoError(t, err)
+
+		inactiveShare := &ssvtypes.SSVShare{
+			Share: *spectestingutils.TestingShare(ks),
+			Metadata: ssvtypes.Metadata{
+				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+					Status: v1.ValidatorStateUnknown,
+				},
+				Liquidated: false,
+			},
+		}
+		inactiveShare.ValidatorPubKey = inactiveSK.PublicKey().Marshal()
+
+		require.NoError(t, ns.Shares().Save(nil, inactiveShare))
+
+		message := &spectypes.SSVMessage{
+			MsgType: math.MaxUint64,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, inactiveShare.ValidatorPubKey, roleAttester),
+			Data:    []byte{0x1},
+		}
+
+		_, _, err = validator.validateSSVMessage(message, time.Now())
+		expectedErr := ErrValidatorNotAttesting
+		require.ErrorAs(t, err, &expectedErr)
+
+		require.NoError(t, ns.Shares().Delete(nil, inactiveShare.ValidatorPubKey))
 	})
 
 	t.Run("invalid QBFT message type", func(t *testing.T) {
@@ -270,7 +377,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedValidSignedMessage,
 		}
 
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot + 100).Add(validator.waitAfterSlotStart(roleAttester))
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot + phase0.Slot(netCfg.Beacon.SlotsPerEpoch()*3)).Add(validator.waitAfterSlotStart(roleAttester))
 		_, _, err = validator.validateSSVMessage(message, receivedAt)
 		expectedErr := ErrLateMessage
 		require.ErrorAs(t, err, &expectedErr)
