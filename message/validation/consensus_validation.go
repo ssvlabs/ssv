@@ -349,7 +349,7 @@ func (mv *MessageValidator) validConsensusSigners(share *ssvtypes.SSVShare, m *s
 		return e
 	} else if !share.HasQuorum(len(m.Signers)) || len(m.Signers) > len(share.Committee) {
 		e := ErrWrongSignersLength
-		e.want = fmt.Sprintf("between %v and %v", share.Quorum, share.Committee)
+		e.want = fmt.Sprintf("between %v and %v", share.Quorum, len(share.Committee))
 		e.got = len(m.Signers)
 		return e
 	}

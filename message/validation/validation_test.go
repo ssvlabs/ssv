@@ -84,8 +84,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
 		_, _, err = validator.validateSSVMessage(message, receivedAt)
 
-		expectedErr := ErrDataTooBig
-		require.ErrorAs(t, err, &expectedErr)
+		require.ErrorContains(t, err, ErrMalformedMessage.Error())
 	})
 
 	t.Run("no data", func(t *testing.T) {
@@ -138,8 +137,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		_, _, err := validator.validateSSVMessage(message, time.Now())
-		expectedErr := ErrMalformedMessage
-		require.ErrorAs(t, err, &expectedErr)
+		require.ErrorContains(t, err, ErrMalformedMessage.Error())
 	})
 
 	t.Run("invalid SSV message type", func(t *testing.T) {
@@ -152,8 +150,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		_, _, err = validator.validateSSVMessage(message, time.Now())
-		expectedErr := ErrUnknownSSVMessageType
-		require.ErrorAs(t, err, &expectedErr)
+		require.ErrorContains(t, err, ErrUnknownSSVMessageType.Error())
 	})
 
 	t.Run("malformed validator public key", func(t *testing.T) {
@@ -170,8 +167,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		_, _, err = validator.validateSSVMessage(message, time.Now())
-		expectedErr := ErrDeserializePublicKey
-		require.ErrorAs(t, err, &expectedErr)
+		require.ErrorContains(t, err, ErrDeserializePublicKey.Error())
 	})
 
 	t.Run("unknown validator", func(t *testing.T) {
@@ -192,7 +188,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		_, _, err = validator.validateSSVMessage(message, time.Now())
 		expectedErr := ErrUnknownValidator
-		require.ErrorAs(t, err, &expectedErr)
+		expectedErr.got = hex.EncodeToString(sk.PublicKey().Marshal())
+		require.ErrorIs(t, err, expectedErr)
 	})
 
 	t.Run("wrong domain", func(t *testing.T) {
@@ -272,7 +269,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		_, _, err = validator.validateSSVMessage(message, time.Now())
 		expectedErr := ErrValidatorLiquidated
-		require.ErrorAs(t, err, &expectedErr)
+		require.ErrorIs(t, err, expectedErr)
 
 		require.NoError(t, ns.Shares().Delete(nil, liquidatedShare.ValidatorPubKey))
 	})
@@ -302,13 +299,17 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		message := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, inactiveShare.ValidatorPubKey, roleAttester),
 			Data:    encodedValidSignedMessage,
 		}
 
-		_, _, err = validator.validateSSVMessage(message, time.Now())
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
+
+		_, _, err = validator.validateSSVMessage(message, receivedAt)
 		expectedErr := ErrValidatorNotAttesting
-		require.ErrorAs(t, err, &expectedErr)
+		expectedErr.got = v1.ValidatorStateUnknown.String()
+		require.ErrorIs(t, err, expectedErr)
 
 		require.NoError(t, ns.Shares().Delete(nil, inactiveShare.ValidatorPubKey))
 	})
@@ -332,7 +333,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
 		_, _, err = validator.validateSSVMessage(message, receivedAt)
 		expectedErr := ErrSignerNotInCommittee
-		require.ErrorAs(t, err, &expectedErr)
+		require.ErrorIs(t, err, expectedErr)
 	})
 
 	t.Run("partial zero signer ID", func(t *testing.T) {
@@ -354,7 +355,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
 		_, _, err = validator.validateSSVMessage(message, receivedAt)
 		expectedErr := ErrSignerNotInCommittee
-		require.ErrorAs(t, err, &expectedErr)
+		require.ErrorIs(t, err, expectedErr)
 	})
 
 	t.Run("partial inconsistent signer ID", func(t *testing.T) {
@@ -377,7 +378,9 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
 		_, _, err = validator.validateSSVMessage(message, receivedAt)
 		expectedErr := ErrUnexpectedSigner
-		require.ErrorAs(t, err, &expectedErr)
+		expectedErr.got = spectypes.OperatorID(2)
+		expectedErr.want = spectypes.OperatorID(1)
+		require.ErrorIs(t, err, expectedErr)
 	})
 
 	t.Run("partial wrong signature size", func(t *testing.T) {
@@ -399,8 +402,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
 		_, _, err = validator.validateSSVMessage(message, receivedAt)
-		expectedErr := ErrMalformedMessage
-		require.ErrorAs(t, err, &expectedErr)
+		require.ErrorContains(t, err, ErrMalformedMessage.Error())
 	})
 
 	t.Run("partial wrong signature", func(t *testing.T) {
@@ -425,7 +427,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
 		_, _, err = validator.validateSSVMessage(message, receivedAt)
 		expectedErr := ErrInvalidSignature
-		require.ErrorAs(t, err, &expectedErr)
+		require.ErrorIs(t, err, expectedErr)
 	})
 
 	t.Run("invalid QBFT message type", func(t *testing.T) {
@@ -455,7 +457,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
 		_, _, err = validator.validateSSVMessage(message, receivedAt)
 		expectedErr := ErrUnknownQBFTMessageType
-		require.ErrorAs(t, err, &expectedErr)
+		require.ErrorIs(t, err, expectedErr)
 	})
 
 	t.Run("wrong signature size", func(t *testing.T) {
@@ -629,7 +631,9 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, _, err = validator.validateSSVMessage(message, receivedAt)
 
 		expectedErr := ErrWrongSignersLength
-		require.ErrorAs(t, err, &expectedErr)
+		expectedErr.got = 2
+		expectedErr.want = "between 3 and 4"
+		require.ErrorIs(t, err, expectedErr)
 	})
 
 	t.Run("non decided with multiple signers", func(t *testing.T) {
@@ -653,7 +657,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, _, err = validator.validateSSVMessage(message, receivedAt)
 
 		expectedErr := ErrNonDecidedWithMultipleSigners
-		require.ErrorAs(t, err, &expectedErr)
+		expectedErr.got = 3
+		require.ErrorIs(t, err, expectedErr)
 	})
 
 	t.Run("wrong signed signature", func(t *testing.T) {
@@ -679,7 +684,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, _, err = validator.validateSSVMessage(message, receivedAt)
 
 		expectedErr := ErrNonDecidedWithMultipleSigners
-		require.ErrorAs(t, err, &expectedErr)
+		require.ErrorIs(t, err, expectedErr)
 	})
 
 	t.Run("late message", func(t *testing.T) {
@@ -700,8 +705,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot + phase0.Slot(netCfg.Beacon.SlotsPerEpoch()*3)).Add(validator.waitAfterSlotStart(roleAttester))
 		_, _, err = validator.validateSSVMessage(message, receivedAt)
-		expectedErr := ErrLateMessage
-		require.ErrorAs(t, err, &expectedErr)
+		require.ErrorContains(t, err, ErrLateMessage.Error())
 	})
 
 	t.Run("early message", func(t *testing.T) {
@@ -770,8 +774,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
 		_, _, err = validator.validateSSVMessage(message, receivedAt)
 
-		expectedErr := ErrMalformedPrepareJustifications
-		require.ErrorAs(t, err, &expectedErr)
+		require.ErrorContains(t, err, ErrMalformedPrepareJustifications.Error())
 	})
 
 	t.Run("non-proposal with prepare justification", func(t *testing.T) {
@@ -800,7 +803,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, _, err = validator.validateSSVMessage(message, receivedAt)
 
 		expectedErr := ErrUnexpectedPrepareJustifications
-		require.ErrorAs(t, err, &expectedErr)
+		expectedErr.got = specqbft.PrepareMsgType
+		require.ErrorIs(t, err, expectedErr)
 	})
 
 	t.Run("non-proposal with round change justification", func(t *testing.T) {
@@ -830,7 +834,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, _, err = validator.validateSSVMessage(message, receivedAt)
 
 		expectedErr := ErrUnexpectedRoundChangeJustifications
-		require.ErrorAs(t, err, &expectedErr)
+		expectedErr.got = specqbft.PrepareMsgType
+		require.ErrorIs(t, err, expectedErr)
 	})
 
 	t.Run("malformed round change justification", func(t *testing.T) {
@@ -854,8 +859,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
 		_, _, err = validator.validateSSVMessage(message, receivedAt)
 
-		expectedErr := ErrMalformedRoundChangeJustifications
-		require.ErrorAs(t, err, &expectedErr)
+		require.ErrorContains(t, err, ErrMalformedRoundChangeJustifications.Error())
 	})
 
 	t.Run("wrong root hash", func(t *testing.T) {
@@ -918,7 +922,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		_, _, err = validator.validateSSVMessage(message2, receivedAt)
 		expectedErr := ErrDuplicatedProposalWithDifferentData
-		require.ErrorAs(t, err, &expectedErr)
+		require.ErrorIs(t, err, expectedErr)
 	})
 
 	t.Run("double prepare", func(t *testing.T) {
