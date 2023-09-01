@@ -13,8 +13,7 @@ import (
 
 // maxMessageCounts is the maximum number of acceptable messages from a signer within a slot & round.
 func maxMessageCounts(committeeSize int) MessageCounts {
-	f := committeeSize/3 - 1
-	maxDecided := committeeSize * (f + 1) // N * (f + 1)
+	maxDecided := maxDecidedCount(committeeSize)
 
 	return MessageCounts{
 		PreConsensus:  1,
@@ -25,6 +24,11 @@ func maxMessageCounts(committeeSize int) MessageCounts {
 		RoundChange:   1,
 		PostConsensus: 1,
 	}
+}
+
+func maxDecidedCount(committeeSize int) int {
+	f := (committeeSize - 1) / 3
+	return committeeSize * (f + 1) // N * (f + 1)
 }
 
 type MessageCounts struct {
