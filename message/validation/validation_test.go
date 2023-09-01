@@ -748,4 +748,213 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		expectedErr.want = spectypes.OperatorID(1)
 		require.ErrorIs(t, err, expectedErr)
 	})
+
+	t.Run("malformed prepare justification", func(t *testing.T) {
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		height := specqbft.Height(slot)
+
+		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
+		validSignedMessage.Message.PrepareJustification = [][]byte{{1}}
+
+		encodedValidSignedMessage, err := validSignedMessage.Encode()
+		require.NoError(t, err)
+
+		message := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
+			Data:    encodedValidSignedMessage,
+		}
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
+		_, _, err = validator.validateSSVMessage(message, receivedAt)
+
+		expectedErr := ErrMalformedPrepareJustifications
+		require.ErrorAs(t, err, &expectedErr)
+	})
+
+	t.Run("non-proposal with prepare justification", func(t *testing.T) {
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		msg := spectestingutils.TestingProposalMessageWithParams(
+			ks.Shares[1], spectypes.OperatorID(1), specqbft.FirstRound, specqbft.FirstHeight, spectestingutils.TestingQBFTRootData,
+			nil,
+			spectestingutils.MarshalJustifications([]*specqbft.SignedMessage{
+				spectestingutils.TestingRoundChangeMessage(ks.Shares[1], spectypes.OperatorID(1)),
+			}))
+		msg.Message.MsgType = specqbft.PrepareMsgType
+
+		encodedValidSignedMessage, err := msg.Encode()
+		require.NoError(t, err)
+
+		message := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
+			Data:    encodedValidSignedMessage,
+		}
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
+		_, _, err = validator.validateSSVMessage(message, receivedAt)
+
+		expectedErr := ErrUnexpectedPrepareJustifications
+		require.ErrorAs(t, err, &expectedErr)
+	})
+
+	t.Run("non-proposal with round change justification", func(t *testing.T) {
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		msg := spectestingutils.TestingProposalMessageWithParams(
+			ks.Shares[1], spectypes.OperatorID(1), specqbft.FirstRound, specqbft.FirstHeight, spectestingutils.TestingQBFTRootData,
+			spectestingutils.MarshalJustifications([]*specqbft.SignedMessage{
+				spectestingutils.TestingPrepareMessage(ks.Shares[1], spectypes.OperatorID(1)),
+			}),
+			nil,
+		)
+		msg.Message.MsgType = specqbft.PrepareMsgType
+
+		encodedValidSignedMessage, err := msg.Encode()
+		require.NoError(t, err)
+
+		message := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
+			Data:    encodedValidSignedMessage,
+		}
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
+		_, _, err = validator.validateSSVMessage(message, receivedAt)
+
+		expectedErr := ErrUnexpectedRoundChangeJustifications
+		require.ErrorAs(t, err, &expectedErr)
+	})
+
+	t.Run("malformed round change justification", func(t *testing.T) {
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		height := specqbft.Height(slot)
+
+		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
+		validSignedMessage.Message.RoundChangeJustification = [][]byte{{1}}
+
+		encodedValidSignedMessage, err := validSignedMessage.Encode()
+		require.NoError(t, err)
+
+		message := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
+			Data:    encodedValidSignedMessage,
+		}
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
+		_, _, err = validator.validateSSVMessage(message, receivedAt)
+
+		expectedErr := ErrMalformedRoundChangeJustifications
+		require.ErrorAs(t, err, &expectedErr)
+	})
+
+	t.Run("wrong root hash", func(t *testing.T) {
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		height := specqbft.Height(slot)
+
+		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
+		validSignedMessage.FullData = []byte{1}
+
+		encodedValidSignedMessage, err := validSignedMessage.Encode()
+		require.NoError(t, err)
+
+		message := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
+			Data:    encodedValidSignedMessage,
+		}
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
+		_, _, err = validator.validateSSVMessage(message, receivedAt)
+
+		expectedErr := ErrInvalidHash
+		require.ErrorIs(t, err, expectedErr)
+	})
+
+	t.Run("double proposal with different data", func(t *testing.T) {
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		signed1 := spectestingutils.TestingProposalMessageWithRound(ks.Shares[1], 1, 1)
+		encodedSigned1, err := signed1.Encode()
+		require.NoError(t, err)
+
+		message1 := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
+			Data:    encodedSigned1,
+		}
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
+		_, _, err = validator.validateSSVMessage(message1, receivedAt)
+		require.NoError(t, err)
+
+		signed2 := spectestingutils.TestingProposalMessageWithRound(ks.Shares[1], 1, 1)
+		signed2.FullData = []byte{1}
+		signed2.Message.Root, err = specqbft.HashDataRoot(signed2.FullData)
+		require.NoError(t, err)
+
+		encodedSigned2, err := signed2.Encode()
+		require.NoError(t, err)
+
+		message2 := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
+			Data:    encodedSigned2,
+		}
+
+		_, _, err = validator.validateSSVMessage(message2, receivedAt)
+		expectedErr := ErrDuplicatedProposalWithDifferentData
+		require.ErrorAs(t, err, &expectedErr)
+	})
+
+	t.Run("double prepare", func(t *testing.T) {
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		signed1 := spectestingutils.TestingPrepareMessage(ks.Shares[1], 1)
+		encodedSigned1, err := signed1.Encode()
+		require.NoError(t, err)
+
+		message1 := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
+			Data:    encodedSigned1,
+		}
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
+		_, _, err = validator.validateSSVMessage(message1, receivedAt)
+		require.NoError(t, err)
+
+		signed2 := spectestingutils.TestingPrepareMessage(ks.Shares[1], 1)
+		require.NoError(t, err)
+
+		encodedSigned2, err := signed2.Encode()
+		require.NoError(t, err)
+
+		message2 := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
+			Data:    encodedSigned2,
+		}
+
+		_, _, err = validator.validateSSVMessage(message2, receivedAt)
+		expectedErr := ErrTooManySameTypeMessagesPerRound
+		expectedErr.got = "prepare, having pre-consensus: 0, proposal: 0, prepare: 1, commit: 0, decided: 0, round change: 0, post-consensus: 0"
+		require.ErrorIs(t, err, expectedErr)
+	})
 }
