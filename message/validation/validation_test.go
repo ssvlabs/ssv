@@ -582,6 +582,106 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, ErrDuplicatedSigner)
 	})
 
+	t.Run("signers not sorted", func(t *testing.T) {
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		validSignedMessage := spectestingutils.TestingCommitMultiSignerMessage(
+			[]*bls.SecretKey{ks.Shares[1], ks.Shares[2], ks.Shares[3]}, []spectypes.OperatorID{1, 2, 3})
+
+		validSignedMessage.Signers = []spectypes.OperatorID{3, 2, 1}
+
+		encoded, err := validSignedMessage.Encode()
+		require.NoError(t, err)
+
+		message := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
+			Data:    encoded,
+		}
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
+		_, _, err = validator.validateSSVMessage(message, receivedAt)
+		require.ErrorIs(t, err, ErrSignersNotSorted)
+	})
+
+	t.Run("wrong signers length", func(t *testing.T) {
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		validSignedMessage := spectestingutils.TestingCommitMultiSignerMessage(
+			[]*bls.SecretKey{ks.Shares[1], ks.Shares[2], ks.Shares[3]}, []spectypes.OperatorID{1, 2, 3})
+
+		validSignedMessage.Signers = []spectypes.OperatorID{1, 2}
+
+		encoded, err := validSignedMessage.Encode()
+		require.NoError(t, err)
+
+		message := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
+			Data:    encoded,
+		}
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
+		_, _, err = validator.validateSSVMessage(message, receivedAt)
+
+		expectedErr := ErrWrongSignersLength
+		require.ErrorAs(t, err, &expectedErr)
+	})
+
+	t.Run("non decided with multiple signers", func(t *testing.T) {
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		validSignedMessage := spectestingutils.TestingMultiSignerProposalMessage(
+			[]*bls.SecretKey{ks.Shares[1], ks.Shares[2], ks.Shares[3]}, []spectypes.OperatorID{1, 2, 3})
+
+		encoded, err := validSignedMessage.Encode()
+		require.NoError(t, err)
+
+		message := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
+			Data:    encoded,
+		}
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
+		_, _, err = validator.validateSSVMessage(message, receivedAt)
+
+		expectedErr := ErrNonDecidedWithMultipleSigners
+		require.ErrorAs(t, err, &expectedErr)
+	})
+
+	t.Run("wrong signed signature", func(t *testing.T) {
+		t.Skip() // TODO: enable when signature check is enabled
+
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		validSignedMessage := spectestingutils.TestingProposalMessage(ks.Shares[1], 1)
+		validSignedMessage.Signature = bytes.Repeat([]byte{1}, 96)
+
+		encoded, err := validSignedMessage.Encode()
+		require.NoError(t, err)
+
+		message := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
+			Data:    encoded,
+		}
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
+		_, _, err = validator.validateSSVMessage(message, receivedAt)
+
+		expectedErr := ErrNonDecidedWithMultipleSigners
+		require.ErrorAs(t, err, &expectedErr)
+	})
+
 	t.Run("late message", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
 
