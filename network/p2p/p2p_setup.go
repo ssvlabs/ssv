@@ -276,14 +276,12 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 }
 
 func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
-	cfg := &topics.PububConfig{
-		Host:     n.host,
-		TraceLog: n.cfg.PubSubTrace,
-		MsgValidatorFactory: func(s string) topics.MsgValidatorFunc {
-			return topics.NewSSVMsgValidator(logger, n.cfg.Metrics, n.msgValidator)
-		},
-		MsgHandler: n.handlePubsubMessages(logger),
-		ScoreIndex: n.idx,
+	cfg := &topics.PubSubConfig{
+		Host:         n.host,
+		TraceLog:     n.cfg.PubSubTrace,
+		MsgValidator: n.msgValidator.ValidatorForTopic,
+		MsgHandler:   n.handlePubsubMessages(logger),
+		ScoreIndex:   n.idx,
 		//Discovery: n.disc,
 		OutboundQueueSize:   n.cfg.PubsubOutQueueSize,
 		ValidationQueueSize: n.cfg.PubsubValidationQueueSize,

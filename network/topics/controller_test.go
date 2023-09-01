@@ -2,13 +2,14 @@ package topics
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/hex"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/libp2p/go-libp2p"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -21,7 +22,7 @@ import (
 	"github.com/bloxapp/ssv/message/validation"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/bloxapp/ssv/networkconfig"
 )
 
 func TestTopicManager(t *testing.T) {
@@ -40,7 +41,9 @@ func TestTopicManager(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	peers := newPeers(ctx, logger, t, nPeers, nil, true)
+	validator := validation.NewMessageValidator(networkconfig.TestNetwork)
+
+	peers := newPeers(ctx, logger, t, nPeers, validator, true)
 	baseTest(t, ctx, logger, peers, pks, 1, 2)
 }
 
@@ -214,7 +217,7 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 		midHandler = NewMsgIDHandler(ctx, 2*time.Minute)
 		go midHandler.Start()
 	}
-	cfg := &PububConfig{
+	cfg := &PubSubConfig{
 		Host:         h,
 		TraceLog:     false,
 		MsgIDHandler: midHandler,
@@ -227,14 +230,10 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 			IPColocationWeight: 0,
 			OneEpochDuration:   time.Minute,
 		},
+		MsgValidator: msgValidator,
 		// TODO: add mock for peers.ScoreIndex
 	}
-	//
-	if msgValidator != nil {
-		cfg.MsgValidatorFactory = func(s string) MsgValidatorFunc {
-			return NewSSVMsgValidator(logger, nopMetrics{}, msgValidator)
-		}
-	}
+
 	ps, tm, err := NewPubsub(ctx, logger, cfg)
 	require.NoError(t, err)
 
@@ -262,22 +261,34 @@ func dummyMsg(pkHex string, height int) (*spectypes.SSVMessage, error) {
 	if err != nil {
 		return nil, err
 	}
-	id := spectypes.NewMsgID(types.GetDefaultDomain(), pk, spectypes.BNRoleAttester)
-	msgData := fmt.Sprintf(`{
-	  "message": {
-		"type": 3,
-		"round": 2,
-		"identifier": "%s",
-		"height": %d,
-		"value": "bk0iAAAAAAACAAAAAAAAAAbYXFSt2H7SQd5q5u+N0bp6PbbPTQjU25H1QnkbzTECahIBAAAAAADmi+NJfvXZ3iXp2cfs0vYVW+EgGD7DTTvr5EkLtiWq8WsSAQAAAAAAIC8dZTEdD3EvE38B9kDVWkSLy40j0T+TtSrrrBqVjo4="
-	  },
-	  "signature": "sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv2hMf2iRL5ZPKOSmMifHbd8yg4PeeceyN",
-	  "signer_ids": [1,3,4]
-	}`, id, height)
+	id := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, pk, spectypes.BNRoleAttester)
+	signature, err := base64.StdEncoding.DecodeString("sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv2hMf2iRL5ZPKOSmMifHbd8yg4PeeceyN")
+	if err != nil {
+		return nil, err
+	}
+
+	signedMessage := specqbft.SignedMessage{
+		Signature: signature,
+		Signers:   []spectypes.OperatorID{1, 3, 4},
+		Message: specqbft.Message{
+			MsgType:    specqbft.RoundChangeMsgType,
+			Height:     specqbft.Height(height),
+			Round:      2,
+			Identifier: id[:],
+			Root:       [32]byte{},
+		},
+		FullData: nil,
+	}
+
+	msgData, err := signedMessage.Encode()
+	if err != nil {
+		return nil, err
+	}
+
 	return &spectypes.SSVMessage{
 		MsgType: spectypes.SSVConsensusMsgType,
 		MsgID:   id,
-		Data:    []byte(msgData),
+		Data:    msgData,
 	}, nil
 }
 

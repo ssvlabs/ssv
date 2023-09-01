@@ -39,20 +39,20 @@ var (
 	msgIDCacheTTL = params.HeartbeatInterval * 550
 )
 
-// PububConfig is the needed config to instantiate pubsub
-type PububConfig struct {
+// PubSubConfig is the needed config to instantiate pubsub
+type PubSubConfig struct {
 	Host        host.Host
 	TraceLog    bool
 	StaticPeers []peer.AddrInfo
 	MsgHandler  PubsubMessageHandler
-	// MsgValidatorFactory accepts the topic name and returns the corresponding msg validator
+	// MsgValidator accepts the topic name and returns the corresponding msg validator
 	// in case we need different validators for specific topics,
 	// this should be the place to map a validator to topic
-	MsgValidatorFactory func(string) MsgValidatorFunc
-	ScoreIndex          peers.ScoreIndex
-	Scoring             *ScoringConfig
-	MsgIDHandler        MsgIDHandler
-	Discovery           discovery.Discovery
+	MsgValidator messageValidator
+	ScoreIndex   peers.ScoreIndex
+	Scoring      *ScoringConfig
+	MsgIDHandler MsgIDHandler
+	Discovery    discovery.Discovery
 
 	ValidateThrottle    int
 	ValidationQueueSize int
@@ -76,7 +76,7 @@ type PubsubBundle struct {
 	Resolver   MsgPeersResolver
 }
 
-func (cfg *PububConfig) init() error {
+func (cfg *PubSubConfig) init() error {
 	if cfg.Host == nil {
 		return errors.New("bad args: missing host")
 	}
@@ -96,14 +96,14 @@ func (cfg *PububConfig) init() error {
 }
 
 // initScoring initializes scoring config
-func (cfg *PububConfig) initScoring() {
+func (cfg *PubSubConfig) initScoring() {
 	if cfg.Scoring == nil {
 		cfg.Scoring = DefaultScoringConfig()
 	}
 }
 
 // NewPubsub creates a new pubsub router and the necessary components
-func NewPubsub(ctx context.Context, logger *zap.Logger, cfg *PububConfig) (*pubsub.PubSub, Controller, error) {
+func NewPubsub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig) (*pubsub.PubSub, Controller, error) {
 	if err := cfg.init(); err != nil {
 		return nil, nil, err
 	}
@@ -169,7 +169,7 @@ func NewPubsub(ctx context.Context, logger *zap.Logger, cfg *PububConfig) (*pubs
 		return nil, nil, err
 	}
 
-	ctrl := NewTopicsController(ctx, logger, cfg.MsgHandler, cfg.MsgValidatorFactory, sf, ps, topicScoreFactory)
+	ctrl := NewTopicsController(ctx, logger, cfg.MsgHandler, cfg.MsgValidator, sf, ps, topicScoreFactory)
 
 	return ps, ctrl, nil
 }

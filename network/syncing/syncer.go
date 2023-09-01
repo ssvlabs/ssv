@@ -105,7 +105,7 @@ func (s *syncer) SyncHighestDecided(
 
 		// TODO: consider uncommenting
 		//if s.msgValidator != nil {
-		//	decodedMsg, err := s.msgValidator.ValidateMessage(ssvMessage, time.Now())
+		//	decodedMsg, err := s.msgValidator.ValidateSSVMessage(ssvMessage, time.Now())
 		//	if err != nil {
 		//		logger.Debug("could not validate ssv message", zap.Error(err))
 		//		return false
@@ -168,7 +168,7 @@ func (s *syncer) SyncDecidedByRange(
 
 			// TODO: consider uncommenting
 			//if s.msgValidator != nil {
-			//	decodedMsg, err := s.msgValidator.ValidateMessage(ssvMessage, time.Now())
+			//	decodedMsg, err := s.msgValidator.ValidateSSVMessage(ssvMessage, time.Now())
 			//	if err != nil {
 			//		logger.Debug("could not validate ssv message", zap.Error(err))
 			//		return nil

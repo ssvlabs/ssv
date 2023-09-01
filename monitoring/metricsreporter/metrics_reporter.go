@@ -96,6 +96,10 @@ var (
 		Help:    "Message size",
 		Buckets: []float64{100, 500, 1_000, 5_000, 10_000, 50_000, 100_000, 500_000, 1_000_000, 5_000_000},
 	}, []string{})
+	activeMsgValidation = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:p2p:pubsub:msg:val:active",
+		Help: "Count active message validation",
+	}, []string{"topic"})
 )
 
 type MetricsReporter struct {
@@ -125,6 +129,7 @@ func New(opts ...Option) *MetricsReporter {
 		messageValidationConsensusType,
 		messageValidationDuration,
 		messageSize,
+		activeMsgValidation,
 	}
 
 	for i, c := range allMetrics {
@@ -279,4 +284,12 @@ func (m *MetricsReporter) MessageValidationDuration(duration time.Duration, labe
 
 func (m *MetricsReporter) MessageSize(size int) {
 	messageSize.WithLabelValues().Observe(float64(size))
+}
+
+func (m *MetricsReporter) ActiveMsgValidation(topic string) {
+	activeMsgValidation.WithLabelValues(topic).Inc()
+}
+
+func (m *MetricsReporter) ActiveMsgValidationDone(topic string) {
+	activeMsgValidation.WithLabelValues(topic).Dec()
 }

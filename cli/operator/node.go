@@ -140,7 +140,13 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
 		cfg.P2pNetworkConfig.Network = networkConfig
 
-		messageValidator := validation.NewMessageValidator(networkConfig, operatorData.ID, nodeStorage.Shares(), validation.WithLogger(logger), validation.WithMetrics(metricsReporter))
+		messageValidator := validation.NewMessageValidator(
+			networkConfig,
+			validation.WithShareStorage(nodeStorage.Shares()),
+			validation.WithLogger(logger),
+			validation.WithMetrics(metricsReporter),
+		)
+
 		cfg.P2pNetworkConfig.Metrics = metricsReporter
 		cfg.P2pNetworkConfig.MessageValidator = messageValidator
 		cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
