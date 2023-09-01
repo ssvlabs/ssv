@@ -12,6 +12,7 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	eth2types "github.com/wealdtech/go-eth2-types/v2"
 	"go.uber.org/zap/zaptest"
@@ -173,7 +174,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorAs(t, err, &expectedErr)
 	})
 
-	t.Run("inactive validator", func(t *testing.T) {
+	t.Run("unknown validator", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
 
 		sk, err := eth2types.GenerateBLSPrivateKey()
@@ -312,6 +313,121 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, ns.Shares().Delete(nil, inactiveShare.ValidatorPubKey))
 	})
 
+	t.Run("partial signer ID not in committee", func(t *testing.T) {
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		msg := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 5, specqbft.Height(slot))
+
+		encoded, err := msg.Encode()
+		require.NoError(t, err)
+
+		message := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVPartialSignatureMsgType,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
+			Data:    encoded,
+		}
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
+		_, _, err = validator.validateSSVMessage(message, receivedAt)
+		expectedErr := ErrSignerNotInCommittee
+		require.ErrorAs(t, err, &expectedErr)
+	})
+
+	t.Run("partial zero signer ID", func(t *testing.T) {
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		msg := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 5, specqbft.Height(slot))
+
+		encoded, err := msg.Encode()
+		require.NoError(t, err)
+
+		message := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVPartialSignatureMsgType,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
+			Data:    encoded,
+		}
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
+		_, _, err = validator.validateSSVMessage(message, receivedAt)
+		expectedErr := ErrSignerNotInCommittee
+		require.ErrorAs(t, err, &expectedErr)
+	})
+
+	t.Run("partial inconsistent signer ID", func(t *testing.T) {
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		msg := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 1, specqbft.Height(slot))
+		msg.Message.Messages[0].Signer = 2
+
+		encoded, err := msg.Encode()
+		require.NoError(t, err)
+
+		message := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVPartialSignatureMsgType,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
+			Data:    encoded,
+		}
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
+		_, _, err = validator.validateSSVMessage(message, receivedAt)
+		expectedErr := ErrUnexpectedSigner
+		require.ErrorAs(t, err, &expectedErr)
+	})
+
+	t.Run("partial wrong signature size", func(t *testing.T) {
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		msg := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 1, specqbft.Height(slot))
+		msg.Signature = []byte{1}
+
+		encoded, err := msg.Encode()
+		require.ErrorContains(t, err, "bytes array does not have the correct length")
+
+		message := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVPartialSignatureMsgType,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
+			Data:    encoded,
+		}
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
+		_, _, err = validator.validateSSVMessage(message, receivedAt)
+		expectedErr := ErrMalformedMessage
+		require.ErrorAs(t, err, &expectedErr)
+	})
+
+	t.Run("partial wrong signature", func(t *testing.T) {
+		t.Skip() // TODO: enable when signature check is enabled
+
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		msg := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 1, specqbft.Height(slot))
+		msg.Signature = bytes.Repeat([]byte{1}, 96)
+
+		encoded, err := msg.Encode()
+		require.NoError(t, err)
+
+		message := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVPartialSignatureMsgType,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
+			Data:    encoded,
+		}
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
+		_, _, err = validator.validateSSVMessage(message, receivedAt)
+		expectedErr := ErrInvalidSignature
+		require.ErrorAs(t, err, &expectedErr)
+	})
+
 	t.Run("invalid QBFT message type", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
 
@@ -375,6 +491,95 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
 		_, _, err = validator.validateSSVMessage(message, receivedAt)
 		require.ErrorIs(t, err, ErrZeroSignature)
+	})
+
+	t.Run("no signers", func(t *testing.T) {
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		height := specqbft.Height(slot)
+
+		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
+		validSignedMessage.Signers = []spectypes.OperatorID{}
+
+		encoded, err := validSignedMessage.Encode()
+		require.NoError(t, err)
+
+		message := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
+			Data:    encoded,
+		}
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
+		_, _, err = validator.validateSSVMessage(message, receivedAt)
+		require.ErrorIs(t, err, ErrNoSigners)
+	})
+
+	t.Run("zero signer", func(t *testing.T) {
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		inactiveSK, err := eth2types.GenerateBLSPrivateKey()
+		require.NoError(t, err)
+
+		zeroSignerKS := spectestingutils.Testing7SharesSet()
+		zeroSignerShare := &ssvtypes.SSVShare{
+			Share: *spectestingutils.TestingShare(zeroSignerKS),
+			Metadata: ssvtypes.Metadata{
+				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+					Status: v1.ValidatorStateActiveOngoing,
+				},
+				Liquidated: false,
+			},
+		}
+		zeroSignerShare.Committee[0].OperatorID = 0
+		zeroSignerShare.ValidatorPubKey = inactiveSK.PublicKey().Marshal()
+
+		require.NoError(t, ns.Shares().Save(nil, zeroSignerShare))
+
+		validSignedMessage := spectestingutils.TestingProposalMessage(zeroSignerKS.Shares[1], 1)
+		validSignedMessage.Signers = []spectypes.OperatorID{0}
+
+		encodedValidSignedMessage, err := validSignedMessage.Encode()
+		require.NoError(t, err)
+
+		message := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, zeroSignerShare.ValidatorPubKey, roleAttester),
+			Data:    encodedValidSignedMessage,
+		}
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
+		_, _, err = validator.validateSSVMessage(message, receivedAt)
+		require.ErrorIs(t, err, ErrZeroSigner)
+
+		require.NoError(t, ns.Shares().Delete(nil, zeroSignerShare.ValidatorPubKey))
+	})
+
+	t.Run("non unique signer", func(t *testing.T) {
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		validSignedMessage := spectestingutils.TestingCommitMultiSignerMessage(
+			[]*bls.SecretKey{ks.Shares[1], ks.Shares[2], ks.Shares[3]}, []spectypes.OperatorID{1, 2, 3})
+
+		validSignedMessage.Signers = []spectypes.OperatorID{1, 2, 2}
+
+		encoded, err := validSignedMessage.Encode()
+		require.NoError(t, err)
+
+		message := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
+			Data:    encoded,
+		}
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
+		_, _, err = validator.validateSSVMessage(message, receivedAt)
+		require.ErrorIs(t, err, ErrDuplicatedSigner)
 	})
 
 	t.Run("late message", func(t *testing.T) {
