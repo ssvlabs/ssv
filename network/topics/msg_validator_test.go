@@ -8,7 +8,6 @@ import (
 	"github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/stretchr/testify/require"
@@ -22,7 +21,6 @@ import (
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
-	"github.com/bloxapp/ssv/utils/threshold"
 )
 
 func TestMsgValidator(t *testing.T) {
@@ -94,19 +92,6 @@ func TestMsgValidator(t *testing.T) {
 	//	res := mv.ValidateP2PMessage(context.Background(), "xxxx", pmsg)
 	//	require.Equal(t, res, pubsub.ValidationReject)
 	//})
-}
-
-func createSharePublicKeys(n int) []string {
-	threshold.Init()
-
-	var res []string
-	for i := 0; i < n; i++ {
-		sk := bls.SecretKey{}
-		sk.SetByCSPRNG()
-		pk := sk.GetPublicKey().SerializeToHexStr()
-		res = append(res, pk)
-	}
-	return res
 }
 
 func newPBMsg(data []byte, topic string, from []byte) *pubsub.Message {
