@@ -158,10 +158,14 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("malformed validator public key", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
 
+		validSignedMessage := spectestingutils.TestingProposalMessage(ks.Shares[1], 1)
+		encodedValidSignedMessage, err := validSignedMessage.Encode()
+		require.NoError(t, err)
+
 		message := &spectypes.SSVMessage{
-			MsgType: math.MaxUint64,
+			MsgType: spectypes.SSVConsensusMsgType,
 			MsgID:   spectypes.NewMsgID(netCfg.Domain, spectypes.ValidatorPK{}, roleAttester),
-			Data:    []byte{0x1},
+			Data:    encodedValidSignedMessage,
 		}
 
 		_, _, err = validator.validateSSVMessage(message, time.Now())
@@ -175,10 +179,14 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		sk, err := eth2types.GenerateBLSPrivateKey()
 		require.NoError(t, err)
 
+		validSignedMessage := spectestingutils.TestingProposalMessage(ks.Shares[1], 1)
+		encodedValidSignedMessage, err := validSignedMessage.Encode()
+		require.NoError(t, err)
+
 		message := &spectypes.SSVMessage{
-			MsgType: math.MaxUint64,
+			MsgType: spectypes.SSVConsensusMsgType,
 			MsgID:   spectypes.NewMsgID(netCfg.Domain, sk.PublicKey().Marshal(), roleAttester),
-			Data:    []byte{0x1},
+			Data:    encodedValidSignedMessage,
 		}
 
 		_, _, err = validator.validateSSVMessage(message, time.Now())
@@ -251,10 +259,14 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		require.NoError(t, ns.Shares().Save(nil, liquidatedShare))
 
+		validSignedMessage := spectestingutils.TestingProposalMessage(ks.Shares[1], 1)
+		encodedValidSignedMessage, err := validSignedMessage.Encode()
+		require.NoError(t, err)
+
 		message := &spectypes.SSVMessage{
-			MsgType: math.MaxUint64,
+			MsgType: spectypes.SSVConsensusMsgType,
 			MsgID:   spectypes.NewMsgID(netCfg.Domain, liquidatedShare.ValidatorPubKey, roleAttester),
-			Data:    []byte{0x1},
+			Data:    encodedValidSignedMessage,
 		}
 
 		_, _, err = validator.validateSSVMessage(message, time.Now())
@@ -283,10 +295,14 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		require.NoError(t, ns.Shares().Save(nil, inactiveShare))
 
+		validSignedMessage := spectestingutils.TestingProposalMessage(ks.Shares[1], 1)
+		encodedValidSignedMessage, err := validSignedMessage.Encode()
+		require.NoError(t, err)
+
 		message := &spectypes.SSVMessage{
-			MsgType: math.MaxUint64,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, inactiveShare.ValidatorPubKey, roleAttester),
-			Data:    []byte{0x1},
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
+			Data:    encodedValidSignedMessage,
 		}
 
 		_, _, err = validator.validateSSVMessage(message, time.Now())
