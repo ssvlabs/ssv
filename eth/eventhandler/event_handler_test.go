@@ -68,7 +68,16 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sim := simTestBackend(testAddr)
+
+	wrongPk, err := crypto.HexToECDSA("42e14d227125f411d6d3285bb4a2e07c2dba2e210bd2f3f4e2a36633bd61bfe6")
+	require.NoError(t, err)
+	testAddr2 := crypto.PubkeyToAddress(wrongPk.PublicKey)
+
+	testAddresses := make([]*ethcommon.Address, 2)
+	testAddresses[0] = &testAddr
+	testAddresses[1] = &testAddr2
+
+	sim := simTestBackend(testAddresses)
 
 	// Create JSON-RPC handler
 	rpcServer, _ := sim.Node.RPCHandler()
@@ -450,41 +459,136 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		})
 	})
 
-	// Receive event, unmarshall, parse, check parse event is not nil or with an error,
-	// public key is correct, owner is correct, operator ids are correct
-	t.Run("test ValidatorRemoved event handle", func(t *testing.T) {
-		_, err = boundContract.SimcontractTransactor.RemoveValidator(
-			auth,
-			validatorData1.masterPubKey.Serialize(),
-			[]uint64{1, 2, 3, 4},
-			simcontract.CallableCluster{
-				ValidatorCount:  1,
-				NetworkFeeIndex: 1,
-				Index:           1,
-				Active:          true,
-				Balance:         big.NewInt(100_000_000),
-			})
-		require.NoError(t, err)
-		sim.Commit()
+	t.Run("test ValidatorRemoved event handling", func(t *testing.T) {
+		// Must throw error "malformed event: could not find validator share"
+		t.Run("ValidatorRemoved incorrect event public key", func(t *testing.T) {
+			pk := validatorData1.masterPubKey.Serialize()
+			// Corrupt the public key
+			pk[len(pk)-1] ^= 1
 
-		block := <-logs
-		require.NotEmpty(t, block.Logs)
-		require.Equal(t, ethcommon.HexToHash("0xccf4370403e5fbbde0cd3f13426479dcd8a5916b05db424b7a2c04978cf8ce6e"), block.Logs[0].Topics[0])
+			_, err = boundContract.SimcontractTransactor.RemoveValidator(
+				auth,
+				pk,
+				[]uint64{1, 2, 3, 4},
+				simcontract.CallableCluster{
+					ValidatorCount:  1,
+					NetworkFeeIndex: 1,
+					Index:           2,
+					Active:          true,
+					Balance:         big.NewInt(100_000_000),
+				})
+			require.NoError(t, err)
+			sim.Commit()
 
-		eventsCh := make(chan executionclient.BlockLogs)
-		go func() {
-			defer close(eventsCh)
-			eventsCh <- block
-		}()
+			block := <-logs
+			require.NotEmpty(t, block.Logs)
+			require.Equal(t, ethcommon.HexToHash("0xccf4370403e5fbbde0cd3f13426479dcd8a5916b05db424b7a2c04978cf8ce6e"), block.Logs[0].Topics[0])
 
-		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
-		require.Equal(t, blockNum+1, lastProcessedBlock)
-		require.NoError(t, err)
-		blockNum++
+			eventsCh := make(chan executionclient.BlockLogs)
+			go func() {
+				defer close(eventsCh)
+				eventsCh <- block
+			}()
+
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+			require.Equal(t, blockNum+1, lastProcessedBlock)
+			require.NoError(t, err)
+			blockNum++
+
+			// Check the validator's shares are still present in the state after incorrect ValidatorRemoved event
+			valShare := eh.nodeStorage.Shares().Get(nil, validatorData1.masterPubKey.Serialize())
+			require.NotNil(t, valShare)
+		})
+
+		t.Run("ValidatorRemoved incorrect owner address", func(t *testing.T) {
+			wrongAuth, _ := bind.NewKeyedTransactorWithChainID(wrongPk, big.NewInt(1337))
+
+			_, err = boundContract.SimcontractTransactor.RemoveValidator(
+				wrongAuth,
+				validatorData1.masterPubKey.Serialize(),
+				[]uint64{1, 2, 3, 4},
+				simcontract.CallableCluster{
+					ValidatorCount:  1,
+					NetworkFeeIndex: 1,
+					Index:           2,
+					Active:          true,
+					Balance:         big.NewInt(100_000_000),
+				})
+			require.NoError(t, err)
+			sim.Commit()
+
+			block := <-logs
+			require.NotEmpty(t, block.Logs)
+			require.Equal(t, ethcommon.HexToHash("0xccf4370403e5fbbde0cd3f13426479dcd8a5916b05db424b7a2c04978cf8ce6e"), block.Logs[0].Topics[0])
+
+			eventsCh := make(chan executionclient.BlockLogs)
+			go func() {
+				defer close(eventsCh)
+				eventsCh <- block
+			}()
+
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+			require.Equal(t, blockNum+1, lastProcessedBlock)
+			require.NoError(t, err)
+			blockNum++
+
+			// Check the validator's shares are still present in the state after incorrect ValidatorRemoved event
+			valShare := eh.nodeStorage.Shares().Get(nil, validatorData1.masterPubKey.Serialize())
+			require.NotNil(t, valShare)
+		})
+
+		// Receive event, unmarshall, parse, check parse event is not nil or with an error,
+		// public key is correct, owner is correct, operator ids are correct
+		// event handler's own operator is responsible for removed validator
+		t.Run("ValidatorRemoved happy flow", func(t *testing.T) {
+			// Check the validator's shares are present in the state before removing
+			valShare := eh.nodeStorage.Shares().Get(nil, validatorData1.masterPubKey.Serialize())
+			require.NotNil(t, valShare)
+
+			_, err = boundContract.SimcontractTransactor.RemoveValidator(
+				auth,
+				validatorData1.masterPubKey.Serialize(),
+				[]uint64{1, 2, 3, 4},
+				simcontract.CallableCluster{
+					ValidatorCount:  1,
+					NetworkFeeIndex: 1,
+					Index:           2,
+					Active:          true,
+					Balance:         big.NewInt(100_000_000),
+				})
+			require.NoError(t, err)
+			sim.Commit()
+
+			block := <-logs
+			require.NotEmpty(t, block.Logs)
+			require.Equal(t, ethcommon.HexToHash("0xccf4370403e5fbbde0cd3f13426479dcd8a5916b05db424b7a2c04978cf8ce6e"), block.Logs[0].Topics[0])
+
+			eventsCh := make(chan executionclient.BlockLogs)
+			go func() {
+				defer close(eventsCh)
+				eventsCh <- block
+			}()
+
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+			require.Equal(t, blockNum+1, lastProcessedBlock)
+			require.NoError(t, err)
+			blockNum++
+
+			// TODO: Check the validator removed from the validator registry storage.
+
+			// Check the validator was removed from the validator shares storage.
+			shares := eh.nodeStorage.Shares().List(nil)
+			require.Equal(t, 2, len(shares))
+			valShare = eh.nodeStorage.Shares().Get(nil, validatorData1.masterPubKey.Serialize())
+			require.Nil(t, valShare)
+
+			// TODO Check the validator was removed from the validator duties storage.
+		})
 	})
 
 	// Receive event, unmarshall, parse, check parse event is not nil or with an error, owner is correct, operator ids are correct
 	t.Run("test ClusterLiquidated event handle", func(t *testing.T) {
+		// TODO add destructive test cases with Cluster Id hash computation and operator ids
 		_, err = boundContract.SimcontractTransactor.Liquidate(
 			auth,
 			testAddr,
@@ -570,11 +674,12 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
 		blockNum++
-		// Check if the fee recepient was updated
-		recepientData, _, err := eh.nodeStorage.GetRecipientData(nil, testAddr)
+		// Check if the fee recipient was updated
+		recipientData, _, err := eh.nodeStorage.GetRecipientData(nil, testAddr)
 		require.NoError(t, err)
-		require.Equal(t, ethcommon.HexToAddress("0x1").String(), recepientData.FeeRecipient.String())
+		require.Equal(t, ethcommon.HexToAddress("0x1").String(), recipientData.FeeRecipient.String())
 	})
+
 }
 
 func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, operator *testOperator, useMockCtrl bool) (*EventHandler, *mocks.MockController, error) {
@@ -705,11 +810,15 @@ func unmarshalLog(t *testing.T, rawOperatorAdded string) ethtypes.Log {
 	return vLogOperatorAdded
 }
 
-func simTestBackend(testAddr ethcommon.Address) *simulator.SimulatedBackend {
+func simTestBackend(testAddresses []*ethcommon.Address) *simulator.SimulatedBackend {
+	genesis := core.GenesisAlloc{}
+
+	for _, testAddr := range testAddresses {
+		genesis[*testAddr] = core.GenesisAccount{Balance: big.NewInt(10000000000000000)}
+	}
+
 	return simulator.NewSimulatedBackend(
-		core.GenesisAlloc{
-			testAddr: {Balance: big.NewInt(10000000000000000)},
-		}, 10000000,
+		genesis, 10000000,
 	)
 }
 
