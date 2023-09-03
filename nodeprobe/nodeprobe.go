@@ -70,8 +70,8 @@ func (p *Prober) probe(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, p.interval)
 	defer cancel()
 
-	var fullyHealthy atomic.Bool
-	fullyHealthy.Store(true)
+	var healthy atomic.Bool
+	healthy.Store(true)
 	var wg sync.WaitGroup
 	p.nodesMu.Lock()
 	for name, node := range p.nodes {
@@ -87,7 +87,7 @@ func (p *Prober) probe(ctx context.Context) {
 				}
 				if err != nil {
 					// Update readiness and quit early.
-					fullyHealthy.Store(false)
+					healthy.Store(false)
 					cancel()
 				}
 			}()
@@ -105,7 +105,7 @@ func (p *Prober) probe(ctx context.Context) {
 	p.cond.L.Lock()
 	defer p.cond.L.Unlock()
 
-	p.healthy.Store(fullyHealthy.Load())
+	p.healthy.Store(healthy.Load())
 
 	if !p.healthy.Load() {
 		p.logger.Error("not all nodes are healthy")
