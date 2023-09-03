@@ -65,14 +65,14 @@ func New(nodeStorage nodestorage.Storage, executionClient ExecutionClient, event
 	return es
 }
 
-// Healthy returns true if the syncer is currently syncing events.
+// Healthy returns nil if the syncer is syncing ongoing events.
 func (es *EventSyncer) Healthy(ctx context.Context) error {
 	lastProcessedBlock, found, err := es.nodeStorage.GetLastProcessedBlock(nil)
 	if err != nil {
 		return fmt.Errorf("failed to read last processed block: %w", err)
 	}
 	if !found || lastProcessedBlock == nil {
-		return fmt.Errorf("last processed block not found")
+		return fmt.Errorf("last processed block is not found")
 	}
 	if es.lastProcessedBlock != lastProcessedBlock.Uint64() {
 		es.lastProcessedBlock = lastProcessedBlock.Uint64()
