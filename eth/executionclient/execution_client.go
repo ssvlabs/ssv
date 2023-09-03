@@ -219,10 +219,10 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 	return logs
 }
 
-// IsReady returns if execution client is currently ready: responds to requests and not in the syncing state.
-func (ec *ExecutionClient) IsReady(ctx context.Context) (bool, error) {
+// Healthy returns if execution client is currently healthy: responds to requests and not in the syncing state.
+func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 	if ec.isClosed() {
-		return false, nil
+		return ErrClosed
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, ec.connectionTimeout)
@@ -231,17 +231,17 @@ func (ec *ExecutionClient) IsReady(ctx context.Context) (bool, error) {
 	sp, err := ec.client.SyncProgress(ctx)
 	if err != nil {
 		ec.metrics.ExecutionClientFailure()
-		return false, err
+		return err
 	}
 
 	if sp != nil {
 		ec.metrics.ExecutionClientSyncing()
-		return false, nil
+		return fmt.Errorf("syncing")
 	}
 
 	ec.metrics.ExecutionClientReady()
 
-	return true, nil
+	return nil
 }
 
 func (ec *ExecutionClient) isClosed() bool {

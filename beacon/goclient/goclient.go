@@ -199,24 +199,30 @@ func (gc *goClient) NodeClient() NodeClient {
 	return gc.nodeClient
 }
 
-// IsReady returns if beacon node is currently ready: responds to requests, not in the syncing state, not optimistic
+// Healthy returns if beacon node is currently healthy: responds to requests, not in the syncing state, not optimistic
 // (for optimistic see https://github.com/ethereum/consensus-specs/blob/dev/sync/optimistic.md#block-production).
-func (gc *goClient) IsReady(ctx context.Context) (bool, error) {
+func (gc *goClient) Healthy(ctx context.Context) error {
 	syncState, err := gc.client.NodeSyncing(ctx)
 	if err != nil {
 		// TODO: get rid of global variable, pass metrics to goClient
 		metricsBeaconNodeStatus.Set(float64(statusUnknown))
-		return false, err
+		return err
 	}
 
 	// TODO: also check if syncState.ElOffline when github.com/attestantio/go-eth2-client supports it
-	if syncState == nil || syncState.IsSyncing || syncState.IsOptimistic {
-		metricsBeaconNodeStatus.Set(float64(statusSyncing))
-		return false, nil
+	metricsBeaconNodeStatus.Set(float64(statusSyncing))
+	if syncState == nil {
+		return errors.New("sync state is nil")
+	}
+	if syncState.IsSyncing {
+		return errors.New("syncing")
+	}
+	if syncState.IsOptimistic {
+		return errors.New("optimistic")
 	}
 
 	metricsBeaconNodeStatus.Set(float64(statusOK))
-	return true, nil
+	return nil
 }
 
 // GetBeaconNetwork returns the beacon network the node is on

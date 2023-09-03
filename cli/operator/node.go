@@ -222,24 +222,26 @@ var StartNodeCmd = &cobra.Command{
 
 		nodeProber := nodeprobe.NewProber(
 			logger,
-			executionClient,
-			// Underlying options.Beacon's value implements nodeprobe.StatusChecker.
-			// However, as it uses spec's specssv.BeaconNode interface, avoiding type assertion requires modifications in spec.
-			// If options.Beacon doesn't implement nodeprobe.StatusChecker due to a mistake, this would panic early.
-			consensusClient.(nodeprobe.StatusChecker),
+			func() {
+				logger.Fatal("ethereum node(s) are either out of sync or down. Ensure the nodes are healthy to resume.")
+			},
+			map[string]nodeprobe.Node{
+				"execution client": executionClient,
+
+				// Underlying options.Beacon's value implements nodeprobe.StatusChecker.
+				// However, as it uses spec's specssv.BeaconNode interface, avoiding type assertion requires modifications in spec.
+				// If options.Beacon doesn't implement nodeprobe.StatusChecker due to a mistake, this would panic early.
+				"consensus client": consensusClient.(nodeprobe.Node),
+			},
 		)
 
 		nodeProber.Start(cmd.Context())
 		nodeProber.Wait()
-		logger.Info("ethereum node(s) are ready")
-
-		nodeProber.SetUnreadyHandler(func() {
-			logger.Fatal("ethereum node(s) are either out of sync or down. Ensure the nodes are ready to resume.")
-		})
+		logger.Info("ethereum node(s) are healthy")
 
 		metricsReporter.SSVNodeHealthy()
 
-		setupEventHandling(
+		eventSyncer := setupEventHandling(
 			cmd.Context(),
 			logger,
 			executionClient,
@@ -249,6 +251,7 @@ var StartNodeCmd = &cobra.Command{
 			networkConfig,
 			nodeStorage,
 		)
+		nodeProber.AddNode("event syncer", eventSyncer)
 
 		cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, uint64, error) {
 			return validatorCtrl.GetValidatorStats()
@@ -501,7 +504,7 @@ func setupEventHandling(
 	metricsReporter *metricsreporter.MetricsReporter,
 	networkConfig networkconfig.NetworkConfig,
 	nodeStorage operatorstorage.Storage,
-) {
+) *eventsyncer.EventSyncer {
 	eventFilterer, err := executionClient.Filterer()
 	if err != nil {
 		logger.Fatal("failed to set up event filterer", zap.Error(err))
@@ -528,6 +531,7 @@ func setupEventHandling(
 	}
 
 	eventSyncer := eventsyncer.New(
+		nodeStorage,
 		executionClient,
 		eventHandler,
 		eventsyncer.WithLogger(logger),
@@ -608,6 +612,8 @@ func setupEventHandling(
 				zap.Error(err))
 		}()
 	}
+
+	return eventSyncer
 }
 
 func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.Database, metricsReporter *metricsreporter.MetricsReporter, port int, enableProf bool) {
