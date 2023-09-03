@@ -79,14 +79,13 @@ func (p *Prober) probe(ctx context.Context) {
 		go func(name string, node Node) {
 			defer wg.Done()
 
-			var healthy bool
 			var err error
 			defer func() {
 				// Catch panics.
 				if e := recover(); e != nil {
 					err = fmt.Errorf("panic: %v", e)
 				}
-				if err != nil || !healthy {
+				if err != nil {
 					// Update readiness and quit early.
 					fullyHealthy.Store(false)
 					cancel()

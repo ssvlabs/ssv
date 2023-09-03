@@ -280,6 +280,8 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 			return fromBlock, fmt.Errorf("subscription: %w", err)
 
 		case header := <-heads:
+			ec.logger.Debug("skipping block", zap.Uint64("block_number", header.Number.Uint64()))
+			continue
 			if header.Number.Uint64() < ec.followDistance {
 				continue
 			}
