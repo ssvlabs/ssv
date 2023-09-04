@@ -15,6 +15,11 @@ import (
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
+const (
+	MaxPossibleShareSize = 1245
+	MaxAllowedShareSize  = MaxPossibleShareSize * 8 // Leaving some room for protocol updates and calculation mistakes.
+)
+
 // SSVShare is a combination of spectypes.Share and its Metadata.
 type SSVShare struct {
 	spectypes.Share
@@ -34,6 +39,10 @@ func (s *SSVShare) Encode() ([]byte, error) {
 
 // Decode decodes SSVShare using gob.
 func (s *SSVShare) Decode(data []byte) error {
+	if len(data) > MaxAllowedShareSize {
+		return fmt.Errorf("share size is too big, got %v, max allowed %v", len(data), MaxAllowedShareSize)
+	}
+
 	d := gob.NewDecoder(bytes.NewReader(data))
 	if err := d.Decode(s); err != nil {
 		return fmt.Errorf("decode SSVShare: %w", err)
@@ -82,6 +91,11 @@ func ComputeClusterIDHash(ownerAddress []byte, operatorIds []uint64) ([]byte, er
 func ComputeQuorumAndPartialQuorum(committeeSize int) (quorum uint64, partialQuorum uint64) {
 	f := (committeeSize - 1) / 3
 	return uint64(f*2 + 1), uint64(f + 1)
+}
+
+func ValidCommitteeSize(committeeSize int) bool {
+	f := (committeeSize - 1) / 3
+	return (committeeSize-1)%3 == 0 && f >= 1 && f <= 4
 }
 
 // Metadata represents metadata of SSVShare.

@@ -9,12 +9,14 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/bloxapp/ssv/ekm"
 	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
-	"github.com/bloxapp/ssv/network/forks/genesis"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/validator/mocks"
 	"github.com/bloxapp/ssv/protocol/v2/queue/worker"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	ssvstorage "github.com/bloxapp/ssv/storage"
+	"github.com/bloxapp/ssv/storage/kv"
+
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/golang/mock/gomock"
@@ -34,7 +36,6 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/message"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
@@ -43,11 +44,13 @@ import (
 
 type MockControllerOptions struct {
 	metrics           Metrics
+	network           P2PNetwork
 	recipientsStorage Recipients
 	sharesStorage     SharesStorage
 	validatorsMap     *validatorsMap
 	beacon            beacon.BeaconNode
 	signer            spectypes.KeyManager
+	StorageMap        *ibftstorage.QBFTStores
 	operatorData      *registrystorage.OperatorData
 }
 
@@ -112,21 +115,19 @@ func TestSetupValidators(t *testing.T) {
 	// Init global variables
 	passedEpoch := phase0.Epoch(1)
 	operatorIds := []uint64{1, 2, 3, 4}
+	var validatorPublicKey phase0.BLSPubKey
 
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 	km, keyManagerSignerError := ekm.NewETHKeyManagerSigner(logger, db, networkconfig.TestNetwork, true, "")
 	require.NoError(t, keyManagerSignerError)
-	validatorKey, err := createKey() // Assuming createKey() returns ([]byte, error)
+	validatorKey, err := createKey()
 	require.NoError(t, err)
-
-	var validatorPublicKey phase0.BLSPubKey // Assuming phase0.BLSPubKey is a type alias for [48]byte
 
 	// Check the length before copying
 	if len(validatorKey) == len(validatorPublicKey) {
 		copy(validatorPublicKey[:], validatorKey)
 	} else {
-		// Handle the error, lengths don't match
 		t.Fatalf("Length mismatch: validatorKey has length %d, but expected %d", len(validatorKey), len(validatorPublicKey))
 	}
 
@@ -170,10 +171,27 @@ func TestSetupValidators(t *testing.T) {
 	recipientData := buildFeeRecipient("67Ce5c69260bd819B4e0AD13f4b873074D479811", "45E668aba4b7fc8761331EC3CE77584B7A99A51A")
 	ownerAddressBytes := decodeHex(t, "67Ce5c69260bd819B4e0AD13f4b873074D479811", "Failed to decode owner address")
 	feeRecipientBytes := decodeHex(t, "45E668aba4b7fc8761331EC3CE77584B7A99A51A", "Failed to decode second fee recipient address")
-
+	testValidator := setupTestValidator(ownerAddressBytes, feeRecipientBytes)
 	storageMu := sync.Mutex{}
 	storageData := make(map[string]*beacon.ValidatorMetadata)
-	testValidator := setupTestValidator(ownerAddressBytes, feeRecipientBytes)
+	//ctx, cancel := context.WithCancel(context.Background())
+	//options := validator.Options{
+	//	Storage: newStores(logger),
+	//	Network: st,
+	//	SSVShare: &types.SSVShare{
+	//		Share: *testingShare(keySet, id),
+	//		Metadata: types.Metadata{
+	//			BeaconMetadata: &protocolbeacon.ValidatorMetadata{
+	//				Index: spec.ValidatorIndex(1),
+	//			},
+	//			OwnerAddress: common.HexToAddress("0x0"),
+	//			Liquidated:   false,
+	//		},
+	//	},
+	//	Beacon: spectestingutils.NewTestingBeaconNode(),
+	//	Signer: km,
+	//}
+
 	bcResponse := map[phase0.ValidatorIndex]*eth2apiv1.Validator{
 		0: {
 			Balance: 0,
@@ -303,10 +321,10 @@ func TestSetupValidators(t *testing.T) {
 			defer ctrl.Finish()
 			bc := beacon.NewMockBeaconNode(ctrl)
 			metrics := mocks.NewMockMetrics(ctrl)
-			storageMap := ibftstorage.NewStores()
+			network := mocks.NewMockP2PNetwork(ctrl)
 			recipientStorage := mocks.NewMockRecipients(ctrl)
 			sharesStorage := mocks.NewMockSharesStorage(ctrl)
-
+			storageMap := ibftstorage.NewStores()
 			sharesStorage.EXPECT().Get(gomock.Any(), gomock.Any()).Return(shareWithMetaData).AnyTimes()
 			sharesStorage.EXPECT().UpdateValidatorMetadata(gomock.Any(), gomock.Any()).DoAndReturn(func(pk string, metadata *beacon.ValidatorMetadata) error {
 				storageMu.Lock()
@@ -320,8 +338,8 @@ func TestSetupValidators(t *testing.T) {
 			mockValidatorMap := &validatorsMap{
 				ctx: context.Background(),
 				optsTemplate: &validator.Options{
-					Network: nil,
 					Signer:  nil,
+					Network: network,
 					Storage: storageMap,
 				},
 				validatorsMap: map[string]*validator.Validator{"0": testValidator},
@@ -332,6 +350,7 @@ func TestSetupValidators(t *testing.T) {
 				beacon:            bc,
 				signer:            km,
 				metrics:           metrics,
+				network:           network,
 				sharesStorage:     sharesStorage,
 				operatorData:      operatorData,
 				recipientsStorage: recipientStorage,
@@ -343,11 +362,11 @@ func TestSetupValidators(t *testing.T) {
 			ctr := setupController(logger, controllerOptions)
 			disableMetrics(metrics)
 			result, setupValidatorError := ctr.setupValidators(tc.shares)
-			require.Equal(t, tc.comparisonObject, result, "Unexpected result")
+			require.Equal(t, tc.comparisonObject, result, setupValidatorError)
 			if tc.bcResponseErr != nil {
-				require.Error(t, setupValidatorError, "Unexpected error")
+				require.Error(t, setupValidatorError, setupValidatorError)
 			} else {
-				require.NoError(t, setupValidatorError, "Unexpected error")
+				require.NoError(t, setupValidatorError, setupValidatorError)
 			}
 			// Add any assertions here to validate the behavior
 		})
@@ -746,16 +765,17 @@ func setupController(logger *zap.Logger, opts MockControllerOptions) controller 
 		keyManager:                 nil,
 		shareEncryptionKeyProvider: nil,
 		beacon:                     opts.beacon,
+		network:                    opts.network,
 		metrics:                    opts.metrics,
+		ibftStorageMap:             opts.StorageMap,
 		context:                    context.Background(),
 		operatorData:               opts.operatorData,
 		recipientsStorage:          opts.recipientsStorage,
 		sharesStorage:              opts.sharesStorage,
 		logger:                     logger,
 		validatorsMap:              opts.validatorsMap,
-		metadataUpdateQueue:        nil,
 		metadataUpdateInterval:     0,
-		messageRouter:              newMessageRouter(genesis.New().MsgID()),
+		messageRouter:              newMessageRouter(),
 		messageWorker: worker.NewWorker(logger, &worker.Config{
 			Ctx:          context.Background(),
 			WorkersCount: 1,
@@ -810,6 +830,8 @@ func generateDecidedMessage(t *testing.T, identifier spectypes.MessageID) []byte
 
 func setupTestValidator(ownerAddressBytes, feeRecipientBytes []byte) *validator.Validator {
 	return &validator.Validator{
+		DutyRunners: runner.DutyRunners{},
+		Storage:     ibftstorage.NewStores(),
 		Share: &types.SSVShare{
 			Share: spectypes.Share{
 				FeeRecipientAddress: common.BytesToAddress(feeRecipientBytes),
@@ -822,10 +844,7 @@ func setupTestValidator(ownerAddressBytes, feeRecipientBytes []byte) *validator.
 }
 
 func getBaseStorage(logger *zap.Logger) (basedb.Database, error) {
-	return ssvstorage.GetStorageFactory(logger, basedb.Options{
-		Type: "badger-memory",
-		Path: "",
-	})
+	return kv.NewInMemory(logger, basedb.Options{})
 }
 
 func disableMetrics(metrics *mocks.MockMetrics) {
@@ -875,4 +894,27 @@ func createKey() ([]byte, error) {
 		return nil, err
 	}
 	return pubKey, nil
+}
+
+func newStores(logger *zap.Logger) *ibftstorage.QBFTStores {
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	if err != nil {
+		panic(err)
+	}
+
+	storageMap := ibftstorage.NewStores()
+
+	roles := []spectypes.BeaconRole{
+		spectypes.BNRoleAttester,
+		spectypes.BNRoleProposer,
+		spectypes.BNRoleAggregator,
+		spectypes.BNRoleSyncCommittee,
+		spectypes.BNRoleSyncCommitteeContribution,
+		spectypes.BNRoleValidatorRegistration,
+	}
+	for _, role := range roles {
+		storageMap.Add(role, ibftstorage.New(db, role.String()))
+	}
+
+	return storageMap
 }

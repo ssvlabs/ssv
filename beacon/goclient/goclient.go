@@ -3,6 +3,7 @@ package goclient
 import (
 	"context"
 	"math"
+	"strings"
 	"sync"
 	"time"
 
@@ -66,9 +67,33 @@ func init() {
 	}
 }
 
+// NodeClient is the type of the Beacon node.
+type NodeClient string
+
+const (
+	NodeLighthouse NodeClient = "lighthouse"
+	NodePrysm      NodeClient = "prysm"
+	NodeUnknown    NodeClient = "unknown"
+)
+
+// ParseNodeClient derives the client from node's version string.
+func ParseNodeClient(version string) NodeClient {
+	version = strings.ToLower(version)
+	switch {
+	case strings.Contains(version, "lighthouse"):
+		return NodeLighthouse
+	case strings.Contains(version, "prysm"):
+		return NodePrysm
+	default:
+		return NodeUnknown
+	}
+}
+
 // Client defines all go-eth2-client interfaces used in ssv
 type Client interface {
 	eth2client.Service
+	eth2client.NodeVersionProvider
+	eth2client.NodeClientProvider
 
 	eth2client.AttestationDataProvider
 	eth2client.AggregateAttestationProvider
@@ -99,12 +124,20 @@ type Client interface {
 	eth2client.ValidatorRegistrationsSubmitter
 }
 
+type NodeClientProvider interface {
+	NodeClient() NodeClient
+}
+
+var _ NodeClientProvider = (*goClient)(nil)
+
 // goClient implementing Beacon struct
 type goClient struct {
 	log                  *zap.Logger
 	ctx                  context.Context
 	network              beaconprotocol.Network
 	client               Client
+	nodeVersion          string
+	nodeClient           NodeClient
 	graffiti             []byte
 	gasLimit             uint64
 	operatorID           spectypes.OperatorID
@@ -128,8 +161,6 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 		return nil, errors.WithMessage(err, "failed to create http client")
 	}
 
-	logger.Info("consensus client: connected", fields.Name(httpClient.Name()), fields.Address(httpClient.Address()))
-
 	tickerChan := make(chan phase0.Slot, 32)
 	slotTicker.Subscribe(tickerChan)
 
@@ -144,9 +175,28 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 		registrationCache: map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
 	}
 
+	// Get the node's version and client.
+	client.nodeVersion, err = client.client.NodeVersion(opt.Context)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get node version")
+	}
+	client.nodeClient = ParseNodeClient(client.nodeVersion)
+
+	logger.Info("consensus client connected",
+		fields.Name(httpClient.Name()),
+		fields.Address(httpClient.Address()),
+		zap.String("client", string(client.nodeClient)),
+		zap.String("version", client.nodeVersion),
+	)
+
+	// Start registration submitter.
 	go client.registrationSubmitter(tickerChan)
 
 	return client, nil
+}
+
+func (gc *goClient) NodeClient() NodeClient {
+	return gc.nodeClient
 }
 
 // IsReady returns if beacon node is currently ready: responds to requests, not in the syncing state, not optimistic

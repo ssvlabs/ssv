@@ -32,4 +32,5 @@ func Execute(appName, version string) {
 func init() {
 	RootCmd.AddCommand(bootnode.StartBootNodeCmd)
 	RootCmd.AddCommand(operator.StartNodeCmd)
+	RootCmd.AddCommand(operator.GenerateDocCmd)
 }

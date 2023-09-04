@@ -2,6 +2,7 @@ package eventhandler
 
 import (
 	"context"
+	"encoding/binary"
 	"testing"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -14,6 +15,7 @@ import (
 	"github.com/bloxapp/ssv/eth/executionclient"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/bloxapp/ssv/registry/storage"
 )
 
 // const rawOperatorAdded = `{
@@ -137,26 +139,45 @@ func TestExecuteTask(t *testing.T) {
 
 func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 	logger, observedLogs := setupLogsCapture()
-	logValidatorAdded := unmarshalLog(t, rawValidatorAdded)
-	events := []ethtypes.Log{
-		logValidatorAdded,
-	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
 	eh, err := setupEventHandler(t, ctx, logger)
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	for _, id := range []spectypes.OperatorID{1, 2, 3, 4} {
+		od := &storage.OperatorData{
+			PublicKey:    binary.LittleEndian.AppendUint64(nil, id),
+			OwnerAddress: ethcommon.Address{},
+			ID:           id,
+		}
+
+		found, err := eh.nodeStorage.SaveOperatorData(nil, od)
+		require.NoError(t, err)
+		require.False(t, found)
+	}
+
 	eventsCh := make(chan executionclient.BlockLogs)
 	go func() {
 		defer close(eventsCh)
+
+		logValidatorAdded := unmarshalLog(t, rawValidatorAdded)
+		events := []ethtypes.Log{
+			logValidatorAdded,
+		}
+
 		for _, blockLogs := range executionclient.PackLogs(events) {
 			eventsCh <- blockLogs
 		}
 	}()
+
 	lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, true)
 	require.Equal(t, uint64(0x89EBFF), lastProcessedBlock)
 	require.NoError(t, err)
+
 	var observedLogsFlow []string
 	for _, entry := range observedLogs.All() {
 		observedLogsFlow = append(observedLogsFlow, entry.Message)

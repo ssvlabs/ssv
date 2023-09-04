@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
 
@@ -13,14 +12,12 @@ import (
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/duties"
 	"github.com/bloxapp/ssv/operator/fee_recipient"
 	"github.com/bloxapp/ssv/operator/slot_ticker"
 	"github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
@@ -37,13 +34,11 @@ type Options struct {
 	Network             networkconfig.NetworkConfig
 	BeaconNode          beaconprotocol.BeaconNode // TODO: consider renaming to ConsensusClient
 	ExecutionClient     *executionclient.ExecutionClient
-	P2PNetwork          network.P2PNetwork
+	P2PNetwork          validator.P2PNetwork
 	Context             context.Context
 	DB                  basedb.Database
 	ValidatorController validator.Controller
 	ValidatorOptions    validator.ControllerOptions `yaml:"ValidatorOptions"`
-
-	ForkVersion forksprotocol.ForkVersion
 
 	WS        api.WebSocketServer
 	WsAPIPort int
@@ -59,14 +54,11 @@ type operatorNode struct {
 	validatorsCtrl   validator.Controller
 	consensusClient  beaconprotocol.BeaconNode
 	executionClient  *executionclient.ExecutionClient
-	net              network.P2PNetwork
+	net              validator.P2PNetwork
 	storage          storage.Storage
 	qbftStorage      *qbftstorage.QBFTStores
 	dutyScheduler    *duties.Scheduler
 	feeRecipientCtrl fee_recipient.RecipientController
-	// fork           *forks.Forker
-
-	forkVersion forksprotocol.ForkVersion
 
 	ws        api.WebSocketServer
 	wsAPIPort int
@@ -87,7 +79,7 @@ func New(logger *zap.Logger, opts Options, slotTicker slot_ticker.Ticker) Node {
 		spectypes.BNRoleValidatorRegistration,
 	}
 	for _, role := range roles {
-		storageMap.Add(role, qbftstorage.New(opts.DB, role.String(), opts.ForkVersion))
+		storageMap.Add(role, qbftstorage.New(opts.DB, role.String()))
 	}
 
 	node := &operatorNode{
@@ -119,7 +111,6 @@ func New(logger *zap.Logger, opts Options, slotTicker slot_ticker.Ticker) Node {
 			Ticker:           slotTicker,
 			OperatorData:     opts.ValidatorOptions.OperatorData,
 		}),
-		forkVersion: opts.ForkVersion,
 
 		ws:        opts.WS,
 		wsAPIPort: opts.WsAPIPort,
@@ -149,7 +140,6 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 	}()
 
 	go n.ticker.Start(logger)
-	go n.listenForCurrentSlot(logger)
 	n.validatorsCtrl.StartNetworkHandlers()
 	n.validatorsCtrl.StartValidators()
 	go n.net.UpdateSubnets(logger)
@@ -169,15 +159,6 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 	}
 
 	return nil
-}
-
-// listenForCurrentSlot listens to current slot and trigger relevant components if needed
-func (n *operatorNode) listenForCurrentSlot(logger *zap.Logger) {
-	tickerChan := make(chan phase0.Slot, 32)
-	n.ticker.Subscribe(tickerChan)
-	for slot := range tickerChan {
-		n.setFork(logger, slot)
-	}
 }
 
 // HealthCheck returns a list of issues regards the state of the operator node

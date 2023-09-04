@@ -12,8 +12,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/network/forks"
 )
 
 // StreamResponder abstracts the stream access with a simpler interface that accepts only the data to send
@@ -28,11 +26,10 @@ type StreamController interface {
 }
 
 // NewStreamController create a new instance of StreamController
-func NewStreamController(ctx context.Context, host host.Host, fork forks.Fork, dialTimeout, readWriteTimeout time.Duration) StreamController {
+func NewStreamController(ctx context.Context, host host.Host, dialTimeout, readWriteTimeout time.Duration) StreamController {
 	ctrl := streamCtrl{
 		ctx:              ctx,
 		host:             host,
-		fork:             fork,
 		dialTimeout:      dialTimeout,
 		readWriteTimeout: readWriteTimeout,
 	}
@@ -44,7 +41,6 @@ type streamCtrl struct {
 	ctx context.Context
 
 	host host.Host
-	fork forks.Fork
 
 	dialTimeout      time.Duration
 	readWriteTimeout time.Duration

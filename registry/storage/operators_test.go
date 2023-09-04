@@ -11,8 +11,8 @@ import (
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/registry/storage"
-	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/blskeygen"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
@@ -144,10 +144,7 @@ func TestStorage_ListOperators(t *testing.T) {
 }
 
 func newOperatorStorageForTest(logger *zap.Logger) (storage.Operators, func()) {
-	db, err := ssvstorage.GetStorageFactory(logger, basedb.Options{
-		Type: "badger-memory",
-		Path: "",
-	})
+	db, err := kv.NewInMemory(logger, basedb.Options{})
 	if err != nil {
 		return nil, func() {}
 	}

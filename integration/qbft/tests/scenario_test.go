@@ -17,10 +17,8 @@ import (
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/validator"
-	protocolforks "github.com/bloxapp/ssv/protocol/forks"
 	protocolbeacon "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 	protocolstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
@@ -28,8 +26,8 @@ import (
 	protocolvalidator "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/sync/handlers"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/kv"
 )
 
 var (
@@ -168,10 +166,7 @@ func quorum(committee int) int {
 }
 
 func newStores(logger *zap.Logger) *qbftstorage.QBFTStores {
-	db, err := storage.GetStorageFactory(logger, basedb.Options{
-		Type: "badger-memory",
-		Path: "",
-	})
+	db, err := kv.NewInMemory(logger, basedb.Options{})
 	if err != nil {
 		panic(err)
 	}
@@ -187,13 +182,13 @@ func newStores(logger *zap.Logger) *qbftstorage.QBFTStores {
 		spectypes.BNRoleValidatorRegistration,
 	}
 	for _, role := range roles {
-		storageMap.Add(role, qbftstorage.New(db, role.String(), protocolforks.GenesisForkVersion))
+		storageMap.Add(role, qbftstorage.New(db, role.String()))
 	}
 
 	return storageMap
 }
 
-func createValidator(t *testing.T, pCtx context.Context, id spectypes.OperatorID, keySet *spectestingutils.TestKeySet, pLogger *zap.Logger, node network.P2PNetwork) *protocolvalidator.Validator {
+func createValidator(t *testing.T, pCtx context.Context, id spectypes.OperatorID, keySet *spectestingutils.TestKeySet, pLogger *zap.Logger, node validator.P2PNetwork) *protocolvalidator.Validator {
 	ctx, cancel := context.WithCancel(pCtx)
 	validatorPubKey := keySet.Shares[id].GetPublicKey().Serialize()
 
@@ -223,7 +218,9 @@ func createValidator(t *testing.T, pCtx context.Context, id spectypes.OperatorID
 	options.DutyRunners = validator.SetupRunners(ctx, logger, options)
 	val := protocolvalidator.NewValidator(ctx, cancel, options)
 	node.UseMessageRouter(newMsgRouter(val))
-	require.NoError(t, val.Start(logger))
+	started, err := val.Start(logger)
+	require.NoError(t, err)
+	require.True(t, started)
 
 	return val
 }

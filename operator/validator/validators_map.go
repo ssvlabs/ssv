@@ -5,6 +5,8 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"sync"
 
 	"github.com/bloxapp/ssv/logging/fields"
@@ -14,6 +16,12 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
+
+type Validator interface {
+	GetShare() *types.SSVShare
+	StartDuty(logger *zap.Logger, duty *spectypes.Duty) error
+	ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage) error
+}
 
 // validatorIterator is the function used to iterate over existing validators
 type validatorIterator func(validator *validator.Validator) error
@@ -70,6 +78,7 @@ func (vm *validatorsMap) GetOrCreateValidator(logger *zap.Logger, share *types.S
 	defer vm.lock.Unlock()
 	pubKey := hex.EncodeToString(share.ValidatorPubKey)
 	if v, ok := vm.validatorsMap[pubKey]; !ok {
+		println("didn't found validator")
 		if !share.HasBeaconMetadata() {
 			return nil, fmt.Errorf("beacon metadata is missing")
 		}
@@ -83,6 +92,7 @@ func (vm *validatorsMap) GetOrCreateValidator(logger *zap.Logger, share *types.S
 		printShare(share, logger, "setup validator done")
 		opts.SSVShare = nil
 	} else {
+		println("found validator")
 		printShare(v.Share, logger, "get validator")
 	}
 

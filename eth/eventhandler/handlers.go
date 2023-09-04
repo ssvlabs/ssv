@@ -9,7 +9,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"go.uber.org/zap"
 
@@ -132,10 +131,20 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 		fields.Validator(event.PublicKey),
 	)
 
-	// get nonce
+	// Get the expected nonce.
 	nonce, nonceErr := eh.nodeStorage.GetNextNonce(txn, event.Owner)
 	if nonceErr != nil {
 		return nil, fmt.Errorf("failed to get next nonce: %w", nonceErr)
+	}
+
+	// Bump nonce. This transaction would be reverted later if the handling fails,
+	// unless the failure is due to a malformed event.
+	if err := eh.nodeStorage.BumpNonce(txn, event.Owner); err != nil {
+		return nil, err
+	}
+
+	if err := eh.validateOperators(txn, event.OperatorIds); err != nil {
+		return nil, &MalformedEventError{Err: err}
 	}
 
 	// Calculate the expected length of constructed shares based on the number of operator IDs,
@@ -149,10 +158,6 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 		logger.Warn("malformed event: event shares length is not correct",
 			zap.Int("expected", sharesExpectedLength),
 			zap.Int("got", len(event.Shares)))
-
-		if err := eh.nodeStorage.BumpNonce(txn, event.Owner); err != nil {
-			return nil, fmt.Errorf("bump nonce: %w", err)
-		}
 
 		return nil, &MalformedEventError{Err: ErrIncorrectSharesLength}
 	}
@@ -169,10 +174,6 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 			zap.String("validator_public_key", hex.EncodeToString(event.PublicKey)),
 			zap.Error(err))
 
-		if err := eh.nodeStorage.BumpNonce(txn, event.Owner); err != nil {
-			return nil, fmt.Errorf("bump nonce: %w", err)
-		}
-
 		return nil, &MalformedEventError{Err: ErrSignatureVerification}
 	}
 
@@ -184,6 +185,7 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
 				logger.Warn("malformed event", zap.Error(err))
+
 				return nil, err
 			}
 
@@ -194,10 +196,6 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 		validatorShare = shareCreated
 
 		logger.Debug("share not found, created a new one", fields.OperatorID(validatorShare.OperatorID))
-
-		if err := eh.nodeStorage.BumpNonce(txn, event.Owner); err != nil {
-			return nil, fmt.Errorf("bump nonce: %w", err)
-		}
 	} else if event.Owner != validatorShare.OwnerAddress {
 		// Prevent multiple registration of the same validator with different owner address
 		// owner A registers validator with public key X (OK)
@@ -205,10 +203,6 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 		logger.Warn("malformed event: validator share already exists with different owner address",
 			zap.String("expected", validatorShare.OwnerAddress.String()),
 			zap.String("got", event.Owner.String()))
-
-		if err := eh.nodeStorage.BumpNonce(txn, event.Owner); err != nil {
-			return nil, fmt.Errorf("bump nonce: %w", err)
-		}
 
 		return nil, &MalformedEventError{Err: ErrShareBelongsToDifferentOwner}
 	}
@@ -473,29 +467,6 @@ func splitBytes(buf []byte, lim int) [][]byte {
 		chunks = append(chunks, buf[:])
 	}
 	return chunks
-}
-
-// verify signature of the ValidatorAddedEvent shares data
-// todo(align-contract-v0.3.1-rc.0): move to crypto package in ssv protocol?
-func verifySignature(sig []byte, owner ethcommon.Address, pubKey []byte, nonce registrystorage.Nonce) error {
-	data := fmt.Sprintf("%s:%d", owner.String(), nonce)
-	hash := crypto.Keccak256([]byte(data))
-
-	sign := &bls.Sign{}
-	if err := sign.Deserialize(sig); err != nil {
-		return fmt.Errorf("failed to deserialize signature: %w", err)
-	}
-
-	pk := &bls.PublicKey{}
-	if err := pk.Deserialize(pubKey); err != nil {
-		return fmt.Errorf("failed to deserialize public key: %w", err)
-	}
-
-	if res := sign.VerifyByte(pk, hash); !res {
-		return errors.New("failed to verify signature")
-	}
-
-	return nil
 }
 
 // processClusterEvent handles registry contract event for cluster

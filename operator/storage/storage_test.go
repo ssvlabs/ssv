@@ -5,19 +5,18 @@ import (
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-
-	ssvstorage "github.com/bloxapp/ssv/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
-
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
+	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/kv"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
 var (
@@ -28,12 +27,7 @@ var (
 
 func TestSaveAndGetPrivateKey(t *testing.T) {
 	logger := logging.TestLogger(t)
-	options := basedb.Options{
-		Type: "badger-memory",
-		Path: "",
-	}
-
-	db, err := ssvstorage.GetStorageFactory(logger, options)
+	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 	defer db.Close()
 
@@ -54,73 +48,48 @@ func TestSaveAndGetPrivateKey(t *testing.T) {
 
 func TestSetupPrivateKey(t *testing.T) {
 	tests := []struct {
-		name           string
-		existKey       string
-		passedKey      string
-		generateIfNone bool
-		expectedError  string
+		name          string
+		existKey      string
+		passedKey     string
+		expectedError string
 	}{
 		{
-			name:           "key not exist, passing nothing", // expected - raise an error
-			existKey:       "",
-			passedKey:      "",
-			generateIfNone: false,
-			expectedError:  "key not exist or provided",
+			name:          "key not exist, passing nothing", // expected - raise an error
+			existKey:      "",
+			passedKey:     "",
+			expectedError: "key not exist or provided",
 		},
 		{
-			name:           "key not exist passing, nothing (with generate flag)", // expected - generate new key
-			existKey:       "",
-			passedKey:      "",
-			generateIfNone: true,
-			expectedError:  "",
+			name:          "key not exist, passing key in env", // expected - set the passed key
+			existKey:      "",
+			passedKey:     skPem2,
+			expectedError: "",
 		},
 		{
-			name:           "key not exist, passing key in env", // expected - set the passed key
-			existKey:       "",
-			passedKey:      skPem2,
-			generateIfNone: false,
-			expectedError:  "",
+			name:          "key exist, passing key in env", // expected - throw ERROR of data encrypted with different key
+			existKey:      skPem,
+			passedKey:     skPem2,
+			expectedError: "Operator private key is not matching the one encrypted the storage",
 		},
 		{
-			name:           "key exist, passing key in env", // expected - override current key with the passed one
-			existKey:       skPem,
-			passedKey:      skPem2,
-			generateIfNone: false,
-			expectedError:  "",
+			name:          "key exist, passing nothing", // expected - throw ERROR of data encrypted with different key
+			existKey:      skPem,
+			passedKey:     "",
+			expectedError: "Operator private key is not matching the one encrypted the storage",
 		},
 		{
-			name:           "key exist, passing nothing", // expected - do nothing
-			existKey:       skPem,
-			passedKey:      "",
-			generateIfNone: false,
-			expectedError:  "",
-		},
-		{
-			name:           "key exist, passing nothing (with generate flag)", // expected - do nothing
-			existKey:       skPem,
-			passedKey:      "",
-			generateIfNone: true,
-			expectedError:  "",
-		},
-		{
-			name:           "error raised", // expected - throw an error
-			existKey:       "",
-			passedKey:      "xxx",
-			generateIfNone: false,
-			expectedError:  "Failed to decode base64: illegal base64 data at input byte 0",
+			name:          "error raised", // expected - throw an error
+			existKey:      "",
+			passedKey:     "xxx",
+			expectedError: "Failed to decode base64: illegal base64 data at input byte 0",
 		},
 	}
 
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
-			options := basedb.Options{
-				Type: "badger-memory",
-				Path: "",
-			}
-
 			logger := logging.TestLogger(t)
-			db, err := ssvstorage.GetStorageFactory(logger, options)
+			db, err := kv.NewInMemory(logger, basedb.Options{})
 			require.NoError(t, err)
 			defer db.Close()
 
@@ -143,13 +112,12 @@ func TestSetupPrivateKey(t *testing.T) {
 				require.Equal(t, string(existKeyByte), string(rsaencryption.PrivateKeyToByte(sk)))
 			}
 
-			pk, err := operatorStorage.SetupPrivateKey(test.passedKey, test.generateIfNone)
+			pk, err := operatorStorage.SetupPrivateKey(test.passedKey)
 			if test.expectedError != "" {
 				require.NotNil(t, err)
 				require.Equal(t, test.expectedError, err.Error())
 				return
 			}
-
 			require.NoError(t, err)
 			sk, found, err := operatorStorage.GetPrivateKey()
 			require.NoError(t, err)
@@ -175,14 +143,11 @@ func TestSetupPrivateKey(t *testing.T) {
 }
 
 func TestDropRegistryData(t *testing.T) {
-	options := basedb.Options{
-		Type: "badger-memory",
-		Path: "",
-	}
 	logger := logging.TestLogger(t)
-	db, err := ssvstorage.GetStorageFactory(logger, options)
+	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 	defer db.Close()
+
 	storage, err := NewNodeStorage(logger, db)
 	require.NoError(t, err)
 
@@ -252,4 +217,41 @@ func TestDropRegistryData(t *testing.T) {
 	// Re-open storage and check again that everything is still dropped.
 	storage, err = NewNodeStorage(logger, db)
 	require.NoError(t, err)
+}
+
+func TestNetworkAndLocalEventsConfig(t *testing.T) {
+	logger := logging.TestLogger(t)
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	storage, err := NewNodeStorage(logger, db)
+	require.NoError(t, err)
+
+	storedCfg, found, err := storage.GetConfig(nil)
+	require.NoError(t, err)
+	require.False(t, found)
+	require.Nil(t, storedCfg)
+
+	c1 := &ConfigLock{
+		NetworkName:      networkconfig.TestNetwork.Name,
+		UsingLocalEvents: false,
+	}
+	require.NoError(t, storage.SaveConfig(nil, c1))
+
+	storedCfg, found, err = storage.GetConfig(nil)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, c1, storedCfg)
+
+	c2 := &ConfigLock{
+		NetworkName:      networkconfig.TestNetwork.Name + "1",
+		UsingLocalEvents: false,
+	}
+	require.NoError(t, storage.SaveConfig(nil, c2))
+
+	storedCfg, found, err = storage.GetConfig(nil)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, c2, storedCfg)
 }

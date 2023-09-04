@@ -2,16 +2,15 @@ package testing
 
 import (
 	"context"
-
-	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/operator/validator"
 )
 
 // NetworkFactory is a generic factory for network instances
-type NetworkFactory func(pctx context.Context, keys NodeKeys) network.P2PNetwork
+type NetworkFactory func(pctx context.Context, keys NodeKeys) validator.P2PNetwork
 
 // NewLocalTestnet creates a new local network
-func NewLocalTestnet(ctx context.Context, n int, factory NetworkFactory) ([]network.P2PNetwork, []NodeKeys, error) {
-	nodes := make([]network.P2PNetwork, n)
+func NewLocalTestnet(ctx context.Context, n int, factory NetworkFactory) ([]validator.P2PNetwork, []NodeKeys, error) {
+	nodes := make([]validator.P2PNetwork, n)
 	keys, err := CreateKeys(n)
 	if err != nil {
 		return nil, nil, err

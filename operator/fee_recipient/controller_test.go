@@ -23,8 +23,8 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/kv"
 )
 
 func TestSubmitProposal(t *testing.T) {
@@ -105,12 +105,7 @@ func TestSubmitProposal(t *testing.T) {
 
 func createStorage(t *testing.T) (basedb.Database, registrystorage.Shares, registrystorage.Recipients) {
 	logger := logging.TestLogger(t)
-	options := basedb.Options{
-		Type: "badger-memory",
-		Path: "",
-	}
-
-	db, err := storage.GetStorageFactory(logger, options)
+	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
 	shareStorage, err := registrystorage.NewSharesStorage(logger, db, []byte("test"))

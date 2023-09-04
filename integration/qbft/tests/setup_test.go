@@ -2,17 +2,17 @@ package tests
 
 import (
 	"context"
+	"github.com/bloxapp/ssv/operator/validator"
 	"testing"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/network"
-	p2pv1 "github.com/bloxapp/ssv/network/p2p"
-	protocolforks "github.com/bloxapp/ssv/protocol/forks"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging"
+	p2pv1 "github.com/bloxapp/ssv/network/p2p"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 const (
@@ -23,7 +23,7 @@ const (
 var sharedData *SharedData
 
 type SharedData struct {
-	Nodes map[spectypes.OperatorID]network.P2PNetwork
+	Nodes map[spectypes.OperatorID]validator.P2PNetwork
 }
 
 func GetSharedData(t *testing.T) SharedData { //singleton B-)
@@ -42,13 +42,13 @@ func TestMain(m *testing.M) {
 
 	types.SetDefaultDomain(testingutils.TestingSSVDomainType)
 
-	ln, err := p2pv1.CreateAndStartLocalNet(ctx, logger, protocolforks.GenesisForkVersion, maxSupportedCommittee, maxSupportedQuorum, false)
+	ln, err := p2pv1.CreateAndStartLocalNet(ctx, logger, maxSupportedCommittee, maxSupportedQuorum, false)
 	if err != nil {
 		logger.Fatal("error creating and start local net", zap.Error(err))
 		return
 	}
 
-	nodes := map[spectypes.OperatorID]network.P2PNetwork{}
+	nodes := map[spectypes.OperatorID]validator.P2PNetwork{}
 	for i := 0; i < len(ln.Nodes); i++ {
 		nodes[spectypes.OperatorID(i+1)] = ln.Nodes[i]
 	}

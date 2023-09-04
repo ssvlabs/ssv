@@ -131,14 +131,9 @@ func TestEventSyncer(t *testing.T) {
 }
 
 func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger) *eventhandler.EventHandler {
-	options := basedb.Options{
-		Type:      "badger-memory",
-		Path:      "",
-		Reporting: false,
-		Ctx:       ctx,
-	}
-
-	db, err := kv.New(logger, options)
+	db, err := kv.NewInMemory(logger, basedb.Options{
+		Ctx: ctx,
+	})
 	require.NoError(t, err)
 
 	storageMap := ibftstorage.NewStores()
@@ -198,7 +193,11 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database) (operatorstora
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
-	operatorPubKey, err := nodeStorage.SetupPrivateKey("", true)
+	_, pv, err := rsaencryption.GenerateKeys()
+	if err != nil {
+		logger.Fatal("failed generating operator key %v", zap.Error(err))
+	}
+	operatorPubKey, err := nodeStorage.SetupPrivateKey(base64.StdEncoding.EncodeToString(pv))
 	if err != nil {
 		logger.Fatal("could not setup operator private key", zap.Error(err))
 	}

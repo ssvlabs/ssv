@@ -2,12 +2,12 @@ package operator
 
 import (
 	"context"
-	"crypto/sha256"
 	"crypto/x509"
 	"fmt"
 	"log"
 	"math/big"
 	"net/http"
+	"os"
 	"time"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -37,7 +37,6 @@ import (
 	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/monitoring/metricsreporter"
-	"github.com/bloxapp/ssv/network"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/nodeprobe"
@@ -45,16 +44,20 @@ import (
 	"github.com/bloxapp/ssv/operator/slot_ticker"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	"github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/format"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
+
+type KeyStore struct {
+	PrivateKeyFile string `yaml:"PrivateKeyFile" env:"PRIVATE_KEY_FILE" env-description:"Operator private key file"`
+	PasswordFile   string `yaml:"PasswordFile" env:"PASSWORD_FILE" env-description:"Password for operator private key file decryption"`
+}
 
 type config struct {
 	global_config.GlobalConfig `yaml:"global"`
@@ -63,12 +66,11 @@ type config struct {
 	ExecutionClient            executionclient.ExecutionOptions `yaml:"eth1"` // TODO: execution_client in yaml
 	ConsensusClient            beaconprotocol.Options           `yaml:"eth2"` // TODO: consensus_client in yaml
 	P2pNetworkConfig           p2pv1.Config                     `yaml:"p2p"`
-
-	OperatorPrivateKey         string `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
-	GenerateOperatorPrivateKey bool   `yaml:"GenerateOperatorPrivateKey" env:"GENERATE_OPERATOR_KEY" env-description:"Whether to generate operator key if none is passed by config"`
-	MetricsAPIPort             int    `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port to listen on for the metrics API."`
-	EnableProfile              bool   `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
-	NetworkPrivateKey          string `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
+	KeyStore                   KeyStore                         `yaml:"KeyStore"`
+	OperatorPrivateKey         string                           `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
+	MetricsAPIPort             int                              `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port to listen on for the metrics API."`
+	EnableProfile              bool                             `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
+	NetworkPrivateKey          string                           `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
 
 	WsAPIPort int  `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"Port to listen on for the websocket API."`
 	WithPing  bool `yaml:"WithPing" env:"WITH_PING" env-description:"Whether to send websocket ping messages'"`
@@ -84,6 +86,7 @@ var globalArgs global_config.Args
 
 var operatorNode operator.Node
 
+// StartNodeCmd is the command to start SSV node
 var StartNodeCmd = &cobra.Command{
 	Use:   "start-node",
 	Short: "Starts an instance of SSV node",
@@ -92,27 +95,27 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal("could not create logger", err)
 		}
-
 		defer logging.CapturePanic(logger)
-
-		networkConfig, forkVersion, err := setupSSVNetwork(logger)
+		networkConfig, err := setupSSVNetwork(logger)
 		if err != nil {
-			log.Fatal("could not setup network", err)
+			logger.Fatal("could not setup network", zap.Error(err))
 		}
-
 		cfg.DBOptions.Ctx = cmd.Context()
 		db, err := setupDB(logger, networkConfig.Beacon.GetNetwork())
 		if err != nil {
 			logger.Fatal("could not setup db", zap.Error(err))
 		}
+
 		nodeStorage, operatorData := setupOperatorStorage(logger, db)
+
+		usingLocalEvents := len(cfg.LocalEventsPath) != 0
+
+		verifyConfig(logger, nodeStorage, networkConfig.Name, usingLocalEvents)
 
 		operatorKey, _, _ := nodeStorage.GetPrivateKey()
 		keyBytes := x509.MarshalPKCS1PrivateKey(operatorKey)
-		hash := sha256.Sum256(keyBytes)
-		keyString := fmt.Sprintf("%x", hash)
-
-		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkConfig, cfg.SSVOptions.ValidatorOptions.BuilderProposals, keyString)
+		hashedKey, _ := rsaencryption.HashRsaKey(keyBytes)
+		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkConfig, cfg.SSVOptions.ValidatorOptions.BuilderProposals, hashedKey)
 		if err != nil {
 			logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 		}
@@ -126,8 +129,12 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.P2pNetworkConfig.Permissioned = permissioned
 		cfg.P2pNetworkConfig.WhitelistedOperatorKeys = append(cfg.P2pNetworkConfig.WhitelistedOperatorKeys, networkConfig.WhitelistedOperatorKeys...)
+		cfg.P2pNetworkConfig.NodeStorage = nodeStorage
+		cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorData.PublicKey)
+		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
+		cfg.P2pNetworkConfig.Network = networkConfig
 
-		p2pNetwork := setupP2P(forkVersion, operatorData, db, logger, networkConfig)
+		p2pNetwork := setupP2P(logger, db)
 
 		slotTicker := slot_ticker.NewTicker(cmd.Context(), networkConfig)
 
@@ -158,14 +165,12 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not connect to execution client", zap.Error(err))
 		}
 
-		cfg.SSVOptions.ForkVersion = forkVersion
 		cfg.SSVOptions.Context = cmd.Context()
 		cfg.SSVOptions.DB = db
 		cfg.SSVOptions.BeaconNode = consensusClient
 		cfg.SSVOptions.ExecutionClient = executionClient
 		cfg.SSVOptions.Network = networkConfig
 		cfg.SSVOptions.P2PNetwork = p2pNetwork
-		cfg.SSVOptions.ValidatorOptions.ForkVersion = forkVersion
 		cfg.SSVOptions.ValidatorOptions.BeaconNetwork = networkConfig.Beacon.GetNetwork()
 		cfg.SSVOptions.ValidatorOptions.Context = cmd.Context()
 		cfg.SSVOptions.ValidatorOptions.DB = db
@@ -199,7 +204,7 @@ var StartNodeCmd = &cobra.Command{
 		storageMap := ibftstorage.NewStores()
 
 		for _, storageRole := range storageRoles {
-			storageMap.Add(storageRole, ibftstorage.New(cfg.SSVOptions.ValidatorOptions.DB, storageRole.String(), cfg.SSVOptions.ValidatorOptions.ForkVersion))
+			storageMap.Add(storageRole, ibftstorage.New(cfg.SSVOptions.ValidatorOptions.DB, storageRole.String()))
 		}
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
@@ -241,7 +246,6 @@ var StartNodeCmd = &cobra.Command{
 			validatorCtrl,
 			storageMap,
 			metricsReporter,
-			nodeProber,
 			networkConfig,
 			nodeStorage,
 		)
@@ -284,6 +288,30 @@ var StartNodeCmd = &cobra.Command{
 	},
 }
 
+func verifyConfig(logger *zap.Logger, nodeStorage operatorstorage.Storage, networkName string, usingLocalEvents bool) {
+	storedConfig, foundConfig, err := nodeStorage.GetConfig(nil)
+	if err != nil {
+		logger.Fatal("could not check saved local events config", zap.Error(err))
+	}
+
+	currentConfig := &operatorstorage.ConfigLock{
+		NetworkName:      networkName,
+		UsingLocalEvents: usingLocalEvents,
+	}
+
+	if foundConfig {
+		if err := storedConfig.EnsureSameWith(currentConfig); err != nil {
+			err = fmt.Errorf("incompatible config change: %w", err)
+			logger.Fatal(err.Error())
+		}
+	} else {
+		if err := nodeStorage.SaveConfig(nil, currentConfig); err != nil {
+			err = fmt.Errorf("failed to store config: %w", err)
+			logger.Fatal(err.Error())
+		}
+	}
+}
+
 func init() {
 	global_config.ProcessArgs(&cfg, &globalArgs, StartNodeCmd)
 }
@@ -311,7 +339,7 @@ func setupGlobal(cmd *cobra.Command) (*zap.Logger, error) {
 }
 
 func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.BadgerDB, error) {
-	db, err := storage.GetStorageFactory(logger, cfg.DBOptions)
+	db, err := kv.New(logger, cfg.DBOptions)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open db")
 	}
@@ -319,7 +347,7 @@ func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.Badger
 		if err := db.Close(); err != nil {
 			return errors.Wrap(err, "failed to close db")
 		}
-		db, err = storage.GetStorageFactory(logger, cfg.DBOptions)
+		db, err = kv.New(logger, cfg.DBOptions)
 		return errors.Wrap(err, "failed to reopen db")
 	}
 
@@ -366,7 +394,24 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database) (operatorstora
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
-	operatorPubKey, err := nodeStorage.SetupPrivateKey(cfg.OperatorPrivateKey, cfg.GenerateOperatorPrivateKey)
+	if cfg.KeyStore.PrivateKeyFile != "" {
+		encryptedJSON, err := os.ReadFile(cfg.KeyStore.PrivateKeyFile)
+		if err != nil {
+			log.Fatal("Error reading PEM file", zap.Error(err))
+		}
+		keyStorePassword, err := os.ReadFile(cfg.KeyStore.PasswordFile)
+		if err != nil {
+			log.Fatal("Error reading Password file", zap.Error(err))
+		}
+
+		privateKey, err := rsaencryption.ConvertEncryptedPemToPrivateKey(encryptedJSON, string(keyStorePassword))
+		if err != nil {
+			logger.Fatal("could not decrypt operator private key", zap.Error(err))
+		}
+		cfg.OperatorPrivateKey = rsaencryption.ExtractPrivateKey(privateKey)
+	}
+
+	operatorPubKey, err := nodeStorage.SetupPrivateKey(cfg.OperatorPrivateKey)
 	if err != nil {
 		logger.Fatal("could not setup operator private key", zap.Error(err))
 	}
@@ -389,16 +434,14 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database) (operatorstora
 	return nodeStorage, operatorData
 }
 
-func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, forksprotocol.ForkVersion, error) {
+func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 	networkConfig, err := networkconfig.GetNetworkConfigByName(cfg.SSVOptions.NetworkName)
 	if err != nil {
-		return networkconfig.NetworkConfig{}, "", err
+		return networkconfig.NetworkConfig{}, err
 	}
 
 	types.SetDefaultDomain(networkConfig.Domain)
 
-	currentEpoch := networkConfig.Beacon.EstimatedCurrentEpoch()
-	forkVersion := forksprotocol.GetCurrentForkVersion(currentEpoch)
 	nodeType := "light"
 	if cfg.SSVOptions.ValidatorOptions.FullNode {
 		nodeType = "full"
@@ -414,37 +457,23 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, forksprot
 		zap.String("nodeType", nodeType),
 		zap.String("builderProposals(MEV)", builderProposals),
 		zap.Any("beaconNetwork", networkConfig.Beacon.GetNetwork().BeaconNetwork),
-		fields.Fork(forkVersion),
 		zap.Uint64("genesisEpoch", uint64(networkConfig.GenesisEpoch)),
 		zap.String("registryContract", networkConfig.RegistryContractAddr),
 	)
 
-	return networkConfig, forkVersion, nil
+	return networkConfig, nil
 }
 
 func setupP2P(
-	forkVersion forksprotocol.ForkVersion,
-	operatorData *registrystorage.OperatorData,
-	db basedb.Database,
 	logger *zap.Logger,
-	network networkconfig.NetworkConfig,
-) network.P2PNetwork {
+	db basedb.Database,
+) validator.P2PNetwork {
 	istore := ssv_identity.NewIdentityStore(db)
 	netPrivKey, err := istore.SetupNetworkKey(logger, cfg.NetworkPrivateKey)
 	if err != nil {
 		logger.Fatal("failed to setup network private key", zap.Error(err))
 	}
-
-	cfg.P2pNetworkConfig.NodeStorage, err = operatorstorage.NewNodeStorage(logger, db)
-	if err != nil {
-		logger.Fatal("failed to create node storage", zap.Error(err))
-	}
-
 	cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
-	cfg.P2pNetworkConfig.ForkVersion = forkVersion
-	cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorData.PublicKey)
-	cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
-	cfg.P2pNetworkConfig.Network = network
 
 	return p2pv1.New(logger, &cfg.P2pNetworkConfig)
 }
@@ -470,7 +499,6 @@ func setupEventHandling(
 	validatorCtrl validator.Controller,
 	storageMap *ibftstorage.QBFTStores,
 	metricsReporter *metricsreporter.MetricsReporter,
-	nodeProber *nodeprobe.Prober,
 	networkConfig networkconfig.NetworkConfig,
 	nodeStorage operatorstorage.Storage,
 ) {
