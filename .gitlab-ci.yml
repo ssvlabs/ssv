@@ -58,8 +58,8 @@ Deploy nodes to stage:
     # +--------------------+
     # |  Deploy SSV nodes  |
     # +--------------------+
-#    - .k8/stage/scripts/deploy-cluster-1--4.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
-    - .k8/stage/scripts/deploy-cluster-5--8.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
+    - .k8/stage/scripts/deploy-cluster-1--4.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
+#    - .k8/stage/scripts/deploy-cluster-5--8.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
     # - .k8/stage/scripts/deploy-cluster-9--12.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
     # - .k8/stage/scripts/deploy-cluster-13--16.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
     #
