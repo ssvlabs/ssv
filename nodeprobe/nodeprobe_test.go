@@ -18,37 +18,56 @@ func TestProber(t *testing.T) {
 	node.healthy.Store(nil)
 
 	prober := NewProber(zap.L(), nil, map[string]Node{"test node": node})
-	prober.interval = 1 * time.Millisecond
+	prober.interval = 10 * time.Millisecond
 
-	ready, err := prober.Healthy(ctx)
+	healthy, err := prober.Healthy(ctx)
 	require.NoError(t, err)
-	require.False(t, ready)
+	require.False(t, healthy)
 
 	prober.Start(ctx)
 	prober.Wait()
 
-	ready, err = prober.Healthy(ctx)
+	healthy, err = prober.Healthy(ctx)
 	require.NoError(t, err)
-	require.True(t, ready)
+	require.True(t, healthy)
 
 	notHealthy := fmt.Errorf("not healthy")
 	node.healthy.Store(&notHealthy)
 	time.Sleep(prober.interval * 2)
 
-	ready, err = prober.Healthy(ctx)
+	healthy, err = prober.Healthy(ctx)
 	require.NoError(t, err)
-	require.False(t, ready)
+	require.False(t, healthy)
+}
 
-	var unreadyHandlerCalled atomic.Bool
-	unreadyHandler := func() {
-		unreadyHandlerCalled.Store(true)
+func TestProber_UnhealthyHandler(t *testing.T) {
+	ctx := context.Background()
+
+	node := &node{}
+	node.healthy.Store(nil)
+
+	var unhealthyHandlerCalled atomic.Bool
+	unhealthyHandler := func() {
+		unhealthyHandlerCalled.Store(true)
 	}
-	prober = NewProber(zap.L(), unreadyHandler, map[string]Node{"test node": node})
+	prober := NewProber(zap.L(), unhealthyHandler, map[string]Node{"test node": node})
+	prober.interval = 10 * time.Millisecond
 	prober.Start(ctx)
 	prober.Wait()
 
+	healthy, err := prober.Healthy(ctx)
+	require.NoError(t, err)
+	require.True(t, healthy)
+
+	notHealthy := fmt.Errorf("not healthy")
+	node.healthy.Store(&notHealthy)
+
 	time.Sleep(prober.interval * 2)
-	require.True(t, unreadyHandlerCalled.Load())
+	require.True(t, unhealthyHandlerCalled.Load())
+
+	healthy, err = prober.Healthy(ctx)
+	require.NoError(t, err)
+	require.False(t, healthy)
 }
 
 type node struct {
