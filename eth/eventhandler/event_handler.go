@@ -73,6 +73,8 @@ type EventHandler struct {
 	fullNode bool
 	logger   *zap.Logger
 	metrics  metrics
+
+	secondTime bool
 }
 
 func New(
@@ -141,6 +143,8 @@ func (eh *EventHandler) HandleBlockEventsStream(logs <-chan executionclient.Bloc
 			}
 		}
 	}
+
+	eh.secondTime = true
 
 	return
 }

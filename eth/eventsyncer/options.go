@@ -1,6 +1,8 @@
 package eventsyncer
 
 import (
+	"time"
+
 	"go.uber.org/zap"
 )
 
@@ -18,5 +20,11 @@ func WithLogger(logger *zap.Logger) Option {
 func WithMetrics(metrics metrics) Option {
 	return func(es *EventSyncer) {
 		es.metrics = metrics
+	}
+}
+
+func WithStalenessThreshold(threshold time.Duration) Option {
+	return func(es *EventSyncer) {
+		es.stalenessThreshold = threshold
 	}
 }

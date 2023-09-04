@@ -88,11 +88,8 @@ func TestEventSyncer(t *testing.T) {
 	client, err := executionclient.New(ctx, addr, contractAddr, executionclient.WithLogger(logger))
 	require.NoError(t, err)
 
-	isReady, err := client.IsReady(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	require.True(t, isReady)
+	err = client.Healthy(ctx)
+	require.NoError(t, err)
 
 	// Generate operator key
 	opPubKey, _, err := rsaencryption.GenerateKeys()
@@ -119,6 +116,7 @@ func TestEventSyncer(t *testing.T) {
 
 	eh := setupEventHandler(t, ctx, logger)
 	eventSyncer := New(
+		nil,
 		client,
 		eh,
 		WithLogger(logger),

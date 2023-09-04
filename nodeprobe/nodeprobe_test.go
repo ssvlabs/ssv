@@ -2,6 +2,7 @@ package nodeprobe
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -13,27 +14,28 @@ import (
 func TestProber(t *testing.T) {
 	ctx := context.Background()
 
-	checker := &statusChecker{}
-	checker.ready.Store(true)
+	node := &node{}
+	node.healthy.Store(nil)
 
-	prober := NewProber(zap.L(), checker)
+	prober := NewProber(zap.L(), nil, map[string]Node{"test node": node})
 	prober.interval = 1 * time.Millisecond
 
-	ready, err := prober.IsReady(ctx)
+	ready, err := prober.Healthy(ctx)
 	require.NoError(t, err)
 	require.False(t, ready)
 
 	prober.Start(ctx)
 	prober.Wait()
 
-	ready, err = prober.IsReady(ctx)
+	ready, err = prober.Healthy(ctx)
 	require.NoError(t, err)
 	require.True(t, ready)
 
-	checker.ready.Store(false)
+	notHealthy := fmt.Errorf("not healthy")
+	node.healthy.Store(&notHealthy)
 	time.Sleep(prober.interval * 2)
 
-	ready, err = prober.IsReady(ctx)
+	ready, err = prober.Healthy(ctx)
 	require.NoError(t, err)
 	require.False(t, ready)
 
@@ -41,16 +43,22 @@ func TestProber(t *testing.T) {
 	unreadyHandler := func() {
 		unreadyHandlerCalled.Store(true)
 	}
+	prober = NewProber(zap.L(), unreadyHandler, map[string]Node{"test node": node})
+	prober.Start(ctx)
+	prober.Wait()
 
-	prober.SetUnreadyHandler(unreadyHandler)
 	time.Sleep(prober.interval * 2)
 	require.True(t, unreadyHandlerCalled.Load())
 }
 
-type statusChecker struct {
-	ready atomic.Bool
+type node struct {
+	healthy atomic.Pointer[error]
 }
 
-func (sc *statusChecker) IsReady(context.Context) (bool, error) {
-	return sc.ready.Load(), nil
+func (sc *node) Healthy(context.Context) error {
+	err := sc.healthy.Load()
+	if err != nil {
+		return *err
+	}
+	return nil
 }
