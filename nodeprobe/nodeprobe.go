@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	probeInterval = 1 * time.Minute
+	probeInterval = 24 * time.Second
 )
 
 type Node interface {
@@ -30,10 +30,11 @@ type Prober struct {
 
 func NewProber(logger *zap.Logger, unhealthyHandler func(), nodes map[string]Node) *Prober {
 	return &Prober{
-		logger:   logger,
-		interval: probeInterval,
-		nodes:    nodes,
-		cond:     sync.NewCond(&sync.Mutex{}),
+		logger:           logger,
+		unhealthyHandler: unhealthyHandler,
+		interval:         probeInterval,
+		nodes:            nodes,
+		cond:             sync.NewCond(&sync.Mutex{}),
 	}
 }
 

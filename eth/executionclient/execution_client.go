@@ -116,7 +116,7 @@ func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, e
 			}
 
 			start := time.Now()
-			results, err := ec.client.FilterLogs(context.Background(), ethereum.FilterQuery{
+			results, err := ec.client.FilterLogs(ctx, ethereum.FilterQuery{
 				Addresses: []ethcommon.Address{ec.contractAddress},
 				FromBlock: new(big.Int).SetUint64(fromBlock),
 				ToBlock:   new(big.Int).SetUint64(toBlock),
@@ -280,8 +280,6 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 			return fromBlock, fmt.Errorf("subscription: %w", err)
 
 		case header := <-heads:
-			ec.logger.Debug("skipping block", zap.Uint64("block_number", header.Number.Uint64()))
-			continue
 			if header.Number.Uint64() < ec.followDistance {
 				continue
 			}

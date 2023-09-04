@@ -71,13 +71,15 @@ func (es *EventSyncer) Healthy(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to read last processed block: %w", err)
 	}
-	if !found || lastProcessedBlock == nil {
-		return fmt.Errorf("last processed block is not found")
+	if !found || lastProcessedBlock == nil || lastProcessedBlock.Uint64() == 0 {
+		return fmt.Errorf("last processed block is not set")
 	}
 	if es.lastProcessedBlock != lastProcessedBlock.Uint64() {
 		es.lastProcessedBlock = lastProcessedBlock.Uint64()
 		es.lastProcessedBlockChange = time.Now()
-	} else if time.Since(es.lastProcessedBlockChange) > es.stalenessThreshold {
+		return nil
+	}
+	if time.Since(es.lastProcessedBlockChange) > es.stalenessThreshold {
 		return fmt.Errorf("syncing is stuck at block %d", lastProcessedBlock.Uint64())
 	}
 	return nil
