@@ -668,7 +668,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 	// Receive event, unmarshall, parse, check parse event is not nil or with an error, owner is correct, operator ids are correct
 	t.Run("test ClusterLiquidated event handle", func(t *testing.T) {
-		// TODO add destructive test cases with Cluster Id hash computation and operator ids
 		_, err = boundContract.SimcontractTransactor.Liquidate(
 			auth,
 			testAddr,
@@ -693,6 +692,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			eventsCh <- block
 		}()
 
+		// Using validator 2 because we've removed validator 1 in ValidatorRemoved tests. This one has to be in the state
 		valPubKey := validatorData2.masterPubKey.Serialize()
 
 		share := eh.nodeStorage.Shares().Get(nil, valPubKey)
@@ -704,16 +704,16 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		blockNum++
 
-		//share = eh.nodeStorage.Shares().Get(nil, valPubKey)
-		//require.NotNil(t, share)
-		//require.True(t, share.Liquidated)
+		share = eh.nodeStorage.Shares().Get(nil, valPubKey)
+		require.NotNil(t, share)
+		require.True(t, share.Liquidated)
 	})
 
 	// Receive event, unmarshall, parse, check parse event is not nil or with an error, owner is correct, operator ids are correct
 	t.Run("test ClusterReactivated event handle", func(t *testing.T) {
 		_, err = boundContract.SimcontractTransactor.Reactivate(
 			auth,
-			[]uint64{1, 2, 3},
+			[]uint64{1, 2, 3, 4},
 			big.NewInt(100_000_000),
 			simcontract.CallableCluster{
 				ValidatorCount:  1,
@@ -735,10 +735,21 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			eventsCh <- block
 		}()
 
+		// Using validator 2 because we've removed validator 1 in ValidatorRemoved tests
+		valPubKey := validatorData2.masterPubKey.Serialize()
+
+		share := eh.nodeStorage.Shares().Get(nil, valPubKey)
+		require.NotNil(t, share)
+		require.True(t, share.Liquidated)
+
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
 		blockNum++
+
+		share = eh.nodeStorage.Shares().Get(nil, valPubKey)
+		require.NotNil(t, share)
+		require.False(t, share.Liquidated)
 	})
 
 	// Receive event, unmarshall, parse, check parse event is not nil or with an error, owner is correct, fee recipient is correct
