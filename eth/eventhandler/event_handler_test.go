@@ -111,9 +111,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	contractFilterer, err := client.Filterer()
 	require.NoError(t, err)
 
-	isReady, err := client.IsReady(ctx)
+	err = client.Healthy(ctx)
 	require.NoError(t, err)
-	require.True(t, isReady)
 
 	logs := client.StreamLogs(ctx, 0)
 
