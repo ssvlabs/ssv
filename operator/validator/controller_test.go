@@ -43,15 +43,16 @@ import (
 // 1. a validator with a non-empty share and empty metadata - test a scenario if we cannot get metadata from beacon node
 
 type MockControllerOptions struct {
-	metrics           Metrics
-	network           P2PNetwork
-	recipientsStorage Recipients
-	sharesStorage     SharesStorage
-	validatorsMap     *validatorsMap
-	beacon            beacon.BeaconNode
-	signer            spectypes.KeyManager
-	StorageMap        *ibftstorage.QBFTStores
-	operatorData      *registrystorage.OperatorData
+	metrics             Metrics
+	network             P2PNetwork
+	recipientsStorage   Recipients
+	sharesStorage       SharesStorage
+	validatorsMap       *validatorsMap
+	beacon              beacon.BeaconNode
+	signer              spectypes.KeyManager
+	StorageMap          *ibftstorage.QBFTStores
+	metadataLastUpdated map[string]time.Time
+	operatorData        *registrystorage.OperatorData
 }
 
 func TestHandleNonCommitteeMessages(t *testing.T) {
@@ -131,6 +132,9 @@ func TestSetupValidators(t *testing.T) {
 		t.Fatalf("Length mismatch: validatorKey has length %d, but expected %d", len(validatorKey), len(validatorPublicKey))
 	}
 
+	metadataLastMap := make(map[string]time.Time)
+	metadataLastMap[validatorPublicKey.String()] = time.Now()
+
 	operators := make([]*spectypes.Operator, len(operatorIds))
 	for i, id := range operatorIds {
 		operatorKey, keyError := createKey()
@@ -174,23 +178,6 @@ func TestSetupValidators(t *testing.T) {
 	testValidator := setupTestValidator(ownerAddressBytes, feeRecipientBytes)
 	storageMu := sync.Mutex{}
 	storageData := make(map[string]*beacon.ValidatorMetadata)
-	//ctx, cancel := context.WithCancel(context.Background())
-	//options := validator.Options{
-	//	Storage: newStores(logger),
-	//	Network: st,
-	//	SSVShare: &types.SSVShare{
-	//		Share: *testingShare(keySet, id),
-	//		Metadata: types.Metadata{
-	//			BeaconMetadata: &protocolbeacon.ValidatorMetadata{
-	//				Index: spec.ValidatorIndex(1),
-	//			},
-	//			OwnerAddress: common.HexToAddress("0x0"),
-	//			Liquidated:   false,
-	//		},
-	//	},
-	//	Beacon: spectestingutils.NewTestingBeaconNode(),
-	//	Signer: km,
-	//}
 
 	bcResponse := map[phase0.ValidatorIndex]*eth2apiv1.Validator{
 		0: {
@@ -215,6 +202,7 @@ func TestSetupValidators(t *testing.T) {
 		comparisonObject   *setUpValidatorsResult
 		recipientData      *registrystorage.RecipientData
 		bcResponse         map[phase0.ValidatorIndex]*eth2apiv1.Validator
+		validatorStartFunc func(validator *validator.Validator) (bool, error)
 	}{
 		{
 			name:               "setting fee recipient to storage data",
@@ -232,6 +220,9 @@ func TestSetupValidators(t *testing.T) {
 			bcResponse:    bcResponse,
 			bcResponseErr: nil,
 			bcMockTimes:   1,
+			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
+				return true, nil
+			},
 		},
 		{
 			name:               "setting fee recipient to owner address",
@@ -249,6 +240,9 @@ func TestSetupValidators(t *testing.T) {
 			bcResponse:    bcResponse,
 			bcResponseErr: nil,
 			bcMockTimes:   1,
+			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
+				return true, nil
+			},
 		},
 		{
 			name:               "failed to set fee recipient",
@@ -266,6 +260,9 @@ func TestSetupValidators(t *testing.T) {
 			bcResponse:    bcResponse,
 			bcResponseErr: nil,
 			bcMockTimes:   0,
+			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
+				return true, nil
+			},
 		},
 		{
 			name:               "start share with metadata",
@@ -283,6 +280,9 @@ func TestSetupValidators(t *testing.T) {
 			bcResponse:    bcResponse,
 			bcResponseErr: nil,
 			bcMockTimes:   0,
+			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
+				return true, nil
+			},
 		},
 		{
 			name:               "start share without metadata",
@@ -300,6 +300,9 @@ func TestSetupValidators(t *testing.T) {
 				Failures:        0,
 				MissingMetadata: 1,
 			},
+			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
+				return true, nil
+			},
 		},
 		{
 			name:               "failed to get GetValidatorData",
@@ -312,6 +315,29 @@ func TestSetupValidators(t *testing.T) {
 			comparisonObject:   nil,
 			bcResponseErr:      errors.New("some error"),
 			shares:             []*types.SSVShare{shareWithoutMetaData},
+			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
+				return true, nil
+			},
+		},
+		{
+			name:               "failed to start validator",
+			shares:             []*types.SSVShare{shareWithMetaData},
+			recipientData:      nil,
+			recipientFound:     false,
+			recipientErr:       nil,
+			recipientMockTimes: 1,
+			comparisonObject: &setUpValidatorsResult{
+				Shares:          1,
+				Started:         0,
+				Failures:        1,
+				MissingMetadata: 0,
+			},
+			bcResponse:    bcResponse,
+			bcResponseErr: nil,
+			bcMockTimes:   0,
+			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
+				return true, errors.New("some error")
+			},
 		},
 	}
 
@@ -347,19 +373,21 @@ func TestSetupValidators(t *testing.T) {
 
 			// Set up the controller with mock data
 			controllerOptions := MockControllerOptions{
-				beacon:            bc,
-				signer:            km,
-				metrics:           metrics,
-				network:           network,
-				sharesStorage:     sharesStorage,
-				operatorData:      operatorData,
-				recipientsStorage: recipientStorage,
-				validatorsMap:     mockValidatorMap,
+				beacon:              bc,
+				signer:              km,
+				metrics:             metrics,
+				network:             network,
+				sharesStorage:       sharesStorage,
+				operatorData:        operatorData,
+				recipientsStorage:   recipientStorage,
+				validatorsMap:       mockValidatorMap,
+				metadataLastUpdated: metadataLastMap,
 			}
 
 			recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(tc.recipientData, tc.recipientFound, tc.recipientErr).Times(tc.recipientMockTimes)
 			bc.EXPECT().GetValidatorData(gomock.Any()).Return(tc.bcResponse, tc.bcResponseErr).Times(tc.bcMockTimes)
 			ctr := setupController(logger, controllerOptions)
+			ctr.validatorStartFunc = tc.validatorStartFunc
 			disableMetrics(metrics)
 			result, setupValidatorError := ctr.setupValidators(tc.shares)
 			require.Equal(t, tc.comparisonObject, result, setupValidatorError)
@@ -781,6 +809,7 @@ func setupController(logger *zap.Logger, opts MockControllerOptions) controller 
 			WorkersCount: 1,
 			Buffer:       100,
 		}),
+		metadataLastUpdated: opts.metadataLastUpdated,
 	}
 }
 
