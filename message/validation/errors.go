@@ -57,10 +57,15 @@ var (
 	ErrEarlyMessage                        = Error{text: "early message"}
 	ErrLateMessage                         = Error{text: "late message"}
 	ErrTooManySameTypeMessagesPerRound     = Error{text: "too many messages of same type per round"}
-	ErrUnexpectedMessageOrder              = Error{text: "unexpected message order", silent: true}
+	ErrUnexpectedMessageOrder              = Error{text: "unexpected message order", silent: true} // TODO: consider disabling: network delays/issues may cause wrong receipt order, and in practice this case happens very often
 	ErrDecidedSignersSequence              = Error{text: "decided must have more signers than previous decided", silent: true}
 	ErrNonCommitteeOnlyDecided             = Error{text: "non-committee message can be only decided", silent: true}
-	ErrDataTooBig                          = Error{text: "data too big", reject: true}
+	ErrPubSubMessageHasNoData              = Error{text: "pub-sub message has no data", reject: true}
+	ErrPubSubDataTooBig                    = Error{text: "pub-sub message data too big", reject: true}
+	ErrMalformedPubSubMessage              = Error{text: "pub-sub message is malformed", reject: true}
+	ErrEmptyPubSubMessage                  = Error{text: "pub-sub message is empty", reject: true}
+	ErrTopicNotFound                       = Error{text: "topic not found", reject: true}
+	ErrSSVDataTooBig                       = Error{text: "ssv message data too big", reject: true}
 	ErrInvalidRole                         = Error{text: "invalid role", reject: true}
 	ErrNoSigners                           = Error{text: "no signers", reject: true}
 	ErrWrongSignatureSize                  = Error{text: "wrong signature size", reject: true}

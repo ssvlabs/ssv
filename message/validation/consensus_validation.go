@@ -100,12 +100,7 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		}
 	}
 
-	consensusID := ConsensusID{
-		PubKey: phase0.BLSPubKey(msg.GetID().GetPubKey()),
-		Role:   role,
-	}
-	state := mv.consensusState(consensusID)
-
+	state := mv.consensusState(msg.GetID())
 	for _, signer := range signedMsg.Signers {
 		if err := mv.validateSignerBehavior(state, signer, share, msg); err != nil {
 			return consensusDescriptor, msgSlot, fmt.Errorf("bad signer behavior: %w", err)

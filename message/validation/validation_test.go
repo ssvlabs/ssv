@@ -2,6 +2,7 @@ package validation
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"math"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/stretchr/testify/require"
 	eth2types "github.com/wealdtech/go-eth2-types/v2"
 	"go.uber.org/zap/zaptest"
@@ -70,7 +72,104 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("bad format", func(t *testing.T) {
+	t.Run("message counts", func(t *testing.T) {
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		height := specqbft.Height(slot)
+
+		msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester)
+		state := validator.consensusState(msgID)
+		for i := spectypes.OperatorID(1); i <= 4; i++ {
+			signerState := state.GetSignerState(i)
+			require.Nil(t, signerState)
+		}
+
+		signedMsg := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
+		encodedMsg, err := signedMsg.Encode()
+		require.NoError(t, err)
+
+		ssvMsg := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   msgID,
+			Data:    encodedMsg,
+		}
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
+		_, _, err = validator.validateSSVMessage(ssvMsg, receivedAt)
+		require.NoError(t, err)
+
+		_, _, err = validator.validateSSVMessage(ssvMsg, receivedAt)
+		require.ErrorContains(t, err, ErrTooManySameTypeMessagesPerRound.Error())
+
+		state1 := state.GetSignerState(1)
+		require.NotNil(t, state1)
+		require.EqualValues(t, height, state1.Slot)
+		require.EqualValues(t, 1, state1.Round)
+		require.EqualValues(t, MessageCounts{Proposal: 1}, state1.MessageCounts)
+		for i := spectypes.OperatorID(2); i <= 4; i++ {
+			signerState := state.GetSignerState(i)
+			require.Nil(t, signerState)
+		}
+
+		signedMsg = spectestingutils.TestingPrepareMessageWithParams(ks.Shares[1], 1, 2, height, spectestingutils.TestingIdentifier, spectestingutils.TestingQBFTRootData)
+		encodedMsg, err = signedMsg.Encode()
+		require.NoError(t, err)
+
+		ssvMsg.Data = encodedMsg
+		_, _, err = validator.validateSSVMessage(ssvMsg, receivedAt)
+		require.NoError(t, err)
+
+		require.NotNil(t, state1)
+		require.EqualValues(t, height, state1.Slot)
+		require.EqualValues(t, 2, state1.Round)
+		require.EqualValues(t, MessageCounts{Prepare: 1}, state1.MessageCounts)
+
+		_, _, err = validator.validateSSVMessage(ssvMsg, receivedAt)
+		require.ErrorContains(t, err, ErrTooManySameTypeMessagesPerRound.Error())
+
+		signedMsg = spectestingutils.TestingCommitMessageWithHeight(ks.Shares[1], 1, height+1)
+		encodedMsg, err = signedMsg.Encode()
+		require.NoError(t, err)
+
+		ssvMsg.Data = encodedMsg
+		_, _, err = validator.validateSSVMessage(ssvMsg, receivedAt.Add(netCfg.Beacon.SlotDurationSec()))
+		require.NoError(t, err)
+		require.NotNil(t, state1)
+		require.EqualValues(t, height+1, state1.Slot)
+		require.EqualValues(t, 1, state1.Round)
+		require.EqualValues(t, MessageCounts{Commit: 1}, state1.MessageCounts)
+
+		_, _, err = validator.validateSSVMessage(ssvMsg, receivedAt.Add(netCfg.Beacon.SlotDurationSec()))
+		require.ErrorContains(t, err, ErrTooManySameTypeMessagesPerRound.Error())
+
+		signedMsg = spectestingutils.TestingCommitMultiSignerMessageWithHeight([]*bls.SecretKey{ks.Shares[1], ks.Shares[2], ks.Shares[3]}, []spectypes.OperatorID{1, 2, 3}, height+1)
+		encodedMsg, err = signedMsg.Encode()
+		require.NoError(t, err)
+
+		ssvMsg.Data = encodedMsg
+		_, _, err = validator.validateSSVMessage(ssvMsg, receivedAt.Add(netCfg.Beacon.SlotDurationSec()))
+		require.NoError(t, err)
+		require.NotNil(t, state1)
+		require.EqualValues(t, height+1, state1.Slot)
+		require.EqualValues(t, 1, state1.Round)
+		require.EqualValues(t, MessageCounts{Commit: 1, Decided: 1, lastDecidedSigners: 3}, state1.MessageCounts)
+	})
+
+	t.Run("bad pubsub message", func(t *testing.T) {
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		pmsg := &pubsub.Message{}
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
+		_, _, err := validator.validateP2PMessage(context.TODO(), "", pmsg, receivedAt)
+
+		require.ErrorIs(t, err, ErrPubSubMessageHasNoData)
+	})
+
+	t.Run("bad data format", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
@@ -121,7 +220,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		_, _, err := validator.validateSSVMessage(message, time.Now())
-		expectedErr := ErrDataTooBig
+		expectedErr := ErrSSVDataTooBig
 		expectedErr.got = tooBigMsgSize
 		expectedErr.want = maxMessageSize
 		require.ErrorIs(t, err, expectedErr)
@@ -1042,11 +1141,6 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester)
-		consensusID := ConsensusID{
-			PubKey: phase0.BLSPubKey(msgID.GetPubKey()),
-			Role:   msgID.GetRoleType(),
-		}
-		state := validator.consensusState(consensusID)
 
 		signed := spectestingutils.TestingCommitMultiSignerMessageWithRound(
 			[]*bls.SecretKey{ks.Shares[1], ks.Shares[2], ks.Shares[3]}, []spectypes.OperatorID{1, 2, 3}, 1)
@@ -1061,6 +1155,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
 
+		state := validator.consensusState(msgID)
 		for i := 0; i < maxDecidedCount(len(share.Committee)); i++ {
 			_, _, err = validator.validateSSVMessage(message, receivedAt)
 			require.NoError(t, err)

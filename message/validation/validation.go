@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"math"
 	"strings"
 	"sync"
 	"time"
@@ -187,10 +186,6 @@ func (mv *MessageValidator) ValidatorForTopic(topic string) func(ctx context.Con
 }
 
 func (mv *MessageValidator) ValidateP2PMessage(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
-	return mv.validateP2PMessage(ctx, p, pmsg, time.Now())
-}
-
-func (mv *MessageValidator) validateP2PMessage(ctx context.Context, p peer.ID, pmsg *pubsub.Message, receivedAt time.Time) pubsub.ValidationResult {
 	start := time.Now()
 	var validationDurationLabels []string // TODO: implement
 
@@ -200,60 +195,7 @@ func (mv *MessageValidator) validateP2PMessage(ctx context.Context, p peer.ID, p
 		//mv.logger.Debug("processed message", zap.Duration("took", sinceStart))
 	}()
 
-	topic := pmsg.GetTopic()
-
-	mv.metrics.ActiveMsgValidation(topic)
-	defer mv.metrics.ActiveMsgValidationDone(topic)
-
-	messageData := pmsg.GetData()
-	if len(messageData) == 0 {
-		mv.metrics.MessageRejected("no data", nil, math.MaxUint64, 0, 0)
-		return pubsub.ValidationReject
-	}
-
-	mv.metrics.MessageSize(len(messageData))
-
-	// Max possible MsgType + MsgID + Data plus 10% for encoding overhead
-	// TODO: check if we need to add 10% here
-	const maxMsgSize = 4 + 56 + 8388668
-	const maxEncodedMsgSize = maxMsgSize + maxMsgSize/10
-	if len(messageData) > maxEncodedMsgSize {
-		mv.metrics.MessageRejected("message is too big", nil, math.MaxUint64, 0, 0)
-		return pubsub.ValidationReject
-	}
-
-	msg, err := commons.DecodeNetworkMsg(messageData)
-	if err != nil {
-		// can't decode message
-		// logger.Debug("invalid: can't decode message", zap.Error(err))
-		mv.metrics.MessageRejected("could not decode network message", nil, math.MaxUint64, 0, 0)
-		return pubsub.ValidationReject
-	}
-	if msg == nil {
-		mv.metrics.MessageRejected("message is nil", nil, math.MaxUint64, 0, 0)
-		return pubsub.ValidationReject
-	}
-
-	// Check if the message was sent on the right topic.
-	currentTopic := pmsg.GetTopic()
-	currentTopicBaseName := commons.GetTopicBaseName(currentTopic)
-	topics := commons.ValidatorTopicID(msg.GetID().GetPubKey())
-
-	topicFound := false
-	for _, tp := range topics {
-		if tp == currentTopicBaseName {
-			topicFound = true
-			break
-		}
-	}
-	if !topicFound {
-		mv.metrics.MessageRejected("topic not found", msg.GetID().GetPubKey(), math.MaxUint64, 0, 0)
-		return pubsub.ValidationReject
-	}
-
-	mv.metrics.SSVMessageType(msg.MsgType)
-
-	decodedMessage, descriptor, err := mv.validateSSVMessage(msg, receivedAt)
+	decodedMessage, descriptor, err := mv.validateP2PMessage(ctx, p, pmsg, time.Now())
 	round := specqbft.Round(0)
 	if descriptor.Consensus != nil {
 		round = descriptor.Consensus.Round
@@ -316,6 +258,61 @@ func (mv *MessageValidator) validateP2PMessage(ctx context.Context, p peer.ID, p
 	return pubsub.ValidationAccept
 }
 
+func (mv *MessageValidator) validateP2PMessage(ctx context.Context, p peer.ID, pmsg *pubsub.Message, receivedAt time.Time) (*queue.DecodedSSVMessage, Descriptor, error) {
+	topic := pmsg.GetTopic()
+
+	mv.metrics.ActiveMsgValidation(topic)
+	defer mv.metrics.ActiveMsgValidationDone(topic)
+
+	messageData := pmsg.GetData()
+	if len(messageData) == 0 {
+		return nil, Descriptor{}, ErrPubSubMessageHasNoData
+	}
+
+	mv.metrics.MessageSize(len(messageData))
+
+	// Max possible MsgType + MsgID + Data plus 10% for encoding overhead
+	const maxMsgSize = 4 + 56 + 8388668
+	const maxEncodedMsgSize = maxMsgSize + maxMsgSize/10
+	if len(messageData) > maxEncodedMsgSize {
+		e := ErrPubSubDataTooBig
+		e.got = len(messageData)
+		return nil, Descriptor{}, e
+	}
+
+	msg, err := commons.DecodeNetworkMsg(messageData)
+	if err != nil {
+		e := ErrMalformedPubSubMessage
+		e.innerErr = err
+		return nil, Descriptor{}, e
+	}
+
+	if msg == nil {
+		return nil, Descriptor{}, ErrEmptyPubSubMessage
+	}
+
+	// Check if the message was sent on the right topic.
+	currentTopic := pmsg.GetTopic()
+	currentTopicBaseName := commons.GetTopicBaseName(currentTopic)
+	topics := commons.ValidatorTopicID(msg.GetID().GetPubKey())
+
+	topicFound := false
+	for _, tp := range topics {
+		if tp == currentTopicBaseName {
+			topicFound = true
+			break
+		}
+	}
+	if !topicFound {
+		return nil, Descriptor{}, ErrTopicNotFound
+	}
+
+	mv.metrics.SSVMessageType(msg.MsgType)
+
+	return mv.validateSSVMessage(msg, receivedAt)
+
+}
+
 func (mv *MessageValidator) ValidateSSVMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, Descriptor, error) {
 	return mv.validateSSVMessage(ssvMessage, time.Now())
 }
@@ -328,7 +325,7 @@ func (mv *MessageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 	}
 
 	if len(ssvMessage.Data) > maxMessageSize {
-		err := ErrDataTooBig
+		err := ErrSSVDataTooBig
 		err.got = len(ssvMessage.Data)
 		err.want = maxMessageSize
 		return nil, descriptor, err
@@ -489,7 +486,12 @@ func (mv *MessageValidator) lateMessage(slot phase0.Slot, role spectypes.BeaconR
 		Sub(deadline)
 }
 
-func (mv *MessageValidator) consensusState(id ConsensusID) *ConsensusState {
+func (mv *MessageValidator) consensusState(messageID spectypes.MessageID) *ConsensusState {
+	id := ConsensusID{
+		PubKey: phase0.BLSPubKey(messageID.GetPubKey()),
+		Role:   messageID.GetRoleType(),
+	}
+
 	if _, ok := mv.index.Load(id); !ok {
 		cs := &ConsensusState{
 			Signers: hashmap.New[spectypes.OperatorID, *SignerState](),

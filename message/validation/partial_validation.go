@@ -44,12 +44,7 @@ func (mv *MessageValidator) validatePartialSignatureMessage(share *ssvtypes.SSVS
 
 	// TODO: check running duty
 
-	consensusID := ConsensusID{
-		PubKey: phase0.BLSPubKey(msg.GetID().GetPubKey()),
-		Role:   role,
-	}
-
-	consensusState := mv.consensusState(consensusID)
+	consensusState := mv.consensusState(msg.GetID())
 	signerState := consensusState.GetSignerState(signedMsg.Signer)
 
 	if signerState != nil {
