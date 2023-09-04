@@ -3,6 +3,7 @@ package validator
 import (
 	"encoding/hex"
 	"fmt"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"go.uber.org/multierr"
@@ -78,7 +79,14 @@ func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []uint6
 		}
 	}
 	if startedValidators > 0 {
-		c.indicesChange <- struct{}{}
+		// Notify DutyScheduler about the changes in validator indices without blocking.
+		go func() {
+			select {
+			case c.indicesChange <- struct{}{}:
+			case <-time.After(12 * time.Second):
+				logger.Error("failed to notify indices change")
+			}
+		}()
 	}
 	logger.Debug("reactivated cluster",
 		zap.Int("cluster_validators", len(toReactivate)),

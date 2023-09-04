@@ -82,9 +82,8 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	client, err := New(ctx, addr, contractAddr, WithLogger(logger), WithFollowDistance(followDistance))
 	require.NoError(t, err)
 
-	isReady, err := client.IsReady(ctx)
+	err = client.Healthy(ctx)
 	require.NoError(t, err)
-	require.True(t, isReady)
 
 	// Create blocks with transactions
 	for i := 0; i < blocksWithLogsLength; i++ {
@@ -148,9 +147,8 @@ func TestStreamLogs(t *testing.T) {
 	client, err := New(ctx, addr, contractAddr, WithLogger(logger), WithFollowDistance(followDistance))
 	require.NoError(t, err)
 
-	isReady, err := client.IsReady(ctx)
+	err = client.Healthy(ctx)
 	require.NoError(t, err)
-	require.True(t, isReady)
 
 	logs := client.StreamLogs(ctx, 0)
 	var wg sync.WaitGroup
@@ -440,9 +438,8 @@ func TestSimSSV(t *testing.T) {
 	client, err := New(ctx, addr, contractAddr, WithLogger(logger), WithFollowDistance(0))
 	require.NoError(t, err)
 
-	isReady, err := client.IsReady(ctx)
+	err = client.Healthy(ctx)
 	require.NoError(t, err)
-	require.True(t, isReady)
 
 	logs := client.StreamLogs(ctx, 0)
 
