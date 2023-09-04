@@ -214,10 +214,11 @@ func (mv *MessageValidator) validateSignerBehavior(
 			return err
 		}
 
+		if err := mv.validateDutiesCount(signerState, msg.MsgID.GetRoleType()); err != nil {
+			return err
+		}
+
 		if !(msgSlot > signerState.Slot || msgSlot == signerState.Slot && msgRound > signerState.Round) {
-			if err := mv.validateDutiesCount(signerState, msg.MsgID.GetRoleType()); err != nil {
-				return err
-			}
 
 			if mv.hasFullData(signedMsg) && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
 				return ErrDuplicatedProposalWithDifferentData
@@ -240,7 +241,7 @@ func (mv *MessageValidator) validateSignerBehavior(
 func (mv *MessageValidator) validateDutiesCount(state *SignerState, role spectypes.BeaconRole) error {
 	switch role {
 	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator, spectypes.BNRoleValidatorRegistration:
-		if state.EpochDuties > maxDutiesPerEpoch {
+		if state.EpochDuties >= maxDutiesPerEpoch {
 			err := ErrTooManyDutiesPerEpoch
 			err.got = fmt.Sprintf("%v (role %v)", state.EpochDuties, role)
 			err.want = maxDutiesPerEpoch
