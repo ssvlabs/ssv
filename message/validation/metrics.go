@@ -15,6 +15,7 @@ type metrics interface {
 	SSVMessageType(msgType spectypes.MsgType)
 	ConsensusMsgType(msgType specqbft.MessageType, signers int)
 	MessageValidationDuration(duration time.Duration, labels ...string)
+	SignatureValidationDuration(duration time.Duration, labels ...string)
 	MessageSize(size int)
 	ActiveMsgValidation(topic string)
 	ActiveMsgValidationDone(topic string)
@@ -29,8 +30,9 @@ func (*nopMetrics) MessageIgnored(string, spectypes.ValidatorPK, spectypes.Beaco
 }
 func (*nopMetrics) MessageRejected(string, spectypes.ValidatorPK, spectypes.BeaconRole, phase0.Slot, specqbft.Round) {
 }
-func (*nopMetrics) SSVMessageType(spectypes.MsgType)                   {}
-func (*nopMetrics) MessageValidationDuration(time.Duration, ...string) {}
-func (*nopMetrics) MessageSize(int)                                    {}
-func (*nopMetrics) ActiveMsgValidation(string)                         {}
-func (*nopMetrics) ActiveMsgValidationDone(string)                     {}
+func (*nopMetrics) SSVMessageType(spectypes.MsgType)                     {}
+func (*nopMetrics) MessageValidationDuration(time.Duration, ...string)   {}
+func (*nopMetrics) SignatureValidationDuration(time.Duration, ...string) {}
+func (*nopMetrics) MessageSize(int)                                      {}
+func (*nopMetrics) ActiveMsgValidation(string)                           {}
+func (*nopMetrics) ActiveMsgValidationDone(string)                       {}

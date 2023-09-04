@@ -91,6 +91,11 @@ var (
 		Help:    "Message validation duration (seconds)",
 		Buckets: []float64{0.000_500, 0.001, 0.002, 0.003, 0.004, 0.005, 0.010, 0.050},
 	}, []string{})
+	signatureValidationDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "ssv_signature_validation_duration_seconds",
+		Help:    "Signature validation duration (seconds)",
+		Buckets: []float64{0.000_500, 0.001, 0.002, 0.003, 0.004, 0.005, 0.010, 0.050},
+	}, []string{})
 	messageSize = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "ssv_message_size",
 		Help:    "Message size",
@@ -128,6 +133,7 @@ func New(opts ...Option) *MetricsReporter {
 		messageValidationSSVType,
 		messageValidationConsensusType,
 		messageValidationDuration,
+		signatureValidationDuration,
 		messageSize,
 		activeMsgValidation,
 	}
@@ -280,6 +286,10 @@ func (m *MetricsReporter) ConsensusMsgType(msgType specqbft.MessageType, signers
 
 func (m *MetricsReporter) MessageValidationDuration(duration time.Duration, labels ...string) {
 	messageValidationDuration.WithLabelValues(labels...).Observe(duration.Seconds())
+}
+
+func (m *MetricsReporter) SignatureValidationDuration(duration time.Duration, labels ...string) {
+	signatureValidationDuration.WithLabelValues(labels...).Observe(duration.Seconds())
 }
 
 func (m *MetricsReporter) MessageSize(size int) {

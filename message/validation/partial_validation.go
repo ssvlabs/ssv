@@ -4,11 +4,13 @@ package validation
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
@@ -161,13 +163,26 @@ func (mv *MessageValidator) verifyPartialSignature(msg *spectypes.PartialSignatu
 			return fmt.Errorf("deserialize signature: %w", err)
 		}
 
-		if !ssvtypes.Verifier.AggregateVerify(sig, []bls.PublicKey{pk}, root) {
+		if !mv.aggregateVerify(sig, pk, root) {
 			return fmt.Errorf("wrong partial signature")
 		}
+
 		return nil
 	}
 
 	return ErrSignerNotInCommittee
+}
+
+func (mv *MessageValidator) aggregateVerify(sig *bls.Sign, pk bls.PublicKey, root [32]byte) bool {
+	start := time.Now()
+
+	valid := ssvtypes.Verifier.AggregateVerify(sig, []bls.PublicKey{pk}, root)
+
+	sinceStart := time.Since(start)
+	mv.metrics.SignatureValidationDuration(sinceStart)
+	mv.logger.Debug("verified signature message", zap.Duration("took", sinceStart), zap.Bool("valid", valid))
+
+	return valid
 }
 
 func (mv *MessageValidator) validPartialSigners(share *ssvtypes.SSVShare, m *spectypes.SignedPartialSignatureMessage) error {
