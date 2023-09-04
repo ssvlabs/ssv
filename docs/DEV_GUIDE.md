@@ -72,18 +72,21 @@ $ ./bin/ssvnode create-threshold --count <number of ssv nodes> --private-key <pr
 ```
 
 #### Generating an Operator Key
-To generate an operator key, you can use `./bin/ssvnode generate-operator-keys`. This command can generate the key in two ways: raw format or encrypted format.
+To generate an operator key, you can use `./bin/ssvnode generate-operator-keys`. This command can generate the key in three distinct ways:
+1) Raw format
+2) Encrypted format as keystore.json
+3) Convert an existing key to encrypted keystore.json format
 
 **IMPORTANT**: The raw format is **NOT recommended** for production use, as it can expose sensitive data. Use the encrypted format for added security.
 
-**Raw Operator Key Generation:**
+**Option 1: Raw Operator Key Generation:**
 This is the default mode of operation and does not require any additional parameters.
 ```bash
 $ ./bin/ssvnode generate-operator-keys
 ```
 This will generate an operator key in raw format.
 
-**Encrypted Operator Key Generation:**
+**Option 2: Encrypted Operator Key Generation as keystore.json:**
 
 To generate an operator key in encrypted format, use the `--password-file` option followed by your password file.
 
@@ -92,6 +95,18 @@ $ ./bin/ssvnode generate-operator-keys --password-file=path/to/your/file
 ```
 
 Please replace `path/to/your/file` with your password file. This will generate an operator key in encrypted format.
+
+**Option 3: Convert an Existing Key to keystore.json:**
+
+To convert an existing key to keystore.json format, use both the `--password-file` and `--operator-key-file` options.
+
+```bash
+$ ./bin/ssvnode generate-operator-keys --password-file=path/to/your/password/file --operator-key-file=path/to/your/existing/key/file
+```
+
+Please replace `path/to/your/password/file` with your password file and `path/to/your/existing/key/file` with your existing key file. This will convert the existing key to a keystore.json file as an encrypted private key.
+
+
 
 Keep your password safe as it will be required to decrypt the operator key for use.
 
@@ -139,7 +154,7 @@ This section details the steps to run a local network of operator nodes.
 In order to run a local environment, install the following:
 
 * git
-* go (1.19)
+* go (1.20)
 * docker
 * make
 * yq

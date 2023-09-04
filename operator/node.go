@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
 
@@ -20,7 +19,6 @@ import (
 	"github.com/bloxapp/ssv/operator/slot_ticker"
 	"github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
@@ -43,8 +41,6 @@ type Options struct {
 	ValidatorController validator.Controller
 	ValidatorOptions    validator.ControllerOptions `yaml:"ValidatorOptions"`
 
-	ForkVersion forksprotocol.ForkVersion
-
 	WS        api.WebSocketServer
 	WsAPIPort int
 
@@ -64,9 +60,6 @@ type operatorNode struct {
 	qbftStorage      *qbftstorage.QBFTStores
 	dutyScheduler    *duties.Scheduler
 	feeRecipientCtrl fee_recipient.RecipientController
-	// fork           *forks.Forker
-
-	forkVersion forksprotocol.ForkVersion
 
 	ws        api.WebSocketServer
 	wsAPIPort int
@@ -87,7 +80,7 @@ func New(logger *zap.Logger, opts Options, slotTicker slot_ticker.Ticker) Node {
 		spectypes.BNRoleValidatorRegistration,
 	}
 	for _, role := range roles {
-		storageMap.Add(role, qbftstorage.New(opts.DB, role.String(), opts.ForkVersion))
+		storageMap.Add(role, qbftstorage.New(opts.DB, role.String()))
 	}
 
 	node := &operatorNode{
@@ -119,7 +112,6 @@ func New(logger *zap.Logger, opts Options, slotTicker slot_ticker.Ticker) Node {
 			Ticker:           slotTicker,
 			OperatorData:     opts.ValidatorOptions.OperatorData,
 		}),
-		forkVersion: opts.ForkVersion,
 
 		ws:        opts.WS,
 		wsAPIPort: opts.WsAPIPort,
@@ -149,11 +141,6 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 	}()
 
 	go n.ticker.Start(logger)
-	go func() {
-		if err := n.listenForCurrentSlot(logger); err != nil {
-			logger.Fatal("unexpected error while listening for current slot", zap.Error(err))
-		}
-	}()
 	n.validatorsCtrl.StartNetworkHandlers()
 	n.validatorsCtrl.StartValidators()
 	go n.net.UpdateSubnets(logger)
@@ -170,20 +157,6 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 
 	if err := n.dutyScheduler.Wait(); err != nil {
 		logger.Fatal("duty scheduler exited with error", zap.Error(err))
-	}
-
-	return nil
-}
-
-// listenForCurrentSlot listens to current slot and trigger relevant components if needed
-func (n *operatorNode) listenForCurrentSlot(logger *zap.Logger) error {
-	tickerChan := make(chan phase0.Slot, 32)
-	n.ticker.Subscribe(tickerChan)
-
-	for slot := range tickerChan {
-		if err := n.setFork(logger, slot); err != nil {
-			return err
-		}
 	}
 
 	return nil

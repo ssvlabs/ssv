@@ -18,16 +18,13 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/network"
-	forksfactory "github.com/bloxapp/ssv/network/forks/factory"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	protcolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 func TestGetMaxPeers(t *testing.T) {
 	n := &p2pNetwork{
-		cfg:  &Config{MaxPeers: 40, TopicMaxPeers: 8},
-		fork: forksfactory.NewFork(forksprotocol.GenesisForkVersion),
+		cfg: &Config{MaxPeers: 40, TopicMaxPeers: 8},
 	}
 
 	require.Equal(t, 40, n.getMaxPeers(""))
@@ -42,7 +39,7 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	pks := []string{"b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400",
 		"824b9024767a01b56790a72afb5f18bb0f97d5bddb946a7bd8dd35cc607c35a4d76be21f24f484d0d478b99dc63ed170"}
 
-	ln, routers, err := createNetworkAndSubscribe(t, ctx, n, forksprotocol.GenesisForkVersion, pks...)
+	ln, routers, err := createNetworkAndSubscribe(t, ctx, n, pks...)
 	require.NoError(t, err)
 	require.NotNil(t, routers)
 	require.NotNil(t, ln)
@@ -115,7 +112,7 @@ func TestP2pNetwork_Stream(t *testing.T) {
 
 	pkHex := "b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400"
 
-	ln, _, err := createNetworkAndSubscribe(t, ctx, n, forksprotocol.GenesisForkVersion, pkHex)
+	ln, _, err := createNetworkAndSubscribe(t, ctx, n, pkHex)
 	require.NoError(t, err)
 	require.Len(t, ln.Nodes, n)
 
@@ -238,9 +235,9 @@ func registerHandler(logger *zap.Logger, node network.P2PNetwork, mid spectypes.
 	})
 }
 
-func createNetworkAndSubscribe(t *testing.T, ctx context.Context, n int, forkVersion forksprotocol.ForkVersion, pks ...string) (*LocalNet, []*dummyRouter, error) {
+func createNetworkAndSubscribe(t *testing.T, ctx context.Context, n int, pks ...string) (*LocalNet, []*dummyRouter, error) {
 	logger := logging.TestLogger(t)
-	ln, err := CreateAndStartLocalNet(ctx, logger.Named("createNetworkAndSubscribe"), forkVersion, n, n/2-1, false)
+	ln, err := CreateAndStartLocalNet(ctx, logger.Named("createNetworkAndSubscribe"), n, n/2-1, false)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -251,8 +248,6 @@ func createNetworkAndSubscribe(t *testing.T, ctx context.Context, n int, forkVer
 	logger.Debug("created local network")
 
 	routers := make([]*dummyRouter, n)
-	// for now, skip routers for v0
-	// if forkVersion != forksprotocol.GenesisForkVersion {
 	for i, node := range ln.Nodes {
 		routers[i] = &dummyRouter{i: i}
 		node.UseMessageRouter(routers[i])

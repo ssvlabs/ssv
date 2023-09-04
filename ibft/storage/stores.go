@@ -4,7 +4,6 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
 
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
@@ -23,7 +22,7 @@ func NewStores() *QBFTStores {
 func NewStoresFromRoles(db basedb.Database, roles ...spectypes.BeaconRole) *QBFTStores {
 	stores := NewStores()
 	for _, role := range roles {
-		stores.Add(role, New(db, role.String(), forksprotocol.GenesisForkVersion))
+		stores.Add(role, New(db, role.String()))
 	}
 	return stores
 }

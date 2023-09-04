@@ -260,7 +260,8 @@ func (km *ethKeyManagerSigner) AddShare(shareKey *bls.SecretKey) error {
 		return errors.Wrap(err, "could not check share existence")
 	}
 	if acc == nil {
-		if err := km.saveMinimalSlashingProtection(shareKey.GetPublicKey().Serialize()); err != nil {
+		currentSlot := km.storage.Network().EstimatedCurrentSlot()
+		if err := km.saveMinimalSlashingProtection(shareKey.GetPublicKey().Serialize(), currentSlot); err != nil {
 			return errors.Wrap(err, "could not save minimal slashing protection")
 		}
 		if err := km.saveShare(shareKey); err != nil {
@@ -271,8 +272,7 @@ func (km *ethKeyManagerSigner) AddShare(shareKey *bls.SecretKey) error {
 	return nil
 }
 
-func (km *ethKeyManagerSigner) saveMinimalSlashingProtection(pk []byte) error {
-	currentSlot := km.storage.Network().EstimatedCurrentSlot()
+func (km *ethKeyManagerSigner) saveMinimalSlashingProtection(pk []byte, currentSlot phase0.Slot) error {
 	currentEpoch := km.storage.Network().EstimatedEpochAtSlot(currentSlot)
 	highestTarget := currentEpoch + minimalAttSlashingProtectionEpochDistance
 	highestSource := highestTarget - 1

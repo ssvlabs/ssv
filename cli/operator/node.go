@@ -45,7 +45,6 @@ import (
 	"github.com/bloxapp/ssv/operator/slot_ticker"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
@@ -98,7 +97,7 @@ var StartNodeCmd = &cobra.Command{
 			log.Fatal("could not create logger", err)
 		}
 		defer logging.CapturePanic(logger)
-		networkConfig, forkVersion, err := setupSSVNetwork(logger)
+		networkConfig, err := setupSSVNetwork(logger)
 		if err != nil {
 			logger.Fatal("could not setup network", zap.Error(err))
 		}
@@ -132,7 +131,6 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.Permissioned = permissioned
 		cfg.P2pNetworkConfig.WhitelistedOperatorKeys = append(cfg.P2pNetworkConfig.WhitelistedOperatorKeys, networkConfig.WhitelistedOperatorKeys...)
 		cfg.P2pNetworkConfig.NodeStorage = nodeStorage
-		cfg.P2pNetworkConfig.ForkVersion = forkVersion
 		cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorData.PublicKey)
 		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
 		cfg.P2pNetworkConfig.Network = networkConfig
@@ -168,14 +166,12 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not connect to execution client", zap.Error(err))
 		}
 
-		cfg.SSVOptions.ForkVersion = forkVersion
 		cfg.SSVOptions.Context = cmd.Context()
 		cfg.SSVOptions.DB = db
 		cfg.SSVOptions.BeaconNode = consensusClient
 		cfg.SSVOptions.ExecutionClient = executionClient
 		cfg.SSVOptions.Network = networkConfig
 		cfg.SSVOptions.P2PNetwork = p2pNetwork
-		cfg.SSVOptions.ValidatorOptions.ForkVersion = forkVersion
 		cfg.SSVOptions.ValidatorOptions.BeaconNetwork = networkConfig.Beacon.GetNetwork()
 		cfg.SSVOptions.ValidatorOptions.Context = cmd.Context()
 		cfg.SSVOptions.ValidatorOptions.DB = db
@@ -208,7 +204,7 @@ var StartNodeCmd = &cobra.Command{
 		storageMap := ibftstorage.NewStores()
 
 		for _, storageRole := range storageRoles {
-			storageMap.Add(storageRole, ibftstorage.New(cfg.SSVOptions.ValidatorOptions.DB, storageRole.String(), cfg.SSVOptions.ValidatorOptions.ForkVersion))
+			storageMap.Add(storageRole, ibftstorage.New(cfg.SSVOptions.ValidatorOptions.DB, storageRole.String()))
 		}
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
@@ -226,24 +222,26 @@ var StartNodeCmd = &cobra.Command{
 
 		nodeProber := nodeprobe.NewProber(
 			logger,
-			executionClient,
-			// Underlying options.Beacon's value implements nodeprobe.StatusChecker.
-			// However, as it uses spec's specssv.BeaconNode interface, avoiding type assertion requires modifications in spec.
-			// If options.Beacon doesn't implement nodeprobe.StatusChecker due to a mistake, this would panic early.
-			consensusClient.(nodeprobe.StatusChecker),
+			func() {
+				logger.Fatal("ethereum node(s) are either out of sync or down. Ensure the nodes are healthy to resume.")
+			},
+			map[string]nodeprobe.Node{
+				"execution client": executionClient,
+
+				// Underlying options.Beacon's value implements nodeprobe.StatusChecker.
+				// However, as it uses spec's specssv.BeaconNode interface, avoiding type assertion requires modifications in spec.
+				// If options.Beacon doesn't implement nodeprobe.StatusChecker due to a mistake, this would panic early.
+				"consensus client": consensusClient.(nodeprobe.Node),
+			},
 		)
 
 		nodeProber.Start(cmd.Context())
 		nodeProber.Wait()
-		logger.Info("ethereum node(s) are ready")
-
-		nodeProber.SetUnreadyHandler(func() {
-			logger.Fatal("ethereum node(s) are either out of sync or down. Ensure the nodes are ready to resume.")
-		})
+		logger.Info("ethereum node(s) are healthy")
 
 		metricsReporter.SSVNodeHealthy()
 
-		setupEventHandling(
+		eventSyncer := setupEventHandling(
 			cmd.Context(),
 			logger,
 			executionClient,
@@ -253,6 +251,7 @@ var StartNodeCmd = &cobra.Command{
 			networkConfig,
 			nodeStorage,
 		)
+		nodeProber.AddNode("event syncer", eventSyncer)
 
 		cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, uint64, error) {
 			return validatorCtrl.GetValidatorStats()
@@ -438,16 +437,14 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database) (operatorstora
 	return nodeStorage, operatorData
 }
 
-func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, forksprotocol.ForkVersion, error) {
+func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 	networkConfig, err := networkconfig.GetNetworkConfigByName(cfg.SSVOptions.NetworkName)
 	if err != nil {
-		return networkconfig.NetworkConfig{}, "", err
+		return networkconfig.NetworkConfig{}, err
 	}
 
 	types.SetDefaultDomain(networkConfig.Domain)
 
-	currentEpoch := networkConfig.Beacon.EstimatedCurrentEpoch()
-	forkVersion := forksprotocol.GetCurrentForkVersion(currentEpoch)
 	nodeType := "light"
 	if cfg.SSVOptions.ValidatorOptions.FullNode {
 		nodeType = "full"
@@ -463,12 +460,11 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, forksprot
 		zap.String("nodeType", nodeType),
 		zap.String("builderProposals(MEV)", builderProposals),
 		zap.Any("beaconNetwork", networkConfig.Beacon.GetNetwork().BeaconNetwork),
-		fields.Fork(forkVersion),
 		zap.Uint64("genesisEpoch", uint64(networkConfig.GenesisEpoch)),
 		zap.String("registryContract", networkConfig.RegistryContractAddr),
 	)
 
-	return networkConfig, forkVersion, nil
+	return networkConfig, nil
 }
 
 func setupP2P(
@@ -508,7 +504,7 @@ func setupEventHandling(
 	metricsReporter *metricsreporter.MetricsReporter,
 	networkConfig networkconfig.NetworkConfig,
 	nodeStorage operatorstorage.Storage,
-) {
+) *eventsyncer.EventSyncer {
 	eventFilterer, err := executionClient.Filterer()
 	if err != nil {
 		logger.Fatal("failed to set up event filterer", zap.Error(err))
@@ -535,6 +531,7 @@ func setupEventHandling(
 	}
 
 	eventSyncer := eventsyncer.New(
+		nodeStorage,
 		executionClient,
 		eventHandler,
 		eventsyncer.WithLogger(logger),
@@ -615,6 +612,8 @@ func setupEventHandling(
 				zap.Error(err))
 		}()
 	}
+
+	return eventSyncer
 }
 
 func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.Database, metricsReporter *metricsreporter.MetricsReporter, port int, enableProf bool) {
