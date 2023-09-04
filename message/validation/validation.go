@@ -197,7 +197,7 @@ func (mv *MessageValidator) validateP2PMessage(ctx context.Context, p peer.ID, p
 	defer func() {
 		sinceStart := time.Since(start)
 		mv.metrics.MessageValidationDuration(sinceStart, validationDurationLabels...)
-		mv.logger.Debug("processed message", zap.Duration("took", sinceStart))
+		//mv.logger.Debug("processed message", zap.Duration("took", sinceStart))
 	}()
 
 	topic := pmsg.GetTopic()

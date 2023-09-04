@@ -10,7 +10,6 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
@@ -180,7 +179,7 @@ func (mv *MessageValidator) aggregateVerify(sig *bls.Sign, pk bls.PublicKey, roo
 
 	sinceStart := time.Since(start)
 	mv.metrics.SignatureValidationDuration(sinceStart)
-	mv.logger.Debug("verified signature message", zap.Duration("took", sinceStart), zap.Bool("valid", valid))
+	//mv.logger.Debug("verified signature message", zap.Duration("took", sinceStart), zap.Bool("valid", valid))
 
 	return valid
 }
