@@ -38,7 +38,7 @@ func (mv *MessageValidator) validatePartialSignatureMessage(share *ssvtypes.SSVS
 		return msgSlot, ErrPartialSignatureTypeRoleMismatch
 	}
 
-	if err := mv.validPartialSigners(share, signedMsg); err != nil {
+	if err := mv.validatePartialMessages(share, signedMsg); err != nil {
 		return msgSlot, err
 	}
 
@@ -57,6 +57,10 @@ func (mv *MessageValidator) validatePartialSignatureMessage(share *ssvtypes.SSVS
 			err.got = msgSlot
 			return msgSlot, err
 		}
+	}
+
+	if err := mv.validateSignatureFormat(signedMsg.Signature); err != nil {
+		return msgSlot, err
 	}
 
 	if err := mv.validPartialSignatures(share, signedMsg); err != nil {
@@ -108,10 +112,6 @@ func (mv *MessageValidator) partialSignatureTypeMatchesRole(msgType spectypes.Pa
 }
 
 func (mv *MessageValidator) validPartialSignatures(share *ssvtypes.SSVShare, signedMsg *spectypes.SignedPartialSignatureMessage) error {
-	if err := mv.validateSignatureFormat(signedMsg.Signature); err != nil {
-		return err
-	}
-
 	//if err := ssvtypes.VerifyByOperators(signedMsg.Signature, signedMsg, mv.netCfg.Domain, spectypes.PartialSignatureType, share.Committee); err != nil {
 	//	signErr := ErrInvalidSignature
 	//	signErr.innerErr = err
@@ -119,17 +119,7 @@ func (mv *MessageValidator) validPartialSignatures(share *ssvtypes.SSVShare, sig
 	//	return signErr
 	//}
 
-	seen := map[[32]byte]struct{}{}
 	for _, message := range signedMsg.Message.Messages {
-		if _, ok := seen[message.SigningRoot]; ok {
-			return fmt.Errorf("duplicated partial signature message")
-		}
-		seen[message.SigningRoot] = struct{}{}
-
-		if err := mv.validateSignatureFormat(message.PartialSignature); err != nil {
-			return err
-		}
-
 		if err := mv.verifyPartialSignature(message, share); err != nil {
 			return err
 		}
@@ -179,19 +169,34 @@ func (mv *MessageValidator) aggregateVerify(sig *bls.Sign, pk bls.PublicKey, roo
 	return valid
 }
 
-func (mv *MessageValidator) validPartialSigners(share *ssvtypes.SSVShare, m *spectypes.SignedPartialSignatureMessage) error {
+func (mv *MessageValidator) validatePartialMessages(share *ssvtypes.SSVShare, m *spectypes.SignedPartialSignatureMessage) error {
 	if err := mv.commonSignerValidation(m.Signer, share); err != nil {
 		return err
 	}
 
+	if len(m.Message.Messages) == 0 {
+		return ErrNoPartialMessages
+	}
+
+	seen := map[[32]byte]struct{}{}
 	for _, message := range m.Message.Messages {
+		if _, ok := seen[message.SigningRoot]; ok {
+			return ErrDuplicatedPartialSignatureMessage
+		}
+		seen[message.SigningRoot] = struct{}{}
+
 		if message.Signer != m.Signer {
 			err := ErrUnexpectedSigner
 			err.want = m.Signer
 			err.got = message.Signer
 			return err
 		}
+
 		if err := mv.commonSignerValidation(message.Signer, share); err != nil {
+			return err
+		}
+
+		if err := mv.validateSignatureFormat(message.PartialSignature); err != nil {
 			return err
 		}
 	}
