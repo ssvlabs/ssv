@@ -175,8 +175,7 @@ func (mv *MessageValidator) verifyPartialSignature(msg *spectypes.PartialSignatu
 func (mv *MessageValidator) aggregateVerify(sig *bls.Sign, pk bls.PublicKey, root [32]byte) bool {
 	start := time.Now()
 
-	//valid := ssvtypes.Verifier.AggregateVerify(sig, []bls.PublicKey{pk}, root)
-	valid := sig.AggregateVerify([]bls.PublicKey{pk}, root[:])
+	valid := ssvtypes.Verifier.AggregateVerify(sig, []bls.PublicKey{pk}, root)
 
 	sinceStart := time.Since(start)
 	mv.metrics.SignatureValidationDuration(sinceStart)
