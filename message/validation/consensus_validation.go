@@ -249,14 +249,16 @@ func (mv *MessageValidator) validateDutiesCount(state *SignerState, role spectyp
 	switch role {
 	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator, spectypes.BNRoleValidatorRegistration:
 		limit = maxDutiesPerEpoch
-		// TODO: check other roles
+	// TODO: check other roles
+	default:
+		return nil
 	}
 
 	if !stateToBeReset {
 		limit++
 	}
 
-	if limit != 0 && state.EpochDuties >= limit {
+	if state.EpochDuties >= limit {
 		err := ErrTooManyDutiesPerEpoch
 		err.got = fmt.Sprintf("%v (role %v)", state.EpochDuties, role)
 		err.want = fmt.Sprintf("less than %v", maxDutiesPerEpoch)
