@@ -214,7 +214,12 @@ func (mv *MessageValidator) validateSignerBehavior(
 			return err
 		}
 
-		if err := mv.validateDutiesCount(signerState, msg.MsgID.GetRoleType()); err != nil {
+		stateToBeReset := false
+		if msgSlot > signerState.Slot || msgSlot == signerState.Slot && msgRound > signerState.Round {
+			stateToBeReset = true
+		}
+
+		if err := mv.validateDutiesCount(signerState, msg.MsgID.GetRoleType(), stateToBeReset); err != nil {
 			return err
 		}
 
@@ -238,16 +243,24 @@ func (mv *MessageValidator) validateSignerBehavior(
 	return nil
 }
 
-func (mv *MessageValidator) validateDutiesCount(state *SignerState, role spectypes.BeaconRole) error {
+func (mv *MessageValidator) validateDutiesCount(state *SignerState, role spectypes.BeaconRole, stateToBeReset bool) error {
+	var limit int
+
 	switch role {
 	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator, spectypes.BNRoleValidatorRegistration:
-		if state.EpochDuties >= maxDutiesPerEpoch {
-			err := ErrTooManyDutiesPerEpoch
-			err.got = fmt.Sprintf("%v (role %v)", state.EpochDuties, role)
-			err.want = maxDutiesPerEpoch
-			return err
-		}
+		limit = maxDutiesPerEpoch
 		// TODO: check other roles
+	}
+
+	if !stateToBeReset {
+		limit++
+	}
+
+	if limit != 0 && state.EpochDuties >= limit {
+		err := ErrTooManyDutiesPerEpoch
+		err.got = fmt.Sprintf("%v (role %v)", state.EpochDuties, role)
+		err.want = fmt.Sprintf("less than %v", maxDutiesPerEpoch)
+		return err
 	}
 
 	return nil
