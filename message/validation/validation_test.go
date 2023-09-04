@@ -891,16 +891,18 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		for role, receivedAt := range tests {
-			msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role)
+			t.Run(role.String(), func(t *testing.T) {
+				msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role)
 
-			message := &spectypes.SSVMessage{
-				MsgType: spectypes.SSVConsensusMsgType,
-				MsgID:   msgID,
-				Data:    encodedValidSignedMessage,
-			}
+				message := &spectypes.SSVMessage{
+					MsgType: spectypes.SSVConsensusMsgType,
+					MsgID:   msgID,
+					Data:    encodedValidSignedMessage,
+				}
 
-			_, _, err = validator.validateSSVMessage(message, receivedAt)
-			require.ErrorContains(t, err, ErrLateMessage.Error())
+				_, _, err = validator.validateSSVMessage(message, receivedAt)
+				require.ErrorContains(t, err, ErrLateMessage.Error())
+			})
 		}
 	})
 
@@ -1311,22 +1313,34 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("round too high", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
 
-		msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester)
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-
-		signedMessage := spectestingutils.TestingPrepareMessageWithRound(ks.Shares[1], 1, validator.maxRound(msgID.GetRoleType())+1)
-		encodedMessage, err := signedMessage.Encode()
-		require.NoError(t, err)
-
-		ssvMessage := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   msgID,
-			Data:    encodedMessage,
+		tests := map[spectypes.BeaconRole]specqbft.Round{
+			spectypes.BNRoleAttester:                  13,
+			spectypes.BNRoleAggregator:                13,
+			spectypes.BNRoleProposer:                  7,
+			spectypes.BNRoleSyncCommittee:             7,
+			spectypes.BNRoleSyncCommitteeContribution: 7,
+			spectypes.BNRoleValidatorRegistration:     1,
 		}
 
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(ssvMessage, receivedAt)
-		require.ErrorContains(t, err, ErrRoundTooHigh.Error())
+		for role, round := range tests {
+			t.Run(role.String(), func(t *testing.T) {
+				msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role)
+
+				signedMessage := spectestingutils.TestingPrepareMessageWithRound(ks.Shares[1], 1, round)
+				encodedMessage, err := signedMessage.Encode()
+				require.NoError(t, err)
+
+				ssvMessage := &spectypes.SSVMessage{
+					MsgType: spectypes.SSVConsensusMsgType,
+					MsgID:   msgID,
+					Data:    encodedMessage,
+				}
+
+				receivedAt := netCfg.Beacon.GetSlotStartTime(0).Add(validator.waitAfterSlotStart(role))
+				_, _, err = validator.validateSSVMessage(ssvMessage, receivedAt)
+				require.ErrorContains(t, err, ErrRoundTooHigh.Error())
+			})
+		}
 	})
 
 	t.Run("round already advanced", func(t *testing.T) {
