@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
@@ -183,15 +184,22 @@ func TestPriorityQueue_Order(t *testing.T) {
 	}
 }
 
-type mockMetrics struct {
-	dropped int
+type testMetrics struct {
+	dropped atomic.Uint64
 }
 
-func (m *mockMetrics) Dropped() { m.dropped++ }
+func (n *testMetrics) IncomingQueueMessage(messageID spectypes.MessageID) {}
+func (n *testMetrics) OutgoingQueueMessage(messageID spectypes.MessageID) {}
+func (n *testMetrics) DroppedQueueMessage(messageID spectypes.MessageID) {
+	n.dropped.Add(1)
+}
+func (n *testMetrics) MessageQueueSize(size int)                                         {}
+func (n *testMetrics) MessageQueueCapacity(size int)                                     {}
+func (n *testMetrics) MessageTimeInQueue(messageID spectypes.MessageID, d time.Duration) {}
 
 func TestWithMetrics(t *testing.T) {
-	var metrics mockMetrics
-	queue := WithMetrics(New(1), &metrics)
+	metrics := &testMetrics{}
+	queue := WithMetrics(New(1), metrics)
 	require.True(t, queue.Empty())
 
 	// Push 1 message.
@@ -200,13 +208,13 @@ func TestWithMetrics(t *testing.T) {
 	pushed := queue.TryPush(msg)
 	require.True(t, pushed)
 	require.False(t, queue.Empty())
-	require.Equal(t, 0, metrics.dropped)
+	require.EqualValues(t, 0, metrics.dropped.Load())
 
 	// Push above capacity.
 	pushed = queue.TryPush(msg)
 	require.False(t, pushed)
 	require.False(t, queue.Empty())
-	require.Equal(t, 1, metrics.dropped)
+	require.EqualValues(t, 1, metrics.dropped.Load())
 }
 
 func BenchmarkPriorityQueue_Parallel(b *testing.B) {

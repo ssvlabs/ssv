@@ -77,7 +77,7 @@ type ControllerOptions struct {
 	NewDecidedHandler          qbftcontroller.NewDecidedHandler
 	DutyRoles                  []spectypes.BeaconRole
 	StorageMap                 *storage.QBFTStores
-	Metrics                    validatorMetrics
+	Metrics                    validator.Metrics
 	MessageValidator           *validation.MessageValidator
 
 	// worker flags
@@ -122,7 +122,7 @@ type controller struct {
 	context context.Context
 
 	logger  *zap.Logger
-	metrics validatorMetrics
+	metrics validator.Metrics
 
 	sharesStorage     registrystorage.Shares
 	operatorsStorage  registrystorage.Operators
@@ -184,6 +184,8 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		Exporter:          options.Exporter,
 		BuilderProposals:  options.BuilderProposals,
 		GasLimit:          options.GasLimit,
+		MessageValidator:  options.MessageValidator,
+		Metrics:           options.Metrics,
 	}
 
 	// If full node, increase queue size to make enough room
@@ -193,10 +195,6 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		if size > validator.DefaultQueueSize {
 			validatorOptions.QueueSize = size
 		}
-	}
-
-	if options.Metrics == nil {
-		options.Metrics = nopMetrics{}
 	}
 
 	ctrl := controller{
@@ -681,7 +679,7 @@ func (c *controller) onShareStart(share *ssvtypes.SSVShare) (bool, error) {
 	}
 
 	// Start a committee validator.
-	v, err := c.validatorsMap.GetOrCreateValidator(c.logger.Named("validatorsMap"), share, c.messageValidator)
+	v, err := c.validatorsMap.GetOrCreateValidator(c.logger.Named("validatorsMap"), share)
 	if err != nil {
 		return false, errors.Wrap(err, "could not get or create validator")
 	}

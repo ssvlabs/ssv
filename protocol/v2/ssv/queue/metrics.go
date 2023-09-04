@@ -1,61 +1,109 @@
 package queue
 
 import (
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
+	"context"
+	"time"
+
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/jellydator/ttlcache/v3"
 )
+
+const defaultTTL = 1 * time.Minute
 
 // Metrics records metrics about the Queue.
 type Metrics interface {
-	// Dropped increments the number of messages dropped from the Queue.
-	Dropped()
+	IncomingQueueMessage(messageID spectypes.MessageID)
+	OutgoingQueueMessage(messageID spectypes.MessageID)
+	DroppedQueueMessage(messageID spectypes.MessageID)
+	MessageQueueSize(size int)
+	MessageQueueCapacity(size int)
+	MessageTimeInQueue(messageID spectypes.MessageID, d time.Duration)
 }
 
 type queueWithMetrics struct {
 	Queue
-	metrics Metrics
+	metrics            Metrics
+	messageReceiptTime *ttlcache.Cache[spectypes.MessageID, time.Time]
 }
 
 // WithMetrics returns a wrapping of the given Queue that records metrics using the given Metrics.
 func WithMetrics(q Queue, metrics Metrics) Queue {
-	return &queueWithMetrics{
+	qm := &queueWithMetrics{
 		Queue:   q,
 		metrics: metrics,
+		messageReceiptTime: ttlcache.New(
+			ttlcache.WithTTL[spectypes.MessageID, time.Time](defaultTTL),
+		),
 	}
+
+	go qm.messageReceiptTime.Start()
+
+	return qm
+}
+
+func (q *queueWithMetrics) Close() error {
+	q.messageReceiptTime.Stop()
+	return nil
+}
+
+func (q *queueWithMetrics) Push(msg *DecodedSSVMessage) {
+	q.Queue.TryPush(msg)
+
+	msgID := msg.GetID()
+	q.processPushedMessage(msgID)
 }
 
 func (q *queueWithMetrics) TryPush(msg *DecodedSSVMessage) bool {
+	msgID := msg.GetID()
+
 	pushed := q.Queue.TryPush(msg)
 	if !pushed {
-		q.metrics.Dropped()
+		q.metrics.DroppedQueueMessage(msgID)
 	}
+
+	q.processPushedMessage(msgID)
+
 	return pushed
 }
 
-// TODO: move to metrics/prometheus package
-type prometheusMetrics struct {
-	dropped prometheus.Counter
+func (q *queueWithMetrics) Pop(ctx context.Context, mp MessagePrioritizer, f Filter) *DecodedSSVMessage {
+	msg := q.Queue.Pop(ctx, mp, f)
+
+	q.processPoppedMessage(msg.GetID())
+
+	return msg
 }
 
-// NewPrometheusMetrics returns a Prometheus implementation of Metrics.
-func NewPrometheusMetrics(messageID string) Metrics {
-	return &prometheusMetrics{
-		dropped: metricMessageDropped.WithLabelValues(messageID),
+func (q *queueWithMetrics) TryPop(mp MessagePrioritizer, f Filter) *DecodedSSVMessage {
+	msg := q.Queue.TryPop(mp, f)
+
+	q.processPoppedMessage(msg.GetID())
+
+	return msg
+}
+
+func (q *queueWithMetrics) processPushedMessage(msgID spectypes.MessageID) {
+	q.metrics.IncomingQueueMessage(msgID)
+	q.messageReceiptTime.Set(msgID, time.Now(), defaultTTL)
+}
+
+func (q *queueWithMetrics) processPoppedMessage(msgID spectypes.MessageID) {
+	q.metrics.OutgoingQueueMessage(msgID)
+
+	timeInQueue := defaultTTL
+	entry := q.messageReceiptTime.Get(msgID)
+	if entry != nil {
+		timeInQueue = time.Since(entry.Value())
 	}
+	q.metrics.MessageTimeInQueue(msgID, timeInQueue)
 }
 
-func (m *prometheusMetrics) Dropped() {
-	m.dropped.Inc()
-}
+func (q *queueWithMetrics) Len() int {
+	l := q.Queue.Len()
+	c := q.Queue.Cap()
 
-// Register Prometheus metrics.
-var (
-	metricMessageDropped = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv:ibft:msgq:drops",
-		Help: "The amount of message dropped from the validator's msg queue",
-	}, []string{"msg_id"})
-)
+	q.metrics.MessageQueueSize(l)
+	q.metrics.MessageQueueCapacity(c)
 
-func init() {
-	_ = prometheus.Register(metricMessageDropped)
+	return l
 }

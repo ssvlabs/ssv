@@ -48,6 +48,10 @@ type Validator struct {
 func NewValidator(pctx context.Context, cancel func(), options Options) *Validator {
 	options.defaults()
 
+	if options.Metrics == nil {
+		options.Metrics = &nopMetrics{}
+	}
+
 	v := &Validator{
 		mtx:              &sync.RWMutex{},
 		ctx:              pctx,
@@ -69,10 +73,9 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 
 		// Setup the queue.
 		role := dutyRunner.GetBaseRunner().BeaconRoleType
-		msgID := spectypes.NewMsgID(types.GetDefaultDomain(), options.SSVShare.ValidatorPubKey, role).String()
 
 		v.Queues[role] = queueContainer{
-			Q: queue.WithMetrics(queue.New(options.QueueSize), queue.NewPrometheusMetrics(msgID)),
+			Q: queue.WithMetrics(queue.New(options.QueueSize), options.Metrics),
 			queueState: &queue.State{
 				HasRunningInstance: false,
 				Height:             0,

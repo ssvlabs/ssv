@@ -105,6 +105,33 @@ var (
 		Name: "ssv:p2p:pubsub:msg:val:active",
 		Help: "Count active message validation",
 	}, []string{"topic"})
+	incomingQueueMessages = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_message_queue_incoming",
+		Help: "The amount of message incoming to the validator's msg queue",
+	}, []string{"msg_id"})
+	outgoingQueueMessages = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_message_queue_outgoing",
+		Help: "The amount of message outgoing from the validator's msg queue",
+	}, []string{"msg_id"})
+	droppedQueueMessages = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_message_queue_drops",
+		Help: "The amount of message dropped from the validator's msg queue",
+	}, []string{"msg_id"})
+	messageQueueSize = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "ssv_message_queue_size",
+		Help:    "Size of message queue",
+		Buckets: []float64{1, 3, 5, 10, 20, 32},
+	}, []string{})
+	messageQueueCapacity = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "ssv_message_queue_capacity",
+		Help:    "Capacity of message queue",
+		Buckets: []float64{32, 40, 50},
+	}, []string{})
+	messageTimeInQueue = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "ssv_message_time_in_queue_seconds",
+		Help:    "Time message spent in queue (seconds",
+		Buckets: []float64{0.001, 0.005, 0.010, 0.050, 0.100, 0.500, 1, 5, 10, 60},
+	}, []string{"msg_id"})
 )
 
 type MetricsReporter struct {
@@ -136,6 +163,12 @@ func New(opts ...Option) *MetricsReporter {
 		signatureValidationDuration,
 		messageSize,
 		activeMsgValidation,
+		incomingQueueMessages,
+		outgoingQueueMessages,
+		droppedQueueMessages,
+		messageQueueSize,
+		messageQueueCapacity,
+		messageTimeInQueue,
 	}
 
 	for i, c := range allMetrics {
@@ -302,4 +335,28 @@ func (m *MetricsReporter) ActiveMsgValidation(topic string) {
 
 func (m *MetricsReporter) ActiveMsgValidationDone(topic string) {
 	activeMsgValidation.WithLabelValues(topic).Dec()
+}
+
+func (m *MetricsReporter) IncomingQueueMessage(messageID spectypes.MessageID) {
+	incomingQueueMessages.WithLabelValues(messageID.String()).Inc()
+}
+
+func (m *MetricsReporter) OutgoingQueueMessage(messageID spectypes.MessageID) {
+	outgoingQueueMessages.WithLabelValues(messageID.String()).Inc()
+}
+
+func (m *MetricsReporter) DroppedQueueMessage(messageID spectypes.MessageID) {
+	droppedQueueMessages.WithLabelValues(messageID.String()).Inc()
+}
+
+func (m *MetricsReporter) MessageQueueSize(size int) {
+	messageQueueSize.WithLabelValues().Observe(float64(size))
+}
+
+func (m *MetricsReporter) MessageQueueCapacity(size int) {
+	messageQueueCapacity.WithLabelValues().Observe(float64(size))
+}
+
+func (m *MetricsReporter) MessageTimeInQueue(messageID spectypes.MessageID, d time.Duration) {
+	messageTimeInQueue.WithLabelValues(messageID.String()).Observe(d.Seconds())
 }
