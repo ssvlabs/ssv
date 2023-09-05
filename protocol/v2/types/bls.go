@@ -44,16 +44,16 @@ func DeserializeBLSPublicKey(b []byte) (bls.PublicKey, error) {
 // DeserializeBLSSignature deserializes a bls.Sign from bytes,
 // caching the result to avoid repeated deserialization.
 func DeserializeBLSSignature(b []byte) (bls.Sign, error) {
-	sigStr := string(b)
-	if sig, ok := blsSignatureCache.Get(sigStr); ok {
-		return sig, nil
+	pkStr := string(b)
+	if pk, ok := blsSignatureCache.Get(pkStr); ok {
+		return pk, nil
 	}
 
 	sig := bls.Sign{}
 	if err := sig.Deserialize(b); err != nil {
 		return bls.Sign{}, err
 	}
-	blsSignatureCache.Add(sigStr, sig)
+	blsSignatureCache.Add(pkStr, sig)
 
 	return sig, nil
 }
