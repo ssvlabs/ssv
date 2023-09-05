@@ -23,6 +23,12 @@ func (mv *MessageValidator) validatePartialSignatureMessage(share *ssvtypes.SSVS
 		return 0, fmt.Errorf("expected partial signature message")
 	}
 
+	if mv.inCommittee(share) {
+		mv.metrics.InCommitteeMessage(spectypes.SSVPartialSignatureMsgType, false)
+	} else {
+		mv.metrics.NonCommitteeMessage(spectypes.SSVPartialSignatureMsgType, false)
+	}
+
 	msgSlot := signedMsg.Message.Slot
 
 	if len(msg.Data) > maxPartialSignatureMsgSize {

@@ -27,6 +27,12 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		return consensusDescriptor, 0, fmt.Errorf("expected consensus message")
 	}
 
+	if mv.inCommittee(share) {
+		mv.metrics.InCommitteeMessage(spectypes.SSVConsensusMsgType, mv.isDecidedMessage(signedMsg))
+	} else {
+		mv.metrics.NonCommitteeMessage(spectypes.SSVConsensusMsgType, mv.isDecidedMessage(signedMsg))
+	}
+
 	msgSlot := phase0.Slot(signedMsg.Message.Height)
 	msgRound := signedMsg.Message.Round
 

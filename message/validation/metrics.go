@@ -19,6 +19,8 @@ type metrics interface {
 	MessageSize(size int)
 	ActiveMsgValidation(topic string)
 	ActiveMsgValidationDone(topic string)
+	InCommitteeMessage(msgType spectypes.MsgType, decided bool)
+	NonCommitteeMessage(msgType spectypes.MsgType, decided bool)
 }
 
 type nopMetrics struct{}
@@ -36,3 +38,5 @@ func (*nopMetrics) SignatureValidationDuration(time.Duration, ...string) {}
 func (*nopMetrics) MessageSize(int)                                      {}
 func (*nopMetrics) ActiveMsgValidation(string)                           {}
 func (*nopMetrics) ActiveMsgValidationDone(string)                       {}
+func (*nopMetrics) InCommitteeMessage(spectypes.MsgType, bool)           {}
+func (*nopMetrics) NonCommitteeMessage(spectypes.MsgType, bool)          {}

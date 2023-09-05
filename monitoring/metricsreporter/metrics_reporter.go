@@ -130,6 +130,14 @@ var (
 		Help:    "Time message spent in queue (seconds)",
 		Buckets: []float64{0.001, 0.005, 0.010, 0.050, 0.100, 0.500, 1, 5, 10, 60},
 	}, []string{"msg_id"})
+	inCommitteeMessages = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_message_in_committee",
+		Help: "The amount of messages in committee",
+	}, []string{"ssv_msg_type", "decided"})
+	nonCommitteeMessages = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_message_non_committee",
+		Help: "The amount of messages not in committee",
+	}, []string{"ssv_msg_type", "decided"})
 )
 
 type MetricsReporter struct {
@@ -167,6 +175,8 @@ func New(opts ...Option) *MetricsReporter {
 		messageQueueSize,
 		messageQueueCapacity,
 		messageTimeInQueue,
+		inCommitteeMessages,
+		nonCommitteeMessages,
 	}
 
 	for i, c := range allMetrics {
@@ -357,4 +367,20 @@ func (m *MetricsReporter) MessageQueueCapacity(size int) {
 
 func (m *MetricsReporter) MessageTimeInQueue(messageID spectypes.MessageID, d time.Duration) {
 	messageTimeInQueue.WithLabelValues(messageID.String()).Observe(d.Seconds())
+}
+
+func (m *MetricsReporter) InCommitteeMessage(msgType spectypes.MsgType, decided bool) {
+	str := "non-decided"
+	if decided {
+		str = "decided"
+	}
+	inCommitteeMessages.WithLabelValues(ssvmessage.MsgTypeToString(msgType), str).Inc()
+}
+
+func (m *MetricsReporter) NonCommitteeMessage(msgType spectypes.MsgType, decided bool) {
+	str := "non-decided"
+	if decided {
+		str = "decided"
+	}
+	nonCommitteeMessages.WithLabelValues(ssvmessage.MsgTypeToString(msgType), str).Inc()
 }
