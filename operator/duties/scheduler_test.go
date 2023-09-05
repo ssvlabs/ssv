@@ -242,7 +242,8 @@ func TestScheduler_Regression_IndiciesChangeStuck(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	ctx, _ := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	logger := logging.TestLogger(t)
 
 	mockBeaconNode := mocks.NewMockBeaconNode(ctrl)
