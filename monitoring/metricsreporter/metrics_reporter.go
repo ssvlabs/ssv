@@ -117,15 +117,13 @@ var (
 		Name: "ssv_message_queue_drops",
 		Help: "The amount of message dropped from the validator's msg queue",
 	}, []string{"msg_id"})
-	messageQueueSize = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "ssv_message_queue_size",
-		Help:    "Size of message queue",
-		Buckets: []float64{1, 3, 5, 10, 20, 32},
+	messageQueueSize = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv_message_queue_size",
+		Help: "Size of message queue",
 	}, []string{})
-	messageQueueCapacity = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "ssv_message_queue_capacity",
-		Help:    "Capacity of message queue",
-		Buckets: []float64{32, 40, 50},
+	messageQueueCapacity = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv_message_queue_capacity",
+		Help: "Capacity of message queue",
 	}, []string{})
 	messageTimeInQueue = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "ssv_message_time_in_queue_seconds",
@@ -350,11 +348,11 @@ func (m *MetricsReporter) DroppedQueueMessage(messageID spectypes.MessageID) {
 }
 
 func (m *MetricsReporter) MessageQueueSize(size int) {
-	messageQueueSize.WithLabelValues().Observe(float64(size))
+	messageQueueSize.WithLabelValues().Set(float64(size))
 }
 
 func (m *MetricsReporter) MessageQueueCapacity(size int) {
-	messageQueueCapacity.WithLabelValues().Observe(float64(size))
+	messageQueueCapacity.WithLabelValues().Set(float64(size))
 }
 
 func (m *MetricsReporter) MessageTimeInQueue(messageID spectypes.MessageID, d time.Duration) {
