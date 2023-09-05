@@ -11,6 +11,7 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"golang.org/x/exp/slices"
 
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
@@ -64,8 +65,14 @@ func (mv *MessageValidator) validatePartialSignatureMessage(share *ssvtypes.SSVS
 		return msgSlot, err
 	}
 
-	if err := mv.validPartialSignatures(share, signedMsg); err != nil {
-		return msgSlot, err
+	inCommittee := slices.ContainsFunc(share.Committee, func(operator *spectypes.Operator) bool {
+		return operator.OperatorID == mv.ownOperatorID
+	})
+
+	if inCommittee {
+		if err := mv.validPartialSignatures(share, signedMsg); err != nil {
+			return msgSlot, err
+		}
 	}
 
 	if signerState == nil {
