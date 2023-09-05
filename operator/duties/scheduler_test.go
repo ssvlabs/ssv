@@ -270,13 +270,12 @@ func TestScheduler_Regression_IndiciesChangeStuck(t *testing.T) {
 	err := s.Start(ctx, logger)
 	require.NoError(t, err)
 
+	s.indicesChg <- struct{}{} // first time make fanout stuck
 	select {
-	case s.indicesChg <- struct{}{}: // first time make fanout stuck
-		select {
-		case s.indicesChg <- struct{}{}: // second send should hang
-			break
-		default:
-			t.Fatal("Channel is jammed")
-		}
+	case s.indicesChg <- struct{}{}: // second send should hang
+		break
+	default:
+		t.Fatal("Channel is jammed")
 	}
+
 }
