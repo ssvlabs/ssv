@@ -129,7 +129,7 @@ var (
 	}, []string{})
 	messageTimeInQueue = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "ssv_message_time_in_queue_seconds",
-		Help:    "Time message spent in queue (seconds",
+		Help:    "Time message spent in queue (seconds)",
 		Buckets: []float64{0.001, 0.005, 0.010, 0.050, 0.100, 0.500, 1, 5, 10, 60},
 	}, []string{"msg_id"})
 )
