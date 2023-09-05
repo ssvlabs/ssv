@@ -23,7 +23,7 @@ func TestCheckPeer(t *testing.T) {
 		ctx          = context.Background()
 		logger       = zap.NewNop()
 		myDomainType = spectypes.DomainType{0x1, 0x2, 0x3, 0x4}
-		mySubnets    = []byte{0x1, 0x0, 0x1}
+		mySubnets    = mockSubnets(1, 2, 3)
 		tests        = []*checkPeerTest{
 			{
 				name:          "valid",
@@ -38,21 +38,39 @@ func TestCheckPeer(t *testing.T) {
 				expectedError: nil,
 			},
 			{
+				name:          "different domain type",
+				domainType:    &spectypes.DomainType{0x1, 0x2, 0x3, 0x5},
+				subnets:       mySubnets,
+				expectedError: nil,
+			},
+			{
 				name:          "missing subnets",
 				domainType:    &myDomainType,
 				subnets:       nil,
 				expectedError: errors.New("could not read subnets"),
 			},
 			{
+				name:          "inactive subnets",
+				domainType:    &myDomainType,
+				subnets:       mockSubnets(),
+				expectedError: errors.New("zero subnets"),
+			},
+			{
 				name:          "no shared subnets",
 				domainType:    &myDomainType,
-				subnets:       []byte{0x0, 0x0, 0x0},
-				expectedError: errors.New("zero subnets"),
+				subnets:       mockSubnets(0, 4, 5),
+				expectedError: errors.New("no shared subnets"),
 			},
 			{
 				name:          "one shared subnet",
 				domainType:    &myDomainType,
-				subnets:       []byte{0x1, 0x0, 0x0},
+				subnets:       mockSubnets(0, 1, 4),
+				expectedError: nil,
+			},
+			{
+				name:          "two shared subnets",
+				domainType:    &myDomainType,
+				subnets:       mockSubnets(0, 1, 2),
 				expectedError: nil,
 			},
 		}
@@ -87,7 +105,7 @@ func TestCheckPeer(t *testing.T) {
 	subnetIndex := peers.NewSubnetsIndex(commons.Subnets())
 	dvs := &DiscV5Service{
 		ctx:        ctx,
-		conns:      &mock.MockConnectionIndex{LimitValue: false},
+		conns:      &mock.MockConnectionIndex{LimitValue: true},
 		subnetsIdx: subnetIndex,
 		domainType: myDomainType,
 		subnets:    mySubnets,
@@ -111,4 +129,12 @@ type checkPeerTest struct {
 	subnets       []byte
 	localNode     *enode.LocalNode
 	expectedError error
+}
+
+func mockSubnets(active ...int) []byte {
+	subnets := make([]byte, commons.Subnets())
+	for _, subnet := range active {
+		subnets[subnet] = 1
+	}
+	return subnets
 }
