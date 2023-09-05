@@ -108,12 +108,7 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		}
 	}
 
-	isDecidedMessage := signedMsg.Message.MsgType == specqbft.CommitMsgType && share.HasQuorum(len(signedMsg.Signers))
-	inCommittee := slices.ContainsFunc(share.Committee, func(operator *spectypes.Operator) bool {
-		return operator.OperatorID == mv.ownOperatorID
-	})
-
-	if mv.ownOperatorID == 0 || inCommittee || isDecidedMessage {
+	if mv.ownOperatorID == 0 || mv.inCommittee(share) || mv.isDecidedMessage(signedMsg) {
 		if err := ssvtypes.VerifyByOperators(signedMsg.Signature, signedMsg, mv.netCfg.Domain, spectypes.QBFTSignatureType, share.Committee); err != nil {
 			signErr := ErrInvalidSignature
 			signErr.innerErr = err

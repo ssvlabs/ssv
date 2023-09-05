@@ -65,11 +65,7 @@ func (mv *MessageValidator) validatePartialSignatureMessage(share *ssvtypes.SSVS
 		return msgSlot, err
 	}
 
-	inCommittee := slices.ContainsFunc(share.Committee, func(operator *spectypes.Operator) bool {
-		return operator.OperatorID == mv.ownOperatorID
-	})
-
-	if mv.ownOperatorID == 0 || inCommittee {
+	if mv.ownOperatorID == 0 || mv.inCommittee(share) {
 		if err := mv.validPartialSignatures(share, signedMsg); err != nil {
 			return msgSlot, err
 		}
@@ -85,6 +81,12 @@ func (mv *MessageValidator) validatePartialSignatureMessage(share *ssvtypes.SSVS
 	}
 
 	return msgSlot, nil
+}
+
+func (mv *MessageValidator) inCommittee(share *ssvtypes.SSVShare) bool {
+	return slices.ContainsFunc(share.Committee, func(operator *spectypes.Operator) bool {
+		return operator.OperatorID == mv.ownOperatorID
+	})
 }
 
 func (mv *MessageValidator) validPartialSigMsgType(msgType spectypes.PartialSigMsgType) bool {
