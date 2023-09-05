@@ -8,7 +8,6 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	zap "go.uber.org/zap"
 )
 
 // MockValidatorMetadataStorage is a mock of ValidatorMetadataStorage interface.
@@ -35,15 +34,15 @@ func (m *MockValidatorMetadataStorage) EXPECT() *MockValidatorMetadataStorageMoc
 }
 
 // UpdateValidatorMetadata mocks base method.
-func (m *MockValidatorMetadataStorage) UpdateValidatorMetadata(logger *zap.Logger, pk string, metadata *ValidatorMetadata) error {
+func (m *MockValidatorMetadataStorage) UpdateValidatorMetadata(pk string, metadata *ValidatorMetadata) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateValidatorMetadata", logger, pk, metadata)
+	ret := m.ctrl.Call(m, "UpdateValidatorMetadata", pk, metadata)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdateValidatorMetadata indicates an expected call of UpdateValidatorMetadata.
-func (mr *MockValidatorMetadataStorageMockRecorder) UpdateValidatorMetadata(logger, pk, metadata interface{}) *gomock.Call {
+func (mr *MockValidatorMetadataStorageMockRecorder) UpdateValidatorMetadata(pk, metadata interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateValidatorMetadata", reflect.TypeOf((*MockValidatorMetadataStorage)(nil).UpdateValidatorMetadata), logger, pk, metadata)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateValidatorMetadata", reflect.TypeOf((*MockValidatorMetadataStorage)(nil).UpdateValidatorMetadata), pk, metadata)
 }

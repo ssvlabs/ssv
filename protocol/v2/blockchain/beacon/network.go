@@ -7,10 +7,38 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
+//go:generate mockgen -package=mocks -destination=./mocks/network.go -source=./network.go
+
 // Network is a beacon chain network.
 type Network struct {
 	spectypes.BeaconNetwork
 	LocalTestNet bool
+}
+
+type BeaconNetwork interface {
+	ForkVersion() [4]byte
+	MinGenesisTime() uint64
+	SlotDurationSec() time.Duration
+	SlotsPerEpoch() uint64
+	EstimatedCurrentSlot() phase0.Slot
+	EstimatedSlotAtTime(time int64) phase0.Slot
+	EstimatedTimeAtSlot(slot phase0.Slot) int64
+	EstimatedCurrentEpoch() phase0.Epoch
+	EstimatedEpochAtSlot(slot phase0.Slot) phase0.Epoch
+	FirstSlotAtEpoch(epoch phase0.Epoch) phase0.Slot
+	EpochStartTime(epoch phase0.Epoch) time.Time
+
+	GetSlotStartTime(slot phase0.Slot) time.Time
+	IsFirstSlotOfEpoch(slot phase0.Slot) bool
+	GetEpochFirstSlot(epoch phase0.Epoch) phase0.Slot
+
+	EpochsPerSyncCommitteePeriod() uint64
+	EstimatedSyncCommitteePeriodAtEpoch(epoch phase0.Epoch) uint64
+	FirstEpochOfSyncPeriod(period uint64) phase0.Epoch
+	LastSlotOfSyncPeriod(period uint64) phase0.Slot
+
+	GetNetwork() Network
+	GetBeaconNetwork() spectypes.BeaconNetwork
 }
 
 // NewNetwork creates a new beacon chain network.
@@ -35,6 +63,16 @@ func (n Network) MinGenesisTime() uint64 {
 		return 1689072978
 	}
 	return n.BeaconNetwork.MinGenesisTime()
+}
+
+// GetNetwork returns the network
+func (n Network) GetNetwork() Network {
+	return n
+}
+
+// GetBeaconNetwork returns the beacon network the node is on
+func (n Network) GetBeaconNetwork() spectypes.BeaconNetwork {
+	return n.BeaconNetwork
 }
 
 // GetSlotStartTime returns the start time for the given slot
@@ -79,15 +117,19 @@ func (n Network) GetEpochFirstSlot(epoch phase0.Epoch) phase0.Slot {
 	return phase0.Slot(uint64(epoch) * n.SlotsPerEpoch())
 }
 
+// EpochsPerSyncCommitteePeriod returns the number of epochs per sync committee period.
+func (n Network) EpochsPerSyncCommitteePeriod() uint64 {
+	return 256
+}
+
 // EstimatedSyncCommitteePeriodAtEpoch estimates the current sync committee period at the given Epoch
 func (n Network) EstimatedSyncCommitteePeriodAtEpoch(epoch phase0.Epoch) uint64 {
-	// TODO: consider extracting EpochsPerSyncCommitteePeriod to config
-	return uint64(epoch) / 256 // EpochsPerSyncCommitteePeriod
+	return uint64(epoch) / n.EpochsPerSyncCommitteePeriod()
 }
 
 // FirstEpochOfSyncPeriod calculates the first epoch of the given sync period.
 func (n Network) FirstEpochOfSyncPeriod(period uint64) phase0.Epoch {
-	return phase0.Epoch(period * 256) // EpochsPerSyncCommitteePeriod
+	return phase0.Epoch(period * n.EpochsPerSyncCommitteePeriod())
 }
 
 // LastSlotOfSyncPeriod calculates the first epoch of the given sync period.

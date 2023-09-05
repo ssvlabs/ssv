@@ -2,6 +2,7 @@ package connections
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
@@ -163,7 +164,12 @@ func (h *handshaker) verifyTheirNodeInfo(logger *zap.Logger, sender peer.ID, ani
 
 	h.nodeInfos.SetNodeInfo(sender, ani.GetNodeInfo())
 
-	logger.Info("Verified handshake nodeinfo ", fields.PeerID(sender), fields.OperatorIDStr(ani.GetNodeInfo().Metadata.OperatorID))
+	logger.Info("Verified handshake nodeinfo",
+		fields.PeerID(sender),
+		fields.OperatorIDStr(ani.GetNodeInfo().Metadata.OperatorID),
+		zap.Any("metadata", ani.GetNodeInfo().Metadata),
+		zap.String("networkID", ani.GetNodeInfo().NetworkID),
+	)
 
 	return nil
 }
@@ -220,8 +226,11 @@ func (h *handshaker) requestNodeInfo(logger *zap.Logger, conn libp2pnetwork.Conn
 	permissioned := h.Permissioned()
 
 	privateKey, found, err := h.nodeStorage.GetPrivateKey()
+	if err != nil {
+		return nil, fmt.Errorf("could not get private key: %w", err)
+	}
 	if !found {
-		return nil, err
+		return nil, errors.New("could not get private key")
 	}
 	data, err := h.nodeInfos.SelfSealed(h.net.LocalPeer(), conn.RemotePeer(), permissioned, privateKey)
 	if err != nil {

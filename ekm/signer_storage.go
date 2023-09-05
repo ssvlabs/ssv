@@ -45,17 +45,19 @@ type Storage interface {
 	RemoveHighestAttestation(pubKey []byte) error
 	RemoveHighestProposal(pubKey []byte) error
 	SetEncryptionKey(newKey string) error
+	ListAccountsTxn(r basedb.Reader) ([]core.ValidatorAccount, error)
+	SaveAccountTxn(rw basedb.ReadWriter, account core.ValidatorAccount) error
 }
 
 type storage struct {
-	db            basedb.IDb
+	db            basedb.Database
 	network       beacon.Network
 	encryptionKey []byte
 	logger        *zap.Logger // struct logger is used because core.Storage does not support passing a logger
 	lock          sync.RWMutex
 }
 
-func NewSignerStorage(db basedb.IDb, network beacon.Network, logger *zap.Logger) Storage {
+func NewSignerStorage(db basedb.Database, network beacon.Network, logger *zap.Logger) Storage {
 	return &storage{
 		db:      db,
 		network: network,
@@ -80,8 +82,8 @@ func (s *storage) SetEncryptionKey(newKey string) error {
 	return nil
 }
 
-func (s *storage) CleanRegistryData() error {
-	return s.db.RemoveAllByCollection(s.objPrefix(accountsPrefix))
+func (s *storage) DropRegistryData() error {
+	return s.db.DropPrefix(s.objPrefix(accountsPrefix))
 }
 
 func (s *storage) objPrefix(obj string) []byte {
@@ -138,15 +140,20 @@ func (s *storage) OpenWallet() (core.Wallet, error) {
 
 // ListAccounts returns an empty array for no accounts
 func (s *storage) ListAccounts() ([]core.ValidatorAccount, error) {
+	return s.ListAccountsTxn(nil)
+}
+
+// ListAccountsTxn returns an empty array for no accounts
+func (s *storage) ListAccountsTxn(r basedb.Reader) ([]core.ValidatorAccount, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
 	ret := make([]core.ValidatorAccount, 0)
 
-	err := s.db.GetAll(s.logger, s.objPrefix(accountsPrefix), func(i int, obj basedb.Obj) error {
+	err := s.db.UsingReader(r).GetAll(s.objPrefix(accountsPrefix), func(i int, obj basedb.Obj) error {
 		value, err := s.decryptData(obj.Value)
 		if err != nil {
-			return err
+			return errors.Wrap(err, "failed to decrypt accounts")
 		}
 		acc, err := s.decodeAccount(value)
 		if err != nil {
@@ -159,8 +166,7 @@ func (s *storage) ListAccounts() ([]core.ValidatorAccount, error) {
 	return ret, err
 }
 
-// SaveAccount saves the given account
-func (s *storage) SaveAccount(account core.ValidatorAccount) error {
+func (s *storage) SaveAccountTxn(rw basedb.ReadWriter, account core.ValidatorAccount) error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -175,7 +181,12 @@ func (s *storage) SaveAccount(account core.ValidatorAccount) error {
 	if err != nil {
 		return err
 	}
-	return s.db.Set(s.objPrefix(accountsPrefix), []byte(key), encryptedValue)
+	return s.db.Using(rw).Set(s.objPrefix(accountsPrefix), []byte(key), encryptedValue)
+}
+
+// SaveAccount saves the given account
+func (s *storage) SaveAccount(account core.ValidatorAccount) error {
+	return s.SaveAccountTxn(nil, account)
 }
 
 // DeleteAccount deletes account by uuid

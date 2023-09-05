@@ -3,29 +3,30 @@ package ekm
 import (
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha256"
 	"crypto/x509"
 	"encoding/hex"
-	"fmt"
+	"testing"
+
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/eth2-key-manager/wallets/hd"
-	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
+
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"testing"
+
+	"github.com/bloxapp/ssv/storage/basedb"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/prysmaticlabs/go-bitfield"
-	"github.com/stretchr/testify/require"
-
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/utils/threshold"
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/prysmaticlabs/go-bitfield"
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -59,12 +60,14 @@ func testKeyManager(t *testing.T) spectypes.KeyManager {
 }
 
 func TestEncryptedKeyManager(t *testing.T) {
+	// Generate key 1.
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	// Convert RSA private key to bytes
 	keyBytes := x509.MarshalPKCS1PrivateKey(privateKey)
-	hash := sha256.Sum256(keyBytes)
-	encryptionKey := fmt.Sprintf("%x", hash)
+	encryptionKey, err := rsaencryption.HashRsaKey(keyBytes)
+	require.NoError(t, err)
+
+	// Create account with key 1.
 	threshold.Init()
 	sk := bls.SecretKey{}
 	sk.SetByCSPRNG()
@@ -72,13 +75,13 @@ func TestEncryptedKeyManager(t *testing.T) {
 	logger := logging.TestLogger(t)
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
-	signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon, logger)
+	signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon.GetNetwork(), logger)
 	err = signerStorage.SetEncryptionKey(encryptionKey)
 	require.NoError(t, err)
-	defer func(db basedb.IDb, logger *zap.Logger) {
-		err := db.Close(logger)
+	defer func(db basedb.Database, logger *zap.Logger) {
+		err := db.Close()
 		if err != nil {
-
+			t.Fatal(err)
 		}
 	}(db, logging.TestLogger(t))
 	hdwallet := hd.NewWallet(&core.WalletContext{Storage: signerStorage})
@@ -86,18 +89,28 @@ func TestEncryptedKeyManager(t *testing.T) {
 	a, err := hdwallet.CreateValidatorAccountFromPrivateKey(sk.Serialize(), &index)
 	require.NoError(t, err)
 
+	// Load account with key 1 (should succeed).
 	wallet, err := signerStorage.OpenWallet()
 	require.NoError(t, err)
-	// open
 	_, err = wallet.AccountByPublicKey(hex.EncodeToString(a.ValidatorPublicKey()))
 	require.NoError(t, err)
+
+	// Generate key 2.
+	privateKey2, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	keyBytes2 := x509.MarshalPKCS1PrivateKey(privateKey2)
+	encryptionKey2, err := rsaencryption.HashRsaKey(keyBytes2)
+	require.NoError(t, err)
+
+	// Load account with key 2 (should fail).
 	wallet2, err := signerStorage.OpenWallet()
 	require.NoError(t, err)
-	err = signerStorage.SetEncryptionKey(encryptionKey[:len(encryptionKey)-1] + "a")
+	err = signerStorage.SetEncryptionKey(encryptionKey2)
 	require.NoError(t, err)
 	_, err = wallet2.AccountByPublicKey(hex.EncodeToString(a.ValidatorPublicKey()))
 	require.True(t, errors.Is(err, ErrCantDecrypt))
 
+	// Retry with key 1 (should succeed).
 	wallet3, err := signerStorage.OpenWallet()
 	require.NoError(t, err)
 	err = signerStorage.SetEncryptionKey(encryptionKey)
@@ -250,6 +263,98 @@ func TestSlashing(t *testing.T) {
 		require.EqualError(t, err, "slashable proposal (HighestProposalVote), not signing")
 		require.Equal(t, [32]byte{}, sig)
 	})
+	t.Run("slashable sign after duplicate AddShare, fail", func(t *testing.T) {
+		require.NoError(t, km.AddShare(sk1))
+		_, sig, err := km.(*ethKeyManagerSigner).SignBeaconObject(beaconBlock, phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainProposer)
+		require.EqualError(t, err, "slashable proposal (HighestProposalVote), not signing")
+		require.Equal(t, [32]byte{}, sig)
+	})
+}
+
+func TestSlashing_Attestation(t *testing.T) {
+	km := testKeyManager(t)
+
+	var secretKeys [4]*bls.SecretKey
+	for i := range secretKeys {
+		secretKeys[i] = &bls.SecretKey{}
+		secretKeys[i].SetByCSPRNG()
+
+		// Equivalent to AddShare but with a custom slot for minimal slashing protection.
+		minimalSlot := phase0.Slot(64)
+		err := km.(*ethKeyManagerSigner).saveMinimalSlashingProtection(secretKeys[i].GetPublicKey().Serialize(), minimalSlot)
+		require.NoError(t, err)
+		err = km.(*ethKeyManagerSigner).saveShare(secretKeys[i])
+		require.NoError(t, err)
+	}
+
+	var baseEpoch phase0.Epoch = 10
+	createAttestationData := func(sourceEpoch, targetEpoch phase0.Epoch) *phase0.AttestationData {
+		return &phase0.AttestationData{
+			Source: &phase0.Checkpoint{
+				Epoch: baseEpoch + sourceEpoch,
+			},
+			Target: &phase0.Checkpoint{
+				Epoch: baseEpoch + targetEpoch,
+			},
+		}
+	}
+
+	signAttestation := func(sk *bls.SecretKey, signingRoot phase0.Root, attestation *phase0.AttestationData, expectSlashing bool, expectReason string) {
+		sig, root, err := km.(*ethKeyManagerSigner).SignBeaconObject(
+			attestation,
+			phase0.Domain{},
+			sk.GetPublicKey().Serialize(),
+			spectypes.DomainAttester,
+		)
+		if expectSlashing {
+			require.Error(t, err, "expected slashing: %s", expectReason)
+			require.Zero(t, sig, "expected zero signature")
+			require.Zero(t, root, "expected zero root")
+			if expectReason != "" {
+				require.ErrorContains(t, err, expectReason, "expected slashing: %s", expectReason)
+			}
+		} else {
+			require.NoError(t, err, "expected no slashing")
+			require.NotZero(t, sig, "expected non-zero signature")
+			require.NotZero(t, root, "expected non-zero root")
+		}
+	}
+
+	// Note: in the current implementation, eth2-key-manager doesn't check the signing roots and is
+	// instead blocking the repeated signing of the same attestation.
+
+	// 1. Check a valid attestation.
+	signAttestation(secretKeys[1], phase0.Root{1}, createAttestationData(3, 4), false, "HighestAttestationVote")
+
+	// 2. Same signing root -> slashing (stricter than Eth spec).
+	signAttestation(secretKeys[1], phase0.Root{1}, createAttestationData(3, 4), true, "HighestAttestationVote")
+
+	// 3. Lower than previous source epoch -> expect slashing.
+	signAttestation(secretKeys[1], phase0.Root{1}, createAttestationData(2, 5), true, "HighestAttestationVote")
+
+	// 4. Different signing root -> expect slashing.
+	signAttestation(secretKeys[1], phase0.Root{2}, createAttestationData(3, 4), true, "HighestAttestationVote")
+
+	// 5. Different signing root, lower target epoch -> expect slashing.
+	signAttestation(secretKeys[1], phase0.Root{2}, createAttestationData(3, 3), true, "HighestAttestationVote")
+
+	// 6. Different signing root, same source epoch, higher target epoch -> no slashing.
+	signAttestation(secretKeys[1], phase0.Root{3}, createAttestationData(3, 5), false, "HighestAttestationVote")
+
+	// 7. Different signing root, higher source epoch, same target epoch -> expect slashing.
+	signAttestation(secretKeys[1], phase0.Root{3}, createAttestationData(4, 5), true, "HighestAttestationVote")
+
+	// 8. Different signing root, lower source epoch, higher target epoch -> expect slashing.
+	//    This should fail due to surrounding, but since we're stricter than Eth spec,
+	//    this will fail due to the source epoch being lower than the previous.
+	signAttestation(secretKeys[1], phase0.Root{byte(4)}, createAttestationData(2, 6), true, "HighestAttestationVote")
+
+	// 9. Different public key, different signing root -> no slashing.
+	signAttestation(secretKeys[2], phase0.Root{4}, createAttestationData(3, 6), false, "HighestAttestationVote")
+
+	// 10. Different signing root, higher source epoch, lower target epoch -> expect slashing.
+	//     Same as 8, but in the opposite direction.
+	signAttestation(secretKeys[2], phase0.Root{5}, createAttestationData(4, 5), true, "HighestAttestationVote")
 }
 
 func TestSignRoot(t *testing.T) {

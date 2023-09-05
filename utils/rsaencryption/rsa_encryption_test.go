@@ -1,11 +1,18 @@
 package rsaencryption
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
 	"encoding/base64"
+	"encoding/json"
+	"encoding/pem"
+	"os"
 	"testing"
 
 	testingspace "github.com/bloxapp/ssv/utils/rsaencryption/testingspace"
 	"github.com/stretchr/testify/require"
+	"github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
 )
 
 func TestGenerateKeys(t *testing.T) {
@@ -45,4 +52,50 @@ func TestPrivateKeyToByte(t *testing.T) {
 	b := PrivateKeyToByte(sk)
 	require.NotNil(t, b)
 	require.Greater(t, len(b), 1024)
+}
+
+func TestConvertEncryptedPemToPrivateKey(t *testing.T) {
+	fileName := os.TempDir() + "/encrypted_private_key.json"
+	defer func() {
+		if err := os.Remove(fileName); err != nil {
+			t.Logf("Could not delete encrypted private key file: %v", err)
+		}
+	}()
+	password := "123123123"
+	privateKey, err := rsa.GenerateKey(rand.Reader, keySize)
+	require.NoError(t, err)
+
+	privDER := x509.MarshalPKCS1PrivateKey(privateKey)
+
+	privateBlock := pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: privDER,
+	}
+
+	pemBytes := pem.EncodeToMemory(&privateBlock)
+
+	encryptedData, err := keystorev4.New().Encrypt(pemBytes, password)
+	require.NoError(t, err)
+
+	encryptedJSON, err := json.Marshal(encryptedData)
+	require.NoError(t, err)
+
+	err = os.WriteFile(fileName, encryptedJSON, 0600)
+	require.NoError(t, err)
+
+	// Read and decrypt the private key
+	encryptedJSON, err = os.ReadFile(fileName)
+	require.NoError(t, err)
+
+	key, err := ConvertEncryptedPemToPrivateKey(encryptedJSON, password)
+	require.NoError(t, err)
+	require.Equal(t, privateKey, key)
+
+	// Convert encrypted PEM to private key.
+	_, err = ConvertEncryptedPemToPrivateKey(encryptedJSON, password+"1")
+	require.Error(t, err)
+
+	// Test with incorrect password.
+	_, err = ConvertEncryptedPemToPrivateKey(pemBytes, "")
+	require.Error(t, err)
 }

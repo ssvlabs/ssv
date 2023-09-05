@@ -4,7 +4,7 @@ const (
 	NameBootNode         = "BootNode"
 	NameController       = "Controller"
 	NameDiscoveryService = "DiscoveryService"
-	NameDutyController   = "DutyController"
+	NameDutyScheduler    = "DutyScheduler"
 	NameEthClient        = "EthClient"
 	NameMetricsHandler   = "MetricsHandler"
 	NameOperator         = "Operator"
@@ -19,8 +19,8 @@ const (
 	NameCreateThreshold   = "CreateThreshold"
 	NameDiscoveryV5Logger = "DiscoveryV5Logger"
 	NameExportKeys        = "ExportKeys"
-	NameOnFork            = "OnFork"
 	NameP2PStorage        = "P2PStorage"
 	NamePubsubTrace       = "PubsubTrace"
 	NameScoreInspector    = "ScoreInspector"
+	NameEventHandler      = "EventHandler"
 )

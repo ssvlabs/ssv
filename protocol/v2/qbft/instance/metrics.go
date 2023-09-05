@@ -2,7 +2,7 @@ package instance
 
 import (
 	"encoding/hex"
-	"log"
+	"go.uber.org/zap"
 	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -30,9 +30,10 @@ func init() {
 		metricsStageDuration,
 		metricsRound,
 	}
+	logger := zap.L()
 	for _, c := range allMetrics {
 		if err := prometheus.Register(c); err != nil {
-			log.Println("could not register prometheus collector")
+			logger.Debug("could not register prometheus collector")
 		}
 	}
 }

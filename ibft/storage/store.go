@@ -2,8 +2,6 @@ package storage
 
 import (
 	"encoding/binary"
-	"log"
-	"sync"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
@@ -11,9 +9,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/ibft/storage/forks"
-	forksfactory "github.com/bloxapp/ssv/ibft/storage/forks/factory"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -32,37 +27,25 @@ var (
 )
 
 func init() {
+	logger := zap.L()
 	if err := prometheus.Register(metricsHighestDecided); err != nil {
-		log.Println("could not register prometheus collector")
+		logger.Debug("could not register prometheus collector")
 	}
 }
 
 // ibftStorage struct
 // instanceType is what separates different iBFT eth2 duty types (attestation, proposal and aggregation)
 type ibftStorage struct {
-	prefix   []byte
-	db       basedb.IDb
-	fork     forks.Fork
-	forkLock *sync.RWMutex
+	prefix []byte
+	db     basedb.Database
 }
 
 // New create new ibft storage
-func New(db basedb.IDb, prefix string, forkVersion forksprotocol.ForkVersion) qbftstorage.QBFTStore {
+func New(db basedb.Database, prefix string) qbftstorage.QBFTStore {
 	return &ibftStorage{
-		prefix:   []byte(prefix),
-		db:       db,
-		fork:     forksfactory.NewFork(forkVersion),
-		forkLock: &sync.RWMutex{},
+		prefix: []byte(prefix),
+		db:     db,
 	}
-}
-
-func (i *ibftStorage) OnFork(logger *zap.Logger, forkVersion forksprotocol.ForkVersion) error {
-	i.forkLock.Lock()
-	defer i.forkLock.Unlock()
-
-	logger.Info("forking ibft storage")
-	i.fork = forksfactory.NewFork(forkVersion)
-	return nil
 }
 
 // GetHighestInstance returns the StoredInstance for the highest instance.
@@ -102,9 +85,6 @@ func (i *ibftStorage) saveInstance(inst *qbftstorage.StoredInstance, toHistory, 
 	}
 
 	if asHighest {
-		i.forkLock.RLock()
-		defer i.forkLock.RUnlock()
-
 		err = i.save(value, highestInstanceKey, inst.State.ID)
 		if err != nil {
 			return errors.Wrap(err, "could not save highest instance")
@@ -123,9 +103,6 @@ func (i *ibftStorage) saveInstance(inst *qbftstorage.StoredInstance, toHistory, 
 
 // GetInstance returns historical StoredInstance for the given identifier and height.
 func (i *ibftStorage) GetInstance(identifier []byte, height specqbft.Height) (*qbftstorage.StoredInstance, error) {
-	i.forkLock.RLock()
-	defer i.forkLock.RUnlock()
-
 	val, found, err := i.get(instanceKey, identifier[:], uInt64ToByteSlice(uint64(height)))
 	if !found {
 		return nil, nil
@@ -142,9 +119,6 @@ func (i *ibftStorage) GetInstance(identifier []byte, height specqbft.Height) (*q
 
 // GetInstancesInRange returns historical StoredInstance's in the given range.
 func (i *ibftStorage) GetInstancesInRange(identifier []byte, from specqbft.Height, to specqbft.Height) ([]*qbftstorage.StoredInstance, error) {
-	i.forkLock.RLock()
-	defer i.forkLock.RUnlock()
-
 	instances := make([]*qbftstorage.StoredInstance, 0)
 
 	for seq := from; seq <= to; seq++ {
@@ -162,18 +136,13 @@ func (i *ibftStorage) GetInstancesInRange(identifier []byte, from specqbft.Heigh
 
 // CleanAllInstances removes all StoredInstance's & highest StoredInstance's for msgID.
 func (i *ibftStorage) CleanAllInstances(logger *zap.Logger, msgID []byte) error {
-	i.forkLock.RLock()
-	defer i.forkLock.RUnlock()
-
 	prefix := i.prefix
 	prefix = append(prefix, msgID[:]...)
 	prefix = append(prefix, []byte(instanceKey)...)
-	n, err := i.db.DeleteByPrefix(prefix)
+	_, err := i.db.DeletePrefix(prefix)
 	if err != nil {
 		return errors.Wrap(err, "failed to remove decided")
 	}
-
-	logger.Debug("removed decided", zap.Int("count", n))
 
 	if err := i.delete(highestInstanceKey, msgID[:]); err != nil {
 		return errors.Wrap(err, "failed to remove last decided")

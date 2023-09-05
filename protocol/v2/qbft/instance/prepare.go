@@ -71,6 +71,8 @@ func (i *Instance) uponPrepare(
 	return nil
 }
 
+// getRoundChangeJustification returns the round change justification for the current round.
+// The justification is a quorum of signed prepare messages that agree on state.LastPreparedValue
 func getRoundChangeJustification(state *specqbft.State, config qbft.IConfig, prepareMsgContainer *specqbft.MsgContainer) ([]*specqbft.SignedMessage, error) {
 	if state.LastPreparedValue == nil {
 		return nil, nil
@@ -95,6 +97,11 @@ func getRoundChangeJustification(state *specqbft.State, config qbft.IConfig, pre
 			ret = append(ret, msg)
 		}
 	}
+
+	if !specqbft.HasQuorum(state.Share, ret) {
+		return nil, nil
+	}
+
 	return ret, nil
 }
 

@@ -1,10 +1,9 @@
 package peers
 
 import (
-	"log"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"go.uber.org/zap"
 )
 
 var (
@@ -24,13 +23,14 @@ var (
 )
 
 func init() {
+	logger := zap.L()
 	if err := prometheus.Register(metricsSubnetsKnownPeers); err != nil {
-		log.Println("could not register prometheus collector")
+		logger.Debug("could not register prometheus collector")
 	}
 	if err := prometheus.Register(metricsSubnetsConnectedPeers); err != nil {
-		log.Println("could not register prometheus collector")
+		logger.Debug("could not register prometheus collector")
 	}
 	if err := prometheus.Register(metricsMySubnets); err != nil {
-		log.Println("could not register prometheus collector")
+		logger.Debug("could not register prometheus collector")
 	}
 }

@@ -3,8 +3,9 @@ package peers
 import (
 	"sync"
 
-	"github.com/bloxapp/ssv/network/records"
 	"github.com/libp2p/go-libp2p/core/peer"
+
+	"github.com/bloxapp/ssv/network/records"
 )
 
 // subnetsIndex implements SubnetsIndex
@@ -57,6 +58,9 @@ diffLoop:
 					if len(peers) == 1 {
 						si.subnets[subnet] = make([]peer.ID, 0)
 					} else {
+						// #nosec
+						// False positive by the linter, it says potential out of bounds,
+						// but it can't be because we're inside a for on `peers`.
 						si.subnets[subnet] = peers[1:]
 					}
 					continue diffLoop

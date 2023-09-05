@@ -90,7 +90,7 @@ func isAggregator(committeeCount uint64, slotSig []byte) (bool, error) {
 	return binary.LittleEndian.Uint64(b[:8])%modulo == 0, nil
 }
 
-// waitOneThirdOrValidBlock waits until one-third of the slot has transpired (SECONDS_PER_SLOT / 3 seconds after the start of slot)
+// waitToSlotTwoThirds waits until two-third of the slot has transpired (SECONDS_PER_SLOT * 2 / 3 seconds after the start of slot)
 func (gc *goClient) waitToSlotTwoThirds(slot phase0.Slot) {
 	oneThird := gc.network.SlotDurationSec() / 3 /* one third of slot duration */
 

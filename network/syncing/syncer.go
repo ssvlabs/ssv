@@ -2,7 +2,6 @@ package syncing
 
 import (
 	"context"
-	"sync/atomic"
 	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -19,25 +18,6 @@ import (
 
 // MessageHandler reacts to a message received from Syncer.
 type MessageHandler func(msg spectypes.SSVMessage)
-
-// Throttle returns a MessageHandler that throttles the given handler.
-func Throttle(handler MessageHandler, throttle time.Duration) MessageHandler {
-	var last atomic.Pointer[time.Time]
-	now := time.Now()
-	last.Store(&now)
-
-	return func(msg spectypes.SSVMessage) {
-		delta := time.Since(*last.Load())
-		if delta < throttle {
-			time.Sleep(throttle - delta)
-		}
-
-		now := time.Now()
-		last.Store(&now)
-
-		handler(msg)
-	}
-}
 
 // Syncer handles the syncing of decided messages.
 type Syncer interface {

@@ -12,14 +12,11 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/module"
 
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
 )
 
 var (
@@ -145,15 +142,6 @@ func AggregateInvalidSign(t *testing.T, sks map[spectypes.OperatorID]*bls.Secret
 	sigend := SignMsg(t, sks, []spectypes.OperatorID{1}, consensusMessage)
 	sigend.Signers = []spectypes.OperatorID{2}
 	return sigend
-}
-
-// NewInMemDb returns basedb.IDb with in-memory type
-func NewInMemDb(logger *zap.Logger) basedb.IDb {
-	db, _ := kv.New(logger, basedb.Options{
-		Type: "badger-memory",
-		Path: "",
-	})
-	return db
 }
 
 func GetSpecTestJSON(path string, module string) ([]byte, error) {
