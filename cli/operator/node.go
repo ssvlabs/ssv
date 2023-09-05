@@ -145,6 +145,7 @@ var StartNodeCmd = &cobra.Command{
 			validation.WithShareStorage(nodeStorage.Shares()),
 			validation.WithLogger(logger),
 			validation.WithMetrics(metricsReporter),
+			validation.WithOwnOperatorID(operatorData.ID),
 		)
 
 		cfg.P2pNetworkConfig.Metrics = metricsReporter

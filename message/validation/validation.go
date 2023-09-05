@@ -74,11 +74,12 @@ func (cs *ConsensusState) CreateSignerState(signer spectypes.OperatorID) *Signer
 }
 
 type MessageValidator struct {
-	logger       *zap.Logger
-	metrics      metrics
-	netCfg       networkconfig.NetworkConfig
-	index        sync.Map
-	shareStorage registrystorage.Shares
+	logger        *zap.Logger
+	metrics       metrics
+	netCfg        networkconfig.NetworkConfig
+	index         sync.Map
+	shareStorage  registrystorage.Shares
+	ownOperatorID spectypes.OperatorID
 }
 
 func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) *MessageValidator {
@@ -106,6 +107,12 @@ func WithLogger(logger *zap.Logger) Option {
 func WithMetrics(metrics metrics) Option {
 	return func(mv *MessageValidator) {
 		mv.metrics = metrics
+	}
+}
+
+func WithOwnOperatorID(id spectypes.OperatorID) Option {
+	return func(mv *MessageValidator) {
+		mv.ownOperatorID = id
 	}
 }
 
@@ -310,7 +317,6 @@ func (mv *MessageValidator) validateP2PMessage(ctx context.Context, p peer.ID, p
 	mv.metrics.SSVMessageType(msg.MsgType)
 
 	return mv.validateSSVMessage(msg, receivedAt)
-
 }
 
 func (mv *MessageValidator) ValidateSSVMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, Descriptor, error) {
