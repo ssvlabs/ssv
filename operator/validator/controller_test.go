@@ -924,26 +924,3 @@ func createKey() ([]byte, error) {
 	}
 	return pubKey, nil
 }
-
-func newStores(logger *zap.Logger) *ibftstorage.QBFTStores {
-	db, err := kv.NewInMemory(logger, basedb.Options{})
-	if err != nil {
-		panic(err)
-	}
-
-	storageMap := ibftstorage.NewStores()
-
-	roles := []spectypes.BeaconRole{
-		spectypes.BNRoleAttester,
-		spectypes.BNRoleProposer,
-		spectypes.BNRoleAggregator,
-		spectypes.BNRoleSyncCommittee,
-		spectypes.BNRoleSyncCommitteeContribution,
-		spectypes.BNRoleValidatorRegistration,
-	}
-	for _, role := range roles {
-		storageMap.Add(role, ibftstorage.New(db, role.String()))
-	}
-
-	return storageMap
-}
