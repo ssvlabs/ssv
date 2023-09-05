@@ -142,12 +142,13 @@ func (mv *MessageValidator) verifyPartialSignature(msg *spectypes.PartialSignatu
 		if err != nil {
 			return fmt.Errorf("deserialize pk: %w", err)
 		}
-		sig := &bls.Sign{}
-		if err := sig.Deserialize(signature); err != nil {
+
+		sig, err := ssvtypes.DeserializeBLSSignature(signature)
+		if err != nil {
 			return fmt.Errorf("deserialize signature: %w", err)
 		}
 
-		if !mv.aggregateVerify(sig, pk, root) {
+		if !mv.aggregateVerify(&sig, pk, root) {
 			return fmt.Errorf("wrong partial signature")
 		}
 

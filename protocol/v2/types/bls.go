@@ -5,11 +5,20 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 )
 
-var blsPublicKeyCache *lru.Cache[string, bls.PublicKey]
+var (
+	blsPublicKeyCache *lru.Cache[string, bls.PublicKey]
+	blsSignatureCache *lru.Cache[string, bls.Sign]
+)
 
 func init() {
 	var err error
+
 	blsPublicKeyCache, err = lru.New[string, bls.PublicKey](128_000)
+	if err != nil {
+		panic(err)
+	}
+
+	blsSignatureCache, err = lru.New[string, bls.Sign](128_000)
 	if err != nil {
 		panic(err)
 	}
@@ -30,4 +39,21 @@ func DeserializeBLSPublicKey(b []byte) (bls.PublicKey, error) {
 	blsPublicKeyCache.Add(pkStr, pk)
 
 	return pk, nil
+}
+
+// DeserializeBLSSignature deserializes a bls.Sign from bytes,
+// caching the result to avoid repeated deserialization.
+func DeserializeBLSSignature(b []byte) (bls.Sign, error) {
+	pkStr := string(b)
+	if pk, ok := blsSignatureCache.Get(pkStr); ok {
+		return pk, nil
+	}
+
+	sig := bls.Sign{}
+	if err := sig.Deserialize(b); err != nil {
+		return bls.Sign{}, err
+	}
+	blsSignatureCache.Add(pkStr, sig)
+
+	return sig, nil
 }
