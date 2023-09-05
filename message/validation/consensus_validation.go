@@ -113,7 +113,7 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		return operator.OperatorID == mv.ownOperatorID
 	})
 
-	if mv.ownOperatorID == 0 || isDecidedMessage && inCommittee {
+	if mv.ownOperatorID == 0 || inCommittee || isDecidedMessage {
 		if err := ssvtypes.VerifyByOperators(signedMsg.Signature, signedMsg, mv.netCfg.Domain, spectypes.QBFTSignatureType, share.Committee); err != nil {
 			signErr := ErrInvalidSignature
 			signErr.innerErr = err
