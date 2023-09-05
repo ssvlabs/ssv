@@ -26,7 +26,7 @@ type Instance struct {
 	forceStop  bool
 	StartValue []byte
 
-	Metrics MetricsI
+	metrics *metrics
 }
 
 func NewInstance(
@@ -50,7 +50,7 @@ func NewInstance(
 		},
 		config:      config,
 		processMsgF: spectypes.NewThreadSafeF(),
-		Metrics:     newMetrics(msgId),
+		metrics:     newMetrics(msgId),
 	}
 }
 
@@ -64,7 +64,7 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Heigh
 		i.StartValue = value
 		i.bumpToRound(specqbft.FirstRound)
 		i.State.Height = height
-		i.Metrics.StartStage()
+		i.metrics.StartStage()
 
 		i.config.GetTimer().TimeoutForRound(specqbft.FirstRound)
 
@@ -253,7 +253,7 @@ func (i *Instance) Decode(data []byte) error {
 // bumpToRound sets round and sends current round metrics.
 func (i *Instance) bumpToRound(round specqbft.Round) {
 	i.State.Round = round
-	i.Metrics.SetRound(round)
+	i.metrics.SetRound(round)
 }
 
 // CanProcessMessages will return true if instance can process messages

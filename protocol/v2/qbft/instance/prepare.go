@@ -47,7 +47,7 @@ func (i *Instance) uponPrepare(
 	i.State.LastPreparedValue = i.State.ProposalAcceptedForCurrentRound.FullData
 	i.State.LastPreparedRound = i.State.Round
 
-	i.Metrics.EndStagePrepare()
+	i.metrics.EndStagePrepare()
 
 	logger.Debug("🎯 got prepare quorum",
 		fields.Round(i.State.Round),

@@ -2,16 +2,15 @@ package instance
 
 import (
 	"encoding/hex"
-	"go.uber.org/zap"
 	"time"
+
+	"go.uber.org/zap"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
-
-//go:generate mockgen -package=mocks -destination=./mocks/metrics.go -source=./metrics.go
 
 var (
 	metricsStageDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
@@ -38,14 +37,6 @@ func init() {
 	}
 }
 
-type MetricsI interface {
-	StartStage()
-	EndStageProposal()
-	EndStagePrepare()
-	EndStageCommit()
-	SetRound(round specqbft.Round)
-}
-
 type metrics struct {
 	StageStart       time.Time
 	proposalDuration prometheus.Observer
@@ -54,7 +45,7 @@ type metrics struct {
 	round            prometheus.Gauge
 }
 
-func newMetrics(msgID spectypes.MessageID) MetricsI {
+func newMetrics(msgID spectypes.MessageID) *metrics {
 	hexPubKey := hex.EncodeToString(msgID.GetPubKey())
 	return &metrics{
 		proposalDuration: metricsStageDuration.WithLabelValues("proposal", hexPubKey),

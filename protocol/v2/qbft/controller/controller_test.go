@@ -6,13 +6,11 @@ import (
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance/mocks"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
@@ -35,13 +33,6 @@ func TestController_Marshaling(t *testing.T) {
 }
 
 func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	//NewMockMetrics
-	mockMetric := mocks.NewMockMetrics(ctrl)
-	mockMetric.EXPECT().SetRound(gomock.Any()).AnyTimes()
-
 	// Initialize logger
 	logger := logging.TestLogger(t)
 
