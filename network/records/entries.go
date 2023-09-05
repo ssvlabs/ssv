@@ -3,12 +3,16 @@ package records
 import (
 	"io"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/pkg/errors"
+	"github.com/prysmaticlabs/go-bitfield"
+
+	spectypes "github.com/bloxapp/ssv-spec/types"
 )
+
+var ErrEntryNotFound = errors.New("not found")
 
 // DomainTypeEntry holds the domain type of the node
 type DomainTypeEntry spectypes.DomainType
@@ -42,10 +46,39 @@ func GetDomainTypeEntry(record *enr.Record) (spectypes.DomainType, error) {
 	dt := new(DomainTypeEntry)
 	if err := record.Load(dt); err != nil {
 		if enr.IsNotFound(err) {
-			// If not found, assuming jato-v2 for backwards-compatibility.
-			return networkconfig.JatoV2.Domain, nil
+			return spectypes.DomainType{}, ErrEntryNotFound
 		}
 		return spectypes.DomainType{}, err
 	}
 	return spectypes.DomainType(*dt), nil
+}
+
+// SetSubnetsEntry adds subnets entry to our enode.LocalNode
+func SetSubnetsEntry(node *enode.LocalNode, subnets []byte) error {
+	subnetsVec := bitfield.NewBitvector128()
+	for i, subnet := range subnets {
+		subnetsVec.SetBitAt(uint64(i), subnet > 0)
+	}
+	node.Set(enr.WithEntry("subnets", &subnetsVec))
+	return nil
+}
+
+// GetSubnetsEntry extracts the value of subnets entry from some record
+func GetSubnetsEntry(record *enr.Record) ([]byte, error) {
+	subnetsVec := bitfield.NewBitvector128()
+	if err := record.Load(enr.WithEntry("subnets", &subnetsVec)); err != nil {
+		if enr.IsNotFound(err) {
+			return nil, ErrEntryNotFound
+		}
+		return nil, err
+	}
+	res := make([]byte, 0, subnetsVec.Len())
+	for i := uint64(0); i < subnetsVec.Len(); i++ {
+		val := byte(0)
+		if subnetsVec.BitAt(i) {
+			val = 1
+		}
+		res = append(res, val)
+	}
+	return res, nil
 }

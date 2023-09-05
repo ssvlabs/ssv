@@ -33,7 +33,7 @@ func TestSubnetsIndex(t *testing.T) {
 	sPartial, err := records.Subnets{}.FromString("0x57b080fffd743d9878dc41a184ab160a")
 	require.NoError(t, err)
 
-	subnetsIdx := newSubnetsIndex(128)
+	subnetsIdx := NewSubnetsIndex(128)
 
 	subnetsIdx.UpdatePeerSubnets(pids[0], sAll.Clone())
 	subnetsIdx.UpdatePeerSubnets(pids[1], sNone.Clone())

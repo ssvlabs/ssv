@@ -3,6 +3,8 @@ package discovery
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
+	"fmt"
 	"net"
 	"sync/atomic"
 	"time"
@@ -125,52 +127,57 @@ func (dvs *DiscV5Service) Node(logger *zap.Logger, info peer.AddrInfo) (*enode.N
 // if we reached peers limit, make sure to accept peers with more than 1 shared subnet,
 // which lets other components to determine whether we'll want to connect to this node or not.
 func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) error {
-	zeroSubnets, _ := records.Subnets{}.FromString(records.ZeroSubnets)
+	logger = logger.Named(logging.NameDiscoveryService)
 
 	dvs.discover(dvs.ctx, func(e PeerEvent) {
 		logger := logger.With(
 			fields.ENR(e.Node),
 			fields.PeerID(e.AddrInfo.ID),
 		)
-
-		// Get the peer's domain type, skipping if it mismatches ours.
-		nodeDomainType, err := records.GetDomainTypeEntry(e.Node.Record())
+		err := dvs.checkPeer(logger, e)
 		if err != nil {
-			logger.Debug("could not read domain type", zap.Error(err))
+			logger.Debug("discovered peer was dropped", zap.Error(err))
 			return
 		}
-		if nodeDomainType != dvs.domainType {
-			logger.Debug("skipping node with different domain type")
-			return
-		}
-
-		// Get the peer's subnets, skipping if it has none.
-		nodeSubnets, err := records.GetSubnetsEntry(e.Node.Record())
-		if err != nil {
-			logger.Debug("could not read subnets", zap.Error(err))
-			return
-		}
-		if bytes.Equal(zeroSubnets, nodeSubnets) {
-			logger.Debug("skipping zero subnets")
-			return
-		}
-
-		updated := dvs.subnetsIdx.UpdatePeerSubnets(e.AddrInfo.ID, nodeSubnets)
-		if updated {
-			logger.Debug("[discv5] peer subnets were updated", fields.ENR(e.Node),
-				fields.PeerID(e.AddrInfo.ID),
-				fields.Subnets(records.Subnets(nodeSubnets)))
-		}
-		if !dvs.limitNodeFilter(e.Node) {
-			if !dvs.sharedSubnetsFilter(1)(e.Node) {
-				metricRejectedNodes.Inc()
-				return
-			}
-		}
-		metricFoundNodes.Inc()
 		handler(e)
 	}, defaultDiscoveryInterval) // , dvs.forkVersionFilter) //, dvs.badNodeFilter)
 
+	return nil
+}
+
+var zeroSubnets, _ = records.Subnets{}.FromString(records.ZeroSubnets)
+
+func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
+	// Get the peer's domain type, skipping if it mismatches ours.
+	// TODO: uncomment errors once there are sufficient nodes with domain type.
+	nodeDomainType, err := records.GetDomainTypeEntry(e.Node.Record())
+	if err != nil {
+		// return fmt.Errorf("could not read domain type: %w", err)
+		logger.Debug("could not read domain type entry", zap.Error(err))
+	} else if nodeDomainType != dvs.domainType {
+		// return errors.New("different domain type")
+		logger.Debug("skipping different domain type entry", zap.String("domain_type", hex.EncodeToString(nodeDomainType[:])))
+	} else {
+		logger.Debug("discovered node with matching domain type", zap.String("domain_type", hex.EncodeToString(nodeDomainType[:])))
+	}
+
+	// Get the peer's subnets, skipping if it has none.
+	nodeSubnets, err := records.GetSubnetsEntry(e.Node.Record())
+	if err != nil {
+		return fmt.Errorf("could not read subnets: %w", err)
+	}
+	if bytes.Equal(zeroSubnets, nodeSubnets) {
+		return errors.New("zero subnets")
+	}
+
+	dvs.subnetsIdx.UpdatePeerSubnets(e.AddrInfo.ID, nodeSubnets)
+	if !dvs.limitNodeFilter(e.Node) {
+		if !dvs.sharedSubnetsFilter(1)(e.Node) {
+			metricRejectedNodes.Inc()
+			return errors.New("no shared subnets")
+		}
+	}
+	metricFoundNodes.Inc()
 	return nil
 }
 
