@@ -69,7 +69,7 @@ func (mv *MessageValidator) validatePartialSignatureMessage(share *ssvtypes.SSVS
 		return operator.OperatorID == mv.ownOperatorID
 	})
 
-	if inCommittee {
+	if mv.ownOperatorID == 0 || inCommittee {
 		if err := mv.validPartialSignatures(share, signedMsg); err != nil {
 			return msgSlot, err
 		}
