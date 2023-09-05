@@ -89,12 +89,12 @@ var (
 	messageValidationDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "ssv_message_validation_duration_seconds",
 		Help:    "Message validation duration (seconds)",
-		Buckets: []float64{0.001, 0.005, 0.010, 0.050, 0.100, 0.500, 1},
+		Buckets: []float64{0.001, 0.005, 0.010, 0.020, 0.050},
 	}, []string{})
 	signatureValidationDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "ssv_signature_validation_duration_seconds",
 		Help:    "Signature validation duration (seconds)",
-		Buckets: []float64{0.000_500, 0.001, 0.002, 0.003, 0.004, 0.005, 0.010, 0.050},
+		Buckets: []float64{0.001, 0.005, 0.010, 0.020, 0.050},
 	}, []string{})
 	messageSize = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "ssv_message_size",
