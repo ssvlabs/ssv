@@ -11,6 +11,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
+//go:generate mockgen -package=mocks -destination=./mocks/metrics.go -source=./metrics.go
+
 var (
 	metricsStageDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "ssv_validator_instance_stage_duration_seconds",
@@ -35,6 +37,14 @@ func init() {
 	}
 }
 
+type MetricsI interface {
+	StartStage()
+	EndStageProposal()
+	EndStagePrepare()
+	EndStageCommit()
+	SetRound(round specqbft.Round)
+}
+
 type metrics struct {
 	StageStart       time.Time
 	proposalDuration prometheus.Observer
@@ -43,7 +53,7 @@ type metrics struct {
 	round            prometheus.Gauge
 }
 
-func newMetrics(msgID spectypes.MessageID) *metrics {
+func newMetrics(msgID spectypes.MessageID) MetricsI {
 	hexPubKey := hex.EncodeToString(msgID.GetPubKey())
 	return &metrics{
 		proposalDuration: metricsStageDuration.WithLabelValues("proposal", hexPubKey),

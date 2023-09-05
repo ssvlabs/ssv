@@ -37,7 +37,7 @@ func (i *Instance) uponProposal(logger *zap.Logger, signedProposal *specqbft.Sig
 	}
 	i.bumpToRound(newRound)
 
-	i.metrics.EndStageProposal()
+	i.Metrics.EndStageProposal()
 
 	// value root
 	r, err := specqbft.HashDataRoot(signedProposal.FullData)
