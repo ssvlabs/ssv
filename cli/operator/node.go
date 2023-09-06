@@ -42,11 +42,9 @@ import (
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/nodeprobe"
 	"github.com/bloxapp/ssv/operator"
-	"github.com/bloxapp/ssv/operator/duties/dutyfetcher"
 	"github.com/bloxapp/ssv/operator/slot_ticker"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
-	"github.com/bloxapp/ssv/operator/validatorsmap"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
@@ -94,8 +92,6 @@ var StartNodeCmd = &cobra.Command{
 	Use:   "start-node",
 	Short: "Starts an instance of SSV node",
 	Run: func(cmd *cobra.Command, args []string) {
-		ctx := cmd.Context()
-
 		logger, err := setupGlobal(cmd)
 		if err != nil {
 			log.Fatal("could not create logger", err)
@@ -110,7 +106,7 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil {
 			logger.Fatal("could not setup network", zap.Error(err))
 		}
-		cfg.DBOptions.Ctx = ctx
+		cfg.DBOptions.Ctx = cmd.Context()
 		db, err := setupDB(logger, networkConfig.Beacon.GetNetwork())
 		if err != nil {
 			logger.Fatal("could not setup db", zap.Error(err))
@@ -130,14 +126,14 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 		}
 
-		cfg.P2pNetworkConfig.Ctx = ctx
+		cfg.P2pNetworkConfig.Ctx = cmd.Context()
 
 		permissioned := func() bool {
 			currentEpoch := uint64(networkConfig.Beacon.EstimatedCurrentEpoch())
 			return currentEpoch >= cfg.P2pNetworkConfig.PermissionedActivateEpoch && currentEpoch < cfg.P2pNetworkConfig.PermissionedDeactivateEpoch
 		}
 
-		slotTicker := slot_ticker.NewTicker(ctx, networkConfig)
+		slotTicker := slot_ticker.NewTicker(cmd.Context(), networkConfig)
 
 		cfg.ConsensusClient.Context = cmd.Context()
 		cfg.ConsensusClient.Graffiti = []byte("SSV.Network")
@@ -147,7 +143,7 @@ var StartNodeCmd = &cobra.Command{
 		consensusClient := setupConsensusClient(logger, operatorData.ID, slotTicker)
 
 		executionClient, err := executionclient.New(
-			ctx,
+			cmd.Context(),
 			cfg.ExecutionClient.Addr,
 			ethcommon.HexToAddress(networkConfig.RegistryContractAddr),
 			executionclient.WithLogger(logger),
@@ -168,15 +164,15 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
 		cfg.P2pNetworkConfig.Network = networkConfig
 
-		validatorsMap := validatorsmap.New(ctx)
-		dutyFetcher := dutyfetcher.New(consensusClient, slotTicker, validatorsMap, dutyfetcher.WithLogger(logger))
+		// TODO: pass it to duty scheduler
+		//dutyFetcher := dutyfetcher.New(consensusClient, slotTicker, validatorsMap) // TODO: uncomment when validatorsMap is extracted
 
 		messageValidator := validation.NewMessageValidator(
 			networkConfig,
 			validation.WithShareStorage(nodeStorage.Shares()),
 			validation.WithLogger(logger),
 			validation.WithMetrics(metricsReporter),
-			validation.WithDutyFetcher(dutyFetcher),
+			//validation.WithDutyFetcher(dutyFetcher), // TODO: uncomment when validatorsMap is extracted
 			validation.WithOwnOperatorID(operatorData.ID),
 		)
 
@@ -186,25 +182,18 @@ var StartNodeCmd = &cobra.Command{
 
 		p2pNetwork := setupP2P(logger, db)
 
-		cfg.ConsensusClient.Context = ctx
-
-		cfg.ConsensusClient.Graffiti = []byte("SSV.Network")
-		cfg.ConsensusClient.GasLimit = spectypes.DefaultGasLimit
-		cfg.ConsensusClient.Network = networkConfig.Beacon.GetNetwork()
-
-		cfg.SSVOptions.Context = ctx
+		cfg.SSVOptions.Context = cmd.Context()
 		cfg.SSVOptions.DB = db
 		cfg.SSVOptions.BeaconNode = consensusClient
 		cfg.SSVOptions.ExecutionClient = executionClient
 		cfg.SSVOptions.Network = networkConfig
 		cfg.SSVOptions.P2PNetwork = p2pNetwork
 		cfg.SSVOptions.ValidatorOptions.BeaconNetwork = networkConfig.Beacon.GetNetwork()
-		cfg.SSVOptions.ValidatorOptions.Context = ctx
+		cfg.SSVOptions.ValidatorOptions.Context = cmd.Context()
 		cfg.SSVOptions.ValidatorOptions.DB = db
 		cfg.SSVOptions.ValidatorOptions.Network = p2pNetwork
 		cfg.SSVOptions.ValidatorOptions.Beacon = consensusClient
 		cfg.SSVOptions.ValidatorOptions.KeyManager = keyManager
-		cfg.SSVOptions.ValidatorOptions.ValidatorsMap = validatorsMap
 
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = nodeStorage.GetPrivateKey
 		cfg.SSVOptions.ValidatorOptions.OperatorData = operatorData
@@ -212,7 +201,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.GasLimit = cfg.ConsensusClient.GasLimit
 
 		if cfg.WsAPIPort != 0 {
-			ws := exporterapi.NewWsServer(ctx, nil, http.NewServeMux(), cfg.WithPing)
+			ws := exporterapi.NewWsServer(cmd.Context(), nil, http.NewServeMux(), cfg.WithPing)
 			cfg.SSVOptions.WS = ws
 			cfg.SSVOptions.WsAPIPort = cfg.WsAPIPort
 			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(logger, ws)
@@ -244,7 +233,7 @@ var StartNodeCmd = &cobra.Command{
 		operatorNode = operator.New(logger, cfg.SSVOptions, slotTicker)
 
 		if cfg.MetricsAPIPort > 0 {
-			go startMetricsHandler(ctx, logger, db, metricsReporter, cfg.MetricsAPIPort, cfg.EnableProfile)
+			go startMetricsHandler(cmd.Context(), logger, db, metricsReporter, cfg.MetricsAPIPort, cfg.EnableProfile)
 		}
 
 		nodeProber := nodeprobe.NewProber(
@@ -262,14 +251,14 @@ var StartNodeCmd = &cobra.Command{
 			},
 		)
 
-		nodeProber.Start(ctx)
+		nodeProber.Start(cmd.Context())
 		nodeProber.Wait()
 		logger.Info("ethereum node(s) are healthy")
 
 		metricsReporter.SSVNodeHealthy()
 
 		eventSyncer := setupEventHandling(
-			ctx,
+			cmd.Context(),
 			logger,
 			executionClient,
 			validatorCtrl,
