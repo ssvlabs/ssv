@@ -5,7 +5,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
-	"github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
+
+	keystorev4 "github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
 
 	"os"
 	"path/filepath"
@@ -84,7 +85,7 @@ var generateOperatorKeysCmd = &cobra.Command{
 			}
 		}
 
-		if err := logging.SetGlobalLogger("debug", "capital", "console", ""); err != nil {
+		if err := logging.SetGlobalLogger("debug", "capital", "console", nil); err != nil {
 			logger.Fatal("", zap.Error(err))
 		}
 

@@ -14,6 +14,7 @@ import (
 //go:generate mockgen -package=mocks -destination=./mocks/timer.go -source=./timer.go
 
 type RoundTimeoutFunc func(BeaconNetwork, spectypes.BeaconRole, specqbft.Height, specqbft.Round) time.Duration
+type OnRoundTimeoutF func(round specqbft.Round)
 
 const (
 	quickTimeoutThreshold = specqbft.Round(8)
@@ -47,7 +48,7 @@ type RoundTimer struct {
 	// timer is the underlying time.Timer
 	timer *time.Timer
 	// result holds the result of the timer
-	done func()
+	done OnRoundTimeoutF
 	// round is the current round of the timer
 	round int64
 	// timeoutOptions holds the timeoutOptions for the timer
@@ -59,7 +60,7 @@ type RoundTimer struct {
 }
 
 // New creates a new instance of RoundTimer.
-func New(pctx context.Context, beaconNetwork BeaconNetwork, role spectypes.BeaconRole, done func()) *RoundTimer {
+func New(pctx context.Context, beaconNetwork BeaconNetwork, role spectypes.BeaconRole, done OnRoundTimeoutF) *RoundTimer {
 	ctx, cancelCtx := context.WithCancel(pctx)
 	return &RoundTimer{
 		mtx:           &sync.RWMutex{},
@@ -138,7 +139,7 @@ func (t *RoundTimer) RoundTimeout(height specqbft.Height, round specqbft.Round) 
 }
 
 // OnTimeout sets a function called on timeout.
-func (t *RoundTimer) OnTimeout(done func()) {
+func (t *RoundTimer) OnTimeout(done OnRoundTimeoutF) {
 	t.mtx.Lock() // write to t.done
 	defer t.mtx.Unlock()
 
@@ -153,7 +154,6 @@ func (t *RoundTimer) Round() specqbft.Round {
 // TimeoutForRound times out for a given round.
 func (t *RoundTimer) TimeoutForRound(height specqbft.Height, round specqbft.Round) {
 	atomic.StoreInt64(&t.round, int64(round))
-
 	timeout := t.RoundTimeout(height, round)
 
 	// preparing the underlying timer
@@ -184,7 +184,7 @@ func (t *RoundTimer) waitForRound(round specqbft.Round, timeout <-chan time.Time
 				t.mtx.RLock() // read t.done
 				defer t.mtx.RUnlock()
 				if done := t.done; done != nil {
-					done()
+					done(round)
 				}
 			}()
 		}

@@ -9,7 +9,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 )
 
-type TimeoutF func(logger *zap.Logger, identifier spectypes.MessageID, height specqbft.Height) func()
+type TimeoutF func(logger *zap.Logger, identifier spectypes.MessageID, height specqbft.Height) roundtimer.OnRoundTimeoutF
 
 func (b *BaseRunner) registerTimeoutHandler(logger *zap.Logger, instance *instance.Instance, height specqbft.Height) {
 	identifier := spectypes.MessageIDFromBytes(instance.State.ID)
