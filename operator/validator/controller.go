@@ -670,21 +670,17 @@ func (c *controller) onShareStart(share *ssvtypes.SSVShare) (bool, error) {
 	// Start a committee validator.
 	v, found := c.validatorsMap.GetValidator(hex.EncodeToString(share.ValidatorPubKey))
 	if !found {
-		if !share.HasBeaconMetadata() {
-			return false, fmt.Errorf("beacon metadata is missing")
-		}
-
-		// Share context with both the validator and the runners,
-		// so that when the validator is stopped, the runners are stopped as well.
-		ctx, cancel := context.WithCancel(c.context)
-
 		opts := c.validatorOptions
-		opts.DutyRunners = SetupRunners(ctx, c.logger, opts)
+		opts.DutyRunners = SetupRunners(c.context, c.logger, opts)
 		opts.SSVShare = share
 
-		v = validator.NewValidator(ctx, cancel, opts)
-		c.validatorsMap.SaveValidator(share, v)
+		createdValidator, err := c.validatorsMap.CreateValidator(share, opts)
+		if err != nil {
+			return false, fmt.Errorf("could not get or create validator: %w", err)
+		}
+
 		c.printShare(share, "setup validator done")
+		v = createdValidator
 	} else {
 		c.printShare(v.Share, "get validator")
 	}
