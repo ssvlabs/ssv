@@ -133,34 +133,7 @@ var StartNodeCmd = &cobra.Command{
 			return currentEpoch >= cfg.P2pNetworkConfig.PermissionedActivateEpoch && currentEpoch < cfg.P2pNetworkConfig.PermissionedDeactivateEpoch
 		}
 
-		cfg.P2pNetworkConfig.Permissioned = permissioned
-		cfg.P2pNetworkConfig.WhitelistedOperatorKeys = append(cfg.P2pNetworkConfig.WhitelistedOperatorKeys, networkConfig.WhitelistedOperatorKeys...)
-		cfg.P2pNetworkConfig.NodeStorage = nodeStorage
-		cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorData.PublicKey)
-		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
-		cfg.P2pNetworkConfig.Network = networkConfig
-
-		messageValidator := validation.NewMessageValidator(
-			networkConfig,
-			validation.WithShareStorage(nodeStorage.Shares()),
-			validation.WithLogger(logger),
-			validation.WithMetrics(metricsReporter),
-			validation.WithOwnOperatorID(operatorData.ID),
-		)
-
-		cfg.P2pNetworkConfig.Metrics = metricsReporter
-		cfg.P2pNetworkConfig.MessageValidator = messageValidator
-		cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
-
-		p2pNetwork := setupP2P(logger, db)
-
 		slotTicker := slot_ticker.NewTicker(cmd.Context(), networkConfig)
-
-		cfg.ConsensusClient.Context = cmd.Context()
-
-		cfg.ConsensusClient.Graffiti = []byte("SSV.Network")
-		cfg.ConsensusClient.GasLimit = spectypes.DefaultGasLimit
-		cfg.ConsensusClient.Network = networkConfig.Beacon.GetNetwork()
 
 		consensusClient := setupConsensusClient(logger, operatorData.ID, slotTicker)
 
@@ -178,6 +151,37 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil {
 			logger.Fatal("could not connect to execution client", zap.Error(err))
 		}
+
+		cfg.P2pNetworkConfig.Permissioned = permissioned
+		cfg.P2pNetworkConfig.WhitelistedOperatorKeys = append(cfg.P2pNetworkConfig.WhitelistedOperatorKeys, networkConfig.WhitelistedOperatorKeys...)
+		cfg.P2pNetworkConfig.NodeStorage = nodeStorage
+		cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorData.PublicKey)
+		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
+		cfg.P2pNetworkConfig.Network = networkConfig
+
+		// TODO: pass it to duty scheduler
+		//dutyFetcher := dutyfetcher.New(consensusClient, slotTicker, validatorsMap) // TODO: uncomment when validatorsMap is extracted
+
+		messageValidator := validation.NewMessageValidator(
+			networkConfig,
+			validation.WithShareStorage(nodeStorage.Shares()),
+			validation.WithLogger(logger),
+			validation.WithMetrics(metricsReporter),
+			//validation.WithDutyFetcher(dutyFetcher), // TODO: uncomment when validatorsMap is extracted
+			validation.WithOwnOperatorID(operatorData.ID),
+		)
+
+		cfg.P2pNetworkConfig.Metrics = metricsReporter
+		cfg.P2pNetworkConfig.MessageValidator = messageValidator
+		cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
+
+		p2pNetwork := setupP2P(logger, db)
+
+		cfg.ConsensusClient.Context = cmd.Context()
+
+		cfg.ConsensusClient.Graffiti = []byte("SSV.Network")
+		cfg.ConsensusClient.GasLimit = spectypes.DefaultGasLimit
+		cfg.ConsensusClient.Network = networkConfig.Beacon.GetNetwork()
 
 		cfg.SSVOptions.Context = cmd.Context()
 		cfg.SSVOptions.DB = db
