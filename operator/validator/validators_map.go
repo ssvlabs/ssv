@@ -66,7 +66,7 @@ func (vm *validatorsMap) CreateValidator(logger *zap.Logger, share *types.SSVSha
 	defer vm.lock.Unlock()
 
 	pubKey := hex.EncodeToString(share.ValidatorPubKey)
-	if v, ok := vm.validatorsMap[pubKey]; ok {
+	if v, ok := vm.validatorsMap[pubKey]; !ok {
 		if !share.HasBeaconMetadata() {
 			return nil, fmt.Errorf("beacon metadata is missing")
 		}
