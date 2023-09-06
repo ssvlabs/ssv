@@ -50,7 +50,7 @@ func newMetrics(msgID spectypes.MessageID) *metrics {
 		proposalDuration: metricsStageDuration.WithLabelValues("proposal", hexPubKey),
 		prepareDuration:  metricsStageDuration.WithLabelValues("prepare", hexPubKey),
 		commitDuration:   metricsStageDuration.WithLabelValues("commit", hexPubKey),
-		round:            metricsRound.WithLabelValues("validator", hexPubKey),
+		round:            metricsRound.WithLabelValues(msgID.GetRoleType().String(), hexPubKey),
 	}
 }
 
