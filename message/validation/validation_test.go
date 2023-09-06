@@ -38,12 +38,15 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	ns, err := storage.NewNodeStorage(logger, db)
 	require.NoError(t, err)
 
+	const validatorIndex = 123
+
 	ks := spectestingutils.Testing4SharesSet()
 	share := &ssvtypes.SSVShare{
 		Share: *spectestingutils.TestingShare(ks),
 		Metadata: ssvtypes.Metadata{
 			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
 				Status: v1.ValidatorStateActiveOngoing,
+				Index:  validatorIndex,
 			},
 			Liquidated: false,
 		},
@@ -500,6 +503,36 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		message.Data = encodedValidSignedMessage
 		_, _, err = validator.validateSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot+8).Add(validator.waitAfterSlotStart(roleAttester)))
 		require.ErrorContains(t, err, ErrTooManyDutiesPerEpoch.Error())
+	})
+
+	t.Run("no duties", func(t *testing.T) {
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		height := specqbft.Height(slot)
+
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithDutyFetcher(&mockDutyFetcher{
+			slot:           slot,
+			validatorIndex: validatorIndex + 1,
+		}))
+
+		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
+		encodedValidSignedMessage, err := validSignedMessage.Encode()
+		require.NoError(t, err)
+
+		message := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, spectypes.BNRoleProposer),
+			Data:    encodedValidSignedMessage,
+		}
+
+		_, _, err = validator.validateSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester)))
+		require.ErrorContains(t, err, ErrNoDuty.Error())
+
+		validator = NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithDutyFetcher(&mockDutyFetcher{
+			slot:           slot,
+			validatorIndex: validatorIndex,
+		}))
+		_, _, err = validator.validateSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester)))
+		require.NoError(t, err)
 	})
 
 	t.Run("partial message too big", func(t *testing.T) {
@@ -1664,4 +1697,25 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, _, err = validator.validateSSVMessage(ssvMessage, receivedAt)
 		require.ErrorIs(t, err, ErrEventMessage)
 	})
+}
+
+type mockDutyFetcher struct {
+	slot           phase0.Slot
+	validatorIndex phase0.ValidatorIndex
+}
+
+func (m mockDutyFetcher) ProposerDuty(slot phase0.Slot, validatorIndex phase0.ValidatorIndex) *v1.ProposerDuty {
+	if slot == m.slot && validatorIndex == m.validatorIndex {
+		return &v1.ProposerDuty{}
+	}
+
+	return nil
+}
+
+func (m mockDutyFetcher) SyncCommitteeDuty(slot phase0.Slot, validatorIndex phase0.ValidatorIndex) *v1.SyncCommitteeDuty {
+	if slot == m.slot && validatorIndex == m.validatorIndex {
+		return &v1.SyncCommitteeDuty{}
+	}
+
+	return nil
 }

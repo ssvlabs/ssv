@@ -107,6 +107,10 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		}
 	}
 
+	if err := mv.validateBeaconDuty(msg.MsgID.GetRoleType(), msgSlot, share); err != nil {
+		return consensusDescriptor, msgSlot, err
+	}
+
 	state := mv.consensusState(msg.GetID())
 	for _, signer := range signedMsg.Signers {
 		if err := mv.validateSignerBehavior(state, signer, share, msg); err != nil {
@@ -228,7 +232,7 @@ func (mv *MessageValidator) validateSignerBehavior(
 			stateToBeReset = true
 		}
 
-		if err := mv.validateDuties(signerState, msg.MsgID.GetRoleType(), msgSlot, share, stateToBeReset); err != nil {
+		if err := mv.validateDutyCount(signerState, msg.MsgID.GetRoleType(), stateToBeReset); err != nil {
 			return err
 		}
 
@@ -252,11 +256,9 @@ func (mv *MessageValidator) validateSignerBehavior(
 	return nil
 }
 
-func (mv *MessageValidator) validateDuties(
+func (mv *MessageValidator) validateDutyCount(
 	state *SignerState,
 	role spectypes.BeaconRole,
-	slot phase0.Slot,
-	share *ssvtypes.SSVShare,
 	stateToBeReset bool,
 ) error {
 	switch role {
@@ -274,7 +276,17 @@ func (mv *MessageValidator) validateDuties(
 		}
 
 		return nil
+	}
 
+	return nil
+}
+
+func (mv *MessageValidator) validateBeaconDuty(
+	role spectypes.BeaconRole,
+	slot phase0.Slot,
+	share *ssvtypes.SSVShare,
+) error {
+	switch role {
 	case spectypes.BNRoleProposer:
 		if mv.dutyFetcher != nil && share.Metadata.BeaconMetadata != nil && mv.dutyFetcher.ProposerDuty(slot, share.Metadata.BeaconMetadata.Index) == nil {
 			return ErrNoDuty
