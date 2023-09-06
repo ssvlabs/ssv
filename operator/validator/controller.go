@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -609,20 +608,7 @@ func CreateDutyExecuteMsg(duty *spectypes.Duty, pubKey phase0.BLSPubKey, domain 
 // ActiveValidatorIndices fetches indices of validators who are either attesting or queued and
 // whose activation epoch is not greater than the passed epoch. It logs a warning if an error occurs.
 func (c *controller) ActiveValidatorIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
-	indices := make([]phase0.ValidatorIndex, 0, c.validatorsMap.Size())
-	err := c.validatorsMap.ForEach(func(v *validator.Validator) error {
-		// Beacon node throws error when trying to fetch duties for non-existing validators.
-		if (v.Share.BeaconMetadata.IsAttesting() || v.Share.BeaconMetadata.Status == v1.ValidatorStatePendingQueued) &&
-			v.Share.BeaconMetadata.ActivationEpoch <= epoch {
-			indices = append(indices, v.Share.BeaconMetadata.Index)
-		}
-		return nil
-	})
-	if err != nil {
-		c.logger.Warn("failed to get all validators public keys", zap.Error(err))
-	}
-
-	return indices
+	return c.validatorsMap.ActiveValidatorIndices(epoch)
 }
 
 // onMetadataUpdated is called when validator's metadata was updated

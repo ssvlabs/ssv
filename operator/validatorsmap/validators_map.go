@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"sync"
 
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
@@ -142,4 +144,26 @@ func printShare(s *types.SSVShare, logger *zap.Logger, msg string) {
 		zap.Strings("committee", committee),
 		fields.FeeRecipient(s.FeeRecipientAddress[:]),
 	)
+}
+
+// ActiveValidatorIndices fetches indices of validators who are either attesting or queued and
+// whose activation epoch is not greater than the passed epoch.
+func (vm *ValidatorsMap) ActiveValidatorIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
+	indices := make([]phase0.ValidatorIndex, 0, vm.Size())
+
+	iterator := func(v *validator.Validator) error {
+		// Beacon node throws error when trying to fetch duties for non-existing validators.
+		if (v.Share.BeaconMetadata.IsAttesting() || v.Share.BeaconMetadata.Status == v1.ValidatorStatePendingQueued) &&
+			v.Share.BeaconMetadata.ActivationEpoch <= epoch {
+			indices = append(indices, v.Share.BeaconMetadata.Index)
+		}
+
+		return nil
+	}
+
+	if err := vm.ForEach(iterator); err != nil {
+		panic("error is unexpected as iterator never returns it")
+	}
+
+	return indices
 }
