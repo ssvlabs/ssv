@@ -680,14 +680,13 @@ func (c *controller) onShareStart(share *ssvtypes.SSVShare) (bool, error) {
 
 		opts := c.validatorOptions
 		opts.SSVShare = share
-
 		opts.DutyRunners = SetupRunners(ctx, c.logger, opts)
+
 		v = validator.NewValidator(ctx, cancel, opts)
+		c.validatorsMap.CreateValidator(hex.EncodeToString(share.ValidatorPubKey), v)
 
 		c.printShare(share, "setup validator done")
-		opts.SSVShare = nil
 
-		c.validatorsMap.CreateValidator(hex.EncodeToString(share.ValidatorPubKey), v)
 	} else {
 		c.printShare(v.Share, "get validator")
 	}
