@@ -4,7 +4,6 @@ package validatorsmap
 import (
 	"context"
 	"encoding/hex"
-	"fmt"
 	"sync"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -73,24 +72,14 @@ func (vm *ValidatorsMap) GetValidator(pubKey string) (*validator.Validator, bool
 	return v, ok
 }
 
-// CreateValidator creates a new validator instance
-func (vm *ValidatorsMap) CreateValidator(share *types.SSVShare, opts validator.Options) (*validator.Validator, error) {
+// SaveValidator saves a new validator instance
+func (vm *ValidatorsMap) SaveValidator(share *types.SSVShare, validator *validator.Validator) {
 	// main lock
 	vm.lock.Lock()
 	defer vm.lock.Unlock()
 
-	if !share.HasBeaconMetadata() {
-		return nil, fmt.Errorf("beacon metadata is missing")
-	}
-
-	// Share context with both the validator and the runners,
-	// so that when the validator is stopped, the runners are stopped as well.
-	ctx, cancel := context.WithCancel(vm.ctx)
-
 	pubKey := hex.EncodeToString(share.ValidatorPubKey)
-	vm.validatorsMap[pubKey] = validator.NewValidator(ctx, cancel, opts)
-
-	return vm.validatorsMap[pubKey], nil
+	vm.validatorsMap[pubKey] = validator
 }
 
 // RemoveValidator removes a validator instance from the map
