@@ -73,28 +73,30 @@ func (f *Fetcher) Start(ctx context.Context) {
 	slotsPerEpoch := phase0.Slot(f.beaconNode.GetBeaconNetwork().SlotsPerEpoch())
 
 	firstRun := true
-	for {
-		select {
-		case <-f.closed:
-			return
+	go func() {
+		for {
+			select {
+			case <-f.closed:
+				return
 
-		case <-ctx.Done():
-			return
+			case <-ctx.Done():
+				return
 
-		case slot := <-f.ticker:
-			epochForSlot := f.beaconNode.GetBeaconNetwork().EstimatedEpochAtSlot(slot)
+			case slot := <-f.ticker:
+				epochForSlot := f.beaconNode.GetBeaconNetwork().EstimatedEpochAtSlot(slot)
 
-			if firstRun || slot%slotsPerEpoch >= slotsPerEpoch/2 {
-				for epoch := epochForSlot - 1; epoch <= epochForSlot+1; epoch++ {
-					if err := f.fetchEpoch(ctx, epoch); err != nil {
-						f.logger.Warn("failed to fetch epoch duties: %w", fields.Epoch(epoch), zap.Error(err))
+				if firstRun || slot%slotsPerEpoch >= slotsPerEpoch/2 {
+					for epoch := epochForSlot - 1; epoch <= epochForSlot+1; epoch++ {
+						if err := f.fetchEpoch(ctx, epoch); err != nil {
+							f.logger.Warn("failed to fetch epoch duties: %w", fields.Epoch(epoch), zap.Error(err))
+						}
 					}
-				}
 
-				firstRun = false
+					firstRun = false
+				}
 			}
 		}
-	}
+	}()
 }
 
 func (f *Fetcher) ProposerDuty(slot phase0.Slot, validatorIndex phase0.ValidatorIndex) *eth2apiv1.ProposerDuty {
