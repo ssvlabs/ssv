@@ -3,16 +3,12 @@ package validatorsmap
 // TODO(nkryuchkov): remove old validator interface(s)
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // validatorIterator is the function used to iterate over existing validators
@@ -102,19 +98,6 @@ func (vm *ValidatorsMap) Size() int {
 	defer vm.lock.RUnlock()
 
 	return len(vm.validatorsMap)
-}
-
-func printShare(s *types.SSVShare, logger *zap.Logger, msg string) {
-	committee := make([]string, len(s.Committee))
-	for i, c := range s.Committee {
-		committee[i] = fmt.Sprintf(`[OperatorID=%d, PubKey=%x]`, c.OperatorID, c.PubKey)
-	}
-	logger.Debug(msg,
-		fields.PubKey(s.ValidatorPubKey),
-		zap.Uint64("node_id", s.OperatorID),
-		zap.Strings("committee", committee),
-		fields.FeeRecipient(s.FeeRecipientAddress[:]),
-	)
 }
 
 // ActiveValidatorIndices fetches indices of validators who are either attesting or queued and
