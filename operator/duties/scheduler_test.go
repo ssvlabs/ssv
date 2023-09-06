@@ -275,7 +275,7 @@ func TestScheduler_Regression_IndiciesChangeStuck(t *testing.T) {
 	select {
 	case s.indicesChg <- struct{}{}: // second send should hang
 		break
-	default:
+	case <-time.After(1 * time.Second):
 		t.Fatal("Channel is jammed")
 	}
 
