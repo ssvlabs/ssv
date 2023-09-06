@@ -26,6 +26,7 @@ import (
 	"github.com/bloxapp/ssv/message/validation"
 	"github.com/bloxapp/ssv/network"
 	nodestorage "github.com/bloxapp/ssv/operator/storage"
+	"github.com/bloxapp/ssv/operator/validatorsmap"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
@@ -137,7 +138,7 @@ type controller struct {
 	operatorData               *registrystorage.OperatorData
 	operatorDataMutex          sync.RWMutex
 
-	validatorsMap    *validatorsMap
+	validatorsMap    *validatorsmap.ValidatorsMap
 	validatorOptions validator.Options
 
 	metadataUpdateInterval time.Duration
@@ -212,7 +213,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		keyManager:                 options.KeyManager,
 		network:                    options.Network,
 
-		validatorsMap:    newValidatorsMap(options.Context),
+		validatorsMap:    validatorsmap.New(options.Context),
 		validatorOptions: validatorOptions,
 
 		metadataUpdateInterval: options.MetadataUpdateInterval,
@@ -552,7 +553,7 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 	return nil
 }
 
-// GetValidator returns a validator instance from validatorsMap
+// GetValidator returns a validator instance from ValidatorsMap
 func (c *controller) GetValidator(pubKey string) (*validator.Validator, bool) {
 	return c.validatorsMap.GetValidator(pubKey)
 }
@@ -608,7 +609,7 @@ func CreateDutyExecuteMsg(duty *spectypes.Duty, pubKey phase0.BLSPubKey, domain 
 // ActiveValidatorIndices fetches indices of validators who are either attesting or queued and
 // whose activation epoch is not greater than the passed epoch. It logs a warning if an error occurs.
 func (c *controller) ActiveValidatorIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
-	indices := make([]phase0.ValidatorIndex, 0, len(c.validatorsMap.validatorsMap))
+	indices := make([]phase0.ValidatorIndex, 0, c.validatorsMap.Size())
 	err := c.validatorsMap.ForEach(func(v *validator.Validator) error {
 		// Beacon node throws error when trying to fetch duties for non-existing validators.
 		if (v.Share.BeaconMetadata.IsAttesting() || v.Share.BeaconMetadata.Status == v1.ValidatorStatePendingQueued) &&
@@ -652,7 +653,7 @@ func (c *controller) onMetadataUpdated(pk string, meta *beaconprotocol.Validator
 // onShareRemove is called when a validator was removed
 // TODO: think how we can make this function atomic (i.e. failing wouldn't stop the removal of the share)
 func (c *controller) onShareRemove(pk string, removeSecret bool) error {
-	// remove from validatorsMap
+	// remove from ValidatorsMap
 	v := c.validatorsMap.RemoveValidator(pk)
 
 	// stop instance
@@ -682,7 +683,7 @@ func (c *controller) onShareStart(share *ssvtypes.SSVShare) (bool, error) {
 	// Start a committee validator.
 	v, found := c.validatorsMap.GetValidator(hex.EncodeToString(share.ValidatorPubKey))
 	if !found {
-		createdValidator, err := c.validatorsMap.CreateValidator(c.logger.Named("validatorsMap"), share, c.validatorOptions)
+		createdValidator, err := c.validatorsMap.CreateValidator(c.logger.Named("ValidatorsMap"), share, c.validatorOptions, SetupRunners)
 		if err != nil {
 			return false, fmt.Errorf("could not get or create validator: %w", err)
 		}

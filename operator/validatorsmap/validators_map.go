@@ -1,4 +1,4 @@
-package validator
+package validatorsmap
 
 // TODO(nkryuchkov): remove old validator interface(s)
 import (
@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -17,25 +18,39 @@ import (
 // validatorIterator is the function used to iterate over existing validators
 type validatorIterator func(validator *validator.Validator) error
 
-// validatorsMap manages a collection of running validators
-type validatorsMap struct {
+// ValidatorsMap manages a collection of running validators
+type ValidatorsMap struct {
 	ctx           context.Context
 	lock          sync.RWMutex
 	validatorsMap map[string]*validator.Validator
 }
 
-func newValidatorsMap(ctx context.Context) *validatorsMap {
-	vm := validatorsMap{
+func New(ctx context.Context, opts ...Option) *ValidatorsMap {
+	vm := &ValidatorsMap{
 		ctx:           ctx,
 		lock:          sync.RWMutex{},
 		validatorsMap: make(map[string]*validator.Validator),
 	}
 
-	return &vm
+	for _, opt := range opts {
+		opt(vm)
+	}
+
+	return vm
+}
+
+// Option defines EventSyncer configuration option.
+type Option func(*ValidatorsMap)
+
+// WithInitialState sets initial state
+func WithInitialState(state map[string]*validator.Validator) Option {
+	return func(vm *ValidatorsMap) {
+		vm.validatorsMap = state
+	}
 }
 
 // ForEach loops over validators
-func (vm *validatorsMap) ForEach(iterator validatorIterator) error {
+func (vm *ValidatorsMap) ForEach(iterator validatorIterator) error {
 	vm.lock.RLock()
 	defer vm.lock.RUnlock()
 
@@ -49,7 +64,7 @@ func (vm *validatorsMap) ForEach(iterator validatorIterator) error {
 
 // GetValidator returns a validator
 // TODO: pass spectypes.ValidatorPK instead of string
-func (vm *validatorsMap) GetValidator(pubKey string) (*validator.Validator, bool) {
+func (vm *ValidatorsMap) GetValidator(pubKey string) (*validator.Validator, bool) {
 	// main lock
 	vm.lock.RLock()
 	defer vm.lock.RUnlock()
@@ -60,7 +75,12 @@ func (vm *validatorsMap) GetValidator(pubKey string) (*validator.Validator, bool
 }
 
 // CreateValidator creates a new validator instance
-func (vm *validatorsMap) CreateValidator(logger *zap.Logger, share *types.SSVShare, optsTemplate validator.Options) (*validator.Validator, error) {
+func (vm *ValidatorsMap) CreateValidator(
+	logger *zap.Logger,
+	share *types.SSVShare,
+	optsTemplate validator.Options,
+	setupRunners func(ctx context.Context, logger *zap.Logger, options validator.Options) runner.DutyRunners,
+) (*validator.Validator, error) {
 	// main lock
 	vm.lock.Lock()
 	defer vm.lock.Unlock()
@@ -76,7 +96,7 @@ func (vm *validatorsMap) CreateValidator(logger *zap.Logger, share *types.SSVSha
 		// Share context with both the validator and the runners,
 		// so that when the validator is stopped, the runners are stopped as well.
 		ctx, cancel := context.WithCancel(vm.ctx)
-		opts.DutyRunners = SetupRunners(ctx, logger, opts)
+		opts.DutyRunners = setupRunners(ctx, logger, opts)
 		opts.MessageValidator = optsTemplate.MessageValidator
 		opts.Metrics = optsTemplate.Metrics
 		vm.validatorsMap[pubKey] = validator.NewValidator(ctx, cancel, opts)
@@ -92,7 +112,7 @@ func (vm *validatorsMap) CreateValidator(logger *zap.Logger, share *types.SSVSha
 
 // RemoveValidator removes a validator instance from the map
 // TODO: pass spectypes.ValidatorPK instead of string
-func (vm *validatorsMap) RemoveValidator(pubKey string) *validator.Validator {
+func (vm *ValidatorsMap) RemoveValidator(pubKey string) *validator.Validator {
 	if v, found := vm.GetValidator(pubKey); found {
 		vm.lock.Lock()
 		defer vm.lock.Unlock()
@@ -104,7 +124,7 @@ func (vm *validatorsMap) RemoveValidator(pubKey string) *validator.Validator {
 }
 
 // Size returns the number of validators in the map
-func (vm *validatorsMap) Size() int {
+func (vm *ValidatorsMap) Size() int {
 	vm.lock.RLock()
 	defer vm.lock.RUnlock()
 
