@@ -21,9 +21,8 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
-	ssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
-
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
+	ssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
 	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
