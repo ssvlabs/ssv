@@ -347,7 +347,17 @@ func setupGlobal(cmd *cobra.Command) (*zap.Logger, error) {
 		}
 	}
 
-	if err := logging.SetGlobalLogger(cfg.LogLevel, cfg.LogLevelFormat, cfg.LogFormat, cfg.LogFilePath); err != nil {
+	err := logging.SetGlobalLogger(
+		cfg.LogLevel,
+		cfg.LogLevelFormat,
+		cfg.LogFormat,
+		&logging.LogFileOptions{
+			FileName:   cfg.LogFilePath,
+			MaxSize:    cfg.LogFileSize,
+			MaxBackups: cfg.LogFileBackups,
+		},
+	)
+	if err != nil {
 		return nil, fmt.Errorf("logging.SetGlobalLogger: %w", err)
 	}
 

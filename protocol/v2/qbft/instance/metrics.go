@@ -2,13 +2,13 @@ package instance
 
 import (
 	"encoding/hex"
-	"go.uber.org/zap"
 	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"go.uber.org/zap"
 )
 
 var (
