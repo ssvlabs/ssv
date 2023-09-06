@@ -13,7 +13,6 @@ import (
 
 //go:generate mockgen -package=mocks -destination=./mocks/timer.go -source=./timer.go
 
-type RoundTimeoutFunc func(BeaconNetwork, spectypes.BeaconRole, specqbft.Height, specqbft.Round) time.Duration
 type OnRoundTimeoutF func(round specqbft.Round)
 
 const (
@@ -111,7 +110,7 @@ func (t *RoundTimer) RoundTimeout(height specqbft.Height, round specqbft.Round) 
 	case spectypes.BNRoleAggregator, spectypes.BNRoleSyncCommitteeContribution:
 		// two-third of the slot time
 		timeoutDuration = t.beaconNetwork.SlotDurationSec() / 3 * 2
-	case spectypes.BNRoleProposer:
+	default:
 		if round <= t.timeoutOptions.quickThreshold {
 			return t.timeoutOptions.quick
 		}
