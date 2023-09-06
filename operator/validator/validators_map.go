@@ -19,16 +19,20 @@ type validatorIterator func(validator *validator.Validator) error
 
 // validatorsMap manages a collection of running validators
 type validatorsMap struct {
-	ctx           context.Context
+	ctx context.Context
+
+	optsTemplate *validator.Options
+
 	lock          sync.RWMutex
 	validatorsMap map[string]*validator.Validator
 }
 
-func newValidatorsMap(ctx context.Context) *validatorsMap {
+func newValidatorsMap(ctx context.Context, optsTemplate *validator.Options) *validatorsMap {
 	vm := validatorsMap{
 		ctx:           ctx,
 		lock:          sync.RWMutex{},
 		validatorsMap: make(map[string]*validator.Validator),
+		optsTemplate:  optsTemplate,
 	}
 
 	return &vm
@@ -48,7 +52,6 @@ func (vm *validatorsMap) ForEach(iterator validatorIterator) error {
 }
 
 // GetValidator returns a validator
-// TODO: pass spectypes.ValidatorPK instead of string
 func (vm *validatorsMap) GetValidator(pubKey string) (*validator.Validator, bool) {
 	// main lock
 	vm.lock.RLock()
@@ -59,26 +62,26 @@ func (vm *validatorsMap) GetValidator(pubKey string) (*validator.Validator, bool
 	return v, ok
 }
 
-// CreateValidator creates a new validator instance
-func (vm *validatorsMap) CreateValidator(logger *zap.Logger, share *types.SSVShare, optsTemplate validator.Options) (*validator.Validator, error) {
+// GetOrCreateValidator creates a new validator instance if not exist
+func (vm *validatorsMap) GetOrCreateValidator(logger *zap.Logger, share *types.SSVShare) (*validator.Validator, error) {
 	// main lock
 	vm.lock.Lock()
 	defer vm.lock.Unlock()
 
 	pubKey := hex.EncodeToString(share.ValidatorPubKey)
-	if v, ok := vm.validatorsMap[pubKey]; ok {
+	if v, ok := vm.validatorsMap[pubKey]; !ok {
 		if !share.HasBeaconMetadata() {
 			return nil, fmt.Errorf("beacon metadata is missing")
 		}
-		opts := optsTemplate
+		opts := *vm.optsTemplate
 		opts.SSVShare = share
 
 		// Share context with both the validator and the runners,
 		// so that when the validator is stopped, the runners are stopped as well.
 		ctx, cancel := context.WithCancel(vm.ctx)
 		opts.DutyRunners = SetupRunners(ctx, logger, opts)
-		opts.MessageValidator = optsTemplate.MessageValidator
-		opts.Metrics = optsTemplate.Metrics
+		opts.MessageValidator = vm.optsTemplate.MessageValidator
+		opts.Metrics = vm.optsTemplate.Metrics
 		vm.validatorsMap[pubKey] = validator.NewValidator(ctx, cancel, opts)
 
 		printShare(share, logger, "setup validator done")
@@ -91,7 +94,6 @@ func (vm *validatorsMap) CreateValidator(logger *zap.Logger, share *types.SSVSha
 }
 
 // RemoveValidator removes a validator instance from the map
-// TODO: pass spectypes.ValidatorPK instead of string
 func (vm *validatorsMap) RemoveValidator(pubKey string) *validator.Validator {
 	if v, found := vm.GetValidator(pubKey); found {
 		vm.lock.Lock()

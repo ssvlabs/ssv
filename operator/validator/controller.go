@@ -5,7 +5,6 @@ import (
 	"crypto/rsa"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"sync"
 	"time"
 
@@ -138,7 +137,7 @@ type controller struct {
 	operatorDataMutex          sync.RWMutex
 
 	validatorsMap    *validatorsMap
-	validatorOptions validator.Options
+	validatorOptions *validator.Options
 
 	metadataUpdateInterval time.Duration
 
@@ -171,7 +170,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		Buffer:       options.QueueBufferSize,
 	}
 
-	validatorOptions := validator.Options{ //TODO add vars
+	validatorOptions := &validator.Options{ //TODO add vars
 		Network:       options.Network,
 		Beacon:        options.Beacon,
 		BeaconNetwork: options.BeaconNetwork.BeaconNetwork,
@@ -212,7 +211,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		keyManager:                 options.KeyManager,
 		network:                    options.Network,
 
-		validatorsMap:    newValidatorsMap(options.Context),
+		validatorsMap:    newValidatorsMap(options.Context, validatorOptions),
 		validatorOptions: validatorOptions,
 
 		metadataUpdateInterval: options.MetadataUpdateInterval,
@@ -358,7 +357,7 @@ func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
 				return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetID().GetPubKey()))
 			}
 
-			opts := c.validatorOptions
+			opts := *c.validatorOptions
 			opts.SSVShare = share
 			ncv = &nonCommitteeValidator{
 				NonCommitteeValidator: validator.NewNonCommitteeValidator(c.logger, msg.GetID(), opts),
@@ -464,7 +463,7 @@ func (c *controller) setupNonCommitteeValidators() {
 	for _, validatorShare := range nonCommitteeShares {
 		pubKeys = append(pubKeys, validatorShare.ValidatorPubKey)
 
-		opts := c.validatorOptions
+		opts := *c.validatorOptions
 		opts.SSVShare = validatorShare
 		allRoles := []spectypes.BeaconRole{
 			spectypes.BNRoleAttester,
@@ -676,29 +675,23 @@ func (c *controller) onShareStart(share *ssvtypes.SSVShare) (bool, error) {
 	}
 
 	if err := c.setShareFeeRecipient(share, c.recipientsStorage.GetRecipientData); err != nil {
-		return false, fmt.Errorf("could not set share fee recipient: %w", err)
+		return false, errors.Wrap(err, "could not set share fee recipient")
 	}
 
 	// Start a committee validator.
-	v, found := c.validatorsMap.GetValidator(hex.EncodeToString(share.ValidatorPubKey))
-	if !found {
-		createdValidator, err := c.validatorsMap.CreateValidator(c.logger.Named("validatorsMap"), share, c.validatorOptions)
-		if err != nil {
-			return false, fmt.Errorf("could not get or create validator: %w", err)
-		}
-
-		v = createdValidator
+	v, err := c.validatorsMap.GetOrCreateValidator(c.logger.Named("validatorsMap"), share)
+	if err != nil {
+		return false, errors.Wrap(err, "could not get or create validator")
 	}
 	return c.startValidator(v)
 }
 
 func (c *controller) setShareFeeRecipient(share *ssvtypes.SSVShare, getRecipientData GetRecipientDataFunc) error {
+	var feeRecipient bellatrix.ExecutionAddress
 	data, found, err := getRecipientData(nil, share.OwnerAddress)
 	if err != nil {
 		return errors.Wrap(err, "could not get recipient data")
 	}
-
-	var feeRecipient bellatrix.ExecutionAddress
 	if !found {
 		c.logger.Debug("setting fee recipient to owner address",
 			fields.Validator(share.ValidatorPubKey), fields.FeeRecipient(share.OwnerAddress.Bytes()))
