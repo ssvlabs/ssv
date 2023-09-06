@@ -5,17 +5,18 @@ import (
 	"net"
 	"time"
 
-	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/network/forks"
-	"github.com/bloxapp/ssv/network/peers"
-	"github.com/bloxapp/ssv/network/topics/params"
-	"github.com/bloxapp/ssv/utils/async"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/discovery"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/network/commons"
+	"github.com/bloxapp/ssv/network/peers"
+	"github.com/bloxapp/ssv/network/topics/params"
+	"github.com/bloxapp/ssv/utils/async"
 )
 
 const (
@@ -102,12 +103,17 @@ func (cfg *PububConfig) initScoring() {
 }
 
 // NewPubsub creates a new pubsub router and the necessary components
-func NewPubsub(ctx context.Context, logger *zap.Logger, cfg *PububConfig, fork forks.Fork) (*pubsub.PubSub, Controller, error) {
+func NewPubsub(ctx context.Context, logger *zap.Logger, cfg *PububConfig) (*pubsub.PubSub, Controller, error) {
 	if err := cfg.init(); err != nil {
 		return nil, nil, err
 	}
 
-	sf := newSubFilter(logger, fork, subscriptionRequestLimit)
+	// Set up a SubFilter with a whitelist of known topics.
+	sf := newSubFilter(logger, subscriptionRequestLimit)
+	for _, topic := range commons.Topics() {
+		sf.(Whitelist).Register(topic)
+	}
+
 	psOpts := []pubsub.Option{
 		pubsub.WithSeenMessagesTTL(cfg.MsgIDCacheTTL),
 		pubsub.WithPeerOutboundQueueSize(cfg.OutboundQueueSize),
@@ -143,7 +149,7 @@ func NewPubsub(ctx context.Context, logger *zap.Logger, cfg *PububConfig, fork f
 				return 100, 100, 10, nil
 			}
 		}
-		topicScoreFactory = topicScoreParams(logger, cfg, fork)
+		topicScoreFactory = topicScoreParams(logger, cfg)
 	}
 
 	if cfg.MsgIDHandler != nil {
@@ -163,7 +169,7 @@ func NewPubsub(ctx context.Context, logger *zap.Logger, cfg *PububConfig, fork f
 		return nil, nil, err
 	}
 
-	ctrl := NewTopicsController(ctx, logger, cfg.MsgHandler, cfg.MsgValidatorFactory, sf, ps, fork, topicScoreFactory)
+	ctrl := NewTopicsController(ctx, logger, cfg.MsgHandler, cfg.MsgValidatorFactory, sf, ps, topicScoreFactory)
 
 	return ps, ctrl, nil
 }

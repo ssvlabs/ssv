@@ -21,6 +21,10 @@ spec:
       protocol: TCP
       targetPort: 15304
       name: port-15304
+    - port: 16304
+      protocol: TCP
+      targetPort: 16304
+      name: port-16304
   selector:
     app: ssv-node-v3-4
 ---
@@ -72,6 +76,9 @@ spec:
         - containerPort: 15304
           name: port-15304
           hostPort: 15304
+        - containerPort: 16304
+          name: port-16304
+          hostPort: 16304
         env:
         - name: SHARE_CONFIG
           value: "./data/share.yaml"
@@ -108,6 +115,8 @@ spec:
           value: "jato-v2-stage"
         - name: METRICS_API_PORT
           value: "15304"
+        - name: SSV_API_PORT
+          value: "16304"
         - name: ENABLE_PROFILE
           value: "true"
         - name: BUILDER_PROPOSALS

@@ -2,9 +2,8 @@ package goclient
 
 import (
 	"context"
-	"fmt"
-	"log"
 	"math"
+	"strings"
 	"sync"
 	"time"
 
@@ -21,7 +20,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/operator/slot_ticker"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
@@ -29,10 +27,6 @@ import (
 // DataVersionNil is just a placeholder for a nil data version.
 // Don't check for it, check for errors or nil data instead.
 const DataVersionNil spec.DataVersion = math.MaxUint64
-
-const (
-	healthCheckTimeout = 10 * time.Second
-)
 
 type beaconNodeStatus int32
 
@@ -65,16 +59,41 @@ var (
 )
 
 func init() {
+	logger := zap.L()
 	for _, c := range allMetrics {
 		if err := prometheus.Register(c); err != nil {
-			log.Println("could not register prometheus collector")
+			logger.Debug("could not register prometheus collector")
 		}
+	}
+}
+
+// NodeClient is the type of the Beacon node.
+type NodeClient string
+
+const (
+	NodeLighthouse NodeClient = "lighthouse"
+	NodePrysm      NodeClient = "prysm"
+	NodeUnknown    NodeClient = "unknown"
+)
+
+// ParseNodeClient derives the client from node's version string.
+func ParseNodeClient(version string) NodeClient {
+	version = strings.ToLower(version)
+	switch {
+	case strings.Contains(version, "lighthouse"):
+		return NodeLighthouse
+	case strings.Contains(version, "prysm"):
+		return NodePrysm
+	default:
+		return NodeUnknown
 	}
 }
 
 // Client defines all go-eth2-client interfaces used in ssv
 type Client interface {
 	eth2client.Service
+	eth2client.NodeVersionProvider
+	eth2client.NodeClientProvider
 
 	eth2client.AttestationDataProvider
 	eth2client.AggregateAttestationProvider
@@ -105,12 +124,20 @@ type Client interface {
 	eth2client.ValidatorRegistrationsSubmitter
 }
 
+type NodeClientProvider interface {
+	NodeClient() NodeClient
+}
+
+var _ NodeClientProvider = (*goClient)(nil)
+
 // goClient implementing Beacon struct
 type goClient struct {
 	log                  *zap.Logger
 	ctx                  context.Context
 	network              beaconprotocol.Network
 	client               Client
+	nodeVersion          string
+	nodeClient           NodeClient
 	graffiti             []byte
 	gasLimit             uint64
 	operatorID           spectypes.OperatorID
@@ -118,9 +145,6 @@ type goClient struct {
 	registrationLastSlot phase0.Slot
 	registrationCache    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration
 }
-
-// verifies that the client implements HealthCheckAgent
-var _ metrics.HealthCheckAgent = &goClient{}
 
 // New init new client and go-client instance
 func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.OperatorID, slotTicker slot_ticker.Ticker) (beaconprotocol.BeaconNode, error) {
@@ -137,8 +161,6 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 		return nil, errors.WithMessage(err, "failed to create http client")
 	}
 
-	logger.Info("consensus client: connected", fields.Name(httpClient.Name()), fields.Address(httpClient.Address()))
-
 	tickerChan := make(chan phase0.Slot, 32)
 	slotTicker.Subscribe(tickerChan)
 
@@ -153,30 +175,54 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 		registrationCache: map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
 	}
 
+	// Get the node's version and client.
+	client.nodeVersion, err = client.client.NodeVersion(opt.Context)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get node version")
+	}
+	client.nodeClient = ParseNodeClient(client.nodeVersion)
+
+	logger.Info("consensus client connected",
+		fields.Name(httpClient.Name()),
+		fields.Address(httpClient.Address()),
+		zap.String("client", string(client.nodeClient)),
+		zap.String("version", client.nodeVersion),
+	)
+
+	// Start registration submitter.
 	go client.registrationSubmitter(tickerChan)
 
 	return client, nil
 }
 
-// HealthCheck provides health status of beacon node
-func (gc *goClient) HealthCheck() []string {
-	if gc.client == nil {
-		return []string{"not connected to beacon node"}
-	}
-	ctx, cancel := context.WithTimeout(gc.ctx, healthCheckTimeout)
-	defer cancel()
+func (gc *goClient) NodeClient() NodeClient {
+	return gc.nodeClient
+}
+
+// Healthy returns if beacon node is currently healthy: responds to requests, not in the syncing state, not optimistic
+// (for optimistic see https://github.com/ethereum/consensus-specs/blob/dev/sync/optimistic.md#block-production).
+func (gc *goClient) Healthy(ctx context.Context) error {
 	syncState, err := gc.client.NodeSyncing(ctx)
 	if err != nil {
+		// TODO: get rid of global variable, pass metrics to goClient
 		metricsBeaconNodeStatus.Set(float64(statusUnknown))
-		return []string{"could not get beacon node sync state"}
+		return err
 	}
-	if syncState != nil && syncState.IsSyncing {
-		metricsBeaconNodeStatus.Set(float64(statusSyncing))
-		return []string{fmt.Sprintf("beacon node is currently syncing: head=%d, distance=%d",
-			syncState.HeadSlot, syncState.SyncDistance)}
+
+	// TODO: also check if syncState.ElOffline when github.com/attestantio/go-eth2-client supports it
+	metricsBeaconNodeStatus.Set(float64(statusSyncing))
+	if syncState == nil {
+		return errors.New("sync state is nil")
 	}
+	if syncState.IsSyncing {
+		return errors.New("syncing")
+	}
+	if syncState.IsOptimistic {
+		return errors.New("optimistic")
+	}
+
 	metricsBeaconNodeStatus.Set(float64(statusOK))
-	return []string{}
+	return nil
 }
 
 // GetBeaconNetwork returns the beacon network the node is on

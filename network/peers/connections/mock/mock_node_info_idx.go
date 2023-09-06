@@ -7,15 +7,13 @@ import (
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
 )
 
 var _ peers.NodeInfoIndex = NodeInfoIndex{}
 
 type NodeInfoIndex struct {
-	MockNodeInfo          *records.NodeInfo
-	MockSelfSealed        []byte
-	MockAddNodeInfoResult bool
+	MockNodeInfo   *records.NodeInfo
+	MockSelfSealed []byte
 }
 
 func (m NodeInfoIndex) SelfSealed(sender, recipient peer.ID, permissioned bool, operatorPrivateKey *rsa.PrivateKey) ([]byte, error) {
@@ -36,13 +34,8 @@ func (m NodeInfoIndex) UpdateSelfRecord(newInfo *records.NodeInfo) {
 	panic("implement me")
 }
 
-func (m NodeInfoIndex) AddNodeInfo(logger *zap.Logger, id peer.ID, node *records.NodeInfo) (bool, error) {
-	if m.MockAddNodeInfoResult {
-		return true, nil
-	}
-	return false, errors.New("AddNodeInfo error")
-}
+func (m NodeInfoIndex) SetNodeInfo(id peer.ID, node *records.NodeInfo) {}
 
-func (m NodeInfoIndex) GetNodeInfo(id peer.ID) (*records.NodeInfo, error) {
-	return m.MockNodeInfo, nil
+func (m NodeInfoIndex) NodeInfo(id peer.ID) *records.NodeInfo {
+	return m.MockNodeInfo
 }

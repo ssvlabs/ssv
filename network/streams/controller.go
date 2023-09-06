@@ -12,8 +12,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/network/forks"
 )
 
 // StreamResponder abstracts the stream access with a simpler interface that accepts only the data to send
@@ -28,12 +26,12 @@ type StreamController interface {
 }
 
 // NewStreamController create a new instance of StreamController
-func NewStreamController(ctx context.Context, host host.Host, fork forks.Fork, requestTimeout time.Duration) StreamController {
+func NewStreamController(ctx context.Context, host host.Host, dialTimeout, readWriteTimeout time.Duration) StreamController {
 	ctrl := streamCtrl{
-		ctx:            ctx,
-		host:           host,
-		fork:           fork,
-		requestTimeout: requestTimeout,
+		ctx:              ctx,
+		host:             host,
+		dialTimeout:      dialTimeout,
+		readWriteTimeout: readWriteTimeout,
 	}
 
 	return &ctrl
@@ -43,35 +41,38 @@ type streamCtrl struct {
 	ctx context.Context
 
 	host host.Host
-	fork forks.Fork
 
-	requestTimeout time.Duration
+	dialTimeout      time.Duration
+	readWriteTimeout time.Duration
 }
 
 // Request sends a message to the given stream and returns the response
 func (n *streamCtrl) Request(logger *zap.Logger, peerID peer.ID, protocol protocol.ID, data []byte) ([]byte, error) {
-	s, err := n.host.NewStream(n.ctx, peerID, protocol)
+	// Dial with timeout.
+	ctx, cancel := context.WithTimeout(n.ctx, n.dialTimeout)
+	defer cancel()
+
+	s, err := n.host.NewStream(ctx, peerID, protocol)
 	if err != nil {
 		return nil, err
 	}
-	stream := NewStream(s)
 	defer func() {
-		err := stream.Close()
-		if err != nil && err.Error() != libp2pnetwork.ErrReset.Error() {
-			logger.Debug("failed to close stream (request)", zap.String("s_id", stream.ID()), zap.Error(err))
+		if err := s.Close(); err != nil {
+			logger.Debug("could not close stream", zap.Error(err))
 		}
 	}()
+	stream := NewStream(s)
 	metricsStreamOutgoingRequests.WithLabelValues(string(protocol)).Inc()
 	metricsStreamRequestsActive.WithLabelValues(string(protocol)).Inc()
 	defer metricsStreamRequestsActive.WithLabelValues(string(protocol)).Dec()
 
-	if err := stream.WriteWithTimeout(data, n.requestTimeout); err != nil {
+	if err := stream.WriteWithTimeout(data, n.readWriteTimeout); err != nil {
 		return nil, errors.Wrap(err, "could not write to stream")
 	}
 	if err := s.CloseWrite(); err != nil {
 		return nil, errors.Wrap(err, "could not close write stream")
 	}
-	res, err := stream.ReadWithTimeout(n.requestTimeout)
+	res, err := stream.ReadWithTimeout(n.readWriteTimeout)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not read stream msg")
 	}
@@ -92,7 +93,7 @@ func (n *streamCtrl) HandleStream(logger *zap.Logger, stream core.Stream) ([]byt
 			logger.Debug("failed to close stream (handler)", zap.String("s_id", stream.ID()), zap.Error(err))
 		}
 	}
-	data, err := s.ReadWithTimeout(n.requestTimeout)
+	data, err := s.ReadWithTimeout(n.readWriteTimeout)
 	if err != nil {
 		return nil, nil, done, errors.Wrap(err, "could not read stream msg")
 	}
@@ -100,7 +101,7 @@ func (n *streamCtrl) HandleStream(logger *zap.Logger, stream core.Stream) ([]byt
 	return data, func(res []byte) error {
 		cp := make([]byte, len(res))
 		copy(cp, res)
-		if err := s.WriteWithTimeout(cp, n.requestTimeout); err != nil {
+		if err := s.WriteWithTimeout(cp, n.readWriteTimeout); err != nil {
 			// logger.Debug("could not write to stream", zap.Error(err))
 			return errors.Wrap(err, "could not write to stream")
 		}

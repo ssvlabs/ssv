@@ -58,6 +58,10 @@ spec:
       protocol: TCP
       targetPort: 15000
       name: port-15000
+    - port: 16000
+      protocol: TCP
+      targetPort: 16000
+      name: port-16000
   selector:
     app: ssv-exporter
 ---
@@ -112,6 +116,9 @@ spec:
             - containerPort: 15000
               name: port-15000
               hostPort: 15000
+            - containerPort: 16000
+              name: port-16000
+              hostPort: 16000
           env:
             - name: SHARE_CONFIG
               value: "./data/share.yaml"
@@ -140,9 +147,9 @@ spec:
               value: "false"
             - name: METRICS_API_PORT
               value: "15000"
+            - name: SSV_API_PORT
+              value: "16000"
             - name: ENABLE_PROFILE
-              value: "true"
-            - name: GENERATE_OPERATOR_KEY
               value: "true"
             - name: UDP_PORT
               value: "12000"

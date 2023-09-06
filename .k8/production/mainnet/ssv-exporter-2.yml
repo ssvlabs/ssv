@@ -58,6 +58,10 @@ spec:
       protocol: TCP
       targetPort: 15016
       name: port-15016
+    - port: 16016
+      protocol: TCP
+      targetPort: 16016
+      name: port-16016
   selector:
     app: ssv-full-node-mainnet-2
 ---
@@ -116,6 +120,9 @@ spec:
         - containerPort: 15016
           name: port-15016
           hostPort: 15016
+        - containerPort: 16016
+          name: port-16016
+          hostPort: 16016
         env:
           - name: SHARE_CONFIG
             value: "./data/share.yaml"
@@ -133,6 +140,8 @@ spec:
             value: "./data/db-mainnet"
           - name: METRICS_API_PORT
             value: "15016"
+          - name: SSV_API_PORT
+            value: "16016"
           - name: ENABLE_PROFILE
             value: "true"
           - name: UDP_PORT

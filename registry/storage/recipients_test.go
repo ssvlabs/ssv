@@ -11,8 +11,8 @@ import (
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/registry/storage"
-	ssvstorage "github.com/bloxapp/ssv/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/kv"
 )
 
 func TestStorage_SaveAndGetRecipientData(t *testing.T) {
@@ -27,17 +27,17 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 	copy(recipientData.FeeRecipient[:], "0x2")
 
 	t.Run("get non-existing recipient", func(t *testing.T) {
-		nonExistingRecipient, found, err := storageCollection.GetRecipientData(recipientData.Owner)
+		nonExistingRecipient, found, err := storageCollection.GetRecipientData(nil, recipientData.Owner)
 		require.NoError(t, err)
 		require.Nil(t, nonExistingRecipient)
 		require.False(t, found)
 	})
 
 	t.Run("create and get recipient", func(t *testing.T) {
-		rd, err := storageCollection.SaveRecipientData(recipientData)
+		rd, err := storageCollection.SaveRecipientData(nil, recipientData)
 		require.NoError(t, err)
 
-		recipientDataFromDB, found, err := storageCollection.GetRecipientData(recipientData.Owner)
+		recipientDataFromDB, found, err := storageCollection.GetRecipientData(nil, recipientData.Owner)
 		require.NoError(t, err)
 		require.True(t, found)
 		require.Equal(t, recipientData.Owner, recipientDataFromDB.Owner)
@@ -52,18 +52,48 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 		}
 		copy(rdToSave.FeeRecipient[:], "0x2")
 
-		rd, err := storageCollection.SaveRecipientData(rdToSave)
+		rd, err := storageCollection.SaveRecipientData(nil, rdToSave)
 		require.NoError(t, err)
 		require.NotNil(t, rd)
 
-		rdDup, err := storageCollection.SaveRecipientData(rdToSave)
+		rdDup, err := storageCollection.SaveRecipientData(nil, rdToSave)
 		require.NoError(t, err)
 		require.Nil(t, rdDup)
 
-		rdFromDB, found, err := storageCollection.GetRecipientData(rd.Owner)
+		rdFromDB, found, err := storageCollection.GetRecipientData(nil, rd.Owner)
 		require.NoError(t, err)
 		require.True(t, found)
 		require.NotNil(t, rdFromDB)
+	})
+
+	t.Run("save/get/save fee recipient address without overwriting nonce", func(t *testing.T) {
+		var nonce storage.Nonce
+		rdToSave := &storage.RecipientData{
+			Owner: common.BytesToAddress([]byte("0x3")),
+			Nonce: &nonce,
+		}
+		copy(rdToSave.FeeRecipient[:], "0x3")
+
+		rd, err := storageCollection.SaveRecipientData(nil, rdToSave)
+		require.NoError(t, err)
+		require.NotNil(t, rd)
+		require.NotNil(t, rd.Nonce)
+		require.Equal(t, storage.Nonce(0), *rd.Nonce)
+
+		rdToSave, found, err := storageCollection.GetRecipientData(nil, rd.Owner)
+		require.NoError(t, err)
+		require.True(t, found)
+		rdDup, err := storageCollection.SaveRecipientData(nil, rdToSave)
+		require.NoError(t, err)
+		require.Nil(t, rdDup)
+		require.NotNil(t, rd.Nonce)
+		require.Equal(t, storage.Nonce(0), *rd.Nonce)
+
+		rdFromDB, found, err := storageCollection.GetRecipientData(nil, rd.Owner)
+		require.NoError(t, err)
+		require.True(t, found)
+		require.NotNil(t, rdFromDB.Nonce)
+		require.Equal(t, storage.Nonce(0), *rdFromDB.Nonce)
 	})
 
 	t.Run("update existing recipient", func(t *testing.T) {
@@ -72,20 +102,23 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 		}
 		copy(rdToSave.FeeRecipient[:], "0x2")
 
-		rd, err := storageCollection.SaveRecipientData(rdToSave)
+		rd, err := storageCollection.SaveRecipientData(nil, rdToSave)
 		require.NoError(t, err)
 		require.NotNil(t, rd)
+		require.Nil(t, rd.Nonce)
 
 		copy(rdToSave.FeeRecipient[:], "0x3")
-		rdNew, err := storageCollection.SaveRecipientData(rdToSave)
+		rdNew, err := storageCollection.SaveRecipientData(nil, rdToSave)
 		require.NoError(t, err)
 		require.NotNil(t, rdNew)
+		require.Nil(t, rd.Nonce)
 
-		rdFromDB, found, err := storageCollection.GetRecipientData(rd.Owner)
+		rdFromDB, found, err := storageCollection.GetRecipientData(nil, rd.Owner)
 		require.NoError(t, err)
 		require.True(t, found)
 		require.Equal(t, rdNew.Owner, rdFromDB.Owner)
 		require.Equal(t, rdNew.FeeRecipient, rdFromDB.FeeRecipient)
+		require.Nil(t, rd.Nonce)
 	})
 
 	t.Run("delete recipient", func(t *testing.T) {
@@ -94,14 +127,14 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 		}
 		copy(rdToSave.FeeRecipient[:], "0x2")
 
-		rd, err := storageCollection.SaveRecipientData(rdToSave)
+		rd, err := storageCollection.SaveRecipientData(nil, rdToSave)
 		require.NoError(t, err)
 		require.NotNil(t, rd)
 
-		err = storageCollection.DeleteRecipientData(rd.Owner)
+		err = storageCollection.DeleteRecipientData(nil, rd.Owner)
 		require.NoError(t, err)
 
-		rdFromDB, found, err := storageCollection.GetRecipientData(rd.Owner)
+		rdFromDB, found, err := storageCollection.GetRecipientData(nil, rd.Owner)
 		require.NoError(t, err)
 		require.False(t, found)
 		require.Nil(t, rdFromDB)
@@ -117,13 +150,13 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 			copy(recipientData.FeeRecipient[:], fmt.Sprintf("0x%d", i))
 			ownerAddresses = append(ownerAddresses, rd.Owner)
 
-			_, err := storageCollection.SaveRecipientData(&rd)
+			_, err := storageCollection.SaveRecipientData(nil, &rd)
 			require.NoError(t, err)
 
 			savedRecipients = append(savedRecipients, &rd)
 		}
 
-		recipients, err := storageCollection.GetRecipientDataMany(logger, ownerAddresses)
+		recipients, err := storageCollection.GetRecipientDataMany(nil, ownerAddresses)
 		require.NoError(t, err)
 		require.Equal(t, len(ownerAddresses), len(recipients))
 
@@ -137,10 +170,10 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 			Owner: common.BytesToAddress([]byte("0x11111")),
 		}
 
-		rd, err := storageCollection.SaveRecipientData(rdToCreate)
+		rd, err := storageCollection.SaveRecipientData(nil, rdToCreate)
 		require.NoError(t, err)
 
-		recipientDataFromDB, found, err := storageCollection.GetRecipientData(rdToCreate.Owner)
+		recipientDataFromDB, found, err := storageCollection.GetRecipientData(nil, rdToCreate.Owner)
 		require.NoError(t, err)
 		require.True(t, found)
 		require.Equal(t, rdToCreate.Owner, recipientDataFromDB.Owner)
@@ -156,15 +189,15 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 		var feeRecipient bellatrix.ExecutionAddress
 		copy(feeRecipient[:], owner.Bytes())
 
-		data, found, err := storageCollection.GetRecipientData(owner)
+		data, found, err := storageCollection.GetRecipientData(nil, owner)
 		require.NoError(t, err)
 		require.False(t, found)
 		require.Nil(t, data)
 
-		err = storageCollection.BumpNonce(owner)
+		err = storageCollection.BumpNonce(nil, owner)
 		require.NoError(t, err)
 
-		data, found, err = storageCollection.GetRecipientData(owner)
+		data, found, err = storageCollection.GetRecipientData(nil, owner)
 		require.NoError(t, err)
 		require.True(t, found)
 		require.NotNil(t, data)
@@ -178,14 +211,14 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 			Owner: common.BytesToAddress([]byte("0x11113")),
 		}
 		copy(rdToCreate.FeeRecipient[:], rdToCreate.Owner.Bytes())
-		rd, err := storageCollection.SaveRecipientData(rdToCreate)
+		rd, err := storageCollection.SaveRecipientData(nil, rdToCreate)
 		require.NoError(t, err)
 		require.NotNil(t, rd)
 
-		err = storageCollection.BumpNonce(rdToCreate.Owner)
+		err = storageCollection.BumpNonce(nil, rdToCreate.Owner)
 		require.NoError(t, err)
 
-		data, found, err := storageCollection.GetRecipientData(rdToCreate.Owner)
+		data, found, err := storageCollection.GetRecipientData(nil, rdToCreate.Owner)
 		require.NoError(t, err)
 		require.True(t, found)
 		require.NotNil(t, data)
@@ -200,14 +233,14 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 		copy(rdToCreate.FeeRecipient[:], rdToCreate.Owner.Bytes())
 		rdToCreate.Nonce = &nonce
 
-		rd, err := storageCollection.SaveRecipientData(rdToCreate)
+		rd, err := storageCollection.SaveRecipientData(nil, rdToCreate)
 		require.NoError(t, err)
 		require.NotNil(t, rd)
 
-		err = storageCollection.BumpNonce(rdToCreate.Owner)
+		err = storageCollection.BumpNonce(nil, rdToCreate.Owner)
 		require.NoError(t, err)
 
-		data, found, err := storageCollection.GetRecipientData(rdToCreate.Owner)
+		data, found, err := storageCollection.GetRecipientData(nil, rdToCreate.Owner)
 		require.NoError(t, err)
 		require.True(t, found)
 		require.NotNil(t, data)
@@ -219,16 +252,16 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 		var feeRecipient bellatrix.ExecutionAddress
 		copy(feeRecipient[:], owner.Bytes())
 
-		data, found, err := storageCollection.GetRecipientData(owner)
+		data, found, err := storageCollection.GetRecipientData(nil, owner)
 		require.NoError(t, err)
 		require.False(t, found)
 		require.Nil(t, data)
 
-		nonce, err := storageCollection.GetNextNonce(owner)
+		nonce, err := storageCollection.GetNextNonce(nil, owner)
 		require.NoError(t, err)
 		require.Equal(t, storage.Nonce(0), nonce)
 
-		data, found, err = storageCollection.GetRecipientData(owner)
+		data, found, err = storageCollection.GetRecipientData(nil, owner)
 		require.NoError(t, err)
 		require.False(t, found)
 		require.Nil(t, data)
@@ -240,15 +273,15 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 		}
 		copy(rdToCreate.FeeRecipient[:], rdToCreate.Owner.Bytes())
 
-		rd, err := storageCollection.SaveRecipientData(rdToCreate)
+		rd, err := storageCollection.SaveRecipientData(nil, rdToCreate)
 		require.NoError(t, err)
 		require.NotNil(t, rd)
 
-		nonce, err := storageCollection.GetNextNonce(rdToCreate.Owner)
+		nonce, err := storageCollection.GetNextNonce(nil, rdToCreate.Owner)
 		require.NoError(t, err)
 		require.Equal(t, storage.Nonce(0), nonce)
 
-		data, found, err := storageCollection.GetRecipientData(rdToCreate.Owner)
+		data, found, err := storageCollection.GetRecipientData(nil, rdToCreate.Owner)
 		require.NoError(t, err)
 		require.True(t, found)
 		require.NotNil(t, data)
@@ -261,18 +294,18 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 		}
 		copy(rdToCreate.FeeRecipient[:], rdToCreate.Owner.Bytes())
 
-		rd, err := storageCollection.SaveRecipientData(rdToCreate)
+		rd, err := storageCollection.SaveRecipientData(nil, rdToCreate)
 		require.NoError(t, err)
 		require.NotNil(t, rd)
 
-		nonce, err := storageCollection.GetNextNonce(rdToCreate.Owner)
+		nonce, err := storageCollection.GetNextNonce(nil, rdToCreate.Owner)
 		require.NoError(t, err)
 		require.Equal(t, storage.Nonce(0), nonce)
 
-		err = storageCollection.BumpNonce(rdToCreate.Owner)
+		err = storageCollection.BumpNonce(nil, rdToCreate.Owner)
 		require.NoError(t, err)
 
-		data, found, err := storageCollection.GetRecipientData(rdToCreate.Owner)
+		data, found, err := storageCollection.GetRecipientData(nil, rdToCreate.Owner)
 		require.NoError(t, err)
 		require.True(t, found)
 		require.NotNil(t, data)
@@ -285,18 +318,18 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 		}
 		copy(rdToCreate.FeeRecipient[:], rdToCreate.Owner.Bytes())
 
-		rd, err := storageCollection.SaveRecipientData(rdToCreate)
+		rd, err := storageCollection.SaveRecipientData(nil, rdToCreate)
 		require.NoError(t, err)
 		require.NotNil(t, rd)
 
-		err = storageCollection.BumpNonce(rdToCreate.Owner)
+		err = storageCollection.BumpNonce(nil, rdToCreate.Owner)
 		require.NoError(t, err)
 
-		nonce, err := storageCollection.GetNextNonce(rdToCreate.Owner)
+		nonce, err := storageCollection.GetNextNonce(nil, rdToCreate.Owner)
 		require.NoError(t, err)
 		require.Equal(t, storage.Nonce(1), nonce)
 
-		data, found, err := storageCollection.GetRecipientData(rdToCreate.Owner)
+		data, found, err := storageCollection.GetRecipientData(nil, rdToCreate.Owner)
 		require.NoError(t, err)
 		require.True(t, found)
 		require.NotNil(t, data)
@@ -305,15 +338,13 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 }
 
 func newRecipientStorageForTest(logger *zap.Logger) (storage.Recipients, func()) {
-	db, err := ssvstorage.GetStorageFactory(logger, basedb.Options{
-		Type: "badger-memory",
-		Path: "",
-	})
+	db, err := kv.NewInMemory(logger, basedb.Options{})
 	if err != nil {
 		return nil, func() {}
 	}
-	s := storage.NewRecipientsStorage(db, []byte("test"))
+
+	s := storage.NewRecipientsStorage(logger, db, []byte("test"))
 	return s, func() {
-		db.Close(logger)
+		db.Close()
 	}
 }

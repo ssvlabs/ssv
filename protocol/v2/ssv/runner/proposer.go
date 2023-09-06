@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/api"
+	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
+	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -15,6 +18,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec"
 
+	"github.com/bloxapp/ssv/beacon/goclient"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
@@ -105,20 +109,35 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 		// get block data
 		obj, ver, err = r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
 		if err != nil {
-			// Prysm currently doesn’t support MEV.
-			// TODO: Check Prysm MEV support after https://github.com/prysmaticlabs/prysm/issues/12103 is resolved.
-			return errors.Wrap(err, "failed to get Beacon block")
+			// Prysm workaround: when Prysm can't retrieve an MEV block, it responds with an error
+			// saying the block isn't blinded, implying to request a standard block instead.
+			// https://github.com/prysmaticlabs/prysm/issues/12103
+			if nodeClientProvider, ok := r.GetBeaconNode().(goclient.NodeClientProvider); ok &&
+				nodeClientProvider.NodeClient() == goclient.NodePrysm {
+				logger.Debug("failed to get blinded beacon block, falling back to standard block")
+				obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
+				if err != nil {
+					return errors.Wrap(err, "failed falling back from blinded to standard beacon block")
+				}
+			} else {
+				return errors.Wrap(err, "failed to get blinded beacon block")
+			}
 		}
 	} else {
 		// get block data
 		obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
 		if err != nil {
-			return errors.Wrap(err, "failed to get Beacon block")
+			return errors.Wrap(err, "failed to get beacon block")
 		}
 	}
 
-	logger.Debug("🧊 got beacon block",
-		zap.Duration("took", time.Since(start)))
+	// Log essentials about the retrieved block.
+	blockSummary, summarizeErr := summarizeBlock(obj)
+	logger.Info("🧊 got beacon block proposal",
+		zap.String("block_hash", blockSummary.Hash.String()),
+		zap.Bool("blinded", blockSummary.Blinded),
+		zap.Duration("took", time.Since(start)),
+		zap.NamedError("summarize_err", summarizeErr))
 
 	byts, err := obj.MarshalSSZ()
 	if err != nil {
@@ -222,12 +241,13 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		blockSubmissionEnd := r.metrics.StartBeaconSubmission()
 
 		start := time.Now()
-		decidedBlockIsBlinded := r.decidedBlindedBlock()
-		if decidedBlockIsBlinded {
+		var blk any
+		if r.decidedBlindedBlock() {
 			vBlindedBlk, _, err := r.GetState().DecidedValue.GetBlindedBlockData()
 			if err != nil {
 				return errors.Wrap(err, "could not get blinded block")
 			}
+			blk = vBlindedBlk
 
 			if err := r.GetBeaconNode().SubmitBlindedBeaconBlock(vBlindedBlk, specSig); err != nil {
 				r.metrics.RoleSubmissionFailed()
@@ -239,6 +259,7 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 			if err != nil {
 				return errors.Wrap(err, "could not get block")
 			}
+			blk = vBlk
 
 			if err := r.GetBeaconNode().SubmitBeaconBlock(vBlk, specSig); err != nil {
 				r.metrics.RoleSubmissionFailed()
@@ -251,12 +272,15 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
 		r.metrics.RoleSubmitted()
 
+		blockSummary, summarizeErr := summarizeBlock(blk)
 		logger.Info("✅ successfully submitted block proposal",
 			fields.Slot(signedMsg.Message.Slot),
 			fields.Height(r.BaseRunner.QBFTController.Height),
 			fields.Round(r.GetState().RunningInstance.State.Round),
-			fields.BuilderProposals(decidedBlockIsBlinded),
-			zap.Duration("took", time.Since(start)))
+			zap.String("block_hash", blockSummary.Hash.String()),
+			zap.Bool("blinded", blockSummary.Blinded),
+			zap.Duration("took", time.Since(start)),
+			zap.NamedError("summarize_err", summarizeErr))
 	}
 	r.GetState().Finished = true
 	return nil
@@ -389,4 +413,46 @@ func (r *ProposerRunner) GetRoot() ([32]byte, error) {
 	}
 	ret := sha256.Sum256(marshaledRoot)
 	return ret, nil
+}
+
+// blockSummary contains essentials about a block. Useful for logging.
+type blockSummary struct {
+	Hash    phase0.Hash32
+	Blinded bool
+	Version spec.DataVersion
+}
+
+// summarizeBlock returns a blockSummary for the given block.
+func summarizeBlock(block any) (summary blockSummary, err error) {
+	if block == nil {
+		return summary, errors.New("block is nil")
+	}
+	switch b := block.(type) {
+	case *api.VersionedBlindedBeaconBlock:
+		switch b.Version {
+		case spec.DataVersionCapella:
+			return summarizeBlock(b.Capella)
+		}
+	case *spec.VersionedBeaconBlock:
+		switch b.Version {
+		case spec.DataVersionCapella:
+			return summarizeBlock(b.Capella)
+		}
+
+	case *capella.BeaconBlock:
+		if b == nil || b.Body == nil || b.Body.ExecutionPayload == nil {
+			return summary, errors.New("block, body or execution payload is nil")
+		}
+		summary.Hash = b.Body.ExecutionPayload.BlockHash
+		summary.Version = spec.DataVersionCapella
+
+	case *apiv1capella.BlindedBeaconBlock:
+		if b == nil || b.Body == nil || b.Body.ExecutionPayloadHeader == nil {
+			return summary, errors.New("block, body or execution payload header is nil")
+		}
+		summary.Hash = b.Body.ExecutionPayloadHeader.BlockHash
+		summary.Blinded = true
+		summary.Version = spec.DataVersionCapella
+	}
+	return
 }

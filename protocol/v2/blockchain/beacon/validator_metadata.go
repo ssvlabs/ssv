@@ -2,28 +2,26 @@ package beacon
 
 import (
 	"encoding/hex"
-	"math"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/protocol/v2/queue"
 )
 
 //go:generate mockgen -package=beacon -destination=./mock_validator_metadata.go -source=./validator_metadata.go
 
 // ValidatorMetadataStorage interface for validator metadata
 type ValidatorMetadataStorage interface {
-	UpdateValidatorMetadata(logger *zap.Logger, pk string, metadata *ValidatorMetadata) error
+	UpdateValidatorMetadata(pk string, metadata *ValidatorMetadata) error
 }
 
 // ValidatorMetadata represents validator metdata from beacon
 type ValidatorMetadata struct {
-	Balance phase0.Gwei              `json:"balance"`
-	Status  eth2apiv1.ValidatorState `json:"status"`
-	Index   phase0.ValidatorIndex    `json:"index"` // pointer in order to support nil
+	Balance         phase0.Gwei              `json:"balance"`
+	Status          eth2apiv1.ValidatorState `json:"status"`
+	Index           phase0.ValidatorIndex    `json:"index"` // pointer in order to support nil
+	ActivationEpoch phase0.Epoch             `json:"activation_epoch"`
 }
 
 // Equals returns true if the given metadata is equal to current
@@ -31,7 +29,8 @@ func (m *ValidatorMetadata) Equals(other *ValidatorMetadata) bool {
 	return other != nil &&
 		m.Status == other.Status &&
 		m.Index == other.Index &&
-		m.Balance == other.Balance
+		m.Balance == other.Balance &&
+		m.ActivationEpoch == other.ActivationEpoch
 }
 
 // Pending returns true if the validator is pending
@@ -65,7 +64,7 @@ func (m *ValidatorMetadata) Slashed() bool {
 }
 
 // OnUpdated represents a function to be called once validator's metadata was updated
-type OnUpdated func(logger *zap.Logger, pk string, meta *ValidatorMetadata)
+type OnUpdated func(pk string, meta *ValidatorMetadata)
 
 // UpdateValidatorsMetadata updates validator information for the given public keys
 func UpdateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte, collection ValidatorMetadataStorage, bc BeaconNode, onUpdated OnUpdated) error {
@@ -80,13 +79,13 @@ func UpdateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte, collection V
 
 	var errs []error
 	for pk, meta := range results {
-		if err := collection.UpdateValidatorMetadata(logger, pk, meta); err != nil {
+		if err := collection.UpdateValidatorMetadata(pk, meta); err != nil {
 			logger.Error("❗ failed to update validator metadata",
 				zap.String("validator", pk), zap.Error(err))
 			errs = append(errs, err)
 		}
 		if onUpdated != nil {
-			onUpdated(logger, pk, meta)
+			onUpdated(pk, meta)
 		}
 		logger.Debug("💾️ successfully updated validator metadata",
 			zap.String("pk", pk), zap.Any("metadata", meta))
@@ -119,45 +118,12 @@ func FetchValidatorsMetadata(bc BeaconNode, pubKeys [][]byte) (map[string]*Valid
 	for _, v := range validatorsIndexMap {
 		pk := hex.EncodeToString(v.Validator.PublicKey[:])
 		meta := &ValidatorMetadata{
-			Balance: v.Balance,
-			Status:  v.Status,
-			Index:   v.Index,
+			Balance:         v.Balance,
+			Status:          v.Status,
+			Index:           v.Index,
+			ActivationEpoch: v.Validator.ActivationEpoch,
 		}
 		ret[pk] = meta
 	}
 	return ret, nil
-}
-
-// UpdateValidatorsMetadataBatch updates the given public keys in batches
-func UpdateValidatorsMetadataBatch(logger *zap.Logger,
-	pubKeys [][]byte,
-	queue queue.Queue,
-	collection ValidatorMetadataStorage,
-	bc BeaconNode,
-	onUpdated OnUpdated,
-	batchSize int) {
-	batch(pubKeys, queue, func(pks [][]byte) func() error {
-		return func() error {
-			return UpdateValidatorsMetadata(logger, pks, collection, bc, onUpdated)
-		}
-	}, batchSize)
-}
-
-type batchTask func(pks [][]byte) func() error
-
-func batch(pubKeys [][]byte, queue queue.Queue, task batchTask, batchSize int) {
-	n := float64(len(pubKeys))
-	// in case the amount of public keys is lower than the batch size
-	batchSize = int(math.Min(n, float64(batchSize)))
-	batches := int(math.Ceil(n / float64(batchSize)))
-	start := 0
-	end := int(math.Min(n, float64(batchSize)))
-
-	for i := 0; i < batches; i++ {
-		// run task
-		queue.Queue(task(pubKeys[start:end]))
-		// reset start and end
-		start = end
-		end = int(math.Min(n, float64(start+batchSize)))
-	}
 }

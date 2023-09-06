@@ -10,16 +10,11 @@ import (
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/libp2p/go-libp2p/core/peerstore"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
-)
-
-const (
-	nodeInfoKey = "nodeInfo"
 )
 
 // MaxPeersProvider returns the max peers for the given topic.
@@ -34,10 +29,9 @@ type peersIndex struct {
 	netKeyProvider NetworkKeyProvider
 	network        libp2pnetwork.Network
 
-	states        *nodeStates
-	scoreIdx      ScoreIndex
-	subnets       SubnetsIndex
-	nodeInfoStore *nodeInfoStore
+	scoreIdx ScoreIndex
+	SubnetsIndex
+	PeerInfoIndex
 
 	selfLock *sync.RWMutex
 	self     *records.NodeInfo
@@ -50,10 +44,9 @@ func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *reco
 	netKeyProvider NetworkKeyProvider, subnetsCount int, pruneTTL time.Duration) *peersIndex {
 	return &peersIndex{
 		network:        network,
-		states:         newNodeStates(pruneTTL),
 		scoreIdx:       newScoreIndex(),
-		subnets:        newSubnetsIndex(subnetsCount),
-		nodeInfoStore:  newNodeInfoStore(network),
+		SubnetsIndex:   newSubnetsIndex(subnetsCount),
+		PeerInfoIndex:  NewPeerInfoIndex(),
 		self:           self,
 		selfLock:       &sync.RWMutex{},
 		maxPeers:       maxPeers,
@@ -66,10 +59,6 @@ func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *reco
 // - pruned (that was not expired)
 // - bad score
 func (pi *peersIndex) IsBad(logger *zap.Logger, id peer.ID) bool {
-	if pi.states.pruned(id.String()) {
-		logger.Debug("bad peer (pruned)")
-		return true
-	}
 	// TODO: check scores
 	threshold := -10000.0
 	scores, err := pi.GetScore(id, "")
@@ -165,52 +154,18 @@ func (pi *peersIndex) SelfSealed(sender, recipient peer.ID, permissioned bool, o
 
 }
 
-// AddNodeInfo adds a new node info
-func (pi *peersIndex) AddNodeInfo(logger *zap.Logger, id peer.ID, nodeInfo *records.NodeInfo) (bool, error) {
-	switch pi.states.State(id) {
-	case StateReady:
-		return true, nil
-	case StateIndexing:
-		// TODO: handle
-		return true, nil
-	case StatePruned:
-		return false, ErrWasPruned
-	case StateUnknown:
-	default:
-	}
-	pid := id.String()
-	pi.states.setState(pid, StateIndexing)
-	added, err := pi.nodeInfoStore.Add(logger, id, nodeInfo)
-	if err != nil || !added {
-		pi.states.setState(pid, StateUnknown)
-	} else {
-		pi.states.setState(pid, StateReady)
-	}
-	return added, err
+func (pi *peersIndex) SetNodeInfo(id peer.ID, nodeInfo *records.NodeInfo) {
+	pi.UpdatePeerInfo(id, func(info *PeerInfo) {
+		info.NodeInfo = nodeInfo
+	})
 }
 
-// GetNodeInfo returns the node info of the given peer
-func (pi *peersIndex) GetNodeInfo(id peer.ID) (*records.NodeInfo, error) {
-	switch pi.states.State(id) {
-	case StateIndexing:
-		return nil, ErrIndexingInProcess
-	case StatePruned:
-		return nil, ErrWasPruned
-	case StateUnknown:
-		return nil, ErrNotFound
-	default:
+func (pi *peersIndex) NodeInfo(id peer.ID) *records.NodeInfo {
+	info := pi.PeerInfo(id)
+	if info != nil {
+		return info.NodeInfo
 	}
-	// if in good state -> get node info
-	ni, err := pi.nodeInfoStore.Get(id)
-	if errors.Is(err, peerstore.ErrNotFound) {
-		return nil, ErrNotFound
-	}
-
-	return ni, err
-}
-
-func (pi *peersIndex) State(id peer.ID) NodeState {
-	return pi.states.State(id)
+	return nil
 }
 
 // Score adds score to the given peer
@@ -220,46 +175,12 @@ func (pi *peersIndex) Score(id peer.ID, scores ...*NodeScore) error {
 
 // GetScore returns the desired score for the given peer
 func (pi *peersIndex) GetScore(id peer.ID, names ...string) ([]NodeScore, error) {
-	var scores []NodeScore
-	switch pi.states.State(id) {
-	case StateIndexing:
-		// TODO: handle
-		return scores, nil
-	case StatePruned:
-		return nil, ErrWasPruned
+	switch pi.State(id) {
 	case StateUnknown:
 		return nil, ErrNotFound
-	default:
 	}
 
 	return pi.scoreIdx.GetScore(id, names...)
-}
-
-// Prune set prune state for the given peer
-func (pi *peersIndex) Prune(id peer.ID) error {
-	return pi.states.Prune(id)
-}
-
-// EvictPruned changes to ready state instead of pruned
-func (pi *peersIndex) EvictPruned(id peer.ID) {
-	pi.states.EvictPruned(id)
-}
-
-// GC does garbage collection on current peers and states
-func (pi *peersIndex) GC() {
-	pi.states.GC()
-}
-
-func (pi *peersIndex) UpdatePeerSubnets(id peer.ID, s records.Subnets) bool {
-	return pi.subnets.UpdatePeerSubnets(id, s)
-}
-
-func (pi *peersIndex) GetSubnetPeers(subnet int) []peer.ID {
-	return pi.subnets.GetSubnetPeers(subnet)
-}
-
-func (pi *peersIndex) GetPeerSubnets(id peer.ID) records.Subnets {
-	return pi.subnets.GetPeerSubnets(id)
 }
 
 func (pi *peersIndex) GetSubnetsStats() *SubnetsStats {
@@ -267,7 +188,7 @@ func (pi *peersIndex) GetSubnetsStats() *SubnetsStats {
 	if err != nil {
 		mySubnets, _ = records.Subnets{}.FromString(records.ZeroSubnets)
 	}
-	stats := pi.subnets.GetSubnetsStats()
+	stats := pi.SubnetsIndex.GetSubnetsStats()
 	if stats == nil {
 		return nil
 	}
@@ -276,7 +197,7 @@ func (pi *peersIndex) GetSubnetsStats() *SubnetsStats {
 	for subnet, count := range stats.PeersCount {
 		metricsSubnetsKnownPeers.WithLabelValues(strconv.Itoa(subnet)).Set(float64(count))
 		metricsMySubnets.WithLabelValues(strconv.Itoa(subnet)).Set(float64(mySubnets[subnet]))
-		peers := pi.subnets.GetSubnetPeers(subnet)
+		peers := pi.SubnetsIndex.GetSubnetPeers(subnet)
 		connectedCount := 0
 		for _, p := range peers {
 			if pi.Connectedness(p) == libp2pnetwork.Connected {
@@ -296,7 +217,6 @@ func (pi *peersIndex) GetSubnetsStats() *SubnetsStats {
 
 // Close closes peer index
 func (pi *peersIndex) Close() error {
-	_ = pi.states.Close()
 	if err := pi.network.Peerstore().Close(); err != nil {
 		return errors.Wrap(err, "could not close peerstore")
 	}

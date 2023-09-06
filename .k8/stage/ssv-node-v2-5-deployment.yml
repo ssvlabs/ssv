@@ -21,6 +21,10 @@ spec:
       protocol: TCP
       targetPort: 15005
       name: port-15005
+    - port: 16005
+      protocol: TCP
+      targetPort: 16005
+      name: port-16005
   selector:
     app: ssv-node-v2-5
 ---
@@ -58,7 +62,7 @@ spec:
         imagePullPolicy: Always
         resources:
           limits:
-            cpu: 3000m
+            cpu: 4000m
             memory: REPLACE_NODES_MEM_LIMIT
         command: ["make", "start-node"]
         ports:
@@ -72,6 +76,9 @@ spec:
         - containerPort: 15005
           name: port-15005
           hostPort: 15005
+        - containerPort: 16005
+          name: port-16005
+          hostPort: 16005
         env:
         - name: SHARE_CONFIG
           value: "./data/share.yaml"
@@ -104,6 +111,8 @@ spec:
           value: "false"
         - name: METRICS_API_PORT
           value: "15005"
+        - name: SSV_API_PORT
+          value: "16005"
         - name: ENABLE_PROFILE
           value: "true"
         - name: DISCOVERY_TRACE
@@ -111,7 +120,7 @@ spec:
         - name: PUBSUB_TRACE
           value: 'false'
         - name: BUILDER_PROPOSALS
-          value: "true"
+          value: "false"
         volumeMounts:
         - mountPath: /data
           name: ssv-node-v2-5

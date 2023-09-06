@@ -26,7 +26,7 @@ func RunControllerSync(t *testing.T, test *futuremsg.ControllerSyncSpecTest) {
 		false,
 	)
 
-	err := contr.StartNewInstance(logger, []byte{1, 2, 3, 4})
+	err := contr.StartNewInstance(logger, 0, []byte{1, 2, 3, 4})
 	if err != nil {
 		t.Fatalf(err.Error())
 	}

@@ -30,7 +30,7 @@ func ECDSAPrivateKey(logger *zap.Logger, privateKey string) (*ecdsa.PrivateKey, 
 			return nil, err
 		}
 	} else {
-		logger.Warn("No private key was provided. Using default/random private key")
+		logger.Info("No private key was provided. Generating a new one...")
 		privInterfaceKey, _, err := crypto.GenerateSecp256k1Key(rand.Reader)
 		if err != nil {
 			return nil, errors.WithMessage(err, "failed to generate 256k1 key")

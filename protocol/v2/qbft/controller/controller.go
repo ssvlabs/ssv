@@ -54,20 +54,34 @@ func NewController(
 }
 
 // StartNewInstance will start a new QBFT instance, if can't will return error
-func (c *Controller) StartNewInstance(logger *zap.Logger, value []byte) error {
-	if err := c.canStartInstanceForValue(value); err != nil {
-		return errors.Wrap(err, "can't start new QBFT instance")
+func (c *Controller) StartNewInstance(logger *zap.Logger, height specqbft.Height, value []byte) error {
+
+	if err := c.GetConfig().GetValueCheckF()(value); err != nil {
+		return errors.Wrap(err, "value invalid")
 	}
 
-	// only if current height's instance exists (and decided since passed can start instance) bump
-	if c.StoredInstances.FindInstance(c.Height) != nil {
-		c.bumpHeight()
+	if height < c.Height {
+		return errors.New("attempting to start an instance with a past height")
 	}
+
+	if c.StoredInstances.FindInstance(height) != nil {
+		return errors.New("instance already running")
+	}
+
+	c.Height = height
 
 	newInstance := c.addAndStoreNewInstance()
-	newInstance.Start(logger, value, c.Height)
-
+	newInstance.Start(logger, value, height)
+	c.forceStopAllInstanceExceptCurrent()
 	return nil
+}
+
+func (c *Controller) forceStopAllInstanceExceptCurrent() {
+	for _, i := range c.StoredInstances {
+		if i.State.Height != c.Height {
+			i.ForceStop()
+		}
+	}
 }
 
 // ProcessMsg processes a new msg, returns decided message or error
@@ -164,10 +178,6 @@ func (c *Controller) InstanceForHeight(logger *zap.Logger, height specqbft.Heigh
 	return inst
 }
 
-func (c *Controller) bumpHeight() {
-	c.Height++
-}
-
 // GetIdentifier returns QBFT Identifier, used to identify messages
 func (c *Controller) GetIdentifier() []byte {
 	return c.Identifier
@@ -187,29 +197,6 @@ func (c *Controller) addAndStoreNewInstance() *instance.Instance {
 	i := instance.NewInstance(c.GetConfig(), c.Share, c.Identifier, c.Height)
 	c.StoredInstances.addNewInstance(i)
 	return i
-}
-
-func (c *Controller) canStartInstanceForValue(value []byte) error {
-	// check value
-	if err := c.GetConfig().GetValueCheckF()(value); err != nil {
-		return errors.Wrap(err, "value invalid")
-	}
-
-	return c.CanStartInstance()
-}
-
-// CanStartInstance returns nil if controller can start a new instance
-func (c *Controller) CanStartInstance() error {
-	// check prev instance if prev instance is not the first instance
-	inst := c.StoredInstances.FindInstance(c.Height)
-	if inst == nil {
-		return nil
-	}
-	if decided, _ := inst.IsDecided(); !decided {
-		return errors.New("previous instance hasn't Decided")
-	}
-
-	return nil
 }
 
 // GetRoot returns the state's deterministic root

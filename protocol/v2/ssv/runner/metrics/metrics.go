@@ -1,7 +1,7 @@
 package metrics
 
 import (
-	"log"
+	"go.uber.org/zap"
 	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -70,10 +70,10 @@ func init() {
 		metricsRolesSubmitted,
 		metricsRolesSubmissionFailures,
 	}
-
+	logger := zap.L()
 	for _, metric := range metricsList {
 		if err := prometheus.Register(metric); err != nil {
-			log.Println("could not register prometheus collector")
+			logger.Debug("could not register prometheus collector")
 		}
 	}
 }

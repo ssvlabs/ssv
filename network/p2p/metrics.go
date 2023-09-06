@@ -1,7 +1,6 @@
 package p2pv1
 
 import (
-	"log"
 	"strconv"
 
 	"github.com/bloxapp/ssv/logging/fields"
@@ -37,17 +36,18 @@ var (
 )
 
 func init() {
+	logger := zap.L()
 	if err := prometheus.Register(MetricsAllConnectedPeers); err != nil {
-		log.Println("could not register prometheus collector")
+		logger.Debug("could not register prometheus collector")
 	}
 	if err := prometheus.Register(MetricsPeersIdentity); err != nil {
-		log.Println("could not register prometheus collector")
+		logger.Debug("could not register prometheus collector")
 	}
 	if err := prometheus.Register(MetricsConnectedPeers); err != nil {
-		log.Println("could not register prometheus collector")
+		logger.Debug("could not register prometheus collector")
 	}
 	if err := prometheus.Register(metricsRouterIncoming); err != nil {
-		log.Println("could not register prometheus collector")
+		logger.Debug("could not register prometheus collector")
 	}
 }
 
@@ -92,12 +92,9 @@ func (n *p2pNetwork) reportTopicPeers(logger *zap.Logger, name string) {
 }
 
 func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
-	opPKHash, opIndex, forkv, nodeVersion, nodeType := unknown, unknown, unknown, unknown, unknown
-	ni, err := n.idx.GetNodeInfo(pid)
-	if err == nil && ni != nil {
-		opPKHash = unknown
-		nodeVersion = unknown
-		forkv = ni.ForkVersion.String()
+	opPKHash, opID, nodeVersion, nodeType := unknown, unknown, unknown, unknown
+	ni := n.idx.NodeInfo(pid)
+	if ni != nil {
 		if ni.Metadata != nil {
 			opPKHash = ni.Metadata.OperatorID
 			nodeVersion = ni.Metadata.NodeVersion
@@ -109,12 +106,12 @@ func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
 	}
 
 	if pubKey, ok := n.operatorPKCache.Load(opPKHash); ok {
-		operatorData, found, opDataErr := n.nodeStorage.GetOperatorDataByPubKey(logger, pubKey.([]byte))
+		operatorData, found, opDataErr := n.nodeStorage.GetOperatorDataByPubKey(nil, pubKey.([]byte))
 		if opDataErr == nil && found {
-			opIndex = strconv.FormatUint(operatorData.ID, 10)
+			opID = strconv.FormatUint(operatorData.ID, 10)
 		}
 	} else {
-		operators, err := n.nodeStorage.ListOperators(logger, 0, 0)
+		operators, err := n.nodeStorage.ListOperators(nil, 0, 0)
 		if err != nil {
 			logger.Warn("failed to get all operators for reporting", zap.Error(err))
 		}
@@ -123,22 +120,19 @@ func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
 			pubKeyHash := format.OperatorID(operator.PublicKey)
 			n.operatorPKCache.Store(pubKeyHash, operator.PublicKey)
 			if pubKeyHash == opPKHash {
-				opIndex = strconv.FormatUint(operator.ID, 10)
+				opID = strconv.FormatUint(operator.ID, 10)
 			}
 		}
 	}
 
-	nodeState := n.idx.State(pid)
+	state := n.idx.State(pid)
 	logger.Debug("peer identity",
 		fields.PeerID(pid),
-		zap.String("forkv", forkv),
-		zap.String("nodeVersion", nodeVersion),
-		zap.String("opPKHash", opPKHash),
-		zap.String("opIndex", opIndex),
-		zap.String("nodeType", nodeType),
-		zap.String("nodeState", nodeState.String()),
+		zap.String("node_version", nodeVersion),
+		zap.String("operator_id", opID),
+		zap.String("state", state.String()),
 	)
-	MetricsPeersIdentity.WithLabelValues(opPKHash, opIndex, nodeVersion, pid.String(), nodeType).Set(1)
+	MetricsPeersIdentity.WithLabelValues(opPKHash, opID, nodeVersion, pid.String(), nodeType).Set(1)
 }
 
 //

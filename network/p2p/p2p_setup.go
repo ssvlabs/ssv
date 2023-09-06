@@ -20,7 +20,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/logging/fields"
 	p2pcommons "github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"
 	"github.com/bloxapp/ssv/network/peers"
@@ -108,7 +107,7 @@ func (n *p2pNetwork) initCfg() error {
 
 // SetupHost configures a libp2p host and backoff connector utility
 func (n *p2pNetwork) SetupHost(logger *zap.Logger) error {
-	opts, err := n.cfg.Libp2pOptions(logger, n.fork)
+	opts, err := n.cfg.Libp2pOptions(logger)
 	if err != nil {
 		return errors.Wrap(err, "could not create libp2p options")
 	}
@@ -156,7 +155,7 @@ func (n *p2pNetwork) SetupServices(logger *zap.Logger) error {
 }
 
 func (n *p2pNetwork) setupStreamCtrl(logger *zap.Logger) error {
-	n.streamCtrl = streams.NewStreamController(n.ctx, n.host, n.fork, n.cfg.RequestTimeout)
+	n.streamCtrl = streams.NewStreamController(n.ctx, n.host, n.cfg.RequestTimeout, n.cfg.RequestTimeout)
 	logger.Debug("stream controller is ready")
 	return nil
 }
@@ -168,7 +167,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	}
 
 	domain := "0x" + hex.EncodeToString(n.cfg.Network.Domain[:])
-	self := records.NewNodeInfo(n.cfg.ForkVersion, domain)
+	self := records.NewNodeInfo(domain)
 	self.Metadata = &records.NodeMetadata{
 		OperatorID:  n.cfg.OperatorID,
 		NodeVersion: commons.GetNodeVersion(),
@@ -178,8 +177,8 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 		return libPrivKey
 	}
 
-	n.idx = peers.NewPeersIndex(logger, n.host.Network(), self, n.getMaxPeers, getPrivKey, n.fork.Subnets(), 10*time.Minute)
-	logger.Debug("peers index is ready", fields.Fork(n.cfg.ForkVersion))
+	n.idx = peers.NewPeersIndex(logger, n.host.Network(), self, n.getMaxPeers, getPrivKey, p2pcommons.Subnets(), 10*time.Minute)
+	logger.Debug("peers index is ready")
 
 	var ids identify.IDService
 	if bh, ok := n.host.(*basichost.BasicHost); ok {
@@ -205,15 +204,15 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 			filters = append(filters,
 				connections.SenderRecipientIPsCheckFilter(n.host.ID()),
 				connections.SignatureCheckFilter(),
-				connections.RegisteredOperatorsFilter(logger, n.nodeStorage, n.cfg.WhitelistedOperatorKeys))
+				connections.RegisteredOperatorsFilter(n.nodeStorage, n.cfg.WhitelistedOperatorKeys))
 		}
 		return filters
 	}
 
 	handshaker := connections.NewHandshaker(n.ctx, &connections.HandshakerCfg{
 		Streams:         n.streamCtrl,
-		NodeInfoIdx:     n.idx,
-		States:          n.idx,
+		NodeInfos:       n.idx,
+		PeerInfos:       n.idx,
 		ConnIdx:         n.idx,
 		SubnetsIdx:      n.idx,
 		IDService:       ids,
@@ -226,7 +225,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler(logger))
 	logger.Debug("handshaker is ready")
 
-	n.connHandler = connections.NewConnHandler(n.ctx, handshaker, subnetsProvider, n.idx, n.idx)
+	n.connHandler = connections.NewConnHandler(n.ctx, handshaker, subnetsProvider, n.idx, n.idx, n.idx)
 	n.host.Network().Notify(n.connHandler.Handle(logger))
 	logger.Debug("connection handler is ready")
 
@@ -264,7 +263,6 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 		SubnetsIdx:  n.idx,
 		HostAddress: n.cfg.HostAddress,
 		HostDNS:     n.cfg.HostDNS,
-		ForkVersion: n.cfg.ForkVersion,
 	}
 	disc, err := discovery.NewService(n.ctx, logger, discOpts)
 	if err != nil {
@@ -282,7 +280,7 @@ func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
 		Host:     n.host,
 		TraceLog: n.cfg.PubSubTrace,
 		MsgValidatorFactory: func(s string) topics.MsgValidatorFunc {
-			return topics.NewSSVMsgValidator(n.fork)
+			return topics.NewSSVMsgValidator()
 		},
 		MsgHandler: n.handlePubsubMessages(logger),
 		ScoreIndex: n.idx,
@@ -298,15 +296,13 @@ func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
 		cfg.ScoreIndex = nil
 	}
 
-	if n.fork.MsgID() != nil {
-		midHandler := topics.NewMsgIDHandler(n.ctx, n.fork, time.Minute*2)
-		n.msgResolver = midHandler
-		cfg.MsgIDHandler = midHandler
-		go cfg.MsgIDHandler.Start()
-		// run GC every 3 minutes to clear old messages
-		async.RunEvery(n.ctx, time.Minute*3, midHandler.GC)
-	}
-	_, tc, err := topics.NewPubsub(n.ctx, logger, cfg, n.fork)
+	midHandler := topics.NewMsgIDHandler(n.ctx, time.Minute*2)
+	n.msgResolver = midHandler
+	cfg.MsgIDHandler = midHandler
+	go cfg.MsgIDHandler.Start()
+	// run GC every 3 minutes to clear old messages
+	async.RunEvery(n.ctx, time.Minute*3, midHandler.GC)
+	_, tc, err := topics.NewPubsub(n.ctx, logger, cfg)
 	if err != nil {
 		return errors.Wrap(err, "could not setup pubsub")
 	}

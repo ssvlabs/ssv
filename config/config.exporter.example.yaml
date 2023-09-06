@@ -22,7 +22,6 @@ p2p:
 
 ssv:
   GenesisEpoch:
-  DutyLimit: 32
   ValidatorOptions:
     SignatureCollectionTimeout: 5s
     FullNode: true

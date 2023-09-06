@@ -2,13 +2,13 @@ package slot_ticker
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/networkconfig"
 )
 
@@ -53,7 +53,9 @@ func (t *ticker) Subscribe(subscription chan phase0.Slot) event.Subscription {
 // listenToTicker loop over the given slot channel
 func (t *ticker) listenToTicker(logger *zap.Logger, slots <-chan phase0.Slot) {
 	for currentSlot := range slots {
-		logger.Debug("slot ticker", fields.Slot(currentSlot), zap.Uint64("position", uint64(currentSlot%32+1)))
+		currentEpoch := t.network.Beacon.EstimatedEpochAtSlot(currentSlot)
+		buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, currentSlot, currentSlot%32+1)
+		logger.Debug("📅 slot ticker", zap.String("epoch_slot_seq", buildStr))
 		if !t.genesisEpochEffective(logger) {
 			continue
 		}

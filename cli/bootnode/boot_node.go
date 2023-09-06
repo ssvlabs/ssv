@@ -31,7 +31,17 @@ var StartBootNodeCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		if err := logging.SetGlobalLogger(cfg.LogLevel, cfg.LogLevelFormat, cfg.LogFormat, cfg.LogFilePath); err != nil {
+		err := logging.SetGlobalLogger(
+			cfg.LogLevel,
+			cfg.LogLevelFormat,
+			cfg.LogFormat,
+			&logging.LogFileOptions{
+				FileName:   cfg.LogFilePath,
+				MaxSize:    cfg.LogFileSize,
+				MaxBackups: cfg.LogFileBackups,
+			},
+		)
+		if err != nil {
 			log.Fatal(err)
 		}
 

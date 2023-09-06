@@ -11,7 +11,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/network/peers"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 )
 
 const (
@@ -40,8 +39,6 @@ type Options struct {
 	SubnetsIdx  peers.SubnetsIndex
 	HostAddress string
 	HostDNS     string
-
-	ForkVersion forksprotocol.ForkVersion
 }
 
 // Service is the interface for discovery
@@ -51,7 +48,6 @@ type Service interface {
 	RegisterSubnets(logger *zap.Logger, subnets ...int) error
 	DeregisterSubnets(logger *zap.Logger, subnets ...int) error
 	Bootstrap(logger *zap.Logger, handler HandleNewPeer) error
-	UpdateForkVersion(logger *zap.Logger, forkv forksprotocol.ForkVersion) error
 }
 
 // NewService creates new discovery.Service

@@ -7,10 +7,9 @@ import (
 	"time"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/logging"
-	"go.uber.org/zap"
-
 	"github.com/stretchr/testify/require"
+
+	"github.com/bloxapp/ssv/logging"
 )
 
 func TestWorker(t *testing.T) {
@@ -21,7 +20,7 @@ func TestWorker(t *testing.T) {
 		Buffer:       2,
 	})
 
-	worker.UseHandler(func(logger *zap.Logger, msg *spectypes.SSVMessage) error {
+	worker.UseHandler(func(msg *spectypes.SSVMessage) error {
 		require.NotNil(t, msg)
 		return nil
 	})
@@ -42,7 +41,7 @@ func TestManyWorkers(t *testing.T) {
 	})
 	time.Sleep(time.Millisecond * 100) // wait for worker to start listen
 
-	worker.UseHandler(func(logger *zap.Logger, msg *spectypes.SSVMessage) error {
+	worker.UseHandler(func(msg *spectypes.SSVMessage) error {
 		require.NotNil(t, msg)
 		wg.Done()
 		return nil
@@ -66,7 +65,7 @@ func TestBuffer(t *testing.T) {
 	})
 	time.Sleep(time.Millisecond * 100) // wait for worker to start listen
 
-	worker.UseHandler(func(logger *zap.Logger, msg *spectypes.SSVMessage) error {
+	worker.UseHandler(func(msg *spectypes.SSVMessage) error {
 		require.NotNil(t, msg)
 		wg.Done()
 		time.Sleep(time.Millisecond * 100)

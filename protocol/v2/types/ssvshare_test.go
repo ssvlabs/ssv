@@ -58,3 +58,31 @@ func TestSSVShare_HasBeaconMetadata(t *testing.T) {
 		})
 	}
 }
+
+func TestValidCommitteeSize(t *testing.T) {
+	tt := []struct {
+		name  string
+		valid bool
+		sizes []int
+	}{
+		{
+			name:  "valid",
+			valid: true,
+			sizes: []int{4, 7, 10, 13},
+		},
+		{
+			name:  "invalid",
+			valid: false,
+			sizes: []int{0, 1, 2, 3, 5, 6, 8, 9, 11, 12, 14, 15, 16, 17, 18, 19, -1, -4, -7},
+		},
+	}
+
+	for _, tc := range tt {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			for _, size := range tc.sizes {
+				require.Equal(t, tc.valid, ValidCommitteeSize(size))
+			}
+		})
+	}
+}

@@ -16,10 +16,8 @@ import (
 
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/network/forks"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/storage"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	uc "github.com/bloxapp/ssv/utils/commons"
 )
 
@@ -39,7 +37,7 @@ type Config struct {
 	HostAddress string `yaml:"HostAddress" env:"HOST_ADDRESS" env-description:"External ip node is exposed for discovery"`
 	HostDNS     string `yaml:"HostDNS" env:"HOST_DNS" env-description:"External DNS node is exposed for discovery"`
 
-	RequestTimeout   time.Duration `yaml:"RequestTimeout" env:"P2P_REQUEST_TIMEOUT"  env-default:"7s"`
+	RequestTimeout   time.Duration `yaml:"RequestTimeout" env:"P2P_REQUEST_TIMEOUT"  env-default:"10s"`
 	MaxBatchResponse uint64        `yaml:"MaxBatchResponse" env:"P2P_MAX_BATCH_RESPONSE" env-default:"25" env-description:"Maximum number of returned objects in a batch"`
 	MaxPeers         int           `yaml:"MaxPeers" env:"P2P_MAX_PEERS" env-default:"60" env-description:"Connected peers limit for connections"`
 	TopicMaxPeers    int           `yaml:"TopicMaxPeers" env:"P2P_TOPIC_MAX_PEERS" env-default:"10" env-description:"Connected peers limit per pubsub topic"`
@@ -60,8 +58,6 @@ type Config struct {
 	Router network.MessageRouter
 	// UserAgent to use by libp2p identify protocol
 	UserAgent string
-	// ForkVersion to use
-	ForkVersion forksprotocol.ForkVersion
 	// NodeStorage is used to get operator metadata.
 	NodeStorage storage.Storage
 	// Network defines a network configuration.
@@ -89,7 +85,7 @@ type Config struct {
 // Libp2pOptions creates options list for the libp2p host
 // these are the most basic options required to start a network instance,
 // other options and libp2p components can be configured on top
-func (c *Config) Libp2pOptions(logger *zap.Logger, fork forks.Fork) ([]libp2p.Option, error) {
+func (c *Config) Libp2pOptions(logger *zap.Logger) ([]libp2p.Option, error) {
 	if c.NetworkPrivateKey == nil {
 		return nil, errors.New("could not create options w/o network key")
 	}
@@ -111,7 +107,7 @@ func (c *Config) Libp2pOptions(logger *zap.Logger, fork forks.Fork) ([]libp2p.Op
 
 	opts = append(opts, libp2p.Security(noise.ID, noise.New))
 
-	opts = fork.AddOptions(opts)
+	opts = commons.AddOptions(opts)
 
 	return opts, nil
 }

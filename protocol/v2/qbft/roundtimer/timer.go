@@ -10,6 +10,7 @@ import (
 )
 
 type RoundTimeoutFunc func(specqbft.Round) time.Duration
+type OnRoundTimeoutF func(round specqbft.Round)
 
 var (
 	quickTimeoutThreshold = specqbft.Round(8)
@@ -36,7 +37,7 @@ type RoundTimer struct {
 	// timer is the underlying time.Timer
 	timer *time.Timer
 	// result holds the result of the timer
-	done func()
+	done OnRoundTimeoutF
 	// round is the current round of the timer
 	round int64
 
@@ -44,7 +45,7 @@ type RoundTimer struct {
 }
 
 // New creates a new instance of RoundTimer.
-func New(pctx context.Context, done func()) *RoundTimer {
+func New(pctx context.Context, done OnRoundTimeoutF) *RoundTimer {
 	ctx, cancelCtx := context.WithCancel(pctx)
 	return &RoundTimer{
 		mtx:          &sync.RWMutex{},
@@ -57,7 +58,7 @@ func New(pctx context.Context, done func()) *RoundTimer {
 }
 
 // OnTimeout sets a function called on timeout.
-func (t *RoundTimer) OnTimeout(done func()) {
+func (t *RoundTimer) OnTimeout(done OnRoundTimeoutF) {
 	t.mtx.Lock() // write to t.done
 	defer t.mtx.Unlock()
 
@@ -101,7 +102,7 @@ func (t *RoundTimer) waitForRound(round specqbft.Round, timeout <-chan time.Time
 				t.mtx.RLock() // read t.done
 				defer t.mtx.RUnlock()
 				if done := t.done; done != nil {
-					done()
+					done(round)
 				}
 			}()
 		}

@@ -3,7 +3,6 @@ package connections
 import (
 	"testing"
 
-	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network/peers/connections/mock"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/stretchr/testify/require"
@@ -77,7 +76,7 @@ func TestSignatureCheckFFilter(t *testing.T) {
 func TestRegisteredOperatorsFilter_ContractRegistered(t *testing.T) {
 	td := getTestingData(t)
 
-	f := RegisteredOperatorsFilter(logging.TestLogger(t), mock.NodeStorage{
+	f := RegisteredOperatorsFilter(mock.NodeStorage{
 		RegisteredOperatorPublicKeyPEMs: []string{
 			td.SenderBase64PublicKeyPEM,
 		},
@@ -95,7 +94,7 @@ func TestRegisteredOperatorsFilter_ContractRegistered(t *testing.T) {
 func TestRegisteredOperatorsFilter_ConfigWhitelist(t *testing.T) {
 	td := getTestingData(t)
 
-	f := RegisteredOperatorsFilter(logging.TestLogger(t), mock.NodeStorage{}, []string{td.SenderBase64PublicKeyPEM})
+	f := RegisteredOperatorsFilter(mock.NodeStorage{}, []string{td.SenderBase64PublicKeyPEM})
 
 	err := f("", &records.SignedNodeInfo{NodeInfo: &records.NodeInfo{}, HandshakeData: td.HandshakeData, Signature: td.Signature})
 	require.NoError(t, err)

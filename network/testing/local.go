@@ -9,8 +9,8 @@ import (
 // NetworkFactory is a generic factory for network instances
 type NetworkFactory func(pctx context.Context, keys NodeKeys) network.P2PNetwork
 
-// NewLocalNetwork creates a new local network
-func NewLocalNetwork(ctx context.Context, n int, factory NetworkFactory) ([]network.P2PNetwork, []NodeKeys, error) {
+// NewLocalTestnet creates a new local network
+func NewLocalTestnet(ctx context.Context, n int, factory NetworkFactory) ([]network.P2PNetwork, []NodeKeys, error) {
 	nodes := make([]network.P2PNetwork, n)
 	keys, err := CreateKeys(n)
 	if err != nil {

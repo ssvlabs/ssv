@@ -21,6 +21,10 @@ spec:
       protocol: TCP
       targetPort: 15009
       name: port-15009
+    - port: 16009
+      protocol: TCP
+      targetPort: 16009
+      name: port-16009
   selector:
     app: ssv-node-9
 ---
@@ -72,6 +76,9 @@ spec:
         - containerPort: 15009
           name: port-15009
           hostPort: 15009
+        - containerPort: 16009
+          name: port-16009
+          hostPort: 16009
         env:
         - name: SHARE_CONFIG
           value: "./data/share.yaml"
@@ -106,6 +113,8 @@ spec:
           value: "false"
         - name: METRICS_API_PORT
           value: "15009"
+        - name: SSV_API_PORT
+          value: "16009"
         - name: ENABLE_PROFILE
           value: "true"
         - name: DISCOVERY_TRACE

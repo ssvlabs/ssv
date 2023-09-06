@@ -1,13 +1,13 @@
 package topics
 
 import (
-	"sync"
-
-	"github.com/bloxapp/ssv/network/forks"
+	"github.com/cornelk/hashmap"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/network/commons"
 )
 
 // SubFilter is a wrapper on top of pubsub.SubscriptionFilter,
@@ -19,14 +19,12 @@ type SubFilter interface {
 }
 
 type subFilter struct {
-	fork      forks.Fork
 	whitelist *dynamicWhitelist
 	subsLimit int
 }
 
-func newSubFilter(logger *zap.Logger, fork forks.Fork, subsLimit int) SubFilter {
+func newSubFilter(logger *zap.Logger, subsLimit int) SubFilter {
 	return &subFilter{
-		fork:      fork,
 		whitelist: newWhitelist(),
 		subsLimit: subsLimit,
 	}
@@ -34,7 +32,7 @@ func newSubFilter(logger *zap.Logger, fork forks.Fork, subsLimit int) SubFilter 
 
 // CanSubscribe returns true if the topic is of interest and we can subscribe to it
 func (sf *subFilter) CanSubscribe(topic string) bool {
-	if sf.fork.GetTopicBaseName(topic) == topic {
+	if commons.GetTopicBaseName(topic) == topic {
 		// not of the same fork
 		return false
 	}
@@ -44,13 +42,13 @@ func (sf *subFilter) CanSubscribe(topic string) bool {
 // FilterIncomingSubscriptions is invoked for all RPCs containing subscription notifications.
 // It should filter only the subscriptions of interest and my return an error if (for instance)
 // there are too many subscriptions.
-func (sf *subFilter) FilterIncomingSubscriptions(pi peer.ID, subs []*ps_pb.RPC_SubOpts) ([]*ps_pb.RPC_SubOpts, error) {
+func (sf *subFilter) FilterIncomingSubscriptions(pi peer.ID, subs []*ps_pb.RPC_SubOpts) (res []*ps_pb.RPC_SubOpts, err error) {
 	if len(subs) > subscriptionRequestLimit {
-		return nil, pubsub.ErrTooManySubscriptions
+		err = pubsub.ErrTooManySubscriptions
+		return
 	}
 
-	res := pubsub.FilterSubscriptions(subs, sf.CanSubscribe)
-
+	res = pubsub.FilterSubscriptions(subs, sf.CanSubscribe)
 	return res, nil
 }
 
@@ -81,28 +79,28 @@ type Whitelist interface {
 
 // dynamicWhitelist helps to maintain a filter based on some whitelist
 type dynamicWhitelist struct {
-	whitelist *sync.Map
+	whitelist *hashmap.Map[string, struct{}]
 }
 
 // newWhitelist creates a new whitelist
 func newWhitelist() *dynamicWhitelist {
 	return &dynamicWhitelist{
-		whitelist: &sync.Map{},
+		whitelist: hashmap.New[string, struct{}](),
 	}
 }
 
 // Register adds the given topic to the whitelist
 func (wl *dynamicWhitelist) Register(name string) {
-	wl.whitelist.Store(name, true)
+	wl.whitelist.Set(name, struct{}{})
 }
 
 // Deregister removes the given topic from the whitelist
 func (wl *dynamicWhitelist) Deregister(name string) {
-	wl.whitelist.Delete(name)
+	wl.whitelist.Del(name)
 }
 
 // Whitelisted checks if the given name was whitelisted
 func (wl *dynamicWhitelist) Whitelisted(name string) bool {
-	_, ok := wl.whitelist.Load(name)
+	_, ok := wl.whitelist.Get(name)
 	return ok
 }

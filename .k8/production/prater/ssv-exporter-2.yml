@@ -58,6 +58,10 @@ spec:
       protocol: TCP
       targetPort: 15010
       name: port-15010
+    - port: 16010
+      protocol: TCP
+      targetPort: 16010
+      name: port-16010
   selector:
     app: ssv-full-node-prater-2
 ---
@@ -116,6 +120,9 @@ spec:
         - containerPort: 15010
           name: port-15010
           hostPort: 15010
+        - containerPort: 16010
+          name: port-16010
+          hostPort: 16010
         env:
           - name: SHARE_CONFIG
             value: "./data/share.yaml"
@@ -133,9 +140,9 @@ spec:
             value: "./data/db-jato-v2"
           - name: METRICS_API_PORT
             value: "15010"
+          - name: SSV_API_PORT
+            value: "16010"
           - name: ENABLE_PROFILE
-            value: "true"
-          - name: GENERATE_OPERATOR_KEY
             value: "true"
           - name: UDP_PORT
             value: "12010"

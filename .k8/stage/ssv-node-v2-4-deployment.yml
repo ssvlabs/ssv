@@ -21,6 +21,10 @@ spec:
       protocol: TCP
       targetPort: 15004
       name: port-15004
+    - port: 16004
+      protocol: TCP
+      targetPort: 16004
+      name: port-16004
   selector:
     app: ssv-node-v2-4
 ---
@@ -57,8 +61,6 @@ spec:
         image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG
         imagePullPolicy: Always
         resources:
-          requests:
-            cpu: 2000m
           limits:
             cpu: REPLACE_NODES_CPU_LIMIT
             memory: REPLACE_NODES_MEM_LIMIT
@@ -74,6 +76,9 @@ spec:
         - containerPort: 15004
           name: port-15004
           hostPort: 15004
+        - containerPort: 16004
+          name: port-16004
+          hostPort: 16004
         env:
         - name: SHARE_CONFIG
           value: "./data/share.yaml"
@@ -112,6 +117,8 @@ spec:
           value: "false"
         - name: METRICS_API_PORT
           value: "15004"
+        - name: SSV_API_PORT
+          value: "16004"
         - name: ENABLE_PROFILE
           value: "true"
         - name: DISCOVERY_TRACE
