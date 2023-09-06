@@ -2,7 +2,7 @@ package tests
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/operator/validator"
+	"github.com/bloxapp/ssv/network"
 	"testing"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -23,7 +23,7 @@ const (
 var sharedData *SharedData
 
 type SharedData struct {
-	Nodes map[spectypes.OperatorID]validator.P2PNetwork
+	Nodes map[spectypes.OperatorID]network.P2PNetwork
 }
 
 func GetSharedData(t *testing.T) SharedData { //singleton B-)
@@ -48,7 +48,7 @@ func TestMain(m *testing.M) {
 		return
 	}
 
-	nodes := map[spectypes.OperatorID]validator.P2PNetwork{}
+	nodes := map[spectypes.OperatorID]network.P2PNetwork{}
 	for i := 0; i < len(ln.Nodes); i++ {
 		nodes[spectypes.OperatorID(i+1)] = ln.Nodes[i]
 	}

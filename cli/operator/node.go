@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/x509"
 	"fmt"
+	"github.com/bloxapp/ssv/network"
 	"log"
 	"math/big"
 	"net/http"
@@ -467,7 +468,7 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 func setupP2P(
 	logger *zap.Logger,
 	db basedb.Database,
-) validator.P2PNetwork {
+) network.P2PNetwork {
 	istore := ssv_identity.NewIdentityStore(db)
 	netPrivKey, err := istore.SetupNetworkKey(logger, cfg.NetworkPrivateKey)
 	if err != nil {

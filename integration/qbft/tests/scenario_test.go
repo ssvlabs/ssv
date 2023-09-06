@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"fmt"
+	"github.com/bloxapp/ssv/network"
 	"testing"
 	"time"
 
@@ -188,7 +189,7 @@ func newStores(logger *zap.Logger) *qbftstorage.QBFTStores {
 	return storageMap
 }
 
-func createValidator(t *testing.T, pCtx context.Context, id spectypes.OperatorID, keySet *spectestingutils.TestKeySet, pLogger *zap.Logger, node validator.P2PNetwork) *protocolvalidator.Validator {
+func createValidator(t *testing.T, pCtx context.Context, id spectypes.OperatorID, keySet *spectestingutils.TestKeySet, pLogger *zap.Logger, node network.P2PNetwork) *protocolvalidator.Validator {
 	ctx, cancel := context.WithCancel(pCtx)
 	validatorPubKey := keySet.Shares[id].GetPublicKey().Serialize()
 
