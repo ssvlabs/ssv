@@ -19,8 +19,13 @@ func (c *Controller) OnTimeout(logger *zap.Logger, msg types.EventMsg) error {
 	if instance == nil {
 		return errors.New("instance is nil")
 	}
-	decided, _ := instance.IsDecided()
-	if decided {
+
+	if timeoutData.Round < instance.State.Round {
+		logger.Debug("timeout for old round", zap.Uint64("timeout round", uint64(timeoutData.Round)), zap.Uint64("instance round", uint64(instance.State.Round)))
+		return nil
+	}
+
+	if decided, _ := instance.IsDecided(); decided {
 		return nil
 	}
 	return instance.UponRoundTimeout(logger)
