@@ -100,25 +100,22 @@ func New(pctx context.Context, beaconNetwork BeaconNetwork, role spectypes.Beaco
 // and the additional timeout is added based on the round number.
 func (t *RoundTimer) RoundTimeout(height specqbft.Height, round specqbft.Round) time.Duration {
 	// Initialize duration to zero
-	var timeoutDuration time.Duration
+	var baseDuration time.Duration
 
 	// Set base duration based on role
 	switch t.role {
 	case spectypes.BNRoleAttester, spectypes.BNRoleSyncCommittee:
 		// third of the slot time
-		timeoutDuration = t.beaconNetwork.SlotDurationSec() / 3
+		baseDuration = t.beaconNetwork.SlotDurationSec() / 3
 	case spectypes.BNRoleAggregator, spectypes.BNRoleSyncCommitteeContribution:
 		// two-third of the slot time
-		timeoutDuration = t.beaconNetwork.SlotDurationSec() / 3 * 2
+		baseDuration = t.beaconNetwork.SlotDurationSec() / 3 * 2
 	default:
 		if round <= t.timeoutOptions.quickThreshold {
 			return t.timeoutOptions.quick
 		}
 		return t.timeoutOptions.slow
 	}
-
-	// Get the start time of the duty
-	dutyStartTime := t.beaconNetwork.GetSlotStartTime(phase0.Slot(height))
 
 	// Calculate additional timeout based on round
 	var additionalTimeout time.Duration
@@ -131,7 +128,10 @@ func (t *RoundTimer) RoundTimeout(height specqbft.Height, round specqbft.Round) 
 	}
 
 	// Combine base duration and additional timeout
-	timeoutDuration += additionalTimeout
+	timeoutDuration := baseDuration + additionalTimeout
+
+	// Get the start time of the duty
+	dutyStartTime := t.beaconNetwork.GetSlotStartTime(phase0.Slot(height))
 
 	// Calculate the time until the duty should start plus the timeout duration
 	return time.Until(dutyStartTime.Add(timeoutDuration))
