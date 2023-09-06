@@ -165,7 +165,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.Network = networkConfig
 
 		// TODO: pass it to duty scheduler
-		//dutyFetcher := dutyfetcher.New(consensusClient, slotTicker, validatorsMap) // TODO: uncomment when validatorsMap is extracted
+		//dutyFetcher := dutyfetcher.New(consensusClient, slotTicker, dutyfetcher.WithLogger(logger)) // TODO: uncomment when validatorsMap is extracted
 		//dutyFetcher.Start(ctx)
 
 		messageValidator := validation.NewMessageValidator(
