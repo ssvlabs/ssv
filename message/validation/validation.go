@@ -25,7 +25,6 @@ import (
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/operator/duties/dutyfetcher"
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
@@ -80,7 +79,6 @@ type MessageValidator struct {
 	netCfg        networkconfig.NetworkConfig
 	index         sync.Map
 	shareStorage  registrystorage.Shares
-	dutyFetcher   *dutyfetcher.Fetcher
 	ownOperatorID spectypes.OperatorID
 }
 
@@ -109,12 +107,6 @@ func WithLogger(logger *zap.Logger) Option {
 func WithMetrics(metrics metrics) Option {
 	return func(mv *MessageValidator) {
 		mv.metrics = metrics
-	}
-}
-
-func WithDutyFetcher(dutyFetcher *dutyfetcher.Fetcher) Option {
-	return func(mv *MessageValidator) {
-		mv.dutyFetcher = dutyFetcher
 	}
 }
 
@@ -325,6 +317,10 @@ func (mv *MessageValidator) validateP2PMessage(ctx context.Context, p peer.ID, p
 	mv.metrics.SSVMessageType(msg.MsgType)
 
 	return mv.validateSSVMessage(msg, receivedAt)
+}
+
+func (mv *MessageValidator) ValidateSSVMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, Descriptor, error) {
+	return mv.validateSSVMessage(ssvMessage, time.Now())
 }
 
 func (mv *MessageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage, receivedAt time.Time) (*queue.DecodedSSVMessage, Descriptor, error) {

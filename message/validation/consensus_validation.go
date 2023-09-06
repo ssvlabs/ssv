@@ -228,7 +228,7 @@ func (mv *MessageValidator) validateSignerBehavior(
 			stateToBeReset = true
 		}
 
-		if err := mv.validateDuties(signerState, msg.MsgID.GetRoleType(), msgSlot, share, stateToBeReset); err != nil {
+		if err := mv.validateDutiesCount(signerState, msg.MsgID.GetRoleType(), stateToBeReset); err != nil {
 			return err
 		}
 
@@ -252,42 +252,26 @@ func (mv *MessageValidator) validateSignerBehavior(
 	return nil
 }
 
-func (mv *MessageValidator) validateDuties(
-	state *SignerState,
-	role spectypes.BeaconRole,
-	slot phase0.Slot,
-	share *ssvtypes.SSVShare,
-	stateToBeReset bool,
-) error {
+func (mv *MessageValidator) validateDutiesCount(state *SignerState, role spectypes.BeaconRole, stateToBeReset bool) error {
+	var limit int
+
 	switch role {
 	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator, spectypes.BNRoleValidatorRegistration:
-		limit := maxDutiesPerEpoch
-		if !stateToBeReset {
-			limit++
-		}
-
-		if state.EpochDuties >= limit {
-			err := ErrTooManyDutiesPerEpoch
-			err.got = fmt.Sprintf("%v (role %v)", state.EpochDuties, role)
-			err.want = fmt.Sprintf("less than %v", maxDutiesPerEpoch)
-			return err
-		}
-
+		limit = maxDutiesPerEpoch
+	// TODO: check other roles
+	default:
 		return nil
+	}
 
-	case spectypes.BNRoleProposer:
-		if mv.dutyFetcher != nil && share.Metadata.BeaconMetadata != nil && mv.dutyFetcher.ProposerDuty(slot, share.Metadata.BeaconMetadata.Index) == nil {
-			return ErrNoDuty
-		}
+	if !stateToBeReset {
+		limit++
+	}
 
-		return nil
-
-	case spectypes.BNRoleSyncCommittee, spectypes.BNRoleSyncCommitteeContribution:
-		if mv.dutyFetcher != nil && share.Metadata.BeaconMetadata != nil && mv.dutyFetcher.SyncCommitteeDuty(slot, share.Metadata.BeaconMetadata.Index) == nil {
-			return ErrNoDuty
-		}
-
-		return nil
+	if state.EpochDuties >= limit {
+		err := ErrTooManyDutiesPerEpoch
+		err.got = fmt.Sprintf("%v (role %v)", state.EpochDuties, role)
+		err.want = fmt.Sprintf("less than %v", maxDutiesPerEpoch)
+		return err
 	}
 
 	return nil
