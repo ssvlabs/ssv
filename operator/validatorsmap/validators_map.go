@@ -77,7 +77,6 @@ func (vm *ValidatorsMap) GetValidator(pubKey string) (*validator.Validator, bool
 // CreateValidator creates a new validator instance
 // TODO: pass spectypes.ValidatorPK instead of string
 func (vm *ValidatorsMap) CreateValidator(pubKey string, v *validator.Validator) {
-	// main lock
 	vm.lock.Lock()
 	defer vm.lock.Unlock()
 
