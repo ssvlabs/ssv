@@ -1611,8 +1611,12 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		t.Run("partial signature message", func(t *testing.T) {
 			validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
 
-			message := spectestingutils.PostConsensusAttestationMsg(ks.Shares[2], 2, height)
+			message := spectestingutils.PostConsensusAttestationMsg(ks.Shares[2], 2, height+1)
 			message.Message.Slot = phase0.Slot(height) + 1
+			sig, err := spectestingutils.NewTestingKeyManager().SignRoot(message.Message, spectypes.PartialSignatureType, ks.Shares[2].GetPublicKey().Serialize())
+			require.NoError(t, err)
+			message.Signature = sig
+
 			encodedMessage, err := message.Encode()
 			require.NoError(t, err)
 
@@ -1627,6 +1631,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			message = spectestingutils.PostConsensusAttestationMsg(ks.Shares[2], 2, height)
 			message.Message.Slot = phase0.Slot(height)
+			sig, err = spectestingutils.NewTestingKeyManager().SignRoot(message.Message, spectypes.PartialSignatureType, ks.Shares[2].GetPublicKey().Serialize())
+			require.NoError(t, err)
+			message.Signature = sig
+
 			encodedMessage, err = message.Encode()
 			require.NoError(t, err)
 
