@@ -139,11 +139,6 @@ var StartNodeCmd = &cobra.Command{
 
 		slotTicker := slot_ticker.NewTicker(ctx, networkConfig)
 
-		cfg.ConsensusClient.Context = ctx
-		cfg.ConsensusClient.Graffiti = []byte("SSV.Network")
-		cfg.ConsensusClient.GasLimit = spectypes.DefaultGasLimit
-		cfg.ConsensusClient.Network = networkConfig.Beacon.GetNetwork()
-
 		consensusClient := setupConsensusClient(logger, operatorData.ID, slotTicker)
 
 		executionClient, err := executionclient.New(
@@ -185,6 +180,12 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
 
 		p2pNetwork := setupP2P(logger, db)
+
+		cfg.ConsensusClient.Context = ctx
+
+		cfg.ConsensusClient.Graffiti = []byte("SSV.Network")
+		cfg.ConsensusClient.GasLimit = spectypes.DefaultGasLimit
+		cfg.ConsensusClient.Network = networkConfig.Beacon.GetNetwork()
 
 		cfg.SSVOptions.Context = ctx
 		cfg.SSVOptions.DB = db
