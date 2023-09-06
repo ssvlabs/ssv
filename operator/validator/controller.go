@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -25,7 +26,6 @@ import (
 	"github.com/bloxapp/ssv/message/validation"
 	"github.com/bloxapp/ssv/network"
 	nodestorage "github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/operator/validatorsmap"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
@@ -80,7 +80,6 @@ type ControllerOptions struct {
 	StorageMap                 *storage.QBFTStores
 	Metrics                    validator.Metrics
 	MessageValidator           *validation.MessageValidator
-	ValidatorsMap              *validatorsmap.ValidatorsMap
 
 	// worker flags
 	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of goroutines to use for message workers"`
@@ -138,7 +137,7 @@ type controller struct {
 	operatorData               *registrystorage.OperatorData
 	operatorDataMutex          sync.RWMutex
 
-	validatorsMap    *validatorsmap.ValidatorsMap
+	validatorsMap    *validatorsMap
 	validatorOptions validator.Options
 
 	metadataUpdateInterval time.Duration
@@ -213,7 +212,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		keyManager:                 options.KeyManager,
 		network:                    options.Network,
 
-		validatorsMap:    options.ValidatorsMap,
+		validatorsMap:    newValidatorsMap(options.Context),
 		validatorOptions: validatorOptions,
 
 		metadataUpdateInterval: options.MetadataUpdateInterval,
@@ -553,7 +552,7 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 	return nil
 }
 
-// GetValidator returns a validator instance from ValidatorsMap
+// GetValidator returns a validator instance from validatorsMap
 func (c *controller) GetValidator(pubKey string) (*validator.Validator, bool) {
 	return c.validatorsMap.GetValidator(pubKey)
 }
@@ -609,7 +608,20 @@ func CreateDutyExecuteMsg(duty *spectypes.Duty, pubKey phase0.BLSPubKey, domain 
 // ActiveValidatorIndices fetches indices of validators who are either attesting or queued and
 // whose activation epoch is not greater than the passed epoch. It logs a warning if an error occurs.
 func (c *controller) ActiveValidatorIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
-	return c.validatorsMap.ActiveValidatorIndices(epoch)
+	indices := make([]phase0.ValidatorIndex, 0, len(c.validatorsMap.validatorsMap))
+	err := c.validatorsMap.ForEach(func(v *validator.Validator) error {
+		// Beacon node throws error when trying to fetch duties for non-existing validators.
+		if (v.Share.BeaconMetadata.IsAttesting() || v.Share.BeaconMetadata.Status == v1.ValidatorStatePendingQueued) &&
+			v.Share.BeaconMetadata.ActivationEpoch <= epoch {
+			indices = append(indices, v.Share.BeaconMetadata.Index)
+		}
+		return nil
+	})
+	if err != nil {
+		c.logger.Warn("failed to get all validators public keys", zap.Error(err))
+	}
+
+	return indices
 }
 
 // onMetadataUpdated is called when validator's metadata was updated
@@ -640,7 +652,7 @@ func (c *controller) onMetadataUpdated(pk string, meta *beaconprotocol.Validator
 // onShareRemove is called when a validator was removed
 // TODO: think how we can make this function atomic (i.e. failing wouldn't stop the removal of the share)
 func (c *controller) onShareRemove(pk string, removeSecret bool) error {
-	// remove from ValidatorsMap
+	// remove from validatorsMap
 	v := c.validatorsMap.RemoveValidator(pk)
 
 	// stop instance
@@ -670,35 +682,14 @@ func (c *controller) onShareStart(share *ssvtypes.SSVShare) (bool, error) {
 	// Start a committee validator.
 	v, found := c.validatorsMap.GetValidator(hex.EncodeToString(share.ValidatorPubKey))
 	if !found {
-		opts := c.validatorOptions
-		opts.DutyRunners = SetupRunners(c.context, c.logger, opts)
-		opts.SSVShare = share
-
-		createdValidator, err := c.validatorsMap.CreateValidator(share, opts)
+		createdValidator, err := c.validatorsMap.CreateValidator(c.logger.Named("validatorsMap"), share, c.validatorOptions)
 		if err != nil {
 			return false, fmt.Errorf("could not get or create validator: %w", err)
 		}
 
-		c.printShare(share, "setup validator done")
 		v = createdValidator
-	} else {
-		c.printShare(v.Share, "get validator")
 	}
-
 	return c.startValidator(v)
-}
-
-func (c *controller) printShare(s *ssvtypes.SSVShare, msg string) {
-	committee := make([]string, len(s.Committee))
-	for i, c := range s.Committee {
-		committee[i] = fmt.Sprintf(`[OperatorID=%d, PubKey=%x]`, c.OperatorID, c.PubKey)
-	}
-	c.logger.Debug(msg,
-		fields.PubKey(s.ValidatorPubKey),
-		zap.Uint64("node_id", s.OperatorID),
-		zap.Strings("committee", committee),
-		fields.FeeRecipient(s.FeeRecipientAddress[:]),
-	)
 }
 
 func (c *controller) setShareFeeRecipient(share *ssvtypes.SSVShare, getRecipientData GetRecipientDataFunc) error {
