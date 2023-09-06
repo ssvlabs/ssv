@@ -166,6 +166,7 @@ var StartNodeCmd = &cobra.Command{
 
 		// TODO: pass it to duty scheduler
 		//dutyFetcher := dutyfetcher.New(consensusClient, slotTicker, validatorsMap) // TODO: uncomment when validatorsMap is extracted
+		//dutyFetcher.Start(ctx)
 
 		messageValidator := validation.NewMessageValidator(
 			networkConfig,
