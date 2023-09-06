@@ -45,6 +45,7 @@ import (
 	"github.com/bloxapp/ssv/operator/slot_ticker"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
+	"github.com/bloxapp/ssv/operator/validatorsmap"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
@@ -164,9 +165,11 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
 		cfg.P2pNetworkConfig.Network = networkConfig
 
+		validatorsMap := validatorsmap.New(cmd.Context())
+
 		// TODO: pass it to duty scheduler
 		//dutyFetcher := dutyfetcher.New(consensusClient, slotTicker, dutyfetcher.WithLogger(logger)) // TODO: uncomment when validatorsMap is extracted
-		//dutyFetcher.Start(ctx)
+		//dutyFetcher.Start(cmd.Context())
 
 		messageValidator := validation.NewMessageValidator(
 			networkConfig,
@@ -195,6 +198,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.Network = p2pNetwork
 		cfg.SSVOptions.ValidatorOptions.Beacon = consensusClient
 		cfg.SSVOptions.ValidatorOptions.KeyManager = keyManager
+		cfg.SSVOptions.ValidatorOptions.ValidatorsMap = validatorsMap
 
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = nodeStorage.GetPrivateKey
 		cfg.SSVOptions.ValidatorOptions.OperatorData = operatorData

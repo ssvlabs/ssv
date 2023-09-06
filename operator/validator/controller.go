@@ -80,6 +80,7 @@ type ControllerOptions struct {
 	StorageMap                 *storage.QBFTStores
 	Metrics                    validator.Metrics
 	MessageValidator           *validation.MessageValidator
+	ValidatorsMap              *validatorsmap.ValidatorsMap
 
 	// worker flags
 	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of goroutines to use for message workers"`
@@ -212,7 +213,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		keyManager:                 options.KeyManager,
 		network:                    options.Network,
 
-		validatorsMap:    validatorsmap.New(options.Context),
+		validatorsMap:    options.ValidatorsMap,
 		validatorOptions: validatorOptions,
 
 		metadataUpdateInterval: options.MetadataUpdateInterval,
