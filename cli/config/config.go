@@ -17,6 +17,8 @@ type GlobalConfig struct {
 	LogFormat      string `yaml:"LogFormat" env:"LOG_FORMAT" env-default:"console" env-description:"Defines logger's encoding, valid values are 'json' (default) and 'console''"`
 	LogLevelFormat string `yaml:"LogLevelFormat" env:"LOG_LEVEL_FORMAT" env-default:"capitalColor" env-description:"Defines logger's level format, valid values are 'capitalColor' (default), 'capital' or 'lowercase''"`
 	LogFilePath    string `yaml:"LogFilePath" env:"LOG_FILE_PATH" env-default:"./data/debug.log" env-description:"Defines a file path to write logs into"`
+	LogFileSize    int    `yaml:"LogFileSize" env:"LOG_FILE_SIZE" env-default:"500" env-description:"Defines a file size in megabytes to rotate logs"`
+	LogFileBackups int    `yaml:"LogFileBackups" env:"LOG_FILE_BACKUPS" env-default:"3" env-description:"Defines a number of backups to keep when rotating logs"`
 }
 
 // ProcessArgs processes and handles CLI arguments
