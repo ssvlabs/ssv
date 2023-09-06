@@ -13,7 +13,7 @@ import (
 func TestRoundTimer_TimeoutForRound(t *testing.T) {
 	t.Run("TimeoutForRound", func(t *testing.T) {
 		count := int32(0)
-		onTimeout := func() {
+		onTimeout := func(round specqbft.Round) {
 			atomic.AddInt32(&count, 1)
 		}
 		timer := New(context.Background(), onTimeout)
@@ -28,7 +28,7 @@ func TestRoundTimer_TimeoutForRound(t *testing.T) {
 
 	t.Run("timeout round before elapsed", func(t *testing.T) {
 		count := int32(0)
-		onTimeout := func() {
+		onTimeout := func(round specqbft.Round) {
 			atomic.AddInt32(&count, 1)
 		}
 		timer := New(context.Background(), onTimeout)
