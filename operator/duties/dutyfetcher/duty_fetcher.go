@@ -3,6 +3,7 @@ package dutyfetcher
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -71,8 +72,8 @@ func (f *Fetcher) Start(ctx context.Context) {
 	go f.syncCommittee.Start()
 
 	slotsPerEpoch := phase0.Slot(f.beaconNode.GetBeaconNetwork().SlotsPerEpoch())
-
 	firstRun := true
+
 	go func() {
 		for {
 			select {
@@ -86,7 +87,14 @@ func (f *Fetcher) Start(ctx context.Context) {
 				epochForSlot := f.beaconNode.GetBeaconNetwork().EstimatedEpochAtSlot(slot)
 
 				if firstRun || slot%slotsPerEpoch >= slotsPerEpoch/2 {
-					for epoch := epochForSlot - 1; epoch <= epochForSlot+1; epoch++ {
+					prevEpoch, nextEpoch := epochForSlot, epochForSlot
+					if prevEpoch > 0 {
+						prevEpoch--
+					}
+					if nextEpoch < math.MaxUint64 {
+						nextEpoch++
+					}
+					for epoch := prevEpoch; epoch <= nextEpoch; epoch++ {
 						if err := f.fetchEpoch(ctx, epoch); err != nil {
 							f.logger.Warn("failed to fetch epoch duties: %w", fields.Epoch(epoch), zap.Error(err))
 						}
