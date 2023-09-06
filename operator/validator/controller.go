@@ -805,11 +805,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 // SetupRunners initializes duty runners for the given validator
 func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Options) runner.DutyRunners {
 	if options.SSVShare == nil || options.SSVShare.BeaconMetadata == nil {
-		var f []zap.Field
-		if options.SSVShare != nil {
-			f = append(f, zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey)))
-		}
-		logger.Error("missing validator metadata", f...)
+		logger.Error("missing validator metadata", zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey)))
 		return runner.DutyRunners{} // TODO need to find better way to fix it
 	}
 
