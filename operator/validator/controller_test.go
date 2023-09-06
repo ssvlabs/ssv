@@ -14,6 +14,7 @@ import (
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/operator/validatorsmap"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/queue/worker"
@@ -160,19 +161,17 @@ func TestGetIndices(t *testing.T) {
 }
 
 func setupController(logger *zap.Logger, validators map[string]*validator.Validator) controller {
+	validatorsMap := validatorsmap.New(context.TODO(), validatorsmap.WithInitialState(validators))
+
 	return controller{
 		context:                    context.Background(),
 		sharesStorage:              nil,
 		beacon:                     nil,
 		keyManager:                 nil,
 		shareEncryptionKeyProvider: nil,
-		validatorsMap: &validatorsMap{
-			ctx:           context.Background(),
-			lock:          sync.RWMutex{},
-			validatorsMap: validators,
-		},
-		metadataUpdateInterval: 0,
-		messageRouter:          newMessageRouter(logger),
+		validatorsMap:              validatorsMap,
+		metadataUpdateInterval:     0,
+		messageRouter:              newMessageRouter(logger),
 		messageWorker: worker.NewWorker(logger, &worker.Config{
 			Ctx:          context.Background(),
 			WorkersCount: 1,
