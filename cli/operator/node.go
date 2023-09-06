@@ -42,6 +42,7 @@ import (
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/nodeprobe"
 	"github.com/bloxapp/ssv/operator"
+	"github.com/bloxapp/ssv/operator/duties/dutyfetcher"
 	"github.com/bloxapp/ssv/operator/slot_ticker"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
@@ -168,8 +169,8 @@ var StartNodeCmd = &cobra.Command{
 		validatorsMap := validatorsmap.New(cmd.Context())
 
 		// TODO: pass it to duty scheduler
-		//dutyFetcher := dutyfetcher.New(consensusClient, slotTicker, dutyfetcher.WithLogger(logger)) // TODO: uncomment when validatorsMap is extracted
-		//dutyFetcher.Start(cmd.Context())
+		dutyFetcher := dutyfetcher.New(consensusClient, slotTicker, validatorsMap, dutyfetcher.WithLogger(logger)) // TODO: uncomment when validatorsMap is extracted
+		dutyFetcher.Start(cmd.Context())
 
 		messageValidator := validation.NewMessageValidator(
 			networkConfig,
