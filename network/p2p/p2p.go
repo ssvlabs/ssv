@@ -2,7 +2,6 @@ package p2pv1
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/operator/validator"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -48,7 +47,7 @@ const (
 	topicsReportingInterval         = 180 * time.Second
 )
 
-// p2pNetwork implements validator.P2PNetwork
+// p2pNetwork implements network.P2PNetwork
 type p2pNetwork struct {
 	parentCtx context.Context
 	ctx       context.Context
@@ -79,7 +78,7 @@ type p2pNetwork struct {
 }
 
 // New creates a new p2p network
-func New(logger *zap.Logger, cfg *Config) validator.P2PNetwork {
+func New(logger *zap.Logger, cfg *Config) network.P2PNetwork {
 	ctx, cancel := context.WithCancel(cfg.Ctx)
 
 	logger = logger.Named(logging.NameP2PNetwork)

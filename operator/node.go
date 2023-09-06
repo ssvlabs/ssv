@@ -3,6 +3,7 @@ package operator
 import (
 	"context"
 	"fmt"
+	"github.com/bloxapp/ssv/network"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
@@ -34,7 +35,7 @@ type Options struct {
 	Network             networkconfig.NetworkConfig
 	BeaconNode          beaconprotocol.BeaconNode // TODO: consider renaming to ConsensusClient
 	ExecutionClient     *executionclient.ExecutionClient
-	P2PNetwork          validator.P2PNetwork
+	P2PNetwork          network.P2PNetwork
 	Context             context.Context
 	DB                  basedb.Database
 	ValidatorController validator.Controller
@@ -54,7 +55,7 @@ type operatorNode struct {
 	validatorsCtrl   validator.Controller
 	consensusClient  beaconprotocol.BeaconNode
 	executionClient  *executionclient.ExecutionClient
-	net              validator.P2PNetwork
+	net              network.P2PNetwork
 	storage          storage.Storage
 	qbftStorage      *qbftstorage.QBFTStores
 	dutyScheduler    *duties.Scheduler

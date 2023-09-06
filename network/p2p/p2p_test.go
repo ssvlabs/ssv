@@ -3,7 +3,6 @@ package p2pv1
 import (
 	"context"
 	"encoding/hex"
-	"github.com/bloxapp/ssv/operator/validator"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -18,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/network"
 	protcolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -205,7 +205,7 @@ func TestWaitSubsetOfPeers(t *testing.T) {
 	}
 }
 
-func registerHandler(logger *zap.Logger, node validator.P2PNetwork, mid spectypes.MessageID, height specqbft.Height, round specqbft.Round, counter *int64, errors chan<- error) {
+func registerHandler(logger *zap.Logger, node network.P2PNetwork, mid spectypes.MessageID, height specqbft.Height, round specqbft.Round, counter *int64, errors chan<- error) {
 	node.RegisterHandlers(logger, &protcolp2p.SyncHandler{
 		Protocol: protcolp2p.LastDecidedProtocol,
 		Handler: func(message *spectypes.SSVMessage) (*spectypes.SSVMessage, error) {
@@ -263,7 +263,7 @@ func createNetworkAndSubscribe(t *testing.T, ctx context.Context, n int, pks ...
 		}
 		for _, node := range ln.Nodes {
 			wg.Add(1)
-			go func(node validator.P2PNetwork, vpk []byte) {
+			go func(node network.P2PNetwork, vpk []byte) {
 				defer wg.Done()
 				if err := node.Subscribe(vpk); err != nil {
 					logger.Warn("could not subscribe to topic", zap.Error(err))

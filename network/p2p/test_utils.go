@@ -5,7 +5,7 @@ import (
 	"crypto/ecdsa"
 	"encoding/hex"
 	"fmt"
-	"github.com/bloxapp/ssv/operator/validator"
+	"github.com/bloxapp/ssv/network"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/host"
@@ -34,9 +34,9 @@ type HostProvider interface {
 
 // LocalNet holds the nodes in the local network
 type LocalNet struct {
-	Nodes    []validator.P2PNetwork
 	NodeKeys []testing.NodeKeys
 	Bootnode *discovery.Bootnode
+	Nodes    []network.P2PNetwork
 
 	udpRand testing.UDPPortsRandomizer
 }
@@ -123,8 +123,8 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, nodesQuant
 	}
 }
 
-// NewTestP2pNetwork creates a new validator.P2PNetwork instance
-func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, keys testing.NodeKeys, logger *zap.Logger, maxPeers int) (validator.P2PNetwork, error) {
+// NewTestP2pNetwork creates a new network.P2PNetwork instance
+func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, keys testing.NodeKeys, logger *zap.Logger, maxPeers int) (network.P2PNetwork, error) {
 	operatorPubkey, err := rsaencryption.ExtractPublicKey(keys.OperatorKey)
 	if err != nil {
 		return nil, err
@@ -155,7 +155,7 @@ func NewLocalNet(ctx context.Context, logger *zap.Logger, n int, useDiscv5 bool)
 		}
 	}
 	i := 0
-	nodes, keys, err := testing.NewLocalTestnet(ctx, n, func(pctx context.Context, keys testing.NodeKeys) validator.P2PNetwork {
+	nodes, keys, err := testing.NewLocalTestnet(ctx, n, func(pctx context.Context, keys testing.NodeKeys) network.P2PNetwork {
 		i++
 		logger := logger.Named(fmt.Sprintf("node-%d", i))
 		p, err := ln.NewTestP2pNetwork(pctx, keys, logger, n)

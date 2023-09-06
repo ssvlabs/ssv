@@ -43,11 +43,11 @@ import (
 // 1. a validator with a non-empty share and empty metadata - test a scenario if we cannot get metadata from beacon node
 
 type MockControllerOptions struct {
-	metrics             Metrics
 	network             P2PNetwork
 	recipientsStorage   Recipients
 	sharesStorage       SharesStorage
 	validatorsMap       *validatorsMap
+	metrics             validatorMetrics
 	beacon              beacon.BeaconNode
 	signer              spectypes.KeyManager
 	StorageMap          *ibftstorage.QBFTStores
@@ -118,10 +118,6 @@ func TestSetupValidators(t *testing.T) {
 	operatorIds := []uint64{1, 2, 3, 4}
 	var validatorPublicKey phase0.BLSPubKey
 
-	db, err := getBaseStorage(logger)
-	require.NoError(t, err)
-	km, keyManagerSignerError := ekm.NewETHKeyManagerSigner(logger, db, networkconfig.TestNetwork, true, "")
-	require.NoError(t, keyManagerSignerError)
 	validatorKey, err := createKey()
 	require.NoError(t, err)
 
@@ -346,12 +342,13 @@ func TestSetupValidators(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 			bc := beacon.NewMockBeaconNode(ctrl)
-			metrics := mocks.NewMockMetrics(ctrl)
+			storageMap := ibftstorage.NewStores()
 			network := mocks.NewMockP2PNetwork(ctrl)
+			db, getBaseStorageErr := getBaseStorage(logger)
 			recipientStorage := mocks.NewMockRecipients(ctrl)
 			sharesStorage := mocks.NewMockSharesStorage(ctrl)
-			storageMap := ibftstorage.NewStores()
 			sharesStorage.EXPECT().Get(gomock.Any(), gomock.Any()).Return(shareWithMetaData).AnyTimes()
+			km, keyManagerSignerError := ekm.NewETHKeyManagerSigner(logger, db, networkconfig.TestNetwork, true, "")
 			sharesStorage.EXPECT().UpdateValidatorMetadata(gomock.Any(), gomock.Any()).DoAndReturn(func(pk string, metadata *beacon.ValidatorMetadata) error {
 				storageMu.Lock()
 				defer storageMu.Unlock()
@@ -360,6 +357,9 @@ func TestSetupValidators(t *testing.T) {
 
 				return nil
 			}).AnyTimes()
+
+			require.NoError(t, keyManagerSignerError)
+			require.NoError(t, getBaseStorageErr)
 
 			mockValidatorMap := &validatorsMap{
 				ctx: context.Background(),
@@ -375,8 +375,8 @@ func TestSetupValidators(t *testing.T) {
 			controllerOptions := MockControllerOptions{
 				beacon:              bc,
 				signer:              km,
-				metrics:             metrics,
 				network:             network,
+				metrics:             nopMetrics{},
 				sharesStorage:       sharesStorage,
 				operatorData:        operatorData,
 				recipientsStorage:   recipientStorage,
@@ -388,7 +388,6 @@ func TestSetupValidators(t *testing.T) {
 			bc.EXPECT().GetValidatorData(gomock.Any()).Return(tc.bcResponse, tc.bcResponseErr).Times(tc.bcMockTimes)
 			ctr := setupController(logger, controllerOptions)
 			ctr.validatorStartFunc = tc.validatorStartFunc
-			disableMetrics(metrics)
 			result, setupValidatorError := ctr.setupValidators(tc.shares)
 			require.Equal(t, tc.comparisonObject, result, setupValidatorError)
 			if tc.bcResponseErr != nil {
@@ -874,20 +873,6 @@ func setupTestValidator(ownerAddressBytes, feeRecipientBytes []byte) *validator.
 
 func getBaseStorage(logger *zap.Logger) (basedb.Database, error) {
 	return kv.NewInMemory(logger, basedb.Options{})
-}
-
-func disableMetrics(metrics *mocks.MockMetrics) {
-	metrics.EXPECT().ValidatorError(gomock.Any()).Return().AnyTimes()
-	metrics.EXPECT().ValidatorExiting(gomock.Any()).Return().AnyTimes()
-	metrics.EXPECT().ValidatorInactive(gomock.Any()).Return().AnyTimes()
-	metrics.EXPECT().ValidatorNotActivated(gomock.Any()).Return().AnyTimes()
-	metrics.EXPECT().ValidatorUnknown(gomock.Any()).Return().AnyTimes()
-	metrics.EXPECT().ValidatorSlashed(gomock.Any()).Return().AnyTimes()
-	metrics.EXPECT().ValidatorReady(gomock.Any()).Return().AnyTimes()
-	metrics.EXPECT().ValidatorPending(gomock.Any()).Return().AnyTimes()
-	metrics.EXPECT().ValidatorRemoved(gomock.Any()).Return().AnyTimes()
-	metrics.EXPECT().ValidatorError(gomock.Any()).Return().AnyTimes()
-	metrics.EXPECT().ValidatorNotFound(gomock.Any()).Return().AnyTimes()
 }
 
 func decodeHex(t *testing.T, hexStr string, errMsg string) []byte {

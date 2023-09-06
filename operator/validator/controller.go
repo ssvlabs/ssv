@@ -155,26 +155,12 @@ type P2PNetwork interface {
 	GetHistory(logger *zap.Logger, mid spectypes.MessageID, from specqbft.Height, to specqbft.Height, targets ...string) ([]p2pprotocol.SyncResult, specqbft.Height, error)
 }
 
-type Metrics interface {
-	ValidatorInactive(publicKey []byte)
-	ValidatorNoIndex(publicKey []byte)
-	ValidatorError(publicKey []byte)
-	ValidatorReady(publicKey []byte)
-	ValidatorNotActivated(publicKey []byte)
-	ValidatorExiting(publicKey []byte)
-	ValidatorSlashed(publicKey []byte)
-	ValidatorNotFound(publicKey []byte)
-	ValidatorPending(publicKey []byte)
-	ValidatorRemoved(publicKey []byte)
-	ValidatorUnknown(publicKey []byte)
-}
-
 // controller implements Controller
 type controller struct {
 	context context.Context
 
 	logger  *zap.Logger
-	metrics Metrics
+	metrics validatorMetrics
 
 	sharesStorage     SharesStorage
 	operatorsStorage  registrystorage.Operators
@@ -246,7 +232,6 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 			validatorOptions.QueueSize = size
 		}
 	}
-
 	if options.Metrics == nil {
 		options.Metrics = nopMetrics{}
 	}
