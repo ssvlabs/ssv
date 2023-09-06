@@ -168,8 +168,7 @@ var StartNodeCmd = &cobra.Command{
 
 		validatorsMap := validatorsmap.New(cmd.Context())
 
-		// TODO: pass it to duty scheduler
-		dutyFetcher := dutyfetcher.New(consensusClient, slotTicker, validatorsMap, dutyfetcher.WithLogger(logger)) // TODO: uncomment when validatorsMap is extracted
+		dutyFetcher := dutyfetcher.New(consensusClient, slotTicker, validatorsMap, dutyfetcher.WithLogger(logger))
 		dutyFetcher.Start(cmd.Context())
 
 		messageValidator := validation.NewMessageValidator(
@@ -177,7 +176,7 @@ var StartNodeCmd = &cobra.Command{
 			validation.WithShareStorage(nodeStorage.Shares()),
 			validation.WithLogger(logger),
 			validation.WithMetrics(metricsReporter),
-			//validation.WithDutyFetcher(dutyFetcher), // TODO: uncomment when validatorsMap is extracted
+			validation.WithDutyFetcher(dutyFetcher),
 			validation.WithOwnOperatorID(operatorData.ID),
 		)
 
