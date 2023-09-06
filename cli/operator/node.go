@@ -170,6 +170,7 @@ var StartNodeCmd = &cobra.Command{
 
 		validatorsMap := validatorsmap.New(ctx)
 		dutyFetcher := dutyfetcher.New(consensusClient, slotTicker, validatorsMap, dutyfetcher.WithLogger(logger))
+		dutyFetcher.Start(ctx)
 
 		messageValidator := validation.NewMessageValidator(
 			networkConfig,
