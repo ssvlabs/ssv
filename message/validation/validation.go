@@ -366,7 +366,7 @@ func (mv *MessageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 		return nil, descriptor, ErrInvalidRole
 	}
 
-	publicKey, err := ssvtypes.DeserializeBLSPublicKey(validatorPK)
+	_, err := ssvtypes.DeserializeBLSPublicKey(validatorPK)
 	if err != nil {
 		e := ErrDeserializePublicKey
 		e.innerErr = err
@@ -375,7 +375,7 @@ func (mv *MessageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 
 	var share *ssvtypes.SSVShare
 	if mv.shareStorage != nil {
-		share = mv.shareStorage.Get(nil, publicKey.Serialize())
+		share = mv.shareStorage.Get(nil, validatorPK)
 		if share == nil {
 			e := ErrUnknownValidator
 			//e.got = publicKey.SerializeToHexStr()
