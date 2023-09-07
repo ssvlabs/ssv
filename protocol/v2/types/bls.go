@@ -1,16 +1,15 @@
 package types
 
 import (
-	"fmt"
-
 	lru "github.com/hashicorp/golang-lru/v2"
+	"github.com/herumi/bls-eth-go-binary/bls"
 )
 
-var blsPublicKeyCache *lru.Cache[string, *BLSTPublicKey]
+var blsPublicKeyCache *lru.Cache[string, bls.PublicKey]
 
 func init() {
 	var err error
-	blsPublicKeyCache, err = lru.New[string, *BLSTPublicKey](128_000)
+	blsPublicKeyCache, err = lru.New[string, bls.PublicKey](128_000)
 	if err != nil {
 		panic(err)
 	}
@@ -18,17 +17,16 @@ func init() {
 
 // DeserializeBLSPublicKey deserializes a bls.PublicKey from bytes,
 // caching the result to avoid repeated deserialization.
-func DeserializeBLSPublicKey(b []byte) (*BLSTPublicKey, error) {
+func DeserializeBLSPublicKey(b []byte) (bls.PublicKey, error) {
 	pkStr := string(b)
 	if pk, ok := blsPublicKeyCache.Get(pkStr); ok {
 		return pk, nil
 	}
 
-	pk := new(BLSTPublicKey).Uncompress(b)
-	if pk == nil {
-		return nil, fmt.Errorf("failed to deserialize public key")
+	pk := bls.PublicKey{}
+	if err := pk.Deserialize(b); err != nil {
+		return bls.PublicKey{}, err
 	}
-
 	blsPublicKeyCache.Add(pkStr, pk)
 
 	return pk, nil

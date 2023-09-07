@@ -1,11 +1,10 @@
 package runner
 
 import (
-	"fmt"
-
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 
 	"github.com/bloxapp/ssv/protocol/v2/types"
@@ -85,13 +84,13 @@ func (b *BaseRunner) verifyBeaconPartialSignature(msg *spectypes.PartialSignatur
 			if err != nil {
 				return errors.Wrap(err, "could not deserialized pk")
 			}
-			sig := new(types.BLSTSignature).Uncompress(signature)
-			if sig == nil {
-				return fmt.Errorf("could not deserialized Signature")
+			sig := &bls.Sign{}
+			if err := sig.Deserialize(signature); err != nil {
+				return errors.Wrap(err, "could not deserialized Signature")
 			}
 
 			// verify
-			if !sig.Verify(false, pk, false, root[:], []byte("BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_")) {
+			if !sig.VerifyByte(&pk, root[:]) {
 				return errors.New("wrong signature")
 			}
 			return nil

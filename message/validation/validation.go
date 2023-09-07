@@ -378,7 +378,7 @@ func (mv *MessageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 		share = mv.shareStorage.Get(nil, publicKey.Serialize())
 		if share == nil {
 			e := ErrUnknownValidator
-			//e.got = publicKey.SerializeToHexStr()
+			e.got = publicKey.SerializeToHexStr()
 			return nil, descriptor, e
 		}
 
