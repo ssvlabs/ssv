@@ -11,6 +11,7 @@ import (
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
@@ -39,7 +40,7 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 	testConfig := &qbft.Config{
 		Signer:  spectestingutils.NewTestingKeyManager(),
 		Network: spectestingutils.NewTestingNetwork(),
-		Timer:   spectestingutils.NewTestingTimer(),
+		Timer:   roundtimer.NewTestingTimer(),
 	}
 
 	share := spectestingutils.TestingShare(spectestingutils.Testing4SharesSet())
