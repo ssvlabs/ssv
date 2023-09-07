@@ -15,11 +15,11 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	"github.com/bloxapp/ssv/storage/kv"
-
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/golang/mock/gomock"
+	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"sync"
 	"testing"
@@ -39,6 +39,11 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
+const (
+	sk1Str = "3548db63ab5701878daf25fa877638dc7809778815b9d9ecd5369da33ca9e64f"
+	sk2Str = "3748db63ab5701878daf25fa877638dc7809778815b9d9ecd5369da33ca9e64f"
+)
+
 // TODO: increase test coverage, add more tests, e.g.:
 // 1. a validator with a non-empty share and empty metadata - test a scenario if we cannot get metadata from beacon node
 
@@ -49,7 +54,7 @@ type MockControllerOptions struct {
 	validatorsMap       *validatorsMap
 	metrics             validatorMetrics
 	beacon              beacon.BeaconNode
-	signer              spectypes.KeyManager
+	keyManager          spectypes.KeyManager
 	StorageMap          *ibftstorage.QBFTStores
 	metadataLastUpdated map[string]time.Time
 	operatorData        *registrystorage.OperatorData
@@ -107,6 +112,73 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 	}()
 
 	wg.Wait()
+}
+
+func TestOnRemoveShare(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	logger := logging.TestLogger(t)
+	defer ctrl.Finish()
+	storageMap := ibftstorage.NewStores()
+	network := mocks.NewMockP2PNetwork(ctrl)
+	db, getBaseStorageErr := getBaseStorage(logger)
+	require.NoError(t, getBaseStorageErr)
+	km, keyManagerSignerError := ekm.NewETHKeyManagerSigner(logger, db, networkconfig.TestNetwork, true, "")
+	require.NoError(t, keyManagerSignerError)
+	sk1 := &bls.SecretKey{}
+	sk2 := &bls.SecretKey{}
+	require.NoError(t, sk1.SetHexString(sk1Str))
+	require.NoError(t, sk2.SetHexString(sk2Str))
+	require.NoError(t, km.AddShare(sk1))
+	require.NoError(t, km.AddShare(sk2))
+
+	firstValidator := &validator.Validator{
+		DutyRunners: runner.DutyRunners{},
+		Storage:     ibftstorage.NewStores(),
+		Share: &types.SSVShare{
+			Share: spectypes.Share{
+				ValidatorPubKey: sk1.GetPublicKey().Serialize(),
+			},
+		},
+	}
+	secondValidator := &validator.Validator{
+		DutyRunners: runner.DutyRunners{},
+		Storage:     ibftstorage.NewStores(),
+		Share: &types.SSVShare{
+			Share: spectypes.Share{
+				ValidatorPubKey: sk2.GetPublicKey().Serialize(),
+			},
+		},
+	}
+	firstValidatorPublicKey := sk1.GetPublicKey().SerializeToHexStr()
+	secondValidatorPublicKey := sk2.GetPublicKey().SerializeToHexStr()
+
+	mockValidatorMap := &validatorsMap{
+		ctx: context.Background(),
+		optsTemplate: &validator.Options{
+			Signer:  km,
+			Network: network,
+			Storage: storageMap,
+		},
+		validatorsMap: map[string]*validator.Validator{
+			firstValidatorPublicKey:  firstValidator,
+			secondValidatorPublicKey: secondValidator,
+		},
+	}
+	controllerOptions := MockControllerOptions{
+		keyManager:    km,
+		network:       network,
+		metrics:       nopMetrics{},
+		validatorsMap: mockValidatorMap,
+	}
+
+	ctr := setupController(logger, controllerOptions)
+	shareRemoveErr := ctr.onShareRemove(firstValidatorPublicKey, false)
+	require.NoError(t, shareRemoveErr)
+	require.Equal(t, 1, len(ctr.validatorsMap.validatorsMap))
+	shareRemoveSecretErr := ctr.onShareRemove(secondValidatorPublicKey, true)
+	require.NoError(t, shareRemoveSecretErr)
+	require.Equal(t, 0, len(ctr.validatorsMap.validatorsMap))
+
 }
 
 func TestSetupValidators(t *testing.T) {
@@ -344,11 +416,9 @@ func TestSetupValidators(t *testing.T) {
 			bc := beacon.NewMockBeaconNode(ctrl)
 			storageMap := ibftstorage.NewStores()
 			network := mocks.NewMockP2PNetwork(ctrl)
-			db, getBaseStorageErr := getBaseStorage(logger)
 			recipientStorage := mocks.NewMockRecipients(ctrl)
 			sharesStorage := mocks.NewMockSharesStorage(ctrl)
 			sharesStorage.EXPECT().Get(gomock.Any(), gomock.Any()).Return(shareWithMetaData).AnyTimes()
-			km, keyManagerSignerError := ekm.NewETHKeyManagerSigner(logger, db, networkconfig.TestNetwork, true, "")
 			sharesStorage.EXPECT().UpdateValidatorMetadata(gomock.Any(), gomock.Any()).DoAndReturn(func(pk string, metadata *beacon.ValidatorMetadata) error {
 				storageMu.Lock()
 				defer storageMu.Unlock()
@@ -357,9 +427,6 @@ func TestSetupValidators(t *testing.T) {
 
 				return nil
 			}).AnyTimes()
-
-			require.NoError(t, keyManagerSignerError)
-			require.NoError(t, getBaseStorageErr)
 
 			mockValidatorMap := &validatorsMap{
 				ctx: context.Background(),
@@ -374,7 +441,6 @@ func TestSetupValidators(t *testing.T) {
 			// Set up the controller with mock data
 			controllerOptions := MockControllerOptions{
 				beacon:              bc,
-				signer:              km,
 				network:             network,
 				metrics:             nopMetrics{},
 				sharesStorage:       sharesStorage,
@@ -789,11 +855,11 @@ func TestGetIndices(t *testing.T) {
 
 func setupController(logger *zap.Logger, opts MockControllerOptions) controller {
 	return controller{
-		keyManager:                 nil,
 		shareEncryptionKeyProvider: nil,
 		beacon:                     opts.beacon,
 		network:                    opts.network,
 		metrics:                    opts.metrics,
+		keyManager:                 opts.keyManager,
 		ibftStorageMap:             opts.StorageMap,
 		context:                    context.Background(),
 		operatorData:               opts.operatorData,
