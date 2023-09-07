@@ -60,9 +60,11 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	operatorsCount := uint64(0)
 	// Create operators rsa keys
-	ops, err := createOperators(4)
+	ops, err := createOperators(4, operatorsCount)
 	require.NoError(t, err)
+	operatorsCount += uint64(len(ops))
 
 	eh, _, err := setupEventHandler(t, ctx, logger, ops[0], false)
 	if err != nil {
@@ -158,7 +160,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 0, len(operators))
 
-		// Hanlde the event
+		// Handle the event
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
@@ -221,8 +223,9 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		// TODO: fix this test. It checks nothing, due the handleOperatorRemoved method is no-op currently
 		t.Run("test OperatorRemoved happy flow", func(t *testing.T) {
 			// Prepare a new operator to remove it later in this test
-			op, err := createOperators(1)
+			op, err := createOperators(1, operatorsCount)
 			require.NoError(t, err)
+			operatorsCount++
 
 			// Call the contract method
 			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(op[0].pub)
@@ -780,6 +783,193 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.Equal(t, testAddr2.String(), recipientData.FeeRecipient.String())
 	})
 
+	// DO / UNDO in one block tests
+	t.Run("test DO / UNDO in one block", func(t *testing.T) {
+		t.Run("test OperatorAdded + OperatorRemoved events handling", func(t *testing.T) {
+			// There are 5 ops before the test running
+			// Check that there is no registered operators
+			operators, err := eh.nodeStorage.ListOperators(nil, 0, 10)
+			require.NoError(t, err)
+			require.Equal(t, operatorsCount, uint64(len(operators)))
+
+			tmpOps, err := createOperators(1, operatorsCount)
+			require.NoError(t, err)
+			operatorsCount++
+			op := tmpOps[0]
+
+			// Call the RegisterOperator contract method
+			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(op.pub)
+			require.NoError(t, err)
+			_, err = boundContract.SimcontractTransactor.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
+			require.NoError(t, err)
+
+			// Call the OperatorRemoved contract method
+			_, err = boundContract.SimcontractTransactor.RemoveOperator(auth, op.id)
+			require.NoError(t, err)
+
+			sim.Commit()
+
+			block := <-logs
+			require.NotEmpty(t, block.Logs)
+			require.Equal(t, ethcommon.HexToHash("0xd839f31c14bd632f424e307b36abff63ca33684f77f28e35dc13718ef338f7f4"), block.Logs[0].Topics[0])
+			require.Equal(t, ethcommon.HexToHash("0x0e0ba6c2b04de36d6d509ec5bd155c43a9fe862f8052096dd54f3902a74cca3e"), block.Logs[1].Topics[0])
+
+			eventsCh := make(chan executionclient.BlockLogs)
+			go func() {
+				defer close(eventsCh)
+				eventsCh <- block
+			}()
+
+			// Handle the event
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+			require.Equal(t, blockNum+1, lastProcessedBlock)
+			require.NoError(t, err)
+			blockNum++
+
+			// #TODO: Fails until we fix the OperatorAdded: handlers.go #108
+			// Check storage for the new operators
+			//operators, err = eh.nodeStorage.ListOperators(nil, 0, 10)
+			//require.NoError(t, err)
+			//require.Equal(t, operatorsCount-1, uint64(len(operators)))
+			//
+			//_, found, err := eh.nodeStorage.GetOperatorData(nil, op.id)
+			//require.NoError(t, err)
+			//require.False(t, found)
+		})
+
+		t.Run("test ValidatorAdded + ValidatorRemoved events handling", func(t *testing.T) {
+			shares := eh.nodeStorage.Shares().List(nil)
+			sharesCountBeforeTest := len(shares)
+
+			validatorData4, err := createNewValidator(ops)
+			require.NoError(t, err)
+
+			currentNonce, err := eh.nodeStorage.GetNextNonce(nil, testAddr)
+			require.NoError(t, err)
+
+			sharesData4, err := generateSharesData(validatorData4, ops, testAddr, int(currentNonce))
+			require.NoError(t, err)
+
+			valPubKey := validatorData4.masterPubKey.Serialize()
+			valShare := eh.nodeStorage.Shares().Get(nil, valPubKey)
+			require.Nil(t, valShare)
+
+			// Call the contract method
+			_, err = boundContract.SimcontractTransactor.RegisterValidator(
+				auth,
+				validatorData4.masterPubKey.Serialize(),
+				[]uint64{1, 2, 3, 4},
+				sharesData4,
+				big.NewInt(100_000_000),
+				simcontract.CallableCluster{
+					ValidatorCount:  1,
+					NetworkFeeIndex: 1,
+					Index:           2,
+					Active:          true,
+					Balance:         big.NewInt(100_000_000),
+				})
+			require.NoError(t, err)
+
+			_, err = boundContract.SimcontractTransactor.RemoveValidator(
+				auth,
+				valPubKey,
+				[]uint64{1, 2, 3, 4},
+				simcontract.CallableCluster{
+					ValidatorCount:  1,
+					NetworkFeeIndex: 1,
+					Index:           2,
+					Active:          true,
+					Balance:         big.NewInt(100_000_000),
+				})
+
+			require.NoError(t, err)
+
+			sim.Commit()
+
+			block := <-logs
+			require.NotEmpty(t, block.Logs)
+			require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
+			require.Equal(t, ethcommon.HexToHash("0xccf4370403e5fbbde0cd3f13426479dcd8a5916b05db424b7a2c04978cf8ce6e"), block.Logs[1].Topics[0])
+
+			eventsCh := make(chan executionclient.BlockLogs)
+			go func() {
+				defer close(eventsCh)
+				eventsCh <- block
+			}()
+
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+			require.Equal(t, blockNum+1, lastProcessedBlock)
+			require.NoError(t, err)
+			blockNum++
+
+			valShare = eh.nodeStorage.Shares().Get(nil, valPubKey)
+			require.Nil(t, valShare)
+
+			// Check that validator was registered
+			shares = eh.nodeStorage.Shares().List(nil)
+			require.Equal(t, sharesCountBeforeTest, len(shares))
+			// and nonce was bumped
+			nonce, err := eh.nodeStorage.GetNextNonce(nil, testAddr)
+			require.NoError(t, err)
+			require.Equal(t, currentNonce+1, nonce)
+		})
+
+		t.Run("test ClusterLiquidated + ClusterReactivated events handling", func(t *testing.T) {
+			// Using validator 2 because we've removed validator 1 in ValidatorRemoved tests
+			valPubKey := validatorData2.masterPubKey.Serialize()
+			share := eh.nodeStorage.Shares().Get(nil, valPubKey)
+
+			require.NotNil(t, share)
+			require.False(t, share.Liquidated)
+			_, err = boundContract.SimcontractTransactor.Liquidate(
+				auth,
+				testAddr,
+				[]uint64{1, 2, 3, 4},
+				simcontract.CallableCluster{
+					ValidatorCount:  1,
+					NetworkFeeIndex: 1,
+					Index:           1,
+					Active:          true,
+					Balance:         big.NewInt(100_000_000),
+				})
+			require.NoError(t, err)
+
+			_, err = boundContract.SimcontractTransactor.Reactivate(
+				auth,
+				[]uint64{1, 2, 3, 4},
+				big.NewInt(100_000_000),
+				simcontract.CallableCluster{
+					ValidatorCount:  1,
+					NetworkFeeIndex: 1,
+					Index:           1,
+					Active:          true,
+					Balance:         big.NewInt(100_000_000),
+				})
+			require.NoError(t, err)
+
+			sim.Commit()
+
+			block := <-logs
+			require.NotEmpty(t, block.Logs)
+			require.Equal(t, ethcommon.HexToHash("0x1fce24c373e07f89214e9187598635036111dbb363e99f4ce498488cdc66e688"), block.Logs[0].Topics[0])
+			require.Equal(t, ethcommon.HexToHash("0xc803f8c01343fcdaf32068f4c283951623ef2b3fa0c547551931356f456b6859"), block.Logs[1].Topics[0])
+
+			eventsCh := make(chan executionclient.BlockLogs)
+			go func() {
+				defer close(eventsCh)
+				eventsCh <- block
+			}()
+
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+			require.Equal(t, blockNum+1, lastProcessedBlock)
+			require.NoError(t, err)
+			blockNum++
+
+			share = eh.nodeStorage.Shares().Get(nil, valPubKey)
+			require.NotNil(t, share)
+			require.False(t, share.Liquidated)
+		})
+	})
 }
 
 func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, operator *testOperator, useMockCtrl bool) (*EventHandler, *mocks.MockController, error) {
@@ -927,7 +1117,7 @@ func TestCreatingSharesData(t *testing.T) {
 	owner := testAddr
 	nonce := 0
 	//
-	ops, err := createOperators(4)
+	ops, err := createOperators(4, 1)
 	require.NoError(t, err)
 
 	validatorData, err := createNewValidator(ops)
@@ -1016,7 +1206,7 @@ func createNewValidator(ops []*testOperator) (*testValidatorData, error) {
 	return validatorData, nil
 }
 
-func createOperators(num uint64) ([]*testOperator, error) {
+func createOperators(num uint64, idOffset uint64) ([]*testOperator, error) {
 	testops := make([]*testOperator, num)
 
 	for i := uint64(1); i <= num; i++ {
@@ -1025,7 +1215,7 @@ func createOperators(num uint64) ([]*testOperator, error) {
 			return nil, err
 		}
 		testops[i-1] = &testOperator{
-			id:   i,
+			id:   idOffset + i,
 			pub:  pb,
 			priv: sk,
 		}
