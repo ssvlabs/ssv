@@ -33,7 +33,7 @@ func (i *Instance) uponProposal(logger *zap.Logger, signedProposal *specqbft.Sig
 
 	// A future justified proposal should bump us into future round and reset timer
 	if signedProposal.Message.Round > i.State.Round {
-		i.config.GetTimer().TimeoutForRound(signedProposal.Message.Round)
+		i.config.GetTimer().TimeoutForRound(signedProposal.Message.Height, signedProposal.Message.Round)
 	}
 	i.bumpToRound(newRound)
 
