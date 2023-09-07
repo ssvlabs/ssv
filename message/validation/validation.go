@@ -332,6 +332,10 @@ func (mv *MessageValidator) validateP2PMessage(ctx context.Context, p peer.ID, p
 	return mv.validateSSVMessage(msg, receivedAt)
 }
 
+func (mv *MessageValidator) ValidateSSVMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, Descriptor, error) {
+	return mv.validateSSVMessage(ssvMessage, time.Now())
+}
+
 func (mv *MessageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage, receivedAt time.Time) (*queue.DecodedSSVMessage, Descriptor, error) {
 	var descriptor Descriptor
 
