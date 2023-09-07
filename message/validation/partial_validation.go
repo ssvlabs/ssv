@@ -10,7 +10,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"golang.org/x/exp/slices"
 
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
@@ -158,9 +157,10 @@ func (mv *MessageValidator) verifyPartialSignature(msg *spectypes.PartialSignatu
 		if err != nil {
 			return fmt.Errorf("deserialize pk: %w", err)
 		}
-		sig := &bls.Sign{}
-		if err := sig.Deserialize(signature); err != nil {
-			return fmt.Errorf("deserialize signature: %w", err)
+
+		sig := new(ssvtypes.BLSTSignature).Uncompress(signature)
+		if sig == nil {
+			return fmt.Errorf("deserialize signature")
 		}
 
 		if !mv.aggregateVerify(sig, pk, root) {
@@ -173,10 +173,13 @@ func (mv *MessageValidator) verifyPartialSignature(msg *spectypes.PartialSignatu
 	return ErrSignerNotInCommittee
 }
 
-func (mv *MessageValidator) aggregateVerify(sig *bls.Sign, pk bls.PublicKey, root [32]byte) bool {
+func (mv *MessageValidator) aggregateVerify(sig *ssvtypes.BLSTSignature, pk *ssvtypes.BLSTPublicKey, root [32]byte) bool {
 	start := time.Now()
 
-	valid := ssvtypes.Verifier.AggregateVerify(sig, []bls.PublicKey{pk}, root)
+	aggSig := new(ssvtypes.BLSTAggregateSignature)
+	aggSig.Add(sig, false)
+
+	valid := ssvtypes.Verifier.AggregateVerify(aggSig, []*ssvtypes.BLSTPublicKey{pk}, root)
 
 	sinceStart := time.Since(start)
 	mv.metrics.SignatureValidationDuration(sinceStart)
