@@ -70,9 +70,9 @@ func New(pctx context.Context, beaconNetwork BeaconNetwork, role spectypes.Beaco
 		role:          role,
 		beaconNetwork: beaconNetwork,
 		timeoutOptions: TimeoutOptions{
-			quickThreshold: quickTimeoutThreshold,
-			quick:          quickTimeout,
-			slow:           slowTimeout,
+			quickThreshold: QuickTimeoutThreshold,
+			quick:          QuickTimeout,
+			slow:           SlowTimeout,
 		},
 	}
 }
