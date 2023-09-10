@@ -54,9 +54,10 @@ type MockControllerOptions struct {
 	validatorsMap       *validatorsMap
 	metrics             validatorMetrics
 	beacon              beacon.BeaconNode
+	validatorOptions    *validator.Options
 	keyManager          spectypes.KeyManager
-	StorageMap          *ibftstorage.QBFTStores
 	metadataLastUpdated map[string]time.Time
+	StorageMap          *ibftstorage.QBFTStores
 	operatorData        *registrystorage.OperatorData
 }
 
@@ -114,9 +115,131 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 	wg.Wait()
 }
 
+func TestUpdateValidatorMetadata(t *testing.T) {
+	secretKey := &bls.SecretKey{}
+	secretKey2 := &bls.SecretKey{}
+	require.NoError(t, secretKey.SetHexString(sk1Str))
+	require.NoError(t, secretKey2.SetHexString(sk2Str))
+
+	passedEpoch := phase0.Epoch(1)
+	validatorKey, err := createKey()
+	require.NoError(t, err)
+
+	operatorIds := []uint64{1, 2, 3, 4}
+	operators := make([]*spectypes.Operator, len(operatorIds))
+	for i, id := range operatorIds {
+		operatorKey, keyError := createKey()
+		require.NoError(t, keyError)
+		operators[i] = &spectypes.Operator{OperatorID: id, PubKey: operatorKey}
+	}
+
+	firstValidator := &validator.Validator{
+		DutyRunners: runner.DutyRunners{},
+		Storage:     ibftstorage.NewStores(),
+		Share: &types.SSVShare{
+			Share: spectypes.Share{
+				ValidatorPubKey: secretKey.GetPublicKey().Serialize(),
+			},
+		},
+	}
+	shareWithMetaData := &types.SSVShare{
+		Share: spectypes.Share{
+			OperatorID:      1,
+			Committee:       operators,
+			ValidatorPubKey: validatorKey,
+		},
+		Metadata: types.Metadata{
+			OwnerAddress: common.BytesToAddress([]byte("67Ce5c69260bd819B4e0AD13f4b873074D479811")),
+			BeaconMetadata: &beacon.ValidatorMetadata{
+				Balance:         0,
+				Status:          3, // ValidatorStateActiveOngoing
+				Index:           1,
+				ActivationEpoch: passedEpoch,
+			},
+		},
+	}
+
+	validatorMetaData := &beacon.ValidatorMetadata{Index: 1, ActivationEpoch: passedEpoch, Status: eth2apiv1.ValidatorStateActiveOngoing}
+
+	testCases := []struct {
+		name                      string
+		metadata                  *beacon.ValidatorMetadata
+		ExpectedErrorResult       bool
+		sharesStorageExpectReturn any
+		getShareError             bool
+		operatorDataId            uint64
+		testPublicKey             string
+		mockRecipientTimes        int
+	}{
+		{"could not decode public key", validatorMetaData, true, nil, false, 1, "123", 0},
+		{"Empty metadata", nil, true, nil, false, 1, secretKey.GetPublicKey().SerializeToHexStr(), 0},
+		{"Valid metadata", validatorMetaData, false, nil, false, 1, secretKey.GetPublicKey().SerializeToHexStr(), 0},
+		{"Share wasn't found", validatorMetaData, true, nil, true, 1, secretKey.GetPublicKey().SerializeToHexStr(), 0},
+		{"Share not belong to operator", validatorMetaData, false, nil, false, 2, secretKey.GetPublicKey().SerializeToHexStr(), 0},
+		{"Metadata with error", validatorMetaData, true, fmt.Errorf("error"), false, 1, secretKey.GetPublicKey().SerializeToHexStr(), 0},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Initialize common setup
+			ctrl, logger, sharesStorage, network, km, recipientStorage := setupCommonTestComponents(t)
+			defer ctrl.Finish()
+			operatorData := buildOperatorData(tc.operatorDataId, "67Ce5c69260bd819B4e0AD13f4b873074D479811")
+			recipientData := buildFeeRecipient("67Ce5c69260bd819B4e0AD13f4b873074D479811", "45E668aba4b7fc8761331EC3CE77584B7A99A51A")
+			firstValidatorPublicKey := secretKey.GetPublicKey().SerializeToHexStr()
+
+			mockValidatorMap := &validatorsMap{
+				ctx: context.Background(),
+				optsTemplate: &validator.Options{
+					Signer:  km,
+					Network: network,
+				},
+				validatorsMap: map[string]*validator.Validator{
+					firstValidatorPublicKey: firstValidator,
+				},
+			}
+
+			// Assuming controllerOptions is set up correctly
+			controllerOptions := MockControllerOptions{
+				keyManager:          km,
+				network:             network,
+				operatorData:        operatorData,
+				metrics:             nopMetrics{},
+				sharesStorage:       sharesStorage,
+				recipientsStorage:   recipientStorage,
+				validatorsMap:       mockValidatorMap,
+				metadataLastUpdated: map[string]time.Time{},
+			}
+
+			if tc.getShareError {
+				sharesStorage.EXPECT().Get(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+			} else {
+				sharesStorage.EXPECT().Get(gomock.Any(), gomock.Any()).Return(shareWithMetaData).AnyTimes()
+			}
+			recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(recipientData, true, nil).Times(tc.mockRecipientTimes)
+			sharesStorage.EXPECT().UpdateValidatorMetadata(gomock.Any(), gomock.Any()).Return(tc.sharesStorageExpectReturn).AnyTimes()
+
+			ctr := setupController(logger, controllerOptions)
+
+			validatorStartFunc := func(validator *validator.Validator) (bool, error) {
+				return true, nil
+			}
+			ctr.validatorStartFunc = validatorStartFunc
+
+			err := ctr.UpdateValidatorMetadata(tc.testPublicKey, tc.metadata)
+
+			if tc.ExpectedErrorResult {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestOnRemoveShare(t *testing.T) {
-	ctrl := gomock.NewController(t)
 	logger := logging.TestLogger(t)
+	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	storageMap := ibftstorage.NewStores()
 	network := mocks.NewMockP2PNetwork(ctrl)
@@ -178,7 +301,6 @@ func TestOnRemoveShare(t *testing.T) {
 	shareRemoveSecretErr := ctr.onShareRemove(secondValidatorPublicKey, true)
 	require.NoError(t, shareRemoveSecretErr)
 	require.Equal(t, 0, len(ctr.validatorsMap.validatorsMap))
-
 }
 
 func TestSetupValidators(t *testing.T) {
@@ -864,6 +986,7 @@ func setupController(logger *zap.Logger, opts MockControllerOptions) controller 
 		context:                    context.Background(),
 		operatorData:               opts.operatorData,
 		recipientsStorage:          opts.recipientsStorage,
+		validatorOptions:           opts.validatorOptions,
 		sharesStorage:              opts.sharesStorage,
 		logger:                     logger,
 		validatorsMap:              opts.validatorsMap,
@@ -974,4 +1097,17 @@ func createKey() ([]byte, error) {
 		return nil, err
 	}
 	return pubKey, nil
+}
+
+func setupCommonTestComponents(t *testing.T) (*gomock.Controller, *zap.Logger, *mocks.MockSharesStorage, *mocks.MockP2PNetwork, spectypes.KeyManager, *mocks.MockRecipients) {
+	logger := logging.TestLogger(t)
+	ctrl := gomock.NewController(t)
+	network := mocks.NewMockP2PNetwork(ctrl)
+	db, err := getBaseStorage(logger)
+	require.NoError(t, err)
+	sharesStorage := mocks.NewMockSharesStorage(ctrl)
+	recipientStorage := mocks.NewMockRecipients(ctrl)
+	km, err := ekm.NewETHKeyManagerSigner(logger, db, networkconfig.TestNetwork, true, "")
+	require.NoError(t, err)
+	return ctrl, logger, sharesStorage, network, km, recipientStorage
 }
