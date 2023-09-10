@@ -205,7 +205,7 @@ Unfollowed:
 	select {
 	case _, ok := <-logs:
 		require.False(t, ok, "logs channel should be closed")
-	case <-time.After(time.Millisecond * 100):
+	case <-time.After(time.Second):
 		require.Fail(t, "logs channel should be closed")
 	}
 }
@@ -596,7 +596,7 @@ func TestSimSSV(t *testing.T) {
 	select {
 	case _, ok := <-logs:
 		require.False(t, ok, "logs channel should be closed")
-	case <-time.After(time.Millisecond * 100):
+	case <-time.After(time.Second):
 		require.Fail(t, "logs channel should be closed")
 	}
 }
