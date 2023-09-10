@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/bloxapp/ssv/operator/validator"
 	"github.com/bloxapp/ssv/operator/validator/mocks"
@@ -574,6 +575,17 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, ethcommon.HexToAddress("0x1").String(), recepientData.FeeRecipient.String())
 	})
+
+	// Cancel StreamLogs context.
+	cancel()
+
+	// Wait for the stream to be closed.
+	select {
+	case _, ok := <-logs:
+		require.False(t, ok, "logs channel should be closed")
+	case <-time.After(time.Millisecond * 100):
+		require.Fail(t, "logs channel should be closed")
+	}
 }
 
 func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, operator *testOperator, useMockCtrl bool) (*EventHandler, *mocks.MockController, error) {
