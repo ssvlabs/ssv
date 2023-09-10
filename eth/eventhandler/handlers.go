@@ -324,11 +324,11 @@ func validatorAddedEventToShare(
 	return &validatorShare, shareSecret, nil
 }
 
-func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.ContractValidatorRemoved) ([]byte, error) {
+func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.ContractValidatorRemoved) (*types.SSVShare, error) {
 	logger := eh.logger.With(
 		zap.String("event_type", ValidatorRemoved),
 		fields.TxHash(event.Raw.TxHash),
-		zap.String("owner_address", event.Owner.String()),
+		fields.Owner(event.Owner),
 		zap.Uint64s("operator_ids", event.OperatorIds),
 		fields.PubKey(event.PublicKey),
 	)
@@ -374,7 +374,7 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 	if isOperatorShare {
 		eh.metrics.ValidatorRemoved(event.PublicKey)
 		logger.Debug("processed event")
-		return share.ValidatorPubKey, nil
+		return share, nil
 	}
 
 	logger.Debug("processed event")

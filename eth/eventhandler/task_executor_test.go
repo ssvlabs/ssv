@@ -3,8 +3,9 @@ package eventhandler
 import (
 	"context"
 	"encoding/binary"
-	"github.com/golang/mock/gomock"
 	"testing"
+
+	"github.com/golang/mock/gomock"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -98,7 +99,7 @@ func TestExecuteTask(t *testing.T) {
 	t.Run("test StopValidator task execution", func(t *testing.T) {
 		validatorCtrl.EXPECT().StopValidator(gomock.Any()).Return(nil).AnyTimes()
 
-		task := NewStopValidatorTask(eh.taskExecutor, ethcommon.Hex2Bytes(valPk))
+		task := NewStopValidatorTask(eh.taskExecutor, &ssvtypes.SSVShare{})
 		require.NoError(t, task.Execute())
 	})
 

@@ -1,7 +1,6 @@
 package validator
 
 import (
-	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -30,11 +29,11 @@ func (c *controller) StartValidator(share *ssvtypes.SSVShare) error {
 	return nil
 }
 
-func (c *controller) StopValidator(publicKey []byte) error {
-	logger := c.taskLogger("StopValidator", fields.PubKey(publicKey))
+func (c *controller) StopValidator(share *ssvtypes.SSVShare) error {
+	logger := c.taskLogger("StopValidator", fields.PubKey(share.ValidatorPubKey))
 
-	c.metrics.ValidatorRemoved(publicKey)
-	if err := c.onShareRemove(hex.EncodeToString(publicKey), true); err != nil {
+	c.metrics.ValidatorRemoved(share.ValidatorPubKey)
+	if err := c.onShareRemove(share, true); err != nil {
 		return err
 	}
 
@@ -52,7 +51,7 @@ func (c *controller) LiquidateCluster(owner common.Address, operatorIDs []uint64
 		// we can't remove the share secret from key-manager
 		// due to the fact that after activating the validators (ClusterReactivated)
 		// we don't have the encrypted keys to decrypt the secret, but only the owner address
-		if err := c.onShareRemove(hex.EncodeToString(share.ValidatorPubKey), false); err != nil {
+		if err := c.onShareRemove(share, false); err != nil {
 			return err
 		}
 		logger.With(fields.PubKey(share.ValidatorPubKey)).Debug("removed share")

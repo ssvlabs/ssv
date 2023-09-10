@@ -31,23 +31,23 @@ func (t StartValidatorTask) Execute() error {
 }
 
 type stopValidatorExecutor interface {
-	StopValidator(publicKey []byte) error
+	StopValidator(share *ssvtypes.SSVShare) error
 }
 
 type StopValidatorTask struct {
-	executor  stopValidatorExecutor
-	publicKey []byte
+	executor stopValidatorExecutor
+	share    *ssvtypes.SSVShare
 }
 
-func NewStopValidatorTask(executor stopValidatorExecutor, publicKey []byte) *StopValidatorTask {
+func NewStopValidatorTask(executor stopValidatorExecutor, share *ssvtypes.SSVShare) *StopValidatorTask {
 	return &StopValidatorTask{
-		executor:  executor,
-		publicKey: publicKey,
+		executor: executor,
+		share:    share,
 	}
 }
 
 func (t StopValidatorTask) Execute() error {
-	return t.executor.StopValidator(t.publicKey)
+	return t.executor.StopValidator(t.share)
 }
 
 type liquidateClusterExecutor interface {
