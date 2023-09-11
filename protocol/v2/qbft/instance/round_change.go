@@ -85,7 +85,9 @@ func (i *Instance) uponRoundChange(
 func (i *Instance) uponChangeRoundPartialQuorum(logger *zap.Logger, newRound specqbft.Round, instanceStartValue []byte) error {
 	i.bumpToRound(newRound)
 	i.State.ProposalAcceptedForCurrentRound = nil
-	i.config.GetTimer().TimeoutForRound(i.State.Round)
+
+	i.config.GetTimer().TimeoutForRound(i.State.Height, i.State.Round)
+
 	roundChange, err := CreateRoundChange(i.State, i.config, newRound, instanceStartValue)
 	if err != nil {
 		return errors.Wrap(err, "failed to create round change message")
