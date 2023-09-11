@@ -60,18 +60,12 @@ func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, d
 	// 	return errors.New("failed to verify signature")
 	// }
 	if res := Verifier.AggregateVerify(sign, pks, computedRoot); !res {
-		return SingleVerifyByOperators(s, data, domain, sigType, operators)
+		return SingleVerifyByOperators(sign, data, domain, sigType, operators)
 	}
 	return nil
 }
 
-func SingleVerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, domain spectypes.DomainType, sigType spectypes.SignatureType, operators []*spectypes.Operator) error {
-	// decode sig
-	sign := &bls.Sign{}
-	if err := sign.Deserialize(s); err != nil {
-		return errors.Wrap(err, "failed to deserialize signature")
-	}
-
+func SingleVerifyByOperators(sign *bls.Sign, data spectypes.MessageSignature, domain spectypes.DomainType, sigType spectypes.SignatureType, operators []*spectypes.Operator) error {
 	// find operators
 	pks := make([]bls.PublicKey, 0)
 	for _, id := range data.GetSigners() {
