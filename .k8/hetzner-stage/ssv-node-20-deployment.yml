@@ -117,7 +117,7 @@ spec:
           value: "true"
         volumeMounts:
         - mountPath: /data
-          name: ssv-node-16
+          name: ssv-node-20
         - mountPath: /data/share.yaml
           subPath: share.yaml
           name: ssv-node-20-cm
