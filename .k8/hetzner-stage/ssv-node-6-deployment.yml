@@ -9,7 +9,7 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-    - port: 120064
+    - port: 12006
       protocol: UDP
       targetPort: 12006
       name: port-12006
