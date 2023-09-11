@@ -50,8 +50,6 @@ func (mv *MessageValidator) validatePartialSignatureMessage(share *ssvtypes.SSVS
 		return msgSlot, err
 	}
 
-	// TODO: check running duty
-
 	consensusState := mv.consensusState(msg.GetID())
 	signerState := consensusState.GetSignerState(signedMsg.Signer)
 
