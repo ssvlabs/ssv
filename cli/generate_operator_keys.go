@@ -57,7 +57,7 @@ func readPrivateKeyFromFile(filePath string) ([]byte, []byte, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-
+	// #nosec G304
 	keyBytes, err := os.ReadFile(absPath)
 	if err != nil {
 		return nil, nil, err
@@ -95,7 +95,7 @@ func encryptAndSavePrivateKey(sk []byte, passwordFilePath string, logger *zap.Lo
 	if err != nil {
 		logger.Fatal("Failed to read absolute path of password file", zap.Error(err))
 	}
-
+	// #nosec G304
 	passwordBytes, err := os.ReadFile(absPath)
 	if err != nil {
 		logger.Fatal("Failed to read password file", zap.Error(err))
