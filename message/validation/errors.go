@@ -51,15 +51,12 @@ var (
 	ErrValidatorNotAttesting               = Error{text: "validator is not attesting"}
 	ErrSlotAlreadyAdvanced                 = Error{text: "signer has already advanced to a later slot"}
 	ErrRoundAlreadyAdvanced                = Error{text: "signer has already advanced to a later round"}
-	ErrFutureSlotRoundMismatch             = Error{text: "if slot is in future, round must be also in future and vice versa"}
-	ErrRoundTooFarInTheFuture              = Error{text: "round is too far in the future"}
 	ErrRoundTooHigh                        = Error{text: "round is too high for this role" /*, reject: true*/} // TODO: enable reject
 	ErrEarlyMessage                        = Error{text: "early message"}
 	ErrLateMessage                         = Error{text: "late message"}
 	ErrTooManySameTypeMessagesPerRound     = Error{text: "too many messages of same type per round"}
 	ErrUnexpectedMessageOrder              = Error{text: "unexpected message order", silent: true} // TODO: consider disabling: network delays/issues may cause wrong receipt order, and in practice this case happens very often
 	ErrDecidedSignersSequence              = Error{text: "decided must have more signers than previous decided", silent: true}
-	ErrNonCommitteeOnlyDecided             = Error{text: "non-committee message can be only decided", silent: true}
 	ErrPubSubMessageHasNoData              = Error{text: "pub-sub message has no data", reject: true}
 	ErrPubSubDataTooBig                    = Error{text: "pub-sub message data too big", reject: true}
 	ErrMalformedPubSubMessage              = Error{text: "pub-sub message is malformed", reject: true}
