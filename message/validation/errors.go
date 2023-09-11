@@ -55,8 +55,8 @@ var (
 	ErrEarlyMessage                        = Error{text: "early message"}
 	ErrLateMessage                         = Error{text: "late message"}
 	ErrTooManySameTypeMessagesPerRound     = Error{text: "too many messages of same type per round"}
-	ErrUnexpectedMessageOrder              = Error{text: "unexpected message order", silent: true} // TODO: consider disabling: network delays/issues may cause wrong receipt order, and in practice this case happens very often
-	ErrDecidedSignersSequence              = Error{text: "decided must have more signers than previous decided", silent: true}
+	ErrUnexpectedMessageOrder              = Error{text: "unexpected message order", silent: true}                             // TODO: drop
+	ErrDecidedSignersSequence              = Error{text: "decided must have more signers than previous decided", silent: true} // TODO: drop, consider adding another rule
 	ErrPubSubMessageHasNoData              = Error{text: "pub-sub message has no data", reject: true}
 	ErrPubSubDataTooBig                    = Error{text: "pub-sub message data too big", reject: true}
 	ErrMalformedPubSubMessage              = Error{text: "pub-sub message is malformed", reject: true}
