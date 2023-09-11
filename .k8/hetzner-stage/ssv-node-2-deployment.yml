@@ -49,8 +49,8 @@ spec:
     spec:
       containers:
       - name: ssv-node-2
-        #image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG
-        image: mosheblox/ssv-preview:stage
+        image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG
+        #image: mosheblox/ssv-preview:stage
         imagePullPolicy: Always
         resources:
           limits:
@@ -121,6 +121,8 @@ spec:
         - mountPath: /data/share.yaml
           subPath: share.yaml
           name: ssv-node-2-cm
+      imagePullSecrets:
+        - name: ecr-repo
       volumes:
       - name: ssv-node-2
         persistentVolumeClaim:

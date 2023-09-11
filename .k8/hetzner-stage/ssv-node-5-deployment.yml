@@ -121,6 +121,8 @@ spec:
         - mountPath: /data/share.yaml
           subPath: share.yaml
           name: ssv-node-5-cm
+      imagePullSecrets:
+        - name: ecr-repo
       volumes:
       - name: ssv-node-5
         persistentVolumeClaim:
