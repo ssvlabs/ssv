@@ -324,7 +324,7 @@ func validatorAddedEventToShare(
 	return &validatorShare, shareSecret, nil
 }
 
-func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.ContractValidatorRemoved) (*types.SSVShare, error) {
+func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.ContractValidatorRemoved) (spectypes.ValidatorPK, error) {
 	logger := eh.logger.With(
 		fields.EventName(ValidatorRemoved),
 		fields.TxHash(event.Raw.TxHash),
@@ -379,7 +379,7 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 
 		eh.metrics.ValidatorRemoved(event.PublicKey)
 		logger.Debug("processed event")
-		return share, nil
+		return share.ValidatorPubKey, nil
 	}
 
 	logger.Debug("processed event")

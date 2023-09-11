@@ -46,7 +46,7 @@ var (
 
 type taskExecutor interface {
 	StartValidator(share *ssvtypes.SSVShare) error
-	StopValidator(share *ssvtypes.SSVShare) error
+	StopValidator(pubKey spectypes.ValidatorPK) error
 	LiquidateCluster(owner ethcommon.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
 	ReactivateCluster(owner ethcommon.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error
 	UpdateFeeRecipient(owner, recipient ethcommon.Address) error
@@ -285,7 +285,7 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			return nil, nil
 		}
 
-		share, err := eh.handleValidatorRemoved(txn, validatorRemovedEvent)
+		validatorPubKey, err := eh.handleValidatorRemoved(txn, validatorRemovedEvent)
 		if err != nil {
 			eh.metrics.EventProcessingFailed(abiEvent.Name)
 
@@ -298,8 +298,8 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 
 		defer eh.metrics.EventProcessed(abiEvent.Name)
 
-		if share != nil {
-			return NewStopValidatorTask(eh.taskExecutor, share), nil
+		if validatorPubKey != nil {
+			return NewStopValidatorTask(eh.taskExecutor, validatorPubKey), nil
 		}
 
 		return nil, nil

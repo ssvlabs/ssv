@@ -104,7 +104,7 @@ type Controller interface {
 	IndicesChangeChan() chan struct{}
 
 	StartValidator(share *ssvtypes.SSVShare) error
-	StopValidator(share *ssvtypes.SSVShare) error
+	StopValidator(pubKey spectypes.ValidatorPK) error
 	LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
 	ReactivateCluster(owner common.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error
 	UpdateFeeRecipient(owner, recipient common.Address) error

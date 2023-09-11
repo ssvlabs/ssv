@@ -30,11 +30,11 @@ func (c *controller) StartValidator(share *types.SSVShare) error {
 	return nil
 }
 
-func (c *controller) StopValidator(share *types.SSVShare) error {
-	logger := c.taskLogger("StopValidator", fields.PubKey(share.ValidatorPubKey))
+func (c *controller) StopValidator(pubKey spectypes.ValidatorPK) error {
+	logger := c.taskLogger("StopValidator", fields.PubKey(pubKey))
 
-	c.metrics.ValidatorRemoved(share.ValidatorPubKey)
-	c.onShareStop(share.ValidatorPubKey)
+	c.metrics.ValidatorRemoved(pubKey)
+	c.onShareStop(pubKey)
 
 	logger.Info("removed validator")
 
