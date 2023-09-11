@@ -106,6 +106,7 @@ fi
 DIR=".k8/hetzner-stage"
 DEPLOY_FILES=(
   "ssv-node-13-deployment.yml"
+  "ssv-node-14-deployment.yml"
 )
 
 if [[ -d $DIR ]]; then
