@@ -2,38 +2,38 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: ssv-node-1-svc
+  name: ssv-node-7-svc
   namespace: REPLACE_NAMESPACE
   labels:
-    app: ssv-node-1
+    app: ssv-node-7
 spec:
   type: ClusterIP
   ports:
-    - port: 12001
+    - port: 12007
       protocol: UDP
-      targetPort: 12001
-      name: port-12001
-    - port: 13001
+      targetPort: 12007
+      name: port-12007
+    - port: 13007
       protocol: TCP
-      targetPort: 13001
-      name: port-13001
-    - port: 15001
+      targetPort: 13007
+      name: port-13007
+    - port: 15007
       protocol: TCP
-      targetPort: 15001
-      name: port-15001
-    - port: 16001
+      targetPort: 15007
+      name: port-15007
+    - port: 16007
       protocol: TCP
-      targetPort: 16001
-      name: port-16001
+      targetPort: 16007
+      name: port-16007
   selector:
-    app: ssv-node-1
+    app: ssv-node-7
 ---
 apiVersion: REPLACE_API_VERSION
 kind: Deployment
 metadata:
   labels:
-    app: ssv-node-1
-  name: ssv-node-1
+    app: ssv-node-7
+  name: ssv-node-7
   namespace: REPLACE_NAMESPACE
 spec:
   replicas: 1
@@ -41,16 +41,16 @@ spec:
     type: Recreate
   selector:
     matchLabels:
-      app: ssv-node-1
+      app: ssv-node-7
   template:
     metadata:
       labels:
-        app: ssv-node-1
+        app: ssv-node-7
     spec:
       containers:
-      - name: ssv-node-1
-        image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG
-        #image: mosheblox/ssv-preview:stage
+      - name: ssv-node-7
+        #image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG
+        image: mosheblox/ssv-preview:stage
         imagePullPolicy: Always
         resources:
           limits:
@@ -58,19 +58,19 @@ spec:
             memory: REPLACE_NODES_MEM_LIMIT
         command: ["make", "start-node"]
         ports:
-        - containerPort: 12001
-          name: port-12001
-          hostPort: 12001
+        - containerPort: 12007
+          name: port-12007
           protocol: UDP
-        - containerPort: 13001
-          name: port-13001
-          hostPort: 13001
-        - containerPort: 15001
-          name: port-15001
-          hostPort: 15001
-        - containerPort: 16001
-          name: port-16001
-          hostPort: 16001
+          hostPort: 12007
+        - containerPort: 13007
+          name: port-13007
+          hostPort: 13007
+        - containerPort: 15007
+          name: port-15007
+          hostPort: 15007
+        - containerPort: 16007
+          name: port-16007
+          hostPort: 16007
         env:
         - name: SHARE_CONFIG
           value: "./data/share.yaml"
@@ -104,9 +104,9 @@ spec:
         - name: DB_REPORTING
           value: "false"
         - name: METRICS_API_PORT
-          value: "15001"
+          value: "15007"
         - name: SSV_API_PORT
-          value: "16001"
+          value: "16007"
         - name: ENABLE_PROFILE
           value: "true"
         - name: DISCOVERY_TRACE
@@ -117,15 +117,15 @@ spec:
           value: "true"
         volumeMounts:
         - mountPath: /data
-          name: ssv-node-1
+          name: ssv-node-7
         - mountPath: /data/share.yaml
           subPath: share.yaml
-          name: ssv-node-1-cm
+          name: ssv-node-7-cm
       volumes:
-      - name: ssv-node-1
+      - name: ssv-node-7
         persistentVolumeClaim:
-          claimName: ssv-node-1
-      - name: ssv-node-1-cm
+          claimName: ssv-node-7
+      - name: ssv-node-7-cm
         configMap:
-          name: ssv-node-1-cm
+          name: ssv-node-7-cm
       hostNetwork: true
