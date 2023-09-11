@@ -58,7 +58,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	roleAttester := spectypes.BNRoleAttester
 
 	t.Run("happy flow", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
@@ -79,7 +79,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("message counts", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
@@ -171,7 +171,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("pubsub message has no data", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -184,7 +184,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("pubsub data too big", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -206,7 +206,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("malformed network message", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -226,7 +226,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("bad data format", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -243,7 +243,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("no data", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		message := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
@@ -265,7 +265,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("data too big", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		const tooBigMsgSize = maxMessageSize * 2
 
@@ -283,7 +283,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("data size borderline / malformed message", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		message := &spectypes.SSVMessage{
 			MsgType: spectypes.SSVConsensusMsgType,
@@ -296,7 +296,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("invalid SSV message type", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		message := &spectypes.SSVMessage{
 			MsgType: math.MaxUint64,
@@ -309,7 +309,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("malformed validator public key", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		validSignedMessage := spectestingutils.TestingProposalMessage(ks.Shares[1], 1)
 		encodedValidSignedMessage, err := validSignedMessage.Encode()
@@ -326,7 +326,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("unknown validator", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		sk, err := eth2types.GenerateBLSPrivateKey()
 		require.NoError(t, err)
@@ -348,7 +348,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("wrong domain", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
@@ -373,7 +373,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("invalid role", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
@@ -394,7 +394,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("liquidated validator", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		liquidatedSK, err := eth2types.GenerateBLSPrivateKey()
 		require.NoError(t, err)
@@ -430,7 +430,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("inactive validator", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		inactiveSK, err := eth2types.GenerateBLSPrivateKey()
 		require.NoError(t, err)
@@ -470,7 +470,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("too many duties", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
@@ -509,10 +509,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
 
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithDutyFetcher(&mockDutyFetcher{
+		fetcher := &mockDutyFetcher{
 			slot:           slot,
 			validatorIndex: validatorIndex + 1,
-		}))
+		}
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithDutyFetcher(fetcher), WithSignatureCheck(true))
 
 		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
 		encodedValidSignedMessage, err := validSignedMessage.Encode()
@@ -527,10 +528,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, _, err = validator.validateSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester)))
 		require.ErrorContains(t, err, ErrNoDuty.Error())
 
-		validator = NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithDutyFetcher(&mockDutyFetcher{
+		f := &mockDutyFetcher{
 			slot:           slot,
 			validatorIndex: validatorIndex,
-		}))
+		}
+		validator = NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithDutyFetcher(f), WithSignatureCheck(true))
 		_, _, err = validator.validateSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester)))
 		require.NoError(t, err)
 	})
@@ -548,7 +550,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("signer ID not in committee", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -569,7 +571,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("partial zero signer ID", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -590,7 +592,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("partial inconsistent signer ID", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -615,7 +617,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("partial duplicated message", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -637,7 +639,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("no partial messages", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -659,7 +661,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("partial wrong signature size", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -681,9 +683,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("partial wrong signature", func(t *testing.T) {
-		t.Skip() // TODO: enable when signature check is enabled
-
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -701,8 +701,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
 		_, _, err = validator.validateSSVMessage(message, receivedAt)
-		expectedErr := ErrInvalidSignature
-		require.ErrorIs(t, err, expectedErr)
+		require.ErrorContains(t, err, ErrInvalidSignature.Error())
 	})
 
 	t.Run("partial message type", func(t *testing.T) {
@@ -720,7 +719,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			for role, msgTypes := range tests {
 				for _, msgType := range msgTypes {
-					validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+					validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 					msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role)
 
 					msg := &spectypes.SignedPartialSignatureMessage{
@@ -748,7 +747,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		})
 
 		t.Run("invalid", func(t *testing.T) {
-			validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+			validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 			msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester)
 
 			msg := &spectypes.SignedPartialSignatureMessage{
@@ -785,7 +784,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			for role, msgTypes := range tests {
 				for _, msgType := range msgTypes {
-					validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+					validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 					msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role)
 
 					msg := &spectypes.SignedPartialSignatureMessage{
@@ -814,7 +813,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("invalid QBFT message type", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
@@ -855,7 +854,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("zero signature", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
@@ -900,7 +899,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("no signers", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
@@ -923,7 +922,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("zero signer", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -985,7 +984,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("non unique signer", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1009,7 +1008,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("signers not sorted", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1033,7 +1032,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("wrong signers length", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1061,7 +1060,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("non decided with multiple signers", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1086,9 +1085,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("wrong signed signature", func(t *testing.T) {
-		t.Skip() // TODO: enable when signature check is enabled
-
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1107,12 +1104,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
 		_, _, err = validator.validateSSVMessage(message, receivedAt)
 
-		expectedErr := ErrNonDecidedWithMultipleSigners
-		require.ErrorIs(t, err, expectedErr)
+		require.ErrorContains(t, err, ErrInvalidSignature.Error())
 	})
 
 	t.Run("late message", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
@@ -1146,7 +1142,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("early message", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
@@ -1167,7 +1163,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("not leader", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
@@ -1191,7 +1187,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("malformed prepare justification", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
@@ -1215,7 +1211,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("non-proposal with prepare justification", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1245,7 +1241,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("non-proposal with round change justification", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1276,7 +1272,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("malformed round change justification", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
@@ -1300,7 +1296,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("wrong root hash", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
@@ -1325,7 +1321,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("double proposal with different data", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1363,7 +1359,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("double prepare", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1400,7 +1396,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("double commit", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1437,7 +1433,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("double round change", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1474,7 +1470,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("too many decided", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1510,7 +1506,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("decided not increasing signer count", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -1550,7 +1546,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("round too high", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		tests := map[spectypes.BeaconRole]specqbft.Round{
 			spectypes.BNRoleAttester:                  13,
@@ -1583,7 +1579,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("round already advanced", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester)
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
@@ -1617,7 +1613,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		height := specqbft.Height(slot)
 
 		t.Run("consensus message", func(t *testing.T) {
-			validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+			validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 			signedMessage := spectestingutils.TestingPrepareMessageWithHeight(ks.Shares[1], 1, height+1)
 			encodedMessage, err := signedMessage.Encode()
@@ -1642,7 +1638,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		})
 
 		t.Run("partial signature message", func(t *testing.T) {
-			validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+			validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 			message := spectestingutils.PostConsensusAttestationMsg(ks.Shares[2], 2, height+1)
 			message.Message.Slot = phase0.Slot(height) + 1
@@ -1678,7 +1674,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("event message", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()))
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
 		msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester)
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)

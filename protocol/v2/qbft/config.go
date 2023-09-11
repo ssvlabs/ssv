@@ -40,7 +40,7 @@ type Config struct {
 	Storage        qbftstorage.QBFTStore
 	Network        specqbft.Network
 	Timer          roundtimer.Timer
-	SignatureCheck bool // signature is checked in message validation, but tests need it here
+	SignatureCheck bool
 }
 
 // GetSigner returns a Signer instance

@@ -80,13 +80,14 @@ type dutyFetcher interface {
 }
 
 type MessageValidator struct {
-	logger        *zap.Logger
-	metrics       metrics
-	netCfg        networkconfig.NetworkConfig
-	index         sync.Map
-	shareStorage  registrystorage.Shares
-	dutyFetcher   dutyFetcher
-	ownOperatorID spectypes.OperatorID
+	logger         *zap.Logger
+	metrics        metrics
+	netCfg         networkconfig.NetworkConfig
+	index          sync.Map
+	shareStorage   registrystorage.Shares
+	dutyFetcher    dutyFetcher
+	ownOperatorID  spectypes.OperatorID
+	checkSignature bool
 }
 
 func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) *MessageValidator {
@@ -132,6 +133,12 @@ func WithOwnOperatorID(id spectypes.OperatorID) Option {
 func WithShareStorage(shareStorage registrystorage.Shares) Option {
 	return func(mv *MessageValidator) {
 		mv.shareStorage = shareStorage
+	}
+}
+
+func WithSignatureCheck(check bool) Option {
+	return func(mv *MessageValidator) {
+		mv.checkSignature = check
 	}
 }
 

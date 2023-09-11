@@ -74,13 +74,11 @@ type config struct {
 	MetricsAPIPort             int                              `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port to listen on for the metrics API."`
 	EnableProfile              bool                             `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
 	NetworkPrivateKey          string                           `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
-
-	WsAPIPort int  `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"Port to listen on for the websocket API."`
-	WithPing  bool `yaml:"WithPing" env:"WITH_PING" env-description:"Whether to send websocket ping messages'"`
-
-	SSVAPIPort int `yaml:"SSVAPIPort" env:"SSV_API_PORT" env-description:"Port to listen on for the SSV API."`
-
-	LocalEventsPath string `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"path to local events"`
+	WsAPIPort                  int                              `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"Port to listen on for the websocket API."`
+	WithPing                   bool                             `yaml:"WithPing" env:"WITH_PING" env-description:"Whether to send websocket ping messages'"`
+	SSVAPIPort                 int                              `yaml:"SSVAPIPort" env:"SSV_API_PORT" env-description:"Port to listen on for the SSV API."`
+	LocalEventsPath            string                           `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"path to local events"`
+	MsgValidationCheckSig      bool                             `yaml:"MsgValidationCheckSig" env:"MSG_VALIDATION_CHECK_SIG" env-description:"check signature in message validation instead of in protocol"`
 }
 
 var cfg config
@@ -178,11 +176,14 @@ var StartNodeCmd = &cobra.Command{
 			validation.WithMetrics(metricsReporter),
 			validation.WithDutyFetcher(dutyFetcher),
 			validation.WithOwnOperatorID(operatorData.ID),
+			validation.WithSignatureCheck(cfg.MsgValidationCheckSig),
 		)
 
 		cfg.P2pNetworkConfig.Metrics = metricsReporter
 		cfg.P2pNetworkConfig.MessageValidator = messageValidator
 		cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
+		// if signature check is enabled in message validation then it's disabled in validator controller and vice versa
+		cfg.SSVOptions.ValidatorOptions.SignatureCheck = !cfg.MsgValidationCheckSig
 
 		p2pNetwork := setupP2P(logger, db)
 
