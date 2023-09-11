@@ -645,24 +645,15 @@ func (c *controller) onMetadataUpdated(pk string, meta *beaconprotocol.Validator
 	}
 }
 
-// onShareRemove is called when a validator was removed
-// TODO: think how we can make this function atomic (i.e. failing wouldn't stop the removal of the share)
-func (c *controller) onShareRemove(share *ssvtypes.SSVShare, removeSecret bool) error {
+// onShareStop is called when a validator was removed or liquidated
+func (c *controller) onShareStop(pubKey spectypes.ValidatorPK) {
 	// remove from validatorsMap
-	v := c.validatorsMap.RemoveValidator(hex.EncodeToString(share.ValidatorPubKey))
+	v := c.validatorsMap.RemoveValidator(hex.EncodeToString(pubKey))
 
 	// stop instance
 	if v != nil {
 		v.Stop()
 	}
-	// remove the share secret from key-manager
-	if removeSecret {
-		if err := c.keyManager.RemoveShare(hex.EncodeToString(share.SharePubKey)); err != nil {
-			return errors.Wrap(err, "could not remove share secret from key manager")
-		}
-	}
-
-	return nil
 }
 
 func (c *controller) onShareStart(share *ssvtypes.SSVShare) (bool, error) {

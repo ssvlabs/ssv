@@ -1,6 +1,7 @@
 package eventhandler
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -12,13 +13,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bloxapp/ssv/operator/validator"
-	"github.com/bloxapp/ssv/operator/validator/mocks"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv/utils/blskeygen"
-	"github.com/pkg/errors"
-
+	ekmcore "github.com/bloxapp/eth2-key-manager/core"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -27,6 +23,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/golang/mock/gomock"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
@@ -40,10 +37,14 @@ import (
 	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/networkconfig"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
+	"github.com/bloxapp/ssv/operator/validator"
+	"github.com/bloxapp/ssv/operator/validator/mocks"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	mocknetwork "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon/mocks"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
+	"github.com/bloxapp/ssv/utils/blskeygen"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
@@ -235,9 +236,25 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			eventsCh <- block
 		}()
 
+		sharePubKey := validatorData1.operatorsShares[0].sec.GetPublicKey().Serialize()
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
-		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
+		require.Equal(t, blockNum+1, lastProcessedBlock)
+
+		accounts, err := eh.keyManager.(ekm.StorageProvider).ListAccounts()
+		require.NoError(t, err)
+		require.Equal(t, 1, len(accounts))
+		require.True(t, shareExist(accounts, sharePubKey))
+
+		highestAttestation, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestAttestation(sharePubKey)
+		require.NoError(t, err)
+		require.True(t, found)
+		require.NotNil(t, highestAttestation)
+
+		_, found, err = eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
+		require.NoError(t, err)
+		require.True(t, found)
+
 		blockNum++
 		// Check that validator was registered
 		shares := eh.nodeStorage.Shares().List(nil)
@@ -284,9 +301,25 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
+			sharePubKey := validatorData2.operatorsShares[0].sec.GetPublicKey().Serialize()
 			lastProcessedBlock, err = eh.HandleBlockEventsStream(eventsCh, false)
-			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
+			require.Equal(t, blockNum+1, lastProcessedBlock)
+
+			accounts, err := eh.keyManager.(ekm.StorageProvider).ListAccounts()
+			require.NoError(t, err)
+			require.Equal(t, 1, len(accounts))
+			require.False(t, shareExist(accounts, sharePubKey))
+
+			highestAttestation, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestAttestation(sharePubKey)
+			require.NoError(t, err)
+			require.False(t, found)
+			require.Nil(t, highestAttestation)
+
+			_, found, err = eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
+			require.NoError(t, err)
+			require.False(t, found)
+
 			blockNum++
 
 			// Check that validator was not registered,
@@ -331,9 +364,25 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
+			sharePubKey := validatorData2.operatorsShares[0].sec.GetPublicKey().Serialize()
 			lastProcessedBlock, err = eh.HandleBlockEventsStream(eventsCh, false)
-			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
+			require.Equal(t, blockNum+1, lastProcessedBlock)
+
+			accounts, err := eh.keyManager.(ekm.StorageProvider).ListAccounts()
+			require.NoError(t, err)
+			require.Equal(t, 2, len(accounts))
+			require.True(t, shareExist(accounts, sharePubKey))
+
+			highestAttestation, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestAttestation(sharePubKey)
+			require.NoError(t, err)
+			require.True(t, found)
+			require.NotNil(t, highestAttestation)
+
+			_, found, err = eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
+			require.NoError(t, err)
+			require.True(t, found)
+
 			blockNum++
 
 			// Check that validator was registered for op1,
@@ -351,7 +400,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 
 		// Share for 1st operator is malformed; check nonce is bumped correctly; validator wasn't added
-		t.Run("test correct ValidatorAdded again and nonce is bumped", func(t *testing.T) {
+		t.Run("test malformed ValidatorAdded and nonce is bumped", func(t *testing.T) {
 			malformedSharesData := sharesData3[:]
 
 			operatorCount := len(ops)
@@ -388,9 +437,25 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
+			sharePubKey := validatorData3.operatorsShares[0].sec.GetPublicKey().Serialize()
 			lastProcessedBlock, err = eh.HandleBlockEventsStream(eventsCh, false)
-			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
+			require.Equal(t, blockNum+1, lastProcessedBlock)
+
+			accounts, err := eh.keyManager.(ekm.StorageProvider).ListAccounts()
+			require.NoError(t, err)
+			require.Equal(t, 2, len(accounts))
+			require.False(t, shareExist(accounts, sharePubKey))
+
+			highestAttestation, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestAttestation(sharePubKey)
+			require.NoError(t, err)
+			require.False(t, found)
+			require.Nil(t, highestAttestation)
+
+			_, found, err = eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
+			require.NoError(t, err)
+			require.False(t, found)
+
 			blockNum++
 
 			// Check that validator was not registered
@@ -434,9 +499,25 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
+			sharePubKey := validatorData3.operatorsShares[0].sec.GetPublicKey().Serialize()
 			lastProcessedBlock, err = eh.HandleBlockEventsStream(eventsCh, false)
-			require.Equal(t, blockNum+1, lastProcessedBlock)
 			require.NoError(t, err)
+			require.Equal(t, blockNum+1, lastProcessedBlock)
+
+			accounts, err := eh.keyManager.(ekm.StorageProvider).ListAccounts()
+			require.NoError(t, err)
+			require.Equal(t, 3, len(accounts))
+			require.True(t, shareExist(accounts, sharePubKey))
+
+			highestAttestation, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestAttestation(sharePubKey)
+			require.NoError(t, err)
+			require.True(t, found)
+			require.NotNil(t, highestAttestation)
+
+			_, found, err = eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
+			require.NoError(t, err)
+			require.True(t, found)
+
 			blockNum++
 
 			// Check that validator was registered
@@ -476,9 +557,25 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			eventsCh <- block
 		}()
 
-		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
-		require.Equal(t, blockNum+1, lastProcessedBlock)
+		sharePubKey := validatorData1.operatorsShares[0].sec.GetPublicKey().Serialize()
+		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, true)
 		require.NoError(t, err)
+		require.Equal(t, blockNum+1, lastProcessedBlock)
+
+		accounts, err := eh.keyManager.(ekm.StorageProvider).ListAccounts()
+		require.NoError(t, err)
+		require.Equal(t, 2, len(accounts))
+		require.False(t, shareExist(accounts, sharePubKey))
+
+		highestAttestation, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestAttestation(sharePubKey)
+		require.NoError(t, err)
+		require.False(t, found)
+		require.Nil(t, highestAttestation)
+
+		_, found, err = eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
+		require.NoError(t, err)
+		require.False(t, found)
+
 		blockNum++
 	})
 
@@ -584,9 +681,12 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, op
 
 	storageMap := ibftstorage.NewStores()
 	nodeStorage, operatorData := setupOperatorStorage(logger, db, operator)
-	testNetworkConfig := networkconfig.TestNetwork
 
-	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, true, "")
+	mockNetworkConfig := networkconfig.NetworkConfig{
+		Beacon: setupMockBeaconNetwork(t),
+	}
+
+	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, mockNetworkConfig, true, "")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -607,7 +707,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, op
 			nodeStorage,
 			parser,
 			validatorCtrl,
-			testNetworkConfig.Domain,
+			mockNetworkConfig.Domain,
 			validatorCtrl,
 			nodeStorage.GetPrivateKey,
 			keyManager,
@@ -644,7 +744,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, op
 		nodeStorage,
 		parser,
 		validatorCtrl,
-		testNetworkConfig.Domain,
+		mockNetworkConfig.Domain,
 		validatorCtrl,
 		nodeStorage.GetPrivateKey,
 		keyManager,
@@ -656,6 +756,20 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, op
 		return nil, nil, err
 	}
 	return eh, nil, nil
+}
+
+func setupMockBeaconNetwork(t *testing.T) *mocknetwork.MockBeaconNetwork {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockBeaconNetwork := mocknetwork.NewMockBeaconNetwork(ctrl)
+
+	currentSlot := phase0.Slot(100)
+	mockBeaconNetwork.EXPECT().GetBeaconNetwork().Return(networkconfig.TestNetwork.Beacon.GetBeaconNetwork()).AnyTimes()
+	mockBeaconNetwork.EXPECT().EstimatedCurrentSlot().Return(currentSlot).AnyTimes()
+	mockBeaconNetwork.EXPECT().EstimatedEpochAtSlot(gomock.Any()).Return(phase0.Epoch(currentSlot / 32)).AnyTimes()
+
+	return mockBeaconNetwork
 }
 
 func setupOperatorStorage(logger *zap.Logger, db basedb.Database, operator *testOperator) (operatorstorage.Storage, *registrystorage.OperatorData) {
@@ -772,6 +886,15 @@ type testShare struct {
 	opId uint64
 	sec  *bls.SecretKey
 	pub  *bls.PublicKey
+}
+
+func shareExist(accounts []ekmcore.ValidatorAccount, sharePubKey []byte) bool {
+	for _, acc := range accounts {
+		if bytes.Equal(acc.ValidatorPublicKey(), sharePubKey) {
+			return true
+		}
+	}
+	return false
 }
 
 func createNewValidator(ops []*testOperator) (*testValidatorData, error) {
