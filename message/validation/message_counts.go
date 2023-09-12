@@ -64,19 +64,9 @@ func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage, limits MessageCou
 				err.got = fmt.Sprintf("proposal, having %v", c.String())
 				return err
 			}
-			if c.Commit > 0 || c.Decided > 0 || c.PostConsensus > 0 {
-				err := ErrUnexpectedMessageOrder
-				err.got = fmt.Sprintf("proposal, having %v", c.String())
-				return err
-			}
 		case specqbft.PrepareMsgType:
 			if c.Prepare >= limits.Prepare {
 				err := ErrTooManySameTypeMessagesPerRound
-				err.got = fmt.Sprintf("prepare, having %v", c.String())
-				return err
-			}
-			if c.Commit > 0 || c.Decided > 0 || c.PostConsensus > 0 {
-				err := ErrUnexpectedMessageOrder
 				err.got = fmt.Sprintf("prepare, having %v", c.String())
 				return err
 			}
@@ -87,20 +77,10 @@ func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage, limits MessageCou
 					err.got = fmt.Sprintf("commit, having %v", c.String())
 					return err
 				}
-				if c.Decided > 0 || c.PostConsensus > 0 {
-					err := ErrUnexpectedMessageOrder
-					err.got = fmt.Sprintf("commit, having %v", c.String())
-					return err
-				}
 			}
 			if len(m.Signers) > 1 {
 				if c.Decided >= limits.Decided {
 					err := ErrTooManySameTypeMessagesPerRound
-					err.got = fmt.Sprintf("decided, having %v", c.String())
-					return err
-				}
-				if c.PostConsensus > 0 {
-					err := ErrUnexpectedMessageOrder
 					err.got = fmt.Sprintf("decided, having %v", c.String())
 					return err
 				}
@@ -117,11 +97,6 @@ func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage, limits MessageCou
 				err.got = fmt.Sprintf("round change, having %v", c.String())
 				return err
 			}
-			if c.Decided > 0 || c.PostConsensus > 0 {
-				err := ErrUnexpectedMessageOrder
-				err.got = fmt.Sprintf("round change, having %v", c.String())
-				return err
-			}
 		default:
 			panic("unexpected signed message type") // should be checked before
 		}
@@ -130,11 +105,6 @@ func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage, limits MessageCou
 		case spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig:
 			if c.PreConsensus > limits.PreConsensus {
 				err := ErrTooManySameTypeMessagesPerRound
-				err.got = fmt.Sprintf("pre-consensus, having %v", c.String())
-				return err
-			}
-			if c.PostConsensus > 0 {
-				err := ErrUnexpectedMessageOrder
 				err.got = fmt.Sprintf("pre-consensus, having %v", c.String())
 				return err
 			}

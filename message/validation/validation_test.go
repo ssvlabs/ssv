@@ -160,14 +160,6 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.EqualValues(t, height+1, state1.Slot)
 		require.EqualValues(t, 1, state1.Round)
 		require.EqualValues(t, MessageCounts{Commit: 1, Decided: 1, lastDecidedSigners: 3}, state1.MessageCounts)
-
-		signedMsg = spectestingutils.TestingPrepareMessageWithHeight(ks.Shares[1], 1, height+1)
-		encodedMsg, err = signedMsg.Encode()
-		require.NoError(t, err)
-
-		ssvMsg.Data = encodedMsg
-		_, _, err = validator.validateSSVMessage(ssvMsg, receivedAt.Add(netCfg.Beacon.SlotDurationSec()))
-		require.ErrorContains(t, err, ErrUnexpectedMessageOrder.Error())
 	})
 
 	t.Run("pubsub message has no data", func(t *testing.T) {

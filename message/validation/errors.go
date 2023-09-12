@@ -55,7 +55,6 @@ var (
 	ErrEarlyMessage                        = Error{text: "early message"}
 	ErrLateMessage                         = Error{text: "late message"}
 	ErrTooManySameTypeMessagesPerRound     = Error{text: "too many messages of same type per round"}
-	ErrUnexpectedMessageOrder              = Error{text: "unexpected message order", silent: true}                             // TODO: drop
 	ErrDecidedSignersSequence              = Error{text: "decided must have more signers than previous decided", silent: true} // TODO: drop, consider adding another rule
 	ErrPubSubMessageHasNoData              = Error{text: "pub-sub message has no data", reject: true}
 	ErrPubSubDataTooBig                    = Error{text: "pub-sub message data too big", reject: true}
