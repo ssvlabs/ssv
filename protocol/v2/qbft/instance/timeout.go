@@ -10,8 +10,6 @@ import (
 var CutoffRound = 15 // stop processing instances after 8*2+120*6 = 14.2 min (~ 2 epochs)
 
 func (i *Instance) UponRoundTimeout(logger *zap.Logger) error {
-	logger.Debug("config in UponRoundTimeout", zap.Any("config", i.GetConfig()))
-
 	if !i.CanProcessMessages() {
 		return errors.New("instance stopped processing timeouts")
 	}

@@ -11,8 +11,6 @@ import (
 )
 
 func (c *Controller) UponFutureMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
-	logger.Debug("config in UponFutureMsg", zap.Any("config", c.GetConfig()))
-
 	if err := ValidateFutureMsg(c.GetConfig(), msg, c.Share.Committee); err != nil {
 		return nil, errors.Wrap(err, "invalid future msg")
 	}
