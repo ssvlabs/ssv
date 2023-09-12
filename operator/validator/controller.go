@@ -847,8 +847,6 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 		return qbftCtrl
 	}
 
-	zap.L().Info("signature check in protocol", zap.Bool("enabled", options.SignatureCheck))
-
 	runners := runner.DutyRunners{}
 	for _, role := range runnersType {
 		switch role {
