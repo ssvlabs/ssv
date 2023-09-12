@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -33,7 +34,7 @@ var generateOperatorKeysCmd = &cobra.Command{
 		}
 
 		if privateKeyFilePath != "" {
-			sk, pk, err = readPrivateKeyFromFile(privateKeyFilePath)
+			sk, pk, err = readPrivateKeyFromFile(privateKeyFilePath, logger)
 			if err != nil {
 				logger.Fatal("Failed to read private key from file", zap.Error(err))
 			}
@@ -52,13 +53,8 @@ var generateOperatorKeysCmd = &cobra.Command{
 	},
 }
 
-func readPrivateKeyFromFile(filePath string) ([]byte, []byte, error) {
-	absPath, err := filepath.Abs(filePath)
-	if err != nil {
-		return nil, nil, err
-	}
-	// #nosec G304
-	keyBytes, err := os.ReadFile(absPath)
+func readPrivateKeyFromFile(filePath string, logger *zap.Logger) ([]byte, []byte, error) {
+	keyBytes, err := readFile(filePath, logger)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -91,12 +87,7 @@ func readPrivateKeyFromFile(filePath string) ([]byte, []byte, error) {
 }
 
 func encryptAndSavePrivateKey(sk []byte, passwordFilePath string, logger *zap.Logger) {
-	absPath, err := filepath.Abs(passwordFilePath)
-	if err != nil {
-		logger.Fatal("Failed to read absolute path of password file", zap.Error(err))
-	}
-	// #nosec G304
-	passwordBytes, err := os.ReadFile(absPath)
+	passwordBytes, err := readFile(passwordFilePath, logger)
 	if err != nil {
 		logger.Fatal("Failed to read password file", zap.Error(err))
 	}
@@ -111,13 +102,29 @@ func encryptAndSavePrivateKey(sk []byte, passwordFilePath string, logger *zap.Lo
 	if err != nil {
 		logger.Fatal("Failed to marshal encrypted data to JSON", zap.Error(err))
 	}
-
-	err = os.WriteFile("encrypted_private_key.json", encryptedJSON, 0600)
+	err = writeFile("encrypted_private_key.json", encryptedJSON)
 	if err != nil {
 		logger.Fatal("Failed to write encrypted private key to file", zap.Error(err))
 	}
 
 	logger.Info("private key encrypted and stored in encrypted_private_key.json")
+}
+
+func writeFile(fileName string, data []byte) error {
+	return os.WriteFile(fileName, data, 0600)
+}
+
+func readFile(filePath string, logger *zap.Logger) ([]byte, error) {
+	absPath, err := filepath.Abs(filePath)
+	if err != nil {
+		logger.Fatal(fmt.Sprintf("Failed to read absolute path of %s", filePath), zap.Error(err))
+	}
+	// #nosec G304
+	contentBytes, err := os.ReadFile(absPath)
+	if err != nil {
+		logger.Fatal(fmt.Sprintf("Failed to read file %s", filePath), zap.Error(err))
+	}
+	return contentBytes, err
 }
 
 func init() {
