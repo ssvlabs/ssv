@@ -41,6 +41,8 @@ func NewController(
 	config qbft.IConfig,
 	fullNode bool,
 ) *Controller {
+	zap.L().Info("signature check in NewController", zap.Bool("enabled", config.CheckSignature()))
+
 	return &Controller{
 		Identifier:          identifier,
 		Height:              specqbft.FirstHeight,
