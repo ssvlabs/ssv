@@ -115,8 +115,6 @@ spec:
           value: "15007"
         - name: SSV_API_PORT
           value: "16007"
-        - name: MSG_VALIDATION_CHECK_SIG
-          value: "true"
         - name: ENABLE_PROFILE
           value: "true"
         - name: DISCOVERY_TRACE
