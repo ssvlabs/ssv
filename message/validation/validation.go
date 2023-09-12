@@ -437,7 +437,7 @@ func (mv *MessageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 			return nil, descriptor, ErrEventMessage
 
 		case spectypes.DKGMsgType:
-			// TODO: handle
+			return nil, descriptor, ErrDKGMessage
 		}
 	}
 
