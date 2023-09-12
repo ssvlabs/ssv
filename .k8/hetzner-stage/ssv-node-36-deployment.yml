@@ -9,10 +9,10 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-    - port: 13636
+    - port: 12036
       protocol: UDP
-      targetPort: 13636
-      name: port-13636
+      targetPort: 12036
+      name: port-12036
     - port: 13036
       protocol: TCP
       targetPort: 13036
@@ -58,10 +58,10 @@ spec:
             memory: REPLACE_NODES_MEM_LIMIT
         command: ["make", "start-node"]
         ports:
-        - containerPort: 13636
-          name: port-13636
+        - containerPort: 12036
+          name: port-12036
           protocol: UDP
-          hostPort: 13636
+          hostPort: 12036
         - containerPort: 13036
           name: port-13036
           hostPort: 13036

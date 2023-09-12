@@ -2,38 +2,38 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: ssv-node-68-svc
+  name: ssv-node-41-svc
   namespace: REPLACE_NAMESPACE
   labels:
-    app: ssv-node-68
+    app: ssv-node-41
 spec:
   type: ClusterIP
   ports:
-    - port: 12068
+    - port: 12041
       protocol: UDP
-      targetPort: 12068
-      name: port-12068
-    - port: 13068
+      targetPort: 12041
+      name: port-12041
+    - port: 13041
       protocol: TCP
-      targetPort: 13068
-      name: port-13068
-    - port: 15068
+      targetPort: 13041
+      name: port-13041
+    - port: 15041
       protocol: TCP
-      targetPort: 15068
-      name: port-15068
-    - port: 16068
+      targetPort: 15041
+      name: port-15041
+    - port: 16041
       protocol: TCP
-      targetPort: 16068
-      name: port-16068
+      targetPort: 16041
+      name: port-16041
   selector:
-    app: ssv-node-68
+    app: ssv-node-41
 ---
 apiVersion: REPLACE_API_VERSION
 kind: Deployment
 metadata:
   labels:
-    app: ssv-node-68
-  name: ssv-node-68
+    app: ssv-node-41
+  name: ssv-node-41
   namespace: REPLACE_NAMESPACE
 spec:
   replicas: 1
@@ -41,14 +41,14 @@ spec:
     type: Recreate
   selector:
     matchLabels:
-      app: ssv-node-68
+      app: ssv-node-41
   template:
     metadata:
       labels:
-        app: ssv-node-68
+        app: ssv-node-41
     spec:
       containers:
-      - name: ssv-node-68
+      - name: ssv-node-41
         image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG
         #image: mosheblox/ssv-preview:stage
         imagePullPolicy: Always
@@ -58,19 +58,19 @@ spec:
             memory: REPLACE_NODES_MEM_LIMIT
         command: ["make", "start-node"]
         ports:
-        - containerPort: 12068
-          name: port-12068
+        - containerPort: 12041
+          name: port-12041
           protocol: UDP
-          hostPort: 12068
-        - containerPort: 13068
-          name: port-13068
-          hostPort: 13068
-        - containerPort: 15068
-          name: port-15068
-          hostPort: 15068
-        - containerPort: 16068
-          name: port-16068
-          hostPort: 16068
+          hostPort: 12041
+        - containerPort: 13041
+          name: port-13041
+          hostPort: 13041
+        - containerPort: 15041
+          name: port-15041
+          hostPort: 15041
+        - containerPort: 16041
+          name: port-16041
+          hostPort: 16041
         env:
         - name: SHARE_CONFIG
           value: "./data/share.yaml"
@@ -104,9 +104,9 @@ spec:
         - name: DB_REPORTING
           value: "false"
         - name: METRICS_API_PORT
-          value: "15068"
+          value: "15041"
         - name: SSV_API_PORT
-          value: "16068"
+          value: "16041"
         - name: ENABLE_PROFILE
           value: "true"
         - name: DISCOVERY_TRACE
@@ -117,17 +117,17 @@ spec:
           value: "true"
         volumeMounts:
         - mountPath: /data
-          name: ssv-node-68
+          name: ssv-node-41
         - mountPath: /data/share.yaml
           subPath: share.yaml
-          name: ssv-node-68-cm
+          name: ssv-node-41-cm
       imagePullSecrets:
         - name: ecr-repo
       volumes:
-      - name: ssv-node-68
+      - name: ssv-node-41
         persistentVolumeClaim:
-          claimName: ssv-node-68
-      - name: ssv-node-68-cm
+          claimName: ssv-node-41
+      - name: ssv-node-41-cm
         configMap:
-          name: ssv-node-68-cm
+          name: ssv-node-41-cm
       hostNetwork: true
