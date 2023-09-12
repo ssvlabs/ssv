@@ -228,7 +228,7 @@ func (mv *MessageValidator) validateSignerBehavior(
 		}
 
 		stateToBeReset := false
-		if msgSlot > signerState.Slot || msgSlot == signerState.Slot && msgRound > signerState.Round {
+		if msgSlot > signerState.Slot {
 			stateToBeReset = true
 		}
 
