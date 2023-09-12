@@ -189,10 +189,6 @@ func validateCommit(
 		zap.L().Warn("config is nil in validateCommit")
 	}
 
-	if !config.CheckSignature() {
-		zap.L().Warn("signature check disabled in validateCommit")
-	}
-
 	if err := BaseCommitValidation(config, signedCommit, height, operators); err != nil {
 		return err
 	}

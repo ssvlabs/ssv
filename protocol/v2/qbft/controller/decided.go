@@ -20,10 +20,6 @@ func (c *Controller) UponDecided(logger *zap.Logger, msg *specqbft.SignedMessage
 		zap.L().Warn("config is nil in UponDecided")
 	}
 
-	if !c.config.CheckSignature() {
-		zap.L().Warn("signature check disabled in UponDecided")
-	}
-
 	if err := ValidateDecided(
 		c.config,
 		msg,
@@ -106,10 +102,6 @@ func ValidateDecided(
 
 	if config == nil {
 		zap.L().Warn("config is nil in ValidateDecided")
-	}
-
-	if !config.CheckSignature() {
-		zap.L().Warn("signature check disabled in ValidateDecided")
 	}
 
 	if err := instance.BaseCommitValidation(config, signedDecided, signedDecided.Message.Height, share.Committee); err != nil {
