@@ -151,10 +151,6 @@ func BaseCommitValidation(
 		zap.L().Warn("config is nil in BaseCommitValidation")
 	}
 
-	if !config.CheckSignature() {
-		zap.L().Warn("signature check disabled in BaseCommitValidation")
-	}
-
 	if signedCommit.Message.MsgType != specqbft.CommitMsgType {
 		return errors.New("commit msg type is wrong")
 	}
