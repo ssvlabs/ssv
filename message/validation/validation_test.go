@@ -159,7 +159,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NotNil(t, state1)
 		require.EqualValues(t, height+1, state1.Slot)
 		require.EqualValues(t, 1, state1.Round)
-		require.EqualValues(t, MessageCounts{Commit: 1, Decided: 1, lastDecidedSigners: 3}, state1.MessageCounts)
+		require.EqualValues(t, MessageCounts{Commit: 1, Decided: 1}, state1.MessageCounts)
 	})
 
 	t.Run("pubsub message has no data", func(t *testing.T) {
@@ -1481,59 +1481,14 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
 
-		state := validator.consensusState(msgID)
 		for i := 0; i < maxDecidedCount(len(share.Committee)); i++ {
 			_, _, err = validator.validateSSVMessage(message, receivedAt)
 			require.NoError(t, err)
-
-			for i := spectypes.OperatorID(1); i <= 3; i++ {
-				state.GetSignerState(i).MessageCounts.lastDecidedSigners = 0
-			}
 		}
 
 		_, _, err = validator.validateSSVMessage(message, receivedAt)
 		expectedErr := ErrTooManySameTypeMessagesPerRound
 		expectedErr.got = "decided, having pre-consensus: 0, proposal: 0, prepare: 0, commit: 0, decided: 8, round change: 0, post-consensus: 0"
-		require.ErrorIs(t, err, expectedErr)
-	})
-
-	t.Run("decided not increasing signer count", func(t *testing.T) {
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
-
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-
-		signed1 := spectestingutils.TestingCommitMultiSignerMessageWithRound(
-			[]*bls.SecretKey{ks.Shares[1], ks.Shares[2], ks.Shares[3]}, []spectypes.OperatorID{1, 2, 3}, 1)
-		encodedSigned1, err := signed1.Encode()
-		require.NoError(t, err)
-
-		message1 := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    encodedSigned1,
-		}
-
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message1, receivedAt)
-		require.NoError(t, err)
-
-		signed2 := spectestingutils.TestingCommitMultiSignerMessageWithRound(
-			[]*bls.SecretKey{ks.Shares[1], ks.Shares[2], ks.Shares[3]}, []spectypes.OperatorID{1, 2, 3}, 1)
-		require.NoError(t, err)
-
-		encodedSigned2, err := signed2.Encode()
-		require.NoError(t, err)
-
-		message2 := &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-			Data:    encodedSigned2,
-		}
-
-		_, _, err = validator.validateSSVMessage(message2, receivedAt)
-		expectedErr := ErrDecidedSignersSequence
-		expectedErr.got = 3
-		expectedErr.want = "more than 3"
 		require.ErrorIs(t, err, expectedErr)
 	})
 

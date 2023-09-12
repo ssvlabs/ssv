@@ -32,14 +32,13 @@ func maxDecidedCount(committeeSize int) int {
 }
 
 type MessageCounts struct {
-	PreConsensus       int
-	Proposal           int
-	Prepare            int
-	Commit             int
-	Decided            int
-	RoundChange        int
-	PostConsensus      int
-	lastDecidedSigners int
+	PreConsensus  int
+	Proposal      int
+	Prepare       int
+	Commit        int
+	Decided       int
+	RoundChange   int
+	PostConsensus int
 }
 
 func (c *MessageCounts) String() string {
@@ -82,12 +81,6 @@ func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage, limits MessageCou
 				if c.Decided >= limits.Decided {
 					err := ErrTooManySameTypeMessagesPerRound
 					err.got = fmt.Sprintf("decided, having %v", c.String())
-					return err
-				}
-				if len(m.Signers) <= c.lastDecidedSigners {
-					err := ErrDecidedSignersSequence
-					err.got = len(m.Signers)
-					err.want = fmt.Sprintf("more than %v", c.lastDecidedSigners)
 					return err
 				}
 			}
@@ -137,7 +130,6 @@ func (c *MessageCounts) Record(msg *queue.DecodedSSVMessage) {
 				c.Commit++
 			} else if len(m.Signers) > 1 {
 				c.Decided++
-				c.lastDecidedSigners = len(m.Signers)
 			} else {
 				panic("expected signers") // 0 length should be checked before
 			}
