@@ -104,7 +104,7 @@ spec:
         - name: DB_REPORTING
           value: "false"
         - name: METRICS_API_PORT
-          value: "16062"
+          value: "15062"
         - name: SSV_API_PORT
           value: "16062"
         - name: ENABLE_PROFILE
