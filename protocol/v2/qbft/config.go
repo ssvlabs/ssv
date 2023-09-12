@@ -3,7 +3,6 @@ package qbft
 import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
@@ -85,6 +84,5 @@ func (c *Config) GetTimer() roundtimer.Timer {
 }
 
 func (c *Config) CheckSignature() bool {
-	zap.L().Info("signature check in config", zap.Bool("enabled", c.SignatureCheck))
 	return c.SignatureCheck
 }
