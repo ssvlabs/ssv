@@ -1,10 +1,8 @@
 package cli
 
 import (
-	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
 	"log"
 	"os"
@@ -63,17 +61,12 @@ func readPrivateKeyFromFile(filePath string, logger *zap.Logger) ([]byte, []byte
 	if err != nil {
 		return nil, nil, err
 	}
-
-	keyPem, _ := pem.Decode(decodedBytes)
-	rsaKey, err := x509.ParsePKCS1PrivateKey(keyPem.Bytes)
+	rsaKey, err := rsaencryption.ConvertPemToPrivateKey(string(decodedBytes))
 	if err != nil {
 		return nil, nil, err
 	}
 
-	skPem := pem.EncodeToMemory(&pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(rsaKey),
-	})
+	skPem := rsaencryption.PrivateKeyToByte(rsaKey)
 
 	operatorPublicKey, err := rsaencryption.ExtractPublicKey(rsaKey)
 	if err != nil {
