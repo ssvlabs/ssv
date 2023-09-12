@@ -22,9 +22,10 @@ type NonCommitteeValidator struct {
 func NewNonCommitteeValidator(logger *zap.Logger, identifier spectypes.MessageID, opts Options) *NonCommitteeValidator {
 	// currently, only need domain & storage
 	config := &qbft.Config{
-		Domain:  types.GetDefaultDomain(),
-		Storage: opts.Storage.Get(identifier.GetRoleType()),
-		Network: opts.Network,
+		Domain:         types.GetDefaultDomain(),
+		Storage:        opts.Storage.Get(identifier.GetRoleType()),
+		Network:        opts.Network,
+		SignatureCheck: opts.SignatureCheck,
 	}
 	ctrl := qbftcontroller.NewController(identifier[:], &opts.SSVShare.Share, types.GetDefaultDomain(), config, opts.FullNode)
 	ctrl.StoredInstances = make(qbftcontroller.InstanceContainer, 0, nonCommitteeInstanceContainerCapacity(opts.FullNode))
