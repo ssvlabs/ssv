@@ -258,8 +258,6 @@ func validRoundChangeForData(
 		if err := types.VerifyByOperators(signedMsg.Signature, signedMsg, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, state.Share.Committee); err != nil {
 			return errors.Wrap(err, "msg signature invalid")
 		}
-	} else {
-		zap.L().Warn("not checking signature in validRoundChangeForData")
 	}
 
 	if err := signedMsg.Message.Validate(); err != nil {

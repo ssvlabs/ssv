@@ -163,8 +163,6 @@ func validSignedPrepareForHeightRoundAndRoot(
 		if err := types.VerifyByOperators(signedPrepare.Signature, signedPrepare, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
 			return errors.Wrap(err, "msg signature invalid")
 		}
-	} else {
-		zap.L().Warn("not checking signature in validSignedPrepareForHeightRoundAndRoot")
 	}
 
 	return nil
