@@ -169,6 +169,8 @@ var StartNodeCmd = &cobra.Command{
 		dutyFetcher := dutyfetcher.New(consensusClient, slotTicker, validatorsMap, dutyfetcher.WithLogger(logger))
 		dutyFetcher.Start(cmd.Context())
 
+		zap.L().Info("signature check in config", zap.Bool("enabled", cfg.MsgValidationCheckSig))
+
 		messageValidator := validation.NewMessageValidator(
 			networkConfig,
 			validation.WithShareStorage(nodeStorage.Shares()),
@@ -184,6 +186,8 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
 		// if signature check is enabled in message validation then it's disabled in validator controller and vice versa
 		cfg.SSVOptions.ValidatorOptions.SignatureCheck = !cfg.MsgValidationCheckSig
+
+		zap.L().Info("signature check in validator config", zap.Bool("enabled", cfg.SSVOptions.ValidatorOptions.SignatureCheck))
 
 		p2pNetwork := setupP2P(logger, db)
 

@@ -101,6 +101,8 @@ func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) *Me
 		opt(mv)
 	}
 
+	zap.L().Info("signature check in message validator", zap.Bool("enabled", mv.checkSignature))
+
 	return mv
 }
 
