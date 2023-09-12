@@ -13,7 +13,6 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"golang.org/x/exp/slices"
 
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
@@ -179,13 +178,13 @@ func (mv *MessageValidator) validateJustifications(
 		return e
 	}
 
-	if signedMsg.Message.MsgType == specqbft.ProposalMsgType {
-		if err := instance.IsProposalJustification(share, rcj, pj, signedMsg.Message.Height, signedMsg.Message.Round, signedMsg.FullData); err != nil {
-			e := ErrInvalidJustifications
-			e.innerErr = err
-			return e
-		}
-	}
+	//if signedMsg.Message.MsgType == specqbft.ProposalMsgType {
+	//	if err := instance.IsProposalJustification(share, rcj, pj, signedMsg.Message.Height, signedMsg.Message.Round, signedMsg.FullData); err != nil {
+	//		e := ErrInvalidJustifications
+	//		e.innerErr = err
+	//		return e
+	//	}
+	//}
 
 	return nil
 }
