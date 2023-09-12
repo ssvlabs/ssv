@@ -1,9 +1,6 @@
 package types
 
 import (
-	"crypto"
-	"crypto/rsa"
-	_ "crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"runtime"
@@ -58,27 +55,13 @@ func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, d
 		return errors.Wrap(err, "could not compute signing root")
 	}
 
-	_ = computedRoot
-
 	// verify
-	if err := rsa.VerifyPKCS1v15(&rsaPrivateKey.PublicKey, crypto.SHA256, rawDigest, rawSig); err != nil {
-		return err
+	// if res := sign.FastAggregateVerify(pks, computedRoot[:]); !res {
+	// 	return errors.New("failed to verify signature")
+	// }
+	if res := Verifier.AggregateVerify(sign, pks, computedRoot); !res {
+		return SingleVerifyByOperators(sign, data, domain, sigType, operators)
 	}
-
-	//if res := sign.FastAggregateVerify(pks, computedRoot[:]); !res {
-	//	return errors.New("failed to verify signature")
-	//}
-	//if res := Verifier.AggregateVerify(sign, pks, computedRoot); !res {
-	//	return SingleVerifyByOperators(sign, data, domain, sigType, operators)
-	//}
-	return nil
-}
-
-func RSADummy() error {
-	if err := rsa.VerifyPKCS1v15(&rsaPrivateKey.PublicKey, crypto.SHA256, rawDigest, rawSig); err != nil {
-		return err
-	}
-
 	return nil
 }
 
