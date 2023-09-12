@@ -16,6 +16,10 @@ import (
 func (c *Controller) UponDecided(logger *zap.Logger, msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
 	logger.Debug("config in UponDecided", zap.Any("config", c.GetConfig()))
 
+	if c.config == nil {
+		zap.L().Warn("config is nil in UponDecided")
+	}
+
 	if err := ValidateDecided(
 		c.config,
 		msg,
@@ -94,6 +98,10 @@ func ValidateDecided(
 
 	if err := signedDecided.Validate(); err != nil {
 		return errors.Wrap(err, "invalid decided msg")
+	}
+
+	if config == nil {
+		zap.L().Warn("config is nil in ValidateDecided")
 	}
 
 	if err := instance.BaseCommitValidation(config, signedDecided, signedDecided.Message.Height, share.Committee); err != nil {
