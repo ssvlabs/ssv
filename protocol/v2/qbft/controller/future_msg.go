@@ -39,8 +39,10 @@ func ValidateFutureMsg(
 		return errors.New("allows 1 signer")
 	}
 
-	if err := types.VerifyByOperators(msg.Signature, msg, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
-		return errors.Wrap(err, "msg signature invalid")
+	if config != nil && config.CheckSignature() {
+		if err := types.VerifyByOperators(msg.Signature, msg, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
+			return errors.Wrap(err, "msg signature invalid")
+		}
 	}
 
 	return nil
