@@ -138,6 +138,10 @@ func (i *Instance) ProcessMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (
 		zap.L().Warn("config is nil in ProcessMsg")
 	}
 
+	if !i.config.CheckSignature() {
+		zap.L().Warn("signature check disabled in ProcessMsg")
+	}
+
 	if err := i.BaseMsgValidation(msg); err != nil {
 		return false, nil, nil, errors.Wrap(err, "invalid signed message")
 	}
@@ -201,6 +205,10 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.SignedMessage) error {
 	case specqbft.CommitMsgType:
 		if i.config == nil {
 			zap.L().Warn("config is nil in BaseMsgValidation (commit)")
+		}
+
+		if !i.config.CheckSignature() {
+			zap.L().Warn("signature check disabled in BaseMsgValidation (commit)")
 		}
 
 		proposedMsg := i.State.ProposalAcceptedForCurrentRound
