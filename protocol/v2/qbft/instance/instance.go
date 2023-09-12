@@ -134,10 +134,6 @@ func (i *Instance) ProcessMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (
 		return false, nil, nil, errors.New("instance stopped processing messages")
 	}
 
-	if i.config == nil {
-		zap.L().Warn("config is nil in ProcessMsg")
-	}
-
 	if err := i.BaseMsgValidation(msg); err != nil {
 		return false, nil, nil, errors.Wrap(err, "invalid signed message")
 	}
@@ -199,10 +195,6 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.SignedMessage) error {
 			i.State.Share.Committee,
 		)
 	case specqbft.CommitMsgType:
-		if i.config == nil {
-			zap.L().Warn("config is nil in BaseMsgValidation (commit)")
-		}
-
 		proposedMsg := i.State.ProposalAcceptedForCurrentRound
 		if proposedMsg == nil {
 			return errors.New("did not receive proposal for this round")

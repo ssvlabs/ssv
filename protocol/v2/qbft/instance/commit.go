@@ -147,10 +147,6 @@ func BaseCommitValidation(
 	height specqbft.Height,
 	operators []*spectypes.Operator,
 ) error {
-	if config == nil {
-		zap.L().Warn("config is nil in BaseCommitValidation")
-	}
-
 	if signedCommit.Message.MsgType != specqbft.CommitMsgType {
 		return errors.New("commit msg type is wrong")
 	}
@@ -181,10 +177,6 @@ func validateCommit(
 	proposedMsg *specqbft.SignedMessage,
 	operators []*spectypes.Operator,
 ) error {
-	if config == nil {
-		zap.L().Warn("config is nil in validateCommit")
-	}
-
 	if err := BaseCommitValidation(config, signedCommit, height, operators); err != nil {
 		return err
 	}
