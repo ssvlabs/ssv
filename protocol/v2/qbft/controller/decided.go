@@ -14,6 +14,8 @@ import (
 
 // UponDecided returns decided msg if decided, nil otherwise
 func (c *Controller) UponDecided(logger *zap.Logger, msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
+	logger.Debug("config in UponDecided", zap.Any("config", c.GetConfig()))
+
 	if err := ValidateDecided(
 		c.config,
 		msg,

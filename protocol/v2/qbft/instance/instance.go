@@ -128,6 +128,8 @@ func allSigners(all []*specqbft.SignedMessage) []spectypes.OperatorID {
 
 // ProcessMsg processes a new QBFT msg, returns non nil error on msg processing error
 func (i *Instance) ProcessMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (decided bool, decidedValue []byte, aggregatedCommit *specqbft.SignedMessage, err error) {
+	logger.Debug("config in ProcessMsg", zap.Any("config", i.GetConfig()))
+
 	if !i.CanProcessMessages() {
 		return false, nil, nil, errors.New("instance stopped processing messages")
 	}

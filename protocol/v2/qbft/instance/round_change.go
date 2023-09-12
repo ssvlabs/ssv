@@ -86,6 +86,8 @@ func (i *Instance) uponRoundChange(
 }
 
 func (i *Instance) uponChangeRoundPartialQuorum(logger *zap.Logger, newRound specqbft.Round, instanceStartValue []byte) error {
+	logger.Debug("config in uponChangeRoundPartialQuorum", zap.Any("config", i.GetConfig()))
+
 	i.bumpToRound(newRound)
 	i.State.ProposalAcceptedForCurrentRound = nil
 
