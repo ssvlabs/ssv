@@ -461,6 +461,42 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, ns.Shares().Delete(nil, inactiveShare.ValidatorPubKey))
 	})
 
+	t.Run("no share metadata", func(t *testing.T) {
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
+
+		noMetadataSK, err := eth2types.GenerateBLSPrivateKey()
+		require.NoError(t, err)
+
+		noMetadataShare := &ssvtypes.SSVShare{
+			Share: *spectestingutils.TestingShare(ks),
+			Metadata: ssvtypes.Metadata{
+				BeaconMetadata: nil,
+				Liquidated:     false,
+			},
+		}
+		noMetadataShare.ValidatorPubKey = noMetadataSK.PublicKey().Marshal()
+
+		require.NoError(t, ns.Shares().Save(nil, noMetadataShare))
+
+		validSignedMessage := spectestingutils.TestingProposalMessage(ks.Shares[1], 1)
+		encodedValidSignedMessage, err := validSignedMessage.Encode()
+		require.NoError(t, err)
+
+		message := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, noMetadataShare.ValidatorPubKey, roleAttester),
+			Data:    encodedValidSignedMessage,
+		}
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
+
+		_, _, err = validator.validateSSVMessage(message, receivedAt)
+		require.ErrorIs(t, err, ErrNoShareMetadata)
+
+		require.NoError(t, ns.Shares().Delete(nil, noMetadataShare.ValidatorPubKey))
+	})
+
 	t.Run("too many duties", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
