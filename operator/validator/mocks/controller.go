@@ -219,17 +219,17 @@ func (mr *MockControllerMockRecorder) StartValidators() *gomock.Call {
 }
 
 // StopValidator mocks base method.
-func (m *MockController) StopValidator(publicKey []byte) error {
+func (m *MockController) StopValidator(pubKey types.ValidatorPK) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "StopValidator", publicKey)
+	ret := m.ctrl.Call(m, "StopValidator", pubKey)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // StopValidator indicates an expected call of StopValidator.
-func (mr *MockControllerMockRecorder) StopValidator(publicKey interface{}) *gomock.Call {
+func (mr *MockControllerMockRecorder) StopValidator(pubKey interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopValidator", reflect.TypeOf((*MockController)(nil).StopValidator), publicKey)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopValidator", reflect.TypeOf((*MockController)(nil).StopValidator), pubKey)
 }
 
 // UpdateFeeRecipient mocks base method.

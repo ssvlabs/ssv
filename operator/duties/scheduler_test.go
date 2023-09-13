@@ -237,3 +237,46 @@ func TestScheduler_Run(t *testing.T) {
 	cancel()
 	require.NoError(t, s.Wait())
 }
+
+func TestScheduler_Regression_IndiciesChangeStuck(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	logger := logging.TestLogger(t)
+
+	mockBeaconNode := mocks.NewMockBeaconNode(ctrl)
+	mockValidatorController := mocks.NewMockValidatorController(ctrl)
+	mockTicker := mockslotticker.NewMockTicker(ctrl)
+	// create multiple mock duty handlers
+
+	opts := &SchedulerOptions{
+		Ctx:                 ctx,
+		BeaconNode:          mockBeaconNode,
+		Network:             networkconfig.TestNetwork,
+		ValidatorController: mockValidatorController,
+		Ticker:              mockTicker,
+		IndicesChg:          make(chan struct{}),
+
+		BuilderProposals: true,
+	}
+
+	s := NewScheduler(opts)
+
+	// add multiple mock duty handlers
+	s.handlers = []dutyHandler{NewValidatorRegistrationHandler()}
+	mockBeaconNode.EXPECT().Events(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	mockTicker.EXPECT().Subscribe(gomock.Any()).Return(nil).Times(len(s.handlers) + 1)
+	err := s.Start(ctx, logger)
+	require.NoError(t, err)
+
+	s.indicesChg <- struct{}{} // first time make fanout stuck
+	select {
+	case s.indicesChg <- struct{}{}: // second send should hang
+		break
+	case <-time.After(1 * time.Second):
+		t.Fatal("Channel is jammed")
+	}
+
+}

@@ -34,6 +34,7 @@ type EventMsg struct {
 
 type TimeoutData struct {
 	Height qbft.Height
+	Round  qbft.Round
 }
 
 type ExecuteDutyData struct {
@@ -57,11 +58,11 @@ func (m *EventMsg) GetExecuteDutyData() (*ExecuteDutyData, error) {
 }
 
 // Encode returns a msg encoded bytes or error
-func (msg *EventMsg) Encode() ([]byte, error) {
-	return json.Marshal(msg)
+func (m *EventMsg) Encode() ([]byte, error) {
+	return json.Marshal(m)
 }
 
 // Decode returns error if decoding failed
-func (msg *EventMsg) Decode(data []byte) error {
-	return json.Unmarshal(data, &msg)
+func (m *EventMsg) Decode(data []byte) error {
+	return json.Unmarshal(data, &m)
 }
