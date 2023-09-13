@@ -133,7 +133,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			eventsCh <- block
 		}()
 
-		// Check that there is no registered operators
+		// Check that there are no registered operators
 		operators, err := eh.nodeStorage.ListOperators(nil, 0, 10)
 		require.NoError(t, err)
 		require.Equal(t, 0, len(operators))
