@@ -139,8 +139,10 @@ func (f *Fetcher) SyncCommitteeDuty(slot phase0.Slot, validatorIndex phase0.Vali
 }
 
 func (f *Fetcher) fetchEpoch(ctx context.Context, epoch phase0.Epoch) error {
+	// TODO: iterate and get indices instead of returning share
 	shares := f.shareStorage.List(nil, func(share *ssvtypes.SSVShare) bool {
-		return (share.BeaconMetadata.IsAttesting() || share.BeaconMetadata.Status == v1.ValidatorStatePendingQueued) &&
+		return share != nil && share.BeaconMetadata != nil &&
+			(share.BeaconMetadata.IsAttesting() || share.BeaconMetadata.Status == v1.ValidatorStatePendingQueued) &&
 			share.BeaconMetadata.ActivationEpoch <= epoch
 	})
 	if len(shares) == 0 {
