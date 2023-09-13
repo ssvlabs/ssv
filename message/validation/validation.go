@@ -393,8 +393,11 @@ func (mv *MessageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 			return nil, descriptor, ErrValidatorLiquidated
 		}
 
-		// TODO: check if need to return error if no metadata
-		if share.BeaconMetadata != nil && !share.BeaconMetadata.IsAttesting() {
+		if share.BeaconMetadata == nil {
+			return nil, descriptor, ErrNoShareMetadata
+		}
+
+		if !share.BeaconMetadata.IsAttesting() {
 			err := ErrValidatorNotAttesting
 			err.got = share.BeaconMetadata.Status.String()
 			return nil, descriptor, err

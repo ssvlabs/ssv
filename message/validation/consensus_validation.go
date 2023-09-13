@@ -288,14 +288,22 @@ func (mv *MessageValidator) validateBeaconDuty(
 ) error {
 	switch role {
 	case spectypes.BNRoleProposer:
-		if mv.dutyFetcher != nil && share.Metadata.BeaconMetadata != nil && mv.dutyFetcher.ProposerDuty(slot, share.Metadata.BeaconMetadata.Index) == nil {
+		if share.Metadata.BeaconMetadata == nil {
+			return ErrNoShareMetadata
+		}
+
+		if mv.dutyFetcher != nil && mv.dutyFetcher.ProposerDuty(slot, share.Metadata.BeaconMetadata.Index) == nil {
 			return ErrNoDuty
 		}
 
 		return nil
 
 	case spectypes.BNRoleSyncCommittee, spectypes.BNRoleSyncCommitteeContribution:
-		if mv.dutyFetcher != nil && share.Metadata.BeaconMetadata != nil && mv.dutyFetcher.SyncCommitteeDuty(slot, share.Metadata.BeaconMetadata.Index) == nil {
+		if share.Metadata.BeaconMetadata == nil {
+			return ErrNoShareMetadata
+		}
+
+		if mv.dutyFetcher != nil && mv.dutyFetcher.SyncCommitteeDuty(slot, share.Metadata.BeaconMetadata.Index) == nil {
 			return ErrNoDuty
 		}
 
