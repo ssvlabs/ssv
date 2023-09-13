@@ -46,6 +46,7 @@ func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig) spectype
 	if network == nil {
 		network = &networkconfig.NetworkConfig{
 			Beacon: utils.SetupMockBeaconNetwork(t, nil),
+			Domain: networkconfig.TestNetwork.Domain,
 		}
 	}
 
