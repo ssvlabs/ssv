@@ -314,13 +314,24 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 		operatorDataId            uint64
 		testPublicKey             string
 		mockRecipientTimes        int
+		createValidatorFunc       func(logger *zap.Logger, share *types.SSVShare) *validator.Validator
 	}{
-		{"could not decode public key", validatorMetaData, true, nil, false, 1, "123", 0},
-		{"Empty metadata", nil, true, nil, false, 1, secretKey.GetPublicKey().SerializeToHexStr(), 0},
-		{"Valid metadata", validatorMetaData, false, nil, false, 1, secretKey.GetPublicKey().SerializeToHexStr(), 0},
-		{"Share wasn't found", validatorMetaData, true, nil, true, 1, secretKey.GetPublicKey().SerializeToHexStr(), 0},
-		{"Share not belong to operator", validatorMetaData, false, nil, false, 2, secretKey.GetPublicKey().SerializeToHexStr(), 0},
-		{"Metadata with error", validatorMetaData, true, fmt.Errorf("error"), false, 1, secretKey.GetPublicKey().SerializeToHexStr(), 0},
+		{"could not decode public key", validatorMetaData, true, nil, false, 1, "123", 0, nil},
+		{"Empty metadata", nil, true, nil, false, 1, secretKey.GetPublicKey().SerializeToHexStr(), 0, nil},
+		{"Valid metadata", validatorMetaData, false, nil, false, 1, secretKey.GetPublicKey().SerializeToHexStr(), 0, nil},
+		{"Share wasn't found", validatorMetaData, true, nil, true, 1, secretKey.GetPublicKey().SerializeToHexStr(), 0, nil},
+		{"Share not belong to operator", validatorMetaData, false, nil, false, 2, secretKey.GetPublicKey().SerializeToHexStr(), 0, nil},
+		{"Metadata with error", validatorMetaData, true, fmt.Errorf("error"), false, 1, secretKey.GetPublicKey().SerializeToHexStr(), 0, nil},
+		{"validator not found", validatorMetaData, false, nil, false, 1, secretKey2.GetPublicKey().SerializeToHexStr(), 1, func(logger *zap.Logger, share *types.SSVShare) *validator.Validator {
+			return &validator.Validator{
+				DutyRunners: nil,
+				Network:     nil,
+				Share:       share,
+				Signer:      nil,
+				Storage:     nil,
+				Queues:      nil,
+			}
+		}},
 	}
 
 	for _, tc := range testCases {
@@ -341,6 +352,7 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 				validatorsMap: map[string]*validator.Validator{
 					firstValidatorPublicKey: firstValidator,
 				},
+				createValidatorFunc: tc.createValidatorFunc,
 			}
 
 			// Assuming controllerOptions is set up correctly

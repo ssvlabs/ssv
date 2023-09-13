@@ -32,8 +32,9 @@ type validatorsMap struct {
 
 	optsTemplate *validator.Options
 
-	lock          sync.RWMutex
-	validatorsMap map[string]*validator.Validator
+	lock                sync.RWMutex
+	validatorsMap       map[string]*validator.Validator
+	createValidatorFunc func(logger *zap.Logger, share *types.SSVShare) *validator.Validator
 }
 
 func newValidatorsMap(ctx context.Context, optsTemplate *validator.Options) *validatorsMap {
@@ -71,6 +72,18 @@ func (vm *validatorsMap) GetValidator(pubKey string) (*validator.Validator, bool
 	return v, ok
 }
 
+func (vm *validatorsMap) createValidator(logger *zap.Logger, share *types.SSVShare) *validator.Validator {
+	if vm.createValidatorFunc != nil {
+		return vm.createValidatorFunc(logger, share)
+	}
+	opts := *vm.optsTemplate
+	opts.SSVShare = share
+	defer func() { opts.SSVShare = nil }()
+	ctx, cancel := context.WithCancel(vm.ctx)
+	opts.DutyRunners = SetupRunners(ctx, logger, opts)
+	return validator.NewValidator(ctx, cancel, opts)
+}
+
 // GetOrCreateValidator creates a new validator instance if not exist
 func (vm *validatorsMap) GetOrCreateValidator(logger *zap.Logger, share *types.SSVShare) (*validator.Validator, error) {
 	// main lock
@@ -81,15 +94,10 @@ func (vm *validatorsMap) GetOrCreateValidator(logger *zap.Logger, share *types.S
 		if !share.HasBeaconMetadata() {
 			return nil, fmt.Errorf("beacon metadata is missing")
 		}
-		opts := *vm.optsTemplate
-		opts.SSVShare = share
 		// Share context with both the validator and the runners,
 		// so that when the validator is stopped, the runners are stopped as well.
-		ctx, cancel := context.WithCancel(vm.ctx)
-		opts.DutyRunners = SetupRunners(ctx, logger, opts)
-		vm.validatorsMap[pubKey] = validator.NewValidator(ctx, cancel, opts)
+		vm.validatorsMap[pubKey] = vm.createValidator(logger, share)
 		printShare(share, logger, "setup validator done")
-		opts.SSVShare = nil
 	} else {
 		printShare(v.Share, logger, "get validator")
 	}
