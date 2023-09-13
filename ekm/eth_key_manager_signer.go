@@ -43,9 +43,16 @@ type ethKeyManagerSigner struct {
 	builderProposals  bool
 }
 
+// StorageProvider provides the underlying KeyManager storage.
+type StorageProvider interface {
+	ListAccounts() ([]core.ValidatorAccount, error)
+	RetrieveHighestAttestation(pubKey []byte) (*phase0.AttestationData, bool, error)
+	RetrieveHighestProposal(pubKey []byte) (phase0.Slot, bool, error)
+}
+
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
 func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, network networkconfig.NetworkConfig, builderProposals bool, encryptionKey string) (spectypes.KeyManager, error) {
-	signerStore := NewSignerStorage(db, network.Beacon.GetNetwork(), logger)
+	signerStore := NewSignerStorage(db, network.Beacon, logger)
 	if encryptionKey != "" {
 		err := signerStore.SetEncryptionKey(encryptionKey)
 		if err != nil {
@@ -83,6 +90,18 @@ func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, network netw
 		slashingProtector: slashingProtector,
 		builderProposals:  builderProposals,
 	}, nil
+}
+
+func (km *ethKeyManagerSigner) ListAccounts() ([]core.ValidatorAccount, error) {
+	return km.storage.ListAccounts()
+}
+
+func (km *ethKeyManagerSigner) RetrieveHighestAttestation(pubKey []byte) (*phase0.AttestationData, bool, error) {
+	return km.storage.RetrieveHighestAttestation(pubKey)
+}
+
+func (km *ethKeyManagerSigner) RetrieveHighestProposal(pubKey []byte) (phase0.Slot, bool, error) {
+	return km.storage.RetrieveHighestProposal(pubKey)
 }
 
 func (km *ethKeyManagerSigner) SignBeaconObject(obj ssz.HashRoot, domain phase0.Domain, pk []byte, domainType phase0.DomainType) (spectypes.Signature, [32]byte, error) {
@@ -260,7 +279,7 @@ func (km *ethKeyManagerSigner) AddShare(shareKey *bls.SecretKey) error {
 		return errors.Wrap(err, "could not check share existence")
 	}
 	if acc == nil {
-		currentSlot := km.storage.Network().EstimatedCurrentSlot()
+		currentSlot := km.storage.BeaconNetwork().EstimatedCurrentSlot()
 		if err := km.saveMinimalSlashingProtection(shareKey.GetPublicKey().Serialize(), currentSlot); err != nil {
 			return errors.Wrap(err, "could not save minimal slashing protection")
 		}
@@ -273,7 +292,7 @@ func (km *ethKeyManagerSigner) AddShare(shareKey *bls.SecretKey) error {
 }
 
 func (km *ethKeyManagerSigner) saveMinimalSlashingProtection(pk []byte, currentSlot phase0.Slot) error {
-	currentEpoch := km.storage.Network().EstimatedEpochAtSlot(currentSlot)
+	currentEpoch := km.storage.BeaconNetwork().EstimatedEpochAtSlot(currentSlot)
 	highestTarget := currentEpoch + minimalAttSlashingProtectionEpochDistance
 	highestSource := highestTarget - 1
 	highestProposal := currentSlot + minimalBlockSlashingProtectionSlotDistance

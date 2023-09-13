@@ -39,10 +39,10 @@ var (
 
 func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.ContractOperatorAdded) error {
 	logger := eh.logger.With(
-		zap.String("event_type", OperatorAdded),
+		fields.EventName(OperatorAdded),
 		fields.TxHash(event.Raw.TxHash),
 		fields.OperatorID(event.OperatorId),
-		zap.String("owner_address", event.Owner.String()),
+		fields.Owner(event.Owner),
 		fields.OperatorPubKey(event.PublicKey),
 	)
 	logger.Debug("processing event")
@@ -85,7 +85,7 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 
 func (eh *EventHandler) handleOperatorRemoved(txn basedb.Txn, event *contract.ContractOperatorRemoved) error {
 	logger := eh.logger.With(
-		zap.String("event_type", OperatorRemoved),
+		fields.EventName(OperatorRemoved),
 		fields.TxHash(event.Raw.TxHash),
 		fields.OperatorID(event.OperatorId),
 	)
@@ -101,8 +101,8 @@ func (eh *EventHandler) handleOperatorRemoved(txn basedb.Txn, event *contract.Co
 	}
 
 	logger = logger.With(
-		zap.String("operator_pub_key", ethcommon.Bytes2Hex(od.PublicKey)),
-		zap.String("owner_address", od.OwnerAddress.String()),
+		fields.OperatorPubKey(od.PublicKey),
+		fields.Owner(od.OwnerAddress),
 	)
 
 	// TODO: In original handler we didn't delete operator data, so this behavior was preserved. However we likely need to.
@@ -124,10 +124,10 @@ func (eh *EventHandler) handleOperatorRemoved(txn basedb.Txn, event *contract.Co
 
 func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.ContractValidatorAdded) (ownShare *ssvtypes.SSVShare, err error) {
 	logger := eh.logger.With(
-		zap.String("event_type", ValidatorAdded),
+		fields.EventName(ValidatorAdded),
 		fields.TxHash(event.Raw.TxHash),
 		fields.Owner(event.Owner),
-		zap.Uint64s("operator_ids", event.OperatorIds),
+		fields.OperatorIDs(event.OperatorIds),
 		fields.Validator(event.PublicKey),
 	)
 
@@ -324,12 +324,12 @@ func validatorAddedEventToShare(
 	return &validatorShare, shareSecret, nil
 }
 
-func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.ContractValidatorRemoved) ([]byte, error) {
+func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.ContractValidatorRemoved) (spectypes.ValidatorPK, error) {
 	logger := eh.logger.With(
-		zap.String("event_type", ValidatorRemoved),
+		fields.EventName(ValidatorRemoved),
 		fields.TxHash(event.Raw.TxHash),
-		zap.String("owner_address", event.Owner.String()),
-		zap.Uint64s("operator_ids", event.OperatorIds),
+		fields.Owner(event.Owner),
+		fields.OperatorIDs(event.OperatorIds),
 		fields.PubKey(event.PublicKey),
 	)
 	logger.Debug("processing event")
@@ -372,6 +372,11 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 		logger = logger.With(zap.String("validator_pubkey", hex.EncodeToString(share.ValidatorPubKey)))
 	}
 	if isOperatorShare {
+		err = eh.keyManager.RemoveShare(hex.EncodeToString(share.SharePubKey))
+		if err != nil {
+			return nil, fmt.Errorf("could not remove share from ekm storage: %w", err)
+		}
+
 		eh.metrics.ValidatorRemoved(event.PublicKey)
 		logger.Debug("processed event")
 		return share.ValidatorPubKey, nil
@@ -383,10 +388,10 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 
 func (eh *EventHandler) handleClusterLiquidated(txn basedb.Txn, event *contract.ContractClusterLiquidated) ([]*ssvtypes.SSVShare, error) {
 	logger := eh.logger.With(
-		zap.String("event_type", ClusterLiquidated),
+		fields.EventName(ClusterLiquidated),
 		fields.TxHash(event.Raw.TxHash),
-		zap.String("owner_address", event.Owner.String()),
-		zap.Uint64s("operator_ids", event.OperatorIds),
+		fields.Owner(event.Owner),
+		fields.OperatorIDs(event.OperatorIds),
 	)
 	logger.Debug("processing event")
 
@@ -405,10 +410,10 @@ func (eh *EventHandler) handleClusterLiquidated(txn basedb.Txn, event *contract.
 
 func (eh *EventHandler) handleClusterReactivated(txn basedb.Txn, event *contract.ContractClusterReactivated) ([]*ssvtypes.SSVShare, error) {
 	logger := eh.logger.With(
-		zap.String("event_type", ClusterReactivated),
+		fields.EventName(ClusterReactivated),
 		fields.TxHash(event.Raw.TxHash),
-		zap.String("owner_address", event.Owner.String()),
-		zap.Uint64s("operator_ids", event.OperatorIds),
+		fields.Owner(event.Owner),
+		fields.OperatorIDs(event.OperatorIds),
 	)
 	logger.Debug("processing event")
 
@@ -427,9 +432,9 @@ func (eh *EventHandler) handleClusterReactivated(txn basedb.Txn, event *contract
 
 func (eh *EventHandler) handleFeeRecipientAddressUpdated(txn basedb.Txn, event *contract.ContractFeeRecipientAddressUpdated) (bool, error) {
 	logger := eh.logger.With(
-		zap.String("event_type", FeeRecipientAddressUpdated),
+		fields.EventName(FeeRecipientAddressUpdated),
 		fields.TxHash(event.Raw.TxHash),
-		zap.String("owner_address", event.Owner.String()),
+		fields.Owner(event.Owner),
 		fields.FeeRecipient(event.RecipientAddress.Bytes()),
 	)
 	logger.Debug("processing event")
