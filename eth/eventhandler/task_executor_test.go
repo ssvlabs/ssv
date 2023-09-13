@@ -3,8 +3,9 @@ package eventhandler
 import (
 	"context"
 	"encoding/binary"
-	"github.com/golang/mock/gomock"
 	"testing"
+
+	"github.com/golang/mock/gomock"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"

@@ -104,7 +104,7 @@ type Controller interface {
 	IndicesChangeChan() chan struct{}
 
 	StartValidator(share *ssvtypes.SSVShare) error
-	StopValidator(publicKey []byte) error
+	StopValidator(pubKey spectypes.ValidatorPK) error
 	LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
 	ReactivateCluster(owner common.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error
 	UpdateFeeRecipient(owner, recipient common.Address) error
@@ -645,24 +645,15 @@ func (c *controller) onMetadataUpdated(pk string, meta *beaconprotocol.Validator
 	}
 }
 
-// onShareRemove is called when a validator was removed
-// TODO: think how we can make this function atomic (i.e. failing wouldn't stop the removal of the share)
-func (c *controller) onShareRemove(pk string, removeSecret bool) error {
+// onShareStop is called when a validator was removed or liquidated
+func (c *controller) onShareStop(pubKey spectypes.ValidatorPK) {
 	// remove from validatorsMap
-	v := c.validatorsMap.RemoveValidator(pk)
+	v := c.validatorsMap.RemoveValidator(hex.EncodeToString(pubKey))
 
 	// stop instance
 	if v != nil {
 		v.Stop()
 	}
-	// remove the share secret from key-manager
-	if removeSecret {
-		if err := c.keyManager.RemoveShare(pk); err != nil {
-			return errors.Wrap(err, "could not remove share secret from key manager")
-		}
-	}
-
-	return nil
 }
 
 func (c *controller) onShareStart(share *ssvtypes.SSVShare) (bool, error) {
