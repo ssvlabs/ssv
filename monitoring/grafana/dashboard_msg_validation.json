@@ -22,7 +22,7 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": 144,
-  "iteration": 1693901897156,
+  "iteration": 1694608292033,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -31,6 +31,93 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 12,
+      "interval": "5m",
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "table",
+          "placement": "right"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "sum(rate(ssv_message_size_count{instance=~\"$instance.*\"}[$__interval]))",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "RPS",
+          "refId": "A"
+        }
+      ],
+      "title": "Message RPS",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "eXfXfqH7z"
+      },
+      "description": "",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -82,7 +169,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 0
+        "y": 8
       },
       "id": 3,
       "interval": "5m",
@@ -106,7 +193,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "sum(increase(ssv_message_validation{instance=~\"$instance.*\"}[$__interval])) by (status)",
+          "expr": "sum(rate(ssv_message_validation{instance=~\"$instance.*\"}[$__interval])) by (status)",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -114,7 +201,7 @@
           "refId": "A"
         }
       ],
-      "title": "Validation Status",
+      "title": "Validation Status RPS",
       "transformations": [
         {
           "id": "convertFieldType",
@@ -181,13 +268,38 @@
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "__systemRef": "hideSeriesFrom",
+            "matcher": {
+              "id": "byNames",
+              "options": {
+                "mode": "exclude",
+                "names": [
+                  "no duty for this epoch"
+                ],
+                "prefix": "All except:",
+                "readOnly": true
+              }
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom",
+                "value": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": true
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 8
+        "y": 16
       },
       "id": 4,
       "interval": "5m",
@@ -198,7 +310,9 @@
             "max"
           ],
           "displayMode": "table",
-          "placement": "right"
+          "placement": "right",
+          "sortBy": "Max",
+          "sortDesc": true
         },
         "tooltip": {
           "mode": "single"
@@ -278,7 +392,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 16
+        "y": 24
       },
       "id": 5,
       "interval": "5m",
@@ -369,7 +483,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 24
+        "y": 32
       },
       "id": 6,
       "interval": "5m",
@@ -460,7 +574,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 32
+        "y": 40
       },
       "id": 7,
       "interval": "5m",
@@ -505,6 +619,119 @@
         }
       ],
       "title": "Commit messages",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "eXfXfqH7z"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 48
+      },
+      "id": 19,
+      "interval": "5m",
+      "options": {
+        "legend": {
+          "calcs": [
+            "last"
+          ],
+          "displayMode": "table",
+          "placement": "right"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "sum(rate(ssv_message_in_committee{instance=~\"$instance.*\"}[$__interval]))",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "in committee",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "rate(ssv_message_non_committee{instance=~\"$instance.*\", decided=\"decided\"}[$__interval])",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "non-committee decided",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "sum(rate(ssv_message_non_committee{instance=~\"$instance.*\", decided=\"non-decided\"}[$__interval]))",
+          "hide": false,
+          "interval": "",
+          "legendFormat": "non-committee non-decided",
+          "refId": "C"
+        }
+      ],
+      "title": "Committee belonging RPS",
       "type": "timeseries"
     },
     {
@@ -562,7 +789,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 40
+        "y": 56
       },
       "id": 9,
       "interval": "5m",
@@ -658,92 +885,6 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 48
-      },
-      "id": 12,
-      "interval": "5m",
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "table",
-          "placement": "right"
-        },
-        "tooltip": {
-          "mode": "single"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "eXfXfqH7z"
-          },
-          "exemplar": true,
-          "expr": "sum(rate(ssv_message_size_count{instance=~\"$instance.*\"}[$__interval]))",
-          "hide": false,
-          "interval": "",
-          "legendFormat": "RPS",
-          "refId": "A"
-        }
-      ],
-      "title": "Message RPS",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "eXfXfqH7z"
-      },
       "description": "Over panel interval",
       "fieldConfig": {
         "defaults": {
@@ -795,7 +936,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 56
+        "y": 64
       },
       "id": 13,
       "interval": "5m",
@@ -816,14 +957,14 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "sum(increase(ssv_message_size_sum{instance=~\"$instance.*\"}[$__interval]))",
+          "expr": "sum(rate(ssv_message_size_sum{instance=~\"$instance.*\"}[$__interval]))",
           "hide": false,
           "interval": "",
           "legendFormat": "Bytes",
           "refId": "A"
         }
       ],
-      "title": "Total bytes received (incoming messages)",
+      "title": "Total bytes received RPS (incoming messages)",
       "type": "timeseries"
     },
     {
@@ -882,7 +1023,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 64
+        "y": 72
       },
       "id": 14,
       "interval": "5m",
@@ -903,7 +1044,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "sum(rate(ssv_message_validation_duration_seconds_sum{instance=~\"$instance.*\"}[$__interval])) / sum(rate(ssv_message_size_count{instance=~\"$instance.*\"}[$__interval]))\n",
+          "expr": "sum(rate(ssv_message_validation_duration_seconds_sum{instance=~\"$instance.*\"}[$__interval])) / sum(rate(ssv_message_validation_duration_seconds_count{instance=~\"$instance.*\"}[$__interval]))\n",
           "hide": false,
           "interval": "",
           "legendFormat": "Average",
@@ -1029,7 +1170,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 72
+        "y": 80
       },
       "id": 15,
       "interval": "5m",
@@ -1050,7 +1191,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "sum(rate(ssv_signature_validation_duration_seconds_sum{instance=~\"$instance.*\"}[$__interval])) / sum(rate(ssv_message_size_count{instance=~\"$instance.*\"}[$__interval]))\n",
+          "expr": "sum(rate(ssv_signature_validation_duration_seconds_sum{instance=~\"$instance.*\"}[$__interval])) / sum(rate(ssv_signature_validation_duration_seconds_count{instance=~\"$instance.*\"}[$__interval]))\n",
           "hide": false,
           "interval": "",
           "legendFormat": "Average",
@@ -1176,7 +1317,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 80
+        "y": 88
       },
       "id": 17,
       "interval": "5m",
@@ -1286,7 +1427,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 88
+        "y": 96
       },
       "id": 18,
       "interval": "5m",
@@ -1387,7 +1528,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 96
+        "y": 104
       },
       "id": 16,
       "interval": "5m",
@@ -1488,8 +1629,8 @@
       {
         "current": {
           "selected": false,
-          "text": "ssv-node-v2-1",
-          "value": "ssv-node-v2-1"
+          "text": "ssv-node-v2-5",
+          "value": "ssv-node-v2-5"
         },
         "hide": 1,
         "includeAll": false,
@@ -1497,7 +1638,7 @@
         "name": "instance",
         "options": [
           {
-            "selected": true,
+            "selected": false,
             "text": "ssv-node-v2-1",
             "value": "ssv-node-v2-1"
           },
@@ -1517,7 +1658,7 @@
             "value": "ssv-node-v2-4"
           },
           {
-            "selected": false,
+            "selected": true,
             "text": "ssv-node-v2-5",
             "value": "ssv-node-v2-5"
           },
@@ -1552,6 +1693,6 @@
   "timezone": "",
   "title": "Message Validation",
   "uid": "DppaYPgSk",
-  "version": 24,
+  "version": 35,
   "weekStart": ""
 }
