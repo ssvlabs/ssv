@@ -166,7 +166,7 @@ var StartNodeCmd = &cobra.Command{
 
 		validatorsMap := validatorsmap.New(cmd.Context())
 
-		dutyFetcher := dutyfetcher.New(consensusClient, slotTicker, validatorsMap, dutyfetcher.WithLogger(logger))
+		dutyFetcher := dutyfetcher.New(consensusClient, slotTicker, nodeStorage.Shares(), dutyfetcher.WithLogger(logger))
 		dutyFetcher.Start(cmd.Context())
 
 		messageValidator := validation.NewMessageValidator(

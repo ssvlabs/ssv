@@ -7,6 +7,7 @@ import (
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/jellydator/ttlcache/v3"
 	"go.uber.org/zap"
@@ -15,16 +16,18 @@ import (
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/operator/slot_ticker"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
+	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )
 
 type Fetcher struct {
-	logger              *zap.Logger
-	closed              chan struct{}
-	beaconNode          beacon.BeaconNode
-	activeIndicesGetter activeIndicesGetter
-	ticker              chan phase0.Slot
-	proposer            *ttlcache.Cache[phase0.Epoch, map[phase0.ValidatorIndex]*eth2apiv1.ProposerDuty]
-	syncCommittee       *ttlcache.Cache[phase0.Epoch, map[phase0.ValidatorIndex]*eth2apiv1.SyncCommitteeDuty]
+	logger        *zap.Logger
+	closed        chan struct{}
+	beaconNode    beacon.BeaconNode
+	shareStorage  registrystorage.Shares
+	ticker        chan phase0.Slot
+	proposer      *ttlcache.Cache[phase0.Epoch, map[phase0.ValidatorIndex]*eth2apiv1.ProposerDuty]
+	syncCommittee *ttlcache.Cache[phase0.Epoch, map[phase0.ValidatorIndex]*eth2apiv1.SyncCommitteeDuty]
 }
 
 // Option defines EventHandler configuration option.
@@ -37,27 +40,23 @@ func WithLogger(logger *zap.Logger) Option {
 	}
 }
 
-type activeIndicesGetter interface {
-	ActiveValidatorIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
-}
-
 func New(
 	beaconNode beacon.BeaconNode,
 	slotTicker slot_ticker.Ticker,
-	activeIndicesGetter activeIndicesGetter,
+	shareStorage registrystorage.Shares,
 	opts ...Option,
 ) *Fetcher {
 	tickerChan := make(chan phase0.Slot, 32)
 	slotTicker.Subscribe(tickerChan)
 
 	f := &Fetcher{
-		logger:              zap.NewNop(),
-		closed:              make(chan struct{}),
-		beaconNode:          beaconNode,
-		ticker:              tickerChan,
-		activeIndicesGetter: activeIndicesGetter,
-		proposer:            ttlcache.New[phase0.Epoch, map[phase0.ValidatorIndex]*eth2apiv1.ProposerDuty](),
-		syncCommittee:       ttlcache.New[phase0.Epoch, map[phase0.ValidatorIndex]*eth2apiv1.SyncCommitteeDuty](),
+		logger:        zap.NewNop(),
+		closed:        make(chan struct{}),
+		beaconNode:    beaconNode,
+		ticker:        tickerChan,
+		shareStorage:  shareStorage,
+		proposer:      ttlcache.New[phase0.Epoch, map[phase0.ValidatorIndex]*eth2apiv1.ProposerDuty](),
+		syncCommittee: ttlcache.New[phase0.Epoch, map[phase0.ValidatorIndex]*eth2apiv1.SyncCommitteeDuty](),
 	}
 
 	for _, opt := range opts {
@@ -140,9 +139,19 @@ func (f *Fetcher) SyncCommitteeDuty(slot phase0.Slot, validatorIndex phase0.Vali
 }
 
 func (f *Fetcher) fetchEpoch(ctx context.Context, epoch phase0.Epoch) error {
-	indices := f.activeIndicesGetter.ActiveValidatorIndices(epoch)
-	if len(indices) == 0 {
+	shares := f.shareStorage.List(nil, func(share *ssvtypes.SSVShare) bool {
+		return (share.BeaconMetadata.IsAttesting() || share.BeaconMetadata.Status == v1.ValidatorStatePendingQueued) &&
+			share.BeaconMetadata.ActivationEpoch <= epoch
+	})
+	if len(shares) == 0 {
 		return nil
+	}
+
+	var indices []phase0.ValidatorIndex
+	for _, share := range shares {
+		if share != nil && share.BeaconMetadata != nil {
+			indices = append(indices, share.BeaconMetadata.Index)
+		}
 	}
 
 	ttl := f.beaconNode.GetBeaconNetwork().SlotDurationSec() * time.Duration(f.beaconNode.GetBeaconNetwork().SlotsPerEpoch()) * 3
