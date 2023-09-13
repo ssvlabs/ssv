@@ -745,6 +745,11 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 	// Prepare share filters.
 	filters := []registrystorage.SharesFilter{}
 
+	// Filter for validators who belong to our operator.
+	if !c.validatorOptions.Exporter {
+		filters = append(filters, registrystorage.ByOperatorID(c.GetOperatorData().ID))
+	}
+
 	// Filter for validators who are not liquidated.
 	filters = append(filters, registrystorage.ByNotLiquidated())
 
