@@ -227,17 +227,16 @@ func (mv *MessageValidator) validateSignerBehavior(
 			return err
 		}
 
-		stateToBeReset := false
-		if msgSlot > signerState.Slot {
-			stateToBeReset = true
+		newDutyInSameEpoch := false
+		if msgSlot > signerState.Slot && mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) == mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot) {
+			newDutyInSameEpoch = true
 		}
 
-		if err := mv.validateDutyCount(signerState, msg.MsgID.GetRoleType(), stateToBeReset); err != nil {
+		if err := mv.validateDutyCount(signerState, msg.MsgID.GetRoleType(), newDutyInSameEpoch); err != nil {
 			return err
 		}
 
 		if !(msgSlot > signerState.Slot || msgSlot == signerState.Slot && msgRound > signerState.Round) {
-
 			if mv.hasFullData(signedMsg) && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
 				return ErrDuplicatedProposalWithDifferentData
 			}
@@ -259,12 +258,13 @@ func (mv *MessageValidator) validateSignerBehavior(
 func (mv *MessageValidator) validateDutyCount(
 	state *SignerState,
 	role spectypes.BeaconRole,
-	stateToBeReset bool,
+	newDutyInSameEpoch bool,
 ) error {
 	switch role {
 	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator, spectypes.BNRoleValidatorRegistration:
 		limit := maxDutiesPerEpoch
-		if !stateToBeReset {
+
+		if sameSlot := !newDutyInSameEpoch; sameSlot {
 			limit++
 		}
 
