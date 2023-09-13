@@ -40,10 +40,10 @@ import (
 	"github.com/bloxapp/ssv/operator/validator"
 	"github.com/bloxapp/ssv/operator/validator/mocks"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	mocknetwork "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon/mocks"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
+	"github.com/bloxapp/ssv/utils"
 	"github.com/bloxapp/ssv/utils/blskeygen"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/bloxapp/ssv/utils/threshold"
@@ -65,7 +65,13 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	ops, err := createOperators(4)
 	require.NoError(t, err)
 
-	eh, _, err := setupEventHandler(t, ctx, logger, ops[0], false)
+	currentSlot := &utils.SlotValue{}
+	mockBeaconNetwork := utils.SetupMockBeaconNetwork(t, currentSlot)
+	mockNetworkConfig := &networkconfig.NetworkConfig{
+		Beacon: mockBeaconNetwork,
+	}
+
+	eh, _, err := setupEventHandler(t, ctx, logger, mockNetworkConfig, ops[0], false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +121,18 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	sharesData1, err := generateSharesData(validatorData1, ops, testAddr, 0)
 	require.NoError(t, err)
 
+	validatorData2, err := createNewValidator(ops)
+	require.NoError(t, err)
+	sharesData2, err := generateSharesData(validatorData2, ops, testAddr, 2)
+	require.NoError(t, err)
+
+	validatorData3, err := createNewValidator(ops)
+	require.NoError(t, err)
+	sharesData3, err := generateSharesData(validatorData3, ops, testAddr, 3)
+	require.NoError(t, err)
+
 	blockNum := uint64(0x1)
+	currentSlot.SetSlot(100)
 
 	t.Run("test OperatorAdded event handle", func(t *testing.T) {
 
@@ -204,6 +221,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 	// Receive event, unmarshall, parse, check parse event is not nil or with an error,
 	// public key is correct, owner is correct, operator ids are correct, shares are correct
+	// slashing protection data is correct
 	t.Run("test ValidatorAdded event handle", func(t *testing.T) {
 		nonce, err := eh.nodeStorage.GetNextNonce(nil, testAddr)
 		require.NoError(t, err)
@@ -251,12 +269,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, registrystorage.Nonce(1), nonce)
 
-		validatorData2, err := createNewValidator(ops)
-		require.NoError(t, err)
-		sharesData2, err := generateSharesData(validatorData2, ops, testAddr, 2)
-		require.NoError(t, err)
-
 		// SharesData length is incorrect. Nonce is bumped; Validator wasn't added
+		// slashing protection data is not added
 		t.Run("test nonce bumping even for incorrect sharesData length", func(t *testing.T) {
 			// changing the length
 			malformedSharesData := sharesData2[:len(sharesData2)-1]
@@ -305,6 +319,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		})
 
 		// Length of the shares []byte is correct; nonce is bumped; validator is added
+		// slashing protection data is correct
 		t.Run("test validator 1 doesnt check validator's 4 share", func(t *testing.T) {
 			malformedSharesData := sharesData2[:]
 			// Corrupt the encrypted last share key of the 4th operator
@@ -353,12 +368,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.Equal(t, registrystorage.Nonce(3), nonce)
 		})
 
-		validatorData3, err := createNewValidator(ops)
-		require.NoError(t, err)
-		sharesData3, err := generateSharesData(validatorData3, ops, testAddr, 3)
-		require.NoError(t, err)
-
 		// Share for 1st operator is malformed; check nonce is bumped correctly; validator wasn't added
+		// slashing protection data is not added
 		t.Run("test malformed ValidatorAdded and nonce is bumped", func(t *testing.T) {
 			malformedSharesData := sharesData3[:]
 
@@ -413,6 +424,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		})
 
 		// Correct event; check nonce is bumped correctly; validator is added
+		// slashing protection data is correct
 		t.Run("test correct ValidatorAdded again and nonce is bumped", func(t *testing.T) {
 			// regenerate with updated nonce
 			sharesData3, err = generateSharesData(validatorData3, ops, testAddr, 4)
@@ -463,6 +475,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 	// Receive event, unmarshall, parse, check parse event is not nil or with an error,
 	// public key is correct, owner is correct, operator ids are correct
+	// slashing protection data is removed
 	t.Run("test ValidatorRemoved event handle", func(t *testing.T) {
 		_, err = boundContract.SimcontractTransactor.RemoveValidator(
 			auth,
@@ -499,7 +512,107 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	})
 
 	// Receive event, unmarshall, parse, check parse event is not nil or with an error, owner is correct, operator ids are correct
+	// slashing protection data is not deleted
 	t.Run("test ClusterLiquidated event handle", func(t *testing.T) {
+		_, err = boundContract.SimcontractTransactor.Liquidate(
+			auth,
+			testAddr,
+			[]uint64{1, 2, 3, 4},
+			simcontract.CallableCluster{
+				ValidatorCount:  1,
+				NetworkFeeIndex: 1,
+				Index:           1,
+				Active:          true,
+				Balance:         big.NewInt(100_000_000),
+			})
+		require.NoError(t, err)
+		sim.Commit()
+
+		block := <-logs
+		require.NotEmpty(t, block.Logs)
+		require.Equal(t, ethcommon.HexToHash("0x1fce24c373e07f89214e9187598635036111dbb363e99f4ce498488cdc66e688"), block.Logs[0].Topics[0])
+
+		eventsCh := make(chan executionclient.BlockLogs)
+		go func() {
+			defer close(eventsCh)
+			eventsCh <- block
+		}()
+
+		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+		require.Equal(t, blockNum+1, lastProcessedBlock)
+		require.NoError(t, err)
+		blockNum++
+
+		// check that slashing data was not deleted
+		sharePubKey := validatorData3.operatorsShares[0].sec.GetPublicKey().Serialize()
+		highestAttestation, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestAttestation(sharePubKey)
+		require.NoError(t, err)
+		require.True(t, found)
+		require.NotNil(t, highestAttestation)
+
+		require.Equal(t, highestAttestation.Source.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
+		require.Equal(t, highestAttestation.Target.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot()))
+
+		highestProposal, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
+		require.NoError(t, err)
+		require.True(t, found)
+		require.Equal(t, highestProposal, currentSlot.GetSlot())
+	})
+
+	// Receive event, unmarshall, parse, check parse event is not nil or with an error, owner is correct, operator ids are correct
+	// **  storedEpoch = max(nextEpoch, storedEpoch)  **
+	// Validate that slashing protection data stored epoch is nextEpoch and NOT storedEpoch
+	t.Run("test ClusterReactivated event handle", func(t *testing.T) {
+		_, err = boundContract.SimcontractTransactor.Reactivate(
+			auth,
+			[]uint64{1, 2, 3, 4},
+			big.NewInt(100_000_000),
+			simcontract.CallableCluster{
+				ValidatorCount:  1,
+				NetworkFeeIndex: 1,
+				Index:           1,
+				Active:          true,
+				Balance:         big.NewInt(100_000_000),
+			})
+		require.NoError(t, err)
+		sim.Commit()
+
+		block := <-logs
+		require.NotEmpty(t, block.Logs)
+		require.Equal(t, ethcommon.HexToHash("0xc803f8c01343fcdaf32068f4c283951623ef2b3fa0c547551931356f456b6859"), block.Logs[0].Topics[0])
+
+		eventsCh := make(chan executionclient.BlockLogs)
+		go func() {
+			defer close(eventsCh)
+			eventsCh <- block
+		}()
+
+		currentSlot.SetSlot(1000)
+
+		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+		require.Equal(t, blockNum+1, lastProcessedBlock)
+		require.NoError(t, err)
+
+		// check that slashing data was bumped
+		sharePubKey := validatorData3.operatorsShares[0].sec.GetPublicKey().Serialize()
+		highestAttestation, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestAttestation(sharePubKey)
+		require.NoError(t, err)
+		require.True(t, found)
+		require.NotNil(t, highestAttestation)
+		require.Equal(t, highestAttestation.Source.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
+		require.Equal(t, highestAttestation.Target.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot()))
+
+		highestProposal, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
+		require.NoError(t, err)
+		require.True(t, found)
+		require.Equal(t, highestProposal, currentSlot.GetSlot())
+
+		blockNum++
+	})
+
+	// Liquidated event is far in the future
+	// in order to simulate stored far in the future slashing protection data
+	t.Run("test ClusterLiquidated event handle - far in the future", func(t *testing.T) {
 		_, err = boundContract.SimcontractTransactor.Liquidate(
 			auth,
 			testAddr,
@@ -530,11 +643,13 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		blockNum++
 	})
 
-	// Receive event, unmarshall, parse, check parse event is not nil or with an error, owner is correct, operator ids are correct
-	t.Run("test ClusterReactivated event handle", func(t *testing.T) {
+	// Reactivate event
+	// **  storedEpoch = max(nextEpoch, storedEpoch)  **
+	// Validate that slashing protection data stored epoch is storedEpoch and NOT nextEpoch
+	t.Run("test ClusterReactivated event handle - far in the future", func(t *testing.T) {
 		_, err = boundContract.SimcontractTransactor.Reactivate(
 			auth,
-			[]uint64{1, 2, 3},
+			[]uint64{1, 2, 3, 4},
 			big.NewInt(100_000_000),
 			simcontract.CallableCluster{
 				ValidatorCount:  1,
@@ -556,9 +671,26 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			eventsCh <- block
 		}()
 
+		currentSlot.SetSlot(100)
+
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
 		require.NoError(t, err)
+
+		// check that slashing data is greater than current epoch
+		sharePubKey := validatorData3.operatorsShares[0].sec.GetPublicKey().Serialize()
+		highestAttestation, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestAttestation(sharePubKey)
+		require.NoError(t, err)
+		require.True(t, found)
+		require.NotNil(t, highestAttestation)
+		require.Greater(t, highestAttestation.Source.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot())-1)
+		require.Greater(t, highestAttestation.Target.Epoch, mockBeaconNetwork.EstimatedEpochAtSlot(currentSlot.GetSlot()))
+
+		highestProposal, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
+		require.NoError(t, err)
+		require.True(t, found)
+		require.Greater(t, highestProposal, currentSlot.GetSlot())
+
 		blockNum++
 	})
 
@@ -592,7 +724,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	})
 }
 
-func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, operator *testOperator, useMockCtrl bool) (*EventHandler, *mocks.MockController, error) {
+func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, network *networkconfig.NetworkConfig, operator *testOperator, useMockCtrl bool) (*EventHandler, *mocks.MockController, error) {
 	db, err := kv.NewInMemory(logger, basedb.Options{
 		Ctx: ctx,
 	})
@@ -601,11 +733,13 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, op
 	storageMap := ibftstorage.NewStores()
 	nodeStorage, operatorData := setupOperatorStorage(logger, db, operator)
 
-	mockNetworkConfig := networkconfig.NetworkConfig{
-		Beacon: setupMockBeaconNetwork(t),
+	if network == nil {
+		network = &networkconfig.NetworkConfig{
+			Beacon: utils.SetupMockBeaconNetwork(t, &utils.SlotValue{}),
+		}
 	}
 
-	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, mockNetworkConfig, true, "")
+	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, *network, true, "")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -626,7 +760,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, op
 			nodeStorage,
 			parser,
 			validatorCtrl,
-			mockNetworkConfig.Domain,
+			network.Domain,
 			validatorCtrl,
 			nodeStorage.GetPrivateKey,
 			keyManager,
@@ -663,7 +797,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, op
 		nodeStorage,
 		parser,
 		validatorCtrl,
-		mockNetworkConfig.Domain,
+		network.Domain,
 		validatorCtrl,
 		nodeStorage.GetPrivateKey,
 		keyManager,
@@ -675,20 +809,6 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, op
 		return nil, nil, err
 	}
 	return eh, nil, nil
-}
-
-func setupMockBeaconNetwork(t *testing.T) *mocknetwork.MockBeaconNetwork {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockBeaconNetwork := mocknetwork.NewMockBeaconNetwork(ctrl)
-
-	currentSlot := phase0.Slot(100)
-	mockBeaconNetwork.EXPECT().GetBeaconNetwork().Return(networkconfig.TestNetwork.Beacon.GetBeaconNetwork()).AnyTimes()
-	mockBeaconNetwork.EXPECT().EstimatedCurrentSlot().Return(currentSlot).AnyTimes()
-	mockBeaconNetwork.EXPECT().EstimatedEpochAtSlot(gomock.Any()).Return(phase0.Epoch(currentSlot / 32)).AnyTimes()
-
-	return mockBeaconNetwork
 }
 
 func setupOperatorStorage(logger *zap.Logger, db basedb.Database, operator *testOperator) (operatorstorage.Storage, *registrystorage.OperatorData) {
