@@ -49,7 +49,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 	options.defaults()
 
 	if options.Metrics == nil {
-		options.Metrics = &nopMetrics{}
+		options.Metrics = &NopMetrics{}
 	}
 
 	v := &Validator{

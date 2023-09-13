@@ -61,7 +61,6 @@ func (vm *ValidatorsMap) ForEach(iterator validatorIterator) error {
 // GetValidator returns a validator
 // TODO: pass spectypes.ValidatorPK instead of string
 func (vm *ValidatorsMap) GetValidator(pubKey string) (*validator.Validator, bool) {
-	// main lock
 	vm.lock.RLock()
 	defer vm.lock.RUnlock()
 

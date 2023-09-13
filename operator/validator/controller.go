@@ -201,9 +201,14 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		}
 	}
 
+	metrics := validator.Metrics(validator.NopMetrics{})
+	if options.Metrics != nil {
+		metrics = options.Metrics
+	}
+
 	ctrl := controller{
 		logger:                     logger.Named(logging.NameController),
-		metrics:                    options.Metrics,
+		metrics:                    metrics,
 		sharesStorage:              options.RegistryStorage.Shares(),
 		operatorsStorage:           options.RegistryStorage,
 		recipientsStorage:          options.RegistryStorage,

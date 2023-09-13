@@ -24,22 +24,22 @@ type Metrics interface {
 	queue.Metrics
 }
 
-type nopMetrics struct{}
+type NopMetrics struct{}
 
-func (n nopMetrics) ValidatorInactive([]byte)                              {}
-func (n nopMetrics) ValidatorNoIndex([]byte)                               {}
-func (n nopMetrics) ValidatorError([]byte)                                 {}
-func (n nopMetrics) ValidatorReady([]byte)                                 {}
-func (n nopMetrics) ValidatorNotActivated([]byte)                          {}
-func (n nopMetrics) ValidatorExiting([]byte)                               {}
-func (n nopMetrics) ValidatorSlashed([]byte)                               {}
-func (n nopMetrics) ValidatorNotFound([]byte)                              {}
-func (n nopMetrics) ValidatorPending([]byte)                               {}
-func (n nopMetrics) ValidatorRemoved([]byte)                               {}
-func (n nopMetrics) ValidatorUnknown([]byte)                               {}
-func (n nopMetrics) IncomingQueueMessage(spectypes.MessageID)              {}
-func (n nopMetrics) OutgoingQueueMessage(spectypes.MessageID)              {}
-func (n nopMetrics) DroppedQueueMessage(spectypes.MessageID)               {}
-func (n nopMetrics) MessageQueueSize(int)                                  {}
-func (n nopMetrics) MessageQueueCapacity(int)                              {}
-func (n nopMetrics) MessageTimeInQueue(spectypes.MessageID, time.Duration) {}
+func (n NopMetrics) ValidatorInactive([]byte)                              {}
+func (n NopMetrics) ValidatorNoIndex([]byte)                               {}
+func (n NopMetrics) ValidatorError([]byte)                                 {}
+func (n NopMetrics) ValidatorReady([]byte)                                 {}
+func (n NopMetrics) ValidatorNotActivated([]byte)                          {}
+func (n NopMetrics) ValidatorExiting([]byte)                               {}
+func (n NopMetrics) ValidatorSlashed([]byte)                               {}
+func (n NopMetrics) ValidatorNotFound([]byte)                              {}
+func (n NopMetrics) ValidatorPending([]byte)                               {}
+func (n NopMetrics) ValidatorRemoved([]byte)                               {}
+func (n NopMetrics) ValidatorUnknown([]byte)                               {}
+func (n NopMetrics) IncomingQueueMessage(spectypes.MessageID)              {}
+func (n NopMetrics) OutgoingQueueMessage(spectypes.MessageID)              {}
+func (n NopMetrics) DroppedQueueMessage(spectypes.MessageID)               {}
+func (n NopMetrics) MessageQueueSize(int)                                  {}
+func (n NopMetrics) MessageQueueCapacity(int)                              {}
+func (n NopMetrics) MessageTimeInQueue(spectypes.MessageID, time.Duration) {}

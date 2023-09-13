@@ -39,6 +39,7 @@ import (
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
 	"github.com/bloxapp/ssv/operator/validator/mocks"
+	"github.com/bloxapp/ssv/operator/validatorsmap"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	mocknetwork "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon/mocks"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
@@ -652,6 +653,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, op
 		KeyManager:      keyManager,
 		StorageMap:      storageMap,
 		OperatorData:    operatorData,
+		ValidatorsMap:   validatorsmap.New(ctx),
 	})
 
 	contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
