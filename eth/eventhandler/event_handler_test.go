@@ -236,26 +236,13 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			eventsCh <- block
 		}()
 
-		sharePubKey := validatorData1.operatorsShares[0].sec.GetPublicKey().Serialize()
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
 		require.NoError(t, err)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
-
-		accounts, err := eh.keyManager.(ekm.StorageProvider).ListAccounts()
-		require.NoError(t, err)
-		require.Equal(t, 1, len(accounts))
-		require.True(t, shareExist(accounts, sharePubKey))
-
-		highestAttestation, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestAttestation(sharePubKey)
-		require.NoError(t, err)
-		require.True(t, found)
-		require.NotNil(t, highestAttestation)
-
-		_, found, err = eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
-		require.NoError(t, err)
-		require.True(t, found)
-
 		blockNum++
+
+		requireKeyManagerDataToExist(t, eh, 1, validatorData1)
+
 		// Check that validator was registered
 		shares := eh.nodeStorage.Shares().List(nil)
 		require.Equal(t, 1, len(shares))
@@ -301,26 +288,12 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
-			sharePubKey := validatorData2.operatorsShares[0].sec.GetPublicKey().Serialize()
 			lastProcessedBlock, err = eh.HandleBlockEventsStream(eventsCh, false)
 			require.NoError(t, err)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
-
-			accounts, err := eh.keyManager.(ekm.StorageProvider).ListAccounts()
-			require.NoError(t, err)
-			require.Equal(t, 1, len(accounts))
-			require.False(t, shareExist(accounts, sharePubKey))
-
-			highestAttestation, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestAttestation(sharePubKey)
-			require.NoError(t, err)
-			require.False(t, found)
-			require.Nil(t, highestAttestation)
-
-			_, found, err = eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
-			require.NoError(t, err)
-			require.False(t, found)
-
 			blockNum++
+
+			requireKeyManagerDataToNotExist(t, eh, 1, validatorData2)
 
 			// Check that validator was not registered,
 			shares = eh.nodeStorage.Shares().List(nil)
@@ -364,26 +337,12 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
-			sharePubKey := validatorData2.operatorsShares[0].sec.GetPublicKey().Serialize()
 			lastProcessedBlock, err = eh.HandleBlockEventsStream(eventsCh, false)
 			require.NoError(t, err)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
-
-			accounts, err := eh.keyManager.(ekm.StorageProvider).ListAccounts()
-			require.NoError(t, err)
-			require.Equal(t, 2, len(accounts))
-			require.True(t, shareExist(accounts, sharePubKey))
-
-			highestAttestation, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestAttestation(sharePubKey)
-			require.NoError(t, err)
-			require.True(t, found)
-			require.NotNil(t, highestAttestation)
-
-			_, found, err = eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
-			require.NoError(t, err)
-			require.True(t, found)
-
 			blockNum++
+
+			requireKeyManagerDataToExist(t, eh, 2, validatorData2)
 
 			// Check that validator was registered for op1,
 			shares = eh.nodeStorage.Shares().List(nil)
@@ -437,26 +396,12 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
-			sharePubKey := validatorData3.operatorsShares[0].sec.GetPublicKey().Serialize()
 			lastProcessedBlock, err = eh.HandleBlockEventsStream(eventsCh, false)
 			require.NoError(t, err)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
-
-			accounts, err := eh.keyManager.(ekm.StorageProvider).ListAccounts()
-			require.NoError(t, err)
-			require.Equal(t, 2, len(accounts))
-			require.False(t, shareExist(accounts, sharePubKey))
-
-			highestAttestation, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestAttestation(sharePubKey)
-			require.NoError(t, err)
-			require.False(t, found)
-			require.Nil(t, highestAttestation)
-
-			_, found, err = eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
-			require.NoError(t, err)
-			require.False(t, found)
-
 			blockNum++
+
+			requireKeyManagerDataToNotExist(t, eh, 2, validatorData3)
 
 			// Check that validator was not registered
 			shares = eh.nodeStorage.Shares().List(nil)
@@ -499,26 +444,12 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
-			sharePubKey := validatorData3.operatorsShares[0].sec.GetPublicKey().Serialize()
 			lastProcessedBlock, err = eh.HandleBlockEventsStream(eventsCh, false)
 			require.NoError(t, err)
 			require.Equal(t, blockNum+1, lastProcessedBlock)
-
-			accounts, err := eh.keyManager.(ekm.StorageProvider).ListAccounts()
-			require.NoError(t, err)
-			require.Equal(t, 3, len(accounts))
-			require.True(t, shareExist(accounts, sharePubKey))
-
-			highestAttestation, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestAttestation(sharePubKey)
-			require.NoError(t, err)
-			require.True(t, found)
-			require.NotNil(t, highestAttestation)
-
-			_, found, err = eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
-			require.NoError(t, err)
-			require.True(t, found)
-
 			blockNum++
+
+			requireKeyManagerDataToExist(t, eh, 3, validatorData3)
 
 			// Check that validator was registered
 			shares = eh.nodeStorage.Shares().List(nil)
@@ -557,26 +488,14 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			eventsCh <- block
 		}()
 
-		sharePubKey := validatorData1.operatorsShares[0].sec.GetPublicKey().Serialize()
+		requireKeyManagerDataToExist(t, eh, 3, validatorData1)
+
 		lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, true)
 		require.NoError(t, err)
 		require.Equal(t, blockNum+1, lastProcessedBlock)
-
-		accounts, err := eh.keyManager.(ekm.StorageProvider).ListAccounts()
-		require.NoError(t, err)
-		require.Equal(t, 2, len(accounts))
-		require.False(t, shareExist(accounts, sharePubKey))
-
-		highestAttestation, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestAttestation(sharePubKey)
-		require.NoError(t, err)
-		require.False(t, found)
-		require.Nil(t, highestAttestation)
-
-		_, found, err = eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
-		require.NoError(t, err)
-		require.False(t, found)
-
 		blockNum++
+
+		requireKeyManagerDataToNotExist(t, eh, 2, validatorData1)
 	})
 
 	// Receive event, unmarshall, parse, check parse event is not nil or with an error, owner is correct, operator ids are correct
@@ -996,4 +915,38 @@ func generateSharesData(validatorData *testValidatorData, operators []*testOpera
 	sharesDataSigned := append(sig, sharesData...)
 
 	return sharesDataSigned, nil
+}
+
+func requireKeyManagerDataToExist(t *testing.T, eh *EventHandler, expectedAccounts int, validatorData *testValidatorData) {
+	sharePubKey := validatorData.operatorsShares[0].sec.GetPublicKey().Serialize()
+	accounts, err := eh.keyManager.(ekm.StorageProvider).ListAccounts()
+	require.NoError(t, err)
+	require.Equal(t, expectedAccounts, len(accounts))
+	require.True(t, shareExist(accounts, sharePubKey))
+
+	highestAttestation, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestAttestation(sharePubKey)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.NotNil(t, highestAttestation)
+
+	_, found, err = eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
+	require.NoError(t, err)
+	require.True(t, found)
+}
+
+func requireKeyManagerDataToNotExist(t *testing.T, eh *EventHandler, expectedAccounts int, validatorData *testValidatorData) {
+	sharePubKey := validatorData.operatorsShares[0].sec.GetPublicKey().Serialize()
+	accounts, err := eh.keyManager.(ekm.StorageProvider).ListAccounts()
+	require.NoError(t, err)
+	require.Equal(t, expectedAccounts, len(accounts))
+	require.False(t, shareExist(accounts, sharePubKey))
+
+	highestAttestation, found, err := eh.keyManager.(ekm.StorageProvider).RetrieveHighestAttestation(sharePubKey)
+	require.NoError(t, err)
+	require.False(t, found)
+	require.Nil(t, highestAttestation)
+
+	_, found, err = eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
+	require.NoError(t, err)
+	require.False(t, found)
 }
