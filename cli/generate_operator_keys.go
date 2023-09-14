@@ -3,7 +3,6 @@ package cli
 import (
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -32,18 +31,31 @@ var generateOperatorKeysCmd = &cobra.Command{
 		}
 
 		if privateKeyFilePath != "" {
-			sk, pk, err = readPrivateKeyFromFile(privateKeyFilePath, logger)
+			keyBytes, err := readFile(privateKeyFilePath)
+			if err != nil {
+				logger.Fatal("Failed to read private key from file", zap.Error(err))
+			}
+			sk, pk, err = parsePrivateKey(keyBytes)
 			if err != nil {
 				logger.Fatal("Failed to read private key from file", zap.Error(err))
 			}
 		}
 
-		if err := logging.SetGlobalLogger("debug", "capital", "console", nil); err != nil {
-			logger.Fatal("", zap.Error(err))
-		}
-
 		if passwordFilePath != "" {
-			encryptAndSavePrivateKey(sk, passwordFilePath, logger)
+			passwordBytes, err := readFile(passwordFilePath)
+			if err != nil {
+				logger.Fatal("Failed to read password file", zap.Error(err))
+			}
+			encryptedJSON, encryptedJSONErr := encryptPrivateKey(sk, pk, passwordBytes)
+			if encryptedJSONErr != nil {
+				logger.Fatal("Failed to encrypt private key", zap.Error(err))
+			}
+			err = writeFile("encrypted_private_key.json", encryptedJSON)
+			if err != nil {
+				logger.Fatal("Failed to save private key", zap.Error(err))
+			} else {
+				logger.Info("private key encrypted and stored in encrypted_private_key.json")
+			}
 		} else {
 			logger.Info("generated public key (base64)", zap.String("pk", base64.StdEncoding.EncodeToString(pk)))
 			logger.Info("generated private key (base64)", zap.String("sk", base64.StdEncoding.EncodeToString(sk)))
@@ -51,12 +63,7 @@ var generateOperatorKeysCmd = &cobra.Command{
 	},
 }
 
-func readPrivateKeyFromFile(filePath string, logger *zap.Logger) ([]byte, []byte, error) {
-	keyBytes, err := readFile(filePath, logger)
-	if err != nil {
-		return nil, nil, err
-	}
-
+func parsePrivateKey(keyBytes []byte) ([]byte, []byte, error) {
 	decodedBytes, err := base64.StdEncoding.DecodeString(string(keyBytes))
 	if err != nil {
 		return nil, nil, err
@@ -79,44 +86,31 @@ func readPrivateKeyFromFile(filePath string, logger *zap.Logger) ([]byte, []byte
 	return skPem, pk, nil
 }
 
-func encryptAndSavePrivateKey(sk []byte, passwordFilePath string, logger *zap.Logger) {
-	passwordBytes, err := readFile(passwordFilePath, logger)
-	if err != nil {
-		logger.Fatal("Failed to read password file", zap.Error(err))
-	}
-
+func encryptPrivateKey(sk []byte, pk []byte, passwordBytes []byte) ([]byte, error) {
 	encryptionPassword := string(passwordBytes)
 	encryptedData, err := keystorev4.New().Encrypt(sk, encryptionPassword)
 	if err != nil {
-		logger.Fatal("Failed to encrypt private key", zap.Error(err))
+		return nil, err
 	}
-
+	encryptedData["publicKey"] = base64.StdEncoding.EncodeToString(pk)
 	encryptedJSON, err := json.Marshal(encryptedData)
 	if err != nil {
-		logger.Fatal("Failed to marshal encrypted data to JSON", zap.Error(err))
+		return nil, err
 	}
-	err = writeFile("encrypted_private_key.json", encryptedJSON)
-	if err != nil {
-		logger.Fatal("Failed to write encrypted private key to file", zap.Error(err))
-	}
-
-	logger.Info("private key encrypted and stored in encrypted_private_key.json")
+	return encryptedJSON, nil
 }
 
 func writeFile(fileName string, data []byte) error {
 	return os.WriteFile(fileName, data, 0600)
 }
 
-func readFile(filePath string, logger *zap.Logger) ([]byte, error) {
+func readFile(filePath string) ([]byte, error) {
 	absPath, err := filepath.Abs(filePath)
 	if err != nil {
-		logger.Fatal(fmt.Sprintf("Failed to read absolute path of %s", filePath), zap.Error(err))
+		return nil, err
 	}
 	// #nosec G304
 	contentBytes, err := os.ReadFile(absPath)
-	if err != nil {
-		logger.Fatal(fmt.Sprintf("Failed to read file %s", filePath), zap.Error(err))
-	}
 	return contentBytes, err
 }
 
