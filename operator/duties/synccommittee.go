@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/operator/duties/dutystorage"
 )
 
 // syncCommitteePreparationEpochs is the number of epochs ahead of the sync committee
@@ -21,14 +22,14 @@ var syncCommitteePreparationEpochs = uint64(2)
 type SyncCommitteeHandler struct {
 	baseHandler
 
-	duties             *SyncCommitteeDuties
+	duties             *dutystorage.SyncCommitteeDuties
 	fetchCurrentPeriod bool
 	fetchNextPeriod    bool
 }
 
-func NewSyncCommitteeHandler() *SyncCommitteeHandler {
+func NewSyncCommitteeHandler(duties *dutystorage.SyncCommitteeDuties) *SyncCommitteeHandler {
 	h := &SyncCommitteeHandler{
-		duties: NewSyncCommitteeDuties(),
+		duties: duties,
 	}
 	h.fetchCurrentPeriod = true
 	h.fetchFirst = true
@@ -37,27 +38,6 @@ func NewSyncCommitteeHandler() *SyncCommitteeHandler {
 
 func (h *SyncCommitteeHandler) Name() string {
 	return spectypes.BNRoleSyncCommittee.String()
-}
-
-type SyncCommitteeDuties struct {
-	m map[uint64][]*eth2apiv1.SyncCommitteeDuty
-}
-
-func NewSyncCommitteeDuties() *SyncCommitteeDuties {
-	return &SyncCommitteeDuties{
-		m: make(map[uint64][]*eth2apiv1.SyncCommitteeDuty),
-	}
-}
-
-func (d *SyncCommitteeDuties) Add(period uint64, duty *eth2apiv1.SyncCommitteeDuty) {
-	if _, ok := d.m[period]; !ok {
-		d.m[period] = []*eth2apiv1.SyncCommitteeDuty{}
-	}
-	d.m[period] = append(d.m[period], duty)
-}
-
-func (d *SyncCommitteeDuties) Reset(period uint64) {
-	delete(d.m, period)
 }
 
 // HandleDuties manages the duty lifecycle, handling different cases:
@@ -73,7 +53,7 @@ func (d *SyncCommitteeDuties) Reset(period uint64) {
 //
 // On Indices Change:
 //  1. Execute duties.
-//  2. Reset duties for the current period.
+//  2. ResetEpoch duties for the current period.
 //  3. Fetch duties for the current period.
 //  4. If necessary, fetch duties for the next period.
 //
@@ -106,7 +86,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			} else {
 				h.processExecution(period, slot)
 				if h.indicesChanged {
-					h.duties.Reset(period)
+					h.duties.ResetPeriod(period)
 					h.indicesChanged = false
 				}
 				h.processFetching(ctx, period, slot)
@@ -123,7 +103,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 
 			// last slot of period
 			if slot == h.network.Beacon.LastSlotOfSyncPeriod(period) {
-				h.duties.Reset(period)
+				h.duties.ResetPeriod(period)
 			}
 
 		case reorgEvent := <-h.reorg:
@@ -135,7 +115,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 
 			// reset current epoch duties
 			if reorgEvent.Current && h.shouldFetchNextPeriod(reorgEvent.Slot) {
-				h.duties.Reset(period + 1)
+				h.duties.ResetPeriod(period + 1)
 				h.fetchNextPeriod = true
 			}
 
@@ -151,7 +131,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 
 			// reset next period duties if in appropriate slot range
 			if h.shouldFetchNextPeriod(slot) {
-				h.duties.Reset(period + 1)
+				h.duties.ResetPeriod(period + 1)
 				h.fetchNextPeriod = true
 			}
 		}
@@ -181,16 +161,19 @@ func (h *SyncCommitteeHandler) processFetching(ctx context.Context, period uint6
 
 func (h *SyncCommitteeHandler) processExecution(period uint64, slot phase0.Slot) {
 	// range over duties and execute
-	if duties, ok := h.duties.m[period]; ok {
-		toExecute := make([]*spectypes.Duty, 0, len(duties)*2)
-		for _, d := range duties {
-			if h.shouldExecute(d, slot) {
-				toExecute = append(toExecute, h.toSpecDuty(d, slot, spectypes.BNRoleSyncCommittee))
-				toExecute = append(toExecute, h.toSpecDuty(d, slot, spectypes.BNRoleSyncCommitteeContribution))
-			}
-		}
-		h.executeDuties(h.logger, toExecute)
+	duties := h.duties.PeriodDuties(period)
+	if duties == nil {
+		return
 	}
+
+	toExecute := make([]*spectypes.Duty, 0, len(duties)*2)
+	for _, d := range duties {
+		if h.shouldExecute(d, slot) {
+			toExecute = append(toExecute, h.toSpecDuty(d, slot, spectypes.BNRoleSyncCommittee))
+			toExecute = append(toExecute, h.toSpecDuty(d, slot, spectypes.BNRoleSyncCommitteeContribution))
+		}
+	}
+	h.executeDuties(h.logger, toExecute)
 }
 
 func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period uint64) error {
@@ -214,7 +197,7 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period
 	}
 
 	for _, d := range duties {
-		h.duties.Add(period, d)
+		h.duties.Add(period, d.ValidatorIndex, d)
 	}
 
 	h.prepareDutiesResultLog(period, duties, start)

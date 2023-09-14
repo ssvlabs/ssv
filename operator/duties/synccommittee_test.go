@@ -12,6 +12,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/bloxapp/ssv/operator/duties/dutystorage"
 	"github.com/bloxapp/ssv/operator/duties/mocks"
 	mocknetwork "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon/mocks"
 )
@@ -89,7 +90,7 @@ func expectedExecutedSyncCommitteeDuties(handler *SyncCommitteeHandler, duties [
 
 func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 	var (
-		handler     = NewSyncCommitteeHandler()
+		handler     = NewSyncCommitteeHandler(dutystorage.NewSyncCommittee())
 		currentSlot = &SlotValue{}
 		dutiesMap   = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
 	)
@@ -148,7 +149,7 @@ func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 
 func TestScheduler_SyncCommittee_Current_Next_Periods(t *testing.T) {
 	var (
-		handler     = NewSyncCommitteeHandler()
+		handler     = NewSyncCommitteeHandler(dutystorage.NewSyncCommittee())
 		currentSlot = &SlotValue{}
 		dutiesMap   = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
 	)
@@ -215,7 +216,7 @@ func TestScheduler_SyncCommittee_Current_Next_Periods(t *testing.T) {
 
 func TestScheduler_SyncCommittee_Indices_Changed(t *testing.T) {
 	var (
-		handler     = NewSyncCommitteeHandler()
+		handler     = NewSyncCommitteeHandler(dutystorage.NewSyncCommittee())
 		currentSlot = &SlotValue{}
 		dutiesMap   = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
 	)
@@ -269,7 +270,7 @@ func TestScheduler_SyncCommittee_Indices_Changed(t *testing.T) {
 
 func TestScheduler_SyncCommittee_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 	var (
-		handler     = NewSyncCommitteeHandler()
+		handler     = NewSyncCommitteeHandler(dutystorage.NewSyncCommittee())
 		currentSlot = &SlotValue{}
 		dutiesMap   = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
 	)
@@ -327,7 +328,7 @@ func TestScheduler_SyncCommittee_Multiple_Indices_Changed_Same_Slot(t *testing.T
 // reorg current dependent root changed
 func TestScheduler_SyncCommittee_Reorg_Current(t *testing.T) {
 	var (
-		handler     = NewSyncCommitteeHandler()
+		handler     = NewSyncCommitteeHandler(dutystorage.NewSyncCommittee())
 		currentSlot = &SlotValue{}
 		dutiesMap   = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
 	)
@@ -399,7 +400,7 @@ func TestScheduler_SyncCommittee_Reorg_Current(t *testing.T) {
 // reorg current dependent root changed including indices change in the same slot
 func TestScheduler_SyncCommittee_Reorg_Current_Indices_Changed(t *testing.T) {
 	var (
-		handler     = NewSyncCommitteeHandler()
+		handler     = NewSyncCommitteeHandler(dutystorage.NewSyncCommittee())
 		currentSlot = &SlotValue{}
 		dutiesMap   = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
 	)
@@ -479,7 +480,7 @@ func TestScheduler_SyncCommittee_Reorg_Current_Indices_Changed(t *testing.T) {
 
 func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 	var (
-		handler     = NewSyncCommitteeHandler()
+		handler     = NewSyncCommitteeHandler(dutystorage.NewSyncCommittee())
 		currentSlot = &SlotValue{}
 		dutiesMap   = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
 	)

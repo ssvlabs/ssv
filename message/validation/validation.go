@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -26,6 +25,7 @@ import (
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/operator/duties/dutystorage"
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
@@ -74,18 +74,13 @@ func (cs *ConsensusState) CreateSignerState(signer spectypes.OperatorID) *Signer
 	return signerState
 }
 
-type dutyFetcher interface {
-	ProposerDuty(slot phase0.Slot, validatorIndex phase0.ValidatorIndex) *eth2apiv1.ProposerDuty
-	SyncCommitteeDuty(slot phase0.Slot, validatorIndex phase0.ValidatorIndex) *eth2apiv1.SyncCommitteeDuty
-}
-
 type MessageValidator struct {
 	logger         *zap.Logger
 	metrics        metrics
 	netCfg         networkconfig.NetworkConfig
 	index          sync.Map
 	shareStorage   registrystorage.Shares
-	dutyFetcher    dutyFetcher
+	dutyStorage    *dutystorage.Storage
 	ownOperatorID  spectypes.OperatorID
 	checkSignature bool
 }
@@ -118,9 +113,9 @@ func WithMetrics(metrics metrics) Option {
 	}
 }
 
-func WithDutyFetcher(dutyFetcher dutyFetcher) Option {
+func WithDutyStorage(dutyStorage *dutystorage.Storage) Option {
 	return func(mv *MessageValidator) {
-		mv.dutyFetcher = dutyFetcher
+		mv.dutyStorage = dutyStorage
 	}
 }
 

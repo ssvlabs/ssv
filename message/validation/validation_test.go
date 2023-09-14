@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	v1 "github.com/attestantio/go-eth2-client/api/v1"
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -22,6 +22,7 @@ import (
 
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/operator/duties/dutystorage"
 	"github.com/bloxapp/ssv/operator/storage"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
@@ -45,7 +46,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		Share: *spectestingutils.TestingShare(ks),
 		Metadata: ssvtypes.Metadata{
 			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-				Status: v1.ValidatorStateActiveOngoing,
+				Status: eth2apiv1.ValidatorStateActiveOngoing,
 				Index:  validatorIndex,
 			},
 			Liquidated: false,
@@ -395,7 +396,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Share: *spectestingutils.TestingShare(ks),
 			Metadata: ssvtypes.Metadata{
 				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-					Status: v1.ValidatorStateActiveOngoing,
+					Status: eth2apiv1.ValidatorStateActiveOngoing,
 				},
 				Liquidated: true,
 			},
@@ -431,7 +432,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Share: *spectestingutils.TestingShare(ks),
 			Metadata: ssvtypes.Metadata{
 				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-					Status: v1.ValidatorStateUnknown,
+					Status: eth2apiv1.ValidatorStateUnknown,
 				},
 				Liquidated: false,
 			},
@@ -455,7 +456,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		_, _, err = validator.validateSSVMessage(message, receivedAt)
 		expectedErr := ErrValidatorNotAttesting
-		expectedErr.got = v1.ValidatorStateUnknown.String()
+		expectedErr.got = eth2apiv1.ValidatorStateUnknown.String()
 		require.ErrorIs(t, err, expectedErr)
 
 		require.NoError(t, ns.Shares().Delete(nil, inactiveShare.ValidatorPubKey))
@@ -534,14 +535,13 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	})
 
 	t.Run("no duties", func(t *testing.T) {
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		const epoch = 1
+		slot := netCfg.Beacon.FirstSlotAtEpoch(epoch)
 		height := specqbft.Height(slot)
 
-		fetcher := &mockDutyFetcher{
-			slot:           slot,
-			validatorIndex: validatorIndex + 1,
-		}
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithDutyFetcher(fetcher), WithSignatureCheck(true))
+		dutyStorage := dutystorage.New()
+		dutyStorage.Proposer.Add(epoch, slot, validatorIndex+1, &eth2apiv1.ProposerDuty{})
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithDutyStorage(dutyStorage), WithSignatureCheck(true))
 
 		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
 		encodedValidSignedMessage, err := validSignedMessage.Encode()
@@ -556,11 +556,9 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, _, err = validator.validateSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester)))
 		require.ErrorContains(t, err, ErrNoDuty.Error())
 
-		f := &mockDutyFetcher{
-			slot:           slot,
-			validatorIndex: validatorIndex,
-		}
-		validator = NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithDutyFetcher(f), WithSignatureCheck(true))
+		dutyStorage = dutystorage.New()
+		dutyStorage.Proposer.Add(epoch, slot, validatorIndex, &eth2apiv1.ProposerDuty{})
+		validator = NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithDutyStorage(dutyStorage), WithSignatureCheck(true))
 		_, _, err = validator.validateSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester)))
 		require.NoError(t, err)
 	})
@@ -962,7 +960,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Share: *spectestingutils.TestingShare(zeroSignerKS),
 			Metadata: ssvtypes.Metadata{
 				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-					Status: v1.ValidatorStateActiveOngoing,
+					Status: eth2apiv1.ValidatorStateActiveOngoing,
 				},
 				Liquidated: false,
 			},
@@ -1676,25 +1674,4 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, _, err = validator.validateSSVMessage(ssvMessage, receivedAt)
 		require.ErrorIs(t, err, ErrEventMessage)
 	})
-}
-
-type mockDutyFetcher struct {
-	slot           phase0.Slot
-	validatorIndex phase0.ValidatorIndex
-}
-
-func (m mockDutyFetcher) ProposerDuty(slot phase0.Slot, validatorIndex phase0.ValidatorIndex) *v1.ProposerDuty {
-	if slot == m.slot && validatorIndex == m.validatorIndex {
-		return &v1.ProposerDuty{}
-	}
-
-	return nil
-}
-
-func (m mockDutyFetcher) SyncCommitteeDuty(slot phase0.Slot, validatorIndex phase0.ValidatorIndex) *v1.SyncCommitteeDuty {
-	if slot == m.slot && validatorIndex == m.validatorIndex {
-		return &v1.SyncCommitteeDuty{}
-	}
-
-	return nil
 }

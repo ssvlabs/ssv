@@ -11,17 +11,18 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/operator/duties/dutystorage"
 )
 
 type ProposerHandler struct {
 	baseHandler
 
-	duties *Duties[*eth2apiv1.ProposerDuty]
+	duties *dutystorage.Duties[eth2apiv1.ProposerDuty]
 }
 
-func NewProposerHandler() *ProposerHandler {
+func NewProposerHandler(duties *dutystorage.Duties[eth2apiv1.ProposerDuty]) *ProposerHandler {
 	return &ProposerHandler{
-		duties: NewDuties[*eth2apiv1.ProposerDuty](),
+		duties: duties,
 		baseHandler: baseHandler{
 			fetchFirst: true,
 		},
@@ -44,7 +45,7 @@ func (h *ProposerHandler) Name() string {
 //
 // On Indices Change:
 //  1. Execute duties.
-//  2. Reset duties for the current epoch.
+//  2. ResetEpoch duties for the current epoch.
 //  3. Fetch duties for the current epoch.
 //
 // On Ticker event:
@@ -71,7 +72,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 			} else {
 				h.processExecution(currentEpoch, slot)
 				if h.indicesChanged {
-					h.duties.Reset(currentEpoch)
+					h.duties.ResetEpoch(currentEpoch)
 					h.indicesChanged = false
 					h.processFetching(ctx, currentEpoch, slot)
 				}
@@ -79,7 +80,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 
 			// last slot of epoch
 			if uint64(slot)%h.network.Beacon.SlotsPerEpoch() == h.network.Beacon.SlotsPerEpoch()-1 {
-				h.duties.Reset(currentEpoch)
+				h.duties.ResetEpoch(currentEpoch)
 				h.fetchFirst = true
 			}
 
@@ -90,7 +91,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 
 			// reset current epoch duties
 			if reorgEvent.Current {
-				h.duties.Reset(currentEpoch)
+				h.duties.ResetEpoch(currentEpoch)
 				h.fetchFirst = true
 			}
 
@@ -116,18 +117,19 @@ func (h *ProposerHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 }
 
 func (h *ProposerHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot) {
+	duties := h.duties.SlotDuties(epoch, slot)
+	if duties == nil {
+		return
+	}
+
 	// range over duties and execute
-	if slotMap, ok := h.duties.m[epoch]; ok {
-		if duties, ok := slotMap[slot]; ok {
-			toExecute := make([]*spectypes.Duty, 0, len(duties))
-			for _, d := range duties {
-				if h.shouldExecute(d) {
-					toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleProposer))
-				}
-			}
-			h.executeDuties(h.logger, toExecute)
+	toExecute := make([]*spectypes.Duty, 0, len(duties))
+	for _, d := range duties {
+		if h.shouldExecute(d) {
+			toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleProposer))
 		}
 	}
+	h.executeDuties(h.logger, toExecute)
 }
 
 func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch) error {
@@ -145,7 +147,7 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 
 	specDuties := make([]*spectypes.Duty, 0, len(duties))
 	for _, d := range duties {
-		h.duties.Add(epoch, d.Slot, d)
+		h.duties.Add(epoch, d.Slot, d.ValidatorIndex, d)
 		specDuties = append(specDuties, h.toSpecDuty(d, spectypes.BNRoleProposer))
 	}
 

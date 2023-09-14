@@ -15,6 +15,7 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/duties"
+	"github.com/bloxapp/ssv/operator/duties/dutystorage"
 	"github.com/bloxapp/ssv/operator/fee_recipient"
 	"github.com/bloxapp/ssv/operator/slot_ticker"
 	"github.com/bloxapp/ssv/operator/storage"
@@ -40,11 +41,10 @@ type Options struct {
 	DB                  basedb.Database
 	ValidatorController validator.Controller
 	ValidatorOptions    validator.ControllerOptions `yaml:"ValidatorOptions"`
-
-	WS        api.WebSocketServer
-	WsAPIPort int
-
-	Metrics nodeMetrics
+	DutyStorage         *dutystorage.Storage
+	WS                  api.WebSocketServer
+	WsAPIPort           int
+	Metrics             nodeMetrics
 }
 
 // operatorNode implements Node interface
@@ -102,6 +102,7 @@ func New(logger *zap.Logger, opts Options, slotTicker slot_ticker.Ticker) Node {
 			ExecuteDuty:         opts.ValidatorController.ExecuteDuty,
 			Ticker:              slotTicker,
 			BuilderProposals:    opts.ValidatorOptions.BuilderProposals,
+			DutyStorage:         opts.DutyStorage,
 		}),
 		feeRecipientCtrl: fee_recipient.NewController(&fee_recipient.ControllerOptions{
 			Ctx:              opts.Context,
