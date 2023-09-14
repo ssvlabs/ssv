@@ -5,14 +5,11 @@ import (
 	"context"
 	"sync"
 
-	v1 "github.com/attestantio/go-eth2-client/api/v1"
-	"github.com/attestantio/go-eth2-client/spec/phase0"
-
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 )
 
 // validatorIterator is the function used to iterate over existing validators
-type validatorIterator func(validator *validator.Validator) error
+type validatorIterator func(validator *validator.Validator) bool
 
 // ValidatorsMap manages a collection of running validators
 type ValidatorsMap struct {
@@ -46,16 +43,29 @@ func WithInitialState(state map[string]*validator.Validator) Option {
 }
 
 // ForEach loops over validators
-func (vm *ValidatorsMap) ForEach(iterator validatorIterator) error {
+func (vm *ValidatorsMap) ForEach(iterator validatorIterator) bool {
 	vm.lock.RLock()
 	defer vm.lock.RUnlock()
 
 	for _, val := range vm.validatorsMap {
-		if err := iterator(val); err != nil {
-			return err
+		if !iterator(val) {
+			return false
 		}
 	}
-	return nil
+	return true
+}
+
+// GetAll returns all validators.
+func (vm *ValidatorsMap) GetAll() []*validator.Validator {
+	vm.lock.RLock()
+	defer vm.lock.RUnlock()
+
+	var validators []*validator.Validator
+	for _, val := range vm.validatorsMap {
+		validators = append(validators, val)
+	}
+
+	return validators
 }
 
 // GetValidator returns a validator
@@ -97,26 +107,4 @@ func (vm *ValidatorsMap) Size() int {
 	defer vm.lock.RUnlock()
 
 	return len(vm.validatorsMap)
-}
-
-// ActiveValidatorIndices fetches indices of validators who are either attesting or queued and
-// whose activation epoch is not greater than the passed epoch.
-func (vm *ValidatorsMap) ActiveValidatorIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
-	indices := make([]phase0.ValidatorIndex, 0, vm.Size())
-
-	iterator := func(v *validator.Validator) error {
-		// Beacon node throws error when trying to fetch duties for non-existing validators.
-		if (v.Share.BeaconMetadata.IsAttesting() || v.Share.BeaconMetadata.Status == v1.ValidatorStatePendingQueued) &&
-			v.Share.BeaconMetadata.ActivationEpoch <= epoch {
-			indices = append(indices, v.Share.BeaconMetadata.Index)
-		}
-
-		return nil
-	}
-
-	if err := vm.ForEach(iterator); err != nil {
-		panic("error is unexpected as iterator never returns it")
-	}
-
-	return indices
 }

@@ -56,23 +56,24 @@ func setupSyncCommitteeDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[uint64, [
 			return duties, nil
 		}).AnyTimes()
 
-	s.validatorController.(*mocks.MockValidatorController).EXPECT().ActiveValidatorIndices(gomock.Any()).DoAndReturn(
-		func(epoch phase0.Epoch) []phase0.ValidatorIndex {
-			uniqueIndices := make(map[phase0.ValidatorIndex]bool)
+	getDuties := func(epoch phase0.Epoch) []phase0.ValidatorIndex {
+		uniqueIndices := make(map[phase0.ValidatorIndex]bool)
 
-			period := s.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
-			duties, _ := dutiesMap.Get(period)
-			for _, d := range duties {
-				uniqueIndices[d.ValidatorIndex] = true
-			}
+		period := s.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+		duties, _ := dutiesMap.Get(period)
+		for _, d := range duties {
+			uniqueIndices[d.ValidatorIndex] = true
+		}
 
-			indices := make([]phase0.ValidatorIndex, 0, len(uniqueIndices))
-			for index := range uniqueIndices {
-				indices = append(indices, index)
-			}
+		indices := make([]phase0.ValidatorIndex, 0, len(uniqueIndices))
+		for index := range uniqueIndices {
+			indices = append(indices, index)
+		}
 
-			return indices
-		}).AnyTimes()
+		return indices
+	}
+	s.validatorController.(*mocks.MockValidatorController).EXPECT().CommitteeActiveIndices(gomock.Any()).DoAndReturn(getDuties).AnyTimes()
+	s.validatorController.(*mocks.MockValidatorController).EXPECT().AllActiveIndices(gomock.Any()).DoAndReturn(getDuties).AnyTimes()
 
 	s.beaconNode.(*mocks.MockBeaconNode).EXPECT().SubmitSyncCommitteeSubscriptions(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 

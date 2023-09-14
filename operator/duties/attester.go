@@ -165,7 +165,7 @@ func (h *AttesterHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 }
 
 func (h *AttesterHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot) {
-	duties := h.dutyStorage.SlotDuties(epoch, slot)
+	duties := h.dutyStorage.InCommitteeSlotDuties(epoch, slot)
 	if duties == nil {
 		return
 	}
@@ -184,7 +184,7 @@ func (h *AttesterHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 
 func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch) error {
 	start := time.Now()
-	indices := h.validatorController.ActiveValidatorIndices(epoch)
+	indices := h.validatorController.CommitteeActiveIndices(epoch)
 
 	if len(indices) == 0 {
 		return nil
@@ -197,7 +197,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 
 	specDuties := make([]*spectypes.Duty, 0, len(duties))
 	for _, d := range duties {
-		h.dutyStorage.Add(epoch, d.Slot, d.ValidatorIndex, d)
+		h.dutyStorage.Add(epoch, d.Slot, d.ValidatorIndex, d, true)
 		specDuties = append(specDuties, h.toSpecDuty(d, spectypes.BNRoleAttester))
 	}
 

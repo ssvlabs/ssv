@@ -185,7 +185,7 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period
 	}
 	lastEpoch := h.network.Beacon.FirstEpochOfSyncPeriod(period+1) - 1
 
-	indices := h.validatorController.ActiveValidatorIndices(firstEpoch)
+	indices := h.validatorController.AllActiveIndices(firstEpoch)
 
 	if len(indices) == 0 {
 		return nil

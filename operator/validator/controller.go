@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -93,7 +94,8 @@ type ControllerOptions struct {
 // it takes care of bootstrapping, updating and managing existing validators and their shares
 type Controller interface {
 	StartValidators()
-	ActiveValidatorIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
+	CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
+	AllActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
 	GetValidator(pubKey string) (*validator.Validator, bool)
 	ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty)
 	UpdateValidatorMetaDataLoop()
@@ -613,10 +615,37 @@ func CreateDutyExecuteMsg(duty *spectypes.Duty, pubKey phase0.BLSPubKey, domain 
 	}, nil
 }
 
-// ActiveValidatorIndices fetches indices of validators who are either attesting or queued and
+// CommitteeActiveIndices fetches indices of in-committee validators who are either attesting or queued and
 // whose activation epoch is not greater than the passed epoch. It logs a warning if an error occurs.
-func (c *controller) ActiveValidatorIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
-	return c.validatorsMap.ActiveValidatorIndices(epoch)
+func (c *controller) CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
+	var indices []phase0.ValidatorIndex
+
+	for _, v := range c.validatorsMap.GetAll() {
+		if isShareActive(epoch)(v.Share) {
+			indices = append(indices, v.Share.BeaconMetadata.Index)
+		}
+	}
+
+	return indices
+}
+
+func (c *controller) AllActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
+	var indices []phase0.ValidatorIndex
+
+	shares := c.sharesStorage.List(nil, isShareActive(epoch))
+	for _, share := range shares {
+		indices = append(indices, share.BeaconMetadata.Index)
+	}
+
+	return indices
+}
+
+func isShareActive(epoch phase0.Epoch) func(share *ssvtypes.SSVShare) bool {
+	return func(share *ssvtypes.SSVShare) bool {
+		return share != nil && share.BeaconMetadata != nil &&
+			(share.BeaconMetadata.IsAttesting() || share.BeaconMetadata.Status == v1.ValidatorStatePendingQueued) &&
+			share.BeaconMetadata.ActivationEpoch <= epoch
+	}
 }
 
 // onMetadataUpdated is called when validator's metadata was updated

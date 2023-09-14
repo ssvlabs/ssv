@@ -26,22 +26,23 @@ func setupProposerDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[phase0.Epoch, 
 			return duties, nil
 		}).AnyTimes()
 
-	s.validatorController.(*mocks.MockValidatorController).EXPECT().ActiveValidatorIndices(gomock.Any()).DoAndReturn(
-		func(epoch phase0.Epoch) []phase0.ValidatorIndex {
-			uniqueIndices := make(map[phase0.ValidatorIndex]bool)
+	getIndices := func(epoch phase0.Epoch) []phase0.ValidatorIndex {
+		uniqueIndices := make(map[phase0.ValidatorIndex]bool)
 
-			duties, _ := dutiesMap.Get(epoch)
-			for _, d := range duties {
-				uniqueIndices[d.ValidatorIndex] = true
-			}
+		duties, _ := dutiesMap.Get(epoch)
+		for _, d := range duties {
+			uniqueIndices[d.ValidatorIndex] = true
+		}
 
-			indices := make([]phase0.ValidatorIndex, 0, len(uniqueIndices))
-			for index := range uniqueIndices {
-				indices = append(indices, index)
-			}
+		indices := make([]phase0.ValidatorIndex, 0, len(uniqueIndices))
+		for index := range uniqueIndices {
+			indices = append(indices, index)
+		}
 
-			return indices
-		}).AnyTimes()
+		return indices
+	}
+	s.validatorController.(*mocks.MockValidatorController).EXPECT().CommitteeActiveIndices(gomock.Any()).DoAndReturn(getIndices).AnyTimes()
+	s.validatorController.(*mocks.MockValidatorController).EXPECT().AllActiveIndices(gomock.Any()).DoAndReturn(getIndices).AnyTimes()
 
 	return fetchDutiesCall, executeDutiesCall
 }

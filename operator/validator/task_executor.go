@@ -1,7 +1,6 @@
 package validator
 
 import (
-	"fmt"
 	"time"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -89,17 +88,14 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address) error {
 		zap.String("owner", owner.String()),
 		zap.String("fee_recipient", recipient.String()))
 
-	err := c.validatorsMap.ForEach(func(v *validator.Validator) error {
+	c.validatorsMap.ForEach(func(v *validator.Validator) bool {
 		if v.Share.OwnerAddress == owner {
 			v.Share.FeeRecipientAddress = recipient
 
 			logger.Debug("updated recipient address")
 		}
-		return nil
+		return true
 	})
-	if err != nil {
-		return fmt.Errorf("update validators map: %w", err)
-	}
 
 	return nil
 }

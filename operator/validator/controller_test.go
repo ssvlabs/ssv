@@ -153,10 +153,10 @@ func TestGetIndices(t *testing.T) {
 	logger := logging.TestLogger(t)
 	ctr := setupController(logger, validators)
 
-	activeIndicesForCurrentEpoch := ctr.ActiveValidatorIndices(currentEpoch)
+	activeIndicesForCurrentEpoch := ctr.CommitteeActiveIndices(currentEpoch)
 	require.Equal(t, 2, len(activeIndicesForCurrentEpoch)) // should return only active indices
 
-	activeIndicesForNextEpoch := ctr.ActiveValidatorIndices(currentEpoch + 1)
+	activeIndicesForNextEpoch := ctr.CommitteeActiveIndices(currentEpoch + 1)
 	require.Equal(t, 3, len(activeIndicesForNextEpoch)) // should return including ValidatorStatePendingQueued
 }
 

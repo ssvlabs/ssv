@@ -540,7 +540,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		height := specqbft.Height(slot)
 
 		dutyStorage := dutystorage.New()
-		dutyStorage.Proposer.Add(epoch, slot, validatorIndex+1, &eth2apiv1.ProposerDuty{})
+		dutyStorage.Proposer.Add(epoch, slot, validatorIndex+1, &eth2apiv1.ProposerDuty{}, true)
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithDutyStorage(dutyStorage), WithSignatureCheck(true))
 
 		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
@@ -557,7 +557,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorContains(t, err, ErrNoDuty.Error())
 
 		dutyStorage = dutystorage.New()
-		dutyStorage.Proposer.Add(epoch, slot, validatorIndex, &eth2apiv1.ProposerDuty{})
+		dutyStorage.Proposer.Add(epoch, slot, validatorIndex, &eth2apiv1.ProposerDuty{}, true)
 		validator = NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithDutyStorage(dutyStorage), WithSignatureCheck(true))
 		_, _, err = validator.validateSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester)))
 		require.NoError(t, err)
