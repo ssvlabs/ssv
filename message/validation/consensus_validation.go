@@ -283,8 +283,8 @@ func (mv *MessageValidator) validateBeaconDuty(
 			return ErrNoShareMetadata
 		}
 
-		duty := mv.dutyStorage.Proposer.ValidatorDuty(mv.netCfg.Beacon.EstimatedEpochAtSlot(slot), slot, share.Metadata.BeaconMetadata.Index)
-		if mv.dutyStorage != nil && duty == nil {
+		epoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(slot)
+		if mv.dutyStorage != nil && mv.dutyStorage.Proposer.ValidatorDuty(epoch, slot, share.Metadata.BeaconMetadata.Index) == nil {
 			return ErrNoDuty
 		}
 
