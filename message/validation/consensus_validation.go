@@ -15,17 +15,16 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
-func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, msg *queue.DecodedSSVMessage, receivedAt time.Time) (ConsensusDescriptor, phase0.Slot, error) {
+func (mv *MessageValidator) validateConsensusMessage(
+	share *ssvtypes.SSVShare,
+	signedMsg *specqbft.SignedMessage,
+	messageID spectypes.MessageID,
+	receivedAt time.Time,
+) (ConsensusDescriptor, phase0.Slot, error) {
 	var consensusDescriptor ConsensusDescriptor
-
-	signedMsg, ok := msg.Body.(*specqbft.SignedMessage)
-	if !ok {
-		return consensusDescriptor, 0, fmt.Errorf("expected consensus message")
-	}
 
 	if mv.inCommittee(share) {
 		mv.metrics.InCommitteeMessage(spectypes.SSVConsensusMsgType, mv.isDecidedMessage(signedMsg))
@@ -45,10 +44,6 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 
 	mv.metrics.ConsensusMsgType(signedMsg.Message.MsgType, len(signedMsg.Signers))
 
-	if len(msg.Data) > maxConsensusMsgSize {
-		return consensusDescriptor, msgSlot, fmt.Errorf("size exceeded")
-	}
-
 	if err := mv.validateSignatureFormat(signedMsg.Signature); err != nil {
 		return consensusDescriptor, msgSlot, err
 	}
@@ -61,7 +56,7 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		return consensusDescriptor, msgSlot, err
 	}
 
-	role := msg.GetID().GetRoleType()
+	role := messageID.GetRoleType()
 	maxRound := mv.maxRound(role)
 
 	if err := mv.validateSlotTime(msgSlot, role, receivedAt); err != nil {
@@ -107,13 +102,13 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 		}
 	}
 
-	if err := mv.validateBeaconDuty(msg.MsgID.GetRoleType(), msgSlot, share); err != nil {
+	if err := mv.validateBeaconDuty(messageID.GetRoleType(), msgSlot, share); err != nil {
 		return consensusDescriptor, msgSlot, err
 	}
 
-	state := mv.consensusState(msg.GetID())
+	state := mv.consensusState(messageID)
 	for _, signer := range signedMsg.Signers {
-		if err := mv.validateSignerBehavior(state, signer, share, msg); err != nil {
+		if err := mv.validateSignerBehavior(state, signer, share, messageID, signedMsg); err != nil {
 			return consensusDescriptor, msgSlot, fmt.Errorf("bad signer behavior: %w", err)
 		}
 	}
@@ -143,7 +138,7 @@ func (mv *MessageValidator) validateConsensusMessage(share *ssvtypes.SSVShare, m
 			signerState.ProposalData = signedMsg.FullData
 		}
 
-		signerState.MessageCounts.Record(msg)
+		signerState.MessageCounts.RecordSignedMessage(signedMsg)
 	}
 
 	return consensusDescriptor, msgSlot, nil
@@ -194,13 +189,9 @@ func (mv *MessageValidator) validateSignerBehavior(
 	state *ConsensusState,
 	signer spectypes.OperatorID,
 	share *ssvtypes.SSVShare,
-	msg *queue.DecodedSSVMessage,
+	msgID spectypes.MessageID,
+	signedMsg *specqbft.SignedMessage,
 ) error {
-	signedMsg, ok := msg.Body.(*specqbft.SignedMessage)
-	if !ok {
-		panic("validateSignerBehavior should be called on signed message")
-	}
-
 	signerState := state.GetSignerState(signer)
 
 	if signerState != nil {
@@ -232,7 +223,7 @@ func (mv *MessageValidator) validateSignerBehavior(
 			newDutyInSameEpoch = true
 		}
 
-		if err := mv.validateDutyCount(signerState, msg.MsgID.GetRoleType(), newDutyInSameEpoch); err != nil {
+		if err := mv.validateDutyCount(signerState, msgID, newDutyInSameEpoch); err != nil {
 			return err
 		}
 
@@ -242,7 +233,7 @@ func (mv *MessageValidator) validateSignerBehavior(
 			}
 
 			limits := maxMessageCounts(len(share.Committee))
-			if err := signerState.MessageCounts.Validate(msg, limits); err != nil {
+			if err := signerState.MessageCounts.ValidateSignedMessage(signedMsg, limits); err != nil {
 				return err
 			}
 		}
@@ -257,10 +248,10 @@ func (mv *MessageValidator) validateSignerBehavior(
 
 func (mv *MessageValidator) validateDutyCount(
 	state *SignerState,
-	role spectypes.BeaconRole,
+	msgID spectypes.MessageID,
 	newDutyInSameEpoch bool,
 ) error {
-	switch role {
+	switch msgID.GetRoleType() {
 	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator, spectypes.BNRoleValidatorRegistration:
 		limit := maxDutiesPerEpoch
 
@@ -270,7 +261,7 @@ func (mv *MessageValidator) validateDutyCount(
 
 		if state.EpochDuties >= limit {
 			err := ErrTooManyDutiesPerEpoch
-			err.got = fmt.Sprintf("%v (role %v)", state.EpochDuties, role)
+			err.got = fmt.Sprintf("%v (role %v)", state.EpochDuties, msgID.GetRoleType())
 			err.want = fmt.Sprintf("less than %v", maxDutiesPerEpoch)
 			return err
 		}

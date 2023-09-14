@@ -13,16 +13,14 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"golang.org/x/exp/slices"
 
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
-func (mv *MessageValidator) validatePartialSignatureMessage(share *ssvtypes.SSVShare, msg *queue.DecodedSSVMessage) (phase0.Slot, error) {
-	signedMsg, ok := msg.Body.(*spectypes.SignedPartialSignatureMessage)
-	if !ok {
-		return 0, fmt.Errorf("expected partial signature message")
-	}
-
+func (mv *MessageValidator) validatePartialSignatureMessage(
+	share *ssvtypes.SSVShare,
+	signedMsg *spectypes.SignedPartialSignatureMessage,
+	msgID spectypes.MessageID,
+) (phase0.Slot, error) {
 	if mv.inCommittee(share) {
 		mv.metrics.InCommitteeMessage(spectypes.SSVPartialSignatureMsgType, false)
 	} else {
@@ -31,17 +29,13 @@ func (mv *MessageValidator) validatePartialSignatureMessage(share *ssvtypes.SSVS
 
 	msgSlot := signedMsg.Message.Slot
 
-	if len(msg.Data) > maxPartialSignatureMsgSize {
-		return msgSlot, fmt.Errorf("size exceeded")
-	}
-
 	if !mv.validPartialSigMsgType(signedMsg.Message.Type) {
 		e := ErrUnknownPartialMessageType
 		e.got = signedMsg.Message.Type
 		return msgSlot, e
 	}
 
-	role := msg.GetID().GetRoleType()
+	role := msgID.GetRoleType()
 	if !mv.partialSignatureTypeMatchesRole(signedMsg.Message.Type, role) {
 		return msgSlot, ErrPartialSignatureTypeRoleMismatch
 	}
@@ -50,7 +44,7 @@ func (mv *MessageValidator) validatePartialSignatureMessage(share *ssvtypes.SSVS
 		return msgSlot, err
 	}
 
-	consensusState := mv.consensusState(msg.GetID())
+	consensusState := mv.consensusState(msgID)
 	signerState := consensusState.GetSignerState(signedMsg.Signer)
 
 	if signerState != nil {

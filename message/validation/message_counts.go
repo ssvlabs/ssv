@@ -7,8 +7,6 @@ import (
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
 
 // maxMessageCounts is the maximum number of acceptable messages from a signer within a slot & round.
@@ -53,101 +51,99 @@ func (c *MessageCounts) String() string {
 	)
 }
 
-func (c *MessageCounts) Validate(msg *queue.DecodedSSVMessage, limits MessageCounts) error {
-	switch m := msg.Body.(type) {
-	case *specqbft.SignedMessage:
-		switch m.Message.MsgType {
-		case specqbft.ProposalMsgType:
-			if c.Proposal >= limits.Proposal {
-				err := ErrTooManySameTypeMessagesPerRound
-				err.got = fmt.Sprintf("proposal, having %v", c.String())
-				return err
-			}
-		case specqbft.PrepareMsgType:
-			if c.Prepare >= limits.Prepare {
-				err := ErrTooManySameTypeMessagesPerRound
-				err.got = fmt.Sprintf("prepare, having %v", c.String())
-				return err
-			}
-		case specqbft.CommitMsgType:
-			if len(m.Signers) == 1 {
-				if c.Commit >= limits.Commit {
-					err := ErrTooManySameTypeMessagesPerRound
-					err.got = fmt.Sprintf("commit, having %v", c.String())
-					return err
-				}
-			}
-			if len(m.Signers) > 1 {
-				if c.Decided >= limits.Decided {
-					err := ErrTooManySameTypeMessagesPerRound
-					err.got = fmt.Sprintf("decided, having %v", c.String())
-					return err
-				}
-			}
-		case specqbft.RoundChangeMsgType:
-			if c.RoundChange >= limits.RoundChange {
-				err := ErrTooManySameTypeMessagesPerRound
-				err.got = fmt.Sprintf("round change, having %v", c.String())
-				return err
-			}
-		default:
-			panic("unexpected signed message type") // should be checked before
+func (c *MessageCounts) ValidateSignedMessage(msg *specqbft.SignedMessage, limits MessageCounts) error {
+	switch msg.Message.MsgType {
+	case specqbft.ProposalMsgType:
+		if c.Proposal >= limits.Proposal {
+			err := ErrTooManySameTypeMessagesPerRound
+			err.got = fmt.Sprintf("proposal, having %v", c.String())
+			return err
 		}
-	case *spectypes.SignedPartialSignatureMessage:
-		switch m.Message.Type {
-		case spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig:
-			if c.PreConsensus > limits.PreConsensus {
+	case specqbft.PrepareMsgType:
+		if c.Prepare >= limits.Prepare {
+			err := ErrTooManySameTypeMessagesPerRound
+			err.got = fmt.Sprintf("prepare, having %v", c.String())
+			return err
+		}
+	case specqbft.CommitMsgType:
+		if len(msg.Signers) == 1 {
+			if c.Commit >= limits.Commit {
 				err := ErrTooManySameTypeMessagesPerRound
-				err.got = fmt.Sprintf("pre-consensus, having %v", c.String())
+				err.got = fmt.Sprintf("commit, having %v", c.String())
 				return err
 			}
-		case spectypes.PostConsensusPartialSig:
-			if c.PostConsensus > limits.PostConsensus {
+		}
+		if len(msg.Signers) > 1 {
+			if c.Decided >= limits.Decided {
 				err := ErrTooManySameTypeMessagesPerRound
-				err.got = fmt.Sprintf("post-consensus, having %v", c.String())
+				err.got = fmt.Sprintf("decided, having %v", c.String())
 				return err
 			}
-		default:
-			panic("unexpected partial signature message type") // should be checked before
+		}
+	case specqbft.RoundChangeMsgType:
+		if c.RoundChange >= limits.RoundChange {
+			err := ErrTooManySameTypeMessagesPerRound
+			err.got = fmt.Sprintf("round change, having %v", c.String())
+			return err
 		}
 	default:
-		panic("unexpected ssv message type") // should be checked before
+		panic("unexpected signed message type") // should be checked before
 	}
 
 	return nil
 }
 
-func (c *MessageCounts) Record(msg *queue.DecodedSSVMessage) {
-	switch m := msg.Body.(type) {
-	case *specqbft.SignedMessage:
-		switch m.Message.MsgType {
-		case specqbft.ProposalMsgType:
-			c.Proposal++
-		case specqbft.PrepareMsgType:
-			c.Prepare++
-		case specqbft.CommitMsgType:
-			if len(m.Signers) == 1 {
-				c.Commit++
-			} else if len(m.Signers) > 1 {
-				c.Decided++
-			} else {
-				panic("expected signers") // 0 length should be checked before
-			}
-		case specqbft.RoundChangeMsgType:
-			c.RoundChange++
-		default:
-			panic("unexpected signed message type") // should be checked before
+func (c *MessageCounts) ValidatePartialSignatureMessage(m *spectypes.SignedPartialSignatureMessage, limits MessageCounts) error {
+	// TODO: use it
+	switch m.Message.Type {
+	case spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig:
+		if c.PreConsensus > limits.PreConsensus {
+			err := ErrTooManySameTypeMessagesPerRound
+			err.got = fmt.Sprintf("pre-consensus, having %v", c.String())
+			return err
 		}
-	case *spectypes.SignedPartialSignatureMessage:
-		switch m.Message.Type {
-		case spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig:
-			c.PreConsensus++
-		case spectypes.PostConsensusPartialSig:
-			c.PostConsensus++
-		default:
-			panic("unexpected partial signature message type") // should be checked before
+	case spectypes.PostConsensusPartialSig:
+		if c.PostConsensus > limits.PostConsensus {
+			err := ErrTooManySameTypeMessagesPerRound
+			err.got = fmt.Sprintf("post-consensus, having %v", c.String())
+			return err
 		}
 	default:
-		panic("unexpected ssv message type")
+		panic("unexpected partial signature message type") // should be checked before
+	}
+
+	return nil
+}
+
+func (c *MessageCounts) RecordSignedMessage(msg *specqbft.SignedMessage) {
+	switch msg.Message.MsgType {
+	case specqbft.ProposalMsgType:
+		c.Proposal++
+	case specqbft.PrepareMsgType:
+		c.Prepare++
+	case specqbft.CommitMsgType:
+		if len(msg.Signers) == 1 {
+			c.Commit++
+		} else if len(msg.Signers) > 1 {
+			c.Decided++
+		} else {
+			panic("expected signers") // 0 length should be checked before
+		}
+	case specqbft.RoundChangeMsgType:
+		c.RoundChange++
+	default:
+		panic("unexpected signed message type") // should be checked before
+	}
+}
+
+func (c *MessageCounts) RecordPartialSignatureMessage(msg *spectypes.SignedPartialSignatureMessage) {
+	// TODO: use it
+	switch msg.Message.Type {
+	case spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig:
+		c.PreConsensus++
+	case spectypes.PostConsensusPartialSig:
+		c.PostConsensus++
+	default:
+		panic("unexpected partial signature message type") // should be checked before
 	}
 }

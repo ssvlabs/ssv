@@ -422,7 +422,14 @@ func (mv *MessageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 	if mv.shareStorage != nil {
 		switch ssvMessage.MsgType {
 		case spectypes.SSVConsensusMsgType:
-			consensusDescriptor, slot, err := mv.validateConsensusMessage(share, msg, receivedAt)
+			if len(msg.Data) > maxConsensusMsgSize {
+				e := ErrSSVDataTooBig
+				e.got = len(ssvMessage.Data)
+				e.want = maxConsensusMsgSize
+				return nil, descriptor, e
+			}
+
+			consensusDescriptor, slot, err := mv.validateConsensusMessage(share, msg.Body.(*specqbft.SignedMessage), msg.GetID(), receivedAt)
 			descriptor.Consensus = &consensusDescriptor
 			descriptor.Slot = slot
 			if err != nil {
@@ -430,7 +437,14 @@ func (mv *MessageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 			}
 
 		case spectypes.SSVPartialSignatureMsgType:
-			slot, err := mv.validatePartialSignatureMessage(share, msg)
+			if len(msg.Data) > maxPartialSignatureMsgSize {
+				e := ErrSSVDataTooBig
+				e.got = len(ssvMessage.Data)
+				e.want = maxPartialSignatureMsgSize
+				return nil, descriptor, e
+			}
+
+			slot, err := mv.validatePartialSignatureMessage(share, msg.Body.(*spectypes.SignedPartialSignatureMessage), msg.GetID())
 			descriptor.Slot = slot
 			if err != nil {
 				return nil, descriptor, err
