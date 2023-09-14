@@ -165,7 +165,7 @@ func (h *AttesterHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 }
 
 func (h *AttesterHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot) {
-	duties := h.dutyStorage.InCommitteeSlotDuties(epoch, slot)
+	duties := h.dutyStorage.CommitteeSlotDuties(epoch, slot)
 	if duties == nil {
 		return
 	}

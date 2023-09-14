@@ -5,30 +5,36 @@ import (
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"golang.org/x/exp/maps"
 )
 
 type SyncCommitteeDuties struct {
 	mu sync.RWMutex
-	m  map[uint64]map[phase0.ValidatorIndex]*eth2apiv1.SyncCommitteeDuty
+	m  map[uint64]map[phase0.ValidatorIndex]dutyDescriptor[eth2apiv1.SyncCommitteeDuty]
 }
 
 func NewSyncCommittee() *SyncCommitteeDuties {
 	return &SyncCommitteeDuties{
-		m: make(map[uint64]map[phase0.ValidatorIndex]*eth2apiv1.SyncCommitteeDuty),
+		m: make(map[uint64]map[phase0.ValidatorIndex]dutyDescriptor[eth2apiv1.SyncCommitteeDuty]),
 	}
 }
 
-func (d *SyncCommitteeDuties) PeriodDuties(period uint64) []*eth2apiv1.SyncCommitteeDuty {
+func (d *SyncCommitteeDuties) CommitteePeriodDuties(period uint64) []*eth2apiv1.SyncCommitteeDuty {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 
-	duties, ok := d.m[period]
+	descriptorMap, ok := d.m[period]
 	if !ok {
 		return nil
 	}
 
-	return maps.Values(duties)
+	var duties []*eth2apiv1.SyncCommitteeDuty
+	for _, descriptor := range descriptorMap {
+		if descriptor.inCommittee {
+			duties = append(duties, descriptor.duty)
+		}
+	}
+
+	return duties
 }
 
 func (d *SyncCommitteeDuties) ValidatorDuty(period uint64, validatorIndex phase0.ValidatorIndex) *eth2apiv1.SyncCommitteeDuty {
@@ -40,23 +46,26 @@ func (d *SyncCommitteeDuties) ValidatorDuty(period uint64, validatorIndex phase0
 		return nil
 	}
 
-	duty, ok := duties[validatorIndex]
+	descriptor, ok := duties[validatorIndex]
 	if !ok {
 		return nil
 	}
 
-	return duty
+	return descriptor.duty
 }
 
-func (d *SyncCommitteeDuties) Add(period uint64, validatorIndex phase0.ValidatorIndex, duty *eth2apiv1.SyncCommitteeDuty) {
+func (d *SyncCommitteeDuties) Add(period uint64, validatorIndex phase0.ValidatorIndex, duty *eth2apiv1.SyncCommitteeDuty, inCommittee bool) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
 	if _, ok := d.m[period]; !ok {
-		d.m[period] = make(map[phase0.ValidatorIndex]*eth2apiv1.SyncCommitteeDuty)
+		d.m[period] = make(map[phase0.ValidatorIndex]dutyDescriptor[eth2apiv1.SyncCommitteeDuty])
 	}
 
-	d.m[period][validatorIndex] = duty
+	d.m[period][validatorIndex] = dutyDescriptor[eth2apiv1.SyncCommitteeDuty]{
+		duty:        duty,
+		inCommittee: inCommittee,
+	}
 }
 
 func (d *SyncCommitteeDuties) ResetPeriod(period uint64) {

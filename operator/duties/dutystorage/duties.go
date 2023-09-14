@@ -8,7 +8,7 @@ import (
 )
 
 type Duty interface {
-	eth2apiv1.AttesterDuty | eth2apiv1.ProposerDuty
+	eth2apiv1.AttesterDuty | eth2apiv1.ProposerDuty | eth2apiv1.SyncCommitteeDuty
 }
 
 type dutyDescriptor[D Duty] struct {
@@ -27,7 +27,7 @@ func NewDuties[D Duty]() *Duties[D] {
 	}
 }
 
-func (d *Duties[D]) InCommitteeSlotDuties(epoch phase0.Epoch, slot phase0.Slot) []*D {
+func (d *Duties[D]) CommitteeSlotDuties(epoch phase0.Epoch, slot phase0.Slot) []*D {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 

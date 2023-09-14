@@ -161,7 +161,7 @@ func (h *SyncCommitteeHandler) processFetching(ctx context.Context, period uint6
 
 func (h *SyncCommitteeHandler) processExecution(period uint64, slot phase0.Slot) {
 	// range over duties and execute
-	duties := h.duties.PeriodDuties(period)
+	duties := h.duties.CommitteePeriodDuties(period)
 	if duties == nil {
 		return
 	}
@@ -185,19 +185,25 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period
 	}
 	lastEpoch := h.network.Beacon.FirstEpochOfSyncPeriod(period+1) - 1
 
-	indices := h.validatorController.AllActiveIndices(firstEpoch)
-
-	if len(indices) == 0 {
+	allActiveIndices := h.validatorController.AllActiveIndices(firstEpoch)
+	if len(allActiveIndices) == 0 {
 		return nil
 	}
 
-	duties, err := h.beaconNode.SyncCommitteeDuties(ctx, firstEpoch, indices)
+	inCommitteeIndices := h.validatorController.CommitteeActiveIndices(firstEpoch)
+	inCommitteeIndicesSet := map[phase0.ValidatorIndex]struct{}{}
+	for _, idx := range inCommitteeIndices {
+		inCommitteeIndicesSet[idx] = struct{}{}
+	}
+
+	duties, err := h.beaconNode.SyncCommitteeDuties(ctx, firstEpoch, allActiveIndices)
 	if err != nil {
 		return fmt.Errorf("failed to fetch sync committee duties: %w", err)
 	}
 
 	for _, d := range duties {
-		h.duties.Add(period, d.ValidatorIndex, d)
+		_, inCommitteeDuty := inCommitteeIndicesSet[d.ValidatorIndex]
+		h.duties.Add(period, d.ValidatorIndex, d, inCommitteeDuty)
 	}
 
 	h.prepareDutiesResultLog(period, duties, start)
