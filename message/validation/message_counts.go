@@ -51,7 +51,7 @@ func (c *MessageCounts) String() string {
 	)
 }
 
-func (c *MessageCounts) ValidateSignedMessage(msg *specqbft.SignedMessage, limits MessageCounts) error {
+func (c *MessageCounts) ValidateConsensusMessage(msg *specqbft.SignedMessage, limits MessageCounts) error {
 	switch msg.Message.MsgType {
 	case specqbft.ProposalMsgType:
 		if c.Proposal >= limits.Proposal {
@@ -94,7 +94,6 @@ func (c *MessageCounts) ValidateSignedMessage(msg *specqbft.SignedMessage, limit
 }
 
 func (c *MessageCounts) ValidatePartialSignatureMessage(m *spectypes.SignedPartialSignatureMessage, limits MessageCounts) error {
-	// TODO: use it
 	switch m.Message.Type {
 	case spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig:
 		if c.PreConsensus > limits.PreConsensus {
@@ -115,7 +114,7 @@ func (c *MessageCounts) ValidatePartialSignatureMessage(m *spectypes.SignedParti
 	return nil
 }
 
-func (c *MessageCounts) RecordSignedMessage(msg *specqbft.SignedMessage) {
+func (c *MessageCounts) RecordConsensusMessage(msg *specqbft.SignedMessage) {
 	switch msg.Message.MsgType {
 	case specqbft.ProposalMsgType:
 		c.Proposal++
@@ -137,7 +136,6 @@ func (c *MessageCounts) RecordSignedMessage(msg *specqbft.SignedMessage) {
 }
 
 func (c *MessageCounts) RecordPartialSignatureMessage(msg *spectypes.SignedPartialSignatureMessage) {
-	// TODO: use it
 	switch msg.Message.Type {
 	case spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig:
 		c.PreConsensus++

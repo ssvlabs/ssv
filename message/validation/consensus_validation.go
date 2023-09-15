@@ -112,7 +112,7 @@ func (mv *MessageValidator) validateConsensusMessage(
 
 	state := mv.consensusState(messageID)
 	for _, signer := range signedMsg.Signers {
-		if err := mv.validateSignerBehavior(state, signer, share, messageID, signedMsg); err != nil {
+		if err := mv.validateSignerBehaviorConsensus(state, signer, share, messageID, signedMsg); err != nil {
 			return consensusDescriptor, msgSlot, fmt.Errorf("bad signer behavior: %w", err)
 		}
 	}
@@ -142,7 +142,7 @@ func (mv *MessageValidator) validateConsensusMessage(
 			signerState.ProposalData = signedMsg.FullData
 		}
 
-		signerState.MessageCounts.RecordSignedMessage(signedMsg)
+		signerState.MessageCounts.RecordConsensusMessage(signedMsg)
 	}
 
 	return consensusDescriptor, msgSlot, nil
@@ -189,7 +189,7 @@ func (mv *MessageValidator) validateJustifications(
 	return nil
 }
 
-func (mv *MessageValidator) validateSignerBehavior(
+func (mv *MessageValidator) validateSignerBehaviorConsensus(
 	state *ConsensusState,
 	signer spectypes.OperatorID,
 	share *ssvtypes.SSVShare,
@@ -237,7 +237,7 @@ func (mv *MessageValidator) validateSignerBehavior(
 			}
 
 			limits := maxMessageCounts(len(share.Committee))
-			if err := signerState.MessageCounts.ValidateSignedMessage(signedMsg, limits); err != nil {
+			if err := signerState.MessageCounts.ValidateConsensusMessage(signedMsg, limits); err != nil {
 				return err
 			}
 		}
