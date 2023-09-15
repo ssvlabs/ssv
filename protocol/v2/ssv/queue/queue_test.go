@@ -188,14 +188,9 @@ type testMetrics struct {
 	dropped atomic.Uint64
 }
 
-func (n *testMetrics) IncomingQueueMessage(messageID spectypes.MessageID) {}
-func (n *testMetrics) OutgoingQueueMessage(messageID spectypes.MessageID) {}
 func (n *testMetrics) DroppedQueueMessage(messageID spectypes.MessageID) {
 	n.dropped.Add(1)
 }
-func (n *testMetrics) MessageQueueSize(size int)                                         {}
-func (n *testMetrics) MessageQueueCapacity(size int)                                     {}
-func (n *testMetrics) MessageTimeInQueue(messageID spectypes.MessageID, d time.Duration) {}
 
 func TestWithMetrics(t *testing.T) {
 	metrics := &testMetrics{}

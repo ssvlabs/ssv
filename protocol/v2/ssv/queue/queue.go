@@ -37,9 +37,6 @@ type Queue interface {
 
 	// Len returns the number of messages in the queue.
 	Len() int
-
-	// Cap returns capacity of the queue.
-	Cap() int
 }
 
 type priorityQueue struct {
@@ -194,18 +191,6 @@ func (q *priorityQueue) Len() int {
 		n++
 	}
 	return n
-}
-
-func (q *priorityQueue) Cap() int {
-	n := cap(q.inbox)
-	for i := q.head; i != nil; i = i.next {
-		n++
-	}
-	return n
-}
-
-func (q *priorityQueue) FillRate() float64 {
-	return float64(len(q.inbox)) / float64(cap(q.inbox))
 }
 
 // item is a node in a linked list of DecodedSSVMessage.
