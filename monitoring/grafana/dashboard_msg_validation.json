@@ -299,7 +299,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "sum(rate(ssv_message_validation{instance=~\"$instance.*\", status!=\"accepted\"}[$__interval])) by (status, role)",
+          "expr": "sum(increase(ssv_message_validation{instance=~\"$instance.*\", status!=\"accepted\"}[$__interval])) by (status, role)",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -405,7 +405,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": true,
-          "expr": "sum(rate(ssv_message_validation{instance=~\"$instance.*\", status!=\"accepted\"}[$__interval])) by (status, round)",
+          "expr": "sum(increase(ssv_message_validation{instance=~\"$instance.*\", status!=\"accepted\"}[$__interval])) by (status, round)",
           "format": "time_series",
           "instant": false,
           "interval": "",
@@ -1880,6 +1880,6 @@
   "timezone": "",
   "title": "Message Validation",
   "uid": "DppaYPgSk",
-  "version": 36,
+  "version": 37,
   "weekStart": ""
 }
