@@ -22,7 +22,7 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": 144,
-  "iteration": 1694608292033,
+  "iteration": 1694780331830,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -223,6 +223,7 @@
         "type": "prometheus",
         "uid": "eXfXfqH7z"
       },
+      "description": "",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -268,38 +269,224 @@
             ]
           }
         },
-        "overrides": [
-          {
-            "__systemRef": "hideSeriesFrom",
-            "matcher": {
-              "id": "byNames",
-              "options": {
-                "mode": "exclude",
-                "names": [
-                  "no duty for this epoch"
-                ],
-                "prefix": "All except:",
-                "readOnly": true
-              }
-            },
-            "properties": [
-              {
-                "id": "custom.hideFrom",
-                "value": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": true
-                }
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "gridPos": {
         "h": 8,
         "w": 24,
         "x": 0,
         "y": 16
+      },
+      "id": 20,
+      "interval": "5m",
+      "options": {
+        "legend": {
+          "calcs": [
+            "last",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "right"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "sum(rate(ssv_message_validation{instance=~\"$instance.*\", status!=\"accepted\"}[$__interval])) by (status, role)",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "{{status}} {{role}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Ignored+rejected by role",
+      "transformations": [
+        {
+          "id": "convertFieldType",
+          "options": {
+            "conversions": [
+              {
+                "destinationType": "number",
+                "targetField": "Value"
+              }
+            ],
+            "fields": {}
+          }
+        }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "eXfXfqH7z"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "log": 10,
+              "type": "log"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 24
+      },
+      "id": 21,
+      "interval": "5m",
+      "options": {
+        "legend": {
+          "calcs": [
+            "last",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "right"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "sum(rate(ssv_message_validation{instance=~\"$instance.*\", status!=\"accepted\"}[$__interval])) by (status, round)",
+          "format": "time_series",
+          "instant": false,
+          "interval": "",
+          "legendFormat": "{{status}} round {{round}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Ignored+rejected by round",
+      "transformations": [
+        {
+          "id": "convertFieldType",
+          "options": {
+            "conversions": [
+              {
+                "destinationType": "number",
+                "targetField": "Value"
+              }
+            ],
+            "fields": {}
+          }
+        }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "eXfXfqH7z"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "log": 10,
+              "type": "log"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 32
       },
       "id": 4,
       "interval": "5m",
@@ -392,7 +579,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 24
+        "y": 40
       },
       "id": 5,
       "interval": "5m",
@@ -483,7 +670,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 32
+        "y": 48
       },
       "id": 6,
       "interval": "5m",
@@ -574,7 +761,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 40
+        "y": 56
       },
       "id": 7,
       "interval": "5m",
@@ -677,7 +864,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 48
+        "y": 64
       },
       "id": 19,
       "interval": "5m",
@@ -789,7 +976,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 56
+        "y": 72
       },
       "id": 9,
       "interval": "5m",
@@ -936,7 +1123,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 64
+        "y": 80
       },
       "id": 13,
       "interval": "5m",
@@ -1023,7 +1210,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 72
+        "y": 88
       },
       "id": 14,
       "interval": "5m",
@@ -1170,7 +1357,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 80
+        "y": 96
       },
       "id": 15,
       "interval": "5m",
@@ -1317,7 +1504,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 88
+        "y": 104
       },
       "id": 17,
       "interval": "5m",
@@ -1427,7 +1614,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 96
+        "y": 112
       },
       "id": 18,
       "interval": "5m",
@@ -1528,7 +1715,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 104
+        "y": 120
       },
       "id": 16,
       "interval": "5m",
@@ -1693,6 +1880,6 @@
   "timezone": "",
   "title": "Message Validation",
   "uid": "DppaYPgSk",
-  "version": 35,
+  "version": 36,
   "weekStart": ""
 }
