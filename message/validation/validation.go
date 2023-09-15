@@ -232,36 +232,18 @@ func (mv *MessageValidator) ValidateP2PMessage(ctx context.Context, p peer.ID, p
 					mv.logger.Debug("rejecting invalid message", f...)
 				}
 
-				mv.metrics.MessageRejected(
-					valErr.Text(),
-					descriptor.ValidatorPK,
-					descriptor.Role,
-					descriptor.Slot,
-					round,
-				)
+				mv.metrics.MessageRejected(valErr.Text(), descriptor.Role, round)
 				return pubsub.ValidationReject
 			} else {
 				if !valErr.Silent() {
 					f := append(descriptor.Fields(), zap.Error(err))
 					mv.logger.Debug("ignoring invalid message", f...)
 				}
-				mv.metrics.MessageIgnored(
-					valErr.Text(),
-					descriptor.ValidatorPK,
-					descriptor.Role,
-					descriptor.Slot,
-					round,
-				)
+				mv.metrics.MessageIgnored(valErr.Text(), descriptor.Role, round)
 				return pubsub.ValidationIgnore
 			}
 		} else {
-			mv.metrics.MessageIgnored(
-				err.Error(),
-				descriptor.ValidatorPK,
-				descriptor.Role,
-				descriptor.Slot,
-				round,
-			)
+			mv.metrics.MessageIgnored(err.Error(), descriptor.Role, round)
 			f := append(descriptor.Fields(), zap.Error(err))
 			mv.logger.Debug("ignoring invalid message", f...)
 			return pubsub.ValidationIgnore
@@ -270,12 +252,7 @@ func (mv *MessageValidator) ValidateP2PMessage(ctx context.Context, p peer.ID, p
 
 	pmsg.ValidatorData = decodedMessage
 
-	mv.metrics.MessageAccepted(
-		descriptor.ValidatorPK,
-		descriptor.Role,
-		descriptor.Slot,
-		round,
-	)
+	mv.metrics.MessageAccepted(descriptor.Role, round)
 
 	return pubsub.ValidationAccept
 }
