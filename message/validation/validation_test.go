@@ -386,6 +386,27 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, ErrInvalidRole)
 	})
 
+	t.Run("consensus validator registration", func(t *testing.T) {
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		height := specqbft.Height(slot)
+
+		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
+		encodedValidSignedMessage, err := validSignedMessage.Encode()
+		require.NoError(t, err)
+
+		message := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, spectypes.BNRoleValidatorRegistration),
+			Data:    encodedValidSignedMessage,
+		}
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
+		_, _, err = validator.validateSSVMessage(message, receivedAt)
+		require.ErrorIs(t, err, ErrConsensusValidatorRegistration)
+	})
+
 	t.Run("liquidated validator", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true))
 
@@ -1535,7 +1556,6 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			spectypes.BNRoleProposer:                  7,
 			spectypes.BNRoleSyncCommittee:             7,
 			spectypes.BNRoleSyncCommitteeContribution: 7,
-			spectypes.BNRoleValidatorRegistration:     1,
 		}
 
 		for role, round := range tests {

@@ -44,6 +44,10 @@ func (mv *MessageValidator) validateConsensusMessage(
 
 	mv.metrics.ConsensusMsgType(signedMsg.Message.MsgType, len(signedMsg.Signers))
 
+	if messageID.GetRoleType() == spectypes.BNRoleValidatorRegistration {
+		return consensusDescriptor, msgSlot, ErrConsensusValidatorRegistration
+	}
+
 	if err := mv.validateSignatureFormat(signedMsg.Signature); err != nil {
 		return consensusDescriptor, msgSlot, err
 	}
