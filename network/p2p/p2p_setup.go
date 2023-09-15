@@ -300,10 +300,12 @@ func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
 	go cfg.MsgIDHandler.Start()
 	// run GC every 3 minutes to clear old messages
 	async.RunEvery(n.ctx, time.Minute*3, midHandler.GC)
-	_, tc, err := topics.NewPubsub(n.ctx, logger, cfg)
+
+	_, tc, err := topics.NewPubSub(n.ctx, logger, cfg)
 	if err != nil {
 		return errors.Wrap(err, "could not setup pubsub")
 	}
+
 	n.topicsCtrl = tc
 	logger.Debug("topics controller is ready")
 	return nil
