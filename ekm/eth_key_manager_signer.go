@@ -343,8 +343,6 @@ func (km *ethKeyManagerSigner) BumpSlashingProtection(pubKey []byte) error {
 
 // updateHighestAttestation updates the highest attestation data for slashing protection.
 func (km *ethKeyManagerSigner) updateHighestAttestation(pubKey []byte, slot phase0.Slot) error {
-	var highAtt *phase0.AttestationData
-
 	// Retrieve the highest attestation data stored for the given public key.
 	retrievedHighAtt, found, err := km.RetrieveHighestAttestation(pubKey)
 	if err != nil {
@@ -352,24 +350,18 @@ func (km *ethKeyManagerSigner) updateHighestAttestation(pubKey []byte, slot phas
 	}
 
 	currentEpoch := km.storage.BeaconNetwork().EstimatedEpochAtSlot(slot)
+	minimalSP := km.computeMinimalAttestationSP(currentEpoch)
 
-	// Validate the retrieved highest attestation data.
+	// Check if the retrieved highest attestation data is valid and not outdated.
 	if found && retrievedHighAtt != nil {
-		if retrievedHighAtt.Source.Epoch < currentEpoch-1 && retrievedHighAtt.Target.Epoch < currentEpoch {
-			found = false
-		} else {
-			// The retrieved highest attestation data is far in the future.
+		if retrievedHighAtt.Source.Epoch >= minimalSP.Source.Epoch || retrievedHighAtt.Target.Epoch >= minimalSP.Target.Epoch {
 			return nil
 		}
 	}
 
-	// Compute new highest attestation if not found or invalidated.
-	if !found || retrievedHighAtt == nil {
-		highAtt = km.computeMinimalAttestationSP(currentEpoch)
-	}
-
-	// Save the new highest attestation data.
-	if err := km.storage.SaveHighestAttestation(pubKey, highAtt); err != nil {
+	// At this point, either the retrieved attestation data was not found, or it was outdated.
+	// In either case, we update it to the minimal slashing protection data.
+	if err := km.storage.SaveHighestAttestation(pubKey, minimalSP); err != nil {
 		return fmt.Errorf("could not save highest attestation: %w", err)
 	}
 
@@ -378,31 +370,24 @@ func (km *ethKeyManagerSigner) updateHighestAttestation(pubKey []byte, slot phas
 
 // updateHighestProposal updates the highest proposal slot for slashing protection.
 func (km *ethKeyManagerSigner) updateHighestProposal(pubKey []byte, slot phase0.Slot) error {
-	var highProp phase0.Slot
-
 	// Retrieve the highest proposal slot stored for the given public key.
 	retrievedHighProp, found, err := km.RetrieveHighestProposal(pubKey)
 	if err != nil {
 		return fmt.Errorf("could not retrieve highest proposal: %w", err)
 	}
 
-	// Validate the retrieved highest proposal slot.
+	minimalSPSlot := km.computeMinimalProposerSP(slot)
+
+	// Check if the retrieved highest proposal slot is valid and not outdated.
 	if found && retrievedHighProp != 0 {
-		if retrievedHighProp < slot {
-			found = false
-		} else {
-			// The retrieved highest proposal slot is far in the future.
+		if retrievedHighProp >= minimalSPSlot {
 			return nil
 		}
 	}
 
-	// Compute new highest proposal if not found or invalidated.
-	if !found || retrievedHighProp == 0 {
-		highProp = km.computeMinimalProposerSP(slot)
-	}
-
-	// Save the new highest proposal slot.
-	if err := km.storage.SaveHighestProposal(pubKey, highProp); err != nil {
+	// At this point, either the retrieved proposal slot was not found, or it was outdated.
+	// In either case, we update it to the minimal slashing protection slot.
+	if err := km.storage.SaveHighestProposal(pubKey, minimalSPSlot); err != nil {
 		return fmt.Errorf("could not save highest proposal: %w", err)
 	}
 
