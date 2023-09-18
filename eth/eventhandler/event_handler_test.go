@@ -550,6 +550,58 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, registrystorage.Nonce(5), nonce)
 		})
+
+		t.Run("test correct ValidatorAdded again and nonce is bumped with another owner", func(t *testing.T) {
+			validatorData4, err := createNewValidator(ops)
+			require.NoError(t, err)
+			authTestAddr2, _ := bind.NewKeyedTransactorWithChainID(wrongPk, big.NewInt(1337))
+
+			sharesData4, err := generateSharesData(validatorData4, ops, testAddr2, 0)
+			require.NoError(t, err)
+			// Call the contract method
+			_, err = boundContract.SimcontractTransactor.RegisterValidator(
+				authTestAddr2,
+				validatorData4.masterPubKey.Serialize(),
+				[]uint64{1, 2, 3, 4},
+				sharesData4,
+				big.NewInt(100_000_000),
+				simcontract.CallableCluster{
+					ValidatorCount:  1,
+					NetworkFeeIndex: 1,
+					Index:           2,
+					Active:          true,
+					Balance:         big.NewInt(100_000_000),
+				})
+			require.NoError(t, err)
+			sim.Commit()
+
+			block = <-logs
+			require.NotEmpty(t, block.Logs)
+			require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
+
+			eventsCh = make(chan executionclient.BlockLogs)
+			go func() {
+				defer close(eventsCh)
+				eventsCh <- block
+			}()
+
+			lastProcessedBlock, err = eh.HandleBlockEventsStream(eventsCh, false)
+			require.NoError(t, err)
+			require.Equal(t, blockNum+1, lastProcessedBlock)
+			blockNum++
+
+			requireKeyManagerDataToExist(t, eh, 4, validatorData4)
+
+			// Check that validator was registered
+			shares = eh.nodeStorage.Shares().List(nil)
+			require.Equal(t, 4, len(shares))
+			// and nonce was bumped
+			nonce, err = eh.nodeStorage.GetNextNonce(nil, testAddr2)
+			require.NoError(t, err)
+			// Check that nonces are not intertwined between different owner accounts!
+			require.Equal(t, registrystorage.Nonce(1), nonce)
+		})
+
 	})
 
 	t.Run("test ValidatorRemoved event handling", func(t *testing.T) {
@@ -638,7 +690,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			// Check the validator's shares are present in the state before removing
 			valShare := eh.nodeStorage.Shares().Get(nil, valPubKey)
 			require.NotNil(t, valShare)
-			requireKeyManagerDataToExist(t, eh, 3, validatorData1)
+			requireKeyManagerDataToExist(t, eh, 4, validatorData1)
 
 			_, err = boundContract.SimcontractTransactor.RemoveValidator(
 				auth,
@@ -671,10 +723,10 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 			// Check the validator was removed from the validator shares storage.
 			shares := eh.nodeStorage.Shares().List(nil)
-			require.Equal(t, 2, len(shares))
+			require.Equal(t, 3, len(shares))
 			valShare = eh.nodeStorage.Shares().Get(nil, valPubKey)
 			require.Nil(t, valShare)
-			requireKeyManagerDataToNotExist(t, eh, 2, validatorData1)
+			requireKeyManagerDataToNotExist(t, eh, 3, validatorData1)
 		})
 	})
 
