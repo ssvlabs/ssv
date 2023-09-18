@@ -12,6 +12,7 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/ekm"
 	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/logging/fields"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
@@ -420,6 +421,13 @@ func (eh *EventHandler) handleClusterReactivated(txn basedb.Txn, event *contract
 	toReactivate, enabledPubKeys, err := eh.processClusterEvent(txn, event.Owner, event.OperatorIds, false)
 	if err != nil {
 		return nil, fmt.Errorf("could not process cluster event: %w", err)
+	}
+
+	// bump slashing protection for operator reactivated validators
+	for _, share := range toReactivate {
+		if err := eh.keyManager.(ekm.StorageProvider).BumpSlashingProtection(share.SharePubKey); err != nil {
+			return nil, fmt.Errorf("could not bump slashing protection: %w", err)
+		}
 	}
 
 	if len(enabledPubKeys) > 0 {
