@@ -10,6 +10,7 @@ import (
 	"github.com/bloxapp/ssv/ekm"
 	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator/mocks"
 	"github.com/bloxapp/ssv/protocol/v2/queue/worker"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
@@ -59,6 +60,26 @@ type MockControllerOptions struct {
 	metadataLastUpdated map[string]time.Time
 	StorageMap          *ibftstorage.QBFTStores
 	operatorData        *registrystorage.OperatorData
+}
+
+func TestNewController(t *testing.T) {
+	operatorData := buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")
+	_, logger, _, network, _, recipientStorage, bc := setupCommonTestComponents(t)
+	db, err := getBaseStorage(logger)
+	require.NoError(t, err)
+	registryStorage, err := storage.NewNodeStorage(logger, db)
+	controllerOptions := ControllerOptions{
+		Beacon:            bc,
+		Metrics:           nil,
+		FullNode:          true,
+		Network:           network,
+		OperatorData:      operatorData,
+		RegistryStorage:   registryStorage,
+		RecipientsStorage: recipientStorage,
+		Context:           context.Background(),
+	}
+	control := NewController(logger, controllerOptions)
+	require.IsType(t, &controller{}, control)
 }
 
 func TestSetupNonCommitteeValidators(t *testing.T) {
