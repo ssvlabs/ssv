@@ -5,8 +5,10 @@ import (
 	"github.com/bloxapp/ssv/eth/eventparser"
 	"github.com/bloxapp/ssv/eth/eventsyncer"
 	"github.com/bloxapp/ssv/eth/executionclient"
+	"github.com/bloxapp/ssv/eth/simulator"
 	"github.com/bloxapp/ssv/eth/simulator/simcontract"
 	"github.com/bloxapp/ssv/monitoring/metricsreporter"
+	"github.com/bloxapp/ssv/operator/storage"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -115,7 +117,13 @@ func TestEthExecLayer(t *testing.T) {
 	// Check SyncHistory doesn't execute any tasks -> doesn't run any of Controller methods
 	// Check the node storage for existing of operators and a validator
 	t.Run("SyncHistory happy flow", func(t *testing.T) {
-		//validatorCtrl.
+		common := &commonSimContractInput{
+			sim:           sim,
+			boundContract: boundContract,
+			blockNum:      &blockNum,
+			nodeStorage:   nodeStorage,
+			doInOneBlock:  true,
+		}
 
 		// BLOCK 2. produce OPERATOR ADDED
 		// Check that there are no registered operators
@@ -123,44 +131,37 @@ func TestEthExecLayer(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 0, len(operators))
 
-		for _, op := range ops {
-			// Call the contract method
-			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(op.pub)
-			require.NoError(t, err)
-			_, err = boundContract.SimcontractTransactor.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
-			require.NoError(t, err)
-		}
-		sim.Commit()
-		blockNum++
+		produceOperatorAddedEvents(t, &produceOperatorAddedEventsInput{
+			commonSimContractInput: common,
+			testOperatorAddedEventInput: &testOperatorAddedEventInput{
+				ops:  ops,
+				auth: auth,
+			},
+		})
 
 		// BLOCK 3:  VALIDATOR ADDED:
 		// Check that there were no operations for Alice Validator
-		nonce, err := nodeStorage.GetNextNonce(nil, testAddrAlice)
-		require.NoError(t, err)
-		require.Equal(t, registrystorage.Nonce(0), nonce)
-		// Check there are no shares related to the Alice Validator
-		valPubKey := validatorData1.masterPubKey.Serialize()
-		aliceShares := nodeStorage.Shares().Get(nil, valPubKey)
-		require.Nil(t, aliceShares)
+		validators := make([]*testValidatorData, 1)
+		sharesByValidator := make([][]byte, 1)
 
-		// Call the contract method
-		_, err = boundContract.SimcontractTransactor.RegisterValidator(
-			auth,
-			validatorData1.masterPubKey.Serialize(),
-			[]uint64{1, 2, 3, 4},
-			sharesData1,
-			big.NewInt(100_000_000),
-			simcontract.CallableCluster{
-				ValidatorCount:  1,
-				NetworkFeeIndex: 1,
-				Index:           1,
-				Active:          true,
-				Balance:         big.NewInt(100_000_000),
-			})
-		require.NoError(t, err)
-		sim.Commit()
-		blockNum++
+		validators[0] = validatorData1
+		sharesByValidator[0] = sharesData1
+		opsIds := make([]uint64, len(ops))
 
+		for i, op := range ops {
+			opsIds[i] = op.id
+		}
+
+		produceValidatorRegisteredEvents(t, &produceValidatorRegisteredEventsInput{
+			commonSimContractInput: common,
+			testValidatorRegisteredEventInput: &testValidatorRegisteredEventInput{
+				validators:        validators,
+				sharesByValidator: sharesByValidator,
+				auth:              auth,
+				opsIds:            opsIds,
+				ops:               ops,
+			},
+		})
 		// Run SyncHistory
 		lastHandledBlockNum, err = eventSyncer.SyncHistory(ctx, lastHandledBlockNum)
 		require.NoError(t, err)
@@ -176,7 +177,7 @@ func TestEthExecLayer(t *testing.T) {
 		shares := nodeStorage.Shares().List(nil)
 		require.Equal(t, 1, len(shares))
 		// Check the nonce was bumped
-		nonce, err = nodeStorage.GetNextNonce(nil, testAddrAlice)
+		nonce, err := nodeStorage.GetNextNonce(nil, testAddrAlice)
 		require.NoError(t, err)
 		require.Equal(t, registrystorage.Nonce(1), nonce)
 	})
@@ -188,4 +189,135 @@ func TestEthExecLayer(t *testing.T) {
 	})
 
 	_ = validatorData2
+}
+
+type commonSimContractInput struct {
+	sim           *simulator.SimulatedBackend
+	boundContract *simcontract.Simcontract
+	blockNum      *uint64
+	nodeStorage   storage.Storage
+	doInOneBlock  bool
+}
+
+type testOperatorAddedEventInput struct {
+	ops  []*testOperator
+	auth *bind.TransactOpts
+}
+
+type produceOperatorAddedEventsInput struct {
+	*commonSimContractInput
+	*testOperatorAddedEventInput
+}
+
+func produceOperatorAddedEvents(
+	t *testing.T,
+	input *produceOperatorAddedEventsInput,
+) {
+	for _, op := range input.ops {
+		packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(op.pub)
+		require.NoError(t, err)
+		_, err = input.boundContract.SimcontractTransactor.RegisterOperator(input.auth, packedOperatorPubKey, big.NewInt(100_000_000))
+		require.NoError(t, err)
+
+		if !input.doInOneBlock {
+			input.sim.Commit()
+			*input.blockNum++
+		}
+	}
+	if input.doInOneBlock {
+		input.sim.Commit()
+		*input.blockNum++
+	}
+}
+
+type testValidatorRegisteredEventInput struct {
+	auth              *bind.TransactOpts
+	ops               []*testOperator
+	validators        []*testValidatorData
+	sharesByValidator [][]byte
+	opsIds            []uint64
+}
+
+type produceValidatorRegisteredEventsInput struct {
+	*commonSimContractInput
+	*testValidatorRegisteredEventInput
+}
+
+func produceValidatorRegisteredEvents(
+	t *testing.T,
+	input *produceValidatorRegisteredEventsInput,
+) {
+	for i, val := range input.validators {
+		valPubKey := val.masterPubKey.Serialize()
+		shares := input.nodeStorage.Shares().Get(nil, valPubKey)
+		require.Nil(t, shares)
+
+		// Call the contract method
+		_, err := input.boundContract.SimcontractTransactor.RegisterValidator(
+			input.auth,
+			val.masterPubKey.Serialize(),
+			input.opsIds,
+			input.sharesByValidator[i],
+			big.NewInt(100_000_000),
+			simcontract.CallableCluster{
+				ValidatorCount:  1,
+				NetworkFeeIndex: 1,
+				Index:           1,
+				Active:          true,
+				Balance:         big.NewInt(100_000_000),
+			})
+		require.NoError(t, err)
+
+		if !input.doInOneBlock {
+			input.sim.Commit()
+			*input.blockNum++
+		}
+	}
+	if input.doInOneBlock {
+		input.sim.Commit()
+		*input.blockNum++
+	}
+}
+
+func produceValidatorRemovedEvents(
+	t *testing.T,
+	validators []*testValidatorData,
+	opsIds []uint64,
+	sim *simulator.SimulatedBackend,
+	boundContract *simcontract.Simcontract,
+	auth *bind.TransactOpts,
+	nodeStorage storage.Storage,
+	blockNum *uint64,
+	doInOneBlock bool,
+) {
+	for _, val := range validators {
+		valPubKey := val.masterPubKey.Serialize()
+		// Check the validator's shares are present in the state before removing
+		valShare := nodeStorage.Shares().Get(nil, valPubKey)
+		require.NotNil(t, valShare)
+
+		_, err := boundContract.SimcontractTransactor.RemoveValidator(
+			auth,
+			val.masterPubKey.Serialize(),
+			opsIds,
+			simcontract.CallableCluster{
+				ValidatorCount:  1,
+				NetworkFeeIndex: 1,
+				Index:           2,
+				Active:          true,
+				Balance:         big.NewInt(100_000_000),
+			})
+		require.NoError(t, err)
+		sim.Commit()
+		require.NoError(t, err)
+
+		if !doInOneBlock {
+			sim.Commit()
+			*blockNum++
+		}
+	}
+	if doInOneBlock {
+		sim.Commit()
+		*blockNum++
+	}
 }
