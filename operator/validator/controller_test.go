@@ -67,7 +67,8 @@ func TestNewController(t *testing.T) {
 	_, logger, _, network, _, recipientStorage, bc := setupCommonTestComponents(t)
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
-	registryStorage, err := storage.NewNodeStorage(logger, db)
+	registryStorage, newStorageErr := storage.NewNodeStorage(logger, db)
+	require.NoError(t, newStorageErr)
 	controllerOptions := ControllerOptions{
 		Beacon:            bc,
 		Metrics:           nil,
