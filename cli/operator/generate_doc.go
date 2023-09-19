@@ -21,8 +21,8 @@ var GenerateDocCmd = &cobra.Command{
 	Use:   "doc",
 	Short: "Generate CLI documentation for the node",
 	Run: func(cmd *cobra.Command, args []string) {
-		var cfg config
-		t := reflect.TypeOf(cfg)
+		var conf config
+		t := reflect.TypeOf(conf)
 
 		var docs []ArgumentDoc
 		getAllFields(t, nil, nil, &docs)
