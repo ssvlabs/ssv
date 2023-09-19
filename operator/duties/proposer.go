@@ -11,16 +11,16 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/operator/duties/dutystorage"
+	"github.com/bloxapp/ssv/operator/duties/dutystore"
 )
 
 type ProposerHandler struct {
 	baseHandler
 
-	duties *dutystorage.Duties[eth2apiv1.ProposerDuty]
+	duties *dutystore.Duties[eth2apiv1.ProposerDuty]
 }
 
-func NewProposerHandler(duties *dutystorage.Duties[eth2apiv1.ProposerDuty]) *ProposerHandler {
+func NewProposerHandler(duties *dutystore.Duties[eth2apiv1.ProposerDuty]) *ProposerHandler {
 	return &ProposerHandler{
 		duties: duties,
 		baseHandler: baseHandler{

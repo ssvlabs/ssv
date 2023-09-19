@@ -1,4 +1,4 @@
-package dutystorage
+package dutystore
 
 import (
 	"sync"

@@ -25,7 +25,7 @@ import (
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/operator/duties/dutystorage"
+	"github.com/bloxapp/ssv/operator/duties/dutystore"
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
@@ -80,7 +80,7 @@ type MessageValidator struct {
 	netCfg         networkconfig.NetworkConfig
 	index          sync.Map
 	shareStorage   registrystorage.Shares
-	dutyStorage    *dutystorage.Storage
+	dutyStore      *dutystore.Store
 	ownOperatorID  spectypes.OperatorID
 	checkSignature bool
 }
@@ -113,9 +113,9 @@ func WithMetrics(metrics metrics) Option {
 	}
 }
 
-func WithDutyStorage(dutyStorage *dutystorage.Storage) Option {
+func WithDutyStore(dutyStore *dutystore.Store) Option {
 	return func(mv *MessageValidator) {
-		mv.dutyStorage = dutyStorage
+		mv.dutyStore = dutyStore
 	}
 }
 

@@ -288,7 +288,7 @@ func (mv *MessageValidator) validateBeaconDuty(
 		}
 
 		epoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(slot)
-		if mv.dutyStorage != nil && mv.dutyStorage.Proposer.ValidatorDuty(epoch, slot, share.Metadata.BeaconMetadata.Index) == nil {
+		if mv.dutyStore != nil && mv.dutyStore.Proposer.ValidatorDuty(epoch, slot, share.Metadata.BeaconMetadata.Index) == nil {
 			return ErrNoDuty
 		}
 
@@ -300,7 +300,7 @@ func (mv *MessageValidator) validateBeaconDuty(
 		}
 
 		period := mv.netCfg.Beacon.EstimatedSyncCommitteePeriodAtEpoch(mv.netCfg.Beacon.EstimatedEpochAtSlot(slot))
-		if mv.dutyStorage != nil && mv.dutyStorage.SyncCommittee.ValidatorDuty(period, share.Metadata.BeaconMetadata.Index) == nil {
+		if mv.dutyStore != nil && mv.dutyStore.SyncCommittee.ValidatorDuty(period, share.Metadata.BeaconMetadata.Index) == nil {
 			return ErrNoDuty
 		}
 

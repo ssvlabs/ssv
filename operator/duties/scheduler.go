@@ -19,7 +19,7 @@ import (
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/operator/duties/dutystorage"
+	"github.com/bloxapp/ssv/operator/duties/dutystore"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
@@ -62,7 +62,7 @@ type SchedulerOptions struct {
 	IndicesChg          chan struct{}
 	Ticker              SlotTicker
 	BuilderProposals    bool
-	DutyStorage         *dutystorage.Storage
+	DutyStore           *dutystore.Store
 }
 
 type Scheduler struct {
@@ -89,9 +89,9 @@ type Scheduler struct {
 }
 
 func NewScheduler(opts *SchedulerOptions) *Scheduler {
-	dutyStorage := opts.DutyStorage
-	if dutyStorage == nil {
-		dutyStorage = dutystorage.New()
+	dutyStore := opts.DutyStore
+	if dutyStore == nil {
+		dutyStore = dutystore.New()
 	}
 
 	s := &Scheduler{
@@ -105,9 +105,9 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 		blockPropagateDelay: blockPropagationDelay,
 
 		handlers: []dutyHandler{
-			NewAttesterHandler(dutyStorage.Attester),
-			NewProposerHandler(dutyStorage.Proposer),
-			NewSyncCommitteeHandler(dutyStorage.SyncCommittee),
+			NewAttesterHandler(dutyStore.Attester),
+			NewProposerHandler(dutyStore.Proposer),
+			NewSyncCommitteeHandler(dutyStore.SyncCommittee),
 		},
 
 		ticker:   make(chan phase0.Slot),

@@ -11,20 +11,20 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/operator/duties/dutystorage"
+	"github.com/bloxapp/ssv/operator/duties/dutystore"
 )
 
 type AttesterHandler struct {
 	baseHandler
 
-	dutyStorage       *dutystorage.Duties[eth2apiv1.AttesterDuty]
+	duties            *dutystore.Duties[eth2apiv1.AttesterDuty]
 	fetchCurrentEpoch bool
 	fetchNextEpoch    bool
 }
 
-func NewAttesterHandler(dutyStorage *dutystorage.Duties[eth2apiv1.AttesterDuty]) *AttesterHandler {
+func NewAttesterHandler(duties *dutystore.Duties[eth2apiv1.AttesterDuty]) *AttesterHandler {
 	h := &AttesterHandler{
-		dutyStorage: dutyStorage,
+		duties: duties,
 	}
 	h.fetchCurrentEpoch = true
 	h.fetchFirst = true
@@ -83,7 +83,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			} else {
 				h.processExecution(currentEpoch, slot)
 				if h.indicesChanged {
-					h.dutyStorage.ResetEpoch(currentEpoch)
+					h.duties.ResetEpoch(currentEpoch)
 					h.indicesChanged = false
 				}
 				h.processFetching(ctx, currentEpoch, slot)
@@ -99,7 +99,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 
 			// last slot of epoch
 			if uint64(slot)%slotsPerEpoch == slotsPerEpoch-1 {
-				h.dutyStorage.ResetEpoch(currentEpoch)
+				h.duties.ResetEpoch(currentEpoch)
 			}
 
 		case reorgEvent := <-h.reorg:
@@ -109,18 +109,18 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 
 			// reset current epoch duties
 			if reorgEvent.Previous {
-				h.dutyStorage.ResetEpoch(currentEpoch)
+				h.duties.ResetEpoch(currentEpoch)
 				h.fetchFirst = true
 				h.fetchCurrentEpoch = true
 				if h.shouldFetchNexEpoch(reorgEvent.Slot) {
-					h.dutyStorage.ResetEpoch(currentEpoch + 1)
+					h.duties.ResetEpoch(currentEpoch + 1)
 					h.fetchNextEpoch = true
 				}
 			} else if reorgEvent.Current {
 				// reset & re-fetch next epoch duties if in appropriate slot range,
 				// otherwise they will be fetched by the appropriate slot tick.
 				if h.shouldFetchNexEpoch(reorgEvent.Slot) {
-					h.dutyStorage.ResetEpoch(currentEpoch + 1)
+					h.duties.ResetEpoch(currentEpoch + 1)
 					h.fetchNextEpoch = true
 				}
 			}
@@ -136,7 +136,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 
 			// reset next epoch duties if in appropriate slot range
 			if h.shouldFetchNexEpoch(slot) {
-				h.dutyStorage.ResetEpoch(currentEpoch + 1)
+				h.duties.ResetEpoch(currentEpoch + 1)
 				h.fetchNextEpoch = true
 			}
 		}
@@ -165,7 +165,7 @@ func (h *AttesterHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 }
 
 func (h *AttesterHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot) {
-	duties := h.dutyStorage.CommitteeSlotDuties(epoch, slot)
+	duties := h.duties.CommitteeSlotDuties(epoch, slot)
 	if duties == nil {
 		return
 	}
@@ -197,7 +197,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 
 	specDuties := make([]*spectypes.Duty, 0, len(duties))
 	for _, d := range duties {
-		h.dutyStorage.Add(epoch, d.Slot, d.ValidatorIndex, d, true)
+		h.duties.Add(epoch, d.Slot, d.ValidatorIndex, d, true)
 		specDuties = append(specDuties, h.toSpecDuty(d, spectypes.BNRoleAttester))
 	}
 

@@ -22,7 +22,7 @@ import (
 
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/operator/duties/dutystorage"
+	"github.com/bloxapp/ssv/operator/duties/dutystore"
 	"github.com/bloxapp/ssv/operator/storage"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
@@ -560,9 +560,9 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		slot := netCfg.Beacon.FirstSlotAtEpoch(epoch)
 		height := specqbft.Height(slot)
 
-		dutyStorage := dutystorage.New()
-		dutyStorage.Proposer.Add(epoch, slot, validatorIndex+1, &eth2apiv1.ProposerDuty{}, true)
-		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithDutyStorage(dutyStorage), WithSignatureCheck(true))
+		dutyStore := dutystore.New()
+		dutyStore.Proposer.Add(epoch, slot, validatorIndex+1, &eth2apiv1.ProposerDuty{}, true)
+		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithDutyStore(dutyStore), WithSignatureCheck(true))
 
 		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
 		encodedValidSignedMessage, err := validSignedMessage.Encode()
@@ -577,9 +577,9 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, _, err = validator.validateSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester)))
 		require.ErrorContains(t, err, ErrNoDuty.Error())
 
-		dutyStorage = dutystorage.New()
-		dutyStorage.Proposer.Add(epoch, slot, validatorIndex, &eth2apiv1.ProposerDuty{}, true)
-		validator = NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithDutyStorage(dutyStorage), WithSignatureCheck(true))
+		dutyStore = dutystore.New()
+		dutyStore.Proposer.Add(epoch, slot, validatorIndex, &eth2apiv1.ProposerDuty{}, true)
+		validator = NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithDutyStore(dutyStore), WithSignatureCheck(true))
 		_, _, err = validator.validateSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester)))
 		require.NoError(t, err)
 	})

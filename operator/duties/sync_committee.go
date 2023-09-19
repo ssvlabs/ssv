@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/operator/duties/dutystorage"
+	"github.com/bloxapp/ssv/operator/duties/dutystore"
 )
 
 // syncCommitteePreparationEpochs is the number of epochs ahead of the sync committee
@@ -22,12 +22,12 @@ var syncCommitteePreparationEpochs = uint64(2)
 type SyncCommitteeHandler struct {
 	baseHandler
 
-	duties             *dutystorage.SyncCommitteeDuties
+	duties             *dutystore.SyncCommitteeDuties
 	fetchCurrentPeriod bool
 	fetchNextPeriod    bool
 }
 
-func NewSyncCommitteeHandler(duties *dutystorage.SyncCommitteeDuties) *SyncCommitteeHandler {
+func NewSyncCommitteeHandler(duties *dutystore.SyncCommitteeDuties) *SyncCommitteeHandler {
 	h := &SyncCommitteeHandler{
 		duties: duties,
 	}

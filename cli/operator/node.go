@@ -42,7 +42,7 @@ import (
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/nodeprobe"
 	"github.com/bloxapp/ssv/operator"
-	"github.com/bloxapp/ssv/operator/duties/dutystorage"
+	"github.com/bloxapp/ssv/operator/duties/dutystore"
 	"github.com/bloxapp/ssv/operator/slot_ticker"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
@@ -166,15 +166,15 @@ var StartNodeCmd = &cobra.Command{
 
 		validatorsMap := validatorsmap.New(cmd.Context())
 
-		dutyStorage := dutystorage.New()
-		cfg.SSVOptions.DutyStorage = dutyStorage
+		dutyStore := dutystore.New()
+		cfg.SSVOptions.DutyStore = dutyStore
 
 		messageValidator := validation.NewMessageValidator(
 			networkConfig,
 			validation.WithShareStorage(nodeStorage.Shares()),
 			validation.WithLogger(logger),
 			validation.WithMetrics(metricsReporter),
-			validation.WithDutyStorage(dutyStorage),
+			validation.WithDutyStore(dutyStore),
 			validation.WithOwnOperatorID(operatorData.ID),
 			validation.WithSignatureCheck(cfg.MsgValidationCheckSig),
 		)
