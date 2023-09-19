@@ -12,7 +12,7 @@ type SyncCommitteeDuties struct {
 	m  map[uint64]map[phase0.ValidatorIndex]dutyDescriptor[eth2apiv1.SyncCommitteeDuty]
 }
 
-func NewSyncCommittee() *SyncCommitteeDuties {
+func NewSyncCommitteeDuties() *SyncCommitteeDuties {
 	return &SyncCommitteeDuties{
 		m: make(map[uint64]map[phase0.ValidatorIndex]dutyDescriptor[eth2apiv1.SyncCommitteeDuty]),
 	}
@@ -37,7 +37,7 @@ func (d *SyncCommitteeDuties) CommitteePeriodDuties(period uint64) []*eth2apiv1.
 	return duties
 }
 
-func (d *SyncCommitteeDuties) ValidatorDuty(period uint64, validatorIndex phase0.ValidatorIndex) *eth2apiv1.SyncCommitteeDuty {
+func (d *SyncCommitteeDuties) Duty(period uint64, validatorIndex phase0.ValidatorIndex) *eth2apiv1.SyncCommitteeDuty {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 
@@ -68,7 +68,7 @@ func (d *SyncCommitteeDuties) Add(period uint64, validatorIndex phase0.Validator
 	}
 }
 
-func (d *SyncCommitteeDuties) ResetPeriod(period uint64) {
+func (d *SyncCommitteeDuties) Reset(period uint64) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 

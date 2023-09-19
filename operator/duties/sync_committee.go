@@ -86,7 +86,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			} else {
 				h.processExecution(period, slot)
 				if h.indicesChanged {
-					h.duties.ResetPeriod(period)
+					h.duties.Reset(period)
 					h.indicesChanged = false
 				}
 				h.processFetching(ctx, period, slot)
@@ -103,7 +103,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 
 			// last slot of period
 			if slot == h.network.Beacon.LastSlotOfSyncPeriod(period) {
-				h.duties.ResetPeriod(period)
+				h.duties.Reset(period)
 			}
 
 		case reorgEvent := <-h.reorg:
@@ -115,7 +115,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 
 			// reset current epoch duties
 			if reorgEvent.Current && h.shouldFetchNextPeriod(reorgEvent.Slot) {
-				h.duties.ResetPeriod(period + 1)
+				h.duties.Reset(period + 1)
 				h.fetchNextPeriod = true
 			}
 
@@ -131,7 +131,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 
 			// reset next period duties if in appropriate slot range
 			if h.shouldFetchNextPeriod(slot) {
-				h.duties.ResetPeriod(period + 1)
+				h.duties.Reset(period + 1)
 				h.fetchNextPeriod = true
 			}
 		}

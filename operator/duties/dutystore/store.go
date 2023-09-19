@@ -14,6 +14,6 @@ func New() *Store {
 	return &Store{
 		Attester:      NewDuties[eth2apiv1.AttesterDuty](),
 		Proposer:      NewDuties[eth2apiv1.ProposerDuty](),
-		SyncCommittee: NewSyncCommittee(),
+		SyncCommittee: NewSyncCommitteeDuties(),
 	}
 }
