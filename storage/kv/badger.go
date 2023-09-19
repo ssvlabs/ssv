@@ -31,19 +31,20 @@ type BadgerDB struct {
 }
 
 // New creates a persistent DB instance.
-func New(logger *zap.Logger, options basedb.Options) (*BadgerDB, error) {
-	return createDB(logger, options, false)
+func New(ctx context.Context, logger *zap.Logger, options basedb.Options) (*BadgerDB, error) {
+	return createDB(ctx, logger, options, false)
 }
 
 // NewInMemory creates an in-memory DB instance.
-func NewInMemory(logger *zap.Logger, options basedb.Options) (*BadgerDB, error) {
-	return createDB(logger, options, true)
+func NewInMemory(ctx context.Context, logger *zap.Logger, options basedb.Options) (*BadgerDB, error) {
+	return createDB(ctx, logger, options, true)
 }
 
-func createDB(logger *zap.Logger, options basedb.Options, inMemory bool) (*BadgerDB, error) {
+func createDB(ctx context.Context, logger *zap.Logger, options basedb.Options, inMemory bool) (*BadgerDB, error) {
 	// Open the Badger database located in the /tmp/badger directory.
 	// It will be created if it doesn't exist.
 	opt := badger.DefaultOptions(options.Path)
+	opt.SyncWrites = options.SyncWrites
 
 	if inMemory {
 		opt.InMemory = true
@@ -66,21 +67,17 @@ func createDB(logger *zap.Logger, options basedb.Options, inMemory bool) (*Badge
 	}
 
 	// Set up context/cancel to control background goroutines.
-	parentCtx := options.Ctx
-	if parentCtx == nil {
-		parentCtx = context.Background()
-	}
-	ctx, cancel := context.WithCancel(parentCtx)
+	ctxWithCancel, cancel := context.WithCancel(ctx)
 
 	badgerDB := BadgerDB{
 		logger: logger,
 		db:     db,
-		ctx:    ctx,
+		ctx:    ctxWithCancel,
 		cancel: cancel,
 	}
 
 	// Start periodic reporting.
-	if options.Reporting && options.Ctx != nil {
+	if options.Reporting {
 		badgerDB.wg.Add(1)
 		go badgerDB.periodicallyReport(1 * time.Minute)
 	}

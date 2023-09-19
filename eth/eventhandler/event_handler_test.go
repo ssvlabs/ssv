@@ -725,9 +725,10 @@ func TestHandleBlockEventsStream(t *testing.T) {
 }
 
 func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, network *networkconfig.NetworkConfig, operator *testOperator, useMockCtrl bool) (*EventHandler, *mocks.MockController, error) {
-	db, err := kv.NewInMemory(logger, basedb.Options{
-		Ctx: ctx,
-	})
+	db, err := kv.NewInMemory(ctx, logger, basedb.Options{})
+	require.NoError(t, err)
+
+	spDB, err := kv.NewInMemory(ctx, logger, basedb.Options{})
 	require.NoError(t, err)
 
 	storageMap := ibftstorage.NewStores()
@@ -739,7 +740,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 		}
 	}
 
-	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, *network, true, "")
+	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, spDB, *network, true, "")
 	if err != nil {
 		return nil, nil, err
 	}

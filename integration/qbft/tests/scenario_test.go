@@ -64,7 +64,7 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 			id := spectypes.OperatorID(id)
 			s.validators[id] = createValidator(t, ctx, id, getKeySet(s.Committee), logger, s.shared.Nodes[id])
 
-			stores := newStores(logger)
+			stores := newStores(ctx, logger)
 			s.shared.Nodes[id].RegisterHandlers(logger, protocolp2p.WithHandler(
 				protocolp2p.LastDecidedProtocol,
 				handlers.LastDecidedHandler(logger.Named(fmt.Sprintf("decided-handler-%d", id)), stores, s.shared.Nodes[id]),
@@ -166,8 +166,8 @@ func quorum(committee int) int {
 	return (committee*2 + 1) / 3 // committee = 3f+1; quorum = 2f+1
 }
 
-func newStores(logger *zap.Logger) *qbftstorage.QBFTStores {
-	db, err := kv.NewInMemory(logger, basedb.Options{})
+func newStores(ctx context.Context, logger *zap.Logger) *qbftstorage.QBFTStores {
+	db, err := kv.NewInMemory(ctx, logger, basedb.Options{})
 	if err != nil {
 		panic(err)
 	}
@@ -200,7 +200,7 @@ func createValidator(t *testing.T, pCtx context.Context, id spectypes.OperatorID
 	require.NoError(t, err)
 
 	options := protocolvalidator.Options{
-		Storage: newStores(logger),
+		Storage: newStores(ctx, logger),
 		Network: node,
 		SSVShare: &types.SSVShare{
 			Share: *testingShare(keySet, id),

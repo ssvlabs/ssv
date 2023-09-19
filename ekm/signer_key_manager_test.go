@@ -43,6 +43,9 @@ func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig) spectype
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 
+	spDB, err := getBaseStorage(logger)
+	require.NoError(t, err)
+
 	if network == nil {
 		network = &networkconfig.NetworkConfig{
 			Beacon: utils.SetupMockBeaconNetwork(t, nil),
@@ -50,7 +53,7 @@ func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig) spectype
 		}
 	}
 
-	km, err := NewETHKeyManagerSigner(logger, db, *network, true, "")
+	km, err := NewETHKeyManagerSigner(logger, db, spDB, *network, true, "")
 	require.NoError(t, err)
 
 	sk1 := &bls.SecretKey{}
@@ -81,7 +84,11 @@ func TestEncryptedKeyManager(t *testing.T) {
 	logger := logging.TestLogger(t)
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
-	signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon.GetNetwork(), logger)
+
+	spDB, err := getBaseStorage(logger)
+	require.NoError(t, err)
+
+	signerStorage := NewEKMStorage(db, spDB, networkconfig.TestNetwork.Beacon.GetBeaconNetwork(), logger)
 	err = signerStorage.SetEncryptionKey(encryptionKey)
 	require.NoError(t, err)
 	defer func(db basedb.Database, logger *zap.Logger) {
@@ -132,8 +139,8 @@ func TestSlashing(t *testing.T) {
 	require.NoError(t, sk1.SetHexString(sk1Str))
 	require.NoError(t, km.AddShare(sk1))
 
-	currentSlot := km.(*ethKeyManagerSigner).storage.Network().EstimatedCurrentSlot()
-	currentEpoch := km.(*ethKeyManagerSigner).storage.Network().EstimatedEpochAtSlot(currentSlot)
+	currentSlot := km.(*ethKeyManagerSigner).network.EstimatedCurrentSlot()
+	currentEpoch := km.(*ethKeyManagerSigner).network.EstimatedEpochAtSlot(currentSlot)
 
 	highestTarget := currentEpoch + minSPAttestationEpochGap + 1
 	highestSource := highestTarget - 1

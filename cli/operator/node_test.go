@@ -1,6 +1,7 @@
 package operator
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -16,7 +17,7 @@ import (
 func Test_verifyConfig(t *testing.T) {
 	logger := zap.New(zapcore.NewNopCore(), zap.WithFatalHook(zapcore.WriteThenPanic))
 
-	db, err := kv.NewInMemory(logger, basedb.Options{})
+	db, err := kv.NewInMemory(context.TODO(), logger, basedb.Options{})
 	require.NoError(t, err)
 
 	nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)

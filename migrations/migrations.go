@@ -27,10 +27,15 @@ var (
 		migration_2_encrypt_shares,
 		migration_3_drop_registry_data,
 	}
+
+	spMigrations = Migrations{}
 )
 
 // Run executes the default migrations.
 func Run(ctx context.Context, logger *zap.Logger, opt Options) (applied int, err error) {
+	if opt.SP {
+		return spMigrations.Run(ctx, logger, opt)
+	}
 	return defaultMigrations.Run(ctx, logger, opt)
 }
 
@@ -56,6 +61,9 @@ type Options struct {
 	NodeStorage operatorstorage.Storage
 	DbPath      string
 	Network     beacon.Network
+
+	// TODO(standalone-sp-db): re-think
+	SP bool
 }
 
 // nolint
@@ -74,7 +82,8 @@ func (o Options) nodeStorage(logger *zap.Logger) (operatorstorage.Storage, error
 
 // nolint
 func (o Options) signerStorage(logger *zap.Logger) ekm.Storage {
-	return ekm.NewSignerStorage(o.Db, o.Network, logger)
+	// TODO(standalone-sp-db): use sp db
+	return ekm.NewEKMStorage(o.Db, o.Db, o.Network.BeaconNetwork, logger)
 }
 
 // Run executes the migrations.

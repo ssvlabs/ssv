@@ -17,9 +17,7 @@ var dbOnce sync.Once
 
 func getDB(logger *zap.Logger) basedb.Database {
 	dbOnce.Do(func() {
-		dbInstance, err := kv.NewInMemory(logger, basedb.Options{
-			Ctx: context.TODO(),
-		})
+		dbInstance, err := kv.NewInMemory(context.TODO(), logger, basedb.Options{})
 		if err != nil {
 			panic(err)
 		}

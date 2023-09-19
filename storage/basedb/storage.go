@@ -7,10 +7,12 @@ import (
 
 // Options for creating all db type
 type Options struct {
-	Ctx        context.Context
-	Path       string        `yaml:"Path" env:"DB_PATH" env-default:"./data/db" env-description:"Path for storage"`
-	Reporting  bool          `yaml:"Reporting" env:"DB_REPORTING" env-default:"false" env-description:"Flag to run on-off db size reporting"`
-	GCInterval time.Duration `yaml:"GCInterval" env:"DB_GC_INTERVAL" env-default:"6m" env-description:"Interval between garbage collection cycles. Set to 0 to disable."`
+	Path       string
+	Reporting  bool
+	GCInterval time.Duration
+
+	// SyncWrites ensure that writes are saved to disk immediately (used for slashing protection DB)
+	SyncWrites bool
 }
 
 // Reader is a read-only accessor to the database.
@@ -20,7 +22,7 @@ type Reader interface {
 	GetAll(prefix []byte, handler func(int, Obj) error) error
 }
 
-// ReadWrite is a read-write accessor to the database.
+// ReadWriter is a read-write accessor to the database.
 type ReadWriter interface {
 	Reader
 	Set(prefix []byte, key []byte, value []byte) error

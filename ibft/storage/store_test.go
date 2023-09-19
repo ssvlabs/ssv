@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"testing"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -170,7 +171,7 @@ func TestSaveAndFetchState(t *testing.T) {
 }
 
 func newTestIbftStorage(logger *zap.Logger, prefix string) (qbftstorage.QBFTStore, error) {
-	db, err := kv.NewInMemory(logger.Named(logging.NameBadgerDBLog), basedb.Options{
+	db, err := kv.NewInMemory(context.TODO(), logger.Named(logging.NameBadgerDBLog), basedb.Options{
 		Reporting: true,
 	})
 	if err != nil {

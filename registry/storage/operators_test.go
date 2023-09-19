@@ -2,6 +2,7 @@ package storage_test
 
 import (
 	"bytes"
+	"context"
 	"testing"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -144,7 +145,7 @@ func TestStorage_ListOperators(t *testing.T) {
 }
 
 func newOperatorStorageForTest(logger *zap.Logger) (storage.Operators, func()) {
-	db, err := kv.NewInMemory(logger, basedb.Options{})
+	db, err := kv.NewInMemory(context.TODO(), logger, basedb.Options{})
 	if err != nil {
 		return nil, func() {}
 	}

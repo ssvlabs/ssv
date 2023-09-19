@@ -16,9 +16,8 @@ import (
 
 func setupOptions(ctx context.Context, t *testing.T) (Options, error) {
 	// Create in-memory test DB.
-	db, err := kv.NewInMemory(logging.TestLogger(t), basedb.Options{
+	db, err := kv.NewInMemory(ctx, logging.TestLogger(t), basedb.Options{
 		Reporting: true,
-		Ctx:       ctx,
 	})
 	if err != nil {
 		return Options{}, err

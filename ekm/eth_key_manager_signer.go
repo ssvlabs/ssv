@@ -26,6 +26,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
@@ -48,6 +49,7 @@ type ethKeyManagerSigner struct {
 	domain            spectypes.DomainType
 	slashingProtector core.SlashingProtector
 	builderProposals  bool
+	network           beacon.BeaconNetwork
 }
 
 // StorageProvider provides the underlying KeyManager storage.
@@ -59,19 +61,19 @@ type StorageProvider interface {
 }
 
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
-func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, network networkconfig.NetworkConfig, builderProposals bool, encryptionKey string) (spectypes.KeyManager, error) {
-	signerStore := NewSignerStorage(db, network.Beacon, logger)
+func NewETHKeyManagerSigner(logger *zap.Logger, db, spDB basedb.Database, network networkconfig.NetworkConfig, builderProposals bool, encryptionKey string) (spectypes.KeyManager, error) {
+	ekmStorage := NewEKMStorage(db, spDB, network.Beacon.GetBeaconNetwork(), logger)
 	if encryptionKey != "" {
-		err := signerStore.SetEncryptionKey(encryptionKey)
+		err := ekmStorage.SetEncryptionKey(encryptionKey)
 		if err != nil {
 			return nil, err
 		}
 	}
 	options := &eth2keymanager.KeyVaultOptions{}
-	options.SetStorage(signerStore)
+	options.SetStorage(ekmStorage)
 	options.SetWalletType(core.NDWallet)
 
-	wallet, err := signerStore.OpenWallet()
+	wallet, err := ekmStorage.OpenWallet()
 	if err != nil && err.Error() != "could not find wallet" {
 		return nil, err
 	}
@@ -86,17 +88,18 @@ func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, network netw
 		}
 	}
 
-	slashingProtector := slashingprotection.NewNormalProtection(signerStore)
+	slashingProtector := slashingprotection.NewNormalProtection(ekmStorage)
 	beaconSigner := signer.NewSimpleSigner(wallet, slashingProtector, core.Network(network.Beacon.GetBeaconNetwork()))
 
 	return &ethKeyManagerSigner{
 		wallet:            wallet,
 		walletLock:        &sync.RWMutex{},
 		signer:            beaconSigner,
-		storage:           signerStore,
+		storage:           ekmStorage,
 		domain:            network.Domain,
 		slashingProtector: slashingProtector,
 		builderProposals:  builderProposals,
+		network:           network.Beacon,
 	}, nil
 }
 
@@ -326,7 +329,7 @@ func (km *ethKeyManagerSigner) RemoveShare(pubKey string) error {
 
 // BumpSlashingProtection updates the slashing protection data for a given public key.
 func (km *ethKeyManagerSigner) BumpSlashingProtection(pubKey []byte) error {
-	currentSlot := km.storage.BeaconNetwork().EstimatedCurrentSlot()
+	currentSlot := km.network.EstimatedCurrentSlot()
 
 	// Update highest attestation data for slashing protection.
 	if err := km.updateHighestAttestation(pubKey, currentSlot); err != nil {
@@ -349,7 +352,7 @@ func (km *ethKeyManagerSigner) updateHighestAttestation(pubKey []byte, slot phas
 		return fmt.Errorf("could not retrieve highest attestation: %w", err)
 	}
 
-	currentEpoch := km.storage.BeaconNetwork().EstimatedEpochAtSlot(slot)
+	currentEpoch := km.network.EstimatedEpochAtSlot(slot)
 	minimalSP := km.computeMinimalAttestationSP(currentEpoch)
 
 	// Check if the retrieved highest attestation data is valid and not outdated.

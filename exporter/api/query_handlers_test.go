@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"math"
 	"testing"
 
@@ -182,7 +183,7 @@ func newDecidedAPIMsg(pk string, role spectypes.BeaconRole, from, to uint64) *Ne
 }
 
 func newDBAndLoggerForTest(logger *zap.Logger) (basedb.Database, *zap.Logger, func()) {
-	db, err := kv.NewInMemory(logger, basedb.Options{})
+	db, err := kv.NewInMemory(context.TODO(), logger, basedb.Options{})
 	if err != nil {
 		return nil, nil, func() {}
 	}

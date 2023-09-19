@@ -1,6 +1,7 @@
 package p2p
 
 import (
+	"context"
 	"encoding/hex"
 	"testing"
 
@@ -51,7 +52,7 @@ func TestSetupPrivateKey(t *testing.T) {
 	for _, test := range tests {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
-			db, err := kv.NewInMemory(logging.TestLogger(t), basedb.Options{})
+			db, err := kv.NewInMemory(context.TODO(), logging.TestLogger(t), basedb.Options{})
 			require.NoError(t, err)
 			defer db.Close()
 

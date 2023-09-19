@@ -1,6 +1,7 @@
 package eventhandler
 
 import (
+	"context"
 	"encoding/binary"
 	"testing"
 
@@ -17,7 +18,7 @@ import (
 func Test_validateValidatorAddedEvent(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 
-	db, err := kv.NewInMemory(logger, basedb.Options{})
+	db, err := kv.NewInMemory(context.TODO(), logger, basedb.Options{})
 	require.NoError(t, err)
 
 	nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)

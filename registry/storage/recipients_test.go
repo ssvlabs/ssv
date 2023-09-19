@@ -1,6 +1,7 @@
 package storage_test
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -338,7 +339,7 @@ func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 }
 
 func newRecipientStorageForTest(logger *zap.Logger) (storage.Recipients, func()) {
-	db, err := kv.NewInMemory(logger, basedb.Options{})
+	db, err := kv.NewInMemory(context.TODO(), logger, basedb.Options{})
 	if err != nil {
 		return nil, func() {}
 	}

@@ -2,6 +2,7 @@ package storage
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"sort"
 	"strconv"
@@ -168,7 +169,7 @@ func generateMaxPossibleShare() (*ssvtypes.SSVShare, error) {
 }
 
 func newShareStorageForTest(logger *zap.Logger) (Shares, func()) {
-	db, err := kv.NewInMemory(logger, basedb.Options{})
+	db, err := kv.NewInMemory(context.TODO(), logger, basedb.Options{})
 	if err != nil {
 		return nil, func() {}
 	}

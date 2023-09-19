@@ -1,6 +1,7 @@
 package operator
 
 import (
+	"bytes"
 	"context"
 	"crypto/x509"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"math/big"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -19,7 +21,6 @@ import (
 
 	"github.com/bloxapp/ssv/api/handlers"
 	apiserver "github.com/bloxapp/ssv/api/server"
-
 	"github.com/bloxapp/ssv/beacon/goclient"
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/ekm"
@@ -60,9 +61,16 @@ type KeyStore struct {
 	PasswordFile   string `yaml:"PasswordFile" env:"PASSWORD_FILE" env-description:"Password for operator private key file decryption"`
 }
 
+type DBOptions struct {
+	Path       string        `yaml:"Path" env:"DB_PATH" env-default:"./data/db" env-description:"Path for storage"`
+	Reporting  bool          `yaml:"Reporting" env:"DB_REPORTING" env-default:"false" env-description:"Flag to run on-off db size reporting"`
+	GCInterval time.Duration `yaml:"GCInterval" env:"DB_GC_INTERVAL" env-default:"6m" env-description:"Interval between garbage collection cycles. Set to 0 to disable."`
+}
+
 type config struct {
 	global_config.GlobalConfig `yaml:"global"`
-	DBOptions                  basedb.Options                   `yaml:"db"`
+	DBOptions                  DBOptions                        `yaml:"db"`
+	SlashingProtectionOptions  SlashingProtectionOptions        `yaml:"slashing_protection"`
 	SSVOptions                 operator.Options                 `yaml:"ssv"`
 	ExecutionClient            executionclient.ExecutionOptions `yaml:"eth1"` // TODO: execution_client in yaml
 	ConsensusClient            beaconprotocol.Options           `yaml:"eth2"` // TODO: consensus_client in yaml
@@ -101,10 +109,43 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil {
 			logger.Fatal("could not setup network", zap.Error(err))
 		}
-		cfg.DBOptions.Ctx = cmd.Context()
-		db, err := setupDB(logger, networkConfig.Beacon.GetNetwork())
+
+		nodeDBOptions := basedb.Options{
+			Path:       cfg.DBOptions.Path,
+			Reporting:  cfg.DBOptions.Reporting,
+			GCInterval: cfg.DBOptions.GCInterval,
+		}
+
+		db, err := setupDB(cmd.Context(), logger, nodeDBOptions, networkConfig.Beacon.GetNetwork())
 		if err != nil {
 			logger.Fatal("could not setup db", zap.Error(err))
+		}
+
+		// Validate that provided slashing protection DB path directory exists
+		if _, err := os.Stat(cfg.SlashingProtectionOptions.DBPath); os.IsNotExist(err) {
+			logger.Fatal("Slashing protection database does not exist. Please create it using the 'create-slashing-protection-db' command.")
+		}
+
+		// Validate that the slashing protection DB and node DB are not in the same directory
+		if filepath.Dir(cfg.DBOptions.Path) == filepath.Dir(cfg.SlashingProtectionOptions.DBPath) {
+			logger.Fatal("node DB and slashing protection DB should not be in the same directory")
+		}
+
+		spDBOptions := basedb.Options{
+			Path:       cfg.SlashingProtectionOptions.DBPath,
+			SyncWrites: true,
+		}
+
+		spDB, err := setupDB(cmd.Context(), logger, spDBOptions, networkConfig.Beacon.GetNetwork())
+		if err != nil {
+			logger.Fatal("could not setup slashing protection db", zap.Error(err))
+		}
+
+		// If the sp db was created with cli command, it should include "genesis" version of the db
+		// this way we can validate the db was created via the cli command. if not, we should fail
+		value, found, err := spDB.Get([]byte(networkConfig.Beacon.GetBeaconNetwork()), []byte(ekm.GenesisVersionPrefix))
+		if err != nil || !found || !bytes.Equal(value.Value, []byte(ekm.GenesisVersion)) {
+			logger.Fatal("Slashing protection DB was not created via cli command. Please create it using the 'create-slashing-protection-db' command.", zap.Error(err))
 		}
 
 		nodeStorage, operatorData := setupOperatorStorage(logger, db)
@@ -116,7 +157,7 @@ var StartNodeCmd = &cobra.Command{
 		operatorKey, _, _ := nodeStorage.GetPrivateKey()
 		keyBytes := x509.MarshalPKCS1PrivateKey(operatorKey)
 		hashedKey, _ := rsaencryption.HashRsaKey(keyBytes)
-		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkConfig, cfg.SSVOptions.ValidatorOptions.BuilderProposals, hashedKey)
+		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, spDB, networkConfig, cfg.SSVOptions.ValidatorOptions.BuilderProposals, hashedKey)
 		if err != nil {
 			logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 		}
@@ -351,8 +392,8 @@ func setupGlobal(cmd *cobra.Command) (*zap.Logger, error) {
 	return zap.L(), nil
 }
 
-func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.BadgerDB, error) {
-	db, err := kv.New(logger, cfg.DBOptions)
+func setupDB(ctx context.Context, logger *zap.Logger, options basedb.Options, eth2Network beaconprotocol.Network) (*kv.BadgerDB, error) {
+	db, err := kv.New(ctx, logger, options)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open db")
 	}
@@ -360,16 +401,18 @@ func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.Badger
 		if err := db.Close(); err != nil {
 			return errors.Wrap(err, "failed to close db")
 		}
-		db, err = kv.New(logger, cfg.DBOptions)
+		db, err = kv.New(ctx, logger, options)
 		return errors.Wrap(err, "failed to reopen db")
 	}
 
 	migrationOpts := migrations.Options{
 		Db:      db,
-		DbPath:  cfg.DBOptions.Path,
+		DbPath:  options.Path,
 		Network: eth2Network,
+
+		SP: options.SyncWrites,
 	}
-	applied, err := migrations.Run(cfg.DBOptions.Ctx, logger, migrationOpts)
+	applied, err := migrations.Run(ctx, logger, migrationOpts)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to run migrations")
 	}

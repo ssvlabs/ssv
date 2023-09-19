@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"encoding/base64"
 	"testing"
 
@@ -27,7 +28,7 @@ var (
 
 func TestSaveAndGetPrivateKey(t *testing.T) {
 	logger := logging.TestLogger(t)
-	db, err := kv.NewInMemory(logger, basedb.Options{})
+	db, err := kv.NewInMemory(context.TODO(), logger, basedb.Options{})
 	require.NoError(t, err)
 	defer db.Close()
 
@@ -89,7 +90,7 @@ func TestSetupPrivateKey(t *testing.T) {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			logger := logging.TestLogger(t)
-			db, err := kv.NewInMemory(logger, basedb.Options{})
+			db, err := kv.NewInMemory(context.TODO(), logger, basedb.Options{})
 			require.NoError(t, err)
 			defer db.Close()
 
@@ -144,7 +145,7 @@ func TestSetupPrivateKey(t *testing.T) {
 
 func TestDropRegistryData(t *testing.T) {
 	logger := logging.TestLogger(t)
-	db, err := kv.NewInMemory(logger, basedb.Options{})
+	db, err := kv.NewInMemory(context.TODO(), logger, basedb.Options{})
 	require.NoError(t, err)
 	defer db.Close()
 
@@ -221,7 +222,7 @@ func TestDropRegistryData(t *testing.T) {
 
 func TestNetworkAndLocalEventsConfig(t *testing.T) {
 	logger := logging.TestLogger(t)
-	db, err := kv.NewInMemory(logger, basedb.Options{})
+	db, err := kv.NewInMemory(context.TODO(), logger, basedb.Options{})
 	require.NoError(t, err)
 	defer db.Close()
 

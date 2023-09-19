@@ -105,7 +105,7 @@ func TestSubmitProposal(t *testing.T) {
 
 func createStorage(t *testing.T) (basedb.Database, registrystorage.Shares, registrystorage.Recipients) {
 	logger := logging.TestLogger(t)
-	db, err := kv.NewInMemory(logger, basedb.Options{})
+	db, err := kv.NewInMemory(context.TODO(), logger, basedb.Options{})
 	require.NoError(t, err)
 
 	shareStorage, err := registrystorage.NewSharesStorage(logger, db, []byte("test"))

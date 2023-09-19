@@ -1,6 +1,7 @@
 package ekm
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 	"math/big"
@@ -18,9 +19,8 @@ import (
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/storage/kv"
-
 	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
 
@@ -30,17 +30,18 @@ func _byteArray(input string) []byte {
 }
 
 func getBaseStorage(logger *zap.Logger) (basedb.Database, error) {
-	return kv.NewInMemory(logger, basedb.Options{})
+	return kv.NewInMemory(context.TODO(), logger, basedb.Options{})
 }
 
 func newStorageForTest(t *testing.T) (Storage, func()) {
 	logger := logging.TestLogger(t)
 	db, err := getBaseStorage(logger)
-	if err != nil {
-		return nil, func() {}
-	}
+	require.NoError(t, err)
 
-	s := NewSignerStorage(db, networkconfig.TestNetwork.Beacon.GetNetwork(), logger)
+	spDB, err := getBaseStorage(logger)
+	require.NoError(t, err)
+
+	s := NewEKMStorage(db, spDB, networkconfig.TestNetwork.Beacon.GetBeaconNetwork(), logger)
 	return s, func() {
 		db.Close()
 	}
