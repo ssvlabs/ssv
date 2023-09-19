@@ -6,17 +6,23 @@
 
 # SSV - Monitoring
 
-`/metrics` end-point is exposing metrics from ssv node to prometheus.
+This page will outline how to monitor an SSV Node using Grafana and Prometheus.
+### Pre-requisites
+Make sure your node is exposing a `/metrics` and `/health` endpoints. This is done via node configuration, as explained in the [Installation guide on the docs]([../installation.md#metrics-configuration-optional](https://docs.ssv.network/run-a-node/operator-node/installation#create-configuration-file)).
 
-Prometheus should also hit `/health` end-point in order to collect the health check metrics. \
-Even if prometheus is not configured, the end-point can simply be polled by a simple HTTP client 
-(it doesn't contain metrics)
+This guide will not go into the details of setting up and running Prometheus or Grafana. For this, we recommend visiting their related documentations:
+
+[Prometheus docs](https://prometheus.io/docs/introduction/overview/)
+
+[Grafana docs](https://grafana.com/docs/)
+
+For Grafana, specifically, [Grafana Cloud](https://grafana.com/docs/grafana-cloud/) is a viable solution, especially for beginners.
 
 See the configuration of a [local prometheus service](prometheus/prometheus.yaml).
 
 ### Health Check
 
-Health check route is available on `GET /health`. \
+Even if Prometheus is not configured, the `/health` end-point can simply be polled by a simple HTTP client as a health check. \
 In case the node is healthy it returns an HTTP Code `200` with empty response:
 ```shell
 $ curl http://localhost:15000/health
@@ -28,42 +34,83 @@ $ curl http://localhost:15000/health
 {"errors": ["could not sync eth1 events"]}
 ```
 
-## Metrics
+## Prometheus
 
-`MetricsAPIPort` is used to enable prometheus metrics collection:
+In a typical setup, where only one SSV node Docker container is running, Prometheus should be configured with a file like this:
 
-Example:
 ```yaml
-MetricsAPIPort: 15000
+global:
+  scrape_interval:     10s
+  evaluation_interval: 10s
+
+scrape_configs:
+  - job_name: ssv
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+        # change the targets according to your setup
+        # if running prometheus from source, or as executable:
+        # - <container_name>:15000 (i.e.: ssv_node:15000, check with docker ps command)
+        # if running prometheus as docker container:
+        - host.docker.internal:15000
+  - job_name: ssv_health
+    metrics_path: /health
+    static_configs:
+      - targets:
+        # change the targets according to your setup
+        # if running prometheus from source, or as executable:
+        # - <container_name>:15000 (i.e.: ssv_node:15000, check with docker ps command)
+        # if running prometheus as docker container:
+        - host.docker.internal:15000
+
 ```
 
-Or as env variable:
-```shell
-METRICS_API_PORT=15000
+And to launch the Prometheus service as a Docker container as well ([using the official Docker image, as shown here](https://hub.docker.com/r/prom/prometheus)), use this command, where `/path/to/prometheus.yml` is the path and filename of the configuration file described above:
+
+```bash
+docker run \
+    -p 9090:9090 \
+    -v /path/to/prometheus.yml:/etc/prometheus/prometheus.yml \
+    prom/prometheus
 ```
 
 
-## Grafana
+> ⚠️ Note: If you are not running Prometheus as a Docker container, but as an executable, change the \`targets\` in the config file to reflect the correct networking connections. In the case where the SSV Node container is called `ssv_node` the targets should look like this:
 
-In order to setup a grafana dashboard do the following:
-1. Enable metrics (`MetricsAPIPort`)
-2. Setup Prometheus as mentioned in the beginning of this document and add as data source
-    * Job name assumed to be '`ssv`'
-3. Import dashboards to Grafana:
-   * [SSV Node dashboard](./grafana/NODE.md) 
-   * [Operator Performance dashboard](./grafana/PERF.md)
-4. Align dashboard variables:
-    * `instance` - container name, used in 'instance' field for metrics coming from prometheus. \
-      In the given dashboard, instances names are: `ssv-node-v2-<i>`, make sure to change according to your setup
+```yaml
+      - targets:
+        - ssv_node:15000
+```
 
-<br />
+> Use the `docker ps` command to verify the name of the SSV Node container.
 
-### Profiling
+## Grafana monitoring
 
-Profiling can be enabled via config:
+After successfully configuring a Prometheus service, and [adding it as a data source to Grafana](https://grafana.com/docs/grafana/latest/datasources/prometheus/configure-prometheus-data-source/) (read [here for Grafana Cloud](https://grafana.com/docs/grafana-cloud/connect-externally-hosted/data-sources/prometheus/configure-prometheus-data-source/)), a Grafana dashboard can be created.
+
+Below, an example of two dashboards, respectively monitoring the SSV Node and the performance of an Operator:
+
+* [SSV Node monitoring](grafana/dashboard_single_ssv_node.json)
+* [Operator performance monitoring](grafana/dashboard_single_ssv_operator_performance.json)
+
+> It is very important **NOT** to use each JSON template "as is". They should be used as templates, and apply a few important changes to before importing them in Grafana:
+> * search for the `instance` variable in the `templating` section and replace `<SSV_NODE_URL>` with the `targets` variables used in the `prometheus.yml` configuration file, which point to the node container names
+> * identify the occurrences `<PROMETHEUS_SOURCE_ID` in all the `datasource` object instances in the file as shown below, and replace them with the uuid of the Prometheus datasource added to Grafana.
+
+```json
+"datasource": {
+  "type": "prometheus",
+  "uid": "<PROMETHEUS_SOURCE_ID>"
+},
+```
+--- 
+## Profiling
+
+Profiling can be enabled in the node configuration file (`config.yaml`):
 ```yaml
 EnableProfile: true
 ```
+> Note: remember to restart the node after changing its configuration
 
 All the default `pprof` routes are available via HTTP:
 ```shell
