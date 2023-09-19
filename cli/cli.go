@@ -33,4 +33,5 @@ func init() {
 	RootCmd.AddCommand(bootnode.StartBootNodeCmd)
 	RootCmd.AddCommand(operator.StartNodeCmd)
 	RootCmd.AddCommand(operator.GenerateDocCmd)
+	RootCmd.AddCommand(operator.CreateSlashingProtectionDBCmd)
 }
