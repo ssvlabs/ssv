@@ -34,7 +34,7 @@ type storage struct {
 func NewEKMStorage(db, spDB basedb.Database, network spectypes.BeaconNetwork, logger *zap.Logger) Storage {
 	storagePrefix := []byte(network)
 	return &storage{
-		signerStorage: newSignerStorage(db, logger, storagePrefix),
+		signerStorage: newSignerStorage(db, logger, network, storagePrefix),
 		spStorage:     newSlashingProtectionStorage(spDB, logger, storagePrefix),
 	}
 }

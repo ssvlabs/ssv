@@ -14,6 +14,7 @@ import (
 	"github.com/bloxapp/eth2-key-manager/encryptor"
 	"github.com/bloxapp/eth2-key-manager/wallets"
 	"github.com/bloxapp/eth2-key-manager/wallets/hd"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/google/uuid"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -33,16 +34,18 @@ type signerStorage struct {
 	db            basedb.Database
 	encryptionKey []byte
 	logger        *zap.Logger // struct logger is used because core.Storage does not support passing a logger
+	network       spectypes.BeaconNetwork
 	prefix        []byte
 	lock          sync.RWMutex
 }
 
-func newSignerStorage(db basedb.Database, logger *zap.Logger, prefix []byte) signerStorage {
+func newSignerStorage(db basedb.Database, logger *zap.Logger, network spectypes.BeaconNetwork, prefix []byte) signerStorage {
 	return signerStorage{
-		db:     db,
-		logger: logger.Named(logging.NameSignerStorage).Named(fmt.Sprintf("%sstorage", prefix)),
-		prefix: prefix,
-		lock:   sync.RWMutex{},
+		db:      db,
+		logger:  logger.Named(logging.NameSignerStorage).Named(fmt.Sprintf("%sstorage", prefix)),
+		network: network,
+		prefix:  prefix,
+		lock:    sync.RWMutex{},
 	}
 }
 
@@ -76,10 +79,8 @@ func (s *signerStorage) Name() string {
 }
 
 // Network returns the network storage is related to.
-// TODO: remove network from storage?
 func (s *signerStorage) Network() core.Network {
-	panic("implement me")
-	//return core.Network(s.network.GetBeaconNetwork())
+	return core.Network(s.network)
 }
 
 // SaveWallet stores the given wallet.
