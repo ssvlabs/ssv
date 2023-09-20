@@ -205,7 +205,9 @@ func TestEthExecLayer(t *testing.T) {
 			}},
 		})
 
+		// Wait until the state is changed
 		time.Sleep(time.Millisecond * 500)
+
 		nonce, err := nodeStorage.GetNextNonce(nil, testAddrAlice)
 		require.NoError(t, err)
 		require.Equal(t, registrystorage.Nonce(2), nonce)
