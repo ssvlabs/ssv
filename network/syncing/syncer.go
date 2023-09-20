@@ -46,11 +46,11 @@ type Network interface {
 
 type syncer struct {
 	network      Network
-	msgValidator *validation.MessageValidator
+	msgValidator validation.MessageValidator
 }
 
 // New returns a standard implementation of Syncer.
-func New(network Network, msgValidator *validation.MessageValidator) Syncer {
+func New(network Network, msgValidator validation.MessageValidator) Syncer {
 	return &syncer{
 		network:      network,
 		msgValidator: msgValidator,

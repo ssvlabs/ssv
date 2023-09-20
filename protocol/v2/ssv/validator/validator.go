@@ -41,7 +41,7 @@ type Validator struct {
 
 	state uint32
 
-	messageValidator *validation.MessageValidator
+	messageValidator validation.MessageValidator
 }
 
 // NewValidator creates a new instance of Validator.

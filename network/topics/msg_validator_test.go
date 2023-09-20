@@ -57,7 +57,7 @@ func TestMsgValidator(t *testing.T) {
 
 		topics := commons.ValidatorTopicID(share.ValidatorPubKey)
 		pmsg := newPBMsg(raw, commons.GetTopicFullName(topics[0]), []byte("16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r"))
-		res := mv.ValidateP2PMessage(context.Background(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
+		res := mv.ValidatePubsubMessage(context.Background(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
 		require.Equal(t, pubsub.ValidationAccept, res)
 	})
 
@@ -78,7 +78,7 @@ func TestMsgValidator(t *testing.T) {
 
 	t.Run("empty message", func(t *testing.T) {
 		pmsg := newPBMsg([]byte{}, "xxx", []byte{})
-		res := mv.ValidateP2PMessage(context.Background(), "xxxx", pmsg)
+		res := mv.ValidatePubsubMessage(context.Background(), "xxxx", pmsg)
 		require.Equal(t, pubsub.ValidationReject, res)
 	})
 

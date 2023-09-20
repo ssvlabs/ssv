@@ -74,7 +74,21 @@ func (cs *ConsensusState) CreateSignerState(signer spectypes.OperatorID) *Signer
 	return signerState
 }
 
-type MessageValidator struct {
+type PubsubMessageValidator interface {
+	ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
+	ValidatePubsubMessage(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
+}
+
+type SSVMessageValidator interface {
+	ValidateSSVMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, Descriptor, error)
+}
+
+type MessageValidator interface {
+	PubsubMessageValidator
+	SSVMessageValidator
+}
+
+type messageValidator struct {
 	logger         *zap.Logger
 	metrics        metrics
 	netCfg         networkconfig.NetworkConfig
@@ -85,8 +99,8 @@ type MessageValidator struct {
 	checkSignature bool
 }
 
-func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) *MessageValidator {
-	mv := &MessageValidator{
+func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) MessageValidator {
+	mv := &messageValidator{
 		logger:  zap.NewNop(),
 		metrics: &nopMetrics{},
 		netCfg:  netCfg,
@@ -99,40 +113,40 @@ func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) *Me
 	return mv
 }
 
-type Option func(validator *MessageValidator)
+type Option func(validator *messageValidator)
 
 func WithLogger(logger *zap.Logger) Option {
-	return func(mv *MessageValidator) {
+	return func(mv *messageValidator) {
 		mv.logger = logger
 	}
 }
 
 func WithMetrics(metrics metrics) Option {
-	return func(mv *MessageValidator) {
+	return func(mv *messageValidator) {
 		mv.metrics = metrics
 	}
 }
 
 func WithDutyStore(dutyStore *dutystore.Store) Option {
-	return func(mv *MessageValidator) {
+	return func(mv *messageValidator) {
 		mv.dutyStore = dutyStore
 	}
 }
 
 func WithOwnOperatorID(id spectypes.OperatorID) Option {
-	return func(mv *MessageValidator) {
+	return func(mv *messageValidator) {
 		mv.ownOperatorID = id
 	}
 }
 
 func WithShareStorage(shareStorage registrystorage.Shares) Option {
-	return func(mv *MessageValidator) {
+	return func(mv *messageValidator) {
 		mv.shareStorage = shareStorage
 	}
 }
 
 func WithSignatureCheck(check bool) Option {
-	return func(mv *MessageValidator) {
+	return func(mv *messageValidator) {
 		mv.checkSignature = check
 	}
 }
@@ -203,11 +217,11 @@ func (d Descriptor) String() string {
 	return sb.String()
 }
 
-func (mv *MessageValidator) ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
-	return mv.ValidateP2PMessage
+func (mv *messageValidator) ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+	return mv.ValidatePubsubMessage
 }
 
-func (mv *MessageValidator) ValidateP2PMessage(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+func (mv *messageValidator) ValidatePubsubMessage(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 	start := time.Now()
 	var validationDurationLabels []string // TODO: implement
 
@@ -257,7 +271,7 @@ func (mv *MessageValidator) ValidateP2PMessage(ctx context.Context, p peer.ID, p
 	return pubsub.ValidationAccept
 }
 
-func (mv *MessageValidator) validateP2PMessage(ctx context.Context, p peer.ID, pmsg *pubsub.Message, receivedAt time.Time) (*queue.DecodedSSVMessage, Descriptor, error) {
+func (mv *messageValidator) validateP2PMessage(ctx context.Context, p peer.ID, pmsg *pubsub.Message, receivedAt time.Time) (*queue.DecodedSSVMessage, Descriptor, error) {
 	topic := pmsg.GetTopic()
 
 	mv.metrics.ActiveMsgValidation(topic)
@@ -311,11 +325,11 @@ func (mv *MessageValidator) validateP2PMessage(ctx context.Context, p peer.ID, p
 	return mv.validateSSVMessage(msg, receivedAt)
 }
 
-func (mv *MessageValidator) ValidateSSVMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, Descriptor, error) {
+func (mv *messageValidator) ValidateSSVMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, Descriptor, error) {
 	return mv.validateSSVMessage(ssvMessage, time.Now())
 }
 
-func (mv *MessageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage, receivedAt time.Time) (*queue.DecodedSSVMessage, Descriptor, error) {
+func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage, receivedAt time.Time) (*queue.DecodedSSVMessage, Descriptor, error) {
 	var descriptor Descriptor
 
 	if len(ssvMessage.Data) == 0 {
@@ -433,13 +447,13 @@ func (mv *MessageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 	return msg, descriptor, nil
 }
 
-func (mv *MessageValidator) containsSignerFunc(signer spectypes.OperatorID) func(operator *spectypes.Operator) bool {
+func (mv *messageValidator) containsSignerFunc(signer spectypes.OperatorID) func(operator *spectypes.Operator) bool {
 	return func(operator *spectypes.Operator) bool {
 		return operator.OperatorID == signer
 	}
 }
 
-func (mv *MessageValidator) validateSignatureFormat(signature []byte) error {
+func (mv *messageValidator) validateSignatureFormat(signature []byte) error {
 	if len(signature) != signatureSize {
 		e := ErrWrongSignatureSize
 		e.got = len(signature)
@@ -452,7 +466,7 @@ func (mv *MessageValidator) validateSignatureFormat(signature []byte) error {
 	return nil
 }
 
-func (mv *MessageValidator) commonSignerValidation(signer spectypes.OperatorID, share *ssvtypes.SSVShare) error {
+func (mv *messageValidator) commonSignerValidation(signer spectypes.OperatorID, share *ssvtypes.SSVShare) error {
 	if signer == 0 {
 		return ErrZeroSigner
 	}
@@ -464,7 +478,7 @@ func (mv *MessageValidator) commonSignerValidation(signer spectypes.OperatorID, 
 	return nil
 }
 
-func (mv *MessageValidator) validateSlotTime(messageSlot phase0.Slot, role spectypes.BeaconRole, receivedAt time.Time) error {
+func (mv *messageValidator) validateSlotTime(messageSlot phase0.Slot, role spectypes.BeaconRole, receivedAt time.Time) error {
 	if mv.earlyMessage(messageSlot, receivedAt) {
 		return ErrEarlyMessage
 	}
@@ -478,12 +492,12 @@ func (mv *MessageValidator) validateSlotTime(messageSlot phase0.Slot, role spect
 	return nil
 }
 
-func (mv *MessageValidator) earlyMessage(slot phase0.Slot, receivedAt time.Time) bool {
+func (mv *messageValidator) earlyMessage(slot phase0.Slot, receivedAt time.Time) bool {
 	return mv.netCfg.Beacon.GetSlotEndTime(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Unix())).
 		Add(-clockErrorTolerance).Before(mv.netCfg.Beacon.GetSlotStartTime(slot))
 }
 
-func (mv *MessageValidator) lateMessage(slot phase0.Slot, role spectypes.BeaconRole, receivedAt time.Time) time.Duration {
+func (mv *messageValidator) lateMessage(slot phase0.Slot, role spectypes.BeaconRole, receivedAt time.Time) time.Duration {
 	var ttl phase0.Slot
 	switch role {
 	case spectypes.BNRoleProposer, spectypes.BNRoleSyncCommittee, spectypes.BNRoleSyncCommitteeContribution:
@@ -501,7 +515,7 @@ func (mv *MessageValidator) lateMessage(slot phase0.Slot, role spectypes.BeaconR
 		Sub(deadline)
 }
 
-func (mv *MessageValidator) consensusState(messageID spectypes.MessageID) *ConsensusState {
+func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *ConsensusState {
 	id := ConsensusID{
 		PubKey: phase0.BLSPubKey(messageID.GetPubKey()),
 		Role:   messageID.GetRoleType(),

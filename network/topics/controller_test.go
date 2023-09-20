@@ -317,7 +317,7 @@ func (p *P) saveMsg(t string, msg *pubsub.Message) {
 }
 
 // TODO: use p2p/testing
-func newPeers(ctx context.Context, logger *zap.Logger, t *testing.T, n int, msgValidator *validation.MessageValidator, msgID bool, scoreInspector pubsub.ExtendedPeerScoreInspectFn) []*P {
+func newPeers(ctx context.Context, logger *zap.Logger, t *testing.T, n int, msgValidator validation.MessageValidator, msgID bool, scoreInspector pubsub.ExtendedPeerScoreInspectFn) []*P {
 	peers := make([]*P, n)
 	for i := 0; i < n; i++ {
 		peers[i] = newPeer(ctx, logger, t, msgValidator, msgID, scoreInspector)
@@ -339,7 +339,7 @@ func newPeers(ctx context.Context, logger *zap.Logger, t *testing.T, n int, msgV
 	return peers
 }
 
-func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator *validation.MessageValidator, msgID bool, scoreInspector pubsub.ExtendedPeerScoreInspectFn) *P {
+func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator validation.MessageValidator, msgID bool, scoreInspector pubsub.ExtendedPeerScoreInspectFn) *P {
 	h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
 	require.NoError(t, err)
 	ds, err := discovery.NewLocalDiscovery(ctx, logger, h)

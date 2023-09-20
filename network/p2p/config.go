@@ -65,7 +65,7 @@ type Config struct {
 	// Network defines a network configuration.
 	Network networkconfig.NetworkConfig
 	// MessageValidator validates incoming messages.
-	MessageValidator *validation.MessageValidator
+	MessageValidator validation.MessageValidator
 	// Metrics report metrics.
 	Metrics *metricsreporter.MetricsReporter
 

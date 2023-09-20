@@ -62,7 +62,7 @@ type p2pNetwork struct {
 	topicsCtrl   topics.Controller
 	msgRouter    network.MessageRouter
 	msgResolver  topics.MsgPeersResolver
-	msgValidator *validation.MessageValidator
+	msgValidator validation.MessageValidator
 	connHandler  connections.ConnHandler
 
 	state int32

@@ -95,7 +95,7 @@ func TestMessageValidator_currentEstimatedRound(t *testing.T) {
 
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
-			mv := &MessageValidator{}
+			mv := &messageValidator{}
 			got := mv.currentEstimatedRound(tc.sinceSlotStart)
 			require.Equal(t, tc.want, got)
 		})

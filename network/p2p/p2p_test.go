@@ -236,19 +236,19 @@ func registerHandler(logger *zap.Logger, node network.P2PNetwork, mid spectypes.
 	})
 }
 
-func createNetworkAndSubscribe(t *testing.T, ctx context.Context, n int, pks ...string) (*LocalNet, []*dummyRouter, error) {
+func createNetworkAndSubscribe(t *testing.T, ctx context.Context, nodes int, pks ...string) (*LocalNet, []*dummyRouter, error) {
 	logger := logging.TestLogger(t)
-	ln, err := CreateAndStartLocalNet(ctx, logger.Named("createNetworkAndSubscribe"), n, n/2-1, false)
+	ln, err := CreateAndStartLocalNet(ctx, logger.Named("createNetworkAndSubscribe"), nodes, nodes/2-1, false)
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(ln.Nodes) != n {
-		return nil, nil, errors.Errorf("only %d peers created, expected %d", len(ln.Nodes), n)
+	if len(ln.Nodes) != nodes {
+		return nil, nil, errors.Errorf("only %d peers created, expected %d", len(ln.Nodes), nodes)
 	}
 
 	logger.Debug("created local network")
 
-	routers := make([]*dummyRouter, n)
+	routers := make([]*dummyRouter, nodes)
 	for i, node := range ln.Nodes {
 		routers[i] = &dummyRouter{
 			i: i,

@@ -18,7 +18,7 @@ import (
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
-func (mv *MessageValidator) validateConsensusMessage(
+func (mv *messageValidator) validateConsensusMessage(
 	share *ssvtypes.SSVShare,
 	signedMsg *specqbft.SignedMessage,
 	messageID spectypes.MessageID,
@@ -148,7 +148,7 @@ func (mv *MessageValidator) validateConsensusMessage(
 	return consensusDescriptor, msgSlot, nil
 }
 
-func (mv *MessageValidator) validateJustifications(
+func (mv *messageValidator) validateJustifications(
 	share *ssvtypes.SSVShare,
 	signedMsg *specqbft.SignedMessage,
 ) error {
@@ -189,7 +189,7 @@ func (mv *MessageValidator) validateJustifications(
 	return nil
 }
 
-func (mv *MessageValidator) validateSignerBehaviorConsensus(
+func (mv *messageValidator) validateSignerBehaviorConsensus(
 	state *ConsensusState,
 	signer spectypes.OperatorID,
 	share *ssvtypes.SSVShare,
@@ -250,7 +250,7 @@ func (mv *MessageValidator) validateSignerBehaviorConsensus(
 	return nil
 }
 
-func (mv *MessageValidator) validateDutyCount(
+func (mv *messageValidator) validateDutyCount(
 	state *SignerState,
 	msgID spectypes.MessageID,
 	newDutyInSameEpoch bool,
@@ -276,7 +276,7 @@ func (mv *MessageValidator) validateDutyCount(
 	return nil
 }
 
-func (mv *MessageValidator) validateBeaconDuty(
+func (mv *messageValidator) validateBeaconDuty(
 	role spectypes.BeaconRole,
 	slot phase0.Slot,
 	share *ssvtypes.SSVShare,
@@ -310,17 +310,17 @@ func (mv *MessageValidator) validateBeaconDuty(
 	return nil
 }
 
-func (mv *MessageValidator) hasFullData(signedMsg *specqbft.SignedMessage) bool {
+func (mv *messageValidator) hasFullData(signedMsg *specqbft.SignedMessage) bool {
 	return (signedMsg.Message.MsgType == specqbft.ProposalMsgType ||
 		signedMsg.Message.MsgType == specqbft.RoundChangeMsgType ||
 		mv.isDecidedMessage(signedMsg)) && len(signedMsg.FullData) != 0 // TODO: more complex check of FullData
 }
 
-func (mv *MessageValidator) isDecidedMessage(signedMsg *specqbft.SignedMessage) bool {
+func (mv *messageValidator) isDecidedMessage(signedMsg *specqbft.SignedMessage) bool {
 	return signedMsg.Message.MsgType == specqbft.CommitMsgType && len(signedMsg.Signers) > 1
 }
 
-func (mv *MessageValidator) maxRound(role spectypes.BeaconRole) specqbft.Round {
+func (mv *messageValidator) maxRound(role spectypes.BeaconRole) specqbft.Round {
 	switch role {
 	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator: // TODO: check if value for aggregator is correct as there are messages on stage exceeding the limit
 		return 12 // TODO: consider calculating based on quick timeout and slow timeout
@@ -333,7 +333,7 @@ func (mv *MessageValidator) maxRound(role spectypes.BeaconRole) specqbft.Round {
 	}
 }
 
-func (mv *MessageValidator) currentEstimatedRound(sinceSlotStart time.Duration) specqbft.Round {
+func (mv *messageValidator) currentEstimatedRound(sinceSlotStart time.Duration) specqbft.Round {
 	if currentQuickRound := specqbft.FirstRound + specqbft.Round(sinceSlotStart/roundtimer.QuickTimeout); currentQuickRound <= roundtimer.QuickTimeoutThreshold {
 		return currentQuickRound
 	}
@@ -343,7 +343,7 @@ func (mv *MessageValidator) currentEstimatedRound(sinceSlotStart time.Duration) 
 	return estimatedRound
 }
 
-func (mv *MessageValidator) waitAfterSlotStart(role spectypes.BeaconRole) time.Duration {
+func (mv *messageValidator) waitAfterSlotStart(role spectypes.BeaconRole) time.Duration {
 	switch role {
 	case spectypes.BNRoleAttester, spectypes.BNRoleSyncCommittee:
 		return mv.netCfg.Beacon.SlotDurationSec() / 3
@@ -356,7 +356,7 @@ func (mv *MessageValidator) waitAfterSlotStart(role spectypes.BeaconRole) time.D
 	}
 }
 
-func (mv *MessageValidator) validRole(roleType spectypes.BeaconRole) bool {
+func (mv *messageValidator) validRole(roleType spectypes.BeaconRole) bool {
 	switch roleType {
 	case spectypes.BNRoleAttester,
 		spectypes.BNRoleAggregator,
@@ -369,7 +369,7 @@ func (mv *MessageValidator) validRole(roleType spectypes.BeaconRole) bool {
 	return false
 }
 
-func (mv *MessageValidator) validQBFTMsgType(msgType specqbft.MessageType) bool {
+func (mv *messageValidator) validQBFTMsgType(msgType specqbft.MessageType) bool {
 	switch msgType {
 	case specqbft.ProposalMsgType, specqbft.PrepareMsgType, specqbft.CommitMsgType, specqbft.RoundChangeMsgType:
 		return true
@@ -377,7 +377,7 @@ func (mv *MessageValidator) validQBFTMsgType(msgType specqbft.MessageType) bool 
 	return false
 }
 
-func (mv *MessageValidator) validConsensusSigners(share *ssvtypes.SSVShare, m *specqbft.SignedMessage) error {
+func (mv *messageValidator) validConsensusSigners(share *ssvtypes.SSVShare, m *specqbft.SignedMessage) error {
 	if len(m.Signers) == 0 {
 		return ErrNoSigners
 	}

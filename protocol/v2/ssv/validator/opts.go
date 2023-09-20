@@ -32,7 +32,7 @@ type Options struct {
 	BuilderProposals  bool
 	QueueSize         int
 	GasLimit          uint64
-	MessageValidator  *validation.MessageValidator
+	MessageValidator  validation.MessageValidator
 	Metrics           Metrics
 	SignatureCheck    bool
 }

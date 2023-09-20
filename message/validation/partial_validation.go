@@ -16,7 +16,7 @@ import (
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
-func (mv *MessageValidator) validatePartialSignatureMessage(
+func (mv *messageValidator) validatePartialSignatureMessage(
 	share *ssvtypes.SSVShare,
 	signedMsg *spectypes.SignedPartialSignatureMessage,
 	msgID spectypes.MessageID,
@@ -78,13 +78,13 @@ func (mv *MessageValidator) validatePartialSignatureMessage(
 	return msgSlot, nil
 }
 
-func (mv *MessageValidator) inCommittee(share *ssvtypes.SSVShare) bool {
+func (mv *messageValidator) inCommittee(share *ssvtypes.SSVShare) bool {
 	return slices.ContainsFunc(share.Committee, func(operator *spectypes.Operator) bool {
 		return operator.OperatorID == mv.ownOperatorID
 	})
 }
 
-func (mv *MessageValidator) validPartialSigMsgType(msgType spectypes.PartialSigMsgType) bool {
+func (mv *messageValidator) validPartialSigMsgType(msgType spectypes.PartialSigMsgType) bool {
 	switch msgType {
 	case spectypes.PostConsensusPartialSig,
 		spectypes.RandaoPartialSig,
@@ -97,7 +97,7 @@ func (mv *MessageValidator) validPartialSigMsgType(msgType spectypes.PartialSigM
 	}
 }
 
-func (mv *MessageValidator) partialSignatureTypeMatchesRole(msgType spectypes.PartialSigMsgType, role spectypes.BeaconRole) bool {
+func (mv *messageValidator) partialSignatureTypeMatchesRole(msgType spectypes.PartialSigMsgType, role spectypes.BeaconRole) bool {
 	switch role {
 	case spectypes.BNRoleAttester:
 		return msgType == spectypes.PostConsensusPartialSig
@@ -116,7 +116,7 @@ func (mv *MessageValidator) partialSignatureTypeMatchesRole(msgType spectypes.Pa
 	}
 }
 
-func (mv *MessageValidator) validPartialSignatures(share *ssvtypes.SSVShare, signedMsg *spectypes.SignedPartialSignatureMessage) error {
+func (mv *messageValidator) validPartialSignatures(share *ssvtypes.SSVShare, signedMsg *spectypes.SignedPartialSignatureMessage) error {
 	if err := ssvtypes.VerifyByOperators(signedMsg.Signature, signedMsg, mv.netCfg.Domain, spectypes.PartialSignatureType, share.Committee); err != nil {
 		signErr := ErrInvalidSignature
 		signErr.innerErr = err
@@ -133,7 +133,7 @@ func (mv *MessageValidator) validPartialSignatures(share *ssvtypes.SSVShare, sig
 	return nil
 }
 
-func (mv *MessageValidator) verifyPartialSignature(msg *spectypes.PartialSignatureMessage, share *ssvtypes.SSVShare) error {
+func (mv *messageValidator) verifyPartialSignature(msg *spectypes.PartialSignatureMessage, share *ssvtypes.SSVShare) error {
 	signer := msg.Signer
 	signature := msg.PartialSignature
 	root := msg.SigningRoot
@@ -162,7 +162,7 @@ func (mv *MessageValidator) verifyPartialSignature(msg *spectypes.PartialSignatu
 	return ErrSignerNotInCommittee
 }
 
-func (mv *MessageValidator) aggregateVerify(sig *bls.Sign, pk bls.PublicKey, root [32]byte) bool {
+func (mv *messageValidator) aggregateVerify(sig *bls.Sign, pk bls.PublicKey, root [32]byte) bool {
 	start := time.Now()
 
 	valid := ssvtypes.Verifier.AggregateVerify(sig, []bls.PublicKey{pk}, root)
@@ -174,7 +174,7 @@ func (mv *MessageValidator) aggregateVerify(sig *bls.Sign, pk bls.PublicKey, roo
 	return valid
 }
 
-func (mv *MessageValidator) validatePartialMessages(share *ssvtypes.SSVShare, m *spectypes.SignedPartialSignatureMessage) error {
+func (mv *messageValidator) validatePartialMessages(share *ssvtypes.SSVShare, m *spectypes.SignedPartialSignatureMessage) error {
 	if err := mv.commonSignerValidation(m.Signer, share); err != nil {
 		return err
 	}
@@ -209,7 +209,7 @@ func (mv *MessageValidator) validatePartialMessages(share *ssvtypes.SSVShare, m 
 	return nil
 }
 
-func (mv *MessageValidator) validateSignerBehaviorPartial(
+func (mv *messageValidator) validateSignerBehaviorPartial(
 	state *ConsensusState,
 	signer spectypes.OperatorID,
 	share *ssvtypes.SSVShare,

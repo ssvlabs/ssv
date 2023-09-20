@@ -80,7 +80,7 @@ type ControllerOptions struct {
 	DutyRoles                  []spectypes.BeaconRole
 	StorageMap                 *storage.QBFTStores
 	Metrics                    validator.Metrics
-	MessageValidator           *validation.MessageValidator
+	MessageValidator           validation.MessageValidator
 	ValidatorsMap              *validatorsmap.ValidatorsMap
 	SignatureCheck             bool
 
@@ -151,7 +151,7 @@ type controller struct {
 	messageRouter        *messageRouter
 	messageWorker        *worker.Worker
 	historySyncBatchSize int
-	messageValidator     *validation.MessageValidator
+	messageValidator     validation.MessageValidator
 
 	// nonCommittees is a cache of initialized nonCommitteeValidator instances
 	nonCommitteeValidators *ttlcache.Cache[spectypes.MessageID, *nonCommitteeValidator]
