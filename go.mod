@@ -223,4 +223,4 @@ replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
 
-replace github.com/bloxapp/ssv-spec => github.com/bloxapp/ssv-spec v0.0.0-20230820132342-55bfe7a89a75 // #drop-blinded-block-rejection
+replace github.com/bloxapp/ssv-spec => github.com/bloxapp/ssv-spec v0.0.0-20230911140920-8fd437282494
