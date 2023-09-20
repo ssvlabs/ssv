@@ -49,17 +49,17 @@ type Options struct {
 
 // operatorNode implements Node interface
 type operatorNode struct {
-	network          networkconfig.NetworkConfig
-	context          context.Context
-	ticker           slot_ticker.Ticker
-	validatorsCtrl   validator.Controller
-	consensusClient  beaconprotocol.BeaconNode
-	executionClient  *executionclient.ExecutionClient
-	net              network.P2PNetwork
-	storage          storage.Storage
-	qbftStorage      *qbftstorage.QBFTStores
-	dutyScheduler    *duties.Scheduler
-	feeRecipientCtrl fee_recipient.RecipientController
+	network            networkconfig.NetworkConfig
+	context            context.Context
+	slotTickerProvider func() slot_ticker.SlotTicker
+	validatorsCtrl     validator.Controller
+	consensusClient    beaconprotocol.BeaconNode
+	executionClient    *executionclient.ExecutionClient
+	net                network.P2PNetwork
+	storage            storage.Storage
+	qbftStorage        *qbftstorage.QBFTStores
+	dutyScheduler      *duties.Scheduler
+	feeRecipientCtrl   fee_recipient.RecipientController
 
 	ws        api.WebSocketServer
 	wsAPIPort int
@@ -68,7 +68,7 @@ type operatorNode struct {
 }
 
 // New is the constructor of operatorNode
-func New(logger *zap.Logger, opts Options, slotTicker slot_ticker.Ticker) Node {
+func New(logger *zap.Logger, opts Options, slotTickerProvider func() slot_ticker.SlotTicker) Node {
 	storageMap := qbftstorage.NewStores()
 
 	roles := []spectypes.BeaconRole{
@@ -84,15 +84,15 @@ func New(logger *zap.Logger, opts Options, slotTicker slot_ticker.Ticker) Node {
 	}
 
 	node := &operatorNode{
-		context:         opts.Context,
-		ticker:          slotTicker,
-		validatorsCtrl:  opts.ValidatorController,
-		network:         opts.Network,
-		consensusClient: opts.BeaconNode,
-		executionClient: opts.ExecutionClient,
-		net:             opts.P2PNetwork,
-		storage:         opts.ValidatorOptions.RegistryStorage,
-		qbftStorage:     storageMap,
+		context:            opts.Context,
+		slotTickerProvider: slotTickerProvider,
+		validatorsCtrl:     opts.ValidatorController,
+		network:            opts.Network,
+		consensusClient:    opts.BeaconNode,
+		executionClient:    opts.ExecutionClient,
+		net:                opts.P2PNetwork,
+		storage:            opts.ValidatorOptions.RegistryStorage,
+		qbftStorage:        storageMap,
 		dutyScheduler: duties.NewScheduler(&duties.SchedulerOptions{
 			Ctx:                 opts.Context,
 			BeaconNode:          opts.BeaconNode,
@@ -100,7 +100,6 @@ func New(logger *zap.Logger, opts Options, slotTicker slot_ticker.Ticker) Node {
 			ValidatorController: opts.ValidatorController,
 			IndicesChg:          opts.ValidatorController.IndicesChangeChan(),
 			ExecuteDuty:         opts.ValidatorController.ExecuteDuty,
-			Ticker:              slotTicker,
 			BuilderProposals:    opts.ValidatorOptions.BuilderProposals,
 		}),
 		feeRecipientCtrl: fee_recipient.NewController(&fee_recipient.ControllerOptions{
@@ -109,7 +108,6 @@ func New(logger *zap.Logger, opts Options, slotTicker slot_ticker.Ticker) Node {
 			Network:          opts.Network,
 			ShareStorage:     opts.ValidatorOptions.RegistryStorage.Shares(),
 			RecipientStorage: opts.ValidatorOptions.RegistryStorage,
-			Ticker:           slotTicker,
 			OperatorData:     opts.ValidatorOptions.OperatorData,
 		}),
 
@@ -140,7 +138,6 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 		}
 	}()
 
-	go n.ticker.Start(logger)
 	n.validatorsCtrl.StartNetworkHandlers()
 	n.validatorsCtrl.StartValidators()
 	go n.net.UpdateSubnets(logger)

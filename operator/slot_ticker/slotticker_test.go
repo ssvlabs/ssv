@@ -4,9 +4,11 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 )
 
-func TestSlotTicker2(t *testing.T) {
+func TestSlotTicker(t *testing.T) {
 	const numTicks = 3
 	slotDuration := 200 * time.Millisecond
 	// Set the genesis time such that we start from slot 1
@@ -14,13 +16,13 @@ func TestSlotTicker2(t *testing.T) {
 
 	// Calculate the expected starting slot based on genesisTime
 	timeSinceGenesis := time.Since(genesisTime)
-	expectedSlot := uint64(timeSinceGenesis/slotDuration) + 1
+	expectedSlot := phase0.Slot(timeSinceGenesis/slotDuration) + 1
 
-	ticker := NewSlotTicker2(slotDuration, genesisTime)
+	ticker := NewSlotTicker(SlotTickerConfig{slotDuration, genesisTime})
 
 	for i := 0; i < numTicks; i++ {
-		tickChan, slot := ticker.Next()
-		<-tickChan
+		<-ticker.Next()
+		slot := ticker.Slot()
 
 		if slot != expectedSlot {
 			t.Errorf("Expected slot %d, but got slot %d", expectedSlot, slot)
@@ -33,11 +35,11 @@ func TestSlotTicker2(t *testing.T) {
 func TestTickerInitialization(t *testing.T) {
 	slotDuration := 200 * time.Millisecond
 	genesisTime := time.Now()
-	ticker := NewSlotTicker2(slotDuration, genesisTime)
+	ticker := NewSlotTicker(SlotTickerConfig{slotDuration, genesisTime})
 
 	start := time.Now()
-	ch, slot := ticker.Next() // Ignoring the slot number here with "_"
-	<-ch
+	<-ticker.Next()
+	slot := ticker.Slot()
 
 	// Allow a small buffer (e.g., 10ms) due to code execution overhead
 	buffer := 10 * time.Millisecond
@@ -55,12 +57,12 @@ func TestSlotNumberConsistency(t *testing.T) {
 	slotDuration := 200 * time.Millisecond
 	genesisTime := time.Now()
 
-	ticker := NewSlotTicker2(slotDuration, genesisTime)
-	var lastSlot uint64
+	ticker := NewSlotTicker(SlotTickerConfig{slotDuration, genesisTime})
+	var lastSlot phase0.Slot
 
 	for i := 0; i < 10; i++ {
-		ch, slot := ticker.Next()
-		<-ch
+		<-ticker.Next()
+		slot := ticker.Slot()
 		if lastSlot != 0 && slot != lastSlot+1 {
 			t.Errorf("Expected slot %d, got %d", lastSlot+1, slot)
 			break
@@ -73,11 +75,10 @@ func TestGenesisInFuture(t *testing.T) {
 	slotDuration := 200 * time.Millisecond
 	genesisTime := time.Now().Add(1 * time.Second) // Setting genesis time 1s in the future
 
-	ticker := NewSlotTicker2(slotDuration, genesisTime)
+	ticker := NewSlotTicker(SlotTickerConfig{slotDuration, genesisTime})
 	start := time.Now()
 
-	tickChan, _ := ticker.Next() // Ignoring the slot number with '_'
-	<-tickChan
+	<-ticker.Next()
 
 	// The first tick should occur after the genesis time
 	expectedFirstTickDuration := genesisTime.Sub(start)
@@ -95,13 +96,12 @@ func TestBoundedDrift(t *testing.T) {
 	slotDuration := 20 * time.Millisecond
 	genesisTime := time.Now()
 
-	ticker := NewSlotTicker2(slotDuration, genesisTime)
+	ticker := NewSlotTicker(SlotTickerConfig{slotDuration, genesisTime})
 	ticks := 100
 
 	start := time.Now()
 	for i := 0; i < ticks; i++ {
-		ch, _ := ticker.Next() // Ignoring the slot number here with "_"
-		<-ch
+		<-ticker.Next()
 	}
 	expectedDuration := time.Duration(ticks) * slotDuration
 	elapsed := time.Since(start)
@@ -131,10 +131,9 @@ func TestMultipleSlotTickers(t *testing.T) {
 	for i := 0; i < numTickers; i++ {
 		go func() {
 			defer wg.Done()
-			ticker := NewSlotTicker2(slotDuration, genesisTime)
+			ticker := NewSlotTicker(SlotTickerConfig{slotDuration, genesisTime})
 			for j := 0; j < ticksPerTimer; j++ {
-				ch, _ := ticker.Next() // Ignoring the slot number here with "_"
-				<-ch
+				<-ticker.Next()
 			}
 		}()
 	}

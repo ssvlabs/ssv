@@ -19,6 +19,7 @@ import (
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/operator/slot_ticker"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
@@ -31,7 +32,8 @@ const (
 )
 
 type SlotTicker interface {
-	Subscribe(subscription chan phase0.Slot) event.Subscription
+	Next() <-chan time.Time
+	Slot() phase0.Slot
 }
 
 type BeaconNode interface {
@@ -58,7 +60,7 @@ type SchedulerOptions struct {
 	ValidatorController ValidatorController
 	ExecuteDuty         ExecuteDutyFunc
 	IndicesChg          chan struct{}
-	Ticker              SlotTicker
+	SlotTickerProvider  func() slot_ticker.SlotTicker
 	BuilderProposals    bool
 }
 
@@ -66,7 +68,7 @@ type Scheduler struct {
 	beaconNode          BeaconNode
 	network             networkconfig.NetworkConfig
 	validatorController ValidatorController
-	slotTicker          SlotTicker
+	slotTickerProvider  func() slot_ticker.SlotTicker
 	executeDuty         ExecuteDutyFunc
 	builderProposals    bool
 
@@ -75,7 +77,7 @@ type Scheduler struct {
 
 	reorg      chan ReorgEvent
 	indicesChg chan struct{}
-	ticker     chan phase0.Slot
+	ticker     slot_ticker.SlotTicker
 	waitCond   *sync.Cond
 	pool       *pool.ContextPool
 
@@ -89,7 +91,7 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 	s := &Scheduler{
 		beaconNode:          opts.BeaconNode,
 		network:             opts.Network,
-		slotTicker:          opts.Ticker,
+		slotTickerProvider:  opts.SlotTickerProvider,
 		executeDuty:         opts.ExecuteDuty,
 		validatorController: opts.ValidatorController,
 		builderProposals:    opts.BuilderProposals,
@@ -102,7 +104,7 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 			NewSyncCommitteeHandler(),
 		},
 
-		ticker:   make(chan phase0.Slot),
+		ticker:   opts.SlotTickerProvider(),
 		reorg:    make(chan ReorgEvent),
 		waitCond: sync.NewCond(&sync.Mutex{}),
 	}
@@ -135,8 +137,6 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 
 	for _, handler := range s.handlers {
 		handler := handler
-		slotTicker := make(chan phase0.Slot)
-		s.slotTicker.Subscribe(slotTicker)
 
 		indicesChangeCh := make(chan struct{})
 		indicesChangeFeed.Subscribe(indicesChangeCh)
@@ -150,7 +150,7 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 			s.network,
 			s.validatorController,
 			s.ExecuteDuties,
-			slotTicker,
+			s.slotTickerProvider,
 			reorgCh,
 			indicesChangeCh,
 		)
@@ -162,7 +162,6 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 		})
 	}
 
-	s.slotTicker.Subscribe(s.ticker)
 	go s.SlotTicker(ctx)
 
 	go indicesChangeFeed.FanOut(ctx, s.indicesChg)
@@ -214,7 +213,8 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case slot := <-s.ticker:
+		case <-s.ticker.Next():
+			slot := s.ticker.Slot()
 			delay := s.network.SlotDurationSec() / time.Duration(goclient.IntervalsPerSlot) /* a third of the slot duration */
 			finalTime := s.network.Beacon.GetSlotStartTime(slot).Add(delay)
 			waitDuration := time.Until(finalTime)

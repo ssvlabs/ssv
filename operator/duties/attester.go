@@ -69,7 +69,8 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 		case <-ctx.Done():
 			return
 
-		case slot := <-h.ticker:
+		case <-h.ticker.Next():
+			slot := h.ticker.Slot()
 			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_seq", buildStr))

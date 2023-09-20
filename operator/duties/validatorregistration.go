@@ -36,10 +36,11 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 		case <-ctx.Done():
 			return
 
-		case slot := <-h.ticker:
+		case <-h.ticker.Next():
 			shares := h.validatorController.GetOperatorShares()
-
+			slot := h.ticker.Slot()
 			sent := 0
+
 			for _, share := range shares {
 				if !share.HasBeaconMetadata() {
 					continue

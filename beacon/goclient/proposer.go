@@ -19,6 +19,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/operator/slot_ticker"
 )
 
 const (
@@ -230,9 +231,11 @@ func (gc *goClient) createValidatorRegistration(pubkey []byte, feeRecipient bell
 	return signedReg
 }
 
-func (gc *goClient) registrationSubmitter(slots <-chan phase0.Slot) {
-	for currentSlot := range slots {
-		gc.submitRegistrationsFromCache(currentSlot)
+func (gc *goClient) startSlotTicker(slotTickerProvider func() slot_ticker.SlotTicker) {
+	ticker := slotTickerProvider()
+	for {
+		<-ticker.Next()
+		gc.submitRegistrationsFromCache(ticker.Slot())
 	}
 }
 

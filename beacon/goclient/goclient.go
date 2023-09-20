@@ -147,7 +147,7 @@ type goClient struct {
 }
 
 // New init new client and go-client instance
-func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.OperatorID, slotTicker slot_ticker.Ticker) (beaconprotocol.BeaconNode, error) {
+func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.OperatorID, slotTickerProvider func() slot_ticker.SlotTicker) (beaconprotocol.BeaconNode, error) {
 	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(string(opt.Network.BeaconNetwork)))
 
 	httpClient, err := http.New(opt.Context,
@@ -160,9 +160,6 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 	if err != nil {
 		return nil, errors.WithMessage(err, "failed to create http client")
 	}
-
-	tickerChan := make(chan phase0.Slot, 32)
-	slotTicker.Subscribe(tickerChan)
 
 	client := &goClient{
 		log:               logger,
@@ -190,7 +187,7 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 	)
 
 	// Start registration submitter.
-	go client.registrationSubmitter(tickerChan)
+	go client.startSlotTicker(slotTickerProvider)
 
 	return client, nil
 }

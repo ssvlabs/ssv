@@ -137,8 +137,6 @@ var StartNodeCmd = &cobra.Command{
 
 		p2pNetwork := setupP2P(logger, db)
 
-		slotTicker := slot_ticker.NewTicker(cmd.Context(), networkConfig)
-
 		metricsReporter := metricsreporter.New(
 			metricsreporter.WithLogger(logger),
 		)
@@ -149,7 +147,9 @@ var StartNodeCmd = &cobra.Command{
 		cfg.ConsensusClient.GasLimit = spectypes.DefaultGasLimit
 		cfg.ConsensusClient.Network = networkConfig.Beacon.GetNetwork()
 
-		consensusClient := setupConsensusClient(logger, operatorData.ID, slotTicker)
+		consensusClient := setupConsensusClient(logger, operatorData.ID, func() slot_ticker.SlotTicker {
+			return slot_ticker.NewSlotTicker(networkConfig)
+		})
 
 		executionClient, err := executionclient.New(
 			cmd.Context(),
@@ -214,7 +214,9 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 		cfg.SSVOptions.Metrics = metricsReporter
 
-		operatorNode = operator.New(logger, cfg.SSVOptions, slotTicker)
+		operatorNode = operator.New(logger, cfg.SSVOptions, func() slot_ticker.SlotTicker {
+			return slot_ticker.NewSlotTicker(networkConfig)
+		})
 
 		if cfg.MetricsAPIPort > 0 {
 			go startMetricsHandler(cmd.Context(), logger, db, metricsReporter, cfg.MetricsAPIPort, cfg.EnableProfile)
@@ -494,9 +496,9 @@ func setupP2P(
 func setupConsensusClient(
 	logger *zap.Logger,
 	operatorID spectypes.OperatorID,
-	slotTicker slot_ticker.Ticker,
+	slotTickerProvider func() slot_ticker.SlotTicker,
 ) beaconprotocol.BeaconNode {
-	cl, err := goclient.New(logger, cfg.ConsensusClient, operatorID, slotTicker)
+	cl, err := goclient.New(logger, cfg.ConsensusClient, operatorID, slotTickerProvider)
 	if err != nil {
 		logger.Fatal("failed to create beacon go-client", zap.Error(err),
 			fields.Address(cfg.ConsensusClient.BeaconNodeAddr))
