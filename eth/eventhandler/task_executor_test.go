@@ -49,7 +49,7 @@ func TestExecuteTask(t *testing.T) {
 	defer cancel()
 	// Create operators rsa keys
 
-	ops, err := createOperators(1)
+	ops, err := createOperators(1, 0)
 	require.NoError(t, err)
 
 	eh, validatorCtrl, err := setupEventHandler(t, ctx, logger, nil, ops[0], true)
@@ -146,7 +146,7 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 	defer cancel()
 
 	// Create operators rsa keys
-	ops, err := createOperators(1)
+	ops, err := createOperators(1, 0)
 	require.NoError(t, err)
 
 	eh, _, err := setupEventHandler(t, ctx, logger, nil, ops[0], false)
