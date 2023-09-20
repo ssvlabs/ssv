@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/utils/format"
 )
 
@@ -28,7 +29,7 @@ func (dvs *DiscV5Service) nsToSubnet(ns string) (int, error) {
 		return 0, err
 	}
 
-	if val >= uint64(dvs.fork.Subnets()) {
+	if val >= uint64(commons.Subnets()) {
 		return 0, errValueOutOfRange
 	}
 

@@ -5,12 +5,14 @@ import (
 	"fmt"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/network/records"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/network/commons"
+	"github.com/bloxapp/ssv/network/records"
 
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/protocol/v2/message"
@@ -33,7 +35,7 @@ func (n *p2pNetwork) UseMessageRouter(router network.MessageRouter) {
 // Peers registers a message router to handle incoming messages
 func (n *p2pNetwork) Peers(pk spectypes.ValidatorPK) ([]peer.ID, error) {
 	all := make([]peer.ID, 0)
-	topics := n.fork.ValidatorTopicID(pk)
+	topics := commons.ValidatorTopicID(pk)
 	for _, topic := range topics {
 		peers, err := n.topicsCtrl.Peers(topic)
 		if err != nil {
@@ -50,13 +52,13 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
 
-	raw, err := n.fork.EncodeNetworkMsg(msg)
+	raw, err := commons.EncodeNetworkMsg(msg)
 	if err != nil {
 		return errors.Wrap(err, "could not decode msg")
 	}
 
 	vpk := msg.GetID().GetPubKey()
-	topics := n.fork.ValidatorTopicID(vpk)
+	topics := commons.ValidatorTopicID(vpk)
 
 	for _, topic := range topics {
 		if err := n.topicsCtrl.Broadcast(topic, raw, n.cfg.RequestTimeout); err != nil {
@@ -72,8 +74,8 @@ func (n *p2pNetwork) SubscribeAll(logger *zap.Logger) error {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
 	n.subnets, _ = records.Subnets{}.FromString(records.AllSubnets)
-	for subnet := 0; subnet < n.fork.Subnets(); subnet++ {
-		err := n.topicsCtrl.Subscribe(logger, n.fork.SubnetTopicID(subnet))
+	for subnet := 0; subnet < commons.Subnets(); subnet++ {
+		err := n.topicsCtrl.Subscribe(logger, commons.SubnetTopicID(subnet))
 		if err != nil {
 			return err
 		}
@@ -108,7 +110,7 @@ func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) e
 	if status, _ := n.activeValidators.Get(pkHex); status != validatorStatusSubscribed {
 		return nil
 	}
-	topics := n.fork.ValidatorTopicID(pk)
+	topics := commons.ValidatorTopicID(pk)
 	for _, topic := range topics {
 		if err := n.topicsCtrl.Unsubscribe(logger, topic, false); err != nil {
 			return err
@@ -120,7 +122,7 @@ func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) e
 
 // subscribe to validator topics, as defined in the fork
 func (n *p2pNetwork) subscribe(logger *zap.Logger, pk spectypes.ValidatorPK) error {
-	topics := n.fork.ValidatorTopicID(pk)
+	topics := commons.ValidatorTopicID(pk)
 	for _, topic := range topics {
 		if err := n.topicsCtrl.Subscribe(logger, topic); err != nil {
 			// return errors.Wrap(err, "could not broadcast message")

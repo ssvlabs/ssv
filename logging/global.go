@@ -13,19 +13,6 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// TODO: Log rotation out of the app
-func getFileWriter(logFileName string) io.Writer {
-	fileLogger := &lumberjack.Logger{
-		Filename:   logFileName,
-		MaxSize:    500, // megabytes
-		MaxBackups: 3,
-		MaxAge:     28, // days
-		Compress:   false,
-	}
-
-	return fileLogger
-}
-
 func parseConfigLevel(levelName string) (zapcore.Level, error) {
 	return zapcore.ParseLevel(levelName)
 }
@@ -43,7 +30,17 @@ func parseConfigLevelEncoder(levelEncoderName string) zapcore.LevelEncoder {
 	}
 }
 
-func SetGlobalLogger(levelName string, levelEncoderName string, logFormat string, logFilePath string) error {
+func SetGlobalLogger(levelName string, levelEncoderName string, logFormat string, fileOptions *LogFileOptions) (err error) {
+	defer func() {
+		if err == nil {
+			zap.L().Debug("logger is ready",
+				zap.String("level", levelName),
+				zap.String("encoder", levelEncoderName),
+				zap.String("format", logFormat),
+				zap.Any("file_options", fileOptions),
+			)
+		}
+	}()
 	level, err := parseConfigLevel(levelName)
 	if err != nil {
 		return err
@@ -77,23 +74,37 @@ func SetGlobalLogger(levelName string, levelEncoderName string, logFormat string
 
 	consoleCore := zapcore.NewCore(zapcore.NewConsoleEncoder(cfg.EncoderConfig), os.Stdout, lv)
 
-	if logFilePath == "" {
+	if fileOptions == nil {
 		zap.ReplaceGlobals(zap.New(consoleCore))
 		return nil
 	}
-
-	logFileWriter := getFileWriter(logFilePath)
 
 	lv2 := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
 		return true // debug log returns all logs
 	})
 
 	dev := zapcore.NewJSONEncoder(zap.NewDevelopmentEncoderConfig())
-	fileCore := zapcore.NewCore(dev, zapcore.AddSync(logFileWriter), lv2)
+	fileWriter := fileOptions.writer(fileOptions)
+	fileCore := zapcore.NewCore(dev, zapcore.AddSync(fileWriter), lv2)
 
 	zap.ReplaceGlobals(zap.New(zapcore.NewTee(consoleCore, fileCore)))
-
 	return nil
+}
+
+type LogFileOptions struct {
+	FileName   string
+	MaxSize    int
+	MaxBackups int
+}
+
+func (o LogFileOptions) writer(options *LogFileOptions) io.Writer {
+	return &lumberjack.Logger{
+		Filename:   options.FileName,
+		MaxSize:    options.MaxSize, // megabytes
+		MaxBackups: options.MaxBackups,
+		MaxAge:     28, // days
+		Compress:   false,
+	}
 }
 
 func CapturePanic(logger *zap.Logger) {

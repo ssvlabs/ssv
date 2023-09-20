@@ -7,26 +7,25 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/bloxapp/eth2-key-manager/core"
-	"github.com/bloxapp/eth2-key-manager/wallets/hd"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
-
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/storage/basedb"
-
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/bloxapp/eth2-key-manager/core"
+	"github.com/bloxapp/eth2-key-manager/wallets/hd"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/utils"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
+	"github.com/bloxapp/ssv/utils/threshold"
 )
 
 const (
@@ -36,7 +35,7 @@ const (
 	pk2Str = "8796fafa576051372030a75c41caafea149e4368aebaca21c9f90d9974b3973d5cee7d7874e4ec9ec59fb2c8945b3e01"
 )
 
-func testKeyManager(t *testing.T) spectypes.KeyManager {
+func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig) spectypes.KeyManager {
 	threshold.Init()
 
 	logger := logging.TestLogger(t)
@@ -44,7 +43,14 @@ func testKeyManager(t *testing.T) spectypes.KeyManager {
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
 
-	km, err := NewETHKeyManagerSigner(logger, db, networkconfig.TestNetwork, true, "")
+	if network == nil {
+		network = &networkconfig.NetworkConfig{
+			Beacon: utils.SetupMockBeaconNetwork(t, nil),
+			Domain: networkconfig.TestNetwork.Domain,
+		}
+	}
+
+	km, err := NewETHKeyManagerSigner(logger, db, *network, true, "")
 	require.NoError(t, err)
 
 	sk1 := &bls.SecretKey{}
@@ -120,7 +126,7 @@ func TestEncryptedKeyManager(t *testing.T) {
 }
 
 func TestSlashing(t *testing.T) {
-	km := testKeyManager(t)
+	km := testKeyManager(t, nil)
 
 	sk1 := &bls.SecretKey{}
 	require.NoError(t, sk1.SetHexString(sk1Str))
@@ -129,12 +135,12 @@ func TestSlashing(t *testing.T) {
 	currentSlot := km.(*ethKeyManagerSigner).storage.Network().EstimatedCurrentSlot()
 	currentEpoch := km.(*ethKeyManagerSigner).storage.Network().EstimatedEpochAtSlot(currentSlot)
 
-	highestTarget := currentEpoch + minimalAttSlashingProtectionEpochDistance + 1
+	highestTarget := currentEpoch + minSPAttestationEpochGap + 1
 	highestSource := highestTarget - 1
-	highestProposal := currentSlot + minimalBlockSlashingProtectionSlotDistance + 1
+	highestProposal := currentSlot + minSPProposalSlotGap + 1
 
 	attestationData := &phase0.AttestationData{
-		Slot:            30,
+		Slot:            currentSlot,
 		Index:           1,
 		BeaconBlockRoot: [32]byte{1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2},
 		Source: &phase0.Checkpoint{
@@ -271,10 +277,101 @@ func TestSlashing(t *testing.T) {
 	})
 }
 
+func TestSlashing_Attestation(t *testing.T) {
+	km := testKeyManager(t, nil)
+
+	var secretKeys [4]*bls.SecretKey
+	for i := range secretKeys {
+		secretKeys[i] = &bls.SecretKey{}
+		secretKeys[i].SetByCSPRNG()
+
+		// Equivalent to AddShare but with a custom slot for minimal slashing protection.
+		err := km.(*ethKeyManagerSigner).BumpSlashingProtection(secretKeys[i].GetPublicKey().Serialize())
+		require.NoError(t, err)
+		err = km.(*ethKeyManagerSigner).saveShare(secretKeys[i])
+		require.NoError(t, err)
+	}
+
+	var baseEpoch phase0.Epoch = 10
+	createAttestationData := func(sourceEpoch, targetEpoch phase0.Epoch) *phase0.AttestationData {
+		return &phase0.AttestationData{
+			Source: &phase0.Checkpoint{
+				Epoch: baseEpoch + sourceEpoch,
+			},
+			Target: &phase0.Checkpoint{
+				Epoch: baseEpoch + targetEpoch,
+			},
+		}
+	}
+
+	signAttestation := func(sk *bls.SecretKey, signingRoot phase0.Root, attestation *phase0.AttestationData, expectSlashing bool, expectReason string) {
+		sig, root, err := km.(*ethKeyManagerSigner).SignBeaconObject(
+			attestation,
+			phase0.Domain{},
+			sk.GetPublicKey().Serialize(),
+			spectypes.DomainAttester,
+		)
+		if expectSlashing {
+			require.Error(t, err, "expected slashing: %s", expectReason)
+			require.Zero(t, sig, "expected zero signature")
+			require.Zero(t, root, "expected zero root")
+			if expectReason != "" {
+				require.ErrorContains(t, err, expectReason, "expected slashing: %s", expectReason)
+			}
+		} else {
+			require.NoError(t, err, "expected no slashing")
+			require.NotZero(t, sig, "expected non-zero signature")
+			require.NotZero(t, root, "expected non-zero root")
+
+			highAtt, found, err := km.(*ethKeyManagerSigner).storage.RetrieveHighestAttestation(sk.GetPublicKey().Serialize())
+			require.NoError(t, err)
+			require.True(t, found)
+			require.Equal(t, attestation.Source.Epoch, highAtt.Source.Epoch)
+			require.Equal(t, attestation.Target.Epoch, highAtt.Target.Epoch)
+		}
+	}
+
+	// Note: in the current implementation, eth2-key-manager doesn't check the signing roots and is
+	// instead blocking the repeated signing of the same attestation.
+
+	// 1. Check a valid attestation.
+	signAttestation(secretKeys[1], phase0.Root{1}, createAttestationData(3, 4), false, "HighestAttestationVote")
+
+	// 2. Same signing root -> slashing (stricter than Eth spec).
+	signAttestation(secretKeys[1], phase0.Root{1}, createAttestationData(3, 4), true, "HighestAttestationVote")
+
+	// 3. Lower than previous source epoch -> expect slashing.
+	signAttestation(secretKeys[1], phase0.Root{1}, createAttestationData(2, 5), true, "HighestAttestationVote")
+
+	// 4. Different signing root -> expect slashing.
+	signAttestation(secretKeys[1], phase0.Root{2}, createAttestationData(3, 4), true, "HighestAttestationVote")
+
+	// 5. Different signing root, lower target epoch -> expect slashing.
+	signAttestation(secretKeys[1], phase0.Root{2}, createAttestationData(3, 3), true, "HighestAttestationVote")
+
+	// 6. Different signing root, same source epoch, higher target epoch -> no slashing.
+	signAttestation(secretKeys[1], phase0.Root{3}, createAttestationData(3, 5), false, "HighestAttestationVote")
+
+	// 7. Different signing root, higher source epoch, same target epoch -> expect slashing.
+	signAttestation(secretKeys[1], phase0.Root{3}, createAttestationData(4, 5), true, "HighestAttestationVote")
+
+	// 8. Different signing root, lower source epoch, higher target epoch -> expect slashing.
+	//    This should fail due to surrounding, but since we're stricter than Eth spec,
+	//    this will fail due to the source epoch being lower than the previous.
+	signAttestation(secretKeys[1], phase0.Root{byte(4)}, createAttestationData(2, 6), true, "HighestAttestationVote")
+
+	// 9. Different public key, different signing root -> no slashing.
+	signAttestation(secretKeys[2], phase0.Root{4}, createAttestationData(3, 6), false, "HighestAttestationVote")
+
+	// 10. Different signing root, higher source epoch, lower target epoch -> expect slashing.
+	//     Same as 8, but in the opposite direction.
+	signAttestation(secretKeys[2], phase0.Root{5}, createAttestationData(4, 5), true, "HighestAttestationVote")
+}
+
 func TestSignRoot(t *testing.T) {
 	require.NoError(t, bls.Init(bls.BLS12_381))
 
-	km := testKeyManager(t)
+	km := testKeyManager(t, nil)
 
 	t.Run("pk 1", func(t *testing.T) {
 		pk := &bls.PublicKey{}

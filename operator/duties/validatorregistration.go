@@ -70,6 +70,12 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 				h.validatorsPassedFirstRegistration[string(share.ValidatorPubKey)] = struct{}{}
 			}
 			h.logger.Debug("validator registration duties sent", zap.Uint64("slot", uint64(slot)), fields.Count(sent))
+
+		case <-h.indicesChange:
+			continue
+
+		case <-h.reorg:
+			continue
 		}
 	}
 }

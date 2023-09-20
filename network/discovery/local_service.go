@@ -4,9 +4,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/bloxapp/ssv/logging"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
+
+	"github.com/bloxapp/ssv/logging"
 
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/discovery"
@@ -100,12 +100,6 @@ func (md *localDiscovery) RegisterSubnets(logger *zap.Logger, subnets ...int) er
 
 // DeregisterSubnets implements Service
 func (md *localDiscovery) DeregisterSubnets(logger *zap.Logger, subnets ...int) error {
-	// TODO
-	return nil
-}
-
-// UpdateForkVersion implements Service
-func (md *localDiscovery) UpdateForkVersion(logger *zap.Logger, forkv forksprotocol.ForkVersion) error {
 	// TODO
 	return nil
 }

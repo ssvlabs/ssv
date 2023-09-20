@@ -23,7 +23,6 @@ import (
 	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/logging/fields/stringer"
 	"github.com/bloxapp/ssv/network/records"
-	forksprotocol "github.com/bloxapp/ssv/protocol/forks"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
@@ -57,7 +56,6 @@ const (
 	FieldEvent               = "event"
 	FieldEventID             = "event_id"
 	FieldFeeRecipient        = "fee_recipient"
-	FieldFork                = "fork"
 	FieldFromBlock           = "from_block"
 	FieldHeight              = "height"
 	FieldIndexCacheMetrics   = "index_cache_metrics"
@@ -66,6 +64,7 @@ const (
 	FieldName                = "name"
 	FieldNetwork             = "network"
 	FieldOperatorId          = "operator_id"
+	FieldOperatorIDs         = "operator_ids"
 	FieldOperatorPubKey      = "operator_pubkey"
 	FieldOwnerAddress        = "owner_address"
 	FieldPeerID              = "peer_id"
@@ -192,6 +191,10 @@ func OperatorID(operatorId spectypes.OperatorID) zap.Field {
 	return zap.Uint64(FieldOperatorId, operatorId)
 }
 
+func OperatorIDs(operatorIDs []spectypes.OperatorID) zap.Field {
+	return zap.Uint64s(FieldOperatorIDs, operatorIDs)
+}
+
 func OperatorIDStr(operatorId string) zap.Field {
 	return zap.String(FieldOperatorId, operatorId)
 }
@@ -282,10 +285,6 @@ func Domain(val spectypes.DomainType) zap.Field {
 
 func Network(val string) zap.Field {
 	return zap.String(FieldNetwork, val)
-}
-
-func Fork(val forksprotocol.ForkVersion) zap.Field {
-	return zap.String(FieldFork, string(val))
 }
 
 func ABIVersion(val string) zap.Field {
