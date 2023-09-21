@@ -8,23 +8,18 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/stretchr/testify/require"
 	"math/big"
-	"testing"
 )
 
-type testValidatorRegisteredEventInput struct {
-	auth      *bind.TransactOpts
-	ops       []*testOperator
-	validator *testValidatorData
-	share     []byte
-	opsIds    []uint64 // separating opsIds from ops as it is a separate event field and should be used for destructive tests
-}
-
-type produceValidatorRegisteredEventsInput struct {
+type testValidatorRegisteredInput struct {
 	*commonTestInput
-	events []*testValidatorRegisteredEventInput
+	events []*validatorRegisteredEventInput
 }
 
-func (input *produceValidatorRegisteredEventsInput) validate() error {
+func NewTestValidatorRegisteredInput(common *commonTestInput) *testValidatorRegisteredInput {
+	return &testValidatorRegisteredInput{common, nil}
+}
+
+func (input *testValidatorRegisteredInput) validate() error {
 	for _, e := range input.events {
 		if err := e.validate(); err != nil {
 			return err
@@ -33,7 +28,15 @@ func (input *produceValidatorRegisteredEventsInput) validate() error {
 	return nil
 }
 
-func (input *testValidatorRegisteredEventInput) validate() error {
+type validatorRegisteredEventInput struct {
+	auth      *bind.TransactOpts
+	ops       []*testOperator
+	validator *testValidatorData
+	share     []byte
+	opsIds    []uint64 // separating opsIds from ops as it is a separate event field and should be used for destructive tests
+}
+
+func (input *validatorRegisteredEventInput) validate() error {
 	if input == nil {
 		return fmt.Errorf("validation error: empty input")
 	}
@@ -58,8 +61,7 @@ func (input *testValidatorRegisteredEventInput) validate() error {
 	return nil
 }
 
-func prepareValidatorAddedEvents(
-	t *testing.T,
+func (input *testValidatorRegisteredInput) prepare(
 	nodeStorage storage.Storage,
 	validators []*testValidatorData,
 	shares [][]byte,
@@ -67,17 +69,17 @@ func prepareValidatorAddedEvents(
 	auth *bind.TransactOpts,
 	expectedNonce *registrystorage.Nonce,
 	validatorsIds []uint32,
-) []*testValidatorRegisteredEventInput {
-	events := make([]*testValidatorRegisteredEventInput, len(validatorsIds))
+) {
+	input.events = make([]*validatorRegisteredEventInput, len(validatorsIds))
 
 	for i, validatorId := range validatorsIds {
 		// Check there are no shares in the state for the current validator
 		valPubKey := validators[validatorId].masterPubKey.Serialize()
 		share := nodeStorage.Shares().Get(nil, valPubKey)
-		require.Nil(t, share)
+		require.Nil(input.t, share)
 
 		// Create event input
-		events[i] = &testValidatorRegisteredEventInput{
+		input.events[i] = &validatorRegisteredEventInput{
 			validator: validators[validatorId],
 			share:     shares[validatorId],
 			auth:      auth,
@@ -87,21 +89,17 @@ func prepareValidatorAddedEvents(
 		// expect nonce bumping after each of these ValidatorAdded events handling
 		*expectedNonce++
 	}
-	return events
 }
 
-func produceValidatorRegisteredEvents(
-	t *testing.T,
-	input *produceValidatorRegisteredEventsInput,
-) {
+func (input *testValidatorRegisteredInput) produce() {
 	err := input.validate()
-	require.NoError(t, err)
+	require.NoError(input.t, err)
 
 	for _, event := range input.events {
 		val := event.validator
 		valPubKey := val.masterPubKey.Serialize()
 		shares := input.nodeStorage.Shares().Get(nil, valPubKey)
-		require.Nil(t, shares)
+		require.Nil(input.t, shares)
 
 		// Call the contract method
 		_, err := input.boundContract.SimcontractTransactor.RegisterValidator(
@@ -117,7 +115,7 @@ func produceValidatorRegisteredEvents(
 				Active:          true,
 				Balance:         big.NewInt(100_000_000),
 			})
-		require.NoError(t, err)
+		require.NoError(input.t, err)
 
 		if !input.doInOneBlock {
 			input.sim.Commit()

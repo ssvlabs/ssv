@@ -111,14 +111,7 @@ func TestEthExecLayer(t *testing.T) {
 	blockNum := uint64(0x1)
 	lastHandledBlockNum := uint64(0x1)
 
-	common := &commonTestInput{
-		sim:           sim,
-		boundContract: boundContract,
-		blockNum:      &blockNum,
-		nodeStorage:   nodeStorage,
-		doInOneBlock:  true,
-	}
-
+	common := NewCommonTestInput(t, sim, boundContract, &blockNum, nodeStorage, true)
 	expectedNonce := registrystorage.Nonce(0)
 	// Prepare blocks with events
 	// Check that the state is empty before the test
@@ -131,25 +124,19 @@ func TestEthExecLayer(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 0, len(operators))
 
-		opAddedEvents := prepareOperatorAddedEvents(ops, auth)
-		produceOperatorAddedEvents(t, &produceOperatorAddedEventsInput{
-			commonTestInput: common,
-			events:          opAddedEvents,
-		})
-		
+		opAddedInput := NewOperatorAddedEventInput(common)
+		opAddedInput.prepare(ops, auth)
+		opAddedInput.produce()
+
 		// BLOCK 3:  VALIDATOR ADDED:
 		// Check that there were no operations for Alice Validator
 		nonce, err := nodeStorage.GetNextNonce(nil, testAddrAlice)
 		require.NoError(t, err)
 		require.Equal(t, expectedNonce, nonce)
 
-		events := prepareValidatorAddedEvents(t, nodeStorage, validators, shares, ops, auth, &expectedNonce, []uint32{0, 1})
-
-		// Produce prepared events
-		produceValidatorRegisteredEvents(t, &produceValidatorRegisteredEventsInput{
-			commonTestInput: common,
-			events:          events,
-		})
+		valAddInput := NewTestValidatorRegisteredInput(common)
+		valAddInput.prepare(nodeStorage, validators, shares, ops, auth, &expectedNonce, []uint32{0, 1})
+		valAddInput.produce()
 
 		// Run SyncHistory
 		lastHandledBlockNum, err = eventSyncer.SyncHistory(ctx, lastHandledBlockNum)
@@ -166,7 +153,7 @@ func TestEthExecLayer(t *testing.T) {
 
 		// Check that validator was registered
 		shares := nodeStorage.Shares().List(nil)
-		require.Equal(t, len(events), len(shares))
+		require.Equal(t, len(valAddInput.events), len(shares))
 
 		// Check the nonce was bumped
 		nonce, err = nodeStorage.GetNextNonce(nil, testAddrAlice)
@@ -203,12 +190,9 @@ func TestEthExecLayer(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, expectedNonce, nonce)
 
-		events := prepareValidatorAddedEvents(t, nodeStorage, validators, shares, ops, auth, &expectedNonce, []uint32{2, 3, 4, 5, 6})
-		// Produce prepared events
-		produceValidatorRegisteredEvents(t, &produceValidatorRegisteredEventsInput{
-			commonTestInput: common,
-			events:          events,
-		})
+		valAddInput := NewTestValidatorRegisteredInput(common)
+		valAddInput.prepare(nodeStorage, validators, shares, ops, auth, &expectedNonce, []uint32{2, 3, 4, 5, 6})
+		valAddInput.produce()
 
 		// Wait until the state is changed
 		time.Sleep(time.Millisecond * 500)

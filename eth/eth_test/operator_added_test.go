@@ -6,7 +6,6 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/stretchr/testify/require"
 	"math/big"
-	"testing"
 )
 
 type testOperatorAddedEventInput struct {
@@ -14,9 +13,13 @@ type testOperatorAddedEventInput struct {
 	auth *bind.TransactOpts
 }
 
-type produceOperatorAddedEventsInput struct {
+type ProduceOperatorAddedEventsInput struct {
 	*commonTestInput
 	events []*testOperatorAddedEventInput
+}
+
+func NewOperatorAddedEventInput(common *commonTestInput) *ProduceOperatorAddedEventsInput {
+	return &ProduceOperatorAddedEventsInput{common, nil}
 }
 
 func (input *testOperatorAddedEventInput) validate() error {
@@ -34,29 +37,24 @@ func (input *testOperatorAddedEventInput) validate() error {
 	return nil
 }
 
-func prepareOperatorAddedEvents(
+func (input *ProduceOperatorAddedEventsInput) prepare(
 	ops []*testOperator,
 	auth *bind.TransactOpts,
-) []*testOperatorAddedEventInput {
-	events := make([]*testOperatorAddedEventInput, len(ops))
+) {
+	input.events = make([]*testOperatorAddedEventInput, len(ops))
 
 	for i, op := range ops {
-		events[i] = &testOperatorAddedEventInput{op, auth}
+		input.events[i] = &testOperatorAddedEventInput{op, auth}
 	}
-
-	return events
 }
 
-func produceOperatorAddedEvents(
-	t *testing.T,
-	input *produceOperatorAddedEventsInput,
-) {
+func (input *ProduceOperatorAddedEventsInput) produce() {
 	for _, event := range input.events {
 		op := event.op
 		packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(op.pub)
-		require.NoError(t, err)
+		require.NoError(input.t, err)
 		_, err = input.boundContract.SimcontractTransactor.RegisterOperator(event.auth, packedOperatorPubKey, big.NewInt(100_000_000))
-		require.NoError(t, err)
+		require.NoError(input.t, err)
 
 		if !input.doInOneBlock {
 			input.sim.Commit()
