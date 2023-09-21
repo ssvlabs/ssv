@@ -7,6 +7,7 @@ import (
 	"github.com/bloxapp/ssv/eth/executionclient"
 	"github.com/bloxapp/ssv/eth/simulator/simcontract"
 	"github.com/bloxapp/ssv/monitoring/metricsreporter"
+	"github.com/bloxapp/ssv/operator/storage"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -35,10 +36,21 @@ func TestEthExecLayer(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	operatorsCount := uint64(0)
-	// Create operators rsa keys
-	ops, err := createOperators(4, operatorsCount)
-	require.NoError(t, err)
+	operatorsExistNow := uint64(0)
+	// Create operators RSA keys
+	ops, err := createOperators(4, operatorsExistNow)
+	operatorsExistNow += 4
+
+	validators := make([]*testValidatorData, 10)
+	shares := make([][]byte, 10)
+
+	// Create validators, BLS keys, shares
+	for i := 0; i < 10; i++ {
+		validators[i], err = createNewValidator(ops)
+		require.NoError(t, err)
+		shares[i], err = generateSharesData(validators[i], ops, testAddrAlice, i)
+		require.NoError(t, err)
+	}
 
 	eh, validatorCtrl, nodeStorage, err := setupEventHandler(t, ctx, logger, ops[0], &testAddrAlice, true)
 	require.NoError(t, err)
@@ -97,19 +109,8 @@ func TestEthExecLayer(t *testing.T) {
 		eventsyncer.WithMetrics(metricsReporter),
 	)
 
-	lastHandledBlockNum := uint64(0x1)
-
-	// Generate a new validator
-	validatorData1, err := createNewValidator(ops)
-	require.NoError(t, err)
-	sharesData1, err := generateSharesData(validatorData1, ops, testAddrAlice, 0)
-	require.NoError(t, err)
-
-	// Create another validator. We'll create the shares later in the tests
-	validatorData2, err := createNewValidator(ops)
-	require.NoError(t, err)
-
 	blockNum := uint64(0x1)
+	lastHandledBlockNum := uint64(0x1)
 
 	common := &commonTestInput{
 		sim:           sim,
@@ -119,6 +120,7 @@ func TestEthExecLayer(t *testing.T) {
 		doInOneBlock:  true,
 	}
 
+	expectedNonce := registrystorage.Nonce(0)
 	// Prepare blocks with events
 	// Check that the state is empty before the test
 	// Check SyncHistory doesn't execute any tasks -> doesn't run any of Controller methods
@@ -143,15 +145,16 @@ func TestEthExecLayer(t *testing.T) {
 
 		// BLOCK 3:  VALIDATOR ADDED:
 		// Check that there were no operations for Alice Validator
+		nonce, err := nodeStorage.GetNextNonce(nil, testAddrAlice)
+		require.NoError(t, err)
+		require.Equal(t, expectedNonce, nonce)
+
+		events := prepareValidatorAddedEvents(t, nodeStorage, validators, shares, ops, auth, &expectedNonce, []uint32{0, 1})
+
+		// Produce prepared events
 		produceValidatorRegisteredEvents(t, &produceValidatorRegisteredEventsInput{
 			commonTestInput: common,
-			events: []*testValidatorRegisteredEventInput{&testValidatorRegisteredEventInput{
-				validator: validatorData1,
-				share:     sharesData1,
-				auth:      auth,
-				opsIds:    []uint64{1, 2, 3, 4},
-				ops:       ops,
-			}},
+			events:          events,
 		})
 
 		// Run SyncHistory
@@ -161,17 +164,20 @@ func TestEthExecLayer(t *testing.T) {
 		//check all the events were handled correctly and block number was increased
 		require.Equal(t, blockNum, lastHandledBlockNum)
 		fmt.Println("lastHandledBlockNum", lastHandledBlockNum)
+
 		// Check that operators were successfully registered
 		operators, err = nodeStorage.ListOperators(nil, 0, 10)
 		require.NoError(t, err)
 		require.Equal(t, len(ops), len(operators))
+
 		// Check that validator was registered
 		shares := nodeStorage.Shares().List(nil)
-		require.Equal(t, 1, len(shares))
+		require.Equal(t, len(events), len(shares))
+
 		// Check the nonce was bumped
-		nonce, err := nodeStorage.GetNextNonce(nil, testAddrAlice)
+		nonce, err = nodeStorage.GetNextNonce(nil, testAddrAlice)
 		require.NoError(t, err)
-		require.Equal(t, registrystorage.Nonce(1), nonce)
+		require.Equal(t, expectedNonce, nonce)
 	})
 
 	// Main difference between "online" events handling and syncing the historical (old) events
@@ -188,53 +194,63 @@ func TestEthExecLayer(t *testing.T) {
 			require.NoError(t, err)
 		}()
 
-		// Generate a new validator
-		valData, err := createNewValidator(ops)
+		// Check current nonce before start
+		nonce, err := nodeStorage.GetNextNonce(nil, testAddrAlice)
 		require.NoError(t, err)
-		share, err := generateSharesData(valData, ops, testAddrAlice, 2)
-		require.NoError(t, err)
+		require.Equal(t, expectedNonce, nonce)
 
+		events := prepareValidatorAddedEvents(t, nodeStorage, validators, shares, ops, auth, &expectedNonce, []uint32{2, 3, 4, 5, 6})
+		// Produce prepared events
 		produceValidatorRegisteredEvents(t, &produceValidatorRegisteredEventsInput{
 			commonTestInput: common,
-			events: []*testValidatorRegisteredEventInput{&testValidatorRegisteredEventInput{
-				validator: valData,
-				share:     share,
-				auth:      auth,
-				opsIds:    []uint64{1, 2, 3, 4},
-				ops:       ops,
-			}},
+			events:          events,
 		})
 
 		// Wait until the state is changed
 		time.Sleep(time.Millisecond * 500)
 
-		nonce, err := nodeStorage.GetNextNonce(nil, testAddrAlice)
+		nonce, err = nodeStorage.GetNextNonce(nil, testAddrAlice)
 		require.NoError(t, err)
-		require.Equal(t, registrystorage.Nonce(2), nonce)
-
-		valData, err = createNewValidator(ops)
-		require.NoError(t, err)
-		share, err = generateSharesData(valData, ops, testAddrAlice, 3)
-		require.NoError(t, err)
-
-		produceValidatorRegisteredEvents(t, &produceValidatorRegisteredEventsInput{
-			commonTestInput: common,
-			events: []*testValidatorRegisteredEventInput{&testValidatorRegisteredEventInput{
-				validator: valData,
-				share:     share,
-				auth:      auth,
-				opsIds:    []uint64{1, 2, 3, 4},
-				ops:       ops,
-			}},
-		})
+		require.Equal(t, expectedNonce, nonce)
 
 		time.Sleep(time.Millisecond * 500)
 		nonce, err = nodeStorage.GetNextNonce(nil, testAddrAlice)
 		require.NoError(t, err)
-		require.Equal(t, registrystorage.Nonce(3), nonce)
+		require.Equal(t, expectedNonce, nonce)
 
-		require.Equal(t, uint64(5), *common.blockNum)
+		require.Equal(t, uint64(4), *common.blockNum)
 	})
 
-	_ = validatorData2
+}
+
+func prepareValidatorAddedEvents(
+	t *testing.T,
+	nodeStorage storage.Storage,
+	validators []*testValidatorData,
+	shares [][]byte,
+	ops []*testOperator,
+	auth *bind.TransactOpts,
+	expectedNonce *registrystorage.Nonce,
+	validatorsIds []uint32,
+) []*testValidatorRegisteredEventInput {
+	events := make([]*testValidatorRegisteredEventInput, len(validatorsIds))
+
+	for i, validatorId := range validatorsIds {
+		// Check there are no shares in the state for the current validator
+		valPubKey := validators[validatorId].masterPubKey.Serialize()
+		share := nodeStorage.Shares().Get(nil, valPubKey)
+		require.Nil(t, share)
+
+		// Create event input
+		events[i] = &testValidatorRegisteredEventInput{
+			validator: validators[validatorId],
+			share:     shares[validatorId],
+			auth:      auth,
+			ops:       ops,
+		}
+
+		// expect nonce bumping after each of these ValidatorAdded events handling
+		*expectedNonce++
+	}
+	return events
 }

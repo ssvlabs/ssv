@@ -1,6 +1,7 @@
 package eth_test
 
 import (
+	"fmt"
 	"github.com/bloxapp/ssv/eth/eventparser"
 	"github.com/bloxapp/ssv/eth/simulator"
 	"github.com/bloxapp/ssv/eth/simulator/simcontract"
@@ -64,10 +65,47 @@ type produceValidatorRegisteredEventsInput struct {
 	events []*testValidatorRegisteredEventInput
 }
 
+func (input *produceValidatorRegisteredEventsInput) validate() error {
+	for _, e := range input.events {
+		if err := e.validate(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (input *testValidatorRegisteredEventInput) validate() error {
+	if input == nil {
+		return fmt.Errorf("validation error: empty input")
+	}
+	switch {
+	case input.auth == nil:
+		return fmt.Errorf("validation error: input.auth is empty")
+	case input.validator == nil:
+		return fmt.Errorf("validation error: input.validator is empty")
+	case len(input.share) == 0:
+		return fmt.Errorf("validation error: input.validator is empty")
+	case len(input.ops) == 0:
+		return fmt.Errorf("validation error: input.ops is empty")
+	}
+
+	if len(input.opsIds) == 0 {
+		input.opsIds = make([]uint64, len(input.ops))
+		for i, op := range input.ops {
+			input.opsIds[i] = op.id
+		}
+	}
+
+	return nil
+}
+
 func produceValidatorRegisteredEvents(
 	t *testing.T,
 	input *produceValidatorRegisteredEventsInput,
 ) {
+	err := input.validate()
+	require.NoError(t, err)
+
 	for _, event := range input.events {
 		val := event.validator
 		valPubKey := val.masterPubKey.Serialize()
