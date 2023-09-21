@@ -133,9 +133,9 @@ func TestEthExecLayer(t *testing.T) {
 		require.Equal(t, 0, len(operators))
 
 		// Prepare events input data
-		opAddedEvents := make([]*testOperatorAddedEventInput, 0)
-		for _, op := range ops {
-			opAddedEvents = append(opAddedEvents, &testOperatorAddedEventInput{op, auth})
+		opAddedEvents := make([]*testOperatorAddedEventInput, len(ops))
+		for i, op := range ops {
+			opAddedEvents[i] = &testOperatorAddedEventInput{op, auth}
 		}
 
 		produceOperatorAddedEvents(t, &produceOperatorAddedEventsInput{
@@ -188,10 +188,20 @@ func TestEthExecLayer(t *testing.T) {
 			require.NoError(t, err)
 		}()
 
+		stopChan := make(chan struct{})
 		go func() {
-			time.Sleep(4 * time.Second)
-			err := client.Close()
-			require.NoError(t, err)
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-stopChan:
+					err := client.Close()
+					require.NoError(t, err)
+					return
+				default:
+					time.Sleep(100 * time.Millisecond)
+				}
+			}
 		}()
 
 		// Check current nonce before start
@@ -219,8 +229,8 @@ func TestEthExecLayer(t *testing.T) {
 		require.Equal(t, expectedNonce, nonce)
 
 		require.Equal(t, uint64(4), *common.blockNum)
+		stopChan <- struct{}{}
 	})
-
 }
 
 func prepareValidatorAddedEvents(
