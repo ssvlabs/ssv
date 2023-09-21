@@ -2,55 +2,14 @@ package eth_test
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv/eth/eventparser"
-	"github.com/bloxapp/ssv/eth/simulator"
 	"github.com/bloxapp/ssv/eth/simulator/simcontract"
 	"github.com/bloxapp/ssv/operator/storage"
+	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/stretchr/testify/require"
 	"math/big"
 	"testing"
 )
-
-type commonTestInput struct {
-	sim           *simulator.SimulatedBackend
-	boundContract *simcontract.Simcontract
-	blockNum      *uint64
-	nodeStorage   storage.Storage
-	doInOneBlock  bool
-}
-
-type testOperatorAddedEventInput struct {
-	op   *testOperator
-	auth *bind.TransactOpts
-}
-
-type produceOperatorAddedEventsInput struct {
-	*commonTestInput
-	events []*testOperatorAddedEventInput
-}
-
-func produceOperatorAddedEvents(
-	t *testing.T,
-	input *produceOperatorAddedEventsInput,
-) {
-	for _, event := range input.events {
-		op := event.op
-		packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(op.pub)
-		require.NoError(t, err)
-		_, err = input.boundContract.SimcontractTransactor.RegisterOperator(event.auth, packedOperatorPubKey, big.NewInt(100_000_000))
-		require.NoError(t, err)
-
-		if !input.doInOneBlock {
-			input.sim.Commit()
-			*input.blockNum++
-		}
-	}
-	if input.doInOneBlock {
-		input.sim.Commit()
-		*input.blockNum++
-	}
-}
 
 type testValidatorRegisteredEventInput struct {
 	auth      *bind.TransactOpts
@@ -99,6 +58,38 @@ func (input *testValidatorRegisteredEventInput) validate() error {
 	return nil
 }
 
+func prepareValidatorAddedEvents(
+	t *testing.T,
+	nodeStorage storage.Storage,
+	validators []*testValidatorData,
+	shares [][]byte,
+	ops []*testOperator,
+	auth *bind.TransactOpts,
+	expectedNonce *registrystorage.Nonce,
+	validatorsIds []uint32,
+) []*testValidatorRegisteredEventInput {
+	events := make([]*testValidatorRegisteredEventInput, len(validatorsIds))
+
+	for i, validatorId := range validatorsIds {
+		// Check there are no shares in the state for the current validator
+		valPubKey := validators[validatorId].masterPubKey.Serialize()
+		share := nodeStorage.Shares().Get(nil, valPubKey)
+		require.Nil(t, share)
+
+		// Create event input
+		events[i] = &testValidatorRegisteredEventInput{
+			validator: validators[validatorId],
+			share:     shares[validatorId],
+			auth:      auth,
+			ops:       ops,
+		}
+
+		// expect nonce bumping after each of these ValidatorAdded events handling
+		*expectedNonce++
+	}
+	return events
+}
+
 func produceValidatorRegisteredEvents(
 	t *testing.T,
 	input *produceValidatorRegisteredEventsInput,
@@ -126,56 +117,6 @@ func produceValidatorRegisteredEvents(
 				Active:          true,
 				Balance:         big.NewInt(100_000_000),
 			})
-		require.NoError(t, err)
-
-		if !input.doInOneBlock {
-			input.sim.Commit()
-			*input.blockNum++
-		}
-	}
-	if input.doInOneBlock {
-		input.sim.Commit()
-		*input.blockNum++
-	}
-}
-
-type testValidatorRemovedInput struct {
-	auth      *bind.TransactOpts
-	ops       []*testOperator
-	validator *testValidatorData
-	share     []byte
-	opsIds    []uint64 // separating opsIds from ops as it is a separate event field and should be used for destructive tests
-}
-
-type produceValidatorRemovedEventsInput struct {
-	*commonTestInput
-	events []*testValidatorRemovedInput
-}
-
-func produceValidatorRemovedEvents(
-	t *testing.T,
-	input *produceValidatorRemovedEventsInput,
-) {
-	for _, event := range input.events {
-		val := event.validator
-		valPubKey := val.masterPubKey.Serialize()
-		// Check the validator's shares are present in the state before removing
-		valShare := input.nodeStorage.Shares().Get(nil, valPubKey)
-		require.NotNil(t, valShare)
-
-		_, err := input.boundContract.SimcontractTransactor.RemoveValidator(
-			event.auth,
-			val.masterPubKey.Serialize(),
-			event.opsIds,
-			simcontract.CallableCluster{
-				ValidatorCount:  1,
-				NetworkFeeIndex: 1,
-				Index:           2,
-				Active:          true,
-				Balance:         big.NewInt(100_000_000),
-			})
-		require.NoError(t, err)
-		input.sim.Commit()
 		require.NoError(t, err)
 
 		if !input.doInOneBlock {

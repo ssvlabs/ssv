@@ -7,7 +7,6 @@ import (
 	"github.com/bloxapp/ssv/eth/executionclient"
 	"github.com/bloxapp/ssv/eth/simulator/simcontract"
 	"github.com/bloxapp/ssv/monitoring/metricsreporter"
-	"github.com/bloxapp/ssv/operator/storage"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -132,17 +131,12 @@ func TestEthExecLayer(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 0, len(operators))
 
-		// Prepare events input data
-		opAddedEvents := make([]*testOperatorAddedEventInput, len(ops))
-		for i, op := range ops {
-			opAddedEvents[i] = &testOperatorAddedEventInput{op, auth}
-		}
-
+		opAddedEvents := prepareOperatorAddedEvents(ops, auth)
 		produceOperatorAddedEvents(t, &produceOperatorAddedEventsInput{
 			commonTestInput: common,
 			events:          opAddedEvents,
 		})
-
+		
 		// BLOCK 3:  VALIDATOR ADDED:
 		// Check that there were no operations for Alice Validator
 		nonce, err := nodeStorage.GetNextNonce(nil, testAddrAlice)
@@ -231,36 +225,4 @@ func TestEthExecLayer(t *testing.T) {
 		require.Equal(t, uint64(4), *common.blockNum)
 		stopChan <- struct{}{}
 	})
-}
-
-func prepareValidatorAddedEvents(
-	t *testing.T,
-	nodeStorage storage.Storage,
-	validators []*testValidatorData,
-	shares [][]byte,
-	ops []*testOperator,
-	auth *bind.TransactOpts,
-	expectedNonce *registrystorage.Nonce,
-	validatorsIds []uint32,
-) []*testValidatorRegisteredEventInput {
-	events := make([]*testValidatorRegisteredEventInput, len(validatorsIds))
-
-	for i, validatorId := range validatorsIds {
-		// Check there are no shares in the state for the current validator
-		valPubKey := validators[validatorId].masterPubKey.Serialize()
-		share := nodeStorage.Shares().Get(nil, valPubKey)
-		require.Nil(t, share)
-
-		// Create event input
-		events[i] = &testValidatorRegisteredEventInput{
-			validator: validators[validatorId],
-			share:     shares[validatorId],
-			auth:      auth,
-			ops:       ops,
-		}
-
-		// expect nonce bumping after each of these ValidatorAdded events handling
-		*expectedNonce++
-	}
-	return events
 }
