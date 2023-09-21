@@ -64,6 +64,7 @@ const (
 	FieldName                = "name"
 	FieldNetwork             = "network"
 	FieldOperatorId          = "operator_id"
+	FieldOperatorIDs         = "operator_ids"
 	FieldOperatorPubKey      = "operator_pubkey"
 	FieldOwnerAddress        = "owner_address"
 	FieldPeerID              = "peer_id"
@@ -188,6 +189,10 @@ func SyncResults(msgs protocolp2p.SyncResults) zapcore.Field {
 
 func OperatorID(operatorId spectypes.OperatorID) zap.Field {
 	return zap.Uint64(FieldOperatorId, operatorId)
+}
+
+func OperatorIDs(operatorIDs []spectypes.OperatorID) zap.Field {
+	return zap.Uint64s(FieldOperatorIDs, operatorIDs)
 }
 
 func OperatorIDStr(operatorId string) zap.Field {
