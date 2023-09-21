@@ -9,6 +9,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/golang/mock/gomock"
+	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"github.com/sourcegraph/conc/pool"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -24,67 +25,71 @@ import (
 type MockSlotTicker interface {
 	Next() <-chan time.Time
 	Slot() phase0.Slot
-	Send(slot phase0.Slot)
+	Subscribe() chan phase0.Slot
 }
 
 type mockSlotTicker struct {
-	mu        sync.RWMutex
-	slotChans []chan time.Time
-	slot      phase0.Slot
+	slotChan chan phase0.Slot
+	timeChan chan time.Time
+	slot     phase0.Slot
+	mu       sync.Mutex // Added Mutex for synchronization
 }
 
 func NewMockSlotTicker() MockSlotTicker {
-	return &mockSlotTicker{
-		slotChans: make([]chan time.Time, 0),
+	ticker := &mockSlotTicker{
+		slotChan: make(chan phase0.Slot),
+		timeChan: make(chan time.Time),
 	}
+	ticker.start()
+	return ticker
 }
 
-// Implement the SlotTicker's Next method
+func (m *mockSlotTicker) start() {
+	go func() {
+		for slot := range m.slotChan {
+			m.mu.Lock() // Locking here
+			m.slot = slot
+			m.mu.Unlock() // Unlocking here
+			m.timeChan <- time.Now()
+		}
+	}()
+}
+
 func (m *mockSlotTicker) Next() <-chan time.Time {
-	timeCh := make(chan time.Time, 1)
-
-	m.mu.Lock()
-	m.slotChans = append(m.slotChans, timeCh)
-	m.mu.Unlock()
-
-	return timeCh
+	return m.timeChan
 }
 
 func (m *mockSlotTicker) Slot() phase0.Slot {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()         // Locking here
+	defer m.mu.Unlock() // Unlocking with defer
 	return m.slot
 }
 
-// Implement the Send method
-func (m *mockSlotTicker) Send(slot phase0.Slot) {
-	m.mu.Lock()
-	m.slot = slot
-	for _, ch := range m.slotChans {
-		ch <- time.Now()
-	}
-	// Clear the slice after signaling all listeners
-	m.slotChans = m.slotChans[:0]
-	m.mu.Unlock()
+func (m *mockSlotTicker) Subscribe() chan phase0.Slot {
+	return m.slotChan
+}
+
+type mockSlotTickerService struct {
+	event.Feed
 }
 
 func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *SlotValue) (
 	*Scheduler,
 	*zap.Logger,
-	MockSlotTicker,
+	*mockSlotTickerService,
 	time.Duration,
 	context.CancelFunc,
 	*pool.ContextPool,
 ) {
 	ctrl := gomock.NewController(t)
-	timeout := 100 * time.Millisecond
+	timeout := 200 * time.Millisecond
 
 	ctx, cancel := context.WithCancel(context.Background())
 	logger := logging.TestLogger(t)
 
 	mockBeaconNode := mocks.NewMockBeaconNode(ctrl)
 	mockValidatorController := mocks.NewMockValidatorController(ctrl)
-	mockSlotTicker := NewMockSlotTicker()
+	mockSlotService := &mockSlotTickerService{}
 	mockNetworkConfig := networkconfig.NetworkConfig{
 		Beacon: mocknetwork.NewMockBeaconNetwork(ctrl),
 	}
@@ -95,7 +100,9 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Slot
 		Network:             mockNetworkConfig,
 		ValidatorController: mockValidatorController,
 		SlotTickerProvider: func() slot_ticker.SlotTicker {
-			return mockSlotTicker
+			ticker := NewMockSlotTicker()
+			mockSlotService.Subscribe(ticker.Subscribe())
+			return ticker
 		},
 		BuilderProposals: false,
 	}
@@ -144,7 +151,7 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Slot
 		return s.Wait()
 	})
 
-	return s, logger, mockSlotTicker, timeout, cancel, schedulerPool
+	return s, logger, mockSlotService, timeout, cancel, schedulerPool
 }
 
 func setExecuteDutyFunc(s *Scheduler, executeDutiesCall chan []*spectypes.Duty, executeDutiesCallSize int) {
