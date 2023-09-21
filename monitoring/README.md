@@ -8,7 +8,7 @@
 
 This page will outline how to monitor an SSV Node using Grafana and Prometheus.
 ### Pre-requisites
-Make sure your node is exposing a `/metrics` and `/health` endpoints. This is done via node configuration, as explained in the [Installation guide on the docs]([../installation.md#metrics-configuration-optional](https://docs.ssv.network/run-a-node/operator-node/installation#create-configuration-file)).
+Make sure your node is exposing a `/metrics` and `/health` endpoints. This is done via node configuration, as explained in the [Installation guide on the docs](https://docs.ssv.network/run-a-node/operator-node/installation#create-configuration-file).
 
 This guide will not go into the details of setting up and running Prometheus or Grafana. For this, we recommend visiting their related documentations:
 
@@ -23,12 +23,12 @@ See the configuration of a [local prometheus service](prometheus/prometheus.yaml
 ### Health Check
 
 Even if Prometheus is not configured, the `/health` end-point can simply be polled by a simple HTTP client as a health check. \
-In case the node is healthy it returns an HTTP Code `200` with empty response:
+In case the node is healthy it returns an HTTP Code `200` with an empty response:
 ```shell
 $ curl http://localhost:15000/health
 ```
 
-If the node is not healthy, the corresponding errors will be returned with HTTP Code `500`:
+If the node is not healthy, the corresponding errors will be returned with HTTP a Code of `500`:
 ```shell
 $ curl http://localhost:15000/health
 {"errors": ["could not sync eth1 events"]}
@@ -75,7 +75,7 @@ docker run \
 ```
 
 
-> ⚠️ Note: If you are not running Prometheus as a Docker container, but as an executable, change the \`targets\` in the config file to reflect the correct networking connections. In the case where the SSV Node container is called `ssv_node` the targets should look like this:
+> ⚠️ Note: If you are not running Prometheus as a Docker container, but as an executable, change the `targets` in the config file to reflect the correct networking connections. In the case where the SSV Node container is called `ssv_node` the targets should look like this:
 
 ```yaml
       - targets:
