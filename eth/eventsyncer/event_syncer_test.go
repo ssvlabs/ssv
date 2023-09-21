@@ -88,17 +88,14 @@ func TestEventSyncer(t *testing.T) {
 	client, err := executionclient.New(ctx, addr, contractAddr, executionclient.WithLogger(logger))
 	require.NoError(t, err)
 
-	isReady, err := client.IsReady(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	require.True(t, isReady)
-
-	// Generate operator key
-	_, operatorPubKey, err := rsaencryption.GenerateKeys()
+	err = client.Healthy(ctx)
 	require.NoError(t, err)
 
-	pkstr := base64.StdEncoding.EncodeToString(operatorPubKey)
+	// Generate operator key
+	opPubKey, _, err := rsaencryption.GenerateKeys()
+	require.NoError(t, err)
+
+	pkstr := base64.StdEncoding.EncodeToString(opPubKey)
 	pckd, err := eventparser.PackOperatorPublicKey([]byte(pkstr))
 	require.NoError(t, err)
 
@@ -119,6 +116,7 @@ func TestEventSyncer(t *testing.T) {
 
 	eh := setupEventHandler(t, ctx, logger)
 	eventSyncer := New(
+		nil,
 		client,
 		eh,
 		WithLogger(logger),

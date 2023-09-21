@@ -86,3 +86,4 @@ Deploy nodes to stage:
     # - .k8/stage/scripts/deploy-boot-nodes.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE 1000m 1000m
   only:
     - hetzner-k8s
+

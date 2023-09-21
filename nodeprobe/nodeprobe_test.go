@@ -2,6 +2,7 @@ package nodeprobe
 
 import (
 	"context"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -13,44 +14,70 @@ import (
 func TestProber(t *testing.T) {
 	ctx := context.Background()
 
-	checker := &statusChecker{}
-	checker.ready.Store(true)
+	node := &node{}
+	node.healthy.Store(nil)
 
-	prober := NewProber(zap.L(), checker)
-	prober.interval = 1 * time.Millisecond
+	prober := NewProber(zap.L(), nil, map[string]Node{"test node": node})
+	prober.interval = 10 * time.Millisecond
 
-	ready, err := prober.IsReady(ctx)
+	healthy, err := prober.Healthy(ctx)
 	require.NoError(t, err)
-	require.False(t, ready)
+	require.False(t, healthy)
 
 	prober.Start(ctx)
 	prober.Wait()
 
-	ready, err = prober.IsReady(ctx)
+	healthy, err = prober.Healthy(ctx)
 	require.NoError(t, err)
-	require.True(t, ready)
+	require.True(t, healthy)
 
-	checker.ready.Store(false)
+	notHealthy := fmt.Errorf("not healthy")
+	node.healthy.Store(&notHealthy)
 	time.Sleep(prober.interval * 2)
 
-	ready, err = prober.IsReady(ctx)
+	healthy, err = prober.Healthy(ctx)
 	require.NoError(t, err)
-	require.False(t, ready)
+	require.False(t, healthy)
+}
 
-	var unreadyHandlerCalled atomic.Bool
-	unreadyHandler := func() {
-		unreadyHandlerCalled.Store(true)
+func TestProber_UnhealthyHandler(t *testing.T) {
+	ctx := context.Background()
+
+	node := &node{}
+	node.healthy.Store(nil)
+
+	var unhealthyHandlerCalled atomic.Bool
+	unhealthyHandler := func() {
+		unhealthyHandlerCalled.Store(true)
 	}
+	prober := NewProber(zap.L(), unhealthyHandler, map[string]Node{"test node": node})
+	prober.interval = 10 * time.Millisecond
+	prober.Start(ctx)
+	prober.Wait()
 
-	prober.SetUnreadyHandler(unreadyHandler)
+	healthy, err := prober.Healthy(ctx)
+	require.NoError(t, err)
+	require.True(t, healthy)
+
+	notHealthy := fmt.Errorf("not healthy")
+	node.healthy.Store(&notHealthy)
+
 	time.Sleep(prober.interval * 2)
-	require.True(t, unreadyHandlerCalled.Load())
+	require.True(t, unhealthyHandlerCalled.Load())
+
+	healthy, err = prober.Healthy(ctx)
+	require.NoError(t, err)
+	require.False(t, healthy)
 }
 
-type statusChecker struct {
-	ready atomic.Bool
+type node struct {
+	healthy atomic.Pointer[error]
 }
 
-func (sc *statusChecker) IsReady(context.Context) (bool, error) {
-	return sc.ready.Load(), nil
+func (sc *node) Healthy(context.Context) error {
+	err := sc.healthy.Load()
+	if err != nil {
+		return *err
+	}
+	return nil
 }

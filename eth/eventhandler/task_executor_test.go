@@ -5,6 +5,8 @@ import (
 	"encoding/binary"
 	"testing"
 
+	"github.com/golang/mock/gomock"
+
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
@@ -42,10 +44,15 @@ const rawValidatorAdded = `{
   }`
 
 func TestExecuteTask(t *testing.T) {
-	logger, observedLogs := setupLogsCapture()
+	logger, _ := setupLogsCapture()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	eh, err := setupEventHandler(t, ctx, logger)
+	// Create operators rsa keys
+
+	ops, err := createOperators(1, 0)
+	require.NoError(t, err)
+
+	eh, validatorCtrl, err := setupEventHandler(t, ctx, logger, nil, ops[0], true)
 	require.NoError(t, err)
 
 	t.Run("test AddValidator task execution - not started", func(t *testing.T) {
@@ -59,13 +66,13 @@ func TestExecuteTask(t *testing.T) {
 				ValidatorPubKey: validatorAddedEvent.PublicKey,
 			},
 		}
+		validatorCtrl.EXPECT().StartValidator(gomock.Any()).Return(nil).AnyTimes()
+
 		task := NewStartValidatorTask(eh.taskExecutor, share)
 		require.NoError(t, task.Execute())
-		require.NotZero(t, observedLogs.Len())
-		entry := observedLogs.All()[len(observedLogs.All())-1]
-		require.Equal(t, "setting validator controller", entry.Message) // no logs
 	})
 
+	// Currently Start Validator is a no-op in Controller, but we need to check this anyway
 	t.Run("test AddValidator task execution - started", func(t *testing.T) {
 		logValidatorAdded := unmarshalLog(t, rawValidatorAdded)
 		validatorAddedEvent, err := eh.eventParser.ParseValidatorAdded(logValidatorAdded)
@@ -82,58 +89,53 @@ func TestExecuteTask(t *testing.T) {
 				},
 			},
 		}
+
+		validatorCtrl.EXPECT().StartValidators().AnyTimes()
 		task := NewStartValidatorTask(eh.taskExecutor, share)
 		require.NoError(t, task.Execute())
-		require.NotZero(t, observedLogs.Len())
-		entry := observedLogs.All()[len(observedLogs.All())-1]
-		require.Equal(t, "setting validator controller", entry.Message) // no logs
 	})
+	valPk := "b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"
 
 	t.Run("test StopValidator task execution", func(t *testing.T) {
-		require.NoError(t, err)
-		task := NewStopValidatorTask(eh.taskExecutor, ethcommon.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"))
+		validatorCtrl.EXPECT().StopValidator(gomock.Any()).Return(nil).AnyTimes()
+
+		task := NewStopValidatorTask(eh.taskExecutor, ethcommon.Hex2Bytes(valPk))
 		require.NoError(t, task.Execute())
-		require.NotZero(t, observedLogs.Len())
-		entry := observedLogs.All()[len(observedLogs.All())-1]
-		require.Equal(t, "removed validator", entry.Message)
 	})
 
 	t.Run("test LiquidateCluster task execution", func(t *testing.T) {
 		var shares []*ssvtypes.SSVShare
 		share := &ssvtypes.SSVShare{
 			Share: spectypes.Share{
-				ValidatorPubKey: ethcommon.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"),
+				ValidatorPubKey: ethcommon.Hex2Bytes(valPk),
 			},
 		}
+
+		validatorCtrl.EXPECT().LiquidateCluster(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
 		shares = append(shares, share)
 		task := NewLiquidateClusterTask(eh.taskExecutor, ethcommon.HexToAddress("0x1"), []uint64{1, 2, 3}, shares)
 		require.NoError(t, task.Execute())
-		require.NotZero(t, observedLogs.Len())
-		entry := observedLogs.All()[len(observedLogs.All())-1]
-		require.Equal(t, "removed share", entry.Message)
 	})
 	t.Run("test ReactivateCluster task execution", func(t *testing.T) {
 		var shares []*ssvtypes.SSVShare
 		share := &ssvtypes.SSVShare{
 			Share: spectypes.Share{
-				ValidatorPubKey: ethcommon.Hex2Bytes("b24454393691331ee6eba4ffa2dbb2600b9859f908c3e648b6c6de9e1dea3e9329866015d08355c8d451427762b913d1"),
+				ValidatorPubKey: ethcommon.Hex2Bytes(valPk),
 			},
 		}
+
 		shares = append(shares, share)
 		task := NewReactivateClusterTask(eh.taskExecutor, ethcommon.HexToAddress("0x1"), []uint64{1, 2, 3}, shares)
+		validatorCtrl.EXPECT().ReactivateCluster(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
 		require.NoError(t, task.Execute())
-		require.NotZero(t, observedLogs.Len())
-		entry := observedLogs.All()[len(observedLogs.All())-1]
-		require.Equal(t, "reactivated cluster", entry.Message) // TODO: fix
-		require.Equal(t, int64(1), entry.ContextMap()["cluster_validators"])
 	})
 	t.Run("test UpdateFeeRecipient task execution", func(t *testing.T) {
 		task := NewUpdateFeeRecipientTask(eh.taskExecutor, ethcommon.HexToAddress("0x1"), ethcommon.HexToAddress("0x2"))
+		validatorCtrl.EXPECT().UpdateFeeRecipient(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
 		require.NoError(t, task.Execute())
-		require.NotZero(t, observedLogs.Len())
-		entry := observedLogs.All()[len(observedLogs.All())-1]
-		require.Equal(t, "reactivated cluster", entry.Message) // no new logs
-		require.Equal(t, int64(1), entry.ContextMap()["cluster_validators"])
 	})
 }
 
@@ -143,7 +145,11 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	eh, err := setupEventHandler(t, ctx, logger)
+	// Create operators rsa keys
+	ops, err := createOperators(1, 0)
+	require.NoError(t, err)
+
+	eh, _, err := setupEventHandler(t, ctx, logger, nil, ops[0], false)
 	if err != nil {
 		t.Fatal(err)
 	}

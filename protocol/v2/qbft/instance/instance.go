@@ -66,7 +66,7 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Heigh
 		i.State.Height = height
 		i.metrics.StartStage()
 
-		i.config.GetTimer().TimeoutForRound(specqbft.FirstRound)
+		i.config.GetTimer().TimeoutForRound(height, specqbft.FirstRound)
 
 		logger = logger.With(
 			fields.Round(i.State.Round),
