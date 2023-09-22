@@ -3,20 +3,12 @@ package eth_test
 import (
 	"context"
 	"fmt"
-	"github.com/bloxapp/ssv/eth/eventsyncer"
-	"github.com/bloxapp/ssv/eth/executionclient"
 	"github.com/bloxapp/ssv/eth/simulator/simcontract"
-	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zaptest"
 	"math/big"
-	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 )
@@ -31,88 +23,31 @@ var (
 
 // E2E tests for ETH package
 func TestEthExecLayer(t *testing.T) {
-	logger := zaptest.NewLogger(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	operatorsExistNow := uint64(0)
-	// Create operators RSA keys
-	ops, err := createOperators(4, operatorsExistNow)
-	operatorsExistNow += 4
-
-	validators := make([]*testValidatorData, 10)
-	shares := make([][]byte, 10)
-
-	// Create validators, BLS keys, shares
-	for i := 0; i < 10; i++ {
-		validators[i], err = createNewValidator(ops)
-		require.NoError(t, err)
-		shares[i], err = generateSharesData(validators[i], ops, testAddrAlice, i)
-		require.NoError(t, err)
-	}
-
-	eh, validatorCtrl, nodeStorage, err := setupEventHandler(t, ctx, logger, ops[0], &testAddrAlice, true)
-	require.NoError(t, err)
-	require.NotNil(t, validatorCtrl)
 
 	testAddresses := make([]*ethcommon.Address, 2)
 	testAddresses[0] = &testAddrAlice
 	testAddresses[1] = &testAddrBob
+	expectedNonce := registrystorage.Nonce(0)
 
-	// Adding testAddresses to the genesis block mostly to specify some balances for them
-	sim := simTestBackend(testAddresses)
-
-	// Create JSON-RPC handler
-	rpcServer, _ := sim.Node.RPCHandler()
-	// Expose handler on a test server with ws open
-	httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
-	defer rpcServer.Stop()
-	defer httpsrv.Close()
-	addr := "ws:" + strings.TrimPrefix(httpsrv.URL, "http:")
-
-	parsed, _ := abi.JSON(strings.NewReader(simcontract.SimcontractMetaData.ABI))
-	auth, _ := bind.NewKeyedTransactorWithChainID(testKeyAlice, big.NewInt(1337))
-	contractAddr, _, _, err := bind.DeployContract(auth, parsed, ethcommon.FromHex(simcontract.SimcontractMetaData.Bin), sim)
-	if err != nil {
-		t.Errorf("deploying contract: %v", err)
-	}
-	sim.Commit()
-
-	// Check contract code at the simulated blockchain
-	contractCode, err := sim.CodeAt(ctx, contractAddr, nil)
-	if err != nil {
-		t.Errorf("getting contract code: %v", err)
-	}
-	require.NotEmpty(t, contractCode)
-
-	// Create a client and connect to the simulator
-	client, err := executionclient.New(
-		ctx, addr, contractAddr, executionclient.WithLogger(logger), executionclient.WithFollowDistance(0))
+	testEnv, err := setupEnv(t, &ctx, testAddresses, 10, 4)
 	require.NoError(t, err)
-
-	err = client.Healthy(ctx)
-	require.NoError(t, err)
-
-	boundContract, err := simcontract.NewSimcontract(contractAddr, sim)
-	require.NoError(t, err)
-
-	metricsReporter := metricsreporter.New(
-		metricsreporter.WithLogger(logger),
+	var (
+		auth          = testEnv.auth
+		nodeStorage   = testEnv.nodeStorage
+		sim           = testEnv.sim
+		boundContract = testEnv.boundContract
+		ops           = testEnv.ops
+		validators    = testEnv.validators
+		eventSyncer   = testEnv.eventSyncer
+		shares        = testEnv.shares
+		client        = testEnv.execClient
 	)
-
-	eventSyncer := eventsyncer.New(
-		nodeStorage,
-		client,
-		eh,
-		eventsyncer.WithLogger(logger),
-		eventsyncer.WithMetrics(metricsReporter),
-	)
-
 	blockNum := uint64(0x1)
 	lastHandledBlockNum := uint64(0x1)
 
 	common := NewCommonTestInput(t, sim, boundContract, &blockNum, nodeStorage, true)
-	expectedNonce := registrystorage.Nonce(0)
 	// Prepare blocks with events
 	// Check that the state is empty before the test
 	// Check SyncHistory doesn't execute any tasks -> doesn't run any of Controller methods
@@ -226,7 +161,7 @@ func TestEthExecLayer(t *testing.T) {
 				Active:          true,
 				Balance:         big.NewInt(100_000_000),
 			}
-			
+
 			shares := nodeStorage.Shares().List(nil)
 			require.Equal(t, 7, len(shares))
 

@@ -10,17 +10,17 @@ import (
 )
 
 type testValidatorRegisteredInput struct {
-	*commonTestInput
+	*CommonTestInput
 	events []*validatorRegisteredEventInput
 }
 
-func NewTestValidatorRegisteredInput(common *commonTestInput) *testValidatorRegisteredInput {
+func NewTestValidatorRegisteredInput(common *CommonTestInput) *testValidatorRegisteredInput {
 	return &testValidatorRegisteredInput{common, nil}
 }
 
 func (input *testValidatorRegisteredInput) validate() error {
-	if input.commonTestInput == nil {
-		return fmt.Errorf("validation error: commonTestInput is empty")
+	if input.CommonTestInput == nil {
+		return fmt.Errorf("validation error: CommonTestInput is empty")
 	}
 	for _, e := range input.events {
 		if err := e.validate(); err != nil {

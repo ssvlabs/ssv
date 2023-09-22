@@ -14,11 +14,11 @@ type testOperatorAddedEventInput struct {
 }
 
 type ProduceOperatorAddedEventsInput struct {
-	*commonTestInput
+	*CommonTestInput
 	events []*testOperatorAddedEventInput
 }
 
-func NewOperatorAddedEventInput(common *commonTestInput) *ProduceOperatorAddedEventsInput {
+func NewOperatorAddedEventInput(common *CommonTestInput) *ProduceOperatorAddedEventsInput {
 	return &ProduceOperatorAddedEventsInput{common, nil}
 }
 

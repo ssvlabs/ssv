@@ -30,12 +30,12 @@ func (input *testValidatorRemovedInput) validate() error {
 	return nil
 }
 
-type testValidatorRemovedEventsInput struct {
-	*commonTestInput
+type TestValidatorRemovedEventsInput struct {
+	*CommonTestInput
 	events []*testValidatorRemovedInput
 }
 
-func (input *testValidatorRemovedEventsInput) validate() error {
+func (input *TestValidatorRemovedEventsInput) validate() error {
 	for _, e := range input.events {
 		if err := e.validate(); err != nil {
 			return err
@@ -44,11 +44,11 @@ func (input *testValidatorRemovedEventsInput) validate() error {
 	return nil
 }
 
-func NewTestValidatorRemovedEventsInput(common *commonTestInput) *testValidatorRemovedEventsInput {
-	return &testValidatorRemovedEventsInput{common, nil}
+func NewTestValidatorRemovedEventsInput(common *CommonTestInput) *TestValidatorRemovedEventsInput {
+	return &TestValidatorRemovedEventsInput{common, nil}
 }
 
-func (input *testValidatorRemovedEventsInput) prepare(
+func (input *TestValidatorRemovedEventsInput) prepare(
 	validators []*testValidatorData,
 	validatorsIds []uint64,
 	opsIds []uint64,
@@ -67,7 +67,7 @@ func (input *testValidatorRemovedEventsInput) prepare(
 	}
 }
 
-func (input *testValidatorRemovedEventsInput) produce() {
+func (input *TestValidatorRemovedEventsInput) produce() {
 	err := input.validate()
 	require.NoError(input.t, err)
 
