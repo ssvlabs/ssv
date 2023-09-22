@@ -1,51 +1,89 @@
 package eth_test
 
 import (
+	"fmt"
 	"github.com/bloxapp/ssv/eth/simulator/simcontract"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/stretchr/testify/require"
-	"math/big"
-	"testing"
 )
 
 type testValidatorRemovedInput struct {
 	auth      *bind.TransactOpts
-	ops       []*testOperator
 	validator *testValidatorData
-	share     []byte
-	opsIds    []uint64 // separating opsIds from ops as it is a separate event field and should be used for destructive tests
+	opsIds    []uint64
+	cluster   *simcontract.CallableCluster
 }
 
-type produceValidatorRemovedEventsInput struct {
+func (input *testValidatorRemovedInput) validate() error {
+	if input == nil {
+		return fmt.Errorf("validation error: empty input")
+	}
+	switch {
+	case input.auth == nil:
+		return fmt.Errorf("validation error: input.auth is empty")
+	case input.validator == nil:
+		return fmt.Errorf("validation error: input.validator is empty")
+	case len(input.opsIds) == 0:
+		return fmt.Errorf("validation error: input.opsIds is empty")
+	}
+
+	return nil
+}
+
+type testValidatorRemovedEventsInput struct {
 	*commonTestInput
 	events []*testValidatorRemovedInput
 }
 
-func produceValidatorRemovedEvents(
-	t *testing.T,
-	input *produceValidatorRemovedEventsInput,
+func (input *testValidatorRemovedEventsInput) validate() error {
+	for _, e := range input.events {
+		if err := e.validate(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func NewTestValidatorRemovedEventsInput(common *commonTestInput) *testValidatorRemovedEventsInput {
+	return &testValidatorRemovedEventsInput{common, nil}
+}
+
+func (input *testValidatorRemovedEventsInput) prepare(
+	validators []*testValidatorData,
+	validatorsIds []uint64,
+	opsIds []uint64,
+	auth *bind.TransactOpts,
+	cluster *simcontract.CallableCluster,
 ) {
+	input.events = make([]*testValidatorRemovedInput, len(validatorsIds))
+
+	for i, validatorId := range validatorsIds {
+		input.events[i] = &testValidatorRemovedInput{
+			auth,
+			validators[validatorId],
+			opsIds,
+			cluster,
+		}
+	}
+}
+
+func (input *testValidatorRemovedEventsInput) produce() {
+	err := input.validate()
+	require.NoError(input.t, err)
+
 	for _, event := range input.events {
-		val := event.validator
-		valPubKey := val.masterPubKey.Serialize()
+		valPubKey := event.validator.masterPubKey.Serialize()
 		// Check the validator's shares are present in the state before removing
 		valShare := input.nodeStorage.Shares().Get(nil, valPubKey)
-		require.NotNil(t, valShare)
+		require.NotNil(input.t, valShare)
 
-		_, err := input.boundContract.SimcontractTransactor.RemoveValidator(
+		_, err = input.boundContract.SimcontractTransactor.RemoveValidator(
 			event.auth,
-			val.masterPubKey.Serialize(),
+			valPubKey,
 			event.opsIds,
-			simcontract.CallableCluster{
-				ValidatorCount:  1,
-				NetworkFeeIndex: 1,
-				Index:           2,
-				Active:          true,
-				Balance:         big.NewInt(100_000_000),
-			})
-		require.NoError(t, err)
-		input.sim.Commit()
-		require.NoError(t, err)
+			*event.cluster,
+		)
+		require.NoError(input.t, err)
 
 		if !input.doInOneBlock {
 			input.sim.Commit()

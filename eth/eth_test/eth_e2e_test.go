@@ -120,45 +120,49 @@ func TestEthExecLayer(t *testing.T) {
 	t.Run("SyncHistory happy flow", func(t *testing.T) {
 		// BLOCK 2. produce OPERATOR ADDED
 		// Check that there are no registered operators
-		operators, err := nodeStorage.ListOperators(nil, 0, 10)
-		require.NoError(t, err)
-		require.Equal(t, 0, len(operators))
+		{
+			operators, err := nodeStorage.ListOperators(nil, 0, 10)
+			require.NoError(t, err)
+			require.Equal(t, 0, len(operators))
 
-		opAddedInput := NewOperatorAddedEventInput(common)
-		opAddedInput.prepare(ops, auth)
-		opAddedInput.produce()
+			opAddedInput := NewOperatorAddedEventInput(common)
+			opAddedInput.prepare(ops, auth)
+			opAddedInput.produce()
+		}
 
 		// BLOCK 3:  VALIDATOR ADDED:
 		// Check that there were no operations for Alice Validator
-		nonce, err := nodeStorage.GetNextNonce(nil, testAddrAlice)
-		require.NoError(t, err)
-		require.Equal(t, expectedNonce, nonce)
+		{
+			nonce, err := nodeStorage.GetNextNonce(nil, testAddrAlice)
+			require.NoError(t, err)
+			require.Equal(t, expectedNonce, nonce)
 
-		valAddInput := NewTestValidatorRegisteredInput(common)
-		valAddInput.prepare(nodeStorage, validators, shares, ops, auth, &expectedNonce, []uint32{0, 1})
-		valAddInput.produce()
+			valAddInput := NewTestValidatorRegisteredInput(common)
+			valAddInput.prepare(validators, shares, ops, auth, &expectedNonce, []uint32{0, 1})
+			valAddInput.produce()
 
-		// Run SyncHistory
-		lastHandledBlockNum, err = eventSyncer.SyncHistory(ctx, lastHandledBlockNum)
-		require.NoError(t, err)
+			// Run SyncHistory
+			lastHandledBlockNum, err = eventSyncer.SyncHistory(ctx, lastHandledBlockNum)
+			require.NoError(t, err)
 
-		//check all the events were handled correctly and block number was increased
-		require.Equal(t, blockNum, lastHandledBlockNum)
-		fmt.Println("lastHandledBlockNum", lastHandledBlockNum)
+			//check all the events were handled correctly and block number was increased
+			require.Equal(t, blockNum, lastHandledBlockNum)
+			fmt.Println("lastHandledBlockNum", lastHandledBlockNum)
 
-		// Check that operators were successfully registered
-		operators, err = nodeStorage.ListOperators(nil, 0, 10)
-		require.NoError(t, err)
-		require.Equal(t, len(ops), len(operators))
+			// Check that operators were successfully registered
+			operators, err := nodeStorage.ListOperators(nil, 0, 10)
+			require.NoError(t, err)
+			require.Equal(t, len(ops), len(operators))
 
-		// Check that validator was registered
-		shares := nodeStorage.Shares().List(nil)
-		require.Equal(t, len(valAddInput.events), len(shares))
+			// Check that validator was registered
+			shares := nodeStorage.Shares().List(nil)
+			require.Equal(t, len(valAddInput.events), len(shares))
 
-		// Check the nonce was bumped
-		nonce, err = nodeStorage.GetNextNonce(nil, testAddrAlice)
-		require.NoError(t, err)
-		require.Equal(t, expectedNonce, nonce)
+			// Check the nonce was bumped
+			nonce, err = nodeStorage.GetNextNonce(nil, testAddrAlice)
+			require.NoError(t, err)
+			require.Equal(t, expectedNonce, nonce)
+		}
 	})
 
 	// Main difference between "online" events handling and syncing the historical (old) events
@@ -174,6 +178,8 @@ func TestEthExecLayer(t *testing.T) {
 			for {
 				select {
 				case <-ctx.Done():
+					err := client.Close()
+					require.NoError(t, err)
 					return
 				case <-stopChan:
 					err := client.Close()
@@ -185,28 +191,67 @@ func TestEthExecLayer(t *testing.T) {
 			}
 		}()
 
-		// Check current nonce before start
-		nonce, err := nodeStorage.GetNextNonce(nil, testAddrAlice)
-		require.NoError(t, err)
-		require.Equal(t, expectedNonce, nonce)
+		// Step 1: Add more validators
+		{
+			// Check current nonce before start
+			nonce, err := nodeStorage.GetNextNonce(nil, testAddrAlice)
+			require.NoError(t, err)
+			require.Equal(t, expectedNonce, nonce)
 
-		valAddInput := NewTestValidatorRegisteredInput(common)
-		valAddInput.prepare(nodeStorage, validators, shares, ops, auth, &expectedNonce, []uint32{2, 3, 4, 5, 6})
-		valAddInput.produce()
+			valAddInput := NewTestValidatorRegisteredInput(common)
+			valAddInput.prepare(validators, shares, ops, auth, &expectedNonce, []uint32{2, 3, 4, 5, 6})
+			valAddInput.produce()
 
-		// Wait until the state is changed
-		time.Sleep(time.Millisecond * 500)
+			// Wait until the state is changed
+			time.Sleep(time.Millisecond * 500)
 
-		nonce, err = nodeStorage.GetNextNonce(nil, testAddrAlice)
-		require.NoError(t, err)
-		require.Equal(t, expectedNonce, nonce)
+			nonce, err = nodeStorage.GetNextNonce(nil, testAddrAlice)
+			require.NoError(t, err)
+			require.Equal(t, expectedNonce, nonce)
 
-		time.Sleep(time.Millisecond * 500)
-		nonce, err = nodeStorage.GetNextNonce(nil, testAddrAlice)
-		require.NoError(t, err)
-		require.Equal(t, expectedNonce, nonce)
+			time.Sleep(time.Millisecond * 500)
+			nonce, err = nodeStorage.GetNextNonce(nil, testAddrAlice)
+			require.NoError(t, err)
+			require.Equal(t, expectedNonce, nonce)
 
-		require.Equal(t, uint64(4), *common.blockNum)
+			require.Equal(t, uint64(4), *common.blockNum)
+		}
+
+		// Step 2: remove validator
+		{
+			cluster := &simcontract.CallableCluster{
+				ValidatorCount:  1,
+				NetworkFeeIndex: 1,
+				Index:           2,
+				Active:          true,
+				Balance:         big.NewInt(100_000_000),
+			}
+			
+			shares := nodeStorage.Shares().List(nil)
+			require.Equal(t, 7, len(shares))
+
+			valRemove := NewTestValidatorRemovedEventsInput(common)
+			valRemove.prepare(
+				validators,
+				[]uint64{0, 1},
+				[]uint64{1, 2, 3, 4},
+				auth,
+				cluster)
+			valRemove.produce()
+
+			// Wait until the state is changed
+			time.Sleep(time.Millisecond * 500)
+
+			shares = nodeStorage.Shares().List(nil)
+			require.Equal(t, 5, len(shares))
+
+			for _, event := range valRemove.events {
+				valPubKey := event.validator.masterPubKey.Serialize()
+				valShare := nodeStorage.Shares().Get(nil, valPubKey)
+				require.Nil(t, valShare)
+			}
+		}
+
 		stopChan <- struct{}{}
 	})
 }

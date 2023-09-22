@@ -3,7 +3,6 @@ package eth_test
 import (
 	"fmt"
 	"github.com/bloxapp/ssv/eth/simulator/simcontract"
-	"github.com/bloxapp/ssv/operator/storage"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/stretchr/testify/require"
@@ -20,6 +19,9 @@ func NewTestValidatorRegisteredInput(common *commonTestInput) *testValidatorRegi
 }
 
 func (input *testValidatorRegisteredInput) validate() error {
+	if input.commonTestInput == nil {
+		return fmt.Errorf("validation error: commonTestInput is empty")
+	}
 	for _, e := range input.events {
 		if err := e.validate(); err != nil {
 			return err
@@ -40,13 +42,14 @@ func (input *validatorRegisteredEventInput) validate() error {
 	if input == nil {
 		return fmt.Errorf("validation error: empty input")
 	}
+
 	switch {
 	case input.auth == nil:
 		return fmt.Errorf("validation error: input.auth is empty")
 	case input.validator == nil:
 		return fmt.Errorf("validation error: input.validator is empty")
 	case len(input.share) == 0:
-		return fmt.Errorf("validation error: input.validator is empty")
+		return fmt.Errorf("validation error: input.share is empty")
 	case len(input.ops) == 0:
 		return fmt.Errorf("validation error: input.ops is empty")
 	}
@@ -62,7 +65,6 @@ func (input *validatorRegisteredEventInput) validate() error {
 }
 
 func (input *testValidatorRegisteredInput) prepare(
-	nodeStorage storage.Storage,
 	validators []*testValidatorData,
 	shares [][]byte,
 	ops []*testOperator,
@@ -75,7 +77,7 @@ func (input *testValidatorRegisteredInput) prepare(
 	for i, validatorId := range validatorsIds {
 		// Check there are no shares in the state for the current validator
 		valPubKey := validators[validatorId].masterPubKey.Serialize()
-		share := nodeStorage.Shares().Get(nil, valPubKey)
+		share := input.nodeStorage.Shares().Get(nil, valPubKey)
 		require.Nil(input.t, share)
 
 		// Create event input
