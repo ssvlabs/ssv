@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"github.com/bloxapp/ssv/eth/simulator/simcontract"
+	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"math/big"
 	"testing"
@@ -31,7 +33,7 @@ func TestEthExecLayer(t *testing.T) {
 	testAddresses[1] = &testAddrBob
 	expectedNonce := registrystorage.Nonce(0)
 
-	testEnv, err := setupEnv(t, ctx, testAddresses, 10, 4)
+	testEnv, err := setupEnv(t, ctx, testAddresses, 7, 4)
 	require.NoError(t, err)
 
 	var (
@@ -46,6 +48,7 @@ func TestEthExecLayer(t *testing.T) {
 		client        = testEnv.execClient
 		rpcServer     = testEnv.rpcServer
 		httpSrv       = testEnv.httpSrv
+		validatorCtrl = testEnv.validatorCtrl
 	)
 	defer rpcServer.Stop()
 	defer httpSrv.Close()
@@ -134,6 +137,8 @@ func TestEthExecLayer(t *testing.T) {
 
 		// Step 1: Add more validators
 		{
+			validatorCtrl.EXPECT().StartValidator(gomock.Any()).AnyTimes()
+
 			// Check current nonce before start
 			nonce, err := nodeStorage.GetNextNonce(nil, testAddrAlice)
 			require.NoError(t, err)
@@ -160,10 +165,12 @@ func TestEthExecLayer(t *testing.T) {
 
 		// Step 2: remove validator
 		{
+			validatorCtrl.EXPECT().StopValidator(gomock.Any()).Return(nil).AnyTimes()
+
 			cluster := &simcontract.CallableCluster{
 				ValidatorCount:  1,
 				NetworkFeeIndex: 1,
-				Index:           2,
+				Index:           1,
 				Active:          true,
 				Balance:         big.NewInt(100_000_000),
 			}
@@ -177,11 +184,12 @@ func TestEthExecLayer(t *testing.T) {
 				[]uint64{0, 1},
 				[]uint64{1, 2, 3, 4},
 				auth,
-				cluster)
+				cluster,
+			)
 			valRemove.produce()
 
 			// Wait until the state is changed
-			time.Sleep(time.Millisecond * 500)
+			time.Sleep(time.Millisecond * 300)
 
 			shares = nodeStorage.Shares().List(nil)
 			require.Equal(t, 5, len(shares))
@@ -190,6 +198,44 @@ func TestEthExecLayer(t *testing.T) {
 				valPubKey := event.validator.masterPubKey.Serialize()
 				valShare := nodeStorage.Shares().Get(nil, valPubKey)
 				require.Nil(t, valShare)
+			}
+		}
+
+		// Step 3 Liquidate Cluster
+		{
+			validatorCtrl.EXPECT().LiquidateCluster(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+			cluster := &simcontract.CallableCluster{
+				ValidatorCount:  1,
+				NetworkFeeIndex: 1,
+				Index:           1,
+				Active:          true,
+				Balance:         big.NewInt(100_000_000),
+			}
+
+			clusterLiquidate := NewTestClusterLiquidatedInput(common)
+			clusterLiquidate.prepare([]*ClusterLiquidatedEventInput{
+				{
+					auth:         auth,
+					ownerAddress: &testAddrAlice,
+					opsIds:       []uint64{1, 2, 3, 4},
+					cluster:      cluster,
+				},
+			})
+			clusterLiquidate.produce()
+
+			// Wait until the state is changed
+			time.Sleep(time.Millisecond * 300)
+
+			clusterID, err := ssvtypes.ComputeClusterIDHash(testAddrAlice.Bytes(), []uint64{1, 2, 3, 4})
+			require.NoError(t, err)
+
+			shares := nodeStorage.Shares().List(nil, registrystorage.ByClusterID(clusterID))
+			require.NotEmpty(t, shares)
+			require.Equal(t, 5, len(shares))
+
+			for _, s := range shares {
+				require.True(t, s.Liquidated)
 			}
 		}
 

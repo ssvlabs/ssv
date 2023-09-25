@@ -26,6 +26,9 @@ func (input *ProduceOperatorAddedEventsInput) validate() error {
 	if input.CommonTestInput == nil {
 		return fmt.Errorf("validation error: CommonTestInput is empty")
 	}
+	if input.events == nil {
+		return fmt.Errorf("validation error: empty events")
+	}
 	for _, event := range input.events {
 		err := event.validate()
 		if err != nil {
@@ -72,12 +75,10 @@ func (input *ProduceOperatorAddedEventsInput) produce() {
 		require.NoError(input.t, err)
 
 		if !input.doInOneBlock {
-			input.sim.Commit()
-			*input.blockNum++
+			commitBlock(input.sim, input.blockNum)
 		}
 	}
 	if input.doInOneBlock {
-		input.sim.Commit()
-		*input.blockNum++
+		commitBlock(input.sim, input.blockNum)
 	}
 }

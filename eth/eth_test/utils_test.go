@@ -202,7 +202,7 @@ func setupEventHandler(
 		)
 		require.NoError(t, err)
 
-		validatorCtrl.EXPECT().GetOperatorData().Return(&registrystorage.OperatorData{}).AnyTimes()
+		validatorCtrl.EXPECT().GetOperatorData().Return(operatorData).AnyTimes()
 
 		return eh, validatorCtrl, nodeStorage, nil
 	}

@@ -22,6 +22,9 @@ func (input *testValidatorRegisteredInput) validate() error {
 	if input.CommonTestInput == nil {
 		return fmt.Errorf("validation error: CommonTestInput is empty")
 	}
+	if input.events == nil {
+		return fmt.Errorf("validation error: empty events")
+	}
 	for _, e := range input.events {
 		if err := e.validate(); err != nil {
 			return err
@@ -120,12 +123,10 @@ func (input *testValidatorRegisteredInput) produce() {
 		require.NoError(input.t, err)
 
 		if !input.doInOneBlock {
-			input.sim.Commit()
-			*input.blockNum++
+			commitBlock(input.sim, input.blockNum)
 		}
 	}
 	if input.doInOneBlock {
-		input.sim.Commit()
-		*input.blockNum++
+		commitBlock(input.sim, input.blockNum)
 	}
 }

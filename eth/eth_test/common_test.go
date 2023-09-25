@@ -9,6 +9,7 @@ import (
 	"github.com/bloxapp/ssv/eth/simulator/simcontract"
 	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/operator/storage"
+	"github.com/bloxapp/ssv/operator/validator/mocks"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -59,6 +60,7 @@ type testEnv struct {
 	execClient    *executionclient.ExecutionClient
 	rpcServer     *rpc.Server
 	httpSrv       *httptest.Server
+	validatorCtrl *mocks.MockController
 }
 
 func setupEnv(
@@ -77,10 +79,10 @@ func setupEnv(
 	}
 
 	validators := make([]*testValidatorData, validatorsCount)
-	shares := make([][]byte, 10)
+	shares := make([][]byte, validatorsCount)
 
 	// Create validators, BLS keys, shares
-	for i := 0; i < 10; i++ {
+	for i := 0; i < int(validatorsCount); i++ {
 		validators[i], err = createNewValidator(ops)
 		if err != nil {
 			return nil, err
@@ -93,6 +95,7 @@ func setupEnv(
 	}
 
 	eh, validatorCtrl, nodeStorage, err := setupEventHandler(t, ctx, logger, ops[0], &testAddrAlice, true)
+
 	if err != nil {
 		return nil, err
 	}
@@ -164,6 +167,7 @@ func setupEnv(
 
 	return &testEnv{
 		eventSyncer:   eventSyncer,
+		validatorCtrl: validatorCtrl,
 		boundContract: boundContract,
 		sim:           sim,
 		nodeStorage:   nodeStorage,
@@ -175,4 +179,9 @@ func setupEnv(
 		rpcServer:     rpcServer,
 		httpSrv:       httpSrv,
 	}, nil
+}
+
+func commitBlock(sim *simulator.SimulatedBackend, blockNum *uint64) {
+	sim.Commit()
+	*blockNum++
 }

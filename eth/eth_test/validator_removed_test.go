@@ -18,6 +18,7 @@ func (input *testValidatorRemovedInput) validate() error {
 	if input == nil {
 		return fmt.Errorf("validation error: empty input")
 	}
+
 	switch {
 	case input.auth == nil:
 		return fmt.Errorf("validation error: input.auth is empty")
@@ -36,6 +37,12 @@ type TestValidatorRemovedEventsInput struct {
 }
 
 func (input *TestValidatorRemovedEventsInput) validate() error {
+	if input.CommonTestInput == nil {
+		return fmt.Errorf("validation error: empty CommonTestInput")
+	}
+	if input.events == nil {
+		return fmt.Errorf("validation error: empty events")
+	}
 	for _, e := range input.events {
 		if err := e.validate(); err != nil {
 			return err
@@ -86,12 +93,10 @@ func (input *TestValidatorRemovedEventsInput) produce() {
 		require.NoError(input.t, err)
 
 		if !input.doInOneBlock {
-			input.sim.Commit()
-			*input.blockNum++
+			commitBlock(input.sim, input.blockNum)
 		}
 	}
 	if input.doInOneBlock {
-		input.sim.Commit()
-		*input.blockNum++
+		commitBlock(input.sim, input.blockNum)
 	}
 }
