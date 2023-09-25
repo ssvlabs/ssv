@@ -22,6 +22,18 @@ func NewOperatorAddedEventInput(common *CommonTestInput) *ProduceOperatorAddedEv
 	return &ProduceOperatorAddedEventsInput{common, nil}
 }
 
+func (input *ProduceOperatorAddedEventsInput) validate() error {
+	if input.CommonTestInput == nil {
+		return fmt.Errorf("validation error: CommonTestInput is empty")
+	}
+	for _, event := range input.events {
+		err := event.validate()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
 func (input *testOperatorAddedEventInput) validate() error {
 	if input == nil {
 		return fmt.Errorf("validation error: empty input")
@@ -49,6 +61,9 @@ func (input *ProduceOperatorAddedEventsInput) prepare(
 }
 
 func (input *ProduceOperatorAddedEventsInput) produce() {
+	err := input.validate()
+	require.NoError(input.t, err)
+
 	for _, event := range input.events {
 		op := event.op
 		packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(op.pub)
