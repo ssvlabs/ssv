@@ -31,6 +31,15 @@ func TestEthExecLayer(t *testing.T) {
 	testAddresses := make([]*ethcommon.Address, 2)
 	testAddresses[0] = &testAddrAlice
 	testAddresses[1] = &testAddrBob
+
+	cluster := &simcontract.CallableCluster{
+		ValidatorCount:  1,
+		NetworkFeeIndex: 1,
+		Index:           1,
+		Active:          true,
+		Balance:         big.NewInt(100_000_000),
+	}
+
 	expectedNonce := registrystorage.Nonce(0)
 
 	testEnv, err := setupEnv(t, ctx, testAddresses, 7, 4)
@@ -165,15 +174,7 @@ func TestEthExecLayer(t *testing.T) {
 
 		// Step 2: remove validator
 		{
-			validatorCtrl.EXPECT().StopValidator(gomock.Any()).Return(nil).AnyTimes()
-
-			cluster := &simcontract.CallableCluster{
-				ValidatorCount:  1,
-				NetworkFeeIndex: 1,
-				Index:           1,
-				Active:          true,
-				Balance:         big.NewInt(100_000_000),
-			}
+			validatorCtrl.EXPECT().StopValidator(gomock.Any()).AnyTimes()
 
 			shares := nodeStorage.Shares().List(nil)
 			require.Equal(t, 7, len(shares))
@@ -205,14 +206,6 @@ func TestEthExecLayer(t *testing.T) {
 		{
 			validatorCtrl.EXPECT().LiquidateCluster(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
-			cluster := &simcontract.CallableCluster{
-				ValidatorCount:  1,
-				NetworkFeeIndex: 1,
-				Index:           1,
-				Active:          true,
-				Balance:         big.NewInt(100_000_000),
-			}
-
 			clusterLiquidate := NewTestClusterLiquidatedInput(common)
 			clusterLiquidate.prepare([]*ClusterLiquidatedEventInput{
 				{
@@ -236,6 +229,43 @@ func TestEthExecLayer(t *testing.T) {
 
 			for _, s := range shares {
 				require.True(t, s.Liquidated)
+			}
+		}
+
+		// Step 4 Reactivate Cluster
+		{
+			validatorCtrl.EXPECT().ReactivateCluster(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+			clusterID, err := ssvtypes.ComputeClusterIDHash(testAddrAlice.Bytes(), []uint64{1, 2, 3, 4})
+			require.NoError(t, err)
+
+			shares := nodeStorage.Shares().List(nil, registrystorage.ByClusterID(clusterID))
+			require.NotEmpty(t, shares)
+			require.Equal(t, 5, len(shares))
+
+			for _, s := range shares {
+				require.True(t, s.Liquidated)
+			}
+
+			// Trigger the event
+			clusterLiquidate := NewTestClusterReactivatedInput(common)
+			clusterLiquidate.prepare([]*ClusterReactivatedEventInput{
+				{
+					auth:    auth,
+					opsIds:  []uint64{1, 2, 3, 4},
+					cluster: cluster,
+				},
+			})
+			clusterLiquidate.produce()
+
+			// Wait until the state is changed
+			time.Sleep(time.Millisecond * 300)
+
+			shares = nodeStorage.Shares().List(nil, registrystorage.ByClusterID(clusterID))
+			require.NotEmpty(t, shares)
+			require.Equal(t, 5, len(shares))
+
+			for _, s := range shares {
+				require.False(t, s.Liquidated)
 			}
 		}
 
