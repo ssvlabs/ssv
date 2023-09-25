@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/rpc"
 	"go.uber.org/zap/zaptest"
 	"math/big"
 	"net/http/httptest"
@@ -56,13 +57,13 @@ type testEnv struct {
 	auth          *bind.TransactOpts
 	shares        [][]byte
 	execClient    *executionclient.ExecutionClient
-
-	doInOneBlock bool
+	rpcServer     *rpc.Server
+	httpSrv       *httptest.Server
 }
 
 func setupEnv(
 	t *testing.T,
-	ctx *context.Context,
+	ctx context.Context,
 	testAddresses []*ethcommon.Address,
 	validatorsCount uint64,
 	operatorsCount uint64,
@@ -91,7 +92,7 @@ func setupEnv(
 		}
 	}
 
-	eh, validatorCtrl, nodeStorage, err := setupEventHandler(t, *ctx, logger, ops[0], &testAddrAlice, true)
+	eh, validatorCtrl, nodeStorage, err := setupEventHandler(t, ctx, logger, ops[0], &testAddrAlice, true)
 	if err != nil {
 		return nil, err
 	}
@@ -105,10 +106,8 @@ func setupEnv(
 	// Create JSON-RPC handler
 	rpcServer, _ := sim.Node.RPCHandler()
 	// Expose handler on a test server with ws open
-	httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
-	defer rpcServer.Stop()
-	defer httpsrv.Close()
-	addr := "ws:" + strings.TrimPrefix(httpsrv.URL, "http:")
+	httpSrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
+	addr := "ws:" + strings.TrimPrefix(httpSrv.URL, "http:")
 
 	parsed, _ := abi.JSON(strings.NewReader(simcontract.SimcontractMetaData.ABI))
 	auth, _ := bind.NewKeyedTransactorWithChainID(testKeyAlice, big.NewInt(1337))
@@ -120,7 +119,7 @@ func setupEnv(
 	sim.Commit()
 
 	// Check contract code at the simulated blockchain
-	contractCode, err := sim.CodeAt(*ctx, contractAddr, nil)
+	contractCode, err := sim.CodeAt(ctx, contractAddr, nil)
 	if err != nil {
 		t.Errorf("getting contract code: %v", err)
 	}
@@ -130,7 +129,7 @@ func setupEnv(
 
 	// Create a client and connect to the simulator
 	client, err := executionclient.New(
-		*ctx,
+		ctx,
 		addr,
 		contractAddr,
 		executionclient.WithLogger(logger),
@@ -141,7 +140,7 @@ func setupEnv(
 		return nil, err
 	}
 
-	err = client.Healthy(*ctx)
+	err = client.Healthy(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -173,5 +172,7 @@ func setupEnv(
 		validators:    validators,
 		shares:        shares,
 		execClient:    client,
+		rpcServer:     rpcServer,
+		httpSrv:       httpSrv,
 	}, nil
 }

@@ -31,8 +31,9 @@ func TestEthExecLayer(t *testing.T) {
 	testAddresses[1] = &testAddrBob
 	expectedNonce := registrystorage.Nonce(0)
 
-	testEnv, err := setupEnv(t, &ctx, testAddresses, 10, 4)
+	testEnv, err := setupEnv(t, ctx, testAddresses, 10, 4)
 	require.NoError(t, err)
+
 	var (
 		auth          = testEnv.auth
 		nodeStorage   = testEnv.nodeStorage
@@ -43,7 +44,12 @@ func TestEthExecLayer(t *testing.T) {
 		eventSyncer   = testEnv.eventSyncer
 		shares        = testEnv.shares
 		client        = testEnv.execClient
+		rpcServer     = testEnv.rpcServer
+		httpSrv       = testEnv.httpSrv
 	)
+	defer rpcServer.Stop()
+	defer httpSrv.Close()
+
 	blockNum := uint64(0x1)
 	lastHandledBlockNum := uint64(0x1)
 
