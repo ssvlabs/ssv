@@ -231,7 +231,7 @@ func (gc *goClient) createValidatorRegistration(pubkey []byte, feeRecipient bell
 	return signedReg
 }
 
-func (gc *goClient) startSlotTicker(slotTickerProvider func() slot_ticker.SlotTicker) {
+func (gc *goClient) startSlotTicker(slotTickerProvider slot_ticker.SlotTickerProvider) {
 	ticker := slotTickerProvider()
 	for {
 		<-ticker.Next()

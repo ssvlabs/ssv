@@ -60,7 +60,7 @@ type SchedulerOptions struct {
 	ValidatorController ValidatorController
 	ExecuteDuty         ExecuteDutyFunc
 	IndicesChg          chan struct{}
-	SlotTickerProvider  func() slot_ticker.SlotTicker
+	SlotTickerProvider  slot_ticker.SlotTickerProvider
 	BuilderProposals    bool
 }
 
@@ -68,7 +68,7 @@ type Scheduler struct {
 	beaconNode          BeaconNode
 	network             networkconfig.NetworkConfig
 	validatorController ValidatorController
-	slotTickerProvider  func() slot_ticker.SlotTicker
+	slotTickerProvider  slot_ticker.SlotTickerProvider
 	executeDuty         ExecuteDutyFunc
 	builderProposals    bool
 

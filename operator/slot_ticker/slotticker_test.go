@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/cornelk/hashmap/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSlotTicker(t *testing.T) {
@@ -24,10 +26,7 @@ func TestSlotTicker(t *testing.T) {
 		<-ticker.Next()
 		slot := ticker.Slot()
 
-		if slot != expectedSlot {
-			t.Errorf("Expected slot %d, but got slot %d", expectedSlot, slot)
-			break
-		}
+		require.Equal(t, expectedSlot, slot)
 		expectedSlot++
 	}
 }
@@ -44,13 +43,9 @@ func TestTickerInitialization(t *testing.T) {
 	// Allow a small buffer (e.g., 10ms) due to code execution overhead
 	buffer := 10 * time.Millisecond
 
-	if elapsed := time.Since(start); elapsed+buffer < slotDuration {
-		t.Errorf("First tick occurred too soon: %v", elapsed)
-	}
-
-	if slot != 1 {
-		t.Errorf("Expected slot 1, but got slot %d", slot)
-	}
+	elapsed := time.Since(start)
+	assert.True(t, elapsed+buffer >= slotDuration, "First tick occurred too soon: %v", elapsed.String())
+	require.Equal(t, phase0.Slot(1), slot)
 }
 
 func TestSlotNumberConsistency(t *testing.T) {
@@ -63,9 +58,9 @@ func TestSlotNumberConsistency(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		<-ticker.Next()
 		slot := ticker.Slot()
-		if lastSlot != 0 && slot != lastSlot+1 {
-			t.Errorf("Expected slot %d, got %d", lastSlot+1, slot)
-			break
+
+		if lastSlot != 0 {
+			require.Equal(t, lastSlot+1, slot)
 		}
 		lastSlot = slot
 	}
@@ -87,9 +82,7 @@ func TestGenesisInFuture(t *testing.T) {
 	// Allow a small buffer (e.g., 10ms) due to code execution overhead
 	buffer := 10 * time.Millisecond
 
-	if actualFirstTickDuration+buffer < expectedFirstTickDuration {
-		t.Errorf("First tick occurred too soon. Expected at least: %v, but got: %v", expectedFirstTickDuration, actualFirstTickDuration)
-	}
+	assert.True(t, actualFirstTickDuration+buffer >= expectedFirstTickDuration, "First tick occurred too soon. Expected at least: %v, but got: %v", expectedFirstTickDuration.String(), actualFirstTickDuration.String())
 }
 
 func TestBoundedDrift(t *testing.T) {
@@ -108,9 +101,7 @@ func TestBoundedDrift(t *testing.T) {
 
 	// We'll allow a small buffer for drift, say 1%
 	buffer := expectedDuration * 1 / 100
-	if elapsed < expectedDuration-buffer || elapsed > expectedDuration+buffer {
-		t.Errorf("Drifted too far from expected time. Expected: %v, Actual: %v", expectedDuration, elapsed)
-	}
+	assert.True(t, elapsed >= expectedDuration-buffer && elapsed <= expectedDuration+buffer, "Drifted too far from expected time. Expected: %v, Actual: %v", expectedDuration.String(), elapsed.String())
 }
 
 func TestMultipleSlotTickers(t *testing.T) {
@@ -146,7 +137,5 @@ func TestMultipleSlotTickers(t *testing.T) {
 
 	// We'll allow a small buffer for drift, say 1%
 	buffer := expectedDuration * 1 / 100
-	if elapsed > expectedDuration+buffer {
-		t.Errorf("Expected all tickers to complete within %v but took %v", expectedDuration, elapsed)
-	}
+	assert.True(t, elapsed <= expectedDuration+buffer, "Expected all tickers to complete within %v but took %v", expectedDuration.String(), elapsed.String())
 }

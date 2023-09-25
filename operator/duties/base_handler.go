@@ -17,7 +17,7 @@ import (
 type ExecuteDutiesFunc func(logger *zap.Logger, duties []*spectypes.Duty)
 
 type dutyHandler interface {
-	Setup(string, *zap.Logger, BeaconNode, networkconfig.NetworkConfig, ValidatorController, ExecuteDutiesFunc, func() slot_ticker.SlotTicker, chan ReorgEvent, chan struct{})
+	Setup(string, *zap.Logger, BeaconNode, networkconfig.NetworkConfig, ValidatorController, ExecuteDutiesFunc, slot_ticker.SlotTickerProvider, chan ReorgEvent, chan struct{})
 	HandleDuties(context.Context)
 	Name() string
 }
@@ -44,7 +44,7 @@ func (h *baseHandler) Setup(
 	network networkconfig.NetworkConfig,
 	validatorController ValidatorController,
 	executeDuties ExecuteDutiesFunc,
-	slotTickerProvider func() slot_ticker.SlotTicker,
+	slotTickerProvider slot_ticker.SlotTickerProvider,
 	reorgEvents chan ReorgEvent,
 	indicesChange chan struct{},
 ) {

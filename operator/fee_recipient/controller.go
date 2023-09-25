@@ -30,7 +30,7 @@ type ControllerOptions struct {
 	Network            networkconfig.NetworkConfig
 	ShareStorage       storage.Shares
 	RecipientStorage   storage.Recipients
-	SlotTickerProvider func() slot_ticker.SlotTicker
+	SlotTickerProvider slot_ticker.SlotTickerProvider
 	OperatorData       *storage.OperatorData
 }
 
@@ -41,7 +41,7 @@ type recipientController struct {
 	network            networkconfig.NetworkConfig
 	shareStorage       storage.Shares
 	recipientStorage   storage.Recipients
-	slotTickerProvider func() slot_ticker.SlotTicker
+	slotTickerProvider slot_ticker.SlotTickerProvider
 	operatorData       *storage.OperatorData
 }
 

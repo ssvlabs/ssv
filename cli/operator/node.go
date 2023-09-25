@@ -496,7 +496,7 @@ func setupP2P(
 func setupConsensusClient(
 	logger *zap.Logger,
 	operatorID spectypes.OperatorID,
-	slotTickerProvider func() slot_ticker.SlotTicker,
+	slotTickerProvider slot_ticker.SlotTickerProvider,
 ) beaconprotocol.BeaconNode {
 	cl, err := goclient.New(logger, cfg.ConsensusClient, operatorID, slotTickerProvider)
 	if err != nil {

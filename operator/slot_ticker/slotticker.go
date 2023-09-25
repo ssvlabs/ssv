@@ -8,6 +8,8 @@ import (
 
 //go:generate mockgen -package=mocks -destination=./mocks/slotticker.go -source=./slotticker.go
 
+type SlotTickerProvider func() SlotTicker
+
 type SlotTicker interface {
 	Next() <-chan time.Time
 	Slot() phase0.Slot
@@ -63,6 +65,9 @@ func NewSlotTicker(cfgProvider ConfigProvider) SlotTicker {
 	}
 }
 
+// Next returns a channel that signals when the next slot should start.
+// Note: This function is not thread-safe and should be called in a serialized fashion.
+// Make sure no concurrent calls happen, as it can result in unexpected behavior.
 func (s *slotTicker) Next() <-chan time.Time {
 	timeSinceGenesis := time.Since(s.genesisTime)
 	if timeSinceGenesis < 0 {
@@ -82,6 +87,9 @@ func (s *slotTicker) Next() <-chan time.Time {
 	return s.timer.C
 }
 
+// Slot returns the current slot number.
+// Note: Like the Next function, this method is also not thread-safe.
+// It should be called in a serialized manner after calling Next.
 func (s *slotTicker) Slot() phase0.Slot {
 	return s.slot
 }

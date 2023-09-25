@@ -51,7 +51,7 @@ type Options struct {
 type operatorNode struct {
 	network            networkconfig.NetworkConfig
 	context            context.Context
-	slotTickerProvider func() slot_ticker.SlotTicker
+	slotTickerProvider slot_ticker.SlotTickerProvider
 	validatorsCtrl     validator.Controller
 	consensusClient    beaconprotocol.BeaconNode
 	executionClient    *executionclient.ExecutionClient
@@ -68,7 +68,7 @@ type operatorNode struct {
 }
 
 // New is the constructor of operatorNode
-func New(logger *zap.Logger, opts Options, slotTickerProvider func() slot_ticker.SlotTicker) Node {
+func New(logger *zap.Logger, opts Options, slotTickerProvider slot_ticker.SlotTickerProvider) Node {
 	storageMap := qbftstorage.NewStores()
 
 	roles := []spectypes.BeaconRole{
