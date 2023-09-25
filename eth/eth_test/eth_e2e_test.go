@@ -235,6 +235,7 @@ func TestEthExecLayer(t *testing.T) {
 		// Step 4 Reactivate Cluster
 		{
 			validatorCtrl.EXPECT().ReactivateCluster(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
 			clusterID, err := ssvtypes.ComputeClusterIDHash(testAddrAlice.Bytes(), []uint64{1, 2, 3, 4})
 			require.NoError(t, err)
 
@@ -247,15 +248,15 @@ func TestEthExecLayer(t *testing.T) {
 			}
 
 			// Trigger the event
-			clusterLiquidate := NewTestClusterReactivatedInput(common)
-			clusterLiquidate.prepare([]*ClusterReactivatedEventInput{
+			clusterReactivated := NewTestClusterReactivatedInput(common)
+			clusterReactivated.prepare([]*ClusterReactivatedEventInput{
 				{
 					auth:    auth,
 					opsIds:  []uint64{1, 2, 3, 4},
 					cluster: cluster,
 				},
 			})
-			clusterLiquidate.produce()
+			clusterReactivated.produce()
 
 			// Wait until the state is changed
 			time.Sleep(time.Millisecond * 300)
@@ -267,6 +268,38 @@ func TestEthExecLayer(t *testing.T) {
 			for _, s := range shares {
 				require.False(t, s.Liquidated)
 			}
+		}
+
+		// Step 5 Remove some Operators
+		{
+			operators, err := nodeStorage.ListOperators(nil, 0, 10)
+			require.NoError(t, err)
+			require.Equal(t, 4, len(operators))
+
+			opRemoved := NewOperatorRemovedEventInput(common)
+			opRemoved.prepare([]uint64{1, 2}, auth)
+			opRemoved.produce()
+
+			// TODO: this should be adjusted when eth/eventhandler/handlers.go#L109 is resolved
+		}
+		
+		// Step 6 Update Fee Recipient
+		{
+			validatorCtrl.EXPECT().UpdateFeeRecipient(gomock.Any(), gomock.Any()).Times(1)
+
+			setFeeRecipient := NewSetFeeRecipientAddressInput(common)
+			setFeeRecipient.prepare([]*SetFeeRecipientAddressEventInput{
+				{auth, &testAddrBob},
+			})
+			setFeeRecipient.produce()
+
+			// Wait until the state is changed
+			time.Sleep(time.Millisecond * 300)
+
+			recipientData, found, err := nodeStorage.GetRecipientData(nil, testAddrAlice)
+			require.NoError(t, err)
+			require.True(t, found)
+			require.Equal(t, testAddrBob.String(), recipientData.FeeRecipient.String())
 		}
 
 		stopChan <- struct{}{}
