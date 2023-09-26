@@ -37,7 +37,7 @@ func (test *MsgProcessingSpecTest) TestName() string {
 func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
 	logger := logging.TestLogger(t)
 
-	test.Runner.GetBaseRunner().CheckSignature = true
+	test.Runner.GetBaseRunner().VerifySignatures = true
 
 	v := ssvtesting.BaseValidator(logger, spectestingutils.KeySetForShare(test.Runner.GetBaseRunner().Share))
 	v.DutyRunners[test.Runner.GetBaseRunner().BeaconRoleType] = test.Runner

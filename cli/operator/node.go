@@ -63,22 +63,22 @@ type KeyStore struct {
 }
 
 type config struct {
-	global_config.GlobalConfig `yaml:"global"`
-	DBOptions                  basedb.Options                   `yaml:"db"`
-	SSVOptions                 operator.Options                 `yaml:"ssv"`
-	ExecutionClient            executionclient.ExecutionOptions `yaml:"eth1"` // TODO: execution_client in yaml
-	ConsensusClient            beaconprotocol.Options           `yaml:"eth2"` // TODO: consensus_client in yaml
-	P2pNetworkConfig           p2pv1.Config                     `yaml:"p2p"`
-	KeyStore                   KeyStore                         `yaml:"KeyStore"`
-	OperatorPrivateKey         string                           `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
-	MetricsAPIPort             int                              `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port to listen on for the metrics API."`
-	EnableProfile              bool                             `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
-	NetworkPrivateKey          string                           `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
-	WsAPIPort                  int                              `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"Port to listen on for the websocket API."`
-	WithPing                   bool                             `yaml:"WithPing" env:"WITH_PING" env-description:"Whether to send websocket ping messages'"`
-	SSVAPIPort                 int                              `yaml:"SSVAPIPort" env:"SSV_API_PORT" env-description:"Port to listen on for the SSV API."`
-	LocalEventsPath            string                           `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"path to local events"`
-	MsgValidationCheckSig      bool                             `yaml:"MsgValidationCheckSig" env:"MSG_VALIDATION_CHECK_SIG" env-description:"check signature in message validation instead of in protocol"`
+	global_config.GlobalConfig    `yaml:"global"`
+	DBOptions                     basedb.Options                   `yaml:"db"`
+	SSVOptions                    operator.Options                 `yaml:"ssv"`
+	ExecutionClient               executionclient.ExecutionOptions `yaml:"eth1"` // TODO: execution_client in yaml
+	ConsensusClient               beaconprotocol.Options           `yaml:"eth2"` // TODO: consensus_client in yaml
+	P2pNetworkConfig              p2pv1.Config                     `yaml:"p2p"`
+	KeyStore                      KeyStore                         `yaml:"KeyStore"`
+	OperatorPrivateKey            string                           `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
+	MetricsAPIPort                int                              `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port to listen on for the metrics API."`
+	EnableProfile                 bool                             `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
+	NetworkPrivateKey             string                           `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
+	WsAPIPort                     int                              `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"Port to listen on for the websocket API."`
+	WithPing                      bool                             `yaml:"WithPing" env:"WITH_PING" env-description:"Whether to send websocket ping messages'"`
+	SSVAPIPort                    int                              `yaml:"SSVAPIPort" env:"SSV_API_PORT" env-description:"Port to listen on for the SSV API."`
+	LocalEventsPath               string                           `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"path to local events"`
+	MsgValidationVerifySignatures bool                             `yaml:"MsgValidationVerifySignatures" env:"MSG_VALIDATION_VERIFY_SIGNATURES" env-description:"verify signatures in message validation instead of in protocol"`
 }
 
 var cfg config
@@ -176,14 +176,14 @@ var StartNodeCmd = &cobra.Command{
 			validation.WithMetrics(metricsReporter),
 			validation.WithDutyStore(dutyStore),
 			validation.WithOwnOperatorID(operatorData.ID),
-			validation.WithSignatureCheck(cfg.MsgValidationCheckSig),
+			validation.WithSignatureVerification(cfg.MsgValidationVerifySignatures),
 		)
 
 		cfg.P2pNetworkConfig.Metrics = metricsReporter
 		cfg.P2pNetworkConfig.MessageValidator = messageValidator
 		cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
 		// if signature check is enabled in message validation then it's disabled in validator controller and vice versa
-		cfg.SSVOptions.ValidatorOptions.SignatureCheck = !cfg.MsgValidationCheckSig
+		cfg.SSVOptions.ValidatorOptions.VerifySignatures = !cfg.MsgValidationVerifySignatures
 
 		p2pNetwork := setupP2P(logger, db)
 

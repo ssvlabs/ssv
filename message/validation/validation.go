@@ -89,14 +89,14 @@ type MessageValidator interface {
 }
 
 type messageValidator struct {
-	logger         *zap.Logger
-	metrics        metrics
-	netCfg         networkconfig.NetworkConfig
-	index          sync.Map
-	shareStorage   registrystorage.Shares
-	dutyStore      *dutystore.Store
-	ownOperatorID  spectypes.OperatorID
-	checkSignature bool
+	logger           *zap.Logger
+	metrics          metrics
+	netCfg           networkconfig.NetworkConfig
+	index            sync.Map
+	shareStorage     registrystorage.Shares
+	dutyStore        *dutystore.Store
+	ownOperatorID    spectypes.OperatorID
+	verifySignatures bool
 }
 
 func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) MessageValidator {
@@ -145,9 +145,9 @@ func WithShareStorage(shareStorage registrystorage.Shares) Option {
 	}
 }
 
-func WithSignatureCheck(check bool) Option {
+func WithSignatureVerification(check bool) Option {
 	return func(mv *messageValidator) {
-		mv.checkSignature = check
+		mv.verifySignatures = check
 	}
 }
 

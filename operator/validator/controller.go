@@ -82,7 +82,7 @@ type ControllerOptions struct {
 	Metrics                    validator.Metrics
 	MessageValidator           validation.MessageValidator
 	ValidatorsMap              *validatorsmap.ValidatorsMap
-	SignatureCheck             bool
+	VerifySignatures           bool
 
 	// worker flags
 	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of goroutines to use for message workers"`
@@ -191,7 +191,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		GasLimit:          options.GasLimit,
 		MessageValidator:  options.MessageValidator,
 		Metrics:           options.Metrics,
-		SignatureCheck:    options.SignatureCheck,
+		VerifySignatures:  options.VerifySignatures,
 	}
 
 	// If full node, increase queue size to make enough room
@@ -854,10 +854,10 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
 				return leader
 			},
-			Storage:        options.Storage.Get(role),
-			Network:        options.Network,
-			Timer:          roundtimer.New(ctx, options.BeaconNetwork, role, nil),
-			SignatureCheck: options.SignatureCheck,
+			Storage:               options.Storage.Get(role),
+			Network:               options.Network,
+			Timer:                 roundtimer.New(ctx, options.BeaconNetwork, role, nil),
+			SignatureVerification: options.VerifySignatures,
 		}
 		config.ValueCheckF = valueCheckF
 

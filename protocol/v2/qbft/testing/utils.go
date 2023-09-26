@@ -34,10 +34,10 @@ var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, ro
 		ProposerF: func(state *specqbft.State, round specqbft.Round) types.OperatorID {
 			return 1
 		},
-		Storage:        TestingStores(logger).Get(role),
-		Network:        testingutils.NewTestingNetwork(),
-		Timer:          roundtimer.NewTestingTimer(),
-		SignatureCheck: true,
+		Storage:               TestingStores(logger).Get(role),
+		Network:               testingutils.NewTestingNetwork(),
+		Timer:                 roundtimer.NewTestingTimer(),
+		SignatureVerification: true,
 	}
 }
 
