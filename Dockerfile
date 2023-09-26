@@ -9,7 +9,6 @@ RUN apt-get update                                                        && \
   git=1:2.39.2-1.1 \
   zip=3.0-13 \
   unzip=6.0-28 \
-  wget=1.21.3-1+b2 \
   g++=4:12.2.0-3 \
   gcc-aarch64-linux-gnu=4:12.2.0-3 \
   bzip2=1.0.8-5+b1 \
