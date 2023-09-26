@@ -54,8 +54,8 @@ type BaseRunner struct {
 	BeaconRoleType spectypes.BeaconRole
 
 	// implementation vars
-	TimeoutF       TimeoutF `json:"-"`
-	CheckSignature bool     `json:"-"`
+	TimeoutF         TimeoutF `json:"-"`
+	VerifySignatures bool     `json:"-"`
 
 	// highestDecidedSlot holds the highest decided duty slot and gets updated after each decided is reached
 	highestDecidedSlot spec.Slot

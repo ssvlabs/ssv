@@ -117,7 +117,7 @@ func (mv *messageValidator) validateConsensusMessage(
 		}
 	}
 
-	if mv.checkSignature {
+	if mv.verifySignatures {
 		if err := ssvtypes.VerifyByOperators(signedMsg.Signature, signedMsg, mv.netCfg.Domain, spectypes.QBFTSignatureType, share.Committee); err != nil {
 			signErr := ErrInvalidSignature
 			signErr.innerErr = err
