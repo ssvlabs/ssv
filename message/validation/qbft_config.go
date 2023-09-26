@@ -23,7 +23,7 @@ func (q qbftConfig) GetSigner() spectypes.SSVSigner {
 }
 
 func (q qbftConfig) GetSignatureDomainType() spectypes.DomainType {
-	panic("should not be called")
+	return q.domain
 }
 
 func (q qbftConfig) GetValueCheckF() specqbft.ProposedValueCheckF {
