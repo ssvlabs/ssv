@@ -9,6 +9,13 @@ import (
 )
 
 type qbftConfig struct {
+	domain spectypes.DomainType
+}
+
+func newQBFTConfig(domain spectypes.DomainType) qbftConfig {
+	return qbftConfig{
+		domain: domain,
+	}
 }
 
 func (q qbftConfig) GetSigner() spectypes.SSVSigner {
