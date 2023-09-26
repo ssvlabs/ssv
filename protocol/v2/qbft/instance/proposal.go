@@ -124,6 +124,7 @@ func isValidProposal(
 }
 
 func IsProposalJustification(
+	config qbft.IConfig,
 	share *ssvtypes.SSVShare,
 	roundChangeMsgs []*specqbft.SignedMessage,
 	prepareMsgs []*specqbft.SignedMessage,
@@ -136,7 +137,7 @@ func IsProposalJustification(
 			Share:  &share.Share,
 			Height: height,
 		},
-		nil,
+		config,
 		roundChangeMsgs,
 		prepareMsgs,
 		height,

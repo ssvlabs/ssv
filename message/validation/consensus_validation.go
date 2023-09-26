@@ -178,7 +178,7 @@ func (mv *messageValidator) validateJustifications(
 	}
 
 	if signedMsg.Message.MsgType == specqbft.ProposalMsgType {
-		if err := instance.IsProposalJustification(share, rcj, pj, signedMsg.Message.Height, signedMsg.Message.Round, signedMsg.FullData); err != nil {
+		if err := instance.IsProposalJustification(qbftConfig{}, share, rcj, pj, signedMsg.Message.Height, signedMsg.Message.Round, signedMsg.FullData); err != nil {
 			e := ErrInvalidJustifications
 			e.innerErr = err
 			return e
