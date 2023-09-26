@@ -77,7 +77,7 @@ func isValidProposal(
 	if len(signedProposal.GetSigners()) != 1 {
 		return errors.New("msg allows 1 signer")
 	}
-	if config.VerifySignatures() {
+	if config != nil && config.VerifySignatures() {
 		if err := ssvtypes.VerifyByOperators(signedProposal.Signature, signedProposal, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
 			return errors.Wrap(err, "msg signature invalid")
 		}
