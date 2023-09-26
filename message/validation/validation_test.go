@@ -58,6 +58,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	roleAttester := spectypes.BNRoleAttester
 
+	// Message validation happy flow, messages are not ignored or rejected and there are no errors
 	t.Run("happy flow", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -79,6 +80,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	// Make sure messages are incremented and throw an ignore message if more than 1 for a commit
 	t.Run("message counts", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -163,6 +165,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.EqualValues(t, MessageCounts{Commit: 1, Decided: 1}, state1.MessageCounts)
 	})
 
+	// Send a pubsub message with no data should cause an error
 	t.Run("pubsub message has no data", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -176,6 +179,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, ErrPubSubMessageHasNoData)
 	})
 
+	// Send a pubsub message where there is too much data should cause an error
 	t.Run("pubsub data too big", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -198,7 +202,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, e)
 	})
 
-	t.Run("malformed network message", func(t *testing.T) {
+	// Send a malformed pubsub message (empty message) should return an error
+	t.Run("empty pubsub message", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
@@ -218,6 +223,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorContains(t, err, ErrMalformedPubSubMessage.Error())
 	})
 
+	// Send a message with incorrect data (unable to decode incorrect message type)
 	t.Run("bad data format", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -235,6 +241,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorContains(t, err, ErrMalformedMessage.Error())
 	})
 
+	// Send a message with no data should return an error
 	t.Run("no data", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -257,6 +264,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, ErrEmptyData)
 	})
 
+	// Send a message where there is too much data should cause an error
 	t.Run("data too big", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -275,6 +283,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, expectedErr)
 	})
 
+	// Send exact allowed data size amount but with invalid data (fails to decode)
 	t.Run("data size borderline / malformed message", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -288,6 +297,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorContains(t, err, ErrMalformedMessage.Error())
 	})
 
+	// Send an invalid SSV message type returns an error
 	t.Run("invalid SSV message type", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -301,7 +311,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorContains(t, err, ErrUnknownSSVMessageType.Error())
 	})
 
-	t.Run("malformed validator public key", func(t *testing.T) {
+	// Empty validator public key returns an error
+	t.Run("empty validator public key", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
 		validSignedMessage := spectestingutils.TestingProposalMessage(ks.Shares[1], 1)
@@ -318,6 +329,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorContains(t, err, ErrDeserializePublicKey.Error())
 	})
 
+	// Generate random validator and validate it is unknown to the network
 	t.Run("unknown validator", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -340,6 +352,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, expectedErr)
 	})
 
+	// Make sure messages are dropped if on the incorrect network
 	t.Run("wrong domain", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -365,6 +378,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, expectedErr)
 	})
 
+	// Send message with a value that refers to a non-existent role
 	t.Run("invalid role", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -386,6 +400,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, ErrInvalidRole)
 	})
 
+	// Perform validator registration with a consensus type message will give an error
 	t.Run("consensus validator registration", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -407,6 +422,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, ErrConsensusValidatorRegistration)
 	})
 
+	// Ignore messages related to a validator that is liquidated
 	t.Run("liquidated validator", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -443,6 +459,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, ns.Shares().Delete(nil, liquidatedShare.ValidatorPubKey))
 	})
 
+	// Ignore messages related to a validator that is not active
 	t.Run("inactive validator", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -483,6 +500,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, ns.Shares().Delete(nil, inactiveShare.ValidatorPubKey))
 	})
 
+	// Unable to process a message with a validator that is not on the network
 	t.Run("no share metadata", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -519,6 +537,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, ns.Shares().Delete(nil, noMetadataShare.ValidatorPubKey))
 	})
 
+	// Receive error if more than 2 attestation duties in an epoch
 	t.Run("too many duties", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -555,7 +574,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorContains(t, err, ErrTooManyDutiesPerEpoch.Error())
 	})
 
-	t.Run("no duties", func(t *testing.T) {
+	// Throw error if getting a message for proposal and see there is no message from beacon
+	t.Run("no proposal duties", func(t *testing.T) {
 		const epoch = 1
 		slot := netCfg.Beacon.FirstSlotAtEpoch(epoch)
 		height := specqbft.Height(slot)
@@ -574,16 +594,17 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedValidSignedMessage,
 		}
 
-		_, _, err = validator.validateSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester)))
+		_, _, err = validator.validateSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(spectypes.BNRoleProposer)))
 		require.ErrorContains(t, err, ErrNoDuty.Error())
 
 		dutyStore = dutystore.New()
 		dutyStore.Proposer.Add(epoch, slot, validatorIndex, &eth2apiv1.ProposerDuty{}, true)
 		validator = NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithDutyStore(dutyStore), WithSignatureCheck(true)).(*messageValidator)
-		_, _, err = validator.validateSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester)))
+		_, _, err = validator.validateSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(spectypes.BNRoleProposer)))
 		require.NoError(t, err)
 	})
 
+	// Get error when receiving a message with over 13 partial signatures
 	t.Run("partial message too big", func(t *testing.T) {
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
@@ -596,6 +617,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorContains(t, err, "max expected 13 and 14 found")
 	})
 
+	// Get error when receiving message from operator who is not affiliated with the validator
 	t.Run("signer ID not in committee", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -617,6 +639,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, ErrSignerNotInCommittee)
 	})
 
+	// Get error when receiving message from operator who is non-existent (operator id 0)
 	t.Run("partial zero signer ID", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -638,6 +661,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, ErrZeroSigner)
 	})
 
+	// Get error when receiving partial signature message from operator who is the incorrect signer
 	t.Run("partial inconsistent signer ID", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -663,6 +687,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, expectedErr)
 	})
 
+	// Receive error when receiving a duplicated partial signature message
 	t.Run("partial duplicated message", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -685,7 +710,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, ErrDuplicatedPartialSignatureMessage)
 	})
 
-	t.Run("no partial messages", func(t *testing.T) {
+	// Receive error when "partialSignatureMessages" does not contain any "partialSignatureMessage"
+	t.Run("no partial signature messages", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
@@ -707,6 +733,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, ErrNoPartialMessages)
 	})
 
+	// Receive error when the partial signature message is not enough bytes
 	t.Run("partial wrong signature size", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -729,6 +756,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorContains(t, err, ErrMalformedMessage.Error())
 	})
 
+	// Get error when receiving a partial signature message with an invalid signature
 	t.Run("partial wrong signature", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -751,9 +779,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorContains(t, err, ErrInvalidSignature.Error())
 	})
 
+	// Initialize partial message type tests
 	t.Run("partial message type", func(t *testing.T) {
 		slot := netCfg.Beacon.FirstSlotAtEpoch(162304)
 
+		// Check happy flow of a duty for each role
 		t.Run("valid", func(t *testing.T) {
 			tests := map[spectypes.BeaconRole][]spectypes.PartialSigMsgType{
 				spectypes.BNRoleAttester:                  {spectypes.PostConsensusPartialSig},
@@ -769,11 +799,26 @@ func Test_ValidateSSVMessage(t *testing.T) {
 					validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 					msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role)
 
-					msg := &spectypes.SignedPartialSignatureMessage{
-						Message: spectypes.PartialSignatureMessages{
-							Type: msgType,
+					innerSig, r, err := spectestingutils.NewTestingKeyManager().SignBeaconObject(spectypes.SSZUint64(spectestingutils.TestingDutyEpoch), phase0.Domain{}, ks.Shares[1].GetPublicKey().Serialize(), phase0.DomainType{})
+					require.NoError(t, err)
+
+					innerMsg := spectypes.PartialSignatureMessages{
+						Type: msgType,
+						Messages: []*spectypes.PartialSignatureMessage{
+							{
+								PartialSignature: innerSig,
+								SigningRoot:      r,
+								Signer:           1,
+							},
 						},
-						Signature: make([]byte, 96),
+					}
+
+					sig, err := spectestingutils.NewTestingKeyManager().SignRoot(innerMsg, spectypes.PartialSignatureType, ks.Shares[1].GetPublicKey().Serialize())
+					require.NoError(t, err)
+
+					msg := &spectypes.SignedPartialSignatureMessage{
+						Message:   innerMsg,
+						Signature: sig,
 						Signer:    1,
 					}
 
@@ -788,12 +833,13 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 					receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
 					_, _, err = validator.validateSSVMessage(message, receivedAt)
-					require.ErrorContains(t, err, ErrNoPartialMessages.Error())
+					require.NoError(t, err)
 				}
 			}
 		})
 
-		t.Run("invalid", func(t *testing.T) {
+		// Get error when receiving a message with an incorrect message type
+		t.Run("invalid message type", func(t *testing.T) {
 			validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 			msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester)
 
@@ -819,6 +865,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			require.ErrorContains(t, err, ErrUnknownPartialMessageType.Error())
 		})
 
+		// Get error when sending an unexpected message type for the required duty (sending randao for attestor duty)
 		t.Run("mismatch", func(t *testing.T) {
 			tests := map[spectypes.BeaconRole][]spectypes.PartialSigMsgType{
 				spectypes.BNRoleAttester:                  {spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig},
@@ -859,6 +906,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		})
 	})
 
+	// Get error when receiving QBFT message with an invalid type
 	t.Run("invalid QBFT message type", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -889,6 +937,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, expectedErr)
 	})
 
+	// Get error when receiving an incorrect signature size (too small)
 	t.Run("wrong signature size", func(t *testing.T) {
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
@@ -900,12 +949,14 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.Error(t, err)
 	})
 
+	// Initialize signature tests
 	t.Run("zero signature", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
 
+		// Get error when receiving a consensus message with a zero signature
 		t.Run("consensus message", func(t *testing.T) {
 			validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
 			zeroSignature := [signatureSize]byte{}
@@ -925,6 +976,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			require.ErrorIs(t, err, ErrZeroSignature)
 		})
 
+		// Get error when receiving a consensus message with a zero signature
 		t.Run("partial signature message", func(t *testing.T) {
 			partialSigMessage := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 1, height)
 			zeroSignature := [signatureSize]byte{}
@@ -945,6 +997,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		})
 	})
 
+	// Get error when receiving a message with an empty list of signers
 	t.Run("no signers", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -968,6 +1021,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, ErrNoSigners)
 	})
 
+	// Initialize no signer tests
 	t.Run("zero signer", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -991,6 +1045,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		require.NoError(t, ns.Shares().Save(nil, zeroSignerShare))
 
+		// Get error when receiving a consensus message with a zero signer
 		t.Run("consensus message", func(t *testing.T) {
 			validSignedMessage := spectestingutils.TestingProposalMessage(zeroSignerKS.Shares[1], 1)
 			validSignedMessage.Signers = []spectypes.OperatorID{0}
@@ -1009,6 +1064,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			require.ErrorIs(t, err, ErrZeroSigner)
 		})
 
+		// Get error when receiving a partial message with a zero signer
 		t.Run("partial signature message", func(t *testing.T) {
 			partialSignatureMessage := spectestingutils.PostConsensusAttestationMsg(zeroSignerKS.Shares[1], 1, specqbft.Height(slot))
 			partialSignatureMessage.Signer = 0
@@ -1030,6 +1086,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, ns.Shares().Delete(nil, zeroSignerShare.ValidatorPubKey))
 	})
 
+	// Get error when receiving a message with duplicated signers
 	t.Run("non unique signer", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -1054,6 +1111,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, ErrDuplicatedSigner)
 	})
 
+	// Get error when receiving a message with non-sorted signers
 	t.Run("signers not sorted", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -1078,6 +1136,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, ErrSignersNotSorted)
 	})
 
+	// Get error when receiving message from non quorum size amount of signers
 	t.Run("wrong signers length", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -1106,6 +1165,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, expectedErr)
 	})
 
+	// Get error when receiving a non decided message with multiple signers
 	t.Run("non decided with multiple signers", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -1131,6 +1191,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, expectedErr)
 	})
 
+	// Get error when receiving a proposal message with an invalid signature (random bytes)
 	t.Run("wrong signed signature", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -1154,6 +1215,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorContains(t, err, ErrInvalidSignature.Error())
 	})
 
+	// Send late message for all roles and receive late message error
 	t.Run("late message", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -1165,11 +1227,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		tests := map[spectypes.BeaconRole]time.Time{
-			spectypes.BNRoleAttester:                  netCfg.Beacon.GetSlotStartTime(slot + 35).Add(validator.waitAfterSlotStart(roleAttester)),
-			spectypes.BNRoleAggregator:                netCfg.Beacon.GetSlotStartTime(slot + 35).Add(validator.waitAfterSlotStart(roleAttester)),
-			spectypes.BNRoleProposer:                  netCfg.Beacon.GetSlotStartTime(slot + 4).Add(validator.waitAfterSlotStart(roleAttester)),
-			spectypes.BNRoleSyncCommittee:             netCfg.Beacon.GetSlotStartTime(slot + 4).Add(validator.waitAfterSlotStart(roleAttester)),
-			spectypes.BNRoleSyncCommitteeContribution: netCfg.Beacon.GetSlotStartTime(slot + 4).Add(validator.waitAfterSlotStart(roleAttester)),
+			spectypes.BNRoleAttester:                  netCfg.Beacon.GetSlotStartTime(slot + 35).Add(validator.waitAfterSlotStart(spectypes.BNRoleAttester)),
+			spectypes.BNRoleAggregator:                netCfg.Beacon.GetSlotStartTime(slot + 35).Add(validator.waitAfterSlotStart(spectypes.BNRoleAggregator)),
+			spectypes.BNRoleProposer:                  netCfg.Beacon.GetSlotStartTime(slot + 4).Add(validator.waitAfterSlotStart(spectypes.BNRoleProposer)),
+			spectypes.BNRoleSyncCommittee:             netCfg.Beacon.GetSlotStartTime(slot + 4).Add(validator.waitAfterSlotStart(spectypes.BNRoleSyncCommittee)),
+			spectypes.BNRoleSyncCommitteeContribution: netCfg.Beacon.GetSlotStartTime(slot + 4).Add(validator.waitAfterSlotStart(spectypes.BNRoleSyncCommitteeContribution)),
 		}
 
 		for role, receivedAt := range tests {
@@ -1188,6 +1250,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 	})
 
+	// Send early message for all roles before the duty start and receive early message error
 	t.Run("early message", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -1209,7 +1272,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, ErrEarlyMessage)
 	})
 
-	t.Run("not leader", func(t *testing.T) {
+	// Send message from non-leader acting as a leader should receive an error
+	t.Run("not a leader", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
@@ -1233,6 +1297,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, expectedErr)
 	})
 
+	// Send wrong size of data (8 bytes) for a prepare justification message should receive an error
 	t.Run("malformed prepare justification", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -1257,6 +1322,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorContains(t, err, ErrMalformedPrepareJustifications.Error())
 	})
 
+	// Send prepare justification message without a proposal message should receive an error
 	t.Run("non-proposal with prepare justification", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -1287,6 +1353,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, expectedErr)
 	})
 
+	// Send round change justification message without a proposal message should receive an error
 	t.Run("non-proposal with round change justification", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -1318,6 +1385,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, expectedErr)
 	})
 
+	// Send round change justification message with a malformed message (1 byte) should receive an error
 	t.Run("malformed round change justification", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -1342,6 +1410,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorContains(t, err, ErrMalformedRoundChangeJustifications.Error())
 	})
 
+	// Send message root hash that doesnt match the expected root hash should receive an error
 	t.Run("wrong root hash", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -1367,6 +1436,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, expectedErr)
 	})
 
+	// Receive proposal from same operator twice with different messages (same round) should receive an error
 	t.Run("double proposal with different data", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -1405,6 +1475,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, expectedErr)
 	})
 
+	// Receive prepare from same operator twice with different messages (same round) should receive an error
 	t.Run("double prepare", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -1442,6 +1513,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, expectedErr)
 	})
 
+	// Receive commit from same operator twice with different messages (same round) should receive an error
 	t.Run("double commit", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -1479,6 +1551,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, expectedErr)
 	})
 
+	// Receive round change from same operator twice with different messages (same round) should receive an error
 	t.Run("double round change", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -1516,6 +1589,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, expectedErr)
 	})
 
+	// Receive too many decided messages should receive an error
 	t.Run("too many decided", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -1547,6 +1621,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, expectedErr)
 	})
 
+	// Receive message from a round that is too high for that epoch should receive an error
 	t.Run("round too high", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -1579,6 +1654,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 	})
 
+	// Receive message from a round that is incorrect for current epoch should receive an error
 	t.Run("round already advanced", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -1608,11 +1684,13 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorContains(t, err, ErrRoundAlreadyAdvanced.Error())
 	})
 
+	// Initialize tests for testing when sending a message with a slot before the current one
 	t.Run("slot already advanced", func(t *testing.T) {
 		msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester)
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
 
+		// Send a consensus message with a slot before the current one should cause an error
 		t.Run("consensus message", func(t *testing.T) {
 			validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -1638,6 +1716,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			require.ErrorContains(t, err, ErrSlotAlreadyAdvanced.Error())
 		})
 
+		// Send a partial signature message with a slot before the current one should cause an error
 		t.Run("partial signature message", func(t *testing.T) {
 			validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
@@ -1674,6 +1753,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		})
 	})
 
+	// Receive an event message from an operator that is not myself should receive an error
 	t.Run("event message", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithShareStorage(ns.Shares()), WithSignatureCheck(true)).(*messageValidator)
 
