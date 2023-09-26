@@ -17,8 +17,8 @@ import (
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/duties/mocks"
-	"github.com/bloxapp/ssv/operator/slot_ticker"
-	mockslotticker "github.com/bloxapp/ssv/operator/slot_ticker/mocks"
+	"github.com/bloxapp/ssv/operator/slotticker"
+	mockslotticker "github.com/bloxapp/ssv/operator/slotticker/mocks"
 	mocknetwork "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon/mocks"
 )
 
@@ -32,7 +32,7 @@ type mockSlotTicker struct {
 	slotChan chan phase0.Slot
 	timeChan chan time.Time
 	slot     phase0.Slot
-	mu       sync.Mutex // Added Mutex for synchronization
+	mu       sync.Mutex
 }
 
 func NewMockSlotTicker() MockSlotTicker {
@@ -47,9 +47,9 @@ func NewMockSlotTicker() MockSlotTicker {
 func (m *mockSlotTicker) start() {
 	go func() {
 		for slot := range m.slotChan {
-			m.mu.Lock() // Locking here
+			m.mu.Lock()
 			m.slot = slot
-			m.mu.Unlock() // Unlocking here
+			m.mu.Unlock()
 			m.timeChan <- time.Now()
 		}
 	}()
@@ -60,8 +60,8 @@ func (m *mockSlotTicker) Next() <-chan time.Time {
 }
 
 func (m *mockSlotTicker) Slot() phase0.Slot {
-	m.mu.Lock()         // Locking here
-	defer m.mu.Unlock() // Unlocking with defer
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	return m.slot
 }
 
@@ -82,6 +82,7 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Slot
 	*pool.ContextPool,
 ) {
 	ctrl := gomock.NewController(t)
+	// A 200ms timeout ensures the test passes, even with mockSlotTicker overhead.
 	timeout := 200 * time.Millisecond
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -99,7 +100,7 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Slot
 		BeaconNode:          mockBeaconNode,
 		Network:             mockNetworkConfig,
 		ValidatorController: mockValidatorController,
-		SlotTickerProvider: func() slot_ticker.SlotTicker {
+		SlotTickerProvider: func() slotticker.SlotTicker {
 			ticker := NewMockSlotTicker()
 			mockSlotService.Subscribe(ticker.Subscribe())
 			return ticker
@@ -258,7 +259,7 @@ func TestScheduler_Run(t *testing.T) {
 		Network:             networkconfig.TestNetwork,
 		ValidatorController: mockValidatorController,
 		BuilderProposals:    false,
-		SlotTickerProvider: func() slot_ticker.SlotTicker {
+		SlotTickerProvider: func() slotticker.SlotTicker {
 			return mockTicker
 		},
 	}
@@ -306,7 +307,7 @@ func TestScheduler_Regression_IndiciesChangeStuck(t *testing.T) {
 		BeaconNode:          mockBeaconNode,
 		Network:             networkconfig.TestNetwork,
 		ValidatorController: mockValidatorController,
-		SlotTickerProvider: func() slot_ticker.SlotTicker {
+		SlotTickerProvider: func() slotticker.SlotTicker {
 			return mockTicker
 		},
 		IndicesChg: make(chan struct{}),

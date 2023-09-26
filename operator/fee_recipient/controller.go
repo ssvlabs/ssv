@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/operator/slot_ticker"
+	"github.com/bloxapp/ssv/operator/slotticker"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/registry/storage"
@@ -30,7 +30,7 @@ type ControllerOptions struct {
 	Network            networkconfig.NetworkConfig
 	ShareStorage       storage.Shares
 	RecipientStorage   storage.Recipients
-	SlotTickerProvider slot_ticker.SlotTickerProvider
+	SlotTickerProvider slotticker.Provider
 	OperatorData       *storage.OperatorData
 }
 
@@ -41,7 +41,7 @@ type recipientController struct {
 	network            networkconfig.NetworkConfig
 	shareStorage       storage.Shares
 	recipientStorage   storage.Recipients
-	slotTickerProvider slot_ticker.SlotTickerProvider
+	slotTickerProvider slotticker.Provider
 	operatorData       *storage.OperatorData
 }
 

@@ -18,8 +18,8 @@ import (
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/operator/slot_ticker"
-	"github.com/bloxapp/ssv/operator/slot_ticker/mocks"
+	"github.com/bloxapp/ssv/operator/slotticker"
+	"github.com/bloxapp/ssv/operator/slotticker/mocks"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
@@ -69,7 +69,7 @@ func TestSubmitProposal(t *testing.T) {
 		}).AnyTimes()
 
 		frCtrl.beaconClient = client
-		frCtrl.slotTickerProvider = func() slot_ticker.SlotTicker {
+		frCtrl.slotTickerProvider = func() slotticker.SlotTicker {
 			return ticker
 		}
 
@@ -109,7 +109,7 @@ func TestSubmitProposal(t *testing.T) {
 		ticker.EXPECT().Slot().Return(phase0.Slot(100)).AnyTimes()
 
 		frCtrl.beaconClient = client
-		frCtrl.slotTickerProvider = func() slot_ticker.SlotTicker {
+		frCtrl.slotTickerProvider = func() slotticker.SlotTicker {
 			return ticker
 		}
 

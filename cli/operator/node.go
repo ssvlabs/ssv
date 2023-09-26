@@ -42,7 +42,7 @@ import (
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/nodeprobe"
 	"github.com/bloxapp/ssv/operator"
-	"github.com/bloxapp/ssv/operator/slot_ticker"
+	"github.com/bloxapp/ssv/operator/slotticker"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
@@ -147,8 +147,8 @@ var StartNodeCmd = &cobra.Command{
 		cfg.ConsensusClient.GasLimit = spectypes.DefaultGasLimit
 		cfg.ConsensusClient.Network = networkConfig.Beacon.GetNetwork()
 
-		consensusClient := setupConsensusClient(logger, operatorData.ID, func() slot_ticker.SlotTicker {
-			return slot_ticker.NewSlotTicker(networkConfig)
+		consensusClient := setupConsensusClient(logger, operatorData.ID, func() slotticker.SlotTicker {
+			return slotticker.New(networkConfig)
 		})
 
 		executionClient, err := executionclient.New(
@@ -214,8 +214,8 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 		cfg.SSVOptions.Metrics = metricsReporter
 
-		operatorNode = operator.New(logger, cfg.SSVOptions, func() slot_ticker.SlotTicker {
-			return slot_ticker.NewSlotTicker(networkConfig)
+		operatorNode = operator.New(logger, cfg.SSVOptions, func() slotticker.SlotTicker {
+			return slotticker.New(networkConfig)
 		})
 
 		if cfg.MetricsAPIPort > 0 {
@@ -496,7 +496,7 @@ func setupP2P(
 func setupConsensusClient(
 	logger *zap.Logger,
 	operatorID spectypes.OperatorID,
-	slotTickerProvider slot_ticker.SlotTickerProvider,
+	slotTickerProvider slotticker.Provider,
 ) beaconprotocol.BeaconNode {
 	cl, err := goclient.New(logger, cfg.ConsensusClient, operatorID, slotTickerProvider)
 	if err != nil {

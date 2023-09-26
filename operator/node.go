@@ -16,7 +16,7 @@ import (
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/duties"
 	"github.com/bloxapp/ssv/operator/fee_recipient"
-	"github.com/bloxapp/ssv/operator/slot_ticker"
+	"github.com/bloxapp/ssv/operator/slotticker"
 	"github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
@@ -51,7 +51,7 @@ type Options struct {
 type operatorNode struct {
 	network            networkconfig.NetworkConfig
 	context            context.Context
-	slotTickerProvider slot_ticker.SlotTickerProvider
+	slotTickerProvider slotticker.Provider
 	validatorsCtrl     validator.Controller
 	consensusClient    beaconprotocol.BeaconNode
 	executionClient    *executionclient.ExecutionClient
@@ -68,7 +68,7 @@ type operatorNode struct {
 }
 
 // New is the constructor of operatorNode
-func New(logger *zap.Logger, opts Options, slotTickerProvider slot_ticker.SlotTickerProvider) Node {
+func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provider) Node {
 	storageMap := qbftstorage.NewStores()
 
 	roles := []spectypes.BeaconRole{

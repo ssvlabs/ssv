@@ -1,4 +1,4 @@
-package slot_ticker
+package slotticker
 
 import (
 	"time"
@@ -8,7 +8,7 @@ import (
 
 //go:generate mockgen -package=mocks -destination=./mocks/slotticker.go -source=./slotticker.go
 
-type SlotTickerProvider func() SlotTicker
+type Provider func() SlotTicker
 
 type SlotTicker interface {
 	Next() <-chan time.Time
@@ -20,16 +20,16 @@ type ConfigProvider interface {
 	GetGenesisTime() time.Time
 }
 
-type SlotTickerConfig struct {
+type Config struct {
 	slotDuration time.Duration
 	genesisTime  time.Time
 }
 
-func (cfg SlotTickerConfig) SlotDurationSec() time.Duration {
+func (cfg Config) SlotDurationSec() time.Duration {
 	return cfg.slotDuration
 }
 
-func (cfg SlotTickerConfig) GetGenesisTime() time.Time {
+func (cfg Config) GetGenesisTime() time.Time {
 	return cfg.genesisTime
 }
 
@@ -40,7 +40,7 @@ type slotTicker struct {
 	slot         phase0.Slot
 }
 
-func NewSlotTicker(cfgProvider ConfigProvider) SlotTicker {
+func New(cfgProvider ConfigProvider) *slotTicker {
 	genesisTime := cfgProvider.GetGenesisTime()
 	slotDuration := cfgProvider.SlotDurationSec()
 

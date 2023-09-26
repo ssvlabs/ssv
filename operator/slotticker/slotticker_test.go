@@ -1,4 +1,4 @@
-package slot_ticker
+package slotticker
 
 import (
 	"sync"
@@ -20,7 +20,7 @@ func TestSlotTicker(t *testing.T) {
 	timeSinceGenesis := time.Since(genesisTime)
 	expectedSlot := phase0.Slot(timeSinceGenesis/slotDuration) + 1
 
-	ticker := NewSlotTicker(SlotTickerConfig{slotDuration, genesisTime})
+	ticker := New(Config{slotDuration, genesisTime})
 
 	for i := 0; i < numTicks; i++ {
 		<-ticker.Next()
@@ -34,7 +34,7 @@ func TestSlotTicker(t *testing.T) {
 func TestTickerInitialization(t *testing.T) {
 	slotDuration := 200 * time.Millisecond
 	genesisTime := time.Now()
-	ticker := NewSlotTicker(SlotTickerConfig{slotDuration, genesisTime})
+	ticker := New(Config{slotDuration, genesisTime})
 
 	start := time.Now()
 	<-ticker.Next()
@@ -52,7 +52,7 @@ func TestSlotNumberConsistency(t *testing.T) {
 	slotDuration := 200 * time.Millisecond
 	genesisTime := time.Now()
 
-	ticker := NewSlotTicker(SlotTickerConfig{slotDuration, genesisTime})
+	ticker := New(Config{slotDuration, genesisTime})
 	var lastSlot phase0.Slot
 
 	for i := 0; i < 10; i++ {
@@ -70,7 +70,7 @@ func TestGenesisInFuture(t *testing.T) {
 	slotDuration := 200 * time.Millisecond
 	genesisTime := time.Now().Add(1 * time.Second) // Setting genesis time 1s in the future
 
-	ticker := NewSlotTicker(SlotTickerConfig{slotDuration, genesisTime})
+	ticker := New(Config{slotDuration, genesisTime})
 	start := time.Now()
 
 	<-ticker.Next()
@@ -89,7 +89,7 @@ func TestBoundedDrift(t *testing.T) {
 	slotDuration := 20 * time.Millisecond
 	genesisTime := time.Now()
 
-	ticker := NewSlotTicker(SlotTickerConfig{slotDuration, genesisTime})
+	ticker := New(Config{slotDuration, genesisTime})
 	ticks := 100
 
 	start := time.Now()
@@ -122,7 +122,7 @@ func TestMultipleSlotTickers(t *testing.T) {
 	for i := 0; i < numTickers; i++ {
 		go func() {
 			defer wg.Done()
-			ticker := NewSlotTicker(SlotTickerConfig{slotDuration, genesisTime})
+			ticker := New(Config{slotDuration, genesisTime})
 			for j := 0; j < ticksPerTimer; j++ {
 				<-ticker.Next()
 			}

@@ -20,7 +20,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/operator/slot_ticker"
+	"github.com/bloxapp/ssv/operator/slotticker"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
@@ -147,7 +147,7 @@ type goClient struct {
 }
 
 // New init new client and go-client instance
-func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.OperatorID, slotTickerProvider slot_ticker.SlotTickerProvider) (beaconprotocol.BeaconNode, error) {
+func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.OperatorID, slotTickerProvider slotticker.Provider) (beaconprotocol.BeaconNode, error) {
 	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(string(opt.Network.BeaconNetwork)))
 
 	httpClient, err := http.New(opt.Context,

@@ -19,7 +19,7 @@ import (
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/operator/slot_ticker"
+	"github.com/bloxapp/ssv/operator/slotticker"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
@@ -60,7 +60,7 @@ type SchedulerOptions struct {
 	ValidatorController ValidatorController
 	ExecuteDuty         ExecuteDutyFunc
 	IndicesChg          chan struct{}
-	SlotTickerProvider  slot_ticker.SlotTickerProvider
+	SlotTickerProvider  slotticker.Provider
 	BuilderProposals    bool
 }
 
@@ -68,7 +68,7 @@ type Scheduler struct {
 	beaconNode          BeaconNode
 	network             networkconfig.NetworkConfig
 	validatorController ValidatorController
-	slotTickerProvider  slot_ticker.SlotTickerProvider
+	slotTickerProvider  slotticker.Provider
 	executeDuty         ExecuteDutyFunc
 	builderProposals    bool
 
@@ -77,7 +77,7 @@ type Scheduler struct {
 
 	reorg      chan ReorgEvent
 	indicesChg chan struct{}
-	ticker     slot_ticker.SlotTicker
+	ticker     slotticker.SlotTicker
 	waitCond   *sync.Cond
 	pool       *pool.ContextPool
 
