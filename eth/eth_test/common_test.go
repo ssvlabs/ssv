@@ -109,7 +109,7 @@ func setupEnv(
 	// Create JSON-RPC handler
 	rpcServer, err := sim.Node.RPCHandler()
 	if err != nil {
-		return nil, fmt.Errorf("creatingt rpc server: %v", err)
+		return nil, fmt.Errorf("creatingt rpc server: %w", err)
 	}
 	// Expose handler on a test server with ws open
 	httpSrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
@@ -117,7 +117,7 @@ func setupEnv(
 
 	parsed, err := abi.JSON(strings.NewReader(simcontract.SimcontractMetaData.ABI))
 	if err != nil {
-		return nil, fmt.Errorf("parsing contract abi: %v", err)
+		return nil, fmt.Errorf("parsing contract abi: %w", err)
 	}
 
 	auth, err := bind.NewKeyedTransactorWithChainID(testKeyAlice, big.NewInt(1337))
@@ -127,7 +127,7 @@ func setupEnv(
 
 	contractAddr, _, _, err := bind.DeployContract(auth, parsed, ethcommon.FromHex(simcontract.SimcontractMetaData.Bin), sim)
 	if err != nil {
-		return nil, fmt.Errorf("deploying contract: %v", err)
+		return nil, fmt.Errorf("deploying contract: %w", err)
 	}
 
 	sim.Commit()
@@ -135,7 +135,7 @@ func setupEnv(
 	// Check contract code at the simulated blockchain
 	contractCode, err := sim.CodeAt(ctx, contractAddr, nil)
 	if err != nil {
-		return nil, fmt.Errorf("getting contract code: %v", err)
+		return nil, fmt.Errorf("getting contract code: %w", err)
 	}
 	if len(contractCode) == 0 {
 		return nil, fmt.Errorf("error: contractCode is empty")
