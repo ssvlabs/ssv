@@ -29,7 +29,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/golang/mock/gomock"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"math/big"
 
@@ -167,20 +166,27 @@ func setupEventHandler(
 	db, err := kv.NewInMemory(logger, basedb.Options{
 		Ctx: ctx,
 	})
-	require.NoError(t, err)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 
 	storageMap := ibftstorage.NewStores()
 	nodeStorage, operatorData := setupOperatorStorage(logger, db, operator, ownerAddress)
 	testNetworkConfig := networkconfig.TestNetwork
 
 	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, true, "")
-	require.NoError(t, err)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	bc := beacon.NewMockBeaconNode(ctrl)
+
 	contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
-	require.NoError(t, err)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 
 	if useMockCtrl {
 		validatorCtrl := mocks.NewMockController(ctrl)
@@ -200,7 +206,10 @@ func setupEventHandler(
 			eventhandler.WithFullNode(),
 			eventhandler.WithLogger(logger),
 		)
-		require.NoError(t, err)
+
+		if err != nil {
+			return nil, nil, nil, err
+		}
 
 		validatorCtrl.EXPECT().GetOperatorData().Return(operatorData).AnyTimes()
 
@@ -231,7 +240,9 @@ func setupEventHandler(
 		eventhandler.WithFullNode(),
 		eventhandler.WithLogger(logger),
 	)
-	require.NoError(t, err)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 
 	return eh, nil, nodeStorage, nil
 }

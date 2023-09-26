@@ -282,7 +282,7 @@ func TestEthExecLayer(t *testing.T) {
 
 			// TODO: this should be adjusted when eth/eventhandler/handlers.go#L109 is resolved
 		}
-		
+
 		// Step 6 Update Fee Recipient
 		{
 			validatorCtrl.EXPECT().UpdateFeeRecipient(gomock.Any(), gomock.Any()).Times(1)
