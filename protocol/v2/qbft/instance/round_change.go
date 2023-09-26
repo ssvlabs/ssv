@@ -252,7 +252,7 @@ func validRoundChangeForData(
 		return errors.New("msg allows 1 signer")
 	}
 
-	if config != nil && config.VerifySignatures() {
+	if config.VerifySignatures() {
 		if err := types.VerifyByOperators(signedMsg.Signature, signedMsg, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, state.Share.Committee); err != nil {
 			return errors.Wrap(err, "msg signature invalid")
 		}
