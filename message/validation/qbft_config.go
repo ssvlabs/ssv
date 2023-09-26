@@ -9,12 +9,14 @@ import (
 )
 
 type qbftConfig struct {
-	domain spectypes.DomainType
+	domain          spectypes.DomainType
+	verifySignature bool
 }
 
-func newQBFTConfig(domain spectypes.DomainType) qbftConfig {
+func newQBFTConfig(domain spectypes.DomainType, verifySignature bool) qbftConfig {
 	return qbftConfig{
-		domain: domain,
+		domain:          domain,
+		verifySignature: verifySignature,
 	}
 }
 
@@ -47,5 +49,5 @@ func (q qbftConfig) GetTimer() roundtimer.Timer {
 }
 
 func (q qbftConfig) VerifySignatures() bool {
-	return true
+	return q.verifySignature
 }
