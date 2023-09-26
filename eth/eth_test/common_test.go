@@ -117,6 +117,7 @@ func setupEnv(
 
 	parsed, err := abi.JSON(strings.NewReader(simcontract.SimcontractMetaData.ABI))
 	if err != nil {
+		httpSrv.Close()
 		return nil, fmt.Errorf("parsing contract abi: %w", err)
 	}
 
@@ -135,6 +136,7 @@ func setupEnv(
 	// Check contract code at the simulated blockchain
 	contractCode, err := sim.CodeAt(ctx, contractAddr, nil)
 	if err != nil {
+		httpSrv.Close()
 		return nil, fmt.Errorf("getting contract code: %w", err)
 	}
 	if len(contractCode) == 0 {
@@ -155,11 +157,17 @@ func setupEnv(
 
 	err = client.Healthy(ctx)
 	if err != nil {
+		// Always returns nil error
+		client.Close()
+		httpSrv.Close()
 		return nil, err
 	}
 
 	boundContract, err := simcontract.NewSimcontract(contractAddr, sim)
 	if err != nil {
+		// Always returns nil error
+		client.Close()
+		httpSrv.Close()
 		return nil, err
 	}
 
