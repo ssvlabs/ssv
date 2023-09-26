@@ -217,21 +217,20 @@ func (d Descriptor) String() string {
 	return sb.String()
 }
 
-func (mv *messageValidator) ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+func (mv *messageValidator) ValidatorForTopic(_ string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 	return mv.ValidatePubsubMessage
 }
 
-func (mv *messageValidator) ValidatePubsubMessage(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, _ peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 	start := time.Now()
 	var validationDurationLabels []string // TODO: implement
 
 	defer func() {
 		sinceStart := time.Since(start)
 		mv.metrics.MessageValidationDuration(sinceStart, validationDurationLabels...)
-		//mv.logger.Debug("processed message", zap.Duration("took", sinceStart))
 	}()
 
-	decodedMessage, descriptor, err := mv.validateP2PMessage(ctx, p, pmsg, time.Now())
+	decodedMessage, descriptor, err := mv.validateP2PMessage(pmsg, time.Now())
 	round := specqbft.Round(0)
 	if descriptor.Consensus != nil {
 		round = descriptor.Consensus.Round
@@ -248,20 +247,20 @@ func (mv *messageValidator) ValidatePubsubMessage(ctx context.Context, p peer.ID
 
 				mv.metrics.MessageRejected(valErr.Text(), descriptor.Role, round)
 				return pubsub.ValidationReject
-			} else {
-				if !valErr.Silent() {
-					f := append(descriptor.Fields(), zap.Error(err))
-					mv.logger.Debug("ignoring invalid message", f...)
-				}
-				mv.metrics.MessageIgnored(valErr.Text(), descriptor.Role, round)
-				return pubsub.ValidationIgnore
 			}
-		} else {
-			mv.metrics.MessageIgnored(err.Error(), descriptor.Role, round)
-			f := append(descriptor.Fields(), zap.Error(err))
-			mv.logger.Debug("ignoring invalid message", f...)
+
+			if !valErr.Silent() {
+				f := append(descriptor.Fields(), zap.Error(err))
+				mv.logger.Debug("ignoring invalid message", f...)
+			}
+			mv.metrics.MessageIgnored(valErr.Text(), descriptor.Role, round)
 			return pubsub.ValidationIgnore
 		}
+
+		mv.metrics.MessageIgnored(err.Error(), descriptor.Role, round)
+		f := append(descriptor.Fields(), zap.Error(err))
+		mv.logger.Debug("ignoring invalid message", f...)
+		return pubsub.ValidationIgnore
 	}
 
 	pmsg.ValidatorData = decodedMessage
@@ -271,13 +270,13 @@ func (mv *messageValidator) ValidatePubsubMessage(ctx context.Context, p peer.ID
 	return pubsub.ValidationAccept
 }
 
-func (mv *messageValidator) validateP2PMessage(ctx context.Context, p peer.ID, pmsg *pubsub.Message, receivedAt time.Time) (*queue.DecodedSSVMessage, Descriptor, error) {
-	topic := pmsg.GetTopic()
+func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt time.Time) (*queue.DecodedSSVMessage, Descriptor, error) {
+	topic := pMsg.GetTopic()
 
 	mv.metrics.ActiveMsgValidation(topic)
 	defer mv.metrics.ActiveMsgValidationDone(topic)
 
-	messageData := pmsg.GetData()
+	messageData := pMsg.GetData()
 	if len(messageData) == 0 {
 		return nil, Descriptor{}, ErrPubSubMessageHasNoData
 	}
@@ -305,7 +304,7 @@ func (mv *messageValidator) validateP2PMessage(ctx context.Context, p peer.ID, p
 	}
 
 	// Check if the message was sent on the right topic.
-	currentTopic := pmsg.GetTopic()
+	currentTopic := pMsg.GetTopic()
 	currentTopicBaseName := commons.GetTopicBaseName(currentTopic)
 	topics := commons.ValidatorTopicID(msg.GetID().GetPubKey())
 

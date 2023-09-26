@@ -24,18 +24,15 @@ type metrics interface {
 
 type nopMetrics struct{}
 
-func (*nopMetrics) ConsensusMsgType(specqbft.MessageType, int) {}
-func (*nopMetrics) MessageAccepted(spectypes.BeaconRole, specqbft.Round) {
-}
-func (*nopMetrics) MessageIgnored(string, spectypes.BeaconRole, specqbft.Round) {
-}
-func (*nopMetrics) MessageRejected(string, spectypes.BeaconRole, specqbft.Round) {
-}
-func (*nopMetrics) SSVMessageType(spectypes.MsgType)                     {}
-func (*nopMetrics) MessageValidationDuration(time.Duration, ...string)   {}
-func (*nopMetrics) SignatureValidationDuration(time.Duration, ...string) {}
-func (*nopMetrics) MessageSize(int)                                      {}
-func (*nopMetrics) ActiveMsgValidation(string)                           {}
-func (*nopMetrics) ActiveMsgValidationDone(string)                       {}
-func (*nopMetrics) InCommitteeMessage(spectypes.MsgType, bool)           {}
-func (*nopMetrics) NonCommitteeMessage(spectypes.MsgType, bool)          {}
+func (*nopMetrics) ConsensusMsgType(specqbft.MessageType, int)                   {}
+func (*nopMetrics) MessageAccepted(spectypes.BeaconRole, specqbft.Round)         {}
+func (*nopMetrics) MessageIgnored(string, spectypes.BeaconRole, specqbft.Round)  {}
+func (*nopMetrics) MessageRejected(string, spectypes.BeaconRole, specqbft.Round) {}
+func (*nopMetrics) SSVMessageType(spectypes.MsgType)                             {}
+func (*nopMetrics) MessageValidationDuration(time.Duration, ...string)           {}
+func (*nopMetrics) SignatureValidationDuration(time.Duration, ...string)         {}
+func (*nopMetrics) MessageSize(int)                                              {}
+func (*nopMetrics) ActiveMsgValidation(string)                                   {}
+func (*nopMetrics) ActiveMsgValidationDone(string)                               {}
+func (*nopMetrics) InCommitteeMessage(spectypes.MsgType, bool)                   {}
+func (*nopMetrics) NonCommitteeMessage(spectypes.MsgType, bool)                  {}

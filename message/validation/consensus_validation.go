@@ -61,13 +61,12 @@ func (mv *messageValidator) validateConsensusMessage(
 	}
 
 	role := messageID.GetRoleType()
-	maxRound := mv.maxRound(role)
 
 	if err := mv.validateSlotTime(msgSlot, role, receivedAt); err != nil {
 		return consensusDescriptor, msgSlot, err
 	}
 
-	if msgRound > maxRound {
+	if maxRound := mv.maxRound(role); msgRound > maxRound {
 		err := ErrRoundTooHigh
 		err.got = fmt.Sprintf("%v (%v role)", msgRound, role)
 		err.want = fmt.Sprintf("%v (%v role)", maxRound, role)
@@ -198,56 +197,54 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 ) error {
 	signerState := state.GetSignerState(signer)
 
-	if signerState != nil {
-		msgSlot := phase0.Slot(signedMsg.Message.Height)
-		msgRound := signedMsg.Message.Round
-
-		if msgSlot < signerState.Slot {
-			// Signers aren't allowed to decrease their slot.
-			// If they've sent a future message due to clock error,
-			// this should be caught by the earlyMessage check.
-			err := ErrSlotAlreadyAdvanced
-			err.want = signerState.Slot
-			err.got = msgSlot
-			return err
-		}
-
-		if msgSlot == signerState.Slot && msgRound < signerState.Round {
-			// Signers aren't allowed to decrease their round.
-			// If they've sent a future message due to clock error,
-			// they'd have to wait for the next slot/round to be accepted.
-			err := ErrRoundAlreadyAdvanced
-			err.want = signerState.Round
-			err.got = msgRound
-			return err
-		}
-
-		newDutyInSameEpoch := false
-		if msgSlot > signerState.Slot && mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) == mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot) {
-			newDutyInSameEpoch = true
-		}
-
-		if err := mv.validateDutyCount(signerState, msgID, newDutyInSameEpoch); err != nil {
-			return err
-		}
-
-		if !(msgSlot > signerState.Slot || msgSlot == signerState.Slot && msgRound > signerState.Round) {
-			if mv.hasFullData(signedMsg) && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
-				return ErrDuplicatedProposalWithDifferentData
-			}
-
-			limits := maxMessageCounts(len(share.Committee))
-			if err := signerState.MessageCounts.ValidateConsensusMessage(signedMsg, limits); err != nil {
-				return err
-			}
-		}
+	if signerState == nil {
+		return mv.validateJustifications(share, signedMsg)
 	}
 
-	if err := mv.validateJustifications(share, signedMsg); err != nil {
+	msgSlot := phase0.Slot(signedMsg.Message.Height)
+	msgRound := signedMsg.Message.Round
+
+	if msgSlot < signerState.Slot {
+		// Signers aren't allowed to decrease their slot.
+		// If they've sent a future message due to clock error,
+		// this should be caught by the earlyMessage check.
+		err := ErrSlotAlreadyAdvanced
+		err.want = signerState.Slot
+		err.got = msgSlot
 		return err
 	}
 
-	return nil
+	if msgSlot == signerState.Slot && msgRound < signerState.Round {
+		// Signers aren't allowed to decrease their round.
+		// If they've sent a future message due to clock error,
+		// they'd have to wait for the next slot/round to be accepted.
+		err := ErrRoundAlreadyAdvanced
+		err.want = signerState.Round
+		err.got = msgRound
+		return err
+	}
+
+	newDutyInSameEpoch := false
+	if msgSlot > signerState.Slot && mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) == mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot) {
+		newDutyInSameEpoch = true
+	}
+
+	if err := mv.validateDutyCount(signerState, msgID, newDutyInSameEpoch); err != nil {
+		return err
+	}
+
+	if !(msgSlot > signerState.Slot || msgSlot == signerState.Slot && msgRound > signerState.Round) {
+		if mv.hasFullData(signedMsg) && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
+			return ErrDuplicatedProposalWithDifferentData
+		}
+
+		limits := maxMessageCounts(len(share.Committee))
+		if err := signerState.MessageCounts.ValidateConsensusMessage(signedMsg, limits); err != nil {
+			return err
+		}
+	}
+
+	return mv.validateJustifications(share, signedMsg)
 }
 
 func (mv *messageValidator) validateDutyCount(
@@ -378,11 +375,11 @@ func (mv *messageValidator) validQBFTMsgType(msgType specqbft.MessageType) bool 
 }
 
 func (mv *messageValidator) validConsensusSigners(share *ssvtypes.SSVShare, m *specqbft.SignedMessage) error {
-	if len(m.Signers) == 0 {
+	switch {
+	case len(m.Signers) == 0:
 		return ErrNoSigners
-	}
 
-	if len(m.Signers) == 1 {
+	case len(m.Signers) == 1:
 		if m.Message.MsgType == specqbft.ProposalMsgType {
 			qbftState := &specqbft.State{
 				Height: m.Message.Height,
@@ -396,11 +393,13 @@ func (mv *messageValidator) validConsensusSigners(share *ssvtypes.SSVShare, m *s
 				return err
 			}
 		}
-	} else if m.Message.MsgType != specqbft.CommitMsgType {
+
+	case m.Message.MsgType != specqbft.CommitMsgType:
 		e := ErrNonDecidedWithMultipleSigners
 		e.got = len(m.Signers)
 		return e
-	} else if !share.HasQuorum(len(m.Signers)) || len(m.Signers) > len(share.Committee) {
+
+	case !share.HasQuorum(len(m.Signers)) || len(m.Signers) > len(share.Committee):
 		e := ErrWrongSignersLength
 		e.want = fmt.Sprintf("between %v and %v", share.Quorum, len(share.Committee))
 		e.got = len(m.Signers)

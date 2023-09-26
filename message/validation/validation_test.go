@@ -2,7 +2,6 @@ package validation
 
 import (
 	"bytes"
-	"context"
 	"encoding/hex"
 	"math"
 	"testing"
@@ -15,7 +14,7 @@ import (
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
+	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/stretchr/testify/require"
 	eth2types "github.com/wealdtech/go-eth2-types/v2"
 	"go.uber.org/zap/zaptest"
@@ -174,7 +173,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		pmsg := &pubsub.Message{}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err := validator.validateP2PMessage(context.TODO(), "", pmsg, receivedAt)
+		_, _, err := validator.validateP2PMessage(pmsg, receivedAt)
 
 		require.ErrorIs(t, err, ErrPubSubMessageHasNoData)
 	})
@@ -187,7 +186,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		topic := commons.GetTopicFullName(commons.ValidatorTopicID(share.ValidatorPubKey)[0])
 		pmsg := &pubsub.Message{
-			Message: &ps_pb.Message{
+			Message: &pspb.Message{
 				Data:  bytes.Repeat([]byte{1}, 10_000_000),
 				Topic: &topic,
 				From:  []byte("16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r"),
@@ -195,7 +194,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateP2PMessage(context.TODO(), "", pmsg, receivedAt)
+		_, _, err = validator.validateP2PMessage(pmsg, receivedAt)
 
 		e := ErrPubSubDataTooBig
 		e.got = 10_000_000
@@ -210,7 +209,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		topic := commons.GetTopicFullName(commons.ValidatorTopicID(share.ValidatorPubKey)[0])
 		pmsg := &pubsub.Message{
-			Message: &ps_pb.Message{
+			Message: &pspb.Message{
 				Data:  []byte{1},
 				Topic: &topic,
 				From:  []byte("16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r"),
@@ -218,7 +217,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateP2PMessage(context.TODO(), "", pmsg, receivedAt)
+		_, _, err = validator.validateP2PMessage(pmsg, receivedAt)
 
 		require.ErrorContains(t, err, ErrMalformedPubSubMessage.Error())
 	})
@@ -779,8 +778,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorContains(t, err, ErrInvalidSignature.Error())
 	})
 
-	// Initialize partial message type tests
-	t.Run("partial message type", func(t *testing.T) {
+	// Run partial message type validation tests
+	t.Run("partial message type validation", func(t *testing.T) {
 		slot := netCfg.Beacon.FirstSlotAtEpoch(162304)
 
 		// Check happy flow of a duty for each role
@@ -1235,6 +1234,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		for role, receivedAt := range tests {
+			role, receivedAt := role, receivedAt
 			t.Run(role.String(), func(t *testing.T) {
 				msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role)
 
@@ -1534,8 +1534,6 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		signed2 := spectestingutils.TestingCommitMessage(ks.Shares[1], 1)
-		require.NoError(t, err)
-
 		encodedSigned2, err := signed2.Encode()
 		require.NoError(t, err)
 
@@ -1572,8 +1570,6 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		signed2 := spectestingutils.TestingRoundChangeMessage(ks.Shares[1], 1)
-		require.NoError(t, err)
-
 		encodedSigned2, err := signed2.Encode()
 		require.NoError(t, err)
 
@@ -1634,6 +1630,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		for role, round := range tests {
+			role, round := role, round
 			t.Run(role.String(), func(t *testing.T) {
 				msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role)
 

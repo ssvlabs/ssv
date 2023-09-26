@@ -153,7 +153,7 @@ func (mv *messageValidator) verifyPartialSignature(msg *spectypes.PartialSignatu
 		}
 
 		if !mv.aggregateVerify(sig, pk, root) {
-			return fmt.Errorf("wrong partial signature")
+			return ErrInvalidPartialSignature
 		}
 
 		return nil
@@ -169,7 +169,6 @@ func (mv *messageValidator) aggregateVerify(sig *bls.Sign, pk bls.PublicKey, roo
 
 	sinceStart := time.Since(start)
 	mv.metrics.SignatureValidationDuration(sinceStart)
-	//mv.logger.Debug("verified signature message", zap.Duration("took", sinceStart), zap.Bool("valid", valid))
 
 	return valid
 }
@@ -218,33 +217,35 @@ func (mv *messageValidator) validateSignerBehaviorPartial(
 ) error {
 	signerState := state.GetSignerState(signer)
 
-	if signerState != nil {
-		msgSlot := signedMsg.Message.Slot
+	if signerState == nil {
+		return nil
+	}
 
-		if msgSlot < signerState.Slot {
-			// Signers aren't allowed to decrease their slot.
-			// If they've sent a future message due to clock error,
-			// this should be caught by the earlyMessage check.
-			err := ErrSlotAlreadyAdvanced
-			err.want = signerState.Slot
-			err.got = msgSlot
+	msgSlot := signedMsg.Message.Slot
+
+	if msgSlot < signerState.Slot {
+		// Signers aren't allowed to decrease their slot.
+		// If they've sent a future message due to clock error,
+		// this should be caught by the earlyMessage check.
+		err := ErrSlotAlreadyAdvanced
+		err.want = signerState.Slot
+		err.got = msgSlot
+		return err
+	}
+
+	newDutyInSameEpoch := false
+	if msgSlot > signerState.Slot && mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) == mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot) {
+		newDutyInSameEpoch = true
+	}
+
+	if err := mv.validateDutyCount(signerState, msgID, newDutyInSameEpoch); err != nil {
+		return err
+	}
+
+	if msgSlot <= signerState.Slot {
+		limits := maxMessageCounts(len(share.Committee))
+		if err := signerState.MessageCounts.ValidatePartialSignatureMessage(signedMsg, limits); err != nil {
 			return err
-		}
-
-		newDutyInSameEpoch := false
-		if msgSlot > signerState.Slot && mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) == mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot) {
-			newDutyInSameEpoch = true
-		}
-
-		if err := mv.validateDutyCount(signerState, msgID, newDutyInSameEpoch); err != nil {
-			return err
-		}
-
-		if msgSlot <= signerState.Slot {
-			limits := maxMessageCounts(len(share.Committee))
-			if err := signerState.MessageCounts.ValidatePartialSignatureMessage(signedMsg, limits); err != nil {
-				return err
-			}
 		}
 	}
 

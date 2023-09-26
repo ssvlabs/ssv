@@ -121,11 +121,12 @@ func (c *MessageCounts) RecordConsensusMessage(msg *specqbft.SignedMessage) {
 	case specqbft.PrepareMsgType:
 		c.Prepare++
 	case specqbft.CommitMsgType:
-		if len(msg.Signers) == 1 {
+		switch {
+		case len(msg.Signers) == 1:
 			c.Commit++
-		} else if len(msg.Signers) > 1 {
+		case len(msg.Signers) > 1:
 			c.Decided++
-		} else {
+		default:
 			panic("expected signers") // 0 length should be checked before
 		}
 	case specqbft.RoundChangeMsgType:
