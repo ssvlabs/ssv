@@ -355,7 +355,7 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 		Host:         h,
 		TraceLog:     false,
 		MsgIDHandler: midHandler,
-		MsgHandler: func(topic string, msg *pubsub.Message) error {
+		MsgHandler: func(_ context.Context, topic string, msg *pubsub.Message) error {
 			p.saveMsg(topic, msg)
 			return nil
 		},

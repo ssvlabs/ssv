@@ -1,6 +1,7 @@
 package p2pv1
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 
@@ -133,8 +134,8 @@ func (n *p2pNetwork) subscribe(logger *zap.Logger, pk spectypes.ValidatorPK) err
 }
 
 // handleIncomingMessages reads messages from the given channel and calls the router, note that this function blocks.
-func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(topic string, msg *pubsub.Message) error {
-	return func(topic string, msg *pubsub.Message) error {
+func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.Context, topic string, msg *pubsub.Message) error {
+	return func(ctx context.Context, topic string, msg *pubsub.Message) error {
 		if n.msgRouter == nil {
 			logger.Debug("msg router is not configured")
 			return nil
@@ -163,7 +164,7 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(topic string,
 
 		metricsRouterIncoming.WithLabelValues(p2pID, message.MsgTypeToString(decodedMsg.MsgType)).Inc()
 
-		n.msgRouter.Route(logger, decodedMsg)
+		n.msgRouter.Route(ctx, decodedMsg)
 
 		return nil
 	}

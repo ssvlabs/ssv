@@ -302,9 +302,8 @@ type dummyRouter struct {
 	i     int
 }
 
-func (r *dummyRouter) Route(logger *zap.Logger, message *queue.DecodedSSVMessage) {
-	c := atomic.AddUint64(&r.count, 1)
-	logger.Debug("got message", zap.Uint64("count", c))
+func (r *dummyRouter) Route(_ context.Context, _ *queue.DecodedSSVMessage) {
+	atomic.AddUint64(&r.count, 1)
 }
 
 func dummyMsg(pkHex string, height int) (*spectypes.SSVMessage, error) {

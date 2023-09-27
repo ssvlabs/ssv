@@ -37,7 +37,7 @@ type Controller interface {
 }
 
 // PubsubMessageHandler handles incoming messages
-type PubsubMessageHandler func(string, *pubsub.Message) error
+type PubsubMessageHandler func(context.Context, string, *pubsub.Message) error
 
 type messageValidator interface {
 	ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
@@ -247,7 +247,7 @@ func (ctrl *topicsCtrl) listen(logger *zap.Logger, sub *pubsub.Subscription) err
 			).Inc()
 		}
 
-		if err := ctrl.msgHandler(topicName, msg); err != nil {
+		if err := ctrl.msgHandler(ctx, topicName, msg); err != nil {
 			logger.Debug("could not handle msg", zap.Error(err))
 		}
 	}

@@ -28,6 +28,7 @@ type queueContainer struct {
 
 // HandleMessage handles a spectypes.SSVMessage.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
+// TODO: get rid of logger, add context
 func (v *Validator) HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage) {
 	v.mtx.RLock() // read v.Queues
 	defer v.mtx.RUnlock()

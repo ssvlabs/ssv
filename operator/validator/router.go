@@ -1,6 +1,8 @@
 package validator
 
 import (
+	"context"
+
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/network/commons"
@@ -23,11 +25,13 @@ type messageRouter struct {
 	msgID  commons.MsgIDFunc
 }
 
-func (r *messageRouter) Route(logger *zap.Logger, message *queue.DecodedSSVMessage) {
+func (r *messageRouter) Route(ctx context.Context, message *queue.DecodedSSVMessage) {
 	select {
+	case <-ctx.Done():
+		r.logger.Warn("context canceled, dropping message")
 	case r.ch <- message:
 	default:
-		r.logger.Warn("message router buffer is full. dropping message")
+		r.logger.Warn("message router buffer is full, dropping message")
 	}
 }
 

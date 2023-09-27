@@ -49,9 +49,9 @@ func TestRouter(t *testing.T) {
 			},
 		}
 
-		router.Route(nil, msg)
+		router.Route(context.TODO(), msg)
 		if i%2 == 0 {
-			go router.Route(nil, msg)
+			go router.Route(context.TODO(), msg)
 		}
 	}
 
