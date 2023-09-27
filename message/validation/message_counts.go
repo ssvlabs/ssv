@@ -9,26 +9,7 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
-// maxMessageCounts is the maximum number of acceptable messages from a signer within a slot & round.
-func maxMessageCounts(committeeSize int) MessageCounts {
-	maxDecided := maxDecidedCount(committeeSize)
-
-	return MessageCounts{
-		PreConsensus:  1,
-		Proposal:      1,
-		Prepare:       1,
-		Commit:        1,
-		Decided:       maxDecided,
-		RoundChange:   1,
-		PostConsensus: 1,
-	}
-}
-
-func maxDecidedCount(committeeSize int) int {
-	f := (committeeSize - 1) / 3
-	return committeeSize * (f + 1) // N * (f + 1)
-}
-
+// MessageCounts tracks the number of various message types received for validation.
 type MessageCounts struct {
 	PreConsensus  int
 	Proposal      int
@@ -39,6 +20,7 @@ type MessageCounts struct {
 	PostConsensus int
 }
 
+// String provides a formatted representation of the MessageCounts.
 func (c *MessageCounts) String() string {
 	return fmt.Sprintf("pre-consensus: %v, proposal: %v, prepare: %v, commit: %v, decided: %v, round change: %v, post-consensus: %v",
 		c.PreConsensus,
@@ -51,6 +33,8 @@ func (c *MessageCounts) String() string {
 	)
 }
 
+// ValidateConsensusMessage checks if the provided consensus message exceeds the set limits.
+// Returns an error if the message type exceeds its respective count limit.
 func (c *MessageCounts) ValidateConsensusMessage(msg *specqbft.SignedMessage, limits MessageCounts) error {
 	switch msg.Message.MsgType {
 	case specqbft.ProposalMsgType:
@@ -93,6 +77,8 @@ func (c *MessageCounts) ValidateConsensusMessage(msg *specqbft.SignedMessage, li
 	return nil
 }
 
+// ValidatePartialSignatureMessage checks if the provided partial signature message exceeds the set limits.
+// Returns an error if the message type exceeds its respective count limit.
 func (c *MessageCounts) ValidatePartialSignatureMessage(m *spectypes.SignedPartialSignatureMessage, limits MessageCounts) error {
 	switch m.Message.Type {
 	case spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig:
@@ -114,6 +100,7 @@ func (c *MessageCounts) ValidatePartialSignatureMessage(m *spectypes.SignedParti
 	return nil
 }
 
+// RecordConsensusMessage updates the counts based on the provided consensus message type.
 func (c *MessageCounts) RecordConsensusMessage(msg *specqbft.SignedMessage) {
 	switch msg.Message.MsgType {
 	case specqbft.ProposalMsgType:
@@ -136,6 +123,7 @@ func (c *MessageCounts) RecordConsensusMessage(msg *specqbft.SignedMessage) {
 	}
 }
 
+// RecordPartialSignatureMessage updates the counts based on the provided partial signature message type.
 func (c *MessageCounts) RecordPartialSignatureMessage(msg *spectypes.SignedPartialSignatureMessage) {
 	switch msg.Message.Type {
 	case spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig:
@@ -145,4 +133,24 @@ func (c *MessageCounts) RecordPartialSignatureMessage(msg *spectypes.SignedParti
 	default:
 		panic("unexpected partial signature message type") // should be checked before
 	}
+}
+
+// maxMessageCounts is the maximum number of acceptable messages from a signer within a slot & round.
+func maxMessageCounts(committeeSize int) MessageCounts {
+	maxDecided := maxDecidedCount(committeeSize)
+
+	return MessageCounts{
+		PreConsensus:  1,
+		Proposal:      1,
+		Prepare:       1,
+		Commit:        1,
+		Decided:       maxDecided,
+		RoundChange:   1,
+		PostConsensus: 1,
+	}
+}
+
+func maxDecidedCount(committeeSize int) int {
+	f := (committeeSize - 1) / 3
+	return committeeSize * (f + 1) // N * (f + 1)
 }

@@ -1,3 +1,4 @@
+// Package validation provides functions and structures for validating messages.
 package validation
 
 // validator.go contains main code for validation and most of the rule checks.
@@ -49,16 +50,20 @@ const (
 	maxDutiesPerEpoch          = 2
 )
 
+// ConsensusID uniquely identifies a public key and role pair to keep track of state.
 type ConsensusID struct {
 	PubKey phase0.BLSPubKey
 	Role   spectypes.BeaconRole
 }
 
+// ConsensusState keeps track of the signers for a given public key and role.
 type ConsensusState struct {
 	// TODO: consider evicting old data to avoid excessive memory consumption
 	Signers *hashmap.Map[spectypes.OperatorID, *SignerState]
 }
 
+// GetSignerState retrieves the state for the given signer.
+// Returns nil if the signer is not found.
 func (cs *ConsensusState) GetSignerState(signer spectypes.OperatorID) *SignerState {
 	signerState, ok := cs.Signers.Get(signer)
 	if !ok {
@@ -67,6 +72,7 @@ func (cs *ConsensusState) GetSignerState(signer spectypes.OperatorID) *SignerSta
 	return signerState
 }
 
+// CreateSignerState initializes and sets a new SignerState for the given signer.
 func (cs *ConsensusState) CreateSignerState(signer spectypes.OperatorID) *SignerState {
 	signerState := &SignerState{}
 	cs.Signers.Set(signer, signerState)
@@ -74,15 +80,18 @@ func (cs *ConsensusState) CreateSignerState(signer spectypes.OperatorID) *Signer
 	return signerState
 }
 
+// PubsubMessageValidator defines methods for validating pubsub messages.
 type PubsubMessageValidator interface {
 	ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
 	ValidatePubsubMessage(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
 }
 
+// SSVMessageValidator defines methods for validating SSV messages.
 type SSVMessageValidator interface {
 	ValidateSSVMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, Descriptor, error)
 }
 
+// MessageValidator is an interface that combines both PubsubMessageValidator and SSVMessageValidator.
 type MessageValidator interface {
 	PubsubMessageValidator
 	SSVMessageValidator
@@ -99,6 +108,7 @@ type messageValidator struct {
 	verifySignatures bool
 }
 
+// NewMessageValidator returns a new MessageValidator with the given network configuration and options.
 func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) MessageValidator {
 	mv := &messageValidator{
 		logger:  zap.NewNop(),
@@ -113,44 +123,52 @@ func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) Mes
 	return mv
 }
 
+// Option represents a functional option for configuring a messageValidator.
 type Option func(validator *messageValidator)
 
+// WithLogger sets the logger for the messageValidator.
 func WithLogger(logger *zap.Logger) Option {
 	return func(mv *messageValidator) {
 		mv.logger = logger
 	}
 }
 
+// WithMetrics sets the metrics for the messageValidator.
 func WithMetrics(metrics metrics) Option {
 	return func(mv *messageValidator) {
 		mv.metrics = metrics
 	}
 }
 
+// WithDutyStore sets the duty store for the messageValidator.
 func WithDutyStore(dutyStore *dutystore.Store) Option {
 	return func(mv *messageValidator) {
 		mv.dutyStore = dutyStore
 	}
 }
 
+// WithOwnOperatorID sets the operator ID for the messageValidator.
 func WithOwnOperatorID(id spectypes.OperatorID) Option {
 	return func(mv *messageValidator) {
 		mv.ownOperatorID = id
 	}
 }
 
+// WithShareStorage sets the share storage for the messageValidator.
 func WithShareStorage(shareStorage registrystorage.Shares) Option {
 	return func(mv *messageValidator) {
 		mv.shareStorage = shareStorage
 	}
 }
 
+// WithSignatureVerification sets whether to verify signatures in the messageValidator.
 func WithSignatureVerification(check bool) Option {
 	return func(mv *messageValidator) {
 		mv.verifySignatures = check
 	}
 }
 
+// ConsensusDescriptor provides details about the consensus for a message. It's used for logging and metrics.
 type ConsensusDescriptor struct {
 	Round           specqbft.Round
 	QBFTMessageType specqbft.MessageType
@@ -158,6 +176,7 @@ type ConsensusDescriptor struct {
 	Committee       []*spectypes.Operator
 }
 
+// Descriptor provides details about a message. It's used for logging and metrics.
 type Descriptor struct {
 	ValidatorPK    spectypes.ValidatorPK
 	Role           spectypes.BeaconRole
@@ -166,6 +185,7 @@ type Descriptor struct {
 	Consensus      *ConsensusDescriptor
 }
 
+// Fields returns zap logging fields for the descriptor.
 func (d Descriptor) Fields() []zapcore.Field {
 	result := []zapcore.Field{
 		fields.Validator(d.ValidatorPK),
@@ -191,6 +211,7 @@ func (d Descriptor) Fields() []zapcore.Field {
 	return result
 }
 
+// String provides a string representation of the descriptor. It may be useful for logging.
 func (d Descriptor) String() string {
 	sb := strings.Builder{}
 	sb.WriteString(fmt.Sprintf("validator PK: %v, role: %v, ssv message type: %v, slot: %v",
@@ -217,10 +238,14 @@ func (d Descriptor) String() string {
 	return sb.String()
 }
 
+// ValidatorForTopic returns a validation function for the given topic.
+// This function can be used to validate messages within the libp2p pubsub framework.
 func (mv *messageValidator) ValidatorForTopic(_ string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 	return mv.ValidatePubsubMessage
 }
 
+// ValidatePubsubMessage validates the given pubsub message.
+// Depending on the outcome, it will return one of the pubsub validation results (Accept, Ignore, or Reject).
 func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, _ peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 	start := time.Now()
 	var validationDurationLabels []string // TODO: implement
@@ -268,6 +293,12 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, _ peer.ID, 
 	mv.metrics.MessageAccepted(descriptor.Role, round)
 
 	return pubsub.ValidationAccept
+}
+
+// ValidateSSVMessage validates the given SSV message.
+// If successful, it returns the decoded message and its descriptor. Otherwise, it returns an error.
+func (mv *messageValidator) ValidateSSVMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, Descriptor, error) {
+	return mv.validateSSVMessage(ssvMessage, time.Now())
 }
 
 func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt time.Time) (*queue.DecodedSSVMessage, Descriptor, error) {
@@ -322,10 +353,6 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 	mv.metrics.SSVMessageType(msg.MsgType)
 
 	return mv.validateSSVMessage(msg, receivedAt)
-}
-
-func (mv *messageValidator) ValidateSSVMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, Descriptor, error) {
-	return mv.validateSSVMessage(ssvMessage, time.Now())
 }
 
 func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage, receivedAt time.Time) (*queue.DecodedSSVMessage, Descriptor, error) {
