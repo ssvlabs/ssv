@@ -89,7 +89,7 @@ func (d *Duties[D]) Add(epoch phase0.Epoch, slot phase0.Slot, validatorIndex pha
 	}
 }
 
-func (d *Duties[D]) Reset(epoch phase0.Epoch) {
+func (d *Duties[D]) ResetEpoch(epoch phase0.Epoch) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 

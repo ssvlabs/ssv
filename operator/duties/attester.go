@@ -53,7 +53,7 @@ func (h *AttesterHandler) Name() string {
 //
 // On Indices Change:
 //  1. Execute duties.
-//  2. Reset duties for the current epoch.
+//  2. ResetEpoch duties for the current epoch.
 //  3. Fetch duties for the current epoch.
 //  4. If necessary, fetch duties for the next epoch.
 //
@@ -83,7 +83,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			} else {
 				h.processExecution(currentEpoch, slot)
 				if h.indicesChanged {
-					h.duties.Reset(currentEpoch)
+					h.duties.ResetEpoch(currentEpoch)
 					h.indicesChanged = false
 				}
 				h.processFetching(ctx, currentEpoch, slot)
@@ -99,7 +99,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 
 			// last slot of epoch
 			if uint64(slot)%slotsPerEpoch == slotsPerEpoch-1 {
-				h.duties.Reset(currentEpoch)
+				h.duties.ResetEpoch(currentEpoch)
 			}
 
 		case reorgEvent := <-h.reorg:
@@ -109,18 +109,18 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 
 			// reset current epoch duties
 			if reorgEvent.Previous {
-				h.duties.Reset(currentEpoch)
+				h.duties.ResetEpoch(currentEpoch)
 				h.fetchFirst = true
 				h.fetchCurrentEpoch = true
 				if h.shouldFetchNexEpoch(reorgEvent.Slot) {
-					h.duties.Reset(currentEpoch + 1)
+					h.duties.ResetEpoch(currentEpoch + 1)
 					h.fetchNextEpoch = true
 				}
 			} else if reorgEvent.Current {
 				// reset & re-fetch next epoch duties if in appropriate slot range,
 				// otherwise they will be fetched by the appropriate slot tick.
 				if h.shouldFetchNexEpoch(reorgEvent.Slot) {
-					h.duties.Reset(currentEpoch + 1)
+					h.duties.ResetEpoch(currentEpoch + 1)
 					h.fetchNextEpoch = true
 				}
 			}
@@ -136,7 +136,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 
 			// reset next epoch duties if in appropriate slot range
 			if h.shouldFetchNexEpoch(slot) {
-				h.duties.Reset(currentEpoch + 1)
+				h.duties.ResetEpoch(currentEpoch + 1)
 				h.fetchNextEpoch = true
 			}
 		}
