@@ -42,7 +42,8 @@ func TestEthExecLayer(t *testing.T) {
 
 	expectedNonce := registrystorage.Nonce(0)
 
-	testEnv, err := setupEnv(t, ctx, testAddresses, 7, 4)
+	testEnv := TestEnv{}
+	err := testEnv.setup(t, ctx, testAddresses, 7, 4)
 	require.NoError(t, err)
 
 	var (
@@ -58,7 +59,9 @@ func TestEthExecLayer(t *testing.T) {
 		rpcServer     = testEnv.rpcServer
 		httpSrv       = testEnv.httpSrv
 		validatorCtrl = testEnv.validatorCtrl
+		testMockCtrl  = testEnv.mockCtrl
 	)
+	defer testMockCtrl.Finish()
 	defer rpcServer.Stop()
 	defer httpSrv.Close()
 

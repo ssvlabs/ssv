@@ -14,6 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/golang/mock/gomock"
 	"go.uber.org/zap/zaptest"
 	"math/big"
 	"net/http/httptest"
@@ -48,7 +49,7 @@ func NewCommonTestInput(
 	}
 }
 
-type testEnv struct {
+type TestEnv struct {
 	eventSyncer   *eventsyncer.EventSyncer
 	validators    []*testValidatorData
 	ops           []*testOperator
@@ -61,21 +62,37 @@ type testEnv struct {
 	rpcServer     *rpc.Server
 	httpSrv       *httptest.Server
 	validatorCtrl *mocks.MockController
+	mockCtrl      *gomock.Controller
 }
 
-func setupEnv(
+func (e *TestEnv) shutdown() {
+	if e.mockCtrl != nil {
+		e.mockCtrl.Finish()
+	}
+
+	if e.httpSrv != nil {
+		e.httpSrv.Close()
+	}
+
+	if e.execClient != nil {
+		// Always returns nil error
+		_ = e.execClient.Close()
+	}
+}
+
+func (e *TestEnv) setup(
 	t *testing.T,
 	ctx context.Context,
 	testAddresses []*ethcommon.Address,
 	validatorsCount uint64,
 	operatorsCount uint64,
-) (*testEnv, error) {
+) error {
 	logger := zaptest.NewLogger(t)
 
 	// Create operators RSA keys
 	ops, err := createOperators(operatorsCount, 0)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	validators := make([]*testValidatorData, validatorsCount)
@@ -85,22 +102,28 @@ func setupEnv(
 	for i := 0; i < int(validatorsCount); i++ {
 		validators[i], err = createNewValidator(ops)
 		if err != nil {
-			return nil, err
+			e.shutdown()
+			return err
 		}
 
 		shares[i], err = generateSharesData(validators[i], ops, testAddrAlice, i)
 		if err != nil {
-			return nil, err
+			e.shutdown()
+			return err
 		}
 	}
 
-	eh, validatorCtrl, nodeStorage, err := setupEventHandler(t, ctx, logger, ops[0], &testAddrAlice, true)
+	eh, validatorCtrl, mockCtrl, nodeStorage, err := setupEventHandler(t, ctx, logger, ops[0], &testAddrAlice, true)
+	e.mockCtrl = mockCtrl
+	e.nodeStorage = nodeStorage
 
 	if err != nil {
-		return nil, err
+		defer e.shutdown()
+		return err
 	}
 	if validatorCtrl == nil {
-		return nil, fmt.Errorf("error: validatorCtrl is empty")
+		defer e.shutdown()
+		return fmt.Errorf("error: validatorCtrl is empty")
 	}
 
 	// Adding testAddresses to the genesis block mostly to specify some balances for them
@@ -108,27 +131,33 @@ func setupEnv(
 
 	// Create JSON-RPC handler
 	rpcServer, err := sim.Node.RPCHandler()
+	e.rpcServer = rpcServer
 	if err != nil {
-		return nil, fmt.Errorf("creatingt rpc server: %w", err)
+		defer e.shutdown()
+		return fmt.Errorf("creatingt rpc server: %w", err)
 	}
 	// Expose handler on a test server with ws open
 	httpSrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
+	e.httpSrv = httpSrv
+
 	addr := "ws:" + strings.TrimPrefix(httpSrv.URL, "http:")
 
 	parsed, err := abi.JSON(strings.NewReader(simcontract.SimcontractMetaData.ABI))
 	if err != nil {
-		httpSrv.Close()
-		return nil, fmt.Errorf("parsing contract abi: %w", err)
+		defer e.shutdown()
+		return fmt.Errorf("parsing contract abi: %w", err)
 	}
 
 	auth, err := bind.NewKeyedTransactorWithChainID(testKeyAlice, big.NewInt(1337))
 	if err != nil {
-		return nil, err
+		defer e.shutdown()
+		return err
 	}
 
 	contractAddr, _, _, err := bind.DeployContract(auth, parsed, ethcommon.FromHex(simcontract.SimcontractMetaData.Bin), sim)
 	if err != nil {
-		return nil, fmt.Errorf("deploying contract: %w", err)
+		defer e.shutdown()
+		return fmt.Errorf("deploying contract: %w", err)
 	}
 
 	sim.Commit()
@@ -136,15 +165,16 @@ func setupEnv(
 	// Check contract code at the simulated blockchain
 	contractCode, err := sim.CodeAt(ctx, contractAddr, nil)
 	if err != nil {
-		httpSrv.Close()
-		return nil, fmt.Errorf("getting contract code: %w", err)
+		defer e.shutdown()
+		return fmt.Errorf("getting contract code: %w", err)
 	}
 	if len(contractCode) == 0 {
-		return nil, fmt.Errorf("error: contractCode is empty")
+		defer e.shutdown()
+		return fmt.Errorf("error: contractCode is empty")
 	}
 
 	// Create a client and connect to the simulator
-	client, err := executionclient.New(
+	e.execClient, err = executionclient.New(
 		ctx,
 		addr,
 		contractAddr,
@@ -152,51 +182,42 @@ func setupEnv(
 		executionclient.WithFollowDistance(0),
 	)
 	if err != nil {
-		return nil, err
+		defer e.shutdown()
+		return err
 	}
 
-	err = client.Healthy(ctx)
+	err = e.execClient.Healthy(ctx)
 	if err != nil {
-		// Always returns nil error
-		client.Close()
-		httpSrv.Close()
-		return nil, err
+		defer e.shutdown()
+		return err
 	}
 
-	boundContract, err := simcontract.NewSimcontract(contractAddr, sim)
+	e.boundContract, err = simcontract.NewSimcontract(contractAddr, sim)
 	if err != nil {
-		// Always returns nil error
-		client.Close()
-		httpSrv.Close()
-		return nil, err
+		defer e.shutdown()
+		return err
 	}
 
 	metricsReporter := metricsreporter.New(
 		metricsreporter.WithLogger(logger),
 	)
 
-	eventSyncer := eventsyncer.New(
+	e.eventSyncer = eventsyncer.New(
 		nodeStorage,
-		client,
+		e.execClient,
 		eh,
 		eventsyncer.WithLogger(logger),
 		eventsyncer.WithMetrics(metricsReporter),
 	)
 
-	return &testEnv{
-		eventSyncer:   eventSyncer,
-		validatorCtrl: validatorCtrl,
-		boundContract: boundContract,
-		sim:           sim,
-		nodeStorage:   nodeStorage,
-		auth:          auth,
-		ops:           ops,
-		validators:    validators,
-		shares:        shares,
-		execClient:    client,
-		rpcServer:     rpcServer,
-		httpSrv:       httpSrv,
-	}, nil
+	e.validatorCtrl = validatorCtrl
+	e.sim = sim
+	e.auth = auth
+	e.validators = validators
+	e.ops = ops
+	e.shares = shares
+
+	return nil
 }
 
 func commitBlock(sim *simulator.SimulatedBackend, blockNum *uint64) {

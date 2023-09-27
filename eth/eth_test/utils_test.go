@@ -162,12 +162,12 @@ func setupEventHandler(
 	operator *testOperator,
 	ownerAddress *ethcommon.Address,
 	useMockCtrl bool,
-) (*eventhandler.EventHandler, *mocks.MockController, operatorstorage.Storage, error) {
+) (*eventhandler.EventHandler, *mocks.MockController, *gomock.Controller, operatorstorage.Storage, error) {
 	db, err := kv.NewInMemory(logger, basedb.Options{
 		Ctx: ctx,
 	})
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	storageMap := ibftstorage.NewStores()
@@ -176,16 +176,15 @@ func setupEventHandler(
 
 	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, true, "")
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
 	bc := beacon.NewMockBeaconNode(ctrl)
 
 	contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	if useMockCtrl {
@@ -208,12 +207,12 @@ func setupEventHandler(
 		)
 
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, nil, err
 		}
 
 		validatorCtrl.EXPECT().GetOperatorData().Return(operatorData).AnyTimes()
 
-		return eh, validatorCtrl, nodeStorage, nil
+		return eh, validatorCtrl, ctrl, nodeStorage, nil
 	}
 
 	validatorCtrl := validator.NewController(logger, validator.ControllerOptions{
@@ -241,10 +240,10 @@ func setupEventHandler(
 		eventhandler.WithLogger(logger),
 	)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
-	return eh, nil, nodeStorage, nil
+	return eh, nil, ctrl, nodeStorage, nil
 }
 
 func setupOperatorStorage(
