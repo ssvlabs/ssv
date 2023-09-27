@@ -43,6 +43,7 @@ func TestEthExecLayer(t *testing.T) {
 	expectedNonce := registrystorage.Nonce(0)
 
 	testEnv := TestEnv{}
+	defer testEnv.shutdown()
 	err := testEnv.setup(t, ctx, testAddresses, 7, 4)
 	require.NoError(t, err)
 
@@ -55,15 +56,8 @@ func TestEthExecLayer(t *testing.T) {
 		validators    = testEnv.validators
 		eventSyncer   = testEnv.eventSyncer
 		shares        = testEnv.shares
-		client        = testEnv.execClient
-		rpcServer     = testEnv.rpcServer
-		httpSrv       = testEnv.httpSrv
 		validatorCtrl = testEnv.validatorCtrl
-		testMockCtrl  = testEnv.mockCtrl
 	)
-	defer testMockCtrl.Finish()
-	defer rpcServer.Stop()
-	defer httpSrv.Close()
 
 	blockNum := uint64(0x1)
 	lastHandledBlockNum := uint64(0x1)
@@ -134,12 +128,8 @@ func TestEthExecLayer(t *testing.T) {
 			for {
 				select {
 				case <-ctx.Done():
-					err := client.Close()
-					require.NoError(t, err)
 					return
 				case <-stopChan:
-					err := client.Close()
-					require.NoError(t, err)
 					return
 				default:
 					time.Sleep(100 * time.Millisecond)
@@ -193,7 +183,7 @@ func TestEthExecLayer(t *testing.T) {
 			valRemove.produce()
 
 			// Wait until the state is changed
-			time.Sleep(time.Millisecond * 300)
+			time.Sleep(time.Millisecond * 500)
 
 			shares = nodeStorage.Shares().List(nil)
 			require.Equal(t, 5, len(shares))

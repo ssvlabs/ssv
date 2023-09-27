@@ -102,13 +102,11 @@ func (e *TestEnv) setup(
 	for i := 0; i < int(validatorsCount); i++ {
 		validators[i], err = createNewValidator(ops)
 		if err != nil {
-			e.shutdown()
 			return err
 		}
 
 		shares[i], err = generateSharesData(validators[i], ops, testAddrAlice, i)
 		if err != nil {
-			e.shutdown()
 			return err
 		}
 	}
@@ -118,11 +116,9 @@ func (e *TestEnv) setup(
 	e.nodeStorage = nodeStorage
 
 	if err != nil {
-		defer e.shutdown()
 		return err
 	}
 	if validatorCtrl == nil {
-		defer e.shutdown()
 		return fmt.Errorf("error: validatorCtrl is empty")
 	}
 
@@ -133,7 +129,6 @@ func (e *TestEnv) setup(
 	rpcServer, err := sim.Node.RPCHandler()
 	e.rpcServer = rpcServer
 	if err != nil {
-		defer e.shutdown()
 		return fmt.Errorf("creatingt rpc server: %w", err)
 	}
 	// Expose handler on a test server with ws open
@@ -144,19 +139,16 @@ func (e *TestEnv) setup(
 
 	parsed, err := abi.JSON(strings.NewReader(simcontract.SimcontractMetaData.ABI))
 	if err != nil {
-		defer e.shutdown()
 		return fmt.Errorf("parsing contract abi: %w", err)
 	}
 
 	auth, err := bind.NewKeyedTransactorWithChainID(testKeyAlice, big.NewInt(1337))
 	if err != nil {
-		defer e.shutdown()
 		return err
 	}
 
 	contractAddr, _, _, err := bind.DeployContract(auth, parsed, ethcommon.FromHex(simcontract.SimcontractMetaData.Bin), sim)
 	if err != nil {
-		defer e.shutdown()
 		return fmt.Errorf("deploying contract: %w", err)
 	}
 
@@ -165,11 +157,9 @@ func (e *TestEnv) setup(
 	// Check contract code at the simulated blockchain
 	contractCode, err := sim.CodeAt(ctx, contractAddr, nil)
 	if err != nil {
-		defer e.shutdown()
 		return fmt.Errorf("getting contract code: %w", err)
 	}
 	if len(contractCode) == 0 {
-		defer e.shutdown()
 		return fmt.Errorf("error: contractCode is empty")
 	}
 
@@ -182,19 +172,16 @@ func (e *TestEnv) setup(
 		executionclient.WithFollowDistance(0),
 	)
 	if err != nil {
-		defer e.shutdown()
 		return err
 	}
 
 	err = e.execClient.Healthy(ctx)
 	if err != nil {
-		defer e.shutdown()
 		return err
 	}
 
 	e.boundContract, err = simcontract.NewSimcontract(contractAddr, sim)
 	if err != nil {
-		defer e.shutdown()
 		return err
 	}
 
