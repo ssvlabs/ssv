@@ -85,7 +85,7 @@ func (n Network) GetSlotStartTime(slot phase0.Slot) time.Time {
 
 // GetSlotEndTime returns the end time for the given slot
 func (n Network) GetSlotEndTime(slot phase0.Slot) time.Time {
-	return n.GetSlotStartTime(slot + 1) // TODO: check if it's correct
+	return n.GetSlotStartTime(slot + 1)
 }
 
 // EstimatedCurrentSlot returns the estimation of the current slot
