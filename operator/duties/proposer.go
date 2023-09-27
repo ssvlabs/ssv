@@ -45,7 +45,7 @@ func (h *ProposerHandler) Name() string {
 //
 // On Indices Change:
 //  1. Execute duties.
-//  2. ResetEpoch duties for the current epoch.
+//  2. Reset duties for the current epoch.
 //  3. Fetch duties for the current epoch.
 //
 // On Ticker event:
@@ -72,7 +72,8 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 			} else {
 				h.processExecution(currentEpoch, slot)
 				if h.indicesChanged {
-					h.duties.ResetEpoch(currentEpoch)
+					h.duties.Reset(currentEpoch)
+					h.duties.Reset(currentEpoch - 1)
 					h.indicesChanged = false
 					h.processFetching(ctx, currentEpoch, slot)
 				}
@@ -80,7 +81,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 
 			// last slot of epoch
 			if uint64(slot)%h.network.Beacon.SlotsPerEpoch() == h.network.Beacon.SlotsPerEpoch()-1 {
-				h.duties.ResetEpoch(currentEpoch)
+				h.duties.Reset(currentEpoch - 1) // keep current epoch in case of change rounds
 				h.fetchFirst = true
 			}
 
@@ -89,9 +90,10 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, reorgEvent.Slot, reorgEvent.Slot%32+1)
 			h.logger.Info("🔀 reorg event received", zap.String("epoch_slot_seq", buildStr), zap.Any("event", reorgEvent))
 
-			// reset current epoch duties
+			// reset current and previous epoch duties
 			if reorgEvent.Current {
-				h.duties.ResetEpoch(currentEpoch)
+				h.duties.Reset(currentEpoch)
+				h.duties.Reset(currentEpoch - 1)
 				h.fetchFirst = true
 			}
 
