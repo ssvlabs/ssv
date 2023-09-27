@@ -80,15 +80,10 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 
 			if h.fetchFirst {
 				h.fetchFirst = false
-				h.indicesChanged = false
 				h.processFetching(ctx, period, slot)
 				h.processExecution(period, slot)
 			} else {
 				h.processExecution(period, slot)
-				if h.indicesChanged {
-					h.duties.Reset(period)
-					h.indicesChanged = false
-				}
 				h.processFetching(ctx, period, slot)
 			}
 
@@ -103,7 +98,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 
 			// last slot of period
 			if slot == h.network.Beacon.LastSlotOfSyncPeriod(period) {
-				h.duties.Reset(period)
+				h.duties.Reset(period - 1)
 			}
 
 		case reorgEvent := <-h.reorg:
@@ -126,12 +121,10 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
 			h.logger.Info("🔁 indices change received", zap.String("period_epoch_slot_seq", buildStr))
 
-			h.indicesChanged = true
 			h.fetchCurrentPeriod = true
 
 			// reset next period duties if in appropriate slot range
 			if h.shouldFetchNextPeriod(slot) {
-				h.duties.Reset(period + 1)
 				h.fetchNextPeriod = true
 			}
 		}
@@ -201,6 +194,7 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period
 		return fmt.Errorf("failed to fetch sync committee duties: %w", err)
 	}
 
+	h.duties.Reset(period)
 	for _, d := range duties {
 		_, inCommitteeDuty := inCommitteeIndicesSet[d.ValidatorIndex]
 		h.duties.Add(period, d.ValidatorIndex, d, inCommitteeDuty)

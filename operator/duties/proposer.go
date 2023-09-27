@@ -72,7 +72,6 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 			} else {
 				h.processExecution(currentEpoch, slot)
 				if h.indicesChanged {
-					h.duties.ResetEpoch(currentEpoch)
 					h.indicesChanged = false
 					h.processFetching(ctx, currentEpoch, slot)
 				}
@@ -80,7 +79,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 
 			// last slot of epoch
 			if uint64(slot)%h.network.Beacon.SlotsPerEpoch() == h.network.Beacon.SlotsPerEpoch()-1 {
-				h.duties.ResetEpoch(currentEpoch)
+				h.duties.ResetEpoch(currentEpoch - 1)
 				h.fetchFirst = true
 			}
 
@@ -151,10 +150,11 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 		return fmt.Errorf("failed to fetch proposer duties: %w", err)
 	}
 
+	h.duties.ResetEpoch(epoch)
+
 	specDuties := make([]*spectypes.Duty, 0, len(duties))
 	for _, d := range duties {
 		_, inCommitteeDuty := inCommitteeIndicesSet[d.ValidatorIndex]
-
 		h.duties.Add(epoch, d.Slot, d.ValidatorIndex, d, inCommitteeDuty)
 		specDuties = append(specDuties, h.toSpecDuty(d, spectypes.BNRoleProposer))
 	}
