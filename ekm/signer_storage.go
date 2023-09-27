@@ -20,6 +20,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging"
+	registry "github.com/bloxapp/ssv/protocol/v2/blockchain/eth1"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
@@ -30,6 +31,15 @@ const (
 	accountsPath   = "accounts_%s"
 )
 
+type SignerStorage interface {
+	registry.RegistryStore
+	core.Storage
+
+	SetEncryptionKey(newKey string) error
+	ListAccountsTxn(r basedb.Reader) ([]core.ValidatorAccount, error)
+	SaveAccountTxn(rw basedb.ReadWriter, account core.ValidatorAccount) error
+}
+
 type signerStorage struct {
 	db            basedb.Database
 	encryptionKey []byte
@@ -39,8 +49,8 @@ type signerStorage struct {
 	lock          sync.RWMutex
 }
 
-func newSignerStorage(db basedb.Database, logger *zap.Logger, network spectypes.BeaconNetwork, prefix []byte) signerStorage {
-	return signerStorage{
+func NewSignerStorage(db basedb.Database, logger *zap.Logger, network spectypes.BeaconNetwork, prefix []byte) SignerStorage {
+	return &signerStorage{
 		db:      db,
 		logger:  logger.Named(logging.NameSignerStorage).Named(fmt.Sprintf("%sstorage", prefix)),
 		network: network,

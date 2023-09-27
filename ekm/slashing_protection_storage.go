@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/bloxapp/eth2-key-manager/core"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -23,6 +24,13 @@ const (
 	GenesisVersion = "0x0"
 )
 
+type SpStorage interface {
+	core.SlashingStore
+
+	RemoveHighestAttestation(pubKey []byte) error
+	RemoveHighestProposal(pubKey []byte) error
+}
+
 type spStorage struct {
 	db     basedb.Database
 	logger *zap.Logger // struct logger is used because core.Storage does not support passing a logger
@@ -31,8 +39,8 @@ type spStorage struct {
 	prefix []byte
 }
 
-func newSlashingProtectionStorage(db basedb.Database, logger *zap.Logger, prefix []byte) spStorage {
-	return spStorage{
+func NewSlashingProtectionStorage(db basedb.Database, logger *zap.Logger, prefix []byte) SpStorage {
+	return &spStorage{
 		db:     db,
 		logger: logger.Named(logging.NameSlashingProtectionStorage).Named(fmt.Sprintf("%sstorage", prefix)),
 		prefix: prefix,

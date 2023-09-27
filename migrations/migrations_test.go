@@ -23,8 +23,7 @@ func setupOptions(ctx context.Context, t *testing.T) (Options, error) {
 		return Options{}, err
 	}
 	return Options{
-		Db:     db,
-		DbPath: t.TempDir(),
+		Db: db,
 	}, nil
 }
 

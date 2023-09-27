@@ -105,47 +105,20 @@ var StartNodeCmd = &cobra.Command{
 			log.Fatal("could not create logger", err)
 		}
 		defer logging.CapturePanic(logger)
+
 		networkConfig, err := setupSSVNetwork(logger)
 		if err != nil {
 			logger.Fatal("could not setup network", zap.Error(err))
 		}
 
-		nodeDBOptions := basedb.Options{
-			Path:       cfg.DBOptions.Path,
-			Reporting:  cfg.DBOptions.Reporting,
-			GCInterval: cfg.DBOptions.GCInterval,
-		}
-
-		db, err := setupDB(cmd.Context(), logger, nodeDBOptions, networkConfig.Beacon.GetNetwork())
-		if err != nil {
-			logger.Fatal("could not setup db", zap.Error(err))
-		}
-
-		// Validate that provided slashing protection DB path directory exists
-		if _, err := os.Stat(cfg.SlashingProtectionOptions.DBPath); os.IsNotExist(err) {
-			logger.Fatal("Slashing protection database does not exist. Please create it using the 'create-slashing-protection-db' command.")
-		}
-
-		// Validate that the slashing protection DB and node DB are not in the same directory
-		if filepath.Dir(cfg.DBOptions.Path) == filepath.Dir(cfg.SlashingProtectionOptions.DBPath) {
-			logger.Fatal("node DB and slashing protection DB should not be in the same directory")
-		}
-
-		spDBOptions := basedb.Options{
-			Path:       cfg.SlashingProtectionOptions.DBPath,
-			SyncWrites: true,
-		}
-
-		spDB, err := setupDB(cmd.Context(), logger, spDBOptions, networkConfig.Beacon.GetNetwork())
+		spDB, err := setupSlashingProtectionDB(cmd.Context(), logger, networkConfig.Beacon.GetNetwork())
 		if err != nil {
 			logger.Fatal("could not setup slashing protection db", zap.Error(err))
 		}
 
-		// If the sp db was created with cli command, it should include "genesis" version of the db
-		// this way we can validate the db was created via the cli command. if not, we should fail
-		value, found, err := spDB.Get([]byte(networkConfig.Beacon.GetBeaconNetwork()), []byte(ekm.GenesisVersionPrefix))
-		if err != nil || !found || !bytes.Equal(value.Value, []byte(ekm.GenesisVersion)) {
-			logger.Fatal("Slashing protection DB was not created via cli command. Please create it using the 'create-slashing-protection-db' command.", zap.Error(err))
+		db, err := setupDB(cmd.Context(), logger, networkConfig.Beacon.GetNetwork(), spDB)
+		if err != nil {
+			logger.Fatal("could not setup db", zap.Error(err))
 		}
 
 		nodeStorage, operatorData := setupOperatorStorage(logger, db)
@@ -392,7 +365,13 @@ func setupGlobal(cmd *cobra.Command) (*zap.Logger, error) {
 	return zap.L(), nil
 }
 
-func setupDB(ctx context.Context, logger *zap.Logger, options basedb.Options, eth2Network beaconprotocol.Network) (*kv.BadgerDB, error) {
+func setupDB(ctx context.Context, logger *zap.Logger, network beaconprotocol.Network, spDB *kv.BadgerDB) (*kv.BadgerDB, error) {
+	options := basedb.Options{
+		Path:       cfg.DBOptions.Path,
+		Reporting:  cfg.DBOptions.Reporting,
+		GCInterval: cfg.DBOptions.GCInterval,
+	}
+
 	db, err := kv.New(ctx, logger, options)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open db")
@@ -407,10 +386,8 @@ func setupDB(ctx context.Context, logger *zap.Logger, options basedb.Options, et
 
 	migrationOpts := migrations.Options{
 		Db:      db,
-		DbPath:  options.Path,
-		Network: eth2Network,
-
-		SP: options.SyncWrites,
+		SpDb:    spDB,
+		Network: network,
 	}
 	applied, err := migrations.Run(ctx, logger, migrationOpts)
 	if err != nil {
@@ -441,6 +418,37 @@ func setupDB(ctx context.Context, logger *zap.Logger, options basedb.Options, et
 		return nil, err
 	}
 	logger.Debug("post-migrations garbage collection completed", fields.Duration(start))
+
+	return db, nil
+}
+
+func setupSlashingProtectionDB(ctx context.Context, logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.BadgerDB, error) {
+	// Validate that provided slashing protection DB path directory exists
+	if _, err := os.Stat(cfg.SlashingProtectionOptions.DBPath); os.IsNotExist(err) {
+		logger.Fatal("Slashing protection database does not exist. Please create it using the 'create-slashing-protection-db' command.")
+	}
+
+	// Validate that the slashing protection DB and node DB are not in the same directory
+	if filepath.Dir(cfg.DBOptions.Path) == filepath.Dir(cfg.SlashingProtectionOptions.DBPath) {
+		logger.Fatal("node DB and slashing protection DB should not be in the same directory")
+	}
+
+	options := basedb.Options{
+		Path:       cfg.SlashingProtectionOptions.DBPath,
+		SyncWrites: true,
+	}
+
+	db, err := kv.New(ctx, logger, options)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open slashing protection DB: %w", err)
+	}
+
+	// If the sp db was created with cli command, it should include "genesis" version of the db
+	// this way we can validate the db was created via the cli command. if not, we should fail
+	value, found, err := db.Get([]byte(eth2Network.GetBeaconNetwork()), []byte(ekm.GenesisVersionPrefix))
+	if err != nil || !found || !bytes.Equal(value.Value, []byte(ekm.GenesisVersion)) {
+		logger.Fatal("Slashing protection DB was not created via cli command. Please create it using the 'create-slashing-protection-db' command.", zap.Error(err))
+	}
 
 	return db, nil
 }
