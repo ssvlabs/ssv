@@ -77,7 +77,7 @@ func New(pctx context.Context, beaconNetwork BeaconNetwork, role spectypes.Beaco
 	}
 }
 
-// RoundTimeout calculates the timeout duration for a specific role, height, and round.
+// roundTimeout calculates the timeout duration for a specific role, height, and round.
 //
 // Timeout Rules:
 // - For roles BNRoleAttester and BNRoleSyncCommittee, the base timeout is 1/3 of the slot duration.
@@ -98,7 +98,7 @@ func New(pctx context.Context, beaconNetwork BeaconNetwork, role spectypes.Beaco
 // To ensure synchronized timeouts across instances, the timeout is based on the duty start time,
 // which is calculated from the slot height. The base timeout is set based on the role,
 // and the additional timeout is added based on the round number.
-func (t *RoundTimer) RoundTimeout(height specqbft.Height, round specqbft.Round) time.Duration {
+func (t *RoundTimer) roundTimeout(height specqbft.Height, round specqbft.Round) time.Duration {
 	// Initialize duration to zero
 	var baseDuration time.Duration
 
@@ -153,7 +153,7 @@ func (t *RoundTimer) Round() specqbft.Round {
 // TimeoutForRound times out for a given round.
 func (t *RoundTimer) TimeoutForRound(height specqbft.Height, round specqbft.Round) {
 	atomic.StoreInt64(&t.round, int64(round))
-	timeout := t.RoundTimeout(height, round)
+	timeout := t.roundTimeout(height, round)
 
 	// preparing the underlying timer
 	timer := t.timer

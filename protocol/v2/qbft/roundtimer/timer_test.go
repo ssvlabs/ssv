@@ -87,7 +87,7 @@ func testTimeoutForRound(t *testing.T, role spectypes.BeaconRole, threshold spec
 
 	timer.TimeoutForRound(specqbft.FirstHeight, threshold)
 	require.Equal(t, int32(0), atomic.LoadInt32(&count))
-	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, threshold) + time.Millisecond*10)
+	<-time.After(timer.roundTimeout(specqbft.FirstHeight, threshold) + time.Millisecond*10)
 	require.Equal(t, int32(1), atomic.LoadInt32(&count))
 }
 
@@ -102,10 +102,10 @@ func testTimeoutForRoundElapsed(t *testing.T, role spectypes.BeaconRole, thresho
 	timer := setupTimer(mockBeaconNetwork, onTimeout, role, threshold)
 
 	timer.TimeoutForRound(specqbft.FirstHeight, specqbft.FirstRound)
-	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, specqbft.FirstRound) / 2)
+	<-time.After(timer.roundTimeout(specqbft.FirstHeight, specqbft.FirstRound) / 2)
 	timer.TimeoutForRound(specqbft.FirstHeight, specqbft.Round(2)) // reset before elapsed
 	require.Equal(t, int32(0), atomic.LoadInt32(&count))
-	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, specqbft.Round(2)) + time.Millisecond*10)
+	<-time.After(timer.roundTimeout(specqbft.FirstHeight, specqbft.Round(2)) + time.Millisecond*10)
 	require.Equal(t, int32(1), atomic.LoadInt32(&count))
 }
 
@@ -156,7 +156,7 @@ func testTimeoutForRoundMulti(t *testing.T, role spectypes.BeaconRole, threshold
 	}
 
 	// Wait a bit more than the expected timeout to ensure all timers have triggered
-	<-time.After(timer.RoundTimeout(specqbft.FirstHeight, specqbft.FirstRound) + time.Millisecond*100)
+	<-time.After(timer.roundTimeout(specqbft.FirstHeight, specqbft.FirstRound) + time.Millisecond*100)
 
 	require.Equal(t, int32(4), atomic.LoadInt32(&count), "All four timers should have triggered")
 
