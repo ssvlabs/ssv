@@ -64,6 +64,7 @@ func TestSlashingProtectionMigration(t *testing.T) {
 	}
 
 	spDB, err := kv.New(ctx, logger, options)
+	require.NoError(t, err)
 	spStorage := ekm.NewSlashingProtectionStorage(spDB, logger, []byte(network.Beacon.GetBeaconNetwork()))
 
 	// Migration process
