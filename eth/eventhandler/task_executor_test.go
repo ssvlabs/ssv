@@ -190,7 +190,7 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 	}
 	happyFlow := []string{
 		"successfully setup operator keys",
-		"setting validator controller",
+		"setting up validator controller",
 		"malformed event: failed to verify signature",
 		"processed events from block",
 	}
