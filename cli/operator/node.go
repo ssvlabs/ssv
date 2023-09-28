@@ -1,7 +1,6 @@
 package operator
 
 import (
-	"bytes"
 	"context"
 	"crypto/x509"
 	"fmt"
@@ -445,8 +444,9 @@ func setupSlashingProtectionDB(ctx context.Context, logger *zap.Logger, network 
 
 	// If the sp db was created with cli command, it should include "genesis" version of the db
 	// this way we can validate the db was created via the cli command. if not, we should fail
-	value, found, err := db.Get([]byte(network.GetBeaconNetwork()), []byte(ekm.GenesisVersionPrefix))
-	if err != nil || !found || !bytes.Equal(value.Value, []byte(ekm.GenesisVersion)) {
+	storage := ekm.NewSlashingProtectionStorage(db, logger, []byte(network.GetBeaconNetwork()))
+	value, found, err := storage.GetVersion()
+	if err != nil || !found || value != ekm.GenesisVersion {
 		return nil, fmt.Errorf("slashing protection database was not created via cli command, please create it using the 'create-slashing-protection-db' command: %w", err)
 	}
 
