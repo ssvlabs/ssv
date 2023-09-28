@@ -18,7 +18,7 @@ var migration_4_standalone_slashing_data = Migration{
 			legacySPStorage := opt.legacySlashingProtectionStorage(logger)
 			spStorage := opt.slashingProtectionStorage(logger)
 
-			accounts, err := signerStorage.ListAccounts()
+			accounts, err := signerStorage.ListAccountsTxn(txn)
 			if err != nil {
 				return fmt.Errorf("failed to list accounts: %w", err)
 			}
