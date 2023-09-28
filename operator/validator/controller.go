@@ -618,25 +618,22 @@ func CreateDutyExecuteMsg(duty *spectypes.Duty, pubKey phase0.BLSPubKey, domain 
 // CommitteeActiveIndices fetches indices of in-committee validators who are either attesting or queued and
 // whose activation epoch is not greater than the passed epoch. It logs a warning if an error occurs.
 func (c *controller) CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
-	var indices []phase0.ValidatorIndex
-
-	for _, v := range c.validatorsMap.GetAll() {
+	validators := c.validatorsMap.GetAll()
+	indices := make([]phase0.ValidatorIndex, 0, len(validators))
+	for _, v := range validators {
 		if isShareActive(epoch)(v.Share) {
 			indices = append(indices, v.Share.BeaconMetadata.Index)
 		}
 	}
-
 	return indices
 }
 
 func (c *controller) AllActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
-	var indices []phase0.ValidatorIndex
-
 	shares := c.sharesStorage.List(nil, isShareActive(epoch))
-	for _, share := range shares {
-		indices = append(indices, share.BeaconMetadata.Index)
+	indices := make([]phase0.ValidatorIndex, len(shares))
+	for i, share := range shares {
+		indices[i] = share.BeaconMetadata.Index
 	}
-
 	return indices
 }
 
