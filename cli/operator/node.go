@@ -62,23 +62,27 @@ type KeyStore struct {
 	PasswordFile   string `yaml:"PasswordFile" env:"PASSWORD_FILE" env-description:"Password for operator private key file decryption"`
 }
 
+type MessageValidation struct {
+	VerifySignatures bool `yaml:"VerifySignatures" env:"MESSAGE_VALIDATION_VERIFY_SIGNATURES" env-default:"false" env-description:"Experimental feature to verify signatures in pubsub's message validation instead of in consensus protocol."`
+}
+
 type config struct {
-	global_config.GlobalConfig    `yaml:"global"`
-	DBOptions                     basedb.Options                   `yaml:"db"`
-	SSVOptions                    operator.Options                 `yaml:"ssv"`
-	ExecutionClient               executionclient.ExecutionOptions `yaml:"eth1"` // TODO: execution_client in yaml
-	ConsensusClient               beaconprotocol.Options           `yaml:"eth2"` // TODO: consensus_client in yaml
-	P2pNetworkConfig              p2pv1.Config                     `yaml:"p2p"`
-	KeyStore                      KeyStore                         `yaml:"KeyStore"`
-	OperatorPrivateKey            string                           `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
-	MetricsAPIPort                int                              `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port to listen on for the metrics API."`
-	EnableProfile                 bool                             `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
-	NetworkPrivateKey             string                           `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
-	WsAPIPort                     int                              `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"Port to listen on for the websocket API."`
-	WithPing                      bool                             `yaml:"WithPing" env:"WITH_PING" env-description:"Whether to send websocket ping messages'"`
-	SSVAPIPort                    int                              `yaml:"SSVAPIPort" env:"SSV_API_PORT" env-description:"Port to listen on for the SSV API."`
-	LocalEventsPath               string                           `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"path to local events"`
-	MsgValidationVerifySignatures bool                             `yaml:"MsgValidationVerifySignatures" env:"MSG_VALIDATION_VERIFY_SIGNATURES" env-description:"verify signatures in message validation instead of in protocol"`
+	global_config.GlobalConfig `yaml:"global"`
+	DBOptions                  basedb.Options                   `yaml:"db"`
+	SSVOptions                 operator.Options                 `yaml:"ssv"`
+	ExecutionClient            executionclient.ExecutionOptions `yaml:"eth1"` // TODO: execution_client in yaml
+	ConsensusClient            beaconprotocol.Options           `yaml:"eth2"` // TODO: consensus_client in yaml
+	P2pNetworkConfig           p2pv1.Config                     `yaml:"p2p"`
+	KeyStore                   KeyStore                         `yaml:"KeyStore"`
+	OperatorPrivateKey         string                           `yaml:"OperatorPrivateKey" env:"OPERATOR_KEY" env-description:"Operator private key, used to decrypt contract events"`
+	MetricsAPIPort             int                              `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port to listen on for the metrics API."`
+	EnableProfile              bool                             `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
+	NetworkPrivateKey          string                           `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
+	WsAPIPort                  int                              `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"Port to listen on for the websocket API."`
+	WithPing                   bool                             `yaml:"WithPing" env:"WITH_PING" env-description:"Whether to send websocket ping messages'"`
+	SSVAPIPort                 int                              `yaml:"SSVAPIPort" env:"SSV_API_PORT" env-description:"Port to listen on for the SSV API."`
+	LocalEventsPath            string                           `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"path to local events"`
+	MessageValidation          MessageValidation                `yaml:"MessageValidation"`
 }
 
 var cfg config
@@ -176,14 +180,14 @@ var StartNodeCmd = &cobra.Command{
 			validation.WithMetrics(metricsReporter),
 			validation.WithDutyStore(dutyStore),
 			validation.WithOwnOperatorID(operatorData.ID),
-			validation.WithSignatureVerification(cfg.MsgValidationVerifySignatures),
+			validation.WithSignatureVerification(cfg.MessageValidation.VerifySignatures),
 		)
 
 		cfg.P2pNetworkConfig.Metrics = metricsReporter
 		cfg.P2pNetworkConfig.MessageValidator = messageValidator
 		cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
 		// if signature check is enabled in message validation then it's disabled in validator controller and vice versa
-		cfg.SSVOptions.ValidatorOptions.VerifySignatures = !cfg.MsgValidationVerifySignatures
+		cfg.SSVOptions.ValidatorOptions.VerifySignatures = !cfg.MessageValidation.VerifySignatures
 
 		p2pNetwork := setupP2P(logger, db)
 
