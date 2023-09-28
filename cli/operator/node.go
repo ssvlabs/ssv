@@ -365,7 +365,7 @@ func setupGlobal(cmd *cobra.Command) (*zap.Logger, error) {
 	return zap.L(), nil
 }
 
-func setupDB(ctx context.Context, logger *zap.Logger, network beaconprotocol.Network, spDB *kv.BadgerDB) (*kv.BadgerDB, error) {
+func setupDB(ctx context.Context, logger *zap.Logger, network beaconprotocol.BeaconNetwork, spDB *kv.BadgerDB) (*kv.BadgerDB, error) {
 	options := basedb.Options{
 		Path:       cfg.DBOptions.Path,
 		Reporting:  cfg.DBOptions.Reporting,
@@ -422,15 +422,15 @@ func setupDB(ctx context.Context, logger *zap.Logger, network beaconprotocol.Net
 	return db, nil
 }
 
-func setupSlashingProtectionDB(ctx context.Context, logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.BadgerDB, error) {
+func setupSlashingProtectionDB(ctx context.Context, logger *zap.Logger, network beaconprotocol.BeaconNetwork) (*kv.BadgerDB, error) {
 	// Validate that provided slashing protection DB path directory exists
 	if _, err := os.Stat(cfg.SlashingProtectionOptions.DBPath); os.IsNotExist(err) {
-		logger.Fatal("Slashing protection database does not exist. Please create it using the 'create-slashing-protection-db' command.")
+		return nil, fmt.Errorf("slashing protection database does not exist, please create it using the 'create-slashing-protection-db' command: %w", err)
 	}
 
 	// Validate that the slashing protection DB and node DB are not in the same directory
 	if filepath.Dir(cfg.DBOptions.Path) == filepath.Dir(cfg.SlashingProtectionOptions.DBPath) {
-		logger.Fatal("node DB and slashing protection DB should not be in the same directory")
+		return nil, fmt.Errorf("slashing protection database and node database cannot be in the same directory")
 	}
 
 	options := basedb.Options{
@@ -445,9 +445,9 @@ func setupSlashingProtectionDB(ctx context.Context, logger *zap.Logger, eth2Netw
 
 	// If the sp db was created with cli command, it should include "genesis" version of the db
 	// this way we can validate the db was created via the cli command. if not, we should fail
-	value, found, err := db.Get([]byte(eth2Network.GetBeaconNetwork()), []byte(ekm.GenesisVersionPrefix))
+	value, found, err := db.Get([]byte(network.GetBeaconNetwork()), []byte(ekm.GenesisVersionPrefix))
 	if err != nil || !found || !bytes.Equal(value.Value, []byte(ekm.GenesisVersion)) {
-		logger.Fatal("Slashing protection DB was not created via cli command. Please create it using the 'create-slashing-protection-db' command.", zap.Error(err))
+		return nil, fmt.Errorf("slashing protection database was not created via cli command, please create it using the 'create-slashing-protection-db' command: %w", err)
 	}
 
 	return db, nil
