@@ -31,7 +31,7 @@ var CreateSlashingProtectionDBCmd = &cobra.Command{
 	Use:   "create-slashing-protection-db",
 	Short: "Create the slashing protection database",
 	Run: func(cmd *cobra.Command, args []string) {
-		logger := zap.L().Named(logging.NameExportKeys)
+		logger := zap.L().Named(logging.NameCreateSlashingProtectionDB)
 
 		configPath, err := GetConfigPathFlagValue(cmd)
 		if err != nil {

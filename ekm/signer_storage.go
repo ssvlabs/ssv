@@ -294,8 +294,3 @@ func (s *signerStorage) decrypt(data []byte) ([]byte, error) {
 	nonce, ciphertext := data[:nonceSize], data[nonceSize:]
 	return gcm.Open(nil, nonce, ciphertext, nil)
 }
-
-// BeaconNetwork TODO: remove this method
-//func (s *signerStorage) BeaconNetwork() beacon.BeaconNetwork {
-//	return s.network
-//}
