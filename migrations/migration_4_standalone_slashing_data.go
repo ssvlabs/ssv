@@ -44,11 +44,6 @@ var migration_4_standalone_slashing_data = Migration{
 					return fmt.Errorf("failed to save highest attestation for share %s: %w", hex.EncodeToString(sharePubKey), err)
 				}
 
-				err = legacySPStorage.RemoveHighestAttestation(sharePubKey)
-				if err != nil {
-					return fmt.Errorf("failed to remove highest attestation for share %s: %w", hex.EncodeToString(sharePubKey), err)
-				}
-
 				// migrate highest proposal slashing protection data
 				highProposal, found, err := legacySPStorage.RetrieveHighestProposal(sharePubKey)
 				if err != nil {
@@ -65,13 +60,9 @@ var migration_4_standalone_slashing_data = Migration{
 				if err != nil {
 					return fmt.Errorf("failed to save highest proposal for share %s: %w", hex.EncodeToString(sharePubKey), err)
 				}
-
-				err = legacySPStorage.RemoveHighestProposal(sharePubKey)
-				if err != nil {
-					return fmt.Errorf("failed to remove highest proposal for share %s: %w", hex.EncodeToString(sharePubKey), err)
-				}
 			}
 
+			// NOTE: skip removing legacy data, for unexpected migration behavior to rescue the slashing protection data
 			return completed(txn)
 		})
 	},
