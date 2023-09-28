@@ -129,19 +129,16 @@ func GetDBPathFlagValue(c *cobra.Command) (string, error) {
 		return "", err
 	}
 
-	if dbPath != "" {
-		if cfg.DBOptions.Path != "" {
-			// Validate that the slashing protection DB and node DB are not in the same directory
-			if filepath.Dir(dbPath) == filepath.Dir(cfg.DBOptions.Path) {
-				return "", fmt.Errorf("node DB and slashing protection DB should not be in the same directory")
-			}
-		}
-
-		return dbPath, nil
+	if dbPath == "" && cfg.SlashingProtectionOptions.DBPath != "" {
+		dbPath = cfg.SlashingProtectionOptions.DBPath
 	}
 
-	if cfg.SlashingProtectionOptions.DBPath != "" {
-		return cfg.SlashingProtectionOptions.DBPath, nil
+	if dbPath != "" && cfg.DBOptions.Path != "" {
+		// Validate that the slashing protection DB and node DB are not in the same directory
+		if filepath.Dir(dbPath) == filepath.Dir(cfg.DBOptions.Path) {
+			return "", fmt.Errorf("node DB and slashing protection DB should not be in the same directory")
+		}
+		return dbPath, nil
 	}
 
 	return "", fmt.Errorf("no slashing protection database path provided")
