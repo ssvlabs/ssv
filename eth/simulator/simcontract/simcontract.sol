@@ -52,20 +52,43 @@ contract Callable {
         _operatorId += 1;
         emit OperatorAdded(_operatorId, msg.sender, publicKey, fee);
     }
-    function removeOperator(uint64 operatorId) public {emit OperatorRemoved(operatorId);}
+
+    function removeOperator(uint64 operatorId) public {
+        emit OperatorRemoved(operatorId);
+    }
+
     function registerValidator(
         bytes calldata publicKey,
         uint64[] memory operatorIds,
         bytes calldata sharesData,
         uint256 amount,
         Cluster memory cluster
-    ) public { emit ValidatorAdded(msg.sender, operatorIds, publicKey, sharesData, cluster);}
+    ) public {
+        emit ValidatorAdded(msg.sender, operatorIds, publicKey, sharesData, cluster);
+    }
+
     function removeValidator(
         bytes calldata publicKey,
         uint64[] calldata operatorIds,
         Cluster memory cluster
-    ) public {emit ValidatorRemoved(msg.sender, operatorIds, publicKey, cluster);}
-    function liquidate(address clusterOwner, uint64[] memory operatorIds, Cluster memory cluster) public {emit ClusterLiquidated(clusterOwner, operatorIds, cluster);}
-    function reactivate(uint64[] calldata operatorIds, uint256 amount, Cluster memory cluster) public {emit ClusterReactivated(msg.sender, operatorIds, cluster);}
+    ) public {
+        emit ValidatorRemoved(msg.sender, operatorIds, publicKey, cluster);
+    }
+
+    function liquidate(address clusterOwner,
+        uint64[] memory operatorIds,
+        Cluster memory cluster
+    ) public {
+        emit ClusterLiquidated(msg.sender, operatorIds, cluster);
+    }
+
+    function reactivate(
+        uint64[] calldata operatorIds,
+        uint256 amount,
+        Cluster memory cluster
+    ) public {
+        emit ClusterReactivated(msg.sender, operatorIds, cluster);
+    }
+
     function setFeeRecipientAddress(address recipientAddress) public {emit FeeRecipientAddressUpdated(msg.sender, recipientAddress);}
 }
