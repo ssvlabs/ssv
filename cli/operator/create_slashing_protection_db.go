@@ -2,18 +2,18 @@ package operator
 
 import (
 	"fmt"
-	"log"
 	"path/filepath"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ekm"
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
-	"github.com/bloxapp/ssv/utils/cliflag"
 )
 
 // Flag names.
@@ -31,25 +31,27 @@ var CreateSlashingProtectionDBCmd = &cobra.Command{
 	Use:   "create-slashing-protection-db",
 	Short: "Create the slashing protection database",
 	Run: func(cmd *cobra.Command, args []string) {
+		logger := zap.L().Named(logging.NameExportKeys)
+
 		configPath, err := GetConfigPathFlagValue(cmd)
 		if err != nil {
-			log.Fatal("failed to get config path flag value: ", err)
+			logger.Panic("failed to get config path flag value: ", zap.Error(err))
 		}
 
 		if configPath != "" {
 			if err := cleanenv.ReadConfig(configPath, &cfg); err != nil {
-				log.Fatal("failed to read config", err)
+				logger.Panic("failed to read config: ", zap.Error(err))
 			}
 		}
 
 		network, err := GetNetworkFlagValue(cmd)
 		if err != nil {
-			log.Fatal("failed to get network flag value", err)
+			logger.Panic("failed to get network flag value: ", zap.Error(err))
 		}
 
 		dbPath, err := GetDBPathFlagValue(cmd)
 		if err != nil {
-			log.Fatal("failed to get db path flag value", err)
+			logger.Panic("failed to get db path flag value", zap.Error(err))
 		}
 
 		options := basedb.Options{
@@ -58,26 +60,23 @@ var CreateSlashingProtectionDBCmd = &cobra.Command{
 		}
 		db, err := kv.New(cmd.Context(), nil, options)
 		if err != nil {
-			log.Fatal("failed to create slashing protection db", err)
+			logger.Panic("failed to create slashing protection db: ", zap.Error(err))
 		}
 
-		// Set the "genesis" version
-		err = db.Update(func(txn basedb.Txn) error {
-			return txn.Set([]byte(network), []byte(ekm.GenesisVersionPrefix), []byte(ekm.GenesisVersion))
-		})
-		if err != nil {
-			log.Fatal("failed to set genesis version", err)
+		storage := ekm.NewSlashingProtectionStorage(db, logger, []byte(network))
+		if err = storage.SetVersion(ekm.GenesisVersion); err != nil {
+			logger.Panic("failed to set genesis version: ", zap.Error(err))
 		}
 
 		if err := db.Close(); err != nil {
-			log.Fatal("failed to close slashing protection db", err)
+			logger.Panic("failed to close slashing protection db: ", zap.Error(err))
 		}
 	},
 }
 
 // AddConfigPathFlagValue adds the config path flag to the command
 func AddConfigPathFlagValue(c *cobra.Command) {
-	cliflag.AddPersistentStringFlag(c, configPathFlag, "", "Path to the config file ", false)
+	c.Flags().String(configPathFlag, "", "Path to the config file")
 }
 
 // GetConfigPathFlagValue gets the config path flag from the command or from the global args
@@ -96,7 +95,7 @@ func GetConfigPathFlagValue(c *cobra.Command) (string, error) {
 
 // AddNetworkFlagValue adds the network flag to the command
 func AddNetworkFlagValue(c *cobra.Command) {
-	cliflag.AddPersistentStringFlag(c, networkConfigNameFlag, "", "Network config name: one of the supported network config names", false)
+	c.Flags().String(networkConfigNameFlag, "", "Network config name: one of the supported network config names")
 }
 
 // GetNetworkFlagValue gets the network flag from the command or config file
@@ -120,7 +119,7 @@ func GetNetworkFlagValue(c *cobra.Command) (spectypes.BeaconNetwork, error) {
 
 // AddDBPathFlagValue adds the db path flag to the command
 func AddDBPathFlagValue(c *cobra.Command) {
-	cliflag.AddPersistentStringFlag(c, dbPathFlag, "", "Path to create the slashing protection DB at", false)
+	c.Flags().String(dbPathFlag, "", "Path to create the slashing protection DB at")
 }
 
 // GetDBPathFlagValue gets the db path flag from the command or config file
