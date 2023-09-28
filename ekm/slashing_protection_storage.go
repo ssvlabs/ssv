@@ -18,8 +18,8 @@ const (
 	highestAttPrefix      = prefix + "highest_att-"
 	highestProposalPrefix = prefix + "highest_prop-"
 
-	// GenesisVersionPrefix is the version prefix key of slashing protection DB
-	GenesisVersionPrefix = "genesis_version"
+	// versionPrefix is the version prefix key of slashing protection DB
+	versionPrefix = "version"
 	// GenesisVersion is the genesis version of the slashing protection DB
 	GenesisVersion = "0x0"
 )
@@ -29,6 +29,11 @@ type SpStorage interface {
 
 	RemoveHighestAttestation(pubKey []byte) error
 	RemoveHighestProposal(pubKey []byte) error
+
+	// SetVersion saves the version of the slashing protection DB
+	SetVersion(version string) error
+	// GetVersion returns the version of the slashing protection DB
+	GetVersion() (string, bool, error)
 }
 
 type spStorage struct {
@@ -37,6 +42,28 @@ type spStorage struct {
 	lock   sync.RWMutex
 
 	prefix []byte
+}
+
+func (s *spStorage) SetVersion(version string) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	return s.db.Set([]byte(versionPrefix), nil, []byte(version))
+}
+
+func (s *spStorage) GetVersion() (string, bool, error) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	obj, found, err := s.db.Get([]byte(versionPrefix), nil)
+	if err != nil {
+		return "", found, errors.Wrap(err, "failed to get version")
+	}
+	if !found {
+		return "", found, nil
+	}
+
+	return string(obj.Value), found, nil
 }
 
 func NewSlashingProtectionStorage(db basedb.Database, logger *zap.Logger, prefix []byte) SpStorage {
