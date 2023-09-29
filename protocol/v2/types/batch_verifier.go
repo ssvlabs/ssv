@@ -2,7 +2,6 @@ package types
 
 import (
 	"fmt"
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -13,11 +12,7 @@ import (
 	"golang.org/x/exp/maps"
 )
 
-var Verifier = NewBatchVerifier(runtime.NumCPU(), 10, time.Millisecond*5)
-
-func init() {
-	go Verifier.Start()
-}
+// TODO: remove the file after switching to RSA
 
 const messageSize = 32
 
