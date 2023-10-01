@@ -66,11 +66,11 @@ func (o Options) signerStorage(logger *zap.Logger) ekm.SignerStorage {
 	return ekm.NewSignerStorage(o.Db, logger, network, []byte(network))
 }
 
-func (o Options) legacySlashingProtectionStorage(logger *zap.Logger) ekm.SpStorage {
+func (o Options) legacySlashingProtectionStorage(logger *zap.Logger) ekm.SPStorage {
 	return ekm.NewSlashingProtectionStorage(o.Db, logger, []byte(o.Network.GetBeaconNetwork()))
 }
 
-func (o Options) slashingProtectionStorage(logger *zap.Logger) ekm.SpStorage {
+func (o Options) slashingProtectionStorage(logger *zap.Logger) ekm.SPStorage {
 	return ekm.NewSlashingProtectionStorage(o.SpDb, logger, []byte(o.Network.GetBeaconNetwork()))
 }
 
