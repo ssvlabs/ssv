@@ -24,7 +24,8 @@ const (
 	GenesisVersion = "0x0"
 )
 
-type SpStorage interface {
+// SPStorage is the interface for slashing protection storage.
+type SPStorage interface {
 	core.SlashingStore
 
 	RemoveHighestAttestation(pubKey []byte) error
@@ -66,7 +67,7 @@ func (s *spStorage) GetVersion() (string, bool, error) {
 	return string(obj.Value), found, nil
 }
 
-func NewSlashingProtectionStorage(db basedb.Database, logger *zap.Logger, prefix []byte) SpStorage {
+func NewSlashingProtectionStorage(db basedb.Database, logger *zap.Logger, prefix []byte) SPStorage {
 	return &spStorage{
 		db:     db,
 		logger: logger.Named(logging.NameSlashingProtectionStorage).Named(fmt.Sprintf("%sstorage", prefix)),

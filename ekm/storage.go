@@ -14,12 +14,12 @@ const (
 // Storage represents the interface for ssv node storage
 type Storage interface {
 	SignerStorage
-	SpStorage
+	SPStorage
 }
 
 type storage struct {
 	SignerStorage
-	SpStorage
+	SPStorage
 }
 
 func NewEKMStorage(db, spDB basedb.Database, network spectypes.BeaconNetwork, logger *zap.Logger) Storage {
