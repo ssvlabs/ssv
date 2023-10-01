@@ -256,7 +256,6 @@ func TestDropRegistryData(t *testing.T) {
 	nodeStorage, err = NewNodeStorage(logger, db)
 	require.NoError(t, err)
 
-	signerStorage = ekm.NewSignerStorage(db, logger, network.Beacon.GetBeaconNetwork(), []byte(network.Beacon.GetBeaconNetwork()))
 	km, err = ekm.NewETHKeyManagerSigner(logger, db, spDB, *network, true, "")
 	require.NoError(t, err)
 
@@ -273,10 +272,6 @@ func TestDropRegistryData(t *testing.T) {
 
 	// Re-open storage and check again that everything is still dropped.
 	nodeStorage, err = NewNodeStorage(logger, db)
-	require.NoError(t, err)
-
-	signerStorage = ekm.NewSignerStorage(db, logger, network.Beacon.GetBeaconNetwork(), []byte(network.Beacon.GetBeaconNetwork()))
-	km, err = ekm.NewETHKeyManagerSigner(logger, db, spDB, *network, true, "")
 	require.NoError(t, err)
 
 	requireSaved(t, 0, 0, 0)
