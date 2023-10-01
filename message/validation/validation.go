@@ -65,10 +65,7 @@ type ConsensusState struct {
 // GetSignerState retrieves the state for the given signer.
 // Returns nil if the signer is not found.
 func (cs *ConsensusState) GetSignerState(signer spectypes.OperatorID) *SignerState {
-	signerState, ok := cs.Signers.Get(signer)
-	if !ok {
-		return nil
-	}
+	signerState, _ := cs.Signers.Get(signer)
 	return signerState
 }
 
