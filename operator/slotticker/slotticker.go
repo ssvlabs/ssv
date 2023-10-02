@@ -40,7 +40,7 @@ type slotTicker struct {
 	slot         phase0.Slot
 }
 
-// `New` returns a goroutine-free `SlotTicker` implementation which is not thread-safe.
+// New returns a goroutine-free SlotTicker implementation which is not thread-safe.
 func New(cfgProvider ConfigProvider) *slotTicker {
 	genesisTime := cfgProvider.GetGenesisTime()
 	slotDuration := cfgProvider.SlotDurationSec()

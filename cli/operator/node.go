@@ -147,9 +147,11 @@ var StartNodeCmd = &cobra.Command{
 		cfg.ConsensusClient.GasLimit = spectypes.DefaultGasLimit
 		cfg.ConsensusClient.Network = networkConfig.Beacon.GetNetwork()
 
-		consensusClient := setupConsensusClient(logger, operatorData.ID, func() slotticker.SlotTicker {
+		slotTickerProvider := func() slotticker.SlotTicker {
 			return slotticker.New(networkConfig)
-		})
+		}
+
+		consensusClient := setupConsensusClient(logger, operatorData.ID, slotTickerProvider)
 
 		executionClient, err := executionclient.New(
 			cmd.Context(),
@@ -214,9 +216,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 		cfg.SSVOptions.Metrics = metricsReporter
 
-		operatorNode = operator.New(logger, cfg.SSVOptions, func() slotticker.SlotTicker {
-			return slotticker.New(networkConfig)
-		})
+		operatorNode = operator.New(logger, cfg.SSVOptions, slotTickerProvider)
 
 		if cfg.MetricsAPIPort > 0 {
 			go startMetricsHandler(cmd.Context(), logger, db, metricsReporter, cfg.MetricsAPIPort, cfg.EnableProfile)
