@@ -209,7 +209,7 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 	}
 
 	isOperatorShare := validatorShare.BelongsToOperator(eh.operatorData.GetOperatorData().ID)
-	if isOperatorShare {
+	if isOperatorShare && !validatorShare.Invalid {
 		eh.metrics.ValidatorInactive(event.PublicKey)
 		ownShare = validatorShare
 		logger = logger.With(zap.Bool("own_validator", isOperatorShare))
@@ -233,6 +233,8 @@ func (eh *EventHandler) handleShareCreation(
 		sharePublicKeys,
 		encryptedKeys,
 	)
+	//					 .....
+	//[signature, pubkey, part1, part2, .., part4]
 	if err != nil {
 		return nil, fmt.Errorf("could not extract validator share from event: %w", err)
 	}
@@ -300,6 +302,7 @@ func validatorAddedEventToShare(
 
 		shareSecret = &bls.SecretKey{}
 		decryptedSharePrivateKey, err := rsaencryption.DecodeKey(operatorPrivateKey, encryptedKeys[i])
+		/// ... => save()
 		if err != nil {
 			return nil, nil, &MalformedEventError{
 				Err: fmt.Errorf("could not decrypt share private key: %w", err),
