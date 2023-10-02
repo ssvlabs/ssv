@@ -37,8 +37,8 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 			return
 
 		case <-h.ticker.Next():
-			shares := h.validatorController.GetOperatorShares()
 			slot := h.ticker.Slot()
+			shares := h.validatorController.GetOperatorShares()
 			sent := 0
 
 			for _, share := range shares {

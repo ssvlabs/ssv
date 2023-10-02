@@ -231,11 +231,15 @@ func (gc *goClient) createValidatorRegistration(pubkey []byte, feeRecipient bell
 	return signedReg
 }
 
-func (gc *goClient) startSlotTicker(slotTickerProvider slotticker.Provider) {
+func (gc *goClient) registrationSubmitter(slotTickerProvider slotticker.Provider) {
 	ticker := slotTickerProvider()
 	for {
-		<-ticker.Next()
-		gc.submitRegistrationsFromCache(ticker.Slot())
+		select {
+		case <-gc.ctx.Done():
+			return
+		case <-ticker.Next():
+			gc.submitRegistrationsFromCache(ticker.Slot())
+		}
 	}
 }
 

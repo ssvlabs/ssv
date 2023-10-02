@@ -59,9 +59,7 @@ func TestSlotNumberConsistency(t *testing.T) {
 		<-ticker.Next()
 		slot := ticker.Slot()
 
-		if lastSlot != 0 {
-			require.Equal(t, lastSlot+1, slot)
-		}
+		require.Equal(t, lastSlot+1, slot)
 		lastSlot = slot
 	}
 }
@@ -138,4 +136,44 @@ func TestMultipleSlotTickers(t *testing.T) {
 	// We'll allow a small buffer for drift, say 1%
 	buffer := expectedDuration * 1 / 100
 	assert.True(t, elapsed <= expectedDuration+buffer, "Expected all tickers to complete within %v but took %v", expectedDuration.String(), elapsed.String())
+}
+
+func TestSlotSkipping(t *testing.T) {
+	const (
+		numTicks     = 100
+		skipInterval = 10 // Introduce a delay every 10 ticks
+		slotDuration = 20 * time.Millisecond
+	)
+
+	genesisTime := time.Now()
+	ticker := New(Config{slotDuration, genesisTime})
+
+	var lastSlot phase0.Slot
+	for i := 1; i <= numTicks; i++ { // Starting loop from 1 for ease of skipInterval check
+		select {
+		case <-ticker.Next():
+			slot := ticker.Slot()
+
+			// Ensure we never receive slots out of order or repeatedly
+			require.True(t, slot > lastSlot, "Expected slot %d to be greater than last slot %d", slot, lastSlot)
+			lastSlot = slot
+
+			// If it's the 10th tick or any multiple thereof
+			if i%skipInterval == 0 {
+				// Introduce delay to skip a slot
+				time.Sleep(slotDuration)
+
+				// Ensure the next slot we receive is exactly 2 slots ahead of the previous slot
+				<-ticker.Next()
+				slotAfterDelay := ticker.Slot()
+				require.Equal(t, lastSlot+2, slotAfterDelay, "Expected to skip a slot after introducing a delay")
+
+				// Update the slot variable to use this new slot for further iterations
+				lastSlot = slotAfterDelay
+			}
+
+		case <-time.After(2 * slotDuration): // Fail if we don't get a tick within a reasonable time
+			t.Fatalf("Did not receive expected tick for iteration %d", i)
+		}
+	}
 }

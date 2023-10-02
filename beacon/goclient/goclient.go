@@ -187,7 +187,7 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 	)
 
 	// Start registration submitter.
-	go client.startSlotTicker(slotTickerProvider)
+	go client.registrationSubmitter(slotTickerProvider)
 
 	return client, nil
 }
