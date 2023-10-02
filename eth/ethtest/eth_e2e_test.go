@@ -43,9 +43,7 @@ func TestEthExecLayer(t *testing.T) {
 	expectedNonce := registrystorage.Nonce(0)
 
 	testEnv := TestEnv{}
-
-	testFollowDistance := uint64(8)
-	testEnv.followDistance = &testFollowDistance
+	testEnv.SetDefaultFollowDistance()
 
 	defer testEnv.shutdown()
 	err := testEnv.setup(t, ctx, testAddresses, 7, 4)
