@@ -36,7 +36,7 @@ func TestCreateSlashingProtectionDBCmd(t *testing.T) {
 	tmpDir := t.TempDir()
 	require.NoError(t, cmd.Flags().Set(dbPathFlag, tmpDir))
 
-	// Run the command and expect it to fail
+	// Run the command and expect it not to fail
 	require.NotPanics(t, func() {
 		cmd.Run(cmd, []string{})
 	}, "The command should not panic if a valid DB path is provided")

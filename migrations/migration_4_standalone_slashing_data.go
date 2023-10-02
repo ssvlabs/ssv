@@ -39,8 +39,7 @@ var migration_4_standalone_slashing_data = Migration{
 				}
 
 				// save slashing protection in the new standalone storage
-				err = spStorage.SaveHighestAttestation(sharePubKey, highAtt)
-				if err != nil {
+				if err := spStorage.SaveHighestAttestation(sharePubKey, highAtt); err != nil {
 					return fmt.Errorf("failed to save highest attestation for share %s: %w", hex.EncodeToString(sharePubKey), err)
 				}
 
@@ -56,8 +55,7 @@ var migration_4_standalone_slashing_data = Migration{
 					return fmt.Errorf("highest proposal is 0 for share %s", hex.EncodeToString(sharePubKey))
 				}
 
-				err = spStorage.SaveHighestProposal(sharePubKey, highProposal)
-				if err != nil {
+				if err := spStorage.SaveHighestProposal(sharePubKey, highProposal); err != nil {
 					return fmt.Errorf("failed to save highest proposal for share %s: %w", hex.EncodeToString(sharePubKey), err)
 				}
 			}

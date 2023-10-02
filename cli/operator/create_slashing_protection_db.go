@@ -35,18 +35,16 @@ var CreateSlashingProtectionDBCmd = &cobra.Command{
 
 		configPath, err := GetConfigPathFlagValue(cmd)
 		if err != nil {
-			logger.Panic("failed to get config path flag value: ", zap.Error(err))
+			logger.Panic("failed to get config path flag value", zap.Error(err))
 		}
 
-		if configPath != "" {
-			if err := cleanenv.ReadConfig(configPath, &cfg); err != nil {
-				logger.Panic("failed to read config: ", zap.Error(err))
-			}
+		if err := cleanenv.ReadConfig(configPath, &cfg); err != nil {
+			logger.Panic("failed to read config", zap.Error(err))
 		}
 
 		network, err := GetNetworkFlagValue(cmd)
 		if err != nil {
-			logger.Panic("failed to get network flag value: ", zap.Error(err))
+			logger.Panic("failed to get network flag value", zap.Error(err))
 		}
 
 		dbPath, err := GetDBPathFlagValue(cmd)
@@ -60,7 +58,7 @@ var CreateSlashingProtectionDBCmd = &cobra.Command{
 		}
 		db, err := kv.New(cmd.Context(), nil, options)
 		if err != nil {
-			logger.Panic("failed to create slashing protection db: ", zap.Error(err))
+			logger.Panic("failed to create slashing protection db", zap.Error(err))
 		}
 
 		storage := ekm.NewSlashingProtectionStorage(db, logger, []byte(network))
@@ -69,7 +67,7 @@ var CreateSlashingProtectionDBCmd = &cobra.Command{
 		}
 
 		if err := db.Close(); err != nil {
-			logger.Panic("failed to close slashing protection db: ", zap.Error(err))
+			logger.Panic("failed to close slashing protection db", zap.Error(err))
 		}
 	},
 }
@@ -111,7 +109,7 @@ func GetNetworkFlagValue(c *cobra.Command) (spectypes.BeaconNetwork, error) {
 
 	networkConfig, err := networkconfig.GetNetworkConfigByName(networkName)
 	if err != nil {
-		return "", fmt.Errorf("failed to get network config by name: %w", err)
+		return "", fmt.Errorf("unable to get network config by name: %w", err)
 	}
 
 	return networkConfig.Beacon.GetBeaconNetwork(), nil
@@ -133,15 +131,16 @@ func GetDBPathFlagValue(c *cobra.Command) (string, error) {
 		dbPath = cfg.SlashingProtectionOptions.DBPath
 	}
 
-	if dbPath != "" && cfg.DBOptions.Path != "" {
-		// Validate that the slashing protection DB and node DB are not in the same directory
-		if filepath.Dir(dbPath) == filepath.Dir(cfg.DBOptions.Path) {
-			return "", fmt.Errorf("node DB and slashing protection DB should not be in the same directory")
-		}
-		return dbPath, nil
+	if dbPath == "" || cfg.DBOptions.Path == "" {
+		return "", fmt.Errorf("no slashing protection database path provided")
 	}
 
-	return "", fmt.Errorf("no slashing protection database path provided")
+	// Validate that the slashing protection DB and node DB are not in the same directory
+	if filepath.Dir(dbPath) == filepath.Dir(cfg.DBOptions.Path) {
+		return "", fmt.Errorf("node DB and slashing protection DB should not be in the same directory")
+	}
+
+	return dbPath, nil
 }
 
 func init() {

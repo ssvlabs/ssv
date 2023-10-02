@@ -446,8 +446,14 @@ func setupSlashingProtectionDB(ctx context.Context, logger *zap.Logger, network 
 	// this way we can validate the db was created via the cli command. if not, we should fail
 	storage := ekm.NewSlashingProtectionStorage(db, logger, []byte(network.GetBeaconNetwork()))
 	value, found, err := storage.GetVersion()
-	if err != nil || !found || value != ekm.GenesisVersion {
-		return nil, fmt.Errorf("slashing protection database was not created via cli command, please create it using the 'create-slashing-protection-db' command: %w", err)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get slashing protection DB version: %w", err)
+	}
+	if !found {
+		return nil, fmt.Errorf("slashing protection DB is missing version, please create it using the 'create-slashing-protection-db' command")
+	}
+	if value != ekm.GenesisVersion {
+		return nil, fmt.Errorf("slashing protection DB was not created via the cli command, please create it using the 'create-slashing-protection-db' command")
 	}
 
 	return db, nil
