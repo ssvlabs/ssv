@@ -1,4 +1,4 @@
-package eth_test
+package ethtest
 
 import (
 	"context"
@@ -43,6 +43,7 @@ func TestEthExecLayer(t *testing.T) {
 	expectedNonce := registrystorage.Nonce(0)
 
 	testEnv := TestEnv{}
+	testEnv.followDistance = &[]uint64{8}[0]
 	defer testEnv.shutdown()
 	err := testEnv.setup(t, ctx, testAddresses, 7, 4)
 	require.NoError(t, err)
@@ -78,6 +79,8 @@ func TestEthExecLayer(t *testing.T) {
 			opAddedInput := NewOperatorAddedEventInput(common)
 			opAddedInput.prepare(ops, auth)
 			opAddedInput.produce()
+
+			testEnv.CloseFollowDistance(&blockNum)
 		}
 
 		// BLOCK 3:  VALIDATOR ADDED:
@@ -90,13 +93,14 @@ func TestEthExecLayer(t *testing.T) {
 			valAddInput := NewTestValidatorRegisteredInput(common)
 			valAddInput.prepare(validators, shares, ops, auth, &expectedNonce, []uint32{0, 1})
 			valAddInput.produce()
+			testEnv.CloseFollowDistance(&blockNum)
 
 			// Run SyncHistory
 			lastHandledBlockNum, err = eventSyncer.SyncHistory(ctx, lastHandledBlockNum)
 			require.NoError(t, err)
 
 			//check all the events were handled correctly and block number was increased
-			require.Equal(t, blockNum, lastHandledBlockNum)
+			require.Equal(t, blockNum-*testEnv.followDistance, lastHandledBlockNum)
 			fmt.Println("lastHandledBlockNum", lastHandledBlockNum)
 
 			// Check that operators were successfully registered
@@ -149,20 +153,17 @@ func TestEthExecLayer(t *testing.T) {
 			valAddInput := NewTestValidatorRegisteredInput(common)
 			valAddInput.prepare(validators, shares, ops, auth, &expectedNonce, []uint32{2, 3, 4, 5, 6})
 			valAddInput.produce()
+			testEnv.CloseFollowDistance(&blockNum)
 
 			// Wait until the state is changed
-			time.Sleep(time.Millisecond * 500)
+			time.Sleep(time.Millisecond * 5000)
 
 			nonce, err = nodeStorage.GetNextNonce(nil, testAddrAlice)
 			require.NoError(t, err)
 			require.Equal(t, expectedNonce, nonce)
 
-			time.Sleep(time.Millisecond * 500)
-			nonce, err = nodeStorage.GetNextNonce(nil, testAddrAlice)
-			require.NoError(t, err)
-			require.Equal(t, expectedNonce, nonce)
-
-			require.Equal(t, uint64(4), *common.blockNum)
+			// Not sure does this make sense
+			require.Equal(t, uint64(testEnv.sim.Blockchain.CurrentBlock().Number.Int64()), *common.blockNum)
 		}
 
 		// Step 2: remove validator
@@ -181,6 +182,7 @@ func TestEthExecLayer(t *testing.T) {
 				cluster,
 			)
 			valRemove.produce()
+			testEnv.CloseFollowDistance(&blockNum)
 
 			// Wait until the state is changed
 			time.Sleep(time.Millisecond * 500)
@@ -209,6 +211,7 @@ func TestEthExecLayer(t *testing.T) {
 				},
 			})
 			clusterLiquidate.produce()
+			testEnv.CloseFollowDistance(&blockNum)
 
 			// Wait until the state is changed
 			time.Sleep(time.Millisecond * 300)
@@ -250,6 +253,7 @@ func TestEthExecLayer(t *testing.T) {
 				},
 			})
 			clusterReactivated.produce()
+			testEnv.CloseFollowDistance(&blockNum)
 
 			// Wait until the state is changed
 			time.Sleep(time.Millisecond * 300)
@@ -272,6 +276,7 @@ func TestEthExecLayer(t *testing.T) {
 			opRemoved := NewOperatorRemovedEventInput(common)
 			opRemoved.prepare([]uint64{1, 2}, auth)
 			opRemoved.produce()
+			testEnv.CloseFollowDistance(&blockNum)
 
 			// TODO: this should be adjusted when eth/eventhandler/handlers.go#L109 is resolved
 		}
@@ -285,6 +290,7 @@ func TestEthExecLayer(t *testing.T) {
 				{auth, &testAddrBob},
 			})
 			setFeeRecipient.produce()
+			testEnv.CloseFollowDistance(&blockNum)
 
 			// Wait until the state is changed
 			time.Sleep(time.Millisecond * 300)

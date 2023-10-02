@@ -1,22 +1,23 @@
-package eth_test
+package ethtest
 
 import (
 	"fmt"
+	"github.com/bloxapp/ssv/eth/simulator/simcontract"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
+	"math/big"
 )
 
-type SetFeeRecipientAddressInput struct {
+type testClusterReactivatedInput struct {
 	*CommonTestInput
-	events []*SetFeeRecipientAddressEventInput
+	events []*ClusterReactivatedEventInput
 }
 
-func NewSetFeeRecipientAddressInput(common *CommonTestInput) *SetFeeRecipientAddressInput {
-	return &SetFeeRecipientAddressInput{common, nil}
+func NewTestClusterReactivatedInput(common *CommonTestInput) *testClusterReactivatedInput {
+	return &testClusterReactivatedInput{common, nil}
 }
 
-func (input *SetFeeRecipientAddressInput) validate() error {
+func (input *testClusterReactivatedInput) validate() error {
 	if input.CommonTestInput == nil {
 		return fmt.Errorf("validation error: CommonTestInput is empty")
 	}
@@ -31,12 +32,13 @@ func (input *SetFeeRecipientAddressInput) validate() error {
 	return nil
 }
 
-type SetFeeRecipientAddressEventInput struct {
+type ClusterReactivatedEventInput struct {
 	auth    *bind.TransactOpts
-	address *ethcommon.Address
+	opsIds  []uint64
+	cluster *simcontract.CallableCluster
 }
 
-func (input *SetFeeRecipientAddressEventInput) validate() error {
+func (input *ClusterReactivatedEventInput) validate() error {
 	if input == nil {
 		return fmt.Errorf("validation error: empty input")
 	}
@@ -44,28 +46,32 @@ func (input *SetFeeRecipientAddressEventInput) validate() error {
 	switch {
 	case input.auth == nil:
 		return fmt.Errorf("validation error: input.auth is empty")
-	case input.address == nil:
-		return fmt.Errorf("validation error: input.address is empty")
+	case input.cluster == nil:
+		return fmt.Errorf("validation error: input.cluster is empty")
+	case len(input.opsIds) == 0:
+		return fmt.Errorf("validation error: input.opsIds is empty")
 	}
 
 	return nil
 }
 
-func (input *SetFeeRecipientAddressInput) prepare(
-	eventsToDo []*SetFeeRecipientAddressEventInput,
+func (input *testClusterReactivatedInput) prepare(
+	eventsToDo []*ClusterReactivatedEventInput,
 ) {
 	input.events = eventsToDo
 }
 
-func (input *SetFeeRecipientAddressInput) produce() {
+func (input *testClusterReactivatedInput) produce() {
 	err := input.validate()
 	require.NoError(input.t, err)
 
 	for _, event := range input.events {
 		// Call the contract method
-		_, err = input.boundContract.SimcontractTransactor.SetFeeRecipientAddress(
+		_, err = input.boundContract.SimcontractTransactor.Reactivate(
 			event.auth,
-			*event.address,
+			event.opsIds,
+			big.NewInt(100_000_000),
+			*event.cluster,
 		)
 		require.NoError(input.t, err)
 

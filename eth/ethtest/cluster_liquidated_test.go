@@ -1,4 +1,4 @@
-package eth_test
+package ethtest
 
 import (
 	"fmt"

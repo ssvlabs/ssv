@@ -1,4 +1,4 @@
-package eth_test
+package ethtest
 
 import (
 	"context"
@@ -70,7 +70,7 @@ func createNewValidator(ops []*testOperator) (*testValidatorData, error) {
 	num := uint64(len(ops))
 	validatorData.operatorsShares = make([]*testShare, num)
 
-	// derive a `hareCount` number of shares
+	// derive a `shareCount` number of shares
 	for i := uint64(1); i <= num; i++ {
 		validatorData.operatorsShares[i-1] = &testShare{
 			opId: i,
@@ -295,6 +295,6 @@ func simTestBackend(testAddresses []*ethcommon.Address) *simulator.SimulatedBack
 	}
 
 	return simulator.NewSimulatedBackend(
-		genesis, 10000000,
+		genesis, 50_000_000,
 	)
 }

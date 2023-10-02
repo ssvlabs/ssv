@@ -169,7 +169,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		}()
 
 		// Check that there is no registered operators
-		operators, err := eh.nodeStorage.ListOperators(nil, 0, 10)
+		operators, err := eh.nodeStorage.ListOperators(nil, 0, 0)
 		require.NoError(t, err)
 		require.Equal(t, 0, len(operators))
 
@@ -180,7 +180,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		blockNum++
 
 		// Check storage for the new operators
-		operators, err = eh.nodeStorage.ListOperators(nil, 0, 10)
+		operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
 		require.NoError(t, err)
 		require.Equal(t, len(ops), len(operators))
 
@@ -216,7 +216,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			}()
 
 			// Check that there is 1 registered operator
-			operators, err := eh.nodeStorage.ListOperators(nil, 0, 10)
+			operators, err := eh.nodeStorage.ListOperators(nil, 0, 0)
 			require.NoError(t, err)
 			require.Equal(t, len(ops), len(operators))
 
@@ -227,7 +227,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			blockNum++
 
 			// Check if the operator wasn't removed successfully
-			operators, err = eh.nodeStorage.ListOperators(nil, 0, 10)
+			operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
 			require.NoError(t, err)
 			require.Equal(t, len(ops), len(operators))
 		})
@@ -259,7 +259,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			}()
 
 			// Check that there is no registered operators
-			operators, err := eh.nodeStorage.ListOperators(nil, 0, 10)
+			operators, err := eh.nodeStorage.ListOperators(nil, 0, 0)
 			require.NoError(t, err)
 			require.Equal(t, len(ops), len(operators))
 
@@ -269,7 +269,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			blockNum++
 			// Check storage for the new operator
-			operators, err = eh.nodeStorage.ListOperators(nil, 0, 10)
+			operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
 			require.NoError(t, err)
 			require.Equal(t, len(ops)+1, len(operators))
 
@@ -289,7 +289,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				eventsCh <- block
 			}()
 
-			operators, err = eh.nodeStorage.ListOperators(nil, 0, 10)
+			operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
 			require.NoError(t, err)
 			require.Equal(t, len(ops)+1, len(operators))
 
@@ -301,7 +301,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 			// TODO: this should be adjusted when eth/eventhandler/handlers.go#L109 is resolved
 			// Check if the operator was removed successfully
-			//operators, err = eh.nodeStorage.ListOperators(nil, 0, 10)
+			//operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
 			//require.NoError(t, err)
 			//require.Equal(t, len(ops), len(operators))
 		})
@@ -979,7 +979,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		t.Run("test OperatorAdded + OperatorRemoved events handling", func(t *testing.T) {
 			// There are 5 ops before the test running
 			// Check that there is no registered operators
-			operators, err := eh.nodeStorage.ListOperators(nil, 0, 10)
+			operators, err := eh.nodeStorage.ListOperators(nil, 0, 0)
 			require.NoError(t, err)
 			require.Equal(t, operatorsCount, uint64(len(operators)))
 
@@ -1019,7 +1019,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 			// #TODO: Fails until we fix the OperatorAdded: handlers.go #108
 			// Check storage for the new operators
-			//operators, err = eh.nodeStorage.ListOperators(nil, 0, 10)
+			//operators, err = eh.nodeStorage.ListOperators(nil, 0, 0)
 			//require.NoError(t, err)
 			//require.Equal(t, operatorsCount-1, uint64(len(operators)))
 			//
@@ -1304,7 +1304,7 @@ func simTestBackend(testAddresses []*ethcommon.Address) *simulator.SimulatedBack
 	}
 
 	return simulator.NewSimulatedBackend(
-		genesis, 10000000,
+		genesis, 50_000_000,
 	)
 }
 
@@ -1395,7 +1395,7 @@ func createNewValidator(ops []*testOperator) (*testValidatorData, error) {
 	num := uint64(len(ops))
 	validatorData.operatorsShares = make([]*testShare, num)
 
-	// derive a `hareCount` number of shares
+	// derive a `shareCount` number of shares
 	for i := uint64(1); i <= num; i++ {
 		validatorData.operatorsShares[i-1] = &testShare{
 			opId: i,
