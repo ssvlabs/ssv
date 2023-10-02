@@ -89,7 +89,7 @@ func (e *TestEnv) setup(
 	operatorsCount uint64,
 ) error {
 	if e.followDistance == nil {
-		e.followDistance = e.DefaultFollowDistance()
+		e.SetDefaultFollowDistance()
 	}
 	logger := zaptest.NewLogger(t)
 
@@ -211,11 +211,10 @@ func (e *TestEnv) setup(
 	return nil
 }
 
-func (e *TestEnv) DefaultFollowDistance() (fd *uint64) {
-	fd = new(uint64)
+func (e *TestEnv) SetDefaultFollowDistance() {
 	// 8 is current production offset
-	*fd = uint64(8)
-	return fd
+	value := uint64(8)
+	e.followDistance = &value
 }
 
 func (e *TestEnv) CloseFollowDistance(blockNum *uint64) {
