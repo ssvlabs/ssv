@@ -3,6 +3,7 @@ package validator
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -96,6 +97,10 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 
 	lens := make([]int, 0, 10)
 
+	queueUpdater := queue.NewChannelUpdater(logger, q.Q, queue.NewMessagePrioritizer(q.queueState), queue.FilterAny)
+	var once sync.Once
+
+outerLoop:
 	for ctx.Err() == nil {
 		// Construct a representation of the current state.
 		state := *q.queueState
@@ -140,28 +145,35 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 			}
 		}
 
-		// Pop the highest priority message for the current state.
-		msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state), filter)
-		if ctx.Err() != nil {
-			break
-		}
-		if msg == nil {
-			logger.Error("❗ got nil message from queue, but context is not done!")
-			break
-		}
-		lens = append(lens, q.Q.Len())
-		if len(lens) >= 10 {
-			logger.Debug("📬 [TEMPORARY] queue statistics",
-				fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType),
-				zap.Ints("past_10_lengths", lens))
-			lens = lens[:0]
-		}
+		queueUpdater.UpdatePrioritizerAndFilter(queue.NewMessagePrioritizer(&state), filter)
+		once.Do(func() {
+			queueUpdater.Start(ctx)
+		})
 
-		// Handle the message.
-		if err := handler(logger, msg); err != nil {
-			v.logMsg(logger, msg, "❗ could not handle message",
-				fields.MessageType(msg.SSVMessage.MsgType),
-				zap.Error(err))
+		select {
+		case msg, closed := <-queueUpdater.GetChannel():
+			if closed {
+				break outerLoop
+			}
+
+			lens = append(lens, q.Q.Len())
+			if len(lens) >= 10 {
+				logger.Debug("📬 [TEMPORARY] queue statistics",
+					fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType),
+					zap.Ints("past_10_lengths", lens))
+				lens = lens[:0]
+			}
+
+			// Handle the message.
+			if err := handler(logger, msg); err != nil {
+				v.logMsg(logger, msg, "❗ could not handle message",
+					fields.MessageType(msg.SSVMessage.MsgType),
+					zap.Error(err))
+			}
+
+		case <-ctx.Done():
+			// Context is canceled or has met its deadline
+			break outerLoop
 		}
 	}
 

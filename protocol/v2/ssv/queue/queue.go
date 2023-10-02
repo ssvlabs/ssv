@@ -2,6 +2,7 @@ package queue
 
 import (
 	"context"
+	"sync"
 	"time"
 )
 
@@ -43,6 +44,7 @@ type priorityQueue struct {
 	head     *item
 	inbox    chan *DecodedSSVMessage
 	lastRead time.Time
+	mu       sync.Mutex
 }
 
 // New returns an implementation of Queue optimized for concurrent push and sequential pop.
@@ -73,6 +75,9 @@ func (q *priorityQueue) TryPush(msg *DecodedSSVMessage) bool {
 }
 
 func (q *priorityQueue) TryPop(prioritizer MessagePrioritizer, filter Filter) *DecodedSSVMessage {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
 	// Read any pending messages from the inbox.
 	q.readInbox()
 
@@ -88,33 +93,39 @@ func (q *priorityQueue) Pop(ctx context.Context, prioritizer MessagePrioritizer,
 	// Read any pending messages from the inbox, if enough time has passed.
 	// inboxReadFrequency is a tradeoff between responsiveness and computational cost,
 	// since reading the inbox is more expensive than just reading the head.
+	q.mu.Lock()
+
 	if time.Since(q.lastRead) > inboxReadFrequency {
 		q.readInbox()
 	}
 
 	// Try to pop immediately.
 	if q.head != nil {
-		if m := q.pop(prioritizer, filter); m != nil {
-			return m
-		}
+		m := q.pop(prioritizer, filter)
+		q.mu.Unlock()
+		return m
 	}
+	q.mu.Unlock()
 
 	// Wait for a message to be pushed.
+	var receivedMsg *DecodedSSVMessage
 Wait:
-	for {
-		select {
-		case msg := <-q.inbox:
-			if q.head == nil {
-				q.head = &item{message: msg}
-			} else {
-				q.head = &item{message: msg, next: q.head}
-			}
-			if filter(msg) {
-				break Wait
-			}
-		case <-ctx.Done():
+	select {
+	case receivedMsg = <-q.inbox:
+		if filter(receivedMsg) {
 			break Wait
 		}
+	case <-ctx.Done():
+		return nil
+	}
+
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	if q.head == nil {
+		q.head = &item{message: receivedMsg}
+	} else {
+		q.head = &item{message: receivedMsg, next: q.head}
 	}
 
 	// Read any messages that were pushed while waiting.
@@ -182,10 +193,16 @@ func (q *priorityQueue) pop(prioritizer MessagePrioritizer, filter Filter) *Deco
 }
 
 func (q *priorityQueue) Empty() bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
 	return q.head == nil && len(q.inbox) == 0
 }
 
 func (q *priorityQueue) Len() int {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
 	n := len(q.inbox)
 	for i := q.head; i != nil; i = i.next {
 		n++
