@@ -6,7 +6,7 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 )
 
-var (
+const (
 	// gsD topic stable mesh target count
 	gsD = 8
 	// gsDlo topic stable mesh low watermark
