@@ -31,7 +31,6 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"go.uber.org/zap"
 	"math/big"
-
 	"testing"
 )
 
@@ -43,9 +42,9 @@ type testValidatorData struct {
 }
 
 type testOperator struct {
-	id   uint64
-	pub  []byte // rsa pub
-	priv []byte // rsa sk
+	id      uint64
+	rsaPub  []byte
+	rsaPriv []byte
 }
 
 type testShare struct {
@@ -95,9 +94,9 @@ func createOperators(num uint64, idOffset uint64) ([]*testOperator, error) {
 			return nil, err
 		}
 		testops[i-1] = &testOperator{
-			id:   idOffset + i,
-			pub:  pb,
-			priv: sk,
+			id:      idOffset + i,
+			rsaPub:  pb,
+			rsaPriv: sk,
 		}
 	}
 
@@ -105,29 +104,29 @@ func createOperators(num uint64, idOffset uint64) ([]*testOperator, error) {
 }
 
 func generateSharesData(validatorData *testValidatorData, operators []*testOperator, owner ethcommon.Address, nonce int) ([]byte, error) {
-	var pubkeys []byte
+	var pubKeys []byte
 	var encryptedShares []byte
 
 	for i, op := range operators {
-		rsakey, err := rsaencryption.ConvertPemToPublicKey(op.pub)
+		rsaKey, err := rsaencryption.ConvertPemToPublicKey(op.rsaPub)
 		if err != nil {
-			return nil, fmt.Errorf("cant convert publickey: %w", err)
+			return nil, fmt.Errorf("can't convert public key: %w", err)
 		}
 
-		rawshare := validatorData.operatorsShares[i].sec.SerializeToHexStr()
-		ciphertext, err := rsa.EncryptPKCS1v15(rand.Reader, rsakey, []byte(rawshare))
+		rawShare := validatorData.operatorsShares[i].sec.SerializeToHexStr()
+		cipherText, err := rsa.EncryptPKCS1v15(rand.Reader, rsaKey, []byte(rawShare))
 		if err != nil {
 			return nil, errors.New("cant encrypt share")
 		}
 
-		rsapriv, err := rsaencryption.ConvertPemToPrivateKey(string(op.priv))
+		rsaPriv, err := rsaencryption.ConvertPemToPrivateKey(string(op.rsaPriv))
 		if err != nil {
 			return nil, err
 		}
 
 		// check that we encrypt right
 		shareSecret := &bls.SecretKey{}
-		decryptedSharePrivateKey, err := rsaencryption.DecodeKey(rsapriv, ciphertext)
+		decryptedSharePrivateKey, err := rsaencryption.DecodeKey(rsaPriv, cipherText)
 		if err != nil {
 			return nil, err
 		}
@@ -135,21 +134,21 @@ func generateSharesData(validatorData *testValidatorData, operators []*testOpera
 			return nil, err
 		}
 
-		pubkeys = append(pubkeys, validatorData.operatorsShares[i].pub.Serialize()...)
-		encryptedShares = append(encryptedShares, ciphertext...)
+		pubKeys = append(pubKeys, validatorData.operatorsShares[i].pub.Serialize()...)
+		encryptedShares = append(encryptedShares, cipherText...)
 
 	}
 
-	tosign := fmt.Sprintf("%s:%d", owner.String(), nonce)
-	msghash := crypto.Keccak256([]byte(tosign))
-	signed := validatorData.masterKey.Sign(string(msghash))
+	toSign := fmt.Sprintf("%s:%d", owner.String(), nonce)
+	msgHash := crypto.Keccak256([]byte(toSign))
+	signed := validatorData.masterKey.Sign(string(msgHash))
 	sig := signed.Serialize()
 
-	if !signed.VerifyByte(validatorData.masterPubKey, msghash) {
+	if !signed.VerifyByte(validatorData.masterPubKey, msgHash) {
 		return nil, errors.New("couldn't sign correctly")
 	}
 
-	sharesData := append(pubkeys, encryptedShares...)
+	sharesData := append(pubKeys, encryptedShares...)
 	sharesDataSigned := append(sig, sharesData...)
 
 	return sharesDataSigned, nil
@@ -253,7 +252,7 @@ func setupOperatorStorage(
 	ownerAddress *ethcommon.Address,
 ) (operatorstorage.Storage, *registrystorage.OperatorData) {
 	if operator == nil {
-		logger.Fatal("empty test operator was passed", zap.Error(fmt.Errorf("empty test operator was passed")))
+		logger.Fatal("empty test operator was passed")
 	}
 
 	nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)
@@ -261,7 +260,7 @@ func setupOperatorStorage(
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
 
-	operatorPubKey, err := nodeStorage.SetupPrivateKey(base64.StdEncoding.EncodeToString(operator.priv))
+	operatorPubKey, err := nodeStorage.SetupPrivateKey(base64.StdEncoding.EncodeToString(operator.rsaPriv))
 	if err != nil {
 		logger.Fatal("could not setup operator private key", zap.Error(err))
 	}

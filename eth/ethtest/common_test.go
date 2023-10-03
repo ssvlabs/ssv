@@ -133,7 +133,7 @@ func (e *TestEnv) setup(
 	rpcServer, err := sim.Node.RPCHandler()
 	e.rpcServer = rpcServer
 	if err != nil {
-		return fmt.Errorf("creatingt rpc server: %w", err)
+		return fmt.Errorf("create RPC server: %w", err)
 	}
 	// Expose handler on a test server with ws open
 	httpSrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
@@ -143,7 +143,7 @@ func (e *TestEnv) setup(
 
 	parsed, err := abi.JSON(strings.NewReader(simcontract.SimcontractMetaData.ABI))
 	if err != nil {
-		return fmt.Errorf("parsing contract abi: %w", err)
+		return fmt.Errorf("parsing contract ABI: %w", err)
 	}
 
 	auth, err := bind.NewKeyedTransactorWithChainID(testKeyAlice, big.NewInt(1337))
@@ -164,7 +164,7 @@ func (e *TestEnv) setup(
 		return fmt.Errorf("getting contract code: %w", err)
 	}
 	if len(contractCode) == 0 {
-		return fmt.Errorf("error: contractCode is empty")
+		return fmt.Errorf("contractCode is empty")
 	}
 
 	// Create a client and connect to the simulator

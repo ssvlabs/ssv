@@ -69,7 +69,7 @@ func (input *ProduceOperatorAddedEventsInput) produce() {
 
 	for _, event := range input.events {
 		op := event.op
-		packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(op.pub)
+		packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(op.rsaPub)
 		require.NoError(input.t, err)
 		_, err = input.boundContract.SimcontractTransactor.RegisterOperator(event.auth, packedOperatorPubKey, big.NewInt(100_000_000))
 		require.NoError(input.t, err)
