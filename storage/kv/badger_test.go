@@ -166,6 +166,37 @@ func TestBadgerDb_SetMany(t *testing.T) {
 	}
 }
 
+func TestBadgerDb_IsEmpty(t *testing.T) {
+	logger := logging.TestLogger(t)
+	db, err := NewInMemory(context.TODO(), logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	// Initially, the DB should be empty
+	isEmpty, err := db.IsEmpty()
+	require.NoError(t, err)
+	require.True(t, isEmpty, "DB should be empty initially")
+
+	// Add an item to the DB
+	prefix := []byte("prefix")
+	key := []byte("key")
+	value := []byte("value")
+	require.NoError(t, db.Set(prefix, key, value))
+
+	// Now, the DB should not be empty
+	isEmpty, err = db.IsEmpty()
+	require.NoError(t, err)
+	require.False(t, isEmpty, "DB should not be empty after adding an item")
+
+	// Delete the item from the DB
+	require.NoError(t, db.Delete(prefix, key))
+
+	// The DB should be empty again
+	isEmpty, err = db.IsEmpty()
+	require.NoError(t, err)
+	require.True(t, isEmpty, "DB should be empty after deleting the item")
+}
+
 func uInt64ToByteSlice(n uint64) []byte {
 	b := make([]byte, 8)
 	binary.LittleEndian.PutUint64(b, n)

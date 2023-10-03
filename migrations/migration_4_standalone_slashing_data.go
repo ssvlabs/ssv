@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"reflect"
 
 	"github.com/bloxapp/ssv/storage/basedb"
 
@@ -57,6 +58,29 @@ var migration_4_standalone_slashing_data = Migration{
 
 				if err := spStorage.SaveHighestProposal(sharePubKey, highProposal); err != nil {
 					return fmt.Errorf("failed to save highest proposal for share %s: %w", hex.EncodeToString(sharePubKey), err)
+				}
+
+				// ensure the data is saved and can be read.
+				migratedHighAtt, found, err := spStorage.RetrieveHighestAttestation(sharePubKey)
+				if err != nil {
+					return err
+				}
+				if !found {
+					return fmt.Errorf("migrated highest attestation not found for share %s", hex.EncodeToString(sharePubKey))
+				}
+				if !reflect.DeepEqual(migratedHighAtt, highAtt) {
+					return fmt.Errorf("migrated highest attestation is not equal to original for share %s", hex.EncodeToString(sharePubKey))
+				}
+
+				migratedHighProp, found, err := spStorage.RetrieveHighestProposal(sharePubKey)
+				if err != nil {
+					return err
+				}
+				if !found {
+					return fmt.Errorf("migrated highest proposal not found for share %s", hex.EncodeToString(sharePubKey))
+				}
+				if migratedHighProp != highProposal {
+					return fmt.Errorf("migrated highest proposal is not equal to original for share %s", hex.EncodeToString(sharePubKey))
 				}
 			}
 

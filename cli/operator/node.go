@@ -455,7 +455,7 @@ func setupSlashingProtectionDB(ctx context.Context, logger *zap.Logger, network 
 
 	// Validate that the slashing protection DB and node DB are not in the same directory
 	if filepath.Dir(cfg.DBOptions.Path) == filepath.Dir(cfg.SlashingProtectionOptions.DBPath) {
-		return nil, fmt.Errorf("slashing protection database and node database cannot be in the same directory")
+		return nil, fmt.Errorf("node DB (db.Path) and slashing protection DB (slashing_protection.DBPath) should not be in the same directory")
 	}
 
 	options := basedb.Options{

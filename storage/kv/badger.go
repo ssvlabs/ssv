@@ -337,3 +337,17 @@ func (b *BadgerDB) UsingReader(r basedb.Reader) basedb.Reader {
 	}
 	return r
 }
+
+func (b *BadgerDB) IsEmpty() (bool, error) {
+	var isEmpty = true // Assume empty until proven otherwise
+	err := b.db.View(func(txn *badger.Txn) error {
+		it := txn.NewIterator(badger.DefaultIteratorOptions)
+		defer it.Close()
+		if it.Rewind(); it.Valid() {
+			isEmpty = false // Found a key, so database is not empty
+			return nil      // Exit the transaction early since we found a key
+		}
+		return nil
+	})
+	return isEmpty, err
+}

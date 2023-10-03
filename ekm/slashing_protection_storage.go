@@ -18,7 +18,7 @@ const (
 	highestProposalPrefix = prefix + "highest_prop-"
 
 	// versionPrefix is the version prefix key of slashing protection DB
-	versionPrefix = "version"
+	versionPrefix = prefix + "version"
 	// GenesisVersion is the genesis version of the slashing protection DB
 	GenesisVersion = "0x0"
 )

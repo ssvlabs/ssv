@@ -61,6 +61,14 @@ var CreateSlashingProtectionDBCmd = &cobra.Command{
 			logger.Panic("failed to create slashing protection db", zap.Error(err))
 		}
 
+		isEmpty, err := db.IsEmpty()
+		if err != nil {
+			logger.Panic("failed to check database emptiness", zap.Error(err))
+		}
+		if !isEmpty {
+			logger.Panic("database is not empty")
+		}
+
 		storage := ekm.NewSlashingProtectionStorage(db, logger, []byte(network))
 		if err = storage.SetVersion(ekm.GenesisVersion); err != nil {
 			logger.Panic("failed to set genesis version: ", zap.Error(err))
@@ -137,7 +145,7 @@ func GetDBPathFlagValue(c *cobra.Command, cfg *config) (string, error) {
 
 	// Validate that the slashing protection DB and node DB are not in the same directory
 	if filepath.Dir(dbPath) == filepath.Dir(cfg.DBOptions.Path) {
-		return "", fmt.Errorf("node DB and slashing protection DB should not be in the same directory")
+		return "", fmt.Errorf("node DB (db.Path) and slashing protection DB (slashing_protection.DBPath) should not be in the same directory")
 	}
 
 	return dbPath, nil
