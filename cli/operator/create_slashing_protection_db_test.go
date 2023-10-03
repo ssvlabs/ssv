@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -50,7 +51,10 @@ func TestCreateSlashingProtectionDBCmd(t *testing.T) {
 	})
 	require.NoError(t, err, "Failed to create DB instance")
 
-	network, err := GetNetworkFlagValue(cmd)
+	var cfg config
+	require.NoError(t, cleanenv.ReadConfig(filePath, &cfg), "Failed to read config file")
+
+	network, err := GetNetworkFlagValue(cmd, &cfg)
 	require.NoError(t, err, "Failed to get network flag value")
 
 	storage := ekm.NewSlashingProtectionStorage(db, logger, []byte(network))

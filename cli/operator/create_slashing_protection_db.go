@@ -33,21 +33,21 @@ var CreateSlashingProtectionDBCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		logger := zap.L().Named(logging.NameCreateSlashingProtectionDB)
 
-		configPath, err := GetConfigPathFlagValue(cmd)
+		var cfg config
+		configPath, err := GetConfigPathFlagValue(cmd, globalArgs.ConfigPath)
 		if err != nil {
 			logger.Panic("failed to get config path flag value", zap.Error(err))
 		}
-
 		if err := cleanenv.ReadConfig(configPath, &cfg); err != nil {
 			logger.Panic("failed to read config", zap.Error(err))
 		}
 
-		network, err := GetNetworkFlagValue(cmd)
+		network, err := GetNetworkFlagValue(cmd, &cfg)
 		if err != nil {
 			logger.Panic("failed to get network flag value", zap.Error(err))
 		}
 
-		dbPath, err := GetDBPathFlagValue(cmd)
+		dbPath, err := GetDBPathFlagValue(cmd, &cfg)
 		if err != nil {
 			logger.Panic("failed to get db path flag value", zap.Error(err))
 		}
@@ -78,7 +78,7 @@ func AddConfigPathFlagValue(c *cobra.Command) {
 }
 
 // GetConfigPathFlagValue gets the config path flag from the command or from the global args
-func GetConfigPathFlagValue(c *cobra.Command) (string, error) {
+func GetConfigPathFlagValue(c *cobra.Command, defaultPath string) (string, error) {
 	configPath, err := c.Flags().GetString(configPathFlag)
 	if err != nil {
 		return "", err
@@ -88,7 +88,7 @@ func GetConfigPathFlagValue(c *cobra.Command) (string, error) {
 		return configPath, nil
 	}
 
-	return globalArgs.ConfigPath, nil
+	return defaultPath, nil
 }
 
 // AddNetworkFlagValue adds the network flag to the command
@@ -97,7 +97,7 @@ func AddNetworkFlagValue(c *cobra.Command) {
 }
 
 // GetNetworkFlagValue gets the network flag from the command or config file
-func GetNetworkFlagValue(c *cobra.Command) (spectypes.BeaconNetwork, error) {
+func GetNetworkFlagValue(c *cobra.Command, cfg *config) (spectypes.BeaconNetwork, error) {
 	networkName, err := c.Flags().GetString(networkConfigNameFlag)
 	if err != nil {
 		return "", err
@@ -121,17 +121,17 @@ func AddDBPathFlagValue(c *cobra.Command) {
 }
 
 // GetDBPathFlagValue gets the db path flag from the command or config file
-func GetDBPathFlagValue(c *cobra.Command) (string, error) {
+func GetDBPathFlagValue(c *cobra.Command, cfg *config) (string, error) {
 	dbPath, err := c.Flags().GetString(dbPathFlag)
 	if err != nil {
 		return "", err
 	}
 
-	if dbPath == "" && cfg.SlashingProtectionOptions.DBPath != "" {
+	if dbPath == "" {
 		dbPath = cfg.SlashingProtectionOptions.DBPath
 	}
 
-	if dbPath == "" || cfg.DBOptions.Path == "" {
+	if dbPath == "" {
 		return "", fmt.Errorf("no slashing protection database path provided")
 	}
 
