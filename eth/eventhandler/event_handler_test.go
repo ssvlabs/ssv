@@ -1384,19 +1384,18 @@ func createNewValidator(ops []*testOperator) (*testValidatorData, error) {
 	sharesCount := uint64(len(ops))
 	threshold.Init()
 
-	msk, pubk := blskeygen.GenBLSKeyPair()
+	msk, mpk := blskeygen.GenBLSKeyPair()
 	secVec := msk.GetMasterSecretKey(int(sharesCount))
-	pubks := bls.GetMasterPublicKey(secVec)
+	pubKeys := bls.GetMasterPublicKey(secVec)
 	splitKeys, err := threshold.Create(msk.Serialize(), sharesCount-1, sharesCount)
 	if err != nil {
 		return nil, err
 	}
 
-	num := uint64(len(ops))
-	validatorData.operatorsShares = make([]*testShare, num)
+	validatorData.operatorsShares = make([]*testShare, sharesCount)
 
 	// derive a `shareCount` number of shares
-	for i := uint64(1); i <= num; i++ {
+	for i := uint64(1); i <= sharesCount; i++ {
 		validatorData.operatorsShares[i-1] = &testShare{
 			opId: i,
 			sec:  splitKeys[i],
@@ -1405,28 +1404,28 @@ func createNewValidator(ops []*testOperator) (*testValidatorData, error) {
 	}
 
 	validatorData.masterKey = msk
-	validatorData.masterPubKey = pubk
-	validatorData.masterPublicKeys = pubks
+	validatorData.masterPubKey = mpk
+	validatorData.masterPublicKeys = pubKeys
 
 	return validatorData, nil
 }
 
 func createOperators(num uint64, idOffset uint64) ([]*testOperator, error) {
-	testops := make([]*testOperator, num)
+	testOps := make([]*testOperator, num)
 
 	for i := uint64(1); i <= num; i++ {
 		pb, sk, err := rsaencryption.GenerateKeys()
 		if err != nil {
 			return nil, err
 		}
-		testops[i-1] = &testOperator{
+		testOps[i-1] = &testOperator{
 			id:      idOffset + i,
 			rsaPub:  pb,
 			rsaPriv: sk,
 		}
 	}
 
-	return testops, nil
+	return testOps, nil
 }
 
 func generateSharesData(validatorData *testValidatorData, operators []*testOperator, owner ethcommon.Address, nonce int) ([]byte, error) {
