@@ -22,7 +22,8 @@ const (
 	// using value of 50 (prysm changed to 90)
 	dampeningFactor = 50
 
-	subnetTopicsWeight = 4.0
+	subnetTopicsWeight          = 4.0
+	invalidMeshDeliveriesWeight = -800
 )
 
 const (
@@ -167,7 +168,7 @@ func TopicParams(opts Options) (*pubsub.TopicScoreParams, error) {
 	}
 
 	if opts.Topic.InvalidMsgDecayTime > 0 {
-		params.InvalidMessageDeliveriesWeight = -opts.maxScore() / opts.Topic.TopicWeight
+		params.InvalidMessageDeliveriesWeight = invalidMeshDeliveriesWeight
 		params.InvalidMessageDeliveriesDecay = scoreDecay(opts.Topic.InvalidMsgDecayTime*opts.Network.OneEpochDuration, opts.Network.OneEpochDuration)
 	} else {
 		params.InvalidMessageDeliveriesDecay = 0.1

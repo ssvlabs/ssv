@@ -15,13 +15,11 @@ import (
 //
 // TODO: rethink this function and consider moving/refactoring it.
 func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, domain spectypes.DomainType, sigType spectypes.SignatureType, operators []*spectypes.Operator) error {
-	// decode sig
 	sign := &bls.Sign{}
 	if err := sign.Deserialize(s); err != nil {
 		return errors.Wrap(err, "failed to deserialize signature")
 	}
 
-	// find operators
 	pks := make([]bls.PublicKey, 0)
 	for _, id := range data.GetSigners() {
 		found := false
@@ -41,13 +39,11 @@ func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, d
 		}
 	}
 
-	// compute root
 	computedRoot, err := spectypes.ComputeSigningRoot(data, spectypes.ComputeSignatureDomain(domain, sigType))
 	if err != nil {
 		return errors.Wrap(err, "could not compute signing root")
 	}
 
-	// verify
 	if res := sign.FastAggregateVerify(pks, computedRoot[:]); !res {
 		return errors.New("failed to verify signature")
 	}
@@ -72,7 +68,6 @@ func VerifyReconstructedSignature(sig *bls.Sign, validatorPubKey []byte, root [3
 		return errors.Wrap(err, "could not deserialize validator pk")
 	}
 
-	// verify reconstructed sig
 	if res := sig.VerifyByte(&pk, root[:]); !res {
 		return errors.New("could not reconstruct a valid signature")
 	}

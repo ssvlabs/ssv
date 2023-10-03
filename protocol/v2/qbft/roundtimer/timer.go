@@ -16,9 +16,9 @@ import (
 type OnRoundTimeoutF func(round specqbft.Round)
 
 const (
-	quickTimeoutThreshold = specqbft.Round(8)
-	quickTimeout          = 2 * time.Second
-	slowTimeout           = 2 * time.Minute
+	QuickTimeoutThreshold = specqbft.Round(8)
+	QuickTimeout          = 2 * time.Second
+	SlowTimeout           = 2 * time.Minute
 )
 
 // Timer is an interface for a round timer, calling the UponRoundTimeout when times out
@@ -70,9 +70,9 @@ func New(pctx context.Context, beaconNetwork BeaconNetwork, role spectypes.Beaco
 		role:          role,
 		beaconNetwork: beaconNetwork,
 		timeoutOptions: TimeoutOptions{
-			quickThreshold: quickTimeoutThreshold,
-			quick:          quickTimeout,
-			slow:           slowTimeout,
+			quickThreshold: QuickTimeoutThreshold,
+			quick:          QuickTimeout,
+			slow:           SlowTimeout,
 		},
 	}
 }

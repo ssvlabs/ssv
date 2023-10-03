@@ -1,25 +1,31 @@
 package queue
 
 import (
+	"fmt"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
 
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
+var (
+	ErrUnknownMessageType = fmt.Errorf("unknown message type")
+)
+
 // DecodedSSVMessage is a bundle of SSVMessage and it's decoding.
+// TODO: try to make it generic
 type DecodedSSVMessage struct {
 	*spectypes.SSVMessage
 
 	// Body is the decoded Data.
-	Body interface{} // *SignedMessage | *SignedPartialSignatureMessage
+	Body interface{} // *SignedMessage | *SignedPartialSignatureMessage | *EventMsg
 }
 
 // DecodeSSVMessage decodes an SSVMessage and returns a DecodedSSVMessage.
-func DecodeSSVMessage(logger *zap.Logger, m *spectypes.SSVMessage) (*DecodedSSVMessage, error) {
+func DecodeSSVMessage(m *spectypes.SSVMessage) (*DecodedSSVMessage, error) {
 	var body interface{}
 	switch m.MsgType {
 	case spectypes.SSVConsensusMsgType: // TODO: Or message.SSVDecidedMsgType?
@@ -40,6 +46,8 @@ func DecodeSSVMessage(logger *zap.Logger, m *spectypes.SSVMessage) (*DecodedSSVM
 			return nil, errors.Wrap(err, "failed to decode EventMsg")
 		}
 		body = msg
+	default:
+		return nil, ErrUnknownMessageType
 	}
 	return &DecodedSSVMessage{
 		SSVMessage: m,
