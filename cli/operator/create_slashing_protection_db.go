@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"path/filepath"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -42,9 +41,9 @@ var CreateSlashingProtectionDBCmd = &cobra.Command{
 			logger.Panic("failed to read config", zap.Error(err))
 		}
 
-		network, err := GetNetworkFlagValue(cmd, &cfg)
+		networkConfig, err := networkconfig.GetNetworkConfigByName(cfg.SSVOptions.NetworkName)
 		if err != nil {
-			logger.Panic("failed to get network flag value", zap.Error(err))
+			logger.Panic("failed to get network config by name", zap.Error(err))
 		}
 
 		dbPath, err := GetDBPathFlagValue(cmd, &cfg)
@@ -69,7 +68,7 @@ var CreateSlashingProtectionDBCmd = &cobra.Command{
 			logger.Panic("database is not empty")
 		}
 
-		storage := ekm.NewSlashingProtectionStorage(db, logger, []byte(network))
+		storage := ekm.NewSlashingProtectionStorage(db, logger, []byte(networkConfig.Beacon.GetBeaconNetwork()))
 		if err = storage.SetVersion(ekm.GenesisVersion); err != nil {
 			logger.Panic("failed to set genesis version: ", zap.Error(err))
 		}
@@ -97,30 +96,6 @@ func GetConfigPathFlagValue(c *cobra.Command, defaultPath string) (string, error
 	}
 
 	return defaultPath, nil
-}
-
-// AddNetworkFlagValue adds the network flag to the command
-func AddNetworkFlagValue(c *cobra.Command) {
-	c.Flags().String(networkConfigNameFlag, "", "Network config name: one of the supported network config names")
-}
-
-// GetNetworkFlagValue gets the network flag from the command or config file
-func GetNetworkFlagValue(c *cobra.Command, cfg *config) (spectypes.BeaconNetwork, error) {
-	networkName, err := c.Flags().GetString(networkConfigNameFlag)
-	if err != nil {
-		return "", err
-	}
-
-	if networkName == "" {
-		networkName = cfg.SSVOptions.NetworkName
-	}
-
-	networkConfig, err := networkconfig.GetNetworkConfigByName(networkName)
-	if err != nil {
-		return "", fmt.Errorf("unable to get network config by name: %w", err)
-	}
-
-	return networkConfig.Beacon.GetBeaconNetwork(), nil
 }
 
 // AddDBPathFlagValue adds the db path flag to the command
@@ -152,7 +127,6 @@ func GetDBPathFlagValue(c *cobra.Command, cfg *config) (string, error) {
 }
 
 func init() {
-	AddNetworkFlagValue(CreateSlashingProtectionDBCmd)
 	AddDBPathFlagValue(CreateSlashingProtectionDBCmd)
 	AddConfigPathFlagValue(CreateSlashingProtectionDBCmd)
 }

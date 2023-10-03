@@ -11,6 +11,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ekm"
+	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils"
@@ -54,10 +55,12 @@ func TestCreateSlashingProtectionDBCmd(t *testing.T) {
 	var cfg config
 	require.NoError(t, cleanenv.ReadConfig(filePath, &cfg), "Failed to read config file")
 
-	network, err := GetNetworkFlagValue(cmd, &cfg)
-	require.NoError(t, err, "Failed to get network flag value")
+	networkConfig, err := networkconfig.GetNetworkConfigByName(cfg.SSVOptions.NetworkName)
+	if err != nil {
+		logger.Panic("failed to get network config by name", zap.Error(err))
+	}
 
-	storage := ekm.NewSlashingProtectionStorage(db, logger, []byte(network))
+	storage := ekm.NewSlashingProtectionStorage(db, logger, []byte(networkConfig.Beacon.GetBeaconNetwork()))
 	version, found, err := storage.GetVersion()
 
 	require.NoError(t, err, "Failed to get genesis version from DB")
@@ -118,17 +121,4 @@ func TestCreateSlashingProtectionDBCmd_DBPath_Same_Directory(t *testing.T) {
 	require.Panics(t, func() {
 		cmd.Run(cmd, []string{})
 	}, "The command should panic if the same DB path is provided as the config db path")
-}
-
-func TestCreateSlashingProtectionDBCmd_InvalidNetwork(t *testing.T) {
-	cmd := CreateSlashingProtectionDBCmd
-	cmd.SetContext(context.Background())
-
-	// Set the network flag to a non-supported value
-	require.NoError(t, cmd.Flags().Set(networkConfigNameFlag, "invalid-network"))
-
-	// Run the command and expect it to fail
-	require.Panics(t, func() {
-		CreateSlashingProtectionDBCmd.Run(cmd, []string{})
-	}, "The command should panic if an invalid network is provided")
 }
