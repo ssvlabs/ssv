@@ -1262,7 +1262,7 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, operator *test
 
 	operatorPubKey, err := nodeStorage.SetupPrivateKey(base64.StdEncoding.EncodeToString(operator.rsaPriv))
 	if err != nil {
-		logger.Fatal("could not setup operator private key", zap.Error(err))
+		logger.Fatal("couldn't setup operator private key", zap.Error(err))
 	}
 
 	_, found, err := nodeStorage.GetPrivateKey()
@@ -1273,7 +1273,7 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, operator *test
 	operatorData, found, err = nodeStorage.GetOperatorDataByPubKey(nil, operatorPubKey)
 
 	if err != nil {
-		logger.Fatal("could not get operator data by public key", zap.Error(err))
+		logger.Fatal("couldn't get operator data by public key", zap.Error(err))
 	}
 	if !found {
 		operatorData = &registrystorage.OperatorData{
@@ -1309,10 +1309,8 @@ func simTestBackend(testAddresses []*ethcommon.Address) *simulator.SimulatedBack
 }
 
 func TestCreatingSharesData(t *testing.T) {
-
 	owner := testAddr
 	nonce := 0
-	//
 	ops, err := createOperators(4, 1)
 	require.NoError(t, err)
 
@@ -1394,7 +1392,7 @@ func createNewValidator(ops []*testOperator) (*testValidatorData, error) {
 
 	validatorData.operatorsShares = make([]*testShare, sharesCount)
 
-	// derive a `shareCount` number of shares
+	// derive a `sharesCount` number of shares
 	for i := uint64(1); i <= sharesCount; i++ {
 		validatorData.operatorsShares[i-1] = &testShare{
 			opId: i,
@@ -1441,12 +1439,12 @@ func generateSharesData(validatorData *testValidatorData, operators []*testOpera
 		rawShare := validatorData.operatorsShares[i].sec.SerializeToHexStr()
 		cipherText, err := rsa.EncryptPKCS1v15(rand.Reader, rsaKey, []byte(rawShare))
 		if err != nil {
-			return nil, errors.New("cant encrypt share")
+			return nil, fmt.Errorf("can't encrypt share: %w", err)
 		}
 
 		rsaPriv, err := rsaencryption.ConvertPemToPrivateKey(string(op.rsaPriv))
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("can't convert secret key to a private key share: %w", err)
 		}
 
 		// check that we encrypt right
@@ -1470,7 +1468,7 @@ func generateSharesData(validatorData *testValidatorData, operators []*testOpera
 	sig := signed.Serialize()
 
 	if !signed.VerifyByte(validatorData.masterPubKey, msgHash) {
-		return nil, errors.New("couldn't sign correctly")
+		return nil, errors.New("can't sign correctly")
 	}
 
 	sharesData := append(pubKeys, encryptedShares...)

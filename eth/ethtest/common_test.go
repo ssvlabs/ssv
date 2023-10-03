@@ -125,7 +125,7 @@ func (e *TestEnv) setup(
 		return err
 	}
 	if validatorCtrl == nil {
-		return fmt.Errorf("error: validatorCtrl is empty")
+		return fmt.Errorf("validatorCtrl is empty")
 	}
 
 	// Adding testAddresses to the genesis block mostly to specify some balances for them
@@ -135,7 +135,7 @@ func (e *TestEnv) setup(
 	rpcServer, err := sim.Node.RPCHandler()
 	e.rpcServer = rpcServer
 	if err != nil {
-		return fmt.Errorf("create RPC server: %w", err)
+		return fmt.Errorf("can't create RPC server: %w", err)
 	}
 	// Expose handler on a test server with ws open
 	httpSrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
@@ -145,7 +145,7 @@ func (e *TestEnv) setup(
 
 	parsed, err := abi.JSON(strings.NewReader(simcontract.SimcontractMetaData.ABI))
 	if err != nil {
-		return fmt.Errorf("parsing contract ABI: %w", err)
+		return fmt.Errorf("can't parse contract ABI: %w", err)
 	}
 
 	auth, err := bind.NewKeyedTransactorWithChainID(testKeyAlice, big.NewInt(1337))
@@ -155,7 +155,7 @@ func (e *TestEnv) setup(
 
 	contractAddr, _, _, err := bind.DeployContract(auth, parsed, ethcommon.FromHex(simcontract.SimcontractMetaData.Bin), sim)
 	if err != nil {
-		return fmt.Errorf("deploying contract: %w", err)
+		return fmt.Errorf("deploy contract: %w", err)
 	}
 
 	sim.Commit()
@@ -163,7 +163,7 @@ func (e *TestEnv) setup(
 	// Check contract code at the simulated blockchain
 	contractCode, err := sim.CodeAt(ctx, contractAddr, nil)
 	if err != nil {
-		return fmt.Errorf("getting contract code: %w", err)
+		return fmt.Errorf("get contract code: %w", err)
 	}
 	if len(contractCode) == 0 {
 		return fmt.Errorf("contractCode is empty")
