@@ -26,7 +26,7 @@ const (
 )
 
 // the following are kept in vars to allow flexibility (e.g. in tests)
-var (
+const (
 	// validationQueueSize is the size that we assign to the validation queue
 	validationQueueSize = 512
 	// outboundQueueSize is the size that we assign to the outbound message queue
@@ -34,32 +34,34 @@ var (
 	// validateThrottle is the amount of goroutines used for pubsub msg validation
 	validateThrottle = 8192
 	// scoreInspectInterval is the interval for performing score inspect, which goes over all peers scores
-	scoreInspectInterval = time.Minute
+	defaultScoreInspectInterval = time.Minute
 	// msgIDCacheTTL specifies how long a message ID will be remembered as seen, 6.4m (as ETH 2.0)
 	msgIDCacheTTL = params.HeartbeatInterval * 550
 )
 
-// PububConfig is the needed config to instantiate pubsub
-type PububConfig struct {
+// PubSubConfig is the needed config to instantiate pubsub
+type PubSubConfig struct {
 	Host        host.Host
 	TraceLog    bool
 	StaticPeers []peer.AddrInfo
 	MsgHandler  PubsubMessageHandler
-	// MsgValidatorFactory accepts the topic name and returns the corresponding msg validator
+	// MsgValidator accepts the topic name and returns the corresponding msg validator
 	// in case we need different validators for specific topics,
 	// this should be the place to map a validator to topic
-	MsgValidatorFactory func(string) MsgValidatorFunc
-	ScoreIndex          peers.ScoreIndex
-	Scoring             *ScoringConfig
-	MsgIDHandler        MsgIDHandler
-	Discovery           discovery.Discovery
+	MsgValidator messageValidator
+	ScoreIndex   peers.ScoreIndex
+	Scoring      *ScoringConfig
+	MsgIDHandler MsgIDHandler
+	Discovery    discovery.Discovery
 
 	ValidateThrottle    int
 	ValidationQueueSize int
 	OutboundQueueSize   int
 	MsgIDCacheTTL       time.Duration
 
-	GetValidatorStats network.GetValidatorStats
+	GetValidatorStats      network.GetValidatorStats
+	ScoreInspector         pubsub.ExtendedPeerScoreInspectFn
+	ScoreInspectorInterval time.Duration
 }
 
 // ScoringConfig is the configuration for peer scoring
@@ -76,7 +78,7 @@ type PubsubBundle struct {
 	Resolver   MsgPeersResolver
 }
 
-func (cfg *PububConfig) init() error {
+func (cfg *PubSubConfig) init() error {
 	if cfg.Host == nil {
 		return errors.New("bad args: missing host")
 	}
@@ -96,14 +98,14 @@ func (cfg *PububConfig) init() error {
 }
 
 // initScoring initializes scoring config
-func (cfg *PububConfig) initScoring() {
+func (cfg *PubSubConfig) initScoring() {
 	if cfg.Scoring == nil {
 		cfg.Scoring = DefaultScoringConfig()
 	}
 }
 
-// NewPubsub creates a new pubsub router and the necessary components
-func NewPubsub(ctx context.Context, logger *zap.Logger, cfg *PububConfig) (*pubsub.PubSub, Controller, error) {
+// NewPubSub creates a new pubsub router and the necessary components
+func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig) (*pubsub.PubSub, Controller, error) {
 	if err := cfg.init(); err != nil {
 		return nil, nil, err
 	}
@@ -133,12 +135,23 @@ func NewPubsub(ctx context.Context, logger *zap.Logger, cfg *PububConfig) (*pubs
 	}
 
 	var topicScoreFactory func(string) *pubsub.TopicScoreParams
-	if cfg.ScoreIndex != nil {
+
+	inspector := cfg.ScoreInspector
+	inspectInterval := cfg.ScoreInspectorInterval
+	if cfg.ScoreIndex != nil || inspector != nil {
 		cfg.initScoring()
-		inspector := scoreInspector(logger, cfg.ScoreIndex)
+
+		if inspector == nil {
+			inspector = scoreInspector(logger, cfg.ScoreIndex)
+		}
+
+		if inspectInterval == 0 {
+			inspectInterval = defaultScoreInspectInterval
+		}
+
 		peerScoreParams := params.PeerScoreParams(cfg.Scoring.OneEpochDuration, cfg.MsgIDCacheTTL, cfg.Scoring.IPColocationWeight, 0, cfg.Scoring.IPWhilelist...)
 		psOpts = append(psOpts, pubsub.WithPeerScore(peerScoreParams, params.PeerScoreThresholds()),
-			pubsub.WithPeerScoreInspect(inspector, scoreInspectInterval))
+			pubsub.WithPeerScoreInspect(inspector, inspectInterval))
 		async.Interval(ctx, time.Hour, func() {
 			// reset peer scores metric every hour because it has a label for peer ID which can grow infinitely
 			metricPubsubPeerScoreInspect.Reset()
@@ -169,7 +182,7 @@ func NewPubsub(ctx context.Context, logger *zap.Logger, cfg *PububConfig) (*pubs
 		return nil, nil, err
 	}
 
-	ctrl := NewTopicsController(ctx, logger, cfg.MsgHandler, cfg.MsgValidatorFactory, sf, ps, topicScoreFactory)
+	ctrl := NewTopicsController(ctx, logger, cfg.MsgHandler, cfg.MsgValidator, sf, ps, topicScoreFactory)
 
 	return ps, ctrl, nil
 }

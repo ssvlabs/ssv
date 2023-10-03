@@ -19,7 +19,6 @@ import (
 
 	"github.com/bloxapp/ssv/api/handlers"
 	apiserver "github.com/bloxapp/ssv/api/server"
-
 	"github.com/bloxapp/ssv/beacon/goclient"
 	global_config "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/ekm"
@@ -34,6 +33,7 @@ import (
 	ssv_identity "github.com/bloxapp/ssv/identity"
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/message/validation"
 	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/monitoring/metricsreporter"
@@ -42,9 +42,11 @@ import (
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/nodeprobe"
 	"github.com/bloxapp/ssv/operator"
+	"github.com/bloxapp/ssv/operator/duties/dutystore"
 	"github.com/bloxapp/ssv/operator/slot_ticker"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
+	"github.com/bloxapp/ssv/operator/validatorsmap"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
@@ -60,6 +62,10 @@ type KeyStore struct {
 	PasswordFile   string `yaml:"PasswordFile" env:"PASSWORD_FILE" env-description:"Password for operator private key file decryption"`
 }
 
+type MessageValidation struct {
+	VerifySignatures bool `yaml:"VerifySignatures" env:"MESSAGE_VALIDATION_VERIFY_SIGNATURES" env-default:"false" env-description:"Experimental feature to verify signatures in pubsub's message validation instead of in consensus protocol."`
+}
+
 type config struct {
 	global_config.GlobalConfig `yaml:"global"`
 	DBOptions                  basedb.Options                   `yaml:"db"`
@@ -72,13 +78,11 @@ type config struct {
 	MetricsAPIPort             int                              `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port to listen on for the metrics API."`
 	EnableProfile              bool                             `yaml:"EnableProfile" env:"ENABLE_PROFILE" env-description:"flag that indicates whether go profiling tools are enabled"`
 	NetworkPrivateKey          string                           `yaml:"NetworkPrivateKey" env:"NETWORK_PRIVATE_KEY" env-description:"private key for network identity"`
-
-	WsAPIPort int  `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"Port to listen on for the websocket API."`
-	WithPing  bool `yaml:"WithPing" env:"WITH_PING" env-description:"Whether to send websocket ping messages'"`
-
-	SSVAPIPort int `yaml:"SSVAPIPort" env:"SSV_API_PORT" env-description:"Port to listen on for the SSV API."`
-
-	LocalEventsPath string `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"path to local events"`
+	WsAPIPort                  int                              `yaml:"WebSocketAPIPort" env:"WS_API_PORT" env-description:"Port to listen on for the websocket API."`
+	WithPing                   bool                             `yaml:"WithPing" env:"WITH_PING" env-description:"Whether to send websocket ping messages'"`
+	SSVAPIPort                 int                              `yaml:"SSVAPIPort" env:"SSV_API_PORT" env-description:"Port to listen on for the SSV API."`
+	LocalEventsPath            string                           `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"path to local events"`
+	MessageValidation          MessageValidation                `yaml:"MessageValidation"`
 }
 
 var cfg config
@@ -97,6 +101,11 @@ var StartNodeCmd = &cobra.Command{
 			log.Fatal("could not create logger", err)
 		}
 		defer logging.CapturePanic(logger)
+
+		metricsReporter := metricsreporter.New(
+			metricsreporter.WithLogger(logger),
+		)
+
 		networkConfig, err := setupSSVNetwork(logger)
 		if err != nil {
 			logger.Fatal("could not setup network", zap.Error(err))
@@ -128,23 +137,9 @@ var StartNodeCmd = &cobra.Command{
 			return currentEpoch >= cfg.P2pNetworkConfig.PermissionedActivateEpoch && currentEpoch < cfg.P2pNetworkConfig.PermissionedDeactivateEpoch
 		}
 
-		cfg.P2pNetworkConfig.Permissioned = permissioned
-		cfg.P2pNetworkConfig.WhitelistedOperatorKeys = append(cfg.P2pNetworkConfig.WhitelistedOperatorKeys, networkConfig.WhitelistedOperatorKeys...)
-		cfg.P2pNetworkConfig.NodeStorage = nodeStorage
-		cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorData.PublicKey)
-		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
-		cfg.P2pNetworkConfig.Network = networkConfig
-
-		p2pNetwork := setupP2P(logger, db)
-
 		slotTicker := slot_ticker.NewTicker(cmd.Context(), networkConfig)
 
-		metricsReporter := metricsreporter.New(
-			metricsreporter.WithLogger(logger),
-		)
-
 		cfg.ConsensusClient.Context = cmd.Context()
-
 		cfg.ConsensusClient.Graffiti = []byte("SSV.Network")
 		cfg.ConsensusClient.GasLimit = spectypes.DefaultGasLimit
 		cfg.ConsensusClient.Network = networkConfig.Beacon.GetNetwork()
@@ -166,6 +161,36 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not connect to execution client", zap.Error(err))
 		}
 
+		cfg.P2pNetworkConfig.Permissioned = permissioned
+		cfg.P2pNetworkConfig.WhitelistedOperatorKeys = append(cfg.P2pNetworkConfig.WhitelistedOperatorKeys, networkConfig.WhitelistedOperatorKeys...)
+		cfg.P2pNetworkConfig.NodeStorage = nodeStorage
+		cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorData.PublicKey)
+		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
+		cfg.P2pNetworkConfig.Network = networkConfig
+
+		validatorsMap := validatorsmap.New(cmd.Context())
+
+		dutyStore := dutystore.New()
+		cfg.SSVOptions.DutyStore = dutyStore
+
+		messageValidator := validation.NewMessageValidator(
+			networkConfig,
+			validation.WithShareStorage(nodeStorage.Shares()),
+			validation.WithLogger(logger),
+			validation.WithMetrics(metricsReporter),
+			validation.WithDutyStore(dutyStore),
+			validation.WithOwnOperatorID(operatorData.ID),
+			validation.WithSignatureVerification(cfg.MessageValidation.VerifySignatures),
+		)
+
+		cfg.P2pNetworkConfig.Metrics = metricsReporter
+		cfg.P2pNetworkConfig.MessageValidator = messageValidator
+		cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
+		// if signature check is enabled in message validation then it's disabled in validator controller and vice versa
+		cfg.SSVOptions.ValidatorOptions.VerifySignatures = !cfg.MessageValidation.VerifySignatures
+
+		p2pNetwork := setupP2P(logger, db)
+
 		cfg.SSVOptions.Context = cmd.Context()
 		cfg.SSVOptions.DB = db
 		cfg.SSVOptions.BeaconNode = consensusClient
@@ -178,6 +203,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.Network = p2pNetwork
 		cfg.SSVOptions.ValidatorOptions.Beacon = consensusClient
 		cfg.SSVOptions.ValidatorOptions.KeyManager = keyManager
+		cfg.SSVOptions.ValidatorOptions.ValidatorsMap = validatorsMap
 
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = nodeStorage.GetPrivateKey
 		cfg.SSVOptions.ValidatorOptions.OperatorData = operatorData
@@ -209,10 +235,10 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
 		cfg.SSVOptions.ValidatorOptions.Metrics = metricsReporter
+		cfg.SSVOptions.Metrics = metricsReporter
 
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
-		cfg.SSVOptions.Metrics = metricsReporter
 
 		operatorNode = operator.New(logger, cfg.SSVOptions, slotTicker)
 
@@ -477,10 +503,7 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 	return networkConfig, nil
 }
 
-func setupP2P(
-	logger *zap.Logger,
-	db basedb.Database,
-) network.P2PNetwork {
+func setupP2P(logger *zap.Logger, db basedb.Database) network.P2PNetwork {
 	istore := ssv_identity.NewIdentityStore(db)
 	netPrivKey, err := istore.SetupNetworkKey(logger, cfg.NetworkPrivateKey)
 	if err != nil {
