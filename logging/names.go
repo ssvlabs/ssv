@@ -25,5 +25,5 @@ const (
 	NamePubsubTrace                = "PubsubTrace"
 	NameScoreInspector             = "ScoreInspector"
 	NameEventHandler               = "EventHandler"
-	NameDutyFetcher       = "DutyFetcher"
+	NameDutyFetcher                = "DutyFetcher"
 )
