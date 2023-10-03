@@ -7,6 +7,16 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"math/big"
+	"testing"
+
+	ethcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/golang/mock/gomock"
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/ekm"
 	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/eth/eventhandler"
@@ -24,14 +34,6 @@ import (
 	"github.com/bloxapp/ssv/utils/blskeygen"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/bloxapp/ssv/utils/threshold"
-	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/golang/mock/gomock"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"go.uber.org/zap"
-	"math/big"
-	"testing"
 )
 
 type testValidatorData struct {

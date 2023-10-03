@@ -2,11 +2,13 @@ package ethtest
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv/eth/simulator/simcontract"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
+	"math/big"
+
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/stretchr/testify/require"
-	"math/big"
+
+	"github.com/bloxapp/ssv/eth/simulator/simcontract"
+	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )
 
 type testValidatorRegisteredInput struct {

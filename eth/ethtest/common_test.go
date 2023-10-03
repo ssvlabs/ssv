@@ -3,6 +3,18 @@ package ethtest
 import (
 	"context"
 	"fmt"
+	"math/big"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	ethcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/golang/mock/gomock"
+	"go.uber.org/zap/zaptest"
+
 	"github.com/bloxapp/ssv/eth/eventsyncer"
 	"github.com/bloxapp/ssv/eth/executionclient"
 	"github.com/bloxapp/ssv/eth/simulator"
@@ -10,16 +22,6 @@ import (
 	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator/mocks"
-	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/rpc"
-	"github.com/golang/mock/gomock"
-	"go.uber.org/zap/zaptest"
-	"math/big"
-	"net/http/httptest"
-	"strings"
-	"testing"
 )
 
 type CommonTestInput struct {

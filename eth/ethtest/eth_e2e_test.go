@@ -3,16 +3,18 @@ package ethtest
 import (
 	"context"
 	"fmt"
-	"github.com/bloxapp/ssv/eth/simulator/simcontract"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
+	"math/big"
+	"testing"
+	"time"
+
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
-	"math/big"
-	"testing"
-	"time"
+
+	"github.com/bloxapp/ssv/eth/simulator/simcontract"
+	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
+	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )
 
 var (

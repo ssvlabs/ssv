@@ -2,9 +2,11 @@ package ethtest
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv/eth/simulator/simcontract"
+
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/stretchr/testify/require"
+
+	"github.com/bloxapp/ssv/eth/simulator/simcontract"
 )
 
 type testValidatorRemovedInput struct {
