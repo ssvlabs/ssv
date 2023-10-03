@@ -144,6 +144,11 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	sharesData3, err := generateSharesData(validatorData3, ops, testAddr, 3)
 	require.NoError(t, err)
 
+	validatorData4, err := createNewValidator(ops)
+	require.NoError(t, err)
+	sharesData4, err := generateSharesData(validatorData4, ops, testAddr, 4)
+	require.NoError(t, err)
+
 	blockNum := uint64(0x1)
 	currentSlot.SetSlot(100)
 
@@ -457,17 +462,15 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.Equal(t, 2, len(shares))
 			valShare := eh.nodeStorage.Shares().Get(nil, valPubKey)
 			require.NotNil(t, valShare)
-			require.True(t, valShare.Invalid)
+			require.False(t, valShare.Invalid)
 			// and nonce was bumped
 			nonce, err = eh.nodeStorage.GetNextNonce(nil, testAddr)
 			require.NoError(t, err)
 			require.Equal(t, registrystorage.Nonce(3), nonce)
 		})
 
-		// Share for 1st operator is malformed; check nonce is bumped correctly; validator wasn't added
-		// slashing protection data is not added
-		t.Run("test malformed ValidatorAdded and nonce is bumped and share is saved, marked as invalid", func(t *testing.T) {
-			malformedSharesData := sharesData3[:]
+		t.Run("test malformed ValidatorAdded, nonce is bumped, share is saved, marked as invalid", func(t *testing.T) {
+			malformedSharesData := sharesData4[:]
 
 			operatorCount := len(ops)
 			signatureOffset := phase0.SignatureLength
@@ -476,7 +479,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			// Corrupt the encrypted share key of the operator 1
 			malformedSharesData[pubKeysOffset+encryptedKeyLength-1] ^= 1
 
-			valPubKey := validatorData3.masterPubKey.Serialize()
+			valPubKey := validatorData4.masterPubKey.Serialize()
 			// Call the contract method
 			_, err = boundContract.SimcontractTransactor.RegisterValidator(
 				auth,
@@ -509,11 +512,12 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.Equal(t, blockNum+1, lastProcessedBlock)
 			blockNum++
 
-			requireKeyManagerDataToNotExist(t, eh, 2, validatorData3)
+			// TODO. Fix the behavior of event_handler.go
+			requireKeyManagerDataToNotExist(t, eh, 2, validatorData4)
 
-			//// Check that validator was not registered
-			//shares = eh.nodeStorage.Shares().List(nil)
-			//require.Equal(t, 3, len(shares))
+			// Check that validator was not registered
+			shares = eh.nodeStorage.Shares().List(nil)
+			require.Equal(t, 3, len(shares))
 			valShare := eh.nodeStorage.Shares().Get(nil, valPubKey)
 			require.NotNil(t, valShare)
 			require.True(t, valShare.Invalid)
