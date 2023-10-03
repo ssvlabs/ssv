@@ -3,6 +3,7 @@ package instance
 import (
 	"bytes"
 	"encoding/hex"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
@@ -40,13 +41,6 @@ func (i *Instance) uponRoundChange(
 		fields.Root(signedRoundChange.Message.Root),
 		zap.Any("round-change-signers", signedRoundChange.Signers))
 
-	if i.proposalRoundBroadcasted >= signedRoundChange.Message.Round {
-		logger.Debug("🔄 I'm doing nothing with this round change!",
-			fields.Root(signedRoundChange.Message.Root),
-			zap.Any("round-change-signers", signedRoundChange.Signers))
-		return nil
-	}
-
 	justifiedRoundChangeMsg, valueToPropose, err := hasReceivedProposalJustificationForLeadingRound(
 		logger,
 		i.State,
@@ -79,8 +73,6 @@ func (i *Instance) uponRoundChange(
 			zap.String("instance_start_value", hex.EncodeToString(instanceStartValue)),
 			zap.String("valueToPropose", hex.EncodeToString(valueToPropose)),
 			fields.Root(proposal.Message.Root))
-
-		i.proposalRoundBroadcasted = signedRoundChange.Message.Round
 
 		if err := i.Broadcast(logger, proposal); err != nil {
 			return errors.Wrap(err, "failed to broadcast proposal message")
