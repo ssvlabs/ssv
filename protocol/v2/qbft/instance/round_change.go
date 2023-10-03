@@ -30,8 +30,11 @@ func (i *Instance) uponRoundChange(
 		return nil // UponCommit was already called
 	}
 
-	logger = logger.With(fields.Round(i.State.Round),
-		fields.Height(i.State.Height))
+	logger = logger.With(
+		fields.Round(i.State.Round),
+		fields.Height(i.State.Height),
+		zap.Uint64("msg_round", uint64(signedRoundChange.Message.Round)),
+	)
 
 	logger.Debug("🔄 got round change",
 		fields.Root(signedRoundChange.Message.Root),
@@ -249,8 +252,10 @@ func validRoundChangeForData(
 		return errors.New("msg allows 1 signer")
 	}
 
-	if err := types.VerifyByOperators(signedMsg.Signature, signedMsg, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, state.Share.Committee); err != nil {
-		return errors.Wrap(err, "msg signature invalid")
+	if config.VerifySignatures() {
+		if err := types.VerifyByOperators(signedMsg.Signature, signedMsg, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, state.Share.Committee); err != nil {
+			return errors.Wrap(err, "msg signature invalid")
+		}
 	}
 
 	if err := signedMsg.Message.Validate(); err != nil {
@@ -379,7 +384,7 @@ func CreateRoundChange(state *specqbft.State, config qbft.IConfig, newRound spec
 	}
 	sig, err := config.GetSigner().SignRoot(msg, spectypes.QBFTSignatureType, state.Share.SharePubKey)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed signing prepare msg")
+		return nil, errors.Wrap(err, "failed signing round change msg")
 	}
 
 	signedMsg := &specqbft.SignedMessage{

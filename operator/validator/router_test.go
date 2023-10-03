@@ -10,7 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
 
 func TestRouter(t *testing.T) {
@@ -19,7 +20,7 @@ func TestRouter(t *testing.T) {
 
 	logger := logging.TestLogger(t)
 
-	router := newMessageRouter()
+	router := newMessageRouter(logger)
 
 	expectedCount := 1000
 	count := 0
@@ -40,14 +41,17 @@ func TestRouter(t *testing.T) {
 	}()
 
 	for i := 0; i < expectedCount; i++ {
-		msg := spectypes.SSVMessage{
-			MsgType: spectypes.MsgType(i % 3),
-			MsgID:   spectypes.NewMsgID(types.GetDefaultDomain(), []byte{1, 1, 1, 1, 1}, spectypes.BNRoleAttester),
-			Data:    []byte(fmt.Sprintf("data-%d", i)),
+		msg := &queue.DecodedSSVMessage{
+			SSVMessage: &spectypes.SSVMessage{
+				MsgType: spectypes.MsgType(i % 3),
+				MsgID:   spectypes.NewMsgID(networkconfig.TestNetwork.Domain, []byte{1, 1, 1, 1, 1}, spectypes.BNRoleAttester),
+				Data:    []byte(fmt.Sprintf("data-%d", i)),
+			},
 		}
-		router.Route(logger, msg)
+
+		router.Route(context.TODO(), msg)
 		if i%2 == 0 {
-			go router.Route(logger, msg)
+			go router.Route(context.TODO(), msg)
 		}
 	}
 

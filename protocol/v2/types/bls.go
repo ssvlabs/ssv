@@ -9,7 +9,7 @@ var blsPublicKeyCache *lru.Cache[string, bls.PublicKey]
 
 func init() {
 	var err error
-	blsPublicKeyCache, err = lru.New[string, bls.PublicKey](10_000)
+	blsPublicKeyCache, err = lru.New[string, bls.PublicKey](128_000)
 	if err != nil {
 		panic(err)
 	}

@@ -1,6 +1,7 @@
 package p2pv1
 
 import (
+	"context"
 	"encoding/hex"
 	"fmt"
 
@@ -11,12 +12,12 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/records"
-
-	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
 
 type validatorStatus int
@@ -133,8 +134,8 @@ func (n *p2pNetwork) subscribe(logger *zap.Logger, pk spectypes.ValidatorPK) err
 }
 
 // handleIncomingMessages reads messages from the given channel and calls the router, note that this function blocks.
-func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(topic string, msg *pubsub.Message) error {
-	return func(topic string, msg *pubsub.Message) error {
+func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.Context, topic string, msg *pubsub.Message) error {
+	return func(ctx context.Context, topic string, msg *pubsub.Message) error {
 		if n.msgRouter == nil {
 			logger.Debug("msg router is not configured")
 			return nil
@@ -143,26 +144,28 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(topic string,
 			return nil
 		}
 
-		var ssvMsg *spectypes.SSVMessage
+		var decodedMsg *queue.DecodedSSVMessage
 		if msg.ValidatorData != nil {
-			m, ok := msg.ValidatorData.(spectypes.SSVMessage)
+			m, ok := msg.ValidatorData.(*queue.DecodedSSVMessage)
 			if ok {
-				ssvMsg = &m
+				decodedMsg = m
 			}
 		}
-		if ssvMsg == nil {
+		if decodedMsg == nil {
 			return errors.New("message was not decoded")
 		}
 
-		p2pID := ssvMsg.GetID().String()
+		p2pID := decodedMsg.GetID().String()
 
 		//	logger.With(
 		// 		zap.String("pubKey", hex.EncodeToString(ssvMsg.MsgID.GetPubKey())),
 		// 		zap.String("role", ssvMsg.MsgID.GetRoleType().String()),
 		// 	).Debug("handlePubsubMessages")
 
-		metricsRouterIncoming.WithLabelValues(p2pID, message.MsgTypeToString(ssvMsg.MsgType)).Inc()
-		n.msgRouter.Route(logger, *ssvMsg)
+		metricsRouterIncoming.WithLabelValues(p2pID, message.MsgTypeToString(decodedMsg.MsgType)).Inc()
+
+		n.msgRouter.Route(ctx, decodedMsg)
+
 		return nil
 	}
 }

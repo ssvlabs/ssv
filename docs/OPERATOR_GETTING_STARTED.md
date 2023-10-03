@@ -148,7 +148,8 @@ OperatorPrivateKey: LS0tLS...
 
 ### 6. Start SSV Node in Docker
 
-Run the docker image in the same folder you created the `config.yaml`:
+Before start, make sure the clock is synced with NTP servers. 
+Then, run the docker image in the same folder you created the `config.yaml`:
 
 ```shell
 $ docker run -d --restart unless-stopped --name=ssv_node -e CONFIG_PATH=./config.yaml -p 13001:13001 -p 12001:12001/udp -v $(pwd)/config.yaml:/config.yaml -v $(pwd):/data --log-opt max-size=500m --log-opt max-file=10 -it 'bloxstaking/ssv-node:latest' make BUILD_PATH=/go/bin/ssvnode start-node \

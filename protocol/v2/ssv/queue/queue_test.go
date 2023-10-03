@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 )
@@ -109,7 +109,7 @@ func TestPriorityQueue_Pop(t *testing.T) {
 	queue := New(capacity)
 	require.True(t, queue.Empty())
 
-	msg, err := DecodeSSVMessage(zap.L(), mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
+	msg, err := DecodeSSVMessage(mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
 	require.NoError(t, err)
 
 	// Push messages.
@@ -163,7 +163,7 @@ func TestPriorityQueue_Order(t *testing.T) {
 			// Decode messages.
 			messages := make(messageSlice, len(test.messages))
 			for i, m := range test.messages {
-				mm, err := DecodeSSVMessage(zap.L(), m.ssvMessage(test.state))
+				mm, err := DecodeSSVMessage(m.ssvMessage(test.state))
 				require.NoError(t, err)
 				messages[i] = mm
 			}
@@ -184,30 +184,32 @@ func TestPriorityQueue_Order(t *testing.T) {
 	}
 }
 
-type mockMetrics struct {
-	dropped int
+type testMetrics struct {
+	dropped atomic.Uint64
 }
 
-func (m *mockMetrics) Dropped() { m.dropped++ }
+func (n *testMetrics) DroppedQueueMessage(messageID spectypes.MessageID) {
+	n.dropped.Add(1)
+}
 
 func TestWithMetrics(t *testing.T) {
-	var metrics mockMetrics
-	queue := WithMetrics(New(1), &metrics)
+	metrics := &testMetrics{}
+	queue := WithMetrics(New(1), metrics)
 	require.True(t, queue.Empty())
 
 	// Push 1 message.
-	msg, err := DecodeSSVMessage(zap.L(), mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
+	msg, err := DecodeSSVMessage(mockConsensusMessage{Height: 100, Type: qbft.PrepareMsgType}.ssvMessage(mockState))
 	require.NoError(t, err)
 	pushed := queue.TryPush(msg)
 	require.True(t, pushed)
 	require.False(t, queue.Empty())
-	require.Equal(t, 0, metrics.dropped)
+	require.EqualValues(t, 0, metrics.dropped.Load())
 
 	// Push above capacity.
 	pushed = queue.TryPush(msg)
 	require.False(t, pushed)
 	require.False(t, queue.Empty())
-	require.Equal(t, 1, metrics.dropped)
+	require.EqualValues(t, 1, metrics.dropped.Load())
 }
 
 func BenchmarkPriorityQueue_Parallel(b *testing.B) {
@@ -234,7 +236,7 @@ func benchmarkPriorityQueueParallel(b *testing.B, factory func() Queue, lossy bo
 	messages := make([]*DecodedSSVMessage, messageCount)
 	for i := range messages {
 		var err error
-		msg, err := DecodeSSVMessage(zap.L(), mockConsensusMessage{Height: qbft.Height(rand.Intn(messageCount)), Type: qbft.PrepareMsgType}.ssvMessage(mockState))
+		msg, err := DecodeSSVMessage(mockConsensusMessage{Height: qbft.Height(rand.Intn(messageCount)), Type: qbft.PrepareMsgType}.ssvMessage(mockState))
 		require.NoError(b, err)
 		messages[i] = msg
 	}
@@ -359,7 +361,7 @@ func BenchmarkPriorityQueue_Concurrent(b *testing.B) {
 	for _, i := range rand.Perm(messageCount) {
 		height := qbft.FirstHeight + qbft.Height(i)
 		for _, t := range types {
-			decoded, err := DecodeSSVMessage(zap.L(), mockConsensusMessage{Height: height, Type: t}.ssvMessage(mockState))
+			decoded, err := DecodeSSVMessage(mockConsensusMessage{Height: height, Type: t}.ssvMessage(mockState))
 			require.NoError(b, err)
 			msgs <- decoded
 		}
@@ -412,7 +414,7 @@ func BenchmarkPriorityQueue_Concurrent(b *testing.B) {
 }
 
 func decodeAndPush(t require.TestingT, queue Queue, msg mockMessage, state *State) *DecodedSSVMessage {
-	decoded, err := DecodeSSVMessage(zap.L(), msg.ssvMessage(state))
+	decoded, err := DecodeSSVMessage(msg.ssvMessage(state))
 	require.NoError(t, err)
 	queue.Push(decoded)
 	return decoded

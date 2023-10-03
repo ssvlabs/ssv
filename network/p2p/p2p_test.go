@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -19,7 +21,6 @@ import (
 
 	"github.com/bloxapp/ssv/network"
 	protcolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 func TestGetMaxPeers(t *testing.T) {
@@ -118,7 +119,7 @@ func TestP2pNetwork_Stream(t *testing.T) {
 
 	pk, err := hex.DecodeString(pkHex)
 	require.NoError(t, err)
-	mid := spectypes.NewMsgID(types.GetDefaultDomain(), pk, spectypes.BNRoleAttester)
+	mid := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, pk, spectypes.BNRoleAttester)
 	rounds := []specqbft.Round{
 		1, 1, 1,
 		1, 2, 2,
@@ -235,21 +236,23 @@ func registerHandler(logger *zap.Logger, node network.P2PNetwork, mid spectypes.
 	})
 }
 
-func createNetworkAndSubscribe(t *testing.T, ctx context.Context, n int, pks ...string) (*LocalNet, []*dummyRouter, error) {
+func createNetworkAndSubscribe(t *testing.T, ctx context.Context, nodes int, pks ...string) (*LocalNet, []*dummyRouter, error) {
 	logger := logging.TestLogger(t)
-	ln, err := CreateAndStartLocalNet(ctx, logger.Named("createNetworkAndSubscribe"), n, n/2-1, false)
+	ln, err := CreateAndStartLocalNet(ctx, logger.Named("createNetworkAndSubscribe"), nodes, nodes/2-1, false)
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(ln.Nodes) != n {
-		return nil, nil, errors.Errorf("only %d peers created, expected %d", len(ln.Nodes), n)
+	if len(ln.Nodes) != nodes {
+		return nil, nil, errors.Errorf("only %d peers created, expected %d", len(ln.Nodes), nodes)
 	}
 
 	logger.Debug("created local network")
 
-	routers := make([]*dummyRouter, n)
+	routers := make([]*dummyRouter, nodes)
 	for i, node := range ln.Nodes {
-		routers[i] = &dummyRouter{i: i}
+		routers[i] = &dummyRouter{
+			i: i,
+		}
 		node.UseMessageRouter(routers[i])
 	}
 
@@ -299,9 +302,8 @@ type dummyRouter struct {
 	i     int
 }
 
-func (r *dummyRouter) Route(logger *zap.Logger, message spectypes.SSVMessage) {
-	c := atomic.AddUint64(&r.count, 1)
-	logger.Debug("got message", zap.Uint64("count", c))
+func (r *dummyRouter) Route(_ context.Context, _ *queue.DecodedSSVMessage) {
+	atomic.AddUint64(&r.count, 1)
 }
 
 func dummyMsg(pkHex string, height int) (*spectypes.SSVMessage, error) {
@@ -309,7 +311,7 @@ func dummyMsg(pkHex string, height int) (*spectypes.SSVMessage, error) {
 	if err != nil {
 		return nil, err
 	}
-	id := spectypes.NewMsgID(types.GetDefaultDomain(), pk, spectypes.BNRoleAttester)
+	id := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, pk, spectypes.BNRoleAttester)
 	signedMsg := &specqbft.SignedMessage{
 		Message: specqbft.Message{
 			MsgType:    specqbft.CommitMsgType,
