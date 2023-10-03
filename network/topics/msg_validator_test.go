@@ -25,7 +25,7 @@ import (
 
 func TestMsgValidator(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	db, err := kv.NewInMemory(logger, basedb.Options{})
+	db, err := kv.NewInMemory(context.TODO(), logger, basedb.Options{})
 	require.NoError(t, err)
 
 	ns, err := storage.NewNodeStorage(logger, db)

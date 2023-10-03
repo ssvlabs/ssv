@@ -2,6 +2,7 @@ package validation
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"math"
 	"testing"
@@ -32,7 +33,7 @@ import (
 
 func Test_ValidateSSVMessage(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	db, err := kv.NewInMemory(logger, basedb.Options{})
+	db, err := kv.NewInMemory(context.TODO(), logger, basedb.Options{})
 	require.NoError(t, err)
 
 	ns, err := storage.NewNodeStorage(logger, db)
