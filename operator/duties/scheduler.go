@@ -19,6 +19,7 @@ import (
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/operator/duties/dutystore"
 	"github.com/bloxapp/ssv/operator/slotticker"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -47,7 +48,8 @@ type BeaconNode interface {
 
 // ValidatorController represents the component that controls validators via the scheduler
 type ValidatorController interface {
-	ActiveValidatorIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
+	CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
+	AllActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
 	GetOperatorShares() []*types.SSVShare
 }
 
@@ -62,6 +64,7 @@ type SchedulerOptions struct {
 	IndicesChg          chan struct{}
 	SlotTickerProvider  slotticker.Provider
 	BuilderProposals    bool
+	DutyStore           *dutystore.Store
 }
 
 type Scheduler struct {
@@ -88,6 +91,11 @@ type Scheduler struct {
 }
 
 func NewScheduler(opts *SchedulerOptions) *Scheduler {
+	dutyStore := opts.DutyStore
+	if dutyStore == nil {
+		dutyStore = dutystore.New()
+	}
+
 	s := &Scheduler{
 		beaconNode:          opts.BeaconNode,
 		network:             opts.Network,
@@ -99,9 +107,9 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 		blockPropagateDelay: blockPropagationDelay,
 
 		handlers: []dutyHandler{
-			NewAttesterHandler(),
-			NewProposerHandler(),
-			NewSyncCommitteeHandler(),
+			NewAttesterHandler(dutyStore.Attester),
+			NewProposerHandler(dutyStore.Proposer),
+			NewSyncCommitteeHandler(dutyStore.SyncCommittee),
 		},
 
 		ticker:   opts.SlotTickerProvider(),

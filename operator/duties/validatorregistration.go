@@ -42,7 +42,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 			sent := 0
 
 			for _, share := range shares {
-				if !share.HasBeaconMetadata() {
+				if !share.HasBeaconMetadata() || !share.BeaconMetadata.IsAttesting() {
 					continue
 				}
 

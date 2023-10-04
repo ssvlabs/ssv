@@ -7,31 +7,34 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/network/commons"
-
-	"github.com/multiformats/go-multistream"
-
 	"github.com/bloxapp/ssv-spec/qbft"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	libp2p_protocol "github.com/libp2p/go-libp2p/core/protocol"
+	"github.com/multiformats/go-multistream"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
 
 func (n *p2pNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
-	return n.syncer.SyncHighestDecided(context.Background(), n.interfaceLogger, mid, func(msg spectypes.SSVMessage) {
-		n.msgRouter.Route(n.interfaceLogger, msg)
+	ctx := context.TODO() // TODO: pass context to SyncHighestDecided
+
+	return n.syncer.SyncHighestDecided(ctx, n.interfaceLogger, mid, func(msg *queue.DecodedSSVMessage) {
+		n.msgRouter.Route(ctx, msg)
 	})
 }
 
 func (n *p2pNetwork) SyncDecidedByRange(mid spectypes.MessageID, from, to qbft.Height) {
+	ctx := context.TODO() // TODO: pass context to SyncDecidedByRange
+
 	if !n.cfg.FullNode {
 		return
 	}
@@ -61,8 +64,8 @@ func (n *p2pNetwork) SyncDecidedByRange(mid spectypes.MessageID, from, to qbft.H
 		return
 	}
 
-	err := n.syncer.SyncDecidedByRange(context.Background(), n.interfaceLogger, mid, from, to, func(msg spectypes.SSVMessage) {
-		n.msgRouter.Route(n.interfaceLogger, msg)
+	err := n.syncer.SyncDecidedByRange(ctx, n.interfaceLogger, mid, from, to, func(msg *queue.DecodedSSVMessage) {
+		n.msgRouter.Route(ctx, msg)
 	})
 	if err != nil {
 		n.interfaceLogger.Error("failed to sync decided by range", zap.Error(err))

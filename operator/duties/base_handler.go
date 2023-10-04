@@ -3,7 +3,6 @@ package duties
 import (
 	"context"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
 
@@ -56,25 +55,4 @@ func (h *baseHandler) Setup(
 	h.ticker = slotTickerProvider()
 	h.reorg = reorgEvents
 	h.indicesChange = indicesChange
-}
-
-type Duties[D any] struct {
-	m map[phase0.Epoch]map[phase0.Slot][]D
-}
-
-func NewDuties[D any]() *Duties[D] {
-	return &Duties[D]{
-		m: make(map[phase0.Epoch]map[phase0.Slot][]D),
-	}
-}
-
-func (d *Duties[D]) Add(epoch phase0.Epoch, slot phase0.Slot, duty D) {
-	if _, ok := d.m[epoch]; !ok {
-		d.m[epoch] = make(map[phase0.Slot][]D)
-	}
-	d.m[epoch][slot] = append(d.m[epoch][slot], duty)
-}
-
-func (d *Duties[D]) Reset(epoch phase0.Epoch) {
-	delete(d.m, epoch)
 }
