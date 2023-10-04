@@ -155,7 +155,7 @@ func TestSlotSkipping(t *testing.T) {
 			slot := ticker.Slot()
 
 			// Ensure we never receive slots out of order or repeatedly
-			require.True(t, slot > lastSlot, "Expected slot %d to be greater than last slot %d", slot, lastSlot)
+			require.Equal(t, slot, lastSlot+1, "Expected slot %d to be one more than the last slot %d", slot, lastSlot)
 			lastSlot = slot
 
 			// If it's the 10th tick or any multiple thereof
