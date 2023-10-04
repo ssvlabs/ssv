@@ -60,8 +60,6 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 	}
 
 	for _, dutyRunner := range options.DutyRunners {
-		//TODO[matus]
-		//create registration function
 		// Setup the queue.
 		role := dutyRunner.GetBaseRunner().BeaconRoleType
 		msgID := spectypes.NewMsgID(types.GetDefaultDomain(), options.SSVShare.ValidatorPubKey, role).String()
