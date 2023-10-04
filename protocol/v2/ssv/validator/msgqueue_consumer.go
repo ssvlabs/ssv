@@ -146,7 +146,6 @@ outerLoop:
 				select {
 				case <-instance.GetConfig().GetTimer().GetChannel():
 					height := runner.GetBaseRunner().QBFTController.Height
-					instance := runner.GetBaseRunner().QBFTController.InstanceForHeight(logger, height)
 					v.onTimeout(logger, spectypes.MessageID(instance.State.ID), height, instance.GetConfig().GetTimer().Round())
 
 				case msg, closed := <-queueUpdater.GetChannel():
