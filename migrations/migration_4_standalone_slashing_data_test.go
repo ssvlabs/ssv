@@ -4,8 +4,10 @@ import (
 	"context"
 	"testing"
 
+	"github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ekm"
 	"github.com/bloxapp/ssv/logging"
@@ -21,31 +23,12 @@ const (
 	sk2Str = "66dd37ae71b35c81022cdde98370e881cff896b689fa9136917f45afce43fd3b"
 )
 
-// TestSlashingProtectionMigration tests the migration of slashing protection data from a legacy database to a new standalone database.
+// TestSlashingProtectionMigration
+// NodeDB = Exists
+// SpDB = Doesn't Exist
+// tests the migration of slashing protection data from a legacy database to a new standalone database.
 func TestSlashingProtectionMigration(t *testing.T) {
-	// Initialization
-	threshold.Init()
-	ctx := context.Background()
-	logger := logging.TestLogger(t)
-
-	// Database setup
-	nodeDBPath := t.TempDir()
-	db, err := kv.New(ctx, logger, basedb.Options{
-		Path: nodeDBPath,
-	})
-	require.NoError(t, err)
-	// simulate legacy db
-	legacyDb := db
-
-	// Network configuration
-	network := &networkconfig.NetworkConfig{
-		Beacon: utils.SetupMockBeaconNetwork(t, nil),
-		Domain: networkconfig.TestNetwork.Domain,
-	}
-
-	// Key management setup
-	km, err := ekm.NewETHKeyManagerSigner(logger, db, legacyDb, *network, true, "")
-	require.NoError(t, err)
+	ctx, logger, network, db, spDB, km, spStorage := setupCommon(t)
 
 	sk1 := &bls.SecretKey{}
 	require.NoError(t, sk1.SetHexString(sk1Str))
@@ -55,17 +38,6 @@ func TestSlashingProtectionMigration(t *testing.T) {
 
 	require.NoError(t, km.AddShare(sk1))
 	require.NoError(t, km.AddShare(sk2))
-
-	// Standalone slashing protection storage setup
-	spDBPath := t.TempDir()
-	options := basedb.Options{
-		Path:       spDBPath,
-		SyncWrites: true,
-	}
-
-	spDB, err := kv.New(ctx, logger, options)
-	require.NoError(t, err)
-	spStorage := ekm.NewSlashingProtectionStorage(spDB, logger, []byte(network.Beacon.GetBeaconNetwork()))
 
 	// Migration process
 	migrationOpts := Options{
@@ -83,6 +55,10 @@ func TestSlashingProtectionMigration(t *testing.T) {
 			return rw.Set(migrationsPrefix, []byte(migration_4_standalone_slashing_data.Name), migrationCompleted)
 		},
 	))
+
+	obj, _, err := db.Get(migrationsPrefix, []byte(migration_4_standalone_slashing_data.Name))
+	require.NoError(t, err)
+	require.Equal(t, migrationCompleted, obj.Value)
 
 	// Verification of migration
 	// Check that the slashing protection storage has the same data as the legacy database
@@ -117,4 +93,195 @@ func TestSlashingProtectionMigration(t *testing.T) {
 
 		require.Equal(t, legacyHighProposal, migratedHighProposal)
 	}
+}
+
+// TestSlashingProtectionMigration_NodeDB_SPDB_Exists
+// NodeDB = Exists
+// SlashingDB = Exists
+// test that migration fails if the node & sp DBs already exists
+func TestSlashingProtectionMigration_NodeDB_SPDB_Exists(t *testing.T) {
+	ctx, logger, network, db, spDB, km, spStorage := setupCommon(t)
+
+	sk1 := &bls.SecretKey{}
+	require.NoError(t, sk1.SetHexString(sk1Str))
+
+	sk2 := &bls.SecretKey{}
+	require.NoError(t, sk2.SetHexString(sk2Str))
+
+	require.NoError(t, km.AddShare(sk1))
+	require.NoError(t, km.AddShare(sk2))
+
+	// populate slashing protection storage with some data
+	err := spStorage.SaveHighestProposal([]byte("mock_pub_key"), network.Beacon.EstimatedCurrentSlot())
+	require.NoError(t, err)
+
+	// Migration process
+	migrationOpts := Options{
+		Db:      db,
+		SpDb:    spDB,
+		Network: network.Beacon,
+	}
+
+	require.Error(t, migration_4_standalone_slashing_data.Run(
+		ctx,
+		logger,
+		migrationOpts,
+		[]byte(migration_4_standalone_slashing_data.Name),
+		func(rw basedb.ReadWriter) error {
+			return rw.Set(migrationsPrefix, []byte(migration_4_standalone_slashing_data.Name), migrationCompleted)
+		},
+	))
+
+	_, found, err := db.Get(migrationsPrefix, []byte(migration_4_standalone_slashing_data.Name))
+	require.NoError(t, err)
+	require.False(t, found)
+
+	// Verification of migration
+	// Check that the slashing protection storage has the same data as the legacy database
+	ekmStorage := km.(ekm.StorageProvider)
+	accounts, err := ekmStorage.ListAccounts()
+	require.NoError(t, err)
+	require.Len(t, accounts, 2)
+
+	for _, account := range accounts {
+		legacyHighAtt, found, err := ekmStorage.RetrieveHighestAttestation(account.ValidatorPublicKey())
+		require.NoError(t, err)
+		require.True(t, found)
+		require.NotNil(t, legacyHighAtt)
+
+		migratedHighAtt, found, err := spStorage.RetrieveHighestAttestation(account.ValidatorPublicKey())
+		require.NoError(t, err)
+		require.False(t, found)
+		require.Nil(t, migratedHighAtt)
+
+		legacyHighProposal, found, err := ekmStorage.RetrieveHighestProposal(account.ValidatorPublicKey())
+		require.NoError(t, err)
+		require.True(t, found)
+		require.NotZero(t, legacyHighProposal)
+
+		migratedHighProposal, found, err := spStorage.RetrieveHighestProposal(account.ValidatorPublicKey())
+		require.NoError(t, err)
+		require.False(t, found)
+		require.Zero(t, migratedHighProposal)
+	}
+}
+
+// TestSlashingProtectionMigration_NodeDB_SPDB_Does_Not_Exists
+// NodeDB = Doesn't Exist
+// SlashingDB = Doesn't Exist
+// test that migration complete without error
+func TestSlashingProtectionMigration_NodeDB_SPDB_Does_Not_Exists(t *testing.T) {
+	ctx, logger, network, db, spDB, km, _ := setupCommon(t)
+
+	// Migration process
+	migrationOpts := Options{
+		Db:      db,
+		SpDb:    spDB,
+		Network: network.Beacon,
+	}
+
+	require.NoError(t, migration_4_standalone_slashing_data.Run(
+		ctx,
+		logger,
+		migrationOpts,
+		[]byte(migration_4_standalone_slashing_data.Name),
+		func(rw basedb.ReadWriter) error {
+			return rw.Set(migrationsPrefix, []byte(migration_4_standalone_slashing_data.Name), migrationCompleted)
+		},
+	))
+
+	obj, _, err := db.Get(migrationsPrefix, []byte(migration_4_standalone_slashing_data.Name))
+	require.NoError(t, err)
+	require.Equal(t, migrationCompleted, obj.Value)
+
+	// Verification of migration
+	// Check that the slashing protection storage has the same data as the legacy database
+	ekmStorage := km.(ekm.StorageProvider)
+	accounts, err := ekmStorage.ListAccounts()
+	require.NoError(t, err)
+	require.Len(t, accounts, 0)
+
+	empty, err := spDB.IsEmpty()
+	require.NoError(t, err)
+	require.True(t, empty)
+}
+
+// TestSlashingProtectionMigration_NodeDB_DoesNot_Exists_SPDB_Exists
+// NodeDB = Doesn't Exist
+// SlashingDB = Exist
+// test that migration complete without error
+func TestSlashingProtectionMigration_NodeDB_DoesNot_Exists_SPDB_Exists(t *testing.T) {
+	ctx, logger, network, db, spDB, km, spStorage := setupCommon(t)
+	// populate slashing protection storage with some data
+	err := spStorage.SaveHighestProposal([]byte("mock_pub_key"), network.Beacon.EstimatedCurrentSlot())
+	require.NoError(t, err)
+
+	// Migration process
+	migrationOpts := Options{
+		Db:      db,
+		SpDb:    spDB,
+		Network: network.Beacon,
+	}
+
+	require.NoError(t, migration_4_standalone_slashing_data.Run(
+		ctx,
+		logger,
+		migrationOpts,
+		[]byte(migration_4_standalone_slashing_data.Name),
+		func(rw basedb.ReadWriter) error {
+			return rw.Set(migrationsPrefix, []byte(migration_4_standalone_slashing_data.Name), migrationCompleted)
+		},
+	))
+
+	obj, _, err := db.Get(migrationsPrefix, []byte(migration_4_standalone_slashing_data.Name))
+	require.NoError(t, err)
+	require.Equal(t, migrationCompleted, obj.Value)
+
+	// Verification of migration
+	// Check that the slashing protection storage has the same data as the legacy database
+	ekmStorage := km.(ekm.StorageProvider)
+	accounts, err := ekmStorage.ListAccounts()
+	require.NoError(t, err)
+	require.Len(t, accounts, 0)
+
+	empty, err := spDB.IsEmpty()
+	require.NoError(t, err)
+	require.False(t, empty)
+}
+
+func setupCommon(t *testing.T) (context.Context, *zap.Logger, *networkconfig.NetworkConfig, *kv.BadgerDB, *kv.BadgerDB, types.KeyManager, ekm.SPStorage) {
+	// Initialization
+	threshold.Init()
+	ctx := context.Background()
+	logger := logging.TestLogger(t)
+
+	// Database setup
+	nodeDBPath := t.TempDir()
+	db, err := kv.New(ctx, logger, basedb.Options{
+		Path: nodeDBPath,
+	})
+	require.NoError(t, err)
+
+	// Network configuration
+	network := &networkconfig.NetworkConfig{
+		Beacon: utils.SetupMockBeaconNetwork(t, nil),
+		Domain: networkconfig.TestNetwork.Domain,
+	}
+
+	// Key management setup
+	km, err := ekm.NewETHKeyManagerSigner(logger, db, db, *network, true, "")
+	require.NoError(t, err)
+
+	// Standalone slashing protection storage setup
+	spDBPath := t.TempDir()
+	options := basedb.Options{
+		Path:       spDBPath,
+		SyncWrites: true,
+	}
+
+	spDB, err := kv.New(ctx, logger, options)
+	require.NoError(t, err)
+	spStorage := ekm.NewSlashingProtectionStorage(spDB, logger, []byte(network.Beacon.GetBeaconNetwork()))
+
+	return ctx, logger, network, db, spDB, km, spStorage
 }

@@ -59,6 +59,8 @@ type Database interface {
 	DropPrefix(prefix []byte) error
 	Update(fn func(Txn) error) error
 	Close() error
+
+	IsEmpty() (bool, error)
 }
 
 // GarbageCollector is an interface implemented by storage engines which demand garbage collection.

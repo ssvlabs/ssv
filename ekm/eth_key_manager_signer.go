@@ -58,6 +58,7 @@ type StorageProvider interface {
 	RetrieveHighestAttestation(pubKey []byte) (*phase0.AttestationData, bool, error)
 	RetrieveHighestProposal(pubKey []byte) (phase0.Slot, bool, error)
 	BumpSlashingProtection(pubKey []byte) error
+	MatchSlashingProtectionData() error
 }
 
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
@@ -339,6 +340,41 @@ func (km *ethKeyManagerSigner) BumpSlashingProtection(pubKey []byte) error {
 	// Update highest proposal data for slashing protection.
 	if err := km.updateHighestProposal(pubKey, currentSlot); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+// MatchSlashingProtectionData checks if the slashing protection data matches signer accounts.
+func (km *ethKeyManagerSigner) MatchSlashingProtectionData() error {
+	accounts, err := km.storage.ListAccounts()
+	if err != nil {
+		return fmt.Errorf("could not list accounts: %w", err)
+	}
+
+	for _, account := range accounts {
+		pubKey := account.ValidatorPublicKey()
+		highAtt, found, err := km.storage.RetrieveHighestAttestation(pubKey)
+		if err != nil {
+			return fmt.Errorf("could not retrieve highest attestation: %w", err)
+		}
+		if !found {
+			return fmt.Errorf("highest attestation for account %s not found", pubKey)
+		}
+		if highAtt == nil {
+			return fmt.Errorf("highest attestation for account %s is nil", pubKey)
+		}
+
+		highProp, found, err := km.storage.RetrieveHighestProposal(pubKey)
+		if err != nil {
+			return fmt.Errorf("could not retrieve highest proposal: %w", err)
+		}
+		if !found {
+			return fmt.Errorf("highest proposal for account %s not found", pubKey)
+		}
+		if highProp == 0 {
+			return fmt.Errorf("highest proposal for account %s is 0", pubKey)
+		}
 	}
 
 	return nil

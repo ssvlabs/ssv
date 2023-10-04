@@ -24,6 +24,16 @@ var migration_4_standalone_slashing_data = Migration{
 				return fmt.Errorf("failed to list accounts: %w", err)
 			}
 
+			spIsEmpty, err := opt.SpDb.IsEmpty()
+			if err != nil {
+				return fmt.Errorf("failed to check if slashing protection db is empty: %w", err)
+			}
+			// Edge case where the nodeDB and sp DB exists, but migration was not completed
+			// In this case, we want to throw an error
+			if len(accounts) > 0 && !spIsEmpty {
+				return fmt.Errorf("can not migrate legacy slashing protection data over existing slashing protection data")
+			}
+
 			for _, account := range accounts {
 				sharePubKey := account.ValidatorPublicKey()
 
@@ -83,6 +93,8 @@ var migration_4_standalone_slashing_data = Migration{
 					return fmt.Errorf("migrated highest proposal is not equal to original for share %s", hex.EncodeToString(sharePubKey))
 				}
 			}
+
+			logger.Info("migrated slashing protection data for accounts", zap.Int("accounts", len(accounts)))
 
 			// NOTE: skip removing legacy data, for unexpected migration behavior to rescue the slashing protection data
 			return completed(txn)

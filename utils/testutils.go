@@ -1,8 +1,6 @@
 package utils
 
 import (
-	"fmt"
-	"os"
 	"sync"
 	"testing"
 
@@ -54,32 +52,4 @@ func SetupMockBeaconNetwork(t *testing.T, currentSlot *SlotValue) *mocknetwork.M
 	).AnyTimes()
 
 	return mockBeaconNetwork
-}
-
-func CreateMockConfigFile(path string, dbPath string) (*os.File, error) {
-	f, err := os.CreateTemp(path, "config-*.yaml")
-	if err != nil {
-		return nil, err
-	}
-
-	if dbPath == "" {
-		dbPath = os.TempDir()
-	}
-
-	data := fmt.Sprintf(`
-db:
-  Path: %s
-
-eth2:
-  BeaconNodeAddr: mock-eth2-addr
-
-eth1:
-  ETH1Addr: mock-eth1-addr
-`, dbPath)
-
-	if _, err = f.Write([]byte(data)); err != nil {
-		return nil, err
-	}
-
-	return f, nil
 }

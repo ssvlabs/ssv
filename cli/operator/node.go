@@ -73,6 +73,10 @@ type DBOptions struct {
 	GCInterval time.Duration `yaml:"GCInterval" env:"DB_GC_INTERVAL" env-default:"6m" env-description:"Interval between garbage collection cycles. Set to 0 to disable."`
 }
 
+type SlashingProtectionOptions struct {
+	DBPath string `yaml:"DBPath" env:"SP_DB_PATH" env-description:"Path for slashing protection db"`
+}
+
 type config struct {
 	global_config.GlobalConfig `yaml:"global"`
 	DBOptions                  DBOptions                        `yaml:"db"`
@@ -119,7 +123,7 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not setup network", zap.Error(err))
 		}
 
-		spDB, err := setupSlashingProtectionDB(cmd.Context(), logger, networkConfig.Beacon.GetNetwork())
+		spDB, err := setupSlashingProtectionDB(cmd.Context(), logger, &cfg)
 		if err != nil {
 			logger.Fatal("could not setup slashing protection db", zap.Error(err))
 		}
@@ -401,6 +405,19 @@ func setupDB(ctx context.Context, logger *zap.Logger, network beaconprotocol.Bea
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open db")
 	}
+
+	//item, found, err := db.Get([]byte{}, []byte("ssv-db-type"))
+	//if err != nil {
+	//	return nil, err
+	//}
+	//
+	//if !found {
+	//	// set
+	//} else if string(item.Value) != "ssv" {
+	//	// return error
+	//	return nil, errors.New("db is not an ssv db")
+	//}
+
 	reopenDb := func() error {
 		if err := db.Close(); err != nil {
 			return errors.Wrap(err, "failed to close db")
@@ -447,12 +464,7 @@ func setupDB(ctx context.Context, logger *zap.Logger, network beaconprotocol.Bea
 	return db, nil
 }
 
-func setupSlashingProtectionDB(ctx context.Context, logger *zap.Logger, network beaconprotocol.BeaconNetwork) (*kv.BadgerDB, error) {
-	// Validate that provided slashing protection DB path directory exists
-	if _, err := os.Stat(cfg.SlashingProtectionOptions.DBPath); os.IsNotExist(err) {
-		return nil, fmt.Errorf("slashing protection database does not exist, please create it using the 'create-slashing-protection-db' command: %w", err)
-	}
-
+func setupSlashingProtectionDB(ctx context.Context, logger *zap.Logger, cfg *config) (*kv.BadgerDB, error) {
 	// Validate that the slashing protection DB and node DB are not in the same directory
 	if filepath.Dir(cfg.DBOptions.Path) == filepath.Dir(cfg.SlashingProtectionOptions.DBPath) {
 		return nil, fmt.Errorf("node DB (db.Path) and slashing protection DB (slashing_protection.DBPath) should not be in the same directory")
@@ -466,20 +478,6 @@ func setupSlashingProtectionDB(ctx context.Context, logger *zap.Logger, network 
 	db, err := kv.New(ctx, logger, options)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open slashing protection DB: %w", err)
-	}
-
-	// If the sp db was created with cli command, it should include "genesis" version of the db
-	// this way we can validate the db was created via the cli command. if not, we should fail
-	storage := ekm.NewSlashingProtectionStorage(db, logger, []byte(network.GetBeaconNetwork()))
-	value, found, err := storage.GetVersion()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get slashing protection DB version: %w", err)
-	}
-	if !found {
-		return nil, fmt.Errorf("slashing protection DB is missing version, please create it using the 'create-slashing-protection-db' command")
-	}
-	if value != ekm.GenesisVersion {
-		return nil, fmt.Errorf("slashing protection DB was not created via the cli command, please create it using the 'create-slashing-protection-db' command")
 	}
 
 	return db, nil
@@ -691,6 +689,10 @@ func setupEventHandling(
 			zap.Int("liquidated_validators", liquidatedValidators),
 			zap.Int("my_validators", operatorValidators),
 		)
+
+		if err = cfg.SSVOptions.ValidatorOptions.KeyManager.(ekm.StorageProvider).MatchSlashingProtectionData(); err != nil {
+			logger.Fatal("failed to match slashing protection data", zap.Error(err))
+		}
 
 		// Sync ongoing registry events in the background.
 		go func() {
