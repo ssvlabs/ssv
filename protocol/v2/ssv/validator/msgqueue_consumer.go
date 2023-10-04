@@ -142,14 +142,12 @@ outerLoop:
 			queueUpdater.Start(ctx)
 		})
 		for _, runner := range v.DutyRunners {
-			for _, timer := range runner.GetBaseRunner().QBFTController.RoundTimers {
+			for _, instance := range runner.GetBaseRunner().QBFTController.StoredInstances {
 				select {
-				case <-timer.GetChannel():
+				case <-instance.GetConfig().GetTimer().GetChannel():
 					height := runner.GetBaseRunner().QBFTController.Height
 					instance := runner.GetBaseRunner().QBFTController.InstanceForHeight(logger, height)
-					v.onTimeout(logger, spectypes.MessageID(instance.State.ID), height, timer.Round())
-
-					//TODO delete timer
+					v.onTimeout(logger, spectypes.MessageID(instance.State.ID), height, instance.GetConfig().GetTimer().Round())
 
 				case msg, closed := <-queueUpdater.GetChannel():
 					if closed {
