@@ -800,7 +800,7 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 			},
 			Storage: options.Storage.Get(role),
 			Network: options.Network,
-			Timer:   roundtimer.New(ctx, options.BeaconNetwork, role, nil),
+			Timer:   roundtimer.New(options.BeaconNetwork, role),
 		}
 		config.ValueCheckF = valueCheckF
 

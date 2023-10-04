@@ -1,7 +1,6 @@
 package roundtimer
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -16,6 +15,8 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer/mocks"
 )
+
+type OnRoundTimeoutF func(round specqbft.Round)
 
 func TestTimeoutForRound(t *testing.T) {
 	roles := []spectypes.BeaconRole{
@@ -64,15 +65,24 @@ func setupMockBeaconNetwork(t *testing.T) *mocks.MockBeaconNetwork {
 	return mockBeaconNetwork
 }
 
-func setupTimer(mockBeaconNetwork *mocks.MockBeaconNetwork, onTimeout OnRoundTimeoutF, role spectypes.BeaconRole, round specqbft.Round) *RoundTimer {
-	timer := New(context.Background(), mockBeaconNetwork, role, onTimeout)
+func setupTimer(mockBeaconNetwork *mocks.MockBeaconNetwork, role spectypes.BeaconRole, round specqbft.Round) *RoundTimer {
+	timer := New(mockBeaconNetwork, role)
 	timer.timeoutOptions = TimeoutOptions{
 		quickThreshold: round,
 		quick:          100 * time.Millisecond,
 		slow:           200 * time.Millisecond,
 	}
-
 	return timer
+}
+
+func handleTimeout(timer *RoundTimer, onTimeout OnRoundTimeoutF) {
+	go func() {
+		for range timer.GetChannel() {
+			if onTimeout != nil {
+				onTimeout(timer.Round())
+			}
+		}
+	}()
 }
 
 func testTimeoutForRound(t *testing.T, role spectypes.BeaconRole, threshold specqbft.Round) {
@@ -83,9 +93,11 @@ func testTimeoutForRound(t *testing.T, role spectypes.BeaconRole, threshold spec
 		atomic.AddInt32(&count, 1)
 	}
 
-	timer := setupTimer(mockBeaconNetwork, onTimeout, role, threshold)
+	timer := setupTimer(mockBeaconNetwork, role, threshold)
 
 	timer.TimeoutForRound(specqbft.FirstHeight, threshold)
+	handleTimeout(timer, onTimeout)
+
 	require.Equal(t, int32(0), atomic.LoadInt32(&count))
 	<-time.After(timer.roundTimeout(specqbft.FirstHeight, threshold) + time.Millisecond*10)
 	require.Equal(t, int32(1), atomic.LoadInt32(&count))
@@ -99,9 +111,11 @@ func testTimeoutForRoundElapsed(t *testing.T, role spectypes.BeaconRole, thresho
 		atomic.AddInt32(&count, 1)
 	}
 
-	timer := setupTimer(mockBeaconNetwork, onTimeout, role, threshold)
+	timer := setupTimer(mockBeaconNetwork, role, threshold)
 
 	timer.TimeoutForRound(specqbft.FirstHeight, specqbft.FirstRound)
+	handleTimeout(timer, onTimeout)
+
 	<-time.After(timer.roundTimeout(specqbft.FirstHeight, specqbft.FirstRound) / 2)
 	timer.TimeoutForRound(specqbft.FirstHeight, specqbft.Round(2)) // reset before elapsed
 	require.Equal(t, int32(0), atomic.LoadInt32(&count))
@@ -136,12 +150,13 @@ func testTimeoutForRoundMulti(t *testing.T, role spectypes.BeaconRole, threshold
 	for i := 0; i < 4; i++ {
 		wg.Add(1)
 		go func(index int) {
-			timer := New(context.Background(), mockBeaconNetwork, role, func(round specqbft.Round) { onTimeout(index) })
+			timer := New(mockBeaconNetwork, role)
 			timer.timeoutOptions = TimeoutOptions{
 				quickThreshold: threshold,
 				quick:          100 * time.Millisecond,
 			}
 			timer.TimeoutForRound(specqbft.FirstHeight, specqbft.FirstRound)
+			handleTimeout(timer, func(round specqbft.Round) { onTimeout(index) })
 			wg.Done()
 		}(i)
 		time.Sleep(time.Millisecond * 10) // Introduce a sleep between creating timers
@@ -149,7 +164,7 @@ func testTimeoutForRoundMulti(t *testing.T, role spectypes.BeaconRole, threshold
 
 	wg.Wait() // Wait for all go-routines to finish
 
-	timer := New(context.Background(), mockBeaconNetwork, role, nil)
+	timer := New(mockBeaconNetwork, role)
 	timer.timeoutOptions = TimeoutOptions{
 		quickThreshold: specqbft.Round(1),
 		quick:          100 * time.Millisecond,

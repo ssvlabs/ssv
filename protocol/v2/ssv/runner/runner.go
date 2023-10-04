@@ -53,9 +53,6 @@ type BaseRunner struct {
 	BeaconNetwork  spectypes.BeaconNetwork
 	BeaconRoleType spectypes.BeaconRole
 
-	// implementation vars
-	TimeoutF TimeoutF `json:"-"`
-
 	// highestDecidedSlot holds the highest decided duty slot and gets updated after each decided is reached
 	highestDecidedSlot spec.Slot
 }
@@ -250,7 +247,8 @@ func (b *BaseRunner) decide(logger *zap.Logger, runner Runner, input *spectypes.
 
 	runner.GetBaseRunner().State.RunningInstance = newInstance
 
-	b.registerTimeoutHandler(logger, newInstance, runner.GetBaseRunner().QBFTController.Height)
+	//TODO[matus]
+	// b.registerTimeoutHandler(logger, newInstance, runner.GetBaseRunner().QBFTController.Height)
 
 	return nil
 }

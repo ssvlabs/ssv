@@ -1,8 +1,6 @@
 package roundtimer
 
 import (
-	"context"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -12,8 +10,6 @@ import (
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/timer.go -source=./timer.go
-
-type OnRoundTimeoutF func(round specqbft.Round)
 
 const (
 	quickTimeoutThreshold = specqbft.Round(8)
@@ -25,6 +21,9 @@ const (
 type Timer interface {
 	// TimeoutForRound will reset running timer if exists and will start a new timer for a specific round
 	TimeoutForRound(height specqbft.Height, round specqbft.Round)
+	GetChannel() <-chan time.Time
+	Round() specqbft.Round
+	GetRole() spectypes.BeaconRole
 }
 
 type BeaconNetwork interface {
@@ -40,14 +39,8 @@ type TimeoutOptions struct {
 
 // RoundTimer helps to manage current instance rounds.
 type RoundTimer struct {
-	mtx *sync.RWMutex
-	ctx context.Context
-	// cancelCtx cancels the current context, will be called from Kill()
-	cancelCtx context.CancelFunc
 	// timer is the underlying time.Timer
 	timer *time.Timer
-	// result holds the result of the timer
-	done OnRoundTimeoutF
 	// round is the current round of the timer
 	round int64
 	// timeoutOptions holds the timeoutOptions for the timer
@@ -59,14 +52,9 @@ type RoundTimer struct {
 }
 
 // New creates a new instance of RoundTimer.
-func New(pctx context.Context, beaconNetwork BeaconNetwork, role spectypes.BeaconRole, done OnRoundTimeoutF) *RoundTimer {
-	ctx, cancelCtx := context.WithCancel(pctx)
+func New(beaconNetwork BeaconNetwork, role spectypes.BeaconRole) *RoundTimer {
 	return &RoundTimer{
-		mtx:           &sync.RWMutex{},
-		ctx:           ctx,
-		cancelCtx:     cancelCtx,
 		timer:         nil,
-		done:          done,
 		role:          role,
 		beaconNetwork: beaconNetwork,
 		timeoutOptions: TimeoutOptions{
@@ -137,17 +125,20 @@ func (t *RoundTimer) roundTimeout(height specqbft.Height, round specqbft.Round) 
 	return time.Until(dutyStartTime.Add(timeoutDuration))
 }
 
-// OnTimeout sets a function called on timeout.
-func (t *RoundTimer) OnTimeout(done OnRoundTimeoutF) {
-	t.mtx.Lock() // write to t.done
-	defer t.mtx.Unlock()
-
-	t.done = done
-}
-
 // Round returns a round.
 func (t *RoundTimer) Round() specqbft.Round {
 	return specqbft.Round(atomic.LoadInt64(&t.round))
+}
+
+// GetRole returns the role of the RoundTimer.
+func (t *RoundTimer) GetRole() spectypes.BeaconRole {
+	return t.role
+}
+
+// GetChannel returns the channel of the underlying timer which signals
+// when the timeout for the current round has occurred.
+func (t *RoundTimer) GetChannel() <-chan time.Time {
+	return t.timer.C
 }
 
 // TimeoutForRound times out for a given round.
@@ -156,36 +147,16 @@ func (t *RoundTimer) TimeoutForRound(height specqbft.Height, round specqbft.Roun
 	timeout := t.roundTimeout(height, round)
 
 	// preparing the underlying timer
-	timer := t.timer
-	if timer == nil {
-		timer = time.NewTimer(timeout)
+	if t.timer == nil {
+		t.timer = time.NewTimer(timeout)
+		return
 	} else {
-		timer.Stop()
+		t.timer.Stop()
 		// draining the channel of existing timer
 		select {
-		case <-timer.C:
+		case <-t.timer.C:
 		default:
 		}
 	}
-	timer.Reset(timeout)
-	// spawns a new goroutine to listen to the timer
-	go t.waitForRound(round, timer.C)
-}
-
-func (t *RoundTimer) waitForRound(round specqbft.Round, timeout <-chan time.Time) {
-	ctx, cancel := context.WithCancel(t.ctx)
-	defer cancel()
-	select {
-	case <-ctx.Done():
-	case <-timeout:
-		if t.Round() == round {
-			func() {
-				t.mtx.RLock() // read t.done
-				defer t.mtx.RUnlock()
-				if done := t.done; done != nil {
-					done(round)
-				}
-			}()
-		}
-	}
+	t.timer.Reset(timeout)
 }

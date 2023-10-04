@@ -10,6 +10,7 @@ import (
 
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	qbft "github.com/bloxapp/ssv-spec/qbft"
+	types "github.com/bloxapp/ssv-spec/types"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -34,6 +35,48 @@ func NewMockTimer(ctrl *gomock.Controller) *MockTimer {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockTimer) EXPECT() *MockTimerMockRecorder {
 	return m.recorder
+}
+
+// GetChannel mocks base method.
+func (m *MockTimer) GetChannel() <-chan time.Time {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetChannel")
+	ret0, _ := ret[0].(<-chan time.Time)
+	return ret0
+}
+
+// GetChannel indicates an expected call of GetChannel.
+func (mr *MockTimerMockRecorder) GetChannel() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChannel", reflect.TypeOf((*MockTimer)(nil).GetChannel))
+}
+
+// GetRole mocks base method.
+func (m *MockTimer) GetRole() types.BeaconRole {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRole")
+	ret0, _ := ret[0].(types.BeaconRole)
+	return ret0
+}
+
+// GetRole indicates an expected call of GetRole.
+func (mr *MockTimerMockRecorder) GetRole() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRole", reflect.TypeOf((*MockTimer)(nil).GetRole))
+}
+
+// Round mocks base method.
+func (m *MockTimer) Round() qbft.Round {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Round")
+	ret0, _ := ret[0].(qbft.Round)
+	return ret0
+}
+
+// Round indicates an expected call of Round.
+func (mr *MockTimerMockRecorder) Round() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Round", reflect.TypeOf((*MockTimer)(nil).Round))
 }
 
 // TimeoutForRound mocks base method.
