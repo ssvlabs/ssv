@@ -34,7 +34,7 @@ func (v *Validator) onTimeout(logger *zap.Logger, identifier spectypes.MessageID
 		logger.Debug("❗ failed to create timer msg", zap.Error(err))
 		return
 	}
-	dec, err := queue.DecodeSSVMessage(logger, msg)
+	dec, err := queue.DecodeSSVMessage(msg)
 	if err != nil {
 		logger.Debug("❌ failed to decode timer msg", zap.Error(err))
 		return

@@ -12,12 +12,14 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/bloxapp/ssv/message/validation"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/peers/connections/mock"
 	"github.com/bloxapp/ssv/network/testing"
+	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
@@ -136,6 +138,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, keys testing.NodeKeys
 		MockGetPrivateKey:               keys.OperatorKey,
 		RegisteredOperatorPublicKeyPEMs: []string{},
 	}
+	cfg.MessageValidator = validation.NewMessageValidator(networkconfig.TestNetwork)
 
 	p := New(logger, cfg)
 	err = p.Setup(logger)

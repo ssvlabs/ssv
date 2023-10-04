@@ -29,6 +29,7 @@ type BeaconNetwork interface {
 	EpochStartTime(epoch phase0.Epoch) time.Time
 
 	GetSlotStartTime(slot phase0.Slot) time.Time
+	GetSlotEndTime(slot phase0.Slot) time.Time
 	IsFirstSlotOfEpoch(slot phase0.Slot) bool
 	GetEpochFirstSlot(epoch phase0.Epoch) phase0.Slot
 
@@ -80,6 +81,11 @@ func (n Network) GetSlotStartTime(slot phase0.Slot) time.Time {
 	timeSinceGenesisStart := uint64(slot) * uint64(n.SlotDurationSec().Seconds())
 	start := time.Unix(int64(n.MinGenesisTime()+timeSinceGenesisStart), 0)
 	return start
+}
+
+// GetSlotEndTime returns the end time for the given slot
+func (n Network) GetSlotEndTime(slot phase0.Slot) time.Time {
+	return n.GetSlotStartTime(slot + 1)
 }
 
 // EstimatedCurrentSlot returns the estimation of the current slot

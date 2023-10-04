@@ -186,18 +186,18 @@ func (m *MockValidatorController) EXPECT() *MockValidatorControllerMockRecorder 
 	return m.recorder
 }
 
-// ActiveValidatorIndices mocks base method.
-func (m *MockValidatorController) ActiveValidatorIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
+// AllActiveIndices mocks base method.
+func (m *MockValidatorController) AllActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ActiveValidatorIndices", epoch)
+	ret := m.ctrl.Call(m, "AllActiveIndices", epoch)
 	ret0, _ := ret[0].([]phase0.ValidatorIndex)
 	return ret0
 }
 
-// ActiveValidatorIndices indicates an expected call of ActiveValidatorIndices.
-func (mr *MockValidatorControllerMockRecorder) ActiveValidatorIndices(epoch interface{}) *gomock.Call {
+// AllActiveIndices indicates an expected call of AllActiveIndices.
+func (mr *MockValidatorControllerMockRecorder) AllActiveIndices(epoch interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ActiveValidatorIndices", reflect.TypeOf((*MockValidatorController)(nil).ActiveValidatorIndices), epoch)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AllActiveIndices", reflect.TypeOf((*MockValidatorController)(nil).AllActiveIndices), epoch)
 }
 
 // GetOperatorShares mocks base method.
@@ -212,4 +212,18 @@ func (m *MockValidatorController) GetOperatorShares() []*types.SSVShare {
 func (mr *MockValidatorControllerMockRecorder) GetOperatorShares() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorShares", reflect.TypeOf((*MockValidatorController)(nil).GetOperatorShares))
+}
+
+// CommitteeActiveIndices mocks base method.
+func (m *MockValidatorController) CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CommitteeActiveIndices", epoch)
+	ret0, _ := ret[0].([]phase0.ValidatorIndex)
+	return ret0
+}
+
+// CommitteeActiveIndices indicates an expected call of CommitteeActiveIndices.
+func (mr *MockValidatorControllerMockRecorder) CommitteeActiveIndices(epoch interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CommitteeActiveIndices", reflect.TypeOf((*MockValidatorController)(nil).CommitteeActiveIndices), epoch)
 }

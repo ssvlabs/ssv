@@ -9,7 +9,6 @@ RUN apt-get update                                                        && \
   git=1:2.39.2-1.1 \
   zip=3.0-13 \
   unzip=6.0-28 \
-  wget=1.21.3-1+b2 \
   g++=4:12.2.0-3 \
   gcc-aarch64-linux-gnu=4:12.2.0-3 \
   bzip2=1.0.8-5+b1 \
@@ -61,7 +60,7 @@ RUN apk -v --update add \
   ca-certificates=20230506-r0 \
   bash=5.2.15-r5 \
   make=4.4.1-r1 \
-  bind-tools=9.18.16-r0 && \
+  bind-tools=9.18.19-r0 && \
   rm /var/cache/apk/*
 
 COPY --from=builder /go/bin/ssvnode /go/bin/ssvnode

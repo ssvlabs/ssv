@@ -53,6 +53,9 @@ type BaseRunner struct {
 	BeaconNetwork  spectypes.BeaconNetwork
 	BeaconRoleType spectypes.BeaconRole
 
+	// implementation vars
+	VerifySignatures bool `json:"-"`
+
 	// highestDecidedSlot holds the highest decided duty slot and gets updated after each decided is reached
 	highestDecidedSlot spec.Slot
 }
