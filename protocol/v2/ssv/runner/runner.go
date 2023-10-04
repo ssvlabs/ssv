@@ -247,9 +247,6 @@ func (b *BaseRunner) decide(logger *zap.Logger, runner Runner, input *spectypes.
 
 	runner.GetBaseRunner().State.RunningInstance = newInstance
 
-	//TODO[matus]
-	// b.registerTimeoutHandler(logger, newInstance, runner.GetBaseRunner().QBFTController.Height)
-
 	return nil
 }
 

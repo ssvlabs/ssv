@@ -149,38 +149,41 @@ outerLoop:
 		once.Do(func() {
 			queueUpdater.Start(ctx)
 		})
-		for _, timer := range v.roundTimers {
-			select {
-			case <-timer.GetChannel():
-				height := v.DutyRunners[timer.GetRole()].GetBaseRunner().QBFTController.Height
-				instance := runner.GetBaseRunner().QBFTController.InstanceForHeight(logger, height)
-				v.onTimeout(logger, spectypes.MessageID(instance.State.ID), height, timer.Round())
-				//TODO delete timer
+		for _, runner := range v.DutyRunners {
+			for _, timer := range runner.GetBaseRunner().QBFTController.RoundTimers {
+				select {
+				case <-timer.GetChannel():
+					height := runner.GetBaseRunner().QBFTController.Height
+					instance := runner.GetBaseRunner().QBFTController.InstanceForHeight(logger, height)
+					v.onTimeout(logger, spectypes.MessageID(instance.State.ID), height, timer.Round())
 
-			case msg, closed := <-queueUpdater.GetChannel():
-				if closed {
+					//TODO delete timer
+
+				case msg, closed := <-queueUpdater.GetChannel():
+					if closed {
+						break outerLoop
+					}
+
+					lens = append(lens, q.Q.Len())
+					if len(lens) >= 10 {
+						logger.Debug("📬 [TEMPORARY] queue statistics",
+							fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType),
+							zap.Ints("past_10_lengths", lens))
+						lens = lens[:0]
+					}
+
+					// Handle the message.
+					if err := handler(logger, msg); err != nil {
+						v.logMsg(logger, msg, "❗ could not handle message",
+							fields.MessageType(msg.SSVMessage.MsgType),
+							zap.Error(err))
+					}
+
+				case <-ctx.Done():
+					// Context is canceled or has met its deadline
 					break outerLoop
+				default:
 				}
-
-				lens = append(lens, q.Q.Len())
-				if len(lens) >= 10 {
-					logger.Debug("📬 [TEMPORARY] queue statistics",
-						fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType),
-						zap.Ints("past_10_lengths", lens))
-					lens = lens[:0]
-				}
-
-				// Handle the message.
-				if err := handler(logger, msg); err != nil {
-					v.logMsg(logger, msg, "❗ could not handle message",
-						fields.MessageType(msg.SSVMessage.MsgType),
-						zap.Error(err))
-				}
-
-			case <-ctx.Done():
-				// Context is canceled or has met its deadline
-				break outerLoop
-			default:
 			}
 		}
 	}

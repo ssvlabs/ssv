@@ -35,6 +35,7 @@ func (c *Controller) UponDecided(logger *zap.Logger, msg *specqbft.SignedMessage
 		i.State.DecidedValue = msg.FullData
 		i.State.CommitContainer.AddMsg(msg)
 		c.StoredInstances.addNewInstance(i)
+		c.RoundTimers = append(c.RoundTimers, i.GetConfig().GetTimer())
 	} else if decided, _ := inst.IsDecided(); !decided {
 		inst.State.Decided = true
 		inst.State.Round = msg.Message.Round

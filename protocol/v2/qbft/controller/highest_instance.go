@@ -18,7 +18,9 @@ func (c *Controller) LoadHighestInstance(identifier []byte) (*instance.Instance,
 	}
 	c.Height = highestInstance.GetHeight()
 	c.StoredInstances.reset()
+	c.RoundTimers = c.RoundTimers[:0]
 	c.StoredInstances.addNewInstance(highestInstance)
+	c.RoundTimers = append(c.RoundTimers, highestInstance.GetConfig().GetTimer())
 	return highestInstance, nil
 }
 

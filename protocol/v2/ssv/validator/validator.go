@@ -14,7 +14,6 @@ import (
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/message"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/types"
@@ -29,7 +28,6 @@ type Validator struct {
 	cancel context.CancelFunc
 
 	DutyRunners runner.DutyRunners
-	roundTimers []roundtimer.Timer
 	Network     specqbft.Network
 	Share       *types.SSVShare
 	Signer      spectypes.KeyManager
@@ -52,7 +50,6 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		ctx:         pctx,
 		cancel:      cancel,
 		DutyRunners: options.DutyRunners,
-		roundTimers: make([]roundtimer.Timer, 10),
 		Network:     options.Network,
 		Storage:     options.Storage,
 		Share:       options.SSVShare,

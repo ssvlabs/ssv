@@ -13,6 +13,7 @@ import (
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 )
 
 // NewDecidedHandler handles newly saved decided messages.
@@ -25,6 +26,8 @@ type Controller struct {
 	Height     specqbft.Height // incremental Height for InstanceContainer
 	// StoredInstances stores the last HistoricalInstanceCapacity in an array for message processing purposes.
 	StoredInstances InstanceContainer
+	// All roundtimers of all instances
+	RoundTimers []roundtimer.Timer `json:"-"`
 	// FutureMsgsContainer holds all msgs from a higher height
 	FutureMsgsContainer map[spectypes.OperatorID]specqbft.Height // maps msg signer to height of higher height received msgs
 	Domain              spectypes.DomainType
@@ -47,6 +50,7 @@ func NewController(
 		Domain:              domain,
 		Share:               share,
 		StoredInstances:     make(InstanceContainer, 0, InstanceContainerDefaultCapacity),
+		RoundTimers:         make([]roundtimer.Timer, 0, InstanceContainerDefaultCapacity), // Number of roles * number of instances
 		FutureMsgsContainer: make(map[spectypes.OperatorID]specqbft.Height),
 		config:              config,
 		fullNode:            fullNode,
@@ -196,6 +200,7 @@ func (c *Controller) isFutureMessage(msg *specqbft.SignedMessage) bool {
 func (c *Controller) addAndStoreNewInstance() *instance.Instance {
 	i := instance.NewInstance(c.GetConfig(), c.Share, c.Identifier, c.Height)
 	c.StoredInstances.addNewInstance(i)
+	c.RoundTimers = append(c.RoundTimers, i.GetConfig().GetTimer())
 	return i
 }
 

@@ -64,7 +64,7 @@ func (i *InstanceContainer) addNewInstance(instance *instance.Instance) {
 	}
 }
 
-// reset will remove all instances from the container, perserving the underlying slice's capacity.
+// reset will remove all instances from the container, preserving the underlying slice's capacity.
 func (i *InstanceContainer) reset() {
 	*i = (*i)[:0]
 }
