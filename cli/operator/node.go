@@ -448,6 +448,7 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database) (operatorstora
 			logger.Fatal("could not decrypt operator private key", zap.Error(err))
 		}
 		cfg.OperatorPrivateKey = rsaencryption.ExtractPrivateKey(privateKey)
+		cfg.P2pNetworkConfig.OperatorPrivateKey = privateKey
 	}
 
 	operatorPubKey, err := nodeStorage.SetupPrivateKey(cfg.OperatorPrivateKey)

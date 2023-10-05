@@ -19,7 +19,7 @@ func TestSubnetsIndex(t *testing.T) {
 
 	var pids []peer.ID
 	for _, nk := range nks {
-		sk, err := commons.ConvertToInterfacePrivkey(nk.NetKey)
+		sk, err := commons.ECDSAPrivToInterface(nk.NetKey)
 		require.NoError(t, err)
 		pid, err := peer.IDFromPrivateKey(sk)
 		require.NoError(t, err)

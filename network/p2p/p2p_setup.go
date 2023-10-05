@@ -161,7 +161,7 @@ func (n *p2pNetwork) setupStreamCtrl(logger *zap.Logger) error {
 }
 
 func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
-	libPrivKey, err := p2pcommons.ConvertToInterfacePrivkey(n.cfg.NetworkPrivateKey)
+	libPrivKey, err := p2pcommons.RSAPrivToInterface(n.cfg.OperatorPrivateKey)
 	if err != nil {
 		return err
 	}

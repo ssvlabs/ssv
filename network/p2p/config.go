@@ -3,6 +3,7 @@ package p2pv1
 import (
 	"context"
 	"crypto/ecdsa"
+	"crypto/rsa"
 	"fmt"
 	"strings"
 	"time"
@@ -54,6 +55,8 @@ type Config struct {
 	DiscoveryTrace bool `yaml:"DiscoveryTrace" env:"DISCOVERY_TRACE" env-description:"Flag to turn on/off discovery tracing in logs"`
 	// NetworkPrivateKey is used for network identity, MUST be injected
 	NetworkPrivateKey *ecdsa.PrivateKey
+	// OperatorPrivateKey is used for operator identity, MUST be injected
+	OperatorPrivateKey *rsa.PrivateKey
 	// OperatorPublicKey is used for operator identity, optional
 	OperatorID string
 	// Router propagate incoming network messages to the responsive components
@@ -92,10 +95,10 @@ type Config struct {
 // these are the most basic options required to start a network instance,
 // other options and libp2p components can be configured on top
 func (c *Config) Libp2pOptions(logger *zap.Logger) ([]libp2p.Option, error) {
-	if c.NetworkPrivateKey == nil {
-		return nil, errors.New("could not create options w/o network key")
+	if c.OperatorPrivateKey == nil {
+		return nil, errors.New("could not create options w/o operator key")
 	}
-	sk, err := commons.ConvertToInterfacePrivkey(c.NetworkPrivateKey)
+	sk, err := commons.RSAPrivToInterface(c.OperatorPrivateKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not convert to interface priv key")
 	}
