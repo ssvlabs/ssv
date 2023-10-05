@@ -359,7 +359,7 @@ func (km *ethKeyManagerSigner) MatchSlashingProtectionData() error {
 			return fmt.Errorf("could not retrieve highest attestation: %w", err)
 		}
 		if !found {
-			return fmt.Errorf("highest attestation for account %s not found", pubKey)
+			return fmt.Errorf("highest attestation for account %s not found", hex.EncodeToString(pubKey))
 		}
 		if highAtt == nil {
 			return fmt.Errorf("highest attestation for account %s is nil", pubKey)
@@ -370,7 +370,7 @@ func (km *ethKeyManagerSigner) MatchSlashingProtectionData() error {
 			return fmt.Errorf("could not retrieve highest proposal: %w", err)
 		}
 		if !found {
-			return fmt.Errorf("highest proposal for account %s not found", pubKey)
+			return fmt.Errorf("highest proposal for account %s not found", hex.EncodeToString(pubKey))
 		}
 		if highProp == 0 {
 			return fmt.Errorf("highest proposal for account %s is 0", pubKey)
