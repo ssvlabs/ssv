@@ -406,17 +406,14 @@ func setupDB(ctx context.Context, logger *zap.Logger, network beaconprotocol.Bea
 		return nil, errors.Wrap(err, "failed to open db")
 	}
 
-	//item, found, err := db.Get([]byte{}, []byte("ssv-db-type"))
-	//if err != nil {
-	//	return nil, err
-	//}
-	//
-	//if !found {
-	//	// set
-	//} else if string(item.Value) != "ssv" {
-	//	// return error
-	//	return nil, errors.New("db is not an ssv db")
-	//}
+	dbType, found, err := db.GetType()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get db type: %w", err)
+	}
+
+	if found && dbType == ekm.SlashingDBName {
+		return nil, fmt.Errorf("slashing protection DP found at path %s, use node DB instead", cfg.DBOptions.Path)
+	}
 
 	reopenDb := func() error {
 		if err := db.Close(); err != nil {

@@ -60,6 +60,10 @@ func TestSlashingProtectionMigration(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, migrationCompleted, obj.Value)
 
+	initialized, err := spStorage.IsInitialized()
+	require.NoError(t, err)
+	require.True(t, initialized)
+
 	// Verification of migration
 	// Check that the slashing protection storage has the same data as the legacy database
 	ekmStorage := km.(ekm.StorageProvider)
@@ -122,7 +126,7 @@ func TestSlashingProtectionMigration_NodeDB_SPDB_Exists(t *testing.T) {
 		Network: network.Beacon,
 	}
 
-	require.Error(t, migration_4_standalone_slashing_data.Run(
+	err = migration_4_standalone_slashing_data.Run(
 		ctx,
 		logger,
 		migrationOpts,
@@ -130,7 +134,155 @@ func TestSlashingProtectionMigration_NodeDB_SPDB_Exists(t *testing.T) {
 		func(rw basedb.ReadWriter) error {
 			return rw.Set(migrationsPrefix, []byte(migration_4_standalone_slashing_data.Name), migrationCompleted)
 		},
-	))
+	)
+	require.Error(t, err)
+	require.Equal(t, "failed to check if slashing protection db is initialized: sp db is not empty but type not found", err.Error())
+
+	_, found, err := db.Get(migrationsPrefix, []byte(migration_4_standalone_slashing_data.Name))
+	require.NoError(t, err)
+	require.False(t, found)
+
+	// Verification of migration
+	// Check that the slashing protection storage has the same data as the legacy database
+	ekmStorage := km.(ekm.StorageProvider)
+	accounts, err := ekmStorage.ListAccounts()
+	require.NoError(t, err)
+	require.Len(t, accounts, 2)
+
+	for _, account := range accounts {
+		legacyHighAtt, found, err := ekmStorage.RetrieveHighestAttestation(account.ValidatorPublicKey())
+		require.NoError(t, err)
+		require.True(t, found)
+		require.NotNil(t, legacyHighAtt)
+
+		migratedHighAtt, found, err := spStorage.RetrieveHighestAttestation(account.ValidatorPublicKey())
+		require.NoError(t, err)
+		require.False(t, found)
+		require.Nil(t, migratedHighAtt)
+
+		legacyHighProposal, found, err := ekmStorage.RetrieveHighestProposal(account.ValidatorPublicKey())
+		require.NoError(t, err)
+		require.True(t, found)
+		require.NotZero(t, legacyHighProposal)
+
+		migratedHighProposal, found, err := spStorage.RetrieveHighestProposal(account.ValidatorPublicKey())
+		require.NoError(t, err)
+		require.False(t, found)
+		require.Zero(t, migratedHighProposal)
+	}
+}
+
+// TestSlashingProtectionMigration_NodeDB_SPDB_Exists
+// NodeDB = Exists
+// SlashingDB = Exists
+// test that migration fails if the node & sp DBs already exists
+func TestSlashingProtectionMigration_NodeDB_SPDB_Exists2(t *testing.T) {
+	ctx, logger, network, db, spDB, km, spStorage := setupCommon(t)
+
+	sk1 := &bls.SecretKey{}
+	require.NoError(t, sk1.SetHexString(sk1Str))
+
+	sk2 := &bls.SecretKey{}
+	require.NoError(t, sk2.SetHexString(sk2Str))
+
+	require.NoError(t, km.AddShare(sk1))
+	require.NoError(t, km.AddShare(sk2))
+
+	// Simulate an incorrect db type by setting a different type
+	err := spDB.SetType("IncorrectDBType")
+	require.NoError(t, err)
+
+	// Migration process
+	migrationOpts := Options{
+		Db:      db,
+		SpDb:    spDB,
+		Network: network.Beacon,
+	}
+
+	err = migration_4_standalone_slashing_data.Run(
+		ctx,
+		logger,
+		migrationOpts,
+		[]byte(migration_4_standalone_slashing_data.Name),
+		func(rw basedb.ReadWriter) error {
+			return rw.Set(migrationsPrefix, []byte(migration_4_standalone_slashing_data.Name), migrationCompleted)
+		},
+	)
+	require.Error(t, err)
+	require.Equal(t, "failed to check if slashing protection db is initialized: sp db is not empty but the db type is incorrect IncorrectDBType", err.Error())
+
+	_, found, err := db.Get(migrationsPrefix, []byte(migration_4_standalone_slashing_data.Name))
+	require.NoError(t, err)
+	require.False(t, found)
+
+	// Verification of migration
+	// Check that the slashing protection storage has the same data as the legacy database
+	ekmStorage := km.(ekm.StorageProvider)
+	accounts, err := ekmStorage.ListAccounts()
+	require.NoError(t, err)
+	require.Len(t, accounts, 2)
+
+	for _, account := range accounts {
+		legacyHighAtt, found, err := ekmStorage.RetrieveHighestAttestation(account.ValidatorPublicKey())
+		require.NoError(t, err)
+		require.True(t, found)
+		require.NotNil(t, legacyHighAtt)
+
+		migratedHighAtt, found, err := spStorage.RetrieveHighestAttestation(account.ValidatorPublicKey())
+		require.NoError(t, err)
+		require.False(t, found)
+		require.Nil(t, migratedHighAtt)
+
+		legacyHighProposal, found, err := ekmStorage.RetrieveHighestProposal(account.ValidatorPublicKey())
+		require.NoError(t, err)
+		require.True(t, found)
+		require.NotZero(t, legacyHighProposal)
+
+		migratedHighProposal, found, err := spStorage.RetrieveHighestProposal(account.ValidatorPublicKey())
+		require.NoError(t, err)
+		require.False(t, found)
+		require.Zero(t, migratedHighProposal)
+	}
+}
+
+// TestSlashingProtectionMigration_NodeDB_SPDB_Exists
+// NodeDB = Exists
+// SlashingDB = Exists
+// test that migration fails if the node & sp DBs already exists
+func TestSlashingProtectionMigration_NodeDB_SPDB_Exists3(t *testing.T) {
+	ctx, logger, network, db, spDB, km, spStorage := setupCommon(t)
+
+	sk1 := &bls.SecretKey{}
+	require.NoError(t, sk1.SetHexString(sk1Str))
+
+	sk2 := &bls.SecretKey{}
+	require.NoError(t, sk2.SetHexString(sk2Str))
+
+	require.NoError(t, km.AddShare(sk1))
+	require.NoError(t, km.AddShare(sk2))
+
+	// populate slashing protection storage with some data
+	err := spStorage.Init()
+	require.NoError(t, err)
+
+	// Migration process
+	migrationOpts := Options{
+		Db:      db,
+		SpDb:    spDB,
+		Network: network.Beacon,
+	}
+
+	err = migration_4_standalone_slashing_data.Run(
+		ctx,
+		logger,
+		migrationOpts,
+		[]byte(migration_4_standalone_slashing_data.Name),
+		func(rw basedb.ReadWriter) error {
+			return rw.Set(migrationsPrefix, []byte(migration_4_standalone_slashing_data.Name), migrationCompleted)
+		},
+	)
+	require.Error(t, err)
+	require.Equal(t, "can not migrate legacy slashing protection data over existing slashing protection data", err.Error())
 
 	_, found, err := db.Get(migrationsPrefix, []byte(migration_4_standalone_slashing_data.Name))
 	require.NoError(t, err)
@@ -171,7 +323,7 @@ func TestSlashingProtectionMigration_NodeDB_SPDB_Exists(t *testing.T) {
 // SlashingDB = Doesn't Exist
 // test that migration complete without error
 func TestSlashingProtectionMigration_NodeDB_SPDB_Does_Not_Exists(t *testing.T) {
-	ctx, logger, network, db, spDB, km, _ := setupCommon(t)
+	ctx, logger, network, db, spDB, km, spStorage := setupCommon(t)
 
 	// Migration process
 	migrationOpts := Options{
@@ -193,6 +345,10 @@ func TestSlashingProtectionMigration_NodeDB_SPDB_Does_Not_Exists(t *testing.T) {
 	obj, _, err := db.Get(migrationsPrefix, []byte(migration_4_standalone_slashing_data.Name))
 	require.NoError(t, err)
 	require.Equal(t, migrationCompleted, obj.Value)
+
+	initialized, err := spStorage.IsInitialized()
+	require.NoError(t, err)
+	require.True(t, initialized)
 
 	// Verification of migration
 	// Check that the slashing protection storage has the same data as the legacy database
@@ -203,7 +359,7 @@ func TestSlashingProtectionMigration_NodeDB_SPDB_Does_Not_Exists(t *testing.T) {
 
 	empty, err := spDB.IsEmpty()
 	require.NoError(t, err)
-	require.True(t, empty)
+	require.False(t, empty)
 }
 
 // TestSlashingProtectionMigration_NodeDB_DoesNot_Exists_SPDB_Exists
@@ -213,7 +369,7 @@ func TestSlashingProtectionMigration_NodeDB_SPDB_Does_Not_Exists(t *testing.T) {
 func TestSlashingProtectionMigration_NodeDB_DoesNot_Exists_SPDB_Exists(t *testing.T) {
 	ctx, logger, network, db, spDB, km, spStorage := setupCommon(t)
 	// populate slashing protection storage with some data
-	err := spStorage.SaveHighestProposal([]byte("mock_pub_key"), network.Beacon.EstimatedCurrentSlot())
+	err := spStorage.Init()
 	require.NoError(t, err)
 
 	// Migration process
@@ -236,6 +392,10 @@ func TestSlashingProtectionMigration_NodeDB_DoesNot_Exists_SPDB_Exists(t *testin
 	obj, _, err := db.Get(migrationsPrefix, []byte(migration_4_standalone_slashing_data.Name))
 	require.NoError(t, err)
 	require.Equal(t, migrationCompleted, obj.Value)
+
+	initialized, err := spStorage.IsInitialized()
+	require.NoError(t, err)
+	require.True(t, initialized)
 
 	// Verification of migration
 	// Check that the slashing protection storage has the same data as the legacy database

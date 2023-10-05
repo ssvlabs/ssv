@@ -60,6 +60,8 @@ type Database interface {
 	Update(fn func(Txn) error) error
 	Close() error
 
+	GetType() (string, bool, error)
+	SetType(string) error
 	IsEmpty() (bool, error)
 }
 

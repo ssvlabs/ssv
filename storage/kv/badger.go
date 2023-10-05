@@ -3,6 +3,7 @@ package kv
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -14,6 +15,10 @@ import (
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/storage/basedb"
+)
+
+const (
+	DBTypePrefix = "ssv-db-type"
 )
 
 // BadgerDB struct
@@ -350,4 +355,21 @@ func (b *BadgerDB) IsEmpty() (bool, error) {
 		return nil
 	})
 	return isEmpty, err
+}
+
+func (b *BadgerDB) GetType() (string, bool, error) {
+	item, found, err := b.Get([]byte{}, []byte(DBTypePrefix))
+	if err != nil {
+		return "", false, fmt.Errorf("failed to get db type: %w", err)
+	}
+
+	return string(item.Value), found, nil
+}
+
+func (b *BadgerDB) SetType(dbType string) error {
+	if err := b.Set([]byte{}, []byte(DBTypePrefix), []byte(dbType)); err != nil {
+		return fmt.Errorf("failed to set db type: %w", err)
+	}
+
+	return nil
 }

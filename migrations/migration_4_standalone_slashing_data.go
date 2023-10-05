@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/bloxapp/ssv/ekm"
 	"github.com/bloxapp/ssv/storage/basedb"
 
 	"go.uber.org/zap"
@@ -24,13 +25,14 @@ var migration_4_standalone_slashing_data = Migration{
 				return fmt.Errorf("failed to list accounts: %w", err)
 			}
 
-			spIsEmpty, err := opt.SpDb.IsEmpty()
+			initialized, err := spStorage.IsInitialized()
 			if err != nil {
-				return fmt.Errorf("failed to check if slashing protection db is empty: %w", err)
+				return fmt.Errorf("failed to check if slashing protection db is initialized: %w", err)
 			}
+
 			// Edge case where the nodeDB and sp DB exists, but migration was not completed
 			// In this case, we want to throw an error
-			if len(accounts) > 0 && !spIsEmpty {
+			if len(accounts) > 0 && initialized {
 				return fmt.Errorf("can not migrate legacy slashing protection data over existing slashing protection data")
 			}
 
@@ -92,6 +94,10 @@ var migration_4_standalone_slashing_data = Migration{
 				if migratedHighProp != highProposal {
 					return fmt.Errorf("migrated highest proposal is not equal to original for share %s", hex.EncodeToString(sharePubKey))
 				}
+			}
+
+			if err := opt.SpDb.SetType(ekm.SlashingDBName); err != nil {
+				return fmt.Errorf("failed to set slashing protection db type: %w", err)
 			}
 
 			logger.Info("migrated slashing protection data for accounts", zap.Int("accounts", len(accounts)))

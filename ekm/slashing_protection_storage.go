@@ -16,6 +16,9 @@ import (
 const (
 	highestAttPrefix      = prefix + "highest_att-"
 	highestProposalPrefix = prefix + "highest_prop-"
+
+	// SlashingDBName is the name of the slashing protection database.
+	SlashingDBName = "slashing_protection"
 )
 
 // SPStorage is the interface for slashing protection storage.
@@ -24,6 +27,9 @@ type SPStorage interface {
 
 	RemoveHighestAttestation(pubKey []byte) error
 	RemoveHighestProposal(pubKey []byte) error
+
+	Init() error
+	IsInitialized() (bool, error)
 }
 
 type spStorage struct {
@@ -149,4 +155,35 @@ func (s *spStorage) RemoveHighestProposal(pubKey []byte) error {
 	defer s.lock.Unlock()
 
 	return s.db.Delete(s.objPrefix(highestProposalPrefix), pubKey)
+}
+
+func (s *spStorage) Init() error {
+	if err := s.db.SetType(SlashingDBName); err != nil {
+		return fmt.Errorf("failed to set slashing protection db type: %w", err)
+	}
+
+	return nil
+}
+
+func (s *spStorage) IsInitialized() (bool, error) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	empty, err := s.db.IsEmpty()
+	if err != nil {
+		return false, fmt.Errorf("failed to check if db is empty: %w", err)
+	}
+
+	dbType, found, err := s.db.GetType()
+	if err != nil {
+		return false, fmt.Errorf("failed to get db type: %w", err)
+	}
+	if !found && !empty {
+		return false, fmt.Errorf("sp db is not empty but type not found")
+	}
+	if dbType != SlashingDBName && !empty {
+		return false, fmt.Errorf("sp db is not empty but the db type is incorrect %s", dbType)
+	}
+
+	return !empty, nil
 }

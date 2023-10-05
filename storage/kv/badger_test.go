@@ -197,6 +197,35 @@ func TestBadgerDb_IsEmpty(t *testing.T) {
 	require.True(t, isEmpty, "DB should be empty after deleting the item")
 }
 
+func TestBadgerDb_SetType_and_GetType(t *testing.T) {
+	logger := logging.TestLogger(t)
+	db, err := NewInMemory(context.TODO(), logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	// Set the database type
+	dbType := "testType"
+	err = db.SetType(dbType)
+	require.NoError(t, err, "Setting db type should not produce an error")
+
+	// Get the database type
+	gotDbType, found, err := db.GetType()
+	require.NoError(t, err, "Getting db type should not produce an error")
+	require.True(t, found, "DB type should be found")
+	require.Equal(t, dbType, gotDbType, "DB type should match the set value")
+
+	// Ensure the db type is correct after adding some data
+	prefix := []byte("prefix")
+	key := []byte("key")
+	value := []byte("value")
+	require.NoError(t, db.Set(prefix, key, value))
+
+	gotDbType, found, err = db.GetType()
+	require.NoError(t, err, "Getting db type should not produce an error after adding data")
+	require.True(t, found, "DB type should be found after adding data")
+	require.Equal(t, dbType, gotDbType, "DB type should match the set value after adding data")
+}
+
 func uInt64ToByteSlice(n uint64) []byte {
 	b := make([]byte, 8)
 	binary.LittleEndian.PutUint64(b, n)
