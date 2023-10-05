@@ -234,18 +234,18 @@ func (eh *EventHandler) handleShareCreation(
 		encryptedKeys,
 	)
 
-	var malformedEventError *MalformedEventError
+	var malformedEventError *MalformedEventError = nil
 	if err != nil {
 		switch {
+		default:
+			return nil, fmt.Errorf("could not extract validator share from event: %w", err)
+
 		case errors.As(err, &malformedEventError):
 			if malformedEventError.IsInvalidEncryptedShare &&
 				share.BelongsToOperator(eh.operatorData.GetOperatorData().ID) {
 
 				share.Metadata.Invalid = true
-				break
 			}
-		default:
-			return nil, fmt.Errorf("could not extract validator share from event: %w", err)
 		}
 	}
 
@@ -312,7 +312,6 @@ func validatorAddedEventToShare(
 
 		shareSecret = &bls.SecretKey{}
 		decryptedSharePrivateKey, err := rsaencryption.DecodeKey(operatorPrivateKey, encryptedKeys[i])
-		/// ... => save()
 		if err != nil {
 			return &validatorShare, nil, &MalformedEventError{
 				Err:                     fmt.Errorf("could not decrypt share private key: %w", err),

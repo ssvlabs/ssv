@@ -144,11 +144,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	sharesData3, err := generateSharesData(validatorData3, ops, testAddr, 3)
 	require.NoError(t, err)
 
-	validatorData4, err := createNewValidator(ops)
-	require.NoError(t, err)
-	sharesData4, err := generateSharesData(validatorData4, ops, testAddr, 4)
-	require.NoError(t, err)
-
 	blockNum := uint64(0x1)
 	currentSlot.SetSlot(100)
 
@@ -470,22 +465,29 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		})
 
 		t.Run("test malformed ValidatorAdded, nonce is bumped, share is saved, marked as invalid", func(t *testing.T) {
-			malformedSharesData := sharesData4[:]
+			validatorData, err := createNewValidator(ops)
+			require.NoError(t, err)
 
-			operatorCount := len(ops)
+			sharesData, err := generateSharesData(validatorData, ops, testAddr, 3)
+			require.NoError(t, err)
+			incorrectSharesData, err := generateSharesDataWrong(validatorData, ops, testAddr, 4)
+			require.NoError(t, err)
+
 			signatureOffset := phase0.SignatureLength
-			pubKeysOffset := phase0.PublicKeyLength*operatorCount + signatureOffset
 
-			// Corrupt the encrypted share key of the operator 1
-			malformedSharesData[pubKeysOffset+encryptedKeyLength-1] ^= 1
+			for i := 0; i < signatureOffset; i++ {
+				incorrectSharesData[i] = sharesData[i]
+			}
 
-			valPubKey := validatorData4.masterPubKey.Serialize()
+			require.NoError(t, err)
+
+			valPubKey := validatorData.masterPubKey.Serialize()
 			// Call the contract method
 			_, err = boundContract.SimcontractTransactor.RegisterValidator(
 				auth,
 				valPubKey,
 				[]uint64{1, 2, 3, 4},
-				malformedSharesData,
+				incorrectSharesData,
 				big.NewInt(100_000_000),
 				simcontract.CallableCluster{
 					ValidatorCount:  1,
@@ -513,7 +515,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			blockNum++
 
 			// TODO. Fix the behavior of event_handler.go
-			requireKeyManagerDataToNotExist(t, eh, 2, validatorData4)
+			requireKeyManagerDataToNotExist(t, eh, 2, validatorData)
 
 			// Check that validator was not registered
 			shares = eh.nodeStorage.Shares().List(nil)
@@ -569,7 +571,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 			// Check that validator was registered
 			shares = eh.nodeStorage.Shares().List(nil)
-			require.Equal(t, 3, len(shares))
+			require.Equal(t, 4, len(shares))
 			// and nonce was bumped
 			nonce, err = eh.nodeStorage.GetNextNonce(nil, testAddr)
 			require.NoError(t, err)
@@ -619,7 +621,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 			// Check that validator was registered
 			shares = eh.nodeStorage.Shares().List(nil)
-			require.Equal(t, 4, len(shares))
+			require.Equal(t, 5, len(shares))
 			// and nonce was bumped
 			nonce, err = eh.nodeStorage.GetNextNonce(nil, testAddr2)
 			require.NoError(t, err)
@@ -748,7 +750,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 			// Check the validator was removed from the validator shares storage.
 			shares := eh.nodeStorage.Shares().List(nil)
-			require.Equal(t, 3, len(shares))
+			require.Equal(t, 4, len(shares))
 			valShare = eh.nodeStorage.Shares().Get(nil, valPubKey)
 			require.Nil(t, valShare)
 			requireKeyManagerDataToNotExist(t, eh, 3, validatorData1)
@@ -1476,7 +1478,64 @@ func generateSharesData(validatorData *testValidatorData, operators []*testOpera
 
 		pubkeys = append(pubkeys, validatorData.operatorsShares[i].pub.Serialize()...)
 		encryptedShares = append(encryptedShares, ciphertext...)
+	}
 
+	tosign := fmt.Sprintf("%s:%d", owner.String(), nonce)
+	msghash := crypto.Keccak256([]byte(tosign))
+	signed := validatorData.masterKey.Sign(string(msghash))
+	sig := signed.Serialize()
+
+	if !signed.VerifyByte(validatorData.masterPubKey, msghash) {
+		return nil, errors.New("couldn't sign correctly")
+	}
+
+	sharesData := append(pubkeys, encryptedShares...)
+	sharesDataSigned := append(sig, sharesData...)
+
+	return sharesDataSigned, nil
+}
+
+func generateSharesDataWrong(validatorData *testValidatorData, operators []*testOperator, owner ethcommon.Address, nonce int) ([]byte, error) {
+	var pubkeys []byte
+	var encryptedShares []byte
+
+	for i, op := range operators {
+		pubKey := op.pub[:]
+		privKey := op.priv[:]
+
+		if i == 0 {
+			pb, sk, _ := rsaencryption.GenerateKeys()
+			pubKey = pb
+			privKey = sk
+		}
+		rsakey, err := rsaencryption.ConvertPemToPublicKey(pubKey)
+		if err != nil {
+			return nil, fmt.Errorf("cant convert publickey: %w", err)
+		}
+
+		rawshare := validatorData.operatorsShares[i].sec.SerializeToHexStr()
+		ciphertext, err := rsa.EncryptPKCS1v15(rand.Reader, rsakey, []byte(rawshare))
+		if err != nil {
+			return nil, errors.New("cant encrypt share")
+		}
+
+		rsapriv, err := rsaencryption.ConvertPemToPrivateKey(string(privKey))
+		if err != nil {
+			return nil, err
+		}
+
+		// check that we encrypt right
+		shareSecret := &bls.SecretKey{}
+		decryptedSharePrivateKey, err := rsaencryption.DecodeKey(rsapriv, ciphertext)
+		if err != nil {
+			return nil, err
+		}
+		if err = shareSecret.SetHexString(string(decryptedSharePrivateKey)); err != nil {
+			return nil, err
+		}
+
+		pubkeys = append(pubkeys, validatorData.operatorsShares[i].pub.Serialize()...)
+		encryptedShares = append(encryptedShares, ciphertext...)
 	}
 
 	tosign := fmt.Sprintf("%s:%d", owner.String(), nonce)
