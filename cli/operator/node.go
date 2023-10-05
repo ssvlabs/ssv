@@ -2,7 +2,9 @@ package operator
 
 import (
 	"context"
+	"crypto/rsa"
 	"crypto/x509"
+	"encoding/base64"
 	"fmt"
 	"log"
 	"math/big"
@@ -448,7 +450,11 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database) (operatorstora
 			logger.Fatal("could not decrypt operator private key", zap.Error(err))
 		}
 		cfg.OperatorPrivateKey = rsaencryption.ExtractPrivateKey(privateKey)
-		cfg.P2pNetworkConfig.OperatorPrivateKey = privateKey
+	}
+
+	cfg.P2pNetworkConfig.OperatorPrivateKey, err = decodePrivateKey(cfg.OperatorPrivateKey)
+	if err != nil {
+		logger.Fatal("could not decode operator private key", zap.Error(err))
 	}
 
 	operatorPubKey, err := nodeStorage.SetupPrivateKey(cfg.OperatorPrivateKey)
@@ -472,6 +478,20 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database) (operatorstora
 	}
 
 	return nodeStorage, operatorData
+}
+
+func decodePrivateKey(key string) (*rsa.PrivateKey, error) {
+	operatorKeyByte, err := base64.StdEncoding.DecodeString(key)
+	if err != nil {
+		return nil, err
+	}
+
+	sk, err := rsaencryption.ConvertPemToPrivateKey(string(operatorKeyByte))
+	if err != nil {
+		return nil, err
+	}
+
+	return sk, err
 }
 
 func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
