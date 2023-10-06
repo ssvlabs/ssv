@@ -24,6 +24,7 @@ type Timer interface {
 	GetChannel() <-chan time.Time
 	Round() specqbft.Round
 	GetRole() spectypes.BeaconRole
+	IsActive() bool
 }
 
 type BeaconNetwork interface {
@@ -139,6 +140,12 @@ func (t *RoundTimer) GetRole() spectypes.BeaconRole {
 // when the timeout for the current round has occurred.
 func (t *RoundTimer) GetChannel() <-chan time.Time {
 	return t.timer.C
+}
+
+// IsActive checks if the timer is active. The timer is considered active if it has been initialized
+// and is currently waiting to fire, and inactive otherwise.
+func (t *RoundTimer) IsActive() bool {
+	return t.timer != nil
 }
 
 // TimeoutForRound times out for a given round.

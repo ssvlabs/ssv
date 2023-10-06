@@ -41,3 +41,7 @@ func (t *TestQBFTTimer) GetRole() spectypes.BeaconRole {
 func (t *TestQBFTTimer) Round() specqbft.Round {
 	return t.State.Round
 }
+
+func (t *TestQBFTTimer) IsActive() bool {
+	return true
+}

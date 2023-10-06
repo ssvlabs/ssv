@@ -200,20 +200,6 @@ func (mr *MockValidatorControllerMockRecorder) AllActiveIndices(epoch interface{
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AllActiveIndices", reflect.TypeOf((*MockValidatorController)(nil).AllActiveIndices), epoch)
 }
 
-// GetOperatorShares mocks base method.
-func (m *MockValidatorController) GetOperatorShares() []*types.SSVShare {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetOperatorShares")
-	ret0, _ := ret[0].([]*types.SSVShare)
-	return ret0
-}
-
-// GetOperatorShares indicates an expected call of GetOperatorShares.
-func (mr *MockValidatorControllerMockRecorder) GetOperatorShares() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorShares", reflect.TypeOf((*MockValidatorController)(nil).GetOperatorShares))
-}
-
 // CommitteeActiveIndices mocks base method.
 func (m *MockValidatorController) CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
 	m.ctrl.T.Helper()
@@ -226,4 +212,18 @@ func (m *MockValidatorController) CommitteeActiveIndices(epoch phase0.Epoch) []p
 func (mr *MockValidatorControllerMockRecorder) CommitteeActiveIndices(epoch interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CommitteeActiveIndices", reflect.TypeOf((*MockValidatorController)(nil).CommitteeActiveIndices), epoch)
+}
+
+// GetOperatorShares mocks base method.
+func (m *MockValidatorController) GetOperatorShares() []*types.SSVShare {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetOperatorShares")
+	ret0, _ := ret[0].([]*types.SSVShare)
+	return ret0
+}
+
+// GetOperatorShares indicates an expected call of GetOperatorShares.
+func (mr *MockValidatorControllerMockRecorder) GetOperatorShares() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorShares", reflect.TypeOf((*MockValidatorController)(nil).GetOperatorShares))
 }

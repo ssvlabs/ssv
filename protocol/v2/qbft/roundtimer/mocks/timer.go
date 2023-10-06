@@ -65,6 +65,20 @@ func (mr *MockTimerMockRecorder) GetRole() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRole", reflect.TypeOf((*MockTimer)(nil).GetRole))
 }
 
+// IsActive mocks base method.
+func (m *MockTimer) IsActive() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsActive")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsActive indicates an expected call of IsActive.
+func (mr *MockTimerMockRecorder) IsActive() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsActive", reflect.TypeOf((*MockTimer)(nil).IsActive))
+}
+
 // Round mocks base method.
 func (m *MockTimer) Round() qbft.Round {
 	m.ctrl.T.Helper()
