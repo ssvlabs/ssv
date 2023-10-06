@@ -468,13 +468,24 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			validatorData, err := createNewValidator(ops)
 			require.NoError(t, err)
 
+			// Generating a new list of operators, but with changed op1 rsa keys
+			pb, sk, _ := rsaencryption.GenerateKeys()
+			wrongOps := make([]*testOperator, 0)
+			wrongOps = append(wrongOps, &testOperator{id: 1, pub: pb, priv: sk})
+			for _, op := range ops[1:] {
+				wrongOps = append(wrongOps, op)
+			}
+
+			require.Equal(t, len(wrongOps), len(ops))
+			require.NotEqual(t, wrongOps[0].pub, ops[0].pub)
+
+			incorrectSharesData, err := generateSharesData(validatorData, wrongOps, testAddr, 4)
+			require.NoError(t, err)
+
 			sharesData, err := generateSharesData(validatorData, ops, testAddr, 3)
 			require.NoError(t, err)
-			incorrectSharesData, err := generateSharesDataWrong(validatorData, ops, testAddr, 4)
-			require.NoError(t, err)
-
 			signatureOffset := phase0.SignatureLength
-
+			// Replace incorrect signature with a correct one
 			for i := 0; i < signatureOffset; i++ {
 				incorrectSharesData[i] = sharesData[i]
 			}
@@ -1462,64 +1473,6 @@ func generateSharesData(validatorData *testValidatorData, operators []*testOpera
 		}
 
 		rsapriv, err := rsaencryption.ConvertPemToPrivateKey(string(op.priv))
-		if err != nil {
-			return nil, err
-		}
-
-		// check that we encrypt right
-		shareSecret := &bls.SecretKey{}
-		decryptedSharePrivateKey, err := rsaencryption.DecodeKey(rsapriv, ciphertext)
-		if err != nil {
-			return nil, err
-		}
-		if err = shareSecret.SetHexString(string(decryptedSharePrivateKey)); err != nil {
-			return nil, err
-		}
-
-		pubkeys = append(pubkeys, validatorData.operatorsShares[i].pub.Serialize()...)
-		encryptedShares = append(encryptedShares, ciphertext...)
-	}
-
-	tosign := fmt.Sprintf("%s:%d", owner.String(), nonce)
-	msghash := crypto.Keccak256([]byte(tosign))
-	signed := validatorData.masterKey.Sign(string(msghash))
-	sig := signed.Serialize()
-
-	if !signed.VerifyByte(validatorData.masterPubKey, msghash) {
-		return nil, errors.New("couldn't sign correctly")
-	}
-
-	sharesData := append(pubkeys, encryptedShares...)
-	sharesDataSigned := append(sig, sharesData...)
-
-	return sharesDataSigned, nil
-}
-
-func generateSharesDataWrong(validatorData *testValidatorData, operators []*testOperator, owner ethcommon.Address, nonce int) ([]byte, error) {
-	var pubkeys []byte
-	var encryptedShares []byte
-
-	for i, op := range operators {
-		pubKey := op.pub[:]
-		privKey := op.priv[:]
-
-		if i == 0 {
-			pb, sk, _ := rsaencryption.GenerateKeys()
-			pubKey = pb
-			privKey = sk
-		}
-		rsakey, err := rsaencryption.ConvertPemToPublicKey(pubKey)
-		if err != nil {
-			return nil, fmt.Errorf("cant convert publickey: %w", err)
-		}
-
-		rawshare := validatorData.operatorsShares[i].sec.SerializeToHexStr()
-		ciphertext, err := rsa.EncryptPKCS1v15(rand.Reader, rsakey, []byte(rawshare))
-		if err != nil {
-			return nil, errors.New("cant encrypt share")
-		}
-
-		rsapriv, err := rsaencryption.ConvertPemToPrivateKey(string(privKey))
 		if err != nil {
 			return nil, err
 		}
