@@ -235,17 +235,15 @@ func (eh *EventHandler) handleShareCreation(
 	)
 
 	var malformedEventError *MalformedEventError = nil
+
 	if err != nil {
-		switch {
-		default:
+		if errors.As(err, &malformedEventError) &&
+			malformedEventError.IsInvalidEncryptedShare &&
+			share.BelongsToOperator(eh.operatorData.GetOperatorData().ID) {
+
+			share.Metadata.Invalid = true
+		} else {
 			return nil, fmt.Errorf("could not extract validator share from event: %w", err)
-
-		case errors.As(err, &malformedEventError):
-			if malformedEventError.IsInvalidEncryptedShare &&
-				share.BelongsToOperator(eh.operatorData.GetOperatorData().ID) {
-
-				share.Metadata.Invalid = true
-			}
 		}
 	}
 
@@ -263,6 +261,10 @@ func (eh *EventHandler) handleShareCreation(
 	// Save share.
 	if err := eh.nodeStorage.Shares().Save(txn, share); err != nil {
 		return nil, fmt.Errorf("could not save validator share: %w", err)
+	}
+
+	if malformedEventError == nil {
+		return share, nil
 	}
 
 	return share, malformedEventError

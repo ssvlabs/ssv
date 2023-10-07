@@ -472,9 +472,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			pb, sk, _ := rsaencryption.GenerateKeys()
 			wrongOps := make([]*testOperator, 0)
 			wrongOps = append(wrongOps, &testOperator{id: 1, pub: pb, priv: sk})
-			for _, op := range ops[1:] {
-				wrongOps = append(wrongOps, op)
-			}
+
+			wrongOps = append(wrongOps, ops[1:]...)
 
 			require.Equal(t, len(wrongOps), len(ops))
 			require.NotEqual(t, wrongOps[0].pub, ops[0].pub)
