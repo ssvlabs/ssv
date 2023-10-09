@@ -49,17 +49,16 @@ type Options struct {
 
 // operatorNode implements Node interface
 type operatorNode struct {
-	network            networkconfig.NetworkConfig
-	context            context.Context
-	slotTickerProvider slotticker.Provider
-	validatorsCtrl     validator.Controller
-	consensusClient    beaconprotocol.BeaconNode
-	executionClient    *executionclient.ExecutionClient
-	net                network.P2PNetwork
-	storage            storage.Storage
-	qbftStorage        *qbftstorage.QBFTStores
-	dutyScheduler      *duties.Scheduler
-	feeRecipientCtrl   fee_recipient.RecipientController
+	network          networkconfig.NetworkConfig
+	context          context.Context
+	validatorsCtrl   validator.Controller
+	consensusClient  beaconprotocol.BeaconNode
+	executionClient  *executionclient.ExecutionClient
+	net              network.P2PNetwork
+	storage          storage.Storage
+	qbftStorage      *qbftstorage.QBFTStores
+	dutyScheduler    *duties.Scheduler
+	feeRecipientCtrl fee_recipient.RecipientController
 
 	ws        api.WebSocketServer
 	wsAPIPort int
@@ -84,15 +83,14 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 	}
 
 	node := &operatorNode{
-		context:            opts.Context,
-		slotTickerProvider: slotTickerProvider,
-		validatorsCtrl:     opts.ValidatorController,
-		network:            opts.Network,
-		consensusClient:    opts.BeaconNode,
-		executionClient:    opts.ExecutionClient,
-		net:                opts.P2PNetwork,
-		storage:            opts.ValidatorOptions.RegistryStorage,
-		qbftStorage:        storageMap,
+		context:         opts.Context,
+		validatorsCtrl:  opts.ValidatorController,
+		network:         opts.Network,
+		consensusClient: opts.BeaconNode,
+		executionClient: opts.ExecutionClient,
+		net:             opts.P2PNetwork,
+		storage:         opts.ValidatorOptions.RegistryStorage,
+		qbftStorage:     storageMap,
 		dutyScheduler: duties.NewScheduler(&duties.SchedulerOptions{
 			Ctx:                 opts.Context,
 			BeaconNode:          opts.BeaconNode,
@@ -102,14 +100,16 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 			ExecuteDuty:         opts.ValidatorController.ExecuteDuty,
 			BuilderProposals:    opts.ValidatorOptions.BuilderProposals,
 			DutyStore:           opts.DutyStore,
+			SlotTickerProvider:  slotTickerProvider,
 		}),
 		feeRecipientCtrl: fee_recipient.NewController(&fee_recipient.ControllerOptions{
-			Ctx:              opts.Context,
-			BeaconClient:     opts.BeaconNode,
-			Network:          opts.Network,
-			ShareStorage:     opts.ValidatorOptions.RegistryStorage.Shares(),
-			RecipientStorage: opts.ValidatorOptions.RegistryStorage,
-			OperatorData:     opts.ValidatorOptions.OperatorData,
+			Ctx:                opts.Context,
+			BeaconClient:       opts.BeaconNode,
+			Network:            opts.Network,
+			ShareStorage:       opts.ValidatorOptions.RegistryStorage.Shares(),
+			RecipientStorage:   opts.ValidatorOptions.RegistryStorage,
+			OperatorData:       opts.ValidatorOptions.OperatorData,
+			SlotTickerProvider: slotTickerProvider,
 		}),
 
 		ws:        opts.WS,
