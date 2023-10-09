@@ -464,79 +464,82 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.Equal(t, registrystorage.Nonce(3), nonce)
 		})
 
-		t.Run("test malformed ValidatorAdded, nonce is bumped, share is saved, marked as invalid", func(t *testing.T) {
+		t.Run("test invalid encrypted shares", func(t *testing.T) {
 			validatorData, err := createNewValidator(ops)
 			require.NoError(t, err)
 
-			// Generating a new list of operators, but with changed op1 rsa keys
-			pb, sk, _ := rsaencryption.GenerateKeys()
-			wrongOps := make([]*testOperator, 0)
-			wrongOps = append(wrongOps, &testOperator{id: 1, pub: pb, priv: sk})
+			t.Run("valid signature + wrong op1 key, nonce is bumped, share is saved, marked as invalid", func(t *testing.T) {
+				sharesData, err := generateSharesData(validatorData, ops, testAddr, 3)
+				require.NoError(t, err)
 
-			wrongOps = append(wrongOps, ops[1:]...)
+				// Generating a new list of operators, but with changed op1 rsa keys
+				pb, sk, _ := rsaencryption.GenerateKeys()
+				wrongOps := make([]*testOperator, 0)
+				wrongOps = append(wrongOps, &testOperator{id: 1, pub: pb, priv: sk})
 
-			require.Equal(t, len(wrongOps), len(ops))
-			require.NotEqual(t, wrongOps[0].pub, ops[0].pub)
+				wrongOps = append(wrongOps, ops[1:]...)
 
-			incorrectSharesData, err := generateSharesData(validatorData, wrongOps, testAddr, 4)
-			require.NoError(t, err)
+				require.Equal(t, len(wrongOps), len(ops))
+				require.NotEqual(t, wrongOps[0].pub, ops[0].pub)
 
-			sharesData, err := generateSharesData(validatorData, ops, testAddr, 3)
-			require.NoError(t, err)
-			signatureOffset := phase0.SignatureLength
-			// Replace incorrect signature with a correct one
-			for i := 0; i < signatureOffset; i++ {
-				incorrectSharesData[i] = sharesData[i]
-			}
+				incorrectSharesData, err := generateSharesData(validatorData, wrongOps, testAddr, 4)
+				require.NoError(t, err)
 
-			require.NoError(t, err)
+				signatureOffset := phase0.SignatureLength
+				// Replace incorrect signature with a correct one
+				for i := 0; i < signatureOffset; i++ {
+					incorrectSharesData[i] = sharesData[i]
+				}
 
-			valPubKey := validatorData.masterPubKey.Serialize()
-			// Call the contract method
-			_, err = boundContract.SimcontractTransactor.RegisterValidator(
-				auth,
-				valPubKey,
-				[]uint64{1, 2, 3, 4},
-				incorrectSharesData,
-				big.NewInt(100_000_000),
-				simcontract.CallableCluster{
-					ValidatorCount:  1,
-					NetworkFeeIndex: 1,
-					Index:           2,
-					Active:          true,
-					Balance:         big.NewInt(100_000_000),
-				})
-			require.NoError(t, err)
-			sim.Commit()
+				require.NoError(t, err)
 
-			block = <-logs
-			require.NotEmpty(t, block.Logs)
-			require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
+				valPubKey := validatorData.masterPubKey.Serialize()
+				// Call the contract method
+				_, err = boundContract.SimcontractTransactor.RegisterValidator(
+					auth,
+					valPubKey,
+					[]uint64{1, 2, 3, 4},
+					incorrectSharesData,
+					big.NewInt(100_000_000),
+					simcontract.CallableCluster{
+						ValidatorCount:  1,
+						NetworkFeeIndex: 1,
+						Index:           2,
+						Active:          true,
+						Balance:         big.NewInt(100_000_000),
+					})
+				require.NoError(t, err)
+				sim.Commit()
 
-			eventsCh = make(chan executionclient.BlockLogs)
-			go func() {
-				defer close(eventsCh)
-				eventsCh <- block
-			}()
+				block = <-logs
+				require.NotEmpty(t, block.Logs)
+				require.Equal(t, ethcommon.HexToHash("0x48a3ea0796746043948f6341d17ff8200937b99262a0b48c2663b951ed7114e5"), block.Logs[0].Topics[0])
 
-			lastProcessedBlock, err = eh.HandleBlockEventsStream(eventsCh, false)
-			require.NoError(t, err)
-			require.Equal(t, blockNum+1, lastProcessedBlock)
-			blockNum++
+				eventsCh = make(chan executionclient.BlockLogs)
+				go func() {
+					defer close(eventsCh)
+					eventsCh <- block
+				}()
 
-			// TODO. Fix the behavior of event_handler.go
-			requireKeyManagerDataToNotExist(t, eh, 2, validatorData)
+				lastProcessedBlock, err = eh.HandleBlockEventsStream(eventsCh, false)
+				require.NoError(t, err)
+				require.Equal(t, blockNum+1, lastProcessedBlock)
+				blockNum++
 
-			// Check that validator was not registered
-			shares = eh.nodeStorage.Shares().List(nil)
-			require.Equal(t, 3, len(shares))
-			valShare := eh.nodeStorage.Shares().Get(nil, valPubKey)
-			require.NotNil(t, valShare)
-			require.True(t, valShare.Invalid)
-			// and nonce was bumped
-			nonce, err = eh.nodeStorage.GetNextNonce(nil, testAddr)
-			require.NoError(t, err)
-			require.Equal(t, registrystorage.Nonce(4), nonce)
+				// TODO. Fix the behavior of event_handler.go
+				requireKeyManagerDataToNotExist(t, eh, 2, validatorData)
+
+				// Check that validator was not registered
+				shares = eh.nodeStorage.Shares().List(nil)
+				require.Equal(t, 3, len(shares))
+				valShare := eh.nodeStorage.Shares().Get(nil, valPubKey)
+				require.NotNil(t, valShare)
+				require.True(t, valShare.Invalid)
+				// and nonce was bumped
+				nonce, err = eh.nodeStorage.GetNextNonce(nil, testAddr)
+				require.NoError(t, err)
+				require.Equal(t, registrystorage.Nonce(4), nonce)
+			})
 		})
 
 		// Correct event; check nonce is bumped correctly; validator is added

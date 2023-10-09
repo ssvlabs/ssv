@@ -686,6 +686,10 @@ func (c *controller) onShareStart(share *ssvtypes.SSVShare) (bool, error) {
 		c.logger.Warn("skipping validator until it becomes active", fields.PubKey(share.ValidatorPubKey))
 		return false, nil
 	}
+	if share.Invalid {
+		c.logger.Warn("skipping validator with invalid share", fields.PubKey(share.ValidatorPubKey))
+		return false, nil
+	}
 
 	if err := c.setShareFeeRecipient(share, c.recipientsStorage.GetRecipientData); err != nil {
 		return false, fmt.Errorf("could not set share fee recipient: %w", err)
