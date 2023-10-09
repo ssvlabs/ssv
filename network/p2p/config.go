@@ -14,6 +14,8 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/message/validation"
+	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/networkconfig"
@@ -62,6 +64,10 @@ type Config struct {
 	NodeStorage storage.Storage
 	// Network defines a network configuration.
 	Network networkconfig.NetworkConfig
+	// MessageValidator validates incoming messages.
+	MessageValidator validation.MessageValidator
+	// Metrics report metrics.
+	Metrics *metricsreporter.MetricsReporter
 
 	PubsubMsgCacheTTL         time.Duration `yaml:"PubsubMsgCacheTTL" env:"PUBSUB_MSG_CACHE_TTL" env-description:"How long a message ID will be remembered as seen"`
 	PubsubOutQueueSize        int           `yaml:"PubsubOutQueueSize" env:"PUBSUB_OUT_Q_SIZE" env-description:"The size that we assign to the outbound pubsub message queue"`

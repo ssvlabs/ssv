@@ -10,12 +10,13 @@ import (
 
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/message"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
-func (v *Validator) onTimeout(logger *zap.Logger, identifier spectypes.MessageID, height specqbft.Height) func() {
-	return func() {
+func (v *Validator) onTimeout(logger *zap.Logger, identifier spectypes.MessageID, height specqbft.Height) roundtimer.OnRoundTimeoutF {
+	return func(round specqbft.Round) {
 		v.mtx.RLock() // read-lock for v.Queues, v.state
 		defer v.mtx.RUnlock()
 
@@ -30,12 +31,12 @@ func (v *Validator) onTimeout(logger *zap.Logger, identifier spectypes.MessageID
 			return
 		}
 
-		msg, err := v.createTimerMessage(identifier, height)
+		msg, err := v.createTimerMessage(identifier, height, round)
 		if err != nil {
 			logger.Debug("❗ failed to create timer msg", zap.Error(err))
 			return
 		}
-		dec, err := queue.DecodeSSVMessage(logger, msg)
+		dec, err := queue.DecodeSSVMessage(msg)
 		if err != nil {
 			logger.Debug("❌ failed to decode timer msg", zap.Error(err))
 			return
@@ -49,8 +50,11 @@ func (v *Validator) onTimeout(logger *zap.Logger, identifier spectypes.MessageID
 	}
 }
 
-func (v *Validator) createTimerMessage(identifier spectypes.MessageID, height specqbft.Height) (*spectypes.SSVMessage, error) {
-	td := types.TimeoutData{Height: height}
+func (v *Validator) createTimerMessage(identifier spectypes.MessageID, height specqbft.Height, round specqbft.Round) (*spectypes.SSVMessage, error) {
+	td := types.TimeoutData{
+		Height: height,
+		Round:  round,
+	}
 	data, err := json.Marshal(td)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to marshal timeout data")

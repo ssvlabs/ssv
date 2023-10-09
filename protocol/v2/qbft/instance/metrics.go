@@ -2,13 +2,13 @@ package instance
 
 import (
 	"encoding/hex"
-	"go.uber.org/zap"
 	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"go.uber.org/zap"
 )
 
 var (
@@ -50,7 +50,7 @@ func newMetrics(msgID spectypes.MessageID) *metrics {
 		proposalDuration: metricsStageDuration.WithLabelValues("proposal", hexPubKey),
 		prepareDuration:  metricsStageDuration.WithLabelValues("prepare", hexPubKey),
 		commitDuration:   metricsStageDuration.WithLabelValues("commit", hexPubKey),
-		round:            metricsRound.WithLabelValues("validator", hexPubKey),
+		round:            metricsRound.WithLabelValues(msgID.GetRoleType().String(), hexPubKey),
 	}
 }
 

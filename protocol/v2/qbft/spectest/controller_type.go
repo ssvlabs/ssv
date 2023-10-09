@@ -16,6 +16,7 @@ import (
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
 )
 
@@ -50,7 +51,7 @@ func testTimer(
 	runData *spectests.RunInstanceData,
 ) {
 	if runData.ExpectedTimerState != nil {
-		if timer, ok := config.GetTimer().(*spectestingutils.TestQBFTTimer); ok {
+		if timer, ok := config.GetTimer().(*roundtimer.TestQBFTTimer); ok {
 			require.Equal(t, runData.ExpectedTimerState.Timeouts, timer.State.Timeouts)
 			require.Equal(t, runData.ExpectedTimerState.Round, timer.State.Round)
 		}

@@ -2,6 +2,8 @@
 pragma solidity 0.8.18;
 
 contract Callable {
+    uint64 _operatorId = 0;
+
     struct Cluster {
         /// @dev The number of validators in the cluster
         uint32 validatorCount;
@@ -46,22 +48,47 @@ contract Callable {
     event ClusterReactivated(address indexed owner, uint64[] operatorIds, Cluster cluster);
     event FeeRecipientAddressUpdated(address indexed owner, address recipientAddress);
 
-    function registerOperator(bytes calldata publicKey, uint256 fee) public { emit OperatorAdded(uint64(1), msg.sender, publicKey, fee); }
-    function removeOperator(uint64 operatorId) public {emit OperatorRemoved(operatorId);}
+    function registerOperator(bytes calldata publicKey, uint256 fee) public {
+        _operatorId += 1;
+        emit OperatorAdded(_operatorId, msg.sender, publicKey, fee);
+    }
+
+    function removeOperator(uint64 operatorId) public {
+        emit OperatorRemoved(operatorId);
+    }
+
     function registerValidator(
         bytes calldata publicKey,
         uint64[] memory operatorIds,
         bytes calldata sharesData,
         uint256 amount,
         Cluster memory cluster
-    ) public { emit ValidatorAdded(msg.sender, operatorIds, publicKey, sharesData, cluster);}
+    ) public {
+        emit ValidatorAdded(msg.sender, operatorIds, publicKey, sharesData, cluster);
+    }
+
     function removeValidator(
         bytes calldata publicKey,
         uint64[] calldata operatorIds,
         Cluster memory cluster
-    ) public {emit ValidatorRemoved(msg.sender, operatorIds, publicKey, cluster);}
-    function liquidate(address clusterOwner, uint64[] memory operatorIds, Cluster memory cluster) public {emit ClusterLiquidated(clusterOwner, operatorIds, cluster);}
-    function reactivate(uint64[] calldata operatorIds, uint256 amount, Cluster memory cluster) public {emit ClusterReactivated(msg.sender, operatorIds, cluster);}
+    ) public {
+        emit ValidatorRemoved(msg.sender, operatorIds, publicKey, cluster);
+    }
+
+    function liquidate(address clusterOwner,
+        uint64[] memory operatorIds,
+        Cluster memory cluster
+    ) public {
+        emit ClusterLiquidated(msg.sender, operatorIds, cluster);
+    }
+
+    function reactivate(
+        uint64[] calldata operatorIds,
+        uint256 amount,
+        Cluster memory cluster
+    ) public {
+        emit ClusterReactivated(msg.sender, operatorIds, cluster);
+    }
+
     function setFeeRecipientAddress(address recipientAddress) public {emit FeeRecipientAddressUpdated(msg.sender, recipientAddress);}
 }
-

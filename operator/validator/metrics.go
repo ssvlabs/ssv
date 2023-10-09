@@ -33,31 +33,3 @@ func (c *controller) reportValidatorStatus(pk []byte, meta *beacon.ValidatorMeta
 		c.metrics.ValidatorUnknown(pk)
 	}
 }
-
-type validatorMetrics interface {
-	ValidatorInactive(publicKey []byte)
-	ValidatorNoIndex(publicKey []byte)
-	ValidatorError(publicKey []byte)
-	ValidatorReady(publicKey []byte)
-	ValidatorNotActivated(publicKey []byte)
-	ValidatorExiting(publicKey []byte)
-	ValidatorSlashed(publicKey []byte)
-	ValidatorNotFound(publicKey []byte)
-	ValidatorPending(publicKey []byte)
-	ValidatorRemoved(publicKey []byte)
-	ValidatorUnknown(publicKey []byte)
-}
-
-type nopMetrics struct{}
-
-func (n nopMetrics) ValidatorInactive([]byte)     {}
-func (n nopMetrics) ValidatorNoIndex([]byte)      {}
-func (n nopMetrics) ValidatorError([]byte)        {}
-func (n nopMetrics) ValidatorReady([]byte)        {}
-func (n nopMetrics) ValidatorNotActivated([]byte) {}
-func (n nopMetrics) ValidatorExiting([]byte)      {}
-func (n nopMetrics) ValidatorSlashed([]byte)      {}
-func (n nopMetrics) ValidatorNotFound([]byte)     {}
-func (n nopMetrics) ValidatorPending([]byte)      {}
-func (n nopMetrics) ValidatorRemoved([]byte)      {}
-func (n nopMetrics) ValidatorUnknown([]byte)      {}

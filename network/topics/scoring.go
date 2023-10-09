@@ -54,7 +54,7 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.Extend
 }
 
 // topicScoreParams factory for creating scoring params for topics
-func topicScoreParams(logger *zap.Logger, cfg *PububConfig) func(string) *pubsub.TopicScoreParams {
+func topicScoreParams(logger *zap.Logger, cfg *PubSubConfig) func(string) *pubsub.TopicScoreParams {
 	return func(t string) *pubsub.TopicScoreParams {
 		totalValidators, activeValidators, myValidators, err := cfg.GetValidatorStats()
 		if err != nil {
