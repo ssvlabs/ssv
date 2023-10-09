@@ -491,8 +491,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 					incorrectSharesData[i] = sharesData[i]
 				}
 
-				require.NoError(t, err)
-
 				valPubKey := validatorData.masterPubKey.Serialize()
 				// Call the contract method
 				_, err = boundContract.SimcontractTransactor.RegisterValidator(
@@ -526,7 +524,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				require.Equal(t, blockNum+1, lastProcessedBlock)
 				blockNum++
 
-				// TODO. Fix the behavior of event_handler.go
 				requireKeyManagerDataToNotExist(t, eh, 2, validatorData)
 
 				// Check that validator was not registered
