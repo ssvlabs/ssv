@@ -11,6 +11,8 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"github.com/sourcegraph/conc/pool"
 	"go.uber.org/zap"
@@ -24,6 +26,18 @@ import (
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/scheduler.go -source=./scheduler.go
+
+var slotDelayGauge = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	Name: "slot_ticker_delay_ms",
+	Help: "The delay in ms of the slot ticker",
+}, []string{"role"})
+
+func init() {
+	logger := zap.L()
+	if err := prometheus.Register(slotDelayGauge); err != nil {
+		logger.Debug("could not register prometheus collector")
+	}
+}
 
 const (
 	// blockPropagationDelay time to propagate around the nodes
@@ -330,6 +344,7 @@ func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []*spectypes.Duty) 
 	for _, duty := range duties {
 		duty := duty
 		logger := s.loggerWithDutyContext(logger, duty)
+		slotDelayGauge.WithLabelValues(duty.Type.String()).Set(float64(time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot)).Milliseconds()))
 		go func() {
 			if duty.Type == spectypes.BNRoleAttester || duty.Type == spectypes.BNRoleSyncCommittee {
 				s.waitOneThirdOrValidBlock(duty.Slot)
