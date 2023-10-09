@@ -28,14 +28,15 @@ import (
 
 //go:generate mockgen -package=mocks -destination=./mocks/scheduler.go -source=./scheduler.go
 
-var slotDelayGauge = promauto.NewGaugeVec(prometheus.GaugeOpts{
-	Name: "slot_ticker_delay_ms",
-	Help: "The delay in ms of the slot ticker",
-}, []string{"role"})
+var slotDelayHistogram = promauto.NewHistogram(prometheus.HistogramOpts{
+	Name:    "slot_ticker_delay_milliseconds",
+	Help:    "The delay in milliseconds of the slot ticker",
+	Buckets: []float64{5, 10, 20, 100, 500, 5000}, // Buckets in milliseconds. Adjust as per your needs.
+})
 
 func init() {
 	logger := zap.L()
-	if err := prometheus.Register(slotDelayGauge); err != nil {
+	if err := prometheus.Register(slotDelayHistogram); err != nil {
 		logger.Debug("could not register prometheus collector")
 	}
 }
@@ -345,7 +346,7 @@ func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []*spectypes.Duty) 
 	for _, duty := range duties {
 		duty := duty
 		logger := s.loggerWithDutyContext(logger, duty)
-		slotDelayGauge.WithLabelValues(duty.Type.String()).Set(float64(time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot)).Milliseconds()))
+		slotDelayHistogram.Observe(float64(time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot)).Milliseconds()))
 		go func() {
 			if duty.Type == spectypes.BNRoleAttester || duty.Type == spectypes.BNRoleSyncCommittee {
 				s.waitOneThirdOrValidBlock(duty.Slot)
