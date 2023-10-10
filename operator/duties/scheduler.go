@@ -346,7 +346,11 @@ func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []*spectypes.Duty) 
 	for _, duty := range duties {
 		duty := duty
 		logger := s.loggerWithDutyContext(logger, duty)
-		slotDelayHistogram.Observe(float64(time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot)).Milliseconds()))
+		slotDelay := time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot))
+		if slotDelay >= 100*time.Millisecond {
+			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
+		}
+		slotDelayHistogram.Observe(float64(slotDelay.Milliseconds()))
 		go func() {
 			if duty.Type == spectypes.BNRoleAttester || duty.Type == spectypes.BNRoleSyncCommittee {
 				s.waitOneThirdOrValidBlock(duty.Slot)
