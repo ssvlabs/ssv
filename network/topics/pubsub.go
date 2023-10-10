@@ -123,7 +123,7 @@ func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig) (*pub
 		pubsub.WithValidateThrottle(cfg.ValidateThrottle),
 		pubsub.WithSubscriptionFilter(sf),
 		pubsub.WithGossipSubParams(params.GossipSubParams()),
-		pubsub.WithMessageSignaturePolicy(pubsub.StrictSign),
+		pubsub.WithMessageSignaturePolicy(pubsub.StrictNoSign),
 		// pubsub.WithPeerFilter(func(pid peer.ID, topic string) bool {
 		//	logger.Debug("pubsubTrace: filtering peer", zap.String("id", pid.String()), zap.String("topic", topic))
 		//	return true
