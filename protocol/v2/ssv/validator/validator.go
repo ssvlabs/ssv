@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -106,8 +105,7 @@ func (v *Validator) StartDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 		logger = logger.With(fields.Height(baseRunner.QBFTController.Height))
 	}
 
-	slotDelay := time.Since(time.Unix(baseRunner.BeaconNetwork.EstimatedTimeAtSlot(duty.Slot), 0)).Milliseconds()
-	logger.Info("ℹ️ starting duty processing", zap.Int64("slot_delay", slotDelay), zap.Bool("late_duty", slotDelay > 100))
+	logger.Info("ℹ️ starting duty processing")
 
 	return dutyRunner.StartNewDuty(logger, duty)
 }
