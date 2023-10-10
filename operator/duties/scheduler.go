@@ -11,6 +11,8 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"github.com/sourcegraph/conc/pool"
 	"go.uber.org/zap"
@@ -20,10 +22,24 @@ import (
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
+	"github.com/bloxapp/ssv/operator/slotticker"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/scheduler.go -source=./scheduler.go
+
+var slotDelayHistogram = promauto.NewHistogram(prometheus.HistogramOpts{
+	Name:    "slot_ticker_delay_milliseconds",
+	Help:    "The delay in milliseconds of the slot ticker",
+	Buckets: []float64{5, 10, 20, 100, 500, 5000}, // Buckets in milliseconds. Adjust as per your needs.
+})
+
+func init() {
+	logger := zap.L()
+	if err := prometheus.Register(slotDelayHistogram); err != nil {
+		logger.Debug("could not register prometheus collector")
+	}
+}
 
 const (
 	// blockPropagationDelay time to propagate around the nodes
@@ -32,7 +48,8 @@ const (
 )
 
 type SlotTicker interface {
-	Subscribe(subscription chan phase0.Slot) event.Subscription
+	Next() <-chan time.Time
+	Slot() phase0.Slot
 }
 
 type BeaconNode interface {
@@ -60,7 +77,7 @@ type SchedulerOptions struct {
 	ValidatorController ValidatorController
 	ExecuteDuty         ExecuteDutyFunc
 	IndicesChg          chan struct{}
-	Ticker              SlotTicker
+	SlotTickerProvider  slotticker.Provider
 	BuilderProposals    bool
 	DutyStore           *dutystore.Store
 }
@@ -69,7 +86,7 @@ type Scheduler struct {
 	beaconNode          BeaconNode
 	network             networkconfig.NetworkConfig
 	validatorController ValidatorController
-	slotTicker          SlotTicker
+	slotTickerProvider  slotticker.Provider
 	executeDuty         ExecuteDutyFunc
 	builderProposals    bool
 
@@ -78,7 +95,7 @@ type Scheduler struct {
 
 	reorg      chan ReorgEvent
 	indicesChg chan struct{}
-	ticker     chan phase0.Slot
+	ticker     slotticker.SlotTicker
 	waitCond   *sync.Cond
 	pool       *pool.ContextPool
 
@@ -97,7 +114,7 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 	s := &Scheduler{
 		beaconNode:          opts.BeaconNode,
 		network:             opts.Network,
-		slotTicker:          opts.Ticker,
+		slotTickerProvider:  opts.SlotTickerProvider,
 		executeDuty:         opts.ExecuteDuty,
 		validatorController: opts.ValidatorController,
 		builderProposals:    opts.BuilderProposals,
@@ -110,7 +127,7 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 			NewSyncCommitteeHandler(dutyStore.SyncCommittee),
 		},
 
-		ticker:   make(chan phase0.Slot),
+		ticker:   opts.SlotTickerProvider(),
 		reorg:    make(chan ReorgEvent),
 		waitCond: sync.NewCond(&sync.Mutex{}),
 	}
@@ -143,8 +160,6 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 
 	for _, handler := range s.handlers {
 		handler := handler
-		slotTicker := make(chan phase0.Slot)
-		s.slotTicker.Subscribe(slotTicker)
 
 		indicesChangeCh := make(chan struct{})
 		indicesChangeFeed.Subscribe(indicesChangeCh)
@@ -158,7 +173,7 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 			s.network,
 			s.validatorController,
 			s.ExecuteDuties,
-			slotTicker,
+			s.slotTickerProvider,
 			reorgCh,
 			indicesChangeCh,
 		)
@@ -170,7 +185,6 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 		})
 	}
 
-	s.slotTicker.Subscribe(s.ticker)
 	go s.SlotTicker(ctx)
 
 	go indicesChangeFeed.FanOut(ctx, s.indicesChg)
@@ -222,7 +236,9 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		case slot := <-s.ticker:
+		case <-s.ticker.Next():
+			slot := s.ticker.Slot()
+
 			delay := s.network.SlotDurationSec() / time.Duration(goclient.IntervalsPerSlot) /* a third of the slot duration */
 			finalTime := s.network.Beacon.GetSlotStartTime(slot).Add(delay)
 			waitDuration := time.Until(finalTime)
@@ -330,6 +346,11 @@ func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []*spectypes.Duty) 
 	for _, duty := range duties {
 		duty := duty
 		logger := s.loggerWithDutyContext(logger, duty)
+		slotDelay := time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot))
+		if slotDelay >= 100*time.Millisecond {
+			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
+		}
+		slotDelayHistogram.Observe(float64(slotDelay.Milliseconds()))
 		go func() {
 			if duty.Type == spectypes.BNRoleAttester || duty.Type == spectypes.BNRoleSyncCommittee {
 				s.waitOneThirdOrValidBlock(duty.Slot)

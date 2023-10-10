@@ -43,7 +43,7 @@ import (
 	"github.com/bloxapp/ssv/nodeprobe"
 	"github.com/bloxapp/ssv/operator"
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
-	"github.com/bloxapp/ssv/operator/slot_ticker"
+	"github.com/bloxapp/ssv/operator/slotticker"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
 	"github.com/bloxapp/ssv/operator/validatorsmap"
@@ -137,14 +137,16 @@ var StartNodeCmd = &cobra.Command{
 			return currentEpoch >= cfg.P2pNetworkConfig.PermissionedActivateEpoch && currentEpoch < cfg.P2pNetworkConfig.PermissionedDeactivateEpoch
 		}
 
-		slotTicker := slot_ticker.NewTicker(cmd.Context(), networkConfig)
+		slotTickerProvider := func() slotticker.SlotTicker {
+			return slotticker.New(networkConfig)
+		}
 
 		cfg.ConsensusClient.Context = cmd.Context()
 		cfg.ConsensusClient.Graffiti = []byte("SSV.Network")
 		cfg.ConsensusClient.GasLimit = spectypes.DefaultGasLimit
 		cfg.ConsensusClient.Network = networkConfig.Beacon.GetNetwork()
 
-		consensusClient := setupConsensusClient(logger, operatorData.ID, slotTicker)
+		consensusClient := setupConsensusClient(logger, operatorData.ID, slotTickerProvider)
 
 		executionClient, err := executionclient.New(
 			cmd.Context(),
@@ -240,7 +242,7 @@ var StartNodeCmd = &cobra.Command{
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 
-		operatorNode = operator.New(logger, cfg.SSVOptions, slotTicker)
+		operatorNode = operator.New(logger, cfg.SSVOptions, slotTickerProvider)
 
 		if cfg.MetricsAPIPort > 0 {
 			go startMetricsHandler(cmd.Context(), logger, db, metricsReporter, cfg.MetricsAPIPort, cfg.EnableProfile)
@@ -517,9 +519,9 @@ func setupP2P(logger *zap.Logger, db basedb.Database) network.P2PNetwork {
 func setupConsensusClient(
 	logger *zap.Logger,
 	operatorID spectypes.OperatorID,
-	slotTicker slot_ticker.Ticker,
+	slotTickerProvider slotticker.Provider,
 ) beaconprotocol.BeaconNode {
-	cl, err := goclient.New(logger, cfg.ConsensusClient, operatorID, slotTicker)
+	cl, err := goclient.New(logger, cfg.ConsensusClient, operatorID, slotTickerProvider)
 	if err != nil {
 		logger.Fatal("failed to create beacon go-client", zap.Error(err),
 			fields.Address(cfg.ConsensusClient.BeaconNodeAddr))

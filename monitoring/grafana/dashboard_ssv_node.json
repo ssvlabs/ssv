@@ -22,7 +22,7 @@
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "id": 115,
-  "iteration": 1676023992743,
+  "iteration": 1696933836051,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -2685,8 +2685,245 @@
       "title": "Stream Protocols (time-series)",
       "transformations": [],
       "type": "timeseries"
+    },
+    {
+      "collapsed": true,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 81
+      },
+      "id": 67,
+      "panels": [],
+      "title": "Vitals",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "eXfXfqH7z"
+      },
+      "description": "Rate per second of requests,  responses and active requests.\nResponses are outgoing, for incoming requests.\nSuccessful Requests are outgoing.\nActive are outgoing requests.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "bars",
+            "fillOpacity": 100,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "log": 2,
+              "type": "log"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "#73BF69",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "10ms"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "yellow",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "20ms"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "light-orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "100ms"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "semi-dark-orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "5000ms"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "dark-red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 82
+      },
+      "id": 65,
+      "maxDataPoints": 25,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "pluginVersion": "8.3.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "sum(increase(slot_ticker_delay_milliseconds_bucket{instance=~\"$instance.*\", le=\"5.0\"}[5m]))",
+          "format": "time_series",
+          "hide": false,
+          "instant": false,
+          "interval": "",
+          "legendFormat": "5ms",
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "sum(increase(slot_ticker_delay_milliseconds_bucket{instance=~\"$instance.*\", le=\"10.0\"}[5m])) -\nsum(increase(slot_ticker_delay_milliseconds_bucket{instance=~\"$instance.*\", le=\"5.0\"}[5m]))",
+          "format": "time_series",
+          "hide": false,
+          "instant": false,
+          "interval": "",
+          "legendFormat": "10ms",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "sum(increase(slot_ticker_delay_milliseconds_bucket{instance=~\"$instance.*\", le=\"20.0\"}[5m])) -\nsum(increase(slot_ticker_delay_milliseconds_bucket{instance=~\"$instance.*\", le=\"10.0\"}[5m]))",
+          "format": "time_series",
+          "hide": false,
+          "instant": false,
+          "interval": "",
+          "legendFormat": "20ms",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "sum(increase(slot_ticker_delay_milliseconds_bucket{instance=~\"$instance.*\", le=\"100.0\"}[5m])) -\nsum(increase(slot_ticker_delay_milliseconds_bucket{instance=~\"$instance.*\", le=\"20.0\"}[5m]))",
+          "format": "time_series",
+          "hide": false,
+          "instant": false,
+          "interval": "",
+          "legendFormat": "100ms",
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "sum(increase(slot_ticker_delay_milliseconds_bucket{instance=~\"$instance.*\", le=\"500.0\"}[5m])) -\nsum(increase(slot_ticker_delay_milliseconds_bucket{instance=~\"$instance.*\", le=\"100.0\"}[5m]))",
+          "format": "time_series",
+          "hide": false,
+          "instant": false,
+          "interval": "",
+          "legendFormat": "500ms",
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "eXfXfqH7z"
+          },
+          "exemplar": true,
+          "expr": "sum(increase(slot_ticker_delay_milliseconds_bucket{instance=~\"$instance.*\", le=\"5000.0\"}[5m])) -\nsum(increase(slot_ticker_delay_milliseconds_bucket{instance=~\"$instance.*\", le=\"500.0\"}[5m]))",
+          "format": "time_series",
+          "hide": false,
+          "instant": false,
+          "interval": "",
+          "legendFormat": "5000ms",
+          "refId": "F"
+        }
+      ],
+      "title": "Duty Execution Latency (5m)",
+      "transformations": [],
+      "type": "timeseries"
     }
   ],
+  "refresh": "",
   "schemaVersion": 34,
   "style": "dark",
   "tags": [],
@@ -2695,8 +2932,8 @@
       {
         "current": {
           "selected": false,
-          "text": "ssv-node-v3-1",
-          "value": "ssv-node-v3-1"
+          "text": "ssv-node-v2-6",
+          "value": "ssv-node-v2-6"
         },
         "description": "",
         "hide": 1,
@@ -2730,7 +2967,7 @@
             "value": "ssv-node-v2-5"
           },
           {
-            "selected": false,
+            "selected": true,
             "text": "ssv-node-v2-6",
             "value": "ssv-node-v2-6"
           },
@@ -2746,26 +2983,6 @@
           },
           {
             "selected": false,
-            "text": "ssv-node-9",
-            "value": "ssv-node-9"
-          },
-          {
-            "selected": false,
-            "text": "ssv-node-10",
-            "value": "ssv-node-10"
-          },
-          {
-            "selected": false,
-            "text": "ssv-node-11",
-            "value": "ssv-node-11"
-          },
-          {
-            "selected": false,
-            "text": "ssv-node-12",
-            "value": "ssv-node-12"
-          },
-          {
-            "selected": false,
             "text": "ssv-exporter",
             "value": "ssv-exporter"
           },
@@ -2773,29 +2990,9 @@
             "selected": false,
             "text": "ssv-exporter-v2",
             "value": "ssv-exporter-v2"
-          },
-          {
-            "selected": true,
-            "text": "ssv-node-v3-1",
-            "value": "ssv-node-v3-1"
-          },
-          {
-            "selected": false,
-            "text": "ssv-node-v3-2",
-            "value": "ssv-node-v3-2"
-          },
-          {
-            "selected": false,
-            "text": "ssv-node-v3-3",
-            "value": "ssv-node-v3-3"
-          },
-          {
-            "selected": false,
-            "text": "ssv-node-v3-4",
-            "value": "ssv-node-v3-4"
           }
         ],
-        "query": "ssv-node-v2-1,ssv-node-v2-2,ssv-node-v2-3,ssv-node-v2-4,ssv-node-v2-5,ssv-node-v2-6,ssv-node-v2-7,ssv-node-v2-8,ssv-node-9,ssv-node-10,ssv-node-11,ssv-node-12,ssv-exporter,ssv-exporter-v2,ssv-node-v3-1,ssv-node-v3-2,ssv-node-v3-3,ssv-node-v3-4",
+        "query": "ssv-node-v2-1,ssv-node-v2-2,ssv-node-v2-3,ssv-node-v2-4,ssv-node-v2-5,ssv-node-v2-6,ssv-node-v2-7,ssv-node-v2-8,ssv-exporter,ssv-exporter-v2",
         "queryValue": "",
         "skipUrlSync": false,
         "type": "custom"
@@ -2803,13 +3000,13 @@
     ]
   },
   "time": {
-    "from": "now-6h",
+    "from": "now-1h",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "Node Dashboard",
   "uid": "QNiMrdoVz",
-  "version": 59,
+  "version": 70,
   "weekStart": ""
 }
