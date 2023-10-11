@@ -104,7 +104,7 @@ spec:
         - name: HOST_ADDRESS
           value: ""
         - name: DB_PATH
-          value: "./data/db-jato-v2-rsa"
+          value: "./data/db-jato-v2"
         - name: NETWORK
           value: "jato-v2-stage-rsa"
         - name: DB_REPORTING

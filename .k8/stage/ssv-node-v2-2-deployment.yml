@@ -110,7 +110,7 @@ spec:
         - name: UDP_PORT
           value: "12002"
         - name: DB_PATH
-          value: "./data/db-jato-v2-rsa"
+          value: "./data/db-jato-v2"
         - name: NETWORK
           value: "jato-v2-stage-rsa"
         - name: DB_REPORTING
