@@ -112,7 +112,7 @@ spec:
         - name: DB_PATH
           value: "./data/db-jato-v2-rsa"
         - name: NETWORK
-          value: "jato-v2-stage"
+          value: "jato-v2-stage-rsa"
         - name: DB_REPORTING
           value: "false"
         - name: METRICS_API_PORT
