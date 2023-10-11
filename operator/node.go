@@ -17,7 +17,7 @@ import (
 	"github.com/bloxapp/ssv/operator/duties"
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
 	"github.com/bloxapp/ssv/operator/fee_recipient"
-	"github.com/bloxapp/ssv/operator/slot_ticker"
+	"github.com/bloxapp/ssv/operator/slotticker"
 	"github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
@@ -51,7 +51,6 @@ type Options struct {
 type operatorNode struct {
 	network          networkconfig.NetworkConfig
 	context          context.Context
-	ticker           slot_ticker.Ticker
 	validatorsCtrl   validator.Controller
 	consensusClient  beaconprotocol.BeaconNode
 	executionClient  *executionclient.ExecutionClient
@@ -68,7 +67,7 @@ type operatorNode struct {
 }
 
 // New is the constructor of operatorNode
-func New(logger *zap.Logger, opts Options, slotTicker slot_ticker.Ticker) Node {
+func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provider) Node {
 	storageMap := qbftstorage.NewStores()
 
 	roles := []spectypes.BeaconRole{
@@ -85,7 +84,6 @@ func New(logger *zap.Logger, opts Options, slotTicker slot_ticker.Ticker) Node {
 
 	node := &operatorNode{
 		context:         opts.Context,
-		ticker:          slotTicker,
 		validatorsCtrl:  opts.ValidatorController,
 		network:         opts.Network,
 		consensusClient: opts.BeaconNode,
@@ -100,18 +98,18 @@ func New(logger *zap.Logger, opts Options, slotTicker slot_ticker.Ticker) Node {
 			ValidatorController: opts.ValidatorController,
 			IndicesChg:          opts.ValidatorController.IndicesChangeChan(),
 			ExecuteDuty:         opts.ValidatorController.ExecuteDuty,
-			Ticker:              slotTicker,
 			BuilderProposals:    opts.ValidatorOptions.BuilderProposals,
 			DutyStore:           opts.DutyStore,
+			SlotTickerProvider:  slotTickerProvider,
 		}),
 		feeRecipientCtrl: fee_recipient.NewController(&fee_recipient.ControllerOptions{
-			Ctx:              opts.Context,
-			BeaconClient:     opts.BeaconNode,
-			Network:          opts.Network,
-			ShareStorage:     opts.ValidatorOptions.RegistryStorage.Shares(),
-			RecipientStorage: opts.ValidatorOptions.RegistryStorage,
-			Ticker:           slotTicker,
-			OperatorData:     opts.ValidatorOptions.OperatorData,
+			Ctx:                opts.Context,
+			BeaconClient:       opts.BeaconNode,
+			Network:            opts.Network,
+			ShareStorage:       opts.ValidatorOptions.RegistryStorage.Shares(),
+			RecipientStorage:   opts.ValidatorOptions.RegistryStorage,
+			OperatorData:       opts.ValidatorOptions.OperatorData,
+			SlotTickerProvider: slotTickerProvider,
 		}),
 
 		ws:        opts.WS,
@@ -141,7 +139,6 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 		}
 	}()
 
-	go n.ticker.Start(logger)
 	n.validatorsCtrl.StartNetworkHandlers()
 	n.validatorsCtrl.StartValidators()
 	go n.net.UpdateSubnets(logger)

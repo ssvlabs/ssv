@@ -3,11 +3,11 @@ package duties
 import (
 	"context"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/operator/slotticker"
 )
 
 //go:generate mockgen -package=duties -destination=./base_handler_mock.go -source=./base_handler.go
@@ -16,7 +16,7 @@ import (
 type ExecuteDutiesFunc func(logger *zap.Logger, duties []*spectypes.Duty)
 
 type dutyHandler interface {
-	Setup(string, *zap.Logger, BeaconNode, networkconfig.NetworkConfig, ValidatorController, ExecuteDutiesFunc, chan phase0.Slot, chan ReorgEvent, chan struct{})
+	Setup(string, *zap.Logger, BeaconNode, networkconfig.NetworkConfig, ValidatorController, ExecuteDutiesFunc, slotticker.Provider, chan ReorgEvent, chan struct{})
 	HandleDuties(context.Context)
 	Name() string
 }
@@ -27,7 +27,7 @@ type baseHandler struct {
 	network             networkconfig.NetworkConfig
 	validatorController ValidatorController
 	executeDuties       ExecuteDutiesFunc
-	ticker              chan phase0.Slot
+	ticker              slotticker.SlotTicker
 
 	reorg         chan ReorgEvent
 	indicesChange chan struct{}
@@ -43,7 +43,7 @@ func (h *baseHandler) Setup(
 	network networkconfig.NetworkConfig,
 	validatorController ValidatorController,
 	executeDuties ExecuteDutiesFunc,
-	ticker chan phase0.Slot,
+	slotTickerProvider slotticker.Provider,
 	reorgEvents chan ReorgEvent,
 	indicesChange chan struct{},
 ) {
@@ -52,7 +52,7 @@ func (h *baseHandler) Setup(
 	h.network = network
 	h.validatorController = validatorController
 	h.executeDuties = executeDuties
-	h.ticker = ticker
+	h.ticker = slotTickerProvider()
 	h.reorg = reorgEvents
 	h.indicesChange = indicesChange
 }
