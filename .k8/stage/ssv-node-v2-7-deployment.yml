@@ -120,7 +120,7 @@ spec:
         - name: DISCOVERY_TRACE
           value: 'false'
         - name: PUBSUB_TRACE
-          value: 'true'
+          value: 'false'
         - name: BUILDER_PROPOSALS
           value: "false"
         volumeMounts:
