@@ -160,7 +160,7 @@ func WithShareStorage(shareStorage registrystorage.Shares) Option {
 	}
 }
 
-// With PeerInfoIndex sets the peer info index for the messageValidator.
+// WithPeerInfoIndex sets the peer info index for the messageValidator.
 func WithPeerInfoIndex(index peers.PeerInfoIndex) Option {
 	return func(mv *messageValidator) {
 		mv.peersIndex = index
@@ -252,7 +252,7 @@ func (mv *messageValidator) ValidatorForTopic(_ string) func(ctx context.Context
 
 // ValidatePubsubMessage validates the given pubsub message.
 // Depending on the outcome, it will return one of the pubsub validation results (Accept, Ignore, or Reject).
-func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, _ peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 	start := time.Now()
 	var validationDurationLabels []string // TODO: implement
 
@@ -266,7 +266,7 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, _ peer.ID, 
 	// - pass the existing PeerInfoIndex to NewMessageValidator
 	// - add a separate metric to track # of messages ignored here
 	// - add unit tests with a PeerInfoIndex mock
-	if mv.peersIndex != nil && mv.peersIndex.State(pmsg.GetFrom()) != peers.StateConnected {
+	if mv.peersIndex != nil && mv.peersIndex.State(peerID) != peers.StateConnected {
 		return pubsub.ValidationIgnore
 	}
 
