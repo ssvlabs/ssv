@@ -24,10 +24,14 @@ const (
 
 	subnetTopicsWeight          = 4.0
 	invalidMeshDeliveriesWeight = -800
-)
 
-const (
-	minActiveValidators = 200
+	// a bool to check if we enable scoring for messages in the mesh sent for near first deliveries.
+	// Currently set to false due to Prysm's insight that enabling this could penalize the average nodes.
+	// See https://github.com/prysmaticlabs/prysm/blob/2674e204cab117b1e902c78d72d8b6faaec7e6a0/beacon-chain/p2p/gossip_scoring_params.go#L215-L219
+	meshDeliveryIsScored = false
+
+	// TODO: when we have less than 200 validators, there would be no scoring for topics!
+	minActiveValidators = 1
 )
 
 var (
@@ -54,8 +58,8 @@ type NetworkOpts struct {
 type TopicOpts struct {
 	// TopicWeight is the weight of the topic
 	TopicWeight float64
-	//  ExpectedMsgRate is the expected rate for the topic
-	ExpectedMsgRate       float64
+	//  MessagesPerSlot is the expected rate for the topic
+	MessagesPerSlot       float64
 	InvalidMsgDecayTime   time.Duration
 	FirstMsgDecayTime     time.Duration
 	MeshMsgDecayTime      time.Duration
@@ -112,9 +116,9 @@ func NewSubnetTopicOpts(activeValidators, subnets int) Options {
 	opts.defaults()
 	opts.Topic.TopicWeight = subnetTopicsWeight / float64(opts.Network.Subnets)
 	validatorsPerSubnet := float64(opts.Network.ActiveValidators) / float64(opts.Network.Subnets)
-	valMsgsPerEpoch := 9.0
-	opts.Topic.ExpectedMsgRate = validatorsPerSubnet * valMsgsPerEpoch / float64(slotsPerEpoch)
-	opts.Topic.FirstMsgDecayTime = time.Duration(8)
+	valMsgsPerEpoch := 16.0
+	opts.Topic.MessagesPerSlot = validatorsPerSubnet * valMsgsPerEpoch / float64(slotsPerEpoch)
+	opts.Topic.FirstMsgDecayTime = time.Duration(1)
 	opts.Topic.MeshMsgDecayTime = time.Duration(16)
 	opts.Topic.MeshMsgCapFactor = 16.0 // using a large factor until we have more accurate values
 	opts.Topic.MeshMsgActivationTime = opts.Network.OneEpochDuration
@@ -141,8 +145,8 @@ func TopicParams(opts Options) (*pubsub.TopicScoreParams, error) {
 	}
 
 	if opts.Topic.FirstMsgDecayTime > 0 {
-		params.FirstMessageDeliveriesDecay = scoreDecay(opts.Topic.FirstMsgDecayTime*opts.Network.OneEpochDuration, opts.Network.OneEpochDuration)
-		firstMsgDeliveryCap, err := decayConvergence(params.FirstMessageDeliveriesDecay, 2*opts.Topic.ExpectedMsgRate/float64(opts.Topic.D))
+		params.FirstMessageDeliveriesDecay = scoreDecay(opts.Topic.FirstMsgDecayTime*opts.Network.OneEpochDuration, opts.Network.OneEpochDuration/slotsPerEpoch)
+		firstMsgDeliveryCap, err := decayConvergence(params.FirstMessageDeliveriesDecay, 2*opts.Topic.MessagesPerSlot/float64(opts.Topic.D))
 		if err != nil {
 			return nil, errors.Wrap(err, "could not calculate first msg delivery cap")
 		}
@@ -153,25 +157,30 @@ func TopicParams(opts Options) (*pubsub.TopicScoreParams, error) {
 	if opts.Topic.MeshMsgDecayTime > 0 {
 		params.MeshMessageDeliveriesDecay = scoreDecay(opts.Topic.MeshMsgDecayTime*opts.Network.OneEpochDuration, opts.Network.OneEpochDuration)
 		// a peer must send us at least 1/50 of the regular messages in time, very conservative limit
-		meshMsgDeliveriesThreshold, err := decayThreshold(params.MeshMessageDeliveriesDecay, math.Min(2.0, opts.Topic.ExpectedMsgRate/dampeningFactor))
+		meshMsgDeliveriesThreshold, err := decayThreshold(params.MeshMessageDeliveriesDecay, math.Min(2.0, opts.Topic.MessagesPerSlot/dampeningFactor))
 		if err != nil {
 			return nil, errors.Wrap(err, "could not calculate mesh message deliveries threshold")
 		}
 		params.MeshMessageDeliveriesThreshold = meshMsgDeliveriesThreshold
 		params.MeshMessageDeliveriesCap = opts.Topic.MeshMsgCapFactor * meshMsgDeliveriesThreshold
-		params.MeshMessageDeliveriesWeight = -scoreByWeight(opts.maxScore(), opts.Topic.TopicWeight,
-			math.Max(4.0, params.MeshMessageDeliveriesCap)) // used cap instead of threshold to reduce weight
+		if meshDeliveryIsScored {
+			params.MeshMessageDeliveriesWeight = -scoreByWeight(opts.maxScore(), opts.Topic.TopicWeight,
+				math.Max(4.0, params.MeshMessageDeliveriesCap)) // used cap instead of threshold to reduce weight
+		}
 		params.MeshMessageDeliveriesActivation = opts.Topic.MeshMsgActivationTime
 		params.MeshMessageDeliveriesWindow = 2 * time.Second
 		params.MeshFailurePenaltyWeight = params.MeshMessageDeliveriesWeight
 		params.MeshFailurePenaltyDecay = params.MeshMessageDeliveriesDecay
 	}
 
+	params.InvalidMessageDeliveriesWeight = invalidMeshDeliveriesWeight
 	if opts.Topic.InvalidMsgDecayTime > 0 {
-		params.InvalidMessageDeliveriesWeight = invalidMeshDeliveriesWeight
 		params.InvalidMessageDeliveriesDecay = scoreDecay(opts.Topic.InvalidMsgDecayTime*opts.Network.OneEpochDuration, opts.Network.OneEpochDuration)
 	} else {
-		params.InvalidMessageDeliveriesDecay = 0.1
+		// TODO: Since InvalidMsgDecayTime is not passed, then
+		// we need to figure out a good default value this,
+		// 0.5 is just a neutral placeholder for now.
+		params.InvalidMessageDeliveriesDecay = 0.5
 	}
 
 	return params, nil

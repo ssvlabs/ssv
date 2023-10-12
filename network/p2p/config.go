@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	libp2ptcp "github.com/libp2p/go-libp2p/p2p/transport/tcp"
 	ma "github.com/multiformats/go-multiaddr"
@@ -86,6 +88,12 @@ type Config struct {
 	Permissioned func() bool // this is not loaded from config file but set up in full node setup
 	// WhitelistedOperatorKeys is an array of Operator Public Key PEMs not registered in the contract with which the node will accept connections
 	WhitelistedOperatorKeys []string `yaml:"WhitelistedOperatorKeys" env:"WHITELISTED_KEYS" env-description:"Operators' keys not registered in the contract with which the node will accept connections"`
+
+	// PeerScoreInspector is called periodically to inspect the peer scores.
+	PeerScoreInspector func(peerMap map[peer.ID]*pubsub.PeerScoreSnapshot)
+
+	// PeerScoreInspectorInterval is the interval at which the PeerScoreInspector is called.
+	PeerScoreInspectorInterval time.Duration
 }
 
 // Libp2pOptions creates options list for the libp2p host

@@ -103,6 +103,9 @@ type messageValidator struct {
 	dutyStore        *dutystore.Store
 	ownOperatorID    spectypes.OperatorID
 	verifySignatures bool
+
+	selfPID    peer.ID
+	selfAccept bool
 }
 
 // NewMessageValidator returns a new MessageValidator with the given network configuration and options.
@@ -162,6 +165,14 @@ func WithShareStorage(shareStorage registrystorage.Shares) Option {
 func WithSignatureVerification(check bool) Option {
 	return func(mv *messageValidator) {
 		mv.verifySignatures = check
+	}
+}
+
+// WithSelfAccept blindly accepts messages sent from self. Useful for testing.
+func WithSelfAccept(selfPID peer.ID, selfAccept bool) Option {
+	return func(mv *messageValidator) {
+		mv.selfPID = selfPID
+		mv.selfAccept = selfAccept
 	}
 }
 
@@ -243,7 +254,11 @@ func (mv *messageValidator) ValidatorForTopic(_ string) func(ctx context.Context
 
 // ValidatePubsubMessage validates the given pubsub message.
 // Depending on the outcome, it will return one of the pubsub validation results (Accept, Ignore, or Reject).
-func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, _ peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+func (mv *messageValidator) ValidatePubsubMessage(ctx context.Context, p peer.ID, pmsg *pubsub.Message) (result pubsub.ValidationResult) {
+	if mv.selfAccept && p == mv.selfPID {
+		return pubsub.ValidationAccept
+	}
+
 	start := time.Now()
 	var validationDurationLabels []string // TODO: implement
 

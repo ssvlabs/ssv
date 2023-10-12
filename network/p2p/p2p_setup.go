@@ -290,6 +290,11 @@ func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
 		GetValidatorStats:   n.cfg.GetValidatorStats,
 	}
 
+	if n.cfg.PeerScoreInspector != nil && n.cfg.PeerScoreInspectorInterval > 0 {
+		cfg.ScoreInspector = n.cfg.PeerScoreInspector
+		cfg.ScoreInspectorInterval = n.cfg.PeerScoreInspectorInterval
+	}
+
 	if !n.cfg.PubSubScoring {
 		cfg.ScoreIndex = nil
 	}
