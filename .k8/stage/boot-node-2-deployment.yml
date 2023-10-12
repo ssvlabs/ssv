@@ -95,6 +95,8 @@ spec:
           name: port-5001      
           hostPort: 5001
         env:
+          - name: CONFIG_PATH
+            value: /config/config.example.yaml
           - name: BOOT_NODE_PRIVATE_KEY
             valueFrom:
               secretKeyRef:

@@ -95,6 +95,8 @@ spec:
           name: port-5003      
           hostPort: 5003
         env:
+          - name: CONFIG_PATH
+            value: /config/config.example.yaml
           - name: BOOT_NODE_PRIVATE_KEY
             value: "5e0b1cf218e644b91fdc9680be912279213b2985a10dea85f7b988216ac645b5"
           - name: BOOT_NODE_EXTERNAL_IP
