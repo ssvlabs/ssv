@@ -16,8 +16,7 @@ var JatoV2Stage = NetworkConfig{
 	RegistrySyncOffset:   new(big.Int).SetInt64(9249887),
 	RegistryContractAddr: "0xd6b633304Db2DD59ce93753FA55076DA367e5b2c",
 	Bootnodes: []string{
-		"enr:-Li4QO86ZMZr_INMW_WQBsP2jS56yjrHnZXxAUOKJz4_qFPKD1Cr3rghQD2FtXPk2_VPnJUi8BBiMngOGVXC0wTYpJGGAYgqnGSNh2F0dG5ldHOIAAAAAAAAAACEZXRoMpDkvpOTAAAQIP__________gmlkgnY0gmlwhArqAsGJc2VjcDI1NmsxoQKNW0Mf-xTXcevRSkZOvoN0Q0T9OkTjGZQyQeOl3bYU3YN0Y3CCE4iDdWRwgg-g",
-		"enr:-Li4QBoH15fXLV78y1_nmD5sODveptALORh568iWLS_eju3SUvF2ZfGE2j-nERKU1zb2g5KlS8L70SRLdRUJ-pHH-fmGAYgvh9oGh2F0dG5ldHOIAAAAAAAAAACEZXRoMpDkvpOTAAAQIP__________gmlkgnY0gmlwhArqAsGJc2VjcDI1NmsxoQO_tV3JP75ZUZPjhOgc2VqEu_FQEMeHc4AyOz6Lz33M2IN0Y3CCE4mDdWRwgg-h",
+		"enr:-Li4QNvWefIeYdbn8xAlxsTIlsEH9s-ERek3iYjpErY2O-8tZfgKi1r0yArKWP3CBV9ESQTdFPGH4LgE1cyOhCf4qUKGAYsjkwg-h2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhDbUHcyJc2VjcDI1NmsxoQPT1sl68ev56zH79WC5ZYTwdsV7eOu2g8WyIIWV8IwVooN0Y3CCE4uDdWRwgg-j",
 	},
 	WhitelistedOperatorKeys: []string{
 		// Blox's exporter nodes.
