@@ -2,15 +2,17 @@ package p2pv1
 
 import (
 	"context"
+	cryptorand "crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"math/rand"
 	"os"
 	"sort"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"math/rand"
 
 	"github.com/aquasecurity/table"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -44,7 +46,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	validators := make([]string, validatorCount)
 	for i := 0; i < validatorCount; i++ {
 		var validator [48]byte
-		rand.Read(validator[:])
+		cryptorand.Read(validator[:])
 		validators[i] = hex.EncodeToString(validator[:])
 	}
 
