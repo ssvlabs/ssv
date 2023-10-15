@@ -84,7 +84,7 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 				copy(pk[:], getKeySet(s.Committee).ValidatorPK.Serialize())
 				ssvMsg, err := validator.CreateDutyExecuteMsg(duty, pk, networkconfig.TestNetwork.Domain)
 				require.NoError(t, err)
-				dec, err := queue.DecodeSSVMessage(logger, ssvMsg)
+				dec, err := queue.DecodeSSVMessage(ssvMsg)
 				require.NoError(t, err)
 
 				s.validators[id].Queues[role].Q.Push(dec)
@@ -218,7 +218,7 @@ func createValidator(t *testing.T, pCtx context.Context, id spectypes.OperatorID
 
 	options.DutyRunners = validator.SetupRunners(ctx, logger, options)
 	val := protocolvalidator.NewValidator(ctx, cancel, options)
-	node.UseMessageRouter(newMsgRouter(val))
+	node.UseMessageRouter(newMsgRouter(logger, val))
 	started, err := val.Start(logger)
 	require.NoError(t, err)
 	require.True(t, started)

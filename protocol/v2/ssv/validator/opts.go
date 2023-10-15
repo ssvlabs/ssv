@@ -6,6 +6,7 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	"github.com/bloxapp/ssv/ibft/storage"
+	"github.com/bloxapp/ssv/message/validation"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	qbftctrl "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
@@ -31,6 +32,9 @@ type Options struct {
 	BuilderProposals  bool
 	QueueSize         int
 	GasLimit          uint64
+	MessageValidator  validation.MessageValidator
+	Metrics           Metrics
+	VerifySignatures  bool
 }
 
 func (o *Options) defaults() {

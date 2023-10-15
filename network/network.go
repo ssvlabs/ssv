@@ -1,19 +1,19 @@
 package network
 
 import (
+	"context"
 	"io"
 
 	"go.uber.org/zap"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
-
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
 
 // MessageRouter is accepting network messages and route them to the corresponding (internal) components
 type MessageRouter interface {
 	// Route routes the given message, this function MUST NOT block
-	Route(logger *zap.Logger, message spectypes.SSVMessage)
+	Route(ctx context.Context, message *queue.DecodedSSVMessage)
 }
 
 // MessageRouting allows to register a MessageRouter

@@ -12,9 +12,10 @@ import (
 	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/timeout"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
+	"github.com/stretchr/testify/require"
+
 	"github.com/bloxapp/ssv/logging"
 	testing2 "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
-	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
@@ -31,18 +32,12 @@ func TestQBFTMapping(t *testing.T) {
 		panic(err.Error())
 	}
 
-	origDomain := types.GetDefaultDomain()
 	types.SetDefaultDomain(testingutils.TestingSSVDomainType)
-	defer func() {
-		types.SetDefaultDomain(origDomain)
-	}()
 
 	for name, test := range untypedTests {
 		name, test := name, test
-
 		testName := strings.Split(name, "_")[1]
 		testType := strings.Split(name, "_")[0]
-
 		switch testType {
 		case reflect.TypeOf(&spectests.MsgProcessingSpecTest{}).String():
 			byts, err := json.Marshal(test)
@@ -51,6 +46,7 @@ func TestQBFTMapping(t *testing.T) {
 			require.NoError(t, json.Unmarshal(byts, &typedTest))
 
 			t.Run(typedTest.TestName(), func(t *testing.T) {
+				t.Parallel()
 				RunMsgProcessing(t, typedTest)
 			})
 		case reflect.TypeOf(&spectests.MsgSpecTest{}).String():
@@ -60,6 +56,7 @@ func TestQBFTMapping(t *testing.T) {
 			require.NoError(t, json.Unmarshal(byts, &typedTest))
 
 			t.Run(typedTest.TestName(), func(t *testing.T) {
+				t.Parallel()
 				RunMsg(t, typedTest)
 			})
 		case reflect.TypeOf(&spectests.ControllerSpecTest{}).String():
@@ -69,6 +66,7 @@ func TestQBFTMapping(t *testing.T) {
 			require.NoError(t, json.Unmarshal(byts, &typedTest))
 
 			t.Run(typedTest.TestName(), func(t *testing.T) {
+				t.Parallel()
 				RunControllerSpecTest(t, typedTest)
 			})
 		case reflect.TypeOf(&spectests.CreateMsgSpecTest{}).String():
@@ -78,6 +76,7 @@ func TestQBFTMapping(t *testing.T) {
 			require.NoError(t, json.Unmarshal(byts, &typedTest))
 
 			t.Run(typedTest.TestName(), func(t *testing.T) {
+				t.Parallel()
 				RunCreateMsg(t, typedTest)
 			})
 		case reflect.TypeOf(&spectests.RoundRobinSpecTest{}).String():
@@ -87,12 +86,12 @@ func TestQBFTMapping(t *testing.T) {
 			require.NoError(t, json.Unmarshal(byts, &typedTest))
 
 			t.Run(typedTest.TestName(), func(t *testing.T) { // using only spec struct so no need to run our version (TODO: check how we choose leader)
+				t.Parallel()
 				typedTest.Run(t)
 			})
 			/*t.Run(typedTest.TestName(), func(t *testing.T) {
 				RunMsg(t, typedTest)
 			})*/
-
 		case reflect.TypeOf(&futuremsg.ControllerSyncSpecTest{}).String():
 			byts, err := json.Marshal(test)
 			require.NoError(t, err)
@@ -100,6 +99,7 @@ func TestQBFTMapping(t *testing.T) {
 			require.NoError(t, json.Unmarshal(byts, &typedTest))
 
 			t.Run(typedTest.TestName(), func(t *testing.T) {
+				t.Parallel()
 				RunControllerSync(t, typedTest)
 			})
 		case reflect.TypeOf(&timeout.SpecTest{}).String():

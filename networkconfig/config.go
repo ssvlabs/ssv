@@ -61,3 +61,8 @@ func (n NetworkConfig) SlotDurationSec() time.Duration {
 func (n NetworkConfig) SlotsPerEpoch() uint64 {
 	return n.Beacon.SlotsPerEpoch()
 }
+
+// GetGenesisTime returns the genesis time in unix time.
+func (n NetworkConfig) GetGenesisTime() time.Time {
+	return time.Unix(int64(n.Beacon.MinGenesisTime()), 0)
+}

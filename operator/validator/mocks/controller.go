@@ -40,18 +40,18 @@ func (m *MockController) EXPECT() *MockControllerMockRecorder {
 	return m.recorder
 }
 
-// ActiveValidatorIndices mocks base method.
-func (m *MockController) ActiveValidatorIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
+// AllActiveIndices mocks base method.
+func (m *MockController) AllActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ActiveValidatorIndices", epoch)
+	ret := m.ctrl.Call(m, "AllActiveIndices", epoch)
 	ret0, _ := ret[0].([]phase0.ValidatorIndex)
 	return ret0
 }
 
-// ActiveValidatorIndices indicates an expected call of ActiveValidatorIndices.
-func (mr *MockControllerMockRecorder) ActiveValidatorIndices(epoch interface{}) *gomock.Call {
+// AllActiveIndices indicates an expected call of AllActiveIndices.
+func (mr *MockControllerMockRecorder) AllActiveIndices(epoch interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ActiveValidatorIndices", reflect.TypeOf((*MockController)(nil).ActiveValidatorIndices), epoch)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AllActiveIndices", reflect.TypeOf((*MockController)(nil).AllActiveIndices), epoch)
 }
 
 // ExecuteDuty mocks base method.
@@ -124,6 +124,20 @@ func (m *MockController) GetValidatorStats() (uint64, uint64, uint64, error) {
 func (mr *MockControllerMockRecorder) GetValidatorStats() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidatorStats", reflect.TypeOf((*MockController)(nil).GetValidatorStats))
+}
+
+// CommitteeActiveIndices mocks base method.
+func (m *MockController) CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CommitteeActiveIndices", epoch)
+	ret0, _ := ret[0].([]phase0.ValidatorIndex)
+	return ret0
+}
+
+// CommitteeActiveIndices indicates an expected call of CommitteeActiveIndices.
+func (mr *MockControllerMockRecorder) CommitteeActiveIndices(epoch interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CommitteeActiveIndices", reflect.TypeOf((*MockController)(nil).CommitteeActiveIndices), epoch)
 }
 
 // IndicesChangeChan mocks base method.

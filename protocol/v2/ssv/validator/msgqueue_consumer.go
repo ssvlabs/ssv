@@ -28,7 +28,8 @@ type queueContainer struct {
 
 // HandleMessage handles a spectypes.SSVMessage.
 // TODO: accept DecodedSSVMessage once p2p is upgraded to decode messages during validation.
-func (v *Validator) HandleMessage(logger *zap.Logger, msg *spectypes.SSVMessage) {
+// TODO: get rid of logger, add context
+func (v *Validator) HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage) {
 	v.mtx.RLock() // read v.Queues
 	defer v.mtx.RUnlock()
 
@@ -37,22 +38,13 @@ func (v *Validator) HandleMessage(logger *zap.Logger, msg *spectypes.SSVMessage)
 	// 	fields.Role(msg.MsgID.GetRoleType()))
 
 	if q, ok := v.Queues[msg.MsgID.GetRoleType()]; ok {
-		decodedMsg, err := queue.DecodeSSVMessage(logger, msg)
-		if err != nil {
-			logger.Warn("❗ failed to decode message",
-				zap.Error(err),
-				zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
-				zap.String("msg_id", msg.MsgID.String()),
-			)
-			return
-		}
-		if pushed := q.Q.TryPush(decodedMsg); !pushed {
+		if pushed := q.Q.TryPush(msg); !pushed {
 			msgID := msg.MsgID.String()
 			logger.Warn("❗ dropping message because the queue is full",
 				zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
 				zap.String("msg_id", msgID))
 		}
-		// logger.Debug("📬 queue: pushed message", fields.MessageID(decodedMsg.MsgID), fields.MessageType(decodedMsg.MsgType))
+		// logger.Debug("📬 queue: pushed message", fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType))
 	} else {
 		logger.Error("❌ missing queue for role type", fields.Role(msg.MsgID.GetRoleType()))
 	}

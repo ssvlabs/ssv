@@ -13,13 +13,13 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/golang/mock/gomock"
 	"github.com/pkg/errors"
-	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/operator/slot_ticker/mocks"
+	"github.com/bloxapp/ssv/operator/slotticker"
+	"github.com/bloxapp/ssv/operator/slotticker/mocks"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
@@ -52,32 +52,47 @@ func TestSubmitProposal(t *testing.T) {
 	t.Run("submit first time or halfway through epoch", func(t *testing.T) {
 		numberOfRequests := 4
 		var wg sync.WaitGroup
+		wg.Add(numberOfRequests) // Set up the wait group before starting goroutines
+
 		client := beacon.NewMockBeaconNode(ctrl)
 		client.EXPECT().SubmitProposalPreparation(gomock.Any()).DoAndReturn(func(feeRecipients map[phase0.ValidatorIndex]bellatrix.ExecutionAddress) error {
 			wg.Done()
 			return nil
-		}).MinTimes(numberOfRequests).MaxTimes(numberOfRequests) // call first time and on the halfway through epoch. each time should be 2 request as we have two batches
+		}).Times(numberOfRequests)
 
-		ticker := mocks.NewMockTicker(ctrl)
-		ticker.EXPECT().Subscribe(gomock.Any()).DoAndReturn(func(subscription chan phase0.Slot) event.Subscription {
-			subscription <- 1 // first time
-			time.Sleep(time.Millisecond * 500)
-			subscription <- 2 // should not call submit
-			time.Sleep(time.Millisecond * 500)
-			subscription <- 20 // should not call submit
-			time.Sleep(time.Millisecond * 500)
-			subscription <- phase0.Slot(network.SlotsPerEpoch()) / 2 // halfway through epoch
-			time.Sleep(time.Millisecond * 500)
-			subscription <- 63 // should not call submit
-			return nil
-		})
+		ticker := mocks.NewMockSlotTicker(ctrl)
+		mockTimeChan := make(chan time.Time)
+		mockSlotChan := make(chan phase0.Slot)
+		ticker.EXPECT().Next().Return(mockTimeChan).AnyTimes()
+		ticker.EXPECT().Slot().DoAndReturn(func() phase0.Slot {
+			return <-mockSlotChan
+		}).AnyTimes()
 
 		frCtrl.beaconClient = client
-		frCtrl.ticker = ticker
+		frCtrl.slotTickerProvider = func() slotticker.SlotTicker {
+			return ticker
+		}
 
 		go frCtrl.Start(logger)
-		wg.Add(numberOfRequests)
+
+		slots := []phase0.Slot{
+			1,                                        // first time
+			2,                                        // should not call submit
+			20,                                       // should not call submit
+			phase0.Slot(network.SlotsPerEpoch()) / 2, // halfway through epoch
+			63,                                       // should not call submit
+		}
+
+		for _, s := range slots {
+			mockTimeChan <- time.Now()
+			mockSlotChan <- s
+			time.Sleep(time.Millisecond * 500)
+		}
+
 		wg.Wait()
+
+		close(mockTimeChan) // Close the channel after test
+		close(mockSlotChan)
 	})
 
 	t.Run("error handling", func(t *testing.T) {
@@ -88,18 +103,21 @@ func TestSubmitProposal(t *testing.T) {
 			return errors.New("failed to submit")
 		}).MinTimes(2).MaxTimes(2)
 
-		ticker := mocks.NewMockTicker(ctrl)
-		ticker.EXPECT().Subscribe(gomock.Any()).DoAndReturn(func(subscription chan phase0.Slot) event.Subscription {
-			subscription <- 100 // first time
-			return nil
-		})
+		ticker := mocks.NewMockSlotTicker(ctrl)
+		mockTimeChan := make(chan time.Time, 1)
+		ticker.EXPECT().Next().Return(mockTimeChan).AnyTimes()
+		ticker.EXPECT().Slot().Return(phase0.Slot(100)).AnyTimes()
 
 		frCtrl.beaconClient = client
-		frCtrl.ticker = ticker
+		frCtrl.slotTickerProvider = func() slotticker.SlotTicker {
+			return ticker
+		}
 
 		go frCtrl.Start(logger)
+		mockTimeChan <- time.Now()
 		wg.Add(2)
 		wg.Wait()
+		close(mockTimeChan)
 	})
 }
 
