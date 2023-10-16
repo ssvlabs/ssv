@@ -40,7 +40,7 @@ Build stage Docker image:
     - docker tag $IMAGE_NAME:$CI_COMMIT_SHA $DOCKER_REPO_INFRA_STAGE:$CI_COMMIT_SHA
     - $DOCKER_LOGIN_TO_INFRA_STAGE_REPO && docker push $DOCKER_REPO_INFRA_STAGE:$CI_COMMIT_SHA
   only:
-    - libp2p-rsa
+    - stage
 
 Deploy nodes to stage:
   stage: deploy
@@ -67,9 +67,9 @@ Deploy nodes to stage:
     # │  Deploy Bootnode  |
     # +-------------------+
     # █▓▒░ Keep commented unless you're testing the bootnode ░▒▓█
-    - .k8/stage/scripts/deploy-boot-nodes.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE 1000m 1000m
+    # - .k8/stage/scripts/deploy-boot-nodes.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE 1000m 1000m
   only:
-    - libp2p-rsa
+    - stage
 
 Deploy exporter to stage:
   stage: deploy
