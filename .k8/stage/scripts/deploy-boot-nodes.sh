@@ -105,9 +105,8 @@ fi
 
 DIR=".k8/stage"
 DEPLOY_FILES=(
-#  "boot-node-deployment.yml"
-#  "boot-node-2-deployment.yml"
-  "boot-node-3-deployment.yml"
+  "boot-node-deployment.yml"
+  "boot-node-2-deployment.yml"
 )
 
 if [[ -d $DIR ]]; then
@@ -125,6 +124,5 @@ if [[ -d $DIR ]]; then
 fi
 
 #deploy
-#kubectl --context=$K8S_CONTEXT apply -f .k8/stage/boot-node-deployment.yml || exit 1
-#kubectl --context=$K8S_CONTEXT apply -f .k8/stage/boot-node-2-deployment.yml || exit 1
-kubectl --context=$K8S_CONTEXT apply -f .k8/stage/boot-node-3-deployment.yml || exit 1
+kubectl --context=$K8S_CONTEXT apply -f .k8/stage/boot-node-deployment.yml || exit 1
+kubectl --context=$K8S_CONTEXT apply -f .k8/stage/boot-node-2-deployment.yml || exit 1
