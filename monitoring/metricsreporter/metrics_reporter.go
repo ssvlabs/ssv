@@ -1,6 +1,7 @@
 package metricsreporter
 
 import (
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"strconv"
@@ -14,6 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
+	"github.com/bloxapp/ssv/utils/async"
 )
 
 // TODO: implement all methods
@@ -137,13 +139,21 @@ var (
 		Name: "ssv_message_non_committee",
 		Help: "The amount of messages not in committee",
 	}, []string{"ssv_msg_type", "decided"})
+	messagesReceivedFromPeer = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_messages_received_from_peer",
+		Help: "The amount of messages received from the specific peer",
+	}, []string{"peer_id"})
+	messagesReceivedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_messages_received_total",
+		Help: "The amount of messages total received",
+	}, []string{})
 )
 
 type MetricsReporter struct {
 	logger *zap.Logger
 }
 
-func New(opts ...Option) *MetricsReporter {
+func New(ctx context.Context, opts ...Option) *MetricsReporter {
 	mr := &MetricsReporter{
 		logger: zap.NewNop(),
 	}
@@ -176,6 +186,8 @@ func New(opts ...Option) *MetricsReporter {
 		messageTimeInQueue,
 		inCommitteeMessages,
 		nonCommitteeMessages,
+		messagesReceivedFromPeer,
+		messagesReceivedTotal,
 	}
 
 	for i, c := range allMetrics {
@@ -187,6 +199,12 @@ func New(opts ...Option) *MetricsReporter {
 			)
 		}
 	}
+
+	// reset  metric every hour because it can grow infinitely
+	async.Interval(ctx, time.Hour, func() {
+		messagesReceivedFromPeer.Reset()
+		messagesReceivedTotal.Reset()
+	})
 
 	return &MetricsReporter{}
 }
@@ -260,6 +278,14 @@ func (m *MetricsReporter) EventProcessed(eventName string) {
 
 func (m *MetricsReporter) EventProcessingFailed(eventName string) {
 	eventProcessingFailed.WithLabelValues(eventName).Inc()
+}
+
+func (m *MetricsReporter) MessagesReceivedFromPeer(peerId string) {
+	messagesReceivedFromPeer.WithLabelValues(peerId).Inc()
+}
+
+func (m *MetricsReporter) MessagesReceivedTotal() {
+	messagesReceivedTotal.WithLabelValues().Inc()
 }
 
 // TODO implement
