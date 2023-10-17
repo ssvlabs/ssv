@@ -105,6 +105,7 @@ var StartNodeCmd = &cobra.Command{
 		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
 
 		metricsReporter := metricsreporter.New(
+			cmd.Context(),
 			metricsreporter.WithLogger(logger),
 		)
 
