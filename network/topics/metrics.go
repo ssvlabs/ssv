@@ -24,6 +24,12 @@ var (
 		Name: "ssv:p2p:pubsub:score:inspect",
 		Help: "Gauge for negative peer scores",
 	}, []string{"pid"})
+
+	// score.go invalidMessageDeliveries value per topic
+	metricPubSubPeerP4Score = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:p2p:pubsub:score:invalid_message_deliveries",
+		Help: "Invalid message deliveries",
+	}, []string{"topic"})
 )
 
 func init() {
@@ -38,6 +44,9 @@ func init() {
 		logger.Debug("could not register prometheus collector")
 	}
 	if err := prometheus.Register(metricPubsubPeerScoreInspect); err != nil {
+		logger.Debug("could not register prometheus collector")
+	}
+	if err := prometheus.Register(metricPubSubPeerP4Score); err != nil {
 		logger.Debug("could not register prometheus collector")
 	}
 }
