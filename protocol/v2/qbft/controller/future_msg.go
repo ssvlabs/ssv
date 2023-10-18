@@ -6,6 +6,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -17,11 +18,13 @@ func (c *Controller) UponFutureMsg(logger *zap.Logger, msg *specqbft.SignedMessa
 	if !c.addHigherHeightMsg(msg) {
 		return nil, errors.New("discarded future msg")
 	}
-	if c.f1SyncTrigger() {
-		logger.Debug("🔀 triggered f+1 sync",
-			zap.Uint64("ctrl_height", uint64(c.Height)),
-			zap.Uint64("msg_height", uint64(msg.Message.Height)))
-		return nil, c.GetConfig().GetNetwork().SyncHighestDecided(spectypes.MessageIDFromBytes(c.Identifier))
+	if syncer, ok := c.GetConfig().GetNetwork().(protocolp2p.Syncer); ok {
+		if c.f1SyncTrigger() {
+			logger.Debug("🔀 triggered f+1 sync",
+				zap.Uint64("ctrl_height", uint64(c.Height)),
+				zap.Uint64("msg_height", uint64(msg.Message.Height)))
+			return nil, syncer.SyncHighestDecided(spectypes.MessageIDFromBytes(c.Identifier))
+		}
 	}
 	return nil, nil
 }

@@ -134,7 +134,12 @@ func WithHandler(protocol SyncProtocol, handler RequestHandler) *SyncHandler {
 
 // Syncer holds the interface for syncing data from other peers
 type Syncer interface {
-	specqbft.Syncer
+	// SyncHighestDecided tries to fetch the highest decided from peers (not blocking)
+	SyncHighestDecided(identifier spectypes.MessageID) error
+
+	// SyncDecidedByRange will trigger sync from-to heights (including)
+	SyncDecidedByRange(identifier spectypes.MessageID, from, to specqbft.Height)
+
 	// GetHistory sync the given range from a set of peers that supports history for the given identifier
 	// it accepts a list of targets for the request.
 	GetHistory(logger *zap.Logger, mid spectypes.MessageID, from, to specqbft.Height, targets ...string) ([]SyncResult, specqbft.Height, error)

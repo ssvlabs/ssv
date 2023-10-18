@@ -14,6 +14,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 )
 
 // Start starts a Validator.
@@ -76,6 +77,10 @@ func (v *Validator) Stop() {
 
 // sync performs highest decided sync
 func (v *Validator) sync(logger *zap.Logger, mid spectypes.MessageID) {
+	syncer, ok := v.Network.(protocolp2p.Syncer)
+	if !ok {
+		return
+	}
 	ctx, cancel := context.WithCancel(v.ctx)
 	defer cancel()
 
@@ -84,7 +89,7 @@ func (v *Validator) sync(logger *zap.Logger, mid spectypes.MessageID) {
 	retries := 3
 
 	for ctx.Err() == nil {
-		err := v.Network.SyncHighestDecided(mid)
+		err := syncer.SyncHighestDecided(mid)
 		if err != nil {
 			logger.Debug("❌ failed to sync highest decided", zap.Error(err))
 			retries--

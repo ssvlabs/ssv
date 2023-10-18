@@ -122,6 +122,7 @@ type Client interface {
 	eth2client.BlindedBeaconBlockProposalProvider
 	eth2client.BlindedBeaconBlockSubmitter
 	eth2client.ValidatorRegistrationsSubmitter
+	eth2client.VoluntaryExitSubmitter
 }
 
 type NodeClientProvider interface {
