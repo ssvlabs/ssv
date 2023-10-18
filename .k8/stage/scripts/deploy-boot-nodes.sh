@@ -105,8 +105,9 @@ fi
 
 DIR=".k8/stage"
 DEPLOY_FILES=(
-  "boot-node-deployment.yml"
-  "boot-node-2-deployment.yml"
+#  "boot-node-deployment.yml"
+#  "boot-node-2-deployment.yml"
+  "boot-node-holesky-deployment.yml"
 )
 
 if [[ -d $DIR ]]; then
