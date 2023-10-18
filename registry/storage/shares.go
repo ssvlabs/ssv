@@ -206,6 +206,13 @@ func ByActiveValidator() SharesFilter {
 	}
 }
 
+// ByAttesting filters for attesting validators.
+func ByAttesting() SharesFilter {
+	return func(share *types.SSVShare) bool {
+		return share.HasBeaconMetadata() && share.BeaconMetadata.IsAttesting()
+	}
+}
+
 // ByClusterID filters by cluster id.
 func ByClusterID(clusterID []byte) SharesFilter {
 	return func(share *types.SSVShare) bool {

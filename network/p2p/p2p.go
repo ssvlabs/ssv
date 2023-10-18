@@ -7,18 +7,17 @@ import (
 	"time"
 
 	"github.com/cornelk/hashmap"
-
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/network/commons"
-
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/message/validation"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/peers/connections"
@@ -56,14 +55,15 @@ type p2pNetwork struct {
 	interfaceLogger *zap.Logger // struct logger to log in interface methods that do not accept a logger
 	cfg             *Config
 
-	host        host.Host
-	streamCtrl  streams.StreamController
-	idx         peers.Index
-	disc        discovery.Service
-	topicsCtrl  topics.Controller
-	msgRouter   network.MessageRouter
-	msgResolver topics.MsgPeersResolver
-	connHandler connections.ConnHandler
+	host         host.Host
+	streamCtrl   streams.StreamController
+	idx          peers.Index
+	disc         discovery.Service
+	topicsCtrl   topics.Controller
+	msgRouter    network.MessageRouter
+	msgResolver  topics.MsgPeersResolver
+	msgValidator validation.MessageValidator
+	connHandler  connections.ConnHandler
 
 	state int32
 
@@ -90,6 +90,7 @@ func New(logger *zap.Logger, cfg *Config) network.P2PNetwork {
 		interfaceLogger:  logger,
 		cfg:              cfg,
 		msgRouter:        cfg.Router,
+		msgValidator:     cfg.MessageValidator,
 		state:            stateClosed,
 		activeValidators: hashmap.New[string, validatorStatus](),
 		nodeStorage:      cfg.NodeStorage,
@@ -172,7 +173,7 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 	}
 
 	// Create & start ConcurrentSyncer.
-	syncer := syncing.NewConcurrent(n.ctx, syncing.New(n), 16, syncing.DefaultTimeouts, nil)
+	syncer := syncing.NewConcurrent(n.ctx, syncing.New(n, n.msgValidator), 16, syncing.DefaultTimeouts, nil)
 	go syncer.Run(logger)
 	n.syncer = syncer
 
