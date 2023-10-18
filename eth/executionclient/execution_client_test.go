@@ -239,7 +239,7 @@ func TestFetchLogsInBatches(t *testing.T) {
 	}
 
 	t.Run("startBlock is greater than endBlock", func(t *testing.T) {
-		logChan, errChan := client.fetchLogsInBatches(ctx, 10, 5)
+		logChan, errChan := client.FetchLogs(ctx, 10, 5)
 		select {
 		case <-logChan:
 			require.Fail(t, "Should not receive log when startBlock > endBlock")
@@ -253,7 +253,7 @@ func TestFetchLogsInBatches(t *testing.T) {
 	t.Run("startBlock is same as endBlock", func(t *testing.T) {
 		var blockNumbers []uint64
 
-		logChan, errChan := client.fetchLogsInBatches(ctx, 5, 5)
+		logChan, errChan := client.FetchLogs(ctx, 5, 5)
 		select {
 		case block := <-logChan:
 			blockNumbers = append(blockNumbers, block.BlockNumber)
@@ -269,7 +269,7 @@ func TestFetchLogsInBatches(t *testing.T) {
 	t.Run("startBlock is less than endBlock", func(t *testing.T) {
 		var blockNumbers []uint64
 
-		logChan, errChan := client.fetchLogsInBatches(ctx, 3, 11)
+		logChan, errChan := client.FetchLogs(ctx, 3, 11)
 		for block := range logChan {
 			blockNumbers = append(blockNumbers, block.BlockNumber)
 		}
@@ -286,7 +286,7 @@ func TestFetchLogsInBatches(t *testing.T) {
 		canceledCtx, cancel := context.WithCancel(ctx)
 		cancel()
 
-		logChan, errChan := client.fetchLogsInBatches(canceledCtx, 0, 5)
+		logChan, errChan := client.FetchLogs(canceledCtx, 0, 5)
 		select {
 		case <-logChan:
 			require.Fail(t, "Should not receive log when context is canceled")

@@ -35,7 +35,6 @@ import (
 	"github.com/bloxapp/ssv/networkconfig"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
@@ -147,7 +146,6 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger) *e
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	bc := beacon.NewMockBeaconNode(ctrl)
 	validatorCtrl := validator.NewController(logger, validator.ControllerOptions{
 		Context:         ctx,
 		DB:              db,
@@ -169,7 +167,6 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger) *e
 		validatorCtrl,
 		nodeStorage.GetPrivateKey,
 		keyManager,
-		bc,
 		storageMap,
 		eventhandler.WithFullNode(),
 		eventhandler.WithLogger(logger))

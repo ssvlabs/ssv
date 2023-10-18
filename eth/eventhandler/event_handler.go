@@ -10,6 +10,7 @@ import (
 	"time"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"go.uber.org/zap"
@@ -21,21 +22,9 @@ import (
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging/fields"
 	nodestorage "github.com/bloxapp/ssv/operator/storage"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-)
-
-// Event names
-const (
-	OperatorAdded              = "OperatorAdded"
-	OperatorRemoved            = "OperatorRemoved"
-	ValidatorAdded             = "ValidatorAdded"
-	ValidatorRemoved           = "ValidatorRemoved"
-	ClusterLiquidated          = "ClusterLiquidated"
-	ClusterReactivated         = "ClusterReactivated"
-	FeeRecipientAddressUpdated = "FeeRecipientAddressUpdated"
 )
 
 var (
@@ -44,7 +33,7 @@ var (
 	ErrInferiorBlock = errors.New("block is not higher than the last processed block")
 )
 
-type taskExecutor interface {
+type TaskExecutor interface {
 	StartValidator(share *ssvtypes.SSVShare) error
 	StopValidator(pubKey spectypes.ValidatorPK) error
 	LiquidateCluster(owner ethcommon.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
@@ -61,13 +50,12 @@ type OperatorData interface {
 
 type EventHandler struct {
 	nodeStorage                nodestorage.Storage
-	taskExecutor               taskExecutor
+	taskExecutor               TaskExecutor
 	eventParser                eventparser.Parser
 	domain                     spectypes.DomainType
 	operatorData               OperatorData
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider
 	keyManager                 spectypes.KeyManager
-	beacon                     beaconprotocol.BeaconNode
 	storageMap                 *qbftstorage.QBFTStores
 
 	fullNode bool
@@ -78,12 +66,11 @@ type EventHandler struct {
 func New(
 	nodeStorage nodestorage.Storage,
 	eventParser eventparser.Parser,
-	taskExecutor taskExecutor,
+	taskExecutor TaskExecutor,
 	domain spectypes.DomainType,
 	operatorData OperatorData,
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider,
 	keyManager spectypes.KeyManager,
-	beacon beaconprotocol.BeaconNode,
 	storageMap *qbftstorage.QBFTStores,
 	opts ...Option,
 ) (*EventHandler, error) {
@@ -95,7 +82,6 @@ func New(
 		operatorData:               operatorData,
 		shareEncryptionKeyProvider: shareEncryptionKeyProvider,
 		keyManager:                 keyManager,
-		beacon:                     beacon,
 		storageMap:                 storageMap,
 		logger:                     zap.NewNop(),
 		metrics:                    nopMetrics{},
@@ -197,208 +183,72 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 		return nil, nil
 	}
 
+	parsedEvent, err := eh.eventParser.ParseEvent(abiEvent, event)
+	if err != nil {
+		eh.logger.Warn("could not parse event",
+			fields.EventName(abiEvent.Name),
+			zap.Error(err))
+		eh.metrics.EventProcessingFailed(abiEvent.Name)
+		return nil, nil
+	}
+	if parsedEvent == nil {
+		return nil, nil
+	}
+
+	task, err := eh.handleEvent(txn, abiEvent, parsedEvent)
+	if err != nil {
+		eh.metrics.EventProcessingFailed(abiEvent.Name)
+		var malformedEventError *MalformedEventError
+		if errors.As(err, &malformedEventError) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	eh.metrics.EventProcessed(abiEvent.Name)
+	return task, nil
+}
+
+func (eh *EventHandler) handleEvent(txn basedb.Txn, abiEvent *abi.Event, parsedEvent interface{}) (Task, error) {
 	switch abiEvent.Name {
-	case OperatorAdded:
-		operatorAddedEvent, err := eh.eventParser.ParseOperatorAdded(event)
-		if err != nil {
-			eh.logger.Warn("could not parse event",
-				fields.EventName(abiEvent.Name),
-				zap.Error(err))
-			eh.metrics.EventProcessingFailed(abiEvent.Name)
-			return nil, nil
+	case eventparser.OperatorAdded:
+		err := eh.handleOperatorAdded(txn, parsedEvent.(*contract.ContractOperatorAdded))
+		return nil, err
+	case eventparser.OperatorRemoved:
+		err := eh.handleOperatorRemoved(txn, parsedEvent.(*contract.ContractOperatorRemoved))
+		return nil, err
+	case eventparser.ValidatorAdded:
+		share, err := eh.handleValidatorAdded(txn, parsedEvent.(*contract.ContractValidatorAdded))
+		if err != nil || share == nil {
+			return nil, err
 		}
-
-		if err := eh.handleOperatorAdded(txn, operatorAddedEvent); err != nil {
-			eh.metrics.EventProcessingFailed(abiEvent.Name)
-
-			var malformedEventError *MalformedEventError
-			if errors.As(err, &malformedEventError) {
-				return nil, nil
-			}
-			return nil, fmt.Errorf("handle OperatorAdded: %w", err)
+		return NewStartValidatorTask(eh.taskExecutor, share), nil
+	case eventparser.ValidatorRemoved:
+		validatorPubKey, err := eh.handleValidatorRemoved(txn, parsedEvent.(*contract.ContractValidatorRemoved))
+		if err != nil || validatorPubKey == nil {
+			return nil, err
 		}
-
-		eh.metrics.EventProcessed(abiEvent.Name)
-		return nil, nil
-
-	case OperatorRemoved:
-		operatorRemovedEvent, err := eh.eventParser.ParseOperatorRemoved(event)
-		if err != nil {
-			eh.logger.Warn("could not parse event",
-				fields.EventName(abiEvent.Name),
-				zap.Error(err))
-			eh.metrics.EventProcessingFailed(abiEvent.Name)
-			return nil, nil
+		return NewStopValidatorTask(eh.taskExecutor, validatorPubKey), nil
+	case eventparser.ClusterLiquidated:
+		sharesToLiquidate, err := eh.handleClusterLiquidated(txn, parsedEvent.(*contract.ContractClusterLiquidated))
+		if err != nil || len(sharesToLiquidate) == 0 {
+			return nil, err
 		}
-
-		if err := eh.handleOperatorRemoved(txn, operatorRemovedEvent); err != nil {
-			eh.metrics.EventProcessingFailed(abiEvent.Name)
-
-			var malformedEventError *MalformedEventError
-			if errors.As(err, &malformedEventError) {
-				return nil, nil
-			}
-			return nil, fmt.Errorf("handle OperatorRemoved: %w", err)
+		return NewLiquidateClusterTask(eh.taskExecutor, parsedEvent.(*contract.ContractClusterLiquidated).Owner, parsedEvent.(*contract.ContractClusterLiquidated).OperatorIds, sharesToLiquidate), nil
+	case eventparser.ClusterReactivated:
+		sharesToReactivate, err := eh.handleClusterReactivated(txn, parsedEvent.(*contract.ContractClusterReactivated))
+		if err != nil || len(sharesToReactivate) == 0 {
+			return nil, err
 		}
-
-		eh.metrics.EventProcessed(abiEvent.Name)
-		return nil, nil
-
-	case ValidatorAdded:
-		validatorAddedEvent, err := eh.eventParser.ParseValidatorAdded(event)
-		if err != nil {
-			eh.logger.Warn("could not parse event",
-				fields.EventName(abiEvent.Name),
-				zap.Error(err))
-			eh.metrics.EventProcessingFailed(abiEvent.Name)
-			return nil, nil
+		return NewReactivateClusterTask(eh.taskExecutor, parsedEvent.(*contract.ContractClusterReactivated).Owner, parsedEvent.(*contract.ContractClusterReactivated).OperatorIds, sharesToReactivate), nil
+	case eventparser.FeeRecipientAddressUpdated:
+		updated, err := eh.handleFeeRecipientAddressUpdated(txn, parsedEvent.(*contract.ContractFeeRecipientAddressUpdated))
+		if err != nil || !updated {
+			return nil, err
 		}
-
-		share, err := eh.handleValidatorAdded(txn, validatorAddedEvent)
-		if err != nil {
-			eh.metrics.EventProcessingFailed(abiEvent.Name)
-
-			var malformedEventError *MalformedEventError
-			if errors.As(err, &malformedEventError) {
-				return nil, nil
-			}
-			return nil, fmt.Errorf("handle ValidatorAdded: %w", err)
-		}
-
-		defer eh.metrics.EventProcessed(abiEvent.Name)
-
-		if share == nil {
-			return nil, nil
-		}
-
-		task := NewStartValidatorTask(eh.taskExecutor, share)
-
-		return task, nil
-
-	case ValidatorRemoved:
-		validatorRemovedEvent, err := eh.eventParser.ParseValidatorRemoved(event)
-		if err != nil {
-			eh.logger.Warn("could not parse event",
-				fields.EventName(abiEvent.Name),
-				zap.Error(err))
-			eh.metrics.EventProcessingFailed(abiEvent.Name)
-			return nil, nil
-		}
-
-		validatorPubKey, err := eh.handleValidatorRemoved(txn, validatorRemovedEvent)
-		if err != nil {
-			eh.metrics.EventProcessingFailed(abiEvent.Name)
-
-			var malformedEventError *MalformedEventError
-			if errors.As(err, &malformedEventError) {
-				return nil, nil
-			}
-			return nil, fmt.Errorf("handle ValidatorRemoved: %w", err)
-		}
-
-		defer eh.metrics.EventProcessed(abiEvent.Name)
-
-		if validatorPubKey != nil {
-			return NewStopValidatorTask(eh.taskExecutor, validatorPubKey), nil
-		}
-
-		return nil, nil
-
-	case ClusterLiquidated:
-		clusterLiquidatedEvent, err := eh.eventParser.ParseClusterLiquidated(event)
-		if err != nil {
-			eh.logger.Warn("could not parse event",
-				fields.EventName(abiEvent.Name),
-				zap.Error(err))
-			eh.metrics.EventProcessingFailed(abiEvent.Name)
-			return nil, nil
-		}
-
-		sharesToLiquidate, err := eh.handleClusterLiquidated(txn, clusterLiquidatedEvent)
-		if err != nil {
-			eh.metrics.EventProcessingFailed(abiEvent.Name)
-
-			var malformedEventError *MalformedEventError
-			if errors.As(err, &malformedEventError) {
-				return nil, nil
-			}
-			return nil, fmt.Errorf("handle ClusterLiquidated: %w", err)
-		}
-
-		defer eh.metrics.EventProcessed(abiEvent.Name)
-
-		if len(sharesToLiquidate) == 0 {
-			return nil, nil
-		}
-
-		task := NewLiquidateClusterTask(eh.taskExecutor, clusterLiquidatedEvent.Owner, clusterLiquidatedEvent.OperatorIds, sharesToLiquidate)
-
-		return task, nil
-
-	case ClusterReactivated:
-		clusterReactivatedEvent, err := eh.eventParser.ParseClusterReactivated(event)
-		if err != nil {
-			eh.logger.Warn("could not parse event",
-				fields.EventName(abiEvent.Name),
-				zap.Error(err))
-			eh.metrics.EventProcessingFailed(abiEvent.Name)
-			return nil, nil
-		}
-
-		sharesToReactivate, err := eh.handleClusterReactivated(txn, clusterReactivatedEvent)
-		if err != nil {
-			eh.metrics.EventProcessingFailed(abiEvent.Name)
-
-			var malformedEventError *MalformedEventError
-			if errors.As(err, &malformedEventError) {
-				return nil, nil
-			}
-			return nil, fmt.Errorf("handle ClusterReactivated: %w", err)
-		}
-
-		defer eh.metrics.EventProcessed(abiEvent.Name)
-
-		if len(sharesToReactivate) == 0 {
-			return nil, nil
-		}
-
-		task := NewReactivateClusterTask(eh.taskExecutor, clusterReactivatedEvent.Owner, clusterReactivatedEvent.OperatorIds, sharesToReactivate)
-
-		return task, nil
-
-	case FeeRecipientAddressUpdated:
-		feeRecipientAddressUpdatedEvent, err := eh.eventParser.ParseFeeRecipientAddressUpdated(event)
-		if err != nil {
-			eh.logger.Warn("could not parse event",
-				fields.EventName(abiEvent.Name),
-				zap.Error(err))
-			eh.metrics.EventProcessingFailed(abiEvent.Name)
-			return nil, nil
-		}
-
-		updated, err := eh.handleFeeRecipientAddressUpdated(txn, feeRecipientAddressUpdatedEvent)
-		if err != nil {
-			eh.metrics.EventProcessingFailed(abiEvent.Name)
-
-			var malformedEventError *MalformedEventError
-			if errors.As(err, &malformedEventError) {
-				return nil, nil
-			}
-			return nil, fmt.Errorf("handle FeeRecipientAddressUpdated: %w", err)
-		}
-
-		defer eh.metrics.EventProcessed(abiEvent.Name)
-
-		if !updated {
-			return nil, nil
-		}
-
-		task := NewUpdateFeeRecipientTask(eh.taskExecutor, feeRecipientAddressUpdatedEvent.Owner, feeRecipientAddressUpdatedEvent.RecipientAddress)
-		return task, nil
-
+		return NewUpdateFeeRecipientTask(eh.taskExecutor, parsedEvent.(*contract.ContractFeeRecipientAddressUpdated).Owner, parsedEvent.(*contract.ContractFeeRecipientAddressUpdated).RecipientAddress), nil
 	default:
-		eh.logger.Warn("unknown event name", fields.Name(abiEvent.Name))
-		return nil, nil
+		return nil, fmt.Errorf("unknown event name: %s", abiEvent.Name)
 	}
 }
 
@@ -421,45 +271,45 @@ func (eh *EventHandler) HandleLocalEvents(localEvents []localevents.Event) error
 
 func (eh *EventHandler) processLocalEvent(txn basedb.Txn, event localevents.Event) error {
 	switch event.Name {
-	case OperatorAdded:
+	case eventparser.OperatorAdded:
 		data := event.Data.(contract.ContractOperatorAdded)
 		if err := eh.handleOperatorAdded(txn, &data); err != nil {
 			return fmt.Errorf("handle OperatorAdded: %w", err)
 		}
 		return nil
-	case OperatorRemoved:
+	case eventparser.OperatorRemoved:
 		data := event.Data.(contract.ContractOperatorRemoved)
 		if err := eh.handleOperatorRemoved(txn, &data); err != nil {
 			return fmt.Errorf("handle OperatorRemoved: %w", err)
 		}
 		return nil
-	case ValidatorAdded:
+	case eventparser.ValidatorAdded:
 		data := event.Data.(contract.ContractValidatorAdded)
 		if _, err := eh.handleValidatorAdded(txn, &data); err != nil {
 			return fmt.Errorf("handle ValidatorAdded: %w", err)
 		}
 		return nil
-	case ValidatorRemoved:
+	case eventparser.ValidatorRemoved:
 		data := event.Data.(contract.ContractValidatorRemoved)
 		if _, err := eh.handleValidatorRemoved(txn, &data); err != nil {
 			return fmt.Errorf("handle ValidatorRemoved: %w", err)
 		}
 		return nil
-	case ClusterLiquidated:
+	case eventparser.ClusterLiquidated:
 		data := event.Data.(contract.ContractClusterLiquidated)
 		_, err := eh.handleClusterLiquidated(txn, &data)
 		if err != nil {
 			return fmt.Errorf("handle ClusterLiquidated: %w", err)
 		}
 		return nil
-	case ClusterReactivated:
+	case eventparser.ClusterReactivated:
 		data := event.Data.(contract.ContractClusterReactivated)
 		_, err := eh.handleClusterReactivated(txn, &data)
 		if err != nil {
 			return fmt.Errorf("handle ClusterReactivated: %w", err)
 		}
 		return nil
-	case FeeRecipientAddressUpdated:
+	case eventparser.FeeRecipientAddressUpdated:
 		data := event.Data.(contract.ContractFeeRecipientAddressUpdated)
 		_, err := eh.handleFeeRecipientAddressUpdated(txn, &data)
 		if err != nil {

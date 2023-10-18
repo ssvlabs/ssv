@@ -11,6 +11,21 @@ import (
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 )
 
+// Event names.
+const (
+	OperatorAdded              = "OperatorAdded"
+	OperatorRemoved            = "OperatorRemoved"
+	ValidatorAdded             = "ValidatorAdded"
+	ValidatorRemoved           = "ValidatorRemoved"
+	ClusterLiquidated          = "ClusterLiquidated"
+	ClusterReactivated         = "ClusterReactivated"
+	FeeRecipientAddressUpdated = "FeeRecipientAddressUpdated"
+)
+
+var (
+	ErrUnknownEvent = fmt.Errorf("unknown event")
+)
+
 type EventParser struct {
 	eventFilterer
 	eventByIDGetter
@@ -18,6 +33,7 @@ type EventParser struct {
 }
 
 type Parser interface {
+	ParseEvent(abiEvent *ethabi.Event, event ethtypes.Log) (interface{}, error)
 	eventFilterer
 	eventByIDGetter
 }
@@ -51,6 +67,27 @@ func New(eventFilterer eventFilterer) *EventParser {
 		eventFilterer:        eventFilterer,
 		eventByIDGetter:      contractABI,
 		operatorPublicKeyABI: operatorPublicKeyABI,
+	}
+}
+
+func (e *EventParser) ParseEvent(abiEvent *ethabi.Event, event ethtypes.Log) (interface{}, error) {
+	switch abiEvent.Name {
+	case OperatorAdded:
+		return e.ParseOperatorAdded(event)
+	case OperatorRemoved:
+		return e.ParseOperatorRemoved(event)
+	case ValidatorAdded:
+		return e.ParseValidatorAdded(event)
+	case ValidatorRemoved:
+		return e.ParseValidatorRemoved(event)
+	case ClusterLiquidated:
+		return e.ParseClusterLiquidated(event)
+	case ClusterReactivated:
+		return e.ParseClusterReactivated(event)
+	case FeeRecipientAddressUpdated:
+		return e.ParseFeeRecipientAddressUpdated(event)
+	default:
+		return nil, fmt.Errorf("%w: %s", ErrUnknownEvent, abiEvent.Name)
 	}
 }
 

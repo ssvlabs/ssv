@@ -77,6 +77,11 @@ func (ec *ExecutionClient) Close() error {
 	return nil
 }
 
+// RPC returns the underlying RPC client.
+func (ec *ExecutionClient) RPC() *ethclient.Client {
+	return ec.client
+}
+
 // FetchHistoricalLogs retrieves historical logs emitted by the contract starting from fromBlock.
 func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan BlockLogs, errors <-chan error, err error) {
 	currentBlock, err := ec.client.BlockNumber(ctx)
@@ -91,12 +96,12 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 		return nil, nil, ErrNothingToSync
 	}
 
-	logs, errors = ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
+	logs, errors = ec.FetchLogs(ctx, fromBlock, toBlock)
 	return
 }
 
 // Calls FilterLogs multiple times and batches results to avoid fetching enormous amount of events
-func (ec *ExecutionClient) fetchLogsInBatches(ctx context.Context, startBlock, endBlock uint64) (<-chan BlockLogs, <-chan error) {
+func (ec *ExecutionClient) FetchLogs(ctx context.Context, startBlock, endBlock uint64) (<-chan BlockLogs, <-chan error) {
 	logs := make(chan BlockLogs, defaultLogBuf)
 	errors := make(chan error, 1)
 
@@ -287,7 +292,7 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 			if toBlock < fromBlock {
 				continue
 			}
-			logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
+			logStream, fetchErrors := ec.FetchLogs(ctx, fromBlock, toBlock)
 			for block := range logStream {
 				logs <- block
 				lastBlock = block.BlockNumber
