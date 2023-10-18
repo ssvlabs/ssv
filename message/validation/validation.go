@@ -6,7 +6,12 @@ package validation
 import (
 	"bytes"
 	"context"
+	"crypto"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/x509"
 	"encoding/hex"
+	"encoding/pem"
 	"fmt"
 	"strings"
 	"sync"
@@ -96,15 +101,16 @@ type MessageValidator interface {
 }
 
 type messageValidator struct {
-	logger           *zap.Logger
-	metrics          metrics
-	netCfg           networkconfig.NetworkConfig
-	index            sync.Map
-	shareStorage     registrystorage.Shares
-	peersIndex       peers.PeerInfoIndex
-	dutyStore        *dutystore.Store
-	ownOperatorID    spectypes.OperatorID
-	verifySignatures bool
+	logger             *zap.Logger
+	metrics            metrics
+	netCfg             networkconfig.NetworkConfig
+	index              sync.Map
+	shareStorage       registrystorage.Shares
+	peersIndex         peers.PeerInfoIndex
+	dutyStore          *dutystore.Store
+	ownOperatorID      spectypes.OperatorID
+	operatorPrivateKey *rsa.PrivateKey
+	verifySignatures   bool
 }
 
 // NewMessageValidator returns a new MessageValidator with the given network configuration and options.
@@ -164,6 +170,13 @@ func WithShareStorage(shareStorage registrystorage.Shares) Option {
 func WithPeerInfoIndex(index peers.PeerInfoIndex) Option {
 	return func(mv *messageValidator) {
 		mv.peersIndex = index
+	}
+}
+
+// WithOperatorPrivateKey sets operator private key.
+func WithOperatorPrivateKey(privKey *rsa.PrivateKey) Option {
+	return func(mv *messageValidator) {
+		mv.operatorPrivateKey = privKey
 	}
 }
 
@@ -322,7 +335,49 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 	mv.metrics.ActiveMsgValidation(topic)
 	defer mv.metrics.ActiveMsgValidationDone(topic)
 
-	messageData := pMsg.GetData()
+	var decodedSignedSSVMessage commons.SignedSSVMessage
+	err := decodedSignedSSVMessage.UnmarshalSSZ(pMsg.GetData())
+	if err != nil {
+		e := ErrRSADecryption
+		e.innerErr = fmt.Errorf("unmarshal ssz: %w", err)
+		return nil, Descriptor{}, e
+	}
+
+	messageData := decodedSignedSSVMessage.Message
+	messageHash := sha256.Sum256(messageData)
+
+	block, rest := pem.Decode(decodedSignedSSVMessage.PubKey)
+	if block == nil {
+		e := ErrRSADecryption
+		e.innerErr = fmt.Errorf("block is nil")
+		return nil, Descriptor{}, e
+	}
+	if len(rest) != 0 {
+		e := ErrRSADecryption
+		e.innerErr = fmt.Errorf("extra data after PEM decoding")
+		return nil, Descriptor{}, e
+	}
+
+	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
+	if err != nil {
+		e := ErrRSADecryption
+		e.innerErr = fmt.Errorf("parse public key: %w", err)
+		return nil, Descriptor{}, e
+	}
+
+	rsaPubKey, ok := pub.(*rsa.PublicKey)
+	if !ok {
+		e := ErrRSADecryption
+		e.innerErr = fmt.Errorf("unexpected public key type")
+		return nil, Descriptor{}, e
+	}
+
+	if err := rsa.VerifyPKCS1v15(rsaPubKey, crypto.SHA256, messageHash[:], decodedSignedSSVMessage.Signature); err != nil {
+		e := ErrRSADecryption
+		e.innerErr = fmt.Errorf("verify signature: %w", err)
+		return nil, Descriptor{}, e
+	}
+
 	if len(messageData) == 0 {
 		return nil, Descriptor{}, ErrPubSubMessageHasNoData
 	}

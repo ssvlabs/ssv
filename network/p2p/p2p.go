@@ -2,6 +2,7 @@ package p2pv1
 
 import (
 	"context"
+	"crypto/rsa"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -69,12 +70,13 @@ type p2pNetwork struct {
 
 	activeValidators *hashmap.Map[string, validatorStatus]
 
-	backoffConnector *libp2pdiscbackoff.BackoffConnector
-	subnets          []byte
-	libConnManager   connmgrcore.ConnManager
-	syncer           syncing.Syncer
-	nodeStorage      operatorstorage.Storage
-	operatorPKCache  sync.Map
+	backoffConnector   *libp2pdiscbackoff.BackoffConnector
+	subnets            []byte
+	libConnManager     connmgrcore.ConnManager
+	syncer             syncing.Syncer
+	nodeStorage        operatorstorage.Storage
+	operatorPKCache    sync.Map
+	operatorPrivateKey *rsa.PrivateKey
 }
 
 // New creates a new p2p network
@@ -84,17 +86,18 @@ func New(logger *zap.Logger, cfg *Config) network.P2PNetwork {
 	logger = logger.Named(logging.NameP2PNetwork)
 
 	return &p2pNetwork{
-		parentCtx:        cfg.Ctx,
-		ctx:              ctx,
-		cancel:           cancel,
-		interfaceLogger:  logger,
-		cfg:              cfg,
-		msgRouter:        cfg.Router,
-		msgValidator:     cfg.MessageValidator,
-		state:            stateClosed,
-		activeValidators: hashmap.New[string, validatorStatus](),
-		nodeStorage:      cfg.NodeStorage,
-		operatorPKCache:  sync.Map{},
+		parentCtx:          cfg.Ctx,
+		ctx:                ctx,
+		cancel:             cancel,
+		interfaceLogger:    logger,
+		cfg:                cfg,
+		msgRouter:          cfg.Router,
+		msgValidator:       cfg.MessageValidator,
+		state:              stateClosed,
+		activeValidators:   hashmap.New[string, validatorStatus](),
+		nodeStorage:        cfg.NodeStorage,
+		operatorPKCache:    sync.Map{},
+		operatorPrivateKey: cfg.OperatorPrivateKey,
 	}
 }
 

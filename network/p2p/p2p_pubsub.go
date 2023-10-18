@@ -2,10 +2,16 @@ package p2pv1
 
 import (
 	"context"
+	"crypto"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/x509"
 	"encoding/hex"
+	"encoding/pem"
 	"fmt"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	ssz "github.com/ferranbt/fastssz"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
@@ -58,11 +64,41 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 		return errors.Wrap(err, "could not decode msg")
 	}
 
+	hash := sha256.Sum256(raw)
+
+	signature, err := rsa.SignPKCS1v15(nil, n.operatorPrivateKey, crypto.SHA256, hash[:]) // TODO: OAEP?
+	if err != nil {
+		return err
+	}
+
+	publicKey := &n.operatorPrivateKey.PublicKey
+
+	pubKeyBytes, err := x509.MarshalPKIXPublicKey(publicKey)
+	if err != nil {
+		return err
+	}
+
+	pubPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PUBLIC KEY",
+		Bytes: pubKeyBytes,
+	})
+
+	signedSSVMessage := &commons.SignedSSVMessage{
+		Message:   raw,
+		Signature: signature,
+		PubKey:    pubPEM,
+	}
+
+	encodedSignedSSVMessage, err := ssz.MarshalSSZ(signedSSVMessage)
+	if err != nil {
+		return err
+	}
+
 	vpk := msg.GetID().GetPubKey()
 	topics := commons.ValidatorTopicID(vpk)
 
 	for _, topic := range topics {
-		if err := n.topicsCtrl.Broadcast(topic, raw, n.cfg.RequestTimeout); err != nil {
+		if err := n.topicsCtrl.Broadcast(topic, encodedSignedSSVMessage, n.cfg.RequestTimeout); err != nil {
 			n.interfaceLogger.Debug("could not broadcast msg", fields.PubKey(vpk), zap.Error(err))
 			return errors.Wrap(err, "could not broadcast msg")
 		}

@@ -185,6 +185,7 @@ var StartNodeCmd = &cobra.Command{
 			validation.WithDutyStore(dutyStore),
 			validation.WithOwnOperatorID(operatorData.ID),
 			validation.WithSignatureVerification(cfg.MessageValidation.VerifySignatures),
+			validation.WithOperatorPrivateKey(cfg.P2pNetworkConfig.OperatorPrivateKey),
 		)
 
 		cfg.P2pNetworkConfig.Metrics = metricsReporter

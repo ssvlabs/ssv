@@ -2,13 +2,23 @@ package p2pv1
 
 import (
 	"context"
+	"crypto"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/x509"
 	"encoding/hex"
+	"encoding/pem"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	ssz "github.com/ferranbt/fastssz"
+
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 
@@ -22,6 +32,59 @@ import (
 	"github.com/bloxapp/ssv/network"
 	protcolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 )
+
+func TestRSAUsage(t *testing.T) {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	message := []byte("message")
+
+	hash := sha256.Sum256(message)
+
+	signature, err := rsa.SignPKCS1v15(nil, privateKey, crypto.SHA256, hash[:])
+	require.NoError(t, err)
+
+	publicKey := &privateKey.PublicKey
+
+	pubKeyBytes, err := x509.MarshalPKIXPublicKey(publicKey)
+	if err != nil {
+		fmt.Println("Error marshalling public key:", err)
+		return
+	}
+
+	pubPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PUBLIC KEY",
+		Bytes: pubKeyBytes,
+	})
+
+	signedSSVMessage := &commons.SignedSSVMessage{
+		Message:   message,
+		Signature: signature,
+		PubKey:    pubPEM,
+	}
+
+	encodedSignedSSVMessage, err := ssz.MarshalSSZ(signedSSVMessage)
+	require.NoError(t, err)
+
+	var decodedSignedSSVMessage commons.SignedSSVMessage
+	err = decodedSignedSSVMessage.UnmarshalSSZ(encodedSignedSSVMessage)
+	require.NoError(t, err)
+
+	messageHash := sha256.Sum256(decodedSignedSSVMessage.Message)
+
+	block, rest := pem.Decode(decodedSignedSSVMessage.PubKey)
+	require.NotNil(t, block)
+	require.Empty(t, rest, "extra data after PEM decoding")
+
+	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
+	require.NoError(t, err)
+
+	rsaPubKey, ok := pub.(*rsa.PublicKey)
+	require.True(t, ok)
+
+	require.NoError(t, rsa.VerifyPKCS1v15(rsaPubKey, crypto.SHA256, messageHash[:], decodedSignedSSVMessage.Signature))
+	require.Equal(t, message, decodedSignedSSVMessage.Message)
+}
 
 func TestGetMaxPeers(t *testing.T) {
 	n := &p2pNetwork{

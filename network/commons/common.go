@@ -1,6 +1,7 @@
 package commons
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
@@ -30,6 +31,90 @@ const (
 
 	topicPrefix = "ssv.v2"
 )
+
+type SignedSSVMessage struct {
+	Message   []byte
+	Signature []byte
+	PubKey    []byte
+}
+
+// MarshalSSZTo appends the serialized form of the SignedSSVMessage to the given byte slice.
+func (msg *SignedSSVMessage) MarshalSSZTo(dst []byte) ([]byte, error) {
+	encoded, err := msg.MarshalSSZ()
+	if err != nil {
+		return nil, err
+	}
+	return append(dst, encoded...), nil
+}
+
+// SizeSSZ returns the size in bytes that the SignedSSVMessage would take when serialized using SSZ.
+func (msg *SignedSSVMessage) SizeSSZ() int {
+	// Each length prefix is uint64, so 8 bytes for each of the 3 fields
+	return 8 + len(msg.Message) + 8 + len(msg.Signature) + 8 + len(msg.PubKey)
+}
+
+// MarshalSSZ serializes the SignedSSVMessage into its SSZ form.
+func (msg *SignedSSVMessage) MarshalSSZ() ([]byte, error) {
+	var buf bytes.Buffer
+
+	// Writing the Message
+	messageLength := uint64(len(msg.Message))
+	binary.Write(&buf, binary.LittleEndian, messageLength)
+	buf.Write(msg.Message)
+
+	// Writing the Signature
+	signatureLength := uint64(len(msg.Signature))
+	binary.Write(&buf, binary.LittleEndian, signatureLength)
+	buf.Write(msg.Signature)
+
+	// Writing the PubKey
+	pubKeyLength := uint64(len(msg.PubKey))
+	binary.Write(&buf, binary.LittleEndian, pubKeyLength)
+	buf.Write(msg.PubKey)
+
+	return buf.Bytes(), nil
+}
+
+// UnmarshalSSZ deserializes the given data into a SignedSSVMessage.
+func (msg *SignedSSVMessage) UnmarshalSSZ(data []byte) error {
+	buf := bytes.NewReader(data)
+
+	// Reading the Message
+	var messageLength uint64
+	if err := binary.Read(buf, binary.LittleEndian, &messageLength); err != nil {
+		return err
+	}
+	msg.Message = make([]byte, messageLength)
+	if _, err := buf.Read(msg.Message); err != nil {
+		return err
+	}
+
+	// Reading the Signature
+	var signatureLength uint64
+	if err := binary.Read(buf, binary.LittleEndian, &signatureLength); err != nil {
+		return err
+	}
+	msg.Signature = make([]byte, signatureLength)
+	if _, err := buf.Read(msg.Signature); err != nil {
+		return err
+	}
+
+	// Reading the PubKey
+	var pubKeyLength uint64
+	if err := binary.Read(buf, binary.LittleEndian, &pubKeyLength); err != nil {
+		return err
+	}
+	msg.PubKey = make([]byte, pubKeyLength)
+	if _, err := buf.Read(msg.PubKey); err != nil {
+		return err
+	}
+
+	if buf.Len() != 0 {
+		return fmt.Errorf("extra data at the end of the buffer")
+	}
+
+	return nil
+}
 
 // SubnetTopicID returns the topic to use for the given subnet
 func SubnetTopicID(subnet int) string {
@@ -101,6 +186,11 @@ func AddOptions(opts []libp2p.Option) []libp2p.Option {
 	opts = append(opts, libp2p.AutoNATServiceRateLimit(15, 3, 1*time.Minute))
 	// opts = append(opts, libp2p.DisableRelay())
 	return opts
+}
+
+type EncryptedSSVMessage struct {
+	SSVMessage *spectypes.SSVMessage
+	Signature  []byte
 }
 
 // EncodeNetworkMsg encodes network message
