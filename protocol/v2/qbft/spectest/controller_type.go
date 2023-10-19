@@ -80,13 +80,6 @@ func testProcessMsg(
 	}
 	require.EqualValues(t, runData.ExpectedDecidedState.DecidedCnt, decidedCnt, lastErr)
 
-	// verify sync decided by range calls
-	if runData.ExpectedDecidedState.CalledSyncDecidedByRange {
-		require.EqualValues(t, runData.ExpectedDecidedState.DecidedByRangeValues, config.GetNetwork().(*spectestingutils.TestingNetwork).DecidedByRange)
-	} else {
-		require.EqualValues(t, [2]specqbft.Height{0, 0}, config.GetNetwork().(*spectestingutils.TestingNetwork).DecidedByRange)
-	}
-
 	return lastErr
 }
 

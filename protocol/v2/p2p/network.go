@@ -132,26 +132,6 @@ func WithHandler(protocol SyncProtocol, handler RequestHandler) *SyncHandler {
 	}
 }
 
-// Syncer holds the interface for syncing data from other peers
-type Syncer interface {
-	// SyncHighestDecided tries to fetch the highest decided from peers (not blocking)
-	SyncHighestDecided(identifier spectypes.MessageID) error
-
-	// SyncDecidedByRange will trigger sync from-to heights (including)
-	SyncDecidedByRange(identifier spectypes.MessageID, from, to specqbft.Height)
-
-	// GetHistory sync the given range from a set of peers that supports history for the given identifier
-	// it accepts a list of targets for the request.
-	GetHistory(logger *zap.Logger, mid spectypes.MessageID, from, to specqbft.Height, targets ...string) ([]SyncResult, specqbft.Height, error)
-
-	// RegisterHandlers registers handler for the given protocol
-	RegisterHandlers(logger *zap.Logger, handlers ...*SyncHandler)
-
-	// LastDecided fetches last decided from a random set of peers
-	// TODO: replace with specqbft.SyncHighestDecided
-	LastDecided(logger *zap.Logger, mid spectypes.MessageID) ([]SyncResult, error)
-}
-
 // MsgValidationResult helps other components to report message validation with a generic results scheme
 type MsgValidationResult int32
 
@@ -178,6 +158,8 @@ type ValidationReporting interface {
 type Network interface {
 	Subscriber
 	Broadcaster
-	Syncer
 	ValidationReporting
+
+	// RegisterHandlers registers handler for the given protocol
+	RegisterHandlers(logger *zap.Logger, handlers ...*SyncHandler)
 }

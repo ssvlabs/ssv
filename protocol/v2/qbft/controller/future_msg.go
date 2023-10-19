@@ -4,30 +4,10 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
-	"go.uber.org/zap"
 
-	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
-
-func (c *Controller) UponFutureMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
-	if err := ValidateFutureMsg(c.GetConfig(), msg, c.Share.Committee); err != nil {
-		return nil, errors.Wrap(err, "invalid future msg")
-	}
-	if !c.addHigherHeightMsg(msg) {
-		return nil, errors.New("discarded future msg")
-	}
-	if syncer, ok := c.GetConfig().GetNetwork().(protocolp2p.Syncer); ok {
-		if c.f1SyncTrigger() {
-			logger.Debug("🔀 triggered f+1 sync",
-				zap.Uint64("ctrl_height", uint64(c.Height)),
-				zap.Uint64("msg_height", uint64(msg.Message.Height)))
-			return nil, syncer.SyncHighestDecided(spectypes.MessageIDFromBytes(c.Identifier))
-		}
-	}
-	return nil, nil
-}
 
 func ValidateFutureMsg(
 	config qbft.IConfig,
