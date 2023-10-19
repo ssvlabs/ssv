@@ -201,7 +201,7 @@ func New(ctx context.Context, opts ...Option) *MetricsReporter {
 	}
 
 	// reset  metric every hour because it can grow infinitely
-	async.Interval(ctx, time.Hour, func() {
+	async.Interval(ctx, 8*time.Hour, func() {
 		messagesReceivedFromPeer.Reset()
 		messagesReceivedTotal.Reset()
 	})
