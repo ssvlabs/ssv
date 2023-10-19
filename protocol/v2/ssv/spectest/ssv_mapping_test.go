@@ -71,10 +71,12 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test interface{}
 		}
 		// TODO: fix blinded test
 		if strings.Contains(testName, "propose regular decide blinded") || strings.Contains(testName, "propose blinded decide regular") {
+			logger.Info("skipping blinded block test", zap.String("test", testName))
 			return nil
 		}
 		// TODO: uncomment after implementing VoluntaryExit
 		if strings.Contains(testName, "voluntary exit") {
+			logger.Info("skipping voluntary exit test", zap.String("test", testName))
 			return nil
 		}
 		require.NoError(t, json.Unmarshal(byts, &typedTest))
