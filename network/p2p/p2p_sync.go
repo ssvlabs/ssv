@@ -156,6 +156,8 @@ func (n *p2pNetwork) makeSyncRequest(logger *zap.Logger, peers []peer.ID, mid sp
 }
 
 // peersWithProtocolsFilter is used to accept peers that supports the given protocols
+//
+//nolint:unused
 func (n *p2pNetwork) peersWithProtocolsFilter(protocols ...libp2p_protocol.ID) func(peer.ID) bool {
 	return func(id peer.ID) bool {
 		supported, err := n.host.Network().Peerstore().SupportsProtocols(id, protocols...)
