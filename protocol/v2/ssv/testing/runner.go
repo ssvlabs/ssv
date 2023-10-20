@@ -54,6 +54,10 @@ var ValidatorRegistrationRunner = func(logger *zap.Logger, keySet *spectestingut
 	return ret
 }
 
+var VoluntaryExitRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
+	return baseRunner(logger, spectypes.BNRoleVoluntaryExit, nil, keySet)
+}
+
 var UnknownDutyTypeRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
 	return baseRunner(logger, spectestingutils.UnknownDutyType, spectestingutils.UnknownDutyValueCheck(), keySet)
 }
@@ -140,6 +144,14 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 			spectypes.BeaconTestNetwork,
 			share,
 			contr,
+			spectestingutils.NewTestingBeaconNode(),
+			net,
+			km,
+		)
+	case spectypes.BNRoleVoluntaryExit:
+		return runner.NewVoluntaryExitRunner(
+			spectypes.BeaconTestNetwork,
+			share,
 			spectestingutils.NewTestingBeaconNode(),
 			net,
 			km,
