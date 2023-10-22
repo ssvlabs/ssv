@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/logging"
 	"go.uber.org/zap"
 )
@@ -42,16 +41,4 @@ func (tests *MultiMsgProcessingSpecTest) overrideStateComparison(t *testing.T) {
 		testType = strings.Replace(testType, "spectest.", "tests.", 1)
 		overrideStateComparison(t, test, path, testType)
 	}
-}
-
-func (tests *MultiMsgProcessingSpecTest) GetPostState() (interface{}, error) {
-	ret := make(map[string]types.Root, len(tests.Tests))
-	for _, test := range tests.Tests {
-		_, err := test.runPreTesting(tests.logger)
-		if err != nil && test.ExpectedError != err.Error() {
-			return nil, err
-		}
-		ret[test.Name] = test.Runner
-	}
-	return ret, nil
 }
