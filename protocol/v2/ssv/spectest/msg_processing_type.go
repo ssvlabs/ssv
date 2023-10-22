@@ -46,6 +46,30 @@ func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
 	test.RunAsPartOfMultiTest(t, logger)
 }
 
+func (test *MsgProcessingSpecTest) runPreTesting(logger *zap.Logger) (*validator.Validator, error) {
+	v := ssvtesting.BaseValidator(logger, spectestingutils.KeySetForShare(test.Runner.GetBaseRunner().Share))
+	v.DutyRunners[test.Runner.GetBaseRunner().BeaconRoleType] = test.Runner
+	v.Network = test.Runner.GetNetwork()
+
+	var lastErr error
+	if !test.DontStartDuty {
+		lastErr = v.StartDuty(logger, test.Duty)
+	}
+	for _, msg := range test.Messages {
+		decoded, err := queue.DecodeSSVMessage(msg)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		err = v.ProcessMessage(logger, decoded)
+		if err != nil {
+			lastErr = err
+		}
+	}
+
+	return v, lastErr
+}
+
 func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *zap.Logger) {
 	test.Runner.GetBaseRunner().VerifySignatures = true
 
