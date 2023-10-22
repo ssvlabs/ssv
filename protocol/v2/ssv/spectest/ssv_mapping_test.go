@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"os"
 	"reflect"
-	"regexp"
 	"strings"
 	"testing"
 
@@ -44,12 +43,6 @@ func TestSSVMapping(t *testing.T) {
 
 	for name, test := range untypedTests {
 		name, test := name, test
-
-		ok, err := regexp.MatchString("(?i)pre.consensus.valid.msg.13.operators", name)
-		require.NoError(t, err)
-		if !ok {
-			continue
-		}
 
 		r := prepareTest(t, logger, name, test)
 		if r != nil {
