@@ -2,6 +2,7 @@ package spectest
 
 import (
 	"encoding/hex"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -207,7 +208,7 @@ func overrideStateComparison(t *testing.T, test *MsgProcessingSpecTest, name str
 	default:
 		t.Fatalf("unknown runner type")
 	}
-	specDir, err := protocoltesting.GetSpecDir("", "ssv/spectest")
+	specDir, err := protocoltesting.GetSpecDir("", filepath.Join("ssv", "spectest"))
 	require.NoError(t, err)
 	r, err = typescomparable.UnmarshalStateComparison(specDir, name, testType, r)
 	require.NoError(t, err)

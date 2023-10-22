@@ -2,14 +2,19 @@ package spectest
 
 import (
 	"encoding/hex"
+	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
+	typescomparable "github.com/bloxapp/ssv-spec/types/testingutils/comparable"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
+	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
 )
 
 type StartNewRunnerDutySpecTest struct {
@@ -17,6 +22,7 @@ type StartNewRunnerDutySpecTest struct {
 	Runner                  runner.Runner
 	Duty                    *spectypes.Duty
 	PostDutyRunnerStateRoot string
+	PostDutyRunnerState     spectypes.Root `json:"-"` // Field is ignored by encoding/json
 	OutputMessages          []*spectypes.SignedPartialSignatureMessage
 	ExpectedError           string
 }
@@ -25,7 +31,14 @@ func (test *StartNewRunnerDutySpecTest) TestName() string {
 	return test.Name
 }
 
-func (test *StartNewRunnerDutySpecTest) Run(t *testing.T, logger *zap.Logger) {
+// overrideStateComparison overrides the state comparison to compare the runner state
+func (test *StartNewRunnerDutySpecTest) overrideStateComparison(t *testing.T) {
+	testType := reflect.TypeOf(test).String()
+	testType = strings.Replace(testType, "spectest.", "newduty.", 1)
+	overrideStateComparisonForStartNewRunnerDutySpecTest(t, test, test.Name, testType)
+}
+
+func (test *StartNewRunnerDutySpecTest) RunAsPartOfMultiTest(t *testing.T, logger *zap.Logger) {
 	err := test.Runner.StartNewDuty(logger, test.Duty)
 	if len(test.ExpectedError) > 0 {
 		require.EqualError(t, err, test.ExpectedError)
@@ -84,6 +97,11 @@ func (test *StartNewRunnerDutySpecTest) Run(t *testing.T, logger *zap.Logger) {
 	require.EqualValues(t, test.PostDutyRunnerStateRoot, hex.EncodeToString(postRoot[:]))
 }
 
+func (test *StartNewRunnerDutySpecTest) Run(t *testing.T, logger *zap.Logger) {
+	test.overrideStateComparison(t)
+	test.RunAsPartOfMultiTest(t, logger)
+}
+
 type MultiStartNewRunnerDutySpecTest struct {
 	Name  string
 	Tests []*StartNewRunnerDutySpecTest
@@ -94,10 +112,56 @@ func (tests *MultiStartNewRunnerDutySpecTest) TestName() string {
 }
 
 func (tests *MultiStartNewRunnerDutySpecTest) Run(t *testing.T, logger *zap.Logger) {
+	tests.overrideStateComparison(t)
+
 	for _, test := range tests.Tests {
-		test := test
 		t.Run(test.TestName(), func(t *testing.T) {
-			test.Run(t, logger)
+			test.RunAsPartOfMultiTest(t, logger)
 		})
 	}
+}
+
+// overrideStateComparison overrides the post state comparison for all tests in the multi test
+func (tests *MultiStartNewRunnerDutySpecTest) overrideStateComparison(t *testing.T) {
+	testsName := strings.ReplaceAll(tests.TestName(), " ", "_")
+	for _, test := range tests.Tests {
+		path := filepath.Join(testsName, test.TestName())
+		testType := reflect.TypeOf(tests).String()
+		testType = strings.Replace(testType, "spectest.", "newduty.", 1)
+		overrideStateComparisonForStartNewRunnerDutySpecTest(t, test, path, testType)
+	}
+}
+
+func overrideStateComparisonForStartNewRunnerDutySpecTest(t *testing.T, test *StartNewRunnerDutySpecTest, name string, testType string) {
+	var r runner.Runner
+	switch test.Runner.(type) {
+	case *runner.AttesterRunner:
+		r = &runner.AttesterRunner{}
+	case *runner.AggregatorRunner:
+		r = &runner.AggregatorRunner{}
+	case *runner.ProposerRunner:
+		r = &runner.ProposerRunner{}
+	case *runner.SyncCommitteeRunner:
+		r = &runner.SyncCommitteeRunner{}
+	case *runner.SyncCommitteeAggregatorRunner:
+		r = &runner.SyncCommitteeAggregatorRunner{}
+	case *runner.ValidatorRegistrationRunner:
+		r = &runner.ValidatorRegistrationRunner{}
+	case *runner.VoluntaryExitRunner:
+		r = &runner.VoluntaryExitRunner{}
+	default:
+		t.Fatalf("unknown runner type")
+	}
+	specDir, err := protocoltesting.GetSpecDir("", filepath.Join("ssv", "spectest"))
+	require.NoError(t, err)
+	r, err = typescomparable.UnmarshalStateComparison(specDir, name, testType, r)
+	require.NoError(t, err)
+
+	// override
+	test.PostDutyRunnerState = r
+
+	root, err := r.GetRoot()
+	require.NoError(t, err)
+
+	test.PostDutyRunnerStateRoot = hex.EncodeToString(root[:])
 }

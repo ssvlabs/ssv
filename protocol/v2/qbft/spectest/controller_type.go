@@ -164,7 +164,7 @@ func runInstanceWithData(t *testing.T, logger *zap.Logger, height specqbft.Heigh
 }
 
 func overrideStateComparisonForControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
-	specDir, err := protocoltesting.GetSpecDir("", "qbft/spectest")
+	specDir, err := protocoltesting.GetSpecDir("", filepath.Join("qbft", "spectest"))
 	require.NoError(t, err)
 	specDir = filepath.Join(specDir, "generate")
 	dir := typescomparable.GetSCDir(specDir, reflect.TypeOf(test).String())

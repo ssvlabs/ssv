@@ -43,7 +43,6 @@ func TestSSVMapping(t *testing.T) {
 
 	for name, test := range untypedTests {
 		name, test := name, test
-
 		r := prepareTest(t, logger, name, test)
 		if r != nil {
 			t.Run(r.name, func(t *testing.T) {

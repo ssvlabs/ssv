@@ -3,6 +3,7 @@ package qbft
 import (
 	"encoding/hex"
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
@@ -85,7 +86,7 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 }
 
 func overrideStateComparisonForMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTest) {
-	specDir, err := protocoltesting.GetSpecDir("", "qbft/spectest")
+	specDir, err := protocoltesting.GetSpecDir("", filepath.Join("qbft", "spectest"))
 	require.NoError(t, err)
 	test.PostState, err = typescomparable.UnmarshalStateComparison(specDir, test.TestName(),
 		reflect.TypeOf(test).String(),
