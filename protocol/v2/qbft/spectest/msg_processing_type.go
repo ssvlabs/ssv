@@ -3,6 +3,7 @@ package qbft
 import (
 	"encoding/hex"
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 
@@ -10,15 +11,19 @@ import (
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
+	typescomparable "github.com/bloxapp/ssv-spec/types/testingutils/comparable"
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
+	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
 	"github.com/stretchr/testify/require"
 )
 
 // RunMsgProcessing processes MsgProcessingSpecTest. It probably may be removed.
 func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
+	overrideStateComparisonForMsgProcessingSpecTest(t, test)
+
 	// a little trick we do to instantiate all the internal instance params
 	preByts, _ := test.Pre.Encode()
 	msgId := specqbft.ControllerIdToMessageID(test.Pre.State.ID)
@@ -77,4 +82,23 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 	}
 
 	require.EqualValues(t, test.PostRoot, hex.EncodeToString(postRoot[:]), "post root not valid")
+}
+
+func overrideStateComparisonForMsgProcessingSpecTest(t *testing.T, test *spectests.MsgProcessingSpecTest) {
+	specDir, err := protocoltesting.GetSpecDir("", "qbft/spectest")
+	require.NoError(t, err)
+	test.PostState, err = typescomparable.UnmarshalStateComparison(specDir, test.TestName(),
+		reflect.TypeOf(test).String(),
+		&specqbft.State{})
+	require.NoError(t, err)
+
+	r, err := test.PostState.GetRoot()
+	require.NoError(t, err)
+
+	// backwards compatability test, hard coded post root must be equal to the one loaded from file
+	if len(test.PostRoot) > 0 {
+		require.EqualValues(t, test.PostRoot, hex.EncodeToString(r[:]))
+	}
+
+	test.PostRoot = hex.EncodeToString(r[:])
 }
