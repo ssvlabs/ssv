@@ -2,6 +2,8 @@ package spectest
 
 import (
 	"encoding/hex"
+	"reflect"
+	"strings"
 	"testing"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -9,12 +11,15 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 
+	typescomparable "github.com/bloxapp/ssv-spec/types/testingutils/comparable"
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	ssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
+	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
 )
 
 type MsgProcessingSpecTest struct {
@@ -23,6 +28,7 @@ type MsgProcessingSpecTest struct {
 	Duty                    *spectypes.Duty
 	Messages                []*spectypes.SSVMessage
 	PostDutyRunnerStateRoot string
+	PostDutyRunnerState     spectypes.Root `json:"-"` // Field is ignored by encoding/json
 	// OutputMessages compares pre/ post signed partial sigs to output. We exclude consensus msgs as it's tested in consensus
 	OutputMessages         []*spectypes.SignedPartialSignatureMessage
 	BeaconBroadcastedRoots []string
@@ -36,7 +42,35 @@ func (test *MsgProcessingSpecTest) TestName() string {
 
 func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
 	logger := logging.TestLogger(t)
+	test.overrideStateComparison(t)
+	test.RunAsPartOfMultiTest(t, logger)
+}
 
+func (test *MsgProcessingSpecTest) runPreTesting(logger *zap.Logger) (*validator.Validator, error) {
+	v := ssvtesting.BaseValidator(logger, spectestingutils.KeySetForShare(test.Runner.GetBaseRunner().Share))
+	v.DutyRunners[test.Runner.GetBaseRunner().BeaconRoleType] = test.Runner
+	v.Network = test.Runner.GetNetwork()
+
+	var lastErr error
+	if !test.DontStartDuty {
+		lastErr = v.StartDuty(logger, test.Duty)
+	}
+	for _, msg := range test.Messages {
+		decoded, err := queue.DecodeSSVMessage(msg)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		err = v.ProcessMessage(logger, decoded)
+		if err != nil {
+			lastErr = err
+		}
+	}
+
+	return v, lastErr
+}
+
+func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *zap.Logger) {
 	test.Runner.GetBaseRunner().VerifySignatures = true
 
 	v := ssvtesting.BaseValidator(logger, spectestingutils.KeySetForShare(test.Runner.GetBaseRunner().Share))
@@ -145,4 +179,44 @@ func (test *MsgProcessingSpecTest) compareOutputMsgs(t *testing.T, v *validator.
 
 		index++
 	}
+}
+
+func (test *MsgProcessingSpecTest) overrideStateComparison(t *testing.T) {
+	testType := reflect.TypeOf(test).String()
+	testType = strings.Replace(testType, "spectest.", "tests.", 1)
+	overrideStateComparison(t, test, test.Name, testType)
+}
+
+func overrideStateComparison(t *testing.T, test *MsgProcessingSpecTest, name string, testType string) {
+	var r runner.Runner
+	switch test.Runner.(type) {
+	case *runner.AttesterRunner:
+		r = &runner.AttesterRunner{}
+	case *runner.AggregatorRunner:
+		r = &runner.AggregatorRunner{}
+	case *runner.ProposerRunner:
+		r = &runner.ProposerRunner{}
+	case *runner.SyncCommitteeRunner:
+		r = &runner.SyncCommitteeRunner{}
+	case *runner.SyncCommitteeAggregatorRunner:
+		r = &runner.SyncCommitteeAggregatorRunner{}
+	case *runner.ValidatorRegistrationRunner:
+		r = &runner.ValidatorRegistrationRunner{}
+	case *runner.VoluntaryExitRunner:
+		r = &runner.VoluntaryExitRunner{}
+	default:
+		t.Fatalf("unknown runner type")
+	}
+	specDir, err := protocoltesting.GetSpecDir("", "ssv/spectest")
+	require.NoError(t, err)
+	r, err = typescomparable.UnmarshalStateComparison(specDir, name, testType, r)
+	require.NoError(t, err)
+
+	// override
+	test.PostDutyRunnerState = r
+
+	root, err := r.GetRoot()
+	require.NoError(t, err)
+
+	test.PostDutyRunnerStateRoot = hex.EncodeToString(root[:])
 }

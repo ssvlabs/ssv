@@ -43,6 +43,7 @@ func TestSSVMapping(t *testing.T) {
 
 	for name, test := range untypedTests {
 		name, test := name, test
+
 		r := prepareTest(t, logger, name, test)
 		if r != nil {
 			t.Run(r.name, func(t *testing.T) {
@@ -69,8 +70,9 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test interface{}
 		typedTest := &MsgProcessingSpecTest{
 			Runner: &runner.AttesterRunner{},
 		}
-		// TODO fix blinded test
+		// TODO: fix blinded test
 		if strings.Contains(testName, "propose regular decide blinded") || strings.Contains(testName, "propose blinded decide regular") {
+			logger.Info("skipping blinded block test", zap.String("test", testName))
 			return nil
 		}
 		require.NoError(t, json.Unmarshal(byts, &typedTest))
@@ -345,6 +347,10 @@ func baseRunnerForRole(logger *zap.Logger, role spectypes.BeaconRole, base *runn
 	case spectypes.BNRoleValidatorRegistration:
 		ret := ssvtesting.ValidatorRegistrationRunner(logger, ks)
 		ret.(*runner.ValidatorRegistrationRunner).BaseRunner = base
+		return ret
+	case spectypes.BNRoleVoluntaryExit:
+		ret := ssvtesting.VoluntaryExitRunner(logger, ks)
+		ret.(*runner.VoluntaryExitRunner).BaseRunner = base
 		return ret
 	case testingutils.UnknownDutyType:
 		ret := ssvtesting.UnknownDutyTypeRunner(logger, ks)
