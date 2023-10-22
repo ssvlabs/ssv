@@ -35,7 +35,11 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 
 	var lastErr error
 	for i, runData := range test.RunInstanceData {
-		if err := runInstanceWithData(t, logger, specqbft.Height(i), contr, runData); err != nil {
+		height := specqbft.Height(i)
+		if runData.Height != nil {
+			height = *runData.Height
+		}
+		if err := runInstanceWithData(t, logger, height, contr, runData); err != nil {
 			lastErr = err
 		}
 	}

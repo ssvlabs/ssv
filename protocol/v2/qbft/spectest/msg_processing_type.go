@@ -54,7 +54,7 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 	}
 
 	if len(test.ExpectedError) != 0 {
-		require.EqualError(t, lastErr, test.ExpectedError)
+		require.EqualError(t, lastErr, test.ExpectedError, "expected %v, but got %v", test.ExpectedError, lastErr)
 	} else {
 		require.NoError(t, lastErr)
 	}
