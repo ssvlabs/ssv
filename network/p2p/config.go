@@ -86,6 +86,9 @@ type Config struct {
 	Permissioned func() bool // this is not loaded from config file but set up in full node setup
 	// WhitelistedOperatorKeys is an array of Operator Public Key PEMs not registered in the contract with which the node will accept connections
 	WhitelistedOperatorKeys []string `yaml:"WhitelistedOperatorKeys" env:"WHITELISTED_KEYS" env-description:"Operators' keys not registered in the contract with which the node will accept connections"`
+
+	AllowListCIDR       string `yaml:"P2PAllowList" env:"P2PAllowList" env-description:"The CIDR subnet for allowing only certain peer connections. Using \"public\" would allow only public subnets. Example: 192.168.0.0/16 would permit connections to peers on your local network only. The default is to accept all connections."`
+	DenyListCIDR        []string `yaml:"P2PDenyList" env:"P2PDenyList" env-description:"The CIDR subnets for denying certainty peer connections. Using \"private\" would deny all private subnets. Example: 192.168.0.0/16 would deny connections from peers on your local network only. The default is to accept all connections."`
 }
 
 // Libp2pOptions creates options list for the libp2p host

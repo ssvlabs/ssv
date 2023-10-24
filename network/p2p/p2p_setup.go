@@ -118,7 +118,7 @@ func (n *p2pNetwork) SetupHost(logger *zap.Logger) error {
 	if err != nil {
 		return errors.Wrap(err, "could not create resource manager")
 	}
-	connGater, err := connections.NewConnectionGater(logger, n.nodeStorage)
+	connGater, err := connections.NewConnectionGater(logger, n.idx, &connections.Config{AllowListCIDR: n.cfg.AllowListCIDR, DenyListCIDR: n.cfg.DenyListCIDR})
 	if err != nil {
 		return errors.Wrap(err, "could not create connection gater")
 	}
