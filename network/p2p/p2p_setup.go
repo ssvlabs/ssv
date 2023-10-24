@@ -118,7 +118,11 @@ func (n *p2pNetwork) SetupHost(logger *zap.Logger) error {
 	if err != nil {
 		return errors.Wrap(err, "could not create resource manager")
 	}
-	opts = append(opts, libp2p.ResourceManager(rmgr))
+	connGater, err := connections.NewConnectionGater(logger, n.nodeStorage)
+	if err != nil {
+		return errors.Wrap(err, "could not create connection gater")
+	}
+	opts = append(opts, libp2p.ResourceManager(rmgr), libp2p.ConnectionGater(connGater))
 	host, err := libp2p.New(opts...)
 	if err != nil {
 		return errors.Wrap(err, "could not create p2p host")

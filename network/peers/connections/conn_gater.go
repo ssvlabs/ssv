@@ -2,9 +2,11 @@ package connections
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"sync"
 
+	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/control"
@@ -15,27 +17,26 @@ import (
 	"go.uber.org/zap"
 )
 
-// connGater implements ConnectionGater interface:
+// connGater implements ConnectionGater interface: used to active inbound or outbound connection gating.
 // https://github.com/libp2p/go-libp2p/core/blob/master/connmgr/gater.go
 // TODO: add IP limiting
-type connGater struct {
+type СonnectionGater struct {
 	sync.RWMutex
-	logger *zap.Logger // struct logger to implement connmgr.ConnectionGater
+	logger         *zap.Logger // struct logger to implement connmgr.ConnectionGater
 	blockedPeers   map[peer.ID]struct{}
 	blockedAddrs   map[string]struct{}
 	blockedSubnets map[string]*net.IPNet
-
-	ds basedb.Database
+	ds             operatorstorage.Storage
 }
 
 // NewConnectionGater creates a new instance of ConnectionGater
-func NewConnectionGater(logger *zap.Logger, ds basedb.Database) (connmgr.ConnectionGater,error) {
-	cg := &connGater{
-		logger: logger,
+func NewConnectionGater(logger *zap.Logger, ds operatorstorage.Storage) (connmgr.ConnectionGater, error) {
+	cg := &СonnectionGater{
+		logger:         logger,
 		blockedPeers:   make(map[peer.ID]struct{}),
 		blockedAddrs:   make(map[string]struct{}),
 		blockedSubnets: make(map[string]*net.IPNet),
-		ds: ds,
+		ds:             ds,
 	}
 	if ds != nil {
 		err := cg.loadRules(context.Background())
@@ -46,8 +47,10 @@ func NewConnectionGater(logger *zap.Logger, ds basedb.Database) (connmgr.Connect
 	return cg, nil
 }
 
-func (cg *connGater) loadRules(ctx context.Context) error {
-	cg.ds.GetAll([]byte("p2p-blockedPeers"), func(i int, obj basedb.Obj) error {
+func (cg *СonnectionGater) loadRules(ctx context.Context) error {
+	txn := cg.ds.Begin()
+	defer txn.Discard()
+	txn.GetAll([]byte("p2p-blockedPeers"), func(i int, obj basedb.Obj) error {
 		var id peer.ID
 		if err := id.UnmarshalBinary(obj.Value); err != nil {
 			return nil
@@ -55,12 +58,12 @@ func (cg *connGater) loadRules(ctx context.Context) error {
 		cg.blockedPeers[id] = struct{}{}
 		return nil
 	})
-	cg.ds.GetAll([]byte("p2p-blockedAddrs"), func(i int, obj basedb.Obj) error {
+	txn.GetAll([]byte("p2p-blockedAddrs"), func(i int, obj basedb.Obj) error {
 		ip := net.IP(obj.Value)
 		cg.blockedAddrs[ip.String()] = struct{}{}
 		return nil
 	})
-	cg.ds.GetAll([]byte("p2p-blockedSubnets"), func(i int, obj basedb.Obj) error {
+	txn.GetAll([]byte("p2p-blockedSubnets"), func(i int, obj basedb.Obj) error {
 		ipnetStr := string(obj.Value)
 		_, ipnet, err := net.ParseCIDR(ipnetStr)
 		if err != nil {
@@ -72,10 +75,11 @@ func (cg *connGater) loadRules(ctx context.Context) error {
 	})
 	return nil
 }
+
 // InterceptPeerDial is called on an imminent outbound peer dial request, prior
 // to the addresses of that peer being available/resolved. Blocking connections
 // at this stage is typical for blacklisting scenarios
-func (cg *connGater) InterceptPeerDial(p peer.ID) bool {
+func (cg *СonnectionGater) InterceptPeerDial(p peer.ID) bool {
 	cg.RLock()
 	defer cg.RUnlock()
 
@@ -86,7 +90,7 @@ func (cg *connGater) InterceptPeerDial(p peer.ID) bool {
 // InterceptAddrDial is called on an imminent outbound dial to a peer on a
 // particular address. Blocking connections at this stage is typical for
 // address filtering.
-func (cg *connGater) InterceptAddrDial(p peer.ID, a ma.Multiaddr) (allow bool) {
+func (cg *СonnectionGater) InterceptAddrDial(p peer.ID, a ma.Multiaddr) (allow bool) {
 	// we have already filtered blocked peers in InterceptPeerDial, so we just check the IP
 	cg.RLock()
 	defer cg.RUnlock()
@@ -115,7 +119,7 @@ func (cg *connGater) InterceptAddrDial(p peer.ID, a ma.Multiaddr) (allow bool) {
 // inbound connection request, before any upgrade takes place. Transports who
 // accept already secure and/or multiplexed connections (e.g. possibly QUIC)
 // MUST call this method regardless, for correctness/consistency.
-func (cg *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) bool {
+func (cg *СonnectionGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) bool {
 	cg.RLock()
 	defer cg.RUnlock()
 
@@ -143,7 +147,7 @@ func (cg *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) bo
 
 // InterceptSecured is called for both inbound and outbound connections,
 // after a security handshake has taken place and we've authenticated the peer.
-func (cg *connGater) InterceptSecured(direction libp2pnetwork.Direction, id peer.ID, multiaddrs libp2pnetwork.ConnMultiaddrs) bool {
+func (cg *СonnectionGater) InterceptSecured(direction libp2pnetwork.Direction, id peer.ID, multiaddrs libp2pnetwork.ConnMultiaddrs) bool {
 	if direction == libp2pnetwork.DirOutbound {
 		// we have already filtered those in InterceptPeerDial/InterceptAddrDial
 		return true
@@ -160,18 +164,22 @@ func (cg *connGater) InterceptSecured(direction libp2pnetwork.Direction, id peer
 // InterceptUpgraded is called for inbound and outbound connections, after
 // libp2p has finished upgrading the connection entirely to a secure,
 // multiplexed channel.
-func (n *connGater) InterceptUpgraded(conn libp2pnetwork.Conn) (bool, control.DisconnectReason) {
+func (n *СonnectionGater) InterceptUpgraded(conn libp2pnetwork.Conn) (bool, control.DisconnectReason) {
 	return true, 0
 }
 
 // BlockPeer adds a peer to the set of blocked peers.
 // Note: active connections to the peer are not automatically closed.
-func (cg *connGater) BlockPeer(p peer.ID) error {
+func (cg *СonnectionGater) BlockPeer(p peer.ID) error {
+	txn := cg.ds.Begin()
 	if cg.ds != nil {
-		err := cg.ds.Set([]byte("p2p-blockedPeers"), []byte(p), []byte(p))
+		err := txn.Set([]byte("p2p-blockedPeers"), []byte(p), []byte(p))
 		if err != nil {
 			cg.logger.Error("error writing blocked peer to datastore: ", zap.Error(err))
 			return err
+		}
+		if err := txn.Commit(); err != nil {
+			return fmt.Errorf("commit transaction: %w", err)
 		}
 	}
 
@@ -183,12 +191,16 @@ func (cg *connGater) BlockPeer(p peer.ID) error {
 }
 
 // UnblockPeer removes a peer from the set of blocked peers
-func (cg *connGater) UnblockPeer(p peer.ID) error {
+func (cg *СonnectionGater) UnblockPeer(p peer.ID) error {
+	txn := cg.ds.Begin()
 	if cg.ds != nil {
-		err := cg.ds.Delete([]byte("p2p-blockedPeers"), []byte(p))
+		err := txn.Delete([]byte("p2p-blockedPeers"), []byte(p))
 		if err != nil {
 			cg.logger.Error("error deleting blocked peer from datastore:", zap.Error(err))
 			return err
+		}
+		if err := txn.Commit(); err != nil {
+			return fmt.Errorf("commit transaction: %w", err)
 		}
 	}
 
@@ -201,7 +213,7 @@ func (cg *connGater) UnblockPeer(p peer.ID) error {
 }
 
 // ListBlockedPeers return a list of blocked peers
-func (cg *connGater) ListBlockedPeers() []peer.ID {
+func (cg *СonnectionGater) ListBlockedPeers() []peer.ID {
 	cg.RLock()
 	defer cg.RUnlock()
 
@@ -215,12 +227,16 @@ func (cg *connGater) ListBlockedPeers() []peer.ID {
 
 // BlockAddr adds an IP address to the set of blocked addresses.
 // Note: active connections to the IP address are not automatically closed.
-func (cg *connGater) BlockAddr(ip net.IP) error {
+func (cg *СonnectionGater) BlockAddr(ip net.IP) error {
+	txn := cg.ds.Begin()
 	if cg.ds != nil {
-		err := cg.ds.Set([]byte("p2p-blockedAddrs"), []byte(ip), []byte(ip))
+		err := txn.Set([]byte("p2p-blockedAddrs"), []byte(ip), []byte(ip))
 		if err != nil {
 			cg.logger.Error("error writing blocked addr to datastore:", zap.Error(err))
 			return err
+		}
+		if err := txn.Commit(); err != nil {
+			return fmt.Errorf("commit transaction: %w", err)
 		}
 	}
 
@@ -233,12 +249,16 @@ func (cg *connGater) BlockAddr(ip net.IP) error {
 }
 
 // UnblockAddr removes an IP address from the set of blocked addresses
-func (cg *connGater) UnblockAddr(ip net.IP) error {
+func (cg *СonnectionGater) UnblockAddr(ip net.IP) error {
+	txn := cg.ds.Begin()
 	if cg.ds != nil {
-		err := cg.ds.Delete([]byte("p2p-blockedAddrs"),[]byte(ip))
+		err := txn.Delete([]byte("p2p-blockedAddrs"), []byte(ip))
 		if err != nil {
 			cg.logger.Error("error deleting blocked addr from datastore:", zap.Error(err))
 			return err
+		}
+		if err := txn.Commit(); err != nil {
+			return fmt.Errorf("commit transaction: %w", err)
 		}
 	}
 
@@ -251,7 +271,7 @@ func (cg *connGater) UnblockAddr(ip net.IP) error {
 }
 
 // ListBlockedAddrs return a list of blocked IP addresses
-func (cg *connGater) ListBlockedAddrs() []net.IP {
+func (cg *СonnectionGater) ListBlockedAddrs() []net.IP {
 	cg.RLock()
 	defer cg.RUnlock()
 
@@ -266,12 +286,16 @@ func (cg *connGater) ListBlockedAddrs() []net.IP {
 
 // BlockSubnet adds an IP subnet to the set of blocked addresses.
 // Note: active connections to the IP subnet are not automatically closed.
-func (cg *connGater) BlockSubnet(ipnet *net.IPNet) error {
+func (cg *СonnectionGater) BlockSubnet(ipnet *net.IPNet) error {
+	txn := cg.ds.Begin()
 	if cg.ds != nil {
-		err := cg.ds.Set([]byte("p2p-blockedSubnets"), []byte(ipnet.String()), []byte(ipnet.String()))
+		err := txn.Set([]byte("p2p-blockedSubnets"), []byte(ipnet.String()), []byte(ipnet.String()))
 		if err != nil {
 			cg.logger.Error("error writing blocked addr to datastore:", zap.Error(err))
 			return err
+		}
+		if err := txn.Commit(); err != nil {
+			return fmt.Errorf("commit transaction: %w", err)
 		}
 	}
 
@@ -284,12 +308,16 @@ func (cg *connGater) BlockSubnet(ipnet *net.IPNet) error {
 }
 
 // UnblockSubnet removes an IP address from the set of blocked addresses
-func (cg *connGater) UnblockSubnet(ipnet *net.IPNet) error {
+func (cg *СonnectionGater) UnblockSubnet(ipnet *net.IPNet) error {
+	txn := cg.ds.Begin()
 	if cg.ds != nil {
-		err := cg.ds.Delete([]byte("p2p-blockedSubnets"),  []byte(ipnet.String()))
+		err := txn.Delete([]byte("p2p-blockedSubnets"), []byte(ipnet.String()))
 		if err != nil {
 			cg.logger.Error("error deleting blocked subnet from datastore:", zap.Error(err))
 			return err
+		}
+		if err := txn.Commit(); err != nil {
+			return fmt.Errorf("commit transaction: %w", err)
 		}
 	}
 
@@ -302,7 +330,7 @@ func (cg *connGater) UnblockSubnet(ipnet *net.IPNet) error {
 }
 
 // ListBlockedSubnets return a list of blocked IP subnets
-func (cg *connGater) ListBlockedSubnets() []*net.IPNet {
+func (cg *СonnectionGater) ListBlockedSubnets() []*net.IPNet {
 	cg.RLock()
 	defer cg.RUnlock()
 
