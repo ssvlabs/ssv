@@ -89,7 +89,7 @@ Deploy exporter to stage:
     # +--------------------------+
     - .k8/stage/scripts/deploy-holesky-exporters.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $SSV_EXPORTER_CPU_LIMIT $SSV_EXPORTER_MEM_LIMIT
   only:
-    - stage
+    - holesky-stage-config
 
 
 # +---------------+
