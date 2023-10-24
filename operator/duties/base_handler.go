@@ -56,3 +56,8 @@ func (h *baseHandler) Setup(
 	h.reorg = reorgEvents
 	h.indicesChange = indicesChange
 }
+
+func (h *baseHandler) warnMisalignedSlotAndDuty(dutyType string) {
+	h.logger.Debug("current slot and duty slot are not aligned, "+
+		"assuming diff caused by a time drift - ignoring and executing duty", zap.String("type", dutyType))
+}

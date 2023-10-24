@@ -53,7 +53,13 @@ func NewValidatorRegistrationRunner(
 }
 
 func (r *ValidatorRegistrationRunner) StartNewDuty(logger *zap.Logger, duty *spectypes.Duty) error {
-	return r.BaseRunner.baseStartNewDuty(logger, r, duty)
+	// Note: Unlike the other runners, this doesn't call BaseRunner.baseStartNewDuty because
+	// that requires a QBFTController which ValidatorRegistrationRunner doesn't have.
+	if r.HasRunningDuty() {
+		return errors.New("already running duty")
+	}
+	r.BaseRunner.baseSetupForNewDuty(duty)
+	return r.executeDuty(logger, duty)
 }
 
 // HasRunningDuty returns true if a duty is already running (StartNewDuty called and returned nil)
