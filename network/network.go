@@ -8,6 +8,7 @@ import (
 
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 )
 
 // MessageRouter is accepting network messages and route them to the corresponding (internal) components
@@ -35,6 +36,8 @@ type P2PNetwork interface {
 	UpdateSubnets(logger *zap.Logger)
 	// SubscribeAll subscribes to all subnets
 	SubscribeAll(logger *zap.Logger) error
+	// Returns the pubsub object
+	GetPubSub() *pubsub.PubSub
 }
 
 // GetValidatorStats returns stats of validators, including the following:

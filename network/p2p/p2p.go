@@ -28,6 +28,7 @@ import (
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/utils/async"
 	"github.com/bloxapp/ssv/utils/tasks"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 )
 
 // network states
@@ -59,6 +60,7 @@ type p2pNetwork struct {
 	streamCtrl   streams.StreamController
 	idx          peers.Index
 	disc         discovery.Service
+	pubsub       *pubsub.PubSub
 	topicsCtrl   topics.Controller
 	msgRouter    network.MessageRouter
 	msgResolver  topics.MsgPeersResolver
@@ -290,4 +292,9 @@ func (n *p2pNetwork) getMaxPeers(topic string) int {
 		return n.cfg.MaxPeers
 	}
 	return n.cfg.TopicMaxPeers
+}
+
+// Implements the interface GetPubSub method
+func (n *p2pNetwork) GetPubSub() *pubsub.PubSub {
+	return n.pubsub
 }
