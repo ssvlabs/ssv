@@ -24,7 +24,6 @@ import (
 	"github.com/bloxapp/ssv/network/peers/connections"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/network/streams"
-	"github.com/bloxapp/ssv/network/syncing"
 	"github.com/bloxapp/ssv/network/topics"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/utils/async"
@@ -73,7 +72,7 @@ type p2pNetwork struct {
 	backoffConnector   *libp2pdiscbackoff.BackoffConnector
 	subnets            []byte
 	libConnManager     connmgrcore.ConnManager
-	syncer             syncing.Syncer
+
 	nodeStorage        operatorstorage.Storage
 	operatorPKCache    sync.Map
 	operatorPrivateKey *rsa.PrivateKey
@@ -174,11 +173,6 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 	if err := n.subscribeToSubnets(logger); err != nil {
 		return err
 	}
-
-	// Create & start ConcurrentSyncer.
-	syncer := syncing.NewConcurrent(n.ctx, syncing.New(n, n.msgValidator), 16, syncing.DefaultTimeouts, nil)
-	go syncer.Run(logger)
-	n.syncer = syncer
 
 	return nil
 }
