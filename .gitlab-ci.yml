@@ -131,6 +131,22 @@ Deploy nodes to hetzner stage:
   only:
     - stage
 
+Deploy exporter to hetzner stage:
+  stage: deploy
+  tags:
+    - hetzner-k8s-stage
+  script:
+    - export K8S_API_VERSION=$INFRA_STAGE_K8_API_VERSION
+    - export SSV_NODES_CPU_LIMIT=$HETZNER_STAGE_SSV_NODES_CPU_LIMIT
+    - export SSV_NODES_MEM_LIMIT=$HETZNER_STAGE_SSV_NODES_MEM_LIMIT
+    - echo $HETZNER_KUBECONFIG | base64 -d > kubeconfig
+    - mv kubeconfig ~/.kube/
+    - export KUBECONFIG=~/.kube/kubeconfig
+    - kubectl config get-contexts
+    - .k8/stage/scripts/deploy-holesky-exporters.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $SSV_EXPORTER_CPU_LIMIT $SSV_EXPORTER_MEM_LIMIT
+  only:
+    - stage
+
 # +---------------+
 # |     Prod      |
 # +---------------+
