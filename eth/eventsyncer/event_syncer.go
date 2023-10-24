@@ -10,6 +10,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/eth/eventhandler"
 	"github.com/bloxapp/ssv/eth/executionclient"
 	"github.com/bloxapp/ssv/logging/fields"
 	nodestorage "github.com/bloxapp/ssv/operator/storage"
@@ -29,7 +30,7 @@ type ExecutionClient interface {
 }
 
 type EventHandler interface {
-	HandleBlockEventsStream(logs <-chan executionclient.BlockLogs, executeTasks bool) (uint64, error)
+	HandleBlockEventsStream(logs <-chan executionclient.BlockLogs, executeTasks bool, eventTraces chan<- eventhandler.EventTrace) (uint64, error)
 }
 
 // EventSyncer syncs registry contract events from the given ExecutionClient

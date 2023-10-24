@@ -48,8 +48,8 @@ type OperatorData interface {
 	SetOperatorData(*storage.OperatorData)
 }
 
-// HandledEvent records the outcome of an event going through EventHandler.
-type HandledEvent struct {
+// EventTrace records the outcome of an event going through EventHandler.
+type EventTrace struct {
 	Log *ethtypes.Log
 
 	// Event is the parsed SSV event, or nil if the event was not parsed.
@@ -109,13 +109,13 @@ func New(
 func (eh *EventHandler) HandleBlockEventsStream(
 	logs <-chan executionclient.BlockLogs,
 	executeTasks bool,
-	handledEvents chan<- HandledEvent,
+	eventTraces chan<- EventTrace,
 ) (lastProcessedBlock uint64, err error) {
 	for blockLogs := range logs {
 		logger := eh.logger.With(fields.BlockNumber(blockLogs.BlockNumber))
 
 		start := time.Now()
-		tasks, err := eh.processBlockEvents(blockLogs, handledEvents)
+		tasks, err := eh.processBlockEvents(blockLogs, eventTraces)
 		logger.Debug("processed events from block",
 			fields.Count(len(blockLogs.Logs)),
 			fields.Took(time.Since(start)),
@@ -147,7 +147,7 @@ func (eh *EventHandler) HandleBlockEventsStream(
 	return
 }
 
-func (eh *EventHandler) processBlockEvents(block executionclient.BlockLogs, handledEvents chan<- HandledEvent) ([]Task, error) {
+func (eh *EventHandler) processBlockEvents(block executionclient.BlockLogs, eventTraces chan<- EventTrace) ([]Task, error) {
 	txn := eh.nodeStorage.Begin()
 	defer txn.Discard()
 
@@ -172,7 +172,7 @@ func (eh *EventHandler) processBlockEvents(block executionclient.BlockLogs, hand
 
 	var tasks []Task
 	for _, log := range block.Logs {
-		task, err := eh.processEvent(txn, log, handledEvents)
+		task, err := eh.processEvent(txn, log, eventTraces)
 		if err != nil {
 			return nil, err
 		}
@@ -192,35 +192,35 @@ func (eh *EventHandler) processBlockEvents(block executionclient.BlockLogs, hand
 	return tasks, nil
 }
 
-func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log, handledEvents chan<- HandledEvent) (Task, error) {
-	handledEvent := HandledEvent{Log: &event}
-	if handledEvents != nil {
+func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log, eventTraces chan<- EventTrace) (Task, error) {
+	eventTrace := EventTrace{Log: &event}
+	if eventTraces != nil {
 		defer func() {
-			handledEvents <- handledEvent
+			eventTraces <- eventTrace
 		}()
 	}
 
 	abiEvent, err := eh.eventParser.EventByID(event.Topics[0])
 	if err != nil {
-		handledEvent.Error = fmt.Errorf("failed to find event by ID: %w", err)
+		eventTrace.Error = fmt.Errorf("failed to find event by ID: %w", err)
 		eh.logger.Warn("failed to find event by ID", zap.String("hash", event.Topics[0].String()))
 		return nil, nil
 	}
 
 	parsedEvent, err := eh.eventParser.ParseEvent(abiEvent, event)
 	if err != nil {
-		handledEvent.Error = fmt.Errorf("failed to parse event: %w", err)
+		eventTrace.Error = fmt.Errorf("failed to parse event: %w", err)
 		eh.logger.Warn("could not parse event",
 			fields.EventName(abiEvent.Name),
 			zap.Error(err))
 		eh.metrics.EventProcessingFailed(abiEvent.Name)
 		return nil, nil
 	}
-	handledEvent.Event = parsedEvent
+	eventTrace.Event = parsedEvent
 
 	task, err := eh.handleEvent(txn, abiEvent, parsedEvent)
 	if err != nil {
-		handledEvent.Error = fmt.Errorf("failed to handle event: %w", err)
+		eventTrace.Error = fmt.Errorf("failed to handle event: %w", err)
 		eh.metrics.EventProcessingFailed(abiEvent.Name)
 		var malformedEventError *MalformedEventError
 		if errors.As(err, &malformedEventError) {
