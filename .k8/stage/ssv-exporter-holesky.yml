@@ -1,0 +1,187 @@
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: ssv-exporter-holesky
+  namespace: REPLACE_NAMESPACE
+spec:
+  hosts:
+    - "ws-exporter-holesky.REPLACE_DOMAIN_SUFFIX"
+  gateways:
+    - ssv-exporter-holesky
+  http:
+    - route:
+        - destination:
+            host: ssv-exporter-holesky
+            port:
+              number: 14003
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: ssv-exporter-holesky
+  namespace: REPLACE_NAMESPACE
+spec:
+  selector:
+    istio: ingressgateway-int
+  servers:
+    - port:
+        number: 80
+        name: http
+        protocol: HTTP
+      hosts:
+        - "ws-exporter-holesky.REPLACE_DOMAIN_SUFFIX"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ssv-exporter-holesky
+  namespace: REPLACE_NAMESPACE
+  labels:
+    app: ssv-exporter-holesky
+spec:
+  type: ClusterIP
+  ports:
+    - port: 12003
+      protocol: UDP
+      targetPort: 12003
+      name: port-12003
+    - port: 13003
+      protocol: TCP
+      targetPort: 13003
+      name: port-13003
+    - port: 14003
+      protocol: TCP
+      targetPort: 14003
+      name: port-14003
+    - port: 15003
+      protocol: TCP
+      targetPort: 15003
+      name: port-15003
+    - port: 16003
+      protocol: TCP
+      targetPort: 16003
+      name: port-16003
+  selector:
+    app: ssv-exporter-holesky
+---
+apiVersion: REPLACE_API_VERSION
+kind: Deployment
+metadata:
+  labels:
+    app: ssv-exporter-holesky
+  name: ssv-exporter-holesky
+  namespace: REPLACE_NAMESPACE
+spec:
+  replicas: REPLACE_REPLICAS
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ssv-exporter-holesky
+  template:
+    metadata:
+      labels:
+        app: ssv-exporter-holesky
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/role
+                    operator: In
+                    values:
+                      - ssv-main
+      containers:
+        - name: ssv-exporter-holesky
+          image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG
+          imagePullPolicy: Always
+          resources:
+            limits:
+              cpu: REPLACE_EXPORTER_CPU_LIMIT
+              memory: REPLACE_EXPORTER_MEM_LIMIT
+          command: ["make", "start-node"]
+          ports:
+            - containerPort: 12003
+              name: port-12003
+              hostPort: 12003
+              protocol: UDP
+            - containerPort: 13003
+              name: port-13003
+              hostPort: 13003
+            - containerPort: 14003
+              name: port-14003
+              hostPort: 14003
+            - containerPort: 15003
+              name: port-15003
+              hostPort: 15003
+            - containerPort: 16003
+              name: port-16003
+              hostPort: 16003
+          env:
+            - name: SHARE_CONFIG
+              value: "./data/share.yaml"
+            - name: CONFIG_PATH
+              valueFrom:
+                secretKeyRef:
+                  name: config-secrets
+                  key: config_path
+            - name: ABI_VERSION
+              valueFrom:
+                secretKeyRef:
+                  name: config-secrets
+                  key: abi_version
+                  optional: true
+            - name: LOG_LEVEL
+              value: "debug"
+            - name: DEBUG_SERVICES
+              value: "ssv.*"
+            - name: DISCOVERY_TYPE_KEY
+              value: "discv5"
+            - name: DB_PATH
+              value: "./data/db-jato-v2"
+            - name: NETWORK
+              value: "jato-v2-stage"
+            - name: DB_REPORTING
+              value: "false"
+            - name: METRICS_API_PORT
+              value: "15003"
+            - name: SSV_API_PORT
+              value: "16003"
+            - name: ENABLE_PROFILE
+              value: "true"
+            - name: UDP_PORT
+              value: "12003"
+            - name: TCP_PORT
+              value: "13003"
+            - name: WS_API_PORT
+              value: "14003"
+            - name: FULLNODE
+              value: "true"
+            - name: EXPORTER
+              value: "true"
+            - name: DISCOVERY_TRACE
+              value: "false"
+            - name: PUBSUB_TRACE
+              value: "false"
+            - name: SUBNETS
+              value: "0xffffffffffffffffffffffffffffffff"
+          volumeMounts:
+            - mountPath: /data
+              name: ssv-exporter-holesky
+            - mountPath: /data/share.yaml
+              subPath: share.yaml
+              name: ssv-exporter-holesky-cm
+      volumes:
+        - name: ssv-exporter-holesky
+          persistentVolumeClaim:
+            claimName: ssv-exporter-holesky
+        - name: ssv-exporter-holesky-cm
+          configMap:
+            name: ssv-exporter-holesky-cm
+      tolerations:
+        - effect: NoSchedule
+          key: kubernetes.io/role
+          operator: Exists
+      hostNetwork: true
