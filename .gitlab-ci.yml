@@ -84,7 +84,6 @@ Deploy exporter to stage:
     - chmod 755 kubectl
     - mv kubectl /usr/bin/
     - .k8/stage/scripts/deploy-exporters.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $SSV_EXPORTER_CPU_LIMIT $SSV_EXPORTER_MEM_LIMIT
-    - .k8/stage/scripts/deploy-holesky-exporters.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $SSV_EXPORTER_CPU_LIMIT $SSV_EXPORTER_MEM_LIMIT
   only:
     - stage
 
@@ -129,6 +128,22 @@ Deploy nodes to hetzner stage:
     - .k8/hetzner-stage/scripts/deploy-cluster-61--64.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE hetzner.stage.k8s.local hetzner.stage.k8s.local stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
     - .k8/hetzner-stage/scripts/deploy-cluster-65--68.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE hetzner.stage.k8s.local hetzner.stage.k8s.local stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
     - .k8/hetzner-stage/scripts/deploy-cluster-69--72.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE hetzner.stage.k8s.local hetzner.stage.k8s.local stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
+  only:
+    - stage
+
+Deploy exporter to hetzner stage:
+  stage: deploy
+  tags:
+    - hetzner-k8s-stage
+  script:
+    - export K8S_API_VERSION=$INFRA_STAGE_K8_API_VERSION
+    - export SSV_NODES_CPU_LIMIT=$HETZNER_STAGE_SSV_NODES_CPU_LIMIT
+    - export SSV_NODES_MEM_LIMIT=$HETZNER_STAGE_SSV_NODES_MEM_LIMIT
+    - echo $HETZNER_KUBECONFIG | base64 -d > kubeconfig
+    - mv kubeconfig ~/.kube/
+    - export KUBECONFIG=~/.kube/kubeconfig
+    - kubectl config get-contexts
+    - .k8/stage/scripts/deploy-holesky-exporters.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $SSV_EXPORTER_CPU_LIMIT $SSV_EXPORTER_MEM_LIMIT
   only:
     - stage
 
