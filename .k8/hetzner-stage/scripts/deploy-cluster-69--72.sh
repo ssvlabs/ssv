@@ -109,7 +109,6 @@ DEPLOY_FILES=(
   "ssv-node-70-deployment.yml"
   "ssv-node-71-deployment.yml"
   "ssv-node-72-deployment.yml"
-  "ssv-node-andrew-network.yml"
 )
 
 if [[ -d $DIR ]]; then
