@@ -51,15 +51,6 @@ spec:
       labels:
         app: ssv-exporter-holesky
     spec:
-      affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-              - matchExpressions:
-                  - key: kubernetes.io/role
-                    operator: In
-                    values:
-                      - ssv-main
       containers:
         - name: ssv-exporter-holesky
           image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG
@@ -147,8 +138,4 @@ spec:
         - name: ssv-exporter-holesky-cm
           configMap:
             name: ssv-exporter-holesky-cm
-      tolerations:
-        - effect: NoSchedule
-          key: kubernetes.io/role
-          operator: Exists
       hostNetwork: true
