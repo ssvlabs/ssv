@@ -19,13 +19,8 @@ import (
 const (
 	// Limit for rate limiter when processing new inbound dials.
 	ipLimit = 4
-
 	// Burst limit for inbound dials.
 	ipBurst = 8
-
-	// High watermark buffer signifies the buffer till which
-	// we will handle inbound requests.
-	highWatermarkBuffer = 10
 )
 
 type Config struct {
