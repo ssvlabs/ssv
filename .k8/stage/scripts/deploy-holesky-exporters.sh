@@ -80,7 +80,7 @@ if ! kubectl --context=$K8S_CONTEXT get ns | grep -q $NAMESPACE; then
   kubectl --context=$K8S_CONTEXT create namespace $NAMESPACE
 fi
 
-DIR=".k8/stage"
+DIR=".k8/hetzner-stage"
 DEPLOY_FILES=(
   "ssv-exporter-holesky.yml"
 )
