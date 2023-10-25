@@ -8,14 +8,13 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
-
-	ssz "github.com/ferranbt/fastssz"
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network/commons"
@@ -64,11 +63,11 @@ func TestRSAUsage(t *testing.T) {
 		PubKey:    pubPEM,
 	}
 
-	encodedSignedSSVMessage, err := ssz.MarshalSSZ(signedSSVMessage)
+	encodedSignedSSVMessage, err := json.Marshal(signedSSVMessage)
 	require.NoError(t, err)
 
 	var decodedSignedSSVMessage commons.SignedSSVMessage
-	err = decodedSignedSSVMessage.UnmarshalSSZ(encodedSignedSSVMessage)
+	err = json.Unmarshal(encodedSignedSSVMessage, &decodedSignedSSVMessage)
 	require.NoError(t, err)
 
 	messageHash := sha256.Sum256(decodedSignedSSVMessage.Message)

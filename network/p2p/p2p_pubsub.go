@@ -7,11 +7,11 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	ssz "github.com/ferranbt/fastssz"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
@@ -89,7 +89,7 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 		PubKey:    pubPEM,
 	}
 
-	encodedSignedSSVMessage, err := ssz.MarshalSSZ(signedSSVMessage)
+	encodedSignedSSVMessage, err := json.Marshal(signedSSVMessage)
 	if err != nil {
 		return err
 	}

@@ -11,6 +11,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"strings"
@@ -335,47 +336,45 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 	mv.metrics.ActiveMsgValidation(topic)
 	defer mv.metrics.ActiveMsgValidationDone(topic)
 
+	messageData := pMsg.GetData()
+
 	var decodedSignedSSVMessage commons.SignedSSVMessage
-	err := decodedSignedSSVMessage.UnmarshalSSZ(pMsg.GetData())
-	if err != nil {
-		e := ErrRSADecryption
-		e.innerErr = fmt.Errorf("unmarshal ssz: %w", err)
-		return nil, Descriptor{}, e
-	}
+	err := json.Unmarshal(messageData, &decodedSignedSSVMessage)
+	if err == nil {
+		messageData = decodedSignedSSVMessage.Message
+		messageHash := sha256.Sum256(messageData)
 
-	messageData := decodedSignedSSVMessage.Message
-	messageHash := sha256.Sum256(messageData)
+		block, rest := pem.Decode(decodedSignedSSVMessage.PubKey)
+		if block == nil {
+			e := ErrRSADecryption
+			e.innerErr = fmt.Errorf("block is nil")
+			return nil, Descriptor{}, e
+		}
+		if len(rest) != 0 {
+			e := ErrRSADecryption
+			e.innerErr = fmt.Errorf("extra data after PEM decoding")
+			return nil, Descriptor{}, e
+		}
 
-	block, rest := pem.Decode(decodedSignedSSVMessage.PubKey)
-	if block == nil {
-		e := ErrRSADecryption
-		e.innerErr = fmt.Errorf("block is nil")
-		return nil, Descriptor{}, e
-	}
-	if len(rest) != 0 {
-		e := ErrRSADecryption
-		e.innerErr = fmt.Errorf("extra data after PEM decoding")
-		return nil, Descriptor{}, e
-	}
+		pub, err := x509.ParsePKIXPublicKey(block.Bytes)
+		if err != nil {
+			e := ErrRSADecryption
+			e.innerErr = fmt.Errorf("parse public key: %w", err)
+			return nil, Descriptor{}, e
+		}
 
-	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
-	if err != nil {
-		e := ErrRSADecryption
-		e.innerErr = fmt.Errorf("parse public key: %w", err)
-		return nil, Descriptor{}, e
-	}
+		rsaPubKey, ok := pub.(*rsa.PublicKey)
+		if !ok {
+			e := ErrRSADecryption
+			e.innerErr = fmt.Errorf("unexpected public key type")
+			return nil, Descriptor{}, e
+		}
 
-	rsaPubKey, ok := pub.(*rsa.PublicKey)
-	if !ok {
-		e := ErrRSADecryption
-		e.innerErr = fmt.Errorf("unexpected public key type")
-		return nil, Descriptor{}, e
-	}
-
-	if err := rsa.VerifyPKCS1v15(rsaPubKey, crypto.SHA256, messageHash[:], decodedSignedSSVMessage.Signature); err != nil {
-		e := ErrRSADecryption
-		e.innerErr = fmt.Errorf("verify signature: %w", err)
-		return nil, Descriptor{}, e
+		if err := rsa.VerifyPKCS1v15(rsaPubKey, crypto.SHA256, messageHash[:], decodedSignedSSVMessage.Signature); err != nil {
+			e := ErrRSADecryption
+			e.innerErr = fmt.Errorf("verify signature: %w", err)
+			return nil, Descriptor{}, e
+		}
 	}
 
 	if len(messageData) == 0 {
