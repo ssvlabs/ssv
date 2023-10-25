@@ -133,9 +133,9 @@ Deploy nodes to hetzner stage:
 
 Deploy exporter to hetzner stage:
   stage: deploy
-  image: bitnami/kubectl:1.27.5
   tags:
     - hetzner-k8s-stage
+  image: bitnami/kubectl:1.27.5
   script:
     - export K8S_API_VERSION=$INFRA_STAGE_K8_API_VERSION
     - export SSV_EXPORTER_CPU_LIMIT=$STAGE_SSV_EXPORTER_CPU_LIMIT
