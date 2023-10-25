@@ -140,6 +140,8 @@ spec:
             - mountPath: /data/share.yaml
               subPath: share.yaml
               name: ssv-exporter-holesky-cm
+      imagePullSecrets:
+        - name: ecr-repo
       volumes:
         - name: ssv-exporter-holesky
           persistentVolumeClaim:
