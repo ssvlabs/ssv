@@ -69,9 +69,9 @@ type p2pNetwork struct {
 
 	activeValidators *hashmap.Map[string, validatorStatus]
 
-	backoffConnector   *libp2pdiscbackoff.BackoffConnector
-	subnets            []byte
-	libConnManager     connmgrcore.ConnManager
+	backoffConnector *libp2pdiscbackoff.BackoffConnector
+	subnets          []byte
+	libConnManager   connmgrcore.ConnManager
 
 	nodeStorage        operatorstorage.Storage
 	operatorPKCache    sync.Map
