@@ -280,9 +280,9 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer
 	// - pass the existing PeerInfoIndex to NewMessageValidator
 	// - add a separate metric to track # of messages ignored here
 	// - add unit tests with a PeerInfoIndex mock
-	if mv.peersIndex != nil && mv.peersIndex.State(peerID) != peers.StateConnected {
-		return pubsub.ValidationIgnore
-	}
+	//if mv.peersIndex != nil && mv.peersIndex.State(peerID) != peers.StateConnected {
+	//	return pubsub.ValidationIgnore
+	//}
 
 	decodedMessage, descriptor, err := mv.validateP2PMessage(pmsg, time.Now())
 	round := specqbft.Round(0)
