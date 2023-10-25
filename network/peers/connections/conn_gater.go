@@ -58,17 +58,17 @@ func NewConnectionGater(logger *zap.Logger, idx peers.ConnectionIndex, cfg *Conf
 // InterceptPeerDial is called on an imminent outbound peer dial request, prior
 // to the addresses of that peer being available/resolved. Blocking connections
 // at this stage is typical for blacklisting scenarios
-func (n *СonnectionGater) InterceptPeerDial(id peer.ID) bool {
-	return n.idx.Limit(libp2pnetwork.DirOutbound)
+func (cg *СonnectionGater) InterceptPeerDial(id peer.ID) bool {
+	return true
 }
 
 // InterceptAddrDial tests whether we're permitted to dial the specified
 // multiaddr for the given peer.
 func (cg *СonnectionGater) InterceptAddrDial(pid peer.ID, m multiaddr.Multiaddr) (allow bool) {
 	// Disallow bad peers from dialing in.
-	if cg.idx.IsBad(cg.logger, pid) {
-		return false
-	}
+	// if cg.idx.IsBad(cg.logger, pid) {
+	// 	return false
+	// }
 	return filterConnections(cg.addrFilter, m)
 }
 
@@ -82,9 +82,7 @@ func (cg *СonnectionGater) InterceptAccept(n libp2pnetwork.ConnMultiaddrs) (all
 	}
 
 	// TODO
-	// if cg.isPeerAtLimit(true /* inbound */) {
-	// 	log.WithFields(logrus.Fields{"peer": n.RemoteMultiaddr(),
-	// 		"reason": "at peer limit"}).Trace("Not accepting inbound dial")
+	// if cg.idx.Limit(libp2pnetwork.DirInbound) {
 	// 	return false
 	// }
 	return filterConnections(cg.addrFilter, n.RemoteMultiaddr())

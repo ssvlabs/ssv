@@ -40,7 +40,7 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	pks := []string{"b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400",
 		"824b9024767a01b56790a72afb5f18bb0f97d5bddb946a7bd8dd35cc607c35a4d76be21f24f484d0d478b99dc63ed170"}
 
-	ln, routers, err := createNetworkAndSubscribe(t, ctx, n, pks...)
+	ln, routers, err := createNetworkAndSubscribe(t, ctx, n, "", []string{}, pks...)
 	require.NoError(t, err)
 	require.NotNil(t, routers)
 	require.NotNil(t, ln)
@@ -113,7 +113,7 @@ func TestP2pNetwork_Stream(t *testing.T) {
 
 	pkHex := "b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400"
 
-	ln, _, err := createNetworkAndSubscribe(t, ctx, n, pkHex)
+	ln, _, err := createNetworkAndSubscribe(t, ctx, n, "", []string{}, pkHex)
 	require.NoError(t, err)
 	require.Len(t, ln.Nodes, n)
 
@@ -236,9 +236,9 @@ func registerHandler(logger *zap.Logger, node network.P2PNetwork, mid spectypes.
 	})
 }
 
-func createNetworkAndSubscribe(t *testing.T, ctx context.Context, nodes int, pks ...string) (*LocalNet, []*dummyRouter, error) {
+func createNetworkAndSubscribe(t *testing.T, ctx context.Context, nodes int, allowCIDR string, denyCIDR []string, pks ...string) (*LocalNet, []*dummyRouter, error) {
 	logger := logging.TestLogger(t)
-	ln, err := CreateAndStartLocalNet(ctx, logger.Named("createNetworkAndSubscribe"), nodes, nodes/2-1, false)
+	ln, err := CreateAndStartLocalNet(ctx, logger.Named("createNetworkAndSubscribe"), nodes, nodes/2-1, false, allowCIDR, denyCIDR)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -332,4 +332,16 @@ func dummyMsg(pkHex string, height int) (*spectypes.SSVMessage, error) {
 		MsgID:   id,
 		Data:    data,
 	}, nil
+}
+
+func TestP2pNetwork_Gater_Deny_Local(t *testing.T) {
+	n := 12
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	pkHex := "b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400"
+
+	ln, _, err := createNetworkAndSubscribe(t, ctx, n, "", []string{"127.0.0.1/16", "10.0.1.14/16", "192.168.176.1/16"}, pkHex)
+	require.NoError(t, err)
+	require.Len(t, ln.Nodes, n)
 }

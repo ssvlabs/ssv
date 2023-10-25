@@ -72,9 +72,9 @@ func (ln *LocalNet) WithBootnode(ctx context.Context, logger *zap.Logger) error 
 // CreateAndStartLocalNet creates a new local network and starts it
 // if any errors occurs during starting local network CreateAndStartLocalNet trying
 // to create and start local net one more time until pCtx is not Done()
-func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, nodesQuantity, minConnected int, useDiscv5 bool) (*LocalNet, error) {
+func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, nodesQuantity, minConnected int, useDiscv5 bool, allowCIDR string, denyCIDR []string) (*LocalNet, error) {
 	attempt := func(pCtx context.Context, nodesQuantity, minConnected int, useDiscv5 bool) (*LocalNet, error) {
-		ln, err := NewLocalNet(pCtx, logger, nodesQuantity, useDiscv5)
+		ln, err := NewLocalNet(pCtx, logger, nodesQuantity, useDiscv5, allowCIDR, denyCIDR)
 		if err != nil {
 			return nil, err
 		}
@@ -126,12 +126,12 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, nodesQuant
 }
 
 // NewTestP2pNetwork creates a new network.P2PNetwork instance
-func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, keys testing.NodeKeys, logger *zap.Logger, maxPeers int) (network.P2PNetwork, error) {
+func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, keys testing.NodeKeys, logger *zap.Logger, maxPeers int, allowCIDR string, denyCIDR []string) (network.P2PNetwork, error) {
 	operatorPubkey, err := rsaencryption.ExtractPublicKey(keys.OperatorKey)
 	if err != nil {
 		return nil, err
 	}
-	cfg := NewNetConfig(keys.NetKey, format.OperatorID([]byte(operatorPubkey)), ln.Bootnode, testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), maxPeers)
+	cfg := NewNetConfig(keys.NetKey, format.OperatorID([]byte(operatorPubkey)), ln.Bootnode, testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), maxPeers, allowCIDR, denyCIDR)
 	cfg.Ctx = ctx
 	cfg.Subnets = "00000000000000000000020000000000" //PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
 	cfg.NodeStorage = mock.NodeStorage{
@@ -149,7 +149,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, keys testing.NodeKeys
 }
 
 // NewLocalNet creates a new mdns network
-func NewLocalNet(ctx context.Context, logger *zap.Logger, n int, useDiscv5 bool) (*LocalNet, error) {
+func NewLocalNet(ctx context.Context, logger *zap.Logger, n int, useDiscv5 bool, allowCIDR string, denyCIDR []string) (*LocalNet, error) {
 	ln := &LocalNet{}
 	ln.udpRand = make(testing.UDPPortsRandomizer)
 	if useDiscv5 {
@@ -161,7 +161,7 @@ func NewLocalNet(ctx context.Context, logger *zap.Logger, n int, useDiscv5 bool)
 	nodes, keys, err := testing.NewLocalTestnet(ctx, n, func(pctx context.Context, keys testing.NodeKeys) network.P2PNetwork {
 		i++
 		logger := logger.Named(fmt.Sprintf("node-%d", i))
-		p, err := ln.NewTestP2pNetwork(pctx, keys, logger, n)
+		p, err := ln.NewTestP2pNetwork(pctx, keys, logger, n, allowCIDR, denyCIDR)
 		if err != nil {
 			logger.Error("could not setup network", zap.Error(err))
 		}
@@ -177,7 +177,7 @@ func NewLocalNet(ctx context.Context, logger *zap.Logger, n int, useDiscv5 bool)
 }
 
 // NewNetConfig creates a new config for tests
-func NewNetConfig(netPrivKey *ecdsa.PrivateKey, operatorID string, bn *discovery.Bootnode, tcpPort, udpPort, maxPeers int) *Config {
+func NewNetConfig(netPrivKey *ecdsa.PrivateKey, operatorID string, bn *discovery.Bootnode, tcpPort, udpPort, maxPeers int, allowCIDR string, denyCIDR []string) *Config {
 	bns := ""
 	discT := "discv5"
 	if bn != nil {
@@ -203,5 +203,7 @@ func NewNetConfig(netPrivKey *ecdsa.PrivateKey, operatorID string, bn *discovery
 		Permissioned: func() bool {
 			return false
 		},
+		AllowListCIDR: allowCIDR,
+		DenyListCIDR:  denyCIDR,
 	}
 }
