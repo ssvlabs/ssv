@@ -95,10 +95,10 @@ type Config struct {
 // these are the most basic options required to start a network instance,
 // other options and libp2p components can be configured on top
 func (c *Config) Libp2pOptions(logger *zap.Logger) ([]libp2p.Option, error) {
-	if c.OperatorPrivateKey == nil {
+	if c.NetworkPrivateKey == nil {
 		return nil, errors.New("could not create options w/o operator key")
 	}
-	sk, err := commons.RSAPrivToInterface(c.OperatorPrivateKey)
+	sk, err := commons.ECDSAPrivToInterface(c.NetworkPrivateKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not convert to interface priv key")
 	}
