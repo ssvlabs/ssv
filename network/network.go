@@ -6,6 +6,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/network/discovery"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -38,6 +39,8 @@ type P2PNetwork interface {
 	SubscribeAll(logger *zap.Logger) error
 	// Returns the pubsub object
 	GetPubSub() *pubsub.PubSub
+	// Get discovery service
+	GetDiscoveryService() *discovery.Service
 }
 
 // GetValidatorStats returns stats of validators, including the following:

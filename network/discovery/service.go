@@ -52,6 +52,7 @@ type Service interface {
 	RegisterSubnets(logger *zap.Logger, subnets ...int) error
 	DeregisterSubnets(logger *zap.Logger, subnets ...int) error
 	Bootstrap(logger *zap.Logger, handler HandleNewPeer) error
+	Node(logger *zap.Logger, info peer.AddrInfo) (*enode.Node, error)
 }
 
 // NewService creates new discovery.Service

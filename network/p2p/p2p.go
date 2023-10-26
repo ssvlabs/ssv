@@ -298,3 +298,8 @@ func (n *p2pNetwork) getMaxPeers(topic string) int {
 func (n *p2pNetwork) GetPubSub() *pubsub.PubSub {
 	return n.pubsub
 }
+
+// Implements the interface GetDiscoveryService method
+func (n *p2pNetwork) GetDiscoveryService() *discovery.Service {
+	return &n.disc
+}

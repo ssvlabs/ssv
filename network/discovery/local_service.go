@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/ethereum/go-ethereum/p2p/enode"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 
 	"github.com/bloxapp/ssv/logging"
@@ -121,4 +122,9 @@ func (md *localDiscovery) Close() error {
 		return err
 	}
 	return nil
+}
+
+// Mock method to follow interface.
+func (md *localDiscovery) Node(logger *zap.Logger, info peer.AddrInfo) (*enode.Node, error) {
+	return nil, nil
 }
