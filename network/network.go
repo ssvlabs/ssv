@@ -40,7 +40,7 @@ type P2PNetwork interface {
 	// Returns the pubsub object
 	GetPubSub() *pubsub.PubSub
 	// Get discovery service
-	GetDiscoveryService() *discovery.Service
+	GetDiscoveryService() discovery.Service
 }
 
 // GetValidatorStats returns stats of validators, including the following:

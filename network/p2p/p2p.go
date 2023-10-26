@@ -300,6 +300,6 @@ func (n *p2pNetwork) GetPubSub() *pubsub.PubSub {
 }
 
 // Implements the interface GetDiscoveryService method
-func (n *p2pNetwork) GetDiscoveryService() *discovery.Service {
-	return &n.disc
+func (n *p2pNetwork) GetDiscoveryService() discovery.Service {
+	return n.disc
 }
