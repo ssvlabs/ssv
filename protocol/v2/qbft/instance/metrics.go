@@ -59,17 +59,17 @@ func (m *metrics) StartStage() {
 }
 
 func (m *metrics) EndStageProposal() {
-	m.proposalDuration.Observe(time.Since(m.StageStart).Seconds())
+	//m.proposalDuration.Observe(time.Since(m.StageStart).Seconds())
 	m.StageStart = time.Now()
 }
 
 func (m *metrics) EndStagePrepare() {
-	m.prepareDuration.Observe(time.Since(m.StageStart).Seconds())
+	//m.prepareDuration.Observe(time.Since(m.StageStart).Seconds())
 	m.StageStart = time.Now()
 }
 
 func (m *metrics) EndStageCommit() {
-	m.commitDuration.Observe(time.Since(m.StageStart).Seconds())
+	//m.commitDuration.Observe(time.Since(m.StageStart).Seconds())
 	m.StageStart = time.Now()
 }
 

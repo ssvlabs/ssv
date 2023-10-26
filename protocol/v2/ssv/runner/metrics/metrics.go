@@ -119,7 +119,7 @@ func (cm *ConsensusMetrics) StartPreConsensus() {
 // EndPreConsensus sends metrics for pre-consensus duration.
 func (cm *ConsensusMetrics) EndPreConsensus() {
 	if cm != nil && cm.preConsensus != nil && !cm.preConsensusStart.IsZero() {
-		cm.preConsensus.Observe(time.Since(cm.preConsensusStart).Seconds())
+		//cm.preConsensus.Observe(time.Since(cm.preConsensusStart).Seconds())
 		cm.preConsensusStart = time.Time{}
 	}
 }
@@ -134,7 +134,7 @@ func (cm *ConsensusMetrics) StartConsensus() {
 // EndConsensus sends metrics for consensus duration.
 func (cm *ConsensusMetrics) EndConsensus() {
 	if cm != nil && cm.consensus != nil && !cm.consensusStart.IsZero() {
-		cm.consensus.Observe(time.Since(cm.consensusStart).Seconds())
+		//cm.consensus.Observe(time.Since(cm.consensusStart).Seconds())
 		cm.consensusStart = time.Time{}
 	}
 }
@@ -149,7 +149,7 @@ func (cm *ConsensusMetrics) StartPostConsensus() {
 // EndPostConsensus sends metrics for post-consensus duration.
 func (cm *ConsensusMetrics) EndPostConsensus() {
 	if cm != nil && cm.postConsensus != nil && !cm.postConsensusStart.IsZero() {
-		cm.postConsensus.Observe(time.Since(cm.postConsensusStart).Seconds())
+		//cm.postConsensus.Observe(time.Since(cm.postConsensusStart).Seconds())
 		cm.postConsensusStart = time.Time{}
 	}
 }
@@ -181,10 +181,10 @@ func (cm *ConsensusMetrics) ContinueDutyFullFlow() {
 func (cm *ConsensusMetrics) EndDutyFullFlow(round specqbft.Round) {
 	if cm != nil && cm.dutyFullFlow != nil && !cm.dutyFullFlowStart.IsZero() {
 		cm.dutyFullFlowCumulativeDuration += time.Since(cm.dutyFullFlowStart)
-		cm.dutyFullFlow.Observe(cm.dutyFullFlowCumulativeDuration.Seconds())
+		//cm.dutyFullFlow.Observe(cm.dutyFullFlowCumulativeDuration.Seconds())
 
 		if round == 1 {
-			cm.dutyFullFlowFirstRound.Observe(cm.dutyFullFlowCumulativeDuration.Seconds())
+			//cm.dutyFullFlowFirstRound.Observe(cm.dutyFullFlowCumulativeDuration.Seconds())
 		}
 
 		cm.dutyFullFlowStart = time.Time{}
@@ -194,14 +194,15 @@ func (cm *ConsensusMetrics) EndDutyFullFlow(round specqbft.Round) {
 
 // StartBeaconSubmission returns a function that sends metrics for beacon submission duration.
 func (cm *ConsensusMetrics) StartBeaconSubmission() (endBeaconSubmission func()) {
-	if cm == nil || cm.beaconSubmission == nil {
-		return func() {}
-	}
-
-	start := time.Now()
-	return func() {
-		cm.beaconSubmission.Observe(time.Since(start).Seconds())
-	}
+	return func() {}
+	//if cm == nil || cm.beaconSubmission == nil {
+	//	return func() {}
+	//}
+	//
+	//start := time.Now()
+	//return func() {
+	//	cm.beaconSubmission.Observe(time.Since(start).Seconds())
+	//}
 }
 
 // RoleSubmitted increases submitted roles counter.
