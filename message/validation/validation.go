@@ -342,7 +342,7 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 	err := json.Unmarshal(messageData, &decodedSignedSSVMessage)
 	if err == nil {
 		messageData = decodedSignedSSVMessage.Message
-		messageHash := sha256.Sum256(messageData)
+		messageHash := sha256.Sum256(messageData[1:])
 
 		block, rest := pem.Decode(decodedSignedSSVMessage.PubKey)
 		if block == nil {
