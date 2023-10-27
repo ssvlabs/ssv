@@ -129,12 +129,16 @@ func (r *ValidatorRegistrationRunner) executeDuty(logger *zap.Logger, duty *spec
 		Slot:     duty.Slot,
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
+	b, err := json.MarshalIndent(vr, "", "  ")
+	if err != nil {
+		return errors.Wrap(err, "could not marshal validator registration")
+	}
 	logger.Debug("signing validator registration",
 		zap.Uint64("slot", uint64(r.GetState().StartingDuty.Slot)),
 		zap.String("fee_recipient", hex.EncodeToString(vr.FeeRecipient[:])),
 		zap.Int64("timestamp", vr.Timestamp.Unix()),
 		zap.Uint64("gas_limit", vr.GasLimit),
-		zap.Any("object", vr))
+		zap.String("object", string(b)))
 
 	// sign msg
 	signature, err := r.GetSigner().SignRoot(msgs, spectypes.PartialSignatureType, r.GetShare().SharePubKey)
