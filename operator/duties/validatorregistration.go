@@ -2,6 +2,7 @@ package duties
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -40,8 +41,14 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 			shares := h.validatorController.GetOperatorShares()
 
 			sent := 0
+			sharesChecked := 0
+			noMetadata := 0
+			notThisSlot := 0
+			validators := make(map[string]bool)
 			for _, share := range shares {
+				sharesChecked++
 				if !share.HasBeaconMetadata() {
+					noMetadata++
 					continue
 				}
 
@@ -51,8 +58,11 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 				registrationSlotInterval *= validatorRegistrationEpochInterval
 
 				if uint64(share.BeaconMetadata.Index)%registrationSlotInterval != uint64(slot)%registrationSlotInterval {
+					validators[fmt.Sprint(share.BeaconMetadata.Index)] = true
+					notThisSlot++
 					continue
 				}
+				validators[fmt.Sprint(share.BeaconMetadata.Index)] = false
 
 				pk := phase0.BLSPubKey{}
 				copy(pk[:], share.ValidatorPubKey)
@@ -67,7 +77,13 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 				sent++
 				h.validatorsPassedFirstRegistration[string(share.ValidatorPubKey)] = struct{}{}
 			}
-			h.logger.Debug("validator registration duties sent", zap.Uint64("slot", uint64(slot)), fields.Count(sent))
+			h.logger.Debug("validator registration duties sent",
+				zap.Uint64("shares", uint64(sharesChecked)),
+				zap.Uint64("no_metadata", uint64(noMetadata)),
+				zap.Uint64("not_this_slot", uint64(notThisSlot)),
+				zap.Uint64("slot", uint64(slot)), fields.Count(sent),
+				zap.Any("validators", validators),
+			)
 
 		case <-h.indicesChange:
 			continue

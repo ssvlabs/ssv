@@ -2,8 +2,6 @@ package goclient
 
 import (
 	"context"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -229,18 +227,6 @@ func (gc *goClient) createValidatorRegistration(pubkey []byte, feeRecipient bell
 			Signature: sig,
 		},
 	}
-
-	b, err := json.MarshalIndent(signedReg.V1, "", "  ")
-	if err != nil {
-		panic(err)
-	}
-	zap.L().Debug("created validator registration for submission",
-		zap.String("pubkey", hex.EncodeToString(pk[:])),
-		zap.String("fee_recipient", hex.EncodeToString(feeRecipient[:])),
-		zap.Uint64("gas_limit", gc.gasLimit),
-		zap.Int64("timestamp", gc.network.GetSlotStartTime(gc.network.GetEpochFirstSlot(gc.network.EstimatedCurrentEpoch())).Unix()),
-		zap.Any("object", string(b)),
-		zap.Stringer("signature", sig))
 	return signedReg
 }
 
