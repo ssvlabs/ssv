@@ -2,6 +2,7 @@ package goclient
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -227,6 +228,18 @@ func (gc *goClient) createValidatorRegistration(pubkey []byte, feeRecipient bell
 			Signature: sig,
 		},
 	}
+	zap.L().Debug("created validator registration for submission",
+		zap.String("pubkey", hex.EncodeToString(pk[:])),
+		zap.String("fee_recipient", hex.EncodeToString(feeRecipient[:])),
+		zap.Uint64("gas_limit", gc.gasLimit),
+		zap.Int64("timestamp", gc.network.GetSlotStartTime(gc.network.GetEpochFirstSlot(gc.network.EstimatedCurrentEpoch())).Unix()),
+		zap.Any("object", &eth2apiv1.ValidatorRegistration{
+			FeeRecipient: feeRecipient,
+			GasLimit:     gc.gasLimit,
+			Timestamp:    gc.network.GetSlotStartTime(gc.network.GetEpochFirstSlot(gc.network.EstimatedCurrentEpoch())),
+			Pubkey:       pk,
+		}),
+		zap.Stringer("signature", sig))
 	return signedReg
 }
 
