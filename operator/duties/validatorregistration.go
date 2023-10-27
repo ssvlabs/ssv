@@ -41,8 +41,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 
 				// if not passed first registration, should be registered within one epoch time in a corresponding slot
 				// if passed first registration, should be registered within validatorRegistrationEpochInterval epochs time in a corresponding slot
-				registrationSlotInterval := h.network.SlotsPerEpoch()
-				registrationSlotInterval *= validatorRegistrationEpochInterval
+				registrationSlotInterval := h.network.SlotsPerEpoch() * validatorRegistrationEpochInterval
 
 				if uint64(share.BeaconMetadata.Index)%registrationSlotInterval != uint64(slot)%registrationSlotInterval {
 					continue
