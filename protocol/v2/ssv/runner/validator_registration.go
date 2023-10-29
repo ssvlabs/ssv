@@ -2,6 +2,7 @@ package runner
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -91,7 +92,9 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(logger *zap.Logger, si
 		return errors.Wrap(err, "could not submit validator registration")
 	}
 
-	logger.Debug("validator registration submitted successfully", fields.FeeRecipient(r.BaseRunner.Share.FeeRecipientAddress[:]))
+	logger.Debug("validator registration submitted successfully",
+		fields.FeeRecipient(r.BaseRunner.Share.FeeRecipientAddress[:]),
+		zap.String("signature", hex.EncodeToString(specSig[:])))
 
 	r.GetState().Finished = true
 	return nil
