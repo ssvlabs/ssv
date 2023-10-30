@@ -38,7 +38,7 @@ const (
 type SignedSSVMessage struct {
 	Message   []byte `json:"message"`
 	Signature []byte `json:"signature"`
-	PubKey    []byte `json:"pub_key"`
+	PubKey    []byte `json:"pub_key"` // TODO: operator ID
 }
 
 // SubnetTopicID returns the topic to use for the given subnet
