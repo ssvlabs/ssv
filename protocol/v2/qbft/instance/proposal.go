@@ -10,7 +10,7 @@ import (
 
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // uponProposal process proposal message
@@ -33,7 +33,7 @@ func (i *Instance) uponProposal(logger *zap.Logger, signedProposal *specqbft.Sig
 
 	// A future justified proposal should bump us into future round and reset timer
 	if signedProposal.Message.Round > i.State.Round {
-		i.config.GetTimer().TimeoutForRound(signedProposal.Message.Round)
+		i.config.GetTimer().TimeoutForRound(signedProposal.Message.Height, signedProposal.Message.Round)
 	}
 	i.bumpToRound(newRound)
 
@@ -77,8 +77,10 @@ func isValidProposal(
 	if len(signedProposal.GetSigners()) != 1 {
 		return errors.New("msg allows 1 signer")
 	}
-	if err := types.VerifyByOperators(signedProposal.Signature, signedProposal, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
-		return errors.Wrap(err, "msg signature invalid")
+	if config.VerifySignatures() {
+		if err := ssvtypes.VerifyByOperators(signedProposal.Signature, signedProposal, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
+			return errors.Wrap(err, "msg signature invalid")
+		}
 	}
 	if !signedProposal.MatchedSigners([]spectypes.OperatorID{proposer(state, config, signedProposal.Message.Round)}) {
 		return errors.New("proposal leader invalid")
@@ -119,6 +121,30 @@ func isValidProposal(
 		return nil
 	}
 	return errors.New("proposal is not valid with current state")
+}
+
+func IsProposalJustification(
+	config qbft.IConfig,
+	share *ssvtypes.SSVShare,
+	roundChangeMsgs []*specqbft.SignedMessage,
+	prepareMsgs []*specqbft.SignedMessage,
+	height specqbft.Height,
+	round specqbft.Round,
+	fullData []byte,
+) error {
+	return isProposalJustification(
+		&specqbft.State{
+			Share:  &share.Share,
+			Height: height,
+		},
+		config,
+		roundChangeMsgs,
+		prepareMsgs,
+		height,
+		round,
+		fullData,
+		func(data []byte) error { return nil },
+	)
 }
 
 // isProposalJustification returns nil if the proposal and round change messages are valid and justify a proposal message for the provided round, value and leader
@@ -256,7 +282,7 @@ func CreateProposal(state *specqbft.State, config qbft.IConfig, fullData []byte,
 	}
 	sig, err := config.GetSigner().SignRoot(msg, spectypes.QBFTSignatureType, state.Share.SharePubKey)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed signing prepare msg")
+		return nil, errors.Wrap(err, "failed signing proposal msg")
 	}
 
 	signedMsg := &specqbft.SignedMessage{

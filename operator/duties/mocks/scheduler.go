@@ -7,13 +7,13 @@ package mocks
 import (
 	context "context"
 	reflect "reflect"
+	time "time"
 
 	client "github.com/attestantio/go-eth2-client"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	types "github.com/bloxapp/ssv/protocol/v2/types"
 	gomock "github.com/golang/mock/gomock"
-	event "github.com/prysmaticlabs/prysm/v4/async/event"
 )
 
 // MockSlotTicker is a mock of SlotTicker interface.
@@ -39,18 +39,32 @@ func (m *MockSlotTicker) EXPECT() *MockSlotTickerMockRecorder {
 	return m.recorder
 }
 
-// Subscribe mocks base method.
-func (m *MockSlotTicker) Subscribe(subscription chan phase0.Slot) event.Subscription {
+// Next mocks base method.
+func (m *MockSlotTicker) Next() <-chan time.Time {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Subscribe", subscription)
-	ret0, _ := ret[0].(event.Subscription)
+	ret := m.ctrl.Call(m, "Next")
+	ret0, _ := ret[0].(<-chan time.Time)
 	return ret0
 }
 
-// Subscribe indicates an expected call of Subscribe.
-func (mr *MockSlotTickerMockRecorder) Subscribe(subscription interface{}) *gomock.Call {
+// Next indicates an expected call of Next.
+func (mr *MockSlotTickerMockRecorder) Next() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Subscribe", reflect.TypeOf((*MockSlotTicker)(nil).Subscribe), subscription)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Next", reflect.TypeOf((*MockSlotTicker)(nil).Next))
+}
+
+// Slot mocks base method.
+func (m *MockSlotTicker) Slot() phase0.Slot {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Slot")
+	ret0, _ := ret[0].(phase0.Slot)
+	return ret0
+}
+
+// Slot indicates an expected call of Slot.
+func (mr *MockSlotTickerMockRecorder) Slot() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Slot", reflect.TypeOf((*MockSlotTicker)(nil).Slot))
 }
 
 // MockBeaconNode is a mock of BeaconNode interface.
@@ -186,18 +200,32 @@ func (m *MockValidatorController) EXPECT() *MockValidatorControllerMockRecorder 
 	return m.recorder
 }
 
-// ActiveValidatorIndices mocks base method.
-func (m *MockValidatorController) ActiveValidatorIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
+// AllActiveIndices mocks base method.
+func (m *MockValidatorController) AllActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ActiveValidatorIndices", epoch)
+	ret := m.ctrl.Call(m, "AllActiveIndices", epoch)
 	ret0, _ := ret[0].([]phase0.ValidatorIndex)
 	return ret0
 }
 
-// ActiveValidatorIndices indicates an expected call of ActiveValidatorIndices.
-func (mr *MockValidatorControllerMockRecorder) ActiveValidatorIndices(epoch interface{}) *gomock.Call {
+// AllActiveIndices indicates an expected call of AllActiveIndices.
+func (mr *MockValidatorControllerMockRecorder) AllActiveIndices(epoch interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ActiveValidatorIndices", reflect.TypeOf((*MockValidatorController)(nil).ActiveValidatorIndices), epoch)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AllActiveIndices", reflect.TypeOf((*MockValidatorController)(nil).AllActiveIndices), epoch)
+}
+
+// CommitteeActiveIndices mocks base method.
+func (m *MockValidatorController) CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CommitteeActiveIndices", epoch)
+	ret0, _ := ret[0].([]phase0.ValidatorIndex)
+	return ret0
+}
+
+// CommitteeActiveIndices indicates an expected call of CommitteeActiveIndices.
+func (mr *MockValidatorControllerMockRecorder) CommitteeActiveIndices(epoch interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CommitteeActiveIndices", reflect.TypeOf((*MockValidatorController)(nil).CommitteeActiveIndices), epoch)
 }
 
 // GetOperatorShares mocks base method.

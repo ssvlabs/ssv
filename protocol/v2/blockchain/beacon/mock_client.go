@@ -643,6 +643,20 @@ func (mr *MockBeaconNodeMockRecorder) SubmitValidatorRegistration(pubkey, feeRec
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitValidatorRegistration", reflect.TypeOf((*MockBeaconNode)(nil).SubmitValidatorRegistration), pubkey, feeRecipient, sig)
 }
 
+// SubmitVoluntaryExit mocks base method.
+func (m *MockBeaconNode) SubmitVoluntaryExit(voluntaryExit *phase0.SignedVoluntaryExit, sig phase0.BLSSignature) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubmitVoluntaryExit", voluntaryExit, sig)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SubmitVoluntaryExit indicates an expected call of SubmitVoluntaryExit.
+func (mr *MockBeaconNodeMockRecorder) SubmitVoluntaryExit(voluntaryExit, sig interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitVoluntaryExit", reflect.TypeOf((*MockBeaconNode)(nil).SubmitVoluntaryExit), voluntaryExit, sig)
+}
+
 // SyncCommitteeDuties mocks base method.
 func (m *MockBeaconNode) SyncCommitteeDuties(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex) ([]*v1.SyncCommitteeDuty, error) {
 	m.ctrl.T.Helper()

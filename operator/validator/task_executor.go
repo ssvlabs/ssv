@@ -1,17 +1,16 @@
 package validator
 
 import (
-	"encoding/hex"
-	"fmt"
 	"time"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 func (c *controller) taskLogger(taskName string, fields ...zap.Field) *zap.Logger {
@@ -20,7 +19,7 @@ func (c *controller) taskLogger(taskName string, fields ...zap.Field) *zap.Logge
 		With(fields...)
 }
 
-func (c *controller) StartValidator(share *ssvtypes.SSVShare) error {
+func (c *controller) StartValidator(share *types.SSVShare) error {
 	// logger := c.taskLogger("StartValidator", fields.PubKey(share.ValidatorPubKey))
 
 	// Since we don't yet have the Beacon metadata for this validator,
@@ -30,41 +29,30 @@ func (c *controller) StartValidator(share *ssvtypes.SSVShare) error {
 	return nil
 }
 
-func (c *controller) StopValidator(publicKey []byte) error {
-	logger := c.taskLogger("StopValidator", fields.PubKey(publicKey))
+func (c *controller) StopValidator(pubKey spectypes.ValidatorPK) error {
+	logger := c.taskLogger("StopValidator", fields.PubKey(pubKey))
 
-	c.metrics.ValidatorRemoved(publicKey)
-	if err := c.onShareRemove(hex.EncodeToString(publicKey), true); err != nil {
-		return err
-	}
+	c.metrics.ValidatorRemoved(pubKey)
+	c.onShareStop(pubKey)
 
 	logger.Info("removed validator")
 
 	return nil
 }
 
-func (c *controller) LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error {
-	logger := c.taskLogger("LiquidateCluster",
-		zap.String("owner", owner.String()),
-		zap.Uint64s("operator_ids", operatorIDs))
+func (c *controller) LiquidateCluster(owner common.Address, operatorIDs []spectypes.OperatorID, toLiquidate []*types.SSVShare) error {
+	logger := c.taskLogger("LiquidateCluster", fields.Owner(owner), fields.OperatorIDs(operatorIDs))
 
 	for _, share := range toLiquidate {
-		// we can't remove the share secret from key-manager
-		// due to the fact that after activating the validators (ClusterReactivated)
-		// we don't have the encrypted keys to decrypt the secret, but only the owner address
-		if err := c.onShareRemove(hex.EncodeToString(share.ValidatorPubKey), false); err != nil {
-			return err
-		}
-		logger.With(fields.PubKey(share.ValidatorPubKey)).Debug("removed share")
+		c.onShareStop(share.ValidatorPubKey)
+		logger.With(fields.PubKey(share.ValidatorPubKey)).Debug("liquidated share")
 	}
 
 	return nil
 }
 
-func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error {
-	logger := c.taskLogger("ReactivateCluster",
-		zap.String("owner", owner.String()),
-		zap.Uint64s("operator_ids", operatorIDs))
+func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []spectypes.OperatorID, toReactivate []*types.SSVShare) error {
+	logger := c.taskLogger("ReactivateCluster", fields.Owner(owner), fields.OperatorIDs(operatorIDs))
 
 	var startedValidators int
 	var errs error
@@ -100,17 +88,14 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address) error {
 		zap.String("owner", owner.String()),
 		zap.String("fee_recipient", recipient.String()))
 
-	err := c.validatorsMap.ForEach(func(v *validator.Validator) error {
+	c.validatorsMap.ForEach(func(v *validator.Validator) bool {
 		if v.Share.OwnerAddress == owner {
 			v.Share.FeeRecipientAddress = recipient
 
 			logger.Debug("updated recipient address")
 		}
-		return nil
+		return true
 	})
-	if err != nil {
-		return fmt.Errorf("update validators map: %w", err)
-	}
 
 	return nil
 }

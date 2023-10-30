@@ -6,7 +6,7 @@ require (
 	github.com/aquasecurity/table v1.8.0
 	github.com/attestantio/go-eth2-client v0.16.3
 	github.com/bloxapp/eth2-key-manager v1.3.1
-	github.com/bloxapp/ssv-spec v0.3.1
+	github.com/bloxapp/ssv-spec v0.3.3
 	github.com/btcsuite/btcd/btcec/v2 v2.3.2
 	github.com/cespare/xxhash/v2 v2.2.0
 	github.com/cornelk/hashmap v1.0.8
@@ -37,6 +37,7 @@ require (
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/cobra v1.7.0
 	github.com/stretchr/testify v1.8.4
+	github.com/wealdtech/go-eth2-types/v2 v2.8.1
 	github.com/wealdtech/go-eth2-util v1.8.1
 	github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4 v1.1.3
 	go.uber.org/multierr v1.11.0
@@ -192,7 +193,6 @@ require (
 	github.com/tyler-smith/go-bip39 v1.1.0 // indirect
 	github.com/urfave/cli/v2 v2.24.1 // indirect
 	github.com/wealdtech/go-bytesutil v1.2.1 // indirect
-	github.com/wealdtech/go-eth2-types/v2 v2.8.1 // indirect
 	github.com/whyrusleeping/go-keyspace v0.0.0-20160322163242-5b898ac5add1 // indirect
 	github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673 // indirect
 	github.com/yusufpapurcu/wmi v1.2.2 // indirect
@@ -223,4 +223,5 @@ replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
 
-replace github.com/bloxapp/ssv-spec => github.com/bloxapp/ssv-spec v0.0.0-20230719131453-1c0044021800
+//TODO remove this replace when the following PR is merged https://github.com/bloxapp/eth2-key-manager/pull/100
+replace github.com/bloxapp/eth2-key-manager => github.com/bloxapp/eth2-key-manager v1.3.2-0.20231022162227-e2b8264a29a5

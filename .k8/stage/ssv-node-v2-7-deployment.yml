@@ -106,9 +106,9 @@ spec:
         - name: HOST_ADDRESS
           value: ""
         - name: DB_PATH
-          value: "./data/db-jato-v2"
+          value: "./data/db-holesky-stage"
         - name: NETWORK
-          value: "jato-v2-stage"
+          value: "holesky-stage"
         - name: DB_REPORTING
           value: "false"
         - name: METRICS_API_PORT
@@ -122,7 +122,7 @@ spec:
         - name: PUBSUB_TRACE
           value: 'false'
         - name: BUILDER_PROPOSALS
-          value: "true"
+          value: "false"
         volumeMounts:
         - mountPath: /data
           name: ssv-node-v2-7
