@@ -180,13 +180,6 @@ func WithOperatorPrivateKey(privKey *rsa.PrivateKey) Option {
 	}
 }
 
-// WithSignatureVerification sets whether to verify signatures in the messageValidator.
-func WithSignatureVerification(check bool) Option {
-	return func(mv *messageValidator) {
-		// TODO: deprecated, remove
-	}
-}
-
 // ConsensusDescriptor provides details about the consensus for a message. It's used for logging and metrics.
 type ConsensusDescriptor struct {
 	Round           specqbft.Round

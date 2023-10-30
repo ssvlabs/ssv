@@ -75,8 +75,6 @@ var (
 	ErrSignersNotSorted                    = Error{text: "signers are not sorted", reject: true}
 	ErrUnexpectedSigner                    = Error{text: "signer is not expected", reject: true}
 	ErrInvalidHash                         = Error{text: "root doesn't match full data hash", reject: true}
-	ErrInvalidSignature                    = Error{text: "invalid signature", reject: true}
-	ErrInvalidPartialSignature             = Error{text: "invalid partial signature", reject: true}
 	ErrEstimatedRoundTooFar                = Error{text: "message round is too far from estimated"}
 	ErrMalformedMessage                    = Error{text: "message could not be decoded", reject: true}
 	ErrUnknownSSVMessageType               = Error{text: "unknown SSV message type", reject: true}
