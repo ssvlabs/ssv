@@ -102,16 +102,17 @@ type MessageValidator interface {
 }
 
 type messageValidator struct {
-	logger             *zap.Logger
-	metrics            metrics
-	netCfg             networkconfig.NetworkConfig
-	index              sync.Map
-	shareStorage       registrystorage.Shares
-	peersIndex         peers.PeerInfoIndex
-	dutyStore          *dutystore.Store
-	ownOperatorID      spectypes.OperatorID
-	operatorPrivateKey *rsa.PrivateKey
-	verifySignatures   bool
+	logger                       *zap.Logger
+	metrics                      metrics
+	netCfg                       networkconfig.NetworkConfig
+	index                        sync.Map
+	shareStorage                 registrystorage.Shares
+	peersIndex                   peers.PeerInfoIndex
+	dutyStore                    *dutystore.Store
+	ownOperatorID                spectypes.OperatorID
+	operatorPrivateKey           *rsa.PrivateKey
+	verifySignatures             bool
+	verifyNonCommitteeSignatures bool
 }
 
 // NewMessageValidator returns a new MessageValidator with the given network configuration and options.
@@ -185,6 +186,14 @@ func WithOperatorPrivateKey(privKey *rsa.PrivateKey) Option {
 func WithSignatureVerification(check bool) Option {
 	return func(mv *messageValidator) {
 		mv.verifySignatures = check
+	}
+}
+
+// WithNonCommitteeSignatureVerification sets whether to verify non-committee message signatures in the messageValidator.
+// It requires WithSignatureVerification to be enabled.
+func WithNonCommitteeSignatureVerification(check bool) Option {
+	return func(mv *messageValidator) {
+		mv.verifyNonCommitteeSignatures = check
 	}
 }
 

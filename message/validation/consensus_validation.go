@@ -116,7 +116,7 @@ func (mv *messageValidator) validateConsensusMessage(
 		}
 	}
 
-	if mv.verifySignatures && mv.inCommittee(share) && mv.isDecidedMessage(signedMsg) {
+	if mv.verifySignatures && mv.isDecidedMessage(signedMsg) && (mv.verifyNonCommitteeSignatures || mv.inCommittee(share)) {
 		if err := ssvtypes.VerifyByOperators(signedMsg.Signature, signedMsg, mv.netCfg.Domain, spectypes.QBFTSignatureType, share.Committee); err != nil {
 			signErr := ErrInvalidSignature
 			signErr.innerErr = err
