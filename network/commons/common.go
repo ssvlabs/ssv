@@ -3,6 +3,7 @@ package commons
 import (
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -79,6 +80,10 @@ func MsgID() MsgIDFunc {
 	return func(msg []byte) string {
 		if len(msg) == 0 {
 			return ""
+		}
+		var signedMsg SignedSSVMessage
+		if err := json.Unmarshal(msg, &signedMsg); err == nil {
+			msg = signedMsg.Message
 		}
 		b := make([]byte, 12)
 		binary.LittleEndian.PutUint64(b, xxhash.Sum64(msg))
