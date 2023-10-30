@@ -29,6 +29,10 @@ import (
 func TestHandleNonCommitteeMessages(t *testing.T) {
 	logger := logging.TestLogger(t)
 	ctr := setupController(logger, map[string]*validator.Validator{}) // none committee
+
+	// Only exporter handles non committee messages
+	ctr.validatorOptions.Exporter = true
+
 	go ctr.handleRouterMessages()
 
 	var wg sync.WaitGroup
