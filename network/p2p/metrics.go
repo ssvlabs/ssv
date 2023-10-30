@@ -29,10 +29,10 @@ var (
 		Name: "ssv:network:peers_identity",
 		Help: "Peers identity",
 	}, []string{"pubKey", "operatorID", "v", "pid", "type"})
-	metricsRouterIncoming = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv:network:router:in",
-		Help: "Counts incoming messages",
-	}, []string{"identifier", "mt"})
+	//metricsRouterIncoming = promauto.NewCounterVec(prometheus.CounterOpts{
+	//	Name: "ssv:network:router:in",
+	//	Help: "Counts incoming messages",
+	//}, []string{"identifier", "mt"})
 )
 
 func init() {
@@ -46,9 +46,9 @@ func init() {
 	if err := prometheus.Register(MetricsConnectedPeers); err != nil {
 		logger.Debug("could not register prometheus collector")
 	}
-	if err := prometheus.Register(metricsRouterIncoming); err != nil {
-		logger.Debug("could not register prometheus collector")
-	}
+	//if err := prometheus.Register(metricsRouterIncoming); err != nil {
+	//	logger.Debug("could not register prometheus collector")
+	//}
 }
 
 var unknown = "unknown"

@@ -25,8 +25,8 @@ var (
 
 func init() {
 	allMetrics := []prometheus.Collector{
-		metricsStageDuration,
-		metricsRound,
+		//metricsStageDuration,
+		//metricsRound,
 	}
 	logger := zap.L()
 	for _, c := range allMetrics {
@@ -74,5 +74,5 @@ func (m *metrics) EndStageCommit() {
 }
 
 func (m *metrics) SetRound(round specqbft.Round) {
-	m.round.Set(float64(round))
+	//m.round.Set(float64(round))
 }
