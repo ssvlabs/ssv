@@ -246,7 +246,6 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 			TCPPort:       n.cfg.TCPPort,
 			NetworkKey:    n.cfg.NetworkPrivateKey,
 			Bootnodes:     n.cfg.TransformBootnodes(),
-			OperatorID:    n.cfg.OperatorID,
 			EnableLogging: n.cfg.DiscoveryTrace,
 		}
 		if len(n.subnets) > 0 {
