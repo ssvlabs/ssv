@@ -45,7 +45,7 @@ func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *reco
 	return &peersIndex{
 		network:        network,
 		scoreIdx:       newScoreIndex(),
-		SubnetsIndex:   newSubnetsIndex(subnetsCount),
+		SubnetsIndex:   NewSubnetsIndex(subnetsCount),
 		PeerInfoIndex:  NewPeerInfoIndex(),
 		self:           self,
 		selfLock:       &sync.RWMutex{},

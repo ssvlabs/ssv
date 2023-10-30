@@ -110,6 +110,8 @@ spec:
             value: "16019"
           - name: ENABLE_PROFILE
             value: "true"
+          - name: BUILDER_PROPOSALS
+            value: "true"
         volumeMounts:
         - mountPath: /data
           name: ssv-node-mainnet-3
