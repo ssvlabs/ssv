@@ -79,7 +79,7 @@ func ValidatorSubnet(validatorPKHex string) int {
 type MsgIDFunc func(msg []byte) string
 
 var metricMsgIDCalls = promauto.NewCounterVec(prometheus.CounterOpts{
-	Name: "ssv-msg-id-calls",
+	Name: "ssv_msg_id_calls",
 	Help: "",
 }, []string{"with_signature"})
 
