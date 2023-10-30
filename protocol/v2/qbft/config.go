@@ -3,6 +3,8 @@ package qbft
 import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+
+	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 )
 
@@ -24,18 +26,21 @@ type IConfig interface {
 	// GetStorage returns a storage instance
 	GetStorage() qbftstorage.QBFTStore
 	// GetTimer returns round timer
-	GetTimer() specqbft.Timer
+	GetTimer() roundtimer.Timer
+	// VerifySignatures returns if signature is checked
+	VerifySignatures() bool
 }
 
 type Config struct {
-	Signer      spectypes.SSVSigner
-	SigningPK   []byte
-	Domain      spectypes.DomainType
-	ValueCheckF specqbft.ProposedValueCheckF
-	ProposerF   specqbft.ProposerF
-	Storage     qbftstorage.QBFTStore
-	Network     specqbft.Network
-	Timer       specqbft.Timer
+	Signer                spectypes.SSVSigner
+	SigningPK             []byte
+	Domain                spectypes.DomainType
+	ValueCheckF           specqbft.ProposedValueCheckF
+	ProposerF             specqbft.ProposerF
+	Storage               qbftstorage.QBFTStore
+	Network               specqbft.Network
+	Timer                 roundtimer.Timer
+	SignatureVerification bool
 }
 
 // GetSigner returns a Signer instance
@@ -74,6 +79,10 @@ func (c *Config) GetStorage() qbftstorage.QBFTStore {
 }
 
 // GetTimer returns round timer
-func (c *Config) GetTimer() specqbft.Timer {
+func (c *Config) GetTimer() roundtimer.Timer {
 	return c.Timer
+}
+
+func (c *Config) VerifySignatures() bool {
+	return c.SignatureVerification
 }

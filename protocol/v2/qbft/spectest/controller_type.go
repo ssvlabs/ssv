@@ -3,6 +3,10 @@ package qbft
 import (
 	"bytes"
 	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -10,29 +14,32 @@ import (
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
+	typescomparable "github.com/bloxapp/ssv-spec/types/testingutils/comparable"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
+	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
 )
 
 func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
+	//temporary to override state comparisons from file not inputted one
+	overrideStateComparisonForControllerSpecTest(t, test)
+
 	logger := logging.TestLogger(t)
-	identifier := []byte{1, 2, 3, 4}
-	config := qbfttesting.TestingConfig(logger, spectestingutils.Testing4SharesSet(), spectypes.BNRoleAttester)
-	contr := qbfttesting.NewTestingQBFTController(
-		identifier[:],
-		spectestingutils.TestingShare(spectestingutils.Testing4SharesSet()),
-		config,
-		false,
-	)
+	contr := generateController(logger)
 
 	var lastErr error
 	for i, runData := range test.RunInstanceData {
-		if err := runInstanceWithData(t, logger, specqbft.Height(i), contr, config, identifier, runData); err != nil {
+		height := specqbft.Height(i)
+		if runData.Height != nil {
+			height = *runData.Height
+		}
+		if err := runInstanceWithData(t, logger, height, contr, runData); err != nil {
 			lastErr = err
 		}
 	}
@@ -44,13 +51,24 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 	}
 }
 
+func generateController(logger *zap.Logger) *controller.Controller {
+	identifier := []byte{1, 2, 3, 4}
+	config := qbfttesting.TestingConfig(logger, spectestingutils.Testing4SharesSet(), spectypes.BNRoleAttester)
+	return qbfttesting.NewTestingQBFTController(
+		identifier[:],
+		spectestingutils.TestingShare(spectestingutils.Testing4SharesSet()),
+		config,
+		false,
+	)
+}
+
 func testTimer(
 	t *testing.T,
 	config *qbft.Config,
 	runData *spectests.RunInstanceData,
 ) {
 	if runData.ExpectedTimerState != nil {
-		if timer, ok := config.GetTimer().(*spectestingutils.TestQBFTTimer); ok {
+		if timer, ok := config.GetTimer().(*roundtimer.TestQBFTTimer); ok {
 			require.Equal(t, runData.ExpectedTimerState.Timeouts, timer.State.Timeouts)
 			require.Equal(t, runData.ExpectedTimerState.Round, timer.State.Round)
 		}
@@ -78,13 +96,6 @@ func testProcessMsg(
 		}
 	}
 	require.EqualValues(t, runData.ExpectedDecidedState.DecidedCnt, decidedCnt, lastErr)
-
-	// verify sync decided by range calls
-	if runData.ExpectedDecidedState.CalledSyncDecidedByRange {
-		require.EqualValues(t, runData.ExpectedDecidedState.DecidedByRangeValues, config.GetNetwork().(*spectestingutils.TestingNetwork).DecidedByRange)
-	} else {
-		require.EqualValues(t, [2]specqbft.Height{0, 0}, config.GetNetwork().(*spectestingutils.TestingNetwork).DecidedByRange)
-	}
 
 	return lastErr
 }
@@ -129,20 +140,20 @@ func testBroadcastedDecided(
 	}
 }
 
-func runInstanceWithData(t *testing.T, logger *zap.Logger, height specqbft.Height, contr *controller.Controller, config *qbft.Config, identifier []byte, runData *spectests.RunInstanceData) error {
+func runInstanceWithData(t *testing.T, logger *zap.Logger, height specqbft.Height, contr *controller.Controller, runData *spectests.RunInstanceData) error {
 	err := contr.StartNewInstance(logger, height, runData.InputValue)
 	var lastErr error
 	if err != nil {
 		lastErr = err
 	}
 
-	testTimer(t, config, runData)
+	testTimer(t, contr.GetConfig().(*qbft.Config), runData)
 
-	if err := testProcessMsg(t, logger, contr, config, runData); err != nil {
+	if err := testProcessMsg(t, logger, contr, contr.GetConfig().(*qbft.Config), runData); err != nil {
 		lastErr = err
 	}
 
-	testBroadcastedDecided(t, config, identifier, runData)
+	testBroadcastedDecided(t, contr.GetConfig().(*qbft.Config), contr.Identifier, runData)
 
 	// test root
 	r, err := contr.GetRoot()
@@ -150,4 +161,25 @@ func runInstanceWithData(t *testing.T, logger *zap.Logger, height specqbft.Heigh
 	require.EqualValues(t, runData.ControllerPostRoot, hex.EncodeToString(r[:]))
 
 	return lastErr
+}
+
+func overrideStateComparisonForControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
+	specDir, err := protocoltesting.GetSpecDir("", filepath.Join("qbft", "spectest"))
+	require.NoError(t, err)
+	specDir = filepath.Join(specDir, "generate")
+	dir := typescomparable.GetSCDir(specDir, reflect.TypeOf(test).String())
+	path := filepath.Join(dir, fmt.Sprintf("%s.json", test.TestName()))
+	byteValue, err := os.ReadFile(filepath.Clean(path))
+	require.NoError(t, err)
+	sc := make([]*controller.Controller, len(test.RunInstanceData))
+	require.NoError(t, json.Unmarshal(byteValue, &sc))
+
+	for i, runData := range test.RunInstanceData {
+		runData.ControllerPostState = sc[i]
+
+		r, err := sc[i].GetRoot()
+		require.NoError(t, err)
+
+		runData.ControllerPostRoot = hex.EncodeToString(r[:])
+	}
 }

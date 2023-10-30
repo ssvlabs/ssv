@@ -14,6 +14,7 @@ import (
 
 var SupportedConfigs = map[string]NetworkConfig{
 	Mainnet.Name:      Mainnet,
+	HoleskyStage.Name: HoleskyStage,
 	JatoV2Stage.Name:  JatoV2Stage,
 	JatoV2.Name:       JatoV2,
 	LocalTestnet.Name: LocalTestnet,
@@ -60,4 +61,9 @@ func (n NetworkConfig) SlotDurationSec() time.Duration {
 // SlotsPerEpoch returns number of slots per one epoch
 func (n NetworkConfig) SlotsPerEpoch() uint64 {
 	return n.Beacon.SlotsPerEpoch()
+}
+
+// GetGenesisTime returns the genesis time in unix time.
+func (n NetworkConfig) GetGenesisTime() time.Time {
+	return time.Unix(int64(n.Beacon.MinGenesisTime()), 0)
 }

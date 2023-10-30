@@ -6,10 +6,13 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 )
 
 var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, role types.BeaconRole) *qbft.Config {
@@ -31,9 +34,10 @@ var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, ro
 		ProposerF: func(state *specqbft.State, round specqbft.Round) types.OperatorID {
 			return 1
 		},
-		Storage: TestingStores(logger).Get(role),
-		Network: testingutils.NewTestingNetwork(),
-		Timer:   testingutils.NewTestingTimer(),
+		Storage:               TestingStores(logger).Get(role),
+		Network:               testingutils.NewTestingNetwork(),
+		Timer:                 roundtimer.NewTestingTimer(),
+		SignatureVerification: true,
 	}
 }
 

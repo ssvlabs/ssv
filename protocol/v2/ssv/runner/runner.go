@@ -54,7 +54,8 @@ type BaseRunner struct {
 	BeaconRoleType spectypes.BeaconRole
 
 	// implementation vars
-	TimeoutF TimeoutF `json:"-"`
+	TimeoutF         TimeoutF `json:"-"`
+	VerifySignatures bool     `json:"-"`
 
 	// highestDecidedSlot holds the highest decided duty slot and gets updated after each decided is reached
 	highestDecidedSlot spec.Slot
@@ -96,6 +97,9 @@ func NewBaseRunner(
 
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
 func (b *BaseRunner) baseStartNewDuty(logger *zap.Logger, runner Runner, duty *spectypes.Duty) error {
+	if err := b.ShouldProcessDuty(duty); err != nil {
+		return errors.Wrap(err, "can't start duty")
+	}
 	b.baseSetupForNewDuty(duty)
 	return runner.executeDuty(logger, duty)
 }
@@ -264,4 +268,12 @@ func (b *BaseRunner) hasRunningDuty() bool {
 		return false
 	}
 	return !b.State.Finished
+}
+
+func (b *BaseRunner) ShouldProcessDuty(duty *spectypes.Duty) error {
+	if b.QBFTController.Height >= specqbft.Height(duty.Slot) {
+		return errors.Errorf("duty for slot %d already passed. Current height is %d", duty.Slot,
+			b.QBFTController.Height)
+	}
+	return nil
 }

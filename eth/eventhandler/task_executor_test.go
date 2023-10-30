@@ -3,8 +3,9 @@ package eventhandler
 import (
 	"context"
 	"encoding/binary"
-	"github.com/golang/mock/gomock"
 	"testing"
+
+	"github.com/golang/mock/gomock"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -48,10 +49,10 @@ func TestExecuteTask(t *testing.T) {
 	defer cancel()
 	// Create operators rsa keys
 
-	ops, err := createOperators(1)
+	ops, err := createOperators(1, 0)
 	require.NoError(t, err)
 
-	eh, validatorCtrl, err := setupEventHandler(t, ctx, logger, ops[0], true)
+	eh, validatorCtrl, err := setupEventHandler(t, ctx, logger, nil, ops[0], true)
 	require.NoError(t, err)
 
 	t.Run("test AddValidator task execution - not started", func(t *testing.T) {
@@ -145,10 +146,10 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 	defer cancel()
 
 	// Create operators rsa keys
-	ops, err := createOperators(1)
+	ops, err := createOperators(1, 0)
 	require.NoError(t, err)
 
-	eh, _, err := setupEventHandler(t, ctx, logger, ops[0], false)
+	eh, _, err := setupEventHandler(t, ctx, logger, nil, ops[0], false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -189,7 +190,7 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 	}
 	happyFlow := []string{
 		"successfully setup operator keys",
-		"setting validator controller",
+		"setting up validator controller",
 		"malformed event: failed to verify signature",
 		"processed events from block",
 	}

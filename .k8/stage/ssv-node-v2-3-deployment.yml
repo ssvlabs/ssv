@@ -110,9 +110,9 @@ spec:
         - name: UDP_PORT
           value: "12003"
         - name: DB_PATH
-          value: "./data/db-jato-v2"
+          value: "./data/db-holesky-stage"
         - name: NETWORK
-          value: "jato-v2-stage"
+          value: "holesky-stage"
         - name: DB_REPORTING
           value: "false"
         - name: METRICS_API_PORT

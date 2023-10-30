@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/operator/slot_ticker"
+	"github.com/bloxapp/ssv/operator/slotticker"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/registry/storage"
@@ -25,42 +25,40 @@ type RecipientController interface {
 
 // ControllerOptions holds the needed dependencies
 type ControllerOptions struct {
-	Ctx              context.Context
-	BeaconClient     beaconprotocol.BeaconNode
-	Network          networkconfig.NetworkConfig
-	ShareStorage     storage.Shares
-	RecipientStorage storage.Recipients
-	Ticker           slot_ticker.Ticker
-	OperatorData     *storage.OperatorData
+	Ctx                context.Context
+	BeaconClient       beaconprotocol.BeaconNode
+	Network            networkconfig.NetworkConfig
+	ShareStorage       storage.Shares
+	RecipientStorage   storage.Recipients
+	SlotTickerProvider slotticker.Provider
+	OperatorData       *storage.OperatorData
 }
 
 // recipientController implementation of RecipientController
 type recipientController struct {
-	ctx              context.Context
-	beaconClient     beaconprotocol.BeaconNode
-	network          networkconfig.NetworkConfig
-	shareStorage     storage.Shares
-	recipientStorage storage.Recipients
-	ticker           slot_ticker.Ticker
-	operatorData     *storage.OperatorData
+	ctx                context.Context
+	beaconClient       beaconprotocol.BeaconNode
+	network            networkconfig.NetworkConfig
+	shareStorage       storage.Shares
+	recipientStorage   storage.Recipients
+	slotTickerProvider slotticker.Provider
+	operatorData       *storage.OperatorData
 }
 
 func NewController(opts *ControllerOptions) *recipientController {
 	return &recipientController{
-		ctx:              opts.Ctx,
-		beaconClient:     opts.BeaconClient,
-		network:          opts.Network,
-		shareStorage:     opts.ShareStorage,
-		recipientStorage: opts.RecipientStorage,
-		ticker:           opts.Ticker,
-		operatorData:     opts.OperatorData,
+		ctx:                opts.Ctx,
+		beaconClient:       opts.BeaconClient,
+		network:            opts.Network,
+		shareStorage:       opts.ShareStorage,
+		recipientStorage:   opts.RecipientStorage,
+		slotTickerProvider: opts.SlotTickerProvider,
+		operatorData:       opts.OperatorData,
 	}
 }
 
 func (rc *recipientController) Start(logger *zap.Logger) {
-	tickerChan := make(chan phase0.Slot, 32)
-	rc.ticker.Subscribe(tickerChan)
-	rc.listenToTicker(logger, tickerChan)
+	rc.listenToTicker(logger)
 }
 
 // listenToTicker loop over the given slot channel
@@ -68,16 +66,19 @@ func (rc *recipientController) Start(logger *zap.Logger) {
 // in addition, submitting "same data" every slot is not efficient and can overload beacon node
 // instead we can subscribe to beacon node events and submit only when there is
 // a new fee recipient event (or new validator) was handled or when there is a syncing issue with beacon node
-func (rc *recipientController) listenToTicker(logger *zap.Logger, slots chan phase0.Slot) {
+func (rc *recipientController) listenToTicker(logger *zap.Logger) {
 	firstTimeSubmitted := false
-	for currentSlot := range slots {
+	ticker := rc.slotTickerProvider()
+	for {
+		<-ticker.Next()
+		slot := ticker.Slot()
 		// submit if first time or if first slot in epoch
-		if firstTimeSubmitted && uint64(currentSlot)%rc.network.SlotsPerEpoch() != (rc.network.SlotsPerEpoch()/2) {
+		if firstTimeSubmitted && uint64(slot)%rc.network.SlotsPerEpoch() != (rc.network.SlotsPerEpoch()/2) {
 			continue
 		}
 		firstTimeSubmitted = true
 
-		err := rc.prepareAndSubmit(logger, currentSlot)
+		err := rc.prepareAndSubmit(logger, slot)
 		if err != nil {
 			logger.Warn("could not submit proposal preparations", zap.Error(err))
 		}

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"fmt"
+
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 
 	"github.com/bloxapp/ssv/storage/basedb"

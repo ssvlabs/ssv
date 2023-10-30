@@ -29,9 +29,16 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
-// minimal att&block epoch/slot distance to protect slashing
-var minimalAttSlashingProtectionEpochDistance = phase0.Epoch(0)
-var minimalBlockSlashingProtectionSlotDistance = phase0.Slot(0)
+const (
+	// minSPAttestationEpochGap is the minimum epoch distance used for slashing protection in attestations.
+	// It defines the smallest allowable gap between the source and target epochs in an existing attestation
+	// and those in a new attestation, helping to prevent slashable offenses.
+	minSPAttestationEpochGap = phase0.Epoch(0)
+	// minSPProposalSlotGap is the minimum slot distance used for slashing protection in block proposals.
+	// It defines the smallest allowable gap between the current slot and the slot of a new block proposal,
+	// helping to prevent slashable offenses.
+	minSPProposalSlotGap = phase0.Slot(0)
+)
 
 type ethKeyManagerSigner struct {
 	wallet            core.Wallet
@@ -43,9 +50,17 @@ type ethKeyManagerSigner struct {
 	builderProposals  bool
 }
 
+// StorageProvider provides the underlying KeyManager storage.
+type StorageProvider interface {
+	ListAccounts() ([]core.ValidatorAccount, error)
+	RetrieveHighestAttestation(pubKey []byte) (*phase0.AttestationData, bool, error)
+	RetrieveHighestProposal(pubKey []byte) (phase0.Slot, bool, error)
+	BumpSlashingProtection(pubKey []byte) error
+}
+
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
 func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, network networkconfig.NetworkConfig, builderProposals bool, encryptionKey string) (spectypes.KeyManager, error) {
-	signerStore := NewSignerStorage(db, network.Beacon.GetNetwork(), logger)
+	signerStore := NewSignerStorage(db, network.Beacon, logger)
 	if encryptionKey != "" {
 		err := signerStore.SetEncryptionKey(encryptionKey)
 		if err != nil {
@@ -83,6 +98,18 @@ func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, network netw
 		slashingProtector: slashingProtector,
 		builderProposals:  builderProposals,
 	}, nil
+}
+
+func (km *ethKeyManagerSigner) ListAccounts() ([]core.ValidatorAccount, error) {
+	return km.storage.ListAccounts()
+}
+
+func (km *ethKeyManagerSigner) RetrieveHighestAttestation(pubKey []byte) (*phase0.AttestationData, bool, error) {
+	return km.storage.RetrieveHighestAttestation(pubKey)
+}
+
+func (km *ethKeyManagerSigner) RetrieveHighestProposal(pubKey []byte) (phase0.Slot, bool, error) {
+	return km.storage.RetrieveHighestProposal(pubKey)
 }
 
 func (km *ethKeyManagerSigner) SignBeaconObject(obj ssz.HashRoot, domain phase0.Domain, pk []byte, domainType phase0.DomainType) (spectypes.Signature, [32]byte, error) {
@@ -260,32 +287,14 @@ func (km *ethKeyManagerSigner) AddShare(shareKey *bls.SecretKey) error {
 		return errors.Wrap(err, "could not check share existence")
 	}
 	if acc == nil {
-		currentSlot := km.storage.Network().EstimatedCurrentSlot()
-		if err := km.saveMinimalSlashingProtection(shareKey.GetPublicKey().Serialize(), currentSlot); err != nil {
-			return errors.Wrap(err, "could not save minimal slashing protection")
+		if err := km.BumpSlashingProtection(shareKey.GetPublicKey().Serialize()); err != nil {
+			return errors.Wrap(err, "could not bump slashing protection")
 		}
 		if err := km.saveShare(shareKey); err != nil {
 			return errors.Wrap(err, "could not save share")
 		}
 	}
 
-	return nil
-}
-
-func (km *ethKeyManagerSigner) saveMinimalSlashingProtection(pk []byte, currentSlot phase0.Slot) error {
-	currentEpoch := km.storage.Network().EstimatedEpochAtSlot(currentSlot)
-	highestTarget := currentEpoch + minimalAttSlashingProtectionEpochDistance
-	highestSource := highestTarget - 1
-	highestProposal := currentSlot + minimalBlockSlashingProtectionSlotDistance
-
-	minAttData := minimalAttProtectionData(highestSource, highestTarget)
-
-	if err := km.storage.SaveHighestAttestation(pk, minAttData); err != nil {
-		return errors.Wrapf(err, "could not save minimal highest attestation for %s", string(pk))
-	}
-	if err := km.storage.SaveHighestProposal(pk, highestProposal); err != nil {
-		return errors.Wrapf(err, "could not save minimal highest proposal for %s", string(pk))
-	}
 	return nil
 }
 
@@ -315,6 +324,102 @@ func (km *ethKeyManagerSigner) RemoveShare(pubKey string) error {
 	return nil
 }
 
+// BumpSlashingProtection updates the slashing protection data for a given public key.
+func (km *ethKeyManagerSigner) BumpSlashingProtection(pubKey []byte) error {
+	currentSlot := km.storage.BeaconNetwork().EstimatedCurrentSlot()
+
+	// Update highest attestation data for slashing protection.
+	if err := km.updateHighestAttestation(pubKey, currentSlot); err != nil {
+		return err
+	}
+
+	// Update highest proposal data for slashing protection.
+	if err := km.updateHighestProposal(pubKey, currentSlot); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// updateHighestAttestation updates the highest attestation data for slashing protection.
+func (km *ethKeyManagerSigner) updateHighestAttestation(pubKey []byte, slot phase0.Slot) error {
+	// Retrieve the highest attestation data stored for the given public key.
+	retrievedHighAtt, found, err := km.RetrieveHighestAttestation(pubKey)
+	if err != nil {
+		return fmt.Errorf("could not retrieve highest attestation: %w", err)
+	}
+
+	currentEpoch := km.storage.BeaconNetwork().EstimatedEpochAtSlot(slot)
+	minimalSP := km.computeMinimalAttestationSP(currentEpoch)
+
+	// Check if the retrieved highest attestation data is valid and not outdated.
+	if found && retrievedHighAtt != nil {
+		if retrievedHighAtt.Source.Epoch >= minimalSP.Source.Epoch || retrievedHighAtt.Target.Epoch >= minimalSP.Target.Epoch {
+			return nil
+		}
+	}
+
+	// At this point, either the retrieved attestation data was not found, or it was outdated.
+	// In either case, we update it to the minimal slashing protection data.
+	if err := km.storage.SaveHighestAttestation(pubKey, minimalSP); err != nil {
+		return fmt.Errorf("could not save highest attestation: %w", err)
+	}
+
+	return nil
+}
+
+// updateHighestProposal updates the highest proposal slot for slashing protection.
+func (km *ethKeyManagerSigner) updateHighestProposal(pubKey []byte, slot phase0.Slot) error {
+	// Retrieve the highest proposal slot stored for the given public key.
+	retrievedHighProp, found, err := km.RetrieveHighestProposal(pubKey)
+	if err != nil {
+		return fmt.Errorf("could not retrieve highest proposal: %w", err)
+	}
+
+	minimalSPSlot := km.computeMinimalProposerSP(slot)
+
+	// Check if the retrieved highest proposal slot is valid and not outdated.
+	if found && retrievedHighProp != 0 {
+		if retrievedHighProp >= minimalSPSlot {
+			return nil
+		}
+	}
+
+	// At this point, either the retrieved proposal slot was not found, or it was outdated.
+	// In either case, we update it to the minimal slashing protection slot.
+	if err := km.storage.SaveHighestProposal(pubKey, minimalSPSlot); err != nil {
+		return fmt.Errorf("could not save highest proposal: %w", err)
+	}
+
+	return nil
+}
+
+// computeMinimalAttestationSP calculates the minimal safe attestation data for slashing protection.
+// It takes the current epoch as an argument and returns an AttestationData object with the minimal safe source and target epochs.
+func (km *ethKeyManagerSigner) computeMinimalAttestationSP(epoch phase0.Epoch) *phase0.AttestationData {
+	// Calculate the highest safe target epoch based on the current epoch and a predefined minimum distance.
+	highestTarget := epoch + minSPAttestationEpochGap
+	// The highest safe source epoch is one less than the highest target epoch.
+	highestSource := highestTarget - 1
+
+	// Return a new AttestationData object with the calculated source and target epochs.
+	return &phase0.AttestationData{
+		Source: &phase0.Checkpoint{
+			Epoch: highestSource,
+		},
+		Target: &phase0.Checkpoint{
+			Epoch: highestTarget,
+		},
+	}
+}
+
+// computeMinimalProposerSP calculates the minimal safe slot for a block proposal to avoid slashing.
+// It takes the current slot as an argument and returns the minimal safe slot.
+func (km *ethKeyManagerSigner) computeMinimalProposerSP(slot phase0.Slot) phase0.Slot {
+	// Calculate the highest safe proposal slot based on the current slot and a predefined minimum distance.
+	return slot + minSPProposalSlotGap
+}
+
 func (km *ethKeyManagerSigner) saveShare(shareKey *bls.SecretKey) error {
 	key, err := core.NewHDKeyFromPrivateKey(shareKey.Serialize(), "")
 	if err != nil {
@@ -325,18 +430,4 @@ func (km *ethKeyManagerSigner) saveShare(shareKey *bls.SecretKey) error {
 		return errors.Wrap(err, "could not save new account")
 	}
 	return nil
-}
-
-func minimalAttProtectionData(source, target phase0.Epoch) *phase0.AttestationData {
-	return &phase0.AttestationData{
-		BeaconBlockRoot: [32]byte{},
-		Source: &phase0.Checkpoint{
-			Epoch: source,
-			Root:  [32]byte{},
-		},
-		Target: &phase0.Checkpoint{
-			Epoch: target,
-			Root:  [32]byte{},
-		},
-	}
 }

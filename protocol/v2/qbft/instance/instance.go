@@ -66,7 +66,7 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Heigh
 		i.State.Height = height
 		i.metrics.StartStage()
 
-		i.config.GetTimer().TimeoutForRound(specqbft.FirstRound)
+		i.config.GetTimer().TimeoutForRound(height, specqbft.FirstRound)
 
 		logger = logger.With(
 			fields.Round(i.State.Round),
@@ -95,13 +95,9 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Heigh
 }
 
 func (i *Instance) Broadcast(logger *zap.Logger, msg *specqbft.SignedMessage) error {
-	// logger.Debug("Broadcast",
-	// 	zap.Any("MsgType", msg.Message.MsgType),
-	// 	fields.Round(msg.Message.Round),
-	// 	zap.Any("DataRound", msg.Message.DataRound),
-	// 	fields.Height(msg.Message.Height),
-	// )
-
+	if !i.CanProcessMessages() {
+		return errors.New("instance stopped processing messages")
+	}
 	byts, err := msg.Encode()
 	if err != nil {
 		return errors.Wrap(err, "could not encode message")

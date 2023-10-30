@@ -40,18 +40,32 @@ func (m *MockController) EXPECT() *MockControllerMockRecorder {
 	return m.recorder
 }
 
-// ActiveValidatorIndices mocks base method.
-func (m *MockController) ActiveValidatorIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
+// AllActiveIndices mocks base method.
+func (m *MockController) AllActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ActiveValidatorIndices", epoch)
+	ret := m.ctrl.Call(m, "AllActiveIndices", epoch)
 	ret0, _ := ret[0].([]phase0.ValidatorIndex)
 	return ret0
 }
 
-// ActiveValidatorIndices indicates an expected call of ActiveValidatorIndices.
-func (mr *MockControllerMockRecorder) ActiveValidatorIndices(epoch interface{}) *gomock.Call {
+// AllActiveIndices indicates an expected call of AllActiveIndices.
+func (mr *MockControllerMockRecorder) AllActiveIndices(epoch interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ActiveValidatorIndices", reflect.TypeOf((*MockController)(nil).ActiveValidatorIndices), epoch)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AllActiveIndices", reflect.TypeOf((*MockController)(nil).AllActiveIndices), epoch)
+}
+
+// CommitteeActiveIndices mocks base method.
+func (m *MockController) CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CommitteeActiveIndices", epoch)
+	ret0, _ := ret[0].([]phase0.ValidatorIndex)
+	return ret0
+}
+
+// CommitteeActiveIndices indicates an expected call of CommitteeActiveIndices.
+func (mr *MockControllerMockRecorder) CommitteeActiveIndices(epoch interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CommitteeActiveIndices", reflect.TypeOf((*MockController)(nil).CommitteeActiveIndices), epoch)
 }
 
 // ExecuteDuty mocks base method.
@@ -219,17 +233,17 @@ func (mr *MockControllerMockRecorder) StartValidators() *gomock.Call {
 }
 
 // StopValidator mocks base method.
-func (m *MockController) StopValidator(publicKey []byte) error {
+func (m *MockController) StopValidator(pubKey types.ValidatorPK) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "StopValidator", publicKey)
+	ret := m.ctrl.Call(m, "StopValidator", pubKey)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // StopValidator indicates an expected call of StopValidator.
-func (mr *MockControllerMockRecorder) StopValidator(publicKey interface{}) *gomock.Call {
+func (mr *MockControllerMockRecorder) StopValidator(pubKey interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopValidator", reflect.TypeOf((*MockController)(nil).StopValidator), publicKey)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopValidator", reflect.TypeOf((*MockController)(nil).StopValidator), pubKey)
 }
 
 // UpdateFeeRecipient mocks base method.

@@ -17,35 +17,80 @@ import (
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/duties/mocks"
-	mockslotticker "github.com/bloxapp/ssv/operator/slot_ticker/mocks"
+	"github.com/bloxapp/ssv/operator/slotticker"
+	mockslotticker "github.com/bloxapp/ssv/operator/slotticker/mocks"
 	mocknetwork "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon/mocks"
 )
 
-type mockSlotTicker struct {
-	event.Feed
+type MockSlotTicker interface {
+	Next() <-chan time.Time
+	Slot() phase0.Slot
+	Subscribe() chan phase0.Slot
 }
 
-func (m *mockSlotTicker) Subscribe(subscriber chan phase0.Slot) event.Subscription {
-	return m.Feed.Subscribe(subscriber)
+type mockSlotTicker struct {
+	slotChan chan phase0.Slot
+	timeChan chan time.Time
+	slot     phase0.Slot
+	mu       sync.Mutex
+}
+
+func NewMockSlotTicker() MockSlotTicker {
+	ticker := &mockSlotTicker{
+		slotChan: make(chan phase0.Slot),
+		timeChan: make(chan time.Time),
+	}
+	ticker.start()
+	return ticker
+}
+
+func (m *mockSlotTicker) start() {
+	go func() {
+		for slot := range m.slotChan {
+			m.mu.Lock()
+			m.slot = slot
+			m.mu.Unlock()
+			m.timeChan <- time.Now()
+		}
+	}()
+}
+
+func (m *mockSlotTicker) Next() <-chan time.Time {
+	return m.timeChan
+}
+
+func (m *mockSlotTicker) Slot() phase0.Slot {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.slot
+}
+
+func (m *mockSlotTicker) Subscribe() chan phase0.Slot {
+	return m.slotChan
+}
+
+type mockSlotTickerService struct {
+	event.Feed
 }
 
 func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *SlotValue) (
 	*Scheduler,
 	*zap.Logger,
-	*mockSlotTicker,
+	*mockSlotTickerService,
 	time.Duration,
 	context.CancelFunc,
 	*pool.ContextPool,
 ) {
 	ctrl := gomock.NewController(t)
-	timeout := 100 * time.Millisecond
+	// A 200ms timeout ensures the test passes, even with mockSlotTicker overhead.
+	timeout := 200 * time.Millisecond
 
 	ctx, cancel := context.WithCancel(context.Background())
 	logger := logging.TestLogger(t)
 
 	mockBeaconNode := mocks.NewMockBeaconNode(ctrl)
 	mockValidatorController := mocks.NewMockValidatorController(ctrl)
-	mockTicker := &mockSlotTicker{}
+	mockSlotService := &mockSlotTickerService{}
 	mockNetworkConfig := networkconfig.NetworkConfig{
 		Beacon: mocknetwork.NewMockBeaconNetwork(ctrl),
 	}
@@ -55,8 +100,12 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Slot
 		BeaconNode:          mockBeaconNode,
 		Network:             mockNetworkConfig,
 		ValidatorController: mockValidatorController,
-		Ticker:              mockTicker,
-		BuilderProposals:    false,
+		SlotTickerProvider: func() slotticker.SlotTicker {
+			ticker := NewMockSlotTicker()
+			mockSlotService.Subscribe(ticker.Subscribe())
+			return ticker
+		},
+		BuilderProposals: false,
 	}
 
 	s := NewScheduler(opts)
@@ -103,7 +152,7 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Slot
 		return s.Wait()
 	})
 
-	return s, logger, mockTicker, timeout, cancel, schedulerPool
+	return s, logger, mockSlotService, timeout, cancel, schedulerPool
 }
 
 func setExecuteDutyFunc(s *Scheduler, executeDutiesCall chan []*spectypes.Duty, executeDutiesCallSize int) {
@@ -199,7 +248,7 @@ func TestScheduler_Run(t *testing.T) {
 
 	mockBeaconNode := mocks.NewMockBeaconNode(ctrl)
 	mockValidatorController := mocks.NewMockValidatorController(ctrl)
-	mockTicker := mockslotticker.NewMockTicker(ctrl)
+	mockTicker := mockslotticker.NewMockSlotTicker(ctrl)
 	// create multiple mock duty handlers
 	mockDutyHandler1 := NewMockdutyHandler(ctrl)
 	mockDutyHandler2 := NewMockdutyHandler(ctrl)
@@ -209,8 +258,10 @@ func TestScheduler_Run(t *testing.T) {
 		BeaconNode:          mockBeaconNode,
 		Network:             networkconfig.TestNetwork,
 		ValidatorController: mockValidatorController,
-		Ticker:              mockTicker,
 		BuilderProposals:    false,
+		SlotTickerProvider: func() slotticker.SlotTicker {
+			return mockTicker
+		},
 	}
 
 	s := NewScheduler(opts)
@@ -218,7 +269,7 @@ func TestScheduler_Run(t *testing.T) {
 	s.handlers = []dutyHandler{mockDutyHandler1, mockDutyHandler2}
 
 	mockBeaconNode.EXPECT().Events(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
-	mockTicker.EXPECT().Subscribe(gomock.Any()).Return(nil).Times(len(s.handlers) + 1)
+	mockTicker.EXPECT().Next().Return(nil).AnyTimes()
 
 	// setup mock duty handler expectations
 	for _, mockDutyHandler := range s.handlers {
@@ -248,7 +299,7 @@ func TestScheduler_Regression_IndiciesChangeStuck(t *testing.T) {
 
 	mockBeaconNode := mocks.NewMockBeaconNode(ctrl)
 	mockValidatorController := mocks.NewMockValidatorController(ctrl)
-	mockTicker := mockslotticker.NewMockTicker(ctrl)
+	mockTicker := mockslotticker.NewMockSlotTicker(ctrl)
 	// create multiple mock duty handlers
 
 	opts := &SchedulerOptions{
@@ -256,8 +307,10 @@ func TestScheduler_Regression_IndiciesChangeStuck(t *testing.T) {
 		BeaconNode:          mockBeaconNode,
 		Network:             networkconfig.TestNetwork,
 		ValidatorController: mockValidatorController,
-		Ticker:              mockTicker,
-		IndicesChg:          make(chan struct{}),
+		SlotTickerProvider: func() slotticker.SlotTicker {
+			return mockTicker
+		},
+		IndicesChg: make(chan struct{}),
 
 		BuilderProposals: true,
 	}
@@ -267,7 +320,7 @@ func TestScheduler_Regression_IndiciesChangeStuck(t *testing.T) {
 	// add multiple mock duty handlers
 	s.handlers = []dutyHandler{NewValidatorRegistrationHandler()}
 	mockBeaconNode.EXPECT().Events(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
-	mockTicker.EXPECT().Subscribe(gomock.Any()).Return(nil).Times(len(s.handlers) + 1)
+	mockTicker.EXPECT().Next().Return(nil).AnyTimes()
 	err := s.Start(ctx, logger)
 	require.NoError(t, err)
 

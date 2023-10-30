@@ -229,7 +229,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": false,
-          "expr": "count(ssv_qbft_instance_round{instance=~\"$instance.*\", roleType=\"ATTESTER\"})",
+          "expr": "count(ssv_qbft_instance_round{instance=~\"$instance.*\", roleType=\"ATTESTER\"} > 0)",
           "hide": false,
           "instant": true,
           "interval": "",
@@ -268,7 +268,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": false,
-          "expr": "count_values(\"round\", ssv_qbft_instance_round{instance=~\"$instance.*\", roleType=\"ATTESTER\"})",
+          "expr": "count_values(\"round\", ssv_qbft_instance_round{instance=~\"$instance.*\", roleType=\"ATTESTER\"} > 0)",
           "hide": false,
           "instant": true,
           "interval": "",
@@ -2033,7 +2033,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": false,
-          "expr": "count(ssv_qbft_instance_round{instance=~\"$instance.*\", roleType=\"PROPOSER\"})",
+          "expr": "count(ssv_qbft_instance_round{instance=~\"$instance.*\", roleType=\"PROPOSER\"} > 0)",
           "hide": false,
           "instant": true,
           "interval": "",
@@ -2072,7 +2072,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": false,
-          "expr": "count_values(\"round\", ssv_qbft_instance_round{instance=~\"$instance.*\", roleType=\"PROPOSER\"})",
+          "expr": "count_values(\"round\", ssv_qbft_instance_round{instance=~\"$instance.*\", roleType=\"PROPOSER\"} > 0)",
           "hide": false,
           "instant": true,
           "interval": "",
@@ -3405,7 +3405,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": false,
-          "expr": "count(ssv_qbft_instance_round{instance=~\"$instance.*\", roleType=\"AGGREGATOR\"})",
+          "expr": "count(ssv_qbft_instance_round{instance=~\"$instance.*\", roleType=\"AGGREGATOR\"} > 0)",
           "hide": false,
           "instant": true,
           "interval": "",
@@ -3444,7 +3444,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": false,
-          "expr": "count_values(\"round\", ssv_qbft_instance_round{instance=~\"$instance.*\", roleType=\"AGGREGATOR\"})",
+          "expr": "count_values(\"round\", ssv_qbft_instance_round{instance=~\"$instance.*\", roleType=\"AGGREGATOR\"} > 0)",
           "hide": false,
           "instant": true,
           "interval": "",
@@ -4777,7 +4777,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": false,
-          "expr": "count(ssv_qbft_instance_round{instance=~\"$instance.*\", roleType=\"SYNC_COMMITTEE\"})",
+          "expr": "count(ssv_qbft_instance_round{instance=~\"$instance.*\", roleType=\"SYNC_COMMITTEE\"} > 0)",
           "hide": false,
           "instant": true,
           "interval": "",
@@ -4816,7 +4816,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": false,
-          "expr": "count_values(\"round\", ssv_qbft_instance_round{instance=~\"$instance.*\", roleType=\"SYNC_COMMITTEE\"})",
+          "expr": "count_values(\"round\", ssv_qbft_instance_round{instance=~\"$instance.*\", roleType=\"SYNC_COMMITTEE\"} > 0)",
           "hide": false,
           "instant": true,
           "interval": "",
@@ -5969,7 +5969,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": false,
-          "expr": "count(ssv_qbft_instance_round{instance=~\"$instance.*\", roleType=\"SYNC_COMMITTEE_CONTRIBUTION\"})",
+          "expr": "count(ssv_qbft_instance_round{instance=~\"$instance.*\", roleType=\"SYNC_COMMITTEE_CONTRIBUTION\"} > 0)",
           "hide": false,
           "instant": true,
           "interval": "",
@@ -6008,7 +6008,7 @@
             "uid": "eXfXfqH7z"
           },
           "exemplar": false,
-          "expr": "count_values(\"round\", ssv_qbft_instance_round{instance=~\"$instance.*\", roleType=\"SYNC_COMMITTEE_CONTRIBUTION\"})",
+          "expr": "count_values(\"round\", ssv_qbft_instance_round{instance=~\"$instance.*\", roleType=\"SYNC_COMMITTEE_CONTRIBUTION\"} > 0)",
           "hide": false,
           "instant": true,
           "interval": "",
