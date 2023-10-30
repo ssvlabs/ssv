@@ -97,10 +97,10 @@ func MsgID() MsgIDFunc {
 		}
 		var signedMsg SignedSSVMessage
 		if err := json.Unmarshal(msg, &signedMsg); err == nil {
-			metricMsgIDCalls.WithLabelValues("Decoded")
+			metricMsgIDCalls.WithLabelValues("Decoded").Inc()
 			msg = signedMsg.Message
 		}
-		metricMsgIDCalls.WithLabelValues("NotDecoded")
+		metricMsgIDCalls.WithLabelValues("NotDecoded").Inc()
 		b := make([]byte, 12)
 		binary.LittleEndian.PutUint64(b, xxhash.Sum64(msg))
 		return string(b)
