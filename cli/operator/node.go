@@ -65,7 +65,7 @@ type KeyStore struct {
 }
 
 type MessageValidation struct {
-	VerifySignatures bool `yaml:"VerifySignatures" env:"MESSAGE_VALIDATION_VERIFY_SIGNATURES" env-default:"false" env-description:"Experimental feature to verify signatures in pubsub's message validation instead of in consensus protocol."`
+	VerifySignatures bool `yaml:"VerifySignatures" env:"MESSAGE_VALIDATION_VERIFY_SIGNATURES" env-default:"true" env-description:"Experimental feature to verify signatures in pubsub's message validation instead of in consensus protocol."`
 }
 
 type config struct {
