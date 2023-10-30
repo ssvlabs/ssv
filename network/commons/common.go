@@ -13,6 +13,9 @@ import (
 	"github.com/cespare/xxhash/v2"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/protocol"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"go.uber.org/zap"
 
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 )
@@ -75,6 +78,17 @@ func ValidatorSubnet(validatorPKHex string) int {
 // MsgIDFunc is the function that maps a message to a msg_id
 type MsgIDFunc func(msg []byte) string
 
+var metricMsgIDCalls = promauto.NewCounterVec(prometheus.CounterOpts{
+	Name: "ssv-msg-id-calls",
+	Help: "",
+}, []string{"with_signature"})
+
+func init() {
+	if err := prometheus.Register(metricMsgIDCalls); err != nil {
+		zap.L().Debug("could not register prometheus collector")
+	}
+}
+
 // MsgID returns msg_id for the given message
 func MsgID() MsgIDFunc {
 	return func(msg []byte) string {
@@ -83,8 +97,10 @@ func MsgID() MsgIDFunc {
 		}
 		var signedMsg SignedSSVMessage
 		if err := json.Unmarshal(msg, &signedMsg); err == nil {
+			metricMsgIDCalls.WithLabelValues("Decoded")
 			msg = signedMsg.Message
 		}
+		metricMsgIDCalls.WithLabelValues("NotDecoded")
 		b := make([]byte, 12)
 		binary.LittleEndian.PutUint64(b, xxhash.Sum64(msg))
 		return string(b)
