@@ -56,11 +56,11 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 		return msgSlot, err
 	}
 
-	if mv.verifySignatures {
-		if err := mv.validPartialSignatures(share, signedMsg); err != nil {
-			return msgSlot, err
-		}
-	}
+	//if mv.verifySignatures {
+	//	if err := mv.validPartialSignatures(share, signedMsg); err != nil {
+	//		return msgSlot, err
+	//	}
+	//}
 
 	if signerState == nil {
 		signerState = state.CreateSignerState(signedMsg.Signer)
