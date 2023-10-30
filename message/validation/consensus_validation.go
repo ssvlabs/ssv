@@ -4,7 +4,6 @@ package validation
 
 import (
 	"bytes"
-	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -116,15 +115,6 @@ func (mv *messageValidator) validateConsensusMessage(
 		}
 	}
 
-	if mv.verifySignatures && mv.isDecidedMessage(signedMsg) && (mv.verifyNonCommitteeSignatures || mv.inCommittee(share)) {
-		if err := ssvtypes.VerifyByOperators(signedMsg.Signature, signedMsg, mv.netCfg.Domain, spectypes.QBFTSignatureType, share.Committee); err != nil {
-			signErr := ErrInvalidSignature
-			signErr.innerErr = err
-			signErr.got = fmt.Sprintf("domain %v from %v", hex.EncodeToString(mv.netCfg.Domain[:]), hex.EncodeToString(share.ValidatorPubKey))
-			return consensusDescriptor, msgSlot, signErr
-		}
-	}
-
 	for _, signer := range signedMsg.Signers {
 		signerState := state.GetSignerState(signer)
 		if signerState == nil {
@@ -178,7 +168,7 @@ func (mv *messageValidator) validateJustifications(
 	}
 
 	if signedMsg.Message.MsgType == specqbft.ProposalMsgType {
-		cfg := newQBFTConfig(mv.netCfg.Domain, mv.verifySignatures)
+		cfg := newQBFTConfig(mv.netCfg.Domain, false)
 
 		if err := instance.IsProposalJustification(
 			cfg,

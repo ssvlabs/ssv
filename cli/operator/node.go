@@ -184,8 +184,6 @@ var StartNodeCmd = &cobra.Command{
 			validation.WithMetrics(metricsReporter),
 			validation.WithDutyStore(dutyStore),
 			validation.WithOwnOperatorID(operatorData.ID),
-			validation.WithSignatureVerification(cfg.MessageValidation.VerifySignatures),
-			validation.WithNonCommitteeSignatureVerification(cfg.SSVOptions.ValidatorOptions.Exporter),
 			validation.WithOperatorPrivateKey(cfg.P2pNetworkConfig.OperatorPrivateKey),
 		)
 
@@ -193,7 +191,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.MessageValidator = messageValidator
 		cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
 		// if signature check is enabled in message validation then it's disabled in validator controller and vice versa
-		cfg.SSVOptions.ValidatorOptions.VerifySignatures = !cfg.MessageValidation.VerifySignatures
+		cfg.SSVOptions.ValidatorOptions.VerifySignatures = true
 
 		p2pNetwork := setupP2P(logger, db)
 
