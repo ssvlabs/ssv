@@ -32,7 +32,7 @@ var (
 	metricsRouterIncoming = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:network:router:in",
 		Help: "Counts incoming messages",
-	}, []string{"identifier", "mt"})
+	}, []string{"mt"})
 )
 
 func init() {
