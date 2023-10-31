@@ -90,8 +90,8 @@ After successfully configuring a Prometheus service, and [adding it as a data so
 
 Below, an example of two dashboards, respectively monitoring the SSV Node and the performance of an Operator:
 
-* [SSV Node monitoring](grafana/dashboard_single_ssv_node.json)
-* [Operator performance monitoring](grafana/dashboard_single_ssv_operator_performance.json)
+* [SSV Node monitoring](grafana/dashboard_ssv_node.json)
+* [Operator performance monitoring](grafana/dashboard_ssv_operator_performance.json.json)
 
 > It is very important **NOT** to use each JSON template "as is". They should be used as templates, and apply a few important changes to before importing them in Grafana:
 > * search for the `instance` variable in the `templating` section and replace `<SSV_NODE_URL>` with the `targets` variables used in the `prometheus.yml` configuration file, which point to the node container names
