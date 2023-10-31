@@ -1,0 +1,127 @@
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: boot-node-holesky
+  namespace: REPLACE_NAMESPACE
+spec:
+  hosts:
+  - "boot-node-holesky.REPLACE_DOMAIN_SUFFIX"
+  gateways:
+  - boot-node-holesky
+  http:
+  - route:
+    - destination:
+        host: boot-node-holesky-svc
+        port:
+          number: 5003
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: boot-node-holesky
+  namespace: REPLACE_NAMESPACE
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "boot-node-holesky.REPLACE_DOMAIN_SUFFIX"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: boot-node-holesky-svc
+  namespace: REPLACE_NAMESPACE
+  labels:
+    app: boot-node-holesky
+spec:
+  type: ClusterIP
+  ports:
+    - port: 4003
+      protocol: UDP
+      targetPort: 4003
+      name: port-4003
+    - port: 5003
+      protocol: TCP
+      targetPort: 5003
+      name: port-5003
+  selector:
+    app: boot-node-holesky
+---
+apiVersion: REPLACE_API_VERSION 
+kind: Deployment
+metadata:
+  labels:
+    app: boot-node-holesky
+  name: boot-node-holesky
+  namespace: REPLACE_NAMESPACE
+spec:
+  replicas: REPLACE_REPLICAS
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: boot-node-holesky
+  template:
+    metadata:
+      labels:
+        app: boot-node-holesky
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: kubernetes.io/role
+                operator: In
+                values:
+                - ssv-boot-node
+      containers:
+      - name: boot-node-holesky
+        image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG 
+        imagePullPolicy: Always
+        command: ["make", "start-boot-node"]
+        ports:
+        - containerPort: 5003
+          name: port-5003      
+          hostPort: 5003
+        env:
+          - name: CONFIG_PATH
+            value: /config/config.example.yaml
+          - name: BOOT_NODE_PRIVATE_KEY
+            valueFrom:
+              secretKeyRef:
+                name: config-secrets
+                key: boot_node_holesky_private_key
+          - name: BOOT_NODE_EXTERNAL_IP
+            valueFrom:
+              secretKeyRef:
+                name: config-secrets
+                key: boot_node_holesky_external_ip
+          - name: TCP_PORT
+            value: "5003"
+          - name: UDP_PORT
+            value: "4003"
+        volumeMounts:
+        - mountPath: /data/bootnode
+          name: boot-node-holesky
+        - mountPath: /data/config.yaml
+          name: boot-node-holesky-cm
+      volumes:
+      - name: boot-node-holesky
+        persistentVolumeClaim:
+          claimName: boot-node-holesky
+      - configMap:
+          defaultMode: 420
+          name: boot-node-holesky-cm
+        name: boot-node-holesky-cm
+      tolerations:
+      - effect: NoSchedule
+        key: kubernetes.io/role
+        operator: Exists         
+      hostNetwork: true
