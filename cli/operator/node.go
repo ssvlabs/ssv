@@ -105,7 +105,6 @@ var StartNodeCmd = &cobra.Command{
 		defer logging.CapturePanic(logger)
 
 		metricsReporter := metricsreporter.New(
-			cmd.Context(),
 			metricsreporter.WithLogger(logger),
 		)
 

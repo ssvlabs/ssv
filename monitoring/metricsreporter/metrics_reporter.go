@@ -1,7 +1,6 @@
 package metricsreporter
 
 import (
-	"context"
 	"crypto/sha256"
 	"fmt"
 	"strconv"
@@ -15,7 +14,6 @@ import (
 	"go.uber.org/zap"
 
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
-	"github.com/bloxapp/ssv/utils/async"
 )
 
 // TODO: implement all methods
@@ -153,7 +151,7 @@ type MetricsReporter struct {
 	logger *zap.Logger
 }
 
-func New(ctx context.Context, opts ...Option) *MetricsReporter {
+func New(opts ...Option) *MetricsReporter {
 	mr := &MetricsReporter{
 		logger: zap.NewNop(),
 	}
@@ -199,12 +197,6 @@ func New(ctx context.Context, opts ...Option) *MetricsReporter {
 			)
 		}
 	}
-
-	// reset  metric every hour because it can grow infinitely
-	async.Interval(ctx, 8*time.Hour, func() {
-		messagesReceivedFromPeer.Reset()
-		messagesReceivedTotal.Reset()
-	})
 
 	return &MetricsReporter{}
 }
