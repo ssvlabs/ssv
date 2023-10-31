@@ -40,7 +40,7 @@ Build stage Docker image:
     - docker tag $IMAGE_NAME:$CI_COMMIT_SHA $DOCKER_REPO_INFRA_STAGE:$CI_COMMIT_SHA
     - $DOCKER_LOGIN_TO_INFRA_STAGE_REPO && docker push $DOCKER_REPO_INFRA_STAGE:$CI_COMMIT_SHA
   only:
-    - stage
+    - fix-validator-registration-duty-start
 
 Deploy nodes to stage:
   stage: deploy
@@ -59,7 +59,7 @@ Deploy nodes to stage:
     # |  Deploy SSV nodes  |
     # +--------------------+
     - .k8/stage/scripts/deploy-cluster-1--4.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
-    - .k8/stage/scripts/deploy-cluster-5--8.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
+    # - .k8/stage/scripts/deploy-cluster-5--8.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
     # - .k8/stage/scripts/deploy-cluster-9--12.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
     # - .k8/stage/scripts/deploy-cluster-13--16.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
     #
@@ -69,7 +69,7 @@ Deploy nodes to stage:
     # █▓▒░ Keep commented unless you're testing the bootnode ░▒▓█
     # - .k8/stage/scripts/deploy-boot-nodes.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE 1000m 1000m
   only:
-    - stage
+    - fix-validator-registration-duty-start
 
 Deploy exporter to stage:
   stage: deploy
