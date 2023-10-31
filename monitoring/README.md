@@ -93,16 +93,8 @@ Below, an example of two dashboards, respectively monitoring the SSV Node and th
 * [SSV Node monitoring](grafana/dashboard_ssv_node.json)
 * [Operator performance monitoring](grafana/dashboard_ssv_operator_performance.json.json)
 
-> It is very important **NOT** to use each JSON template "as is". They should be used as templates, and apply a few important changes to before importing them in Grafana:
-> * search for the `instance` variable in the `templating` section and replace `<SSV_NODE_URL>` with the `targets` variables used in the `prometheus.yml` configuration file, which point to the node container names
-> * identify the occurrences `<PROMETHEUS_SOURCE_ID` in all the `datasource` object instances in the file as shown below, and replace them with the uuid of the Prometheus datasource added to Grafana.
+The dashboards leverage Grafana templating so that one can select different datasources, the Grafana SSV operators are inferred from the Prometheus metrics, so if you spin up more SSV operators, they will show up on the dashboard seamlessly. 
 
-```json
-"datasource": {
-  "type": "prometheus",
-  "uid": "<PROMETHEUS_SOURCE_ID>"
-},
-```
 --- 
 ## Profiling
 
