@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -76,6 +77,7 @@ type p2pNetwork struct {
 	nodeStorage        operatorstorage.Storage
 	operatorPKCache    sync.Map
 	operatorPrivateKey *rsa.PrivateKey
+	operatorID         spectypes.OperatorID
 }
 
 // New creates a new p2p network
@@ -97,6 +99,7 @@ func New(logger *zap.Logger, cfg *Config) network.P2PNetwork {
 		nodeStorage:        cfg.NodeStorage,
 		operatorPKCache:    sync.Map{},
 		operatorPrivateKey: cfg.OperatorPrivateKey,
+		operatorID:         cfg.OperatorID,
 	}
 }
 

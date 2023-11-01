@@ -9,10 +9,9 @@ import (
 	"crypto"
 	"crypto/rsa"
 	"crypto/sha256"
-	"crypto/x509"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
 	"strings"
 	"sync"
@@ -34,10 +33,11 @@ import (
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
+	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
 const (
@@ -106,7 +106,7 @@ type messageValidator struct {
 	metrics            metrics
 	netCfg             networkconfig.NetworkConfig
 	index              sync.Map
-	shareStorage       registrystorage.Shares
+	nodeStorage        operatorstorage.Storage
 	peersIndex         peers.PeerInfoIndex
 	dutyStore          *dutystore.Store
 	ownOperatorID      spectypes.OperatorID
@@ -159,10 +159,10 @@ func WithOwnOperatorID(id spectypes.OperatorID) Option {
 	}
 }
 
-// WithShareStorage sets the share storage for the messageValidator.
-func WithShareStorage(shareStorage registrystorage.Shares) Option {
+// WithNodeStorage sets the node storage for the messageValidator.
+func WithNodeStorage(nodeStorage operatorstorage.Storage) Option {
 	return func(mv *messageValidator) {
-		mv.shareStorage = shareStorage
+		mv.nodeStorage = nodeStorage
 	}
 }
 
@@ -339,29 +339,30 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 		messageData = decodedSignedSSVMessage.Message
 		messageHash := sha256.Sum256(messageData)
 
-		block, rest := pem.Decode(decodedSignedSSVMessage.PubKey)
-		if block == nil {
-			e := ErrRSADecryption
-			e.innerErr = fmt.Errorf("block is nil")
+		operator, found, err := mv.nodeStorage.GetOperatorData(nil, decodedSignedSSVMessage.OperatorID)
+		if err != nil {
+			e := ErrOperatorNotFound
+			e.got = decodedSignedSSVMessage.OperatorID
+			e.innerErr = err
 			return nil, Descriptor{}, e
 		}
-		if len(rest) != 0 {
-			e := ErrRSADecryption
-			e.innerErr = fmt.Errorf("extra data after PEM decoding")
+		if !found {
+			e := ErrOperatorNotFound
+			e.got = decodedSignedSSVMessage.OperatorID
 			return nil, Descriptor{}, e
 		}
 
-		pub, err := x509.ParsePKIXPublicKey(block.Bytes)
+		operatorPubKey, err := base64.StdEncoding.DecodeString(string(operator.PublicKey))
 		if err != nil {
 			e := ErrRSADecryption
-			e.innerErr = fmt.Errorf("parse public key: %w", err)
+			e.innerErr = fmt.Errorf("decode public key: %w", err)
 			return nil, Descriptor{}, e
 		}
 
-		rsaPubKey, ok := pub.(*rsa.PublicKey)
-		if !ok {
+		rsaPubKey, err := rsaencryption.ConvertPemToPublicKey(operatorPubKey)
+		if err != nil {
 			e := ErrRSADecryption
-			e.innerErr = fmt.Errorf("unexpected public key type")
+			e.innerErr = fmt.Errorf("convert PEM: %w", err)
 			return nil, Descriptor{}, e
 		}
 
@@ -457,8 +458,8 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 	}
 
 	var share *ssvtypes.SSVShare
-	if mv.shareStorage != nil {
-		share = mv.shareStorage.Get(nil, publicKey.Serialize())
+	if mv.nodeStorage != nil {
+		share = mv.nodeStorage.Shares().Get(nil, publicKey.Serialize())
 		if share == nil {
 			e := ErrUnknownValidator
 			e.got = publicKey.SerializeToHexStr()
@@ -495,7 +496,7 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 
 	descriptor.SSVMessageType = ssvMessage.MsgType
 
-	if mv.shareStorage != nil {
+	if mv.nodeStorage != nil {
 		switch ssvMessage.MsgType {
 		case spectypes.SSVConsensusMsgType:
 			if len(msg.Data) > maxConsensusMsgSize {

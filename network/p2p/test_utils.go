@@ -176,7 +176,7 @@ func NewLocalNet(ctx context.Context, logger *zap.Logger, n int, useDiscv5 bool)
 }
 
 // NewNetConfig creates a new config for tests
-func NewNetConfig(keys testing.NodeKeys, operatorID string, bn *discovery.Bootnode, tcpPort, udpPort, maxPeers int) *Config {
+func NewNetConfig(keys testing.NodeKeys, operatorPubKey string, bn *discovery.Bootnode, tcpPort, udpPort, maxPeers int) *Config {
 	bns := ""
 	discT := "discv5"
 	if bn != nil {
@@ -197,7 +197,7 @@ func NewNetConfig(keys testing.NodeKeys, operatorID string, bn *discovery.Bootno
 		PubSubTrace:        false,
 		NetworkPrivateKey:  keys.NetKey,
 		OperatorPrivateKey: keys.OperatorKey,
-		OperatorID:         operatorID,
+		OperatorPublicKey:  operatorPubKey,
 		UserAgent:          ua,
 		Discovery:          discT,
 		Permissioned: func() bool {

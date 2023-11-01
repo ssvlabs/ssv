@@ -60,7 +60,6 @@ func TestRSAUsage(t *testing.T) {
 	signedSSVMessage := &commons.SignedSSVMessage{
 		Message:   message,
 		Signature: signature,
-		PubKey:    pubPEM,
 	}
 
 	encodedSignedSSVMessage, err := json.Marshal(signedSSVMessage)
@@ -72,7 +71,7 @@ func TestRSAUsage(t *testing.T) {
 
 	messageHash := sha256.Sum256(decodedSignedSSVMessage.Message)
 
-	block, rest := pem.Decode(decodedSignedSSVMessage.PubKey)
+	block, rest := pem.Decode(pubPEM)
 	require.NotNil(t, block)
 	require.Empty(t, rest, "extra data after PEM decoding")
 
