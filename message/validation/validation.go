@@ -30,7 +30,6 @@ import (
 
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
@@ -102,15 +101,13 @@ type MessageValidator interface {
 }
 
 type messageValidator struct {
-	logger             *zap.Logger
-	metrics            metrics
-	netCfg             networkconfig.NetworkConfig
-	index              sync.Map
-	nodeStorage        operatorstorage.Storage
-	peersIndex         peers.PeerInfoIndex
-	dutyStore          *dutystore.Store
-	ownOperatorID      spectypes.OperatorID
-	operatorPrivateKey *rsa.PrivateKey
+	logger        *zap.Logger
+	metrics       metrics
+	netCfg        networkconfig.NetworkConfig
+	index         sync.Map
+	nodeStorage   operatorstorage.Storage
+	dutyStore     *dutystore.Store
+	ownOperatorID spectypes.OperatorID
 }
 
 // NewMessageValidator returns a new MessageValidator with the given network configuration and options.
@@ -163,20 +160,6 @@ func WithOwnOperatorID(id spectypes.OperatorID) Option {
 func WithNodeStorage(nodeStorage operatorstorage.Storage) Option {
 	return func(mv *messageValidator) {
 		mv.nodeStorage = nodeStorage
-	}
-}
-
-// WithPeerInfoIndex sets the peer info index for the messageValidator.
-func WithPeerInfoIndex(index peers.PeerInfoIndex) Option {
-	return func(mv *messageValidator) {
-		mv.peersIndex = index
-	}
-}
-
-// WithOperatorPrivateKey sets operator private key.
-func WithOperatorPrivateKey(privKey *rsa.PrivateKey) Option {
-	return func(mv *messageValidator) {
-		mv.operatorPrivateKey = privKey
 	}
 }
 
