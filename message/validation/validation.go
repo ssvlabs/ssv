@@ -287,6 +287,11 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 
 	encodedSSVMessage := pMsg.GetData()
 	messageData, operatorID, signature, err := commons.DecodeSignedSSVMessage(encodedSSVMessage)
+	if err != nil {
+		e := ErrMalformedSignedMessage
+		e.innerErr = err
+		return nil, Descriptor{}, e
+	}
 
 	rsaPubKey, ok := mv.operatorPubKeyCache.Get(operatorID)
 	if !ok {
