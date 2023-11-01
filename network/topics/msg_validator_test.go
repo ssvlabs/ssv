@@ -43,7 +43,7 @@ func TestMsgValidator(t *testing.T) {
 	}
 	require.NoError(t, ns.Shares().Save(nil, share))
 
-	mv := validation.NewMessageValidator(networkconfig.TestNetwork, validation.WithNodeStorage(ns))
+	mv := validation.NewMessageValidator(networkconfig.TestNetwork, validation.WithShareStorage(ns.Shares()))
 	require.NotNil(t, mv)
 
 	slot := networkconfig.TestNetwork.Beacon.GetBeaconNetwork().EstimatedCurrentSlot()

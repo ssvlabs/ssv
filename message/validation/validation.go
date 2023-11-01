@@ -34,10 +34,10 @@ import (
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
-	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
+	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )
 
 const (
@@ -106,7 +106,7 @@ type messageValidator struct {
 	metrics            metrics
 	netCfg             networkconfig.NetworkConfig
 	index              sync.Map
-	nodeStorage        operatorstorage.Storage
+	shareStorage       registrystorage.Shares
 	peersIndex         peers.PeerInfoIndex
 	dutyStore          *dutystore.Store
 	ownOperatorID      spectypes.OperatorID
@@ -159,10 +159,10 @@ func WithOwnOperatorID(id spectypes.OperatorID) Option {
 	}
 }
 
-// WithNodeStorage sets the node storage for the messageValidator.
-func WithNodeStorage(nodeStorage operatorstorage.Storage) Option {
+// WithShareStorage sets the share storage for the messageValidator.
+func WithShareStorage(shareStorage registrystorage.Shares) Option {
 	return func(mv *messageValidator) {
-		mv.nodeStorage = nodeStorage
+		mv.shareStorage = shareStorage
 	}
 }
 
@@ -336,20 +336,7 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 		messageData = decodedSignedSSVMessage.Message
 		messageHash := sha256.Sum256(messageData)
 
-		operator, found, err := mv.nodeStorage.GetOperatorData(nil, decodedSignedSSVMessage.OperatorID)
-		if err != nil {
-			e := ErrOperatorNotFound
-			e.got = decodedSignedSSVMessage.OperatorID
-			e.innerErr = err
-			return nil, Descriptor{}, e
-		}
-		if !found {
-			e := ErrOperatorNotFound
-			e.got = decodedSignedSSVMessage.OperatorID
-			return nil, Descriptor{}, e
-		}
-
-		block, rest := pem.Decode(operator.PublicKey)
+		block, rest := pem.Decode(decodedSignedSSVMessage.PubKey)
 		if block == nil {
 			e := ErrRSADecryption
 			e.innerErr = fmt.Errorf("block is nil")
@@ -467,8 +454,8 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 	}
 
 	var share *ssvtypes.SSVShare
-	if mv.nodeStorage != nil {
-		share = mv.nodeStorage.Shares().Get(nil, publicKey.Serialize())
+	if mv.shareStorage != nil {
+		share = mv.shareStorage.Get(nil, publicKey.Serialize())
 		if share == nil {
 			e := ErrUnknownValidator
 			e.got = publicKey.SerializeToHexStr()
@@ -505,7 +492,7 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 
 	descriptor.SSVMessageType = ssvMessage.MsgType
 
-	if mv.nodeStorage != nil {
+	if mv.shareStorage != nil {
 		switch ssvMessage.MsgType {
 		case spectypes.SSVConsensusMsgType:
 			if len(msg.Data) > maxConsensusMsgSize {
