@@ -8,7 +8,6 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/hex"
-	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"sync"
@@ -37,9 +36,9 @@ func TestRSAUsage(t *testing.T) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
-	message := []byte("message")
+	testMessage := []byte("message")
 
-	hash := sha256.Sum256(message)
+	hash := sha256.Sum256(testMessage)
 
 	signature, err := rsa.SignPKCS1v15(nil, privateKey, crypto.SHA256, hash[:])
 	require.NoError(t, err)
@@ -57,19 +56,15 @@ func TestRSAUsage(t *testing.T) {
 		Bytes: pubKeyBytes,
 	})
 
-	signedSSVMessage := &commons.SignedSSVMessage{
-		Message:   message,
-		Signature: signature,
-	}
+	const operatorID = spectypes.OperatorID(0x12345678)
+	encodedSignedSSVMessage := commons.EncodeSignedSSVMessage(testMessage, operatorID, signature)
 
-	encodedSignedSSVMessage, err := json.Marshal(signedSSVMessage)
+	decodedMessage, decodedOperatorID, decodedSignature, err := commons.DecodeSignedSSVMessage(encodedSignedSSVMessage)
 	require.NoError(t, err)
+	require.Equal(t, operatorID, decodedOperatorID)
+	require.Equal(t, signature, decodedSignature)
 
-	var decodedSignedSSVMessage commons.SignedSSVMessage
-	err = json.Unmarshal(encodedSignedSSVMessage, &decodedSignedSSVMessage)
-	require.NoError(t, err)
-
-	messageHash := sha256.Sum256(decodedSignedSSVMessage.Message)
+	messageHash := sha256.Sum256(decodedMessage)
 
 	block, rest := pem.Decode(pubPEM)
 	require.NotNil(t, block)
@@ -81,8 +76,8 @@ func TestRSAUsage(t *testing.T) {
 	rsaPubKey, ok := pub.(*rsa.PublicKey)
 	require.True(t, ok)
 
-	require.NoError(t, rsa.VerifyPKCS1v15(rsaPubKey, crypto.SHA256, messageHash[:], decodedSignedSSVMessage.Signature))
-	require.Equal(t, message, decodedSignedSSVMessage.Message)
+	require.NoError(t, rsa.VerifyPKCS1v15(rsaPubKey, crypto.SHA256, messageHash[:], decodedSignature))
+	require.Equal(t, testMessage, decodedMessage)
 }
 
 func TestGetMaxPeers(t *testing.T) {

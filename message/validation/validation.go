@@ -11,7 +11,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -30,7 +29,6 @@ import (
 
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
@@ -57,33 +55,6 @@ const (
 	maxDutiesPerEpoch          = 2
 )
 
-// ConsensusID uniquely identifies a public key and role pair to keep track of state.
-type ConsensusID struct {
-	PubKey phase0.BLSPubKey
-	Role   spectypes.BeaconRole
-}
-
-// ConsensusState keeps track of the signers for a given public key and role.
-type ConsensusState struct {
-	// TODO: consider evicting old data to avoid excessive memory consumption
-	Signers *hashmap.Map[spectypes.OperatorID, *SignerState]
-}
-
-// GetSignerState retrieves the state for the given signer.
-// Returns nil if the signer is not found.
-func (cs *ConsensusState) GetSignerState(signer spectypes.OperatorID) *SignerState {
-	signerState, _ := cs.Signers.Get(signer)
-	return signerState
-}
-
-// CreateSignerState initializes and sets a new SignerState for the given signer.
-func (cs *ConsensusState) CreateSignerState(signer spectypes.OperatorID) *SignerState {
-	signerState := &SignerState{}
-	cs.Signers.Set(signer, signerState)
-
-	return signerState
-}
-
 // PubsubMessageValidator defines methods for validating pubsub messages.
 type PubsubMessageValidator interface {
 	ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
@@ -102,23 +73,23 @@ type MessageValidator interface {
 }
 
 type messageValidator struct {
-	logger             *zap.Logger
-	metrics            metrics
-	netCfg             networkconfig.NetworkConfig
-	index              sync.Map
-	nodeStorage        operatorstorage.Storage
-	peersIndex         peers.PeerInfoIndex
-	dutyStore          *dutystore.Store
-	ownOperatorID      spectypes.OperatorID
-	operatorPrivateKey *rsa.PrivateKey
+	logger              *zap.Logger
+	metrics             metrics
+	netCfg              networkconfig.NetworkConfig
+	index               sync.Map
+	nodeStorage         operatorstorage.Storage
+	dutyStore           *dutystore.Store
+	ownOperatorID       spectypes.OperatorID
+	operatorPubKeyCache *hashmap.Map[spectypes.OperatorID, *rsa.PublicKey]
 }
 
 // NewMessageValidator returns a new MessageValidator with the given network configuration and options.
 func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) MessageValidator {
 	mv := &messageValidator{
-		logger:  zap.NewNop(),
-		metrics: &nopMetrics{},
-		netCfg:  netCfg,
+		logger:              zap.NewNop(),
+		metrics:             &nopMetrics{},
+		netCfg:              netCfg,
+		operatorPubKeyCache: hashmap.New[spectypes.OperatorID, *rsa.PublicKey](),
 	}
 
 	for _, opt := range opts {
@@ -163,20 +134,6 @@ func WithOwnOperatorID(id spectypes.OperatorID) Option {
 func WithNodeStorage(nodeStorage operatorstorage.Storage) Option {
 	return func(mv *messageValidator) {
 		mv.nodeStorage = nodeStorage
-	}
-}
-
-// WithPeerInfoIndex sets the peer info index for the messageValidator.
-func WithPeerInfoIndex(index peers.PeerInfoIndex) Option {
-	return func(mv *messageValidator) {
-		mv.peersIndex = index
-	}
-}
-
-// WithOperatorPrivateKey sets operator private key.
-func WithOperatorPrivateKey(privKey *rsa.PrivateKey) Option {
-	return func(mv *messageValidator) {
-		mv.operatorPrivateKey = privKey
 	}
 }
 
@@ -331,24 +288,21 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 
 	defer mv.metrics.ActiveMsgValidationDone(topic)
 
-	messageData := pMsg.GetData()
+	encodedSSVMessage := pMsg.GetData()
+	messageData, operatorID, signature, err := commons.DecodeSignedSSVMessage(encodedSSVMessage)
 
-	var decodedSignedSSVMessage commons.SignedSSVMessage
-	err := json.Unmarshal(messageData, &decodedSignedSSVMessage)
-	if err == nil {
-		messageData = decodedSignedSSVMessage.Message
-		messageHash := sha256.Sum256(messageData)
-
-		operator, found, err := mv.nodeStorage.GetOperatorData(nil, decodedSignedSSVMessage.OperatorID)
+	rsaPubKey, ok := mv.operatorPubKeyCache.Get(operatorID)
+	if !ok {
+		operator, found, err := mv.nodeStorage.GetOperatorData(nil, operatorID)
 		if err != nil {
 			e := ErrOperatorNotFound
-			e.got = decodedSignedSSVMessage.OperatorID
+			e.got = operatorID
 			e.innerErr = err
 			return nil, Descriptor{}, e
 		}
 		if !found {
 			e := ErrOperatorNotFound
-			e.got = decodedSignedSSVMessage.OperatorID
+			e.got = operatorID
 			return nil, Descriptor{}, e
 		}
 
@@ -359,18 +313,22 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 			return nil, Descriptor{}, e
 		}
 
-		rsaPubKey, err := rsaencryption.ConvertPemToPublicKey(operatorPubKey)
+		rsaPubKey, err = rsaencryption.ConvertPemToPublicKey(operatorPubKey)
 		if err != nil {
 			e := ErrRSADecryption
 			e.innerErr = fmt.Errorf("convert PEM: %w", err)
 			return nil, Descriptor{}, e
 		}
 
-		if err := rsa.VerifyPKCS1v15(rsaPubKey, crypto.SHA256, messageHash[:], decodedSignedSSVMessage.Signature); err != nil {
-			e := ErrRSADecryption
-			e.innerErr = fmt.Errorf("verify signature: %w", err)
-			return nil, Descriptor{}, e
-		}
+		mv.operatorPubKeyCache.Set(operatorID, rsaPubKey)
+	}
+
+	messageHash := sha256.Sum256(messageData)
+
+	if err := rsa.VerifyPKCS1v15(rsaPubKey, crypto.SHA256, messageHash[:], signature); err != nil {
+		e := ErrRSADecryption
+		e.innerErr = fmt.Errorf("verify signature: %w", err)
+		return nil, Descriptor{}, e
 	}
 
 	if len(messageData) == 0 {
