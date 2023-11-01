@@ -5,11 +5,10 @@ import (
 	"crypto"
 	"crypto/rsa"
 	"crypto/sha256"
-	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
+
 	"github.com/bloxapp/ssv/protocol/v2/message"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -71,22 +70,10 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 		return err
 	}
 
-	publicKey := &n.operatorPrivateKey.PublicKey
-
-	pubKeyBytes, err := x509.MarshalPKIXPublicKey(publicKey)
-	if err != nil {
-		return err
-	}
-
-	pubPEM := pem.EncodeToMemory(&pem.Block{
-		Type:  "RSA PUBLIC KEY",
-		Bytes: pubKeyBytes,
-	})
-
 	signedSSVMessage := &commons.SignedSSVMessage{
-		Message:   raw,
-		Signature: signature,
-		PubKey:    pubPEM,
+		Message:    raw,
+		Signature:  signature,
+		OperatorID: n.operatorID,
 	}
 
 	encodedSignedSSVMessage, err := json.Marshal(signedSSVMessage)

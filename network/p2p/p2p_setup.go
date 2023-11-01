@@ -169,7 +169,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	domain := "0x" + hex.EncodeToString(n.cfg.Network.Domain[:])
 	self := records.NewNodeInfo(domain)
 	self.Metadata = &records.NodeMetadata{
-		OperatorID:  n.cfg.OperatorID,
+		OperatorID:  n.cfg.OperatorPublicKey,
 		NodeVersion: commons.GetNodeVersion(),
 		Subnets:     records.Subnets(n.subnets).String(),
 	}

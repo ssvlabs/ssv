@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	libp2ptcp "github.com/libp2p/go-libp2p/p2p/transport/tcp"
@@ -58,7 +59,9 @@ type Config struct {
 	// OperatorPrivateKey is used for operator identity, MUST be injected
 	OperatorPrivateKey *rsa.PrivateKey
 	// OperatorPublicKey is used for operator identity, optional
-	OperatorID string
+	OperatorPublicKey string
+	// OperatorID contains operator ID
+	OperatorID spectypes.OperatorID
 	// Router propagate incoming network messages to the responsive components
 	Router network.MessageRouter
 	// UserAgent to use by libp2p identify protocol
