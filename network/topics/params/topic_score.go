@@ -29,7 +29,7 @@ const (
 	minActiveValidators = 200
 
 	// P1
-	timeInMeshQuantum    = time.Second * 12
+	timeInMeshQuantum    = 12
 	timeInMeshQuantumCap = 3600
 	timeInMeshMaxScore   = 10
 
@@ -174,7 +174,7 @@ func TopicParams(opts Options) (*pubsub.TopicScoreParams, error) {
 		TopicWeight: topicWeight,
 
 		// P1
-		TimeInMeshQuantum: timeInMeshQuantum,
+		TimeInMeshQuantum: timeInMeshQuantum * time.Second,
 		TimeInMeshCap:     timeInMeshCap,
 		TimeInMeshWeight:  timeInMeshMaxScore / timeInMeshCap,
 
