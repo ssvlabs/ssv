@@ -101,13 +101,14 @@ type MessageValidator interface {
 }
 
 type messageValidator struct {
-	logger        *zap.Logger
-	metrics       metrics
-	netCfg        networkconfig.NetworkConfig
-	index         sync.Map
-	nodeStorage   operatorstorage.Storage
-	dutyStore     *dutystore.Store
-	ownOperatorID spectypes.OperatorID
+	logger              *zap.Logger
+	metrics             metrics
+	netCfg              networkconfig.NetworkConfig
+	index               sync.Map
+	nodeStorage         operatorstorage.Storage
+	dutyStore           *dutystore.Store
+	ownOperatorID       spectypes.OperatorID
+	operatorPubKeyCache hashmap.Map[spectypes.OperatorID, *rsa.PublicKey]
 }
 
 // NewMessageValidator returns a new MessageValidator with the given network configuration and options.
@@ -319,31 +320,36 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 		messageData = decodedSignedSSVMessage.Message
 		messageHash := sha256.Sum256(messageData)
 
-		operator, found, err := mv.nodeStorage.GetOperatorData(nil, decodedSignedSSVMessage.OperatorID)
-		if err != nil {
-			e := ErrOperatorNotFound
-			e.got = decodedSignedSSVMessage.OperatorID
-			e.innerErr = err
-			return nil, Descriptor{}, e
-		}
-		if !found {
-			e := ErrOperatorNotFound
-			e.got = decodedSignedSSVMessage.OperatorID
-			return nil, Descriptor{}, e
-		}
+		rsaPubKey, ok := mv.operatorPubKeyCache.Get(decodedSignedSSVMessage.OperatorID)
+		if !ok {
+			operator, found, err := mv.nodeStorage.GetOperatorData(nil, decodedSignedSSVMessage.OperatorID)
+			if err != nil {
+				e := ErrOperatorNotFound
+				e.got = decodedSignedSSVMessage.OperatorID
+				e.innerErr = err
+				return nil, Descriptor{}, e
+			}
+			if !found {
+				e := ErrOperatorNotFound
+				e.got = decodedSignedSSVMessage.OperatorID
+				return nil, Descriptor{}, e
+			}
 
-		operatorPubKey, err := base64.StdEncoding.DecodeString(string(operator.PublicKey))
-		if err != nil {
-			e := ErrRSADecryption
-			e.innerErr = fmt.Errorf("decode public key: %w", err)
-			return nil, Descriptor{}, e
-		}
+			operatorPubKey, err := base64.StdEncoding.DecodeString(string(operator.PublicKey))
+			if err != nil {
+				e := ErrRSADecryption
+				e.innerErr = fmt.Errorf("decode public key: %w", err)
+				return nil, Descriptor{}, e
+			}
 
-		rsaPubKey, err := rsaencryption.ConvertPemToPublicKey(operatorPubKey)
-		if err != nil {
-			e := ErrRSADecryption
-			e.innerErr = fmt.Errorf("convert PEM: %w", err)
-			return nil, Descriptor{}, e
+			rsaPubKey, err = rsaencryption.ConvertPemToPublicKey(operatorPubKey)
+			if err != nil {
+				e := ErrRSADecryption
+				e.innerErr = fmt.Errorf("convert PEM: %w", err)
+				return nil, Descriptor{}, e
+			}
+
+			mv.operatorPubKeyCache.Set(decodedSignedSSVMessage.OperatorID, rsaPubKey)
 		}
 
 		if err := rsa.VerifyPKCS1v15(rsaPubKey, crypto.SHA256, messageHash[:], decodedSignedSSVMessage.Signature); err != nil {
