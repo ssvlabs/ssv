@@ -20,7 +20,7 @@ const (
 	// decayToZero = 0.01
 	// dampeningFactor reduces the amount by which the various thresholds and caps are created.
 	// using value of 50 (prysm changed to 90)
-	dampeningFactor = 50
+	// dampeningFactor = 50
 
 	subnetTopicsWeight          = 4.0
 	totalTopicsWeigth           = 4.0
@@ -38,7 +38,7 @@ const (
 	maxFirstMessageDeliveryScore = 40
 
 	// P3
-	meshMessageDeliveriesDampeningFactor = 1 / 50
+	meshMessageDeliveriesDampeningFactor = 1.0 / 50
 	meshMessageDeliveriesCapFactor       = 16
 )
 
@@ -103,9 +103,9 @@ func (o *Options) validate() error {
 }
 
 // maxScore attainable by a peer
-func (o *Options) maxScore() float64 {
-	return (maxInMeshScore + maxFirstDeliveryScore) * o.Network.TotalTopicsWeight
-}
+// func (o *Options) maxScore() float64 {
+// 	return (maxInMeshScore + maxFirstDeliveryScore) * o.Network.TotalTopicsWeight
+// }
 
 // NewOpts creates new TopicOpts instance with defaults
 func NewOpts(activeValidators, subnets int) Options {
