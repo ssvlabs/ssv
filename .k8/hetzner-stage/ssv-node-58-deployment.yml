@@ -17,10 +17,10 @@ spec:
       protocol: TCP
       targetPort: 13058
       name: port-13058
-    - port: 15858
+    - port: 15058
       protocol: TCP
-      targetPort: 15858
-      name: port-15858
+      targetPort: 15058
+      name: port-15058
     - port: 16058
       protocol: TCP
       targetPort: 16058
@@ -65,9 +65,9 @@ spec:
         - containerPort: 13058
           name: port-13058
           hostPort: 13058
-        - containerPort: 15858
-          name: port-15858
-          hostPort: 15858
+        - containerPort: 15058
+          name: port-15058
+          hostPort: 15058
         - containerPort: 16058
           name: port-16058
           hostPort: 16058
@@ -104,7 +104,7 @@ spec:
         - name: DB_REPORTING
           value: "false"
         - name: METRICS_API_PORT
-          value: "15858"
+          value: "15058"
         - name: SSV_API_PORT
           value: "16058"
         - name: ENABLE_PROFILE
