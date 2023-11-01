@@ -6,7 +6,6 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 
 	"github.com/bloxapp/ssv/protocol/v2/message"
@@ -70,16 +69,7 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 		return err
 	}
 
-	signedSSVMessage := &commons.SignedSSVMessage{
-		Message:    raw,
-		Signature:  signature,
-		OperatorID: n.operatorID,
-	}
-
-	encodedSignedSSVMessage, err := json.Marshal(signedSSVMessage)
-	if err != nil {
-		return err
-	}
+	encodedSignedSSVMessage := commons.EncodeSignedSSVMessage(raw, n.operatorID, signature)
 
 	vpk := msg.GetID().GetPubKey()
 	topics := commons.ValidatorTopicID(vpk)

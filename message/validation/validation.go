@@ -11,7 +11,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -286,51 +285,47 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 	mv.metrics.ActiveMsgValidation(topic)
 	defer mv.metrics.ActiveMsgValidationDone(topic)
 
-	messageData := pMsg.GetData()
+	encodedSSVMessage := pMsg.GetData()
+	messageData, operatorID, signature, err := commons.DecodeSignedSSVMessage(encodedSSVMessage)
 
-	var decodedSignedSSVMessage commons.SignedSSVMessage
-	err := json.Unmarshal(messageData, &decodedSignedSSVMessage)
-	if err == nil {
-		messageData = decodedSignedSSVMessage.Message
-		messageHash := sha256.Sum256(messageData)
-
-		rsaPubKey, ok := mv.operatorPubKeyCache.Get(decodedSignedSSVMessage.OperatorID)
-		if !ok {
-			operator, found, err := mv.nodeStorage.GetOperatorData(nil, decodedSignedSSVMessage.OperatorID)
-			if err != nil {
-				e := ErrOperatorNotFound
-				e.got = decodedSignedSSVMessage.OperatorID
-				e.innerErr = err
-				return nil, Descriptor{}, e
-			}
-			if !found {
-				e := ErrOperatorNotFound
-				e.got = decodedSignedSSVMessage.OperatorID
-				return nil, Descriptor{}, e
-			}
-
-			operatorPubKey, err := base64.StdEncoding.DecodeString(string(operator.PublicKey))
-			if err != nil {
-				e := ErrRSADecryption
-				e.innerErr = fmt.Errorf("decode public key: %w", err)
-				return nil, Descriptor{}, e
-			}
-
-			rsaPubKey, err = rsaencryption.ConvertPemToPublicKey(operatorPubKey)
-			if err != nil {
-				e := ErrRSADecryption
-				e.innerErr = fmt.Errorf("convert PEM: %w", err)
-				return nil, Descriptor{}, e
-			}
-
-			mv.operatorPubKeyCache.Set(decodedSignedSSVMessage.OperatorID, rsaPubKey)
-		}
-
-		if err := rsa.VerifyPKCS1v15(rsaPubKey, crypto.SHA256, messageHash[:], decodedSignedSSVMessage.Signature); err != nil {
-			e := ErrRSADecryption
-			e.innerErr = fmt.Errorf("verify signature: %w", err)
+	rsaPubKey, ok := mv.operatorPubKeyCache.Get(operatorID)
+	if !ok {
+		operator, found, err := mv.nodeStorage.GetOperatorData(nil, operatorID)
+		if err != nil {
+			e := ErrOperatorNotFound
+			e.got = operatorID
+			e.innerErr = err
 			return nil, Descriptor{}, e
 		}
+		if !found {
+			e := ErrOperatorNotFound
+			e.got = operatorID
+			return nil, Descriptor{}, e
+		}
+
+		operatorPubKey, err := base64.StdEncoding.DecodeString(string(operator.PublicKey))
+		if err != nil {
+			e := ErrRSADecryption
+			e.innerErr = fmt.Errorf("decode public key: %w", err)
+			return nil, Descriptor{}, e
+		}
+
+		rsaPubKey, err = rsaencryption.ConvertPemToPublicKey(operatorPubKey)
+		if err != nil {
+			e := ErrRSADecryption
+			e.innerErr = fmt.Errorf("convert PEM: %w", err)
+			return nil, Descriptor{}, e
+		}
+
+		mv.operatorPubKeyCache.Set(operatorID, rsaPubKey)
+	}
+
+	messageHash := sha256.Sum256(messageData)
+
+	if err := rsa.VerifyPKCS1v15(rsaPubKey, crypto.SHA256, messageHash[:], signature); err != nil {
+		e := ErrRSADecryption
+		e.innerErr = fmt.Errorf("verify signature: %w", err)
+		return nil, Descriptor{}, e
 	}
 
 	if len(messageData) == 0 {

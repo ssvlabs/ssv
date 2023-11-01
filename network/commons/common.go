@@ -3,7 +3,6 @@ package commons
 import (
 	"encoding/binary"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -35,10 +34,28 @@ const (
 	topicPrefix = "ssv.v2"
 )
 
-type SignedSSVMessage struct {
-	Message    []byte               `json:"message"`
-	Signature  []byte               `json:"signature"`
-	OperatorID spectypes.OperatorID `json:"operator_id"`
+const (
+	signatureSize    = 256
+	signatureOffset  = 0
+	operatorIDSize   = 8
+	operatorIDOffset = signatureOffset + signatureSize
+	messageOffset    = operatorIDOffset + operatorIDSize
+)
+
+func EncodeSignedSSVMessage(message []byte, operatorID spectypes.OperatorID, signature []byte) []byte {
+	return append(append(signature, binary.LittleEndian.AppendUint64(nil, operatorID)...), message...)
+}
+
+func DecodeSignedSSVMessage(encoded []byte) (message []byte, operatorID spectypes.OperatorID, signature []byte, err error) {
+	if len(encoded) < messageOffset {
+		err = fmt.Errorf("unexpected encoded message size of %d", len(encoded))
+		return
+	}
+
+	message = encoded[messageOffset:]
+	operatorID = binary.LittleEndian.Uint64(encoded[operatorIDOffset : operatorIDOffset+operatorIDSize])
+	signature = encoded[signatureOffset : signatureOffset+signatureSize]
+	return
 }
 
 // SubnetTopicID returns the topic to use for the given subnet
@@ -95,12 +112,15 @@ func MsgID() MsgIDFunc {
 		if len(msg) == 0 {
 			return ""
 		}
-		var signedMsg SignedSSVMessage
-		if err := json.Unmarshal(msg, &signedMsg); err == nil {
+
+		message, _, _, err := DecodeSignedSSVMessage(msg)
+		if err != nil {
+			metricMsgIDCalls.WithLabelValues("NotDecoded").Inc()
+		} else {
 			metricMsgIDCalls.WithLabelValues("Decoded").Inc()
-			msg = signedMsg.Message
+			msg = message
 		}
-		metricMsgIDCalls.WithLabelValues("NotDecoded").Inc()
+
 		b := make([]byte, 12)
 		binary.LittleEndian.PutUint64(b, xxhash.Sum64(msg))
 		return string(b)
