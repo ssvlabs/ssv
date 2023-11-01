@@ -34,7 +34,7 @@ const (
 	timeInMeshMaxScore   = 10
 
 	// P2
-	expectedMessagesPerSec       = 600
+	expectedMessagesPerSec       = 600 / 117
 	maxFirstMessageDeliveryScore = 40
 
 	// P3
@@ -158,11 +158,11 @@ func TopicParams(opts Options) (*pubsub.TopicScoreParams, error) {
 
 	// P3
 	meshMessageDeliveriesDecay := scoreDecay(oneEpochDuration*16, decayInterval)
-	meshMessageDeliveriesThreshold, err := decayThreshold(meshMessageDeliveriesDecay, math.Min(2.0, (expectedMessagesPerSec*12)*meshMessageDeliveriesDampeningFactor))
+	meshMessageDeliveriesThreshold, err := decayThreshold(meshMessageDeliveriesDecay, (expectedMessagesPerSec*12)*meshMessageDeliveriesDampeningFactor)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not calculate threshold for mesh message deliveries threshold")
 	}
-	meshMessageDeliveriesWeight := -(maxFirstDeliveryScore + maxInMeshScore) / (topicWeight * math.Pow(meshMessageDeliveriesThreshold, 2))
+	meshMessageDeliveriesWeight := -((maxFirstDeliveryScore + maxInMeshScore) * topicWeight * float64(opts.Network.Subnets)) / (topicWeight * math.Pow(meshMessageDeliveriesThreshold, 2))
 	MeshMessageDeliveriesCap := meshMessageDeliveriesThreshold * meshMessageDeliveriesCapFactor
 
 	// P4
