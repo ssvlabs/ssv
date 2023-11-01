@@ -1,6 +1,6 @@
-//go:build linux && !android
+//go:build linux
 
-package validation
+package types
 
 import (
 	"crypto"
