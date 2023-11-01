@@ -9,10 +9,9 @@ import (
 	"crypto"
 	"crypto/rsa"
 	"crypto/sha256"
-	"crypto/x509"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
 	"strings"
 	"sync"
@@ -38,6 +37,7 @@ import (
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
 const (
@@ -349,29 +349,17 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 			return nil, Descriptor{}, e
 		}
 
-		block, rest := pem.Decode(operator.PublicKey)
-		if block == nil {
-			e := ErrRSADecryption
-			e.innerErr = fmt.Errorf("block is nil")
-			return nil, Descriptor{}, e
-		}
-		if len(rest) != 0 {
-			e := ErrRSADecryption
-			e.innerErr = fmt.Errorf("extra data after PEM decoding")
-			return nil, Descriptor{}, e
-		}
-
-		pub, err := x509.ParsePKIXPublicKey(block.Bytes)
+		operatorPubKey, err := base64.StdEncoding.DecodeString(string(operator.PublicKey))
 		if err != nil {
 			e := ErrRSADecryption
-			e.innerErr = fmt.Errorf("parse public key: %w", err)
+			e.innerErr = fmt.Errorf("decode public key: %w", err)
 			return nil, Descriptor{}, e
 		}
 
-		rsaPubKey, ok := pub.(*rsa.PublicKey)
-		if !ok {
+		rsaPubKey, err := rsaencryption.ConvertPemToPublicKey(operatorPubKey)
+		if err != nil {
 			e := ErrRSADecryption
-			e.innerErr = fmt.Errorf("unexpected public key type")
+			e.innerErr = fmt.Errorf("convert PEM: %w", err)
 			return nil, Descriptor{}, e
 		}
 
