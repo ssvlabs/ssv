@@ -108,15 +108,16 @@ type messageValidator struct {
 	nodeStorage         operatorstorage.Storage
 	dutyStore           *dutystore.Store
 	ownOperatorID       spectypes.OperatorID
-	operatorPubKeyCache hashmap.Map[spectypes.OperatorID, *rsa.PublicKey]
+	operatorPubKeyCache *hashmap.Map[spectypes.OperatorID, *rsa.PublicKey]
 }
 
 // NewMessageValidator returns a new MessageValidator with the given network configuration and options.
 func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) MessageValidator {
 	mv := &messageValidator{
-		logger:  zap.NewNop(),
-		metrics: &nopMetrics{},
-		netCfg:  netCfg,
+		logger:              zap.NewNop(),
+		metrics:             &nopMetrics{},
+		netCfg:              netCfg,
+		operatorPubKeyCache: hashmap.New[spectypes.OperatorID, *rsa.PublicKey](),
 	}
 
 	for _, opt := range opts {
