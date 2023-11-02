@@ -62,20 +62,25 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 		return errors.Wrap(err, "could not decode msg")
 	}
 
-	hash := sha256.Sum256(raw)
+	var afterRSAFork = n.cfg.Network.Beacon.EstimatedCurrentEpoch() >= network.HoleskyRSAMessageForkEpoch
+	finalMesasge := raw
 
-	signature, err := rsa.SignPKCS1v15(nil, n.operatorPrivateKey, crypto.SHA256, hash[:]) // TODO: OAEP?
-	if err != nil {
-		return err
+	if afterRSAFork {
+		hash := sha256.Sum256(raw)
+
+		signature, err := rsa.SignPKCS1v15(nil, n.operatorPrivateKey, crypto.SHA256, hash[:]) // TODO: OAEP?
+		if err != nil {
+			return err
+		}
+
+		finalMesasge = commons.EncodeSignedSSVMessage(raw, n.operatorID, signature)
 	}
-
-	encodedSignedSSVMessage := commons.EncodeSignedSSVMessage(raw, n.operatorID, signature)
 
 	vpk := msg.GetID().GetPubKey()
 	topics := commons.ValidatorTopicID(vpk)
 
 	for _, topic := range topics {
-		if err := n.topicsCtrl.Broadcast(topic, encodedSignedSSVMessage, n.cfg.RequestTimeout); err != nil {
+		if err := n.topicsCtrl.Broadcast(topic, finalMesasge, n.cfg.RequestTimeout); err != nil {
 			n.interfaceLogger.Debug("could not broadcast msg", fields.PubKey(vpk), zap.Error(err))
 			return errors.Wrap(err, "could not broadcast msg")
 		}
