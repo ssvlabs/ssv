@@ -43,8 +43,8 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.Extend
 				zap.Any("peerScores", peerScores))
 			metricPubsubPeerScoreInspect.WithLabelValues(pid.String()).Set(peerScores.Score)
 
-			for topicName, snapshot := range peerScores.Topics {
-				metricPubSubPeerP4Score.WithLabelValues(topicName).Set(snapshot.InvalidMessageDeliveries)
+			for _, snapshot := range peerScores.Topics {
+				metricPubSubPeerP4Score.WithLabelValues(pid.String()).Set(snapshot.InvalidMessageDeliveries)
 			}
 
 			// err := scoreIdx.Score(pid, scores...)

@@ -25,11 +25,11 @@ var (
 		Help: "Gauge for negative peer scores",
 	}, []string{"pid"})
 
-	// score.go invalidMessageDeliveries value per topic
+	// invalidMessageDeliveries value per peer id
 	metricPubSubPeerP4Score = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:p2p:pubsub:score:invalid_message_deliveries",
-		Help: "Invalid message deliveries",
-	}, []string{"topic"})
+		Help: "Invalid message deliveries by peer",
+	}, []string{"pid"})
 )
 
 func init() {
