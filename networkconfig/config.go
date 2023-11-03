@@ -79,7 +79,7 @@ func (n NetworkConfig) RSAMessageFork(currentEpoch spec.Epoch) bool {
 	//
 	//return currentEpoch >= n.RSAMessageForkEpoch()
 
-	return currentEpoch >= 8144
+	return currentEpoch >= 8153
 }
 
 // RSAMessageForkEpoch returns epoch for RSA message fork epoch
