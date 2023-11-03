@@ -76,17 +76,15 @@ func (n NetworkConfig) RSAMessageFork(currentEpoch spec.Epoch) bool {
 	//default:
 	//	return false
 	//}
-	//
-	//return currentEpoch >= n.RSAMessageForkEpoch()
 
-	return currentEpoch >= 8093
+	return currentEpoch >= n.RSAMessageForkEpoch()
 }
 
 // RSAMessageForkEpoch returns epoch for RSA message fork epoch
 func (n NetworkConfig) RSAMessageForkEpoch() spec.Epoch {
 	switch n.Name {
 	case HoleskyStage.Name:
-		return 8093
+		return 8090
 	default:
 		return 0
 	}
