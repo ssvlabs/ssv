@@ -224,15 +224,6 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer
 		mv.metrics.MessageValidationDuration(sinceStart, validationDurationLabels...)
 	}()
 
-	// Ignore messages from peers that are not connected.
-	// TODO:
-	// - pass the existing PeerInfoIndex to NewMessageValidator
-	// - add a separate metric to track # of messages ignored here
-	// - add unit tests with a PeerInfoIndex mock
-	//if mv.peersIndex != nil && mv.peersIndex.State(peerID) != peers.StateConnected {
-	//	return pubsub.ValidationIgnore
-	//}
-
 	decodedMessage, descriptor, err := mv.validateP2PMessage(pmsg, time.Now())
 	round := specqbft.Round(0)
 	if descriptor.Consensus != nil {
@@ -286,14 +277,8 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 	defer mv.metrics.ActiveMsgValidationDone(topic)
 
 	messageData := pMsg.GetData()
-	currentEpoch := mv.netCfg.Beacon.EstimatedCurrentEpoch()
 
-	if mv.netCfg.RSAMessageFork(currentEpoch) {
-		//mv.logger.Info("RSA message fork happened, verifying message signature",
-		//	zap.Uint64("current_epoch", uint64(currentEpoch)),
-		//	zap.Uint64("fork_epoch", uint64(mv.netCfg.RSAMessageForkEpoch())),
-		//)
-
+	if mv.netCfg.RSAMessageFork(mv.netCfg.Beacon.EstimatedCurrentEpoch()) {
 		decMessageData, operatorID, signature, err := commons.DecodeSignedSSVMessage(messageData)
 		messageData = decMessageData
 		if err != nil {
@@ -302,50 +287,9 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 			return nil, Descriptor{}, e
 		}
 
-		rsaPubKey, ok := mv.operatorPubKeyCache.Get(operatorID)
-		if !ok {
-			operator, found, err := mv.nodeStorage.GetOperatorData(nil, operatorID)
-			if err != nil {
-				e := ErrOperatorNotFound
-				e.got = operatorID
-				e.innerErr = err
-				return nil, Descriptor{}, e
-			}
-			if !found {
-				e := ErrOperatorNotFound
-				e.got = operatorID
-				return nil, Descriptor{}, e
-			}
-
-			operatorPubKey, err := base64.StdEncoding.DecodeString(string(operator.PublicKey))
-			if err != nil {
-				e := ErrRSADecryption
-				e.innerErr = fmt.Errorf("decode public key: %w", err)
-				return nil, Descriptor{}, e
-			}
-
-			rsaPubKey, err = rsaencryption.ConvertPemToPublicKey(operatorPubKey)
-			if err != nil {
-				e := ErrRSADecryption
-				e.innerErr = fmt.Errorf("convert PEM: %w", err)
-				return nil, Descriptor{}, e
-			}
-
-			mv.operatorPubKeyCache.Set(operatorID, rsaPubKey)
+		if err := mv.verifyRSASignature(messageData, operatorID, signature); err != nil {
+			return nil, Descriptor{}, err
 		}
-
-		messageHash := sha256.Sum256(messageData)
-
-		if err := rsa.VerifyPKCS1v15(rsaPubKey, crypto.SHA256, messageHash[:], signature); err != nil {
-			e := ErrRSADecryption
-			e.innerErr = fmt.Errorf("verify signature: %w", err)
-			return nil, Descriptor{}, e
-		}
-	} else {
-		//mv.logger.Info("RSA message fork didn't happen, not verifying message signature",
-		//	zap.Uint64("current_epoch", uint64(currentEpoch)),
-		//	zap.Uint64("fork_epoch", uint64(mv.netCfg.RSAMessageForkEpoch())),
-		//)
 	}
 
 	if len(messageData) == 0 {
@@ -393,6 +337,50 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 	mv.metrics.SSVMessageType(msg.MsgType)
 
 	return mv.validateSSVMessage(msg, receivedAt)
+}
+
+func (mv *messageValidator) verifyRSASignature(messageData []byte, operatorID spectypes.OperatorID, signature []byte) error {
+	rsaPubKey, ok := mv.operatorPubKeyCache.Get(operatorID)
+	if !ok {
+		operator, found, err := mv.nodeStorage.GetOperatorData(nil, operatorID)
+		if err != nil {
+			e := ErrOperatorNotFound
+			e.got = operatorID
+			e.innerErr = err
+			return e
+		}
+		if !found {
+			e := ErrOperatorNotFound
+			e.got = operatorID
+			return e
+		}
+
+		operatorPubKey, err := base64.StdEncoding.DecodeString(string(operator.PublicKey))
+		if err != nil {
+			e := ErrRSADecryption
+			e.innerErr = fmt.Errorf("decode public key: %w", err)
+			return e
+		}
+
+		rsaPubKey, err = rsaencryption.ConvertPemToPublicKey(operatorPubKey)
+		if err != nil {
+			e := ErrRSADecryption
+			e.innerErr = fmt.Errorf("convert PEM: %w", err)
+			return e
+		}
+
+		mv.operatorPubKeyCache.Set(operatorID, rsaPubKey)
+	}
+
+	messageHash := sha256.Sum256(messageData)
+
+	if err := rsa.VerifyPKCS1v15(rsaPubKey, crypto.SHA256, messageHash[:], signature); err != nil {
+		e := ErrRSADecryption
+		e.innerErr = fmt.Errorf("verify signature: %w", err)
+		return e
+	}
+
+	return nil
 }
 
 func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage, receivedAt time.Time) (*queue.DecodedSSVMessage, Descriptor, error) {

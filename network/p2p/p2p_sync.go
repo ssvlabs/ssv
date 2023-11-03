@@ -146,9 +146,7 @@ func (n *p2pNetwork) makeSyncRequest(logger *zap.Logger, peers []peer.ID, mid sp
 			continue
 		}
 
-		currentEpoch := n.cfg.Network.Beacon.EstimatedCurrentEpoch()
-
-		if n.cfg.Network.RSAMessageFork(currentEpoch) {
+		if n.cfg.Network.RSAMessageFork(n.cfg.Network.Beacon.EstimatedCurrentEpoch()) {
 			decodedMsg, _, _, err := commons.DecodeSignedSSVMessage(raw)
 			if err != nil {
 				logger.Debug("could not decode signed SSV message", zap.Error(err))

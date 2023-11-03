@@ -72,13 +72,9 @@ func (n NetworkConfig) GetGenesisTime() time.Time {
 func (n NetworkConfig) RSAMessageFork(currentEpoch spec.Epoch) bool {
 	switch n.Name {
 	case HoleskyStage.Name:
-		return currentEpoch >= 8153
-	// TODO: the case above is to be used for testing on stage, the case below is to be merged
-	//case HoleskyStage.Name:
-	//	return true
-	// TODO: Mainnet epoch must be defined
-	//case Mainnet.Name:
-	//	return currentEpoch >= 0
+		return true
+	case Mainnet.Name:
+		return currentEpoch >= 0 // TODO: Mainnet epoch must be defined!
 	default:
 		return false
 	}

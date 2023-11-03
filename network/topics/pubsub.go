@@ -116,10 +116,6 @@ func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig) (*pub
 		sf.(Whitelist).Register(topic)
 	}
 
-	const signaturePolicy = pubsub.StrictNoSign
-
-	logger.Debug("signature policy", zap.Uint8("code", uint8(signaturePolicy)))
-
 	psOpts := []pubsub.Option{
 		pubsub.WithSeenMessagesTTL(cfg.MsgIDCacheTTL),
 		pubsub.WithPeerOutboundQueueSize(cfg.OutboundQueueSize),
@@ -127,7 +123,7 @@ func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig) (*pub
 		pubsub.WithValidateThrottle(cfg.ValidateThrottle),
 		pubsub.WithSubscriptionFilter(sf),
 		pubsub.WithGossipSubParams(params.GossipSubParams()),
-		pubsub.WithMessageSignaturePolicy(signaturePolicy),
+		pubsub.WithMessageSignaturePolicy(pubsub.StrictNoSign),
 		// pubsub.WithPeerFilter(func(pid peer.ID, topic string) bool {
 		//	logger.Debug("pubsubTrace: filtering peer", zap.String("id", pid.String()), zap.String("topic", topic))
 		//	return true
