@@ -70,19 +70,23 @@ func (n NetworkConfig) GetGenesisTime() time.Time {
 
 // RSAMessageFork returns epoch for RSA message fork
 func (n NetworkConfig) RSAMessageFork(currentEpoch spec.Epoch) bool {
-	switch n.Name {
-	case HoleskyStage.Name:
-		return currentEpoch >= n.RSAMessageForkEpoch()
-	default:
-		return false
-	}
+	//switch n.Name {
+	//case HoleskyStage.Name:
+	//	return currentEpoch >= n.RSAMessageForkEpoch()
+	//default:
+	//	return false
+	//}
+	//
+	//return currentEpoch >= n.RSAMessageForkEpoch()
+
+	return currentEpoch >= 8093
 }
 
 // RSAMessageForkEpoch returns epoch for RSA message fork epoch
 func (n NetworkConfig) RSAMessageForkEpoch() spec.Epoch {
 	switch n.Name {
 	case HoleskyStage.Name:
-		return 8090
+		return 8093
 	default:
 		return 0
 	}

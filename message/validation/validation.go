@@ -292,13 +292,12 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 	currentEpoch := mv.netCfg.Beacon.EstimatedCurrentEpoch()
 
 	if mv.netCfg.RSAMessageFork(currentEpoch) {
-		mv.logger.Info("RSA message fork happened, verifying message signature",
-			zap.Uint64("current_epoch", uint64(currentEpoch)),
-			zap.Uint64("fork_epoch", uint64(mv.netCfg.RSAMessageForkEpoch())),
-		)
+		//mv.logger.Info("RSA message fork happened, verifying message signature",
+		//	zap.Uint64("current_epoch", uint64(currentEpoch)),
+		//	zap.Uint64("fork_epoch", uint64(mv.netCfg.RSAMessageForkEpoch())),
+		//)
 
 		decMessageData, operatorID, signature, err := commons.DecodeSignedSSVMessage(messageData)
-		messageData = decMessageData
 		if err != nil {
 			e := ErrMalformedSignedMessage
 			e.innerErr = err
@@ -344,11 +343,13 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 			e.innerErr = fmt.Errorf("verify signature: %w", err)
 			return nil, Descriptor{}, e
 		}
+
+		messageData = decMessageData
 	} else {
-		mv.logger.Info("RSA message fork didn't happen, not verifying message signature",
-			zap.Uint64("current_epoch", uint64(currentEpoch)),
-			zap.Uint64("fork_epoch", uint64(mv.netCfg.RSAMessageForkEpoch())),
-		)
+		//mv.logger.Info("RSA message fork didn't happen, not verifying message signature",
+		//	zap.Uint64("current_epoch", uint64(currentEpoch)),
+		//	zap.Uint64("fork_epoch", uint64(mv.netCfg.RSAMessageForkEpoch())),
+		//)
 	}
 
 	if len(messageData) == 0 {
