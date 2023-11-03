@@ -12,7 +12,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
-	"github.com/bloxapp/ssv/network"
 	"strings"
 	"sync"
 	"time"
@@ -287,9 +286,10 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 	defer mv.metrics.ActiveMsgValidationDone(topic)
 
 	messageData := pMsg.GetData()
+	currentEpoch := mv.netCfg.Beacon.EstimatedCurrentEpoch()
 
-	var afterRSAFork = mv.netCfg.Beacon.EstimatedCurrentEpoch() >= network.HoleskyRSAMessageForkEpoch
-	if afterRSAFork {
+	if mv.netCfg.RSAMessageFork(currentEpoch) {
+		mv.logger.Info("RSA message fork happened, verifying message signature", fields.Epoch(currentEpoch))
 
 		decMessageData, operatorID, signature, err := commons.DecodeSignedSSVMessage(messageData)
 		messageData = decMessageData
@@ -338,7 +338,8 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 			e.innerErr = fmt.Errorf("verify signature: %w", err)
 			return nil, Descriptor{}, e
 		}
-
+	} else {
+		mv.logger.Info("RSA message fork didn't happen, not verifying message signature", fields.Epoch(currentEpoch))
 	}
 
 	if len(messageData) == 0 {

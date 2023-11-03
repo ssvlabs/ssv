@@ -57,30 +57,32 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
 
-	raw, err := commons.EncodeNetworkMsg(msg)
+	broadcastMessage, err := commons.EncodeNetworkMsg(msg)
 	if err != nil {
 		return errors.Wrap(err, "could not decode msg")
 	}
 
-	var afterRSAFork = n.cfg.Network.Beacon.EstimatedCurrentEpoch() >= network.HoleskyRSAMessageForkEpoch
-	finalMesasge := raw
+	currentEpoch := n.cfg.Network.Beacon.EstimatedCurrentEpoch()
+	if n.cfg.Network.RSAMessageFork(currentEpoch) {
+		n.interfaceLogger.Info("RSA message fork happened, signing message", fields.Epoch(currentEpoch))
 
-	if afterRSAFork {
-		hash := sha256.Sum256(raw)
+		hash := sha256.Sum256(broadcastMessage)
 
-		signature, err := rsa.SignPKCS1v15(nil, n.operatorPrivateKey, crypto.SHA256, hash[:]) // TODO: OAEP?
+		signature, err := rsa.SignPKCS1v15(nil, n.operatorPrivateKey, crypto.SHA256, hash[:])
 		if err != nil {
 			return err
 		}
 
-		finalMesasge = commons.EncodeSignedSSVMessage(raw, n.operatorID, signature)
+		broadcastMessage = commons.EncodeSignedSSVMessage(broadcastMessage, n.operatorID, signature)
+	} else {
+		n.interfaceLogger.Info("RSA message fork didn't happen, not signing message", fields.Epoch(currentEpoch))
 	}
 
 	vpk := msg.GetID().GetPubKey()
 	topics := commons.ValidatorTopicID(vpk)
 
 	for _, topic := range topics {
-		if err := n.topicsCtrl.Broadcast(topic, finalMesasge, n.cfg.RequestTimeout); err != nil {
+		if err := n.topicsCtrl.Broadcast(topic, broadcastMessage, n.cfg.RequestTimeout); err != nil {
 			n.interfaceLogger.Debug("could not broadcast msg", fields.PubKey(vpk), zap.Error(err))
 			return errors.Wrap(err, "could not broadcast msg")
 		}
