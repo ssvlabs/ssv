@@ -295,6 +295,7 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 		//)
 
 		decMessageData, operatorID, signature, err := commons.DecodeSignedSSVMessage(messageData)
+		messageData = decMessageData
 		if err != nil {
 			e := ErrMalformedSignedMessage
 			e.innerErr = err
@@ -340,8 +341,6 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 			e.innerErr = fmt.Errorf("verify signature: %w", err)
 			return nil, Descriptor{}, e
 		}
-
-		messageData = decMessageData
 	} else {
 		//mv.logger.Info("RSA message fork didn't happen, not verifying message signature",
 		//	zap.Uint64("current_epoch", uint64(currentEpoch)),
