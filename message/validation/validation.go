@@ -6,10 +6,7 @@ package validation
 import (
 	"bytes"
 	"context"
-	"crypto"
 	"crypto/rsa"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"strings"
@@ -35,7 +32,6 @@ import (
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
 const (
@@ -267,7 +263,7 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer
 // ValidateSSVMessage validates the given SSV message.
 // If successful, it returns the decoded message and its descriptor. Otherwise, it returns an error.
 func (mv *messageValidator) ValidateSSVMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, Descriptor, error) {
-	return mv.validateSSVMessage(ssvMessage, time.Now())
+	return mv.validateSSVMessage(ssvMessage, time.Now(), nil)
 }
 
 func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt time.Time) (*queue.DecodedSSVMessage, Descriptor, error) {
@@ -278,6 +274,8 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 
 	messageData := pMsg.GetData()
 
+	var messageVerifier func() error
+
 	if mv.netCfg.RSAMessageFork(mv.netCfg.Beacon.EstimatedCurrentEpoch()) {
 		decMessageData, operatorID, signature, err := commons.DecodeSignedSSVMessage(messageData)
 		messageData = decMessageData
@@ -287,8 +285,8 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 			return nil, Descriptor{}, e
 		}
 
-		if err := mv.verifyRSASignature(messageData, operatorID, signature); err != nil {
-			return nil, Descriptor{}, err
+		messageVerifier = func() error {
+			return mv.verifyRSASignature(messageData, operatorID, signature)
 		}
 	}
 
@@ -336,54 +334,10 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 
 	mv.metrics.SSVMessageType(msg.MsgType)
 
-	return mv.validateSSVMessage(msg, receivedAt)
+	return mv.validateSSVMessage(msg, receivedAt, messageVerifier)
 }
 
-func (mv *messageValidator) verifyRSASignature(messageData []byte, operatorID spectypes.OperatorID, signature []byte) error {
-	rsaPubKey, ok := mv.operatorPubKeyCache.Get(operatorID)
-	if !ok {
-		operator, found, err := mv.nodeStorage.GetOperatorData(nil, operatorID)
-		if err != nil {
-			e := ErrOperatorNotFound
-			e.got = operatorID
-			e.innerErr = err
-			return e
-		}
-		if !found {
-			e := ErrOperatorNotFound
-			e.got = operatorID
-			return e
-		}
-
-		operatorPubKey, err := base64.StdEncoding.DecodeString(string(operator.PublicKey))
-		if err != nil {
-			e := ErrRSADecryption
-			e.innerErr = fmt.Errorf("decode public key: %w", err)
-			return e
-		}
-
-		rsaPubKey, err = rsaencryption.ConvertPemToPublicKey(operatorPubKey)
-		if err != nil {
-			e := ErrRSADecryption
-			e.innerErr = fmt.Errorf("convert PEM: %w", err)
-			return e
-		}
-
-		mv.operatorPubKeyCache.Set(operatorID, rsaPubKey)
-	}
-
-	messageHash := sha256.Sum256(messageData)
-
-	if err := rsa.VerifyPKCS1v15(rsaPubKey, crypto.SHA256, messageHash[:], signature); err != nil {
-		e := ErrRSADecryption
-		e.innerErr = fmt.Errorf("verify signature: %w", err)
-		return e
-	}
-
-	return nil
-}
-
-func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage, receivedAt time.Time) (*queue.DecodedSSVMessage, Descriptor, error) {
+func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage, receivedAt time.Time, signatureVerifier func() error) (*queue.DecodedSSVMessage, Descriptor, error) {
 	var descriptor Descriptor
 
 	if len(ssvMessage.Data) == 0 {
@@ -469,7 +423,8 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 				return nil, descriptor, e
 			}
 
-			consensusDescriptor, slot, err := mv.validateConsensusMessage(share, msg.Body.(*specqbft.SignedMessage), msg.GetID(), receivedAt)
+			signedMessage := msg.Body.(*specqbft.SignedMessage)
+			consensusDescriptor, slot, err := mv.validateConsensusMessage(share, signedMessage, msg.GetID(), receivedAt, signatureVerifier)
 			descriptor.Consensus = &consensusDescriptor
 			descriptor.Slot = slot
 			if err != nil {
@@ -484,7 +439,8 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 				return nil, descriptor, e
 			}
 
-			slot, err := mv.validatePartialSignatureMessage(share, msg.Body.(*spectypes.SignedPartialSignatureMessage), msg.GetID())
+			partialSignatureMessage := msg.Body.(*spectypes.SignedPartialSignatureMessage)
+			slot, err := mv.validatePartialSignatureMessage(share, partialSignatureMessage, msg.GetID(), signatureVerifier)
 			descriptor.Slot = slot
 			if err != nil {
 				return nil, descriptor, err

@@ -22,6 +22,7 @@ func (mv *messageValidator) validateConsensusMessage(
 	signedMsg *specqbft.SignedMessage,
 	messageID spectypes.MessageID,
 	receivedAt time.Time,
+	signatureVerifier func() error,
 ) (ConsensusDescriptor, phase0.Slot, error) {
 	var consensusDescriptor ConsensusDescriptor
 
@@ -112,6 +113,12 @@ func (mv *messageValidator) validateConsensusMessage(
 	for _, signer := range signedMsg.Signers {
 		if err := mv.validateSignerBehaviorConsensus(state, signer, share, messageID, signedMsg); err != nil {
 			return consensusDescriptor, msgSlot, fmt.Errorf("bad signer behavior: %w", err)
+		}
+	}
+
+	if signatureVerifier != nil {
+		if err := signatureVerifier(); err != nil {
+			return consensusDescriptor, msgSlot, err
 		}
 	}
 

@@ -15,6 +15,7 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 	share *ssvtypes.SSVShare,
 	signedMsg *spectypes.SignedPartialSignatureMessage,
 	msgID spectypes.MessageID,
+	signatureVerifier func() error,
 ) (phase0.Slot, error) {
 	if mv.inCommittee(share) {
 		mv.metrics.InCommitteeMessage(spectypes.SSVPartialSignatureMsgType, false)
@@ -49,6 +50,12 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 
 	if err := mv.validateSignatureFormat(signedMsg.Signature); err != nil {
 		return msgSlot, err
+	}
+
+	if signatureVerifier != nil {
+		if err := signatureVerifier(); err != nil {
+			return msgSlot, err
+		}
 	}
 
 	if signerState == nil {
