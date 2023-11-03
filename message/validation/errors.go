@@ -78,6 +78,7 @@ var (
 	ErrInvalidHash                         = Error{text: "root doesn't match full data hash", reject: true}
 	ErrEstimatedRoundTooFar                = Error{text: "message round is too far from estimated"}
 	ErrMalformedMessage                    = Error{text: "message could not be decoded", reject: true}
+	ErrMalformedSignedMessage              = Error{text: "signed message could not be decoded", reject: true}
 	ErrUnknownSSVMessageType               = Error{text: "unknown SSV message type", reject: true}
 	ErrUnknownQBFTMessageType              = Error{text: "unknown QBFT message type", reject: true}
 	ErrUnknownPartialMessageType           = Error{text: "unknown partial signature message type", reject: true}
