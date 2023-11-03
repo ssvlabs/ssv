@@ -1819,6 +1819,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			hash := sha256.Sum256(encodedMsg)
 			privKey, err := rsa.GenerateKey(crand.Reader, 2048)
+			require.NoError(t, err)
 
 			const operatorID = spectypes.OperatorID(1)
 
@@ -1876,6 +1877,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			hash := sha256.Sum256(encodedMsg)
 			privKey, err := rsa.GenerateKey(crand.Reader, 2048)
+			require.NoError(t, err)
 
 			const operatorID = spectypes.OperatorID(1)
 
@@ -1933,6 +1935,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			hash := sha256.Sum256(encodedMsg)
 			privKey, err := rsa.GenerateKey(crand.Reader, 2048)
+			require.NoError(t, err)
 
 			const operatorID = spectypes.OperatorID(1)
 
@@ -1990,6 +1993,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			require.NoError(t, err)
 
 			privKey, err := rsa.GenerateKey(crand.Reader, 2048)
+			require.NoError(t, err)
 
 			const operatorID = spectypes.OperatorID(1)
 
