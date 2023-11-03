@@ -96,14 +96,18 @@ func (handler *msgIDHandler) MsgID(logger *zap.Logger) func(pmsg *ps_pb.Message)
 		if pmsg == nil {
 			return MsgIDEmptyMessage
 		}
+
 		//logger := logger.With()
+
 		if len(pmsg.GetData()) == 0 {
 			return MsgIDEmptyMessage
 		}
+
 		pid, err := peer.IDFromBytes(pmsg.GetFrom())
 		if err != nil {
 			return MsgIDBadPeerID
 		}
+
 		mid := commons.MsgID()(pmsg.GetData())
 		if len(mid) == 0 {
 			logger.Debug("could not create msg_id",
@@ -111,6 +115,7 @@ func (handler *msgIDHandler) MsgID(logger *zap.Logger) func(pmsg *ps_pb.Message)
 				fields.PeerID(pid))
 			return MsgIDError
 		}
+
 		handler.Add(mid, pid)
 		return mid
 	}
@@ -119,8 +124,10 @@ func (handler *msgIDHandler) MsgID(logger *zap.Logger) func(pmsg *ps_pb.Message)
 // GetPeers returns the peers that are related to the given msg
 func (handler *msgIDHandler) GetPeers(msg []byte) []peer.ID {
 	msgID := commons.MsgID()(msg)
+
 	handler.locker.Lock()
 	defer handler.locker.Unlock()
+
 	entry, ok := handler.ids[msgID]
 	if ok {
 		if !entry.t.Add(handler.ttl).After(time.Now()) {
