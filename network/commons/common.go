@@ -113,14 +113,6 @@ func MsgID() MsgIDFunc {
 			return ""
 		}
 
-		message, _, _, err := DecodeSignedSSVMessage(msg)
-		if err != nil {
-			metricMsgIDCalls.WithLabelValues("NotDecoded").Inc()
-		} else {
-			metricMsgIDCalls.WithLabelValues("Decoded").Inc()
-			msg = message
-		}
-
 		b := make([]byte, 12)
 		binary.LittleEndian.PutUint64(b, xxhash.Sum64(msg))
 		return string(b)

@@ -63,8 +63,8 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 	}
 
 	finalMessage := raw
-
 	currentEpoch := n.cfg.Network.Beacon.EstimatedCurrentEpoch()
+
 	if n.cfg.Network.RSAMessageFork(currentEpoch) {
 		//n.interfaceLogger.Info("RSA message fork happened, signing message",
 		//	zap.Uint64("current_epoch", uint64(currentEpoch)),

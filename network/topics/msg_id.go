@@ -8,6 +8,7 @@ import (
 
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/network/commons"
+	"github.com/bloxapp/ssv/networkconfig"
 
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -53,21 +54,23 @@ type msgIDEntry struct {
 
 // msgIDHandler implements MsgIDHandler
 type msgIDHandler struct {
-	ctx    context.Context
-	added  chan addedEvent
-	ids    map[string]*msgIDEntry
-	locker sync.Locker
-	ttl    time.Duration
+	ctx           context.Context
+	added         chan addedEvent
+	ids           map[string]*msgIDEntry
+	locker        sync.Locker
+	ttl           time.Duration
+	networkConfig networkconfig.NetworkConfig
 }
 
 // NewMsgIDHandler creates a new MsgIDHandler
-func NewMsgIDHandler(ctx context.Context, ttl time.Duration) MsgIDHandler {
+func NewMsgIDHandler(ctx context.Context, ttl time.Duration, networkConfig networkconfig.NetworkConfig) MsgIDHandler {
 	handler := &msgIDHandler{
-		ctx:    ctx,
-		added:  make(chan addedEvent, msgIDHandlerBufferSize),
-		ids:    make(map[string]*msgIDEntry),
-		locker: &sync.Mutex{},
-		ttl:    ttl,
+		ctx:           ctx,
+		added:         make(chan addedEvent, msgIDHandlerBufferSize),
+		ids:           make(map[string]*msgIDEntry),
+		locker:        &sync.Mutex{},
+		ttl:           ttl,
+		networkConfig: networkConfig,
 	}
 	return handler
 }
@@ -97,9 +100,8 @@ func (handler *msgIDHandler) MsgID(logger *zap.Logger) func(pmsg *ps_pb.Message)
 			return MsgIDEmptyMessage
 		}
 
-		//logger := logger.With()
-
-		if len(pmsg.GetData()) == 0 {
+		messageData := pmsg.GetData()
+		if len(messageData) == 0 {
 			return MsgIDEmptyMessage
 		}
 
@@ -108,7 +110,17 @@ func (handler *msgIDHandler) MsgID(logger *zap.Logger) func(pmsg *ps_pb.Message)
 			return MsgIDBadPeerID
 		}
 
-		mid := commons.MsgID()(pmsg.GetData())
+		currentEpoch := handler.networkConfig.Beacon.EstimatedCurrentEpoch()
+		if handler.networkConfig.RSAMessageFork(currentEpoch) {
+			decodedMsg, _, _, err := commons.DecodeSignedSSVMessage(messageData)
+			if err != nil {
+				logger.Debug("could not decode signed SSV message", zap.Error(err))
+			} else {
+				messageData = decodedMsg
+			}
+		}
+
+		mid := commons.MsgID()(messageData)
 		if len(mid) == 0 {
 			logger.Debug("could not create msg_id",
 				zap.ByteString("seq_no", pmsg.GetSeqno()),
@@ -123,6 +135,16 @@ func (handler *msgIDHandler) MsgID(logger *zap.Logger) func(pmsg *ps_pb.Message)
 
 // GetPeers returns the peers that are related to the given msg
 func (handler *msgIDHandler) GetPeers(msg []byte) []peer.ID {
+	currentEpoch := handler.networkConfig.Beacon.EstimatedCurrentEpoch()
+	if handler.networkConfig.RSAMessageFork(currentEpoch) {
+		decodedMsg, _, _, err := commons.DecodeSignedSSVMessage(msg)
+		if err != nil {
+			// TODO: consider logging it
+		} else {
+			msg = decodedMsg
+		}
+	}
+
 	msgID := commons.MsgID()(msg)
 
 	handler.locker.Lock()
