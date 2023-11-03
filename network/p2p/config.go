@@ -99,7 +99,7 @@ type Config struct {
 // other options and libp2p components can be configured on top
 func (c *Config) Libp2pOptions(logger *zap.Logger) ([]libp2p.Option, error) {
 	if c.NetworkPrivateKey == nil {
-		return nil, errors.New("could not create options w/o operator key")
+		return nil, errors.New("could not create options w/o network key")
 	}
 	sk, err := commons.ECDSAPrivToInterface(c.NetworkPrivateKey)
 	if err != nil {

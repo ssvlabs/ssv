@@ -288,52 +288,61 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 
 	defer mv.metrics.ActiveMsgValidationDone(topic)
 
-	encodedSSVMessage := pMsg.GetData()
-	messageData, operatorID, signature, err := commons.DecodeSignedSSVMessage(encodedSSVMessage)
-	if err != nil {
-		e := ErrMalformedSignedMessage
-		e.innerErr = err
-		return nil, Descriptor{}, e
-	}
+	messageData := pMsg.GetData()
+	currentEpoch := mv.netCfg.Beacon.EstimatedCurrentEpoch()
 
-	rsaPubKey, ok := mv.operatorPubKeyCache.Get(operatorID)
-	if !ok {
-		operator, found, err := mv.nodeStorage.GetOperatorData(nil, operatorID)
+	if mv.netCfg.RSAMessageFork(currentEpoch) {
+		mv.logger.Info("RSA message fork happened, verifying message signature", fields.Epoch(currentEpoch))
+
+		decMessageData, operatorID, signature, err := commons.DecodeSignedSSVMessage(messageData)
+		messageData = decMessageData
 		if err != nil {
-			e := ErrOperatorNotFound
-			e.got = operatorID
+			e := ErrMalformedSignedMessage
 			e.innerErr = err
 			return nil, Descriptor{}, e
 		}
-		if !found {
-			e := ErrOperatorNotFound
-			e.got = operatorID
-			return nil, Descriptor{}, e
+
+		rsaPubKey, ok := mv.operatorPubKeyCache.Get(operatorID)
+		if !ok {
+			operator, found, err := mv.nodeStorage.GetOperatorData(nil, operatorID)
+			if err != nil {
+				e := ErrOperatorNotFound
+				e.got = operatorID
+				e.innerErr = err
+				return nil, Descriptor{}, e
+			}
+			if !found {
+				e := ErrOperatorNotFound
+				e.got = operatorID
+				return nil, Descriptor{}, e
+			}
+
+			operatorPubKey, err := base64.StdEncoding.DecodeString(string(operator.PublicKey))
+			if err != nil {
+				e := ErrRSADecryption
+				e.innerErr = fmt.Errorf("decode public key: %w", err)
+				return nil, Descriptor{}, e
+			}
+
+			rsaPubKey, err = rsaencryption.ConvertPemToPublicKey(operatorPubKey)
+			if err != nil {
+				e := ErrRSADecryption
+				e.innerErr = fmt.Errorf("convert PEM: %w", err)
+				return nil, Descriptor{}, e
+			}
+
+			mv.operatorPubKeyCache.Set(operatorID, rsaPubKey)
 		}
 
-		operatorPubKey, err := base64.StdEncoding.DecodeString(string(operator.PublicKey))
-		if err != nil {
+		messageHash := sha256.Sum256(messageData)
+
+		if err := rsa.VerifyPKCS1v15(rsaPubKey, crypto.SHA256, messageHash[:], signature); err != nil {
 			e := ErrRSADecryption
-			e.innerErr = fmt.Errorf("decode public key: %w", err)
+			e.innerErr = fmt.Errorf("verify signature: %w", err)
 			return nil, Descriptor{}, e
 		}
-
-		rsaPubKey, err = rsaencryption.ConvertPemToPublicKey(operatorPubKey)
-		if err != nil {
-			e := ErrRSADecryption
-			e.innerErr = fmt.Errorf("convert PEM: %w", err)
-			return nil, Descriptor{}, e
-		}
-
-		mv.operatorPubKeyCache.Set(operatorID, rsaPubKey)
-	}
-
-	messageHash := sha256.Sum256(messageData)
-
-	if err := rsa.VerifyPKCS1v15(rsaPubKey, crypto.SHA256, messageHash[:], signature); err != nil {
-		e := ErrRSADecryption
-		e.innerErr = fmt.Errorf("verify signature: %w", err)
-		return nil, Descriptor{}, e
+	} else {
+		mv.logger.Info("RSA message fork didn't happen, not verifying message signature", fields.Epoch(currentEpoch))
 	}
 
 	if len(messageData) == 0 {
