@@ -86,7 +86,7 @@ func (n NetworkConfig) RSAMessageFork(currentEpoch spec.Epoch) bool {
 func (n NetworkConfig) RSAMessageForkEpoch() spec.Epoch {
 	switch n.Name {
 	case HoleskyStage.Name:
-		return 8140
+		return 8145
 	default:
 		return 0
 	}
