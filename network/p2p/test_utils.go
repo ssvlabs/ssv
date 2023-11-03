@@ -138,6 +138,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, keys testing.NodeKeys
 		RegisteredOperatorPublicKeyPEMs: []string{},
 	}
 	cfg.MessageValidator = validation.NewMessageValidator(networkconfig.TestNetwork)
+	cfg.Network = networkconfig.TestNetwork
 
 	p := New(logger, cfg)
 	err = p.Setup(logger)
