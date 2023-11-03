@@ -72,7 +72,7 @@ func (n NetworkConfig) GetGenesisTime() time.Time {
 func (n NetworkConfig) RSAMessageFork(currentEpoch spec.Epoch) bool {
 	switch n.Name {
 	case HoleskyStage.Name:
-		return currentEpoch >= 8083
+		return currentEpoch >= 8086
 	default:
 		return false
 	}
