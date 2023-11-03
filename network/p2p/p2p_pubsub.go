@@ -66,10 +66,10 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 
 	currentEpoch := n.cfg.Network.Beacon.EstimatedCurrentEpoch()
 	if n.cfg.Network.RSAMessageFork(currentEpoch) {
-		n.interfaceLogger.Info("RSA message fork happened, signing message",
-			zap.Uint64("current_epoch", uint64(currentEpoch)),
-			zap.Uint64("fork_epoch", uint64(n.cfg.Network.RSAMessageForkEpoch())),
-		)
+		//n.interfaceLogger.Info("RSA message fork happened, signing message",
+		//	zap.Uint64("current_epoch", uint64(currentEpoch)),
+		//	zap.Uint64("fork_epoch", uint64(n.cfg.Network.RSAMessageForkEpoch())),
+		//)
 
 		hash := sha256.Sum256(raw)
 
@@ -80,10 +80,10 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 
 		finalMessage = commons.EncodeSignedSSVMessage(raw, n.operatorID, signature)
 	} else {
-		n.interfaceLogger.Info("RSA message fork didn't happen, not signing message",
-			zap.Uint64("current_epoch", uint64(currentEpoch)),
-			zap.Uint64("fork_epoch", uint64(n.cfg.Network.RSAMessageForkEpoch())),
-		)
+		//n.interfaceLogger.Info("RSA message fork didn't happen, not signing message",
+		//	zap.Uint64("current_epoch", uint64(currentEpoch)),
+		//	zap.Uint64("fork_epoch", uint64(n.cfg.Network.RSAMessageForkEpoch())),
+		//)
 	}
 
 	vpk := msg.GetID().GetPubKey()
