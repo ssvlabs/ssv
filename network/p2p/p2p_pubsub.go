@@ -2,8 +2,13 @@ package p2pv1
 
 import (
 	"context"
+	"crypto"
+	"crypto/rsa"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+
+	"github.com/bloxapp/ssv/protocol/v2/message"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -15,7 +20,6 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/records"
-	"github.com/bloxapp/ssv/protocol/v2/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
@@ -60,27 +64,27 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 
 	finalMessage := raw
 
-	//currentEpoch := n.cfg.Network.Beacon.EstimatedCurrentEpoch()
-	//if n.cfg.Network.RSAMessageFork(currentEpoch) {
-	//	//n.interfaceLogger.Info("RSA message fork happened, signing message",
-	//	//	zap.Uint64("current_epoch", uint64(currentEpoch)),
-	//	//	zap.Uint64("fork_epoch", uint64(n.cfg.Network.RSAMessageForkEpoch())),
-	//	//)
-	//
-	//	hash := sha256.Sum256(raw)
-	//
-	//	signature, err := rsa.SignPKCS1v15(nil, n.operatorPrivateKey, crypto.SHA256, hash[:])
-	//	if err != nil {
-	//		return err
-	//	}
-	//
-	//	finalMessage = commons.EncodeSignedSSVMessage(raw, n.operatorID, signature)
-	//} else {
-	//	//n.interfaceLogger.Info("RSA message fork didn't happen, not signing message",
-	//	//	zap.Uint64("current_epoch", uint64(currentEpoch)),
-	//	//	zap.Uint64("fork_epoch", uint64(n.cfg.Network.RSAMessageForkEpoch())),
-	//	//)
-	//}
+	currentEpoch := n.cfg.Network.Beacon.EstimatedCurrentEpoch()
+	if n.cfg.Network.RSAMessageFork(currentEpoch) {
+		//n.interfaceLogger.Info("RSA message fork happened, signing message",
+		//	zap.Uint64("current_epoch", uint64(currentEpoch)),
+		//	zap.Uint64("fork_epoch", uint64(n.cfg.Network.RSAMessageForkEpoch())),
+		//)
+
+		hash := sha256.Sum256(raw)
+
+		signature, err := rsa.SignPKCS1v15(nil, n.operatorPrivateKey, crypto.SHA256, hash[:])
+		if err != nil {
+			return err
+		}
+
+		finalMessage = commons.EncodeSignedSSVMessage(raw, n.operatorID, signature)
+	} else {
+		//n.interfaceLogger.Info("RSA message fork didn't happen, not signing message",
+		//	zap.Uint64("current_epoch", uint64(currentEpoch)),
+		//	zap.Uint64("fork_epoch", uint64(n.cfg.Network.RSAMessageForkEpoch())),
+		//)
+	}
 
 	vpk := msg.GetID().GetPubKey()
 	topics := commons.ValidatorTopicID(vpk)
