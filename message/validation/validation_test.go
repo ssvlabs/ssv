@@ -1770,7 +1770,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		t.Run("unsigned message after fork", func(t *testing.T) {
 			validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-			validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[3], 3, forkEpoch)
+			validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[4], 4, forkEpoch)
 
 			encoded, err := validSignedMessage.Encode()
 			require.NoError(t, err)

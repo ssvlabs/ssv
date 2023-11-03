@@ -3,7 +3,6 @@ package networkconfig
 import (
 	"encoding/json"
 	"fmt"
-	"math"
 	"math/big"
 	"time"
 
@@ -14,7 +13,7 @@ import (
 )
 
 const (
-	TestNetworkRSAForkEpoch = math.MaxUint64 / 2
+	TestNetworkRSAForkEpoch = 12345678
 	MainnetRSAForkEpoch     = 1 // TODO: Mainnet epoch must be defined!
 )
 
