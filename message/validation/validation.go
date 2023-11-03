@@ -276,7 +276,8 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 
 	var messageVerifier func() error
 
-	if mv.netCfg.RSAMessageFork(mv.netCfg.Beacon.EstimatedCurrentEpoch()) {
+	currentEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Unix()))
+	if mv.netCfg.RSAMessageFork(currentEpoch) {
 		decMessageData, operatorID, signature, err := commons.DecodeSignedSSVMessage(messageData)
 		messageData = decMessageData
 		if err != nil {

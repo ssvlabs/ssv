@@ -12,6 +12,11 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
+const (
+	TestNetworkRSAForkEpoch = 1234
+	MainnetRSAForkEpoch     = 1 // TODO: Mainnet epoch must be defined!
+)
+
 var SupportedConfigs = map[string]NetworkConfig{
 	Mainnet.Name:      Mainnet,
 	HoleskyStage.Name: HoleskyStage,
@@ -74,7 +79,9 @@ func (n NetworkConfig) RSAMessageFork(currentEpoch spec.Epoch) bool {
 	case HoleskyStage.Name:
 		return true
 	case Mainnet.Name:
-		return currentEpoch >= 1 // TODO: Mainnet epoch must be defined!
+		return currentEpoch >= MainnetRSAForkEpoch
+	case TestNetwork.Name:
+		return currentEpoch >= TestNetworkRSAForkEpoch
 	default:
 		return false
 	}
