@@ -74,7 +74,7 @@ func (n NetworkConfig) RSAMessageFork(currentEpoch spec.Epoch) bool {
 	case HoleskyStage.Name:
 		return true
 	case Mainnet.Name:
-		return currentEpoch >= 0 // TODO: Mainnet epoch must be defined!
+		return currentEpoch >= 1 // TODO: Mainnet epoch must be defined!
 	default:
 		return false
 	}
