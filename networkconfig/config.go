@@ -67,3 +67,13 @@ func (n NetworkConfig) SlotsPerEpoch() uint64 {
 func (n NetworkConfig) GetGenesisTime() time.Time {
 	return time.Unix(int64(n.Beacon.MinGenesisTime()), 0)
 }
+
+// RSAMessageFork returns epoch for RSA message fork
+func (n NetworkConfig) RSAMessageFork(currentEpoch spec.Epoch) bool {
+	switch n.Name {
+	case HoleskyStage.Name:
+		return currentEpoch >= 8080
+	default:
+		return false
+	}
+}
