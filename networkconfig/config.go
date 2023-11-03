@@ -82,7 +82,7 @@ func (n NetworkConfig) RSAMessageFork(currentEpoch spec.Epoch) bool {
 func (n NetworkConfig) RSAMessageForkEpoch() spec.Epoch {
 	switch n.Name {
 	case HoleskyStage.Name:
-		return 8088
+		return 8090
 	default:
 		return 0
 	}
