@@ -274,7 +274,7 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 
 	messageData := pMsg.GetData()
 
-	var messageVerifier func() error
+	var signatureVerifier func() error
 
 	currentEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Unix()))
 	if mv.netCfg.RSAMessageFork(currentEpoch) {
@@ -286,7 +286,7 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 			return nil, Descriptor{}, e
 		}
 
-		messageVerifier = func() error {
+		signatureVerifier = func() error {
 			return mv.verifyRSASignature(messageData, operatorID, signature)
 		}
 	}
@@ -335,7 +335,7 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 
 	mv.metrics.SSVMessageType(msg.MsgType)
 
-	return mv.validateSSVMessage(msg, receivedAt, messageVerifier)
+	return mv.validateSSVMessage(msg, receivedAt, signatureVerifier)
 }
 
 func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage, receivedAt time.Time, signatureVerifier func() error) (*queue.DecodedSSVMessage, Descriptor, error) {
