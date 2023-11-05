@@ -42,52 +42,6 @@ Build stage Docker image:
   only:
     - stage
 
-Deploy nodes to stage:
-  stage: deploy
-  tags:
-    - blox-infra-stage
-  script:
-    - apk add bash
-    - export K8S_API_VERSION=$INFRA_STAGE_K8_API_VERSION
-    - export SSV_NODES_CPU_LIMIT=$STAGE_SSV_NODES_CPU_LIMIT
-    - export SSV_NODES_MEM_LIMIT=$STAGE_SSV_NODES_MEM_LIMIT
-    - curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.17.0/bin/linux/amd64/kubectl
-    - chmod 755 kubectl
-    - mv kubectl /usr/bin/
-    #
-    # +--------------------+
-    # |  Deploy SSV nodes  |
-    # +--------------------+
-    - .k8/stage/scripts/deploy-cluster-1--4.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
-    - .k8/stage/scripts/deploy-cluster-5--8.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
-    # - .k8/stage/scripts/deploy-cluster-9--12.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
-    # - .k8/stage/scripts/deploy-cluster-13--16.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
-    #
-    # +-------------------+
-    # │  Deploy Bootnode  |
-    # +-------------------+
-    # █▓▒░ Keep commented unless you're testing the bootnode ░▒▓█
-    # - .k8/stage/scripts/deploy-boot-nodes.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE 1000m 1000m
-  only:
-    - stage
-
-Deploy exporter to stage:
-  stage: deploy
-  tags:
-    - blox-infra-stage
-  script:
-    - apk add bash
-    - export K8S_API_VERSION=$INFRA_STAGE_K8_API_VERSION
-    - export SSV_EXPORTER_CPU_LIMIT=$STAGE_SSV_EXPORTER_CPU_LIMIT
-    - export SSV_EXPORTER_MEM_LIMIT=$STAGE_SSV_EXPORTER_MEM_LIMIT
-    - curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.17.0/bin/linux/amd64/kubectl
-    - chmod 755 kubectl
-    - mv kubectl /usr/bin/
-    - .k8/stage/scripts/deploy-exporters.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE blox-infra-stage kubernetes-admin@blox-infra stage.ssv.network $K8S_API_VERSION $SSV_EXPORTER_CPU_LIMIT $SSV_EXPORTER_MEM_LIMIT
-  only:
-    - stage
-
-
 # +---------------------+
 # | STAGE HETZNER NODES |
 # +---------------------+
@@ -166,7 +120,7 @@ Build prod Docker image:
     - $DOCKER_LOGIN_TO_INFRA_PROD_REPO && docker push $DOCKER_REPO_INFRA_PROD:$CI_COMMIT_SHA
 
   only:
-    - fix-validator-registration-duty-start
+    - main
 
 Deploy nodes to prod:
   stage: deploy
@@ -207,7 +161,7 @@ Deploy nodes to prod:
     # - .k8/production/mainnet/scripts/deploy-boot-nodes.sh $DOCKER_REPO_INFRA_PROD $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $PROD_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V3 $SSV_NODES_MEM_LIMIT_V3
 
   only:
-    - fix-validator-registration-duty-start
+    - main
 
 Deploy exporter to prod:
   stage: deploy
