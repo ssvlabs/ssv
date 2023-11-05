@@ -175,11 +175,13 @@ func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]interface{}) *Start
 	require.NoError(t, json.Unmarshal(byts, duty))
 
 	outputMsgs := make([]*spectypes.SignedPartialSignatureMessage, 0)
-	for _, msg := range m["OutputMessages"].([]interface{}) {
-		byts, _ = json.Marshal(msg)
-		typedMsg := &spectypes.SignedPartialSignatureMessage{}
-		require.NoError(t, json.Unmarshal(byts, typedMsg))
-		outputMsgs = append(outputMsgs, typedMsg)
+	if v, ok := m["OutputMessages"].([]interface{}); ok {
+		for _, msg := range v {
+			byts, _ = json.Marshal(msg)
+			typedMsg := &spectypes.SignedPartialSignatureMessage{}
+			require.NoError(t, json.Unmarshal(byts, typedMsg))
+			outputMsgs = append(outputMsgs, typedMsg)
+		}
 	}
 
 	ks := testingutils.KeySetForShare(&spectypes.Share{Quorum: uint64(baseRunnerMap["Share"].(map[string]interface{})["Quorum"].(float64))})
