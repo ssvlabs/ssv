@@ -17,6 +17,8 @@ github.com/CloudyKit/fastprinter v0.0.0-20200109182630-33d98a066a53/go.mod h1:+3
 github.com/CloudyKit/jet/v3 v3.0.0/go.mod h1:HKQPgSJmdK8hdoAbKUUWajkHyHo4RaU5rMdUywE7VMo=
 github.com/DataDog/zstd v1.5.2 h1:vUG4lAyuPCXO0TLbXvPv7EB7cNK1QV/luu55UHLrrn8=
 github.com/DataDog/zstd v1.5.2/go.mod h1:g4AWEaM3yOg3HYfnJ3YIawPnVdXJh9QME85blwSAmyw=
+github.com/GalRogozinski/ssv-spec v0.0.0-20231101193255-1b6c21fd491d h1:RyGnDTFcJt69UEU4O9dAya9kO5qreDHDkKFMhOIyedw=
+github.com/GalRogozinski/ssv-spec v0.0.0-20231101193255-1b6c21fd491d/go.mod h1:zPJR7YnG5iZ6I0h6EzfVly8bTBXaZwcx4TyJ8pzYVd8=
 github.com/Joker/hpp v1.0.0/go.mod h1:8x5n+M1Hp5hC0g8okX3sR3vFQwynaX/UgSOM9MeBKzY=
 github.com/Shopify/goreferrer v0.0.0-20181106222321-ec9c9a553398/go.mod h1:a1uqRtAwp2Xwc6WNPJEufxJ7fx3npB4UV/JOLmbu5I0=
 github.com/Shopify/sarama v1.26.1/go.mod h1:NbSGBSSndYaIhRcBtY9V0U7AyH+x71bG668AuWys/yU=
@@ -56,8 +58,6 @@ github.com/bits-and-blooms/bitset v1.7.0 h1:YjAGVd3XmtK9ktAbX8Zg2g2PwLIMjGREZJHl
 github.com/bits-and-blooms/bitset v1.7.0/go.mod h1:gIdJ4wp64HaoK2YrL1Q5/N7Y16edYb8uY+O0FJTyyDA=
 github.com/bloxapp/eth2-key-manager v1.3.2-0.20231022162227-e2b8264a29a5 h1:vjrMmMH15Bo0QF+228CuEZvCI+OuPyJRco82Gj/WyTI=
 github.com/bloxapp/eth2-key-manager v1.3.2-0.20231022162227-e2b8264a29a5/go.mod h1:cT+qAJfnAzNz9StFoHQ8xAkyU2eyEukd6xfxvcBWuZA=
-github.com/bloxapp/ssv-spec v0.3.3 h1:iNomqWQjxDDQouHMjl27PmH1hUolJ4u8QQ+HX/TQQcg=
-github.com/bloxapp/ssv-spec v0.3.3/go.mod h1:zPJR7YnG5iZ6I0h6EzfVly8bTBXaZwcx4TyJ8pzYVd8=
 github.com/bradfitz/go-smtpd v0.0.0-20170404230938-deb6d6237625/go.mod h1:HYsPBTaaSFSlLx/70C2HPIMNZpVV8+vt/A+FMnYP11g=
 github.com/btcsuite/btcd/btcec/v2 v2.3.2 h1:5n0X6hX0Zk+6omWcihdYvdAlGf2DfasC0GMf7DClJ3U=
 github.com/btcsuite/btcd/btcec/v2 v2.3.2/go.mod h1:zYzJ8etWJQIv1Ogk7OzpWjowwOdXY1W/17j2MW85J04=

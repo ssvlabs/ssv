@@ -223,5 +223,8 @@ replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
 
-//TODO remove this replace when the following PR is merged https://github.com/bloxapp/eth2-key-manager/pull/100
+// TODO: remove this replace when the following PR is merged https://github.com/bloxapp/eth2-key-manager/pull/100
 replace github.com/bloxapp/eth2-key-manager => github.com/bloxapp/eth2-key-manager v1.3.2-0.20231022162227-e2b8264a29a5
+
+// TODO: remove this replace when the following PR is merged https://github.com/bloxapp/ssv-spec/pull
+replace github.com/bloxapp/ssv-spec => github.com/GalRogozinski/ssv-spec v0.0.0-20231101193255-1b6c21fd491d
