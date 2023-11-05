@@ -227,4 +227,4 @@ replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-
 replace github.com/bloxapp/eth2-key-manager => github.com/bloxapp/eth2-key-manager v1.3.2-0.20231022162227-e2b8264a29a5
 
 // TODO: remove this replace when the following PR is merged https://github.com/bloxapp/ssv-spec/pull
-replace github.com/bloxapp/ssv-spec => github.com/GalRogozinski/ssv-spec v0.0.0-20231101193255-1b6c21fd491d
+replace github.com/bloxapp/ssv-spec => github.com/moshe-blox/ssv-spec v0.0.0-20231105135956-a64e63f6e35a
