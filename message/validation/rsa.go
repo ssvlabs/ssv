@@ -49,7 +49,7 @@ func (mv *messageValidator) verifyRSASignature(messageData []byte, operatorID sp
 
 	if err := rsa.VerifyPKCS1v15(rsaPubKey, crypto.SHA256, messageHash[:], signature); err != nil {
 		e := ErrRSADecryption
-		e.innerErr = fmt.Errorf("verify signature: %w", err)
+		e.innerErr = fmt.Errorf("verify opid: %v signature: %w", operatorID, err)
 		return e
 	}
 
