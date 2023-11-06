@@ -7,11 +7,13 @@ import (
 	"math"
 	"sort"
 
-	"github.com/bloxapp/ssv/network/records"
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/monitoring/metricsreporter"
+	"github.com/bloxapp/ssv/network/records"
 )
 
 const (
@@ -27,7 +29,7 @@ type ConnManager interface {
 	// TagBestPeers tags the best n peers from the given list, based on subnets distribution scores.
 	TagBestPeers(logger *zap.Logger, n int, mySubnets records.Subnets, allPeers []peer.ID, topicMaxPeers int)
 	// TrimPeers will trim unprotected peers.
-	TrimPeers(ctx context.Context, logger *zap.Logger, net libp2pnetwork.Network)
+	TrimPeers(ctx context.Context, logger *zap.Logger, net libp2pnetwork.Network, mr *metricsreporter.MetricsReporter)
 }
 
 // NewConnManager creates a new conn manager.
@@ -65,7 +67,7 @@ func (c connManager) TagBestPeers(logger *zap.Logger, n int, mySubnets records.S
 	}
 }
 
-func (c connManager) TrimPeers(ctx context.Context, logger *zap.Logger, net libp2pnetwork.Network) {
+func (c connManager) TrimPeers(ctx context.Context, logger *zap.Logger, net libp2pnetwork.Network, metrics *metricsreporter.MetricsReporter) {
 	allPeers := net.Peers()
 	before := len(allPeers)
 	// TODO: use libp2p's conn manager once ready
@@ -74,6 +76,7 @@ func (c connManager) TrimPeers(ctx context.Context, logger *zap.Logger, net libp
 		if !c.connManager.IsProtected(pid, protectedTag) {
 			err := net.ClosePeer(pid)
 			logger.Debug("closing peer", zap.String("pid", pid.String()), zap.Error(err))
+			metrics.DeletePeerInfo(pid)
 			// if err != nil {
 			//	logger.Debug("could not close trimmed peer",
 			//		zap.String("pid", pid.String()), zap.Error(err))

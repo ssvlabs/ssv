@@ -1,7 +1,6 @@
 package metricsreporter
 
 import (
-	"context"
 	"crypto/sha256"
 	"fmt"
 	"strconv"
@@ -10,12 +9,12 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
-	"github.com/bloxapp/ssv/utils/async"
 )
 
 // TODO: implement all methods
@@ -147,13 +146,17 @@ var (
 		Name: "ssv_messages_received_total",
 		Help: "The amount of messages total received",
 	}, []string{})
+	messageValidationRSAVerifications = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_message_validation_rsa_checks",
+		Help: "The amount message validations",
+	}, []string{})
 )
 
 type MetricsReporter struct {
 	logger *zap.Logger
 }
 
-func New(ctx context.Context, opts ...Option) *MetricsReporter {
+func New(opts ...Option) *MetricsReporter {
 	mr := &MetricsReporter{
 		logger: zap.NewNop(),
 	}
@@ -188,6 +191,7 @@ func New(ctx context.Context, opts ...Option) *MetricsReporter {
 		nonCommitteeMessages,
 		messagesReceivedFromPeer,
 		messagesReceivedTotal,
+		messageValidationRSAVerifications,
 	}
 
 	for i, c := range allMetrics {
@@ -199,12 +203,6 @@ func New(ctx context.Context, opts ...Option) *MetricsReporter {
 			)
 		}
 	}
-
-	// reset  metric every hour because it can grow infinitely
-	async.Interval(ctx, 8*time.Hour, func() {
-		messagesReceivedFromPeer.Reset()
-		messagesReceivedTotal.Reset()
-	})
 
 	return &MetricsReporter{}
 }
@@ -286,6 +284,10 @@ func (m *MetricsReporter) MessagesReceivedFromPeer(peerId string) {
 
 func (m *MetricsReporter) MessagesReceivedTotal() {
 	messagesReceivedTotal.WithLabelValues().Inc()
+}
+
+func (m *MetricsReporter) MessageValidationRSAVerifications() {
+	messageValidationRSAVerifications.WithLabelValues().Inc()
 }
 
 // TODO implement
@@ -396,4 +398,9 @@ func (m *MetricsReporter) NonCommitteeMessage(msgType spectypes.MsgType, decided
 		str = "decided"
 	}
 	nonCommitteeMessages.WithLabelValues(ssvmessage.MsgTypeToString(msgType), str).Inc()
+}
+
+// DeletePeerInfo deletes all data about peers which connections have been closed by the current node
+func (m *MetricsReporter) DeletePeerInfo(peerId peer.ID) {
+	messagesReceivedFromPeer.DeleteLabelValues(peerId.String())
 }

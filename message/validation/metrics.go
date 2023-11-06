@@ -5,6 +5,7 @@ import (
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 type metrics interface {
@@ -22,6 +23,8 @@ type metrics interface {
 	NonCommitteeMessage(msgType spectypes.MsgType, decided bool)
 	MessagesReceivedFromPeer(peerId string)
 	MessagesReceivedTotal()
+	MessageValidationRSAVerifications()
+	DeletePeerInfo(peerId peer.ID)
 }
 
 type nopMetrics struct{}
@@ -40,3 +43,5 @@ func (*nopMetrics) InCommitteeMessage(spectypes.MsgType, bool)                  
 func (*nopMetrics) NonCommitteeMessage(spectypes.MsgType, bool)                  {}
 func (*nopMetrics) MessagesReceivedFromPeer(string)                              {}
 func (*nopMetrics) MessagesReceivedTotal()                                       {}
+func (*nopMetrics) MessageValidationRSAVerifications()                           {}
+func (*nopMetrics) DeletePeerInfo(peer.ID)                                       {}

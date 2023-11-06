@@ -12,6 +12,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/bloxapp/ssv/message/validation"
+	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"
@@ -140,7 +141,8 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, keys testing.NodeKeys
 	cfg.MessageValidator = validation.NewMessageValidator(networkconfig.TestNetwork)
 	cfg.Network = networkconfig.TestNetwork
 
-	p := New(logger, cfg)
+	mr := metricsreporter.New()
+	p := New(logger, cfg, mr)
 	err = p.Setup(logger)
 	if err != nil {
 		return nil, err
