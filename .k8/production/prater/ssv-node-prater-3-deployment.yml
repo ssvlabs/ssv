@@ -103,7 +103,7 @@ spec:
           - name: HOST_ADDRESS
             value: ""
           - name: DB_PATH
-            value: "./data/db-jato-v2--2023-11-06--19-07"
+            value: "./data/db-jato-v2"
           - name: METRICS_API_PORT
             value: "15013"
           - name: SSV_API_PORT
