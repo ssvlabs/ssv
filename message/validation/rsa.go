@@ -13,7 +13,7 @@ import (
 )
 
 func (mv *messageValidator) verifyRSASignature(messageData []byte, operatorID spectypes.OperatorID, signature []byte) error {
-	rsaPubKey, ok := mv.operatorPubKeyCache.Get(operatorID)
+	rsaPubKey, ok := mv.operatorIDToPubkeyCache.Get(operatorID)
 	if !ok {
 		operator, found, err := mv.nodeStorage.GetOperatorData(nil, operatorID)
 		if err != nil {
@@ -42,7 +42,7 @@ func (mv *messageValidator) verifyRSASignature(messageData []byte, operatorID sp
 			return e
 		}
 
-		mv.operatorPubKeyCache.Set(operatorID, rsaPubKey)
+		mv.operatorIDToPubkeyCache.Set(operatorID, rsaPubKey)
 	}
 
 	messageHash := sha256.Sum256(messageData)
