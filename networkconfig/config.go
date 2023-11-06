@@ -14,6 +14,7 @@ import (
 
 var SupportedConfigs = map[string]NetworkConfig{
 	Mainnet.Name:      Mainnet,
+	Holesky.Name:      Holesky,
 	HoleskyStage.Name: HoleskyStage,
 	JatoV2Stage.Name:  JatoV2Stage,
 	JatoV2.Name:       JatoV2,
