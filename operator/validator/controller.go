@@ -162,6 +162,8 @@ type controller struct {
 
 // NewController creates a new validator controller instance
 func NewController(logger *zap.Logger, options ControllerOptions) Controller {
+	logger.Debug("setting up validator controller")
+
 	// lookup in a map that holds all relevant operators
 	operatorsIDs := &sync.Map{}
 

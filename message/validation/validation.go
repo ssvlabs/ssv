@@ -6,10 +6,7 @@ package validation
 import (
 	"bytes"
 	"context"
-	"crypto"
 	"crypto/rsa"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"strings"
@@ -35,7 +32,6 @@ import (
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
 const (
@@ -224,15 +220,6 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer
 		mv.metrics.MessageValidationDuration(sinceStart, validationDurationLabels...)
 	}()
 
-	// Ignore messages from peers that are not connected.
-	// TODO:
-	// - pass the existing PeerInfoIndex to NewMessageValidator
-	// - add a separate metric to track # of messages ignored here
-	// - add unit tests with a PeerInfoIndex mock
-	//if mv.peersIndex != nil && mv.peersIndex.State(peerID) != peers.StateConnected {
-	//	return pubsub.ValidationIgnore
-	//}
-
 	decodedMessage, descriptor, err := mv.validateP2PMessage(pmsg, time.Now())
 	round := specqbft.Round(0)
 	if descriptor.Consensus != nil {
@@ -276,7 +263,7 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer
 // ValidateSSVMessage validates the given SSV message.
 // If successful, it returns the decoded message and its descriptor. Otherwise, it returns an error.
 func (mv *messageValidator) ValidateSSVMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, Descriptor, error) {
-	return mv.validateSSVMessage(ssvMessage, time.Now())
+	return mv.validateSSVMessage(ssvMessage, time.Now(), nil)
 }
 
 func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt time.Time) (*queue.DecodedSSVMessage, Descriptor, error) {
@@ -289,67 +276,22 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 	defer mv.metrics.ActiveMsgValidationDone(topic)
 
 	messageData := pMsg.GetData()
-	currentEpoch := mv.netCfg.Beacon.EstimatedCurrentEpoch()
 
+	var signatureVerifier func() error
+
+	currentEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Unix()))
 	if mv.netCfg.RSAMessageFork(currentEpoch) {
-		//mv.logger.Info("RSA message fork happened, verifying message signature",
-		//	zap.Uint64("current_epoch", uint64(currentEpoch)),
-		//	zap.Uint64("fork_epoch", uint64(mv.netCfg.RSAMessageForkEpoch())),
-		//)
-
 		decMessageData, operatorID, signature, err := commons.DecodeSignedSSVMessage(messageData)
+		messageData = decMessageData
 		if err != nil {
 			e := ErrMalformedSignedMessage
 			e.innerErr = err
 			return nil, Descriptor{}, e
 		}
 
-		rsaPubKey, ok := mv.operatorPubKeyCache.Get(operatorID)
-		if !ok {
-			operator, found, err := mv.nodeStorage.GetOperatorData(nil, operatorID)
-			if err != nil {
-				e := ErrOperatorNotFound
-				e.got = operatorID
-				e.innerErr = err
-				return nil, Descriptor{}, e
-			}
-			if !found {
-				e := ErrOperatorNotFound
-				e.got = operatorID
-				return nil, Descriptor{}, e
-			}
-
-			operatorPubKey, err := base64.StdEncoding.DecodeString(string(operator.PublicKey))
-			if err != nil {
-				e := ErrRSADecryption
-				e.innerErr = fmt.Errorf("decode public key: %w", err)
-				return nil, Descriptor{}, e
-			}
-
-			rsaPubKey, err = rsaencryption.ConvertPemToPublicKey(operatorPubKey)
-			if err != nil {
-				e := ErrRSADecryption
-				e.innerErr = fmt.Errorf("convert PEM: %w", err)
-				return nil, Descriptor{}, e
-			}
-
-			mv.operatorPubKeyCache.Set(operatorID, rsaPubKey)
+		signatureVerifier = func() error {
+			return mv.verifyRSASignature(messageData, operatorID, signature)
 		}
-
-		messageHash := sha256.Sum256(messageData)
-
-		if err := rsa.VerifyPKCS1v15(rsaPubKey, crypto.SHA256, messageHash[:], signature); err != nil {
-			e := ErrRSADecryption
-			e.innerErr = fmt.Errorf("verify signature: %w", err)
-			return nil, Descriptor{}, e
-		}
-		mv.metrics.MessageValidationRSAVerifications()
-		messageData = decMessageData
-	} else {
-		//mv.logger.Info("RSA message fork didn't happen, not verifying message signature",
-		//	zap.Uint64("current_epoch", uint64(currentEpoch)),
-		//	zap.Uint64("fork_epoch", uint64(mv.netCfg.RSAMessageForkEpoch())),
-		//)
 	}
 
 	if len(messageData) == 0 {
@@ -396,10 +338,10 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 
 	mv.metrics.SSVMessageType(msg.MsgType)
 
-	return mv.validateSSVMessage(msg, receivedAt)
+	return mv.validateSSVMessage(msg, receivedAt, signatureVerifier)
 }
 
-func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage, receivedAt time.Time) (*queue.DecodedSSVMessage, Descriptor, error) {
+func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage, receivedAt time.Time, signatureVerifier func() error) (*queue.DecodedSSVMessage, Descriptor, error) {
 	var descriptor Descriptor
 
 	if len(ssvMessage.Data) == 0 {
@@ -485,7 +427,8 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 				return nil, descriptor, e
 			}
 
-			consensusDescriptor, slot, err := mv.validateConsensusMessage(share, msg.Body.(*specqbft.SignedMessage), msg.GetID(), receivedAt)
+			signedMessage := msg.Body.(*specqbft.SignedMessage)
+			consensusDescriptor, slot, err := mv.validateConsensusMessage(share, signedMessage, msg.GetID(), receivedAt, signatureVerifier)
 			descriptor.Consensus = &consensusDescriptor
 			descriptor.Slot = slot
 			if err != nil {
@@ -500,7 +443,8 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 				return nil, descriptor, e
 			}
 
-			slot, err := mv.validatePartialSignatureMessage(share, msg.Body.(*spectypes.SignedPartialSignatureMessage), msg.GetID())
+			partialSignatureMessage := msg.Body.(*spectypes.SignedPartialSignatureMessage)
+			slot, err := mv.validatePartialSignatureMessage(share, partialSignatureMessage, msg.GetID(), signatureVerifier)
 			descriptor.Slot = slot
 			if err != nil {
 				return nil, descriptor, err
