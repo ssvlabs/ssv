@@ -6,6 +6,7 @@ metadata:
   namespace: REPLACE_NAMESPACE
   labels:
     app: ssv-node-31
+    prometheus/app: ssv-node
 spec:
   type: ClusterIP
   ports:
