@@ -343,7 +343,7 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 			e.innerErr = fmt.Errorf("verify signature: %w", err)
 			return nil, Descriptor{}, e
 		}
-
+		mv.metrics.MessageValidationRSAVerifications()
 		messageData = decMessageData
 	} else {
 		//mv.logger.Info("RSA message fork didn't happen, not verifying message signature",

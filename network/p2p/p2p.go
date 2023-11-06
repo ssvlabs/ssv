@@ -18,6 +18,7 @@ import (
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/message/validation"
+	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"
@@ -65,6 +66,7 @@ type p2pNetwork struct {
 	msgResolver  topics.MsgPeersResolver
 	msgValidator validation.MessageValidator
 	connHandler  connections.ConnHandler
+	metrics      *metricsreporter.MetricsReporter
 
 	state int32
 
@@ -81,7 +83,7 @@ type p2pNetwork struct {
 }
 
 // New creates a new p2p network
-func New(logger *zap.Logger, cfg *Config) network.P2PNetwork {
+func New(logger *zap.Logger, cfg *Config, mr *metricsreporter.MetricsReporter) network.P2PNetwork {
 	ctx, cancel := context.WithCancel(cfg.Ctx)
 
 	logger = logger.Named(logging.NameP2PNetwork)
@@ -100,6 +102,7 @@ func New(logger *zap.Logger, cfg *Config) network.P2PNetwork {
 		operatorPKCache:    sync.Map{},
 		operatorPrivateKey: cfg.OperatorPrivateKey,
 		operatorID:         cfg.OperatorID,
+		metrics:            mr,
 	}
 }
 
@@ -194,7 +197,7 @@ func (n *p2pNetwork) peersBalancing(logger *zap.Logger) func() {
 		connMgr := peers.NewConnManager(logger, n.libConnManager, n.idx)
 		mySubnets := records.Subnets(n.subnets).Clone()
 		connMgr.TagBestPeers(logger, n.cfg.MaxPeers-1, mySubnets, allPeers, n.cfg.TopicMaxPeers)
-		connMgr.TrimPeers(ctx, logger, n.host.Network())
+		connMgr.TrimPeers(ctx, logger, n.host.Network(), n.metrics)
 	}
 }
 
