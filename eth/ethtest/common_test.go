@@ -192,7 +192,6 @@ func (e *TestEnv) setup(
 	}
 
 	metricsReporter := metricsreporter.New(
-		ctx,
 		metricsreporter.WithLogger(logger),
 	)
 

@@ -318,6 +318,7 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 		signatureVerifier = func() error {
 			return mv.verifyRSASignature(messageData, operatorID, signature)
 		}
+		mv.metrics.MessageValidationRSAVerifications()
 	}
 
 	if len(messageData) == 0 {
