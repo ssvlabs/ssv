@@ -395,8 +395,9 @@ func (c *controller) StartValidators() {
 
 	var ownShares []*ssvtypes.SSVShare
 	var allPubKeys = make([][]byte, 0, len(shares))
+	ownOpID := c.GetOperatorData().ID
 	for _, share := range shares {
-		if share.BelongsToOperator(c.GetOperatorData().ID) {
+		if share.BelongsToOperator(ownOpID) {
 			ownShares = append(ownShares, share)
 		}
 		allPubKeys = append(allPubKeys, share.ValidatorPubKey)
