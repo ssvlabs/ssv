@@ -1734,7 +1734,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Get error when receiving an SSV message with an invalid signature.
 	t.Run("signature verification", func(t *testing.T) {
-		const forkEpoch = networkconfig.TestNetworkRSAForkEpoch
+		const forkEpoch = math.MaxUint64
 
 		t.Run("unsigned message before fork", func(t *testing.T) {
 			validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)

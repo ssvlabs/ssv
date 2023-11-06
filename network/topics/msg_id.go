@@ -110,17 +110,8 @@ func (handler *msgIDHandler) MsgID(logger *zap.Logger) func(pmsg *ps_pb.Message)
 			return MsgIDBadPeerID
 		}
 
-		currentEpoch := handler.networkConfig.Beacon.EstimatedCurrentEpoch()
-		if handler.networkConfig.RSAMessageFork(currentEpoch) {
-			decodedMsg, _, _, err := commons.DecodeSignedSSVMessage(messageData)
-			if err != nil {
-				logger.Debug("could not decode signed SSV message", zap.Error(err))
-			} else {
-				messageData = decodedMsg
-			}
-		}
+		mid := handler.pubsubMsgToMsgID(messageData)
 
-		mid := commons.MsgID()(messageData)
 		if len(mid) == 0 {
 			logger.Debug("could not create msg_id",
 				zap.ByteString("seq_no", pmsg.GetSeqno()),
@@ -133,19 +124,22 @@ func (handler *msgIDHandler) MsgID(logger *zap.Logger) func(pmsg *ps_pb.Message)
 	}
 }
 
-// GetPeers returns the peers that are related to the given msg
-func (handler *msgIDHandler) GetPeers(msg []byte) []peer.ID {
+func (handler *msgIDHandler) pubsubMsgToMsgID(msg []byte) string {
 	currentEpoch := handler.networkConfig.Beacon.EstimatedCurrentEpoch()
-	if handler.networkConfig.RSAMessageFork(currentEpoch) {
+	if currentEpoch > handler.networkConfig.RSAForkEpoch {
 		decodedMsg, _, _, err := commons.DecodeSignedSSVMessage(msg)
 		if err != nil {
-			// TODO: consider logging it
+			// todo: should err here or just log and let the decode function err?
 		} else {
-			msg = decodedMsg
+			return commons.MsgID()(decodedMsg)
 		}
 	}
+	return commons.MsgID()(msg)
+}
 
-	msgID := commons.MsgID()(msg)
+// GetPeers returns the peers that are related to the given msg
+func (handler *msgIDHandler) GetPeers(msg []byte) []peer.ID {
+	msgID := handler.pubsubMsgToMsgID(msg)
 
 	handler.locker.Lock()
 	defer handler.locker.Unlock()

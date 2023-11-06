@@ -62,7 +62,7 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 		return errors.Wrap(err, "could not decode msg")
 	}
 
-	if n.cfg.Network.RSAMessageFork(n.cfg.Network.Beacon.EstimatedCurrentEpoch()) {
+	if n.cfg.Network.Beacon.EstimatedCurrentEpoch() > n.cfg.Network.RSAForkEpoch {
 		hash := sha256.Sum256(encodedMsg)
 
 		signature, err := rsa.SignPKCS1v15(nil, n.operatorPrivateKey, crypto.SHA256, hash[:])

@@ -12,11 +12,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
-const (
-	TestNetworkRSAForkEpoch = 12345678
-	MainnetRSAForkEpoch     = 1 // TODO: Mainnet epoch must be defined!
-)
-
 var SupportedConfigs = map[string]NetworkConfig{
 	Mainnet.Name:      Mainnet,
 	HoleskyStage.Name: HoleskyStage,
@@ -42,6 +37,7 @@ type NetworkConfig struct {
 	RegistryContractAddr    string // TODO: ethcommon.Address
 	Bootnodes               []string
 	WhitelistedOperatorKeys []string
+	RSAForkEpoch            spec.Epoch
 }
 
 func (n NetworkConfig) String() string {
@@ -71,18 +67,4 @@ func (n NetworkConfig) SlotsPerEpoch() uint64 {
 // GetGenesisTime returns the genesis time in unix time.
 func (n NetworkConfig) GetGenesisTime() time.Time {
 	return time.Unix(int64(n.Beacon.MinGenesisTime()), 0)
-}
-
-// RSAMessageFork returns epoch for RSA message fork
-func (n NetworkConfig) RSAMessageFork(currentEpoch spec.Epoch) bool {
-	switch n.Name {
-	case HoleskyStage.Name:
-		return true
-	case Mainnet.Name:
-		return currentEpoch >= MainnetRSAForkEpoch
-	case TestNetwork.Name:
-		return currentEpoch >= TestNetworkRSAForkEpoch
-	default:
-		return false
-	}
 }
