@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"github.com/bloxapp/ssv/protocol/v2/message"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -15,7 +16,6 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/records"
-	"github.com/bloxapp/ssv/protocol/v2/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
@@ -155,14 +155,14 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 			return errors.New("message was not decoded")
 		}
 
-		p2pID := decodedMsg.GetID().String()
+		//p2pID := decodedMsg.GetID().String()
 
 		//	logger.With(
 		// 		zap.String("pubKey", hex.EncodeToString(ssvMsg.MsgID.GetPubKey())),
 		// 		zap.String("role", ssvMsg.MsgID.GetRoleType().String()),
 		// 	).Debug("handlePubsubMessages")
 
-		metricsRouterIncoming.WithLabelValues(p2pID, message.MsgTypeToString(decodedMsg.MsgType)).Inc()
+		metricsRouterIncoming.WithLabelValues(message.MsgTypeToString(decodedMsg.MsgType)).Inc()
 
 		n.msgRouter.Route(ctx, decodedMsg)
 

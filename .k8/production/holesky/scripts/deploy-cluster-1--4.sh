@@ -27,7 +27,7 @@ if [[ -z $5 ]]; then
   exit 1
 fi
 
-if [[ -z $6 ]]; then
+if [[ -z $6 ]]; then 
   echo "Please provide k8s context"
   exit 1
 fi
@@ -93,7 +93,7 @@ fi
 #if [[ -d .k8/configmaps/ ]]; then
 #config
   #for file in $(ls -A1 .k8/configmaps/); do
-    #sed -i -e "s|REPLACE_NAMESPACE|${NAMESPACE}|g" ".k8/configmaps/${file}"
+    #sed -i -e "s|REPLACE_NAMESPACE|${NAMESPACE}|g" ".k8/configmaps/${file}" 
   #done
 #fi
 
@@ -103,10 +103,12 @@ fi
   #done
 #fi
 
-DIR=".k8/stage"
+DIR=".k8/production/holesky"
 DEPLOY_FILES=(
-  "boot-node-deployment.yml"
-  "boot-node-2-deployment.yml"
+  "ssv-node-holesky-1-deployment.yml"
+  "ssv-node-holesky-2-deployment.yml"
+  "ssv-node-holesky-3-deployment.yml"
+  "ssv-node-holesky-4-deployment.yml"
 )
 
 if [[ -d $DIR ]]; then
@@ -119,10 +121,11 @@ if [[ -d $DIR ]]; then
           -e "s|REPLACE_HEALTH_IMAGE|${HEALTH_CHECK_IMAGE}|g" \
           -e "s|REPLACE_NODES_CPU_LIMIT|${NODES_CPU_LIMIT}|g" \
           -e "s|REPLACE_NODES_MEM_LIMIT|${NODES_MEM_LIMIT}|g" \
-          -e "s|REPLACE_IMAGETAG|${IMAGETAG}|g" "${DIR}/${file}" || exit 1
+	        -e "s|REPLACE_IMAGETAG|${IMAGETAG}|g" "${DIR}/${file}" || exit 1
   done
 fi
 
 #deploy
-kubectl --context=$K8S_CONTEXT apply -f .k8/stage/boot-node-deployment.yml || exit 1
-kubectl --context=$K8S_CONTEXT apply -f .k8/stage/boot-node-2-deployment.yml || exit 1
+for file in "${DEPLOY_FILES[@]}"; do
+    kubectl --context=$K8S_CONTEXT apply -f "${DIR}/${file}" || exit 1
+done

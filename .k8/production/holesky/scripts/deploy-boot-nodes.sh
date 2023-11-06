@@ -27,7 +27,7 @@ if [[ -z $5 ]]; then
   exit 1
 fi
 
-if [[ -z $6 ]]; then 
+if [[ -z $6 ]]; then
   echo "Please provide k8s context"
   exit 1
 fi
@@ -93,7 +93,7 @@ fi
 #if [[ -d .k8/configmaps/ ]]; then
 #config
   #for file in $(ls -A1 .k8/configmaps/); do
-    #sed -i -e "s|REPLACE_NAMESPACE|${NAMESPACE}|g" ".k8/configmaps/${file}" 
+    #sed -i -e "s|REPLACE_NAMESPACE|${NAMESPACE}|g" ".k8/configmaps/${file}"
   #done
 #fi
 
@@ -103,12 +103,9 @@ fi
   #done
 #fi
 
-DIR=".k8/stage"
+DIR=".k8/production/holesky"
 DEPLOY_FILES=(
-  "ssv-node-v2-1-deployment.yml"
-  "ssv-node-v2-2-deployment.yml"
-  "ssv-node-v2-3-deployment.yml"
-  "ssv-node-v2-4-deployment.yml"
+  "boot-node-holesky-deployment.yml"
 )
 
 if [[ -d $DIR ]]; then

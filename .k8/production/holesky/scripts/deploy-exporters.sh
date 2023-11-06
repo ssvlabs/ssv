@@ -33,7 +33,7 @@ if [[ -z $6 ]]; then
 fi
 
 if [[ -z $7 ]]; then
-  echo "Please provide domain suffix"
+  echo "Pleae provide domain suffix"
   exit 1
 fi
 
@@ -80,10 +80,23 @@ if ! kubectl --context=$K8S_CONTEXT get ns | grep -q $NAMESPACE; then
   kubectl --context=$K8S_CONTEXT create namespace $NAMESPACE
 fi
 
-DIR=".k8/stage"
+#config
+#if [[ -d .k8/configmaps/ ]]; then
+#config
+  #for file in $(ls -A1 .k8/configmaps/); do
+    #sed -i -e "s|REPLACE_NAMESPACE|${NAMESPACE}|g" ".k8/configmaps/${file}" 
+  #done
+#fi
+
+#if [[ -d .k8/secrets/ ]]; then
+  #for file in $(ls -A1 .k8/secrets/); do
+   #sed -i -e "s|REPLACE_NAMESPACE|${NAMESPACE}|g" ".k8/secrets/${file}"
+  #done
+#fi
+
+DIR=".k8/production/holesky"
 DEPLOY_FILES=(
-  "ssv-exporter-1.yml"
-  "ssv-exporter-2.yml"
+  "ssv-full-node-holesky-deployment.yml"
 )
 
 if [[ -d $DIR ]]; then

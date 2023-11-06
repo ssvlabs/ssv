@@ -246,7 +246,6 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 			TCPPort:       n.cfg.TCPPort,
 			NetworkKey:    n.cfg.NetworkPrivateKey,
 			Bootnodes:     n.cfg.TransformBootnodes(),
-			OperatorID:    n.cfg.OperatorID,
 			EnableLogging: n.cfg.DiscoveryTrace,
 		}
 		if len(n.subnets) > 0 {
@@ -263,6 +262,7 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 		SubnetsIdx:  n.idx,
 		HostAddress: n.cfg.HostAddress,
 		HostDNS:     n.cfg.HostDNS,
+		DomainType:  n.cfg.Network.Domain,
 	}
 	disc, err := discovery.NewService(n.ctx, logger, discOpts)
 	if err != nil {
