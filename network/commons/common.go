@@ -40,7 +40,12 @@ const (
 )
 
 func EncodeSignedSSVMessage(message []byte, operatorID spectypes.OperatorID, signature []byte) []byte {
-	return append(append(signature, binary.LittleEndian.AppendUint64(nil, operatorID)...), message...)
+
+	b := make([]byte, signatureSize+operatorIDSize+len(message))
+	copy(b[signatureOffset:], signature)
+	binary.LittleEndian.PutUint64(b[operatorIDOffset:], uint64(operatorID))
+	copy(b[messageOffset:], message)
+	return b
 }
 
 func DecodeSignedSSVMessage(encoded []byte) (message []byte, operatorID spectypes.OperatorID, signature []byte, err error) {
