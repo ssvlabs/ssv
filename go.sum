@@ -56,8 +56,6 @@ github.com/bits-and-blooms/bitset v1.7.0 h1:YjAGVd3XmtK9ktAbX8Zg2g2PwLIMjGREZJHl
 github.com/bits-and-blooms/bitset v1.7.0/go.mod h1:gIdJ4wp64HaoK2YrL1Q5/N7Y16edYb8uY+O0FJTyyDA=
 github.com/bloxapp/eth2-key-manager v1.3.2-0.20231022162227-e2b8264a29a5 h1:vjrMmMH15Bo0QF+228CuEZvCI+OuPyJRco82Gj/WyTI=
 github.com/bloxapp/eth2-key-manager v1.3.2-0.20231022162227-e2b8264a29a5/go.mod h1:cT+qAJfnAzNz9StFoHQ8xAkyU2eyEukd6xfxvcBWuZA=
-github.com/bloxapp/ssv-spec v0.3.3 h1:iNomqWQjxDDQouHMjl27PmH1hUolJ4u8QQ+HX/TQQcg=
-github.com/bloxapp/ssv-spec v0.3.3/go.mod h1:zPJR7YnG5iZ6I0h6EzfVly8bTBXaZwcx4TyJ8pzYVd8=
 github.com/bradfitz/go-smtpd v0.0.0-20170404230938-deb6d6237625/go.mod h1:HYsPBTaaSFSlLx/70C2HPIMNZpVV8+vt/A+FMnYP11g=
 github.com/btcsuite/btcd/btcec/v2 v2.3.2 h1:5n0X6hX0Zk+6omWcihdYvdAlGf2DfasC0GMf7DClJ3U=
 github.com/btcsuite/btcd/btcec/v2 v2.3.2/go.mod h1:zYzJ8etWJQIv1Ogk7OzpWjowwOdXY1W/17j2MW85J04=
@@ -542,6 +540,8 @@ github.com/modern-go/reflect2 v1.0.1/go.mod h1:bx2lNnkwVCuqBIxFjflWJWanXIb3Rllmb
 github.com/modern-go/reflect2 v1.0.2 h1:xBagoLtFs94CBntxluKeaWgTMpvLxC4ur3nMaC9Gz0M=
 github.com/modern-go/reflect2 v1.0.2/go.mod h1:yWuevngMOJpCy52FWWMvUC8ws7m/LJsjYzDa0/r8luk=
 github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826 h1:RWengNIwukTxcDr9M+97sNutRR1RKhG96O6jWumTTnw=
+github.com/moshe-blox/ssv-spec v0.0.0-20231105135956-a64e63f6e35a h1:I9d5JgkAFj3twwA3D7KkMxvp1wvMnkScmSGDvlf8J7o=
+github.com/moshe-blox/ssv-spec v0.0.0-20231105135956-a64e63f6e35a/go.mod h1:zPJR7YnG5iZ6I0h6EzfVly8bTBXaZwcx4TyJ8pzYVd8=
 github.com/moul/http2curl v1.0.0/go.mod h1:8UbvGypXm98wA/IqH45anm5Y2Z6ep6O31QGOAZ3H0fQ=
 github.com/mr-tron/base58 v1.1.2/go.mod h1:BinMc/sQntlIE1frQmRFPUoPA1Zkr8VRgBdjWI2mNwc=
 github.com/mr-tron/base58 v1.1.3/go.mod h1:BinMc/sQntlIE1frQmRFPUoPA1Zkr8VRgBdjWI2mNwc=
