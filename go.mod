@@ -5,7 +5,7 @@ go 1.20
 require (
 	github.com/aquasecurity/table v1.8.0
 	github.com/attestantio/go-eth2-client v0.16.3
-	github.com/bloxapp/eth2-key-manager v1.3.1
+	github.com/bloxapp/eth2-key-manager v1.3.2
 	github.com/bloxapp/ssv-spec v0.3.4
 	github.com/btcsuite/btcd/btcec/v2 v2.3.2
 	github.com/cespare/xxhash/v2 v2.2.0
@@ -222,6 +222,3 @@ require (
 replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
-
-// TODO: remove this replace when the following PR is merged https://github.com/bloxapp/eth2-key-manager/pull/100
-replace github.com/bloxapp/eth2-key-manager => github.com/bloxapp/eth2-key-manager v1.3.2-0.20231022162227-e2b8264a29a5
