@@ -3,7 +3,6 @@ package discovery
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
 	"fmt"
 	"net"
 	"sync/atomic"
@@ -152,13 +151,9 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 	// TODO: uncomment errors once there are sufficient nodes with domain type.
 	nodeDomainType, err := records.GetDomainTypeEntry(e.Node.Record())
 	if err != nil {
-		// return fmt.Errorf("could not read domain type: %w", err)
-		logger.Debug("could not read domain type entry", zap.Error(err))
+		// TODO: skip missing domain type (likely old node).
 	} else if nodeDomainType != dvs.domainType {
-		// return errors.New("different domain type")
-		logger.Debug("skipping different domain type entry", zap.String("domain_type", hex.EncodeToString(nodeDomainType[:])))
-	} else {
-		logger.Debug("discovered node with matching domain type", zap.String("domain_type", hex.EncodeToString(nodeDomainType[:])))
+		// TODO: skip different domain type.
 	}
 
 	// Get the peer's subnets, skipping if it has none.
