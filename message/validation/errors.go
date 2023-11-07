@@ -44,18 +44,19 @@ func (e Error) Text() string {
 }
 
 var (
-	ErrEmptyData                           = Error{text: "empty data"}
 	ErrWrongDomain                         = Error{text: "wrong domain", silent: true}
+	ErrEmptyData                           = Error{text: "empty data"}
 	ErrNoShareMetadata                     = Error{text: "share has no metadata"}
 	ErrUnknownValidator                    = Error{text: "unknown validator"}
 	ErrValidatorLiquidated                 = Error{text: "validator is liquidated"}
 	ErrValidatorNotAttesting               = Error{text: "validator is not attesting"}
 	ErrSlotAlreadyAdvanced                 = Error{text: "signer has already advanced to a later slot"}
 	ErrRoundAlreadyAdvanced                = Error{text: "signer has already advanced to a later round"}
-	ErrRoundTooHigh                        = Error{text: "round is too high for this role" /*, reject: true*/} // TODO: enable reject
 	ErrEarlyMessage                        = Error{text: "early message"}
 	ErrLateMessage                         = Error{text: "late message"}
 	ErrTooManySameTypeMessagesPerRound     = Error{text: "too many messages of same type per round"}
+	ErrNoDuty                              = Error{text: "no duty for this epoch"}
+	ErrRoundTooHigh                        = Error{text: "round is too high for this role" /*, reject: true*/} // TODO: enable reject
 	ErrPubSubMessageHasNoData              = Error{text: "pub-sub message has no data", reject: true}
 	ErrPubSubDataTooBig                    = Error{text: "pub-sub message data too big", reject: true}
 	ErrMalformedPubSubMessage              = Error{text: "pub-sub message is malformed", reject: true}
@@ -93,7 +94,6 @@ var (
 	ErrUnexpectedRoundChangeJustifications = Error{text: "round change justifications unexpected for this message type", reject: true}
 	ErrInvalidJustifications               = Error{text: "invalid justifications", reject: true}
 	ErrTooManyDutiesPerEpoch               = Error{text: "too many duties per epoch", reject: true}
-	ErrNoDuty                              = Error{text: "no duty for this epoch", reject: true}
 	ErrDeserializePublicKey                = Error{text: "deserialize public key", reject: true}
 	ErrNoPartialMessages                   = Error{text: "no partial messages", reject: true}
 	ErrDuplicatedPartialSignatureMessage   = Error{text: "duplicated partial signature message", reject: true}

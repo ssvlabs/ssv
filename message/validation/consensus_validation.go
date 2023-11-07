@@ -56,11 +56,15 @@ func (mv *messageValidator) validateConsensusMessage(
 		return consensusDescriptor, msgSlot, ErrUnknownQBFTMessageType
 	}
 
-	if err := mv.validConsensusSigners(share, signedMsg); err != nil {
+	role := messageID.GetRoleType()
+
+	if err := mv.validateBeaconDuty(role, msgSlot, share); err != nil {
 		return consensusDescriptor, msgSlot, err
 	}
 
-	role := messageID.GetRoleType()
+	if err := mv.validConsensusSigners(share, signedMsg); err != nil {
+		return consensusDescriptor, msgSlot, err
+	}
 
 	if err := mv.validateSlotTime(msgSlot, role, receivedAt); err != nil {
 		return consensusDescriptor, msgSlot, err
@@ -103,10 +107,6 @@ func (mv *messageValidator) validateConsensusMessage(
 		if hashedFullData != signedMsg.Message.Root {
 			return consensusDescriptor, msgSlot, ErrInvalidHash
 		}
-	}
-
-	if err := mv.validateBeaconDuty(messageID.GetRoleType(), msgSlot, share); err != nil {
-		return consensusDescriptor, msgSlot, err
 	}
 
 	state := mv.consensusState(messageID)
@@ -288,12 +288,23 @@ func (mv *messageValidator) validateBeaconDuty(
 	slot phase0.Slot,
 	share *ssvtypes.SSVShare,
 ) error {
+	if share.Metadata.BeaconMetadata == nil {
+		return ErrNoShareMetadata
+	}
+
 	switch role {
-	case spectypes.BNRoleProposer:
-		if share.Metadata.BeaconMetadata == nil {
-			return ErrNoShareMetadata
+	case spectypes.BNRoleAttester:
+		epoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(slot)
+		if mv.dutyStore != nil && mv.dutyStore.Attester.ValidatorDuty(epoch, slot, share.Metadata.BeaconMetadata.Index) == nil {
+			return ErrNoDuty
 		}
 
+		return nil
+
+	case spectypes.BNRoleAggregator:
+		// TODO
+
+	case spectypes.BNRoleProposer:
 		epoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(slot)
 		if mv.dutyStore != nil && mv.dutyStore.Proposer.ValidatorDuty(epoch, slot, share.Metadata.BeaconMetadata.Index) == nil {
 			return ErrNoDuty
@@ -302,10 +313,6 @@ func (mv *messageValidator) validateBeaconDuty(
 		return nil
 
 	case spectypes.BNRoleSyncCommittee, spectypes.BNRoleSyncCommitteeContribution:
-		if share.Metadata.BeaconMetadata == nil {
-			return ErrNoShareMetadata
-		}
-
 		period := mv.netCfg.Beacon.EstimatedSyncCommitteePeriodAtEpoch(mv.netCfg.Beacon.EstimatedEpochAtSlot(slot))
 		if mv.dutyStore != nil && mv.dutyStore.SyncCommittee.Duty(period, share.Metadata.BeaconMetadata.Index) == nil {
 			return ErrNoDuty
