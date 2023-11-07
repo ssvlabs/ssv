@@ -385,12 +385,38 @@ func (c *controller) StartValidators() {
 		return
 	}
 
-	shares := c.sharesStorage.List(nil, registrystorage.ByOperatorID(c.GetOperatorData().ID), registrystorage.ByNotLiquidated())
+	shares := c.sharesStorage.List(nil, registrystorage.ByNotLiquidated())
 	if len(shares) == 0 {
 		c.logger.Info("could not find validators")
 		return
 	}
-	c.setupValidators(shares)
+
+	var ownShares []*ssvtypes.SSVShare
+	var allPubKeys = make([][]byte, 0, len(shares))
+	ownOpID := c.GetOperatorData().ID
+	for _, share := range shares {
+		if share.BelongsToOperator(ownOpID) {
+			ownShares = append(ownShares, share)
+		}
+		allPubKeys = append(allPubKeys, share.ValidatorPubKey)
+	}
+
+	// Start own validators.
+	c.setupValidators(ownShares)
+
+	// Fetch metadata for all validators.
+	start := time.Now()
+	err := beaconprotocol.UpdateValidatorsMetadata(c.logger, allPubKeys, c, c.beacon, c.onMetadataUpdated)
+	if err != nil {
+		c.logger.Error("failed to update validators metadata after setup",
+			zap.Int("shares", len(allPubKeys)),
+			fields.Took(time.Since(start)),
+			zap.Error(err))
+	} else {
+		c.logger.Debug("updated validators metadata after setup",
+			zap.Int("shares", len(allPubKeys)),
+			fields.Took(time.Since(start)))
+	}
 }
 
 // setupValidators setup and starts validators from the given shares.
@@ -417,22 +443,6 @@ func (c *controller) setupValidators(shares []*ssvtypes.SSVShare) {
 	c.logger.Info("setup validators done", zap.Int("map size", c.validatorsMap.Size()),
 		zap.Int("failures", len(errs)), zap.Int("missing_metadata", len(fetchMetadata)),
 		zap.Int("shares", len(shares)), zap.Int("started", started))
-
-	// Try to fetch metadata once for validators that don't have it.
-	if len(fetchMetadata) > 0 {
-		start := time.Now()
-		err := beaconprotocol.UpdateValidatorsMetadata(c.logger, fetchMetadata, c, c.beacon, c.onMetadataUpdated)
-		if err != nil {
-			c.logger.Error("failed to update validators metadata after setup",
-				zap.Int("shares", len(fetchMetadata)),
-				fields.Took(time.Since(start)),
-				zap.Error(err))
-		} else {
-			c.logger.Debug("updated validators metadata after setup",
-				zap.Int("shares", len(fetchMetadata)),
-				fields.Took(time.Since(start)))
-		}
-	}
 }
 
 // setupNonCommitteeValidators trigger SyncHighestDecided for each validator

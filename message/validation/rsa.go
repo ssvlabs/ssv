@@ -14,7 +14,7 @@ import (
 
 func (mv *messageValidator) verifyRSASignature(messageData []byte, operatorID spectypes.OperatorID, signature []byte) error {
 	mv.metrics.MessageValidationRSAVerifications()
-	rsaPubKey, ok := mv.operatorPubKeyCache.Get(operatorID)
+	rsaPubKey, ok := mv.operatorIDToPubkeyCache.Get(operatorID)
 	if !ok {
 		operator, found, err := mv.nodeStorage.GetOperatorData(nil, operatorID)
 		if err != nil {
@@ -43,14 +43,14 @@ func (mv *messageValidator) verifyRSASignature(messageData []byte, operatorID sp
 			return e
 		}
 
-		mv.operatorPubKeyCache.Set(operatorID, rsaPubKey)
+		mv.operatorIDToPubkeyCache.Set(operatorID, rsaPubKey)
 	}
 
 	messageHash := sha256.Sum256(messageData)
 
 	if err := rsa.VerifyPKCS1v15(rsaPubKey, crypto.SHA256, messageHash[:], signature); err != nil {
 		e := ErrRSADecryption
-		e.innerErr = fmt.Errorf("verify signature: %w", err)
+		e.innerErr = fmt.Errorf("verify opid: %v signature: %w", operatorID, err)
 		return e
 	}
 

@@ -39,20 +39,25 @@ const (
 	messageOffset    = operatorIDOffset + operatorIDSize
 )
 
+// EncodeSignedSSVMessage serializes the message, op id and signature into bytes
 func EncodeSignedSSVMessage(message []byte, operatorID spectypes.OperatorID, signature []byte) []byte {
-	return append(append(signature, binary.LittleEndian.AppendUint64(nil, operatorID)...), message...)
+	b := make([]byte, signatureSize+operatorIDSize+len(message))
+	copy(b[signatureOffset:], signature)
+	binary.LittleEndian.PutUint64(b[operatorIDOffset:], operatorID)
+	copy(b[messageOffset:], message)
+	return b
 }
 
-func DecodeSignedSSVMessage(encoded []byte) (message []byte, operatorID spectypes.OperatorID, signature []byte, err error) {
+// DecodeSignedSSVMessage deserializes signed message bytes messsage, op id and a signature
+func DecodeSignedSSVMessage(encoded []byte) ([]byte, spectypes.OperatorID, []byte, error) {
 	if len(encoded) < messageOffset {
-		err = fmt.Errorf("unexpected encoded message size of %d", len(encoded))
-		return
+		return nil, 0, nil, fmt.Errorf("unexpected encoded message size of %d", len(encoded))
 	}
 
-	message = encoded[messageOffset:]
-	operatorID = binary.LittleEndian.Uint64(encoded[operatorIDOffset : operatorIDOffset+operatorIDSize])
-	signature = encoded[signatureOffset : signatureOffset+signatureSize]
-	return
+	message := encoded[messageOffset:]
+	operatorID := binary.LittleEndian.Uint64(encoded[operatorIDOffset : operatorIDOffset+operatorIDSize])
+	signature := encoded[signatureOffset : signatureOffset+signatureSize]
+	return message, operatorID, signature, nil
 }
 
 // SubnetTopicID returns the topic to use for the given subnet

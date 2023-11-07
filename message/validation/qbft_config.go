@@ -8,15 +8,14 @@ import (
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 )
 
+// qbftConfig is used in message validation and has no signature verification.
 type qbftConfig struct {
-	domain          spectypes.DomainType
-	verifySignature bool
+	domain spectypes.DomainType
 }
 
-func newQBFTConfig(domain spectypes.DomainType, verifySignature bool) qbftConfig {
+func newQBFTConfig(domain spectypes.DomainType) qbftConfig {
 	return qbftConfig{
-		domain:          domain,
-		verifySignature: verifySignature,
+		domain: domain,
 	}
 }
 
@@ -49,5 +48,5 @@ func (q qbftConfig) GetTimer() roundtimer.Timer {
 }
 
 func (q qbftConfig) VerifySignatures() bool {
-	return q.verifySignature
+	return false
 }

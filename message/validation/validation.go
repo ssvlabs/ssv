@@ -69,23 +69,23 @@ type MessageValidator interface {
 }
 
 type messageValidator struct {
-	logger              *zap.Logger
-	metrics             metrics
-	netCfg              networkconfig.NetworkConfig
-	index               sync.Map
-	nodeStorage         operatorstorage.Storage
-	dutyStore           *dutystore.Store
-	ownOperatorID       spectypes.OperatorID
-	operatorPubKeyCache *hashmap.Map[spectypes.OperatorID, *rsa.PublicKey]
+	logger                  *zap.Logger
+	metrics                 metrics
+	netCfg                  networkconfig.NetworkConfig
+	index                   sync.Map
+	nodeStorage             operatorstorage.Storage
+	dutyStore               *dutystore.Store
+	ownOperatorID           spectypes.OperatorID
+	operatorIDToPubkeyCache *hashmap.Map[spectypes.OperatorID, *rsa.PublicKey]
 }
 
 // NewMessageValidator returns a new MessageValidator with the given network configuration and options.
 func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) MessageValidator {
 	mv := &messageValidator{
-		logger:              zap.NewNop(),
-		metrics:             &nopMetrics{},
-		netCfg:              netCfg,
-		operatorPubKeyCache: hashmap.New[spectypes.OperatorID, *rsa.PublicKey](),
+		logger:                  zap.NewNop(),
+		metrics:                 &nopMetrics{},
+		netCfg:                  netCfg,
+		operatorIDToPubkeyCache: hashmap.New[spectypes.OperatorID, *rsa.PublicKey](),
 	}
 
 	for _, opt := range opts {
@@ -280,7 +280,7 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 	var signatureVerifier func() error
 
 	currentEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Unix()))
-	if mv.netCfg.RSAMessageFork(currentEpoch) {
+	if currentEpoch > mv.netCfg.RSAForkEpoch {
 		decMessageData, operatorID, signature, err := commons.DecodeSignedSSVMessage(messageData)
 		messageData = decMessageData
 		if err != nil {
