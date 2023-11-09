@@ -458,53 +458,53 @@ func (eh *EventHandler) processLocalEvent(txn basedb.Txn, event localevents.Even
 	case OperatorAdded:
 		data := event.Data.(contract.ContractOperatorAdded)
 		if err := eh.handleOperatorAdded(txn, &data); err != nil {
-			return fmt.Errorf("handle %s: %w", event.Name, err)
+			return fmt.Errorf("handle OperatorAdded: %w", err)
 		}
 		return nil
 	case OperatorRemoved:
 		data := event.Data.(contract.ContractOperatorRemoved)
 		if err := eh.handleOperatorRemoved(txn, &data); err != nil {
-			return fmt.Errorf("handle %s: %w", event.Name, err)
+			return fmt.Errorf("handle OperatorRemoved: %w", err)
 		}
 		return nil
 	case ValidatorAdded:
 		data := event.Data.(contract.ContractValidatorAdded)
 		if _, err := eh.handleValidatorAdded(txn, &data); err != nil {
-			return fmt.Errorf("handle %s: %w", event.Name, err)
+			return fmt.Errorf("handle ValidatorAdded: %w", err)
 		}
 		return nil
 	case ValidatorRemoved:
 		data := event.Data.(contract.ContractValidatorRemoved)
 		if _, err := eh.handleValidatorRemoved(txn, &data); err != nil {
-			return fmt.Errorf("handle %s: %w", event.Name, err)
+			return fmt.Errorf("handle ValidatorRemoved: %w", err)
 		}
 		return nil
 	case ClusterLiquidated:
 		data := event.Data.(contract.ContractClusterLiquidated)
 		_, err := eh.handleClusterLiquidated(txn, &data)
 		if err != nil {
-			return fmt.Errorf("handle %s: %w", event.Name, err)
+			return fmt.Errorf("handle ClusterLiquidated: %w", err)
 		}
 		return nil
 	case ClusterReactivated:
 		data := event.Data.(contract.ContractClusterReactivated)
 		_, err := eh.handleClusterReactivated(txn, &data)
 		if err != nil {
-			return fmt.Errorf("handle %s: %w", event.Name, err)
+			return fmt.Errorf("handle ClusterReactivated: %w", err)
 		}
 		return nil
 	case FeeRecipientAddressUpdated:
 		data := event.Data.(contract.ContractFeeRecipientAddressUpdated)
 		_, err := eh.handleFeeRecipientAddressUpdated(txn, &data)
 		if err != nil {
-			return fmt.Errorf("handle %s: %w", event.Name, err)
+			return fmt.Errorf("handle FeeRecipientAddressUpdated: %w", err)
 		}
 		return nil
 	case ValidatorExited:
 		data := event.Data.(contract.ContractValidatorExited)
 		_, err := eh.handleValidatorExited(txn, &data)
 		if err != nil {
-			return fmt.Errorf("handle %s: %w", event.Name, err)
+			return fmt.Errorf("handle ValidatorExited: %w", err)
 		}
 		return nil
 	default:
