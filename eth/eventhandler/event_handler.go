@@ -219,7 +219,7 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			if errors.As(err, &malformedEventError) {
 				return nil, nil
 			}
-			return nil, fmt.Errorf("handle %s: %w", abiEvent.Name, err)
+			return nil, fmt.Errorf("handle OperatorAdded: %w", err)
 		}
 
 		eh.metrics.EventProcessed(abiEvent.Name)
@@ -242,7 +242,7 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			if errors.As(err, &malformedEventError) {
 				return nil, nil
 			}
-			return nil, fmt.Errorf("handle %s: %w", abiEvent.Name, err)
+			return nil, fmt.Errorf("handle OperatorRemoved: %w", err)
 		}
 
 		eh.metrics.EventProcessed(abiEvent.Name)
@@ -266,7 +266,7 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			if errors.As(err, &malformedEventError) {
 				return nil, nil
 			}
-			return nil, fmt.Errorf("handle %s: %w", abiEvent.Name, err)
+			return nil, fmt.Errorf("handle ValidatorAdded: %w", err)
 		}
 
 		defer eh.metrics.EventProcessed(abiEvent.Name)
@@ -297,7 +297,7 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			if errors.As(err, &malformedEventError) {
 				return nil, nil
 			}
-			return nil, fmt.Errorf("handle %s: %w", abiEvent.Name, err)
+			return nil, fmt.Errorf("handle ValidatorRemoved: %w", err)
 		}
 
 		defer eh.metrics.EventProcessed(abiEvent.Name)
@@ -326,7 +326,7 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			if errors.As(err, &malformedEventError) {
 				return nil, nil
 			}
-			return nil, fmt.Errorf("handle %s: %w", abiEvent.Name, err)
+			return nil, fmt.Errorf("handle ClusterLiquidated: %w", err)
 		}
 
 		defer eh.metrics.EventProcessed(abiEvent.Name)
@@ -357,7 +357,7 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			if errors.As(err, &malformedEventError) {
 				return nil, nil
 			}
-			return nil, fmt.Errorf("handle %s: %w", abiEvent.Name, err)
+			return nil, fmt.Errorf("handle ClusterReactivated: %w", err)
 		}
 
 		defer eh.metrics.EventProcessed(abiEvent.Name)
@@ -388,7 +388,7 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			if errors.As(err, &malformedEventError) {
 				return nil, nil
 			}
-			return nil, fmt.Errorf("handle %s: %w", abiEvent.Name, err)
+			return nil, fmt.Errorf("handle FeeRecipientAddressUpdated: %w", err)
 		}
 
 		defer eh.metrics.EventProcessed(abiEvent.Name)
@@ -418,7 +418,7 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			if errors.As(err, &malformedEventError) {
 				return nil, nil
 			}
-			return nil, fmt.Errorf("handle FeeRecipientAddressUpdated: %w", err)
+			return nil, fmt.Errorf("handle ValidatorExited: %w", err)
 		}
 
 		defer eh.metrics.EventProcessed(abiEvent.Name)
