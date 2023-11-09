@@ -25,7 +25,7 @@ func ECDSAPrivateKey(logger *zap.Logger, privateKey string) (*ecdsa.PrivateKey, 
 		if err != nil {
 			return nil, errors.WithMessage(err, "failed to unmarshal passed privKey")
 		}
-		privKey, err = commons.ConvertFromInterfacePrivKey(unmarshalledKey)
+		privKey, err = commons.ECDSAPrivFromInterface(unmarshalledKey)
 		if err != nil {
 			return nil, err
 		}
@@ -35,12 +35,12 @@ func ECDSAPrivateKey(logger *zap.Logger, privateKey string) (*ecdsa.PrivateKey, 
 		if err != nil {
 			return nil, errors.WithMessage(err, "failed to generate 256k1 key")
 		}
-		privKey, err = commons.ConvertFromInterfacePrivKey(privInterfaceKey)
+		privKey, err = commons.ECDSAPrivFromInterface(privInterfaceKey)
 		if err != nil {
 			return nil, err
 		}
 	}
-	interfacePriv, err := commons.ConvertToInterfacePrivkey(privKey)
+	interfacePriv, err := commons.ECDSAPrivToInterface(privKey)
 	if err != nil {
 		return nil, err
 	}

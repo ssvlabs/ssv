@@ -2,7 +2,14 @@ package p2pv1
 
 import (
 	"context"
+	"crypto"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/x509"
 	"encoding/hex"
+	"encoding/pem"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -24,6 +31,54 @@ import (
 	"github.com/bloxapp/ssv/network"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 )
+
+func TestRSAUsage(t *testing.T) {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	testMessage := []byte("message")
+
+	hash := sha256.Sum256(testMessage)
+
+	signature, err := rsa.SignPKCS1v15(nil, privateKey, crypto.SHA256, hash[:])
+	require.NoError(t, err)
+
+	publicKey := &privateKey.PublicKey
+
+	pubKeyBytes, err := x509.MarshalPKIXPublicKey(publicKey)
+	if err != nil {
+		fmt.Println("Error marshalling public key:", err)
+		return
+	}
+
+	pubPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PUBLIC KEY",
+		Bytes: pubKeyBytes,
+	})
+
+	const operatorID = spectypes.OperatorID(0x12345678)
+	encodedSignedSSVMessage := commons.EncodeSignedSSVMessage(testMessage, operatorID, signature)
+
+	decodedMessage, decodedOperatorID, decodedSignature, err := commons.DecodeSignedSSVMessage(encodedSignedSSVMessage)
+	require.NoError(t, err)
+	require.Equal(t, operatorID, decodedOperatorID)
+	require.Equal(t, signature, decodedSignature)
+
+	messageHash := sha256.Sum256(decodedMessage)
+
+	block, rest := pem.Decode(pubPEM)
+	require.NotNil(t, block)
+	require.Empty(t, rest, "extra data after PEM decoding")
+
+	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
+	require.NoError(t, err)
+
+	rsaPubKey, ok := pub.(*rsa.PublicKey)
+	require.True(t, ok)
+
+	require.NoError(t, rsa.VerifyPKCS1v15(rsaPubKey, crypto.SHA256, messageHash[:], decodedSignature))
+	require.Equal(t, testMessage, decodedMessage)
+}
 
 func TestGetMaxPeers(t *testing.T) {
 	n := &p2pNetwork{

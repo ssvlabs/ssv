@@ -38,6 +38,7 @@ type NetworkConfig struct {
 	RegistryContractAddr    string // TODO: ethcommon.Address
 	Bootnodes               []string
 	WhitelistedOperatorKeys []string
+	RSAForkEpoch            spec.Epoch
 }
 
 func (n NetworkConfig) String() string {
