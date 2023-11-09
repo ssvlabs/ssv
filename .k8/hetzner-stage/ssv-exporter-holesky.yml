@@ -9,26 +9,26 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-    - port: 12013
+    - port: 12073
       protocol: UDP
-      targetPort: 12013
-      name: port-12013
-    - port: 13013
+      targetPort: 12073
+      name: port-12073
+    - port: 13073
       protocol: TCP
-      targetPort: 13013
-      name: port-13013
-    - port: 14013
+      targetPort: 13073
+      name: port-13073
+    - port: 14073
       protocol: TCP
-      targetPort: 14013
-      name: port-14013
-    - port: 15013
+      targetPort: 14073
+      name: port-14073
+    - port: 15073
       protocol: TCP
-      targetPort: 15013
-      name: port-15013
-    - port: 16013
+      targetPort: 15073
+      name: port-15073
+    - port: 16073
       protocol: TCP
-      targetPort: 16013
-      name: port-16013
+      targetPort: 16073
+      name: port-16073
   selector:
     app: ssv-exporter-holesky
 ---
@@ -70,22 +70,22 @@ spec:
               memory: REPLACE_EXPORTER_MEM_LIMIT
           command: ["make", "start-node"]
           ports:
-            - containerPort: 12013
-              name: port-12013
-              hostPort: 12013
+            - containerPort: 12073
+              name: port-12073
+              hostPort: 12073
               protocol: UDP
-            - containerPort: 13013
-              name: port-13013
-              hostPort: 13013
-            - containerPort: 14013
-              name: port-14013
-              hostPort: 14013
-            - containerPort: 15013
-              name: port-15013
-              hostPort: 15013
-            - containerPort: 16013
-              name: port-16013
-              hostPort: 16013
+            - containerPort: 13073
+              name: port-13073
+              hostPort: 13073
+            - containerPort: 14073
+              name: port-14073
+              hostPort: 14073
+            - containerPort: 15073
+              name: port-15073
+              hostPort: 15073
+            - containerPort: 16073
+              name: port-16073
+              hostPort: 16073
           env:
             - name: SHARE_CONFIG
               value: "./data/share.yaml"
@@ -113,17 +113,17 @@ spec:
             - name: DB_REPORTING
               value: "false"
             - name: METRICS_API_PORT
-              value: "15013"
+              value: "15073"
             - name: SSV_API_PORT
-              value: "16013"
+              value: "16073"
             - name: ENABLE_PROFILE
               value: "true"
             - name: UDP_PORT
-              value: "12013"
+              value: "12073"
             - name: TCP_PORT
-              value: "13003"
+              value: "13073"
             - name: WS_API_PORT
-              value: "14013"
+              value: "14073"
             - name: FULLNODE
               value: "true"
             - name: EXPORTER
