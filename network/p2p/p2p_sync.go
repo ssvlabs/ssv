@@ -57,21 +57,26 @@ func (n *p2pNetwork) handleStream(logger *zap.Logger, handler p2pprotocol.Reques
 		if err != nil {
 			return errors.Wrap(err, "could not handle stream")
 		}
+
 		smsg, err := commons.DecodeNetworkMsg(req)
 		if err != nil {
 			return errors.Wrap(err, "could not decode msg from stream")
 		}
+
 		result, err := handler(smsg)
 		if err != nil {
 			return errors.Wrap(err, "could not handle msg from stream")
 		}
+
 		resultBytes, err := commons.EncodeNetworkMsg(result)
 		if err != nil {
 			return errors.Wrap(err, "could not encode msg")
 		}
+
 		if err := respond(resultBytes); err != nil {
 			return errors.Wrap(err, "could not respond to stream")
 		}
+
 		return nil
 	}
 }
@@ -114,6 +119,7 @@ func (n *p2pNetwork) makeSyncRequest(logger *zap.Logger, peers []peer.ID, mid sp
 	if err != nil {
 		return nil, errors.Wrap(err, "could not encode sync message")
 	}
+
 	msg := &spectypes.SSVMessage{
 		MsgType: message.SSVSyncMsgType,
 		MsgID:   mid,
@@ -123,11 +129,13 @@ func (n *p2pNetwork) makeSyncRequest(logger *zap.Logger, peers []peer.ID, mid sp
 	if err != nil {
 		return nil, err
 	}
+
 	logger = logger.With(zap.String("protocol", string(protocol)))
 	msgID := commons.MsgID()
 	distinct := make(map[string]struct{})
 	for _, pid := range peers {
 		logger := logger.With(fields.PeerID(pid))
+
 		raw, err := n.streamCtrl.Request(logger, pid, protocol, encoded)
 		if err != nil {
 			// TODO: is this how to check for ErrNotSupported?
@@ -137,16 +145,28 @@ func (n *p2pNetwork) makeSyncRequest(logger *zap.Logger, peers []peer.ID, mid sp
 			}
 			continue
 		}
+
+		if n.cfg.Network.Beacon.EstimatedCurrentEpoch() > n.cfg.Network.RSAForkEpoch {
+			decodedMsg, _, _, err := commons.DecodeSignedSSVMessage(raw)
+			if err != nil {
+				logger.Debug("could not decode signed SSV message", zap.Error(err))
+			} else {
+				raw = decodedMsg
+			}
+		}
+
 		mid := msgID(raw)
 		if _, ok := distinct[mid]; ok {
 			continue
 		}
 		distinct[mid] = struct{}{}
+
 		res, err := commons.DecodeNetworkMsg(raw)
 		if err != nil {
 			logger.Debug("could not decode stream response", zap.Error(err))
 			continue
 		}
+
 		results = append(results, p2pprotocol.SyncResult{
 			Msg:    res,
 			Sender: pid.String(),
