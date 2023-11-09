@@ -3,6 +3,7 @@ package validator
 import (
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
 	"go.uber.org/multierr"
@@ -97,5 +98,14 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address) error {
 		return true
 	})
 
+	return nil
+}
+func (c *controller) ExitValidator(pubKey phase0.BLSPubKey, slot phase0.Slot, validatorIndex phase0.ValidatorIndex) error {
+	duty := &spectypes.Duty{
+		Type:           spectypes.BNRoleVoluntaryExit,
+		Slot:           slot,
+		ValidatorIndex: validatorIndex,
+	}
+	c.ExecuteDuty(c.logger, duty)
 	return nil
 }

@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
@@ -20,6 +21,7 @@ import (
 	"github.com/bloxapp/ssv/eth/localevents"
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/networkconfig"
 	nodestorage "github.com/bloxapp/ssv/operator/storage"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
@@ -36,6 +38,7 @@ const (
 	ClusterLiquidated          = "ClusterLiquidated"
 	ClusterReactivated         = "ClusterReactivated"
 	FeeRecipientAddressUpdated = "FeeRecipientAddressUpdated"
+	ValidatorExited            = "ValidatorExited"
 )
 
 var (
@@ -50,6 +53,7 @@ type taskExecutor interface {
 	LiquidateCluster(owner ethcommon.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
 	ReactivateCluster(owner ethcommon.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error
 	UpdateFeeRecipient(owner, recipient ethcommon.Address) error
+	ExitValidator(pubKey phase0.BLSPubKey, slot phase0.Slot, validatorIndex phase0.ValidatorIndex) error
 }
 
 type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
@@ -63,7 +67,7 @@ type EventHandler struct {
 	nodeStorage                nodestorage.Storage
 	taskExecutor               taskExecutor
 	eventParser                eventparser.Parser
-	domain                     spectypes.DomainType
+	networkConfig              networkconfig.NetworkConfig
 	operatorData               OperatorData
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider
 	keyManager                 spectypes.KeyManager
@@ -79,7 +83,7 @@ func New(
 	nodeStorage nodestorage.Storage,
 	eventParser eventparser.Parser,
 	taskExecutor taskExecutor,
-	domain spectypes.DomainType,
+	networkConfig networkconfig.NetworkConfig,
 	operatorData OperatorData,
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider,
 	keyManager spectypes.KeyManager,
@@ -91,7 +95,7 @@ func New(
 		nodeStorage:                nodeStorage,
 		taskExecutor:               taskExecutor,
 		eventParser:                eventParser,
-		domain:                     domain,
+		networkConfig:              networkConfig,
 		operatorData:               operatorData,
 		shareEncryptionKeyProvider: shareEncryptionKeyProvider,
 		keyManager:                 keyManager,
@@ -215,7 +219,7 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			if errors.As(err, &malformedEventError) {
 				return nil, nil
 			}
-			return nil, fmt.Errorf("handle OperatorAdded: %w", err)
+			return nil, fmt.Errorf("handle %s: %w", abiEvent.Name, err)
 		}
 
 		eh.metrics.EventProcessed(abiEvent.Name)
@@ -238,7 +242,7 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			if errors.As(err, &malformedEventError) {
 				return nil, nil
 			}
-			return nil, fmt.Errorf("handle OperatorRemoved: %w", err)
+			return nil, fmt.Errorf("handle %s: %w", abiEvent.Name, err)
 		}
 
 		eh.metrics.EventProcessed(abiEvent.Name)
@@ -262,7 +266,7 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			if errors.As(err, &malformedEventError) {
 				return nil, nil
 			}
-			return nil, fmt.Errorf("handle ValidatorAdded: %w", err)
+			return nil, fmt.Errorf("handle %s: %w", abiEvent.Name, err)
 		}
 
 		defer eh.metrics.EventProcessed(abiEvent.Name)
@@ -293,7 +297,7 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			if errors.As(err, &malformedEventError) {
 				return nil, nil
 			}
-			return nil, fmt.Errorf("handle ValidatorRemoved: %w", err)
+			return nil, fmt.Errorf("handle %s: %w", abiEvent.Name, err)
 		}
 
 		defer eh.metrics.EventProcessed(abiEvent.Name)
@@ -322,7 +326,7 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			if errors.As(err, &malformedEventError) {
 				return nil, nil
 			}
-			return nil, fmt.Errorf("handle ClusterLiquidated: %w", err)
+			return nil, fmt.Errorf("handle %s: %w", abiEvent.Name, err)
 		}
 
 		defer eh.metrics.EventProcessed(abiEvent.Name)
@@ -353,7 +357,7 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			if errors.As(err, &malformedEventError) {
 				return nil, nil
 			}
-			return nil, fmt.Errorf("handle ClusterReactivated: %w", err)
+			return nil, fmt.Errorf("handle %s: %w", abiEvent.Name, err)
 		}
 
 		defer eh.metrics.EventProcessed(abiEvent.Name)
@@ -384,7 +388,7 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			if errors.As(err, &malformedEventError) {
 				return nil, nil
 			}
-			return nil, fmt.Errorf("handle FeeRecipientAddressUpdated: %w", err)
+			return nil, fmt.Errorf("handle %s: %w", abiEvent.Name, err)
 		}
 
 		defer eh.metrics.EventProcessed(abiEvent.Name)
@@ -394,6 +398,36 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 		}
 
 		task := NewUpdateFeeRecipientTask(eh.taskExecutor, feeRecipientAddressUpdatedEvent.Owner, feeRecipientAddressUpdatedEvent.RecipientAddress)
+		return task, nil
+
+	case ValidatorExited:
+		validatorExitedEvent, err := eh.eventParser.ParseValidatorExited(event)
+		if err != nil {
+			eh.logger.Warn("could not parse event",
+				fields.EventName(abiEvent.Name),
+				zap.Error(err))
+			eh.metrics.EventProcessingFailed(abiEvent.Name)
+			return nil, nil
+		}
+
+		exitDescriptor, err := eh.handleValidatorExited(txn, validatorExitedEvent)
+		if err != nil {
+			eh.metrics.EventProcessingFailed(abiEvent.Name)
+
+			var malformedEventError *MalformedEventError
+			if errors.As(err, &malformedEventError) {
+				return nil, nil
+			}
+			return nil, fmt.Errorf("handle FeeRecipientAddressUpdated: %w", err)
+		}
+
+		defer eh.metrics.EventProcessed(abiEvent.Name)
+
+		if exitDescriptor == nil {
+			return nil, nil
+		}
+
+		task := NewExitValidatorTask(eh.taskExecutor, exitDescriptor.PubKey, exitDescriptor.Slot, exitDescriptor.ValidatorIndex)
 		return task, nil
 
 	default:
@@ -424,46 +458,53 @@ func (eh *EventHandler) processLocalEvent(txn basedb.Txn, event localevents.Even
 	case OperatorAdded:
 		data := event.Data.(contract.ContractOperatorAdded)
 		if err := eh.handleOperatorAdded(txn, &data); err != nil {
-			return fmt.Errorf("handle OperatorAdded: %w", err)
+			return fmt.Errorf("handle %s: %w", event.Name, err)
 		}
 		return nil
 	case OperatorRemoved:
 		data := event.Data.(contract.ContractOperatorRemoved)
 		if err := eh.handleOperatorRemoved(txn, &data); err != nil {
-			return fmt.Errorf("handle OperatorRemoved: %w", err)
+			return fmt.Errorf("handle %s: %w", event.Name, err)
 		}
 		return nil
 	case ValidatorAdded:
 		data := event.Data.(contract.ContractValidatorAdded)
 		if _, err := eh.handleValidatorAdded(txn, &data); err != nil {
-			return fmt.Errorf("handle ValidatorAdded: %w", err)
+			return fmt.Errorf("handle %s: %w", event.Name, err)
 		}
 		return nil
 	case ValidatorRemoved:
 		data := event.Data.(contract.ContractValidatorRemoved)
 		if _, err := eh.handleValidatorRemoved(txn, &data); err != nil {
-			return fmt.Errorf("handle ValidatorRemoved: %w", err)
+			return fmt.Errorf("handle %s: %w", event.Name, err)
 		}
 		return nil
 	case ClusterLiquidated:
 		data := event.Data.(contract.ContractClusterLiquidated)
 		_, err := eh.handleClusterLiquidated(txn, &data)
 		if err != nil {
-			return fmt.Errorf("handle ClusterLiquidated: %w", err)
+			return fmt.Errorf("handle %s: %w", event.Name, err)
 		}
 		return nil
 	case ClusterReactivated:
 		data := event.Data.(contract.ContractClusterReactivated)
 		_, err := eh.handleClusterReactivated(txn, &data)
 		if err != nil {
-			return fmt.Errorf("handle ClusterReactivated: %w", err)
+			return fmt.Errorf("handle %s: %w", event.Name, err)
 		}
 		return nil
 	case FeeRecipientAddressUpdated:
 		data := event.Data.(contract.ContractFeeRecipientAddressUpdated)
 		_, err := eh.handleFeeRecipientAddressUpdated(txn, &data)
 		if err != nil {
-			return fmt.Errorf("handle FeeRecipientAddressUpdated: %w", err)
+			return fmt.Errorf("handle %s: %w", event.Name, err)
+		}
+		return nil
+	case ValidatorExited:
+		data := event.Data.(contract.ContractValidatorExited)
+		_, err := eh.handleValidatorExited(txn, &data)
+		if err != nil {
+			return fmt.Errorf("handle %s: %w", event.Name, err)
 		}
 		return nil
 	default:

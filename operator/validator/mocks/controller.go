@@ -80,6 +80,20 @@ func (mr *MockControllerMockRecorder) ExecuteDuty(logger, duty interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteDuty", reflect.TypeOf((*MockController)(nil).ExecuteDuty), logger, duty)
 }
 
+// ExitValidator mocks base method.
+func (m *MockController) ExitValidator(pubKey phase0.BLSPubKey, slot phase0.Slot, validatorIndex phase0.ValidatorIndex) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExitValidator", pubKey, slot, validatorIndex)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ExitValidator indicates an expected call of ExitValidator.
+func (mr *MockControllerMockRecorder) ExitValidator(pubKey, slot, validatorIndex interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExitValidator", reflect.TypeOf((*MockController)(nil).ExitValidator), pubKey, slot, validatorIndex)
+}
+
 // GetOperatorData mocks base method.
 func (m *MockController) GetOperatorData() *storage.OperatorData {
 	m.ctrl.T.Helper()

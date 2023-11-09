@@ -551,7 +551,7 @@ func setupEventHandling(
 		nodeStorage,
 		eventParser,
 		validatorCtrl,
-		networkConfig.Domain,
+		networkConfig,
 		validatorCtrl,
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider,
 		cfg.SSVOptions.ValidatorOptions.KeyManager,

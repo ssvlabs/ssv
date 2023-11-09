@@ -469,6 +469,48 @@ func (eh *EventHandler) handleFeeRecipientAddressUpdated(txn basedb.Txn, event *
 	return r != nil, nil
 }
 
+type ExitDescriptor struct {
+	PubKey         phase0.BLSPubKey
+	ValidatorIndex phase0.ValidatorIndex
+	Slot           phase0.Slot
+}
+
+func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.ContractValidatorExited) (*ExitDescriptor, error) {
+	logger := eh.logger.With(
+		fields.EventName(ValidatorExited),
+		fields.TxHash(event.Raw.TxHash),
+		fields.PubKey(event.PublicKey.Bytes()), // TODO: check if logged correctly
+		fields.OperatorIDs(event.OperatorIds),
+	)
+	logger.Debug("processing event")
+	defer logger.Debug("processed event")
+
+	share := eh.nodeStorage.Shares().Get(txn, event.PublicKey.Bytes())
+	if share == nil {
+		logger.Warn("malformed event: could not find validator share")
+		return nil, &MalformedEventError{Err: ErrValidatorShareNotFound}
+	}
+
+	if !share.BelongsToOperator(eh.operatorData.GetOperatorData().ID) {
+		return nil, nil
+	}
+
+	if share.BeaconMetadata == nil {
+		return nil, nil
+	}
+
+	pk := phase0.BLSPubKey{}
+	copy(pk[:], share.ValidatorPubKey)
+
+	ed := &ExitDescriptor{
+		PubKey:         pk,
+		ValidatorIndex: share.BeaconMetadata.Index,
+		Slot:           eh.networkConfig.Beacon.EstimatedCurrentSlot(),
+	}
+
+	return ed, nil
+}
+
 func splitBytes(buf []byte, lim int) [][]byte {
 	var chunk []byte
 	chunks := make([][]byte, 0, len(buf)/lim+1)
