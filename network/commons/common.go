@@ -133,11 +133,6 @@ func AddOptions(opts []libp2p.Option) []libp2p.Option {
 	return opts
 }
 
-type EncryptedSSVMessage struct {
-	SSVMessage *spectypes.SSVMessage
-	Signature  []byte
-}
-
 // EncodeNetworkMsg encodes network message
 func EncodeNetworkMsg(msg *spectypes.SSVMessage) ([]byte, error) {
 	return msg.Encode()
