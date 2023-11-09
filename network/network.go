@@ -2,10 +2,12 @@ package network
 
 import (
 	"context"
+	"crypto/rsa"
 	"io"
 
 	"go.uber.org/zap"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/network/discovery"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
@@ -41,6 +43,8 @@ type P2PNetwork interface {
 	GetPubSub() *pubsub.PubSub
 	// Get discovery service
 	GetDiscoveryService() discovery.Service
+	// Just for simulator
+	BroadcastWithCustomKey(msg *spectypes.SSVMessage, pk *rsa.PrivateKey, id spectypes.OperatorID) error
 }
 
 // GetValidatorStats returns stats of validators, including the following:
