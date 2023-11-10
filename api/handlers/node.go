@@ -3,10 +3,11 @@ package handlers
 import (
 	"net/http"
 
-	"github.com/bloxapp/ssv/api"
-	networkpeers "github.com/bloxapp/ssv/network/peers"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+
+	"github.com/bloxapp/ssv/api"
+	networkpeers "github.com/bloxapp/ssv/network/peers"
 )
 
 type TopicIndex interface {
@@ -42,6 +43,11 @@ type identityJSON struct {
 	Addresses []string `json:"addresses"`
 	Subnets   string   `json:"subnets"`
 	Version   string   `json:"version"`
+}
+
+type healthCheckJSON struct {
+	PeersConnectionHealth  string `json:"peers_connection_health"`
+	BeaconConnectionHealth string `json:"beacon_connection_health"`
 }
 
 type Node struct {
@@ -105,4 +111,17 @@ func (h *Node) Topics(w http.ResponseWriter, r *http.Request) error {
 	alland.PeersByTopic = tpcs
 
 	return api.Render(w, r, alland)
+}
+
+func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
+	resp := healthCheckJSON{}
+	switch l := len(h.Network.Peers()); {
+	case l == 0:
+		resp.PeersConnectionHealth = "red"
+	case l > 0 && l <= 10:
+		resp.PeersConnectionHealth = "yellow"
+	case l > 10:
+		resp.PeersConnectionHealth = "green"
+	}
+	return api.Render(w, r, resp)
 }
