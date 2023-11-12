@@ -58,9 +58,9 @@ type Config struct {
 	NetworkPrivateKey *ecdsa.PrivateKey
 	// OperatorPrivateKey is used for operator identity, MUST be injected
 	OperatorPrivateKey *rsa.PrivateKey
-	// OperatorPublicKey is used for operator identity, optional
-	OperatorPublicKey string
-	// OperatorID contains operator ID
+	// OperatorPubKeyHash is hash of operator public key, used for identity, optional
+	OperatorPubKeyHash string
+	// OperatorID contains numeric operator ID
 	OperatorID spectypes.OperatorID
 	// Router propagate incoming network messages to the responsive components
 	Router network.MessageRouter
