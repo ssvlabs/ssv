@@ -48,11 +48,11 @@ type identityJSON struct {
 }
 
 type healthCheckJSON struct {
-	Peers               []peerJSON `json:"peers"`
-	BeaconConnected     bool       `json:"beacon_connected"`
-	ExecutionConnected  bool       `json:"execution_connected"`
-	EventSyncConnected  bool       `json:"event_sync_connected"`
-	LocalPortsListening []string   `json:"local_ports_listening"`
+	PeersHealthStatus               string   `json:"peers_status"`
+	BeaconConnectionHealthStatus    string   `json:"beacon_health_status"`
+	ExecutionConnectionHealthStatus string   `json:"execution_health_status"`
+	EventSyncHealthStatus           string   `json:"event_sync_health_status"`
+	LocalPortsListening             []string `json:"local_ports_listening"`
 }
 
 type Node struct {
@@ -104,22 +104,38 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	}
 	// check consensus node health
 	err := h.NodeProber.CheckBeaconNodeHealth(ctx)
-	if err == nil {
-		resp.BeaconConnected = true
+	if err != nil {
+		resp.BeaconConnectionHealthStatus = "bad"
+	} else {
+		resp.BeaconConnectionHealthStatus = "good"
 	}
 	// check execution node health
 	err = h.NodeProber.CheckExecutionNodeHealth(ctx)
-	if err == nil {
-		resp.EventSyncConnected = true
+	if err != nil {
+		resp.ExecutionConnectionHealthStatus = "bad"
+	} else {
+		resp.ExecutionConnectionHealthStatus = "good"
 	}
 	// check event sync health
 	err = h.NodeProber.CheckEventSycNodeHealth(ctx)
 	if err != nil {
-		resp.EventSyncConnected = true
+		resp.EventSyncHealthStatus = "bad"
+	} else {
+		resp.EventSyncHealthStatus = "good"
 	}
 	// check peers connection
+	var activePeerCount int
 	prs := h.Network.Peers()
-	resp.Peers = h.peers(prs)
+	for _, p := range h.peers(prs) {
+		if p.Connectedness == "Connected" {
+			activePeerCount++
+		}
+	}
+	if activePeerCount < 10 {
+		resp.PeersHealthStatus = "bad"
+	} else {
+		resp.PeersHealthStatus = "good"
+	}
 	return api.Render(w, r, resp)
 }
 
