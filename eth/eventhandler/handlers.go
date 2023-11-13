@@ -479,13 +479,13 @@ func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.Co
 	logger := eh.logger.With(
 		fields.EventName(ValidatorExited),
 		fields.TxHash(event.Raw.TxHash),
-		fields.PubKey(event.PublicKey.Bytes()), // TODO: check if logged correctly
+		fields.PubKey(event.PublicKey),
 		fields.OperatorIDs(event.OperatorIds),
 	)
 	logger.Debug("processing event")
 	defer logger.Debug("processed event")
 
-	share := eh.nodeStorage.Shares().Get(txn, event.PublicKey.Bytes())
+	share := eh.nodeStorage.Shares().Get(txn, event.PublicKey)
 	if share == nil {
 		logger.Warn("malformed event: could not find validator share")
 		return nil, &MalformedEventError{Err: ErrValidatorShareNotFound}
