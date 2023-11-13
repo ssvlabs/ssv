@@ -8,9 +8,9 @@ import (
 )
 
 // scoreByWeight provides the relevant score by the provided weight and threshold.
-func scoreByWeight(maxScore float64, weight, threshold float64) float64 {
-	return maxScore / (weight * threshold * threshold)
-}
+// func scoreByWeight(maxScore float64, weight, threshold float64) float64 {
+// 	return maxScore / (weight * threshold * threshold)
+// }
 
 // scoreDecay determines the decay rate from the provided time period till
 // the decayToZero value. Ex: ( 1 -> 0.01)
@@ -20,9 +20,9 @@ func scoreDecay(totalDecayDuration time.Duration, decayIntervalDuration time.Dur
 }
 
 // the cap for `inMesh` time scoring.
-func inMeshCap(inMeshTime time.Duration) float64 {
-	return float64((3600 * time.Second) / inMeshTime)
-}
+// func inMeshCap(inMeshTime time.Duration) float64 {
+// 	return float64((3600 * time.Second) / inMeshTime)
+// }
 
 // decayThreshold is used to determine the threshold from the decay limit with
 // a provided growth rate. This applies the decay rate to a

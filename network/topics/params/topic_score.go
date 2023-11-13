@@ -17,17 +17,29 @@ const (
 	// maxFirstDeliveryScore describes the max score a peer can obtain from first deliveries
 	maxFirstDeliveryScore = 40
 	// decayToZero specifies the terminal value that we will use when decaying a value.
-	decayToZero = 0.01
+	// decayToZero = 0.01
 	// dampeningFactor reduces the amount by which the various thresholds and caps are created.
 	// using value of 50 (prysm changed to 90)
-	dampeningFactor = 50
+	// dampeningFactor = 50
 
 	subnetTopicsWeight          = 4.0
+	totalTopicsWeigth           = 4.0
 	invalidMeshDeliveriesWeight = -800
-)
 
-const (
 	minActiveValidators = 200
+
+	// P1
+	timeInMeshQuantum    = 12
+	timeInMeshQuantumCap = 3600
+	timeInMeshMaxScore   = 10
+
+	// P2
+	expectedMessagesPerSec       = 600 / 117
+	maxFirstMessageDeliveryScore = 40
+
+	// P3
+	meshMessageDeliveriesDampeningFactor = 1.0 / 50
+	meshMessageDeliveriesCapFactor       = 16
 )
 
 var (
@@ -91,9 +103,9 @@ func (o *Options) validate() error {
 }
 
 // maxScore attainable by a peer
-func (o *Options) maxScore() float64 {
-	return (maxInMeshScore + maxFirstDeliveryScore) * o.Network.TotalTopicsWeight
-}
+// func (o *Options) maxScore() float64 {
+// 	return (maxInMeshScore + maxFirstDeliveryScore) * o.Network.TotalTopicsWeight
+// }
 
 // NewOpts creates new TopicOpts instance with defaults
 func NewOpts(activeValidators, subnets int) Options {
@@ -130,49 +142,97 @@ func TopicParams(opts Options) (*pubsub.TopicScoreParams, error) {
 	}
 	opts.defaults()
 
-	oneSlot := opts.Network.OneEpochDuration / 32.0
-	inMeshTime := oneSlot
+	// Topic-specific parameters
+
+	topicWeight := totalTopicsWeigth / float64(opts.Network.Subnets)
+
+	// P1
+	timeInMeshCap := float64(timeInMeshQuantumCap / timeInMeshQuantum)
+
+	// P2
+	firstMessageDeliveriesDecay := scoreDecay(oneEpochDuration*4, decayInterval)
+	firstMessageDeliveriesCap, err := decayConvergence(firstMessageDeliveriesDecay, 2*(expectedMessagesPerSec*12)/float64(opts.Topic.D))
+	if err != nil {
+		return nil, errors.Wrap(err, "could not calculate decay convergence for first message delivery cap")
+	}
+
+	// P3
+	meshMessageDeliveriesDecay := scoreDecay(oneEpochDuration*16, decayInterval)
+	meshMessageDeliveriesThreshold, err := decayThreshold(meshMessageDeliveriesDecay, (expectedMessagesPerSec*12)*meshMessageDeliveriesDampeningFactor)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not calculate threshold for mesh message deliveries threshold")
+	}
+	meshMessageDeliveriesWeight := -((maxFirstDeliveryScore + maxInMeshScore) * topicWeight * float64(opts.Network.Subnets)) / (topicWeight * math.Pow(meshMessageDeliveriesThreshold, 2))
+	MeshMessageDeliveriesCap := meshMessageDeliveriesThreshold * meshMessageDeliveriesCapFactor
+
+	// P4
+	invalidMessageDeliveriesDecay := scoreDecay(100*oneEpochDuration, decayInterval)
+	invalidMessageDeliveriesWeight := graylistThreshold / (topicWeight * 20 * 20)
 
 	params := &pubsub.TopicScoreParams{
-		TopicWeight:       opts.Topic.TopicWeight,
-		TimeInMeshWeight:  maxInMeshScore / inMeshCap(inMeshTime),
-		TimeInMeshQuantum: inMeshTime,
-		TimeInMeshCap:     inMeshCap(inMeshTime),
+		// Topic-specific parameters
+		TopicWeight: topicWeight,
+
+		// P1
+		TimeInMeshQuantum: timeInMeshQuantum * time.Second,
+		TimeInMeshCap:     timeInMeshCap,
+		TimeInMeshWeight:  timeInMeshMaxScore / timeInMeshCap,
+
+		// P2
+		FirstMessageDeliveriesDecay:  firstMessageDeliveriesDecay,
+		FirstMessageDeliveriesCap:    firstMessageDeliveriesCap,
+		FirstMessageDeliveriesWeight: maxFirstMessageDeliveryScore / firstMessageDeliveriesCap,
+
+		// P3
+		MeshMessageDeliveriesDecay:      meshMessageDeliveriesDecay,
+		MeshMessageDeliveriesThreshold:  meshMessageDeliveriesThreshold,
+		MeshMessageDeliveriesWeight:     meshMessageDeliveriesWeight,
+		MeshMessageDeliveriesCap:        MeshMessageDeliveriesCap,
+		MeshMessageDeliveriesActivation: oneEpochDuration * 3,
+		MeshMessageDeliveriesWindow:     2 * time.Second,
+
+		// P3b
+		MeshFailurePenaltyDecay:  meshMessageDeliveriesDecay,
+		MeshFailurePenaltyWeight: meshMessageDeliveriesWeight,
+
+		// P4
+		InvalidMessageDeliveriesDecay:  invalidMessageDeliveriesDecay,
+		InvalidMessageDeliveriesWeight: invalidMessageDeliveriesWeight,
 	}
 
-	if opts.Topic.FirstMsgDecayTime > 0 {
-		params.FirstMessageDeliveriesDecay = scoreDecay(opts.Topic.FirstMsgDecayTime*opts.Network.OneEpochDuration, opts.Network.OneEpochDuration)
-		firstMsgDeliveryCap, err := decayConvergence(params.FirstMessageDeliveriesDecay, 2*opts.Topic.ExpectedMsgRate/float64(opts.Topic.D))
-		if err != nil {
-			return nil, errors.Wrap(err, "could not calculate first msg delivery cap")
-		}
-		params.FirstMessageDeliveriesCap = firstMsgDeliveryCap
-		params.FirstMessageDeliveriesWeight = maxFirstDeliveryScore / firstMsgDeliveryCap
-	}
+	// if opts.Topic.FirstMsgDecayTime > 0 {
+	// 	params.FirstMessageDeliveriesDecay = scoreDecay(opts.Topic.FirstMsgDecayTime*opts.Network.OneEpochDuration, opts.Network.OneEpochDuration)
+	// 	firstMsgDeliveryCap, err := decayConvergence(params.FirstMessageDeliveriesDecay, 2*opts.Topic.ExpectedMsgRate/float64(opts.Topic.D))
+	// 	if err != nil {
+	// 		return nil, errors.Wrap(err, "could not calculate first msg delivery cap")
+	// 	}
+	// 	params.FirstMessageDeliveriesCap = firstMsgDeliveryCap
+	// 	params.FirstMessageDeliveriesWeight = maxFirstDeliveryScore / firstMsgDeliveryCap
+	// }
 
-	if opts.Topic.MeshMsgDecayTime > 0 {
-		params.MeshMessageDeliveriesDecay = scoreDecay(opts.Topic.MeshMsgDecayTime*opts.Network.OneEpochDuration, opts.Network.OneEpochDuration)
-		// a peer must send us at least 1/50 of the regular messages in time, very conservative limit
-		meshMsgDeliveriesThreshold, err := decayThreshold(params.MeshMessageDeliveriesDecay, math.Min(2.0, opts.Topic.ExpectedMsgRate/dampeningFactor))
-		if err != nil {
-			return nil, errors.Wrap(err, "could not calculate mesh message deliveries threshold")
-		}
-		params.MeshMessageDeliveriesThreshold = meshMsgDeliveriesThreshold
-		params.MeshMessageDeliveriesCap = opts.Topic.MeshMsgCapFactor * meshMsgDeliveriesThreshold
-		params.MeshMessageDeliveriesWeight = -scoreByWeight(opts.maxScore(), opts.Topic.TopicWeight,
-			math.Max(4.0, params.MeshMessageDeliveriesCap)) // used cap instead of threshold to reduce weight
-		params.MeshMessageDeliveriesActivation = opts.Topic.MeshMsgActivationTime
-		params.MeshMessageDeliveriesWindow = 2 * time.Second
-		params.MeshFailurePenaltyWeight = params.MeshMessageDeliveriesWeight
-		params.MeshFailurePenaltyDecay = params.MeshMessageDeliveriesDecay
-	}
+	// if opts.Topic.MeshMsgDecayTime > 0 {
+	// 	params.MeshMessageDeliveriesDecay = scoreDecay(opts.Topic.MeshMsgDecayTime*opts.Network.OneEpochDuration, opts.Network.OneEpochDuration)
+	// 	// a peer must send us at least 1/50 of the regular messages in time, very conservative limit
+	// 	meshMsgDeliveriesThreshold, err := decayThreshold(params.MeshMessageDeliveriesDecay, math.Min(2.0, opts.Topic.ExpectedMsgRate/dampeningFactor))
+	// 	if err != nil {
+	// 		return nil, errors.Wrap(err, "could not calculate mesh message deliveries threshold")
+	// 	}
+	// 	params.MeshMessageDeliveriesThreshold = meshMsgDeliveriesThreshold
+	// 	params.MeshMessageDeliveriesCap = opts.Topic.MeshMsgCapFactor * meshMsgDeliveriesThreshold
+	// 	params.MeshMessageDeliveriesWeight = -scoreByWeight(opts.maxScore(), opts.Topic.TopicWeight,
+	// 		math.Max(4.0, params.MeshMessageDeliveriesCap)) // used cap instead of threshold to reduce weight
+	// 	params.MeshMessageDeliveriesActivation = opts.Topic.MeshMsgActivationTime
+	// 	params.MeshMessageDeliveriesWindow = 2 * time.Second
+	// 	params.MeshFailurePenaltyWeight = params.MeshMessageDeliveriesWeight
+	// 	params.MeshFailurePenaltyDecay = params.MeshMessageDeliveriesDecay
+	// }
 
-	if opts.Topic.InvalidMsgDecayTime > 0 {
-		params.InvalidMessageDeliveriesWeight = invalidMeshDeliveriesWeight
-		params.InvalidMessageDeliveriesDecay = scoreDecay(opts.Topic.InvalidMsgDecayTime*opts.Network.OneEpochDuration, opts.Network.OneEpochDuration)
-	} else {
-		params.InvalidMessageDeliveriesDecay = 0.1
-	}
+	// if opts.Topic.InvalidMsgDecayTime > 0 {
+	// 	params.InvalidMessageDeliveriesWeight = invalidMeshDeliveriesWeight
+	// 	params.InvalidMessageDeliveriesDecay = scoreDecay(opts.Topic.InvalidMsgDecayTime*opts.Network.OneEpochDuration, opts.Network.OneEpochDuration)
+	// } else {
+	// 	params.InvalidMessageDeliveriesDecay = 0.1
+	// }
 
 	return params, nil
 }
