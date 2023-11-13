@@ -152,7 +152,7 @@ func (e *FeeRecipientAddressUpdatedEventYAML) toEventData() (interface{}, error)
 
 func (e *ValidatorExitedEventYAML) toEventData() (interface{}, error) {
 	return contract.ContractValidatorExited{
-		PublicKey:   []byte(strings.TrimPrefix(e.PublicKey, "0x")), // TODO: check if hex.DecodeString is needed
+		PublicKey:   []byte(strings.TrimPrefix(e.PublicKey, "0x")),
 		OperatorIds: e.OperatorIds,
 	}, nil
 }
