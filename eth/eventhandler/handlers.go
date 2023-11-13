@@ -16,7 +16,6 @@ import (
 	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/logging/fields"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -226,7 +225,7 @@ func (eh *EventHandler) handleShareCreation(
 	sharePublicKeys [][]byte,
 	encryptedKeys [][]byte,
 ) (*ssvtypes.SSVShare, error) {
-	share, shareSecret, err := validatorAddedEventToShare(
+	share, shareSecret, err := eh.validatorAddedEventToShare(
 		validatorEvent,
 		eh.shareEncryptionKeyProvider,
 		eh.operatorData.GetOperatorData(),
@@ -256,7 +255,7 @@ func (eh *EventHandler) handleShareCreation(
 	return share, nil
 }
 
-func validatorAddedEventToShare(
+func (eh *EventHandler) validatorAddedEventToShare(
 	event *contract.ContractValidatorAdded,
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider,
 	operatorData *registrystorage.OperatorData,
@@ -318,7 +317,7 @@ func validatorAddedEventToShare(
 	}
 
 	validatorShare.Quorum, validatorShare.PartialQuorum = ssvtypes.ComputeQuorumAndPartialQuorum(len(committee))
-	validatorShare.DomainType = ssvtypes.GetDefaultDomain()
+	validatorShare.DomainType = eh.networkConfig.Domain
 	validatorShare.Committee = committee
 	validatorShare.Graffiti = []byte("ssv.network")
 
@@ -356,7 +355,7 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 	}
 
 	removeDecidedMessages := func(role spectypes.BeaconRole, store qbftstorage.QBFTStore) error {
-		messageID := spectypes.NewMsgID(types.GetDefaultDomain(), share.ValidatorPubKey, role)
+		messageID := spectypes.NewMsgID(eh.networkConfig.Domain, share.ValidatorPubKey, role)
 		return store.CleanAllInstances(logger, messageID[:])
 	}
 	err := eh.storageMap.Each(removeDecidedMessages)
