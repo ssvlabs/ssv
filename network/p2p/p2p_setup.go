@@ -204,7 +204,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 			filters = append(filters,
 				connections.SenderRecipientIPsCheckFilter(n.host.ID()),
 				connections.SignatureCheckFilter(),
-				connections.RegisteredOperatorsFilter(n.nodeStorage, n.cfg.WhitelistedOperatorKeys))
+				connections.RegisteredOperatorsFilter(n.nodeStorage, n.cfg.Network.WhitelistedOperatorKeys))
 		}
 		return filters
 	}
