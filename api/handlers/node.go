@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/libp2p/go-libp2p/core/network"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/bloxapp/ssv/api"
 	networkpeers "github.com/bloxapp/ssv/network/peers"
+	"github.com/bloxapp/ssv/nodeprobe"
 )
 
 type TopicIndex interface {
@@ -46,14 +48,18 @@ type identityJSON struct {
 }
 
 type healthCheckJSON struct {
-	PeersConnectionHealth  string `json:"peers_connection_health"`
-	BeaconConnectionHealth string `json:"beacon_connection_health"`
+	Peers               []peerJSON `json:"peers"`
+	BeaconConnected     bool       `json:"beacon_connected"`
+	ExecutionConnected  bool       `json:"execution_connected"`
+	EventSyncConnected  bool       `json:"event_sync_connected"`
+	LocalPortsListening []string   `json:"local_ports_listening"`
 }
 
 type Node struct {
 	PeersIndex networkpeers.Index
 	TopicIndex TopicIndex
 	Network    network.Network
+	NodeProber *nodeprobe.Prober
 }
 
 func (h *Node) Identity(w http.ResponseWriter, r *http.Request) error {
@@ -70,7 +76,54 @@ func (h *Node) Identity(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (h *Node) Peers(w http.ResponseWriter, r *http.Request) error {
-	peers := h.Network.Peers()
+	prs := h.Network.Peers()
+	resp := h.peers(prs)
+	return api.Render(w, r, resp)
+}
+
+func (h *Node) Topics(w http.ResponseWriter, r *http.Request) error {
+	allpeers, peerbytpc := h.TopicIndex.PeersByTopic()
+	alland := AllPeersAndTopicsJSON{}
+	tpcs := []topicIndexJSON{}
+	for topic, peerz := range peerbytpc {
+		tpcs = append(tpcs, topicIndexJSON{TopicName: topic, Peers: peerz})
+	}
+	alland.AllPeers = allpeers
+	alland.PeersByTopic = tpcs
+
+	return api.Render(w, r, alland)
+}
+
+func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
+	ctx := context.Background()
+	resp := healthCheckJSON{}
+	// check ports being used
+	addrs := h.Network.ListenAddresses()
+	for _, addr := range addrs {
+		resp.LocalPortsListening = append(resp.LocalPortsListening, addr.String())
+	}
+	// check consensus node health
+	err := h.NodeProber.CheckBeaconNodeHealth(ctx)
+	if err == nil {
+		resp.BeaconConnected = true
+	}
+	// check execution node health
+	err = h.NodeProber.CheckExecutionNodeHealth(ctx)
+	if err == nil {
+		resp.EventSyncConnected = true
+	}
+	// check event sync health
+	err = h.NodeProber.CheckEventSycNodeHealth(ctx)
+	if err != nil {
+		resp.EventSyncConnected = true
+	}
+	// check peers connection
+	prs := h.Network.Peers()
+	resp.Peers = h.peers(prs)
+	return api.Render(w, r, resp)
+}
+
+func (h *Node) peers(peers []peer.ID) []peerJSON {
 	resp := make([]peerJSON, len(peers))
 	for i, id := range peers {
 		resp[i] = peerJSON{
@@ -97,31 +150,5 @@ func (h *Node) Peers(w http.ResponseWriter, r *http.Request) error {
 		}
 		resp[i].Version = nodeInfo.Metadata.NodeVersion
 	}
-	return api.Render(w, r, resp)
-}
-
-func (h *Node) Topics(w http.ResponseWriter, r *http.Request) error {
-	allpeers, peerbytpc := h.TopicIndex.PeersByTopic()
-	alland := AllPeersAndTopicsJSON{}
-	tpcs := []topicIndexJSON{}
-	for topic, peerz := range peerbytpc {
-		tpcs = append(tpcs, topicIndexJSON{TopicName: topic, Peers: peerz})
-	}
-	alland.AllPeers = allpeers
-	alland.PeersByTopic = tpcs
-
-	return api.Render(w, r, alland)
-}
-
-func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
-	resp := healthCheckJSON{}
-	switch l := len(h.Network.Peers()); {
-	case l == 0:
-		resp.PeersConnectionHealth = "red"
-	case l > 0 && l <= 10:
-		resp.PeersConnectionHealth = "yellow"
-	case l > 10:
-		resp.PeersConnectionHealth = "green"
-	}
-	return api.Render(w, r, resp)
+	return resp
 }

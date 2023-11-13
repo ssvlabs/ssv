@@ -136,3 +136,27 @@ func (p *Prober) AddNode(name string, node Node) {
 
 	p.nodes[name] = node
 }
+
+func (p *Prober) CheckBeaconNodeHealth(ctx context.Context) error {
+	err := p.nodes["consensus client"].Healthy(ctx)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (p *Prober) CheckExecutionNodeHealth(ctx context.Context) error {
+	err := p.nodes["execution client"].Healthy(ctx)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (p *Prober) CheckEventSycNodeHealth(ctx context.Context) error {
+	err := p.nodes["event syncer"].Healthy(ctx)
+	if err != nil {
+		return err
+	}
+	return nil
+}
