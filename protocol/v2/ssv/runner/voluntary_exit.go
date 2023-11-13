@@ -48,7 +48,7 @@ func NewVoluntaryExitRunner(
 		beacon:  beacon,
 		network: network,
 		signer:  signer,
-		metrics: metrics.NewConsensusMetrics(spectypes.BNRoleValidatorRegistration),
+		metrics: metrics.NewConsensusMetrics(spectypes.BNRoleVoluntaryExit),
 	}
 }
 

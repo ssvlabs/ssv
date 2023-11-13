@@ -223,6 +223,7 @@ var StartNodeCmd = &cobra.Command{
 			spectypes.BNRoleSyncCommittee,
 			spectypes.BNRoleSyncCommitteeContribution,
 			spectypes.BNRoleValidatorRegistration,
+			spectypes.BNRoleVoluntaryExit,
 		}
 		storageMap := ibftstorage.NewStores()
 

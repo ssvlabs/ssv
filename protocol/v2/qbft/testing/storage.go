@@ -35,6 +35,7 @@ var allRoles = []spectypes.BeaconRole{
 	spectypes.BNRoleSyncCommittee,
 	spectypes.BNRoleSyncCommitteeContribution,
 	spectypes.BNRoleValidatorRegistration,
+	spectypes.BNRoleVoluntaryExit,
 }
 
 func TestingStores(logger *zap.Logger) *qbftstorage.QBFTStores {
