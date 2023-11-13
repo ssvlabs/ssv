@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/libp2p/go-libp2p/core/network"
@@ -14,6 +15,21 @@ import (
 
 type TopicIndex interface {
 	PeersByTopic() ([]peer.ID, map[string][]peer.ID)
+}
+
+type HealthStatus int
+
+const (
+	NotHealthy HealthStatus = iota
+	Healthy
+)
+
+func (c HealthStatus) String() string {
+	str := [...]string{"NotHealthy", "Healthy"}
+	if c < 0 || int(c) >= len(str) {
+		return "(unrecognized)"
+	}
+	return str[c]
 }
 
 type AllPeersAndTopicsJSON struct {
@@ -104,24 +120,24 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	}
 	// check consensus node health
 	err := h.NodeProber.CheckBeaconNodeHealth(ctx)
-	if err != nil {
-		resp.BeaconConnectionHealthStatus = "bad"
+	if err == nil {
+		resp.BeaconConnectionHealthStatus = Healthy.String()
 	} else {
-		resp.BeaconConnectionHealthStatus = "good"
+		resp.BeaconConnectionHealthStatus = fmt.Sprintf("%s: %s", NotHealthy.String(), err.Error())
 	}
 	// check execution node health
 	err = h.NodeProber.CheckExecutionNodeHealth(ctx)
-	if err != nil {
-		resp.ExecutionConnectionHealthStatus = "bad"
+	if err == nil {
+		resp.ExecutionConnectionHealthStatus = Healthy.String()
 	} else {
-		resp.ExecutionConnectionHealthStatus = "good"
+		resp.ExecutionConnectionHealthStatus = fmt.Sprintf("%s: %s", NotHealthy.String(), err.Error())
 	}
 	// check event sync health
 	err = h.NodeProber.CheckEventSycNodeHealth(ctx)
 	if err != nil {
-		resp.EventSyncHealthStatus = "bad"
+		resp.EventSyncHealthStatus = Healthy.String()
 	} else {
-		resp.EventSyncHealthStatus = "good"
+		resp.EventSyncHealthStatus = fmt.Sprintf("%s: %s", NotHealthy.String(), err.Error())
 	}
 	// check peers connection
 	var activePeerCount int
@@ -131,10 +147,10 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 			activePeerCount++
 		}
 	}
-	if activePeerCount < 10 {
-		resp.PeersHealthStatus = "bad"
+	if activePeerCount >= 10 {
+		resp.PeersHealthStatus = Healthy.String()
 	} else {
-		resp.PeersHealthStatus = "good"
+		resp.PeersHealthStatus = fmt.Sprintf("%s: %s", NotHealthy.String(), "less than 10 peers are connected")
 	}
 	return api.Render(w, r, resp)
 }
