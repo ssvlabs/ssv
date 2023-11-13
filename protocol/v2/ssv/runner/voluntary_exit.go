@@ -2,16 +2,19 @@ package runner
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 )
 
 // Duty runner for validator voluntary exit duty
@@ -89,6 +92,12 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg 
 	if err := r.beacon.SubmitVoluntaryExit(signedVoluntaryExit, specSig); err != nil {
 		return errors.Wrap(err, "could not submit voluntary exit")
 	}
+
+	logger.Debug("voluntary exit submitted successfully",
+		fields.Epoch(r.voluntaryExit.Epoch),
+		zap.Uint64("validator_index", uint64(r.voluntaryExit.ValidatorIndex)),
+		zap.String("signature", hex.EncodeToString(specSig[:])),
+	)
 
 	r.GetState().Finished = true
 	return nil
