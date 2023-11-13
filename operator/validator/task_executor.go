@@ -106,6 +106,14 @@ func (c *controller) ExitValidator(pubKey phase0.BLSPubKey, slot phase0.Slot, va
 		Slot:           slot,
 		ValidatorIndex: validatorIndex,
 	}
-	c.ExecuteDuty(c.logger.Named("ExitValidator"), duty)
+
+	logger := c.logger.
+		Named("ExitValidator").
+		With(fields.PubKey(pubKey[:])).
+		With(fields.Slot(slot)).
+		With(zap.Uint64("validator_index", uint64(validatorIndex)))
+
+	c.ExecuteDuty(logger, duty)
+
 	return nil
 }
