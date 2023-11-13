@@ -565,7 +565,7 @@ func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) {
 		}
 		// logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
 	} else {
-		logger.Warn("could not find validator", zap.String(fields.FieldPubKey, pubKeyString))
+		logger.Warn("could not find validator", zap.String("pubkey-string", pubKeyString))
 	}
 }
 
