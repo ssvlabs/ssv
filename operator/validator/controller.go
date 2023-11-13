@@ -548,7 +548,8 @@ func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) {
 	var pk phase0.BLSPubKey
 	copy(pk[:], duty.PubKey[:])
 
-	if v, ok := c.GetValidator(hex.EncodeToString(pk[:])); ok {
+	pubKeyString := hex.EncodeToString(pk[:])
+	if v, ok := c.GetValidator(pubKeyString); ok {
 		ssvMsg, err := CreateDutyExecuteMsg(duty, pk, types.GetDefaultDomain())
 		if err != nil {
 			logger.Error("could not create duty execute msg", zap.Error(err))
@@ -564,7 +565,7 @@ func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) {
 		}
 		// logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
 	} else {
-		logger.Warn("could not find validator")
+		logger.Warn("could not find validator", zap.String(fields.FieldPubKey, pubKeyString))
 	}
 }
 
