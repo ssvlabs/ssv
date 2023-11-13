@@ -103,6 +103,7 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address) error {
 func (c *controller) ExitValidator(pubKey phase0.BLSPubKey, slot phase0.Slot, validatorIndex phase0.ValidatorIndex) error {
 	duty := &spectypes.Duty{
 		Type:           spectypes.BNRoleVoluntaryExit,
+		PubKey:         pubKey,
 		Slot:           slot,
 		ValidatorIndex: validatorIndex,
 	}
