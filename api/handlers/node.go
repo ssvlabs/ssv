@@ -147,10 +147,13 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 			activePeerCount++
 		}
 	}
-	if activePeerCount >= 10 {
-		resp.PeersHealthStatus = Healthy.String()
-	} else {
-		resp.PeersHealthStatus = fmt.Sprintf("%s: %s", NotHealthy.String(), "less than 10 peers are connected")
+	switch count := activePeerCount; {
+	case count >= 5:
+		resp.PeersHealthStatus = fmt.Sprintf("%s: %d  peers are connected", Healthy.String(), activePeerCount)
+	case count < 5:
+		resp.PeersHealthStatus = fmt.Sprintf("%s: %s", NotHealthy.String(), "less than 5 peers are connected")
+	case count == 0:
+		resp.PeersHealthStatus = fmt.Sprintf("%s: %s", NotHealthy.String(), "error: no peers are connected")
 	}
 	return api.Render(w, r, resp)
 }
