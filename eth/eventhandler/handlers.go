@@ -490,6 +490,14 @@ func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.Co
 		return nil, &MalformedEventError{Err: ErrValidatorShareNotFound}
 	}
 
+	if event.Owner != share.OwnerAddress {
+		logger.Warn("malformed event: validator share already exists with different owner address",
+			zap.String("expected", share.OwnerAddress.String()),
+			zap.String("got", event.Owner.String()))
+
+		return nil, &MalformedEventError{Err: ErrShareBelongsToDifferentOwner}
+	}
+
 	if !share.BelongsToOperator(eh.operatorData.GetOperatorData().ID) {
 		return nil, nil
 	}
