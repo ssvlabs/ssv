@@ -14,6 +14,8 @@ import (
 	"github.com/bloxapp/ssv/nodeprobe"
 )
 
+const healthyPeersAmount = 10
+
 type TopicIndex interface {
 	PeersByTopic() ([]peer.ID, map[string][]peer.ID)
 }
@@ -93,8 +95,8 @@ func (h *Node) Identity(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (h *Node) Peers(w http.ResponseWriter, r *http.Request) error {
-	prs := h.Network.Peers()
-	resp := h.peers(prs)
+	peers := h.Network.Peers()
+	resp := h.peers(peers)
 	return api.Render(w, r, resp)
 }
 
@@ -102,8 +104,8 @@ func (h *Node) Topics(w http.ResponseWriter, r *http.Request) error {
 	allpeers, peerbytpc := h.TopicIndex.PeersByTopic()
 	alland := AllPeersAndTopicsJSON{}
 	tpcs := []topicIndexJSON{}
-	for topic, peerz := range peerbytpc {
-		tpcs = append(tpcs, topicIndexJSON{TopicName: topic, Peers: peerz})
+	for topic, peers := range peerbytpc {
+		tpcs = append(tpcs, topicIndexJSON{TopicName: topic, Peers: peers})
 	}
 	alland.AllPeers = allpeers
 	alland.PeersByTopic = tpcs
@@ -129,35 +131,34 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	// check consensus node health
 	err := h.NodeProber.CheckBeaconNodeHealth(ctx)
 	if err != nil {
-		resp.BeaconConnectionHealthStatus = fmt.Sprintf("%s: %s", NotHealthy.String(), err.Error())
+		resp.BeaconConnectionHealthStatus = fmt.Sprintf("%s: %s", NotHealthy, err.Error())
 	}
 	// check execution node health
 	err = h.NodeProber.CheckExecutionNodeHealth(ctx)
 	if err != nil {
-		resp.ExecutionConnectionHealthStatus = fmt.Sprintf("%s: %s", NotHealthy.String(), err.Error())
+		resp.ExecutionConnectionHealthStatus = fmt.Sprintf("%s: %s", NotHealthy, err.Error())
 	}
 	// check event sync health
 	err = h.NodeProber.CheckEventSyncerHealth(ctx)
 	if err != nil {
-		resp.EventSyncHealthStatus = fmt.Sprintf("%s: %s", NotHealthy.String(), err.Error())
+		resp.EventSyncHealthStatus = fmt.Sprintf("%s: %s", NotHealthy, err.Error())
 	}
 	// check peers connection
 	var activePeerCount int
-	prs := h.Network.Peers()
-	for _, p := range h.peers(prs) {
+	peers := h.Network.Peers()
+	for _, p := range h.peers(peers) {
 		if p.Connectedness == "Connected" {
 			activePeerCount++
 		}
 	}
-	switch count := activePeerCount; {
-	case count >= 10:
-		resp.PeersHealthStatus = fmt.Sprintf("%s: %d  peers are connected", Healthy.String(), activePeerCount)
-	case count < 10:
-		resp.PeersHealthStatus = fmt.Sprintf("%s: %s", NotHealthy.String(), "less than 10 peers are connected")
-	case count == 0:
-		resp.PeersHealthStatus = fmt.Sprintf("%s: %s", NotHealthy.String(), "error: no peers are connected")
+	switch {
+	case activePeerCount >= healthyPeersAmount:
+		resp.PeersHealthStatus = fmt.Sprintf("%s: %d  peers are connected", Healthy, activePeerCount)
+	case activePeerCount > 0 && activePeerCount < healthyPeersAmount:
+		resp.PeersHealthStatus = fmt.Sprintf("%s: less than %d peers are connected", NotHealthy, healthyPeersAmount)
+	case activePeerCount == 0:
+		resp.PeersHealthStatus = fmt.Sprintf("%s: %s", NotHealthy, "error: no peers are connected")
 	}
-
 	// Handle plain text content.
 	if contentType := api.NegotiateContentType(r); contentType == api.ContentTypePlainText {
 		str := fmt.Sprintf("%s: %s; %s: %s; %s: %s; %s: %s; %s: %s; \n",
