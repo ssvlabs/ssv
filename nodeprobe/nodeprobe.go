@@ -138,6 +138,8 @@ func (p *Prober) AddNode(name string, node Node) {
 }
 
 func (p *Prober) CheckBeaconNodeHealth(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, p.interval)
+	defer cancel()
 	err := p.nodes["consensus client"].Healthy(ctx)
 	if err != nil {
 		return err
@@ -146,6 +148,8 @@ func (p *Prober) CheckBeaconNodeHealth(ctx context.Context) error {
 }
 
 func (p *Prober) CheckExecutionNodeHealth(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, p.interval)
+	defer cancel()
 	err := p.nodes["execution client"].Healthy(ctx)
 	if err != nil {
 		return err
@@ -153,7 +157,9 @@ func (p *Prober) CheckExecutionNodeHealth(ctx context.Context) error {
 	return nil
 }
 
-func (p *Prober) CheckEventSycNodeHealth(ctx context.Context) error {
+func (p *Prober) CheckEventSyncerHealth(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, p.interval)
+	defer cancel()
 	err := p.nodes["event syncer"].Healthy(ctx)
 	if err != nil {
 		return err

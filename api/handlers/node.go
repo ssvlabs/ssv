@@ -112,7 +112,11 @@ func (h *Node) Topics(w http.ResponseWriter, r *http.Request) error {
 
 func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	ctx := context.Background()
-	resp := healthCheckJSON{}
+	resp := healthCheckJSON{
+		BeaconConnectionHealthStatus:    Healthy.String(),
+		ExecutionConnectionHealthStatus: Healthy.String(),
+		EventSyncHealthStatus:           Healthy.String(),
+	}
 	// check ports being used
 	addrs := h.Network.ListenAddresses()
 	for _, addr := range addrs {
@@ -120,23 +124,17 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	}
 	// check consensus node health
 	err := h.NodeProber.CheckBeaconNodeHealth(ctx)
-	if err == nil {
-		resp.BeaconConnectionHealthStatus = Healthy.String()
-	} else {
+	if err != nil {
 		resp.BeaconConnectionHealthStatus = fmt.Sprintf("%s: %s", NotHealthy.String(), err.Error())
 	}
 	// check execution node health
 	err = h.NodeProber.CheckExecutionNodeHealth(ctx)
-	if err == nil {
-		resp.ExecutionConnectionHealthStatus = Healthy.String()
-	} else {
+	if err != nil {
 		resp.ExecutionConnectionHealthStatus = fmt.Sprintf("%s: %s", NotHealthy.String(), err.Error())
 	}
 	// check event sync health
-	err = h.NodeProber.CheckEventSycNodeHealth(ctx)
+	err = h.NodeProber.CheckEventSyncerHealth(ctx)
 	if err != nil {
-		resp.EventSyncHealthStatus = Healthy.String()
-	} else {
 		resp.EventSyncHealthStatus = fmt.Sprintf("%s: %s", NotHealthy.String(), err.Error())
 	}
 	// check peers connection
@@ -148,10 +146,10 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 		}
 	}
 	switch count := activePeerCount; {
-	case count >= 5:
+	case count >= 10:
 		resp.PeersHealthStatus = fmt.Sprintf("%s: %d  peers are connected", Healthy.String(), activePeerCount)
-	case count < 5:
-		resp.PeersHealthStatus = fmt.Sprintf("%s: %s", NotHealthy.String(), "less than 5 peers are connected")
+	case count < 10:
+		resp.PeersHealthStatus = fmt.Sprintf("%s: %s", NotHealthy.String(), "less than 10 peers are connected")
 	case count == 0:
 		resp.PeersHealthStatus = fmt.Sprintf("%s: %s", NotHealthy.String(), "error: no peers are connected")
 	}
