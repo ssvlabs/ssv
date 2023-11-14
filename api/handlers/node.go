@@ -7,6 +7,7 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/multiformats/go-multiaddr"
 
 	"github.com/bloxapp/ssv/api"
 	networkpeers "github.com/bloxapp/ssv/network/peers"
@@ -64,11 +65,11 @@ type identityJSON struct {
 }
 
 type healthCheckJSON struct {
-	PeersHealthStatus               string   `json:"peers_status"`
-	BeaconConnectionHealthStatus    string   `json:"beacon_health_status"`
-	ExecutionConnectionHealthStatus string   `json:"execution_health_status"`
-	EventSyncHealthStatus           string   `json:"event_sync_health_status"`
-	LocalPortsListening             []string `json:"local_ports_listening"`
+	PeersHealthStatus               string `json:"peers_status"`
+	BeaconConnectionHealthStatus    string `json:"beacon_health_status"`
+	ExecutionConnectionHealthStatus string `json:"execution_health_status"`
+	EventSyncHealthStatus           string `json:"event_sync_health_status"`
+	LocalPortsListening             string `json:"local_port_listening"`
 }
 
 type Node struct {
@@ -120,7 +121,10 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	// check ports being used
 	addrs := h.Network.ListenAddresses()
 	for _, addr := range addrs {
-		resp.LocalPortsListening = append(resp.LocalPortsListening, addr.String())
+		if addr.String() == "/p2p-circuit" || addr.Decapsulate(multiaddr.StringCast("/ip4/0.0.0.0")) == nil {
+			continue
+		}
+		resp.LocalPortsListening = addr.String()
 	}
 	// check consensus node health
 	err := h.NodeProber.CheckBeaconNodeHealth(ctx)
@@ -152,6 +156,18 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 		resp.PeersHealthStatus = fmt.Sprintf("%s: %s", NotHealthy.String(), "less than 10 peers are connected")
 	case count == 0:
 		resp.PeersHealthStatus = fmt.Sprintf("%s: %s", NotHealthy.String(), "error: no peers are connected")
+	}
+
+	// Handle plain text content.
+	if contentType := api.NegotiateContentType(r); contentType == api.ContentTypePlainText {
+		str := fmt.Sprintf("%s: %s; %s: %s; %s: %s; %s: %s; %s: %s; \n",
+			"peers_status", resp.PeersHealthStatus,
+			"beacon_health_status", resp.BeaconConnectionHealthStatus,
+			"execution_health_status", resp.ExecutionConnectionHealthStatus,
+			"event_sync_health_status", resp.EventSyncHealthStatus,
+			"local_port_listening", resp.LocalPortsListening,
+		)
+		return api.Render(w, r, str)
 	}
 	return api.Render(w, r, resp)
 }
