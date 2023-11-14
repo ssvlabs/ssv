@@ -187,7 +187,7 @@ func TestEthExecLayer(t *testing.T) {
 			valExit.produce()
 			testEnv.CloseFollowDistance(&blockNum)
 
-			// Wait until the state is changed
+			// Wait to make sure the state is not changed
 			time.Sleep(time.Millisecond * 500)
 
 			shares = nodeStorage.Shares().List(nil)
