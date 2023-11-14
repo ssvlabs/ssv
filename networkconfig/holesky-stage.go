@@ -20,5 +20,5 @@ var HoleskyStage = NetworkConfig{
 	},
 	WhitelistedOperatorKeys:    []string{},
 	RSAForkEpoch:               0,
-	PermissionedDeactivateFork: 10365,
+	PermissionedDeactivateFork: 10560,
 }
