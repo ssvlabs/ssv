@@ -242,7 +242,10 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 
 	if !(msgSlot > signerState.Slot || msgSlot == signerState.Slot && msgRound > signerState.Round) {
 		if mv.hasFullData(signedMsg) && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
-			return ErrDuplicatedProposalWithDifferentData
+			e := ErrDuplicatedProposalWithDifferentData
+			e.want = signerState.ProposalData
+			e.got = signedMsg.FullData
+			return e
 		}
 
 		limits := maxMessageCounts(len(share.Committee))
