@@ -243,57 +243,50 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 
 	if !(msgSlot > signerState.Slot || msgSlot == signerState.Slot && msgRound > signerState.Round) {
 		if mv.hasFullData(signedMsg) && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
-			expectedAttestationDataJSON := "error"
-			receivedAttestationDataJSON := "error"
-			expectedConsensusDataJSON := "error"
-			receivedConsensusDataJSON := "error"
-
 			expectedConsensusData := &spectypes.ConsensusData{}
-			if err := expectedConsensusData.Decode(signerState.ProposalData); err == nil {
-				if jsonBytes, err := json.Marshal(expectedConsensusData); err == nil {
-					expectedConsensusDataJSON = string(jsonBytes)
-				}
+			if err := expectedConsensusData.Decode(signerState.ProposalData); err != nil {
+				// TODO
 			}
 
 			receivedConsensusData := &spectypes.ConsensusData{}
-			if err := receivedConsensusData.Decode(signedMsg.FullData); err == nil {
-				if jsonBytes, err := json.Marshal(receivedConsensusData); err == nil {
-					receivedConsensusDataJSON = string(jsonBytes)
-				}
+			if err := receivedConsensusData.Decode(signedMsg.FullData); err != nil {
+				// TODO
 			}
 
 			expectedAttestationData := &phase0.AttestationData{}
-			if err := expectedAttestationData.UnmarshalSSZ(expectedConsensusData.DataSSZ); err == nil {
-				if jsonBytes, err := json.Marshal(expectedAttestationData); err == nil {
-					expectedAttestationDataJSON = string(jsonBytes)
-				}
+			if err := expectedAttestationData.UnmarshalSSZ(expectedConsensusData.DataSSZ); err != nil {
+				// TODO
 			}
 
 			receivedAttestationData := &phase0.AttestationData{}
-			if err := receivedAttestationData.UnmarshalSSZ(receivedConsensusData.DataSSZ); err == nil {
-				if jsonBytes, err := json.Marshal(receivedAttestationData); err == nil {
-					receivedAttestationDataJSON = string(jsonBytes)
-				}
+			if err := receivedAttestationData.UnmarshalSSZ(receivedConsensusData.DataSSZ); err != nil {
+				// TODO
 			}
 
 			type DataLog struct {
-				Consensus   string `json:"consensus"`
-				Attestation string `json:"attestation"`
+				Consensus   *spectypes.ConsensusData `json:"consensus"`
+				Attestation *phase0.AttestationData  `json:"attestation"`
 			}
 
 			expectedDataLog := DataLog{
-				Consensus:   expectedConsensusDataJSON,
-				Attestation: expectedAttestationDataJSON,
+				Consensus:   expectedConsensusData,
+				Attestation: expectedAttestationData,
 			}
 
-			expectedDataLogJSON, _ := json.Marshal(expectedDataLog)
+			expectedDataLogJSON, err := json.Marshal(expectedDataLog)
+			if err != nil {
+				// TODO
+			}
 
 			receivedDataLog := DataLog{
-				Consensus:   receivedConsensusDataJSON,
-				Attestation: receivedAttestationDataJSON,
+				Consensus:   receivedConsensusData,
+				Attestation: receivedAttestationData,
 			}
 
-			receivedDataLogJSON, _ := json.Marshal(receivedDataLog)
+			receivedDataLogJSON, err := json.Marshal(receivedDataLog)
+			if err != nil {
+				// TODO
+			}
 
 			e := ErrDuplicatedProposalWithDifferentData
 			e.want = string(expectedDataLogJSON)
