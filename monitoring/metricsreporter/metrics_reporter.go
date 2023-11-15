@@ -402,5 +402,7 @@ func (m *MetricsReporter) NonCommitteeMessage(msgType spectypes.MsgType, decided
 
 // DeletePeerInfo deletes all data about peers which connections have been closed by the current node
 func (m *MetricsReporter) DeletePeerInfo(peerId peer.ID) {
-	messagesReceivedFromPeer.DeleteLabelValues(peerId.String())
+	// disabled for demo
+	_ = peerId
+	//messagesReceivedFromPeer.DeleteLabelValues(peerId.String())
 }
