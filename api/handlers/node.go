@@ -20,15 +20,15 @@ type TopicIndex interface {
 	PeersByTopic() ([]peer.ID, map[string][]peer.ID)
 }
 
-type HealthStatus int
+type healthStatus int
 
 const (
-	Bad HealthStatus = iota
-	Good
+	bad healthStatus = iota
+	good
 )
 
-func (c HealthStatus) String() string {
-	str := [...]string{"Bad", "Good"}
+func (c healthStatus) String() string {
+	str := [...]string{"bad", "good"}
 	if c < 0 || int(c) >= len(str) {
 		return "(unrecognized)"
 	}
@@ -116,10 +116,10 @@ func (h *Node) Topics(w http.ResponseWriter, r *http.Request) error {
 func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	ctx := context.Background()
 	resp := healthCheckJSON{
-		BeaconConnectionHealthStatus:    Good.String(),
-		ExecutionConnectionHealthStatus: Good.String(),
-		EventSyncHealthStatus:           Good.String(),
-		PeersHealthStatus:               Good.String(),
+		BeaconConnectionHealthStatus:    good.String(),
+		ExecutionConnectionHealthStatus: good.String(),
+		EventSyncHealthStatus:           good.String(),
+		PeersHealthStatus:               good.String(),
 	}
 	// check ports being used
 	addrs := h.Network.ListenAddresses()
@@ -132,17 +132,17 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	// check consensus node health
 	err := h.NodeProber.CheckBeaconNodeHealth(ctx)
 	if err != nil {
-		resp.BeaconConnectionHealthStatus = fmt.Sprintf("%s: %s", Bad, err.Error())
+		resp.BeaconConnectionHealthStatus = fmt.Sprintf("%s: %s", bad, err.Error())
 	}
 	// check execution node health
 	err = h.NodeProber.CheckExecutionNodeHealth(ctx)
 	if err != nil {
-		resp.ExecutionConnectionHealthStatus = fmt.Sprintf("%s: %s", Bad, err.Error())
+		resp.ExecutionConnectionHealthStatus = fmt.Sprintf("%s: %s", bad, err.Error())
 	}
 	// check event sync health
 	err = h.NodeProber.CheckEventSyncerHealth(ctx)
 	if err != nil {
-		resp.EventSyncHealthStatus = fmt.Sprintf("%s: %s", Bad, err.Error())
+		resp.EventSyncHealthStatus = fmt.Sprintf("%s: %s", bad, err.Error())
 	}
 	// check peers connection
 	var activePeerCount int
@@ -154,13 +154,13 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	}
 	switch {
 	case activePeerCount > 0 && activePeerCount < healthyPeersAmount:
-		resp.PeersHealthStatus = fmt.Sprintf("%s: %d peers are connected", Bad, activePeerCount)
+		resp.PeersHealthStatus = fmt.Sprintf("%s: %d peers are connected", bad, activePeerCount)
 	case activePeerCount == 0:
-		resp.PeersHealthStatus = fmt.Sprintf("%s: %s", Bad, "error: no peers are connected")
+		resp.PeersHealthStatus = fmt.Sprintf("%s: %s", bad, "error: no peers are connected")
 	}
 	// handle plain text content
 	if contentType := api.NegotiateContentType(r); contentType == api.ContentTypePlainText {
-		str := fmt.Sprintf("%s: %s; %s: %s; %s: %s; %s: %s; %s: %s; \n",
+		str := fmt.Sprintf("%s: %s\n %s: %s\n %s: %s\n %s: %s\n %s: %s\n",
 			"peers_status", resp.PeersHealthStatus,
 			"beacon_health_status", resp.BeaconConnectionHealthStatus,
 			"execution_health_status", resp.ExecutionConnectionHealthStatus,
