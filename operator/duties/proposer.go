@@ -3,7 +3,6 @@ package duties
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -25,8 +24,7 @@ func NewProposerHandler(duties *dutystore.Duties[eth2apiv1.ProposerDuty]) *Propo
 	return &ProposerHandler{
 		duties: duties,
 		baseHandler: baseHandler{
-			fetchFirst:       true,
-			waitForInitFetch: true,
+			fetchFirst: true,
 		},
 	}
 }
@@ -53,18 +51,8 @@ func (h *ProposerHandler) Name() string {
 // On Ticker event:
 //  1. Execute duties.
 //  2. If necessary, fetch duties for the current epoch.
-func (h *ProposerHandler) HandleDuties(ctx context.Context, wg *sync.WaitGroup) {
+func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
-
-	if h.waitForInitFetch {
-		slot := h.network.Beacon.EstimatedCurrentSlot()
-		epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
-		h.processFetching(ctx, epoch, slot)
-		h.waitForInitFetch = false
-		h.fetchFirst = false
-		h.indicesChanged = false
-		wg.Done()
-	}
 
 	for {
 		select {
@@ -116,6 +104,15 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context, wg *sync.WaitGroup) 
 			h.indicesChanged = true
 		}
 	}
+}
+
+func (h *ProposerHandler) HandleInitialDuties(ctx context.Context) {
+	slot := h.network.Beacon.EstimatedCurrentSlot()
+	epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
+	h.processFetching(ctx, epoch, slot)
+	h.fetchFirst = false
+	h.indicesChanged = false
+	h.logger.Info("fetching duties on init done")
 }
 
 func (h *ProposerHandler) processFetching(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {

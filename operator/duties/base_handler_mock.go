@@ -7,7 +7,6 @@ package duties
 import (
 	context "context"
 	reflect "reflect"
-	sync "sync"
 
 	networkconfig "github.com/bloxapp/ssv/networkconfig"
 	slotticker "github.com/bloxapp/ssv/operator/slotticker"
@@ -39,15 +38,27 @@ func (m *MockdutyHandler) EXPECT() *MockdutyHandlerMockRecorder {
 }
 
 // HandleDuties mocks base method.
-func (m *MockdutyHandler) HandleDuties(arg0 context.Context, arg1 *sync.WaitGroup) {
+func (m *MockdutyHandler) HandleDuties(arg0 context.Context) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "HandleDuties", arg0, arg1)
+	m.ctrl.Call(m, "HandleDuties", arg0)
 }
 
 // HandleDuties indicates an expected call of HandleDuties.
-func (mr *MockdutyHandlerMockRecorder) HandleDuties(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockdutyHandlerMockRecorder) HandleDuties(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleDuties", reflect.TypeOf((*MockdutyHandler)(nil).HandleDuties), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleDuties", reflect.TypeOf((*MockdutyHandler)(nil).HandleDuties), arg0)
+}
+
+// HandleInitialDuties mocks base method.
+func (m *MockdutyHandler) HandleInitialDuties(arg0 context.Context) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "HandleInitialDuties", arg0)
+}
+
+// HandleInitialDuties indicates an expected call of HandleInitialDuties.
+func (mr *MockdutyHandlerMockRecorder) HandleInitialDuties(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleInitialDuties", reflect.TypeOf((*MockdutyHandler)(nil).HandleInitialDuties), arg0)
 }
 
 // Name mocks base method.
@@ -74,18 +85,4 @@ func (m *MockdutyHandler) Setup(arg0 string, arg1 *zap.Logger, arg2 BeaconNode, 
 func (mr *MockdutyHandlerMockRecorder) Setup(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Setup", reflect.TypeOf((*MockdutyHandler)(nil).Setup), arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8)
-}
-
-// WaitForInitFetch mocks base method.
-func (m *MockdutyHandler) WaitForInitFetch() bool {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ShouldFetchFirst")
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// ShouldFetchFirst indicates an expected call of ShouldFetchFirst.
-func (mr *MockdutyHandlerMockRecorder) ShouldFetchFirst() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ShouldFetchFirst", reflect.TypeOf((*MockdutyHandler)(nil).WaitForInitFetch))
 }

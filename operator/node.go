@@ -149,9 +149,6 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 		logger.Fatal("duty scheduler exited with error", zap.Error(err))
 	}
 
-	// Waiting for the duty scheduler to the init fetch
-	n.dutyScheduler.WaitForInitFetch()
-
 	n.validatorsCtrl.StartNetworkHandlers()
 	n.validatorsCtrl.StartValidators()
 	go n.net.UpdateSubnets(logger)

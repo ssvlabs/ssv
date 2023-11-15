@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -34,7 +33,6 @@ func NewSyncCommitteeHandler(duties *dutystore.SyncCommitteeDuties) *SyncCommitt
 	}
 	h.fetchCurrentPeriod = true
 	h.fetchFirst = true
-	h.waitForInitFetch = true
 	return h
 }
 
@@ -62,21 +60,11 @@ func (h *SyncCommitteeHandler) Name() string {
 // On Ticker event:
 //  1. Execute duties.
 //  2. If necessary, fetch duties for the next period.
-func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context, wg *sync.WaitGroup) {
+func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 
 	if h.shouldFetchNextPeriod(h.network.Beacon.EstimatedCurrentSlot()) {
 		h.fetchNextPeriod = true
-	}
-
-	if h.waitForInitFetch {
-		slot := h.network.Beacon.EstimatedCurrentSlot()
-		epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
-		period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
-		h.processFetching(ctx, period, slot)
-		h.waitForInitFetch = false
-		h.fetchFirst = false
-		wg.Done()
 	}
 
 	for {
@@ -142,6 +130,15 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context, wg *sync.WaitGr
 			}
 		}
 	}
+}
+
+func (h *SyncCommitteeHandler) HandleInitialDuties(ctx context.Context) {
+	slot := h.network.Beacon.EstimatedCurrentSlot()
+	epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
+	period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+	h.processFetching(ctx, period, slot)
+	h.fetchFirst = false
+	h.logger.Info("fetching duties on init done")
 }
 
 func (h *SyncCommitteeHandler) processFetching(ctx context.Context, period uint64, slot phase0.Slot) {

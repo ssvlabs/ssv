@@ -2,7 +2,6 @@ package duties
 
 import (
 	"context"
-	"sync"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
@@ -18,8 +17,8 @@ type ExecuteDutiesFunc func(logger *zap.Logger, duties []*spectypes.Duty)
 
 type dutyHandler interface {
 	Setup(string, *zap.Logger, BeaconNode, networkconfig.NetworkConfig, ValidatorController, ExecuteDutiesFunc, slotticker.Provider, chan ReorgEvent, chan struct{})
-	HandleDuties(context.Context, *sync.WaitGroup)
-	WaitForInitFetch() bool
+	HandleDuties(context.Context)
+	HandleInitialDuties(context.Context)
 	Name() string
 }
 
@@ -34,11 +33,8 @@ type baseHandler struct {
 	reorg         chan ReorgEvent
 	indicesChange chan struct{}
 
-	fetchFirst bool
-	// This bool is used to determine if the fetch of duties on init was completed
-	// is only necessary for duties that we can not validate in msg validation
-	waitForInitFetch bool
-	indicesChanged   bool
+	fetchFirst     bool
+	indicesChanged bool
 }
 
 func (h *baseHandler) Setup(
@@ -67,6 +63,6 @@ func (h *baseHandler) warnMisalignedSlotAndDuty(dutyType string) {
 		"assuming diff caused by a time drift - ignoring and executing duty", zap.String("type", dutyType))
 }
 
-func (h *baseHandler) WaitForInitFetch() bool {
-	return h.waitForInitFetch
+func (b *baseHandler) HandleInitialDuties(context.Context) {
+	// Do nothing
 }

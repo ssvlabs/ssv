@@ -3,7 +3,6 @@ package duties
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -61,7 +60,7 @@ func (h *AttesterHandler) Name() string {
 // On Ticker event:
 //  1. Execute duties.
 //  2. If necessary, fetch duties for the next epoch.
-func (h *AttesterHandler) HandleDuties(ctx context.Context, wg *sync.WaitGroup) {
+func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 
 	h.fetchNextEpoch = true
