@@ -296,27 +296,33 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 				receivedData = fmt.Sprintf("duty type %v logging is not implemented", expectedConsensusData.Duty.Type)
 			}
 
-			type DataLog struct {
+			type DuplicateProposalLog struct {
 				Consensus *spectypes.ConsensusData `json:"consensus"`
 				Data      any                      `json:"data"`
+				Slot      phase0.Slot              `json:"slot"`
+				Round     specqbft.Round           `json:"round"`
 			}
 
-			expectedDataLog := DataLog{
+			expectedLog := DuplicateProposalLog{
 				Consensus: expectedConsensusData,
 				Data:      expectedData,
+				Slot:      signerState.Slot,
+				Round:     signerState.Round,
 			}
 
-			expectedDataLogJSON, err := json.Marshal(expectedDataLog)
+			expectedDataLogJSON, err := json.Marshal(expectedLog)
 			if err != nil {
 				// TODO
 			}
 
-			receivedDataLog := DataLog{
+			receivedLog := DuplicateProposalLog{
 				Consensus: receivedConsensusData,
 				Data:      receivedData,
+				Slot:      msgSlot,
+				Round:     msgRound,
 			}
 
-			receivedDataLogJSON, err := json.Marshal(receivedDataLog)
+			receivedDataLogJSON, err := json.Marshal(receivedLog)
 			if err != nil {
 				// TODO
 			}
