@@ -257,13 +257,17 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 			switch expectedConsensusData.Duty.Type {
 			case spectypes.BNRoleAttester:
 				expectedAttestationData := &phase0.AttestationData{}
-				if err := expectedAttestationData.UnmarshalSSZ(expectedConsensusData.DataSSZ); err == nil {
+				if err := expectedAttestationData.UnmarshalSSZ(expectedConsensusData.DataSSZ); err != nil {
+					expectedData = fmt.Sprintf("could not decode expected attestation: %v", err)
+				} else {
 					expectedData = expectedAttestationData
 				}
 
 			case spectypes.BNRoleAggregator:
 				expectedAggData := &phase0.AggregateAndProof{}
-				if err := expectedAggData.UnmarshalSSZ(expectedConsensusData.DataSSZ); err == nil {
+				if err := expectedAggData.UnmarshalSSZ(expectedConsensusData.DataSSZ); err != nil {
+					expectedData = fmt.Sprintf("could not decode expected aggregate: %v", err)
+				} else {
 					expectedData = expectedAggData
 				}
 
@@ -274,13 +278,17 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 			switch receivedConsensusData.Duty.Type {
 			case spectypes.BNRoleAttester:
 				receivedAttestationData := &phase0.AttestationData{}
-				if err := receivedAttestationData.UnmarshalSSZ(receivedConsensusData.DataSSZ); err == nil {
+				if err := receivedAttestationData.UnmarshalSSZ(receivedConsensusData.DataSSZ); err != nil {
+					receivedData = fmt.Sprintf("could not decode received attestation: %v", err)
+				} else {
 					receivedData = receivedAttestationData
 				}
 
 			case spectypes.BNRoleAggregator:
 				receivedAggData := &phase0.AggregateAndProof{}
-				if err := receivedAggData.UnmarshalSSZ(receivedConsensusData.DataSSZ); err == nil {
+				if err := receivedAggData.UnmarshalSSZ(receivedConsensusData.DataSSZ); err != nil {
+					receivedData = fmt.Sprintf("could not decode received aggregate: %v", err)
+				} else {
 					receivedData = receivedAggData
 				}
 
