@@ -159,16 +159,6 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Slot
 	return s, logger, mockSlotService, timeout, cancel, schedulerPool, startFunction
 }
 
-func startDutyScheduler(t *testing.T, s *Scheduler, pool *pool.ContextPool, logger *zap.Logger, ctx context.Context) {
-	err := s.Start(ctx, logger)
-	require.NoError(t, err)
-
-	// Create a pool to wait for the scheduler to finish.
-	pool.Go(func(ctx context.Context) error {
-		return s.Wait()
-	})
-}
-
 func setExecuteDutyFunc(s *Scheduler, executeDutiesCall chan []*spectypes.Duty, executeDutiesCallSize int) {
 	executeDutiesBuffer := make(chan *spectypes.Duty, executeDutiesCallSize)
 	s.executeDuty = func(logger *zap.Logger, duty *spectypes.Duty) {
