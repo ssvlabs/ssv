@@ -2,7 +2,6 @@ package p2pv1
 
 import (
 	"context"
-	"crypto/ecdsa"
 	"encoding/hex"
 	"fmt"
 	"time"
@@ -51,7 +50,7 @@ func (ln *LocalNet) WithBootnode(ctx context.Context, logger *zap.Logger) error 
 	if err != nil {
 		return err
 	}
-	isk, err := commons.ConvertToInterfacePrivkey(bnSk)
+	isk, err := commons.ECDSAPrivToInterface(bnSk)
 	if err != nil {
 		return err
 	}
@@ -133,7 +132,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 	if err != nil {
 		return nil, err
 	}
-	cfg := NewNetConfig(keys.NetKey, format.OperatorID([]byte(operatorPubkey)), ln.Bootnode, testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), options.Nodes)
+	cfg := NewNetConfig(keys, format.OperatorID([]byte(operatorPubkey)), ln.Bootnode, testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), options.Nodes)
 	cfg.Ctx = ctx
 	cfg.Subnets = "00000000000000000000020000000000" //PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
 	cfg.NodeStorage = mock.NodeStorage{
@@ -146,7 +145,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 		}
 	}
 
-	pubKey, err := p2pcommons.ConvertToInterfacePubkey(&keys.NetKey.PublicKey)
+	pubKey, err := p2pcommons.ECDSAPubToInterface(&keys.NetKey.PublicKey)
 	if err != nil {
 		panic(err)
 	}
@@ -167,6 +166,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 		}
 		cfg.PeerScoreInspectorInterval = options.PeerScoreInspectorInterval
 	}
+	cfg.Network = networkconfig.TestNetwork
 
 	p := New(logger, cfg)
 	err = p.Setup(logger)
@@ -213,7 +213,7 @@ func NewLocalNet(ctx context.Context, logger *zap.Logger, options LocalNetOption
 }
 
 // NewNetConfig creates a new config for tests
-func NewNetConfig(netPrivKey *ecdsa.PrivateKey, operatorID string, bn *discovery.Bootnode, tcpPort, udpPort, maxPeers int) *Config {
+func NewNetConfig(keys testing.NodeKeys, operatorPubKeyHash string, bn *discovery.Bootnode, tcpPort, udpPort, maxPeers int) *Config {
 	bns := ""
 	discT := "discv5"
 	if bn != nil {
@@ -223,20 +223,21 @@ func NewNetConfig(netPrivKey *ecdsa.PrivateKey, operatorID string, bn *discovery
 	}
 	ua := ""
 	return &Config{
-		Bootnodes:         bns,
-		TCPPort:           tcpPort,
-		UDPPort:           udpPort,
-		HostAddress:       "",
-		HostDNS:           "",
-		RequestTimeout:    10 * time.Second,
-		MaxBatchResponse:  25,
-		MaxPeers:          maxPeers,
-		PubSubTrace:       false,
-		PubSubScoring:     true,
-		NetworkPrivateKey: netPrivKey,
-		OperatorID:        operatorID,
-		UserAgent:         ua,
-		Discovery:         discT,
+		Bootnodes:          bns,
+		TCPPort:            tcpPort,
+		UDPPort:            udpPort,
+		HostAddress:        "",
+		HostDNS:            "",
+		RequestTimeout:     10 * time.Second,
+		MaxBatchResponse:   25,
+		MaxPeers:           maxPeers,
+		PubSubTrace:        false,
+		PubSubScoring:      true,
+		NetworkPrivateKey:  keys.NetKey,
+		OperatorPrivateKey: keys.OperatorKey,
+		OperatorPubKeyHash: operatorPubKeyHash,
+		UserAgent:          ua,
+		Discovery:          discT,
 		Permissioned: func() bool {
 			return false
 		},

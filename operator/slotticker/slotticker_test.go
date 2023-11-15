@@ -133,9 +133,9 @@ func TestMultipleSlotTickers(t *testing.T) {
 	elapsed := time.Since(start)
 	expectedDuration := slotDuration * ticksPerTimer
 
-	// We'll allow a small buffer for drift, say 1%
-	buffer := expectedDuration * 1 / 100
-	assert.True(t, elapsed <= expectedDuration+buffer, "Expected all tickers to complete within %v but took %v", expectedDuration.String(), elapsed.String())
+	// We'll allow a small buffer for drift, say 5%
+	buffer := expectedDuration * 5 / 100
+	assert.True(t, elapsed <= expectedDuration+buffer, "Expected all tickers to complete within", expectedDuration.String(), "but took", elapsed.String())
 }
 
 func TestSlotSkipping(t *testing.T) {

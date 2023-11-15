@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -24,14 +25,12 @@ type Controller struct {
 	Identifier []byte
 	Height     specqbft.Height // incremental Height for InstanceContainer
 	// StoredInstances stores the last HistoricalInstanceCapacity in an array for message processing purposes.
-	StoredInstances InstanceContainer
-	// FutureMsgsContainer holds all msgs from a higher height
-	FutureMsgsContainer map[spectypes.OperatorID]specqbft.Height // maps msg signer to height of higher height received msgs
-	Domain              spectypes.DomainType
-	Share               *spectypes.Share
-	NewDecidedHandler   NewDecidedHandler `json:"-"`
-	config              qbft.IConfig
-	fullNode            bool
+	StoredInstances   InstanceContainer
+	Domain            spectypes.DomainType
+	Share             *spectypes.Share
+	NewDecidedHandler NewDecidedHandler `json:"-"`
+	config            qbft.IConfig
+	fullNode          bool
 }
 
 func NewController(
@@ -42,14 +41,13 @@ func NewController(
 	fullNode bool,
 ) *Controller {
 	return &Controller{
-		Identifier:          identifier,
-		Height:              specqbft.FirstHeight,
-		Domain:              domain,
-		Share:               share,
-		StoredInstances:     make(InstanceContainer, 0, InstanceContainerDefaultCapacity),
-		FutureMsgsContainer: make(map[spectypes.OperatorID]specqbft.Height),
-		config:              config,
-		fullNode:            fullNode,
+		Identifier:      identifier,
+		Height:          specqbft.FirstHeight,
+		Domain:          domain,
+		Share:           share,
+		StoredInstances: make(InstanceContainer, 0, InstanceContainerDefaultCapacity),
+		config:          config,
+		fullNode:        fullNode,
 	}
 }
 
@@ -100,10 +98,9 @@ func (c *Controller) ProcessMsg(logger *zap.Logger, msg *specqbft.SignedMessage)
 	if IsDecidedMsg(c.Share, msg) {
 		return c.UponDecided(logger, msg)
 	} else if c.isFutureMessage(msg) {
-		return c.UponFutureMsg(logger, msg)
-	} else {
-		return c.UponExistingInstanceMsg(logger, msg)
+		return nil, fmt.Errorf("future msg from height, could not process")
 	}
+	return c.UponExistingInstanceMsg(logger, msg)
 }
 
 func (c *Controller) UponExistingInstanceMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {

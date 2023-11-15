@@ -32,7 +32,7 @@ var (
 	metricsRouterIncoming = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:network:router:in",
 		Help: "Counts incoming messages",
-	}, []string{"identifier", "mt"})
+	}, []string{"mt"})
 )
 
 func init() {
@@ -105,8 +105,8 @@ func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
 		}
 	}
 
-	if pubKey, ok := n.operatorPKCache.Load(opPKHash); ok {
-		operatorData, found, opDataErr := n.nodeStorage.GetOperatorDataByPubKey(nil, pubKey.([]byte))
+	if pubKey, ok := n.operatorPKHashToPKCache.Get(opPKHash); ok {
+		operatorData, found, opDataErr := n.nodeStorage.GetOperatorDataByPubKey(nil, pubKey)
 		if opDataErr == nil && found {
 			opID = strconv.FormatUint(operatorData.ID, 10)
 		}
@@ -118,7 +118,7 @@ func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
 
 		for _, operator := range operators {
 			pubKeyHash := format.OperatorID(operator.PublicKey)
-			n.operatorPKCache.Store(pubKeyHash, operator.PublicKey)
+			n.operatorPKHashToPKCache.Set(pubKeyHash, operator.PublicKey)
 			if pubKeyHash == opPKHash {
 				opID = strconv.FormatUint(operator.ID, 10)
 			}

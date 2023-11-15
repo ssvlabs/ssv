@@ -3,10 +3,12 @@ package p2pv1
 import (
 	"context"
 	"crypto/ecdsa"
+	"crypto/rsa"
 	"fmt"
 	"strings"
 	"time"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/libp2p/go-libp2p"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -56,8 +58,12 @@ type Config struct {
 	DiscoveryTrace bool `yaml:"DiscoveryTrace" env:"DISCOVERY_TRACE" env-description:"Flag to turn on/off discovery tracing in logs"`
 	// NetworkPrivateKey is used for network identity, MUST be injected
 	NetworkPrivateKey *ecdsa.PrivateKey
-	// OperatorPublicKey is used for operator identity, optional
-	OperatorID string
+	// OperatorPrivateKey is used for operator identity, MUST be injected
+	OperatorPrivateKey *rsa.PrivateKey
+	// OperatorPubKeyHash is hash of operator public key, used for identity, optional
+	OperatorPubKeyHash string
+	// OperatorID contains numeric operator ID
+	OperatorID spectypes.OperatorID
 	// Router propagate incoming network messages to the responsive components
 	Router network.MessageRouter
 	// UserAgent to use by libp2p identify protocol
@@ -103,7 +109,7 @@ func (c *Config) Libp2pOptions(logger *zap.Logger) ([]libp2p.Option, error) {
 	if c.NetworkPrivateKey == nil {
 		return nil, errors.New("could not create options w/o network key")
 	}
-	sk, err := commons.ConvertToInterfacePrivkey(c.NetworkPrivateKey)
+	sk, err := commons.ECDSAPrivToInterface(c.NetworkPrivateKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not convert to interface priv key")
 	}

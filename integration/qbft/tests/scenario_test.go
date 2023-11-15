@@ -2,7 +2,6 @@ package tests
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -21,11 +20,9 @@ import (
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/validator"
 	protocolbeacon "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 	protocolstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	protocolvalidator "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
-	"github.com/bloxapp/ssv/protocol/v2/sync/handlers"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
@@ -63,15 +60,6 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 		for id := 1; id <= s.Committee; id++ {
 			id := spectypes.OperatorID(id)
 			s.validators[id] = createValidator(t, ctx, id, getKeySet(s.Committee), logger, s.shared.Nodes[id])
-
-			stores := newStores(logger)
-			s.shared.Nodes[id].RegisterHandlers(logger, protocolp2p.WithHandler(
-				protocolp2p.LastDecidedProtocol,
-				handlers.LastDecidedHandler(logger.Named(fmt.Sprintf("decided-handler-%d", id)), stores, s.shared.Nodes[id]),
-			), protocolp2p.WithHandler(
-				protocolp2p.DecidedHistoryProtocol,
-				handlers.HistoryHandler(logger.Named(fmt.Sprintf("history-handler-%d", id)), stores, s.shared.Nodes[id], 25),
-			))
 		}
 
 		//invoking duties
@@ -200,8 +188,9 @@ func createValidator(t *testing.T, pCtx context.Context, id spectypes.OperatorID
 	require.NoError(t, err)
 
 	options := protocolvalidator.Options{
-		Storage: newStores(logger),
-		Network: node,
+		Storage:       newStores(logger),
+		Network:       node,
+		BeaconNetwork: networkconfig.TestNetwork.Beacon,
 		SSVShare: &types.SSVShare{
 			Share: *testingShare(keySet, id),
 			Metadata: types.Metadata{

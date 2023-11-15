@@ -14,6 +14,8 @@ import (
 
 var SupportedConfigs = map[string]NetworkConfig{
 	Mainnet.Name:      Mainnet,
+	Holesky.Name:      Holesky,
+	HoleskyStage.Name: HoleskyStage,
 	JatoV2Stage.Name:  JatoV2Stage,
 	JatoV2.Name:       JatoV2,
 	LocalTestnet.Name: LocalTestnet,
@@ -36,6 +38,7 @@ type NetworkConfig struct {
 	RegistryContractAddr    string // TODO: ethcommon.Address
 	Bootnodes               []string
 	WhitelistedOperatorKeys []string
+	RSAForkEpoch            spec.Epoch
 }
 
 func (n NetworkConfig) String() string {

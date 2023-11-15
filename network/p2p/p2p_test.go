@@ -2,14 +2,23 @@ package p2pv1
 
 import (
 	"context"
+	"crypto"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/x509"
 	"encoding/hex"
+	"encoding/pem"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -20,8 +29,56 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/network"
-	protcolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
+	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 )
+
+func TestRSAUsage(t *testing.T) {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	testMessage := []byte("message")
+
+	hash := sha256.Sum256(testMessage)
+
+	signature, err := rsa.SignPKCS1v15(nil, privateKey, crypto.SHA256, hash[:])
+	require.NoError(t, err)
+
+	publicKey := &privateKey.PublicKey
+
+	pubKeyBytes, err := x509.MarshalPKIXPublicKey(publicKey)
+	if err != nil {
+		fmt.Println("Error marshalling public key:", err)
+		return
+	}
+
+	pubPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PUBLIC KEY",
+		Bytes: pubKeyBytes,
+	})
+
+	const operatorID = spectypes.OperatorID(0x12345678)
+	encodedSignedSSVMessage := commons.EncodeSignedSSVMessage(testMessage, operatorID, signature)
+
+	decodedMessage, decodedOperatorID, decodedSignature, err := commons.DecodeSignedSSVMessage(encodedSignedSSVMessage)
+	require.NoError(t, err)
+	require.Equal(t, operatorID, decodedOperatorID)
+	require.Equal(t, signature, decodedSignature)
+
+	messageHash := sha256.Sum256(decodedMessage)
+
+	block, rest := pem.Decode(pubPEM)
+	require.NotNil(t, block)
+	require.Empty(t, rest, "extra data after PEM decoding")
+
+	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
+	require.NoError(t, err)
+
+	rsaPubKey, ok := pub.(*rsa.PublicKey)
+	require.True(t, ok)
+
+	require.NoError(t, rsa.VerifyPKCS1v15(rsaPubKey, crypto.SHA256, messageHash[:], decodedSignature))
+	require.Equal(t, testMessage, decodedMessage)
+}
 
 func TestGetMaxPeers(t *testing.T) {
 	n := &p2pNetwork{
@@ -144,7 +201,7 @@ func TestP2pNetwork_Stream(t *testing.T) {
 	<-time.After(time.Second)
 
 	node := ln.Nodes[0]
-	res, err := node.LastDecided(logger, mid)
+	res, err := node.(*p2pNetwork).LastDecided(logger, mid)
 	require.NoError(t, err)
 	select {
 	case err := <-errors:
@@ -209,9 +266,30 @@ func TestWaitSubsetOfPeers(t *testing.T) {
 	}
 }
 
+func (n *p2pNetwork) LastDecided(logger *zap.Logger, mid spectypes.MessageID) ([]p2pprotocol.SyncResult, error) {
+	const (
+		minPeers = 3
+		waitTime = time.Second * 24
+	)
+	if !n.isReady() {
+		return nil, p2pprotocol.ErrNetworkIsNotReady
+	}
+	pid, maxPeers := commons.ProtocolID(p2pprotocol.LastDecidedProtocol)
+	peers, err := waitSubsetOfPeers(logger, n.getSubsetOfPeers, mid.GetPubKey(), minPeers, maxPeers, waitTime, allPeersFilter)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get subset of peers")
+	}
+	return n.makeSyncRequest(logger, peers, mid, pid, &message.SyncMessage{
+		Params: &message.SyncParams{
+			Identifier: mid,
+		},
+		Protocol: message.LastDecidedType,
+	})
+}
+
 func registerHandler(logger *zap.Logger, node network.P2PNetwork, mid spectypes.MessageID, height specqbft.Height, round specqbft.Round, counter *int64, errors chan<- error) {
-	node.RegisterHandlers(logger, &protcolp2p.SyncHandler{
-		Protocol: protcolp2p.LastDecidedProtocol,
+	node.RegisterHandlers(logger, &p2pprotocol.SyncHandler{
+		Protocol: p2pprotocol.LastDecidedProtocol,
 		Handler: func(message *spectypes.SSVMessage) (*spectypes.SSVMessage, error) {
 			atomic.AddInt64(counter, 1)
 			sm := specqbft.SignedMessage{

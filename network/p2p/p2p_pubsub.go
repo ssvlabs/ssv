@@ -2,8 +2,13 @@ package p2pv1
 
 import (
 	"context"
+	"crypto"
+	"crypto/rsa"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+
+	"github.com/bloxapp/ssv/protocol/v2/message"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -15,7 +20,6 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/records"
-	"github.com/bloxapp/ssv/protocol/v2/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
@@ -53,16 +57,27 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
 
-	raw, err := commons.EncodeNetworkMsg(msg)
+	encodedMsg, err := commons.EncodeNetworkMsg(msg)
 	if err != nil {
 		return errors.Wrap(err, "could not decode msg")
+	}
+
+	if n.cfg.Network.Beacon.EstimatedCurrentEpoch() > n.cfg.Network.RSAForkEpoch {
+		hash := sha256.Sum256(encodedMsg)
+
+		signature, err := rsa.SignPKCS1v15(nil, n.operatorPrivateKey, crypto.SHA256, hash[:])
+		if err != nil {
+			return err
+		}
+
+		encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, n.operatorID, signature)
 	}
 
 	vpk := msg.GetID().GetPubKey()
 	topics := commons.ValidatorTopicID(vpk)
 
 	for _, topic := range topics {
-		if err := n.topicsCtrl.Broadcast(topic, raw, n.cfg.RequestTimeout); err != nil {
+		if err := n.topicsCtrl.Broadcast(topic, encodedMsg, n.cfg.RequestTimeout); err != nil {
 			n.interfaceLogger.Debug("could not broadcast msg", fields.PubKey(vpk), zap.Error(err))
 			return errors.Wrap(err, "could not broadcast msg")
 		}
@@ -155,14 +170,14 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 			return errors.New("message was not decoded")
 		}
 
-		p2pID := decodedMsg.GetID().String()
+		//p2pID := decodedMsg.GetID().String()
 
 		//	logger.With(
 		// 		zap.String("pubKey", hex.EncodeToString(ssvMsg.MsgID.GetPubKey())),
 		// 		zap.String("role", ssvMsg.MsgID.GetRoleType().String()),
 		// 	).Debug("handlePubsubMessages")
 
-		metricsRouterIncoming.WithLabelValues(p2pID, message.MsgTypeToString(decodedMsg.MsgType)).Inc()
+		metricsRouterIncoming.WithLabelValues(message.MsgTypeToString(decodedMsg.MsgType)).Inc()
 
 		n.msgRouter.Route(ctx, decodedMsg)
 

@@ -1,0 +1,132 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ssv-node-holesky-3-svc
+  namespace: REPLACE_NAMESPACE
+  labels:
+    app: ssv-node-holesky-3
+spec:
+  type: ClusterIP
+  ports:
+    - port: 12024
+      protocol: UDP
+      targetPort: 12024
+      name: port-12024
+    - port: 13024
+      protocol: TCP
+      targetPort: 13024
+      name: port-13024
+    - port: 15024
+      protocol: TCP
+      targetPort: 15024
+      name: port-15024
+    - port: 16024
+      protocol: TCP
+      targetPort: 16024
+      name: port-16024
+  selector:
+    app: ssv-node-holesky-3
+---
+apiVersion: REPLACE_API_VERSION
+kind: Deployment
+metadata:
+  labels:
+    app: ssv-node-holesky-3
+  name: ssv-node-holesky-3
+  namespace: REPLACE_NAMESPACE
+spec:
+  replicas: REPLACE_REPLICAS
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ssv-node-holesky-3
+  template:
+    metadata:
+      labels:
+        app: ssv-node-holesky-3
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/role
+                    operator: In
+                    values:
+                      - ssv-main
+                  - key: beta.kubernetes.io/instance-type
+                    operator: In
+                    values:
+                      - m5a.4xlarge
+      containers:
+      - name: ssv-node-holesky-3
+        image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG
+        imagePullPolicy: Always
+        resources:
+          limits:
+            cpu: REPLACE_NODES_CPU_LIMIT
+            memory: REPLACE_NODES_MEM_LIMIT
+        command: ["make", "start-node"]
+        ports:
+        - containerPort: 12024
+          name: port-12024
+          hostPort: 12024
+          protocol: UDP
+        - containerPort: 13024
+          name: port-13024
+          hostPort: 13024
+        - containerPort: 15024
+          name: port-15024
+          hostPort: 15024
+        - containerPort: 16024
+          name: port-16024
+          hostPort: 16024
+        env:
+          - name: SHARE_CONFIG
+            value: "./data1/share.yaml"
+          - name: LOG_LEVEL
+            value: "debug"
+          - name: DB_REPORTING
+            value: "false"
+          - name: PUBSUB_TRACE
+            value: "false"
+          - name: DISCOVERY_TYPE_KEY
+            value: "discv5"
+          - name: DB_PATH
+            value: ./data/db-holesky
+          - name: NETWORK
+            value: holesky
+          - name: CONSENSUS_TYPE
+            value: "validation"
+          - name: HOST_DNS
+            value: ""
+          - name: HOST_ADDRESS
+            value: ""
+          - name: METRICS_API_PORT
+            value: "15024"
+          - name: SSV_API_PORT
+            value: "16024"
+          - name: ENABLE_PROFILE
+            value: "true"
+          - name: BUILDER_PROPOSALS
+            value: "true"
+        volumeMounts:
+        - mountPath: /data
+          name: ssv-node-holesky-3
+        - mountPath: /data1/share.yaml
+          subPath: share.yaml
+          name: ssv-node-holesky-3-cm
+      volumes:
+      - name: ssv-node-holesky-3
+        persistentVolumeClaim:
+          claimName: ssv-node-holesky-3
+      - name: ssv-node-holesky-3-cm
+        configMap:
+          name: ssv-node-holesky-3-cm
+      tolerations:
+        - effect: NoSchedule
+          key: kubernetes.io/role
+          operator: Exists
+      hostNetwork: true

@@ -4,13 +4,14 @@ import (
 	"crypto/rsa"
 	"io"
 
-	"github.com/bloxapp/ssv/network/records"
 	"github.com/libp2p/go-libp2p/core/network"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/network/records"
 )
 
 const (
@@ -71,7 +72,7 @@ type NodeInfoIndex interface {
 	NodeInfo(id peer.ID) *records.NodeInfo
 }
 
-// InfoIndex is an interface for managing PeerInfo of network peers
+// PeerInfoIndex is an interface for managing PeerInfo of network peers
 type PeerInfoIndex interface {
 	// PeerInfo returns the PeerInfo of the given peer, or nil if not found.
 	PeerInfo(peer.ID) *PeerInfo

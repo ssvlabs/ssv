@@ -1,0 +1,152 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ssv-exporter-holesky
+  namespace: REPLACE_NAMESPACE
+  labels:
+    app: ssv-exporter-holesky
+spec:
+  type: ClusterIP
+  ports:
+    - port: 12073
+      protocol: UDP
+      targetPort: 12073
+      name: port-12073
+    - port: 13073
+      protocol: TCP
+      targetPort: 13073
+      name: port-13073
+    - port: 14073
+      protocol: TCP
+      targetPort: 14073
+      name: port-14073
+    - port: 15073
+      protocol: TCP
+      targetPort: 15073
+      name: port-15073
+    - port: 16073
+      protocol: TCP
+      targetPort: 16073
+      name: port-16073
+  selector:
+    app: ssv-exporter-holesky
+---
+apiVersion: REPLACE_API_VERSION
+kind: Deployment
+metadata:
+  labels:
+    app: ssv-exporter-holesky
+  name: ssv-exporter-holesky
+  namespace: REPLACE_NAMESPACE
+spec:
+  replicas: REPLACE_REPLICAS
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ssv-exporter-holesky
+  template:
+    metadata:
+      labels:
+        app: ssv-exporter-holesky
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/role
+                    operator: In
+                    values:
+                      - ssv-exporter
+      containers:
+        - name: ssv-exporter-holesky
+          image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG
+          imagePullPolicy: Always
+          resources:
+            limits:
+              cpu: REPLACE_EXPORTER_CPU_LIMIT
+              memory: REPLACE_EXPORTER_MEM_LIMIT
+          command: ["make", "start-node"]
+          ports:
+            - containerPort: 12073
+              name: port-12073
+              hostPort: 12073
+              protocol: UDP
+            - containerPort: 13073
+              name: port-13073
+              hostPort: 13073
+            - containerPort: 14073
+              name: port-14073
+              hostPort: 14073
+            - containerPort: 15073
+              name: port-15073
+              hostPort: 15073
+            - containerPort: 16073
+              name: port-16073
+              hostPort: 16073
+          env:
+            - name: SHARE_CONFIG
+              value: "./data/share.yaml"
+            - name: CONFIG_PATH
+              valueFrom:
+                secretKeyRef:
+                  name: config-secrets
+                  key: config_path
+            - name: ABI_VERSION
+              valueFrom:
+                secretKeyRef:
+                  name: config-secrets
+                  key: abi_version
+                  optional: true
+            - name: LOG_LEVEL
+              value: "debug"
+            - name: DEBUG_SERVICES
+              value: "ssv.*"
+            - name: DISCOVERY_TYPE_KEY
+              value: "discv5"
+            - name: DB_PATH
+              value: "./data/db-holesky-stage"
+            - name: NETWORK
+              value: "holesky-stage"
+            - name: DB_REPORTING
+              value: "false"
+            - name: METRICS_API_PORT
+              value: "15073"
+            - name: SSV_API_PORT
+              value: "16073"
+            - name: ENABLE_PROFILE
+              value: "true"
+            - name: UDP_PORT
+              value: "12073"
+            - name: TCP_PORT
+              value: "13073"
+            - name: WS_API_PORT
+              value: "14073"
+            - name: FULLNODE
+              value: "true"
+            - name: EXPORTER
+              value: "true"
+            - name: DISCOVERY_TRACE
+              value: "false"
+            - name: PUBSUB_TRACE
+              value: "false"
+            - name: SUBNETS
+              value: "0xffffffffffffffffffffffffffffffff"
+          volumeMounts:
+            - mountPath: /data
+              name: ssv-exporter-holesky
+            - mountPath: /data/share.yaml
+              subPath: share.yaml
+              name: ssv-exporter-holesky-cm
+      imagePullSecrets:
+        - name: ecr-repo
+      volumes:
+        - name: ssv-exporter-holesky
+          persistentVolumeClaim:
+            claimName: ssv-exporter-holesky
+        - name: ssv-exporter-holesky-cm
+          configMap:
+            name: ssv-exporter-holesky-cm
+      hostNetwork: true

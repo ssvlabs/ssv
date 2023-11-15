@@ -6,13 +6,13 @@ import (
 	"strconv"
 	"time"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/network/commons"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
 
 var (
@@ -240,7 +240,7 @@ func (ctrl *topicsCtrl) listen(logger *zap.Logger, sub *pubsub.Subscription) err
 			continue
 		}
 
-		if ssvMsg, ok := msg.ValidatorData.(spectypes.SSVMessage); ok {
+		if ssvMsg, ok := msg.ValidatorData.(*queue.DecodedSSVMessage); ok {
 			metricPubsubInbound.WithLabelValues(
 				commons.GetTopicBaseName(topicName),
 				strconv.FormatUint(uint64(ssvMsg.MsgType), 10),

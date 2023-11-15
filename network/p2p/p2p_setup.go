@@ -161,7 +161,7 @@ func (n *p2pNetwork) setupStreamCtrl(logger *zap.Logger) error {
 }
 
 func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
-	libPrivKey, err := p2pcommons.ConvertToInterfacePrivkey(n.cfg.NetworkPrivateKey)
+	libPrivKey, err := p2pcommons.ECDSAPrivToInterface(n.cfg.NetworkPrivateKey)
 	if err != nil {
 		return err
 	}
@@ -169,7 +169,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	domain := "0x" + hex.EncodeToString(n.cfg.Network.Domain[:])
 	self := records.NewNodeInfo(domain)
 	self.Metadata = &records.NodeMetadata{
-		OperatorID:  n.cfg.OperatorID,
+		OperatorID:  n.cfg.OperatorPubKeyHash,
 		NodeVersion: commons.GetNodeVersion(),
 		Subnets:     records.Subnets(n.subnets).String(),
 	}
@@ -246,7 +246,6 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 			TCPPort:       n.cfg.TCPPort,
 			NetworkKey:    n.cfg.NetworkPrivateKey,
 			Bootnodes:     n.cfg.TransformBootnodes(),
-			OperatorID:    n.cfg.OperatorID,
 			EnableLogging: n.cfg.DiscoveryTrace,
 		}
 		if len(n.subnets) > 0 {
@@ -263,6 +262,7 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 		SubnetsIdx:  n.idx,
 		HostAddress: n.cfg.HostAddress,
 		HostDNS:     n.cfg.HostDNS,
+		DomainType:  n.cfg.Network.Domain,
 	}
 	disc, err := discovery.NewService(n.ctx, logger, discOpts)
 	if err != nil {
@@ -299,7 +299,7 @@ func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
 		cfg.ScoreIndex = nil
 	}
 
-	midHandler := topics.NewMsgIDHandler(n.ctx, time.Minute*2)
+	midHandler := topics.NewMsgIDHandler(n.ctx, time.Minute*2, n.cfg.Network)
 	n.msgResolver = midHandler
 	cfg.MsgIDHandler = midHandler
 	go cfg.MsgIDHandler.Start()
