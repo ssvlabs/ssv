@@ -4,6 +4,7 @@ package validation
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -242,9 +243,61 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 
 	if !(msgSlot > signerState.Slot || msgSlot == signerState.Slot && msgRound > signerState.Round) {
 		if mv.hasFullData(signedMsg) && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
+			expectedAttestationDataJSON := "error"
+			receivedAttestationDataJSON := "error"
+			expectedConsensusDataJSON := "error"
+			receivedConsensusDataJSON := "error"
+
+			expectedConsensusData := &spectypes.ConsensusData{}
+			if err := expectedConsensusData.Decode(signerState.ProposalData); err == nil {
+				if jsonBytes, err := json.Marshal(expectedConsensusData); err == nil {
+					expectedConsensusDataJSON = string(jsonBytes)
+				}
+			}
+
+			receivedConsensusData := &spectypes.ConsensusData{}
+			if err := receivedConsensusData.Decode(signedMsg.FullData); err == nil {
+				if jsonBytes, err := json.Marshal(receivedConsensusData); err == nil {
+					receivedConsensusDataJSON = string(jsonBytes)
+				}
+			}
+
+			expectedAttestationData := &phase0.AttestationData{}
+			if err := expectedAttestationData.UnmarshalSSZ(expectedConsensusData.DataSSZ); err == nil {
+				if jsonBytes, err := json.Marshal(expectedAttestationData); err == nil {
+					expectedAttestationDataJSON = string(jsonBytes)
+				}
+			}
+
+			receivedAttestationData := &phase0.AttestationData{}
+			if err := receivedAttestationData.UnmarshalSSZ(receivedConsensusData.DataSSZ); err == nil {
+				if jsonBytes, err := json.Marshal(receivedAttestationData); err == nil {
+					receivedAttestationDataJSON = string(jsonBytes)
+				}
+			}
+
+			type DataLog struct {
+				Consensus   string `json:"consensus"`
+				Attestation string `json:"attestation"`
+			}
+
+			expectedDataLog := DataLog{
+				Consensus:   expectedConsensusDataJSON,
+				Attestation: expectedAttestationDataJSON,
+			}
+
+			expectedDataLogJSON, _ := json.Marshal(expectedDataLog)
+
+			receivedDataLog := DataLog{
+				Consensus:   receivedConsensusDataJSON,
+				Attestation: receivedAttestationDataJSON,
+			}
+
+			receivedDataLogJSON, _ := json.Marshal(receivedDataLog)
+
 			e := ErrDuplicatedProposalWithDifferentData
-			e.want = signerState.ProposalData
-			e.got = signedMsg.FullData
+			e.want = string(expectedDataLogJSON)
+			e.got = string(receivedDataLogJSON)
 			return e
 		}
 
