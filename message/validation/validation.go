@@ -461,7 +461,7 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 
 func (mv *messageValidator) GetConsensusDataJson(fullData []byte) string {
 
-	var consensusData *spectypes.ConsensusData
+	consensusData := &spectypes.ConsensusData{}
 	err := consensusData.Decode(fullData)
 	if err != nil {
 		mv.logger.Error("Could not decode fullData", zap.Error(err))
