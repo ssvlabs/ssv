@@ -145,10 +145,6 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 		return fmt.Errorf("failed to run duty scheduler: %w", err)
 	}
 
-	if err := n.dutyScheduler.Wait(); err != nil {
-		logger.Fatal("duty scheduler exited with error", zap.Error(err))
-	}
-
 	n.validatorsCtrl.StartNetworkHandlers()
 	n.validatorsCtrl.StartValidators()
 	go n.net.UpdateSubnets(logger)
@@ -156,6 +152,10 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 
 	go n.feeRecipientCtrl.Start(logger)
 	go n.validatorsCtrl.UpdateValidatorMetaDataLoop()
+
+	if err := n.dutyScheduler.Wait(); err != nil {
+		logger.Fatal("duty scheduler exited with error", zap.Error(err))
+	}
 
 	return nil
 }

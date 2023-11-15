@@ -110,9 +110,6 @@ func (h *ProposerHandler) HandleInitialDuties(ctx context.Context) {
 	slot := h.network.Beacon.EstimatedCurrentSlot()
 	epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 	h.processFetching(ctx, epoch, slot)
-	h.fetchFirst = false
-	h.indicesChanged = false
-	h.logger.Info("fetching duties on init done")
 }
 
 func (h *ProposerHandler) processFetching(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {

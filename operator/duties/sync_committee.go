@@ -137,8 +137,6 @@ func (h *SyncCommitteeHandler) HandleInitialDuties(ctx context.Context) {
 	epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 	period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 	h.processFetching(ctx, period, slot)
-	h.fetchFirst = false
-	h.logger.Info("fetching duties on init done")
 }
 
 func (h *SyncCommitteeHandler) processFetching(ctx context.Context, period uint64, slot phase0.Slot) {
