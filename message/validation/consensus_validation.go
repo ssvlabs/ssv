@@ -253,24 +253,49 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 				// TODO
 			}
 
-			expectedAttestationData := &phase0.AttestationData{}
-			if err := expectedAttestationData.UnmarshalSSZ(expectedConsensusData.DataSSZ); err != nil {
-				// TODO
+			var expectedData, receivedData any
+			switch expectedConsensusData.Duty.Type {
+			case spectypes.BNRoleAttester:
+				expectedAttestationData := &phase0.AttestationData{}
+				if err := expectedAttestationData.UnmarshalSSZ(expectedConsensusData.DataSSZ); err == nil {
+					expectedData = expectedAttestationData
+				}
+
+			case spectypes.BNRoleAggregator:
+				expectedAggData := &phase0.AggregateAndProof{}
+				if err := expectedAggData.UnmarshalSSZ(expectedConsensusData.DataSSZ); err == nil {
+					expectedData = expectedAggData
+				}
+
+			default:
+				expectedData = fmt.Sprintf("duty type %v logging is not implemented", expectedConsensusData.Duty.Type)
 			}
 
-			receivedAttestationData := &phase0.AttestationData{}
-			if err := receivedAttestationData.UnmarshalSSZ(receivedConsensusData.DataSSZ); err != nil {
-				// TODO
+			switch receivedConsensusData.Duty.Type {
+			case spectypes.BNRoleAttester:
+				receivedAttestationData := &phase0.AttestationData{}
+				if err := receivedAttestationData.UnmarshalSSZ(receivedConsensusData.DataSSZ); err == nil {
+					receivedData = receivedAttestationData
+				}
+
+			case spectypes.BNRoleAggregator:
+				receivedAggData := &phase0.AggregateAndProof{}
+				if err := receivedAggData.UnmarshalSSZ(receivedConsensusData.DataSSZ); err == nil {
+					receivedData = receivedAggData
+				}
+
+			default:
+				receivedData = fmt.Sprintf("duty type %v logging is not implemented", expectedConsensusData.Duty.Type)
 			}
 
 			type DataLog struct {
-				Consensus   *spectypes.ConsensusData `json:"consensus"`
-				Attestation *phase0.AttestationData  `json:"attestation"`
+				Consensus *spectypes.ConsensusData `json:"consensus"`
+				Data      any                      `json:"data"`
 			}
 
 			expectedDataLog := DataLog{
-				Consensus:   expectedConsensusData,
-				Attestation: expectedAttestationData,
+				Consensus: expectedConsensusData,
+				Data:      expectedData,
 			}
 
 			expectedDataLogJSON, err := json.Marshal(expectedDataLog)
@@ -279,8 +304,8 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 			}
 
 			receivedDataLog := DataLog{
-				Consensus:   receivedConsensusData,
-				Attestation: receivedAttestationData,
+				Consensus: receivedConsensusData,
+				Data:      receivedData,
 			}
 
 			receivedDataLogJSON, err := json.Marshal(receivedDataLog)
