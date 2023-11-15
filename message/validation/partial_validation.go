@@ -6,6 +6,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"go.uber.org/zap"
 	"golang.org/x/exp/slices"
 
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
@@ -64,6 +65,7 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 
 	if msgSlot > signerState.Slot {
 		newEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) > mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot)
+		mv.logger.Info("Resetting slot", zap.Int("slot", int(msgSlot)), zap.Int("round", int(specqbft.FirstRound)), zap.Bool("new epoch", newEpoch))
 		signerState.ResetSlot(msgSlot, specqbft.FirstRound, newEpoch)
 	}
 
