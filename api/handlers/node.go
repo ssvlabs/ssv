@@ -160,7 +160,7 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	}
 	// handle plain text content
 	if contentType := api.NegotiateContentType(r); contentType == api.ContentTypePlainText {
-		str := fmt.Sprintf("%s: %s\n %s: %s\n %s: %s\n %s: %s\n %s: %s\n",
+		str := fmt.Sprintf("%s: %s\n%s: %s\n%s: %s\n%s: %s\n%s: %s\n",
 			"peers_status", resp.PeersHealthStatus,
 			"beacon_health_status", resp.BeaconConnectionHealthStatus,
 			"execution_health_status", resp.ExecutionConnectionHealthStatus,
