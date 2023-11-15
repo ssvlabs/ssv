@@ -121,7 +121,7 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 		EventSyncHealthStatus:           good.String(),
 		PeersHealthStatus:               good.String(),
 	}
-	// check ports being used
+	// Check ports being used.
 	addrs := h.Network.ListenAddresses()
 	for _, addr := range addrs {
 		if addr.String() == "/p2p-circuit" || addr.Decapsulate(multiaddr.StringCast("/ip4/0.0.0.0")) == nil {
@@ -129,22 +129,11 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 		}
 		resp.LocalPortsListening = addr.String()
 	}
-	// check consensus node health
-	err := h.NodeProber.CheckBeaconNodeHealth(ctx)
-	if err != nil {
-		resp.BeaconConnectionHealthStatus = fmt.Sprintf("%s: %s", bad, err.Error())
-	}
-	// check execution node health
-	err = h.NodeProber.CheckExecutionNodeHealth(ctx)
-	if err != nil {
-		resp.ExecutionConnectionHealthStatus = fmt.Sprintf("%s: %s", bad, err.Error())
-	}
-	// check event sync health
-	err = h.NodeProber.CheckEventSyncerHealth(ctx)
-	if err != nil {
-		resp.EventSyncHealthStatus = fmt.Sprintf("%s: %s", bad, err.Error())
-	}
-	// check peers connection
+	// Performing various health checks.
+	resp.BeaconConnectionHealthStatus = performHealthCheck(h.NodeProber.CheckBeaconNodeHealth, ctx)
+	resp.ExecutionConnectionHealthStatus = performHealthCheck(h.NodeProber.CheckExecutionNodeHealth, ctx)
+	resp.EventSyncHealthStatus = performHealthCheck(h.NodeProber.CheckEventSyncerHealth, ctx)
+	// Check peers connection.
 	var activePeerCount int
 	peers := h.Network.Peers()
 	for _, p := range h.peers(peers) {
@@ -158,7 +147,7 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	case activePeerCount == 0:
 		resp.PeersHealthStatus = fmt.Sprintf("%s: %s", bad, "error: no peers are connected")
 	}
-	// handle plain text content
+	// Handle plain text content.
 	if contentType := api.NegotiateContentType(r); contentType == api.ContentTypePlainText {
 		str := fmt.Sprintf("%s: %s\n%s: %s\n%s: %s\n%s: %s\n%s: %s\n",
 			"peers_status", resp.PeersHealthStatus,
@@ -200,4 +189,11 @@ func (h *Node) peers(peers []peer.ID) []peerJSON {
 		resp[i].Version = nodeInfo.Metadata.NodeVersion
 	}
 	return resp
+}
+
+func performHealthCheck(healthCheckFunc func(context.Context) error, ctx context.Context) string {
+	if err := healthCheckFunc(ctx); err != nil {
+		return fmt.Sprintf("%s: %s", bad, err.Error())
+	}
+	return good.String()
 }
