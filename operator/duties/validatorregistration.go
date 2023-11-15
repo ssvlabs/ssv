@@ -2,6 +2,7 @@ package duties
 
 import (
 	"context"
+	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -22,7 +23,7 @@ func (h *ValidatorRegistrationHandler) Name() string {
 	return spectypes.BNRoleValidatorRegistration.String()
 }
 
-func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
+func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context, wg *sync.WaitGroup) {
 	h.logger.Info("starting duty handler")
 
 	for {

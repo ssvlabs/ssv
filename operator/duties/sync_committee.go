@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -33,6 +34,7 @@ func NewSyncCommitteeHandler(duties *dutystore.SyncCommitteeDuties) *SyncCommitt
 	}
 	h.fetchCurrentPeriod = true
 	h.fetchFirst = true
+	h.waitForInitFetch = true
 	return h
 }
 
@@ -60,11 +62,21 @@ func (h *SyncCommitteeHandler) Name() string {
 // On Ticker event:
 //  1. Execute duties.
 //  2. If necessary, fetch duties for the next period.
-func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
+func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context, wg *sync.WaitGroup) {
 	h.logger.Info("starting duty handler")
 
 	if h.shouldFetchNextPeriod(h.network.Beacon.EstimatedCurrentSlot()) {
 		h.fetchNextPeriod = true
+	}
+
+	if h.waitForInitFetch {
+		slot := h.network.Beacon.EstimatedCurrentSlot()
+		epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
+		period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+		h.processFetching(ctx, period, slot)
+		h.waitForInitFetch = false
+		h.fetchFirst = false
+		wg.Done()
 	}
 
 	for {

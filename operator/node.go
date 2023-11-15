@@ -139,14 +139,6 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 		}
 	}()
 
-	n.validatorsCtrl.StartNetworkHandlers()
-	n.validatorsCtrl.StartValidators()
-	go n.net.UpdateSubnets(logger)
-	go n.reportOperators(logger)
-
-	go n.feeRecipientCtrl.Start(logger)
-	go n.validatorsCtrl.UpdateValidatorMetaDataLoop()
-
 	// Start the duty scheduler, and a background goroutine to crash the node
 	// in case there were any errors.
 	if err := n.dutyScheduler.Start(n.context, logger); err != nil {
@@ -156,6 +148,17 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 	if err := n.dutyScheduler.Wait(); err != nil {
 		logger.Fatal("duty scheduler exited with error", zap.Error(err))
 	}
+
+	// Waiting for the duty scheduler to the init fetch
+	n.dutyScheduler.WaitForInitFetch()
+
+	n.validatorsCtrl.StartNetworkHandlers()
+	n.validatorsCtrl.StartValidators()
+	go n.net.UpdateSubnets(logger)
+	go n.reportOperators(logger)
+
+	go n.feeRecipientCtrl.Start(logger)
+	go n.validatorsCtrl.UpdateValidatorMetaDataLoop()
 
 	return nil
 }

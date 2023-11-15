@@ -99,6 +99,8 @@ type Scheduler struct {
 	waitCond   *sync.Cond
 	pool       *pool.ContextPool
 
+	wg sync.WaitGroup
+
 	headSlot                  phase0.Slot
 	lastBlockEpoch            phase0.Epoch
 	currentDutyDependentRoot  phase0.Root
@@ -180,7 +182,12 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 
 		s.pool.Go(func(ctx context.Context) error {
 			// Wait for the head event subscription to complete before starting the handler.
-			handler.HandleDuties(ctx)
+			if handler.WaitForInitFetch() {
+				s.wg.Add(1)
+				handler.HandleDuties(ctx, &s.wg)
+			} else {
+				handler.HandleDuties(ctx, nil)
+			}
 			return nil
 		})
 	}
@@ -195,6 +202,10 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 
 func (s *Scheduler) Wait() error {
 	return s.pool.Wait()
+}
+
+func (s *Scheduler) WaitForInitFetch() {
+	s.wg.Wait()
 }
 
 type EventFeed[T any] struct {

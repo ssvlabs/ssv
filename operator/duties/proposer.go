@@ -3,6 +3,7 @@ package duties
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -24,7 +25,8 @@ func NewProposerHandler(duties *dutystore.Duties[eth2apiv1.ProposerDuty]) *Propo
 	return &ProposerHandler{
 		duties: duties,
 		baseHandler: baseHandler{
-			fetchFirst: true,
+			fetchFirst:       true,
+			waitForInitFetch: true,
 		},
 	}
 }
@@ -51,8 +53,18 @@ func (h *ProposerHandler) Name() string {
 // On Ticker event:
 //  1. Execute duties.
 //  2. If necessary, fetch duties for the current epoch.
-func (h *ProposerHandler) HandleDuties(ctx context.Context) {
+func (h *ProposerHandler) HandleDuties(ctx context.Context, wg *sync.WaitGroup) {
 	h.logger.Info("starting duty handler")
+
+	if h.waitForInitFetch {
+		slot := h.network.Beacon.EstimatedCurrentSlot()
+		epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
+		h.processFetching(ctx, epoch, slot)
+		h.waitForInitFetch = false
+		h.fetchFirst = false
+		h.indicesChanged = false
+		wg.Done()
+	}
 
 	for {
 		select {
