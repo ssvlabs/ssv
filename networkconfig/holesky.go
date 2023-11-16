@@ -18,7 +18,7 @@ var Holesky = NetworkConfig{
 	Bootnodes: []string{
 		"enr:-Li4QFIQzamdvTxGJhvcXG_DFmCeyggSffDnllY5DiU47pd_K_1MRnSaJimWtfKJ-MD46jUX9TwgW5Jqe0t4pH41RYWGAYuFnlyth2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCLdu_SJc2VjcDI1NmsxoQN4v-N9zFYwEqzGPBBX37q24QPFvAVUtokIo1fblIsmTIN0Y3CCE4uDdWRwgg-j",
 	},
-	WhitelistedOperatorKeys:    []string{},
-	RSAForkEpoch:               13500, // Nov-27-2023 12:00:00 PM UTC
-	PermissionedDeactivateFork: 13500, // Nov-27-2023 12:00:00 PM UTC
+	WhitelistedOperatorKeys: []string{},
+	RSAForkEpoch:            13500, // Nov-27-2023 12:00:00 PM UTC
+	PermissionlessForkEpoch: 13500, // Nov-27-2023 12:00:00 PM UTC
 }
