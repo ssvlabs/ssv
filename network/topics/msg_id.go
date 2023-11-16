@@ -126,7 +126,7 @@ func (handler *msgIDHandler) MsgID(logger *zap.Logger) func(pmsg *ps_pb.Message)
 
 func (handler *msgIDHandler) pubsubMsgToMsgID(msg []byte) string {
 	currentEpoch := handler.networkConfig.Beacon.EstimatedCurrentEpoch()
-	if currentEpoch > handler.networkConfig.RSAForkEpoch {
+	if currentEpoch > handler.networkConfig.PermissionlessActivationEpoch {
 		decodedMsg, _, _, err := commons.DecodeSignedSSVMessage(msg)
 		if err != nil {
 			// todo: should err here or just log and let the decode function err?
