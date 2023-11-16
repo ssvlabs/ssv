@@ -155,6 +155,8 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	deadline := time.Now().Add(5 * time.Second)
 	interval := 100 * time.Millisecond
 	for i := 0; i < nodeCount; i++ {
+		// better lock inside loop than wait interval locked
+		mtx.Lock()
 		var errors []error
 		if roleBroadcasts[acceptedRole] != messageValidators[i].TotalAccepted {
 			errors = append(errors, fmt.Errorf("node %d accepted %d messages (expected %d)", i, messageValidators[i].TotalAccepted, roleBroadcasts[acceptedRole]))
@@ -165,6 +167,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 		if roleBroadcasts[rejectedRole] != messageValidators[i].TotalRejected {
 			errors = append(errors, fmt.Errorf("node %d rejected %d messages (expected %d)", i, messageValidators[i].TotalRejected, roleBroadcasts[rejectedRole]))
 		}
+		mtx.Unlock()
 		if len(errors) == 0 {
 			break
 		}
