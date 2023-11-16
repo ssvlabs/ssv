@@ -138,7 +138,7 @@ func (mv *messageValidator) validateConsensusMessage(
 			signerState.ResetRound(msgRound)
 		}
 
-		if mv.hasFullData(signedMsg) && signerState.ProposalData == nil {
+		if msgSlot == signerState.Slot && msgRound == signerState.Round && mv.hasFullData(signedMsg) && signerState.ProposalData == nil {
 			signerState.ProposalData = signedMsg.FullData
 			mv.logger.Info("Setting proposal data", zap.Int("signer", int(signer)), zap.String("validator", string(messageID.GetPubKey())), zap.Int("slot", int(signerState.Slot)), zap.Int("round", int(signerState.Round)), zap.Int("Signer", int(signedMsg.Signers[0])), zap.String("consensus data", mv.GetConsensusDataJson(signedMsg.FullData)))
 		}
