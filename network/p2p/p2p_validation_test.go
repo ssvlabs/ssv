@@ -5,6 +5,7 @@ import (
 	cryptorand "crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"github.com/cornelk/hashmap"
 	"os"
 	"sort"
 	"sync"
@@ -57,6 +58,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 		rejectedRole = spectypes.BNRoleSyncCommittee
 	)
 	messageValidators := make([]*MockMessageValidator, nodeCount)
+	var mtx sync.Mutex
 	for i := 0; i < nodeCount; i++ {
 		i := i
 		messageValidators[i] = &MockMessageValidator{
@@ -72,7 +74,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 			decodedMsg, err := queue.DecodeSSVMessage(msg)
 			require.NoError(t, err)
 			pmsg.ValidatorData = decodedMsg
-
+			mtx.Lock()
 			// Validation according to role.
 			var validation pubsub.ValidationResult
 			switch msg.MsgID.GetRoleType() {
@@ -91,6 +93,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 			default:
 				panic("unsupported role")
 			}
+			mtx.Unlock()
 
 			// Always accept messages from self to make libp2p propagate them,
 			// while still counting them by their role.
@@ -196,10 +199,11 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 			index NodeIndex
 			score float64
 		}
-		peers := make([]peerScore, 0, len(node.PeerScores))
-		for nodeIndex, score := range node.PeerScores {
-			peers = append(peers, peerScore{nodeIndex, score.Score})
-		}
+		peers := make([]peerScore, 0, node.PeerScores.Len())
+		node.PeerScores.Range(func(index NodeIndex, snapshot *pubsub.PeerScoreSnapshot) bool {
+			peers = append(peers, peerScore{index, snapshot.Score})
+			return true
+		})
 		sort.Slice(peers, func(i, j int) bool {
 			return peers[i].score > peers[j].score
 		})
@@ -271,7 +275,7 @@ type NodeIndex int
 type VirtualNode struct {
 	Index      NodeIndex
 	Network    *p2pNetwork
-	PeerScores map[NodeIndex]*pubsub.PeerScoreSnapshot
+	PeerScores *hashmap.Map[NodeIndex, *pubsub.PeerScoreSnapshot]
 }
 
 func (n *VirtualNode) Broadcast(msg *spectypes.SSVMessage) error {
@@ -308,15 +312,18 @@ func CreateVirtualNet(
 			if node == nil {
 				t.Fatalf("self peer not found (%s)", selfPeer)
 			}
-			peerScores := make(map[NodeIndex]*pubsub.PeerScoreSnapshot)
+			node.PeerScores.Range(func(index NodeIndex, snapshot *pubsub.PeerScoreSnapshot) bool {
+				node.PeerScores.Del(index)
+				return true
+			})
 			for peerID, peerScore := range peerMap {
 				peerNode := vn.NodeByPeerID(peerID)
 				if peerNode == nil {
 					t.Fatalf("peer not found (%s)", peerID)
 				}
-				peerScores[peerNode.Index] = peerScore
+				node.PeerScores.Set(peerNode.Index, peerScore)
 			}
-			node.PeerScores = peerScores
+
 		},
 		PeerScoreInspectorInterval: time.Millisecond * 5,
 	}, validatorPubKeys...)
@@ -328,7 +335,7 @@ func CreateVirtualNet(
 		vn.Nodes = append(vn.Nodes, &VirtualNode{
 			Index:      NodeIndex(i),
 			Network:    node.(*p2pNetwork),
-			PeerScores: make(map[NodeIndex]*pubsub.PeerScoreSnapshot),
+			PeerScores: hashmap.New[NodeIndex, *pubsub.PeerScoreSnapshot](), //{}make(map[NodeIndex]*pubsub.PeerScoreSnapshot),
 		})
 	}
 	doneSetup.Store(true)
