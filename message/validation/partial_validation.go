@@ -65,7 +65,7 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 
 	if msgSlot > signerState.Slot {
 		newEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) > mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot)
-		mv.logger.Info("Resetting slot", zap.Int("slot", int(msgSlot)), zap.Int("round", int(specqbft.FirstRound)), zap.Bool("new epoch", newEpoch))
+		mv.logger.Info("Resetting slot", zap.Int("signer", int(signedMsg.Signer)), zap.String("validator", string(msgID.GetPubKey())), zap.Int("slot", int(msgSlot)), zap.Int("round", int(specqbft.FirstRound)), zap.Bool("new epoch", newEpoch))
 		signerState.ResetSlot(msgSlot, specqbft.FirstRound, newEpoch)
 	}
 
