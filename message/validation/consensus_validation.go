@@ -4,14 +4,12 @@ package validation
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"go.uber.org/zap"
 	"golang.org/x/exp/slices"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
@@ -131,16 +129,13 @@ func (mv *messageValidator) validateConsensusMessage(
 		}
 		if msgSlot > signerState.Slot {
 			newEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) > mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot)
-			mv.logger.Info("Resetting slot", zap.Int("signer", int(signer)), zap.String("validator", string(messageID.GetPubKey())), zap.Int("slot", int(msgSlot)), zap.Int("round", int(msgRound)), zap.Bool("new epoch", newEpoch))
 			signerState.ResetSlot(msgSlot, msgRound, newEpoch)
 		} else if msgSlot == signerState.Slot && msgRound > signerState.Round {
-			mv.logger.Info("Resetting round", zap.Int("signer", int(signer)), zap.String("validator", string(messageID.GetPubKey())), zap.Int("slot", int(signerState.Slot)), zap.Int("round", int(msgRound)))
 			signerState.ResetRound(msgRound)
 		}
 
 		if msgSlot == signerState.Slot && msgRound == signerState.Round && mv.hasFullData(signedMsg) && signerState.ProposalData == nil {
 			signerState.ProposalData = signedMsg.FullData
-			mv.logger.Info("Setting proposal data", zap.Int("signer", int(signer)), zap.String("validator", string(messageID.GetPubKey())), zap.Int("slot", int(signerState.Slot)), zap.Int("round", int(signerState.Round)), zap.Int("Signer", int(signedMsg.Signers[0])), zap.String("consensus data", mv.GetConsensusDataJson(signedMsg.FullData)))
 		}
 
 		signerState.MessageCounts.RecordConsensusMessage(signedMsg)
@@ -247,94 +242,7 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 
 	if msgSlot == signerState.Slot && msgRound == signerState.Round {
 		if mv.hasFullData(signedMsg) && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
-			expectedConsensusData := &spectypes.ConsensusData{}
-			if err := expectedConsensusData.Decode(signerState.ProposalData); err != nil {
-				// TODO
-			}
-
-			receivedConsensusData := &spectypes.ConsensusData{}
-			if err := receivedConsensusData.Decode(signedMsg.FullData); err != nil {
-				// TODO
-			}
-
-			var expectedData, receivedData any
-			switch expectedConsensusData.Duty.Type {
-			case spectypes.BNRoleAttester:
-				expectedAttestationData := &phase0.AttestationData{}
-				if err := expectedAttestationData.UnmarshalSSZ(expectedConsensusData.DataSSZ); err != nil {
-					expectedData = fmt.Sprintf("could not decode expected attestation: %v", err)
-				} else {
-					expectedData = expectedAttestationData
-				}
-
-			case spectypes.BNRoleAggregator:
-				expectedAggData := &phase0.AggregateAndProof{}
-				if err := expectedAggData.UnmarshalSSZ(expectedConsensusData.DataSSZ); err != nil {
-					expectedData = fmt.Sprintf("could not decode expected aggregate: %v", err)
-				} else {
-					expectedData = expectedAggData
-				}
-
-			default:
-				expectedData = fmt.Sprintf("duty type %v logging is not implemented", expectedConsensusData.Duty.Type)
-			}
-
-			switch receivedConsensusData.Duty.Type {
-			case spectypes.BNRoleAttester:
-				receivedAttestationData := &phase0.AttestationData{}
-				if err := receivedAttestationData.UnmarshalSSZ(receivedConsensusData.DataSSZ); err != nil {
-					receivedData = fmt.Sprintf("could not decode received attestation: %v", err)
-				} else {
-					receivedData = receivedAttestationData
-				}
-
-			case spectypes.BNRoleAggregator:
-				receivedAggData := &phase0.AggregateAndProof{}
-				if err := receivedAggData.UnmarshalSSZ(receivedConsensusData.DataSSZ); err != nil {
-					receivedData = fmt.Sprintf("could not decode received aggregate: %v", err)
-				} else {
-					receivedData = receivedAggData
-				}
-
-			default:
-				receivedData = fmt.Sprintf("duty type %v logging is not implemented", expectedConsensusData.Duty.Type)
-			}
-
-			type DuplicateProposalLog struct {
-				Consensus *spectypes.ConsensusData `json:"consensus"`
-				Data      any                      `json:"data"`
-				Slot      phase0.Slot              `json:"slot"`
-				Round     specqbft.Round           `json:"round"`
-			}
-
-			expectedLog := DuplicateProposalLog{
-				Consensus: expectedConsensusData,
-				Data:      expectedData,
-				Slot:      signerState.Slot,
-				Round:     signerState.Round,
-			}
-
-			expectedDataLogJSON, err := json.Marshal(expectedLog)
-			if err != nil {
-				// TODO
-			}
-
-			receivedLog := DuplicateProposalLog{
-				Consensus: receivedConsensusData,
-				Data:      receivedData,
-				Slot:      msgSlot,
-				Round:     msgRound,
-			}
-
-			receivedDataLogJSON, err := json.Marshal(receivedLog)
-			if err != nil {
-				// TODO
-			}
-
-			e := ErrDuplicatedProposalWithDifferentData
-			e.want = string(expectedDataLogJSON)
-			e.got = string(receivedDataLogJSON)
-			return e
+			return ErrDuplicatedProposalWithDifferentData
 		}
 
 		limits := maxMessageCounts(len(share.Committee))
