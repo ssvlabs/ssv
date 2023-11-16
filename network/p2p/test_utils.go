@@ -147,11 +147,11 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 		}
 	}
 
-	pubKey, err := p2pcommons.ConvertToInterfacePubkey(&keys.NetKey.PublicKey)
+	pubKey, err := p2pcommons.ECDSAPrivToInterface(keys.NetKey)
 	if err != nil {
 		panic(err)
 	}
-	selfPeerID, err := peer.IDFromPublicKey(pubKey)
+	selfPeerID, err := peer.IDFromPublicKey(pubKey.GetPublic())
 	if err != nil {
 		panic(err)
 	}
@@ -233,7 +233,7 @@ func NewNetConfig(keys testing.NodeKeys, operatorPubKeyHash string, bn *discover
 		MaxBatchResponse:   25,
 		MaxPeers:           maxPeers,
 		PubSubTrace:        false,
-		PubSubScoring:     true,
+		PubSubScoring:      true,
 		NetworkPrivateKey:  keys.NetKey,
 		OperatorPrivateKey: keys.OperatorKey,
 		OperatorPubKeyHash: operatorPubKeyHash,
