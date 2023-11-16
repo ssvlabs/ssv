@@ -1,6 +1,8 @@
 package bootnode
 
 import (
+	"fmt"
+	"github.com/bloxapp/ssv/utils/commons"
 	"log"
 
 	"github.com/bloxapp/ssv/logging"
@@ -41,11 +43,15 @@ var StartBootNodeCmd = &cobra.Command{
 				MaxBackups: cfg.LogFileBackups,
 			},
 		)
+
 		if err != nil {
 			log.Fatal(err)
 		}
 
 		logger := zap.L()
+		log.Printf("starting SSV node (version %s)", commons.GetBuildData())
+
+		logger.Info(fmt.Sprintf("starting SSV %v (version %s)", cmd.Short, commons.GetBuildData()))
 
 		bootNode, err := bootnode.New(cfg.Options)
 		if err != nil {
