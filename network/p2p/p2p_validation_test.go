@@ -215,6 +215,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 		defer func() {
 			tbl := table.New(os.Stdout)
 			tbl.SetHeaders("Peer", "Score", "Accepted", "Ignored", "Rejected")
+			mtx.Lock()
 			for _, peer := range peers {
 				tbl.AddRow(
 					fmt.Sprintf("%d", peer.index),
@@ -224,6 +225,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 					fmt.Sprintf("%d", messageValidators[node.Index].Rejected[peer.index]),
 				)
 			}
+			mtx.Unlock()
 			fmt.Println()
 			fmt.Printf("Peer Scores (Node %d)\n", node.Index)
 			tbl.Render()
