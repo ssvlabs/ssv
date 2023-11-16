@@ -245,7 +245,7 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 		return err
 	}
 
-	if !(msgSlot > signerState.Slot || msgSlot == signerState.Slot && msgRound > signerState.Round) {
+	if msgSlot == signerState.Slot && msgRound == signerState.Round {
 		if mv.hasFullData(signedMsg) && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
 			expectedConsensusData := &spectypes.ConsensusData{}
 			if err := expectedConsensusData.Decode(signerState.ProposalData); err != nil {
