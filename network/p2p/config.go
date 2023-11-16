@@ -86,12 +86,7 @@ type Config struct {
 
 	GetValidatorStats network.GetValidatorStats
 
-	PermissionedActivateEpoch   uint64 `yaml:"PermissionedActivateEpoch" env:"PERMISSIONED_ACTIVE_EPOCH" env-default:"0" env-description:"On which epoch to start only accepting peers that are operators registered in the contract"`
-	PermissionedDeactivateEpoch uint64 `yaml:"PermissionedDeactivateEpoch" env:"PERMISSIONED_DEACTIVE_EPOCH" env-default:"99999999999999" env-description:"On which epoch to start accepting operators all peers"`
-
 	Permissioned func() bool // this is not loaded from config file but set up in full node setup
-	// WhitelistedOperatorKeys is an array of Operator Public Key PEMs not registered in the contract with which the node will accept connections
-	WhitelistedOperatorKeys []string `yaml:"WhitelistedOperatorKeys" env:"WHITELISTED_KEYS" env-description:"Operators' keys not registered in the contract with which the node will accept connections"`
 }
 
 // Libp2pOptions creates options list for the libp2p host
