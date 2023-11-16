@@ -139,6 +139,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 		MockGetPrivateKey:               keys.OperatorKey,
 		RegisteredOperatorPublicKeyPEMs: []string{},
 	}
+	cfg.Metrics = nil
 	cfg.MessageValidator = validation.NewMessageValidator(networkconfig.TestNetwork)
 	cfg.Network = networkconfig.TestNetwork
 	if options.TotalValidators > 0 {
