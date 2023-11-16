@@ -131,7 +131,7 @@ var StartNodeCmd = &cobra.Command{
 
 		permissioned := func() bool {
 			currentEpoch := networkConfig.Beacon.EstimatedCurrentEpoch()
-			return currentEpoch < networkConfig.PermissionlessForkEpoch
+			return currentEpoch < networkConfig.PermissionlessActivationEpoch
 		}
 
 		slotTickerProvider := func() slotticker.SlotTicker {

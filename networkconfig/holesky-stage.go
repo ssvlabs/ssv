@@ -18,7 +18,6 @@ var HoleskyStage = NetworkConfig{
 	Bootnodes: []string{
 		"enr:-Li4QNUN0RdeoHjI4Np18-PX1VXrJ2rJMo2OarRz0wCAxiYlD3s_E4zsmXi1LHv62ULLBT-AQfZIjYefEoEsMDkaEKCGAYtCguORh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhKfrtCyJc2VjcDI1NmsxoQP2e508AoA0B-KH-IaAd3nVCfI9q16lNztV-oTpcH72tIN0Y3CCE4mDdWRwgg-h",
 	},
-	WhitelistedOperatorKeys: []string{},
-	RSAForkEpoch:            0,
-	PermissionlessForkEpoch: 10560,
+	WhitelistedOperatorKeys:       []string{},
+	PermissionlessActivationEpoch: 10560,
 }
