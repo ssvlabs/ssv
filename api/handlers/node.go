@@ -145,7 +145,7 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	case activePeerCount > 0 && activePeerCount < healthyPeersAmount:
 		resp.PeersHealthStatus = fmt.Sprintf("%s: %d peers are connected", bad, activePeerCount)
 	case activePeerCount == 0:
-		resp.PeersHealthStatus = fmt.Sprintf("%s: %s", bad, "error: no peers are connected")
+		resp.PeersHealthStatus = fmt.Sprintf("%s: error: no peers are connected", bad)
 	}
 	// Handle plain text content.
 	if contentType := api.NegotiateContentType(r); contentType == api.ContentTypePlainText {
