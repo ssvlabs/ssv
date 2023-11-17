@@ -301,13 +301,17 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 				Data      any                      `json:"data"`
 				Slot      phase0.Slot              `json:"slot"`
 				Round     specqbft.Round           `json:"round"`
+				Root      [32]byte                 `json:"root"`
 			}
+
+			expectedRoot, _ := specqbft.HashDataRoot(signedMsg.FullData)
 
 			expectedLog := DuplicateProposalLog{
 				Consensus: expectedConsensusData,
 				Data:      expectedData,
 				Slot:      signerState.Slot,
 				Round:     signerState.Round,
+				Root:      expectedRoot,
 			}
 
 			expectedDataLogJSON, err := json.Marshal(expectedLog)
@@ -320,6 +324,7 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 				Data:      receivedData,
 				Slot:      msgSlot,
 				Round:     msgRound,
+				Root:      signedMsg.Message.Root,
 			}
 
 			receivedDataLogJSON, err := json.Marshal(receivedLog)
