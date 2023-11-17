@@ -3,11 +3,13 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/multiformats/go-multiaddr"
+	ma "github.com/multiformats/go-multiaddr"
+	manet "github.com/multiformats/go-multiaddr/net"
 
 	"github.com/bloxapp/ssv/api"
 	networkpeers "github.com/bloxapp/ssv/network/peers"
@@ -78,6 +80,10 @@ type healthCheckJSON struct {
 	LocalPortsListening             string `json:"local_port_listening"`
 }
 
+type pingPort struct {
+	URL string `json:"url_string"`
+}
+
 type Node struct {
 	PeersIndex networkpeers.Index
 	TopicIndex TopicIndex
@@ -127,11 +133,16 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	}
 	// Check ports being used.
 	addrs := h.Network.ListenAddresses()
+	var localAddressPort net.Addr
 	for _, addr := range addrs {
-		if addr.String() == "/p2p-circuit" || addr.Decapsulate(multiaddr.StringCast("/ip4/0.0.0.0")) == nil {
+		var err error
+		if addr.String() == "/p2p-circuit" || addr.Decapsulate(ma.StringCast("/ip4/0.0.0.0")) == nil {
 			continue
 		}
-		resp.LocalPortsListening = addr.String()
+		localAddressPort, err = manet.ToNetAddr(addr)
+		if err != nil {
+			return err
+		}
 	}
 	// Performing various health checks.
 	resp.BeaconConnectionHealthStatus = performHealthCheck(h.NodeProber.CheckBeaconNodeHealth, ctx)
@@ -147,27 +158,25 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 		if p.Connectedness == "Connected" {
 			activePeerCount++
 		}
-		// Check connection direction.
-		for _, conn := range conns {
-			if conn.ID() == string(p.ID) {
-				switch conn.Stat().Direction {
-				case network.DirInbound:
-					inboundPeerCount++
-				case network.DirOutbound:
-					outboundPeerCount++
-				}
-			}
+	}
+	// Check connection direction.
+	for _, conn := range conns {
+		switch conn.Stat().Direction {
+		case network.DirInbound:
+			inboundPeerCount++
+		case network.DirOutbound:
+			outboundPeerCount++
 		}
 	}
-
 	resp.InboundPeersCount = inboundPeerCount
 	resp.OutboundPeersCount = outboundPeerCount
 	resp.PeersCount = len(peers)
 	resp.ActivePeersCount = activePeerCount
+	resp.LocalPortsListening = localAddressPort.String()
 	switch {
 	case activePeerCount > 0 && activePeerCount < healthyPeersAmount && inboundPeerCount > 0:
 		resp.PeersHealthStatus = fmt.Sprintf("%s: not enough connected peers", bad)
-	case activePeerCount > 0 && inboundPeerCount == 0:
+	case inboundPeerCount == 0:
 		resp.PeersHealthStatus = fmt.Sprintf("%s: error: local port is not reachable, please check the configuration", bad)
 	case activePeerCount == 0:
 		resp.PeersHealthStatus = fmt.Sprintf("%s: error: no peers are connected", bad)
