@@ -68,6 +68,10 @@ type identityJSON struct {
 
 type healthCheckJSON struct {
 	PeersHealthStatus               string `json:"peers_status"`
+	PeersCount                      int    `json:"peers_count"`
+	ActivePeersCount                int    `json:"active_peers"`
+	InboundPeersCount               int    `json:"inbound_peers"`
+	OutboundPeersCount              int    `json:"outbound_peers"`
 	BeaconConnectionHealthStatus    string `json:"beacon_health_status"`
 	ExecutionConnectionHealthStatus string `json:"execution_health_status"`
 	EventSyncHealthStatus           string `json:"event_sync_health_status"`
@@ -135,22 +139,47 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	resp.EventSyncHealthStatus = performHealthCheck(h.NodeProber.CheckEventSyncerHealth, ctx)
 	// Check peers connection.
 	var activePeerCount int
+	var inboundPeerCount int
+	var outboundPeerCount int
 	peers := h.Network.Peers()
+	conns := h.Network.ConnsToPeer(h.Network.LocalPeer())
 	for _, p := range h.peers(peers) {
 		if p.Connectedness == "Connected" {
 			activePeerCount++
 		}
+		// Check connection direction.
+		for _, conn := range conns {
+			if conn.ID() == string(p.ID) {
+				switch conn.Stat().Direction {
+				case network.DirInbound:
+					inboundPeerCount++
+				case network.DirOutbound:
+					outboundPeerCount++
+				}
+			}
+		}
 	}
+
+	resp.InboundPeersCount = inboundPeerCount
+	resp.OutboundPeersCount = outboundPeerCount
+	resp.PeersCount = len(peers)
+	resp.ActivePeersCount = activePeerCount
 	switch {
-	case activePeerCount > 0 && activePeerCount < healthyPeersAmount:
-		resp.PeersHealthStatus = fmt.Sprintf("%s: %d peers are connected", bad, activePeerCount)
+	case activePeerCount > 0 && activePeerCount < healthyPeersAmount && inboundPeerCount > 0:
+		resp.PeersHealthStatus = fmt.Sprintf("%s: not enough connected peers", bad)
+	case activePeerCount > 0 && inboundPeerCount == 0:
+		resp.PeersHealthStatus = fmt.Sprintf("%s: error: local port is not reachable, please check the configuration", bad)
 	case activePeerCount == 0:
 		resp.PeersHealthStatus = fmt.Sprintf("%s: error: no peers are connected", bad)
 	}
 	// Handle plain text content.
 	if contentType := api.NegotiateContentType(r); contentType == api.ContentTypePlainText {
-		str := fmt.Sprintf("%s: %s\n%s: %s\n%s: %s\n%s: %s\n%s: %s\n",
+		str := fmt.Sprintf("%s: %s\n%s: %d\n%s: %d\n%s: %d\n%s: %d\n%s: %s\n%s: %s\n%s: %s\n%s: %s\n",
 			"peers_status", resp.PeersHealthStatus,
+			"peers_count", resp.PeersCount,
+			"active_peers", resp.ActivePeersCount,
+			"inbound_peers", resp.InboundPeersCount,
+			"outbound_peers", resp.OutboundPeersCount,
 			"beacon_health_status", resp.BeaconConnectionHealthStatus,
 			"execution_health_status", resp.ExecutionConnectionHealthStatus,
 			"event_sync_health_status", resp.EventSyncHealthStatus,
