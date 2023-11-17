@@ -80,10 +80,6 @@ type healthCheckJSON struct {
 	LocalPortsListening             string `json:"local_port_listening"`
 }
 
-type pingPort struct {
-	URL string `json:"url_string"`
-}
-
 type Node struct {
 	PeersIndex networkpeers.Index
 	TopicIndex TopicIndex
