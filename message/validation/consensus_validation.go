@@ -304,7 +304,7 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 				Root      [32]byte                 `json:"root"`
 			}
 
-			expectedRoot, _ := specqbft.HashDataRoot(signedMsg.FullData)
+			expectedRoot, _ := specqbft.HashDataRoot(signerState.ProposalData)
 
 			expectedLog := DuplicateProposalLog{
 				Consensus: expectedConsensusData,
