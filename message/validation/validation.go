@@ -8,7 +8,6 @@ import (
 	"context"
 	"crypto/rsa"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -457,51 +456,6 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 	}
 
 	return msg, descriptor, nil
-}
-
-func (mv *messageValidator) GetConsensusDataJson(fullData []byte) string {
-
-	consensusData := &spectypes.ConsensusData{}
-	err := consensusData.Decode(fullData)
-	if err != nil {
-		mv.logger.Error("Could not decode fullData", zap.Error(err))
-		return "error"
-	}
-	role := consensusData.Duty.Type
-	dataSSZ := consensusData.DataSSZ
-
-	switch role {
-	case spectypes.BNRoleAttester:
-		receivedAttestationData := &phase0.AttestationData{}
-		if err := receivedAttestationData.UnmarshalSSZ(dataSSZ); err != nil {
-			mv.logger.Error("Could not unmarshal attestation", zap.Error(err))
-			return "error"
-		} else {
-
-			receivedDataLogJSON, err := json.Marshal(receivedAttestationData)
-			if err != nil {
-				mv.logger.Error("Could not json marshal attestation", zap.Error(err))
-				return "error"
-			}
-			return string(receivedDataLogJSON)
-		}
-
-	case spectypes.BNRoleAggregator:
-		receivedAggData := &phase0.AggregateAndProof{}
-		if err := receivedAggData.UnmarshalSSZ(dataSSZ); err != nil {
-			mv.logger.Error("Could not unmarshal attestation", zap.Error(err))
-			return "error"
-		} else {
-
-			receivedDataLogJSON, err := json.Marshal(receivedAggData)
-			if err != nil {
-				mv.logger.Error("Could not json marshal attestation", zap.Error(err))
-				return "error"
-			}
-			return string(receivedDataLogJSON)
-		}
-	}
-	return "conversion not implemented for duty type"
 }
 
 func (mv *messageValidator) containsSignerFunc(signer spectypes.OperatorID) func(operator *spectypes.Operator) bool {

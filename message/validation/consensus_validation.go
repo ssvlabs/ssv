@@ -11,7 +11,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"go.uber.org/zap"
 	"golang.org/x/exp/slices"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
@@ -131,16 +130,13 @@ func (mv *messageValidator) validateConsensusMessage(
 		}
 		if msgSlot > signerState.Slot {
 			newEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) > mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot)
-			mv.logger.Info("Resetting slot", zap.Int("signer", int(signer)), zap.String("validator", string(messageID.GetPubKey())), zap.Int("slot", int(msgSlot)), zap.Int("round", int(msgRound)), zap.Bool("new epoch", newEpoch))
 			signerState.ResetSlot(msgSlot, msgRound, newEpoch)
 		} else if msgSlot == signerState.Slot && msgRound > signerState.Round {
-			mv.logger.Info("Resetting round", zap.Int("signer", int(signer)), zap.String("validator", string(messageID.GetPubKey())), zap.Int("slot", int(signerState.Slot)), zap.Int("round", int(msgRound)))
 			signerState.ResetRound(msgRound)
 		}
 
 		if msgSlot == signerState.Slot && msgRound == signerState.Round && mv.hasFullData(signedMsg) && signerState.ProposalData == nil {
 			signerState.ProposalData = signedMsg.FullData
-			mv.logger.Info("Setting proposal data", zap.Int("signer", int(signer)), zap.String("validator", string(messageID.GetPubKey())), zap.Int("slot", int(signerState.Slot)), zap.Int("round", int(signerState.Round)), zap.Int("Signer", int(signedMsg.Signers[0])), zap.String("consensus data", mv.GetConsensusDataJson(signedMsg.FullData)))
 		}
 
 		signerState.MessageCounts.RecordConsensusMessage(signedMsg)
