@@ -149,14 +149,13 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	var inboundPeerCount int
 	var outboundPeerCount int
 	peers := h.Network.Peers()
-	conns := h.Network.ConnsToPeer(h.Network.LocalPeer())
 	for _, p := range h.peers(peers) {
 		if p.Connectedness == "Connected" {
 			activePeerCount++
 		}
 	}
 	// Check connection direction.
-	for _, conn := range conns {
+	for _, conn := range h.Network.Conns() {
 		switch conn.Stat().Direction {
 		case network.DirInbound:
 			inboundPeerCount++
