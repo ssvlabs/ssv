@@ -1,7 +1,6 @@
 package bootnode
 
 import (
-	"fmt"
 	"github.com/bloxapp/ssv/utils/commons"
 	"log"
 
@@ -29,6 +28,8 @@ var StartBootNodeCmd = &cobra.Command{
 	Use:   "start-boot-node",
 	Short: "Starts boot node for discovery based ENR",
 	Run: func(cmd *cobra.Command, args []string) {
+		commons.SetBuildData(cmd.Parent().Short, cmd.Parent().Version)
+
 		if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
 			log.Fatal(err)
 		}
@@ -49,9 +50,8 @@ var StartBootNodeCmd = &cobra.Command{
 		}
 
 		logger := zap.L()
-		log.Printf("starting SSV node (version %s)", commons.GetBuildData())
 
-		logger.Info(fmt.Sprintf("starting SSV %v (version %s)", cmd.Short, commons.GetBuildData()))
+		logger.Info("starting ssv-node", zap.String("version", commons.GetBuildData()))
 
 		bootNode, err := bootnode.New(cfg.Options)
 		if err != nil {
