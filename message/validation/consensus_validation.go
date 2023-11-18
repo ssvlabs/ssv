@@ -4,6 +4,7 @@ package validation
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -301,7 +302,7 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 				Data      any                      `json:"data"`
 				Slot      phase0.Slot              `json:"slot"`
 				Round     specqbft.Round           `json:"round"`
-				Root      [32]byte                 `json:"root"`
+				Root      string                   `json:"root"`
 			}
 
 			expectedRoot, _ := specqbft.HashDataRoot(signerState.ProposalData)
@@ -311,7 +312,7 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 				Data:      expectedData,
 				Slot:      signerState.Slot,
 				Round:     signerState.Round,
-				Root:      expectedRoot,
+				Root:      hex.EncodeToString(expectedRoot[:]),
 			}
 
 			expectedDataLogJSON, err := json.Marshal(expectedLog)
@@ -324,7 +325,7 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 				Data:      receivedData,
 				Slot:      msgSlot,
 				Round:     msgRound,
-				Root:      signedMsg.Message.Root,
+				Root:      hex.EncodeToString(signedMsg.Message.Root[:]),
 			}
 
 			receivedDataLogJSON, err := json.Marshal(receivedLog)
