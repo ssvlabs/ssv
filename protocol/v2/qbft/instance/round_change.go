@@ -40,6 +40,13 @@ func (i *Instance) uponRoundChange(
 		fields.Root(signedRoundChange.Message.Root),
 		zap.Any("round-change-signers", signedRoundChange.Signers))
 
+	if i.proposalRoundBroadcasted >= signedRoundChange.Message.Round {
+		logger.Debug("🔄 I'm doing nothing with this round change!",
+			fields.Root(signedRoundChange.Message.Root),
+			zap.Any("round-change-signers", signedRoundChange.Signers))
+		return nil
+	}
+
 	justifiedRoundChangeMsg, valueToPropose, err := hasReceivedProposalJustificationForLeadingRound(
 		logger,
 		i.State,
@@ -73,7 +80,7 @@ func (i *Instance) uponRoundChange(
 			zap.String("valueToPropose", hex.EncodeToString(valueToPropose)),
 			fields.Root(proposal.Message.Root))
 
-		//i.State.ProposalAcceptedForCurrentRound = proposal
+		i.proposalRoundBroadcasted = signedRoundChange.Message.Round
 
 		if err := i.Broadcast(logger, proposal); err != nil {
 			return errors.Wrap(err, "failed to broadcast proposal message")
