@@ -23,7 +23,7 @@ const (
 
 	// P2
 	firstDeliveryDecayEpochs = time.Duration(4)
-	maxFirstDeliveryScore    = 40 // max score a peer can obtain from first deliveries
+	maxFirstDeliveryScore    = 80 // max score a peer can obtain from first deliveries
 
 	// P3
 	meshDeliveryDecayEpochs     = time.Duration(16)
