@@ -102,7 +102,7 @@ var StartNodeCmd = &cobra.Command{
 
 		defer logging.CapturePanic(logger)
 
-		logger.Info("starting ssv-node", zap.String("version", commons.GetBuildData()))
+		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
 
 		metricsReporter := metricsreporter.New(
 			metricsreporter.WithLogger(logger),

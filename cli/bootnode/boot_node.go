@@ -1,6 +1,7 @@
 package bootnode
 
 import (
+	"fmt"
 	"github.com/bloxapp/ssv/utils/commons"
 	"log"
 
@@ -51,7 +52,7 @@ var StartBootNodeCmd = &cobra.Command{
 
 		logger := zap.L()
 
-		logger.Info("starting ssv-node", zap.String("version", commons.GetBuildData()))
+		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
 
 		bootNode, err := bootnode.New(cfg.Options)
 		if err != nil {
