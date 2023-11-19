@@ -69,7 +69,7 @@ func (i *Instance) uponRoundChange(
 			zap.Any("round-change-signers", allSigners(roundChangeMsgContainer.MessagesForRound(i.State.Round))),
 			fields.Root(proposal.Message.Root))
 
-		i.State.ProposalAcceptedForCurrentRound = proposal
+		//i.State.ProposalAcceptedForCurrentRound = proposal
 
 		if err := i.Broadcast(logger, proposal); err != nil {
 			return errors.Wrap(err, "failed to broadcast proposal message")
