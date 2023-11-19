@@ -18,7 +18,7 @@ const (
 
 	// Overall parameters
 	topicScoreCap = 32.72
-	decayInterval = time.Second * 12 // One slot
+	decayInterval = 32 * (time.Second * 12) // One epoch
 	decayToZero   = 0.01
 	retainScore   = 38400
 
@@ -30,9 +30,7 @@ const (
 	ipColocationFactorWeight    = -topicScoreCap
 
 	// P7
-	// behaviourPenaltyDecay     = 0.9857119009006162
 	behaviourPenaltyThreshold = 6
-	// behaviourPenaltyWeight    = -15.879335171059182
 )
 
 // PeerScoreThresholds returns the thresholds to use for peer scoring
@@ -54,7 +52,8 @@ func PeerScoreParams(oneEpoch, msgIDCacheTTL time.Duration, ipWhilelist ...*net.
 
 	// P7 calculation
 	behaviourPenaltyDecay := scoreDecay(oneEpoch*10, decayInterval)
-	targetVal, _ := decayConvergence(behaviourPenaltyDecay, 10.0/slotsPerEpoch)
+	maxAllowedRatePerDecayInterval := 10.0
+	targetVal, _ := decayConvergence(behaviourPenaltyDecay, maxAllowedRatePerDecayInterval)
 	targetVal = targetVal - behaviourPenaltyThreshold
 	behaviourPenaltyWeight := gossipThreshold / (targetVal * targetVal)
 
