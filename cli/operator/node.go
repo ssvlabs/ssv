@@ -93,11 +93,16 @@ var StartNodeCmd = &cobra.Command{
 	Use:   "start-node",
 	Short: "Starts an instance of SSV node",
 	Run: func(cmd *cobra.Command, args []string) {
-		logger, err := setupGlobal(cmd)
+		commons.SetBuildData(cmd.Parent().Short, cmd.Parent().Version)
+
+		logger, err := setupGlobal()
 		if err != nil {
 			log.Fatal("could not create logger", err)
 		}
+
 		defer logging.CapturePanic(logger)
+
+		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
 
 		metricsReporter := metricsreporter.New(
 			metricsreporter.WithLogger(logger),
@@ -341,10 +346,7 @@ func init() {
 	global_config.ProcessArgs(&cfg, &globalArgs, StartNodeCmd)
 }
 
-func setupGlobal(cmd *cobra.Command) (*zap.Logger, error) {
-	commons.SetBuildData(cmd.Parent().Short, cmd.Parent().Version)
-	log.Printf("starting SSV node (version %s)", commons.GetBuildData())
-
+func setupGlobal() (*zap.Logger, error) {
 	if globalArgs.ConfigPath != "" {
 		if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
 			return nil, fmt.Errorf("could not read config: %w", err)
