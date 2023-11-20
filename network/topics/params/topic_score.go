@@ -200,14 +200,14 @@ func TopicParams(opts Options) (*pubsub.TopicScoreParams, error) {
 	timeInMeshCap := float64(opts.Topic.TimeInMeshQuantumCap) / float64(opts.Topic.TimeInMeshQuantum)
 
 	// P2
-	firstMessageDeliveriesDecay := scoreDecay(oneEpochDuration*opts.Topic.FirstDeliveryDecayEpochs, decayInterval)
+	firstMessageDeliveriesDecay := scoreDecay(opts.Network.OneEpochDuration*opts.Topic.FirstDeliveryDecayEpochs, decayInterval)
 	firstMessageDeliveriesCap, err := decayConvergence(firstMessageDeliveriesDecay, 2*(expectedMessagesPerDecayInterval)/float64(opts.Topic.D))
 	if err != nil {
 		return nil, errors.Wrap(err, "could not calculate decay convergence for first message delivery cap")
 	}
 
 	// P3
-	meshMessageDeliveriesDecay := scoreDecay(oneEpochDuration*opts.Topic.MeshDeliveryDecayEpochs, decayInterval)
+	meshMessageDeliveriesDecay := scoreDecay(opts.Network.OneEpochDuration*opts.Topic.MeshDeliveryDecayEpochs, decayInterval)
 	meshMessageDeliveriesThreshold, err := decayThreshold(meshMessageDeliveriesDecay, (expectedMessagesPerDecayInterval * opts.Topic.MeshDeliveryDampeningFactor))
 	if err != nil {
 		return nil, errors.Wrap(err, "could not calculate threshold for mesh message deliveries threshold")
@@ -216,7 +216,7 @@ func TopicParams(opts Options) (*pubsub.TopicScoreParams, error) {
 	MeshMessageDeliveriesCap := meshMessageDeliveriesThreshold * opts.Topic.MeshDeliveryCapFactor
 
 	// P4
-	invalidMessageDeliveriesDecay := scoreDecay(opts.Topic.InvalidMessageDecayEpochs*oneEpochDuration, decayInterval)
+	invalidMessageDeliveriesDecay := scoreDecay(opts.Topic.InvalidMessageDecayEpochs*opts.Network.OneEpochDuration, decayInterval)
 	invalidMessageDeliveriesWeight := graylistThreshold / (opts.Topic.TopicWeight * float64(opts.Topic.MaxInvalidMessagesAllowed) * float64(opts.Topic.MaxInvalidMessagesAllowed))
 
 	params := &pubsub.TopicScoreParams{

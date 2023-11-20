@@ -9,7 +9,6 @@ import (
 
 const (
 	oneEpochDuration = (12 * time.Second) * 32
-	slotsPerEpoch    = 32
 )
 
 // scoreDecay determines the decay rate from the provided time period till
