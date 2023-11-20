@@ -27,20 +27,22 @@ func DefaultScoringConfig() *ScoringConfig {
 func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.ExtendedPeerScoreInspectFn {
 	return func(scores map[peer.ID]*pubsub.PeerScoreSnapshot) {
 		for pid, peerScores := range scores {
-			// scores := []*peers.NodeScore{
-			//	{
-			//		Name:  "PS_Score",
-			//		Value: peerScores.Score,
-			//	}, {
-			//		Name:  "PS_BehaviourPenalty",
-			//		Value: peerScores.BehaviourPenalty,
-			//	}, {
-			//		Name:  "PS_IPColocationFactor",
-			//		Value: peerScores.IPColocationFactor,
-			//	},
-			//}
+
+			//filter all topics that have InvalidMessageDeliveries > 0
+			filtered := make(map[string]*pubsub.TopicScoreSnapshot)
+			for topic, snapshot := range peerScores.Topics {
+				if snapshot.InvalidMessageDeliveries > 0 {
+					filtered[topic] = snapshot
+				}
+			}
+			// log peer overall score and topics scores
 			logger.Debug("peer scores", fields.PeerID(pid),
-				zap.Any("peerScores", peerScores))
+				fields.PeerScore(peerScores.Score),
+				zap.Any("invalid_messages", filtered),
+				zap.Float64("ip_colocation", peerScores.IPColocationFactor),
+				zap.Float64("behaviour_penalty", peerScores.BehaviourPenalty),
+				zap.Float64("app_specific_penalty", peerScores.AppSpecificScore))
+
 			metricPubsubPeerScoreInspect.WithLabelValues(pid.String()).Set(peerScores.Score)
 
 			for _, snapshot := range peerScores.Topics {

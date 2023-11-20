@@ -68,6 +68,7 @@ const (
 	FieldOperatorPubKey      = "operator_pubkey"
 	FieldOwnerAddress        = "owner_address"
 	FieldPeerID              = "peer_id"
+	FieldPeerScore           = "peer_score"
 	FieldPrivKey             = "privkey"
 	FieldPubKey              = "pubkey"
 	FieldRole                = "role"
@@ -153,6 +154,10 @@ func Subnets(val records.Subnets) zapcore.Field {
 
 func PeerID(val peer.ID) zapcore.Field {
 	return zap.Stringer(FieldPeerID, val)
+}
+
+func PeerScore(val float64) zapcore.Field {
+	return zap.Stringer(FieldPeerScore, stringer.Float64Stringer{Val: val})
 }
 
 func BindIP(val net.IP) zapcore.Field {

@@ -34,7 +34,7 @@ const (
 	// validateThrottle is the amount of goroutines used for pubsub msg validation
 	validateThrottle = 8192
 	// scoreInspectInterval is the interval for performing score inspect, which goes over all peers scores
-	defaultScoreInspectInterval = time.Minute
+	defaultScoreInspectInterval = 5 * time.Minute
 	// msgIDCacheTTL specifies how long a message ID will be remembered as seen, 6.4m (as ETH 2.0)
 	msgIDCacheTTL = params.HeartbeatInterval * 550
 )

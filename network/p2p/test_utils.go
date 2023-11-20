@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
@@ -15,6 +16,7 @@ import (
 	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
+	p2pcommons "github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/peers/connections/mock"
@@ -72,9 +74,9 @@ func (ln *LocalNet) WithBootnode(ctx context.Context, logger *zap.Logger) error 
 // CreateAndStartLocalNet creates a new local network and starts it
 // if any errors occurs during starting local network CreateAndStartLocalNet trying
 // to create and start local net one more time until pCtx is not Done()
-func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, nodesQuantity, minConnected int, useDiscv5 bool) (*LocalNet, error) {
-	attempt := func(pCtx context.Context, nodesQuantity, minConnected int, useDiscv5 bool) (*LocalNet, error) {
-		ln, err := NewLocalNet(pCtx, logger, nodesQuantity, useDiscv5)
+func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options LocalNetOptions) (*LocalNet, error) {
+	attempt := func(pCtx context.Context) (*LocalNet, error) {
+		ln, err := NewLocalNet(pCtx, logger, options)
 		if err != nil {
 			return nil, err
 		}
@@ -90,14 +92,14 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, nodesQuant
 				ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 				defer cancel()
 				var peers []peer.ID
-				for len(peers) < minConnected && ctx.Err() == nil {
+				for len(peers) < options.MinConnected && ctx.Err() == nil {
 					peers = node.(HostProvider).Host().Network().Peers()
 					time.Sleep(time.Millisecond * 100)
 				}
 				if ctx.Err() != nil {
-					return fmt.Errorf("could not find enough peers for node %d, nodes quantity = %d, found = %d", i, nodesQuantity, len(peers))
+					return fmt.Errorf("could not find enough peers for node %d, nodes quantity = %d, found = %d", i, options.Nodes, len(peers))
 				}
-				logger.Debug("found enough peers", zap.Int("for node", i), zap.Int("nodesQuantity", nodesQuantity), zap.String("found", fmt.Sprintf("%+v", peers)))
+				logger.Debug("found enough peers", zap.Int("for node", i), zap.Int("nodesQuantity", options.Nodes), zap.String("found", fmt.Sprintf("%+v", peers)))
 				return nil
 			})
 		}
@@ -110,7 +112,7 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, nodesQuant
 		case <-pCtx.Done():
 			return nil, fmt.Errorf("context is done, network didn't start on time")
 		default:
-			ln, err := attempt(pCtx, nodesQuantity, minConnected, useDiscv5)
+			ln, err := attempt(pCtx)
 			if err != nil {
 				for _, node := range ln.Nodes {
 					_ = node.Close()
@@ -126,20 +128,48 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, nodesQuant
 }
 
 // NewTestP2pNetwork creates a new network.P2PNetwork instance
-func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, keys testing.NodeKeys, logger *zap.Logger, maxPeers int) (network.P2PNetwork, error) {
+func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys testing.NodeKeys, logger *zap.Logger, options LocalNetOptions) (network.P2PNetwork, error) {
 	operatorPubkey, err := rsaencryption.ExtractPublicKey(keys.OperatorKey)
 	if err != nil {
 		return nil, err
 	}
-	cfg := NewNetConfig(keys, format.OperatorID([]byte(operatorPubkey)), ln.Bootnode, testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), maxPeers)
+	cfg := NewNetConfig(keys, format.OperatorID([]byte(operatorPubkey)), ln.Bootnode, testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), options.Nodes)
 	cfg.Ctx = ctx
 	cfg.Subnets = "00000000000000000000020000000000" //PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
 	cfg.NodeStorage = mock.NodeStorage{
 		MockGetPrivateKey:               keys.OperatorKey,
 		RegisteredOperatorPublicKeyPEMs: []string{},
 	}
+	cfg.Metrics = nil
 	cfg.MessageValidator = validation.NewMessageValidator(networkconfig.TestNetwork)
 	cfg.Network = networkconfig.TestNetwork
+	if options.TotalValidators > 0 {
+		cfg.GetValidatorStats = func() (uint64, uint64, uint64, error) {
+			return uint64(options.TotalValidators), uint64(options.ActiveValidators), uint64(options.MyValidators), nil
+		}
+	}
+
+	pubKey, err := p2pcommons.ECDSAPrivToInterface(keys.NetKey)
+	if err != nil {
+		panic(err)
+	}
+	selfPeerID, err := peer.IDFromPublicKey(pubKey.GetPublic())
+	if err != nil {
+		panic(err)
+	}
+
+	if options.MessageValidatorProvider != nil {
+		cfg.MessageValidator = options.MessageValidatorProvider(nodeIndex)
+	} else {
+		cfg.MessageValidator = validation.NewMessageValidator(networkconfig.TestNetwork, validation.WithSelfAccept(selfPeerID, true))
+	}
+
+	if options.PeerScoreInspector != nil && options.PeerScoreInspectorInterval > 0 {
+		cfg.PeerScoreInspector = func(peerMap map[peer.ID]*pubsub.PeerScoreSnapshot) {
+			options.PeerScoreInspector(selfPeerID, peerMap)
+		}
+		cfg.PeerScoreInspectorInterval = options.PeerScoreInspectorInterval
+	}
 
 	mr := metricsreporter.New()
 
@@ -151,20 +181,28 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, keys testing.NodeKeys
 	return p, nil
 }
 
+type LocalNetOptions struct {
+	MessageValidatorProvider                        func(int) validation.MessageValidator
+	Nodes                                           int
+	MinConnected                                    int
+	UseDiscv5                                       bool
+	TotalValidators, ActiveValidators, MyValidators int
+	PeerScoreInspector                              func(selfPeer peer.ID, peerMap map[peer.ID]*pubsub.PeerScoreSnapshot)
+	PeerScoreInspectorInterval                      time.Duration
+}
+
 // NewLocalNet creates a new mdns network
-func NewLocalNet(ctx context.Context, logger *zap.Logger, n int, useDiscv5 bool) (*LocalNet, error) {
+func NewLocalNet(ctx context.Context, logger *zap.Logger, options LocalNetOptions) (*LocalNet, error) {
 	ln := &LocalNet{}
 	ln.udpRand = make(testing.UDPPortsRandomizer)
-	if useDiscv5 {
+	if options.UseDiscv5 {
 		if err := ln.WithBootnode(ctx, logger); err != nil {
 			return nil, err
 		}
 	}
-	i := 0
-	nodes, keys, err := testing.NewLocalTestnet(ctx, n, func(pctx context.Context, keys testing.NodeKeys) network.P2PNetwork {
-		i++
-		logger := logger.Named(fmt.Sprintf("node-%d", i))
-		p, err := ln.NewTestP2pNetwork(pctx, keys, logger, n)
+	nodes, keys, err := testing.NewLocalTestnet(ctx, options.Nodes, func(pctx context.Context, nodeIndex int, keys testing.NodeKeys) network.P2PNetwork {
+		logger := logger.Named(fmt.Sprintf("node-%d", nodeIndex))
+		p, err := ln.NewTestP2pNetwork(pctx, nodeIndex, keys, logger, options)
 		if err != nil {
 			logger.Error("could not setup network", zap.Error(err))
 		}
@@ -199,6 +237,7 @@ func NewNetConfig(keys testing.NodeKeys, operatorPubKeyHash string, bn *discover
 		MaxBatchResponse:   25,
 		MaxPeers:           maxPeers,
 		PubSubTrace:        false,
+		PubSubScoring:      true,
 		NetworkPrivateKey:  keys.NetKey,
 		OperatorPrivateKey: keys.OperatorKey,
 		OperatorPubKeyHash: operatorPubKeyHash,
