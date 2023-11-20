@@ -49,6 +49,18 @@ func (mr *MockdutyHandlerMockRecorder) HandleDuties(arg0 interface{}) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleDuties", reflect.TypeOf((*MockdutyHandler)(nil).HandleDuties), arg0)
 }
 
+// HandleInitialDuties mocks base method.
+func (m *MockdutyHandler) HandleInitialDuties(arg0 context.Context) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "HandleInitialDuties", arg0)
+}
+
+// HandleInitialDuties indicates an expected call of HandleInitialDuties.
+func (mr *MockdutyHandlerMockRecorder) HandleInitialDuties(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleInitialDuties", reflect.TypeOf((*MockdutyHandler)(nil).HandleInitialDuties), arg0)
+}
+
 // Name mocks base method.
 func (m *MockdutyHandler) Name() string {
 	m.ctrl.T.Helper()
