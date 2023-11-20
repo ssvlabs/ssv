@@ -308,7 +308,7 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 				Data      any            `json:"data"`
 				Slot      phase0.Slot    `json:"slot"`
 				Round     specqbft.Round `json:"round"`
-				Root      string       `json:"root"`
+				Root      string         `json:"root"`
 			}
 
 			expectedRoot, _ := specqbft.HashDataRoot(signerState.ProposalData)
