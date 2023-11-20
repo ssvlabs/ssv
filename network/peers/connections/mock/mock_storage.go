@@ -89,7 +89,7 @@ func (m NodeStorage) DeleteOperatorData(txn basedb.ReadWriter, id spectypes.Oper
 
 func (m NodeStorage) ListOperators(txn basedb.Reader, from uint64, to uint64) ([]registrystorage.OperatorData, error) {
 	//TODO implement me
-	panic("implement me")
+	return nil, errors.New("empty")
 }
 
 func (m NodeStorage) GetOperatorsPrefix() []byte {

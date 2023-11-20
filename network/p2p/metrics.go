@@ -96,6 +96,7 @@ func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
 	ni := n.idx.NodeInfo(pid)
 	if ni != nil {
 		if ni.Metadata != nil {
+			opPKHash = ni.Metadata.OperatorID
 			nodeVersion = ni.Metadata.NodeVersion
 		}
 		nodeType = "operator"
