@@ -109,7 +109,9 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	vNet = CreateVirtualNet(t, ctx, 4, validators, func(nodeIndex int) validation.MessageValidator {
 		return messageValidators[nodeIndex]
 	})
-	defer vNet.Close()
+	defer func() {
+		require.NoError(t, vNet.Close())
+	}()
 
 	// Prepare a pool of broadcasters.
 	mu := sync.Mutex{}
@@ -317,6 +319,7 @@ func CreateVirtualNet(
 			if node == nil {
 				t.Fatalf("self peer not found (%s)", selfPeer)
 			}
+
 			node.PeerScores.Range(func(index NodeIndex, snapshot *pubsub.PeerScoreSnapshot) bool {
 				node.PeerScores.Del(index)
 				return true
@@ -332,6 +335,7 @@ func CreateVirtualNet(
 		},
 		PeerScoreInspectorInterval: time.Millisecond * 5,
 	}, validatorPubKeys...)
+
 	require.NoError(t, err)
 	require.NotNil(t, routers)
 	require.NotNil(t, ln)

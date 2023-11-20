@@ -105,6 +105,12 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	require.NotNil(t, routers)
 	require.NotNil(t, ln)
 
+	defer func() {
+		for _, node := range ln.Nodes {
+			require.NoError(t, node.(*p2pNetwork).Close())
+		}
+	}()
+
 	node1, node2 := ln.Nodes[1], ln.Nodes[2]
 
 	var wg sync.WaitGroup
@@ -155,10 +161,6 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	}
 
 	<-time.After(time.Millisecond * 10)
-
-	for _, node := range ln.Nodes {
-		require.NoError(t, node.(*p2pNetwork).Close())
-	}
 }
 
 func TestP2pNetwork_Stream(t *testing.T) {
@@ -174,6 +176,12 @@ func TestP2pNetwork_Stream(t *testing.T) {
 		MinConnected: n/2 - 1,
 		UseDiscv5:    false,
 	}, pkHex)
+
+	defer func() {
+		for _, node := range ln.Nodes {
+			require.NoError(t, node.(*p2pNetwork).Close())
+		}
+	}()
 	require.NoError(t, err)
 	require.Len(t, ln.Nodes, n)
 
@@ -211,6 +219,7 @@ func TestP2pNetwork_Stream(t *testing.T) {
 	require.GreaterOrEqual(t, len(res), 2) // got at least 2 results
 	require.LessOrEqual(t, len(res), 6)    // less than 6 unique heights
 	require.GreaterOrEqual(t, msgCounter, int64(2))
+
 }
 
 func TestWaitSubsetOfPeers(t *testing.T) {
@@ -318,7 +327,8 @@ func registerHandler(logger *zap.Logger, node network.P2PNetwork, mid spectypes.
 }
 
 func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options LocalNetOptions, pks ...string) (*LocalNet, []*dummyRouter, error) {
-	logger := logging.TestLogger(t)
+	logger, err := zap.NewDevelopment()
+	require.NoError(t, err)
 	ln, err := CreateAndStartLocalNet(ctx, logger.Named("createNetworkAndSubscribe"), options)
 	if err != nil {
 		return nil, nil, err
