@@ -171,8 +171,8 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	switch {
 	case activePeerCount > 0 && activePeerCount < healthyPeersAmount && inboundPeerCount > 0:
 		resp.PeersHealthStatus = fmt.Sprintf("%s: not enough connected peers", bad)
-	case inboundPeerCount == 0:
-		resp.PeersHealthStatus = fmt.Sprintf("%s: error: local port is not reachable, please check the configuration", bad)
+	case activePeerCount > 0 && inboundPeerCount == 0:
+		resp.PeersHealthStatus = fmt.Sprintf("%s: error: local port probably is not reachable, please check the configuration", bad)
 	case activePeerCount == 0:
 		resp.PeersHealthStatus = fmt.Sprintf("%s: error: no peers are connected", bad)
 	}
