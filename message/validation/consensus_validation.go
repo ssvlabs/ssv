@@ -244,72 +244,78 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 
 	if msgSlot == signerState.Slot && msgRound == signerState.Round {
 		if mv.hasFullData(signedMsg) && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
+			var expectedOuter, receivedOuter any
+
 			expectedConsensusData := &spectypes.ConsensusData{}
 			if err := expectedConsensusData.Decode(signerState.ProposalData); err != nil {
-				// TODO
+				expectedOuter = fmt.Sprintf("could not decode expected consensus data: %v", err)
+			} else {
+				expectedOuter = expectedConsensusData
 			}
 
 			receivedConsensusData := &spectypes.ConsensusData{}
 			if err := receivedConsensusData.Decode(signedMsg.FullData); err != nil {
-				// TODO
+				receivedOuter = fmt.Sprintf("could not decode received consensus data: %v", err)
+			} else {
+				receivedOuter = expectedConsensusData
 			}
 
-			var expectedData, receivedData any
+			var expectedInner, receivedInner any
 			switch expectedConsensusData.Duty.Type {
 			case spectypes.BNRoleAttester:
 				expectedAttestationData := &phase0.AttestationData{}
 				if err := expectedAttestationData.UnmarshalSSZ(expectedConsensusData.DataSSZ); err != nil {
-					expectedData = fmt.Sprintf("could not decode expected attestation: %v", err)
+					expectedInner = fmt.Sprintf("could not decode expected attestation: %v", err)
 				} else {
-					expectedData = expectedAttestationData
+					expectedInner = expectedAttestationData
 				}
 
 			case spectypes.BNRoleAggregator:
 				expectedAggData := &phase0.AggregateAndProof{}
 				if err := expectedAggData.UnmarshalSSZ(expectedConsensusData.DataSSZ); err != nil {
-					expectedData = fmt.Sprintf("could not decode expected aggregate: %v", err)
+					expectedInner = fmt.Sprintf("could not decode expected aggregate: %v", err)
 				} else {
-					expectedData = expectedAggData
+					expectedInner = expectedAggData
 				}
 
 			default:
-				expectedData = fmt.Sprintf("duty type %v logging is not implemented", expectedConsensusData.Duty.Type)
+				expectedInner = fmt.Sprintf("duty type %v logging is not implemented", expectedConsensusData.Duty.Type)
 			}
 
 			switch receivedConsensusData.Duty.Type {
 			case spectypes.BNRoleAttester:
 				receivedAttestationData := &phase0.AttestationData{}
 				if err := receivedAttestationData.UnmarshalSSZ(receivedConsensusData.DataSSZ); err != nil {
-					receivedData = fmt.Sprintf("could not decode received attestation: %v", err)
+					receivedInner = fmt.Sprintf("could not decode received attestation: %v", err)
 				} else {
-					receivedData = receivedAttestationData
+					receivedInner = receivedAttestationData
 				}
 
 			case spectypes.BNRoleAggregator:
 				receivedAggData := &phase0.AggregateAndProof{}
 				if err := receivedAggData.UnmarshalSSZ(receivedConsensusData.DataSSZ); err != nil {
-					receivedData = fmt.Sprintf("could not decode received aggregate: %v", err)
+					receivedInner = fmt.Sprintf("could not decode received aggregate: %v", err)
 				} else {
-					receivedData = receivedAggData
+					receivedInner = receivedAggData
 				}
 
 			default:
-				receivedData = fmt.Sprintf("duty type %v logging is not implemented", expectedConsensusData.Duty.Type)
+				receivedInner = fmt.Sprintf("duty type %v logging is not implemented", receivedConsensusData.Duty.Type)
 			}
 
 			type DuplicateProposalLog struct {
-				Consensus *spectypes.ConsensusData `json:"consensus"`
-				Data      any                      `json:"data"`
-				Slot      phase0.Slot              `json:"slot"`
-				Round     specqbft.Round           `json:"round"`
-				Root      string                   `json:"root"`
+				Consensus any            `json:"consensus"`
+				Data      any            `json:"data"`
+				Slot      phase0.Slot    `json:"slot"`
+				Round     specqbft.Round `json:"round"`
+				Root      string       `json:"root"`
 			}
 
 			expectedRoot, _ := specqbft.HashDataRoot(signerState.ProposalData)
 
 			expectedLog := DuplicateProposalLog{
-				Consensus: expectedConsensusData,
-				Data:      expectedData,
+				Consensus: expectedOuter,
+				Data:      expectedInner,
 				Slot:      signerState.Slot,
 				Round:     signerState.Round,
 				Root:      hex.EncodeToString(expectedRoot[:]),
@@ -321,8 +327,8 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 			}
 
 			receivedLog := DuplicateProposalLog{
-				Consensus: receivedConsensusData,
-				Data:      receivedData,
+				Consensus: receivedOuter,
+				Data:      receivedInner,
 				Slot:      msgSlot,
 				Round:     msgRound,
 				Root:      hex.EncodeToString(signedMsg.Message.Root[:]),
