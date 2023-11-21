@@ -96,7 +96,7 @@ func (n *p2pNetwork) BroadcastWithCustomKey(msg *spectypes.SSVMessage, pk *rsa.P
 		return errors.Wrap(err, "could not decode msg")
 	}
 
-	if n.cfg.Network.Beacon.EstimatedCurrentEpoch() > n.cfg.Network.RSAForkEpoch {
+	if n.cfg.Network.Beacon.EstimatedCurrentEpoch() > n.cfg.Network.PermissionlessActivationEpoch {
 		hash := sha256.Sum256(encodedMsg)
 
 		signature, err := rsa.SignPKCS1v15(nil, pk, crypto.SHA256, hash[:])
