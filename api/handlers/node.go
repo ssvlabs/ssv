@@ -71,6 +71,7 @@ type identityJSON struct {
 type healthCheckJSON struct {
 	PeersHealthStatus               string `json:"peers_status"`
 	PeersCount                      int    `json:"peers_count"`
+	ActivePeersCount                int    `json:"active_peers"`
 	InboundPeersCount               int    `json:"inbound_peers"`
 	OutboundPeersCount              int    `json:"outbound_peers"`
 	BeaconConnectionHealthStatus    string `json:"beacon_health_status"`
@@ -147,6 +148,12 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	var activePeerCount int
 	var inboundPeerCount int
 	var outboundPeerCount int
+	peers := h.Network.Peers()
+	for _, p := range h.peers(peers) {
+		if p.Connectedness == "Connected" {
+			activePeerCount++
+		}
+	}
 	// Check connection direction.
 	for _, conn := range h.Network.Conns() {
 		switch conn.Stat().Direction {
@@ -158,7 +165,8 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	}
 	resp.InboundPeersCount = inboundPeerCount
 	resp.OutboundPeersCount = outboundPeerCount
-	resp.PeersCount = len(h.Network.Peers())
+	resp.PeersCount = len(peers)
+	resp.ActivePeersCount = activePeerCount
 	resp.LocalPortsListening = localAddressPort.String()
 	switch {
 	case activePeerCount > 0 && activePeerCount < healthyPeersAmount && inboundPeerCount > 0:
@@ -170,9 +178,10 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	}
 	// Handle plain text content.
 	if contentType := api.NegotiateContentType(r); contentType == api.ContentTypePlainText {
-		str := fmt.Sprintf("%s: %s\n%s: %d\n%s: %d\n%s: %d\n%s: %s\n%s: %s\n%s: %s\n%s: %s\n",
+		str := fmt.Sprintf("%s: %s\n%s: %d\n%s: %d\n%s: %d\n%s: %d\n%s: %s\n%s: %s\n%s: %s\n%s: %s\n",
 			"peers_status", resp.PeersHealthStatus,
 			"peers_count", resp.PeersCount,
+			"active_peers", resp.ActivePeersCount,
 			"inbound_peers", resp.InboundPeersCount,
 			"outbound_peers", resp.OutboundPeersCount,
 			"beacon_health_status", resp.BeaconConnectionHealthStatus,
