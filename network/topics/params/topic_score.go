@@ -1,7 +1,6 @@
 package params
 
 import (
-	"math"
 	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -212,7 +211,7 @@ func TopicParams(opts Options) (*pubsub.TopicScoreParams, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "could not calculate threshold for mesh message deliveries threshold")
 	}
-	meshMessageDeliveriesWeight := -(opts.maxScore() / (opts.Topic.TopicWeight * math.Pow(meshMessageDeliveriesThreshold, 2)))
+	meshMessageDeliveriesWeight := float64(0) //-(opts.maxScore() / (opts.Topic.TopicWeight * math.Pow(meshMessageDeliveriesThreshold, 2)))
 	MeshMessageDeliveriesCap := meshMessageDeliveriesThreshold * opts.Topic.MeshDeliveryCapFactor
 
 	// P4
