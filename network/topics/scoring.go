@@ -59,7 +59,6 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.Extend
 
 			// log if peer score is below threshold
 			if peerScores.Score < -1000 {
-				// logger.Debug("peer score is below -1000", fields.PeerID(pid), fields.PeerScore(peerScores.Score))
 				fields = append(fields, zap.Bool("low_score", true))
 			}
 
