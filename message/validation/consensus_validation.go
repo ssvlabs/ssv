@@ -257,7 +257,7 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 			if err := receivedConsensusData.Decode(signedMsg.FullData); err != nil {
 				receivedOuter = fmt.Sprintf("could not decode received consensus data: %v", err)
 			} else {
-				receivedOuter = expectedConsensusData
+				receivedOuter = receivedConsensusData
 			}
 
 			var expectedInner, receivedInner any
