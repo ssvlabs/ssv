@@ -77,6 +77,8 @@ type messageValidator struct {
 	dutyStore               *dutystore.Store
 	ownOperatorID           spectypes.OperatorID
 	operatorIDToPubkeyCache *hashmap.Map[spectypes.OperatorID, *rsa.PublicKey]
+	selfPID                 peer.ID
+	selfAccept              bool
 }
 
 // NewMessageValidator returns a new MessageValidator with the given network configuration and options.
@@ -130,6 +132,14 @@ func WithOwnOperatorID(id spectypes.OperatorID) Option {
 func WithNodeStorage(nodeStorage operatorstorage.Storage) Option {
 	return func(mv *messageValidator) {
 		mv.nodeStorage = nodeStorage
+	}
+}
+
+// WithSelfAccept blindly accepts messages sent from self. Useful for testing.
+func WithSelfAccept(selfPID peer.ID, selfAccept bool) Option {
+	return func(mv *messageValidator) {
+		mv.selfPID = selfPID
+		mv.selfAccept = selfAccept
 	}
 }
 
@@ -212,6 +222,13 @@ func (mv *messageValidator) ValidatorForTopic(_ string) func(ctx context.Context
 // ValidatePubsubMessage validates the given pubsub message.
 // Depending on the outcome, it will return one of the pubsub validation results (Accept, Ignore, or Reject).
 func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+	if mv.selfAccept && peerID == mv.selfPID {
+		msg, _ := commons.DecodeNetworkMsg(pmsg.Data)
+		decMsg, _ := queue.DecodeSSVMessage(msg)
+		pmsg.ValidatorData = decMsg
+		return pubsub.ValidationAccept
+	}
+
 	start := time.Now()
 	var validationDurationLabels []string // TODO: implement
 
@@ -277,7 +294,7 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 	var signatureVerifier func() error
 
 	currentEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Unix()))
-	if currentEpoch > mv.netCfg.RSAForkEpoch {
+	if currentEpoch > mv.netCfg.PermissionlessActivationEpoch {
 		decMessageData, operatorID, signature, err := commons.DecodeSignedSSVMessage(messageData)
 		messageData = decMessageData
 		if err != nil {

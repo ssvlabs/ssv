@@ -169,7 +169,6 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	domain := "0x" + hex.EncodeToString(n.cfg.Network.Domain[:])
 	self := records.NewNodeInfo(domain)
 	self.Metadata = &records.NodeMetadata{
-		OperatorID:  n.cfg.OperatorPubKeyHash,
 		NodeVersion: commons.GetNodeVersion(),
 		Subnets:     records.Subnets(n.subnets).String(),
 	}
@@ -204,7 +203,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 			filters = append(filters,
 				connections.SenderRecipientIPsCheckFilter(n.host.ID()),
 				connections.SignatureCheckFilter(),
-				connections.RegisteredOperatorsFilter(n.nodeStorage, n.cfg.WhitelistedOperatorKeys))
+				connections.RegisteredOperatorsFilter(n.nodeStorage, n.cfg.Network.WhitelistedOperatorKeys))
 		}
 		return filters
 	}
@@ -288,6 +287,11 @@ func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
 		ValidateThrottle:    n.cfg.PubsubValidateThrottle,
 		MsgIDCacheTTL:       n.cfg.PubsubMsgCacheTTL,
 		GetValidatorStats:   n.cfg.GetValidatorStats,
+	}
+
+	if n.cfg.PeerScoreInspector != nil && n.cfg.PeerScoreInspectorInterval > 0 {
+		cfg.ScoreInspector = n.cfg.PeerScoreInspector
+		cfg.ScoreInspectorInterval = n.cfg.PeerScoreInspectorInterval
 	}
 
 	if !n.cfg.PubSubScoring {
