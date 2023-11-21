@@ -1,241 +1,283 @@
 package connections
 
 import (
+	"context"
 	"net"
-	"runtime"
-	"time"
+	"sync"
+
+	"github.com/ipfs/go-datastore"
+	"github.com/ipfs/go-datastore/namespace"
+	"github.com/ipfs/go-datastore/query"
+	"github.com/libp2p/go-libp2p/core/control"
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
+	ma "github.com/multiformats/go-multiaddr"
+	manet "github.com/multiformats/go-multiaddr/net"
+	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/network/peers"
-	"github.com/libp2p/go-libp2p/core/connmgr"
-	libp2pcontrol "github.com/libp2p/go-libp2p/core/control"
-	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
-	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/multiformats/go-multiaddr"
-	manet "github.com/multiformats/go-multiaddr/net"
-	leakybucket "github.com/prysmaticlabs/prysm/v4/container/leaky-bucket"
-	"go.uber.org/zap"
 )
 
 const (
-	// Limit for rate limiter when processing new inbound dials.
-	ipLimit = 4
-	// Burst limit for inbound dials.
-	ipBurst = 8
+	ns        = "/libp2p/net/conngater"
+	keyPeer   = "/peer/"
+	keyAddr   = "/addr/"
+	keySubnet = "/subnet/"
 )
-
-type Config struct {
-	AllowListCIDR string
-	DenyListCIDR  []string
-}
 
 // connGater implements ConnectionGater interface: used to active inbound or outbound connection gating.
 // https://github.com/libp2p/go-libp2p/core/blob/master/connmgr/gater.go
 // TODO: add IP limiting
-type СonnectionGater struct {
-	logger     *zap.Logger // struct logger to implement connmgr.ConnectionGater
-	idx        peers.ConnectionIndex
-	addrFilter *multiaddr.Filters
-	ipLimiter  *leakybucket.Collector
+type ConnectionGater struct {
+	sync.RWMutex
+	logger *zap.Logger // struct logger to implement connmgr.ConnectionGater
+	idx    peers.ConnectionIndex
+
+	blockedPeers   map[peer.ID]struct{}
+	blockedAddrs   map[string]struct{}
+	blockedSubnets map[string]*net.IPNet
+
+	ds datastore.Datastore
 }
 
 // NewConnectionGater creates a new instance of ConnectionGater
-func NewConnectionGater(logger *zap.Logger, idx peers.ConnectionIndex, cfg *Config) (connmgr.ConnectionGater, error) {
-	addrFilter, err := configureFilter(logger, cfg)
-	if err != nil {
-		logger.With(zap.String("Failed to create address filter", ""))
-		return nil, err
+func NewConnectionGater(logger *zap.Logger, idx peers.ConnectionIndex, ds datastore.Datastore) (*ConnectionGater, error) {
+	cg := &ConnectionGater{
+		blockedPeers:   make(map[peer.ID]struct{}),
+		blockedAddrs:   make(map[string]struct{}),
+		blockedSubnets: make(map[string]*net.IPNet),
 	}
-	ipLimiter := leakybucket.NewCollector(ipLimit, ipBurst, 30*time.Second, true /* deleteEmptyBuckets */)
 
-	return &СonnectionGater{
-		logger:     logger,
-		idx:        idx,
-		addrFilter: addrFilter,
-		ipLimiter:  ipLimiter,
+	if ds != nil {
+		cg.ds = namespace.Wrap(ds, datastore.NewKey(ns))
+		err := cg.loadRules(context.Background())
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &ConnectionGater{
+		logger:       logger,
+		idx:          idx,
+		blockedPeers: make(map[peer.ID]struct{}),
+		ds:           ds,
 	}, nil
 }
 
-// InterceptPeerDial is called on an imminent outbound peer dial request, prior
-// to the addresses of that peer being available/resolved. Blocking connections
-// at this stage is typical for blacklisting scenarios
-func (cg *СonnectionGater) InterceptPeerDial(id peer.ID) bool {
+func (cg *ConnectionGater) loadRules(ctx context.Context) error {
+	// load blocked peers
+	res, err := cg.ds.Query(ctx, query.Query{Prefix: keyPeer})
+	if err != nil {
+		cg.logger.Error("error querying datastore for blocked peers: %s", zap.Error(err))
+		return err
+	}
+
+	for r := range res.Next() {
+		if r.Error != nil {
+			cg.logger.Error("query result error: %s", zap.Error(r.Error))
+			return err
+		}
+
+		p := peer.ID(r.Entry.Value)
+		cg.blockedPeers[p] = struct{}{}
+	}
+
+	// load blocked addrs
+	res, err = cg.ds.Query(ctx, query.Query{Prefix: keyAddr})
+	if err != nil {
+		cg.logger.Error("error querying datastore for blocked addrs: %s", zap.Error(err))
+		return err
+	}
+
+	for r := range res.Next() {
+		if r.Error != nil {
+			cg.logger.Error("query result error: %s", zap.Error(r.Error))
+			return err
+		}
+
+		ip := net.IP(r.Entry.Value)
+		cg.blockedAddrs[ip.String()] = struct{}{}
+	}
+
+	// load blocked subnets
+	res, err = cg.ds.Query(ctx, query.Query{Prefix: keySubnet})
+	if err != nil {
+		cg.logger.Error("error querying datastore for blocked subnets: %s", zap.Error(err))
+		return err
+	}
+
+	for r := range res.Next() {
+		if r.Error != nil {
+			cg.logger.Error("query result error: %s", zap.Error(r.Error))
+			return err
+		}
+
+		ipnetStr := string(r.Entry.Value)
+		_, ipnet, err := net.ParseCIDR(ipnetStr)
+		if err != nil {
+			cg.logger.Error("error parsing CIDR subnet: %s", zap.Error(err))
+			return err
+		}
+		cg.blockedSubnets[ipnetStr] = ipnet
+	}
+
+	return nil
+}
+
+// BlockPeer adds a peer to the set of blocked peers.
+// Note: active connections to the peer are not automatically closed.
+func (cg *ConnectionGater) BlockPeer(p peer.ID) error {
+	if cg.ds != nil {
+		err := cg.ds.Put(context.Background(), datastore.NewKey(keyPeer+p.String()), []byte(p))
+		if err != nil {
+			cg.logger.Error("error writing blocked peer to datastore: %s", zap.Error(err))
+			return err
+		}
+	}
+
+	cg.Lock()
+	defer cg.Unlock()
+	cg.blockedPeers[p] = struct{}{}
+
+	return nil
+}
+
+// UnblockPeer removes a peer from the set of blocked peers
+func (cg *ConnectionGater) UnblockPeer(p peer.ID) error {
+	if cg.ds != nil {
+		err := cg.ds.Delete(context.Background(), datastore.NewKey(keyPeer+p.String()))
+		if err != nil {
+			cg.logger.Error("error deleting blocked peer from datastore: %s", zap.Error(err))
+			return err
+		}
+	}
+
+	cg.Lock()
+	defer cg.Unlock()
+
+	delete(cg.blockedPeers, p)
+
+	return nil
+}
+
+// ListBlockedPeers return a list of blocked peers
+func (cg *ConnectionGater) ListBlockedPeers() []peer.ID {
+	cg.RLock()
+	defer cg.RUnlock()
+
+	result := make([]peer.ID, 0, len(cg.blockedPeers))
+	for p := range cg.blockedPeers {
+		result = append(result, p)
+	}
+
+	return result
+}
+
+// BlockAddr adds an IP address to the set of blocked addresses.
+// Note: active connections to the IP address are not automatically closed.
+func (cg *ConnectionGater) BlockAddr(ip net.IP) error {
+	if cg.ds != nil {
+		err := cg.ds.Put(context.Background(), datastore.NewKey(keyAddr+ip.String()), []byte(ip))
+		if err != nil {
+			cg.logger.Error("error writing blocked addr to datastore: %s", zap.Error(err))
+			return err
+		}
+	}
+
+	cg.Lock()
+	defer cg.Unlock()
+
+	cg.blockedAddrs[ip.String()] = struct{}{}
+
+	return nil
+}
+
+// UnblockAddr removes an IP address from the set of blocked addresses
+func (cg *ConnectionGater) UnblockAddr(ip net.IP) error {
+	if cg.ds != nil {
+		err := cg.ds.Delete(context.Background(), datastore.NewKey(keyAddr+ip.String()))
+		if err != nil {
+			cg.logger.Error("error deleting blocked addr from datastore: %s", zap.Error(err))
+			return err
+		}
+	}
+
+	cg.Lock()
+	defer cg.Unlock()
+
+	delete(cg.blockedAddrs, ip.String())
+
+	return nil
+}
+
+// ListBlockedAddrs return a list of blocked IP addresses
+func (cg *ConnectionGater) ListBlockedAddrs() []net.IP {
+	cg.RLock()
+	defer cg.RUnlock()
+
+	result := make([]net.IP, 0, len(cg.blockedAddrs))
+	for ipStr := range cg.blockedAddrs {
+		ip := net.ParseIP(ipStr)
+		result = append(result, ip)
+	}
+
+	return result
+}
+
+func (cg *ConnectionGater) InterceptPeerDial(p peer.ID) (allow bool) {
+	cg.RLock()
+	defer cg.RUnlock()
+
+	_, block := cg.blockedPeers[p]
+	return !block
+}
+
+func (cg *ConnectionGater) InterceptAddrDial(p peer.ID, a ma.Multiaddr) (allow bool) {
+	cg.RLock()
+	defer cg.RUnlock()
+
 	return true
 }
 
-// InterceptAddrDial tests whether we're permitted to dial the specified
-// multiaddr for the given peer.
-func (cg *СonnectionGater) InterceptAddrDial(pid peer.ID, m multiaddr.Multiaddr) (allow bool) {
-	// Disallow bad peers from dialing in.
-	// if cg.idx.IsBad(cg.logger, pid) {
-	// 	return false
-	// }
-	return filterConnections(cg.addrFilter, m)
-}
+func (cg *ConnectionGater) InterceptAccept(cma network.ConnMultiaddrs) (allow bool) {
+	cg.RLock()
+	defer cg.RUnlock()
 
-// InterceptAccept checks whether the incidental inbound connection is allowed.
-func (cg *СonnectionGater) InterceptAccept(n libp2pnetwork.ConnMultiaddrs) (allow bool) {
-	if !cg.validateDial(n.RemoteMultiaddr()) {
-		// Allow other go-routines to run in the event
-		// we receive a large amount of junk connections.
-		runtime.Gosched()
+	a := cma.RemoteMultiaddr()
+
+	ip, err := manet.ToIP(a)
+	if err != nil {
+		cg.logger.Warn("error converting multiaddr to IP addr: %s", zap.Error(err))
+		return true
+	}
+
+	_, block := cg.blockedAddrs[ip.String()]
+	if block {
 		return false
 	}
 
-	// TODO
-	// if cg.idx.Limit(libp2pnetwork.DirInbound) {
-	// 	return false
-	// }
-	return filterConnections(cg.addrFilter, n.RemoteMultiaddr())
-}
-
-// InterceptSecured tests whether a given connection, now authenticated,
-// is allowed.
-func (_ *СonnectionGater) InterceptSecured(_ libp2pnetwork.Direction, _ peer.ID, _ libp2pnetwork.ConnMultiaddrs) (allow bool) {
-	return true
-}
-
-// InterceptUpgraded tests whether a fully capable connection is allowed.
-func (_ *СonnectionGater) InterceptUpgraded(_ libp2pnetwork.Conn) (allow bool, reason libp2pcontrol.DisconnectReason) {
-	return true, 0
-}
-
-// configureFilter looks at the provided allow lists and
-// deny lists to appropriately create a filter.
-func configureFilter(logger *zap.Logger, cfg *Config) (*multiaddr.Filters, error) {
-	addrFilter := multiaddr.NewFilters()
-	var privErr error
-	switch {
-	case cfg.AllowListCIDR == "public":
-		cfg.DenyListCIDR = append(cfg.DenyListCIDR, privateCIDRList...)
-	case cfg.AllowListCIDR == "private":
-		addrFilter, privErr = privateCIDRFilter(logger, addrFilter, multiaddr.ActionAccept)
-		if privErr != nil {
-			return nil, privErr
-		}
-	case cfg.AllowListCIDR != "":
-		_, ipnet, err := net.ParseCIDR(cfg.AllowListCIDR)
-		if err != nil {
-			return nil, err
-		}
-		addrFilter.AddFilter(*ipnet, multiaddr.ActionAccept)
-	}
-
-	// Configure from provided deny list in the config.
-	if len(cfg.DenyListCIDR) > 0 {
-		for _, cidr := range cfg.DenyListCIDR {
-			// If an entry in the deny list is "private", we iterate through the
-			// private addresses and add them to the filter. Likewise, if the deny
-			// list is "public", then we add all private address to the accept filter,
-			switch {
-			case cidr == "private":
-				addrFilter, privErr = privateCIDRFilter(logger, addrFilter, multiaddr.ActionDeny)
-				if privErr != nil {
-					return nil, privErr
-				}
-				continue
-			case cidr == "public":
-				addrFilter, privErr = privateCIDRFilter(logger, addrFilter, multiaddr.ActionAccept)
-				if privErr != nil {
-					return nil, privErr
-				}
-				continue
-			}
-			_, ipnet, err := net.ParseCIDR(cidr)
-			if err != nil {
-				return nil, err
-			}
-			// Check if the address already has an action associated with it
-			// If this address was previously accepted, log a warning before placing
-			// it in the deny filter
-			action, _ := addrFilter.ActionForFilter(*ipnet)
-			if action == multiaddr.ActionAccept {
-				logger.Warn("Address %s is in conflict with previous rule.", zap.String("", ipnet.String()))
-			}
-			addrFilter.AddFilter(*ipnet, multiaddr.ActionDeny)
-		}
-	}
-	return addrFilter, nil
-}
-
-var privateCIDRList = []string{
-	// Private ip addresses specified by rfc-1918.
-	// See: https://tools.ietf.org/html/rfc1918
-	"10.0.0.0/8",
-	"172.16.0.0/12",
-	"192.168.0.0/16",
-	// Reserved address space for CGN devices, specified by rfc-6598
-	// See: https://tools.ietf.org/html/rfc6598
-	"100.64.0.0/10",
-	// IPv4 Link-Local addresses, specified by rfc-3926
-	// See: https://tools.ietf.org/html/rfc3927
-	"169.254.0.0/16",
-}
-
-// helper function to either accept or deny all private addresses
-// if a new rule for a private address is in conflict with a previous one, log a warning
-func privateCIDRFilter(logger *zap.Logger, addrFilter *multiaddr.Filters, action multiaddr.Action) (*multiaddr.Filters, error) {
-	for _, privCidr := range privateCIDRList {
-		_, ipnet, err := net.ParseCIDR(privCidr)
-		if err != nil {
-			return nil, err
-		}
-		// Get the current filter action for the address
-		// If it conflicts with the action given by the function call,
-		// log a warning
-		curAction, _ := addrFilter.ActionForFilter(*ipnet)
-		switch {
-		case action == multiaddr.ActionAccept:
-			if curAction == multiaddr.ActionDeny {
-				logger.Warn("Address is in conflict with previous rule.", zap.String("", ipnet.String()))
-			}
-		case action == multiaddr.ActionDeny:
-			if curAction == multiaddr.ActionAccept {
-				logger.Warn("Address is in conflict with previous rule.", zap.String("", ipnet.String()))
-			}
-		}
-		addrFilter.AddFilter(*ipnet, action)
-	}
-	return addrFilter, nil
-}
-
-// filterConnections checks the appropriate ip subnets from our
-// filter and decides what to do with them. By default libp2p
-// accepts all incoming dials, so if we have an allow list
-// we will reject all inbound dials except for those in the
-// appropriate ip subnets.
-func filterConnections(f *multiaddr.Filters, a multiaddr.Multiaddr) bool {
-	acceptedNets := f.FiltersForAction(multiaddr.ActionAccept)
-	restrictConns := len(acceptedNets) != 0
-
-	// If we have an allow list added in, we by default reject all
-	// connection attempts except for those coming in from the
-	// appropriate ip subnets.
-	if restrictConns {
-		ip, err := manet.ToIP(a)
-		if err != nil {
+	for _, ipnet := range cg.blockedSubnets {
+		if ipnet.Contains(ip) {
 			return false
 		}
-		found := false
-		for _, ipnet := range acceptedNets {
-			if ipnet.Contains(ip) {
-				found = true
-				break
-			}
-		}
-		return found
 	}
-	return !f.AddrBlocked(a)
+
+	return true
 }
 
-func (cg *СonnectionGater) validateDial(addr multiaddr.Multiaddr) bool {
-	ip, err := manet.ToIP(addr)
-	if err != nil {
-		return false
+func (cg *ConnectionGater) InterceptSecured(dir network.Direction, p peer.ID, cma network.ConnMultiaddrs) (allow bool) {
+	if dir == network.DirOutbound {
+		// we have already filtered those in InterceptPeerDial/InterceptAddrDial
+		return true
 	}
-	remaining := cg.ipLimiter.Remaining(ip.String())
-	if remaining <= 0 {
-		return false
-	}
-	cg.ipLimiter.Add(ip.String(), 1)
-	return true
+
+	// we have already filtered addrs in InterceptAccept, so we just check the peer ID
+	cg.RLock()
+	defer cg.RUnlock()
+
+	_, block := cg.blockedPeers[p]
+	return !block
+}
+
+func (cg *ConnectionGater) InterceptUpgraded(network.Conn) (allow bool, reason control.DisconnectReason) {
+	return true, 0
 }

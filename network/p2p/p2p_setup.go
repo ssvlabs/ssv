@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ipfs/go-datastore"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
@@ -118,10 +119,12 @@ func (n *p2pNetwork) SetupHost(logger *zap.Logger) error {
 	if err != nil {
 		return errors.Wrap(err, "could not create resource manager")
 	}
-	connGater, err := connections.NewConnectionGater(logger, n.idx, &connections.Config{AllowListCIDR: n.cfg.AllowListCIDR, DenyListCIDR: n.cfg.DenyListCIDR})
+	ds := datastore.NewMapDatastore()
+	connGater, err := connections.NewConnectionGater(logger, n.idx, ds)
 	if err != nil {
 		return errors.Wrap(err, "could not create connection gater")
 	}
+	n.connGater = connGater
 	opts = append(opts, libp2p.ResourceManager(rmgr), libp2p.ConnectionGater(connGater))
 	host, err := libp2p.New(opts...)
 	if err != nil {
@@ -224,6 +227,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 		SubnetsProvider: subnetsProvider,
 		NodeStorage:     n.nodeStorage,
 		Permissioned:    n.cfg.Permissioned,
+		ConnGater:       n.connGater,
 	}, filters)
 
 	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler(logger))

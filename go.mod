@@ -22,6 +22,7 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.2
 	github.com/herumi/bls-eth-go-binary v1.29.1
 	github.com/ilyakaznacheev/cleanenv v1.4.2
+	github.com/ipfs/go-datastore v0.6.0
 	github.com/jellydator/ttlcache/v3 v3.0.1
 	github.com/libp2p/go-libp2p v0.28.2
 	github.com/libp2p/go-libp2p-kad-dht v0.23.0
@@ -46,6 +47,7 @@ require (
 	golang.org/x/mod v0.11.0
 	golang.org/x/sync v0.3.0
 	golang.org/x/text v0.9.0
+	google.golang.org/appengine v1.6.7
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -113,7 +115,6 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/ipfs/boxo v0.8.0 // indirect
 	github.com/ipfs/go-cid v0.4.1 // indirect
-	github.com/ipfs/go-datastore v0.6.0 // indirect
 	github.com/ipfs/go-ipfs-util v0.0.2 // indirect
 	github.com/ipfs/go-log v1.0.5 // indirect
 	github.com/ipfs/go-log/v2 v2.5.1 // indirect

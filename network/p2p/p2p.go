@@ -64,6 +64,7 @@ type p2pNetwork struct {
 	msgResolver  topics.MsgPeersResolver
 	msgValidator validation.MessageValidator
 	connHandler  connections.ConnHandler
+	connGater    *connections.ConnectionGater
 
 	state int32
 
