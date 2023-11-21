@@ -14,9 +14,9 @@ spec:
       protocol: UDP
       targetPort: 12046
       name: port-12046
-    - port: 43046
+    - port: 13046
       protocol: TCP
-      targetPort: 43046
+      targetPort: 13046
       name: port-13046
     - port: 15046
       protocol: TCP

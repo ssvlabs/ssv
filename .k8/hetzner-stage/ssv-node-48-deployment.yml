@@ -10,13 +10,13 @@ metadata:
 spec:
   type: ClusterIP
   ports:
-    - port: 42048
+    - port: 12048
       protocol: UDP
-      targetPort: 42048
+      targetPort: 12048
       name: port-12048
-    - port: 43048
+    - port: 13048
       protocol: TCP
-      targetPort: 43048
+      targetPort: 13048
       name: port-13048
     - port: 15048
       protocol: TCP
