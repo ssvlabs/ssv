@@ -68,7 +68,7 @@ func TestSetupPrivateKey(t *testing.T) {
 				require.NoError(t, err)
 				require.NotNil(t, sk)
 
-				interfacePriv, err := commons.ConvertToInterfacePrivkey(privKey)
+				interfacePriv, err := commons.ECDSAPrivToInterface(privKey)
 				require.NoError(t, err)
 				b, err := interfacePriv.Raw()
 				require.NoError(t, err)
@@ -87,7 +87,7 @@ func TestSetupPrivateKey(t *testing.T) {
 				return
 			}
 			if test.existKey != "" && test.passedKey == "" { // exist and not passed in env
-				interfacePriv, err := commons.ConvertToInterfacePrivkey(privateKey)
+				interfacePriv, err := commons.ECDSAPrivToInterface(privateKey)
 				require.NoError(t, err)
 				b, err := interfacePriv.Raw()
 				require.NoError(t, err)
@@ -95,7 +95,7 @@ func TestSetupPrivateKey(t *testing.T) {
 				return
 			}
 			// not exist && passed and exist && passed
-			interfacePriv, err := commons.ConvertToInterfacePrivkey(privateKey)
+			interfacePriv, err := commons.ECDSAPrivToInterface(privateKey)
 			require.NoError(t, err)
 			b, err := interfacePriv.Raw()
 			require.NoError(t, err)

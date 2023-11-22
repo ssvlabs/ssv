@@ -2,10 +2,11 @@ package p2pv1
 
 import (
 	"context"
-	"sync"
+	"crypto/rsa"
 	"sync/atomic"
 	"time"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/host"
@@ -38,7 +39,7 @@ const (
 )
 
 const (
-	connManagerGCInterval           = time.Minute
+	connManagerGCInterval           = 3 * time.Minute
 	connManagerGCTimeout            = time.Minute
 	peersReportingInterval          = 60 * time.Second
 	peerIdentitiesReportingInterval = 5 * time.Minute
@@ -71,8 +72,11 @@ type p2pNetwork struct {
 	backoffConnector *libp2pdiscbackoff.BackoffConnector
 	subnets          []byte
 	libConnManager   connmgrcore.ConnManager
-	nodeStorage      operatorstorage.Storage
-	operatorPKCache  sync.Map
+
+	nodeStorage             operatorstorage.Storage
+	operatorPKHashToPKCache *hashmap.Map[string, []byte] // used for metrics
+	operatorPrivateKey      *rsa.PrivateKey
+	operatorID              spectypes.OperatorID
 }
 
 // New creates a new p2p network
@@ -82,17 +86,19 @@ func New(logger *zap.Logger, cfg *Config) network.P2PNetwork {
 	logger = logger.Named(logging.NameP2PNetwork)
 
 	return &p2pNetwork{
-		parentCtx:        cfg.Ctx,
-		ctx:              ctx,
-		cancel:           cancel,
-		interfaceLogger:  logger,
-		cfg:              cfg,
-		msgRouter:        cfg.Router,
-		msgValidator:     cfg.MessageValidator,
-		state:            stateClosed,
-		activeValidators: hashmap.New[string, validatorStatus](),
-		nodeStorage:      cfg.NodeStorage,
-		operatorPKCache:  sync.Map{},
+		parentCtx:               cfg.Ctx,
+		ctx:                     ctx,
+		cancel:                  cancel,
+		interfaceLogger:         logger,
+		cfg:                     cfg,
+		msgRouter:               cfg.Router,
+		msgValidator:            cfg.MessageValidator,
+		state:                   stateClosed,
+		activeValidators:        hashmap.New[string, validatorStatus](),
+		nodeStorage:             cfg.NodeStorage,
+		operatorPKHashToPKCache: hashmap.New[string, []byte](),
+		operatorPrivateKey:      cfg.OperatorPrivateKey,
+		operatorID:              cfg.OperatorID,
 	}
 }
 
@@ -159,12 +165,14 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 	go n.startDiscovery(logger)
 
 	async.Interval(n.ctx, connManagerGCInterval, n.peersBalancing(logger))
+	// don't report metrics in tests
+	if n.cfg.Metrics != nil {
+		async.Interval(n.ctx, peersReportingInterval, n.reportAllPeers(logger))
 
-	async.Interval(n.ctx, peersReportingInterval, n.reportAllPeers(logger))
+		async.Interval(n.ctx, peerIdentitiesReportingInterval, n.reportPeerIdentities(logger))
 
-	async.Interval(n.ctx, peerIdentitiesReportingInterval, n.reportPeerIdentities(logger))
-
-	async.Interval(n.ctx, topicsReportingInterval, n.reportTopics(logger))
+		async.Interval(n.ctx, topicsReportingInterval, n.reportTopics(logger))
+	}
 
 	if err := n.subscribeToSubnets(logger); err != nil {
 		return err

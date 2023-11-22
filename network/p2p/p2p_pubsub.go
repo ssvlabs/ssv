@@ -2,8 +2,12 @@ package p2pv1
 
 import (
 	"context"
+	"crypto"
+	"crypto/rsa"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+
 	"github.com/bloxapp/ssv/protocol/v2/message"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -53,16 +57,27 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
 
-	raw, err := commons.EncodeNetworkMsg(msg)
+	encodedMsg, err := commons.EncodeNetworkMsg(msg)
 	if err != nil {
 		return errors.Wrap(err, "could not decode msg")
+	}
+
+	if n.cfg.Network.Beacon.EstimatedCurrentEpoch() > n.cfg.Network.PermissionlessActivationEpoch {
+		hash := sha256.Sum256(encodedMsg)
+
+		signature, err := rsa.SignPKCS1v15(nil, n.operatorPrivateKey, crypto.SHA256, hash[:])
+		if err != nil {
+			return err
+		}
+
+		encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, n.operatorID, signature)
 	}
 
 	vpk := msg.GetID().GetPubKey()
 	topics := commons.ValidatorTopicID(vpk)
 
 	for _, topic := range topics {
-		if err := n.topicsCtrl.Broadcast(topic, raw, n.cfg.RequestTimeout); err != nil {
+		if err := n.topicsCtrl.Broadcast(topic, encodedMsg, n.cfg.RequestTimeout); err != nil {
 			n.interfaceLogger.Debug("could not broadcast msg", fields.PubKey(vpk), zap.Error(err))
 			return errors.Wrap(err, "could not broadcast msg")
 		}

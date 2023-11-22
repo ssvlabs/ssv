@@ -43,7 +43,7 @@ func Test_ParseENR(t *testing.T) {
 func localNodeMock(t *testing.T) *enode.LocalNode {
 	sk, _, err := crypto.GenerateSecp256k1Key(crand.Reader)
 	require.NoError(t, err)
-	pk, err := commons.ConvertFromInterfacePrivKey(sk)
+	pk, err := commons.ECDSAPrivFromInterface(sk)
 	require.NoError(t, err)
 	ip, err := commons.IPAddr()
 	require.NoError(t, err)
