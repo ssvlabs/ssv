@@ -18,7 +18,6 @@ func scoreDecay(totalDecayDuration time.Duration, decayIntervalDuration time.Dur
 	return math.Pow(decayToZero, 1/ticks)
 }
 
-
 // decayThreshold is used to determine the threshold from the decay limit with
 // a provided growth rate. This applies the decay rate to a
 // computed limit.
