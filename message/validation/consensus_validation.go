@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -111,16 +110,6 @@ func (mv *messageValidator) validateConsensusMessage(
 	if err := mv.validateBeaconDuty(messageID.GetRoleType(), msgSlot, share); err != nil {
 		return consensusDescriptor, msgSlot, err
 	}
-
-	mv.mu.Lock()
-	m, ok := mv.locks[messageID]
-	if !ok {
-		m = &sync.Mutex{}
-		mv.locks[messageID] = m
-	}
-	m.Lock()
-	defer m.Unlock()
-	mv.mu.Unlock()
 
 	state := mv.consensusState(messageID)
 	for _, signer := range signedMsg.Signers {

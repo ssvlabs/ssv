@@ -80,9 +80,6 @@ type messageValidator struct {
 	operatorIDToPubkeyCache *hashmap.Map[spectypes.OperatorID, *rsa.PublicKey]
 	selfPID                 peer.ID
 	selfAccept              bool
-
-	locks map[spectypes.MessageID]*sync.Mutex
-	mu    sync.Mutex
 }
 
 // NewMessageValidator returns a new MessageValidator with the given network configuration and options.
@@ -92,7 +89,6 @@ func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) Mes
 		metrics:                 &nopMetrics{},
 		netCfg:                  netCfg,
 		operatorIDToPubkeyCache: hashmap.New[spectypes.OperatorID, *rsa.PublicKey](),
-		locks:                   make(map[spectypes.MessageID]*sync.Mutex),
 	}
 
 	for _, opt := range opts {
