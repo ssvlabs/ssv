@@ -20,7 +20,7 @@ const (
 	topicScoreCap = 32.72
 	decayInterval = 32 * (time.Second * 12) // One epoch
 	decayToZero   = 0.01
-	retainScore   = 38400
+	retainScore   = 100 * 32 * 12 * time.Second
 
 	// P5
 	appSpecificWeight = 0
