@@ -18,6 +18,7 @@ type ExecuteDutiesFunc func(logger *zap.Logger, duties []*spectypes.Duty)
 type dutyHandler interface {
 	Setup(string, *zap.Logger, BeaconNode, networkconfig.NetworkConfig, ValidatorController, ExecuteDutiesFunc, slotticker.Provider, chan ReorgEvent, chan struct{})
 	HandleDuties(context.Context)
+	HandleInitialDuties(context.Context)
 	Name() string
 }
 
@@ -60,4 +61,8 @@ func (h *baseHandler) Setup(
 func (h *baseHandler) warnMisalignedSlotAndDuty(dutyType string) {
 	h.logger.Debug("current slot and duty slot are not aligned, "+
 		"assuming diff caused by a time drift - ignoring and executing duty", zap.String("type", dutyType))
+}
+
+func (b *baseHandler) HandleInitialDuties(context.Context) {
+	// Do nothing
 }
