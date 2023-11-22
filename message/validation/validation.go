@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -220,17 +219,9 @@ func (mv *messageValidator) ValidatorForTopic(_ string) func(ctx context.Context
 	return mv.ValidatePubsubMessage
 }
 
-var concurrency atomic.Int64
-
 // ValidatePubsubMessage validates the given pubsub message.
 // Depending on the outcome, it will return one of the pubsub validation results (Accept, Ignore, or Reject).
 func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
-	c := concurrency.Add(1)
-	defer concurrency.Add(-1)
-	if c > 1 {
-		mv.logger.Warn("concurrent message validation", zap.Int64("concurrency", c))
-	}
-
 	if mv.selfAccept && peerID == mv.selfPID {
 		msg, _ := commons.DecodeNetworkMsg(pmsg.Data)
 		decMsg, _ := queue.DecodeSSVMessage(msg)
