@@ -439,13 +439,13 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 
 	// Lock this SSV message ID to prevent concurrent access to the same state.
 	mv.validationMutex.Lock()
-	m, ok := mv.validationLocks[msg.GetID()]
+	mutex, ok := mv.validationLocks[msg.GetID()]
 	if !ok {
-		m = &sync.Mutex{}
-		mv.validationLocks[msg.GetID()] = m
+		mutex = &sync.Mutex{}
+		mv.validationLocks[msg.GetID()] = mutex
 	}
-	m.Lock()
-	defer m.Unlock()
+	mutex.Lock()
+	defer mutex.Unlock()
 	mv.validationMutex.Unlock()
 
 	descriptor.SSVMessageType = ssvMessage.MsgType
