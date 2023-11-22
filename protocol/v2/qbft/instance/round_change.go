@@ -2,7 +2,6 @@ package instance
 
 import (
 	"bytes"
-	"encoding/hex"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -42,7 +41,6 @@ func (i *Instance) uponRoundChange(
 		zap.Any("round-change-signers", signedRoundChange.Signers))
 
 	justifiedRoundChangeMsg, valueToPropose, err := hasReceivedProposalJustificationForLeadingRound(
-		logger,
 		i.State,
 		i.config,
 		instanceStartValue,
@@ -52,7 +50,6 @@ func (i *Instance) uponRoundChange(
 	if err != nil {
 		return errors.Wrap(err, "could not get proposal justification for leading round")
 	}
-
 	if justifiedRoundChangeMsg != nil {
 		roundChangeJustification, _ := justifiedRoundChangeMsg.Message.GetRoundChangeJustifications() // no need to check error, check on isValidRoundChange
 
@@ -70,8 +67,6 @@ func (i *Instance) uponRoundChange(
 		logger.Debug("🔄 got justified round change, broadcasting proposal message",
 			fields.Round(i.State.Round),
 			zap.Any("round-change-signers", allSigners(roundChangeMsgContainer.MessagesForRound(i.State.Round))),
-			zap.String("instance_start_value", hex.EncodeToString(instanceStartValue)),
-			zap.String("valueToPropose", hex.EncodeToString(valueToPropose)),
 			fields.Root(proposal.Message.Root))
 
 		if err := i.Broadcast(logger, proposal); err != nil {
@@ -133,7 +128,6 @@ func hasReceivedPartialQuorum(state *specqbft.State, roundChangeMsgContainer *sp
 // if received round change msgs with prepare justification - returns the highest prepare justification round change msg and value to propose
 // (all the above considering the operator is a leader for the round
 func hasReceivedProposalJustificationForLeadingRound(
-	logger *zap.Logger,
 	state *specqbft.State,
 	config qbft.IConfig,
 	instanceStartValue []byte,
@@ -156,7 +150,6 @@ func hasReceivedProposalJustificationForLeadingRound(
 		// If justifiedRoundChangeMsg has prepare justification chose prepared value
 		valueToPropose := instanceStartValue
 		if msg.Message.RoundChangePrepared() {
-			logger.Debug("Changing value to propose because roundchange is prepared", zap.String("from", hex.EncodeToString(instanceStartValue)), zap.String("to", hex.EncodeToString(signedRoundChange.FullData)))
 			valueToPropose = signedRoundChange.FullData
 		}
 

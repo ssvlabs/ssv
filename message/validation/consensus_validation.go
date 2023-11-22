@@ -4,8 +4,6 @@ package validation
 
 import (
 	"bytes"
-	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -244,108 +242,7 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 
 	if msgSlot == signerState.Slot && msgRound == signerState.Round {
 		if mv.hasFullData(signedMsg) && len(signerState.ProposalData) != 0 && !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
-			var expectedOuter, receivedOuter any
-
-			expectedConsensusData := &spectypes.ConsensusData{}
-			if err := expectedConsensusData.Decode(signerState.ProposalData); err != nil {
-				expectedOuter = fmt.Sprintf("could not decode expected consensus data: %v", err)
-			} else {
-				expectedOuter = expectedConsensusData
-			}
-
-			receivedConsensusData := &spectypes.ConsensusData{}
-			if err := receivedConsensusData.Decode(signedMsg.FullData); err != nil {
-				receivedOuter = fmt.Sprintf("could not decode received consensus data: %v", err)
-			} else {
-				receivedOuter = receivedConsensusData
-			}
-
-			var expectedInner, receivedInner any
-			switch expectedConsensusData.Duty.Type {
-			case spectypes.BNRoleAttester:
-				expectedAttestationData := &phase0.AttestationData{}
-				if err := expectedAttestationData.UnmarshalSSZ(expectedConsensusData.DataSSZ); err != nil {
-					expectedInner = fmt.Sprintf("could not decode expected attestation: %v", err)
-				} else {
-					expectedInner = expectedAttestationData
-				}
-
-			case spectypes.BNRoleAggregator:
-				expectedAggData := &phase0.AggregateAndProof{}
-				if err := expectedAggData.UnmarshalSSZ(expectedConsensusData.DataSSZ); err != nil {
-					expectedInner = fmt.Sprintf("could not decode expected aggregate: %v", err)
-				} else {
-					expectedInner = expectedAggData
-				}
-
-			default:
-				expectedInner = fmt.Sprintf("duty type %v logging is not implemented", expectedConsensusData.Duty.Type)
-			}
-
-			switch receivedConsensusData.Duty.Type {
-			case spectypes.BNRoleAttester:
-				receivedAttestationData := &phase0.AttestationData{}
-				if err := receivedAttestationData.UnmarshalSSZ(receivedConsensusData.DataSSZ); err != nil {
-					receivedInner = fmt.Sprintf("could not decode received attestation: %v", err)
-				} else {
-					receivedInner = receivedAttestationData
-				}
-
-			case spectypes.BNRoleAggregator:
-				receivedAggData := &phase0.AggregateAndProof{}
-				if err := receivedAggData.UnmarshalSSZ(receivedConsensusData.DataSSZ); err != nil {
-					receivedInner = fmt.Sprintf("could not decode received aggregate: %v", err)
-				} else {
-					receivedInner = receivedAggData
-				}
-
-			default:
-				receivedInner = fmt.Sprintf("duty type %v logging is not implemented", receivedConsensusData.Duty.Type)
-			}
-
-			type DuplicateProposalLog struct {
-				DataBytes string         `json:"data_bytes"`
-				Consensus any            `json:"consensus"`
-				Data      any            `json:"data"`
-				Slot      phase0.Slot    `json:"slot"`
-				Round     specqbft.Round `json:"round"`
-				Root      string         `json:"root"`
-			}
-
-			expectedRoot, _ := specqbft.HashDataRoot(signerState.ProposalData)
-
-			expectedLog := DuplicateProposalLog{
-				DataBytes: hex.EncodeToString(signerState.ProposalData),
-				Consensus: expectedOuter,
-				Data:      expectedInner,
-				Slot:      signerState.Slot,
-				Round:     signerState.Round,
-				Root:      hex.EncodeToString(expectedRoot[:]),
-			}
-
-			expectedDataLogJSON, err := json.Marshal(expectedLog)
-			if err != nil {
-				// TODO
-			}
-
-			receivedLog := DuplicateProposalLog{
-				DataBytes: hex.EncodeToString(signedMsg.FullData),
-				Consensus: receivedOuter,
-				Data:      receivedInner,
-				Slot:      msgSlot,
-				Round:     msgRound,
-				Root:      hex.EncodeToString(signedMsg.Message.Root[:]),
-			}
-
-			receivedDataLogJSON, err := json.Marshal(receivedLog)
-			if err != nil {
-				// TODO
-			}
-
-			e := ErrDuplicatedProposalWithDifferentData
-			e.want = string(expectedDataLogJSON)
-			e.got = string(receivedDataLogJSON)
-			return e
+			return ErrDuplicatedProposalWithDifferentData
 		}
 
 		limits := maxMessageCounts(len(share.Committee))

@@ -26,8 +26,6 @@ type Instance struct {
 	forceStop  bool
 	StartValue []byte
 
-	proposalRoundBroadcasted specqbft.Round
-
 	metrics *metrics
 }
 
