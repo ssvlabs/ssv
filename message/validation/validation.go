@@ -94,6 +94,7 @@ func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) Mes
 		metrics:                 &nopMetrics{},
 		netCfg:                  netCfg,
 		operatorIDToPubkeyCache: hashmap.New[spectypes.OperatorID, *rsa.PublicKey](),
+		validationLocks:         make(map[spectypes.MessageID]*sync.Mutex),
 	}
 
 	for _, opt := range opts {
