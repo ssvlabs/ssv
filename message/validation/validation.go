@@ -77,8 +77,14 @@ type messageValidator struct {
 	dutyStore               *dutystore.Store
 	ownOperatorID           spectypes.OperatorID
 	operatorIDToPubkeyCache *hashmap.Map[spectypes.OperatorID, *rsa.PublicKey]
-	selfPID                 peer.ID
-	selfAccept              bool
+
+	// validationLocks is a map of lock per SSV message ID to
+	// prevent concurrent access to the same state.
+	validationLocks map[spectypes.MessageID]*sync.Mutex
+	validationMutex sync.Mutex
+
+	selfPID    peer.ID
+	selfAccept bool
 }
 
 // NewMessageValidator returns a new MessageValidator with the given network configuration and options.
@@ -88,6 +94,7 @@ func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) Mes
 		metrics:                 &nopMetrics{},
 		netCfg:                  netCfg,
 		operatorIDToPubkeyCache: hashmap.New[spectypes.OperatorID, *rsa.PublicKey](),
+		validationLocks:         make(map[spectypes.MessageID]*sync.Mutex),
 	}
 
 	for _, opt := range opts {
@@ -430,6 +437,17 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 		e.innerErr = err
 		return nil, descriptor, e
 	}
+
+	// Lock this SSV message ID to prevent concurrent access to the same state.
+	mv.validationMutex.Lock()
+	mutex, ok := mv.validationLocks[msg.GetID()]
+	if !ok {
+		mutex = &sync.Mutex{}
+		mv.validationLocks[msg.GetID()] = mutex
+	}
+	mutex.Lock()
+	defer mutex.Unlock()
+	mv.validationMutex.Unlock()
 
 	descriptor.SSVMessageType = ssvMessage.MsgType
 
