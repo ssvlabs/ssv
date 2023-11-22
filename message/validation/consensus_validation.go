@@ -241,7 +241,7 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 	}
 
 	if msgSlot == signerState.Slot && msgRound == signerState.Round {
-		if mv.hasFullData(signedMsg) && len(signerState.ProposalData) != 0 && !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
+		if mv.hasFullData(signedMsg) && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
 			return ErrDuplicatedProposalWithDifferentData
 		}
 
