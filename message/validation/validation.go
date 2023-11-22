@@ -243,12 +243,14 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer
 		round = descriptor.Consensus.Round
 	}
 
+	f := append(descriptor.Fields(), fields.PeerID(peerID))
+
 	if err != nil {
 		var valErr Error
 		if errors.As(err, &valErr) {
 			if valErr.Reject() {
 				if !valErr.Silent() {
-					f := append(descriptor.Fields(), zap.Error(err))
+					f = append(f, zap.Error(err))
 					mv.logger.Debug("rejecting invalid message", f...)
 				}
 
@@ -257,7 +259,7 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer
 			}
 
 			if !valErr.Silent() {
-				f := append(descriptor.Fields(), zap.Error(err))
+				f = append(f, zap.Error(err))
 				mv.logger.Debug("ignoring invalid message", f...)
 			}
 			mv.metrics.MessageIgnored(valErr.Text(), descriptor.Role, round)
@@ -265,7 +267,7 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer
 		}
 
 		mv.metrics.MessageIgnored(err.Error(), descriptor.Role, round)
-		f := append(descriptor.Fields(), zap.Error(err))
+		f = append(f, zap.Error(err))
 		mv.logger.Debug("ignoring invalid message", f...)
 		return pubsub.ValidationIgnore
 	}

@@ -40,7 +40,7 @@ const (
 )
 
 const (
-	connManagerGCInterval           = time.Minute
+	connManagerGCInterval           = 3 * time.Minute
 	connManagerGCTimeout            = time.Minute
 	peersReportingInterval          = 60 * time.Second
 	peerIdentitiesReportingInterval = 5 * time.Minute

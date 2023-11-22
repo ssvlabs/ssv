@@ -1,6 +1,7 @@
 package topics
 
 import (
+	"math"
 	"time"
 
 	"github.com/bloxapp/ssv/logging/fields"
@@ -30,18 +31,39 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.Extend
 
 			//filter all topics that have InvalidMessageDeliveries > 0
 			filtered := make(map[string]*pubsub.TopicScoreSnapshot)
+			var totalInvalidMessages float64
+			var totalLowMeshDeliveries int
 			for topic, snapshot := range peerScores.Topics {
-				if snapshot.InvalidMessageDeliveries > 0 {
+				if snapshot.InvalidMessageDeliveries != 0 {
 					filtered[topic] = snapshot
 				}
+				if snapshot.InvalidMessageDeliveries > 0 {
+					totalInvalidMessages += math.Sqrt(snapshot.InvalidMessageDeliveries)
+				}
+				if snapshot.MeshMessageDeliveries < 107 {
+					totalLowMeshDeliveries++
+				}
 			}
-			// log peer overall score and topics scores
-			logger.Debug("peer scores", fields.PeerID(pid),
+
+			fields := []zap.Field{
+				fields.PeerID(pid),
 				fields.PeerScore(peerScores.Score),
 				zap.Any("invalid_messages", filtered),
 				zap.Float64("ip_colocation", peerScores.IPColocationFactor),
 				zap.Float64("behaviour_penalty", peerScores.BehaviourPenalty),
-				zap.Float64("app_specific_penalty", peerScores.AppSpecificScore))
+				zap.Float64("app_specific_penalty", peerScores.AppSpecificScore),
+				zap.Float64("total_low_mesh_deliveries", float64(totalLowMeshDeliveries)),
+				zap.Float64("total_invalid_messages", totalInvalidMessages),
+				zap.Any("invalid_messages", filtered),
+			}
+
+			// log if peer score is below threshold
+			if peerScores.Score < -1000 {
+				fields = append(fields, zap.Bool("low_score", true))
+			}
+
+			// log peer overall score and topics scores
+			logger.Debug("peer scores", fields...)
 
 			metricPubsubPeerScoreInspect.WithLabelValues(pid.String()).Set(peerScores.Score)
 
