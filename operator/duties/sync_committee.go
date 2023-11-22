@@ -3,6 +3,7 @@ package duties
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -136,7 +137,19 @@ func (h *SyncCommitteeHandler) HandleInitialDuties(ctx context.Context) {
 	slot := h.network.Beacon.EstimatedCurrentSlot()
 	epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 	period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
-	h.processFetching(ctx, period, slot)
+
+	baseSleepTime := 50 // Milliseconds
+	maxAttempts := 10
+
+	for i := 0; i < maxAttempts; i++ {
+		h.processFetching(ctx, period, slot)
+		if !h.fetchCurrentPeriod {
+			break
+		}
+		sleepDuration := time.Duration(math.Pow(2, float64(i))*float64(baseSleepTime)) * time.Millisecond
+		time.Sleep(sleepDuration)
+	}
+
 	// At the init time we may not have enough duties to fetch
 	// we should not set those values to false in processFetching() call
 	h.fetchNextPeriod = true
