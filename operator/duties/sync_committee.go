@@ -138,7 +138,7 @@ func (h *SyncCommitteeHandler) HandleInitialDuties(ctx context.Context) {
 	epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 	period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 
-	baseSleepTime := 50 // Milliseconds
+	baseSleepTime := 100 // Milliseconds
 	maxAttempts := 10
 
 	for i := 0; i < maxAttempts; i++ {
