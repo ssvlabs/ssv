@@ -21,7 +21,7 @@ type metrics interface {
 	ActiveMsgValidationDone(topic string)
 	InCommitteeMessage(msgType spectypes.MsgType, decided bool)
 	NonCommitteeMessage(msgType spectypes.MsgType, decided bool)
-	MessagesReceivedFromPeer(peerId string)
+	MessagesReceivedFromPeer(peerId peer.ID)
 	MessagesReceivedTotal()
 	MessageValidationRSAVerifications()
 	DeletePeerInfo(peerId peer.ID)
@@ -41,7 +41,7 @@ func (*nopMetrics) ActiveMsgValidation(string)                                  
 func (*nopMetrics) ActiveMsgValidationDone(string)                               {}
 func (*nopMetrics) InCommitteeMessage(spectypes.MsgType, bool)                   {}
 func (*nopMetrics) NonCommitteeMessage(spectypes.MsgType, bool)                  {}
-func (*nopMetrics) MessagesReceivedFromPeer(string)                              {}
+func (*nopMetrics) MessagesReceivedFromPeer(peer.ID)                             {}
 func (*nopMetrics) MessagesReceivedTotal()                                       {}
 func (*nopMetrics) MessageValidationRSAVerifications()                           {}
 func (*nopMetrics) DeletePeerInfo(peer.ID)                                       {}

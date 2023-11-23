@@ -42,6 +42,8 @@ const (
 	messageAccepted = "accepted"
 	messageIgnored  = "ignored"
 	messageRejected = "rejected"
+
+	isPeerMetricsEnabled = true
 )
 
 var (
@@ -278,8 +280,10 @@ func (m *MetricsReporter) EventProcessingFailed(eventName string) {
 	eventProcessingFailed.WithLabelValues(eventName).Inc()
 }
 
-func (m *MetricsReporter) MessagesReceivedFromPeer(peerId string) {
-	messagesReceivedFromPeer.WithLabelValues(peerId).Inc()
+func (m *MetricsReporter) MessagesReceivedFromPeer(peerId peer.ID) {
+	if isPeerMetricsEnabled {
+		messagesReceivedFromPeer.WithLabelValues(peerId.String()).Inc()
+	}
 }
 
 func (m *MetricsReporter) MessagesReceivedTotal() {
@@ -402,5 +406,7 @@ func (m *MetricsReporter) NonCommitteeMessage(msgType spectypes.MsgType, decided
 
 // DeletePeerInfo deletes all data about peers which connections have been closed by the current node
 func (m *MetricsReporter) DeletePeerInfo(peerId peer.ID) {
-	messagesReceivedFromPeer.DeleteLabelValues(peerId.String())
+	if isPeerMetricsEnabled {
+		messagesReceivedFromPeer.DeleteLabelValues(peerId.String())
+	}
 }
