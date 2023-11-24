@@ -57,11 +57,11 @@ var (
 		Help: "Submitted roles",
 	}, []string{"role"})
 	metricsDutiesCreated = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "test_ssv_duties_created",
+		Name: "ssv_duties_created",
 		Help: "Number of created duties",
 	}, []string{})
 	metricsDutiesDecided = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "test_ssv_duties_finalized",
+		Name: "ssv_duties_finalized",
 		Help: "Number of finalized duties",
 	}, []string{})
 )
