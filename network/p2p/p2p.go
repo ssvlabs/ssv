@@ -17,7 +17,6 @@ import (
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/message/validation"
-	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"
@@ -65,7 +64,7 @@ type p2pNetwork struct {
 	msgResolver  topics.MsgPeersResolver
 	msgValidator validation.MessageValidator
 	connHandler  connections.ConnHandler
-	metrics      *metricsreporter.MetricsReporter
+	metrics      connections.MetricsReporter
 
 	state int32
 
@@ -82,7 +81,7 @@ type p2pNetwork struct {
 }
 
 // New creates a new p2p network
-func New(logger *zap.Logger, cfg *Config, mr *metricsreporter.MetricsReporter) network.P2PNetwork {
+func New(logger *zap.Logger, cfg *Config, mr connections.MetricsReporter) network.P2PNetwork {
 	ctx, cancel := context.WithCancel(cfg.Ctx)
 
 	logger = logger.Named(logging.NameP2PNetwork)
