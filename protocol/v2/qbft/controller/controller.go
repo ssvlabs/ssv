@@ -9,11 +9,24 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
+)
+
+var (
+	metricsDutiesCreated = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_duties_created",
+		Help: "Number of created duties",
+	}, []string{})
+	metricsDutiesDecided = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_duties_finalized",
+		Help: "Number of finalized duties",
+	}, []string{})
 )
 
 // NewDecidedHandler handles newly saved decided messages.
@@ -71,6 +84,7 @@ func (c *Controller) StartNewInstance(logger *zap.Logger, height specqbft.Height
 	newInstance := c.addAndStoreNewInstance()
 	newInstance.Start(logger, value, height)
 	c.forceStopAllInstanceExceptCurrent()
+	metricsDutiesCreated.WithLabelValues().Inc()
 	return nil
 }
 
@@ -135,6 +149,8 @@ func (c *Controller) UponExistingInstanceMsg(logger *zap.Logger, msg *specqbft.S
 	if prevDecided {
 		return nil, err
 	}
+
+	metricsDutiesDecided.WithLabelValues().Inc()
 
 	return decidedMsg, nil
 }
