@@ -133,25 +133,25 @@ func (t UpdateFeeRecipientTask) Execute() error {
 }
 
 type exitValidatorExecutor interface {
-	ExitValidator(pubKey phase0.BLSPubKey, slot phase0.Slot, validatorIndex phase0.ValidatorIndex) error
+	ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex) error
 }
 
 type ExitValidatorTask struct {
 	executor       exitValidatorExecutor
 	pubKey         phase0.BLSPubKey
-	slot           phase0.Slot
+	blockNumber    uint64
 	validatorIndex phase0.ValidatorIndex
 }
 
-func NewExitValidatorTask(executor exitValidatorExecutor, pubKey phase0.BLSPubKey, slot phase0.Slot, validatorIndex phase0.ValidatorIndex) *ExitValidatorTask {
+func NewExitValidatorTask(executor exitValidatorExecutor, pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex) *ExitValidatorTask {
 	return &ExitValidatorTask{
 		executor:       executor,
 		pubKey:         pubKey,
-		slot:           slot,
+		blockNumber:    blockNumber,
 		validatorIndex: validatorIndex,
 	}
 }
 
 func (t ExitValidatorTask) Execute() error {
-	return t.executor.ExitValidator(t.pubKey, t.slot, t.validatorIndex)
+	return t.executor.ExitValidator(t.pubKey, t.blockNumber, t.validatorIndex)
 }

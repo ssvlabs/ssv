@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/operator/duties"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -100,17 +101,21 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address) error {
 
 	return nil
 }
-func (c *controller) ExitValidator(pubKey phase0.BLSPubKey, slot phase0.Slot, validatorIndex phase0.ValidatorIndex) error {
-	duty := &spectypes.Duty{
-		Type:           spectypes.BNRoleVoluntaryExit,
+
+func (c *controller) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex) error {
+	logger := c.taskLogger("ExitValidator",
+		fields.PubKey(pubKey[:]),
+		fields.BlockNumber(blockNumber),
+		zap.Uint64("validator_index", uint64(validatorIndex)),
+	)
+
+	c.validatorExitCh <- duties.ExitDescriptor{
 		PubKey:         pubKey,
-		Slot:           slot,
 		ValidatorIndex: validatorIndex,
+		BlockNumber:    blockNumber,
 	}
 
-	logger := c.logger.Named("ExitValidator")
-
-	c.ExecuteDuty(logger, duty)
+	logger.Debug("added voluntary exit task to pipeline")
 
 	return nil
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/bloxapp/ssv/ekm"
 	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/operator/duties"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
@@ -468,13 +469,7 @@ func (eh *EventHandler) handleFeeRecipientAddressUpdated(txn basedb.Txn, event *
 	return r != nil, nil
 }
 
-type ExitDescriptor struct {
-	PubKey         phase0.BLSPubKey
-	ValidatorIndex phase0.ValidatorIndex
-	Slot           phase0.Slot
-}
-
-func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.ContractValidatorExited) (*ExitDescriptor, error) {
+func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.ContractValidatorExited) (*duties.ExitDescriptor, error) {
 	logger := eh.logger.With(
 		fields.EventName(ValidatorExited),
 		fields.TxHash(event.Raw.TxHash),
@@ -509,10 +504,10 @@ func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.Co
 	pk := phase0.BLSPubKey{}
 	copy(pk[:], share.ValidatorPubKey)
 
-	ed := &ExitDescriptor{
+	ed := &duties.ExitDescriptor{
 		PubKey:         pk,
 		ValidatorIndex: share.BeaconMetadata.Index,
-		Slot:           eh.networkConfig.Beacon.EstimatedCurrentSlot(),
+		BlockNumber:    event.Raw.BlockNumber,
 	}
 
 	return ed, nil

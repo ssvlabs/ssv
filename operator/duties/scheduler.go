@@ -18,6 +18,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/beacon/goclient"
+	"github.com/bloxapp/ssv/eth/executionclient"
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/networkconfig"
@@ -73,10 +74,12 @@ type ExecuteDutyFunc func(logger *zap.Logger, duty *spectypes.Duty)
 type SchedulerOptions struct {
 	Ctx                 context.Context
 	BeaconNode          BeaconNode
+	ExecutionClient     *executionclient.ExecutionClient
 	Network             networkconfig.NetworkConfig
 	ValidatorController ValidatorController
 	ExecuteDuty         ExecuteDutyFunc
 	IndicesChg          chan struct{}
+	ValidatorExitCh     <-chan ExitDescriptor
 	SlotTickerProvider  slotticker.Provider
 	BuilderProposals    bool
 	DutyStore           *dutystore.Store
@@ -84,6 +87,7 @@ type SchedulerOptions struct {
 
 type Scheduler struct {
 	beaconNode          BeaconNode
+	executionClient     *executionclient.ExecutionClient
 	network             networkconfig.NetworkConfig
 	validatorController ValidatorController
 	slotTickerProvider  slotticker.Provider
@@ -113,6 +117,7 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 
 	s := &Scheduler{
 		beaconNode:          opts.BeaconNode,
+		executionClient:     opts.ExecutionClient,
 		network:             opts.Network,
 		slotTickerProvider:  opts.SlotTickerProvider,
 		executeDuty:         opts.ExecuteDuty,
@@ -125,6 +130,7 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 			NewAttesterHandler(dutyStore.Attester),
 			NewProposerHandler(dutyStore.Proposer),
 			NewSyncCommitteeHandler(dutyStore.SyncCommittee),
+			NewVoluntaryExitHandler(opts.ValidatorExitCh),
 		},
 
 		ticker:   opts.SlotTickerProvider(),
@@ -159,8 +165,6 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 	reorgFeed := NewEventFeed[ReorgEvent]()
 
 	for _, handler := range s.handlers {
-		handler := handler
-
 		indicesChangeCh := make(chan struct{})
 		indicesChangeFeed.Subscribe(indicesChangeCh)
 		reorgCh := make(chan ReorgEvent)
@@ -170,6 +174,7 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 			handler.Name(),
 			logger,
 			s.beaconNode,
+			s.executionClient,
 			s.network,
 			s.validatorController,
 			s.ExecuteDuties,
@@ -178,6 +183,7 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 			indicesChangeCh,
 		)
 
+		handler := handler
 		s.pool.Go(func(ctx context.Context) error {
 			// Wait for the head event subscription to complete before starting the handler.
 			handler.HandleDuties(ctx)

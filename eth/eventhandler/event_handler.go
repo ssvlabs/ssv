@@ -53,7 +53,7 @@ type taskExecutor interface {
 	LiquidateCluster(owner ethcommon.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
 	ReactivateCluster(owner ethcommon.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error
 	UpdateFeeRecipient(owner, recipient ethcommon.Address) error
-	ExitValidator(pubKey phase0.BLSPubKey, slot phase0.Slot, validatorIndex phase0.ValidatorIndex) error
+	ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex) error
 }
 
 type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
@@ -427,7 +427,7 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 			return nil, nil
 		}
 
-		task := NewExitValidatorTask(eh.taskExecutor, exitDescriptor.PubKey, exitDescriptor.Slot, exitDescriptor.ValidatorIndex)
+		task := NewExitValidatorTask(eh.taskExecutor, exitDescriptor.PubKey, exitDescriptor.BlockNumber, exitDescriptor.ValidatorIndex)
 		return task, nil
 
 	default:

@@ -244,6 +244,15 @@ func (ec *ExecutionClient) Healthy(ctx context.Context) error {
 	return nil
 }
 
+func (ec *ExecutionClient) BlockTime(ctx context.Context, blockNumber uint64) (time.Time, error) {
+	block, err := ec.client.BlockByNumber(ctx, new(big.Int).SetUint64(blockNumber))
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	return time.Unix(int64(block.Time()), 0), nil
+}
+
 func (ec *ExecutionClient) isClosed() bool {
 	select {
 	case <-ec.closed:

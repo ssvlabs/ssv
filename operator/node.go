@@ -95,9 +95,11 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 		dutyScheduler: duties.NewScheduler(&duties.SchedulerOptions{
 			Ctx:                 opts.Context,
 			BeaconNode:          opts.BeaconNode,
+			ExecutionClient:     opts.ExecutionClient,
 			Network:             opts.Network,
 			ValidatorController: opts.ValidatorController,
 			IndicesChg:          opts.ValidatorController.IndicesChangeChan(),
+			ValidatorExitCh:     opts.ValidatorController.ValidatorExitChan(),
 			ExecuteDuty:         opts.ValidatorController.ExecuteDuty,
 			BuilderProposals:    opts.ValidatorOptions.BuilderProposals,
 			DutyStore:           opts.DutyStore,

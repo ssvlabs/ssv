@@ -25,6 +25,7 @@ import (
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/message/validation"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/operator/duties"
 	nodestorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validatorsmap"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
@@ -107,13 +108,14 @@ type Controller interface {
 	GetOperatorData() *registrystorage.OperatorData
 	SetOperatorData(data *registrystorage.OperatorData)
 	IndicesChangeChan() chan struct{}
+	ValidatorExitChan() <-chan duties.ExitDescriptor
 
 	StartValidator(share *ssvtypes.SSVShare) error
 	StopValidator(pubKey spectypes.ValidatorPK) error
 	LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
 	ReactivateCluster(owner common.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error
 	UpdateFeeRecipient(owner, recipient common.Address) error
-	ExitValidator(pubKey phase0.BLSPubKey, slot phase0.Slot, validatorIndex phase0.ValidatorIndex) error
+	ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex) error
 }
 
 type nonCommitteeValidator struct {
@@ -159,6 +161,7 @@ type controller struct {
 	recentlyStartedValidators uint64
 	metadataLastUpdated       map[string]time.Time
 	indicesChange             chan struct{}
+	validatorExitCh           chan duties.ExitDescriptor
 }
 
 // NewController creates a new validator controller instance
@@ -236,6 +239,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		),
 		metadataLastUpdated: make(map[string]time.Time),
 		indicesChange:       make(chan struct{}),
+		validatorExitCh:     make(chan duties.ExitDescriptor),
 
 		messageValidator: options.MessageValidator,
 	}
@@ -276,6 +280,10 @@ func (c *controller) SetOperatorData(data *registrystorage.OperatorData) {
 
 func (c *controller) IndicesChangeChan() chan struct{} {
 	return c.indicesChange
+}
+
+func (c *controller) ValidatorExitChan() <-chan duties.ExitDescriptor {
+	return c.validatorExitCh
 }
 
 func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
