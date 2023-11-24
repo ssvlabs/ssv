@@ -149,6 +149,9 @@ type ReorgEvent struct {
 	Current  bool
 }
 
+// Start initializes the Scheduler and begins its operation.
+// Note: This function includes blocking operations, especially within the handler's HandleInitialDuties call,
+// which will block until initial duties are fully handled.
 func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 	logger = logger.Named(logging.NameDutyScheduler)
 	logger.Info("duty scheduler started")
@@ -182,6 +185,9 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 			reorgCh,
 			indicesChangeCh,
 		)
+
+		// This call is blocking
+		handler.HandleInitialDuties(ctx)
 
 		handler := handler
 		s.pool.Go(func(ctx context.Context) error {

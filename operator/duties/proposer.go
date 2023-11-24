@@ -106,6 +106,12 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 	}
 }
 
+func (h *ProposerHandler) HandleInitialDuties(ctx context.Context) {
+	slot := h.network.Beacon.EstimatedCurrentSlot()
+	epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
+	h.processFetching(ctx, epoch, slot)
+}
+
 func (h *ProposerHandler) processFetching(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
 	ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
 	defer cancel()

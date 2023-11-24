@@ -77,6 +77,14 @@ type messageValidator struct {
 	dutyStore               *dutystore.Store
 	ownOperatorID           spectypes.OperatorID
 	operatorIDToPubkeyCache *hashmap.Map[spectypes.OperatorID, *rsa.PublicKey]
+
+	// validationLocks is a map of lock per SSV message ID to
+	// prevent concurrent access to the same state.
+	validationLocks map[spectypes.MessageID]*sync.Mutex
+	validationMutex sync.Mutex
+
+	selfPID    peer.ID
+	selfAccept bool
 }
 
 // NewMessageValidator returns a new MessageValidator with the given network configuration and options.
@@ -86,6 +94,7 @@ func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) Mes
 		metrics:                 &nopMetrics{},
 		netCfg:                  netCfg,
 		operatorIDToPubkeyCache: hashmap.New[spectypes.OperatorID, *rsa.PublicKey](),
+		validationLocks:         make(map[spectypes.MessageID]*sync.Mutex),
 	}
 
 	for _, opt := range opts {
@@ -130,6 +139,14 @@ func WithOwnOperatorID(id spectypes.OperatorID) Option {
 func WithNodeStorage(nodeStorage operatorstorage.Storage) Option {
 	return func(mv *messageValidator) {
 		mv.nodeStorage = nodeStorage
+	}
+}
+
+// WithSelfAccept blindly accepts messages sent from self. Useful for testing.
+func WithSelfAccept(selfPID peer.ID, selfAccept bool) Option {
+	return func(mv *messageValidator) {
+		mv.selfPID = selfPID
+		mv.selfAccept = selfAccept
 	}
 }
 
@@ -212,6 +229,13 @@ func (mv *messageValidator) ValidatorForTopic(_ string) func(ctx context.Context
 // ValidatePubsubMessage validates the given pubsub message.
 // Depending on the outcome, it will return one of the pubsub validation results (Accept, Ignore, or Reject).
 func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+	if mv.selfAccept && peerID == mv.selfPID {
+		msg, _ := commons.DecodeNetworkMsg(pmsg.Data)
+		decMsg, _ := queue.DecodeSSVMessage(msg)
+		pmsg.ValidatorData = decMsg
+		return pubsub.ValidationAccept
+	}
+
 	start := time.Now()
 	var validationDurationLabels []string // TODO: implement
 
@@ -226,12 +250,14 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer
 		round = descriptor.Consensus.Round
 	}
 
+	f := append(descriptor.Fields(), fields.PeerID(peerID))
+
 	if err != nil {
 		var valErr Error
 		if errors.As(err, &valErr) {
 			if valErr.Reject() {
 				if !valErr.Silent() {
-					f := append(descriptor.Fields(), zap.Error(err))
+					f = append(f, zap.Error(err))
 					mv.logger.Debug("rejecting invalid message", f...)
 				}
 
@@ -240,7 +266,7 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer
 			}
 
 			if !valErr.Silent() {
-				f := append(descriptor.Fields(), zap.Error(err))
+				f = append(f, zap.Error(err))
 				mv.logger.Debug("ignoring invalid message", f...)
 			}
 			mv.metrics.MessageIgnored(valErr.Text(), descriptor.Role, round)
@@ -248,7 +274,7 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer
 		}
 
 		mv.metrics.MessageIgnored(err.Error(), descriptor.Role, round)
-		f := append(descriptor.Fields(), zap.Error(err))
+		f = append(f, zap.Error(err))
 		mv.logger.Debug("ignoring invalid message", f...)
 		return pubsub.ValidationIgnore
 	}
@@ -277,7 +303,7 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 	var signatureVerifier func() error
 
 	currentEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Unix()))
-	if currentEpoch > mv.netCfg.RSAForkEpoch {
+	if currentEpoch > mv.netCfg.PermissionlessActivationEpoch {
 		decMessageData, operatorID, signature, err := commons.DecodeSignedSSVMessage(messageData)
 		messageData = decMessageData
 		if err != nil {
@@ -411,6 +437,17 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 		e.innerErr = err
 		return nil, descriptor, e
 	}
+
+	// Lock this SSV message ID to prevent concurrent access to the same state.
+	mv.validationMutex.Lock()
+	mutex, ok := mv.validationLocks[msg.GetID()]
+	if !ok {
+		mutex = &sync.Mutex{}
+		mv.validationLocks[msg.GetID()] = mutex
+	}
+	mutex.Lock()
+	defer mutex.Unlock()
+	mv.validationMutex.Unlock()
 
 	descriptor.SSVMessageType = ssvMessage.MsgType
 

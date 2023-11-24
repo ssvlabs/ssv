@@ -10,6 +10,8 @@ import (
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/libp2p/go-libp2p"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	libp2ptcp "github.com/libp2p/go-libp2p/p2p/transport/tcp"
 	ma "github.com/multiformats/go-multiaddr"
@@ -86,12 +88,13 @@ type Config struct {
 
 	GetValidatorStats network.GetValidatorStats
 
-	PermissionedActivateEpoch   uint64 `yaml:"PermissionedActivateEpoch" env:"PERMISSIONED_ACTIVE_EPOCH" env-default:"0" env-description:"On which epoch to start only accepting peers that are operators registered in the contract"`
-	PermissionedDeactivateEpoch uint64 `yaml:"PermissionedDeactivateEpoch" env:"PERMISSIONED_DEACTIVE_EPOCH" env-default:"99999999999999" env-description:"On which epoch to start accepting operators all peers"`
-
 	Permissioned func() bool // this is not loaded from config file but set up in full node setup
-	// WhitelistedOperatorKeys is an array of Operator Public Key PEMs not registered in the contract with which the node will accept connections
-	WhitelistedOperatorKeys []string `yaml:"WhitelistedOperatorKeys" env:"WHITELISTED_KEYS" env-description:"Operators' keys not registered in the contract with which the node will accept connections"`
+
+	// PeerScoreInspector is called periodically to inspect the peer scores.
+	PeerScoreInspector func(peerMap map[peer.ID]*pubsub.PeerScoreSnapshot)
+
+	// PeerScoreInspectorInterval is the interval at which the PeerScoreInspector is called.
+	PeerScoreInspectorInterval time.Duration
 }
 
 // Libp2pOptions creates options list for the libp2p host

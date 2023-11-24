@@ -9,62 +9,77 @@ import (
 )
 
 const (
-	gossipThreshold              = -4000
-	defaultIPColocationThreshold = 10 // TODO: check a lower value such as in ETH (3)
+	// Thresholds
+	gossipThreshold             = -4000
+	publishThreshold            = -8000
+	graylistThreshold           = -16000
+	acceptPXThreshold           = 100
+	opportunisticGraftThreshold = 5
+
+	// Overall parameters
+	topicScoreCap = 32.72
+	decayInterval = 32 * (time.Second * 12) // One epoch
+	decayToZero   = 0.01
+	retainScore   = 100 * 32 * 12 * time.Second
+
+	// P5
+	appSpecificWeight = 0
+
+	// P6
+	ipColocationFactorThreshold = 10
+	ipColocationFactorWeight    = -topicScoreCap
+
+	// P7
+	behaviourPenaltyThreshold = 6
 )
 
 // PeerScoreThresholds returns the thresholds to use for peer scoring
 func PeerScoreThresholds() *pubsub.PeerScoreThresholds {
 	return &pubsub.PeerScoreThresholds{
 		GossipThreshold:             gossipThreshold,
-		PublishThreshold:            -8000,
-		GraylistThreshold:           -16000,
-		AcceptPXThreshold:           100,
-		OpportunisticGraftThreshold: 5,
+		PublishThreshold:            publishThreshold,
+		GraylistThreshold:           graylistThreshold,
+		AcceptPXThreshold:           acceptPXThreshold,
+		OpportunisticGraftThreshold: opportunisticGraftThreshold,
 	}
 }
 
 // PeerScoreParams returns peer score params according to the given options
-func PeerScoreParams(oneEpoch, msgIDCacheTTL time.Duration, ipColocationWeight float64, ipColocationThreshold int, ipWhilelist ...*net.IPNet) *pubsub.PeerScoreParams {
+func PeerScoreParams(oneEpoch, msgIDCacheTTL time.Duration, ipWhilelist ...*net.IPNet) *pubsub.PeerScoreParams {
 	if oneEpoch == 0 {
 		oneEpoch = oneEpochDuration
 	}
 
-	maxPositiveScore := (maxInMeshScore + maxFirstDeliveryScore) * (subnetTopicsWeight)
-	topicScoreCap := maxPositiveScore / 4.0 // ETH divides by 2, we use lower value to reduce cap
-
-	behaviourPenaltyThreshold := 10.0 // using a larger threshold than ETH (6) to reduce the effect of behavioural penalty
-	behaviourPenaltyDecay := scoreDecay(oneEpoch*10, oneEpoch)
-	// TODO: rate (10.0) should be injected to this function
-	targetVal, _ := decayConvergence(behaviourPenaltyDecay, 10.0/slotsPerEpoch)
+	// P7 calculation
+	behaviourPenaltyDecay := scoreDecay(oneEpoch*10, decayInterval)
+	maxAllowedRatePerDecayInterval := 10.0
+	targetVal, _ := decayConvergence(behaviourPenaltyDecay, maxAllowedRatePerDecayInterval)
 	targetVal = targetVal - behaviourPenaltyThreshold
 	behaviourPenaltyWeight := gossipThreshold / (targetVal * targetVal)
 
-	if ipColocationWeight == 0 {
-		ipColocationWeight = -topicScoreCap
-	}
-	if ipColocationThreshold == 0 {
-		ipColocationThreshold = defaultIPColocationThreshold
-	}
 	return &pubsub.PeerScoreParams{
-		Topics:        make(map[string]*pubsub.TopicScoreParams),
+		Topics: make(map[string]*pubsub.TopicScoreParams),
+		// Overall parameters
 		TopicScoreCap: topicScoreCap,
+		DecayInterval: decayInterval,
+		DecayToZero:   decayToZero,
+		RetainScore:   retainScore,
+		SeenMsgTTL:    msgIDCacheTTL,
+
+		// P5
 		AppSpecificScore: func(p peer.ID) float64 {
-			// TODO: implement
 			return 0
 		},
-		AppSpecificWeight:           1,
-		IPColocationFactorWeight:    ipColocationWeight,
-		IPColocationFactorThreshold: ipColocationThreshold,
+		AppSpecificWeight: appSpecificWeight,
+
+		// P6
+		IPColocationFactorWeight:    ipColocationFactorWeight,
+		IPColocationFactorThreshold: ipColocationFactorThreshold,
 		IPColocationFactorWhitelist: ipWhilelist,
-		SeenMsgTTL:                  msgIDCacheTTL,
-		BehaviourPenaltyWeight:      behaviourPenaltyWeight,
-		BehaviourPenaltyThreshold:   behaviourPenaltyThreshold,
-		BehaviourPenaltyDecay:       behaviourPenaltyDecay,
-		DecayInterval:               oneEpoch,
-		DecayToZero:                 decayToZero,
-		// RetainScore is the time to remember counters for a disconnected peer
-		// TODO: ETH uses 100 epoch, we reduced it to 10 until scoring will be more mature
-		RetainScore: oneEpoch * 10,
+
+		// P7
+		BehaviourPenaltyWeight:    behaviourPenaltyWeight,
+		BehaviourPenaltyThreshold: behaviourPenaltyThreshold,
+		BehaviourPenaltyDecay:     behaviourPenaltyDecay,
 	}
 }

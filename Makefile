@@ -90,7 +90,7 @@ docker-integration-test:
 #Build
 .PHONY: build
 build:
-	CGO_ENABLED=1 go build -o ./bin/ssvnode -ldflags "-X main.Version=`git describe --tags $(git rev-list --tags --max-count=1)`" ./cmd/ssvnode/
+	CGO_ENABLED=1 go build -o ./bin/ssvnode -ldflags "-X main.Commit=`git rev-parse HEAD` -X main.Branch=`git symbolic-ref --short HEAD` -X main.Version=`git describe --tags $(git rev-list --tags --max-count=1)`" ./cmd/ssvnode/
 
 .PHONY: start-node
 start-node:

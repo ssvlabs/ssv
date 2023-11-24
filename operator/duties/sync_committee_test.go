@@ -96,8 +96,9 @@ func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 		dutiesMap   = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
 	)
 	currentSlot.SetSlot(phase0.Slot(1))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool := setupSchedulerAndMocks(t, handler, currentSlot)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, dutiesMap)
+	startFn()
 
 	dutiesMap.Set(0, []*v1.SyncCommitteeDuty{
 		{
@@ -155,8 +156,9 @@ func TestScheduler_SyncCommittee_Current_Next_Periods(t *testing.T) {
 		dutiesMap   = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
 	)
 	currentSlot.SetSlot(phase0.Slot(256*32 - 49))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool := setupSchedulerAndMocks(t, handler, currentSlot)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, dutiesMap)
+	startFn()
 
 	dutiesMap.Set(0, []*v1.SyncCommitteeDuty{
 		{
@@ -222,8 +224,9 @@ func TestScheduler_SyncCommittee_Indices_Changed(t *testing.T) {
 		dutiesMap   = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
 	)
 	currentSlot.SetSlot(phase0.Slot(256*32 - 3))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool := setupSchedulerAndMocks(t, handler, currentSlot)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, dutiesMap)
+	startFn()
 
 	dutiesMap.Set(1, []*v1.SyncCommitteeDuty{
 		{
@@ -276,8 +279,9 @@ func TestScheduler_SyncCommittee_Multiple_Indices_Changed_Same_Slot(t *testing.T
 		dutiesMap   = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
 	)
 	currentSlot.SetSlot(phase0.Slot(256*32 - 3))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool := setupSchedulerAndMocks(t, handler, currentSlot)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, dutiesMap)
+	startFn()
 
 	// STEP 1: wait for no action to be taken
 	ticker.Send(currentSlot.GetSlot())
@@ -334,8 +338,9 @@ func TestScheduler_SyncCommittee_Reorg_Current(t *testing.T) {
 		dutiesMap   = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
 	)
 	currentSlot.SetSlot(phase0.Slot(256*32 - 3))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool := setupSchedulerAndMocks(t, handler, currentSlot)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, dutiesMap)
+	startFn()
 
 	dutiesMap.Set(1, []*v1.SyncCommitteeDuty{
 		{
@@ -406,8 +411,9 @@ func TestScheduler_SyncCommittee_Reorg_Current_Indices_Changed(t *testing.T) {
 		dutiesMap   = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
 	)
 	currentSlot.SetSlot(phase0.Slot(256*32 - 3))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool := setupSchedulerAndMocks(t, handler, currentSlot)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, dutiesMap)
+	startFn()
 
 	dutiesMap.Set(1, []*v1.SyncCommitteeDuty{
 		{
@@ -486,8 +492,9 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 		dutiesMap   = hashmap.New[uint64, []*v1.SyncCommitteeDuty]()
 	)
 	currentSlot.SetSlot(phase0.Slot(0))
-	scheduler, logger, ticker, timeout, cancel, schedulerPool := setupSchedulerAndMocks(t, handler, currentSlot)
+	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocks(t, handler, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupSyncCommitteeDutiesMock(scheduler, dutiesMap)
+	startFn()
 
 	dutiesMap.Set(0, []*v1.SyncCommitteeDuty{
 		{
