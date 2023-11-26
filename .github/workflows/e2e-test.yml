@@ -1,0 +1,26 @@
+name: E2E Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Run e2e.sh
+        run: |
+          chmod +x ./e2e/run.sh
+          ./e2e/run.sh
+
+      - name: Clean up
+        run: docker-compose down

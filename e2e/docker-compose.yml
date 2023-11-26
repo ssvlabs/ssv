@@ -1,0 +1,86 @@
+version: "3.8"
+services:
+  x-base: &default-base
+    depends_on:
+      - beacon_proxy
+    build:
+      context: ../
+      dockerfile: Dockerfile
+    image: ssvnode:latest
+    command: make BUILD_PATH=/go/bin/ssvnode start-node
+    networks:
+      - blox-docker
+    restart: always
+    environment:
+      CONFIG_PATH: ./config/config.yaml
+
+  ssv-node-1:
+    <<: *default-base
+    container_name: ssv-node-1
+    environment:
+      CONFIG_PATH: ./config/config.yaml
+      SHARE_CONFIG: ./config/share1.yaml
+    ports:
+      - 16001:16000
+      - 15001:15000
+    volumes:
+      - ssv-node-1-data:/data
+
+  ssv-node-2:
+    <<: *default-base
+    container_name: ssv-node-1
+    environment:
+      CONFIG_PATH: ./config/config.yaml
+      SHARE_CONFIG: ./config/share1.yaml
+    ports:
+      - 16002:16000
+      - 15002:15000
+    volumes:
+      - ssv-node-2-data:/data
+
+  ssv-node-3:
+    <<: *default-base
+    container_name: ssv-node-1
+    environment:
+      CONFIG_PATH: ./config/config.yaml
+      SHARE_CONFIG: ./config/share1.yaml
+    ports:
+      - 16003:16000
+      - 15003:15000
+    volumes:
+      - ssv-node-3-data:/data
+
+  ssv-node-4:
+    <<: *default-base
+    container_name: ssv-node-1
+    environment:
+      CONFIG_PATH: ./config/config.yaml
+      SHARE_CONFIG: ./config/share1.yaml
+    ports:
+      - 16004:16000
+      - 15004:15000
+    volumes:
+      - ssv-node-4-data:/data
+
+  beacon_proxy:
+    build:
+      context: ../
+      dockerfile: Dockerfile
+    image: ssvnode:latest
+    command: make BUILD_PATH=/go/bin/ssvnode start-node
+    networks:
+      - blox-docker
+
+volumes:
+  ssv-node-1-data:
+    driver: local
+  ssv-node-2-data:
+    driver: local
+  ssv-node-3-data:
+    driver: local
+  ssv-node-4-data:
+    driver: local
+
+networks:
+  blox-docker:
+    driver: bridge
