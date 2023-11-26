@@ -9,6 +9,7 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
@@ -41,6 +42,8 @@ const (
 	messageAccepted = "accepted"
 	messageIgnored  = "ignored"
 	messageRejected = "rejected"
+
+	isPeerMetricsEnabled = true
 )
 
 var (
@@ -137,6 +140,18 @@ var (
 		Name: "ssv_message_non_committee",
 		Help: "The amount of messages not in committee",
 	}, []string{"ssv_msg_type", "decided"})
+	messagesReceivedFromPeer = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_messages_received_from_peer",
+		Help: "The amount of messages received from the specific peer",
+	}, []string{"peer_id"})
+	messagesReceivedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_messages_received_total",
+		Help: "The amount of messages total received",
+	}, []string{})
+	messageValidationRSAVerifications = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_message_validation_rsa_checks",
+		Help: "The amount message validations",
+	}, []string{})
 )
 
 type MetricsReporter struct {
@@ -176,6 +191,9 @@ func New(opts ...Option) *MetricsReporter {
 		messageTimeInQueue,
 		inCommitteeMessages,
 		nonCommitteeMessages,
+		messagesReceivedFromPeer,
+		messagesReceivedTotal,
+		messageValidationRSAVerifications,
 	}
 
 	for i, c := range allMetrics {
@@ -260,6 +278,20 @@ func (m *MetricsReporter) EventProcessed(eventName string) {
 
 func (m *MetricsReporter) EventProcessingFailed(eventName string) {
 	eventProcessingFailed.WithLabelValues(eventName).Inc()
+}
+
+func (m *MetricsReporter) MessagesReceivedFromPeer(peerId peer.ID) {
+	if isPeerMetricsEnabled {
+		messagesReceivedFromPeer.WithLabelValues(peerId.String()).Inc()
+	}
+}
+
+func (m *MetricsReporter) MessagesReceivedTotal() {
+	messagesReceivedTotal.WithLabelValues().Inc()
+}
+
+func (m *MetricsReporter) MessageValidationRSAVerifications() {
+	messageValidationRSAVerifications.WithLabelValues().Inc()
 }
 
 // TODO implement
@@ -370,4 +402,11 @@ func (m *MetricsReporter) NonCommitteeMessage(msgType spectypes.MsgType, decided
 		str = "decided"
 	}
 	nonCommitteeMessages.WithLabelValues(ssvmessage.MsgTypeToString(msgType), str).Inc()
+}
+
+// DeletePeerInfo deletes all data about peers which connections have been closed by the current node
+func (m *MetricsReporter) DeletePeerInfo(peerId peer.ID) {
+	if isPeerMetricsEnabled {
+		messagesReceivedFromPeer.DeleteLabelValues(peerId.String())
+	}
 }

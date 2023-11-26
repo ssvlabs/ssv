@@ -30,10 +30,19 @@ type connHandler struct {
 	subnetsIndex    peers.SubnetsIndex
 	connIdx         peers.ConnectionIndex
 	peerInfos       peers.PeerInfoIndex
+	metrics         MetricsReporter
 }
 
 // NewConnHandler creates a new connection handler
-func NewConnHandler(ctx context.Context, handshaker Handshaker, subnetsProvider SubnetsProvider, subnetsIndex peers.SubnetsIndex, connIdx peers.ConnectionIndex, peerInfos peers.PeerInfoIndex) ConnHandler {
+func NewConnHandler(
+	ctx context.Context,
+	handshaker Handshaker,
+	subnetsProvider SubnetsProvider,
+	subnetsIndex peers.SubnetsIndex,
+	connIdx peers.ConnectionIndex,
+	peerInfos peers.PeerInfoIndex,
+	mr MetricsReporter,
+) ConnHandler {
 	return &connHandler{
 		ctx:             ctx,
 		handshaker:      handshaker,
@@ -41,6 +50,7 @@ func NewConnHandler(ctx context.Context, handshaker Handshaker, subnetsProvider 
 		subnetsIndex:    subnetsIndex,
 		connIdx:         connIdx,
 		peerInfos:       peerInfos,
+		metrics:         mr,
 	}
 }
 
@@ -190,6 +200,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 
 			metricsConnections.Dec()
 			ch.peerInfos.SetState(conn.RemotePeer(), peers.StateDisconnected)
+			ch.metrics.DeletePeerInfo(conn.RemotePeer())
 
 			logger := connLogger(conn)
 			logger.Debug("peer disconnected")

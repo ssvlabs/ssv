@@ -1,8 +1,9 @@
 package metrics
 
 import (
-	"go.uber.org/zap"
 	"time"
+
+	"go.uber.org/zap"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -55,6 +56,14 @@ var (
 		Name: "ssv_validator_roles_failed",
 		Help: "Submitted roles",
 	}, []string{"role"})
+	metricsDutiesCreated = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_duties_created",
+		Help: "Number of created duties",
+	}, []string{})
+	metricsDutiesDecided = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_duties_finalized",
+		Help: "Number of finalized duties",
+	}, []string{})
 )
 
 func init() {
@@ -85,6 +94,8 @@ type ConsensusMetrics struct {
 	dutyFullFlowFirstRound         prometheus.Observer
 	rolesSubmitted                 prometheus.Counter
 	rolesSubmissionFailures        prometheus.Counter
+	metricsDutiesCreated           prometheus.Counter
+	metricsDutiesDecided           prometheus.Counter
 	preConsensusStart              time.Time
 	consensusStart                 time.Time
 	postConsensusStart             time.Time
@@ -103,6 +114,8 @@ func NewConsensusMetrics(role spectypes.BeaconRole) ConsensusMetrics {
 		dutyFullFlowFirstRound:  metricsDutyFullFlowFirstRoundDuration.WithLabelValues(values...),
 		rolesSubmitted:          metricsRolesSubmitted.WithLabelValues(values...),
 		rolesSubmissionFailures: metricsRolesSubmissionFailures.WithLabelValues(values...),
+		metricsDutiesCreated:    metricsDutiesCreated.WithLabelValues(),
+		metricsDutiesDecided:    metricsDutiesDecided.WithLabelValues(),
 	}
 }
 
@@ -125,6 +138,7 @@ func (cm *ConsensusMetrics) EndPreConsensus() {
 func (cm *ConsensusMetrics) StartConsensus() {
 	if cm != nil {
 		cm.consensusStart = time.Now()
+		cm.metricsDutiesCreated.Inc()
 	}
 }
 
@@ -133,6 +147,7 @@ func (cm *ConsensusMetrics) EndConsensus() {
 	if cm != nil && cm.consensus != nil && !cm.consensusStart.IsZero() {
 		cm.consensus.Observe(time.Since(cm.consensusStart).Seconds())
 		cm.consensusStart = time.Time{}
+		cm.metricsDutiesDecided.Inc()
 	}
 }
 

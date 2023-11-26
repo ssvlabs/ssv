@@ -24,20 +24,33 @@ var (
 		Name: "ssv:p2p:pubsub:score:inspect",
 		Help: "Gauge for negative peer scores",
 	}, []string{"pid"})
+
+	// invalidMessageDeliveries value per topic
+	metricPubSubPeerP4Score = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:p2p:pubsub:score:invalid_message_deliveries",
+		Help: "Invalid message deliveries",
+	}, []string{"topic", "pid"})
 )
 
 func init() {
 	logger := zap.L()
-	if err := prometheus.Register(metricPubsubTrace); err != nil {
-		logger.Debug("could not register prometheus collector")
+
+	allMetrics := []prometheus.Collector{
+		metricPubsubTrace,
+		metricPubsubOutbound,
+		metricPubsubInbound,
+		metricPubsubPeerScoreInspect,
+		metricPubSubPeerP4Score,
 	}
-	if err := prometheus.Register(metricPubsubOutbound); err != nil {
-		logger.Debug("could not register prometheus collector")
+
+	for i, c := range allMetrics {
+		if err := prometheus.Register(c); err != nil {
+			// TODO: think how to print metric name
+			logger.Debug("could not register prometheus collector",
+				zap.Int("index", i),
+				zap.Error(err),
+			)
+		}
 	}
-	if err := prometheus.Register(metricPubsubInbound); err != nil {
-		logger.Debug("could not register prometheus collector")
-	}
-	if err := prometheus.Register(metricPubsubPeerScoreInspect); err != nil {
-		logger.Debug("could not register prometheus collector")
-	}
+
 }

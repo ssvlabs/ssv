@@ -1,10 +1,16 @@
 package connections
 
 import (
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 )
+
+type MetricsReporter interface {
+	MessagesReceivedFromPeer(peer.ID)
+	DeletePeerInfo(peerId peer.ID)
+}
 
 var (
 	metricsStreams = promauto.NewGaugeVec(prometheus.GaugeOpts{
