@@ -18,9 +18,9 @@ import (
 func (i *Instance) uponPrepare(
 	logger *zap.Logger,
 	signedPrepare *specqbft.SignedMessage,
-	prepareMsgContainer,
-	commitMsgContainer *specqbft.MsgContainer) error {
+	prepareMsgContainer *specqbft.MsgContainer) error {
 
+	hasQuorumBefore := i.State.Share.HasQuorum(len(prepareMsgContainer.MessagesForRound(i.State.Round)))
 	addedMsg, err := prepareMsgContainer.AddFirstMsgForSignerAndRound(signedPrepare)
 	if err != nil {
 		return errors.Wrap(err, "could not add prepare msg to container")
@@ -34,12 +34,12 @@ func (i *Instance) uponPrepare(
 		zap.Any("prepare-signers", signedPrepare.Signers),
 		fields.Root(signedPrepare.Message.Root))
 
-	if !specqbft.HasQuorum(i.State.Share, prepareMsgContainer.MessagesForRound(i.State.Round)) {
-		return nil // no quorum yet
+	if hasQuorumBefore {
+		return nil // already moved to commit stage
 	}
 
-	if didSendCommitForHeightAndRound(i.State, commitMsgContainer) {
-		return nil // already moved to commit stage
+	if !specqbft.HasQuorum(i.State.Share, prepareMsgContainer.MessagesForRound(i.State.Round)) {
+		return nil // no quorum yet
 	}
 
 	proposedRoot := i.State.ProposalAcceptedForCurrentRound.Message.Root
