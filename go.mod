@@ -14,7 +14,7 @@ require (
 	github.com/dgraph-io/ristretto v0.1.1
 	github.com/ethereum/go-ethereum v1.12.2
 	github.com/ferranbt/fastssz v0.1.3
-	github.com/go-chi/chi/v5 v5.0.8
+	github.com/go-chi/chi/v5 v5.0.10
 	github.com/go-chi/render v1.0.2
 	github.com/golang/mock v1.6.0
 	github.com/google/uuid v1.3.0
