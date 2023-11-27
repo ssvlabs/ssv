@@ -109,13 +109,20 @@ func (c *controller) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, 
 		zap.Uint64("validator_index", uint64(validatorIndex)),
 	)
 
-	c.validatorExitCh <- duties.ExitDescriptor{
+	exitDesc := duties.ExitDescriptor{
 		PubKey:         pubKey,
 		ValidatorIndex: validatorIndex,
 		BlockNumber:    blockNumber,
 	}
 
-	logger.Debug("added voluntary exit task to pipeline")
+	go func() {
+		select {
+		case c.validatorExitCh <- exitDesc:
+			logger.Debug("added voluntary exit task to pipeline")
+		case <-time.After(2 * c.beacon.GetBeaconNetwork().SlotDurationSec()):
+			logger.Error("failed to schedule ExitValidator duty!")
+		}
+	}()
 
 	return nil
 }
