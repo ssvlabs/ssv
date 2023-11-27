@@ -26,9 +26,11 @@ const (
 	maxFirstDeliveryScore    = 80 // max score a peer can obtain from first deliveries
 
 	// P3
+	// Mesh scording is disabled for now.
 	meshDeliveryDecayEpochs     = time.Duration(16)
 	meshDeliveryDampeningFactor = 1.0 / 50.0
 	meshDeliveryCapFactor       = 16
+	meshScoringEnabled          = false
 
 	// P4
 	invalidMessageDecayEpochs = time.Duration(100)
@@ -212,7 +214,10 @@ func TopicParams(opts Options) (*pubsub.TopicScoreParams, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "could not calculate threshold for mesh message deliveries threshold")
 	}
-	meshMessageDeliveriesWeight := -(opts.maxScore() / (opts.Topic.TopicWeight * math.Pow(meshMessageDeliveriesThreshold, 2)))
+	var meshMessageDeliveriesWeight float64
+	if meshScoringEnabled {
+		meshMessageDeliveriesWeight = -(opts.maxScore() / (opts.Topic.TopicWeight * math.Pow(meshMessageDeliveriesThreshold, 2)))
+	}
 	MeshMessageDeliveriesCap := meshMessageDeliveriesThreshold * opts.Topic.MeshDeliveryCapFactor
 
 	// P4
