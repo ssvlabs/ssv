@@ -239,7 +239,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		),
 		metadataLastUpdated: make(map[string]time.Time),
 		indicesChange:       make(chan struct{}),
-		validatorExitCh:     make(chan duties.ExitDescriptor),
+		validatorExitCh:     make(chan duties.ExitDescriptor, 1024),
 
 		messageValidator: options.MessageValidator,
 	}
