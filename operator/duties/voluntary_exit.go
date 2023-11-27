@@ -52,7 +52,9 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 			var dutiesForExecution, pendingDuties []*spectypes.Duty
 
 			for _, duty := range h.dutyQueue {
-				if duty.Slot <= currentSlot {
+				executionSlot := duty.Slot + voluntaryExitSlotsToPostpone
+
+				if executionSlot <= currentSlot {
 					dutiesForExecution = append(dutiesForExecution, duty)
 				} else {
 					pendingDuties = append(pendingDuties, duty)
@@ -77,21 +79,17 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 			}
 
 			blockSlot := h.network.Beacon.EstimatedSlotAtTime(int64(block.Time()))
-			dutySlot := blockSlot + voluntaryExitSlotsToPostpone
 
 			duty := &spectypes.Duty{
 				Type:           spectypes.BNRoleVoluntaryExit,
 				PubKey:         exitDescriptor.PubKey,
-				Slot:           dutySlot,
+				Slot:           blockSlot,
 				ValidatorIndex: exitDescriptor.ValidatorIndex,
 			}
 
 			h.dutyQueue = append(h.dutyQueue, duty)
 
-			h.logger.Debug("🛠 scheduled duty for execution",
-				zap.Uint64("block_slot", uint64(blockSlot)),
-				zap.Uint64("duty_slot", uint64(dutySlot)),
-			)
+			h.logger.Debug("🛠 scheduled duty for execution", fields.Slot(blockSlot))
 		}
 	}
 }
