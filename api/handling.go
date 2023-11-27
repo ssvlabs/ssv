@@ -4,6 +4,12 @@ import (
 	"net/http"
 
 	"github.com/go-chi/render"
+	"github.com/golang/gddo/httputil"
+)
+
+const (
+	ContentTypePlainText = "text/plain"
+	ContentTypeJSON      = "application/json"
 )
 
 type HandlerFunc func(http.ResponseWriter, *http.Request) error
@@ -23,6 +29,20 @@ func Handler(h HandlerFunc) http.HandlerFunc {
 }
 
 func Render(w http.ResponseWriter, r *http.Request, response any) error {
-	render.JSON(w, r, response)
+	switch NegotiateContentType(r) {
+	case ContentTypePlainText:
+		render.PlainText(w, r, response.(string))
+	case ContentTypeJSON:
+		render.JSON(w, r, response)
+	}
 	return nil
+}
+
+// negotiateContentType parses "Accept:" header and returns preferred content type string.
+func NegotiateContentType(r *http.Request) string {
+	contentTypes := []string{
+		ContentTypePlainText,
+		ContentTypeJSON,
+	}
+	return httputil.NegotiateContentType(r, contentTypes, ContentTypePlainText)
 }
