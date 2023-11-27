@@ -108,7 +108,10 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 
 			h.dutyQueue = append(h.dutyQueue, duty)
 
-			h.logger.Debug("🛠 scheduled duty for execution", fields.Slot(blockSlot))
+			h.logger.Debug("🛠 scheduled duty for execution",
+				fields.Slot(blockSlot),
+				fields.BlockNumber(exitDescriptor.BlockNumber),
+			)
 		}
 	}
 }
