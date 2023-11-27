@@ -63,9 +63,7 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 			var dutiesForExecution, pendingDuties []*spectypes.Duty
 
 			for _, duty := range h.dutyQueue {
-				executionSlot := duty.Slot + voluntaryExitSlotsToPostpone
-
-				if executionSlot <= currentSlot {
+				if duty.Slot <= currentSlot {
 					dutiesForExecution = append(dutiesForExecution, duty)
 				} else {
 					pendingDuties = append(pendingDuties, duty)
@@ -99,17 +97,20 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 				blockSlot = cachedBlock.Value()
 			}
 
+			dutySlot := blockSlot + voluntaryExitSlotsToPostpone
+
 			duty := &spectypes.Duty{
 				Type:           spectypes.BNRoleVoluntaryExit,
 				PubKey:         exitDescriptor.PubKey,
-				Slot:           blockSlot,
+				Slot:           dutySlot,
 				ValidatorIndex: exitDescriptor.ValidatorIndex,
 			}
 
 			h.dutyQueue = append(h.dutyQueue, duty)
 
 			h.logger.Debug("🛠 scheduled duty for execution",
-				fields.Slot(blockSlot),
+				zap.Uint64("block_slot", uint64(blockSlot)),
+				zap.Uint64("duty_slot", uint64(dutySlot)),
 				fields.BlockNumber(exitDescriptor.BlockNumber),
 			)
 		}
