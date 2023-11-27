@@ -48,20 +48,19 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 
 			h.logger.Debug("🛠 ticker event", fields.Slot(currentSlot))
 
-			var dutiesForExecution []*spectypes.Duty
+			var dutiesForExecution, pendingDuties []*spectypes.Duty
 
 			for _, duty := range h.dutyQueue {
-				if duty.Slot > currentSlot {
-					break
+				if duty.Slot <= currentSlot {
+					dutiesForExecution = append(dutiesForExecution, duty)
+				} else {
+					pendingDuties = append(pendingDuties, duty)
 				}
-
-				dutiesForExecution = append(dutiesForExecution, duty)
 			}
 
-			dutyCount := len(dutiesForExecution)
-			h.dutyQueue = h.dutyQueue[dutyCount:]
+			h.dutyQueue = pendingDuties
 
-			if dutyCount != 0 {
+			if dutyCount := len(dutiesForExecution); dutyCount != 0 {
 				h.executeDuties(h.logger, dutiesForExecution)
 				h.logger.Debug("executed voluntary exit duties",
 					fields.Slot(currentSlot),
