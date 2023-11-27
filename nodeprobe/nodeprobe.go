@@ -140,18 +140,24 @@ func (p *Prober) AddNode(name string, node Node) {
 // TODO: string constants are error-prone.
 // Add a method to clients that returns their name or solve this in another way
 func (p *Prober) CheckBeaconNodeHealth(ctx context.Context) error {
+	p.nodesMu.Lock()
+	defer p.nodesMu.Unlock()
 	ctx, cancel := context.WithTimeout(ctx, p.interval)
 	defer cancel()
 	return p.nodes["consensus client"].Healthy(ctx)
 }
 
 func (p *Prober) CheckExecutionNodeHealth(ctx context.Context) error {
+	p.nodesMu.Lock()
+	defer p.nodesMu.Unlock()
 	ctx, cancel := context.WithTimeout(ctx, p.interval)
 	defer cancel()
 	return p.nodes["execution client"].Healthy(ctx)
 }
 
 func (p *Prober) CheckEventSyncerHealth(ctx context.Context) error {
+	p.nodesMu.Lock()
+	defer p.nodesMu.Unlock()
 	ctx, cancel := context.WithTimeout(ctx, p.interval)
 	defer cancel()
 	return p.nodes["event syncer"].Healthy(ctx)
