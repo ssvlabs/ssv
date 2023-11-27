@@ -29,7 +29,7 @@ var (
 	metricPubSubPeerP4Score = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:p2p:pubsub:score:invalid_message_deliveries",
 		Help: "Invalid message deliveries",
-	}, []string{"topic", "pid"})
+	}, []string{"pid"})
 )
 
 func init() {
