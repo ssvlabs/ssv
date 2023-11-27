@@ -2,6 +2,7 @@ package duties
 
 import (
 	"context"
+	"math/big"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -68,14 +69,14 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 			}
 
 		case exitDescriptor := <-h.validatorExitCh:
-			blockTime, err := h.executionClient.BlockTime(ctx, exitDescriptor.BlockNumber)
+			block, err := h.executionClient.BlockByNumber(ctx, new(big.Int).SetUint64(exitDescriptor.BlockNumber))
 			if err != nil {
 				h.logger.Warn("failed to get block time from execution client, skipping voluntary exit duty",
 					zap.Error(err))
 				continue
 			}
 
-			blockSlot := h.network.Beacon.EstimatedSlotAtTime(blockTime.Unix())
+			blockSlot := h.network.Beacon.EstimatedSlotAtTime(int64(block.Time()))
 			dutySlot := blockSlot + voluntaryExitSlotsToPostpone
 
 			duty := &spectypes.Duty{

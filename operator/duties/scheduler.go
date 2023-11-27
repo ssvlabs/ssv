@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math/big"
 	"sync"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prysmaticlabs/prysm/v4/async/event"
@@ -62,7 +64,7 @@ type BeaconNode interface {
 }
 
 type ExecutionClient interface {
-	BlockTime(ctx context.Context, blockNumber uint64) (time.Time, error)
+	BlockByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Block, error)
 }
 
 // ValidatorController represents the component that controls validators via the scheduler

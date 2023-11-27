@@ -6,6 +6,7 @@ package mocks
 
 import (
 	context "context"
+	big "math/big"
 	reflect "reflect"
 	time "time"
 
@@ -13,6 +14,7 @@ import (
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	types "github.com/bloxapp/ssv/protocol/v2/types"
+	types0 "github.com/ethereum/go-ethereum/core/types"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -200,19 +202,19 @@ func (m *MockExecutionClient) EXPECT() *MockExecutionClientMockRecorder {
 	return m.recorder
 }
 
-// BlockTime mocks base method.
-func (m *MockExecutionClient) BlockTime(ctx context.Context, blockNumber uint64) (time.Time, error) {
+// BlockByNumber mocks base method.
+func (m *MockExecutionClient) BlockByNumber(ctx context.Context, blockNumber *big.Int) (*types0.Block, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "BlockTime", ctx, blockNumber)
-	ret0, _ := ret[0].(time.Time)
+	ret := m.ctrl.Call(m, "BlockByNumber", ctx, blockNumber)
+	ret0, _ := ret[0].(*types0.Block)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// BlockTime indicates an expected call of BlockTime.
-func (mr *MockExecutionClientMockRecorder) BlockTime(ctx, blockNumber interface{}) *gomock.Call {
+// BlockByNumber indicates an expected call of BlockByNumber.
+func (mr *MockExecutionClientMockRecorder) BlockByNumber(ctx, blockNumber interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BlockTime", reflect.TypeOf((*MockExecutionClient)(nil).BlockTime), ctx, blockNumber)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BlockByNumber", reflect.TypeOf((*MockExecutionClient)(nil).BlockByNumber), ctx, blockNumber)
 }
 
 // MockValidatorController is a mock of ValidatorController interface.
