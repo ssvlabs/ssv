@@ -2,7 +2,6 @@ package duties
 
 import (
 	"context"
-	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -23,7 +22,6 @@ type VoluntaryExitHandler struct {
 	baseHandler
 	validatorExitCh <-chan ExitDescriptor
 	dutyQueue       []*spectypes.Duty
-	dutyQueueMu     sync.Mutex
 }
 
 func NewVoluntaryExitHandler(validatorExitCh <-chan ExitDescriptor) *VoluntaryExitHandler {
@@ -52,7 +50,6 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 
 			var dutiesForExecution []*spectypes.Duty
 
-			h.dutyQueueMu.Lock()
 			for _, duty := range h.dutyQueue {
 				if duty.Slot > currentSlot {
 					break
@@ -63,7 +60,6 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 
 			dutyCount := len(dutiesForExecution)
 			h.dutyQueue = h.dutyQueue[dutyCount:]
-			h.dutyQueueMu.Unlock()
 
 			if dutyCount != 0 {
 				h.executeDuties(h.logger, dutiesForExecution)
@@ -73,14 +69,14 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 			}
 
 		case exitDescriptor := <-h.validatorExitCh:
-			time, err := h.executionClient.BlockTime(ctx, exitDescriptor.BlockNumber)
+			blockTime, err := h.executionClient.BlockTime(ctx, exitDescriptor.BlockNumber)
 			if err != nil {
 				h.logger.Warn("failed to get block time from execution client, skipping voluntary exit duty",
 					zap.Error(err))
 				continue
 			}
 
-			slot := h.network.Beacon.EstimatedSlotAtTime(time.Unix()) + voluntaryExitSlotsToPostpone
+			slot := h.network.Beacon.EstimatedSlotAtTime(blockTime.Unix()) + voluntaryExitSlotsToPostpone
 
 			duty := &spectypes.Duty{
 				Type:           spectypes.BNRoleVoluntaryExit,
@@ -89,9 +85,7 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 				ValidatorIndex: exitDescriptor.ValidatorIndex,
 			}
 
-			h.dutyQueueMu.Lock()
 			h.dutyQueue = append(h.dutyQueue, duty)
-			h.dutyQueueMu.Unlock()
 
 			h.logger.Debug("🛠 scheduled duty for execution", fields.Slot(duty.Slot))
 		}
