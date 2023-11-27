@@ -177,6 +177,44 @@ func (mr *MockBeaconNodeMockRecorder) SyncCommitteeDuties(ctx, epoch, indices in
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncCommitteeDuties", reflect.TypeOf((*MockBeaconNode)(nil).SyncCommitteeDuties), ctx, epoch, indices)
 }
 
+// MockExecutionClient is a mock of ExecutionClient interface.
+type MockExecutionClient struct {
+	ctrl     *gomock.Controller
+	recorder *MockExecutionClientMockRecorder
+}
+
+// MockExecutionClientMockRecorder is the mock recorder for MockExecutionClient.
+type MockExecutionClientMockRecorder struct {
+	mock *MockExecutionClient
+}
+
+// NewMockExecutionClient creates a new mock instance.
+func NewMockExecutionClient(ctrl *gomock.Controller) *MockExecutionClient {
+	mock := &MockExecutionClient{ctrl: ctrl}
+	mock.recorder = &MockExecutionClientMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockExecutionClient) EXPECT() *MockExecutionClientMockRecorder {
+	return m.recorder
+}
+
+// BlockTime mocks base method.
+func (m *MockExecutionClient) BlockTime(ctx context.Context, blockNumber uint64) (time.Time, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BlockTime", ctx, blockNumber)
+	ret0, _ := ret[0].(time.Time)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// BlockTime indicates an expected call of BlockTime.
+func (mr *MockExecutionClientMockRecorder) BlockTime(ctx, blockNumber interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BlockTime", reflect.TypeOf((*MockExecutionClient)(nil).BlockTime), ctx, blockNumber)
+}
+
 // MockValidatorController is a mock of ValidatorController interface.
 type MockValidatorController struct {
 	ctrl     *gomock.Controller

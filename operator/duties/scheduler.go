@@ -18,7 +18,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/beacon/goclient"
-	"github.com/bloxapp/ssv/eth/executionclient"
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/networkconfig"
@@ -62,6 +61,10 @@ type BeaconNode interface {
 	SubmitSyncCommitteeSubscriptions(ctx context.Context, subscription []*eth2apiv1.SyncCommitteeSubscription) error
 }
 
+type ExecutionClient interface {
+	BlockTime(ctx context.Context, blockNumber uint64) (time.Time, error)
+}
+
 // ValidatorController represents the component that controls validators via the scheduler
 type ValidatorController interface {
 	CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
@@ -74,7 +77,7 @@ type ExecuteDutyFunc func(logger *zap.Logger, duty *spectypes.Duty)
 type SchedulerOptions struct {
 	Ctx                 context.Context
 	BeaconNode          BeaconNode
-	ExecutionClient     *executionclient.ExecutionClient
+	ExecutionClient     ExecutionClient
 	Network             networkconfig.NetworkConfig
 	ValidatorController ValidatorController
 	ExecuteDuty         ExecuteDutyFunc
@@ -87,7 +90,7 @@ type SchedulerOptions struct {
 
 type Scheduler struct {
 	beaconNode          BeaconNode
-	executionClient     *executionclient.ExecutionClient
+	executionClient     ExecutionClient
 	network             networkconfig.NetworkConfig
 	validatorController ValidatorController
 	slotTickerProvider  slotticker.Provider

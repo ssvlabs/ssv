@@ -6,7 +6,6 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/eth/executionclient"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/slotticker"
 )
@@ -17,7 +16,7 @@ import (
 type ExecuteDutiesFunc func(logger *zap.Logger, duties []*spectypes.Duty)
 
 type dutyHandler interface {
-	Setup(string, *zap.Logger, BeaconNode, *executionclient.ExecutionClient, networkconfig.NetworkConfig, ValidatorController, ExecuteDutiesFunc, slotticker.Provider, chan ReorgEvent, chan struct{})
+	Setup(string, *zap.Logger, BeaconNode, ExecutionClient, networkconfig.NetworkConfig, ValidatorController, ExecuteDutiesFunc, slotticker.Provider, chan ReorgEvent, chan struct{})
 	HandleDuties(context.Context)
 	HandleInitialDuties(context.Context)
 	Name() string
@@ -26,7 +25,7 @@ type dutyHandler interface {
 type baseHandler struct {
 	logger              *zap.Logger
 	beaconNode          BeaconNode
-	executionClient     *executionclient.ExecutionClient
+	executionClient     ExecutionClient
 	network             networkconfig.NetworkConfig
 	validatorController ValidatorController
 	executeDuties       ExecuteDutiesFunc
@@ -39,18 +38,7 @@ type baseHandler struct {
 	indicesChanged bool
 }
 
-func (h *baseHandler) Setup(
-	name string,
-	logger *zap.Logger,
-	beaconNode BeaconNode,
-	executionClient *executionclient.ExecutionClient,
-	network networkconfig.NetworkConfig,
-	validatorController ValidatorController,
-	executeDuties ExecuteDutiesFunc,
-	slotTickerProvider slotticker.Provider,
-	reorgEvents chan ReorgEvent,
-	indicesChange chan struct{},
-) {
+func (h *baseHandler) Setup(name string, logger *zap.Logger, beaconNode BeaconNode, executionClient ExecutionClient, network networkconfig.NetworkConfig, validatorController ValidatorController, executeDuties ExecuteDutiesFunc, slotTickerProvider slotticker.Provider, reorgEvents chan ReorgEvent, indicesChange chan struct{}) {
 	h.logger = logger.With(zap.String("handler", name))
 	h.beaconNode = beaconNode
 	h.executionClient = executionClient

@@ -90,6 +90,7 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Slot
 	logger := logging.TestLogger(t)
 
 	mockBeaconNode := mocks.NewMockBeaconNode(ctrl)
+	mockExecutionClient := mocks.NewMockExecutionClient(ctrl)
 	mockValidatorController := mocks.NewMockValidatorController(ctrl)
 	mockSlotService := &mockSlotTickerService{}
 	mockNetworkConfig := networkconfig.NetworkConfig{
@@ -99,6 +100,7 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Slot
 	opts := &SchedulerOptions{
 		Ctx:                 ctx,
 		BeaconNode:          mockBeaconNode,
+		ExecutionClient:     mockExecutionClient,
 		Network:             mockNetworkConfig,
 		ValidatorController: mockValidatorController,
 		SlotTickerProvider: func() slotticker.SlotTicker {
