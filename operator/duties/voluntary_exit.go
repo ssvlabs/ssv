@@ -47,7 +47,7 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 		ttlcache.WithTTL[uint64, phase0.Slot](cacheTTL),
 	)
 
-	h.blockSlotCache.Start()
+	go h.blockSlotCache.Start()
 	defer h.blockSlotCache.Stop()
 
 	for {
