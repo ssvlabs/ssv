@@ -24,17 +24,21 @@ type validatorState struct {
 
 type SlashingInterceptor struct {
 	validators map[phase0.ValidatorIndex]*validatorState
+	slashers   map[phase0.ValidatorIndex]struct{}
 	mu         sync.RWMutex
 }
 
-func NewSlashingInterceptor(targetValidators []phase0.ValidatorIndex) *SlashingInterceptor {
-	validators := make(map[phase0.ValidatorIndex]*validatorState)
-	for _, validator := range targetValidators {
-		validators[validator] = &validatorState{}
+func NewSlashingInterceptor(validators, slashingValidators []phase0.ValidatorIndex) *SlashingInterceptor {
+	s := &SlashingInterceptor{
+		validators: make(map[phase0.ValidatorIndex]*validatorState),
 	}
-	return &SlashingInterceptor{
-		validators: validators,
+	for _, index := range validators {
+		s.validators[index] = &validatorState{}
 	}
+	for _, index := range slashingValidators {
+		s.slashers[index] = struct{}{}
+	}
+	return s
 }
 
 func (s *SlashingInterceptor) InterceptAttesterDuties(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex, duties []*v1.AttesterDuty) ([]*v1.AttesterDuty, error) {

@@ -68,38 +68,7 @@ func New(ctx context.Context, logger *zap.Logger, remoteAddr string, gateways []
 
 func (b *BeaconProxy) Run(ctx context.Context) error {
 	r := chi.NewRouter()
-	r.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			port, err := strconv.Atoi(r.URL.Port())
-			if err != nil {
-				b.logger.Fatal("failed to parse port",
-					zap.String("port", r.URL.Port()),
-					zap.Error(err),
-				)
-				return
-			}
-			gateway, ok := b.gateways[port]
-			if !ok {
-				b.logger.Fatal("unknown port", zap.String("port", r.URL.Port()))
-				return
-			}
-			ctx := context.WithValue(r.Context(), gatewayKey, gateway)
-
-			logger := b.logger.With(
-				zap.String("gateway", gateway.Name),
-				zap.String("endpoint", fmt.Sprintf("%s %s", r.Method, r.URL.Path)),
-			)
-			ctx = context.WithValue(ctx, loggerKey, logger)
-
-			b.logger.Debug("received request",
-				zap.String("gateway", gateway.Name),
-				zap.String("method", r.Method),
-				zap.String("path", r.URL.Path),
-			)
-
-			next.ServeHTTP(w, r.WithContext(ctx))
-		})
-	})
+	r.Use(b.loggerMiddleware)
 	r.HandleFunc("/", b.passthrough)
 	r.HandleFunc("/eth/v1/validator/duties/attester/{epoch}", b.handleAttesterDuties)
 	r.HandleFunc("/eth/v1/validator/duties/proposer/{epoch}", b.handleProposerDuties)
@@ -126,6 +95,40 @@ func (b *BeaconProxy) Run(ctx context.Context) error {
 		})
 	}
 	return pool.Wait()
+}
+
+func (b *BeaconProxy) loggerMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Determine the gateway from the requested port.
+		port, err := strconv.Atoi(r.URL.Port())
+		if err != nil {
+			b.logger.Fatal("failed to parse port",
+				zap.String("port", r.URL.Port()),
+				zap.Error(err),
+			)
+			return
+		}
+		gateway, ok := b.gateways[port]
+		if !ok {
+			b.logger.Fatal("unknown port", zap.String("port", r.URL.Port()))
+			return
+		}
+		ctx := context.WithValue(r.Context(), gatewayKey, gateway)
+
+		logger := b.logger.With(
+			zap.String("gateway", gateway.Name),
+			zap.String("endpoint", fmt.Sprintf("%s %s", r.Method, r.URL.Path)),
+		)
+		ctx = context.WithValue(ctx, loggerKey, logger)
+
+		b.logger.Debug("received request",
+			zap.String("gateway", gateway.Name),
+			zap.String("method", r.Method),
+			zap.String("path", r.URL.Path),
+		)
+
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 func (b *BeaconProxy) passthrough(w http.ResponseWriter, r *http.Request) {
