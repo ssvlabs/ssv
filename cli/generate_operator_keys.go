@@ -10,7 +10,7 @@ import (
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/spf13/cobra"
-	"github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
+	keystorev4 "github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
 	"go.uber.org/zap"
 )
 

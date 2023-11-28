@@ -13,8 +13,8 @@ import (
 
 	eth2client "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/auto"
-	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/bloxapp/ssv/e2e/beacon_proxy/intercept"
 	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog"
 	"github.com/sourcegraph/conc/pool"
@@ -28,8 +28,9 @@ var gatewayKey struct{}
 var loggerKey struct{}
 
 type Gateway struct {
-	Name string
-	Port int
+	Name        string
+	Port        int
+	Interceptor intercept.Interceptor
 }
 
 type BeaconProxy struct {
@@ -70,10 +71,16 @@ func (b *BeaconProxy) Run(ctx context.Context) error {
 	r := chi.NewRouter()
 	r.Use(b.loggerMiddleware)
 	r.HandleFunc("/", b.passthrough)
+
+	// Attestations.
 	r.HandleFunc("/eth/v1/validator/duties/attester/{epoch}", b.handleAttesterDuties)
-	r.HandleFunc("/eth/v1/validator/duties/proposer/{epoch}", b.handleProposerDuties)
 	r.HandleFunc("/eth/v1/validator/attestation_data", b.handleAttestationData)
+	r.HandleFunc("/eth/v1/beacon/pool/attestations", b.handleSubmitAttestations)
+
+	// Proposals.
+	r.HandleFunc("/eth/v1/validator/duties/proposer/{epoch}", b.handleProposerDuties)
 	r.HandleFunc("/eth/v3/validator/blocks", b.handleBlockProposal)
+	r.HandleFunc("/eth/v1/beacon/pool/proposals", b.handleSubmitBlockProposal)
 
 	// Serve each endpoint on a separate port.
 	pool := pool.New().WithContext(ctx)
@@ -134,131 +141,6 @@ func (b *BeaconProxy) loggerMiddleware(next http.Handler) http.Handler {
 func (b *BeaconProxy) passthrough(w http.ResponseWriter, r *http.Request) {
 	r.Host = b.remote.Host
 	b.proxy.ServeHTTP(w, r)
-}
-
-func (b *BeaconProxy) handleAttesterDuties(w http.ResponseWriter, r *http.Request) {
-	// Parse request.
-	epoch, indices, err := parseDutiesRequest(r)
-	if err != nil {
-		b.error(r, w, 400, fmt.Errorf("failed to read request: %w", err))
-		return
-	}
-
-	// Obtain duties.
-	duties, err := b.client.(eth2client.AttesterDutiesProvider).AttesterDuties(r.Context(), epoch, indices)
-	if err != nil {
-		b.error(r, w, 500, fmt.Errorf("failed to obtain attester duties: %w", err))
-		return
-	}
-
-	// Respond.
-	if err := b.respond(r, w, duties); err != nil {
-		b.error(r, w, 500, fmt.Errorf("failed to encode response: %w", err))
-		return
-	}
-
-	b.logger.Info("obtained attester duties",
-		zap.Uint64("epoch", uint64(epoch)),
-		zap.Int("indices", len(indices)),
-	)
-}
-
-func (b *BeaconProxy) handleProposerDuties(w http.ResponseWriter, r *http.Request) {
-	// Parse request.
-	epoch, indices, err := parseDutiesRequest(r)
-	if err != nil {
-		b.error(r, w, 400, fmt.Errorf("failed to read request: %w", err))
-		return
-	}
-
-	// Obtain duties.
-	duties, err := b.client.(eth2client.ProposerDutiesProvider).ProposerDuties(r.Context(), epoch, indices)
-	if err != nil {
-		b.error(r, w, 500, fmt.Errorf("failed to obtain proposer duties: %w", err))
-		return
-	}
-
-	// Respond.
-	if err := b.respond(r, w, duties); err != nil {
-		b.error(r, w, 500, fmt.Errorf("failed to encode response: %w", err))
-		return
-	}
-
-	b.logger.Info("obtained proposer duties",
-		zap.Uint64("epoch", uint64(epoch)),
-		zap.Int("indices", len(indices)),
-	)
-}
-
-func (b *BeaconProxy) handleAttestationData(w http.ResponseWriter, r *http.Request) {
-	// Parse request.
-	var (
-		slot           phase0.Slot
-		committeeIndex phase0.CommitteeIndex
-	)
-	if err := scanURL(r, "slot:%d", &slot, "committee_index:%d", &committeeIndex); err != nil {
-		b.error(r, w, 400, fmt.Errorf("failed to parse request: %w", err))
-		return
-	}
-
-	// Obtain attestation data.
-	attestationData, err := b.client.(eth2client.AttestationDataProvider).AttestationData(r.Context(), slot, committeeIndex)
-	if err != nil {
-		b.error(r, w, 500, fmt.Errorf("failed to obtain attestation data: %w", err))
-		return
-	}
-
-	// Respond.
-	if err := b.respond(r, w, attestationData); err != nil {
-		b.error(r, w, 500, fmt.Errorf("failed to encode response: %w", err))
-		return
-	}
-
-	b.logger.Info("obtained attestation data",
-		zap.Uint64("slot", uint64(slot)),
-		zap.Uint64("committee_index", uint64(committeeIndex)),
-	)
-}
-
-func (b *BeaconProxy) handleBlockProposal(w http.ResponseWriter, r *http.Request) {
-	// Parse request.
-	var (
-		slot         phase0.Slot
-		randaoReveal []byte
-		graffiti     []byte
-	)
-	if err := scanURL(r, "slot:%d", &slot, "randao_reveal:%x", &randaoReveal, "graffiti:%x", &graffiti); err != nil {
-		b.error(r, w, 400, fmt.Errorf("failed to parse request: %w", err))
-		return
-	}
-
-	// Obtain block.
-	versionedBlock, err := b.client.(eth2client.BeaconBlockProposalProvider).BeaconBlockProposal(r.Context(), slot, phase0.BLSSignature(randaoReveal), graffiti)
-	if err != nil {
-		b.error(r, w, 500, fmt.Errorf("failed to obtain block: %w", err))
-		return
-	}
-	var block any
-	switch versionedBlock.Version {
-	case spec.DataVersionCapella:
-		block = versionedBlock.Capella
-	default:
-		b.error(r, w, 500, fmt.Errorf("unsupported block version %d", versionedBlock.Version))
-		return
-	}
-
-	// Respond.
-	var response = struct {
-		Version spec.DataVersion `json:"version"`
-		Data    any              `json:"data"`
-	}{
-		Version: versionedBlock.Version,
-		Data:    block,
-	}
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		b.error(r, w, 500, fmt.Errorf("failed to encode response: %w", err))
-		return
-	}
 }
 
 func (b *BeaconProxy) error(r *http.Request, w http.ResponseWriter, status int, err error) {
