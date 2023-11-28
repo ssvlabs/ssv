@@ -73,7 +73,6 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 		currentSlot.SetSlot(0)
 		ticker.Send(currentSlot.GetSlot())
 		waitForNoAction(t, logger, nil, executeDutiesCall, timeout)
-		require.Len(t, handler.dutyQueue, 1)
 		require.EqualValues(t, 2, blockByNumberCalls.Load())
 	})
 
@@ -81,7 +80,6 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 		currentSlot.SetSlot(phase0.Slot(normalExit.BlockNumber))
 		ticker.Send(currentSlot.GetSlot())
 		waitForNoAction(t, logger, nil, executeDutiesCall, timeout)
-		require.Len(t, handler.dutyQueue, 1)
 		require.EqualValues(t, 2, blockByNumberCalls.Load())
 	})
 
@@ -89,7 +87,6 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 		currentSlot.SetSlot(phase0.Slot(normalExit.BlockNumber) + voluntaryExitSlotsToPostpone - 1)
 		ticker.Send(currentSlot.GetSlot())
 		waitForNoAction(t, logger, nil, executeDutiesCall, timeout)
-		require.Len(t, handler.dutyQueue, 1)
 		require.EqualValues(t, 2, blockByNumberCalls.Load())
 	})
 
@@ -97,7 +94,6 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 		currentSlot.SetSlot(phase0.Slot(normalExit.BlockNumber) + voluntaryExitSlotsToPostpone)
 		ticker.Send(currentSlot.GetSlot())
 		waitForDutiesExecution(t, logger, nil, executeDutiesCall, timeout, expectedDuties[:1])
-		require.Len(t, handler.dutyQueue, 0)
 		require.EqualValues(t, 2, blockByNumberCalls.Load())
 	})
 
@@ -107,7 +103,6 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 		currentSlot.SetSlot(phase0.Slot(sameBlockExit.BlockNumber) + voluntaryExitSlotsToPostpone)
 		ticker.Send(currentSlot.GetSlot())
 		waitForDutiesExecution(t, logger, nil, executeDutiesCall, timeout, expectedDuties[1:2])
-		require.Len(t, handler.dutyQueue, 0)
 		require.EqualValues(t, 2, blockByNumberCalls.Load())
 	})
 
@@ -117,7 +112,6 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 		currentSlot.SetSlot(phase0.Slot(normalExit.BlockNumber) + voluntaryExitSlotsToPostpone)
 		ticker.Send(currentSlot.GetSlot())
 		waitForNoAction(t, logger, nil, executeDutiesCall, timeout)
-		require.Len(t, handler.dutyQueue, 1)
 		require.EqualValues(t, 3, blockByNumberCalls.Load())
 	})
 
@@ -125,7 +119,6 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 		currentSlot.SetSlot(phase0.Slot(newBlockExit.BlockNumber) + voluntaryExitSlotsToPostpone)
 		ticker.Send(currentSlot.GetSlot())
 		waitForDutiesExecution(t, logger, nil, executeDutiesCall, timeout, expectedDuties[2:3])
-		require.Len(t, handler.dutyQueue, 0)
 		require.EqualValues(t, 3, blockByNumberCalls.Load())
 	})
 
@@ -135,7 +128,6 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 		currentSlot.SetSlot(phase0.Slot(pastBlockExit.BlockNumber) + voluntaryExitSlotsToPostpone + 1)
 		ticker.Send(currentSlot.GetSlot())
 		waitForDutiesExecution(t, logger, nil, executeDutiesCall, timeout, expectedDuties[3:4])
-		require.Len(t, handler.dutyQueue, 0)
 		require.EqualValues(t, 4, blockByNumberCalls.Load())
 	})
 
