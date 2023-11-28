@@ -88,7 +88,7 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 
 				h.blockSlots[exitDescriptor.BlockNumber] = blockSlot
 				for k, v := range h.blockSlots {
-					if v < blockSlot-voluntaryExitSlotsToPostpone {
+					if v < blockSlot {
 						delete(h.blockSlots, k)
 					}
 				}
