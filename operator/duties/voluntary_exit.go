@@ -70,7 +70,11 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 					fields.Count(dutyCount))
 			}
 
-		case exitDescriptor := <-h.validatorExitCh:
+		case exitDescriptor, ok := <-h.validatorExitCh:
+			if !ok {
+				return
+			}
+
 			blockSlot, ok := h.blockSlots[exitDescriptor.BlockNumber]
 			if !ok {
 				block, err := h.executionClient.BlockByNumber(ctx, new(big.Int).SetUint64(exitDescriptor.BlockNumber))
