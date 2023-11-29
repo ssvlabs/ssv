@@ -55,6 +55,7 @@ type handshaker struct {
 	ids         identify.IDService
 	net         libp2pnetwork.Network
 	nodeStorage storage.Storage
+	connGater   *ConnectionGater
 
 	subnetsProvider SubnetsProvider
 }
@@ -70,6 +71,7 @@ type HandshakerCfg struct {
 	IDService       identify.IDService
 	NodeStorage     storage.Storage
 	SubnetsProvider SubnetsProvider
+	ConnGater       *ConnectionGater
 	Permissioned    func() bool
 }
 
@@ -87,6 +89,7 @@ func NewHandshaker(ctx context.Context, cfg *HandshakerCfg, filters func() []Han
 		subnetsProvider: cfg.SubnetsProvider,
 		net:             cfg.Network,
 		nodeStorage:     cfg.NodeStorage,
+		connGater:       cfg.ConnGater,
 		Permissioned:    cfg.Permissioned,
 	}
 	return h
@@ -114,6 +117,7 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 		}
 		err = nodeInfo.Consume(request)
 		if err != nil {
+			h.connGater.BlockPeer(pid)
 			return errors.Wrap(err, "could not consume node info request")
 		}
 
@@ -132,6 +136,7 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 
 		err = h.verifyTheirNodeInfo(logger, pid, nodeInfo)
 		if err != nil {
+			h.connGater.BlockPeer(pid)
 			return errors.Wrap(err, "failed verifying their node info")
 		}
 		return nil

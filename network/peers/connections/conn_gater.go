@@ -1,7 +1,10 @@
 package connections
 
 import (
+	"time"
+
 	"github.com/bloxapp/ssv/network/peers"
+	"github.com/imkira/go-ttlmap"
 	"github.com/libp2p/go-libp2p/core/control"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -14,19 +17,31 @@ import (
 // TODO: add IP limiting
 
 type ConnectionGater struct {
-	logger *zap.Logger // struct logger to implement connmgr.ConnectionGater
-	idx    peers.ConnectionIndex
+	logger    *zap.Logger
+	idx       peers.ConnectionIndex
+	blackList *ttlmap.Map
 }
 
 // NewConnectionGater creates a new instance of ConnectionGater
 func NewConnectionGater(logger *zap.Logger) *ConnectionGater {
 	return &ConnectionGater{
 		logger: logger,
+		blackList: ttlmap.New(&ttlmap.Options{
+			InitialCapacity: 1024}),
 	}
 }
 
 func (n *ConnectionGater) SetPeerIndex(idx peers.ConnectionIndex) {
 	n.idx = idx
+}
+
+func (n *ConnectionGater) BlockPeer(id peer.ID) {
+	n.blackList.Set(id.String(), ttlmap.NewItem(struct{}{}, ttlmap.WithTTL(60*time.Minute)), nil)
+}
+
+func (n *ConnectionGater) IsPeerBlocked(id peer.ID) bool {
+	_, err := n.blackList.Get(id.String())
+	return err == nil
 }
 
 // InterceptPeerDial is called on an imminent outbound peer dial request, prior
