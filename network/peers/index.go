@@ -24,12 +24,6 @@ var (
 	ErrNotFound = errors.New("peer not found")
 )
 
-// NodeScore is a wrapping objet for scores
-type NodeScore struct {
-	Name  string
-	Value float64
-}
-
 // ConnectionIndex is an interface for accessing peers connections
 type ConnectionIndex interface {
 	// Connectedness returns the connection state of the given peer
@@ -49,9 +43,13 @@ type ConnectionIndex interface {
 // ScoreIndex is an interface for managing peers scores
 type ScoreIndex interface {
 	// Score adds score to the given peer
-	Score(id peer.ID, scores ...*NodeScore) error
+	Score(id peer.ID, scores float64)
 	// GetScore returns the desired score for the given peer
-	GetScore(id peer.ID, names ...string) ([]NodeScore, error)
+	GetScore(id peer.ID) (float64, error)
+	// Set default threshold for marking peer's score bad
+	SetThreshold(threshold float64)
+	// IsBelowThreshold returns whether the given peer is bad
+	IsBelowThreshold(id peer.ID) bool
 }
 
 // NodeInfoIndex is an interface for managing records.NodeInfo of network peers

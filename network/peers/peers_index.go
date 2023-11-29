@@ -59,18 +59,9 @@ func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *reco
 // - pruned (that was not expired)
 // - bad score
 func (pi *peersIndex) IsBad(logger *zap.Logger, id peer.ID) bool {
-	// TODO: check scores
-	threshold := -10000.0
-	scores, err := pi.GetScore(id, "")
-	if err != nil {
-		// logger.Debug("could not read score", zap.Error(err))
-		return false
-	}
-	for _, score := range scores {
-		if score.Value < threshold {
-			logger.Debug("bad peer (low score)")
-			return true
-		}
+	if pi.scoreIdx.IsBelowThreshold(id) {
+		logger.Debug("bad peer (low score)", zap.String("peer", id.String()))
+		return true
 	}
 	return false
 }
@@ -169,18 +160,27 @@ func (pi *peersIndex) NodeInfo(id peer.ID) *records.NodeInfo {
 }
 
 // Score adds score to the given peer
-func (pi *peersIndex) Score(id peer.ID, scores ...*NodeScore) error {
-	return pi.scoreIdx.Score(id, scores...)
+func (pi *peersIndex) Score(id peer.ID, scores float64) {
+	pi.scoreIdx.Score(id, scores)
 }
 
 // GetScore returns the desired score for the given peer
-func (pi *peersIndex) GetScore(id peer.ID, names ...string) ([]NodeScore, error) {
+func (pi *peersIndex) GetScore(id peer.ID) (float64, error) {
 	switch pi.State(id) {
 	case StateUnknown:
-		return nil, ErrNotFound
+		return 0, ErrNotFound
 	}
 
-	return pi.scoreIdx.GetScore(id, names...)
+	return pi.scoreIdx.GetScore(id)
+}
+
+func (pi *peersIndex) IsBelowThreshold(id peer.ID) bool {
+	return pi.scoreIdx.IsBelowThreshold(id)
+}
+
+// Score adds score to the given peer
+func (pi *peersIndex) SetThreshold(id float64) {
+	pi.scoreIdx.SetThreshold(id)
 }
 
 func (pi *peersIndex) GetSubnetsStats() *SubnetsStats {

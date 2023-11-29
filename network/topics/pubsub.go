@@ -102,6 +102,7 @@ func (cfg *PubSubConfig) initScoring() {
 	if cfg.Scoring == nil {
 		cfg.Scoring = DefaultScoringConfig()
 	}
+	cfg.ScoreIndex.SetThreshold(params.PeerScoreThresholds().GraylistThreshold)
 }
 
 // NewPubSub creates a new pubsub router and the necessary components

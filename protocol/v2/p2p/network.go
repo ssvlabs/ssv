@@ -148,17 +148,10 @@ const (
 	ValidationRejectHigh
 )
 
-// ValidationReporting is the interface for reporting on message validation results
-type ValidationReporting interface {
-	// ReportValidation reports the result for the given message
-	ReportValidation(logger *zap.Logger, message *spectypes.SSVMessage, res MsgValidationResult)
-}
-
 // Network holds the networking layer used to complement the underlying protocols
 type Network interface {
 	Subscriber
 	Broadcaster
-	ValidationReporting
 
 	// RegisterHandlers registers handler for the given protocol
 	RegisterHandlers(logger *zap.Logger, handlers ...*SyncHandler)

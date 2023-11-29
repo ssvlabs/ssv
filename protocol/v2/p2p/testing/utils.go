@@ -245,9 +245,6 @@ func (m *mockNetwork) LastDecided(logger *zap.Logger, mid spectypes.MessageID) (
 	return nil, nil
 }
 
-func (m *mockNetwork) ReportValidation(logger *zap.Logger, message *spectypes.SSVMessage, res protocolp2p.MsgValidationResult) {
-}
-
 func (m *mockNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
 	//m.lock.Lock()
 	//defer m.lock.Unlock()

@@ -1,6 +1,7 @@
 package peers
 
 import (
+	"fmt"
 	"sort"
 	"sync"
 
@@ -9,59 +10,56 @@ import (
 
 // scoresIndex implements ScoreIndex
 type scoresIndex struct {
-	scores map[peer.ID][]*NodeScore
-	lock   *sync.RWMutex
+	scores    map[peer.ID]float64
+	threshold float64
+	lock      *sync.RWMutex
 }
 
 func newScoreIndex() ScoreIndex {
 	return &scoresIndex{
-		scores: map[peer.ID][]*NodeScore{},
+		scores: map[peer.ID]float64{},
 		lock:   &sync.RWMutex{},
 	}
 }
 
 // Score adds score to the given peer
-func (s *scoresIndex) Score(id peer.ID, scores ...*NodeScore) error {
+func (s *scoresIndex) SetThreshold(threshold float64) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
+	s.threshold = threshold
+}
 
-scoresLoop:
-	for _, score := range scores {
-		existing, ok := s.scores[id]
-		if !ok {
-			existing = make([]*NodeScore, 0)
-		}
-		for _, current := range existing {
-			if current.Name == score.Name {
-				current.Value = score.Value
-				continue scoresLoop
-			}
-		}
-		s.scores[id] = append(existing, score)
-	}
-	return nil
+// Score adds score to the given peer
+func (s *scoresIndex) Score(id peer.ID, score float64) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	s.scores[id] = score
 }
 
 // GetScore returns the desired score for the given peer
-func (s *scoresIndex) GetScore(id peer.ID, names ...string) ([]NodeScore, error) {
+func (s *scoresIndex) GetScore(id peer.ID) (float64, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
 	peerScores, ok := s.scores[id]
 	if !ok {
-		return nil, nil
+		return 0, fmt.Errorf("peer has not score yet")
 	}
-	var scores []NodeScore
-wantedScoresLoop:
-	for _, name := range names {
-		for _, score := range peerScores {
-			if score.Name == name {
-				scores = append(scores, *score)
-				continue wantedScoresLoop
-			}
-		}
+
+	return peerScores, nil
+}
+
+// Score adds score to the given peer
+func (s *scoresIndex) IsBelowThreshold(id peer.ID) bool {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	peerScores, ok := s.scores[id]
+	if !ok {
+		return false
 	}
-	return scores, nil
+
+	return peerScores < s.threshold
 }
 
 // GetTopScores accepts a map of scores and returns the best n peers

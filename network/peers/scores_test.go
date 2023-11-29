@@ -21,18 +21,12 @@ func TestScoresIndex(t *testing.T) {
 	require.NoError(t, err)
 
 	si := newScoreIndex()
+	score := -2.0
+	si.Score(pid, score)
 
-	require.NoError(t, si.Score(pid, &NodeScore{
-		Name:  "decided",
-		Value: 1.0,
-	}, &NodeScore{
-		Name:  "relays",
-		Value: -2.0,
-	}))
-
-	scores, err := si.GetScore(pid, "decided", "relays", "dummy")
+	scores, err := si.GetScore(pid)
 	require.NoError(t, err)
-	require.Len(t, scores, 2)
+	require.Equal(t, scores, score)
 }
 
 func TestPeersTopScores(t *testing.T) {
