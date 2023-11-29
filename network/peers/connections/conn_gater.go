@@ -17,17 +17,19 @@ import (
 // TODO: add IP limiting
 
 type ConnectionGater struct {
-	logger    *zap.Logger
-	idx       peers.ConnectionIndex
-	blackList *ttlmap.Map
+	logger            *zap.Logger
+	idx               peers.ConnectionIndex
+	blackList         *ttlmap.Map
+	blackListDuration time.Duration
 }
 
 // NewConnectionGater creates a new instance of ConnectionGater
-func NewConnectionGater(logger *zap.Logger) *ConnectionGater {
+func NewConnectionGater(logger *zap.Logger, capacity int, blackListDuration time.Duration) *ConnectionGater {
 	return &ConnectionGater{
-		logger: logger,
+		logger:            logger,
+		blackListDuration: blackListDuration,
 		blackList: ttlmap.New(&ttlmap.Options{
-			InitialCapacity: 1024}),
+			InitialCapacity: capacity}),
 	}
 }
 
@@ -36,7 +38,10 @@ func (n *ConnectionGater) SetPeerIndex(idx peers.ConnectionIndex) {
 }
 
 func (n *ConnectionGater) BlockPeer(id peer.ID) {
-	n.blackList.Set(id.String(), ttlmap.NewItem(struct{}{}, ttlmap.WithTTL(60*time.Minute)), nil)
+	err := n.blackList.Set(id.String(), ttlmap.NewItem(struct{}{}, ttlmap.WithTTL(n.blackListDuration)), nil)
+	if err != nil {
+		n.logger.Debug("can not blacklist peer")
+	}
 }
 
 func (n *ConnectionGater) IsPeerBlocked(id peer.ID) bool {
@@ -48,6 +53,9 @@ func (n *ConnectionGater) IsPeerBlocked(id peer.ID) bool {
 // to the addresses of that peer being available/resolved. Blocking connections
 // at this stage is typical for blacklisting scenarios
 func (n *ConnectionGater) InterceptPeerDial(id peer.ID) bool {
+	if n.IsPeerBlocked(id) {
+		return false
+	}
 	if n.idx == nil {
 		return false
 	}
@@ -87,6 +95,9 @@ func (n *ConnectionGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddr
 // InterceptSecured is called for both inbound and outbound connections,
 // after a security handshake has taken place and we've authenticated the peer.
 func (n *ConnectionGater) InterceptSecured(direction libp2pnetwork.Direction, id peer.ID, multiaddrs libp2pnetwork.ConnMultiaddrs) bool {
+	if n.IsPeerBlocked(id) {
+		return false
+	}
 	if n.idx == nil {
 		return false
 	}
