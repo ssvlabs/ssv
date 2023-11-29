@@ -118,7 +118,8 @@ func (n *p2pNetwork) SetupHost(logger *zap.Logger) error {
 	if err != nil {
 		return errors.Wrap(err, "could not create resource manager")
 	}
-	opts = append(opts, libp2p.ResourceManager(rmgr))
+	n.connGater = connections.NewConnectionGater(logger)
+	opts = append(opts, libp2p.ResourceManager(rmgr), libp2p.ConnectionGater(n.connGater))
 	host, err := libp2p.New(opts...)
 	if err != nil {
 		return errors.Wrap(err, "could not create p2p host")
@@ -177,6 +178,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	}
 
 	n.idx = peers.NewPeersIndex(logger, n.host.Network(), self, n.getMaxPeers, getPrivKey, p2pcommons.Subnets(), 10*time.Minute)
+	n.connGater.SetPeerIndex(n.idx)
 	logger.Debug("peers index is ready")
 
 	var ids identify.IDService
