@@ -75,23 +75,11 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 				return
 			}
 
-			blockSlot, ok := h.blockSlots[exitDescriptor.BlockNumber]
-			if !ok {
-				block, err := h.executionClient.BlockByNumber(ctx, new(big.Int).SetUint64(exitDescriptor.BlockNumber))
-				if err != nil {
-					h.logger.Warn("failed to get block time from execution client, skipping voluntary exit duty",
-						zap.Error(err))
-					continue
-				}
-
-				blockSlot = h.network.Beacon.EstimatedSlotAtTime(int64(block.Time()))
-
-				h.blockSlots[exitDescriptor.BlockNumber] = blockSlot
-				for k, v := range h.blockSlots {
-					if v < blockSlot {
-						delete(h.blockSlots, k)
-					}
-				}
+			blockSlot, err := h.blockSlot(ctx, exitDescriptor.BlockNumber)
+			if err != nil {
+				h.logger.Warn("failed to get block time from execution client, skipping voluntary exit duty",
+					zap.Error(err))
+				continue
 			}
 
 			dutySlot := blockSlot + voluntaryExitSlotsToPostpone
@@ -112,4 +100,27 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 			)
 		}
 	}
+}
+
+// blockSlot gets slots happened at the same time as block,
+// it prevents calling execution client multiple times if there are several validator exit events on the same block
+func (h *VoluntaryExitHandler) blockSlot(ctx context.Context, blockNumber uint64) (phase0.Slot, error) {
+	blockSlot, ok := h.blockSlots[blockNumber]
+	if !ok {
+		block, err := h.executionClient.BlockByNumber(ctx, new(big.Int).SetUint64(blockNumber))
+		if err != nil {
+			return 0, err
+		}
+
+		blockSlot = h.network.Beacon.EstimatedSlotAtTime(int64(block.Time()))
+
+		h.blockSlots[blockNumber] = blockSlot
+		for k, v := range h.blockSlots {
+			if v < blockSlot {
+				delete(h.blockSlots, k)
+			}
+		}
+	}
+
+	return blockSlot, nil
 }
