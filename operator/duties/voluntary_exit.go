@@ -106,19 +106,21 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 // it prevents calling execution client multiple times if there are several validator exit events on the same block
 func (h *VoluntaryExitHandler) blockSlot(ctx context.Context, blockNumber uint64) (phase0.Slot, error) {
 	blockSlot, ok := h.blockSlots[blockNumber]
-	if !ok {
-		block, err := h.executionClient.BlockByNumber(ctx, new(big.Int).SetUint64(blockNumber))
-		if err != nil {
-			return 0, err
-		}
+	if ok {
+		return blockSlot, nil
+	}
 
-		blockSlot = h.network.Beacon.EstimatedSlotAtTime(int64(block.Time()))
+	block, err := h.executionClient.BlockByNumber(ctx, new(big.Int).SetUint64(blockNumber))
+	if err != nil {
+		return 0, err
+	}
 
-		h.blockSlots[blockNumber] = blockSlot
-		for k, v := range h.blockSlots {
-			if v < blockSlot {
-				delete(h.blockSlots, k)
-			}
+	blockSlot = h.network.Beacon.EstimatedSlotAtTime(int64(block.Time()))
+
+	h.blockSlots[blockNumber] = blockSlot
+	for k, v := range h.blockSlots {
+		if v < blockSlot {
+			delete(h.blockSlots, k)
 		}
 	}
 
