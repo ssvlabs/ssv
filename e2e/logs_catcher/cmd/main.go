@@ -38,9 +38,21 @@ var Fatalers *List
 var Restarters *List
 
 func main() {
-	flag.Var(Ignored, "Ignored", "A list of containers to not read logs from e.g \"ssv-node-1, beacon-proxy\".. ")
-	flag.Var(Fatalers, "fataler", " Logs to fatal on, format as json fields { 'message': 'bad attestation', 'slot': 1 }")
-	flag.Var(Restarters, "restarter", " Logs to restart on, format as json fields { 'message': 'bad attestation', 'slot': 1 }")
+	flag.Var(
+		Ignored,
+		"Ignored",
+		"A list of containers to not read logs from e.g \"ssv-node-1, beacon-proxy\".. ",
+	)
+	flag.Var(
+		Fatalers,
+		"fataler",
+		" Logs to fatal on, format as json fields { 'message': 'bad attestation', 'slot': 1 }",
+	)
+	flag.Var(
+		Restarters,
+		"restarter",
+		" Logs to restart on, format as json fields { 'message': 'bad attestation', 'slot': 1 }",
+	)
 	parsedFatalers, err := Fatalers.ParseToMaps()
 	if err != nil {
 		panic(err)

@@ -17,20 +17,32 @@ type mockDockerClient struct {
 	ContainerLogsFunc    func(ctx context.Context, container string, options types.ContainerLogsOptions) (io.ReadCloser, error)
 }
 
-func (mdc *mockDockerClient) ContainerRestart(ctx context.Context, containerID string, options container.StopOptions) error {
+func (mdc *mockDockerClient) ContainerRestart(
+	ctx context.Context,
+	containerID string,
+	options container.StopOptions,
+) error {
 	if mdc.ContainerRestartFunc != nil {
 		return mdc.ContainerRestartFunc(ctx, containerID, options)
 	}
 	return nil
 }
-func (mdc *mockDockerClient) ContainerList(ctx context.Context, options types.ContainerListOptions) ([]types.Container, error) {
+
+func (mdc *mockDockerClient) ContainerList(
+	ctx context.Context,
+	options types.ContainerListOptions,
+) ([]types.Container, error) {
 	if mdc.ContainerListFunc != nil {
 		return mdc.ContainerListFunc(ctx, options)
 	}
 	return nil, nil
 }
 
-func (mdc *mockDockerClient) ContainerLogs(ctx context.Context, container string, options types.ContainerLogsOptions) (io.ReadCloser, error) {
+func (mdc *mockDockerClient) ContainerLogs(
+	ctx context.Context,
+	container string,
+	options types.ContainerLogsOptions,
+) (io.ReadCloser, error) {
 	if mdc.ContainerLogsFunc != nil {
 		return mdc.ContainerLogsFunc(ctx, container, options)
 	}

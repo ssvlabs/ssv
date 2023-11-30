@@ -21,13 +21,12 @@ p2p:
 #  Discovery: mdns
 
 ssv:
-  GenesisEpoch:
   ValidatorOptions:
-    SignatureCollectionTimeout: 5s
     FullNode: true
     Exporter: true
 
-GenerateOperatorPrivateKey: true
+# Note: Operator private key can be generated with the `generate-operator-keys` command.
+OperatorPrivateKey: <fill this>
 
 bootnode:
   ExternalIP:

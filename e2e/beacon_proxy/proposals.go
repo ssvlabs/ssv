@@ -22,9 +22,12 @@ func (b *BeaconProxy) handleProposerDuties(w http.ResponseWriter, r *http.Reques
 		b.error(r, w, 400, fmt.Errorf("failed to read request: %w", err))
 		return
 	}
-
 	// Obtain duties.
-	duties, err := b.client.(eth2client.ProposerDutiesProvider).ProposerDuties(r.Context(), epoch, indices)
+	duties, err := b.client.(eth2client.ProposerDutiesProvider).ProposerDuties(
+		r.Context(),
+		epoch,
+		indices,
+	)
 	if err != nil {
 		b.error(r, w, 500, fmt.Errorf("failed to obtain proposer duties: %w", err))
 		return
@@ -65,7 +68,12 @@ func (b *BeaconProxy) handleBlockProposal(w http.ResponseWriter, r *http.Request
 	}
 
 	// Obtain block.
-	versionedBlock, err := b.client.(eth2client.BeaconBlockProposalProvider).BeaconBlockProposal(r.Context(), slot, phase0.BLSSignature(randaoReveal), graffiti)
+	versionedBlock, err := b.client.(eth2client.BeaconBlockProposalProvider).BeaconBlockProposal(
+		r.Context(),
+		slot,
+		phase0.BLSSignature(randaoReveal),
+		graffiti,
+	)
 	if err != nil {
 		b.error(r, w, 500, fmt.Errorf("failed to obtain block: %w", err))
 		return
@@ -80,7 +88,13 @@ func (b *BeaconProxy) handleBlockProposal(w http.ResponseWriter, r *http.Request
 	}
 
 	// Intercept.
-	block, err = gateway.Interceptor.InterceptBlockProposal(r.Context(), slot, phase0.BLSSignature(randaoReveal), graffiti, block.(*spec.VersionedBeaconBlock))
+	block, err = gateway.Interceptor.InterceptBlockProposal(
+		r.Context(),
+		slot,
+		phase0.BLSSignature(randaoReveal),
+		graffiti,
+		block.(*spec.VersionedBeaconBlock),
+	)
 	if err != nil {
 		b.error(r, w, 500, fmt.Errorf("failed to intercept block: %w", err))
 		return
@@ -122,7 +136,10 @@ func (b *BeaconProxy) handleSubmitBlockProposal(w http.ResponseWriter, r *http.R
 		Version: spec.DataVersionCapella,
 		Capella: block,
 	}
-	versionedBlock, err := gateway.Interceptor.InterceptSubmitBlockProposal(r.Context(), versionedBlock)
+	versionedBlock, err := gateway.Interceptor.InterceptSubmitBlockProposal(
+		r.Context(),
+		versionedBlock,
+	)
 	if err != nil {
 		b.error(r, w, 500, fmt.Errorf("failed to intercept block: %w", err))
 		return

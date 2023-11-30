@@ -41,7 +41,12 @@ type BeaconProxy struct {
 	gateways map[int]Gateway
 }
 
-func New(ctx context.Context, logger *zap.Logger, remoteAddr string, gateways []Gateway) (*BeaconProxy, error) {
+func New(
+	ctx context.Context,
+	logger *zap.Logger,
+	remoteAddr string,
+	gateways []Gateway,
+) (*BeaconProxy, error) {
 	client, err := auto.New(
 		ctx,
 		auto.WithAddress(remoteAddr),

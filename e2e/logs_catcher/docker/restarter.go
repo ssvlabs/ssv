@@ -9,7 +9,10 @@ import (
 
 type RestartCLI interface {
 	ContainerRestart(ctx context.Context, containerID string, options container.StopOptions) error
-	ContainerList(ctx context.Context, options types.ContainerListOptions) ([]types.Container, error)
+	ContainerList(
+		ctx context.Context,
+		options types.ContainerListOptions,
+	) ([]types.Container, error)
 }
 
 func Restart(ctx context.Context, c RestartCLI, containerName string) error {
@@ -35,7 +38,11 @@ contLoop:
 	return nil
 }
 
-func GetDockers(ctx context.Context, c RestartCLI, filts ...func(container2 types.Container) bool) ([]string, error) {
+func GetDockers(
+	ctx context.Context,
+	c RestartCLI,
+	filts ...func(container2 types.Container) bool,
+) ([]string, error) {
 	cs, err := c.ContainerList(ctx, types.ContainerListOptions{
 		Size:    false,
 		All:     false,

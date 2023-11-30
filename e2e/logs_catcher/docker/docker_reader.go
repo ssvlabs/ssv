@@ -9,14 +9,23 @@ import (
 )
 
 type StreamCLI interface {
-	ContainerLogs(ctx context.Context, container string, options types.ContainerLogsOptions) (io.ReadCloser, error)
+	ContainerLogs(
+		ctx context.Context,
+		container string,
+		options types.ContainerLogsOptions,
+	) (io.ReadCloser, error)
 }
 
 func New() (*client.Client, error) {
 	return client.NewClientWithOpts(client.FromEnv)
 }
 
-func StreamDockerLogs(ctx context.Context, cli StreamCLI, containerName string, logsChan chan string) error {
+func StreamDockerLogs(
+	ctx context.Context,
+	cli StreamCLI,
+	containerName string,
+	logsChan chan string,
+) error {
 	i, err := cli.ContainerLogs(ctx, containerName, types.ContainerLogsOptions{
 		ShowStderr: true,
 		ShowStdout: true,

@@ -22,7 +22,11 @@ func (b *BeaconProxy) handleAttesterDuties(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Obtain duties.
-	duties, err := b.client.(eth2client.AttesterDutiesProvider).AttesterDuties(r.Context(), epoch, indices)
+	duties, err := b.client.(eth2client.AttesterDutiesProvider).AttesterDuties(
+		r.Context(),
+		epoch,
+		indices,
+	)
 	if err != nil {
 		b.error(r, w, 500, fmt.Errorf("failed to obtain attester duties: %w", err))
 		return
@@ -62,14 +66,23 @@ func (b *BeaconProxy) handleAttestationData(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Obtain attestation data.
-	attestationData, err := b.client.(eth2client.AttestationDataProvider).AttestationData(r.Context(), slot, committeeIndex)
+	attestationData, err := b.client.(eth2client.AttestationDataProvider).AttestationData(
+		r.Context(),
+		slot,
+		committeeIndex,
+	)
 	if err != nil {
 		b.error(r, w, 500, fmt.Errorf("failed to obtain attestation data: %w", err))
 		return
 	}
 
 	// Intercept.
-	attestationData, err = gateway.Interceptor.InterceptAttestationData(r.Context(), slot, committeeIndex, attestationData)
+	attestationData, err = gateway.Interceptor.InterceptAttestationData(
+		r.Context(),
+		slot,
+		committeeIndex,
+		attestationData,
+	)
 	if err != nil {
 		b.error(r, w, 500, fmt.Errorf("failed to intercept attestation data: %w", err))
 		return

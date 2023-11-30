@@ -22,7 +22,10 @@ type SlashingInterceptor struct {
 	mu                 sync.RWMutex
 }
 
-func NewSlashingInterceptor(validators []*v1.Validator, fakeDoubleProposerDuties bool) *SlashingInterceptor {
+func NewSlashingInterceptor(
+	validators []*v1.Validator,
+	fakeDoubleProposerDuties bool,
+) *SlashingInterceptor {
 	s := &SlashingInterceptor{
 		validators:         make(map[phase0.ValidatorIndex]*validatorState),
 		fakeProposerDuties: fakeDoubleProposerDuties,
@@ -35,7 +38,12 @@ func NewSlashingInterceptor(validators []*v1.Validator, fakeDoubleProposerDuties
 	return s
 }
 
-func (s *SlashingInterceptor) InterceptAttesterDuties(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex, duties []*v1.AttesterDuty) ([]*v1.AttesterDuty, error) {
+func (s *SlashingInterceptor) InterceptAttesterDuties(
+	ctx context.Context,
+	epoch phase0.Epoch,
+	indices []phase0.ValidatorIndex,
+	duties []*v1.AttesterDuty,
+) ([]*v1.AttesterDuty, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -52,13 +60,19 @@ func (s *SlashingInterceptor) InterceptAttesterDuties(ctx context.Context, epoch
 	return duties, nil
 }
 
-func (s *SlashingInterceptor) InterceptAttestationData(ctx context.Context, slot phase0.Slot, committeeIndex phase0.CommitteeIndex, data phase0.AttestationData) (phase0.AttestationData, error) {
+func (s *SlashingInterceptor) InterceptAttestationData(
+	ctx context.Context,
+	slot phase0.Slot,
+	committeeIndex phase0.CommitteeIndex,
+	data phase0.AttestationData,
+) (phase0.AttestationData, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	for _, state := range s.validators {
 		// Skip validators that are not in the requested committee.
-		if state.firstAttesterDuty == nil || state.firstAttesterDuty.Slot != slot || state.firstAttesterDuty.CommitteeIndex != committeeIndex {
+		if state.firstAttesterDuty == nil || state.firstAttesterDuty.Slot != slot ||
+			state.firstAttesterDuty.CommitteeIndex != committeeIndex {
 			continue
 		}
 
@@ -76,7 +90,12 @@ func (s *SlashingInterceptor) InterceptAttestationData(ctx context.Context, slot
 	return data, nil
 }
 
-func (s *SlashingInterceptor) InterceptProposerDuties(ctx context.Context, epoch phase0.Epoch, indices []phase0.ValidatorIndex, duties []*v1.ProposerDuty) ([]*v1.ProposerDuty, error) {
+func (s *SlashingInterceptor) InterceptProposerDuties(
+	ctx context.Context,
+	epoch phase0.Epoch,
+	indices []phase0.ValidatorIndex,
+	duties []*v1.ProposerDuty,
+) ([]*v1.ProposerDuty, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -101,7 +120,13 @@ func (s *SlashingInterceptor) InterceptProposerDuties(ctx context.Context, epoch
 	return duties, nil
 }
 
-func (s *SlashingInterceptor) InterceptBlockProposal(ctx context.Context, slot phase0.Slot, randaoReveal phase0.BLSSignature, graffiti []byte, block *spec.VersionedBeaconBlock) (*spec.VersionedBeaconBlock, error) {
+func (s *SlashingInterceptor) InterceptBlockProposal(
+	ctx context.Context,
+	slot phase0.Slot,
+	randaoReveal phase0.BLSSignature,
+	graffiti []byte,
+	block *spec.VersionedBeaconBlock,
+) (*spec.VersionedBeaconBlock, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 

@@ -144,7 +144,10 @@ func SetupLogsListener(cfg Config, cli DockerCLI) {
 		for k, v := range rst {
 			kvs = append(kvs, KV(k, v))
 		}
-		rest := NewLogRestarter(fmt.Sprint(i), func() error { return docker.MassRestarter(ctx, cli, allDockers, nil) }, kvs...)
+		rest := NewLogRestarter(
+			fmt.Sprint(i),
+			func() error { return docker.MassRestarter(ctx, cli, allDockers, nil) },
+			kvs...)
 		feeders = append(feeders, rest)
 	}
 
