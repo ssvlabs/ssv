@@ -72,6 +72,17 @@ func (n *ConnectionGater) InterceptPeerDial(id peer.ID) bool {
 // particular address. Blocking connections at this stage is typical for
 // address filtering.
 func (n *ConnectionGater) InterceptAddrDial(id peer.ID, multiaddr ma.Multiaddr) bool {
+	if n.IsPeerBlocked(id) {
+		return false
+	}
+	if n.idx == nil {
+		return false
+	}
+	if n.idx.Limit(libp2pnetwork.DirOutbound) {
+		n.logger.Debug("Not accepting outbound addmkr dial", zap.String("peer", id.String()),
+			zap.String("reason", "at peer limit"))
+		return false
+	}
 	return true
 }
 
