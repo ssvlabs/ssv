@@ -10,7 +10,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
-	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -235,13 +234,13 @@ func (dvs *DiscV5Service) discover(ctx context.Context, logger *zap.Logger, hand
 	}
 
 	for ctx.Err() == nil {
-		if dvs.conns.Limit(libp2pnetwork.DirInbound) {
-			// Pause the main loop for a period to stop looking
-			// for new peers.
-			logger.Debug("Not looking for peers, at peer limit")
-			time.Sleep(defaultDiscoveryInterval * 6)
-			continue
-		}
+		// if dvs.conns.Limit(libp2pnetwork.DirInbound) {
+		// 	// Pause the main loop for a period to stop looking
+		// 	// for new peers.
+		// 	logger.Debug("Not looking for peers, at peer limit")
+		// 	time.Sleep(defaultDiscoveryInterval * 6)
+		// 	continue
+		// }
 		wait()
 		exists := iterator.Next()
 		if !exists {
