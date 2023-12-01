@@ -158,11 +158,11 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 			go func() {
 				logger := connLogger(conn)
 				err := acceptConnection(logger, net, conn)
-				if err == nil {
-					if ch.connIdx.Limit(conn.Stat().Direction) {
-						err = errors.New("reached peers limit")
-					}
-				}
+				// if err == nil {
+				// 	if ch.connIdx.Limit(conn.Stat().Direction) {
+				// 		err = errors.New("reached peers limit")
+				// 	}
+				// }
 				if errors.Is(err, ignoredConnection) {
 					return
 				}
@@ -182,17 +182,20 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 			if conn == nil || conn.RemoteMultiaddr() == nil {
 				return
 			}
+			// Must be handled in a goroutine as this callback cannot be blocking.
+			go func() {
+				// Skip if we are still connected to the peer.
+				if net.Connectedness(conn.RemotePeer()) == libp2pnetwork.Connected {
+					logger.Debug("peer disconnected - we are still connected")
+					return
+				}
 
-			// Skip if we are still connected to the peer.
-			if net.Connectedness(conn.RemotePeer()) == libp2pnetwork.Connected {
-				return
-			}
+				metricsConnections.Dec()
+				ch.peerInfos.SetState(conn.RemotePeer(), peers.StateDisconnected)
 
-			metricsConnections.Dec()
-			ch.peerInfos.SetState(conn.RemotePeer(), peers.StateDisconnected)
-
-			logger := connLogger(conn)
-			logger.Debug("peer disconnected")
+				logger := connLogger(conn)
+				logger.Debug("peer disconnected")
+			}()
 		},
 	}
 }
