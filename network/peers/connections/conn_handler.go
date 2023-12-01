@@ -161,9 +161,6 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 				if errors.Is(err, ignoredConnection) {
 					return
 				}
-				if errors.Is(err, ignoredConnection) {
-					return
-				}
 				if err != nil {
 					disconnect(logger, net, conn)
 					logger.Debug("failed to accept connection", zap.Error(err))
