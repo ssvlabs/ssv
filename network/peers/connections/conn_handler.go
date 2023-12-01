@@ -119,7 +119,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 					}
 
 					if net.Connectedness(pid) != network.Connected {
-						return errors.New("lost connection")
+						return ignoredConnection
 					}
 				}
 			}
@@ -158,11 +158,9 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 			go func() {
 				logger := connLogger(conn)
 				err := acceptConnection(logger, net, conn)
-				// if err == nil {
-				// 	if ch.connIdx.Limit(conn.Stat().Direction) {
-				// 		err = errors.New("reached peers limit")
-				// 	}
-				// }
+				if errors.Is(err, ignoredConnection) {
+					return
+				}
 				if errors.Is(err, ignoredConnection) {
 					return
 				}
