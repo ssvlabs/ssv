@@ -21,7 +21,7 @@ services:
     volumes:
       - ${PWD}/validators.json:/app/validators.json
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:6634/ || exit 1"]
+      test: ["CMD-SHELL", "curl http://beacon_proxy:6634/"]
       interval: 3s
       timeout: 3s
       retries: 10
