@@ -2,8 +2,9 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
-	"net"
 	"net/http"
 
 	"github.com/libp2p/go-libp2p/core/network"
@@ -16,25 +17,10 @@ import (
 	"github.com/bloxapp/ssv/nodeprobe"
 )
 
-const healthyPeersAmount = 10
+const healthyPeerCount = 30
 
 type TopicIndex interface {
 	PeersByTopic() ([]peer.ID, map[string][]peer.ID)
-}
-
-type healthStatus int
-
-const (
-	bad healthStatus = iota
-	good
-)
-
-func (c healthStatus) String() string {
-	str := [...]string{"bad", "good"}
-	if c < 0 || int(c) >= len(str) {
-		return "(unrecognized)"
-	}
-	return str[c]
 }
 
 type AllPeersAndTopicsJSON struct {
@@ -68,15 +54,36 @@ type identityJSON struct {
 	Version   string   `json:"version"`
 }
 
+type healthStatus struct {
+	err error
+}
+
+func (h healthStatus) MarshalJSON() ([]byte, error) {
+	if h.err == nil {
+		return json.Marshal("good")
+	}
+	return json.Marshal(fmt.Sprintf("bad: %s", h.err.Error()))
+}
+
 type healthCheckJSON struct {
-	PeersHealthStatus               string `json:"peers_status"`
-	ActivePeersCount                int    `json:"peers_count"`
-	InboundPeersCount               int    `json:"inbound_peers"`
-	OutboundPeersCount              int    `json:"outbound_peers"`
-	BeaconConnectionHealthStatus    string `json:"beacon_health_status"`
-	ExecutionConnectionHealthStatus string `json:"execution_health_status"`
-	EventSyncHealthStatus           string `json:"event_sync_health_status"`
-	LocalPortsListening             string `json:"local_port_listening"`
+	P2P           healthStatus `json:"p2p"`
+	BeaconNode    healthStatus `json:"beacon_node"`
+	ExecutionNode healthStatus `json:"execution_node"`
+	EventSyncer   healthStatus `json:"event_syncer"`
+	Advanced      struct {
+		Peers           int      `json:"peers"`
+		InboundConns    int      `json:"inbound_conns"`
+		OutboundConns   int      `json:"outbound_conns"`
+		ListenAddresses []string `json:"p2p_listen_addresses"`
+	} `json:"advanced"`
+}
+
+func (hc healthCheckJSON) String() string {
+	b, err := json.MarshalIndent(hc, "", "  ")
+	if err != nil {
+		return fmt.Sprintf("error marshalling healthCheckJSON: %s", err.Error())
+	}
+	return string(b)
 }
 
 type Node struct {
@@ -106,88 +113,64 @@ func (h *Node) Peers(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (h *Node) Topics(w http.ResponseWriter, r *http.Request) error {
-	allpeers, peerbytpc := h.TopicIndex.PeersByTopic()
-	alland := AllPeersAndTopicsJSON{}
-	tpcs := []topicIndexJSON{}
-	for topic, peers := range peerbytpc {
-		tpcs = append(tpcs, topicIndexJSON{TopicName: topic, Peers: peers})
-	}
-	alland.AllPeers = allpeers
-	alland.PeersByTopic = tpcs
+	peers, byTopic := h.TopicIndex.PeersByTopic()
 
-	return api.Render(w, r, alland)
+	resp := AllPeersAndTopicsJSON{
+		AllPeers: peers,
+	}
+	for topic, peers := range byTopic {
+		resp.PeersByTopic = append(resp.PeersByTopic, topicIndexJSON{TopicName: topic, Peers: peers})
+	}
+
+	return api.Render(w, r, resp)
 }
 
 func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	ctx := context.Background()
-	resp := healthCheckJSON{
-		BeaconConnectionHealthStatus:    good.String(),
-		ExecutionConnectionHealthStatus: good.String(),
-		EventSyncHealthStatus:           good.String(),
-		PeersHealthStatus:               good.String(),
-	}
-	// Check ports being used.
-	addrs := h.Network.ListenAddresses()
-	var localAddressPort net.Addr
-	for _, addr := range addrs {
-		var err error
+	var resp healthCheckJSON
+
+	// Retrieve P2P listen addresses.
+	for _, addr := range h.Network.ListenAddresses() {
 		if addr.String() == "/p2p-circuit" || addr.Decapsulate(ma.StringCast("/ip4/0.0.0.0")) == nil {
+			// Skip circuit and non-IP4 addresses.
 			continue
 		}
-		localAddressPort, err = manet.ToNetAddr(addr)
+		netAddr, err := manet.ToNetAddr(addr)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to convert multiaddr to net.Addr: %w", err)
 		}
+		resp.Advanced.ListenAddresses = append(resp.Advanced.ListenAddresses, netAddr.String())
 	}
-	// Performing various health checks.
-	resp.BeaconConnectionHealthStatus = performHealthCheck(h.NodeProber.CheckBeaconNodeHealth, ctx)
-	resp.ExecutionConnectionHealthStatus = performHealthCheck(h.NodeProber.CheckExecutionNodeHealth, ctx)
-	resp.EventSyncHealthStatus = performHealthCheck(h.NodeProber.CheckEventSyncerHealth, ctx)
-	// Check peers connection.
-	var activePeerCount int
-	var inboundPeerCount int
-	var outboundPeerCount int
+
+	// Count peers and connections.
 	peers := h.Network.Peers()
 	for _, p := range h.peers(peers) {
 		if p.Connectedness == "Connected" {
-			activePeerCount++
+			resp.Advanced.Peers++
+		}
+		for _, conn := range p.Connections {
+			if conn.Direction == "inbound" {
+				resp.Advanced.InboundConns++
+			} else {
+				resp.Advanced.OutboundConns++
+			}
 		}
 	}
-	// Check connection direction.
-	for _, conn := range h.Network.Conns() {
-		switch conn.Stat().Direction {
-		case network.DirInbound:
-			inboundPeerCount++
-		case network.DirOutbound:
-			outboundPeerCount++
-		}
+
+	// Report whether P2P is healthy.
+	if resp.Advanced.Peers == 0 {
+		resp.P2P = healthStatus{errors.New("no peers are connected")}
+	} else if resp.Advanced.Peers < healthyPeerCount {
+		resp.P2P = healthStatus{errors.New("not enough connected peers")}
+	} else if resp.Advanced.InboundConns == 0 {
+		resp.P2P = healthStatus{errors.New("not enough inbound connections, port is likely not reachable")}
 	}
-	resp.InboundPeersCount = inboundPeerCount
-	resp.OutboundPeersCount = outboundPeerCount
-	resp.ActivePeersCount = activePeerCount
-	resp.LocalPortsListening = localAddressPort.String()
-	switch {
-	case activePeerCount > 0 && activePeerCount < healthyPeersAmount && inboundPeerCount > 0:
-		resp.PeersHealthStatus = fmt.Sprintf("%s: not enough connected peers", bad)
-	case activePeerCount > 0 && inboundPeerCount == 0:
-		resp.PeersHealthStatus = fmt.Sprintf("%s: error: local port probably is not reachable, please check the configuration", bad)
-	case activePeerCount == 0:
-		resp.PeersHealthStatus = fmt.Sprintf("%s: error: no peers are connected", bad)
-	}
-	// Handle plain text content.
-	if contentType := api.NegotiateContentType(r); contentType == api.ContentTypePlainText {
-		str := fmt.Sprintf("%s: %s\n%s: %d\n%s: %d\n%s: %d\n%s: %s\n%s: %s\n%s: %s\n%s: %s\n",
-			"peers_status", resp.PeersHealthStatus,
-			"peers_count", resp.ActivePeersCount,
-			"inbound_peers", resp.InboundPeersCount,
-			"outbound_peers", resp.OutboundPeersCount,
-			"beacon_health_status", resp.BeaconConnectionHealthStatus,
-			"execution_health_status", resp.ExecutionConnectionHealthStatus,
-			"event_sync_health_status", resp.EventSyncHealthStatus,
-			"local_port_listening", resp.LocalPortsListening,
-		)
-		return api.Render(w, r, str)
-	}
+
+	// Check the health of Ethereum nodes and EventSyncer.
+	resp.BeaconNode = healthStatus{h.NodeProber.CheckBeaconNodeHealth(ctx)}
+	resp.ExecutionNode = healthStatus{h.NodeProber.CheckExecutionNodeHealth(ctx)}
+	resp.EventSyncer = healthStatus{(h.NodeProber.CheckEventSyncerHealth(ctx))}
+
 	return api.Render(w, r, resp)
 }
 
@@ -219,11 +202,4 @@ func (h *Node) peers(peers []peer.ID) []peerJSON {
 		resp[i].Version = nodeInfo.Metadata.NodeVersion
 	}
 	return resp
-}
-
-func performHealthCheck(healthCheckFunc func(context.Context) error, ctx context.Context) string {
-	if err := healthCheckFunc(ctx); err != nil {
-		return fmt.Sprintf("%s: %s", bad, err.Error())
-	}
-	return good.String()
 }
