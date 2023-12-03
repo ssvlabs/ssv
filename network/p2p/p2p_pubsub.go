@@ -97,14 +97,21 @@ func (n *p2pNetwork) BroadcastWithCustomKey(msg *spectypes.SSVMessage, pk *rsa.P
 	}
 
 	if n.cfg.Network.Beacon.EstimatedCurrentEpoch() > n.cfg.Network.PermissionlessActivationEpoch {
-		hash := sha256.Sum256(encodedMsg)
 
-		signature, err := rsa.SignPKCS1v15(nil, pk, crypto.SHA256, hash[:])
-		if err != nil {
-			return err
+		if pk == nil {
+			signature := [128]byte{1}
+
+			encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, id, signature[:])
+		} else {
+			hash := sha256.Sum256(encodedMsg)
+
+			signature, err := rsa.SignPKCS1v15(nil, pk, crypto.SHA256, hash[:])
+			if err != nil {
+				return err
+			}
+
+			encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, id, signature)
 		}
-
-		encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, id, signature)
 	}
 
 	vpk := msg.GetID().GetPubKey()
