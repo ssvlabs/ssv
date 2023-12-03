@@ -1,13 +1,12 @@
 FROM golang:latest
 
-WORKDIR /go/src/app
+WORKDIR /
 
 COPY . .
 
 RUN go get -d -v ./...
-RUN go install -v ./...
 
 
-RUN --network=host # Needed?
+RUN go build -o ./logs_catcher ./cmd/logs_catcher
 
-CMD ["app"]
+ENTRYPOINT ["./logs_catcher"]

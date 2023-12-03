@@ -58,7 +58,7 @@ func genTestConfig() Config {
 				"Field": "Fatalism",
 			},
 		},
-		Restarters: []map[string]string{
+		Approvers: []map[string]string{
 			{
 				"M":     "Restart message",
 				"Field": "restaarr",
@@ -91,7 +91,9 @@ func (ml *mockedLogger) Close() error {
 func Test_SetupLogsListener(t *testing.T) {
 	cfg := genTestConfig()
 
-	restarted := make(chan struct{}, 5)
+	const numLogs = 30
+
+	fataletd := make(chan struct{}, 5)
 
 	ml := &mockedLogger{
 		make(chan string, 2),
@@ -100,11 +102,6 @@ func Test_SetupLogsListener(t *testing.T) {
 	dockerMock := &mockDockerClient{
 		ContainerLogsFunc: func(ctx context.Context, container string, options types.ContainerLogsOptions) (io.ReadCloser, error) {
 			return ml, nil
-		},
-		ContainerRestartFunc: func(ctx context.Context, containerID string, options container.StopOptions) error {
-			restarted <- struct{}{}
-			fmt.Println(containerID, " Restarted")
-			return nil
 		},
 		ContainerListFunc: func(ctx context.Context, options types.ContainerListOptions) ([]types.Container, error) {
 			return []types.Container{
@@ -117,21 +114,28 @@ func Test_SetupLogsListener(t *testing.T) {
 		},
 	}
 
+	cfg.FatalerFunc = func(s string) {
+		fataletd <- struct{}{}
+	}
+
+	cfg.ApproverFunc = func(s string) {
+		fmt.Printf("Approved")
+	}
+
 	go func() {
-		for i := 0; i < 30; i++ {
+		for i := 0; i < numLogs; i++ {
 			ml.Write("{ \"M\": \"random msg\", \"Field\": \"randomfield\" }")
 			time.Sleep(100 * time.Millisecond)
 		}
-		//}
-		ml.Write("{ \"M\": \"Restart message\", \"Field\": \"restaarr\" }")
+		ml.Write("{ \"M\": \"Fatal message\", \"Field\": \"Fatalism\" }")
 	}()
 
-	go SetupLogsListener(cfg, dockerMock)
+	go Listen(cfg, dockerMock)
 
 	select {
-	case <-restarted:
+	case <-fataletd:
 		break
-	case <-time.After((100 * time.Millisecond) * 35):
+	case <-time.After((100 * time.Millisecond) * (numLogs + 5)):
 		t.Fail()
 	}
 

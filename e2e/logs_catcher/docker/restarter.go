@@ -3,46 +3,39 @@ package docker
 import (
 	"context"
 	"github.com/docker/docker/api/types"
-	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
 )
 
-type RestartCLI interface {
-	ContainerRestart(ctx context.Context, containerID string, options container.StopOptions) error
-	ContainerList(
-		ctx context.Context,
-		options types.ContainerListOptions,
-	) ([]types.Container, error)
+type Lister interface {
+	//	ContainerRestart(ctx context.Context, containerID string, options container.StopOptions) error
+	ContainerList(ctx context.Context, options types.ContainerListOptions) ([]types.Container, error)
 }
 
-func Restart(ctx context.Context, c RestartCLI, containerName string) error {
-	return c.ContainerRestart(ctx, containerName, container.StopOptions{
-		Signal:  "",
-		Timeout: nil,
-	})
-}
+//
+//func Restart(ctx context.Context, c Lister, containerName string) error {
+//	return c.ContainerRestart(ctx, containerName, container.StopOptions{
+//		Signal:  "",
+//		Timeout: nil,
+//	})
+//}
+//
+//func MassRestarter(ctx context.Context, cl Lister, containers []string, ignore []string) error {
+//contLoop:
+//	for _, c := range containers {
+//		for _, i := range ignore {
+//			if c == i {
+//				continue contLoop
+//			}
+//		}
+//		if err := Restart(ctx, cl, c); err != nil {
+//			return err
+//		}
+//
+//	}
+//	return nil
+//}
 
-func MassRestarter(ctx context.Context, cl RestartCLI, containers []string, ignore []string) error {
-contLoop:
-	for _, c := range containers {
-		for _, i := range ignore {
-			if c == i {
-				continue contLoop
-			}
-		}
-		if err := Restart(ctx, cl, c); err != nil {
-			return err
-		}
-
-	}
-	return nil
-}
-
-func GetDockers(
-	ctx context.Context,
-	c RestartCLI,
-	filts ...func(container2 types.Container) bool,
-) ([]string, error) {
+func GetDockers(ctx context.Context, c Lister, filts ...func(container2 types.Container) bool) ([]string, error) {
 	cs, err := c.ContainerList(ctx, types.ContainerListOptions{
 		Size:    false,
 		All:     false,
