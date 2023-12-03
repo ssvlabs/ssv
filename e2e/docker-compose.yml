@@ -39,7 +39,7 @@ services:
   x-base: &default-base
     depends_on:
       beacon_proxy:
-        condition: service_started
+        condition: service_healthy
 
     build:
       context: ../
