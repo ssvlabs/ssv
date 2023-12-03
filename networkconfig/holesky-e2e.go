@@ -10,6 +10,6 @@ var HoleskyE2E = NetworkConfig{
 	Beacon:               beacon.NewNetwork(spectypes.HoleskyNetwork),
 	Domain:               spectypes.DomainType{0x0, 0x0, 0xee, 0x1},
 	GenesisEpoch:         1,
-	RegistryContractAddr: "0xC3CD9A0aE89Fff83b71b58b6512D43F8a41f363D",
+	RegistryContractAddr: "0x58410bef803ecd7e63b23664c586a6db72daf59c",
 	Bootnodes:            []string{},
 }

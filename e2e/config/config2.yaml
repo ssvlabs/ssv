@@ -6,7 +6,7 @@ db:
 
 eth2:
   Network: holesky
-  BeaconNodeAddr: http://beacon_proxy:6631
+  BeaconNodeAddr: http://beacon_proxy:6632
 eth1:
   ETH1Addr: ws://bn-h-1.stage.bloxinfra.com:8549/ws
 
