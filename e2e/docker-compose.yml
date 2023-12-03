@@ -24,7 +24,7 @@ services:
       test: ["CMD-SHELL", "curl -f http://localhost:6631/ || exit 1"]
       interval: 3s
       timeout: 3s
-      retries: 5
+      retries: 10
       start_period: 0s
 
   # logs_catcher:

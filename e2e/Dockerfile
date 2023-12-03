@@ -38,4 +38,6 @@ WORKDIR /app
 # Copy the built binary from the previous stage
 COPY --from=build /bin/ssv-e2e /bin/ssv-e2e
 
+RUN apk add --no-cache curl
+
 ENTRYPOINT ["/bin/ssv-e2e"]
