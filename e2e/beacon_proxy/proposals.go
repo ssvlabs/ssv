@@ -9,6 +9,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 )
 
@@ -16,7 +17,14 @@ func (b *BeaconProxy) handleProposerDuties(w http.ResponseWriter, r *http.Reques
 	logger, gateway := b.requestContext(r)
 
 	// Parse request.
-	epoch, indices, err := parseDutiesRequest(r, false)
+	var epoch phase0.Epoch
+	if chi.URLParam(r, "epoch") != "" {
+		if _, err := fmt.Sscanf(chi.URLParam(r, "epoch"), "%d", &epoch); err != nil {
+			b.error(r, w, 400, fmt.Errorf("failed to parse request: %w", err))
+			return
+		}
+	}
+	indices, err := parseIndicesFromRequest(r, false)
 	if err != nil {
 		b.error(r, w, 400, fmt.Errorf("failed to read request: %w", err))
 		return

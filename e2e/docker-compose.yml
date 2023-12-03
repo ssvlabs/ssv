@@ -23,8 +23,8 @@ services:
     healthcheck:
       test:
         ["CMD-SHELL", "curl -f http://beacon_proxy:6634/eth/v1/node/version"]
-      interval: 3s
-      timeout: 3s
+      interval: 5s
+      timeout: 5s
       retries: 10
       start_period: 0s
 
@@ -47,6 +47,8 @@ services:
       dockerfile: Dockerfile
     image: ssvnode:latest
     command: make BUILD_PATH=/go/bin/ssvnode start-node
+    environment:
+      - HOST_ADDRESS=
     networks:
       - blox-docker
   #    restart: never

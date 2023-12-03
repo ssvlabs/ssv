@@ -3,10 +3,12 @@ package beaconproxy
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 
 	eth2client "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 )
 
@@ -14,7 +16,14 @@ func (b *BeaconProxy) handleAttesterDuties(w http.ResponseWriter, r *http.Reques
 	logger, gateway := b.requestContext(r)
 
 	// Parse request.
-	epoch, indices, err := parseDutiesRequest(r, true)
+	var epoch phase0.Epoch
+	if chi.URLParam(r, "epoch") != "" {
+		if _, err := fmt.Sscanf(chi.URLParam(r, "epoch"), "%d", &epoch); err != nil {
+			b.error(r, w, 400, fmt.Errorf("failed to parse request: %w", err))
+			return
+		}
+	}
+	indices, err := parseIndicesFromRequest(r, true)
 	if err != nil {
 		b.error(r, w, 400, fmt.Errorf("failed to read request: %w", err))
 		return
@@ -62,6 +71,7 @@ func (b *BeaconProxy) handleAttestationData(w http.ResponseWriter, r *http.Reque
 		b.error(r, w, 400, fmt.Errorf("failed to parse request: %w", err))
 		return
 	}
+	log.Printf("slot: %d", slot)
 
 	// Obtain attestation data.
 	attestationData, err := b.client.(eth2client.AttestationDataProvider).AttestationData(

@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -177,26 +179,30 @@ func (b *BeaconProxy) respond(r *http.Request, w http.ResponseWriter, data any) 
 	return json.NewEncoder(w).Encode(response)
 }
 
-func parseDutiesRequest(
+func parseIndicesFromRequest(
 	r *http.Request,
 	requireIndices bool,
-) (phase0.Epoch, []phase0.ValidatorIndex, error) {
-	var epoch phase0.Epoch
-	if err := scanURL(r, "epoch:%d", &epoch); err != nil {
-		return 0, nil, fmt.Errorf("failed to parse epoch: %w", err)
-	}
-	var indices []phase0.ValidatorIndex
+) ([]phase0.ValidatorIndex, error) {
+	var indices []string
 	if err := json.NewDecoder(r.Body).Decode(&indices); err != nil {
 		// EOF is returned when there is no body (such as in GET requests).
 		if errors.Is(err, io.EOF) {
 			if requireIndices {
-				return 0, nil, fmt.Errorf("no indices provided")
+				return nil, fmt.Errorf("no indices provided")
 			}
 		} else {
-			return 0, nil, fmt.Errorf("failed to parse indices: %w", err)
+			return nil, fmt.Errorf("failed to parse indices: %w", err)
 		}
 	}
-	return epoch, indices, nil
+	indicesOut := make([]phase0.ValidatorIndex, len(indices))
+	for i, indexStr := range indices {
+		n, err := strconv.ParseUint(indexStr, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse index %s: %w", indexStr, err)
+		}
+		indicesOut[i] = phase0.ValidatorIndex(n)
+	}
+	return indicesOut, nil
 }
 
 func scanURL(r *http.Request, fields ...any) error {
@@ -204,18 +210,20 @@ func scanURL(r *http.Request, fields ...any) error {
 		return fmt.Errorf("invalid number of arguments to scanURL")
 	}
 	for i := 0; i < len(fields); i += 2 {
-		fieldName, ok := fields[i].(string)
-		if !ok {
+		fieldNameAndFormat := strings.Split(fields[i].(string), ":")
+		fieldName := fieldNameAndFormat[0]
+		if fieldName == "" {
 			return fmt.Errorf("field name must be a string")
 		}
-		format, ok := fields[i].(string)
-		if !ok {
+		format := fieldNameAndFormat[1]
+		if format == "" {
 			return fmt.Errorf("format must be a string")
 		}
-		valueStr := chi.URLParam(r, fieldName)
+		valueStr := r.URL.Query().Get(fieldName)
 		if valueStr == "" {
 			return nil
 		}
+		log.Printf("valueStr: %s", valueStr)
 		if format == "%x" {
 			valueStr = strings.TrimPrefix(valueStr, "0x")
 		}
