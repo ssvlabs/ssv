@@ -48,8 +48,16 @@ func main() {
 
 	logger := zap.L()
 
-	validatorsFilePath := flag.String("validators", "validators.json", "validators json file to load validators and respective tests")
-	beaconNodeUrl := flag.String("beacon_url", "http://bn-h-2.stage.bloxinfra.com:5056", "beaocn node to proxy and intercept")
+	validatorsFilePath := flag.String(
+		"validators",
+		"validators.json",
+		"validators json file to load validators and respective tests",
+	)
+	beaconNodeUrl := flag.String(
+		"beacon_url",
+		"http://bn-h-2.stage.bloxinfra.com:5056",
+		"beaocn node to proxy and intercept",
+	)
 	flag.Var(Nodes, "nodes", "nodes to intercept")
 
 	flag.Parse()
@@ -61,13 +69,21 @@ func main() {
 
 	contents, err := os.ReadFile(*validatorsFilePath)
 	if err != nil {
-		logger.Fatal("Can't read file contents", zap.String("file", *validatorsFilePath), zap.Error(err))
+		logger.Fatal(
+			"Can't read file contents",
+			zap.String("file", *validatorsFilePath),
+			zap.Error(err),
+		)
 	}
 
 	validators := make(map[string]string)
 	err = json.Unmarshal(contents, &validators)
 	if err != nil {
-		logger.Fatal("err parsing json file", zap.String("file", *validatorsFilePath), zap.Error(err))
+		logger.Fatal(
+			"err parsing json file",
+			zap.String("file", *validatorsFilePath),
+			zap.Error(err),
+		)
 	}
 
 	if *beaconNodeUrl == "" {

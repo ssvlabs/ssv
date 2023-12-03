@@ -1,5 +1,35 @@
 version: "3.8"
 services:
+  beacon_proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: beacon_proxy:latest
+    command: beacon-proxy
+    environment:
+      - BEACON_NODE_URL=http://bn-h-2.stage.bloxinfra.com:5056
+      - VALIDATORS_FILE=validators.json
+      - GATEWAYS=ssv-node-1,ssv-node-2,ssv-node-3,ssv-node-4
+      - BASE_PORT=6631
+    ports:
+      - 6631:6631
+      - 6632:6632
+      - 6633:6633
+      - 6634:6634
+    networks:
+      - blox-docker
+    volumes:
+      - ${PWD}/validators.json:/app/validators.json
+
+  # logs_catcher:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   image: logs_catcher:latest
+  #   command: ./bin/logs_catcher
+  #   networks:
+  #     - blox-docker
+
   x-base: &default-base
     depends_on:
       beacon_proxy:
@@ -12,9 +42,9 @@ services:
     command: make BUILD_PATH=/go/bin/ssvnode start-node
     networks:
       - blox-docker
-#    restart: never
-#    environment:
-#      CONFIG_PATH: ./config/config.yaml
+  #    restart: never
+  #    environment:
+  #      CONFIG_PATH: ./config/config.yaml
 
   ssv-node-1:
     <<: *default-base
@@ -71,40 +101,6 @@ services:
       - ssv-node-4-data:/data
       - ${PWD}/config/config4.yaml:/tconfig/config4.yaml
       - ${PWD}/config/share4.yaml:/tconfig/share4.yaml
-
-  beacon_proxy:
-    build:
-      context: ./beacon_proxy
-      dockerfile: Dockerfile
-    image: beacon_proxy:latest
-    command:
-      - --validators=validators.json
-      - --beacon_url=http://bn-h-2.stage.bloxinfra.com:5056
-      - --nodes=ssv-node-1
-      - --nodes=ssv-node-2
-      - --nodes=ssv-node-3
-      - --nodes=ssv-node-4
-    ports:
-      - 6631:6631
-      - 6632:6632
-      - 6633:6633
-      - 6634:6634
-    networks:
-      - blox-docker
-    volumes:
-      - ${PWD}/validators.json:/app/validators.json
-
-
-
-#  logs_catcher:
-#    build:
-#      context: ./logs_catcher
-#      dockerfile: Dockerfile
-#    image: logs_catcher:latest
-#    command: ./bin/logs_catcher
-#    networks:
-#      - blox-docker
-
 
 volumes:
   ssv-node-1-data:

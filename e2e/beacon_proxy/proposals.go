@@ -13,15 +13,15 @@ import (
 )
 
 func (b *BeaconProxy) handleProposerDuties(w http.ResponseWriter, r *http.Request) {
-	logger := r.Context().Value(loggerKey).(*zap.Logger)
-	gateway := r.Context().Value(gatewayKey).(Gateway)
+	logger, gateway := b.requestContext(r)
 
 	// Parse request.
-	epoch, indices, err := parseDutiesRequest(r)
+	epoch, indices, err := parseDutiesRequest(r, false)
 	if err != nil {
 		b.error(r, w, 400, fmt.Errorf("failed to read request: %w", err))
 		return
 	}
+
 	// Obtain duties.
 	duties, err := b.client.(eth2client.ProposerDutiesProvider).ProposerDuties(
 		r.Context(),
@@ -53,8 +53,7 @@ func (b *BeaconProxy) handleProposerDuties(w http.ResponseWriter, r *http.Reques
 }
 
 func (b *BeaconProxy) handleBlockProposal(w http.ResponseWriter, r *http.Request) {
-	logger := r.Context().Value(loggerKey).(*zap.Logger)
-	gateway := r.Context().Value(gatewayKey).(Gateway)
+	logger, gateway := b.requestContext(r)
 
 	// Parse request.
 	var (
@@ -121,8 +120,7 @@ func (b *BeaconProxy) handleBlockProposal(w http.ResponseWriter, r *http.Request
 }
 
 func (b *BeaconProxy) handleSubmitBlockProposal(w http.ResponseWriter, r *http.Request) {
-	logger := r.Context().Value(loggerKey).(*zap.Logger)
-	gateway := r.Context().Value(gatewayKey).(Gateway)
+	logger, gateway := b.requestContext(r)
 
 	// Parse request.
 	var block *capella.SignedBeaconBlock

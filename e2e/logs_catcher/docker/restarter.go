@@ -8,7 +8,10 @@ import (
 
 type Lister interface {
 	//	ContainerRestart(ctx context.Context, containerID string, options container.StopOptions) error
-	ContainerList(ctx context.Context, options types.ContainerListOptions) ([]types.Container, error)
+	ContainerList(
+		ctx context.Context,
+		options types.ContainerListOptions,
+	) ([]types.Container, error)
 }
 
 //
@@ -35,7 +38,11 @@ type Lister interface {
 //	return nil
 //}
 
-func GetDockers(ctx context.Context, c Lister, filts ...func(container2 types.Container) bool) ([]string, error) {
+func GetDockers(
+	ctx context.Context,
+	c Lister,
+	filts ...func(container2 types.Container) bool,
+) ([]string, error) {
 	cs, err := c.ContainerList(ctx, types.ContainerListOptions{
 		Size:    false,
 		All:     false,

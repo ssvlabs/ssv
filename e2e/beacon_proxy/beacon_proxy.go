@@ -3,11 +3,12 @@ package beaconproxy
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"strconv"
 	"strings"
 	"time"
 
@@ -21,11 +22,13 @@ import (
 	"go.uber.org/zap"
 )
 
-// gatewayKey is the key used to store the gateway in the request context.
-var gatewayKey struct{}
+type (
+	// gatewayKey is the key used to store the gateway in the request context.
+	gatewayKey struct{}
 
-// loggerKey is the key used to store the logger in the request context.
-var loggerKey struct{}
+	// loggerKey is the key used to store the logger in the request context.
+	loggerKey struct{}
+)
 
 type Gateway struct {
 	Name        string
@@ -77,9 +80,32 @@ func New(
 }
 
 func (b *BeaconProxy) Run(ctx context.Context) error {
+	// Serve each endpoint on a separate port.
+	pool := pool.New().WithContext(ctx)
+	for port, gateway := range b.gateways {
+		b.logger.Debug("starting proxy server",
+			zap.String("gateway", gateway.Name),
+			zap.Int("port", port),
+		)
+		addr := fmt.Sprintf(":%d", port)
+		pool.Go(func(ctx context.Context) error {
+			server := http.Server{
+				Addr:         addr,
+				ReadTimeout:  30 * time.Second,
+				WriteTimeout: 30 * time.Second,
+				IdleTimeout:  30 * time.Second,
+				Handler:      b.router(gateway),
+			}
+			return server.ListenAndServe()
+		})
+	}
+
+	return pool.Wait()
+}
+
+func (b *BeaconProxy) router(gateway Gateway) *chi.Mux {
 	r := chi.NewRouter()
-	r.Use(b.loggerMiddleware)
-	r.HandleFunc("/", b.passthrough)
+	r.Use(b.middleware(gateway))
 
 	// Attestations.
 	r.HandleFunc("/eth/v1/validator/duties/attester/{epoch}", b.handleAttesterDuties)
@@ -91,62 +117,36 @@ func (b *BeaconProxy) Run(ctx context.Context) error {
 	r.HandleFunc("/eth/v3/validator/blocks", b.handleBlockProposal)
 	r.HandleFunc("/eth/v1/beacon/pool/proposals", b.handleSubmitBlockProposal)
 
-	// Serve each endpoint on a separate port.
-	pool := pool.New().WithContext(ctx)
-	for port, gateway := range b.gateways {
-		b.logger.Debug("starting proxy endpoint",
-			zap.String("gateway", gateway.Name),
-			zap.Int("port", port),
-		)
-		addr := fmt.Sprintf(":%d", port)
-		pool.Go(func(ctx context.Context) error {
-			server := http.Server{
-				Addr:         addr,
-				ReadTimeout:  30 * time.Second,
-				WriteTimeout: 30 * time.Second,
-				IdleTimeout:  30 * time.Second,
-				Handler:      r,
-			}
-			return server.ListenAndServe()
-		})
-	}
+	// Passthrough everything else.
+	r.HandleFunc("/*", b.passthrough)
 
-	return pool.Wait()
+	return r
 }
 
-func (b *BeaconProxy) loggerMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Determine the gateway from the requested port.
-		fmt.Println("##################", r.URL)
-		port, err := strconv.Atoi(r.URL.Port())
-		if err != nil {
-			b.logger.Fatal("failed to parse port",
-				zap.String("port", r.URL.Port()),
-				zap.Error(err),
+func (b *BeaconProxy) middleware(gateway Gateway) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Add gateway to context.
+			ctx := context.WithValue(r.Context(), gatewayKey{}, gateway)
+
+			// Add logger to context.
+			logger := b.logger.With(
+				zap.String("gateway", gateway.Name),
+				zap.String("endpoint", fmt.Sprintf("%s %s", r.Method, r.URL.Path)),
 			)
-			return
-		}
-		gateway, ok := b.gateways[port]
-		if !ok {
-			b.logger.Fatal("unknown port", zap.String("port", r.URL.Port()))
-			return
-		}
-		ctx := context.WithValue(r.Context(), gatewayKey, gateway)
+			ctx = context.WithValue(ctx, loggerKey{}, logger)
 
-		logger := b.logger.With(
-			zap.String("gateway", gateway.Name),
-			zap.String("endpoint", fmt.Sprintf("%s %s", r.Method, r.URL.Path)),
-		)
-		ctx = context.WithValue(ctx, loggerKey, logger)
+			// Log request.
+			b.logger.Debug("received request",
+				zap.String("gateway", gateway.Name),
+				zap.String("method", r.Method),
+				zap.String("path", r.URL.Path),
+			)
 
-		b.logger.Debug("received request",
-			zap.String("gateway", gateway.Name),
-			zap.String("method", r.Method),
-			zap.String("path", r.URL.Path),
-		)
-
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
+			// Call next handler.
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
 }
 
 func (b *BeaconProxy) passthrough(w http.ResponseWriter, r *http.Request) {
@@ -154,8 +154,13 @@ func (b *BeaconProxy) passthrough(w http.ResponseWriter, r *http.Request) {
 	b.proxy.ServeHTTP(w, r)
 }
 
+func (b *BeaconProxy) requestContext(r *http.Request) (*zap.Logger, Gateway) {
+	return r.Context().Value(loggerKey{}).(*zap.Logger),
+		r.Context().Value(gatewayKey{}).(Gateway)
+}
+
 func (b *BeaconProxy) error(r *http.Request, w http.ResponseWriter, status int, err error) {
-	logger := r.Context().Value(loggerKey).(*zap.Logger)
+	logger, _ := b.requestContext(r)
 	logger.Error("failed to handle request",
 		zap.Int("status", status),
 		zap.Error(err),
@@ -172,14 +177,24 @@ func (b *BeaconProxy) respond(r *http.Request, w http.ResponseWriter, data any) 
 	return json.NewEncoder(w).Encode(response)
 }
 
-func parseDutiesRequest(r *http.Request) (phase0.Epoch, []phase0.ValidatorIndex, error) {
+func parseDutiesRequest(
+	r *http.Request,
+	requireIndices bool,
+) (phase0.Epoch, []phase0.ValidatorIndex, error) {
 	var epoch phase0.Epoch
 	if err := scanURL(r, "epoch:%d", &epoch); err != nil {
 		return 0, nil, fmt.Errorf("failed to parse epoch: %w", err)
 	}
 	var indices []phase0.ValidatorIndex
 	if err := json.NewDecoder(r.Body).Decode(&indices); err != nil {
-		return 0, nil, fmt.Errorf("failed to parse indices: %w", err)
+		// EOF is returned when there is no body (such as in GET requests).
+		if errors.Is(err, io.EOF) {
+			if requireIndices {
+				return 0, nil, fmt.Errorf("no indices provided")
+			}
+		} else {
+			return 0, nil, fmt.Errorf("failed to parse indices: %w", err)
+		}
 	}
 	return epoch, indices, nil
 }
@@ -206,7 +221,7 @@ func scanURL(r *http.Request, fields ...any) error {
 		}
 		_, err := fmt.Sscanf(valueStr, format, fields[i+1])
 		if err != nil {
-			return fmt.Errorf("failed to scan field %s: %v", fieldName, err)
+			return fmt.Errorf("failed to scan field %s: %w", fieldName, err)
 		}
 	}
 

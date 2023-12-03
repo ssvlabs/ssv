@@ -17,7 +17,9 @@ func DefaultApprover(count int) func(s string) {
 
 	return func(s string) {
 		goodLogs = append(goodLogs, s)
-		if len(goodLogs) == count { // is it enough? maybe we need a log for each validator in each operator for ex
+		if len(
+			goodLogs,
+		) == count { // is it enough? maybe we need a log for each validator in each operator for ex
 			// todo: Condition satisfied. what should we do? exit happily?
 			fmt.Println("All validators logged successfully")
 			for _, log := range goodLogs {

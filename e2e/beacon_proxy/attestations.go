@@ -11,11 +11,10 @@ import (
 )
 
 func (b *BeaconProxy) handleAttesterDuties(w http.ResponseWriter, r *http.Request) {
-	logger := r.Context().Value(loggerKey).(*zap.Logger)
-	gateway := r.Context().Value(gatewayKey).(Gateway)
+	logger, gateway := b.requestContext(r)
 
 	// Parse request.
-	epoch, indices, err := parseDutiesRequest(r)
+	epoch, indices, err := parseDutiesRequest(r, true)
 	if err != nil {
 		b.error(r, w, 400, fmt.Errorf("failed to read request: %w", err))
 		return
@@ -52,8 +51,7 @@ func (b *BeaconProxy) handleAttesterDuties(w http.ResponseWriter, r *http.Reques
 }
 
 func (b *BeaconProxy) handleAttestationData(w http.ResponseWriter, r *http.Request) {
-	logger := r.Context().Value(loggerKey).(*zap.Logger)
-	gateway := r.Context().Value(gatewayKey).(Gateway)
+	logger, gateway := b.requestContext(r)
 
 	// Parse request.
 	var (
@@ -101,8 +99,7 @@ func (b *BeaconProxy) handleAttestationData(w http.ResponseWriter, r *http.Reque
 }
 
 func (b *BeaconProxy) handleSubmitAttestations(w http.ResponseWriter, r *http.Request) {
-	logger := r.Context().Value(loggerKey).(*zap.Logger)
-	gateway := r.Context().Value(gatewayKey).(Gateway)
+	logger, gateway := b.requestContext(r)
 
 	// Parse request.
 	var attestations []*phase0.Attestation
