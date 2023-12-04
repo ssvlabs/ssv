@@ -36,6 +36,7 @@ require (
 require (
 	github.com/alecthomas/kong v0.8.1
 	github.com/docker/docker v24.0.7+incompatible
+	golang.org/x/exp v0.0.0-20230810033253-352e893a4cad
 )
 
 require (
