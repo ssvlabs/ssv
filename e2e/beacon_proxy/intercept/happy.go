@@ -2,9 +2,11 @@ package intercept
 
 import (
 	"context"
+
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"go.uber.org/zap"
 )
 
 // HappyInterceptor doesn't change anything for the nodes and validators.
@@ -29,6 +31,7 @@ func NewHappyInterceptor(
 
 func (s *HappyInterceptor) InterceptAttesterDuties(
 	ctx context.Context,
+	logger *zap.Logger,
 	epoch phase0.Epoch,
 	indices []phase0.ValidatorIndex,
 	duties []*v1.AttesterDuty,
@@ -38,6 +41,7 @@ func (s *HappyInterceptor) InterceptAttesterDuties(
 
 func (s *HappyInterceptor) InterceptAttestationData(
 	ctx context.Context,
+	logger *zap.Logger,
 	slot phase0.Slot,
 	committeeIndex phase0.CommitteeIndex,
 	data *phase0.AttestationData,
@@ -47,6 +51,7 @@ func (s *HappyInterceptor) InterceptAttestationData(
 
 func (s *HappyInterceptor) InterceptProposerDuties(
 	ctx context.Context,
+	logger *zap.Logger,
 	epoch phase0.Epoch,
 	indices []phase0.ValidatorIndex,
 	duties []*v1.ProposerDuty,
@@ -56,6 +61,7 @@ func (s *HappyInterceptor) InterceptProposerDuties(
 
 func (s *HappyInterceptor) InterceptBlockProposal(
 	ctx context.Context,
+	logger *zap.Logger,
 	slot phase0.Slot,
 	randaoReveal phase0.BLSSignature,
 	graffiti []byte,
@@ -66,6 +72,7 @@ func (s *HappyInterceptor) InterceptBlockProposal(
 
 func (c *HappyInterceptor) InterceptSubmitAttestations(
 	ctx context.Context,
+	logger *zap.Logger,
 	attestations []*phase0.Attestation,
 ) ([]*phase0.Attestation, error) {
 	return attestations, nil
@@ -73,6 +80,7 @@ func (c *HappyInterceptor) InterceptSubmitAttestations(
 
 func (c *HappyInterceptor) InterceptSubmitBlockProposal(
 	ctx context.Context,
+	logger *zap.Logger,
 	block *spec.VersionedSignedBeaconBlock,
 ) (*spec.VersionedSignedBeaconBlock, error) {
 	return block, nil

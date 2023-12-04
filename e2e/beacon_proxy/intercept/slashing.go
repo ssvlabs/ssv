@@ -2,33 +2,79 @@ package intercept
 
 import (
 	"context"
+	"crypto/rand"
+	"fmt"
 	"sync"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	"go.uber.org/zap"
 )
 
+type ProposerSlashingTest struct {
+	Name      string
+	Slashable bool
+	Apply     func(*spec.VersionedBeaconBlock) error
+}
+
+type AttesterSlashingTest struct {
+	Name      string
+	Slashable bool
+	Apply     func(*phase0.AttestationData) error
+}
+
 type validatorState struct {
-	validator            *v1.Validator
-	firstAttesterDuty    *v1.AttesterDuty
-	firstAttestationData *phase0.AttestationData
-	firstBlock           *spec.VersionedBeaconBlock
+	validator *v1.Validator
+
+	proposerTest ProposerSlashingTest
+	attesterTest AttesterSlashingTest
+
+	// StartEpoch
+	firstAttesterDuty         *v1.AttesterDuty
+	firstAttestationData      *phase0.AttestationData
+	firstSubmittedAttestation *phase0.Attestation
+
+	// EndEpoch
+	secondAttesterDuty         *v1.AttesterDuty
+	secondAttestationData      *phase0.AttestationData
+	secondSubmittedAttestation *phase0.Attestation
+
+	// StartEpoch
+	firstProposerDuty   *v1.ProposerDuty
+	firstBlock          *spec.VersionedBeaconBlock
+	firstSubmittedBlock *spec.VersionedBeaconBlock
+
+	// EndEpoch
+	secondProposerDuty   *v1.ProposerDuty
+	secondBlock          *spec.VersionedBeaconBlock
+	secondSubmittedBlock *spec.VersionedBeaconBlock
 }
 
 type SlashingInterceptor struct {
+	network            beacon.Network
+	startEpoch         phase0.Epoch
+	sleepEpoch         phase0.Epoch
+	endEpoch           phase0.Epoch
 	validators         map[phase0.ValidatorIndex]*validatorState
 	fakeProposerDuties bool
 	mu                 sync.RWMutex
 }
 
 func NewSlashingInterceptor(
+	network beacon.Network,
+	startEpoch phase0.Epoch,
+	fakeProposerDuties bool,
 	validators []*v1.Validator,
-	fakeDoubleProposerDuties bool,
 ) *SlashingInterceptor {
 	s := &SlashingInterceptor{
+		network:            network,
+		startEpoch:         startEpoch,
+		sleepEpoch:         startEpoch + 1,
+		endEpoch:           startEpoch + 2,
+		fakeProposerDuties: fakeProposerDuties,
 		validators:         make(map[phase0.ValidatorIndex]*validatorState),
-		fakeProposerDuties: fakeDoubleProposerDuties,
 	}
 	for _, validator := range validators {
 		s.validators[validator.Index] = &validatorState{
@@ -40,6 +86,7 @@ func NewSlashingInterceptor(
 
 func (s *SlashingInterceptor) InterceptAttesterDuties(
 	ctx context.Context,
+	logger *zap.Logger,
 	epoch phase0.Epoch,
 	indices []phase0.ValidatorIndex,
 	duties []*v1.AttesterDuty,
@@ -47,13 +94,28 @@ func (s *SlashingInterceptor) InterceptAttesterDuties(
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	if s.blockedEpoch(epoch) {
+		// Return empty duties outside the test's boundaries.
+		return []*v1.AttesterDuty{}, nil
+	}
+
 	for _, duty := range duties {
 		state, ok := s.validators[duty.ValidatorIndex]
 		if !ok {
 			continue
 		}
 		if state.firstAttesterDuty == nil {
+			if epoch != s.startEpoch {
+				return nil, fmt.Errorf("misbehavior: first attester duty wasn't requested during the start epoch")
+			}
 			state.firstAttesterDuty = duty
+			continue
+		}
+		if state.secondAttesterDuty == nil {
+			if epoch != s.endEpoch {
+				return nil, fmt.Errorf("misbehavior: second attester duty wasn't requested during the end epoch")
+			}
+			state.secondAttesterDuty = duty
 			continue
 		}
 	}
@@ -62,14 +124,22 @@ func (s *SlashingInterceptor) InterceptAttesterDuties(
 
 func (s *SlashingInterceptor) InterceptAttestationData(
 	ctx context.Context,
+	logger *zap.Logger,
 	slot phase0.Slot,
 	committeeIndex phase0.CommitteeIndex,
-	data phase0.AttestationData,
-) (phase0.AttestationData, error) {
+	data *phase0.AttestationData,
+) (*phase0.AttestationData, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	epoch := s.network.EstimatedEpochAtSlot(slot)
+	if s.blockedEpoch(epoch) {
+		return nil, fmt.Errorf("attestation data requested for blocked epoch %d", epoch)
+	}
+
 	for _, state := range s.validators {
+		// TODO: fix to track both first and second attester duties.
+
 		// Skip validators that are not in the requested committee.
 		if state.firstAttesterDuty == nil || state.firstAttesterDuty.Slot != slot ||
 			state.firstAttesterDuty.CommitteeIndex != committeeIndex {
@@ -78,20 +148,68 @@ func (s *SlashingInterceptor) InterceptAttestationData(
 
 		// Record the first attestation data.
 		if state.firstAttestationData == nil {
-			state.firstAttestationData = &data
+			if epoch != s.startEpoch {
+				return nil, fmt.Errorf("misbehavior: first attester data wasn't requested during the start epoch")
+			}
+			state.firstAttestationData = data
 			continue
 		}
 
-		// Replace source & target in the attestation data with those from the first one,
-		// in order to make it slashable.
-		data.Source = state.firstAttestationData.Source
-		data.Target = state.firstAttestationData.Target
+		// Apply the test on the second attestation data.
+		if err := state.attesterTest.Apply(data); err != nil {
+			return nil, fmt.Errorf("failed to apply attester slashing test: %w", err)
+		}
+
+		// Record the second attestation data.
+		if state.secondAttestationData == nil {
+			if epoch != s.endEpoch {
+				return nil, fmt.Errorf("misbehavior: second attester data wasn't requested during the end epoch")
+			}
+			state.secondAttestationData = data
+			continue
+		}
 	}
 	return data, nil
+}
+func (s *SlashingInterceptor) InterceptSubmitAttestations(
+	ctx context.Context,
+	logger *zap.Logger,
+	attestations []*phase0.Attestation,
+) ([]*phase0.Attestation, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, attestation := range attestations {
+		epoch := s.network.EstimatedEpochAtSlot(attestation.Data.Slot)
+		if s.blockedEpoch(epoch) {
+			return nil, fmt.Errorf("attestation submitted for blocked epoch %d", epoch)
+		}
+
+		for _, state := range s.validators {
+			// Skip validators that are not in the attestation's committee.
+			if state.firstAttesterDuty == nil || state.firstAttesterDuty.Slot != attestation.Data.Slot ||
+				state.firstAttesterDuty.CommitteeIndex != attestation.Data.Index {
+				continue
+			}
+
+			// Record the submitted attestation.
+			if state.firstSubmittedAttestation == nil {
+				if epoch != s.endEpoch {
+					return nil, fmt.Errorf("misbehavior: attestation wasn't submitted during the end epoch")
+				}
+				state.firstSubmittedAttestation = attestation
+				if state.attesterTest.Slashable {
+					return nil, fmt.Errorf("misbehavior: attestation was submitted during the end epoch")
+				}
+			}
+		}
+	}
+	return attestations, nil
 }
 
 func (s *SlashingInterceptor) InterceptProposerDuties(
 	ctx context.Context,
+	logger *zap.Logger,
 	epoch phase0.Epoch,
 	indices []phase0.ValidatorIndex,
 	duties []*v1.ProposerDuty,
@@ -122,6 +240,7 @@ func (s *SlashingInterceptor) InterceptProposerDuties(
 
 func (s *SlashingInterceptor) InterceptBlockProposal(
 	ctx context.Context,
+	logger *zap.Logger,
 	slot phase0.Slot,
 	randaoReveal phase0.BLSSignature,
 	graffiti []byte,
@@ -142,9 +261,103 @@ func (s *SlashingInterceptor) InterceptBlockProposal(
 			continue
 		}
 
-		// Replace the slot in the block with that from the first one,
-		// in order to make it slashable.
-		block.Capella.Slot = state.firstBlock.Capella.Slot
+		// Apply the test on the second block.
+		if err := state.proposerTest.Apply(block); err != nil {
+			return nil, fmt.Errorf("failed to apply proposer slashing test: %w", err)
+		}
 	}
 	return block, nil
+}
+
+func (s *SlashingInterceptor) blockedEpoch(epoch phase0.Epoch) bool {
+	return epoch < s.startEpoch || epoch == s.sleepEpoch || epoch > s.endEpoch
+}
+
+var ProposerSlashingTests = []ProposerSlashingTest{
+	{
+		Name:      "HigherSlot_DifferentRoot",
+		Slashable: false,
+		Apply: func(block *spec.VersionedBeaconBlock) error {
+			switch block.Version {
+			case spec.DataVersionCapella:
+				block.Capella.Slot++
+			default:
+				return fmt.Errorf("unsupported version: %s", block.Version)
+			}
+			_, err := rand.Read(block.Capella.ParentRoot[:])
+			return err
+		},
+	},
+	{
+		Name:      "SameSlot_DifferentRoot",
+		Slashable: true,
+		Apply: func(block *spec.VersionedBeaconBlock) error {
+			_, err := rand.Read(block.Capella.ParentRoot[:])
+			return err
+		},
+	},
+	{
+		Name:      "LowerSlot_SameRoot",
+		Slashable: true,
+		Apply: func(block *spec.VersionedBeaconBlock) error {
+			switch block.Version {
+			case spec.DataVersionCapella:
+				block.Capella.Slot--
+			default:
+				return fmt.Errorf("unsupported version: %s", block.Version)
+			}
+			return nil
+		},
+	},
+}
+
+var AttesterSlashingTests = []AttesterSlashingTest{
+	{
+		Name:      "SameSource_HigherTarget_DifferentRoot",
+		Slashable: false,
+		Apply: func(data *phase0.AttestationData) error {
+			data.Target.Epoch++
+			_, err := rand.Read(data.BeaconBlockRoot[:])
+			return err
+		},
+	},
+	{
+		Name:      "SameSource_SameTarget_SameRoot",
+		Slashable: true,
+		Apply: func(data *phase0.AttestationData) error {
+			return nil
+		},
+	},
+	{
+		Name:      "SameSource_SameTarget_DifferentRoot",
+		Slashable: true,
+		Apply: func(data *phase0.AttestationData) error {
+			_, err := rand.Read(data.BeaconBlockRoot[:])
+			return err
+		},
+	},
+	{
+		Name:      "LowerSource_HigherTarget_SameRoot",
+		Slashable: true,
+		Apply: func(data *phase0.AttestationData) error {
+			data.Source.Epoch--
+			return nil
+		},
+	},
+	{
+		Name:      "HigherSource_SameTarget_SameRoot",
+		Slashable: true,
+		Apply: func(data *phase0.AttestationData) error {
+			data.Source.Epoch++
+			return nil
+		},
+	},
+	{
+		Name:      "LowerSource_HigherTarget_SameRoot",
+		Slashable: true,
+		Apply: func(data *phase0.AttestationData) error {
+			data.Source.Epoch--
+			return nil
+		},
+	},
 }

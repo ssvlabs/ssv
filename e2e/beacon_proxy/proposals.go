@@ -42,7 +42,7 @@ func (b *BeaconProxy) handleProposerDuties(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Intercept.
-	duties, err = gateway.Interceptor.InterceptProposerDuties(r.Context(), epoch, indices, duties)
+	duties, err = gateway.Interceptor.InterceptProposerDuties(r.Context(), logger, epoch, indices, duties)
 	if err != nil {
 		b.error(r, w, 500, fmt.Errorf("failed to intercept proposer duties: %w", err))
 		return
@@ -97,6 +97,7 @@ func (b *BeaconProxy) handleBlockProposal(w http.ResponseWriter, r *http.Request
 	// Intercept.
 	block, err = gateway.Interceptor.InterceptBlockProposal(
 		r.Context(),
+		logger,
 		slot,
 		phase0.BLSSignature(randaoReveal),
 		graffiti,
@@ -144,6 +145,7 @@ func (b *BeaconProxy) handleSubmitBlockProposal(w http.ResponseWriter, r *http.R
 	}
 	versionedBlock, err := gateway.Interceptor.InterceptSubmitBlockProposal(
 		r.Context(),
+		logger,
 		versionedBlock,
 	)
 	if err != nil {

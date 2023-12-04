@@ -41,7 +41,7 @@ func (b *BeaconProxy) handleAttesterDuties(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Intercept.
-	duties, err = gateway.Interceptor.InterceptAttesterDuties(r.Context(), epoch, indices, duties)
+	duties, err = gateway.Interceptor.InterceptAttesterDuties(r.Context(), logger, epoch, indices, duties)
 	if err != nil {
 		b.error(r, w, 500, fmt.Errorf("failed to intercept attester duties: %w", err))
 		return
@@ -87,6 +87,7 @@ func (b *BeaconProxy) handleAttestationData(w http.ResponseWriter, r *http.Reque
 	// Intercept.
 	attestationData, err = gateway.Interceptor.InterceptAttestationData(
 		r.Context(),
+		logger,
 		slot,
 		committeeIndex,
 		attestationData,
@@ -119,7 +120,7 @@ func (b *BeaconProxy) handleSubmitAttestations(w http.ResponseWriter, r *http.Re
 	}
 
 	// Intercept.
-	attestations, err := gateway.Interceptor.InterceptSubmitAttestations(r.Context(), attestations)
+	attestations, err := gateway.Interceptor.InterceptSubmitAttestations(r.Context(), logger, attestations)
 	if err != nil {
 		b.error(r, w, 500, fmt.Errorf("failed to intercept attestation: %w", err))
 		return
