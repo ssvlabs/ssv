@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"time"
+
 	eth2client "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/auto"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -12,12 +15,11 @@ import (
 	//eth2client "github.com/attestantio/go-eth2-client/http"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/rs/zerolog"
-	"os"
-	"time"
+
+	"go.uber.org/zap"
 
 	beaconproxy "github.com/bloxapp/ssv/e2e/beacon_proxy"
 	"github.com/bloxapp/ssv/e2e/beacon_proxy/intercept"
-	"go.uber.org/zap"
 )
 
 type BeaconProxyCmd struct {
@@ -67,8 +69,7 @@ func (cmd *BeaconProxyCmd) Run(logger *zap.Logger, globals Globals) error {
 
 	for idx, v := range validatorsData {
 		if v.Status != v1.ValidatorStateActiveOngoing || v.Validator.Slashed {
-			// TODO: fatal?
-			logger.Warn("Validator is not active", zap.Uint64("id", uint64(idx)), zap.String("status", v.Status.String()))
+			logger.Fatal("Validator is not active", zap.Uint64("id", uint64(idx)), zap.String("status", v.Status.String()))
 		}
 	}
 

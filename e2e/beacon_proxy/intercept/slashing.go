@@ -44,15 +44,16 @@ type validatorState struct {
 	// StartEpoch
 	firstProposerDuty   *v1.ProposerDuty
 	firstBlock          *spec.VersionedBeaconBlock
-	firstSubmittedBlock *spec.VersionedBeaconBlock
+	firstSubmittedBlock *spec.VersionedSignedBeaconBlock
 
 	// EndEpoch
 	secondProposerDuty   *v1.ProposerDuty
 	secondBlock          *spec.VersionedBeaconBlock
-	secondSubmittedBlock *spec.VersionedBeaconBlock
+	secondSubmittedBlock *spec.VersionedSignedBeaconBlock
 }
 
 type SlashingInterceptor struct {
+	logger             *zap.Logger
 	network            beacon.Network
 	startEpoch         phase0.Epoch
 	sleepEpoch         phase0.Epoch
@@ -63,12 +64,14 @@ type SlashingInterceptor struct {
 }
 
 func NewSlashingInterceptor(
+	logger *zap.Logger,
 	network beacon.Network,
 	startEpoch phase0.Epoch,
 	fakeProposerDuties bool,
 	validators []*v1.Validator,
 ) *SlashingInterceptor {
 	s := &SlashingInterceptor{
+		logger:             logger,
 		network:            network,
 		startEpoch:         startEpoch,
 		sleepEpoch:         startEpoch + 1,
@@ -84,9 +87,10 @@ func NewSlashingInterceptor(
 	return s
 }
 
+// ATTESTER
+
 func (s *SlashingInterceptor) InterceptAttesterDuties(
 	ctx context.Context,
-	logger *zap.Logger,
 	epoch phase0.Epoch,
 	indices []phase0.ValidatorIndex,
 	duties []*v1.AttesterDuty,
@@ -95,7 +99,6 @@ func (s *SlashingInterceptor) InterceptAttesterDuties(
 	defer s.mu.Unlock()
 
 	if s.blockedEpoch(epoch) {
-		// Return empty duties outside the test's boundaries.
 		return []*v1.AttesterDuty{}, nil
 	}
 
@@ -124,7 +127,6 @@ func (s *SlashingInterceptor) InterceptAttesterDuties(
 
 func (s *SlashingInterceptor) InterceptAttestationData(
 	ctx context.Context,
-	logger *zap.Logger,
 	slot phase0.Slot,
 	committeeIndex phase0.CommitteeIndex,
 	data *phase0.AttestationData,
@@ -171,9 +173,9 @@ func (s *SlashingInterceptor) InterceptAttestationData(
 	}
 	return data, nil
 }
+
 func (s *SlashingInterceptor) InterceptSubmitAttestations(
 	ctx context.Context,
-	logger *zap.Logger,
 	attestations []*phase0.Attestation,
 ) ([]*phase0.Attestation, error) {
 	s.mu.Lock()
@@ -203,19 +205,28 @@ func (s *SlashingInterceptor) InterceptSubmitAttestations(
 				}
 			}
 		}
+		if s.startEpochExpired(epoch) {
+			return nil, fmt.Errorf("misbehavior: start epoch expired")
+		}
 	}
+
 	return attestations, nil
 }
 
+// PROPOSER
+
 func (s *SlashingInterceptor) InterceptProposerDuties(
 	ctx context.Context,
-	logger *zap.Logger,
 	epoch phase0.Epoch,
 	indices []phase0.ValidatorIndex,
 	duties []*v1.ProposerDuty,
 ) ([]*v1.ProposerDuty, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	if s.blockedEpoch(epoch) {
+		return []*v1.ProposerDuty{}, nil
+	}
 
 	if !s.fakeProposerDuties {
 		return duties, nil
@@ -240,7 +251,6 @@ func (s *SlashingInterceptor) InterceptProposerDuties(
 
 func (s *SlashingInterceptor) InterceptBlockProposal(
 	ctx context.Context,
-	logger *zap.Logger,
 	slot phase0.Slot,
 	randaoReveal phase0.BLSSignature,
 	graffiti []byte,
@@ -248,6 +258,11 @@ func (s *SlashingInterceptor) InterceptBlockProposal(
 ) (*spec.VersionedBeaconBlock, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	epoch := s.network.EstimatedEpochAtSlot(slot)
+	if s.blockedEpoch(epoch) {
+		return nil, fmt.Errorf("block proposal requested for blocked epoch %d", epoch)
+	}
 
 	for _, state := range s.validators {
 		// Skip forward to the proposer.
@@ -269,9 +284,49 @@ func (s *SlashingInterceptor) InterceptBlockProposal(
 	return block, nil
 }
 
+func (s *SlashingInterceptor) InterceptSubmitBlockProposal(ctx context.Context, block *spec.VersionedSignedBeaconBlock) (*spec.VersionedSignedBeaconBlock, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	slot := block.Capella.Message.Slot
+	epoch := s.network.EstimatedEpochAtSlot(slot)
+	if s.blockedEpoch(epoch) {
+		return nil, fmt.Errorf("block proposal submitted for blocked epoch %d", epoch)
+	}
+
+	for _, state := range s.validators {
+		if state.firstProposerDuty == nil || state.firstProposerDuty.Slot != slot ||
+			state.firstProposerDuty.ValidatorIndex != block.Capella.Message.ProposerIndex {
+			continue
+		}
+
+		if state.firstSubmittedBlock == nil {
+			if epoch != s.endEpoch {
+				return nil, fmt.Errorf("misbehavior: proposal wasn't submitted during the end epoch")
+			}
+			state.firstSubmittedBlock = block
+			if state.proposerTest.Slashable {
+				return nil, fmt.Errorf("misbehavior: proposal was submitted during the end epoch")
+			}
+		}
+	}
+
+	if s.startEpochExpired(epoch) {
+		return nil, fmt.Errorf("misbehavior: start epoch expired")
+	}
+
+	return block, nil
+}
+
 func (s *SlashingInterceptor) blockedEpoch(epoch phase0.Epoch) bool {
 	return epoch < s.startEpoch || epoch == s.sleepEpoch || epoch > s.endEpoch
 }
+
+func (s *SlashingInterceptor) startEpochExpired(currentEpoch phase0.Epoch) bool {
+	return currentEpoch > s.startEpoch && currentEpoch-s.startEpoch >= 2
+}
+
+// TEST CASES
 
 var ProposerSlashingTests = []ProposerSlashingTest{
 	{
