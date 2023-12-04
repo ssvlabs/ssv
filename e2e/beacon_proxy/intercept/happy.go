@@ -12,20 +12,20 @@ import (
 // HappyInterceptor doesn't change anything for the nodes and validators.
 // TODO: log and/or save state about whether validators preformed well on a happy flow
 type HappyInterceptor struct {
-	//validators map[phase0.ValidatorIndex]*validatorState
+	validators map[phase0.ValidatorIndex]*validatorState
 }
 
 func NewHappyInterceptor(
 	validators []*v1.Validator,
 ) *HappyInterceptor {
 	s := &HappyInterceptor{
-		//validators: make(map[phase0.ValidatorIndex]*validatorState),
+		validators: make(map[phase0.ValidatorIndex]*validatorState),
 	}
-	//for _, validator := range validators {
-	//	s.validators[validator.Index] = &validatorState{
-	//		validator: validator,
-	//	}
-	//}
+	for _, validator := range validators {
+		s.validators[validator.Index] = &validatorState{
+			validator: validator,
+		}
+	}
 	return s
 }
 
@@ -85,7 +85,3 @@ func (c *HappyInterceptor) InterceptSubmitBlockProposal(
 ) (*spec.VersionedSignedBeaconBlock, error) {
 	return block, nil
 }
-
-//Type does not implement 'intercept.Interceptor' need the method:
-//InterceptAttestationData(ctx context.Context, slot phase0.Slot, committeeIndex phase0.CommitteeIndex, data *phase0.AttestationData) (*phase0.AttestationData, error)
-//have the method: InterceptAttestationData(ctx context.Context, slot phase0.Slot, committeeIndex phase0.CommitteeIndex, data phase0.AttestationData) (phase0.AttestationData, error)

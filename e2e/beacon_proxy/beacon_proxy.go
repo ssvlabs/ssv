@@ -39,12 +39,11 @@ type Gateway struct {
 }
 
 type BeaconProxy struct {
-	remote     *url.URL
-	client     eth2client.Service
-	proxy      *httputil.ReverseProxy
-	logger     *zap.Logger
-	gateways   map[int]Gateway
-	validators map[string]string // bls pubkey -> test
+	remote   *url.URL
+	client   eth2client.Service
+	proxy    *httputil.ReverseProxy
+	logger   *zap.Logger
+	gateways map[int]Gateway
 }
 
 func New(
@@ -52,7 +51,6 @@ func New(
 	logger *zap.Logger,
 	remoteAddr string,
 	gateways []Gateway,
-	validators map[string]string,
 ) (*BeaconProxy, error) {
 	client, err := auto.New(
 		ctx,
@@ -68,12 +66,11 @@ func New(
 		return nil, fmt.Errorf("failed to parse remote beacon address: %w", err)
 	}
 	b := &BeaconProxy{
-		remote:     remote,
-		proxy:      httputil.NewSingleHostReverseProxy(remote),
-		client:     client,
-		logger:     logger,
-		validators: validators,
-		gateways:   make(map[int]Gateway),
+		remote:   remote,
+		proxy:    httputil.NewSingleHostReverseProxy(remote),
+		client:   client,
+		logger:   logger,
+		gateways: make(map[int]Gateway),
 	}
 	for _, gateway := range gateways {
 		b.gateways[gateway.Port] = gateway
