@@ -77,6 +77,7 @@ type messageValidator struct {
 	dutyStore               *dutystore.Store
 	ownOperatorID           spectypes.OperatorID
 	operatorIDToPubkeyCache *hashmap.Map[spectypes.OperatorID, *rsa.PublicKey]
+	peerRateLimiter         *PeerRateLimiter
 
 	// validationLocks is a map of lock per SSV message ID to
 	// prevent concurrent access to the same state.
@@ -95,6 +96,7 @@ func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) Mes
 		netCfg:                  netCfg,
 		operatorIDToPubkeyCache: hashmap.New[spectypes.OperatorID, *rsa.PublicKey](),
 		validationLocks:         make(map[spectypes.MessageID]*sync.Mutex),
+		peerRateLimiter:         NewPeerRateLimiter(100), // 20msg per second
 	}
 
 	for _, opt := range opts {
@@ -229,6 +231,10 @@ func (mv *messageValidator) ValidatorForTopic(_ string) func(ctx context.Context
 // ValidatePubsubMessage validates the given pubsub message.
 // Depending on the outcome, it will return one of the pubsub validation results (Accept, Ignore, or Reject).
 func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+	if !mv.peerRateLimiter.CanProceed(peerID) {
+		return pubsub.ValidationIgnore
+	}
+
 	if mv.selfAccept && peerID == mv.selfPID {
 		msg, _ := commons.DecodeNetworkMsg(pmsg.Data)
 		decMsg, _ := queue.DecodeSSVMessage(msg)
@@ -262,6 +268,8 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer
 				}
 
 				mv.metrics.MessageRejected(valErr.Text(), descriptor.Role, round)
+				mv.peerRateLimiter.Increment(peerID)
+
 				return pubsub.ValidationReject
 			}
 
