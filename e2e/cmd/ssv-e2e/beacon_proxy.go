@@ -32,7 +32,9 @@ func (cmd *BeaconProxyCmd) Run(logger *zap.Logger, globals Globals) error {
 	}
 
 	gateways := make([]beaconproxy.Gateway, len(cmd.Gateways))
-	interceptor := intercept.NewHappyInterceptor(nil) // todo pass validators form validators.json
+	// TODO: call NewSlashingInterceptor with startEpoch=currentEpoch+2 and pass the validator objects from Beacon node
+	// to the interceptor
+	interceptor := intercept.NewHappyInterceptor(nil)
 	for i, gw := range cmd.Gateways {
 		gateways[i] = beaconproxy.Gateway{
 			Name:        gw,
