@@ -17,19 +17,20 @@ import (
 	eth2client "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/auto"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv/e2e/beacon_proxy/intercept"
 	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog"
 	"github.com/sourcegraph/conc/pool"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/e2e/beacon_proxy/intercept"
 )
 
 type (
-	// gatewayKey is the key used to store the gateway in the request context.
-	gatewayKey struct{}
+	// GatewayKey is the key used to store the gateway in the request context.
+	GatewayKey struct{}
 
-	// loggerKey is the key used to store the logger in the request context.
-	loggerKey struct{}
+	// LoggerKey is the key used to store the logger in the request context.
+	LoggerKey struct{}
 )
 
 type Gateway struct {
@@ -126,14 +127,14 @@ func (b *BeaconProxy) middleware(gateway Gateway) func(http.Handler) http.Handle
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Add gateway to context.
-			ctx := context.WithValue(r.Context(), gatewayKey{}, gateway)
+			ctx := context.WithValue(r.Context(), GatewayKey{}, gateway)
 
 			// Add logger to context.
 			logger := b.logger.With(
 				zap.String("gateway", gateway.Name),
 				zap.String("endpoint", fmt.Sprintf("%s %s", r.Method, r.URL.Path)),
 			)
-			ctx = context.WithValue(ctx, loggerKey{}, logger)
+			ctx = context.WithValue(ctx, LoggerKey{}, logger)
 
 			// Log request.
 			b.logger.Debug("received request",
@@ -154,8 +155,8 @@ func (b *BeaconProxy) passthrough(w http.ResponseWriter, r *http.Request) {
 }
 
 func (b *BeaconProxy) requestContext(r *http.Request) (*zap.Logger, Gateway) {
-	return r.Context().Value(loggerKey{}).(*zap.Logger),
-		r.Context().Value(gatewayKey{}).(Gateway)
+	return r.Context().Value(LoggerKey{}).(*zap.Logger),
+		r.Context().Value(GatewayKey{}).(Gateway)
 }
 
 func (b *BeaconProxy) error(r *http.Request, w http.ResponseWriter, status int, err error) {

@@ -7,8 +7,8 @@ github.com/alecthomas/kong v0.8.1/go.mod h1:n1iCIO2xS46oE8ZfYCNDqdR0b0wZNrXAIAqr
 github.com/alecthomas/repr v0.1.0 h1:ENn2e1+J3k09gyj2shc0dHr/yjaWSHRlrJ4DPMevDqE=
 github.com/attestantio/go-eth2-client v0.16.3 h1:D6LLwswDlHbUwsAqfBKaKXjWdBzRlNQRXUoC+5vFsDw=
 github.com/attestantio/go-eth2-client v0.16.3/go.mod h1:Om16oH+H34E2JHoOY8hLWg+64twlO+AjAE7kkK3f1Xc=
-github.com/bloxapp/ssv v1.2.0 h1:7qLMDaUrxvaZM22Kg44TWOUA4ph/cKaAYlOShnK6IVk=
-github.com/bloxapp/ssv v1.2.0/go.mod h1:FLcV0hW6A6VY7l7qUYOj0ztndB2mudkFpjUdzxO7X/g=
+github.com/bloxapp/ssv v1.2.1-0.20231204141016-a6afbe837a26 h1:kQfAiH2N7cSwaj5CpH3rFiJjILm7pMVBqHpGdJYnff4=
+github.com/bloxapp/ssv v1.2.1-0.20231204141016-a6afbe837a26/go.mod h1:s/oJth+yoa7qRH+BCGxW0tsaOrJaD05b6ZEOPasIWUY=
 github.com/bloxapp/ssv-spec v0.3.4 h1:uu1pAP8FBucGf1FGORjzqz7if0vWGRY5w6ILLhA7IuM=
 github.com/bloxapp/ssv-spec v0.3.4/go.mod h1:zPJR7YnG5iZ6I0h6EzfVly8bTBXaZwcx4TyJ8pzYVd8=
 github.com/btcsuite/btcd/btcec/v2 v2.3.2 h1:5n0X6hX0Zk+6omWcihdYvdAlGf2DfasC0GMf7DClJ3U=

@@ -1,17 +1,28 @@
-package intercept
+package slashinginterceptor
 
 import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"reflect"
 	"sync"
+	"time"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"go.uber.org/zap"
+	"golang.org/x/exp/maps"
+
+	beaconproxy "github.com/bloxapp/ssv/e2e/beacon_proxy"
 )
+
+// TODO:
+// Check if each gateway submits only one duty for each validator at the end of the StartEpoch. Only Attester.
+// 1. At the end of epoch check the internal map.
+// 2. firstSubmittedAttestation is stored by nothing now, we need to store by gateway.
+// 3. At the end of StartEpoch once I check that all submitted, mark flow as finished.
 
 type ProposerSlashingTest struct {
 	Name      string
@@ -25,6 +36,12 @@ type AttesterSlashingTest struct {
 	Apply     func(*phase0.AttestationData) error
 }
 
+type seenRequests struct {
+	attesterDuty         *v1.AttesterDuty
+	attestationData      *phase0.AttestationData
+	submittedAttestation *phase0.Attestation
+}
+
 type validatorState struct {
 	validator *v1.Validator
 
@@ -32,14 +49,14 @@ type validatorState struct {
 	attesterTest AttesterSlashingTest
 
 	// StartEpoch
-	firstAttesterDuty         *v1.AttesterDuty
-	firstAttestationData      *phase0.AttestationData
-	firstSubmittedAttestation *phase0.Attestation
+	firstAttesterDuty         map[beaconproxy.Gateway]*v1.AttesterDuty
+	firstAttestationData      map[beaconproxy.Gateway]*phase0.AttestationData
+	firstSubmittedAttestation map[beaconproxy.Gateway]*phase0.Attestation
 
 	// EndEpoch
-	secondAttesterDuty         *v1.AttesterDuty
-	secondAttestationData      *phase0.AttestationData
-	secondSubmittedAttestation *phase0.Attestation
+	secondAttesterDuty         map[beaconproxy.Gateway]*v1.AttesterDuty
+	secondAttestationData      map[beaconproxy.Gateway]*phase0.AttestationData
+	secondSubmittedAttestation map[beaconproxy.Gateway]*phase0.Attestation
 
 	// StartEpoch
 	firstProposerDuty   *v1.ProposerDuty
@@ -63,7 +80,7 @@ type SlashingInterceptor struct {
 	mu                 sync.RWMutex
 }
 
-func NewSlashingInterceptor(
+func New(
 	logger *zap.Logger,
 	network beacon.Network,
 	startEpoch phase0.Epoch,
@@ -79,12 +96,57 @@ func NewSlashingInterceptor(
 		fakeProposerDuties: fakeProposerDuties,
 		validators:         make(map[phase0.ValidatorIndex]*validatorState),
 	}
+	logger.Debug("creating slashing interceptor",
+		zap.Any("start_epoch", s.startEpoch),
+		zap.Any("end_epoch", s.endEpoch),
+		zap.Any("sleep_epoch", s.sleepEpoch),
+	)
 	for _, validator := range validators {
 		s.validators[validator.Index] = &validatorState{
-			validator: validator,
+			validator:                  validator,
+			attesterTest:               AttesterSlashingTests[0], // TODO: extract from validators.json
+			firstAttesterDuty:          make(map[beaconproxy.Gateway]*v1.AttesterDuty),
+			firstAttestationData:       make(map[beaconproxy.Gateway]*phase0.AttestationData),
+			firstSubmittedAttestation:  make(map[beaconproxy.Gateway]*phase0.Attestation),
+			secondAttesterDuty:         make(map[beaconproxy.Gateway]*v1.AttesterDuty),
+			secondAttestationData:      make(map[beaconproxy.Gateway]*phase0.AttestationData),
+			secondSubmittedAttestation: make(map[beaconproxy.Gateway]*phase0.Attestation),
 		}
 	}
 	return s
+}
+
+func (s *SlashingInterceptor) WatchSubmissions() {
+	endOfEpoch := s.network.EpochStartTime(s.startEpoch + 1)
+
+	s.logger.Info("scheduled submission check", zap.Any("at", endOfEpoch))
+
+	time.AfterFunc(time.Until(endOfEpoch), func() {
+		submittedCount := 0
+		for _, state := range s.validators {
+			// TODO: support values other than 4
+			if len(state.firstSubmittedAttestation) != 4 {
+				s.logger.Debug("validator did not submit",
+					zap.Any("validator_index", state.validator.Index),
+					zap.Any("validator_pk", state.validator.Validator.PublicKey.String()),
+					zap.Any("submitters", maps.Keys(state.firstSubmittedAttestation)),
+				)
+			} else {
+				submittedCount++
+				s.logger.Debug("validator submitted",
+					zap.Any("validator_index", state.validator.Index),
+					zap.Any("validator_pk", state.validator.Validator.PublicKey.String()),
+					zap.Any("submitters", maps.Keys(state.firstSubmittedAttestation)),
+				)
+			}
+		}
+
+		if submittedCount == len(s.validators) {
+			s.logger.Info("all attestations submitted", zap.Any("count", submittedCount))
+		} else {
+			s.logger.Error("not all attestations submitted", zap.Any("submitted", submittedCount), zap.Any("expected", len(s.validators)))
+		}
+	})
 }
 
 // ATTESTER
@@ -98,8 +160,13 @@ func (s *SlashingInterceptor) InterceptAttesterDuties(
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	_, gateway := s.requestContext(ctx)
+
 	if s.blockedEpoch(epoch) {
+		s.logger.Debug("epoch blocked, returning empty attester duties", zap.Any("epoch", epoch))
 		return []*v1.AttesterDuty{}, nil
+	} else {
+		s.logger.Debug("epoch not blocked, returning real attester duties", zap.Any("epoch", epoch))
 	}
 
 	for _, duty := range duties {
@@ -107,18 +174,22 @@ func (s *SlashingInterceptor) InterceptAttesterDuties(
 		if !ok {
 			continue
 		}
-		if state.firstAttesterDuty == nil {
+		if _, ok = state.firstAttesterDuty[gateway]; !ok {
 			if epoch != s.startEpoch {
 				return nil, fmt.Errorf("misbehavior: first attester duty wasn't requested during the start epoch")
 			}
-			state.firstAttesterDuty = duty
+			state.firstAttesterDuty[gateway] = duty
 			continue
 		}
-		if state.secondAttesterDuty == nil {
+		if reflect.DeepEqual(duty, state.firstAttesterDuty[gateway]) {
+			s.logger.Debug("new duty is same as old duty, skipping")
+			continue
+		}
+		if _, ok = state.secondAttesterDuty[gateway]; !ok {
 			if epoch != s.endEpoch {
 				return nil, fmt.Errorf("misbehavior: second attester duty wasn't requested during the end epoch")
 			}
-			state.secondAttesterDuty = duty
+			state.secondAttesterDuty[gateway] = duty
 			continue
 		}
 	}
@@ -134,26 +205,36 @@ func (s *SlashingInterceptor) InterceptAttestationData(
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	_, gateway := s.requestContext(ctx)
+
 	epoch := s.network.EstimatedEpochAtSlot(slot)
 	if s.blockedEpoch(epoch) {
+		s.logger.Debug("epoch blocked, returning empty attestation data", zap.Any("epoch", epoch))
 		return nil, fmt.Errorf("attestation data requested for blocked epoch %d", epoch)
+	} else {
+		s.logger.Debug("epoch not blocked, returning real attestation data", zap.Any("epoch", epoch))
 	}
 
 	for _, state := range s.validators {
 		// TODO: fix to track both first and second attester duties.
 
 		// Skip validators that are not in the requested committee.
-		if state.firstAttesterDuty == nil || state.firstAttesterDuty.Slot != slot ||
-			state.firstAttesterDuty.CommitteeIndex != committeeIndex {
+		if firstDuty, ok := state.firstAttesterDuty[gateway]; !ok || firstDuty.Slot != slot ||
+			firstDuty.CommitteeIndex != committeeIndex {
 			continue
 		}
 
 		// Record the first attestation data.
-		if state.firstAttestationData == nil {
+		if _, ok := state.firstAttestationData[gateway]; !ok {
 			if epoch != s.startEpoch {
 				return nil, fmt.Errorf("misbehavior: first attester data wasn't requested during the start epoch")
 			}
-			state.firstAttestationData = data
+			state.firstAttestationData[gateway] = data
+			continue
+		}
+
+		if reflect.DeepEqual(data, state.firstAttestationData[gateway]) {
+			s.logger.Debug("new duty is same as old duty, skipping")
 			continue
 		}
 
@@ -163,11 +244,11 @@ func (s *SlashingInterceptor) InterceptAttestationData(
 		}
 
 		// Record the second attestation data.
-		if state.secondAttestationData == nil {
+		if _, ok := state.secondAttestationData[gateway]; !ok {
 			if epoch != s.endEpoch {
 				return nil, fmt.Errorf("misbehavior: second attester data wasn't requested during the end epoch")
 			}
-			state.secondAttestationData = data
+			state.secondAttestationData[gateway] = data
 			continue
 		}
 	}
@@ -181,27 +262,33 @@ func (s *SlashingInterceptor) InterceptSubmitAttestations(
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	_, gateway := s.requestContext(ctx)
+
 	for _, attestation := range attestations {
-		epoch := s.network.EstimatedEpochAtSlot(attestation.Data.Slot)
+		slot := attestation.Data.Slot
+
+		epoch := s.network.EstimatedEpochAtSlot(slot)
 		if s.blockedEpoch(epoch) {
 			return nil, fmt.Errorf("attestation submitted for blocked epoch %d", epoch)
 		}
 
+		s.logger.Debug("submitting attestation", zap.Any("epoch", epoch))
+
 		for _, state := range s.validators {
 			// Skip validators that are not in the attestation's committee.
-			if state.firstAttesterDuty == nil || state.firstAttesterDuty.Slot != attestation.Data.Slot ||
-				state.firstAttesterDuty.CommitteeIndex != attestation.Data.Index {
+			if firstDuty, ok := state.firstAttesterDuty[gateway]; !ok || firstDuty.Slot != slot ||
+				firstDuty.CommitteeIndex != attestation.Data.Index {
 				continue
 			}
 
 			// Record the submitted attestation.
-			if state.firstSubmittedAttestation == nil {
-				if epoch != s.endEpoch {
-					return nil, fmt.Errorf("misbehavior: attestation wasn't submitted during the end epoch")
+			if _, ok := state.firstSubmittedAttestation[gateway]; !ok {
+				if epoch != s.startEpoch {
+					return nil, fmt.Errorf("misbehavior: attestation wasn't submitted during the start epoch")
 				}
-				state.firstSubmittedAttestation = attestation
+				state.firstSubmittedAttestation[gateway] = attestation
 				if state.attesterTest.Slashable {
-					return nil, fmt.Errorf("misbehavior: attestation was submitted during the end epoch")
+					return nil, fmt.Errorf("misbehavior: attestation was submitted during the start epoch")
 				}
 			}
 		}
@@ -232,6 +319,8 @@ func (s *SlashingInterceptor) InterceptProposerDuties(
 		return duties, nil
 	}
 
+	_, gateway := s.requestContext(ctx)
+
 	// Fake 2 proposer duties for each validator.
 	duties = make([]*v1.ProposerDuty, 0, len(indices)*2)
 	for _, index := range indices {
@@ -242,7 +331,7 @@ func (s *SlashingInterceptor) InterceptProposerDuties(
 		for i := 0; i < 2; i++ {
 			duties = append(duties, &v1.ProposerDuty{
 				ValidatorIndex: index,
-				Slot:           state.firstAttesterDuty.Slot + phase0.Slot(i),
+				Slot:           state.firstAttesterDuty[gateway].Slot + phase0.Slot(i),
 			})
 		}
 	}
@@ -264,9 +353,11 @@ func (s *SlashingInterceptor) InterceptBlockProposal(
 		return nil, fmt.Errorf("block proposal requested for blocked epoch %d", epoch)
 	}
 
+	_, gateway := s.requestContext(ctx)
+
 	for _, state := range s.validators {
 		// Skip forward to the proposer.
-		if state.firstAttesterDuty == nil || state.firstAttesterDuty.Slot != slot {
+		if _, ok := state.firstAttesterDuty[gateway]; !ok || state.firstAttesterDuty[gateway].Slot != slot {
 			continue
 		}
 
@@ -324,6 +415,11 @@ func (s *SlashingInterceptor) blockedEpoch(epoch phase0.Epoch) bool {
 
 func (s *SlashingInterceptor) startEpochExpired(currentEpoch phase0.Epoch) bool {
 	return currentEpoch > s.startEpoch && currentEpoch-s.startEpoch >= 2
+}
+
+func (s *SlashingInterceptor) requestContext(ctx context.Context) (*zap.Logger, beaconproxy.Gateway) {
+	return ctx.Value(beaconproxy.LoggerKey{}).(*zap.Logger),
+		ctx.Value(beaconproxy.GatewayKey{}).(beaconproxy.Gateway)
 }
 
 // TEST CASES

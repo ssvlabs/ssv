@@ -10,6 +10,7 @@ import (
 	eth2client "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/auto"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/bloxapp/ssv/networkconfig"
 	"golang.org/x/exp/maps"
 
 	//eth2client "github.com/attestantio/go-eth2-client/http"
@@ -19,7 +20,7 @@ import (
 	"go.uber.org/zap"
 
 	beaconproxy "github.com/bloxapp/ssv/e2e/beacon_proxy"
-	"github.com/bloxapp/ssv/e2e/beacon_proxy/intercept"
+	"github.com/bloxapp/ssv/e2e/beacon_proxy/intercept/slashinginterceptor"
 )
 
 type BeaconProxyCmd struct {
@@ -76,9 +77,24 @@ func (cmd *BeaconProxyCmd) Run(logger *zap.Logger, globals Globals) error {
 	logger.Info("Got all validators data", zap.Int("count", len(validatorsData)))
 
 	gateways := make([]beaconproxy.Gateway, len(cmd.Gateways))
-	// TODO: call NewSlashingInterceptor with startEpoch=currentEpoch+2 and pass the validator objects from Beacon node
-	// to the interceptor
-	interceptor := intercept.NewHappyInterceptor(maps.Values(validatorsData))
+
+	// TODO: implement ability to select what test to run
+	//interceptor := intercept.NewHappyInterceptor(maps.Values(validatorsData))
+	//var validatorsRunningSlashing []*v1.Validator
+	//for _, valData := range validatorsData {
+	//	if validators[valData.Index] == "slashing" {
+	//		validatorsRunningSlashing = append(validatorsRunningSlashing, valData)
+	//	}
+	//}
+
+	networkCfg := networkconfig.HoleskyE2E
+
+	const startEpochDelay = 1 // TODO: change to 2 after debugging is done
+	startEpoch := networkCfg.Beacon.EstimatedCurrentEpoch() + startEpochDelay
+
+	interceptor := slashinginterceptor.New(logger, networkCfg.Beacon.GetNetwork(), startEpoch, false, maps.Values(validatorsData))
+	go interceptor.WatchSubmissions()
+
 	for i, gw := range cmd.Gateways {
 		gateways[i] = beaconproxy.Gateway{
 			Name:        gw,

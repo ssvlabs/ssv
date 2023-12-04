@@ -4,7 +4,7 @@ go 1.20
 
 require (
 	github.com/attestantio/go-eth2-client v0.16.3
-	github.com/bloxapp/ssv v1.2.0
+	github.com/bloxapp/ssv v1.2.1-0.20231204141016-a6afbe837a26
 	github.com/go-chi/chi/v5 v5.0.10
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rs/zerolog v1.31.0
