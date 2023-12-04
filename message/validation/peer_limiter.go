@@ -11,7 +11,7 @@ import (
 type PeerRateLimiter struct {
 	limiters map[peer.ID]*rate.Limiter
 	rate     rate.Limit
-	mu       sync.RWMutex
+	mu       sync.Mutex
 }
 
 // NewPeerRateLimiter creates a new instance of PeerRateLimiter
@@ -22,18 +22,10 @@ func NewPeerRateLimiter(count int) *PeerRateLimiter {
 	}
 }
 
-// AddLimiter adds a new rate limiter for a given peer ID
-func (p *PeerRateLimiter) AddLimiter(peerID peer.ID, r rate.Limit, b int) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	p.limiters[peerID] = rate.NewLimiter(r, b)
-}
-
 // GetLimiter returns the rate limiter for a given peer ID
 func (p *PeerRateLimiter) GetLimiter(peerID peer.ID, create bool) *rate.Limiter {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	if create && p.limiters[peerID] == nil {
 		p.limiters[peerID] = rate.NewLimiter(p.rate, 1)
 	}

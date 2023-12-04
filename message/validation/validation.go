@@ -96,7 +96,7 @@ func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) Mes
 		netCfg:                  netCfg,
 		operatorIDToPubkeyCache: hashmap.New[spectypes.OperatorID, *rsa.PublicKey](),
 		validationLocks:         make(map[spectypes.MessageID]*sync.Mutex),
-		peerRateLimiter:         NewPeerRateLimiter(100), // 20msg per second
+		peerRateLimiter:         NewPeerRateLimiter(100), // 100msgs per second
 	}
 
 	for _, opt := range opts {
