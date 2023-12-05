@@ -105,36 +105,75 @@ func New(
 }
 
 func (s *SlashingInterceptor) WatchSubmissions() {
-	endOfEpoch := s.network.EpochStartTime(s.startEpoch + 1)
+	endOfStartEpoch := s.network.EpochStartTime(s.startEpoch + 1)
 
-	s.logger.Info("scheduled submission check", zap.Any("at", endOfEpoch))
-
-	time.AfterFunc(time.Until(endOfEpoch), func() {
-		submittedCount := 0
-		for _, state := range s.validators {
-			// TODO: support values other than 4
-			if len(state.firstSubmittedAttestation) != 4 {
-				s.logger.Debug("validator did not submit",
-					zap.Any("validator_index", state.validator.Index),
-					zap.Any("validator_pk", state.validator.Validator.PublicKey.String()),
-					zap.Any("submitters", maps.Keys(state.firstSubmittedAttestation)),
-				)
-			} else {
-				submittedCount++
-				s.logger.Debug("validator submitted",
-					zap.Any("validator_index", state.validator.Index),
-					zap.Any("validator_pk", state.validator.Validator.PublicKey.String()),
-					zap.Any("submitters", maps.Keys(state.firstSubmittedAttestation)),
-				)
-			}
-		}
-
-		if submittedCount == len(s.validators) {
-			s.logger.Info("all attestations submitted", zap.Any("count", submittedCount))
-		} else {
-			s.logger.Error("not all attestations submitted", zap.Any("submitted", submittedCount), zap.Any("expected", len(s.validators)))
-		}
+	time.AfterFunc(time.Until(endOfStartEpoch), func() {
+		s.checkStartEpochAttestationSubmission()
 	})
+
+	s.logger.Info("scheduled start epoch submission check", zap.Any("at", endOfStartEpoch))
+
+	endOfEndEpoch := s.network.EpochStartTime(s.endEpoch + 1)
+
+	time.AfterFunc(time.Until(endOfEndEpoch), func() {
+		s.checkEndEpochAttestationSubmission()
+	})
+
+	s.logger.Info("scheduled end epoch submission check", zap.Any("at", endOfEndEpoch))
+}
+
+func (s *SlashingInterceptor) checkStartEpochAttestationSubmission() {
+	submittedCount := 0
+	for _, state := range s.validators {
+		// TODO: support values other than 4
+		if len(state.firstSubmittedAttestation) != 4 {
+			s.logger.Debug("validator did not submit in start epoch",
+				zap.Any("validator_index", state.validator.Index),
+				zap.Any("validator_pk", state.validator.Validator.PublicKey.String()),
+				zap.Any("submitters", maps.Keys(state.firstSubmittedAttestation)),
+			)
+		} else {
+			submittedCount++
+			s.logger.Debug("validator submitted in start epoch",
+				zap.Any("validator_index", state.validator.Index),
+				zap.Any("validator_pk", state.validator.Validator.PublicKey.String()),
+				zap.Any("submitters", maps.Keys(state.firstSubmittedAttestation)),
+			)
+		}
+	}
+
+	if submittedCount == len(s.validators) {
+		s.logger.Info("all attestations submitted in start epoch", zap.Any("count", submittedCount))
+	} else {
+		s.logger.Info("not all attestations submitted in start epoch", zap.Any("submitted", submittedCount), zap.Any("expected", len(s.validators)))
+	}
+}
+
+func (s *SlashingInterceptor) checkEndEpochAttestationSubmission() {
+	submittedCount := 0
+	for _, state := range s.validators {
+		// TODO: support values other than 4
+		if len(state.secondSubmittedAttestation) != 4 {
+			s.logger.Debug("validator did not submit in end epoch",
+				zap.Any("validator_index", state.validator.Index),
+				zap.Any("validator_pk", state.validator.Validator.PublicKey.String()),
+				zap.Any("submitters", maps.Keys(state.secondSubmittedAttestation)),
+			)
+		} else {
+			submittedCount++
+			s.logger.Debug("validator submitted in end epoch",
+				zap.Any("validator_index", state.validator.Index),
+				zap.Any("validator_pk", state.validator.Validator.PublicKey.String()),
+				zap.Any("submitters", maps.Keys(state.secondSubmittedAttestation)),
+			)
+		}
+	}
+
+	if submittedCount == len(s.validators) {
+		s.logger.Info("all attestations submitted in end epoch", zap.Any("count", submittedCount))
+	} else {
+		s.logger.Info("not all attestations submitted in end epoch", zap.Any("submitted", submittedCount), zap.Any("expected", len(s.validators)))
+	}
 }
 
 // ATTESTER
