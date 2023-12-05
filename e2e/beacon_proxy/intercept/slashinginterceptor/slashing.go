@@ -18,12 +18,6 @@ import (
 	beaconproxy "github.com/bloxapp/ssv/e2e/beacon_proxy"
 )
 
-// TODO:
-// Check if each gateway submits only one duty for each validator at the end of the StartEpoch. Only Attester.
-// 1. At the end of epoch check the internal map.
-// 2. firstSubmittedAttestation is stored by nothing now, we need to store by gateway.
-// 3. At the end of StartEpoch once I check that all submitted, mark flow as finished.
-
 type ProposerSlashingTest struct {
 	Name      string
 	Slashable bool
