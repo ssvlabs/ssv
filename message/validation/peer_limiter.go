@@ -2,6 +2,7 @@ package validation
 
 import (
 	"sync"
+	"time"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"golang.org/x/time/rate"
@@ -11,13 +12,15 @@ import (
 type PeerRateLimiter struct {
 	limiters map[peer.ID]*rate.Limiter
 	rate     rate.Limit
+	burst    int
 	mu       sync.Mutex
 }
 
 // NewPeerRateLimiter creates a new instance of PeerRateLimiter
-func NewPeerRateLimiter(count int) *PeerRateLimiter {
+func NewPeerRateLimiter(duration time.Duration, totalCount int) *PeerRateLimiter {
 	return &PeerRateLimiter{
-		rate:     rate.Limit(count),
+		rate:     rate.Every(duration),
+		burst:    totalCount,
 		limiters: make(map[peer.ID]*rate.Limiter),
 	}
 }
@@ -27,7 +30,7 @@ func (p *PeerRateLimiter) GetLimiter(peerID peer.ID, create bool) *rate.Limiter 
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if create && p.limiters[peerID] == nil {
-		p.limiters[peerID] = rate.NewLimiter(p.rate, 1)
+		p.limiters[peerID] = rate.NewLimiter(p.rate, p.burst)
 	}
 	return p.limiters[peerID]
 }
