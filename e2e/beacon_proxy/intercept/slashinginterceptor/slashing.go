@@ -30,12 +30,6 @@ type AttesterSlashingTest struct {
 	Apply     func(*phase0.AttestationData) error
 }
 
-type seenRequests struct {
-	attesterDuty         *v1.AttesterDuty
-	attestationData      *phase0.AttestationData
-	submittedAttestation *phase0.Attestation
-}
-
 type validatorState struct {
 	validator *v1.Validator
 
