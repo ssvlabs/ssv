@@ -72,7 +72,8 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 		case <-ctx.Done():
 			return
 
-		case slot := <-h.ticker:
+		case <-h.ticker.Next():
+			slot := h.ticker.Slot()
 			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 			buildStr := fmt.Sprintf("p%v-%v-s%v-#%v", period, epoch, slot, slot%32+1)
@@ -129,6 +130,17 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			}
 		}
 	}
+}
+
+func (h *SyncCommitteeHandler) HandleInitialDuties(ctx context.Context) {
+	slot := h.network.Beacon.EstimatedCurrentSlot()
+	epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
+	period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
+	h.processFetching(ctx, period, slot)
+	// At the init time we may not have enough duties to fetch
+	// we should not set those values to false in processFetching() call
+	h.fetchNextPeriod = true
+	h.fetchCurrentPeriod = true
 }
 
 func (h *SyncCommitteeHandler) processFetching(ctx context.Context, period uint64, slot phase0.Slot) {
@@ -259,8 +271,7 @@ func (h *SyncCommitteeHandler) shouldExecute(duty *eth2apiv1.SyncCommitteeDuty, 
 		return true
 	}
 	if currentSlot+1 == slot {
-		h.logger.Debug("current slot and duty slot are not aligned, "+
-			"assuming diff caused by a time drift - ignoring and executing duty", zap.String("type", duty.String()))
+		h.warnMisalignedSlotAndDuty(duty.String())
 		return true
 	}
 	return false

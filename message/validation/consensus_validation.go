@@ -4,7 +4,6 @@ package validation
 
 import (
 	"bytes"
-	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -23,6 +22,7 @@ func (mv *messageValidator) validateConsensusMessage(
 	signedMsg *specqbft.SignedMessage,
 	messageID spectypes.MessageID,
 	receivedAt time.Time,
+	signatureVerifier func() error,
 ) (ConsensusDescriptor, phase0.Slot, error) {
 	var consensusDescriptor ConsensusDescriptor
 
@@ -116,12 +116,9 @@ func (mv *messageValidator) validateConsensusMessage(
 		}
 	}
 
-	if mv.verifySignatures {
-		if err := ssvtypes.VerifyByOperators(signedMsg.Signature, signedMsg, mv.netCfg.Domain, spectypes.QBFTSignatureType, share.Committee); err != nil {
-			signErr := ErrInvalidSignature
-			signErr.innerErr = err
-			signErr.got = fmt.Sprintf("domain %v from %v", hex.EncodeToString(mv.netCfg.Domain[:]), hex.EncodeToString(share.ValidatorPubKey))
-			return consensusDescriptor, msgSlot, signErr
+	if signatureVerifier != nil {
+		if err := signatureVerifier(); err != nil {
+			return consensusDescriptor, msgSlot, err
 		}
 	}
 
@@ -178,7 +175,7 @@ func (mv *messageValidator) validateJustifications(
 	}
 
 	if signedMsg.Message.MsgType == specqbft.ProposalMsgType {
-		cfg := newQBFTConfig(mv.netCfg.Domain, mv.verifySignatures)
+		cfg := newQBFTConfig(mv.netCfg.Domain)
 
 		if err := instance.IsProposalJustification(
 			cfg,
@@ -243,7 +240,7 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 		return err
 	}
 
-	if !(msgSlot > signerState.Slot || msgSlot == signerState.Slot && msgRound > signerState.Round) {
+	if msgSlot == signerState.Slot && msgRound == signerState.Round {
 		if mv.hasFullData(signedMsg) && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
 			return ErrDuplicatedProposalWithDifferentData
 		}

@@ -5,8 +5,8 @@ go 1.20
 require (
 	github.com/aquasecurity/table v1.8.0
 	github.com/attestantio/go-eth2-client v0.16.3
-	github.com/bloxapp/eth2-key-manager v1.3.1
-	github.com/bloxapp/ssv-spec v0.3.1
+	github.com/bloxapp/eth2-key-manager v1.3.2
+	github.com/bloxapp/ssv-spec v0.3.4
 	github.com/btcsuite/btcd/btcec/v2 v2.3.2
 	github.com/cespare/xxhash/v2 v2.2.0
 	github.com/cornelk/hashmap v1.0.8
@@ -22,10 +22,12 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.2
 	github.com/herumi/bls-eth-go-binary v1.29.1
 	github.com/ilyakaznacheev/cleanenv v1.4.2
+	github.com/jamiealquiza/tachymeter v2.0.0+incompatible
 	github.com/jellydator/ttlcache/v3 v3.0.1
 	github.com/libp2p/go-libp2p v0.28.2
 	github.com/libp2p/go-libp2p-kad-dht v0.23.0
 	github.com/libp2p/go-libp2p-pubsub v0.9.3
+	github.com/microsoft/go-crypto-openssl v0.2.8
 	github.com/multiformats/go-multiaddr v0.9.0
 	github.com/multiformats/go-multistream v0.4.1
 	github.com/patrickmn/go-cache v2.1.0+incompatible
@@ -222,5 +224,3 @@ require (
 replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
-
-replace github.com/bloxapp/ssv-spec => github.com/bloxapp/ssv-spec v0.0.0-20230719131453-1c0044021800

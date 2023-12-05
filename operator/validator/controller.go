@@ -37,7 +37,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
-	"github.com/bloxapp/ssv/protocol/v2/sync/handlers"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
@@ -82,7 +81,6 @@ type ControllerOptions struct {
 	Metrics                    validator.Metrics
 	MessageValidator           validation.MessageValidator
 	ValidatorsMap              *validatorsmap.ValidatorsMap
-	VerifySignatures           bool
 
 	// worker flags
 	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of goroutines to use for message workers"`
@@ -164,7 +162,7 @@ type controller struct {
 
 // NewController creates a new validator controller instance
 func NewController(logger *zap.Logger, options ControllerOptions) Controller {
-	logger.Debug("setting up validator controller", zap.Bool("message_validation_verify_signatures", options.VerifySignatures))
+	logger.Debug("setting up validator controller")
 
 	// lookup in a map that holds all relevant operators
 	operatorsIDs := &sync.Map{}
@@ -191,7 +189,6 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		GasLimit:          options.GasLimit,
 		MessageValidator:  options.MessageValidator,
 		Metrics:           options.Metrics,
-		VerifySignatures:  options.VerifySignatures,
 	}
 
 	// If full node, increase queue size to make enough room
@@ -250,22 +247,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 
 // setupNetworkHandlers registers all the required handlers for sync protocols
 func (c *controller) setupNetworkHandlers() error {
-	syncHandlers := []*p2pprotocol.SyncHandler{
-		p2pprotocol.WithHandler(
-			p2pprotocol.LastDecidedProtocol,
-			handlers.LastDecidedHandler(c.logger, c.ibftStorageMap, c.network),
-		),
-	}
-	if c.validatorOptions.FullNode {
-		syncHandlers = append(
-			syncHandlers,
-			p2pprotocol.WithHandler(
-				p2pprotocol.DecidedHistoryProtocol,
-				// TODO: extract maxBatch to config
-				handlers.HistoryHandler(c.logger, c.ibftStorageMap, c.network, c.historySyncBatchSize),
-			),
-		)
-	}
+	syncHandlers := []*p2pprotocol.SyncHandler{}
 	c.logger.Debug("setting up network handlers",
 		zap.Int("count", len(syncHandlers)),
 		zap.Bool("full_node", c.validatorOptions.FullNode),
@@ -330,7 +312,7 @@ func (c *controller) handleRouterMessages() {
 			hexPK := hex.EncodeToString(pk)
 			if v, ok := c.validatorsMap.GetValidator(hexPK); ok {
 				v.HandleMessage(c.logger, msg)
-			} else {
+			} else if c.validatorOptions.Exporter {
 				if msg.MsgType != spectypes.SSVConsensusMsgType {
 					continue // not supporting other types
 				}
@@ -403,12 +385,38 @@ func (c *controller) StartValidators() {
 		return
 	}
 
-	shares := c.sharesStorage.List(nil, registrystorage.ByOperatorID(c.GetOperatorData().ID), registrystorage.ByNotLiquidated())
+	shares := c.sharesStorage.List(nil, registrystorage.ByNotLiquidated())
 	if len(shares) == 0 {
 		c.logger.Info("could not find validators")
 		return
 	}
-	c.setupValidators(shares)
+
+	var ownShares []*ssvtypes.SSVShare
+	var allPubKeys = make([][]byte, 0, len(shares))
+	ownOpID := c.GetOperatorData().ID
+	for _, share := range shares {
+		if share.BelongsToOperator(ownOpID) {
+			ownShares = append(ownShares, share)
+		}
+		allPubKeys = append(allPubKeys, share.ValidatorPubKey)
+	}
+
+	// Start own validators.
+	c.setupValidators(ownShares)
+
+	// Fetch metadata for all validators.
+	start := time.Now()
+	err := beaconprotocol.UpdateValidatorsMetadata(c.logger, allPubKeys, c, c.beacon, c.onMetadataUpdated)
+	if err != nil {
+		c.logger.Error("failed to update validators metadata after setup",
+			zap.Int("shares", len(allPubKeys)),
+			fields.Took(time.Since(start)),
+			zap.Error(err))
+	} else {
+		c.logger.Debug("updated validators metadata after setup",
+			zap.Int("shares", len(allPubKeys)),
+			fields.Took(time.Since(start)))
+	}
 }
 
 // setupValidators setup and starts validators from the given shares.
@@ -435,22 +443,6 @@ func (c *controller) setupValidators(shares []*ssvtypes.SSVShare) {
 	c.logger.Info("setup validators done", zap.Int("map size", c.validatorsMap.Size()),
 		zap.Int("failures", len(errs)), zap.Int("missing_metadata", len(fetchMetadata)),
 		zap.Int("shares", len(shares)), zap.Int("started", started))
-
-	// Try to fetch metadata once for validators that don't have it.
-	if len(fetchMetadata) > 0 {
-		start := time.Now()
-		err := beaconprotocol.UpdateValidatorsMetadata(c.logger, fetchMetadata, c, c.beacon, c.onMetadataUpdated)
-		if err != nil {
-			c.logger.Error("failed to update validators metadata after setup",
-				zap.Int("shares", len(fetchMetadata)),
-				fields.Took(time.Since(start)),
-				zap.Error(err))
-		} else {
-			c.logger.Debug("updated validators metadata after setup",
-				zap.Int("shares", len(fetchMetadata)),
-				fields.Took(time.Since(start)))
-		}
-	}
 }
 
 // setupNonCommitteeValidators trigger SyncHighestDecided for each validator
@@ -473,25 +465,7 @@ func (c *controller) setupNonCommitteeValidators() {
 	pubKeys := make([][]byte, 0, len(nonCommitteeShares))
 	for _, validatorShare := range nonCommitteeShares {
 		pubKeys = append(pubKeys, validatorShare.ValidatorPubKey)
-
-		opts := c.validatorOptions
-		opts.SSVShare = validatorShare
-		allRoles := []spectypes.BeaconRole{
-			spectypes.BNRoleAttester,
-			spectypes.BNRoleAggregator,
-			spectypes.BNRoleProposer,
-			spectypes.BNRoleSyncCommittee,
-			spectypes.BNRoleSyncCommitteeContribution,
-		}
-		for _, role := range allRoles {
-			messageID := spectypes.NewMsgID(ssvtypes.GetDefaultDomain(), validatorShare.ValidatorPubKey, role)
-			err := c.network.SyncHighestDecided(messageID)
-			if err != nil {
-				c.logger.Error("failed to sync highest decided", zap.Error(err))
-			}
-		}
 	}
-
 	if len(pubKeys) > 0 {
 		c.logger.Debug("updating metadata for non-committee validators", zap.Int("count", len(pubKeys)))
 		if err := beaconprotocol.UpdateValidatorsMetadata(c.logger, pubKeys, c, c.beacon, c.onMetadataUpdated); err != nil {
@@ -854,7 +828,7 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 			Storage:               options.Storage.Get(role),
 			Network:               options.Network,
 			Timer:                 roundtimer.New(ctx, options.BeaconNetwork, role, nil),
-			SignatureVerification: options.VerifySignatures,
+			SignatureVerification: true,
 		}
 		config.ValueCheckF = valueCheckF
 
@@ -872,7 +846,7 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 			qbftCtrl := buildController(spectypes.BNRoleAttester, valCheck)
 			runners[role] = runner.NewAttesterRunnner(options.BeaconNetwork.GetBeaconNetwork(), &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, valCheck, 0)
 		case spectypes.BNRoleProposer:
-			proposedValueCheck := specssv.ProposerValueCheckF(options.Signer, options.BeaconNetwork.GetBeaconNetwork(), options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index, options.SSVShare.SharePubKey, options.BuilderProposals)
+			proposedValueCheck := specssv.ProposerValueCheckF(options.Signer, options.BeaconNetwork.GetBeaconNetwork(), options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index, options.SSVShare.SharePubKey)
 			qbftCtrl := buildController(spectypes.BNRoleProposer, proposedValueCheck)
 			runners[role] = runner.NewProposerRunner(options.BeaconNetwork.GetBeaconNetwork(), &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck, 0)
 			runners[role].(*runner.ProposerRunner).ProducesBlindedBlocks = options.BuilderProposals // apply blinded block flag
@@ -890,7 +864,7 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 			runners[role] = runner.NewSyncCommitteeAggregatorRunner(options.BeaconNetwork.GetBeaconNetwork(), &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, syncCommitteeContributionValueCheckF, 0)
 		case spectypes.BNRoleValidatorRegistration:
 			qbftCtrl := buildController(spectypes.BNRoleValidatorRegistration, nil)
-			runners[role] = runner.NewValidatorRegistrationRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer)
+			runners[role] = runner.NewValidatorRegistrationRunner(options.BeaconNetwork.GetBeaconNetwork(), &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer)
 		}
 	}
 	return runners

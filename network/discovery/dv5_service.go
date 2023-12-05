@@ -3,6 +3,7 @@ package discovery
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"net"
 	"sync/atomic"
 	"time"
@@ -12,6 +13,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
@@ -54,7 +57,8 @@ type DiscV5Service struct {
 	publishState int32
 	conn         *net.UDPConn
 
-	subnets []byte
+	domainType spectypes.DomainType
+	subnets    []byte
 }
 
 func newDiscV5Service(pctx context.Context, logger *zap.Logger, discOpts *Options) (Service, error) {
@@ -65,6 +69,7 @@ func newDiscV5Service(pctx context.Context, logger *zap.Logger, discOpts *Option
 		publishState: publishStateReady,
 		conns:        discOpts.ConnIndex,
 		subnetsIdx:   discOpts.SubnetsIdx,
+		domainType:   discOpts.DomainType,
 		subnets:      discOpts.DiscV5Opts.Subnets,
 	}
 
@@ -102,7 +107,7 @@ func (dvs *DiscV5Service) Node(logger *zap.Logger, info peer.AddrInfo) (*enode.N
 	if err != nil {
 		return nil, err
 	}
-	pk := commons.ConvertFromInterfacePubKey(pki)
+	pk := commons.ECDSAPubFromInterface(pki)
 	id := enode.PubkeyToIDV4(pk)
 	logger = logger.With(zap.String("info", info.String()),
 		zap.String("enode.ID", id.String()))
@@ -121,34 +126,51 @@ func (dvs *DiscV5Service) Node(logger *zap.Logger, info peer.AddrInfo) (*enode.N
 // if we reached peers limit, make sure to accept peers with more than 1 shared subnet,
 // which lets other components to determine whether we'll want to connect to this node or not.
 func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) error {
-	zeroSubnets, _ := records.Subnets{}.FromString(records.ZeroSubnets)
+	logger = logger.Named(logging.NameDiscoveryService)
 
 	dvs.discover(dvs.ctx, func(e PeerEvent) {
-		nodeSubnets, err := records.GetSubnetsEntry(e.Node.Record())
+		logger := logger.With(
+			fields.ENR(e.Node),
+			fields.PeerID(e.AddrInfo.ID),
+		)
+		err := dvs.checkPeer(logger, e)
 		if err != nil {
-			logger.Debug("could not read subnets", fields.ENR(e.Node))
+			logger.Debug("discovered peer was dropped", zap.Error(err))
 			return
 		}
-		if bytes.Equal(zeroSubnets, nodeSubnets) {
-			logger.Debug("skipping zero subnets", fields.ENR(e.Node))
-			return
-		}
-		updated := dvs.subnetsIdx.UpdatePeerSubnets(e.AddrInfo.ID, nodeSubnets)
-		if updated {
-			logger.Debug("[discv5] peer subnets were updated", fields.ENR(e.Node),
-				fields.PeerID(e.AddrInfo.ID),
-				fields.Subnets(records.Subnets(nodeSubnets)))
-		}
-		if !dvs.limitNodeFilter(e.Node) {
-			if !dvs.sharedSubnetsFilter(1)(e.Node) {
-				metricRejectedNodes.Inc()
-				return
-			}
-		}
-		metricFoundNodes.Inc()
 		handler(e)
 	}, defaultDiscoveryInterval) // , dvs.forkVersionFilter) //, dvs.badNodeFilter)
 
+	return nil
+}
+
+var zeroSubnets, _ = records.Subnets{}.FromString(records.ZeroSubnets)
+
+func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
+	// Get the peer's domain type, skipping if it mismatches ours.
+	// TODO: uncomment errors once there are sufficient nodes with domain type.
+	nodeDomainType, err := records.GetDomainTypeEntry(e.Node.Record())
+	if err != nil {
+		// TODO: skip missing domain type (likely old node).
+	} else if nodeDomainType != dvs.domainType {
+		// TODO: skip different domain type.
+	}
+
+	// Get the peer's subnets, skipping if it has none.
+	nodeSubnets, err := records.GetSubnetsEntry(e.Node.Record())
+	if err != nil {
+		return fmt.Errorf("could not read subnets: %w", err)
+	}
+	if bytes.Equal(zeroSubnets, nodeSubnets) {
+		return errors.New("zero subnets")
+	}
+
+	dvs.subnetsIdx.UpdatePeerSubnets(e.AddrInfo.ID, nodeSubnets)
+	if !dvs.limitNodeFilter(e.Node) && !dvs.sharedSubnetsFilter(1)(e.Node) {
+		metricRejectedNodes.Inc()
+		return errors.New("no shared subnets")
+	}
+	metricFoundNodes.Inc()
 	return nil
 }
 
@@ -184,7 +206,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 	dvs.bootnodes = dv5Cfg.Bootnodes
 
 	logger.Debug("started discv5 listener (UDP)", fields.BindIP(bindIP),
-		zap.Int("UdpPort", opts.Port), fields.ENRLocalNode(localNode), fields.OperatorIDStr(opts.OperatorID))
+		zap.Int("UdpPort", opts.Port), fields.ENRLocalNode(localNode), fields.Domain(discOpts.DomainType))
 
 	return nil
 }
@@ -306,29 +328,20 @@ func (dvs *DiscV5Service) createLocalNode(logger *zap.Logger, discOpts *Options,
 	if err != nil {
 		return nil, errors.Wrap(err, "could not add configured addresses")
 	}
-	err = DecorateNode(localNode, map[string]interface{}{
-		"operatorID": opts.OperatorID,
-		"subnets":    opts.Subnets,
-	})
+	err = DecorateNode(
+		localNode,
+
+		// Satisfy decorations of forks supported by this node.
+		DecorateWithDomainType(dvs.domainType),
+		DecorateWithSubnets(opts.Subnets),
+	)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not decorate local node")
 	}
 
-	logger.Debug("node record is ready", fields.ENRLocalNode(localNode), fields.OperatorIDStr(opts.OperatorID), fields.Subnets(opts.Subnets))
+	logger.Debug("node record is ready", fields.ENRLocalNode(localNode), fields.Domain(dvs.domainType), fields.Subnets(opts.Subnets))
 
 	return localNode, nil
-}
-
-// DecorateNode will enrich the local node record with more entries, according to current fork
-func DecorateNode(node *enode.LocalNode, args map[string]interface{}) error {
-	var subnets []byte
-	raw, ok := args["subnets"]
-	if !ok {
-		subnets = make([]byte, commons.Subnets())
-	} else {
-		subnets = raw.([]byte)
-	}
-	return records.SetSubnetsEntry(node, subnets)
 }
 
 // newUDPListener creates a udp server

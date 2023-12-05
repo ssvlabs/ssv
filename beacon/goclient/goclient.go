@@ -20,7 +20,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/operator/slot_ticker"
+	"github.com/bloxapp/ssv/operator/slotticker"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
@@ -122,6 +122,7 @@ type Client interface {
 	eth2client.BlindedBeaconBlockProposalProvider
 	eth2client.BlindedBeaconBlockSubmitter
 	eth2client.ValidatorRegistrationsSubmitter
+	eth2client.VoluntaryExitSubmitter
 }
 
 type NodeClientProvider interface {
@@ -147,7 +148,7 @@ type goClient struct {
 }
 
 // New init new client and go-client instance
-func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.OperatorID, slotTicker slot_ticker.Ticker) (beaconprotocol.BeaconNode, error) {
+func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.OperatorID, slotTickerProvider slotticker.Provider) (beaconprotocol.BeaconNode, error) {
 	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(string(opt.Network.BeaconNetwork)))
 
 	httpClient, err := http.New(opt.Context,
@@ -160,9 +161,6 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 	if err != nil {
 		return nil, errors.WithMessage(err, "failed to create http client")
 	}
-
-	tickerChan := make(chan phase0.Slot, 32)
-	slotTicker.Subscribe(tickerChan)
 
 	client := &goClient{
 		log:               logger,
@@ -190,7 +188,7 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 	)
 
 	// Start registration submitter.
-	go client.registrationSubmitter(tickerChan)
+	go client.registrationSubmitter(slotTickerProvider)
 
 	return client, nil
 }

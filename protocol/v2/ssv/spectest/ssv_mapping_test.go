@@ -69,8 +69,9 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test interface{}
 		typedTest := &MsgProcessingSpecTest{
 			Runner: &runner.AttesterRunner{},
 		}
-		// TODO fix blinded test
+		// TODO: fix blinded test
 		if strings.Contains(testName, "propose regular decide blinded") || strings.Contains(testName, "propose blinded decide regular") {
+			logger.Info("skipping blinded block test", zap.String("test", testName))
 			return nil
 		}
 		require.NoError(t, json.Unmarshal(byts, &typedTest))
@@ -174,11 +175,13 @@ func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]interface{}) *Start
 	require.NoError(t, json.Unmarshal(byts, duty))
 
 	outputMsgs := make([]*spectypes.SignedPartialSignatureMessage, 0)
-	for _, msg := range m["OutputMessages"].([]interface{}) {
-		byts, _ = json.Marshal(msg)
-		typedMsg := &spectypes.SignedPartialSignatureMessage{}
-		require.NoError(t, json.Unmarshal(byts, typedMsg))
-		outputMsgs = append(outputMsgs, typedMsg)
+	if v, ok := m["OutputMessages"].([]interface{}); ok {
+		for _, msg := range v {
+			byts, _ = json.Marshal(msg)
+			typedMsg := &spectypes.SignedPartialSignatureMessage{}
+			require.NoError(t, json.Unmarshal(byts, typedMsg))
+			outputMsgs = append(outputMsgs, typedMsg)
+		}
 	}
 
 	ks := testingutils.KeySetForShare(&spectypes.Share{Quorum: uint64(baseRunnerMap["Share"].(map[string]interface{})["Quorum"].(float64))})
@@ -345,6 +348,10 @@ func baseRunnerForRole(logger *zap.Logger, role spectypes.BeaconRole, base *runn
 	case spectypes.BNRoleValidatorRegistration:
 		ret := ssvtesting.ValidatorRegistrationRunner(logger, ks)
 		ret.(*runner.ValidatorRegistrationRunner).BaseRunner = base
+		return ret
+	case spectypes.BNRoleVoluntaryExit:
+		ret := ssvtesting.VoluntaryExitRunner(logger, ks)
+		ret.(*runner.VoluntaryExitRunner).BaseRunner = base
 		return ret
 	case testingutils.UnknownDutyType:
 		ret := ssvtesting.UnknownDutyTypeRunner(logger, ks)

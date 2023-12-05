@@ -59,7 +59,8 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 		case <-ctx.Done():
 			return
 
-		case slot := <-h.ticker:
+		case <-h.ticker.Next():
+			slot := h.ticker.Slot()
 			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_seq", buildStr))
@@ -103,6 +104,12 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 			h.indicesChanged = true
 		}
 	}
+}
+
+func (h *ProposerHandler) HandleInitialDuties(ctx context.Context) {
+	slot := h.network.Beacon.EstimatedCurrentSlot()
+	epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
+	h.processFetching(ctx, epoch, slot)
 }
 
 func (h *ProposerHandler) processFetching(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
@@ -184,8 +191,7 @@ func (h *ProposerHandler) shouldExecute(duty *eth2apiv1.ProposerDuty) bool {
 		return true
 	}
 	if currentSlot+1 == duty.Slot {
-		h.logger.Debug("current slot and duty slot are not aligned, "+
-			"assuming diff caused by a time drift - ignoring and executing duty", zap.String("type", duty.String()))
+		h.warnMisalignedSlotAndDuty(duty.String())
 		return true
 	}
 	return false

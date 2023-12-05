@@ -10,6 +10,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/network/peers"
 )
 
@@ -39,6 +40,9 @@ type Options struct {
 	SubnetsIdx  peers.SubnetsIndex
 	HostAddress string
 	HostDNS     string
+
+	// DomainType is the SSV network domain of the node
+	DomainType spectypes.DomainType
 }
 
 // Service is the interface for discovery

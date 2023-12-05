@@ -19,7 +19,7 @@ func TestSubnetsIndex(t *testing.T) {
 
 	var pids []peer.ID
 	for _, nk := range nks {
-		sk, err := commons.ConvertToInterfacePrivkey(nk.NetKey)
+		sk, err := commons.ECDSAPrivToInterface(nk.NetKey)
 		require.NoError(t, err)
 		pid, err := peer.IDFromPrivateKey(sk)
 		require.NoError(t, err)
@@ -33,7 +33,7 @@ func TestSubnetsIndex(t *testing.T) {
 	sPartial, err := records.Subnets{}.FromString("0x57b080fffd743d9878dc41a184ab160a")
 	require.NoError(t, err)
 
-	subnetsIdx := newSubnetsIndex(128)
+	subnetsIdx := NewSubnetsIndex(128)
 
 	subnetsIdx.UpdatePeerSubnets(pids[0], sAll.Clone())
 	subnetsIdx.UpdatePeerSubnets(pids[1], sNone.Clone())

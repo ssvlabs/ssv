@@ -8,6 +8,7 @@ import (
 
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/network/commons"
+	"github.com/bloxapp/ssv/networkconfig"
 
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -53,21 +54,23 @@ type msgIDEntry struct {
 
 // msgIDHandler implements MsgIDHandler
 type msgIDHandler struct {
-	ctx    context.Context
-	added  chan addedEvent
-	ids    map[string]*msgIDEntry
-	locker sync.Locker
-	ttl    time.Duration
+	ctx           context.Context
+	added         chan addedEvent
+	ids           map[string]*msgIDEntry
+	locker        sync.Locker
+	ttl           time.Duration
+	networkConfig networkconfig.NetworkConfig
 }
 
 // NewMsgIDHandler creates a new MsgIDHandler
-func NewMsgIDHandler(ctx context.Context, ttl time.Duration) MsgIDHandler {
+func NewMsgIDHandler(ctx context.Context, ttl time.Duration, networkConfig networkconfig.NetworkConfig) MsgIDHandler {
 	handler := &msgIDHandler{
-		ctx:    ctx,
-		added:  make(chan addedEvent, msgIDHandlerBufferSize),
-		ids:    make(map[string]*msgIDEntry),
-		locker: &sync.Mutex{},
-		ttl:    ttl,
+		ctx:           ctx,
+		added:         make(chan addedEvent, msgIDHandlerBufferSize),
+		ids:           make(map[string]*msgIDEntry),
+		locker:        &sync.Mutex{},
+		ttl:           ttl,
+		networkConfig: networkConfig,
 	}
 	return handler
 }
@@ -96,31 +99,51 @@ func (handler *msgIDHandler) MsgID(logger *zap.Logger) func(pmsg *ps_pb.Message)
 		if pmsg == nil {
 			return MsgIDEmptyMessage
 		}
-		//logger := logger.With()
-		if len(pmsg.GetData()) == 0 {
+
+		messageData := pmsg.GetData()
+		if len(messageData) == 0 {
 			return MsgIDEmptyMessage
 		}
+
 		pid, err := peer.IDFromBytes(pmsg.GetFrom())
 		if err != nil {
 			return MsgIDBadPeerID
 		}
-		mid := commons.MsgID()(pmsg.GetData())
+
+		mid := handler.pubsubMsgToMsgID(messageData)
+
 		if len(mid) == 0 {
 			logger.Debug("could not create msg_id",
 				zap.ByteString("seq_no", pmsg.GetSeqno()),
 				fields.PeerID(pid))
 			return MsgIDError
 		}
+
 		handler.Add(mid, pid)
 		return mid
 	}
 }
 
+func (handler *msgIDHandler) pubsubMsgToMsgID(msg []byte) string {
+	currentEpoch := handler.networkConfig.Beacon.EstimatedCurrentEpoch()
+	if currentEpoch > handler.networkConfig.PermissionlessActivationEpoch {
+		decodedMsg, _, _, err := commons.DecodeSignedSSVMessage(msg)
+		if err != nil {
+			// todo: should err here or just log and let the decode function err?
+		} else {
+			return commons.MsgID()(decodedMsg)
+		}
+	}
+	return commons.MsgID()(msg)
+}
+
 // GetPeers returns the peers that are related to the given msg
 func (handler *msgIDHandler) GetPeers(msg []byte) []peer.ID {
-	msgID := commons.MsgID()(msg)
+	msgID := handler.pubsubMsgToMsgID(msg)
+
 	handler.locker.Lock()
 	defer handler.locker.Unlock()
+
 	entry, ok := handler.ids[msgID]
 	if ok {
 		if !entry.t.Add(handler.ttl).After(time.Now()) {
