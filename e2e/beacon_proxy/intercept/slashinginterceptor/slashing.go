@@ -343,6 +343,11 @@ func (s *SlashingInterceptor) InterceptSubmitAttestations(
 				continue
 			}
 
+			if slot != state.firstSubmittedAttestation[gateway].Data.Slot && epoch == s.network.EstimatedEpochAtSlot(state.firstSubmittedAttestation[gateway].Data.Slot) {
+				s.logger.Debug("new attestation in different slot but same epoch, skipping")
+				continue
+			}
+
 			s.logger.Debug("got second attestation", zap.Any("epoch", epoch), zap.Any("slot", slot), zap.Any("validator", validatorIndex))
 
 			// Record the second submitted attestation.
