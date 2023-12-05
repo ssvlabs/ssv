@@ -10,7 +10,7 @@ import (
 )
 
 func TestLimiterRateLimiting(t *testing.T) {
-	pl := NewPeerRateLimiter(1) // 1 request per second
+	pl := NewPeerRateLimiter(1*time.Second, 1) // 1 request per second
 	peerID := peer.ID("test-peer-3")
 
 	assert.True(t, pl.CanProceed(peerID), "CanProceed should allow the first request")
@@ -23,11 +23,11 @@ func TestLimiterRateLimiting(t *testing.T) {
 
 // TestIncrementConcurrent tests the Increment function in a concurrent environment
 func TestIncrementConcurrent(t *testing.T) {
-	pl := NewPeerRateLimiter(10)
+	pl := NewPeerRateLimiter(1*time.Second, 10)
 	var wg sync.WaitGroup
 	peerID := peer.ID("test-peer-increment")
 
-	for i := 0; i < 20; i++ {
+	for i := 0; i < 11; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -38,5 +38,10 @@ func TestIncrementConcurrent(t *testing.T) {
 	wg.Wait()
 	// After concurrent increments, the limiter should block new requests
 	assert.False(t, pl.CanProceed(peerID), "Should block after multiple concurrent increments")
-	time.Sleep(1 * time.Second) // Wait for the rate limiter to reset
+	time.Sleep(200 * time.Millisecond) // Wait for the rate limiter to reset
+	assert.False(t, pl.CanProceed(peerID), "Should block after multiple concurrent increments")
+	time.Sleep(200 * time.Millisecond) // Wait for the rate limiter to reset
+	assert.False(t, pl.CanProceed(peerID), "Should block after multiple concurrent increments")
+	time.Sleep(700 * time.Millisecond) // Wait for the rate limiter to reset
+	assert.True(t, pl.CanProceed(peerID), "Should alow after multiple concurrent increments")
 }
