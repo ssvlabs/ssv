@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -221,7 +220,6 @@ func scanURL(r *http.Request, fields ...any) error {
 		if valueStr == "" {
 			return nil
 		}
-		log.Printf("valueStr: %s", valueStr)
 		if format == "%x" {
 			valueStr = strings.TrimPrefix(valueStr, "0x")
 		}

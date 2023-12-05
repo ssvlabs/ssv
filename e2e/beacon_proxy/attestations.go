@@ -3,7 +3,6 @@ package beaconproxy
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 
 	eth2client "github.com/attestantio/go-eth2-client"
@@ -71,7 +70,6 @@ func (b *BeaconProxy) handleAttestationData(w http.ResponseWriter, r *http.Reque
 		b.error(r, w, 400, fmt.Errorf("failed to parse request: %w", err))
 		return
 	}
-	log.Printf("slot: %d", slot)
 
 	// Obtain attestation data.
 	attestationData, err := b.client.(eth2client.AttestationDataProvider).AttestationData(
