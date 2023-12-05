@@ -188,7 +188,7 @@ func createValidator(t *testing.T, pCtx context.Context, id spectypes.OperatorID
 	require.NoError(t, err)
 
 	options := protocolvalidator.Options{
-		Storage: newStores(ctx, logger),
+		Storage:       newStores(ctx, logger),
 		Network:       node,
 		BeaconNetwork: networkconfig.TestNetwork.Beacon,
 		SSVShare: &types.SSVShare{
