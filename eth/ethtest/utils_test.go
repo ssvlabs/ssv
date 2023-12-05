@@ -163,9 +163,12 @@ func setupEventHandler(
 	ownerAddress *ethcommon.Address,
 	useMockCtrl bool,
 ) (*eventhandler.EventHandler, *mocks.MockController, *gomock.Controller, operatorstorage.Storage, error) {
-	db, err := kv.NewInMemory(logger, basedb.Options{
-		Ctx: ctx,
-	})
+	db, err := kv.NewInMemory(ctx, logger, basedb.Options{})
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	spDB, err := kv.NewInMemory(ctx, logger, basedb.Options{})
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -174,7 +177,7 @@ func setupEventHandler(
 	nodeStorage, operatorData := setupOperatorStorage(logger, db, operator, ownerAddress)
 	testNetworkConfig := networkconfig.TestNetwork
 
-	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, true, "")
+	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, spDB, testNetworkConfig, true, "")
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
