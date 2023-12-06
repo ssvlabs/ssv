@@ -8,44 +8,80 @@ import (
 	"golang.org/x/time/rate"
 )
 
-// Define a structure for PeerRateLimiter
-type PeerRateLimiter struct {
-	limiters map[peer.ID]*rate.Limiter
-	rate     rate.Limit
-	burst    int
-	mu       sync.Mutex
+type RateLimiter struct {
+	limiter       *rate.Limiter
+	blockRequests bool
+	lastBlocked   time.Time
+	mu            sync.Mutex // Mutex to protect blockRequests and lastBlocked
 }
 
-// NewPeerRateLimiter creates a new instance of PeerRateLimiter
-func NewPeerRateLimiter(duration time.Duration, totalCount int) *PeerRateLimiter {
-	return &PeerRateLimiter{
-		rate:     rate.Every(duration),
-		burst:    totalCount,
-		limiters: make(map[peer.ID]*rate.Limiter),
+func NewRateLimiter(rateLimit rate.Limit) *RateLimiter {
+	return &RateLimiter{
+		limiter: rate.NewLimiter(rateLimit, int(rateLimit)),
 	}
 }
 
-// GetLimiter returns the rate limiter for a given peer ID
-func (p *PeerRateLimiter) GetLimiter(peerID peer.ID, create bool) *rate.Limiter {
+func (rl *RateLimiter) AllowRequest(blockingTime time.Duration) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	if rl.blockRequests {
+		if time.Since(rl.lastBlocked) > blockingTime {
+			rl.blockRequests = false
+		} else {
+			return false
+		}
+	}
+
+	if rl.limiter.Tokens() < 1.0 {
+		rl.blockRequests = true
+		rl.lastBlocked = time.Now()
+		return false
+	}
+
+	return true
+}
+
+func (rl *RateLimiter) RegisterRequest() {
+	rl.limiter.Allow()
+}
+
+type PeerRateLimitManager struct {
+	limiters     map[peer.ID]*RateLimiter
+	rate         rate.Limit
+	blockingTime time.Duration
+	mu           sync.Mutex
+}
+
+func NewPeerRateLimitManager(ratePerSecond int, blockingTime time.Duration) *PeerRateLimitManager {
+	return &PeerRateLimitManager{
+		rate:         rate.Limit(ratePerSecond),
+		blockingTime: blockingTime,
+		limiters:     make(map[peer.ID]*RateLimiter),
+	}
+}
+
+func (p *PeerRateLimitManager) GetLimiter(peerID peer.ID, createIfMissing bool) *RateLimiter {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if create && p.limiters[peerID] == nil {
-		p.limiters[peerID] = rate.NewLimiter(p.rate, p.burst)
+
+	limiter, exists := p.limiters[peerID]
+	if createIfMissing && !exists {
+		limiter = NewRateLimiter(p.rate)
+		p.limiters[peerID] = limiter
 	}
-	return p.limiters[peerID]
+	return limiter
 }
 
-// CanProceed checks if the peer with given ID can proceed with an operation
-func (p *PeerRateLimiter) CanProceed(peerID peer.ID) bool {
+func (p *PeerRateLimitManager) AllowRequest(peerID peer.ID) bool {
 	limiter := p.GetLimiter(peerID, false)
 	if limiter == nil {
 		return true
 	}
-	return limiter.Allow()
+	return limiter.AllowRequest(p.blockingTime)
 }
 
-// Increment consumes a token for the peer, indicating an operation has been performed
-func (p *PeerRateLimiter) Increment(peerID peer.ID) {
+func (p *PeerRateLimitManager) RegisterRequest(peerID peer.ID) {
 	limiter := p.GetLimiter(peerID, true)
-	limiter.Reserve().Cancel()
+	limiter.RegisterRequest()
 }
