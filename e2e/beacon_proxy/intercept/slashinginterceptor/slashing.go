@@ -17,6 +17,8 @@ import (
 	beaconproxy "github.com/bloxapp/ssv/e2e/beacon_proxy"
 )
 
+const startEndEpochsDiff = 2
+
 type ProposerSlashingTest struct {
 	Name      string
 	Slashable bool
@@ -91,7 +93,7 @@ func New(
 	for _, validator := range validators {
 		s.validators[validator.Index] = &validatorState{
 			validator:                  validator,
-			attesterTest:               AttesterSlashingTests[0], // TODO: extract from validators.json
+			attesterTest:               AttesterSlashingTests[4], // TODO: extract from validators.json
 			firstAttesterDuty:          make(map[beaconproxy.Gateway]*v1.AttesterDuty),
 			firstAttestationData:       make(map[beaconproxy.Gateway]*phase0.AttestationData),
 			firstSubmittedAttestation:  make(map[beaconproxy.Gateway]*phase0.Attestation),
@@ -280,8 +282,8 @@ func (s *SlashingInterceptor) InterceptAttestationData(
 			}
 
 			copiedAttData := &phase0.AttestationData{
-				Slot:            slot, // intentional
-				Index:           state.firstAttestationData[gateway].Index,
+				Slot:            slot,
+				Index:           committeeIndex,
 				BeaconBlockRoot: state.firstAttestationData[gateway].BeaconBlockRoot,
 				Source: &phase0.Checkpoint{
 					Epoch: state.firstAttestationData[gateway].Source.Epoch,
@@ -543,7 +545,7 @@ var AttesterSlashingTests = []AttesterSlashingTest{
 		Name:      "SameSource_HigherTarget_DifferentRoot",
 		Slashable: false,
 		Apply: func(data *phase0.AttestationData) error {
-			data.Target.Epoch++
+			data.Target.Epoch += startEndEpochsDiff
 			_, err := rand.Read(data.BeaconBlockRoot[:])
 			return err
 		},
@@ -575,7 +577,7 @@ var AttesterSlashingTests = []AttesterSlashingTest{
 		Name:      "HigherSource_SameTarget_SameRoot",
 		Slashable: true,
 		Apply: func(data *phase0.AttestationData) error {
-			data.Source.Epoch++
+			data.Source.Epoch += startEndEpochsDiff
 			return nil
 		},
 	},
