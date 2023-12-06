@@ -41,13 +41,14 @@ FROM preparer AS builder
 # Copy files and install app
 COPY . .
 
-ARG APP_VERSION
-
 RUN --mount=type=cache,target=/root/.cache/go-build \
   --mount=type=cache,mode=0755,target=/go/pkg \
+  COMMIT=$(git rev-parse HEAD) && \
+  BRANCH=$(git symbolic-ref --short HEAD) && \
+  VERSION=$(git describe --tags $(git rev-list --tags --max-count=1)) && \
   CGO_ENABLED=1 GOOS=linux go install \
   -tags="blst_enabled,jemalloc,allocator" \
-  -ldflags "-X main.Version='${APP_VERSION}' -linkmode external -extldflags \"-static -lm\"" \
+  -ldflags "-X main.Commit=$COMMIT -X main.Branch=$BRANCH -X main.Version=$VERSION -linkmode external -extldflags \"-static -lm\"" \
   ./cmd/ssvnode
 
 #
