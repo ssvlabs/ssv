@@ -265,16 +265,17 @@ func (s *SlashingInterceptor) InterceptAttestationData(
 			continue
 		}
 
-		// Apply the test on the second attestation data.
-		if err := state.attesterTest.Apply(data); err != nil {
+		// Apply the test on the first attestation data.
+		if err := state.attesterTest.Apply(state.firstAttestationData[gateway]); err != nil {
 			return nil, fmt.Errorf("failed to apply attester slashing test: %w", err)
 		}
 
-		// Record the second attestation data.
+		// Record modified first attestation data as second.
 		if _, ok := state.secondAttestationData[gateway]; !ok {
 			if epoch != s.endEpoch {
 				return nil, fmt.Errorf("misbehavior: second attester data wasn't requested during the end epoch")
 			}
+			data = state.firstAttestationData[gateway]
 			state.secondAttestationData[gateway] = data
 			continue
 		}
@@ -343,10 +344,10 @@ func (s *SlashingInterceptor) InterceptSubmitAttestations(
 				continue
 			}
 
-			if slot != state.firstSubmittedAttestation[gateway].Data.Slot && epoch == s.network.EstimatedEpochAtSlot(state.firstSubmittedAttestation[gateway].Data.Slot) {
-				s.logger.Debug("new attestation in different slot but same epoch, skipping")
-				continue
-			}
+			//if slot != state.firstSubmittedAttestation[gateway].Data.Slot && epoch == s.network.EstimatedEpochAtSlot(state.firstSubmittedAttestation[gateway].Data.Slot) {
+			//	s.logger.Debug("new attestation in different slot but same epoch, skipping")
+			//	continue
+			//}
 
 			s.logger.Debug("got second attestation", zap.Any("epoch", epoch), zap.Any("slot", slot), zap.Any("validator", validatorIndex))
 
