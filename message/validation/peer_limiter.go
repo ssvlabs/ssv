@@ -4,6 +4,7 @@ import (
 	"sync"
 	"time"
 
+	lru "github.com/hashicorp/golang-lru"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"golang.org/x/time/rate"
 )
@@ -53,32 +54,32 @@ func (rl *RateLimiter) RegisterRequest(isReject bool) {
 }
 
 type PeerRateLimitManager struct {
-	limiters     map[peer.ID]*RateLimiter
+	limiters     *lru.Cache
 	rejectRate   rate.Limit
 	ignoreRate   rate.Limit
 	blockingTime time.Duration
-	mu           sync.Mutex
 }
 
-func NewPeerRateLimitManager(rejectRate, ignoreRate int, blockingTime time.Duration) *PeerRateLimitManager {
+func NewPeerRateLimitManager(rejectRate, ignoreRate, cacheSize int, blockingTime time.Duration) *PeerRateLimitManager {
+	cache, _ := lru.New(cacheSize)
 	return &PeerRateLimitManager{
+		limiters:     cache,
 		rejectRate:   rate.Limit(rejectRate),
 		ignoreRate:   rate.Limit(ignoreRate),
 		blockingTime: blockingTime,
-		limiters:     make(map[peer.ID]*RateLimiter),
 	}
 }
 
 func (p *PeerRateLimitManager) GetLimiter(peerID peer.ID, createIfMissing bool) *RateLimiter {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	limiter, exists := p.limiters[peerID]
-	if createIfMissing && !exists {
-		limiter = NewRateLimiter(p.rejectRate, p.ignoreRate)
-		p.limiters[peerID] = limiter
+	if limiter, ok := p.limiters.Get(peerID); ok {
+		return limiter.(*RateLimiter)
 	}
-	return limiter
+	if createIfMissing {
+		limiter := NewRateLimiter(p.rejectRate, p.ignoreRate)
+		p.limiters.Add(peerID, limiter)
+		return limiter
+	}
+	return nil
 }
 
 func (p *PeerRateLimitManager) AllowRequest(peerID peer.ID) bool {
