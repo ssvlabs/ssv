@@ -95,7 +95,7 @@ spec:
           - name: DISCOVERY_TYPE_KEY
             value: "discv5"
           - name: DB_PATH
-            value: ./data/db-holesky--test-fix-stale-operator-id
+            value: ./data/db-holesky
           - name: NETWORK
             value: holesky
           - name: CONSENSUS_TYPE
