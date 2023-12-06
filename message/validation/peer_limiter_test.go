@@ -10,11 +10,11 @@ import (
 )
 
 func TestLimiterBasicRateLimiting(t *testing.T) {
-	pl := NewPeerRateLimitManager(1, 1*time.Second) // 1 request per second
+	pl := NewPeerRateLimitManager(1, 1, 1*time.Second) // 1 request per second
 	peerID := peer.ID("test-peer-1")
 
 	assert.True(t, pl.AllowRequest(peerID), "CanProceed should allow the first request")
-	pl.RegisterRequest(peerID)
+	pl.RegisterIgnoreRequest(peerID)
 
 	// Immediate subsequent request should be blocked
 	assert.False(t, pl.AllowRequest(peerID), "CanProceed should block the second immediate request due to rate limiting")
@@ -23,33 +23,34 @@ func TestLimiterBasicRateLimiting(t *testing.T) {
 	assert.True(t, pl.AllowRequest(peerID), "CanProceed should allow the request after waiting for the rate limiter to reset")
 }
 
-// TestIncrementConcurrent tests the Increment function in a concurrent environment
-func TestIncrementConcurrent(t *testing.T) {
-	pl := NewPeerRateLimitManager(10, 1*time.Second) // 10 requests per second
-	peerID := peer.ID("test-peer-2")
+func TestMixedConcurrentRejectAndIgnoreRequests(t *testing.T) {
+	pl := NewPeerRateLimitManager(5, 5, 1*time.Second)
+	peerID := peer.ID("test-peer-mixed-concurrent")
 	var wg sync.WaitGroup
 
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
-		go func() {
+		go func(i int) {
 			defer wg.Done()
-			pl.RegisterRequest(peerID)
-		}()
+			if i%2 == 0 {
+				pl.RegisterIgnoreRequest(peerID)
+			} else {
+				pl.RegisterRejectRequest(peerID)
+			}
+		}(i)
 	}
 
 	wg.Wait()
-
-	// After concurrent increments, the limiter should block new requests if exceeded
-	assert.False(t, pl.AllowRequest(peerID), "Should block after multiple concurrent increments")
+	assert.False(t, pl.AllowRequest(peerID), "Should block after mixed concurrent increments")
 }
 
 func TestBlockingBehavior(t *testing.T) {
-	pl := NewPeerRateLimitManager(5, 1*time.Second) // 5 requests per second
+	pl := NewPeerRateLimitManager(5, 5, 1*time.Second) // 5 requests per second
 	peerID := peer.ID("test-peer-3")
 
 	for i := 0; i < 5; i++ {
 		assert.True(t, pl.AllowRequest(peerID), "Iteration %d: Should allow within rate limit", i)
-		pl.RegisterRequest(peerID)
+		pl.RegisterIgnoreRequest(peerID)
 	}
 
 	// Next request should be blocked

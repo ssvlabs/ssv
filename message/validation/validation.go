@@ -96,7 +96,7 @@ func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) Mes
 		netCfg:                  netCfg,
 		operatorIDToPubkeyCache: hashmap.New[spectypes.OperatorID, *rsa.PublicKey](),
 		validationLocks:         make(map[spectypes.MessageID]*sync.Mutex),
-		peerRateLimiter:         NewPeerRateLimitManager(20, 1*time.Minute), // rate per second and duration
+		peerRateLimiter:         NewPeerRateLimitManager(20, 300000, 1*time.Minute), // rate per second and duration
 	}
 
 	for _, opt := range opts {
@@ -268,7 +268,7 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer
 				}
 
 				mv.metrics.MessageRejected(valErr.Text(), descriptor.Role, round)
-				mv.peerRateLimiter.RegisterRequest(peerID)
+				mv.peerRateLimiter.RegisterRejectRequest(peerID)
 
 				return pubsub.ValidationReject
 			}
@@ -278,12 +278,14 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer
 				mv.logger.Debug("ignoring invalid message", f...)
 			}
 			mv.metrics.MessageIgnored(valErr.Text(), descriptor.Role, round)
+			mv.peerRateLimiter.RegisterIgnoreRequest(peerID)
 			return pubsub.ValidationIgnore
 		}
 
 		mv.metrics.MessageIgnored(err.Error(), descriptor.Role, round)
 		f = append(f, zap.Error(err))
 		mv.logger.Debug("ignoring invalid message", f...)
+		mv.peerRateLimiter.RegisterIgnoreRequest(peerID)
 		return pubsub.ValidationIgnore
 	}
 
