@@ -270,6 +270,15 @@ func (s *SlashingInterceptor) InterceptAttestationData(
 		if secondDuty, ok := state.secondAttesterDuty[gateway]; ok && secondDuty.Slot == slot && secondDuty.CommitteeIndex == committeeIndex {
 			s.logger.Debug("got second attestation data request", zap.Any("epoch", epoch), zap.Any("gateway", gateway.Name), zap.Any("slot", slot), zap.Any("validator", validatorIndex))
 
+			// Record modified first attestation data as second.
+			if _, ok := state.secondAttestationData[gateway]; ok {
+				return nil, fmt.Errorf("second attestation data already requested")
+			}
+
+			if epoch != s.endEpoch {
+				return nil, fmt.Errorf("misbehavior: second attester data wasn't requested during the end epoch")
+			}
+
 			copiedAttData := &phase0.AttestationData{
 				Slot:            slot, // intentional
 				Index:           state.firstAttestationData[gateway].Index,
@@ -287,15 +296,6 @@ func (s *SlashingInterceptor) InterceptAttestationData(
 			// Apply the test on the first attestation data.
 			if err := state.attesterTest.Apply(copiedAttData); err != nil {
 				return nil, fmt.Errorf("failed to apply attester slashing test: %w", err)
-			}
-
-			// Record modified first attestation data as second.
-			if _, ok := state.secondAttestationData[gateway]; ok {
-				return nil, fmt.Errorf("second attestation data already requested")
-			}
-
-			if epoch != s.endEpoch {
-				return nil, fmt.Errorf("misbehavior: second attester data wasn't requested during the end epoch")
 			}
 
 			data = copiedAttData
