@@ -30,6 +30,9 @@ type (
 
 	// LoggerKey is the key used to store the logger in the request context.
 	LoggerKey struct{}
+
+	// StartTimeKey is the key used to store the start time in the request context.
+	StartTimeKey struct{}
 )
 
 type Gateway struct {
@@ -135,6 +138,8 @@ func (b *BeaconProxy) middleware(gateway Gateway) func(http.Handler) http.Handle
 			)
 			ctx = context.WithValue(ctx, LoggerKey{}, logger)
 
+			ctx = context.WithValue(ctx, StartTimeKey{}, time.Now())
+
 			// Log request.
 			b.logger.Debug("received request",
 				zap.String("gateway", gateway.Name),
@@ -162,6 +167,7 @@ func (b *BeaconProxy) error(r *http.Request, w http.ResponseWriter, status int, 
 	logger, _ := b.requestContext(r)
 	logger.Error("failed to handle request",
 		zap.Int("status", status),
+		zap.Duration("took", time.Since(r.Context().Value(StartTimeKey{}).(time.Time))),
 		zap.Error(err),
 	)
 	http.Error(w, err.Error(), status)

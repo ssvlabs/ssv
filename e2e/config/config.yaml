@@ -8,7 +8,7 @@ eth2:
   Network: holesky
   BeaconNodeAddr: http://beacon_proxy:6631
 eth1:
-  ETH1Addr: ws://bn-h-1.stage.bloxinfra.com:8549/ws
+  ETH1Addr: ws://bn-h-2.stage.bloxinfra.com:8557/ws
 
 # KeyStore:
 #   PrivateKeyFile: /Users/mosherevah/Downloads/encrypted_private_key.json

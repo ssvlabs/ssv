@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
-	"reflect"
 	"sync"
 	"time"
 
@@ -151,9 +150,12 @@ func (s *SlashingInterceptor) checkStartEpochAttestationSubmission() {
 
 func (s *SlashingInterceptor) checkEndEpochAttestationSubmission() {
 	submittedCount := 0
+	hasSlashable := false
 	for _, state := range s.validators {
-		// TODO: support values other than 4
-		if len(state.secondSubmittedAttestation) != 4 {
+		if state.attesterTest.Slashable {
+			hasSlashable = true
+			s.logger.Debug("found slashable validator")
+		} else if len(state.secondSubmittedAttestation) != 4 { // TODO: support values other than 4
 			s.logger.Debug("validator did not submit in end epoch",
 				zap.Any("validator_index", state.validator.Index),
 				zap.Any("validator_pk", state.validator.Validator.PublicKey.String()),
@@ -169,11 +171,18 @@ func (s *SlashingInterceptor) checkEndEpochAttestationSubmission() {
 		}
 	}
 
-	if submittedCount == len(s.validators) {
+	if hasSlashable {
+		s.logger.Info("found slashable validators")
+	} else if submittedCount == len(s.validators) {
 		s.logger.Info("all attestations submitted in end epoch", zap.Any("count", submittedCount))
 	} else {
 		s.logger.Info("not all attestations submitted in end epoch", zap.Any("submitted", submittedCount), zap.Any("expected", len(s.validators)))
 	}
+
+	// TODO: rewrite logs above so that we check two conditions:
+	// 1. All non-slashable validators submitted in end epoch
+	// 2. All slashable validators did not submit in end epoch
+	// Then have a summary log if test passes or not. Two cases above may be logged but don't have to (e.g. debugging)
 }
 
 // ATTESTER
@@ -190,10 +199,10 @@ func (s *SlashingInterceptor) InterceptAttesterDuties(
 	_, gateway := s.requestContext(ctx)
 
 	if s.blockedEpoch(epoch) {
-		s.logger.Debug("epoch blocked, returning empty attester duties", zap.Any("epoch", epoch))
+		s.logger.Debug("epoch blocked, returning empty attester duties", zap.Any("epoch", epoch), zap.Any("gateway", gateway.Name))
 		return []*v1.AttesterDuty{}, nil
 	} else {
-		s.logger.Debug("epoch not blocked, returning real attester duties", zap.Any("epoch", epoch))
+		s.logger.Debug("epoch not blocked, returning real attester duties", zap.Any("epoch", epoch), zap.Any("gateway", gateway.Name))
 	}
 
 	for _, duty := range duties {
@@ -206,19 +215,17 @@ func (s *SlashingInterceptor) InterceptAttesterDuties(
 				return nil, fmt.Errorf("misbehavior: first attester duty wasn't requested during the start epoch")
 			}
 			state.firstAttesterDuty[gateway] = duty
+
 			continue
 		}
-		if reflect.DeepEqual(duty, state.firstAttesterDuty[gateway]) {
-			s.logger.Debug("new duty is same as old duty, skipping")
-			continue
+
+		if _, ok = state.secondAttesterDuty[gateway]; ok {
+			return nil, fmt.Errorf("second attester duties already requested")
 		}
-		if _, ok = state.secondAttesterDuty[gateway]; !ok {
-			if epoch != s.endEpoch {
-				return nil, fmt.Errorf("misbehavior: second attester duty wasn't requested during the end epoch")
-			}
-			state.secondAttesterDuty[gateway] = duty
-			continue
+		if epoch != s.endEpoch {
+			return nil, fmt.Errorf("misbehavior: second attester duty wasn't requested during the end epoch")
 		}
+		state.secondAttesterDuty[gateway] = duty
 	}
 	return duties, nil
 }
@@ -236,49 +243,67 @@ func (s *SlashingInterceptor) InterceptAttestationData(
 
 	epoch := s.network.EstimatedEpochAtSlot(slot)
 	if s.blockedEpoch(epoch) {
-		s.logger.Debug("epoch blocked, returning empty attestation data", zap.Any("epoch", epoch))
+		s.logger.Debug("epoch blocked, returning empty attestation data", zap.Any("epoch", epoch), zap.Any("gateway", gateway.Name))
 		return nil, fmt.Errorf("attestation data requested for blocked epoch %d", epoch)
 	} else {
-		s.logger.Debug("epoch not blocked, returning real attestation data", zap.Any("epoch", epoch))
+		s.logger.Debug("epoch not blocked, returning real attestation data", zap.Any("epoch", epoch), zap.Any("gateway", gateway.Name))
 	}
 
-	for _, state := range s.validators {
-		// TODO: fix to track both first and second attester duties.
-
+	for validatorIndex, state := range s.validators {
 		// Skip validators that are not in the requested committee.
-		if firstDuty, ok := state.firstAttesterDuty[gateway]; !ok || firstDuty.Slot != slot ||
-			firstDuty.CommitteeIndex != committeeIndex {
-			continue
-		}
+		if firstDuty, ok := state.firstAttesterDuty[gateway]; ok && firstDuty.Slot == slot && firstDuty.CommitteeIndex == committeeIndex {
+			s.logger.Debug("got first attestation data request", zap.Any("epoch", epoch), zap.Any("gateway", gateway.Name), zap.Any("slot", slot), zap.Any("validator", validatorIndex))
 
-		// Record the first attestation data.
-		if _, ok := state.firstAttestationData[gateway]; !ok {
+			// Record the first attestation data.
+			if _, ok := state.firstAttestationData[gateway]; ok {
+				return nil, fmt.Errorf("first attestation data already requested")
+			}
+
 			if epoch != s.startEpoch {
 				return nil, fmt.Errorf("misbehavior: first attester data wasn't requested during the start epoch")
 			}
 			state.firstAttestationData[gateway] = data
-			continue
+
+			break
 		}
 
-		if reflect.DeepEqual(data, state.firstAttestationData[gateway]) {
-			s.logger.Debug("new duty is same as old duty, skipping")
-			continue
-		}
+		if secondDuty, ok := state.secondAttesterDuty[gateway]; ok && secondDuty.Slot == slot && secondDuty.CommitteeIndex == committeeIndex {
+			s.logger.Debug("got second attestation data request", zap.Any("epoch", epoch), zap.Any("gateway", gateway.Name), zap.Any("slot", slot), zap.Any("validator", validatorIndex))
 
-		// Apply the test on the first attestation data.
-		if err := state.attesterTest.Apply(state.firstAttestationData[gateway]); err != nil {
-			return nil, fmt.Errorf("failed to apply attester slashing test: %w", err)
-		}
+			copiedAttData := &phase0.AttestationData{
+				Slot:            slot, // intentional
+				Index:           state.firstAttestationData[gateway].Index,
+				BeaconBlockRoot: state.firstAttestationData[gateway].BeaconBlockRoot,
+				Source: &phase0.Checkpoint{
+					Epoch: state.firstAttestationData[gateway].Source.Epoch,
+					Root:  state.firstAttestationData[gateway].Source.Root,
+				},
+				Target: &phase0.Checkpoint{
+					Epoch: state.firstAttestationData[gateway].Target.Epoch,
+					Root:  state.firstAttestationData[gateway].Target.Root,
+				},
+			}
 
-		// Record modified first attestation data as second.
-		if _, ok := state.secondAttestationData[gateway]; !ok {
+			// Apply the test on the first attestation data.
+			if err := state.attesterTest.Apply(copiedAttData); err != nil {
+				return nil, fmt.Errorf("failed to apply attester slashing test: %w", err)
+			}
+
+			// Record modified first attestation data as second.
+			if _, ok := state.secondAttestationData[gateway]; ok {
+				return nil, fmt.Errorf("second attestation data already requested")
+			}
+
 			if epoch != s.endEpoch {
 				return nil, fmt.Errorf("misbehavior: second attester data wasn't requested during the end epoch")
 			}
-			data = state.firstAttestationData[gateway]
-			state.secondAttestationData[gateway] = data
-			continue
+
+			data = copiedAttData
+			state.secondAttestationData[gateway] = copiedAttData
+
+			break
 		}
+
 	}
 	return data, nil
 }
@@ -294,74 +319,51 @@ func (s *SlashingInterceptor) InterceptSubmitAttestations(
 
 	for _, attestation := range attestations {
 		slot := attestation.Data.Slot
-
 		epoch := s.network.EstimatedEpochAtSlot(slot)
 
 		if s.blockedEpoch(epoch) {
 			return nil, fmt.Errorf("attestation submitted for blocked epoch %d", epoch)
 		}
 
-		//if s.epochExpired(epoch) {
-		//	return nil, fmt.Errorf("misbehavior: epoch expired")
-		//}
-
-		currentEpoch := s.network.EstimatedCurrentEpoch()
-		if epoch == s.startEpoch && currentEpoch > s.startEpoch && currentEpoch-s.startEpoch >= 2 {
-			return nil, fmt.Errorf("misbehavior: start epoch expired")
-		}
-
-		if epoch == s.endEpoch && currentEpoch > s.endEpoch && currentEpoch-s.endEpoch >= 2 {
-			return nil, fmt.Errorf("misbehavior: end epoch expired")
-		}
-
-		s.logger.Debug("submitting attestation", zap.Any("epoch", epoch), zap.Any("slot", slot))
+		s.logger.Debug("submit attestation request", zap.Any("epoch", epoch), zap.Any("gateway", gateway.Name), zap.Any("slot", slot))
 
 		for validatorIndex, state := range s.validators {
-			// Skip validators that are not in the attestation's committee.
-			if firstDuty, ok := state.firstAttesterDuty[gateway]; !ok ||
-				firstDuty.CommitteeIndex != attestation.Data.Index {
-				continue
-			}
+			// Skip validators that are not in the requested committee.
+			if firstDuty, ok := state.firstAttesterDuty[gateway]; ok && firstDuty.Slot == slot && firstDuty.CommitteeIndex == attestation.Data.Index {
+				// Record the submitted attestation.
+				if _, ok := state.firstSubmittedAttestation[gateway]; ok {
+					return nil, fmt.Errorf("first attestation already submitted")
+				}
 
-			// Record the submitted attestation.
-			if _, ok := state.firstSubmittedAttestation[gateway]; !ok {
-				s.logger.Debug("got first attestation", zap.Any("epoch", epoch), zap.Any("slot", slot), zap.Any("validator", validatorIndex))
+				s.logger.Debug("got first attestation submission", zap.Any("epoch", epoch), zap.Any("gateway", gateway.Name), zap.Any("slot", slot), zap.Any("validator", validatorIndex))
 
 				if epoch != s.startEpoch {
 					return nil, fmt.Errorf("misbehavior: attestation wasn't submitted during the start epoch")
 				}
 				state.firstSubmittedAttestation[gateway] = attestation
-				s.logger.Debug("submitted first attestation", zap.Any("epoch", epoch), zap.Any("slot", slot), zap.Any("validator", validatorIndex))
-				if state.attesterTest.Slashable {
-					return nil, fmt.Errorf("misbehavior: attestation was submitted during the start epoch")
+				s.logger.Debug("submitted first attestation", zap.Any("epoch", epoch), zap.Any("gateway", gateway.Name), zap.Any("slot", slot), zap.Any("validator", validatorIndex))
+
+				break
+			}
+
+			if secondDuty, ok := state.secondAttesterDuty[gateway]; ok && secondDuty.Slot == slot && secondDuty.CommitteeIndex == attestation.Data.Index {
+				s.logger.Debug("got second attestation submission", zap.Any("epoch", epoch), zap.Any("gateway", gateway.Name), zap.Any("slot", slot), zap.Any("validator", validatorIndex))
+
+				// Record the second submitted attestation.
+				if _, ok := state.secondSubmittedAttestation[gateway]; ok {
+					return nil, fmt.Errorf("second attestation already submitted")
 				}
-				continue
-			}
-			s.logger.Debug("got new attestation, checking if it's same as first", zap.Any("epoch", epoch), zap.Any("slot", slot), zap.Any("validator", validatorIndex))
 
-			if reflect.DeepEqual(attestation, state.firstSubmittedAttestation[gateway]) {
-				s.logger.Debug("new attestation is same as old attestation, skipping")
-				continue
-			}
-
-			//if slot != state.firstSubmittedAttestation[gateway].Data.Slot && epoch == s.network.EstimatedEpochAtSlot(state.firstSubmittedAttestation[gateway].Data.Slot) {
-			//	s.logger.Debug("new attestation in different slot but same epoch, skipping")
-			//	continue
-			//}
-
-			s.logger.Debug("got second attestation", zap.Any("epoch", epoch), zap.Any("slot", slot), zap.Any("validator", validatorIndex))
-
-			// Record the second submitted attestation.
-			if _, ok := state.secondSubmittedAttestation[gateway]; !ok {
 				if epoch != s.endEpoch {
 					return nil, fmt.Errorf("misbehavior: attestation wasn't submitted during the end epoch")
 				}
 				state.secondSubmittedAttestation[gateway] = attestation
-				s.logger.Debug("submitted second attestation", zap.Any("epoch", epoch), zap.Any("slot", slot), zap.Any("validator", validatorIndex))
 				if state.attesterTest.Slashable {
 					return nil, fmt.Errorf("misbehavior: attestation was submitted during the end epoch")
 				}
-				continue
+				s.logger.Debug("submitted second attestation", zap.Any("epoch", epoch), zap.Any("gateway", gateway.Name), zap.Any("slot", slot), zap.Any("validator", validatorIndex))
+
+				break
 			}
 		}
 	}
@@ -471,10 +473,6 @@ func (s *SlashingInterceptor) InterceptSubmitBlockProposal(ctx context.Context, 
 		}
 	}
 
-	//if s.epochExpired(epoch) {
-	//	return nil, fmt.Errorf("misbehavior: start epoch expired")
-	//}
-
 	return block, nil
 }
 
@@ -493,10 +491,6 @@ func (s *SlashingInterceptor) expiredEpoch(epoch phase0.Epoch) bool {
 	}
 
 	return false
-}
-
-func (s *SlashingInterceptor) epochExpired(epoch phase0.Epoch) bool {
-	return epoch > s.startEpoch && epoch-s.startEpoch >= 2
 }
 
 func (s *SlashingInterceptor) requestContext(ctx context.Context) (*zap.Logger, beaconproxy.Gateway) {
