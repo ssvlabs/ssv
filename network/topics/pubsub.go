@@ -155,6 +155,7 @@ func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig) (*pub
 		async.Interval(ctx, time.Hour, func() {
 			// reset peer scores metric every hour because it has a label for peer ID which can grow infinitely
 			metricPubsubPeerScoreInspect.Reset()
+			metricPubSubPeerP4Score.Reset()
 		})
 		if cfg.GetValidatorStats == nil {
 			cfg.GetValidatorStats = func() (uint64, uint64, uint64, error) {

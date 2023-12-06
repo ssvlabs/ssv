@@ -5,15 +5,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/network/peers"
-	"github.com/bloxapp/ssv/network/records"
 	"github.com/libp2p/go-libp2p/core/network"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/network/peers"
+	"github.com/bloxapp/ssv/network/records"
 )
 
 // ConnHandler handles new connections (inbound / outbound) using libp2pnetwork.NotifyBundle
@@ -30,7 +31,7 @@ type connHandler struct {
 	subnetsIndex    peers.SubnetsIndex
 	connIdx         peers.ConnectionIndex
 	peerInfos       peers.PeerInfoIndex
-	metrics         MetricsReporter
+	metrics         Metrics
 }
 
 // NewConnHandler creates a new connection handler
@@ -41,7 +42,7 @@ func NewConnHandler(
 	subnetsIndex peers.SubnetsIndex,
 	connIdx peers.ConnectionIndex,
 	peerInfos peers.PeerInfoIndex,
-	mr MetricsReporter,
+	mr Metrics,
 ) ConnHandler {
 	return &connHandler{
 		ctx:             ctx,

@@ -7,7 +7,7 @@ import (
 	"go.uber.org/zap"
 )
 
-type MetricsReporter interface {
+type Metrics interface {
 	MessagesReceivedFromPeer(peer.ID)
 	DeletePeerInfo(peerId peer.ID)
 }
