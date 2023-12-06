@@ -9,15 +9,17 @@ import (
 )
 
 type RateLimiter struct {
-	limiter       *rate.Limiter
+	rejectLimiter *rate.Limiter
+	ignoreLimiter *rate.Limiter
 	blockRequests bool
 	lastBlocked   time.Time
 	mu            sync.Mutex // Mutex to protect blockRequests and lastBlocked
 }
 
-func NewRateLimiter(rateLimit rate.Limit) *RateLimiter {
+func NewRateLimiter(rejectLimit, ignoreLimit rate.Limit) *RateLimiter {
 	return &RateLimiter{
-		limiter: rate.NewLimiter(rateLimit, int(rateLimit)),
+		rejectLimiter: rate.NewLimiter(rejectLimit, int(rejectLimit)),
+		ignoreLimiter: rate.NewLimiter(ignoreLimit, int(ignoreLimit)),
 	}
 }
 
@@ -33,7 +35,7 @@ func (rl *RateLimiter) AllowRequest(blockingTime time.Duration) bool {
 		}
 	}
 
-	if rl.limiter.Tokens() < 1.0 {
+	if rl.rejectLimiter.Tokens() < 1.0 || rl.ignoreLimiter.Tokens() < 1.0 {
 		rl.blockRequests = true
 		rl.lastBlocked = time.Now()
 		return false
@@ -42,20 +44,26 @@ func (rl *RateLimiter) AllowRequest(blockingTime time.Duration) bool {
 	return true
 }
 
-func (rl *RateLimiter) RegisterRequest() {
-	rl.limiter.Allow()
+func (rl *RateLimiter) RegisterRequest(isReject bool) {
+	if isReject {
+		rl.rejectLimiter.Allow() // Consume a token from the reject limiter
+	} else {
+		rl.ignoreLimiter.Allow() // Consume a token from the ignore limiter
+	}
 }
 
 type PeerRateLimitManager struct {
 	limiters     map[peer.ID]*RateLimiter
-	rate         rate.Limit
+	rejectRate   rate.Limit
+	ignoreRate   rate.Limit
 	blockingTime time.Duration
 	mu           sync.Mutex
 }
 
-func NewPeerRateLimitManager(ratePerSecond int, blockingTime time.Duration) *PeerRateLimitManager {
+func NewPeerRateLimitManager(rejectRate, ignoreRate int, blockingTime time.Duration) *PeerRateLimitManager {
 	return &PeerRateLimitManager{
-		rate:         rate.Limit(ratePerSecond),
+		rejectRate:   rate.Limit(rejectRate),
+		ignoreRate:   rate.Limit(ignoreRate),
 		blockingTime: blockingTime,
 		limiters:     make(map[peer.ID]*RateLimiter),
 	}
@@ -67,7 +75,7 @@ func (p *PeerRateLimitManager) GetLimiter(peerID peer.ID, createIfMissing bool) 
 
 	limiter, exists := p.limiters[peerID]
 	if createIfMissing && !exists {
-		limiter = NewRateLimiter(p.rate)
+		limiter = NewRateLimiter(p.rejectRate, p.ignoreRate)
 		p.limiters[peerID] = limiter
 	}
 	return limiter
@@ -81,7 +89,12 @@ func (p *PeerRateLimitManager) AllowRequest(peerID peer.ID) bool {
 	return limiter.AllowRequest(p.blockingTime)
 }
 
-func (p *PeerRateLimitManager) RegisterRequest(peerID peer.ID) {
+func (p *PeerRateLimitManager) RegisterIgnoreRequest(peerID peer.ID) {
 	limiter := p.GetLimiter(peerID, true)
-	limiter.RegisterRequest()
+	limiter.RegisterRequest(false)
+}
+
+func (p *PeerRateLimitManager) RegisterRejectRequest(peerID peer.ID) {
+	limiter := p.GetLimiter(peerID, true)
+	limiter.RegisterRequest(true)
 }
