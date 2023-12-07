@@ -2,8 +2,10 @@ package slashinginterceptor
 
 import (
 	"context"
-	"crypto/rand"
+	crand "crypto/rand"
+	"encoding/json"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -85,6 +87,11 @@ func New(
 		fakeProposerDuties: fakeProposerDuties,
 		validators:         make(map[phase0.ValidatorIndex]*validatorState),
 	}
+
+	if len(s.validators) > int(network.SlotsPerEpoch()) {
+		panic(">32 validators not supported yet")
+	}
+
 	logger.Debug("creating slashing interceptor",
 		zap.Any("start_epoch", s.startEpoch),
 		zap.Any("end_epoch", s.endEpoch),
@@ -146,7 +153,7 @@ func (s *SlashingInterceptor) checkStartEpochAttestationSubmission() {
 	if submittedCount == len(s.validators) {
 		s.logger.Info("all attestations submitted in start epoch", zap.Any("count", submittedCount))
 	} else {
-		s.logger.Info("not all attestations submitted in start epoch", zap.Any("submitted", submittedCount), zap.Any("expected", len(s.validators)))
+		s.logger.Warn("not all attestations submitted in start epoch", zap.Any("submitted", submittedCount), zap.Any("expected", len(s.validators)))
 	}
 }
 
@@ -155,8 +162,14 @@ func (s *SlashingInterceptor) checkEndEpochAttestationSubmission() {
 	hasSlashable := false
 	for _, state := range s.validators {
 		if state.attesterTest.Slashable {
-			hasSlashable = true
-			s.logger.Debug("found slashable validator")
+			if len(state.secondSubmittedAttestation) != 0 {
+				hasSlashable = true
+				s.logger.Error("found slashable validator",
+					zap.Any("validator_index", state.validator.Index),
+					zap.Any("validator_pk", state.validator.Validator.PublicKey.String()),
+					zap.Any("submitters", maps.Keys(state.secondSubmittedAttestation)),
+				)
+			}
 		} else if len(state.secondSubmittedAttestation) != 4 { // TODO: support values other than 4
 			s.logger.Debug("validator did not submit in end epoch",
 				zap.Any("validator_index", state.validator.Index),
@@ -174,7 +187,7 @@ func (s *SlashingInterceptor) checkEndEpochAttestationSubmission() {
 	}
 
 	if hasSlashable {
-		s.logger.Info("found slashable validators")
+		s.logger.Error("found slashable validators")
 	} else if submittedCount == len(s.validators) {
 		s.logger.Info("all attestations submitted in end epoch", zap.Any("count", submittedCount))
 	} else {
@@ -200,6 +213,9 @@ func (s *SlashingInterceptor) InterceptAttesterDuties(
 
 	_, gateway := s.requestContext(ctx)
 
+	dutiesJSON, _ := json.Marshal(duties)
+	s.logger.Debug("attester duties request", zap.String("json", string(dutiesJSON)))
+
 	if s.blockedEpoch(epoch) {
 		s.logger.Debug("epoch blocked, returning empty attester duties", zap.Any("epoch", epoch), zap.Any("gateway", gateway.Name))
 		return []*v1.AttesterDuty{}, nil
@@ -207,11 +223,26 @@ func (s *SlashingInterceptor) InterceptAttesterDuties(
 		s.logger.Debug("epoch not blocked, returning real attester duties", zap.Any("epoch", epoch), zap.Any("gateway", gateway.Name))
 	}
 
-	for _, duty := range duties {
+	if len(duties) != len(s.validators) {
+		return nil, fmt.Errorf("unexpected duty count")
+	}
+
+	sort.Slice(duties, func(i, j int) bool {
+		return duties[i].ValidatorIndex < duties[j].ValidatorIndex
+	})
+
+	for i, duty := range duties {
 		state, ok := s.validators[duty.ValidatorIndex]
 		if !ok {
-			continue
+			return nil, fmt.Errorf("validator not found")
 		}
+
+		duty.Slot = s.network.FirstSlotAtEpoch(epoch) + phase0.Slot(i)
+		duty.CommitteeIndex = phase0.CommitteeIndex(i)
+
+		s.logger.Debug("validator got duty",
+			zap.Any("epoch", epoch), zap.Any("slot", duty.Slot), zap.Any("gateway", gateway.Name), zap.Any("committee_index", duty.CommitteeIndex), zap.Any("validator", duty.ValidatorIndex))
+
 		if _, ok = state.firstAttesterDuty[gateway]; !ok {
 			if epoch != s.startEpoch {
 				return nil, fmt.Errorf("misbehavior: first attester duty wasn't requested during the start epoch")
@@ -229,6 +260,7 @@ func (s *SlashingInterceptor) InterceptAttesterDuties(
 		}
 		state.secondAttesterDuty[gateway] = duty
 	}
+
 	return duties, nil
 }
 
@@ -513,7 +545,7 @@ var ProposerSlashingTests = []ProposerSlashingTest{
 			default:
 				return fmt.Errorf("unsupported version: %s", block.Version)
 			}
-			_, err := rand.Read(block.Capella.ParentRoot[:])
+			_, err := crand.Read(block.Capella.ParentRoot[:])
 			return err
 		},
 	},
@@ -521,7 +553,7 @@ var ProposerSlashingTests = []ProposerSlashingTest{
 		Name:      "SameSlot_DifferentRoot",
 		Slashable: true,
 		Apply: func(block *spec.VersionedBeaconBlock) error {
-			_, err := rand.Read(block.Capella.ParentRoot[:])
+			_, err := crand.Read(block.Capella.ParentRoot[:])
 			return err
 		},
 	},
@@ -546,7 +578,7 @@ var AttesterSlashingTests = []AttesterSlashingTest{
 		Slashable: false,
 		Apply: func(data *phase0.AttestationData) error {
 			data.Target.Epoch += startEndEpochsDiff
-			_, err := rand.Read(data.BeaconBlockRoot[:])
+			_, err := crand.Read(data.BeaconBlockRoot[:])
 			return err
 		},
 	},
@@ -561,7 +593,7 @@ var AttesterSlashingTests = []AttesterSlashingTest{
 		Name:      "SameSource_SameTarget_DifferentRoot",
 		Slashable: true,
 		Apply: func(data *phase0.AttestationData) error {
-			_, err := rand.Read(data.BeaconBlockRoot[:])
+			_, err := crand.Read(data.BeaconBlockRoot[:])
 			return err
 		},
 	},
