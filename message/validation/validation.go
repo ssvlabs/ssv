@@ -269,8 +269,11 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer
 				}
 
 				mv.metrics.MessageRejected(valErr.Text(), descriptor.Role, round)
-				mv.peerRateLimiter.RegisterRejectRequest(peerID)
-
+				if errors.Is(err, ErrRSASignature) {
+					mv.peerRateLimiter.RegisterRejectRequest(peerID)
+				} else {
+					mv.peerRateLimiter.RegisterIgnoreRequest(peerID)
+				}
 				return pubsub.ValidationReject
 			}
 
@@ -279,9 +282,7 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer
 				mv.logger.Debug("ignoring invalid message", f...)
 			}
 			mv.metrics.MessageIgnored(valErr.Text(), descriptor.Role, round)
-			if errors.Is(err, ErrRSADecryption) {
-				mv.peerRateLimiter.RegisterIgnoreRequest(peerID)
-			}
+			mv.peerRateLimiter.RegisterIgnoreRequest(peerID)
 			return pubsub.ValidationIgnore
 		}
 

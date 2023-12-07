@@ -56,7 +56,7 @@ var (
 	ErrEarlyMessage                        = Error{text: "early message"}
 	ErrLateMessage                         = Error{text: "late message"}
 	ErrTooManySameTypeMessagesPerRound     = Error{text: "too many messages of same type per round"}
-	ErrRSADecryption                       = Error{text: "rsa decryption", reject: true}
+	ErrRSASignature                        = Error{text: "invalid rsa signature", reject: true}
 	ErrOperatorNotFound                    = Error{text: "operator not found", reject: true}
 	ErrPubSubMessageHasNoData              = Error{text: "pub-sub message has no data", reject: true}
 	ErrPubSubDataTooBig                    = Error{text: "pub-sub message data too big", reject: true}

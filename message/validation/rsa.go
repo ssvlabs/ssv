@@ -30,14 +30,14 @@ func (mv *messageValidator) verifyRSASignature(messageData []byte, operatorID sp
 
 		operatorPubKey, err := base64.StdEncoding.DecodeString(string(operator.PublicKey))
 		if err != nil {
-			e := ErrRSADecryption
+			e := ErrRSASignature
 			e.innerErr = fmt.Errorf("decode public key: %w", err)
 			return e
 		}
 
 		rsaPubKey, err = rsaencryption.ConvertPemToPublicKey(operatorPubKey)
 		if err != nil {
-			e := ErrRSADecryption
+			e := ErrRSASignature
 			e.innerErr = fmt.Errorf("convert PEM: %w", err)
 			return e
 		}
@@ -48,7 +48,7 @@ func (mv *messageValidator) verifyRSASignature(messageData []byte, operatorID sp
 	messageHash := sha256.Sum256(messageData)
 
 	if err := rsa.VerifyPKCS1v15(rsaPubKey, crypto.SHA256, messageHash[:], signature); err != nil {
-		e := ErrRSADecryption
+		e := ErrRSASignature
 		e.innerErr = fmt.Errorf("verify opid: %v signature: %w", operatorID, err)
 		return e
 	}
