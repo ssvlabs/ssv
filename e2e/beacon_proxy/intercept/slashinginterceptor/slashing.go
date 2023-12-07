@@ -290,13 +290,16 @@ func (s *SlashingInterceptor) InterceptAttestationData(
 
 			// Record the first attestation data.
 			if _, ok := state.firstAttestationData[gateway]; ok {
-				return nil, fmt.Errorf("first attestation data already requested")
+				continue
 			}
 
 			if epoch != s.startEpoch {
 				return nil, fmt.Errorf("misbehavior: first attester data wasn't requested during the start epoch")
 			}
-			state.firstAttestationData[gateway] = data
+
+			for g := range state.firstAttestationData {
+				state.firstAttestationData[g] = data
+			}
 
 			continue
 		}
@@ -306,7 +309,7 @@ func (s *SlashingInterceptor) InterceptAttestationData(
 
 			// Record modified first attestation data as second.
 			if _, ok := state.secondAttestationData[gateway]; ok {
-				return nil, fmt.Errorf("second attestation data already requested")
+				continue
 			}
 
 			if epoch != s.endEpoch {
@@ -333,7 +336,9 @@ func (s *SlashingInterceptor) InterceptAttestationData(
 			}
 
 			data = copiedAttData
-			state.secondAttestationData[gateway] = copiedAttData
+			for g := range state.firstAttestationData {
+				state.secondAttestationData[g] = copiedAttData
+			}
 
 			continue
 		}
