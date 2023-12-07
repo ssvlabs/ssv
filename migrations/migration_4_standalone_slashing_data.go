@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"reflect"
 
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/ekm"
 	"github.com/bloxapp/ssv/storage/basedb"
-
-	"go.uber.org/zap"
 )
 
 var migration_4_standalone_slashing_data = Migration{
@@ -19,6 +19,17 @@ var migration_4_standalone_slashing_data = Migration{
 			signerStorage := opt.signerStorage(logger)
 			legacySPStorage := opt.legacySlashingProtectionStorage(logger)
 			spStorage := opt.slashingProtectionStorage(logger)
+
+			obj, found, err := txn.Get([]byte("operator/"), []byte("hashed-private-key"))
+			if err != nil {
+				return fmt.Errorf("failed to get hashed private key: %w", err)
+			}
+
+			if found {
+				if err := signerStorage.SetEncryptionKey(string(obj.Value)); err != nil {
+					return fmt.Errorf("failed to set encryption key: %w", err)
+				}
+			}
 
 			accounts, err := signerStorage.ListAccountsTxn(txn)
 			if err != nil {
