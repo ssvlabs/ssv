@@ -266,7 +266,7 @@ func (s *SlashingInterceptor) InterceptAttestationData(
 			}
 			state.firstAttestationData[gateway] = data
 
-			break
+			continue
 		}
 
 		if secondDuty, ok := state.secondAttesterDuty[gateway]; ok && secondDuty.Slot == slot && secondDuty.CommitteeIndex == committeeIndex {
@@ -303,7 +303,7 @@ func (s *SlashingInterceptor) InterceptAttestationData(
 			data = copiedAttData
 			state.secondAttestationData[gateway] = copiedAttData
 
-			break
+			continue
 		}
 
 	}
@@ -345,7 +345,7 @@ func (s *SlashingInterceptor) InterceptSubmitAttestations(
 				state.firstSubmittedAttestation[gateway] = attestation
 				s.logger.Debug("submitted first attestation", zap.Any("epoch", epoch), zap.Any("gateway", gateway.Name), zap.Any("slot", slot), zap.Any("validator", validatorIndex))
 
-				break
+				continue
 			}
 
 			if secondDuty, ok := state.secondAttesterDuty[gateway]; ok && secondDuty.Slot == slot && secondDuty.CommitteeIndex == attestation.Data.Index {
@@ -365,7 +365,7 @@ func (s *SlashingInterceptor) InterceptSubmitAttestations(
 				}
 				s.logger.Debug("submitted second attestation", zap.Any("epoch", epoch), zap.Any("gateway", gateway.Name), zap.Any("slot", slot), zap.Any("validator", validatorIndex))
 
-				break
+				continue
 			}
 		}
 	}
