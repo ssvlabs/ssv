@@ -232,6 +232,7 @@ func (mv *messageValidator) ValidatorForTopic(_ string) func(ctx context.Context
 // Depending on the outcome, it will return one of the pubsub validation results (Accept, Ignore, or Reject).
 func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 	if !mv.peerRateLimiter.AllowRequest(peerID) {
+		mv.logger.Debug("Rejecting message due to rate limiting", fields.PeerID(peerID))
 		return pubsub.ValidationReject
 	}
 
