@@ -76,7 +76,7 @@ type p2pNetwork struct {
 	nodeStorage             operatorstorage.Storage
 	operatorPKHashToPKCache *hashmap.Map[string, []byte] // used for metrics
 	operatorPrivateKey      *rsa.PrivateKey
-	operatorID              spectypes.OperatorID
+	operatorID              func() spectypes.OperatorID
 }
 
 // New creates a new p2p network

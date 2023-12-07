@@ -182,10 +182,13 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not connect to execution client", zap.Error(err))
 		}
 
+		var validatorCtrl validator.Controller
 		cfg.P2pNetworkConfig.Permissioned = permissioned
 		cfg.P2pNetworkConfig.NodeStorage = nodeStorage
 		cfg.P2pNetworkConfig.OperatorPubKeyHash = format.OperatorID(operatorData.PublicKey)
-		cfg.P2pNetworkConfig.OperatorID = operatorData.ID
+		cfg.P2pNetworkConfig.OperatorID = func() spectypes.OperatorID {
+			return validatorCtrl.GetOperatorData().ID
+		}
 		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
 		cfg.P2pNetworkConfig.Network = networkConfig
 
@@ -255,7 +258,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.Metrics = metricsReporter
 		cfg.SSVOptions.Metrics = metricsReporter
 
-		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
+		validatorCtrl = validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 
 		operatorNode = operator.New(logger, cfg.SSVOptions, slotTickerProvider)
