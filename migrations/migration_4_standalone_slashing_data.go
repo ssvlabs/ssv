@@ -24,7 +24,6 @@ var migration_4_standalone_slashing_data = Migration{
 			if err != nil {
 				return fmt.Errorf("failed to get hashed private key: %w", err)
 			}
-
 			if found {
 				if err := signerStorage.SetEncryptionKey(string(obj.Value)); err != nil {
 					return fmt.Errorf("failed to set encryption key: %w", err)
