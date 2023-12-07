@@ -2,6 +2,7 @@ package logs_catcher
 
 import (
 	"fmt"
+	"go.uber.org/zap"
 	"os"
 )
 
@@ -12,18 +13,19 @@ var DefaultFataler = func(s string) {
 	os.Exit(1)
 }
 
-func DefaultApprover(count int) func(s string) {
+func DefaultApprover(logger *zap.Logger, count int) func(s string) {
 	goodLogs := make([]string, 0)
 
 	return func(s string) {
+		logger.Info("Found log I was looking for!!!")
 		goodLogs = append(goodLogs, s)
 		if len(
 			goodLogs,
 		) == count { // is it enough? maybe we need a log for each validator in each operator for ex
 			// todo: Condition satisfied. what should we do? exit happily?
-			fmt.Println("All validators logged successfully")
+			logger.Info("All approvers logged successfully")
 			for _, log := range goodLogs {
-				fmt.Println(log)
+				logger.Info(log)
 			}
 			os.Exit(0)
 		}
@@ -32,8 +34,8 @@ func DefaultApprover(count int) func(s string) {
 
 type Config struct {
 	IgnoreContainers []string
-	Fatalers         []map[string]string
+	Fatalers         []map[string]any
 	FatalerFunc      func(string)
-	Approvers        []map[string]string
+	Approvers        []map[string]any
 	ApproverFunc     func(string)
 }

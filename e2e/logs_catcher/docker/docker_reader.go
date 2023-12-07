@@ -48,6 +48,11 @@ func StreamDockerLogs(
 		if err != nil {
 			return err
 		}
-		logsChan <- string(dat)
+		select {
+		case logsChan <- string(dat):
+			continue
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 }
