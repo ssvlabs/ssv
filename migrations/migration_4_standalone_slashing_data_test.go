@@ -2,6 +2,7 @@ package migrations
 
 import (
 	"context"
+	"crypto/x509"
 	"testing"
 
 	"github.com/bloxapp/ssv-spec/types"
@@ -15,6 +16,7 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
 
@@ -417,10 +419,22 @@ func setupCommon(t *testing.T) (context.Context, *zap.Logger, *networkconfig.Net
 
 	// Database setup
 	nodeDBPath := t.TempDir()
-	db, err := kv.New(ctx, logger, basedb.Options{
+	db, err := kv.NewInMemory(ctx, logger, basedb.Options{
 		Path: nodeDBPath,
 	})
 	require.NoError(t, err)
+
+	_, sk, err := rsaencryption.GenerateKeys()
+	require.NoError(t, err)
+
+	rsaPriv, err := rsaencryption.ConvertPemToPrivateKey(string(sk))
+	require.NoError(t, err)
+
+	keyBytes := x509.MarshalPKCS1PrivateKey(rsaPriv)
+	hashedKey, err := rsaencryption.HashRsaKey(keyBytes)
+	require.NoError(t, err)
+
+	require.NoError(t, db.Set([]byte("operator/"), []byte("hashed-private-key"), []byte(hashedKey)))
 
 	// Network configuration
 	network := &networkconfig.NetworkConfig{
@@ -429,7 +443,7 @@ func setupCommon(t *testing.T) (context.Context, *zap.Logger, *networkconfig.Net
 	}
 
 	// Key management setup
-	km, err := ekm.NewETHKeyManagerSigner(logger, db, db, *network, true, "")
+	km, err := ekm.NewETHKeyManagerSigner(logger, db, db, *network, true, hashedKey)
 	require.NoError(t, err)
 
 	// Standalone slashing protection storage setup
@@ -439,7 +453,7 @@ func setupCommon(t *testing.T) (context.Context, *zap.Logger, *networkconfig.Net
 		SyncWrites: true,
 	}
 
-	spDB, err := kv.New(ctx, logger, options)
+	spDB, err := kv.NewInMemory(ctx, logger, options)
 	require.NoError(t, err)
 	spStorage := ekm.NewSlashingProtectionStorage(spDB, logger, []byte(network.Beacon.GetBeaconNetwork()))
 

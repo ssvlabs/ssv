@@ -28,6 +28,15 @@ var migration_4_standalone_slashing_data = Migration{
 				if err := signerStorage.SetEncryptionKey(string(obj.Value)); err != nil {
 					return fmt.Errorf("failed to set encryption key: %w", err)
 				}
+			} else {
+				accounts, err := signerStorage.ListAccountsTxn(txn)
+				if err != nil {
+					return fmt.Errorf("failed to list accounts: %w", err)
+				}
+
+				if len(accounts) > 0 {
+					return fmt.Errorf("no operator private key found but there are accounts")
+				}
 			}
 
 			accounts, err := signerStorage.ListAccountsTxn(txn)
