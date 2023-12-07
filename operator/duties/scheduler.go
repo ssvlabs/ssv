@@ -191,7 +191,7 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 			indicesChangeCh,
 		)
 
-		// This call is blocking
+		// This call is blocking.
 		handler.HandleInitialDuties(ctx)
 
 		handler := handler
