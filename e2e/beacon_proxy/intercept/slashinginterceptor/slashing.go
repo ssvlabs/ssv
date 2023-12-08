@@ -312,6 +312,10 @@ func (s *SlashingInterceptor) InterceptAttestationData(
 				continue
 			}
 
+			if _, ok := state.firstAttestationData[gateway]; !ok {
+				return nil, fmt.Errorf("unexpected state: received second attestation but first attestation doesn't exist")
+			}
+
 			if epoch != s.endEpoch {
 				return nil, fmt.Errorf("misbehavior: second attester data wasn't requested during the end epoch")
 			}
