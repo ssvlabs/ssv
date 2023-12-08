@@ -8,7 +8,7 @@ services:
     image: beacon_proxy:latest
     command: beacon-proxy
     environment:
-      - BEACON_NODE_URL=http://bn-h-2.stage.bloxinfra.com:5056
+      - BEACON_NODE_URL=http://bn-h-2.stage.bloxinfra.com:3502
       - VALIDATORS_FILE=validators.json
       - GATEWAYS=ssv-node-1,ssv-node-2,ssv-node-3,ssv-node-4
       - BASE_PORT=6631
