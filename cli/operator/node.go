@@ -428,6 +428,11 @@ func setupDB(ctx context.Context, logger *zap.Logger, network beaconprotocol.Bea
 		Db:      db,
 		SpDb:    spDB,
 		Network: network,
+		OperatorKeyConfig: migrations.OperatorKeyConfig{
+			PrivateKeyFile:          cfg.KeyStore.PrivateKeyFile,
+			PasswordFile:            cfg.KeyStore.PasswordFile,
+			Base64EncodedPrivateKey: cfg.OperatorPrivateKey,
+		},
 	}
 	applied, err := migrations.Run(ctx, logger, migrationOpts)
 	if err != nil {

@@ -29,6 +29,12 @@ var (
 	}
 )
 
+type OperatorKeyConfig struct {
+	PrivateKeyFile          string
+	PasswordFile            string
+	Base64EncodedPrivateKey string
+}
+
 // Run executes the default migrations.
 func Run(ctx context.Context, logger *zap.Logger, opt Options) (applied int, err error) {
 	return defaultMigrations.Run(ctx, logger, opt)
@@ -52,9 +58,10 @@ type Migrations []Migration
 
 // Options is the options for running migrations.
 type Options struct {
-	Db      basedb.Database
-	SpDb    basedb.Database
-	Network beacon.BeaconNetwork
+	Db                basedb.Database
+	SpDb              basedb.Database
+	Network           beacon.BeaconNetwork
+	OperatorKeyConfig OperatorKeyConfig
 }
 
 func (o Options) nodeStorage(logger *zap.Logger) (operatorstorage.Storage, error) {
