@@ -100,6 +100,8 @@ spec:
               value: ""
             - name: DB_PATH
               value: "./data/db-holesky-stage"
+            - name: SP_DB_PATH
+              value: "./data/sp-db-holesky-stage"
             - name: NETWORK
               value: "holesky-stage"
             - name: DB_REPORTING
