@@ -352,8 +352,8 @@ func (s *SlashingInterceptor) InterceptAttestationData(
 				return nil, fmt.Errorf("failed to apply attester slashing test: %w", err)
 			}
 
-			// Record the first attestation data on this gateway.
-			state.firstAttestationData[gateway] = data
+			// Record the second attestation data on this gateway.
+			state.secondAttestationData[gateway] = data
 			return modifiedData, nil
 		}
 
