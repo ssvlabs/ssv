@@ -96,6 +96,8 @@ spec:
             value: "discv5"
           - name: DB_PATH
             value: ./data/db-holesky
+          - name: SP_DB_PATH
+            value: ./data/sp-db-holesky
           - name: NETWORK
             value: holesky
           - name: CONSENSUS_TYPE

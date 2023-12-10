@@ -104,6 +104,8 @@ spec:
             value: ""
           - name: DB_PATH
             value: "./data/db-jato-v2"
+          - name: SP_DB_PATH
+            value: "./data/sp-db-jato-v2"
           - name: METRICS_API_PORT
             value: "15014"
           - name: SSV_API_PORT
