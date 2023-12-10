@@ -30,7 +30,7 @@ const (
 // SpDB = Doesn't Exist
 // tests the migration of slashing protection data from a legacy database to a new standalone database.
 func TestSlashingProtectionMigration(t *testing.T) {
-	ctx, logger, network, db, spDB, km, spStorage := setupCommon(t)
+	ctx, logger, network, db, spDB, km, spStorage, operatorPrivKey := setupCommon(t)
 
 	sk1 := &bls.SecretKey{}
 	require.NoError(t, sk1.SetHexString(sk1Str))
@@ -46,6 +46,9 @@ func TestSlashingProtectionMigration(t *testing.T) {
 		Db:      db,
 		SpDb:    spDB,
 		Network: network.Beacon,
+		OperatorKeyConfig: OperatorKeyConfig{
+			Base64EncodedPrivateKey: operatorPrivKey,
+		},
 	}
 
 	require.NoError(t, migration_4_standalone_slashing_data.Run(
@@ -106,7 +109,7 @@ func TestSlashingProtectionMigration(t *testing.T) {
 // SlashingDB = Exists
 // test that migration fails if the node & sp DBs already exists
 func TestSlashingProtectionMigration_NodeDB_SPDB_Exists(t *testing.T) {
-	ctx, logger, network, db, spDB, km, spStorage := setupCommon(t)
+	ctx, logger, network, db, spDB, km, spStorage, operatorPrivKey := setupCommon(t)
 
 	sk1 := &bls.SecretKey{}
 	require.NoError(t, sk1.SetHexString(sk1Str))
@@ -126,6 +129,9 @@ func TestSlashingProtectionMigration_NodeDB_SPDB_Exists(t *testing.T) {
 		Db:      db,
 		SpDb:    spDB,
 		Network: network.Beacon,
+		OperatorKeyConfig: OperatorKeyConfig{
+			Base64EncodedPrivateKey: operatorPrivKey,
+		},
 	}
 
 	err = migration_4_standalone_slashing_data.Run(
@@ -179,7 +185,7 @@ func TestSlashingProtectionMigration_NodeDB_SPDB_Exists(t *testing.T) {
 // SlashingDB = Exists
 // test that migration fails if the node & sp DBs already exists
 func TestSlashingProtectionMigration_NodeDB_SPDB_Exists2(t *testing.T) {
-	ctx, logger, network, db, spDB, km, spStorage := setupCommon(t)
+	ctx, logger, network, db, spDB, km, spStorage, operatorPrivKey := setupCommon(t)
 
 	sk1 := &bls.SecretKey{}
 	require.NoError(t, sk1.SetHexString(sk1Str))
@@ -199,6 +205,9 @@ func TestSlashingProtectionMigration_NodeDB_SPDB_Exists2(t *testing.T) {
 		Db:      db,
 		SpDb:    spDB,
 		Network: network.Beacon,
+		OperatorKeyConfig: OperatorKeyConfig{
+			Base64EncodedPrivateKey: operatorPrivKey,
+		},
 	}
 
 	err = migration_4_standalone_slashing_data.Run(
@@ -252,7 +261,7 @@ func TestSlashingProtectionMigration_NodeDB_SPDB_Exists2(t *testing.T) {
 // SlashingDB = Exists
 // test that migration fails if the node & sp DBs already exists
 func TestSlashingProtectionMigration_NodeDB_SPDB_Exists3(t *testing.T) {
-	ctx, logger, network, db, spDB, km, spStorage := setupCommon(t)
+	ctx, logger, network, db, spDB, km, spStorage, operatorPrivKey := setupCommon(t)
 
 	sk1 := &bls.SecretKey{}
 	require.NoError(t, sk1.SetHexString(sk1Str))
@@ -272,6 +281,9 @@ func TestSlashingProtectionMigration_NodeDB_SPDB_Exists3(t *testing.T) {
 		Db:      db,
 		SpDb:    spDB,
 		Network: network.Beacon,
+		OperatorKeyConfig: OperatorKeyConfig{
+			Base64EncodedPrivateKey: operatorPrivKey,
+		},
 	}
 
 	err = migration_4_standalone_slashing_data.Run(
@@ -325,13 +337,16 @@ func TestSlashingProtectionMigration_NodeDB_SPDB_Exists3(t *testing.T) {
 // SlashingDB = Doesn't Exist
 // test that migration complete without error
 func TestSlashingProtectionMigration_NodeDB_SPDB_Does_Not_Exists(t *testing.T) {
-	ctx, logger, network, db, spDB, km, spStorage := setupCommon(t)
+	ctx, logger, network, db, spDB, km, spStorage, operatorPrivKey := setupCommon(t)
 
 	// Migration process
 	migrationOpts := Options{
 		Db:      db,
 		SpDb:    spDB,
 		Network: network.Beacon,
+		OperatorKeyConfig: OperatorKeyConfig{
+			Base64EncodedPrivateKey: operatorPrivKey,
+		},
 	}
 
 	require.NoError(t, migration_4_standalone_slashing_data.Run(
@@ -369,7 +384,7 @@ func TestSlashingProtectionMigration_NodeDB_SPDB_Does_Not_Exists(t *testing.T) {
 // SlashingDB = Exist
 // test that migration complete without error
 func TestSlashingProtectionMigration_NodeDB_DoesNot_Exists_SPDB_Exists(t *testing.T) {
-	ctx, logger, network, db, spDB, km, spStorage := setupCommon(t)
+	ctx, logger, network, db, spDB, km, spStorage, operatorPrivKey := setupCommon(t)
 	// populate slashing protection storage with some data
 	err := spStorage.Init()
 	require.NoError(t, err)
@@ -379,6 +394,9 @@ func TestSlashingProtectionMigration_NodeDB_DoesNot_Exists_SPDB_Exists(t *testin
 		Db:      db,
 		SpDb:    spDB,
 		Network: network.Beacon,
+		OperatorKeyConfig: OperatorKeyConfig{
+			Base64EncodedPrivateKey: operatorPrivKey,
+		},
 	}
 
 	require.NoError(t, migration_4_standalone_slashing_data.Run(
@@ -411,7 +429,7 @@ func TestSlashingProtectionMigration_NodeDB_DoesNot_Exists_SPDB_Exists(t *testin
 	require.False(t, empty)
 }
 
-func setupCommon(t *testing.T) (context.Context, *zap.Logger, *networkconfig.NetworkConfig, *kv.BadgerDB, *kv.BadgerDB, types.KeyManager, ekm.SPStorage) {
+func setupCommon(t *testing.T) (context.Context, *zap.Logger, *networkconfig.NetworkConfig, *kv.BadgerDB, *kv.BadgerDB, types.KeyManager, ekm.SPStorage, string) {
 	// Initialization
 	threshold.Init()
 	ctx := context.Background()
@@ -434,7 +452,7 @@ func setupCommon(t *testing.T) (context.Context, *zap.Logger, *networkconfig.Net
 	hashedKey, err := rsaencryption.HashRsaKey(keyBytes)
 	require.NoError(t, err)
 
-	require.NoError(t, db.Set([]byte("operator/"), []byte("hashed-private-key"), []byte(hashedKey)))
+	base64EncodedKey := rsaencryption.ExtractPrivateKey(rsaPriv)
 
 	// Network configuration
 	network := &networkconfig.NetworkConfig{
@@ -457,5 +475,5 @@ func setupCommon(t *testing.T) (context.Context, *zap.Logger, *networkconfig.Net
 	require.NoError(t, err)
 	spStorage := ekm.NewSlashingProtectionStorage(spDB, logger, []byte(network.Beacon.GetBeaconNetwork()))
 
-	return ctx, logger, network, db, spDB, km, spStorage
+	return ctx, logger, network, db, spDB, km, spStorage, base64EncodedKey
 }

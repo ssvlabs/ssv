@@ -130,7 +130,7 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not setup slashing protection db", zap.Error(err))
 		}
 
-		db, err := setupDB(cmd.Context(), logger, networkConfig.Beacon.GetNetwork(), spDB)
+		db, err := setupDB(cmd.Context(), logger, networkConfig.Beacon.GetNetwork(), spDB, &cfg)
 		if err != nil {
 			logger.Fatal("could not setup db", zap.Error(err))
 		}
@@ -395,7 +395,7 @@ func setupGlobal() (*zap.Logger, error) {
 	return zap.L(), nil
 }
 
-func setupDB(ctx context.Context, logger *zap.Logger, network beaconprotocol.BeaconNetwork, spDB *kv.BadgerDB) (*kv.BadgerDB, error) {
+func setupDB(ctx context.Context, logger *zap.Logger, network beaconprotocol.BeaconNetwork, spDB *kv.BadgerDB, cfg *config) (*kv.BadgerDB, error) {
 	options := basedb.Options{
 		Path:       cfg.DBOptions.Path,
 		Reporting:  cfg.DBOptions.Reporting,
