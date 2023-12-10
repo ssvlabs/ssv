@@ -353,7 +353,7 @@ func (s *SlashingInterceptor) InterceptAttestationData(
 			}
 
 			// Record the second attestation data on this gateway.
-			state.secondAttestationData[gateway] = data
+			state.secondAttestationData[gateway] = modifiedData
 			return modifiedData, nil
 		}
 
