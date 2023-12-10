@@ -29,21 +29,21 @@ services:
       retries: 10
       start_period: 0s
 
-  logs_catcher:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: logs_catcher:latest
-    command: logs-catcher
-    environment:
-      - APPROVERS={"msg":"all attestations submitted"}
-      - VALIDATORS_FILE=validators.json
-      - GATEWAYS=ssv-node-1,ssv-node-2,ssv-node-3,ssv-node-4
-      - BASE_PORT=6631
-    networks:
-     - blox-docker
-    volumes:
-        - /var/run/docker.sock:/var/run/docker.sock
+  # logs_catcher:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   image: logs_catcher:latest
+  #   command: logs-catcher
+  #   environment:
+  #     - APPROVERS={"msg":"all attestations submitted"}
+  #     - VALIDATORS_FILE=validators.json
+  #     - GATEWAYS=ssv-node-1,ssv-node-2,ssv-node-3,ssv-node-4
+  #     - BASE_PORT=6631
+  #   networks:
+  #    - blox-docker
+  #   volumes:
+  #       - /var/run/docker.sock:/var/run/docker.sock
 
   x-base: &default-base
     depends_on:
