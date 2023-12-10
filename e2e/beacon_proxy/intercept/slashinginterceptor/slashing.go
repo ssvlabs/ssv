@@ -148,14 +148,14 @@ func (s *SlashingInterceptor) checkStartEpochAttestationSubmission() {
 			s.logger.Debug("validator did not submit in start epoch",
 				zap.Any("validator_index", state.validator.Index),
 				zap.Any("validator_pk", state.validator.Validator.PublicKey.String()),
-				zap.Any("submitters", maps.Keys(state.firstSubmittedAttestation)),
+				zap.Any("submitters", gatewayNames(maps.Keys(state.firstSubmittedAttestation))),
 			)
 		} else {
 			submittedCount++
 			s.logger.Debug("validator submitted in start epoch",
 				zap.Any("validator_index", state.validator.Index),
 				zap.Any("validator_pk", state.validator.Validator.PublicKey.String()),
-				zap.Any("submitters", maps.Keys(state.firstSubmittedAttestation)),
+				zap.Any("submitters", gatewayNames(maps.Keys(state.firstSubmittedAttestation))),
 			)
 		}
 	}
@@ -177,21 +177,23 @@ func (s *SlashingInterceptor) checkEndEpochAttestationSubmission() {
 				s.logger.Error("found slashable validator",
 					zap.Any("validator_index", state.validator.Index),
 					zap.Any("validator_pk", state.validator.Validator.PublicKey.String()),
-					zap.Any("submitters", maps.Keys(state.secondSubmittedAttestation)),
+					zap.Any("submitters", gatewayNames(maps.Keys(state.secondSubmittedAttestation))),
+					zap.Any("first_attestation", state.firstSubmittedAttestation),
+					zap.Any("second_attestation", state.secondSubmittedAttestation),
 				)
 			}
 		} else if len(state.secondSubmittedAttestation) != 4 { // TODO: support values other than 4
 			s.logger.Debug("validator did not submit in end epoch",
 				zap.Any("validator_index", state.validator.Index),
 				zap.Any("validator_pk", state.validator.Validator.PublicKey.String()),
-				zap.Any("submitters", maps.Keys(state.secondSubmittedAttestation)),
+				zap.Any("submitters", gatewayNames(maps.Keys(state.secondSubmittedAttestation))),
 			)
 		} else {
 			submittedCount++
 			s.logger.Debug("validator submitted in end epoch",
 				zap.Any("validator_index", state.validator.Index),
 				zap.Any("validator_pk", state.validator.Validator.PublicKey.String()),
-				zap.Any("submitters", maps.Keys(state.secondSubmittedAttestation)),
+				zap.Any("submitters", gatewayNames(maps.Keys(state.secondSubmittedAttestation))),
 			)
 		}
 	}
@@ -364,19 +366,26 @@ func (s *SlashingInterceptor) InterceptSubmitAttestations(
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	_, gateway := s.requestContext(ctx)
+	logger, gateway := s.requestContext(ctx)
 
 	for _, attestation := range attestations {
 		slot := attestation.Data.Slot
 		epoch := s.network.EstimatedEpochAtSlot(slot)
+		logger := logger.With(
+			zap.Any("epoch", epoch),
+			zap.Any("slot", slot),
+			zap.Any("source", attestation.Data.Source.Epoch),
+			zap.Any("target", attestation.Data.Target.Epoch),
+		)
+		logger.Debug("submit attestation request")
 
 		if s.blockedEpoch(epoch) {
 			return nil, fmt.Errorf("attestation submitted for blocked epoch %d", epoch)
 		}
 
-		s.logger.Debug("submit attestation request", zap.Any("epoch", epoch), zap.Any("gateway", gateway.Name), zap.Any("slot", slot))
-
 		for validatorIndex, state := range s.validators {
+			logger := logger.With(zap.Any("validator", validatorIndex))
+
 			// Skip validators that are not in the requested committee.
 			if firstDuty, ok := state.firstAttesterDuty[gateway]; ok && firstDuty.Slot == slot && firstDuty.CommitteeIndex == attestation.Data.Index {
 				// Record the submitted attestation.
@@ -384,19 +393,20 @@ func (s *SlashingInterceptor) InterceptSubmitAttestations(
 					return nil, fmt.Errorf("first attestation already submitted")
 				}
 
-				s.logger.Debug("got first attestation submission", zap.Any("epoch", epoch), zap.Any("gateway", gateway.Name), zap.Any("slot", slot), zap.Any("validator", validatorIndex))
+				logger.Debug("got first attestation submission")
 
 				if epoch != s.startEpoch {
 					return nil, fmt.Errorf("misbehavior: attestation wasn't submitted during the start epoch")
 				}
 				state.firstSubmittedAttestation[gateway] = attestation
-				s.logger.Debug("submitted first attestation", zap.Any("epoch", epoch), zap.Any("gateway", gateway.Name), zap.Any("slot", slot), zap.Any("validator", validatorIndex))
+
+				logger.Debug("submitted first attestation")
 
 				continue
 			}
 
 			if secondDuty, ok := state.secondAttesterDuty[gateway]; ok && secondDuty.Slot == slot && secondDuty.CommitteeIndex == attestation.Data.Index {
-				s.logger.Debug("got second attestation submission", zap.Any("epoch", epoch), zap.Any("gateway", gateway.Name), zap.Any("slot", slot), zap.Any("validator", validatorIndex))
+				logger.Debug("got second attestation submission")
 
 				// Record the second submitted attestation.
 				if _, ok := state.secondSubmittedAttestation[gateway]; ok {
@@ -407,7 +417,9 @@ func (s *SlashingInterceptor) InterceptSubmitAttestations(
 					return nil, fmt.Errorf("misbehavior: attestation wasn't submitted during the end epoch")
 				}
 				state.secondSubmittedAttestation[gateway] = attestation
-				s.logger.Debug("submitted second attestation", zap.Any("epoch", epoch), zap.Any("gateway", gateway.Name), zap.Any("slot", slot), zap.Any("validator", validatorIndex))
+
+				logger.Debug("submitted second attestation")
+
 				if state.attesterTest.Slashable {
 					return nil, fmt.Errorf("misbehavior: slashable attestation was submitted during the end epoch")
 				}
@@ -636,4 +648,12 @@ var AttesterSlashingTests = []AttesterSlashingTest{
 			return nil
 		},
 	},
+}
+
+func gatewayNames(gateways []beaconproxy.Gateway) []string {
+	names := make([]string, 0, len(gateways))
+	for _, gateway := range gateways {
+		names = append(names, gateway.Name)
+	}
+	return names
 }
