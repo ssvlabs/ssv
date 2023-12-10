@@ -8,9 +8,12 @@ import (
 
 // TODO: Parse validators.json file into this config
 
-var DefaultFataler = func(s string) {
-	fmt.Fprintf(os.Stderr, "fatal error: %v\n", s)
-	os.Exit(1)
+func DefaultFataler(logger *zap.Logger) func(s string) {
+	return func(s string) {
+		logger.Error("fatal error", zap.Error(fmt.Errorf(s)))
+		fmt.Fprintf(os.Stderr, "fatal error: %v\n", s)
+		os.Exit(1)
+	}
 }
 
 func DefaultApprover(logger *zap.Logger, count int) func(s string) {

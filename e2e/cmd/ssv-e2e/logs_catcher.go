@@ -11,8 +11,8 @@ import (
 
 type LogsCatcherCmd struct {
 	Ignored   []string `env:"IGNORED" help:"A list of containers to not read logs from e.g 'ssv-node-1, beacon-proxy'.."`
-	Fatalers  string   `env:"FATALERS" help:"Logs to fatal on, format as JSON fields { 'message': 'bad attestation', 'slot': 1 }"`
-	Approvers string   `env:"APPROVERS" help:"Logs to collect for approval on, format as JSON fields { 'message': 'good attestation', 'slot': 1 }"`
+	Fatalers  string   `env:"FATALERS" help:"Logs to fatal on, format as JSON fields { 'message': 'bad attestation', 'slot': 1 }" default:""`
+	Approvers string   `env:"APPROVERS" help:"Logs to collect for approval on, format as JSON fields { 'message': 'good attestation', 'slot': 1 }" default:""`
 }
 
 func (cmd *LogsCatcherCmd) Run(logger *zap.Logger, globals Globals) error {
@@ -39,7 +39,7 @@ func (cmd *LogsCatcherCmd) Run(logger *zap.Logger, globals Globals) error {
 		return fmt.Errorf("failed to open docker client: %w", err)
 	}
 
-	cfg.FatalerFunc = logs_catcher.DefaultFataler
+	cfg.FatalerFunc = logs_catcher.DefaultFataler(logger)
 	//allDockers, err := docker.GetDockers(ctx, cli, func(container2 types.Container) bool {
 	//	for _, nm := range container2.Names {
 	//		for _, ign := range cfg.IgnoreContainers {
@@ -50,9 +50,9 @@ func (cmd *LogsCatcherCmd) Run(logger *zap.Logger, globals Globals) error {
 	//	}
 	//	return true
 	//})
-	if err != nil {
-		return fmt.Errorf("failed to get dockers list %w", err)
-	}
+	//if err != nil {
+	//	return fmt.Errorf("failed to get dockers list %w", err)
+	//}
 
 	cfg.ApproverFunc = logs_catcher.DefaultApprover(
 		logger, 1,

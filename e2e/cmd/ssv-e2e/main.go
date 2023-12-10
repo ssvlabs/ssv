@@ -3,10 +3,10 @@ package main
 import (
 	"fmt"
 	"github.com/alecthomas/kong"
-	"github.com/mattn/go-colorable"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"log"
+	"os"
 )
 
 type Globals struct {
@@ -36,22 +36,22 @@ func main() {
 		log.Fatal(fmt.Errorf("failed to parse log level: %w", err))
 	}
 
-	encoderConfig := zap.NewDevelopmentEncoderConfig()
-	encoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
-	logger := zap.New(zapcore.NewCore(
-		zapcore.NewConsoleEncoder(encoderConfig),
-		zapcore.AddSync(colorable.NewColorableStdout()),
-		logLevel,
-	))
-
-	// uncomment to replace to json logs - needed for logs_catcher
-	//encoderConfig := zap.NewProductionEncoderConfig()
-	////	encoderConfig.EncodeLevel = zapcore.json
+	//encoderConfig := zap.NewDevelopmentEncoderConfig()
+	//encoderConfig.EncodeLevel = zapcore.CapitalColorLevelEncoder
 	//logger := zap.New(zapcore.NewCore(
-	//	zapcore.NewJSONEncoder(encoderConfig),
-	//	zapcore.AddSync(os.Stdout),
+	//	zapcore.NewConsoleEncoder(encoderConfig),
+	//	zapcore.AddSync(colorable.NewColorableStdout()),
 	//	logLevel,
 	//))
+
+	// uncomment to replace to json logs - needed for logs_catcher
+	encoderConfig := zap.NewProductionEncoderConfig()
+	//	encoderConfig.EncodeLevel = zapcore.json
+	logger := zap.New(zapcore.NewCore(
+		zapcore.NewJSONEncoder(encoderConfig),
+		zapcore.AddSync(os.Stdout),
+		logLevel,
+	))
 
 	// Run the CLI.
 	err = ctx.Run(logger, cli.Globals)
