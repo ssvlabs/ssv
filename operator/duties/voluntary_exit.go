@@ -98,6 +98,12 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 				zap.Uint64("duty_slot", uint64(dutySlot)),
 				fields.BlockNumber(exitDescriptor.BlockNumber),
 			)
+
+		case <-h.indicesChange:
+			continue
+
+		case <-h.reorg:
+			continue
 		}
 	}
 }
