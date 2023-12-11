@@ -56,6 +56,7 @@ var (
 	ErrEarlyMessage                        = Error{text: "early message"}
 	ErrLateMessage                         = Error{text: "late message"}
 	ErrTooManySameTypeMessagesPerRound     = Error{text: "too many messages of same type per round"}
+	ErrDuplicatedProposalWithDifferentData = Error{text: "duplicated proposal with different data"}
 	ErrRSADecryption                       = Error{text: "rsa decryption", reject: true}
 	ErrOperatorNotFound                    = Error{text: "operator not found", reject: true}
 	ErrPubSubMessageHasNoData              = Error{text: "pub-sub message has no data", reject: true}
@@ -85,7 +86,6 @@ var (
 	ErrPartialSignatureTypeRoleMismatch    = Error{text: "partial signature type and role don't match", reject: true}
 	ErrNonDecidedWithMultipleSigners       = Error{text: "non-decided with multiple signers", reject: true}
 	ErrWrongSignersLength                  = Error{text: "decided signers size is not between quorum and committee size", reject: true}
-	ErrDuplicatedProposalWithDifferentData = Error{text: "duplicated proposal with different data", reject: true}
 	ErrEventMessage                        = Error{text: "event messages are not broadcast", reject: true}
 	ErrDKGMessage                          = Error{text: "DKG messages are not supported", reject: true}
 	ErrMalformedPrepareJustifications      = Error{text: "malformed prepare justifications", reject: true}
