@@ -57,6 +57,7 @@ func (b *BeaconProxy) handleProposerDuties(w http.ResponseWriter, r *http.Reques
 	logger.Info("obtained proposer duties",
 		zap.Uint64("epoch", uint64(epoch)),
 		zap.Int("indices", len(indices)),
+		zap.Int("duties", len(duties)),
 	)
 }
 
@@ -75,32 +76,32 @@ func (b *BeaconProxy) handleBlockProposal(w http.ResponseWriter, r *http.Request
 	}
 
 	// Obtain block.
-	versionedBlock, err := b.client.(eth2client.BeaconBlockProposalProvider).BeaconBlockProposal(
-		r.Context(),
-		slot,
-		phase0.BLSSignature(randaoReveal),
-		graffiti,
-	)
-	if err != nil {
-		b.error(r, w, 500, fmt.Errorf("failed to obtain block: %w", err))
-		return
-	}
-	var block any
-	switch versionedBlock.Version {
-	case spec.DataVersionCapella:
-		block = versionedBlock.Capella
-	default:
-		b.error(r, w, 500, fmt.Errorf("unsupported block version %d", versionedBlock.Version))
-		return
-	}
+	// versionedBlock, err := b.client.(eth2client.BeaconBlockProposalProvider).BeaconBlockProposal(
+	// 	r.Context(),
+	// 	slot,
+	// 	phase0.BLSSignature(randaoReveal),
+	// 	graffiti,
+	// )
+	// if err != nil {
+	// 	b.error(r, w, 500, fmt.Errorf("failed to obtain block: %w", err))
+	// 	return
+	// }
+	// var block any
+	// switch versionedBlock.Version {
+	// case spec.DataVersionCapella:
+	// 	block = versionedBlock.Capella
+	// default:
+	// 	b.error(r, w, 500, fmt.Errorf("unsupported block version %d", versionedBlock.Version))
+	// 	return
+	// }
 
 	// Intercept.
-	block, err = gateway.Interceptor.InterceptBlockProposal(
+	block, err := gateway.Interceptor.InterceptBlockProposal(
 		r.Context(),
 		slot,
 		phase0.BLSSignature(randaoReveal),
 		graffiti,
-		block.(*spec.VersionedBeaconBlock),
+		nil,
 	)
 	if err != nil {
 		b.error(r, w, 500, fmt.Errorf("failed to intercept block: %w", err))
@@ -112,7 +113,7 @@ func (b *BeaconProxy) handleBlockProposal(w http.ResponseWriter, r *http.Request
 		Version spec.DataVersion `json:"version"`
 		Data    any              `json:"data"`
 	}{
-		Version: versionedBlock.Version,
+		Version: block.Version,
 		Data:    block,
 	}
 	if err := json.NewEncoder(w).Encode(response); err != nil {
@@ -148,6 +149,15 @@ func (b *BeaconProxy) handleSubmitBlockProposal(w http.ResponseWriter, r *http.R
 	)
 	if err != nil {
 		b.error(r, w, 500, fmt.Errorf("failed to intercept block: %w", err))
+		return
+	}
+
+	if versionedBlock == nil {
+		// Don't submit.
+		if err := b.respond(r, w, nil); err != nil {
+			b.error(r, w, 500, fmt.Errorf("failed to encode response: %w", err))
+			return
+		}
 		return
 	}
 

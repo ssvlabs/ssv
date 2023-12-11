@@ -116,8 +116,8 @@ func (b *BeaconProxy) router(gateway Gateway) *chi.Mux {
 
 	// Proposals.
 	r.HandleFunc("/eth/v1/validator/duties/proposer/{epoch}", b.handleProposerDuties)
-	r.HandleFunc("/eth/v3/validator/blocks", b.handleBlockProposal)
-	r.HandleFunc("/eth/v1/beacon/pool/proposals", b.handleSubmitBlockProposal)
+	r.HandleFunc("/eth/v2/validator/blocks/{slot}", b.handleBlockProposal)
+	r.HandleFunc("/eth/v1/beacon/blocks", b.handleSubmitBlockProposal)
 
 	// Passthrough everything else.
 	r.HandleFunc("/*", b.passthrough)

@@ -92,7 +92,7 @@ func (cmd *BeaconProxyCmd) Run(logger *zap.Logger, globals Globals) error {
 	const startEpochDelay = 1 // TODO: change to 2 after debugging is done
 	startEpoch := networkCfg.Beacon.EstimatedCurrentEpoch() + startEpochDelay
 
-	interceptor := slashinginterceptor.New(logger, networkCfg.Beacon.GetNetwork(), startEpoch, false, maps.Values(validatorsData))
+	interceptor := slashinginterceptor.New(logger, networkCfg.Beacon.GetNetwork(), startEpoch, true, maps.Values(validatorsData))
 	go interceptor.WatchSubmissions()
 
 	for i, gw := range cmd.Gateways {
