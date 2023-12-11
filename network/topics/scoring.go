@@ -34,6 +34,7 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.Extend
 			var totalInvalidMessages float64
 			var totalLowMeshDeliveries int
 			var totalMeshDeliveriesSquaredDeficitSum float64
+			meshDeliveryCounters := make([]float64, 0)
 			for topic, snapshot := range peerScores.Topics {
 				if snapshot.InvalidMessageDeliveries != 0 {
 					filtered[topic] = snapshot
@@ -45,6 +46,7 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.Extend
 					totalLowMeshDeliveries++
 					totalMeshDeliveriesSquaredDeficitSum += math.Pow(11.243655244810899-snapshot.MeshMessageDeliveries, 2)
 				}
+				meshDeliveryCounters = append(meshDeliveryCounters, snapshot.MeshMessageDeliveries)
 			}
 
 			fields := []zap.Field{
@@ -58,6 +60,7 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.Extend
 				zap.Float64("mesh_deliveries_squared_deficit_sum", totalMeshDeliveriesSquaredDeficitSum),
 				zap.Float64("total_invalid_messages", totalInvalidMessages),
 				zap.Any("invalid_messages", filtered),
+				zap.Any("mesh_delivery_counters", meshDeliveryCounters),
 			}
 
 			// log if peer score is below threshold
