@@ -166,7 +166,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger) *e
 		nodeStorage,
 		parser,
 		validatorCtrl,
-		testNetworkConfig.Domain,
+		testNetworkConfig,
 		validatorCtrl,
 		nodeStorage.GetPrivateKey,
 		keyManager,

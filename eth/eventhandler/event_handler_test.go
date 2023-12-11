@@ -617,6 +617,104 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 	})
 
+	t.Run("test ValidatorExited event handling", func(t *testing.T) {
+		// Must throw error "malformed event: could not find validator share"
+		t.Run("ValidatorExited incorrect event public key", func(t *testing.T) {
+			pk := validatorData1.masterPubKey.Serialize()
+			// Corrupt the public key
+			pk[len(pk)-1] ^= 1
+
+			_, err = boundContract.SimcontractTransactor.ExitValidator(
+				auth,
+				pk,
+				[]uint64{1, 2, 3, 4},
+			)
+			require.NoError(t, err)
+			sim.Commit()
+
+			block := <-logs
+			require.NotEmpty(t, block.Logs)
+			require.Equal(t, ethcommon.HexToHash("0xb4b20ffb2eb1f020be3df600b2287914f50c07003526d3a9d89a9dd12351828c"), block.Logs[0].Topics[0])
+
+			eventsCh := make(chan executionclient.BlockLogs)
+			go func() {
+				defer close(eventsCh)
+				eventsCh <- block
+			}()
+
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+			require.Equal(t, blockNum+1, lastProcessedBlock)
+			require.NoError(t, err)
+			blockNum++
+		})
+
+		t.Run("ValidatorExited incorrect owner address", func(t *testing.T) {
+			wrongAuth, _ := bind.NewKeyedTransactorWithChainID(wrongPk, big.NewInt(1337))
+
+			_, err = boundContract.SimcontractTransactor.ExitValidator(
+				wrongAuth,
+				validatorData1.masterPubKey.Serialize(),
+				[]uint64{1, 2, 3, 4},
+			)
+			require.NoError(t, err)
+			sim.Commit()
+
+			block := <-logs
+			require.NotEmpty(t, block.Logs)
+			require.Equal(t, ethcommon.HexToHash("0xb4b20ffb2eb1f020be3df600b2287914f50c07003526d3a9d89a9dd12351828c"), block.Logs[0].Topics[0])
+
+			eventsCh := make(chan executionclient.BlockLogs)
+			go func() {
+				defer close(eventsCh)
+				eventsCh <- block
+			}()
+
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+			require.Equal(t, blockNum+1, lastProcessedBlock)
+			require.NoError(t, err)
+			blockNum++
+		})
+
+		// Receive event, unmarshall, parse, check parse event is not nil or with an error,
+		// public key is correct, owner is correct, operator ids are correct
+		t.Run("ValidatorExited happy flow", func(t *testing.T) {
+			valPubKey := validatorData1.masterPubKey.Serialize()
+			// Check the validator's shares are present in the state before removing
+			valShare := eh.nodeStorage.Shares().Get(nil, valPubKey)
+			require.NotNil(t, valShare)
+			requireKeyManagerDataToExist(t, eh, 4, validatorData1)
+
+			_, err = boundContract.SimcontractTransactor.ExitValidator(
+				auth,
+				validatorData1.masterPubKey.Serialize(),
+				[]uint64{1, 2, 3, 4},
+			)
+			require.NoError(t, err)
+			sim.Commit()
+
+			block := <-logs
+			require.NotEmpty(t, block.Logs)
+			require.Equal(t, ethcommon.HexToHash("0xb4b20ffb2eb1f020be3df600b2287914f50c07003526d3a9d89a9dd12351828c"), block.Logs[0].Topics[0])
+
+			eventsCh := make(chan executionclient.BlockLogs)
+			go func() {
+				defer close(eventsCh)
+				eventsCh <- block
+			}()
+
+			lastProcessedBlock, err := eh.HandleBlockEventsStream(eventsCh, false)
+			require.Equal(t, blockNum+1, lastProcessedBlock)
+			require.NoError(t, err)
+			blockNum++
+
+			// Check the validator is in the validator shares storage.
+			shares := eh.nodeStorage.Shares().List(nil)
+			require.Equal(t, 4, len(shares))
+			valShare = eh.nodeStorage.Shares().Get(nil, valPubKey)
+			require.NotNil(t, valShare)
+		})
+	})
+
 	t.Run("test ValidatorRemoved event handling", func(t *testing.T) {
 		// Must throw error "malformed event: could not find validator share"
 		t.Run("ValidatorRemoved incorrect event public key", func(t *testing.T) {
@@ -1201,7 +1299,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 			nodeStorage,
 			parser,
 			validatorCtrl,
-			network.Domain,
+			*network,
 			validatorCtrl,
 			nodeStorage.GetPrivateKey,
 			keyManager,
@@ -1239,7 +1337,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 		nodeStorage,
 		parser,
 		validatorCtrl,
-		network.Domain,
+		*network,
 		validatorCtrl,
 		nodeStorage.GetPrivateKey,
 		keyManager,

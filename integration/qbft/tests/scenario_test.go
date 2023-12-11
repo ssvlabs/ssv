@@ -169,6 +169,7 @@ func newStores(ctx context.Context, logger *zap.Logger) *qbftstorage.QBFTStores 
 		spectypes.BNRoleSyncCommittee,
 		spectypes.BNRoleSyncCommitteeContribution,
 		spectypes.BNRoleValidatorRegistration,
+		spectypes.BNRoleVoluntaryExit,
 	}
 	for _, role := range roles {
 		storageMap.Add(role, qbftstorage.New(db, role.String()))
