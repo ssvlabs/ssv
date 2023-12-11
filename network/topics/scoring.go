@@ -33,6 +33,7 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.Extend
 			filtered := make(map[string]*pubsub.TopicScoreSnapshot)
 			var totalInvalidMessages float64
 			var totalLowMeshDeliveries int
+			var totalMeshDeliveriesSquaredDeficitSum float64
 			for topic, snapshot := range peerScores.Topics {
 				if snapshot.InvalidMessageDeliveries != 0 {
 					filtered[topic] = snapshot
@@ -40,8 +41,9 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.Extend
 				if snapshot.InvalidMessageDeliveries > 0 {
 					totalInvalidMessages += math.Sqrt(snapshot.InvalidMessageDeliveries)
 				}
-				if snapshot.MeshMessageDeliveries < 107 {
+				if snapshot.MeshMessageDeliveries < 11.243655244810899 {
 					totalLowMeshDeliveries++
+					totalMeshDeliveriesSquaredDeficitSum += math.Pow(11.243655244810899-snapshot.MeshMessageDeliveries, 2)
 				}
 			}
 
@@ -53,6 +55,7 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.Extend
 				zap.Float64("behaviour_penalty", peerScores.BehaviourPenalty),
 				zap.Float64("app_specific_penalty", peerScores.AppSpecificScore),
 				zap.Float64("total_low_mesh_deliveries", float64(totalLowMeshDeliveries)),
+				zap.Float64("mesh_deliveries_squared_deficit_sum", totalMeshDeliveriesSquaredDeficitSum),
 				zap.Float64("total_invalid_messages", totalInvalidMessages),
 				zap.Any("invalid_messages", filtered),
 			}
