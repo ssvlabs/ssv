@@ -10,17 +10,17 @@ import (
 )
 
 type RateLimiter struct {
-	rejectLimiter *rate.Limiter
-	ignoreLimiter *rate.Limiter
-	blockRequests bool
-	lastBlocked   time.Time
-	mu            sync.Mutex // Mutex to protect blockRequests and lastBlocked
+	rsaLimiter     *rate.Limiter
+	invalidLimiter *rate.Limiter
+	blockRequests  bool
+	lastBlocked    time.Time
+	mu             sync.Mutex // Mutex to protect blockRequests and lastBlocked
 }
 
-func NewRateLimiter(rejectLimit, ignoreLimit rate.Limit) *RateLimiter {
+func NewRateLimiter(rsaLimit, invalidLimit rate.Limit) *RateLimiter {
 	return &RateLimiter{
-		rejectLimiter: rate.NewLimiter(rejectLimit, int(rejectLimit)),
-		ignoreLimiter: rate.NewLimiter(ignoreLimit, int(ignoreLimit)),
+		rsaLimiter:     rate.NewLimiter(rsaLimit, int(rsaLimit)),
+		invalidLimiter: rate.NewLimiter(invalidLimit, int(invalidLimit)),
 	}
 }
 
@@ -36,7 +36,7 @@ func (rl *RateLimiter) AllowRequest(blockingTime time.Duration) bool {
 		}
 	}
 
-	if rl.rejectLimiter.Tokens() < 1.0 || rl.ignoreLimiter.Tokens() < 1.0 {
+	if rl.rsaLimiter.Tokens() < 1.0 || rl.invalidLimiter.Tokens() < 1.0 {
 		rl.blockRequests = true
 		rl.lastBlocked = time.Now()
 		return false
@@ -45,27 +45,27 @@ func (rl *RateLimiter) AllowRequest(blockingTime time.Duration) bool {
 	return true
 }
 
-func (rl *RateLimiter) RegisterReject() {
-	rl.rejectLimiter.Allow()
+func (rl *RateLimiter) RegisterRSAError() {
+	rl.rsaLimiter.Allow()
 }
 
-func (rl *RateLimiter) RegisterIgnore() {
-	rl.ignoreLimiter.Allow()
+func (rl *RateLimiter) RegisterInvalid() {
+	rl.invalidLimiter.Allow()
 }
 
 type PeerRateLimitManager struct {
 	limiters     *lru.Cache
-	rejectRate   rate.Limit
-	ignoreRate   rate.Limit
+	rsaRate      rate.Limit
+	invalidRate  rate.Limit
 	blockingTime time.Duration
 }
 
-func NewPeerRateLimitManager(rejectRate, ignoreRate, cacheSize int, blockingTime time.Duration) *PeerRateLimitManager {
+func NewPeerRateLimitManager(rsaRate, invalidRate, cacheSize int, blockingTime time.Duration) *PeerRateLimitManager {
 	cache, _ := lru.New(cacheSize)
 	return &PeerRateLimitManager{
 		limiters:     cache,
-		rejectRate:   rate.Limit(rejectRate),
-		ignoreRate:   rate.Limit(ignoreRate),
+		rsaRate:      rate.Limit(rsaRate),
+		invalidRate:  rate.Limit(invalidRate),
 		blockingTime: blockingTime,
 	}
 }
@@ -75,7 +75,7 @@ func (p *PeerRateLimitManager) GetLimiter(peerID peer.ID, createIfMissing bool) 
 		return limiter.(*RateLimiter)
 	}
 	if createIfMissing {
-		limiter := NewRateLimiter(p.rejectRate, p.ignoreRate)
+		limiter := NewRateLimiter(p.rsaRate, p.invalidRate)
 		p.limiters.Add(peerID, limiter)
 		return limiter
 	}
@@ -90,12 +90,12 @@ func (p *PeerRateLimitManager) AllowRequest(peerID peer.ID) bool {
 	return limiter.AllowRequest(p.blockingTime)
 }
 
-func (p *PeerRateLimitManager) RegisterIgnoreRequest(peerID peer.ID) {
+func (p *PeerRateLimitManager) RegisterInvalidRequest(peerID peer.ID) {
 	limiter := p.GetLimiter(peerID, true)
-	limiter.RegisterIgnore()
+	limiter.RegisterInvalid()
 }
 
-func (p *PeerRateLimitManager) RegisterRejectRequest(peerID peer.ID) {
+func (p *PeerRateLimitManager) RegisterRSAErrorRequest(peerID peer.ID) {
 	limiter := p.GetLimiter(peerID, true)
-	limiter.RegisterReject()
+	limiter.RegisterRSAError()
 }

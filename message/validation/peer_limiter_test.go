@@ -14,7 +14,7 @@ func TestLimiterBasicRateLimiting(t *testing.T) {
 	peerID := peer.ID("test-peer-1")
 
 	assert.True(t, pl.AllowRequest(peerID), "CanProceed should allow the first request")
-	pl.RegisterIgnoreRequest(peerID)
+	pl.RegisterInvalidRequest(peerID)
 
 	// Immediate subsequent request should be blocked
 	assert.False(t, pl.AllowRequest(peerID), "CanProceed should block the second immediate request due to rate limiting")
@@ -33,9 +33,9 @@ func TestMixedConcurrentRejectAndIgnoreRequests(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			if i%2 == 0 {
-				pl.RegisterIgnoreRequest(peerID)
+				pl.RegisterInvalidRequest(peerID)
 			} else {
-				pl.RegisterRejectRequest(peerID)
+				pl.RegisterRSAErrorRequest(peerID)
 			}
 		}(i)
 	}
@@ -50,7 +50,7 @@ func TestBlockingBehavior(t *testing.T) {
 
 	for i := 0; i < 5; i++ {
 		assert.True(t, pl.AllowRequest(peerID), "Iteration %d: Should allow within rate limit", i)
-		pl.RegisterIgnoreRequest(peerID)
+		pl.RegisterInvalidRequest(peerID)
 	}
 
 	// Next request should be blocked
