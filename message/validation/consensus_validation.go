@@ -234,13 +234,10 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 		return err
 	}
 
-	newDutyInSameEpoch := false
 	if msgSlot > signerState.Slot && mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) == mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot) {
-		newDutyInSameEpoch = true
-	}
-
-	if err := mv.validateDutyCount(signerState, msgID, newDutyInSameEpoch); err != nil {
-		return err
+		if err := mv.validateDutyCount(signerState, msgID); err != nil {
+			return err
+		}
 	}
 
 	if msgSlot == signerState.Slot && msgRound == signerState.Round {
@@ -257,27 +254,15 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 	return mv.validateJustifications(share, signedMsg)
 }
 
-func (mv *messageValidator) validateDutyCount(
-	state *SignerState,
-	msgID spectypes.MessageID,
-	newDutyInSameEpoch bool,
-) error {
+func (mv *messageValidator) validateDutyCount(state *SignerState, msgID spectypes.MessageID) error {
 	switch msgID.GetRoleType() {
 	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator, spectypes.BNRoleValidatorRegistration, spectypes.BNRoleVoluntaryExit:
-		limit := maxDutiesPerEpoch
-
-		if sameSlot := !newDutyInSameEpoch; sameSlot {
-			limit++
-		}
-
-		if state.EpochDuties >= limit {
+		if state.EpochDuties >= maxDutiesPerEpoch {
 			err := ErrTooManyDutiesPerEpoch
 			err.got = fmt.Sprintf("%v (role %v)", state.EpochDuties, msgID.GetRoleType())
-			err.want = fmt.Sprintf("less than %v", maxDutiesPerEpoch)
+			err.want = fmt.Sprintf("<=%v", maxDutiesPerEpoch)
 			return err
 		}
-
-		return nil
 	}
 
 	return nil

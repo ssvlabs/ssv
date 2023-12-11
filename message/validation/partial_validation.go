@@ -173,13 +173,10 @@ func (mv *messageValidator) validateSignerBehaviorPartial(
 		return err
 	}
 
-	newDutyInSameEpoch := false
 	if msgSlot > signerState.Slot && mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) == mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot) {
-		newDutyInSameEpoch = true
-	}
-
-	if err := mv.validateDutyCount(signerState, msgID, newDutyInSameEpoch); err != nil {
-		return err
+		if err := mv.validateDutyCount(signerState, msgID); err != nil {
+			return err
+		}
 	}
 
 	if msgSlot <= signerState.Slot {
