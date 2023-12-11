@@ -96,7 +96,6 @@ func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) Mes
 		netCfg:                  netCfg,
 		operatorIDToPubkeyCache: hashmap.New[spectypes.OperatorID, *rsa.PublicKey](),
 		validationLocks:         make(map[spectypes.MessageID]*sync.Mutex),
-		peerRateLimiter:         NewPeerRateLimitManager(20, 300000, 100, 1*time.Minute), // rate per second and duration
 	}
 
 	for _, opt := range opts {
@@ -113,6 +112,13 @@ type Option func(validator *messageValidator)
 func WithLogger(logger *zap.Logger) Option {
 	return func(mv *messageValidator) {
 		mv.logger = logger
+	}
+}
+
+// WithLimiter sets the peerLimiter for the messageValidator.
+func WithLimiter(peerRateLimiter *PeerRateLimitManager) Option {
+	return func(mv *messageValidator) {
+		mv.peerRateLimiter = peerRateLimiter
 	}
 }
 
