@@ -25,6 +25,7 @@ import (
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/message/validation"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/operator/duties"
 	nodestorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validatorsmap"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
@@ -107,12 +108,14 @@ type Controller interface {
 	GetOperatorData() *registrystorage.OperatorData
 	SetOperatorData(data *registrystorage.OperatorData)
 	IndicesChangeChan() chan struct{}
+	ValidatorExitChan() <-chan duties.ExitDescriptor
 
 	StartValidator(share *ssvtypes.SSVShare) error
 	StopValidator(pubKey spectypes.ValidatorPK) error
 	LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
 	ReactivateCluster(owner common.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error
 	UpdateFeeRecipient(owner, recipient common.Address) error
+	ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex) error
 }
 
 type nonCommitteeValidator struct {
@@ -158,6 +161,7 @@ type controller struct {
 	recentlyStartedValidators uint64
 	metadataLastUpdated       map[string]time.Time
 	indicesChange             chan struct{}
+	validatorExitCh           chan duties.ExitDescriptor
 }
 
 // NewController creates a new validator controller instance
@@ -235,6 +239,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		),
 		metadataLastUpdated: make(map[string]time.Time),
 		indicesChange:       make(chan struct{}),
+		validatorExitCh:     make(chan duties.ExitDescriptor),
 
 		messageValidator: options.MessageValidator,
 	}
@@ -275,6 +280,10 @@ func (c *controller) SetOperatorData(data *registrystorage.OperatorData) {
 
 func (c *controller) IndicesChangeChan() chan struct{} {
 	return c.indicesChange
+}
+
+func (c *controller) ValidatorExitChan() <-chan duties.ExitDescriptor {
+	return c.validatorExitCh
 }
 
 func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
@@ -547,7 +556,8 @@ func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) {
 	var pk phase0.BLSPubKey
 	copy(pk[:], duty.PubKey[:])
 
-	if v, ok := c.GetValidator(hex.EncodeToString(pk[:])); ok {
+	pubKeyString := hex.EncodeToString(pk[:])
+	if v, ok := c.GetValidator(pubKeyString); ok {
 		ssvMsg, err := CreateDutyExecuteMsg(duty, pk, types.GetDefaultDomain())
 		if err != nil {
 			logger.Error("could not create duty execute msg", zap.Error(err))
@@ -563,7 +573,7 @@ func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) {
 		}
 		// logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
 	} else {
-		logger.Warn("could not find validator")
+		logger.Warn("could not find validator", fields.PubKey(duty.PubKey[:]))
 	}
 }
 
@@ -811,6 +821,7 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 		spectypes.BNRoleSyncCommittee,
 		spectypes.BNRoleSyncCommitteeContribution,
 		spectypes.BNRoleValidatorRegistration,
+		spectypes.BNRoleVoluntaryExit,
 	}
 
 	domainType := ssvtypes.GetDefaultDomain()
@@ -865,6 +876,8 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 		case spectypes.BNRoleValidatorRegistration:
 			qbftCtrl := buildController(spectypes.BNRoleValidatorRegistration, nil)
 			runners[role] = runner.NewValidatorRegistrationRunner(options.BeaconNetwork.GetBeaconNetwork(), &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer)
+		case spectypes.BNRoleVoluntaryExit:
+			runners[role] = runner.NewVoluntaryExitRunner(options.BeaconNetwork.GetBeaconNetwork(), &options.SSVShare.Share, options.Beacon, options.Network, options.Signer)
 		}
 	}
 	return runners
