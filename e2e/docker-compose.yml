@@ -66,6 +66,7 @@ services:
     <<: *default-base
     container_name: ssv-node-1
     environment:
+      LOG_FORMAT: json
       CONFIG_PATH: ./tconfig/config.yaml
       SHARE_CONFIG: ./tconfig/share1.yaml
     ports:
@@ -80,6 +81,7 @@ services:
     <<: *default-base
     container_name: ssv-node-2
     environment:
+      LOG_FORMAT: json
       CONFIG_PATH: ./tconfig/config2.yaml
       SHARE_CONFIG: ./tconfig/share2.yaml
     ports:
@@ -94,6 +96,7 @@ services:
     <<: *default-base
     container_name: ssv-node-3
     environment:
+      LOG_FORMAT: json
       CONFIG_PATH: ./tconfig/config3.yaml
       SHARE_CONFIG: ./tconfig/share3.yaml
     ports:
@@ -108,6 +111,7 @@ services:
     <<: *default-base
     container_name: ssv-node-4
     environment:
+      LOG_FORMAT: json
       CONFIG_PATH: ./tconfig/config4.yaml
       SHARE_CONFIG: ./tconfig/share4.yaml
     ports:

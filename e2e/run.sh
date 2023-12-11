@@ -1,5 +1,10 @@
 #!/bin/bash
 
+cleanup() {
+    docker compose down
+}
+trap cleanup EXIT
+
 check_exit_code () {
    if [ $1 -ne 0 ]; then
        echo "Tests failed with exit code $1"
@@ -16,6 +21,3 @@ docker compose run -e FATALERS='{"level":"error"}' --build logs_catcher
 check_exit_code $?
 
 # run more tests
-
-# cleanup
-docker compose down
