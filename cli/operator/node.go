@@ -230,6 +230,7 @@ var StartNodeCmd = &cobra.Command{
 			spectypes.BNRoleSyncCommittee,
 			spectypes.BNRoleSyncCommitteeContribution,
 			spectypes.BNRoleValidatorRegistration,
+			spectypes.BNRoleVoluntaryExit,
 		}
 		storageMap := ibftstorage.NewStores()
 
@@ -569,7 +570,7 @@ func setupEventHandling(
 		nodeStorage,
 		eventParser,
 		validatorCtrl,
-		networkConfig.Domain,
+		networkConfig,
 		validatorCtrl,
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider,
 		cfg.SSVOptions.ValidatorOptions.KeyManager,

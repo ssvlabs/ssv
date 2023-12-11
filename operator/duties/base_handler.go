@@ -16,7 +16,7 @@ import (
 type ExecuteDutiesFunc func(logger *zap.Logger, duties []*spectypes.Duty)
 
 type dutyHandler interface {
-	Setup(string, *zap.Logger, BeaconNode, networkconfig.NetworkConfig, ValidatorController, ExecuteDutiesFunc, slotticker.Provider, chan ReorgEvent, chan struct{})
+	Setup(string, *zap.Logger, BeaconNode, ExecutionClient, networkconfig.NetworkConfig, ValidatorController, ExecuteDutiesFunc, slotticker.Provider, chan ReorgEvent, chan struct{})
 	HandleDuties(context.Context)
 	HandleInitialDuties(context.Context)
 	Name() string
@@ -25,6 +25,7 @@ type dutyHandler interface {
 type baseHandler struct {
 	logger              *zap.Logger
 	beaconNode          BeaconNode
+	executionClient     ExecutionClient
 	network             networkconfig.NetworkConfig
 	validatorController ValidatorController
 	executeDuties       ExecuteDutiesFunc
@@ -37,19 +38,10 @@ type baseHandler struct {
 	indicesChanged bool
 }
 
-func (h *baseHandler) Setup(
-	name string,
-	logger *zap.Logger,
-	beaconNode BeaconNode,
-	network networkconfig.NetworkConfig,
-	validatorController ValidatorController,
-	executeDuties ExecuteDutiesFunc,
-	slotTickerProvider slotticker.Provider,
-	reorgEvents chan ReorgEvent,
-	indicesChange chan struct{},
-) {
+func (h *baseHandler) Setup(name string, logger *zap.Logger, beaconNode BeaconNode, executionClient ExecutionClient, network networkconfig.NetworkConfig, validatorController ValidatorController, executeDuties ExecuteDutiesFunc, slotTickerProvider slotticker.Provider, reorgEvents chan ReorgEvent, indicesChange chan struct{}) {
 	h.logger = logger.With(zap.String("handler", name))
 	h.beaconNode = beaconNode
+	h.executionClient = executionClient
 	h.network = network
 	h.validatorController = validatorController
 	h.executeDuties = executeDuties
