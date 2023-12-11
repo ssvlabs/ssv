@@ -45,12 +45,12 @@ func (rl *RateLimiter) AllowRequest(blockingTime time.Duration) bool {
 	return true
 }
 
-func (rl *RateLimiter) RegisterRequest(isReject bool) {
-	if isReject {
-		rl.rejectLimiter.Allow() // Consume a token from the reject limiter
-	} else {
-		rl.ignoreLimiter.Allow() // Consume a token from the ignore limiter
-	}
+func (rl *RateLimiter) RegisterReject() {
+	rl.rejectLimiter.Allow()
+}
+
+func (rl *RateLimiter) RegisterIgnore() {
+	rl.ignoreLimiter.Allow()
 }
 
 type PeerRateLimitManager struct {
@@ -92,10 +92,10 @@ func (p *PeerRateLimitManager) AllowRequest(peerID peer.ID) bool {
 
 func (p *PeerRateLimitManager) RegisterIgnoreRequest(peerID peer.ID) {
 	limiter := p.GetLimiter(peerID, true)
-	limiter.RegisterRequest(false)
+	limiter.RegisterIgnore()
 }
 
 func (p *PeerRateLimitManager) RegisterRejectRequest(peerID peer.ID) {
 	limiter := p.GetLimiter(peerID, true)
-	limiter.RegisterRequest(true)
+	limiter.RegisterReject()
 }
