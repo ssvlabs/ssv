@@ -10,8 +10,9 @@ import (
 
 const (
 	// Network Topology
-	gossipSubD          = 8
-	minActiveValidators = 200
+	gossipSubD                = 8
+	minActiveValidators       = 200
+	msgsPerSecondPerValidator = 0.05
 
 	// Overall parameters
 	totalTopicsWeight = 4.0
@@ -30,7 +31,7 @@ const (
 	meshDeliveryDecayEpochs     = time.Duration(16)
 	meshDeliveryDampeningFactor = 1.0 / 50.0
 	meshDeliveryCapFactor       = 16
-	meshScoringEnabled          = false
+	meshScoringEnabled          = true
 
 	// P4
 	invalidMessageDecayEpochs = time.Duration(100)
@@ -178,8 +179,7 @@ func NewSubnetTopicOpts(activeValidators, subnets int) Options {
 
 	// Set expected message rate based on stage metrics
 	validatorsPerSubnet := float64(opts.Network.ActiveValidators) / float64(opts.Network.Subnets)
-	msgsPerValidatorPerSecond := 600.0 / 10000.0
-	opts.Topic.ExpectedMsgRate = validatorsPerSubnet * msgsPerValidatorPerSecond
+	opts.Topic.ExpectedMsgRate = validatorsPerSubnet * msgsPerSecondPerValidator
 
 	return opts
 }
@@ -210,7 +210,7 @@ func TopicParams(opts Options) (*pubsub.TopicScoreParams, error) {
 
 	// P3
 	meshMessageDeliveriesDecay := scoreDecay(opts.Network.OneEpochDuration*opts.Topic.MeshDeliveryDecayEpochs, decayInterval)
-	meshMessageDeliveriesThreshold, err := decayThreshold(meshMessageDeliveriesDecay, (expectedMessagesPerDecayInterval * opts.Topic.MeshDeliveryDampeningFactor))
+	meshMessageDeliveriesThreshold, err := decayThreshold(meshMessageDeliveriesDecay, (expectedMessagesPerDecayInterval * opts.Topic.MeshDeliveryDampeningFactor / float64(opts.Topic.D)))
 	if err != nil {
 		return nil, errors.Wrap(err, "could not calculate threshold for mesh message deliveries threshold")
 	}
