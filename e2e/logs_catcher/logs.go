@@ -37,18 +37,17 @@ func (lc *LogCatcher) Feed(orig string, fed map[string]any) {
 
 	//	lc.logger.Info("message is accurate ", zap.String("orig", orig))
 
-	if len(lc.Fields) > 0 {
-
-		for k, v := range lc.Fields {
-			mv, ok := fed[k]
-			if !ok {
-				return
-			}
-			if !v(fmt.Sprint(mv)) {
-				return
-			}
+	for k, v := range lc.Fields {
+		if k == MesasgeKey {
+			continue
 		}
-
+		mv, ok := fed[k]
+		if !ok {
+			return
+		}
+		if !v(fmt.Sprint(mv)) {
+			return
+		}
 	}
 
 	//	lc.logger.Info("running action ", zap.String("orig", orig))
@@ -87,6 +86,71 @@ func EqualFunc(val any) func(s string) bool {
 		}
 		return false
 	}
+}
+
+type LogMatcher struct {
+	logger       *zap.Logger
+	Name         string
+	LookFields   map[string]func(string) bool // key-value checker
+	found        []map[string]any
+	matched      []string
+	First        bool
+	MatchMessage string
+}
+
+func NewLogMatcher(logger *zap.Logger, name string, kvs ...KeyValue) {
+	lg := &LogMatcher{
+		Name:   name,
+		logger: logger,
+		First:  true,
+	}
+
+	for _, kv := range kvs {
+		lg.LookFields[kv.Key] = EqualFunc(kv.Value)
+	}
+}
+
+func (lg LogMatcher) Feed(orig string, fed map[string]any) {
+	found := false
+	if lg.First {
+		ourm, ourok := lg.LookFields[MesasgeKey]
+		m, ok := fed[MesasgeKey] // todo: const/config message key name
+
+		if ourok && ok {
+			if !ourm(fmt.Sprint(m)) {
+				return
+			}
+			found = true
+		}
+
+		for k, v := range lg.LookFields {
+			if k == MesasgeKey {
+				continue
+			}
+			mv, ok := fed[k]
+			if !ok {
+				return
+			}
+			if !v(fmt.Sprint(mv)) {
+				return
+			}
+			found = true
+		}
+		if found {
+			lg.found = append(lg.found, fed)
+		}
+
+	} else {
+		m, ok := fed[MesasgeKey] // todo: const/config message key name
+		if !ok {
+			return
+		}
+		if m != lg.MatchMessage {
+			return
+		}
+
+	}
+
 }
 
 type Feeder interface {

@@ -4,7 +4,6 @@ import (
 	"context"
 	crand "crypto/rand"
 	"fmt"
-	"math"
 	"sort"
 	"sync"
 	"time"
@@ -82,8 +81,8 @@ func New(
 		logger:     logger,
 		network:    network,
 		startEpoch: startEpoch,
-		// sleepEpoch:         startEpoch + 1,
-		sleepEpoch:         math.MaxUint64, // TODO: replace with startEpoch + 1 after debugging is done
+		sleepEpoch: startEpoch + 1,
+		//sleepEpoch:         math.MaxUint64, // TODO: replace with startEpoch + 1 after debugging is done
 		endEpoch:           startEpoch + 2,
 		fakeProposerDuties: fakeProposerDuties,
 		validators:         make(map[phase0.ValidatorIndex]*validatorState),
@@ -117,6 +116,7 @@ func New(
 		}
 		logger.Debug("set up validator",
 			zap.Uint64("validator_index", uint64(validator.Index)),
+			zap.String("pubkey", validator.Validator.PublicKey.String()),
 			zap.String("attester_test", attesterTest.Name),
 			zap.Bool("attester_slashable", attesterTest.Slashable),
 		)
@@ -182,6 +182,7 @@ func (s *SlashingInterceptor) checkEndEpochAttestationSubmission() {
 					zap.Any("submitters", gatewayNames(maps.Keys(state.secondSubmittedAttestation))),
 					zap.Any("first_attestation", state.firstSubmittedAttestation),
 					zap.Any("second_attestation", state.secondSubmittedAttestation),
+					zap.Any("test", state.attesterTest.Name),
 				)
 			}
 		} else if len(state.secondSubmittedAttestation) != 4 { // TODO: support values other than 4
@@ -189,6 +190,7 @@ func (s *SlashingInterceptor) checkEndEpochAttestationSubmission() {
 				zap.Any("validator_index", state.validator.Index),
 				zap.Any("validator_pk", state.validator.Validator.PublicKey.String()),
 				zap.Any("submitters", gatewayNames(maps.Keys(state.secondSubmittedAttestation))),
+				zap.Any("test", state.attesterTest.Name),
 			)
 		} else {
 			submittedCount++
@@ -196,6 +198,7 @@ func (s *SlashingInterceptor) checkEndEpochAttestationSubmission() {
 				zap.Any("validator_index", state.validator.Index),
 				zap.Any("validator_pk", state.validator.Validator.PublicKey.String()),
 				zap.Any("submitters", gatewayNames(maps.Keys(state.secondSubmittedAttestation))),
+				zap.Any("test", state.attesterTest.Name),
 			)
 		}
 	}
@@ -208,6 +211,7 @@ func (s *SlashingInterceptor) checkEndEpochAttestationSubmission() {
 		s.logger.Info("not all attestations submitted in end epoch", zap.Any("submitted", submittedCount), zap.Any("expected", len(s.validators)))
 	}
 
+	s.logger.Info("End epoch finished")
 	// TODO: rewrite logs above so that we check two conditions:
 	// 1. All non-slashable validators submitted in end epoch
 	// 2. All slashable validators did not submit in end epoch
@@ -348,6 +352,7 @@ func (s *SlashingInterceptor) InterceptAttestationData(
 			}
 
 			// Apply the test on the first attestation data.
+			s.logger.Debug("Applying test for validator", zap.String("test", state.attesterTest.Name), zap.Uint64("validator", uint64(state.validator.Index)))
 			if err := state.attesterTest.Apply(modifiedData); err != nil {
 				return nil, fmt.Errorf("failed to apply attester slashing test: %w", err)
 			}
