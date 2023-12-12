@@ -88,71 +88,6 @@ func EqualFunc(val any) func(s string) bool {
 	}
 }
 
-type LogMatcher struct {
-	logger       *zap.Logger
-	Name         string
-	LookFields   map[string]func(string) bool // key-value checker
-	found        []map[string]any
-	matched      []string
-	First        bool
-	MatchMessage string
-}
-
-func NewLogMatcher(logger *zap.Logger, name string, kvs ...KeyValue) {
-	lg := &LogMatcher{
-		Name:   name,
-		logger: logger,
-		First:  true,
-	}
-
-	for _, kv := range kvs {
-		lg.LookFields[kv.Key] = EqualFunc(kv.Value)
-	}
-}
-
-func (lg LogMatcher) Feed(orig string, fed map[string]any) {
-	found := false
-	if lg.First {
-		ourm, ourok := lg.LookFields[MesasgeKey]
-		m, ok := fed[MesasgeKey] // todo: const/config message key name
-
-		if ourok && ok {
-			if !ourm(fmt.Sprint(m)) {
-				return
-			}
-			found = true
-		}
-
-		for k, v := range lg.LookFields {
-			if k == MesasgeKey {
-				continue
-			}
-			mv, ok := fed[k]
-			if !ok {
-				return
-			}
-			if !v(fmt.Sprint(mv)) {
-				return
-			}
-			found = true
-		}
-		if found {
-			lg.found = append(lg.found, fed)
-		}
-
-	} else {
-		m, ok := fed[MesasgeKey] // todo: const/config message key name
-		if !ok {
-			return
-		}
-		if m != lg.MatchMessage {
-			return
-		}
-
-	}
-
-}
-
 type Feeder interface {
 	Feed(orig string, fed map[string]any)
 }
@@ -162,37 +97,36 @@ type DockerCLI interface {
 	docker.Lister
 }
 
-func Listen(ctx context.Context, logger *zap.Logger, cfg Config, cli DockerCLI) {
+func FatalListener(ctx context.Context, logger *zap.Logger, cli DockerCLI) error {
 	ctx, c := context.WithCancel(ctx)
 	defer c()
 
+	errChan := make(chan error, 2)
+
 	var feeders []Feeder
 
-	for i, ftl := range cfg.Fatalers {
-		kvs := []KeyValue{}
-		for k, v := range ftl {
-			kvs = append(kvs, KV(k, v))
-		}
-		fatl := NewLogAction(logger, fmt.Sprint(i), cfg.FatalerFunc, kvs...)
-		feeders = append(feeders, fatl)
+	stopCond := []KeyValue{KV(MesasgeKey, waitFor)}
+	stopCondAction := func(s string) {
+		logger.Info("Stop condition arrived, stopping error checks")
+		errChan <- nil
+		c()
 	}
+	stp := NewLogAction(logger, fmt.Sprint(0), stopCondAction, stopCond...)
 
-	for i, app := range cfg.Approvers {
-		flds := make([]zap.Field, 0)
-		for k, f := range app {
-			flds = append(flds, zap.Any(k, f))
-		}
-		kvs := []KeyValue{}
-		for k, v := range app {
-			kvs = append(kvs, KV(k, v))
-		}
-		appr := NewLogAction(logger, fmt.Sprint(i), cfg.ApproverFunc, kvs...)
-		feeders = append(feeders, appr)
-	}
+	feeders = append(feeders, stp)
+
+	kvs := []KeyValue{KV("level", "error")}
+	fatl := NewLogAction(logger, fmt.Sprint(0), func(s string) {
+		errChan <- fmt.Errorf("found fatal: %v", s)
+		c()
+	}, kvs...)
+
+	feeders = append(feeders, fatl)
 
 	ch := make(chan string, 1024)
-	go func() {
+	defer close(ch)
 
+	go func() {
 		for log := range ch {
 			p, err := parser.JSON(log)
 			if err != nil {
@@ -206,9 +140,10 @@ func Listen(ctx context.Context, logger *zap.Logger, cfg Config, cli DockerCLI) 
 	}()
 	// TODO: either apply logs collection on each container or fan in the containers to one log stream
 	err := docker.StreamDockerLogs(ctx, cli, "beacon_proxy", ch)
-	if err != nil {
+	if err != nil && err != context.Canceled {
 		logger.Error("Log streaming stopped with err ", zap.Error(err))
 		c()
-		close(ch) // not writing since StreamDockerLogs is done
 	}
+
+	return <-errChan
 }
