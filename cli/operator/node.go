@@ -182,12 +182,12 @@ var StartNodeCmd = &cobra.Command{
 
 		messageValidator := validation.NewMessageValidator(
 			networkConfig,
+			cfg.P2pNetworkConfig.MaxPeers*2,
 			validation.WithNodeStorage(nodeStorage),
 			validation.WithLogger(logger),
 			validation.WithMetrics(metricsReporter),
 			validation.WithDutyStore(dutyStore),
 			validation.WithOwnOperatorID(operatorData.ID),
-			validation.WithLimiter(validation.NewPeerRateLimitManager(20, 300000, cfg.P2pNetworkConfig.MaxPeers*2, 1*time.Minute)), // rate per second and duration
 		)
 
 		cfg.P2pNetworkConfig.Metrics = metricsReporter

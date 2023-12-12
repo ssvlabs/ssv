@@ -10,7 +10,7 @@ import (
 )
 
 func TestLimiterBasicRateLimiting(t *testing.T) {
-	pl := NewPeerRateLimitManager(1, 1, 10, 1*time.Second) // 1 request per second
+	pl := NewPeerRateLimiter(1, 1, 10, 1*time.Second) // 1 request per second
 	peerID := peer.ID("test-peer-1")
 
 	assert.True(t, pl.AllowRequest(peerID), "CanProceed should allow the first request")
@@ -24,7 +24,7 @@ func TestLimiterBasicRateLimiting(t *testing.T) {
 }
 
 func TestMixedConcurrentRejectAndIgnoreRequests(t *testing.T) {
-	pl := NewPeerRateLimitManager(5, 5, 10, 1*time.Second)
+	pl := NewPeerRateLimiter(5, 5, 10, 1*time.Second)
 	peerID := peer.ID("test-peer-mixed-concurrent")
 	var wg sync.WaitGroup
 
@@ -45,7 +45,7 @@ func TestMixedConcurrentRejectAndIgnoreRequests(t *testing.T) {
 }
 
 func TestBlockingBehavior(t *testing.T) {
-	pl := NewPeerRateLimitManager(5, 5, 10, 1*time.Second) // 5 requests per second
+	pl := NewPeerRateLimiter(5, 5, 10, 1*time.Second) // 5 requests per second
 	peerID := peer.ID("test-peer-3")
 
 	for i := 0; i < 5; i++ {

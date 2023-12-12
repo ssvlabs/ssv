@@ -53,16 +53,16 @@ func (rl *RateLimiter) RegisterInvalid() {
 	rl.invalidLimiter.Allow()
 }
 
-type PeerRateLimitManager struct {
+type PeerRateLimiter struct {
 	limiters     *lru.Cache
 	rsaRate      rate.Limit
 	invalidRate  rate.Limit
 	blockingTime time.Duration
 }
 
-func NewPeerRateLimitManager(rsaRate, invalidRate, cacheSize int, blockingTime time.Duration) *PeerRateLimitManager {
+func NewPeerRateLimiter(rsaRate, invalidRate, cacheSize int, blockingTime time.Duration) *PeerRateLimiter {
 	cache, _ := lru.New(cacheSize)
-	return &PeerRateLimitManager{
+	return &PeerRateLimiter{
 		limiters:     cache,
 		rsaRate:      rate.Limit(rsaRate),
 		invalidRate:  rate.Limit(invalidRate),
@@ -70,7 +70,7 @@ func NewPeerRateLimitManager(rsaRate, invalidRate, cacheSize int, blockingTime t
 	}
 }
 
-func (p *PeerRateLimitManager) GetLimiter(peerID peer.ID, createIfMissing bool) *RateLimiter {
+func (p *PeerRateLimiter) GetLimiter(peerID peer.ID, createIfMissing bool) *RateLimiter {
 	if limiter, ok := p.limiters.Get(peerID); ok {
 		return limiter.(*RateLimiter)
 	}
@@ -82,7 +82,7 @@ func (p *PeerRateLimitManager) GetLimiter(peerID peer.ID, createIfMissing bool) 
 	return nil
 }
 
-func (p *PeerRateLimitManager) AllowRequest(peerID peer.ID) bool {
+func (p *PeerRateLimiter) AllowRequest(peerID peer.ID) bool {
 	limiter := p.GetLimiter(peerID, false)
 	if limiter == nil {
 		return true
@@ -90,12 +90,12 @@ func (p *PeerRateLimitManager) AllowRequest(peerID peer.ID) bool {
 	return limiter.AllowRequest(p.blockingTime)
 }
 
-func (p *PeerRateLimitManager) RegisterInvalidRequest(peerID peer.ID) {
+func (p *PeerRateLimiter) RegisterInvalidRequest(peerID peer.ID) {
 	limiter := p.GetLimiter(peerID, true)
 	limiter.RegisterInvalid()
 }
 
-func (p *PeerRateLimitManager) RegisterRSAErrorRequest(peerID peer.ID) {
+func (p *PeerRateLimiter) RegisterRSAErrorRequest(peerID peer.ID) {
 	limiter := p.GetLimiter(peerID, true)
 	limiter.RegisterRSAError()
 }

@@ -46,7 +46,7 @@ func TestTopicManager(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		validator := validation.NewMessageValidator(networkconfig.TestNetwork)
+		validator := validation.NewMessageValidator(networkconfig.TestNetwork, 100)
 
 		peers := newPeers(ctx, logger, t, nPeers, validator, true, nil)
 		baseTest(t, ctx, logger, peers, pks, 1, 2)
@@ -65,7 +65,7 @@ func TestTopicManager(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		validator := validation.NewMessageValidator(networkconfig.TestNetwork)
+		validator := validation.NewMessageValidator(networkconfig.TestNetwork, 100)
 
 		scoreMap := map[peer.ID]*pubsub.PeerScoreSnapshot{}
 		var scoreMapMu sync.Mutex
