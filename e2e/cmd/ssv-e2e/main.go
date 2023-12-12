@@ -55,7 +55,7 @@ func main() {
 
 	// Run the CLI.
 	err = ctx.Run(logger, cli.Globals)
-	//ctx.FatalIfErrorf(err)
+
 	if err != nil {
 		logger.Fatal("run stopped", zap.Error(err))
 	}
