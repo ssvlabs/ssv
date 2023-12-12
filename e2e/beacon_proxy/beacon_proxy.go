@@ -145,6 +145,7 @@ func (b *BeaconProxy) middleware(gateway Gateway) func(http.Handler) http.Handle
 				zap.String("gateway", gateway.Name),
 				zap.String("method", r.Method),
 				zap.String("path", r.URL.Path),
+				zap.String("query", r.URL.Query().Encode()),
 			)
 
 			// Call next handler.
