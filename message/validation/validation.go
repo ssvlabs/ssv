@@ -272,6 +272,7 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer
 				if errors.Is(err, ErrRSASignature) {
 					mv.peerRateLimiter.RegisterRSAErrorRequest(peerID)
 				} else {
+					// if msg is rejected but not because of RSA we count as invalid too
 					mv.peerRateLimiter.RegisterInvalidRequest(peerID)
 				}
 				return pubsub.ValidationReject
