@@ -70,8 +70,20 @@ func (b *BeaconProxy) handleBlockProposal(w http.ResponseWriter, r *http.Request
 		randaoReveal []byte
 		graffiti     []byte
 	)
-	if err := scanURL(r, "slot:%d", &slot, "randao_reveal:%x", &randaoReveal, "graffiti:%x", &graffiti); err != nil {
+	if _, err := fmt.Sscanf(chi.URLParam(r, "slot"), "%d", &slot); err != nil {
 		b.error(r, w, 400, fmt.Errorf("failed to parse request: %w", err))
+		return
+	}
+	if err := scanURL(r, "randao_reveal:%x", &randaoReveal, "graffiti:%x", &graffiti); err != nil {
+		b.error(r, w, 400, fmt.Errorf("failed to parse request: %w", err))
+		return
+	}
+	if len(randaoReveal) != len(phase0.BLSSignature{}) {
+		b.error(r, w, 400, fmt.Errorf("randao_reveal is %d bytes, expected %d", len(randaoReveal), len(phase0.BLSSignature{})))
+		return
+	}
+	if len(graffiti) != 32 {
+		b.error(r, w, 400, fmt.Errorf("graffiti is %d bytes, expected exactly 32", len(graffiti)))
 		return
 	}
 
@@ -100,7 +112,7 @@ func (b *BeaconProxy) handleBlockProposal(w http.ResponseWriter, r *http.Request
 		r.Context(),
 		slot,
 		phase0.BLSSignature(randaoReveal),
-		graffiti,
+		[32]byte(graffiti),
 		nil,
 	)
 	if err != nil {
@@ -110,11 +122,11 @@ func (b *BeaconProxy) handleBlockProposal(w http.ResponseWriter, r *http.Request
 
 	// Respond.
 	var response = struct {
-		Version spec.DataVersion `json:"version"`
-		Data    any              `json:"data"`
+		Version string `json:"version"`
+		Data    any    `json:"data"`
 	}{
-		Version: block.Version,
-		Data:    block,
+		Version: block.Version.String(),
+		Data:    block.Capella,
 	}
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		b.error(r, w, 500, fmt.Errorf("failed to encode response: %w", err))

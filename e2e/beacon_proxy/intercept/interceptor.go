@@ -31,7 +31,7 @@ type Interceptor interface {
 		ctx context.Context,
 		slot phase0.Slot,
 		randaoReveal phase0.BLSSignature,
-		graffiti []byte,
+		graffiti [32]byte,
 		block *spec.VersionedBeaconBlock,
 	) (*spec.VersionedBeaconBlock, error)
 	InterceptSubmitAttestations(
