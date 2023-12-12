@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"github.com/bloxapp/ssv/e2e/logs_catcher"
 	"github.com/bloxapp/ssv/e2e/logs_catcher/docker"
@@ -10,63 +9,29 @@ import (
 )
 
 type LogsCatcherCmd struct {
-	target   string `env:"IGNORED" help:"A list of containers to not read logs from e.g 'ssv-node-1, beacon-proxy'.."`
-	Fatalers string `env:"FATALERS" help:"Logs to fatal on, format as JSON fields { 'message': 'bad attestation', 'slot': 1 }" default:""`
-	//Matchers string  `env:"APPROVERS" help:"Logs to collect for approval on, format as JSON fields { 'message': 'good attestation', 'slot': 1 }" default:""`
 }
 
 func (cmd *LogsCatcherCmd) Run(logger *zap.Logger, globals Globals) error {
 	// TODO: where do we stop?
 	ctx := context.Background()
 
-	parsedFatalers, err := parseToMaps(cmd.Fatalers)
-	if err != nil {
-		return fmt.Errorf("error parsing Fatalers: %w", err)
-	}
-	//parsedApprovers, err := parseToMaps(cmd.Approvers)
-	//if err != nil {
-	//	return fmt.Errorf("error parsing Approvers: %w", err)
-	//}
-
-	cfg := logs_catcher.Config{
-		IgnoreContainers: []string{},
-		Fatalers:         parsedFatalers,
-		Approvers:        []map[string]any{},
-	}
-
 	cli, err := docker.New()
 	if err != nil {
 		return fmt.Errorf("failed to open docker client: %w", err)
 	}
+	defer cli.Close()
 
-	cfg.FatalerFunc = logs_catcher.DefaultFataler(logger)
-	//allDockers, err := docker.GetDockers(ctx, cli, func(container2 types.Container) bool {
-	//	for _, nm := range container2.Names {
-	//		for _, ign := range cfg.IgnoreContainers {
-	//			if strings.Contains(nm, ign) {
-	//				return false
-	//			}
-	//		}
-	//	}
-	//	return true
-	//})
-	//if err != nil {
-	//	return fmt.Errorf("failed to get dockers list %w", err)
-	//}
-	//TODO: run fataler and matcher in parallel
+	//TODO: run fataler and matcher in parallel?
 
-	err = logs_catcher.Match(ctx, logger, cfg, cli)
+	err = logs_catcher.FatalListener(ctx, logger, cli)
 	if err != nil {
-		logger.Error("Matching failed", zap.Error(err))
+		return err
 	}
+
+	err = logs_catcher.Match(ctx, logger, cli)
+	if err != nil {
+		return err
+	}
+
 	return nil
-}
-
-func parseToMaps(input string) ([]map[string]any, error) {
-	var list []map[string]any
-	err := json.Unmarshal([]byte("["+input+"]"), &list)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse input (%s) to json: %w", input, err)
-	}
-	return list, nil
 }
