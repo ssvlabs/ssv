@@ -41,8 +41,8 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 	}
 
 	state := mv.consensusState(msgID)
-	signerState := state.GetSignerState(signedMsg.Signer)
-	if signerState != nil {
+	signerState, ok := state.GetSignerState(signedMsg.Signer)
+	if ok {
 		if err := mv.validateSignerBehaviorPartial(state, signedMsg.Signer, share, msgID, signedMsg); err != nil {
 			return msgSlot, err
 		}
@@ -58,7 +58,7 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 		}
 	}
 
-	if signerState == nil {
+	if !ok {
 		signerState = state.CreateSignerState(signedMsg.Signer)
 	}
 
@@ -155,9 +155,8 @@ func (mv *messageValidator) validateSignerBehaviorPartial(
 	msgID spectypes.MessageID,
 	signedMsg *spectypes.SignedPartialSignatureMessage,
 ) error {
-	signerState := state.GetSignerState(signer)
-
-	if signerState == nil {
+	signerState, ok := state.GetSignerState(signer)
+	if !ok {
 		return nil
 	}
 

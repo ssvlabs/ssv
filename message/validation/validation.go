@@ -17,6 +17,7 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
+	"github.com/jellydator/ttlcache/v3"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
@@ -72,7 +73,8 @@ type messageValidator struct {
 	logger                  *zap.Logger
 	metrics                 metrics
 	netCfg                  networkconfig.NetworkConfig
-	index                   sync.Map
+	state                   *ttlcache.Cache[ConsensusID, *ConsensusState]
+	cacheTTL                time.Duration
 	nodeStorage             operatorstorage.Storage
 	dutyStore               *dutystore.Store
 	ownOperatorID           spectypes.OperatorID
@@ -89,10 +91,17 @@ type messageValidator struct {
 
 // NewMessageValidator returns a new MessageValidator with the given network configuration and options.
 func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) MessageValidator {
+	epochDuration := time.Duration(netCfg.SlotsPerEpoch()) * netCfg.SlotDurationSec()
+	cacheTTL := 2 * epochDuration
+
 	mv := &messageValidator{
-		logger:                  zap.NewNop(),
-		metrics:                 &nopMetrics{},
-		netCfg:                  netCfg,
+		logger:  zap.NewNop(),
+		metrics: &nopMetrics{},
+		netCfg:  netCfg,
+		state: ttlcache.New[ConsensusID, *ConsensusState](
+			ttlcache.WithTTL[ConsensusID, *ConsensusState](cacheTTL),
+		),
+		cacheTTL:                cacheTTL,
 		operatorIDToPubkeyCache: hashmap.New[spectypes.OperatorID, *rsa.PublicKey](),
 		validationLocks:         make(map[spectypes.MessageID]*sync.Mutex),
 	}
@@ -100,6 +109,12 @@ func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) Mes
 	for _, opt := range opts {
 		opt(mv)
 	}
+
+	mv.state.OnEviction(func(ctx context.Context, reason ttlcache.EvictionReason, i *ttlcache.Item[ConsensusID, *ConsensusState]) {
+		i.Value().Signers.Stop()
+	})
+
+	go mv.state.Start()
 
 	return mv
 }
@@ -551,7 +566,7 @@ func (mv *messageValidator) lateMessage(slot phase0.Slot, role spectypes.BeaconR
 	case spectypes.BNRoleProposer, spectypes.BNRoleSyncCommittee, spectypes.BNRoleSyncCommitteeContribution:
 		ttl = 1 + lateSlotAllowance
 	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator:
-		ttl = 32 + lateSlotAllowance
+		ttl = phase0.Slot(mv.netCfg.SlotsPerEpoch()) + lateSlotAllowance
 	case spectypes.BNRoleValidatorRegistration, spectypes.BNRoleVoluntaryExit:
 		return 0
 	}
@@ -569,13 +584,24 @@ func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *Conse
 		Role:   messageID.GetRoleType(),
 	}
 
-	if _, ok := mv.index.Load(id); !ok {
-		cs := &ConsensusState{
-			Signers: hashmap.New[spectypes.OperatorID, *SignerState](),
-		}
-		mv.index.Store(id, cs)
+	if csItem := mv.state.Get(id); csItem != nil {
+		return csItem.Value()
 	}
 
-	cs, _ := mv.index.Load(id)
-	return cs.(*ConsensusState)
+	cs := mv.createConsensusState()
+	mv.state.Set(id, cs, mv.cacheTTL)
+	return cs
+}
+
+func (mv *messageValidator) createConsensusState() *ConsensusState {
+	state := &ConsensusState{
+		Signers: ttlcache.New[spectypes.OperatorID, *SignerState](
+			ttlcache.WithTTL[spectypes.OperatorID, *SignerState](mv.cacheTTL),
+		),
+		cacheTTL: mv.cacheTTL,
+	}
+
+	go state.Signers.Start()
+
+	return state
 }
