@@ -2,6 +2,7 @@ package logs_catcher
 
 import (
 	"context"
+	"fmt"
 	"github.com/bloxapp/ssv/e2e/logs_catcher/docker"
 	"github.com/bloxapp/ssv/e2e/logs_catcher/logs"
 	"github.com/pkg/errors"
@@ -53,36 +54,16 @@ func StartCondition(pctx context.Context, logger *zap.Logger, matches []string, 
 	return nil
 }
 
-func matchMessages(ctx context.Context, logger *zap.Logger, cli DockerCLI, first []string, second []string) error {
+// Todo: match messages based on fields. ex: take all X messages from target one,
+// 	extract pubkey field and get all matching messages with this pubkey field on target two.
+
+func matchMessages(ctx context.Context, logger *zap.Logger, cli DockerCLI, first []string, second []string, plus int) error {
 	res, err := docker.DockerLogs(ctx, cli, firstTarget, "")
 	if err != nil {
 		return err
 	}
 
 	grepped := res.Grep(first)
-
-	// TODO: verify pubkeys
-	//parsed := res.ParseAll(parser.JSON)
-	//
-	//find := make(map[string]func(any) bool, 0)
-	//find[MesasgeKey] = func(a any) bool {
-	//	if str, ok := a.(string); ok {
-	//		if str == origMessage {
-	//			return true
-	//		}
-	//	}
-	//	return false
-	//}
-	//find["attester_slashable"] = func(a any) bool {
-	//	if str, ok := a.(bool); ok {
-	//		if str {
-	//			return true
-	//		}
-	//	}
-	//	return false
-	//}
-
-	//grepped := parsed.GrepCondition(find)
 
 	logger.Info("found instances", zap.Int("count", len(grepped)), zap.String("target", firstTarget), zap.String("match_string", origMessage))
 
@@ -94,23 +75,10 @@ func matchMessages(ctx context.Context, logger *zap.Logger, cli DockerCLI, first
 			return err
 		}
 
-		//TODO: field based
-		//tparsed := tres.ParseAll(parser.JSON)
-		//
-		//tfind := make(map[string]func(any) bool, 0)
-		//tfind["error"] = func(a any) bool {
-		//	if str, ok := a.(string); ok {
-		//		return strings.Contains(str, slashableMatchMessage)
-		//	}
-		//	return false
-		//}
-		//
-		//tgrepped := tparsed.GrepCondition(tfind)
-
 		tgrepped := tres.Grep(second)
 
-		if len(tgrepped) != len(grepped) {
-			return errors.Errorf("found non matching messages on %v, want %v got %v", target, len(grepped), len(tgrepped))
+		if len(tgrepped) != len(grepped)+plus {
+			return fmt.Errorf("found non matching messages on %v, want %v got %v", target, len(grepped), len(tgrepped))
 		}
 
 		logger.Debug("found matching messages for target", zap.Strings("first", first), zap.Strings("second", second), zap.Int("count", len(tgrepped)), zap.String("target", target))
@@ -130,13 +98,13 @@ func Match(pctx context.Context, logger *zap.Logger, cli DockerCLI) error {
 	ctx, c := context.WithCancel(pctx)
 	defer c()
 
-	// Find slashable
-	if err := matchMessages(ctx, logger, cli, []string{origMessage, slashableMessage}, []string{slashableMatchMessage}); err != nil {
+	// find slashable attestation not signing for each slashable validator
+	if err := matchMessages(ctx, logger, cli, []string{origMessage, slashableMessage}, []string{slashableMatchMessage}, 0); err != nil {
 		return err
 	}
 
-	// find non-slashable
-	if err := matchMessages(ctx, logger, cli, []string{origMessage, nonSlashableMessage}, []string{nonSlashableMatchMessage}); err != nil {
+	// find non-slashable validators successfully submitting (all first round + 1 for second round)
+	if err := matchMessages(ctx, logger, cli, []string{origMessage, nonSlashableMessage}, []string{nonSlashableMatchMessage}, 30); err != nil {
 		return err
 	}
 
