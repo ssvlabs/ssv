@@ -317,7 +317,8 @@ func (s *SlashingInterceptor) InterceptAttestationData(
 			// If so, record the same attestation data for this gateway and return it.
 			for gw, existingData := range state.firstAttestationData {
 				if gw == gateway {
-					return nil, fmt.Errorf("first attestation data already requested")
+					s.logger.Warn("first attestation data already requested") //NOTE: aggregator might request attestation data again
+					return existingData, nil
 				}
 				state.firstAttestationData[gateway] = existingData
 				return existingData, nil
@@ -339,7 +340,8 @@ func (s *SlashingInterceptor) InterceptAttestationData(
 			// If so, record the same attestation data for this gateway and return it.
 			for gw, existingData := range state.secondAttestationData {
 				if gw == gateway {
-					return nil, fmt.Errorf("second attestation data already requested")
+					s.logger.Warn("second attestation data already requested") // NOTE: aggregator might request attestation data again
+					return existingData, nil
 				}
 				state.secondAttestationData[gateway] = existingData
 				return existingData, nil

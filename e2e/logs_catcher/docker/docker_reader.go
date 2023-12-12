@@ -1,12 +1,14 @@
 package docker
 
 import (
+	"bufio"
 	"context"
-	"encoding/binary"
+	"fmt"
 	"github.com/bloxapp/ssv/e2e/logs_catcher/logs"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 	"io"
+	"strings"
 )
 
 type Streamer interface {
@@ -34,34 +36,57 @@ func StreamDockerLogs(
 		Follow:     true,
 		//Tail:       "40",
 	})
+	defer i.Close()
 	if err != nil {
 		return err
 	}
-	hdr := make([]byte, 8)
-	for {
-		_, err := i.Read(hdr)
-		if err != nil {
-			return err
+	return processLogs(ctx, i, logsChan)
+}
+
+func processLogs(ctx context.Context, reader io.ReadCloser, logChan chan<- string) error {
+	scanner := bufio.NewScanner(reader)
+	var tempBuffer []byte
+
+	for scanner.Scan() {
+		// Check for any scanner errors
+		if err := scanner.Err(); err != nil {
+			return fmt.Errorf("Error reading log:", err)
 		}
-		count := binary.BigEndian.Uint32(hdr[4:])
-		dat := make([]byte, count)
-		_, err = i.Read(dat)
-		if err != nil {
-			return err
+
+		line := string(scanner.Bytes())
+		// Check if the line is longer than the Docker header
+		if len(line) <= 8 {
+			continue
 		}
+
+		// Docker header is 8 bytes, strip it off
+		line = line[8:]
+
+		// Check if the line ends with a newline character
+
+		// If tempBuffer is not empty, append the line to it
+		if len(tempBuffer) != 0 {
+			line = string(append(tempBuffer, []byte(line)...))
+			tempBuffer = nil
+		}
+
+		// Send the complete log message to the channel
 		select {
-		case logsChan <- string(dat):
+		case logChan <- line:
 			continue
 		case <-ctx.Done():
 			return ctx.Err()
 		}
 	}
+
+	return nil
 }
 
 func DockerLogs(
 	ctx context.Context,
 	cli Streamer,
 	containerName string,
+	lastMessage string,
 ) (logs.RAW, error) {
 	i, err := cli.ContainerLogs(ctx, containerName, types.ContainerLogsOptions{
 		ShowStderr: true,
@@ -73,29 +98,28 @@ func DockerLogs(
 	if err != nil {
 		return nil, err
 	}
-	hdr := make([]byte, 8)
-	res := make([]string, 0)
-	for {
-		_, err := i.Read(hdr)
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-		count := binary.BigEndian.Uint32(hdr[4:])
-		dat := make([]byte, count)
-		_, err = i.Read(dat)
-		if err != nil {
-			return nil, err
-		}
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
-			break
-		}
-		res = append(res, string(dat))
+	defer i.Close()
+
+	logs, err := io.ReadAll(i)
+	if err != nil {
+		return nil, err
 	}
+
+	// Split the logs into lines
+	res := strings.Split(string(logs), "\n")
+
+	if lastMessage != "" {
+		cut := 0
+		for i, m := range res {
+			if strings.Contains(m, lastMessage) {
+				cut = i
+				break
+			}
+		}
+		if cut > 0 {
+			res = res[:cut]
+		}
+	}
+
 	return res, nil
 }
