@@ -96,8 +96,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester)
 		state := validator.consensusState(msgID)
 		for i := spectypes.OperatorID(1); i <= 4; i++ {
-			_, ok := state.GetSignerState(i)
-			require.False(t, ok)
+			signerState := state.GetSignerState(i)
+			require.Nil(t, signerState)
 		}
 
 		signedMsg := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
@@ -117,15 +117,14 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, _, err = validator.validateSSVMessage(ssvMsg, receivedAt, nil)
 		require.ErrorContains(t, err, ErrTooManySameTypeMessagesPerRound.Error())
 
-		state1, ok := state.GetSignerState(1)
-		require.True(t, ok)
+		state1 := state.GetSignerState(1)
 		require.NotNil(t, state1)
 		require.EqualValues(t, height, state1.Slot)
 		require.EqualValues(t, 1, state1.Round)
 		require.EqualValues(t, MessageCounts{Proposal: 1}, state1.MessageCounts)
 		for i := spectypes.OperatorID(2); i <= 4; i++ {
-			_, ok = state.GetSignerState(i)
-			require.False(t, ok)
+			signerState := state.GetSignerState(i)
+			require.Nil(t, signerState)
 		}
 
 		signedMsg = spectestingutils.TestingPrepareMessageWithParams(ks.Shares[1], 1, 2, height, spectestingutils.TestingIdentifier, spectestingutils.TestingQBFTRootData)
@@ -1160,7 +1159,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, expectedErr)
 	})
 
-	// Get error when receiving a non-decided message with multiple signers
+	// Get error when receiving a non decided message with multiple signers
 	t.Run("non decided with multiple signers", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
@@ -1382,7 +1381,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorContains(t, err, ErrMalformedRoundChangeJustifications.Error())
 	})
 
-	// Send message root hash that doesn't match the expected root hash should receive an error
+	// Send message root hash that doesnt match the expected root hash should receive an error
 	t.Run("wrong root hash", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
 

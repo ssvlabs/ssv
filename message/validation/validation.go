@@ -110,10 +110,6 @@ func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) Mes
 		opt(mv)
 	}
 
-	mv.state.OnEviction(func(ctx context.Context, reason ttlcache.EvictionReason, i *ttlcache.Item[ConsensusID, *ConsensusState]) {
-		i.Value().Signers.Stop()
-	})
-
 	go mv.state.Start()
 
 	return mv
@@ -588,20 +584,9 @@ func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *Conse
 		return csItem.Value()
 	}
 
-	cs := mv.createConsensusState()
+	cs := &ConsensusState{
+		Signers: hashmap.New[spectypes.OperatorID, *SignerState](),
+	}
 	mv.state.Set(id, cs, mv.cacheTTL)
 	return cs
-}
-
-func (mv *messageValidator) createConsensusState() *ConsensusState {
-	state := &ConsensusState{
-		Signers: ttlcache.New[spectypes.OperatorID, *SignerState](
-			ttlcache.WithTTL[spectypes.OperatorID, *SignerState](mv.cacheTTL),
-		),
-		cacheTTL: mv.cacheTTL,
-	}
-
-	go state.Signers.Start()
-
-	return state
 }

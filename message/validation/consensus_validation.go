@@ -126,8 +126,8 @@ func (mv *messageValidator) validateConsensusMessage(
 	}
 
 	for _, signer := range signedMsg.Signers {
-		signerState, ok := state.GetSignerState(signer)
-		if !ok {
+		signerState := state.GetSignerState(signer)
+		if signerState == nil {
 			signerState = state.CreateSignerState(signer)
 		}
 		if msgSlot > signerState.Slot {
@@ -205,8 +205,9 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 	msgID spectypes.MessageID,
 	signedMsg *specqbft.SignedMessage,
 ) error {
-	signerState, ok := state.GetSignerState(signer)
-	if !ok {
+	signerState := state.GetSignerState(signer)
+
+	if signerState == nil {
 		return mv.validateJustifications(share, signedMsg)
 	}
 
