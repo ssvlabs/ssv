@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    branches: [stage]
 
 jobs:
   build:
@@ -20,7 +20,8 @@ jobs:
       - name: Run e2e.sh
         run: |
           chmod +x ./e2e/run.sh
-          ./e2e/run.sh
+          cd e2e
+          ./run.sh
 
       - name: Clean up
         run: docker-compose down
