@@ -82,7 +82,7 @@ func New(
 		network:    network,
 		startEpoch: startEpoch,
 		sleepEpoch: startEpoch + 1,
-		//sleepEpoch:         math.MaxUint64, // TODO: replace with startEpoch + 1 after debugging is done
+		//sleepEpoch:         math.MaxUint64,  // NOTE: used for debugging
 		endEpoch:           startEpoch + 2,
 		fakeProposerDuties: fakeProposerDuties,
 		validators:         make(map[phase0.ValidatorIndex]*validatorState),
