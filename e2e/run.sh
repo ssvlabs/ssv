@@ -1,7 +1,9 @@
 #!/bin/bash
 
 cleanup() {
+    code=$?
     docker compose down
+    exit $code
 }
 trap cleanup EXIT
 
