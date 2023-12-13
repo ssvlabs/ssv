@@ -141,14 +141,19 @@ type goClient struct {
 	nodeClient           NodeClient
 	graffiti             []byte
 	gasLimit             uint64
-	operatorID           spectypes.OperatorID
+	getOperatorID        func() spectypes.OperatorID
 	registrationMu       sync.Mutex
 	registrationLastSlot phase0.Slot
 	registrationCache    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration
 }
 
 // New init new client and go-client instance
-func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.OperatorID, slotTickerProvider slotticker.Provider) (beaconprotocol.BeaconNode, error) {
+func New(
+	logger *zap.Logger,
+	opt beaconprotocol.Options,
+	getOperatorID func() spectypes.OperatorID,
+	slotTickerProvider slotticker.Provider,
+) (beaconprotocol.BeaconNode, error) {
 	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(string(opt.Network.BeaconNetwork)))
 
 	httpClient, err := http.New(opt.Context,
@@ -169,7 +174,7 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 		client:            httpClient.(*http.Service),
 		graffiti:          opt.Graffiti,
 		gasLimit:          opt.GasLimit,
-		operatorID:        operatorID,
+		getOperatorID:     getOperatorID,
 		registrationCache: map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
 	}
 

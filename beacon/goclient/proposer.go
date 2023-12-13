@@ -252,7 +252,7 @@ func (gc *goClient) submitRegistrationsFromCache(currentSlot phase0.Slot) {
 	gc.registrationMu.Lock()
 
 	slotsSinceLastRegistration := currentSlot - gc.registrationLastSlot
-	operatorSubmissionSlotModulo := gc.operatorID % slotsPerEpoch
+	operatorSubmissionSlotModulo := gc.getOperatorID() % slotsPerEpoch
 
 	hasRegistrations := len(gc.registrationCache) != 0
 	operatorSubmissionSlot := uint64(currentSlot)%slotsPerEpoch == operatorSubmissionSlotModulo

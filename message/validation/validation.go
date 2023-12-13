@@ -75,7 +75,7 @@ type messageValidator struct {
 	index                   sync.Map
 	nodeStorage             operatorstorage.Storage
 	dutyStore               *dutystore.Store
-	ownOperatorID           spectypes.OperatorID
+	getOwnOperatorID        func() spectypes.OperatorID
 	operatorIDToPubkeyCache *hashmap.Map[spectypes.OperatorID, *rsa.PublicKey]
 
 	// validationLocks is a map of lock per SSV message ID to
@@ -94,6 +94,7 @@ func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) Mes
 		metrics:                 &nopMetrics{},
 		netCfg:                  netCfg,
 		operatorIDToPubkeyCache: hashmap.New[spectypes.OperatorID, *rsa.PublicKey](),
+		getOwnOperatorID:        func() spectypes.OperatorID { return 0 },
 		validationLocks:         make(map[spectypes.MessageID]*sync.Mutex),
 	}
 
@@ -128,10 +129,10 @@ func WithDutyStore(dutyStore *dutystore.Store) Option {
 	}
 }
 
-// WithOwnOperatorID sets the operator ID for the messageValidator.
-func WithOwnOperatorID(id spectypes.OperatorID) Option {
+// WithOwnOperatorID sets the operator ID getter for the messageValidator.
+func WithOwnOperatorID(f func() spectypes.OperatorID) Option {
 	return func(mv *messageValidator) {
-		mv.ownOperatorID = id
+		mv.getOwnOperatorID = f
 	}
 }
 
@@ -578,4 +579,10 @@ func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *Conse
 
 	cs, _ := mv.index.Load(id)
 	return cs.(*ConsensusState)
+}
+
+func (mv *messageValidator) inCommittee(share *ssvtypes.SSVShare) bool {
+	return slices.ContainsFunc(share.Committee, func(operator *spectypes.Operator) bool {
+		return operator.OperatorID == mv.getOwnOperatorID()
+	})
 }

@@ -5,6 +5,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -31,7 +32,7 @@ type ControllerOptions struct {
 	ShareStorage       storage.Shares
 	RecipientStorage   storage.Recipients
 	SlotTickerProvider slotticker.Provider
-	OperatorData       *storage.OperatorData
+	GetOperatorID      func() spectypes.OperatorID
 }
 
 // recipientController implementation of RecipientController
@@ -42,7 +43,7 @@ type recipientController struct {
 	shareStorage       storage.Shares
 	recipientStorage   storage.Recipients
 	slotTickerProvider slotticker.Provider
-	operatorData       *storage.OperatorData
+	getOperatorID      func() spectypes.OperatorID
 }
 
 func NewController(opts *ControllerOptions) *recipientController {
@@ -53,7 +54,7 @@ func NewController(opts *ControllerOptions) *recipientController {
 		shareStorage:       opts.ShareStorage,
 		recipientStorage:   opts.RecipientStorage,
 		slotTickerProvider: opts.SlotTickerProvider,
-		operatorData:       opts.OperatorData,
+		getOperatorID:      opts.GetOperatorID,
 	}
 }
 
@@ -86,7 +87,7 @@ func (rc *recipientController) listenToTicker(logger *zap.Logger) {
 }
 
 func (rc *recipientController) prepareAndSubmit(logger *zap.Logger, slot phase0.Slot) error {
-	shares := rc.shareStorage.List(nil, storage.ByOperatorID(rc.operatorData.ID), storage.ByActiveValidator())
+	shares := rc.shareStorage.List(nil, storage.ByOperatorID(rc.getOperatorID()), storage.ByActiveValidator())
 
 	const batchSize = 500
 	var submitted int

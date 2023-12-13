@@ -62,8 +62,8 @@ type Config struct {
 	OperatorPrivateKey *rsa.PrivateKey
 	// OperatorPubKeyHash is hash of operator public key, used for identity, optional
 	OperatorPubKeyHash string
-	// OperatorID contains numeric operator ID
-	OperatorID func() spectypes.OperatorID
+	// GetOperatorID contains numeric operator ID getter
+	GetOperatorID func() spectypes.OperatorID
 	// Router propagate incoming network messages to the responsive components
 	Router network.MessageRouter
 	// UserAgent to use by libp2p identify protocol

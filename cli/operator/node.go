@@ -148,7 +148,12 @@ var StartNodeCmd = &cobra.Command{
 		cfg.ConsensusClient.GasLimit = spectypes.DefaultGasLimit
 		cfg.ConsensusClient.Network = networkConfig.Beacon.GetNetwork()
 
-		consensusClient := setupConsensusClient(logger, operatorData.ID, slotTickerProvider)
+		var validatorCtrl validator.Controller
+		getOperatorID := func() spectypes.OperatorID {
+			return validatorCtrl.GetOperatorData().ID
+		}
+
+		consensusClient := setupConsensusClient(logger, getOperatorID, slotTickerProvider)
 
 		executionClient, err := executionclient.New(
 			cmd.Context(),
@@ -165,13 +170,10 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not connect to execution client", zap.Error(err))
 		}
 
-		var validatorCtrl validator.Controller
 		cfg.P2pNetworkConfig.Permissioned = permissioned
 		cfg.P2pNetworkConfig.NodeStorage = nodeStorage
 		cfg.P2pNetworkConfig.OperatorPubKeyHash = format.OperatorID(operatorData.PublicKey)
-		cfg.P2pNetworkConfig.OperatorID = func() spectypes.OperatorID {
-			return validatorCtrl.GetOperatorData().ID
-		}
+		cfg.P2pNetworkConfig.GetOperatorID = getOperatorID
 		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
 		cfg.P2pNetworkConfig.Network = networkConfig
 
@@ -186,7 +188,7 @@ var StartNodeCmd = &cobra.Command{
 			validation.WithLogger(logger),
 			validation.WithMetrics(metricsReporter),
 			validation.WithDutyStore(dutyStore),
-			validation.WithOwnOperatorID(operatorData.ID),
+			validation.WithOwnOperatorID(getOperatorID),
 		)
 
 		cfg.P2pNetworkConfig.Metrics = metricsReporter
@@ -537,10 +539,10 @@ func setupP2P(logger *zap.Logger, db basedb.Database) network.P2PNetwork {
 
 func setupConsensusClient(
 	logger *zap.Logger,
-	operatorID spectypes.OperatorID,
+	getOperatorID func() spectypes.OperatorID,
 	slotTickerProvider slotticker.Provider,
 ) beaconprotocol.BeaconNode {
-	cl, err := goclient.New(logger, cfg.ConsensusClient, operatorID, slotTickerProvider)
+	cl, err := goclient.New(logger, cfg.ConsensusClient, getOperatorID, slotTickerProvider)
 	if err != nil {
 		logger.Fatal("failed to create beacon go-client", zap.Error(err),
 			fields.Address(cfg.ConsensusClient.BeaconNodeAddr))
