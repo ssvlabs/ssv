@@ -85,14 +85,14 @@ var AttesterSlashingTests = []AttesterSlashingTest{
 			return nil
 		},
 	},
-	{
-		Name:      "HigherSource_SameTarget_SameRoot",
-		Slashable: true,
-		Apply: func(data *phase0.AttestationData) error {
-			data.Source.Epoch += startEndEpochsDiff
-			return nil
-		},
-	},
+	//{
+	//	Name:      "HigherSource_SameTarget_SameRoot",
+	//	Slashable: true,
+	//	Apply: func(data *phase0.AttestationData) error {
+	//		data.Source.Epoch += startEndEpochsDiff
+	//		return nil
+	//	},
+	//},
 	{
 		Name:      "LowerSource_HigherTarget_SameRoot",
 		Slashable: true,

@@ -98,15 +98,19 @@ func New(
 		zap.Any("end_epoch", s.endEpoch),
 		zap.Any("sleep_epoch", s.sleepEpoch),
 	)
-	first := true
+	a := 0
+	p := 0
 	for _, validator := range validators {
-		proposerTest := ProposerSlashingTests[1]
-		attesterTest := AttesterSlashingTests[3]
-		if first {
-			proposerTest = ProposerSlashingTests[0]
-			attesterTest = AttesterSlashingTests[0]
-			first = false
+		if a == len(AttesterSlashingTests) {
+			a = 0
 		}
+		if p == len(ProposerSlashingTests) {
+			p = 0
+		}
+		attesterTest := AttesterSlashingTests[a]
+		proposerTest := ProposerSlashingTests[p]
+		a++
+		p++
 		s.validators[validator.Index] = &validatorState{
 			validator:                  validator,
 			proposerTest:               proposerTest, // TODO: extract from validators.json
