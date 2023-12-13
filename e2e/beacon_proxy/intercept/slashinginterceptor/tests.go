@@ -28,8 +28,13 @@ var ProposerSlashingTests = []ProposerSlashingTest{
 		Name:      "SameSlot_DifferentRoot",
 		Slashable: true,
 		Apply: func(block *spec.VersionedBeaconBlock) error {
-			_, err := rand.Read(block.Capella.ParentRoot[:])
-			return err
+			switch block.Version {
+			case spec.DataVersionCapella:
+				_, err := rand.Read(block.Capella.ParentRoot[:])
+				return err
+			default:
+				return fmt.Errorf("unsupported version: %s", block.Version)
+			}
 		},
 	},
 	{

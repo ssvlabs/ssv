@@ -101,13 +101,16 @@ func New(
 	)
 	first := true
 	for _, validator := range validators {
+		proposerTest := ProposerSlashingTests[1]
 		attesterTest := AttesterSlashingTests[3]
 		if first {
+			proposerTest = ProposerSlashingTests[0]
 			attesterTest = AttesterSlashingTests[0]
 			first = false
 		}
 		s.validators[validator.Index] = &validatorState{
 			validator:                  validator,
+			proposerTest:               proposerTest, // TODO: extract from validators.json
 			attesterTest:               attesterTest, // TODO: extract from validators.json
 			firstAttesterDuty:          make(map[beaconproxy.Gateway]*v1.AttesterDuty),
 			firstAttestationData:       make(map[beaconproxy.Gateway]*phase0.AttestationData),
@@ -127,6 +130,8 @@ func New(
 			zap.String("pubkey", validator.Validator.PublicKey.String()),
 			zap.String("attester_test", attesterTest.Name),
 			zap.Bool("attester_slashable", attesterTest.Slashable),
+			zap.String("proposer_test", proposerTest.Name),
+			zap.Bool("proposer_slashable", proposerTest.Slashable),
 		)
 	}
 	return s
