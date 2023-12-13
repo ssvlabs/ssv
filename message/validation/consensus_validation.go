@@ -260,7 +260,7 @@ func (mv *messageValidator) validateDutyCount(state *SignerState, msgID spectype
 		if state.EpochDuties >= maxDutiesPerEpoch {
 			err := ErrTooManyDutiesPerEpoch
 			err.got = fmt.Sprintf("%v (role %v)", state.EpochDuties, msgID.GetRoleType())
-			err.want = fmt.Sprintf("<=%v", maxDutiesPerEpoch)
+			err.want = fmt.Sprintf("less than %v", maxDutiesPerEpoch)
 			return err
 		}
 	}
