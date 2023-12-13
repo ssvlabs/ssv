@@ -366,6 +366,29 @@ func TestSlashing_Attestation(t *testing.T) {
 	// 10. Different signing root, higher source epoch, lower target epoch -> expect slashing.
 	//     Same as 8, but in the opposite direction.
 	signAttestation(secretKeys[2], phase0.Root{5}, createAttestationData(4, 5), true, "HighestAttestationVote")
+
+	// 11. Different signing root, lower source epoch, lower target epoch -> expect slashing.
+	//     The new point is strictly lower in both source & target
+	signAttestation(secretKeys[2], phase0.Root{5}, createAttestationData(2, 5), true, "HighestAttestationVote")
+
+	// 12. Different signing root, lower source epoch, same target epoch -> expect slashing.
+	//     The new point is lower in source but equal in target
+	signAttestation(secretKeys[2], phase0.Root{5}, createAttestationData(2, 6), true, "HighestAttestationVote")
+
+	// (s==t)
+	// 13. Different signing root -> no slashing. (s==t)
+	signAttestation(secretKeys[2], phase0.Root{6}, createAttestationData(7, 7), false, "HighestAttestationVote")
+
+	// 14. Different signing root, lower source epoch, higher target epoch -> expect slashing.
+	//     The new point is lower in source but higher in target (s==t)
+	signAttestation(secretKeys[2], phase0.Root{6}, createAttestationData(6, 8), true, "HighestAttestationVote")
+
+	// 15. Different signing root -> no slashing. (s==t)
+	signAttestation(secretKeys[2], phase0.Root{7}, createAttestationData(8, 8), false, "HighestAttestationVote")
+
+	// 16. Different signing root, lower source epoch, lower target epoch -> expect slashing.
+	//     The new point is lower in source and lower in target (s==t)
+	signAttestation(secretKeys[2], phase0.Root{7}, createAttestationData(6, 7), true, "HighestAttestationVote")
 }
 
 func TestSignRoot(t *testing.T) {
