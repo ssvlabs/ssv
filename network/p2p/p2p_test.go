@@ -90,7 +90,7 @@ func TestGetMaxPeers(t *testing.T) {
 }
 
 func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
-	n := 4
+	n := 8
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
