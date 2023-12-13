@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"sort"
 	"sync"
 	"time"
@@ -83,9 +82,9 @@ func New(
 		logger:     logger,
 		network:    network,
 		startEpoch: startEpoch,
-		// sleepEpoch: startEpoch + 1,
-		sleepEpoch:         math.MaxUint64, // TODO: replace with startEpoch + 1 after debugging is done
-		endEpoch:           startEpoch + 1,
+		sleepEpoch: startEpoch + 1,
+		// sleepEpoch:         math.MaxUint64, // TODO: replace with startEpoch + 1 after debugging is done
+		endEpoch:           startEpoch + 2,
 		fakeProposerDuties: fakeProposerDuties,
 		validators:         make(map[phase0.ValidatorIndex]*validatorState),
 	}
