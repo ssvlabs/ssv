@@ -1,14 +1,42 @@
 package logs
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 type RAW []string
 
-type Parsed []map[string]any
+type ParsedLine map[string]any
+
+type Parsed []ParsedLine
 
 type Parser func(log string) (map[string]any, error)
 
-func GrepLine(line string, matches []string) bool {
+func (pl ParsedLine) Get(key string) (any, error) {
+	if f, ok := pl[key]; ok {
+		return f, nil
+	}
+	return nil, fmt.Errorf("field doesn't exist %v", key)
+}
+
+func (p Parsed) Fields(key string, failOnError bool) (RAW, error) {
+	var res RAW
+	for _, v := range p {
+		got, err := v.Get(key)
+		if err == nil {
+			res = append(res, fmt.Sprint(got))
+		}
+
+		if failOnError {
+			return nil, err
+		}
+
+	}
+	return res, nil
+}
+
+func GrepLine(line string, matches RAW) bool {
 	matched := true
 	for _, m := range matches {
 		if !strings.Contains(line, m) {
@@ -18,7 +46,7 @@ func GrepLine(line string, matches []string) bool {
 	return matched
 }
 
-func (r RAW) Grep(matches []string) []string {
+func (r RAW) Grep(matches []string) RAW {
 	raw := make([]string, 0)
 	for _, log := range r {
 		if GrepLine(log, matches) {
@@ -30,12 +58,16 @@ func (r RAW) Grep(matches []string) []string {
 }
 
 func (r RAW) ParseAll(p Parser) Parsed {
-	parsed := make([]map[string]any, 0)
+	parsed := Parsed{}
 
 	for _, log := range r {
-		singleparsed, err := p(log)
+		removeall := strings.Split(log, "{")
+		removeall2 := strings.Split(removeall[1], "}")
+		comb := strings.Join([]string{"{", removeall2[0], "}"}, "")
+		singleparsed, err := p(comb)
 		if err != nil {
 			// todo: log parse err
+			fmt.Println("Error parsing log ", err, log)
 			continue
 		}
 		parsed = append(parsed, singleparsed)
@@ -45,7 +77,7 @@ func (r RAW) ParseAll(p Parser) Parsed {
 }
 
 func (p Parsed) GrepCondition(find map[string]func(any) bool) Parsed {
-	parsed := make([]map[string]any, 0)
+	parsed := Parsed{} // make([]map[string]any, 0)
 LogLoop:
 	for _, log := range p {
 		checkedGood := true
