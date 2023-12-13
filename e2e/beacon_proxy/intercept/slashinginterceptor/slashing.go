@@ -239,9 +239,6 @@ func (s *SlashingInterceptor) InterceptAttesterDuties(
 	indices []phase0.ValidatorIndex,
 	duties []*v1.AttesterDuty,
 ) ([]*v1.AttesterDuty, error) {
-	// TODO: revert to enable attestations
-	return []*v1.AttesterDuty{}, nil
-
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -466,6 +463,8 @@ func (s *SlashingInterceptor) InterceptProposerDuties(
 	indices []phase0.ValidatorIndex,
 	duties []*v1.ProposerDuty,
 ) ([]*v1.ProposerDuty, error) {
+	return []*v1.ProposerDuty{}, nil
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
