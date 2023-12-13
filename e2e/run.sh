@@ -1,20 +1,6 @@
 #!/bin/bash
 
-check_exit_code () {
-   if [ $1 -ne 0 ]; then
-       echo "Tests failed with exit code $1"
-       docker compose down
-       exit $exit_code
-   else
-       echo "Tests passed successfully"
-   fi
-}
-
 
 docker compose up -d --build beacon_proxy ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4
-
+echo $EXECUTION_NODE_URL
 docker compose run --build logs_catcher
-
-check_exit_code $?
-
-# run more tests
