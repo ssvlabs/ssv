@@ -144,7 +144,26 @@ func TestStreamLogs(t *testing.T) {
 
 	// Create a client and connect to the simulator
 	const followDistance = 2
-	client, err := New(ctx, addr, contractAddr, WithLogger(logger), WithFollowDistance(followDistance))
+	client, err := New(
+		ctx,
+		addr,
+		contractAddr,
+		WithLogger(logger),
+		WithFollowDistance(followDistance),
+		// FIGURE OUT DO WE STILL NEED THE FOLLOW DISTANCE?
+		WithFinalizedBlocksSubscription(ctx, func(ctx context.Context, finalizedBlocks chan<- uint64) error {
+			go func() {
+				heads := make(chan *ethtypes.Header)
+				sub, _ := sim.SubscribeNewHead(ctx, heads)
+				defer sub.Unsubscribe()
+
+				for {
+					header := <-heads
+					finalizedBlocks <- header.Number.Uint64()
+				}
+			}()
+			return nil
+		}))
 	require.NoError(t, err)
 
 	err = client.Healthy(ctx)

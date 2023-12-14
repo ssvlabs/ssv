@@ -115,7 +115,14 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	require.NotEmpty(t, contractCode)
 
 	// Create a client and connect to the simulator
-	client, err := executionclient.New(ctx, addr, contractAddr, executionclient.WithLogger(logger), executionclient.WithFollowDistance(0))
+	client, err := executionclient.New(
+		ctx,
+		addr,
+		contractAddr,
+		executionclient.WithLogger(logger),
+		executionclient.WithFollowDistance(0),
+		executionclient.WithFinalizedBlocksSubscription(ctx, setFinalizedBlocksProducer(sim)),
+	)
 	require.NoError(t, err)
 
 	contractFilterer, err := client.Filterer()
@@ -1609,4 +1616,20 @@ func requireKeyManagerDataToNotExist(t *testing.T, eh *EventHandler, expectedAcc
 	_, found, err = eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
 	require.NoError(t, err)
 	require.False(t, found)
+}
+
+func setFinalizedBlocksProducer(sim *simulator.SimulatedBackend) func(ctx context.Context, finalizedBlocks chan<- uint64) error {
+	return func(ctx context.Context, finalizedBlocks chan<- uint64) error {
+		go func() {
+			heads := make(chan *ethtypes.Header)
+			sub, _ := sim.SubscribeNewHead(ctx, heads)
+			defer sub.Unsubscribe()
+
+			for {
+				header := <-heads
+				finalizedBlocks <- header.Number.Uint64()
+			}
+		}()
+		return nil
+	}
 }

@@ -176,6 +176,7 @@ func (e *TestEnv) setup(
 		contractAddr,
 		executionclient.WithLogger(logger),
 		executionclient.WithFollowDistance(*e.followDistance),
+		executionclient.WithFinalizedBlocksSubscription(ctx, setFinalizedBlocksProducer(sim)),
 	)
 	if err != nil {
 		return err
