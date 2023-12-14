@@ -266,6 +266,43 @@ func (mr *MocksignerMockRecorder) ComputeSigningRoot(object, domain interface{})
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ComputeSigningRoot", reflect.TypeOf((*Mocksigner)(nil).ComputeSigningRoot), object, domain)
 }
 
+// MockeventsProducer is a mock of eventsProducer interface.
+type MockeventsProducer struct {
+	ctrl     *gomock.Controller
+	recorder *MockeventsProducerMockRecorder
+}
+
+// MockeventsProducerMockRecorder is the mock recorder for MockeventsProducer.
+type MockeventsProducerMockRecorder struct {
+	mock *MockeventsProducer
+}
+
+// NewMockeventsProducer creates a new mock instance.
+func NewMockeventsProducer(ctrl *gomock.Controller) *MockeventsProducer {
+	mock := &MockeventsProducer{ctrl: ctrl}
+	mock.recorder = &MockeventsProducerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockeventsProducer) EXPECT() *MockeventsProducerMockRecorder {
+	return m.recorder
+}
+
+// SubscribeOnFinalizedBlocks mocks base method.
+func (m *MockeventsProducer) SubscribeOnFinalizedBlocks(ctx context.Context, finalizedBlocks chan<- uint64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubscribeOnFinalizedBlocks", ctx, finalizedBlocks)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SubscribeOnFinalizedBlocks indicates an expected call of SubscribeOnFinalizedBlocks.
+func (mr *MockeventsProducerMockRecorder) SubscribeOnFinalizedBlocks(ctx, finalizedBlocks interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeOnFinalizedBlocks", reflect.TypeOf((*MockeventsProducer)(nil).SubscribeOnFinalizedBlocks), ctx, finalizedBlocks)
+}
+
 // MockBeaconNode is a mock of BeaconNode interface.
 type MockBeaconNode struct {
 	ctrl     *gomock.Controller
@@ -655,6 +692,20 @@ func (m *MockBeaconNode) SubmitVoluntaryExit(voluntaryExit *phase0.SignedVolunta
 func (mr *MockBeaconNodeMockRecorder) SubmitVoluntaryExit(voluntaryExit, sig interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitVoluntaryExit", reflect.TypeOf((*MockBeaconNode)(nil).SubmitVoluntaryExit), voluntaryExit, sig)
+}
+
+// SubscribeOnFinalizedBlocks mocks base method.
+func (m *MockBeaconNode) SubscribeOnFinalizedBlocks(ctx context.Context, finalizedBlocks chan<- uint64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubscribeOnFinalizedBlocks", ctx, finalizedBlocks)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SubscribeOnFinalizedBlocks indicates an expected call of SubscribeOnFinalizedBlocks.
+func (mr *MockBeaconNodeMockRecorder) SubscribeOnFinalizedBlocks(ctx, finalizedBlocks interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeOnFinalizedBlocks", reflect.TypeOf((*MockBeaconNode)(nil).SubscribeOnFinalizedBlocks), ctx, finalizedBlocks)
 }
 
 // SyncCommitteeDuties mocks base method.

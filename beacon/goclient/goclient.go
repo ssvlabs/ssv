@@ -2,6 +2,7 @@ package goclient
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"strings"
 	"sync"
@@ -9,6 +10,7 @@ import (
 
 	eth2client "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/api"
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/http"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -238,4 +240,19 @@ func (gc *goClient) slotStartTime(slot phase0.Slot) time.Time {
 
 func (gc *goClient) Events(ctx context.Context, topics []string, handler eth2client.EventHandlerFunc) error {
 	return gc.client.Events(ctx, topics, handler)
+}
+
+func (gc *goClient) SubscribeOnFinalizedBlocks(ctx context.Context, finalizedBlocks chan<- uint64) error {
+	if err := gc.Events(ctx, []string{"finalized_checkpoint"}, func(event *eth2apiv1.Event) {
+		if event.Data == nil {
+			return
+		}
+
+		data := event.Data.(*eth2apiv1.FinalizedCheckpointEvent)
+		finalizedBlocks <- uint64(gc.GetBeaconNetwork().FirstSlotAtEpoch(data.Epoch)) + gc.GetBeaconNetwork().SlotsPerEpoch()
+	}); err != nil {
+		return fmt.Errorf("failed to subscribe to finalized checkpoint events: %w", err)
+	}
+
+	return nil
 }

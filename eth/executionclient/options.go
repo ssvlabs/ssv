@@ -1,6 +1,8 @@
 package executionclient
 
 import (
+	"context"
+	"fmt"
 	"time"
 
 	"go.uber.org/zap"
@@ -56,5 +58,20 @@ func WithReconnectionMaxInterval(interval time.Duration) Option {
 func WithLogBatchSize(size uint64) Option {
 	return func(s *ExecutionClient) {
 		s.logBatchSize = size
+	}
+}
+
+// WithFinalizedBlocksSubscription setting up a subscription for beacon sync channel to be consumed in streamLogsToChan
+func WithFinalizedBlocksSubscription(
+	ctx context.Context,
+	subscribe func(ctx context.Context, finalizedBlocks chan<- uint64) error,
+) Option {
+	return func(s *ExecutionClient) {
+		if s.finalizedBlocks == nil {
+			s.finalizedBlocks = make(chan uint64)
+		}
+		if err := subscribe(ctx, s.finalizedBlocks); err != nil {
+			panic(fmt.Errorf("can't setup dependencies for exec client: %w", err))
+		}
 	}
 }

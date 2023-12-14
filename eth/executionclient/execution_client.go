@@ -30,6 +30,7 @@ var (
 type ExecutionClient struct {
 	// mandatory
 	nodeAddr        string
+	finalizedBlocks chan uint64
 	contractAddress ethcommon.Address
 
 	// optional
@@ -47,9 +48,15 @@ type ExecutionClient struct {
 }
 
 // New creates a new instance of ExecutionClient.
-func New(ctx context.Context, nodeAddr string, contractAddr ethcommon.Address, opts ...Option) (*ExecutionClient, error) {
+func New(
+	ctx context.Context,
+	nodeAddr string,
+	contractAddr ethcommon.Address,
+	opts ...Option,
+) (*ExecutionClient, error) {
 	client := &ExecutionClient{
 		nodeAddr:                    nodeAddr,
+		finalizedBlocks:             make(chan uint64),
 		contractAddress:             contractAddr,
 		logger:                      zap.NewNop(),
 		metrics:                     nopMetrics{},
@@ -195,7 +202,7 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 				}
 
 				// streamLogsToChan should never return without an error,
-				// so we treat a nil error as a an error by itself.
+				// so we treat a nil error as an error by itself.
 				if err == nil {
 					err = errors.New("streamLogsToChan halted without an error")
 				}
@@ -261,14 +268,6 @@ func (ec *ExecutionClient) isClosed() bool {
 // streamLogsToChan *always* returns the last block it fetched, even if it errored.
 // TODO: consider handling "websocket: read limit exceeded" error and reducing batch size (syncSmartContractsEvents has code for this)
 func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (lastBlock uint64, err error) {
-	heads := make(chan *ethtypes.Header)
-
-	sub, err := ec.client.SubscribeNewHead(ctx, heads)
-	if err != nil {
-		return fromBlock, fmt.Errorf("subscribe heads: %w", err)
-	}
-	defer sub.Unsubscribe()
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -277,17 +276,7 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 		case <-ec.closed:
 			return fromBlock, ErrClosed
 
-		case err := <-sub.Err():
-			if err == nil {
-				return fromBlock, ErrClosed
-			}
-			return fromBlock, fmt.Errorf("subscription: %w", err)
-
-		case header := <-heads:
-			if header.Number.Uint64() < ec.followDistance {
-				continue
-			}
-			toBlock := header.Number.Uint64() - ec.followDistance
+		case toBlock := <-ec.finalizedBlocks:
 			if toBlock < fromBlock {
 				continue
 			}

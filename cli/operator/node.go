@@ -149,7 +149,6 @@ var StartNodeCmd = &cobra.Command{
 		cfg.ConsensusClient.Network = networkConfig.Beacon.GetNetwork()
 
 		consensusClient := setupConsensusClient(logger, operatorData.ID, slotTickerProvider)
-
 		executionClient, err := executionclient.New(
 			cmd.Context(),
 			cfg.ExecutionClient.Addr,
@@ -160,6 +159,7 @@ var StartNodeCmd = &cobra.Command{
 			executionclient.WithConnectionTimeout(cfg.ExecutionClient.ConnectionTimeout),
 			executionclient.WithReconnectionInitialInterval(executionclient.DefaultReconnectionInitialInterval),
 			executionclient.WithReconnectionMaxInterval(executionclient.DefaultReconnectionMaxInterval),
+			executionclient.WithFinalizedBlocksSubscription(cmd.Context(), consensusClient.SubscribeOnFinalizedBlocks),
 		)
 		if err != nil {
 			logger.Fatal("could not connect to execution client", zap.Error(err))
