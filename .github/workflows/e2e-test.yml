@@ -24,3 +24,6 @@ jobs:
           cd ./e2e/
           chmod +x ./run.sh
           ./run.sh
+
+      - name: clean up
+        run: docker compose down -v
