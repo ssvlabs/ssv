@@ -16,8 +16,13 @@ func SetFinalizedBlocksProducer(sim *simulator.SimulatedBackend) func(ctx contex
 			defer sub.Unsubscribe()
 
 			for {
-				header := <-heads
-				finalizedBlocks <- header.Number.Uint64()
+				select {
+				case <-ctx.Done():
+					close(finalizedBlocks)
+					return
+				case header := <-heads:
+					finalizedBlocks <- header.Number.Uint64()
+				}
 			}
 		}()
 		return nil

@@ -78,6 +78,7 @@ func New(
 // Close shuts down ExecutionClient.
 func (ec *ExecutionClient) Close() error {
 	close(ec.closed)
+	close(ec.finalizedBlocks)
 	ec.client.Close()
 	return nil
 }
