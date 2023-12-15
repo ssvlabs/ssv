@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
+	"github.com/bloxapp/ssv/eth/ethtestutils"
 	"github.com/bloxapp/ssv/eth/simulator"
 	"github.com/bloxapp/ssv/eth/simulator/simcontract"
 )
@@ -78,8 +79,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	sim.Commit()
 
 	// Create a client and connect to the simulator
-	const followDistance = 8
-	client, err := New(ctx, addr, contractAddr, WithLogger(logger), WithFollowDistance(followDistance))
+	client, err := New(ctx, addr, contractAddr, WithLogger(logger))
 	require.NoError(t, err)
 
 	err = client.Healthy(ctx)
@@ -103,8 +103,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, fetchedLogs)
 
-	expectedSeenLogs := blocksWithLogsLength - followDistance
-	require.Equal(t, expectedSeenLogs, len(fetchedLogs))
+	require.Equal(t, blocksWithLogsLength, len(fetchedLogs))
 
 	select {
 	case err := <-fetchErrCh:
@@ -143,27 +142,13 @@ func TestStreamLogs(t *testing.T) {
 	sim.Commit()
 
 	// Create a client and connect to the simulator
-	const followDistance = 2
 	client, err := New(
 		ctx,
 		addr,
 		contractAddr,
 		WithLogger(logger),
-		WithFollowDistance(followDistance),
-		// FIGURE OUT DO WE STILL NEED THE FOLLOW DISTANCE?
-		WithFinalizedBlocksSubscription(ctx, func(ctx context.Context, finalizedBlocks chan<- uint64) error {
-			go func() {
-				heads := make(chan *ethtypes.Header)
-				sub, _ := sim.SubscribeNewHead(ctx, heads)
-				defer sub.Unsubscribe()
-
-				for {
-					header := <-heads
-					finalizedBlocks <- header.Number.Uint64()
-				}
-			}()
-			return nil
-		}))
+		WithFinalizedBlocksSubscription(ctx, ethtestutils.SetFinalizedBlocksProducer(sim)),
+	)
 	require.NoError(t, err)
 
 	err = client.Healthy(ctx)
@@ -194,24 +179,17 @@ func TestStreamLogs(t *testing.T) {
 		time.Sleep(delay)
 	}
 
-	// Wait for blocksWithLogsLength-followDistance blocks to be streamed.
+	// Wait for blocksWithLogsLength blocks to be streamed.
 Unfollowed:
 	for {
 		select {
 		case <-ctx.Done():
-			require.Equal(t, int64(blocksWithLogsLength-followDistance), streamedLogsCount.Load())
+			require.Equal(t, int64(blocksWithLogsLength), streamedLogsCount.Load())
 		case <-time.After(time.Millisecond * 5):
-			if streamedLogsCount.Load() == int64(blocksWithLogsLength-followDistance) {
+			if streamedLogsCount.Load() == int64(blocksWithLogsLength) {
 				break Unfollowed
 			}
 		}
-	}
-
-	// Create empty blocks with no transactions to advance the chain
-	// to followDistance blocks behind the head.
-	for i := 0; i < followDistance; i++ {
-		sim.Commit()
-		time.Sleep(delay)
 	}
 
 	require.NoError(t, client.Close())
@@ -356,8 +334,7 @@ func TestChainReorganizationLogs(t *testing.T) {
 	// sim.Commit()
 
 	// // Connect the client
-	// const followDistance = 8
-	// client, err := New(ctx, addr, contractAddr, WithLogger(logger), WithFollowDistance(followDistance))
+	// client, err := New(ctx, addr, contractAddr, WithLogger(logger))
 	// require.NoError(t, err)
 
 	// isReady, err := client.IsReady(ctx)
@@ -454,7 +431,13 @@ func TestSimSSV(t *testing.T) {
 	require.NotEmpty(t, contractCode)
 
 	// Create a client and connect to the simulator
-	client, err := New(ctx, addr, contractAddr, WithLogger(logger), WithFollowDistance(0))
+	client, err := New(
+		ctx,
+		addr,
+		contractAddr,
+		WithLogger(logger),
+		WithFinalizedBlocksSubscription(ctx, ethtestutils.SetFinalizedBlocksProducer(sim)),
+	)
 	require.NoError(t, err)
 
 	err = client.Healthy(ctx)

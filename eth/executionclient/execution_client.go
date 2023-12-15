@@ -36,7 +36,6 @@ type ExecutionClient struct {
 	// optional
 	logger                      *zap.Logger
 	metrics                     metrics
-	followDistance              uint64 // TODO: consider reading the finalized checkpoint from consensus layer
 	connectionTimeout           time.Duration
 	reconnectionInitialInterval time.Duration
 	reconnectionMaxInterval     time.Duration
@@ -60,7 +59,6 @@ func New(
 		contractAddress:             contractAddr,
 		logger:                      zap.NewNop(),
 		metrics:                     nopMetrics{},
-		followDistance:              DefaultFollowDistance,
 		connectionTimeout:           DefaultConnectionTimeout,
 		reconnectionInitialInterval: DefaultReconnectionInitialInterval,
 		reconnectionMaxInterval:     DefaultReconnectionMaxInterval,
@@ -86,14 +84,12 @@ func (ec *ExecutionClient) Close() error {
 
 // FetchHistoricalLogs retrieves historical logs emitted by the contract starting from fromBlock.
 func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan BlockLogs, errors <-chan error, err error) {
+	// #TODO refactor this to fetch last finalized one
 	currentBlock, err := ec.client.BlockNumber(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get current block: %w", err)
 	}
-	if currentBlock < ec.followDistance {
-		return nil, nil, ErrNothingToSync
-	}
-	toBlock := currentBlock - ec.followDistance
+	toBlock := currentBlock
 	if toBlock < fromBlock {
 		return nil, nil, ErrNothingToSync
 	}

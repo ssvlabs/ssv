@@ -15,6 +15,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"go.uber.org/zap/zaptest"
 
+	"github.com/bloxapp/ssv/eth/ethtestutils"
 	"github.com/bloxapp/ssv/eth/eventsyncer"
 	"github.com/bloxapp/ssv/eth/executionclient"
 	"github.com/bloxapp/ssv/eth/simulator"
@@ -52,20 +53,19 @@ func NewCommonTestInput(
 }
 
 type TestEnv struct {
-	eventSyncer    *eventsyncer.EventSyncer
-	validators     []*testValidatorData
-	ops            []*testOperator
-	nodeStorage    storage.Storage
-	sim            *simulator.SimulatedBackend
-	boundContract  *simcontract.Simcontract
-	auth           *bind.TransactOpts
-	shares         [][]byte
-	execClient     *executionclient.ExecutionClient
-	rpcServer      *rpc.Server
-	httpSrv        *httptest.Server
-	validatorCtrl  *mocks.MockController
-	mockCtrl       *gomock.Controller
-	followDistance *uint64
+	eventSyncer   *eventsyncer.EventSyncer
+	validators    []*testValidatorData
+	ops           []*testOperator
+	nodeStorage   storage.Storage
+	sim           *simulator.SimulatedBackend
+	boundContract *simcontract.Simcontract
+	auth          *bind.TransactOpts
+	shares        [][]byte
+	execClient    *executionclient.ExecutionClient
+	rpcServer     *rpc.Server
+	httpSrv       *httptest.Server
+	validatorCtrl *mocks.MockController
+	mockCtrl      *gomock.Controller
 }
 
 func (e *TestEnv) shutdown() {
@@ -90,9 +90,6 @@ func (e *TestEnv) setup(
 	validatorsCount uint64,
 	operatorsCount uint64,
 ) error {
-	if e.followDistance == nil {
-		e.SetDefaultFollowDistance()
-	}
 	logger := zaptest.NewLogger(t)
 
 	// Create operators RSA keys
@@ -175,8 +172,7 @@ func (e *TestEnv) setup(
 		addr,
 		contractAddr,
 		executionclient.WithLogger(logger),
-		executionclient.WithFollowDistance(*e.followDistance),
-		executionclient.WithFinalizedBlocksSubscription(ctx, setFinalizedBlocksProducer(sim)),
+		executionclient.WithFinalizedBlocksSubscription(ctx, ethtestutils.SetFinalizedBlocksProducer(sim)),
 	)
 	if err != nil {
 		return err
@@ -212,18 +208,6 @@ func (e *TestEnv) setup(
 	e.shares = shares
 
 	return nil
-}
-
-func (e *TestEnv) SetDefaultFollowDistance() {
-	// 8 is current production offset
-	value := uint64(8)
-	e.followDistance = &value
-}
-
-func (e *TestEnv) CloseFollowDistance(blockNum *uint64) {
-	for i := uint64(0); i < *e.followDistance; i++ {
-		commitBlock(e.sim, blockNum)
-	}
 }
 
 func commitBlock(sim *simulator.SimulatedBackend, blockNum *uint64) {

@@ -12,7 +12,6 @@ import (
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
-	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/golang/mock/gomock"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -298,20 +297,4 @@ func simTestBackend(testAddresses []*ethcommon.Address) *simulator.SimulatedBack
 	return simulator.NewSimulatedBackend(
 		genesis, 50_000_000,
 	)
-}
-
-func setFinalizedBlocksProducer(sim *simulator.SimulatedBackend) func(ctx context.Context, finalizedBlocks chan<- uint64) error {
-	return func(ctx context.Context, finalizedBlocks chan<- uint64) error {
-		go func() {
-			heads := make(chan *ethtypes.Header)
-			sub, _ := sim.SubscribeNewHead(ctx, heads)
-			defer sub.Unsubscribe()
-
-			for {
-				header := <-heads
-				finalizedBlocks <- header.Number.Uint64()
-			}
-		}()
-		return nil
-	}
 }
