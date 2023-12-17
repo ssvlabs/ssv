@@ -84,7 +84,8 @@ func (mv *messageValidator) validPartialSigMsgType(msgType spectypes.PartialSigM
 		spectypes.RandaoPartialSig,
 		spectypes.SelectionProofPartialSig,
 		spectypes.ContributionProofs,
-		spectypes.ValidatorRegistrationPartialSig:
+		spectypes.ValidatorRegistrationPartialSig,
+		spectypes.VoluntaryExitPartialSig:
 		return true
 	default:
 		return false
@@ -105,6 +106,8 @@ func (mv *messageValidator) partialSignatureTypeMatchesRole(msgType spectypes.Pa
 		return msgType == spectypes.PostConsensusPartialSig || msgType == spectypes.ContributionProofs
 	case spectypes.BNRoleValidatorRegistration:
 		return msgType == spectypes.ValidatorRegistrationPartialSig
+	case spectypes.BNRoleVoluntaryExit:
+		return msgType == spectypes.VoluntaryExitPartialSig
 	default:
 		panic("invalid role") // role validity should be checked before
 	}

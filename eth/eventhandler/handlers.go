@@ -15,8 +15,8 @@ import (
 	"github.com/bloxapp/ssv/ekm"
 	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/operator/duties"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -226,7 +226,7 @@ func (eh *EventHandler) handleShareCreation(
 	sharePublicKeys [][]byte,
 	encryptedKeys [][]byte,
 ) (*ssvtypes.SSVShare, error) {
-	share, shareSecret, err := validatorAddedEventToShare(
+	share, shareSecret, err := eh.validatorAddedEventToShare(
 		validatorEvent,
 		eh.shareEncryptionKeyProvider,
 		eh.operatorData.GetOperatorData(),
@@ -256,7 +256,7 @@ func (eh *EventHandler) handleShareCreation(
 	return share, nil
 }
 
-func validatorAddedEventToShare(
+func (eh *EventHandler) validatorAddedEventToShare(
 	event *contract.ContractValidatorAdded,
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider,
 	operatorData *registrystorage.OperatorData,
@@ -318,7 +318,7 @@ func validatorAddedEventToShare(
 	}
 
 	validatorShare.Quorum, validatorShare.PartialQuorum = ssvtypes.ComputeQuorumAndPartialQuorum(len(committee))
-	validatorShare.DomainType = ssvtypes.GetDefaultDomain()
+	validatorShare.DomainType = eh.networkConfig.Domain
 	validatorShare.Committee = committee
 	validatorShare.Graffiti = []byte("ssv.network")
 
@@ -356,7 +356,7 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 	}
 
 	removeDecidedMessages := func(role spectypes.BeaconRole, store qbftstorage.QBFTStore) error {
-		messageID := spectypes.NewMsgID(types.GetDefaultDomain(), share.ValidatorPubKey, role)
+		messageID := spectypes.NewMsgID(eh.networkConfig.Domain, share.ValidatorPubKey, role)
 		return store.CleanAllInstances(logger, messageID[:])
 	}
 	err := eh.storageMap.Each(removeDecidedMessages)
@@ -467,6 +467,50 @@ func (eh *EventHandler) handleFeeRecipientAddressUpdated(txn basedb.Txn, event *
 
 	logger.Debug("processed event")
 	return r != nil, nil
+}
+
+func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.ContractValidatorExited) (*duties.ExitDescriptor, error) {
+	logger := eh.logger.With(
+		fields.EventName(ValidatorExited),
+		fields.TxHash(event.Raw.TxHash),
+		fields.PubKey(event.PublicKey),
+		fields.OperatorIDs(event.OperatorIds),
+	)
+	logger.Debug("processing event")
+	defer logger.Debug("processed event")
+
+	share := eh.nodeStorage.Shares().Get(txn, event.PublicKey)
+	if share == nil {
+		logger.Warn("malformed event: could not find validator share")
+		return nil, &MalformedEventError{Err: ErrValidatorShareNotFound}
+	}
+
+	if event.Owner != share.OwnerAddress {
+		logger.Warn("malformed event: validator share already exists with different owner address",
+			zap.String("expected", share.OwnerAddress.String()),
+			zap.String("got", event.Owner.String()))
+
+		return nil, &MalformedEventError{Err: ErrShareBelongsToDifferentOwner}
+	}
+
+	if !share.BelongsToOperator(eh.operatorData.GetOperatorData().ID) {
+		return nil, nil
+	}
+
+	if share.BeaconMetadata == nil {
+		return nil, nil
+	}
+
+	pk := phase0.BLSPubKey{}
+	copy(pk[:], share.ValidatorPubKey)
+
+	ed := &duties.ExitDescriptor{
+		PubKey:         pk,
+		ValidatorIndex: share.BeaconMetadata.Index,
+		BlockNumber:    event.Raw.BlockNumber,
+	}
+
+	return ed, nil
 }
 
 func splitBytes(buf []byte, lim int) [][]byte {

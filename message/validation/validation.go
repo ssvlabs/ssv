@@ -556,7 +556,7 @@ func (mv *messageValidator) lateMessage(slot phase0.Slot, role spectypes.BeaconR
 		ttl = 1 + lateSlotAllowance
 	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator:
 		ttl = 32 + lateSlotAllowance
-	case spectypes.BNRoleValidatorRegistration:
+	case spectypes.BNRoleValidatorRegistration, spectypes.BNRoleVoluntaryExit:
 		return 0
 	}
 
