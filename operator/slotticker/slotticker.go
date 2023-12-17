@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"go.uber.org/zap"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/slotticker.go -source=./slotticker.go
@@ -34,6 +35,7 @@ func (cfg Config) GetGenesisTime() time.Time {
 }
 
 type slotTicker struct {
+	logger       *zap.Logger
 	timer        *time.Timer
 	slotDuration time.Duration
 	genesisTime  time.Time
@@ -41,7 +43,7 @@ type slotTicker struct {
 }
 
 // New returns a goroutine-free SlotTicker implementation which is not thread-safe.
-func New(cfgProvider ConfigProvider) *slotTicker {
+func New(logger *zap.Logger, cfgProvider ConfigProvider) *slotTicker {
 	genesisTime := cfgProvider.GetGenesisTime()
 	slotDuration := cfgProvider.SlotDurationSec()
 
@@ -59,6 +61,7 @@ func New(cfgProvider ConfigProvider) *slotTicker {
 	}
 
 	return &slotTicker{
+		logger:       logger,
 		timer:        time.NewTimer(initialDelay),
 		slotDuration: slotDuration,
 		genesisTime:  genesisTime,
@@ -81,10 +84,15 @@ func (s *slotTicker) Next() <-chan time.Time {
 		default:
 		}
 	}
-	slotNumber := uint64(timeSinceGenesis / s.slotDuration)
-	nextSlotStartTime := s.genesisTime.Add(time.Duration(slotNumber+1) * s.slotDuration)
+	currentSlot := phase0.Slot(timeSinceGenesis / s.slotDuration)
+	if currentSlot <= s.slot {
+		// We've already ticked for this slot, so we need to wait for the next one.
+		currentSlot = s.slot
+		s.logger.Warn("double tick", zap.Uint64("slot", uint64(currentSlot)))
+	}
+	nextSlotStartTime := s.genesisTime.Add(time.Duration(currentSlot+1) * s.slotDuration)
 	s.timer.Reset(time.Until(nextSlotStartTime))
-	s.slot = phase0.Slot(slotNumber + 1)
+	s.slot = currentSlot + 1
 	return s.timer.C
 }
 
