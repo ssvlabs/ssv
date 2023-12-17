@@ -25,11 +25,11 @@ func DefaultScoringConfig() *ScoringConfig {
 
 // scoreInspector inspects scores and updates the score index accordingly
 // TODO: finalize once validation is in place
-func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.ExtendedPeerScoreInspectFn {
+func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, peerConnected func(pid peer.ID) bool) pubsub.ExtendedPeerScoreInspectFn {
 	return func(scores map[peer.ID]*pubsub.PeerScoreSnapshot) {
 		for pid, peerScores := range scores {
 
-			//filter all topics that have InvalidMessageDeliveries > 0
+			// Filter all topics that have InvalidMessageDeliveries > 0.
 			filtered := make(map[string]*pubsub.TopicScoreSnapshot)
 			var totalInvalidMessages float64
 			var totalLowMeshDeliveries int
@@ -56,13 +56,16 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.Extend
 				zap.Float64("total_invalid_messages", totalInvalidMessages),
 				zap.Any("invalid_messages", filtered),
 			}
+			if peerConnected(pid) {
+				fields = append(fields, zap.Bool("connected", true))
+			}
 
-			// log if peer score is below threshold
+			// Log if peer score is below threshold.
 			if peerScores.Score < -1000 {
 				fields = append(fields, zap.Bool("low_score", true))
 			}
 
-			// log peer overall score and topics scores
+			// Log peer overall score and topics scores.
 			logger.Debug("peer scores", fields...)
 
 			metricPubsubPeerScoreInspect.WithLabelValues(pid.String()).Set(peerScores.Score)
