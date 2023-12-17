@@ -35,7 +35,9 @@ const (
 	// validateThrottle is the amount of goroutines used for pubsub msg validation
 	validateThrottle = 8192
 	// scoreInspectInterval is the interval for performing score inspect, which goes over all peers scores
-	defaultScoreInspectInterval = 5 * time.Minute
+	defaultScoreInspectInterval = 1 * time.Minute
+	// scoreInspectLogFrequency is the frequency of logging the score inspection
+	scoreInspectLogFrequency = 5
 	// msgIDCacheTTL specifies how long a message ID will be remembered as seen, 6.4m (as ETH 2.0)
 	msgIDCacheTTL = params.HeartbeatInterval * 550
 )
@@ -143,9 +145,10 @@ func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig) (*pub
 		cfg.initScoring()
 
 		if inspector == nil {
-			inspector = scoreInspector(logger, cfg.ScoreIndex, func(pid peer.ID) bool {
+			peerConnected := func(pid peer.ID) bool {
 				return cfg.Host.Network().Connectedness(pid) == libp2pnetwork.Connected
-			})
+			}
+			inspector = scoreInspector(logger, cfg.ScoreIndex, scoreInspectLogFrequency, peerConnected)
 		}
 
 		if inspectInterval == 0 {

@@ -25,16 +25,16 @@ func DefaultScoringConfig() *ScoringConfig {
 
 // scoreInspector inspects scores and updates the score index accordingly
 // TODO: finalize once validation is in place
-func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, peerConnected func(pid peer.ID) bool) pubsub.ExtendedPeerScoreInspectFn {
+func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, peerConnected func(pid peer.ID) bool, logFrequency int) pubsub.ExtendedPeerScoreInspectFn {
+	inspections := 0
+
 	return func(scores map[peer.ID]*pubsub.PeerScoreSnapshot) {
 		for pid, peerScores := range scores {
-			// Filter all topics that have InvalidMessageDeliveries > 0.
+			// Compute score-related stats for this peer.
 			filtered := make(map[string]*pubsub.TopicScoreSnapshot)
 			var totalInvalidMessages float64
 			var totalLowMeshDeliveries int
-
 			var p4ScoreSquaresSum float64
-
 			for topic, snapshot := range peerScores.Topics {
 				p4ScoreSquaresSum += snapshot.InvalidMessageDeliveries * snapshot.InvalidMessageDeliveries
 
@@ -49,6 +49,16 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, peerConnected
 				}
 			}
 
+			// Update metrics.
+			metricPubsubPeerScoreInspect.WithLabelValues(pid.String()).Set(peerScores.Score)
+			metricPubSubPeerP4Score.WithLabelValues(pid.String()).Set(p4ScoreSquaresSum)
+
+			if inspections%logFrequency != 0 {
+				// Don't log yet.
+				continue
+			}
+
+			// Log.
 			fields := []zap.Field{
 				fields.PeerID(pid),
 				fields.PeerScore(peerScores.Score),
@@ -63,17 +73,10 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, peerConnected
 			if peerConnected(pid) {
 				fields = append(fields, zap.Bool("connected", true))
 			}
-
-			// Log if peer score is below threshold.
 			if peerScores.Score < -1000 {
 				fields = append(fields, zap.Bool("low_score", true))
 			}
-
-			// Log peer overall score and topics scores.
 			logger.Debug("peer scores", fields...)
-
-			metricPubsubPeerScoreInspect.WithLabelValues(pid.String()).Set(peerScores.Score)
-			metricPubSubPeerP4Score.WithLabelValues(pid.String()).Set(p4ScoreSquaresSum)
 
 			// err := scoreIdx.Score(pid, scores...)
 			// if err != nil {
@@ -83,6 +86,8 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, peerConnected
 			//		zap.Any("scores", scores), zap.Any("topicScores", peerScores.Topics))
 			//}
 		}
+
+		inspections++
 	}
 }
 
