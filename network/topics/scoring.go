@@ -25,7 +25,7 @@ func DefaultScoringConfig() *ScoringConfig {
 
 // scoreInspector inspects scores and updates the score index accordingly
 // TODO: finalize once validation is in place
-func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, peerConnected func(pid peer.ID) bool, logFrequency int) pubsub.ExtendedPeerScoreInspectFn {
+func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, logFrequency int, peerConnected func(pid peer.ID) bool) pubsub.ExtendedPeerScoreInspectFn {
 	inspections := 0
 
 	return func(scores map[peer.ID]*pubsub.PeerScoreSnapshot) {
