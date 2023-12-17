@@ -36,6 +36,7 @@ import (
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/message/validation"
+	"github.com/bloxapp/ssv/message/validation/ratelimiter"
 	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/monitoring/metricsreporter"
@@ -180,14 +181,16 @@ var StartNodeCmd = &cobra.Command{
 		dutyStore := dutystore.New()
 		cfg.SSVOptions.DutyStore = dutyStore
 
+		rateLimiterConfig := ratelimiter.DefaultConfig()
+		rateLimiterConfig.CacheSize = cfg.P2pNetworkConfig.MaxPeers * 2
 		messageValidator := validation.NewMessageValidator(
 			networkConfig,
-			cfg.P2pNetworkConfig.MaxPeers*2,
 			validation.WithNodeStorage(nodeStorage),
 			validation.WithLogger(logger),
 			validation.WithMetrics(metricsReporter),
 			validation.WithDutyStore(dutyStore),
 			validation.WithOwnOperatorID(operatorData.ID),
+			validation.WithRateLimiter(ratelimiter.New(rateLimiterConfig)),
 		)
 
 		cfg.P2pNetworkConfig.Metrics = metricsReporter
