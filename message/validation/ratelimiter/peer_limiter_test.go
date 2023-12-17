@@ -60,3 +60,53 @@ func TestBlockingBehavior(t *testing.T) {
 	time.Sleep(1 * time.Second)
 	assert.True(t, pl.AllowRequest(peerID), "Should allow after rate limiter resets")
 }
+
+func TestMultiplePeers(t *testing.T) {
+	const rateLimit = 5
+	const seconds = 2
+	const blockingTime = seconds*time.Second + 50*time.Millisecond
+
+	pl := New(Config{rateLimit, rateLimit, blockingTime, 10}) // 5 requests per second
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	belowLimitPeer := peer.ID("just-below-limit")
+	go func() {
+		defer wg.Done()
+		for i := 0; i < rateLimit*seconds+1; i++ {
+			assert.True(t, pl.AllowRequest(belowLimitPeer), "Iteration %d: Should allow within rate limit", i)
+			pl.RegisterInvalidRSA(belowLimitPeer)
+			pl.RegisterInvalidMessage(belowLimitPeer)
+			time.Sleep(time.Second / time.Duration(rateLimit))
+		}
+	}()
+
+	aboveLimitPeer := peer.ID("just-above-limit")
+	blocks := 0
+	lastBlocked := time.Now()
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		blocked := false
+		for i := 0; i < (rateLimit*seconds+1)*2; i++ {
+			blocked = !pl.AllowRequest(aboveLimitPeer)
+			if blocked {
+				blocks++
+				lastBlocked = time.Now()
+			} else {
+				pl.RegisterInvalidRSA(aboveLimitPeer)
+				pl.RegisterInvalidMessage(aboveLimitPeer)
+			}
+			time.Sleep(time.Second / time.Duration(rateLimit) / 2)
+		}
+	}()
+
+	wg.Wait()
+	assert.Greater(t, blocks, 0, "Should have blocked at least once")
+	assert.False(t, pl.AllowRequest(aboveLimitPeer), "Should still be blocked after exceeding rate limit")
+	assert.True(t, pl.AllowRequest(belowLimitPeer), "Should allow after rate limiter resets")
+
+	// Wait for the limiter to reset
+	time.Sleep(time.Until(lastBlocked.Add(blockingTime)))
+	assert.True(t, pl.AllowRequest(aboveLimitPeer), "Should allow after rate limiter resets")
+}
