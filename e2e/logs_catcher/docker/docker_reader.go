@@ -50,7 +50,7 @@ func processLogs(ctx context.Context, reader io.ReadCloser, logChan chan<- strin
 	for scanner.Scan() {
 		// Check for any scanner errors
 		if err := scanner.Err(); err != nil {
-			return fmt.Errorf("Error reading log:", err)
+			return fmt.Errorf("error reading logs: %v", err)
 		}
 
 		line := string(scanner.Bytes())
