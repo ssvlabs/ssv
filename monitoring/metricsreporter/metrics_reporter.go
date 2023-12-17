@@ -154,7 +154,7 @@ var (
 	}, []string{"pid"})
 	pubsubPeerP4Score = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:p2p:pubsub:score:invalid_message_deliveries",
-		Help: "Pubsub peer P4 scores (for invalid message deliveries)",
+		Help: "Pubsub peer P4 scores (sum of square of counters for invalid message deliveries)",
 	}, []string{"pid"})
 )
 
