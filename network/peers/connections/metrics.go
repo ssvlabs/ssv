@@ -8,8 +8,7 @@ import (
 )
 
 type Metrics interface {
-	MessagesReceivedFromPeer(peer.ID)
-	DeletePeerInfo(peerId peer.ID)
+	PeerDisconnected(peer.ID)
 }
 
 var (

@@ -17,8 +17,6 @@ import (
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
 )
 
-// TODO: implement all methods
-
 const (
 	ssvNodeNotHealthy = float64(0)
 	ssvNodeHealthy    = float64(1)
@@ -42,8 +40,6 @@ const (
 	messageAccepted = "accepted"
 	messageIgnored  = "ignored"
 	messageRejected = "rejected"
-
-	isPeerMetricsEnabled = true
 )
 
 var (
@@ -152,14 +148,71 @@ var (
 		Name: "ssv_message_validation_rsa_checks",
 		Help: "The amount message validations",
 	}, []string{})
+	pubsubPeerScore = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:p2p:pubsub:score:inspect",
+		Help: "Pubsub peer scores",
+	}, []string{"pid"})
+	pubsubPeerP4Score = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:p2p:pubsub:score:invalid_message_deliveries",
+		Help: "Pubsub peer P4 scores (for invalid message deliveries)",
+	}, []string{"pid"})
 )
 
-type MetricsReporter struct {
+type MetricsReporter interface {
+	SSVNodeHealthy()
+	SSVNodeNotHealthy()
+	ExecutionClientReady()
+	ExecutionClientSyncing()
+	ExecutionClientFailure()
+	ExecutionClientLastFetchedBlock(block uint64)
+	OperatorPublicKey(operatorID spectypes.OperatorID, publicKey []byte)
+	ValidatorInactive(publicKey []byte)
+	ValidatorNoIndex(publicKey []byte)
+	ValidatorError(publicKey []byte)
+	ValidatorReady(publicKey []byte)
+	ValidatorNotActivated(publicKey []byte)
+	ValidatorExiting(publicKey []byte)
+	ValidatorSlashed(publicKey []byte)
+	ValidatorNotFound(publicKey []byte)
+	ValidatorPending(publicKey []byte)
+	ValidatorRemoved(publicKey []byte)
+	ValidatorUnknown(publicKey []byte)
+	EventProcessed(eventName string)
+	EventProcessingFailed(eventName string)
+	MessagesReceivedFromPeer(peerId peer.ID)
+	MessagesReceivedTotal()
+	MessageValidationRSAVerifications()
+	LastBlockProcessed(block uint64)
+	LogsProcessingError(err error)
+	MessageAccepted(role spectypes.BeaconRole, round specqbft.Round)
+	MessageIgnored(reason string, role spectypes.BeaconRole, round specqbft.Round)
+	MessageRejected(reason string, role spectypes.BeaconRole, round specqbft.Round)
+	SSVMessageType(msgType spectypes.MsgType)
+	ConsensusMsgType(msgType specqbft.MessageType, signers int)
+	MessageValidationDuration(duration time.Duration, labels ...string)
+	SignatureValidationDuration(duration time.Duration, labels ...string)
+	MessageSize(size int)
+	ActiveMsgValidation(topic string)
+	ActiveMsgValidationDone(topic string)
+	IncomingQueueMessage(messageID spectypes.MessageID)
+	OutgoingQueueMessage(messageID spectypes.MessageID)
+	DroppedQueueMessage(messageID spectypes.MessageID)
+	MessageQueueSize(size int)
+	MessageQueueCapacity(size int)
+	MessageTimeInQueue(messageID spectypes.MessageID, d time.Duration)
+	InCommitteeMessage(msgType spectypes.MsgType, decided bool)
+	NonCommitteeMessage(msgType spectypes.MsgType, decided bool)
+	PeerScore(peerId peer.ID, score float64)
+	PeerP4Score(peerId peer.ID, score float64)
+	PeerDisconnected(peerId peer.ID)
+}
+
+type metricsReporter struct {
 	logger *zap.Logger
 }
 
-func New(opts ...Option) *MetricsReporter {
-	mr := &MetricsReporter{
+func New(opts ...Option) MetricsReporter {
+	mr := &metricsReporter{
 		logger: zap.NewNop(),
 	}
 
@@ -194,6 +247,8 @@ func New(opts ...Option) *MetricsReporter {
 		messagesReceivedFromPeer,
 		messagesReceivedTotal,
 		messageValidationRSAVerifications,
+		pubsubPeerScore,
+		pubsubPeerP4Score,
 	}
 
 	for i, c := range allMetrics {
@@ -206,99 +261,97 @@ func New(opts ...Option) *MetricsReporter {
 		}
 	}
 
-	return &MetricsReporter{}
+	return &metricsReporter{}
 }
 
-func (m *MetricsReporter) SSVNodeHealthy() {
+func (m *metricsReporter) SSVNodeHealthy() {
 	ssvNodeStatus.Set(ssvNodeHealthy)
 }
 
-func (m *MetricsReporter) SSVNodeNotHealthy() {
+func (m *metricsReporter) SSVNodeNotHealthy() {
 	ssvNodeStatus.Set(ssvNodeNotHealthy)
 }
 
-func (m *MetricsReporter) ExecutionClientReady() {
+func (m *metricsReporter) ExecutionClientReady() {
 	executionClientStatus.Set(executionClientOK)
 }
 
-func (m *MetricsReporter) ExecutionClientSyncing() {
+func (m *metricsReporter) ExecutionClientSyncing() {
 	executionClientStatus.Set(executionClientSyncing)
 }
 
-func (m *MetricsReporter) ExecutionClientFailure() {
+func (m *metricsReporter) ExecutionClientFailure() {
 	executionClientStatus.Set(executionClientFailure)
 }
 
-func (m *MetricsReporter) ExecutionClientLastFetchedBlock(block uint64) {
+func (m *metricsReporter) ExecutionClientLastFetchedBlock(block uint64) {
 	executionClientLastFetchedBlock.Set(float64(block))
 }
 
-func (m *MetricsReporter) OperatorPublicKey(operatorID spectypes.OperatorID, publicKey []byte) {
+func (m *metricsReporter) OperatorPublicKey(operatorID spectypes.OperatorID, publicKey []byte) {
 	pkHash := fmt.Sprintf("%x", sha256.Sum256(publicKey))
 	operatorIndex.WithLabelValues(pkHash, strconv.FormatUint(operatorID, 10)).Set(float64(operatorID))
 }
 
-func (m *MetricsReporter) ValidatorInactive(publicKey []byte) {
+func (m *metricsReporter) ValidatorInactive(publicKey []byte) {
 	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorInactive)
 }
-func (m *MetricsReporter) ValidatorNoIndex(publicKey []byte) {
+func (m *metricsReporter) ValidatorNoIndex(publicKey []byte) {
 	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorNoIndex)
 }
-func (m *MetricsReporter) ValidatorError(publicKey []byte) {
+func (m *metricsReporter) ValidatorError(publicKey []byte) {
 	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorError)
 }
-func (m *MetricsReporter) ValidatorReady(publicKey []byte) {
+func (m *metricsReporter) ValidatorReady(publicKey []byte) {
 	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorReady)
 }
-func (m *MetricsReporter) ValidatorNotActivated(publicKey []byte) {
+func (m *metricsReporter) ValidatorNotActivated(publicKey []byte) {
 	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorNotActivated)
 }
-func (m *MetricsReporter) ValidatorExiting(publicKey []byte) {
+func (m *metricsReporter) ValidatorExiting(publicKey []byte) {
 	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorExiting)
 }
-func (m *MetricsReporter) ValidatorSlashed(publicKey []byte) {
+func (m *metricsReporter) ValidatorSlashed(publicKey []byte) {
 	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorSlashed)
 }
-func (m *MetricsReporter) ValidatorNotFound(publicKey []byte) {
+func (m *metricsReporter) ValidatorNotFound(publicKey []byte) {
 	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorNotFound)
 }
-func (m *MetricsReporter) ValidatorPending(publicKey []byte) {
+func (m *metricsReporter) ValidatorPending(publicKey []byte) {
 	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorPending)
 }
-func (m *MetricsReporter) ValidatorRemoved(publicKey []byte) {
+func (m *metricsReporter) ValidatorRemoved(publicKey []byte) {
 	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorRemoved)
 }
-func (m *MetricsReporter) ValidatorUnknown(publicKey []byte) {
+func (m *metricsReporter) ValidatorUnknown(publicKey []byte) {
 	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorUnknown)
 }
 
-func (m *MetricsReporter) EventProcessed(eventName string) {
+func (m *metricsReporter) EventProcessed(eventName string) {
 	eventProcessed.WithLabelValues(eventName).Inc()
 }
 
-func (m *MetricsReporter) EventProcessingFailed(eventName string) {
+func (m *metricsReporter) EventProcessingFailed(eventName string) {
 	eventProcessingFailed.WithLabelValues(eventName).Inc()
 }
 
-func (m *MetricsReporter) MessagesReceivedFromPeer(peerId peer.ID) {
-	if isPeerMetricsEnabled {
-		messagesReceivedFromPeer.WithLabelValues(peerId.String()).Inc()
-	}
+func (m *metricsReporter) MessagesReceivedFromPeer(peerId peer.ID) {
+	messagesReceivedFromPeer.WithLabelValues(peerId.String()).Inc()
 }
 
-func (m *MetricsReporter) MessagesReceivedTotal() {
+func (m *metricsReporter) MessagesReceivedTotal() {
 	messagesReceivedTotal.WithLabelValues().Inc()
 }
 
-func (m *MetricsReporter) MessageValidationRSAVerifications() {
+func (m *metricsReporter) MessageValidationRSAVerifications() {
 	messageValidationRSAVerifications.WithLabelValues().Inc()
 }
 
 // TODO implement
-func (m *MetricsReporter) LastBlockProcessed(uint64) {}
-func (m *MetricsReporter) LogsProcessingError(error) {}
+func (m *metricsReporter) LastBlockProcessed(uint64) {}
+func (m *metricsReporter) LogsProcessingError(error) {}
 
-func (m *MetricsReporter) MessageAccepted(
+func (m *metricsReporter) MessageAccepted(
 	role spectypes.BeaconRole,
 	round specqbft.Round,
 ) {
@@ -310,7 +363,7 @@ func (m *MetricsReporter) MessageAccepted(
 	).Inc()
 }
 
-func (m *MetricsReporter) MessageIgnored(
+func (m *metricsReporter) MessageIgnored(
 	reason string,
 	role spectypes.BeaconRole,
 	round specqbft.Round,
@@ -323,7 +376,7 @@ func (m *MetricsReporter) MessageIgnored(
 	).Inc()
 }
 
-func (m *MetricsReporter) MessageRejected(
+func (m *metricsReporter) MessageRejected(
 	reason string,
 	role spectypes.BeaconRole,
 	round specqbft.Round,
@@ -336,59 +389,59 @@ func (m *MetricsReporter) MessageRejected(
 	).Inc()
 }
 
-func (m *MetricsReporter) SSVMessageType(msgType spectypes.MsgType) {
+func (m *metricsReporter) SSVMessageType(msgType spectypes.MsgType) {
 	messageValidationSSVType.WithLabelValues(ssvmessage.MsgTypeToString(msgType)).Inc()
 }
 
-func (m *MetricsReporter) ConsensusMsgType(msgType specqbft.MessageType, signers int) {
+func (m *metricsReporter) ConsensusMsgType(msgType specqbft.MessageType, signers int) {
 	messageValidationConsensusType.WithLabelValues(ssvmessage.QBFTMsgTypeToString(msgType), strconv.Itoa(signers)).Inc()
 }
 
-func (m *MetricsReporter) MessageValidationDuration(duration time.Duration, labels ...string) {
+func (m *metricsReporter) MessageValidationDuration(duration time.Duration, labels ...string) {
 	messageValidationDuration.WithLabelValues(labels...).Observe(duration.Seconds())
 }
 
-func (m *MetricsReporter) SignatureValidationDuration(duration time.Duration, labels ...string) {
+func (m *metricsReporter) SignatureValidationDuration(duration time.Duration, labels ...string) {
 	signatureValidationDuration.WithLabelValues(labels...).Observe(duration.Seconds())
 }
 
-func (m *MetricsReporter) MessageSize(size int) {
+func (m *metricsReporter) MessageSize(size int) {
 	messageSize.WithLabelValues().Observe(float64(size))
 }
 
-func (m *MetricsReporter) ActiveMsgValidation(topic string) {
+func (m *metricsReporter) ActiveMsgValidation(topic string) {
 	activeMsgValidation.WithLabelValues(topic).Inc()
 }
 
-func (m *MetricsReporter) ActiveMsgValidationDone(topic string) {
+func (m *metricsReporter) ActiveMsgValidationDone(topic string) {
 	activeMsgValidation.WithLabelValues(topic).Dec()
 }
 
-func (m *MetricsReporter) IncomingQueueMessage(messageID spectypes.MessageID) {
+func (m *metricsReporter) IncomingQueueMessage(messageID spectypes.MessageID) {
 	incomingQueueMessages.WithLabelValues(messageID.String()).Inc()
 }
 
-func (m *MetricsReporter) OutgoingQueueMessage(messageID spectypes.MessageID) {
+func (m *metricsReporter) OutgoingQueueMessage(messageID spectypes.MessageID) {
 	outgoingQueueMessages.WithLabelValues(messageID.String()).Inc()
 }
 
-func (m *MetricsReporter) DroppedQueueMessage(messageID spectypes.MessageID) {
+func (m *metricsReporter) DroppedQueueMessage(messageID spectypes.MessageID) {
 	droppedQueueMessages.WithLabelValues(messageID.String()).Inc()
 }
 
-func (m *MetricsReporter) MessageQueueSize(size int) {
+func (m *metricsReporter) MessageQueueSize(size int) {
 	messageQueueSize.WithLabelValues().Set(float64(size))
 }
 
-func (m *MetricsReporter) MessageQueueCapacity(size int) {
+func (m *metricsReporter) MessageQueueCapacity(size int) {
 	messageQueueCapacity.WithLabelValues().Set(float64(size))
 }
 
-func (m *MetricsReporter) MessageTimeInQueue(messageID spectypes.MessageID, d time.Duration) {
+func (m *metricsReporter) MessageTimeInQueue(messageID spectypes.MessageID, d time.Duration) {
 	messageTimeInQueue.WithLabelValues(messageID.String()).Observe(d.Seconds())
 }
 
-func (m *MetricsReporter) InCommitteeMessage(msgType spectypes.MsgType, decided bool) {
+func (m *metricsReporter) InCommitteeMessage(msgType spectypes.MsgType, decided bool) {
 	str := "non-decided"
 	if decided {
 		str = "decided"
@@ -396,7 +449,7 @@ func (m *MetricsReporter) InCommitteeMessage(msgType spectypes.MsgType, decided 
 	inCommitteeMessages.WithLabelValues(ssvmessage.MsgTypeToString(msgType), str).Inc()
 }
 
-func (m *MetricsReporter) NonCommitteeMessage(msgType spectypes.MsgType, decided bool) {
+func (m *metricsReporter) NonCommitteeMessage(msgType spectypes.MsgType, decided bool) {
 	str := "non-decided"
 	if decided {
 		str = "decided"
@@ -404,9 +457,17 @@ func (m *MetricsReporter) NonCommitteeMessage(msgType spectypes.MsgType, decided
 	nonCommitteeMessages.WithLabelValues(ssvmessage.MsgTypeToString(msgType), str).Inc()
 }
 
-// DeletePeerInfo deletes all data about peers which connections have been closed by the current node
-func (m *MetricsReporter) DeletePeerInfo(peerId peer.ID) {
-	if isPeerMetricsEnabled {
-		messagesReceivedFromPeer.DeleteLabelValues(peerId.String())
-	}
+func (m *metricsReporter) PeerScore(peerId peer.ID, score float64) {
+	pubsubPeerScore.WithLabelValues(peerId.String()).Set(score)
+}
+
+func (m *metricsReporter) PeerP4Score(peerId peer.ID, score float64) {
+	pubsubPeerP4Score.WithLabelValues(peerId.String()).Set(score)
+}
+
+// PeerDisconnected deletes all data about peers which connections have been closed by the current node
+func (m *metricsReporter) PeerDisconnected(peerId peer.ID) {
+	messagesReceivedFromPeer.DeleteLabelValues(peerId.String())
+	pubsubPeerScore.DeleteLabelValues(peerId.String())
+	pubsubPeerP4Score.DeleteLabelValues(peerId.String())
 }

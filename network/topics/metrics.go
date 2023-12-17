@@ -1,10 +1,16 @@
 package topics
 
 import (
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 )
+
+type Metrics interface {
+	PeerScore(peer.ID, float64)
+	PeerP4Score(peer.ID, float64)
+}
 
 // TODO: replace with new metrics
 var (
@@ -20,16 +26,6 @@ var (
 		Name: "ssv:p2p:pubsub:msg:in",
 		Help: "Count incoming messages",
 	}, []string{"topic", "msg_type"})
-	metricPubsubPeerScoreInspect = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:p2p:pubsub:score:inspect",
-		Help: "Gauge for negative peer scores",
-	}, []string{"pid"})
-
-	// invalidMessageDeliveries value per topic
-	metricPubSubPeerP4Score = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:p2p:pubsub:score:invalid_message_deliveries",
-		Help: "Invalid message deliveries",
-	}, []string{"pid"})
 )
 
 func init() {
@@ -39,8 +35,6 @@ func init() {
 		metricPubsubTrace,
 		metricPubsubOutbound,
 		metricPubsubInbound,
-		metricPubsubPeerScoreInspect,
-		metricPubSubPeerP4Score,
 	}
 
 	for i, c := range allMetrics {

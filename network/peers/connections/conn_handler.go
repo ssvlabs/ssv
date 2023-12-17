@@ -201,7 +201,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 
 			metricsConnections.Dec()
 			ch.peerInfos.SetState(conn.RemotePeer(), peers.StateDisconnected)
-			ch.metrics.DeletePeerInfo(conn.RemotePeer())
+			ch.metrics.PeerDisconnected(conn.RemotePeer())
 
 			logger := connLogger(conn)
 			logger.Debug("peer disconnected")
