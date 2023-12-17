@@ -29,6 +29,9 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, logFrequency 
 	inspections := 0
 
 	return func(scores map[peer.ID]*pubsub.PeerScoreSnapshot) {
+		// Reset metrics before updating them.
+		metrics.ResetPeerScores()
+
 		for pid, peerScores := range scores {
 			// Compute score-related stats for this peer.
 			filtered := make(map[string]*pubsub.TopicScoreSnapshot)

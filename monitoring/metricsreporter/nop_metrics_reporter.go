@@ -60,4 +60,5 @@ func (n *nopMetrics) InCommitteeMessage(msgType spectypes.MsgType, decided bool)
 func (n *nopMetrics) NonCommitteeMessage(msgType spectypes.MsgType, decided bool)          {}
 func (n *nopMetrics) PeerScore(peerId peer.ID, score float64)                              {}
 func (n *nopMetrics) PeerP4Score(peerId peer.ID, score float64)                            {}
+func (n *nopMetrics) ResetPeerScores()                                                     {}
 func (n *nopMetrics) PeerDisconnected(peerId peer.ID)                                      {}

@@ -10,6 +10,7 @@ import (
 type Metrics interface {
 	PeerScore(peer.ID, float64)
 	PeerP4Score(peer.ID, float64)
+	ResetPeerScores()
 }
 
 // TODO: replace with new metrics

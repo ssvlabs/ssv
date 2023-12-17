@@ -204,6 +204,7 @@ type MetricsReporter interface {
 	NonCommitteeMessage(msgType spectypes.MsgType, decided bool)
 	PeerScore(peerId peer.ID, score float64)
 	PeerP4Score(peerId peer.ID, score float64)
+	ResetPeerScores()
 	PeerDisconnected(peerId peer.ID)
 }
 
@@ -465,9 +466,12 @@ func (m *metricsReporter) PeerP4Score(peerId peer.ID, score float64) {
 	pubsubPeerP4Score.WithLabelValues(peerId.String()).Set(score)
 }
 
+func (m *metricsReporter) ResetPeerScores() {
+	pubsubPeerScore.Reset()
+	pubsubPeerP4Score.Reset()
+}
+
 // PeerDisconnected deletes all data about peers which connections have been closed by the current node
 func (m *metricsReporter) PeerDisconnected(peerId peer.ID) {
 	messagesReceivedFromPeer.DeleteLabelValues(peerId.String())
-	pubsubPeerScore.DeleteLabelValues(peerId.String())
-	pubsubPeerP4Score.DeleteLabelValues(peerId.String())
 }
