@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/bloxapp/ssv/e2e/logs_catcher/docker"
 	"github.com/bloxapp/ssv/e2e/logs_catcher/parser"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
 
@@ -140,7 +141,7 @@ func FatalListener(ctx context.Context, logger *zap.Logger, cli DockerCLI) error
 	}()
 	// TODO: either apply logs collection on each container or fan in the containers to one log stream
 	err := docker.StreamDockerLogs(ctx, cli, "beacon_proxy", ch)
-	if err != nil && err != context.Canceled {
+	if err != nil && !errors.Is(err, context.Canceled) {
 		logger.Error("Log streaming stopped with err ", zap.Error(err))
 		c()
 	}

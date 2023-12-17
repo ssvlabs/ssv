@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"github.com/bloxapp/ssv/e2e/logs_catcher/docker"
 	"github.com/bloxapp/ssv/e2e/logs_catcher/logs"
+	"github.com/bloxapp/ssv/e2e/logs_catcher/parser"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"strings"
 	"time"
 )
 
@@ -30,6 +32,24 @@ const idField = "pubkey"
 // and find in target #2
 const slashableMatchMessage = "slashable attestation"
 const nonSlashableMatchMessage = "successfully submitted attestation"
+
+func inspect(raw logs.RAW, fieldname string) []string {
+	parsed := raw.ParseAll(func(log string) (map[string]any, error) {
+		// strip docker shit
+		splitted := strings.Split(log, "{")
+		flog := strings.Split(splitted[1], "}")[0]
+		return parser.JSON("{" + flog + "}")
+	})
+	res := make([]string, 0)
+	for _, line := range parsed {
+		v, ok := line[fieldname]
+		if !ok {
+			continue
+		}
+		res = append(res, fmt.Sprint(v))
+	}
+	return res
+}
 
 func StartCondition(pctx context.Context, logger *zap.Logger, matches []string, cli DockerCLI) error {
 	ctx, c := context.WithCancel(pctx)
@@ -65,7 +85,7 @@ func matchMessages(ctx context.Context, logger *zap.Logger, cli DockerCLI, first
 
 	grepped := res.Grep(first)
 
-	logger.Info("found instances", zap.Int("count", len(grepped)), zap.String("target", firstTarget), zap.String("match_string", origMessage))
+	logger.Info("matched", zap.Int("count", len(grepped)), zap.String("target", firstTarget), zap.Strings("match_string", first))
 
 	for _, target := range secondTargets {
 		logger.Debug("Reading one of second targets logs", zap.String("target", target))
