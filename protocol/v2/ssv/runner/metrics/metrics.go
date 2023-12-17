@@ -61,7 +61,7 @@ var (
 		Help: "Number of started QBFT instances",
 	}, []string{"role"})
 	metricsInstancesDecided = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv_duties_decided",
+		Name: "ssv_instances_decided",
 		Help: "Number of decided QBFT instances",
 	}, []string{"role"})
 )
