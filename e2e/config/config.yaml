@@ -6,7 +6,6 @@ db:
 
 eth2:
   Network: holesky
-  BeaconNodeAddr: http://beacon_proxy:6631
 # KeyStore:
 #   PrivateKeyFile: /Users/mosherevah/Downloads/encrypted_private_key.json
 #   PasswordFile: /Users/mosherevah/Downloads/password.pass
