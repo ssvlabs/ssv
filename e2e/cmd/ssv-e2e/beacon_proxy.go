@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/attestantio/go-eth2-client/http"
 	"os"
 	"time"
 
@@ -49,9 +50,34 @@ func GetValidators(ctx context.Context, beaconURL string, idxs []phase0.Validato
 	return vmap, nil
 }
 
+func BeaconClientConnection(pctx context.Context, beaconUrl string) error {
+	ctx, c := context.WithCancel(pctx)
+	defer c()
+	client, err := http.New(ctx,
+		// WithAddress supplies the address of the beacon node, as a URL.
+		http.WithAddress(beaconUrl),
+		// LogLevel supplies the level of logging to carry out.
+		http.WithLogLevel(zerolog.WarnLevel),
+	)
+	if err != nil {
+		return err
+	}
+	_, err = client.(eth2client.GenesisProvider).Genesis(ctx)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (cmd *BeaconProxyCmd) Run(logger *zap.Logger, globals Globals) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	if err := BeaconClientConnection(ctx, cmd.BeaconNodeUrl); err != nil {
+		return err
+	}
+	logger.Info("Beacon client status OK")
 
 	var validators map[phase0.ValidatorIndex]string // dx => tests
 	contents, err := os.ReadFile(globals.ValidatorsFile)
