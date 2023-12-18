@@ -17,6 +17,7 @@ import (
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/topics/params"
 	"github.com/bloxapp/ssv/utils/async"
+	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 )
 
 const (
@@ -144,7 +145,9 @@ func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig) (*pub
 		peerScoreParams := params.PeerScoreParams(cfg.Scoring.OneEpochDuration, cfg.MsgIDCacheTTL, cfg.Scoring.IPWhilelist...)
 
 		if inspector == nil {
-			inspector = scoreInspector(logger, cfg.ScoreIndex, peerScoreParams)
+			inspector = scoreInspector(logger, cfg.ScoreIndex, func(pid peer.ID) bool {
+				return cfg.Host.Network().Connectedness(pid) == libp2pnetwork.Connected
+			}, peerScoreParams)
 		}
 
 		if inspectInterval == 0 {
