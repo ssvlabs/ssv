@@ -68,6 +68,7 @@ services:
     container_name: ssv-node-1
     environment:
       LOG_FORMAT: json
+      BEACON_NODE_ADDR:  http://beacon_proxy:6631
       ETH_1_ADDR: ${EXECUTION_NODE_URL}
       CONFIG_PATH: ./tconfig/config.yaml
       SHARE_CONFIG: ./tconfig/share1.yaml
@@ -84,6 +85,7 @@ services:
     container_name: ssv-node-2
     environment:
       LOG_FORMAT: json
+      BEACON_NODE_ADDR: http://beacon_proxy:6632
       ETH_1_ADDR: ${EXECUTION_NODE_URL}
       CONFIG_PATH: ./tconfig/config.yaml
       SHARE_CONFIG: ./tconfig/share2.yaml
@@ -100,6 +102,7 @@ services:
     container_name: ssv-node-3
     environment:
       LOG_FORMAT: json
+      BEACON_NODE_ADDR: http://beacon_proxy:6633
       ETH_1_ADDR: ${EXECUTION_NODE_URL}
       CONFIG_PATH: ./tconfig/config.yaml
       SHARE_CONFIG: ./tconfig/share3.yaml
@@ -116,6 +119,7 @@ services:
     container_name: ssv-node-4
     environment:
       LOG_FORMAT: json
+      BEACON_NODE_ADDR: http://beacon_proxy:6634
       ETH_1_ADDR: ${EXECUTION_NODE_URL}
       CONFIG_PATH: ./tconfig/config.yaml
       SHARE_CONFIG: ./tconfig/share4.yaml
