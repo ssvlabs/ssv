@@ -67,6 +67,8 @@ type TopicOpts struct {
 	// TopicWeight is the weight of the topic
 	TopicWeight float64
 
+	MaxPositiveScore float64
+
 	// P1
 	MaxTimeInMeshScore   float64
 	TimeInMeshQuantum    int
@@ -105,6 +107,9 @@ func (o *Options) defaults() {
 	if o.Topic.D == 0 {
 		o.Topic.D = gossipSubD
 	}
+	if o.Topic.MaxPositiveScore == 0 {
+		o.Topic.MaxPositiveScore = topicScoreCap
+	}
 	// Topic - P1
 	if o.Topic.MaxTimeInMeshScore == 0 {
 		o.Topic.MaxTimeInMeshScore = maxTimeInMeshScore
@@ -133,7 +138,7 @@ func (o *Options) defaults() {
 		o.Topic.MeshDeliveryCapFactor = meshDeliveryCapFactor
 	}
 	if o.Topic.MeshDeliveryActivationTime == 0 {
-		o.Topic.MeshDeliveryActivationTime = o.Network.OneEpochDuration * 3
+		o.Topic.MeshDeliveryActivationTime = o.Network.OneEpochDuration / 32.0
 	}
 	// Topic - P4
 	if o.Topic.InvalidMessageDecayEpochs == 0 {
@@ -149,11 +154,6 @@ func (o *Options) validate() error {
 		return ErrLowValidatorsCount
 	}
 	return nil
-}
-
-// maxScore attainable by a peer
-func (o *Options) maxScore() float64 {
-	return (o.Topic.MaxTimeInMeshScore + o.Topic.MaxFirstDeliveryScore) * o.Network.TotalTopicsWeight
 }
 
 // NewOpts creates new TopicOpts instance
@@ -216,7 +216,7 @@ func TopicParams(opts Options) (*pubsub.TopicScoreParams, error) {
 	}
 	var meshMessageDeliveriesWeight float64
 	if meshScoringEnabled {
-		meshMessageDeliveriesWeight = -(opts.maxScore() / (opts.Topic.TopicWeight * (float64(opts.Network.Subnets) * 1 / 2) * math.Pow(meshMessageDeliveriesThreshold, 2)))
+		meshMessageDeliveriesWeight = -(opts.Topic.MaxPositiveScore / (opts.Topic.TopicWeight * (float64(opts.Network.Subnets) * 1 / 3) * math.Pow(meshMessageDeliveriesThreshold, 2)))
 	}
 	MeshMessageDeliveriesCap := meshMessageDeliveriesThreshold * opts.Topic.MeshDeliveryCapFactor
 
