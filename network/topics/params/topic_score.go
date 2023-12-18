@@ -136,7 +136,7 @@ func (o *Options) defaults() {
 		o.Topic.MeshDeliveryCapFactor = meshDeliveryCapFactor
 	}
 	if o.Topic.MeshDeliveryActivationTime == 0 {
-		o.Topic.MeshDeliveryActivationTime = o.Network.OneEpochDuration / 32.0
+		o.Topic.MeshDeliveryActivationTime = o.Network.OneEpochDuration * 3
 	}
 	// Topic - P4
 	if o.Topic.InvalidMessageDecayEpochs == 0 {

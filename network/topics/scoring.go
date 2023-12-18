@@ -33,9 +33,6 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, peerScorePara
 			filtered := make(map[string]*pubsub.TopicScoreSnapshot)
 			var totalInvalidMessages float64
 			var totalLowMeshDeliveries int
-			var meshThreshold float64
-			var meshWeight float64
-			var meshSquaredSum float64
 			for topic, snapshot := range peerScores.Topics {
 				if snapshot.InvalidMessageDeliveries != 0 {
 					filtered[topic] = snapshot
@@ -48,9 +45,6 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, peerScorePara
 				if topicFound {
 					if snapshot.MeshMessageDeliveries < topicParams.MeshMessageDeliveriesThreshold {
 						totalLowMeshDeliveries++
-						meshThreshold = topicParams.MeshMessageDeliveriesThreshold
-						meshWeight = topicParams.MeshMessageDeliveriesWeight
-						meshSquaredSum += math.Pow(topicParams.MeshMessageDeliveriesThreshold-snapshot.MeshMessageDeliveries, 2)
 					}
 				}
 			}
@@ -64,9 +58,6 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, peerScorePara
 				zap.Float64("app_specific_penalty", peerScores.AppSpecificScore),
 				zap.Float64("total_low_mesh_deliveries", float64(totalLowMeshDeliveries)),
 				zap.Float64("total_invalid_messages", totalInvalidMessages),
-				zap.Float64("mesh_threshold", meshThreshold),
-				zap.Float64("mesh_weight", meshWeight),
-				zap.Float64("mesh_squared_sum", meshSquaredSum),
 				zap.Any("invalid_messages", filtered),
 			}
 
