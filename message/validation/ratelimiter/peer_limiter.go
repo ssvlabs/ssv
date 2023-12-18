@@ -26,7 +26,7 @@ type Config struct {
 func DefaultConfig() Config {
 	return Config{
 		InvalidRSAs:     5,
-		InvalidMessages: 20,
+		InvalidMessages: 70000,
 		BlockDuration:   1 * time.Minute,
 		CacheSize:       100,
 	}
