@@ -19,7 +19,7 @@ func TestTopicScoreParams(t *testing.T) {
 		{
 			"subnet topic 1k validators",
 			func() *Options {
-				opts := NewSubnetTopicOpts(1000, 128)
+				opts := NewSubnetTopicOpts(1000, 128, topicScoreCap)
 				return &opts
 			},
 			nil,
@@ -27,7 +27,7 @@ func TestTopicScoreParams(t *testing.T) {
 		{
 			"subnet topic 10k validators",
 			func() *Options {
-				opts := NewSubnetTopicOpts(10000, 128)
+				opts := NewSubnetTopicOpts(10000, 128, topicScoreCap)
 				return &opts
 			},
 			nil,
@@ -35,7 +35,7 @@ func TestTopicScoreParams(t *testing.T) {
 		{
 			"subnet topic 51k validators",
 			func() *Options {
-				opts := NewSubnetTopicOpts(51000, 128)
+				opts := NewSubnetTopicOpts(51000, 128, topicScoreCap)
 				return &opts
 			},
 			nil,

@@ -163,7 +163,7 @@ func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig) (*pub
 				return 100, 100, 10, nil
 			}
 		}
-		topicScoreFactory = topicScoreParams(logger, cfg)
+		topicScoreFactory = topicScoreParams(logger, cfg, peerScoreParams.TopicScoreCap)
 	}
 
 	if cfg.MsgIDHandler != nil {

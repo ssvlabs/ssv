@@ -67,7 +67,8 @@ type TopicOpts struct {
 	// TopicWeight is the weight of the topic
 	TopicWeight float64
 
-	MaxPositiveScore float64
+	// Cap for sum of scores from topics
+	TopicScoreCap float64
 
 	// P1
 	MaxTimeInMeshScore   float64
@@ -106,9 +107,6 @@ func (o *Options) defaults() {
 	// Topic
 	if o.Topic.D == 0 {
 		o.Topic.D = gossipSubD
-	}
-	if o.Topic.MaxPositiveScore == 0 {
-		o.Topic.MaxPositiveScore = topicScoreCap
 	}
 	// Topic - P1
 	if o.Topic.MaxTimeInMeshScore == 0 {
@@ -168,7 +166,7 @@ func NewOpts(activeValidators, subnets int) Options {
 }
 
 // NewSubnetTopicOpts creates new TopicOpts for a subnet topic
-func NewSubnetTopicOpts(activeValidators, subnets int) Options {
+func NewSubnetTopicOpts(activeValidators, subnets int, topicScoreCap float64) Options {
 
 	// Create options with default values
 	opts := NewOpts(activeValidators, subnets)
@@ -176,6 +174,8 @@ func NewSubnetTopicOpts(activeValidators, subnets int) Options {
 
 	// Set topic weight with equal weights
 	opts.Topic.TopicWeight = opts.Network.TotalTopicsWeight / float64(opts.Network.Subnets)
+
+	opts.Topic.TopicScoreCap = topicScoreCap
 
 	// Set expected message rate based on stage metrics
 	validatorsPerSubnet := float64(opts.Network.ActiveValidators) / float64(opts.Network.Subnets)
@@ -216,7 +216,7 @@ func TopicParams(opts Options) (*pubsub.TopicScoreParams, error) {
 	}
 	var meshMessageDeliveriesWeight float64
 	if meshScoringEnabled {
-		meshMessageDeliveriesWeight = -(opts.Topic.MaxPositiveScore / (opts.Topic.TopicWeight * (float64(opts.Network.Subnets) * 1 / 3) * math.Pow(meshMessageDeliveriesThreshold, 2)))
+		meshMessageDeliveriesWeight = -(opts.Topic.TopicScoreCap / (opts.Topic.TopicWeight * (float64(opts.Network.Subnets) * 1 / 3) * math.Pow(meshMessageDeliveriesThreshold, 2)))
 	}
 	MeshMessageDeliveriesCap := meshMessageDeliveriesThreshold * opts.Topic.MeshDeliveryCapFactor
 
