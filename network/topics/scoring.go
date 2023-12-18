@@ -25,7 +25,7 @@ func DefaultScoringConfig() *ScoringConfig {
 
 // scoreInspector inspects scores and updates the score index accordingly
 // TODO: finalize once validation is in place
-func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.ExtendedPeerScoreInspectFn {
+func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex, peerScoreParams *pubsub.PeerScoreParams) pubsub.ExtendedPeerScoreInspectFn {
 	return func(scores map[peer.ID]*pubsub.PeerScoreSnapshot) {
 		for pid, peerScores := range scores {
 
@@ -33,8 +33,6 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.Extend
 			filtered := make(map[string]*pubsub.TopicScoreSnapshot)
 			var totalInvalidMessages float64
 			var totalLowMeshDeliveries int
-			var totalMeshDeliveriesSquaredDeficitSum float64
-			meshDeliveryCounters := make([]float64, 0)
 			for topic, snapshot := range peerScores.Topics {
 				if snapshot.InvalidMessageDeliveries != 0 {
 					filtered[topic] = snapshot
@@ -42,11 +40,13 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.Extend
 				if snapshot.InvalidMessageDeliveries > 0 {
 					totalInvalidMessages += math.Sqrt(snapshot.InvalidMessageDeliveries)
 				}
-				if snapshot.MeshMessageDeliveries < 11.243655244810899 {
-					totalLowMeshDeliveries++
-					totalMeshDeliveriesSquaredDeficitSum += math.Pow(11.243655244810899-snapshot.MeshMessageDeliveries, 2)
+
+				topicParams, topicFound := peerScoreParams.Topics[topic]
+				if topicFound {
+					if snapshot.MeshMessageDeliveries < topicParams.MeshMessageDeliveriesThreshold {
+						totalLowMeshDeliveries++
+					}
 				}
-				meshDeliveryCounters = append(meshDeliveryCounters, snapshot.MeshMessageDeliveries)
 			}
 
 			fields := []zap.Field{
@@ -57,10 +57,8 @@ func scoreInspector(logger *zap.Logger, scoreIdx peers.ScoreIndex) pubsub.Extend
 				zap.Float64("behaviour_penalty", peerScores.BehaviourPenalty),
 				zap.Float64("app_specific_penalty", peerScores.AppSpecificScore),
 				zap.Float64("total_low_mesh_deliveries", float64(totalLowMeshDeliveries)),
-				zap.Float64("mesh_deliveries_squared_deficit_sum", totalMeshDeliveriesSquaredDeficitSum),
 				zap.Float64("total_invalid_messages", totalInvalidMessages),
 				zap.Any("invalid_messages", filtered),
-				zap.Any("mesh_delivery_counters", meshDeliveryCounters),
 			}
 
 			// log if peer score is below threshold
