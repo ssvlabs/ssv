@@ -6,7 +6,7 @@ require (
 	github.com/attestantio/go-eth2-client v0.16.3
 	github.com/bloxapp/ssv v1.2.1-0.20231204141016-a6afbe837a26
 	github.com/go-chi/chi/v5 v5.0.10
-	github.com/pkg/errors v0.9.1 // indirect
+	github.com/pkg/errors v0.9.1
 	github.com/rs/zerolog v1.31.0
 	github.com/sourcegraph/conc v0.3.0
 	go.uber.org/zap v1.26.0
@@ -49,6 +49,7 @@ require (
 	github.com/docker/go-connections v0.4.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/ethereum/go-ethereum v1.12.2 // indirect
+	github.com/go-playground/validator/v10 v10.13.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/mock v1.6.0 // indirect
 	github.com/herumi/bls-eth-go-binary v1.29.1 // indirect
@@ -59,5 +60,6 @@ require (
 	golang.org/x/mod v0.11.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	golang.org/x/tools v0.9.1 // indirect
+	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gotest.tools/v3 v3.5.1 // indirect
 )
