@@ -3,6 +3,7 @@ package p2pv1
 import (
 	"context"
 	"crypto/rsa"
+	"math/rand"
 	"sync/atomic"
 	"time"
 
@@ -78,6 +79,8 @@ type p2pNetwork struct {
 	operatorPKHashToPKCache *hashmap.Map[string, []byte] // used for metrics
 	operatorPrivateKey      *rsa.PrivateKey
 	operatorID              func() spectypes.OperatorID
+
+	rand *rand.Rand
 }
 
 // New creates a new p2p network
@@ -101,6 +104,7 @@ func New(logger *zap.Logger, cfg *Config, mr Metrics) network.P2PNetwork {
 		operatorPrivateKey:      cfg.OperatorPrivateKey,
 		operatorID:              cfg.OperatorID,
 		metrics:                 mr,
+		rand:                    rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
 

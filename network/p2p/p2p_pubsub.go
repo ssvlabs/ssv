@@ -99,6 +99,25 @@ func (n *p2pNetwork) SubscribeAll(logger *zap.Logger) error {
 	return nil
 }
 
+func (n *p2pNetwork) SubscribeRandoms(logger *zap.Logger, numSubnets int) error {
+	if !n.isReady() {
+		return p2pprotocol.ErrNetworkIsNotReady
+	}
+	randomSubnets := n.rand.Perm(commons.Subnets())
+	randomSubnets = randomSubnets[:numSubnets]
+	for _, subnet := range randomSubnets {
+		err := n.topicsCtrl.Subscribe(logger, commons.SubnetTopicID(subnet))
+		if err != nil {
+			return fmt.Errorf("could not subscribe to subnet %d: %w", subnet, err)
+		}
+		n.subnets[subnet] = byte(1)
+	}
+	if err := n.disc.RegisterSubnets(logger, randomSubnets...); err != nil {
+		return fmt.Errorf("could not register subnets: %w", err)
+	}
+	return nil
+}
+
 // Subscribe subscribes to validator subnet
 func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 	if !n.isReady() {

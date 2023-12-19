@@ -411,7 +411,14 @@ func (c *controller) StartValidators() {
 	}
 
 	// Start own validators.
-	c.setupValidators(ownShares)
+	startedValidators := c.setupValidators(ownShares)
+	if startedValidators == 0 {
+		// If no validators were started and therefore we're not subscribed to any subnets,
+		// then subscribe to a random subnet to participate in the network.
+		if err := c.network.SubscribeRandoms(c.logger, 1); err != nil {
+			c.logger.Error("failed to subscribe to random subnets", zap.Error(err))
+		}
+	}
 
 	// Fetch metadata for all validators.
 	start := time.Now()
@@ -430,9 +437,8 @@ func (c *controller) StartValidators() {
 
 // setupValidators setup and starts validators from the given shares.
 // shares w/o validator's metadata won't start, but the metadata will be fetched and the validator will start afterwards
-func (c *controller) setupValidators(shares []*ssvtypes.SSVShare) {
+func (c *controller) setupValidators(shares []*ssvtypes.SSVShare) (started int) {
 	c.logger.Info("starting validators setup...", zap.Int("shares count", len(shares)))
-	var started int
 	var errs []error
 	var fetchMetadata [][]byte
 	for _, validatorShare := range shares {
@@ -452,6 +458,7 @@ func (c *controller) setupValidators(shares []*ssvtypes.SSVShare) {
 	c.logger.Info("setup validators done", zap.Int("map size", c.validatorsMap.Size()),
 		zap.Int("failures", len(errs)), zap.Int("missing_metadata", len(fetchMetadata)),
 		zap.Int("shares", len(shares)), zap.Int("started", started))
+	return
 }
 
 // setupNonCommitteeValidators trigger SyncHighestDecided for each validator
