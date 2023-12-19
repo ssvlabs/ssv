@@ -64,6 +64,7 @@ type p2pNetwork struct {
 	msgResolver  topics.MsgPeersResolver
 	msgValidator validation.MessageValidator
 	connHandler  connections.ConnHandler
+	metrics      Metrics
 
 	state int32
 
@@ -80,7 +81,7 @@ type p2pNetwork struct {
 }
 
 // New creates a new p2p network
-func New(logger *zap.Logger, cfg *Config) network.P2PNetwork {
+func New(logger *zap.Logger, cfg *Config, mr Metrics) network.P2PNetwork {
 	ctx, cancel := context.WithCancel(cfg.Ctx)
 
 	logger = logger.Named(logging.NameP2PNetwork)
@@ -99,6 +100,7 @@ func New(logger *zap.Logger, cfg *Config) network.P2PNetwork {
 		operatorPKHashToPKCache: hashmap.New[string, []byte](),
 		operatorPrivateKey:      cfg.OperatorPrivateKey,
 		operatorID:              cfg.OperatorID,
+		metrics:                 mr,
 	}
 }
 
