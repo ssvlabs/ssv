@@ -34,12 +34,14 @@ type ExecutionClient struct {
 	contractAddress ethcommon.Address
 
 	// optional
-	logger                      *zap.Logger
-	metrics                     metrics
-	connectionTimeout           time.Duration
-	reconnectionInitialInterval time.Duration
-	reconnectionMaxInterval     time.Duration
-	logBatchSize                uint64
+	logger                            *zap.Logger
+	metrics                           metrics
+	connectionTimeout                 time.Duration
+	reconnectionInitialInterval       time.Duration
+	reconnectionMaxInterval           time.Duration
+	logBatchSize                      uint64
+	followDistance                    uint64 // used for backward compatibility only
+	finalizedCheckpointActivationSlot uint64
 
 	// variables
 	client *ethclient.Client
@@ -54,16 +56,18 @@ func New(
 	opts ...Option,
 ) (*ExecutionClient, error) {
 	client := &ExecutionClient{
-		nodeAddr:                    nodeAddr,
-		finalizedBlocks:             make(chan uint64),
-		contractAddress:             contractAddr,
-		logger:                      zap.NewNop(),
-		metrics:                     nopMetrics{},
-		connectionTimeout:           DefaultConnectionTimeout,
-		reconnectionInitialInterval: DefaultReconnectionInitialInterval,
-		reconnectionMaxInterval:     DefaultReconnectionMaxInterval,
-		logBatchSize:                DefaultHistoricalLogsBatchSize, // TODO Make batch of logs adaptive depending on "websocket: read limit"
-		closed:                      make(chan struct{}),
+		nodeAddr:                          nodeAddr,
+		finalizedBlocks:                   make(chan uint64),
+		contractAddress:                   contractAddr,
+		logger:                            zap.NewNop(),
+		metrics:                           nopMetrics{},
+		followDistance:                    DefaultFollowDistance,
+		finalizedCheckpointActivationSlot: DefaultFinalizedCheckpointActivationSlot,
+		connectionTimeout:                 DefaultConnectionTimeout,
+		reconnectionInitialInterval:       DefaultReconnectionInitialInterval,
+		reconnectionMaxInterval:           DefaultReconnectionMaxInterval,
+		logBatchSize:                      DefaultHistoricalLogsBatchSize, // TODO Make batch of logs adaptive depending on "websocket: read limit"
+		closed:                            make(chan struct{}),
 	}
 	for _, opt := range opts {
 		opt(client)
@@ -85,12 +89,25 @@ func (ec *ExecutionClient) Close() error {
 
 // FetchHistoricalLogs retrieves historical logs emitted by the contract starting from fromBlock.
 func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan BlockLogs, errors <-chan error, err error) {
-	// #TODO refactor this to fetch last finalized one
-	currentBlock, err := ec.client.BlockNumber(ctx)
+	currentBlock, err := ec.client.HeaderByNumber(ctx, -3)
+	var toBlock uint64
+
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get current block: %w", err)
 	}
-	toBlock := currentBlock
+
+	switch {
+	case currentBlock < ec.finalizedCheckpointActivationSlot:
+		if currentBlock < ec.followDistance {
+			return nil, nil, ErrNothingToSync
+		}
+		toBlock = currentBlock - ec.followDistance
+		break
+	case ec.finalizedCheckpointActivationSlot <= currentBlock:
+		//
+		toBlock = currentBlock - ec.followDistance
+	}
+
 	if toBlock < fromBlock {
 		return nil, nil, ErrNothingToSync
 	}

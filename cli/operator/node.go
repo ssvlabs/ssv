@@ -159,6 +159,7 @@ var StartNodeCmd = &cobra.Command{
 			executionclient.WithReconnectionInitialInterval(executionclient.DefaultReconnectionInitialInterval),
 			executionclient.WithReconnectionMaxInterval(executionclient.DefaultReconnectionMaxInterval),
 			executionclient.WithFinalizedBlocksSubscription(cmd.Context(), consensusClient.SubscribeOnFinalizedBlocks),
+			executionclient.WithNetworkConfig(cmd.Context(), networkConfig),
 		)
 		if err != nil {
 			logger.Fatal("could not connect to execution client", zap.Error(err))

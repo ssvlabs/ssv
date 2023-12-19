@@ -3,6 +3,7 @@ package executionclient
 import (
 	"context"
 	"fmt"
+	"github.com/bloxapp/ssv/networkconfig"
 	"time"
 
 	"go.uber.org/zap"
@@ -65,5 +66,15 @@ func WithFinalizedBlocksSubscription(
 		if err := subscribe(ctx, s.finalizedBlocks); err != nil {
 			panic(fmt.Errorf("can't setup dependencies for exec client: %w", err))
 		}
+	}
+}
+
+// WithFinalizedBlocksSubscription setting up a subscription for beacon sync channel to be consumed in streamLogsToChan
+func WithNetworkConfig(
+	ctx context.Context,
+	networkConfig networkconfig.NetworkConfig,
+) Option {
+	return func(s *ExecutionClient) {
+		s.networkConfig = networkConfig
 	}
 }
