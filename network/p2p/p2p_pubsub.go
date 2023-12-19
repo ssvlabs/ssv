@@ -101,6 +101,7 @@ func (n *p2pNetwork) SubscribeAll(logger *zap.Logger) error {
 	return nil
 }
 
+// SubscribeRandoms subscribes to random subnets. This method isn't thread-safe.
 func (n *p2pNetwork) SubscribeRandoms(logger *zap.Logger, numSubnets int) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
