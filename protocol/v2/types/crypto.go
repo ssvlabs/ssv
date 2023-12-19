@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	metricsSignaturesVerifications = promauto.NewCounterVec(prometheus.CounterOpts{
+	MetricsSignaturesVerifications = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_signature_verifications",
 		Help: "Number of signatures verifications",
 	}, []string{})
@@ -21,7 +21,7 @@ var (
 
 func init() {
 	logger := zap.L()
-	if err := prometheus.Register(metricsSignaturesVerifications); err != nil {
+	if err := prometheus.Register(MetricsSignaturesVerifications); err != nil {
 		logger.Debug("could not register prometheus collector")
 	}
 }
@@ -32,7 +32,8 @@ func init() {
 //
 // TODO: rethink this function and consider moving/refactoring it.
 func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, domain spectypes.DomainType, sigType spectypes.SignatureType, operators []*spectypes.Operator) error {
-	metricsSignaturesVerifications.WithLabelValues().Inc()
+	MetricsSignaturesVerifications.WithLabelValues().Inc()
+
 	sign := &bls.Sign{}
 	if err := sign.Deserialize(s); err != nil {
 		return errors.Wrap(err, "failed to deserialize signature")
@@ -81,6 +82,8 @@ func ReconstructSignature(ps *specssv.PartialSigContainer, root [32]byte, valida
 }
 
 func VerifyReconstructedSignature(sig *bls.Sign, validatorPubKey []byte, root [32]byte) error {
+	MetricsSignaturesVerifications.WithLabelValues().Inc()
+
 	pk, err := DeserializeBLSPublicKey(validatorPubKey)
 	if err != nil {
 		return errors.Wrap(err, "could not deserialize validator pk")
