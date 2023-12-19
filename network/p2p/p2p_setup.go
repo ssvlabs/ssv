@@ -94,6 +94,8 @@ func (n *p2pNetwork) initCfg() error {
 			return fmt.Errorf("parse subnet: %w", err)
 		}
 		n.subnets = subnets
+	} else {
+		n.subnets = make(records.Subnets, p2pcommons.Subnets())
 	}
 	if n.cfg.MaxPeers <= 0 {
 		n.cfg.MaxPeers = minPeersBuffer

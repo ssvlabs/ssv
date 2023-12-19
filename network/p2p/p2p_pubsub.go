@@ -7,6 +7,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"math/rand"
+	"time"
 
 	"github.com/bloxapp/ssv/protocol/v2/message"
 
@@ -103,15 +105,24 @@ func (n *p2pNetwork) SubscribeRandoms(logger *zap.Logger, numSubnets int) error 
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
-	randomSubnets := n.rand.Perm(commons.Subnets())
+	if numSubnets > commons.Subnets() {
+		numSubnets = commons.Subnets()
+	}
+
+	subnets := make([]byte, commons.Subnets())
+	copy(subnets, n.subnets)
+	// #nosec G404
+	randomSubnets := rand.New(rand.NewSource(time.Now().UnixNano())).Perm(commons.Subnets())
 	randomSubnets = randomSubnets[:numSubnets]
 	for _, subnet := range randomSubnets {
 		err := n.topicsCtrl.Subscribe(logger, commons.SubnetTopicID(subnet))
 		if err != nil {
 			return fmt.Errorf("could not subscribe to subnet %d: %w", subnet, err)
 		}
-		n.subnets[subnet] = byte(1)
+		subnets[subnet] = byte(1)
 	}
+	n.subnets = subnets
+
 	if err := n.disc.RegisterSubnets(logger, randomSubnets...); err != nil {
 		return fmt.Errorf("could not register subnets: %w", err)
 	}
