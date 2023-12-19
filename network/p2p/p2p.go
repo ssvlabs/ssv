@@ -104,7 +104,8 @@ func New(logger *zap.Logger, cfg *Config, mr Metrics) network.P2PNetwork {
 		operatorPrivateKey:      cfg.OperatorPrivateKey,
 		operatorID:              cfg.OperatorID,
 		metrics:                 mr,
-		rand:                    rand.New(rand.NewSource(time.Now().UnixNano())),
+		// #nosec G404
+		rand: rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 }
 
