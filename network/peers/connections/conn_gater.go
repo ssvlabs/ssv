@@ -37,7 +37,7 @@ func NewConnectionGater(logger *zap.Logger, atLimit func() bool) connmgr.Connect
 	return &connGater{
 		logger:    logger,
 		atLimit:   atLimit,
-		ipLimiter: leakybucket.NewCollector(ipLimitRate, ipLimitBurst, 30*time.Second, true),
+		ipLimiter: leakybucket.NewCollector(ipLimitRate, ipLimitBurst, ipLimitPeriod, true),
 	}
 }
 
