@@ -44,7 +44,7 @@ func NewConnectionGater(logger *zap.Logger, idx peers.ConnectionIndex) connmgr.C
 // to the addresses of that peer being available/resolved. Blocking connections
 // at this stage is typical for blacklisting scenarios
 func (n *connGater) InterceptPeerDial(id peer.ID) bool {
-	return n.idx.Limit(libp2pnetwork.DirOutbound)
+	return !n.idx.Limit(libp2pnetwork.DirOutbound)
 }
 
 // InterceptAddrDial is called on an imminent outbound dial to a peer on a
@@ -64,10 +64,10 @@ func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) boo
 		// Yield this goroutine to allow others to run in-between connection attempts.
 		runtime.Gosched()
 
-		n.logger.Debug("connection rejected due to IP limit", zap.String("remote_addr", remoteAddr.String()))
+		n.logger.Debug("connection rejected due to IP rate limit", zap.String("remote_addr", remoteAddr.String()))
 		return false
 	}
-	return n.idx.Limit(libp2pnetwork.DirInbound)
+	return !n.idx.Limit(libp2pnetwork.DirInbound)
 }
 
 // InterceptSecured is called for both inbound and outbound connections,
