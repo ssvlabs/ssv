@@ -119,12 +119,7 @@ func (n *p2pNetwork) SetupHost(logger *zap.Logger) error {
 	if err != nil {
 		return errors.Wrap(err, "could not create resource manager")
 	}
-	n.connGater = connections.NewConnectionGater(logger, func() bool {
-		if n.idx == nil {
-			return false
-		}
-		return n.idx.AtLimit(network.DirOutbound)
-	})
+	n.connGater = connections.NewConnectionGater(logger, n.connectionsAtLimit)
 	opts = append(opts, libp2p.ResourceManager(rmgr), libp2p.ConnectionGater(n.connGater))
 	host, err := libp2p.New(opts...)
 	if err != nil {
@@ -320,4 +315,11 @@ func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
 	n.topicsCtrl = tc
 	logger.Debug("topics controller is ready")
 	return nil
+}
+
+func (n *p2pNetwork) connectionsAtLimit() bool {
+	if n.idx == nil {
+		return false
+	}
+	return n.idx.AtLimit(network.DirOutbound)
 }
