@@ -110,8 +110,7 @@ func (n *p2pNetwork) SubscribeRandoms(logger *zap.Logger, numSubnets int) error 
 		numSubnets = commons.Subnets()
 	}
 
-	subnets := make([]byte, commons.Subnets())
-	copy(subnets, n.subnets)
+	// Subscribe to random subnets.
 	// #nosec G404
 	randomSubnets := rand.New(rand.NewSource(time.Now().UnixNano())).Perm(commons.Subnets())
 	randomSubnets = randomSubnets[:numSubnets]
@@ -120,6 +119,12 @@ func (n *p2pNetwork) SubscribeRandoms(logger *zap.Logger, numSubnets int) error 
 		if err != nil {
 			return fmt.Errorf("could not subscribe to subnet %d: %w", subnet, err)
 		}
+	}
+
+	// Update the subnets slice.
+	subnets := make([]byte, commons.Subnets())
+	copy(subnets, n.subnets)
+	for _, subnet := range randomSubnets {
 		subnets[subnet] = byte(1)
 	}
 	n.subnets = subnets
