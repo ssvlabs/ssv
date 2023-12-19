@@ -4,7 +4,6 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/bloxapp/ssv/network/peers"
 	"github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/control"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
@@ -21,21 +20,23 @@ const (
 	ipLimitRate   = 4
 	ipLimitBurst  = 8
 	ipLimitPeriod = 30 * time.Second
+
+	//
 )
 
 // connGater implements ConnectionGater interface:
 // https://github.com/libp2p/go-libp2p/core/blob/master/connmgr/gater.go
 type connGater struct {
 	logger    *zap.Logger // struct logger to implement connmgr.ConnectionGater
-	idx       peers.ConnectionIndex
+	atLimit   func() bool
 	ipLimiter *leakybucket.Collector
 }
 
 // NewConnectionGater creates a new instance of ConnectionGater
-func NewConnectionGater(logger *zap.Logger, idx peers.ConnectionIndex) connmgr.ConnectionGater {
+func NewConnectionGater(logger *zap.Logger, atLimit func() bool) connmgr.ConnectionGater {
 	return &connGater{
 		logger:    logger,
-		idx:       idx,
+		atLimit:   atLimit,
 		ipLimiter: leakybucket.NewCollector(ipLimitRate, ipLimitBurst, 30*time.Second, true),
 	}
 }
@@ -44,7 +45,7 @@ func NewConnectionGater(logger *zap.Logger, idx peers.ConnectionIndex) connmgr.C
 // to the addresses of that peer being available/resolved. Blocking connections
 // at this stage is typical for blacklisting scenarios
 func (n *connGater) InterceptPeerDial(id peer.ID) bool {
-	return !n.idx.Limit(libp2pnetwork.DirOutbound)
+	return true
 }
 
 // InterceptAddrDial is called on an imminent outbound dial to a peer on a
@@ -67,13 +68,13 @@ func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) boo
 		n.logger.Debug("connection rejected due to IP rate limit", zap.String("remote_addr", remoteAddr.String()))
 		return false
 	}
-	return !n.idx.Limit(libp2pnetwork.DirInbound)
+	return !n.atLimit()
 }
 
 // InterceptSecured is called for both inbound and outbound connections,
 // after a security handshake has taken place and we've authenticated the peer.
 func (n *connGater) InterceptSecured(direction libp2pnetwork.Direction, id peer.ID, multiaddrs libp2pnetwork.ConnMultiaddrs) bool {
-	return n.idx.IsBad(n.logger, id)
+	return true
 }
 
 // InterceptUpgraded is called for inbound and outbound connections, after
