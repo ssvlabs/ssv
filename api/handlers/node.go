@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"runtime"
 
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -76,7 +75,6 @@ type healthCheckJSON struct {
 		InboundConns    int      `json:"inbound_conns"`
 		OutboundConns   int      `json:"outbound_conns"`
 		ListenAddresses []string `json:"p2p_listen_addresses"`
-		CPUCores        int      `json:"cpu_cores"`
 	} `json:"advanced"`
 }
 
@@ -172,9 +170,6 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	resp.BeaconNode = healthStatus{h.NodeProber.CheckBeaconNodeHealth(ctx)}
 	resp.ExecutionNode = healthStatus{h.NodeProber.CheckExecutionNodeHealth(ctx)}
 	resp.EventSyncer = healthStatus{(h.NodeProber.CheckEventSyncerHealth(ctx))}
-
-	// Report number of CPU cores.
-	resp.Advanced.CPUCores = runtime.NumCPU()
 
 	return api.Render(w, r, resp)
 }
