@@ -3,9 +3,9 @@ package executionclient
 import (
 	"context"
 	"fmt"
-	"github.com/bloxapp/ssv/networkconfig"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.uber.org/zap"
 )
 
@@ -60,21 +60,20 @@ func WithFinalizedBlocksSubscription(
 	subscribe func(ctx context.Context, finalizedBlocks chan<- uint64) error,
 ) Option {
 	return func(s *ExecutionClient) {
-		if s.finalizedBlocks == nil {
-			s.finalizedBlocks = make(chan uint64)
+		if s.blocksChan == nil {
+			s.blocksChan = make(chan uint64)
 		}
-		if err := subscribe(ctx, s.finalizedBlocks); err != nil {
+		if err := subscribe(ctx, s.blocksChan); err != nil {
 			panic(fmt.Errorf("can't setup dependencies for exec client: %w", err))
 		}
 	}
 }
 
-// WithFinalizedBlocksSubscription setting up a subscription for beacon sync channel to be consumed in streamLogsToChan
-func WithNetworkConfig(
-	ctx context.Context,
-	networkConfig networkconfig.NetworkConfig,
+// WithFinalizedCheckpointsFork sets the exact
+func WithFinalizedCheckpointsFork(
+	finalizedCheckpointActivationSlot phase0.Slot,
 ) Option {
 	return func(s *ExecutionClient) {
-		s.networkConfig = networkConfig
+		s.finalizedCheckpointActivationSlot = uint64(finalizedCheckpointActivationSlot)
 	}
 }

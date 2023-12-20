@@ -12,6 +12,7 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/rpc"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth/contract"
@@ -30,7 +31,7 @@ var (
 type ExecutionClient struct {
 	// mandatory
 	nodeAddr        string
-	finalizedBlocks chan uint64
+	blocksChan      chan uint64
 	contractAddress ethcommon.Address
 
 	// optional
@@ -57,7 +58,7 @@ func New(
 ) (*ExecutionClient, error) {
 	client := &ExecutionClient{
 		nodeAddr:                          nodeAddr,
-		finalizedBlocks:                   make(chan uint64),
+		blocksChan:                        make(chan uint64),
 		contractAddress:                   contractAddr,
 		logger:                            zap.NewNop(),
 		metrics:                           nopMetrics{},
@@ -82,16 +83,15 @@ func New(
 // Close shuts down ExecutionClient.
 func (ec *ExecutionClient) Close() error {
 	close(ec.closed)
-	close(ec.finalizedBlocks)
+	close(ec.blocksChan)
 	ec.client.Close()
 	return nil
 }
 
 // FetchHistoricalLogs retrieves historical logs emitted by the contract starting from fromBlock.
 func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock uint64) (logs <-chan BlockLogs, errors <-chan error, err error) {
-	currentBlock, err := ec.client.HeaderByNumber(ctx, -3)
 	var toBlock uint64
-
+	currentBlock, err := ec.client.BlockNumber(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get current block: %w", err)
 	}
@@ -104,8 +104,13 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 		toBlock = currentBlock - ec.followDistance
 		break
 	case ec.finalizedCheckpointActivationSlot <= currentBlock:
-		//
-		toBlock = currentBlock - ec.followDistance
+		lastFinalizedBlock, err := ec.client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to get current block: %w", err)
+		}
+
+		toBlock = lastFinalizedBlock.Number.Uint64()
+		break
 	}
 
 	if toBlock < fromBlock {
@@ -282,6 +287,24 @@ func (ec *ExecutionClient) isClosed() bool {
 // streamLogsToChan *always* returns the last block it fetched, even if it errored.
 // TODO: consider handling "websocket: read limit exceeded" error and reducing batch size (syncSmartContractsEvents has code for this)
 func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (lastBlock uint64, err error) {
+	lastBlock, err = ec.steamLatestBlocks(ctx, logs, fromBlock)
+
+	if err == nil {
+		lastBlock, err = ec.streamFinalizedBlocks(ctx, logs, fromBlock)
+	}
+
+	return lastBlock, err
+}
+
+func (ec *ExecutionClient) steamLatestBlocks(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (lastBlock uint64, err error) {
+	heads := make(chan *ethtypes.Header)
+
+	sub, err := ec.client.SubscribeNewHead(ctx, heads)
+	if err != nil {
+		return fromBlock, fmt.Errorf("subscribe heads: %w", err)
+	}
+	defer sub.Unsubscribe()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -290,23 +313,69 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 		case <-ec.closed:
 			return fromBlock, ErrClosed
 
-		case toBlock := <-ec.finalizedBlocks:
+		case err := <-sub.Err():
+			if err == nil {
+				return fromBlock, ErrClosed
+			}
+			return fromBlock, fmt.Errorf("subscription: %w", err)
+
+		case header := <-heads:
+			if header.Number.Uint64() >= ec.finalizedCheckpointActivationSlot {
+				return lastBlock, nil
+			}
+			if header.Number.Uint64() < ec.followDistance {
+				continue
+			}
+			toBlock := header.Number.Uint64() - ec.followDistance
 			if toBlock < fromBlock {
 				continue
 			}
-			logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
-			for block := range logStream {
-				logs <- block
-				lastBlock = block.BlockNumber
+			lastBlock, err := ec.handleNewBlocks(ctx, fromBlock, toBlock, logs)
+			if err != nil {
+				return lastBlock, err
 			}
-			if err := <-fetchErrors; err != nil {
-				// If we get an error while fetching, we return the last block we fetched.
-				return lastBlock, fmt.Errorf("fetch logs: %w", err)
-			}
-			fromBlock = toBlock + 1
-			ec.metrics.ExecutionClientLastFetchedBlock(fromBlock)
 		}
 	}
+}
+
+func (ec *ExecutionClient) streamFinalizedBlocks(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (lastBlock uint64, err error) {
+	for {
+		select {
+		case <-ctx.Done():
+			return fromBlock, context.Canceled
+
+		case <-ec.closed:
+			return fromBlock, ErrClosed
+
+		case toBlock := <-ec.blocksChan:
+			if toBlock < fromBlock {
+				continue
+			}
+			lastBlock, err := ec.handleNewBlocks(ctx, fromBlock, toBlock, logs)
+			if err != nil {
+				return lastBlock, err
+			}
+		}
+	}
+}
+func (ec *ExecutionClient) handleNewBlocks(
+	ctx context.Context,
+	fromBlock uint64,
+	toBlock uint64,
+	logs chan<- BlockLogs,
+) (lastBlock uint64, err error) {
+	logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
+	for block := range logStream {
+		logs <- block
+		lastBlock = block.BlockNumber
+	}
+	if err := <-fetchErrors; err != nil {
+		// If we get an error while fetching, we return the last block we fetched.
+		return lastBlock, fmt.Errorf("fetch logs: %w", err)
+	}
+	fromBlock = toBlock + 1
+	ec.metrics.ExecutionClientLastFetchedBlock(fromBlock)
+	return lastBlock, nil
 }
 
 // connect connects to Ethereum execution client.
