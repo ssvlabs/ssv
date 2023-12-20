@@ -147,11 +147,11 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	// Count peers and connections.
 	peers := h.Network.Peers()
 	for _, p := range h.peers(peers) {
-		if p.Connectedness == "Connected" {
+		if p.Connectedness == network.Connected.String() {
 			resp.Advanced.Peers++
 		}
 		for _, conn := range p.Connections {
-			if conn.Direction == "inbound" {
+			if conn.Direction == network.DirInbound.String() {
 				resp.Advanced.InboundConns++
 			} else {
 				resp.Advanced.OutboundConns++
