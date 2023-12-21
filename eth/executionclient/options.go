@@ -26,6 +26,14 @@ func WithMetrics(metrics metrics) Option {
 	}
 }
 
+// WithFollowDistance sets finalization offset.
+// It defines how many blocks in the past the latest block we want to process is.
+func WithFollowDistance(offset uint64) Option {
+	return func(s *ExecutionClient) {
+		s.followDistance = offset
+	}
+}
+
 // WithConnectionTimeout sets timeout for network connection to eth1 node.
 func WithConnectionTimeout(timeout time.Duration) Option {
 	return func(s *ExecutionClient) {

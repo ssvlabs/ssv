@@ -287,7 +287,7 @@ func (ec *ExecutionClient) isClosed() bool {
 // streamLogsToChan *always* returns the last block it fetched, even if it errored.
 // TODO: consider handling "websocket: read limit exceeded" error and reducing batch size (syncSmartContractsEvents has code for this)
 func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (lastBlock uint64, err error) {
-	lastBlock, err = ec.steamLatestBlocks(ctx, logs, fromBlock)
+	lastBlock, err = ec.streamLatestBlocks(ctx, logs, fromBlock)
 
 	if err == nil {
 		lastBlock, err = ec.streamFinalizedBlocks(ctx, logs, fromBlock)
@@ -296,7 +296,7 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 	return lastBlock, err
 }
 
-func (ec *ExecutionClient) steamLatestBlocks(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (lastBlock uint64, err error) {
+func (ec *ExecutionClient) streamLatestBlocks(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (lastBlock uint64, err error) {
 	heads := make(chan *ethtypes.Header)
 
 	sub, err := ec.client.SubscribeNewHead(ctx, heads)

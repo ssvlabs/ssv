@@ -25,6 +25,10 @@ import (
 	"github.com/bloxapp/ssv/operator/validator/mocks"
 )
 
+const (
+	defaultFollowDistance uint64 = 8
+)
+
 type CommonTestInput struct {
 	t             *testing.T
 	sim           *simulator.SimulatedBackend
@@ -53,19 +57,20 @@ func NewCommonTestInput(
 }
 
 type TestEnv struct {
-	eventSyncer   *eventsyncer.EventSyncer
-	validators    []*testValidatorData
-	ops           []*testOperator
-	nodeStorage   storage.Storage
-	sim           *simulator.SimulatedBackend
-	boundContract *simcontract.Simcontract
-	auth          *bind.TransactOpts
-	shares        [][]byte
-	execClient    *executionclient.ExecutionClient
-	rpcServer     *rpc.Server
-	httpSrv       *httptest.Server
-	validatorCtrl *mocks.MockController
-	mockCtrl      *gomock.Controller
+	eventSyncer    *eventsyncer.EventSyncer
+	validators     []*testValidatorData
+	ops            []*testOperator
+	nodeStorage    storage.Storage
+	sim            *simulator.SimulatedBackend
+	boundContract  *simcontract.Simcontract
+	auth           *bind.TransactOpts
+	shares         [][]byte
+	execClient     *executionclient.ExecutionClient
+	rpcServer      *rpc.Server
+	httpSrv        *httptest.Server
+	validatorCtrl  *mocks.MockController
+	mockCtrl       *gomock.Controller
+	followDistance *uint64
 }
 
 func (e *TestEnv) shutdown() {
@@ -91,6 +96,9 @@ func (e *TestEnv) setup(
 	operatorsCount uint64,
 ) error {
 	logger := zaptest.NewLogger(t)
+	if e.followDistance == nil {
+		e.SetFollowDistance(defaultFollowDistance)
+	}
 
 	// Create operators RSA keys
 	ops, err := createOperators(operatorsCount, 0)
@@ -172,6 +180,8 @@ func (e *TestEnv) setup(
 		addr,
 		contractAddr,
 		executionclient.WithLogger(logger),
+		executionclient.WithFollowDistance(*e.followDistance),
+		executionclient.WithFinalizedCheckpointsFork(1000),
 		executionclient.WithFinalizedBlocksSubscription(ctx, ethtestutils.SetFinalizedBlocksProducer(sim)),
 	)
 	if err != nil {
@@ -208,6 +218,16 @@ func (e *TestEnv) setup(
 	e.shares = shares
 
 	return nil
+}
+
+func (e *TestEnv) SetFollowDistance(d uint64) {
+	e.followDistance = &d
+}
+
+func (e *TestEnv) CloseFollowDistance(blockNum *uint64) {
+	for i := uint64(0); i < *e.followDistance; i++ {
+		commitBlock(e.sim, blockNum)
+	}
 }
 
 func commitBlock(sim *simulator.SimulatedBackend, blockNum *uint64) {

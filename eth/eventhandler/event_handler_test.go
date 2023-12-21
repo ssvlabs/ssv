@@ -121,6 +121,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		addr,
 		contractAddr,
 		executionclient.WithLogger(logger),
+		executionclient.WithFollowDistance(0),
+		executionclient.WithFinalizedCheckpointsFork(100500),
 		executionclient.WithFinalizedBlocksSubscription(ctx, ethtestutils.SetFinalizedBlocksProducer(sim)),
 	)
 	require.NoError(t, err)

@@ -53,7 +53,7 @@ const callableBin = "6080604052348015600f57600080fd5b5060998061001e6000396000f3f
 
 const blocksWithLogsLength = 30
 
-func TestFetchHistoricalLogs(t *testing.T) {
+func TestOldFetchHistoricalLogs(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	const testTimeout = 1 * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
@@ -78,8 +78,17 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	}
 	sim.Commit()
 
+	const followDistance = 8
+
 	// Create a client and connect to the simulator
-	client, err := New(ctx, addr, contractAddr, WithLogger(logger))
+	client, err := New(
+		ctx,
+		addr,
+		contractAddr,
+		WithLogger(logger),
+		WithFollowDistance(followDistance),
+		WithFinalizedCheckpointsFork(100500),
+	)
 	require.NoError(t, err)
 
 	err = client.Healthy(ctx)
@@ -103,7 +112,8 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, fetchedLogs)
 
-	require.Equal(t, blocksWithLogsLength, len(fetchedLogs))
+	expectedSeenLogs := blocksWithLogsLength - followDistance
+	require.Equal(t, expectedSeenLogs, len(fetchedLogs))
 
 	select {
 	case err := <-fetchErrCh:

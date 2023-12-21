@@ -155,6 +155,7 @@ var StartNodeCmd = &cobra.Command{
 			ethcommon.HexToAddress(networkConfig.RegistryContractAddr),
 			executionclient.WithLogger(logger),
 			executionclient.WithMetrics(metricsReporter),
+			executionclient.WithFollowDistance(executionclient.DefaultFollowDistance),
 			executionclient.WithConnectionTimeout(cfg.ExecutionClient.ConnectionTimeout),
 			executionclient.WithReconnectionInitialInterval(executionclient.DefaultReconnectionInitialInterval),
 			executionclient.WithReconnectionMaxInterval(executionclient.DefaultReconnectionMaxInterval),
