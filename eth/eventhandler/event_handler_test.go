@@ -169,7 +169,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 		}
 
-		lastBlock = commitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
+		lastBlock = ethtestutils.CommitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
 
 		block := <-logs
 		require.NotEmpty(t, block.Logs)
@@ -217,7 +217,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			_, err = boundContract.SimcontractTransactor.RemoveOperator(auth, 100500)
 			require.NoError(t, err)
 
-			lastBlock = commitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
+			lastBlock = ethtestutils.CommitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
 
 			block := <-logs
 			require.NotEmpty(t, block.Logs)
@@ -260,7 +260,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			_, err = boundContract.SimcontractTransactor.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
 			require.NoError(t, err)
 
-			lastBlock = commitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
+			lastBlock = ethtestutils.CommitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
 
 			block := <-logs
 			require.NotEmpty(t, block.Logs)
@@ -292,7 +292,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			_, err = boundContract.SimcontractTransactor.RemoveOperator(auth, 4)
 			require.NoError(t, err)
 
-			lastBlock = commitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
+			lastBlock = ethtestutils.CommitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
 
 			block = <-logs
 			require.NotEmpty(t, block.Logs)
@@ -407,7 +407,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				})
 			require.NoError(t, err)
 
-			lastBlock = commitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
+			lastBlock = ethtestutils.CommitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
 
 			block = <-logs
 			require.NotEmpty(t, block.Logs)
@@ -458,7 +458,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				})
 			require.NoError(t, err)
 
-			lastBlock = commitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
+			lastBlock = ethtestutils.CommitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
 
 			block = <-logs
 			require.NotEmpty(t, block.Logs)
@@ -514,7 +514,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				})
 			require.NoError(t, err)
 
-			lastBlock = commitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
+			lastBlock = ethtestutils.CommitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
 
 			block = <-logs
 			require.NotEmpty(t, block.Logs)
@@ -564,7 +564,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				})
 			require.NoError(t, err)
 
-			lastBlock = commitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
+			lastBlock = ethtestutils.CommitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
 
 			block = <-logs
 			require.NotEmpty(t, block.Logs)
@@ -615,7 +615,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				})
 			require.NoError(t, err)
 
-			lastBlock = commitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
+			lastBlock = ethtestutils.CommitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
 
 			block = <-logs
 			require.NotEmpty(t, block.Logs)
@@ -660,7 +660,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			)
 			require.NoError(t, err)
 
-			lastBlock = commitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
+			lastBlock = ethtestutils.CommitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
 
 			block := <-logs
 			require.NotEmpty(t, block.Logs)
@@ -688,7 +688,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			)
 			require.NoError(t, err)
 
-			lastBlock = commitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
+			lastBlock = ethtestutils.CommitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
 
 			block := <-logs
 			require.NotEmpty(t, block.Logs)
@@ -722,7 +722,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			)
 			require.NoError(t, err)
 
-			lastBlock = commitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
+			lastBlock = ethtestutils.CommitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
 
 			block := <-logs
 			require.NotEmpty(t, block.Logs)
@@ -767,7 +767,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				})
 			require.NoError(t, err)
 
-			lastBlock = commitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
+			lastBlock = ethtestutils.CommitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
 
 			block := <-logs
 			require.NotEmpty(t, block.Logs)
@@ -805,7 +805,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				})
 			require.NoError(t, err)
 
-			lastBlock = commitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
+			lastBlock = ethtestutils.CommitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
 
 			block := <-logs
 			require.NotEmpty(t, block.Logs)
@@ -850,7 +850,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				})
 			require.NoError(t, err)
 
-			lastBlock = commitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
+			lastBlock = ethtestutils.CommitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
 
 			block := <-logs
 			require.NotEmpty(t, block.Logs)
@@ -1157,7 +1157,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			_, err = boundContract.SimcontractTransactor.RemoveOperator(auth, op.id)
 			require.NoError(t, err)
 
-			lastBlock = commitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
+			lastBlock = ethtestutils.CommitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
 
 			block := <-logs
 			require.NotEmpty(t, block.Logs)
@@ -1234,7 +1234,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 			require.NoError(t, err)
 
-			lastBlock = commitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
+			lastBlock = ethtestutils.CommitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
 
 			block := <-logs
 			require.NotEmpty(t, block.Logs)
@@ -1297,7 +1297,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 				})
 			require.NoError(t, err)
 
-			lastBlock = commitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
+			lastBlock = ethtestutils.CommitBlockAndCheckSequence(t, ctx, sim, lastBlock.NumberU64())
 
 			block := <-logs
 			require.NotEmpty(t, block.Logs)
@@ -1669,18 +1669,4 @@ func requireKeyManagerDataToNotExist(t *testing.T, eh *EventHandler, expectedAcc
 	_, found, err = eh.keyManager.(ekm.StorageProvider).RetrieveHighestProposal(sharePubKey)
 	require.NoError(t, err)
 	require.False(t, found)
-}
-
-// commitBlockAndCheckSequence - Creating a new block and checking the block number has increased sequentially by 1
-func commitBlockAndCheckSequence(
-	t *testing.T,
-	ctx context.Context,
-	sim *simulator.SimulatedBackend,
-	lastBlockNumber uint64,
-) *ethtypes.Block {
-	newBlockHash := sim.Commit()
-	currentBlock, err := sim.BlockByHash(ctx, newBlockHash)
-	require.NoError(t, err)
-	require.Equal(t, lastBlockNumber+1, currentBlock.NumberU64())
-	return currentBlock
 }

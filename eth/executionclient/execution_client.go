@@ -352,10 +352,12 @@ func (ec *ExecutionClient) streamFinalizedBlocks(ctx context.Context, logs chan<
 		case <-ec.closed:
 			return fromBlock, ErrClosed
 
-		case toBlock := <-ec.blocksChan:
-			// #REMOVE #TODO
+		case toBlock, ok := <-ec.blocksChan:
+			if !ok {
+				return lastBlock, fmt.Errorf("blocksChan is closed")
+			}
 			if toBlock < ec.finalizedCheckpointActivationSlot {
-				panic(fmt.Sprintf("NEVER CASE %d", toBlock))
+				panic(fmt.Sprintf("invalid blocks sequence: received block %d while last handled block is %d", toBlock, lastBlock))
 			}
 			if toBlock < ec.followDistance {
 				continue

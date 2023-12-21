@@ -19,7 +19,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
-	"github.com/bloxapp/ssv/eth/ethtestutils"
 	"github.com/bloxapp/ssv/eth/simulator"
 	"github.com/bloxapp/ssv/eth/simulator/simcontract"
 )
@@ -51,9 +50,10 @@ Example contract to test event emission:
 const callableAbi = "[{\"anonymous\":false,\"inputs\":[],\"name\":\"Called\",\"type\":\"event\"},{\"inputs\":[],\"name\":\"Call\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"}]"
 const callableBin = "6080604052348015600f57600080fd5b5060998061001e6000396000f3fe6080604052348015600f57600080fd5b506004361060285760003560e01c806334e2292114602d575b600080fd5b60336035565b005b7f81fab7a4a0aa961db47eefc81f143a5220e8c8495260dd65b1356f1d19d3c7b860405160405180910390a156fea2646970667358221220029436d24f3ac598ceca41d4d712e13ced6d70727f4cdc580667de66d2f51d8b64736f6c63430008010033"
 
-const blocksWithLogsLength = 30
+const blocksWithLogsLength = 13
 
-func TestOldFetchHistoricalLogs(t *testing.T) {
+func TestFetchHistoricalLogs(t *testing.T) {
+
 	logger := zaptest.NewLogger(t)
 	const testTimeout = 1 * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
@@ -87,7 +87,7 @@ func TestOldFetchHistoricalLogs(t *testing.T) {
 		contractAddr,
 		WithLogger(logger),
 		WithFollowDistance(followDistance),
-		WithFinalizedCheckpointsFork(100500),
+		WithFinalizedCheckpointsFork(1<<64-1),
 	)
 	require.NoError(t, err)
 
@@ -152,13 +152,8 @@ func TestStreamLogs(t *testing.T) {
 	sim.Commit()
 
 	// Create a client and connect to the simulator
-	client, err := New(
-		ctx,
-		addr,
-		contractAddr,
-		WithLogger(logger),
-		WithFinalizedBlocksSubscription(ctx, ethtestutils.SetFinalizedBlocksProducer(sim)),
-	)
+	const followDistance = 2
+	client, err := New(ctx, addr, contractAddr, WithLogger(logger), WithFollowDistance(followDistance))
 	require.NoError(t, err)
 
 	err = client.Healthy(ctx)
@@ -189,17 +184,24 @@ func TestStreamLogs(t *testing.T) {
 		time.Sleep(delay)
 	}
 
-	// Wait for blocksWithLogsLength blocks to be streamed.
+	// Wait for blocksWithLogsLength-followDistance blocks to be streamed.
 Unfollowed:
 	for {
 		select {
 		case <-ctx.Done():
-			require.Equal(t, int64(blocksWithLogsLength), streamedLogsCount.Load())
+			require.Equal(t, int64(blocksWithLogsLength-followDistance), streamedLogsCount.Load())
 		case <-time.After(time.Millisecond * 5):
-			if streamedLogsCount.Load() == int64(blocksWithLogsLength) {
+			if streamedLogsCount.Load() == int64(blocksWithLogsLength-followDistance) {
 				break Unfollowed
 			}
 		}
+	}
+
+	// Create empty blocks with no transactions to advance the chain
+	// to followDistance blocks behind the head.
+	for i := 0; i < followDistance; i++ {
+		sim.Commit()
+		time.Sleep(delay)
 	}
 
 	require.NoError(t, client.Close())
@@ -344,7 +346,8 @@ func TestChainReorganizationLogs(t *testing.T) {
 	// sim.Commit()
 
 	// // Connect the client
-	// client, err := New(ctx, addr, contractAddr, WithLogger(logger))
+	// const followDistance = 8
+	// client, err := New(ctx, addr, contractAddr, WithLogger(logger), WithFollowDistance(followDistance))
 	// require.NoError(t, err)
 
 	// isReady, err := client.IsReady(ctx)
@@ -441,13 +444,7 @@ func TestSimSSV(t *testing.T) {
 	require.NotEmpty(t, contractCode)
 
 	// Create a client and connect to the simulator
-	client, err := New(
-		ctx,
-		addr,
-		contractAddr,
-		WithLogger(logger),
-		WithFinalizedBlocksSubscription(ctx, ethtestutils.SetFinalizedBlocksProducer(sim)),
-	)
+	client, err := New(ctx, addr, contractAddr, WithLogger(logger), WithFollowDistance(0))
 	require.NoError(t, err)
 
 	err = client.Healthy(ctx)
