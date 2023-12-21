@@ -129,9 +129,6 @@ func (n *p2pNetwork) SubscribeRandoms(logger *zap.Logger, numSubnets int) error 
 	}
 	n.subnets = subnets
 
-	if err := n.disc.RegisterSubnets(logger, randomSubnets...); err != nil {
-		return fmt.Errorf("could not register subnets: %w", err)
-	}
 	return nil
 }
 

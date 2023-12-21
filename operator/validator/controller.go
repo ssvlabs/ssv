@@ -465,13 +465,6 @@ func (c *controller) setupValidators(shares []*ssvtypes.SSVShare) (started int) 
 // to start consensus flow which would save the highest decided instance
 // and sync any gaps (in protocol/v2/qbft/controller/decided.go).
 func (c *controller) setupNonCommitteeValidators() {
-	// Subscribe to all subnets.
-	err := c.network.SubscribeAll(c.logger)
-	if err != nil {
-		c.logger.Error("failed to subscribe to all subnets", zap.Error(err))
-		return
-	}
-
 	nonCommitteeShares := c.sharesStorage.List(nil, registrystorage.ByNotLiquidated())
 	if len(nonCommitteeShares) == 0 {
 		c.logger.Info("could not find non-committee validators")
