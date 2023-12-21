@@ -102,7 +102,6 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 			return nil, nil, ErrNothingToSync
 		}
 		toBlock = currentBlock - ec.followDistance
-		break
 	case ec.finalizedCheckpointActivationSlot <= currentBlock:
 		lastFinalizedBlock, err := ec.client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
 		if err != nil {
@@ -110,7 +109,6 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 		}
 
 		toBlock = lastFinalizedBlock.Number.Uint64()
-		break
 	}
 
 	if toBlock < fromBlock {
@@ -290,7 +288,7 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 	lastBlock, err = ec.streamLatestBlocks(ctx, logs, fromBlock)
 
 	if err == nil {
-		lastBlock, err = ec.streamFinalizedBlocks(ctx, logs, fromBlock)
+		lastBlock, err = ec.streamFinalizedBlocks(ctx, logs, lastBlock)
 	}
 
 	return lastBlock, err
@@ -321,7 +319,7 @@ func (ec *ExecutionClient) streamLatestBlocks(ctx context.Context, logs chan<- B
 
 		case header := <-heads:
 			if header.Number.Uint64() >= ec.finalizedCheckpointActivationSlot {
-				return lastBlock, nil
+				return header.Number.Uint64(), nil
 			}
 			if header.Number.Uint64() < ec.followDistance {
 				continue
@@ -330,10 +328,17 @@ func (ec *ExecutionClient) streamLatestBlocks(ctx context.Context, logs chan<- B
 			if toBlock < fromBlock {
 				continue
 			}
-			lastBlock, err := ec.handleNewBlocks(ctx, fromBlock, toBlock, logs)
-			if err != nil {
-				return lastBlock, err
+			logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
+			for block := range logStream {
+				logs <- block
+				lastBlock = block.BlockNumber
 			}
+			if err := <-fetchErrors; err != nil {
+				// If we get an error while fetching, we return the last block we fetched.
+				return lastBlock, fmt.Errorf("fetch logs: %w", err)
+			}
+			fromBlock = toBlock + 1
+			ec.metrics.ExecutionClientLastFetchedBlock(fromBlock)
 		}
 	}
 }
@@ -348,34 +353,29 @@ func (ec *ExecutionClient) streamFinalizedBlocks(ctx context.Context, logs chan<
 			return fromBlock, ErrClosed
 
 		case toBlock := <-ec.blocksChan:
+			// #REMOVE #TODO
+			if toBlock < ec.finalizedCheckpointActivationSlot {
+				panic(fmt.Sprintf("NEVER CASE %d", toBlock))
+			}
+			if toBlock < ec.followDistance {
+				continue
+			}
 			if toBlock < fromBlock {
 				continue
 			}
-			lastBlock, err := ec.handleNewBlocks(ctx, fromBlock, toBlock, logs)
-			if err != nil {
-				return lastBlock, err
+			logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
+			for block := range logStream {
+				logs <- block
+				lastBlock = block.BlockNumber
 			}
+			if err := <-fetchErrors; err != nil {
+				// If we get an error while fetching, we return the last block we fetched.
+				return lastBlock, fmt.Errorf("fetch logs: %w", err)
+			}
+			fromBlock = toBlock + 1
+			ec.metrics.ExecutionClientLastFetchedBlock(fromBlock)
 		}
 	}
-}
-func (ec *ExecutionClient) handleNewBlocks(
-	ctx context.Context,
-	fromBlock uint64,
-	toBlock uint64,
-	logs chan<- BlockLogs,
-) (lastBlock uint64, err error) {
-	logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
-	for block := range logStream {
-		logs <- block
-		lastBlock = block.BlockNumber
-	}
-	if err := <-fetchErrors; err != nil {
-		// If we get an error while fetching, we return the last block we fetched.
-		return lastBlock, fmt.Errorf("fetch logs: %w", err)
-	}
-	fromBlock = toBlock + 1
-	ec.metrics.ExecutionClientLastFetchedBlock(fromBlock)
-	return lastBlock, nil
 }
 
 // connect connects to Ethereum execution client.

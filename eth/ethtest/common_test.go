@@ -15,7 +15,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"go.uber.org/zap/zaptest"
 
-	"github.com/bloxapp/ssv/eth/ethtestutils"
 	"github.com/bloxapp/ssv/eth/eventsyncer"
 	"github.com/bloxapp/ssv/eth/executionclient"
 	"github.com/bloxapp/ssv/eth/simulator"
@@ -181,8 +180,8 @@ func (e *TestEnv) setup(
 		contractAddr,
 		executionclient.WithLogger(logger),
 		executionclient.WithFollowDistance(*e.followDistance),
-		executionclient.WithFinalizedCheckpointsFork(1000),
-		executionclient.WithFinalizedBlocksSubscription(ctx, ethtestutils.SetFinalizedBlocksProducer(sim)),
+		executionclient.WithFinalizedCheckpointsFork(1<<64-1),
+		//executionclient.WithFinalizedBlocksSubscription(ctx, ethtestutils.SetFinalizedBlocksProducer(sim)),
 	)
 	if err != nil {
 		return err
