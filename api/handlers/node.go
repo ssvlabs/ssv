@@ -128,9 +128,7 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	var resp healthCheckJSON
 
 	// Retrieve P2P listen addresses.
-	for _, addr := range h.ListenAddresses {
-		resp.Advanced.ListenAddresses = append(resp.Advanced.ListenAddresses, addr)
-	}
+	resp.Advanced.ListenAddresses = h.ListenAddresses
 
 	// Count peers and connections.
 	peers := h.Network.Peers()
