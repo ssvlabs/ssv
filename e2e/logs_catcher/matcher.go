@@ -3,13 +3,15 @@ package logs_catcher
 import (
 	"context"
 	"fmt"
+	"strings"
+	"time"
+
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/e2e/logs_catcher/docker"
 	"github.com/bloxapp/ssv/e2e/logs_catcher/logs"
 	"github.com/bloxapp/ssv/e2e/logs_catcher/parser"
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
-	"strings"
-	"time"
 )
 
 // Test conditions:
@@ -51,27 +53,31 @@ func inspect(raw logs.RAW, fieldname string) []string {
 	return res
 }
 
-func StartCondition(pctx context.Context, logger *zap.Logger, matches []string, cli DockerCLI) error {
-	ctx, c := context.WithCancel(pctx)
+func StartCondition(pctx context.Context, logger *zap.Logger, condition []string, targetContainer string, cli DockerCLI) (string, error) {
+	ctx, cancel := context.WithCancel(pctx)
+	defer cancel()
 
-	logger.Debug("Waiting for start condition at target", zap.String("target", waitTarget), zap.String("condition", waitFor))
+	conditionLog := ""
+
+	logger.Debug("Waiting for start condition at target", zap.String("target", targetContainer), zap.Strings("condition", condition))
 	ch := make(chan string, 1024)
 	go func() {
 		for log := range ch {
-			if logs.GrepLine(log, matches) {
-				logger.Info("Start condition arrived", zap.String("log_message", waitFor))
-				c()
+			if logs.GrepLine(log, condition) {
+				conditionLog = log
+				logger.Info("Start condition arrived", zap.Strings("log_message", condition))
+				cancel()
 			}
 		}
 	}()
 	// TODO: either apply logs collection on each container or fan in the containers to one log stream
-	err := docker.StreamDockerLogs(ctx, cli, waitTarget, ch)
+	err := docker.StreamDockerLogs(ctx, cli, targetContainer, ch)
 	if !errors.Is(err, context.Canceled) {
 		logger.Error("Log streaming stopped with err ", zap.Error(err))
-		c()
-		return err
+		cancel()
+		return conditionLog, err
 	}
-	return nil
+	return conditionLog, nil
 }
 
 // Todo: match messages based on fields. ex: take all X messages from target one,
@@ -109,8 +115,9 @@ func matchMessages(ctx context.Context, logger *zap.Logger, cli DockerCLI, first
 
 func Match(pctx context.Context, logger *zap.Logger, cli DockerCLI) error {
 	startctx, startc := context.WithTimeout(pctx, time.Minute*6*4) // wait max 4 epochs
-	err := StartCondition(startctx, logger, []string{waitFor}, cli)
+	_, err := StartCondition(startctx, logger, []string{waitFor}, waitTarget, cli)
 	if err != nil {
+		startc() // Cancel the startctx context
 		return err
 	}
 	startc()
