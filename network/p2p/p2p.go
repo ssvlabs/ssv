@@ -246,7 +246,7 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 
 		// Compute the new subnets according to the active validators.
 		newSubnets := make([]byte, commons.Subnets())
-		// copy(newSubnets, n.subnets)
+		copy(newSubnets, n.subnets)
 		n.activeValidators.Range(func(pkHex string, status validatorStatus) bool {
 			subnet := commons.ValidatorSubnet(pkHex)
 			newSubnets[subnet] = byte(1)
