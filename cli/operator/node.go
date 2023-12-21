@@ -303,6 +303,7 @@ var StartNodeCmd = &cobra.Command{
 					PeersIndex: p2pNetwork.(p2pv1.PeersIndexProvider).PeersIndex(),
 					Network:    p2pNetwork.(p2pv1.HostProvider).Host().Network(),
 					TopicIndex: p2pNetwork.(handlers.TopicIndex),
+					NodeProber: nodeProber,
 				},
 				&handlers.Validators{
 					Shares: nodeStorage.Shares(),
