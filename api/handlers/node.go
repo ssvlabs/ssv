@@ -17,7 +17,10 @@ import (
 	"github.com/bloxapp/ssv/nodeprobe"
 )
 
-const healthyPeerCount = 30
+const (
+	healthyPeerCount = 20
+	healthyInbounds  = 4
+)
 
 type TopicIndex interface {
 	PeersByTopic() ([]peer.ID, map[string][]peer.ID)
@@ -162,7 +165,7 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 		resp.P2P = healthStatus{errors.New("no peers are connected")}
 	} else if resp.Advanced.Peers < healthyPeerCount {
 		resp.P2P = healthStatus{errors.New("not enough connected peers")}
-	} else if resp.Advanced.InboundConns == 0 {
+	} else if resp.Advanced.InboundConns < healthyInbounds {
 		resp.P2P = healthStatus{errors.New("not enough inbound connections, port is likely not reachable")}
 	}
 
