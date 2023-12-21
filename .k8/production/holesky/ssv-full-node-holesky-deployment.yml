@@ -158,8 +158,6 @@ spec:
             value: "1024"
           - name: MSG_WORKER_BUFFER_SIZE
             value: "2048"
-          - name: SUBNETS
-            value: "0xffffffffffffffffffffffffffffffff"
           - name: P2P_MAX_PEERS
             value: "300"
         volumeMounts:
