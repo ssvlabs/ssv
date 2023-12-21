@@ -7,14 +7,11 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/libp2p/go-libp2p/core/network"
-	"github.com/libp2p/go-libp2p/core/peer"
-	ma "github.com/multiformats/go-multiaddr"
-	manet "github.com/multiformats/go-multiaddr/net"
-
 	"github.com/bloxapp/ssv/api"
 	networkpeers "github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/nodeprobe"
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 const (
@@ -90,10 +87,11 @@ func (hc healthCheckJSON) String() string {
 }
 
 type Node struct {
-	PeersIndex networkpeers.Index
-	TopicIndex TopicIndex
-	Network    network.Network
-	NodeProber *nodeprobe.Prober
+	ListenAddresses []string
+	PeersIndex      networkpeers.Index
+	TopicIndex      TopicIndex
+	Network         network.Network
+	NodeProber      *nodeprobe.Prober
 }
 
 func (h *Node) Identity(w http.ResponseWriter, r *http.Request) error {
@@ -133,17 +131,7 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	var resp healthCheckJSON
 
 	// Retrieve P2P listen addresses.
-	for _, addr := range h.Network.ListenAddresses() {
-		if addr.String() == "/p2p-circuit" || addr.Decapsulate(ma.StringCast("/ip4/0.0.0.0")) == nil {
-			// Skip circuit and non-IP4 addresses.
-			continue
-		}
-		netAddr, err := manet.ToNetAddr(addr)
-		if err != nil {
-			return fmt.Errorf("failed to convert multiaddr to net.Addr: %w", err)
-		}
-		resp.Advanced.ListenAddresses = append(resp.Advanced.ListenAddresses, netAddr.String())
-	}
+	resp.Advanced.ListenAddresses = h.ListenAddresses
 
 	// Count peers and connections.
 	peers := h.Network.Peers()
