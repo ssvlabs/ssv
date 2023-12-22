@@ -57,8 +57,8 @@ github.com/bits-and-blooms/bitset v1.7.0 h1:YjAGVd3XmtK9ktAbX8Zg2g2PwLIMjGREZJHl
 github.com/bits-and-blooms/bitset v1.7.0/go.mod h1:gIdJ4wp64HaoK2YrL1Q5/N7Y16edYb8uY+O0FJTyyDA=
 github.com/bloxapp/eth2-key-manager v1.3.2 h1:xzxwYQZr8DoQrkCBkTnSdDWqqoPq/iy5VoKLxfPf4IY=
 github.com/bloxapp/eth2-key-manager v1.3.2/go.mod h1:cT+qAJfnAzNz9StFoHQ8xAkyU2eyEukd6xfxvcBWuZA=
-github.com/bloxapp/ssv-spec v0.3.4 h1:uu1pAP8FBucGf1FGORjzqz7if0vWGRY5w6ILLhA7IuM=
-github.com/bloxapp/ssv-spec v0.3.4/go.mod h1:zPJR7YnG5iZ6I0h6EzfVly8bTBXaZwcx4TyJ8pzYVd8=
+github.com/bloxapp/ssv-spec v0.3.5-0.20231212075847-375a2766d19e h1:/ZRSxON+Dia+Nqa5QznflL/zASMxAmJNQhZW28fQejQ=
+github.com/bloxapp/ssv-spec v0.3.5-0.20231212075847-375a2766d19e/go.mod h1:zPJR7YnG5iZ6I0h6EzfVly8bTBXaZwcx4TyJ8pzYVd8=
 github.com/bradfitz/go-smtpd v0.0.0-20170404230938-deb6d6237625/go.mod h1:HYsPBTaaSFSlLx/70C2HPIMNZpVV8+vt/A+FMnYP11g=
 github.com/bradfitz/gomemcache v0.0.0-20170208213004-1952afaa557d/go.mod h1:PmM6Mmwb0LSuEubjR8N7PtNe1KxZLtOUHtbeikc5h60=
 github.com/btcsuite/btcd/btcec/v2 v2.3.2 h1:5n0X6hX0Zk+6omWcihdYvdAlGf2DfasC0GMf7DClJ3U=
