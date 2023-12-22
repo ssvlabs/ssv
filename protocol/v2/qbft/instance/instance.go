@@ -137,7 +137,7 @@ func (i *Instance) ProcessMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (
 		case specqbft.ProposalMsgType:
 			return i.uponProposal(logger, msg, i.State.ProposeContainer)
 		case specqbft.PrepareMsgType:
-			return i.uponPrepare(logger, msg, i.State.PrepareContainer, i.State.CommitContainer)
+			return i.uponPrepare(logger, msg, i.State.PrepareContainer)
 		case specqbft.CommitMsgType:
 			decided, decidedValue, aggregatedCommit, err = i.UponCommit(logger, msg, i.State.CommitContainer)
 			if decided {
