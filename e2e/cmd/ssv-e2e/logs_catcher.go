@@ -12,7 +12,7 @@ import (
 
 type LogsCatcherCmd struct {
 	Mode   string `required:"" env:"Mode" help:"Mode of the logs catcher. Can be Slashing or BlsVerification"`
-	Leader int    `required:"" env:"Leader" help:"Leader to run the bls verification on"`
+	Leader int    `env:"Leader" help:"Leader to run the bls verification on"`
 }
 
 const (
