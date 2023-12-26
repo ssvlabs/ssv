@@ -54,7 +54,7 @@ services:
     environment:
       - NETWORK=holesky-e2e
     volumes:
-      - ssv-node-4-data:/ssv-node-4-data
+      - ssv-node-2-data:/ssv-node-2-data
     networks:
       - blox-docker
 

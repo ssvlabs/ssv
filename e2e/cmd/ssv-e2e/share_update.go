@@ -27,7 +27,7 @@ const (
 	// secret key to be used for updated share
 	sk   = "3548db63ab5701878daf25fa877638dc7809778815b9d9ecd5369da33ca9e64f"
 	vPK1 = "8c5801d7a18e27fae47dfdd99c0ac67fbc6a5a56bb1fc52d0309626d805861e04eaaf67948c18ad50c96d63e44328ab0" // leader 1
-	vPK2 = "81bde622abeb6fb98be8e6d281944b11867c6ddb23b2af582b2af459a0316f766fdb97e56a6c69f66d85e411361c0b8a" // leader 4
+	vPK2 = "a238aa8e3bd1890ac5def81e1a693a7658da491ac087d92cee870ab4d42998a184957321d70cbd42f9d38982dd9a928c" // leader 2
 )
 
 func (cmd *ShareUpdateCmd) Run(logger *zap.Logger, globals Globals) error {
