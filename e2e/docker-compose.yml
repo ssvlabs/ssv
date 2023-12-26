@@ -45,6 +45,19 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
 
+  share_update:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: share_update:latest
+    command: share-update
+    environment:
+      - NETWORK=holesky-e2e
+    volumes:
+      - ssv-node-2-data:/ssv-node-2-data
+    networks:
+      - blox-docker
+
   x-base: &default-base
     depends_on:
       beacon_proxy:

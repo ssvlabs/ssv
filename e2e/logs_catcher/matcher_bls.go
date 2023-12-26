@@ -49,32 +49,37 @@ type logCondition struct {
 	error            string
 }
 
-func VerifyBLSSignature(pctx context.Context, logger *zap.Logger, cli DockerCLI) error {
-	startctx, startc := context.WithTimeout(pctx, time.Minute*6*4) // wait max 4 epochs
+type CorruptedShare struct {
+	OperatorID      types.OperatorID
+	ValidatorPubKey string
+	ValidatorIndex  string
+}
+
+func VerifyBLSSignature(pctx context.Context, logger *zap.Logger, cli DockerCLI, share CorruptedShare) error {
+	startctx, startc := context.WithTimeout(pctx, time.Minute*6*4) // wait max 4 epochs // TODO: dynamic wait based on leader?
 	defer startc()
 
-	// TODO: pass corrupted operator & validator info from outside
-	corruptedOperator := types.OperatorID(4)
-	//corruptedValidatorIndex := fmt.Sprintf("v%d", 1476356) // leader 1
-	//corruptedValidatorPubKey := "8c5801d7a18e27fae47dfdd99c0ac67fbc6a5a56bb1fc52d0309626d805861e04eaaf67948c18ad50c96d63e44328ab0"
-	corruptedValidatorIndex := fmt.Sprintf("v%d", 1476359) // leader 4
-	corruptedValidatorPubKey := "81bde622abeb6fb98be8e6d281944b11867c6ddb23b2af582b2af459a0316f766fdb97e56a6c69f66d85e411361c0b8a"
-
-	conditionLog, err := StartCondition(startctx, logger, []string{gotDutiesSuccess, corruptedValidatorIndex}, targetContainer, cli)
+	conditionLog, err := StartCondition(startctx, logger, []string{gotDutiesSuccess, share.ValidatorIndex}, targetContainer, cli)
 	if err != nil {
 		return fmt.Errorf("failed to start condition: %w", err)
 	}
 
-	dutyID, dutySlot, err := ParseAndExtractDutyInfo(conditionLog, corruptedValidatorIndex)
+	dutyID, dutySlot, err := ParseAndExtractDutyInfo(conditionLog, share.ValidatorIndex)
 	if err != nil {
 		return fmt.Errorf("failed to parse and extract duty info: %w", err)
 	}
-	fmt.Println("Duty ID: ", dutyID)
+	logger.Info("Duty ID: ", zap.String("duty_id", dutyID))
 
-	leader, committee := DetermineLeaderAndCommittee(dutySlot)
-	fmt.Println("Leader: ", leader)
+	committee := []*types.Operator{
+		{OperatorID: 1},
+		{OperatorID: 2},
+		{OperatorID: 3},
+		{OperatorID: 4},
+	}
+	leader := DetermineLeader(dutySlot, committee)
+	logger.Info("Leader: ", zap.Uint64("leader", leader))
 
-	_, err = StartCondition(startctx, logger, []string{submittedAttSuccess, corruptedValidatorPubKey}, targetContainer, cli)
+	_, err = StartCondition(startctx, logger, []string{submittedAttSuccess, share.ValidatorPubKey}, targetContainer, cli)
 	if err != nil {
 		return fmt.Errorf("failed to start condition: %w", err)
 	}
@@ -82,7 +87,7 @@ func VerifyBLSSignature(pctx context.Context, logger *zap.Logger, cli DockerCLI)
 	ctx, c := context.WithCancel(pctx)
 	defer c()
 
-	return ProcessLogs(ctx, logger, cli, committee, leader, dutyID, dutySlot, corruptedOperator)
+	return ProcessLogs(ctx, logger, cli, committee, leader, dutyID, dutySlot, share.OperatorID)
 }
 
 func ParseAndExtractDutyInfo(conditionLog string, corruptedValidatorIndex string) (string, phase0.Slot, error) {
@@ -104,14 +109,7 @@ func ParseAndExtractDutyInfo(conditionLog string, corruptedValidatorIndex string
 	return dutyID, dutySlot, nil
 }
 
-func DetermineLeaderAndCommittee(dutySlot phase0.Slot) (types.OperatorID, []*types.Operator) {
-	committee := []*types.Operator{
-		{OperatorID: 1},
-		{OperatorID: 2},
-		{OperatorID: 3},
-		{OperatorID: 4},
-	}
-
+func DetermineLeader(dutySlot phase0.Slot, committee []*types.Operator) types.OperatorID {
 	leader := qbft.RoundRobinProposer(&qbft.State{
 		Share: &types.Share{
 			Committee: committee,
@@ -119,7 +117,7 @@ func DetermineLeaderAndCommittee(dutySlot phase0.Slot) (types.OperatorID, []*typ
 		Height: qbft.Height(dutySlot),
 	}, qbft.FirstRound)
 
-	return leader, committee
+	return leader
 }
 
 func ProcessLogs(ctx context.Context, logger *zap.Logger, cli DockerCLI, committee []*types.Operator, leader types.OperatorID, dutyID string, dutySlot phase0.Slot, corruptedOperator types.OperatorID) error {
@@ -128,12 +126,12 @@ func ProcessLogs(ctx context.Context, logger *zap.Logger, cli DockerCLI, committ
 		if operator.OperatorID == corruptedOperator {
 			err := processCorruptedOperatorLogs(ctx, logger, cli, dutyID, dutySlot, corruptedOperator, target)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to process corrupted operator logs: %w", err)
 			}
 		} else {
 			err := processNonCorruptedOperatorLogs(ctx, logger, cli, leader, dutySlot, corruptedOperator, target)
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to process non corrupted operator logs: %w", err)
 			}
 		}
 	}
@@ -194,7 +192,7 @@ func processNonCorruptedOperatorLogs(ctx context.Context, logger *zap.Logger, cl
 				signer:           corruptedOperator,
 				error:            verifySignatureErr,
 			},
-			// TODO: should we handle decided failed signature?
+			// TODO: handle decided failed signature
 		}
 	} else {
 		conditions = []logCondition{
@@ -216,40 +214,7 @@ func processNonCorruptedOperatorLogs(ctx context.Context, logger *zap.Logger, cl
 				signer:           corruptedOperator,
 				error:            verifySignatureErr,
 			},
-
-			// TODO: should we handle decided failed signature?
-			//if err := matchSingleConditionLog(ctx, logger, cli, []string{
-			//	fmt.Sprintf(msgHeightField, dutySlot),
-			//	fmt.Sprintf(msgTypeField, message.MsgTypeToString(types.SSVConsensusMsgType)),
-			//	"\"consensus_msg_type\":2", // decided
-			//	"\"signers\":[1,3,4]",
-			//	"\"error\":\"failed processing consensus message: invalid decided msg: invalid decided msg: msg signature invalid: failed to verify signature\"",
-			//}, target); err != nil {
-			//	return err
-			//}
-			//
-			//// TODO: 1,2,4 signers ??? no log for this
-			//// TODO: 2,3,4 signers ??? no log for this
-			//
-			//if err := matchSingleConditionLog(ctx, logger, cli, []string{
-			//	fmt.Sprintf(msgHeightField, dutySlot),
-			//	fmt.Sprintf(msgTypeField, message.MsgTypeToString(types.SSVConsensusMsgType)),
-			//	"\"consensus_msg_type\":2", // decided
-			//	"\"signers\":[1,2,3,4]",
-			//	"\"error\":\"failed processing consensus message: invalid decided msg: invalid decided msg: msg signature invalid: failed to verify signature\"",
-			//}, target); err != nil {
-			//	return err
-			//}
-			//
-			//// post consensus
-			//if err := matchSingleConditionLog(ctx, logger, cli, []string{
-			//	fmt.Sprintf(msgHeightField, dutySlot),
-			//	"\"msg_type\":\"partial_signature\"",
-			//	"\"signer\":4",
-			//	"\"error\":\"failed processing post consensus message: invalid post-consensus message: failed to verify PartialSignature: failed to verify signature\"",
-			//}, target); err != nil {
-			//	return err
-			//}
+			// TODO: handle decided failed signature
 		}
 	}
 

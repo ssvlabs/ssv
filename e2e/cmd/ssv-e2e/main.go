@@ -21,6 +21,7 @@ type CLI struct {
 	Globals
 	BeaconProxy BeaconProxyCmd `cmd:""`
 	LogsCatcher LogsCatcherCmd `cmd:""`
+	ShareUpdate ShareUpdateCmd `cmd:""`
 }
 
 func main() {
