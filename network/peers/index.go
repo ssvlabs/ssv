@@ -39,8 +39,8 @@ type ConnectionIndex interface {
 	// by checking if it is already connected or if we tried to connect to it recently and failed
 	CanConnect(id peer.ID) bool
 
-	// Limit checks if the node has reached peers limit
-	Limit(dir libp2pnetwork.Direction) bool
+	// AtLimit checks if the node has reached peers limit
+	AtLimit(dir libp2pnetwork.Direction) bool
 
 	// IsBad returns whether the given peer is bad
 	IsBad(logger *zap.Logger, id peer.ID) bool

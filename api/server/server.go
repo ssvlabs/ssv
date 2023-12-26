@@ -5,11 +5,12 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/bloxapp/ssv/api"
-	"github.com/bloxapp/ssv/api/handlers"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/api"
+	"github.com/bloxapp/ssv/api/handlers"
 )
 
 type Server struct {
@@ -44,6 +45,7 @@ func (s *Server) Run() error {
 	router.Get("/v1/node/identity", api.Handler(s.node.Identity))
 	router.Get("/v1/node/peers", api.Handler(s.node.Peers))
 	router.Get("/v1/node/topics", api.Handler(s.node.Topics))
+	router.Get("/v1/node/health", api.Handler(s.node.Health))
 	router.Get("/v1/validators", api.Handler(s.validators.List))
 
 	s.logger.Info("Serving SSV API", zap.String("addr", s.addr))
