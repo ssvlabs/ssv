@@ -22,5 +22,4 @@ docker compose up -d beacon_proxy ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4
 docker compose run --build logs_catcher logs-catcher --mode BlsVerification --leader 1
 
 # Step 8: Run logs_catcher in Mode BlsVerification for leader
-# TODO: Fix
-#docker compose run --build logs_catcher logs-catcher --mode BlsVerification --leader 2
+docker compose run --build logs_catcher logs-catcher --mode BlsVerification --leader 2

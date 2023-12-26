@@ -25,9 +25,10 @@ type ShareUpdateCmd struct {
 
 const (
 	// secret key to be used for updated share
-	sk   = "3548db63ab5701878daf25fa877638dc7809778815b9d9ecd5369da33ca9e64f"
-	vPK1 = "8c5801d7a18e27fae47dfdd99c0ac67fbc6a5a56bb1fc52d0309626d805861e04eaaf67948c18ad50c96d63e44328ab0" // leader 1
-	vPK2 = "a238aa8e3bd1890ac5def81e1a693a7658da491ac087d92cee870ab4d42998a184957321d70cbd42f9d38982dd9a928c" // leader 2
+	skLeader1  = "3548db63ab5701878daf25fa877638dc7809778815b9d9ecd5369da33ca9e64f"
+	skLeader2  = "66dd37ae71b35c81022cdde98370e881cff896b689fa9136917f45afce43fd3b"
+	vpkLeader1 = "8c5801d7a18e27fae47dfdd99c0ac67fbc6a5a56bb1fc52d0309626d805861e04eaaf67948c18ad50c96d63e44328ab0" // leader 1
+	vpkLeader2 = "a238aa8e3bd1890ac5def81e1a693a7658da491ac087d92cee870ab4d42998a184957321d70cbd42f9d38982dd9a928c" // leader 2
 )
 
 func (cmd *ShareUpdateCmd) Run(logger *zap.Logger, globals Globals) error {
@@ -92,6 +93,15 @@ func (cmd *ShareUpdateCmd) Run(logger *zap.Logger, globals Globals) error {
 	}
 	for i, op := range validatorShare.Committee {
 		if op.OperatorID == operatorData.ID {
+			var sk string
+			switch cmd.ValidatorPubKey {
+			case vpkLeader1:
+				sk = skLeader1
+			case vpkLeader2:
+				sk = skLeader2
+			default:
+				return fmt.Errorf("invalid validator public key")
+			}
 
 			blsSK := &bls.SecretKey{}
 			if err = blsSK.SetHexString(sk); err != nil {
