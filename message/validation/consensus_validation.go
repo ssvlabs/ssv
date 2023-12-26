@@ -92,7 +92,7 @@ func (mv *messageValidator) validateConsensusMessage(
 	if msgRound < lowestAllowed || msgRound > highestAllowed {
 		e := ErrEstimatedRoundTooFar
 		e.got = fmt.Sprintf("%v (%v role)", msgRound, role)
-		e.want = fmt.Sprintf("between %v and %v (%v role) / %v passed", lowestAllowed, highestAllowed, role, sinceSlotStart)
+		e.want = fmt.Sprintf("between %v and %v (estimated %v, %v role) / %v passed", lowestAllowed, highestAllowed, estimatedRound, role, sinceSlotStart)
 		return consensusDescriptor, msgSlot, e
 	}
 
