@@ -13,7 +13,6 @@ import (
 	"golang.org/x/exp/slices"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
@@ -49,6 +48,7 @@ func (mv *messageValidator) validateConsensusMessage(
 		e := ErrUnexpectedConsensusMessage
 		e.got = messageID.GetRoleType()
 		return consensusDescriptor, msgSlot, e
+	default:
 	}
 
 	if err := mv.validateSignatureFormat(signedMsg.Signature); err != nil {
@@ -69,32 +69,31 @@ func (mv *messageValidator) validateConsensusMessage(
 		return consensusDescriptor, msgSlot, err
 	}
 
-	if maxRound := mv.maxRound(role); msgRound > maxRound {
-		err := ErrRoundTooHigh
-		err.got = fmt.Sprintf("%v (%v role)", msgRound, role)
-		err.want = fmt.Sprintf("%v (%v role)", maxRound, role)
-		return consensusDescriptor, msgSlot, err
+	maxRound := mv.roundThresholdCache.MaxPossibleRound(role)
+
+	if msgRound > maxRound {
+		e := ErrRoundTooHigh
+		e.got = fmt.Sprintf("%v (%v role)", msgRound, role)
+		e.want = fmt.Sprintf("%v (%v role)", maxRound, role)
+		return consensusDescriptor, msgSlot, e
 	}
 
-	slotStartTime := mv.netCfg.Beacon.GetSlotStartTime(msgSlot) /*.
-	Add(mv.waitAfterSlotStart(role))*/ // TODO: not supported yet because first round is non-deterministic now
+	slotStartTime := mv.netCfg.Beacon.GetSlotStartTime(msgSlot)
 
 	sinceSlotStart := time.Duration(0)
 	estimatedRound := specqbft.FirstRound
 	if receivedAt.After(slotStartTime) {
 		sinceSlotStart = receivedAt.Sub(slotStartTime)
-		estimatedRound = mv.currentEstimatedRound(sinceSlotStart)
+		estimatedRound = mv.roundThresholdCache.EstimatedRound(role, sinceSlotStart)
 	}
 
-	// TODO: lowestAllowed is not supported yet because first round is non-deterministic now
-	lowestAllowed := /*estimatedRound - allowedRoundsInPast*/ specqbft.FirstRound
-	highestAllowed := estimatedRound + allowedRoundsInFuture
+	lowestAllowed, highestAllowed := mv.allowedRoundRange(estimatedRound, maxRound)
 
 	if msgRound < lowestAllowed || msgRound > highestAllowed {
-		err := ErrEstimatedRoundTooFar
-		err.got = fmt.Sprintf("%v (%v role)", msgRound, role)
-		err.want = fmt.Sprintf("between %v and %v (%v role) / %v passed", lowestAllowed, highestAllowed, role, sinceSlotStart)
-		return consensusDescriptor, msgSlot, err
+		e := ErrEstimatedRoundTooFar
+		e.got = fmt.Sprintf("%v (%v role)", msgRound, role)
+		e.want = fmt.Sprintf("between %v and %v (%v role) / %v passed", lowestAllowed, highestAllowed, role, sinceSlotStart)
+		return consensusDescriptor, msgSlot, e
 	}
 
 	if mv.hasFullData(signedMsg) {
@@ -145,6 +144,24 @@ func (mv *messageValidator) validateConsensusMessage(
 	}
 
 	return consensusDescriptor, msgSlot, nil
+}
+
+func (mv *messageValidator) allowedRoundRange(estimatedRound specqbft.Round, maxRound specqbft.Round) (specqbft.Round, specqbft.Round) {
+	var lowestAllowed, highestAllowed specqbft.Round
+
+	if lowestAllowed > allowedRoundsInPast {
+		lowestAllowed = estimatedRound - allowedRoundsInPast
+	} else {
+		lowestAllowed = specqbft.FirstRound
+	}
+
+	if maxRound-estimatedRound >= allowedRoundsInFuture {
+		highestAllowed = estimatedRound + allowedRoundsInFuture
+	} else {
+		highestAllowed = maxRound
+	}
+
+	return lowestAllowed, highestAllowed
 }
 
 func (mv *messageValidator) validateJustifications(
@@ -278,9 +295,10 @@ func (mv *messageValidator) validateDutyCount(
 		}
 
 		return nil
-	}
 
-	return nil
+	default:
+		return nil
+	}
 }
 
 func (mv *messageValidator) validateBeaconDuty(
@@ -312,9 +330,11 @@ func (mv *messageValidator) validateBeaconDuty(
 		}
 
 		return nil
+
+	default:
+		return nil
 	}
 
-	return nil
 }
 
 func (mv *messageValidator) hasFullData(signedMsg *specqbft.SignedMessage) bool {
@@ -327,54 +347,9 @@ func (mv *messageValidator) isDecidedMessage(signedMsg *specqbft.SignedMessage) 
 	return signedMsg.Message.MsgType == specqbft.CommitMsgType && len(signedMsg.Signers) > 1
 }
 
-func (mv *messageValidator) maxRound(role spectypes.BeaconRole) specqbft.Round {
-	switch role {
-	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator: // TODO: check if value for aggregator is correct as there are messages on stage exceeding the limit
-		return 12 // TODO: consider calculating based on quick timeout and slow timeout
-	case spectypes.BNRoleProposer, spectypes.BNRoleSyncCommittee, spectypes.BNRoleSyncCommitteeContribution:
-		return 6
-	case spectypes.BNRoleValidatorRegistration, spectypes.BNRoleVoluntaryExit:
-		return 0
-	default:
-		panic("unknown role")
-	}
-}
-
-func (mv *messageValidator) currentEstimatedRound(sinceSlotStart time.Duration) specqbft.Round {
-	if currentQuickRound := specqbft.FirstRound + specqbft.Round(sinceSlotStart/roundtimer.QuickTimeout); currentQuickRound <= roundtimer.QuickTimeoutThreshold {
-		return currentQuickRound
-	}
-
-	sinceFirstSlowRound := sinceSlotStart - (time.Duration(roundtimer.QuickTimeoutThreshold) * roundtimer.QuickTimeout)
-	estimatedRound := roundtimer.QuickTimeoutThreshold + specqbft.FirstRound + specqbft.Round(sinceFirstSlowRound/roundtimer.SlowTimeout)
-	return estimatedRound
-}
-
-func (mv *messageValidator) waitAfterSlotStart(role spectypes.BeaconRole) time.Duration {
-	switch role {
-	case spectypes.BNRoleAttester, spectypes.BNRoleSyncCommittee:
-		return mv.netCfg.Beacon.SlotDurationSec() / 3
-	case spectypes.BNRoleAggregator, spectypes.BNRoleSyncCommitteeContribution:
-		return mv.netCfg.Beacon.SlotDurationSec() / 3 * 2
-	case spectypes.BNRoleProposer, spectypes.BNRoleValidatorRegistration, spectypes.BNRoleVoluntaryExit:
-		return 0
-	default:
-		panic("unknown role")
-	}
-}
-
 func (mv *messageValidator) validRole(roleType spectypes.BeaconRole) bool {
-	switch roleType {
-	case spectypes.BNRoleAttester,
-		spectypes.BNRoleAggregator,
-		spectypes.BNRoleProposer,
-		spectypes.BNRoleSyncCommittee,
-		spectypes.BNRoleSyncCommitteeContribution,
-		spectypes.BNRoleValidatorRegistration,
-		spectypes.BNRoleVoluntaryExit:
-		return true
-	}
-	return false
+	_, ok := mv.beaconRoles[roleType]
+	return ok
 }
 
 func (mv *messageValidator) validQBFTMsgType(msgType specqbft.MessageType) bool {

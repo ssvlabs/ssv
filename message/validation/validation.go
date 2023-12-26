@@ -25,6 +25,7 @@ import (
 	"golang.org/x/exp/slices"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/message/validation/roundthresholds"
 	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/networkconfig"
@@ -72,12 +73,14 @@ type MessageValidator interface {
 type messageValidator struct {
 	logger                  *zap.Logger
 	metrics                 metricsreporter.MetricsReporter
+	beaconRoles             map[spectypes.BeaconRole]bool
 	netCfg                  networkconfig.NetworkConfig
 	index                   sync.Map
 	nodeStorage             operatorstorage.Storage
 	dutyStore               *dutystore.Store
 	ownOperatorID           spectypes.OperatorID
 	operatorIDToPubkeyCache *hashmap.Map[spectypes.OperatorID, *rsa.PublicKey]
+	roundThresholdCache     *roundthresholds.Cache
 
 	// validationLocks is a map of lock per SSV message ID to
 	// prevent concurrent access to the same state.
@@ -91,11 +94,27 @@ type messageValidator struct {
 // NewMessageValidator returns a new MessageValidator with the given network configuration and options.
 func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) MessageValidator {
 	mv := &messageValidator{
-		logger:                  zap.NewNop(),
-		metrics:                 metricsreporter.NewNop(),
+		logger:  zap.NewNop(),
+		metrics: metricsreporter.NewNop(),
+		beaconRoles: map[spectypes.BeaconRole]bool{
+			spectypes.BNRoleAttester:                  true,
+			spectypes.BNRoleAggregator:                true,
+			spectypes.BNRoleProposer:                  true,
+			spectypes.BNRoleSyncCommittee:             true,
+			spectypes.BNRoleSyncCommitteeContribution: true,
+			spectypes.BNRoleValidatorRegistration:     false,
+			spectypes.BNRoleVoluntaryExit:             false,
+		},
 		netCfg:                  netCfg,
 		operatorIDToPubkeyCache: hashmap.New[spectypes.OperatorID, *rsa.PublicKey](),
 		validationLocks:         make(map[spectypes.MessageID]*sync.Mutex),
+		roundThresholdCache:     roundthresholds.New(netCfg.Beacon),
+	}
+
+	for role, hasConsensus := range mv.beaconRoles {
+		if hasConsensus {
+			mv.roundThresholdCache.InitThresholds(role)
+		}
 	}
 
 	for _, opt := range opts {
