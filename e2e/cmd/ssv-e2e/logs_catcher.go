@@ -52,16 +52,16 @@ func (cmd *LogsCatcherCmd) Run(logger *zap.Logger, globals Globals) error {
 		switch cmd.Leader {
 		case 1:
 			corruptedShare = logs_catcher.CorruptedShare{
-				OperatorID:      2,
+				OperatorID:      4,
 				ValidatorPubKey: "8c5801d7a18e27fae47dfdd99c0ac67fbc6a5a56bb1fc52d0309626d805861e04eaaf67948c18ad50c96d63e44328ab0",
 				ValidatorIndex:  fmt.Sprintf("v%d", 1476356),
 			}
 
-		case 2:
+		case 4:
 			corruptedShare = logs_catcher.CorruptedShare{
-				OperatorID:      2,
-				ValidatorPubKey: "a238aa8e3bd1890ac5def81e1a693a7658da491ac087d92cee870ab4d42998a184957321d70cbd42f9d38982dd9a928c",
-				ValidatorIndex:  fmt.Sprintf("v%d", 1476357),
+				OperatorID:      4,
+				ValidatorPubKey: "81bde622abeb6fb98be8e6d281944b11867c6ddb23b2af582b2af459a0316f766fdb97e56a6c69f66d85e411361c0b8a",
+				ValidatorIndex:  fmt.Sprintf("v%d", 1476359),
 			}
 		default:
 			return fmt.Errorf("invalid leader: %d", cmd.Leader)
