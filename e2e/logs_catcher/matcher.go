@@ -72,9 +72,8 @@ func StartCondition(pctx context.Context, logger *zap.Logger, condition []string
 	}()
 	// TODO: either apply logs collection on each container or fan in the containers to one log stream
 	err := docker.StreamDockerLogs(ctx, cli, targetContainer, ch)
-	if !errors.Is(err, context.Canceled) {
+	if err != nil && !errors.Is(err, context.Canceled) {
 		logger.Error("Log streaming stopped with err ", zap.Error(err))
-		cancel()
 		return conditionLog, err
 	}
 	return conditionLog, nil

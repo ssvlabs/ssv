@@ -5,39 +5,64 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"os"
 
+	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/ekm"
 	"github.com/bloxapp/ssv/networkconfig"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
+	"github.com/bloxapp/ssv/utils/blskeygen"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"go.uber.org/zap"
+	"gopkg.in/yaml.v3"
+
+	"github.com/bloxapp/ssv/e2e/logs_catcher"
 )
 
 type ShareUpdateCmd struct {
-	NetworkName        string `required:"" env:"NETWORK" env-description:"Network config name"`
-	DBPath             string `required:"" env:"DB_PATH" help:"Path to the DB folder"`
-	OperatorPrivateKey string `required:"" env:"OPERATOR_KEY" env-description:"Operator private key"`
-	ValidatorPubKey    string `required:"" env:"VALIDATOR_PUB_KEY" env-description:"Validator public key"`
+	OperatorPrivateKey string `yaml:"OperatorPrivateKey"`
 }
 
 const (
-	// secret key to be used for updated share
-	skLeader1  = "3548db63ab5701878daf25fa877638dc7809778815b9d9ecd5369da33ca9e64f"
-	skLeader2  = "66dd37ae71b35c81022cdde98370e881cff896b689fa9136917f45afce43fd3b"
-	vpkLeader1 = "8c5801d7a18e27fae47dfdd99c0ac67fbc6a5a56bb1fc52d0309626d805861e04eaaf67948c18ad50c96d63e44328ab0" // leader 1
-	vpkLeader2 = "a238aa8e3bd1890ac5def81e1a693a7658da491ac087d92cee870ab4d42998a184957321d70cbd42f9d38982dd9a928c" // leader 2
+	dbPathFormat  = "/ssv-node-%d-data/db"
+	shareYAMLPath = "/tconfig/share%d.yaml"
 )
 
 func (cmd *ShareUpdateCmd) Run(logger *zap.Logger, globals Globals) error {
-	// Setup DB
-	db, err := kv.New(logger, basedb.Options{
-		Path: cmd.DBPath,
-	})
+	networkConfig, err := networkconfig.GetNetworkConfigByName(globals.NetworkName)
 	if err != nil {
-		return fmt.Errorf("failed to open db: %w", err)
+		return fmt.Errorf("failed to get network config: %w", err)
+	}
+
+	corruptedShares, err := UnmarshalBlsVerificationJSON(globals.ValidatorsFile)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal bls verification json: %w", err)
+	}
+
+	operatorSharesMap := buildOperatorCorruptedSharesMap(corruptedShares)
+
+	for operatorID, operatorCorruptedShares := range operatorSharesMap {
+		// Read OperatorPrivateKey from the YAML file
+		operatorPrivateKey, err := readOperatorPrivateKeyFromFile(fmt.Sprintf(shareYAMLPath, operatorID))
+		if err != nil {
+			return err
+		}
+
+		if err := Process(logger, networkConfig, operatorPrivateKey, operatorID, operatorCorruptedShares); err != nil {
+			return fmt.Errorf("failed to process operator %d: %w", operatorID, err)
+		}
+	}
+
+	return nil
+}
+
+func Process(logger *zap.Logger, networkConfig networkconfig.NetworkConfig, operatorPrivateKey string, operatorID types.OperatorID, operatorCorruptedShares []*logs_catcher.CorruptedShare) error {
+	dbPath := fmt.Sprintf(dbPathFormat, operatorID)
+	db, err := openDB(logger, dbPath)
+	if err != nil {
+		return err
 	}
 	defer db.Close()
 
@@ -46,7 +71,7 @@ func (cmd *ShareUpdateCmd) Run(logger *zap.Logger, globals Globals) error {
 		return fmt.Errorf("failed to create node storage: %w", err)
 	}
 
-	opSK, err := base64.StdEncoding.DecodeString(cmd.OperatorPrivateKey)
+	opSK, err := base64.StdEncoding.DecodeString(operatorPrivateKey)
 	if err != nil {
 		return err
 	}
@@ -67,66 +92,97 @@ func (cmd *ShareUpdateCmd) Run(logger *zap.Logger, globals Globals) error {
 	if !found {
 		return fmt.Errorf("operator data not found")
 	}
+	if operatorData.ID != operatorID {
+		return fmt.Errorf("operator ID mismatch")
+	}
 
 	logger.Info("operator data found", zap.Any("operator ID", operatorData.ID))
 
 	keyBytes := x509.MarshalPKCS1PrivateKey(rsaPriv)
 	hashedKey, _ := rsaencryption.HashRsaKey(keyBytes)
 
-	networkConfig, err := networkconfig.GetNetworkConfigByName(cmd.NetworkName)
-	if err != nil {
-		return fmt.Errorf("failed to get network config: %w", err)
-	}
 	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkConfig, false, hashedKey)
 	if err != nil {
 		return fmt.Errorf("failed to create key manager: %w", err)
 	}
 
-	pkBytes, err := hex.DecodeString(cmd.ValidatorPubKey)
-	if err != nil {
-		return fmt.Errorf("failed to decode validator public key: %w", err)
-	}
+	for _, corruptedShare := range operatorCorruptedShares {
+		pkBytes, err := hex.DecodeString(corruptedShare.ValidatorPubKey)
+		if err != nil {
+			return fmt.Errorf("failed to decode validator public key: %w", err)
+		}
 
-	validatorShare := nodeStorage.Shares().Get(nil, pkBytes)
-	if validatorShare == nil {
-		return fmt.Errorf(fmt.Sprintf("validator share not found for %s", cmd.ValidatorPubKey))
-	}
-	for i, op := range validatorShare.Committee {
-		if op.OperatorID == operatorData.ID {
-			var sk string
-			switch cmd.ValidatorPubKey {
-			case vpkLeader1:
-				sk = skLeader1
-			case vpkLeader2:
-				sk = skLeader2
-			default:
-				return fmt.Errorf("invalid validator public key")
+		validatorShare := nodeStorage.Shares().Get(nil, pkBytes)
+		if validatorShare == nil {
+			return fmt.Errorf(fmt.Sprintf("validator share not found for %s", corruptedShare.ValidatorPubKey))
+		}
+		if validatorShare.Metadata.BeaconMetadata.Index != corruptedShare.ValidatorIndex {
+			return fmt.Errorf("validator index mismatch for validator %s", corruptedShare.ValidatorPubKey)
+		}
+
+		var operatorFound bool
+		for i, op := range validatorShare.Committee {
+			if op.OperatorID == operatorData.ID {
+				operatorFound = true
+
+				blsSK, blsPK := blskeygen.GenBLSKeyPair()
+				if err = keyManager.AddShare(blsSK); err != nil {
+					return fmt.Errorf("failed to add share: %w", err)
+				}
+
+				preChangePK := validatorShare.SharePubKey
+				validatorShare.SharePubKey = blsPK.Serialize()
+				validatorShare.Share.Committee[i].PubKey = validatorShare.SharePubKey
+				if err = nodeStorage.Shares().Save(nil, validatorShare); err != nil {
+					return fmt.Errorf("failed to save share: %w", err)
+				}
+
+				logger.Info("validator share was updated successfully",
+					zap.String("validator pub key", hex.EncodeToString(validatorShare.ValidatorPubKey)),
+					zap.String("BEFORE: share pub key", hex.EncodeToString(preChangePK)),
+					zap.String("AFTER: share pub key", hex.EncodeToString(validatorShare.SharePubKey)),
+				)
 			}
-
-			blsSK := &bls.SecretKey{}
-			if err = blsSK.SetHexString(sk); err != nil {
-				return fmt.Errorf("failed to set secret key: %w", err)
-			}
-
-			if err = keyManager.AddShare(blsSK); err != nil {
-				return fmt.Errorf("failed to add share: %w", err)
-			}
-
-			preChangePK := validatorShare.SharePubKey
-			validatorShare.SharePubKey = blsSK.GetPublicKey().Serialize()
-			validatorShare.Share.Committee[i].PubKey = validatorShare.SharePubKey
-			if err = nodeStorage.Shares().Save(nil, validatorShare); err != nil {
-				return fmt.Errorf("failed to save share: %w", err)
-			}
-
-			logger.Info("validator share was updated successfully",
-				zap.String("validator pub key", hex.EncodeToString(validatorShare.ValidatorPubKey)),
-				zap.String("BEFORE: share pub key", hex.EncodeToString(preChangePK)),
-				zap.String("AFTER: share pub key", hex.EncodeToString(validatorShare.SharePubKey)),
-			)
-			return nil
+		}
+		if !operatorFound {
+			return fmt.Errorf("operator %d not found in corrupted share", operatorData.ID)
 		}
 	}
 
-	return fmt.Errorf("operator not found in validator share")
+	return nil
+}
+
+func openDB(logger *zap.Logger, dbPath string) (*kv.BadgerDB, error) {
+	db, err := kv.New(logger, basedb.Options{Path: dbPath})
+	if err != nil {
+		return nil, fmt.Errorf("failed to open db: %w", err)
+	}
+	return db, nil
+}
+
+func readOperatorPrivateKeyFromFile(filePath string) (string, error) {
+	var config ShareUpdateCmd
+
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read file: %s, error: %w", filePath, err)
+	}
+
+	if err = yaml.Unmarshal(data, &config); err != nil {
+		return "", fmt.Errorf("failed to unmarshal YAML: %w", err)
+	}
+
+	return config.OperatorPrivateKey, nil
+}
+
+// buildOperatorCorruptedSharesMap takes a slice of CorruptedShare and returns a map
+// where each key is an OperatorID and the value is a slice of CorruptedShares associated with that OperatorID.
+func buildOperatorCorruptedSharesMap(corruptedShares []*logs_catcher.CorruptedShare) map[types.OperatorID][]*logs_catcher.CorruptedShare {
+	operatorSharesMap := make(map[types.OperatorID][]*logs_catcher.CorruptedShare)
+
+	for _, share := range corruptedShares {
+		operatorSharesMap[share.OperatorID] = append(operatorSharesMap[share.OperatorID], share)
+	}
+
+	return operatorSharesMap
 }

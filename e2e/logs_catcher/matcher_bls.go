@@ -50,21 +50,22 @@ type logCondition struct {
 }
 
 type CorruptedShare struct {
-	OperatorID      types.OperatorID
-	ValidatorPubKey string
-	ValidatorIndex  string
+	ValidatorIndex  phase0.ValidatorIndex `json:"validator_index"`
+	ValidatorPubKey string                `json:"validator_pub_key"`
+	OperatorID      types.OperatorID      `json:"operator_id"`
 }
 
-func VerifyBLSSignature(pctx context.Context, logger *zap.Logger, cli DockerCLI, share CorruptedShare) error {
-	startctx, startc := context.WithTimeout(pctx, time.Minute*6*4) // wait max 4 epochs // TODO: dynamic wait based on leader?
+func VerifyBLSSignature(pctx context.Context, logger *zap.Logger, cli DockerCLI, share *CorruptedShare) error {
+	startctx, startc := context.WithTimeout(pctx, time.Second*12*35) // wait max 35 slots
 	defer startc()
 
-	conditionLog, err := StartCondition(startctx, logger, []string{gotDutiesSuccess, share.ValidatorIndex}, targetContainer, cli)
+	validatorIndex := fmt.Sprintf("v%d", share.ValidatorIndex)
+	conditionLog, err := StartCondition(startctx, logger, []string{gotDutiesSuccess, validatorIndex}, targetContainer, cli)
 	if err != nil {
 		return fmt.Errorf("failed to start condition: %w", err)
 	}
 
-	dutyID, dutySlot, err := ParseAndExtractDutyInfo(conditionLog, share.ValidatorIndex)
+	dutyID, dutySlot, err := ParseAndExtractDutyInfo(conditionLog, validatorIndex)
 	if err != nil {
 		return fmt.Errorf("failed to parse and extract duty info: %w", err)
 	}

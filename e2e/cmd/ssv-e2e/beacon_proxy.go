@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/attestantio/go-eth2-client/http"
 	"os"
 	"time"
+
+	"github.com/attestantio/go-eth2-client/http"
 
 	eth2client "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/auto"
@@ -28,6 +29,10 @@ type BeaconProxyCmd struct {
 	BeaconNodeUrl string   `required:"" env:"BEACON_NODE_URL" help:"URL for the Beacon node to proxy and intercept."`
 	Gateways      []string `required:"" env:"GATEWAYS"        help:"Names of the gateways to provide."`
 	BasePort      int      `            env:"BASE_PORT"       help:"Base port for the gateways."                     default:"6631"`
+}
+
+type BeaconProxyJSON struct {
+	Validators map[phase0.ValidatorIndex]string `json:"beacon_proxy"`
 }
 
 func GetValidators(ctx context.Context, beaconURL string, idxs []phase0.ValidatorIndex) (map[phase0.ValidatorIndex]*v1.Validator, error) {
@@ -79,17 +84,17 @@ func (cmd *BeaconProxyCmd) Run(logger *zap.Logger, globals Globals) error {
 	}
 	logger.Info("Beacon client status OK")
 
-	var validators map[phase0.ValidatorIndex]string // dx => tests
 	contents, err := os.ReadFile(globals.ValidatorsFile)
 	if err != nil {
 		return fmt.Errorf("failed to read file contents: %s, %w", globals.ValidatorsFile, err)
 	}
-	err = json.Unmarshal(contents, &validators)
-	if err != nil {
+
+	var beaconProxyJSON BeaconProxyJSON // dx => tests
+	if err = json.Unmarshal(contents, &beaconProxyJSON); err != nil {
 		return fmt.Errorf("error parsing json file: %s, %w", globals.ValidatorsFile, err)
 	}
 
-	validatorsData, err := GetValidators(ctx, cmd.BeaconNodeUrl, maps.Keys(validators))
+	validatorsData, err := GetValidators(ctx, cmd.BeaconNodeUrl, maps.Keys(beaconProxyJSON.Validators))
 	if err != nil {
 		return fmt.Errorf("failed to get validators data from beacon node err:%v", err)
 	}

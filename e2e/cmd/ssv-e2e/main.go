@@ -12,6 +12,7 @@ import (
 )
 
 type Globals struct {
+	NetworkName    string `env:"NETWORK" default:"holesky-e2e" help:"Network config name"`
 	LogLevel       string `env:"LOG_LEVEL"       enum:"debug,info,warn,error" default:"debug"             help:"Log level."`
 	LogFormat      string `env:"LOG_FORMAT"      enum:"console,json"           default:"console"           help:"Log format."`
 	ValidatorsFile string `env:"VALIDATORS_FILE"                              default:"./validators.json" help:"Path to the validators.json file." type:"path"`
