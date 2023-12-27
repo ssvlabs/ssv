@@ -69,7 +69,7 @@ func VerifyBLSSignature(pctx context.Context, logger *zap.Logger, cli DockerCLI,
 	if err != nil {
 		return fmt.Errorf("failed to parse and extract duty info: %w", err)
 	}
-	logger.Info("Duty ID: ", zap.String("duty_id", dutyID))
+	logger.Debug("Duty ID: ", zap.String("duty_id", dutyID))
 
 	committee := []*types.Operator{
 		{OperatorID: 1},
@@ -78,7 +78,7 @@ func VerifyBLSSignature(pctx context.Context, logger *zap.Logger, cli DockerCLI,
 		{OperatorID: 4},
 	}
 	leader := DetermineLeader(dutySlot, committee)
-	logger.Info("Leader: ", zap.Uint64("leader", leader))
+	logger.Debug("Leader: ", zap.Uint64("leader", leader))
 
 	_, err = StartCondition(startctx, logger, []string{submittedAttSuccess, share.ValidatorPubKey}, targetContainer, cli)
 	if err != nil {
@@ -254,8 +254,6 @@ func matchSingleConditionLog(ctx context.Context, logger *zap.Logger, cli Docker
 		return fmt.Errorf("found non matching messages on %v, want %v got %v", target, 1, len(filteredLogs))
 	}
 
-	logger.Info("SUCCESS matched ", zap.Int("matched", len(filteredLogs)))
-
 	return nil
 }
 
@@ -293,7 +291,6 @@ func matchDualConditionLog(ctx context.Context, logger *zap.Logger, cli DockerCL
 		}
 	}
 
-	logger.Info("SUCCESS matched ", zap.Int("matched", len(filteredLogs)))
 	return nil
 }
 
