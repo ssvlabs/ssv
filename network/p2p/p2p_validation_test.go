@@ -35,7 +35,7 @@ import (
 // played role (accepted > ignored > rejected).
 func TestP2pNetwork_MessageValidation(t *testing.T) {
 	const (
-		nodeCount      = 4
+		nodeCount      = 8
 		validatorCount = 20
 	)
 	var vNet *VirtualNet
