@@ -47,6 +47,7 @@ func (s *Server) Run() error {
 	router.Get("/v1/node/topics", api.Handler(s.node.Topics))
 	router.Get("/v1/node/health", api.Handler(s.node.Health))
 	router.Get("/v1/validators", api.Handler(s.validators.List))
+	router.Post("/v1/node/sign", api.Handler(s.node.Sign))
 
 	s.logger.Info("Serving SSV API", zap.String("addr", s.addr))
 

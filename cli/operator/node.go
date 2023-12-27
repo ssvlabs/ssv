@@ -12,13 +12,13 @@ import (
 	"os"
 	"time"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/api/handlers"
 	apiserver "github.com/bloxapp/ssv/api/server"
 	"github.com/bloxapp/ssv/beacon/goclient"
@@ -305,6 +305,7 @@ var StartNodeCmd = &cobra.Command{
 					Network:         p2pNetwork.(p2pv1.HostProvider).Host().Network(),
 					TopicIndex:      p2pNetwork.(handlers.TopicIndex),
 					NodeProber:      nodeProber,
+					Signer:          operatorKey.Sign,
 				},
 				&handlers.Validators{
 					Shares: nodeStorage.Shares(),

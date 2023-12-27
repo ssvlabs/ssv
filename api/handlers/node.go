@@ -2,16 +2,22 @@ package handlers
 
 import (
 	"context"
+	"crypto"
+	"crypto/rand"
+	"crypto/rsa"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
 
 	"github.com/bloxapp/ssv/api"
 	networkpeers "github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/nodeprobe"
-	"github.com/libp2p/go-libp2p/core/network"
-	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 const (
@@ -78,6 +84,14 @@ type healthCheckJSON struct {
 	} `json:"advanced"`
 }
 
+type signRequestJSON struct {
+	Data string `json:"data"`
+}
+
+type signResponseJSON struct {
+	Sig string `json:"sig"`
+}
+
 func (hc healthCheckJSON) String() string {
 	b, err := json.MarshalIndent(hc, "", "  ")
 	if err != nil {
@@ -92,6 +106,7 @@ type Node struct {
 	TopicIndex      TopicIndex
 	Network         network.Network
 	NodeProber      *nodeprobe.Prober
+	Signer          func(rand io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, error)
 }
 
 func (h *Node) Identity(w http.ResponseWriter, r *http.Request) error {
@@ -162,6 +177,36 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	resp.ExecutionNode = healthStatus{h.NodeProber.CheckExecutionNodeHealth(ctx)}
 	resp.EventSyncer = healthStatus{(h.NodeProber.CheckEventSyncerHealth(ctx))}
 
+	return api.Render(w, r, resp)
+}
+
+func (h *Node) Sign(w http.ResponseWriter, r *http.Request) error {
+	// TODO: there is a limit to amount of data can be signed at once
+	rawdata, _ := io.ReadAll(r.Body)
+	if len(rawdata) > 256 {
+		resp, err := json.Marshal("data to sign should be < 256 bytes")
+		if err != nil {
+			return err
+		}
+		return api.Render(w, r, resp)
+	}
+	sigReq := &signRequestJSON{}
+	if err := json.Unmarshal(rawdata, &sigReq); err != nil {
+		return err
+	}
+	data, err := hex.DecodeString(sigReq.Data)
+	if err != nil {
+		return err
+	}
+	signature, err := h.Signer(rand.Reader, data[:], &rsa.PSSOptions{
+		SaltLength: rsa.PSSSaltLengthAuto,
+		Hash:       crypto.SHA256})
+	if err != nil {
+		return err
+	}
+	resp := &signResponseJSON{
+		Sig: hex.EncodeToString(signature),
+	}
 	return api.Render(w, r, resp)
 }
 
