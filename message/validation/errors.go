@@ -56,6 +56,7 @@ var (
 	ErrEarlyMessage                        = Error{text: "early message"}
 	ErrLateMessage                         = Error{text: "late message"}
 	ErrTooManySameTypeMessagesPerRound     = Error{text: "too many messages of same type per round"}
+	ErrEstimatedRoundTooFar                = Error{text: "message round is too far from estimated"}
 	ErrRSADecryption                       = Error{text: "rsa decryption", reject: true}
 	ErrOperatorNotFound                    = Error{text: "operator not found", reject: true}
 	ErrPubSubMessageHasNoData              = Error{text: "pub-sub message has no data", reject: true}
@@ -76,7 +77,6 @@ var (
 	ErrSignersNotSorted                    = Error{text: "signers are not sorted", reject: true}
 	ErrUnexpectedSigner                    = Error{text: "signer is not expected", reject: true}
 	ErrInvalidHash                         = Error{text: "root doesn't match full data hash", reject: true}
-	ErrEstimatedRoundTooFar                = Error{text: "message round is too far from estimated"}
 	ErrMalformedMessage                    = Error{text: "message could not be decoded", reject: true}
 	ErrMalformedSignedMessage              = Error{text: "signed message could not be decoded", reject: true}
 	ErrUnknownSSVMessageType               = Error{text: "unknown SSV message type", reject: true}
