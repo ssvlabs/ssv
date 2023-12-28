@@ -13,7 +13,9 @@ import (
 	"time"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/go-chi/jwtauth/v5"
 	"github.com/ilyakaznacheev/cleanenv"
+	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -80,6 +82,7 @@ type config struct {
 	WithPing                   bool                             `yaml:"WithPing" env:"WITH_PING" env-description:"Whether to send websocket ping messages'"`
 	SSVAPIPort                 int                              `yaml:"SSVAPIPort" env:"SSV_API_PORT" env-description:"Port to listen on for the SSV API."`
 	LocalEventsPath            string                           `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"path to local events"`
+	SecretToken                string                           `yaml:"SecretToken" env:"SECRET_TOKEN" env-description:"secret to access authorized endpoints"`
 }
 
 var cfg config
@@ -310,6 +313,7 @@ var StartNodeCmd = &cobra.Command{
 				&handlers.Validators{
 					Shares: nodeStorage.Shares(),
 				},
+				jwtauth.New("HS256", []byte(cfg.SecretToken), nil, jwt.WithAcceptableSkew(24*time.Hour)),
 			)
 			go func() {
 				err := apiServer.Run()

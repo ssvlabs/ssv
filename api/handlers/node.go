@@ -181,14 +181,10 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 }
 
 func (h *Node) Sign(w http.ResponseWriter, r *http.Request) error {
-	// TODO: there is a limit to amount of data can be signed at once
+	// TODO: there is a limit to amount of data can be signed at once. Or brake down to chunks
 	rawdata, _ := io.ReadAll(r.Body)
 	if len(rawdata) > 256 {
-		resp, err := json.Marshal("data to sign should be < 256 bytes")
-		if err != nil {
-			return err
-		}
-		return api.Render(w, r, resp)
+		return fmt.Errorf("data to sign should be < 256 bytes")
 	}
 	sigReq := &signRequestJSON{}
 	if err := json.Unmarshal(rawdata, &sigReq); err != nil {
