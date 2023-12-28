@@ -45,9 +45,9 @@ func (s *Server) Run() error {
 	router.Use(middleware.Throttle(runtime.NumCPU() * 4))
 	router.Use(middleware.Compress(5, "application/json"))
 	router.Use(middlewareLogger(s.logger))
-	router.Group(func(r chi.Router) {
+	router.Group(func(router chi.Router) {
 		router.Use(jwtauth.Verifier(s.tokenAuth))
-		r.Use(jwtauth.Authenticator(s.tokenAuth))
+		router.Use(jwtauth.Authenticator(s.tokenAuth))
 		router.Post("/v1/node/sign", api.Handler(s.node.Sign))
 	})
 
