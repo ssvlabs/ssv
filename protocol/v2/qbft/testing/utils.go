@@ -10,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
@@ -78,12 +79,14 @@ var baseInstance = func(share *types.Share, keySet *testingutils.TestKeySet, ide
 }
 
 func NewTestingQBFTController(
+	metrics metricsreporter.MetricsReporter,
 	identifier []byte,
 	share *types.Share,
 	config qbft.IConfig,
 	fullNode bool,
 ) *controller.Controller {
 	ctrl := controller.NewController(
+		metrics,
 		identifier,
 		share,
 		testingutils.TestingSSVDomainType,

@@ -19,6 +19,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
@@ -31,7 +32,7 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 	overrideStateComparisonForControllerSpecTest(t, test)
 
 	logger := logging.TestLogger(t)
-	contr := generateController(logger)
+	contr := generateController(logger, metricsreporter.NewNop())
 
 	var lastErr error
 	for i, runData := range test.RunInstanceData {
@@ -51,10 +52,11 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 	}
 }
 
-func generateController(logger *zap.Logger) *controller.Controller {
+func generateController(logger *zap.Logger, metrics metricsreporter.MetricsReporter) *controller.Controller {
 	identifier := []byte{1, 2, 3, 4}
 	config := qbfttesting.TestingConfig(logger, spectestingutils.Testing4SharesSet(), spectypes.BNRoleAttester)
 	return qbfttesting.NewTestingQBFTController(
+		metrics,
 		identifier[:],
 		spectestingutils.TestingShare(spectestingutils.Testing4SharesSet()),
 		config,

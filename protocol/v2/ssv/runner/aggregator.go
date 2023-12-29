@@ -14,22 +14,22 @@ import (
 
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 )
 
 type AggregatorRunner struct {
 	BaseRunner *BaseRunner
 
-	beacon   specssv.BeaconNode
-	network  specssv.Network
-	signer   spectypes.KeyManager
-	valCheck specqbft.ProposedValueCheckF
-	metrics  metrics.ConsensusMetrics
+	beacon           specssv.BeaconNode
+	network          specssv.Network
+	signer           spectypes.KeyManager
+	valCheck         specqbft.ProposedValueCheckF
+	metricsSubmitter consensusMetricsSubmitter
 }
 
 var _ Runner = &AggregatorRunner{}
 
 func NewAggregatorRunner(
+	metrics Metrics,
 	beaconNetwork spectypes.BeaconNetwork,
 	share *spectypes.Share,
 	qbftController *controller.Controller,
@@ -39,19 +39,21 @@ func NewAggregatorRunner(
 	valCheck specqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
 ) Runner {
+	role := spectypes.BNRoleAggregator
+
 	return &AggregatorRunner{
 		BaseRunner: &BaseRunner{
-			BeaconRoleType:     spectypes.BNRoleAggregator,
+			BeaconRoleType:     role,
 			BeaconNetwork:      beaconNetwork,
 			Share:              share,
 			QBFTController:     qbftController,
 			highestDecidedSlot: highestDecidedSlot,
 		},
-		beacon:   beacon,
-		network:  network,
-		signer:   signer,
-		valCheck: valCheck,
-		metrics:  metrics.NewConsensusMetrics(spectypes.BNRoleAggregator),
+		beacon:           beacon,
+		network:          network,
+		signer:           signer,
+		valCheck:         valCheck,
+		metricsSubmitter: newConsensusMetricsSubmitter(metrics, role),
 	}
 }
 
@@ -74,7 +76,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *sp
 		return nil
 	}
 
-	r.metrics.EndPreConsensus()
+	r.metricsSubmitter.EndPreConsensus()
 
 	// only 1 root, verified by basePreConsensusMsgProcessing
 	root := roots[0]
@@ -91,7 +93,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *sp
 		fields.Slot(duty.Slot),
 	)
 
-	r.metrics.PauseDutyFullFlow()
+	r.metricsSubmitter.PauseDutyFullFlow()
 
 	// get block data
 	res, ver, err := r.GetBeaconNode().SubmitAggregateSelectionProof(duty.Slot, duty.CommitteeIndex, duty.CommitteeLength, duty.ValidatorIndex, fullSig)
@@ -99,8 +101,8 @@ func (r *AggregatorRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *sp
 		return errors.Wrap(err, "failed to submit aggregate and proof")
 	}
 
-	r.metrics.ContinueDutyFullFlow()
-	r.metrics.StartConsensus()
+	r.metricsSubmitter.ContinueDutyFullFlow()
+	r.metricsSubmitter.StartConsensus()
 
 	byts, err := res.MarshalSSZ()
 	if err != nil {
@@ -130,8 +132,8 @@ func (r *AggregatorRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specq
 		return nil
 	}
 
-	r.metrics.EndConsensus()
-	r.metrics.StartPostConsensus()
+	r.metricsSubmitter.EndConsensus()
+	r.metricsSubmitter.StartPostConsensus()
 
 	aggregateAndProof, err := decidedValue.GetAggregateAndProof()
 	if err != nil {
@@ -181,7 +183,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 		return nil
 	}
 
-	r.metrics.EndPostConsensus()
+	r.metricsSubmitter.EndPostConsensus()
 
 	for _, root := range roots {
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey)
@@ -201,16 +203,16 @@ func (r *AggregatorRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 			Signature: specSig,
 		}
 
-		proofSubmissionEnd := r.metrics.StartBeaconSubmission()
+		proofSubmissionEnd := r.metricsSubmitter.StartBeaconSubmission()
 
 		if err := r.GetBeaconNode().SubmitSignedAggregateSelectionProof(msg); err != nil {
-			r.metrics.RoleSubmissionFailed()
+			r.metricsSubmitter.RoleSubmissionFailed()
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed aggregate")
 		}
 
 		proofSubmissionEnd()
-		r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
-		r.metrics.RoleSubmitted()
+		r.metricsSubmitter.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
+		r.metricsSubmitter.RoleSubmitted()
 
 		logger.Debug("✅ successful submitted aggregate")
 	}
@@ -240,8 +242,8 @@ func (r *AggregatorRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot
 // 4) Once consensus decides, sign partial aggregation data and broadcast
 // 5) collect 2f+1 partial sigs, reconstruct and broadcast valid SignedAggregateSubmitRequest sig to the BN
 func (r *AggregatorRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
-	r.metrics.StartDutyFullFlow()
-	r.metrics.StartPreConsensus()
+	r.metricsSubmitter.StartDutyFullFlow()
+	r.metricsSubmitter.StartPreConsensus()
 
 	// sign selection proof
 	msg, err := r.BaseRunner.signBeaconObject(r, spectypes.SSZUint64(duty.Slot), duty.Slot, spectypes.DomainSelectionProof)

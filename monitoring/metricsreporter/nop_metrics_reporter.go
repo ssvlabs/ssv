@@ -16,20 +16,36 @@ func NewNop() MetricsReporter {
 	return &nopMetrics{}
 }
 
-func (n *nopMetrics) SSVNodeHealthy()                                                               {}
-func (n *nopMetrics) SSVNodeNotHealthy()                                                            {}
-func (n *nopMetrics) ExecutionClientReady()                                                         {}
-func (n *nopMetrics) ExecutionClientSyncing()                                                       {}
-func (n *nopMetrics) ExecutionClientFailure()                                                       {}
-func (n *nopMetrics) ExecutionClientLastFetchedBlock(block uint64)                                  {}
-func (n *nopMetrics) ConsensusClientReady()                                                         {}
-func (n *nopMetrics) ConsensusClientSyncing()                                                       {}
-func (n *nopMetrics) ConsensusClientUnknown()                                                       {}
-func (n *nopMetrics) AttesterDataRequest(duration time.Duration)                                    {}
-func (n *nopMetrics) AggregatorDataRequest(duration time.Duration)                                  {}
-func (n *nopMetrics) ProposerDataRequest(duration time.Duration)                                    {}
-func (n *nopMetrics) SyncCommitteeDataRequest(duration time.Duration)                               {}
-func (n *nopMetrics) SyncCommitteeContributionDataRequest(duration time.Duration)                   {}
+func (n *nopMetrics) SSVNodeHealthy()                                                           {}
+func (n *nopMetrics) SSVNodeNotHealthy()                                                        {}
+func (n *nopMetrics) ExecutionClientReady()                                                     {}
+func (n *nopMetrics) ExecutionClientSyncing()                                                   {}
+func (n *nopMetrics) ExecutionClientFailure()                                                   {}
+func (n *nopMetrics) ExecutionClientLastFetchedBlock(block uint64)                              {}
+func (n *nopMetrics) ConsensusClientReady()                                                     {}
+func (n *nopMetrics) ConsensusClientSyncing()                                                   {}
+func (n *nopMetrics) ConsensusClientUnknown()                                                   {}
+func (n *nopMetrics) AttesterDataRequest(duration time.Duration)                                {}
+func (n *nopMetrics) AggregatorDataRequest(duration time.Duration)                              {}
+func (n *nopMetrics) ProposerDataRequest(duration time.Duration)                                {}
+func (n *nopMetrics) SyncCommitteeDataRequest(duration time.Duration)                           {}
+func (n *nopMetrics) SyncCommitteeContributionDataRequest(duration time.Duration)               {}
+func (n *nopMetrics) ConsensusDutySubmission(role spectypes.BeaconRole, duration time.Duration) {}
+func (n *nopMetrics) QBFTProposalDuration(duration time.Duration)                               {}
+func (n *nopMetrics) QBFTPrepareDuration(duration time.Duration)                                {}
+func (n *nopMetrics) QBFTCommitDuration(duration time.Duration)                                 {}
+func (n *nopMetrics) QBFTRound(msgID spectypes.MessageID, round specqbft.Round)                 {}
+func (n *nopMetrics) ConsensusDuration(role spectypes.BeaconRole, duration time.Duration)       {}
+func (n *nopMetrics) PreConsensusDuration(role spectypes.BeaconRole, duration time.Duration)    {}
+func (n *nopMetrics) PostConsensusDuration(role spectypes.BeaconRole, duration time.Duration)   {}
+func (n *nopMetrics) DutyFullFlowDuration(role spectypes.BeaconRole, duration time.Duration)    {}
+func (n *nopMetrics) DutyFullFlowFirstRoundDuration(role spectypes.BeaconRole, duration time.Duration) {
+}
+func (n *nopMetrics) RoleSubmitted(role spectypes.BeaconRole)                                       {}
+func (n *nopMetrics) RoleSubmissionFailure(role spectypes.BeaconRole)                               {}
+func (n *nopMetrics) InstanceStarted(role spectypes.BeaconRole)                                     {}
+func (n *nopMetrics) InstanceDecided(role spectypes.BeaconRole)                                     {}
+func (n *nopMetrics) WorkerProcessedMessage(prefix string)                                          {}
 func (n *nopMetrics) OperatorPublicKey(operatorID spectypes.OperatorID, publicKey []byte)           {}
 func (n *nopMetrics) ValidatorInactive(publicKey []byte)                                            {}
 func (n *nopMetrics) ValidatorNoIndex(publicKey []byte)                                             {}

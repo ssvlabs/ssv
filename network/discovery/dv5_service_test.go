@@ -7,15 +7,17 @@ import (
 	"testing"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/peers/connections/mock"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/utils"
-	"github.com/ethereum/go-ethereum/p2p/enode"
-	"github.com/pkg/errors"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 func TestCheckPeer(t *testing.T) {
@@ -106,6 +108,7 @@ func TestCheckPeer(t *testing.T) {
 	dvs := &DiscV5Service{
 		ctx:        ctx,
 		conns:      &mock.MockConnectionIndex{LimitValue: true},
+		metrics:    metricsreporter.NewNop(),
 		subnetsIdx: subnetIndex,
 		domainType: myDomainType,
 		subnets:    mySubnets,

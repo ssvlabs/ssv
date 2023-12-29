@@ -14,7 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/logging"
-	testing2 "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
+	"github.com/bloxapp/ssv/monitoring/metricsreporter"
+	protocolqbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
@@ -103,7 +104,8 @@ func TestQBFTMapping(t *testing.T) {
 			preByts, _ := typedTest.Pre.Encode()
 			logger := logging.TestLogger(t)
 			pre := instance.NewInstance(
-				testing2.TestingConfig(logger, testingutils.KeySetForShare(typedTest.Pre.State.Share), identifier.GetRoleType()),
+				metricsreporter.NewNop(),
+				protocolqbfttesting.TestingConfig(logger, testingutils.KeySetForShare(typedTest.Pre.State.Share), identifier.GetRoleType()),
 				typedTest.Pre.State.Share,
 				typedTest.Pre.State.ID,
 				typedTest.Pre.State.Height,

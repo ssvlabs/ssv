@@ -3,26 +3,10 @@ package worker
 import (
 	"context"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
-
-var (
-	metricsMsgProcessing = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv:worker:msg:process",
-		Help: "Count decided messages",
-	}, []string{"prefix"})
-)
-
-func init() {
-	logger := zap.L()
-	if err := prometheus.Register(metricsMsgProcessing); err != nil {
-		logger.Debug("could not register prometheus collector")
-	}
-}
 
 // MsgHandler func that receive message.SSVMessage to handle
 type MsgHandler func(msg *queue.DecodedSSVMessage) error
@@ -44,6 +28,8 @@ type Config struct {
 
 // Worker listen to queue and process the messages
 type Worker struct {
+	logger        *zap.Logger
+	metrics       Metrics
 	ctx           context.Context
 	cancel        context.CancelFunc
 	workersCount  int
@@ -54,10 +40,12 @@ type Worker struct {
 }
 
 // NewWorker return new Worker
-func NewWorker(logger *zap.Logger, cfg *Config) *Worker {
+func NewWorker(logger *zap.Logger, metrics Metrics, cfg *Config) *Worker {
 	ctx, cancel := context.WithCancel(cfg.Ctx)
 
 	w := &Worker{
+		logger:        logger,
+		metrics:       metrics,
 		ctx:           ctx,
 		cancel:        cancel,
 		workersCount:  cfg.WorkersCount,
@@ -137,5 +125,6 @@ func (w *Worker) process(logger *zap.Logger, msg *queue.DecodedSSVMessage) {
 			return
 		}
 	}
-	metricsMsgProcessing.WithLabelValues(w.metricsPrefix).Inc()
+
+	w.metrics.WorkerProcessedMessage(w.metricsPrefix)
 }

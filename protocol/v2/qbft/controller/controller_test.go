@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
@@ -45,6 +46,7 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 
 	share := spectestingutils.TestingShare(spectestingutils.Testing4SharesSet())
 	inst := instance.NewInstance(
+		metricsreporter.NewNop(),
 		testConfig,
 		share,
 		[]byte{1, 2, 3, 4},

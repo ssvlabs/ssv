@@ -49,7 +49,7 @@ func (i *Instance) UponCommit(logger *zap.Logger, signedCommit *specqbft.SignedM
 			zap.Any("agg-signers", agg.Signers),
 			fields.Root(signedCommit.Message.Root))
 
-		i.metrics.EndStageCommit()
+		i.metricsSubmitter.EndStageCommit()
 
 		return true, fullData, agg, nil
 	}

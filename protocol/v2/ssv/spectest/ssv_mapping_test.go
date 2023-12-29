@@ -18,6 +18,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
@@ -33,6 +34,7 @@ func TestSSVMapping(t *testing.T) {
 	require.NoError(t, err)
 
 	logger := logging.TestLogger(t)
+	metrics := metricsreporter.NewNop()
 
 	untypedTests := map[string]interface{}{}
 	if err := json.Unmarshal(jsonTests, &untypedTests); err != nil {
@@ -43,7 +45,7 @@ func TestSSVMapping(t *testing.T) {
 
 	for name, test := range untypedTests {
 		name, test := name, test
-		r := prepareTest(t, logger, name, test)
+		r := prepareTest(t, logger, metrics, name, test)
 		if r != nil {
 			t.Run(r.name, func(t *testing.T) {
 				t.Parallel()
@@ -58,7 +60,7 @@ type runnable struct {
 	test func(t *testing.T)
 }
 
-func prepareTest(t *testing.T, logger *zap.Logger, name string, test interface{}) *runnable {
+func prepareTest(t *testing.T, logger *zap.Logger, metrics metricsreporter.MetricsReporter, name string, test interface{}) *runnable {
 	testName := strings.Split(name, "_")[1]
 	testType := strings.Split(name, "_")[0]
 
@@ -88,7 +90,7 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test interface{}
 		}
 		subtests := test.(map[string]interface{})["Tests"].([]interface{})
 		for _, subtest := range subtests {
-			typedTest.Tests = append(typedTest.Tests, msgProcessingSpecTestFromMap(t, subtest.(map[string]interface{})))
+			typedTest.Tests = append(typedTest.Tests, msgProcessingSpecTestFromMap(t, metrics, subtest.(map[string]interface{})))
 		}
 
 		return &runnable{
@@ -155,7 +157,7 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test interface{}
 			test: func(t *testing.T) {
 				subtests := test.(map[string]interface{})["Tests"].([]interface{})
 				for _, subtest := range subtests {
-					typedTest.Tests = append(typedTest.Tests, newRunnerDutySpecTestFromMap(t, subtest.(map[string]interface{})))
+					typedTest.Tests = append(typedTest.Tests, newRunnerDutySpecTestFromMap(t, metrics, subtest.(map[string]interface{})))
 				}
 				typedTest.Run(t, logger)
 			},
@@ -166,7 +168,7 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test interface{}
 	}
 }
 
-func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]interface{}) *StartNewRunnerDutySpecTest {
+func newRunnerDutySpecTestFromMap(t *testing.T, metrics metricsreporter.MetricsReporter, m map[string]interface{}) *StartNewRunnerDutySpecTest {
 	runnerMap := m["Runner"].(map[string]interface{})
 	baseRunnerMap := runnerMap["BaseRunner"].(map[string]interface{})
 
@@ -186,7 +188,7 @@ func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]interface{}) *Start
 
 	ks := testingutils.KeySetForShare(&spectypes.Share{Quorum: uint64(baseRunnerMap["Share"].(map[string]interface{})["Quorum"].(float64))})
 
-	r := fixRunnerForRun(t, runnerMap, ks)
+	r := fixRunnerForRun(t, metrics, runnerMap, ks)
 
 	return &StartNewRunnerDutySpecTest{
 		Name:                    m["Name"].(string),
@@ -198,7 +200,7 @@ func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]interface{}) *Start
 	}
 }
 
-func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *MsgProcessingSpecTest {
+func msgProcessingSpecTestFromMap(t *testing.T, metrics metricsreporter.MetricsReporter, m map[string]interface{}) *MsgProcessingSpecTest {
 	runnerMap := m["Runner"].(map[string]interface{})
 	baseRunnerMap := runnerMap["BaseRunner"].(map[string]interface{})
 
@@ -233,7 +235,7 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *MsgPr
 	ks := testingutils.KeySetForShare(&spectypes.Share{Quorum: uint64(baseRunnerMap["Share"].(map[string]interface{})["Quorum"].(float64))})
 
 	// runner
-	r := fixRunnerForRun(t, runnerMap, ks)
+	r := fixRunnerForRun(t, metrics, runnerMap, ks)
 
 	return &MsgProcessingSpecTest{
 		Name:                    m["Name"].(string),
@@ -248,7 +250,7 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *MsgPr
 	}
 }
 
-func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *testingutils.TestKeySet) runner.Runner {
+func fixRunnerForRun(t *testing.T, metrics metricsreporter.MetricsReporter, runnerMap map[string]interface{}, ks *testingutils.TestKeySet) runner.Runner {
 	baseRunnerMap := runnerMap["BaseRunner"].(map[string]interface{})
 
 	base := &runner.BaseRunner{}
@@ -257,7 +259,7 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *testing
 
 	logger := logging.TestLogger(t)
 
-	ret := baseRunnerForRole(logger, base.BeaconRoleType, base, ks)
+	ret := baseRunnerForRole(logger, metrics, base.BeaconRoleType, base, ks)
 
 	// specific for blinded block
 	if blindedBlocks, ok := runnerMap["ProducesBlindedBlocks"]; ok {
@@ -265,10 +267,10 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *testing
 	}
 
 	if ret.GetBaseRunner().QBFTController != nil {
-		ret.GetBaseRunner().QBFTController = fixControllerForRun(t, logger, ret, ret.GetBaseRunner().QBFTController, ks)
+		ret.GetBaseRunner().QBFTController = fixControllerForRun(t, logger, metrics, ret, ret.GetBaseRunner().QBFTController, ks)
 		if ret.GetBaseRunner().State != nil {
 			if ret.GetBaseRunner().State.RunningInstance != nil {
-				ret.GetBaseRunner().State.RunningInstance = fixInstanceForRun(t, ret.GetBaseRunner().State.RunningInstance, ret.GetBaseRunner().QBFTController, ret.GetBaseRunner().Share)
+				ret.GetBaseRunner().State.RunningInstance = fixInstanceForRun(t, metrics, ret.GetBaseRunner().State.RunningInstance, ret.GetBaseRunner().QBFTController, ret.GetBaseRunner().Share)
 			}
 		}
 	}
@@ -276,10 +278,18 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *testing
 	return ret
 }
 
-func fixControllerForRun(t *testing.T, logger *zap.Logger, runner runner.Runner, contr *controller.Controller, ks *testingutils.TestKeySet) *controller.Controller {
+func fixControllerForRun(
+	t *testing.T,
+	logger *zap.Logger,
+	metrics metricsreporter.MetricsReporter,
+	runner runner.Runner,
+	contr *controller.Controller,
+	ks *testingutils.TestKeySet,
+) *controller.Controller {
 	config := qbfttesting.TestingConfig(logger, ks, spectypes.BNRoleAttester)
 	config.ValueCheckF = runner.GetValCheckF()
 	newContr := controller.NewController(
+		metrics,
 		contr.Identifier,
 		contr.Share,
 		testingutils.TestingConfig(ks).Domain,
@@ -295,13 +305,20 @@ func fixControllerForRun(t *testing.T, logger *zap.Logger, runner runner.Runner,
 		if inst == nil {
 			continue
 		}
-		newContr.StoredInstances[i] = fixInstanceForRun(t, inst, newContr, runner.GetBaseRunner().Share)
+		newContr.StoredInstances[i] = fixInstanceForRun(t, metrics, inst, newContr, runner.GetBaseRunner().Share)
 	}
 	return newContr
 }
 
-func fixInstanceForRun(t *testing.T, inst *instance.Instance, contr *controller.Controller, share *spectypes.Share) *instance.Instance {
+func fixInstanceForRun(
+	t *testing.T,
+	metrics metricsreporter.MetricsReporter,
+	inst *instance.Instance,
+	contr *controller.Controller,
+	share *spectypes.Share,
+) *instance.Instance {
 	newInst := instance.NewInstance(
+		metrics,
 		contr.GetConfig(),
 		share,
 		contr.Identifier,
@@ -323,38 +340,38 @@ func fixInstanceForRun(t *testing.T, inst *instance.Instance, contr *controller.
 	return newInst
 }
 
-func baseRunnerForRole(logger *zap.Logger, role spectypes.BeaconRole, base *runner.BaseRunner, ks *testingutils.TestKeySet) runner.Runner {
+func baseRunnerForRole(logger *zap.Logger, metrics metricsreporter.MetricsReporter, role spectypes.BeaconRole, base *runner.BaseRunner, ks *testingutils.TestKeySet) runner.Runner {
 	switch role {
 	case spectypes.BNRoleAttester:
-		ret := ssvtesting.AttesterRunner(logger, ks)
+		ret := ssvtesting.AttesterRunner(logger, metrics, ks)
 		ret.(*runner.AttesterRunner).BaseRunner = base
 		return ret
 	case spectypes.BNRoleAggregator:
-		ret := ssvtesting.AggregatorRunner(logger, ks)
+		ret := ssvtesting.AggregatorRunner(logger, metrics, ks)
 		ret.(*runner.AggregatorRunner).BaseRunner = base
 		return ret
 	case spectypes.BNRoleProposer:
-		ret := ssvtesting.ProposerRunner(logger, ks)
+		ret := ssvtesting.ProposerRunner(logger, metrics, ks)
 		ret.(*runner.ProposerRunner).BaseRunner = base
 		return ret
 	case spectypes.BNRoleSyncCommittee:
-		ret := ssvtesting.SyncCommitteeRunner(logger, ks)
+		ret := ssvtesting.SyncCommitteeRunner(logger, metrics, ks)
 		ret.(*runner.SyncCommitteeRunner).BaseRunner = base
 		return ret
 	case spectypes.BNRoleSyncCommitteeContribution:
-		ret := ssvtesting.SyncCommitteeContributionRunner(logger, ks)
+		ret := ssvtesting.SyncCommitteeContributionRunner(logger, metrics, ks)
 		ret.(*runner.SyncCommitteeAggregatorRunner).BaseRunner = base
 		return ret
 	case spectypes.BNRoleValidatorRegistration:
-		ret := ssvtesting.ValidatorRegistrationRunner(logger, ks)
+		ret := ssvtesting.ValidatorRegistrationRunner(logger, metrics, ks)
 		ret.(*runner.ValidatorRegistrationRunner).BaseRunner = base
 		return ret
 	case spectypes.BNRoleVoluntaryExit:
-		ret := ssvtesting.VoluntaryExitRunner(logger, ks)
+		ret := ssvtesting.VoluntaryExitRunner(logger, metrics, ks)
 		ret.(*runner.VoluntaryExitRunner).BaseRunner = base
 		return ret
 	case testingutils.UnknownDutyType:
-		ret := ssvtesting.UnknownDutyTypeRunner(logger, ks)
+		ret := ssvtesting.UnknownDutyTypeRunner(logger, metrics, ks)
 		ret.(*runner.AttesterRunner).BaseRunner = base
 		return ret
 	default:

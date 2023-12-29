@@ -14,7 +14,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 )
 
 // Duty runner for validator voluntary exit duty
@@ -28,27 +27,30 @@ type VoluntaryExitRunner struct {
 
 	voluntaryExit *phase0.VoluntaryExit
 
-	metrics metrics.ConsensusMetrics
+	metricsSubmitter consensusMetricsSubmitter
 }
 
 func NewVoluntaryExitRunner(
+	metrics Metrics,
 	beaconNetwork spectypes.BeaconNetwork,
 	share *spectypes.Share,
 	beacon specssv.BeaconNode,
 	network specssv.Network,
 	signer spectypes.KeyManager,
 ) Runner {
+	role := spectypes.BNRoleVoluntaryExit
+
 	return &VoluntaryExitRunner{
 		BaseRunner: &BaseRunner{
-			BeaconRoleType: spectypes.BNRoleVoluntaryExit,
+			BeaconRoleType: role,
 			BeaconNetwork:  beaconNetwork,
 			Share:          share,
 		},
 
-		beacon:  beacon,
-		network: network,
-		signer:  signer,
-		metrics: metrics.NewConsensusMetrics(spectypes.BNRoleVoluntaryExit),
+		beacon:           beacon,
+		network:          network,
+		signer:           signer,
+		metricsSubmitter: newConsensusMetricsSubmitter(metrics, role),
 	}
 }
 

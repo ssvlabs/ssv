@@ -9,12 +9,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
 
 func TestWorker(t *testing.T) {
 	logger := logging.TestLogger(t)
-	worker := NewWorker(logger, &Config{
+	worker := NewWorker(logger, metricsreporter.NewNop(), &Config{
 		Ctx:          context.Background(),
 		WorkersCount: 1,
 		Buffer:       2,
@@ -34,7 +35,7 @@ func TestManyWorkers(t *testing.T) {
 	logger := logging.TestLogger(t)
 	var wg sync.WaitGroup
 
-	worker := NewWorker(logger, &Config{
+	worker := NewWorker(logger, metricsreporter.NewNop(), &Config{
 		Ctx:          context.Background(),
 		WorkersCount: 10,
 		Buffer:       0,
@@ -58,7 +59,7 @@ func TestBuffer(t *testing.T) {
 	logger := logging.TestLogger(t)
 	var wg sync.WaitGroup
 
-	worker := NewWorker(logger, &Config{
+	worker := NewWorker(logger, metricsreporter.NewNop(), &Config{
 		Ctx:          context.Background(),
 		WorkersCount: 1,
 		Buffer:       10,

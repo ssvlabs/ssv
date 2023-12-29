@@ -16,7 +16,6 @@ import (
 
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 )
 
 type ValidatorRegistrationRunner struct {
@@ -27,10 +26,11 @@ type ValidatorRegistrationRunner struct {
 	signer   spectypes.KeyManager
 	valCheck qbft.ProposedValueCheckF
 
-	metrics metrics.ConsensusMetrics
+	metricsSubmitter consensusMetricsSubmitter
 }
 
 func NewValidatorRegistrationRunner(
+	metrics Metrics,
 	beaconNetwork spectypes.BeaconNetwork,
 	share *spectypes.Share,
 	qbftController *controller.Controller,
@@ -38,18 +38,20 @@ func NewValidatorRegistrationRunner(
 	network specssv.Network,
 	signer spectypes.KeyManager,
 ) Runner {
+	role := spectypes.BNRoleValidatorRegistration
+
 	return &ValidatorRegistrationRunner{
 		BaseRunner: &BaseRunner{
-			BeaconRoleType: spectypes.BNRoleValidatorRegistration,
+			BeaconRoleType: role,
 			BeaconNetwork:  beaconNetwork,
 			Share:          share,
 			QBFTController: qbftController,
 		},
 
-		beacon:  beacon,
-		network: network,
-		signer:  signer,
-		metrics: metrics.NewConsensusMetrics(spectypes.BNRoleValidatorRegistration),
+		beacon:           beacon,
+		network:          network,
+		signer:           signer,
+		metricsSubmitter: newConsensusMetricsSubmitter(metrics, role),
 	}
 }
 

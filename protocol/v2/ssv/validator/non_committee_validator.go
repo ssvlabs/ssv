@@ -19,7 +19,7 @@ type NonCommitteeValidator struct {
 	qbftController *qbftcontroller.Controller
 }
 
-func NewNonCommitteeValidator(logger *zap.Logger, identifier spectypes.MessageID, opts Options) *NonCommitteeValidator {
+func NewNonCommitteeValidator(logger *zap.Logger, metrics Metrics, identifier spectypes.MessageID, opts Options) *NonCommitteeValidator {
 	// currently, only need domain & storage
 	config := &qbft.Config{
 		Domain:                types.GetDefaultDomain(),
@@ -27,7 +27,7 @@ func NewNonCommitteeValidator(logger *zap.Logger, identifier spectypes.MessageID
 		Network:               opts.Network,
 		SignatureVerification: true,
 	}
-	ctrl := qbftcontroller.NewController(identifier[:], &opts.SSVShare.Share, types.GetDefaultDomain(), config, opts.FullNode)
+	ctrl := qbftcontroller.NewController(metrics, identifier[:], &opts.SSVShare.Share, types.GetDefaultDomain(), config, opts.FullNode)
 	ctrl.StoredInstances = make(qbftcontroller.InstanceContainer, 0, nonCommitteeInstanceContainerCapacity(opts.FullNode))
 	ctrl.NewDecidedHandler = opts.NewDecidedHandler
 	if _, err := ctrl.LoadHighestInstance(identifier[:]); err != nil {

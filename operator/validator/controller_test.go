@@ -13,6 +13,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/validatorsmap"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
@@ -176,7 +177,7 @@ func setupController(logger *zap.Logger, validators map[string]*validator.Valida
 		validatorsMap:              validatorsMap,
 		metadataUpdateInterval:     0,
 		messageRouter:              newMessageRouter(logger),
-		messageWorker: worker.NewWorker(logger, &worker.Config{
+		messageWorker: worker.NewWorker(logger, metricsreporter.NewNop(), &worker.Config{
 			Ctx:          context.Background(),
 			WorkersCount: 1,
 			Buffer:       100,

@@ -22,6 +22,7 @@ type NewDecidedHandler func(msg *specqbft.SignedMessage)
 
 // Controller is a QBFT coordinator responsible for starting and following the entire life cycle of multiple QBFT InstanceContainer
 type Controller struct {
+	metrics    instance.Metrics
 	Identifier []byte
 	Height     specqbft.Height // incremental Height for InstanceContainer
 	// StoredInstances stores the last HistoricalInstanceCapacity in an array for message processing purposes.
@@ -34,6 +35,7 @@ type Controller struct {
 }
 
 func NewController(
+	metrics instance.Metrics,
 	identifier []byte,
 	share *spectypes.Share,
 	domain spectypes.DomainType,
@@ -41,6 +43,7 @@ func NewController(
 	fullNode bool,
 ) *Controller {
 	return &Controller{
+		metrics:         metrics,
 		Identifier:      identifier,
 		Height:          specqbft.FirstHeight,
 		Domain:          domain,
@@ -170,7 +173,7 @@ func (c *Controller) InstanceForHeight(logger *zap.Logger, height specqbft.Heigh
 	if storedInst == nil {
 		return nil
 	}
-	inst := instance.NewInstance(c.config, c.Share, c.Identifier, storedInst.State.Height)
+	inst := instance.NewInstance(c.metrics, c.config, c.Share, c.Identifier, storedInst.State.Height)
 	inst.State = storedInst.State
 	return inst
 }
@@ -191,7 +194,7 @@ func (c *Controller) isFutureMessage(msg *specqbft.SignedMessage) bool {
 
 // addAndStoreNewInstance returns creates a new QBFT instance, stores it in an array and returns it
 func (c *Controller) addAndStoreNewInstance() *instance.Instance {
-	i := instance.NewInstance(c.GetConfig(), c.Share, c.Identifier, c.Height)
+	i := instance.NewInstance(c.metrics, c.GetConfig(), c.Share, c.Identifier, c.Height)
 	c.StoredInstances.addNewInstance(i)
 	return i
 }

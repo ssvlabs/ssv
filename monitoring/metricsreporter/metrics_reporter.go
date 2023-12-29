@@ -77,6 +77,11 @@ var (
 		Help:    "Beacon data request duration (seconds)",
 		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
 	}, []string{"role"})
+	consensusDutySubmission = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "ssv_validator_beacon_submission_duration_seconds",
+		Help:    "Submission to beacon node duration (seconds)",
+		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
+	}, []string{"role"})
 	qbftStageDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "ssv_validator_instance_stage_duration_seconds",
 		Help:    "Instance stage duration (seconds)",
@@ -86,6 +91,53 @@ var (
 		Name: "ssv_qbft_instance_round",
 		Help: "QBFT instance round",
 	}, []string{"roleType"})
+	consensusDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "ssv_validator_consensus_duration_seconds",
+		Help:    "Consensus duration (seconds)",
+		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
+	}, []string{"role"})
+	preConsensusDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "ssv_validator_pre_consensus_duration_seconds",
+		Help:    "Pre-consensus duration (seconds)",
+		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
+	}, []string{"role"})
+	postConsensusDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "ssv_validator_post_consensus_duration_seconds",
+		Help:    "Post-consensus duration (seconds)",
+		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
+	}, []string{"role"})
+	dutyFullFlowDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "ssv_validator_duty_full_flow_duration_seconds",
+		Help:    "Duty full flow duration (seconds)",
+		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
+	}, []string{"role"})
+	dutyFullFlowFirstRoundDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name: "ssv_validator_duty_full_flow_first_round_duration_seconds",
+		Help: "Duty full flow at first round duration (seconds)",
+		Buckets: []float64{
+			0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0,
+			1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0,
+			2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 3.0,
+			3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9, 4.0,
+			4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 5.0,
+		},
+	}, []string{"role"})
+	rolesSubmitted = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_validator_roles_submitted",
+		Help: "Submitted roles",
+	}, []string{"role"})
+	rolesSubmissionFailures = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_validator_roles_failed",
+		Help: "Submitted roles",
+	}, []string{"role"})
+	instancesStarted = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_instances_started",
+		Help: "Number of started QBFT instances",
+	}, []string{"role"})
+	instancesDecided = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_instances_decided",
+		Help: "Number of decided QBFT instances",
+	}, []string{"role"})
 	validatorStatus = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:validator:v2:status",
 		Help: "Validator status",
@@ -296,10 +348,20 @@ type MetricsReporter interface {
 	ProposerDataRequest(duration time.Duration)
 	SyncCommitteeDataRequest(duration time.Duration)
 	SyncCommitteeContributionDataRequest(duration time.Duration)
+	ConsensusDutySubmission(role spectypes.BeaconRole, duration time.Duration)
 	QBFTProposalDuration(duration time.Duration)
 	QBFTPrepareDuration(duration time.Duration)
 	QBFTCommitDuration(duration time.Duration)
 	QBFTRound(msgID spectypes.MessageID, round specqbft.Round)
+	ConsensusDuration(role spectypes.BeaconRole, duration time.Duration)
+	PreConsensusDuration(role spectypes.BeaconRole, duration time.Duration)
+	PostConsensusDuration(role spectypes.BeaconRole, duration time.Duration)
+	DutyFullFlowDuration(role spectypes.BeaconRole, duration time.Duration)
+	DutyFullFlowFirstRoundDuration(role spectypes.BeaconRole, duration time.Duration)
+	RoleSubmitted(role spectypes.BeaconRole)
+	RoleSubmissionFailure(role spectypes.BeaconRole)
+	InstanceStarted(role spectypes.BeaconRole)
+	InstanceDecided(role spectypes.BeaconRole)
 	OperatorPublicKey(operatorID spectypes.OperatorID, publicKey []byte)
 	ValidatorInactive(publicKey []byte)
 	ValidatorNoIndex(publicKey []byte)
@@ -387,6 +449,19 @@ func New(opts ...Option) MetricsReporter {
 		executionClientStatus,
 		executionClientLastFetchedBlock,
 		consensusClientStatus,
+		consensusDataRequest,
+		consensusDutySubmission,
+		qbftStageDuration,
+		qbftRound,
+		consensusDuration,
+		preConsensusDuration,
+		postConsensusDuration,
+		dutyFullFlowDuration,
+		dutyFullFlowFirstRoundDuration,
+		rolesSubmitted,
+		rolesSubmissionFailures,
+		instancesStarted,
+		instancesDecided,
 		validatorStatus,
 		eventProcessed,
 		eventProcessingFailed,
@@ -499,6 +574,10 @@ func (m *metricsReporter) SyncCommitteeContributionDataRequest(duration time.Dur
 	consensusDataRequest.WithLabelValues(spectypes.BNRoleSyncCommitteeContribution.String()).Observe(duration.Seconds())
 }
 
+func (m *metricsReporter) ConsensusDutySubmission(role spectypes.BeaconRole, duration time.Duration) {
+	consensusDutySubmission.WithLabelValues(role.String()).Observe(duration.Seconds())
+}
+
 func (m *metricsReporter) QBFTProposalDuration(duration time.Duration) {
 	qbftStageDuration.WithLabelValues(proposalStage).Observe(duration.Seconds())
 }
@@ -513,6 +592,42 @@ func (m *metricsReporter) QBFTCommitDuration(duration time.Duration) {
 
 func (m *metricsReporter) QBFTRound(msgID spectypes.MessageID, round specqbft.Round) {
 	qbftRound.WithLabelValues(msgID.GetRoleType().String()).Set(float64(round))
+}
+
+func (m *metricsReporter) ConsensusDuration(role spectypes.BeaconRole, duration time.Duration) {
+	consensusDuration.WithLabelValues(role.String()).Observe(duration.Seconds())
+}
+
+func (m *metricsReporter) PreConsensusDuration(role spectypes.BeaconRole, duration time.Duration) {
+	preConsensusDuration.WithLabelValues(role.String()).Observe(duration.Seconds())
+}
+
+func (m *metricsReporter) PostConsensusDuration(role spectypes.BeaconRole, duration time.Duration) {
+	postConsensusDuration.WithLabelValues(role.String()).Observe(duration.Seconds())
+}
+
+func (m *metricsReporter) DutyFullFlowDuration(role spectypes.BeaconRole, duration time.Duration) {
+	dutyFullFlowDuration.WithLabelValues(role.String()).Observe(duration.Seconds())
+}
+
+func (m *metricsReporter) DutyFullFlowFirstRoundDuration(role spectypes.BeaconRole, duration time.Duration) {
+	dutyFullFlowFirstRoundDuration.WithLabelValues(role.String()).Observe(duration.Seconds())
+}
+
+func (m *metricsReporter) RoleSubmitted(role spectypes.BeaconRole) {
+	rolesSubmitted.WithLabelValues(role.String()).Inc()
+}
+
+func (m *metricsReporter) RoleSubmissionFailure(role spectypes.BeaconRole) {
+	rolesSubmissionFailures.WithLabelValues(role.String()).Inc()
+}
+
+func (m *metricsReporter) InstanceStarted(role spectypes.BeaconRole) {
+	instancesStarted.WithLabelValues(role.String()).Inc()
+}
+
+func (m *metricsReporter) InstanceDecided(role spectypes.BeaconRole) {
+	instancesDecided.WithLabelValues(role.String()).Inc()
 }
 
 func (m *metricsReporter) ExecutionClientLastFetchedBlock(block uint64) {
