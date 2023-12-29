@@ -3,6 +3,7 @@ package metricsreporter
 import (
 	"crypto/sha256"
 	"fmt"
+	"net"
 	"strconv"
 	"time"
 
@@ -331,6 +332,14 @@ var (
 		Name: "ssv:worker:msg:process",
 		Help: "Count decided messages",
 	}, []string{"prefix"})
+	streamOutboundCount = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv:exporter:stream_outbound",
+		Help: "count the outbound messages on stream channel",
+	}, []string{"cid"})
+	streamOutboundErrorsCount = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv:exporter:stream_outbound_errors",
+		Help: "count the outbound messages failures on stream channel",
+	}, []string{"cid"})
 )
 
 type MetricsReporter interface {
@@ -428,6 +437,8 @@ type MetricsReporter interface {
 	ENRPong()
 	SlotDelay(delay time.Duration)
 	WorkerProcessedMessage(prefix string)
+	StreamOutbound(addr net.Addr)
+	StreamOutboundError(addr net.Addr)
 }
 
 type metricsReporter struct {
@@ -922,4 +933,12 @@ func (m *metricsReporter) SlotDelay(delay time.Duration) {
 
 func (m *metricsReporter) WorkerProcessedMessage(prefix string) {
 	messageWorker.WithLabelValues(prefix).Inc()
+}
+
+func (m *metricsReporter) StreamOutbound(addr net.Addr) {
+	streamOutboundCount.WithLabelValues(addr.String()).Inc()
+}
+
+func (m *metricsReporter) StreamOutboundError(addr net.Addr) {
+	streamOutboundErrorsCount.WithLabelValues(addr.String()).Inc()
 }

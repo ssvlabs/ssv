@@ -1,6 +1,7 @@
 package metricsreporter
 
 import (
+	"net"
 	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -112,3 +113,5 @@ func (n *nopMetrics) NodeFound()                                                
 func (n *nopMetrics) ENRPing()                                                             {}
 func (n *nopMetrics) ENRPong()                                                             {}
 func (n *nopMetrics) SlotDelay(delay time.Duration)                                        {}
+func (n *nopMetrics) StreamOutbound(addr net.Addr)                                         {}
+func (n *nopMetrics) StreamOutboundError(addr net.Addr)                                    {}

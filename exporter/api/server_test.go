@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
+	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )
 
@@ -22,7 +23,7 @@ func TestHandleQuery(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	ctx, cancelServerCtx := context.WithCancel(context.Background())
 	mux := http.NewServeMux()
-	ws := NewWsServer(ctx, func(logger *zap.Logger, nm *NetworkMessage) {
+	ws := NewWsServer(ctx, metricsreporter.NewNop(), func(logger *zap.Logger, nm *NetworkMessage) {
 		nm.Msg.Data = []registrystorage.OperatorData{
 			{PublicKey: []byte(fmt.Sprintf("pubkey-%d", nm.Msg.Filter.From))},
 		}
@@ -76,7 +77,7 @@ func TestHandleStream(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	ctx := context.Background()
 	mux := http.NewServeMux()
-	ws := NewWsServer(ctx, nil, mux, false).(*wsServer)
+	ws := NewWsServer(ctx, metricsreporter.NewNop(), nil, mux, false).(*wsServer)
 	addr := fmt.Sprintf(":%d", getRandomPort(8001, 14000))
 	go func() {
 		require.NoError(t, ws.Start(logger, addr))

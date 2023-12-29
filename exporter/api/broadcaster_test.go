@@ -10,10 +10,12 @@ import (
 	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
+
+	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 )
 
 func TestConn_Send_FullQueue(t *testing.T) {
-	c := newConn(context.Background(), nil, "test", 0, false)
+	c := newConn(context.Background(), metricsreporter.NewNop(), nil, "test", 0, false)
 
 	for i := 0; i < chanSize+2; i++ {
 		c.Send([]byte(fmt.Sprintf("test-%d", i)))

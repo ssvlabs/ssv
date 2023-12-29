@@ -50,9 +50,11 @@ type Conn interface {
 }
 
 type conn struct {
-	ctx context.Context
-	id  string
-	ws  *websocket.Conn
+	ctx     context.Context
+	metrics metrics
+
+	id string
+	ws *websocket.Conn
 
 	writeTimeout time.Duration
 
@@ -64,9 +66,10 @@ type conn struct {
 	withPing bool
 }
 
-func newConn(ctx context.Context, ws *websocket.Conn, id string, writeTimeout time.Duration, withPing bool) Conn {
+func newConn(ctx context.Context, metrics metrics, ws *websocket.Conn, id string, writeTimeout time.Duration, withPing bool) Conn {
 	return &conn{
 		ctx:          ctx,
+		metrics:      metrics,
 		id:           id,
 		ws:           ws,
 		writeTimeout: writeTimeout,
@@ -139,7 +142,7 @@ func (c *conn) WriteLoop(logger *zap.Logger) {
 			c.writeLock.Lock()
 			n, err := c.sendMsg(message)
 			c.writeLock.Unlock()
-			reportStreamOutbound(c.ws.RemoteAddr().String(), err)
+			c.reportStreamOutbound(c.ws.RemoteAddr(), err)
 			if err != nil {
 				logger.Warn("failed to send message", zap.Error(err))
 				return
@@ -242,6 +245,14 @@ func (c *conn) logMsg(logger *zap.Logger, message []byte, byteWritten int) {
 		logger.Error("could not parse filter", zap.Error(err))
 	}
 	logger.Debug("ws msg was sent", zap.Int("bytes", byteWritten), zap.ByteString("filter", filter))
+}
+
+func (c *conn) reportStreamOutbound(addr net.Addr, err error) {
+	if err != nil {
+		c.metrics.StreamOutboundError(addr)
+	} else {
+		c.metrics.StreamOutbound(addr)
+	}
 }
 
 // isCloseError determines whether the given error is of CloseError type
