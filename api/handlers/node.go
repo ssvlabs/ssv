@@ -2,9 +2,6 @@ package handlers
 
 import (
 	"context"
-	"crypto"
-	"crypto/rand"
-	"crypto/rsa"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -89,7 +86,7 @@ type signRequestJSON struct {
 }
 
 type signResponseJSON struct {
-	Sig string `json:"sig"`
+	Signature string `json:"signature"`
 }
 
 func (hc healthCheckJSON) String() string {
@@ -106,7 +103,7 @@ type Node struct {
 	TopicIndex      TopicIndex
 	Network         network.Network
 	NodeProber      *nodeprobe.Prober
-	Signer          func(rand io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, error)
+	Signer          func(data []byte) ([]byte, error)
 }
 
 func (h *Node) Identity(w http.ResponseWriter, r *http.Request) error {
@@ -182,7 +179,10 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 
 func (h *Node) Sign(w http.ResponseWriter, r *http.Request) error {
 	// TODO: there is a limit to amount of data can be signed at once. Or brake down to chunks
-	rawdata, _ := io.ReadAll(r.Body)
+	rawdata, err := io.ReadAll(r.Body)
+	if err != nil {
+		return err
+	}
 	sigReq := &signRequestJSON{}
 	if err := json.Unmarshal(rawdata, &sigReq); err != nil {
 		return err
@@ -192,16 +192,14 @@ func (h *Node) Sign(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	if len(data) > 256 {
-		return fmt.Errorf("data to sign should be < 256 bytes")
+		return fmt.Errorf("data to sign should be <= 256 bytes")
 	}
-	signature, err := h.Signer(rand.Reader, data[:], &rsa.PSSOptions{
-		SaltLength: rsa.PSSSaltLengthAuto,
-		Hash:       crypto.SHA256})
+	signature, err := h.Signer(data[:])
 	if err != nil {
 		return err
 	}
 	resp := &signResponseJSON{
-		Sig: hex.EncodeToString(signature),
+		Signature: hex.EncodeToString(signature),
 	}
 	return api.Render(w, r, resp)
 }
