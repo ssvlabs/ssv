@@ -51,7 +51,7 @@ func (gc *goClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 		return nil, DataVersionNil, errors.New("block root is nil")
 	}
 
-	metricsSyncCommitteeDataRequest.Observe(time.Since(scDataReqStart).Seconds())
+	gc.metrics.SyncCommitteeDataRequest(time.Since(scDataReqStart))
 
 	gc.waitToSlotTwoThirds(slot)
 
@@ -82,7 +82,7 @@ func (gc *goClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 		return nil, DataVersionNil, err
 	}
 
-	metricsSyncCommitteeContributionDataRequest.Observe(time.Since(sccDataReqStart).Seconds())
+	gc.metrics.SyncCommitteeContributionDataRequest(time.Since(sccDataReqStart))
 
 	return &contributions, spec.DataVersionAltair, nil
 }

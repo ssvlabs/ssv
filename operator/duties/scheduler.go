@@ -13,8 +13,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"github.com/sourcegraph/conc/pool"
 	"go.uber.org/zap"
@@ -29,19 +27,6 @@ import (
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/scheduler.go -source=./scheduler.go
-
-var slotDelayHistogram = promauto.NewHistogram(prometheus.HistogramOpts{
-	Name:    "slot_ticker_delay_milliseconds",
-	Help:    "The delay in milliseconds of the slot ticker",
-	Buckets: []float64{5, 10, 20, 100, 500, 5000}, // Buckets in milliseconds. Adjust as per your needs.
-})
-
-func init() {
-	logger := zap.L()
-	if err := prometheus.Register(slotDelayHistogram); err != nil {
-		logger.Debug("could not register prometheus collector")
-	}
-}
 
 const (
 	// blockPropagationDelay time to propagate around the nodes
@@ -78,6 +63,7 @@ type ExecuteDutyFunc func(logger *zap.Logger, duty *spectypes.Duty)
 
 type SchedulerOptions struct {
 	Ctx                 context.Context
+	Metrics             Metrics
 	BeaconNode          BeaconNode
 	ExecutionClient     ExecutionClient
 	Network             networkconfig.NetworkConfig
@@ -91,6 +77,7 @@ type SchedulerOptions struct {
 }
 
 type Scheduler struct {
+	metrics             Metrics
 	beaconNode          BeaconNode
 	executionClient     ExecutionClient
 	network             networkconfig.NetworkConfig
@@ -120,7 +107,13 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 		dutyStore = dutystore.New()
 	}
 
+	metrics := opts.Metrics
+	if metrics == nil {
+		metrics = nopMetrics{}
+	}
+
 	s := &Scheduler{
+		metrics:             metrics,
 		beaconNode:          opts.BeaconNode,
 		executionClient:     opts.ExecutionClient,
 		network:             opts.Network,
@@ -367,7 +360,9 @@ func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []*spectypes.Duty) 
 		if slotDelay >= 100*time.Millisecond {
 			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
 		}
-		slotDelayHistogram.Observe(float64(slotDelay.Milliseconds()))
+
+		s.metrics.SlotDelay(slotDelay)
+
 		go func() {
 			if duty.Type == spectypes.BNRoleAttester || duty.Type == spectypes.BNRoleSyncCommittee {
 				s.waitOneThirdOrValidBlock(duty.Slot)

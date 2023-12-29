@@ -12,11 +12,12 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
+
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/topics/params"
-	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 )
 
 const (
@@ -175,7 +176,7 @@ func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, metri
 	}
 
 	if cfg.TraceLog {
-		psOpts = append(psOpts, pubsub.WithEventTracer(newTracer(logger)))
+		psOpts = append(psOpts, pubsub.WithEventTracer(newTracer(logger, metrics)))
 	}
 
 	ps, err := pubsub.NewGossipSub(ctx, cfg.Host, psOpts...)
@@ -183,7 +184,7 @@ func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, metri
 		return nil, nil, err
 	}
 
-	ctrl := NewTopicsController(ctx, logger, cfg.MsgHandler, cfg.MsgValidator, sf, ps, topicScoreFactory)
+	ctrl := NewTopicsController(ctx, logger, metrics, cfg.MsgHandler, cfg.MsgValidator, sf, ps, topicScoreFactory)
 
 	return ps, ctrl, nil
 }

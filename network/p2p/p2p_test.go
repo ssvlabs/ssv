@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/protocol/v2/message"
@@ -329,7 +330,7 @@ func registerHandler(logger *zap.Logger, node network.P2PNetwork, mid spectypes.
 func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options LocalNetOptions, pks ...string) (*LocalNet, []*dummyRouter, error) {
 	logger, err := zap.NewDevelopment()
 	require.NoError(t, err)
-	ln, err := CreateAndStartLocalNet(ctx, logger.Named("createNetworkAndSubscribe"), options)
+	ln, err := CreateAndStartLocalNet(ctx, logger.Named("createNetworkAndSubscribe"), metricsreporter.NewNop(), options)
 	if err != nil {
 		return nil, nil, err
 	}

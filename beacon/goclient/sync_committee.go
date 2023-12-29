@@ -27,7 +27,7 @@ func (gc *goClient) GetSyncMessageBlockRoot(slot phase0.Slot) (phase0.Root, spec
 		return phase0.Root{}, DataVersionNil, errors.New("root is nil")
 	}
 
-	metricsSyncCommitteeDataRequest.Observe(time.Since(reqStart).Seconds())
+	gc.metrics.SyncCommitteeDataRequest(time.Since(reqStart))
 
 	return *root, spec.DataVersionAltair, nil
 }

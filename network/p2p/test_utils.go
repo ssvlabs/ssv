@@ -46,7 +46,7 @@ type LocalNet struct {
 }
 
 // WithBootnode adds a bootnode to the network
-func (ln *LocalNet) WithBootnode(ctx context.Context, logger *zap.Logger) error {
+func (ln *LocalNet) WithBootnode(ctx context.Context, logger *zap.Logger, metrics Metrics) error {
 	bnSk, err := commons.GenNetworkKey()
 	if err != nil {
 		return err
@@ -59,7 +59,7 @@ func (ln *LocalNet) WithBootnode(ctx context.Context, logger *zap.Logger) error 
 	if err != nil {
 		return err
 	}
-	bn, err := discovery.NewBootnode(ctx, logger, &discovery.BootnodeOptions{
+	bn, err := discovery.NewBootnode(ctx, logger, metrics, &discovery.BootnodeOptions{
 		PrivateKey: hex.EncodeToString(b),
 		ExternalIP: "127.0.0.1",
 		Port:       ln.udpRand.Next(13001, 13999),
@@ -74,9 +74,9 @@ func (ln *LocalNet) WithBootnode(ctx context.Context, logger *zap.Logger) error 
 // CreateAndStartLocalNet creates a new local network and starts it
 // if any errors occurs during starting local network CreateAndStartLocalNet trying
 // to create and start local net one more time until pCtx is not Done()
-func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options LocalNetOptions) (*LocalNet, error) {
+func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, metrics Metrics, options LocalNetOptions) (*LocalNet, error) {
 	attempt := func(pCtx context.Context) (*LocalNet, error) {
-		ln, err := NewLocalNet(pCtx, logger, options)
+		ln, err := NewLocalNet(pCtx, logger, metrics, options)
 		if err != nil {
 			return nil, err
 		}
@@ -191,11 +191,11 @@ type LocalNetOptions struct {
 }
 
 // NewLocalNet creates a new mdns network
-func NewLocalNet(ctx context.Context, logger *zap.Logger, options LocalNetOptions) (*LocalNet, error) {
+func NewLocalNet(ctx context.Context, logger *zap.Logger, metrics Metrics, options LocalNetOptions) (*LocalNet, error) {
 	ln := &LocalNet{}
 	ln.udpRand = make(testing.UDPPortsRandomizer)
 	if options.UseDiscv5 {
-		if err := ln.WithBootnode(ctx, logger); err != nil {
+		if err := ln.WithBootnode(ctx, logger, metrics); err != nil {
 			return nil, err
 		}
 	}

@@ -96,6 +96,7 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 		qbftStorage:      storageMap,
 		dutyScheduler: duties.NewScheduler(&duties.SchedulerOptions{
 			Ctx:                 opts.Context,
+			Metrics:             opts.Metrics,
 			BeaconNode:          opts.BeaconNode,
 			ExecutionClient:     opts.ExecutionClient,
 			Network:             opts.Network,

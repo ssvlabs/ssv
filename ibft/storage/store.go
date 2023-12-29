@@ -5,8 +5,6 @@ import (
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
@@ -18,20 +16,6 @@ const (
 	highestInstanceKey = "highest_instance"
 	instanceKey        = "instance"
 )
-
-var (
-	metricsHighestDecided = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:validator:ibft_highest_decided",
-		Help: "The highest decided sequence number",
-	}, []string{"identifier", "pubKey"})
-)
-
-func init() {
-	logger := zap.L()
-	if err := prometheus.Register(metricsHighestDecided); err != nil {
-		logger.Debug("could not register prometheus collector")
-	}
-}
 
 // ibftStorage struct
 // instanceType is what separates different iBFT eth2 duty types (attestation, proposal and aggregation)

@@ -5,7 +5,9 @@ import (
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/protocol"
 )
 
 type nopMetrics struct{}
@@ -20,6 +22,14 @@ func (n *nopMetrics) ExecutionClientReady()                                     
 func (n *nopMetrics) ExecutionClientSyncing()                                                       {}
 func (n *nopMetrics) ExecutionClientFailure()                                                       {}
 func (n *nopMetrics) ExecutionClientLastFetchedBlock(block uint64)                                  {}
+func (n *nopMetrics) ConsensusClientReady()                                                         {}
+func (n *nopMetrics) ConsensusClientSyncing()                                                       {}
+func (n *nopMetrics) ConsensusClientUnknown()                                                       {}
+func (n *nopMetrics) AttesterDataRequest(duration time.Duration)                                    {}
+func (n *nopMetrics) AggregatorDataRequest(duration time.Duration)                                  {}
+func (n *nopMetrics) ProposerDataRequest(duration time.Duration)                                    {}
+func (n *nopMetrics) SyncCommitteeDataRequest(duration time.Duration)                               {}
+func (n *nopMetrics) SyncCommitteeContributionDataRequest(duration time.Duration)                   {}
 func (n *nopMetrics) OperatorPublicKey(operatorID spectypes.OperatorID, publicKey []byte)           {}
 func (n *nopMetrics) ValidatorInactive(publicKey []byte)                                            {}
 func (n *nopMetrics) ValidatorNoIndex(publicKey []byte)                                             {}
@@ -62,3 +72,27 @@ func (n *nopMetrics) PeerScore(peerId peer.ID, score float64)                   
 func (n *nopMetrics) PeerP4Score(peerId peer.ID, score float64)                            {}
 func (n *nopMetrics) ResetPeerScores()                                                     {}
 func (n *nopMetrics) PeerDisconnected(peerId peer.ID)                                      {}
+func (n *nopMetrics) AddNetworkConnection()                                                {}
+func (n *nopMetrics) RemoveNetworkConnection()                                             {}
+func (n *nopMetrics) FilteredNetworkConnection()                                           {}
+func (n *nopMetrics) PubsubTrace(eventType ps_pb.TraceEvent_Type)                          {}
+func (n *nopMetrics) PubsubOutbound(topicName string)                                      {}
+func (n *nopMetrics) PubsubInbound(topicName string, msgType spectypes.MsgType)            {}
+func (n *nopMetrics) AllConnectedPeers(count int)                                          {}
+func (n *nopMetrics) ConnectedTopicPeers(topic string, count int)                          {}
+func (n *nopMetrics) PeersIdentity(opPKHash, opID, nodeVersion, pid, nodeType string)      {}
+func (n *nopMetrics) RouterIncoming(msgType spectypes.MsgType)                             {}
+func (n *nopMetrics) KnownSubnetPeers(subnet, count int)                                   {}
+func (n *nopMetrics) ConnectedSubnetPeers(subnet, count int)                               {}
+func (n *nopMetrics) MySubnets(subnet int, existence byte)                                 {}
+func (n *nopMetrics) OutgoingStreamRequest(protocol protocol.ID)                           {}
+func (n *nopMetrics) AddActiveStreamRequest(protocol protocol.ID)                          {}
+func (n *nopMetrics) RemoveActiveStreamRequest(protocol protocol.ID)                       {}
+func (n *nopMetrics) SuccessfulStreamRequest(protocol protocol.ID)                         {}
+func (n *nopMetrics) StreamResponse(protocol protocol.ID)                                  {}
+func (n *nopMetrics) StreamRequest(protocol protocol.ID)                                   {}
+func (n *nopMetrics) NodeRejected()                                                        {}
+func (n *nopMetrics) NodeFound()                                                           {}
+func (n *nopMetrics) ENRPing()                                                             {}
+func (n *nopMetrics) ENRPong()                                                             {}
+func (n *nopMetrics) SlotDelay(delay time.Duration)                                        {}

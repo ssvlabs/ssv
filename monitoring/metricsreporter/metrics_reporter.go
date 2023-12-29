@@ -9,11 +9,14 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
+	pubsub_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/network/commons"
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
 )
 
@@ -24,6 +27,10 @@ const (
 	executionClientFailure = float64(0)
 	executionClientSyncing = float64(1)
 	executionClientOK      = float64(2)
+
+	consensusClientUnknown = float64(0)
+	consensusClientSyncing = float64(1)
+	consensusClientOK      = float64(2)
 
 	validatorInactive     = float64(0)
 	validatorNoIndex      = float64(1)
@@ -40,6 +47,10 @@ const (
 	messageAccepted = "accepted"
 	messageIgnored  = "ignored"
 	messageRejected = "rejected"
+
+	proposalStage = "proposal"
+	prepareStage  = "prepare"
+	commitStage   = "commit"
 )
 
 var (
@@ -47,7 +58,7 @@ var (
 		Name: "ssv_node_status",
 		Help: "Status of the operator node",
 	})
-	// TODO: rename "eth1" in metrics
+	// TODO: rename "eth1" to "execution" in metrics
 	executionClientStatus = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "ssv_eth1_status",
 		Help: "Status of the connected execution client",
@@ -56,6 +67,25 @@ var (
 		Name: "ssv_execution_client_last_fetched_block",
 		Help: "Last fetched block by execution client",
 	})
+	// TODO: rename "beacon" to "consensus" in metrics
+	consensusClientStatus = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "ssv_beacon_status",
+		Help: "Status of the connected beacon client",
+	})
+	consensusDataRequest = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "ssv_beacon_data_request_duration_seconds",
+		Help:    "Beacon data request duration (seconds)",
+		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
+	}, []string{"role"})
+	qbftStageDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "ssv_validator_instance_stage_duration_seconds",
+		Help:    "Instance stage duration (seconds)",
+		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 1.5, 2, 5},
+	}, []string{"stage"})
+	qbftRound = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv_qbft_instance_round",
+		Help: "QBFT instance round",
+	}, []string{"roleType"})
 	validatorStatus = promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:validator:v2:status",
 		Help: "Validator status",
@@ -144,6 +174,14 @@ var (
 		Name: "ssv_messages_received_total",
 		Help: "The amount of messages total received",
 	}, []string{})
+	networkConnections = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "ssv:network:connections",
+		Help: "Counts opened/closed connections",
+	})
+	networkConnectionsFiltered = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "ssv:network:connections:filtered",
+		Help: "Counts opened/closed connections",
+	})
 	messageValidationRSAVerifications = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_message_validation_rsa_checks",
 		Help: "The amount message validations",
@@ -156,6 +194,91 @@ var (
 		Name: "ssv:p2p:pubsub:score:invalid_message_deliveries",
 		Help: "Pubsub peer P4 scores (sum of square of counters for invalid message deliveries)",
 	}, []string{"pid"})
+	pubsubTrace = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv:network:pubsub:trace",
+		Help: "Traces of pubsub messages",
+	}, []string{"type"})
+	pubsubOutbound = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv:p2p:pubsub:msg:out",
+		Help: "Count broadcasted messages",
+	}, []string{"topic"})
+	pubsubInbound = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv:p2p:pubsub:msg:in",
+		Help: "Count incoming messages",
+	}, []string{"topic", "msg_type"})
+	allConnectedPeers = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "ssv_p2p_all_connected_peers",
+		Help: "Count connected peers",
+	})
+	connectedTopicPeers = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv_p2p_connected_peers",
+		Help: "Count connected peers for a validator",
+	}, []string{"pubKey"})
+	peersIdentity = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:network:peers_identity",
+		Help: "Peers identity",
+	}, []string{"pubKey", "operatorID", "v", "pid", "type"})
+	routerIncoming = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv:network:router:in",
+		Help: "Counts incoming messages",
+	}, []string{"mt"})
+	subnetsKnownPeers = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:network:subnets:known",
+		Help: "Counts known peers in subnets",
+	}, []string{"subnet"})
+	subnetsConnectedPeers = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:network:subnets:connected",
+		Help: "Counts connected peers in subnets",
+	}, []string{"subnet"})
+	mySubnets = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:network:subnets:my",
+		Help: "Marks subnets that this node is interested in",
+	}, []string{"subnet"})
+	streamOutgoingRequests = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:p2p:streams:req:out",
+		Help: "Count requests made via streams",
+	}, []string{"pid"})
+	streamRequestsActive = promauto.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:p2p:streams:req:active",
+		Help: "Count requests made via streams",
+	}, []string{"pid"})
+	streamRequestsSuccess = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv:p2p:streams:req:success",
+		Help: "Count successful requests made via streams",
+	}, []string{"pid"})
+	streamResponses = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv:p2p:streams:res",
+		Help: "Count responses for streams",
+	}, []string{"pid"})
+	streamRequests = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv:p2p:streams:req",
+		Help: "Count responses for streams",
+	}, []string{"pid"})
+	rejectedNodes = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "ssv:network:discovery:rejected",
+		Help: "Counts nodes that were found with discovery but rejected",
+	})
+	foundNodes = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "ssv:network:discovery:found",
+		Help: "Counts nodes that were found with discovery",
+	})
+	enrPings = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "ssv:network:discovery:enr_ping",
+		Help: "Counts the number of ping requests we made as part of ENR publishing",
+	})
+	enrPongs = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "ssv:network:discovery:enr_pong",
+		Help: "Counts the number of pong responses we got as part of ENR publishing",
+	})
+	slotDelay = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "slot_ticker_delay_milliseconds",
+		Help:    "The delay in milliseconds of the slot ticker",
+		Buckets: []float64{5, 10, 20, 100, 500, 5000}, // Buckets in milliseconds. Adjust as per your needs.
+	})
+	messageWorker = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv:worker:msg:process",
+		Help: "Count decided messages",
+	}, []string{"prefix"})
 )
 
 type MetricsReporter interface {
@@ -165,6 +288,18 @@ type MetricsReporter interface {
 	ExecutionClientSyncing()
 	ExecutionClientFailure()
 	ExecutionClientLastFetchedBlock(block uint64)
+	ConsensusClientReady()
+	ConsensusClientSyncing()
+	ConsensusClientUnknown()
+	AttesterDataRequest(duration time.Duration)
+	AggregatorDataRequest(duration time.Duration)
+	ProposerDataRequest(duration time.Duration)
+	SyncCommitteeDataRequest(duration time.Duration)
+	SyncCommitteeContributionDataRequest(duration time.Duration)
+	QBFTProposalDuration(duration time.Duration)
+	QBFTPrepareDuration(duration time.Duration)
+	QBFTCommitDuration(duration time.Duration)
+	QBFTRound(msgID spectypes.MessageID, round specqbft.Round)
 	OperatorPublicKey(operatorID spectypes.OperatorID, publicKey []byte)
 	ValidatorInactive(publicKey []byte)
 	ValidatorNoIndex(publicKey []byte)
@@ -206,6 +341,31 @@ type MetricsReporter interface {
 	PeerP4Score(peerId peer.ID, score float64)
 	ResetPeerScores()
 	PeerDisconnected(peerId peer.ID)
+	AddNetworkConnection()
+	RemoveNetworkConnection()
+	FilteredNetworkConnection()
+	PubsubTrace(eventType pubsub_pb.TraceEvent_Type)
+	PubsubOutbound(topicName string)
+	PubsubInbound(topicName string, msgType spectypes.MsgType)
+	AllConnectedPeers(count int)
+	ConnectedTopicPeers(topic string, count int)
+	PeersIdentity(opPKHash, opID, nodeVersion, pid, nodeType string)
+	RouterIncoming(msgType spectypes.MsgType)
+	KnownSubnetPeers(subnet, count int)
+	ConnectedSubnetPeers(subnet, count int)
+	MySubnets(subnet int, existence byte)
+	OutgoingStreamRequest(protocol protocol.ID)
+	AddActiveStreamRequest(protocol protocol.ID)
+	RemoveActiveStreamRequest(protocol protocol.ID)
+	SuccessfulStreamRequest(protocol protocol.ID)
+	StreamResponse(protocol protocol.ID)
+	StreamRequest(protocol protocol.ID)
+	NodeRejected()
+	NodeFound()
+	ENRPing()
+	ENRPong()
+	SlotDelay(delay time.Duration)
+	WorkerProcessedMessage(prefix string)
 }
 
 type metricsReporter struct {
@@ -226,6 +386,7 @@ func New(opts ...Option) MetricsReporter {
 		ssvNodeStatus,
 		executionClientStatus,
 		executionClientLastFetchedBlock,
+		consensusClientStatus,
 		validatorStatus,
 		eventProcessed,
 		eventProcessingFailed,
@@ -247,9 +408,30 @@ func New(opts ...Option) MetricsReporter {
 		nonCommitteeMessages,
 		messagesReceivedFromPeer,
 		messagesReceivedTotal,
+		networkConnections,
+		networkConnectionsFiltered,
 		messageValidationRSAVerifications,
 		pubsubPeerScore,
 		pubsubPeerP4Score,
+		pubsubTrace,
+		pubsubInbound,
+		pubsubOutbound,
+		allConnectedPeers,
+		connectedTopicPeers,
+		peersIdentity,
+		routerIncoming,
+		subnetsKnownPeers,
+		subnetsConnectedPeers,
+		mySubnets,
+		streamOutgoingRequests,
+		streamRequestsActive,
+		streamRequestsSuccess,
+		streamResponses,
+		streamRequests,
+		rejectedNodes,
+		foundNodes,
+		enrPings,
+		enrPongs,
 	}
 
 	for i, c := range allMetrics {
@@ -283,6 +465,54 @@ func (m *metricsReporter) ExecutionClientSyncing() {
 
 func (m *metricsReporter) ExecutionClientFailure() {
 	executionClientStatus.Set(executionClientFailure)
+}
+
+func (m *metricsReporter) ConsensusClientReady() {
+	executionClientStatus.Set(consensusClientOK)
+}
+
+func (m *metricsReporter) ConsensusClientSyncing() {
+	executionClientStatus.Set(consensusClientSyncing)
+}
+
+func (m *metricsReporter) ConsensusClientUnknown() {
+	executionClientStatus.Set(consensusClientUnknown)
+}
+
+func (m *metricsReporter) AttesterDataRequest(duration time.Duration) {
+	consensusDataRequest.WithLabelValues(spectypes.BNRoleAttester.String()).Observe(duration.Seconds())
+}
+
+func (m *metricsReporter) AggregatorDataRequest(duration time.Duration) {
+	consensusDataRequest.WithLabelValues(spectypes.BNRoleAggregator.String()).Observe(duration.Seconds())
+}
+
+func (m *metricsReporter) ProposerDataRequest(duration time.Duration) {
+	consensusDataRequest.WithLabelValues(spectypes.BNRoleProposer.String()).Observe(duration.Seconds())
+}
+
+func (m *metricsReporter) SyncCommitteeDataRequest(duration time.Duration) {
+	consensusDataRequest.WithLabelValues(spectypes.BNRoleSyncCommittee.String()).Observe(duration.Seconds())
+}
+
+func (m *metricsReporter) SyncCommitteeContributionDataRequest(duration time.Duration) {
+	consensusDataRequest.WithLabelValues(spectypes.BNRoleSyncCommitteeContribution.String()).Observe(duration.Seconds())
+}
+
+func (m *metricsReporter) QBFTProposalDuration(duration time.Duration) {
+	qbftStageDuration.WithLabelValues(proposalStage).Observe(duration.Seconds())
+}
+
+func (m *metricsReporter) QBFTPrepareDuration(duration time.Duration) {
+	qbftStageDuration.WithLabelValues(prepareStage).Observe(duration.Seconds())
+}
+
+func (m *metricsReporter) QBFTCommitDuration(duration time.Duration) {
+	qbftStageDuration.WithLabelValues(commitStage).Observe(duration.Seconds())
+}
+
+func (m *metricsReporter) QBFTRound(msgID spectypes.MessageID, round specqbft.Round) {
+	qbftRound.WithLabelValues(msgID.GetRoleType().String()).Set(float64(round))
 }
 
 func (m *metricsReporter) ExecutionClientLastFetchedBlock(block uint64) {
@@ -474,4 +704,107 @@ func (m *metricsReporter) ResetPeerScores() {
 // PeerDisconnected deletes all data about peers which connections have been closed by the current node
 func (m *metricsReporter) PeerDisconnected(peerId peer.ID) {
 	messagesReceivedFromPeer.DeleteLabelValues(peerId.String())
+}
+
+func (m *metricsReporter) AddNetworkConnection() {
+	networkConnections.Inc()
+}
+
+func (m *metricsReporter) RemoveNetworkConnection() {
+	networkConnections.Dec()
+}
+
+func (m *metricsReporter) FilteredNetworkConnection() {
+	networkConnectionsFiltered.Inc()
+}
+
+func (m *metricsReporter) PubsubTrace(eventType pubsub_pb.TraceEvent_Type) {
+	pubsubTrace.WithLabelValues(eventType.String()).Inc()
+}
+
+func (m *metricsReporter) PubsubOutbound(topicName string) {
+	pubsubOutbound.WithLabelValues(topicName).Inc()
+}
+
+func (m *metricsReporter) PubsubInbound(topicName string, msgType spectypes.MsgType) {
+	pubsubInbound.WithLabelValues(
+		commons.GetTopicBaseName(topicName),
+		strconv.FormatUint(uint64(msgType), 10), // TODO: consider using ssvmessage.MsgTypeToString instead
+	).Inc()
+}
+
+func (m *metricsReporter) AllConnectedPeers(count int) {
+	allConnectedPeers.Set(float64(count))
+}
+
+func (m *metricsReporter) ConnectedTopicPeers(topic string, count int) {
+	connectedTopicPeers.WithLabelValues(topic).Set(float64(count))
+}
+
+func (m *metricsReporter) PeersIdentity(opPKHash, opID, nodeVersion, pid, nodeType string) {
+	peersIdentity.WithLabelValues(opPKHash, opID, nodeVersion, pid, nodeType).Set(1)
+}
+
+func (m *metricsReporter) RouterIncoming(msgType spectypes.MsgType) {
+	routerIncoming.WithLabelValues(ssvmessage.MsgTypeToString(msgType)).Inc()
+}
+
+func (m *metricsReporter) KnownSubnetPeers(subnet, count int) {
+	subnetsKnownPeers.WithLabelValues(strconv.Itoa(subnet)).Set(float64(count))
+}
+
+func (m *metricsReporter) ConnectedSubnetPeers(subnet, count int) {
+	subnetsConnectedPeers.WithLabelValues(strconv.Itoa(subnet)).Set(float64(count))
+}
+
+func (m *metricsReporter) MySubnets(subnet int, existence byte) {
+	mySubnets.WithLabelValues(strconv.Itoa(subnet)).Set(float64(existence))
+}
+
+func (m *metricsReporter) OutgoingStreamRequest(protocol protocol.ID) {
+	streamOutgoingRequests.WithLabelValues(string(protocol)).Inc()
+}
+
+func (m *metricsReporter) AddActiveStreamRequest(protocol protocol.ID) {
+	streamRequestsActive.WithLabelValues(string(protocol)).Inc()
+}
+
+func (m *metricsReporter) RemoveActiveStreamRequest(protocol protocol.ID) {
+	streamRequestsActive.WithLabelValues(string(protocol)).Dec()
+}
+
+func (m *metricsReporter) SuccessfulStreamRequest(protocol protocol.ID) {
+	streamRequestsSuccess.WithLabelValues(string(protocol)).Inc()
+}
+
+func (m *metricsReporter) StreamResponse(protocol protocol.ID) {
+	streamResponses.WithLabelValues(string(protocol)).Inc()
+}
+
+func (m *metricsReporter) StreamRequest(protocol protocol.ID) {
+	streamRequests.WithLabelValues(string(protocol)).Inc()
+}
+
+func (m *metricsReporter) NodeRejected() {
+	rejectedNodes.Inc()
+}
+
+func (m *metricsReporter) NodeFound() {
+	foundNodes.Inc()
+}
+
+func (m *metricsReporter) ENRPing() {
+	enrPings.Inc()
+}
+
+func (m *metricsReporter) ENRPong() {
+	enrPongs.Inc()
+}
+
+func (m *metricsReporter) SlotDelay(delay time.Duration) {
+	slotDelay.Observe(float64(delay.Milliseconds()))
+}
+
+func (m *metricsReporter) WorkerProcessedMessage(prefix string) {
+	messageWorker.WithLabelValues(prefix).Inc()
 }

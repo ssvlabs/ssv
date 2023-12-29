@@ -35,7 +35,7 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 		return nil, DataVersionNil, errors.New("attestation data is nil")
 	}
 
-	metricsAttesterDataRequest.Observe(time.Since(attDataReqStart).Seconds())
+	gc.metrics.AttesterDataRequest(time.Since(attDataReqStart))
 
 	// Get aggregate attestation data.
 	root, err := data.HashTreeRoot()
@@ -52,7 +52,7 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 		return nil, DataVersionNil, errors.New("aggregation data is nil")
 	}
 
-	metricsAggregatorDataRequest.Observe(time.Since(aggDataReqStart).Seconds())
+	gc.metrics.AggregatorDataRequest(time.Since(aggDataReqStart))
 
 	var selectionProof phase0.BLSSignature
 	copy(selectionProof[:], slotSig)

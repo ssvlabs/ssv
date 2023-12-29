@@ -3,13 +3,16 @@ package p2pv1
 import (
 	"strconv"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
+
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/network/discovery"
+	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/peers/connections"
+	"github.com/bloxapp/ssv/network/streams"
 	"github.com/bloxapp/ssv/network/topics"
 
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/utils/format"
@@ -18,44 +21,13 @@ import (
 type Metrics interface {
 	connections.Metrics
 	topics.Metrics
-}
-
-var (
-	// MetricsAllConnectedPeers counts all connected peers
-	MetricsAllConnectedPeers = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv_p2p_all_connected_peers",
-		Help: "Count connected peers",
-	})
-	// MetricsConnectedPeers counts connected peers for a topic
-	MetricsConnectedPeers = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv_p2p_connected_peers",
-		Help: "Count connected peers for a validator",
-	}, []string{"pubKey"})
-	// MetricsPeersIdentity tracks peers identity
-	MetricsPeersIdentity = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:network:peers_identity",
-		Help: "Peers identity",
-	}, []string{"pubKey", "operatorID", "v", "pid", "type"})
-	metricsRouterIncoming = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv:network:router:in",
-		Help: "Counts incoming messages",
-	}, []string{"mt"})
-)
-
-func init() {
-	logger := zap.L()
-	if err := prometheus.Register(MetricsAllConnectedPeers); err != nil {
-		logger.Debug("could not register prometheus collector")
-	}
-	if err := prometheus.Register(MetricsPeersIdentity); err != nil {
-		logger.Debug("could not register prometheus collector")
-	}
-	if err := prometheus.Register(MetricsConnectedPeers); err != nil {
-		logger.Debug("could not register prometheus collector")
-	}
-	if err := prometheus.Register(metricsRouterIncoming); err != nil {
-		logger.Debug("could not register prometheus collector")
-	}
+	peers.Metrics
+	streams.Metrics
+	discovery.Metrics
+	AllConnectedPeers(count int)
+	ConnectedTopicPeers(topic string, count int)
+	PeersIdentity(opPKHash, opID, nodeVersion, pid, nodeType string)
+	RouterIncoming(msgType spectypes.MsgType)
 }
 
 var unknown = "unknown"
@@ -64,7 +36,7 @@ func (n *p2pNetwork) reportAllPeers(logger *zap.Logger) func() {
 	return func() {
 		pids := n.host.Network().Peers()
 		logger.Debug("connected peers status", fields.Count(len(pids)))
-		MetricsAllConnectedPeers.Set(float64(len(pids)))
+		n.metrics.AllConnectedPeers(len(pids))
 	}
 }
 
@@ -95,7 +67,7 @@ func (n *p2pNetwork) reportTopicPeers(logger *zap.Logger, name string) {
 		return
 	}
 	logger.Debug("topic peers status", fields.Topic(name), fields.Count(len(peers)), zap.Any("peers", peers))
-	MetricsConnectedPeers.WithLabelValues(name).Set(float64(len(peers)))
+	n.metrics.ConnectedTopicPeers(name, len(peers))
 }
 
 func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
@@ -139,7 +111,7 @@ func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
 		zap.String("operator_id", opID),
 		zap.String("state", state.String()),
 	)
-	MetricsPeersIdentity.WithLabelValues(opPKHash, opID, nodeVersion, pid.String(), nodeType).Set(1)
+	n.metrics.PeersIdentity(opPKHash, opID, nodeVersion, pid.String(), nodeType)
 }
 
 //

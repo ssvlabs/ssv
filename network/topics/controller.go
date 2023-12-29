@@ -3,7 +3,6 @@ package topics
 import (
 	"context"
 	"io"
-	"strconv"
 	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -45,9 +44,10 @@ type messageValidator interface {
 
 // topicsCtrl implements Controller
 type topicsCtrl struct {
-	ctx    context.Context
-	logger *zap.Logger // struct logger to implement i.Closer
-	ps     *pubsub.PubSub
+	ctx     context.Context
+	logger  *zap.Logger // struct logger to implement i.Closer
+	metrics Metrics
+	ps      *pubsub.PubSub
 	// scoreParamsFactory is a function that helps to set scoring params on topics
 	scoreParamsFactory func(string) *pubsub.TopicScoreParams
 	msgValidator       messageValidator
@@ -61,6 +61,7 @@ type topicsCtrl struct {
 func NewTopicsController(
 	ctx context.Context,
 	logger *zap.Logger,
+	metrics Metrics,
 	msgHandler PubsubMessageHandler,
 	msgValidator messageValidator,
 	subFilter SubFilter,
@@ -70,6 +71,7 @@ func NewTopicsController(
 	ctrl := &topicsCtrl{
 		ctx:                ctx,
 		logger:             logger,
+		metrics:            metrics,
 		ps:                 pubSub,
 		scoreParamsFactory: scoreParams,
 		msgValidator:       msgValidator,
@@ -169,7 +171,7 @@ func (ctrl *topicsCtrl) Broadcast(name string, data []byte, timeout time.Duratio
 
 		err := topic.Publish(ctx, data)
 		if err == nil {
-			metricPubsubOutbound.WithLabelValues(name).Inc()
+			ctrl.metrics.PubsubOutbound(name)
 		}
 	}()
 
@@ -241,10 +243,7 @@ func (ctrl *topicsCtrl) listen(logger *zap.Logger, sub *pubsub.Subscription) err
 		}
 
 		if ssvMsg, ok := msg.ValidatorData.(*queue.DecodedSSVMessage); ok {
-			metricPubsubInbound.WithLabelValues(
-				commons.GetTopicBaseName(topicName),
-				strconv.FormatUint(uint64(ssvMsg.MsgType), 10),
-			).Inc()
+			ctrl.metrics.PubsubInbound(topicName, ssvMsg.MsgType)
 		}
 
 		if err := ctrl.msgHandler(ctx, topicName, msg); err != nil {

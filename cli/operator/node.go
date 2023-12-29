@@ -148,7 +148,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.ConsensusClient.GasLimit = spectypes.DefaultGasLimit
 		cfg.ConsensusClient.Network = networkConfig.Beacon.GetNetwork()
 
-		consensusClient := setupConsensusClient(logger, operatorData.ID, slotTickerProvider)
+		consensusClient := setupConsensusClient(logger, metricsReporter, operatorData.ID, slotTickerProvider)
 
 		executionClient, err := executionclient.New(
 			cmd.Context(),
@@ -539,10 +539,11 @@ func setupP2P(logger *zap.Logger, db basedb.Database, mr metricsreporter.Metrics
 
 func setupConsensusClient(
 	logger *zap.Logger,
+	metrics metricsreporter.MetricsReporter,
 	operatorID spectypes.OperatorID,
 	slotTickerProvider slotticker.Provider,
 ) beaconprotocol.BeaconNode {
-	cl, err := goclient.New(logger, cfg.ConsensusClient, operatorID, slotTickerProvider)
+	cl, err := goclient.New(logger, metrics, cfg.ConsensusClient, operatorID, slotTickerProvider)
 	if err != nil {
 		logger.Fatal("failed to create beacon go-client", zap.Error(err),
 			fields.Address(cfg.ConsensusClient.BeaconNodeAddr))

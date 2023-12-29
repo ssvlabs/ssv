@@ -159,7 +159,7 @@ func (n *p2pNetwork) SetupServices(logger *zap.Logger) error {
 }
 
 func (n *p2pNetwork) setupStreamCtrl(logger *zap.Logger) error {
-	n.streamCtrl = streams.NewStreamController(n.ctx, n.host, n.cfg.RequestTimeout, n.cfg.RequestTimeout)
+	n.streamCtrl = streams.NewStreamController(n.ctx, n.metrics, n.host, n.cfg.RequestTimeout, n.cfg.RequestTimeout)
 	logger.Debug("stream controller is ready")
 	return nil
 }
@@ -180,7 +180,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 		return libPrivKey
 	}
 
-	n.idx = peers.NewPeersIndex(logger, n.host.Network(), self, n.getMaxPeers, getPrivKey, p2pcommons.Subnets(), 10*time.Minute)
+	n.idx = peers.NewPeersIndex(logger, n.metrics, n.host.Network(), self, n.getMaxPeers, getPrivKey, p2pcommons.Subnets(), 10*time.Minute)
 	logger.Debug("peers index is ready")
 
 	var ids identify.IDService
@@ -267,7 +267,7 @@ func (n *p2pNetwork) setupDiscovery(logger *zap.Logger) error {
 		HostDNS:     n.cfg.HostDNS,
 		DomainType:  n.cfg.Network.Domain,
 	}
-	disc, err := discovery.NewService(n.ctx, logger, discOpts)
+	disc, err := discovery.NewService(n.ctx, logger, n.metrics, discOpts)
 	if err != nil {
 		return err
 	}

@@ -41,7 +41,8 @@ func (gc *goClient) GetBeaconBlock(slot phase0.Slot, graffiti, randao []byte) (s
 	if err != nil {
 		return nil, DataVersionNil, err
 	}
-	metricsProposerDataRequest.Observe(time.Since(reqStart).Seconds())
+
+	gc.metrics.ProposerDataRequest(time.Since(reqStart))
 
 	if beaconBlock == nil {
 		return nil, 0, fmt.Errorf("block is nil")
@@ -83,7 +84,8 @@ func (gc *goClient) GetBlindedBeaconBlock(slot phase0.Slot, graffiti, randao []b
 	if err != nil {
 		return nil, 0, err
 	}
-	metricsProposerDataRequest.Observe(time.Since(reqStart).Seconds())
+
+	gc.metrics.ProposerDataRequest(time.Since(reqStart))
 
 	if beaconBlock == nil {
 		return nil, 0, fmt.Errorf("blinded block is nil")

@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/network"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/protocol/v2/types"
@@ -42,7 +43,7 @@ func TestMain(m *testing.M) {
 
 	types.SetDefaultDomain(testingutils.TestingSSVDomainType)
 
-	ln, err := p2pv1.CreateAndStartLocalNet(ctx, logger, p2pv1.LocalNetOptions{
+	ln, err := p2pv1.CreateAndStartLocalNet(ctx, logger, metricsreporter.NewNop(), p2pv1.LocalNetOptions{
 		Nodes:        maxSupportedCommittee,
 		MinConnected: maxSupportedQuorum,
 		UseDiscv5:    false,

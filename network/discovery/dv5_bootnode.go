@@ -6,8 +6,9 @@ import (
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
 
-	"github.com/bloxapp/ssv/utils"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/utils"
 )
 
 // BootnodeOptions contains options to create the node
@@ -27,9 +28,9 @@ type Bootnode struct {
 }
 
 // NewBootnode creates a new bootnode
-func NewBootnode(pctx context.Context, logger *zap.Logger, opts *BootnodeOptions) (*Bootnode, error) {
+func NewBootnode(pctx context.Context, logger *zap.Logger, metrics Metrics, opts *BootnodeOptions) (*Bootnode, error) {
 	ctx, cancel := context.WithCancel(pctx)
-	disc, err := createBootnodeDiscovery(ctx, logger, opts)
+	disc, err := createBootnodeDiscovery(ctx, logger, metrics, opts)
 	if err != nil {
 		cancel()
 		return nil, err
@@ -51,7 +52,7 @@ func (b *Bootnode) Close() error {
 	return nil
 }
 
-func createBootnodeDiscovery(ctx context.Context, logger *zap.Logger, opts *BootnodeOptions) (Service, error) {
+func createBootnodeDiscovery(ctx context.Context, logger *zap.Logger, metrics Metrics, opts *BootnodeOptions) (Service, error) {
 	privKey, err := utils.ECDSAPrivateKey(logger.Named(logging.NameBootNode), opts.PrivateKey)
 	if err != nil {
 		return nil, err
@@ -66,5 +67,5 @@ func createBootnodeDiscovery(ctx context.Context, logger *zap.Logger, opts *Boot
 			Bootnodes:  []string{},
 		},
 	}
-	return newDiscV5Service(ctx, logger, discOpts)
+	return newDiscV5Service(ctx, logger, metrics, discOpts)
 }

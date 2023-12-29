@@ -61,7 +61,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 		id := conn.RemotePeer()
 		errClose := net.ClosePeer(id)
 		if errClose == nil {
-			metricsFilteredConnections.Inc()
+			ch.metrics.FilteredNetworkConnection()
 		}
 	}
 
@@ -184,7 +184,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 				}
 
 				// Successfully connected.
-				metricsConnections.Inc()
+				ch.metrics.AddNetworkConnection()
 				ch.peerInfos.SetState(conn.RemotePeer(), peers.StateConnected)
 				logger.Debug("peer connected")
 			}()
@@ -199,7 +199,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 				return
 			}
 
-			metricsConnections.Dec()
+			ch.metrics.RemoveNetworkConnection()
 			ch.peerInfos.SetState(conn.RemotePeer(), peers.StateDisconnected)
 			ch.metrics.PeerDisconnected(conn.RemotePeer())
 

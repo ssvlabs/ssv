@@ -48,6 +48,9 @@ type DiscV5Service struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
+	logger  *zap.Logger
+	metrics Metrics
+
 	dv5Listener *discover.UDPv5
 	bootnodes   []*enode.Node
 
@@ -61,11 +64,13 @@ type DiscV5Service struct {
 	subnets    []byte
 }
 
-func newDiscV5Service(pctx context.Context, logger *zap.Logger, discOpts *Options) (Service, error) {
+func newDiscV5Service(pctx context.Context, logger *zap.Logger, metrics Metrics, discOpts *Options) (Service, error) {
 	ctx, cancel := context.WithCancel(pctx)
 	dvs := DiscV5Service{
 		ctx:          ctx,
 		cancel:       cancel,
+		logger:       logger,
+		metrics:      metrics,
 		publishState: publishStateReady,
 		conns:        discOpts.ConnIndex,
 		subnetsIdx:   discOpts.SubnetsIdx,
@@ -167,10 +172,10 @@ func (dvs *DiscV5Service) checkPeer(logger *zap.Logger, e PeerEvent) error {
 
 	dvs.subnetsIdx.UpdatePeerSubnets(e.AddrInfo.ID, nodeSubnets)
 	if !dvs.limitNodeFilter(e.Node) && !dvs.sharedSubnetsFilter(1)(e.Node) {
-		metricRejectedNodes.Inc()
+		dvs.metrics.NodeRejected()
 		return errors.New("no shared subnets")
 	}
-	metricFoundNodes.Inc()
+	dvs.metrics.NodeFound()
 	return nil
 }
 
@@ -303,7 +308,7 @@ func (dvs *DiscV5Service) publishENR(logger *zap.Logger) {
 	}
 	defer atomic.StoreInt32(&dvs.publishState, publishStateReady)
 	dvs.discover(ctx, func(e PeerEvent) {
-		metricPublishEnrPings.Inc()
+		dvs.metrics.ENRPing()
 		err := dvs.dv5Listener.Ping(e.Node)
 		if err != nil {
 			if err.Error() == "RPC timeout" {
@@ -313,7 +318,7 @@ func (dvs *DiscV5Service) publishENR(logger *zap.Logger) {
 			logger.Warn("could not ping node", fields.TargetNodeENR(e.Node), zap.Error(err))
 			return
 		}
-		metricPublishEnrPongs.Inc()
+		dvs.metrics.ENRPong()
 		// logger.Debug("ping success", logging.TargetNodeEnr(e.Node))
 	}, time.Millisecond*100, dvs.badNodeFilter(logger))
 }

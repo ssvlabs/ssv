@@ -26,9 +26,10 @@ type StreamController interface {
 }
 
 // NewStreamController create a new instance of StreamController
-func NewStreamController(ctx context.Context, host host.Host, dialTimeout, readWriteTimeout time.Duration) StreamController {
+func NewStreamController(ctx context.Context, metrics Metrics, host host.Host, dialTimeout, readWriteTimeout time.Duration) StreamController {
 	ctrl := streamCtrl{
 		ctx:              ctx,
+		metrics:          metrics,
 		host:             host,
 		dialTimeout:      dialTimeout,
 		readWriteTimeout: readWriteTimeout,
@@ -38,7 +39,8 @@ func NewStreamController(ctx context.Context, host host.Host, dialTimeout, readW
 }
 
 type streamCtrl struct {
-	ctx context.Context
+	ctx     context.Context
+	metrics Metrics
 
 	host host.Host
 
@@ -61,10 +63,12 @@ func (n *streamCtrl) Request(logger *zap.Logger, peerID peer.ID, protocol protoc
 			logger.Debug("could not close stream", zap.Error(err))
 		}
 	}()
+
 	stream := NewStream(s)
-	metricsStreamOutgoingRequests.WithLabelValues(string(protocol)).Inc()
-	metricsStreamRequestsActive.WithLabelValues(string(protocol)).Inc()
-	defer metricsStreamRequestsActive.WithLabelValues(string(protocol)).Dec()
+
+	n.metrics.OutgoingStreamRequest(protocol)
+	n.metrics.AddActiveStreamRequest(protocol)
+	defer n.metrics.RemoveActiveStreamRequest(protocol)
 
 	if err := stream.WriteWithTimeout(data, n.readWriteTimeout); err != nil {
 		return nil, errors.Wrap(err, "could not write to stream")
@@ -76,7 +80,9 @@ func (n *streamCtrl) Request(logger *zap.Logger, peerID peer.ID, protocol protoc
 	if err != nil {
 		return nil, errors.Wrap(err, "could not read stream msg")
 	}
-	metricsStreamRequestsSuccess.WithLabelValues(string(protocol)).Inc()
+
+	n.metrics.SuccessfulStreamRequest(protocol)
+
 	return res, nil
 }
 
@@ -86,7 +92,7 @@ func (n *streamCtrl) HandleStream(logger *zap.Logger, stream core.Stream) ([]byt
 	s := NewStream(stream)
 
 	protocolID := stream.Protocol()
-	metricsStreamRequests.WithLabelValues(string(protocolID)).Inc()
+	n.metrics.StreamRequest(protocolID)
 	// logger := logger.With(zap.String("protocol", string(protocolID)), zap.String("streamID", streamID))
 	done := func() {
 		if err := s.Close(); err != nil && err.Error() != libp2pnetwork.ErrReset.Error() {
@@ -105,7 +111,9 @@ func (n *streamCtrl) HandleStream(logger *zap.Logger, stream core.Stream) ([]byt
 			// logger.Debug("could not write to stream", zap.Error(err))
 			return errors.Wrap(err, "could not write to stream")
 		}
-		metricsStreamResponses.WithLabelValues(string(protocolID)).Inc()
+
+		n.metrics.StreamResponse(protocolID)
+
 		return nil
 	}, done, nil
 }

@@ -3,7 +3,6 @@ package peers
 import (
 	"crypto"
 	"crypto/rsa"
-	"strconv"
 	"sync"
 	"time"
 
@@ -26,6 +25,9 @@ type NetworkKeyProvider func() libp2pcrypto.PrivKey
 
 // peersIndex implements Index interface.
 type peersIndex struct {
+	logger  *zap.Logger
+	metrics Metrics
+
 	netKeyProvider NetworkKeyProvider
 	network        libp2pnetwork.Network
 
@@ -40,9 +42,19 @@ type peersIndex struct {
 }
 
 // NewPeersIndex creates a new Index
-func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *records.NodeInfo, maxPeers MaxPeersProvider,
-	netKeyProvider NetworkKeyProvider, subnetsCount int, pruneTTL time.Duration) *peersIndex {
+func NewPeersIndex(
+	logger *zap.Logger,
+	metrics Metrics,
+	network libp2pnetwork.Network,
+	self *records.NodeInfo,
+	maxPeers MaxPeersProvider,
+	netKeyProvider NetworkKeyProvider,
+	subnetsCount int,
+	pruneTTL time.Duration,
+) *peersIndex {
 	return &peersIndex{
+		logger:         logger,
+		metrics:        metrics,
 		network:        network,
 		scoreIdx:       newScoreIndex(),
 		SubnetsIndex:   NewSubnetsIndex(subnetsCount),
@@ -195,8 +207,9 @@ func (pi *peersIndex) GetSubnetsStats() *SubnetsStats {
 	stats.Connected = make([]int, len(stats.PeersCount))
 	var sumConnected int
 	for subnet, count := range stats.PeersCount {
-		metricsSubnetsKnownPeers.WithLabelValues(strconv.Itoa(subnet)).Set(float64(count))
-		metricsMySubnets.WithLabelValues(strconv.Itoa(subnet)).Set(float64(mySubnets[subnet]))
+		pi.metrics.KnownSubnetPeers(subnet, count)
+		pi.metrics.MySubnets(subnet, mySubnets[subnet])
+
 		peers := pi.SubnetsIndex.GetSubnetPeers(subnet)
 		connectedCount := 0
 		for _, p := range peers {
@@ -206,7 +219,8 @@ func (pi *peersIndex) GetSubnetsStats() *SubnetsStats {
 		}
 		stats.Connected[subnet] = connectedCount
 		sumConnected += connectedCount
-		metricsSubnetsConnectedPeers.WithLabelValues(strconv.Itoa(subnet)).Set(float64(connectedCount))
+
+		pi.metrics.ConnectedSubnetPeers(subnet, connectedCount)
 	}
 	if len(stats.PeersCount) > 0 {
 		stats.AvgConnected = sumConnected / len(stats.PeersCount)

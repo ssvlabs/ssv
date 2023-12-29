@@ -25,7 +25,7 @@ func (gc *goClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 		return nil, DataVersionNil, err
 	}
 
-	metricsAttesterDataRequest.Observe(time.Since(startTime).Seconds())
+	gc.metrics.AttesterDataRequest(time.Since(startTime))
 
 	return attestationData, spec.DataVersionPhase0, nil
 }
