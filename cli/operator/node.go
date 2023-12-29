@@ -15,7 +15,6 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/go-chi/jwtauth/v5"
 	"github.com/ilyakaznacheev/cleanenv"
-	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -313,7 +312,7 @@ var StartNodeCmd = &cobra.Command{
 				&handlers.Validators{
 					Shares: nodeStorage.Shares(),
 				},
-				jwtauth.New("HS256", []byte(cfg.SecretToken), nil, jwt.WithAcceptableSkew(24*time.Hour)),
+				jwtauth.New("HS256", []byte(cfg.SecretToken), nil),
 			)
 			go func() {
 				err := apiServer.Run()
