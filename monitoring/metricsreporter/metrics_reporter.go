@@ -564,15 +564,15 @@ func (m *metricsReporter) ExecutionClientFailure() {
 }
 
 func (m *metricsReporter) ConsensusClientReady() {
-	executionClientStatus.Set(consensusClientOK)
+	consensusClientStatus.Set(consensusClientOK)
 }
 
 func (m *metricsReporter) ConsensusClientSyncing() {
-	executionClientStatus.Set(consensusClientSyncing)
+	consensusClientStatus.Set(consensusClientSyncing)
 }
 
 func (m *metricsReporter) ConsensusClientUnknown() {
-	executionClientStatus.Set(consensusClientUnknown)
+	consensusClientStatus.Set(consensusClientUnknown)
 }
 
 func (m *metricsReporter) AttesterDataRequest(duration time.Duration) {
