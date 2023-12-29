@@ -54,65 +54,72 @@ const (
 	commitStage   = "commit"
 )
 
+var allMetrics []prometheus.Collector
+
+func registerMetric[T prometheus.Collector](collector T) T {
+	allMetrics = append(allMetrics, collector)
+	return collector
+}
+
 var (
-	ssvNodeStatus = promauto.NewGauge(prometheus.GaugeOpts{
+	ssvNodeStatus = registerMetric(promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "ssv_node_status",
 		Help: "Status of the operator node",
-	})
+	}))
 	// TODO: rename "eth1" to "execution" in metrics
-	executionClientStatus = promauto.NewGauge(prometheus.GaugeOpts{
+	executionClientStatus = registerMetric(promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "ssv_eth1_status",
 		Help: "Status of the connected execution client",
-	})
-	executionClientLastFetchedBlock = promauto.NewGauge(prometheus.GaugeOpts{
+	}))
+	executionClientLastFetchedBlock = registerMetric(promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "ssv_execution_client_last_fetched_block",
 		Help: "Last fetched block by execution client",
-	})
+	}))
 	// TODO: rename "beacon" to "consensus" in metrics
-	consensusClientStatus = promauto.NewGauge(prometheus.GaugeOpts{
+	consensusClientStatus = registerMetric(promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "ssv_beacon_status",
 		Help: "Status of the connected beacon client",
-	})
-	consensusDataRequest = promauto.NewHistogramVec(prometheus.HistogramOpts{
+	}))
+	consensusDataRequest = registerMetric(promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "ssv_beacon_data_request_duration_seconds",
 		Help:    "Beacon data request duration (seconds)",
 		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
-	}, []string{"role"})
-	consensusDutySubmission = promauto.NewHistogramVec(prometheus.HistogramOpts{
+	}, []string{"role"}))
+	consensusDutySubmission = registerMetric(promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "ssv_validator_beacon_submission_duration_seconds",
 		Help:    "Submission to beacon node duration (seconds)",
 		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
-	}, []string{"role"})
-	qbftStageDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+	}, []string{"role"}))
+	qbftStageDuration = registerMetric(promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "ssv_validator_instance_stage_duration_seconds",
 		Help:    "Instance stage duration (seconds)",
 		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 1.5, 2, 5},
-	}, []string{"stage"})
-	qbftRound = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	}, []string{"stage"}))
+	qbftRound = registerMetric(promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv_qbft_instance_round",
 		Help: "QBFT instance round",
-	}, []string{"roleType"})
-	consensusDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+	}, []string{"roleType"}))
+	consensusDuration = registerMetric(promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "ssv_validator_consensus_duration_seconds",
 		Help:    "Consensus duration (seconds)",
 		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
-	}, []string{"role"})
-	preConsensusDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+	}, []string{"role"}))
+	preConsensusDuration = registerMetric(promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "ssv_validator_pre_consensus_duration_seconds",
 		Help:    "Pre-consensus duration (seconds)",
 		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
-	}, []string{"role"})
-	postConsensusDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+	}, []string{"role"}))
+	postConsensusDuration = registerMetric(promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "ssv_validator_post_consensus_duration_seconds",
 		Help:    "Post-consensus duration (seconds)",
 		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
-	}, []string{"role"})
-	dutyFullFlowDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+	}, []string{"role"}))
+	dutyFullFlowDuration = registerMetric(promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "ssv_validator_duty_full_flow_duration_seconds",
 		Help:    "Duty full flow duration (seconds)",
 		Buckets: []float64{0.02, 0.05, 0.1, 0.2, 0.5, 1, 5},
-	}, []string{"role"})
-	dutyFullFlowFirstRoundDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+	}, []string{"role"}))
+	dutyFullFlowFirstRoundDuration = registerMetric(promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name: "ssv_validator_duty_full_flow_first_round_duration_seconds",
 		Help: "Duty full flow at first round duration (seconds)",
 		Buckets: []float64{
@@ -122,228 +129,228 @@ var (
 			3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9, 4.0,
 			4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 5.0,
 		},
-	}, []string{"role"})
-	rolesSubmitted = promauto.NewCounterVec(prometheus.CounterOpts{
+	}, []string{"role"}))
+	rolesSubmitted = registerMetric(promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_validator_roles_submitted",
 		Help: "Submitted roles",
-	}, []string{"role"})
-	rolesSubmissionFailures = promauto.NewCounterVec(prometheus.CounterOpts{
+	}, []string{"role"}))
+	rolesSubmissionFailures = registerMetric(promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_validator_roles_failed",
 		Help: "Submitted roles",
-	}, []string{"role"})
-	instancesStarted = promauto.NewCounterVec(prometheus.CounterOpts{
+	}, []string{"role"}))
+	instancesStarted = registerMetric(promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_instances_started",
 		Help: "Number of started QBFT instances",
-	}, []string{"role"})
-	instancesDecided = promauto.NewCounterVec(prometheus.CounterOpts{
+	}, []string{"role"}))
+	instancesDecided = registerMetric(promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_instances_decided",
 		Help: "Number of decided QBFT instances",
-	}, []string{"role"})
-	validatorStatus = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	}, []string{"role"}))
+	validatorStatus = registerMetric(promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:validator:v2:status",
 		Help: "Validator status",
-	}, []string{"pubKey"})
-	eventProcessed = promauto.NewCounterVec(prometheus.CounterOpts{
+	}, []string{"pubKey"}))
+	eventProcessed = registerMetric(promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_eth1_sync_count_success",
 		Help: "Count succeeded execution client events",
-	}, []string{"etype"})
-	eventProcessingFailed = promauto.NewCounterVec(prometheus.CounterOpts{
+	}, []string{"etype"}))
+	eventProcessingFailed = registerMetric(promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_eth1_sync_count_failed",
 		Help: "Count failed execution client events",
-	}, []string{"etype"})
-	operatorIndex = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	}, []string{"etype"}))
+	operatorIndex = registerMetric(promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:exporter:operator_index",
 		Help: "operator footprint",
-	}, []string{"pubKey", "index"})
-	messageValidationResult = promauto.NewCounterVec(prometheus.CounterOpts{
+	}, []string{"pubKey", "index"}))
+	messageValidationResult = registerMetric(promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_message_validation",
 		Help: "Message validation result",
-	}, []string{"status", "reason", "role", "round"})
-	messageValidationSSVType = promauto.NewCounterVec(prometheus.CounterOpts{
+	}, []string{"status", "reason", "role", "round"}))
+	messageValidationSSVType = registerMetric(promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_message_validation_ssv_type",
 		Help: "SSV message type",
-	}, []string{"type"})
-	messageValidationConsensusType = promauto.NewCounterVec(prometheus.CounterOpts{
+	}, []string{"type"}))
+	messageValidationConsensusType = registerMetric(promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_message_validation_consensus_type",
 		Help: "Consensus message type",
-	}, []string{"type", "signers"})
-	messageValidationDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+	}, []string{"type", "signers"}))
+	messageValidationDuration = registerMetric(promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "ssv_message_validation_duration_seconds",
 		Help:    "Message validation duration (seconds)",
 		Buckets: []float64{0.001, 0.005, 0.010, 0.020, 0.050},
-	}, []string{})
-	signatureValidationDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+	}, []string{}))
+	signatureValidationDuration = registerMetric(promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "ssv_signature_validation_duration_seconds",
 		Help:    "Signature validation duration (seconds)",
 		Buckets: []float64{0.001, 0.005, 0.010, 0.020, 0.050},
-	}, []string{})
-	messageSize = promauto.NewHistogramVec(prometheus.HistogramOpts{
+	}, []string{}))
+	messageSize = registerMetric(promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "ssv_message_size",
 		Help:    "Message size",
 		Buckets: []float64{100, 500, 1_000, 5_000, 10_000, 50_000, 100_000, 500_000, 1_000_000, 5_000_000},
-	}, []string{})
-	activeMsgValidation = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	}, []string{}))
+	activeMsgValidation = registerMetric(promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:p2p:pubsub:msg:val:active",
 		Help: "Count active message validation",
-	}, []string{"topic"})
-	incomingQueueMessages = promauto.NewCounterVec(prometheus.CounterOpts{
+	}, []string{"topic"}))
+	incomingQueueMessages = registerMetric(promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_message_queue_incoming",
 		Help: "The amount of message incoming to the validator's msg queue",
-	}, []string{"msg_id"})
-	outgoingQueueMessages = promauto.NewCounterVec(prometheus.CounterOpts{
+	}, []string{"msg_id"}))
+	outgoingQueueMessages = registerMetric(promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_message_queue_outgoing",
 		Help: "The amount of message outgoing from the validator's msg queue",
-	}, []string{"msg_id"})
-	droppedQueueMessages = promauto.NewCounterVec(prometheus.CounterOpts{
+	}, []string{"msg_id"}))
+	droppedQueueMessages = registerMetric(promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_message_queue_drops",
 		Help: "The amount of message dropped from the validator's msg queue",
-	}, []string{"msg_id"})
-	messageQueueSize = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	}, []string{"msg_id"}))
+	messageQueueSize = registerMetric(promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv_message_queue_size",
 		Help: "Size of message queue",
-	}, []string{})
-	messageQueueCapacity = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	}, []string{}))
+	messageQueueCapacity = registerMetric(promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv_message_queue_capacity",
 		Help: "Capacity of message queue",
-	}, []string{})
-	messageTimeInQueue = promauto.NewHistogramVec(prometheus.HistogramOpts{
+	}, []string{}))
+	messageTimeInQueue = registerMetric(promauto.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "ssv_message_time_in_queue_seconds",
 		Help:    "Time message spent in queue (seconds)",
 		Buckets: []float64{0.001, 0.005, 0.010, 0.050, 0.100, 0.500, 1, 5, 10, 60},
-	}, []string{"msg_id"})
-	inCommitteeMessages = promauto.NewCounterVec(prometheus.CounterOpts{
+	}, []string{"msg_id"}))
+	inCommitteeMessages = registerMetric(promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_message_in_committee",
 		Help: "The amount of messages in committee",
-	}, []string{"ssv_msg_type", "decided"})
-	nonCommitteeMessages = promauto.NewCounterVec(prometheus.CounterOpts{
+	}, []string{"ssv_msg_type", "decided"}))
+	nonCommitteeMessages = registerMetric(promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_message_non_committee",
 		Help: "The amount of messages not in committee",
-	}, []string{"ssv_msg_type", "decided"})
-	messagesReceivedFromPeer = promauto.NewCounterVec(prometheus.CounterOpts{
+	}, []string{"ssv_msg_type", "decided"}))
+	messagesReceivedFromPeer = registerMetric(promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_messages_received_from_peer",
 		Help: "The amount of messages received from the specific peer",
-	}, []string{"peer_id"})
-	messagesReceivedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+	}, []string{"peer_id"}))
+	messagesReceivedTotal = registerMetric(promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_messages_received_total",
 		Help: "The amount of messages total received",
-	}, []string{})
-	networkConnections = promauto.NewGauge(prometheus.GaugeOpts{
+	}, []string{}))
+	networkConnections = registerMetric(promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "ssv:network:connections",
 		Help: "Counts opened/closed connections",
-	})
-	networkConnectionsFiltered = promauto.NewGauge(prometheus.GaugeOpts{
+	}))
+	networkConnectionsFiltered = registerMetric(promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "ssv:network:connections:filtered",
 		Help: "Counts opened/closed connections",
-	})
-	messageValidationRSAVerifications = promauto.NewCounterVec(prometheus.CounterOpts{
+	}))
+	messageValidationRSAVerifications = registerMetric(promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_message_validation_rsa_checks",
 		Help: "The amount message validations",
-	}, []string{})
-	pubsubPeerScore = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	}, []string{}))
+	pubsubPeerScore = registerMetric(promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:p2p:pubsub:score:inspect",
 		Help: "Pubsub peer scores",
-	}, []string{"pid"})
-	pubsubPeerP4Score = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	}, []string{"pid"}))
+	pubsubPeerP4Score = registerMetric(promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:p2p:pubsub:score:invalid_message_deliveries",
 		Help: "Pubsub peer P4 scores (sum of square of counters for invalid message deliveries)",
-	}, []string{"pid"})
-	pubsubTrace = promauto.NewCounterVec(prometheus.CounterOpts{
+	}, []string{"pid"}))
+	pubsubTrace = registerMetric(promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:network:pubsub:trace",
 		Help: "Traces of pubsub messages",
-	}, []string{"type"})
-	pubsubOutbound = promauto.NewCounterVec(prometheus.CounterOpts{
+	}, []string{"type"}))
+	pubsubOutbound = registerMetric(promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:p2p:pubsub:msg:out",
 		Help: "Count broadcasted messages",
-	}, []string{"topic"})
-	pubsubInbound = promauto.NewCounterVec(prometheus.CounterOpts{
+	}, []string{"topic"}))
+	pubsubInbound = registerMetric(promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:p2p:pubsub:msg:in",
 		Help: "Count incoming messages",
-	}, []string{"topic", "msg_type"})
-	allConnectedPeers = promauto.NewGauge(prometheus.GaugeOpts{
+	}, []string{"topic", "msg_type"}))
+	allConnectedPeers = registerMetric(promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "ssv_p2p_all_connected_peers",
 		Help: "Count connected peers",
-	})
-	connectedTopicPeers = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	}))
+	connectedTopicPeers = registerMetric(promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv_p2p_connected_peers",
 		Help: "Count connected peers for a validator",
-	}, []string{"pubKey"})
-	peersIdentity = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	}, []string{"pubKey"}))
+	peersIdentity = registerMetric(promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:network:peers_identity",
 		Help: "Peers identity",
-	}, []string{"pubKey", "operatorID", "v", "pid", "type"})
-	routerIncoming = promauto.NewCounterVec(prometheus.CounterOpts{
+	}, []string{"pubKey", "operatorID", "v", "pid", "type"}))
+	routerIncoming = registerMetric(promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:network:router:in",
 		Help: "Counts incoming messages",
-	}, []string{"mt"})
-	subnetsKnownPeers = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	}, []string{"mt"}))
+	subnetsKnownPeers = registerMetric(promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:network:subnets:known",
 		Help: "Counts known peers in subnets",
-	}, []string{"subnet"})
-	subnetsConnectedPeers = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	}, []string{"subnet"}))
+	subnetsConnectedPeers = registerMetric(promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:network:subnets:connected",
 		Help: "Counts connected peers in subnets",
-	}, []string{"subnet"})
-	mySubnets = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	}, []string{"subnet"}))
+	mySubnets = registerMetric(promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:network:subnets:my",
 		Help: "Marks subnets that this node is interested in",
-	}, []string{"subnet"})
-	streamOutgoingRequests = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	}, []string{"subnet"}))
+	streamOutgoingRequests = registerMetric(promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:p2p:streams:req:out",
 		Help: "Count requests made via streams",
-	}, []string{"pid"})
-	streamRequestsActive = promauto.NewGaugeVec(prometheus.GaugeOpts{
+	}, []string{"pid"}))
+	streamRequestsActive = registerMetric(promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:p2p:streams:req:active",
 		Help: "Count requests made via streams",
-	}, []string{"pid"})
-	streamRequestsSuccess = promauto.NewCounterVec(prometheus.CounterOpts{
+	}, []string{"pid"}))
+	streamRequestsSuccess = registerMetric(promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:p2p:streams:req:success",
 		Help: "Count successful requests made via streams",
-	}, []string{"pid"})
-	streamResponses = promauto.NewCounterVec(prometheus.CounterOpts{
+	}, []string{"pid"}))
+	streamResponses = registerMetric(promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:p2p:streams:res",
 		Help: "Count responses for streams",
-	}, []string{"pid"})
-	streamRequests = promauto.NewCounterVec(prometheus.CounterOpts{
+	}, []string{"pid"}))
+	streamRequests = registerMetric(promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:p2p:streams:req",
 		Help: "Count responses for streams",
-	}, []string{"pid"})
-	rejectedNodes = promauto.NewCounter(prometheus.CounterOpts{
+	}, []string{"pid"}))
+	rejectedNodes = registerMetric(promauto.NewCounter(prometheus.CounterOpts{
 		Name: "ssv:network:discovery:rejected",
 		Help: "Counts nodes that were found with discovery but rejected",
-	})
-	foundNodes = promauto.NewCounter(prometheus.CounterOpts{
+	}))
+	foundNodes = registerMetric(promauto.NewCounter(prometheus.CounterOpts{
 		Name: "ssv:network:discovery:found",
 		Help: "Counts nodes that were found with discovery",
-	})
-	enrPings = promauto.NewCounter(prometheus.CounterOpts{
+	}))
+	enrPings = registerMetric(promauto.NewCounter(prometheus.CounterOpts{
 		Name: "ssv:network:discovery:enr_ping",
 		Help: "Counts the number of ping requests we made as part of ENR publishing",
-	})
-	enrPongs = promauto.NewCounter(prometheus.CounterOpts{
+	}))
+	enrPongs = registerMetric(promauto.NewCounter(prometheus.CounterOpts{
 		Name: "ssv:network:discovery:enr_pong",
 		Help: "Counts the number of pong responses we got as part of ENR publishing",
-	})
-	slotDelay = promauto.NewHistogram(prometheus.HistogramOpts{
+	}))
+	slotDelay = registerMetric(promauto.NewHistogram(prometheus.HistogramOpts{
 		Name:    "slot_ticker_delay_milliseconds",
 		Help:    "The delay in milliseconds of the slot ticker",
 		Buckets: []float64{5, 10, 20, 100, 500, 5000}, // Buckets in milliseconds. Adjust as per your needs.
-	})
-	messageWorker = promauto.NewCounterVec(prometheus.CounterOpts{
+	}))
+	messageWorker = registerMetric(promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:worker:msg:process",
 		Help: "Count decided messages",
-	}, []string{"prefix"})
-	streamOutboundCount = promauto.NewCounterVec(prometheus.CounterOpts{
+	}, []string{"prefix"}))
+	streamOutboundCount = registerMetric(promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:exporter:stream_outbound",
 		Help: "count the outbound messages on stream channel",
-	}, []string{"cid"})
-	streamOutboundErrorsCount = promauto.NewCounterVec(prometheus.CounterOpts{
+	}, []string{"cid"}))
+	streamOutboundErrorsCount = registerMetric(promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:exporter:stream_outbound_errors",
 		Help: "count the outbound messages failures on stream channel",
-	}, []string{"cid"})
-	signatureVerifications = promauto.NewCounterVec(prometheus.CounterOpts{
+	}, []string{"cid"}))
+	signatureVerifications = registerMetric(promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_signature_verifications",
 		Help: "Number of signatures verifications",
-	}, []string{})
+	}, []string{}))
 )
 
 type MetricsReporter interface {
@@ -457,77 +464,6 @@ func New(opts ...Option) MetricsReporter {
 
 	for _, opt := range opts {
 		opt(mr)
-	}
-
-	// TODO: think how to register all metrics without adding them all to the slice
-	allMetrics := []prometheus.Collector{
-		ssvNodeStatus,
-		executionClientStatus,
-		executionClientLastFetchedBlock,
-		consensusClientStatus,
-		consensusDataRequest,
-		consensusDutySubmission,
-		qbftStageDuration,
-		qbftRound,
-		consensusDuration,
-		preConsensusDuration,
-		postConsensusDuration,
-		dutyFullFlowDuration,
-		dutyFullFlowFirstRoundDuration,
-		rolesSubmitted,
-		rolesSubmissionFailures,
-		instancesStarted,
-		instancesDecided,
-		validatorStatus,
-		eventProcessed,
-		eventProcessingFailed,
-		operatorIndex,
-		messageValidationResult,
-		messageValidationSSVType,
-		messageValidationConsensusType,
-		messageValidationDuration,
-		signatureValidationDuration,
-		messageSize,
-		activeMsgValidation,
-		incomingQueueMessages,
-		outgoingQueueMessages,
-		droppedQueueMessages,
-		messageQueueSize,
-		messageQueueCapacity,
-		messageTimeInQueue,
-		inCommitteeMessages,
-		nonCommitteeMessages,
-		messagesReceivedFromPeer,
-		messagesReceivedTotal,
-		networkConnections,
-		networkConnectionsFiltered,
-		messageValidationRSAVerifications,
-		pubsubPeerScore,
-		pubsubPeerP4Score,
-		pubsubTrace,
-		pubsubInbound,
-		pubsubOutbound,
-		allConnectedPeers,
-		connectedTopicPeers,
-		peersIdentity,
-		routerIncoming,
-		subnetsKnownPeers,
-		subnetsConnectedPeers,
-		mySubnets,
-		streamOutgoingRequests,
-		streamRequestsActive,
-		streamRequestsSuccess,
-		streamResponses,
-		streamRequests,
-		rejectedNodes,
-		foundNodes,
-		enrPings,
-		enrPongs,
-		slotDelay,
-		messageWorker,
-		streamOutboundCount,
-		streamOutboundErrorsCount,
-		signatureVerifications,
 	}
 
 	for i, c := range allMetrics {
