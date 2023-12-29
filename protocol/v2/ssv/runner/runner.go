@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 type Getters interface {
@@ -54,7 +55,8 @@ type BaseRunner struct {
 	BeaconRoleType spectypes.BeaconRole
 
 	// implementation vars
-	TimeoutF TimeoutF `json:"-"`
+	TimeoutF          TimeoutF                 `json:"-"`
+	SignatureVerifier *types.SignatureVerifier `json:"-"`
 
 	// highestDecidedSlot holds the highest decided duty slot and gets updated after each decided is reached
 	highestDecidedSlot spec.Slot

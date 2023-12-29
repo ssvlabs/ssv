@@ -10,6 +10,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/queue/worker"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 type Metrics interface {
@@ -29,6 +30,7 @@ type Metrics interface {
 	worker.Metrics
 	runner.Metrics
 	instance.Metrics
+	types.Metrics
 }
 
 type NopMetrics struct{}
@@ -61,3 +63,4 @@ func (n NopMetrics) QBFTProposalDuration(duration time.Duration)               {
 func (n NopMetrics) QBFTPrepareDuration(duration time.Duration)                {}
 func (n NopMetrics) QBFTCommitDuration(duration time.Duration)                 {}
 func (n NopMetrics) QBFTRound(msgID spectypes.MessageID, round specqbft.Round) {}
+func (n NopMetrics) SignatureVerified()                                        {}

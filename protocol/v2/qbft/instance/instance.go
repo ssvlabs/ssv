@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -17,20 +18,21 @@ import (
 // Instance is a single QBFT instance that starts with a Start call (including a value).
 // Every new msg the ProcessMsg function needs to be called
 type Instance struct {
-	State  *specqbft.State
-	config qbft.IConfig
+	State             *specqbft.State
+	config            qbft.IConfig
+	metricsSubmitter  *metricsSubmitter
+	signatureVerifier *types.SignatureVerifier
 
 	processMsgF *spectypes.ThreadSafeF
 	startOnce   sync.Once
 
 	forceStop  bool
 	StartValue []byte
-
-	metricsSubmitter *metricsSubmitter
 }
 
 func NewInstance(
 	metrics Metrics,
+	signatureVerifier *types.SignatureVerifier,
 	config qbft.IConfig,
 	share *spectypes.Share,
 	identifier []byte,
@@ -49,9 +51,10 @@ func NewInstance(
 			CommitContainer:      specqbft.NewMsgContainer(),
 			RoundChangeContainer: specqbft.NewMsgContainer(),
 		},
-		config:           config,
-		processMsgF:      spectypes.NewThreadSafeF(),
-		metricsSubmitter: newMetricsSubmitter(msgId, metrics),
+		config:            config,
+		processMsgF:       spectypes.NewThreadSafeF(),
+		metricsSubmitter:  newMetricsSubmitter(msgId, metrics),
+		signatureVerifier: signatureVerifier,
 	}
 }
 
@@ -169,7 +172,7 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.SignedMessage) error {
 
 	switch msg.Message.MsgType {
 	case specqbft.ProposalMsgType:
-		return isValidProposal(
+		return i.isValidProposal(
 			i.State,
 			i.config,
 			msg,
@@ -181,7 +184,7 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.SignedMessage) error {
 		if proposedMsg == nil {
 			return errors.New("did not receive proposal for this round")
 		}
-		return validSignedPrepareForHeightRoundAndRoot(
+		return i.validSignedPrepareForHeightRoundAndRoot(
 			i.config,
 			msg,
 			i.State.Height,
@@ -194,7 +197,7 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.SignedMessage) error {
 		if proposedMsg == nil {
 			return errors.New("did not receive proposal for this round")
 		}
-		return validateCommit(
+		return i.validateCommit(
 			i.config,
 			msg,
 			i.State.Height,
@@ -203,7 +206,7 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.SignedMessage) error {
 			i.State.Share.Committee,
 		)
 	case specqbft.RoundChangeMsgType:
-		return validRoundChangeForData(i.State, i.config, msg, i.State.Height, msg.Message.Round, msg.FullData)
+		return i.validRoundChangeForData(i.State, i.config, msg, i.State.Height, msg.Message.Round, msg.FullData)
 	default:
 		return errors.New("signed message type not supported")
 	}

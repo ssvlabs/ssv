@@ -70,6 +70,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 	for _, dutyRunner := range options.DutyRunners {
 		// Set timeout function.
 		dutyRunner.GetBaseRunner().TimeoutF = v.onTimeout
+		dutyRunner.GetBaseRunner().SignatureVerifier = options.SignatureVerifier
 
 		// Setup the queue.
 		role := dutyRunner.GetBaseRunner().BeaconRoleType

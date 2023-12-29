@@ -103,8 +103,10 @@ func TestQBFTMapping(t *testing.T) {
 			identifier := spectypes.MessageIDFromBytes(typedTest.Pre.State.ID)
 			preByts, _ := typedTest.Pre.Encode()
 			logger := logging.TestLogger(t)
+			nopMetrics := metricsreporter.NewNop()
 			pre := instance.NewInstance(
-				metricsreporter.NewNop(),
+				nopMetrics,
+				types.NewSignatureVerifier(nopMetrics),
 				protocolqbfttesting.TestingConfig(logger, testingutils.KeySetForShare(typedTest.Pre.State.Share), identifier.GetRoleType()),
 				typedTest.Pre.State.Share,
 				typedTest.Pre.State.ID,

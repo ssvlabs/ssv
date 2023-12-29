@@ -80,6 +80,7 @@ type ControllerOptions struct {
 	DutyRoles                  []spectypes.BeaconRole
 	StorageMap                 *storage.QBFTStores
 	Metrics                    validator.Metrics
+	SignatureVerifier          *ssvtypes.SignatureVerifier
 	MessageValidator           validation.MessageValidator
 	ValidatorsMap              *validatorsmap.ValidatorsMap
 
@@ -127,8 +128,9 @@ type nonCommitteeValidator struct {
 type controller struct {
 	context context.Context
 
-	logger  *zap.Logger
-	metrics validator.Metrics
+	logger            *zap.Logger
+	metrics           validator.Metrics
+	signatureVerifier *ssvtypes.SignatureVerifier
 
 	sharesStorage     registrystorage.Shares
 	operatorsStorage  registrystorage.Operators
@@ -193,6 +195,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		GasLimit:          options.GasLimit,
 		MessageValidator:  options.MessageValidator,
 		Metrics:           options.Metrics,
+		SignatureVerifier: options.SignatureVerifier,
 	}
 
 	// If full node, increase queue size to make enough room
@@ -212,6 +215,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	ctrl := controller{
 		logger:                     logger.Named(logging.NameController),
 		metrics:                    metrics,
+		signatureVerifier:          options.SignatureVerifier,
 		sharesStorage:              options.RegistryStorage.Shares(),
 		operatorsStorage:           options.RegistryStorage,
 		recipientsStorage:          options.RegistryStorage,
@@ -362,7 +366,7 @@ func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
 			opts := c.validatorOptions
 			opts.SSVShare = share
 			ncv = &nonCommitteeValidator{
-				NonCommitteeValidator: validator.NewNonCommitteeValidator(c.logger, c.metrics, msg.GetID(), opts),
+				NonCommitteeValidator: validator.NewNonCommitteeValidator(c.logger, c.metrics, c.signatureVerifier, msg.GetID(), opts),
 			}
 
 			ttlSlots := nonCommitteeValidatorTTLs[msg.MsgID.GetRoleType()]
@@ -844,7 +848,7 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 		config.ValueCheckF = valueCheckF
 
 		identifier := spectypes.NewMsgID(ssvtypes.GetDefaultDomain(), options.SSVShare.Share.ValidatorPubKey, role)
-		qbftCtrl := qbftcontroller.NewController(options.Metrics, identifier[:], &options.SSVShare.Share, domainType, config, options.FullNode)
+		qbftCtrl := qbftcontroller.NewController(options.Metrics, options.SignatureVerifier, identifier[:], &options.SSVShare.Share, domainType, config, options.FullNode)
 		qbftCtrl.NewDecidedHandler = options.NewDecidedHandler
 		return qbftCtrl
 	}

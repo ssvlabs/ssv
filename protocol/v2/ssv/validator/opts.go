@@ -34,6 +34,7 @@ type Options struct {
 	GasLimit          uint64
 	MessageValidator  validation.MessageValidator
 	Metrics           Metrics
+	SignatureVerifier *types.SignatureVerifier
 }
 
 func (o *Options) defaults() {

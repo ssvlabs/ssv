@@ -26,7 +26,7 @@ func (i *Instance) UponRoundTimeout(logger *zap.Logger) error {
 		i.config.GetTimer().TimeoutForRound(i.State.Height, i.State.Round)
 	}()
 
-	roundChange, err := CreateRoundChange(i.State, i.config, newRound, i.StartValue)
+	roundChange, err := i.CreateRoundChange(i.State, i.config, newRound, i.StartValue)
 	if err != nil {
 		return errors.Wrap(err, "could not generate round change msg")
 	}

@@ -14,8 +14,11 @@ import (
 
 // UponDecided returns decided msg if decided, nil otherwise
 func (c *Controller) UponDecided(logger *zap.Logger, msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
+	newInstance := instance.NewInstance(c.metrics, c.signatureVerifier, c.GetConfig(), c.Share, c.Identifier, msg.Message.Height)
+
 	if err := ValidateDecided(
 		c.config,
+		newInstance,
 		msg,
 		c.Share,
 	); err != nil {
@@ -29,7 +32,7 @@ func (c *Controller) UponDecided(logger *zap.Logger, msg *specqbft.SignedMessage
 	save := true
 
 	if inst == nil {
-		i := instance.NewInstance(c.metrics, c.GetConfig(), c.Share, c.Identifier, msg.Message.Height)
+		i := newInstance
 		i.State.Round = msg.Message.Round
 		i.State.Decided = true
 		i.State.DecidedValue = msg.FullData
@@ -81,6 +84,7 @@ func (c *Controller) UponDecided(logger *zap.Logger, msg *specqbft.SignedMessage
 
 func ValidateDecided(
 	config qbft.IConfig,
+	instance *instance.Instance,
 	signedDecided *specqbft.SignedMessage,
 	share *spectypes.Share,
 ) error {

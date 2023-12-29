@@ -178,10 +178,8 @@ func (mv *messageValidator) validateJustifications(
 	}
 
 	if signedMsg.Message.MsgType == specqbft.ProposalMsgType {
-		cfg := newQBFTConfig(mv.netCfg.Domain)
-
-		if err := instance.IsProposalJustification(
-			cfg,
+		if err := instance.ValidateJustificationWithoutSignatureCheck(
+			mv.netCfg.Domain,
 			share,
 			rcj,
 			pj,

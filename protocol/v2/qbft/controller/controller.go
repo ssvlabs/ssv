@@ -14,6 +14,7 @@ import (
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // NewDecidedHandler handles newly saved decided messages.
@@ -22,9 +23,10 @@ type NewDecidedHandler func(msg *specqbft.SignedMessage)
 
 // Controller is a QBFT coordinator responsible for starting and following the entire life cycle of multiple QBFT InstanceContainer
 type Controller struct {
-	metrics    instance.Metrics
-	Identifier []byte
-	Height     specqbft.Height // incremental Height for InstanceContainer
+	metrics           instance.Metrics
+	signatureVerifier *types.SignatureVerifier
+	Identifier        []byte
+	Height            specqbft.Height // incremental Height for InstanceContainer
 	// StoredInstances stores the last HistoricalInstanceCapacity in an array for message processing purposes.
 	StoredInstances   InstanceContainer
 	Domain            spectypes.DomainType
@@ -34,8 +36,14 @@ type Controller struct {
 	fullNode          bool
 }
 
+type metrics interface {
+	instance.Metrics
+	types.Metrics
+}
+
 func NewController(
-	metrics instance.Metrics,
+	metrics metrics,
+	signatureVerifier *types.SignatureVerifier,
 	identifier []byte,
 	share *spectypes.Share,
 	domain spectypes.DomainType,
@@ -43,14 +51,15 @@ func NewController(
 	fullNode bool,
 ) *Controller {
 	return &Controller{
-		metrics:         metrics,
-		Identifier:      identifier,
-		Height:          specqbft.FirstHeight,
-		Domain:          domain,
-		Share:           share,
-		StoredInstances: make(InstanceContainer, 0, InstanceContainerDefaultCapacity),
-		config:          config,
-		fullNode:        fullNode,
+		metrics:           metrics,
+		signatureVerifier: signatureVerifier,
+		Identifier:        identifier,
+		Height:            specqbft.FirstHeight,
+		Domain:            domain,
+		Share:             share,
+		StoredInstances:   make(InstanceContainer, 0, InstanceContainerDefaultCapacity),
+		config:            config,
+		fullNode:          fullNode,
 	}
 }
 
@@ -173,7 +182,7 @@ func (c *Controller) InstanceForHeight(logger *zap.Logger, height specqbft.Heigh
 	if storedInst == nil {
 		return nil
 	}
-	inst := instance.NewInstance(c.metrics, c.config, c.Share, c.Identifier, storedInst.State.Height)
+	inst := instance.NewInstance(c.metrics, c.signatureVerifier, c.config, c.Share, c.Identifier, storedInst.State.Height)
 	inst.State = storedInst.State
 	return inst
 }
@@ -194,7 +203,7 @@ func (c *Controller) isFutureMessage(msg *specqbft.SignedMessage) bool {
 
 // addAndStoreNewInstance returns creates a new QBFT instance, stores it in an array and returns it
 func (c *Controller) addAndStoreNewInstance() *instance.Instance {
-	i := instance.NewInstance(c.metrics, c.GetConfig(), c.Share, c.Identifier, c.Height)
+	i := instance.NewInstance(c.metrics, c.signatureVerifier, c.GetConfig(), c.Share, c.Identifier, c.Height)
 	c.StoredInstances.addNewInstance(i)
 	return i
 }

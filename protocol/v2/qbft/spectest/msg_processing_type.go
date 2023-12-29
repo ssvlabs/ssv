@@ -21,6 +21,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
 	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // RunMsgProcessing processes MsgProcessingSpecTest. It probably may be removed.
@@ -31,8 +32,10 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 	preByts, _ := test.Pre.Encode()
 	msgId := specqbft.ControllerIdToMessageID(test.Pre.State.ID)
 	logger := logging.TestLogger(t)
+	nopMetrics := metricsreporter.NewNop()
 	pre := instance.NewInstance(
-		metricsreporter.NewNop(),
+		nopMetrics,
+		types.NewSignatureVerifier(nopMetrics),
 		qbfttesting.TestingConfig(logger, spectestingutils.KeySetForShare(test.Pre.State.Share), msgId.GetRoleType()),
 		test.Pre.State.Share,
 		test.Pre.State.ID,

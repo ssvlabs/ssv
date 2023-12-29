@@ -7,22 +7,19 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
-	"go.uber.org/zap"
 )
 
-var (
-	MetricsSignaturesVerifications = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv_signature_verifications",
-		Help: "Number of signatures verifications",
-	}, []string{})
-)
+type Metrics interface {
+	SignatureVerified()
+}
 
-func init() {
-	logger := zap.L()
-	if err := prometheus.Register(MetricsSignaturesVerifications); err != nil {
-		logger.Debug("could not register prometheus collector")
+type SignatureVerifier struct {
+	metrics Metrics
+}
+
+func NewSignatureVerifier(metrics Metrics) *SignatureVerifier {
+	return &SignatureVerifier{
+		metrics: metrics,
 	}
 }
 
@@ -31,8 +28,8 @@ func init() {
 // DeserializeBLSPublicKey function and bounded.CGO
 //
 // TODO: rethink this function and consider moving/refactoring it.
-func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, domain spectypes.DomainType, sigType spectypes.SignatureType, operators []*spectypes.Operator) error {
-	MetricsSignaturesVerifications.WithLabelValues().Inc()
+func (sv *SignatureVerifier) VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, domain spectypes.DomainType, sigType spectypes.SignatureType, operators []*spectypes.Operator) error {
+	sv.metrics.SignatureVerified()
 
 	sign := &bls.Sign{}
 	if err := sign.Deserialize(s); err != nil {
@@ -69,20 +66,19 @@ func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, d
 	return nil
 }
 
-func ReconstructSignature(ps *specssv.PartialSigContainer, root [32]byte, validatorPubKey []byte) ([]byte, error) {
-	// Reconstruct signatures
-	signature, err := spectypes.ReconstructSignatures(ps.Signatures[rootHex(root)])
+func (sv *SignatureVerifier) ReconstructSignature(ps *specssv.PartialSigContainer, root [32]byte, validatorPubKey []byte) ([]byte, error) {
+	signature, err := spectypes.ReconstructSignatures(ps.Signatures[hex.EncodeToString(root[:])])
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to reconstruct signatures")
 	}
-	if err := VerifyReconstructedSignature(signature, validatorPubKey, root); err != nil {
+	if err := sv.VerifyReconstructedSignature(signature, validatorPubKey, root); err != nil {
 		return nil, errors.Wrap(err, "failed to verify reconstruct signature")
 	}
 	return signature.Serialize(), nil
 }
 
-func VerifyReconstructedSignature(sig *bls.Sign, validatorPubKey []byte, root [32]byte) error {
-	MetricsSignaturesVerifications.WithLabelValues().Inc()
+func (sv *SignatureVerifier) VerifyReconstructedSignature(sig *bls.Sign, validatorPubKey []byte, root [32]byte) error {
+	sv.metrics.SignatureVerified()
 
 	pk, err := DeserializeBLSPublicKey(validatorPubKey)
 	if err != nil {
@@ -94,7 +90,6 @@ func VerifyReconstructedSignature(sig *bls.Sign, validatorPubKey []byte, root [3
 	}
 	return nil
 }
-
-func rootHex(r [32]byte) string {
-	return hex.EncodeToString(r[:])
+func (sv *SignatureVerifier) ReportSignatureVerification() {
+	sv.metrics.SignatureVerified()
 }

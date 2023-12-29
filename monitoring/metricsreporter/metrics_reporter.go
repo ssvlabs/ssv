@@ -340,6 +340,10 @@ var (
 		Name: "ssv:exporter:stream_outbound_errors",
 		Help: "count the outbound messages failures on stream channel",
 	}, []string{"cid"})
+	signatureVerifications = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_signature_verifications",
+		Help: "Number of signatures verifications",
+	}, []string{})
 )
 
 type MetricsReporter interface {
@@ -439,6 +443,7 @@ type MetricsReporter interface {
 	WorkerProcessedMessage(prefix string)
 	StreamOutbound(addr net.Addr)
 	StreamOutboundError(addr net.Addr)
+	SignatureVerified()
 }
 
 type metricsReporter struct {
@@ -518,6 +523,11 @@ func New(opts ...Option) MetricsReporter {
 		foundNodes,
 		enrPings,
 		enrPongs,
+		slotDelay,
+		messageWorker,
+		streamOutboundCount,
+		streamOutboundErrorsCount,
+		signatureVerifications,
 	}
 
 	for i, c := range allMetrics {
@@ -941,4 +951,8 @@ func (m *metricsReporter) StreamOutbound(addr net.Addr) {
 
 func (m *metricsReporter) StreamOutboundError(addr net.Addr) {
 	streamOutboundErrorsCount.WithLabelValues(addr.String()).Inc()
+}
+
+func (m *metricsReporter) SignatureVerified() {
+	signatureVerifications.WithLabelValues().Inc()
 }

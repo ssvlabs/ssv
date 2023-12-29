@@ -10,7 +10,6 @@ import (
 
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // uponProposal process proposal message
@@ -61,7 +60,7 @@ func (i *Instance) uponProposal(logger *zap.Logger, signedProposal *specqbft.Sig
 	return nil
 }
 
-func isValidProposal(
+func (i *Instance) isValidProposal(
 	state *specqbft.State,
 	config qbft.IConfig,
 	signedProposal *specqbft.SignedMessage,
@@ -78,7 +77,7 @@ func isValidProposal(
 		return errors.New("msg allows 1 signer")
 	}
 	if config.VerifySignatures() {
-		if err := ssvtypes.VerifyByOperators(signedProposal.Signature, signedProposal, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
+		if err := i.signatureVerifier.VerifyByOperators(signedProposal.Signature, signedProposal, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
 			return errors.Wrap(err, "msg signature invalid")
 		}
 	}
@@ -103,7 +102,7 @@ func isValidProposal(
 	roundChangeJustification, _ := signedProposal.Message.GetRoundChangeJustifications() // no need to check error, checked on signedProposal.Validate()
 	prepareJustification, _ := signedProposal.Message.GetPrepareJustifications()         // no need to check error, checked on signedProposal.Validate()
 
-	if err := isProposalJustification(
+	if err := i.isProposalJustification(
 		state,
 		config,
 		roundChangeJustification,
@@ -123,32 +122,8 @@ func isValidProposal(
 	return errors.New("proposal is not valid with current state")
 }
 
-func IsProposalJustification(
-	config qbft.IConfig,
-	share *ssvtypes.SSVShare,
-	roundChangeMsgs []*specqbft.SignedMessage,
-	prepareMsgs []*specqbft.SignedMessage,
-	height specqbft.Height,
-	round specqbft.Round,
-	fullData []byte,
-) error {
-	return isProposalJustification(
-		&specqbft.State{
-			Share:  &share.Share,
-			Height: height,
-		},
-		config,
-		roundChangeMsgs,
-		prepareMsgs,
-		height,
-		round,
-		fullData,
-		func(data []byte) error { return nil },
-	)
-}
-
 // isProposalJustification returns nil if the proposal and round change messages are valid and justify a proposal message for the provided round, value and leader
-func isProposalJustification(
+func (i *Instance) isProposalJustification(
 	state *specqbft.State,
 	config qbft.IConfig,
 	roundChangeMsgs []*specqbft.SignedMessage,
@@ -169,7 +144,7 @@ func isProposalJustification(
 		// no quorum, duplicate signers,  invalid still has quorum, invalid no quorum
 		// prepared
 		for _, rc := range roundChangeMsgs {
-			if err := validRoundChangeForData(state, config, rc, height, round, fullData); err != nil {
+			if err := i.validRoundChangeForData(state, config, rc, height, round, fullData); err != nil {
 				return errors.Wrap(err, "change round msg not valid")
 			}
 		}
@@ -221,7 +196,7 @@ func isProposalJustification(
 
 			// validate each prepare message against the highest previously prepared fullData and round
 			for _, pm := range prepareMsgs {
-				if err := validSignedPrepareForHeightRoundAndRoot(
+				if err := i.validSignedPrepareForHeightRoundAndRoot(
 					config,
 					pm,
 					height,

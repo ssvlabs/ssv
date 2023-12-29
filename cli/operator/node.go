@@ -50,7 +50,7 @@ import (
 	"github.com/bloxapp/ssv/operator/validator"
 	"github.com/bloxapp/ssv/operator/validatorsmap"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
@@ -240,6 +240,7 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
 		cfg.SSVOptions.ValidatorOptions.Metrics = metricsReporter
+		cfg.SSVOptions.ValidatorOptions.SignatureVerifier = ssvtypes.NewSignatureVerifier(metricsReporter)
 		cfg.SSVOptions.Metrics = metricsReporter
 
 		validatorCtrl = validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
@@ -502,7 +503,7 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 		return networkconfig.NetworkConfig{}, err
 	}
 
-	types.SetDefaultDomain(networkConfig.Domain)
+	ssvtypes.SetDefaultDomain(networkConfig.Domain)
 
 	nodeType := "light"
 	if cfg.SSVOptions.ValidatorOptions.FullNode {

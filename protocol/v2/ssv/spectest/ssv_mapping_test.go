@@ -290,6 +290,7 @@ func fixControllerForRun(
 	config.ValueCheckF = runner.GetValCheckF()
 	newContr := controller.NewController(
 		metrics,
+		types.NewSignatureVerifier(metrics),
 		contr.Identifier,
 		contr.Share,
 		testingutils.TestingConfig(ks).Domain,
@@ -319,6 +320,7 @@ func fixInstanceForRun(
 ) *instance.Instance {
 	newInst := instance.NewInstance(
 		metrics,
+		types.NewSignatureVerifier(metrics),
 		contr.GetConfig(),
 		share,
 		contr.Identifier,

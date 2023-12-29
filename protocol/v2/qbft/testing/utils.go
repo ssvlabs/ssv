@@ -14,6 +14,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
+	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, role types.BeaconRole) *qbft.Config {
@@ -87,6 +88,7 @@ func NewTestingQBFTController(
 ) *controller.Controller {
 	ctrl := controller.NewController(
 		metrics,
+		ssvtypes.NewSignatureVerifier(metrics),
 		identifier,
 		share,
 		testingutils.TestingSSVDomainType,

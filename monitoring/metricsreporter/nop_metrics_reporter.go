@@ -115,3 +115,4 @@ func (n *nopMetrics) ENRPong()                                                  
 func (n *nopMetrics) SlotDelay(delay time.Duration)                                        {}
 func (n *nopMetrics) StreamOutbound(addr net.Addr)                                         {}
 func (n *nopMetrics) StreamOutboundError(addr net.Addr)                                    {}
+func (n *nopMetrics) SignatureVerified()                                                   {}
