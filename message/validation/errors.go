@@ -65,7 +65,7 @@ var (
 	ErrTopicNotFound                       = Error{text: "topic not found", reject: true}
 	ErrSSVDataTooBig                       = Error{text: "ssv message data too big", reject: true}
 	ErrInvalidRole                         = Error{text: "invalid role", reject: true}
-	ErrConsensusValidatorRegistration      = Error{text: "consensus message for validator registration role", reject: true}
+	ErrUnexpectedConsensusMessage          = Error{text: "unexpected consensus message for this role", reject: true}
 	ErrNoSigners                           = Error{text: "no signers", reject: true}
 	ErrWrongSignatureSize                  = Error{text: "wrong signature size", reject: true}
 	ErrZeroSignature                       = Error{text: "zero signature", reject: true}
