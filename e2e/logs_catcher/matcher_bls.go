@@ -3,11 +3,12 @@ package logs_catcher
 import (
 	"context"
 	"fmt"
-	"github.com/bloxapp/ssv/e2e/logs_catcher/logs"
-	"github.com/bloxapp/ssv/e2e/logs_catcher/parser"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/bloxapp/ssv/e2e/logs_catcher/logs"
+	"github.com/bloxapp/ssv/e2e/logs_catcher/parser"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv-spec/qbft"
@@ -264,6 +265,9 @@ func matchDualConditionLog(ctx context.Context, logger *zap.Logger, cli DockerCL
 	}
 
 	filteredLogs := res.Grep(success)
+	if len(filteredLogs) > 1 {
+		return fmt.Errorf("found too many matching messages on %v, got %v", target, len(filteredLogs))
+	}
 
 	if len(filteredLogs) == 1 {
 		logger.Info("matched", zap.Int("count", len(filteredLogs)), zap.String("target", target), zap.Strings("match_string", success), zap.String("RAW", filteredLogs[0]))
