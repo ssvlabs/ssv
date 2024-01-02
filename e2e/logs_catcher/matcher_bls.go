@@ -2,9 +2,9 @@ package logs_catcher
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"regexp"
+	"github.com/bloxapp/ssv/e2e/logs_catcher/logs"
+	"github.com/bloxapp/ssv/e2e/logs_catcher/parser"
 	"strconv"
 	"strings"
 	"time"
@@ -92,7 +92,7 @@ func VerifyBLSSignature(pctx context.Context, logger *zap.Logger, cli DockerCLI,
 }
 
 func ParseAndExtractDutyInfo(conditionLog string, corruptedValidatorIndex string) (string, phase0.Slot, error) {
-	parsedData, err := parseLogString(conditionLog)
+	parsedData, err := parser.JSON(conditionLog)
 	if err != nil {
 		return "", 0, fmt.Errorf("failed to parse log string: %w", err)
 	}
@@ -267,7 +267,7 @@ func matchDualConditionLog(ctx context.Context, logger *zap.Logger, cli DockerCL
 
 	if len(filteredLogs) == 1 {
 		logger.Info("matched", zap.Int("count", len(filteredLogs)), zap.String("target", target), zap.Strings("match_string", success), zap.String("RAW", filteredLogs[0]))
-		parsedData, err := parseLogString(filteredLogs[0])
+		parsedData, err := parser.JSON(filteredLogs[0])
 		if err != nil {
 			return fmt.Errorf("error parsing log string: %v", err)
 		}
@@ -294,30 +294,7 @@ func matchDualConditionLog(ctx context.Context, logger *zap.Logger, cli DockerCL
 	return nil
 }
 
-func cleanLogString(logString string) string {
-	// Regular expression to match ANSI color codes
-	ansiRegex := regexp.MustCompile(`\x1b\[[0-9;]*m`)
-	cleanedLog := ansiRegex.ReplaceAllString(logString, "")
-
-	// Remove non-JSON characters before the first '{'
-	startIndex := strings.Index(cleanedLog, "{")
-	if startIndex > -1 {
-		return cleanedLog[startIndex:]
-	}
-	return cleanedLog
-}
-
-func parseLogString(logString string) (map[string]interface{}, error) {
-	cleanedLog := cleanLogString(logString)
-
-	var result map[string]interface{}
-	if err := json.Unmarshal([]byte(cleanedLog), &result); err != nil {
-		return nil, fmt.Errorf("error unmarshaling log string: %v", err)
-	}
-	return result, nil
-}
-
-func extractDutyID(parsedData map[string]interface{}, searchPart string) (string, error) {
+func extractDutyID(parsedData logs.ParsedLine, searchPart string) (string, error) {
 	if duties, ok := parsedData["duties"].(string); ok {
 		dutyList := strings.Split(duties, ", ")
 		for _, duty := range dutyList {
@@ -345,7 +322,7 @@ func extractDutySlot(dutyID string) (phase0.Slot, error) {
 	return 0, fmt.Errorf("no duty slot found for %v", dutyID)
 }
 
-func extractSigners(parsedData map[string]interface{}) ([]types.OperatorID, error) {
+func extractSigners(parsedData logs.ParsedLine) ([]types.OperatorID, error) {
 	if signers, ok := parsedData["signers"].([]interface{}); ok {
 		signerIDs := make([]types.OperatorID, len(signers))
 		for i, signer := range signers {

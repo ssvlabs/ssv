@@ -3,7 +3,6 @@ package logs_catcher
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/pkg/errors"
@@ -11,7 +10,6 @@ import (
 
 	"github.com/bloxapp/ssv/e2e/logs_catcher/docker"
 	"github.com/bloxapp/ssv/e2e/logs_catcher/logs"
-	"github.com/bloxapp/ssv/e2e/logs_catcher/parser"
 )
 
 // Test conditions:
@@ -34,24 +32,6 @@ const idField = "pubkey"
 // and find in target #2
 const slashableMatchMessage = "slashable attestation"
 const nonSlashableMatchMessage = "successfully submitted attestation"
-
-func inspect(raw logs.RAW, fieldname string) []string {
-	parsed := raw.ParseAll(func(log string) (map[string]any, error) {
-		// strip docker shit
-		splitted := strings.Split(log, "{")
-		flog := strings.Split(splitted[1], "}")[0]
-		return parser.JSON("{" + flog + "}")
-	})
-	res := make([]string, 0)
-	for _, line := range parsed {
-		v, ok := line[fieldname]
-		if !ok {
-			continue
-		}
-		res = append(res, fmt.Sprint(v))
-	}
-	return res
-}
 
 func StartCondition(pctx context.Context, logger *zap.Logger, condition []string, targetContainer string, cli DockerCLI) (string, error) {
 	ctx, cancel := context.WithCancel(pctx)
