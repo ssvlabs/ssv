@@ -59,7 +59,7 @@ func VerifyBLSSignature(pctx context.Context, logger *zap.Logger, cli DockerCLI,
 	startctx, startc := context.WithTimeout(pctx, time.Second*12*35) // wait max 35 slots
 	defer startc()
 
-	validatorIndex := fmt.Sprintf("v%d", share.ValidatorIndex)
+	validatorIndex := fmt.Sprintf("v%d,", share.ValidatorIndex)
 	conditionLog, err := StartCondition(startctx, logger, []string{gotDutiesSuccess, validatorIndex}, targetContainer, cli)
 	if err != nil {
 		return fmt.Errorf("failed to start condition: %w", err)
