@@ -1,9 +1,8 @@
 package metrics
 
 import (
-	"time"
-
 	"go.uber.org/zap"
+	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -56,14 +55,6 @@ var (
 		Name: "ssv_validator_roles_failed",
 		Help: "Submitted roles",
 	}, []string{"role"})
-	metricsInstancesStarted = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv_instances_started",
-		Help: "Number of started QBFT instances",
-	}, []string{"role"})
-	metricsInstancesDecided = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv_instances_decided",
-		Help: "Number of decided QBFT instances",
-	}, []string{"role"})
 )
 
 func init() {
@@ -94,8 +85,6 @@ type ConsensusMetrics struct {
 	dutyFullFlowFirstRound         prometheus.Observer
 	rolesSubmitted                 prometheus.Counter
 	rolesSubmissionFailures        prometheus.Counter
-	metricsInstancesStarted        prometheus.Counter
-	metricsInstancesDecided        prometheus.Counter
 	preConsensusStart              time.Time
 	consensusStart                 time.Time
 	postConsensusStart             time.Time
@@ -114,8 +103,6 @@ func NewConsensusMetrics(role spectypes.BeaconRole) ConsensusMetrics {
 		dutyFullFlowFirstRound:  metricsDutyFullFlowFirstRoundDuration.WithLabelValues(values...),
 		rolesSubmitted:          metricsRolesSubmitted.WithLabelValues(values...),
 		rolesSubmissionFailures: metricsRolesSubmissionFailures.WithLabelValues(values...),
-		metricsInstancesStarted: metricsInstancesStarted.WithLabelValues(values...),
-		metricsInstancesDecided: metricsInstancesDecided.WithLabelValues(values...),
 	}
 }
 
@@ -138,7 +125,6 @@ func (cm *ConsensusMetrics) EndPreConsensus() {
 func (cm *ConsensusMetrics) StartConsensus() {
 	if cm != nil {
 		cm.consensusStart = time.Now()
-		cm.metricsInstancesStarted.Inc()
 	}
 }
 
@@ -147,7 +133,6 @@ func (cm *ConsensusMetrics) EndConsensus() {
 	if cm != nil && cm.consensus != nil && !cm.consensusStart.IsZero() {
 		cm.consensus.Observe(time.Since(cm.consensusStart).Seconds())
 		cm.consensusStart = time.Time{}
-		cm.metricsInstancesDecided.Inc()
 	}
 }
 

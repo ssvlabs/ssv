@@ -72,8 +72,6 @@ func (b *BaseRunner) validatePartialSigMsgForSlot(
 }
 
 func (b *BaseRunner) verifyBeaconPartialSignature(msg *spectypes.PartialSignatureMessage) error {
-	types.MetricsSignaturesVerifications.WithLabelValues().Inc()
-
 	signer := msg.Signer
 	signature := msg.PartialSignature
 	root := msg.SigningRoot

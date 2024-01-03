@@ -8,7 +8,6 @@ import (
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
-	"github.com/libp2p/go-libp2p/core/connmgr"
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -65,8 +64,6 @@ type p2pNetwork struct {
 	msgResolver  topics.MsgPeersResolver
 	msgValidator validation.MessageValidator
 	connHandler  connections.ConnHandler
-	connGater    connmgr.ConnectionGater
-	metrics      Metrics
 
 	state int32
 
@@ -83,7 +80,7 @@ type p2pNetwork struct {
 }
 
 // New creates a new p2p network
-func New(logger *zap.Logger, cfg *Config, mr Metrics) network.P2PNetwork {
+func New(logger *zap.Logger, cfg *Config) network.P2PNetwork {
 	ctx, cancel := context.WithCancel(cfg.Ctx)
 
 	logger = logger.Named(logging.NameP2PNetwork)
@@ -102,7 +99,6 @@ func New(logger *zap.Logger, cfg *Config, mr Metrics) network.P2PNetwork {
 		operatorPKHashToPKCache: hashmap.New[string, []byte](),
 		operatorPrivateKey:      cfg.OperatorPrivateKey,
 		operatorID:              cfg.OperatorID,
-		metrics:                 mr,
 	}
 }
 
@@ -240,17 +236,14 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 	// TODO: this is a temporary fix to update subnets when validators are added/removed,
 	// there is a pending PR to replace this: https://github.com/bloxapp/ssv/pull/990
 	logger = logger.Named(logging.NameP2PNetwork)
-	ticker := time.NewTicker(time.Second)
+	ticker := time.NewTicker(2 * time.Second)
 	registeredSubnets := make([]byte, commons.Subnets())
 	defer ticker.Stop()
-
-	// Run immediately and then every second.
-	for ; true; <-ticker.C {
+	for range ticker.C {
 		start := time.Now()
 
 		// Compute the new subnets according to the active validators.
 		newSubnets := make([]byte, commons.Subnets())
-		copy(newSubnets, n.subnets)
 		n.activeValidators.Range(func(pkHex string, status validatorStatus) bool {
 			subnet := commons.ValidatorSubnet(pkHex)
 			newSubnets[subnet] = byte(1)

@@ -1,7 +1,6 @@
 package eventhandler
 
 import (
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 
@@ -130,28 +129,4 @@ func NewUpdateFeeRecipientTask(executor updateFeeRecipientExecutor, owner, recip
 
 func (t UpdateFeeRecipientTask) Execute() error {
 	return t.executor.UpdateFeeRecipient(t.owner, t.recipient)
-}
-
-type exitValidatorExecutor interface {
-	ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex) error
-}
-
-type ExitValidatorTask struct {
-	executor       exitValidatorExecutor
-	pubKey         phase0.BLSPubKey
-	blockNumber    uint64
-	validatorIndex phase0.ValidatorIndex
-}
-
-func NewExitValidatorTask(executor exitValidatorExecutor, pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex) *ExitValidatorTask {
-	return &ExitValidatorTask{
-		executor:       executor,
-		pubKey:         pubKey,
-		blockNumber:    blockNumber,
-		validatorIndex: validatorIndex,
-	}
-}
-
-func (t ExitValidatorTask) Execute() error {
-	return t.executor.ExitValidator(t.pubKey, t.blockNumber, t.validatorIndex)
 }

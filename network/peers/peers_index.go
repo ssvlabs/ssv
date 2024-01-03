@@ -91,7 +91,7 @@ func (pi *peersIndex) CanConnect(id peer.ID) bool {
 	return true
 }
 
-func (pi *peersIndex) AtLimit(dir libp2pnetwork.Direction) bool {
+func (pi *peersIndex) Limit(dir libp2pnetwork.Direction) bool {
 	maxPeers := pi.maxPeers("")
 	peers := pi.network.Peers()
 	return len(peers) > maxPeers

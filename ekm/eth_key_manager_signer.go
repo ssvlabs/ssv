@@ -179,12 +179,6 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 		}
 
 		return km.signer.SignBeaconBlock(vBlock, domain, pk)
-	case spectypes.DomainVoluntaryExit:
-		data, ok := obj.(*phase0.VoluntaryExit)
-		if !ok {
-			return nil, nil, errors.New("could not cast obj to VoluntaryExit")
-		}
-		return km.signer.SignVoluntaryExit(data, domain, pk)
 	case spectypes.DomainAggregateAndProof:
 		data, ok := obj.(*phase0.AggregateAndProof)
 		if !ok {

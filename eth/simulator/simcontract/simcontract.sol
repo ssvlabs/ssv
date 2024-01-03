@@ -47,7 +47,6 @@ contract Callable {
     event ClusterLiquidated(address indexed owner, uint64[] operatorIds, Cluster cluster);
     event ClusterReactivated(address indexed owner, uint64[] operatorIds, Cluster cluster);
     event FeeRecipientAddressUpdated(address indexed owner, address recipientAddress);
-    event ValidatorExited(address indexed owner, uint64[] operatorIds, bytes publicKey);
 
     function registerOperator(bytes calldata publicKey, uint256 fee) public {
         _operatorId += 1;
@@ -91,11 +90,5 @@ contract Callable {
         emit ClusterReactivated(msg.sender, operatorIds, cluster);
     }
 
-    function setFeeRecipientAddress(address recipientAddress) public {
-        emit FeeRecipientAddressUpdated(msg.sender, recipientAddress);
-    }
-
-    function exitValidator(bytes calldata publicKey, uint64[] memory operatorIds) public {
-        emit ValidatorExited(msg.sender, operatorIds, publicKey);
-    }
+    function setFeeRecipientAddress(address recipientAddress) public {emit FeeRecipientAddressUpdated(msg.sender, recipientAddress);}
 }

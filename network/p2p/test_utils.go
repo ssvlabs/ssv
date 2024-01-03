@@ -13,7 +13,6 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/bloxapp/ssv/message/validation"
-	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
 	p2pcommons "github.com/bloxapp/ssv/network/commons"
@@ -171,8 +170,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 		cfg.PeerScoreInspectorInterval = options.PeerScoreInspectorInterval
 	}
 
-	mr := metricsreporter.New()
-	p := New(logger, cfg, mr)
+	p := New(logger, cfg)
 	err = p.Setup(logger)
 	if err != nil {
 		return nil, err

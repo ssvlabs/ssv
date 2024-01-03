@@ -5,16 +5,15 @@ import (
 	"sync"
 	"time"
 
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/network/peers"
+	"github.com/bloxapp/ssv/network/records"
 	"github.com/libp2p/go-libp2p/core/network"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/network/peers"
-	"github.com/bloxapp/ssv/network/records"
 )
 
 // ConnHandler handles new connections (inbound / outbound) using libp2pnetwork.NotifyBundle
@@ -31,19 +30,10 @@ type connHandler struct {
 	subnetsIndex    peers.SubnetsIndex
 	connIdx         peers.ConnectionIndex
 	peerInfos       peers.PeerInfoIndex
-	metrics         Metrics
 }
 
 // NewConnHandler creates a new connection handler
-func NewConnHandler(
-	ctx context.Context,
-	handshaker Handshaker,
-	subnetsProvider SubnetsProvider,
-	subnetsIndex peers.SubnetsIndex,
-	connIdx peers.ConnectionIndex,
-	peerInfos peers.PeerInfoIndex,
-	mr Metrics,
-) ConnHandler {
+func NewConnHandler(ctx context.Context, handshaker Handshaker, subnetsProvider SubnetsProvider, subnetsIndex peers.SubnetsIndex, connIdx peers.ConnectionIndex, peerInfos peers.PeerInfoIndex) ConnHandler {
 	return &connHandler{
 		ctx:             ctx,
 		handshaker:      handshaker,
@@ -51,7 +41,6 @@ func NewConnHandler(
 		subnetsIndex:    subnetsIndex,
 		connIdx:         connIdx,
 		peerInfos:       peerInfos,
-		metrics:         mr,
 	}
 }
 
@@ -170,7 +159,7 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 				logger := connLogger(conn)
 				err := acceptConnection(logger, net, conn)
 				if err == nil {
-					if ch.connIdx.AtLimit(conn.Stat().Direction) {
+					if ch.connIdx.Limit(conn.Stat().Direction) {
 						err = errors.New("reached peers limit")
 					}
 				}
@@ -201,7 +190,6 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 
 			metricsConnections.Dec()
 			ch.peerInfos.SetState(conn.RemotePeer(), peers.StateDisconnected)
-			ch.metrics.PeerDisconnected(conn.RemotePeer())
 
 			logger := connLogger(conn)
 			logger.Debug("peer disconnected")

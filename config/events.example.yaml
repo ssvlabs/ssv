@@ -70,8 +70,3 @@
   Data:
     Owner: <owner-address>
     RecipientAddress: <recipient-address>
-- Log:
-  Name: ValidatorExited
-  Data:
-    PublicKey: <validator-public-key>
-    OperatorIds: <operator-ids e.g. [5, 6, 7, 8]>

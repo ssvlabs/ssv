@@ -169,32 +169,7 @@ func TestEthExecLayer(t *testing.T) {
 			require.Equal(t, uint64(testEnv.sim.Blockchain.CurrentBlock().Number.Int64()), *common.blockNum)
 		}
 
-		// Step 2: Exit validator
-		{
-			validatorCtrl.EXPECT().ExitValidator(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-
-			shares := nodeStorage.Shares().List(nil)
-			require.Equal(t, 7, len(shares))
-
-			valExit := NewTestValidatorExitedEventsInput(common)
-			valExit.prepare(
-				validators,
-				[]uint64{0, 1},
-				[]uint64{1, 2, 3, 4},
-				auth,
-				cluster,
-			)
-			valExit.produce()
-			testEnv.CloseFollowDistance(&blockNum)
-
-			// Wait to make sure the state is not changed
-			time.Sleep(time.Millisecond * 500)
-
-			shares = nodeStorage.Shares().List(nil)
-			require.Equal(t, 7, len(shares))
-		}
-
-		// Step 3: Remove validator
+		// Step 2: remove validator
 		{
 			validatorCtrl.EXPECT().StopValidator(gomock.Any()).AnyTimes()
 
@@ -225,7 +200,7 @@ func TestEthExecLayer(t *testing.T) {
 			}
 		}
 
-		// Step 4 Liquidate Cluster
+		// Step 3 Liquidate Cluster
 		{
 			validatorCtrl.EXPECT().LiquidateCluster(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
@@ -256,7 +231,7 @@ func TestEthExecLayer(t *testing.T) {
 			}
 		}
 
-		// Step 5 Reactivate Cluster
+		// Step 4 Reactivate Cluster
 		{
 			validatorCtrl.EXPECT().ReactivateCluster(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
@@ -295,7 +270,7 @@ func TestEthExecLayer(t *testing.T) {
 			}
 		}
 
-		// Step 6 Remove some Operators
+		// Step 5 Remove some Operators
 		{
 			operators, err := nodeStorage.ListOperators(nil, 0, 10)
 			require.NoError(t, err)
@@ -309,7 +284,7 @@ func TestEthExecLayer(t *testing.T) {
 			// TODO: this should be adjusted when eth/eventhandler/handlers.go#L109 is resolved
 		}
 
-		// Step 7 Update Fee Recipient
+		// Step 6 Update Fee Recipient
 		{
 			validatorCtrl.EXPECT().UpdateFeeRecipient(gomock.Any(), gomock.Any()).Times(1)
 

@@ -79,7 +79,6 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			buildStr := fmt.Sprintf("p%v-%v-s%v-#%v", period, epoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_seq", buildStr))
 
-			ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
 			if h.fetchFirst {
 				h.fetchFirst = false
 				h.processFetching(ctx, period, slot)
@@ -88,7 +87,6 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 				h.processExecution(period, slot)
 				h.processFetching(ctx, period, slot)
 			}
-			cancel()
 
 			// If we have reached the mid-point of the epoch, fetch the duties for the next period in the next slot.
 			// This allows us to set them up at a time when the beacon node should be less busy.
@@ -135,8 +133,6 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 }
 
 func (h *SyncCommitteeHandler) HandleInitialDuties(ctx context.Context) {
-	ctx, cancel := context.WithTimeout(ctx, h.network.Beacon.SlotDurationSec()/2)
-	defer cancel()
 	slot := h.network.Beacon.EstimatedCurrentSlot()
 	epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 	period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
@@ -148,7 +144,7 @@ func (h *SyncCommitteeHandler) HandleInitialDuties(ctx context.Context) {
 }
 
 func (h *SyncCommitteeHandler) processFetching(ctx context.Context, period uint64, slot phase0.Slot) {
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
 	defer cancel()
 
 	if h.fetchCurrentPeriod {

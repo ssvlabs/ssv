@@ -62,8 +62,6 @@ func BeaconRoleFromString(s string) (spectypes.BeaconRole, error) {
 		return spectypes.BNRoleSyncCommitteeContribution, nil
 	case "VALIDATOR_REGISTRATION":
 		return spectypes.BNRoleValidatorRegistration, nil
-	case "VOLUNTARY_EXIT":
-		return spectypes.BNRoleVoluntaryExit, nil
 	default:
 		return 0, fmt.Errorf("unknown role: %s", s)
 	}
