@@ -406,8 +406,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, ErrInvalidRole)
 	})
 
-	// Perform validator registration or voluntary exit with a consensus type message will give an error
-	t.Run("unexpected consensus message", func(t *testing.T) {
+	// Perform validator registration with a consensus type message will give an error
+	t.Run("consensus validator registration", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
@@ -425,16 +425,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
 		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
-		require.ErrorContains(t, err, ErrUnexpectedConsensusMessage.Error())
-
-		message = &spectypes.SSVMessage{
-			MsgType: spectypes.SSVConsensusMsgType,
-			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, spectypes.BNRoleVoluntaryExit),
-			Data:    encodedValidSignedMessage,
-		}
-
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
-		require.ErrorContains(t, err, ErrUnexpectedConsensusMessage.Error())
+		require.ErrorIs(t, err, ErrConsensusValidatorRegistration)
 	})
 
 	// Ignore messages related to a validator that is liquidated
@@ -784,7 +775,6 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				spectypes.BNRoleSyncCommittee:             {spectypes.PostConsensusPartialSig},
 				spectypes.BNRoleSyncCommitteeContribution: {spectypes.PostConsensusPartialSig, spectypes.ContributionProofs},
 				spectypes.BNRoleValidatorRegistration:     {spectypes.ValidatorRegistrationPartialSig},
-				spectypes.BNRoleVoluntaryExit:             {spectypes.VoluntaryExitPartialSig},
 			}
 
 			for role, msgTypes := range tests {
@@ -867,7 +857,6 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				spectypes.BNRoleSyncCommittee:             {spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs, spectypes.ValidatorRegistrationPartialSig},
 				spectypes.BNRoleSyncCommitteeContribution: {spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ValidatorRegistrationPartialSig},
 				spectypes.BNRoleValidatorRegistration:     {spectypes.PostConsensusPartialSig, spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs},
-				spectypes.BNRoleVoluntaryExit:             {spectypes.PostConsensusPartialSig, spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs},
 			}
 
 			for role, msgTypes := range tests {

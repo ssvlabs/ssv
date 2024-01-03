@@ -9,7 +9,6 @@ import (
 
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	types "github.com/bloxapp/ssv-spec/types"
-	duties "github.com/bloxapp/ssv/operator/duties"
 	validator "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	types0 "github.com/bloxapp/ssv/protocol/v2/types"
 	storage "github.com/bloxapp/ssv/registry/storage"
@@ -79,20 +78,6 @@ func (m *MockController) ExecuteDuty(logger *zap.Logger, duty *types.Duty) {
 func (mr *MockControllerMockRecorder) ExecuteDuty(logger, duty interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteDuty", reflect.TypeOf((*MockController)(nil).ExecuteDuty), logger, duty)
-}
-
-// ExitValidator mocks base method.
-func (m *MockController) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ExitValidator", pubKey, blockNumber, validatorIndex)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// ExitValidator indicates an expected call of ExitValidator.
-func (mr *MockControllerMockRecorder) ExitValidator(pubKey, blockNumber, validatorIndex interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExitValidator", reflect.TypeOf((*MockController)(nil).ExitValidator), pubKey, blockNumber, validatorIndex)
 }
 
 // GetOperatorData mocks base method.
@@ -285,18 +270,4 @@ func (m *MockController) UpdateValidatorMetaDataLoop() {
 func (mr *MockControllerMockRecorder) UpdateValidatorMetaDataLoop() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateValidatorMetaDataLoop", reflect.TypeOf((*MockController)(nil).UpdateValidatorMetaDataLoop))
-}
-
-// ValidatorExitChan mocks base method.
-func (m *MockController) ValidatorExitChan() <-chan duties.ExitDescriptor {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ValidatorExitChan")
-	ret0, _ := ret[0].(<-chan duties.ExitDescriptor)
-	return ret0
-}
-
-// ValidatorExitChan indicates an expected call of ValidatorExitChan.
-func (mr *MockControllerMockRecorder) ValidatorExitChan() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorExitChan", reflect.TypeOf((*MockController)(nil).ValidatorExitChan))
 }

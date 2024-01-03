@@ -9,7 +9,6 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
@@ -21,7 +20,6 @@ import (
 	"github.com/bloxapp/ssv/eth/localevents"
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/networkconfig"
 	nodestorage "github.com/bloxapp/ssv/operator/storage"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
@@ -38,7 +36,6 @@ const (
 	ClusterLiquidated          = "ClusterLiquidated"
 	ClusterReactivated         = "ClusterReactivated"
 	FeeRecipientAddressUpdated = "FeeRecipientAddressUpdated"
-	ValidatorExited            = "ValidatorExited"
 )
 
 var (
@@ -53,7 +50,6 @@ type taskExecutor interface {
 	LiquidateCluster(owner ethcommon.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
 	ReactivateCluster(owner ethcommon.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error
 	UpdateFeeRecipient(owner, recipient ethcommon.Address) error
-	ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex) error
 }
 
 type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
@@ -67,7 +63,7 @@ type EventHandler struct {
 	nodeStorage                nodestorage.Storage
 	taskExecutor               taskExecutor
 	eventParser                eventparser.Parser
-	networkConfig              networkconfig.NetworkConfig
+	domain                     spectypes.DomainType
 	operatorData               OperatorData
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider
 	keyManager                 spectypes.KeyManager
@@ -83,7 +79,7 @@ func New(
 	nodeStorage nodestorage.Storage,
 	eventParser eventparser.Parser,
 	taskExecutor taskExecutor,
-	networkConfig networkconfig.NetworkConfig,
+	domain spectypes.DomainType,
 	operatorData OperatorData,
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider,
 	keyManager spectypes.KeyManager,
@@ -95,7 +91,7 @@ func New(
 		nodeStorage:                nodeStorage,
 		taskExecutor:               taskExecutor,
 		eventParser:                eventParser,
-		networkConfig:              networkConfig,
+		domain:                     domain,
 		operatorData:               operatorData,
 		shareEncryptionKeyProvider: shareEncryptionKeyProvider,
 		keyManager:                 keyManager,
@@ -400,36 +396,6 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 		task := NewUpdateFeeRecipientTask(eh.taskExecutor, feeRecipientAddressUpdatedEvent.Owner, feeRecipientAddressUpdatedEvent.RecipientAddress)
 		return task, nil
 
-	case ValidatorExited:
-		validatorExitedEvent, err := eh.eventParser.ParseValidatorExited(event)
-		if err != nil {
-			eh.logger.Warn("could not parse event",
-				fields.EventName(abiEvent.Name),
-				zap.Error(err))
-			eh.metrics.EventProcessingFailed(abiEvent.Name)
-			return nil, nil
-		}
-
-		exitDescriptor, err := eh.handleValidatorExited(txn, validatorExitedEvent)
-		if err != nil {
-			eh.metrics.EventProcessingFailed(abiEvent.Name)
-
-			var malformedEventError *MalformedEventError
-			if errors.As(err, &malformedEventError) {
-				return nil, nil
-			}
-			return nil, fmt.Errorf("handle ValidatorExited: %w", err)
-		}
-
-		defer eh.metrics.EventProcessed(abiEvent.Name)
-
-		if exitDescriptor == nil {
-			return nil, nil
-		}
-
-		task := NewExitValidatorTask(eh.taskExecutor, exitDescriptor.PubKey, exitDescriptor.BlockNumber, exitDescriptor.ValidatorIndex)
-		return task, nil
-
 	default:
 		eh.logger.Warn("unknown event name", fields.Name(abiEvent.Name))
 		return nil, nil
@@ -498,13 +464,6 @@ func (eh *EventHandler) processLocalEvent(txn basedb.Txn, event localevents.Even
 		_, err := eh.handleFeeRecipientAddressUpdated(txn, &data)
 		if err != nil {
 			return fmt.Errorf("handle FeeRecipientAddressUpdated: %w", err)
-		}
-		return nil
-	case ValidatorExited:
-		data := event.Data.(contract.ContractValidatorExited)
-		_, err := eh.handleValidatorExited(txn, &data)
-		if err != nil {
-			return fmt.Errorf("handle ValidatorExited: %w", err)
 		}
 		return nil
 	default:

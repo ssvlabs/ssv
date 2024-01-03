@@ -4,8 +4,6 @@ import (
 	"strconv"
 
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/network/peers/connections"
-	"github.com/bloxapp/ssv/network/topics"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/prometheus/client_golang/prometheus"
@@ -14,11 +12,6 @@ import (
 
 	"github.com/bloxapp/ssv/utils/format"
 )
-
-type Metrics interface {
-	connections.Metrics
-	topics.Metrics
-}
 
 var (
 	// MetricsAllConnectedPeers counts all connected peers

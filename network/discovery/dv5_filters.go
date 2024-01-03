@@ -9,7 +9,7 @@ import (
 
 // limitNodeFilter checks if limit exceeded
 func (dvs *DiscV5Service) limitNodeFilter(node *enode.Node) bool {
-	return !dvs.conns.AtLimit(libp2pnetwork.DirOutbound)
+	return !dvs.conns.Limit(libp2pnetwork.DirOutbound)
 }
 
 //// forkVersionFilter checks if the node has the same fork version

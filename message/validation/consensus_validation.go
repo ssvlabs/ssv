@@ -44,11 +44,8 @@ func (mv *messageValidator) validateConsensusMessage(
 
 	mv.metrics.ConsensusMsgType(signedMsg.Message.MsgType, len(signedMsg.Signers))
 
-	switch messageID.GetRoleType() {
-	case spectypes.BNRoleValidatorRegistration, spectypes.BNRoleVoluntaryExit:
-		e := ErrUnexpectedConsensusMessage
-		e.got = messageID.GetRoleType()
-		return consensusDescriptor, msgSlot, e
+	if messageID.GetRoleType() == spectypes.BNRoleValidatorRegistration {
+		return consensusDescriptor, msgSlot, ErrConsensusValidatorRegistration
 	}
 
 	if err := mv.validateSignatureFormat(signedMsg.Signature); err != nil {
@@ -263,7 +260,7 @@ func (mv *messageValidator) validateDutyCount(
 	newDutyInSameEpoch bool,
 ) error {
 	switch msgID.GetRoleType() {
-	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator, spectypes.BNRoleValidatorRegistration, spectypes.BNRoleVoluntaryExit:
+	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator, spectypes.BNRoleValidatorRegistration:
 		limit := maxDutiesPerEpoch
 
 		if sameSlot := !newDutyInSameEpoch; sameSlot {
@@ -333,7 +330,7 @@ func (mv *messageValidator) maxRound(role spectypes.BeaconRole) specqbft.Round {
 		return 12 // TODO: consider calculating based on quick timeout and slow timeout
 	case spectypes.BNRoleProposer, spectypes.BNRoleSyncCommittee, spectypes.BNRoleSyncCommitteeContribution:
 		return 6
-	case spectypes.BNRoleValidatorRegistration, spectypes.BNRoleVoluntaryExit:
+	case spectypes.BNRoleValidatorRegistration:
 		return 0
 	default:
 		panic("unknown role")
@@ -356,7 +353,7 @@ func (mv *messageValidator) waitAfterSlotStart(role spectypes.BeaconRole) time.D
 		return mv.netCfg.Beacon.SlotDurationSec() / 3
 	case spectypes.BNRoleAggregator, spectypes.BNRoleSyncCommitteeContribution:
 		return mv.netCfg.Beacon.SlotDurationSec() / 3 * 2
-	case spectypes.BNRoleProposer, spectypes.BNRoleValidatorRegistration, spectypes.BNRoleVoluntaryExit:
+	case spectypes.BNRoleProposer, spectypes.BNRoleValidatorRegistration:
 		return 0
 	default:
 		panic("unknown role")
@@ -370,8 +367,7 @@ func (mv *messageValidator) validRole(roleType spectypes.BeaconRole) bool {
 		spectypes.BNRoleProposer,
 		spectypes.BNRoleSyncCommittee,
 		spectypes.BNRoleSyncCommitteeContribution,
-		spectypes.BNRoleValidatorRegistration,
-		spectypes.BNRoleVoluntaryExit:
+		spectypes.BNRoleValidatorRegistration:
 		return true
 	}
 	return false

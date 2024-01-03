@@ -23,7 +23,6 @@ import (
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/message/validation"
-	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"
 	"github.com/bloxapp/ssv/networkconfig"
@@ -371,7 +370,7 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 		// TODO: add mock for peers.ScoreIndex
 	}
 
-	ps, tm, err := NewPubSub(ctx, logger, cfg, metricsreporter.NewNop())
+	ps, tm, err := NewPubSub(ctx, logger, cfg)
 	require.NoError(t, err)
 
 	p = &P{
