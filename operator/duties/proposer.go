@@ -65,6 +65,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_seq", buildStr))
 
+			ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
 			if h.fetchFirst {
 				h.fetchFirst = false
 				h.indicesChanged = false
@@ -77,6 +78,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 					h.processFetching(ctx, currentEpoch, slot)
 				}
 			}
+			cancel()
 
 			// last slot of epoch
 			if uint64(slot)%h.network.Beacon.SlotsPerEpoch() == h.network.Beacon.SlotsPerEpoch()-1 {
@@ -107,13 +109,16 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 }
 
 func (h *ProposerHandler) HandleInitialDuties(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(ctx, h.network.Beacon.SlotDurationSec()/2)
+	defer cancel()
+
 	slot := h.network.Beacon.EstimatedCurrentSlot()
 	epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 	h.processFetching(ctx, epoch, slot)
 }
 
 func (h *ProposerHandler) processFetching(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
-	ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	if err := h.fetchAndProcessDuties(ctx, epoch); err != nil {

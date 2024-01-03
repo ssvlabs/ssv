@@ -6,6 +6,7 @@ package mocks
 
 import (
 	context "context"
+	big "math/big"
 	reflect "reflect"
 	time "time"
 
@@ -13,6 +14,7 @@ import (
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	types "github.com/bloxapp/ssv/protocol/v2/types"
+	types0 "github.com/ethereum/go-ethereum/core/types"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -175,6 +177,44 @@ func (m *MockBeaconNode) SyncCommitteeDuties(ctx context.Context, epoch phase0.E
 func (mr *MockBeaconNodeMockRecorder) SyncCommitteeDuties(ctx, epoch, indices interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncCommitteeDuties", reflect.TypeOf((*MockBeaconNode)(nil).SyncCommitteeDuties), ctx, epoch, indices)
+}
+
+// MockExecutionClient is a mock of ExecutionClient interface.
+type MockExecutionClient struct {
+	ctrl     *gomock.Controller
+	recorder *MockExecutionClientMockRecorder
+}
+
+// MockExecutionClientMockRecorder is the mock recorder for MockExecutionClient.
+type MockExecutionClientMockRecorder struct {
+	mock *MockExecutionClient
+}
+
+// NewMockExecutionClient creates a new mock instance.
+func NewMockExecutionClient(ctrl *gomock.Controller) *MockExecutionClient {
+	mock := &MockExecutionClient{ctrl: ctrl}
+	mock.recorder = &MockExecutionClientMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockExecutionClient) EXPECT() *MockExecutionClientMockRecorder {
+	return m.recorder
+}
+
+// BlockByNumber mocks base method.
+func (m *MockExecutionClient) BlockByNumber(ctx context.Context, blockNumber *big.Int) (*types0.Block, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BlockByNumber", ctx, blockNumber)
+	ret0, _ := ret[0].(*types0.Block)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// BlockByNumber indicates an expected call of BlockByNumber.
+func (mr *MockExecutionClientMockRecorder) BlockByNumber(ctx, blockNumber interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BlockByNumber", reflect.TypeOf((*MockExecutionClient)(nil).BlockByNumber), ctx, blockNumber)
 }
 
 // MockValidatorController is a mock of ValidatorController interface.

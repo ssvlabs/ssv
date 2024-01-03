@@ -25,6 +25,7 @@ import (
 	"golang.org/x/exp/slices"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
@@ -70,7 +71,7 @@ type MessageValidator interface {
 
 type messageValidator struct {
 	logger                  *zap.Logger
-	metrics                 metrics
+	metrics                 metricsreporter.MetricsReporter
 	netCfg                  networkconfig.NetworkConfig
 	index                   sync.Map
 	nodeStorage             operatorstorage.Storage
@@ -91,7 +92,7 @@ type messageValidator struct {
 func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) MessageValidator {
 	mv := &messageValidator{
 		logger:                  zap.NewNop(),
-		metrics:                 &nopMetrics{},
+		metrics:                 metricsreporter.NewNop(),
 		netCfg:                  netCfg,
 		operatorIDToPubkeyCache: hashmap.New[spectypes.OperatorID, *rsa.PublicKey](),
 		validationLocks:         make(map[spectypes.MessageID]*sync.Mutex),
@@ -115,7 +116,7 @@ func WithLogger(logger *zap.Logger) Option {
 }
 
 // WithMetrics sets the metrics for the messageValidator.
-func WithMetrics(metrics metrics) Option {
+func WithMetrics(metrics metricsreporter.MetricsReporter) Option {
 	return func(mv *messageValidator) {
 		mv.metrics = metrics
 	}
@@ -296,6 +297,9 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 	topic := pMsg.GetTopic()
 
 	mv.metrics.ActiveMsgValidation(topic)
+	mv.metrics.MessagesReceivedFromPeer(pMsg.ReceivedFrom)
+	mv.metrics.MessagesReceivedTotal()
+
 	defer mv.metrics.ActiveMsgValidationDone(topic)
 
 	messageData := pMsg.GetData()
@@ -313,6 +317,7 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 		}
 
 		signatureVerifier = func() error {
+			mv.metrics.MessageValidationRSAVerifications()
 			return mv.verifyRSASignature(messageData, operatorID, signature)
 		}
 	}
@@ -552,7 +557,7 @@ func (mv *messageValidator) lateMessage(slot phase0.Slot, role spectypes.BeaconR
 		ttl = 1 + lateSlotAllowance
 	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator:
 		ttl = 32 + lateSlotAllowance
-	case spectypes.BNRoleValidatorRegistration:
+	case spectypes.BNRoleValidatorRegistration, spectypes.BNRoleVoluntaryExit:
 		return 0
 	}
 

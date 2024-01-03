@@ -25,6 +25,7 @@ import (
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/message/validation"
 	"github.com/bloxapp/ssv/network"
+	"github.com/bloxapp/ssv/operator/duties"
 	nodestorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validatorsmap"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
@@ -107,12 +108,14 @@ type Controller interface {
 	GetOperatorData() *registrystorage.OperatorData
 	SetOperatorData(data *registrystorage.OperatorData)
 	IndicesChangeChan() chan struct{}
+	ValidatorExitChan() <-chan duties.ExitDescriptor
 
 	StartValidator(share *ssvtypes.SSVShare) error
 	StopValidator(pubKey spectypes.ValidatorPK) error
 	LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
 	ReactivateCluster(owner common.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error
 	UpdateFeeRecipient(owner, recipient common.Address) error
+	ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex) error
 }
 
 type nonCommitteeValidator struct {
@@ -158,6 +161,7 @@ type controller struct {
 	recentlyStartedValidators uint64
 	metadataLastUpdated       map[string]time.Time
 	indicesChange             chan struct{}
+	validatorExitCh           chan duties.ExitDescriptor
 }
 
 // NewController creates a new validator controller instance
@@ -235,6 +239,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		),
 		metadataLastUpdated: make(map[string]time.Time),
 		indicesChange:       make(chan struct{}),
+		validatorExitCh:     make(chan duties.ExitDescriptor),
 
 		messageValidator: options.MessageValidator,
 	}
@@ -275,6 +280,10 @@ func (c *controller) SetOperatorData(data *registrystorage.OperatorData) {
 
 func (c *controller) IndicesChangeChan() chan struct{} {
 	return c.indicesChange
+}
+
+func (c *controller) ValidatorExitChan() <-chan duties.ExitDescriptor {
+	return c.validatorExitCh
 }
 
 func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
@@ -402,7 +411,14 @@ func (c *controller) StartValidators() {
 	}
 
 	// Start own validators.
-	c.setupValidators(ownShares)
+	startedValidators := c.setupValidators(ownShares)
+	if startedValidators == 0 {
+		// If no validators were started and therefore we're not subscribed to any subnets,
+		// then subscribe to a random subnet to participate in the network.
+		if err := c.network.SubscribeRandoms(c.logger, 1); err != nil {
+			c.logger.Error("failed to subscribe to random subnets", zap.Error(err))
+		}
+	}
 
 	// Fetch metadata for all validators.
 	start := time.Now()
@@ -421,9 +437,8 @@ func (c *controller) StartValidators() {
 
 // setupValidators setup and starts validators from the given shares.
 // shares w/o validator's metadata won't start, but the metadata will be fetched and the validator will start afterwards
-func (c *controller) setupValidators(shares []*ssvtypes.SSVShare) {
+func (c *controller) setupValidators(shares []*ssvtypes.SSVShare) (started int) {
 	c.logger.Info("starting validators setup...", zap.Int("shares count", len(shares)))
-	var started int
 	var errs []error
 	var fetchMetadata [][]byte
 	for _, validatorShare := range shares {
@@ -443,19 +458,13 @@ func (c *controller) setupValidators(shares []*ssvtypes.SSVShare) {
 	c.logger.Info("setup validators done", zap.Int("map size", c.validatorsMap.Size()),
 		zap.Int("failures", len(errs)), zap.Int("missing_metadata", len(fetchMetadata)),
 		zap.Int("shares", len(shares)), zap.Int("started", started))
+	return
 }
 
 // setupNonCommitteeValidators trigger SyncHighestDecided for each validator
 // to start consensus flow which would save the highest decided instance
 // and sync any gaps (in protocol/v2/qbft/controller/decided.go).
 func (c *controller) setupNonCommitteeValidators() {
-	// Subscribe to all subnets.
-	err := c.network.SubscribeAll(c.logger)
-	if err != nil {
-		c.logger.Error("failed to subscribe to all subnets", zap.Error(err))
-		return
-	}
-
 	nonCommitteeShares := c.sharesStorage.List(nil, registrystorage.ByNotLiquidated())
 	if len(nonCommitteeShares) == 0 {
 		c.logger.Info("could not find non-committee validators")
@@ -547,7 +556,8 @@ func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) {
 	var pk phase0.BLSPubKey
 	copy(pk[:], duty.PubKey[:])
 
-	if v, ok := c.GetValidator(hex.EncodeToString(pk[:])); ok {
+	pubKeyString := hex.EncodeToString(pk[:])
+	if v, ok := c.GetValidator(pubKeyString); ok {
 		ssvMsg, err := CreateDutyExecuteMsg(duty, pk, types.GetDefaultDomain())
 		if err != nil {
 			logger.Error("could not create duty execute msg", zap.Error(err))
@@ -563,7 +573,7 @@ func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) {
 		}
 		// logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
 	} else {
-		logger.Warn("could not find validator")
+		logger.Warn("could not find validator", fields.PubKey(duty.PubKey[:]))
 	}
 }
 
@@ -811,6 +821,7 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 		spectypes.BNRoleSyncCommittee,
 		spectypes.BNRoleSyncCommitteeContribution,
 		spectypes.BNRoleValidatorRegistration,
+		spectypes.BNRoleVoluntaryExit,
 	}
 
 	domainType := ssvtypes.GetDefaultDomain()
@@ -865,6 +876,8 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 		case spectypes.BNRoleValidatorRegistration:
 			qbftCtrl := buildController(spectypes.BNRoleValidatorRegistration, nil)
 			runners[role] = runner.NewValidatorRegistrationRunner(options.BeaconNetwork.GetBeaconNetwork(), &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer)
+		case spectypes.BNRoleVoluntaryExit:
+			runners[role] = runner.NewVoluntaryExitRunner(options.BeaconNetwork.GetBeaconNetwork(), &options.SSVShare.Share, options.Beacon, options.Network, options.Signer)
 		}
 	}
 	return runners
