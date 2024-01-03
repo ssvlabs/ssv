@@ -43,7 +43,27 @@ services:
     networks:
       - blox-docker
     volumes:
+      - ${PWD}/validators.json:/app/validators.json
       - /var/run/docker.sock:/var/run/docker.sock
+
+  share_update:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: share_update:latest
+    command: share-update
+    volumes:
+      - ${PWD}/validators.json:/app/validators.json
+      - ssv-node-1-data:/ssv-node-1-data
+      - ssv-node-2-data:/ssv-node-2-data
+      - ssv-node-3-data:/ssv-node-3-data
+      - ssv-node-4-data:/ssv-node-4-data
+      - ${PWD}/config/share1.yaml:/tconfig/share1.yaml
+      - ${PWD}/config/share2.yaml:/tconfig/share2.yaml
+      - ${PWD}/config/share3.yaml:/tconfig/share3.yaml
+      - ${PWD}/config/share4.yaml:/tconfig/share4.yaml
+    networks:
+      - blox-docker
 
   x-base: &default-base
     depends_on:
