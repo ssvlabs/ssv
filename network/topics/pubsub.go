@@ -16,7 +16,7 @@ import (
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/topics/params"
-	"github.com/bloxapp/ssv/utils/async"
+	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 )
 
 const (
@@ -34,7 +34,9 @@ const (
 	// validateThrottle is the amount of goroutines used for pubsub msg validation
 	validateThrottle = 8192
 	// scoreInspectInterval is the interval for performing score inspect, which goes over all peers scores
-	defaultScoreInspectInterval = 5 * time.Minute
+	defaultScoreInspectInterval = 1 * time.Minute
+	// scoreInspectLogFrequency is the frequency of logging the score inspection
+	scoreInspectLogFrequency = 5
 	// msgIDCacheTTL specifies how long a message ID will be remembered as seen, 6.4m (as ETH 2.0)
 	msgIDCacheTTL = params.HeartbeatInterval * 550
 )
@@ -105,7 +107,7 @@ func (cfg *PubSubConfig) initScoring() {
 }
 
 // NewPubSub creates a new pubsub router and the necessary components
-func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig) (*pubsub.PubSub, Controller, error) {
+func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, metrics Metrics) (*pubsub.PubSub, Controller, error) {
 	if err := cfg.init(); err != nil {
 		return nil, nil, err
 	}
@@ -142,7 +144,10 @@ func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig) (*pub
 		cfg.initScoring()
 
 		if inspector == nil {
-			inspector = scoreInspector(logger, cfg.ScoreIndex)
+			peerConnected := func(pid peer.ID) bool {
+				return cfg.Host.Network().Connectedness(pid) == libp2pnetwork.Connected
+			}
+			inspector = scoreInspector(logger, cfg.ScoreIndex, scoreInspectLogFrequency, metrics, peerConnected)
 		}
 
 		if inspectInterval == 0 {
@@ -152,10 +157,6 @@ func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig) (*pub
 		peerScoreParams := params.PeerScoreParams(cfg.Scoring.OneEpochDuration, cfg.MsgIDCacheTTL, cfg.Scoring.IPWhilelist...)
 		psOpts = append(psOpts, pubsub.WithPeerScore(peerScoreParams, params.PeerScoreThresholds()),
 			pubsub.WithPeerScoreInspect(inspector, inspectInterval))
-		async.Interval(ctx, time.Hour, func() {
-			// reset peer scores metric every hour because it has a label for peer ID which can grow infinitely
-			metricPubsubPeerScoreInspect.Reset()
-		})
 		if cfg.GetValidatorStats == nil {
 			cfg.GetValidatorStats = func() (uint64, uint64, uint64, error) {
 				// default in case it was not injected
