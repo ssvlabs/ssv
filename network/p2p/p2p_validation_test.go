@@ -5,7 +5,7 @@ import (
 	cryptorand "crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"github.com/cornelk/hashmap"
+	"math/rand"
 	"os"
 	"sort"
 	"sync"
@@ -13,17 +13,18 @@ import (
 	"testing"
 	"time"
 
-	"math/rand"
+	"github.com/cornelk/hashmap"
 
 	"github.com/aquasecurity/table"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/message/validation"
-	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sourcegraph/conc/pool"
 	"github.com/stretchr/testify/require"
+
+	"github.com/bloxapp/ssv/message/validation"
+	"github.com/bloxapp/ssv/network/commons"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
 
 // TestP2pNetwork_MessageValidation tests p2pNetwork would score peers according
@@ -276,6 +277,9 @@ func (v *MockMessageValidator) ValidatePubsubMessage(ctx context.Context, p peer
 func (v *MockMessageValidator) ValidateSSVMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, validation.Descriptor, error) {
 	panic("not implemented") // TODO: Implement
 }
+
+func (v *MockMessageValidator) Start() {}
+func (v *MockMessageValidator) Stop()  {}
 
 type NodeIndex int
 

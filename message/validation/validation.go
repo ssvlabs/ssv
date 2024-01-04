@@ -52,21 +52,13 @@ const (
 	maxDutiesPerEpoch          = 2
 )
 
-// PubsubMessageValidator defines methods for validating pubsub messages.
-type PubsubMessageValidator interface {
-	ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
-	ValidatePubsubMessage(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
-}
-
-// SSVMessageValidator defines methods for validating SSV messages.
-type SSVMessageValidator interface {
-	ValidateSSVMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, Descriptor, error)
-}
-
 // MessageValidator is an interface that combines both PubsubMessageValidator and SSVMessageValidator.
 type MessageValidator interface {
-	PubsubMessageValidator
-	SSVMessageValidator
+	ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
+	ValidatePubsubMessage(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
+	ValidateSSVMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, Descriptor, error)
+	Start()
+	Stop()
 }
 
 type messageValidator struct {
@@ -109,8 +101,6 @@ func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) Mes
 	for _, opt := range opts {
 		opt(mv)
 	}
-
-	go mv.state.Start()
 
 	return mv
 }
@@ -229,6 +219,14 @@ func (d Descriptor) String() string {
 	}
 
 	return sb.String()
+}
+
+func (mv *messageValidator) Start() {
+	go mv.state.Start()
+}
+
+func (mv *messageValidator) Stop() {
+	mv.state.Stop()
 }
 
 // ValidatorForTopic returns a validation function for the given topic.
