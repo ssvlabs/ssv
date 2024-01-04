@@ -13,12 +13,16 @@ type Grep struct {
 
 type Greps []Grep
 
-func (gs Greps) String() string {
+func (gs Greps) Strings() []string {
 	strs := make([]string, len(gs))
 	for i, g := range gs {
 		strs[i] = g.string
 	}
-	return strings.Join(strs, ",")
+	return strs
+}
+
+func (gs Greps) String() string {
+	return strings.Join(gs.Strings(), "")
 }
 
 func (g Grep) String() string {
