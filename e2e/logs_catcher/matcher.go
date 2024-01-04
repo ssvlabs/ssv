@@ -33,19 +33,19 @@ const idField = "pubkey"
 const slashableMatchMessage = "slashable attestation"
 const nonSlashableMatchMessage = "successfully submitted attestation"
 
-func StartCondition(pctx context.Context, logger *zap.Logger, condition []string, targetContainer string, cli DockerCLI) (string, error) {
+func StartCondition(pctx context.Context, logger *zap.Logger, condition logs.Greps, targetContainer string, cli DockerCLI) (string, error) {
 	ctx, cancel := context.WithCancel(pctx)
 	defer cancel()
 
 	conditionLog := ""
 
-	logger.Debug("Waiting for start condition at target", zap.String("target", targetContainer), zap.Strings("condition", condition))
+	logger.Debug("Waiting for start condition at target", zap.String("target", targetContainer), zap.Stringer("condition", condition))
 	ch := make(chan string, 1024)
 	go func() {
 		for log := range ch {
 			if logs.GrepLine(log, condition) {
 				conditionLog = log
-				logger.Info("Start condition arrived", zap.Strings("log_message", condition))
+				logger.Info("Start condition arrived", zap.Stringer("log_message", condition))
 				cancel()
 			}
 		}
@@ -68,7 +68,7 @@ func matchMessages(ctx context.Context, logger *zap.Logger, cli DockerCLI, first
 		return err
 	}
 
-	grepped := res.Grep(first)
+	grepped := res.Grep(logs.SimpleGreps(first...)...)
 
 	logger.Info("matched", zap.Int("count", len(grepped)), zap.String("target", firstTarget), zap.Strings("match_string", first))
 
@@ -80,7 +80,7 @@ func matchMessages(ctx context.Context, logger *zap.Logger, cli DockerCLI, first
 			return err
 		}
 
-		tgrepped := tres.Grep(second)
+		tgrepped := tres.Grep(logs.SimpleGreps(second...)...)
 
 		if len(tgrepped) != len(grepped)+plus {
 			return fmt.Errorf("found non matching messages on %v, want %v got %v", target, len(grepped), len(tgrepped))
@@ -94,7 +94,7 @@ func matchMessages(ctx context.Context, logger *zap.Logger, cli DockerCLI, first
 
 func Match(pctx context.Context, logger *zap.Logger, cli DockerCLI) error {
 	startctx, startc := context.WithTimeout(pctx, time.Minute*6*4) // wait max 4 epochs
-	_, err := StartCondition(startctx, logger, []string{waitFor}, waitTarget, cli)
+	_, err := StartCondition(startctx, logger, logs.SimpleGreps(waitFor), waitTarget, cli)
 	if err != nil {
 		startc() // Cancel the startctx context
 		return err

@@ -2,8 +2,68 @@ package logs
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 )
+
+type Grep struct {
+	string
+	ConditionType
+}
+
+type Greps []Grep
+
+func (gs Greps) String() string {
+	strs := make([]string, len(gs))
+	for i, g := range gs {
+		strs[i] = g.string
+	}
+	return strings.Join(strs, ",")
+}
+
+func (g Grep) String() string {
+	return g.string
+}
+
+type ConditionType int
+
+const (
+	Simple ConditionType = iota
+	Regex
+)
+
+func SimpleGrep(s string) Grep {
+	return Grep{
+		string:        s,
+		ConditionType: 0,
+	}
+}
+func RegexGrep(s string) Grep {
+	return Grep{
+		string:        s,
+		ConditionType: 1,
+	}
+}
+func SimpleGreps(s ...string) Greps {
+	gps := make([]Grep, len(s))
+	for i, ss := range s {
+		gps[i] = Grep{
+			string:        ss,
+			ConditionType: 0,
+		}
+	}
+	return gps
+}
+func RegexGreps(s ...string) Greps {
+	gps := make([]Grep, len(s))
+	for i, ss := range s {
+		gps[i] = Grep{
+			string:        ss,
+			ConditionType: 0,
+		}
+	}
+	return gps
+}
 
 type RAW []string
 
@@ -36,17 +96,28 @@ func (p Parsed) Fields(key string, failOnError bool) (RAW, error) {
 	return res, nil
 }
 
-func GrepLine(line string, matches RAW) bool {
-	matched := true
+func GrepLine(line string, matches []Grep) bool {
+	matched := false
 	for _, m := range matches {
-		if !strings.Contains(line, m) {
-			matched = false
+		if m.ConditionType == Simple {
+			if strings.Contains(line, m.String()) {
+				matched = true
+			}
+		} else if m.ConditionType == Regex {
+			// TODO: consider returning error to indicate regex wasn't ok
+			b, err := regexp.Match(m.String(), []byte(line))
+			if err != nil {
+				continue
+			}
+			if b {
+				matched = true
+			}
 		}
 	}
 	return matched
 }
 
-func (r RAW) Grep(matches []string) RAW {
+func (r RAW) Grep(matches ...Grep) RAW {
 	raw := make([]string, 0)
 	for _, log := range r {
 		if GrepLine(log, matches) {

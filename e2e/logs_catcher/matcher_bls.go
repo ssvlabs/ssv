@@ -60,8 +60,8 @@ func VerifyBLSSignature(pctx context.Context, logger *zap.Logger, cli DockerCLI,
 	startctx, startc := context.WithTimeout(pctx, time.Second*12*35) // wait max 35 slots
 	defer startc()
 
-	validatorIndex := fmt.Sprintf("v%d", share.ValidatorIndex)
-	conditionLog, err := StartCondition(startctx, logger, []string{gotDutiesSuccess, validatorIndex}, targetContainer, cli)
+	validatorIndex := fmt.Sprintf("^v%d[,]?$", share.ValidatorIndex)
+	conditionLog, err := StartCondition(startctx, logger, logs.Greps{logs.SimpleGrep(gotDutiesSuccess), logs.RegexGrep(validatorIndex)}, targetContainer, cli)
 	if err != nil {
 		return fmt.Errorf("failed to start condition: %w", err)
 	}
@@ -81,7 +81,7 @@ func VerifyBLSSignature(pctx context.Context, logger *zap.Logger, cli DockerCLI,
 	leader := DetermineLeader(dutySlot, committee)
 	logger.Debug("Leader: ", zap.Uint64("leader", leader))
 
-	_, err = StartCondition(startctx, logger, []string{submittedAttSuccess, share.ValidatorPubKey}, targetContainer, cli)
+	_, err = StartCondition(startctx, logger, logs.SimpleGreps(submittedAttSuccess, share.ValidatorPubKey), targetContainer, cli)
 	if err != nil {
 		return fmt.Errorf("failed to start condition: %w", err)
 	}
@@ -264,7 +264,7 @@ func matchDualConditionLog(ctx context.Context, logger *zap.Logger, cli DockerCL
 		return err
 	}
 
-	filteredLogs := res.Grep(success)
+	filteredLogs := res.Grep(logs.SimpleGreps(success...)...)
 	if len(filteredLogs) > 1 {
 		return fmt.Errorf("found too many matching messages on %v, got %v", target, len(filteredLogs))
 	}
@@ -287,7 +287,7 @@ func matchDualConditionLog(ctx context.Context, logger *zap.Logger, cli DockerCL
 			}
 		}
 	} else {
-		filteredLogs = res.Grep(fail)
+		filteredLogs = res.Grep(logs.SimpleGreps(fail...)...)
 		logger.Info("matched", zap.Int("count", len(filteredLogs)), zap.String("target", target), zap.Strings("match_string", fail))
 
 		if len(filteredLogs) != 1 {
