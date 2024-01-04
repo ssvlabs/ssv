@@ -53,7 +53,7 @@ const (
 	maxDutiesPerEpoch          = 2
 )
 
-// MessageValidator is an interface that combines both PubsubMessageValidator and SSVMessageValidator.
+// MessageValidator validates pubsub and ssv messages. It should be started and stopped afterward.
 type MessageValidator interface {
 	ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
 	ValidatePubsubMessage(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
