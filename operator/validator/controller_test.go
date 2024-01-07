@@ -485,6 +485,7 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 //		require.NoError(t, shareRemoveSecretErr)
 //		require.Equal(t, 0, len(ctr.validatorsMap.validatorsMap))
 //	}
+
 func TestSetupValidators(t *testing.T) {
 	// Setup logger and mock controller
 	logger := logging.TestLogger(t)
