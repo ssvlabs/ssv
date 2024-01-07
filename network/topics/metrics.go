@@ -1,19 +1,23 @@
 package topics
 
 import (
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 )
 
+type Metrics interface {
+	PeerScore(peer.ID, float64)
+	PeerP4Score(peer.ID, float64)
+	ResetPeerScores()
+}
+
+// TODO: replace with new metrics
 var (
 	metricPubsubTrace = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:network:pubsub:trace",
 		Help: "Traces of pubsub messages",
-	}, []string{"type"})
-	metricPubsubMsgValidationResults = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv:network:pubsub:msg:validation",
-		Help: "Traces of pubsub message validation results",
 	}, []string{"type"})
 	metricPubsubOutbound = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:p2p:pubsub:msg:out",
@@ -23,45 +27,25 @@ var (
 		Name: "ssv:p2p:pubsub:msg:in",
 		Help: "Count incoming messages",
 	}, []string{"topic", "msg_type"})
-	metricPubsubActiveMsgValidation = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:p2p:pubsub:msg:val:active",
-		Help: "Count active message validation",
-	}, []string{"topic"})
-	metricPubsubPeerScoreInspect = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:p2p:pubsub:score:inspect",
-		Help: "Gauge for negative peer scores",
-	}, []string{"pid"})
 )
 
 func init() {
 	logger := zap.L()
-	if err := prometheus.Register(metricPubsubTrace); err != nil {
-		logger.Debug("could not register prometheus collector")
-	}
-	if err := prometheus.Register(metricPubsubMsgValidationResults); err != nil {
-		logger.Debug("could not register prometheus collector")
-	}
-	if err := prometheus.Register(metricPubsubOutbound); err != nil {
-		logger.Debug("could not register prometheus collector")
-	}
-	if err := prometheus.Register(metricPubsubInbound); err != nil {
-		logger.Debug("could not register prometheus collector")
-	}
-	if err := prometheus.Register(metricPubsubActiveMsgValidation); err != nil {
-		logger.Debug("could not register prometheus collector")
-	}
-	if err := prometheus.Register(metricPubsubPeerScoreInspect); err != nil {
-		logger.Debug("could not register prometheus collector")
-	}
-}
 
-type msgValidationResult string
+	allMetrics := []prometheus.Collector{
+		metricPubsubTrace,
+		metricPubsubOutbound,
+		metricPubsubInbound,
+	}
 
-var (
-	validationResultNoData   msgValidationResult = "no_data"
-	validationResultEncoding msgValidationResult = "encoding"
-)
+	for i, c := range allMetrics {
+		if err := prometheus.Register(c); err != nil {
+			// TODO: think how to print metric name
+			logger.Debug("could not register prometheus collector",
+				zap.Int("index", i),
+				zap.Error(err),
+			)
+		}
+	}
 
-func reportValidationResult(result msgValidationResult) {
-	metricPubsubMsgValidationResults.WithLabelValues(string(result)).Inc()
 }

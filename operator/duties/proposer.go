@@ -11,17 +11,18 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/operator/duties/dutystore"
 )
 
 type ProposerHandler struct {
 	baseHandler
 
-	duties *Duties[*eth2apiv1.ProposerDuty]
+	duties *dutystore.Duties[eth2apiv1.ProposerDuty]
 }
 
-func NewProposerHandler() *ProposerHandler {
+func NewProposerHandler(duties *dutystore.Duties[eth2apiv1.ProposerDuty]) *ProposerHandler {
 	return &ProposerHandler{
-		duties: NewDuties[*eth2apiv1.ProposerDuty](),
+		duties: duties,
 		baseHandler: baseHandler{
 			fetchFirst: true,
 		},
@@ -44,7 +45,7 @@ func (h *ProposerHandler) Name() string {
 //
 // On Indices Change:
 //  1. Execute duties.
-//  2. Reset duties for the current epoch.
+//  2. ResetEpoch duties for the current epoch.
 //  3. Fetch duties for the current epoch.
 //
 // On Ticker event:
@@ -58,11 +59,13 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 		case <-ctx.Done():
 			return
 
-		case slot := <-h.ticker:
+		case <-h.ticker.Next():
+			slot := h.ticker.Slot()
 			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_seq", buildStr))
 
+			ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
 			if h.fetchFirst {
 				h.fetchFirst = false
 				h.indicesChanged = false
@@ -71,15 +74,15 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 			} else {
 				h.processExecution(currentEpoch, slot)
 				if h.indicesChanged {
-					h.duties.Reset(currentEpoch)
 					h.indicesChanged = false
 					h.processFetching(ctx, currentEpoch, slot)
 				}
 			}
+			cancel()
 
 			// last slot of epoch
 			if uint64(slot)%h.network.Beacon.SlotsPerEpoch() == h.network.Beacon.SlotsPerEpoch()-1 {
-				h.duties.Reset(currentEpoch)
+				h.duties.ResetEpoch(currentEpoch - 1)
 				h.fetchFirst = true
 			}
 
@@ -90,7 +93,7 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 
 			// reset current epoch duties
 			if reorgEvent.Current {
-				h.duties.Reset(currentEpoch)
+				h.duties.ResetEpoch(currentEpoch)
 				h.fetchFirst = true
 			}
 
@@ -105,8 +108,17 @@ func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 	}
 }
 
+func (h *ProposerHandler) HandleInitialDuties(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(ctx, h.network.Beacon.SlotDurationSec()/2)
+	defer cancel()
+
+	slot := h.network.Beacon.EstimatedCurrentSlot()
+	epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
+	h.processFetching(ctx, epoch, slot)
+}
+
 func (h *ProposerHandler) processFetching(ctx context.Context, epoch phase0.Epoch, slot phase0.Slot) {
-	ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	if err := h.fetchAndProcessDuties(ctx, epoch); err != nil {
@@ -116,36 +128,46 @@ func (h *ProposerHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 }
 
 func (h *ProposerHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot) {
+	duties := h.duties.CommitteeSlotDuties(epoch, slot)
+	if duties == nil {
+		return
+	}
+
 	// range over duties and execute
-	if slotMap, ok := h.duties.m[epoch]; ok {
-		if duties, ok := slotMap[slot]; ok {
-			toExecute := make([]*spectypes.Duty, 0, len(duties))
-			for _, d := range duties {
-				if h.shouldExecute(d) {
-					toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleProposer))
-				}
-			}
-			h.executeDuties(h.logger, toExecute)
+	toExecute := make([]*spectypes.Duty, 0, len(duties))
+	for _, d := range duties {
+		if h.shouldExecute(d) {
+			toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleProposer))
 		}
 	}
+	h.executeDuties(h.logger, toExecute)
 }
 
 func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch) error {
 	start := time.Now()
-	indices := h.validatorController.ActiveValidatorIndices(epoch)
 
-	if len(indices) == 0 {
+	allIndices := h.validatorController.AllActiveIndices(epoch)
+	if len(allIndices) == 0 {
 		return nil
 	}
 
-	duties, err := h.beaconNode.ProposerDuties(ctx, epoch, indices)
+	inCommitteeIndices := h.validatorController.CommitteeActiveIndices(epoch)
+	inCommitteeIndicesSet := map[phase0.ValidatorIndex]struct{}{}
+	for _, idx := range inCommitteeIndices {
+		inCommitteeIndicesSet[idx] = struct{}{}
+	}
+
+	duties, err := h.beaconNode.ProposerDuties(ctx, epoch, allIndices)
 	if err != nil {
 		return fmt.Errorf("failed to fetch proposer duties: %w", err)
 	}
 
+	h.duties.ResetEpoch(epoch)
+
 	specDuties := make([]*spectypes.Duty, 0, len(duties))
 	for _, d := range duties {
-		h.duties.Add(epoch, d.Slot, d)
+		_, inCommitteeDuty := inCommitteeIndicesSet[d.ValidatorIndex]
+		h.duties.Add(epoch, d.Slot, d.ValidatorIndex, d, inCommitteeDuty)
 		specDuties = append(specDuties, h.toSpecDuty(d, spectypes.BNRoleProposer))
 	}
 
@@ -174,8 +196,7 @@ func (h *ProposerHandler) shouldExecute(duty *eth2apiv1.ProposerDuty) bool {
 		return true
 	}
 	if currentSlot+1 == duty.Slot {
-		h.logger.Debug("current slot and duty slot are not aligned, "+
-			"assuming diff caused by a time drift - ignoring and executing duty", zap.String("type", duty.String()))
+		h.warnMisalignedSlotAndDuty(duty.String())
 		return true
 	}
 	return false

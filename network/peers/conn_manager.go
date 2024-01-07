@@ -7,11 +7,12 @@ import (
 	"math"
 	"sort"
 
-	"github.com/bloxapp/ssv/network/records"
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/network/records"
 )
 
 const (

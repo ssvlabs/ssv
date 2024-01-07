@@ -1,0 +1,134 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ssv-node-35-svc
+  namespace: REPLACE_NAMESPACE
+  labels:
+    app: ssv-node-35
+    prometheus/app: ssv-node
+spec:
+  type: ClusterIP
+  ports:
+    - port: 12035
+      protocol: UDP
+      targetPort: 12035
+      name: port-12035
+    - port: 13035
+      protocol: TCP
+      targetPort: 13035
+      name: port-13035
+    - port: 15035
+      protocol: TCP
+      targetPort: 15035
+      name: metrics
+    - port: 16035
+      protocol: TCP
+      targetPort: 16035
+      name: port-16035
+  selector:
+    app: ssv-node-35
+---
+apiVersion: REPLACE_API_VERSION
+kind: Deployment
+metadata:
+  labels:
+    app: ssv-node-35
+  name: ssv-node-35
+  namespace: REPLACE_NAMESPACE
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ssv-node-35
+  template:
+    metadata:
+      labels:
+        app: ssv-node-35
+    spec:
+      containers:
+        - name: ssv-node-35
+          image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG
+          #image: mosheblox/ssv-preview:stage
+          imagePullPolicy: Always
+          resources:
+            limits:
+              cpu: REPLACE_NODES_CPU_LIMIT
+              memory: REPLACE_NODES_MEM_LIMIT
+          command: ["make", "start-node"]
+          ports:
+            - containerPort: 12035
+              name: port-12035
+              protocol: UDP
+              hostPort: 12035
+            - containerPort: 13035
+              name: port-13035
+              hostPort: 13035
+            - containerPort: 15035
+              name: port-15035
+              hostPort: 15035
+            - containerPort: 16035
+              name: port-16035
+              hostPort: 16035
+          env:
+            - name: SHARE_CONFIG
+              value: "./data/share.yaml"
+            - name: CONFIG_PATH
+              valueFrom:
+                secretKeyRef:
+                  name: config-secrets
+                  key: config_path
+            - name: ABI_VERSION
+              valueFrom:
+                secretKeyRef:
+                  name: config-secrets
+                  key: abi_version
+                  optional: true
+            - name: LOG_LEVEL
+              value: "debug"
+            - name: DEBUG_SERVICES
+              value: "ssv/*."
+            - name: DISCOVERY_TYPE_KEY
+              value: "discv5"
+            - name: CONSENSUS_TYPE
+              value: "validation"
+            - name: HOST_DNS
+              value: ""
+            - name: HOST_ADDRESS
+              value: ""
+            - name: DB_PATH
+              value: "./data/db-holesky-stage"
+            - name: NETWORK
+              value: "holesky-stage"
+            - name: DB_REPORTING
+              value: "false"
+            - name: METRICS_API_PORT
+              value: "15035"
+            - name: SSV_API_PORT
+              value: "16035"
+            - name: ENABLE_PROFILE
+              value: "true"
+            - name: DISCOVERY_TRACE
+              value: 'false'
+            - name: PUBSUB_TRACE
+              value: 'false'
+            - name: BUILDER_PROPOSALS
+              value: "false"
+          volumeMounts:
+            - mountPath: /data
+              name: ssv-node-35
+            - mountPath: /data/share.yaml
+              subPath: share.yaml
+              name: ssv-node-35-cm
+      imagePullSecrets:
+        - name: ecr-repo
+      volumes:
+        - name: ssv-node-35
+          persistentVolumeClaim:
+            claimName: ssv-node-35
+        - name: ssv-node-35-cm
+          configMap:
+            name: ssv-node-35-cm
+      hostNetwork: true

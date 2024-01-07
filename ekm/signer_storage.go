@@ -47,17 +47,19 @@ type Storage interface {
 	SetEncryptionKey(newKey string) error
 	ListAccountsTxn(r basedb.Reader) ([]core.ValidatorAccount, error)
 	SaveAccountTxn(rw basedb.ReadWriter, account core.ValidatorAccount) error
+
+	BeaconNetwork() beacon.BeaconNetwork
 }
 
 type storage struct {
 	db            basedb.Database
-	network       beacon.Network
+	network       beacon.BeaconNetwork
 	encryptionKey []byte
 	logger        *zap.Logger // struct logger is used because core.Storage does not support passing a logger
 	lock          sync.RWMutex
 }
 
-func NewSignerStorage(db basedb.Database, network beacon.Network, logger *zap.Logger) Storage {
+func NewSignerStorage(db basedb.Database, network beacon.BeaconNetwork, logger *zap.Logger) Storage {
 	return &storage{
 		db:      db,
 		network: network,
@@ -87,7 +89,7 @@ func (s *storage) DropRegistryData() error {
 }
 
 func (s *storage) objPrefix(obj string) []byte {
-	return []byte(string(s.network.BeaconNetwork) + obj)
+	return []byte(string(s.network.GetBeaconNetwork()) + obj)
 }
 
 // Name returns storage name.
@@ -97,7 +99,7 @@ func (s *storage) Name() string {
 
 // Network returns the network storage is related to.
 func (s *storage) Network() core.Network {
-	return core.Network(s.network.BeaconNetwork)
+	return core.Network(s.network.GetBeaconNetwork())
 }
 
 // SaveWallet stores the given wallet.
@@ -405,4 +407,8 @@ func (s *storage) decrypt(data []byte) ([]byte, error) {
 
 	nonce, ciphertext := data[:nonceSize], data[nonceSize:]
 	return gcm.Open(nil, nonce, ciphertext, nil)
+}
+
+func (s *storage) BeaconNetwork() beacon.BeaconNetwork {
+	return s.network
 }

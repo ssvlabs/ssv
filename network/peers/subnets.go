@@ -16,7 +16,7 @@ type subnetsIndex struct {
 	lock *sync.RWMutex
 }
 
-func newSubnetsIndex(count int) SubnetsIndex {
+func NewSubnetsIndex(count int) SubnetsIndex {
 	return &subnetsIndex{
 		subnets:     make([][]peer.ID, count),
 		peerSubnets: map[peer.ID]records.Subnets{},

@@ -15,7 +15,7 @@ func Test_SubnetsEntry(t *testing.T) {
 	SubnetsCount := 128
 	priv, _, err := crypto.GenerateSecp256k1Key(crand.Reader)
 	require.NoError(t, err)
-	sk, err := commons.ConvertFromInterfacePrivKey(priv)
+	sk, err := commons.ECDSAPrivFromInterface(priv)
 	require.NoError(t, err)
 	ip, err := commons.IPAddr()
 	require.NoError(t, err)

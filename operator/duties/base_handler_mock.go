@@ -8,8 +8,8 @@ import (
 	context "context"
 	reflect "reflect"
 
-	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	networkconfig "github.com/bloxapp/ssv/networkconfig"
+	slotticker "github.com/bloxapp/ssv/operator/slotticker"
 	gomock "github.com/golang/mock/gomock"
 	zap "go.uber.org/zap"
 )
@@ -49,6 +49,18 @@ func (mr *MockdutyHandlerMockRecorder) HandleDuties(arg0 interface{}) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleDuties", reflect.TypeOf((*MockdutyHandler)(nil).HandleDuties), arg0)
 }
 
+// HandleInitialDuties mocks base method.
+func (m *MockdutyHandler) HandleInitialDuties(arg0 context.Context) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "HandleInitialDuties", arg0)
+}
+
+// HandleInitialDuties indicates an expected call of HandleInitialDuties.
+func (mr *MockdutyHandlerMockRecorder) HandleInitialDuties(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleInitialDuties", reflect.TypeOf((*MockdutyHandler)(nil).HandleInitialDuties), arg0)
+}
+
 // Name mocks base method.
 func (m *MockdutyHandler) Name() string {
 	m.ctrl.T.Helper()
@@ -64,13 +76,13 @@ func (mr *MockdutyHandlerMockRecorder) Name() *gomock.Call {
 }
 
 // Setup mocks base method.
-func (m *MockdutyHandler) Setup(arg0 string, arg1 *zap.Logger, arg2 BeaconNode, arg3 networkconfig.NetworkConfig, arg4 ValidatorController, arg5 ExecuteDutiesFunc, arg6 chan phase0.Slot, arg7 chan ReorgEvent, arg8 chan struct{}) {
+func (m *MockdutyHandler) Setup(arg0 string, arg1 *zap.Logger, arg2 BeaconNode, arg3 ExecutionClient, arg4 networkconfig.NetworkConfig, arg5 ValidatorController, arg6 ExecuteDutiesFunc, arg7 slotticker.Provider, arg8 chan ReorgEvent, arg9 chan struct{}) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "Setup", arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8)
+	m.ctrl.Call(m, "Setup", arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9)
 }
 
 // Setup indicates an expected call of Setup.
-func (mr *MockdutyHandlerMockRecorder) Setup(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8 interface{}) *gomock.Call {
+func (mr *MockdutyHandlerMockRecorder) Setup(arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Setup", reflect.TypeOf((*MockdutyHandler)(nil).Setup), arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Setup", reflect.TypeOf((*MockdutyHandler)(nil).Setup), arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9)
 }

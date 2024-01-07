@@ -1,0 +1,182 @@
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: ssv-full-node-holesky-1
+  namespace: REPLACE_NAMESPACE
+spec:
+  hosts:
+  - "ws-ssv-full-node-holesky-1.REPLACE_DOMAIN_SUFFIX"
+  gateways:
+  - ssv-full-node-holesky-1
+  http:
+  - route:
+    - destination:
+        host: ssv-full-node-holesky-1
+        port:
+          number: 14021
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: ssv-full-node-holesky-1
+  namespace: REPLACE_NAMESPACE
+spec:
+  selector:
+    istio: ingressgateway-int
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "ws-ssv-full-node-holesky-1.REPLACE_DOMAIN_SUFFIX"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ssv-full-node-holesky-1
+  namespace: REPLACE_NAMESPACE
+  labels:
+    app: ssv-full-node-holesky-1
+spec:
+  type: ClusterIP
+  ports:
+    - port: 12021
+      protocol: UDP
+      targetPort: 12021
+      name: port-12021
+    - port: 13021
+      protocol: TCP
+      targetPort: 13021
+      name: port-13021
+    - port: 14021
+      protocol: TCP
+      targetPort: 14021
+      name: port-14021
+    - port: 15021
+      protocol: TCP
+      targetPort: 15021
+      name: port-15021
+    - port: 16021
+      protocol: TCP
+      targetPort: 16021
+      name: port-16021
+  selector:
+    app: ssv-full-node-holesky-1
+---
+apiVersion: REPLACE_API_VERSION
+kind: Deployment
+metadata:
+  labels:
+    app: ssv-full-node-holesky-1
+  name: ssv-full-node-holesky-1
+  namespace: REPLACE_NAMESPACE
+spec:
+  replicas: REPLACE_REPLICAS
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ssv-full-node-holesky-1
+  template:
+    metadata:
+      labels:
+        app: ssv-full-node-holesky-1
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/role
+                    operator: In
+                    values:
+                      - ssv-main
+                  - key: beta.kubernetes.io/instance-type
+                    operator: In
+                    values:
+                      - m5a.4xlarge
+      containers:
+      - name: ssv-full-node-holesky-1
+        image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG
+        imagePullPolicy: Always
+        resources:
+          limits:
+            cpu: REPLACE_EXPORTER_CPU_LIMIT
+            memory: REPLACE_EXPORTER_MEM_LIMIT
+        command: ["make", "start-node"]
+        ports:
+        - containerPort: 12021
+          name: port-12021
+          hostPort: 12021
+          protocol: UDP
+        - containerPort: 13021
+          name: port-13021
+          hostPort: 13021
+        - containerPort: 14021
+          name: port-14021
+          hostPort: 14021
+        - containerPort: 15021
+          name: port-15021
+          hostPort: 15021
+        - containerPort: 16021
+          name: port-16021
+          hostPort: 16021
+        env:
+          - name: SHARE_CONFIG
+            value: "./data/share.yaml"
+          - name: LOG_LEVEL
+            value: "debug"
+          - name: DB_REPORTING
+            value: "false"
+          - name: PUBSUB_TRACE
+            value: "false"
+          - name: DISCOVERY_TYPE_KEY
+            value: "discv5"
+          - name: DB_PATH
+            value: ./data/db-holesky
+          - name: NETWORK
+            value: holesky
+          - name: METRICS_API_PORT
+            value: "15021"
+          - name: SSV_API_PORT
+            value: "16021"
+          - name: ENABLE_PROFILE
+            value: "true"
+          - name: UDP_PORT
+            value: "12021"
+          - name: TCP_PORT
+            value: "13021"
+          - name: WS_API_PORT
+            value: "14021"
+          - name: FULLNODE
+            value: "true"
+          - name: EXPORTER
+            value: "true"
+          - name: MSG_WORKERS_COUNT
+            value: "1024"
+          - name: MSG_WORKER_BUFFER_SIZE
+            value: "2048"
+          - name: SUBNETS
+            value: "0xffffffffffffffffffffffffffffffff"
+          - name: P2P_MAX_PEERS
+            value: "300"
+        volumeMounts:
+        - mountPath: /data
+          name: ssv-full-node-holesky-1
+        - mountPath: /data/share.yaml
+          subPath: share.yaml
+          name: ssv-full-node-holesky-1-cm
+      volumes:
+      - name: ssv-full-node-holesky-1
+        persistentVolumeClaim:
+          claimName: ssv-full-node-holesky-1
+      - name: ssv-full-node-holesky-1-cm
+        configMap:
+          name: ssv-full-node-holesky-1-cm
+      tolerations:
+        - effect: NoSchedule
+          key: kubernetes.io/role
+          operator: Exists
+      hostNetwork: true

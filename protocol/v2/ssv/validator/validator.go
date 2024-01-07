@@ -13,6 +13,7 @@ import (
 
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/message/validation"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
@@ -39,24 +40,31 @@ type Validator struct {
 	dutyIDs *hashmap.Map[spectypes.BeaconRole, string]
 
 	state uint32
+
+	messageValidator validation.MessageValidator
 }
 
 // NewValidator creates a new instance of Validator.
 func NewValidator(pctx context.Context, cancel func(), options Options) *Validator {
 	options.defaults()
 
+	if options.Metrics == nil {
+		options.Metrics = &NopMetrics{}
+	}
+
 	v := &Validator{
-		mtx:         &sync.RWMutex{},
-		ctx:         pctx,
-		cancel:      cancel,
-		DutyRunners: options.DutyRunners,
-		Network:     options.Network,
-		Storage:     options.Storage,
-		Share:       options.SSVShare,
-		Signer:      options.Signer,
-		Queues:      make(map[spectypes.BeaconRole]queueContainer),
-		state:       uint32(NotStarted),
-		dutyIDs:     hashmap.New[spectypes.BeaconRole, string](),
+		mtx:              &sync.RWMutex{},
+		ctx:              pctx,
+		cancel:           cancel,
+		DutyRunners:      options.DutyRunners,
+		Network:          options.Network,
+		Storage:          options.Storage,
+		Share:            options.SSVShare,
+		Signer:           options.Signer,
+		Queues:           make(map[spectypes.BeaconRole]queueContainer),
+		state:            uint32(NotStarted),
+		dutyIDs:          hashmap.New[spectypes.BeaconRole, string](),
+		messageValidator: options.MessageValidator,
 	}
 
 	for _, dutyRunner := range options.DutyRunners {
@@ -65,10 +73,9 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 
 		// Setup the queue.
 		role := dutyRunner.GetBaseRunner().BeaconRoleType
-		msgID := spectypes.NewMsgID(types.GetDefaultDomain(), options.SSVShare.ValidatorPubKey, role).String()
 
 		v.Queues[role] = queueContainer{
-			Q: queue.WithMetrics(queue.New(options.QueueSize), queue.NewPrometheusMetrics(msgID)),
+			Q: queue.WithMetrics(queue.New(options.QueueSize), options.Metrics),
 			queueState: &queue.State{
 				HasRunningInstance: false,
 				Height:             0,
@@ -111,7 +118,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 		return fmt.Errorf("could not get duty runner for msg ID %v", messageID)
 	}
 
-	if err := validateMessage(v.Share.Share, msg.SSVMessage); err != nil {
+	if err := validateMessage(v.Share.Share, msg); err != nil {
 		return fmt.Errorf("message invalid for msg ID %v: %w", messageID, err)
 	}
 
@@ -143,7 +150,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 	}
 }
 
-func validateMessage(share spectypes.Share, msg *spectypes.SSVMessage) error {
+func validateMessage(share spectypes.Share, msg *queue.DecodedSSVMessage) error {
 	if !share.ValidatorPubKey.MessageIDBelongs(msg.GetID()) {
 		return errors.New("msg ID doesn't match validator ID")
 	}

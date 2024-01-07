@@ -12,10 +12,11 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/ekm"
 	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/operator/duties"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -39,10 +40,10 @@ var (
 
 func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.ContractOperatorAdded) error {
 	logger := eh.logger.With(
-		zap.String("event_type", OperatorAdded),
+		fields.EventName(OperatorAdded),
 		fields.TxHash(event.Raw.TxHash),
 		fields.OperatorID(event.OperatorId),
-		zap.String("owner_address", event.Owner.String()),
+		fields.Owner(event.Owner),
 		fields.OperatorPubKey(event.PublicKey),
 	)
 	logger.Debug("processing event")
@@ -85,7 +86,7 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 
 func (eh *EventHandler) handleOperatorRemoved(txn basedb.Txn, event *contract.ContractOperatorRemoved) error {
 	logger := eh.logger.With(
-		zap.String("event_type", OperatorRemoved),
+		fields.EventName(OperatorRemoved),
 		fields.TxHash(event.Raw.TxHash),
 		fields.OperatorID(event.OperatorId),
 	)
@@ -101,8 +102,8 @@ func (eh *EventHandler) handleOperatorRemoved(txn basedb.Txn, event *contract.Co
 	}
 
 	logger = logger.With(
-		zap.String("operator_pub_key", ethcommon.Bytes2Hex(od.PublicKey)),
-		zap.String("owner_address", od.OwnerAddress.String()),
+		fields.OperatorPubKey(od.PublicKey),
+		fields.Owner(od.OwnerAddress),
 	)
 
 	// TODO: In original handler we didn't delete operator data, so this behavior was preserved. However we likely need to.
@@ -124,10 +125,10 @@ func (eh *EventHandler) handleOperatorRemoved(txn basedb.Txn, event *contract.Co
 
 func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.ContractValidatorAdded) (ownShare *ssvtypes.SSVShare, err error) {
 	logger := eh.logger.With(
-		zap.String("event_type", ValidatorAdded),
+		fields.EventName(ValidatorAdded),
 		fields.TxHash(event.Raw.TxHash),
 		fields.Owner(event.Owner),
-		zap.Uint64s("operator_ids", event.OperatorIds),
+		fields.OperatorIDs(event.OperatorIds),
 		fields.Validator(event.PublicKey),
 	)
 
@@ -225,7 +226,7 @@ func (eh *EventHandler) handleShareCreation(
 	sharePublicKeys [][]byte,
 	encryptedKeys [][]byte,
 ) (*ssvtypes.SSVShare, error) {
-	share, shareSecret, err := validatorAddedEventToShare(
+	share, shareSecret, err := eh.validatorAddedEventToShare(
 		validatorEvent,
 		eh.shareEncryptionKeyProvider,
 		eh.operatorData.GetOperatorData(),
@@ -255,7 +256,7 @@ func (eh *EventHandler) handleShareCreation(
 	return share, nil
 }
 
-func validatorAddedEventToShare(
+func (eh *EventHandler) validatorAddedEventToShare(
 	event *contract.ContractValidatorAdded,
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider,
 	operatorData *registrystorage.OperatorData,
@@ -317,19 +318,19 @@ func validatorAddedEventToShare(
 	}
 
 	validatorShare.Quorum, validatorShare.PartialQuorum = ssvtypes.ComputeQuorumAndPartialQuorum(len(committee))
-	validatorShare.DomainType = ssvtypes.GetDefaultDomain()
+	validatorShare.DomainType = eh.networkConfig.Domain
 	validatorShare.Committee = committee
 	validatorShare.Graffiti = []byte("ssv.network")
 
 	return &validatorShare, shareSecret, nil
 }
 
-func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.ContractValidatorRemoved) ([]byte, error) {
+func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.ContractValidatorRemoved) (spectypes.ValidatorPK, error) {
 	logger := eh.logger.With(
-		zap.String("event_type", ValidatorRemoved),
+		fields.EventName(ValidatorRemoved),
 		fields.TxHash(event.Raw.TxHash),
-		zap.String("owner_address", event.Owner.String()),
-		zap.Uint64s("operator_ids", event.OperatorIds),
+		fields.Owner(event.Owner),
+		fields.OperatorIDs(event.OperatorIds),
 		fields.PubKey(event.PublicKey),
 	)
 	logger.Debug("processing event")
@@ -355,7 +356,7 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 	}
 
 	removeDecidedMessages := func(role spectypes.BeaconRole, store qbftstorage.QBFTStore) error {
-		messageID := spectypes.NewMsgID(types.GetDefaultDomain(), share.ValidatorPubKey, role)
+		messageID := spectypes.NewMsgID(eh.networkConfig.Domain, share.ValidatorPubKey, role)
 		return store.CleanAllInstances(logger, messageID[:])
 	}
 	err := eh.storageMap.Each(removeDecidedMessages)
@@ -372,6 +373,11 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 		logger = logger.With(zap.String("validator_pubkey", hex.EncodeToString(share.ValidatorPubKey)))
 	}
 	if isOperatorShare {
+		err = eh.keyManager.RemoveShare(hex.EncodeToString(share.SharePubKey))
+		if err != nil {
+			return nil, fmt.Errorf("could not remove share from ekm storage: %w", err)
+		}
+
 		eh.metrics.ValidatorRemoved(event.PublicKey)
 		logger.Debug("processed event")
 		return share.ValidatorPubKey, nil
@@ -383,10 +389,10 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 
 func (eh *EventHandler) handleClusterLiquidated(txn basedb.Txn, event *contract.ContractClusterLiquidated) ([]*ssvtypes.SSVShare, error) {
 	logger := eh.logger.With(
-		zap.String("event_type", ClusterLiquidated),
+		fields.EventName(ClusterLiquidated),
 		fields.TxHash(event.Raw.TxHash),
-		zap.String("owner_address", event.Owner.String()),
-		zap.Uint64s("operator_ids", event.OperatorIds),
+		fields.Owner(event.Owner),
+		fields.OperatorIDs(event.OperatorIds),
 	)
 	logger.Debug("processing event")
 
@@ -405,16 +411,23 @@ func (eh *EventHandler) handleClusterLiquidated(txn basedb.Txn, event *contract.
 
 func (eh *EventHandler) handleClusterReactivated(txn basedb.Txn, event *contract.ContractClusterReactivated) ([]*ssvtypes.SSVShare, error) {
 	logger := eh.logger.With(
-		zap.String("event_type", ClusterReactivated),
+		fields.EventName(ClusterReactivated),
 		fields.TxHash(event.Raw.TxHash),
-		zap.String("owner_address", event.Owner.String()),
-		zap.Uint64s("operator_ids", event.OperatorIds),
+		fields.Owner(event.Owner),
+		fields.OperatorIDs(event.OperatorIds),
 	)
 	logger.Debug("processing event")
 
 	toReactivate, enabledPubKeys, err := eh.processClusterEvent(txn, event.Owner, event.OperatorIds, false)
 	if err != nil {
 		return nil, fmt.Errorf("could not process cluster event: %w", err)
+	}
+
+	// bump slashing protection for operator reactivated validators
+	for _, share := range toReactivate {
+		if err := eh.keyManager.(ekm.StorageProvider).BumpSlashingProtection(share.SharePubKey); err != nil {
+			return nil, fmt.Errorf("could not bump slashing protection: %w", err)
+		}
 	}
 
 	if len(enabledPubKeys) > 0 {
@@ -427,9 +440,9 @@ func (eh *EventHandler) handleClusterReactivated(txn basedb.Txn, event *contract
 
 func (eh *EventHandler) handleFeeRecipientAddressUpdated(txn basedb.Txn, event *contract.ContractFeeRecipientAddressUpdated) (bool, error) {
 	logger := eh.logger.With(
-		zap.String("event_type", FeeRecipientAddressUpdated),
+		fields.EventName(FeeRecipientAddressUpdated),
 		fields.TxHash(event.Raw.TxHash),
-		zap.String("owner_address", event.Owner.String()),
+		fields.Owner(event.Owner),
 		fields.FeeRecipient(event.RecipientAddress.Bytes()),
 	)
 	logger.Debug("processing event")
@@ -454,6 +467,50 @@ func (eh *EventHandler) handleFeeRecipientAddressUpdated(txn basedb.Txn, event *
 
 	logger.Debug("processed event")
 	return r != nil, nil
+}
+
+func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.ContractValidatorExited) (*duties.ExitDescriptor, error) {
+	logger := eh.logger.With(
+		fields.EventName(ValidatorExited),
+		fields.TxHash(event.Raw.TxHash),
+		fields.PubKey(event.PublicKey),
+		fields.OperatorIDs(event.OperatorIds),
+	)
+	logger.Debug("processing event")
+	defer logger.Debug("processed event")
+
+	share := eh.nodeStorage.Shares().Get(txn, event.PublicKey)
+	if share == nil {
+		logger.Warn("malformed event: could not find validator share")
+		return nil, &MalformedEventError{Err: ErrValidatorShareNotFound}
+	}
+
+	if event.Owner != share.OwnerAddress {
+		logger.Warn("malformed event: validator share already exists with different owner address",
+			zap.String("expected", share.OwnerAddress.String()),
+			zap.String("got", event.Owner.String()))
+
+		return nil, &MalformedEventError{Err: ErrShareBelongsToDifferentOwner}
+	}
+
+	if !share.BelongsToOperator(eh.operatorData.GetOperatorData().ID) {
+		return nil, nil
+	}
+
+	if share.BeaconMetadata == nil {
+		return nil, nil
+	}
+
+	pk := phase0.BLSPubKey{}
+	copy(pk[:], share.ValidatorPubKey)
+
+	ed := &duties.ExitDescriptor{
+		PubKey:         pk,
+		ValidatorIndex: share.BeaconMetadata.Index,
+		BlockNumber:    event.Raw.BlockNumber,
+	}
+
+	return ed, nil
 }
 
 func splitBytes(buf []byte, lim int) [][]byte {

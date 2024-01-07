@@ -9,6 +9,7 @@ import (
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	qbftcontroller "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
@@ -21,9 +22,10 @@ type NonCommitteeValidator struct {
 func NewNonCommitteeValidator(logger *zap.Logger, identifier spectypes.MessageID, opts Options) *NonCommitteeValidator {
 	// currently, only need domain & storage
 	config := &qbft.Config{
-		Domain:  types.GetDefaultDomain(),
-		Storage: opts.Storage.Get(identifier.GetRoleType()),
-		Network: opts.Network,
+		Domain:                types.GetDefaultDomain(),
+		Storage:               opts.Storage.Get(identifier.GetRoleType()),
+		Network:               opts.Network,
+		SignatureVerification: true,
 	}
 	ctrl := qbftcontroller.NewController(identifier[:], &opts.SSVShare.Share, types.GetDefaultDomain(), config, opts.FullNode)
 	ctrl.StoredInstances = make(qbftcontroller.InstanceContainer, 0, nonCommitteeInstanceContainerCapacity(opts.FullNode))
@@ -39,7 +41,7 @@ func NewNonCommitteeValidator(logger *zap.Logger, identifier spectypes.MessageID
 	}
 }
 
-func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *spectypes.SSVMessage) {
+func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage) {
 	logger = logger.With(fields.PubKey(msg.MsgID.GetPubKey()), fields.Role(msg.MsgID.GetRoleType()))
 
 	if err := validateMessage(ncv.Share.Share, msg); err != nil {

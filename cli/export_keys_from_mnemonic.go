@@ -19,7 +19,7 @@ var exportKeysCmd = &cobra.Command{
 	Use:   "export-keys",
 	Short: "exports private/public keys based on given mnemonic",
 	Run: func(cmd *cobra.Command, args []string) {
-		if err := logging.SetGlobalLogger("dpanic", "capital", "console", ""); err != nil {
+		if err := logging.SetGlobalLogger("dpanic", "capital", "console", nil); err != nil {
 			log.Fatal(err)
 		}
 

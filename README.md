@@ -39,12 +39,15 @@ to run validators in a decentralized and trustless way.
 * [Security proof for n-t honest parties](https://notes.ethereum.org/DYU-NrRBTxS3X0fu_MidnA)
 * [MEV Research - Block proposer/ builder separation in SSV](https://hackmd.io/DHt98PC_S_60NbnW4Wgssg)
 
+### Audits
+- [Least Authority](/audits/Least%20Authority.pdf) (August 2023)
 
 ## Getting Started
 
 The following documents contain instructions and information on how to get started:
 * [Operator Node Installation](https://docs.ssv.network/run-a-node/operator-node/installation)
 * [Developers' Guide](./docs/DEV_GUIDE.md)
+* [SSV API Docs](https://bloxapp.github.io/ssv/)
 
 ## Contribution
 

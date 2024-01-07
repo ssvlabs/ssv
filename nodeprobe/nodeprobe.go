@@ -8,38 +8,38 @@ import (
 	"time"
 
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/logging/fields"
 )
 
 const (
-	probeInterval = 1 * time.Minute
+	probeInterval = 24 * time.Second
 )
 
-type StatusChecker interface {
-	IsReady(ctx context.Context) (bool, error)
+type Node interface {
+	Healthy(ctx context.Context) error
 }
 
 type Prober struct {
-	logger         *zap.Logger
-	interval       time.Duration
-	nodes          []StatusChecker
-	ready          atomic.Bool
-	cond           *sync.Cond
-	unreadyHandler atomic.Pointer[func()]
+	logger           *zap.Logger
+	interval         time.Duration
+	nodes            map[string]Node
+	nodesMu          sync.Mutex
+	healthy          atomic.Bool
+	cond             *sync.Cond
+	unhealthyHandler func()
 }
 
-func NewProber(logger *zap.Logger, nodes ...StatusChecker) *Prober {
+func NewProber(logger *zap.Logger, unhealthyHandler func(), nodes map[string]Node) *Prober {
 	return &Prober{
-		logger:   logger,
-		interval: probeInterval,
-		nodes:    nodes,
-		cond:     sync.NewCond(&sync.Mutex{}),
+		logger:           logger,
+		unhealthyHandler: unhealthyHandler,
+		interval:         probeInterval,
+		nodes:            nodes,
+		cond:             sync.NewCond(&sync.Mutex{}),
 	}
 }
 
-func (p *Prober) IsReady(context.Context) (bool, error) {
-	return p.ready.Load(), nil
+func (p *Prober) Healthy(context.Context) (bool, error) {
+	return p.healthy.Load(), nil
 }
 
 func (p *Prober) Start(ctx context.Context) {
@@ -71,50 +71,47 @@ func (p *Prober) probe(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, p.interval)
 	defer cancel()
 
-	var allNodesReady atomic.Bool
-	allNodesReady.Store(true)
+	var healthy atomic.Bool
+	healthy.Store(true)
 	var wg sync.WaitGroup
-	for _, node := range p.nodes {
+	p.nodesMu.Lock()
+	for name, node := range p.nodes {
 		wg.Add(1)
-		go func(node StatusChecker) {
+		go func(name string, node Node) {
 			defer wg.Done()
 
-			var ready bool
 			var err error
 			defer func() {
 				// Catch panics.
 				if e := recover(); e != nil {
 					err = fmt.Errorf("panic: %v", e)
 				}
-				if err != nil || !ready {
+				if err != nil {
 					// Update readiness and quit early.
-					allNodesReady.Store(false)
+					healthy.Store(false)
 					cancel()
 				}
 			}()
 
-			logger := p.logger.With(fields.Type(node))
-
-			ready, err = node.IsReady(ctx)
+			err = node.Healthy(ctx)
 			if err != nil {
-				logger.Error("failed to check if node is ready", zap.Error(err))
-			} else if !ready {
-				logger.Error("node is not ready")
+				p.logger.Error("node is not healthy", zap.String("node", name), zap.Error(err))
 			}
-		}(node)
+		}(name, node)
 	}
+	p.nodesMu.Unlock()
 	wg.Wait()
 
 	// Update readiness.
 	p.cond.L.Lock()
 	defer p.cond.L.Unlock()
 
-	p.ready.Store(allNodesReady.Load())
+	p.healthy.Store(healthy.Load())
 
-	if !p.ready.Load() {
-		p.logger.Error("not all nodes are ready")
-		if h := p.unreadyHandler.Load(); h != nil {
-			(*h)()
+	if !p.healthy.Load() {
+		p.logger.Error("not all nodes are healthy")
+		if h := p.unhealthyHandler; h != nil {
+			h()
 		}
 		return
 	}
@@ -123,16 +120,45 @@ func (p *Prober) probe(ctx context.Context) {
 }
 
 func (p *Prober) Wait() {
-	p.logger.Info("waiting until nodes are ready")
+	p.logger.Info("waiting until nodes are healthy")
 
 	p.cond.L.Lock()
 	defer p.cond.L.Unlock()
 
-	for !p.ready.Load() {
+	for !p.healthy.Load() {
 		p.cond.Wait()
 	}
 }
 
-func (p *Prober) SetUnreadyHandler(h func()) {
-	p.unreadyHandler.Store(&h)
+func (p *Prober) AddNode(name string, node Node) {
+	p.nodesMu.Lock()
+	defer p.nodesMu.Unlock()
+
+	p.nodes[name] = node
+}
+
+// TODO: string constants are error-prone.
+// Add a method to clients that returns their name or solve this in another way
+func (p *Prober) CheckBeaconNodeHealth(ctx context.Context) error {
+	p.nodesMu.Lock()
+	defer p.nodesMu.Unlock()
+	ctx, cancel := context.WithTimeout(ctx, p.interval)
+	defer cancel()
+	return p.nodes["consensus client"].Healthy(ctx)
+}
+
+func (p *Prober) CheckExecutionNodeHealth(ctx context.Context) error {
+	p.nodesMu.Lock()
+	defer p.nodesMu.Unlock()
+	ctx, cancel := context.WithTimeout(ctx, p.interval)
+	defer cancel()
+	return p.nodes["execution client"].Healthy(ctx)
+}
+
+func (p *Prober) CheckEventSyncerHealth(ctx context.Context) error {
+	p.nodesMu.Lock()
+	defer p.nodesMu.Unlock()
+	ctx, cancel := context.WithTimeout(ctx, p.interval)
+	defer cancel()
+	return p.nodes["event syncer"].Healthy(ctx)
 }

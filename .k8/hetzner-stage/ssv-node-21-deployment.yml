@@ -1,0 +1,134 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ssv-node-21-svc
+  namespace: REPLACE_NAMESPACE
+  labels:
+    app: ssv-node-21
+    prometheus/app: ssv-node
+spec:
+  type: ClusterIP
+  ports:
+    - port: 12021
+      protocol: UDP
+      targetPort: 12021
+      name: port-12021
+    - port: 13021
+      protocol: TCP
+      targetPort: 13021
+      name: port-13021
+    - port: 15021
+      protocol: TCP
+      targetPort: 15021
+      name: metrics
+    - port: 16021
+      protocol: TCP
+      targetPort: 16021
+      name: port-16021
+  selector:
+    app: ssv-node-21
+---
+apiVersion: REPLACE_API_VERSION
+kind: Deployment
+metadata:
+  labels:
+    app: ssv-node-21
+  name: ssv-node-21
+  namespace: REPLACE_NAMESPACE
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ssv-node-21
+  template:
+    metadata:
+      labels:
+        app: ssv-node-21
+    spec:
+      containers:
+        - name: ssv-node-21
+          image: REPLACE_DOCKER_REPO:REPLACE_IMAGETAG
+          #image: mosheblox/ssv-preview:stage
+          imagePullPolicy: Always
+          resources:
+            limits:
+              cpu: REPLACE_NODES_CPU_LIMIT
+              memory: REPLACE_NODES_MEM_LIMIT
+          command: ["make", "start-node"]
+          ports:
+            - containerPort: 12021
+              name: port-12021
+              protocol: UDP
+              hostPort: 12021
+            - containerPort: 13021
+              name: port-13021
+              hostPort: 13021
+            - containerPort: 15021
+              name: port-15021
+              hostPort: 15021
+            - containerPort: 16021
+              name: port-16021
+              hostPort: 16021
+          env:
+            - name: SHARE_CONFIG
+              value: "./data/share.yaml"
+            - name: CONFIG_PATH
+              valueFrom:
+                secretKeyRef:
+                  name: config-secrets
+                  key: config_path
+            - name: ABI_VERSION
+              valueFrom:
+                secretKeyRef:
+                  name: config-secrets
+                  key: abi_version
+                  optional: true
+            - name: LOG_LEVEL
+              value: "debug"
+            - name: DEBUG_SERVICES
+              value: "ssv/*."
+            - name: DISCOVERY_TYPE_KEY
+              value: "discv5"
+            - name: CONSENSUS_TYPE
+              value: "validation"
+            - name: HOST_DNS
+              value: ""
+            - name: HOST_ADDRESS
+              value: ""
+            - name: DB_PATH
+              value: "./data/db-holesky-stage"
+            - name: NETWORK
+              value: "holesky-stage"
+            - name: DB_REPORTING
+              value: "false"
+            - name: METRICS_API_PORT
+              value: "15021"
+            - name: SSV_API_PORT
+              value: "16021"
+            - name: ENABLE_PROFILE
+              value: "true"
+            - name: DISCOVERY_TRACE
+              value: 'false'
+            - name: PUBSUB_TRACE
+              value: 'false'
+            - name: BUILDER_PROPOSALS
+              value: "false"
+          volumeMounts:
+            - mountPath: /data
+              name: ssv-node-21
+            - mountPath: /data/share.yaml
+              subPath: share.yaml
+              name: ssv-node-21-cm
+      imagePullSecrets:
+        - name: ecr-repo
+      volumes:
+        - name: ssv-node-21
+          persistentVolumeClaim:
+            claimName: ssv-node-21
+        - name: ssv-node-21-cm
+          configMap:
+            name: ssv-node-21-cm
+      hostNetwork: true

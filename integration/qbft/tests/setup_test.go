@@ -34,7 +34,7 @@ func GetSharedData(t *testing.T) SharedData { //singleton B-)
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
-	if err := logging.SetGlobalLogger("debug", "capital", "console", ""); err != nil {
+	if err := logging.SetGlobalLogger("debug", "capital", "console", nil); err != nil {
 		panic(err)
 	}
 
@@ -42,7 +42,11 @@ func TestMain(m *testing.M) {
 
 	types.SetDefaultDomain(testingutils.TestingSSVDomainType)
 
-	ln, err := p2pv1.CreateAndStartLocalNet(ctx, logger, maxSupportedCommittee, maxSupportedQuorum, false)
+	ln, err := p2pv1.CreateAndStartLocalNet(ctx, logger, p2pv1.LocalNetOptions{
+		Nodes:        maxSupportedCommittee,
+		MinConnected: maxSupportedQuorum,
+		UseDiscv5:    false,
+	})
 	if err != nil {
 		logger.Fatal("error creating and start local net", zap.Error(err))
 		return

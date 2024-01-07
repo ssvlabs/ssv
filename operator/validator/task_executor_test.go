@@ -60,12 +60,12 @@ func TestController_LiquidateCluster(t *testing.T) {
 	controllerOptions := MockControllerOptions{
 		beacon:              bc,
 		network:             network,
-		metrics:             nopMetrics{},
 		operatorData:        operatorData,
 		sharesStorage:       sharesStorage,
 		recipientsStorage:   recipientStorage,
 		validatorsMap:       mockValidatorsMap,
-		validatorOptions:    &validator.Options{},
+		validatorOptions:    validator.Options{},
+		metrics:             validator.NopMetrics{},
 		metadataLastUpdated: map[string]time.Time{},
 	}
 	ctr := setupController(logger, controllerOptions)
@@ -127,12 +127,12 @@ func TestController_StopValidator(t *testing.T) {
 	controllerOptions := MockControllerOptions{
 		beacon:              bc,
 		network:             network,
-		metrics:             nopMetrics{},
 		operatorData:        operatorData,
 		sharesStorage:       sharesStorage,
 		recipientsStorage:   recipientStorage,
 		validatorsMap:       mockValidatorsMap,
-		validatorOptions:    &validator.Options{},
+		validatorOptions:    validator.Options{},
+		metrics:             validator.NopMetrics{},
 		metadataLastUpdated: map[string]time.Time{},
 		keyManager:          km,
 	}
@@ -192,12 +192,12 @@ func TestController_ReactivateCluster(t *testing.T) {
 	controllerOptions := MockControllerOptions{
 		beacon:              bc,
 		network:             network,
-		metrics:             nopMetrics{},
 		operatorData:        operatorData,
 		sharesStorage:       sharesStorage,
 		recipientsStorage:   recipientStorage,
 		validatorsMap:       mockValidatorsMap,
-		validatorOptions:    &validator.Options{},
+		validatorOptions:    validator.Options{},
+		metrics:             validator.NopMetrics{},
 		metadataLastUpdated: map[string]time.Time{},
 		keyManager:          km,
 	}

@@ -1,14 +1,12 @@
 package queue
 
 import (
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
 // Metrics records metrics about the Queue.
 type Metrics interface {
-	// Dropped increments the number of messages dropped from the Queue.
-	Dropped()
+	DroppedQueueMessage(messageID spectypes.MessageID)
 }
 
 type queueWithMetrics struct {
@@ -27,35 +25,8 @@ func WithMetrics(q Queue, metrics Metrics) Queue {
 func (q *queueWithMetrics) TryPush(msg *DecodedSSVMessage) bool {
 	pushed := q.Queue.TryPush(msg)
 	if !pushed {
-		q.metrics.Dropped()
+		q.metrics.DroppedQueueMessage(msg.GetID())
 	}
+
 	return pushed
-}
-
-// TODO: move to metrics/prometheus package
-type prometheusMetrics struct {
-	dropped prometheus.Counter
-}
-
-// NewPrometheusMetrics returns a Prometheus implementation of Metrics.
-func NewPrometheusMetrics(messageID string) Metrics {
-	return &prometheusMetrics{
-		dropped: metricMessageDropped.WithLabelValues(messageID),
-	}
-}
-
-func (m *prometheusMetrics) Dropped() {
-	m.dropped.Inc()
-}
-
-// Register Prometheus metrics.
-var (
-	metricMessageDropped = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv:ibft:msgq:drops",
-		Help: "The amount of message dropped from the validator's msg queue",
-	}, []string{"msg_id"})
-)
-
-func init() {
-	_ = prometheus.Register(metricMessageDropped)
 }

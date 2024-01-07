@@ -2,7 +2,6 @@ package spectest
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"reflect"
 	"strings"
@@ -19,7 +18,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging"
-
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
@@ -41,105 +39,130 @@ func TestSSVMapping(t *testing.T) {
 		panic(err.Error())
 	}
 
-	origDomain := types.GetDefaultDomain()
 	types.SetDefaultDomain(testingutils.TestingSSVDomainType)
-	defer func() {
-		types.SetDefaultDomain(origDomain)
-	}()
 
 	for name, test := range untypedTests {
 		name, test := name, test
-
-		testName := strings.Split(name, "_")[1]
-		testType := strings.Split(name, "_")[0]
-
-		fmt.Printf("--------- %s - %s \n", testType, testName)
-
-		switch testType {
-		case reflect.TypeOf(&tests.MsgProcessingSpecTest{}).String():
-			byts, err := json.Marshal(test)
-			require.NoError(t, err)
-			typedTest := &MsgProcessingSpecTest{
-				Runner: &runner.AttesterRunner{},
-			}
-			// TODO fix blinded test
-			if strings.Contains(testName, "propose regular decide blinded") || strings.Contains(testName, "propose blinded decide regular") {
-				continue
-			}
-			require.NoError(t, json.Unmarshal(byts, &typedTest))
-
-			t.Run(typedTest.TestName(), func(t *testing.T) {
-				RunMsgProcessing(t, typedTest)
+		r := prepareTest(t, logger, name, test)
+		if r != nil {
+			t.Run(r.name, func(t *testing.T) {
+				t.Parallel()
+				r.test(t)
 			})
-		case reflect.TypeOf(&tests.MultiMsgProcessingSpecTest{}).String():
-			subtests := test.(map[string]interface{})["Tests"].([]interface{})
-			typedTests := make([]*MsgProcessingSpecTest, 0)
-			for _, subtest := range subtests {
-				typedTests = append(typedTests, msgProcessingSpecTestFromMap(t, subtest.(map[string]interface{})))
-			}
-
-			typedTest := &MultiMsgProcessingSpecTest{
-				Name:  test.(map[string]interface{})["Name"].(string),
-				Tests: typedTests,
-			}
-
-			t.Run(typedTest.TestName(), func(t *testing.T) {
-				typedTest.Run(t)
-			})
-		case reflect.TypeOf(&messages.MsgSpecTest{}).String(): // no use of internal structs so can run as spec test runs
-			byts, err := json.Marshal(test)
-			require.NoError(t, err)
-			typedTest := &messages.MsgSpecTest{}
-			require.NoError(t, json.Unmarshal(byts, &typedTest))
-
-			t.Run(typedTest.TestName(), func(t *testing.T) {
-				typedTest.Run(t)
-			})
-		case reflect.TypeOf(&valcheck.SpecTest{}).String(): // no use of internal structs so can run as spec test runs TODO: need to use internal signer
-			byts, err := json.Marshal(test)
-			require.NoError(t, err)
-			typedTest := &valcheck.SpecTest{}
-			require.NoError(t, json.Unmarshal(byts, &typedTest))
-
-			t.Run(typedTest.TestName(), func(t *testing.T) {
-				typedTest.Run(t)
-			})
-		case reflect.TypeOf(&valcheck.MultiSpecTest{}).String(): // no use of internal structs so can run as spec test runs TODO: need to use internal signer
-			byts, err := json.Marshal(test)
-			require.NoError(t, err)
-			typedTest := &valcheck.MultiSpecTest{}
-			require.NoError(t, json.Unmarshal(byts, &typedTest))
-
-			t.Run(typedTest.TestName(), func(t *testing.T) {
-				typedTest.Run(t)
-			})
-		case reflect.TypeOf(&synccommitteeaggregator.SyncCommitteeAggregatorProofSpecTest{}).String(): // no use of internal structs so can run as spec test runs TODO: need to use internal signer
-			byts, err := json.Marshal(test)
-			require.NoError(t, err)
-			typedTest := &synccommitteeaggregator.SyncCommitteeAggregatorProofSpecTest{}
-			require.NoError(t, json.Unmarshal(byts, &typedTest))
-
-			t.Run(typedTest.TestName(), func(t *testing.T) {
-				RunSyncCommitteeAggProof(t, typedTest)
-			})
-		case reflect.TypeOf(&newduty.MultiStartNewRunnerDutySpecTest{}).String():
-			subtests := test.(map[string]interface{})["Tests"].([]interface{})
-			typedTests := make([]*StartNewRunnerDutySpecTest, 0)
-			for _, subtest := range subtests {
-				typedTests = append(typedTests, newRunnerDutySpecTestFromMap(t, subtest.(map[string]interface{})))
-			}
-
-			typedTest := &MultiStartNewRunnerDutySpecTest{
-				Name:  test.(map[string]interface{})["Name"].(string),
-				Tests: typedTests,
-			}
-
-			t.Run(typedTest.TestName(), func(t *testing.T) {
-				typedTest.Run(t, logger)
-			})
-		default:
-			t.Fatalf("unsupported test type %s [%s]", testType, testName)
 		}
+	}
+}
+
+type runnable struct {
+	name string
+	test func(t *testing.T)
+}
+
+func prepareTest(t *testing.T, logger *zap.Logger, name string, test interface{}) *runnable {
+	testName := strings.Split(name, "_")[1]
+	testType := strings.Split(name, "_")[0]
+
+	switch testType {
+	case reflect.TypeOf(&tests.MsgProcessingSpecTest{}).String():
+		byts, err := json.Marshal(test)
+		require.NoError(t, err)
+		typedTest := &MsgProcessingSpecTest{
+			Runner: &runner.AttesterRunner{},
+		}
+		// TODO: fix blinded test
+		if strings.Contains(testName, "propose regular decide blinded") || strings.Contains(testName, "propose blinded decide regular") {
+			logger.Info("skipping blinded block test", zap.String("test", testName))
+			return nil
+		}
+		require.NoError(t, json.Unmarshal(byts, &typedTest))
+
+		return &runnable{
+			name: typedTest.TestName(),
+			test: func(t *testing.T) {
+				RunMsgProcessing(t, typedTest)
+			},
+		}
+	case reflect.TypeOf(&tests.MultiMsgProcessingSpecTest{}).String():
+		typedTest := &MultiMsgProcessingSpecTest{
+			Name: test.(map[string]interface{})["Name"].(string),
+		}
+		subtests := test.(map[string]interface{})["Tests"].([]interface{})
+		for _, subtest := range subtests {
+			typedTest.Tests = append(typedTest.Tests, msgProcessingSpecTestFromMap(t, subtest.(map[string]interface{})))
+		}
+
+		return &runnable{
+			name: typedTest.TestName(),
+			test: func(t *testing.T) {
+				typedTest.Run(t)
+			},
+		}
+	case reflect.TypeOf(&messages.MsgSpecTest{}).String(): // no use of internal structs so can run as spec test runs
+		byts, err := json.Marshal(test)
+		require.NoError(t, err)
+		typedTest := &messages.MsgSpecTest{}
+		require.NoError(t, json.Unmarshal(byts, &typedTest))
+
+		return &runnable{
+			name: typedTest.TestName(),
+			test: func(t *testing.T) {
+				typedTest.Run(t)
+			},
+		}
+	case reflect.TypeOf(&valcheck.SpecTest{}).String(): // no use of internal structs so can run as spec test runs TODO: need to use internal signer
+		byts, err := json.Marshal(test)
+		require.NoError(t, err)
+		typedTest := &valcheck.SpecTest{}
+		require.NoError(t, json.Unmarshal(byts, &typedTest))
+
+		return &runnable{
+			name: typedTest.TestName(),
+			test: func(t *testing.T) {
+				typedTest.Run(t)
+			},
+		}
+	case reflect.TypeOf(&valcheck.MultiSpecTest{}).String(): // no use of internal structs so can run as spec test runs TODO: need to use internal signer
+		byts, err := json.Marshal(test)
+		require.NoError(t, err)
+		typedTest := &valcheck.MultiSpecTest{}
+		require.NoError(t, json.Unmarshal(byts, &typedTest))
+
+		return &runnable{
+			name: typedTest.TestName(),
+			test: func(t *testing.T) {
+				typedTest.Run(t)
+			},
+		}
+	case reflect.TypeOf(&synccommitteeaggregator.SyncCommitteeAggregatorProofSpecTest{}).String(): // no use of internal structs so can run as spec test runs TODO: need to use internal signer
+		byts, err := json.Marshal(test)
+		require.NoError(t, err)
+		typedTest := &synccommitteeaggregator.SyncCommitteeAggregatorProofSpecTest{}
+		require.NoError(t, json.Unmarshal(byts, &typedTest))
+
+		return &runnable{
+			name: typedTest.TestName(),
+			test: func(t *testing.T) {
+				RunSyncCommitteeAggProof(t, typedTest)
+			},
+		}
+	case reflect.TypeOf(&newduty.MultiStartNewRunnerDutySpecTest{}).String():
+		typedTest := &MultiStartNewRunnerDutySpecTest{
+			Name: test.(map[string]interface{})["Name"].(string),
+		}
+
+		return &runnable{
+			name: typedTest.TestName(),
+			test: func(t *testing.T) {
+				subtests := test.(map[string]interface{})["Tests"].([]interface{})
+				for _, subtest := range subtests {
+					typedTest.Tests = append(typedTest.Tests, newRunnerDutySpecTestFromMap(t, subtest.(map[string]interface{})))
+				}
+				typedTest.Run(t, logger)
+			},
+		}
+	default:
+		t.Fatalf("unsupported test type %s [%s]", testType, testName)
+		return nil
 	}
 }
 
@@ -152,11 +175,13 @@ func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]interface{}) *Start
 	require.NoError(t, json.Unmarshal(byts, duty))
 
 	outputMsgs := make([]*spectypes.SignedPartialSignatureMessage, 0)
-	for _, msg := range m["OutputMessages"].([]interface{}) {
-		byts, _ = json.Marshal(msg)
-		typedMsg := &spectypes.SignedPartialSignatureMessage{}
-		require.NoError(t, json.Unmarshal(byts, typedMsg))
-		outputMsgs = append(outputMsgs, typedMsg)
+	if v, ok := m["OutputMessages"].([]interface{}); ok {
+		for _, msg := range v {
+			byts, _ = json.Marshal(msg)
+			typedMsg := &spectypes.SignedPartialSignatureMessage{}
+			require.NoError(t, json.Unmarshal(byts, typedMsg))
+			outputMsgs = append(outputMsgs, typedMsg)
+		}
 	}
 
 	ks := testingutils.KeySetForShare(&spectypes.Share{Quorum: uint64(baseRunnerMap["Share"].(map[string]interface{})["Quorum"].(float64))})
@@ -323,6 +348,10 @@ func baseRunnerForRole(logger *zap.Logger, role spectypes.BeaconRole, base *runn
 	case spectypes.BNRoleValidatorRegistration:
 		ret := ssvtesting.ValidatorRegistrationRunner(logger, ks)
 		ret.(*runner.ValidatorRegistrationRunner).BaseRunner = base
+		return ret
+	case spectypes.BNRoleVoluntaryExit:
+		ret := ssvtesting.VoluntaryExitRunner(logger, ks)
+		ret.(*runner.VoluntaryExitRunner).BaseRunner = base
 		return ret
 	case testingutils.UnknownDutyType:
 		ret := ssvtesting.UnknownDutyTypeRunner(logger, ks)

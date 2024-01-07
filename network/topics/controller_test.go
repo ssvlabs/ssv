@@ -2,60 +2,94 @@ package topics
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/hex"
-	"fmt"
+	"encoding/json"
+	"math"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/network/commons"
-
-	"github.com/bloxapp/ssv/protocol/v2/types"
-
 	"github.com/libp2p/go-libp2p"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/message/validation"
+	"github.com/bloxapp/ssv/monitoring/metricsreporter"
+	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"
+	"github.com/bloxapp/ssv/networkconfig"
 )
 
 func TestTopicManager(t *testing.T) {
 	logger := logging.TestLogger(t)
-	nPeers := 4
 
-	pks := []string{"b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400",
-		"824b9024767a01b56790a72afb5f18bb0f97d5bddb946a7bd8dd35cc607c35a4d76be21f24f484d0d478b99dc63ed170",
-		"9340b7b80983a412bbb42cad6f992e06983d53deb41166ed5978dcbfa3761f347b237ad446d7cb4a4d0a5cca78c2ce8a",
-		"a5abb232568fc869765da01688387738153f3ad6cc4e635ab282c5d5cfce2bba2351f03367103090804c5243dc8e229b",
-		"a1169bd8407279d9e56b8cefafa37449afd6751f94d1da6bc8145b96d7ad2940184d506971291cd55ae152f9fc65b146",
-		"80ff2cfb8fd80ceafbb3c331f271a9f9ce0ed3e360087e314d0a8775e86fa7cd19c999b821372ab6419cde376e032ff6",
-		"a01909aac48337bab37c0dba395fb7495b600a53c58059a251d00b4160b9da74c62f9c4e9671125c59932e7bb864fd3d",
-		"a4fc8c859ed5c10d7a1ff9fb111b76df3f2e0a6cbe7d0c58d3c98973c0ff160978bc9754a964b24929fff486ebccb629"}
+	t.Run("happy flow", func(t *testing.T) {
+		nPeers := 4
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	peers := newPeers(ctx, logger, t, nPeers, false, true)
-	baseTest(t, ctx, logger, peers, pks, 1, 2)
+		pks := []string{"b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400",
+			"824b9024767a01b56790a72afb5f18bb0f97d5bddb946a7bd8dd35cc607c35a4d76be21f24f484d0d478b99dc63ed170",
+			"9340b7b80983a412bbb42cad6f992e06983d53deb41166ed5978dcbfa3761f347b237ad446d7cb4a4d0a5cca78c2ce8a",
+			"a5abb232568fc869765da01688387738153f3ad6cc4e635ab282c5d5cfce2bba2351f03367103090804c5243dc8e229b",
+			"a1169bd8407279d9e56b8cefafa37449afd6751f94d1da6bc8145b96d7ad2940184d506971291cd55ae152f9fc65b146",
+			"80ff2cfb8fd80ceafbb3c331f271a9f9ce0ed3e360087e314d0a8775e86fa7cd19c999b821372ab6419cde376e032ff6",
+			"a01909aac48337bab37c0dba395fb7495b600a53c58059a251d00b4160b9da74c62f9c4e9671125c59932e7bb864fd3d",
+			"a4fc8c859ed5c10d7a1ff9fb111b76df3f2e0a6cbe7d0c58d3c98973c0ff160978bc9754a964b24929fff486ebccb629"}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		validator := validation.NewMessageValidator(networkconfig.TestNetwork)
+
+		peers := newPeers(ctx, logger, t, nPeers, validator, true, nil)
+		baseTest(t, ctx, logger, peers, pks, 1, 2)
+	})
+
+	t.Run("banning peer", func(t *testing.T) {
+		t.Skip() // TODO: finish the test
+
+		pks := []string{
+			"b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400",
+			"824b9024767a01b56790a72afb5f18bb0f97d5bddb946a7bd8dd35cc607c35a4d76be21f24f484d0d478b99dc63ed170",
+			"9340b7b80983a412bbb42cad6f992e06983d53deb41166ed5978dcbfa3761f347b237ad446d7cb4a4d0a5cca78c2ce8a",
+			"a5abb232568fc869765da01688387738153f3ad6cc4e635ab282c5d5cfce2bba2351f03367103090804c5243dc8e229b",
+		}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		validator := validation.NewMessageValidator(networkconfig.TestNetwork)
+
+		scoreMap := map[peer.ID]*pubsub.PeerScoreSnapshot{}
+		var scoreMapMu sync.Mutex
+
+		scoreInspector := func(m map[peer.ID]*pubsub.PeerScoreSnapshot) {
+			b, _ := json.Marshal(m)
+			t.Logf("peer scores: %v", string(b))
+
+			scoreMapMu.Lock()
+			defer scoreMapMu.Unlock()
+
+			scoreMap = m
+		}
+
+		const nPeers = 4
+		peers := newPeers(ctx, logger, t, nPeers, validator, true, scoreInspector)
+		banningTest(t, ctx, logger, peers, pks, scoreMap, &scoreMapMu)
+	})
 }
 
 func baseTest(t *testing.T, ctx context.Context, logger *zap.Logger, peers []*P, pks []string, minMsgCount, maxMsgCount int) {
 	nValidators := len(pks)
 	// nPeers := len(peers)
-
-	validatorTopic := func(pkhex string) string {
-		pk, err := hex.DecodeString(pkhex)
-		if err != nil {
-			return "invalid"
-		}
-		return commons.ValidatorTopicID(pk)[0]
-	}
 
 	t.Log("subscribing to topics")
 	// listen to topics
@@ -85,7 +119,7 @@ func baseTest(t *testing.T, ctx context.Context, logger *zap.Logger, peers []*P,
 			wg.Add(1)
 			go func(p *P, pk string, pi int) {
 				defer wg.Done()
-				msg, err := dummyMsg(pk, pi%4)
+				msg, err := dummyMsg(pk, pi%4, false)
 				require.NoError(t, err)
 				raw, err := msg.Encode()
 				require.NoError(t, err)
@@ -146,6 +180,109 @@ func baseTest(t *testing.T, ctx context.Context, logger *zap.Logger, peers []*P,
 	wg.Wait()
 }
 
+func banningTest(t *testing.T, ctx context.Context, logger *zap.Logger, peers []*P, pks []string, scoreMap map[peer.ID]*pubsub.PeerScoreSnapshot, scoreMapMu *sync.Mutex) {
+	t.Log("subscribing to topics")
+
+	for _, pk := range pks {
+		for _, p := range peers {
+			require.NoError(t, p.tm.Subscribe(logger, validatorTopic(pk)))
+		}
+	}
+
+	// wait for the peers to join topics
+	<-time.After(3 * time.Second)
+
+	t.Log("checking initial scores")
+	for _, pk := range pks {
+		for _, p := range peers {
+			peerList, err := p.tm.Peers(pk)
+			require.NoError(t, err)
+
+			for _, pid := range peerList {
+				scoreMapMu.Lock()
+				v, ok := scoreMap[pid]
+				scoreMapMu.Unlock()
+
+				require.True(t, ok)
+				require.Equal(t, 0, v.Score)
+			}
+		}
+	}
+
+	t.Log("broadcasting messages")
+
+	const invalidMessagesCount = 10
+
+	// TODO: get current default score, send an invalid rejected message, check the score; then run 10 of them and check the score; then check valid message
+
+	invalidMessages, err := msgSequence(pks[0], invalidMessagesCount, len(pks), true)
+	require.NoError(t, err)
+
+	var wg sync.WaitGroup
+	// publish some messages
+	for i, msg := range invalidMessages {
+		wg.Add(1)
+		go func(p *P, pk string, msg *spectypes.SSVMessage) {
+			defer wg.Done()
+
+			raw, err := msg.Encode()
+			require.NoError(t, err)
+
+			require.NoError(t, p.tm.Broadcast(validatorTopic(pk), raw, time.Second*10))
+
+			<-time.After(time.Second * 5)
+		}(peers[0], pks[i%len(pks)], msg)
+	}
+	wg.Wait()
+
+	<-time.After(5 * time.Second)
+
+	t.Log("checking final scores")
+	for _, pk := range pks {
+		for _, p := range peers {
+			peerList, err := p.tm.Peers(pk)
+			require.NoError(t, err)
+
+			for _, pid := range peerList {
+				scoreMapMu.Lock()
+				v, ok := scoreMap[pid]
+				scoreMapMu.Unlock()
+
+				require.True(t, ok)
+				require.Equal(t, 0, v.Score) // TODO: score should change
+			}
+		}
+	}
+
+	//t.Log("unsubscribing")
+	//// unsubscribing multiple times for each topic
+	//wg.Add(1)
+	//go func(p *P, pk string) {
+	//	defer wg.Done()
+	//	require.NoError(t, p.tm.Unsubscribe(logger, validatorTopic(pk), false))
+	//	go func(p *P) {
+	//		<-time.After(time.Millisecond)
+	//		require.NoError(t, p.tm.Unsubscribe(logger, validatorTopic(pk), false))
+	//	}(p)
+	//	wg.Add(1)
+	//	go func(p *P) {
+	//		defer wg.Done()
+	//		<-time.After(time.Millisecond * 50)
+	//		require.NoError(t, p.tm.Unsubscribe(logger, validatorTopic(pk), false))
+	//	}(p)
+	//}(peer, pk)
+	//
+	//wg.Wait()
+}
+
+func validatorTopic(pkhex string) string {
+	pk, err := hex.DecodeString(pkhex)
+	if err != nil {
+		return "invalid"
+	}
+	return commons.ValidatorTopicID(pk)[0]
+}
+
 type P struct {
 	host host.Host
 	ps   *pubsub.PubSub
@@ -181,10 +318,10 @@ func (p *P) saveMsg(t string, msg *pubsub.Message) {
 }
 
 // TODO: use p2p/testing
-func newPeers(ctx context.Context, logger *zap.Logger, t *testing.T, n int, msgValidator, msgID bool) []*P {
+func newPeers(ctx context.Context, logger *zap.Logger, t *testing.T, n int, msgValidator validation.MessageValidator, msgID bool, scoreInspector pubsub.ExtendedPeerScoreInspectFn) []*P {
 	peers := make([]*P, n)
 	for i := 0; i < n; i++ {
-		peers[i] = newPeer(ctx, logger, t, msgValidator, msgID)
+		peers[i] = newPeer(ctx, logger, t, msgValidator, msgID, scoreInspector)
 	}
 	t.Logf("%d peers were created", n)
 	th := uint64(n/2) + uint64(n/4)
@@ -203,7 +340,7 @@ func newPeers(ctx context.Context, logger *zap.Logger, t *testing.T, n int, msgV
 	return peers
 }
 
-func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator, msgID bool) *P {
+func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator validation.MessageValidator, msgID bool, scoreInspector pubsub.ExtendedPeerScoreInspectFn) *P {
 	h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
 	require.NoError(t, err)
 	ds, err := discovery.NewLocalDiscovery(ctx, logger, h)
@@ -212,14 +349,14 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 	var p *P
 	var midHandler MsgIDHandler
 	if msgID {
-		midHandler = NewMsgIDHandler(ctx, 2*time.Minute)
+		midHandler = NewMsgIDHandler(ctx, 2*time.Minute, networkconfig.TestNetwork)
 		go midHandler.Start()
 	}
-	cfg := &PububConfig{
+	cfg := &PubSubConfig{
 		Host:         h,
 		TraceLog:     false,
 		MsgIDHandler: midHandler,
-		MsgHandler: func(topic string, msg *pubsub.Message) error {
+		MsgHandler: func(_ context.Context, topic string, msg *pubsub.Message) error {
 			p.saveMsg(topic, msg)
 			return nil
 		},
@@ -228,15 +365,13 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 			IPColocationWeight: 0,
 			OneEpochDuration:   time.Minute,
 		},
+		MsgValidator:           msgValidator,
+		ScoreInspector:         scoreInspector,
+		ScoreInspectorInterval: 100 * time.Millisecond,
 		// TODO: add mock for peers.ScoreIndex
 	}
-	//
-	if msgValidator {
-		cfg.MsgValidatorFactory = func(s string) MsgValidatorFunc {
-			return NewSSVMsgValidator()
-		}
-	}
-	ps, tm, err := NewPubsub(ctx, logger, cfg)
+
+	ps, tm, err := NewPubSub(ctx, logger, cfg, metricsreporter.NewNop())
 	require.NoError(t, err)
 
 	p = &P{
@@ -258,28 +393,63 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 	return p
 }
 
-func dummyMsg(pkHex string, height int) (*spectypes.SSVMessage, error) {
+func msgSequence(pkHex string, n, committeeSize int, malformed bool) ([]*spectypes.SSVMessage, error) {
+	var messages []*spectypes.SSVMessage
+
+	for i := 0; i < n; i++ {
+		height := i * committeeSize
+		msg, err := dummyMsg(pkHex, height, malformed)
+		if err != nil {
+			return nil, err
+		}
+
+		messages = append(messages, msg)
+	}
+
+	return messages, nil
+}
+
+func dummyMsg(pkHex string, height int, malformed bool) (*spectypes.SSVMessage, error) {
 	pk, err := hex.DecodeString(pkHex)
 	if err != nil {
 		return nil, err
 	}
-	id := spectypes.NewMsgID(types.GetDefaultDomain(), pk, spectypes.BNRoleAttester)
-	msgData := fmt.Sprintf(`{
-	  "message": {
-		"type": 3,
-		"round": 2,
-		"identifier": "%s",
-		"height": %d,
-		"value": "bk0iAAAAAAACAAAAAAAAAAbYXFSt2H7SQd5q5u+N0bp6PbbPTQjU25H1QnkbzTECahIBAAAAAADmi+NJfvXZ3iXp2cfs0vYVW+EgGD7DTTvr5EkLtiWq8WsSAQAAAAAAIC8dZTEdD3EvE38B9kDVWkSLy40j0T+TtSrrrBqVjo4="
-	  },
-	  "signature": "sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv2hMf2iRL5ZPKOSmMifHbd8yg4PeeceyN",
-	  "signer_ids": [1,3,4]
-	}`, id, height)
-	return &spectypes.SSVMessage{
+
+	id := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, pk, spectypes.BNRoleAttester)
+	signature, err := base64.StdEncoding.DecodeString("sVV0fsvqQlqliKv/ussGIatxpe8LDWhc9uoaM5WpjbiYvvxUr1eCpz0ja7UT1PGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv2hMf2iRL5ZPKOSmMifHbd8yg4PeeceyN")
+	if err != nil {
+		return nil, err
+	}
+
+	signedMessage := specqbft.SignedMessage{
+		Signature: signature,
+		Signers:   []spectypes.OperatorID{1, 3, 4},
+		Message: specqbft.Message{
+			MsgType:    specqbft.RoundChangeMsgType,
+			Height:     specqbft.Height(height),
+			Round:      2,
+			Identifier: id[:],
+			Root:       [32]byte{},
+		},
+		FullData: nil,
+	}
+
+	msgData, err := signedMessage.Encode()
+	if err != nil {
+		return nil, err
+	}
+
+	ssvMsg := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVConsensusMsgType,
 		MsgID:   id,
-		Data:    []byte(msgData),
-	}, nil
+		Data:    msgData,
+	}
+
+	if malformed {
+		ssvMsg.MsgType = math.MaxUint64
+	}
+
+	return ssvMsg, nil
 }
 
 //

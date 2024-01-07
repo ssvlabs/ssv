@@ -1,9 +1,11 @@
 package eventhandler
 
 import (
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 type Task interface {
@@ -11,15 +13,15 @@ type Task interface {
 }
 
 type startValidatorExecutor interface {
-	StartValidator(share *ssvtypes.SSVShare) error
+	StartValidator(share *types.SSVShare) error
 }
 
 type StartValidatorTask struct {
 	executor startValidatorExecutor
-	share    *ssvtypes.SSVShare
+	share    *types.SSVShare
 }
 
-func NewStartValidatorTask(executor startValidatorExecutor, share *ssvtypes.SSVShare) *StartValidatorTask {
+func NewStartValidatorTask(executor startValidatorExecutor, share *types.SSVShare) *StartValidatorTask {
 	return &StartValidatorTask{
 		executor: executor,
 		share:    share,
@@ -31,41 +33,41 @@ func (t StartValidatorTask) Execute() error {
 }
 
 type stopValidatorExecutor interface {
-	StopValidator(publicKey []byte) error
+	StopValidator(pubKey spectypes.ValidatorPK) error
 }
 
 type StopValidatorTask struct {
-	executor  stopValidatorExecutor
-	publicKey []byte
+	executor stopValidatorExecutor
+	pubKey   spectypes.ValidatorPK
 }
 
-func NewStopValidatorTask(executor stopValidatorExecutor, publicKey []byte) *StopValidatorTask {
+func NewStopValidatorTask(executor stopValidatorExecutor, pubKey spectypes.ValidatorPK) *StopValidatorTask {
 	return &StopValidatorTask{
-		executor:  executor,
-		publicKey: publicKey,
+		executor: executor,
+		pubKey:   pubKey,
 	}
 }
 
 func (t StopValidatorTask) Execute() error {
-	return t.executor.StopValidator(t.publicKey)
+	return t.executor.StopValidator(t.pubKey)
 }
 
 type liquidateClusterExecutor interface {
-	LiquidateCluster(owner ethcommon.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
+	LiquidateCluster(owner ethcommon.Address, operatorIDs []spectypes.OperatorID, toLiquidate []*types.SSVShare) error
 }
 
 type LiquidateClusterTask struct {
 	executor    liquidateClusterExecutor
 	owner       ethcommon.Address
-	operatorIDs []uint64
-	toLiquidate []*ssvtypes.SSVShare
+	operatorIDs []spectypes.OperatorID
+	toLiquidate []*types.SSVShare
 }
 
 func NewLiquidateClusterTask(
 	executor liquidateClusterExecutor,
 	owner ethcommon.Address,
-	operatorIDs []uint64,
-	toLiquidate []*ssvtypes.SSVShare,
+	operatorIDs []spectypes.OperatorID,
+	toLiquidate []*types.SSVShare,
 ) *LiquidateClusterTask {
 	return &LiquidateClusterTask{
 		executor:    executor,
@@ -80,21 +82,21 @@ func (t LiquidateClusterTask) Execute() error {
 }
 
 type reactivateClusterExecutor interface {
-	ReactivateCluster(owner ethcommon.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error
+	ReactivateCluster(owner ethcommon.Address, operatorIDs []spectypes.OperatorID, toReactivate []*types.SSVShare) error
 }
 
 type ReactivateClusterTask struct {
 	executor     reactivateClusterExecutor
 	owner        ethcommon.Address
-	operatorIDs  []uint64
-	toReactivate []*ssvtypes.SSVShare
+	operatorIDs  []spectypes.OperatorID
+	toReactivate []*types.SSVShare
 }
 
 func NewReactivateClusterTask(
 	executor reactivateClusterExecutor,
 	owner ethcommon.Address,
-	operatorIDs []uint64,
-	toReactivate []*ssvtypes.SSVShare,
+	operatorIDs []spectypes.OperatorID,
+	toReactivate []*types.SSVShare,
 ) *ReactivateClusterTask {
 	return &ReactivateClusterTask{
 		executor:     executor,
@@ -128,4 +130,28 @@ func NewUpdateFeeRecipientTask(executor updateFeeRecipientExecutor, owner, recip
 
 func (t UpdateFeeRecipientTask) Execute() error {
 	return t.executor.UpdateFeeRecipient(t.owner, t.recipient)
+}
+
+type exitValidatorExecutor interface {
+	ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex) error
+}
+
+type ExitValidatorTask struct {
+	executor       exitValidatorExecutor
+	pubKey         phase0.BLSPubKey
+	blockNumber    uint64
+	validatorIndex phase0.ValidatorIndex
+}
+
+func NewExitValidatorTask(executor exitValidatorExecutor, pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex) *ExitValidatorTask {
+	return &ExitValidatorTask{
+		executor:       executor,
+		pubKey:         pubKey,
+		blockNumber:    blockNumber,
+		validatorIndex: validatorIndex,
+	}
+}
+
+func (t ExitValidatorTask) Execute() error {
+	return t.executor.ExitValidator(t.pubKey, t.blockNumber, t.validatorIndex)
 }

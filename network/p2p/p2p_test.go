@@ -2,13 +2,24 @@ package p2pv1
 
 import (
 	"context"
+	"crypto"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/x509"
 	"encoding/hex"
+	"encoding/pem"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/network/commons"
+	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/protocol/v2/message"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -18,9 +29,56 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/network"
-	protcolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 )
+
+func TestRSAUsage(t *testing.T) {
+	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	testMessage := []byte("message")
+
+	hash := sha256.Sum256(testMessage)
+
+	signature, err := rsa.SignPKCS1v15(nil, privateKey, crypto.SHA256, hash[:])
+	require.NoError(t, err)
+
+	publicKey := &privateKey.PublicKey
+
+	pubKeyBytes, err := x509.MarshalPKIXPublicKey(publicKey)
+	if err != nil {
+		fmt.Println("Error marshalling public key:", err)
+		return
+	}
+
+	pubPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PUBLIC KEY",
+		Bytes: pubKeyBytes,
+	})
+
+	const operatorID = spectypes.OperatorID(0x12345678)
+	encodedSignedSSVMessage := commons.EncodeSignedSSVMessage(testMessage, operatorID, signature)
+
+	decodedMessage, decodedOperatorID, decodedSignature, err := commons.DecodeSignedSSVMessage(encodedSignedSSVMessage)
+	require.NoError(t, err)
+	require.Equal(t, operatorID, decodedOperatorID)
+	require.Equal(t, signature, decodedSignature)
+
+	messageHash := sha256.Sum256(decodedMessage)
+
+	block, rest := pem.Decode(pubPEM)
+	require.NotNil(t, block)
+	require.Empty(t, rest, "extra data after PEM decoding")
+
+	pub, err := x509.ParsePKIXPublicKey(block.Bytes)
+	require.NoError(t, err)
+
+	rsaPubKey, ok := pub.(*rsa.PublicKey)
+	require.True(t, ok)
+
+	require.NoError(t, rsa.VerifyPKCS1v15(rsaPubKey, crypto.SHA256, messageHash[:], decodedSignature))
+	require.Equal(t, testMessage, decodedMessage)
+}
 
 func TestGetMaxPeers(t *testing.T) {
 	n := &p2pNetwork{
@@ -38,11 +96,20 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 
 	pks := []string{"b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400",
 		"824b9024767a01b56790a72afb5f18bb0f97d5bddb946a7bd8dd35cc607c35a4d76be21f24f484d0d478b99dc63ed170"}
-
-	ln, routers, err := createNetworkAndSubscribe(t, ctx, n, pks...)
+	ln, routers, err := createNetworkAndSubscribe(t, ctx, LocalNetOptions{
+		Nodes:        n,
+		MinConnected: n/2 - 1,
+		UseDiscv5:    false,
+	}, pks...)
 	require.NoError(t, err)
 	require.NotNil(t, routers)
 	require.NotNil(t, ln)
+
+	defer func() {
+		for _, node := range ln.Nodes {
+			require.NoError(t, node.(*p2pNetwork).Close())
+		}
+	}()
 
 	node1, node2 := ln.Nodes[1], ln.Nodes[2]
 
@@ -50,10 +117,8 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		msg1, err := dummyMsg(pks[0], 1)
-		require.NoError(t, err)
-		msg3, err := dummyMsg(pks[0], 3)
-		require.NoError(t, err)
+		msg1 := dummyMsgAttester(t, pks[0], 1)
+		msg3 := dummyMsgAttester(t, pks[0], 3)
 		require.NoError(t, node1.Broadcast(msg1))
 		<-time.After(time.Millisecond * 10)
 		require.NoError(t, node2.Broadcast(msg3))
@@ -64,11 +129,9 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		msg1, err := dummyMsg(pks[0], 1)
-		require.NoError(t, err)
-		msg2, err := dummyMsg(pks[1], 2)
-		require.NoError(t, err)
-		msg3, err := dummyMsg(pks[0], 3)
+		msg1 := dummyMsgAttester(t, pks[0], 1)
+		msg2 := dummyMsgAttester(t, pks[1], 2)
+		msg3 := dummyMsgAttester(t, pks[0], 3)
 		require.NoError(t, err)
 		<-time.After(time.Millisecond * 10)
 		require.NoError(t, node1.Broadcast(msg2))
@@ -98,10 +161,6 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	}
 
 	<-time.After(time.Millisecond * 10)
-
-	for _, node := range ln.Nodes {
-		require.NoError(t, node.(*p2pNetwork).Close())
-	}
 }
 
 func TestP2pNetwork_Stream(t *testing.T) {
@@ -112,13 +171,23 @@ func TestP2pNetwork_Stream(t *testing.T) {
 
 	pkHex := "b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400"
 
-	ln, _, err := createNetworkAndSubscribe(t, ctx, n, pkHex)
+	ln, _, err := createNetworkAndSubscribe(t, ctx, LocalNetOptions{
+		Nodes:        n,
+		MinConnected: n/2 - 1,
+		UseDiscv5:    false,
+	}, pkHex)
+
+	defer func() {
+		for _, node := range ln.Nodes {
+			require.NoError(t, node.(*p2pNetwork).Close())
+		}
+	}()
 	require.NoError(t, err)
 	require.Len(t, ln.Nodes, n)
 
 	pk, err := hex.DecodeString(pkHex)
 	require.NoError(t, err)
-	mid := spectypes.NewMsgID(types.GetDefaultDomain(), pk, spectypes.BNRoleAttester)
+	mid := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, pk, spectypes.BNRoleAttester)
 	rounds := []specqbft.Round{
 		1, 1, 1,
 		1, 2, 2,
@@ -140,7 +209,7 @@ func TestP2pNetwork_Stream(t *testing.T) {
 	<-time.After(time.Second)
 
 	node := ln.Nodes[0]
-	res, err := node.LastDecided(logger, mid)
+	res, err := node.(*p2pNetwork).LastDecided(logger, mid)
 	require.NoError(t, err)
 	select {
 	case err := <-errors:
@@ -150,6 +219,7 @@ func TestP2pNetwork_Stream(t *testing.T) {
 	require.GreaterOrEqual(t, len(res), 2) // got at least 2 results
 	require.LessOrEqual(t, len(res), 6)    // less than 6 unique heights
 	require.GreaterOrEqual(t, msgCounter, int64(2))
+
 }
 
 func TestWaitSubsetOfPeers(t *testing.T) {
@@ -205,9 +275,30 @@ func TestWaitSubsetOfPeers(t *testing.T) {
 	}
 }
 
+func (n *p2pNetwork) LastDecided(logger *zap.Logger, mid spectypes.MessageID) ([]p2pprotocol.SyncResult, error) {
+	const (
+		minPeers = 3
+		waitTime = time.Second * 24
+	)
+	if !n.isReady() {
+		return nil, p2pprotocol.ErrNetworkIsNotReady
+	}
+	pid, maxPeers := commons.ProtocolID(p2pprotocol.LastDecidedProtocol)
+	peers, err := waitSubsetOfPeers(logger, n.getSubsetOfPeers, mid.GetPubKey(), minPeers, maxPeers, waitTime, allPeersFilter)
+	if err != nil {
+		return nil, errors.Wrap(err, "could not get subset of peers")
+	}
+	return n.makeSyncRequest(logger, peers, mid, pid, &message.SyncMessage{
+		Params: &message.SyncParams{
+			Identifier: mid,
+		},
+		Protocol: message.LastDecidedType,
+	})
+}
+
 func registerHandler(logger *zap.Logger, node network.P2PNetwork, mid spectypes.MessageID, height specqbft.Height, round specqbft.Round, counter *int64, errors chan<- error) {
-	node.RegisterHandlers(logger, &protcolp2p.SyncHandler{
-		Protocol: protcolp2p.LastDecidedProtocol,
+	node.RegisterHandlers(logger, &p2pprotocol.SyncHandler{
+		Protocol: p2pprotocol.LastDecidedProtocol,
 		Handler: func(message *spectypes.SSVMessage) (*spectypes.SSVMessage, error) {
 			atomic.AddInt64(counter, 1)
 			sm := specqbft.SignedMessage{
@@ -235,21 +326,24 @@ func registerHandler(logger *zap.Logger, node network.P2PNetwork, mid spectypes.
 	})
 }
 
-func createNetworkAndSubscribe(t *testing.T, ctx context.Context, n int, pks ...string) (*LocalNet, []*dummyRouter, error) {
-	logger := logging.TestLogger(t)
-	ln, err := CreateAndStartLocalNet(ctx, logger.Named("createNetworkAndSubscribe"), n, n/2-1, false)
+func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options LocalNetOptions, pks ...string) (*LocalNet, []*dummyRouter, error) {
+	logger, err := zap.NewDevelopment()
+	require.NoError(t, err)
+	ln, err := CreateAndStartLocalNet(ctx, logger.Named("createNetworkAndSubscribe"), options)
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(ln.Nodes) != n {
-		return nil, nil, errors.Errorf("only %d peers created, expected %d", len(ln.Nodes), n)
+	if len(ln.Nodes) != options.Nodes {
+		return nil, nil, errors.Errorf("only %d peers created, expected %d", len(ln.Nodes), options.Nodes)
 	}
 
 	logger.Debug("created local network")
 
-	routers := make([]*dummyRouter, n)
+	routers := make([]*dummyRouter, options.Nodes)
 	for i, node := range ln.Nodes {
-		routers[i] = &dummyRouter{i: i}
+		routers[i] = &dummyRouter{
+			i: i,
+		}
 		node.UseMessageRouter(routers[i])
 	}
 
@@ -299,17 +393,14 @@ type dummyRouter struct {
 	i     int
 }
 
-func (r *dummyRouter) Route(logger *zap.Logger, message spectypes.SSVMessage) {
-	c := atomic.AddUint64(&r.count, 1)
-	logger.Debug("got message", zap.Uint64("count", c))
+func (r *dummyRouter) Route(_ context.Context, _ *queue.DecodedSSVMessage) {
+	atomic.AddUint64(&r.count, 1)
 }
 
-func dummyMsg(pkHex string, height int) (*spectypes.SSVMessage, error) {
+func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.BeaconRole) *spectypes.SSVMessage {
 	pk, err := hex.DecodeString(pkHex)
-	if err != nil {
-		return nil, err
-	}
-	id := spectypes.NewMsgID(types.GetDefaultDomain(), pk, spectypes.BNRoleAttester)
+	require.NoError(t, err)
+	id := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, pk, role)
 	signedMsg := &specqbft.SignedMessage{
 		Message: specqbft.Message{
 			MsgType:    specqbft.CommitMsgType,
@@ -322,12 +413,14 @@ func dummyMsg(pkHex string, height int) (*spectypes.SSVMessage, error) {
 		Signers:   []spectypes.OperatorID{1, 3, 4},
 	}
 	data, err := signedMsg.Encode()
-	if err != nil {
-		return nil, err
-	}
+	require.NoError(t, err)
 	return &spectypes.SSVMessage{
 		MsgType: spectypes.SSVConsensusMsgType,
 		MsgID:   id,
 		Data:    data,
-	}, nil
+	}
+}
+
+func dummyMsgAttester(t *testing.T, pkHex string, height int) *spectypes.SSVMessage {
+	return dummyMsg(t, pkHex, height, spectypes.BNRoleAttester)
 }

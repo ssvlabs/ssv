@@ -11,6 +11,7 @@ import (
 	qbft "github.com/bloxapp/ssv-spec/qbft"
 	types "github.com/bloxapp/ssv-spec/types"
 	network "github.com/bloxapp/ssv/network"
+	duties "github.com/bloxapp/ssv/operator/duties"
 	beacon "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 	validator "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
@@ -46,18 +47,32 @@ func (m *MockController) EXPECT() *MockControllerMockRecorder {
 	return m.recorder
 }
 
-// ActiveValidatorIndices mocks base method.
-func (m *MockController) ActiveValidatorIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
+// AllActiveIndices mocks base method.
+func (m *MockController) AllActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ActiveValidatorIndices", epoch)
+	ret := m.ctrl.Call(m, "AllActiveIndices", epoch)
 	ret0, _ := ret[0].([]phase0.ValidatorIndex)
 	return ret0
 }
 
-// ActiveValidatorIndices indicates an expected call of ActiveValidatorIndices.
-func (mr *MockControllerMockRecorder) ActiveValidatorIndices(epoch interface{}) *gomock.Call {
+// AllActiveIndices indicates an expected call of AllActiveIndices.
+func (mr *MockControllerMockRecorder) AllActiveIndices(epoch interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ActiveValidatorIndices", reflect.TypeOf((*MockController)(nil).ActiveValidatorIndices), epoch)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AllActiveIndices", reflect.TypeOf((*MockController)(nil).AllActiveIndices), epoch)
+}
+
+// CommitteeActiveIndices mocks base method.
+func (m *MockController) CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CommitteeActiveIndices", epoch)
+	ret0, _ := ret[0].([]phase0.ValidatorIndex)
+	return ret0
+}
+
+// CommitteeActiveIndices indicates an expected call of CommitteeActiveIndices.
+func (mr *MockControllerMockRecorder) CommitteeActiveIndices(epoch interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CommitteeActiveIndices", reflect.TypeOf((*MockController)(nil).CommitteeActiveIndices), epoch)
 }
 
 // ExecuteDuty mocks base method.
@@ -70,6 +85,20 @@ func (m *MockController) ExecuteDuty(logger *zap.Logger, duty *types.Duty) {
 func (mr *MockControllerMockRecorder) ExecuteDuty(logger, duty interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteDuty", reflect.TypeOf((*MockController)(nil).ExecuteDuty), logger, duty)
+}
+
+// ExitValidator mocks base method.
+func (m *MockController) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExitValidator", pubKey, blockNumber, validatorIndex)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ExitValidator indicates an expected call of ExitValidator.
+func (mr *MockControllerMockRecorder) ExitValidator(pubKey, blockNumber, validatorIndex interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExitValidator", reflect.TypeOf((*MockController)(nil).ExitValidator), pubKey, blockNumber, validatorIndex)
 }
 
 // GetOperatorData mocks base method.
@@ -225,17 +254,17 @@ func (mr *MockControllerMockRecorder) StartValidators() *gomock.Call {
 }
 
 // StopValidator mocks base method.
-func (m *MockController) StopValidator(publicKey []byte) error {
+func (m *MockController) StopValidator(pubKey types.ValidatorPK) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "StopValidator", publicKey)
+	ret := m.ctrl.Call(m, "StopValidator", pubKey)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // StopValidator indicates an expected call of StopValidator.
-func (mr *MockControllerMockRecorder) StopValidator(publicKey interface{}) *gomock.Call {
+func (mr *MockControllerMockRecorder) StopValidator(pubKey interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopValidator", reflect.TypeOf((*MockController)(nil).StopValidator), publicKey)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StopValidator", reflect.TypeOf((*MockController)(nil).StopValidator), pubKey)
 }
 
 // UpdateFeeRecipient mocks base method.
@@ -262,6 +291,20 @@ func (m *MockController) UpdateValidatorMetaDataLoop() {
 func (mr *MockControllerMockRecorder) UpdateValidatorMetaDataLoop() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateValidatorMetaDataLoop", reflect.TypeOf((*MockController)(nil).UpdateValidatorMetaDataLoop))
+}
+
+// ValidatorExitChan mocks base method.
+func (m *MockController) ValidatorExitChan() <-chan duties.ExitDescriptor {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidatorExitChan")
+	ret0, _ := ret[0].(<-chan duties.ExitDescriptor)
+	return ret0
+}
+
+// ValidatorExitChan indicates an expected call of ValidatorExitChan.
+func (mr *MockControllerMockRecorder) ValidatorExitChan() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorExitChan", reflect.TypeOf((*MockController)(nil).ValidatorExitChan))
 }
 
 // MockRecipients is a mock of Recipients interface.
@@ -560,6 +603,20 @@ func (mr *MockP2PNetworkMockRecorder) SubscribeAll(logger interface{}) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeAll", reflect.TypeOf((*MockP2PNetwork)(nil).SubscribeAll), logger)
 }
 
+// SubscribeRandoms mocks base method.
+func (m *MockP2PNetwork) SubscribeRandoms(logger *zap.Logger, numSubnets int) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubscribeRandoms", logger, numSubnets)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SubscribeRandoms indicates an expected call of SubscribeRandoms.
+func (mr *MockP2PNetworkMockRecorder) SubscribeRandoms(logger, numSubnets interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeRandoms", reflect.TypeOf((*MockP2PNetwork)(nil).SubscribeRandoms), logger, numSubnets)
+}
+
 // SyncDecidedByRange mocks base method.
 func (m *MockP2PNetwork) SyncDecidedByRange(identifier types.MessageID, from, to qbft.Height) {
 	m.ctrl.T.Helper()
@@ -608,159 +665,4 @@ func (m *MockP2PNetwork) UseMessageRouter(router network.MessageRouter) {
 func (mr *MockP2PNetworkMockRecorder) UseMessageRouter(router interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UseMessageRouter", reflect.TypeOf((*MockP2PNetwork)(nil).UseMessageRouter), router)
-}
-
-// MockMetrics is a mock of Metrics interface.
-type MockMetrics struct {
-	ctrl     *gomock.Controller
-	recorder *MockMetricsMockRecorder
-}
-
-// MockMetricsMockRecorder is the mock recorder for MockMetrics.
-type MockMetricsMockRecorder struct {
-	mock *MockMetrics
-}
-
-// NewMockMetrics creates a new mock instance.
-func NewMockMetrics(ctrl *gomock.Controller) *MockMetrics {
-	mock := &MockMetrics{ctrl: ctrl}
-	mock.recorder = &MockMetricsMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockMetrics) EXPECT() *MockMetricsMockRecorder {
-	return m.recorder
-}
-
-// ValidatorError mocks base method.
-func (m *MockMetrics) ValidatorError(publicKey []byte) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ValidatorError", publicKey)
-}
-
-// ValidatorError indicates an expected call of ValidatorError.
-func (mr *MockMetricsMockRecorder) ValidatorError(publicKey interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorError", reflect.TypeOf((*MockMetrics)(nil).ValidatorError), publicKey)
-}
-
-// ValidatorExiting mocks base method.
-func (m *MockMetrics) ValidatorExiting(publicKey []byte) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ValidatorExiting", publicKey)
-}
-
-// ValidatorExiting indicates an expected call of ValidatorExiting.
-func (mr *MockMetricsMockRecorder) ValidatorExiting(publicKey interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorExiting", reflect.TypeOf((*MockMetrics)(nil).ValidatorExiting), publicKey)
-}
-
-// ValidatorInactive mocks base method.
-func (m *MockMetrics) ValidatorInactive(publicKey []byte) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ValidatorInactive", publicKey)
-}
-
-// ValidatorInactive indicates an expected call of ValidatorInactive.
-func (mr *MockMetricsMockRecorder) ValidatorInactive(publicKey interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorInactive", reflect.TypeOf((*MockMetrics)(nil).ValidatorInactive), publicKey)
-}
-
-// ValidatorNoIndex mocks base method.
-func (m *MockMetrics) ValidatorNoIndex(publicKey []byte) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ValidatorNoIndex", publicKey)
-}
-
-// ValidatorNoIndex indicates an expected call of ValidatorNoIndex.
-func (mr *MockMetricsMockRecorder) ValidatorNoIndex(publicKey interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorNoIndex", reflect.TypeOf((*MockMetrics)(nil).ValidatorNoIndex), publicKey)
-}
-
-// ValidatorNotActivated mocks base method.
-func (m *MockMetrics) ValidatorNotActivated(publicKey []byte) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ValidatorNotActivated", publicKey)
-}
-
-// ValidatorNotActivated indicates an expected call of ValidatorNotActivated.
-func (mr *MockMetricsMockRecorder) ValidatorNotActivated(publicKey interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorNotActivated", reflect.TypeOf((*MockMetrics)(nil).ValidatorNotActivated), publicKey)
-}
-
-// ValidatorNotFound mocks base method.
-func (m *MockMetrics) ValidatorNotFound(publicKey []byte) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ValidatorNotFound", publicKey)
-}
-
-// ValidatorNotFound indicates an expected call of ValidatorNotFound.
-func (mr *MockMetricsMockRecorder) ValidatorNotFound(publicKey interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorNotFound", reflect.TypeOf((*MockMetrics)(nil).ValidatorNotFound), publicKey)
-}
-
-// ValidatorPending mocks base method.
-func (m *MockMetrics) ValidatorPending(publicKey []byte) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ValidatorPending", publicKey)
-}
-
-// ValidatorPending indicates an expected call of ValidatorPending.
-func (mr *MockMetricsMockRecorder) ValidatorPending(publicKey interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorPending", reflect.TypeOf((*MockMetrics)(nil).ValidatorPending), publicKey)
-}
-
-// ValidatorReady mocks base method.
-func (m *MockMetrics) ValidatorReady(publicKey []byte) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ValidatorReady", publicKey)
-}
-
-// ValidatorReady indicates an expected call of ValidatorReady.
-func (mr *MockMetricsMockRecorder) ValidatorReady(publicKey interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorReady", reflect.TypeOf((*MockMetrics)(nil).ValidatorReady), publicKey)
-}
-
-// ValidatorRemoved mocks base method.
-func (m *MockMetrics) ValidatorRemoved(publicKey []byte) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ValidatorRemoved", publicKey)
-}
-
-// ValidatorRemoved indicates an expected call of ValidatorRemoved.
-func (mr *MockMetricsMockRecorder) ValidatorRemoved(publicKey interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorRemoved", reflect.TypeOf((*MockMetrics)(nil).ValidatorRemoved), publicKey)
-}
-
-// ValidatorSlashed mocks base method.
-func (m *MockMetrics) ValidatorSlashed(publicKey []byte) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ValidatorSlashed", publicKey)
-}
-
-// ValidatorSlashed indicates an expected call of ValidatorSlashed.
-func (mr *MockMetricsMockRecorder) ValidatorSlashed(publicKey interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorSlashed", reflect.TypeOf((*MockMetrics)(nil).ValidatorSlashed), publicKey)
-}
-
-// ValidatorUnknown mocks base method.
-func (m *MockMetrics) ValidatorUnknown(publicKey []byte) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "ValidatorUnknown", publicKey)
-}
-
-// ValidatorUnknown indicates an expected call of ValidatorUnknown.
-func (mr *MockMetricsMockRecorder) ValidatorUnknown(publicKey interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorUnknown", reflect.TypeOf((*MockMetrics)(nil).ValidatorUnknown), publicKey)
 }

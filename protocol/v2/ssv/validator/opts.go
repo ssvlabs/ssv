@@ -6,6 +6,8 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	"github.com/bloxapp/ssv/ibft/storage"
+	"github.com/bloxapp/ssv/message/validation"
+	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	qbftctrl "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/types"
@@ -19,7 +21,7 @@ const (
 type Options struct {
 	Network           specqbft.Network
 	Beacon            specssv.BeaconNode
-	BeaconNetwork     spectypes.BeaconNetwork
+	BeaconNetwork     beacon.BeaconNetwork
 	Storage           *storage.QBFTStores
 	SSVShare          *types.SSVShare
 	Signer            spectypes.KeyManager
@@ -30,6 +32,8 @@ type Options struct {
 	BuilderProposals  bool
 	QueueSize         int
 	GasLimit          uint64
+	MessageValidator  validation.MessageValidator
+	Metrics           Metrics
 }
 
 func (o *Options) defaults() {

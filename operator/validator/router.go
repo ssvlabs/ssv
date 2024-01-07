@@ -1,34 +1,37 @@
 package validator
 
 import (
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	"context"
+
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/network/commons"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
 
 const bufSize = 1024
 
-func newMessageRouter() *messageRouter {
+func newMessageRouter(logger *zap.Logger) *messageRouter {
 	return &messageRouter{
-		ch:    make(chan spectypes.SSVMessage, bufSize),
-		msgID: commons.MsgID(),
+		logger: logger,
+		ch:     make(chan *queue.DecodedSSVMessage, bufSize),
 	}
 }
 
 type messageRouter struct {
-	ch    chan spectypes.SSVMessage
-	msgID commons.MsgIDFunc
+	logger *zap.Logger
+	ch     chan *queue.DecodedSSVMessage
 }
 
-func (r *messageRouter) Route(logger *zap.Logger, message spectypes.SSVMessage) {
+func (r *messageRouter) Route(ctx context.Context, message *queue.DecodedSSVMessage) {
 	select {
+	case <-ctx.Done():
+		r.logger.Warn("context canceled, dropping message")
 	case r.ch <- message:
 	default:
-		logger.Warn("message router buffer is full. dropping message")
+		r.logger.Warn("message router buffer is full, dropping message")
 	}
 }
 
-func (r *messageRouter) GetMessageChan() <-chan spectypes.SSVMessage {
+func (r *messageRouter) GetMessageChan() <-chan *queue.DecodedSSVMessage {
 	return r.ch
 }

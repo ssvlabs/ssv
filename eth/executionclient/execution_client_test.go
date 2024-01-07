@@ -67,7 +67,7 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
 	defer rpcServer.Stop()
 	defer httpsrv.Close()
-	addr := "ws:" + strings.TrimPrefix(httpsrv.URL, "http:")
+	addr := httpToWebSocketURL(httpsrv.URL)
 
 	parsed, _ := abi.JSON(strings.NewReader(callableAbi))
 	auth, _ := bind.NewKeyedTransactorWithChainID(testKey, big.NewInt(1337))
@@ -82,9 +82,8 @@ func TestFetchHistoricalLogs(t *testing.T) {
 	client, err := New(ctx, addr, contractAddr, WithLogger(logger), WithFollowDistance(followDistance))
 	require.NoError(t, err)
 
-	isReady, err := client.IsReady(ctx)
+	err = client.Healthy(ctx)
 	require.NoError(t, err)
-	require.True(t, isReady)
 
 	// Create blocks with transactions
 	for i := 0; i < blocksWithLogsLength; i++ {
@@ -132,7 +131,7 @@ func TestStreamLogs(t *testing.T) {
 	httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
 	defer rpcServer.Stop()
 	defer httpsrv.Close()
-	addr := "ws:" + strings.TrimPrefix(httpsrv.URL, "http:")
+	addr := httpToWebSocketURL(httpsrv.URL)
 
 	// Deploy the contract
 	parsed, _ := abi.JSON(strings.NewReader(callableAbi))
@@ -148,9 +147,8 @@ func TestStreamLogs(t *testing.T) {
 	client, err := New(ctx, addr, contractAddr, WithLogger(logger), WithFollowDistance(followDistance))
 	require.NoError(t, err)
 
-	isReady, err := client.IsReady(ctx)
+	err = client.Healthy(ctx)
 	require.NoError(t, err)
-	require.True(t, isReady)
 
 	logs := client.StreamLogs(ctx, 0)
 	var wg sync.WaitGroup
@@ -217,7 +215,7 @@ func TestFetchLogsInBatches(t *testing.T) {
 	httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
 	defer rpcServer.Stop()
 	defer httpsrv.Close()
-	addr := "ws:" + strings.TrimPrefix(httpsrv.URL, "http:")
+	addr := httpToWebSocketURL(httpsrv.URL)
 
 	// Deploy the contract
 	parsed, _ := abi.JSON(strings.NewReader(callableAbi))
@@ -327,7 +325,7 @@ func TestChainReorganizationLogs(t *testing.T) {
 	// defer rpcServer.Stop()
 	// defer httpsrv.Close()
 
-	// addr := "ws:" + strings.TrimPrefix(httpsrv.URL, "http:")
+	// addr := httpToWebSocketURL(httpsrv.URL)
 
 	// // 1.
 	// parsed, _ := abi.JSON(strings.NewReader(callableAbi))
@@ -419,7 +417,7 @@ func TestSimSSV(t *testing.T) {
 	httpsrv := httptest.NewServer(rpcServer.WebsocketHandler([]string{"*"}))
 	defer rpcServer.Stop()
 	defer httpsrv.Close()
-	addr := "ws:" + strings.TrimPrefix(httpsrv.URL, "http:")
+	addr := httpToWebSocketURL(httpsrv.URL)
 
 	parsed, _ := abi.JSON(strings.NewReader(simcontract.SimcontractMetaData.ABI))
 	auth, _ := bind.NewKeyedTransactorWithChainID(testKey, big.NewInt(1337))
@@ -440,9 +438,8 @@ func TestSimSSV(t *testing.T) {
 	client, err := New(ctx, addr, contractAddr, WithLogger(logger), WithFollowDistance(0))
 	require.NoError(t, err)
 
-	isReady, err := client.IsReady(ctx)
+	err = client.Healthy(ctx)
 	require.NoError(t, err)
-	require.True(t, isReady)
 
 	logs := client.StreamLogs(ctx, 0)
 
@@ -586,4 +583,8 @@ func TestSimSSV(t *testing.T) {
 
 	require.NoError(t, client.Close())
 	require.NoError(t, sim.Close())
+}
+
+func httpToWebSocketURL(url string) string {
+	return "ws:" + strings.TrimPrefix(url, "http:")
 }

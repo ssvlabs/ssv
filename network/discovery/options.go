@@ -32,8 +32,6 @@ type DiscV5Options struct {
 	Bootnodes []string
 	// Subnets is a bool slice represents all the subnets the node is intreseted in
 	Subnets []byte
-	// OperatorID is the operator id (optional)
-	OperatorID string
 	// EnableLogging when true enables logs to be emitted
 	EnableLogging bool
 }

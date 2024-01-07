@@ -6,13 +6,13 @@ import (
 	"strconv"
 	"time"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/network/commons"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
 
 var (
@@ -37,7 +37,11 @@ type Controller interface {
 }
 
 // PubsubMessageHandler handles incoming messages
-type PubsubMessageHandler func(string, *pubsub.Message) error
+type PubsubMessageHandler func(context.Context, string, *pubsub.Message) error
+
+type messageValidator interface {
+	ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
+}
 
 // topicsCtrl implements Controller
 type topicsCtrl struct {
@@ -45,25 +49,31 @@ type topicsCtrl struct {
 	logger *zap.Logger // struct logger to implement i.Closer
 	ps     *pubsub.PubSub
 	// scoreParamsFactory is a function that helps to set scoring params on topics
-	scoreParamsFactory  func(string) *pubsub.TopicScoreParams
-	msgValidatorFactory func(string) MsgValidatorFunc
-	msgHandler          PubsubMessageHandler
-	subFilter           SubFilter
+	scoreParamsFactory func(string) *pubsub.TopicScoreParams
+	msgValidator       messageValidator
+	msgHandler         PubsubMessageHandler
+	subFilter          SubFilter
 
 	container *topicsContainer
 }
 
 // NewTopicsController creates an instance of Controller
-func NewTopicsController(ctx context.Context, logger *zap.Logger, msgHandler PubsubMessageHandler,
-	msgValidatorFactory func(string) MsgValidatorFunc, subFilter SubFilter, pubSub *pubsub.PubSub,
-	scoreParams func(string) *pubsub.TopicScoreParams) Controller {
+func NewTopicsController(
+	ctx context.Context,
+	logger *zap.Logger,
+	msgHandler PubsubMessageHandler,
+	msgValidator messageValidator,
+	subFilter SubFilter,
+	pubSub *pubsub.PubSub,
+	scoreParams func(string) *pubsub.TopicScoreParams,
+) Controller {
 	ctrl := &topicsCtrl{
-		ctx:                 ctx,
-		logger:              logger,
-		ps:                  pubSub,
-		scoreParamsFactory:  scoreParams,
-		msgValidatorFactory: msgValidatorFactory,
-		msgHandler:          msgHandler,
+		ctx:                ctx,
+		logger:             logger,
+		ps:                 pubSub,
+		scoreParamsFactory: scoreParams,
+		msgValidator:       msgValidator,
+		msgHandler:         msgHandler,
 
 		subFilter: subFilter,
 	}
@@ -171,7 +181,7 @@ func (ctrl *topicsCtrl) Broadcast(name string, data []byte, timeout time.Duratio
 func (ctrl *topicsCtrl) Unsubscribe(logger *zap.Logger, name string, hard bool) error {
 	ctrl.container.Unsubscribe(name)
 
-	if ctrl.msgValidatorFactory != nil {
+	if ctrl.msgValidator != nil {
 		err := ctrl.ps.UnregisterTopicValidator(name)
 		if err != nil {
 			logger.Debug("could not unregister msg validator", zap.String("topic", name), zap.Error(err))
@@ -207,7 +217,9 @@ func (ctrl *topicsCtrl) start(logger *zap.Logger, name string, sub *pubsub.Subsc
 func (ctrl *topicsCtrl) listen(logger *zap.Logger, sub *pubsub.Subscription) error {
 	ctx, cancel := context.WithCancel(ctrl.ctx)
 	defer cancel()
+
 	topicName := sub.Topic()
+
 	logger = logger.With(zap.String("topic", topicName))
 	logger.Debug("start listening to topic")
 	for ctx.Err() == nil {
@@ -228,14 +240,14 @@ func (ctrl *topicsCtrl) listen(logger *zap.Logger, sub *pubsub.Subscription) err
 			continue
 		}
 
-		if ssvMsg, ok := msg.ValidatorData.(spectypes.SSVMessage); ok {
+		if ssvMsg, ok := msg.ValidatorData.(*queue.DecodedSSVMessage); ok {
 			metricPubsubInbound.WithLabelValues(
 				commons.GetTopicBaseName(topicName),
 				strconv.FormatUint(uint64(ssvMsg.MsgType), 10),
 			).Inc()
 		}
 
-		if err := ctrl.msgHandler(topicName, msg); err != nil {
+		if err := ctrl.msgHandler(ctx, topicName, msg); err != nil {
 			logger.Debug("could not handle msg", zap.Error(err))
 		}
 	}
@@ -244,7 +256,7 @@ func (ctrl *topicsCtrl) listen(logger *zap.Logger, sub *pubsub.Subscription) err
 
 // setupTopicValidator registers the topic validator
 func (ctrl *topicsCtrl) setupTopicValidator(name string) error {
-	if ctrl.msgValidatorFactory != nil {
+	if ctrl.msgValidator != nil {
 		// first try to unregister in case there is already a msg validator for that topic (e.g. fork scenario)
 		_ = ctrl.ps.UnregisterTopicValidator(name)
 
@@ -252,7 +264,7 @@ func (ctrl *topicsCtrl) setupTopicValidator(name string) error {
 		// Optional: set a timeout for message validation
 		// opts = append(opts, pubsub.WithValidatorTimeout(time.Second))
 
-		err := ctrl.ps.RegisterTopicValidator(name, ctrl.msgValidatorFactory(name), opts...)
+		err := ctrl.ps.RegisterTopicValidator(name, ctrl.msgValidator.ValidatorForTopic(name), opts...)
 		if err != nil {
 			return errors.Wrap(err, "could not register topic validator")
 		}

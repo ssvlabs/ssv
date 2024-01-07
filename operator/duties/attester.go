@@ -11,19 +11,20 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/operator/duties/dutystore"
 )
 
 type AttesterHandler struct {
 	baseHandler
 
-	duties            *Duties[*eth2apiv1.AttesterDuty]
+	duties            *dutystore.Duties[eth2apiv1.AttesterDuty]
 	fetchCurrentEpoch bool
 	fetchNextEpoch    bool
 }
 
-func NewAttesterHandler() *AttesterHandler {
+func NewAttesterHandler(duties *dutystore.Duties[eth2apiv1.AttesterDuty]) *AttesterHandler {
 	h := &AttesterHandler{
-		duties: NewDuties[*eth2apiv1.AttesterDuty](),
+		duties: duties,
 	}
 	h.fetchCurrentEpoch = true
 	h.fetchFirst = true
@@ -52,7 +53,7 @@ func (h *AttesterHandler) Name() string {
 //
 // On Indices Change:
 //  1. Execute duties.
-//  2. Reset duties for the current epoch.
+//  2. ResetEpoch duties for the current epoch.
 //  3. Fetch duties for the current epoch.
 //  4. If necessary, fetch duties for the next epoch.
 //
@@ -69,7 +70,8 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 		case <-ctx.Done():
 			return
 
-		case slot := <-h.ticker:
+		case <-h.ticker.Next():
+			slot := h.ticker.Slot()
 			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("epoch_slot_seq", buildStr))
@@ -82,7 +84,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 			} else {
 				h.processExecution(currentEpoch, slot)
 				if h.indicesChanged {
-					h.duties.Reset(currentEpoch)
+					h.duties.ResetEpoch(currentEpoch)
 					h.indicesChanged = false
 				}
 				h.processFetching(ctx, currentEpoch, slot)
@@ -98,7 +100,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 
 			// last slot of epoch
 			if uint64(slot)%slotsPerEpoch == slotsPerEpoch-1 {
-				h.duties.Reset(currentEpoch)
+				h.duties.ResetEpoch(currentEpoch)
 			}
 
 		case reorgEvent := <-h.reorg:
@@ -108,18 +110,18 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 
 			// reset current epoch duties
 			if reorgEvent.Previous {
-				h.duties.Reset(currentEpoch)
+				h.duties.ResetEpoch(currentEpoch)
 				h.fetchFirst = true
 				h.fetchCurrentEpoch = true
 				if h.shouldFetchNexEpoch(reorgEvent.Slot) {
-					h.duties.Reset(currentEpoch + 1)
+					h.duties.ResetEpoch(currentEpoch + 1)
 					h.fetchNextEpoch = true
 				}
 			} else if reorgEvent.Current {
 				// reset & re-fetch next epoch duties if in appropriate slot range,
 				// otherwise they will be fetched by the appropriate slot tick.
 				if h.shouldFetchNexEpoch(reorgEvent.Slot) {
-					h.duties.Reset(currentEpoch + 1)
+					h.duties.ResetEpoch(currentEpoch + 1)
 					h.fetchNextEpoch = true
 				}
 			}
@@ -135,7 +137,7 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 
 			// reset next epoch duties if in appropriate slot range
 			if h.shouldFetchNexEpoch(slot) {
-				h.duties.Reset(currentEpoch + 1)
+				h.duties.ResetEpoch(currentEpoch + 1)
 				h.fetchNextEpoch = true
 			}
 		}
@@ -164,24 +166,26 @@ func (h *AttesterHandler) processFetching(ctx context.Context, epoch phase0.Epoc
 }
 
 func (h *AttesterHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot) {
+	duties := h.duties.CommitteeSlotDuties(epoch, slot)
+	if duties == nil {
+		return
+	}
+
 	// range over duties and execute
-	if slotMap, ok := h.duties.m[epoch]; ok {
-		if duties, ok := slotMap[slot]; ok {
-			toExecute := make([]*spectypes.Duty, 0, len(duties)*2)
-			for _, d := range duties {
-				if h.shouldExecute(d) {
-					toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAttester))
-					toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAggregator))
-				}
-			}
-			h.executeDuties(h.logger, toExecute)
+	toExecute := make([]*spectypes.Duty, 0, len(duties)*2)
+	for _, d := range duties {
+		if h.shouldExecute(d) {
+			toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAttester))
+			toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAggregator))
 		}
 	}
+
+	h.executeDuties(h.logger, toExecute)
 }
 
 func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch) error {
 	start := time.Now()
-	indices := h.validatorController.ActiveValidatorIndices(epoch)
+	indices := h.validatorController.CommitteeActiveIndices(epoch)
 
 	if len(indices) == 0 {
 		return nil
@@ -194,7 +198,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 
 	specDuties := make([]*spectypes.Duty, 0, len(duties))
 	for _, d := range duties {
-		h.duties.Add(epoch, d.Slot, d)
+		h.duties.Add(epoch, d.Slot, d.ValidatorIndex, d, true)
 		specDuties = append(specDuties, h.toSpecDuty(d, spectypes.BNRoleAttester))
 	}
 
@@ -245,8 +249,7 @@ func (h *AttesterHandler) shouldExecute(duty *eth2apiv1.AttesterDuty) bool {
 		return true
 	}
 	if currentSlot+1 == duty.Slot {
-		h.logger.Debug("current slot and duty slot are not aligned, "+
-			"assuming diff caused by a time drift - ignoring and executing duty", zap.String("type", duty.String()))
+		h.warnMisalignedSlotAndDuty(duty.String())
 		return true
 	}
 	return false

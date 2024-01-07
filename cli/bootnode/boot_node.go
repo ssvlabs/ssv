@@ -1,6 +1,8 @@
 package bootnode
 
 import (
+	"fmt"
+	"github.com/bloxapp/ssv/utils/commons"
 	"log"
 
 	"github.com/bloxapp/ssv/logging"
@@ -27,15 +29,30 @@ var StartBootNodeCmd = &cobra.Command{
 	Use:   "start-boot-node",
 	Short: "Starts boot node for discovery based ENR",
 	Run: func(cmd *cobra.Command, args []string) {
+		commons.SetBuildData(cmd.Parent().Short, cmd.Parent().Version)
+
 		if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
 			log.Fatal(err)
 		}
 
-		if err := logging.SetGlobalLogger(cfg.LogLevel, cfg.LogLevelFormat, cfg.LogFormat, cfg.LogFilePath); err != nil {
+		err := logging.SetGlobalLogger(
+			cfg.LogLevel,
+			cfg.LogLevelFormat,
+			cfg.LogFormat,
+			&logging.LogFileOptions{
+				FileName:   cfg.LogFilePath,
+				MaxSize:    cfg.LogFileSize,
+				MaxBackups: cfg.LogFileBackups,
+			},
+		)
+
+		if err != nil {
 			log.Fatal(err)
 		}
 
 		logger := zap.L()
+
+		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
 
 		bootNode, err := bootnode.New(cfg.Options)
 		if err != nil {
