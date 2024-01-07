@@ -288,6 +288,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 }
 
 func TestUpdateValidatorMetadata(t *testing.T) {
+
 	secretKey := &bls.SecretKey{}
 	secretKey2 := &bls.SecretKey{}
 	require.NoError(t, secretKey.SetHexString(sk1Str))
