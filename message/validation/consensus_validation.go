@@ -150,7 +150,7 @@ func (mv *messageValidator) validateConsensusMessage(
 func (mv *messageValidator) allowedRoundRange(estimatedRound specqbft.Round, maxRound specqbft.Round) (specqbft.Round, specqbft.Round) {
 	var lowestAllowed, highestAllowed specqbft.Round
 
-	if lowestAllowed > allowedRoundsInPast {
+	if estimatedRound > allowedRoundsInPast {
 		lowestAllowed = estimatedRound - allowedRoundsInPast
 	} else {
 		lowestAllowed = specqbft.FirstRound
