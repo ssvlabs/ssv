@@ -148,13 +148,9 @@ type P2PNetwork interface {
 	Subscribe(vpk spectypes.ValidatorPK) error
 	UseMessageRouter(router network.MessageRouter)
 	Peers(pk spectypes.ValidatorPK) ([]peer.ID, error)
-	SyncHighestDecided(identifier spectypes.MessageID) error
 	SubscribeRandoms(logger *zap.Logger, numSubnets int) error
 	RegisterHandlers(logger *zap.Logger, handlers ...*p2pprotocol.SyncHandler)
-	LastDecided(logger *zap.Logger, mid spectypes.MessageID) ([]p2pprotocol.SyncResult, error)
-	SyncDecidedByRange(identifier spectypes.MessageID, from specqbft.Height, to specqbft.Height)
 	ReportValidation(logger *zap.Logger, message *spectypes.SSVMessage, res p2pprotocol.MsgValidationResult)
-	GetHistory(logger *zap.Logger, mid spectypes.MessageID, from specqbft.Height, to specqbft.Height, targets ...string) ([]p2pprotocol.SyncResult, specqbft.Height, error)
 }
 
 // controller implements Controller
