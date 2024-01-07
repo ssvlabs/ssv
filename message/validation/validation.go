@@ -110,17 +110,17 @@ func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) Mes
 		validationLocks:         make(map[spectypes.MessageID]*sync.Mutex),
 	}
 
-	for role, hasConsensus := range mv.beaconRoles {
-		if hasConsensus {
-			mv.roundThresholdCache.InitThresholds(role)
-		}
-	}
-
 	for _, opt := range opts {
 		opt(mv)
 	}
 
 	mv.roundThresholdCache = roundthresholds.New(mv.logger, netCfg.Beacon)
+
+	for role, hasConsensus := range mv.beaconRoles {
+		if hasConsensus {
+			mv.roundThresholdCache.InitThresholds(role)
+		}
+	}
 
 	return mv
 }
