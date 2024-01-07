@@ -223,6 +223,7 @@ func TestSetupNonCommitteeValidators(t *testing.T) {
 
 func TestHandleNonCommitteeMessages(t *testing.T) {
 	logger := logging.TestLogger(t)
+	mockValidatorsMap := validatorsMap.newValidatorsMap()
 	mockValidatorsMap := &validatorsMap{
 		validatorsMap: map[string]*validator.Validator{},
 	}
