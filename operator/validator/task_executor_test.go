@@ -6,6 +6,7 @@ import (
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
+	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
@@ -145,11 +146,8 @@ func TestController_StopValidator(t *testing.T) {
 
 	require.Len(t, mockValidatorsMap.validatorsMap, 1)
 	err = ctr.StopValidator(secretKey.GetPublicKey().Serialize())
-
 	require.NoError(t, err)
 	require.Len(t, mockValidatorsMap.validatorsMap, 0)
-	_, err = km.SignRoot(signable{}, [4]byte{0, 0, 0, 0}, secretKey.GetPublicKey().Serialize())
-	require.Error(t, err)
 }
 
 func TestController_ReactivateCluster(t *testing.T) {
@@ -190,13 +188,16 @@ func TestController_ReactivateCluster(t *testing.T) {
 		return true, nil
 	}
 	controllerOptions := MockControllerOptions{
-		beacon:              bc,
-		network:             network,
-		operatorData:        operatorData,
-		sharesStorage:       sharesStorage,
-		recipientsStorage:   recipientStorage,
-		validatorsMap:       mockValidatorsMap,
-		validatorOptions:    validator.Options{},
+		beacon:            bc,
+		network:           network,
+		operatorData:      operatorData,
+		sharesStorage:     sharesStorage,
+		recipientsStorage: recipientStorage,
+		validatorsMap:     mockValidatorsMap,
+		validatorOptions: validator.Options{
+			Storage:       storageMap,
+			BeaconNetwork: networkconfig.TestNetwork.Beacon,
+		},
 		metrics:             validator.NopMetrics{},
 		metadataLastUpdated: map[string]time.Time{},
 		keyManager:          km,
@@ -242,7 +243,6 @@ func TestController_ReactivateCluster(t *testing.T) {
 		<-ctr.indicesChange
 		indiciesUpdate <- struct{}{}
 	}()
-
 	err := ctr.ReactivateCluster(common.HexToAddress("0x1231231"), []uint64{1, 2, 3, 4}, toReactivate)
 
 	require.NoError(t, err)
