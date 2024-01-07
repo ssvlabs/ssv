@@ -2,26 +2,29 @@ package roundthresholds
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging/fields"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 )
 
 // Cache contains thresholds when each round finishes for each role.
 type Cache struct {
+	logger     *zap.Logger
 	bn         beaconprotocol.BeaconNetwork
 	thresholds map[spectypes.BeaconRole][]time.Duration
 	mu         sync.Mutex
 }
 
-func New(bn beaconprotocol.BeaconNetwork) *Cache {
+func New(logger *zap.Logger, bn beaconprotocol.BeaconNetwork) *Cache {
 	return &Cache{
+		logger:     logger,
 		bn:         bn,
 		thresholds: make(map[spectypes.BeaconRole][]time.Duration),
 		mu:         sync.Mutex{},
@@ -43,7 +46,7 @@ func (c *Cache) InitThresholds(role spectypes.BeaconRole) {
 	for {
 		roundDuration := rt.RoundDuration(round)
 		if roundDuration <= 0 {
-			panic(fmt.Sprintf("invalid round duration for round %d", round))
+			c.logger.Fatal("invalid round duration", fields.Round(round))
 		}
 
 		cumulativeDuration += roundDuration
