@@ -114,7 +114,7 @@ func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) Mes
 		opt(mv)
 	}
 
-	mv.roundThresholdMapping = roundthresholds.NewMapping(mv.logger, netCfg.Beacon)
+	mv.roundThresholdMapping = roundthresholds.NewMapping(mv.logger, netCfg.Beacon, mv.allowedSlots)
 
 	for role, hasConsensus := range mv.beaconRoles {
 		if hasConsensus {
@@ -571,21 +571,27 @@ func (mv *messageValidator) earlyMessage(slot phase0.Slot, receivedAt time.Time)
 }
 
 func (mv *messageValidator) lateMessage(slot phase0.Slot, role spectypes.BeaconRole, receivedAt time.Time) time.Duration {
-	var ttl phase0.Slot
-	switch role {
-	case spectypes.BNRoleProposer, spectypes.BNRoleSyncCommittee, spectypes.BNRoleSyncCommitteeContribution:
-		ttl = 1 + lateSlotAllowance
-	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator:
-		ttl = phase0.Slot(mv.netCfg.Beacon.SlotsPerEpoch()) + lateSlotAllowance
-	case spectypes.BNRoleValidatorRegistration, spectypes.BNRoleVoluntaryExit:
-		return 0
+	allowedSlots := mv.allowedSlots(role)
+	if allowedSlots != 0 {
+		allowedSlots += lateSlotAllowance
 	}
 
-	deadline := mv.netCfg.Beacon.GetSlotStartTime(slot + ttl).
+	deadline := mv.netCfg.Beacon.GetSlotStartTime(slot + allowedSlots).
 		Add(lateMessageMargin).Add(clockErrorTolerance)
 
 	return mv.netCfg.Beacon.GetSlotStartTime(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Unix())).
 		Sub(deadline)
+}
+
+func (mv *messageValidator) allowedSlots(role spectypes.BeaconRole) phase0.Slot {
+	switch role {
+	case spectypes.BNRoleProposer, spectypes.BNRoleSyncCommittee, spectypes.BNRoleSyncCommitteeContribution:
+		return 1
+	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator:
+		return phase0.Slot(mv.netCfg.Beacon.SlotsPerEpoch())
+	default:
+		return 0
+	}
 }
 
 func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *ConsensusState {

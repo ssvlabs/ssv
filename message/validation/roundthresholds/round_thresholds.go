@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
@@ -17,16 +18,18 @@ const fatalRoundThreshold = 20
 
 // Mapping contains thresholds when each round finishes for each role.
 type Mapping struct {
-	logger     *zap.Logger
-	bn         beaconprotocol.BeaconNetwork
-	thresholds map[spectypes.BeaconRole][]time.Duration
+	logger       *zap.Logger
+	bn           beaconprotocol.BeaconNetwork
+	thresholds   map[spectypes.BeaconRole][]time.Duration
+	allowedSlots func(role spectypes.BeaconRole) phase0.Slot
 }
 
-func NewMapping(logger *zap.Logger, bn beaconprotocol.BeaconNetwork) *Mapping {
+func NewMapping(logger *zap.Logger, bn beaconprotocol.BeaconNetwork, allowedSlots func(role spectypes.BeaconRole) phase0.Slot) *Mapping {
 	return &Mapping{
-		logger:     logger,
-		bn:         bn,
-		thresholds: make(map[spectypes.BeaconRole][]time.Duration),
+		logger:       logger,
+		bn:           bn,
+		thresholds:   make(map[spectypes.BeaconRole][]time.Duration),
+		allowedSlots: allowedSlots,
 	}
 }
 
@@ -57,14 +60,7 @@ func (c *Mapping) InitThresholds(role spectypes.BeaconRole) {
 }
 
 func (c *Mapping) maxPossibleDuration(role spectypes.BeaconRole) time.Duration {
-	switch role {
-	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator:
-		return c.bn.SlotDurationSec() * time.Duration(c.bn.SlotsPerEpoch())
-	case spectypes.BNRoleProposer, spectypes.BNRoleSyncCommittee, spectypes.BNRoleSyncCommitteeContribution:
-		return c.bn.SlotDurationSec()
-	default:
-		return 0
-	}
+	return time.Duration(c.allowedSlots(role)) * c.bn.SlotDurationSec()
 }
 
 // MaxPossibleRound returns max possible round for given role.
