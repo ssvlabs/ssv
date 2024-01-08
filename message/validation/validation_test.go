@@ -1637,7 +1637,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 					expectedError := ErrRoundTooHigh
 					expectedError.got = fmt.Sprintf("%v (%v role)", round, role)
-					expectedError.want = fmt.Sprintf("%v (%v role)", validator.roundThresholdCache.MaxPossibleRound(role), role)
+					expectedError.want = fmt.Sprintf("%v (%v role)", validator.roundThresholdMapping.MaxPossibleRound(role), role)
 
 					if roundIsTooHigh {
 						require.ErrorIs(t, err, expectedError)

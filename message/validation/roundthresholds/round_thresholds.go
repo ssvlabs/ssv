@@ -15,15 +15,15 @@ import (
 
 const fatalRoundThreshold = 20
 
-// Cache contains thresholds when each round finishes for each role.
-type Cache struct {
+// Mapping contains thresholds when each round finishes for each role.
+type Mapping struct {
 	logger     *zap.Logger
 	bn         beaconprotocol.BeaconNetwork
 	thresholds map[spectypes.BeaconRole][]time.Duration
 }
 
-func New(logger *zap.Logger, bn beaconprotocol.BeaconNetwork) *Cache {
-	return &Cache{
+func NewMapping(logger *zap.Logger, bn beaconprotocol.BeaconNetwork) *Mapping {
+	return &Mapping{
 		logger:     logger,
 		bn:         bn,
 		thresholds: make(map[spectypes.BeaconRole][]time.Duration),
@@ -31,7 +31,7 @@ func New(logger *zap.Logger, bn beaconprotocol.BeaconNetwork) *Cache {
 }
 
 // InitThresholds fills threshold cache for given role.
-func (c *Cache) InitThresholds(role spectypes.BeaconRole) {
+func (c *Mapping) InitThresholds(role spectypes.BeaconRole) {
 	unusedCtx := context.Background()
 	rt := roundtimer.New(unusedCtx, c.bn, role, nil)
 
@@ -56,7 +56,7 @@ func (c *Cache) InitThresholds(role spectypes.BeaconRole) {
 	c.logger.Fatal("too many rounds to initialize", fields.Count(fatalRoundThreshold))
 }
 
-func (c *Cache) maxPossibleDuration(role spectypes.BeaconRole) time.Duration {
+func (c *Mapping) maxPossibleDuration(role spectypes.BeaconRole) time.Duration {
 	switch role {
 	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator:
 		return c.bn.SlotDurationSec() * time.Duration(c.bn.SlotsPerEpoch())
@@ -68,13 +68,13 @@ func (c *Cache) maxPossibleDuration(role spectypes.BeaconRole) time.Duration {
 }
 
 // MaxPossibleRound returns max possible round for given role.
-func (c *Cache) MaxPossibleRound(role spectypes.BeaconRole) specqbft.Round {
+func (c *Mapping) MaxPossibleRound(role spectypes.BeaconRole) specqbft.Round {
 	return specqbft.Round(len(c.thresholds[role]))
 }
 
 // EstimatedRound returns estimated round for given role and duration.
 // If it is out of bounds, it returns the next round after max possible one, which is considered invalid.
-func (c *Cache) EstimatedRound(role spectypes.BeaconRole, sinceSlotStart time.Duration) specqbft.Round {
+func (c *Mapping) EstimatedRound(role spectypes.BeaconRole, sinceSlotStart time.Duration) specqbft.Round {
 	for i, threshold := range c.thresholds[role] {
 		if sinceSlotStart < threshold {
 			return specqbft.Round(i + 1)

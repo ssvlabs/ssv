@@ -115,7 +115,7 @@ func TestMessageValidator_currentEstimatedRound(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			mv := NewMessageValidator(networkconfig.TestNetwork).(*messageValidator)
 
-			got := mv.roundThresholdCache.EstimatedRound(tc.role, tc.sinceSlotStart)
+			got := mv.roundThresholdMapping.EstimatedRound(tc.role, tc.sinceSlotStart)
 			require.Equal(t, tc.want, got)
 		})
 	}

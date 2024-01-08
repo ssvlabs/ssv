@@ -80,7 +80,7 @@ type messageValidator struct {
 	dutyStore               *dutystore.Store
 	ownOperatorID           spectypes.OperatorID
 	operatorIDToPubkeyCache *hashmap.Map[spectypes.OperatorID, *rsa.PublicKey]
-	roundThresholdCache     *roundthresholds.Cache
+	roundThresholdMapping   *roundthresholds.Mapping
 
 	// validationLocks is a map of lock per SSV message ID to
 	// prevent concurrent access to the same state.
@@ -114,11 +114,11 @@ func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) Mes
 		opt(mv)
 	}
 
-	mv.roundThresholdCache = roundthresholds.New(mv.logger, netCfg.Beacon)
+	mv.roundThresholdMapping = roundthresholds.NewMapping(mv.logger, netCfg.Beacon)
 
 	for role, hasConsensus := range mv.beaconRoles {
 		if hasConsensus {
-			mv.roundThresholdCache.InitThresholds(role)
+			mv.roundThresholdMapping.InitThresholds(role)
 		}
 	}
 

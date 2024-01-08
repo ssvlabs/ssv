@@ -69,7 +69,7 @@ func (mv *messageValidator) validateConsensusMessage(
 		return consensusDescriptor, msgSlot, err
 	}
 
-	maxRound := mv.roundThresholdCache.MaxPossibleRound(role)
+	maxRound := mv.roundThresholdMapping.MaxPossibleRound(role)
 
 	if msgRound > maxRound {
 		e := ErrRoundTooHigh
@@ -84,7 +84,7 @@ func (mv *messageValidator) validateConsensusMessage(
 	estimatedRound := specqbft.FirstRound
 	if receivedAt.After(slotStartTime) {
 		sinceSlotStart = receivedAt.Sub(slotStartTime)
-		estimatedRound = mv.roundThresholdCache.EstimatedRound(role, sinceSlotStart)
+		estimatedRound = mv.roundThresholdMapping.EstimatedRound(role, sinceSlotStart)
 	}
 
 	lowestAllowed, highestAllowed := mv.allowedRoundRange(estimatedRound, maxRound)
