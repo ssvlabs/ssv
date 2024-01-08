@@ -1297,7 +1297,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("non-proposal with prepare justification", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(0)
 
 		msg := spectestingutils.TestingProposalMessageWithParams(
 			ks.Shares[1], spectypes.OperatorID(1), specqbft.FirstRound, specqbft.FirstHeight, spectestingutils.TestingQBFTRootData,
@@ -1328,7 +1328,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("non-proposal with round change justification", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(0)
 
 		msg := spectestingutils.TestingProposalMessageWithParams(
 			ks.Shares[1], spectypes.OperatorID(1), specqbft.FirstRound, specqbft.FirstHeight, spectestingutils.TestingQBFTRootData,
@@ -1411,7 +1411,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("double proposal with different data", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(0)
 
 		signed1 := spectestingutils.TestingProposalMessageWithRound(ks.Shares[1], 1, 1)
 		encodedSigned1, err := signed1.Encode()
@@ -1450,7 +1450,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("double prepare", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(0)
 
 		signed1 := spectestingutils.TestingPrepareMessage(ks.Shares[1], 1)
 		encodedSigned1, err := signed1.Encode()
@@ -1488,7 +1488,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("double commit", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(0)
 
 		signed1 := spectestingutils.TestingCommitMessage(ks.Shares[1], 1)
 		encodedSigned1, err := signed1.Encode()
@@ -1524,7 +1524,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("double round change", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(0)
 
 		signed1 := spectestingutils.TestingRoundChangeMessage(ks.Shares[1], 1)
 		encodedSigned1, err := signed1.Encode()
@@ -1560,7 +1560,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("too many decided", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(0)
 
 		msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester)
 
@@ -1627,7 +1627,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
 		msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester)
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(0)
 
 		signedMessage := spectestingutils.TestingPrepareMessageWithRound(ks.Shares[1], 1, 2)
 		encodedMessage, err := signedMessage.Encode()
@@ -1772,7 +1772,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				},
 			}
 
-			slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+			slot := netCfg.Beacon.FirstSlotAtEpoch(0)
 			receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
 			_, _, err = validator.validateP2PMessage(pMsg, receivedAt)
 			require.NoError(t, err)
