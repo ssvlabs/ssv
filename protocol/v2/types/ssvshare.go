@@ -2,10 +2,10 @@ package types
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/binary"
 	"encoding/gob"
 	"fmt"
+	"github.com/ethereum/go-ethereum/crypto"
 	"sort"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
@@ -67,25 +67,32 @@ func (s *SSVShare) SetFeeRecipient(feeRecipient bellatrix.ExecutionAddress) {
 
 // ComputeClusterIDHash will compute cluster ID hash with given owner address and operator ids
 func ComputeClusterIDHash(ownerAddress []byte, operatorIds []uint64) ([]byte, error) {
-	// Create a new hash
-	hash := sha256.New()
+	var encodedData []byte
 
-	// Write the binary representation of the owner address to the hash
-	hash.Write(ownerAddress)
-
-	// Sort the array in ascending order
+	// Sort the slice of uint64 in ascending order
 	sort.Slice(operatorIds, func(i, j int) bool {
 		return operatorIds[i] < operatorIds[j]
 	})
 
-	// Write the values to the hash
+	// Append bytes of the owner address
+	encodedData = append(encodedData, ownerAddress...)
+
+	// Append the ABI-encoded uint64 values
 	for _, id := range operatorIds {
-		if err := binary.Write(hash, binary.BigEndian, id); err != nil {
-			return nil, err
-		}
+		encodedData = append(encodedData, abiEncodeUint64(id)...)
 	}
 
-	return hash.Sum(nil), nil
+	// Compute the keccak256 hash of the encoded data
+	encrypted := crypto.Keccak256(encodedData)
+
+	return encrypted, nil
+}
+
+// abiEncodeUint64 encodes a uint64 value for ABI encoding.
+func abiEncodeUint64(value uint64) []byte {
+	buf := make([]byte, 8)
+	binary.BigEndian.PutUint64(buf, value)
+	return buf
 }
 
 func ComputeQuorumAndPartialQuorum(committeeSize int) (quorum uint64, partialQuorum uint64) {
