@@ -14,6 +14,8 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 )
 
+const fatalRoundThreshold = 20
+
 // Cache contains thresholds when each round finishes for each role.
 type Cache struct {
 	logger     *zap.Logger
@@ -39,24 +41,35 @@ func (c *Cache) InitThresholds(role spectypes.BeaconRole) {
 	unusedCtx := context.Background()
 	rt := roundtimer.New(unusedCtx, c.bn, role, nil)
 
-	var cumulativeDuration time.Duration
 	round := specqbft.Round(1)
 	c.thresholds[role] = []time.Duration{}
 
-	for {
-		roundDuration := rt.RoundDuration(round)
+	for i := 0; i < fatalRoundThreshold; i++ {
+		roundDuration := rt.DurationUntilEndOfRound(round)
 		if roundDuration <= 0 {
 			c.logger.Fatal("invalid round duration", fields.Round(round))
 		}
 
-		cumulativeDuration += roundDuration
-		c.thresholds[role] = append(c.thresholds[role], cumulativeDuration)
+		c.thresholds[role] = append(c.thresholds[role], roundDuration)
 
-		if cumulativeDuration > c.bn.SlotDurationSec()*time.Duration(c.bn.SlotsPerEpoch()) {
-			break
+		if roundDuration >= c.maxPossibleDuration(role) {
+			return
 		}
 
 		round++
+	}
+
+	c.logger.Fatal("too many rounds to initialize", fields.Count(fatalRoundThreshold))
+}
+
+func (c *Cache) maxPossibleDuration(role spectypes.BeaconRole) time.Duration {
+	switch role {
+	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator:
+		return c.bn.SlotDurationSec() * time.Duration(c.bn.SlotsPerEpoch())
+	case spectypes.BNRoleProposer, spectypes.BNRoleSyncCommittee, spectypes.BNRoleSyncCommitteeContribution:
+		return c.bn.SlotDurationSec()
+	default:
+		return 0
 	}
 }
 

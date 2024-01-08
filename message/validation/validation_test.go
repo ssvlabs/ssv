@@ -7,6 +7,7 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"math"
 	"testing"
 	"time"
@@ -1592,33 +1593,59 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("round too high", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-		tests := map[spectypes.BeaconRole]specqbft.Round{
-			spectypes.BNRoleAttester:                  11,
-			spectypes.BNRoleAggregator:                11,
-			spectypes.BNRoleProposer:                  13,
-			spectypes.BNRoleSyncCommittee:             11,
-			spectypes.BNRoleSyncCommitteeContribution: 11,
+		tests := map[spectypes.BeaconRole]map[specqbft.Round]bool{
+			spectypes.BNRoleAttester: {
+				12: false,
+				13: true,
+			},
+			spectypes.BNRoleAggregator: {
+				11: false,
+				12: true,
+			},
+			spectypes.BNRoleProposer: {
+				6: false,
+				7: true,
+			},
+			spectypes.BNRoleSyncCommittee: {
+				4: false,
+				5: true,
+			},
+			spectypes.BNRoleSyncCommitteeContribution: {
+				2: false,
+				3: true,
+			},
 		}
 
-		for role, round := range tests {
-			role, round := role, round
-			t.Run(role.String(), func(t *testing.T) {
-				msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role)
+		for role, rounds := range tests {
+			for round, roundIsTooHigh := range rounds {
+				round, roundIsTooHigh := round, roundIsTooHigh
+				t.Run(fmt.Sprintf("%s/%d", role, round), func(t *testing.T) {
+					msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role)
 
-				signedMessage := spectestingutils.TestingPrepareMessageWithRound(ks.Shares[1], 1, round)
-				encodedMessage, err := signedMessage.Encode()
-				require.NoError(t, err)
+					signedMessage := spectestingutils.TestingPrepareMessageWithRound(ks.Shares[1], 1, round)
+					encodedMessage, err := signedMessage.Encode()
+					require.NoError(t, err)
 
-				ssvMessage := &spectypes.SSVMessage{
-					MsgType: spectypes.SSVConsensusMsgType,
-					MsgID:   msgID,
-					Data:    encodedMessage,
-				}
+					ssvMessage := &spectypes.SSVMessage{
+						MsgType: spectypes.SSVConsensusMsgType,
+						MsgID:   msgID,
+						Data:    encodedMessage,
+					}
 
-				receivedAt := netCfg.Beacon.GetSlotStartTime(0)
-				_, _, err = validator.validateSSVMessage(ssvMessage, receivedAt, nil)
-				require.ErrorContains(t, err, ErrRoundTooHigh.Error())
-			})
+					receivedAt := netCfg.Beacon.GetSlotStartTime(0)
+					_, _, err = validator.validateSSVMessage(ssvMessage, receivedAt, nil)
+
+					expectedError := ErrRoundTooHigh
+					expectedError.got = fmt.Sprintf("%v (%v role)", round, role)
+					expectedError.want = fmt.Sprintf("%v (%v role)", validator.roundThresholdCache.MaxPossibleRound(role), role)
+
+					if roundIsTooHigh {
+						require.ErrorIs(t, err, expectedError)
+					} else {
+						require.NotErrorIs(t, err, expectedError)
+					}
+				})
+			}
 		}
 	})
 
