@@ -215,7 +215,11 @@ func TestDoubleTickWarning(t *testing.T) {
 
 	// Call Next() twice to process the ticks
 	<-ticker.Next()
+	firstSlot := ticker.Slot()
 	<-ticker.Next()
+	secondSlot := ticker.Slot()
+
+	require.NotEqual(t, firstSlot, secondSlot)
 
 	// Assert that the warning was logged
 	require.Equal(t, 1, recorded.Len(), "Expected a warning log for double tick")
@@ -228,5 +232,5 @@ func TestDoubleTickWarning(t *testing.T) {
 	// Extracting and checking the slot number from the log fields
 	slotField := loggedEntry.Context[0]
 	require.Equal(t, "slot", slotField.Key)
-	require.Equal(t, int64(ticker.slot), slotField.Integer)
+	require.Equal(t, int64(firstSlot), slotField.Integer)
 }

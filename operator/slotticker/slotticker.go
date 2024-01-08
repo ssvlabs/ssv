@@ -106,8 +106,8 @@ func (s *slotTicker) Next() <-chan time.Time {
 	nextSlot := phase0.Slot(timeSinceGenesis/s.slotDuration) + 1
 	if nextSlot <= s.slot {
 		// We've already ticked for this slot, so we need to wait for the next one.
-		nextSlot = s.slot
-		s.logger.Warn("double tick", zap.Uint64("slot", uint64(nextSlot)))
+		nextSlot = s.slot + 1
+		s.logger.Warn("double tick", zap.Uint64("slot", uint64(s.slot)))
 	}
 	nextSlotStartTime := s.genesisTime.Add(time.Duration(nextSlot) * s.slotDuration)
 	s.timer.Reset(time.Until(nextSlotStartTime))
