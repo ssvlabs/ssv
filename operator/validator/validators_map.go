@@ -37,18 +37,6 @@ type validatorsMap struct {
 	createValidatorFunc func(logger *zap.Logger, share *types.SSVShare) *validator.Validator
 }
 
-// newValidatorsMap returns a validators map
-func newValidatorsMap(ctx context.Context, optsTemplate *validator.Options) *validatorsMap {
-	vm := validatorsMap{
-		ctx:           ctx,
-		lock:          sync.RWMutex{},
-		validatorsMap: make(map[string]*validator.Validator),
-		optsTemplate:  optsTemplate,
-	}
-
-	return &vm
-}
-
 // ForEach loops over validators
 func (vm *validatorsMap) ForEach(iterator validatorIterator) error {
 	vm.lock.RLock()
