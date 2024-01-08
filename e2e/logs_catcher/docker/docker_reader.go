@@ -36,10 +36,10 @@ func StreamDockerLogs(
 		Follow:     true,
 		//Tail:       "40",
 	})
-	defer i.Close()
 	if err != nil {
 		return err
 	}
+	defer i.Close()
 	return processLogs(ctx, i, logsChan)
 }
 
