@@ -1417,6 +1417,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signed1 := spectestingutils.TestingRoundChangeMessageWithRound(ks.Shares[2], 2, 2)
 		signed1.FullData = []byte{1}
 		signed1.Message.Root, err = specqbft.HashDataRoot(signed1.FullData)
+		require.NoError(t, err)
+
 		encodedSigned1, err := signed1.Encode()
 		require.NoError(t, err)
 
@@ -1437,6 +1439,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			}))
 		signed2.FullData = []byte{2}
 		signed2.Message.Root, err = specqbft.HashDataRoot(signed2.FullData)
+		require.NoError(t, err)
+
 		encodedSigned2, err := signed2.Encode()
 		require.NoError(t, err)
 
