@@ -98,13 +98,17 @@ func (mv *messageValidator) validateConsensusMessage(
 	}
 
 	if mv.needFullDataHashCheck(signedMsg) {
+		if len(signedMsg.FullData) == 0 {
+			return consensusDescriptor, msgSlot, ErrEmptyFullData
+		}
+
 		hashedFullData, err := specqbft.HashDataRoot(signedMsg.FullData)
 		if err != nil {
 			return consensusDescriptor, msgSlot, fmt.Errorf("hash data root: %w", err)
 		}
 
 		if hashedFullData != signedMsg.Message.Root {
-			return consensusDescriptor, msgSlot, ErrInvalidHash
+			return consensusDescriptor, msgSlot, ErrInvalidFullDataHash
 		}
 	}
 
@@ -318,16 +322,11 @@ func (mv *messageValidator) validateBeaconDuty(
 }
 
 func (mv *messageValidator) needDuplicatedFullDataCheck(signedMsg *specqbft.SignedMessage) bool {
-	return (signedMsg.Message.MsgType == specqbft.ProposalMsgType ||
-		mv.isDecidedMessage(signedMsg)) &&
-		len(signedMsg.FullData) != 0
+	return signedMsg.Message.MsgType == specqbft.ProposalMsgType || mv.isDecidedMessage(signedMsg)
 }
 
 func (mv *messageValidator) needFullDataHashCheck(signedMsg *specqbft.SignedMessage) bool {
-	return (signedMsg.Message.MsgType == specqbft.ProposalMsgType ||
-		signedMsg.Message.MsgType == specqbft.RoundChangeMsgType ||
-		mv.isDecidedMessage(signedMsg)) &&
-		len(signedMsg.FullData) != 0
+	return signedMsg.Message.MsgType == specqbft.RoundChangeMsgType || mv.needDuplicatedFullDataCheck(signedMsg)
 }
 
 func (mv *messageValidator) isDecidedMessage(signedMsg *specqbft.SignedMessage) bool {

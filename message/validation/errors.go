@@ -75,7 +75,8 @@ var (
 	ErrSignerNotLeader                     = Error{text: "signer is not leader", reject: true}
 	ErrSignersNotSorted                    = Error{text: "signers are not sorted", reject: true}
 	ErrUnexpectedSigner                    = Error{text: "signer is not expected", reject: true}
-	ErrInvalidHash                         = Error{text: "root doesn't match full data hash", reject: true}
+	ErrEmptyFullData                       = Error{text: "full data is empty", reject: true}
+	ErrInvalidFullDataHash                 = Error{text: "root doesn't match full data hash", reject: true}
 	ErrEstimatedRoundTooFar                = Error{text: "message round is too far from estimated"}
 	ErrMalformedMessage                    = Error{text: "message could not be decoded", reject: true}
 	ErrMalformedSignedMessage              = Error{text: "signed message could not be decoded", reject: true}

@@ -1403,7 +1403,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
 		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
 
-		expectedErr := ErrInvalidHash
+		expectedErr := ErrInvalidFullDataHash
 		require.ErrorIs(t, err, expectedErr)
 	})
 
