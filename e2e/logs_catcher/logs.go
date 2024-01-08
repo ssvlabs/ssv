@@ -144,6 +144,7 @@ func FatalListener(ctx context.Context, logger *zap.Logger, cli DockerCLI) error
 	if err != nil && !errors.Is(err, context.Canceled) {
 		logger.Error("Log streaming stopped with err ", zap.Error(err))
 		c()
+		errChan <- err
 	}
 
 	return <-errChan
