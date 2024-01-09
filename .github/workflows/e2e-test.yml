@@ -21,8 +21,9 @@ jobs:
           BEACON_NODE_URL: ${{ secrets.E2E_BEACON_NODE_URL }}
           EXECUTION_NODE_URL: ${{ secrets.E2E_EXECUTION_NODE_URL }}
         run: |
-          chmod +x ./e2e/run.sh
-          ./e2e/run.sh
+          cd ./e2e/
+          chmod +x ./run.sh
+          ./run.sh
 
       - name: clean up
         run: docker compose down -v
