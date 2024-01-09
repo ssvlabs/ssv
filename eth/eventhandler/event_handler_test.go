@@ -323,7 +323,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	})
 
 	// Setting new blocks producer
-	fmt.Println("FORKING ON BLOCK ", lastBlock.NumberU64())
+	logger.Info("switching to finalized blocks consuming", zap.Uint64("block", lastBlock.NumberU64()))
 	executionclient.WithFinalizedCheckpointsFork(phase0.Slot(lastBlock.NumberU64()))(client)
 	executionclient.WithFinalizedBlocksSubscription(ctx, ethtestutils.SetFinalizedBlocksProducer(sim))(client)
 
