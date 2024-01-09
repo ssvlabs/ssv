@@ -132,8 +132,6 @@ spec:
               value: "false"
             - name: PUBSUB_TRACE
               value: "false"
-            - name: SUBNETS
-              value: "0xffffffffffffffffffffffffffffffff"
           volumeMounts:
             - mountPath: /data
               name: ssv-exporter-holesky

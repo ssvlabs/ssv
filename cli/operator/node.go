@@ -301,10 +301,11 @@ var StartNodeCmd = &cobra.Command{
 				fmt.Sprintf(":%d", cfg.SSVAPIPort),
 				&handlers.Node{
 					// TODO: replace with narrower interface! (instead of accessing the entire PeersIndex)
-					PeersIndex: p2pNetwork.(p2pv1.PeersIndexProvider).PeersIndex(),
-					Network:    p2pNetwork.(p2pv1.HostProvider).Host().Network(),
-					TopicIndex: p2pNetwork.(handlers.TopicIndex),
-					NodeProber: nodeProber,
+					ListenAddresses: []string{fmt.Sprintf("tcp://%s:%d", cfg.P2pNetworkConfig.HostAddress, cfg.P2pNetworkConfig.TCPPort), fmt.Sprintf("udp://%s:%d", cfg.P2pNetworkConfig.HostAddress, cfg.P2pNetworkConfig.UDPPort)},
+					PeersIndex:      p2pNetwork.(p2pv1.PeersIndexProvider).PeersIndex(),
+					Network:         p2pNetwork.(p2pv1.HostProvider).Host().Network(),
+					TopicIndex:      p2pNetwork.(handlers.TopicIndex),
+					NodeProber:      nodeProber,
 				},
 				&handlers.Validators{
 					Shares: nodeStorage.Shares(),
