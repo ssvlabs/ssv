@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pkg/errors"
+	"errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/e2e/logs_catcher/docker"

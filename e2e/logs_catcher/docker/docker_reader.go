@@ -3,10 +3,10 @@ package docker
 import (
 	"bufio"
 	"context"
-	"fmt"
 	"github.com/bloxapp/ssv/e2e/logs_catcher/logs"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
+	"github.com/pkg/errors"
 	"io"
 	"strings"
 )
@@ -50,7 +50,7 @@ func processLogs(ctx context.Context, reader io.ReadCloser, logChan chan<- strin
 	for scanner.Scan() {
 		// Check for any scanner errors
 		if err := scanner.Err(); err != nil {
-			return fmt.Errorf("error reading logs: %v", err)
+			return errors.Wrap(err, "error reading logs")
 		}
 
 		line := string(scanner.Bytes())
