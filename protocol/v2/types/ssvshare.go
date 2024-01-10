@@ -83,9 +83,9 @@ func ComputeClusterIDHash(ownerAddress []byte, operatorIds []uint64) ([]byte, er
 	}
 
 	// Compute the keccak256 hash of the encoded data
-	encrypted := crypto.Keccak256(encodedData)
+	clusterHash := crypto.Keccak256(encodedData)
 
-	return encrypted, nil
+	return clusterHash, nil
 }
 
 // abiEncodeUint64 encodes a uint64 value for ABI encoding.
