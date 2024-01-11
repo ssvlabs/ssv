@@ -254,6 +254,7 @@ func setupOperatorStorage(
 ) (operatorstorage.Storage, *registrystorage.OperatorData) {
 	if operator == nil {
 		logger.Fatal("empty test operator was passed")
+		return nil, nil // Linter needs to see this.
 	}
 
 	nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)
