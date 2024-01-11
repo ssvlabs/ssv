@@ -2,6 +2,7 @@ package ethtestutils
 
 import (
 	"context"
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"testing"
 
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
@@ -10,8 +11,8 @@ import (
 	"github.com/bloxapp/ssv/eth/simulator"
 )
 
-func SetFinalizedBlocksProducer(sim *simulator.SimulatedBackend) func(ctx context.Context, finalizedBlocks chan<- uint64) error {
-	return func(ctx context.Context, finalizedBlocks chan<- uint64) error {
+func SetFinalizedBlocksProducer(sim *simulator.SimulatedBackend) func(ctx context.Context, feed chan<- *eth2apiv1.FinalizedCheckpointEvent) error {
+	return func(ctx context.Context, finalizedBlocks chan<- *eth2apiv1.FinalizedCheckpointEvent) error {
 		go func() {
 			heads := make(chan *ethtypes.Header)
 			sub, _ := sim.SubscribeNewHead(ctx, heads)
@@ -23,11 +24,11 @@ func SetFinalizedBlocksProducer(sim *simulator.SimulatedBackend) func(ctx contex
 					return
 				case <-sub.Err():
 					close(finalizedBlocks)
-				case header, ok := <-heads:
+				case _, ok := <-heads:
 					if !ok {
 						return
 					}
-					finalizedBlocks <- header.Number.Uint64()
+					finalizedBlocks <- &eth2apiv1.FinalizedCheckpointEvent{}
 				}
 			}
 		}()

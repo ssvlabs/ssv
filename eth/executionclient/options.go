@@ -3,9 +3,9 @@ package executionclient
 import (
 	"context"
 	"fmt"
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"go.uber.org/zap"
 )
 
@@ -65,13 +65,13 @@ func WithLogBatchSize(size uint64) Option {
 // WithFinalizedBlocksSubscription setting up a subscription for beacon sync channel to be consumed in streamLogsToChan
 func WithFinalizedBlocksSubscription(
 	ctx context.Context,
-	subscribe func(ctx context.Context, finalizedBlocks chan<- uint64) error,
+	subscribe func(ctx context.Context, finalizedBlocks chan<- *eth2apiv1.FinalizedCheckpointEvent) error,
 ) Option {
 	return func(s *ExecutionClient) {
-		if s.blocksChan == nil {
-			s.blocksChan = make(chan uint64)
+		if s.finalizedCheckpointFeed == nil {
+			s.finalizedCheckpointFeed = make(chan *eth2apiv1.FinalizedCheckpointEvent)
 		}
-		if err := subscribe(ctx, s.blocksChan); err != nil {
+		if err := subscribe(ctx, s.finalizedCheckpointFeed); err != nil {
 			panic(fmt.Errorf("can't setup dependencies for exec client: %w", err))
 		}
 	}
@@ -79,9 +79,9 @@ func WithFinalizedBlocksSubscription(
 
 // WithFinalizedCheckpointsFork sets the exact
 func WithFinalizedCheckpointsFork(
-	finalizedCheckpointActivationSlot phase0.Slot,
+	finalizedCheckpointForkActivationHeight uint64,
 ) Option {
 	return func(s *ExecutionClient) {
-		s.finalizedCheckpointActivationSlot = uint64(finalizedCheckpointActivationSlot)
+		s.finalizedCheckpointActivationSlot = finalizedCheckpointForkActivationHeight
 	}
 }

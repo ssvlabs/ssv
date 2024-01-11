@@ -290,7 +290,7 @@ func (m *MockeventsProducer) EXPECT() *MockeventsProducerMockRecorder {
 }
 
 // SubscribeOnFinalizedBlocks mocks base method.
-func (m *MockeventsProducer) SubscribeOnFinalizedBlocks(ctx context.Context, finalizedBlocks chan<- uint64) error {
+func (m *MockeventsProducer) SubscribeOnFinalizedBlocks(ctx context.Context, finalizedBlocks chan<- *v1.FinalizedCheckpointEvent) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SubscribeOnFinalizedBlocks", ctx, finalizedBlocks)
 	ret0, _ := ret[0].(error)
@@ -695,7 +695,7 @@ func (mr *MockBeaconNodeMockRecorder) SubmitVoluntaryExit(voluntaryExit, sig int
 }
 
 // SubscribeOnFinalizedBlocks mocks base method.
-func (m *MockBeaconNode) SubscribeOnFinalizedBlocks(ctx context.Context, finalizedBlocks chan<- uint64) error {
+func (m *MockBeaconNode) SubscribeOnFinalizedBlocks(ctx context.Context, finalizedBlocks chan<- *v1.FinalizedCheckpointEvent) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SubscribeOnFinalizedBlocks", ctx, finalizedBlocks)
 	ret0, _ := ret[0].(error)

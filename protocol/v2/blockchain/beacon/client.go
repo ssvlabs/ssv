@@ -46,7 +46,7 @@ type signer interface {
 }
 
 type eventsProducer interface {
-	SubscribeOnFinalizedBlocks(ctx context.Context, finalizedBlocks chan<- uint64) error
+	SubscribeOnFinalizedBlocks(ctx context.Context, finalizedBlocks chan<- *eth2apiv1.FinalizedCheckpointEvent) error
 }
 
 // BeaconNode interface for all beacon duty calls

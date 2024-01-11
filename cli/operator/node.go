@@ -159,7 +159,7 @@ var StartNodeCmd = &cobra.Command{
 			executionclient.WithConnectionTimeout(cfg.ExecutionClient.ConnectionTimeout),
 			executionclient.WithReconnectionInitialInterval(executionclient.DefaultReconnectionInitialInterval),
 			executionclient.WithReconnectionMaxInterval(executionclient.DefaultReconnectionMaxInterval),
-			executionclient.WithFinalizedCheckpointsFork(networkConfig.FinalizedCheckpointActivationSlot),
+			executionclient.WithFinalizedCheckpointsFork(networkConfig.FinalizedCheckpointForkActivationHeight),
 			executionclient.WithFinalizedBlocksSubscription(cmd.Context(), consensusClient.SubscribeOnFinalizedBlocks),
 		)
 		if err != nil {

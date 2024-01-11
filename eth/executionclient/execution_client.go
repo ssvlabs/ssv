@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"math/big"
 	"time"
 
@@ -30,9 +31,9 @@ var (
 // ExecutionClient represents a client for interacting with Ethereum execution client.
 type ExecutionClient struct {
 	// mandatory
-	nodeAddr        string
-	blocksChan      chan uint64
-	contractAddress ethcommon.Address
+	nodeAddr                string
+	finalizedCheckpointFeed chan *eth2apiv1.FinalizedCheckpointEvent
+	contractAddress         ethcommon.Address
 
 	// optional
 	logger                            *zap.Logger
@@ -58,7 +59,7 @@ func New(
 ) (*ExecutionClient, error) {
 	client := &ExecutionClient{
 		nodeAddr:                          nodeAddr,
-		blocksChan:                        make(chan uint64),
+		finalizedCheckpointFeed:           make(chan *eth2apiv1.FinalizedCheckpointEvent),
 		contractAddress:                   contractAddr,
 		logger:                            zap.NewNop(),
 		metrics:                           nopMetrics{},
@@ -83,7 +84,7 @@ func New(
 // Close shuts down ExecutionClient.
 func (ec *ExecutionClient) Close() error {
 	close(ec.closed)
-	close(ec.blocksChan)
+	close(ec.finalizedCheckpointFeed)
 	ec.client.Close()
 	return nil
 }
@@ -105,7 +106,7 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 	case ec.finalizedCheckpointActivationSlot <= currentBlock:
 		lastFinalizedBlock, err := ec.client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get current block: %w", err)
+			return nil, nil, fmt.Errorf("failed to get the last finalized block: %w", err)
 		}
 
 		toBlock = lastFinalizedBlock.Number.Uint64()
@@ -352,10 +353,18 @@ func (ec *ExecutionClient) streamFinalizedBlocks(ctx context.Context, logs chan<
 		case <-ec.closed:
 			return fromBlock, ErrClosed
 
-		case toBlock, ok := <-ec.blocksChan:
+		case _, ok := <-ec.finalizedCheckpointFeed:
 			if !ok {
 				return lastBlock, fmt.Errorf("blocksChan is closed")
 			}
+
+			lastFinalizedBlock, err := ec.client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
+			if err != nil {
+				return lastBlock, fmt.Errorf("failed to get the last finalized block: %w", err)
+			}
+
+			toBlock := lastFinalizedBlock.Number.Uint64()
+
 			if toBlock < ec.finalizedCheckpointActivationSlot {
 				panic(fmt.Sprintf("invalid blocks sequence: received block %d while last handled block is %d", toBlock, lastBlock))
 			}

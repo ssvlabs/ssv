@@ -324,7 +324,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 	// Setting new blocks producer
 	logger.Info("switching to finalized blocks consuming", zap.Uint64("block", lastBlock.NumberU64()))
-	executionclient.WithFinalizedCheckpointsFork(phase0.Slot(lastBlock.NumberU64()))(client)
+	executionclient.WithFinalizedCheckpointsFork(lastBlock.NumberU64())(client)
 	executionclient.WithFinalizedBlocksSubscription(ctx, ethtestutils.SetFinalizedBlocksProducer(sim))(client)
 
 	// Receive event, unmarshall, parse, check parse event is not nil or with an error,
