@@ -510,7 +510,7 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 		return errors.Wrap(err, "could not update validator metadata")
 	}
 
-	// If this validator is not ours, don't start it.
+	// If this validator is not ours or is liquidated, don't start it.
 	pkBytes, err := hex.DecodeString(pk)
 	if err != nil {
 		return errors.Wrap(err, "could not decode public key")
@@ -520,7 +520,7 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 	if share == nil {
 		return errors.New("share was not found")
 	}
-	if !share.BelongsToOperator(c.GetOperatorData().ID) {
+	if !share.BelongsToOperator(c.GetOperatorData().ID) || share.Liquidated {
 		return nil
 	}
 
