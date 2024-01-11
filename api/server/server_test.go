@@ -6,10 +6,14 @@ import (
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
+	"net/http/httptest"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -36,9 +40,11 @@ import (
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
-// TODO: finish the test
+type signResponseJSON struct {
+	Signature string `json:"signature"`
+}
+
 func TestAPI(t *testing.T) {
-	t.SkipNow()
 	logger := zap.New(zapcore.NewNopCore(), zap.WithFatalHook(zapcore.WriteThenPanic))
 	_, pv, err := rsaencryption.GenerateKeys()
 	require.NoError(t, err)
@@ -72,9 +78,8 @@ func TestAPI(t *testing.T) {
 	require.NoError(t, err)
 	apiServer := New(
 		logger,
-		fmt.Sprintf("http://127.0.0.1:%d", 3000),
+		fmt.Sprintf(":%d", 3000),
 		&handlers.Node{
-			// TODO: replace with narrower interface! (instead of accessing the entire PeersIndex)
 			ListenAddresses: []string{fmt.Sprintf("tcp://%s:%d", "localhost", 3030), fmt.Sprintf("udp://%s:%d", "localhost", 3030)},
 			PeersIndex:      ln.Nodes[0].(p2pv1.PeersIndexProvider).PeersIndex(),
 			Network:         ln.Nodes[0].(p2pv1.HostProvider).Host().Network(),
@@ -89,21 +94,22 @@ func TestAPI(t *testing.T) {
 		},
 		jwtauth.New("HS256", []byte("secret"), nil),
 	)
-	go func() {
-		err := apiServer.Run()
-		if err != nil {
-			logger.Fatal("failed to start API server", zap.Error(err))
-		}
-	}()
-	data := []byte(`{"data":"0x000"}`)
+	router := apiServer.SetRoutes()
+	testServer := httptest.NewServer(router)
+	hash := sha256.Sum256([]byte("Hello"))
+	data := []byte(fmt.Sprintf(`{"data":"%s"}`, hex.EncodeToString(hash[:])))
 	r := bytes.NewReader(data)
 	require.NoError(t, err)
-	resp, err := http.Post("http://127.0.0.1:3000/v1/node/sign", "application/json", r)
+	_, tokenString, err := jwtauth.New("HS256", []byte("secret"), nil).Encode(nil)
 	require.NoError(t, err)
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+	_, respData := testRequest(t, testServer, "POST", "/v1/node/sign", tokenString, r)
+	sigResp := &signResponseJSON{}
+	err = json.Unmarshal(respData, &sigResp)
 	require.NoError(t, err)
-	t.Log("response Body:", string(body))
+	sigBytes, err := hex.DecodeString(sigResp.Signature)
+	require.NoError(t, err)
+	err = rsa.VerifyPKCS1v15(&priv.PublicKey, crypto.SHA256, hash[:], sigBytes)
+	require.NoError(t, err)
 }
 
 func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options p2pv1.LocalNetOptions, pks ...string) (*p2pv1.LocalNet, []*dummyRouter, error) {
@@ -197,4 +203,30 @@ func (sc *node) Healthy(context.Context) error {
 		return *err
 	}
 	return nil
+}
+
+func testRequest(t *testing.T, ts *httptest.Server, method, path, token string, body io.Reader) (*http.Response, []byte) {
+	req, err := http.NewRequest(method, ts.URL+path, body)
+	if err != nil {
+		t.Fatal(err)
+		return nil, nil
+	}
+	if token != "" {
+		req.Header = http.Header{
+			"Content-Type":  {"application/json"},
+			"Authorization": {"Bearer " + token},
+		}
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+		return nil, nil
+	}
+	respBody, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+		return nil, nil
+	}
+	defer resp.Body.Close()
+	return resp, respBody
 }

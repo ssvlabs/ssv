@@ -40,6 +40,17 @@ func New(
 }
 
 func (s *Server) Run() error {
+	s.logger.Info("Serving SSV API", zap.String("addr", s.addr))
+	server := &http.Server{
+		Addr:         s.addr,
+		Handler:      s.SetRoutes(),
+		ReadTimeout:  12 * time.Second,
+		WriteTimeout: 12 * time.Second,
+	}
+	return server.ListenAndServe()
+}
+
+func (s *Server) SetRoutes() chi.Router {
 	router := chi.NewRouter()
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.Throttle(runtime.NumCPU() * 4))
@@ -56,16 +67,7 @@ func (s *Server) Run() error {
 	router.Get("/v1/node/topics", api.Handler(s.node.Topics))
 	router.Get("/v1/node/health", api.Handler(s.node.Health))
 	router.Get("/v1/validators", api.Handler(s.validators.List))
-
-	s.logger.Info("Serving SSV API", zap.String("addr", s.addr))
-
-	server := &http.Server{
-		Addr:         s.addr,
-		Handler:      router,
-		ReadTimeout:  12 * time.Second,
-		WriteTimeout: 12 * time.Second,
-	}
-	return server.ListenAndServe()
+	return router
 }
 
 func middlewareLogger(logger *zap.Logger) func(next http.Handler) http.Handler {
