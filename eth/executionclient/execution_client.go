@@ -23,7 +23,6 @@ import (
 
 var (
 	ErrClosed        = fmt.Errorf("closed")
-	ErrNotConnected  = fmt.Errorf("not connected")
 	ErrBadInput      = fmt.Errorf("bad input")
 	ErrNothingToSync = errors.New("nothing to sync")
 )
@@ -36,14 +35,15 @@ type ExecutionClient struct {
 	contractAddress         ethcommon.Address
 
 	// optional
-	logger                            *zap.Logger
-	metrics                           metrics
-	connectionTimeout                 time.Duration
-	reconnectionInitialInterval       time.Duration
-	reconnectionMaxInterval           time.Duration
-	logBatchSize                      uint64
-	followDistance                    uint64 // used for backward compatibility only
-	finalizedCheckpointActivationSlot uint64
+	logger                              *zap.Logger
+	metrics                             metrics
+	connectionTimeout                   time.Duration
+	reconnectionInitialInterval         time.Duration
+	reconnectionMaxInterval             time.Duration
+	logBatchSize                        uint64
+	followDistance                      uint64 // used for backward compatibility only
+	finalizedCheckpointActivationHeight uint64
+	rpcGetHeaderArg                     rpc.BlockNumber // todo add meaningful comment
 
 	// variables
 	client *ethclient.Client
@@ -58,18 +58,19 @@ func New(
 	opts ...Option,
 ) (*ExecutionClient, error) {
 	client := &ExecutionClient{
-		nodeAddr:                          nodeAddr,
-		finalizedCheckpointFeed:           make(chan *eth2apiv1.FinalizedCheckpointEvent),
-		contractAddress:                   contractAddr,
-		logger:                            zap.NewNop(),
-		metrics:                           nopMetrics{},
-		followDistance:                    DefaultFollowDistance,
-		finalizedCheckpointActivationSlot: DefaultFinalizedCheckpointActivationSlot,
-		connectionTimeout:                 DefaultConnectionTimeout,
-		reconnectionInitialInterval:       DefaultReconnectionInitialInterval,
-		reconnectionMaxInterval:           DefaultReconnectionMaxInterval,
-		logBatchSize:                      DefaultHistoricalLogsBatchSize, // TODO Make batch of logs adaptive depending on "websocket: read limit"
-		closed:                            make(chan struct{}),
+		nodeAddr:                            nodeAddr,
+		finalizedCheckpointFeed:             make(chan *eth2apiv1.FinalizedCheckpointEvent),
+		contractAddress:                     contractAddr,
+		logger:                              zap.NewNop(),
+		metrics:                             nopMetrics{},
+		rpcGetHeaderArg:                     defaultRpcGetHeaderArg,
+		followDistance:                      DefaultFollowDistance,
+		finalizedCheckpointActivationHeight: 1<<64 - 1,
+		connectionTimeout:                   DefaultConnectionTimeout,
+		reconnectionInitialInterval:         DefaultReconnectionInitialInterval,
+		reconnectionMaxInterval:             DefaultReconnectionMaxInterval,
+		logBatchSize:                        DefaultHistoricalLogsBatchSize, // TODO Make batch of logs adaptive depending on "websocket: read limit"
+		closed:                              make(chan struct{}),
 	}
 	for _, opt := range opts {
 		opt(client)
@@ -98,13 +99,13 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 	}
 
 	switch {
-	case currentBlock < ec.finalizedCheckpointActivationSlot:
+	case currentBlock < ec.finalizedCheckpointActivationHeight:
 		if currentBlock < ec.followDistance {
 			return nil, nil, ErrNothingToSync
 		}
 		toBlock = currentBlock - ec.followDistance
-	case ec.finalizedCheckpointActivationSlot <= currentBlock:
-		lastFinalizedBlock, err := ec.client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
+	case ec.finalizedCheckpointActivationHeight <= currentBlock:
+		lastFinalizedBlock, err := ec.client.HeaderByNumber(ctx, ec.FinalizedBlockArg())
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to get the last finalized block: %w", err)
 		}
@@ -319,7 +320,7 @@ func (ec *ExecutionClient) streamLatestBlocks(ctx context.Context, logs chan<- B
 			return fromBlock, fmt.Errorf("subscription: %w", err)
 
 		case header := <-heads:
-			if header.Number.Uint64() >= ec.finalizedCheckpointActivationSlot {
+			if header.Number.Uint64() >= ec.finalizedCheckpointActivationHeight {
 				return header.Number.Uint64(), nil
 			}
 			if header.Number.Uint64() < ec.followDistance {
@@ -358,14 +359,14 @@ func (ec *ExecutionClient) streamFinalizedBlocks(ctx context.Context, logs chan<
 				return lastBlock, fmt.Errorf("blocksChan is closed")
 			}
 
-			lastFinalizedBlock, err := ec.client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
+			lastFinalizedBlock, err := ec.client.HeaderByNumber(ctx, ec.FinalizedBlockArg())
 			if err != nil {
 				return lastBlock, fmt.Errorf("failed to get the last finalized block: %w", err)
 			}
 
 			toBlock := lastFinalizedBlock.Number.Uint64()
 
-			if toBlock < ec.finalizedCheckpointActivationSlot {
+			if toBlock < ec.finalizedCheckpointActivationHeight {
 				panic(fmt.Sprintf("invalid blocks sequence: received block %d while last handled block is %d", toBlock, lastBlock))
 			}
 			if toBlock < ec.followDistance {
@@ -437,4 +438,8 @@ func (ec *ExecutionClient) reconnect(ctx context.Context) {
 
 func (ec *ExecutionClient) Filterer() (*contract.ContractFilterer, error) {
 	return contract.NewContractFilterer(ec.contractAddress, ec.client)
+}
+
+func (ec *ExecutionClient) FinalizedBlockArg() *big.Int {
+	return big.NewInt(ec.rpcGetHeaderArg.Int64())
 }

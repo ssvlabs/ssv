@@ -87,7 +87,6 @@ func TestFetchHistoricalLogs(t *testing.T) {
 		contractAddr,
 		WithLogger(logger),
 		WithFollowDistance(followDistance),
-		WithFinalizedCheckpointsFork(1<<64-1),
 	)
 	require.NoError(t, err)
 

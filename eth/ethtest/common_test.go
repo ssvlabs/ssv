@@ -180,7 +180,7 @@ func (e *TestEnv) setup(
 		contractAddr,
 		executionclient.WithLogger(logger),
 		executionclient.WithFollowDistance(*e.followDistance),
-		executionclient.WithFinalizedCheckpointsFork(1<<64-1),
+		//executionclient.WithFinalizedCheckpointsFork(1<<64-1),
 		//executionclient.WithFinalizedBlocksSubscription(ctx, ethtestutils.SetFinalizedBlocksProducer(sim)),
 	)
 	if err != nil {

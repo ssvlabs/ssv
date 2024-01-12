@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/ethereum/go-ethereum/rpc"
 	"time"
 
 	"go.uber.org/zap"
@@ -77,11 +78,20 @@ func WithFinalizedBlocksSubscription(
 	}
 }
 
-// WithFinalizedCheckpointsFork sets the exact
+// WithFinalizedCheckpointsFork sets the height for fork switch to handling only finalized blocks
 func WithFinalizedCheckpointsFork(
 	finalizedCheckpointForkActivationHeight uint64,
 ) Option {
 	return func(s *ExecutionClient) {
-		s.finalizedCheckpointActivationSlot = finalizedCheckpointForkActivationHeight
+		s.finalizedCheckpointActivationHeight = finalizedCheckpointForkActivationHeight
+	}
+}
+
+// WithCustomGetHeaderArg sets the exact
+func WithCustomGetHeaderArg(
+	arg rpc.BlockNumber,
+) Option {
+	return func(s *ExecutionClient) {
+		s.rpcGetHeaderArg = arg
 	}
 }

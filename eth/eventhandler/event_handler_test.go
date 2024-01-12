@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/ethereum/go-ethereum/rpc"
 	"math/big"
 	"net/http/httptest"
 	"strings"
@@ -125,7 +126,6 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		contractAddr,
 		executionclient.WithLogger(logger),
 		executionclient.WithFollowDistance(0),
-		executionclient.WithFinalizedCheckpointsFork(1<<64-1),
 	)
 	require.NoError(t, err)
 
@@ -324,6 +324,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 	// Setting new blocks producer
 	logger.Info("switching to finalized blocks consuming", zap.Uint64("block", lastBlock.NumberU64()))
+
+	executionclient.WithCustomGetHeaderArg(rpc.LatestBlockNumber)(client)
 	executionclient.WithFinalizedCheckpointsFork(lastBlock.NumberU64())(client)
 	executionclient.WithFinalizedBlocksSubscription(ctx, ethtestutils.SetFinalizedBlocksProducer(sim))(client)
 
