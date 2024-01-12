@@ -40,10 +40,6 @@ import (
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
-type signResponseJSON struct {
-	Signature string `json:"signature"`
-}
-
 func TestAPI(t *testing.T) {
 	logger := zap.New(zapcore.NewNopCore(), zap.WithFatalHook(zapcore.WriteThenPanic))
 	_, pv, err := rsaencryption.GenerateKeys()
@@ -53,7 +49,49 @@ func TestAPI(t *testing.T) {
 	n := 4
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	apiServer := createTestNodeWithAPI(t, priv, n, ctx, logger)
+	router := apiServer.SetRoutes()
+	testServer := httptest.NewServer(router)
+	t.Run("authorized /v1/node/sign", func(t *testing.T) {
+		hash := sha256.Sum256([]byte("Hello"))
+		data := []byte(fmt.Sprintf(`{"data":"%s"}`, hex.EncodeToString(hash[:])))
+		r := bytes.NewReader(data)
+		require.NoError(t, err)
+		_, tokenString, err := jwtauth.New("HS256", []byte("secret"), nil).Encode(nil)
+		require.NoError(t, err)
+		_, respData := testRequest(t, testServer, "POST", "/v1/node/sign", tokenString, r)
+		sigResp := &handlers.SignResponseJSON{}
+		err = json.Unmarshal(respData, &sigResp)
+		require.NoError(t, err)
+		sigBytes, err := hex.DecodeString(sigResp.Signature)
+		require.NoError(t, err)
+		err = rsa.VerifyPKCS1v15(&priv.PublicKey, crypto.SHA256, hash[:], sigBytes)
+		require.NoError(t, err)
+	})
+	t.Run("non-authorized /v1/node/identity", func(t *testing.T) {
+		_, respData := testRequest(t, testServer, "GET", "/v1/node/identity", "", nil)
+		identity := &handlers.IdentityJSON{}
+		err = json.Unmarshal(respData, &identity)
+		require.NoError(t, err)
+		require.NotEmpty(t, identity.PeerID)
+	})
+	t.Run("non-authorized /v1/node/peers", func(t *testing.T) {
+		_, respData := testRequest(t, testServer, "GET", "/v1/node/peers", "", nil)
+		peers := &[]handlers.PeerJSON{}
+		err = json.Unmarshal(respData, &peers)
+		require.NoError(t, err)
+		require.NotEmpty(t, peers)
+	})
+	t.Run("non-authorized /v1/node/topics", func(t *testing.T) {
+		_, respData := testRequest(t, testServer, "GET", "/v1/node/topics", "", nil)
+		topics := &handlers.AllPeersAndTopicsJSON{}
+		err = json.Unmarshal(respData, &topics)
+		require.NoError(t, err)
+		require.NotEmpty(t, topics)
+	})
+}
 
+func createTestNodeWithAPI(t *testing.T, priv *rsa.PrivateKey, n int, ctx context.Context, logger *zap.Logger) *Server {
 	pks := []string{"b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400",
 		"824b9024767a01b56790a72afb5f18bb0f97d5bddb946a7bd8dd35cc607c35a4d76be21f24f484d0d478b99dc63ed170"}
 	ln, routers, err := createNetworkAndSubscribe(t, ctx, p2pv1.LocalNetOptions{
@@ -76,7 +114,7 @@ func TestAPI(t *testing.T) {
 	require.NoError(t, err)
 	nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)
 	require.NoError(t, err)
-	apiServer := New(
+	return New(
 		logger,
 		fmt.Sprintf(":%d", 3000),
 		&handlers.Node{
@@ -94,22 +132,6 @@ func TestAPI(t *testing.T) {
 		},
 		jwtauth.New("HS256", []byte("secret"), nil),
 	)
-	router := apiServer.SetRoutes()
-	testServer := httptest.NewServer(router)
-	hash := sha256.Sum256([]byte("Hello"))
-	data := []byte(fmt.Sprintf(`{"data":"%s"}`, hex.EncodeToString(hash[:])))
-	r := bytes.NewReader(data)
-	require.NoError(t, err)
-	_, tokenString, err := jwtauth.New("HS256", []byte("secret"), nil).Encode(nil)
-	require.NoError(t, err)
-	_, respData := testRequest(t, testServer, "POST", "/v1/node/sign", tokenString, r)
-	sigResp := &signResponseJSON{}
-	err = json.Unmarshal(respData, &sigResp)
-	require.NoError(t, err)
-	sigBytes, err := hex.DecodeString(sigResp.Signature)
-	require.NoError(t, err)
-	err = rsa.VerifyPKCS1v15(&priv.PublicKey, crypto.SHA256, hash[:], sigBytes)
-	require.NoError(t, err)
 }
 
 func createNetworkAndSubscribe(t *testing.T, ctx context.Context, options p2pv1.LocalNetOptions, pks ...string) (*p2pv1.LocalNet, []*dummyRouter, error) {

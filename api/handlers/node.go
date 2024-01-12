@@ -41,7 +41,7 @@ type connectionJSON struct {
 	Direction string `json:"direction"`
 }
 
-type peerJSON struct {
+type PeerJSON struct {
 	ID            peer.ID          `json:"id"`
 	Addresses     []string         `json:"addresses"`
 	Connections   []connectionJSON `json:"connections"`
@@ -50,7 +50,7 @@ type peerJSON struct {
 	Version       string           `json:"version"`
 }
 
-type identityJSON struct {
+type IdentityJSON struct {
 	PeerID    peer.ID  `json:"peer_id"`
 	Addresses []string `json:"addresses"`
 	Subnets   string   `json:"subnets"`
@@ -81,11 +81,11 @@ type healthCheckJSON struct {
 	} `json:"advanced"`
 }
 
-type signRequestJSON struct {
+type SignRequestJSON struct {
 	Data string `json:"data"`
 }
 
-type signResponseJSON struct {
+type SignResponseJSON struct {
 	Signature string `json:"signature"`
 }
 
@@ -108,7 +108,7 @@ type Node struct {
 
 func (h *Node) Identity(w http.ResponseWriter, r *http.Request) error {
 	nodeInfo := h.PeersIndex.Self()
-	resp := identityJSON{
+	resp := IdentityJSON{
 		PeerID:  h.Network.LocalPeer(),
 		Subnets: nodeInfo.Metadata.Subnets,
 		Version: nodeInfo.Metadata.NodeVersion,
@@ -183,7 +183,7 @@ func (h *Node) Sign(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	sigReq := &signRequestJSON{}
+	sigReq := &SignRequestJSON{}
 	if err := json.Unmarshal(rawdata, &sigReq); err != nil {
 		return err
 	}
@@ -198,16 +198,16 @@ func (h *Node) Sign(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	resp := &signResponseJSON{
+	resp := &SignResponseJSON{
 		Signature: hex.EncodeToString(signature),
 	}
 	return api.Render(w, r, resp)
 }
 
-func (h *Node) peers(peers []peer.ID) []peerJSON {
-	resp := make([]peerJSON, len(peers))
+func (h *Node) peers(peers []peer.ID) []PeerJSON {
+	resp := make([]PeerJSON, len(peers))
 	for i, id := range peers {
-		resp[i] = peerJSON{
+		resp[i] = PeerJSON{
 			ID:            id,
 			Connectedness: h.Network.Connectedness(id).String(),
 			Subnets:       h.PeersIndex.GetPeerSubnets(id).String(),
