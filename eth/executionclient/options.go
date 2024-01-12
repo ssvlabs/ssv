@@ -5,6 +5,7 @@ import (
 	"fmt"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/ethereum/go-ethereum/rpc"
+	"math/big"
 	"time"
 
 	"go.uber.org/zap"
@@ -92,6 +93,6 @@ func WithCustomGetHeaderArg(
 	arg rpc.BlockNumber,
 ) Option {
 	return func(s *ExecutionClient) {
-		s.rpcGetHeaderArg = arg
+		s.rpcGetHeaderArg = big.NewInt(arg.Int64())
 	}
 }

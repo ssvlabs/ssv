@@ -13,7 +13,6 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/ethereum/go-ethereum/rpc"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth/contract"
@@ -43,7 +42,7 @@ type ExecutionClient struct {
 	logBatchSize                        uint64
 	followDistance                      uint64 // used for backward compatibility only
 	finalizedCheckpointActivationHeight uint64
-	rpcGetHeaderArg                     rpc.BlockNumber // todo add meaningful comment
+	rpcGetHeaderArg                     *big.Int
 
 	// variables
 	client *ethclient.Client
@@ -63,7 +62,7 @@ func New(
 		contractAddress:                     contractAddr,
 		logger:                              zap.NewNop(),
 		metrics:                             nopMetrics{},
-		rpcGetHeaderArg:                     defaultRpcGetHeaderArg,
+		rpcGetHeaderArg:                     big.NewInt(defaultRpcGetHeaderArg.Int64()),
 		followDistance:                      DefaultFollowDistance,
 		finalizedCheckpointActivationHeight: 1<<64 - 1,
 		connectionTimeout:                   DefaultConnectionTimeout,
@@ -441,5 +440,5 @@ func (ec *ExecutionClient) Filterer() (*contract.ContractFilterer, error) {
 }
 
 func (ec *ExecutionClient) FinalizedBlockArg() *big.Int {
-	return big.NewInt(ec.rpcGetHeaderArg.Int64())
+	return ec.rpcGetHeaderArg
 }
