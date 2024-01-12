@@ -69,7 +69,7 @@ type TestEnv struct {
 	httpSrv        *httptest.Server
 	validatorCtrl  *mocks.MockController
 	mockCtrl       *gomock.Controller
-	followDistance *uint64
+	followDistance uint64
 }
 
 func (e *TestEnv) shutdown() {
@@ -95,10 +95,6 @@ func (e *TestEnv) setup(
 	operatorsCount uint64,
 ) error {
 	logger := zaptest.NewLogger(t)
-	if e.followDistance == nil {
-		e.SetFollowDistance(defaultFollowDistance)
-	}
-
 	// Create operators RSA keys
 	ops, err := createOperators(operatorsCount, 0)
 	if err != nil {
@@ -179,7 +175,7 @@ func (e *TestEnv) setup(
 		addr,
 		contractAddr,
 		executionclient.WithLogger(logger),
-		executionclient.WithFollowDistance(*e.followDistance),
+		executionclient.WithFollowDistance(e.followDistance),
 		//executionclient.WithFinalizedCheckpointsFork(1<<64-1),
 		//executionclient.WithFinalizedBlocksSubscription(ctx, ethtestutils.SetFinalizedBlocksProducer(sim)),
 	)
@@ -215,16 +211,13 @@ func (e *TestEnv) setup(
 	e.validators = validators
 	e.ops = ops
 	e.shares = shares
+	e.followDistance = defaultFollowDistance
 
 	return nil
 }
 
-func (e *TestEnv) SetFollowDistance(d uint64) {
-	e.followDistance = &d
-}
-
 func (e *TestEnv) CloseFollowDistance(blockNum *uint64) {
-	for i := uint64(0); i < *e.followDistance; i++ {
+	for i := uint64(0); i < e.followDistance; i++ {
 		commitBlock(e.sim, blockNum)
 	}
 }

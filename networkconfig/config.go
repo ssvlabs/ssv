@@ -39,7 +39,7 @@ type NetworkConfig struct {
 	Bootnodes                               []string
 	WhitelistedOperatorKeys                 []string
 	PermissionlessActivationEpoch           spec.Epoch
-	FinalizedCheckpointForkActivationHeight uint64
+	FinalizedCheckpointForkActivationHeight uint64 // eth1 block heightƒ
 }
 
 func (n NetworkConfig) String() string {

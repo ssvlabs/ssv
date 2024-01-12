@@ -45,7 +45,6 @@ func TestEthExecLayer(t *testing.T) {
 	expectedNonce := registrystorage.Nonce(0)
 
 	testEnv := TestEnv{}
-	testEnv.SetFollowDistance(defaultFollowDistance)
 
 	defer testEnv.shutdown()
 	err := testEnv.setup(t, ctx, testAddresses, 7, 4)
@@ -103,7 +102,7 @@ func TestEthExecLayer(t *testing.T) {
 			require.NoError(t, err)
 
 			//check all the events were handled correctly and block number was increased
-			require.Equal(t, blockNum-*testEnv.followDistance, lastHandledBlockNum)
+			require.Equal(t, blockNum-testEnv.followDistance, lastHandledBlockNum)
 			fmt.Println("lastHandledBlockNum", lastHandledBlockNum)
 
 			// Check that operators were successfully registered

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	"math"
 	"math/big"
 	"time"
 
@@ -64,7 +65,7 @@ func New(
 		metrics:                             nopMetrics{},
 		rpcGetHeaderArg:                     big.NewInt(defaultRpcGetHeaderArg.Int64()),
 		followDistance:                      DefaultFollowDistance,
-		finalizedCheckpointActivationHeight: 1<<64 - 1,
+		finalizedCheckpointActivationHeight: math.MaxUint64,
 		connectionTimeout:                   DefaultConnectionTimeout,
 		reconnectionInitialInterval:         DefaultReconnectionInitialInterval,
 		reconnectionMaxInterval:             DefaultReconnectionMaxInterval,
@@ -97,19 +98,10 @@ func (ec *ExecutionClient) FetchHistoricalLogs(ctx context.Context, fromBlock ui
 		return nil, nil, fmt.Errorf("failed to get current block: %w", err)
 	}
 
-	switch {
-	case currentBlock < ec.finalizedCheckpointActivationHeight:
-		if currentBlock < ec.followDistance {
-			return nil, nil, ErrNothingToSync
-		}
-		toBlock = currentBlock - ec.followDistance
-	case ec.finalizedCheckpointActivationHeight <= currentBlock:
-		lastFinalizedBlock, err := ec.client.HeaderByNumber(ctx, ec.FinalizedBlockArg())
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get the last finalized block: %w", err)
-		}
+	toBlock, err = ec.GetMaxSafeHeight(ctx, currentBlock)
 
-		toBlock = lastFinalizedBlock.Number.Uint64()
+	if err != nil {
+		return nil, nil, err
 	}
 
 	if toBlock < fromBlock {
@@ -319,7 +311,7 @@ func (ec *ExecutionClient) streamLatestBlocks(ctx context.Context, logs chan<- B
 			return fromBlock, fmt.Errorf("subscription: %w", err)
 
 		case header := <-heads:
-			if header.Number.Uint64() >= ec.finalizedCheckpointActivationHeight {
+			if ec.IsFinalizedCheckpointForkActivated(header.Number.Uint64()) {
 				return header.Number.Uint64(), nil
 			}
 			if header.Number.Uint64() < ec.followDistance {
@@ -441,4 +433,24 @@ func (ec *ExecutionClient) Filterer() (*contract.ContractFilterer, error) {
 
 func (ec *ExecutionClient) FinalizedBlockArg() *big.Int {
 	return ec.rpcGetHeaderArg
+}
+
+func (ec *ExecutionClient) GetMaxSafeHeight(ctx context.Context, currentBlock uint64) (uint64, error) {
+	if !ec.IsFinalizedCheckpointForkActivated(currentBlock) {
+		if currentBlock < ec.followDistance {
+			return 0, ErrNothingToSync
+		}
+		return currentBlock - ec.followDistance, nil
+	} else {
+		lastFinalizedBlock, err := ec.client.HeaderByNumber(ctx, ec.FinalizedBlockArg())
+		if err != nil {
+			return 0, fmt.Errorf("failed to get the last finalized block: %w", err)
+		}
+
+		return lastFinalizedBlock.Number.Uint64(), nil
+	}
+}
+
+func (ec *ExecutionClient) IsFinalizedCheckpointForkActivated(blockHeight uint64) bool {
+	return blockHeight >= ec.finalizedCheckpointActivationHeight
 }
