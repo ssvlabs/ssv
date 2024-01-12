@@ -20,7 +20,6 @@ import (
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
 // b64 encrypted key length is 256
@@ -228,8 +227,6 @@ func (eh *EventHandler) handleShareCreation(
 ) (*ssvtypes.SSVShare, error) {
 	share, shareSecret, err := eh.validatorAddedEventToShare(
 		validatorEvent,
-		eh.shareEncryptionKeyProvider,
-		eh.operatorData.GetOperatorData(),
 		sharePublicKeys,
 		encryptedKeys,
 	)
@@ -258,8 +255,6 @@ func (eh *EventHandler) handleShareCreation(
 
 func (eh *EventHandler) validatorAddedEventToShare(
 	event *contract.ContractValidatorAdded,
-	shareEncryptionKeyProvider ShareEncryptionKeyProvider,
-	operatorData *registrystorage.OperatorData,
 	sharePublicKeys [][]byte,
 	encryptedKeys [][]byte,
 ) (*ssvtypes.SSVShare, *bls.SecretKey, error) {
@@ -283,23 +278,15 @@ func (eh *EventHandler) validatorAddedEventToShare(
 			PubKey:     sharePublicKeys[i],
 		})
 
-		if operatorID != operatorData.ID {
+		if operatorID != eh.operatorData.GetOperatorData().ID {
 			continue
 		}
 
 		validatorShare.OperatorID = operatorID
 		validatorShare.SharePubKey = sharePublicKeys[i]
 
-		operatorPrivateKey, found, err := shareEncryptionKeyProvider()
-		if err != nil {
-			return nil, nil, fmt.Errorf("could not get operator private key: %w", err)
-		}
-		if !found {
-			return nil, nil, errors.New("could not find operator private key")
-		}
-
 		shareSecret = &bls.SecretKey{}
-		decryptedSharePrivateKey, err := rsaencryption.DecodeKey(operatorPrivateKey, encryptedKeys[i])
+		decryptedSharePrivateKey, err := eh.operatorDecrypter.Decrypt(encryptedKeys[i])
 		if err != nil {
 			return nil, nil, &MalformedEventError{
 				Err: fmt.Errorf("could not decrypt share private key: %w", err),

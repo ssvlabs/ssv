@@ -7,11 +7,12 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/spf13/cobra"
+	keystorev4 "github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
+	"go.uber.org/zap"
+
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
-	"github.com/spf13/cobra"
-	"github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
-	"go.uber.org/zap"
 )
 
 var generateOperatorKeysCmd = &cobra.Command{

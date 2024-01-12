@@ -2,21 +2,19 @@ package testing
 
 import (
 	"crypto/ecdsa"
-	crand "crypto/rand"
-	"crypto/rsa"
+
+	"github.com/herumi/bls-eth-go-binary/bls"
 
 	"github.com/bloxapp/ssv/network/commons"
+	"github.com/bloxapp/ssv/operator/keys"
 	"github.com/bloxapp/ssv/utils/threshold"
-	"github.com/herumi/bls-eth-go-binary/bls"
 )
 
 // NodeKeys holds node's keys
 type NodeKeys struct {
 	NetKey      *ecdsa.PrivateKey
-	OperatorKey *rsa.PrivateKey
+	OperatorKey keys.OperatorPrivateKey
 }
-
-var rsaKeySize = 2048
 
 // CreateKeys creates <n> random node keys
 func CreateKeys(n int) ([]NodeKeys, error) {
@@ -26,10 +24,12 @@ func CreateKeys(n int) ([]NodeKeys, error) {
 		if err != nil {
 			return nil, err
 		}
-		opKey, err := rsa.GenerateKey(crand.Reader, rsaKeySize)
+
+		opKey, err := keys.GenerateKeyPair()
 		if err != nil {
 			return nil, err
 		}
+
 		identities[i] = NodeKeys{
 			NetKey:      netKey,
 			OperatorKey: opKey,

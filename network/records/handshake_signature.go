@@ -26,3 +26,13 @@ func (h *HandshakeData) Hash() [32]byte {
 
 	return sha256.Sum256([]byte(sb.String()))
 }
+func (h *HandshakeData) Encode() []byte {
+	sb := strings.Builder{}
+
+	sb.WriteString(h.SenderPeerID.String())
+	sb.WriteString(h.RecipientPeerID.String())
+	sb.WriteString(strconv.FormatInt(h.Timestamp.Unix(), 10))
+	sb.Write(h.SenderPublicKey)
+
+	return []byte(sb.String())
+}

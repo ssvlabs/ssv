@@ -2,9 +2,6 @@ package ethtest
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"math/big"
@@ -24,6 +21,7 @@ import (
 	"github.com/bloxapp/ssv/eth/simulator"
 	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/operator/keys"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
 	"github.com/bloxapp/ssv/operator/validator/mocks"
@@ -32,7 +30,6 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/blskeygen"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
 
@@ -45,8 +42,7 @@ type testValidatorData struct {
 
 type testOperator struct {
 	id      uint64
-	rsaPub  []byte
-	rsaPriv []byte
+	keyPair keys.OperatorKeyPair
 }
 
 type testShare struct {
@@ -90,14 +86,13 @@ func createOperators(num uint64, idOffset uint64) ([]*testOperator, error) {
 	testOps := make([]*testOperator, num)
 
 	for i := uint64(1); i <= num; i++ {
-		pb, sk, err := rsaencryption.GenerateKeys()
+		keyPair, err := keys.GenerateKeyPair()
 		if err != nil {
 			return nil, err
 		}
 		testOps[i-1] = &testOperator{
 			id:      idOffset + i,
-			rsaPub:  pb,
-			rsaPriv: sk,
+			keyPair: keyPair,
 		}
 	}
 
@@ -109,25 +104,16 @@ func generateSharesData(validatorData *testValidatorData, operators []*testOpera
 	var encryptedShares []byte
 
 	for i, op := range operators {
-		rsaKey, err := rsaencryption.ConvertPemToPublicKey(op.rsaPub)
-		if err != nil {
-			return nil, fmt.Errorf("can't convert public key: %w", err)
-		}
-
 		rawShare := validatorData.operatorsShares[i].sec.SerializeToHexStr()
-		cipherText, err := rsa.EncryptPKCS1v15(rand.Reader, rsaKey, []byte(rawShare))
+
+		cipherText, err := op.keyPair.Encrypt([]byte(rawShare))
 		if err != nil {
 			return nil, fmt.Errorf("can't encrypt share: %w", err)
 		}
 
-		rsaPriv, err := rsaencryption.ConvertPemToPrivateKey(string(op.rsaPriv))
-		if err != nil {
-			return nil, fmt.Errorf("can't convert secret key to a private key share: %w", err)
-		}
-
 		// check that we encrypt right
 		shareSecret := &bls.SecretKey{}
-		decryptedSharePrivateKey, err := rsaencryption.DecodeKey(rsaPriv, cipherText)
+		decryptedSharePrivateKey, err := op.keyPair.Decrypt(cipherText)
 		if err != nil {
 			return nil, err
 		}
@@ -198,7 +184,7 @@ func setupEventHandler(
 			validatorCtrl,
 			testNetworkConfig,
 			validatorCtrl,
-			nodeStorage.GetPrivateKey,
+			operator.keyPair,
 			keyManager,
 			bc,
 			storageMap,
@@ -211,6 +197,7 @@ func setupEventHandler(
 		}
 
 		validatorCtrl.EXPECT().GetOperatorData().Return(operatorData).AnyTimes()
+		validatorCtrl.EXPECT().SetOperatorData(gomock.Any()).AnyTimes()
 
 		return eh, validatorCtrl, ctrl, nodeStorage, nil
 	}
@@ -232,7 +219,7 @@ func setupEventHandler(
 		validatorCtrl,
 		testNetworkConfig,
 		validatorCtrl,
-		nodeStorage.GetPrivateKey,
+		operator.keyPair,
 		keyManager,
 		bc,
 		storageMap,
@@ -261,24 +248,32 @@ func setupOperatorStorage(
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
 
-	operatorPubKey, err := nodeStorage.SetupPrivateKey(base64.StdEncoding.EncodeToString(operator.rsaPriv))
+	encodedPrivKey, err := operator.keyPair.Encode()
 	if err != nil {
+		logger.Fatal("failed to encode operator private key", zap.Error(err))
+	}
+
+	encodedPubKey, err := operator.keyPair.Public().Encode()
+	if err != nil {
+		logger.Fatal("failed to encode operator public key", zap.Error(err))
+	}
+
+	if err := nodeStorage.SavePrivateKeyHash(string(encodedPrivKey)); err != nil {
 		logger.Fatal("couldn't setup operator private key", zap.Error(err))
 	}
 
-	_, found, err := nodeStorage.GetPrivateKey()
+	_, found, err := nodeStorage.GetPrivateKeyHash()
 	if err != nil || !found {
 		logger.Fatal("failed to get operator private key", zap.Error(err))
 	}
-	var operatorData *registrystorage.OperatorData
-	operatorData, found, err = nodeStorage.GetOperatorDataByPubKey(nil, operatorPubKey)
 
+	operatorData, found, err := nodeStorage.GetOperatorDataByPubKey(nil, encodedPubKey)
 	if err != nil {
 		logger.Fatal("couldn't get operator data by public key", zap.Error(err))
 	}
 	if !found {
 		operatorData = &registrystorage.OperatorData{
-			PublicKey:    operatorPubKey,
+			PublicKey:    encodedPubKey,
 			ID:           operator.id,
 			OwnerAddress: *ownerAddress,
 		}

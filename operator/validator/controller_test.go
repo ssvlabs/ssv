@@ -5,8 +5,17 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"sync"
+	"testing"
+	"time"
+
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/golang/mock/gomock"
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
+
 	"github.com/bloxapp/ssv/ekm"
 	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/operator/storage"
@@ -15,13 +24,6 @@ import (
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/golang/mock/gomock"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
-	"sync"
-	"testing"
-	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -1025,21 +1027,20 @@ func TestGetIndices(t *testing.T) {
 
 func setupController(logger *zap.Logger, opts MockControllerOptions) controller {
 	return controller{
-		metadataUpdateInterval:     0,
-		shareEncryptionKeyProvider: nil,
-		logger:                     logger,
-		beacon:                     opts.beacon,
-		network:                    opts.network,
-		metrics:                    opts.metrics,
-		keyManager:                 opts.keyManager,
-		ibftStorageMap:             opts.StorageMap,
-		operatorData:               opts.operatorData,
-		sharesStorage:              opts.sharesStorage,
-		validatorsMap:              opts.validatorsMap,
-		context:                    context.Background(),
-		validatorOptions:           opts.validatorOptions,
-		recipientsStorage:          opts.recipientsStorage,
-		messageRouter:              newMessageRouter(logger),
+		metadataUpdateInterval: 0,
+		logger:                 logger,
+		beacon:                 opts.beacon,
+		network:                opts.network,
+		metrics:                opts.metrics,
+		keyManager:             opts.keyManager,
+		ibftStorageMap:         opts.StorageMap,
+		operatorData:           opts.operatorData,
+		sharesStorage:          opts.sharesStorage,
+		validatorsMap:          opts.validatorsMap,
+		context:                context.Background(),
+		validatorOptions:       opts.validatorOptions,
+		recipientsStorage:      opts.recipientsStorage,
+		messageRouter:          newMessageRouter(logger),
 		messageWorker: worker.NewWorker(logger, &worker.Config{
 			Ctx:          context.Background(),
 			WorkersCount: 1,
