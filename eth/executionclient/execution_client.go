@@ -318,20 +318,10 @@ func (ec *ExecutionClient) streamLatestBlocks(ctx context.Context, logs chan<- B
 				continue
 			}
 			toBlock := header.Number.Uint64() - ec.followDistance
-			if toBlock < fromBlock {
-				continue
-			}
-			logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
-			for block := range logStream {
-				logs <- block
-				lastBlock = block.BlockNumber
-			}
-			if err := <-fetchErrors; err != nil {
+			if err = ec.fetchNewBlocks(ctx, logs, &fromBlock, &toBlock, &lastBlock); err != nil {
 				// If we get an error while fetching, we return the last block we fetched.
-				return lastBlock, fmt.Errorf("fetch logs: %w", err)
+				return lastBlock, err
 			}
-			fromBlock = toBlock + 1
-			ec.metrics.ExecutionClientLastFetchedBlock(fromBlock)
 		}
 	}
 }
@@ -360,23 +350,10 @@ func (ec *ExecutionClient) streamFinalizedBlocks(ctx context.Context, logs chan<
 			if toBlock < ec.finalizedCheckpointActivationHeight {
 				panic(fmt.Sprintf("invalid blocks sequence: received block %d while last handled block is %d", toBlock, lastBlock))
 			}
-			if toBlock < ec.followDistance {
-				continue
-			}
-			if toBlock < fromBlock {
-				continue
-			}
-			logStream, fetchErrors := ec.fetchLogsInBatches(ctx, fromBlock, toBlock)
-			for block := range logStream {
-				logs <- block
-				lastBlock = block.BlockNumber
-			}
-			if err := <-fetchErrors; err != nil {
+			if err = ec.fetchNewBlocks(ctx, logs, &fromBlock, &toBlock, &lastBlock); err != nil {
 				// If we get an error while fetching, we return the last block we fetched.
-				return lastBlock, fmt.Errorf("fetch logs: %w", err)
+				return lastBlock, err
 			}
-			fromBlock = toBlock + 1
-			ec.metrics.ExecutionClientLastFetchedBlock(fromBlock)
 		}
 	}
 }
@@ -453,4 +430,27 @@ func (ec *ExecutionClient) GetMaxSafeHeight(ctx context.Context, currentBlock ui
 
 func (ec *ExecutionClient) IsFinalizedCheckpointForkActivated(blockHeight uint64) bool {
 	return blockHeight >= ec.finalizedCheckpointActivationHeight
+}
+
+func (ec *ExecutionClient) fetchNewBlocks(
+	ctx context.Context,
+	logs chan<- BlockLogs,
+	fromBlock *uint64,
+	toBlock *uint64,
+	lastBlock *uint64,
+) error {
+	if *toBlock < *fromBlock {
+		return nil
+	}
+	logStream, fetchErrors := ec.fetchLogsInBatches(ctx, *fromBlock, *toBlock)
+	for block := range logStream {
+		logs <- block
+		lastBlock = &block.BlockNumber
+	}
+	if err := <-fetchErrors; err != nil {
+		return fmt.Errorf("fetch logs: %w", err)
+	}
+	*fromBlock = *toBlock + 1
+	ec.metrics.ExecutionClientLastFetchedBlock(*fromBlock)
+	return nil
 }
