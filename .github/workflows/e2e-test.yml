@@ -1,6 +1,14 @@
 name: E2E Test
 
 on:
+  workflow_run:
+    workflows: [Lint, Unit tests]
+    types: [completed]
+    branches: [stage, main]
+  #  pull_request:
+  #    branches:
+  #      - "**"
+
   workflow_dispatch:
 
 concurrency:
