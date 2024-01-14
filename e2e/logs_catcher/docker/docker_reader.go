@@ -78,7 +78,6 @@ func processLogs(ctx context.Context, reader io.ReadCloser, logChan chan<- strin
 			return ctx.Err()
 		}
 	}
-
 	return nil
 }
 
