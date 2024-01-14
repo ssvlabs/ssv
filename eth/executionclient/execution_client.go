@@ -445,7 +445,7 @@ func (ec *ExecutionClient) fetchNewBlocks(
 	logStream, fetchErrors := ec.fetchLogsInBatches(ctx, *fromBlock, *toBlock)
 	for block := range logStream {
 		logs <- block
-		lastBlock = &block.BlockNumber
+		*lastBlock = block.BlockNumber
 	}
 	if err := <-fetchErrors; err != nil {
 		return fmt.Errorf("fetch logs: %w", err)
