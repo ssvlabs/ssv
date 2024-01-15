@@ -281,6 +281,7 @@ func (ec *ExecutionClient) streamLogsToChan(ctx context.Context, logs chan<- Blo
 	lastBlock, err = ec.streamLatestBlocks(ctx, logs, fromBlock)
 
 	if err == nil {
+		ec.logger.Info(fmt.Sprintf("forking to handling finalized blocks only on block %d", lastBlock))
 		lastBlock, err = ec.streamFinalizedBlocks(ctx, logs, lastBlock)
 	}
 
