@@ -146,7 +146,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 	t.Run("test OperatorAdded event handle", func(t *testing.T) {
 		for _, op := range ops {
-			encodedPubKey, err := op.keyPair.Public().Base64()
+			encodedPubKey, err := op.privateKey.Public().Base64()
 			require.NoError(t, err)
 
 			// Call the contract method
@@ -194,7 +194,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.Equal(t, operatorAddedEvent.OperatorId, data.ID)
 			require.Equal(t, operatorAddedEvent.Owner, data.OwnerAddress)
 
-			encodedPubKey, err := ops[i].keyPair.Public().Base64()
+			encodedPubKey, err := ops[i].privateKey.Public().Base64()
 			require.NoError(t, err)
 
 			require.Equal(t, encodedPubKey, data.PublicKey)
@@ -245,7 +245,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			operatorsCount++
 
-			encodedPubKey, err := op[0].keyPair.Public().Base64()
+			encodedPubKey, err := op[0].privateKey.Public().Base64()
 			require.NoError(t, err)
 
 			// Call the contract method
@@ -1094,7 +1094,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			operatorsCount++
 			op := tmpOps[0]
 
-			encodedPubKey, err := op.keyPair.Public().Base64()
+			encodedPubKey, err := op.privateKey.Public().Base64()
 			require.NoError(t, err)
 
 			// Call the RegisterOperator contract method
@@ -1310,7 +1310,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 			validatorCtrl,
 			*network,
 			validatorCtrl,
-			operator.keyPair,
+			operator.privateKey,
 			keyManager,
 			bc,
 			storageMap,
@@ -1348,7 +1348,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 		validatorCtrl,
 		*network,
 		validatorCtrl,
-		operator.keyPair,
+		operator.privateKey,
 		keyManager,
 		bc,
 		storageMap,
@@ -1370,17 +1370,17 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, operator *test
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
 
-	encodedPrivKey, err := operator.keyPair.Base64()
+	encodedPrivKey, err := operator.privateKey.StorageHash()
 	if err != nil {
 		logger.Fatal("failed to encode operator private key", zap.Error(err))
 	}
 
-	encodedPubKey, err := operator.keyPair.Public().Base64()
+	encodedPubKey, err := operator.privateKey.Public().Base64()
 	if err != nil {
 		logger.Fatal("failed to encode operator public key", zap.Error(err))
 	}
 
-	if err := nodeStorage.SavePrivateKeyHash(string(encodedPrivKey)); err != nil {
+	if err := nodeStorage.SavePrivateKeyHash(encodedPrivKey); err != nil {
 		logger.Fatal("couldn't setup operator private key", zap.Error(err))
 	}
 
@@ -1459,7 +1459,7 @@ func TestCreatingSharesData(t *testing.T) {
 	encryptedKeys := splitBytes(sharesData[pubKeysOffset:], len(sharesData[pubKeysOffset:])/operatorCount)
 
 	for i, encryptedKey := range encryptedKeys {
-		decryptedSharePrivateKey, err := ops[i].keyPair.Decrypt(encryptedKey)
+		decryptedSharePrivateKey, err := ops[i].privateKey.Decrypt(encryptedKey)
 		require.NoError(t, err)
 
 		share := &bls.SecretKey{}
@@ -1479,8 +1479,8 @@ type testValidatorData struct {
 }
 
 type testOperator struct {
-	id      uint64
-	keyPair keys.OperatorKeyPair
+	id         uint64
+	privateKey keys.OperatorPrivateKey
 }
 
 type testShare struct {
@@ -1539,8 +1539,8 @@ func createOperators(num uint64, idOffset uint64) ([]*testOperator, error) {
 		}
 
 		testOps[i-1] = &testOperator{
-			id:      idOffset + i,
-			keyPair: privateKey,
+			id:         idOffset + i,
+			privateKey: privateKey,
 		}
 	}
 
@@ -1553,13 +1553,13 @@ func generateSharesData(validatorData *testValidatorData, operators []*testOpera
 
 	for i, op := range operators {
 		rawShare := validatorData.operatorsShares[i].sec.SerializeToHexStr()
-		cipherText, err := op.keyPair.Encrypt([]byte(rawShare))
+		cipherText, err := op.privateKey.Public().Encrypt([]byte(rawShare))
 		if err != nil {
 			return nil, fmt.Errorf("can't encrypt share: %w", err)
 		}
 
 		// check that we encrypt right
-		decryptedSharePrivateKey, err := op.keyPair.Decrypt(cipherText)
+		decryptedSharePrivateKey, err := op.privateKey.Decrypt(cipherText)
 		if err != nil {
 			return nil, err
 		}

@@ -195,18 +195,18 @@ func simTestBackend(testAddr ethcommon.Address) *simulator.SimulatedBackend {
 	)
 }
 
-func setupOperatorStorage(logger *zap.Logger, db basedb.Database, keyPair keys.OperatorKeyPair) (operatorstorage.Storage, *registrystorage.OperatorData) {
+func setupOperatorStorage(logger *zap.Logger, db basedb.Database, privKey keys.OperatorPrivateKey) (operatorstorage.Storage, *registrystorage.OperatorData) {
 	nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
 
-	privKeyHash, err := keyPair.StorageHash()
+	privKeyHash, err := privKey.StorageHash()
 	if err != nil {
 		logger.Fatal("failed to hash operator private key", zap.Error(err))
 	}
 
-	encodedPubKey, err := keyPair.Public().Base64()
+	encodedPubKey, err := privKey.Public().Base64()
 	if err != nil {
 		logger.Fatal("failed to encode operator public key", zap.Error(err))
 	}

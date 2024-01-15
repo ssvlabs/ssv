@@ -25,7 +25,6 @@ type TestData struct {
 	SenderPeerID    peer.ID
 	RecipientPeerID peer.ID
 
-	PrivateKeyPEM            []byte
 	SenderBase64PublicKeyPEM string
 
 	Handshaker handshaker
@@ -40,9 +39,6 @@ func getTestingData(t *testing.T) TestData {
 	peerID2 := peer.ID("2.2.2.2")
 
 	privateKey, err := keys.GeneratePrivateKey()
-	require.NoError(t, err)
-
-	senderPrivateKey, err := privateKey.Base64()
 	require.NoError(t, err)
 
 	senderPublicKey, err := privateKey.Public().Base64()
@@ -124,7 +120,6 @@ func getTestingData(t *testing.T) TestData {
 		Signature:                signature,
 		SenderPeerID:             peerID2,
 		RecipientPeerID:          peerID1,
-		PrivateKeyPEM:            senderPrivateKey,
 		SenderBase64PublicKeyPEM: string(senderPublicKey),
 		Handshaker:               mockHandshaker,
 		Conn:                     mockConn,

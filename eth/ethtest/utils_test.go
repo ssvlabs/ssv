@@ -107,7 +107,7 @@ func generateSharesData(validatorData *testValidatorData, operators []*testOpera
 	for i, op := range operators {
 		rawShare := validatorData.operatorsShares[i].sec.SerializeToHexStr()
 
-		cipherText, err := op.operatorPrivateKey.Encrypt([]byte(rawShare))
+		cipherText, err := op.operatorPrivateKey.Public().Encrypt([]byte(rawShare))
 		if err != nil {
 			return nil, fmt.Errorf("can't encrypt share: %w", err)
 		}
@@ -249,17 +249,17 @@ func setupOperatorStorage(
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
 
-	encodedPrivKey, err := operator.operatorPrivateKey.Base64()
-	if err != nil {
-		logger.Fatal("failed to encode operator private key", zap.Error(err))
-	}
-
 	encodedPubKey, err := operator.operatorPrivateKey.Public().Base64()
 	if err != nil {
 		logger.Fatal("failed to encode operator public key", zap.Error(err))
 	}
 
-	if err := nodeStorage.SavePrivateKeyHash(string(encodedPrivKey)); err != nil {
+	privKeyHash, err := operator.operatorPrivateKey.StorageHash()
+	if err != nil {
+		logger.Fatal("failed to encode operator private key", zap.Error(err))
+	}
+
+	if err := nodeStorage.SavePrivateKeyHash(privKeyHash); err != nil {
 		logger.Fatal("couldn't setup operator private key", zap.Error(err))
 	}
 
