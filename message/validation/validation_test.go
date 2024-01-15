@@ -2033,7 +2033,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
 			_, _, err = validator.validateP2PMessage(pMsg, receivedAt)
-			require.ErrorContains(t, err, ErrRSADecryption.Error())
+			require.ErrorContains(t, err, ErrSignatureVerification.Error())
 
 			require.NoError(t, ns.DeleteOperatorData(nil, operatorID))
 		})
