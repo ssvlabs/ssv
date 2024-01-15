@@ -8,7 +8,6 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
-	"encoding/pem"
 	"fmt"
 	"os"
 
@@ -18,7 +17,6 @@ import (
 type OperatorPublicKey interface {
 	Encrypt(data []byte) ([]byte, error)
 	Verify(data []byte, signature []byte) error
-	PEM() ([]byte, error)
 	Base64() ([]byte, error)
 }
 
@@ -27,7 +25,7 @@ type OperatorPrivateKey interface {
 	OperatorDecrypter
 	StorageHash() (string, error)
 	EKMHash() (string, error)
-	PEM() []byte
+	Bytes() []byte
 	Base64() []byte
 }
 
@@ -104,19 +102,12 @@ func (p *privateKey) Decrypt(data []byte) ([]byte, error) {
 	return rsaencryption.DecodeKey(p.privKey, data)
 }
 
-func (p *privateKey) Marshal() []byte {
-	return x509.MarshalPKCS1PrivateKey(p.privKey)
-}
-
-func (p *privateKey) PEM() []byte {
-	return pem.EncodeToMemory(&pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: p.Marshal(),
-	})
+func (p *privateKey) Bytes() []byte {
+	return rsaencryption.PrivateKeyToByte(p.privKey)
 }
 
 func (p *privateKey) Base64() []byte {
-	return []byte(base64.StdEncoding.EncodeToString(p.PEM()))
+	return []byte(rsaencryption.ExtractPrivateKey(p.privKey))
 }
 
 func (p *privateKey) StorageHash() (string, error) {
@@ -124,7 +115,7 @@ func (p *privateKey) StorageHash() (string, error) {
 }
 
 func (p *privateKey) EKMHash() (string, error) {
-	return rsaencryption.HashRsaKey(p.Marshal())
+	return rsaencryption.HashRsaKey(x509.MarshalPKCS1PrivateKey(p.privKey))
 }
 
 type publicKey struct {
@@ -156,31 +147,10 @@ func (p *publicKey) Verify(data []byte, signature []byte) error {
 	return rsa.VerifyPKCS1v15(p.pubKey, crypto.SHA256, messageHash[:], signature)
 }
 
-func (p *publicKey) Marshal() ([]byte, error) {
-	return x509.MarshalPKIXPublicKey(p.pubKey)
-}
-
-func (p *publicKey) PEM() ([]byte, error) {
-	pubKeyBytes, err := p.Marshal()
-	if err != nil {
-		return nil, err
-	}
-
-	pemBytes := pem.EncodeToMemory(
-		&pem.Block{
-			Type:  "RSA PUBLIC KEY",
-			Bytes: pubKeyBytes,
-		},
-	)
-
-	return pemBytes, nil
-}
-
 func (p *publicKey) Base64() ([]byte, error) {
-	pemBytes, err := p.PEM()
+	b, err := rsaencryption.ExtractPublicKey(p.pubKey)
 	if err != nil {
 		return nil, err
 	}
-
-	return []byte(base64.StdEncoding.EncodeToString(pemBytes)), nil
+	return []byte(b), err
 }

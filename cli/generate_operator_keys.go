@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"encoding/base64"
 	"encoding/json"
 	"log"
 	"os"
@@ -44,18 +43,18 @@ var generateOperatorKeysCmd = &cobra.Command{
 			}
 		}
 
+		pubKeyBase64, err := privKey.Public().Base64()
+		if err != nil {
+			logger.Fatal("Failed to get public key PEM", zap.Error(err))
+		}
+
 		if passwordFilePath != "" {
 			passwordBytes, err := readFile(passwordFilePath)
 			if err != nil {
 				logger.Fatal("Failed to read password file", zap.Error(err))
 			}
 
-			pubKeyPem, err := privKey.Public().PEM()
-			if err != nil {
-				logger.Fatal("Failed to get public key PEM", zap.Error(err))
-			}
-
-			encryptedJSON, encryptedJSONErr := encryptPrivateKey(privKey.PEM(), pubKeyPem, passwordBytes)
+			encryptedJSON, encryptedJSONErr := encryptPrivateKey(privKey.Bytes(), string(pubKeyBase64), passwordBytes)
 			if encryptedJSONErr != nil {
 				logger.Fatal("Failed to encrypt private key", zap.Error(err))
 			}
@@ -67,28 +66,25 @@ var generateOperatorKeysCmd = &cobra.Command{
 				logger.Info("private key encrypted and stored in encrypted_private_key.json")
 			}
 		} else {
-			pubKeyBase64, err := privKey.Public().Base64()
-			if err != nil {
-				logger.Fatal("Failed to get public key base64", zap.Error(err))
-			}
-
 			logger.Info("generated public key (base64)", zap.String("pk", string(pubKeyBase64)))
 			logger.Info("generated private key (base64)", zap.String("sk", string(privKey.Base64())))
 		}
 	},
 }
 
-func encryptPrivateKey(sk []byte, pk []byte, passwordBytes []byte) ([]byte, error) {
+func encryptPrivateKey(privKey []byte, pubKeyBase64 string, passwordBytes []byte) ([]byte, error) {
 	encryptionPassword := string(passwordBytes)
-	encryptedData, err := keystorev4.New().Encrypt(sk, encryptionPassword)
+	encryptedData, err := keystorev4.New().Encrypt(privKey, encryptionPassword)
 	if err != nil {
 		return nil, err
 	}
-	encryptedData["publicKey"] = base64.StdEncoding.EncodeToString(pk)
+
+	encryptedData["publicKey"] = pubKeyBase64
 	encryptedJSON, err := json.Marshal(encryptedData)
 	if err != nil {
 		return nil, err
 	}
+
 	return encryptedJSON, nil
 }
 

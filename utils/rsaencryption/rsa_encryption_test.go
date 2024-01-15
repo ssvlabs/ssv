@@ -56,7 +56,7 @@ func TestExtractPublicKey(t *testing.T) {
 	sk, err := ConvertPemToPrivateKey(string(skByte))
 	require.NoError(t, err)
 
-	pk, err := ExtractPublicKey(sk)
+	pk, err := ExtractPublicKey(&sk.PublicKey)
 	require.NoError(t, err)
 	require.NotNil(t, pk)
 }

@@ -17,7 +17,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
-	"github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
+	keystorev4 "github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
 )
 
 var keySize = 2048
@@ -149,8 +149,8 @@ func PrivateKeyToByte(sk *rsa.PrivateKey) []byte {
 }
 
 // ExtractPublicKey get public key from private key and return base64 encoded public key
-func ExtractPublicKey(sk *rsa.PrivateKey) (string, error) {
-	pkBytes, err := x509.MarshalPKIXPublicKey(&sk.PublicKey)
+func ExtractPublicKey(pk *rsa.PublicKey) (string, error) {
+	pkBytes, err := x509.MarshalPKIXPublicKey(pk)
 	if err != nil {
 		return "", errors.Wrap(err, "Failed to marshal private key")
 	}
