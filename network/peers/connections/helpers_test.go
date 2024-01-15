@@ -116,15 +116,14 @@ func getTestingData(t *testing.T) TestData {
 	}
 
 	mockHandshaker := handshaker{
-		ctx:          context.Background(),
-		nodeInfos:    nii,
-		peerInfos:    ns,
-		ids:          ids,
-		net:          net,
-		nodeStorage:  nst,
-		streams:      sc,
-		filters:      func() []HandshakeFilter { return []HandshakeFilter{} },
-		Permissioned: func() bool { return false },
+		ctx:         context.Background(),
+		nodeInfos:   nii,
+		peerInfos:   ns,
+		ids:         ids,
+		net:         net,
+		nodeStorage: nst,
+		streams:     sc,
+		filters:     func() []HandshakeFilter { return []HandshakeFilter{} },
 	}
 
 	mockConn := mock.Conn{

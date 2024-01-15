@@ -11,7 +11,7 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 )
 
-var TestingSSVDomainType = spectypes.V3Testnet
+var TestingSSVDomainType = spectypes.JatoTestnet
 var AttesterMsgID = func() []byte {
 	ret := spectypes.NewMsgID(TestingSSVDomainType, testingutils.TestingValidatorPubKey[:], spectypes.BNRoleAttester)
 	return ret[:]
