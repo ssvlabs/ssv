@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/assert"
@@ -27,23 +28,11 @@ func NewDummyConnectionIndex(maxPeers int) *DummyConnectionIndex {
 	}
 }
 
-func (dci *DummyConnectionIndex) Connectedness(id peer.ID) network.Connectedness {
-	if conn, ok := dci.ConnectedPeers[id]; ok {
-		return conn
-	}
-	return network.NotConnected
-}
-
-func (dci *DummyConnectionIndex) CanConnect(id peer.ID) bool {
-	_, ok := dci.ConnectedPeers[id]
-	return !ok
-}
-
-func (dci *DummyConnectionIndex) Limit(dir network.Direction) bool {
+func (dci *DummyConnectionIndex) Limit() bool {
 	return len(dci.ConnectedPeers) >= dci.MaxPeers
 }
 
-func (dci *DummyConnectionIndex) IsBad(logger *zap.Logger, id peer.ID) bool {
+func (dci *DummyConnectionIndex) IsBad(id peer.ID) bool {
 	if bad, ok := dci.BadPeers[id]; ok {
 		return bad
 	}
@@ -52,31 +41,33 @@ func (dci *DummyConnectionIndex) IsBad(logger *zap.Logger, id peer.ID) bool {
 
 ////////////////////////////////////////////////////////////////////////////
 
-func setupTestEnvironment() (*ConnectionGater, peer.ID) {
+func setupTestEnvironment(maxPeers int) (*ConnectionGater, *DummyConnectionIndex, peer.ID) {
 	logger := zap.NewExample()
 	testPeerID, _ := peer.Decode("12D3KooWEd...") // Example peer ID
-	gater := NewConnectionGater(logger, 10, 1*time.Hour)
+	dummyIndex := NewDummyConnectionIndex(maxPeers)
+	gater := NewConnectionGater(logger, dummyIndex.Limit, dummyIndex.IsBad)
 
-	return gater, testPeerID
+	return gater, dummyIndex, testPeerID
 }
 
 func TestBlockPeer(t *testing.T) {
-	gater, testPeerID := setupTestEnvironment()
+	gater, _, testPeerID := setupTestEnvironment(5)
 
 	gater.BlockPeer(testPeerID)
 	assert.True(t, gater.IsPeerBlocked(testPeerID), "Peer %v was not blocked as expected", testPeerID)
 }
 
 func TestIsPeerBlocked(t *testing.T) {
-	gater, testPeerID := setupTestEnvironment()
+	gater, _, testPeerID := setupTestEnvironment(5)
 
 	assert.False(t, gater.IsPeerBlocked(testPeerID), "Peer %v is unexpectedly blocked", testPeerID)
 }
 
 func TestBlacklistExpiration(t *testing.T) {
-	gater, testPeerID := setupTestEnvironment()
+	gater, _, testPeerID := setupTestEnvironment(5)
 	shortDuration := 500 * time.Millisecond
-	gater.blackListDuration = shortDuration
+	blacklist, _ := pubsub.NewTimeCachedBlacklist(shortDuration)
+	gater.blackList = blacklist
 
 	gater.BlockPeer(testPeerID)
 	require.True(t, gater.IsPeerBlocked(testPeerID), "Peer %v was not initially blocked", testPeerID)
@@ -87,9 +78,7 @@ func TestBlacklistExpiration(t *testing.T) {
 }
 
 func TestInterceptPeerDial(t *testing.T) {
-	gater, testPeerID := setupTestEnvironment()
-	dummyIndex := NewDummyConnectionIndex(5) // Set maximum peers to 5
-	gater.SetPeerIndex(dummyIndex)
+	gater, dummyIndex, testPeerID := setupTestEnvironment(5)
 
 	// Simulate that the number of connected peers is below the limit
 	for i := 0; i < 4; i++ {
@@ -108,9 +97,7 @@ func TestInterceptPeerDial(t *testing.T) {
 }
 
 func TestInterceptSecured(t *testing.T) {
-	gater, testPeerID := setupTestEnvironment()
-	dummyIndex := NewDummyConnectionIndex(5)
-	gater.SetPeerIndex(dummyIndex)
+	gater, dummyIndex, testPeerID := setupTestEnvironment(5)
 
 	// Simulate a good peer
 	dummyIndex.BadPeers[testPeerID] = false

@@ -63,7 +63,7 @@ type Config struct {
 	// OperatorPubKeyHash is hash of operator public key, used for identity, optional
 	OperatorPubKeyHash string
 	// OperatorID contains numeric operator ID
-	OperatorID spectypes.OperatorID
+	OperatorID func() spectypes.OperatorID
 	// Router propagate incoming network messages to the responsive components
 	Router network.MessageRouter
 	// UserAgent to use by libp2p identify protocol
@@ -75,7 +75,7 @@ type Config struct {
 	// MessageValidator validates incoming messages.
 	MessageValidator validation.MessageValidator
 	// Metrics report metrics.
-	Metrics *metricsreporter.MetricsReporter
+	Metrics metricsreporter.MetricsReporter
 
 	PubsubMsgCacheTTL         time.Duration `yaml:"PubsubMsgCacheTTL" env:"PUBSUB_MSG_CACHE_TTL" env-description:"How long a message ID will be remembered as seen"`
 	PubsubOutQueueSize        int           `yaml:"PubsubOutQueueSize" env:"PUBSUB_OUT_Q_SIZE" env-description:"The size that we assign to the outbound pubsub message queue"`

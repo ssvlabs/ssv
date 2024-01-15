@@ -165,10 +165,13 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not connect to execution client", zap.Error(err))
 		}
 
+		var validatorCtrl validator.Controller
 		cfg.P2pNetworkConfig.Permissioned = permissioned
 		cfg.P2pNetworkConfig.NodeStorage = nodeStorage
 		cfg.P2pNetworkConfig.OperatorPubKeyHash = format.OperatorID(operatorData.PublicKey)
-		cfg.P2pNetworkConfig.OperatorID = operatorData.ID
+		cfg.P2pNetworkConfig.OperatorID = func() spectypes.OperatorID {
+			return validatorCtrl.GetOperatorData().ID
+		}
 		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
 		cfg.P2pNetworkConfig.Network = networkConfig
 
@@ -190,7 +193,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.MessageValidator = messageValidator
 		cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
 
-		p2pNetwork := setupP2P(logger, db)
+		p2pNetwork := setupP2P(logger, db, metricsReporter)
 
 		cfg.SSVOptions.Context = cmd.Context()
 		cfg.SSVOptions.DB = db
@@ -227,6 +230,7 @@ var StartNodeCmd = &cobra.Command{
 			spectypes.BNRoleSyncCommittee,
 			spectypes.BNRoleSyncCommitteeContribution,
 			spectypes.BNRoleValidatorRegistration,
+			spectypes.BNRoleVoluntaryExit,
 		}
 		storageMap := ibftstorage.NewStores()
 
@@ -238,7 +242,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.Metrics = metricsReporter
 		cfg.SSVOptions.Metrics = metricsReporter
 
-		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
+		validatorCtrl = validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 
 		operatorNode = operator.New(logger, cfg.SSVOptions, slotTickerProvider)
@@ -296,9 +300,11 @@ var StartNodeCmd = &cobra.Command{
 				fmt.Sprintf(":%d", cfg.SSVAPIPort),
 				&handlers.Node{
 					// TODO: replace with narrower interface! (instead of accessing the entire PeersIndex)
-					PeersIndex: p2pNetwork.(p2pv1.PeersIndexProvider).PeersIndex(),
-					Network:    p2pNetwork.(p2pv1.HostProvider).Host().Network(),
-					TopicIndex: p2pNetwork.(handlers.TopicIndex),
+					ListenAddresses: []string{fmt.Sprintf("tcp://%s:%d", cfg.P2pNetworkConfig.HostAddress, cfg.P2pNetworkConfig.TCPPort), fmt.Sprintf("udp://%s:%d", cfg.P2pNetworkConfig.HostAddress, cfg.P2pNetworkConfig.UDPPort)},
+					PeersIndex:      p2pNetwork.(p2pv1.PeersIndexProvider).PeersIndex(),
+					Network:         p2pNetwork.(p2pv1.HostProvider).Host().Network(),
+					TopicIndex:      p2pNetwork.(handlers.TopicIndex),
+					NodeProber:      nodeProber,
 				},
 				&handlers.Validators{
 					Shares: nodeStorage.Shares(),
@@ -520,7 +526,7 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 	return networkConfig, nil
 }
 
-func setupP2P(logger *zap.Logger, db basedb.Database) network.P2PNetwork {
+func setupP2P(logger *zap.Logger, db basedb.Database, mr metricsreporter.MetricsReporter) network.P2PNetwork {
 	istore := ssv_identity.NewIdentityStore(db)
 	netPrivKey, err := istore.SetupNetworkKey(logger, cfg.NetworkPrivateKey)
 	if err != nil {
@@ -528,7 +534,7 @@ func setupP2P(logger *zap.Logger, db basedb.Database) network.P2PNetwork {
 	}
 	cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
 
-	return p2pv1.New(logger, &cfg.P2pNetworkConfig)
+	return p2pv1.New(logger, &cfg.P2pNetworkConfig, mr)
 }
 
 func setupConsensusClient(
@@ -551,7 +557,7 @@ func setupEventHandling(
 	executionClient *executionclient.ExecutionClient,
 	validatorCtrl validator.Controller,
 	storageMap *ibftstorage.QBFTStores,
-	metricsReporter *metricsreporter.MetricsReporter,
+	metricsReporter metricsreporter.MetricsReporter,
 	networkConfig networkconfig.NetworkConfig,
 	nodeStorage operatorstorage.Storage,
 ) *eventsyncer.EventSyncer {
@@ -566,7 +572,7 @@ func setupEventHandling(
 		nodeStorage,
 		eventParser,
 		validatorCtrl,
-		networkConfig.Domain,
+		networkConfig,
 		validatorCtrl,
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider,
 		cfg.SSVOptions.ValidatorOptions.KeyManager,
@@ -666,7 +672,7 @@ func setupEventHandling(
 	return eventSyncer
 }
 
-func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.Database, metricsReporter *metricsreporter.MetricsReporter, port int, enableProf bool) {
+func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.Database, metricsReporter metricsreporter.MetricsReporter, port int, enableProf bool) {
 	logger = logger.Named(logging.NameMetricsHandler)
 	// init and start HTTP handler
 	metricsHandler := metrics.NewMetricsHandler(ctx, db, metricsReporter, enableProf, operatorNode.(metrics.HealthChecker))

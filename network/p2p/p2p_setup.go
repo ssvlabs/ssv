@@ -11,6 +11,8 @@ import (
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
 	libp2pdiscbackoff "github.com/libp2p/go-libp2p/p2p/discovery/backoff"
 	basichost "github.com/libp2p/go-libp2p/p2p/host/basic"
 	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
@@ -94,6 +96,8 @@ func (n *p2pNetwork) initCfg() error {
 			return fmt.Errorf("parse subnet: %w", err)
 		}
 		n.subnets = subnets
+	} else {
+		n.subnets = make(records.Subnets, p2pcommons.Subnets())
 	}
 	if n.cfg.MaxPeers <= 0 {
 		n.cfg.MaxPeers = minPeersBuffer
@@ -118,7 +122,7 @@ func (n *p2pNetwork) SetupHost(logger *zap.Logger) error {
 	if err != nil {
 		return errors.Wrap(err, "could not create resource manager")
 	}
-	n.connGater = connections.NewConnectionGater(logger, 1024, 60*time.Minute)
+	n.connGater = connections.NewConnectionGater(logger, n.connectionsAtLimit, n.isPeerBad)
 	opts = append(opts, libp2p.ResourceManager(rmgr), libp2p.ConnectionGater(n.connGater))
 	host, err := libp2p.New(opts...)
 	if err != nil {
@@ -178,7 +182,6 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	}
 
 	n.idx = peers.NewPeersIndex(logger, n.host.Network(), self, n.getMaxPeers, getPrivKey, p2pcommons.Subnets(), 10*time.Minute)
-	n.connGater.SetPeerIndex(n.idx)
 	logger.Debug("peers index is ready")
 
 	var ids identify.IDService
@@ -227,7 +230,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler(logger))
 	logger.Debug("handshaker is ready")
 
-	n.connHandler = connections.NewConnHandler(n.ctx, handshaker, subnetsProvider, n.idx, n.idx, n.idx)
+	n.connHandler = connections.NewConnHandler(n.ctx, handshaker, subnetsProvider, n.idx, n.idx, n.idx, n.metrics)
 	n.host.Network().Notify(n.connHandler.Handle(logger))
 	logger.Debug("connection handler is ready")
 
@@ -308,7 +311,7 @@ func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
 	// run GC every 3 minutes to clear old messages
 	async.RunEvery(n.ctx, time.Minute*3, midHandler.GC)
 
-	_, tc, err := topics.NewPubSub(n.ctx, logger, cfg)
+	_, tc, err := topics.NewPubSub(n.ctx, logger, cfg, n.metrics)
 	if err != nil {
 		return errors.Wrap(err, "could not setup pubsub")
 	}
@@ -316,4 +319,18 @@ func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
 	n.topicsCtrl = tc
 	logger.Debug("topics controller is ready")
 	return nil
+}
+
+func (n *p2pNetwork) connectionsAtLimit() bool {
+	if n.idx == nil {
+		return false
+	}
+	return n.idx.AtLimit(network.DirOutbound)
+}
+
+func (n *p2pNetwork) isPeerBad(id peer.ID) bool {
+	if n.idx == nil {
+		return false
+	}
+	return n.idx.IsBad(n.interfaceLogger, id)
 }

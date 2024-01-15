@@ -7,6 +7,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"math/rand"
+	"time"
 
 	"github.com/bloxapp/ssv/protocol/v2/message"
 
@@ -70,7 +72,7 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 			return err
 		}
 
-		encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, n.operatorID, signature)
+		encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, n.operatorID(), signature)
 	}
 
 	vpk := msg.GetID().GetPubKey()
@@ -96,6 +98,37 @@ func (n *p2pNetwork) SubscribeAll(logger *zap.Logger) error {
 			return err
 		}
 	}
+	return nil
+}
+
+// SubscribeRandoms subscribes to random subnets. This method isn't thread-safe.
+func (n *p2pNetwork) SubscribeRandoms(logger *zap.Logger, numSubnets int) error {
+	if !n.isReady() {
+		return p2pprotocol.ErrNetworkIsNotReady
+	}
+	if numSubnets > commons.Subnets() {
+		numSubnets = commons.Subnets()
+	}
+
+	// Subscribe to random subnets.
+	// #nosec G404
+	randomSubnets := rand.New(rand.NewSource(time.Now().UnixNano())).Perm(commons.Subnets())
+	randomSubnets = randomSubnets[:numSubnets]
+	for _, subnet := range randomSubnets {
+		err := n.topicsCtrl.Subscribe(logger, commons.SubnetTopicID(subnet))
+		if err != nil {
+			return fmt.Errorf("could not subscribe to subnet %d: %w", subnet, err)
+		}
+	}
+
+	// Update the subnets slice.
+	subnets := make([]byte, commons.Subnets())
+	copy(subnets, n.subnets)
+	for _, subnet := range randomSubnets {
+		subnets[subnet] = byte(1)
+	}
+	n.subnets = subnets
+
 	return nil
 }
 
