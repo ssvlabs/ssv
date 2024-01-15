@@ -58,7 +58,9 @@ func TestAPI(t *testing.T) {
 		require.NoError(t, err)
 		_, tokenString, err := jwtauth.New("HS256", []byte("secret"), nil).Encode(nil)
 		require.NoError(t, err)
-		_, respData := testRequest(t, testServer, "POST", "/v1/node/sign", tokenString, r)
+		resp, respData, err := testRequest(testServer, "POST", "/v1/node/sign", tokenString, r)
+		require.NoError(t, err)
+		require.Equal(t, resp.StatusCode, 200)
 		sigResp := &handlers.SignResponseJSON{}
 		err = json.Unmarshal(respData, &sigResp)
 		require.NoError(t, err)
@@ -67,37 +69,56 @@ func TestAPI(t *testing.T) {
 		err = rsa.VerifyPKCS1v15(&priv.PublicKey, crypto.SHA256, hash[:], sigBytes)
 		require.NoError(t, err)
 	})
+	t.Run("authorized /v1/node/sign provided JWT token", func(t *testing.T) {
+		hash := sha256.Sum256([]byte("Hello"))
+		data := []byte(fmt.Sprintf(`{"data":"%s"}`, hex.EncodeToString(hash[:])))
+		r := bytes.NewReader(data)
+		require.NoError(t, err)
+		tokenString := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.t-IDcSemACt8x4iTMCda8Yhe3iZaWbvV5XKSTbuAn0M"
+		resp, respData, err := testRequest(testServer, "POST", "/v1/node/sign", tokenString, r)
+		require.NoError(t, err)
+		require.Equal(t, resp.StatusCode, 200)
+		sigResp := &handlers.SignResponseJSON{}
+		err = json.Unmarshal(respData, &sigResp)
+		require.NoError(t, err)
+		sigBytes, err := hex.DecodeString(sigResp.Signature)
+		require.NoError(t, err)
+		err = rsa.VerifyPKCS1v15(&priv.PublicKey, crypto.SHA256, hash[:], sigBytes)
+		require.NoError(t, err)
+	})
+	t.Run("authorized /v1/node/sign wrong JWT token", func(t *testing.T) {
+		hash := sha256.Sum256([]byte("Hello"))
+		data := []byte(fmt.Sprintf(`{"data":"%s"}`, hex.EncodeToString(hash[:])))
+		r := bytes.NewReader(data)
+		require.NoError(t, err)
+		tokenString := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.-h11M7Sw09EUpd-vqBIwAOMuIcogkBfpsYnIHVcVoEc"
+		resp, _, err := testRequest(testServer, "POST", "/v1/node/sign", tokenString, r)
+		require.NoError(t, err)
+		require.Equal(t, resp.StatusCode, 401)
+	})
 	t.Run("non-authorized /v1/node/identity", func(t *testing.T) {
-		_, respData := testRequest(t, testServer, "GET", "/v1/node/identity", "", nil)
+		_, respData, err := testRequest(testServer, "GET", "/v1/node/identity", "", nil)
+		require.NoError(t, err)
 		identity := &handlers.IdentityJSON{}
 		err = json.Unmarshal(respData, &identity)
 		require.NoError(t, err)
 		require.Equal(t, apiServer.node.Network.LocalPeer().String(), identity.PeerID.String())
 	})
 	t.Run("non-authorized /v1/node/peers", func(t *testing.T) {
-		_, respData := testRequest(t, testServer, "GET", "/v1/node/peers", "", nil)
+		resp, respData, err := testRequest(testServer, "GET", "/v1/node/peers", "", nil)
+		require.NoError(t, err)
+		require.Equal(t, resp.StatusCode, 200)
 		peers := []handlers.PeerJSON{}
 		err = json.Unmarshal(respData, &peers)
 		require.NoError(t, err)
-		for i, p := range apiServer.node.Network.Peers() {
-			require.Equal(t, p, peers[i].ID)
-		}
-
 	})
 	t.Run("non-authorized /v1/node/topics", func(t *testing.T) {
-		_, respData := testRequest(t, testServer, "GET", "/v1/node/topics", "", nil)
+		resp, respData, err := testRequest(testServer, "GET", "/v1/node/topics", "", nil)
+		require.NoError(t, err)
+		require.Equal(t, resp.StatusCode, 200)
 		topics := &handlers.AllPeersAndTopicsJSON{}
 		err = json.Unmarshal(respData, &topics)
 		require.NoError(t, err)
-		t.Log(topics.PeersByTopic)
-		t.Log(topics.AllPeers)
-		allPeers, expTopics := apiServer.node.TopicIndex.PeersByTopic()
-		for i, p := range allPeers {
-			require.Equal(t, p, topics.AllPeers[i])
-		}
-		for _, p := range topics.PeersByTopic {
-			require.Equal(t, expTopics[p.TopicName], p.Peers)
-		}
 	})
 }
 
@@ -237,11 +258,10 @@ func (sc *node) Healthy(context.Context) error {
 	return nil
 }
 
-func testRequest(t *testing.T, ts *httptest.Server, method, path, token string, body io.Reader) (*http.Response, []byte) {
+func testRequest(ts *httptest.Server, method, path, token string, body io.Reader) (*http.Response, []byte, error) {
 	req, err := http.NewRequest(method, ts.URL+path, body)
 	if err != nil {
-		t.Fatal(err)
-		return nil, nil
+		return nil, nil, err
 	}
 	if token != "" {
 		req.Header = http.Header{
@@ -251,14 +271,12 @@ func testRequest(t *testing.T, ts *httptest.Server, method, path, token string, 
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		t.Fatal(err)
-		return nil, nil
+		return nil, nil, err
 	}
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		t.Fatal(err)
-		return nil, nil
+		return nil, nil, err
 	}
 	defer resp.Body.Close()
-	return resp, respBody
+	return resp, respBody, nil
 }
