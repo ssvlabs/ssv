@@ -34,6 +34,17 @@ func (cfg Config) GetGenesisTime() time.Time {
 	return cfg.genesisTime
 }
 
+type TimerProvider interface {
+	NewTimer(d time.Duration) *time.Timer
+}
+
+// realTimerProvider is an implementation of TimerProvider that uses real timers.
+type realTimerProvider struct{}
+
+func (rtp *realTimerProvider) NewTimer(d time.Duration) *time.Timer {
+	return time.NewTimer(d)
+}
+
 type slotTicker struct {
 	logger       *zap.Logger
 	timer        *time.Timer
@@ -44,6 +55,10 @@ type slotTicker struct {
 
 // New returns a goroutine-free SlotTicker implementation which is not thread-safe.
 func New(logger *zap.Logger, cfgProvider ConfigProvider) *slotTicker {
+	return NewWithCustomTimer(logger, cfgProvider, &realTimerProvider{})
+}
+
+func NewWithCustomTimer(logger *zap.Logger, cfgProvider ConfigProvider, timerProvider TimerProvider) *slotTicker {
 	genesisTime := cfgProvider.GetGenesisTime()
 	slotDuration := cfgProvider.SlotDurationSec()
 
@@ -60,9 +75,13 @@ func New(logger *zap.Logger, cfgProvider ConfigProvider) *slotTicker {
 		initialDelay = time.Until(nextSlotStartTime)
 	}
 
+	if timerProvider == nil {
+		timerProvider = &realTimerProvider{}
+	}
+
 	return &slotTicker{
 		logger:       logger,
-		timer:        time.NewTimer(initialDelay),
+		timer:        timerProvider.NewTimer(initialDelay),
 		slotDuration: slotDuration,
 		genesisTime:  genesisTime,
 		slot:         0,
@@ -84,15 +103,15 @@ func (s *slotTicker) Next() <-chan time.Time {
 		default:
 		}
 	}
-	currentSlot := phase0.Slot(timeSinceGenesis / s.slotDuration)
-	if currentSlot <= s.slot {
+	nextSlot := phase0.Slot(timeSinceGenesis/s.slotDuration) + 1
+	if nextSlot <= s.slot {
 		// We've already ticked for this slot, so we need to wait for the next one.
-		currentSlot = s.slot
-		s.logger.Warn("double tick", zap.Uint64("slot", uint64(currentSlot)))
+		nextSlot = s.slot + 1
+		s.logger.Warn("double tick", zap.Uint64("slot", uint64(s.slot)))
 	}
-	nextSlotStartTime := s.genesisTime.Add(time.Duration(currentSlot+1) * s.slotDuration)
+	nextSlotStartTime := s.genesisTime.Add(time.Duration(nextSlot) * s.slotDuration)
 	s.timer.Reset(time.Until(nextSlotStartTime))
-	s.slot = currentSlot + 1
+	s.slot = nextSlot
 	return s.timer.C
 }
 

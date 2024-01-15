@@ -9,6 +9,7 @@ import (
 	"github.com/cornelk/hashmap/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zaptest/observer"
 )
 
 func TestSlotTicker(t *testing.T) {
@@ -177,4 +178,59 @@ func TestSlotSkipping(t *testing.T) {
 			t.Fatalf("Did not receive expected tick for iteration %d", i)
 		}
 	}
+}
+
+type mockTimerProvider struct {
+	C chan time.Time
+}
+
+func (mtp *mockTimerProvider) NewTimer(d time.Duration) *time.Timer {
+	// Create a timer with a large duration and immediately stop it.
+	// This is to create a properly initialized timer.
+	t := time.NewTimer(time.Hour)
+	// t.Stop()
+
+	// Replace the timer's channel with our mock channel.
+	t.C = mtp.C
+	return t
+}
+
+func TestDoubleTickWarning(t *testing.T) {
+	// Create a mock timer channel
+	mockTimerChan := make(chan time.Time, 2)
+
+	// Setting up a logger with observer to capture the warning logs
+	core, recorded := observer.New(zap.WarnLevel)
+	logger := zap.New(core)
+
+	// Initialize the slotTicker with the mock timer provider
+	ticker := NewWithCustomTimer(logger, Config{
+		slotDuration: 200 * time.Millisecond,
+		genesisTime:  time.Now(),
+	}, &mockTimerProvider{C: mockTimerChan})
+
+	// Manually fire the timer twice to simulate rapid ticks
+	mockTimerChan <- time.Now()
+	mockTimerChan <- time.Now()
+
+	// Call Next() twice to process the ticks
+	<-ticker.Next()
+	firstSlot := ticker.Slot()
+	<-ticker.Next()
+	secondSlot := ticker.Slot()
+
+	require.NotEqual(t, firstSlot, secondSlot)
+
+	// Assert that the warning was logged
+	require.Equal(t, 1, recorded.Len(), "Expected a warning log for double tick")
+
+	// Extracting and checking the log message
+	loggedEntry := recorded.All()[0]
+	require.Equal(t, "double tick", loggedEntry.Message)
+	require.Equal(t, zap.WarnLevel, loggedEntry.Level)
+
+	// Extracting and checking the slot number from the log fields
+	slotField := loggedEntry.Context[0]
+	require.Equal(t, "slot", slotField.Key)
+	require.Equal(t, int64(firstSlot), slotField.Integer)
 }
