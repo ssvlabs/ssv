@@ -72,21 +72,32 @@ func TestAPI(t *testing.T) {
 		identity := &handlers.IdentityJSON{}
 		err = json.Unmarshal(respData, &identity)
 		require.NoError(t, err)
-		require.NotEmpty(t, identity.PeerID)
+		require.Equal(t, apiServer.node.Network.LocalPeer().String(), identity.PeerID.String())
 	})
 	t.Run("non-authorized /v1/node/peers", func(t *testing.T) {
 		_, respData := testRequest(t, testServer, "GET", "/v1/node/peers", "", nil)
-		peers := &[]handlers.PeerJSON{}
+		peers := []handlers.PeerJSON{}
 		err = json.Unmarshal(respData, &peers)
 		require.NoError(t, err)
-		require.NotEmpty(t, peers)
+		for i, p := range apiServer.node.Network.Peers() {
+			require.Equal(t, p, peers[i].ID)
+		}
+
 	})
 	t.Run("non-authorized /v1/node/topics", func(t *testing.T) {
 		_, respData := testRequest(t, testServer, "GET", "/v1/node/topics", "", nil)
 		topics := &handlers.AllPeersAndTopicsJSON{}
 		err = json.Unmarshal(respData, &topics)
 		require.NoError(t, err)
-		require.NotEmpty(t, topics)
+		t.Log(topics.PeersByTopic)
+		t.Log(topics.AllPeers)
+		allPeers, expTopics := apiServer.node.TopicIndex.PeersByTopic()
+		for i, p := range allPeers {
+			require.Equal(t, p, topics.AllPeers[i])
+		}
+		for _, p := range topics.PeersByTopic {
+			require.Equal(t, expTopics[p.TopicName], p.Peers)
+		}
 	})
 }
 
