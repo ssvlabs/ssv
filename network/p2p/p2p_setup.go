@@ -330,7 +330,7 @@ func (n *p2pNetwork) connectionsAtLimit() bool {
 
 func (n *p2pNetwork) isPeerBad(id peer.ID) bool {
 	if n.idx == nil {
-		return false
+		return true
 	}
 	return n.idx.IsBad(n.interfaceLogger, id)
 }

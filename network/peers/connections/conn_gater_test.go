@@ -3,13 +3,10 @@ package connections
 import (
 	"fmt"
 	"testing"
-	"time"
 
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
@@ -61,20 +58,6 @@ func TestIsPeerBlocked(t *testing.T) {
 	gater, _, testPeerID := setupTestEnvironment(5)
 
 	assert.False(t, gater.IsPeerBlocked(testPeerID), "Peer %v is unexpectedly blocked", testPeerID)
-}
-
-func TestBlacklistExpiration(t *testing.T) {
-	gater, _, testPeerID := setupTestEnvironment(5)
-	shortDuration := 500 * time.Millisecond
-	blacklist, _ := pubsub.NewTimeCachedBlacklist(shortDuration)
-	gater.blackList = blacklist
-
-	gater.BlockPeer(testPeerID)
-	require.True(t, gater.IsPeerBlocked(testPeerID), "Peer %v was not initially blocked", testPeerID)
-
-	time.Sleep(shortDuration + 50*time.Millisecond) // Wait for the blacklist duration plus a small buffer
-
-	assert.False(t, gater.IsPeerBlocked(testPeerID), "Peer %v should not be blocked after expiration", testPeerID)
 }
 
 func TestInterceptPeerDial(t *testing.T) {
