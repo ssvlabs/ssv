@@ -11,7 +11,7 @@ import (
 	"github.com/bloxapp/ssv/eth/simulator"
 )
 
-func SetFinalizedBlocksProducer(sim *simulator.SimulatedBackend) func(ctx context.Context, feed chan<- *eth2apiv1.FinalizedCheckpointEvent) error {
+func SetFinalizedCheckpointsProducer(sim *simulator.SimulatedBackend) func(ctx context.Context, feed chan<- *eth2apiv1.FinalizedCheckpointEvent) error {
 	return func(ctx context.Context, finalizedBlocks chan<- *eth2apiv1.FinalizedCheckpointEvent) error {
 		go func() {
 			heads := make(chan *ethtypes.Header)

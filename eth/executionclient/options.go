@@ -64,8 +64,8 @@ func WithLogBatchSize(size uint64) Option {
 	}
 }
 
-// WithFinalizedBlocksSubscription setting up a subscription for beacon sync channel to be consumed in streamLogsToChan
-func WithFinalizedBlocksSubscription(
+// WithFinalizedCheckpointsFeed setting up a subscription for beacon sync channel to be consumed in streamLogsToChan
+func WithFinalizedCheckpointsFeed(
 	ctx context.Context,
 	subscribe func(ctx context.Context, finalizedBlocks chan<- *eth2apiv1.FinalizedCheckpointEvent) error,
 ) Option {

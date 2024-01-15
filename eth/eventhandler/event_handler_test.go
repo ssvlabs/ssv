@@ -119,6 +119,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	}
 	require.NotEmpty(t, contractCode)
 
+	finalizedCheckpointSupportActivationHeight := uint64(5)
+
 	// Create a client and connect to the simulator
 	client, err := executionclient.New(
 		ctx,
@@ -126,6 +128,9 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		contractAddr,
 		executionclient.WithLogger(logger),
 		executionclient.WithFollowDistance(0),
+		executionclient.WithCustomGetHeaderArg(rpc.LatestBlockNumber),
+		executionclient.WithFinalizedCheckpointsFork(finalizedCheckpointSupportActivationHeight),
+		executionclient.WithFinalizedCheckpointsFeed(ctx, ethtestutils.SetFinalizedCheckpointsProducer(sim)), // Setting new blocks producer for post fork period
 	)
 	require.NoError(t, err)
 
@@ -322,12 +327,8 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		})
 	})
 
-	// Setting new blocks producer
 	logger.Info("switching to finalized blocks consuming", zap.Uint64("block", lastBlock.NumberU64()))
-
-	executionclient.WithCustomGetHeaderArg(rpc.LatestBlockNumber)(client)
-	executionclient.WithFinalizedCheckpointsFork(lastBlock.NumberU64())(client)
-	executionclient.WithFinalizedBlocksSubscription(ctx, ethtestutils.SetFinalizedBlocksProducer(sim))(client)
+	require.True(t, client.IsFinalizedCheckpointForkActivated(lastBlock.NumberU64()))
 
 	// Receive event, unmarshall, parse, check parse event is not nil or with an error,
 	// public key is correct, owner is correct, operator ids are correct, shares are correct

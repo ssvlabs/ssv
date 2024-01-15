@@ -177,7 +177,7 @@ func (e *TestEnv) setup(
 		executionclient.WithLogger(logger),
 		executionclient.WithFollowDistance(e.followDistance),
 		//executionclient.WithFinalizedCheckpointsFork(1<<64-1),
-		//executionclient.WithFinalizedBlocksSubscription(ctx, ethtestutils.SetFinalizedBlocksProducer(sim)),
+		//executionclient.WithFinalizedCheckpointsFeed(ctx, ethtestutils.SetFinalizedBlocksProducer(sim)),
 	)
 	if err != nil {
 		return err
