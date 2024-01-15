@@ -128,7 +128,7 @@ func (dvs *DiscV5Service) Node(logger *zap.Logger, info peer.AddrInfo) (*enode.N
 func (dvs *DiscV5Service) Bootstrap(logger *zap.Logger, handler HandleNewPeer) error {
 	logger = logger.Named(logging.NameDiscoveryService)
 
-	dvs.discover(dvs.ctx, logger, func(e PeerEvent) {
+	dvs.discover(dvs.ctx, func(e PeerEvent) {
 		logger := logger.With(
 			fields.ENR(e.Node),
 			fields.PeerID(e.AddrInfo.ID),
@@ -218,7 +218,7 @@ func (dvs *DiscV5Service) initDiscV5Listener(logger *zap.Logger, discOpts *Optio
 // interval enables to control the rate of new nodes that we find.
 // filters will be applied on each new node before the handler is called,
 // enabling to apply custom access control for different scenarios.
-func (dvs *DiscV5Service) discover(ctx context.Context, logger *zap.Logger, handler HandleNewPeer, interval time.Duration, filters ...NodeFilter) {
+func (dvs *DiscV5Service) discover(ctx context.Context, handler HandleNewPeer, interval time.Duration, filters ...NodeFilter) {
 	iterator := dvs.dv5Listener.RandomNodes()
 	for _, f := range filters {
 		iterator = enode.Filter(iterator, f)
@@ -302,7 +302,7 @@ func (dvs *DiscV5Service) publishENR(logger *zap.Logger) {
 		return
 	}
 	defer atomic.StoreInt32(&dvs.publishState, publishStateReady)
-	dvs.discover(ctx, logger, func(e PeerEvent) {
+	dvs.discover(ctx, func(e PeerEvent) {
 		metricPublishEnrPings.Inc()
 		err := dvs.dv5Listener.Ping(e.Node)
 		if err != nil {

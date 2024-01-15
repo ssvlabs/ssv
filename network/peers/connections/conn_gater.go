@@ -79,7 +79,7 @@ func (n *ConnectionGater) InterceptAddrDial(id peer.ID, multiaddr ma.Multiaddr) 
 		return false
 	}
 	if n.idx.Limit(libp2pnetwork.DirOutbound) {
-		n.logger.Debug("Not accepting outbound addr dial", zap.String("peer", id.String()),
+		n.logger.Debug("Not accepting outbound addmkr dial", zap.String("peer", id.String()),
 			zap.String("reason", "at peer limit"))
 		return false
 	}

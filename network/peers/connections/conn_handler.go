@@ -177,20 +177,17 @@ func (ch *connHandler) Handle(logger *zap.Logger) *libp2pnetwork.NotifyBundle {
 			if conn == nil || conn.RemoteMultiaddr() == nil {
 				return
 			}
-			// Must be handled in a goroutine as this callback cannot be blocking.
-			go func() {
-				// Skip if we are still connected to the peer.
-				if net.Connectedness(conn.RemotePeer()) == libp2pnetwork.Connected {
-					logger.Debug("peer disconnected - we are still connected")
-					return
-				}
 
-				metricsConnections.Dec()
-				ch.peerInfos.SetState(conn.RemotePeer(), peers.StateDisconnected)
+			// Skip if we are still connected to the peer.
+			if net.Connectedness(conn.RemotePeer()) == libp2pnetwork.Connected {
+				return
+			}
 
-				logger := connLogger(conn)
-				logger.Debug("peer disconnected")
-			}()
+			metricsConnections.Dec()
+			ch.peerInfos.SetState(conn.RemotePeer(), peers.StateDisconnected)
+
+			logger := connLogger(conn)
+			logger.Debug("peer disconnected")
 		},
 	}
 }
