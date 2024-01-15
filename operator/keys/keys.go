@@ -16,28 +16,17 @@ import (
 )
 
 type OperatorPublicKey interface {
-	Verify(data []byte, signature []byte) error
 	Encrypt(data []byte) ([]byte, error)
-	//Bytes() ([]byte, error)
-	Encode() ([]byte, error)
+	Verify(data []byte, signature []byte) error
+	Base64() ([]byte, error)
 }
 
 type OperatorPrivateKey interface {
-	//Bytes() ([]byte, error)
-	StorageHash() (string, error)
-	EKMHash() (string, error)
 	OperatorSigner
 	OperatorDecrypter
-}
-
-type OperatorKeyPair interface {
-	OperatorPublicKey
-	OperatorPrivateKey
-}
-
-type keyPair struct {
-	privateKey
-	publicKey
+	Marshal() []byte
+	StorageHash() (string, error)
+	EKMHash() (string, error)
 }
 
 type OperatorSigner interface {
@@ -49,7 +38,7 @@ type OperatorDecrypter interface {
 	Decrypt(data []byte) ([]byte, error)
 }
 
-func KeyPairFromString(privKeyString string) (OperatorKeyPair, error) {
+func PrivateKeyFromString(privKeyString string) (OperatorPrivateKey, error) {
 	operatorKeyByte, err := base64.StdEncoding.DecodeString(privKeyString)
 	if err != nil {
 		return nil, err
@@ -60,13 +49,10 @@ func KeyPairFromString(privKeyString string) (OperatorKeyPair, error) {
 		return nil, err
 	}
 
-	return &keyPair{
-		privateKey: privateKey{privKey: privKey},
-		publicKey:  publicKey{pubKey: &privKey.PublicKey},
-	}, nil
+	return &privateKey{privKey: privKey}, nil
 }
 
-func KeyPairFromFile(privKeyFilePath, passwordFilePath string) (OperatorKeyPair, error) {
+func PrivateKeyFromFile(privKeyFilePath, passwordFilePath string) (OperatorPrivateKey, error) {
 	// nolint: gosec
 	encryptedJSON, err := os.ReadFile(privKeyFilePath)
 	if err != nil {
@@ -84,13 +70,10 @@ func KeyPairFromFile(privKeyFilePath, passwordFilePath string) (OperatorKeyPair,
 		return nil, fmt.Errorf("decrypt operator private key: %w", err)
 	}
 
-	return &keyPair{
-		privateKey: privateKey{privKey: privKey},
-		publicKey:  publicKey{pubKey: &privKey.PublicKey},
-	}, nil
+	return &privateKey{privKey: privKey}, nil
 }
 
-func GenerateKeyPair() (OperatorKeyPair, error) {
+func GeneratePrivateKey() (OperatorPrivateKey, error) {
 	const keySize = 2048
 
 	privKey, err := rsa.GenerateKey(crand.Reader, keySize)
@@ -98,10 +81,7 @@ func GenerateKeyPair() (OperatorKeyPair, error) {
 		return nil, err
 	}
 
-	return &keyPair{
-		privateKey: privateKey{privKey: privKey},
-		publicKey:  publicKey{pubKey: &privKey.PublicKey},
-	}, nil
+	return &privateKey{privKey: privKey}, nil
 }
 
 type privateKey struct {
@@ -113,18 +93,6 @@ func (p *privateKey) Public() OperatorPublicKey {
 	return &publicKey{pubKey: &pubKey}
 }
 
-func (p *privateKey) Bytes() ([]byte, error) {
-	return x509.MarshalPKCS1PrivateKey(p.privKey), nil
-}
-
-func (p *privateKey) StorageHash() (string, error) {
-	return rsaencryption.HashRsaKey(rsaencryption.PrivateKeyToByte(p.privKey))
-}
-
-func (p *privateKey) EKMHash() (string, error) {
-	return rsaencryption.HashRsaKey(x509.MarshalPKCS1PrivateKey(p.privKey))
-}
-
 func (p *privateKey) Sign(data []byte) ([]byte, error) {
 	hash := sha256.Sum256(data)
 	return rsa.SignPKCS1v15(nil, p.privKey, crypto.SHA256, hash[:])
@@ -132,6 +100,18 @@ func (p *privateKey) Sign(data []byte) ([]byte, error) {
 
 func (p *privateKey) Decrypt(data []byte) ([]byte, error) {
 	return rsaencryption.DecodeKey(p.privKey, data)
+}
+
+func (p *privateKey) Marshal() []byte {
+	return x509.MarshalPKCS1PrivateKey(p.privKey)
+}
+
+func (p *privateKey) StorageHash() (string, error) {
+	return rsaencryption.HashRsaKey(rsaencryption.PrivateKeyToByte(p.privKey))
+}
+
+func (p *privateKey) EKMHash() (string, error) {
+	return rsaencryption.HashRsaKey(p.Marshal())
 }
 
 type publicKey struct {
@@ -154,21 +134,17 @@ func PublicKeyFromString(pubKeyString string) (OperatorPublicKey, error) {
 	}, nil
 }
 
+func (p *publicKey) Encrypt(data []byte) ([]byte, error) {
+	return rsa.EncryptPKCS1v15(rand.Reader, p.pubKey, data)
+}
+
 func (p *publicKey) Verify(data []byte, signature []byte) error {
 	messageHash := sha256.Sum256(data)
 	return rsa.VerifyPKCS1v15(p.pubKey, crypto.SHA256, messageHash[:], signature)
 }
 
-func (p *publicKey) Encrypt(data []byte) ([]byte, error) {
-	return rsa.EncryptPKCS1v15(rand.Reader, p.pubKey, data)
-}
-
-func (p *publicKey) Bytes() ([]byte, error) {
-	return x509.MarshalPKIXPublicKey(p.pubKey)
-}
-
-func (p *publicKey) Encode() ([]byte, error) {
-	pkBytes, err := p.Bytes()
+func (p *publicKey) Base64() ([]byte, error) {
+	pkBytes, err := p.Marshal()
 	if err != nil {
 		return nil, err
 	}
@@ -181,4 +157,8 @@ func (p *publicKey) Encode() ([]byte, error) {
 	)
 
 	return []byte(base64.StdEncoding.EncodeToString(pemByte)), nil
+}
+
+func (p *publicKey) Marshal() ([]byte, error) {
+	return x509.MarshalPKIXPublicKey(p.pubKey)
 }

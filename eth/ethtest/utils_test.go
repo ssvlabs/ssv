@@ -41,8 +41,8 @@ type testValidatorData struct {
 }
 
 type testOperator struct {
-	id      uint64
-	keyPair keys.OperatorKeyPair
+	id                 uint64
+	operatorPrivateKey keys.OperatorPrivateKey
 }
 
 type testShare struct {
@@ -86,13 +86,14 @@ func createOperators(num uint64, idOffset uint64) ([]*testOperator, error) {
 	testOps := make([]*testOperator, num)
 
 	for i := uint64(1); i <= num; i++ {
-		keyPair, err := keys.GenerateKeyPair()
+		privateKey, err := keys.GeneratePrivateKey()
 		if err != nil {
 			return nil, err
 		}
+
 		testOps[i-1] = &testOperator{
-			id:      idOffset + i,
-			keyPair: keyPair,
+			id:                 idOffset + i,
+			operatorPrivateKey: privateKey,
 		}
 	}
 
@@ -106,14 +107,14 @@ func generateSharesData(validatorData *testValidatorData, operators []*testOpera
 	for i, op := range operators {
 		rawShare := validatorData.operatorsShares[i].sec.SerializeToHexStr()
 
-		cipherText, err := op.keyPair.Encrypt([]byte(rawShare))
+		cipherText, err := op.operatorPrivateKey.Encrypt([]byte(rawShare))
 		if err != nil {
 			return nil, fmt.Errorf("can't encrypt share: %w", err)
 		}
 
 		// check that we encrypt right
 		shareSecret := &bls.SecretKey{}
-		decryptedSharePrivateKey, err := op.keyPair.Decrypt(cipherText)
+		decryptedSharePrivateKey, err := op.operatorPrivateKey.Decrypt(cipherText)
 		if err != nil {
 			return nil, err
 		}
@@ -184,7 +185,7 @@ func setupEventHandler(
 			validatorCtrl,
 			testNetworkConfig,
 			validatorCtrl,
-			operator.keyPair,
+			operator.operatorPrivateKey,
 			keyManager,
 			bc,
 			storageMap,
@@ -219,7 +220,7 @@ func setupEventHandler(
 		validatorCtrl,
 		testNetworkConfig,
 		validatorCtrl,
-		operator.keyPair,
+		operator.operatorPrivateKey,
 		keyManager,
 		bc,
 		storageMap,
@@ -248,12 +249,12 @@ func setupOperatorStorage(
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
 
-	encodedPrivKey, err := operator.keyPair.Encode()
+	encodedPrivKey, err := operator.operatorPrivateKey.Base64()
 	if err != nil {
 		logger.Fatal("failed to encode operator private key", zap.Error(err))
 	}
 
-	encodedPubKey, err := operator.keyPair.Public().Encode()
+	encodedPubKey, err := operator.operatorPrivateKey.Public().Base64()
 	if err != nil {
 		logger.Fatal("failed to encode operator public key", zap.Error(err))
 	}

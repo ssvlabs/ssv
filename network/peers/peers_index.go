@@ -111,7 +111,7 @@ func (pi *peersIndex) SelfSealed(sender, recipient peer.ID, permissioned bool, o
 	defer pi.selfLock.Unlock()
 
 	if permissioned {
-		publicKey, err := operatorSigner.Public().Encode()
+		publicKey, err := operatorSigner.Public().Base64()
 		if err != nil {
 			return nil, err
 		}

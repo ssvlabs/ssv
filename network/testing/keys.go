@@ -25,14 +25,14 @@ func CreateKeys(n int) ([]NodeKeys, error) {
 			return nil, err
 		}
 
-		opKey, err := keys.GenerateKeyPair()
+		opPrivKey, err := keys.GeneratePrivateKey()
 		if err != nil {
 			return nil, err
 		}
 
 		identities[i] = NodeKeys{
 			NetKey:      netKey,
-			OperatorKey: opKey,
+			OperatorKey: opPrivKey,
 		}
 	}
 	return identities, nil

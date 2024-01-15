@@ -153,7 +153,7 @@ func TestHandshakeProcessIncomingNodeInfoFlow(t *testing.T) {
 		require.NoError(t, err)
 		td.Handshaker.streams = mock.StreamController{MockRequest: sealedIncomingMessage}
 
-		senderPublicKey, err := td.SenderPrivateKey.Public().Encode()
+		senderPublicKey, err := td.SenderPrivateKey.Public().Base64()
 		require.NoError(t, err)
 		storgmock := mock.NodeStorage{RegisteredOperatorPublicKeyPEMs: []string{string(senderPublicKey)}}
 		td.Handshaker.filters = func() []HandshakeFilter {
@@ -171,7 +171,7 @@ func TestHandshakeProcessIncomingNodeInfoFlow(t *testing.T) {
 
 		td.Handshaker.streams = mock.StreamController{MockRequest: sealedIncomingMessage}
 
-		senderPublicKey, err := td.SenderPrivateKey.Public().Encode()
+		senderPublicKey, err := td.SenderPrivateKey.Public().Base64()
 		require.NoError(t, err)
 
 		storgmock := mock.NodeStorage{RegisteredOperatorPublicKeyPEMs: []string{}}

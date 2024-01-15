@@ -138,12 +138,12 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger) *e
 
 	storageMap := ibftstorage.NewStores()
 
-	keyPair, err := keys.GenerateKeyPair()
+	privateKey, err := keys.GeneratePrivateKey()
 	if err != nil {
 		logger.Fatal("failed generating operator key %v", zap.Error(err))
 	}
 
-	nodeStorage, operatorData := setupOperatorStorage(logger, db, keyPair)
+	nodeStorage, operatorData := setupOperatorStorage(logger, db, privateKey)
 	testNetworkConfig := networkconfig.TestNetwork
 
 	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, true, "")
@@ -174,7 +174,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger) *e
 		validatorCtrl,
 		testNetworkConfig,
 		validatorCtrl,
-		keyPair,
+		privateKey,
 		keyManager,
 		bc,
 		storageMap,
@@ -206,7 +206,7 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, keyPair keys.O
 		logger.Fatal("failed to hash operator private key", zap.Error(err))
 	}
 
-	encodedPubKey, err := keyPair.Public().Encode()
+	encodedPubKey, err := keyPair.Public().Base64()
 	if err != nil {
 		logger.Fatal("failed to encode operator public key", zap.Error(err))
 	}

@@ -128,7 +128,7 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 
 // NewTestP2pNetwork creates a new network.P2PNetwork instance
 func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys testing.NodeKeys, logger *zap.Logger, options LocalNetOptions) (network.P2PNetwork, error) {
-	operatorPubkey, err := keys.OperatorKey.Public().Encode()
+	operatorPubkey, err := keys.OperatorKey.Public().Base64()
 	if err != nil {
 		return nil, err
 	}

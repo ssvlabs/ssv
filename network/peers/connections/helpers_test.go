@@ -39,13 +39,13 @@ func getTestingData(t *testing.T) TestData {
 	peerID1 := peer.ID("1.1.1.1")
 	peerID2 := peer.ID("2.2.2.2")
 
-	keyPair, err := keys.GenerateKeyPair()
+	privateKey, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
 
-	senderPrivateKey, err := keyPair.Encode()
+	senderPrivateKey, err := privateKey.Base64()
 	require.NoError(t, err)
 
-	senderPublicKey, err := keyPair.Public().Encode()
+	senderPublicKey, err := privateKey.Public().Base64()
 	require.NoError(t, err)
 
 	nodeInfo := &records.NodeInfo{
@@ -65,7 +65,7 @@ func getTestingData(t *testing.T) TestData {
 		SenderPublicKey: senderPublicKey,
 	}
 
-	signature, err := keyPair.Sign(handshakeData.Encode())
+	signature, err := privateKey.Sign(handshakeData.Encode())
 	require.NoError(t, err)
 
 	sni := &records.SignedNodeInfo{
@@ -108,7 +108,7 @@ func getTestingData(t *testing.T) TestData {
 		peerInfos:      ns,
 		ids:            ids,
 		net:            net,
-		operatorSigner: keyPair,
+		operatorSigner: privateKey,
 		streams:        sc,
 		filters:        func() []HandshakeFilter { return []HandshakeFilter{} },
 		Permissioned:   func() bool { return false },
@@ -119,7 +119,7 @@ func getTestingData(t *testing.T) TestData {
 	}
 
 	return TestData{
-		SenderPrivateKey:         keyPair,
+		SenderPrivateKey:         privateKey,
 		HandshakeData:            handshakeData,
 		Signature:                signature,
 		SenderPeerID:             peerID2,

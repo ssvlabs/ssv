@@ -33,13 +33,13 @@ func TestSaveAndGetPrivateKeyHash(t *testing.T) {
 		db: db,
 	}
 
-	parsedPrivKey, err := keys.KeyPairFromString(skPem)
+	parsedPrivKey, err := keys.PrivateKeyFromString(skPem)
 	require.NoError(t, err)
 
 	parsedPrivKeyHash, err := parsedPrivKey.StorageHash()
 	require.NoError(t, err)
 
-	encodedPubKey, err := parsedPrivKey.Public().Encode()
+	encodedPubKey, err := parsedPrivKey.Public().Base64()
 	require.NoError(t, err)
 	require.Equal(t, pkPem, string(encodedPubKey))
 
@@ -104,7 +104,7 @@ func TestSaveAndGetPrivateKeyHash(t *testing.T) {
 //			}
 //
 //			if test.existKey != "" { // mock exist key
-//				existingKeypair, err := keys.KeyPairFromString(test.existKey)
+//				existingKeypair, err := keys.PrivateKeyFromString(test.existKey)
 //				require.NoError(t, err)
 //
 //				existingPrivKeyHash, err := existingKeypair.Hash()

@@ -117,12 +117,12 @@ var StartNodeCmd = &cobra.Command{
 
 		var operatorPrivKey keys.OperatorPrivateKey
 		if cfg.KeyStore.PrivateKeyFile != "" {
-			operatorPrivKey, err = keys.KeyPairFromFile(cfg.KeyStore.PrivateKeyFile, cfg.KeyStore.PasswordFile)
+			operatorPrivKey, err = keys.PrivateKeyFromFile(cfg.KeyStore.PrivateKeyFile, cfg.KeyStore.PasswordFile)
 			if err != nil {
 				logger.Fatal("could not extract operator private key from file", zap.Error(err))
 			}
 		} else {
-			operatorPrivKey, err = keys.KeyPairFromString(cfg.OperatorPrivateKey)
+			operatorPrivKey, err = keys.PrivateKeyFromString(cfg.OperatorPrivateKey)
 			if err != nil {
 				logger.Fatal("could not decode operator private key", zap.Error(err))
 			}
@@ -473,7 +473,7 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, configPrivKey 
 		logger.Fatal("operator private key is not matching the one encrypted the storage")
 	}
 
-	encodedPubKey, err := configPrivKey.Public().Encode()
+	encodedPubKey, err := configPrivKey.Public().Base64()
 	if err != nil {
 		logger.Fatal("could not encode public key", zap.Error(err))
 	}

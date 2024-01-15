@@ -146,7 +146,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 
 	t.Run("test OperatorAdded event handle", func(t *testing.T) {
 		for _, op := range ops {
-			encodedPubKey, err := op.keyPair.Public().Encode()
+			encodedPubKey, err := op.keyPair.Public().Base64()
 			require.NoError(t, err)
 
 			// Call the contract method
@@ -194,7 +194,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.Equal(t, operatorAddedEvent.OperatorId, data.ID)
 			require.Equal(t, operatorAddedEvent.Owner, data.OwnerAddress)
 
-			encodedPubKey, err := ops[i].keyPair.Public().Encode()
+			encodedPubKey, err := ops[i].keyPair.Public().Base64()
 			require.NoError(t, err)
 
 			require.Equal(t, encodedPubKey, data.PublicKey)
@@ -245,7 +245,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			operatorsCount++
 
-			encodedPubKey, err := op[0].keyPair.Public().Encode()
+			encodedPubKey, err := op[0].keyPair.Public().Base64()
 			require.NoError(t, err)
 
 			// Call the contract method
@@ -1094,7 +1094,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			operatorsCount++
 			op := tmpOps[0]
 
-			encodedPubKey, err := op.keyPair.Public().Encode()
+			encodedPubKey, err := op.keyPair.Public().Base64()
 			require.NoError(t, err)
 
 			// Call the RegisterOperator contract method
@@ -1370,12 +1370,12 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, operator *test
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
 
-	encodedPrivKey, err := operator.keyPair.Encode()
+	encodedPrivKey, err := operator.keyPair.Base64()
 	if err != nil {
 		logger.Fatal("failed to encode operator private key", zap.Error(err))
 	}
 
-	encodedPubKey, err := operator.keyPair.Public().Encode()
+	encodedPubKey, err := operator.keyPair.Public().Base64()
 	if err != nil {
 		logger.Fatal("failed to encode operator public key", zap.Error(err))
 	}
@@ -1533,14 +1533,14 @@ func createOperators(num uint64, idOffset uint64) ([]*testOperator, error) {
 	testOps := make([]*testOperator, num)
 
 	for i := uint64(1); i <= num; i++ {
-		keyPair, err := keys.GenerateKeyPair()
+		privateKey, err := keys.GeneratePrivateKey()
 		if err != nil {
 			return nil, err
 		}
 
 		testOps[i-1] = &testOperator{
 			id:      idOffset + i,
-			keyPair: keyPair,
+			keyPair: privateKey,
 		}
 	}
 
