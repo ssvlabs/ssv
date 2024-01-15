@@ -478,7 +478,7 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, configPrivKey 
 		logger.Fatal("could not encode public key", zap.Error(err))
 	}
 
-	logger.Info("successfully loaded private key", zap.String("pubkey", string(encodedPubKey)))
+	logger.Info("successfully loaded operator keys", zap.String("pubkey", string(encodedPubKey)))
 
 	operatorData, found, err := nodeStorage.GetOperatorDataByPubKey(nil, encodedPubKey)
 	if err != nil {
