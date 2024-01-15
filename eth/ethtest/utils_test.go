@@ -41,8 +41,8 @@ type testValidatorData struct {
 }
 
 type testOperator struct {
-	id                 uint64
-	operatorPrivateKey keys.OperatorPrivateKey
+	id         uint64
+	privateKey keys.OperatorPrivateKey
 }
 
 type testShare struct {
@@ -92,8 +92,8 @@ func createOperators(num uint64, idOffset uint64) ([]*testOperator, error) {
 		}
 
 		testOps[i-1] = &testOperator{
-			id:                 idOffset + i,
-			operatorPrivateKey: privateKey,
+			id:         idOffset + i,
+			privateKey: privateKey,
 		}
 	}
 
@@ -107,14 +107,14 @@ func generateSharesData(validatorData *testValidatorData, operators []*testOpera
 	for i, op := range operators {
 		rawShare := validatorData.operatorsShares[i].sec.SerializeToHexStr()
 
-		cipherText, err := op.operatorPrivateKey.Public().Encrypt([]byte(rawShare))
+		cipherText, err := op.privateKey.Public().Encrypt([]byte(rawShare))
 		if err != nil {
 			return nil, fmt.Errorf("can't encrypt share: %w", err)
 		}
 
 		// check that we encrypt right
 		shareSecret := &bls.SecretKey{}
-		decryptedSharePrivateKey, err := op.operatorPrivateKey.Decrypt(cipherText)
+		decryptedSharePrivateKey, err := op.privateKey.Decrypt(cipherText)
 		if err != nil {
 			return nil, err
 		}
@@ -185,7 +185,7 @@ func setupEventHandler(
 			validatorCtrl,
 			testNetworkConfig,
 			validatorCtrl,
-			operator.operatorPrivateKey,
+			operator.privateKey,
 			keyManager,
 			bc,
 			storageMap,
@@ -220,7 +220,7 @@ func setupEventHandler(
 		validatorCtrl,
 		testNetworkConfig,
 		validatorCtrl,
-		operator.operatorPrivateKey,
+		operator.privateKey,
 		keyManager,
 		bc,
 		storageMap,
@@ -249,12 +249,12 @@ func setupOperatorStorage(
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
 
-	encodedPubKey, err := operator.operatorPrivateKey.Public().Base64()
+	encodedPubKey, err := operator.privateKey.Public().Base64()
 	if err != nil {
 		logger.Fatal("failed to encode operator public key", zap.Error(err))
 	}
 
-	privKeyHash, err := operator.operatorPrivateKey.StorageHash()
+	privKeyHash, err := operator.privateKey.StorageHash()
 	if err != nil {
 		logger.Fatal("failed to encode operator private key", zap.Error(err))
 	}

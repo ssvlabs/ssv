@@ -71,7 +71,7 @@ func (input *ProduceOperatorAddedEventsInput) produce() {
 
 	for _, event := range input.events {
 		op := event.op
-		encodedPubKey, err := op.operatorPrivateKey.Public().Base64()
+		encodedPubKey, err := op.privateKey.Public().Base64()
 		require.NoError(input.t, err)
 
 		packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(encodedPubKey)

@@ -16,11 +16,12 @@ import (
 
 // ECDSAPrivFromInterface converts crypto.PrivKey back to ecdsa.PrivateKey
 func ECDSAPrivFromInterface(privkey crypto.PrivKey) (*ecdsa.PrivateKey, error) {
-	secpKey := (privkey.(*crypto.Secp256k1PrivateKey))
+	secpKey := privkey.(*crypto.Secp256k1PrivateKey)
 	rawKey, err := secpKey.Raw()
 	if err != nil {
 		return nil, errors.Wrap(err, "could mot convert ecdsa.PrivateKey")
 	}
+
 	privKey := new(ecdsa.PrivateKey)
 	k := new(big.Int).SetBytes(rawKey)
 	privKey.D = k
@@ -56,6 +57,7 @@ func ECDSAPubToInterface(pubkey *ecdsa.PublicKey) (crypto.PubKey, error) {
 	if yVal.SetByteSlice(pubkey.Y.Bytes()) {
 		return nil, errors.Errorf("Y value overflows")
 	}
+
 	newKey := crypto.PubKey((*crypto.Secp256k1PublicKey)(btcec.NewPublicKey(xVal, yVal)))
 	// Zero out temporary values.
 	xVal.Zero()
@@ -63,7 +65,7 @@ func ECDSAPubToInterface(pubkey *ecdsa.PublicKey) (crypto.PubKey, error) {
 	return newKey, nil
 }
 
-// RSAPrivToInterface converts ecdsa.PrivateKey to crypto.PrivKey
+// RSAPrivToInterface converts rsa.PrivateKey to crypto.PrivKey
 func RSAPrivToInterface(privkey *rsa.PrivateKey) (crypto.PrivKey, error) {
 	rsaPrivDER := x509.MarshalPKCS1PrivateKey(privkey)
 	return crypto.UnmarshalRsaPrivateKey(rsaPrivDER)
