@@ -201,7 +201,7 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, keyPair keys.O
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
 
-	privKeyHash, err := keyPair.Hash()
+	privKeyHash, err := keyPair.StorageHash()
 	if err != nil {
 		logger.Fatal("failed to hash operator private key", zap.Error(err))
 	}

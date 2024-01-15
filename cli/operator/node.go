@@ -135,12 +135,12 @@ var StartNodeCmd = &cobra.Command{
 
 		verifyConfig(logger, nodeStorage, networkConfig.Name, usingLocalEvents)
 
-		hashedKey, err := operatorPrivKey.Hash()
+		ekmHashedKey, err := operatorPrivKey.EKMHash()
 		if err != nil {
 			logger.Fatal("could not get operator private key hash", zap.Error(err))
 		}
 
-		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkConfig, cfg.SSVOptions.ValidatorOptions.BuilderProposals, hashedKey)
+		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkConfig, cfg.SSVOptions.ValidatorOptions.BuilderProposals, ekmHashedKey)
 		if err != nil {
 			logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 		}
@@ -460,16 +460,16 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, configPrivKey 
 		logger.Fatal("could not get hashed private key", zap.Error(err))
 	}
 
-	configPrivKeyHash, err := configPrivKey.Hash()
+	configStoragePrivKeyHash, err := configPrivKey.StorageHash()
 	if err != nil {
 		logger.Fatal("could not hash private key", zap.Error(err))
 	}
 
 	if !found {
-		if err := nodeStorage.SavePrivateKeyHash(configPrivKeyHash); err != nil {
+		if err := nodeStorage.SavePrivateKeyHash(configStoragePrivKeyHash); err != nil {
 			logger.Fatal("could not save hashed private key", zap.Error(err))
 		}
-	} else if configPrivKeyHash != storedPrivKeyHash {
+	} else if configStoragePrivKeyHash != storedPrivKeyHash {
 		logger.Fatal("operator private key is not matching the one encrypted the storage")
 	}
 

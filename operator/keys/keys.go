@@ -24,7 +24,8 @@ type OperatorPublicKey interface {
 
 type OperatorPrivateKey interface {
 	//Bytes() ([]byte, error)
-	Hash() (string, error)
+	StorageHash() (string, error)
+	EKMHash() (string, error)
 	OperatorSigner
 	OperatorDecrypter
 }
@@ -116,8 +117,12 @@ func (p *privateKey) Bytes() ([]byte, error) {
 	return x509.MarshalPKCS1PrivateKey(p.privKey), nil
 }
 
-func (p *privateKey) Hash() (string, error) {
+func (p *privateKey) StorageHash() (string, error) {
 	return rsaencryption.HashRsaKey(rsaencryption.PrivateKeyToByte(p.privKey))
+}
+
+func (p *privateKey) EKMHash() (string, error) {
+	return rsaencryption.HashRsaKey(x509.MarshalPKCS1PrivateKey(p.privKey))
 }
 
 func (p *privateKey) Sign(data []byte) ([]byte, error) {

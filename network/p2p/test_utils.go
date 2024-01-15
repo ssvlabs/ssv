@@ -133,7 +133,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 		return nil, err
 	}
 
-	hash, err := keys.OperatorKey.Hash()
+	hash, err := keys.OperatorKey.StorageHash()
 	if err != nil {
 		panic(err)
 	}

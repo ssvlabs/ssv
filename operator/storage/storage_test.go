@@ -36,7 +36,7 @@ func TestSaveAndGetPrivateKeyHash(t *testing.T) {
 	parsedPrivKey, err := keys.KeyPairFromString(skPem)
 	require.NoError(t, err)
 
-	parsedPrivKeyHash, err := parsedPrivKey.Hash()
+	parsedPrivKeyHash, err := parsedPrivKey.StorageHash()
 	require.NoError(t, err)
 
 	encodedPubKey, err := parsedPrivKey.Public().Encode()
