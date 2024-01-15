@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
+	"github.com/bloxapp/ssv/operator/keys"
 )
 
 var generateOperatorKeysCmd = &cobra.Command{
@@ -22,11 +22,12 @@ var generateOperatorKeysCmd = &cobra.Command{
 		if err := logging.SetGlobalLogger("debug", "capital", "console", nil); err != nil {
 			log.Fatal(err)
 		}
+
 		logger := zap.L().Named(logging.NameExportKeys)
 		passwordFilePath, _ := cmd.Flags().GetString("password-file")
 		privateKeyFilePath, _ := cmd.Flags().GetString("operator-key-file")
 
-		pk, sk, err := rsaencryption.GenerateKeys()
+		privKey, err := keys.GeneratePrivateKey()
 		if err != nil {
 			logger.Fatal("Failed to generate keys", zap.Error(err))
 		}
@@ -36,9 +37,10 @@ var generateOperatorKeysCmd = &cobra.Command{
 			if err != nil {
 				logger.Fatal("Failed to read private key from file", zap.Error(err))
 			}
-			sk, pk, err = parsePrivateKey(keyBytes)
+
+			privKey, err = keys.PrivateKeyFromString(string(keyBytes))
 			if err != nil {
-				logger.Fatal("Failed to read private key from file", zap.Error(err))
+				logger.Fatal("Failed to parse private key", zap.Error(err))
 			}
 		}
 
@@ -47,10 +49,17 @@ var generateOperatorKeysCmd = &cobra.Command{
 			if err != nil {
 				logger.Fatal("Failed to read password file", zap.Error(err))
 			}
-			encryptedJSON, encryptedJSONErr := encryptPrivateKey(sk, pk, passwordBytes)
+
+			pubKeyPem, err := privKey.Public().PEM()
+			if err != nil {
+				logger.Fatal("Failed to get public key PEM", zap.Error(err))
+			}
+
+			encryptedJSON, encryptedJSONErr := encryptPrivateKey(privKey.PEM(), pubKeyPem, passwordBytes)
 			if encryptedJSONErr != nil {
 				logger.Fatal("Failed to encrypt private key", zap.Error(err))
 			}
+
 			err = writeFile("encrypted_private_key.json", encryptedJSON)
 			if err != nil {
 				logger.Fatal("Failed to save private key", zap.Error(err))
@@ -58,33 +67,15 @@ var generateOperatorKeysCmd = &cobra.Command{
 				logger.Info("private key encrypted and stored in encrypted_private_key.json")
 			}
 		} else {
-			logger.Info("generated public key (base64)", zap.String("pk", base64.StdEncoding.EncodeToString(pk)))
-			logger.Info("generated private key (base64)", zap.String("sk", base64.StdEncoding.EncodeToString(sk)))
+			pubKeyBase64, err := privKey.Public().Base64()
+			if err != nil {
+				logger.Fatal("Failed to get public key base64", zap.Error(err))
+			}
+
+			logger.Info("generated public key (base64)", zap.String("pk", string(pubKeyBase64)))
+			logger.Info("generated private key (base64)", zap.String("sk", string(privKey.Base64())))
 		}
 	},
-}
-
-func parsePrivateKey(keyBytes []byte) ([]byte, []byte, error) {
-	decodedBytes, err := base64.StdEncoding.DecodeString(string(keyBytes))
-	if err != nil {
-		return nil, nil, err
-	}
-	rsaKey, err := rsaencryption.ConvertPemToPrivateKey(string(decodedBytes))
-	if err != nil {
-		return nil, nil, err
-	}
-
-	skPem := rsaencryption.PrivateKeyToByte(rsaKey)
-
-	operatorPublicKey, err := rsaencryption.ExtractPublicKey(rsaKey)
-	if err != nil {
-		return nil, nil, err
-	}
-	pk, err := base64.StdEncoding.DecodeString(operatorPublicKey)
-	if err != nil {
-		return nil, nil, err
-	}
-	return skPem, pk, nil
 }
 
 func encryptPrivateKey(sk []byte, pk []byte, passwordBytes []byte) ([]byte, error) {

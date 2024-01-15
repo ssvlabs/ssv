@@ -18,15 +18,17 @@ import (
 type OperatorPublicKey interface {
 	Encrypt(data []byte) ([]byte, error)
 	Verify(data []byte, signature []byte) error
+	PEM() ([]byte, error)
 	Base64() ([]byte, error)
 }
 
 type OperatorPrivateKey interface {
 	OperatorSigner
 	OperatorDecrypter
-	Marshal() []byte
 	StorageHash() (string, error)
 	EKMHash() (string, error)
+	PEM() []byte
+	Base64() []byte
 }
 
 type OperatorSigner interface {
@@ -106,6 +108,17 @@ func (p *privateKey) Marshal() []byte {
 	return x509.MarshalPKCS1PrivateKey(p.privKey)
 }
 
+func (p *privateKey) PEM() []byte {
+	return pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: p.Marshal(),
+	})
+}
+
+func (p *privateKey) Base64() []byte {
+	return []byte(base64.StdEncoding.EncodeToString(p.PEM()))
+}
+
 func (p *privateKey) StorageHash() (string, error) {
 	return rsaencryption.HashRsaKey(rsaencryption.PrivateKeyToByte(p.privKey))
 }
@@ -143,22 +156,31 @@ func (p *publicKey) Verify(data []byte, signature []byte) error {
 	return rsa.VerifyPKCS1v15(p.pubKey, crypto.SHA256, messageHash[:], signature)
 }
 
-func (p *publicKey) Base64() ([]byte, error) {
-	pkBytes, err := p.Marshal()
+func (p *publicKey) Marshal() ([]byte, error) {
+	return x509.MarshalPKIXPublicKey(p.pubKey)
+}
+
+func (p *publicKey) PEM() ([]byte, error) {
+	pubKeyBytes, err := p.Marshal()
 	if err != nil {
 		return nil, err
 	}
 
-	pemByte := pem.EncodeToMemory(
+	pemBytes := pem.EncodeToMemory(
 		&pem.Block{
 			Type:  "RSA PUBLIC KEY",
-			Bytes: pkBytes,
+			Bytes: pubKeyBytes,
 		},
 	)
 
-	return []byte(base64.StdEncoding.EncodeToString(pemByte)), nil
+	return pemBytes, nil
 }
 
-func (p *publicKey) Marshal() ([]byte, error) {
-	return x509.MarshalPKIXPublicKey(p.pubKey)
+func (p *publicKey) Base64() ([]byte, error) {
+	pemBytes, err := p.PEM()
+	if err != nil {
+		return nil, err
+	}
+
+	return []byte(base64.StdEncoding.EncodeToString(pemBytes)), nil
 }
