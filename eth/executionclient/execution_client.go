@@ -5,10 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"math"
 	"math/big"
 	"time"
+
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 
 	"github.com/ethereum/go-ethereum"
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -328,6 +329,7 @@ func (ec *ExecutionClient) streamLatestBlocks(ctx context.Context, logs chan<- B
 }
 
 func (ec *ExecutionClient) streamFinalizedBlocks(ctx context.Context, logs chan<- BlockLogs, fromBlock uint64) (lastBlock uint64, err error) {
+	lastBlock = fromBlock
 	for {
 		select {
 		case <-ctx.Done():
@@ -336,10 +338,14 @@ func (ec *ExecutionClient) streamFinalizedBlocks(ctx context.Context, logs chan<
 		case <-ec.closed:
 			return fromBlock, ErrClosed
 
-		case _, ok := <-ec.finalizedCheckpointFeed:
+		case checkpointData, ok := <-ec.finalizedCheckpointFeed:
 			if !ok {
-				return lastBlock, fmt.Errorf("blocksChan is closed")
+				return lastBlock, fmt.Errorf("finalizedCheckpointFeed is closed")
 			}
+			if checkpointData == nil {
+				return lastBlock, fmt.Errorf("finaluzed checkpointData is nil")
+			}
+			ec.logger.Info(fmt.Sprintf("got finalized checkpoint %d", checkpointData.Epoch))
 
 			lastFinalizedBlock, err := ec.client.HeaderByNumber(ctx, ec.FinalizedBlockArg())
 			if err != nil {
@@ -349,8 +355,9 @@ func (ec *ExecutionClient) streamFinalizedBlocks(ctx context.Context, logs chan<
 			toBlock := lastFinalizedBlock.Number.Uint64()
 
 			if toBlock < ec.finalizedCheckpointActivationHeight {
-				panic(fmt.Sprintf("invalid blocks sequence: received block %d while last handled block is %d", toBlock, lastBlock))
+				continue // waiting for the "lag" compensation. This should happen only after fork is activated.
 			}
+
 			if err = ec.fetchNewBlocks(ctx, logs, &fromBlock, &toBlock, &lastBlock); err != nil {
 				// If we get an error while fetching, we return the last block we fetched.
 				return lastBlock, err
