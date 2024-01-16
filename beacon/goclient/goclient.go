@@ -177,6 +177,7 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 	if nodeVersionResp == nil {
 		return nil, fmt.Errorf("node version response is nil")
 	}
+	client.nodeVersion = nodeVersionResp.Data
 	client.nodeClient = ParseNodeClient(nodeVersionResp.Data)
 
 	logger.Info("consensus client connected",
