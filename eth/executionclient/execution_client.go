@@ -343,7 +343,7 @@ func (ec *ExecutionClient) streamFinalizedBlocks(ctx context.Context, logs chan<
 				return lastBlock, fmt.Errorf("finalizedCheckpointFeed is closed")
 			}
 			if checkpointData == nil {
-				return lastBlock, fmt.Errorf("finaluzed checkpointData is nil")
+				return lastBlock, fmt.Errorf("finalized checkpointData is nil")
 			}
 			ec.logger.Info(fmt.Sprintf("got finalized checkpoint %d", checkpointData.Epoch))
 
