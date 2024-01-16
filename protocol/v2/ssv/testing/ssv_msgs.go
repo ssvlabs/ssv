@@ -51,9 +51,9 @@ var TestAggregatorConsensusData = &spectypes.ConsensusData{
 var TestAggregatorConsensusDataByts, _ = TestAggregatorConsensusData.Encode()
 
 var TestProposerBlindedBlockConsensusData = &spectypes.ConsensusData{
-	Duty:    *testingutils.TestingProposerDutyV(spec2.DataVersionBellatrix),
+	Duty:    *testingutils.TestingProposerDutyV(spec2.DataVersionCapella),
 	Version: spec2.DataVersionCapella,
-	DataSSZ: testingutils.TestingBlindedBeaconBlockBytesV(spec2.DataVersionBellatrix),
+	DataSSZ: testingutils.TestingBlindedBeaconBlockBytesV(spec2.DataVersionCapella),
 }
 var TestProposerBlindedBlockConsensusDataByts, _ = TestProposerBlindedBlockConsensusData.Encode()
 
