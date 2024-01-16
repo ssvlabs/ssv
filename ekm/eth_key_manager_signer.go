@@ -142,15 +142,13 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 					Version: spec.DataVersionCapella,
 					Capella: v,
 				}
+				return km.signer.SignBlindedBeaconBlock(vBlindedBlock, domain, pk)
 			case *apiv1deneb.BlindedBeaconBlock:
 				vBlindedBlock = &api.VersionedBlindedBeaconBlock{
 					Version: spec.DataVersionDeneb,
 					Deneb:   v,
 				}
-			default:
-				return nil, nil, fmt.Errorf("obj type is unknown: %T", obj)
-			}
-			return km.signer.SignBlindedBeaconBlock(vBlindedBlock, domain, pk)
+				return km.signer.SignBlindedBeaconBlock(vBlindedBlock, domain, pk)
 		}
 
 		var vBlock *spec.VersionedBeaconBlock
