@@ -6,11 +6,15 @@ import (
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 )
 
 func (gc *goClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
+	if domain == spectypes.DomainApplicationBuilder {
+		return gc.client.GenesisDomain(gc.ctx, domain)
+	}
 	return gc.client.Domain(gc.ctx, domain, epoch)
 }
 
