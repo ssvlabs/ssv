@@ -12,10 +12,26 @@ import (
 )
 
 func (gc *goClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
-	if domain == spectypes.DomainApplicationBuilder {
-		return gc.client.GenesisDomain(gc.ctx, domain)
+	if domain == spectypes.DomainApplicationBuilder { // no domain for DomainApplicationBuilder. need to create.  https://github.com/bloxapp/ethereum2-validator/blob/v2-main/signing/keyvault/signer.go#L62
+		var appDomain phase0.Domain
+		forkData := phase0.ForkData{
+			CurrentVersion:        gc.network.ForkVersion(),
+			GenesisValidatorsRoot: phase0.Root{},
+		}
+		root, err := forkData.HashTreeRoot()
+		if err != nil {
+			return phase0.Domain{}, errors.Wrap(err, "failed to get fork data root")
+		}
+		copy(appDomain[:], domain[:])
+		copy(appDomain[4:], root[:])
+		return appDomain, nil
 	}
-	return gc.client.Domain(gc.ctx, domain, epoch)
+
+	data, err := gc.client.Domain(gc.ctx, domain, epoch)
+	if err != nil {
+		return phase0.Domain{}, err
+	}
+	return data, nil
 }
 
 // ComputeSigningRoot computes the root of the object by calculating the hash tree root of the signing data with the given domain.
