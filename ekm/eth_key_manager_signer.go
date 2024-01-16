@@ -149,6 +149,7 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 					Deneb:   v,
 				}
 				return km.signer.SignBlindedBeaconBlock(vBlindedBlock, domain, pk)
+			}
 		}
 
 		var vBlock *spec.VersionedBeaconBlock
