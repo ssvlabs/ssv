@@ -3,7 +3,7 @@ package testing
 import (
 	spec2 "github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
-	"github.com/attestantio/go-eth2-client/spec/capella"
+	"github.com/attestantio/go-eth2-client/spec/deneb"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -295,9 +295,9 @@ var postConsensusBeaconBlockMsg = func(
 	signer := testingutils.NewTestingKeyManager()
 	beacon := testingutils.NewTestingBeaconNode()
 
-	block := testingutils.TestingBeaconBlock
+	block := testingutils.TestingBeaconBlockV(spec2.DataVersionDeneb).Deneb
 	if wrongRoot {
-		block = testingutils.TestingWrongBeaconBlockV(spec2.DataVersionBellatrix).Bellatrix
+		block = testingutils.TestingWrongBeaconBlockV(spec2.DataVersionDeneb).Deneb
 	}
 
 	d, _ := beacon.DomainData(1, spectypes.DomainProposer) // epoch doesn't matter here, hard coded
@@ -308,8 +308,8 @@ var postConsensusBeaconBlockMsg = func(
 	blsSig := spec.BLSSignature{}
 	copy(blsSig[:], sig)
 
-	signed := capella.SignedBeaconBlock{
-		Message:   testingutils.TestingBeaconBlockCapella,
+	signed := &deneb.SignedBeaconBlock{
+		Message:   block.Block,
 		Signature: blsSig,
 	}
 

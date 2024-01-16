@@ -2,12 +2,13 @@ package goclient
 
 import (
 	"encoding/binary"
+	"fmt"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	"github.com/pkg/errors"
 )
 
 // SubmitAggregateSelectionProof returns an AggregateAndProof object
@@ -20,36 +21,48 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 	// differ from spec because we need to subscribe to subnet
 	isAggregator, err := isAggregator(committeeLength, slotSig)
 	if err != nil {
-		return nil, DataVersionNil, errors.Wrap(err, "could not get aggregator status")
+		return nil, DataVersionNil, fmt.Errorf("failed to check if validator is an aggregator: %w", err)
 	}
 	if !isAggregator {
-		return nil, DataVersionNil, errors.New("validator is not an aggregator")
+		return nil, DataVersionNil, fmt.Errorf("validator is not an aggregator")
 	}
 
 	attDataReqStart := time.Now()
-	data, err := gc.client.AttestationData(gc.ctx, slot, committeeIndex)
+	attDataResp, err := gc.client.AttestationData(gc.ctx, &api.AttestationDataOpts{
+		Slot:           slot,
+		CommitteeIndex: committeeIndex,
+	})
 	if err != nil {
-		return nil, DataVersionNil, errors.Wrap(err, "failed to get attestation data")
+		return nil, DataVersionNil, fmt.Errorf("failed to get attestation data: %w", err)
 	}
-	if data == nil {
-		return nil, DataVersionNil, errors.New("attestation data is nil")
+	if attDataResp == nil {
+		return nil, DataVersionNil, fmt.Errorf("attestation data response is nil")
+	}
+	if attDataResp.Data == nil {
+		return nil, DataVersionNil, fmt.Errorf("attestation data is nil")
 	}
 
 	metricsAttesterDataRequest.Observe(time.Since(attDataReqStart).Seconds())
 
 	// Get aggregate attestation data.
-	root, err := data.HashTreeRoot()
+	root, err := attDataResp.Data.HashTreeRoot()
 	if err != nil {
-		return nil, DataVersionNil, errors.Wrap(err, "AttestationData.HashTreeRoot")
+		return nil, DataVersionNil, fmt.Errorf("failed to get attestation data root: %w", err)
 	}
 
 	aggDataReqStart := time.Now()
-	aggregateData, err := gc.client.AggregateAttestation(gc.ctx, slot, root)
+	aggDataResp, err := gc.client.AggregateAttestation(gc.ctx, &api.AggregateAttestationOpts{
+		Slot:                slot,
+		AttestationDataRoot: root,
+	})
 	if err != nil {
-		return nil, DataVersionNil, errors.Wrap(err, "failed to get aggregate attestation")
+		return nil, DataVersionNil, fmt.Errorf("failed to get aggregate attestation: %w", err)
 	}
-	if aggregateData == nil {
-		return nil, DataVersionNil, errors.New("aggregation data is nil")
+	if aggDataResp == nil {
+		return nil, DataVersionNil, fmt.Errorf("aggregate attestation response is nil")
+	}
+	if aggDataResp.Data == nil {
+		return nil, DataVersionNil, fmt.Errorf("aggregate attestation data is nil")
 	}
 
 	metricsAggregatorDataRequest.Observe(time.Since(aggDataReqStart).Seconds())
@@ -59,7 +72,7 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 
 	return &phase0.AggregateAndProof{
 		AggregatorIndex: index,
-		Aggregate:       aggregateData,
+		Aggregate:       aggDataResp.Data,
 		SelectionProof:  selectionProof,
 	}, spec.DataVersionPhase0, nil
 }

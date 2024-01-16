@@ -3,11 +3,14 @@ package runner
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
 	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
+	apiv1deneb "github.com/attestantio/go-eth2-client/api/v1/deneb"
 	"github.com/attestantio/go-eth2-client/spec/capella"
+	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -425,34 +428,63 @@ type blockSummary struct {
 // summarizeBlock returns a blockSummary for the given block.
 func summarizeBlock(block any) (summary blockSummary, err error) {
 	if block == nil {
-		return summary, errors.New("block is nil")
+		return summary, fmt.Errorf("block is nil")
 	}
 	switch b := block.(type) {
-	case *api.VersionedBlindedBeaconBlock:
+	case *api.VersionedBlindedProposal:
 		switch b.Version {
 		case spec.DataVersionCapella:
 			return summarizeBlock(b.Capella)
+		case spec.DataVersionDeneb:
+			return summarizeBlock(b.Deneb)
+		default:
+			return summary, fmt.Errorf("unsupported blinded block version %d", b.Version)
 		}
-	case *spec.VersionedBeaconBlock:
+	case *api.VersionedProposal:
 		switch b.Version {
 		case spec.DataVersionCapella:
 			return summarizeBlock(b.Capella)
+		case spec.DataVersionDeneb:
+			if b.Deneb == nil {
+				return summary, fmt.Errorf("deneb block contents is nil")
+			}
+			if b.Deneb.Block == nil {
+				return summary, fmt.Errorf("deneb block is nil")
+			}
+			return summarizeBlock(b.Deneb.Block)
+		default:
+			return summary, fmt.Errorf("unsupported block version %d", b.Version)
 		}
 
 	case *capella.BeaconBlock:
 		if b == nil || b.Body == nil || b.Body.ExecutionPayload == nil {
-			return summary, errors.New("block, body or execution payload is nil")
+			return summary, fmt.Errorf("block, body or execution payload is nil")
 		}
 		summary.Hash = b.Body.ExecutionPayload.BlockHash
 		summary.Version = spec.DataVersionCapella
 
+	case *deneb.BeaconBlock:
+		if b == nil || b.Body == nil || b.Body.ExecutionPayload == nil {
+			return summary, fmt.Errorf("block, body or execution payload is nil")
+		}
+		summary.Hash = b.Body.ExecutionPayload.BlockHash
+		summary.Version = spec.DataVersionDeneb
+
 	case *apiv1capella.BlindedBeaconBlock:
 		if b == nil || b.Body == nil || b.Body.ExecutionPayloadHeader == nil {
-			return summary, errors.New("block, body or execution payload header is nil")
+			return summary, fmt.Errorf("block, body or execution payload header is nil")
 		}
 		summary.Hash = b.Body.ExecutionPayloadHeader.BlockHash
 		summary.Blinded = true
 		summary.Version = spec.DataVersionCapella
+
+	case *apiv1deneb.BlindedBeaconBlock:
+		if b == nil || b.Body == nil || b.Body.ExecutionPayloadHeader == nil {
+			return summary, fmt.Errorf("block, body or execution payload header is nil")
+		}
+		summary.Hash = b.Body.ExecutionPayloadHeader.BlockHash
+		summary.Blinded = true
+		summary.Version = spec.DataVersionDeneb
 	}
 	return
 }
