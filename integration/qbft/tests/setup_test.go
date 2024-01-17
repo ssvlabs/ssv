@@ -2,7 +2,6 @@ package tests
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/network"
 	"testing"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -11,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/network"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )

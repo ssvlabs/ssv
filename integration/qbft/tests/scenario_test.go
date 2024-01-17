@@ -2,7 +2,6 @@ package tests
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/network"
 	"testing"
 	"time"
 
@@ -17,6 +16,7 @@ import (
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/validator"
 	protocolbeacon "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"

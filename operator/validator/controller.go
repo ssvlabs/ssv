@@ -6,8 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-	"github.com/libp2p/go-libp2p/core/peer"
 	"sync"
 	"time"
 
@@ -17,8 +15,10 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/jellydator/ttlcache/v3"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -35,7 +35,6 @@ import (
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	qbftcontroller "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-
 	"github.com/bloxapp/ssv/protocol/v2/queue/worker"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
@@ -139,18 +138,11 @@ type SharesStorage interface {
 }
 
 type P2PNetwork interface {
-	Close() error
-	Setup(logger *zap.Logger) error
-	Start(logger *zap.Logger) error
-	UpdateSubnets(logger *zap.Logger)
-	SubscribeAll(logger *zap.Logger) error
 	Broadcast(message *spectypes.SSVMessage) error
-	Subscribe(vpk spectypes.ValidatorPK) error
 	UseMessageRouter(router network.MessageRouter)
 	Peers(pk spectypes.ValidatorPK) ([]peer.ID, error)
 	SubscribeRandoms(logger *zap.Logger, numSubnets int) error
 	RegisterHandlers(logger *zap.Logger, handlers ...*p2pprotocol.SyncHandler)
-	ReportValidation(logger *zap.Logger, message *spectypes.SSVMessage, res p2pprotocol.MsgValidationResult)
 }
 
 // controller implements Controller
