@@ -53,13 +53,13 @@ type MockControllerOptions struct {
 	network             P2PNetwork
 	recipientsStorage   Recipients
 	sharesStorage       SharesStorage
-	validatorsMap       *validatorsMap
 	metrics             validator.Metrics
 	beacon              beacon.BeaconNode
 	validatorOptions    validator.Options
 	keyManager          spectypes.KeyManager
 	metadataLastUpdated map[string]time.Time
 	StorageMap          *ibftstorage.QBFTStores
+	validatorsMap       *validatorsmap.ValidatorsMap
 	operatorData        *registrystorage.OperatorData
 }
 
@@ -87,7 +87,6 @@ func TestNewController(t *testing.T) {
 func TestSetupNonCommitteeValidators(t *testing.T) {
 	passedEpoch := phase0.Epoch(1)
 	operators := buildOperators(t)
-	storageMap := ibftstorage.NewStores()
 
 	operatorData := buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")
 	recipientData := buildFeeRecipient("67Ce5c69260bd819B4e0AD13f4b873074D479811", "45E668aba4b7fc8761331EC3CE77584B7A99A51A")
@@ -168,20 +167,12 @@ func TestSetupNonCommitteeValidators(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctrl, logger, sharesStorage, network, km, recipientStorage, bc := setupCommonTestComponents(t)
+			ctrl, logger, sharesStorage, network, _, recipientStorage, bc := setupCommonTestComponents(t)
 			defer ctrl.Finish()
-			mockValidatorsMap := &validatorsMap{
-				optsTemplate: &validator.Options{
-					Signer:  km,
-					Network: network,
-					Storage: storageMap,
-				},
-				ctx:  context.Background(),
-				lock: sync.RWMutex{},
-				validatorsMap: map[string]*validator.Validator{
-					secretKey.GetPublicKey().SerializeToHexStr(): firstValidator,
-				},
+			testValidatorsMap := map[string]*validator.Validator{
+				secretKey.GetPublicKey().SerializeToHexStr(): firstValidator,
 			}
+			mockValidatorsMap := validatorsmap.New(context.TODO(), validatorsmap.WithInitialState(testValidatorsMap))
 
 			if tc.syncHighestDecidedResponse != nil {
 				bc.EXPECT().GetValidatorData(gomock.Any()).Return(bcResponse, nil).Times(1)
@@ -223,11 +214,7 @@ func TestSetupNonCommitteeValidators(t *testing.T) {
 
 func TestHandleNonCommitteeMessages(t *testing.T) {
 	logger := logging.TestLogger(t)
-
-	mockValidatorsMap := &validatorsMap{
-		validatorsMap: map[string]*validator.Validator{},
-	}
-
+	mockValidatorsMap := validatorsmap.New(context.TODO())
 	controllerOptions := MockControllerOptions{
 		validatorsMap: mockValidatorsMap,
 	}
@@ -345,24 +332,13 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 		operatorDataId            uint64
 		testPublicKey             string
 		mockRecipientTimes        int
-		createValidatorFunc       func(logger *zap.Logger, share *types.SSVShare) *validator.Validator
 	}{
-		{"could not decode public key", validatorMetaData, true, nil, false, 1, "123", 0, nil},
-		{"Empty metadata", nil, true, nil, false, 1, secretKey.GetPublicKey().SerializeToHexStr(), 0, nil},
-		{"Valid metadata", validatorMetaData, false, nil, false, 1, secretKey.GetPublicKey().SerializeToHexStr(), 0, nil},
-		{"Share wasn't found", validatorMetaData, true, nil, true, 1, secretKey.GetPublicKey().SerializeToHexStr(), 0, nil},
-		{"Share not belong to operator", validatorMetaData, false, nil, false, 2, secretKey.GetPublicKey().SerializeToHexStr(), 0, nil},
-		{"Metadata with error", validatorMetaData, true, fmt.Errorf("error"), false, 1, secretKey.GetPublicKey().SerializeToHexStr(), 0, nil},
-		//{"validator not found", validatorMetaData, false, nil, false, 1, secretKey2.GetPublicKey().SerializeToHexStr(), 1, func(logger *zap.Logger, share *types.SSVShare) *validator.Validator {
-		//	return &validator.Validator{
-		//		DutyRunners: nil,
-		//		Network:     nil,
-		//		Share:       share,
-		//		Signer:      nil,
-		//		Storage:     nil,
-		//		Queues:      nil,
-		//	}
-		//}},
+		{"could not decode public key", validatorMetaData, true, nil, false, 1, "123", 0},
+		{"Empty metadata", nil, true, nil, false, 1, secretKey.GetPublicKey().SerializeToHexStr(), 0},
+		{"Valid metadata", validatorMetaData, false, nil, false, 1, secretKey.GetPublicKey().SerializeToHexStr(), 0},
+		{"Share wasn't found", validatorMetaData, true, nil, true, 1, secretKey.GetPublicKey().SerializeToHexStr(), 0},
+		{"Share not belong to operator", validatorMetaData, false, nil, false, 2, secretKey.GetPublicKey().SerializeToHexStr(), 0},
+		{"Metadata with error", validatorMetaData, true, fmt.Errorf("error"), false, 1, secretKey.GetPublicKey().SerializeToHexStr(), 0},
 	}
 
 	for _, tc := range testCases {
@@ -374,17 +350,10 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 			recipientData := buildFeeRecipient("67Ce5c69260bd819B4e0AD13f4b873074D479811", "45E668aba4b7fc8761331EC3CE77584B7A99A51A")
 			firstValidatorPublicKey := secretKey.GetPublicKey().SerializeToHexStr()
 
-			mockValidatorMap := &validatorsMap{
-				ctx: context.Background(),
-				optsTemplate: &validator.Options{
-					Signer:  km,
-					Network: network,
-				},
-				validatorsMap: map[string]*validator.Validator{
-					firstValidatorPublicKey: firstValidator,
-				},
-				createValidatorFunc: tc.createValidatorFunc,
+			testValidatorsMap := map[string]*validator.Validator{
+				firstValidatorPublicKey: firstValidator,
 			}
+			mockValidatorsMap := validatorsmap.New(context.TODO(), validatorsmap.WithInitialState(testValidatorsMap))
 
 			// Assuming controllerOptions is set up correctly
 			controllerOptions := MockControllerOptions{
@@ -393,7 +362,7 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 				operatorData:        operatorData,
 				sharesStorage:       sharesStorage,
 				recipientsStorage:   recipientStorage,
-				validatorsMap:       mockValidatorMap,
+				validatorsMap:       mockValidatorsMap,
 				metrics:             validator.NopMetrics{},
 				metadataLastUpdated: map[string]time.Time{},
 			}
@@ -632,15 +601,10 @@ func TestSetupValidators(t *testing.T) {
 				return nil
 			}).AnyTimes()
 
-			mockValidatorMap := &validatorsMap{
-				ctx: context.Background(),
-				optsTemplate: &validator.Options{
-					Signer:  nil,
-					Network: network,
-					Storage: storageMap,
-				},
-				validatorsMap: map[string]*validator.Validator{"0": testValidator},
+			testValidatorsMap := map[string]*validator.Validator{
+				"0": testValidator,
 			}
+			mockValidatorsMap := validatorsmap.New(context.TODO(), validatorsmap.WithInitialState(testValidatorsMap))
 
 			// Set up the controller with mock data
 			controllerOptions := MockControllerOptions{
@@ -649,7 +613,7 @@ func TestSetupValidators(t *testing.T) {
 				sharesStorage:     sharesStorage,
 				operatorData:      operatorData,
 				recipientsStorage: recipientStorage,
-				validatorsMap:     mockValidatorMap,
+				validatorsMap:     mockValidatorsMap,
 				validatorOptions: validator.Options{
 					BeaconNetwork: networkconfig.TestNetwork.Beacon,
 					Storage:       storageMap,
@@ -677,7 +641,7 @@ func TestAssertionOperatorData(t *testing.T) {
 	// Set up the controller with mock data
 	controllerOptions := MockControllerOptions{
 		operatorData:  operatorData,
-		validatorsMap: &validatorsMap{},
+		validatorsMap: validatorsmap.New(context.TODO()),
 	}
 	ctr := setupController(logger, controllerOptions)
 	ctr.SetOperatorData(newOperatorData)
@@ -697,13 +661,10 @@ func TestGetValidator(t *testing.T) {
 		},
 	}
 
-	mockValidatorsMap := &validatorsMap{
-		ctx:  context.Background(),
-		lock: sync.RWMutex{},
-		validatorsMap: map[string]*validator.Validator{
-			"0": testValidator,
-		},
+	testValidatorsMap := map[string]*validator.Validator{
+		"0": testValidator,
 	}
+	mockValidatorsMap := validatorsmap.New(context.TODO(), validatorsmap.WithInitialState(testValidatorsMap))
 	// Set up the controller with mock data
 	controllerOptions := MockControllerOptions{
 		validatorsMap: mockValidatorsMap,
@@ -767,7 +728,7 @@ func TestGetValidatorStats(t *testing.T) {
 		// Set up the controller with mock data for this subtest
 		controllerOptions := MockControllerOptions{
 			sharesStorage: sharesStorage,
-			validatorsMap: &validatorsMap{},
+			validatorsMap: validatorsmap.New(context.TODO()),
 			operatorData:  buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"),
 		}
 
@@ -816,7 +777,7 @@ func TestGetValidatorStats(t *testing.T) {
 		// Set up the controller with mock data for this subtest
 		controllerOptions := MockControllerOptions{
 			sharesStorage: sharesStorage,
-			validatorsMap: &validatorsMap{},
+			validatorsMap: validatorsmap.New(context.TODO()),
 			operatorData:  buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"),
 		}
 		ctr := setupController(logger, controllerOptions)
@@ -853,7 +814,7 @@ func TestGetValidatorStats(t *testing.T) {
 		// Set up the controller with mock data for this subtest
 		controllerOptions := MockControllerOptions{
 			sharesStorage: sharesStorage,
-			validatorsMap: &validatorsMap{},
+			validatorsMap: validatorsmap.New(context.TODO()),
 			operatorData:  buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"),
 		}
 		ctr := setupController(logger, controllerOptions)
@@ -912,7 +873,7 @@ func TestGetValidatorStats(t *testing.T) {
 		// Set up the controller with mock data for this subtest
 		controllerOptions := MockControllerOptions{
 			sharesStorage: sharesStorage,
-			validatorsMap: &validatorsMap{},
+			validatorsMap: validatorsmap.New(context.TODO()),
 			operatorData:  buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"),
 		}
 		ctr := setupController(logger, controllerOptions)
@@ -938,13 +899,11 @@ func TestUpdateFeeRecipient(t *testing.T) {
 	t.Run("Test with right owner address", func(t *testing.T) {
 		testValidator := setupTestValidator(ownerAddressBytes, firstFeeRecipientBytes)
 
-		mockValidatorsMap := &validatorsMap{
-			ctx:  context.Background(),
-			lock: sync.RWMutex{},
-			validatorsMap: map[string]*validator.Validator{
-				"0": testValidator,
-			},
+		testValidatorsMap := map[string]*validator.Validator{
+			"0": testValidator,
 		}
+		mockValidatorsMap := validatorsmap.New(context.TODO(), validatorsmap.WithInitialState(testValidatorsMap))
+
 		controllerOptions := MockControllerOptions{validatorsMap: mockValidatorsMap}
 		ctr := setupController(logger, controllerOptions)
 
@@ -957,14 +916,10 @@ func TestUpdateFeeRecipient(t *testing.T) {
 
 	t.Run("Test with wrong owner address", func(t *testing.T) {
 		testValidator := setupTestValidator(ownerAddressBytes, firstFeeRecipientBytes)
-
-		mockValidatorsMap := &validatorsMap{
-			ctx:  context.Background(),
-			lock: sync.RWMutex{},
-			validatorsMap: map[string]*validator.Validator{
-				"0": testValidator,
-			},
+		testValidatorsMap := map[string]*validator.Validator{
+			"0": testValidator,
 		}
+		mockValidatorsMap := validatorsmap.New(context.TODO(), validatorsmap.WithInitialState(testValidatorsMap))
 		controllerOptions := MockControllerOptions{validatorsMap: mockValidatorsMap}
 		ctr := setupController(logger, controllerOptions)
 
@@ -979,7 +934,7 @@ func TestUpdateFeeRecipient(t *testing.T) {
 func TestGetIndices(t *testing.T) {
 	farFutureEpoch := phase0.Epoch(99999)
 	currentEpoch := phase0.Epoch(100)
-	validators := map[string]*validator.Validator{
+	testValidatorsMap := map[string]*validator.Validator{
 		"0": newValidator(&beacon.ValidatorMetadata{
 			Balance:         0,
 			Status:          0, // ValidatorStateUnknown
@@ -1043,11 +998,7 @@ func TestGetIndices(t *testing.T) {
 			ActivationEpoch: phase0.Epoch(100),
 		}),
 	}
-	mockValidatorsMap := &validatorsMap{
-		ctx:           context.Background(),
-		lock:          sync.RWMutex{},
-		validatorsMap: validators,
-	}
+	mockValidatorsMap := validatorsmap.New(context.TODO(), validatorsmap.WithInitialState(testValidatorsMap))
 	logger := logging.TestLogger(t)
 	controllerOptions := MockControllerOptions{
 		validatorsMap: mockValidatorsMap,
@@ -1062,22 +1013,21 @@ func TestGetIndices(t *testing.T) {
 }
 
 func setupController(logger *zap.Logger, opts MockControllerOptions) controller {
-	valsMap := validatorsmap.New(context.TODO(), validatorsmap.WithInitialState(opts.validatorsMap.validatorsMap))
 	return controller{
+		metadataUpdateInterval:     0,
 		shareEncryptionKeyProvider: nil,
 		logger:                     logger,
-		validatorsMap:              valsMap,
 		beacon:                     opts.beacon,
 		network:                    opts.network,
 		metrics:                    opts.metrics,
 		keyManager:                 opts.keyManager,
 		ibftStorageMap:             opts.StorageMap,
-		context:                    context.Background(),
 		operatorData:               opts.operatorData,
-		recipientsStorage:          opts.recipientsStorage,
-		validatorOptions:           opts.validatorOptions,
 		sharesStorage:              opts.sharesStorage,
-		metadataUpdateInterval:     0,
+		validatorsMap:              opts.validatorsMap,
+		context:                    context.Background(),
+		validatorOptions:           opts.validatorOptions,
+		recipientsStorage:          opts.recipientsStorage,
 		messageRouter:              newMessageRouter(logger),
 		messageWorker: worker.NewWorker(logger, &worker.Config{
 			Ctx:          context.Background(),
