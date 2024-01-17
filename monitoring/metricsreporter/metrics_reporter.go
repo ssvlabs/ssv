@@ -146,6 +146,7 @@ var (
 		Name: "ssv_instances_decided",
 		Help: "Number of decided QBFT instances",
 	}, []string{"role"}))
+	// TODO: convert all names to a_b_c format instead of a:b:c
 	validatorStatus = registerMetric(promauto.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "ssv:validator:v2:status",
 		Help: "Validator status",
