@@ -91,7 +91,6 @@ func NewTestingQBFTController(
 		ssvtypes.NewSignatureVerifier(metrics),
 		identifier,
 		share,
-		testingutils.TestingSSVDomainType,
 		config,
 		fullNode,
 	)

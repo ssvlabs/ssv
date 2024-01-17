@@ -293,13 +293,11 @@ func fixControllerForRun(
 		types.NewSignatureVerifier(metrics),
 		contr.Identifier,
 		contr.Share,
-		testingutils.TestingConfig(ks).Domain,
 		config,
 		false,
 	)
 	newContr.StoredInstances = make(controller.InstanceContainer, 0, controller.InstanceContainerTestCapacity)
 	newContr.Height = contr.Height
-	newContr.Domain = contr.Domain
 	newContr.StoredInstances = contr.StoredInstances
 
 	for i, inst := range newContr.StoredInstances {

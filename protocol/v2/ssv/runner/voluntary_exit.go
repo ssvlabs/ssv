@@ -91,7 +91,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg 
 		Signature: specSig,
 	}
 
-	if err := r.beacon.SubmitVoluntaryExit(signedVoluntaryExit, specSig); err != nil {
+	if err := r.beacon.SubmitVoluntaryExit(signedVoluntaryExit); err != nil {
 		return errors.Wrap(err, "could not submit voluntary exit")
 	}
 

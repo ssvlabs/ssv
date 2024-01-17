@@ -848,7 +848,7 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 		config.ValueCheckF = valueCheckF
 
 		identifier := spectypes.NewMsgID(ssvtypes.GetDefaultDomain(), options.SSVShare.Share.ValidatorPubKey, role)
-		qbftCtrl := qbftcontroller.NewController(options.Metrics, options.SignatureVerifier, identifier[:], &options.SSVShare.Share, domainType, config, options.FullNode)
+		qbftCtrl := qbftcontroller.NewController(options.Metrics, options.SignatureVerifier, identifier[:], &options.SSVShare.Share, config, options.FullNode)
 		qbftCtrl.NewDecidedHandler = options.NewDecidedHandler
 		return qbftCtrl
 	}
