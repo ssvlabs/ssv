@@ -258,6 +258,7 @@ func fixRunnerForRun(t *testing.T, metrics metricsreporter.MetricsReporter, runn
 	require.NoError(t, json.Unmarshal(byts, &base))
 
 	logger := logging.TestLogger(t)
+	base.SignatureVerifier = types.NewSignatureVerifier(types.WithMetrics(metrics))
 
 	ret := baseRunnerForRole(logger, metrics, base.BeaconRoleType, base, ks)
 
@@ -290,7 +291,7 @@ func fixControllerForRun(
 	config.ValueCheckF = runner.GetValCheckF()
 	newContr := controller.NewController(
 		metrics,
-		types.NewSignatureVerifier(metrics),
+		types.NewSignatureVerifier(types.WithMetrics(metrics)),
 		contr.Identifier,
 		contr.Share,
 		config,
@@ -318,7 +319,7 @@ func fixInstanceForRun(
 ) *instance.Instance {
 	newInst := instance.NewInstance(
 		metrics,
-		types.NewSignatureVerifier(metrics),
+		types.NewSignatureVerifier(types.WithMetrics(metrics)),
 		contr.GetConfig(),
 		share,
 		contr.Identifier,

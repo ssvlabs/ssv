@@ -94,6 +94,7 @@ func NewBaseRunner(
 		BeaconNetwork:      beaconNetwork,
 		BeaconRoleType:     beaconRoleType,
 		highestDecidedSlot: highestDecidedSlot,
+		SignatureVerifier:  types.NewSignatureVerifier(),
 	}
 }
 

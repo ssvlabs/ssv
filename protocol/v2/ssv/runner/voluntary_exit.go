@@ -14,6 +14,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // Duty runner for validator voluntary exit duty
@@ -42,9 +43,10 @@ func NewVoluntaryExitRunner(
 
 	return &VoluntaryExitRunner{
 		BaseRunner: &BaseRunner{
-			BeaconRoleType: role,
-			BeaconNetwork:  beaconNetwork,
-			Share:          share,
+			BeaconRoleType:    role,
+			BeaconNetwork:     beaconNetwork,
+			Share:             share,
+			SignatureVerifier: types.NewSignatureVerifier(),
 		},
 
 		beacon:           beacon,

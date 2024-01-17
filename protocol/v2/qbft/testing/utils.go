@@ -88,7 +88,7 @@ func NewTestingQBFTController(
 ) *controller.Controller {
 	ctrl := controller.NewController(
 		metrics,
-		ssvtypes.NewSignatureVerifier(metrics),
+		ssvtypes.NewSignatureVerifier(ssvtypes.WithMetrics(metrics)),
 		identifier,
 		share,
 		config,

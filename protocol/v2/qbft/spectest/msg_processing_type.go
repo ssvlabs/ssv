@@ -35,7 +35,7 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 	nopMetrics := metricsreporter.NewNop()
 	pre := instance.NewInstance(
 		nopMetrics,
-		types.NewSignatureVerifier(nopMetrics),
+		types.NewSignatureVerifier(),
 		qbfttesting.TestingConfig(logger, spectestingutils.KeySetForShare(test.Pre.State.Share), msgId.GetRoleType()),
 		test.Pre.State.Share,
 		test.Pre.State.ID,

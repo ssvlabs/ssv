@@ -240,7 +240,7 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
 		cfg.SSVOptions.ValidatorOptions.Metrics = metricsReporter
-		cfg.SSVOptions.ValidatorOptions.SignatureVerifier = ssvtypes.NewSignatureVerifier(metricsReporter)
+		cfg.SSVOptions.ValidatorOptions.SignatureVerifier = ssvtypes.NewSignatureVerifier(ssvtypes.WithMetrics(metricsReporter))
 		cfg.SSVOptions.Metrics = metricsReporter
 
 		validatorCtrl = validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)

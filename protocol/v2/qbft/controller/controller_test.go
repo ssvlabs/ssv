@@ -48,7 +48,7 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 	nopMetrics := metricsreporter.NewNop()
 	inst := instance.NewInstance(
 		nopMetrics,
-		types.NewSignatureVerifier(nopMetrics),
+		types.NewSignatureVerifier(),
 		testConfig,
 		share,
 		[]byte{1, 2, 3, 4},

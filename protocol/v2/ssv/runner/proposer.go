@@ -21,6 +21,7 @@ import (
 	"github.com/bloxapp/ssv/beacon/goclient"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 type ProposerRunner struct {
@@ -56,6 +57,7 @@ func NewProposerRunner(
 			Share:              share,
 			QBFTController:     qbftController,
 			highestDecidedSlot: highestDecidedSlot,
+			SignatureVerifier:  types.NewSignatureVerifier(),
 		},
 
 		beacon:           beacon,

@@ -16,6 +16,7 @@ import (
 
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 type ValidatorRegistrationRunner struct {
@@ -42,10 +43,11 @@ func NewValidatorRegistrationRunner(
 
 	return &ValidatorRegistrationRunner{
 		BaseRunner: &BaseRunner{
-			BeaconRoleType: role,
-			BeaconNetwork:  beaconNetwork,
-			Share:          share,
-			QBFTController: qbftController,
+			BeaconRoleType:    role,
+			BeaconNetwork:     beaconNetwork,
+			Share:             share,
+			QBFTController:    qbftController,
+			SignatureVerifier: types.NewSignatureVerifier(),
 		},
 
 		beacon:           beacon,

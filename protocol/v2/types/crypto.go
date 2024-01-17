@@ -9,17 +9,29 @@ import (
 	"github.com/pkg/errors"
 )
 
-type Metrics interface {
-	SignatureVerified()
-}
-
 type SignatureVerifier struct {
 	metrics Metrics
 }
 
-func NewSignatureVerifier(metrics Metrics) *SignatureVerifier {
-	return &SignatureVerifier{
-		metrics: metrics,
+type Option func(sv *SignatureVerifier)
+
+func NewSignatureVerifier(opts ...Option) *SignatureVerifier {
+	sv := &SignatureVerifier{
+		metrics: nopMetrics{},
+	}
+
+	for _, opt := range opts {
+		opt(sv)
+	}
+
+	return sv
+}
+
+func WithMetrics(metrics Metrics) func(sv *SignatureVerifier) {
+	return func(sv *SignatureVerifier) {
+		if metrics != nil {
+			sv.metrics = metrics
+		}
 	}
 }
 

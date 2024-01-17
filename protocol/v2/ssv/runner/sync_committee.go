@@ -16,6 +16,7 @@ import (
 
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 type SyncCommitteeRunner struct {
@@ -49,6 +50,7 @@ func NewSyncCommitteeRunner(
 			Share:              share,
 			QBFTController:     qbftController,
 			highestDecidedSlot: highestDecidedSlot,
+			SignatureVerifier:  types.NewSignatureVerifier(),
 		},
 
 		beacon:   beacon,

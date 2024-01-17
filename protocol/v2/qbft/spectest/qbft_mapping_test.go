@@ -106,7 +106,7 @@ func TestQBFTMapping(t *testing.T) {
 			nopMetrics := metricsreporter.NewNop()
 			pre := instance.NewInstance(
 				nopMetrics,
-				types.NewSignatureVerifier(nopMetrics),
+				types.NewSignatureVerifier(),
 				protocolqbfttesting.TestingConfig(logger, testingutils.KeySetForShare(typedTest.Pre.State.Share), identifier.GetRoleType()),
 				typedTest.Pre.State.Share,
 				typedTest.Pre.State.ID,

@@ -41,6 +41,7 @@ var BaseValidator = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet
 				spectypes.BNRoleValidatorRegistration:     ValidatorRegistrationRunner(logger, nopMetrics, keySet),
 				spectypes.BNRoleVoluntaryExit:             VoluntaryExitRunner(logger, nopMetrics, keySet),
 			},
+			SignatureVerifier: types.NewSignatureVerifier(),
 		},
 	)
 }
