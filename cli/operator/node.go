@@ -6,6 +6,7 @@ import (
 	"log"
 	"math/big"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/bloxapp/ssv/network"
@@ -117,7 +118,19 @@ var StartNodeCmd = &cobra.Command{
 
 		var operatorPrivKey keys.OperatorPrivateKey
 		if cfg.KeyStore.PrivateKeyFile != "" {
-			operatorPrivKey, err = keys.PrivateKeyFromFile(cfg.KeyStore.PrivateKeyFile, cfg.KeyStore.PasswordFile)
+			// nolint: gosec
+			encryptedJSON, err := os.ReadFile(cfg.KeyStore.PrivateKeyFile)
+			if err != nil {
+				logger.Fatal("could not read PEM file", zap.Error(err))
+			}
+
+			// nolint: gosec
+			keyStorePassword, err := os.ReadFile(cfg.KeyStore.PasswordFile)
+			if err != nil {
+				logger.Fatal("could not read password file", zap.Error(err))
+			}
+
+			operatorPrivKey, err = keys.PrivateKeyFromEncryptedJSON(encryptedJSON, string(keyStorePassword))
 			if err != nil {
 				logger.Fatal("could not extract operator private key from file", zap.Error(err))
 			}

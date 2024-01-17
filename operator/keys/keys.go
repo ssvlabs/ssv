@@ -9,7 +9,6 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"fmt"
-	"os"
 
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
@@ -52,20 +51,8 @@ func PrivateKeyFromString(privKeyString string) (OperatorPrivateKey, error) {
 	return &privateKey{privKey: privKey}, nil
 }
 
-func PrivateKeyFromFile(privKeyFilePath, passwordFilePath string) (OperatorPrivateKey, error) {
-	// nolint: gosec
-	encryptedJSON, err := os.ReadFile(privKeyFilePath)
-	if err != nil {
-		return nil, fmt.Errorf("read PEM file: %w", err)
-	}
-
-	// nolint: gosec
-	keyStorePassword, err := os.ReadFile(passwordFilePath)
-	if err != nil {
-		return nil, fmt.Errorf("read password file: %w", err)
-	}
-
-	privKey, err := rsaencryption.ConvertEncryptedPemToPrivateKey(encryptedJSON, string(keyStorePassword))
+func PrivateKeyFromEncryptedJSON(pem []byte, password string) (OperatorPrivateKey, error) {
+	privKey, err := rsaencryption.ConvertEncryptedPemToPrivateKey(pem, password)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt operator private key: %w", err)
 	}
