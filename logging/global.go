@@ -57,7 +57,7 @@ func SetGlobalLogger(levelName string, levelEncoderName string, logFormat string
 		Level:       zap.NewAtomicLevelAt(level),
 		OutputPaths: []string{"stdout"},
 		EncoderConfig: zapcore.EncoderConfig{
-			MessageKey:  "msg",
+			MessageKey:  "message",
 			LevelKey:    "level",
 			EncodeLevel: levelEncoder,
 			TimeKey:     "time",
@@ -72,16 +72,10 @@ func SetGlobalLogger(levelName string, levelEncoderName string, logFormat string
 		},
 	}
 
-	var usedcore zapcore.Core
-
-	if logFormat == "console" {
-		usedcore = zapcore.NewCore(zapcore.NewConsoleEncoder(cfg.EncoderConfig), os.Stdout, lv)
-	} else if logFormat == "json" {
-		usedcore = zapcore.NewCore(zapcore.NewJSONEncoder(cfg.EncoderConfig), os.Stdout, lv)
-	}
+	consoleCore := zapcore.NewCore(zapcore.NewConsoleEncoder(cfg.EncoderConfig), os.Stdout, lv)
 
 	if fileOptions == nil {
-		zap.ReplaceGlobals(zap.New(usedcore))
+		zap.ReplaceGlobals(zap.New(consoleCore))
 		return nil
 	}
 
@@ -93,7 +87,7 @@ func SetGlobalLogger(levelName string, levelEncoderName string, logFormat string
 	fileWriter := fileOptions.writer(fileOptions)
 	fileCore := zapcore.NewCore(dev, zapcore.AddSync(fileWriter), lv2)
 
-	zap.ReplaceGlobals(zap.New(zapcore.NewTee(usedcore, fileCore)))
+	zap.ReplaceGlobals(zap.New(zapcore.NewTee(consoleCore, fileCore)))
 	return nil
 }
 
