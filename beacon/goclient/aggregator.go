@@ -28,6 +28,9 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 	}
 
 	attDataSSZMarshal, _, err := gc.GetAttestationData(slot, committeeIndex)
+	if err != nil {
+		return nil, DataVersionNil, fmt.Errorf("failed to get attestation data: %w", err)
+	}
 	if attDataSSZMarshal == nil {
 		return nil, DataVersionNil, fmt.Errorf("attestation data is nil")
 	}
