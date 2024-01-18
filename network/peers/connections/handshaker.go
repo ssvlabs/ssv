@@ -2,6 +2,7 @@ package connections
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
@@ -21,7 +22,7 @@ import (
 var errPeerWasFiltered = errors.New("peer was filtered during handshake")
 
 // errConsumingMessage is thrown when we сan't consume(parse) message: data is broken or incoming msg is from node with different Permissioned mode
-// example: the Node in NON-Permissioned mode receives SignedNodeInfo; the Node in Permissioned mode receives NodeInfo
+// example: the Node in NON-Permissoned mode receives SignedNodeInfo; the Node in Permissoned mode receives NodeInfo
 var errConsumingMessage = errors.New("error consuming message")
 
 // HandshakeFilter can be used to filter nodes once we handshaked with them
@@ -43,7 +44,8 @@ type Handshaker interface {
 type handshaker struct {
 	ctx context.Context
 
-	filters func() []HandshakeFilter
+	Permissioned func() bool
+	filters      func() []HandshakeFilter
 
 	streams     streams.StreamController
 	nodeInfos   peers.NodeInfoIndex
@@ -68,6 +70,7 @@ type HandshakerCfg struct {
 	IDService       identify.IDService
 	NodeStorage     storage.Storage
 	SubnetsProvider SubnetsProvider
+	Permissioned    func() bool
 }
 
 // NewHandshaker creates a new instance of handshaker
@@ -84,6 +87,7 @@ func NewHandshaker(ctx context.Context, cfg *HandshakerCfg, filters func() []Han
 		subnetsProvider: cfg.SubnetsProvider,
 		net:             cfg.Network,
 		nodeStorage:     cfg.NodeStorage,
+		Permissioned:    cfg.Permissioned,
 	}
 	return h
 }
@@ -98,14 +102,27 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 			return err
 		}
 
-		nodeInfo := &records.NodeInfo{}
+		// Check if the node requires permissioned peers.
+		permissioned := h.Permissioned()
+
+		// Read their NodeInfo from the request.
+		var nodeInfo records.AnyNodeInfo
+		if permissioned {
+			nodeInfo = &records.SignedNodeInfo{}
+		} else {
+			nodeInfo = &records.NodeInfo{}
+		}
 		err = nodeInfo.Consume(request)
 		if err != nil {
 			return errors.Wrap(err, "could not consume node info request")
 		}
 
 		// Respond with our own NodeInfo.
-		self, err := h.nodeInfos.SelfSealed()
+		privateKey, found, err := h.nodeStorage.GetPrivateKey()
+		if !found {
+			return errors.Wrap(err, "could not get private key")
+		}
+		self, err := h.nodeInfos.SelfSealed(h.net.LocalPeer(), pid, permissioned, privateKey)
 		if err != nil {
 			return errors.Wrap(err, "could not seal self node info")
 		}
@@ -206,7 +223,16 @@ func (h *handshaker) updateNodeSubnets(logger *zap.Logger, pid peer.ID, ni *reco
 }
 
 func (h *handshaker) requestNodeInfo(logger *zap.Logger, conn libp2pnetwork.Conn) (records.AnyNodeInfo, error) {
-	data, err := h.nodeInfos.SelfSealed()
+	permissioned := h.Permissioned()
+
+	privateKey, found, err := h.nodeStorage.GetPrivateKey()
+	if err != nil {
+		return nil, fmt.Errorf("could not get private key: %w", err)
+	}
+	if !found {
+		return nil, errors.New("could not get private key")
+	}
+	data, err := h.nodeInfos.SelfSealed(h.net.LocalPeer(), conn.RemotePeer(), permissioned, privateKey)
 	if err != nil {
 		return nil, err
 	}
@@ -216,7 +242,12 @@ func (h *handshaker) requestNodeInfo(logger *zap.Logger, conn libp2pnetwork.Conn
 		return nil, err
 	}
 
-	nodeInfo := &records.NodeInfo{}
+	var nodeInfo records.AnyNodeInfo
+	if permissioned {
+		nodeInfo = &records.SignedNodeInfo{}
+	} else {
+		nodeInfo = &records.NodeInfo{}
+	}
 	if err := nodeInfo.Consume(resBytes); err != nil {
 		return nil, errors.Wrap(errConsumingMessage, err.Error())
 	}

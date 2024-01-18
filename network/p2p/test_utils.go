@@ -242,5 +242,8 @@ func NewNetConfig(keys testing.NodeKeys, operatorPubKeyHash string, bn *discover
 		OperatorPubKeyHash: operatorPubKeyHash,
 		UserAgent:          ua,
 		Discovery:          discT,
+		Permissioned: func() bool {
+			return false
+		},
 	}
 }

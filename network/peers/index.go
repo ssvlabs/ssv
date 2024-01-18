@@ -1,6 +1,7 @@
 package peers
 
 import (
+	"crypto/rsa"
 	"io"
 
 	"github.com/libp2p/go-libp2p/core/network"
@@ -56,7 +57,7 @@ type ScoreIndex interface {
 // NodeInfoIndex is an interface for managing records.NodeInfo of network peers
 type NodeInfoIndex interface {
 	// SelfSealed returns a sealed, encoded of self node info
-	SelfSealed() ([]byte, error)
+	SelfSealed(sender, recipient peer.ID, permissioned bool, operatorPrivateKey *rsa.PrivateKey) ([]byte, error)
 
 	// Self returns the current node info
 	Self() *records.NodeInfo

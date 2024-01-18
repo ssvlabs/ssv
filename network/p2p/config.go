@@ -88,6 +88,8 @@ type Config struct {
 
 	GetValidatorStats network.GetValidatorStats
 
+	Permissioned func() bool // this is not loaded from config file but set up in full node setup
+
 	// PeerScoreInspector is called periodically to inspect the peer scores.
 	PeerScoreInspector func(peerMap map[peer.ID]*pubsub.PeerScoreSnapshot)
 

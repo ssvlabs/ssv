@@ -1,6 +1,8 @@
 package mock
 
 import (
+	"crypto/rsa"
+
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 
@@ -15,7 +17,7 @@ type NodeInfoIndex struct {
 	MockSelfSealed []byte
 }
 
-func (m NodeInfoIndex) SelfSealed() ([]byte, error) {
+func (m NodeInfoIndex) SelfSealed(sender, recipient peer.ID, permissioned bool, operatorPrivateKey *rsa.PrivateKey) ([]byte, error) {
 	if len(m.MockSelfSealed) != 0 {
 		return m.MockSelfSealed, nil
 	} else {

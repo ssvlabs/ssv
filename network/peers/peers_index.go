@@ -1,6 +1,8 @@
 package peers
 
 import (
+	"crypto"
+	"crypto/rsa"
 	"strconv"
 	"sync"
 	"time"
@@ -12,6 +14,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/network/records"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
 // MaxPeersProvider returns the max peers for the given topic.
@@ -105,9 +108,42 @@ func (pi *peersIndex) Self() *records.NodeInfo {
 	return pi.self
 }
 
-func (pi *peersIndex) SelfSealed() ([]byte, error) {
+func (pi *peersIndex) SelfSealed(sender, recipient peer.ID, permissioned bool, operatorPrivateKey *rsa.PrivateKey) ([]byte, error) {
 	pi.selfLock.Lock()
 	defer pi.selfLock.Unlock()
+
+	if permissioned {
+		publicKey, err := rsaencryption.ExtractPublicKey(operatorPrivateKey)
+		if err != nil {
+			return nil, err
+		}
+
+		handshakeData := records.HandshakeData{
+			SenderPeerID:    sender,
+			RecipientPeerID: recipient,
+			Timestamp:       time.Now(),
+			SenderPublicKey: []byte(publicKey),
+		}
+		hash := handshakeData.Hash()
+
+		signature, err := rsa.SignPKCS1v15(nil, operatorPrivateKey, crypto.SHA256, hash[:])
+		if err != nil {
+			return nil, err
+		}
+
+		signedNodeInfo := &records.SignedNodeInfo{
+			NodeInfo:      pi.self,
+			HandshakeData: handshakeData,
+			Signature:     signature,
+		}
+
+		sealed, err := signedNodeInfo.Seal(pi.netKeyProvider())
+		if err != nil {
+			return nil, err
+		}
+
+		return sealed, nil
+	}
 
 	sealed, err := pi.self.Seal(pi.netKeyProvider())
 	if err != nil {
