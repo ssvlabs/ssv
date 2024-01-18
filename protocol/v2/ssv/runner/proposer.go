@@ -448,9 +448,6 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 			if b.Deneb == nil {
 				return summary, fmt.Errorf("deneb block contents is nil")
 			}
-			if b.Deneb.Block == nil {
-				return summary, fmt.Errorf("deneb block is nil")
-			}
 			return summarizeBlock(b.Deneb.Block)
 		default:
 			return summary, fmt.Errorf("unsupported block version %d", b.Version)

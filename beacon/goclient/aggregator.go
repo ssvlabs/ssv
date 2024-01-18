@@ -27,25 +27,17 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 		return nil, DataVersionNil, fmt.Errorf("validator is not an aggregator")
 	}
 
-	attDataReqStart := time.Now()
-	attDataResp, err := gc.client.AttestationData(gc.ctx, &api.AttestationDataOpts{
-		Slot:           slot,
-		CommitteeIndex: committeeIndex,
-	})
-	if err != nil {
-		return nil, DataVersionNil, fmt.Errorf("failed to get attestation data: %w", err)
-	}
-	if attDataResp == nil {
-		return nil, DataVersionNil, fmt.Errorf("attestation data response is nil")
-	}
-	if attDataResp.Data == nil {
+	attDataSSZMarshal, _, err := gc.GetAttestationData(slot, committeeIndex)
+	if attDataSSZMarshal == nil {
 		return nil, DataVersionNil, fmt.Errorf("attestation data is nil")
 	}
-
-	metricsAttesterDataRequest.Observe(time.Since(attDataReqStart).Seconds())
+	attData, ok := attDataSSZMarshal.(*phase0.AttestationData)
+	if !ok {
+		return nil, DataVersionNil, fmt.Errorf("failed to cast attestation data")
+	}
 
 	// Get aggregate attestation data.
-	root, err := attDataResp.Data.HashTreeRoot()
+	root, err := attData.HashTreeRoot()
 	if err != nil {
 		return nil, DataVersionNil, fmt.Errorf("failed to get attestation data root: %w", err)
 	}

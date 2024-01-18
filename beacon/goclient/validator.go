@@ -20,9 +20,6 @@ func (gc *goClient) GetValidatorData(validatorPubKeys []phase0.BLSPubKey) (map[p
 	if resp == nil {
 		return nil, fmt.Errorf("validators response is nil")
 	}
-	if resp.Data == nil {
-		return nil, fmt.Errorf("validators data is nil")
-	}
 
 	return resp.Data, nil
 }

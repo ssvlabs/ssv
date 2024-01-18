@@ -26,9 +26,6 @@ func (gc *goClient) AttesterDuties(ctx context.Context, epoch phase0.Epoch, vali
 	if resp == nil {
 		return nil, fmt.Errorf("attester duties response is nil")
 	}
-	if resp.Data == nil {
-		return nil, fmt.Errorf("attester duties data is nil")
-	}
 
 	return resp.Data, nil
 }
@@ -44,9 +41,6 @@ func (gc *goClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 	}
 	if resp == nil {
 		return nil, DataVersionNil, fmt.Errorf("attestation data response is nil")
-	}
-	if resp.Data == nil {
-		return nil, DataVersionNil, fmt.Errorf("attestation data is nil")
 	}
 
 	metricsAttesterDataRequest.Observe(time.Since(attDataReqStart).Seconds())

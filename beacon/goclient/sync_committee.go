@@ -24,9 +24,6 @@ func (gc *goClient) SyncCommitteeDuties(ctx context.Context, epoch phase0.Epoch,
 	if resp == nil {
 		return nil, fmt.Errorf("sync committee duties response is nil")
 	}
-	if resp.Data == nil {
-		return nil, fmt.Errorf("sync committee duties data is nil")
-	}
 
 	return resp.Data, nil
 }

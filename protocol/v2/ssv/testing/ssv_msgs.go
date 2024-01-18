@@ -301,7 +301,7 @@ var postConsensusBeaconBlockMsg = func(
 	blsSig := spec.BLSSignature{}
 	copy(blsSig[:], sig)
 
-	signed := &deneb.SignedBeaconBlock{
+	signed := deneb.SignedBeaconBlock{
 		Message:   block.Block,
 		Signature: blsSig,
 	}

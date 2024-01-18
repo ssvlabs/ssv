@@ -37,9 +37,6 @@ func (gc *goClient) ProposerDuties(ctx context.Context, epoch phase0.Epoch, vali
 	if resp == nil {
 		return nil, fmt.Errorf("proposer duties response is nil")
 	}
-	if resp.Data == nil {
-		return nil, fmt.Errorf("proposer duties data is nil")
-	}
 
 	return resp.Data, nil
 }
@@ -54,10 +51,9 @@ func (gc *goClient) GetBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byt
 
 	reqStart := time.Now()
 	proposalResp, err := gc.client.Proposal(gc.ctx, &api.ProposalOpts{
-		Slot:         slot,
-		RandaoReveal: sig,
-		Graffiti:     graffiti,
-		// TODO: when should we skip randao verification?
+		Slot:                   slot,
+		RandaoReveal:           sig,
+		Graffiti:               graffiti,
 		SkipRandaoVerification: false,
 	})
 	if err != nil {
@@ -115,10 +111,9 @@ func (gc *goClient) GetBlindedBeaconBlock(slot phase0.Slot, graffitiBytes, randa
 
 	reqStart := time.Now()
 	blindedProposalResp, err := gc.client.BlindedProposal(gc.ctx, &api.BlindedProposalOpts{
-		Slot:         slot,
-		RandaoReveal: sig,
-		Graffiti:     graffiti,
-		// TODO: when should we skip randao verification?
+		Slot:                   slot,
+		RandaoReveal:           sig,
+		Graffiti:               graffiti,
 		SkipRandaoVerification: false,
 	})
 	if err != nil {
