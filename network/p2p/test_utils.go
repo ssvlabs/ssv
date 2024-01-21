@@ -38,9 +38,9 @@ type HostProvider interface {
 
 // LocalNet holds the nodes in the local network
 type LocalNet struct {
-	Nodes    []network.P2PNetwork
 	NodeKeys []testing.NodeKeys
 	Bootnode *discovery.Bootnode
+	Nodes    []network.P2PNetwork
 
 	udpRand testing.UDPPortsRandomizer
 }
