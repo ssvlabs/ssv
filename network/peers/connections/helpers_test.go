@@ -55,7 +55,6 @@ func getTestingData(t *testing.T) TestData {
 		NetworkID: "some-network-id",
 		Metadata: &records.NodeMetadata{
 			NodeVersion:   "some-node-version",
-			OperatorID:    "some-operator-id",
 			ExecutionNode: "some-execution-node",
 			ConsensusNode: "some-consensus-node",
 			Subnets:       "some-subnets",
