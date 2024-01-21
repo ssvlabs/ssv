@@ -3,6 +3,9 @@ package validator
 import (
 	"context"
 	"crypto/sha256"
+	"testing"
+	"time"
+
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
@@ -16,8 +19,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
-	"testing"
-	"time"
 )
 
 func TestController_LiquidateCluster(t *testing.T) {
@@ -62,12 +63,17 @@ func TestController_LiquidateCluster(t *testing.T) {
 	ctr.validatorStartFunc = validatorStartFunc
 
 	require.Equal(t, mockValidatorsMap.Size(), 1)
+	_, ok := mockValidatorsMap.GetValidator(secretKey.GetPublicKey().SerializeToHexStr())
+	require.True(t, ok, "validator not found")
+
 	err := ctr.LiquidateCluster(common.HexToAddress("123"), []uint64{1, 2, 3, 4}, []*types.SSVShare{{Share: spectypes.Share{
 		ValidatorPubKey: secretKey.GetPublicKey().Serialize(),
 	}}})
-
 	require.NoError(t, err)
+
 	require.Equal(t, mockValidatorsMap.Size(), 0)
+	_, ok = mockValidatorsMap.GetValidator(secretKey.GetPublicKey().SerializeToHexStr())
+	require.False(t, ok, "validator still exists")
 }
 
 type signable struct {
@@ -125,9 +131,15 @@ func TestController_StopValidator(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, mockValidatorsMap.Size(), 1)
+	_, ok := mockValidatorsMap.GetValidator(secretKey.GetPublicKey().SerializeToHexStr())
+	require.True(t, ok, "validator not found")
+
 	err = ctr.StopValidator(secretKey.GetPublicKey().Serialize())
 	require.NoError(t, err)
+
 	require.Equal(t, mockValidatorsMap.Size(), 0)
+	_, ok = mockValidatorsMap.GetValidator(secretKey.GetPublicKey().SerializeToHexStr())
+	require.False(t, ok, "validator still exists")
 }
 
 func TestController_ReactivateCluster(t *testing.T) {
@@ -205,6 +217,11 @@ func TestController_ReactivateCluster(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, mockValidatorsMap.Size(), 2)
+	_, ok := mockValidatorsMap.GetValidator(secretKey.GetPublicKey().SerializeToHexStr())
+	require.True(t, ok, "validator not found")
+	_, ok = mockValidatorsMap.GetValidator(secretKey2.GetPublicKey().SerializeToHexStr())
+	require.True(t, ok, "validator not found")
+
 	select {
 	case <-indiciesUpdate:
 		break
