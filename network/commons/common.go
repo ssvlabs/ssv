@@ -1,9 +1,6 @@
 package commons
 
 import (
-	"crypto"
-	"crypto/rsa"
-	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
@@ -12,14 +9,10 @@ import (
 	"time"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/cespare/xxhash/v2"
 	"github.com/libp2p/go-libp2p"
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/protocol"
-	"github.com/pkg/errors"
-
-	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 )
 
 const (
@@ -44,35 +37,6 @@ const (
 	operatorIDOffset = signatureOffset + signatureSize
 	messageOffset    = operatorIDOffset + operatorIDSize
 )
-
-// PackAndSignPubSubMessage encodes SSVMessage, signs it with the provided private key and
-// runs EncodeSignedSSVMessage to get a packed message. Then wraps it to pubsub.Message struct
-func PackAndSignPubSubMessage(
-	msg *spectypes.SSVMessage,
-	operatorID spectypes.OperatorID,
-	operatorPrivateKey *rsa.PrivateKey,
-) (*pubsub.Message, error) {
-	encodedMsg, err := EncodeNetworkMsg(msg)
-	if err != nil {
-		return nil, errors.Wrap(err, "could not decode msg")
-	}
-
-	hash := sha256.Sum256(encodedMsg)
-	signature, err := rsa.SignPKCS1v15(nil, operatorPrivateKey, crypto.SHA256, hash[:])
-	if err != nil {
-		return nil, err
-	}
-
-	packedPubSubMsgPayload := EncodeSignedSSVMessage(encodedMsg, operatorID, signature)
-	topicID := ValidatorTopicID(msg.GetID().GetPubKey())
-
-	return &pubsub.Message{
-		Message: &pspb.Message{
-			Topic: &topicID[0],
-			Data:  packedPubSubMsgPayload,
-		},
-	}, nil
-}
 
 // EncodeSignedSSVMessage serializes the message, op id and signature into bytes
 func EncodeSignedSSVMessage(message []byte, operatorID spectypes.OperatorID, signature []byte) []byte {
