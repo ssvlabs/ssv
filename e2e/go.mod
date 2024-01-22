@@ -37,8 +37,8 @@ require (
 	github.com/alecthomas/kong v0.8.1
 	github.com/bloxapp/ssv-spec v0.3.4
 	github.com/docker/docker v24.0.7+incompatible
-	github.com/herumi/bls-eth-go-binary v1.29.1
 	golang.org/x/exp v0.0.0-20230810033253-352e893a4cad
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -71,6 +71,7 @@ require (
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.2 // indirect
+	github.com/herumi/bls-eth-go-binary v1.29.1 // indirect
 	github.com/ipfs/go-cid v0.4.1 // indirect
 	github.com/klauspost/compress v1.16.5 // indirect
 	github.com/libp2p/go-buffer-pool v0.1.0 // indirect
@@ -109,7 +110,6 @@ require (
 	google.golang.org/protobuf v1.30.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/natefinch/npipe.v2 v2.0.0-20160621034901-c1b8fa8bdcce // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gotest.tools/v3 v3.5.1 // indirect
 	lukechampine.com/blake3 v1.2.1 // indirect
 )
