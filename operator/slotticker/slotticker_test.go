@@ -219,7 +219,7 @@ func TestDoubleTickWarning(t *testing.T) {
 	logger := zap.New(core)
 
 	// Initialize the slotTicker with the mock timer provider
-	ticker := NewWithCustomTimer(logger, Config{
+	ticker := newWithCustomTimer(logger, Config{
 		SlotDuration: 200 * time.Millisecond,
 		GenesisTime:  time.Now(),
 	}, func(d time.Duration) Timer {
@@ -267,7 +267,7 @@ func TestDoubleTickRealTimer(t *testing.T) {
 	mockTimer := &mockTimer{timer: NewTimer(time.Hour).(*timer)}
 	slotTime := 200 * time.Millisecond
 	firstSlotTime := time.Now()
-	ticker := NewWithCustomTimer(logger, Config{
+	ticker := newWithCustomTimer(logger, Config{
 		SlotDuration: slotTime,
 		GenesisTime:  time.Now(),
 	}, (&mockTimeProvider{timer: mockTimer}).NewTimer)

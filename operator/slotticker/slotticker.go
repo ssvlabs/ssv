@@ -21,26 +21,6 @@ type Config struct {
 	GenesisTime  time.Time
 }
 
-type TimerProvider func(d time.Duration) Timer
-
-type Timer interface {
-	Stop() bool
-	Reset(d time.Duration) bool
-	C() <-chan time.Time
-}
-
-type timer struct {
-	*time.Timer
-}
-
-func NewTimer(d time.Duration) Timer {
-	return &timer{time.NewTimer(d)}
-}
-
-func (t *timer) C() <-chan time.Time {
-	return t.Timer.C
-}
-
 type slotTicker struct {
 	logger       *zap.Logger
 	timer        Timer
@@ -51,10 +31,10 @@ type slotTicker struct {
 
 // New returns a goroutine-free SlotTicker implementation which is not thread-safe.
 func New(logger *zap.Logger, cfg Config) *slotTicker {
-	return NewWithCustomTimer(logger, cfg, NewTimer)
+	return newWithCustomTimer(logger, cfg, NewTimer)
 }
 
-func NewWithCustomTimer(logger *zap.Logger, cfg Config, timerProvider TimerProvider) *slotTicker {
+func newWithCustomTimer(logger *zap.Logger, cfg Config, timerProvider TimerProvider) *slotTicker {
 	now := time.Now()
 	timeSinceGenesis := now.Sub(cfg.GenesisTime)
 
