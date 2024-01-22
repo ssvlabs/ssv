@@ -203,12 +203,6 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 			connections.NetworkIDFilter(domain),
 		}
 
-		if n.cfg.Permissioned() {
-			filters = append(filters,
-				connections.SenderRecipientIPsCheckFilter(n.host.ID()),
-				connections.SignatureCheckFilter(),
-				connections.RegisteredOperatorsFilter(n.nodeStorage, n.cfg.Network.WhitelistedOperatorKeys))
-		}
 		return filters
 	}
 
@@ -302,7 +296,7 @@ func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
 		cfg.ScoreIndex = nil
 	}
 
-	midHandler := topics.NewMsgIDHandler(n.ctx, time.Minute*2, n.cfg.Network)
+	midHandler := topics.NewMsgIDHandler(n.ctx, time.Minute*2)
 	n.msgResolver = midHandler
 	cfg.MsgIDHandler = midHandler
 	go cfg.MsgIDHandler.Start()

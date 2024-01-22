@@ -306,20 +306,17 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 
 	var signatureVerifier func() error
 
-	currentEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Unix()))
-	if currentEpoch > mv.netCfg.PermissionlessActivationEpoch {
-		decMessageData, operatorID, signature, err := commons.DecodeSignedSSVMessage(messageData)
-		messageData = decMessageData
-		if err != nil {
-			e := ErrMalformedSignedMessage
-			e.innerErr = err
-			return nil, Descriptor{}, e
-		}
+	decMessageData, operatorID, signature, err := commons.DecodeSignedSSVMessage(messageData)
+	messageData = decMessageData
+	if err != nil {
+		e := ErrMalformedSignedMessage
+		e.innerErr = err
+		return nil, Descriptor{}, e
+	}
 
-		signatureVerifier = func() error {
-			mv.metrics.MessageValidationRSAVerifications()
-			return mv.verifyRSASignature(messageData, operatorID, signature)
-		}
+	signatureVerifier = func() error {
+		mv.metrics.MessageValidationRSAVerifications()
+		return mv.verifyRSASignature(messageData, operatorID, signature)
 	}
 
 	if len(messageData) == 0 {

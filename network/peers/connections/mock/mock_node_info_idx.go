@@ -1,8 +1,6 @@
 package mock
 
 import (
-	"crypto/rsa"
-
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -16,7 +14,7 @@ type NodeInfoIndex struct {
 	MockSelfSealed []byte
 }
 
-func (m NodeInfoIndex) SelfSealed(sender, recipient peer.ID, permissioned bool, operatorPrivateKey *rsa.PrivateKey) ([]byte, error) {
+func (m NodeInfoIndex) SelfSealed() ([]byte, error) {
 	if len(m.MockSelfSealed) != 0 {
 		return m.MockSelfSealed, nil
 	} else {

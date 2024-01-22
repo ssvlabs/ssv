@@ -135,11 +135,6 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.P2pNetworkConfig.Ctx = cmd.Context()
 
-		permissioned := func() bool {
-			currentEpoch := networkConfig.Beacon.EstimatedCurrentEpoch()
-			return currentEpoch < networkConfig.PermissionlessActivationEpoch
-		}
-
 		slotTickerProvider := func() slotticker.SlotTicker {
 			return slotticker.New(networkConfig)
 		}
@@ -167,7 +162,6 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		var validatorCtrl validator.Controller
-		cfg.P2pNetworkConfig.Permissioned = permissioned
 		cfg.P2pNetworkConfig.NodeStorage = nodeStorage
 		cfg.P2pNetworkConfig.OperatorPubKeyHash = format.OperatorID(operatorData.PublicKey)
 		cfg.P2pNetworkConfig.OperatorID = func() spectypes.OperatorID {

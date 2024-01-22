@@ -146,13 +146,11 @@ func (n *p2pNetwork) makeSyncRequest(logger *zap.Logger, peers []peer.ID, mid sp
 			continue
 		}
 
-		if n.cfg.Network.Beacon.EstimatedCurrentEpoch() > n.cfg.Network.PermissionlessActivationEpoch {
-			decodedMsg, _, _, err := commons.DecodeSignedSSVMessage(raw)
-			if err != nil {
-				logger.Debug("could not decode signed SSV message", zap.Error(err))
-			} else {
-				raw = decodedMsg
-			}
+		decodedMsg, _, _, err := commons.DecodeSignedSSVMessage(raw)
+		if err != nil {
+			logger.Debug("could not decode signed SSV message", zap.Error(err))
+		} else {
+			raw = decodedMsg
 		}
 
 		mid := msgID(raw)

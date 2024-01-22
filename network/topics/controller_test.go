@@ -349,7 +349,7 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 	var p *P
 	var midHandler MsgIDHandler
 	if msgID {
-		midHandler = NewMsgIDHandler(ctx, 2*time.Minute, networkconfig.TestNetwork)
+		midHandler = NewMsgIDHandler(ctx, 2*time.Minute)
 		go midHandler.Start()
 	}
 	cfg := &PubSubConfig{
