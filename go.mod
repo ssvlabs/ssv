@@ -5,8 +5,8 @@ go 1.20
 require (
 	github.com/aquasecurity/table v1.8.0
 	github.com/attestantio/go-eth2-client v0.19.9
-	github.com/bloxapp/eth2-key-manager v1.3.3-0.20240116151402-1b5ca7e37734
-	github.com/bloxapp/ssv-spec v0.3.5-0.20240116151111-8dbbe6d49f20
+	github.com/bloxapp/eth2-key-manager v1.4.0
+	github.com/bloxapp/ssv-spec v0.3.5
 	github.com/btcsuite/btcd/btcec/v2 v2.3.2
 	github.com/cespare/xxhash/v2 v2.2.0
 	github.com/cornelk/hashmap v1.0.8
