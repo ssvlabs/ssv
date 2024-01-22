@@ -72,7 +72,6 @@ func UpdateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte, collection V
 	if err != nil {
 		return errors.Wrap(err, "failed to get validator data from Beacon")
 	}
-	// TODO: importing logging/fields causes import cycle
 	logger.Debug("🆕 got validators metadata", zap.Int("requested", len(pubKeys)),
 		zap.Int("received", len(results)))
 
@@ -86,14 +85,13 @@ func UpdateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte, collection V
 		if onUpdated != nil {
 			onUpdated(pk, meta)
 		}
-		logger.Debug("💾️ successfully updated validator metadata",
-			zap.String("pk", pk), zap.Any("metadata", meta))
 	}
 	if len(errs) > 0 {
-		logger.Error("❌ failed to process validators returned from Beacon node",
-			zap.Int("count", len(errs)), zap.Errors("errors", errs))
 		return errors.Errorf("could not process %d validators returned from beacon", len(errs))
 	}
+	logger.Debug("💾️ successfully updated validators metadata",
+		zap.Int("succeeded", len(results)-len(errs)),
+		zap.Int("failed", len(errs)))
 	return nil
 }
 
