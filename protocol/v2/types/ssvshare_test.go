@@ -23,14 +23,14 @@ func TestSSVShare_BelongsToOperator(t *testing.T) {
 }
 func TestSSVShare_ComputeClusterIDHash(t *testing.T) {
 	var (
-		aliceClusterHash = "fec0dc0e4be38e074cdaad0dff2375159010d56425f82d926468341c2f7afd3e"
+		aliceClusterHash = "a341933234aa1e6dfd3b8d6677172bdcd0986b1e6afc2e84d321f154d9736717"
 		testKeyAlice, _  = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
 		testAddrAlice    = crypto.PubkeyToAddress(testKeyAlice.PublicKey)
 	)
 
-	clusterHash, err := ComputeClusterIDHash(testAddrAlice.Bytes(), []uint64{3, 2, 1, 4})
+	clusterHash, err := ComputeClusterIDHash(testAddrAlice, []uint64{3, 2, 1, 4})
 	require.NoError(t, err)
-	clusterHash2, err := ComputeClusterIDHash(testAddrAlice.Bytes(), []uint64{4, 3, 1, 2})
+	clusterHash2, err := ComputeClusterIDHash(testAddrAlice, []uint64{4, 3, 1, 2})
 	require.NoError(t, err)
 	// Convert the hash to a hexadecimal string
 	hashString := hex.EncodeToString(clusterHash)

@@ -5,12 +5,11 @@ import (
 	"encoding/binary"
 	"encoding/gob"
 	"fmt"
-	"github.com/ethereum/go-ethereum/crypto"
-	"sort"
-
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
+	"sort"
 
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
@@ -66,33 +65,23 @@ func (s *SSVShare) SetFeeRecipient(feeRecipient bellatrix.ExecutionAddress) {
 }
 
 // ComputeClusterIDHash will compute cluster ID hash with given owner address and operator ids
-func ComputeClusterIDHash(ownerAddress []byte, operatorIds []uint64) ([]byte, error) {
-	var encodedData []byte
-
-	// Sort the slice of uint64 in ascending order
+func ComputeClusterIDHash(address common.Address, operatorIds []uint64) ([]byte, error) {
 	sort.Slice(operatorIds, func(i, j int) bool {
 		return operatorIds[i] < operatorIds[j]
 	})
 
-	// Append bytes of the owner address
-	encodedData = append(encodedData, ownerAddress...)
-
-	// Append the ABI-encoded uint64 values
+	// Encode the address and operator IDs in the same way as Solidity's abi.encodePacked
+	var data []byte
+	data = append(data, address.Bytes()...) // Address is 20 bytes
 	for _, id := range operatorIds {
-		encodedData = append(encodedData, abiEncodeUint64(id)...)
+		idBytes := make([]byte, 32)                  // Each ID should be 32 bytes
+		binary.BigEndian.PutUint64(idBytes[24:], id) // PutUint64 fills the last 8 bytes; rest are 0
+		data = append(data, idBytes...)
 	}
 
-	// Compute the keccak256 hash of the encoded data
-	clusterHash := crypto.Keccak256(encodedData)
-
-	return clusterHash, nil
-}
-
-// abiEncodeUint64 encodes a uint64 value for ABI encoding.
-func abiEncodeUint64(value uint64) []byte {
-	buf := make([]byte, 8)
-	binary.BigEndian.PutUint64(buf, value)
-	return buf
+	// Hash the data using keccak256
+	hash := crypto.Keccak256(data)
+	return hash, nil
 }
 
 func ComputeQuorumAndPartialQuorum(committeeSize int) (quorum uint64, partialQuorum uint64) {
