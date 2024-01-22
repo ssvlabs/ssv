@@ -33,6 +33,31 @@ type RecipientData struct {
 	Nonce *Nonce `json:"nonce"`
 }
 
+func (r *RecipientData) MarshalJSON() ([]byte, error) {
+	return json.Marshal(recipientDataJSON{
+		Owner:        r.Owner,
+		FeeRecipient: r.FeeRecipient,
+		Nonce:        r.Nonce,
+	})
+}
+
+func (r *RecipientData) UnmarshalJSON(input []byte) error {
+	var data recipientDataJSON
+	if err := json.Unmarshal(input, &data); err != nil {
+		return errors.Wrap(err, "invalid JSON")
+	}
+	r.Owner = data.Owner
+	r.FeeRecipient = data.FeeRecipient
+	r.Nonce = data.Nonce
+	return nil
+}
+
+type recipientDataJSON struct {
+	Owner        common.Address `json:"ownerAddress"`
+	FeeRecipient [20]byte       `json:"feeRecipientAddress"`
+	Nonce        *Nonce         `json:"nonce"`
+}
+
 // Recipients is the interface for managing recipients data
 type Recipients interface {
 	GetRecipientData(r basedb.Reader, owner common.Address) (*RecipientData, bool, error)
