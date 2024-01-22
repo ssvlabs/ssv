@@ -12,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/beacon/goclient"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
@@ -86,12 +87,19 @@ func (r *AggregatorRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *sp
 
 	duty := r.GetState().StartingDuty
 
+	// TODO: replace goclient.IsAggregator with r.GetBeaconNode().IsAggregator once it's in spec.
+	isAggregator := goclient.IsAggregator(duty.CommitteeLength, fullSig)
 	logger.Debug("🧩 got partial signature quorum",
 		zap.Any("signer", signedMsg.Signer),
 		fields.Slot(duty.Slot),
+		zap.Bool("is_aggregator", isAggregator),
 	)
 
 	r.metrics.PauseDutyFullFlow()
+
+	if !isAggregator {
+		return nil
+	}
 
 	// get block data
 	res, ver, err := r.GetBeaconNode().SubmitAggregateSelectionProof(duty.Slot, duty.CommitteeIndex, duty.CommitteeLength, duty.ValidatorIndex, fullSig)

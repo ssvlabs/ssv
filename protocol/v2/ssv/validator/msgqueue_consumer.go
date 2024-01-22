@@ -86,7 +86,9 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 
 	logger.Debug("📬 queue consumer is running")
 
-	lens := make([]int, 0, 10)
+	const queueLengthsHistory = 10
+	const queueLengthsThreshold = 16
+	var queueLengths = make([]int, 0, 10)
 
 	for ctx.Err() == nil {
 		// Construct a representation of the current state.
@@ -141,12 +143,21 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 			logger.Error("❗ got nil message from queue, but context is not done!")
 			break
 		}
-		lens = append(lens, q.Q.Len())
-		if len(lens) >= 10 {
-			logger.Debug("📬 [TEMPORARY] queue statistics",
-				fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType),
-				zap.Ints("past_10_lengths", lens))
-			lens = lens[:0]
+
+		// Log the queue length, if it's high.
+		queueLengths = append(queueLengths, q.Q.Len())
+		if len(queueLengths) >= queueLengthsHistory {
+			var max int
+			for _, l := range queueLengths {
+				if l > max {
+					max = l
+				}
+			}
+			if max > queueLengthsThreshold {
+				logger.Debug("📬 queue length is high", fields.MessageType(msg.MsgType),
+					zap.Ints("history", queueLengths))
+			}
+			queueLengths = queueLengths[:0]
 		}
 
 		// Handle the message.
