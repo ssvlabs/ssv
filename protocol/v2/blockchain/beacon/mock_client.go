@@ -518,7 +518,7 @@ func (mr *MockBeaconNodeMockRecorder) SubmitAttestation(attestation interface{})
 }
 
 // SubmitBeaconBlock mocks base method.
-func (m *MockBeaconNode) SubmitBeaconBlock(block *spec.VersionedBeaconBlock, sig phase0.BLSSignature) error {
+func (m *MockBeaconNode) SubmitBeaconBlock(block *api.VersionedProposal, sig phase0.BLSSignature) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SubmitBeaconBlock", block, sig)
 	ret0, _ := ret[0].(error)
@@ -546,7 +546,7 @@ func (mr *MockBeaconNodeMockRecorder) SubmitBeaconCommitteeSubscriptions(ctx, su
 }
 
 // SubmitBlindedBeaconBlock mocks base method.
-func (m *MockBeaconNode) SubmitBlindedBeaconBlock(block *api.VersionedBlindedBeaconBlock, sig phase0.BLSSignature) error {
+func (m *MockBeaconNode) SubmitBlindedBeaconBlock(block *api.VersionedBlindedProposal, sig phase0.BLSSignature) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SubmitBlindedBeaconBlock", block, sig)
 	ret0, _ := ret[0].(error)

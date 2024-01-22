@@ -8,11 +8,11 @@ import (
 	"testing"
 
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests"
-	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/messages"
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/runner/duties/newduty"
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/runner/duties/synccommitteeaggregator"
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/valcheck"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv-spec/types/spectest/tests/partialsigmessage"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -97,10 +97,10 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test interface{}
 				typedTest.Run(t)
 			},
 		}
-	case reflect.TypeOf(&messages.MsgSpecTest{}).String(): // no use of internal structs so can run as spec test runs
+	case reflect.TypeOf(&partialsigmessage.MsgSpecTest{}).String(): // no use of internal structs so can run as spec test runs
 		byts, err := json.Marshal(test)
 		require.NoError(t, err)
-		typedTest := &messages.MsgSpecTest{}
+		typedTest := &partialsigmessage.MsgSpecTest{}
 		require.NoError(t, json.Unmarshal(byts, &typedTest))
 
 		return &runnable{
