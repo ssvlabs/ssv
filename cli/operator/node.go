@@ -141,7 +141,10 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		slotTickerProvider := func() slotticker.SlotTicker {
-			return slotticker.New(networkConfig)
+			return slotticker.New(logger, slotticker.Config{
+				SlotDuration: networkConfig.SlotDurationSec(),
+				GenesisTime:  networkConfig.GetGenesisTime(),
+			})
 		}
 
 		cfg.ConsensusClient.Context = cmd.Context()
