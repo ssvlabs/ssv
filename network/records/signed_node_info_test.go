@@ -22,7 +22,6 @@ func TestSignedNodeInfo_Seal_Consume(t *testing.T) {
 			NodeVersion:   "v0.1.12",
 			ExecutionNode: "geth/x",
 			ConsensusNode: "prysm/x",
-			OperatorID:    "xxx",
 			Subnets:       "some-subnets",
 		},
 	}
@@ -74,7 +73,6 @@ func TestSignedNodeInfo_Marshal_Unmarshal(t *testing.T) {
 			NodeVersion:   "v0.1.12",
 			ExecutionNode: "geth/x",
 			ConsensusNode: "prysm/x",
-			OperatorID:    "xxx",
 			Subnets:       "some-subnets",
 		},
 	}
