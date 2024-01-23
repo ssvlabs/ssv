@@ -533,7 +533,7 @@ func (eh *EventHandler) processClusterEvent(
 	operatorIDs []uint64,
 	toLiquidate bool,
 ) ([]*ssvtypes.SSVShare, []string, error) {
-	clusterID, err := ssvtypes.ComputeClusterIDHash(owner.Bytes(), operatorIDs)
+	clusterID, err := ssvtypes.ComputeClusterIDHash(owner, operatorIDs)
 	if err != nil {
 		return nil, nil, fmt.Errorf("could not compute share cluster id: %w", err)
 	}
