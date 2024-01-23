@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"sort"
 
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
 
@@ -63,6 +65,13 @@ func (s *SSVShare) HasBeaconMetadata() bool {
 
 func (s *SSVShare) SetFeeRecipient(feeRecipient bellatrix.ExecutionAddress) {
 	s.FeeRecipientAddress = feeRecipient
+}
+
+// Active checks whether the share is active for the given epoch.
+func (s *SSVShare) Active(epoch phase0.Epoch) bool {
+	return s != nil && s.BeaconMetadata != nil &&
+		(s.BeaconMetadata.IsAttesting() || s.BeaconMetadata.Status == v1.ValidatorStatePendingQueued) &&
+		s.BeaconMetadata.ActivationEpoch <= epoch
 }
 
 // ComputeClusterIDHash will compute cluster ID hash with given owner address and operator ids

@@ -10,6 +10,7 @@ import (
 
 	networkconfig "github.com/bloxapp/ssv/networkconfig"
 	slotticker "github.com/bloxapp/ssv/operator/slotticker"
+	validatorstore "github.com/bloxapp/ssv/operator/validator/validatorstore"
 	gomock "github.com/golang/mock/gomock"
 	zap "go.uber.org/zap"
 )
@@ -76,7 +77,7 @@ func (mr *MockdutyHandlerMockRecorder) Name() *gomock.Call {
 }
 
 // Setup mocks base method.
-func (m *MockdutyHandler) Setup(arg0 string, arg1 *zap.Logger, arg2 BeaconNode, arg3 ExecutionClient, arg4 networkconfig.NetworkConfig, arg5 ValidatorController, arg6 ExecuteDutiesFunc, arg7 slotticker.Provider, arg8 chan ReorgEvent, arg9 chan struct{}) {
+func (m *MockdutyHandler) Setup(arg0 string, arg1 *zap.Logger, arg2 BeaconNode, arg3 ExecutionClient, arg4 networkconfig.NetworkConfig, arg5 validatorstore.ValidatorStore, arg6 ExecuteDutiesFunc, arg7 slotticker.Provider, arg8 chan ReorgEvent, arg9 chan struct{}) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "Setup", arg0, arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8, arg9)
 }

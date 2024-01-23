@@ -216,12 +216,12 @@ func setupEventHandler(
 	}
 
 	validatorCtrl := validator.NewController(logger, validator.ControllerOptions{
-		Context:         ctx,
-		DB:              db,
-		RegistryStorage: nodeStorage,
-		KeyManager:      keyManager,
-		StorageMap:      storageMap,
-		OperatorData:    operatorData,
+		Context:           ctx,
+		DB:                db,
+		RegistryStorage:   nodeStorage,
+		KeyManager:        keyManager,
+		StorageMap:        storageMap,
+		OperatorDataStore: operatorData,
 	})
 
 	parser := eventparser.New(contractFilterer)

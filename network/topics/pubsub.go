@@ -16,6 +16,8 @@ import (
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/topics/params"
+	"github.com/bloxapp/ssv/registry/storage"
+
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 )
 
@@ -158,9 +160,13 @@ func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, metri
 		psOpts = append(psOpts, pubsub.WithPeerScore(peerScoreParams, params.PeerScoreThresholds()),
 			pubsub.WithPeerScoreInspect(inspector, inspectInterval))
 		if cfg.GetValidatorStats == nil {
-			cfg.GetValidatorStats = func() (uint64, uint64, uint64, error) {
+			cfg.GetValidatorStats = func() storage.ValidatorStats {
 				// default in case it was not injected
-				return 100, 100, 10, nil
+				return storage.ValidatorStats{
+					TotalShares:      100,
+					ActiveValidators: 100,
+					OperatorShares:   10,
+				}
 			}
 		}
 		topicScoreFactory = topicScoreParams(logger, cfg)

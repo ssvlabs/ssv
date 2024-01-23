@@ -8,6 +8,7 @@ import (
 
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
+	"github.com/bloxapp/ssv/registry/storage"
 )
 
 // MessageRouter is accepting network messages and route them to the corresponding (internal) components
@@ -43,4 +44,4 @@ type P2PNetwork interface {
 //   - the amount of validators in the network
 //   - the amount of active validators in the network (i.e. not slashed or existed)
 //   - the amount of validators assigned to this operator
-type GetValidatorStats func() (uint64, uint64, uint64, error)
+type GetValidatorStats func() storage.ValidatorStats

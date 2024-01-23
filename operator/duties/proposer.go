@@ -146,12 +146,12 @@ func (h *ProposerHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch) error {
 	start := time.Now()
 
-	allIndices := h.validatorController.AllActiveIndices(epoch)
+	allIndices := h.validatorStore.AllActiveIndices(epoch)
 	if len(allIndices) == 0 {
 		return nil
 	}
 
-	inCommitteeIndices := h.validatorController.CommitteeActiveIndices(epoch)
+	inCommitteeIndices := h.validatorStore.CommitteeActiveIndices(epoch)
 	inCommitteeIndicesSet := map[phase0.ValidatorIndex]struct{}{}
 	for _, idx := range inCommitteeIndices {
 		inCommitteeIndicesSet[idx] = struct{}{}

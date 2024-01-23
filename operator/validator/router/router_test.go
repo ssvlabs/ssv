@@ -1,4 +1,4 @@
-package validator
+package router
 
 import (
 	"context"
@@ -20,7 +20,7 @@ func TestRouter(t *testing.T) {
 
 	logger := logging.TestLogger(t)
 
-	router := newMessageRouter(logger)
+	router := NewMessageRouter(logger)
 
 	expectedCount := 1000
 	count := 0
@@ -30,7 +30,7 @@ func TestRouter(t *testing.T) {
 	go func() {
 		defer wg.Done()
 
-		cn := router.GetMessageChan()
+		cn := router.Messages()
 		for msg := range cn {
 			require.NotNil(t, msg)
 			count++

@@ -18,8 +18,11 @@ import (
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
 	"github.com/bloxapp/ssv/operator/fee_recipient"
 	"github.com/bloxapp/ssv/operator/slotticker"
-	"github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/operator/validator"
+	operatorstorage "github.com/bloxapp/ssv/operator/storage"
+	"github.com/bloxapp/ssv/operator/validator/dutyexecutor"
+	"github.com/bloxapp/ssv/operator/validator/networkhandler"
+	"github.com/bloxapp/ssv/operator/validator/validatormanager"
+	"github.com/bloxapp/ssv/operator/validator/validatorstore"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
@@ -27,36 +30,43 @@ import (
 // Node represents the behavior of SSV node
 type Node interface {
 	Start(logger *zap.Logger) error
+	HealthCheck() error
 }
 
 // Options contains options to create the node
 type Options struct {
 	// NetworkName is the network name of this node
-	NetworkName         string `yaml:"Network" env:"NETWORK" env-default:"mainnet" env-description:"Network is the network of this node"`
-	Network             networkconfig.NetworkConfig
-	BeaconNode          beaconprotocol.BeaconNode // TODO: consider renaming to ConsensusClient
-	ExecutionClient     *executionclient.ExecutionClient
-	P2PNetwork          network.P2PNetwork
-	Context             context.Context
-	DB                  basedb.Database
-	ValidatorController validator.Controller
-	ValidatorOptions    validator.ControllerOptions `yaml:"ValidatorOptions"`
-	DutyStore           *dutystore.Store
-	WS                  api.WebSocketServer
-	WsAPIPort           int
-	Metrics             nodeMetrics
+	NetworkName      string `yaml:"Network" env:"NETWORK" env-default:"mainnet" env-description:"Network is the network of this node"`
+	Network          networkconfig.NetworkConfig
+	BeaconNode       beaconprotocol.BeaconNode // TODO: consider renaming to ConsensusClient
+	ExecutionClient  *executionclient.ExecutionClient
+	P2PNetwork       network.P2PNetwork
+	Context          context.Context
+	DB               basedb.Database
+	ValidatorManager *validatormanager.ValidatorManager
+	ValidatorStore   validatorstore.ValidatorStore
+	NetworkHandler   networkhandler.NetworkHandler
+	DutyExecutor     dutyexecutor.DutyExecutor
+	IndicesChangeCh  chan struct{}
+	ValidatorExitCh  chan duties.ExitDescriptor
+	ValidatorOptions validatormanager.ControllerOptions `yaml:"ValidatorOptions"`
+	DutyStore        *dutystore.Store
+	WS               api.WebSocketServer
+	WsAPIPort        int
+	Metrics          nodeMetrics
 }
 
 // operatorNode implements Node interface
 type operatorNode struct {
 	network          networkconfig.NetworkConfig
 	context          context.Context
-	validatorsCtrl   validator.Controller
-	validatorOptions validator.ControllerOptions
+	validatorManager *validatormanager.ValidatorManager
+	networkHandler   networkhandler.NetworkHandler
+	validatorOptions validatormanager.ControllerOptions
 	consensusClient  beaconprotocol.BeaconNode
 	executionClient  *executionclient.ExecutionClient
 	net              network.P2PNetwork
-	storage          storage.Storage
+	storage          operatorstorage.Storage
 	qbftStorage      *qbftstorage.QBFTStores
 	dutyScheduler    *duties.Scheduler
 	feeRecipientCtrl fee_recipient.RecipientController
@@ -86,7 +96,8 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 
 	node := &operatorNode{
 		context:          opts.Context,
-		validatorsCtrl:   opts.ValidatorController,
+		validatorManager: opts.ValidatorManager,
+		networkHandler:   opts.NetworkHandler,
 		validatorOptions: opts.ValidatorOptions,
 		network:          opts.Network,
 		consensusClient:  opts.BeaconNode,
@@ -95,17 +106,17 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 		storage:          opts.ValidatorOptions.RegistryStorage,
 		qbftStorage:      storageMap,
 		dutyScheduler: duties.NewScheduler(&duties.SchedulerOptions{
-			Ctx:                 opts.Context,
-			BeaconNode:          opts.BeaconNode,
-			ExecutionClient:     opts.ExecutionClient,
-			Network:             opts.Network,
-			ValidatorController: opts.ValidatorController,
-			IndicesChg:          opts.ValidatorController.IndicesChangeChan(),
-			ValidatorExitCh:     opts.ValidatorController.ValidatorExitChan(),
-			ExecuteDuty:         opts.ValidatorController.ExecuteDuty,
-			BuilderProposals:    opts.ValidatorOptions.BuilderProposals,
-			DutyStore:           opts.DutyStore,
-			SlotTickerProvider:  slotTickerProvider,
+			Ctx:                opts.Context,
+			BeaconNode:         opts.BeaconNode,
+			ExecutionClient:    opts.ExecutionClient,
+			Network:            opts.Network,
+			ValidatorStore:     opts.ValidatorStore,
+			IndicesChg:         opts.IndicesChangeCh,
+			ValidatorExitCh:    opts.ValidatorExitCh,
+			DutyExecutor:       opts.DutyExecutor,
+			BuilderProposals:   opts.ValidatorOptions.BuilderProposals,
+			DutyStore:          opts.DutyStore,
+			SlotTickerProvider: slotTickerProvider,
 		}),
 		feeRecipientCtrl: fee_recipient.NewController(&fee_recipient.ControllerOptions{
 			Ctx:                opts.Context,
@@ -113,7 +124,7 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 			Network:            opts.Network,
 			ShareStorage:       opts.ValidatorOptions.RegistryStorage.Shares(),
 			RecipientStorage:   opts.ValidatorOptions.RegistryStorage,
-			OperatorData:       opts.ValidatorOptions.OperatorData,
+			OperatorDataStore:  opts.ValidatorOptions.OperatorDataStore,
 			SlotTickerProvider: slotTickerProvider,
 		}),
 
@@ -150,7 +161,7 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 		return fmt.Errorf("failed to run duty scheduler: %w", err)
 	}
 
-	n.validatorsCtrl.StartNetworkHandlers()
+	n.networkHandler.StartNetworkHandlers()
 
 	if n.validatorOptions.Exporter {
 		// Subscribe to all subnets.
@@ -160,11 +171,12 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 		}
 	}
 	go n.net.UpdateSubnets(logger)
-	n.validatorsCtrl.StartValidators()
+	n.validatorManager.StartPersistedValidators()
+	n.validatorManager.StartBackgroundCleanup()
 	go n.reportOperators(logger)
 
 	go n.feeRecipientCtrl.Start(logger)
-	go n.validatorsCtrl.UpdateValidatorMetaDataLoop()
+	go n.validatorManager.UpdateValidatorMetaDataLoop()
 
 	if err := n.dutyScheduler.Wait(); err != nil {
 		logger.Fatal("duty scheduler exited with error", zap.Error(err))

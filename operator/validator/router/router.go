@@ -1,4 +1,4 @@
-package validator
+package router
 
 import (
 	"context"
@@ -10,19 +10,19 @@ import (
 
 const bufSize = 1024
 
-func newMessageRouter(logger *zap.Logger) *messageRouter {
-	return &messageRouter{
+func NewMessageRouter(logger *zap.Logger) *MessageRouter {
+	return &MessageRouter{
 		logger: logger,
 		ch:     make(chan *queue.DecodedSSVMessage, bufSize),
 	}
 }
 
-type messageRouter struct {
+type MessageRouter struct {
 	logger *zap.Logger
 	ch     chan *queue.DecodedSSVMessage
 }
 
-func (r *messageRouter) Route(ctx context.Context, message *queue.DecodedSSVMessage) {
+func (r *MessageRouter) Route(ctx context.Context, message *queue.DecodedSSVMessage) {
 	select {
 	case <-ctx.Done():
 		r.logger.Warn("context canceled, dropping message")
@@ -32,6 +32,6 @@ func (r *messageRouter) Route(ctx context.Context, message *queue.DecodedSSVMess
 	}
 }
 
-func (r *messageRouter) GetMessageChan() <-chan *queue.DecodedSSVMessage {
+func (r *MessageRouter) Messages() <-chan *queue.DecodedSSVMessage {
 	return r.ch
 }

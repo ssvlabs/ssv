@@ -1318,13 +1318,13 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 
 	bc := beacon.NewMockBeaconNode(ctrl)
 	validatorCtrl := validator.NewController(logger, validator.ControllerOptions{
-		Context:         ctx,
-		DB:              db,
-		RegistryStorage: nodeStorage,
-		KeyManager:      keyManager,
-		StorageMap:      storageMap,
-		OperatorData:    operatorData,
-		ValidatorsMap:   validatorsmap.New(ctx),
+		Context:           ctx,
+		DB:                db,
+		RegistryStorage:   nodeStorage,
+		KeyManager:        keyManager,
+		StorageMap:        storageMap,
+		OperatorDataStore: operatorData,
+		ValidatorsMap:     validatorsmap.New(ctx),
 	})
 
 	contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)

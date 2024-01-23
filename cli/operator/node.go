@@ -15,12 +15,13 @@ import (
 	"github.com/bloxapp/ssv/network"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
+
+	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 
 	"github.com/bloxapp/ssv/api/handlers"
 	apiserver "github.com/bloxapp/ssv/api/server"
@@ -45,10 +46,17 @@ import (
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/nodeprobe"
 	"github.com/bloxapp/ssv/operator"
+	"github.com/bloxapp/ssv/operator/duties"
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
+	"github.com/bloxapp/ssv/operator/operatordatastore"
 	"github.com/bloxapp/ssv/operator/slotticker"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/operator/validator"
+	"github.com/bloxapp/ssv/operator/validator/dutyexecutor"
+	"github.com/bloxapp/ssv/operator/validator/metadatamanager"
+	"github.com/bloxapp/ssv/operator/validator/networkhandler"
+	"github.com/bloxapp/ssv/operator/validator/taskexecutor"
+	"github.com/bloxapp/ssv/operator/validator/validatormanager"
+	"github.com/bloxapp/ssv/operator/validator/validatorstore"
 	"github.com/bloxapp/ssv/operator/validatorsmap"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
@@ -87,8 +95,6 @@ var cfg config
 
 var globalArgs global_config.Args
 
-var operatorNode operator.Node
-
 // StartNodeCmd is the command to start SSV node
 var StartNodeCmd = &cobra.Command{
 	Use:   "start-node",
@@ -120,6 +126,8 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		nodeStorage, operatorData := setupOperatorStorage(logger, db)
+
+		operatorDataStore := operatordatastore.NewOperatorDataStore(operatorData)
 
 		usingLocalEvents := len(cfg.LocalEventsPath) != 0
 
@@ -169,12 +177,11 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not connect to execution client", zap.Error(err))
 		}
 
-		var validatorCtrl validator.Controller
 		cfg.P2pNetworkConfig.Permissioned = permissioned
 		cfg.P2pNetworkConfig.NodeStorage = nodeStorage
 		cfg.P2pNetworkConfig.OperatorPubKeyHash = format.OperatorID(operatorData.PublicKey)
-		cfg.P2pNetworkConfig.OperatorID = func() spectypes.OperatorID {
-			return validatorCtrl.GetOperatorData().ID
+		cfg.P2pNetworkConfig.OperatorID = func() spectypes.OperatorID { // TODO: pass operatorDataStore?
+			return operatorDataStore.GetOperatorData().ID
 		}
 		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
 		cfg.P2pNetworkConfig.Network = networkConfig
@@ -195,7 +202,6 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.P2pNetworkConfig.Metrics = metricsReporter
 		cfg.P2pNetworkConfig.MessageValidator = messageValidator
-		cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
 
 		p2pNetwork := setupP2P(logger, db, metricsReporter)
 
@@ -213,10 +219,9 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.KeyManager = keyManager
 		cfg.SSVOptions.ValidatorOptions.ValidatorsMap = validatorsMap
 
+		cfg.SSVOptions.ValidatorOptions.OperatorDataStore = operatorDataStore
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = nodeStorage.GetPrivateKey
-		cfg.SSVOptions.ValidatorOptions.OperatorData = operatorData
 		cfg.SSVOptions.ValidatorOptions.RegistryStorage = nodeStorage
-		cfg.SSVOptions.ValidatorOptions.RecipientsStorage = nodeStorage
 		cfg.SSVOptions.ValidatorOptions.GasLimit = cfg.ConsensusClient.GasLimit
 
 		if cfg.WsAPIPort != 0 {
@@ -243,17 +248,35 @@ var StartNodeCmd = &cobra.Command{
 			storageMap.Add(storageRole, ibftstorage.New(cfg.SSVOptions.ValidatorOptions.DB, storageRole.String()))
 		}
 
+		for _, storageRole := range storageRoles {
+			storageMap.Add(storageRole, ibftstorage.New(cfg.SSVOptions.ValidatorOptions.DB, storageRole.String()))
+		}
+
+		indicesChangeCh := make(chan struct{})
+		validatorExitCh := make(chan duties.ExitDescriptor)
+
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
 		cfg.SSVOptions.ValidatorOptions.Metrics = metricsReporter
 		cfg.SSVOptions.Metrics = metricsReporter
+		cfg.SSVOptions.IndicesChangeCh = indicesChangeCh
+		cfg.SSVOptions.ValidatorExitCh = validatorExitCh
 
-		validatorCtrl = validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
-		cfg.SSVOptions.ValidatorController = validatorCtrl
+		validatorStore := validatorstore.New(nodeStorage.Shares(), validatorsMap, operatorDataStore)
+		metadataManager := metadatamanager.New(logger, nodeStorage.Shares(), consensusClient, validatorsMap, p2pNetwork, operatorDataStore, indicesChangeCh)
+		validatorManager := validatormanager.New(cmd.Context(), logger, metricsReporter, networkConfig, p2pNetwork, validatorsMap, nodeStorage, operatorDataStore, metadataManager, indicesChangeCh, cfg.SSVOptions.ValidatorOptions)
+		taskExecutor := taskexecutor.New(logger, metricsReporter, validatorsMap, consensusClient, indicesChangeCh, validatorExitCh, validatorManager)
+		dutyExecutor := dutyexecutor.New(logger, networkConfig, validatorsMap)
+		networkHandler := networkhandler.NewNetworkHandler(cmd.Context(), logger, p2pNetwork, validatorManager, validatorsMap, cfg.SSVOptions.ValidatorOptions.Exporter, cfg.SSVOptions.ValidatorOptions.WorkersCount, cfg.SSVOptions.ValidatorOptions.QueueBufferSize)
 
-		operatorNode = operator.New(logger, cfg.SSVOptions, slotTickerProvider)
+		cfg.SSVOptions.ValidatorManager = validatorManager
+		cfg.SSVOptions.ValidatorStore = validatorStore
+		cfg.SSVOptions.NetworkHandler = networkHandler
+		cfg.SSVOptions.DutyExecutor = dutyExecutor
+
+		operatorNode := operator.New(logger, cfg.SSVOptions, slotTickerProvider)
 
 		if cfg.MetricsAPIPort > 0 {
-			go startMetricsHandler(cmd.Context(), logger, db, metricsReporter, cfg.MetricsAPIPort, cfg.EnableProfile)
+			go startMetricsHandler(cmd.Context(), logger, db, metricsReporter, operatorNode, cfg.MetricsAPIPort, cfg.EnableProfile)
 		}
 
 		nodeProber := nodeprobe.NewProber(
@@ -281,7 +304,8 @@ var StartNodeCmd = &cobra.Command{
 			cmd.Context(),
 			logger,
 			executionClient,
-			validatorCtrl,
+			taskExecutor,
+			operatorDataStore,
 			storageMap,
 			metricsReporter,
 			networkConfig,
@@ -289,9 +313,8 @@ var StartNodeCmd = &cobra.Command{
 		)
 		nodeProber.AddNode("event syncer", eventSyncer)
 
-		cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, uint64, error) {
-			return validatorCtrl.GetValidatorStats()
-		}
+		cfg.P2pNetworkConfig.GetValidatorStats = validatorStore.GetValidatorStats // TODO: pass operatorDataStore?
+
 		if err := p2pNetwork.Setup(logger); err != nil {
 			logger.Fatal("failed to setup network", zap.Error(err))
 		}
@@ -560,7 +583,8 @@ func setupEventHandling(
 	ctx context.Context,
 	logger *zap.Logger,
 	executionClient *executionclient.ExecutionClient,
-	validatorCtrl validator.Controller,
+	taskExecutor taskexecutor.Executor,
+	operatorDataStore operatordatastore.OperatorDataStore,
 	storageMap *ibftstorage.QBFTStores,
 	metricsReporter metricsreporter.MetricsReporter,
 	networkConfig networkconfig.NetworkConfig,
@@ -576,9 +600,9 @@ func setupEventHandling(
 	eventHandler, err := eventhandler.New(
 		nodeStorage,
 		eventParser,
-		validatorCtrl,
+		taskExecutor,
 		networkConfig,
-		validatorCtrl,
+		operatorDataStore,
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider,
 		cfg.SSVOptions.ValidatorOptions.KeyManager,
 		cfg.SSVOptions.ValidatorOptions.Beacon,
@@ -642,7 +666,8 @@ func setupEventHandling(
 		if err != nil {
 			logger.Error("failed to get operators", zap.Error(err))
 		}
-		operatorID := validatorCtrl.GetOperatorData().ID
+
+		operatorID := operatorDataStore.GetOperatorData().ID
 		operatorValidators := 0
 		liquidatedValidators := 0
 		if operatorID != 0 {
@@ -677,10 +702,10 @@ func setupEventHandling(
 	return eventSyncer
 }
 
-func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.Database, metricsReporter metricsreporter.MetricsReporter, port int, enableProf bool) {
+func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.Database, metricsReporter metricsreporter.MetricsReporter, healthChecker metrics.HealthChecker, port int, enableProf bool) {
 	logger = logger.Named(logging.NameMetricsHandler)
 	// init and start HTTP handler
-	metricsHandler := metrics.NewMetricsHandler(ctx, db, metricsReporter, enableProf, operatorNode.(metrics.HealthChecker))
+	metricsHandler := metrics.NewMetricsHandler(ctx, db, metricsReporter, enableProf, healthChecker)
 	addr := fmt.Sprintf(":%d", port)
 	if err := metricsHandler.Start(logger, http.NewServeMux(), addr); err != nil {
 		logger.Panic("failed to serve metrics", zap.Error(err))

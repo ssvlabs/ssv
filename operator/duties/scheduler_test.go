@@ -163,7 +163,7 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Slot
 
 func setExecuteDutyFunc(s *Scheduler, executeDutiesCall chan []*spectypes.Duty, executeDutiesCallSize int) {
 	executeDutiesBuffer := make(chan *spectypes.Duty, executeDutiesCallSize)
-	s.executeDuty = func(logger *zap.Logger, duty *spectypes.Duty) {
+	s.dutyExecutor = func(logger *zap.Logger, duty *spectypes.Duty) {
 		logger.Debug("🏃 Executing duty", zap.Any("duty", duty))
 		executeDutiesBuffer <- duty
 

@@ -8,6 +8,7 @@ import (
 
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/slotticker"
+	"github.com/bloxapp/ssv/operator/validator/validatorstore"
 )
 
 //go:generate mockgen -package=duties -destination=./base_handler_mock.go -source=./base_handler.go
@@ -16,20 +17,20 @@ import (
 type ExecuteDutiesFunc func(logger *zap.Logger, duties []*spectypes.Duty)
 
 type dutyHandler interface {
-	Setup(string, *zap.Logger, BeaconNode, ExecutionClient, networkconfig.NetworkConfig, ValidatorController, ExecuteDutiesFunc, slotticker.Provider, chan ReorgEvent, chan struct{})
+	Setup(string, *zap.Logger, BeaconNode, ExecutionClient, networkconfig.NetworkConfig, validatorstore.ValidatorStore, ExecuteDutiesFunc, slotticker.Provider, chan ReorgEvent, chan struct{})
 	HandleDuties(context.Context)
 	HandleInitialDuties(context.Context)
 	Name() string
 }
 
 type baseHandler struct {
-	logger              *zap.Logger
-	beaconNode          BeaconNode
-	executionClient     ExecutionClient
-	network             networkconfig.NetworkConfig
-	validatorController ValidatorController
-	executeDuties       ExecuteDutiesFunc
-	ticker              slotticker.SlotTicker
+	logger          *zap.Logger
+	beaconNode      BeaconNode
+	executionClient ExecutionClient
+	network         networkconfig.NetworkConfig
+	validatorStore  validatorstore.ValidatorStore
+	executeDuties   ExecuteDutiesFunc
+	ticker          slotticker.SlotTicker
 
 	reorg         chan ReorgEvent
 	indicesChange chan struct{}
@@ -38,12 +39,12 @@ type baseHandler struct {
 	indicesChanged bool
 }
 
-func (h *baseHandler) Setup(name string, logger *zap.Logger, beaconNode BeaconNode, executionClient ExecutionClient, network networkconfig.NetworkConfig, validatorController ValidatorController, executeDuties ExecuteDutiesFunc, slotTickerProvider slotticker.Provider, reorgEvents chan ReorgEvent, indicesChange chan struct{}) {
+func (h *baseHandler) Setup(name string, logger *zap.Logger, beaconNode BeaconNode, executionClient ExecutionClient, network networkconfig.NetworkConfig, validatorStore validatorstore.ValidatorStore, executeDuties ExecuteDutiesFunc, slotTickerProvider slotticker.Provider, reorgEvents chan ReorgEvent, indicesChange chan struct{}) {
 	h.logger = logger.With(zap.String("handler", name))
 	h.beaconNode = beaconNode
 	h.executionClient = executionClient
 	h.network = network
-	h.validatorController = validatorController
+	h.validatorStore = validatorStore
 	h.executeDuties = executeDuties
 	h.ticker = slotTickerProvider()
 	h.reorg = reorgEvents

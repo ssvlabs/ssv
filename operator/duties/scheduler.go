@@ -25,7 +25,8 @@ import (
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
 	"github.com/bloxapp/ssv/operator/slotticker"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/bloxapp/ssv/operator/validator/dutyexecutor"
+	"github.com/bloxapp/ssv/operator/validator/validatorstore"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/scheduler.go -source=./scheduler.go
@@ -67,37 +68,28 @@ type ExecutionClient interface {
 	BlockByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Block, error)
 }
 
-// ValidatorController represents the component that controls validators via the scheduler
-type ValidatorController interface {
-	CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
-	AllActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
-	GetOperatorShares() []*types.SSVShare
-}
-
-type ExecuteDutyFunc func(logger *zap.Logger, duty *spectypes.Duty)
-
 type SchedulerOptions struct {
-	Ctx                 context.Context
-	BeaconNode          BeaconNode
-	ExecutionClient     ExecutionClient
-	Network             networkconfig.NetworkConfig
-	ValidatorController ValidatorController
-	ExecuteDuty         ExecuteDutyFunc
-	IndicesChg          chan struct{}
-	ValidatorExitCh     <-chan ExitDescriptor
-	SlotTickerProvider  slotticker.Provider
-	BuilderProposals    bool
-	DutyStore           *dutystore.Store
+	Ctx                context.Context
+	BeaconNode         BeaconNode
+	ExecutionClient    ExecutionClient
+	Network            networkconfig.NetworkConfig
+	ValidatorStore     validatorstore.ValidatorStore
+	DutyExecutor       dutyexecutor.DutyExecutor
+	IndicesChg         chan struct{}
+	ValidatorExitCh    <-chan ExitDescriptor
+	SlotTickerProvider slotticker.Provider
+	BuilderProposals   bool
+	DutyStore          *dutystore.Store
 }
 
 type Scheduler struct {
-	beaconNode          BeaconNode
-	executionClient     ExecutionClient
-	network             networkconfig.NetworkConfig
-	validatorController ValidatorController
-	slotTickerProvider  slotticker.Provider
-	executeDuty         ExecuteDutyFunc
-	builderProposals    bool
+	beaconNode         BeaconNode
+	executionClient    ExecutionClient
+	network            networkconfig.NetworkConfig
+	validatorStore     validatorstore.ValidatorStore
+	slotTickerProvider slotticker.Provider
+	dutyExecutor       dutyexecutor.DutyExecutor
+	builderProposals   bool
 
 	handlers            []dutyHandler
 	blockPropagateDelay time.Duration
@@ -121,12 +113,13 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 	}
 
 	s := &Scheduler{
-		beaconNode:          opts.BeaconNode,
-		executionClient:     opts.ExecutionClient,
-		network:             opts.Network,
-		slotTickerProvider:  opts.SlotTickerProvider,
-		executeDuty:         opts.ExecuteDuty,
-		validatorController: opts.ValidatorController,
+		beaconNode:         opts.BeaconNode,
+		executionClient:    opts.ExecutionClient,
+		network:            opts.Network,
+		slotTickerProvider: opts.SlotTickerProvider,
+		dutyExecutor:       opts.DutyExecutor,
+		validatorStore:     opts.ValidatorStore,
+
 		builderProposals:    opts.BuilderProposals,
 		indicesChg:          opts.IndicesChg,
 		blockPropagateDelay: blockPropagationDelay,
@@ -184,7 +177,7 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 			s.beaconNode,
 			s.executionClient,
 			s.network,
-			s.validatorController,
+			s.validatorStore,
 			s.ExecuteDuties,
 			s.slotTickerProvider,
 			reorgCh,
@@ -372,7 +365,7 @@ func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []*spectypes.Duty) 
 			if duty.Type == spectypes.BNRoleAttester || duty.Type == spectypes.BNRoleSyncCommittee {
 				s.waitOneThirdOrValidBlock(duty.Slot)
 			}
-			s.executeDuty(logger, duty)
+			s.dutyExecutor.ExecuteDuty(duty)
 		}()
 	}
 }

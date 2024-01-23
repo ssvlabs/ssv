@@ -13,8 +13,7 @@ import (
 	client "github.com/attestantio/go-eth2-client"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
-	types "github.com/bloxapp/ssv/protocol/v2/types"
-	types0 "github.com/ethereum/go-ethereum/core/types"
+	types "github.com/ethereum/go-ethereum/core/types"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -203,10 +202,10 @@ func (m *MockExecutionClient) EXPECT() *MockExecutionClientMockRecorder {
 }
 
 // BlockByNumber mocks base method.
-func (m *MockExecutionClient) BlockByNumber(ctx context.Context, blockNumber *big.Int) (*types0.Block, error) {
+func (m *MockExecutionClient) BlockByNumber(ctx context.Context, blockNumber *big.Int) (*types.Block, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "BlockByNumber", ctx, blockNumber)
-	ret0, _ := ret[0].(*types0.Block)
+	ret0, _ := ret[0].(*types.Block)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -215,69 +214,4 @@ func (m *MockExecutionClient) BlockByNumber(ctx context.Context, blockNumber *bi
 func (mr *MockExecutionClientMockRecorder) BlockByNumber(ctx, blockNumber interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BlockByNumber", reflect.TypeOf((*MockExecutionClient)(nil).BlockByNumber), ctx, blockNumber)
-}
-
-// MockValidatorController is a mock of ValidatorController interface.
-type MockValidatorController struct {
-	ctrl     *gomock.Controller
-	recorder *MockValidatorControllerMockRecorder
-}
-
-// MockValidatorControllerMockRecorder is the mock recorder for MockValidatorController.
-type MockValidatorControllerMockRecorder struct {
-	mock *MockValidatorController
-}
-
-// NewMockValidatorController creates a new mock instance.
-func NewMockValidatorController(ctrl *gomock.Controller) *MockValidatorController {
-	mock := &MockValidatorController{ctrl: ctrl}
-	mock.recorder = &MockValidatorControllerMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockValidatorController) EXPECT() *MockValidatorControllerMockRecorder {
-	return m.recorder
-}
-
-// AllActiveIndices mocks base method.
-func (m *MockValidatorController) AllActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AllActiveIndices", epoch)
-	ret0, _ := ret[0].([]phase0.ValidatorIndex)
-	return ret0
-}
-
-// AllActiveIndices indicates an expected call of AllActiveIndices.
-func (mr *MockValidatorControllerMockRecorder) AllActiveIndices(epoch interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AllActiveIndices", reflect.TypeOf((*MockValidatorController)(nil).AllActiveIndices), epoch)
-}
-
-// CommitteeActiveIndices mocks base method.
-func (m *MockValidatorController) CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CommitteeActiveIndices", epoch)
-	ret0, _ := ret[0].([]phase0.ValidatorIndex)
-	return ret0
-}
-
-// CommitteeActiveIndices indicates an expected call of CommitteeActiveIndices.
-func (mr *MockValidatorControllerMockRecorder) CommitteeActiveIndices(epoch interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CommitteeActiveIndices", reflect.TypeOf((*MockValidatorController)(nil).CommitteeActiveIndices), epoch)
-}
-
-// GetOperatorShares mocks base method.
-func (m *MockValidatorController) GetOperatorShares() []*types.SSVShare {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetOperatorShares")
-	ret0, _ := ret[0].([]*types.SSVShare)
-	return ret0
-}
-
-// GetOperatorShares indicates an expected call of GetOperatorShares.
-func (mr *MockValidatorControllerMockRecorder) GetOperatorShares() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorShares", reflect.TypeOf((*MockValidatorController)(nil).GetOperatorShares))
 }

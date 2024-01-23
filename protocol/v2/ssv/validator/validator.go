@@ -13,7 +13,6 @@ import (
 
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/message/validation"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
@@ -40,8 +39,6 @@ type Validator struct {
 	dutyIDs *hashmap.Map[spectypes.BeaconRole, string]
 
 	state uint32
-
-	messageValidator validation.MessageValidator
 }
 
 // NewValidator creates a new instance of Validator.
@@ -53,18 +50,17 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 	}
 
 	v := &Validator{
-		mtx:              &sync.RWMutex{},
-		ctx:              pctx,
-		cancel:           cancel,
-		DutyRunners:      options.DutyRunners,
-		Network:          options.Network,
-		Storage:          options.Storage,
-		Share:            options.SSVShare,
-		Signer:           options.Signer,
-		Queues:           make(map[spectypes.BeaconRole]queueContainer),
-		state:            uint32(NotStarted),
-		dutyIDs:          hashmap.New[spectypes.BeaconRole, string](),
-		messageValidator: options.MessageValidator,
+		mtx:         &sync.RWMutex{},
+		ctx:         pctx,
+		cancel:      cancel,
+		DutyRunners: options.DutyRunners,
+		Network:     options.Network,
+		Storage:     options.Storage,
+		Share:       options.SSVShare,
+		Signer:      options.Signer,
+		Queues:      make(map[spectypes.BeaconRole]queueContainer),
+		state:       uint32(NotStarted),
+		dutyIDs:     hashmap.New[spectypes.BeaconRole, string](),
 	}
 
 	for _, dutyRunner := range options.DutyRunners {

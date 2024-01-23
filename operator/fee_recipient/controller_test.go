@@ -42,11 +42,11 @@ func TestSubmitProposal(t *testing.T) {
 	populateStorage(t, logger, shareStorage, operatorData)
 
 	frCtrl := NewController(&ControllerOptions{
-		Ctx:              context.TODO(),
-		Network:          network,
-		ShareStorage:     shareStorage,
-		RecipientStorage: recipientStorage,
-		OperatorData:     operatorData,
+		Ctx:               context.TODO(),
+		Network:           network,
+		ShareStorage:      shareStorage,
+		RecipientStorage:  recipientStorage,
+		OperatorDataStore: operatorData,
 	})
 
 	t.Run("submit first time or halfway through epoch", func(t *testing.T) {

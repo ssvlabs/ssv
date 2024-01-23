@@ -44,6 +44,7 @@ type Config struct {
 
 // Worker listen to queue and process the messages
 type Worker struct {
+	logger        *zap.Logger
 	ctx           context.Context
 	cancel        context.CancelFunc
 	workersCount  int
@@ -58,6 +59,7 @@ func NewWorker(logger *zap.Logger, cfg *Config) *Worker {
 	ctx, cancel := context.WithCancel(cfg.Ctx)
 
 	w := &Worker{
+		logger:        logger,
 		ctx:           ctx,
 		cancel:        cancel,
 		workersCount:  cfg.WorkersCount,
@@ -66,20 +68,17 @@ func NewWorker(logger *zap.Logger, cfg *Config) *Worker {
 		metricsPrefix: cfg.MetrixPrefix,
 	}
 
-	w.init(logger)
-
 	return w
 }
 
-// init the worker listening process
-func (w *Worker) init(logger *zap.Logger) {
+func (w *Worker) Start() {
 	for i := 1; i <= w.workersCount; i++ {
-		go w.startWorker(logger, w.queue)
+		go w.startWorker(w.queue)
 	}
 }
 
 // startWorker process functionality
-func (w *Worker) startWorker(logger *zap.Logger, ch <-chan *queue.DecodedSSVMessage) {
+func (w *Worker) startWorker(ch <-chan *queue.DecodedSSVMessage) {
 	ctx, cancel := context.WithCancel(w.ctx)
 	defer cancel()
 	for {
@@ -87,7 +86,7 @@ func (w *Worker) startWorker(logger *zap.Logger, ch <-chan *queue.DecodedSSVMess
 		case <-ctx.Done():
 			return
 		case msg := <-ch:
-			w.process(logger, msg)
+			w.process(msg)
 		}
 	}
 }
@@ -126,14 +125,14 @@ func (w *Worker) Size() int {
 }
 
 // process the msg's from queue
-func (w *Worker) process(logger *zap.Logger, msg *queue.DecodedSSVMessage) {
+func (w *Worker) process(msg *queue.DecodedSSVMessage) {
 	if w.handler == nil {
-		logger.Warn("❗ no handler for worker")
+		w.logger.Warn("❗ no handler for worker")
 		return
 	}
 	if err := w.handler(msg); err != nil {
 		if handlerErr := w.errHandler(msg, err); handlerErr != nil {
-			logger.Debug("❌ failed to handle message", zap.Error(handlerErr))
+			w.logger.Debug("❌ failed to handle message", zap.Error(handlerErr))
 			return
 		}
 	}

@@ -5,6 +5,9 @@ import (
 	"context"
 	"sync"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 )
 
@@ -68,37 +71,40 @@ func (vm *ValidatorsMap) GetAll() []*validator.Validator {
 	return validators
 }
 
-// GetValidator returns a validator
-// TODO: pass spectypes.ValidatorPK instead of string
-func (vm *ValidatorsMap) GetValidator(pubKey string) (*validator.Validator, bool) {
+// CommitteeActiveIndices fetches indices of in-committee validators who are either attesting or queued and
+// whose activation epoch is not greater than the passed epoch.
+func (vm *ValidatorsMap) CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
+	validators := vm.GetAll()
+	indices := make([]phase0.ValidatorIndex, 0, len(validators))
+	for _, v := range validators {
+		if v.Share.Active(epoch) {
+			indices = append(indices, v.Share.BeaconMetadata.Index)
+		}
+	}
+	return indices
+}
+
+func (vm *ValidatorsMap) GetValidator(pubKey spectypes.ValidatorPK) (*validator.Validator, bool) {
 	vm.lock.RLock()
 	defer vm.lock.RUnlock()
 
-	v, ok := vm.validatorsMap[pubKey]
+	v, ok := vm.validatorsMap[string(pubKey)]
 
 	return v, ok
 }
 
-// CreateValidator creates a new validator instance
-// TODO: pass spectypes.ValidatorPK instead of string
-func (vm *ValidatorsMap) CreateValidator(pubKey string, v *validator.Validator) {
+func (vm *ValidatorsMap) CreateValidator(pubKey spectypes.ValidatorPK, v *validator.Validator) {
 	vm.lock.Lock()
 	defer vm.lock.Unlock()
 
-	vm.validatorsMap[pubKey] = v
+	vm.validatorsMap[string(pubKey)] = v
 }
 
-// RemoveValidator removes a validator instance from the map
-// TODO: pass spectypes.ValidatorPK instead of string
-func (vm *ValidatorsMap) RemoveValidator(pubKey string) *validator.Validator {
-	if v, found := vm.GetValidator(pubKey); found {
-		vm.lock.Lock()
-		defer vm.lock.Unlock()
+func (vm *ValidatorsMap) RemoveValidator(pubKey spectypes.ValidatorPK) {
+	vm.lock.Lock()
+	defer vm.lock.Unlock()
 
-		delete(vm.validatorsMap, pubKey)
-		return v
-	}
-	return nil
+	delete(vm.validatorsMap, string(pubKey))
 }
 
 // Size returns the number of validators in the map

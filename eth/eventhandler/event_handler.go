@@ -22,10 +22,10 @@ import (
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/operator/operatordatastore"
 	nodestorage "github.com/bloxapp/ssv/operator/storage"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
@@ -58,17 +58,12 @@ type taskExecutor interface {
 
 type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
 
-type OperatorData interface {
-	GetOperatorData() *storage.OperatorData
-	SetOperatorData(*storage.OperatorData)
-}
-
 type EventHandler struct {
 	nodeStorage                nodestorage.Storage
 	taskExecutor               taskExecutor
 	eventParser                eventparser.Parser
 	networkConfig              networkconfig.NetworkConfig
-	operatorData               OperatorData
+	operatorData               operatordatastore.OperatorDataStore
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider
 	keyManager                 spectypes.KeyManager
 	beacon                     beaconprotocol.BeaconNode
@@ -84,7 +79,7 @@ func New(
 	eventParser eventparser.Parser,
 	taskExecutor taskExecutor,
 	networkConfig networkconfig.NetworkConfig,
-	operatorData OperatorData,
+	operatorDataStore operatordatastore.OperatorDataStore,
 	shareEncryptionKeyProvider ShareEncryptionKeyProvider,
 	keyManager spectypes.KeyManager,
 	beacon beaconprotocol.BeaconNode,
@@ -96,7 +91,7 @@ func New(
 		taskExecutor:               taskExecutor,
 		eventParser:                eventParser,
 		networkConfig:              networkConfig,
-		operatorData:               operatorData,
+		operatorData:               operatorDataStore,
 		shareEncryptionKeyProvider: shareEncryptionKeyProvider,
 		keyManager:                 keyManager,
 		beacon:                     beacon,

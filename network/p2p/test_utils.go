@@ -22,6 +22,7 @@ import (
 	"github.com/bloxapp/ssv/network/peers/connections/mock"
 	"github.com/bloxapp/ssv/network/testing"
 	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
@@ -144,8 +145,12 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 	cfg.MessageValidator = validation.NewMessageValidator(networkconfig.TestNetwork)
 	cfg.Network = networkconfig.TestNetwork
 	if options.TotalValidators > 0 {
-		cfg.GetValidatorStats = func() (uint64, uint64, uint64, error) {
-			return uint64(options.TotalValidators), uint64(options.ActiveValidators), uint64(options.MyValidators), nil
+		cfg.GetValidatorStats = func() storage.ValidatorStats {
+			return storage.ValidatorStats{
+				TotalShares:      uint64(options.TotalValidators),
+				ActiveValidators: uint64(options.ActiveValidators),
+				OperatorShares:   uint64(options.MyValidators),
+			}
 		}
 	}
 

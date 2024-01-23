@@ -32,7 +32,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 
 		case <-h.ticker.Next():
 			slot := h.ticker.Slot()
-			shares := h.validatorController.GetOperatorShares()
+			shares := h.validatorStore.GetOperatorShares()
 
 			validators := []phase0.ValidatorIndex{}
 			for _, share := range shares {

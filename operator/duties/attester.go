@@ -185,7 +185,7 @@ func (h *AttesterHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 
 func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch) error {
 	start := time.Now()
-	indices := h.validatorController.CommitteeActiveIndices(epoch)
+	indices := h.validatorStore.CommitteeActiveIndices(epoch)
 
 	if len(indices) == 0 {
 		return nil
