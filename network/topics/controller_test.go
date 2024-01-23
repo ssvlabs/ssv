@@ -2,18 +2,9 @@ package topics
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
-	"github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/utils/blskeygen"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
-	"github.com/bloxapp/ssv/utils/threshold"
-	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -29,7 +20,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zaptest"
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/message/validation"
@@ -37,10 +27,6 @@ import (
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"
 	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/pkg/errors"
 )
 
 func TestTopicManager(t *testing.T) {
@@ -61,32 +47,9 @@ func TestTopicManager(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		logger := zaptest.NewLogger(t)
-		db, err := kv.NewInMemory(logger, basedb.Options{})
-		require.NoError(t, err)
-		ns, err := storage.NewNodeStorage(logger, db)
-		require.NoError(t, err)
+		validator := validation.NewMessageValidator(networkconfig.TestNetwork)
 
-		//ops, err := createOperators(4, 0)
-		//require.NoError(t, err)
-
-		//validators := make([]*testValidatorData, 0)
-		//share
-		//
-		//for i := 0; i < 8; i++ {
-		//	validator, err := createNewValidator(ops)
-		//	require.NoError(t, err)
-		//	validators = append(validators, validator)
-		//
-		//	sharesData1, err := generateSharesData(validatorData1, ops, testAddr, 0)
-		//}
-
-		require.NoError(t, err)
-
-		msgValidator := validation.NewMessageValidator(networkconfig.TestNetwork, validation.WithNodeStorage(ns))
-
-		peers := newPeers(ctx, logger, t, nPeers, msgValidator, true, nil)
-
+		peers := newPeers(ctx, logger, t, nPeers, validator, true, nil)
 		baseTest(t, ctx, logger, peers, pks, 1, 2)
 	})
 
@@ -124,18 +87,8 @@ func TestTopicManager(t *testing.T) {
 	})
 }
 
-func baseTest(
-	t *testing.T,
-	ctx context.Context,
-	logger *zap.Logger,
-	peers []*P,
-	pks []string,
-	minMsgCount,
-	maxMsgCount int,
-) {
-	//netCfg := networkconfig.TestNetwork
-	//roleAttester := spectypes.BNRoleAttester
-	nValidators := 8
+func baseTest(t *testing.T, ctx context.Context, logger *zap.Logger, peers []*P, pks []string, minMsgCount, maxMsgCount int) {
+	nValidators := len(pks)
 	// nPeers := len(peers)
 
 	t.Log("subscribing to topics")
@@ -162,52 +115,17 @@ func baseTest(
 	var wg sync.WaitGroup
 	// publish some messages
 	for i := 0; i < nValidators; i++ {
-		for pid, peer := range peers {
+		for j, p := range peers {
 			wg.Add(1)
-			go func(p *P, pk string, valId int, pi int) {
+			go func(p *P, pk string, pi int) {
 				defer wg.Done()
-
-				//slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-				//height := specqbft.Height(slot)
-				//
-				//ks := spectestingutils.Testing4SharesSet()
-				//share := &ssvtypes.SSVShare{
-				//	Share: *spectestingutils.TestingShare(ks),
-				//	Metadata: ssvtypes.Metadata{
-				//		BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-				//			Status: eth2apiv1.ValidatorStateActiveOngoing,
-				//			Index:  phase0.ValidatorIndex(valId),
-				//		},
-				//		Liquidated: false,
-				//	},
-				////}
-				////
-				////validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[spectypes.OperatorID(pi+1)], 1, height)
-				////encodedValidSignedMessage, err := validSignedMessage.Encode()
-				////require.NoError(t, err)
-				////
-				////ssvMessage := &spectypes.SSVMessage{
-				////	MsgType: spectypes.SSVConsensusMsgType,
-				////	MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-				////	Data:    encodedValidSignedMessage,
-				////}
-
-				//encodedMsg, err := commons.EncodeNetworkMsg(ssvMessage)
-				//require.NoError(t, err)
-				//
-				//hash := sha256.Sum256(encodedMsg)
-				//signature, err := rsa.SignPKCS1v15(nil, operatorPrivateKey, crypto.SHA256, hash[:])
-				//if err != nil {
-				//	return nil, err
-				//}
-				//
-				//packedPubSubMsgPayload := commons.EncodeSignedSSVMessage(encodedMsg, operatorID, signature)
-				//
-				//require.NoError(t, err)
-
-				//require.NoError(t, p.tm.Broadcast(validatorTopic(pk), packedPubSubMsgPayload, time.Second*10))
-				<-time.After(time.Second * 2)
-			}(peer, pks[i], i, pid)
+				msg, err := dummyMsg(pk, pi%4, false)
+				require.NoError(t, err)
+				raw, err := msg.Encode()
+				require.NoError(t, err)
+				require.NoError(t, p.tm.Broadcast(validatorTopic(pk), raw, time.Second*10))
+				<-time.After(time.Second * 5)
+			}(p, pks[i], j)
 		}
 	}
 	wg.Wait()
@@ -226,10 +144,9 @@ func baseTest(
 				for _, p := range peers {
 					// wait for messages
 					for ctxReadMessages.Err() == nil && p.getCount(commons.GetTopicFullName(validatorTopic(pk))) < minMsgCount {
-						//t.Log(p.getCount(commons.GetTopicFullName(validatorTopic(pk))))
 						time.Sleep(time.Millisecond * 100)
 					}
-					require.NoError(t, ctxReadMessages.Err(), "no messages have been received in given time period")
+					require.NoError(t, ctxReadMessages.Err())
 					c := p.getCount(commons.GetTopicFullName(validatorTopic(pk)))
 					require.GreaterOrEqual(t, c, minMsgCount)
 					// require.LessOrEqual(t, c, maxMsgCount)
@@ -246,16 +163,16 @@ func baseTest(
 			wg.Add(1)
 			go func(p *P, pk string) {
 				defer wg.Done()
-				require.NoError(t, p.tm.Unsubscribe(logger, commons.GetTopicFullName(validatorTopic(pk)), false))
+				require.NoError(t, p.tm.Unsubscribe(logger, validatorTopic(pk), false))
 				go func(p *P) {
 					<-time.After(time.Millisecond)
-					require.NoError(t, p.tm.Unsubscribe(logger, commons.GetTopicFullName(validatorTopic(pk)), false))
+					require.NoError(t, p.tm.Unsubscribe(logger, validatorTopic(pk), false))
 				}(p)
 				wg.Add(1)
 				go func(p *P) {
 					defer wg.Done()
 					<-time.After(time.Millisecond * 50)
-					require.NoError(t, p.tm.Unsubscribe(logger, commons.GetTopicFullName(validatorTopic(pk)), false))
+					require.NoError(t, p.tm.Unsubscribe(logger, validatorTopic(pk), false))
 				}(p)
 			}(p, pks[i])
 		}
@@ -535,121 +452,16 @@ func dummyMsg(pkHex string, height int, malformed bool) (*spectypes.SSVMessage, 
 	return ssvMsg, nil
 }
 
-type testValidatorData struct {
-	masterKey        *bls.SecretKey
-	masterPubKey     *bls.PublicKey
-	masterPublicKeys bls.PublicKeys
-	operatorsShares  []*testShare
-}
-
-type testOperator struct {
-	id      uint64
-	rsaPub  []byte
-	rsaPriv []byte
-}
-
-type testShare struct {
-	opId uint64
-	sec  *bls.SecretKey
-	pub  *bls.PublicKey
-}
-
-func createNewValidator(ops []*testOperator) (*testValidatorData, error) {
-	validatorData := &testValidatorData{}
-	sharesCount := uint64(len(ops))
-	threshold.Init()
-
-	msk, mpk := blskeygen.GenBLSKeyPair()
-	secVec := msk.GetMasterSecretKey(int(sharesCount))
-	pubKeys := bls.GetMasterPublicKey(secVec)
-	splitKeys, err := threshold.Create(msk.Serialize(), sharesCount-1, sharesCount)
-	if err != nil {
-		return nil, err
-	}
-
-	validatorData.operatorsShares = make([]*testShare, sharesCount)
-
-	// derive a `sharesCount` number of shares
-	for i := uint64(1); i <= sharesCount; i++ {
-		validatorData.operatorsShares[i-1] = &testShare{
-			opId: i,
-			sec:  splitKeys[i],
-			pub:  splitKeys[i].GetPublicKey(),
-		}
-	}
-
-	validatorData.masterKey = msk
-	validatorData.masterPubKey = mpk
-	validatorData.masterPublicKeys = pubKeys
-
-	return validatorData, nil
-}
-
-func createOperators(num uint64, idOffset uint64) ([]*testOperator, error) {
-	testOps := make([]*testOperator, num)
-
-	for i := uint64(1); i <= num; i++ {
-		pb, sk, err := rsaencryption.GenerateKeys()
-		if err != nil {
-			return nil, err
-		}
-		testOps[i-1] = &testOperator{
-			id:      idOffset + i,
-			rsaPub:  pb,
-			rsaPriv: sk,
-		}
-	}
-
-	return testOps, nil
-}
-
-func generateSharesData(validatorData *testValidatorData, operators []*testOperator, owner ethcommon.Address, nonce int) ([]byte, error) {
-	var pubKeys []byte
-	var encryptedShares []byte
-
-	for i, op := range operators {
-		rsaKey, err := rsaencryption.ConvertPemToPublicKey(op.rsaPub)
-		if err != nil {
-			return nil, fmt.Errorf("can't convert public key: %w", err)
-		}
-
-		rawShare := validatorData.operatorsShares[i].sec.SerializeToHexStr()
-		cipherText, err := rsa.EncryptPKCS1v15(rand.Reader, rsaKey, []byte(rawShare))
-		if err != nil {
-			return nil, fmt.Errorf("can't encrypt share: %w", err)
-		}
-
-		rsaPriv, err := rsaencryption.ConvertPemToPrivateKey(string(op.rsaPriv))
-		if err != nil {
-			return nil, fmt.Errorf("can't convert secret key to a private key share: %w", err)
-		}
-
-		// check that we encrypt right
-		shareSecret := &bls.SecretKey{}
-		decryptedSharePrivateKey, err := rsaencryption.DecodeKey(rsaPriv, cipherText)
-		if err != nil {
-			return nil, err
-		}
-		if err = shareSecret.SetHexString(string(decryptedSharePrivateKey)); err != nil {
-			return nil, err
-		}
-
-		pubKeys = append(pubKeys, validatorData.operatorsShares[i].pub.Serialize()...)
-		encryptedShares = append(encryptedShares, cipherText...)
-
-	}
-
-	toSign := fmt.Sprintf("%s:%d", owner.String(), nonce)
-	msgHash := crypto.Keccak256([]byte(toSign))
-	signed := validatorData.masterKey.Sign(string(msgHash))
-	sig := signed.Serialize()
-
-	if !signed.VerifyByte(validatorData.masterPubKey, msgHash) {
-		return nil, errors.New("can't sign correctly")
-	}
-
-	sharesData := append(pubKeys, encryptedShares...)
-	sharesDataSigned := append(sig, sharesData...)
-
-	return sharesDataSigned, nil
-}
+//
+// func createShares(n int) []*bls.SecretKey {
+//	threshold.Init()
+//
+//	var res []*bls.SecretKey
+//	for i := 0; i < n; i++ {
+//		sk := bls.SecretKey{}
+//		sk.SetByCSPRNG()
+//		res = append(res, &sk)
+//		fmt.Printf("\"%s\",", sk.GetPublicKey().SerializeToHexStr())
+//	}
+//	return res
+//}
