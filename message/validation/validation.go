@@ -302,25 +302,29 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 
 	defer mv.metrics.ActiveMsgValidationDone(topic)
 
-	messageData := pMsg.GetData()
+	encMessageData := pMsg.GetData()
 
 	var signatureVerifier func() error
 
-	decMessageData, operatorID, signature, err := commons.DecodeSignedSSVMessage(messageData)
-	messageData = decMessageData
+	if len(encMessageData) == 0 {
+		return nil, Descriptor{}, ErrPubSubMessageHasNoData
+	}
+
+	messageData, operatorID, signature, err := commons.DecodeSignedSSVMessage(encMessageData)
+
 	if err != nil {
 		e := ErrMalformedSignedMessage
 		e.innerErr = err
 		return nil, Descriptor{}, e
 	}
 
+	if len(messageData) == 0 {
+		return nil, Descriptor{}, ErrDecodedPubSubMessageHasEmptyData
+	}
+
 	signatureVerifier = func() error {
 		mv.metrics.MessageValidationRSAVerifications()
 		return mv.verifyRSASignature(messageData, operatorID, signature)
-	}
-
-	if len(messageData) == 0 {
-		return nil, Descriptor{}, ErrPubSubMessageHasNoData
 	}
 
 	mv.metrics.MessageSize(len(messageData))
@@ -342,7 +346,7 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 	}
 
 	if msg == nil {
-		return nil, Descriptor{}, ErrEmptyPubSubMessage
+		return nil, Descriptor{}, ErrEmptySSVMessage
 	}
 
 	// Check if the message was sent on the right topic.

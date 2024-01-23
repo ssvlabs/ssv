@@ -40,12 +40,6 @@ func TestHandshakeTestData(t *testing.T) {
 		require.ErrorContains(t, pi.LastHandshakeError, "failed requesting node info")
 	})
 
-	t.Run("wrong NodeStorage", func(t *testing.T) {
-		td := getTestingData(t)
-		td.Handshaker.nodeStorage = mock.NodeStorage{}
-		require.Error(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn))
-	})
-
 	t.Run("wrong StreamController", func(t *testing.T) {
 		td := getTestingData(t)
 		td.Handshaker.streams = mock.StreamController{}

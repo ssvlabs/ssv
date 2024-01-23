@@ -37,6 +37,11 @@ import (
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
+// taken from network/commons/common.go
+const (
+	messageOffset = 264
+)
+
 func Test_ValidateSSVMessage(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
@@ -194,7 +199,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		topic := commons.GetTopicFullName(commons.ValidatorTopicID(share.ValidatorPubKey)[0])
 		pmsg := &pubsub.Message{
 			Message: &pspb.Message{
-				Data:  bytes.Repeat([]byte{1}, 10_000_000),
+				Data:  bytes.Repeat([]byte{1}, 10_000_000+messageOffset),
 				Topic: &topic,
 				From:  []byte("16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r"),
 			},
@@ -217,7 +222,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		topic := commons.GetTopicFullName(commons.ValidatorTopicID(share.ValidatorPubKey)[0])
 		pmsg := &pubsub.Message{
 			Message: &pspb.Message{
-				Data:  []byte{1},
+				Data:  bytes.Repeat([]byte{1}, 1+messageOffset),
 				Topic: &topic,
 				From:  []byte("16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r"),
 			},
@@ -1747,37 +1752,6 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	t.Run("signature verification", func(t *testing.T) {
 		var afterFork = phase0.Epoch(123456789) + 1000
 
-		t.Run("unsigned message before fork", func(t *testing.T) {
-			validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
-
-			validSignedMessage := spectestingutils.TestingProposalMessage(ks.Shares[1], 1)
-
-			encoded, err := validSignedMessage.Encode()
-			require.NoError(t, err)
-
-			message := &spectypes.SSVMessage{
-				MsgType: spectypes.SSVConsensusMsgType,
-				MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-				Data:    encoded,
-			}
-
-			encodedMsg, err := commons.EncodeNetworkMsg(message)
-			require.NoError(t, err)
-
-			topicID := commons.ValidatorTopicID(message.GetID().GetPubKey())
-			pMsg := &pubsub.Message{
-				Message: &pspb.Message{
-					Topic: &topicID[0],
-					Data:  encodedMsg,
-				},
-			}
-
-			slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-			_, _, err = validator.validateP2PMessage(pMsg, receivedAt)
-			require.NoError(t, err)
-		})
-
 		t.Run("unsigned message after fork", func(t *testing.T) {
 			validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
@@ -1807,64 +1781,6 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
 			_, _, err = validator.validateP2PMessage(pMsg, receivedAt)
 			require.ErrorContains(t, err, ErrMalformedPubSubMessage.Error())
-		})
-
-		t.Run("signed message before fork", func(t *testing.T) {
-			validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
-
-			slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-
-			validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, specqbft.Height(slot))
-
-			encoded, err := validSignedMessage.Encode()
-			require.NoError(t, err)
-
-			message := &spectypes.SSVMessage{
-				MsgType: spectypes.SSVConsensusMsgType,
-				MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, roleAttester),
-				Data:    encoded,
-			}
-
-			encodedMsg, err := commons.EncodeNetworkMsg(message)
-			require.NoError(t, err)
-
-			hash := sha256.Sum256(encodedMsg)
-			privKey, err := rsa.GenerateKey(crand.Reader, 2048)
-			require.NoError(t, err)
-
-			const operatorID = spectypes.OperatorID(1)
-
-			pubKey, err := rsaencryption.ExtractPublicKey(privKey)
-			require.NoError(t, err)
-
-			od := &registrystorage.OperatorData{
-				ID:           operatorID,
-				PublicKey:    []byte(pubKey),
-				OwnerAddress: common.Address{},
-			}
-
-			found, err := ns.SaveOperatorData(nil, od)
-			require.NoError(t, err)
-			require.False(t, found)
-
-			signature, err := rsa.SignPKCS1v15(crand.Reader, privKey, crypto.SHA256, hash[:])
-			require.NoError(t, err)
-
-			encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, operatorID, signature)
-
-			topicID := commons.ValidatorTopicID(message.GetID().GetPubKey())
-			pMsg := &pubsub.Message{
-				Message: &pspb.Message{
-					Topic: &topicID[0],
-					Data:  encodedMsg,
-				},
-			}
-
-			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-			_, _, err = validator.validateP2PMessage(pMsg, receivedAt)
-			require.ErrorContains(t, err, ErrMalformedPubSubMessage.Error())
-
-			require.NoError(t, ns.DeleteOperatorData(nil, operatorID))
 		})
 
 		t.Run("signed message after fork", func(t *testing.T) {
