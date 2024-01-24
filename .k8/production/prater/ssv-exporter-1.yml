@@ -19,7 +19,7 @@ spec:
 apiVersion: networking.istio.io/v1alpha3
 kind: Gateway
 metadata:
-  name: full-node-prater-1-api
+  name: ssv-full-node-prater-1-api
   namespace: REPLACE_NAMESPACE
 spec:
   selector:
