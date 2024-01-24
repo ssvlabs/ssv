@@ -2,6 +2,39 @@
 apiVersion: networking.istio.io/v1alpha3
 kind: VirtualService
 metadata:
+  name: ssv-full-node-mainnet-1-api
+  namespace: REPLACE_NAMESPACE
+spec:
+  hosts:
+  - "ssv-full-node-mainnet-1.REPLACE_DOMAIN_SUFFIX"
+  gateways:
+  - ssv-full-node-mainnet-1-api
+  http:
+  - route:
+    - destination:
+        host: ssv-full-node-mainnet-1
+        port:
+          number: 16015
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: full-node-mainnet-1-api
+  namespace: REPLACE_NAMESPACE
+spec:
+  selector:
+    istio: ingressgateway-int
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "ssv-full-node-mainnet-1.REPLACE_DOMAIN_SUFFIX"
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
   name: ssv-full-node-mainnet-1
   namespace: REPLACE_NAMESPACE
 spec:
