@@ -24,7 +24,7 @@ save_logs() {
   docker compose logs ssv-node-2 > "$LOG_DIR/ssv-node-2.txt"
   docker compose logs ssv-node-3 > "$LOG_DIR/ssv-node-3.txt"
   docker compose logs ssv-node-4 > "$LOG_DIR/ssv-node-4.txt"
-  docker compose logs ssv-node-4 > "$LOG_DIR/beacon_proxy.txt"
+  docker compose logs beacon_proxy > "$LOG_DIR/beacon_proxy.txt"
 }
 
 export BEACON_NODE_URL=http://bn-h-2.stage.bloxinfra.com:3502/
