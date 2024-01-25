@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"time"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -173,6 +174,11 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 
 	mr := metricsreporter.New()
 	p := New(logger, cfg, mr)
+
+	p.(*p2pNetwork).operatorID = func() spectypes.OperatorID {
+		return spectypes.OperatorID(nodeIndex)
+	}
+
 	err = p.Setup(logger)
 	if err != nil {
 		return nil, err
