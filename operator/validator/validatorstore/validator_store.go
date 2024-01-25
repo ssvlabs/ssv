@@ -9,6 +9,8 @@ import (
 	"github.com/bloxapp/ssv/registry/storage"
 )
 
+//go:generate mockgen -package=validatorstore -destination=./mock.go -source=./validator_store.go
+
 type ValidatorStore interface {
 	CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
 	AllActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex

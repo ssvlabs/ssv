@@ -127,7 +127,7 @@ var StartNodeCmd = &cobra.Command{
 
 		nodeStorage, operatorData := setupOperatorStorage(logger, db)
 
-		operatorDataStore := operatordatastore.NewOperatorDataStore(operatorData)
+		operatorDataStore := operatordatastore.New(operatorData)
 
 		usingLocalEvents := len(cfg.LocalEventsPath) != 0
 

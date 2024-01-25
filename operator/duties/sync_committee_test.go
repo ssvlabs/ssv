@@ -72,8 +72,8 @@ func setupSyncCommitteeDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[uint64, [
 
 		return indices
 	}
-	s.validatorController.(*mocks.MockValidatorController).EXPECT().CommitteeActiveIndices(gomock.Any()).DoAndReturn(getDuties).AnyTimes()
-	s.validatorController.(*mocks.MockValidatorController).EXPECT().AllActiveIndices(gomock.Any()).DoAndReturn(getDuties).AnyTimes()
+	s.validatorStore.(*mocks.MockValidatorStore).EXPECT().CommitteeActiveIndices(gomock.Any()).DoAndReturn(getDuties).AnyTimes()
+	s.validatorStore.(*mocks.MockValidatorStore).EXPECT().AllActiveIndices(gomock.Any()).DoAndReturn(getDuties).AnyTimes()
 
 	s.beaconNode.(*mocks.MockBeaconNode).EXPECT().SubmitSyncCommitteeSubscriptions(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
@@ -110,7 +110,7 @@ func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 	// STEP 1: wait for sync committee duties to be fetched and executed at the same slot
 	duties, _ := dutiesMap.Get(0)
 	expected := expectedExecutedSyncCommitteeDuties(handler, duties, currentSlot.GetSlot())
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+	setExecuteDutyFunc(t, scheduler, executeDutiesCall, len(expected))
 
 	startTime := time.Now()
 	ticker.Send(currentSlot.GetSlot())
@@ -124,7 +124,7 @@ func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 	currentSlot.SetSlot(phase0.Slot(2))
 	duties, _ = dutiesMap.Get(0)
 	expected = expectedExecutedSyncCommitteeDuties(handler, duties, currentSlot.GetSlot())
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+	setExecuteDutyFunc(t, scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.GetSlot())
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
@@ -133,7 +133,7 @@ func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 	currentSlot.SetSlot(scheduler.network.Beacon.LastSlotOfSyncPeriod(0))
 	duties, _ = dutiesMap.Get(0)
 	expected = expectedExecutedSyncCommitteeDuties(handler, duties, currentSlot.GetSlot())
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+	setExecuteDutyFunc(t, scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.GetSlot())
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
@@ -176,7 +176,7 @@ func TestScheduler_SyncCommittee_Current_Next_Periods(t *testing.T) {
 	// STEP 1: wait for sync committee duties to be fetched and executed at the same slot
 	duties, _ := dutiesMap.Get(0)
 	expected := expectedExecutedSyncCommitteeDuties(handler, duties, currentSlot.GetSlot())
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+	setExecuteDutyFunc(t, scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.GetSlot())
 	waitForDutiesFetch(t, logger, fetchDutiesCall, executeDutiesCall, timeout)
@@ -187,7 +187,7 @@ func TestScheduler_SyncCommittee_Current_Next_Periods(t *testing.T) {
 	currentSlot.SetSlot(phase0.Slot(256*32 - 48))
 	duties, _ = dutiesMap.Get(0)
 	expected = expectedExecutedSyncCommitteeDuties(handler, duties, currentSlot.GetSlot())
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+	setExecuteDutyFunc(t, scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.GetSlot())
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
@@ -196,7 +196,7 @@ func TestScheduler_SyncCommittee_Current_Next_Periods(t *testing.T) {
 	currentSlot.SetSlot(phase0.Slot(256*32 - 47))
 	duties, _ = dutiesMap.Get(0)
 	expected = expectedExecutedSyncCommitteeDuties(handler, duties, currentSlot.GetSlot())
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+	setExecuteDutyFunc(t, scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.GetSlot())
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
@@ -207,7 +207,7 @@ func TestScheduler_SyncCommittee_Current_Next_Periods(t *testing.T) {
 	currentSlot.SetSlot(phase0.Slot(256 * 32))
 	duties, _ = dutiesMap.Get(1)
 	expected = expectedExecutedSyncCommitteeDuties(handler, duties, currentSlot.GetSlot())
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+	setExecuteDutyFunc(t, scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.GetSlot())
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
@@ -262,7 +262,7 @@ func TestScheduler_SyncCommittee_Indices_Changed(t *testing.T) {
 	currentSlot.SetSlot(phase0.Slot(256 * 32))
 	duties, _ = dutiesMap.Get(1)
 	expected := expectedExecutedSyncCommitteeDuties(handler, duties, currentSlot.GetSlot())
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+	setExecuteDutyFunc(t, scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.GetSlot())
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
@@ -320,7 +320,7 @@ func TestScheduler_SyncCommittee_Multiple_Indices_Changed_Same_Slot(t *testing.T
 	currentSlot.SetSlot(phase0.Slot(256 * 32))
 	duties, _ = dutiesMap.Get(1)
 	expected := expectedExecutedSyncCommitteeDuties(handler, duties, currentSlot.GetSlot())
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+	setExecuteDutyFunc(t, scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.GetSlot())
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
@@ -393,7 +393,7 @@ func TestScheduler_SyncCommittee_Reorg_Current(t *testing.T) {
 	currentSlot.SetSlot(phase0.Slot(256 * 32))
 	duties, _ := dutiesMap.Get(1)
 	expected := expectedExecutedSyncCommitteeDuties(handler, duties, currentSlot.GetSlot())
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+	setExecuteDutyFunc(t, scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.GetSlot())
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
@@ -475,7 +475,7 @@ func TestScheduler_SyncCommittee_Reorg_Current_Indices_Changed(t *testing.T) {
 	currentSlot.SetSlot(phase0.Slot(256 * 32))
 	duties, _ = dutiesMap.Get(1)
 	expected := expectedExecutedSyncCommitteeDuties(handler, duties, currentSlot.GetSlot())
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+	setExecuteDutyFunc(t, scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.GetSlot())
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
@@ -505,7 +505,7 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 
 	duties, _ := dutiesMap.Get(0)
 	expected := expectedExecutedSyncCommitteeDuties(handler, duties, currentSlot.GetSlot())
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+	setExecuteDutyFunc(t, scheduler, executeDutiesCall, len(expected))
 
 	// STEP 1: wait for sync committee duties to be fetched and executed at the same slot
 	ticker.Send(currentSlot.GetSlot())
@@ -516,7 +516,7 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 	currentSlot.SetSlot(phase0.Slot(1))
 	duties, _ = dutiesMap.Get(0)
 	expected = expectedExecutedSyncCommitteeDuties(handler, duties, currentSlot.GetSlot())
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+	setExecuteDutyFunc(t, scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.GetSlot())
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
@@ -526,7 +526,7 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 	currentSlot.SetSlot(phase0.Slot(2))
 	duties, _ = dutiesMap.Get(0)
 	expected = expectedExecutedSyncCommitteeDuties(handler, duties, currentSlot.GetSlot())
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+	setExecuteDutyFunc(t, scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.GetSlot())
 

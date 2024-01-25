@@ -19,6 +19,8 @@ import (
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
+//go:generate mockgen -package=taskexecutor -destination=./mock.go -source=./task_executor.go
+
 type Executor interface {
 	StartValidator(share *ssvtypes.SSVShare) error
 	StopValidator(pubKey spectypes.ValidatorPK) error

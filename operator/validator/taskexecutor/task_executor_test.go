@@ -1,4 +1,4 @@
-package validator
+package taskexecutor
 
 import (
 	"context"
@@ -8,6 +8,11 @@ import (
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/golang/mock/gomock"
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/stretchr/testify/require"
+
 	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/validatorsmap"
@@ -15,10 +20,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/golang/mock/gomock"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/stretchr/testify/require"
 )
 
 func TestController_LiquidateCluster(t *testing.T) {

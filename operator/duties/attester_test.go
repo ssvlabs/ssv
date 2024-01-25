@@ -42,8 +42,8 @@ func setupAttesterDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[phase0.Epoch, 
 
 		return indices
 	}
-	s.validatorController.(*mocks.MockValidatorController).EXPECT().CommitteeActiveIndices(gomock.Any()).DoAndReturn(getIndices).AnyTimes()
-	s.validatorController.(*mocks.MockValidatorController).EXPECT().AllActiveIndices(gomock.Any()).DoAndReturn(getIndices).AnyTimes()
+	s.validatorStore.(*mocks.MockValidatorStore).EXPECT().CommitteeActiveIndices(gomock.Any()).DoAndReturn(getIndices).AnyTimes()
+	s.validatorStore.(*mocks.MockValidatorStore).EXPECT().AllActiveIndices(gomock.Any()).DoAndReturn(getIndices).AnyTimes()
 
 	s.beaconNode.(*mocks.MockBeaconNode).EXPECT().SubmitBeaconCommitteeSubscriptions(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
@@ -81,7 +81,7 @@ func TestScheduler_Attester_Same_Slot(t *testing.T) {
 	// STEP 1: wait for attester duties to be fetched and executed at the same slot
 	duties, _ := dutiesMap.Get(phase0.Epoch(0))
 	expected := expectedExecutedAttesterDuties(handler, duties)
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+	setExecuteDutyFunc(t, scheduler, executeDutiesCall, len(expected))
 
 	startTime := time.Now()
 	ticker.Send(currentSlot.GetSlot())
@@ -128,7 +128,7 @@ func TestScheduler_Attester_Diff_Slots(t *testing.T) {
 	currentSlot.SetSlot(phase0.Slot(2))
 	duties, _ := dutiesMap.Get(phase0.Epoch(0))
 	expected := expectedExecutedAttesterDuties(handler, duties)
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+	setExecuteDutyFunc(t, scheduler, executeDutiesCall, len(expected))
 
 	ticker.Send(currentSlot.GetSlot())
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
@@ -186,7 +186,7 @@ func TestScheduler_Attester_Indices_Changed(t *testing.T) {
 	currentSlot.SetSlot(phase0.Slot(2))
 	duties, _ := dutiesMap.Get(phase0.Epoch(0))
 	expected := expectedExecutedAttesterDuties(handler, []*eth2apiv1.AttesterDuty{duties[2]})
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+	setExecuteDutyFunc(t, scheduler, executeDutiesCall, len(expected))
 
 	mockTicker.Send(currentSlot.GetSlot())
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
@@ -245,7 +245,7 @@ func TestScheduler_Attester_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 	currentSlot.SetSlot(phase0.Slot(3))
 	duties, _ = dutiesMap.Get(phase0.Epoch(0))
 	expected := expectedExecutedAttesterDuties(handler, []*eth2apiv1.AttesterDuty{duties[0]})
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+	setExecuteDutyFunc(t, scheduler, executeDutiesCall, len(expected))
 
 	mockTicker.Send(currentSlot.GetSlot())
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
@@ -254,7 +254,7 @@ func TestScheduler_Attester_Multiple_Indices_Changed_Same_Slot(t *testing.T) {
 	currentSlot.SetSlot(phase0.Slot(4))
 	duties, _ = dutiesMap.Get(phase0.Epoch(0))
 	expected = expectedExecutedAttesterDuties(handler, []*eth2apiv1.AttesterDuty{duties[1]})
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+	setExecuteDutyFunc(t, scheduler, executeDutiesCall, len(expected))
 
 	mockTicker.Send(currentSlot.GetSlot())
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
@@ -335,7 +335,7 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition(t *testing.T) {
 	currentSlot.SetSlot(phase0.Slot(67))
 	duties, _ := dutiesMap.Get(phase0.Epoch(2))
 	expected := expectedExecutedAttesterDuties(handler, duties)
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+	setExecuteDutyFunc(t, scheduler, executeDutiesCall, len(expected))
 
 	mockTicker.Send(currentSlot.GetSlot())
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
@@ -427,7 +427,7 @@ func TestScheduler_Attester_Reorg_Previous_Epoch_Transition_Indices_Changed(t *t
 	currentSlot.SetSlot(phase0.Slot(67))
 	duties, _ = dutiesMap.Get(phase0.Epoch(2))
 	expected := expectedExecutedAttesterDuties(handler, duties)
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+	setExecuteDutyFunc(t, scheduler, executeDutiesCall, len(expected))
 
 	mockTicker.Send(currentSlot.GetSlot())
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
@@ -507,7 +507,7 @@ func TestScheduler_Attester_Reorg_Previous(t *testing.T) {
 	currentSlot.SetSlot(phase0.Slot(36))
 	duties, _ := dutiesMap.Get(phase0.Epoch(1))
 	expected := expectedExecutedAttesterDuties(handler, duties)
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+	setExecuteDutyFunc(t, scheduler, executeDutiesCall, len(expected))
 
 	mockTicker.Send(currentSlot.GetSlot())
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
@@ -597,7 +597,7 @@ func TestScheduler_Attester_Reorg_Previous_Indices_Change_Same_Slot(t *testing.T
 	currentSlot.SetSlot(phase0.Slot(36))
 	duties, _ = dutiesMap.Get(phase0.Epoch(1))
 	expected := expectedExecutedAttesterDuties(handler, duties)
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+	setExecuteDutyFunc(t, scheduler, executeDutiesCall, len(expected))
 
 	mockTicker.Send(currentSlot.GetSlot())
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
@@ -685,7 +685,7 @@ func TestScheduler_Attester_Reorg_Current(t *testing.T) {
 	currentSlot.SetSlot(phase0.Slot(65))
 	duties, _ := dutiesMap.Get(phase0.Epoch(2))
 	expected := expectedExecutedAttesterDuties(handler, duties)
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+	setExecuteDutyFunc(t, scheduler, executeDutiesCall, len(expected))
 
 	mockTicker.Send(currentSlot.GetSlot())
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
@@ -783,7 +783,7 @@ func TestScheduler_Attester_Reorg_Current_Indices_Changed(t *testing.T) {
 	currentSlot.SetSlot(phase0.Slot(65))
 	duties, _ = dutiesMap.Get(phase0.Epoch(2))
 	expected := expectedExecutedAttesterDuties(handler, duties)
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+	setExecuteDutyFunc(t, scheduler, executeDutiesCall, len(expected))
 
 	mockTicker.Send(currentSlot.GetSlot())
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
@@ -827,7 +827,7 @@ func TestScheduler_Attester_Early_Block(t *testing.T) {
 	mockTicker.Send(currentSlot.GetSlot())
 	duties, _ := dutiesMap.Get(phase0.Epoch(0))
 	expected := expectedExecutedAttesterDuties(handler, duties)
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+	setExecuteDutyFunc(t, scheduler, executeDutiesCall, len(expected))
 
 	// STEP 4: trigger head event (block arrival)
 	e := &eth2apiv1.Event{
@@ -871,7 +871,7 @@ func TestScheduler_Attester_Start_In_The_End_Of_The_Epoch(t *testing.T) {
 	currentSlot.SetSlot(phase0.Slot(32))
 	duties, _ := dutiesMap.Get(phase0.Epoch(1))
 	expected := expectedExecutedAttesterDuties(handler, duties)
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+	setExecuteDutyFunc(t, scheduler, executeDutiesCall, len(expected))
 
 	mockTicker.Send(currentSlot.GetSlot())
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
@@ -918,7 +918,7 @@ func TestScheduler_Attester_Fetch_Execute_Next_Epoch_Duty(t *testing.T) {
 	currentSlot.SetSlot(phase0.Slot(32))
 	duties, _ := dutiesMap.Get(phase0.Epoch(1))
 	expected := expectedExecutedAttesterDuties(handler, duties)
-	setExecuteDutyFunc(scheduler, executeDutiesCall, len(expected))
+	setExecuteDutyFunc(t, scheduler, executeDutiesCall, len(expected))
 
 	mockTicker.Send(currentSlot.GetSlot())
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)

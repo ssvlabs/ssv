@@ -32,7 +32,7 @@ func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {
 	require.EqualValues(t, 1, blockByNumberCalls.Load())
 
 	executeDutiesCall := make(chan []*spectypes.Duty)
-	setExecuteDutyFunc(scheduler, executeDutiesCall, 1)
+	setExecuteDutyFunc(t, scheduler, executeDutiesCall, 1)
 
 	const blockNumber = uint64(1)
 

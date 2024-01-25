@@ -26,7 +26,7 @@ import (
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
 	"github.com/bloxapp/ssv/operator/slotticker"
 	"github.com/bloxapp/ssv/operator/validator/dutyexecutor"
-	"github.com/bloxapp/ssv/operator/validator/validatorstore"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/scheduler.go -source=./scheduler.go
@@ -68,12 +68,22 @@ type ExecutionClient interface {
 	BlockByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Block, error)
 }
 
+type ValidatorStore interface {
+	CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
+	AllActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
+	GetOperatorShares() []*types.SSVShare
+}
+
+type DutyExecutor interface {
+	ExecuteDuty(duty *spectypes.Duty)
+}
+
 type SchedulerOptions struct {
 	Ctx                context.Context
 	BeaconNode         BeaconNode
 	ExecutionClient    ExecutionClient
 	Network            networkconfig.NetworkConfig
-	ValidatorStore     validatorstore.ValidatorStore
+	ValidatorStore     ValidatorStore
 	DutyExecutor       dutyexecutor.DutyExecutor
 	IndicesChg         chan struct{}
 	ValidatorExitCh    <-chan ExitDescriptor
@@ -86,9 +96,9 @@ type Scheduler struct {
 	beaconNode         BeaconNode
 	executionClient    ExecutionClient
 	network            networkconfig.NetworkConfig
-	validatorStore     validatorstore.ValidatorStore
+	validatorStore     ValidatorStore
 	slotTickerProvider slotticker.Provider
-	dutyExecutor       dutyexecutor.DutyExecutor
+	dutyExecutor       DutyExecutor
 	builderProposals   bool
 
 	handlers            []dutyHandler

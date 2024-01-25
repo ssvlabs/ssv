@@ -18,6 +18,7 @@ import (
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/operator/operatordatastore"
 	"github.com/bloxapp/ssv/operator/slotticker"
 	"github.com/bloxapp/ssv/operator/slotticker/mocks"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
@@ -36,6 +37,8 @@ func TestSubmitProposal(t *testing.T) {
 		ID: 123456789,
 	}
 
+	operatorDataStore := operatordatastore.New(operatorData)
+
 	db, shareStorage, recipientStorage := createStorage(t)
 	defer db.Close()
 	network := networkconfig.TestNetwork
@@ -46,7 +49,7 @@ func TestSubmitProposal(t *testing.T) {
 		Network:           network,
 		ShareStorage:      shareStorage,
 		RecipientStorage:  recipientStorage,
-		OperatorDataStore: operatorData,
+		OperatorDataStore: operatorDataStore,
 	})
 
 	t.Run("submit first time or halfway through epoch", func(t *testing.T) {

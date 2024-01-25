@@ -16,6 +16,8 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
+//go:generate mockgen -package=dutyexecutor -destination=./mock.go -source=./duty_executor.go
+
 type DutyExecutor interface {
 	ExecuteDuty(duty *spectypes.Duty)
 }

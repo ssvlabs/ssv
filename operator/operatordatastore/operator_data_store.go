@@ -6,6 +6,8 @@ import (
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )
 
+//go:generate mockgen -package=operatordatastore -destination=./mock.go -source=./operator_data_store.go
+
 type OperatorDataStore interface {
 	GetOperatorData() *registrystorage.OperatorData
 	SetOperatorData(data *registrystorage.OperatorData)
@@ -16,7 +18,7 @@ type operatorDataStore struct {
 	operatorDataMutex sync.RWMutex
 }
 
-func NewOperatorDataStore(od *registrystorage.OperatorData) OperatorDataStore {
+func New(od *registrystorage.OperatorData) OperatorDataStore {
 	return &operatorDataStore{
 		operatorData: od,
 	}

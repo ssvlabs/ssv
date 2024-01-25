@@ -36,9 +36,11 @@ import (
 	"github.com/bloxapp/ssv/eth/simulator/simcontract"
 	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/operator/operatordatastore"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
-	"github.com/bloxapp/ssv/operator/validator/mocks"
+	"github.com/bloxapp/ssv/operator/validator/taskexecutor"
+	"github.com/bloxapp/ssv/operator/validator/validatormanager"
 	"github.com/bloxapp/ssv/operator/validatorsmap"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
@@ -1262,7 +1264,7 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	})
 }
 
-func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, network *networkconfig.NetworkConfig, operator *testOperator, useMockCtrl bool) (*EventHandler, *mocks.MockController, error) {
+func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, network *networkconfig.NetworkConfig, operator *testOperator, useMockCtrl bool) (*EventHandler, *operatordatastore.MockOperatorDataStore, error) {
 	db, err := kv.NewInMemory(logger, basedb.Options{
 		Ctx: ctx,
 	})
@@ -1287,7 +1289,8 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 		defer ctrl.Finish()
 
 		bc := beacon.NewMockBeaconNode(ctrl)
-		validatorCtrl := mocks.NewMockController(ctrl)
+		taskExecutor := taskexecutor.NewMockExecutor(ctrl)
+		operatorDataStore := operatordatastore.NewMockOperatorDataStore(ctrl)
 
 		contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
 		require.NoError(t, err)
@@ -1297,9 +1300,9 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 		eh, err := New(
 			nodeStorage,
 			parser,
-			validatorCtrl,
+			taskExecutor,
 			*network,
-			validatorCtrl,
+			operatorDataStore,
 			nodeStorage.GetPrivateKey,
 			keyManager,
 			bc,
@@ -1309,15 +1312,15 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 		if err != nil {
 			return nil, nil, err
 		}
-		validatorCtrl.EXPECT().GetOperatorData().Return(&registrystorage.OperatorData{}).AnyTimes()
+		operatorDataStore.EXPECT().GetOperatorData().Return(&registrystorage.OperatorData{}).AnyTimes()
 
-		return eh, validatorCtrl, nil
+		return eh, operatorDataStore, nil
 	}
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	bc := beacon.NewMockBeaconNode(ctrl)
-	validatorCtrl := validator.NewController(logger, validator.ControllerOptions{
+	validatorCtrl := validatormanager.New(logger, validator.ControllerOptions{
 		Context:           ctx,
 		DB:                db,
 		RegistryStorage:   nodeStorage,

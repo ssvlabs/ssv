@@ -91,18 +91,18 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Slot
 
 	mockBeaconNode := mocks.NewMockBeaconNode(ctrl)
 	mockExecutionClient := mocks.NewMockExecutionClient(ctrl)
-	mockValidatorController := mocks.NewMockValidatorController(ctrl)
+	mockValidatorStore := mocks.NewMockValidatorStore(ctrl)
 	mockSlotService := &mockSlotTickerService{}
 	mockNetworkConfig := networkconfig.NetworkConfig{
 		Beacon: mocknetwork.NewMockBeaconNetwork(ctrl),
 	}
 
 	opts := &SchedulerOptions{
-		Ctx:                 ctx,
-		BeaconNode:          mockBeaconNode,
-		ExecutionClient:     mockExecutionClient,
-		Network:             mockNetworkConfig,
-		ValidatorController: mockValidatorController,
+		Ctx:             ctx,
+		BeaconNode:      mockBeaconNode,
+		ExecutionClient: mockExecutionClient,
+		Network:         mockNetworkConfig,
+		ValidatorStore:  mockValidatorStore,
 		SlotTickerProvider: func() slotticker.SlotTicker {
 			ticker := NewMockSlotTicker()
 			mockSlotService.Subscribe(ticker.Subscribe())
@@ -161,10 +161,13 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Slot
 	return s, logger, mockSlotService, timeout, cancel, schedulerPool, startFunction
 }
 
-func setExecuteDutyFunc(s *Scheduler, executeDutiesCall chan []*spectypes.Duty, executeDutiesCallSize int) {
+func setExecuteDutyFunc(t *testing.T, s *Scheduler, executeDutiesCall chan []*spectypes.Duty, executeDutiesCallSize int) {
 	executeDutiesBuffer := make(chan *spectypes.Duty, executeDutiesCallSize)
-	s.dutyExecutor = func(logger *zap.Logger, duty *spectypes.Duty) {
-		logger.Debug("🏃 Executing duty", zap.Any("duty", duty))
+
+	ctrl := gomock.NewController(t)
+	dutyExecutor := mocks.NewMockDutyExecutor(ctrl)
+	dutyExecutor.EXPECT().ExecuteDuty(gomock.Any()).DoAndReturn(func(duty *spectypes.Duty) {
+		zap.L().Debug("🏃 Executing duty", zap.Any("duty", duty))
 		executeDutiesBuffer <- duty
 
 		// Check if all expected duties have been received
@@ -179,7 +182,9 @@ func setExecuteDutyFunc(s *Scheduler, executeDutiesCall chan []*spectypes.Duty, 
 			// Send the array of duties to executeDutiesCall
 			executeDutiesCall <- duties
 		}
-	}
+	}).AnyTimes()
+
+	s.dutyExecutor = dutyExecutor
 }
 
 func waitForDutiesFetch(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*spectypes.Duty, timeout time.Duration) {
@@ -253,7 +258,7 @@ func TestScheduler_Run(t *testing.T) {
 	logger := logging.TestLogger(t)
 
 	mockBeaconNode := mocks.NewMockBeaconNode(ctrl)
-	mockValidatorController := mocks.NewMockValidatorController(ctrl)
+	mockValidatorStore := mocks.NewMockValidatorStore(ctrl)
 	mockTicker := mockslotticker.NewMockSlotTicker(ctrl)
 	// create multiple mock duty handlers
 	mockDutyHandler1 := NewMockdutyHandler(ctrl)
@@ -263,11 +268,11 @@ func TestScheduler_Run(t *testing.T) {
 	mockDutyHandler2.EXPECT().HandleInitialDuties(gomock.Any()).AnyTimes()
 
 	opts := &SchedulerOptions{
-		Ctx:                 ctx,
-		BeaconNode:          mockBeaconNode,
-		Network:             networkconfig.TestNetwork,
-		ValidatorController: mockValidatorController,
-		BuilderProposals:    false,
+		Ctx:              ctx,
+		BeaconNode:       mockBeaconNode,
+		Network:          networkconfig.TestNetwork,
+		ValidatorStore:   mockValidatorStore,
+		BuilderProposals: false,
 		SlotTickerProvider: func() slotticker.SlotTicker {
 			return mockTicker
 		},
@@ -307,15 +312,15 @@ func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 	logger := logging.TestLogger(t)
 
 	mockBeaconNode := mocks.NewMockBeaconNode(ctrl)
-	mockValidatorController := mocks.NewMockValidatorController(ctrl)
+	mockValidatorStore := mocks.NewMockValidatorStore(ctrl)
 	mockTicker := mockslotticker.NewMockSlotTicker(ctrl)
 	// create multiple mock duty handlers
 
 	opts := &SchedulerOptions{
-		Ctx:                 ctx,
-		BeaconNode:          mockBeaconNode,
-		Network:             networkconfig.TestNetwork,
-		ValidatorController: mockValidatorController,
+		Ctx:            ctx,
+		BeaconNode:     mockBeaconNode,
+		Network:        networkconfig.TestNetwork,
+		ValidatorStore: mockValidatorStore,
 		SlotTickerProvider: func() slotticker.SlotTicker {
 			return mockTicker
 		},
