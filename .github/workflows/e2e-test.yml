@@ -4,10 +4,10 @@ on:
   workflow_run:
     workflows: [Lint, Unit tests]
     types: [completed]
-    branches: [stage, main, gm/e2e_left_overs, e2e_left_overs]
-  #  pull_request:
-  #    branches:
-  #      - "**"
+    branches: [stage, main]
+    pull_request:
+      branches:
+        - "**"
 
   workflow_dispatch:
 
