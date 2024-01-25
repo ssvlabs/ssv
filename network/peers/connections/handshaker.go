@@ -43,8 +43,7 @@ type Handshaker interface {
 type handshaker struct {
 	ctx context.Context
 
-	Permissioned func() bool
-	filters      func() []HandshakeFilter
+	filters func() []HandshakeFilter
 
 	streams     streams.StreamController
 	nodeInfos   peers.NodeInfoIndex
@@ -69,7 +68,6 @@ type HandshakerCfg struct {
 	IDService       identify.IDService
 	NodeStorage     storage.Storage
 	SubnetsProvider SubnetsProvider
-	Permissioned    func() bool
 }
 
 // NewHandshaker creates a new instance of handshaker
@@ -86,7 +84,6 @@ func NewHandshaker(ctx context.Context, cfg *HandshakerCfg, filters func() []Han
 		subnetsProvider: cfg.SubnetsProvider,
 		net:             cfg.Network,
 		nodeStorage:     cfg.NodeStorage,
-		Permissioned:    cfg.Permissioned,
 	}
 	return h
 }

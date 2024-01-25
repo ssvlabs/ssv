@@ -216,7 +216,6 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 		Network:         n.host.Network(),
 		SubnetsProvider: subnetsProvider,
 		NodeStorage:     n.nodeStorage,
-		Permissioned:    n.cfg.Permissioned,
 	}, filters)
 
 	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler(logger))
