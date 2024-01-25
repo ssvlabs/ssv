@@ -4,7 +4,7 @@ on:
   workflow_run:
     workflows: [Lint, Unit tests]
     types: [completed]
-    branches: [stage, main]
+    branches: [stage, main, e2e_left_overs]
   #  pull_request:
   #    branches:
   #      - "**"
