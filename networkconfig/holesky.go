@@ -1,7 +1,6 @@
 package networkconfig
 
 import (
-	"math"
 	"math/big"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -20,6 +19,6 @@ var Holesky = NetworkConfig{
 		"enr:-Li4QFIQzamdvTxGJhvcXG_DFmCeyggSffDnllY5DiU47pd_K_1MRnSaJimWtfKJ-MD46jUX9TwgW5Jqe0t4pH41RYWGAYuFnlyth2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCLdu_SJc2VjcDI1NmsxoQN4v-N9zFYwEqzGPBBX37q24QPFvAVUtokIo1fblIsmTIN0Y3CCE4uDdWRwgg-j",
 	},
 	WhitelistedOperatorKeys:                 []string{},
-	PermissionlessActivationEpoch:           13950,          // Nov-29-2023 12:00:00 PM UTC
-	FinalizedCheckpointForkActivationHeight: math.MaxUint64, // inf #TODO replace
+	PermissionlessActivationEpoch:           13950,  // Nov-29-2023 12:00:00 PM UTC
+	FinalizedCheckpointForkActivationHeight: 813955, // inf #TODO replace
 }
