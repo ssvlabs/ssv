@@ -26,7 +26,7 @@ type TopicIndex interface {
 	PeersByTopic() ([]peer.ID, map[string][]peer.ID)
 }
 
-type AllPeersAndTopicsJSON struct {
+type allPeersAndTopicsJSON struct {
 	AllPeers     []peer.ID        `json:"all_peers"`
 	PeersByTopic []topicIndexJSON `json:"peers_by_topic"`
 }
@@ -41,7 +41,7 @@ type connectionJSON struct {
 	Direction string `json:"direction"`
 }
 
-type PeerJSON struct {
+type peerInfo struct {
 	ID            peer.ID          `json:"id"`
 	Addresses     []string         `json:"addresses"`
 	Connections   []connectionJSON `json:"connections"`
@@ -50,7 +50,7 @@ type PeerJSON struct {
 	Version       string           `json:"version"`
 }
 
-type IdentityJSON struct {
+type nodeIdentity struct {
 	PeerID    peer.ID  `json:"peer_id"`
 	Addresses []string `json:"addresses"`
 	Subnets   string   `json:"subnets"`
@@ -81,10 +81,6 @@ type healthCheckJSON struct {
 	} `json:"advanced"`
 }
 
-type SignRequestJSON struct {
-	Data string `json:"data"`
-}
-
 type SignResponseJSON struct {
 	Signature string `json:"signature"`
 }
@@ -108,7 +104,7 @@ type Node struct {
 
 func (h *Node) Identity(w http.ResponseWriter, r *http.Request) error {
 	nodeInfo := h.PeersIndex.Self()
-	resp := IdentityJSON{
+	resp := nodeIdentity{
 		PeerID:  h.Network.LocalPeer(),
 		Subnets: nodeInfo.Metadata.Subnets,
 		Version: nodeInfo.Metadata.NodeVersion,
@@ -128,7 +124,7 @@ func (h *Node) Peers(w http.ResponseWriter, r *http.Request) error {
 func (h *Node) Topics(w http.ResponseWriter, r *http.Request) error {
 	peers, byTopic := h.TopicIndex.PeersByTopic()
 
-	resp := AllPeersAndTopicsJSON{
+	resp := allPeersAndTopicsJSON{
 		AllPeers: peers,
 	}
 	for topic, peers := range byTopic {
@@ -183,11 +179,13 @@ func (h *Node) Sign(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	sigReq := &SignRequestJSON{}
-	if err := json.Unmarshal(rawdata, &sigReq); err != nil {
+	var request struct {
+		Data string `json:"data"`
+	}
+	if err := json.Unmarshal(rawdata, &request); err != nil {
 		return err
 	}
-	data, err := hex.DecodeString(sigReq.Data)
+	data, err := hex.DecodeString(request.Data)
 	if err != nil {
 		return err
 	}
@@ -198,16 +196,17 @@ func (h *Node) Sign(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	resp := &SignResponseJSON{
-		Signature: hex.EncodeToString(signature),
+	var response struct {
+		Signature string `json:"signature"`
 	}
-	return api.Render(w, r, resp)
+	response.Signature = hex.EncodeToString(signature)
+	return api.Render(w, r, response)
 }
 
-func (h *Node) peers(peers []peer.ID) []PeerJSON {
-	resp := make([]PeerJSON, len(peers))
+func (h *Node) peers(peers []peer.ID) []peerInfo {
+	resp := make([]peerInfo, len(peers))
 	for i, id := range peers {
-		resp[i] = PeerJSON{
+		resp[i] = peerInfo{
 			ID:            id,
 			Connectedness: h.Network.Connectedness(id).String(),
 			Subnets:       h.PeersIndex.GetPeerSubnets(id).String(),

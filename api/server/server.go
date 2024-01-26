@@ -43,30 +43,32 @@ func (s *Server) Run() error {
 	s.logger.Info("Serving SSV API", zap.String("addr", s.addr))
 	server := &http.Server{
 		Addr:         s.addr,
-		Handler:      s.SetRoutes(),
+		Handler:      s.setRoutes(),
 		ReadTimeout:  12 * time.Second,
 		WriteTimeout: 12 * time.Second,
 	}
 	return server.ListenAndServe()
 }
 
-func (s *Server) SetRoutes() chi.Router {
+func (s *Server) setRoutes() chi.Router {
 	router := chi.NewRouter()
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.Throttle(runtime.NumCPU() * 4))
 	router.Use(middleware.Compress(5, "application/json"))
 	router.Use(middlewareLogger(s.logger))
-	router.Group(func(router chi.Router) {
-		router.Use(jwtauth.Verifier(s.tokenAuth))
-		router.Use(jwtauth.Authenticator(s.tokenAuth))
-		router.Post("/v1/node/sign", api.Handler(s.node.Sign))
-	})
 
 	router.Get("/v1/node/identity", api.Handler(s.node.Identity))
 	router.Get("/v1/node/peers", api.Handler(s.node.Peers))
 	router.Get("/v1/node/topics", api.Handler(s.node.Topics))
 	router.Get("/v1/node/health", api.Handler(s.node.Health))
 	router.Get("/v1/validators", api.Handler(s.validators.List))
+
+	// Authorized endpoints
+	router.Group(func(router chi.Router) {
+		router.Use(jwtauth.Verifier(s.tokenAuth))
+		router.Use(jwtauth.Authenticator(s.tokenAuth))
+		router.Post("/v1/operator/sign", api.Handler(s.node.Sign))
+	})
 	return router
 }
 

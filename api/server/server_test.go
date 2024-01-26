@@ -49,19 +49,21 @@ func TestAPI(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	apiServer := createTestNodeWithAPI(t, priv, n, ctx, logger)
-	router := apiServer.SetRoutes()
+	router := apiServer.setRoutes()
 	testServer := httptest.NewServer(router)
-	t.Run("authorized /v1/node/sign", func(t *testing.T) {
+	t.Run("authorized /v1/operator/sign", func(t *testing.T) {
 		hash := sha256.Sum256([]byte("Hello"))
 		data := []byte(fmt.Sprintf(`{"data":"%s"}`, hex.EncodeToString(hash[:])))
 		r := bytes.NewReader(data)
 		require.NoError(t, err)
 		_, tokenString, err := jwtauth.New("HS256", []byte("secret"), nil).Encode(nil)
 		require.NoError(t, err)
-		resp, respData, err := testRequest(testServer, "POST", "/v1/node/sign", tokenString, r)
+		resp, respData, err := testRequest(testServer, "POST", "/v1/operator/sign", tokenString, r)
 		require.NoError(t, err)
 		require.Equal(t, resp.StatusCode, 200)
-		sigResp := &handlers.SignResponseJSON{}
+		var sigResp struct {
+			Signature string `json:"signature"`
+		}
 		err = json.Unmarshal(respData, &sigResp)
 		require.NoError(t, err)
 		sigBytes, err := hex.DecodeString(sigResp.Signature)
@@ -69,16 +71,18 @@ func TestAPI(t *testing.T) {
 		err = rsa.VerifyPKCS1v15(&priv.PublicKey, crypto.SHA256, hash[:], sigBytes)
 		require.NoError(t, err)
 	})
-	t.Run("authorized /v1/node/sign provided JWT token", func(t *testing.T) {
+	t.Run("authorized /v1/operator/sign provided JWT token", func(t *testing.T) {
 		hash := sha256.Sum256([]byte("Hello"))
 		data := []byte(fmt.Sprintf(`{"data":"%s"}`, hex.EncodeToString(hash[:])))
 		r := bytes.NewReader(data)
 		require.NoError(t, err)
 		tokenString := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.t-IDcSemACt8x4iTMCda8Yhe3iZaWbvV5XKSTbuAn0M"
-		resp, respData, err := testRequest(testServer, "POST", "/v1/node/sign", tokenString, r)
+		resp, respData, err := testRequest(testServer, "POST", "/v1/operator/sign", tokenString, r)
 		require.NoError(t, err)
 		require.Equal(t, resp.StatusCode, 200)
-		sigResp := &handlers.SignResponseJSON{}
+		var sigResp struct {
+			Signature string `json:"signature"`
+		}
 		err = json.Unmarshal(respData, &sigResp)
 		require.NoError(t, err)
 		sigBytes, err := hex.DecodeString(sigResp.Signature)
@@ -86,20 +90,25 @@ func TestAPI(t *testing.T) {
 		err = rsa.VerifyPKCS1v15(&priv.PublicKey, crypto.SHA256, hash[:], sigBytes)
 		require.NoError(t, err)
 	})
-	t.Run("authorized /v1/node/sign wrong JWT token", func(t *testing.T) {
+	t.Run("authorized /v1/operator/sign wrong JWT token", func(t *testing.T) {
 		hash := sha256.Sum256([]byte("Hello"))
 		data := []byte(fmt.Sprintf(`{"data":"%s"}`, hex.EncodeToString(hash[:])))
 		r := bytes.NewReader(data)
 		require.NoError(t, err)
 		tokenString := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.-h11M7Sw09EUpd-vqBIwAOMuIcogkBfpsYnIHVcVoEc"
-		resp, _, err := testRequest(testServer, "POST", "/v1/node/sign", tokenString, r)
+		resp, _, err := testRequest(testServer, "POST", "/v1/operator/sign", tokenString, r)
 		require.NoError(t, err)
 		require.Equal(t, resp.StatusCode, 401)
 	})
 	t.Run("non-authorized /v1/node/identity", func(t *testing.T) {
 		_, respData, err := testRequest(testServer, "GET", "/v1/node/identity", "", nil)
 		require.NoError(t, err)
-		identity := &handlers.IdentityJSON{}
+		var identity struct {
+			PeerID    peer.ID  `json:"peer_id"`
+			Addresses []string `json:"addresses"`
+			Subnets   string   `json:"subnets"`
+			Version   string   `json:"version"`
+		}
 		err = json.Unmarshal(respData, &identity)
 		require.NoError(t, err)
 		require.Equal(t, apiServer.node.Network.LocalPeer().String(), identity.PeerID.String())
@@ -108,7 +117,17 @@ func TestAPI(t *testing.T) {
 		resp, respData, err := testRequest(testServer, "GET", "/v1/node/peers", "", nil)
 		require.NoError(t, err)
 		require.Equal(t, resp.StatusCode, 200)
-		peers := []handlers.PeerJSON{}
+		var peers []struct {
+			ID          peer.ID  `json:"id"`
+			Addresses   []string `json:"addresses"`
+			Connections []struct {
+				Address   string `json:"address"`
+				Direction string `json:"direction"`
+			} `json:"connections"`
+			Connectedness string `json:"connectedness"`
+			Subnets       string `json:"subnets"`
+			Version       string `json:"version"`
+		}
 		err = json.Unmarshal(respData, &peers)
 		require.NoError(t, err)
 	})
@@ -116,7 +135,13 @@ func TestAPI(t *testing.T) {
 		resp, respData, err := testRequest(testServer, "GET", "/v1/node/topics", "", nil)
 		require.NoError(t, err)
 		require.Equal(t, resp.StatusCode, 200)
-		topics := &handlers.AllPeersAndTopicsJSON{}
+		var topics struct {
+			AllPeers     []peer.ID `json:"all_peers"`
+			PeersByTopic []struct {
+				TopicName string    `json:"topic"`
+				Peers     []peer.ID `json:"peers"`
+			} `json:"peers_by_topic"`
+		}
 		err = json.Unmarshal(respData, &topics)
 		require.NoError(t, err)
 	})
