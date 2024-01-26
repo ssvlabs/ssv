@@ -26,28 +26,28 @@ type TopicIndex interface {
 	PeersByTopic() ([]peer.ID, map[string][]peer.ID)
 }
 
-type allPeersAndTopicsJSON struct {
-	AllPeers     []peer.ID        `json:"all_peers"`
-	PeersByTopic []topicIndexJSON `json:"peers_by_topic"`
+type allPeersAndTopics struct {
+	AllPeers     []peer.ID    `json:"all_peers"`
+	PeersByTopic []topicIndex `json:"peers_by_topic"`
 }
 
-type topicIndexJSON struct {
+type topicIndex struct {
 	TopicName string    `json:"topic"`
 	Peers     []peer.ID `json:"peers"`
 }
 
-type connectionJSON struct {
+type connection struct {
 	Address   string `json:"address"`
 	Direction string `json:"direction"`
 }
 
 type peerInfo struct {
-	ID            peer.ID          `json:"id"`
-	Addresses     []string         `json:"addresses"`
-	Connections   []connectionJSON `json:"connections"`
-	Connectedness string           `json:"connectedness"`
-	Subnets       string           `json:"subnets"`
-	Version       string           `json:"version"`
+	ID            peer.ID      `json:"id"`
+	Addresses     []string     `json:"addresses"`
+	Connections   []connection `json:"connections"`
+	Connectedness string       `json:"connectedness"`
+	Subnets       string       `json:"subnets"`
+	Version       string       `json:"version"`
 }
 
 type nodeIdentity struct {
@@ -68,7 +68,7 @@ func (h healthStatus) MarshalJSON() ([]byte, error) {
 	return json.Marshal(fmt.Sprintf("bad: %s", h.err.Error()))
 }
 
-type healthCheckJSON struct {
+type healthCheck struct {
 	P2P           healthStatus `json:"p2p"`
 	BeaconNode    healthStatus `json:"beacon_node"`
 	ExecutionNode healthStatus `json:"execution_node"`
@@ -81,11 +81,7 @@ type healthCheckJSON struct {
 	} `json:"advanced"`
 }
 
-type SignResponseJSON struct {
-	Signature string `json:"signature"`
-}
-
-func (hc healthCheckJSON) String() string {
+func (hc healthCheck) String() string {
 	b, err := json.MarshalIndent(hc, "", "  ")
 	if err != nil {
 		return fmt.Sprintf("error marshalling healthCheckJSON: %s", err.Error())
@@ -124,11 +120,11 @@ func (h *Node) Peers(w http.ResponseWriter, r *http.Request) error {
 func (h *Node) Topics(w http.ResponseWriter, r *http.Request) error {
 	peers, byTopic := h.TopicIndex.PeersByTopic()
 
-	resp := allPeersAndTopicsJSON{
+	resp := allPeersAndTopics{
 		AllPeers: peers,
 	}
 	for topic, peers := range byTopic {
-		resp.PeersByTopic = append(resp.PeersByTopic, topicIndexJSON{TopicName: topic, Peers: peers})
+		resp.PeersByTopic = append(resp.PeersByTopic, topicIndex{TopicName: topic, Peers: peers})
 	}
 
 	return api.Render(w, r, resp)
@@ -136,7 +132,7 @@ func (h *Node) Topics(w http.ResponseWriter, r *http.Request) error {
 
 func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	ctx := context.Background()
-	var resp healthCheckJSON
+	var resp healthCheck
 
 	// Retrieve P2P listen addresses.
 	resp.Advanced.ListenAddresses = h.ListenAddresses
@@ -218,7 +214,7 @@ func (h *Node) peers(peers []peer.ID) []peerInfo {
 
 		conns := h.Network.ConnsToPeer(id)
 		for _, conn := range conns {
-			resp[i].Connections = append(resp[i].Connections, connectionJSON{
+			resp[i].Connections = append(resp[i].Connections, connection{
 				Address:   conn.RemoteMultiaddr().String(),
 				Direction: conn.Stat().Direction.String(),
 			})
