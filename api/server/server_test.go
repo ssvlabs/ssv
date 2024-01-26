@@ -49,7 +49,7 @@ func TestAPI(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	apiServer := createTestNodeWithAPI(t, priv, n, ctx, logger)
-	router := apiServer.setRoutes()
+	router := apiServer.routes()
 	testServer := httptest.NewServer(router)
 	t.Run("authorized /v1/operator/sign", func(t *testing.T) {
 		hash := sha256.Sum256([]byte("Hello"))

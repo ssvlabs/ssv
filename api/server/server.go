@@ -43,14 +43,14 @@ func (s *Server) Run() error {
 	s.logger.Info("Serving SSV API", zap.String("addr", s.addr))
 	server := &http.Server{
 		Addr:         s.addr,
-		Handler:      s.setRoutes(),
+		Handler:      s.routes(),
 		ReadTimeout:  12 * time.Second,
 		WriteTimeout: 12 * time.Second,
 	}
 	return server.ListenAndServe()
 }
 
-func (s *Server) setRoutes() chi.Router {
+func (s *Server) routes() chi.Router {
 	router := chi.NewRouter()
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.Throttle(runtime.NumCPU() * 4))
