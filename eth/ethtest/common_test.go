@@ -193,7 +193,8 @@ func (e *TestEnv) setup(
 		return err
 	}
 
-	metricsReporter := metricsreporter.New(
+	metricsReg := metricsreporter.NewMetricsRegistry()
+	metricsReporter := metricsreporter.New(metricsReg,
 		metricsreporter.WithLogger(logger),
 	)
 

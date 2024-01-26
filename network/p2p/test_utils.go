@@ -171,7 +171,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 		cfg.PeerScoreInspectorInterval = options.PeerScoreInspectorInterval
 	}
 
-	mr := metricsreporter.New()
+	mr := metricsreporter.NewNop()
 	p := New(logger, cfg, mr)
 	err = p.Setup(logger)
 	if err != nil {

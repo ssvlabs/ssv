@@ -3,6 +3,7 @@ package metricsreporter
 import (
 	"crypto/sha256"
 	"fmt"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"strconv"
 	"time"
 
@@ -11,7 +12,6 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
@@ -40,122 +40,6 @@ const (
 	messageAccepted = "accepted"
 	messageIgnored  = "ignored"
 	messageRejected = "rejected"
-)
-
-var (
-	ssvNodeStatus = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv_node_status",
-		Help: "Status of the operator node",
-	})
-	// TODO: rename "eth1" in metrics
-	executionClientStatus = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv_eth1_status",
-		Help: "Status of the connected execution client",
-	})
-	executionClientLastFetchedBlock = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "ssv_execution_client_last_fetched_block",
-		Help: "Last fetched block by execution client",
-	})
-	validatorStatus = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:validator:v2:status",
-		Help: "Validator status",
-	}, []string{"pubKey"})
-	eventProcessed = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv_eth1_sync_count_success",
-		Help: "Count succeeded execution client events",
-	}, []string{"etype"})
-	eventProcessingFailed = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv_eth1_sync_count_failed",
-		Help: "Count failed execution client events",
-	}, []string{"etype"})
-	operatorIndex = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:exporter:operator_index",
-		Help: "operator footprint",
-	}, []string{"pubKey", "index"})
-	messageValidationResult = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv_message_validation",
-		Help: "Message validation result",
-	}, []string{"status", "reason", "role", "round"})
-	messageValidationSSVType = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv_message_validation_ssv_type",
-		Help: "SSV message type",
-	}, []string{"type"})
-	messageValidationConsensusType = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv_message_validation_consensus_type",
-		Help: "Consensus message type",
-	}, []string{"type", "signers"})
-	messageValidationDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "ssv_message_validation_duration_seconds",
-		Help:    "Message validation duration (seconds)",
-		Buckets: []float64{0.001, 0.005, 0.010, 0.020, 0.050},
-	}, []string{})
-	signatureValidationDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "ssv_signature_validation_duration_seconds",
-		Help:    "Signature validation duration (seconds)",
-		Buckets: []float64{0.001, 0.005, 0.010, 0.020, 0.050},
-	}, []string{})
-	messageSize = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "ssv_message_size",
-		Help:    "Message size",
-		Buckets: []float64{100, 500, 1_000, 5_000, 10_000, 50_000, 100_000, 500_000, 1_000_000, 5_000_000},
-	}, []string{})
-	activeMsgValidation = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:p2p:pubsub:msg:val:active",
-		Help: "Count active message validation",
-	}, []string{"topic"})
-	incomingQueueMessages = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv_message_queue_incoming",
-		Help: "The amount of message incoming to the validator's msg queue",
-	}, []string{"msg_id"})
-	outgoingQueueMessages = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv_message_queue_outgoing",
-		Help: "The amount of message outgoing from the validator's msg queue",
-	}, []string{"msg_id"})
-	droppedQueueMessages = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv_message_queue_drops",
-		Help: "The amount of message dropped from the validator's msg queue",
-	}, []string{"msg_id"})
-	messageQueueSize = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv_message_queue_size",
-		Help: "Size of message queue",
-	}, []string{})
-	messageQueueCapacity = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv_message_queue_capacity",
-		Help: "Capacity of message queue",
-	}, []string{})
-	messageTimeInQueue = promauto.NewHistogramVec(prometheus.HistogramOpts{
-		Name:    "ssv_message_time_in_queue_seconds",
-		Help:    "Time message spent in queue (seconds)",
-		Buckets: []float64{0.001, 0.005, 0.010, 0.050, 0.100, 0.500, 1, 5, 10, 60},
-	}, []string{"msg_id"})
-	inCommitteeMessages = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv_message_in_committee",
-		Help: "The amount of messages in committee",
-	}, []string{"ssv_msg_type", "decided"})
-	nonCommitteeMessages = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv_message_non_committee",
-		Help: "The amount of messages not in committee",
-	}, []string{"ssv_msg_type", "decided"})
-	messagesReceivedFromPeer = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv_messages_received_from_peer",
-		Help: "The amount of messages received from the specific peer",
-	}, []string{"peer_id"})
-	messagesReceivedTotal = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv_messages_received_total",
-		Help: "The amount of messages total received",
-	}, []string{})
-	messageValidationRSAVerifications = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "ssv_message_validation_rsa_checks",
-		Help: "The amount message validations",
-	}, []string{})
-	pubsubPeerScore = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:p2p:pubsub:score:inspect",
-		Help: "Pubsub peer scores",
-	}, []string{"pid"})
-	pubsubPeerP4Score = promauto.NewGaugeVec(prometheus.GaugeOpts{
-		Name: "ssv:p2p:pubsub:score:invalid_message_deliveries",
-		Help: "Pubsub peer P4 scores (sum of square of counters for invalid message deliveries)",
-	}, []string{"pid"})
 )
 
 type MetricsReporter interface {
@@ -210,12 +94,154 @@ type MetricsReporter interface {
 
 type metricsReporter struct {
 	logger *zap.Logger
+
+	ssvNodeStatus                     prometheus.Gauge
+	executionClientStatus             prometheus.Gauge
+	executionClientLastFetchedBlock   prometheus.Gauge
+	validatorStatus                   *prometheus.GaugeVec
+	eventProcessed                    *prometheus.CounterVec
+	eventProcessingFailed             *prometheus.CounterVec
+	operatorIndex                     *prometheus.GaugeVec
+	messageValidationResult           *prometheus.CounterVec
+	messageValidationSSVType          *prometheus.CounterVec
+	messageValidationConsensusType    *prometheus.CounterVec
+	messageValidationDuration         *prometheus.HistogramVec
+	signatureValidationDuration       *prometheus.HistogramVec
+	messageSize                       *prometheus.HistogramVec
+	activeMsgValidation               *prometheus.GaugeVec
+	incomingQueueMessages             *prometheus.CounterVec
+	outgoingQueueMessages             *prometheus.CounterVec
+	droppedQueueMessages              *prometheus.CounterVec
+	messageQueueSize                  *prometheus.GaugeVec
+	messageQueueCapacity              *prometheus.GaugeVec
+	messageTimeInQueue                *prometheus.HistogramVec
+	inCommitteeMessages               *prometheus.CounterVec
+	nonCommitteeMessages              *prometheus.CounterVec
+	messagesReceivedFromPeer          *prometheus.CounterVec
+	messagesReceivedTotal             *prometheus.CounterVec
+	messageValidationRSAVerifications *prometheus.CounterVec
+	pubsubPeerScore                   *prometheus.GaugeVec
+	pubsubPeerP4Score                 *prometheus.GaugeVec
 }
 
-func New(opts ...Option) MetricsReporter {
+func New(reg *prometheus.Registry, opts ...Option) MetricsReporter {
 	mr := &metricsReporter{
 		logger: zap.NewNop(),
 	}
+
+	mr.ssvNodeStatus = promauto.With(reg).NewGauge(prometheus.GaugeOpts{
+		Name: "ssv_node_status",
+		Help: "Status of the operator node",
+	})
+	// TODO: rename "eth1" in metrics
+	mr.executionClientStatus = promauto.With(reg).NewGauge(prometheus.GaugeOpts{
+		Name: "ssv_eth1_status",
+		Help: "Status of the connected execution client",
+	})
+	mr.executionClientLastFetchedBlock = promauto.With(reg).NewGauge(prometheus.GaugeOpts{
+		Name: "ssv_execution_client_last_fetched_block",
+		Help: "Last fetched block by execution client",
+	})
+	mr.validatorStatus = promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:validator:v2:status",
+		Help: "Validator status",
+	}, []string{"pubKey"})
+	mr.eventProcessed = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_eth1_sync_count_success",
+		Help: "Count succeeded execution client events",
+	}, []string{"etype"})
+	mr.eventProcessingFailed = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_eth1_sync_count_failed",
+		Help: "Count failed execution client events",
+	}, []string{"etype"})
+	mr.operatorIndex = promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:exporter:operator_index",
+		Help: "operator footprint",
+	}, []string{"pubKey", "index"})
+	mr.messageValidationResult = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_message_validation",
+		Help: "Message validation result",
+	}, []string{"status", "reason", "role", "round"})
+	mr.messageValidationSSVType = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_message_validation_ssv_type",
+		Help: "SSV message type",
+	}, []string{"type"})
+	mr.messageValidationConsensusType = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_message_validation_consensus_type",
+		Help: "Consensus message type",
+	}, []string{"type", "signers"})
+	mr.messageValidationDuration = promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "ssv_message_validation_duration_seconds",
+		Help:    "Message validation duration (seconds)",
+		Buckets: []float64{0.001, 0.005, 0.010, 0.020, 0.050},
+	}, []string{})
+	mr.signatureValidationDuration = promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "ssv_signature_validation_duration_seconds",
+		Help:    "Signature validation duration (seconds)",
+		Buckets: []float64{0.001, 0.005, 0.010, 0.020, 0.050},
+	}, []string{})
+	mr.messageSize = promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "ssv_message_size",
+		Help:    "Message size",
+		Buckets: []float64{100, 500, 1_000, 5_000, 10_000, 50_000, 100_000, 500_000, 1_000_000, 5_000_000},
+	}, []string{})
+	mr.activeMsgValidation = promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:p2p:pubsub:msg:val:active",
+		Help: "Count active message validation",
+	}, []string{"topic"})
+	mr.incomingQueueMessages = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_message_queue_incoming",
+		Help: "The amount of message incoming to the validator's msg queue",
+	}, []string{"msg_id"})
+	mr.outgoingQueueMessages = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_message_queue_outgoing",
+		Help: "The amount of message outgoing from the validator's msg queue",
+	}, []string{"msg_id"})
+	mr.droppedQueueMessages = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_message_queue_drops",
+		Help: "The amount of message dropped from the validator's msg queue",
+	}, []string{"msg_id"})
+	mr.messageQueueSize = promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv_message_queue_size",
+		Help: "Size of message queue",
+	}, []string{})
+	mr.messageQueueCapacity = promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv_message_queue_capacity",
+		Help: "Capacity of message queue",
+	}, []string{})
+	mr.messageTimeInQueue = promauto.With(reg).NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "ssv_message_time_in_queue_seconds",
+		Help:    "Time message spent in queue (seconds)",
+		Buckets: []float64{0.001, 0.005, 0.010, 0.050, 0.100, 0.500, 1, 5, 10, 60},
+	}, []string{"msg_id"})
+	mr.inCommitteeMessages = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_message_in_committee",
+		Help: "The amount of messages in committee",
+	}, []string{"ssv_msg_type", "decided"})
+	mr.nonCommitteeMessages = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_message_non_committee",
+		Help: "The amount of messages not in committee",
+	}, []string{"ssv_msg_type", "decided"})
+	mr.messagesReceivedFromPeer = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_messages_received_from_peer",
+		Help: "The amount of messages received from the specific peer",
+	}, []string{"peer_id"})
+	mr.messagesReceivedTotal = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_messages_received_total",
+		Help: "The amount of messages total received",
+	}, []string{})
+	mr.messageValidationRSAVerifications = promauto.With(reg).NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_message_validation_rsa_checks",
+		Help: "The amount message validations",
+	}, []string{})
+	mr.pubsubPeerScore = promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:p2p:pubsub:score:inspect",
+		Help: "Pubsub peer scores",
+	}, []string{"pid"})
+	mr.pubsubPeerP4Score = promauto.With(reg).NewGaugeVec(prometheus.GaugeOpts{
+		Name: "ssv:p2p:pubsub:score:invalid_message_deliveries",
+		Help: "Pubsub peer P4 scores (sum of square of counters for invalid message deliveries)",
+	}, []string{"pid"})
 
 	for _, opt := range opts {
 		opt(mr)
@@ -223,33 +249,33 @@ func New(opts ...Option) MetricsReporter {
 
 	// TODO: think how to register all metrics without adding them all to the slice
 	allMetrics := []prometheus.Collector{
-		ssvNodeStatus,
-		executionClientStatus,
-		executionClientLastFetchedBlock,
-		validatorStatus,
-		eventProcessed,
-		eventProcessingFailed,
-		operatorIndex,
-		messageValidationResult,
-		messageValidationSSVType,
-		messageValidationConsensusType,
-		messageValidationDuration,
-		signatureValidationDuration,
-		messageSize,
-		activeMsgValidation,
-		incomingQueueMessages,
-		outgoingQueueMessages,
-		droppedQueueMessages,
-		messageQueueSize,
-		messageQueueCapacity,
-		messageTimeInQueue,
-		inCommitteeMessages,
-		nonCommitteeMessages,
-		messagesReceivedFromPeer,
-		messagesReceivedTotal,
-		messageValidationRSAVerifications,
-		pubsubPeerScore,
-		pubsubPeerP4Score,
+		mr.ssvNodeStatus,
+		mr.executionClientStatus,
+		mr.executionClientLastFetchedBlock,
+		mr.validatorStatus,
+		mr.eventProcessed,
+		mr.eventProcessingFailed,
+		mr.operatorIndex,
+		mr.messageValidationResult,
+		mr.messageValidationSSVType,
+		mr.messageValidationConsensusType,
+		mr.messageValidationDuration,
+		mr.signatureValidationDuration,
+		mr.messageSize,
+		mr.activeMsgValidation,
+		mr.incomingQueueMessages,
+		mr.outgoingQueueMessages,
+		mr.droppedQueueMessages,
+		mr.messageQueueSize,
+		mr.messageQueueCapacity,
+		mr.messageTimeInQueue,
+		mr.inCommitteeMessages,
+		mr.nonCommitteeMessages,
+		mr.messagesReceivedFromPeer,
+		mr.messagesReceivedTotal,
+		mr.messageValidationRSAVerifications,
+		mr.pubsubPeerScore,
+		mr.pubsubPeerP4Score,
 	}
 
 	for i, c := range allMetrics {
@@ -266,86 +292,86 @@ func New(opts ...Option) MetricsReporter {
 }
 
 func (m *metricsReporter) SSVNodeHealthy() {
-	ssvNodeStatus.Set(ssvNodeHealthy)
+	m.ssvNodeStatus.Set(ssvNodeHealthy)
 }
 
 func (m *metricsReporter) SSVNodeNotHealthy() {
-	ssvNodeStatus.Set(ssvNodeNotHealthy)
+	m.ssvNodeStatus.Set(ssvNodeNotHealthy)
 }
 
 func (m *metricsReporter) ExecutionClientReady() {
-	executionClientStatus.Set(executionClientOK)
+	m.executionClientStatus.Set(executionClientOK)
 }
 
 func (m *metricsReporter) ExecutionClientSyncing() {
-	executionClientStatus.Set(executionClientSyncing)
+	m.executionClientStatus.Set(executionClientSyncing)
 }
 
 func (m *metricsReporter) ExecutionClientFailure() {
-	executionClientStatus.Set(executionClientFailure)
+	m.executionClientStatus.Set(executionClientFailure)
 }
 
 func (m *metricsReporter) ExecutionClientLastFetchedBlock(block uint64) {
-	executionClientLastFetchedBlock.Set(float64(block))
+	m.executionClientLastFetchedBlock.Set(float64(block))
 }
 
 func (m *metricsReporter) OperatorPublicKey(operatorID spectypes.OperatorID, publicKey []byte) {
 	pkHash := fmt.Sprintf("%x", sha256.Sum256(publicKey))
-	operatorIndex.WithLabelValues(pkHash, strconv.FormatUint(operatorID, 10)).Set(float64(operatorID))
+	m.operatorIndex.WithLabelValues(pkHash, strconv.FormatUint(operatorID, 10)).Set(float64(operatorID))
 }
 
 func (m *metricsReporter) ValidatorInactive(publicKey []byte) {
-	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorInactive)
+	m.validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorInactive)
 }
 func (m *metricsReporter) ValidatorNoIndex(publicKey []byte) {
-	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorNoIndex)
+	m.validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorNoIndex)
 }
 func (m *metricsReporter) ValidatorError(publicKey []byte) {
-	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorError)
+	m.validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorError)
 }
 func (m *metricsReporter) ValidatorReady(publicKey []byte) {
-	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorReady)
+	m.validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorReady)
 }
 func (m *metricsReporter) ValidatorNotActivated(publicKey []byte) {
-	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorNotActivated)
+	m.validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorNotActivated)
 }
 func (m *metricsReporter) ValidatorExiting(publicKey []byte) {
-	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorExiting)
+	m.validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorExiting)
 }
 func (m *metricsReporter) ValidatorSlashed(publicKey []byte) {
-	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorSlashed)
+	m.validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorSlashed)
 }
 func (m *metricsReporter) ValidatorNotFound(publicKey []byte) {
-	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorNotFound)
+	m.validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorNotFound)
 }
 func (m *metricsReporter) ValidatorPending(publicKey []byte) {
-	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorPending)
+	m.validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorPending)
 }
 func (m *metricsReporter) ValidatorRemoved(publicKey []byte) {
-	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorRemoved)
+	m.validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorRemoved)
 }
 func (m *metricsReporter) ValidatorUnknown(publicKey []byte) {
-	validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorUnknown)
+	m.validatorStatus.WithLabelValues(ethcommon.Bytes2Hex(publicKey)).Set(validatorUnknown)
 }
 
 func (m *metricsReporter) EventProcessed(eventName string) {
-	eventProcessed.WithLabelValues(eventName).Inc()
+	m.eventProcessed.WithLabelValues(eventName).Inc()
 }
 
 func (m *metricsReporter) EventProcessingFailed(eventName string) {
-	eventProcessingFailed.WithLabelValues(eventName).Inc()
+	m.eventProcessingFailed.WithLabelValues(eventName).Inc()
 }
 
 func (m *metricsReporter) MessagesReceivedFromPeer(peerId peer.ID) {
-	messagesReceivedFromPeer.WithLabelValues(peerId.String()).Inc()
+	m.messagesReceivedFromPeer.WithLabelValues(peerId.String()).Inc()
 }
 
 func (m *metricsReporter) MessagesReceivedTotal() {
-	messagesReceivedTotal.WithLabelValues().Inc()
+	m.messagesReceivedTotal.WithLabelValues().Inc()
 }
 
 func (m *metricsReporter) MessageValidationRSAVerifications() {
-	messageValidationRSAVerifications.WithLabelValues().Inc()
+	m.messageValidationRSAVerifications.WithLabelValues().Inc()
 }
 
 // TODO implement
@@ -356,7 +382,7 @@ func (m *metricsReporter) MessageAccepted(
 	role spectypes.BeaconRole,
 	round specqbft.Round,
 ) {
-	messageValidationResult.WithLabelValues(
+	m.messageValidationResult.WithLabelValues(
 		messageAccepted,
 		"",
 		role.String(),
@@ -369,7 +395,7 @@ func (m *metricsReporter) MessageIgnored(
 	role spectypes.BeaconRole,
 	round specqbft.Round,
 ) {
-	messageValidationResult.WithLabelValues(
+	m.messageValidationResult.WithLabelValues(
 		messageIgnored,
 		reason,
 		role.String(),
@@ -382,7 +408,7 @@ func (m *metricsReporter) MessageRejected(
 	role spectypes.BeaconRole,
 	round specqbft.Round,
 ) {
-	messageValidationResult.WithLabelValues(
+	m.messageValidationResult.WithLabelValues(
 		messageRejected,
 		reason,
 		role.String(),
@@ -391,55 +417,55 @@ func (m *metricsReporter) MessageRejected(
 }
 
 func (m *metricsReporter) SSVMessageType(msgType spectypes.MsgType) {
-	messageValidationSSVType.WithLabelValues(ssvmessage.MsgTypeToString(msgType)).Inc()
+	m.messageValidationSSVType.WithLabelValues(ssvmessage.MsgTypeToString(msgType)).Inc()
 }
 
 func (m *metricsReporter) ConsensusMsgType(msgType specqbft.MessageType, signers int) {
-	messageValidationConsensusType.WithLabelValues(ssvmessage.QBFTMsgTypeToString(msgType), strconv.Itoa(signers)).Inc()
+	m.messageValidationConsensusType.WithLabelValues(ssvmessage.QBFTMsgTypeToString(msgType), strconv.Itoa(signers)).Inc()
 }
 
 func (m *metricsReporter) MessageValidationDuration(duration time.Duration, labels ...string) {
-	messageValidationDuration.WithLabelValues(labels...).Observe(duration.Seconds())
+	m.messageValidationDuration.WithLabelValues(labels...).Observe(duration.Seconds())
 }
 
 func (m *metricsReporter) SignatureValidationDuration(duration time.Duration, labels ...string) {
-	signatureValidationDuration.WithLabelValues(labels...).Observe(duration.Seconds())
+	m.signatureValidationDuration.WithLabelValues(labels...).Observe(duration.Seconds())
 }
 
 func (m *metricsReporter) MessageSize(size int) {
-	messageSize.WithLabelValues().Observe(float64(size))
+	m.messageSize.WithLabelValues().Observe(float64(size))
 }
 
 func (m *metricsReporter) ActiveMsgValidation(topic string) {
-	activeMsgValidation.WithLabelValues(topic).Inc()
+	m.activeMsgValidation.WithLabelValues(topic).Inc()
 }
 
 func (m *metricsReporter) ActiveMsgValidationDone(topic string) {
-	activeMsgValidation.WithLabelValues(topic).Dec()
+	m.activeMsgValidation.WithLabelValues(topic).Dec()
 }
 
 func (m *metricsReporter) IncomingQueueMessage(messageID spectypes.MessageID) {
-	incomingQueueMessages.WithLabelValues(messageID.String()).Inc()
+	m.incomingQueueMessages.WithLabelValues(messageID.String()).Inc()
 }
 
 func (m *metricsReporter) OutgoingQueueMessage(messageID spectypes.MessageID) {
-	outgoingQueueMessages.WithLabelValues(messageID.String()).Inc()
+	m.outgoingQueueMessages.WithLabelValues(messageID.String()).Inc()
 }
 
 func (m *metricsReporter) DroppedQueueMessage(messageID spectypes.MessageID) {
-	droppedQueueMessages.WithLabelValues(messageID.String()).Inc()
+	m.droppedQueueMessages.WithLabelValues(messageID.String()).Inc()
 }
 
 func (m *metricsReporter) MessageQueueSize(size int) {
-	messageQueueSize.WithLabelValues().Set(float64(size))
+	m.messageQueueSize.WithLabelValues().Set(float64(size))
 }
 
 func (m *metricsReporter) MessageQueueCapacity(size int) {
-	messageQueueCapacity.WithLabelValues().Set(float64(size))
+	m.messageQueueCapacity.WithLabelValues().Set(float64(size))
 }
 
 func (m *metricsReporter) MessageTimeInQueue(messageID spectypes.MessageID, d time.Duration) {
-	messageTimeInQueue.WithLabelValues(messageID.String()).Observe(d.Seconds())
+	m.messageTimeInQueue.WithLabelValues(messageID.String()).Observe(d.Seconds())
 }
 
 func (m *metricsReporter) InCommitteeMessage(msgType spectypes.MsgType, decided bool) {
@@ -447,7 +473,7 @@ func (m *metricsReporter) InCommitteeMessage(msgType spectypes.MsgType, decided 
 	if decided {
 		str = "decided"
 	}
-	inCommitteeMessages.WithLabelValues(ssvmessage.MsgTypeToString(msgType), str).Inc()
+	m.inCommitteeMessages.WithLabelValues(ssvmessage.MsgTypeToString(msgType), str).Inc()
 }
 
 func (m *metricsReporter) NonCommitteeMessage(msgType spectypes.MsgType, decided bool) {
@@ -455,23 +481,23 @@ func (m *metricsReporter) NonCommitteeMessage(msgType spectypes.MsgType, decided
 	if decided {
 		str = "decided"
 	}
-	nonCommitteeMessages.WithLabelValues(ssvmessage.MsgTypeToString(msgType), str).Inc()
+	m.nonCommitteeMessages.WithLabelValues(ssvmessage.MsgTypeToString(msgType), str).Inc()
 }
 
 func (m *metricsReporter) PeerScore(peerId peer.ID, score float64) {
-	pubsubPeerScore.WithLabelValues(peerId.String()).Set(score)
+	m.pubsubPeerScore.WithLabelValues(peerId.String()).Set(score)
 }
 
 func (m *metricsReporter) PeerP4Score(peerId peer.ID, score float64) {
-	pubsubPeerP4Score.WithLabelValues(peerId.String()).Set(score)
+	m.pubsubPeerP4Score.WithLabelValues(peerId.String()).Set(score)
 }
 
 func (m *metricsReporter) ResetPeerScores() {
-	pubsubPeerScore.Reset()
-	pubsubPeerP4Score.Reset()
+	m.pubsubPeerScore.Reset()
+	m.pubsubPeerP4Score.Reset()
 }
 
 // PeerDisconnected deletes all data about peers which connections have been closed by the current node
 func (m *metricsReporter) PeerDisconnected(peerId peer.ID) {
-	messagesReceivedFromPeer.DeleteLabelValues(peerId.String())
+	m.messagesReceivedFromPeer.DeleteLabelValues(peerId.String())
 }
