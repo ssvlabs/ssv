@@ -93,7 +93,8 @@ func matchMessages(ctx context.Context, logger *zap.Logger, cli DockerCLI, first
 }
 
 func Match(pctx context.Context, logger *zap.Logger, cli DockerCLI) error {
-	startctx, startc := context.WithTimeout(pctx, time.Minute*6*4) // wait max 4 epochs
+	//startctx, startc := context.WithTimeout(pctx, time.Minute*6*4) // wait max 4 epochs
+	startctx, startc := context.WithTimeout(pctx, time.Minute) // wait max 4 epochs
 	_, err := StartCondition(startctx, logger, []string{waitFor}, waitTarget, cli)
 	if err != nil {
 		startc() // Cancel the startctx context
