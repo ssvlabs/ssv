@@ -1,15 +1,15 @@
 name: E2E Test
 
 on:
+  pull_request:
+    branches:
+      - stage
+      - main
+
   workflow_run:
-    workflows: [Lint, Unit tests]
+    workflows: ["Lint", "Unit tests"]
     types: [completed]
     branches: [stage, main]
-    pull_request:
-      branches:
-        - "stage"
-
-  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}
