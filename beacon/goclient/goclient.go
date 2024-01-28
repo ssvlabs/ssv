@@ -2,6 +2,7 @@ package goclient
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -141,18 +142,26 @@ type goClient struct {
 	registrationMu       sync.Mutex
 	registrationLastSlot phase0.Slot
 	registrationCache    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration
+	commonTimeout        time.Duration
+	maxTimeout           time.Duration
 }
 
 // New init new client and go-client instance
 func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.OperatorID, slotTickerProvider slotticker.Provider) (beaconprotocol.BeaconNode, error) {
-	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(string(opt.Network.BeaconNetwork)))
+	const (
+		commonTimeout = time.Second * 5
+		maxTimeout    = time.Second * 30
+	)
 
-	httpClient, err := http.New(opt.Context,
+	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(string(opt.Network.BeaconNetwork)))
+	dialCtx, cancel := context.WithTimeout(opt.Context, commonTimeout)
+	defer cancel()
+	httpClient, err := http.New(dialCtx,
 		// WithAddress supplies the address of the beacon node, in host:port format.
 		http.WithAddress(opt.BeaconNodeAddr),
 		// LogLevel supplies the level of logging to carry out.
 		http.WithLogLevel(zerolog.DebugLevel),
-		http.WithTimeout(time.Second*5),
+		http.WithTimeout(maxTimeout),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create http client: %w", err)
@@ -167,10 +176,14 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 		gasLimit:          opt.GasLimit,
 		operatorID:        operatorID,
 		registrationCache: map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
+		commonTimeout:     commonTimeout,
+		maxTimeout:        maxTimeout,
 	}
 
 	// Get the node's version and client.
-	nodeVersionResp, err := client.client.NodeVersion(opt.Context, &api.NodeVersionOpts{})
+	nodeVersionResp, err := client.client.NodeVersion(opt.Context, &api.NodeVersionOpts{
+		Common: client.commonOpts(),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get node version: %w", err)
 	}
@@ -187,6 +200,29 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 		zap.String("version", client.nodeVersion),
 	)
 
+	// If it's a Prysm, check that the debug endpoints are enabled, otherwise
+	// the Validators method might fail when calling BeaconState.
+	// TODO: remove this once Prysm enables debug endpoints by default.
+	if client.nodeClient == NodePrysm {
+		// BeaconState is quite heavy to call, checking ForkChoice should be enough.
+		resp, err := client.client.(eth2client.ForkChoiceProvider).ForkChoice(opt.Context, &api.ForkChoiceOpts{
+			Common: api.CommonOpts{Timeout: client.maxTimeout},
+		})
+		if err != nil {
+			var apiErr *api.Error
+			if errors.As(err, &apiErr) && apiErr.StatusCode == 404 {
+				return nil, fmt.Errorf("Prysm node doesn't have debug endpoints enabled, please enable them with --enable-debug-rpc-endpoints")
+			}
+			return nil, fmt.Errorf("failed to get fork choice: %w", err)
+		}
+		if resp.Data == nil {
+			return nil, fmt.Errorf("fork choice response is nil")
+		}
+		if resp.Data.FinalizedCheckpoint.Root == (phase0.Root{}) {
+			return nil, fmt.Errorf("fork choice response is empty")
+		}
+	}
+
 	// Start registration submitter.
 	go client.registrationSubmitter(slotTickerProvider)
 
@@ -200,7 +236,9 @@ func (gc *goClient) NodeClient() NodeClient {
 // Healthy returns if beacon node is currently healthy: responds to requests, not in the syncing state, not optimistic
 // (for optimistic see https://github.com/ethereum/consensus-specs/blob/dev/sync/optimistic.md#block-production).
 func (gc *goClient) Healthy(ctx context.Context) error {
-	nodeSyncingResp, err := gc.client.NodeSyncing(ctx, &api.NodeSyncingOpts{})
+	nodeSyncingResp, err := gc.client.NodeSyncing(ctx, &api.NodeSyncingOpts{
+		Common: gc.commonOpts(),
+	})
 	if err != nil {
 		// TODO: get rid of global variable, pass metrics to goClient
 		metricsBeaconNodeStatus.Set(float64(statusUnknown))
@@ -244,4 +282,10 @@ func (gc *goClient) slotStartTime(slot phase0.Slot) time.Time {
 
 func (gc *goClient) Events(ctx context.Context, topics []string, handler eth2client.EventHandlerFunc) error {
 	return gc.client.Events(ctx, topics, handler)
+}
+
+func (gc *goClient) commonOpts() api.CommonOpts {
+	return api.CommonOpts{
+		Timeout: gc.commonTimeout,
+	}
 }

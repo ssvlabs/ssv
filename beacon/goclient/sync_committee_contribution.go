@@ -44,7 +44,8 @@ func (gc *goClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 
 	scDataReqStart := time.Now()
 	beaconBlockRootResp, err := gc.client.BeaconBlockRoot(gc.ctx, &api.BeaconBlockRootOpts{
-		Block: fmt.Sprint(slot),
+		Block:  fmt.Sprint(slot),
+		Common: gc.commonOpts(),
 	})
 	if err != nil {
 		return nil, DataVersionNil, fmt.Errorf("failed to obtain beacon block root: %w", err)
@@ -74,6 +75,7 @@ func (gc *goClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 				Slot:              slot,
 				SubcommitteeIndex: subnetIDs[index],
 				BeaconBlockRoot:   *blockRoot,
+				Common:            gc.commonOpts(),
 			})
 			if err != nil {
 				return fmt.Errorf("failed to obtain sync committee contribution: %w", err)

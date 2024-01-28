@@ -19,6 +19,7 @@ func (gc *goClient) AttesterDuties(ctx context.Context, epoch phase0.Epoch, vali
 	resp, err := gc.client.AttesterDuties(ctx, &api.AttesterDutiesOpts{
 		Epoch:   epoch,
 		Indices: validatorIndices,
+		Common:  gc.commonOpts(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to obtain attester duties: %w", err)
@@ -35,6 +36,7 @@ func (gc *goClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 	resp, err := gc.client.AttestationData(gc.ctx, &api.AttestationDataOpts{
 		Slot:           slot,
 		CommitteeIndex: committeeIndex,
+		Common:         gc.commonOpts(),
 	})
 	if err != nil {
 		return nil, DataVersionNil, fmt.Errorf("failed to get attestation data: %w", err)

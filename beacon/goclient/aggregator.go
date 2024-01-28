@@ -49,6 +49,7 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 	aggDataResp, err := gc.client.AggregateAttestation(gc.ctx, &api.AggregateAttestationOpts{
 		Slot:                slot,
 		AttestationDataRoot: root,
+		Common:              gc.commonOpts(),
 	})
 	if err != nil {
 		return nil, DataVersionNil, fmt.Errorf("failed to get aggregate attestation: %w", err)
