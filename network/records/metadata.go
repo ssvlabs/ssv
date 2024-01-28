@@ -8,8 +8,6 @@ import (
 type NodeMetadata struct {
 	// NodeVersion is the ssv-node version, it is a required field
 	NodeVersion string
-	// OperatorID holds a hash of the operator public key, based on operator key
-	OperatorID string
 	// ExecutionNode is the "name/version" of the eth1 node
 	ExecutionNode string
 	// ConsensusNode is the "name/version" of the beacon node
@@ -23,7 +21,6 @@ type NodeMetadata struct {
 func (nm *NodeMetadata) Encode() ([]byte, error) {
 	// ser := newSerializable(
 	//	nm.NodeVersion,
-	//	nm.OperatorID,
 	//	nm.ConsensusNode,
 	//	nm.ExecutionNode,
 	//)
@@ -43,7 +40,6 @@ func (nm *NodeMetadata) Decode(data []byte) error {
 	// nm.NodeVersion = ""
 	// nm.ConsensusNode = ""
 	// nm.ExecutionNode = ""
-	// nm.OperatorID = ""
 	//
 	// if len(ser.Entries) < 1 {
 	//	return errors.New("not enough entries in node metadata, node version is required")
