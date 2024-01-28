@@ -1,15 +1,17 @@
 name: E2E Test
 
 on:
+  pull_request:
+    branches:
+      - stage
+      - main
+
   workflow_run:
-    workflows: [Lint, Unit tests]
+    workflows: ["Lint", "Unit tests"]
     types: [completed]
     branches: [stage, main]
-  #  pull_request:
-  #    branches:
-  #      - "**"
 
-  workflow_dispatch:
+#  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}
@@ -31,6 +33,20 @@ jobs:
           cd ./e2e/
           chmod +x ./run.sh
           ./run.sh
-
       - name: clean up
         run: docker compose down -v
+
+      - name: Collect docker logs on failure
+        if: failure()
+        uses: jwalton/gh-docker-logs@v2
+        with:
+          dest: './logs'
+      - name: Tar logs
+        if: failure()
+        run: tar cvzf ./logs.tgz ./logs
+      - name: Upload logs to GitHub
+        if: failure()
+        uses: actions/upload-artifact@master
+        with:
+          name: logs.tgz
+          path: ./logs.tgz
