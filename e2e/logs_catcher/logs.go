@@ -99,6 +99,7 @@ type DockerCLI interface {
 }
 
 func FatalListener(ctx context.Context, logger *zap.Logger, cli DockerCLI) error {
+	return nil
 	ctx, c := context.WithCancel(ctx)
 	defer c()
 
