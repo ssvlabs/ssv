@@ -150,7 +150,7 @@ type goClient struct {
 func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.OperatorID, slotTickerProvider slotticker.Provider) (beaconprotocol.BeaconNode, error) {
 	const (
 		commonTimeout = time.Second * 5
-		maxTimeout    = time.Second * 30
+		maxTimeout    = time.Second * 120
 	)
 
 	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(string(opt.Network.BeaconNetwork)))
