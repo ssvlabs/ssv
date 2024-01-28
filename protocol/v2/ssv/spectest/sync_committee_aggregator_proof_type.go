@@ -2,19 +2,27 @@ package spectest
 
 import (
 	"encoding/hex"
+	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/runner/duties/synccommitteeaggregator"
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
+	typescomparable "github.com/bloxapp/ssv-spec/types/testingutils/comparable"
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	ssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
+	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
 )
 
 func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCommitteeAggregatorProofSpecTest) {
+	overrideStateComparisonForSyncCommitteeAggregatorProofSpecTest(t, test, test.Name)
+
 	ks := testingutils.Testing4SharesSet()
 	share := testingutils.TestingShare(ks)
 	logger := logging.TestLogger(t)
@@ -45,6 +53,22 @@ func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCo
 	postRoot, err := r.GetBaseRunner().State.GetRoot()
 	require.NoError(t, err)
 	require.EqualValues(t, test.PostDutyRunnerStateRoot, hex.EncodeToString(postRoot[:]))
+}
+
+func overrideStateComparisonForSyncCommitteeAggregatorProofSpecTest(t *testing.T, test *synccommitteeaggregator.SyncCommitteeAggregatorProofSpecTest, name string) {
+	testType := reflect.TypeOf(test).String()
+	testType = strings.Replace(testType, "spectest.", "synccommitteeaggregator.", 1)
+
+	runnerState := &runner.State{}
+	specDir, err := protocoltesting.GetSpecDir("", filepath.Join("ssv", "spectest"))
+	require.NoError(t, err)
+	runnerState, err = typescomparable.UnmarshalStateComparison(specDir, name, testType, runnerState)
+	require.NoError(t, err)
+
+	root, err := runnerState.GetRoot()
+	require.NoError(t, err)
+
+	test.PostDutyRunnerStateRoot = hex.EncodeToString(root[:])
 }
 
 func keySetForShare(share *types.Share) *testingutils.TestKeySet {
