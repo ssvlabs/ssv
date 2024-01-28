@@ -120,7 +120,7 @@ Build prod Docker image:
     - $DOCKER_LOGIN_TO_INFRA_PROD_REPO && docker push $DOCKER_REPO_INFRA_PROD:$CI_COMMIT_SHA
 
   only:
-    - expose-exporters-api-port
+    - main
 
 Deploy nodes to prod:
   stage: deploy
@@ -204,5 +204,5 @@ Deploy exporter to prod:
     # - .k8/production/mainnet/scripts/deploy-exporters.sh $DOCKER_REPO_INFRA_PROD $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $SSV_EXPORTER_CPU_LIMIT $SSV_EXPORTER_MEM_LIMIT
 
   only:
-    - expose-exporters-api-port
+    - main
 
