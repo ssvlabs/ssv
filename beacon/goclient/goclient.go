@@ -278,6 +278,7 @@ func (gc *goClient) commonOpts() api.CommonOpts {
 }
 
 func (gc *goClient) checkPrysmDebugEndpoints() error {
+	start := time.Now()
 	address := strings.TrimSuffix(gc.client.Address(), "/")
 	if !strings.HasPrefix(address, "http") {
 		address = fmt.Sprintf("http://%s", address)
@@ -303,5 +304,6 @@ func (gc *goClient) checkPrysmDebugEndpoints() error {
 	if data.JustifiedCheckpoint.Root == (phase0.Root{}) {
 		return fmt.Errorf("no justified checkpoint found")
 	}
+	gc.log.Debug("Prysm debug endpoints are enabled", zap.Duration("took", time.Since(start)))
 	return nil
 }
