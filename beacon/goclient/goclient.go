@@ -283,6 +283,9 @@ func (gc *goClient) checkPrysmDebugEndpoints() error {
 	if err != nil {
 		return fmt.Errorf("failed to parse beacon node address: %w", err)
 	}
+	if url.Scheme == "" {
+		url.Scheme = "http"
+	}
 	url.Path = "/eth/v2/debug/beacon/fork_choice"
 	resp, err := http.Get(url.String())
 	if err != nil {
