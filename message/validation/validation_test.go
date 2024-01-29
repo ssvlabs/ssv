@@ -1745,12 +1745,12 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Get error when receiving an SSV message with an invalid signature.
 	t.Run("signature verification", func(t *testing.T) {
-		var afterFork = phase0.Epoch(123456789)
+		epoch := phase0.Epoch(123456789)
 
-		t.Run("unsigned message after fork", func(t *testing.T) {
+		t.Run("unsigned message", func(t *testing.T) {
 			validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-			validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[4], 4, specqbft.Height(afterFork))
+			validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[4], 4, specqbft.Height(epoch))
 
 			encoded, err := validSignedMessage.Encode()
 			require.NoError(t, err)
@@ -1772,16 +1772,16 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				},
 			}
 
-			slot := netCfg.Beacon.FirstSlotAtEpoch(afterFork)
+			slot := netCfg.Beacon.FirstSlotAtEpoch(epoch)
 			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
 			_, _, err = validator.validateP2PMessage(pMsg, receivedAt)
 			require.ErrorContains(t, err, ErrMalformedPubSubMessage.Error())
 		})
 
-		t.Run("signed message after fork", func(t *testing.T) {
+		t.Run("signed message", func(t *testing.T) {
 			validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-			slot := netCfg.Beacon.FirstSlotAtEpoch(afterFork)
+			slot := netCfg.Beacon.FirstSlotAtEpoch(epoch)
 
 			validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, specqbft.Height(slot))
 
@@ -1839,7 +1839,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		t.Run("unexpected operator ID", func(t *testing.T) {
 			validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-			slot := netCfg.Beacon.FirstSlotAtEpoch(afterFork)
+			slot := netCfg.Beacon.FirstSlotAtEpoch(epoch)
 
 			validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, specqbft.Height(slot))
 
@@ -1898,7 +1898,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		t.Run("malformed signature", func(t *testing.T) {
 			validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
-			slot := netCfg.Beacon.FirstSlotAtEpoch(afterFork)
+			slot := netCfg.Beacon.FirstSlotAtEpoch(epoch)
 
 			validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, specqbft.Height(slot))
 
