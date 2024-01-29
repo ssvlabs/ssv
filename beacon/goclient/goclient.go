@@ -5,13 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
 
 	eth2client "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/api"
-	"github.com/attestantio/go-eth2-client/http"
+	eth2clienthttp "github.com/attestantio/go-eth2-client/http"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -156,12 +157,12 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(string(opt.Network.BeaconNetwork)))
 	dialCtx, cancel := context.WithTimeout(opt.Context, commonTimeout)
 	defer cancel()
-	httpClient, err := http.New(dialCtx,
+	httpClient, err := eth2clienthttp.New(dialCtx,
 		// WithAddress supplies the address of the beacon node, in host:port format.
-		http.WithAddress(opt.BeaconNodeAddr),
+		eth2clienthttp.WithAddress(opt.BeaconNodeAddr),
 		// LogLevel supplies the level of logging to carry out.
-		http.WithLogLevel(zerolog.DebugLevel),
-		http.WithTimeout(maxTimeout),
+		eth2clienthttp.WithLogLevel(zerolog.DebugLevel),
+		eth2clienthttp.WithTimeout(maxTimeout),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create http client: %w", err)
@@ -171,7 +172,7 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 		log:               logger,
 		ctx:               opt.Context,
 		network:           opt.Network,
-		client:            httpClient.(*http.Service),
+		client:            httpClient.(*eth2clienthttp.Service),
 		graffiti:          opt.Graffiti,
 		gasLimit:          opt.GasLimit,
 		operatorID:        operatorID,
@@ -210,7 +211,7 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 		})
 		if err != nil {
 			var apiErr *api.Error
-			if errors.As(err, &apiErr) && apiErr.StatusCode == 404 {
+			if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
 				return nil, fmt.Errorf("Prysm node doesn't have debug endpoints enabled, please enable them with --enable-debug-rpc-endpoints")
 			}
 			return nil, fmt.Errorf("failed to get fork choice: %w", err)
