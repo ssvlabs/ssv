@@ -144,7 +144,10 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		slotTickerProvider := func() slotticker.SlotTicker {
-			return slotticker.New(networkConfig)
+			return slotticker.New(logger, slotticker.Config{
+				SlotDuration: networkConfig.SlotDurationSec(),
+				GenesisTime:  networkConfig.GetGenesisTime(),
+			})
 		}
 
 		cfg.ConsensusClient.Context = cmd.Context()
@@ -216,6 +219,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = nodeStorage.GetPrivateKey
 		cfg.SSVOptions.ValidatorOptions.OperatorData = operatorData
 		cfg.SSVOptions.ValidatorOptions.RegistryStorage = nodeStorage
+		cfg.SSVOptions.ValidatorOptions.RecipientsStorage = nodeStorage
 		cfg.SSVOptions.ValidatorOptions.GasLimit = cfg.ConsensusClient.GasLimit
 
 		if cfg.WsAPIPort != 0 {

@@ -128,7 +128,7 @@ func byPubKeys(pubkeys []api.Hex) registrystorage.SharesFilter {
 func byIndices(indices []uint64) registrystorage.SharesFilter {
 	return func(share *types.SSVShare) bool {
 		for _, index := range indices {
-			if share.Metadata.BeaconMetadata.Index == phase0.ValidatorIndex(index) {
+			if share.BeaconMetadata != nil && share.BeaconMetadata.Index == phase0.ValidatorIndex(index) {
 				return true
 			}
 		}

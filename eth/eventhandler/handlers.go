@@ -181,7 +181,7 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 	validatorShare := eh.nodeStorage.Shares().Get(txn, event.PublicKey)
 
 	if validatorShare == nil {
-		createdShare, err := eh.handleShareCreation(txn, event, sharePublicKeys, encryptedKeys)
+		shareCreated, err := eh.handleShareCreation(txn, event, sharePublicKeys, encryptedKeys)
 		if err != nil {
 			var malformedEventError *MalformedEventError
 			if errors.As(err, &malformedEventError) {
@@ -194,7 +194,7 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 			return nil, err
 		}
 
-		validatorShare = createdShare
+		validatorShare = shareCreated
 
 		logger.Debug("share not found, created a new one", fields.OperatorID(validatorShare.OperatorID))
 	} else if event.Owner != validatorShare.OwnerAddress {

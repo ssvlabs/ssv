@@ -15,8 +15,10 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/jellydator/ttlcache/v3"
+	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -33,7 +35,6 @@ import (
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	qbftcontroller "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/bloxapp/ssv/protocol/v2/queue/worker"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
@@ -67,7 +68,7 @@ type ControllerOptions struct {
 	HistorySyncBatchSize       int           `yaml:"HistorySyncBatchSize" env:"HISTORY_SYNC_BATCH_SIZE" env-default:"25" env-description:"Maximum number of messages to sync in a single batch"`
 	MinPeers                   int           `yaml:"MinimumPeers" env:"MINIMUM_PEERS" env-default:"2" env-description:"The required minimum peers for sync"`
 	BeaconNetwork              beaconprotocol.Network
-	Network                    network.P2PNetwork
+	Network                    P2PNetwork
 	Beacon                     beaconprotocol.BeaconNode
 	ShareEncryptionKeyProvider ShareEncryptionKeyProvider
 	FullNode                   bool `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Save decided history rather than just highest messages"`
@@ -76,6 +77,7 @@ type ControllerOptions struct {
 	KeyManager                 spectypes.KeyManager
 	OperatorData               *registrystorage.OperatorData
 	RegistryStorage            nodestorage.Storage
+	RecipientsStorage          Recipients
 	NewDecidedHandler          qbftcontroller.NewDecidedHandler
 	DutyRoles                  []spectypes.BeaconRole
 	StorageMap                 *storage.QBFTStores
@@ -123,6 +125,26 @@ type nonCommitteeValidator struct {
 	sync.Mutex
 }
 
+type Nonce uint16
+
+type Recipients interface {
+	GetRecipientData(r basedb.Reader, owner common.Address) (*registrystorage.RecipientData, bool, error)
+}
+
+type SharesStorage interface {
+	Get(txn basedb.Reader, pubKey []byte) *types.SSVShare
+	List(txn basedb.Reader, filters ...registrystorage.SharesFilter) []*types.SSVShare
+	UpdateValidatorMetadata(pk string, metadata *beaconprotocol.ValidatorMetadata) error
+}
+
+type P2PNetwork interface {
+	Broadcast(message *spectypes.SSVMessage) error
+	UseMessageRouter(router network.MessageRouter)
+	Peers(pk spectypes.ValidatorPK) ([]peer.ID, error)
+	SubscribeRandoms(logger *zap.Logger, numSubnets int) error
+	RegisterHandlers(logger *zap.Logger, handlers ...*p2pprotocol.SyncHandler)
+}
+
 // controller implements Controller
 type controller struct {
 	context context.Context
@@ -130,9 +152,9 @@ type controller struct {
 	logger  *zap.Logger
 	metrics validator.Metrics
 
-	sharesStorage     registrystorage.Shares
+	sharesStorage     SharesStorage
 	operatorsStorage  registrystorage.Operators
-	recipientsStorage registrystorage.Recipients
+	recipientsStorage Recipients
 	ibftStorageMap    *storage.QBFTStores
 
 	beacon     beaconprotocol.BeaconNode
@@ -142,13 +164,14 @@ type controller struct {
 	operatorData               *registrystorage.OperatorData
 	operatorDataMutex          sync.RWMutex
 
-	validatorsMap    *validatorsmap.ValidatorsMap
-	validatorOptions validator.Options
+	validatorOptions   validator.Options
+	validatorsMap      *validatorsmap.ValidatorsMap
+	validatorStartFunc func(validator *validator.Validator) (bool, error)
 
 	metadataUpdateInterval time.Duration
 
 	operatorsIDs         *sync.Map
-	network              network.P2PNetwork
+	network              P2PNetwork
 	messageRouter        *messageRouter
 	messageWorker        *worker.Worker
 	historySyncBatchSize int
@@ -503,27 +526,24 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 	if metadata == nil {
 		return errors.New("could not update empty metadata")
 	}
-
 	// Save metadata to share storage.
 	err := c.sharesStorage.UpdateValidatorMetadata(pk, metadata)
 	if err != nil {
 		return errors.Wrap(err, "could not update validator metadata")
 	}
 
-	// If this validator is not ours, don't start it.
+	// If this validator is not ours or is liquidated, don't start it.
 	pkBytes, err := hex.DecodeString(pk)
 	if err != nil {
 		return errors.Wrap(err, "could not decode public key")
 	}
-
 	share := c.sharesStorage.Get(nil, pkBytes)
 	if share == nil {
 		return errors.New("share was not found")
 	}
-	if !share.BelongsToOperator(c.GetOperatorData().ID) {
+	if !share.BelongsToOperator(c.GetOperatorData().ID) || share.Liquidated {
 		return nil
 	}
-
 	// Start validator (if not already started).
 	if v, found := c.validatorsMap.GetValidator(pk); found {
 		v.Share.BeaconMetadata = metadata
@@ -533,7 +553,6 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 		}
 	} else {
 		c.logger.Info("starting new validator", zap.String("pubKey", pk))
-
 		started, err := c.onShareStart(share)
 		if err != nil {
 			return errors.Wrap(err, "could not start validator")
@@ -670,18 +689,15 @@ func (c *controller) onShareStart(share *ssvtypes.SSVShare) (bool, error) {
 		c.logger.Warn("skipping validator until it becomes active", fields.PubKey(share.ValidatorPubKey))
 		return false, nil
 	}
-
 	if err := c.setShareFeeRecipient(share, c.recipientsStorage.GetRecipientData); err != nil {
 		return false, fmt.Errorf("could not set share fee recipient: %w", err)
 	}
-
 	// Start a committee validator.
 	v, found := c.validatorsMap.GetValidator(hex.EncodeToString(share.ValidatorPubKey))
 	if !found {
 		if !share.HasBeaconMetadata() {
 			return false, fmt.Errorf("beacon metadata is missing")
 		}
-
 		// Share context with both the validator and the runners,
 		// so that when the validator is stopped, the runners are stopped as well.
 		ctx, cancel := context.WithCancel(c.context)
@@ -689,7 +705,6 @@ func (c *controller) onShareStart(share *ssvtypes.SSVShare) (bool, error) {
 		opts := c.validatorOptions
 		opts.SSVShare = share
 		opts.DutyRunners = SetupRunners(ctx, c.logger, opts)
-
 		v = validator.NewValidator(ctx, cancel, opts)
 		c.validatorsMap.CreateValidator(hex.EncodeToString(share.ValidatorPubKey), v)
 
@@ -736,13 +751,20 @@ func (c *controller) setShareFeeRecipient(share *ssvtypes.SSVShare, getRecipient
 	return nil
 }
 
+func (c *controller) validatorStart(validator *validator.Validator) (bool, error) {
+	if c.validatorStartFunc == nil {
+		return validator.Start(c.logger)
+	}
+	return c.validatorStartFunc(validator)
+}
+
 // startValidator will start the given validator if applicable
 func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 	c.reportValidatorStatus(v.Share.ValidatorPubKey, v.Share.BeaconMetadata)
 	if v.Share.BeaconMetadata.Index == 0 {
 		return false, errors.New("could not start validator: index not found")
 	}
-	started, err := v.Start(c.logger)
+	started, err := c.validatorStart(v)
 	if err != nil {
 		c.metrics.ValidatorError(v.Share.ValidatorPubKey)
 		return false, errors.Wrap(err, "could not start validator")
@@ -823,7 +845,6 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 		spectypes.BNRoleValidatorRegistration,
 		spectypes.BNRoleVoluntaryExit,
 	}
-
 	domainType := ssvtypes.GetDefaultDomain()
 	buildController := func(role spectypes.BeaconRole, valueCheckF specqbft.ProposedValueCheckF) *qbftcontroller.Controller {
 		config := &qbft.Config{
@@ -842,13 +863,11 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 			SignatureVerification: true,
 		}
 		config.ValueCheckF = valueCheckF
-
 		identifier := spectypes.NewMsgID(ssvtypes.GetDefaultDomain(), options.SSVShare.Share.ValidatorPubKey, role)
-		qbftCtrl := qbftcontroller.NewController(identifier[:], &options.SSVShare.Share, domainType, config, options.FullNode)
+		qbftCtrl := qbftcontroller.NewController(identifier[:], &options.SSVShare.Share, config, options.FullNode)
 		qbftCtrl.NewDecidedHandler = options.NewDecidedHandler
 		return qbftCtrl
 	}
-
 	runners := runner.DutyRunners{}
 	for _, role := range runnersType {
 		switch role {

@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
-	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -37,21 +37,27 @@ func (gc *goClient) SyncCommitteeSubnetID(index phase0.CommitteeIndex) (uint64, 
 // GetSyncCommitteeContribution returns
 func (gc *goClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProofs []phase0.BLSSignature, subnetIDs []uint64) (ssz.Marshaler, spec.DataVersion, error) {
 	if len(selectionProofs) != len(subnetIDs) {
-		return nil, DataVersionNil, errors.New("mismatching number of selection proofs and subnet IDs")
+		return nil, DataVersionNil, fmt.Errorf("mismatching number of selection proofs and subnet IDs")
 	}
 
 	gc.waitForOneThirdSlotDuration(slot)
 
 	scDataReqStart := time.Now()
-	blockRoot, err := gc.client.BeaconBlockRoot(gc.ctx, fmt.Sprint(slot))
+	beaconBlockRootResp, err := gc.client.BeaconBlockRoot(gc.ctx, &api.BeaconBlockRootOpts{
+		Block: fmt.Sprint(slot),
+	})
 	if err != nil {
-		return nil, DataVersionNil, err
+		return nil, DataVersionNil, fmt.Errorf("failed to obtain beacon block root: %w", err)
 	}
-	if blockRoot == nil {
-		return nil, DataVersionNil, errors.New("block root is nil")
+	if beaconBlockRootResp == nil {
+		return nil, DataVersionNil, fmt.Errorf("beacon block root response is nil")
+	}
+	if beaconBlockRootResp.Data == nil {
+		return nil, DataVersionNil, fmt.Errorf("beacon block root data is nil")
 	}
 
 	metricsSyncCommitteeDataRequest.Observe(time.Since(scDataReqStart).Seconds())
+	blockRoot := beaconBlockRootResp.Data
 
 	gc.waitToSlotTwoThirds(slot)
 
@@ -64,13 +70,21 @@ func (gc *goClient) GetSyncCommitteeContribution(slot phase0.Slot, selectionProo
 	for i := range subnetIDs {
 		index := i
 		g.Go(func() error {
-			contribution, err := gc.client.SyncCommitteeContribution(gc.ctx, slot, subnetIDs[index], *blockRoot)
+			syncCommitteeContrResp, err := gc.client.SyncCommitteeContribution(gc.ctx, &api.SyncCommitteeContributionOpts{
+				Slot:              slot,
+				SubcommitteeIndex: subnetIDs[index],
+				BeaconBlockRoot:   *blockRoot,
+			})
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to obtain sync committee contribution: %w", err)
 			}
-			if contribution == nil {
-				return errors.New("contribution is nil")
+			if syncCommitteeContrResp == nil {
+				return fmt.Errorf("sync committee contribution response is nil")
 			}
+			if syncCommitteeContrResp.Data == nil {
+				return fmt.Errorf("sync committee contribution data is nil")
+			}
+			contribution := syncCommitteeContrResp.Data
 			contributions = append(contributions, &spectypes.Contribution{
 				SelectionProofSig: selectionProofs[index],
 				Contribution:      *contribution,
