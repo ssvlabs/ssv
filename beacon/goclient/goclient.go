@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math"
 	"net/http"
-	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -279,15 +278,11 @@ func (gc *goClient) commonOpts() api.CommonOpts {
 }
 
 func (gc *goClient) checkPrysmDebugEndpoints() error {
-	url, err := url.Parse(gc.client.Address())
-	if err != nil {
-		return fmt.Errorf("failed to parse beacon node address: %w", err)
+	address := strings.TrimSuffix(gc.client.Address(), "/")
+	if !strings.HasPrefix(address, "http") {
+		address = fmt.Sprintf("http://%s", address)
 	}
-	if url.Scheme == "" {
-		url.Scheme = "http"
-	}
-	url.Path = "/eth/v2/debug/beacon/fork_choice"
-	resp, err := http.Get(url.String())
+	resp, err := http.Get(fmt.Sprintf("%s/eth/v2/debug/beacon/fork_choice", address))
 	if err != nil {
 		return fmt.Errorf("failed to get fork choice: %w", err)
 	}
