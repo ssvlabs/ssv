@@ -2,10 +2,11 @@ package goclient
 
 import (
 	"context"
-	"errors"
+	"encoding/json"
 	"fmt"
 	"math"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -205,22 +206,8 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 	// the Validators method might fail when calling BeaconState.
 	// TODO: remove this once Prysm enables debug endpoints by default.
 	if client.nodeClient == NodePrysm {
-		// BeaconState is quite heavy to call, checking ForkChoice should be enough.
-		resp, err := client.client.(eth2client.ForkChoiceProvider).ForkChoice(opt.Context, &api.ForkChoiceOpts{
-			Common: api.CommonOpts{Timeout: client.maxTimeout},
-		})
-		if err != nil {
-			var apiErr *api.Error
-			if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
-				return nil, fmt.Errorf("Prysm node doesn't have debug endpoints enabled, please enable them with --enable-debug-rpc-endpoints")
-			}
-			return nil, fmt.Errorf("failed to get fork choice: %w", err)
-		}
-		if resp.Data == nil {
-			return nil, fmt.Errorf("fork choice response is nil")
-		}
-		if resp.Data.FinalizedCheckpoint.Root == (phase0.Root{}) {
-			return nil, fmt.Errorf("fork choice response is empty")
+		if err := client.checkPrysmDebugEndpoints(); err != nil {
+			return nil, err
 		}
 	}
 
@@ -289,4 +276,34 @@ func (gc *goClient) commonOpts() api.CommonOpts {
 	return api.CommonOpts{
 		Timeout: gc.commonTimeout,
 	}
+}
+
+func (gc *goClient) checkPrysmDebugEndpoints() error {
+	url, err := url.Parse(gc.client.Address())
+	if err != nil {
+		return fmt.Errorf("failed to parse beacon node address: %w", err)
+	}
+	url.Path = "/eth/v2/debug/beacon/fork_choice"
+	resp, err := http.Get(url.String())
+	if err != nil {
+		return fmt.Errorf("failed to get fork choice: %w", err)
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		return fmt.Errorf("Prysm node doesn't have debug endpoints enabled, please enable them with --enable-debug-rpc-endpoints")
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to get fork choice: %s", resp.Status)
+	}
+	var data struct {
+		JustifiedCheckpoint struct {
+			Root phase0.Root `json:"root"`
+		} `json:"justified_checkpoint"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return fmt.Errorf("failed to decode fork choice response: %w", err)
+	}
+	if data.JustifiedCheckpoint.Root == (phase0.Root{}) {
+		return fmt.Errorf("no justified checkpoint found")
+	}
+	return nil
 }
