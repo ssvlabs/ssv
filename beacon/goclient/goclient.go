@@ -282,7 +282,7 @@ func (gc *goClient) checkPrysmDebugEndpoints() error {
 	if !strings.HasPrefix(address, "http") {
 		address = fmt.Sprintf("http://%s", address)
 	}
-	resp, err := http.Get(fmt.Sprintf("%s/eth/v2/debug/beacon/fork_choice", address))
+	resp, err := http.Get(fmt.Sprintf("%s/eth/v2/debug/fork_choice", address))
 	if err != nil {
 		return fmt.Errorf("failed to get fork choice: %w", err)
 	}
