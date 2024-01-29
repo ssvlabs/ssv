@@ -35,7 +35,7 @@ const (
 	signatureOffset  = 0
 	operatorIDSize   = 8
 	operatorIDOffset = signatureOffset + signatureSize
-	messageOffset    = operatorIDOffset + operatorIDSize
+	MessageOffset    = operatorIDOffset + operatorIDSize
 )
 
 // EncodeSignedSSVMessage serializes the message, op id and signature into bytes
@@ -43,17 +43,17 @@ func EncodeSignedSSVMessage(message []byte, operatorID spectypes.OperatorID, sig
 	b := make([]byte, signatureSize+operatorIDSize+len(message))
 	copy(b[signatureOffset:], signature)
 	binary.LittleEndian.PutUint64(b[operatorIDOffset:], operatorID)
-	copy(b[messageOffset:], message)
+	copy(b[MessageOffset:], message)
 	return b
 }
 
 // DecodeSignedSSVMessage deserializes signed message bytes messsage, op id and a signature
 func DecodeSignedSSVMessage(encoded []byte) ([]byte, spectypes.OperatorID, []byte, error) {
-	if len(encoded) < messageOffset {
+	if len(encoded) < MessageOffset {
 		return nil, 0, nil, fmt.Errorf("unexpected encoded message size of %d", len(encoded))
 	}
 
-	message := encoded[messageOffset:]
+	message := encoded[MessageOffset:]
 	operatorID := binary.LittleEndian.Uint64(encoded[operatorIDOffset : operatorIDOffset+operatorIDSize])
 	signature := encoded[signatureOffset : signatureOffset+signatureSize]
 	return message, operatorID, signature, nil

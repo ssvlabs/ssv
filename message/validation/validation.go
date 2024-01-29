@@ -233,17 +233,17 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer
 	if mv.selfAccept && peerID == mv.selfPID {
 		rawMsgPayload, _, _, err := commons.DecodeSignedSSVMessage(pmsg.Data)
 		if err != nil {
-			mv.logger.Error("decoding signed ssv message error", zap.Error(err))
+			mv.logger.Error("failed to decode signed ssv message", zap.Error(err))
 			return pubsub.ValidationReject
 		}
 		msg, err := commons.DecodeNetworkMsg(rawMsgPayload)
 		if err != nil {
-			mv.logger.Error("decoding network message error", zap.Error(err))
+			mv.logger.Error("failed to decode network message", zap.Error(err))
 			return pubsub.ValidationReject
 		}
+		// skipping the error check for testing simplifying
 		decMsg, _ := queue.DecodeSSVMessage(msg)
 		pmsg.ValidatorData = decMsg
-		_ = err
 		return pubsub.ValidationAccept
 	}
 

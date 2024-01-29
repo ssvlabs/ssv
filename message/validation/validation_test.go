@@ -37,11 +37,6 @@ import (
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
-// taken from network/commons/common.go
-const (
-	messageOffset = 264
-)
-
 func Test_ValidateSSVMessage(t *testing.T) {
 	logger := zaptest.NewLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
@@ -199,7 +194,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		topic := commons.GetTopicFullName(commons.ValidatorTopicID(share.ValidatorPubKey)[0])
 		pmsg := &pubsub.Message{
 			Message: &pspb.Message{
-				Data:  bytes.Repeat([]byte{1}, 10_000_000+messageOffset),
+				Data:  bytes.Repeat([]byte{1}, 10_000_000+commons.MessageOffset),
 				Topic: &topic,
 				From:  []byte("16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r"),
 			},
@@ -222,7 +217,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		topic := commons.GetTopicFullName(commons.ValidatorTopicID(share.ValidatorPubKey)[0])
 		pmsg := &pubsub.Message{
 			Message: &pspb.Message{
-				Data:  bytes.Repeat([]byte{1}, 1+messageOffset),
+				Data:  bytes.Repeat([]byte{1}, 1+commons.MessageOffset),
 				Topic: &topic,
 				From:  []byte("16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r"),
 			},
@@ -1750,7 +1745,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	// Get error when receiving an SSV message with an invalid signature.
 	t.Run("signature verification", func(t *testing.T) {
-		var afterFork = phase0.Epoch(123456789) + 1000
+		var afterFork = phase0.Epoch(123456789)
 
 		t.Run("unsigned message after fork", func(t *testing.T) {
 			validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
