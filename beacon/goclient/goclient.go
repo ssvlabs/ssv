@@ -32,8 +32,8 @@ const (
 	DataVersionNil spec.DataVersion = math.MaxUint64
 
 	// Client timeouts.
-	commonTimeout = time.Second * 5   // For dialing and most requests.
-	longTimeout   = time.Second * 120 // For long requests.
+	DefaultCommonTimeout = time.Second * 5   // For dialing and most requests.
+	DefaultLongTimeout   = time.Second * 120 // For long requests.
 )
 
 type beaconNodeStatus int32
@@ -155,8 +155,16 @@ type goClient struct {
 
 // New init new client and go-client instance
 func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.OperatorID, slotTickerProvider slotticker.Provider) (beaconprotocol.BeaconNode, error) {
-
 	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(string(opt.Network.BeaconNetwork)))
+
+	commonTimeout := opt.CommonTimeout
+	if commonTimeout == 0 {
+		commonTimeout = DefaultCommonTimeout
+	}
+	longTimeout := opt.LongTimeout
+	if longTimeout == 0 {
+		longTimeout = DefaultLongTimeout
+	}
 
 	httpClient, err := eth2clienthttp.New(opt.Context,
 		// WithAddress supplies the address of the beacon node, in host:port format.
@@ -275,7 +283,7 @@ func (gc *goClient) checkPrysmDebugEndpoints() error {
 		address = fmt.Sprintf("http://%s", address)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), commonTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), DefaultCommonTimeout)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/eth/v2/debug/fork_choice", address), nil)
