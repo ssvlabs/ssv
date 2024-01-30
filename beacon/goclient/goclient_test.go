@@ -32,39 +32,51 @@ func TestTimeouts(t *testing.T) {
 	require.ErrorContains(t, err, "context deadline exceeded")
 
 	// Create a server that is too slow to respond to the Validators request.
-	unresponsiveServer := mockServer(t, delays{
-		BeaconStateDelay: longTimeout * 2,
-	})
-	client, err := mockClient(t, ctx, unresponsiveServer.URL, commonTimeout, longTimeout)
-	require.NoError(t, err)
-	_, err = client.(*goClient).GetValidatorData(nil) // Should call BeaconState internally.
-	require.ErrorContains(t, err, "context deadline exceeded")
-	duties, err := client.(*goClient).ProposerDuties(ctx, 132502, nil)
-	require.NoError(t, err)
-	require.NotEmpty(t, duties)
+	{
+		unresponsiveServer := mockServer(t, delays{
+			BeaconStateDelay: longTimeout * 2,
+		})
+		client, err := mockClient(t, ctx, unresponsiveServer.URL, commonTimeout, longTimeout)
+		require.NoError(t, err)
+
+		require.NoError(t, err)
+		_, err = client.(*goClient).GetValidatorData(nil) // Should call BeaconState internally.
+		require.ErrorContains(t, err, "context deadline exceeded")
+
+		duties, err := client.(*goClient).ProposerDuties(ctx, 132502, nil)
+		require.NoError(t, err)
+		require.NotEmpty(t, duties)
+	}
 
 	// Create a server that is too slow to respond to proposer duties request.
-	unresponsiveServer = mockServer(t, delays{
-		ProposerDutiesDelay: longTimeout * 2,
-	})
-	client, err = mockClient(t, ctx, unresponsiveServer.URL, commonTimeout, longTimeout)
-	require.NoError(t, err)
-	_, err = client.(*goClient).ProposerDuties(ctx, 132502, nil)
-	require.ErrorContains(t, err, "context deadline exceeded")
+	{
+		unresponsiveServer := mockServer(t, delays{
+			ProposerDutiesDelay: longTimeout * 2,
+		})
+		client, err := mockClient(t, ctx, unresponsiveServer.URL, commonTimeout, longTimeout)
+		require.NoError(t, err)
+
+		_, err = client.(*goClient).ProposerDuties(ctx, 132502, nil)
+		require.ErrorContains(t, err, "context deadline exceeded")
+	}
 
 	// Create a server that is fast enough.
-	fastServer := mockServer(t, delays{
-		BaseDelay:        commonTimeout / 2,
-		BeaconStateDelay: longTimeout / 2,
-	})
-	client, err = mockClient(t, ctx, fastServer.URL, commonTimeout, longTimeout)
-	require.NoError(t, err)
-	validators, err := client.(*goClient).GetValidatorData(nil)
-	require.NoError(t, err)
-	require.NotEmpty(t, validators)
-	duties, err = client.(*goClient).ProposerDuties(ctx, 132502, nil)
-	require.NoError(t, err)
-	require.NotEmpty(t, duties)
+	{
+		fastServer := mockServer(t, delays{
+			BaseDelay:        commonTimeout / 2,
+			BeaconStateDelay: longTimeout / 2,
+		})
+		client, err := mockClient(t, ctx, fastServer.URL, commonTimeout, longTimeout)
+		require.NoError(t, err)
+
+		validators, err := client.(*goClient).GetValidatorData(nil)
+		require.NoError(t, err)
+		require.NotEmpty(t, validators)
+
+		duties, err := client.(*goClient).ProposerDuties(ctx, 132502, nil)
+		require.NoError(t, err)
+		require.NotEmpty(t, duties)
+	}
 }
 
 func mockClient(t *testing.T, ctx context.Context, serverURL string, commonTimeout, longTimeout time.Duration) (beacon.BeaconNode, error) {
