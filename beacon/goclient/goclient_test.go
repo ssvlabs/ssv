@@ -51,7 +51,8 @@ func TestTimeouts(t *testing.T) {
 
 	// Create a server that is fast enough.
 	fastServer := mockServer(t, delays{
-		BaseDelay: commonTimeout / 2,
+		BaseDelay:        commonTimeout / 2,
+		BeaconStateDelay: longTimeout / 2,
 	})
 	client, err = mockClient(t, ctx, fastServer.URL, commonTimeout, longTimeout)
 	require.NoError(t, err)
