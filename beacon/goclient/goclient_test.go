@@ -39,6 +39,9 @@ func TestTimeouts(t *testing.T) {
 	require.NoError(t, err)
 	_, err = client.(*goClient).GetValidatorData(nil) // Should call BeaconState internally.
 	require.ErrorContains(t, err, "context deadline exceeded")
+	duties, err := client.(*goClient).ProposerDuties(ctx, 132502, nil)
+	require.NoError(t, err)
+	require.NotEmpty(t, duties)
 
 	// Create a server that is too slow to respond to proposer duties request.
 	unresponsiveServer = mockServer(t, delays{
@@ -59,7 +62,7 @@ func TestTimeouts(t *testing.T) {
 	validators, err := client.(*goClient).GetValidatorData(nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, validators)
-	duties, err := client.(*goClient).ProposerDuties(ctx, 132502, nil)
+	duties, err = client.(*goClient).ProposerDuties(ctx, 132502, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, duties)
 }
