@@ -32,8 +32,8 @@ const (
 	DataVersionNil spec.DataVersion = math.MaxUint64
 
 	// Client timeouts.
-	commonTimeout = time.Second * 5
-	maxTimeout    = time.Second * 120
+	commonTimeout = time.Second * 5   // For dialing and most requests.
+	longTimeout   = time.Second * 120 // For long requests.
 )
 
 type beaconNodeStatus int32
@@ -179,7 +179,7 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 		operatorID:        operatorID,
 		registrationCache: map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
 		commonTimeout:     commonTimeout,
-		maxTimeout:        maxTimeout,
+		maxTimeout:        longTimeout,
 	}
 
 	// Get the node's version and client.
