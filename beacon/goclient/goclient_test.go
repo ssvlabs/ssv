@@ -45,7 +45,7 @@ func TestTimeouts(t *testing.T) {
 		_, err = client.(*goClient).GetValidatorData(nil) // Should call BeaconState internally.
 		require.ErrorContains(t, err, "context deadline exceeded")
 
-		duties, err := client.(*goClient).ProposerDuties(ctx, 132502, nil)
+		duties, err := client.(*goClient).ProposerDuties(ctx, mockServerEpoch, nil)
 		require.NoError(t, err)
 		require.NotEmpty(t, duties)
 	}
@@ -58,7 +58,7 @@ func TestTimeouts(t *testing.T) {
 		client, err := mockClient(t, ctx, unresponsiveServer.URL, commonTimeout, longTimeout)
 		require.NoError(t, err)
 
-		_, err = client.(*goClient).ProposerDuties(ctx, 132502, nil)
+		_, err = client.(*goClient).ProposerDuties(ctx, mockServerEpoch, nil)
 		require.ErrorContains(t, err, "context deadline exceeded")
 	}
 
@@ -75,7 +75,7 @@ func TestTimeouts(t *testing.T) {
 		require.NoError(t, err)
 		require.NotEmpty(t, validators)
 
-		duties, err := client.(*goClient).ProposerDuties(ctx, 132502, nil)
+		duties, err := client.(*goClient).ProposerDuties(ctx, mockServerEpoch, nil)
 		require.NoError(t, err)
 		require.NotEmpty(t, duties)
 	}
@@ -107,6 +107,9 @@ type delays struct {
 	BeaconStateDelay    time.Duration
 	ValidatorsDelay     time.Duration
 }
+
+// epoch to use in requests to the mock server.
+const mockServerEpoch = 132502
 
 func mockServer(t *testing.T, delays delays) *httptest.Server {
 	var mockResponses map[string]json.RawMessage
