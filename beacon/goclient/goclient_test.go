@@ -110,7 +110,7 @@ type delays struct {
 
 func mockServer(t *testing.T, delays delays) *httptest.Server {
 	var mockResponses map[string]json.RawMessage
-	f, err := os.Open("./mock-beacon-responses.json")
+	f, err := os.Open("testdata/mock-beacon-responses.json")
 	require.NoError(t, err)
 	require.NoError(t, json.NewDecoder(f).Decode(&mockResponses))
 
