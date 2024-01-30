@@ -26,9 +26,15 @@ import (
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
-// DataVersionNil is just a placeholder for a nil data version.
-// Don't check for it, check for errors or nil data instead.
-const DataVersionNil spec.DataVersion = math.MaxUint64
+const (
+	// DataVersionNil is just a placeholder for a nil data version.
+	// Don't check for it, check for errors or nil data instead.
+	DataVersionNil spec.DataVersion = math.MaxUint64
+
+	// Client timeouts.
+	commonTimeout = time.Second * 5
+	maxTimeout    = time.Second * 120
+)
 
 type beaconNodeStatus int32
 
@@ -149,10 +155,6 @@ type goClient struct {
 
 // New init new client and go-client instance
 func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.OperatorID, slotTickerProvider slotticker.Provider) (beaconprotocol.BeaconNode, error) {
-	const (
-		commonTimeout = time.Second * 5
-		maxTimeout    = time.Second * 120
-	)
 
 	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(string(opt.Network.BeaconNetwork)))
 	dialCtx, cancel := context.WithTimeout(opt.Context, commonTimeout)
