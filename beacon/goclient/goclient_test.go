@@ -3,6 +3,7 @@ package goclient
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -129,7 +130,7 @@ func mockServer(t *testing.T, delays delays) *httptest.Server {
 
 		time.Sleep(delays.BaseDelay)
 		switch r.URL.Path {
-		case "/eth/v1/validator/duties/proposer/132502":
+		case "/eth/v1/validator/duties/proposer/" + fmt.Sprint(mockServerEpoch):
 			time.Sleep(delays.ProposerDutiesDelay)
 		case "/eth/v2/debug/beacon/states/head":
 			time.Sleep(delays.BeaconStateDelay)
