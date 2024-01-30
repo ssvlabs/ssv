@@ -14,7 +14,7 @@ func (gc *goClient) GetValidatorData(validatorPubKeys []phase0.BLSPubKey) (map[p
 	resp, err := gc.client.Validators(gc.ctx, &api.ValidatorsOpts{
 		State:   "head", // TODO maybe need to get the chainId (head) as var
 		PubKeys: validatorPubKeys,
-		Common:  api.CommonOpts{Timeout: gc.maxTimeout},
+		Common:  api.CommonOpts{Timeout: gc.longTimeout},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to obtain validators: %w", err)

@@ -150,7 +150,7 @@ type goClient struct {
 	registrationLastSlot phase0.Slot
 	registrationCache    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration
 	commonTimeout        time.Duration
-	maxTimeout           time.Duration
+	longTimeout          time.Duration
 }
 
 // New init new client and go-client instance
@@ -179,7 +179,7 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 		operatorID:        operatorID,
 		registrationCache: map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
 		commonTimeout:     commonTimeout,
-		maxTimeout:        longTimeout,
+		longTimeout:       longTimeout,
 	}
 
 	// Get the node's version and client.
