@@ -1,5 +1,7 @@
 #!/bin/bash
-#!/bin/bash
+
+# clean up the docker containers before running
+docker compose down -v
 
 # Exit on error
 set -e
