@@ -157,14 +157,13 @@ type goClient struct {
 func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.OperatorID, slotTickerProvider slotticker.Provider) (beaconprotocol.BeaconNode, error) {
 
 	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(string(opt.Network.BeaconNetwork)))
-	dialCtx, cancel := context.WithTimeout(opt.Context, commonTimeout)
-	defer cancel()
-	httpClient, err := eth2clienthttp.New(dialCtx,
+
+	httpClient, err := eth2clienthttp.New(opt.Context,
 		// WithAddress supplies the address of the beacon node, in host:port format.
 		eth2clienthttp.WithAddress(opt.BeaconNodeAddr),
 		// LogLevel supplies the level of logging to carry out.
 		eth2clienthttp.WithLogLevel(zerolog.DebugLevel),
-		eth2clienthttp.WithTimeout(maxTimeout),
+		eth2clienthttp.WithTimeout(commonTimeout),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create http client: %w", err)
@@ -184,9 +183,7 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 	}
 
 	// Get the node's version and client.
-	nodeVersionResp, err := client.client.NodeVersion(opt.Context, &api.NodeVersionOpts{
-		Common: client.commonOpts(),
-	})
+	nodeVersionResp, err := client.client.NodeVersion(opt.Context, &api.NodeVersionOpts{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get node version: %w", err)
 	}
@@ -225,9 +222,7 @@ func (gc *goClient) NodeClient() NodeClient {
 // Healthy returns if beacon node is currently healthy: responds to requests, not in the syncing state, not optimistic
 // (for optimistic see https://github.com/ethereum/consensus-specs/blob/dev/sync/optimistic.md#block-production).
 func (gc *goClient) Healthy(ctx context.Context) error {
-	nodeSyncingResp, err := gc.client.NodeSyncing(ctx, &api.NodeSyncingOpts{
-		Common: gc.commonOpts(),
-	})
+	nodeSyncingResp, err := gc.client.NodeSyncing(ctx, &api.NodeSyncingOpts{})
 	if err != nil {
 		// TODO: get rid of global variable, pass metrics to goClient
 		metricsBeaconNodeStatus.Set(float64(statusUnknown))
@@ -273,19 +268,21 @@ func (gc *goClient) Events(ctx context.Context, topics []string, handler eth2cli
 	return gc.client.Events(ctx, topics, handler)
 }
 
-func (gc *goClient) commonOpts() api.CommonOpts {
-	return api.CommonOpts{
-		Timeout: gc.commonTimeout,
-	}
-}
-
 func (gc *goClient) checkPrysmDebugEndpoints() error {
 	start := time.Now()
 	address := strings.TrimSuffix(gc.client.Address(), "/")
 	if !strings.HasPrefix(address, "http") {
 		address = fmt.Sprintf("http://%s", address)
 	}
-	resp, err := http.Get(fmt.Sprintf("%s/eth/v2/debug/fork_choice", address))
+
+	ctx, cancel := context.WithTimeout(context.Background(), commonTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/eth/v2/debug/fork_choice", address), nil)
+	if err != nil {
+		return fmt.Errorf("failed to create fork choice request: %w", err)
+	}
+	resp, err := (&http.Client{}).Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to get fork choice: %w", err)
 	}

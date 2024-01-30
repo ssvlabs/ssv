@@ -30,7 +30,6 @@ func (gc *goClient) ProposerDuties(ctx context.Context, epoch phase0.Epoch, vali
 	resp, err := gc.client.ProposerDuties(ctx, &api.ProposerDutiesOpts{
 		Epoch:   epoch,
 		Indices: validatorIndices,
-		Common:  gc.commonOpts(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to obtain proposer duties: %w", err)
@@ -56,7 +55,6 @@ func (gc *goClient) GetBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byt
 		RandaoReveal:           sig,
 		Graffiti:               graffiti,
 		SkipRandaoVerification: false,
-		Common:                 gc.commonOpts(),
 	})
 	if err != nil {
 		return nil, DataVersionNil, fmt.Errorf("failed to get proposal: %w", err)
@@ -117,7 +115,6 @@ func (gc *goClient) GetBlindedBeaconBlock(slot phase0.Slot, graffitiBytes, randa
 		RandaoReveal:           sig,
 		Graffiti:               graffiti,
 		SkipRandaoVerification: false,
-		Common:                 gc.commonOpts(),
 	})
 	if err != nil {
 		return nil, DataVersionNil, fmt.Errorf("failed to get blinded proposal: %w", err)

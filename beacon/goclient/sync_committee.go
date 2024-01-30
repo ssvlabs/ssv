@@ -17,7 +17,6 @@ func (gc *goClient) SyncCommitteeDuties(ctx context.Context, epoch phase0.Epoch,
 	resp, err := gc.client.SyncCommitteeDuties(ctx, &api.SyncCommitteeDutiesOpts{
 		Epoch:   epoch,
 		Indices: validatorIndices,
-		Common:  gc.commonOpts(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to obtain sync committee duties: %w", err)
@@ -33,8 +32,7 @@ func (gc *goClient) SyncCommitteeDuties(ctx context.Context, epoch phase0.Epoch,
 func (gc *goClient) GetSyncMessageBlockRoot(slot phase0.Slot) (phase0.Root, spec.DataVersion, error) {
 	reqStart := time.Now()
 	resp, err := gc.client.BeaconBlockRoot(gc.ctx, &api.BeaconBlockRootOpts{
-		Block:  "head",
-		Common: gc.commonOpts(),
+		Block: "head",
 	})
 	if err != nil {
 		return phase0.Root{}, DataVersionNil, fmt.Errorf("failed to obtain beacon block root: %w", err)
