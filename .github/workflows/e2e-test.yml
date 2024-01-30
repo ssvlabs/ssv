@@ -3,7 +3,6 @@ name: E2E Test
 on:
   pull_request:
     branches:
-      - stage
       - main
 
   workflow_run:
@@ -11,7 +10,7 @@ on:
     types: [completed]
     branches: [stage, main]
 
-#  workflow_dispatch:
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}

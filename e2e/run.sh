@@ -28,12 +28,27 @@ catch() {
 save_logs() {
   echo "Creating directory at: $LOG_DIR"
   mkdir -p "$LOG_DIR"
-  # Saving logs of each container separately
-  docker compose logs ssv-node-1 > "$LOG_DIR/ssv-node-1.txt"
-  docker compose logs ssv-node-2 > "$LOG_DIR/ssv-node-2.txt"
-  docker compose logs ssv-node-3 > "$LOG_DIR/ssv-node-3.txt"
-  docker compose logs ssv-node-4 > "$LOG_DIR/ssv-node-4.txt"
-  docker compose logs beacon_proxy > "$LOG_DIR/beacon_proxy.txt"
+
+  # Define a list of container patterns to save logs from
+  declare -a containers=("ssv-node-1" "ssv-node-2" "ssv-node-3" "ssv-node-4" "beacon_proxy")
+
+  for container_pattern in "${containers[@]}"; do
+    container_ids=$(docker ps -a --filter name=$container_pattern --format "{{.Names}}")
+
+    for container_id in $container_ids; do
+      if [ ! -z "$container_id" ]; then
+        echo "Saving logs for $container_id..."
+        docker logs "$container_id" > "$LOG_DIR/$container_id.txt"
+      fi
+    done
+  done
+
+  # Special handling for logs_catcher to get the most recent container
+  logs_catcher_container=$(docker ps -a --filter ancestor=logs_catcher:latest --format "{{.Names}}" | head -n 1)
+  if [ ! -z "$logs_catcher_container" ]; then
+    echo "Saving logs for the most recent logs_catcher container: $logs_catcher_container..."
+    docker logs "$logs_catcher_container" > "$LOG_DIR/$logs_catcher_container.txt"
+  fi
 }
 
 # Step 1: Start the beacon_proxy and ssv-node services
