@@ -5,12 +5,15 @@ on:
     branches:
       - main
 
+  workflow_dispatch:
+    branches:
+      - stage
+
   workflow_run:
     workflows: ["Lint", "Unit tests"]
     types: [completed]
     branches: [stage, main]
 
-  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}
