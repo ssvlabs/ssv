@@ -24,14 +24,16 @@ func TestTimeouts(t *testing.T) {
 		longTimeout   = 500 * time.Millisecond
 	)
 
-	// Create a server that is too slow to dial to.
-	undialableServer := mockServer(t, delays{
-		BaseDelay: commonTimeout * 2,
-	})
-	_, err := mockClient(t, ctx, undialableServer.URL, commonTimeout, longTimeout)
-	require.ErrorContains(t, err, "context deadline exceeded")
+	// Too slow to dial.
+	{
+		undialableServer := mockServer(t, delays{
+			BaseDelay: commonTimeout * 2,
+		})
+		_, err := mockClient(t, ctx, undialableServer.URL, commonTimeout, longTimeout)
+		require.ErrorContains(t, err, "context deadline exceeded")
+	}
 
-	// Create a server that is too slow to respond to the Validators request.
+	// Too slow to respond to the Validators request.
 	{
 		unresponsiveServer := mockServer(t, delays{
 			BeaconStateDelay: longTimeout * 2,
@@ -48,7 +50,7 @@ func TestTimeouts(t *testing.T) {
 		require.NotEmpty(t, duties)
 	}
 
-	// Create a server that is too slow to respond to proposer duties request.
+	// Too slow to respond to proposer duties request.
 	{
 		unresponsiveServer := mockServer(t, delays{
 			ProposerDutiesDelay: longTimeout * 2,
@@ -60,7 +62,7 @@ func TestTimeouts(t *testing.T) {
 		require.ErrorContains(t, err, "context deadline exceeded")
 	}
 
-	// Create a server that is fast enough.
+	// Fast enough.
 	{
 		fastServer := mockServer(t, delays{
 			BaseDelay:        commonTimeout / 2,
