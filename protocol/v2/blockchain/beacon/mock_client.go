@@ -518,7 +518,7 @@ func (mr *MockBeaconNodeMockRecorder) SubmitAttestation(attestation interface{})
 }
 
 // SubmitBeaconBlock mocks base method.
-func (m *MockBeaconNode) SubmitBeaconBlock(block *spec.VersionedBeaconBlock, sig phase0.BLSSignature) error {
+func (m *MockBeaconNode) SubmitBeaconBlock(block *api.VersionedProposal, sig phase0.BLSSignature) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SubmitBeaconBlock", block, sig)
 	ret0, _ := ret[0].(error)
@@ -546,7 +546,7 @@ func (mr *MockBeaconNodeMockRecorder) SubmitBeaconCommitteeSubscriptions(ctx, su
 }
 
 // SubmitBlindedBeaconBlock mocks base method.
-func (m *MockBeaconNode) SubmitBlindedBeaconBlock(block *api.VersionedBlindedBeaconBlock, sig phase0.BLSSignature) error {
+func (m *MockBeaconNode) SubmitBlindedBeaconBlock(block *api.VersionedBlindedProposal, sig phase0.BLSSignature) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SubmitBlindedBeaconBlock", block, sig)
 	ret0, _ := ret[0].(error)
@@ -644,17 +644,17 @@ func (mr *MockBeaconNodeMockRecorder) SubmitValidatorRegistration(pubkey, feeRec
 }
 
 // SubmitVoluntaryExit mocks base method.
-func (m *MockBeaconNode) SubmitVoluntaryExit(voluntaryExit *phase0.SignedVoluntaryExit, sig phase0.BLSSignature) error {
+func (m *MockBeaconNode) SubmitVoluntaryExit(voluntaryExit *phase0.SignedVoluntaryExit) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SubmitVoluntaryExit", voluntaryExit, sig)
+	ret := m.ctrl.Call(m, "SubmitVoluntaryExit", voluntaryExit)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SubmitVoluntaryExit indicates an expected call of SubmitVoluntaryExit.
-func (mr *MockBeaconNodeMockRecorder) SubmitVoluntaryExit(voluntaryExit, sig interface{}) *gomock.Call {
+func (mr *MockBeaconNodeMockRecorder) SubmitVoluntaryExit(voluntaryExit interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitVoluntaryExit", reflect.TypeOf((*MockBeaconNode)(nil).SubmitVoluntaryExit), voluntaryExit, sig)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitVoluntaryExit", reflect.TypeOf((*MockBeaconNode)(nil).SubmitVoluntaryExit), voluntaryExit)
 }
 
 // SyncCommitteeDuties mocks base method.

@@ -10,6 +10,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
+	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/eth2-key-manager/core"
 	"github.com/bloxapp/eth2-key-manager/wallets/hd"
@@ -161,7 +162,7 @@ func TestSlashing(t *testing.T) {
 		},
 	}
 
-	var beaconBlock = &bellatrix.BeaconBlock{
+	var beaconBlock = &capella.BeaconBlock{
 		Slot:          highestProposal,
 		ProposerIndex: 0,
 		ParentRoot: phase0.Root{
@@ -172,7 +173,7 @@ func TestSlashing(t *testing.T) {
 			0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f,
 			0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x3a, 0x3b, 0x3c, 0x3d, 0x3e, 0x3f,
 		},
-		Body: &bellatrix.BeaconBlockBody{
+		Body: &capella.BeaconBlockBody{
 			RANDAOReveal: phase0.BLSSignature{
 				0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
 				0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
@@ -217,7 +218,7 @@ func TestSlashing(t *testing.T) {
 					0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
 				},
 			},
-			ExecutionPayload: &bellatrix.ExecutionPayload{
+			ExecutionPayload: &capella.ExecutionPayload{
 				ParentHash: phase0.Hash32{
 					0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
 					0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
@@ -250,6 +251,7 @@ func TestSlashing(t *testing.T) {
 					0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
 				},
 				Transactions: []bellatrix.Transaction{},
+				Withdrawals:  []*capella.Withdrawal{},
 			},
 		},
 	}
@@ -374,6 +376,24 @@ func TestSlashing_Attestation(t *testing.T) {
 	// 10. Different signing root, higher source epoch, lower target epoch -> expect slashing.
 	//     Same as 8, but in the opposite direction.
 	signAttestation(secretKeys[2], phase0.Root{5}, createAttestationData(4, 5), true, "HighestAttestationVote")
+
+	// 11. Different signing root, lower source epoch, lower target epoch -> expect slashing.
+	//     The new point is strictly lower in both source & target
+	signAttestation(secretKeys[2], phase0.Root{5}, createAttestationData(2, 5), true, "HighestAttestationVote")
+
+	// 12. Different signing root, lower source epoch, same target epoch -> expect slashing.
+	//     The new point is lower in source but equal in target
+	signAttestation(secretKeys[2], phase0.Root{5}, createAttestationData(2, 6), true, "HighestAttestationVote")
+
+	// (s==t)
+	// 13. Different signing root -> no slashing.
+	//     The new point on the line s==t, strictly higher in source and target
+	signAttestation(secretKeys[2], phase0.Root{6}, createAttestationData(7, 7), false, "HighestAttestationVote")
+
+	// (s==t)
+	// 14. Different signing root -> expect slashing.
+	//     The new point on the line s==t, strictly lower in source and target
+	signAttestation(secretKeys[2], phase0.Root{7}, createAttestationData(6, 6), true, "HighestAttestationVote")
 }
 
 func TestSignRoot(t *testing.T) {

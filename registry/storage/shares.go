@@ -153,7 +153,6 @@ func (s *sharesStorage) UpdateValidatorMetadata(pk string, metadata *beaconproto
 	if err != nil {
 		return err
 	}
-
 	share := s.Get(nil, key)
 	if share == nil {
 		return nil

@@ -21,8 +21,8 @@ func (m *MockConnectionIndex) CanConnect(id peer.ID) bool {
 	panic("CanConnect method is not implemented in MockConnectionIndex")
 }
 
-// Limit returns the mock value for Limit
-func (m *MockConnectionIndex) Limit(dir network.Direction) bool {
+// AtLimit returns the mock value for Limit
+func (m *MockConnectionIndex) AtLimit(dir network.Direction) bool {
 	return m.LimitValue
 }
 
