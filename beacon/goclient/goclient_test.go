@@ -82,18 +82,23 @@ func TestTimeouts(t *testing.T) {
 }
 
 func mockClient(t *testing.T, ctx context.Context, serverURL string, commonTimeout, longTimeout time.Duration) (beacon.BeaconNode, error) {
-	return New(zap.NewNop(), beacon.Options{
-		Context:        ctx,
-		Network:        beacon.NewNetwork(types.MainNetwork),
-		BeaconNodeAddr: serverURL,
-		CommonTimeout:  commonTimeout,
-		LongTimeout:    longTimeout,
-	}, 0, func() slotticker.SlotTicker {
-		return slotticker.New(zap.NewNop(), slotticker.Config{
-			SlotDuration: 12 * time.Second,
-			GenesisTime:  time.Now(),
-		})
-	})
+	return New(
+		zap.NewNop(),
+		beacon.Options{
+			Context:        ctx,
+			Network:        beacon.NewNetwork(types.MainNetwork),
+			BeaconNodeAddr: serverURL,
+			CommonTimeout:  commonTimeout,
+			LongTimeout:    longTimeout,
+		},
+		0,
+		func() slotticker.SlotTicker {
+			return slotticker.New(zap.NewNop(), slotticker.Config{
+				SlotDuration: 12 * time.Second,
+				GenesisTime:  time.Now(),
+			})
+		},
+	)
 }
 
 type delays struct {
