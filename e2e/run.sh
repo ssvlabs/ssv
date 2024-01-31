@@ -1,6 +1,11 @@
 #!/bin/bash
 
-# clean up the docker containers before running
+# clean up everything including exited dockers and volumes before start
+services=$(docker-compose config --services)
+docker-compose down
+for service in $services; do
+    docker rm -f $(docker ps -aqf "name=${service}*")
+done
 docker compose down -v
 
 # Exit on error
