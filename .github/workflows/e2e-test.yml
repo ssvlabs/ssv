@@ -6,8 +6,6 @@ on:
       - main
 
   workflow_dispatch:
-    branches:
-      - stage
 
   workflow_run:
     workflows: ["Lint", "Unit tests"]
