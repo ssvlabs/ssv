@@ -2,6 +2,7 @@ package beacon
 
 import (
 	"context"
+	"time"
 
 	eth2client "github.com/attestantio/go-eth2-client"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -67,4 +68,6 @@ type Options struct {
 	BeaconNodeAddr string `yaml:"BeaconNodeAddr" env:"BEACON_NODE_ADDR" env-required:"true"`
 	Graffiti       []byte
 	GasLimit       uint64
+	CommonTimeout  time.Duration // Optional.
+	LongTimeout    time.Duration // Optional.
 }
