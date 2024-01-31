@@ -43,6 +43,7 @@ func StartCondition(pctx context.Context, logger *zap.Logger, condition []string
 	ch := make(chan string, 1024)
 	go func() {
 		for log := range ch {
+			cancel()
 			if logs.GrepLine(log, condition) {
 				conditionLog = log
 				logger.Info("Start condition arrived", zap.Strings("log_message", condition))
