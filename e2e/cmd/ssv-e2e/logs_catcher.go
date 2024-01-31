@@ -41,10 +41,10 @@ func (cmd *LogsCatcherCmd) Run(logger *zap.Logger, globals Globals) error {
 	switch cmd.Mode {
 	case SlashingMode:
 		logger.Info("Running slashing mode")
-		//err = logs_catcher.FatalListener(ctx, logger, cli)
-		//if err != nil {
-		//	return err
-		//}
+		err = logs_catcher.FatalListener(ctx, logger, cli)
+		if err != nil {
+			return err
+		}
 		err = logs_catcher.Match(ctx, logger, cli)
 		if err != nil {
 			return err
