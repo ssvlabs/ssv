@@ -1,11 +1,11 @@
 name: E2E Test
 
 on:
+  workflow_dispatch:
+
   pull_request:
     branches:
       - main
-
-  workflow_dispatch:
 
   workflow_run:
     workflows: ["Lint", "Unit tests"]
