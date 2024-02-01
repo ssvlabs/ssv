@@ -286,7 +286,7 @@ func (gc *goClient) checkPrysmDebugEndpoints() error {
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultCommonTimeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/eth/v2/beacon/heads", address), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/eth/v2/debug/beacon/heads", address), nil)
 	if err != nil {
 		return fmt.Errorf("failed to create fork choice request: %w", err)
 	}
