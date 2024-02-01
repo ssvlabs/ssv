@@ -288,17 +288,17 @@ func (gc *goClient) checkPrysmDebugEndpoints() error {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/eth/v2/debug/beacon/heads", address), nil)
 	if err != nil {
-		return fmt.Errorf("failed to create fork choice request: %w", err)
+		return fmt.Errorf("failed to create beacon heads request: %w", err)
 	}
 	resp, err := (&http.Client{}).Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to get fork choice: %w", err)
+		return fmt.Errorf("failed to get beacon heads: %w", err)
 	}
 	if resp.StatusCode == http.StatusNotFound {
 		return fmt.Errorf("Prysm node doesn't have debug endpoints enabled, please enable them with --enable-debug-rpc-endpoints")
 	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to get fork choice: %s", resp.Status)
+		return fmt.Errorf("failed to get beacon heads: %s", resp.Status)
 	}
 	var data struct {
 		Data []struct {
@@ -306,13 +306,13 @@ func (gc *goClient) checkPrysmDebugEndpoints() error {
 		} `json:"data"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		return fmt.Errorf("failed to decode fork choice response: %w", err)
+		return fmt.Errorf("failed to decode beacon heads response: %w", err)
 	}
 	if len(data.Data) == 0 {
-		return fmt.Errorf("no fork choice found")
+		return fmt.Errorf("no beacon heads found")
 	}
 	if data.Data[0].Root == (phase0.Root{}) {
-		return fmt.Errorf("no justified checkpoint found")
+		return fmt.Errorf("beacon head is empty")
 	}
 	gc.log.Debug("Prysm debug endpoints are enabled", zap.Duration("took", time.Since(start)))
 	return nil
