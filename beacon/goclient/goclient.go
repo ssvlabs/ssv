@@ -286,7 +286,7 @@ func (gc *goClient) checkPrysmDebugEndpoints() error {
 	ctx, cancel := context.WithTimeout(context.Background(), DefaultCommonTimeout)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/eth/v2/debug/fork_choice", address), nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/eth/v2/beacon/heads", address), nil)
 	if err != nil {
 		return fmt.Errorf("failed to create fork choice request: %w", err)
 	}
@@ -301,14 +301,17 @@ func (gc *goClient) checkPrysmDebugEndpoints() error {
 		return fmt.Errorf("failed to get fork choice: %s", resp.Status)
 	}
 	var data struct {
-		JustifiedCheckpoint struct {
+		Data []struct {
 			Root phase0.Root `json:"root"`
-		} `json:"justified_checkpoint"`
+		} `json:"data"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
 		return fmt.Errorf("failed to decode fork choice response: %w", err)
 	}
-	if data.JustifiedCheckpoint.Root == (phase0.Root{}) {
+	if len(data.Data) == 0 {
+		return fmt.Errorf("no fork choice found")
+	}
+	if data.Data[0].Root == (phase0.Root{}) {
 		return fmt.Errorf("no justified checkpoint found")
 	}
 	gc.log.Debug("Prysm debug endpoints are enabled", zap.Duration("took", time.Since(start)))
