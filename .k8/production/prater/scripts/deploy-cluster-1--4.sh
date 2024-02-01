@@ -105,10 +105,10 @@ fi
 
 DIR=".k8/production/prater"
 DEPLOY_FILES=(
-  "ssv-node-prater-1-deployment.yml"
-  "ssv-node-prater-2-deployment.yml"
-  # "ssv-node-prater-3-deployment.yml"
-  # "ssv-node-prater-4-deployment.yml"
+  # "ssv-node-prater-1-deployment.yml"
+  # "ssv-node-prater-2-deployment.yml"
+  "ssv-node-prater-3-deployment.yml"
+  "ssv-node-prater-4-deployment.yml"
 )
 
 if [[ -d $DIR ]]; then
