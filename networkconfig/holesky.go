@@ -20,5 +20,5 @@ var Holesky = NetworkConfig{
 	},
 	WhitelistedOperatorKeys:                 []string{},
 	PermissionlessActivationEpoch:           13950, // Nov-29-2023 12:00:00 PM UTC
-	FinalizedCheckpointForkActivationHeight: 859878,
+	FinalizedCheckpointForkActivationHeight: 860670,
 }
