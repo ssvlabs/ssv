@@ -52,6 +52,10 @@ var (
 		Name: "ssv_eth1_status",
 		Help: "Status of the connected execution client",
 	})
+	executionClientLastBlockProcessed = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "execution_client_last_processed_block",
+		Help: "Number of last block processed",
+	})
 	executionClientLastFetchedBlock = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "ssv_execution_client_last_fetched_block",
 		Help: "Last fetched block by execution client",
@@ -348,8 +352,11 @@ func (m *metricsReporter) MessageValidationRSAVerifications() {
 	messageValidationRSAVerifications.WithLabelValues().Inc()
 }
 
+func (m *metricsReporter) LastBlockProcessed(blockNumber uint64) {
+	executionClientLastBlockProcessed.Set(float64(blockNumber))
+}
+
 // TODO implement
-func (m *metricsReporter) LastBlockProcessed(uint64) {}
 func (m *metricsReporter) LogsProcessingError(error) {}
 
 func (m *metricsReporter) MessageAccepted(

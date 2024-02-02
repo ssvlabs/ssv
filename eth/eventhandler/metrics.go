@@ -11,6 +11,7 @@ type metrics interface {
 	ValidatorRemoved(publicKey []byte)
 	EventProcessed(eventName string)
 	EventProcessingFailed(eventName string)
+	LastBlockProcessed(blockNumber uint64)
 }
 
 // nopMetrics is no-op metrics.
@@ -22,3 +23,4 @@ func (n nopMetrics) ValidatorError([]byte)                          {}
 func (n nopMetrics) ValidatorRemoved([]byte)                        {}
 func (n nopMetrics) EventProcessed(string)                          {}
 func (n nopMetrics) EventProcessingFailed(string)                   {}
+func (n nopMetrics) LastBlockProcessed(uint64)                      {}

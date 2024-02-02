@@ -144,6 +144,7 @@ func (eh *EventHandler) HandleBlockEventsStream(logs <-chan executionclient.Bloc
 				logger.Debug("executed task")
 			}
 		}
+		eh.metrics.LastBlockProcessed(lastProcessedBlock)
 	}
 
 	return
