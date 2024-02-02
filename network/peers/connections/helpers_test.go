@@ -34,8 +34,7 @@ type TestData struct {
 	Handshaker handshaker
 	Conn       mock.Conn
 
-	NodeInfo       *records.NodeInfo
-	SignedNodeInfo *records.SignedNodeInfo
+	NodeInfo *records.NodeInfo
 }
 
 func getTestingData(t *testing.T) TestData {
@@ -73,12 +72,6 @@ func getTestingData(t *testing.T) TestData {
 
 	signature, err := rsa.SignPKCS1v15(nil, senderPrivateKey, crypto.SHA256, hashedHandshakeData)
 	require.NoError(t, err)
-
-	sni := &records.SignedNodeInfo{
-		NodeInfo:      nodeInfo,
-		HandshakeData: handshakeData,
-		Signature:     signature,
-	}
 
 	nii := mock.NodeInfoIndex{
 		MockNodeInfo:   nil,
@@ -142,6 +135,5 @@ func getTestingData(t *testing.T) TestData {
 		Conn:                     mockConn,
 		NetworkPrivateKey:        networkPrivateKey,
 		NodeInfo:                 nodeInfo,
-		SignedNodeInfo:           sni,
 	}
 }

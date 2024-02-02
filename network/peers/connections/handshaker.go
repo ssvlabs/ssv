@@ -21,7 +21,6 @@ import (
 var errPeerWasFiltered = errors.New("peer was filtered during handshake")
 
 // errConsumingMessage is thrown when we сan't consume(parse) message: data is broken or incoming msg is from node with different Permissioned mode
-// example: the Node in NON-Permissioned mode receives SignedNodeInfo; the Node in Permissioned mode receives NodeInfo
 var errConsumingMessage = errors.New("error consuming message")
 
 // HandshakeFilter can be used to filter nodes once we handshaked with them
