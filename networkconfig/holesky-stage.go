@@ -1,7 +1,6 @@
 package networkconfig
 
 import (
-	"math"
 	"math/big"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -21,5 +20,5 @@ var HoleskyStage = NetworkConfig{
 	},
 	WhitelistedOperatorKeys:                 []string{},
 	PermissionlessActivationEpoch:           10560,
-	FinalizedCheckpointForkActivationHeight: math.MaxUint64, // inf #TODO replace
+	FinalizedCheckpointForkActivationHeight: 859878,
 }
