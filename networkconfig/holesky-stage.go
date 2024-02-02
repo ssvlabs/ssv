@@ -20,5 +20,5 @@ var HoleskyStage = NetworkConfig{
 	},
 	WhitelistedOperatorKeys:                 []string{},
 	PermissionlessActivationEpoch:           10560,
-	FinalizedCheckpointForkActivationHeight: 814280, // inf #TODO replace
+	FinalizedCheckpointForkActivationHeight: 859780, // inf #TODO replace
 }
