@@ -163,6 +163,10 @@ func (eh *EventHandler) processBlockEvents(block executionclient.BlockLogs) ([]T
 		return nil, fmt.Errorf("last processed block is nil")
 	}
 	if lastProcessedBlock.Uint64() >= block.BlockNumber {
+		eh.logger.Error("same or higher block has already been processed",
+			zap.Uint64("lastProcessedBlock", lastProcessedBlock.Uint64()),
+			zap.Uint64("block.BlockNumber", block.BlockNumber),
+		)
 		// Same or higher block has already been processed, this should never happen!
 		// Returning an error to signal that we should stop processing and
 		// investigate the issue.
