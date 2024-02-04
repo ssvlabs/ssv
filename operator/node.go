@@ -3,6 +3,7 @@ package operator
 import (
 	"context"
 	"fmt"
+	"github.com/bloxapp/ssv/network"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
@@ -12,7 +13,6 @@ import (
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/duties"
 	"github.com/bloxapp/ssv/operator/duties/dutystore"

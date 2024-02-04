@@ -7,12 +7,12 @@ import (
 
 	"github.com/attestantio/go-eth2-client/api"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
-	apiv1bellatrix "github.com/attestantio/go-eth2-client/api/v1/bellatrix"
 	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
+	apiv1deneb "github.com/attestantio/go-eth2-client/api/v1/deneb"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
-	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/capella"
+	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	eth2keymanager "github.com/bloxapp/eth2-key-manager"
 	"github.com/bloxapp/eth2-key-manager/core"
@@ -137,16 +137,16 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 		if km.builderProposals {
 			var vBlindedBlock *api.VersionedBlindedBeaconBlock
 			switch v := obj.(type) {
-			case *apiv1bellatrix.BlindedBeaconBlock:
-				vBlindedBlock = &api.VersionedBlindedBeaconBlock{
-					Version:   spec.DataVersionBellatrix,
-					Bellatrix: v,
-				}
-				return km.signer.SignBlindedBeaconBlock(vBlindedBlock, domain, pk)
 			case *apiv1capella.BlindedBeaconBlock:
 				vBlindedBlock = &api.VersionedBlindedBeaconBlock{
 					Version: spec.DataVersionCapella,
 					Capella: v,
+				}
+				return km.signer.SignBlindedBeaconBlock(vBlindedBlock, domain, pk)
+			case *apiv1deneb.BlindedBeaconBlock:
+				vBlindedBlock = &api.VersionedBlindedBeaconBlock{
+					Version: spec.DataVersionDeneb,
+					Deneb:   v,
 				}
 				return km.signer.SignBlindedBeaconBlock(vBlindedBlock, domain, pk)
 			}
@@ -154,25 +154,15 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 
 		var vBlock *spec.VersionedBeaconBlock
 		switch v := obj.(type) {
-		case *phase0.BeaconBlock:
-			vBlock = &spec.VersionedBeaconBlock{
-				Version: spec.DataVersionPhase0,
-				Phase0:  v,
-			}
-		case *altair.BeaconBlock:
-			vBlock = &spec.VersionedBeaconBlock{
-				Version: spec.DataVersionAltair,
-				Altair:  v,
-			}
-		case *bellatrix.BeaconBlock:
-			vBlock = &spec.VersionedBeaconBlock{
-				Version:   spec.DataVersionBellatrix,
-				Bellatrix: v,
-			}
 		case *capella.BeaconBlock:
 			vBlock = &spec.VersionedBeaconBlock{
 				Version: spec.DataVersionCapella,
 				Capella: v,
+			}
+		case *deneb.BeaconBlock:
+			vBlock = &spec.VersionedBeaconBlock{
+				Version: spec.DataVersionDeneb,
+				Deneb:   v,
 			}
 		default:
 			return nil, nil, fmt.Errorf("obj type is unknown: %T", obj)

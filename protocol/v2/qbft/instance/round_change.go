@@ -22,12 +22,19 @@ func (i *Instance) uponRoundChange(
 	roundChangeMsgContainer *specqbft.MsgContainer,
 	valCheck specqbft.ProposedValueCheckF,
 ) error {
+	hasQuorumBefore := specqbft.HasQuorum(i.State.Share, roundChangeMsgContainer.MessagesForRound(signedRoundChange.Message.
+		Round))
+	// Currently, even if we have a quorum of round change messages, we update the container
 	addedMsg, err := roundChangeMsgContainer.AddFirstMsgForSignerAndRound(signedRoundChange)
 	if err != nil {
 		return errors.Wrap(err, "could not add round change msg to container")
 	}
 	if !addedMsg {
-		return nil // UponCommit was already called
+		return nil // message was already added from signer
+	}
+
+	if hasQuorumBefore {
+		return nil // already changed round
 	}
 
 	logger = logger.With(

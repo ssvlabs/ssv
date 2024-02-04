@@ -2,6 +2,7 @@ package goclient
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"strings"
 	"sync"
@@ -9,11 +10,10 @@ import (
 
 	eth2client "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/api"
-	"github.com/attestantio/go-eth2-client/http"
+	eth2clienthttp "github.com/attestantio/go-eth2-client/http"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/rs/zerolog"
@@ -24,9 +24,15 @@ import (
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
-// DataVersionNil is just a placeholder for a nil data version.
-// Don't check for it, check for errors or nil data instead.
-const DataVersionNil spec.DataVersion = math.MaxUint64
+const (
+	// DataVersionNil is just a placeholder for a nil data version.
+	// Don't check for it, check for errors or nil data instead.
+	DataVersionNil spec.DataVersion = math.MaxUint64
+
+	// Client timeouts.
+	DefaultCommonTimeout = time.Second * 5  // For dialing and most requests.
+	DefaultLongTimeout   = time.Second * 10 // For long requests.
+)
 
 type beaconNodeStatus int32
 
@@ -96,22 +102,20 @@ type Client interface {
 	eth2client.NodeClientProvider
 
 	eth2client.AttestationDataProvider
+	eth2client.AttestationsSubmitter
 	eth2client.AggregateAttestationProvider
 	eth2client.AggregateAttestationsSubmitter
-	eth2client.AttestationDataProvider
-	eth2client.AttestationsSubmitter
 	eth2client.BeaconCommitteeSubscriptionsSubmitter
 	eth2client.SyncCommitteeSubscriptionsSubmitter
 	eth2client.AttesterDutiesProvider
 	eth2client.ProposerDutiesProvider
 	eth2client.SyncCommitteeDutiesProvider
 	eth2client.NodeSyncingProvider
-	eth2client.BeaconBlockProposalProvider
-	eth2client.BeaconBlockSubmitter
-	eth2client.BlindedBeaconBlockProposalProvider
-	eth2client.BlindedBeaconBlockSubmitter
+	eth2client.ProposalProvider
+	eth2client.ProposalSubmitter
+	eth2client.BlindedProposalProvider
+	eth2client.BlindedProposalSubmitter
 	eth2client.DomainProvider
-	eth2client.BeaconBlockRootProvider
 	eth2client.SyncCommitteeMessagesSubmitter
 	eth2client.BeaconBlockRootProvider
 	eth2client.SyncCommitteeContributionProvider
@@ -119,8 +123,6 @@ type Client interface {
 	eth2client.ValidatorsProvider
 	eth2client.ProposalPreparationsSubmitter
 	eth2client.EventsProvider
-	eth2client.BlindedBeaconBlockProposalProvider
-	eth2client.BlindedBeaconBlockSubmitter
 	eth2client.ValidatorRegistrationsSubmitter
 	eth2client.VoluntaryExitSubmitter
 }
@@ -145,40 +147,57 @@ type goClient struct {
 	registrationMu       sync.Mutex
 	registrationLastSlot phase0.Slot
 	registrationCache    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration
+	commonTimeout        time.Duration
+	longTimeout          time.Duration
 }
 
 // New init new client and go-client instance
 func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.OperatorID, slotTickerProvider slotticker.Provider) (beaconprotocol.BeaconNode, error) {
 	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(string(opt.Network.BeaconNetwork)))
 
-	httpClient, err := http.New(opt.Context,
+	commonTimeout := opt.CommonTimeout
+	if commonTimeout == 0 {
+		commonTimeout = DefaultCommonTimeout
+	}
+	longTimeout := opt.LongTimeout
+	if longTimeout == 0 {
+		longTimeout = DefaultLongTimeout
+	}
+
+	httpClient, err := eth2clienthttp.New(opt.Context,
 		// WithAddress supplies the address of the beacon node, in host:port format.
-		http.WithAddress(opt.BeaconNodeAddr),
+		eth2clienthttp.WithAddress(opt.BeaconNodeAddr),
 		// LogLevel supplies the level of logging to carry out.
-		http.WithLogLevel(zerolog.DebugLevel),
-		http.WithTimeout(time.Second*5),
+		eth2clienthttp.WithLogLevel(zerolog.DebugLevel),
+		eth2clienthttp.WithTimeout(commonTimeout),
 	)
 	if err != nil {
-		return nil, errors.WithMessage(err, "failed to create http client")
+		return nil, fmt.Errorf("failed to create http client: %w", err)
 	}
 
 	client := &goClient{
 		log:               logger,
 		ctx:               opt.Context,
 		network:           opt.Network,
-		client:            httpClient.(*http.Service),
+		client:            httpClient.(*eth2clienthttp.Service),
 		graffiti:          opt.Graffiti,
 		gasLimit:          opt.GasLimit,
 		operatorID:        operatorID,
 		registrationCache: map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
+		commonTimeout:     commonTimeout,
+		longTimeout:       longTimeout,
 	}
 
 	// Get the node's version and client.
-	client.nodeVersion, err = client.client.NodeVersion(opt.Context)
+	nodeVersionResp, err := client.client.NodeVersion(opt.Context, &api.NodeVersionOpts{})
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get node version")
+		return nil, fmt.Errorf("failed to get node version: %w", err)
 	}
-	client.nodeClient = ParseNodeClient(client.nodeVersion)
+	if nodeVersionResp == nil {
+		return nil, fmt.Errorf("node version response is nil")
+	}
+	client.nodeVersion = nodeVersionResp.Data
+	client.nodeClient = ParseNodeClient(nodeVersionResp.Data)
 
 	logger.Info("consensus client connected",
 		fields.Name(httpClient.Name()),
@@ -200,23 +219,29 @@ func (gc *goClient) NodeClient() NodeClient {
 // Healthy returns if beacon node is currently healthy: responds to requests, not in the syncing state, not optimistic
 // (for optimistic see https://github.com/ethereum/consensus-specs/blob/dev/sync/optimistic.md#block-production).
 func (gc *goClient) Healthy(ctx context.Context) error {
-	syncState, err := gc.client.NodeSyncing(ctx)
+	nodeSyncingResp, err := gc.client.NodeSyncing(ctx, &api.NodeSyncingOpts{})
 	if err != nil {
 		// TODO: get rid of global variable, pass metrics to goClient
 		metricsBeaconNodeStatus.Set(float64(statusUnknown))
-		return err
+		return fmt.Errorf("failed to obtain node syncing status: %w", err)
 	}
+	if nodeSyncingResp == nil {
+		metricsBeaconNodeStatus.Set(float64(statusUnknown))
+		return fmt.Errorf("node syncing response is nil")
+	}
+	if nodeSyncingResp.Data == nil {
+		metricsBeaconNodeStatus.Set(float64(statusUnknown))
+		return fmt.Errorf("node syncing data is nil")
+	}
+	syncState := nodeSyncingResp.Data
 
 	// TODO: also check if syncState.ElOffline when github.com/attestantio/go-eth2-client supports it
 	metricsBeaconNodeStatus.Set(float64(statusSyncing))
-	if syncState == nil {
-		return errors.New("sync state is nil")
-	}
 	if syncState.IsSyncing {
-		return errors.New("syncing")
+		return fmt.Errorf("syncing")
 	}
 	if syncState.IsOptimistic {
-		return errors.New("optimistic")
+		return fmt.Errorf("optimistic")
 	}
 
 	metricsBeaconNodeStatus.Set(float64(statusOK))

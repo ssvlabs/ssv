@@ -31,7 +31,7 @@ func createDuty(pk []byte, slot phase0.Slot, idx phase0.ValidatorIndex, role spe
 	case spectypes.BNRoleAggregator:
 		testingDuty = spectestingutils.TestingAggregatorDuty
 	case spectypes.BNRoleProposer:
-		testingDuty = *spectestingutils.TestingProposerDutyV(spec.DataVersionBellatrix)
+		testingDuty = *spectestingutils.TestingProposerDutyV(spec.DataVersionCapella)
 	case spectypes.BNRoleSyncCommittee:
 		testingDuty = spectestingutils.TestingSyncCommitteeDuty
 	case spectypes.BNRoleSyncCommitteeContribution:
