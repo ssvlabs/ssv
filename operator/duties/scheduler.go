@@ -70,7 +70,7 @@ type ExecutionClient interface {
 // ValidatorController represents the component that controls validators via the scheduler
 type ValidatorController interface {
 	CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
-	AllActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
+	AllActiveIndices(epoch phase0.Epoch, afterMetadataFetch bool) []phase0.ValidatorIndex
 	GetOperatorShares() []*types.SSVShare
 }
 

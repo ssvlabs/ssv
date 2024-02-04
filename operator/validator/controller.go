@@ -96,7 +96,7 @@ type ControllerOptions struct {
 type Controller interface {
 	StartValidators()
 	CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
-	AllActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
+	AllActiveIndices(epoch phase0.Epoch, afterMetadataFetch bool) []phase0.ValidatorIndex
 	GetValidator(pubKey string) (*validator.Validator, bool)
 	ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty)
 	UpdateValidatorMetaDataLoop()
@@ -164,9 +164,10 @@ type controller struct {
 	operatorData               *registrystorage.OperatorData
 	operatorDataMutex          sync.RWMutex
 
-	validatorOptions   validator.Options
-	validatorsMap      *validatorsmap.ValidatorsMap
-	validatorStartFunc func(validator *validator.Validator) (bool, error)
+	validatorOptions      validator.Options
+	validatorsMap         *validatorsmap.ValidatorsMap
+	validatorStartFunc    func(validator *validator.Validator) (bool, error)
+	initialMetadataUpdate chan struct{}
 
 	metadataUpdateInterval time.Duration
 
@@ -260,9 +261,10 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		nonCommitteeValidators: ttlcache.New(
 			ttlcache.WithTTL[spectypes.MessageID, *nonCommitteeValidator](time.Minute * 13),
 		),
-		metadataLastUpdated: make(map[string]time.Time),
-		indicesChange:       make(chan struct{}),
-		validatorExitCh:     make(chan duties.ExitDescriptor),
+		metadataLastUpdated:   make(map[string]time.Time),
+		indicesChange:         make(chan struct{}),
+		validatorExitCh:       make(chan duties.ExitDescriptor),
+		initialMetadataUpdate: make(chan struct{}, 1),
 
 		messageValidator: options.MessageValidator,
 	}
@@ -455,6 +457,7 @@ func (c *controller) StartValidators() {
 		c.logger.Debug("updated validators metadata after setup",
 			zap.Int("shares", len(allPubKeys)),
 			fields.Took(time.Since(start)))
+		close(c.initialMetadataUpdate)
 	}
 }
 
@@ -631,7 +634,10 @@ func (c *controller) CommitteeActiveIndices(epoch phase0.Epoch) []phase0.Validat
 	return indices
 }
 
-func (c *controller) AllActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
+func (c *controller) AllActiveIndices(epoch phase0.Epoch, afterMetadata bool) []phase0.ValidatorIndex {
+	if afterMetadata {
+		<-c.initialMetadataUpdate
+	}
 	shares := c.sharesStorage.List(nil, isShareActive(epoch))
 	indices := make([]phase0.ValidatorIndex, len(shares))
 	for i, share := range shares {
