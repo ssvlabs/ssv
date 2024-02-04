@@ -30,8 +30,8 @@ const (
 	DataVersionNil spec.DataVersion = math.MaxUint64
 
 	// Client timeouts.
-	DefaultCommonTimeout = time.Second * 5   // For dialing and most requests.
-	DefaultLongTimeout   = time.Second * 120 // For long requests.
+	DefaultCommonTimeout = time.Second * 5  // For dialing and most requests.
+	DefaultLongTimeout   = time.Second * 10 // For long requests.
 )
 
 type beaconNodeStatus int32
