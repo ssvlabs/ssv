@@ -2,15 +2,17 @@ package goclient
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
 
 	eth2client "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/api"
-	"github.com/attestantio/go-eth2-client/http"
+	eth2clienthttp "github.com/attestantio/go-eth2-client/http"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -24,9 +26,15 @@ import (
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
-// DataVersionNil is just a placeholder for a nil data version.
-// Don't check for it, check for errors or nil data instead.
-const DataVersionNil spec.DataVersion = math.MaxUint64
+const (
+	// DataVersionNil is just a placeholder for a nil data version.
+	// Don't check for it, check for errors or nil data instead.
+	DataVersionNil spec.DataVersion = math.MaxUint64
+
+	// Client timeouts.
+	DefaultCommonTimeout = time.Second * 5   // For dialing and most requests.
+	DefaultLongTimeout   = time.Second * 120 // For long requests.
+)
 
 type beaconNodeStatus int32
 
@@ -141,18 +149,29 @@ type goClient struct {
 	registrationMu       sync.Mutex
 	registrationLastSlot phase0.Slot
 	registrationCache    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration
+	commonTimeout        time.Duration
+	longTimeout          time.Duration
 }
 
 // New init new client and go-client instance
 func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.OperatorID, slotTickerProvider slotticker.Provider) (beaconprotocol.BeaconNode, error) {
 	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(string(opt.Network.BeaconNetwork)))
 
-	httpClient, err := http.New(opt.Context,
+	commonTimeout := opt.CommonTimeout
+	if commonTimeout == 0 {
+		commonTimeout = DefaultCommonTimeout
+	}
+	longTimeout := opt.LongTimeout
+	if longTimeout == 0 {
+		longTimeout = DefaultLongTimeout
+	}
+
+	httpClient, err := eth2clienthttp.New(opt.Context,
 		// WithAddress supplies the address of the beacon node, in host:port format.
-		http.WithAddress(opt.BeaconNodeAddr),
+		eth2clienthttp.WithAddress(opt.BeaconNodeAddr),
 		// LogLevel supplies the level of logging to carry out.
-		http.WithLogLevel(zerolog.DebugLevel),
-		http.WithTimeout(time.Second*5),
+		eth2clienthttp.WithLogLevel(zerolog.DebugLevel),
+		eth2clienthttp.WithTimeout(commonTimeout),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create http client: %w", err)
@@ -162,11 +181,13 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 		log:               logger,
 		ctx:               opt.Context,
 		network:           opt.Network,
-		client:            httpClient.(*http.Service),
+		client:            httpClient.(*eth2clienthttp.Service),
 		graffiti:          opt.Graffiti,
 		gasLimit:          opt.GasLimit,
 		operatorID:        operatorID,
 		registrationCache: map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
+		commonTimeout:     commonTimeout,
+		longTimeout:       longTimeout,
 	}
 
 	// Get the node's version and client.
@@ -186,6 +207,15 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 		zap.String("client", string(client.nodeClient)),
 		zap.String("version", client.nodeVersion),
 	)
+
+	// If it's a Prysm, check that the debug endpoints are enabled, otherwise
+	// the Validators method might fail when calling BeaconState.
+	// TODO: remove this once Prysm enables debug endpoints by default.
+	if client.nodeClient == NodePrysm {
+		if err := client.checkPrysmDebugEndpoints(); err != nil {
+			return nil, err
+		}
+	}
 
 	// Start registration submitter.
 	go client.registrationSubmitter(slotTickerProvider)
@@ -244,4 +274,46 @@ func (gc *goClient) slotStartTime(slot phase0.Slot) time.Time {
 
 func (gc *goClient) Events(ctx context.Context, topics []string, handler eth2client.EventHandlerFunc) error {
 	return gc.client.Events(ctx, topics, handler)
+}
+
+func (gc *goClient) checkPrysmDebugEndpoints() error {
+	start := time.Now()
+	address := strings.TrimSuffix(gc.client.Address(), "/")
+	if !strings.HasPrefix(address, "http") {
+		address = fmt.Sprintf("http://%s", address)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), DefaultCommonTimeout)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/eth/v2/debug/beacon/heads", address), nil)
+	if err != nil {
+		return fmt.Errorf("failed to create beacon heads request: %w", err)
+	}
+	resp, err := (&http.Client{}).Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to get beacon heads: %w", err)
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		return fmt.Errorf("Prysm node doesn't have debug endpoints enabled, please enable them with --enable-debug-rpc-endpoints")
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to get beacon heads: %s", resp.Status)
+	}
+	var data struct {
+		Data []struct {
+			Root phase0.Root `json:"root"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		return fmt.Errorf("failed to decode beacon heads response: %w", err)
+	}
+	if len(data.Data) == 0 {
+		return fmt.Errorf("no beacon heads found")
+	}
+	if data.Data[0].Root == (phase0.Root{}) {
+		return fmt.Errorf("beacon head is empty")
+	}
+	gc.log.Debug("Prysm debug endpoints are enabled", zap.Duration("took", time.Since(start)))
+	return nil
 }
