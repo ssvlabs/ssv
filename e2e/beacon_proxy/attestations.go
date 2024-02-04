@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	eth2client "github.com/attestantio/go-eth2-client"
+	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
@@ -29,25 +30,31 @@ func (b *BeaconProxy) handleAttesterDuties(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Obtain duties.
-	duties, err := b.client.(eth2client.AttesterDutiesProvider).AttesterDuties(
+	dutiesResp, err := b.client.(eth2client.AttesterDutiesProvider).AttesterDuties(
 		r.Context(),
-		epoch,
-		indices,
+		&api.AttesterDutiesOpts{
+			Epoch:   epoch,
+			Indices: indices,
+		},
 	)
 	if err != nil {
 		b.error(r, w, 500, fmt.Errorf("failed to obtain attester duties: %w", err))
 		return
 	}
+	if dutiesResp == nil {
+		b.error(r, w, 500, fmt.Errorf("failed to obtain attester duties, duties response is nil"))
+		return
+	}
 
 	// Intercept.
-	duties, err = gateway.Interceptor.InterceptAttesterDuties(r.Context(), epoch, indices, duties)
+	dutiesResp.Data, err = gateway.Interceptor.InterceptAttesterDuties(r.Context(), epoch, indices, dutiesResp.Data)
 	if err != nil {
 		b.error(r, w, 500, fmt.Errorf("failed to intercept attester duties: %w", err))
 		return
 	}
 
 	// Respond.
-	if err := b.respond(r, w, duties); err != nil {
+	if err := b.respond(r, w, dutiesResp.Data); err != nil {
 		b.error(r, w, 500, fmt.Errorf("failed to encode response: %w", err))
 		return
 	}
@@ -72,22 +79,28 @@ func (b *BeaconProxy) handleAttestationData(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Obtain attestation data.
-	attestationData, err := b.client.(eth2client.AttestationDataProvider).AttestationData(
+	attestationDataResp, err := b.client.(eth2client.AttestationDataProvider).AttestationData(
 		r.Context(),
-		slot,
-		committeeIndex,
+		&api.AttestationDataOpts{
+			Slot:           slot,
+			CommitteeIndex: committeeIndex,
+		},
 	)
 	if err != nil {
 		b.error(r, w, 500, fmt.Errorf("failed to obtain attestation data: %w", err))
 		return
 	}
+	if attestationDataResp == nil {
+		b.error(r, w, 500, fmt.Errorf("failed to obtain attestation data, response is nil"))
+		return
+	}
 
 	// Intercept.
-	attestationData, err = gateway.Interceptor.InterceptAttestationData(
+	attestationDataResp.Data, err = gateway.Interceptor.InterceptAttestationData(
 		r.Context(),
 		slot,
 		committeeIndex,
-		attestationData,
+		attestationDataResp.Data,
 	)
 	if err != nil {
 		b.error(r, w, 500, fmt.Errorf("failed to intercept attestation data: %w", err))
@@ -95,7 +108,7 @@ func (b *BeaconProxy) handleAttestationData(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Respond.
-	if err := b.respond(r, w, attestationData); err != nil {
+	if err := b.respond(r, w, attestationDataResp.Data); err != nil {
 		b.error(r, w, 500, fmt.Errorf("failed to encode response: %w", err))
 		return
 	}
