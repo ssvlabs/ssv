@@ -62,48 +62,50 @@ func StartCondition(pctx context.Context, logger *zap.Logger, condition []string
 	return conditionLog, nil
 }
 
-// Todo: match messages based on fields. ex: take all X messages from target one,
-// 	extract pubkey field and get all matching messages with this pubkey field on target two.
+// testDuty performs a generic validation of attestation logs by comparing entries across beacon proxy and SSV node containers.
+// It's designed to handle both non-slashable and slashable attestation log validations.
+func testDuty(ctx context.Context, logger *zap.Logger, dockerCLI DockerCLI, attestationType string) error {
+	var beaconCriteria, nodeCriteria []string
+	var discrepancyCheck func(beaconCount, nodeCount int) bool
 
-// The revised matchMessages function with reduced auxiliary functions.
-func matchMessages(ctx context.Context, logger *zap.Logger, cli DockerCLI, firstMatches, secondMatches []string) error {
-	// Process logs for the beaconProxyContainer.
-	initialCounts, err := dockerLogsByPubKey(ctx, logger, cli, beaconProxyContainer, firstMatches)
+	switch attestationType {
+	case "nonSlashable":
+		beaconCriteria = []string{origMessage, nonSlashableMessage}
+		nodeCriteria = []string{nonSlashableMatchMessage}
+		// For non-slashable attestations, we expect the node count to be exactly 2.
+		discrepancyCheck = func(beaconCount, nodeCount int) bool {
+			return nodeCount != 2
+		}
+	case "slashable":
+		beaconCriteria = []string{origMessage, slashableMessage}
+		nodeCriteria = []string{slashableMatchMessage}
+		// For slashable attestations, the node count must match the beacon count exactly.
+		discrepancyCheck = func(beaconCount, nodeCount int) bool {
+			return beaconCount != nodeCount
+		}
+	default:
+		return fmt.Errorf("unknown attestation type: %s", attestationType)
+	}
+
+	// Extract and count logs from the beaconProxyContainer based on the specified criteria.
+	beaconCounts, err := dockerLogsByPubKey(ctx, logger, dockerCLI, beaconProxyContainer, beaconCriteria)
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<her1>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
-	// Print initial public key counts.
-	for pubkey, count := range initialCounts {
-		fmt.Printf("Public key: %s, Count: %d\n", pubkey, count)
-	}
-	fmt.Printf("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<her2>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
-
-	// Iterate over SSV node containers and compare public key counts.
-	for _, ssvNodeContainer := range ssvNodesContainers {
-		currentCounts, err := dockerLogsByPubKey(ctx, logger, cli, ssvNodeContainer, secondMatches)
+	// Verify corresponding logs in each SSV node container match the criteria.
+	for _, nodeContainer := range ssvNodesContainers {
+		nodeCounts, err := dockerLogsByPubKey(ctx, logger, dockerCLI, nodeContainer, nodeCriteria)
 		if err != nil {
 			return err
 		}
-		fmt.Printf("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<her3>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
-		for pubkey1, count1 := range currentCounts {
-			fmt.Printf("container: %s, Public key: %s, Count: %d\n", ssvNodeContainer, pubkey1, count1)
-		}
-		fmt.Printf("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<her4>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
 
-		// Compare counts for each public key.
-		for pubkey, initialCount := range initialCounts {
-			currentCount, exists := currentCounts[pubkey]
-			if !exists || currentCount != initialCount {
-				// Print initial public key counts.
-				logger.Info("fuckkkkkk>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
-				logger.Info(pubkey)
-				fmt.Println(currentCount)
-				fmt.Println(secondMatches)
-				logger.Debug("Key exists", zap.Bool("exists", exists))
-				logger.Info("fuckkkkkk>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
-				return fmt.Errorf("found non matching messages for pubkey %s in %s: expected %d, got %d", pubkey, ssvNodeContainer, initialCount, currentCount)
+		// Compare the counts for each public key between beacon proxy and node container.
+		for pubkey, beaconCount := range beaconCounts {
+			nodeCount, exists := nodeCounts[pubkey]
+			if !exists || discrepancyCheck(beaconCount, nodeCount) {
+				logger.Info("Discrepancy found", zap.String("PublicKey", pubkey), zap.Int("BeaconCount", beaconCount), zap.Int("NodeCount", nodeCount))
+				return fmt.Errorf("discrepancy for pubkey %s in %s: expected %d, got %d", pubkey, nodeContainer, beaconCount, nodeCount)
 			}
 		}
 	}
@@ -157,12 +159,11 @@ func Match(pctx context.Context, logger *zap.Logger, cli DockerCLI) error {
 	defer c()
 
 	// find slashable attestation not signing for each slashable validator
-	if err := matchMessages(ctx, logger, cli, []string{origMessage, slashableMessage}, []string{slashableMatchMessage}); err != nil {
+	if err := testDuty(ctx, logger, cli, "slashable"); err != nil {
 		return err
 	}
-
 	// find non-slashable validators successfully submitting (all first round + 1 for second round)
-	if err := matchMessages(ctx, logger, cli, []string{origMessage, nonSlashableMessage}, []string{nonSlashableMatchMessage}); err != nil {
+	if err := testDuty(ctx, logger, cli, "nonSlashable"); err != nil {
 		return err
 	}
 
