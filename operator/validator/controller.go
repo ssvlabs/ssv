@@ -167,7 +167,7 @@ type controller struct {
 	validatorOptions      validator.Options
 	validatorsMap         *validatorsmap.ValidatorsMap
 	validatorStartFunc    func(validator *validator.Validator) (bool, error)
-	initialMetadataUpdate chan struct{}
+	initialValidatorSetup chan struct{}
 
 	metadataUpdateInterval time.Duration
 
@@ -264,7 +264,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		metadataLastUpdated:   make(map[string]time.Time),
 		indicesChange:         make(chan struct{}),
 		validatorExitCh:       make(chan duties.ExitDescriptor),
-		initialMetadataUpdate: make(chan struct{}, 1),
+		initialValidatorSetup: make(chan struct{}, 1),
 
 		messageValidator: options.MessageValidator,
 	}
@@ -445,6 +445,8 @@ func (c *controller) StartValidators() {
 		}
 	}
 
+	close(c.initialValidatorSetup)
+
 	// Fetch metadata for all validators.
 	start := time.Now()
 	err := beaconprotocol.UpdateValidatorsMetadata(c.logger, allPubKeys, c, c.beacon, c.onMetadataUpdated)
@@ -457,7 +459,6 @@ func (c *controller) StartValidators() {
 		c.logger.Debug("updated validators metadata after setup",
 			zap.Int("shares", len(allPubKeys)),
 			fields.Took(time.Since(start)))
-		close(c.initialMetadataUpdate)
 	}
 }
 
@@ -636,7 +637,7 @@ func (c *controller) CommitteeActiveIndices(epoch phase0.Epoch) []phase0.Validat
 
 func (c *controller) AllActiveIndices(epoch phase0.Epoch, afterMetadata bool) []phase0.ValidatorIndex {
 	if afterMetadata {
-		<-c.initialMetadataUpdate
+		<-c.initialValidatorSetup
 	}
 	shares := c.sharesStorage.List(nil, isShareActive(epoch))
 	indices := make([]phase0.ValidatorIndex, len(shares))
