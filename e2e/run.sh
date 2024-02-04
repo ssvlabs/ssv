@@ -72,6 +72,8 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 # Set LOG_DIR to a 'logs' directory within the same directory as the script
 LOG_DIR="$SCRIPT_DIR/crash-logs"
 
+export BEACON_NODE_URL=http://bn-h-2.stage.bloxinfra.com:3502/
+export EXECUTION_NODE_URL=ws://bn-h-2.stage.bloxinfra.com:8557/ws
 # Step 1: Start the beacon_proxy and ssv-node services
 docker_compose_up build
 
