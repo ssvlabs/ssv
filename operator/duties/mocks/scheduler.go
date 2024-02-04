@@ -241,17 +241,17 @@ func (m *MockValidatorController) EXPECT() *MockValidatorControllerMockRecorder 
 }
 
 // AllActiveIndices mocks base method.
-func (m *MockValidatorController) AllActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
+func (m *MockValidatorController) AllActiveIndices(epoch phase0.Epoch, afterValidatorsSetup bool) []phase0.ValidatorIndex {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AllActiveIndices", epoch)
+	ret := m.ctrl.Call(m, "AllActiveIndices", epoch, afterValidatorsSetup)
 	ret0, _ := ret[0].([]phase0.ValidatorIndex)
 	return ret0
 }
 
 // AllActiveIndices indicates an expected call of AllActiveIndices.
-func (mr *MockValidatorControllerMockRecorder) AllActiveIndices(epoch interface{}) *gomock.Call {
+func (mr *MockValidatorControllerMockRecorder) AllActiveIndices(epoch, afterValidatorsSetup interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AllActiveIndices", reflect.TypeOf((*MockValidatorController)(nil).AllActiveIndices), epoch)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AllActiveIndices", reflect.TypeOf((*MockValidatorController)(nil).AllActiveIndices), epoch, afterValidatorsSetup)
 }
 
 // CommitteeActiveIndices mocks base method.
