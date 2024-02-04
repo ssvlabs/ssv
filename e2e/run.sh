@@ -1,5 +1,16 @@
 #!/bin/bash
 
+# clean up everything including exited dockers and volumes before start
+services=$(docker-compose config --services)
+docker-compose down
+for service in $services; do
+    docker rm -f $(docker ps -aqf "name=${service}*")
+done
+docker compose down -v
+
+# Exit on error
+set -e
+
 # Step 1: Start the beacon_proxy and ssv-node services
 docker compose up -d --build beacon_proxy ssv-node-1 ssv-node-2 ssv-node-3 ssv-node-4
 
