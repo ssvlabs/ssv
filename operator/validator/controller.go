@@ -96,7 +96,7 @@ type ControllerOptions struct {
 type Controller interface {
 	StartValidators()
 	CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
-	AllActiveIndices(epoch phase0.Epoch, afterMetadataFetch bool) []phase0.ValidatorIndex
+	AllActiveIndices(epoch phase0.Epoch, afterValidatorSetup bool) []phase0.ValidatorIndex
 	GetValidator(pubKey string) (*validator.Validator, bool)
 	ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty)
 	UpdateValidatorMetaDataLoop()
