@@ -125,3 +125,5 @@ require (
 	gotest.tools/v3 v3.5.1 // indirect
 	lukechampine.com/blake3 v1.2.1 // indirect
 )
+
+replace github.com/attestantio/go-eth2-client => github.com/moshe-blox/go-eth2-client v0.7.2-0.20240204094454-17f5c145f39f
