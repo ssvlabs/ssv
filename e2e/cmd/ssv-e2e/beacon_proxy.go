@@ -51,8 +51,9 @@ func GetValidators(ctx context.Context, beaconURL string, idxs []phase0.Validato
 	}
 
 	validatorsResp, err := client.(eth2client.ValidatorsProvider).Validators(ctx, &api.ValidatorsOpts{
-		State:   "head",
-		Indices: idxs,
+		State:              "head",
+		Indices:            idxs,
+		WithoutBeaconState: true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get validators: %w", err)
