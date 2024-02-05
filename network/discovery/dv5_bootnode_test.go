@@ -6,9 +6,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 
+	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network/commons"
 )
 
@@ -19,12 +18,13 @@ func Test_NewBootnode(t *testing.T) {
 	require.NoError(t, err)
 	b, err := isk.Raw()
 	require.NoError(t, err)
-	logger := zap.New(zapcore.NewNopCore(), zap.WithFatalHook(zapcore.WriteThenPanic))
+	logger := logging.TestLogger(t)
 	bn, err := NewBootnode(context.Background(), logger, &BootnodeOptions{
 		PrivateKey: hex.EncodeToString(b),
 		ExternalIP: "127.0.0.1",
 		Port:       13001,
 	})
 	require.NoError(t, err)
+	require.NotEmpty(t, bn.ENR)
 	bn.Close()
 }
