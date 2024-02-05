@@ -96,7 +96,7 @@ type ControllerOptions struct {
 type Controller interface {
 	StartValidators()
 	CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
-	AllActiveIndices(epoch phase0.Epoch, afterValidatorSetup bool) []phase0.ValidatorIndex
+	AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex
 	GetValidator(pubKey string) (*validator.Validator, bool)
 	ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty)
 	UpdateValidatorMetaDataLoop()
@@ -663,8 +663,8 @@ func (c *controller) CommitteeActiveIndices(epoch phase0.Epoch) []phase0.Validat
 	return indices
 }
 
-func (c *controller) AllActiveIndices(epoch phase0.Epoch, afterMetadata bool) []phase0.ValidatorIndex {
-	if afterMetadata {
+func (c *controller) AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex {
+	if afterInit {
 		<-c.initialValidatorSetup
 	}
 	shares := c.sharesStorage.List(nil, isShareActive(epoch))
