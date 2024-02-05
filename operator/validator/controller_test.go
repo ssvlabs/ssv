@@ -474,6 +474,7 @@ func TestSetupValidators(t *testing.T) {
 		recipientMockTimes int
 		bcMockTimes        int
 		recipientFound     bool
+		inited             int
 		started            int
 		recipientErr       error
 		name               string
@@ -490,6 +491,7 @@ func TestSetupValidators(t *testing.T) {
 			recipientErr:       nil,
 			recipientMockTimes: 1,
 			bcResponse:         bcResponse,
+			inited:             1,
 			started:            1,
 			bcMockTimes:        1,
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
@@ -504,6 +506,7 @@ func TestSetupValidators(t *testing.T) {
 			recipientErr:       nil,
 			recipientMockTimes: 1,
 			bcResponse:         bcResponse,
+			inited:             1,
 			started:            1,
 			bcMockTimes:        1,
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
@@ -518,6 +521,7 @@ func TestSetupValidators(t *testing.T) {
 			recipientErr:       errors.New("some error"),
 			recipientMockTimes: 1,
 			bcResponse:         bcResponse,
+			inited:             0,
 			started:            0,
 			bcMockTimes:        0,
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
@@ -532,6 +536,7 @@ func TestSetupValidators(t *testing.T) {
 			recipientErr:       nil,
 			recipientMockTimes: 1,
 			bcResponse:         bcResponse,
+			inited:             1,
 			started:            1,
 			bcMockTimes:        0,
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
@@ -541,6 +546,7 @@ func TestSetupValidators(t *testing.T) {
 		{
 			name:               "start share without metadata",
 			bcMockTimes:        1,
+			inited:             0,
 			started:            0,
 			recipientMockTimes: 0,
 			recipientData:      nil,
@@ -560,6 +566,7 @@ func TestSetupValidators(t *testing.T) {
 			recipientErr:       nil,
 			bcResponse:         nil,
 			recipientFound:     false,
+			inited:             0,
 			started:            0,
 			shares:             []*types.SSVShare{shareWithoutMetaData},
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
@@ -574,6 +581,7 @@ func TestSetupValidators(t *testing.T) {
 			recipientErr:       nil,
 			recipientMockTimes: 1,
 			bcResponse:         bcResponse,
+			inited:             1,
 			started:            0,
 			bcMockTimes:        0,
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
@@ -625,8 +633,11 @@ func TestSetupValidators(t *testing.T) {
 			recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(tc.recipientData, tc.recipientFound, tc.recipientErr).Times(tc.recipientMockTimes)
 			ctr := setupController(logger, controllerOptions)
 			ctr.validatorStartFunc = tc.validatorStartFunc
-			started := ctr.setupValidators(tc.shares)
-			require.Equal(t, tc.started, started)
+			inited := ctr.setupValidators(tc.shares)
+			require.Len(t, inited, tc.inited)
+			started := ctr.startValidators(inited)
+			require.Equal(t, started, tc.started)
+
 			//Add any assertions here to validate the behavior
 		})
 	}
