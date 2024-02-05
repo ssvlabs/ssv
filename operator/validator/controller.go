@@ -445,6 +445,8 @@ func (c *controller) StartValidators() {
 		}
 	}
 
+	close(c.initialValidatorSetup)
+
 	c.startValidators(inited)
 
 	// Fetch metadata for all validators.
