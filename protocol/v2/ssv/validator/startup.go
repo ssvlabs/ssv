@@ -14,6 +14,8 @@ import (
 	"github.com/bloxapp/ssv/logging/fields"
 )
 
+var subscriptionConcurrency = make(chan struct{}, 8)
+
 // Start starts a Validator.
 func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
 	logger = logger.Named(logging.NameValidator).With(fields.PubKey(v.Share.ValidatorPubKey))
@@ -50,9 +52,17 @@ func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
 			}
 		}
 
-		if err := n.Subscribe(identifier.GetPubKey()); err != nil {
-			return true, err
-		}
+		go func() {
+			// Limit the number of concurrent subscriptions.
+			subscriptionConcurrency <- struct{}{}
+			defer func() {
+				<-subscriptionConcurrency
+			}()
+
+			if err := n.Subscribe(identifier.GetPubKey()); err != nil {
+				logger.Error("❗failed to subscribe", zap.Error(err))
+			}
+		}()
 		go v.StartQueueConsumer(logger, identifier, v.ProcessMessage)
 	}
 	return true, nil
