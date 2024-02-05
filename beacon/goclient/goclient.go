@@ -2,11 +2,9 @@ package goclient
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"math"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -33,8 +31,8 @@ const (
 	DataVersionNil spec.DataVersion = math.MaxUint64
 
 	// Client timeouts.
-	DefaultCommonTimeout = time.Second * 5   // For dialing and most requests.
-	DefaultLongTimeout   = time.Second * 120 // For long requests.
+	DefaultCommonTimeout = time.Second * 5  // For dialing and most requests.
+	DefaultLongTimeout   = time.Second * 10 // For long requests.
 )
 
 type beaconNodeStatus int32
@@ -209,15 +207,6 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 		zap.String("version", client.nodeVersion),
 	)
 
-	// If it's a Prysm, check that the debug endpoints are enabled, otherwise
-	// the Validators method might fail when calling BeaconState.
-	// TODO: remove this once Prysm enables debug endpoints by default.
-	if client.nodeClient == NodePrysm {
-		if err := client.checkPrysmDebugEndpoints(); err != nil {
-			return nil, err
-		}
-	}
-
 	// Start registration submitter.
 	go client.registrationSubmitter(slotTickerProvider)
 
@@ -291,47 +280,5 @@ func (gc *goClient) SubscribeOnFinalizedBlocks(
 		return fmt.Errorf("failed to subscribe to finalized checkpoint events: %w", err)
 	}
 
-	return nil
-}
-
-func (gc *goClient) checkPrysmDebugEndpoints() error {
-	start := time.Now()
-	address := strings.TrimSuffix(gc.client.Address(), "/")
-	if !strings.HasPrefix(address, "http") {
-		address = fmt.Sprintf("http://%s", address)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), DefaultCommonTimeout)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/eth/v2/debug/beacon/heads", address), nil)
-	if err != nil {
-		return fmt.Errorf("failed to create beacon heads request: %w", err)
-	}
-	resp, err := (&http.Client{}).Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to get beacon heads: %w", err)
-	}
-	if resp.StatusCode == http.StatusNotFound {
-		return fmt.Errorf("Prysm node doesn't have debug endpoints enabled, please enable them with --enable-debug-rpc-endpoints")
-	}
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to get beacon heads: %s", resp.Status)
-	}
-	var data struct {
-		Data []struct {
-			Root phase0.Root `json:"root"`
-		} `json:"data"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		return fmt.Errorf("failed to decode beacon heads response: %w", err)
-	}
-	if len(data.Data) == 0 {
-		return fmt.Errorf("no beacon heads found")
-	}
-	if data.Data[0].Root == (phase0.Root{}) {
-		return fmt.Errorf("beacon head is empty")
-	}
-	gc.log.Debug("Prysm debug endpoints are enabled", zap.Duration("took", time.Since(start)))
 	return nil
 }

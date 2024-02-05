@@ -51,9 +51,9 @@ type logCondition struct {
 }
 
 type CorruptedShare struct {
-	ValidatorIndex  phase0.ValidatorIndex `json:"validator_index"`
-	ValidatorPubKey string                `json:"validator_pub_key"`
-	OperatorID      types.OperatorID      `json:"operator_id"`
+	ValidatorIndex  uint64           `json:"validator_index"`
+	ValidatorPubKey string           `json:"validator_pub_key"`
+	OperatorID      types.OperatorID `json:"operator_id"`
 }
 
 func VerifyBLSSignature(pctx context.Context, logger *zap.Logger, cli DockerCLI, share *CorruptedShare) error {
