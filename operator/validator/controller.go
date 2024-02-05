@@ -761,40 +761,6 @@ func (c *controller) onShareStart(share *ssvtypes.SSVShare) (bool, error) {
 	return c.startValidator(v)
 }
 
-//
-//func (c *controller) onShareStartValidator() (bool, error) {
-//	if !share.HasBeaconMetadata() { // fetching index and status in case not exist
-//		c.logger.Warn("skipping validator until it becomes active", fields.PubKey(share.ValidatorPubKey))
-//		return false, nil
-//	}
-//	if err := c.setShareFeeRecipient(share, c.recipientsStorage.GetRecipientData); err != nil {
-//		return false, fmt.Errorf("could not set share fee recipient: %w", err)
-//	}
-//	// Start a committee validator.
-//	v, found := c.validatorsMap.GetValidator(hex.EncodeToString(share.ValidatorPubKey))
-//	if !found {
-//		if !share.HasBeaconMetadata() {
-//			return false, fmt.Errorf("beacon metadata is missing")
-//		}
-//		// Share context with both the validator and the runners,
-//		// so that when the validator is stopped, the runners are stopped as well.
-//		ctx, cancel := context.WithCancel(c.context)
-//
-//		opts := c.validatorOptions
-//		opts.SSVShare = share
-//		opts.DutyRunners = SetupRunners(ctx, c.logger, opts)
-//		v = validator.NewValidator(ctx, cancel, opts)
-//		c.validatorsMap.CreateValidator(hex.EncodeToString(share.ValidatorPubKey), v)
-//
-//		c.printShare(share, "setup validator done")
-//
-//	} else {
-//		c.printShare(v.Share, "get validator")
-//	}
-//
-//	return c.startValidator(v)
-//}
-
 func (c *controller) printShare(s *ssvtypes.SSVShare, msg string) {
 	committee := make([]string, len(s.Committee))
 	for i, c := range s.Committee {
