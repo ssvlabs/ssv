@@ -11,7 +11,7 @@ import (
 	"github.com/bloxapp/ssv/network/commons"
 )
 
-func Test_NewBootnode(t *testing.T) {
+func TestNewBootnode(t *testing.T) {
 	bnSk, err := commons.GenNetworkKey()
 	require.NoError(t, err)
 	isk, err := commons.ECDSAPrivToInterface(bnSk)

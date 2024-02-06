@@ -30,7 +30,7 @@ func TestNewService(t *testing.T) {
 	n := 4
 	logger := logging.TestLogger(t)
 	udpRand := make(v1testing.UDPPortsRandomizer)
-	bn, err := createTestBootnode(ctx, logger, udpRand.Next(13001, 13999))
+	bn, err := CreateTestBootnode(ctx, logger, udpRand.Next(13001, 13999))
 	require.NoError(t, err)
 	keys, err := v1testing.CreateKeys(n)
 	require.NoError(t, err)
@@ -57,7 +57,7 @@ func TestNewService(t *testing.T) {
 		fmt.Printf("using tcp port %d\n", tcpPort)
 
 		node, err := newDiscV5Service(ctx, logger, &Options{
-			ConnIndex: &mockConnIndex{},
+			ConnIndex: &MockConnIndex{},
 			DiscV5Opts: &DiscV5Options{
 				StoragePath: "",
 				IP:          "127.0.0.1",
@@ -66,11 +66,12 @@ func TestNewService(t *testing.T) {
 				TCPPort:     tcpPort,
 				NetworkKey:  k.NetKey,
 				Bootnodes:   []string{bn.ENR},
-				Subnets:     []byte{1},
+				Subnets:     []byte("floodsub:bloxstaking.ssv.127"),
 			},
 			SubnetsIdx: peers.NewSubnetsIndex(1),
 		})
 		require.NoError(t, err)
+		defer node.Close()
 		nodes[i] = node.(*DiscV5Service).Self()
 		// start and count connected nodes
 		wg.Add(1)
@@ -95,6 +96,9 @@ func TestNewService(t *testing.T) {
 					t.Log("could not ping node", e.Node.ID().String(), "with err:", err.Error())
 					return
 				}
+				n, err := node.(*DiscV5Service).Node(logger, e.AddrInfo)
+				require.NoError(t, err)
+				require.Equal(t, n.ID().String(), e.Node.ID().String())
 			})
 			require.NoError(t, err)
 		}()
@@ -102,7 +106,7 @@ func TestNewService(t *testing.T) {
 	wg.Wait()
 }
 
-func createTestBootnode(ctx context.Context, logger *zap.Logger, port int) (*Bootnode, error) {
+func CreateTestBootnode(ctx context.Context, logger *zap.Logger, port int) (*Bootnode, error) {
 	bnSk, err := commons.GenNetworkKey()
 	if err != nil {
 		return nil, err
@@ -122,25 +126,25 @@ func createTestBootnode(ctx context.Context, logger *zap.Logger, port int) (*Boo
 	})
 }
 
-type mockConnIndex struct {
+type MockConnIndex struct {
 }
 
-func (c *mockConnIndex) Connectedness(id peer.ID) libp2pnetwork.Connectedness {
+func (c *MockConnIndex) Connectedness(id peer.ID) libp2pnetwork.Connectedness {
 	return libp2pnetwork.NotConnected
 }
 
-func (c *mockConnIndex) CanConnect(id peer.ID) bool {
+func (c *MockConnIndex) CanConnect(id peer.ID) bool {
 	return true
 }
 
-func (c *mockConnIndex) Limit(dir libp2pnetwork.Direction) bool {
+func (c *MockConnIndex) Limit(dir libp2pnetwork.Direction) bool {
 	return false
 }
 
-func (c *mockConnIndex) IsBad(logger *zap.Logger, id peer.ID) bool {
+func (c *MockConnIndex) IsBad(logger *zap.Logger, id peer.ID) bool {
 	return false
 }
 
-func (c *mockConnIndex) AtLimit(dir libp2pnetwork.Direction) bool {
+func (c *MockConnIndex) AtLimit(dir libp2pnetwork.Direction) bool {
 	return false
 }
