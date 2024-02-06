@@ -46,7 +46,7 @@ func TestMsgValidator(t *testing.T) {
 	mv := validation.NewMessageValidator(networkconfig.TestNetwork, validation.WithNodeStorage(ns))
 	require.NotNil(t, mv)
 
-	slot := networkconfig.TestNetwork.Beacon.GetBeaconNetwork().EstimatedCurrentSlot()
+	slot := networkconfig.TestNetwork.Beacon.EstimatedCurrentSlot()
 
 	t.Run("valid consensus msg", func(t *testing.T) {
 		msg, err := dummySSVConsensusMsg(share.ValidatorPubKey, qbft.Height(slot))

@@ -16,6 +16,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 )
@@ -33,7 +34,7 @@ type AttesterRunner struct {
 }
 
 func NewAttesterRunnner(
-	beaconNetwork spectypes.BeaconNetwork,
+	beaconNetwork beaconprotocol.SpecNetwork,
 	share *spectypes.Share,
 	qbftController *controller.Controller,
 	beacon specssv.BeaconNode,

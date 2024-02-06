@@ -89,7 +89,7 @@ func (s *storage) DropRegistryData() error {
 }
 
 func (s *storage) objPrefix(obj string) []byte {
-	return []byte(string(s.network.GetBeaconNetwork()) + obj)
+	return []byte(s.network.String() + obj)
 }
 
 // Name returns storage name.
@@ -99,7 +99,7 @@ func (s *storage) Name() string {
 
 // Network returns the network storage is related to.
 func (s *storage) Network() core.Network {
-	return core.Network(s.network.GetBeaconNetwork())
+	return core.Network(s.network.String()) // TODO: what if a string is not supported by ekm?
 }
 
 // SaveWallet stores the given wallet.
