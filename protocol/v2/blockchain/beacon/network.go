@@ -14,7 +14,6 @@ import (
 // Network is a beacon chain network.
 type Network struct {
 	SpecNetwork
-	LocalTestNet bool
 }
 
 type BeaconNetwork interface {
@@ -50,6 +49,8 @@ type SpecNetwork interface {
 	EpochStartTime(epoch phase0.Epoch) time.Time
 }
 
+// SpecNetworkWrapper wraps spectypes.BeaconNetwork and implements json.Marshaler and json.Unmarshaler.
+// It is used for JSON encoding and decoding of spectypes.BeaconNetwork.
 type SpecNetworkWrapper struct {
 	spectypes.BeaconNetwork
 }
@@ -78,25 +79,8 @@ func NewNetwork(network SpecNetwork) Network {
 	}
 
 	return Network{
-		SpecNetwork:  network,
-		LocalTestNet: false,
+		SpecNetwork: network,
 	}
-}
-
-// NewLocalTestNetwork creates a new local beacon chain network.
-func NewLocalTestNetwork(network SpecNetwork) Network {
-	return Network{
-		SpecNetwork:  network,
-		LocalTestNet: true,
-	}
-}
-
-// MinGenesisTime returns min genesis time value
-func (n Network) MinGenesisTime() uint64 {
-	if n.LocalTestNet {
-		return 1689072978
-	}
-	return n.SpecNetwork.MinGenesisTime()
 }
 
 // GetNetwork returns the network
