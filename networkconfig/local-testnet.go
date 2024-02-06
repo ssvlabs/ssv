@@ -3,20 +3,16 @@ package networkconfig
 import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
-type beaconTestnet struct {
-	spectypes.BeaconNetwork
-}
-
-func (n beaconTestnet) MinGenesisTime() uint64 {
-	return 1689072978
-}
-
 var LocalTestnet = NetworkConfig{
-	Name:                 "local-testnet",
-	Beacon:               beacon.NewNetwork(beaconTestnet{spectypes.PraterNetwork}),
+	Name: "local-testnet",
+	Beacon: beaconprotocol.Network{
+		Parent:            spectypes.PraterNetwork,
+		Name:              "local-testnet",
+		MinGenesisTimeVal: 1689072978,
+	},
 	Domain:               spectypes.JatoV2Testnet,
 	GenesisEpoch:         1,
 	RegistryContractAddr: "0xC3CD9A0aE89Fff83b71b58b6512D43F8a41f363D",

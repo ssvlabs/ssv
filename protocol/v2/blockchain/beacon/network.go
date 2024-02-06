@@ -1,6 +1,7 @@
 package beacon
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -9,15 +10,21 @@ import (
 
 //go:generate mockgen -package=mocks -destination=./mocks/network.go -source=./network.go
 
-// TODO: refactor type names to be more descriptive
-
-// Network is a beacon chain network.
-type Network struct {
-	SpecNetwork
-}
-
 type BeaconNetwork interface {
-	SpecNetwork
+	fmt.Stringer
+
+	ForkVersion() [4]byte
+	MinGenesisTime() uint64
+	SlotDurationSec() time.Duration
+	SlotsPerEpoch() uint64
+
+	EstimatedCurrentSlot() phase0.Slot
+	EstimatedSlotAtTime(time int64) phase0.Slot
+	EstimatedTimeAtSlot(slot phase0.Slot) int64
+	EstimatedCurrentEpoch() phase0.Epoch
+	EstimatedEpochAtSlot(slot phase0.Slot) phase0.Epoch
+	FirstSlotAtEpoch(epoch phase0.Epoch) phase0.Slot
+	EpochStartTime(epoch phase0.Epoch) time.Time
 
 	GetSlotStartTime(slot phase0.Slot) time.Time
 	GetSlotEndTime(slot phase0.Slot) time.Time
@@ -31,56 +38,84 @@ type BeaconNetwork interface {
 
 	GetNetwork() Network
 	GetBeaconNetwork() spectypes.BeaconNetwork
-
-	String() string
 }
 
-type SpecNetwork interface {
-	ForkVersion() [4]byte
-	MinGenesisTime() uint64
-	SlotDurationSec() time.Duration
-	SlotsPerEpoch() uint64
-	EstimatedCurrentSlot() phase0.Slot
-	EstimatedSlotAtTime(time int64) phase0.Slot
-	EstimatedTimeAtSlot(slot phase0.Slot) int64
-	EstimatedCurrentEpoch() phase0.Epoch
-	EstimatedEpochAtSlot(slot phase0.Slot) phase0.Epoch
-	FirstSlotAtEpoch(epoch phase0.Epoch) phase0.Slot
-	EpochStartTime(epoch phase0.Epoch) time.Time
+// Network is a beacon chain network.
+type Network struct {
+	Parent                          spectypes.BeaconNetwork `json:"parent"`
+	Name                            string                  `json:"name"`
+	ForkVersionVal                  [4]byte                 `json:"fork_version"`
+	MinGenesisTimeVal               uint64                  `json:"min_genesis_time"`
+	SlotDurationSecVal              time.Duration           `json:"slot_duration_sec"`
+	SlotsPerEpochVal                uint64                  `json:"slots_per_epoch"`
+	EpochsPerSyncCommitteePeriodVal uint64                  `json:"epochs_per_sync_committee_period"`
 }
 
-// SpecNetworkWrapper wraps spectypes.BeaconNetwork and implements json.Marshaler and json.Unmarshaler.
-// It is used for JSON encoding and decoding of spectypes.BeaconNetwork.
-type SpecNetworkWrapper struct {
-	spectypes.BeaconNetwork
-}
-
-func (n *SpecNetworkWrapper) String() string {
-	return string(n.BeaconNetwork)
-}
-
-func (n *SpecNetworkWrapper) MarshalJSON() ([]byte, error) {
-	return []byte(`"` + n.String() + `"`), nil
-}
-
-func (n *SpecNetworkWrapper) UnmarshalJSON(b []byte) error {
-	if len(b) < 2 {
-		return nil
-	}
-
-	*n = SpecNetworkWrapper{spectypes.BeaconNetwork(b[1 : len(b)-1])}
-	return nil
-}
-
-// NewNetwork creates a new beacon chain network.
-func NewNetwork(network SpecNetwork) Network {
-	if _, ok := network.(spectypes.BeaconNetwork); ok {
-		network = SpecNetworkWrapper{network.(spectypes.BeaconNetwork)}
-	}
-
+// NewNetwork creates a new beacon chain network from a parent spec network.
+func NewNetwork(network spectypes.BeaconNetwork) Network {
 	return Network{
-		SpecNetwork: network,
+		Parent: network,
 	}
+}
+
+func (n Network) String() string {
+	if n.Name != "" {
+		return n.Name
+	}
+
+	if n.Parent != "" {
+		return string(n.Parent)
+	}
+
+	return ""
+}
+
+func (n Network) ForkVersion() [4]byte {
+	if n.ForkVersionVal != ([4]byte{}) {
+		return n.ForkVersionVal
+	}
+
+	if n.Parent != "" {
+		return n.Parent.ForkVersion()
+	}
+
+	return [4]byte{}
+}
+
+func (n Network) MinGenesisTime() uint64 {
+	if n.MinGenesisTimeVal != 0 {
+		return n.MinGenesisTimeVal
+	}
+
+	if n.Parent != "" {
+		return n.Parent.MinGenesisTime()
+	}
+
+	return 0
+}
+
+func (n Network) SlotDurationSec() time.Duration {
+	if n.SlotDurationSecVal != 0 {
+		return n.SlotDurationSecVal
+	}
+
+	if n.Parent != "" {
+		return n.Parent.SlotDurationSec()
+	}
+
+	return 0
+}
+
+func (n Network) SlotsPerEpoch() uint64 {
+	if n.SlotDurationSecVal != 0 {
+		return n.SlotsPerEpochVal
+	}
+
+	if n.Parent != "" {
+		return n.Parent.SlotsPerEpoch()
+	}
+
+	return 0
 }
 
 // GetNetwork returns the network
@@ -90,12 +125,7 @@ func (n Network) GetNetwork() Network {
 
 // GetBeaconNetwork returns the beacon network the node is on
 func (n Network) GetBeaconNetwork() spectypes.BeaconNetwork {
-	switch v := n.SpecNetwork.(type) {
-	case SpecNetworkWrapper:
-		return v.BeaconNetwork
-	default:
-		panic("TODO: implement")
-	}
+	return n.Parent
 }
 
 // GetSlotStartTime returns the start time for the given slot
@@ -115,13 +145,28 @@ func (n Network) EstimatedCurrentSlot() phase0.Slot {
 	return n.EstimatedSlotAtTime(time.Now().Unix())
 }
 
+func (n Network) EstimatedTimeAtSlot(slot phase0.Slot) int64 {
+	d := int64(slot) * int64(n.SlotDurationSec().Seconds())
+	return int64(n.MinGenesisTime()) + d
+}
+
+func (n Network) FirstSlotAtEpoch(epoch phase0.Epoch) phase0.Slot {
+	return phase0.Slot(uint64(epoch) * n.SlotsPerEpoch())
+}
+
+func (n Network) EpochStartTime(epoch phase0.Epoch) time.Time {
+	firstSlot := n.FirstSlotAtEpoch(epoch)
+	t := n.EstimatedTimeAtSlot(firstSlot)
+	return time.Unix(t, 0)
+}
+
 // EstimatedSlotAtTime estimates slot at the given time
 func (n Network) EstimatedSlotAtTime(time int64) phase0.Slot {
 	genesis := int64(n.MinGenesisTime())
 	if time < genesis {
 		return 0
 	}
-	return phase0.Slot(uint64(time-genesis) / uint64(n.SpecNetwork.SlotDurationSec().Seconds()))
+	return phase0.Slot(uint64(time-genesis) / uint64(n.SlotDurationSec().Seconds()))
 }
 
 // EstimatedCurrentEpoch estimates the current epoch
@@ -132,22 +177,22 @@ func (n Network) EstimatedCurrentEpoch() phase0.Epoch {
 
 // EstimatedEpochAtSlot estimates epoch at the given slot
 func (n Network) EstimatedEpochAtSlot(slot phase0.Slot) phase0.Epoch {
-	return phase0.Epoch(slot / phase0.Slot(n.SpecNetwork.SlotsPerEpoch()))
+	return phase0.Epoch(slot / phase0.Slot(n.SlotsPerEpoch()))
 }
 
 // IsFirstSlotOfEpoch estimates epoch at the given slot
 func (n Network) IsFirstSlotOfEpoch(slot phase0.Slot) bool {
-	return uint64(slot)%n.SpecNetwork.SlotsPerEpoch() == 0
+	return uint64(slot)%n.SlotsPerEpoch() == 0
 }
 
 // GetEpochFirstSlot returns the beacon node first slot in epoch
 func (n Network) GetEpochFirstSlot(epoch phase0.Epoch) phase0.Slot {
-	return phase0.Slot(uint64(epoch) * n.SpecNetwork.SlotsPerEpoch())
+	return phase0.Slot(uint64(epoch) * n.SlotsPerEpoch())
 }
 
 // EpochsPerSyncCommitteePeriod returns the number of epochs per sync committee period.
 func (n Network) EpochsPerSyncCommitteePeriod() uint64 {
-	return 256
+	return n.EpochsPerSyncCommitteePeriodVal
 }
 
 // EstimatedSyncCommitteePeriodAtEpoch estimates the current sync committee period at the given Epoch
@@ -166,15 +211,4 @@ func (n Network) LastSlotOfSyncPeriod(period uint64) phase0.Slot {
 	// If we are in the sync committee that ends at slot x we do not generate a message during slot x-1
 	// as it will never be included, hence -1.
 	return n.GetEpochFirstSlot(lastEpoch+1) - 2
-}
-
-func (n Network) String() string {
-	switch v := n.SpecNetwork.(type) {
-	case spectypes.BeaconNetwork:
-		return string(v)
-	case SpecNetworkWrapper:
-		return v.String()
-	default:
-		panic("unknown network type")
-	}
 }

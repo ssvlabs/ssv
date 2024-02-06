@@ -31,15 +31,15 @@ func GetNetworkConfigByName(name string) (NetworkConfig, error) {
 }
 
 type NetworkConfig struct {
-	Name                          string
-	Beacon                        beacon.BeaconNetwork
-	Domain                        spectypes.DomainType
-	GenesisEpoch                  spec.Epoch
-	RegistrySyncOffset            *big.Int
-	RegistryContractAddr          string // TODO: ethcommon.Address
-	Bootnodes                     []string
-	WhitelistedOperatorKeys       []string
-	PermissionlessActivationEpoch spec.Epoch
+	Name                          string               `json:"name"`
+	Beacon                        beacon.BeaconNetwork `json:"beacon"`
+	Domain                        spectypes.DomainType `json:"domain"`
+	GenesisEpoch                  spec.Epoch           `json:"genesis_epoch"`
+	RegistrySyncOffset            *big.Int             `json:"registry_sync_offset"`
+	RegistryContractAddr          string               `json:"registry_contract_addr"` // TODO: ethcommon.Address
+	Bootnodes                     []string             `json:"bootnodes"`
+	WhitelistedOperatorKeys       []string             `json:"whitelisted_operator_keys"`
+	PermissionlessActivationEpoch spec.Epoch           `json:"permissionless_activation_epoch"`
 }
 
 func (n NetworkConfig) String() string {

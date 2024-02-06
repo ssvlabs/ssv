@@ -1,7 +1,6 @@
 package runner
 
 import (
-	"encoding/json"
 	"sync"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
@@ -12,7 +11,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 )
 
@@ -52,7 +50,7 @@ type BaseRunner struct {
 	State          *State
 	Share          *spectypes.Share
 	QBFTController *controller.Controller
-	BeaconNetwork  beaconprotocol.SpecNetwork
+	BeaconNetwork  spectypes.BeaconNetwork
 	BeaconRoleType spectypes.BeaconRole
 
 	// implementation vars
@@ -60,52 +58,6 @@ type BaseRunner struct {
 
 	// highestDecidedSlot holds the highest decided duty slot and gets updated after each decided is reached
 	highestDecidedSlot spec.Slot
-}
-
-// MarshalJSON customizes the JSON marshaling for BaseRunner.
-func (b *BaseRunner) MarshalJSON() ([]byte, error) {
-	type Alias BaseRunner
-	aux := &struct {
-		BeaconNetwork interface{} `json:"BeaconNetwork"`
-		*Alias
-	}{
-		Alias: (*Alias)(b),
-	}
-
-	switch t := b.BeaconNetwork.(type) {
-	case beaconprotocol.SpecNetworkWrapper:
-		aux.BeaconNetwork = t.String()
-	case beaconprotocol.Network:
-		aux.BeaconNetwork = t.String()
-	default:
-		return nil, errors.New("unsupported type for BeaconNetwork")
-	}
-
-	return json.Marshal(aux)
-}
-
-// UnmarshalJSON customizes the JSON unmarshaling for BaseRunner.
-func (b *BaseRunner) UnmarshalJSON(data []byte) error {
-	type Alias BaseRunner
-	aux := &struct {
-		BeaconNetwork interface{} `json:"BeaconNetwork"`
-		*Alias
-	}{
-		Alias: (*Alias)(b),
-	}
-
-	if err := json.Unmarshal(data, &aux); err != nil {
-		return err
-	}
-
-	switch value := aux.BeaconNetwork.(type) {
-	case string:
-		b.BeaconNetwork = beaconprotocol.NewNetwork(spectypes.BeaconNetwork(value))
-	default:
-		return errors.New("unsupported type for BeaconNetwork")
-	}
-
-	return nil
 }
 
 // SetHighestDecidedSlot set highestDecidedSlot for base runner
@@ -129,7 +81,7 @@ func NewBaseRunner(
 	state *State,
 	share *spectypes.Share,
 	controller *controller.Controller,
-	beaconNetwork beaconprotocol.Network,
+	beaconNetwork spectypes.BeaconNetwork,
 	beaconRoleType spectypes.BeaconRole,
 	highestDecidedSlot spec.Slot,
 ) *BaseRunner {
