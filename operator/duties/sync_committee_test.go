@@ -118,7 +118,7 @@ func TestScheduler_SyncCommittee_Same_Period(t *testing.T) {
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// validate the 1/3 of the slot waiting time
-	require.Less(t, scheduler.network.Beacon.SlotDurationSec()/3, time.Since(startTime))
+	require.Less(t, scheduler.network.Beacon.SlotDuration()/3, time.Since(startTime))
 
 	// STEP 2: expect sync committee duties to be executed at the same period
 	currentSlot.SetSlot(phase0.Slot(2))
@@ -538,7 +538,7 @@ func TestScheduler_SyncCommittee_Early_Block(t *testing.T) {
 	}
 	scheduler.HandleHeadEvent(logger)(e)
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
-	require.Less(t, time.Since(startTime), scheduler.network.Beacon.SlotDurationSec()/3)
+	require.Less(t, time.Since(startTime), scheduler.network.Beacon.SlotDuration()/3)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()

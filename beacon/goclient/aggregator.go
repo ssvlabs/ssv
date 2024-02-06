@@ -100,7 +100,7 @@ func isAggregator(committeeCount uint64, slotSig []byte) (bool, error) {
 
 // waitToSlotTwoThirds waits until two-third of the slot has transpired (SECONDS_PER_SLOT * 2 / 3 seconds after the start of slot)
 func (gc *goClient) waitToSlotTwoThirds(slot phase0.Slot) {
-	oneThird := gc.network.SlotDurationSec() / 3 /* one third of slot duration */
+	oneThird := gc.network.SlotDuration() / 3 /* one third of slot duration */
 
 	finalTime := gc.slotStartTime(slot).Add(2 * oneThird)
 	wait := time.Until(finalTime)

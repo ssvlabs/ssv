@@ -89,7 +89,7 @@ func TestScheduler_Attester_Same_Slot(t *testing.T) {
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
 
 	// validate the 1/3 of the slot waiting time
-	require.Less(t, scheduler.network.Beacon.SlotDurationSec()/3, time.Since(startTime))
+	require.Less(t, scheduler.network.Beacon.SlotDuration()/3, time.Since(startTime))
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()
@@ -837,7 +837,7 @@ func TestScheduler_Attester_Early_Block(t *testing.T) {
 	}
 	scheduler.HandleHeadEvent(logger)(e)
 	waitForDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, expected)
-	require.Less(t, time.Since(startTime), scheduler.network.Beacon.SlotDurationSec()/3)
+	require.Less(t, time.Since(startTime), scheduler.network.Beacon.SlotDuration()/3)
 
 	// Stop scheduler & wait for graceful exit.
 	cancel()

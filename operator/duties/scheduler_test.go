@@ -119,7 +119,7 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Slot
 	mockBeaconNode.EXPECT().Events(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 
 	mockNetworkConfig.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().MinGenesisTime().Return(uint64(0)).AnyTimes()
-	mockNetworkConfig.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().SlotDurationSec().Return(150 * time.Millisecond).AnyTimes()
+	mockNetworkConfig.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().SlotDuration().Return(150 * time.Millisecond).AnyTimes()
 	mockNetworkConfig.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().SlotsPerEpoch().Return(uint64(32)).AnyTimes()
 	mockNetworkConfig.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().GetSlotStartTime(gomock.Any()).DoAndReturn(
 		func(slot phase0.Slot) time.Time {

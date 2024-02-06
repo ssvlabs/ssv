@@ -15,5 +15,5 @@ func TestNetwork_GetSlotEndTime(t *testing.T) {
 	slotStart := n.GetSlotStartTime(slot)
 	slotEnd := n.GetSlotEndTime(slot)
 
-	require.Equal(t, n.SlotDurationSec(), slotEnd.Sub(slotStart))
+	require.Equal(t, n.SlotDuration(), slotEnd.Sub(slotStart))
 }

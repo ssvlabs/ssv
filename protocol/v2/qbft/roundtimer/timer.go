@@ -29,7 +29,7 @@ type Timer interface {
 
 type BeaconNetwork interface {
 	GetSlotStartTime(slot phase0.Slot) time.Time
-	SlotDurationSec() time.Duration
+	SlotDuration() time.Duration
 }
 
 type TimeoutOptions struct {
@@ -106,10 +106,10 @@ func (t *RoundTimer) RoundTimeout(height specqbft.Height, round specqbft.Round) 
 	switch t.role {
 	case spectypes.BNRoleAttester, spectypes.BNRoleSyncCommittee:
 		// third of the slot time
-		baseDuration = t.beaconNetwork.SlotDurationSec() / 3
+		baseDuration = t.beaconNetwork.SlotDuration() / 3
 	case spectypes.BNRoleAggregator, spectypes.BNRoleSyncCommitteeContribution:
 		// two-third of the slot time
-		baseDuration = t.beaconNetwork.SlotDurationSec() / 3 * 2
+		baseDuration = t.beaconNetwork.SlotDuration() / 3 * 2
 	default:
 		if round <= t.timeoutOptions.quickThreshold {
 			return t.timeoutOptions.quick

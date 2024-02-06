@@ -56,9 +56,9 @@ func (n NetworkConfig) ForkVersion() [4]byte {
 	return n.Beacon.ForkVersion()
 }
 
-// SlotDurationSec returns slot duration
-func (n NetworkConfig) SlotDurationSec() time.Duration {
-	return n.Beacon.SlotDurationSec()
+// SlotDuration returns slot duration
+func (n NetworkConfig) SlotDuration() time.Duration {
+	return n.Beacon.SlotDuration()
 }
 
 // SlotsPerEpoch returns number of slots per one epoch

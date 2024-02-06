@@ -267,7 +267,7 @@ func (gc *goClient) GetBeaconNetwork() spectypes.BeaconNetwork {
 // SlotStartTime returns the start time in terms of its unix epoch
 // value.
 func (gc *goClient) slotStartTime(slot phase0.Slot) time.Time {
-	duration := time.Second * time.Duration(uint64(slot)*uint64(gc.network.SlotDurationSec().Seconds()))
+	duration := time.Second * time.Duration(uint64(slot)*uint64(gc.network.SlotDuration().Seconds()))
 	startTime := time.Unix(int64(gc.network.MinGenesisTime()), 0).Add(duration)
 	return startTime
 }

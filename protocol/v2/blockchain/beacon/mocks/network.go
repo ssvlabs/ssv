@@ -303,18 +303,18 @@ func (mr *MockBeaconNetworkMockRecorder) MinGenesisTime() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MinGenesisTime", reflect.TypeOf((*MockBeaconNetwork)(nil).MinGenesisTime))
 }
 
-// SlotDurationSec mocks base method.
-func (m *MockBeaconNetwork) SlotDurationSec() time.Duration {
+// SlotDuration mocks base method.
+func (m *MockBeaconNetwork) SlotDuration() time.Duration {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SlotDurationSec")
+	ret := m.ctrl.Call(m, "SlotDuration")
 	ret0, _ := ret[0].(time.Duration)
 	return ret0
 }
 
-// SlotDurationSec indicates an expected call of SlotDurationSec.
-func (mr *MockBeaconNetworkMockRecorder) SlotDurationSec() *gomock.Call {
+// SlotDuration indicates an expected call of SlotDuration.
+func (mr *MockBeaconNetworkMockRecorder) SlotDuration() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SlotDurationSec", reflect.TypeOf((*MockBeaconNetwork)(nil).SlotDurationSec))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SlotDuration", reflect.TypeOf((*MockBeaconNetwork)(nil).SlotDuration))
 }
 
 // SlotsPerEpoch mocks base method.

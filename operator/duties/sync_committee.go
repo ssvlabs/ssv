@@ -135,7 +135,7 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 }
 
 func (h *SyncCommitteeHandler) HandleInitialDuties(ctx context.Context) {
-	ctx, cancel := context.WithTimeout(ctx, h.network.Beacon.SlotDurationSec()/2)
+	ctx, cancel := context.WithTimeout(ctx, h.network.Beacon.SlotDuration()/2)
 	defer cancel()
 	slot := h.network.Beacon.EstimatedCurrentSlot()
 	epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
