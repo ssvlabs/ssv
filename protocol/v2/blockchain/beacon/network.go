@@ -10,7 +10,11 @@ import (
 
 //go:generate mockgen -package=mocks -destination=./mocks/network.go -source=./network.go
 
-const defaultEpochsPerSyncCommitteePeriodVal = 256
+const (
+	defaultSlotDuration                    = 12 * time.Second
+	defaultSlotsPerEpoch                   = 32
+	defaultEpochsPerSyncCommitteePeriodVal = 256
+)
 
 type BeaconNetwork interface {
 	fmt.Stringer
@@ -105,7 +109,7 @@ func (n Network) SlotDurationSec() time.Duration {
 		return n.Parent.SlotDurationSec()
 	}
 
-	return 0
+	return defaultSlotDuration
 }
 
 func (n Network) SlotsPerEpoch() uint64 {
@@ -117,7 +121,7 @@ func (n Network) SlotsPerEpoch() uint64 {
 		return n.Parent.SlotsPerEpoch()
 	}
 
-	return 0
+	return defaultSlotsPerEpoch
 }
 
 // GetNetwork returns the network
