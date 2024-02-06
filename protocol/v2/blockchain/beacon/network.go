@@ -10,6 +10,8 @@ import (
 
 //go:generate mockgen -package=mocks -destination=./mocks/network.go -source=./network.go
 
+const defaultEpochsPerSyncCommitteePeriodVal = 256
+
 type BeaconNetwork interface {
 	fmt.Stringer
 
@@ -192,7 +194,11 @@ func (n Network) GetEpochFirstSlot(epoch phase0.Epoch) phase0.Slot {
 
 // EpochsPerSyncCommitteePeriod returns the number of epochs per sync committee period.
 func (n Network) EpochsPerSyncCommitteePeriod() uint64 {
-	return n.EpochsPerSyncCommitteePeriodVal
+	if n.EpochsPerSyncCommitteePeriodVal != 0 {
+		return n.EpochsPerSyncCommitteePeriodVal
+	}
+
+	return defaultEpochsPerSyncCommitteePeriodVal
 }
 
 // EstimatedSyncCommitteePeriodAtEpoch estimates the current sync committee period at the given Epoch
