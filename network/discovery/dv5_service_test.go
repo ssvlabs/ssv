@@ -20,6 +20,7 @@ import (
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network/commons"
+	"github.com/bloxapp/ssv/network/peers"
 	v1testing "github.com/bloxapp/ssv/network/testing"
 )
 
@@ -34,21 +35,17 @@ func TestNewService(t *testing.T) {
 	keys, err := v1testing.CreateKeys(n)
 	require.NoError(t, err)
 	var wg sync.WaitGroup
-	peers := make([]host.Host, n)
+	localPeers := make([]host.Host, n)
 	for i := 0; i < n; i++ {
 		h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
 		require.NoError(t, err)
 		<-time.After(time.Millisecond * 10)
-		peers[i] = h
+		localPeers[i] = h
 	}
-	err = bn.disc.RegisterSubnets(logger, 1)
-	require.NoError(t, err)
 	nodes := make([]*enode.LocalNode, n)
-	// subnets, err := hex.DecodeString("00000000000000000000020000000000")
-	require.NoError(t, err)
 	for i, k := range keys {
 		tcpPort := v1testing.RandomTCPPort(12001, 12999)
-		h := peers[i]
+		h := localPeers[i]
 		addrs := h.Addrs()
 		if len(addrs) > 0 {
 			addr := addrs[0]
@@ -58,6 +55,7 @@ func TestNewService(t *testing.T) {
 			require.NoError(t, err)
 		}
 		fmt.Printf("using tcp port %d\n", tcpPort)
+
 		node, err := newDiscV5Service(ctx, logger, &Options{
 			ConnIndex: &mockConnIndex{},
 			DiscV5Opts: &DiscV5Options{
@@ -68,10 +66,10 @@ func TestNewService(t *testing.T) {
 				TCPPort:     tcpPort,
 				NetworkKey:  k.NetKey,
 				Bootnodes:   []string{bn.ENR},
+				Subnets:     []byte{1},
 			},
+			SubnetsIdx: peers.NewSubnetsIndex(1),
 		})
-		require.NoError(t, err)
-		err = node.RegisterSubnets(logger, 1)
 		require.NoError(t, err)
 		nodes[i] = node.(*DiscV5Service).Self()
 		// start and count connected nodes
@@ -87,7 +85,6 @@ func TestNewService(t *testing.T) {
 				require.GreaterOrEqual(t, found, expected)
 			}()
 			err = node.Bootstrap(logger, func(e PeerEvent) {
-				logger.Debug("found node", zap.Any("e", e))
 				found++
 				logger.Debug("found node", zap.Any("e", e))
 				if found >= expected {
