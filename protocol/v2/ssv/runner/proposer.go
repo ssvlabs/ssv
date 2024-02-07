@@ -21,7 +21,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec"
 
-	"github.com/bloxapp/ssv/beacon/goclient"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
@@ -105,33 +104,11 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 	logger.Debug("🧩 reconstructed partial RANDAO signatures",
 		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)))
 
-	var ver spec.DataVersion
-	var obj ssz.Marshaler
 	var start = time.Now()
-	if r.ProducesBlindedBlocks {
-		// get block data
-		obj, ver, err = r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
-		if err != nil {
-			// Prysm workaround: when Prysm can't retrieve an MEV block, it responds with an error
-			// saying the block isn't blinded, implying to request a standard block instead.
-			// https://github.com/prysmaticlabs/prysm/issues/12103
-			if nodeClientProvider, ok := r.GetBeaconNode().(goclient.NodeClientProvider); ok &&
-				nodeClientProvider.NodeClient() == goclient.NodePrysm {
-				logger.Debug("failed to get blinded beacon block, falling back to standard block")
-				obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
-				if err != nil {
-					return errors.Wrap(err, "failed falling back from blinded to standard beacon block")
-				}
-			} else {
-				return errors.Wrap(err, "failed to get blinded beacon block")
-			}
-		}
-	} else {
-		// get block data
-		obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
-		if err != nil {
-			return errors.Wrap(err, "failed to get beacon block")
-		}
+	// get block data
+	obj, ver, err := r.fetchBeaconBlock(logger, duty.Slot, fullSig)
+	if err != nil {
+		return errors.Wrap(err, "failed to get beacon block")
 	}
 
 	// Log essentials about the retrieved block.
@@ -159,6 +136,25 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 	}
 
 	return nil
+}
+
+// Function to attempt fetching a beacon block based on the provided conditions.
+// Returns the block (as ssz.Marshaler), the data version, and any error encountered.
+func (r *ProposerRunner) fetchBeaconBlock(logger *zap.Logger, slot phase0.Slot, fullSig []byte) (ssz.Marshaler, spec.DataVersion, error) {
+	var obj ssz.Marshaler
+	var ver spec.DataVersion
+	var err error
+	if r.ProducesBlindedBlocks {
+		// Attempt to fetch the blinded beacon block.
+		obj, ver, err = r.GetBeaconNode().GetBlindedBeaconBlock(slot, r.GetShare().Graffiti, fullSig)
+		if err == nil {
+			return obj, ver, nil
+		}
+		logger.Debug("failed to get blinded beacon block, falling back to standard block")
+	}
+	// Fetch the standard beacon block if blinded block fetching fails or if blinded is false.
+	obj, ver, err = r.GetBeaconNode().GetBeaconBlock(slot, r.GetShare().Graffiti, fullSig)
+	return obj, ver, err
 }
 
 func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbft.SignedMessage) error {
