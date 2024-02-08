@@ -141,6 +141,11 @@ func TestBadgerDb_GetMany(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, 4, len(results))
+	err = db.GetMany(prefix, [][]byte{}, func(obj basedb.Obj) error {
+		results = append(results, obj)
+		return nil
+	})
+	require.Equal(t, nil, err)
 }
 
 func TestBadgerDb_SetMany(t *testing.T) {
@@ -165,6 +170,45 @@ func TestBadgerDb_SetMany(t *testing.T) {
 		require.True(t, found, "should find item %d", i)
 		require.True(t, bytes.Equal(obj.Value, values[i]), "item %d wrong value", i)
 	}
+}
+
+func TestBadgerDb_CountPrefix(t *testing.T) {
+	logger := logging.TestLogger(t)
+	db, err := NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	prefix := []byte("prefix")
+	var i uint64
+	for i = 0; i < 100; i++ {
+		require.NoError(t, db.Set(prefix, uInt64ToByteSlice(i+1), uInt64ToByteSlice(i+1)))
+	}
+
+	n, err := db.CountPrefix(prefix)
+	require.NoError(t, err)
+	require.Equal(t, int64(100), n)
+}
+
+func TestBadgerDb_Update(t *testing.T) {
+	logger := logging.TestLogger(t)
+	db, err := NewInMemory(logger, basedb.Options{})
+	require.NoError(t, err)
+	defer db.Close()
+
+	prefix := []byte("prefix")
+	key := []byte("key")
+	value := []byte("value")
+	err = db.Set(prefix, key, value)
+	require.NoError(t, err)
+	newValue := []byte("newValue")
+	tx := func(txn basedb.Txn) error {
+		return db.Set(prefix, key, newValue)
+	}
+	err = db.Update(tx)
+	require.NoError(t, err)
+	obj, _, err := db.Get(prefix, key)
+	require.NoError(t, err)
+	require.Equal(t, obj.Value, newValue)
 }
 
 func uInt64ToByteSlice(n uint64) []byte {
