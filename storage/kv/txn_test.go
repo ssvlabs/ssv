@@ -3,7 +3,9 @@ package kv
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -117,4 +119,45 @@ func TestTxn_GetMany(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, 4, len(results))
+}
+
+func TestTxn_GetAll(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	zapCore, _ := observer.New(zap.DebugLevel)
+	logger := zap.New(zapCore)
+	options := basedb.Options{
+		Reporting: true,
+		Ctx:       ctx,
+	}
+
+	db, err := NewInMemory(logger, options)
+	require.NoError(t, err)
+	bdb := db.Badger()
+	txn := bdb.NewTransaction(true)
+	tx := &badgerTxn{
+		txn: txn,
+		db:  db,
+	}
+	defer tx.Discard()
+	prefix := []byte("test")
+	for i := 0; i < 100; i++ {
+		id := fmt.Sprintf("test-%d", i)
+		require.NoError(t, tx.Set(prefix, []byte(id), []byte(id+"-data")))
+	}
+	time.Sleep(1 * time.Millisecond)
+
+	var all []basedb.Obj
+	err = tx.GetAll(prefix, func(i int, obj basedb.Obj) error {
+		all = append(all, obj)
+		return nil
+	})
+	require.Equal(t, 100, len(all))
+	require.NoError(t, err)
+	visited := map[string][]byte{}
+	for _, item := range all {
+		visited[string(item.Key)] = item.Value
+	}
+	require.Equal(t, 100, len(visited))
 }
