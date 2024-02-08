@@ -55,7 +55,7 @@ integration-test:
 .PHONY: unit-test
 unit-test:
 	@echo "Running unit tests"
-	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -race -p 1 -v `go list ./... | grep -ve "spectest\|integration\|ssv/scripts/"`
+	@go test -tags blst_enabled -timeout 20m -race -covermode=atomic -coverprofile=coverage.out -p 1 `go list ./eth/eventhandler/... | grep -ve "spectest\|integration\|ssv/scripts/"`
 
 .PHONY: spec-test
 spec-test:
