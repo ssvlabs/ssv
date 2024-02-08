@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto"
-	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/hex"
@@ -19,11 +18,8 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/bloxapp/ssv/api"
 	"github.com/bloxapp/ssv/api/handlers"
 	"github.com/bloxapp/ssv/logging"
-	p2pv1 "github.com/bloxapp/ssv/network/p2p"
-	"github.com/bloxapp/ssv/nodeprobe"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
@@ -49,7 +45,7 @@ func TestAPI(t *testing.T) {
 		require.NoError(t, err)
 		_, tokenString, err := jwtauth.New("HS256", []byte("secret"), nil).Encode(nil)
 		require.NoError(t, err)
-		resp, respData, err := api.TestRequest(testServer, "POST", "/v1/operator/sign", tokenString, r)
+		resp, respData, err := handlers.TestRequest(testServer, "POST", "/v1/operator/sign", tokenString, r)
 		require.NoError(t, err)
 		require.Equal(t, resp.StatusCode, 200)
 		var sigResp struct {
@@ -68,7 +64,7 @@ func TestAPI(t *testing.T) {
 		r := bytes.NewReader(data)
 		require.NoError(t, err)
 		tokenString := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.t-IDcSemACt8x4iTMCda8Yhe3iZaWbvV5XKSTbuAn0M"
-		resp, respData, err := api.TestRequest(testServer, "POST", "/v1/operator/sign", tokenString, r)
+		resp, respData, err := handlers.TestRequest(testServer, "POST", "/v1/operator/sign", tokenString, r)
 		require.NoError(t, err)
 		require.Equal(t, resp.StatusCode, 200)
 		var sigResp struct {
@@ -87,12 +83,12 @@ func TestAPI(t *testing.T) {
 		r := bytes.NewReader(data)
 		require.NoError(t, err)
 		tokenString := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.-h11M7Sw09EUpd-vqBIwAOMuIcogkBfpsYnIHVcVoEc"
-		resp, _, err := api.TestRequest(testServer, "POST", "/v1/operator/sign", tokenString, r)
+		resp, _, err := handlers.TestRequest(testServer, "POST", "/v1/operator/sign", tokenString, r)
 		require.NoError(t, err)
 		require.Equal(t, resp.StatusCode, 401)
 	})
 	t.Run("non-authorized /v1/node/identity", func(t *testing.T) {
-		_, respData, err := api.TestRequest(testServer, "GET", "/v1/node/identity", "", nil)
+		_, respData, err := handlers.TestRequest(testServer, "GET", "/v1/node/identity", "", nil)
 		require.NoError(t, err)
 		var identity struct {
 			PeerID    peer.ID  `json:"peer_id"`
@@ -105,7 +101,7 @@ func TestAPI(t *testing.T) {
 		require.Equal(t, apiServer.node.Network.LocalPeer().String(), identity.PeerID.String())
 	})
 	t.Run("non-authorized /v1/node/peers", func(t *testing.T) {
-		resp, respData, err := api.TestRequest(testServer, "GET", "/v1/node/peers", "", nil)
+		resp, respData, err := handlers.TestRequest(testServer, "GET", "/v1/node/peers", "", nil)
 		require.NoError(t, err)
 		require.Equal(t, resp.StatusCode, 200)
 		var peers []struct {
@@ -123,7 +119,7 @@ func TestAPI(t *testing.T) {
 		require.NoError(t, err)
 	})
 	t.Run("non-authorized /v1/node/topics", func(t *testing.T) {
-		resp, respData, err := api.TestRequest(testServer, "GET", "/v1/node/topics", "", nil)
+		resp, respData, err := handlers.TestRequest(testServer, "GET", "/v1/node/topics", "", nil)
 		require.NoError(t, err)
 		require.Equal(t, resp.StatusCode, 200)
 		var topics struct {
@@ -137,7 +133,7 @@ func TestAPI(t *testing.T) {
 		require.NoError(t, err)
 	})
 	t.Run("non-authorized /v1/node/health", func(t *testing.T) {
-		resp, respData, err := api.TestRequest(testServer, "GET", "/v1/node/health", "", nil)
+		resp, respData, err := handlers.TestRequest(testServer, "GET", "/v1/node/health", "", nil)
 		require.NoError(t, err)
 		require.Equal(t, resp.StatusCode, 200)
 		var health struct {
@@ -158,20 +154,7 @@ func TestAPI(t *testing.T) {
 }
 
 func createTestNodeWithAPI(t *testing.T, priv *rsa.PrivateKey, n int, ctx context.Context, logger *zap.Logger) *Server {
-	pks := []string{"b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400",
-		"824b9024767a01b56790a72afb5f18bb0f97d5bddb946a7bd8dd35cc607c35a4d76be21f24f484d0d478b99dc63ed170"}
-	ln, routers, err := api.CreateNetworkAndSubscribe(t, ctx, p2pv1.LocalNetOptions{
-		Nodes:        n,
-		MinConnected: n/2 - 1,
-		UseDiscv5:    false,
-	}, pks...)
-	require.NoError(t, err)
-	require.NotNil(t, routers)
-	require.NotNil(t, ln)
-
-	node := &api.Node{}
-	node.HealthyMock.Store(nil)
-	nodeProber := nodeprobe.NewProber(zap.L(), nil, map[string]nodeprobe.Node{"consensus client": node, "execution client": node, "event syncer": node})
+	node := handlers.CreateTestNode(t, priv, n, ctx, logger)
 	db, err := kv.NewInMemory(logging.TestLogger(t), basedb.Options{
 		Reporting: true,
 		Ctx:       context.Background(),
@@ -183,16 +166,7 @@ func createTestNodeWithAPI(t *testing.T, priv *rsa.PrivateKey, n int, ctx contex
 	return New(
 		logger,
 		fmt.Sprintf(":%d", 3000),
-		&handlers.Node{
-			ListenAddresses: []string{fmt.Sprintf("tcp://%s:%d", "localhost", 3030), fmt.Sprintf("udp://%s:%d", "localhost", 3030)},
-			PeersIndex:      ln.Nodes[0].(p2pv1.PeersIndexProvider).PeersIndex(),
-			Network:         ln.Nodes[0].(p2pv1.HostProvider).Host().Network(),
-			TopicIndex:      ln.Nodes[0].(handlers.TopicIndex),
-			NodeProber:      nodeProber,
-			Signer: func(data []byte) ([]byte, error) {
-				return rsa.SignPKCS1v15(rand.Reader, priv, crypto.SHA256, data[:])
-			},
-		},
+		node,
 		&handlers.Validators{
 			Shares: nodeStorage.Shares(),
 		},
