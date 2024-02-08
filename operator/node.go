@@ -3,7 +3,6 @@ package operator
 import (
 	"context"
 	"fmt"
-	"github.com/bloxapp/ssv/network"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
@@ -13,6 +12,7 @@ import (
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/duties"
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
@@ -32,7 +32,8 @@ type Node interface {
 // Options contains options to create the node
 type Options struct {
 	// NetworkName is the network name of this node
-	NetworkName         string `yaml:"Network" env:"NETWORK" env-default:"mainnet" env-description:"Network is the network of this node"`
+	NetworkName         string                       `yaml:"Network" env:"NETWORK" env-description:"Network is the network of this node"`
+	CustomNetwork       *networkconfig.NetworkConfig `yaml:"CustomNetwork" env:"CUSTOM_NETWORK" env-description:"Custom network parameters"`
 	Network             networkconfig.NetworkConfig
 	BeaconNode          beaconprotocol.BeaconNode // TODO: consider renaming to ConsensusClient
 	ExecutionClient     *executionclient.ExecutionClient

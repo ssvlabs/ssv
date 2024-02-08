@@ -11,9 +11,9 @@ import (
 //go:generate mockgen -package=mocks -destination=./mocks/network.go -source=./network.go
 
 const (
-	defaultSlotDuration                    = 12 * time.Second
-	defaultSlotsPerEpoch                   = 32
-	defaultEpochsPerSyncCommitteePeriodVal = 256
+	defaultSlotDuration                 = 12 * time.Second
+	defaultSlotsPerEpoch                = uint64(32)
+	defaultEpochsPerSyncCommitteePeriod = uint64(256)
 )
 
 type BeaconNetwork interface {
@@ -48,18 +48,18 @@ type BeaconNetwork interface {
 
 // Network is a beacon chain network.
 type Network struct {
-	Parent                          spectypes.BeaconNetwork `json:"parent"`
-	Name                            string                  `json:"name"`
-	ForkVersionVal                  [4]byte                 `json:"fork_version"`
-	MinGenesisTimeVal               uint64                  `json:"min_genesis_time"`
-	SlotDurationVal                 time.Duration           `json:"slot_duration"`
-	SlotsPerEpochVal                uint64                  `json:"slots_per_epoch"`
-	EpochsPerSyncCommitteePeriodVal uint64                  `json:"epochs_per_sync_committee_period"`
+	Parent                          spectypes.BeaconNetwork `json:"parent" yaml:"Parent"`
+	Name                            string                  `json:"name" yaml:"Name"`
+	ForkVersionVal                  [4]byte                 `json:"fork_version" yaml:"ForkVersion"`
+	MinGenesisTimeVal               uint64                  `json:"min_genesis_time" yaml:"MinGenesisTime"`
+	SlotDurationVal                 time.Duration           `json:"slot_duration" yaml:"SlotDuration"`
+	SlotsPerEpochVal                uint64                  `json:"slots_per_epoch" yaml:"SlotsPerEpoch"`
+	EpochsPerSyncCommitteePeriodVal uint64                  `json:"epochs_per_sync_committee_period" yaml:"EpochsPerSyncCommitteePeriod"`
 }
 
 // NewNetwork creates a new beacon chain network from a parent spec network.
-func NewNetwork(network spectypes.BeaconNetwork) Network {
-	return Network{
+func NewNetwork(network spectypes.BeaconNetwork) *Network {
+	return &Network{
 		Parent: network,
 	}
 }
@@ -113,7 +113,7 @@ func (n Network) SlotDuration() time.Duration {
 }
 
 func (n Network) SlotsPerEpoch() uint64 {
-	if n.SlotDurationVal != 0 {
+	if n.SlotsPerEpochVal != 0 {
 		return n.SlotsPerEpochVal
 	}
 
@@ -122,6 +122,15 @@ func (n Network) SlotsPerEpoch() uint64 {
 	}
 
 	return defaultSlotsPerEpoch
+}
+
+// EpochsPerSyncCommitteePeriod returns the number of epochs per sync committee period.
+func (n Network) EpochsPerSyncCommitteePeriod() uint64 {
+	if n.EpochsPerSyncCommitteePeriodVal != 0 {
+		return n.EpochsPerSyncCommitteePeriodVal
+	}
+
+	return defaultEpochsPerSyncCommitteePeriod
 }
 
 // GetNetwork returns the network
@@ -194,15 +203,6 @@ func (n Network) IsFirstSlotOfEpoch(slot phase0.Slot) bool {
 // GetEpochFirstSlot returns the beacon node first slot in epoch
 func (n Network) GetEpochFirstSlot(epoch phase0.Epoch) phase0.Slot {
 	return phase0.Slot(uint64(epoch) * n.SlotsPerEpoch())
-}
-
-// EpochsPerSyncCommitteePeriod returns the number of epochs per sync committee period.
-func (n Network) EpochsPerSyncCommitteePeriod() uint64 {
-	if n.EpochsPerSyncCommitteePeriodVal != 0 {
-		return n.EpochsPerSyncCommitteePeriodVal
-	}
-
-	return defaultEpochsPerSyncCommitteePeriodVal
 }
 
 // EstimatedSyncCommitteePeriodAtEpoch estimates the current sync committee period at the given Epoch

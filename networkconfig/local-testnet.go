@@ -8,7 +8,7 @@ import (
 
 var LocalTestnet = NetworkConfig{
 	Name: "local-testnet",
-	Beacon: beaconprotocol.Network{
+	Beacon: &beaconprotocol.Network{
 		Parent:            spectypes.PraterNetwork,
 		Name:              "local-testnet",
 		MinGenesisTimeVal: 1689072978,

@@ -113,6 +113,7 @@ var StartNodeCmd = &cobra.Command{
 		if err != nil {
 			logger.Fatal("could not setup network", zap.Error(err))
 		}
+
 		cfg.DBOptions.Ctx = cmd.Context()
 		db, err := setupDB(logger, networkConfig.Beacon.GetNetwork())
 		if err != nil {
@@ -502,9 +503,26 @@ func decodePrivateKey(key string) (*rsa.PrivateKey, error) {
 }
 
 func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
-	networkConfig, err := networkconfig.GetNetworkConfigByName(cfg.SSVOptions.NetworkName)
-	if err != nil {
-		return networkconfig.NetworkConfig{}, err
+	var networkConfig networkconfig.NetworkConfig
+
+	if cfg.SSVOptions.NetworkName == "" && cfg.SSVOptions.CustomNetwork == nil {
+		return networkConfig, fmt.Errorf("both network name and custom config were NOT found in config, only one is required")
+	}
+
+	if cfg.SSVOptions.NetworkName != "" && cfg.SSVOptions.CustomNetwork != nil {
+		return networkConfig, fmt.Errorf("both network name and custom config were found in config, only one is required")
+	}
+
+	if cfg.SSVOptions.NetworkName != "" {
+		nc, err := networkconfig.GetNetworkConfigByName(cfg.SSVOptions.NetworkName)
+		if err != nil {
+			return networkConfig, err
+		}
+
+		networkConfig = nc
+	} else {
+		logger.Info("network name not found in config, using custom network from config")
+		networkConfig = *cfg.SSVOptions.CustomNetwork
 	}
 
 	types.SetDefaultDomain(networkConfig.Domain)
