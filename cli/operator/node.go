@@ -314,6 +314,9 @@ var StartNodeCmd = &cobra.Command{
 				&handlers.Validators{
 					Shares: nodeStorage.Shares(),
 				},
+				&handlers.Operators{
+					Operators: nodeStorage,
+				},
 			)
 			go func() {
 				err := apiServer.Run()
