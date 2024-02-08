@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 
@@ -47,7 +48,7 @@ PermissionlessActivationEpoch: 67890
 		Domain:               [4]byte{0x87, 0x65, 0x43, 0x21},
 		GenesisEpoch:         123456,
 		RegistrySyncOffset:   new(big.Int).SetInt64(321654),
-		RegistryContractAddr: "0xd6b633304Db2DD59ce93753FA55076DA367e5b2c",
+		RegistryContractAddr: ethcommon.HexToAddress("0xd6b633304Db2DD59ce93753FA55076DA367e5b2c"),
 		Bootnodes: []string{
 			"enr:-LK4QJ9hLJ1csDN4rQoSjlJGE2SvsXOETfcLH8uAVrxlHaELF0u3NeKCTY2eO_X1zy5eEKcHruyaAsGNiyyG4QWUQBh2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCLdu_SJc2VjcDI1NmsxoQO8KQz5L1UEXzEr-CXFFq1th0eG6gopbdul2OQVMuxfMoN0Y3CCE4iDdWRwgg-g",
 			"enr:-Li4QO86ZMZr_INMW_WQBsP2jS56yjrHnZXxAUOKJz4_qFPKD1Cr3rghQD2FtXPk2_VPnJUi8BBiMngOGVXC0wTYpJGGAYgqnGSNh2F0dG5ldHOIAAAAAAAAAACEZXRoMpDkvpOTAAAQIP__________gmlkgnY0gmlwhArqAsGJc2VjcDI1NmsxoQKNW0Mf-xTXcevRSkZOvoN0Q0T9OkTjGZQyQeOl3bYU3YN0Y3CCE4iDdWRwgg-g",

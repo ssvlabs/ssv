@@ -4,6 +4,7 @@ import (
 	"math/big"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	ethcommon "github.com/ethereum/go-ethereum/common"
 
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
@@ -14,7 +15,7 @@ var Mainnet = NetworkConfig{
 	Domain:               spectypes.GenesisMainnet,
 	GenesisEpoch:         218450,
 	RegistrySyncOffset:   new(big.Int).SetInt64(17507487),
-	RegistryContractAddr: "0xDD9BC35aE942eF0cFa76930954a156B3fF30a4E1",
+	RegistryContractAddr: ethcommon.HexToAddress("0xDD9BC35aE942eF0cFa76930954a156B3fF30a4E1"),
 	Bootnodes: []string{
 		// Blox
 		"enr:-Li4QHEPYASj5ZY3BXXKXAoWcoIw0ChgUlTtfOSxgNlYxlmpEWUR_K6Nr04VXsMpWSQxWWM4QHDyypnl92DQNpWkMS-GAYiWUvo8h2F0dG5ldHOIAAAAAAAAAACEZXRoMpD1pf1CAAAAAP__________gmlkgnY0gmlwhCzmKVSJc2VjcDI1NmsxoQOW29na1pUAQw4jF3g0zsPgJG89ViHJOOkHFFklnC2UyIN0Y3CCE4qDdWRwgg-i",

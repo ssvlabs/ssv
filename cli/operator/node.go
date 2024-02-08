@@ -15,7 +15,6 @@ import (
 	"github.com/bloxapp/ssv/network"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
@@ -158,7 +157,7 @@ var StartNodeCmd = &cobra.Command{
 		executionClient, err := executionclient.New(
 			cmd.Context(),
 			cfg.ExecutionClient.Addr,
-			ethcommon.HexToAddress(networkConfig.RegistryContractAddr),
+			networkConfig.RegistryContractAddr,
 			executionclient.WithLogger(logger),
 			executionclient.WithMetrics(metricsReporter),
 			executionclient.WithFollowDistance(executionclient.DefaultFollowDistance),
@@ -543,7 +542,7 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 		zap.String("builderProposals(MEV)", builderProposals),
 		zap.Any("beaconNetwork", networkConfig.Beacon.String()),
 		zap.Uint64("genesisEpoch", uint64(networkConfig.GenesisEpoch)),
-		zap.String("registryContract", networkConfig.RegistryContractAddr),
+		zap.String("registryContract", networkConfig.RegistryContractAddr.String()),
 	)
 
 	return networkConfig, nil

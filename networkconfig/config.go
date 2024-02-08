@@ -10,6 +10,7 @@ import (
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	ethcommon "github.com/ethereum/go-ethereum/common"
 
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
@@ -38,7 +39,7 @@ type NetworkConfig struct {
 	Domain                        spectypes.DomainType         `json:"domain" yaml:"Domain"`
 	GenesisEpoch                  spec.Epoch                   `json:"genesis_epoch" yaml:"GenesisEpoch"`
 	RegistrySyncOffset            *big.Int                     `json:"registry_sync_offset" yaml:"RegistrySyncOffset"`
-	RegistryContractAddr          string                       `json:"registry_contract_addr" yaml:"RegistryContractAddr"` // TODO: ethcommon.Address
+	RegistryContractAddr          ethcommon.Address            `json:"registry_contract_addr" yaml:"RegistryContractAddr"`
 	Bootnodes                     []string                     `json:"bootnodes" yaml:"Bootnodes"`
 	WhitelistedOperatorKeys       []string                     `json:"whitelisted_operator_keys" yaml:"WhitelistedOperatorKeys"`
 	PermissionlessActivationEpoch spec.Epoch                   `json:"permissionless_activation_epoch" yaml:"PermissionlessActivationEpoch"`
@@ -88,6 +89,11 @@ func (n *NetworkConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		return fmt.Errorf("decode fork version: %w", err)
 	}
 
+	contractAddr, err := hex.DecodeString(strings.TrimPrefix(aux.RegistryContractAddr, "0x"))
+	if err != nil {
+		return fmt.Errorf("decode registry contract address: %w", err)
+	}
+
 	*n = NetworkConfig{
 		Name: aux.Name,
 		Beacon: &beaconprotocol.Network{
@@ -102,7 +108,7 @@ func (n *NetworkConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		Domain:                        spectypes.DomainType(domain),
 		GenesisEpoch:                  aux.GenesisEpoch,
 		RegistrySyncOffset:            aux.RegistrySyncOffset,
-		RegistryContractAddr:          aux.RegistryContractAddr,
+		RegistryContractAddr:          ethcommon.Address(contractAddr),
 		Bootnodes:                     aux.Bootnodes,
 		WhitelistedOperatorKeys:       aux.WhitelistedOperatorKeys,
 		PermissionlessActivationEpoch: aux.PermissionlessActivationEpoch,
