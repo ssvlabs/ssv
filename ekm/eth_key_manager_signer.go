@@ -87,7 +87,7 @@ func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, network netw
 	}
 
 	slashingProtector := slashingprotection.NewNormalProtection(signerStore)
-	beaconSigner := signer.NewSimpleSigner(wallet, slashingProtector, core.Network(network.Beacon.String())) // TODO: what if a string is not supported by ekm?
+	beaconSigner := signer.NewSimpleSigner(wallet, slashingProtector, network.Beacon)
 
 	return &ethKeyManagerSigner{
 		wallet:            wallet,
