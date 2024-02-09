@@ -69,7 +69,7 @@ func (n *NetworkConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		Domain                        string     `json:"domain" yaml:"Domain"`
 		GenesisEpoch                  spec.Epoch `json:"genesis_epoch" yaml:"GenesisEpoch"`
 		RegistrySyncOffset            *big.Int   `json:"registry_sync_offset" yaml:"RegistrySyncOffset"`
-		RegistryContractAddr          string     `json:"registry_contract_addr" yaml:"RegistryContractAddr"` // TODO: ethcommon.Address
+		RegistryContractAddr          string     `json:"registry_contract_addr" yaml:"RegistryContractAddr"`
 		Bootnodes                     []string   `json:"bootnodes" yaml:"Bootnodes"`
 		WhitelistedOperatorKeys       []string   `json:"whitelisted_operator_keys" yaml:"WhitelistedOperatorKeys"`
 		PermissionlessActivationEpoch spec.Epoch `json:"permissionless_activation_epoch" yaml:"PermissionlessActivationEpoch"`
