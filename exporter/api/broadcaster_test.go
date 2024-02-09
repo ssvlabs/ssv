@@ -30,12 +30,15 @@ func TestBroadcaster(t *testing.T) {
 	}()
 	bm1 := newBroadcastedMock("1")
 	bm2 := newBroadcastedMock("2")
+	bm3 := newBroadcastedMock("2")
+	bm4 := newBroadcastedMock("3")
 
 	require.True(t, b.Register(bm1))
 	defer b.Deregister(bm1)
 
 	require.True(t, b.Register(bm2))
-
+	require.False(t, b.Register(bm3))
+	require.False(t, b.Deregister(bm4))
 	// wait so setup will be finished
 	<-time.After(10 * time.Millisecond)
 	go feed.Send(Message{Type: TypeValidator, Filter: MessageFilter{From: 0, To: 0}})

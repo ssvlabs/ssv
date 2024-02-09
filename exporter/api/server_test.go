@@ -10,9 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"go.uber.org/zap"
-
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
@@ -78,6 +77,7 @@ func TestHandleStream(t *testing.T) {
 	mux := http.NewServeMux()
 	ws := NewWsServer(ctx, nil, mux, false).(*wsServer)
 	addr := fmt.Sprintf(":%d", getRandomPort(8001, 14000))
+	ws.withPing = true
 	go func() {
 		require.NoError(t, ws.Start(logger, addr))
 	}()
@@ -115,6 +115,22 @@ func TestHandleStream(t *testing.T) {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
+}
+
+func TestErrAddrStartServer(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	ctx := context.Background()
+	mux := http.NewServeMux()
+	ws := NewWsServer(ctx, nil, mux, false).(*wsServer)
+	require.ErrorContains(t, ws.Start(logger, "wrong:"), "no such host")
+}
+
+func TestErrPortStartServer(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	ctx := context.Background()
+	mux := http.NewServeMux()
+	ws := NewWsServer(ctx, nil, mux, false).(*wsServer)
+	require.ErrorContains(t, ws.Start(logger, ":99999"), "invalid port")
 }
 
 func newTestMessage() Message {
