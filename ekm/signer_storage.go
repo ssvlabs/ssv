@@ -99,7 +99,9 @@ func (s *storage) Name() string {
 
 // Network returns the network storage is related to.
 func (s *storage) Network() core.Network {
-	return core.Network(s.network.String()) // TODO: what if a string is not supported by ekm?
+	// This method is used only in tests,
+	// so s.network is always a network supported by core.Network.
+	return core.Network(s.network.String())
 }
 
 // SaveWallet stores the given wallet.
