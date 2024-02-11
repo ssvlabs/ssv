@@ -1,5 +1,12 @@
 #!/bin/bash
 
+services=$(docker-compose config --services)
+docker-compose down
+for service in $services; do
+    docker rm -f $(docker ps -aqf "name=${service}*")
+done
+docker compose down -v
+
 set -e
 trap 'catch $?' EXIT
 
