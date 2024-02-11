@@ -9,6 +9,7 @@ done
 docker compose down -v
 
 # Exit on error
+
 set -e
 trap 'catch $?' EXIT
 
