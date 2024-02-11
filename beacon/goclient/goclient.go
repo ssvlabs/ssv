@@ -10,7 +10,7 @@ import (
 
 	eth2client "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/api"
-	"github.com/attestantio/go-eth2-client/http"
+	eth2clienthttp "github.com/attestantio/go-eth2-client/http"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -24,9 +24,15 @@ import (
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
-// DataVersionNil is just a placeholder for a nil data version.
-// Don't check for it, check for errors or nil data instead.
-const DataVersionNil spec.DataVersion = math.MaxUint64
+const (
+	// DataVersionNil is just a placeholder for a nil data version.
+	// Don't check for it, check for errors or nil data instead.
+	DataVersionNil spec.DataVersion = math.MaxUint64
+
+	// Client timeouts.
+	DefaultCommonTimeout = time.Second * 5  // For dialing and most requests.
+	DefaultLongTimeout   = time.Second * 10 // For long requests.
+)
 
 type beaconNodeStatus int32
 
@@ -141,18 +147,29 @@ type goClient struct {
 	registrationMu       sync.Mutex
 	registrationLastSlot phase0.Slot
 	registrationCache    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration
+	commonTimeout        time.Duration
+	longTimeout          time.Duration
 }
 
 // New init new client and go-client instance
 func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.OperatorID, slotTickerProvider slotticker.Provider) (beaconprotocol.BeaconNode, error) {
 	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(string(opt.Network.BeaconNetwork)))
 
-	httpClient, err := http.New(opt.Context,
+	commonTimeout := opt.CommonTimeout
+	if commonTimeout == 0 {
+		commonTimeout = DefaultCommonTimeout
+	}
+	longTimeout := opt.LongTimeout
+	if longTimeout == 0 {
+		longTimeout = DefaultLongTimeout
+	}
+
+	httpClient, err := eth2clienthttp.New(opt.Context,
 		// WithAddress supplies the address of the beacon node, in host:port format.
-		http.WithAddress(opt.BeaconNodeAddr),
+		eth2clienthttp.WithAddress(opt.BeaconNodeAddr),
 		// LogLevel supplies the level of logging to carry out.
-		http.WithLogLevel(zerolog.DebugLevel),
-		http.WithTimeout(time.Second*5),
+		eth2clienthttp.WithLogLevel(zerolog.DebugLevel),
+		eth2clienthttp.WithTimeout(commonTimeout),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create http client: %w", err)
@@ -162,11 +179,13 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 		log:               logger,
 		ctx:               opt.Context,
 		network:           opt.Network,
-		client:            httpClient.(*http.Service),
+		client:            httpClient.(*eth2clienthttp.Service),
 		graffiti:          opt.Graffiti,
 		gasLimit:          opt.GasLimit,
 		operatorID:        operatorID,
 		registrationCache: map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
+		commonTimeout:     commonTimeout,
+		longTimeout:       longTimeout,
 	}
 
 	// Get the node's version and client.
