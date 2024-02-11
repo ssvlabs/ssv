@@ -86,25 +86,27 @@ func testDuty(ctx context.Context, logger *zap.Logger, dockerCLI DockerCLI, atte
 		return fmt.Errorf("unknown attestation type: %s", attestationType)
 	}
 
-	// Extract and count logs from the beaconProxyContainer based on the specified criteria.
-	beaconCounts, err := dockerLogsByPubKey(ctx, logger, dockerCLI, beaconProxyContainer, beaconCriteria)
+	// Extract and count logs from the beaconProxyContainer based on validator public key.
+	beaconLogsByPubKey, err := dockerLogsByPubKey(ctx, logger, dockerCLI, beaconProxyContainer, beaconCriteria)
 	if err != nil {
 		return err
 	}
 
-	// Verify corresponding logs in each SSV node container match the criteria.
+	// Verify corresponding logs in each SSV node container match the validator public key.
 	for _, nodeContainer := range ssvNodesContainers {
-		nodeCounts, err := dockerLogsByPubKey(ctx, logger, dockerCLI, nodeContainer, nodeCriteria)
+		nodeLogsByPubKey, err := dockerLogsByPubKey(ctx, logger, dockerCLI, nodeContainer, nodeCriteria)
 		if err != nil {
 			return err
 		}
 
 		// Compare the counts for each public key between beacon proxy and node container.
-		for pubkey, beaconCount := range beaconCounts {
-			nodeCount, exists := nodeCounts[pubkey]
+		for validatorPubKey, validatorBeaconLogs := range beaconLogsByPubKey {
+			validatorNodeLogs, exists := nodeLogsByPubKey[validatorPubKey]
+			beaconCount := len(validatorBeaconLogs) // Get the count of beacon logs
+			nodeCount := len(validatorNodeLogs)     // Get the count of node logs
 			if !exists || discrepancyCheck(beaconCount, nodeCount) {
-				logger.Info("Discrepancy found", zap.String("PublicKey", pubkey), zap.Int("BeaconCount", beaconCount), zap.Int("NodeCount", nodeCount))
-				return fmt.Errorf("discrepancy for pubkey %s in %s: expected %d, got %d", pubkey, nodeContainer, beaconCount, nodeCount)
+				logger.Info("Discrepancy found", zap.String("PublicKey", validatorPubKey), zap.Int("BeaconCount", beaconCount), zap.Int("NodeCount", nodeCount))
+				return fmt.Errorf("discrepancy for pubkey %s in %s: expected %d, got %d", validatorPubKey, nodeContainer, beaconCount, nodeCount)
 			}
 		}
 	}
@@ -113,36 +115,38 @@ func testDuty(ctx context.Context, logger *zap.Logger, dockerCLI DockerCLI, atte
 }
 
 // Combines the docker log retrieval, grepping, and counting of public keys into one function.
-func dockerLogsByPubKey(ctx context.Context, logger *zap.Logger, cli DockerCLI, containerName string, matchStrings []string) (map[string]int, error) {
+func dockerLogsByPubKey(ctx context.Context, logger *zap.Logger, cli DockerCLI, containerName string, matchStrings []string) (map[string][]any, error) {
 	res, err := docker.DockerLogs(ctx, cli, containerName, "")
 	if err != nil {
 		return nil, err
 	}
-
-	grepped := res.Grep(matchStrings)
-	logger.Info("matched", zap.Int("count", len(grepped)), zap.String("target", containerName), zap.Strings("match_string", matchStrings))
-	publicKeyCounts := make(map[string]int)
-
-	for _, logStr := range grepped {
-		trimmedLogStr := strings.TrimLeftFunc(logStr, func(r rune) bool {
-			return !strings.ContainsRune("{[", r)
-		})
-
-		var logEntry map[string]interface{}
-		if err := json.Unmarshal([]byte(trimmedLogStr), &logEntry); err != nil {
-			continue // Consider logging this error.
+	grepped := res.Grep(matchStrings).ParseAll(func(log string) (map[string]any, error) {
+		var result map[string]any // Corrected to `any` to match the return type
+		err := json.Unmarshal([]byte(log), &result)
+		if err != nil {
+			return nil, err // Return an error if parsing fails
 		}
-
-		if pubkey, ok := logEntry["pubkey"].(string); ok {
+		if pubkey, ok := result["pubkey"].(string); ok {
 			// Check if pubkey starts with "0x" and remove it if present
 			if strings.HasPrefix(pubkey, "0x") {
 				pubkey = strings.TrimPrefix(pubkey, "0x")
 			}
-			publicKeyCounts[pubkey]++
+			result["pubkey"] = pubkey
+		}
+		return result, nil // Return the parsed result if successful
+	})
+
+	logger.Info("matched", zap.Int("count", len(grepped)), zap.String("target", containerName), zap.Strings("match_string", matchStrings))
+	publicKeyLogs := make(map[string][]any) // Corrected type
+
+	for _, logMap := range grepped {
+		if pubkey, ok := logMap["pubkey"].(string); ok {
+			// Append the log map to the slice associated with the pubkey
+			publicKeyLogs[pubkey] = append(publicKeyLogs[pubkey], logMap)
 		}
 	}
 
-	return publicKeyCounts, nil
+	return publicKeyLogs, nil
 }
 
 func Match(pctx context.Context, logger *zap.Logger, cli DockerCLI) error {
