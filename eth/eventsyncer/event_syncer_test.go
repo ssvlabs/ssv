@@ -123,6 +123,9 @@ func TestEventSyncer(t *testing.T) {
 		WithLogger(logger),
 	)
 
+	err = eventSyncer.Healthy(ctx)
+	require.NoError(t, err)
+
 	lastProcessedBlock, err := eventSyncer.SyncHistory(ctx, 0)
 	require.NoError(t, err)
 	require.NoError(t, client.Close())
@@ -217,5 +220,6 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database) (operatorstora
 		}
 	}
 
+	nodeStorage.SaveLastProcessedBlock(nil, big.NewInt(0))
 	return nodeStorage, operatorData
 }
