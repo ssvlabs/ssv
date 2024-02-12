@@ -55,7 +55,6 @@ func (c *controller) LiquidateCluster(owner common.Address, operatorIDs []specty
 
 func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []spectypes.OperatorID, toReactivate []*types.SSVShare) error {
 	logger := c.taskLogger("ReactivateCluster", fields.Owner(owner), fields.OperatorIDs(operatorIDs))
-
 	var startedValidators int
 	var errs error
 	for _, share := range toReactivate {

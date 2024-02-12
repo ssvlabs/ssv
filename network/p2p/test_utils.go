@@ -13,6 +13,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/bloxapp/ssv/message/validation"
+	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
 	p2pcommons "github.com/bloxapp/ssv/network/commons"
@@ -37,9 +38,9 @@ type HostProvider interface {
 
 // LocalNet holds the nodes in the local network
 type LocalNet struct {
-	Nodes    []network.P2PNetwork
 	NodeKeys []testing.NodeKeys
 	Bootnode *discovery.Bootnode
+	Nodes    []network.P2PNetwork
 
 	udpRand testing.UDPPortsRandomizer
 }
@@ -170,7 +171,8 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 		cfg.PeerScoreInspectorInterval = options.PeerScoreInspectorInterval
 	}
 
-	p := New(logger, cfg)
+	mr := metricsreporter.New()
+	p := New(logger, cfg, mr)
 	err = p.Setup(logger)
 	if err != nil {
 		return nil, err

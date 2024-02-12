@@ -153,7 +153,6 @@ func (s *sharesStorage) UpdateValidatorMetadata(pk string, metadata *beaconproto
 	if err != nil {
 		return err
 	}
-
 	share := s.Get(nil, key)
 	if share == nil {
 		return nil
@@ -221,7 +220,7 @@ func ByClusterID(clusterID []byte) SharesFilter {
 			operatorIDs = append(operatorIDs, op.OperatorID)
 		}
 
-		shareClusterID, _ := types.ComputeClusterIDHash(share.OwnerAddress.Bytes(), operatorIDs)
+		shareClusterID := types.ComputeClusterIDHash(share.OwnerAddress, operatorIDs)
 		return bytes.Equal(shareClusterID, clusterID)
 	}
 }

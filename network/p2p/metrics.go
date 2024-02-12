@@ -4,6 +4,8 @@ import (
 	"strconv"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/network/peers/connections"
+	"github.com/bloxapp/ssv/network/topics"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/prometheus/client_golang/prometheus"
@@ -12,6 +14,11 @@ import (
 
 	"github.com/bloxapp/ssv/utils/format"
 )
+
+type Metrics interface {
+	connections.Metrics
+	topics.Metrics
+}
 
 var (
 	// MetricsAllConnectedPeers counts all connected peers
@@ -96,7 +103,6 @@ func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
 	ni := n.idx.NodeInfo(pid)
 	if ni != nil {
 		if ni.Metadata != nil {
-			opPKHash = ni.Metadata.OperatorID
 			nodeVersion = ni.Metadata.NodeVersion
 		}
 		nodeType = "operator"

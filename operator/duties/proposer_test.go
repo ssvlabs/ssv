@@ -41,8 +41,13 @@ func setupProposerDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[phase0.Epoch, 
 
 		return indices
 	}
+
+	getIndicesBool := func(epoch phase0.Epoch, wait bool) []phase0.ValidatorIndex {
+		return getIndices(epoch)
+	}
+
 	s.validatorController.(*mocks.MockValidatorController).EXPECT().CommitteeActiveIndices(gomock.Any()).DoAndReturn(getIndices).AnyTimes()
-	s.validatorController.(*mocks.MockValidatorController).EXPECT().AllActiveIndices(gomock.Any()).DoAndReturn(getIndices).AnyTimes()
+	s.validatorController.(*mocks.MockValidatorController).EXPECT().AllActiveIndices(gomock.Any(), gomock.Any()).DoAndReturn(getIndicesBool).AnyTimes()
 
 	return fetchDutiesCall, executeDutiesCall
 }

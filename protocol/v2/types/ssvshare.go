@@ -2,7 +2,6 @@ package types
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/binary"
 	"encoding/gob"
 	"fmt"
@@ -11,6 +10,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
@@ -66,26 +66,23 @@ func (s *SSVShare) SetFeeRecipient(feeRecipient bellatrix.ExecutionAddress) {
 }
 
 // ComputeClusterIDHash will compute cluster ID hash with given owner address and operator ids
-func ComputeClusterIDHash(ownerAddress []byte, operatorIds []uint64) ([]byte, error) {
-	// Create a new hash
-	hash := sha256.New()
-
-	// Write the binary representation of the owner address to the hash
-	hash.Write(ownerAddress)
-
-	// Sort the array in ascending order
+func ComputeClusterIDHash(address common.Address, operatorIds []uint64) []byte {
 	sort.Slice(operatorIds, func(i, j int) bool {
 		return operatorIds[i] < operatorIds[j]
 	})
 
-	// Write the values to the hash
+	// Encode the address and operator IDs in the same way as Solidity's abi.encodePacked
+	var data []byte
+	data = append(data, address.Bytes()...) // Address is 20 bytes
 	for _, id := range operatorIds {
-		if err := binary.Write(hash, binary.BigEndian, id); err != nil {
-			return nil, err
-		}
+		idBytes := make([]byte, 32)                  // Each ID should be 32 bytes
+		binary.BigEndian.PutUint64(idBytes[24:], id) // PutUint64 fills the last 8 bytes; rest are 0
+		data = append(data, idBytes...)
 	}
 
-	return hash.Sum(nil), nil
+	// Hash the data using keccak256
+	hash := crypto.Keccak256(data)
+	return hash
 }
 
 func ComputeQuorumAndPartialQuorum(committeeSize int) (quorum uint64, partialQuorum uint64) {

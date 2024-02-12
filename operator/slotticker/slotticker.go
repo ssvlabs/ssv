@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"go.uber.org/zap"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/slotticker.go -source=./slotticker.go
@@ -15,53 +16,43 @@ type SlotTicker interface {
 	Slot() phase0.Slot
 }
 
-type ConfigProvider interface {
-	SlotDurationSec() time.Duration
-	GetGenesisTime() time.Time
-}
-
 type Config struct {
-	slotDuration time.Duration
-	genesisTime  time.Time
-}
-
-func (cfg Config) SlotDurationSec() time.Duration {
-	return cfg.slotDuration
-}
-
-func (cfg Config) GetGenesisTime() time.Time {
-	return cfg.genesisTime
+	SlotDuration time.Duration
+	GenesisTime  time.Time
 }
 
 type slotTicker struct {
-	timer        *time.Timer
+	logger       *zap.Logger
+	timer        Timer
 	slotDuration time.Duration
 	genesisTime  time.Time
 	slot         phase0.Slot
 }
 
 // New returns a goroutine-free SlotTicker implementation which is not thread-safe.
-func New(cfgProvider ConfigProvider) *slotTicker {
-	genesisTime := cfgProvider.GetGenesisTime()
-	slotDuration := cfgProvider.SlotDurationSec()
+func New(logger *zap.Logger, cfg Config) *slotTicker {
+	return newWithCustomTimer(logger, cfg, NewTimer)
+}
 
+func newWithCustomTimer(logger *zap.Logger, cfg Config, timerProvider TimerProvider) *slotTicker {
 	now := time.Now()
-	timeSinceGenesis := now.Sub(genesisTime)
+	timeSinceGenesis := now.Sub(cfg.GenesisTime)
 
 	var initialDelay time.Duration
 	if timeSinceGenesis < 0 {
 		// Genesis time is in the future
 		initialDelay = -timeSinceGenesis // Wait until the genesis time
 	} else {
-		slotsSinceGenesis := timeSinceGenesis / slotDuration
-		nextSlotStartTime := genesisTime.Add((slotsSinceGenesis + 1) * slotDuration)
+		slotsSinceGenesis := timeSinceGenesis / cfg.SlotDuration
+		nextSlotStartTime := cfg.GenesisTime.Add((slotsSinceGenesis + 1) * cfg.SlotDuration)
 		initialDelay = time.Until(nextSlotStartTime)
 	}
 
 	return &slotTicker{
-		timer:        time.NewTimer(initialDelay),
-		slotDuration: slotDuration,
-		genesisTime:  genesisTime,
+		logger:       logger,
+		timer:        timerProvider(initialDelay),
+		slotDuration: cfg.SlotDuration,
+		genesisTime:  cfg.GenesisTime,
 		slot:         0,
 	}
 }
@@ -72,20 +63,25 @@ func New(cfgProvider ConfigProvider) *slotTicker {
 func (s *slotTicker) Next() <-chan time.Time {
 	timeSinceGenesis := time.Since(s.genesisTime)
 	if timeSinceGenesis < 0 {
-		return s.timer.C
+		return s.timer.C()
 	}
 	if !s.timer.Stop() {
 		// try to drain the channel, but don't block if there's no value
 		select {
-		case <-s.timer.C:
+		case <-s.timer.C():
 		default:
 		}
 	}
-	slotNumber := uint64(timeSinceGenesis / s.slotDuration)
-	nextSlotStartTime := s.genesisTime.Add(time.Duration(slotNumber+1) * s.slotDuration)
+	nextSlot := phase0.Slot(timeSinceGenesis/s.slotDuration) + 1
+	if nextSlot <= s.slot {
+		// We've already ticked for this slot, so we need to wait for the next one.
+		nextSlot = s.slot + 1
+		s.logger.Debug("double tick", zap.Uint64("slot", uint64(s.slot)))
+	}
+	nextSlotStartTime := s.genesisTime.Add(time.Duration(nextSlot) * s.slotDuration)
 	s.timer.Reset(time.Until(nextSlotStartTime))
-	s.slot = phase0.Slot(slotNumber + 1)
-	return s.timer.C
+	s.slot = nextSlot
+	return s.timer.C()
 }
 
 // Slot returns the current slot number.
