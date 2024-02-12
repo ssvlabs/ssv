@@ -550,7 +550,7 @@ func (eh *EventHandler) processClusterEvent(
 	}
 
 	if len(toUpdate) > 0 {
-		if err = eh.nodeStorage.Shares().Save(txn, toUpdate...); err != nil {
+		if err := eh.nodeStorage.Shares().Save(txn, toUpdate...); err != nil {
 			return nil, nil, fmt.Errorf("could not save validator shares: %w", err)
 		}
 	}
