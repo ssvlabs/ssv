@@ -53,3 +53,6 @@ ignore:
   - "protocol/v2/qbft/controller/types.go"
   - "api/types.go"
   - "beacon/goclient/types.go"
+  - "cli/operator/generate_doc.go"
+  - "migrations/migration_0_example.go"
+  - "migrations/migration_1_example.go"
