@@ -244,8 +244,7 @@ func TestEthExecLayer(t *testing.T) {
 			// Wait until the state is changed
 			time.Sleep(time.Millisecond * 300)
 
-			clusterID, err := ssvtypes.ComputeClusterIDHash(testAddrAlice, []uint64{1, 2, 3, 4})
-			require.NoError(t, err)
+			clusterID := ssvtypes.ComputeClusterIDHash(testAddrAlice, []uint64{1, 2, 3, 4})
 
 			shares := nodeStorage.Shares().List(nil, registrystorage.ByClusterID(clusterID))
 			require.NotEmpty(t, shares)
@@ -260,8 +259,7 @@ func TestEthExecLayer(t *testing.T) {
 		{
 			validatorCtrl.EXPECT().ReactivateCluster(gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
-			clusterID, err := ssvtypes.ComputeClusterIDHash(testAddrAlice, []uint64{1, 2, 3, 4})
-			require.NoError(t, err)
+			clusterID := ssvtypes.ComputeClusterIDHash(testAddrAlice, []uint64{1, 2, 3, 4})
 
 			shares := nodeStorage.Shares().List(nil, registrystorage.ByClusterID(clusterID))
 			require.NotEmpty(t, shares)

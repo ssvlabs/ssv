@@ -533,11 +533,7 @@ func (eh *EventHandler) processClusterEvent(
 	operatorIDs []uint64,
 	toLiquidate bool,
 ) ([]*ssvtypes.SSVShare, []string, error) {
-	clusterID, err := ssvtypes.ComputeClusterIDHash(owner, operatorIDs)
-	if err != nil {
-		return nil, nil, fmt.Errorf("could not compute share cluster id: %w", err)
-	}
-
+	clusterID := ssvtypes.ComputeClusterIDHash(owner, operatorIDs)
 	shares := eh.nodeStorage.Shares().List(txn, registrystorage.ByClusterID(clusterID))
 	toUpdate := make([]*ssvtypes.SSVShare, 0)
 	updatedPubKeys := make([]string, 0)

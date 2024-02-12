@@ -2,8 +2,9 @@ package types
 
 import (
 	"encoding/hex"
-	"github.com/ethereum/go-ethereum/crypto"
 	"testing"
+
+	"github.com/ethereum/go-ethereum/crypto"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
@@ -28,10 +29,8 @@ func TestSSVShare_ComputeClusterIDHash(t *testing.T) {
 		testAddrAlice    = crypto.PubkeyToAddress(testKeyAlice.PublicKey)
 	)
 
-	clusterHash, err := ComputeClusterIDHash(testAddrAlice, []uint64{3, 2, 1, 4})
-	require.NoError(t, err)
-	clusterHash2, err := ComputeClusterIDHash(testAddrAlice, []uint64{4, 3, 1, 2})
-	require.NoError(t, err)
+	clusterHash := ComputeClusterIDHash(testAddrAlice, []uint64{3, 2, 1, 4})
+	clusterHash2 := ComputeClusterIDHash(testAddrAlice, []uint64{4, 3, 1, 2})
 	// Convert the hash to a hexadecimal string
 	hashString := hex.EncodeToString(clusterHash)
 	hashString2 := hex.EncodeToString(clusterHash2)

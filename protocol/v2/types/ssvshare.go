@@ -5,11 +5,12 @@ import (
 	"encoding/binary"
 	"encoding/gob"
 	"fmt"
+	"sort"
+
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"sort"
 
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
@@ -65,7 +66,7 @@ func (s *SSVShare) SetFeeRecipient(feeRecipient bellatrix.ExecutionAddress) {
 }
 
 // ComputeClusterIDHash will compute cluster ID hash with given owner address and operator ids
-func ComputeClusterIDHash(address common.Address, operatorIds []uint64) ([]byte, error) {
+func ComputeClusterIDHash(address common.Address, operatorIds []uint64) []byte {
 	sort.Slice(operatorIds, func(i, j int) bool {
 		return operatorIds[i] < operatorIds[j]
 	})
@@ -81,7 +82,7 @@ func ComputeClusterIDHash(address common.Address, operatorIds []uint64) ([]byte,
 
 	// Hash the data using keccak256
 	hash := crypto.Keccak256(data)
-	return hash, nil
+	return hash
 }
 
 func ComputeQuorumAndPartialQuorum(committeeSize int) (quorum uint64, partialQuorum uint64) {
