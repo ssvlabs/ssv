@@ -150,7 +150,7 @@ var StartNodeCmd = &cobra.Command{
 
 		var validatorCtrl validator.Controller
 		getOperatorID := func() spectypes.OperatorID {
-			return validatorCtrl.GetOperatorData().ID
+			return validatorCtrl.GetOperatorID()
 		}
 
 		consensusClient := setupConsensusClient(logger, getOperatorID, slotTickerProvider)
@@ -637,7 +637,7 @@ func setupEventHandling(
 		if err != nil {
 			logger.Error("failed to get operators", zap.Error(err))
 		}
-		operatorID := validatorCtrl.GetOperatorData().ID
+		operatorID := validatorCtrl.GetOperatorID()
 		operatorValidators := 0
 		liquidatedValidators := 0
 		if operatorID != 0 {

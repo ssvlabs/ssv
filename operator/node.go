@@ -111,7 +111,7 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 			Network:            opts.Network,
 			ShareStorage:       opts.ValidatorOptions.RegistryStorage.Shares(),
 			RecipientStorage:   opts.ValidatorOptions.RegistryStorage,
-			GetOperatorID:      func() spectypes.OperatorID { return opts.ValidatorController.GetOperatorData().ID },
+			GetOperatorID:      opts.ValidatorController.GetOperatorID,
 			SlotTickerProvider: slotTickerProvider,
 		}),
 

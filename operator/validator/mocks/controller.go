@@ -109,6 +109,20 @@ func (mr *MockControllerMockRecorder) GetOperatorData() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorData", reflect.TypeOf((*MockController)(nil).GetOperatorData))
 }
 
+// GetOperatorID mocks base method.
+func (m *MockController) GetOperatorID() types.OperatorID {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetOperatorID")
+	ret0, _ := ret[0].(types.OperatorID)
+	return ret0
+}
+
+// GetOperatorID indicates an expected call of GetOperatorID.
+func (mr *MockControllerMockRecorder) GetOperatorID() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorID", reflect.TypeOf((*MockController)(nil).GetOperatorID))
+}
+
 // GetOperatorShares mocks base method.
 func (m *MockController) GetOperatorShares() []*types0.SSVShare {
 	m.ctrl.T.Helper()
@@ -299,4 +313,41 @@ func (m *MockController) ValidatorExitChan() <-chan duties.ExitDescriptor {
 func (mr *MockControllerMockRecorder) ValidatorExitChan() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorExitChan", reflect.TypeOf((*MockController)(nil).ValidatorExitChan))
+}
+
+// MockOperatorIDProvider is a mock of OperatorIDProvider interface.
+type MockOperatorIDProvider struct {
+	ctrl     *gomock.Controller
+	recorder *MockOperatorIDProviderMockRecorder
+}
+
+// MockOperatorIDProviderMockRecorder is the mock recorder for MockOperatorIDProvider.
+type MockOperatorIDProviderMockRecorder struct {
+	mock *MockOperatorIDProvider
+}
+
+// NewMockOperatorIDProvider creates a new mock instance.
+func NewMockOperatorIDProvider(ctrl *gomock.Controller) *MockOperatorIDProvider {
+	mock := &MockOperatorIDProvider{ctrl: ctrl}
+	mock.recorder = &MockOperatorIDProviderMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockOperatorIDProvider) EXPECT() *MockOperatorIDProviderMockRecorder {
+	return m.recorder
+}
+
+// GetOperatorID mocks base method.
+func (m *MockOperatorIDProvider) GetOperatorID() types.OperatorID {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetOperatorID")
+	ret0, _ := ret[0].(types.OperatorID)
+	return ret0
+}
+
+// GetOperatorID indicates an expected call of GetOperatorID.
+func (mr *MockOperatorIDProviderMockRecorder) GetOperatorID() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorID", reflect.TypeOf((*MockOperatorIDProvider)(nil).GetOperatorID))
 }

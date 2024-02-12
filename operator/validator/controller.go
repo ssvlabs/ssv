@@ -107,6 +107,7 @@ type Controller interface {
 	GetValidatorStats() (uint64, uint64, uint64, error)
 	GetOperatorData() *registrystorage.OperatorData
 	SetOperatorData(data *registrystorage.OperatorData)
+	GetOperatorID() spectypes.OperatorID
 	IndicesChangeChan() chan struct{}
 	ValidatorExitChan() <-chan duties.ExitDescriptor
 
@@ -263,7 +264,7 @@ func (c *controller) setupNetworkHandlers() error {
 }
 
 func (c *controller) GetOperatorShares() []*ssvtypes.SSVShare {
-	return c.sharesStorage.List(nil, registrystorage.ByOperatorID(c.GetOperatorData().ID), registrystorage.ByActiveValidator())
+	return c.sharesStorage.List(nil, registrystorage.ByOperatorID(c.GetOperatorID()), registrystorage.ByActiveValidator())
 }
 
 func (c *controller) GetOperatorData() *registrystorage.OperatorData {
@@ -276,6 +277,10 @@ func (c *controller) SetOperatorData(data *registrystorage.OperatorData) {
 	c.operatorDataMutex.Lock()
 	defer c.operatorDataMutex.Unlock()
 	c.operatorData = data
+}
+
+func (c *controller) GetOperatorID() spectypes.OperatorID {
+	return c.GetOperatorData().ID
 }
 
 func (c *controller) IndicesChangeChan() chan struct{} {
@@ -291,7 +296,7 @@ func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
 	operatorShares := uint64(0)
 	active := uint64(0)
 	for _, s := range allShares {
-		if ok := s.BelongsToOperator(c.GetOperatorData().ID); ok {
+		if ok := s.BelongsToOperator(c.GetOperatorID()); ok {
 			operatorShares++
 		}
 		if s.HasBeaconMetadata() && s.BeaconMetadata.IsAttesting() {
@@ -402,9 +407,8 @@ func (c *controller) StartValidators() {
 
 	var ownShares []*ssvtypes.SSVShare
 	var allPubKeys = make([][]byte, 0, len(shares))
-	ownOpID := c.GetOperatorData().ID
 	for _, share := range shares {
-		if share.BelongsToOperator(ownOpID) {
+		if share.BelongsToOperator(c.GetOperatorID()) {
 			ownShares = append(ownShares, share)
 		}
 		allPubKeys = append(allPubKeys, share.ValidatorPubKey)
@@ -520,7 +524,7 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 	if share == nil {
 		return errors.New("share was not found")
 	}
-	if !share.BelongsToOperator(c.GetOperatorData().ID) {
+	if !share.BelongsToOperator(c.GetOperatorID()) {
 		return nil
 	}
 
