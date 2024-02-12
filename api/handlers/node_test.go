@@ -36,7 +36,7 @@ func TestHandlers(t *testing.T) {
 		req, err := http.NewRequest("GET", "/v1/node/identity", nil)
 		require.NoError(t, err)
 		rr := httptest.NewRecorder()
-		handler := http.HandlerFunc(api.Handler(node.Identity))
+		handler := api.Handler(node.Identity)
 		handler.ServeHTTP(rr, req)
 		if status := rr.Code; status != http.StatusOK {
 			t.Errorf("handler returned wrong status code: got %v want %v",
@@ -51,7 +51,7 @@ func TestHandlers(t *testing.T) {
 		req, err := http.NewRequest("GET", "/v1/node/peers", nil)
 		require.NoError(t, err)
 		rr := httptest.NewRecorder()
-		handler := http.HandlerFunc(api.Handler(node.Peers))
+		handler := api.Handler(node.Peers)
 		handler.ServeHTTP(rr, req)
 		if status := rr.Code; status != http.StatusOK {
 			t.Errorf("handler returned wrong status code: got %v want %v",
@@ -70,7 +70,7 @@ func TestHandlers(t *testing.T) {
 		req, err := http.NewRequest("POST", "/v1/operator/sign", r)
 		require.NoError(t, err)
 		rr := httptest.NewRecorder()
-		handler := http.HandlerFunc(api.Handler(node.Sign))
+		handler := api.Handler(node.Sign)
 		handler.ServeHTTP(rr, req)
 		if status := rr.Code; status != http.StatusOK {
 			t.Errorf("handler returned wrong status code: got %v want %v",
@@ -90,7 +90,7 @@ func TestHandlers(t *testing.T) {
 		req, err := http.NewRequest("GET", "/v1/node/health", nil)
 		require.NoError(t, err)
 		rr := httptest.NewRecorder()
-		handler := http.HandlerFunc(api.Handler(node.Health))
+		handler := api.Handler(node.Health)
 		handler.ServeHTTP(rr, req)
 		if status := rr.Code; status != http.StatusOK {
 			t.Errorf("handler returned wrong status code: got %v want %v",
@@ -115,7 +115,7 @@ func TestHandlers(t *testing.T) {
 		req, err := http.NewRequest("GET", "/v1/node/topics", nil)
 		require.NoError(t, err)
 		rr := httptest.NewRecorder()
-		handler := http.HandlerFunc(api.Handler(node.Topics))
+		handler := api.Handler(node.Topics)
 		handler.ServeHTTP(rr, req)
 		if status := rr.Code; status != http.StatusOK {
 			t.Errorf("handler returned wrong status code: got %v want %v",

@@ -167,6 +167,9 @@ func TestRequest(ts *httptest.Server, method, path, token string, body io.Reader
 	if err != nil {
 		return nil, nil, err
 	}
-	defer resp.Body.Close()
+	err = resp.Body.Close()
+	if err != nil {
+		return nil, nil, err
+	}
 	return resp, respBody, nil
 }
