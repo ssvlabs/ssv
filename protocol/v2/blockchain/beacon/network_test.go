@@ -1,12 +1,14 @@
 package beacon
 
 import (
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v2"
 )
 
 func TestNewNetwork(t *testing.T) {
@@ -114,4 +116,40 @@ func TestNetwork_GetSlotEndTime(t *testing.T) {
 	slotEnd := n.GetSlotEndTime(slot)
 
 	require.Equal(t, n.SlotDuration(), slotEnd.Sub(slotStart))
+}
+
+func TestNetwork_MarshalUnmarshal(t *testing.T) {
+	yamlConfig := `
+Parent: prater
+Name: test
+ForkVersion: "0x12345678"
+MinGenesisTime: 1634025600
+SlotDuration: 12s
+SlotsPerEpoch: 32
+EpochsPerSyncCommitteePeriod: 256
+`
+	expectedConfig := Network{
+		Parent:                          "prater",
+		Name:                            "test",
+		ForkVersionVal:                  [4]byte{0x12, 0x34, 0x56, 0x78},
+		MinGenesisTimeVal:               1634025600,
+		SlotDurationVal:                 12 * time.Second,
+		SlotsPerEpochVal:                32,
+		EpochsPerSyncCommitteePeriodVal: 256,
+	}
+
+	var unmarshaledConfig Network
+
+	require.NoError(t, yaml.Unmarshal([]byte(yamlConfig), &unmarshaledConfig))
+	require.EqualValues(t, expectedConfig, unmarshaledConfig)
+
+	require.Equal(t, unmarshaledConfig.ForkVersionVal, unmarshaledConfig.ForkVersion())
+	require.Equal(t, unmarshaledConfig.SlotDurationVal, unmarshaledConfig.SlotDuration())
+	require.Equal(t, unmarshaledConfig.SlotsPerEpochVal, unmarshaledConfig.SlotsPerEpoch())
+	require.Equal(t, unmarshaledConfig.MinGenesisTimeVal, unmarshaledConfig.MinGenesisTime())
+
+	marshaledConfig, err := yaml.Marshal(unmarshaledConfig)
+	require.NoError(t, err)
+
+	require.Equal(t, strings.TrimSpace(yamlConfig), strings.TrimSpace(string(marshaledConfig)))
 }

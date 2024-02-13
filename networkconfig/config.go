@@ -34,15 +34,15 @@ func GetNetworkConfigByName(name string) (NetworkConfig, error) {
 }
 
 type NetworkConfig struct {
-	Name                          string                       `json:"name" yaml:"Name"`
-	Beacon                        beaconprotocol.BeaconNetwork `json:"beacon" yaml:"Beacon"`
-	Domain                        spectypes.DomainType         `json:"domain" yaml:"Domain"`
-	GenesisEpoch                  spec.Epoch                   `json:"genesis_epoch" yaml:"GenesisEpoch"`
-	RegistrySyncOffset            *big.Int                     `json:"registry_sync_offset" yaml:"RegistrySyncOffset"`
-	RegistryContractAddr          ethcommon.Address            `json:"registry_contract_addr" yaml:"RegistryContractAddr"`
-	Bootnodes                     []string                     `json:"bootnodes" yaml:"Bootnodes"`
-	WhitelistedOperatorKeys       []string                     `json:"whitelisted_operator_keys" yaml:"WhitelistedOperatorKeys"`
-	PermissionlessActivationEpoch spec.Epoch                   `json:"permissionless_activation_epoch" yaml:"PermissionlessActivationEpoch"`
+	Name                          string                       `json:"name,omitempty" yaml:"Name,omitempty"`
+	Beacon                        beaconprotocol.BeaconNetwork `json:"beacon,omitempty" yaml:"Beacon,omitempty"`
+	Domain                        spectypes.DomainType         `json:"domain,omitempty" yaml:"Domain,omitempty"`
+	GenesisEpoch                  spec.Epoch                   `json:"genesis_epoch,omitempty" yaml:"GenesisEpoch,omitempty"`
+	RegistrySyncOffset            *big.Int                     `json:"registry_sync_offset,omitempty" yaml:"RegistrySyncOffset,omitempty"`
+	RegistryContractAddr          ethcommon.Address            `json:"registry_contract_addr,omitempty" yaml:"RegistryContractAddr,omitempty"`
+	Bootnodes                     []string                     `json:"bootnodes,omitempty" yaml:"Bootnodes,omitempty"`
+	WhitelistedOperatorKeys       []string                     `json:"whitelisted_operator_keys,omitempty" yaml:"WhitelistedOperatorKeys,omitempty"`
+	PermissionlessActivationEpoch spec.Epoch                   `json:"permissionless_activation_epoch,omitempty" yaml:"PermissionlessActivationEpoch,omitempty"`
 }
 
 func (n *NetworkConfig) String() string {
@@ -54,25 +54,43 @@ func (n *NetworkConfig) String() string {
 	return string(b)
 }
 
+func (n NetworkConfig) MarshalYAML() (interface{}, error) {
+	aux := &struct {
+		Name                          string                       `json:"name,omitempty" yaml:"Name,omitempty"`
+		Beacon                        beaconprotocol.BeaconNetwork `json:"beacon,omitempty" yaml:"Beacon,omitempty"`
+		Domain                        string                       `json:"domain,omitempty" yaml:"Domain,omitempty"`
+		GenesisEpoch                  spec.Epoch                   `json:"genesis_epoch,omitempty" yaml:"GenesisEpoch,omitempty"`
+		RegistrySyncOffset            *big.Int                     `json:"registry_sync_offset,omitempty" yaml:"RegistrySyncOffset,omitempty"`
+		RegistryContractAddr          string                       `json:"registry_contract_addr,omitempty" yaml:"RegistryContractAddr,omitempty"`
+		Bootnodes                     []string                     `json:"bootnodes,omitempty" yaml:"Bootnodes,omitempty"`
+		WhitelistedOperatorKeys       []string                     `json:"whitelisted_operator_keys,omitempty" yaml:"WhitelistedOperatorKeys,omitempty"`
+		PermissionlessActivationEpoch spec.Epoch                   `json:"permissionless_activation_epoch,omitempty" yaml:"PermissionlessActivationEpoch,omitempty"`
+	}{
+		Name:                          n.Name,
+		Beacon:                        n.Beacon,
+		Domain:                        "0x" + hex.EncodeToString(n.Domain[:]),
+		GenesisEpoch:                  n.GenesisEpoch,
+		RegistrySyncOffset:            n.RegistrySyncOffset,
+		RegistryContractAddr:          n.RegistryContractAddr.String(),
+		Bootnodes:                     n.Bootnodes,
+		WhitelistedOperatorKeys:       n.WhitelistedOperatorKeys,
+		PermissionlessActivationEpoch: n.PermissionlessActivationEpoch,
+	}
+
+	return aux, nil
+}
+
 func (n *NetworkConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	aux := &struct {
-		Name   string `json:"name" yaml:"Name"`
-		Beacon struct {
-			Parent                          spectypes.BeaconNetwork `json:"parent" yaml:"Parent"`
-			Name                            string                  `json:"name" yaml:"Name"`
-			ForkVersionVal                  string                  `json:"fork_version" yaml:"ForkVersion"`
-			MinGenesisTimeVal               uint64                  `json:"min_genesis_time" yaml:"MinGenesisTime"`
-			SlotDurationVal                 time.Duration           `json:"slot_duration" yaml:"SlotDuration"`
-			SlotsPerEpochVal                uint64                  `json:"slots_per_epoch" yaml:"SlotsPerEpoch"`
-			EpochsPerSyncCommitteePeriodVal uint64                  `json:"epochs_per_sync_committee_period" yaml:"EpochsPerSyncCommitteePeriod"`
-		} `json:"beacon" yaml:"Beacon"`
-		Domain                        string     `json:"domain" yaml:"Domain"`
-		GenesisEpoch                  spec.Epoch `json:"genesis_epoch" yaml:"GenesisEpoch"`
-		RegistrySyncOffset            *big.Int   `json:"registry_sync_offset" yaml:"RegistrySyncOffset"`
-		RegistryContractAddr          string     `json:"registry_contract_addr" yaml:"RegistryContractAddr"`
-		Bootnodes                     []string   `json:"bootnodes" yaml:"Bootnodes"`
-		WhitelistedOperatorKeys       []string   `json:"whitelisted_operator_keys" yaml:"WhitelistedOperatorKeys"`
-		PermissionlessActivationEpoch spec.Epoch `json:"permissionless_activation_epoch" yaml:"PermissionlessActivationEpoch"`
+		Name                          string                  `json:"name,omitempty" yaml:"Name,omitempty"`
+		Beacon                        *beaconprotocol.Network `json:"beacon,omitempty" yaml:"Beacon,omitempty"`
+		Domain                        string                  `json:"domain,omitempty" yaml:"Domain,omitempty"`
+		GenesisEpoch                  spec.Epoch              `json:"genesis_epoch,omitempty" yaml:"GenesisEpoch,omitempty"`
+		RegistrySyncOffset            *big.Int                `json:"registry_sync_offset,omitempty" yaml:"RegistrySyncOffset,omitempty"`
+		RegistryContractAddr          string                  `json:"registry_contract_addr,omitempty" yaml:"RegistryContractAddr,omitempty"`
+		Bootnodes                     []string                `json:"bootnodes,omitempty" yaml:"Bootnodes,omitempty"`
+		WhitelistedOperatorKeys       []string                `json:"whitelisted_operator_keys,omitempty" yaml:"WhitelistedOperatorKeys,omitempty"`
+		PermissionlessActivationEpoch spec.Epoch              `json:"permissionless_activation_epoch,omitempty" yaml:"PermissionlessActivationEpoch,omitempty"`
 	}{}
 
 	if err := unmarshal(aux); err != nil {
@@ -84,27 +102,14 @@ func (n *NetworkConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		return fmt.Errorf("decode domain: %w", err)
 	}
 
-	forkVersion, err := hex.DecodeString(strings.TrimPrefix(aux.Beacon.ForkVersionVal, "0x"))
-	if err != nil {
-		return fmt.Errorf("decode fork version: %w", err)
-	}
-
 	contractAddr, err := hex.DecodeString(strings.TrimPrefix(aux.RegistryContractAddr, "0x"))
 	if err != nil {
 		return fmt.Errorf("decode registry contract address: %w", err)
 	}
 
 	*n = NetworkConfig{
-		Name: aux.Name,
-		Beacon: &beaconprotocol.Network{
-			Parent:                          aux.Beacon.Parent,
-			Name:                            aux.Beacon.Name,
-			ForkVersionVal:                  [4]byte(forkVersion),
-			MinGenesisTimeVal:               aux.Beacon.MinGenesisTimeVal,
-			SlotDurationVal:                 aux.Beacon.SlotDurationVal,
-			SlotsPerEpochVal:                aux.Beacon.SlotsPerEpochVal,
-			EpochsPerSyncCommitteePeriodVal: aux.Beacon.EpochsPerSyncCommitteePeriodVal,
-		},
+		Name:                          aux.Name,
+		Beacon:                        aux.Beacon,
 		Domain:                        spectypes.DomainType(domain),
 		GenesisEpoch:                  aux.GenesisEpoch,
 		RegistrySyncOffset:            aux.RegistrySyncOffset,

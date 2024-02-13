@@ -1,7 +1,9 @@
 package beacon
 
 import (
+	"encoding/hex"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -48,13 +50,13 @@ type BeaconNetwork interface {
 
 // Network is a beacon chain network.
 type Network struct {
-	Parent                          spectypes.BeaconNetwork `json:"parent" yaml:"Parent"`
-	Name                            string                  `json:"name" yaml:"Name"`
-	ForkVersionVal                  [4]byte                 `json:"fork_version" yaml:"ForkVersion"`
-	MinGenesisTimeVal               uint64                  `json:"min_genesis_time" yaml:"MinGenesisTime"`
-	SlotDurationVal                 time.Duration           `json:"slot_duration" yaml:"SlotDuration"`
-	SlotsPerEpochVal                uint64                  `json:"slots_per_epoch" yaml:"SlotsPerEpoch"`
-	EpochsPerSyncCommitteePeriodVal uint64                  `json:"epochs_per_sync_committee_period" yaml:"EpochsPerSyncCommitteePeriod"`
+	Parent                          spectypes.BeaconNetwork `json:"parent,omitempty" yaml:"Parent,omitempty"`
+	Name                            string                  `json:"name,omitempty" yaml:"Name,omitempty"`
+	ForkVersionVal                  [4]byte                 `json:"fork_version,omitempty" yaml:"ForkVersion,omitempty"`
+	MinGenesisTimeVal               uint64                  `json:"min_genesis_time,omitempty" yaml:"MinGenesisTime,omitempty"`
+	SlotDurationVal                 time.Duration           `json:"slot_duration,omitempty" yaml:"SlotDuration,omitempty"`
+	SlotsPerEpochVal                uint64                  `json:"slots_per_epoch,omitempty" yaml:"SlotsPerEpoch,omitempty"`
+	EpochsPerSyncCommitteePeriodVal uint64                  `json:"epochs_per_sync_committee_period,omitempty" yaml:"EpochsPerSyncCommitteePeriod,omitempty"`
 }
 
 // NewNetwork creates a new beacon chain network from a parent spec network.
@@ -62,6 +64,65 @@ func NewNetwork(network spectypes.BeaconNetwork) *Network {
 	return &Network{
 		Parent: network,
 	}
+}
+
+func (n Network) MarshalYAML() (interface{}, error) {
+	forkVersion := ""
+	if n.ForkVersionVal != ([4]byte{}) {
+		forkVersion = "0x" + hex.EncodeToString(n.ForkVersionVal[:])
+	}
+
+	aux := struct {
+		Parent                          spectypes.BeaconNetwork `json:"parent,omitempty" yaml:"Parent,omitempty"`
+		Name                            string                  `json:"name,omitempty" yaml:"Name,omitempty"`
+		ForkVersionVal                  string                  `json:"fork_version,omitempty" yaml:"ForkVersion,omitempty"`
+		MinGenesisTimeVal               uint64                  `json:"min_genesis_time,omitempty" yaml:"MinGenesisTime,omitempty"`
+		SlotDurationVal                 time.Duration           `json:"slot_duration,omitempty" yaml:"SlotDuration,omitempty"`
+		SlotsPerEpochVal                uint64                  `json:"slots_per_epoch,omitempty" yaml:"SlotsPerEpoch,omitempty"`
+		EpochsPerSyncCommitteePeriodVal uint64                  `json:"epochs_per_sync_committee_period,omitempty" yaml:"EpochsPerSyncCommitteePeriod,omitempty"`
+	}{
+		Parent:                          n.Parent,
+		Name:                            n.Name,
+		ForkVersionVal:                  forkVersion,
+		MinGenesisTimeVal:               n.MinGenesisTimeVal,
+		SlotDurationVal:                 n.SlotDurationVal,
+		SlotsPerEpochVal:                n.SlotsPerEpochVal,
+		EpochsPerSyncCommitteePeriodVal: n.EpochsPerSyncCommitteePeriodVal,
+	}
+	return aux, nil
+}
+
+func (n *Network) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	aux := struct {
+		Parent                          spectypes.BeaconNetwork `json:"parent,omitempty" yaml:"Parent,omitempty"`
+		Name                            string                  `json:"name,omitempty" yaml:"Name,omitempty"`
+		ForkVersionVal                  string                  `json:"fork_version,omitempty" yaml:"ForkVersion,omitempty"`
+		MinGenesisTimeVal               uint64                  `json:"min_genesis_time,omitempty" yaml:"MinGenesisTime,omitempty"`
+		SlotDurationVal                 time.Duration           `json:"slot_duration,omitempty" yaml:"SlotDuration,omitempty"`
+		SlotsPerEpochVal                uint64                  `json:"slots_per_epoch,omitempty" yaml:"SlotsPerEpoch,omitempty"`
+		EpochsPerSyncCommitteePeriodVal uint64                  `json:"epochs_per_sync_committee_period,omitempty" yaml:"EpochsPerSyncCommitteePeriod,omitempty"`
+	}{}
+
+	if err := unmarshal(&aux); err != nil {
+		return err
+	}
+
+	forkVersion, err := hex.DecodeString(strings.TrimPrefix(aux.ForkVersionVal, "0x"))
+	if err != nil {
+		return fmt.Errorf("decode fork version: %w", err)
+	}
+
+	*n = Network{
+		Parent:                          aux.Parent,
+		Name:                            aux.Name,
+		ForkVersionVal:                  [4]byte(forkVersion),
+		MinGenesisTimeVal:               aux.MinGenesisTimeVal,
+		SlotDurationVal:                 aux.SlotDurationVal,
+		SlotsPerEpochVal:                aux.SlotsPerEpochVal,
+		EpochsPerSyncCommitteePeriodVal: aux.EpochsPerSyncCommitteePeriodVal,
+	}
+
+	return nil
 }
 
 func (n Network) String() string {
