@@ -179,12 +179,12 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 	}
 
 	validatorShare := eh.nodeStorage.Shares().Get(txn, event.PublicKey)
+	var malformedEventError *MalformedEventError
 
 	if validatorShare == nil {
 		shareCreated, err := eh.handleShareCreation(txn, event, sharePublicKeys, encryptedKeys)
 		if err != nil {
-			var malformedEventError *MalformedEventError
-			if errors.As(err, &malformedEventError) {
+			if errors.As(err, &malformedEventError) && malformedEventError != nil && !malformedEventError.InvalidEncryptedShare {
 				logger.Warn("malformed event", zap.Error(err))
 
 				return nil, err
@@ -209,7 +209,7 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 	}
 
 	isOperatorShare := validatorShare.BelongsToOperator(eh.operatorData.GetOperatorData().ID)
-	if isOperatorShare {
+	if isOperatorShare && !validatorShare.InvalidSecret {
 		eh.metrics.ValidatorInactive(event.PublicKey)
 		ownShare = validatorShare
 		logger = logger.With(zap.Bool("own_validator", isOperatorShare))
@@ -233,11 +233,21 @@ func (eh *EventHandler) handleShareCreation(
 		sharePublicKeys,
 		encryptedKeys,
 	)
+
+	var malformedEventError *MalformedEventError = nil
+
 	if err != nil {
-		return nil, fmt.Errorf("could not extract validator share from event: %w", err)
+		if errors.As(err, &malformedEventError) &&
+			malformedEventError.InvalidEncryptedShare &&
+			share.BelongsToOperator(eh.operatorData.GetOperatorData().ID) {
+
+			share.Metadata.InvalidSecret = true
+		} else {
+			return nil, fmt.Errorf("could not extract validator share from event: %w", err)
+		}
 	}
 
-	if share.BelongsToOperator(eh.operatorData.GetOperatorData().ID) {
+	if malformedEventError == nil && share.BelongsToOperator(eh.operatorData.GetOperatorData().ID) {
 		if shareSecret == nil {
 			return nil, errors.New("could not decode shareSecret")
 		}
@@ -253,7 +263,11 @@ func (eh *EventHandler) handleShareCreation(
 		return nil, fmt.Errorf("could not save validator share: %w", err)
 	}
 
-	return share, nil
+	if malformedEventError == nil {
+		return share, nil
+	}
+
+	return share, malformedEventError
 }
 
 func (eh *EventHandler) validatorAddedEventToShare(
@@ -301,18 +315,21 @@ func (eh *EventHandler) validatorAddedEventToShare(
 		shareSecret = &bls.SecretKey{}
 		decryptedSharePrivateKey, err := rsaencryption.DecodeKey(operatorPrivateKey, encryptedKeys[i])
 		if err != nil {
-			return nil, nil, &MalformedEventError{
-				Err: fmt.Errorf("could not decrypt share private key: %w", err),
+			return &validatorShare, nil, &MalformedEventError{
+				Err:                   fmt.Errorf("could not decrypt share private key: %w", err),
+				InvalidEncryptedShare: true,
 			}
 		}
 		if err = shareSecret.SetHexString(string(decryptedSharePrivateKey)); err != nil {
-			return nil, nil, &MalformedEventError{
-				Err: fmt.Errorf("could not set decrypted share private key: %w", err),
+			return &validatorShare, nil, &MalformedEventError{
+				Err:                   fmt.Errorf("could not set decrypted share private key: %w", err),
+				InvalidEncryptedShare: true,
 			}
 		}
 		if !bytes.Equal(shareSecret.GetPublicKey().Serialize(), validatorShare.SharePubKey) {
-			return nil, nil, &MalformedEventError{
-				Err: errors.New("share private key does not match public key"),
+			return &validatorShare, nil, &MalformedEventError{
+				Err:                   fmt.Errorf("share private key does not match public key"),
+				InvalidEncryptedShare: true,
 			}
 		}
 	}
@@ -321,6 +338,7 @@ func (eh *EventHandler) validatorAddedEventToShare(
 	validatorShare.DomainType = eh.networkConfig.Domain
 	validatorShare.Committee = committee
 	validatorShare.Graffiti = []byte("ssv.network")
+	validatorShare.Metadata.InvalidSecret = false
 
 	return &validatorShare, shareSecret, nil
 }
@@ -560,7 +578,8 @@ func (eh *EventHandler) processClusterEvent(
 
 // MalformedEventError is returned when event is malformed
 type MalformedEventError struct {
-	Err error
+	Err                   error
+	InvalidEncryptedShare bool
 }
 
 func (e *MalformedEventError) Error() string {

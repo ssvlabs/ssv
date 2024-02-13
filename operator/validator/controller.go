@@ -419,7 +419,10 @@ func (c *controller) StartValidators() {
 		return
 	}
 
-	shares := c.sharesStorage.List(nil, registrystorage.ByNotLiquidated())
+	shares := c.sharesStorage.List(nil,
+		registrystorage.ByNotLiquidated(),
+		registrystorage.ByValidSecret(),
+	)
 	if len(shares) == 0 {
 		c.logger.Info("could not find validators")
 		return
@@ -520,7 +523,10 @@ func (c *controller) startValidators(validators []*validator.Validator) int {
 // to start consensus flow which would save the highest decided instance
 // and sync any gaps (in protocol/v2/qbft/controller/decided.go).
 func (c *controller) setupNonCommitteeValidators() {
-	nonCommitteeShares := c.sharesStorage.List(nil, registrystorage.ByNotLiquidated())
+	nonCommitteeShares := c.sharesStorage.List(nil,
+		registrystorage.ByNotLiquidated(),
+		registrystorage.ByValidSecret(),
+	)
 	if len(nonCommitteeShares) == 0 {
 		c.logger.Info("could not find non-committee validators")
 		return
@@ -754,6 +760,10 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 
 func (c *controller) onShareStart(share *ssvtypes.SSVShare) (bool, error) {
 	v, err := c.onShareInit(share)
+	if share.InvalidSecret {
+		c.logger.Warn("skipping validator with invalid share", fields.PubKey(share.ValidatorPubKey))
+		return false, nil
+	}
 	if err != nil || v == nil {
 		return false, err
 	}
@@ -827,7 +837,10 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 	filters := []registrystorage.SharesFilter{}
 
 	// Filter for validators who are not liquidated.
-	filters = append(filters, registrystorage.ByNotLiquidated())
+	filters = append(filters,
+		registrystorage.ByNotLiquidated(),
+		registrystorage.ByValidSecret(),
+	)
 
 	// Filter for validators which haven't been updated recently.
 	filters = append(filters, func(s *ssvtypes.SSVShare) bool {

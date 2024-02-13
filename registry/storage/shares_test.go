@@ -64,7 +64,7 @@ func TestMaxPossibleShareSize(t *testing.T) {
 	b, err := s.Encode()
 	require.NoError(t, err)
 
-	require.Equal(t, ssvtypes.MaxPossibleShareSize, len(b))
+	require.Equal(t, ssvtypes.CurrentMaxPossibleShareSize, len(b))
 }
 
 func TestSaveAndGetValidatorStorage(t *testing.T) {
