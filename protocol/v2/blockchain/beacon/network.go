@@ -112,10 +112,15 @@ func (n *Network) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		return fmt.Errorf("decode fork version: %w", err)
 	}
 
+	var forkVersionArr [4]byte
+	if len(forkVersion) != 0 {
+		forkVersionArr = [4]byte(forkVersion)
+	}
+
 	*n = Network{
 		Parent:                          aux.Parent,
 		Name:                            aux.Name,
-		ForkVersionVal:                  [4]byte(forkVersion),
+		ForkVersionVal:                  forkVersionArr,
 		MinGenesisTimeVal:               aux.MinGenesisTimeVal,
 		SlotDurationVal:                 aux.SlotDurationVal,
 		SlotsPerEpochVal:                aux.SlotsPerEpochVal,

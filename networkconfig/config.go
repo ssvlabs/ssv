@@ -102,18 +102,18 @@ func (n *NetworkConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		return fmt.Errorf("decode domain: %w", err)
 	}
 
-	contractAddr, err := hex.DecodeString(strings.TrimPrefix(aux.RegistryContractAddr, "0x"))
-	if err != nil {
-		return fmt.Errorf("decode registry contract address: %w", err)
+	var domainArr spectypes.DomainType
+	if len(domain) != 0 {
+		domainArr = spectypes.DomainType(domain)
 	}
 
 	*n = NetworkConfig{
 		Name:                          aux.Name,
 		Beacon:                        aux.Beacon,
-		Domain:                        spectypes.DomainType(domain),
+		Domain:                        domainArr,
 		GenesisEpoch:                  aux.GenesisEpoch,
 		RegistrySyncOffset:            aux.RegistrySyncOffset,
-		RegistryContractAddr:          ethcommon.Address(contractAddr),
+		RegistryContractAddr:          ethcommon.HexToAddress(aux.RegistryContractAddr),
 		Bootnodes:                     aux.Bootnodes,
 		WhitelistedOperatorKeys:       aux.WhitelistedOperatorKeys,
 		PermissionlessActivationEpoch: aux.PermissionlessActivationEpoch,
