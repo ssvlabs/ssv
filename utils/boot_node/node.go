@@ -195,7 +195,7 @@ func (n *bootNode) createLocalNode(logger *zap.Logger, privKey *ecdsa.PrivateKey
 	//		return nil, errors.Wrap(err, "Could not retrieve fork version")
 	//	}
 	//	if len(fVersion) != 4 {
-	//		return nil, errors.Errorf("InvalidSecret fork version size expected %d but got %d", 4, len(fVersion))
+	//		return nil, errors.Errorf("Invalid fork version size expected %d but got %d", 4, len(fVersion))
 	//	}
 	//}
 	genRoot := [32]byte{}
@@ -205,7 +205,7 @@ func (n *bootNode) createLocalNode(logger *zap.Logger, privKey *ecdsa.PrivateKey
 	//		return nil, errors.Wrap(err, "Could not retrieve genesis validator root")
 	//	}
 	//	if len(retRoot) != 32 {
-	//		return nil, errors.Errorf("InvalidSecret root size, expected 32 but got %d", len(retRoot))
+	//		return nil, errors.Errorf("Invalid root size, expected 32 but got %d", len(retRoot))
 	//	}
 	//	genRoot = bytesutil.ToBytes32(retRoot)
 	//}
