@@ -3,15 +3,14 @@ package storage
 import (
 	"bytes"
 	"encoding/hex"
-	"sort"
-	"strconv"
-	"testing"
-
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+	"sort"
+	"strconv"
+	"testing"
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/networkconfig"
@@ -64,7 +63,7 @@ func TestMaxPossibleShareSize(t *testing.T) {
 	b, err := s.Encode()
 	require.NoError(t, err)
 
-	require.Equal(t, ssvtypes.CurrentMaxPossibleShareSize, len(b))
+	require.Equal(t, ssvtypes.MaxPossibleShareSize, len(b))
 }
 
 func TestSaveAndGetValidatorStorage(t *testing.T) {
@@ -144,8 +143,9 @@ func generateRandomValidatorShare(splitKeys map[uint64]*bls.SecretKey) (*ssvtype
 				Index:           3,
 				ActivationEpoch: 4,
 			},
-			OwnerAddress: common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
-			Liquidated:   true,
+			OwnerAddress:  common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
+			Liquidated:    true,
+			InvalidSecret: true,
 		},
 	}, &sk1
 }
