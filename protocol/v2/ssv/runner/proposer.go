@@ -105,10 +105,9 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)))
 
 	var start = time.Now()
-	// get block data
 	obj, ver, err := r.fetchBeaconBlock(logger, duty.Slot, fullSig)
 	if err != nil {
-		return errors.Wrap(err, "failed to get beacon block")
+		return fmt.Errorf("failed to get beacon block: %w", err)
 	}
 
 	// Log essentials about the retrieved block.
@@ -141,20 +140,16 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 // Function to attempt fetching a beacon block based on the provided conditions.
 // Returns the block (as ssz.Marshaler), the data version, and any error encountered.
 func (r *ProposerRunner) fetchBeaconBlock(logger *zap.Logger, slot phase0.Slot, fullSig []byte) (ssz.Marshaler, spec.DataVersion, error) {
-	var obj ssz.Marshaler
-	var ver spec.DataVersion
-	var err error
 	if r.ProducesBlindedBlocks {
 		// Attempt to fetch the blinded beacon block.
-		obj, ver, err = r.GetBeaconNode().GetBlindedBeaconBlock(slot, r.GetShare().Graffiti, fullSig)
+		obj, ver, err := r.GetBeaconNode().GetBlindedBeaconBlock(slot, r.GetShare().Graffiti, fullSig)
 		if err == nil {
 			return obj, ver, nil
 		}
-		logger.Debug("failed to get blinded beacon block, falling back to standard block")
+		logger.Warn("failed to get blinded beacon block, falling back to standard block")
 	}
 	// Fetch the standard beacon block if blinded block fetching fails or if blinded is false.
-	obj, ver, err = r.GetBeaconNode().GetBeaconBlock(slot, r.GetShare().Graffiti, fullSig)
-	return obj, ver, err
+	return r.GetBeaconNode().GetBeaconBlock(slot, r.GetShare().Graffiti, fullSig)
 }
 
 func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbft.SignedMessage) error {
