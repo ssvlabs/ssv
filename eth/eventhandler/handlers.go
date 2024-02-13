@@ -179,12 +179,11 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 	}
 
 	validatorShare := eh.nodeStorage.Shares().Get(txn, event.PublicKey)
-	var malformedEventError *MalformedEventError
 
 	if validatorShare == nil {
 		shareCreated, err := eh.handleShareCreation(txn, event, sharePublicKeys, encryptedKeys)
 		if err != nil {
-			if errors.As(err, &malformedEventError) && malformedEventError != nil && !malformedEventError.InvalidEncryptedShare {
+			if shareCreated.Metadata.InvalidSecret {
 				logger.Warn("malformed event", zap.Error(err))
 
 				return nil, err
@@ -234,17 +233,10 @@ func (eh *EventHandler) handleShareCreation(
 		encryptedKeys,
 	)
 
-	var malformedEventError *MalformedEventError = nil
+	var malformedEventError *MalformedEventError
 
-	if err != nil {
-		if errors.As(err, &malformedEventError) &&
-			malformedEventError.InvalidEncryptedShare &&
-			share.BelongsToOperator(eh.operatorData.GetOperatorData().ID) {
-
-			share.Metadata.InvalidSecret = true
-		} else {
-			return nil, fmt.Errorf("could not extract validator share from event: %w", err)
-		}
+	if err != nil && !(errors.As(err, &malformedEventError) && share.Metadata.InvalidSecret) {
+		return share, fmt.Errorf("could not extract validator share from event: %w", err)
 	}
 
 	if malformedEventError == nil && share.BelongsToOperator(eh.operatorData.GetOperatorData().ID) {
@@ -314,24 +306,25 @@ func (eh *EventHandler) validatorAddedEventToShare(
 
 		shareSecret = &bls.SecretKey{}
 		decryptedSharePrivateKey, err := rsaencryption.DecodeKey(operatorPrivateKey, encryptedKeys[i])
+
+		validatorShare.Metadata.InvalidSecret = true
+
 		if err != nil {
 			return &validatorShare, nil, &MalformedEventError{
-				Err:                   fmt.Errorf("could not decrypt share private key: %w", err),
-				InvalidEncryptedShare: true,
+				Err: fmt.Errorf("could not decrypt share private key: %w", err),
 			}
 		}
 		if err = shareSecret.SetHexString(string(decryptedSharePrivateKey)); err != nil {
 			return &validatorShare, nil, &MalformedEventError{
-				Err:                   fmt.Errorf("could not set decrypted share private key: %w", err),
-				InvalidEncryptedShare: true,
+				Err: fmt.Errorf("could not set decrypted share private key: %w", err),
 			}
 		}
 		if !bytes.Equal(shareSecret.GetPublicKey().Serialize(), validatorShare.SharePubKey) {
 			return &validatorShare, nil, &MalformedEventError{
-				Err:                   fmt.Errorf("share private key does not match public key"),
-				InvalidEncryptedShare: true,
+				Err: errors.New("share private key does not match public key"),
 			}
 		}
+		validatorShare.Metadata.InvalidSecret = false
 	}
 
 	validatorShare.Quorum, validatorShare.PartialQuorum = ssvtypes.ComputeQuorumAndPartialQuorum(len(committee))
@@ -578,8 +571,7 @@ func (eh *EventHandler) processClusterEvent(
 
 // MalformedEventError is returned when event is malformed
 type MalformedEventError struct {
-	Err                   error
-	InvalidEncryptedShare bool
+	Err error
 }
 
 func (e *MalformedEventError) Error() string {
