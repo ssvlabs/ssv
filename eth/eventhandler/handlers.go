@@ -209,10 +209,15 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 	}
 
 	isOperatorShare := validatorShare.BelongsToOperator(eh.operatorData.GetOperatorData().ID)
-	if isOperatorShare && !validatorShare.InvalidSecret {
+	if isOperatorShare {
 		eh.metrics.ValidatorInactive(event.PublicKey)
-		ownShare = validatorShare
 		logger = logger.With(zap.Bool("own_validator", isOperatorShare))
+		if validatorShare.InvalidSecret {
+			logger = logger.With(zap.Bool("invalid_secret", true))
+			logger.Debug("registered validator has an invalid share secret, it will not be started")
+		} else {
+			ownShare = validatorShare
+		}
 	}
 
 	logger.Debug("processed event")
