@@ -278,7 +278,6 @@ func (eh *EventHandler) validatorAddedEventToShare(
 	}
 	validatorShare.ValidatorPubKey = publicKey.Serialize()
 	validatorShare.OwnerAddress = event.Owner
-	validatorShare.Metadata.InvalidSecret = false
 
 	var shareSecret *bls.SecretKey
 
