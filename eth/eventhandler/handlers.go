@@ -269,16 +269,18 @@ func (eh *EventHandler) validatorAddedEventToShare(
 	sharePublicKeys [][]byte,
 	encryptedKeys [][]byte,
 ) (*ssvtypes.SSVShare, *bls.SecretKey, error) {
-	validatorShare := ssvtypes.SSVShare{}
+	validatorShare := &ssvtypes.SSVShare{}
 
 	publicKey, err := ssvtypes.DeserializeBLSPublicKey(event.PublicKey)
 	if err != nil {
-		return nil, nil, &MalformedEventError{
+		return validatorShare, nil, &MalformedEventError{
 			Err: fmt.Errorf("failed to deserialize validator public key: %w", err),
 		}
 	}
 	validatorShare.ValidatorPubKey = publicKey.Serialize()
 	validatorShare.OwnerAddress = event.Owner
+	validatorShare.Metadata.InvalidSecret = false
+
 	var shareSecret *bls.SecretKey
 
 	committee := make([]*spectypes.Operator, 0)
@@ -310,17 +312,17 @@ func (eh *EventHandler) validatorAddedEventToShare(
 		validatorShare.Metadata.InvalidSecret = true
 
 		if err != nil {
-			return &validatorShare, nil, &MalformedEventError{
+			return validatorShare, nil, &MalformedEventError{
 				Err: fmt.Errorf("could not decrypt share private key: %w", err),
 			}
 		}
 		if err = shareSecret.SetHexString(string(decryptedSharePrivateKey)); err != nil {
-			return &validatorShare, nil, &MalformedEventError{
+			return validatorShare, nil, &MalformedEventError{
 				Err: fmt.Errorf("could not set decrypted share private key: %w", err),
 			}
 		}
 		if !bytes.Equal(shareSecret.GetPublicKey().Serialize(), validatorShare.SharePubKey) {
-			return &validatorShare, nil, &MalformedEventError{
+			return validatorShare, nil, &MalformedEventError{
 				Err: errors.New("share private key does not match public key"),
 			}
 		}
@@ -331,9 +333,8 @@ func (eh *EventHandler) validatorAddedEventToShare(
 	validatorShare.DomainType = eh.networkConfig.Domain
 	validatorShare.Committee = committee
 	validatorShare.Graffiti = []byte("ssv.network")
-	validatorShare.Metadata.InvalidSecret = false
 
-	return &validatorShare, shareSecret, nil
+	return validatorShare, shareSecret, nil
 }
 
 func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.ContractValidatorRemoved) (spectypes.ValidatorPK, error) {

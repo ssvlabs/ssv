@@ -726,15 +726,21 @@ func (c *controller) onShareStop(pubKey spectypes.ValidatorPK) {
 }
 
 func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator, error) {
+	validatorPkHexString := hex.EncodeToString(share.ValidatorPubKey)
+
 	if !share.HasBeaconMetadata() { // fetching index and status in case not exist
 		c.logger.Warn("skipping validator until it becomes active", fields.PubKey(share.ValidatorPubKey))
 		return nil, nil
+	}
+
+	if share.InvalidSecret {
+		return nil, fmt.Errorf("skipping validator with invalid share. validatorPubKey: %s", validatorPkHexString)
 	}
 	if err := c.setShareFeeRecipient(share, c.recipientsStorage.GetRecipientData); err != nil {
 		return nil, fmt.Errorf("could not set share fee recipient: %w", err)
 	}
 	// Start a committee validator.
-	v, found := c.validatorsMap.GetValidator(hex.EncodeToString(share.ValidatorPubKey))
+	v, found := c.validatorsMap.GetValidator(validatorPkHexString)
 	if !found {
 		if !share.HasBeaconMetadata() {
 			return nil, fmt.Errorf("beacon metadata is missing")
@@ -747,7 +753,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 		opts.SSVShare = share
 		opts.DutyRunners = SetupRunners(ctx, c.logger, opts)
 		v = validator.NewValidator(ctx, cancel, opts)
-		c.validatorsMap.CreateValidator(hex.EncodeToString(share.ValidatorPubKey), v)
+		c.validatorsMap.CreateValidator(validatorPkHexString, v)
 
 		c.printShare(share, "setup validator done")
 
@@ -760,10 +766,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 
 func (c *controller) onShareStart(share *ssvtypes.SSVShare) (bool, error) {
 	v, err := c.onShareInit(share)
-	if share.InvalidSecret {
-		c.logger.Warn("skipping validator with invalid share", fields.PubKey(share.ValidatorPubKey))
-		return false, nil
-	}
+
 	if err != nil || v == nil {
 		return false, err
 	}
