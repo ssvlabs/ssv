@@ -183,7 +183,8 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 	if validatorShare == nil {
 		shareCreated, err := eh.handleShareCreation(txn, event, sharePublicKeys, encryptedKeys)
 		if err != nil {
-			if shareCreated.Metadata.InvalidSecret {
+			var malformedEventError *MalformedEventError
+			if errors.As(err, &malformedEventError) {
 				logger.Warn("malformed event", zap.Error(err))
 
 				return nil, err
@@ -233,13 +234,11 @@ func (eh *EventHandler) handleShareCreation(
 		encryptedKeys,
 	)
 
-	var malformedEventError *MalformedEventError
-
-	if err != nil && !(errors.As(err, &malformedEventError) && share.Metadata.InvalidSecret) {
-		return share, fmt.Errorf("could not extract validator share from event: %w", err)
+	if err != nil && !share.Metadata.InvalidSecret {
+		return share, err
 	}
 
-	if malformedEventError == nil && share.BelongsToOperator(eh.operatorData.GetOperatorData().ID) {
+	if !share.Metadata.InvalidSecret && share.BelongsToOperator(eh.operatorData.GetOperatorData().ID) {
 		if shareSecret == nil {
 			return nil, errors.New("could not decode shareSecret")
 		}
@@ -255,11 +254,11 @@ func (eh *EventHandler) handleShareCreation(
 		return nil, fmt.Errorf("could not save validator share: %w", err)
 	}
 
-	if malformedEventError == nil {
+	if !share.Metadata.InvalidSecret {
 		return share, nil
 	}
 
-	return share, malformedEventError
+	return share, err
 }
 
 func (eh *EventHandler) validatorAddedEventToShare(
