@@ -287,25 +287,11 @@ func (eh *EventHandler) handleEvent(txn basedb.Txn, abiEvent *abi.Event, parsedE
 		}
 		return NewUpdateFeeRecipientTask(eh.taskExecutor, parsedEvent.(*contract.ContractFeeRecipientAddressUpdated).Owner, parsedEvent.(*contract.ContractFeeRecipientAddressUpdated).RecipientAddress), nil
 	case ValidatorExited:
-		exitDescriptor, err := eh.handleValidatorExited(txn, validatorExitedEvent)
-		if err != nil {
-			eh.metrics.EventProcessingFailed(abiEvent.Name)
-
-			var malformedEventError *MalformedEventError
-			if errors.As(err, &malformedEventError) {
-				return nil, nil
-			}
-			return nil, fmt.Errorf("handle ValidatorExited: %w", err)
+		exitDescriptor, err := eh.handleValidatorExited(txn, parsedEvent.(*contract.ContractValidatorExited))
+		if err != nil || exitDescriptor == nil {
+			return nil, err
 		}
-
-		defer eh.metrics.EventProcessed(abiEvent.Name)
-
-		if exitDescriptor == nil {
-			return nil, nil
-		}
-
-		task := NewExitValidatorTask(eh.taskExecutor, exitDescriptor.PubKey, exitDescriptor.BlockNumber, exitDescriptor.ValidatorIndex)
-		return task, nil
+		return NewExitValidatorTask(eh.taskExecutor, exitDescriptor.PubKey, exitDescriptor.BlockNumber, exitDescriptor.ValidatorIndex), nil
 
 	default:
 		return nil, fmt.Errorf("unknown event name: %s", abiEvent.Name)
