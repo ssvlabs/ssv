@@ -29,18 +29,6 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
-// Event names
-const (
-	OperatorAdded              = "OperatorAdded"
-	OperatorRemoved            = "OperatorRemoved"
-	ValidatorAdded             = "ValidatorAdded"
-	ValidatorRemoved           = "ValidatorRemoved"
-	ClusterLiquidated          = "ClusterLiquidated"
-	ClusterReactivated         = "ClusterReactivated"
-	FeeRecipientAddressUpdated = "FeeRecipientAddressUpdated"
-	ValidatorExited            = "ValidatorExited"
-)
-
 var (
 	// ErrInferiorBlock is returned when trying to process a block that is
 	// not higher than the last processed block.
@@ -362,7 +350,7 @@ func (eh *EventHandler) processLocalEvent(txn basedb.Txn, event localevents.Even
 			return fmt.Errorf("handle FeeRecipientAddressUpdated: %w", err)
 		}
 		return nil
-	case ValidatorExited:
+	case eventparser.ValidatorExited:
 		data := event.Data.(contract.ContractValidatorExited)
 		_, err := eh.handleValidatorExited(txn, &data)
 		if err != nil {

@@ -21,6 +21,7 @@ const (
 	ClusterLiquidated          = "ClusterLiquidated"
 	ClusterReactivated         = "ClusterReactivated"
 	FeeRecipientAddressUpdated = "FeeRecipientAddressUpdated"
+	ValidatorExited            = "ValidatorExited"
 )
 
 var (
@@ -88,6 +89,8 @@ func (e *EventParser) ParseEvent(abiEvent *ethabi.Event, event ethtypes.Log) (in
 		return e.ParseClusterReactivated(event)
 	case FeeRecipientAddressUpdated:
 		return e.ParseFeeRecipientAddressUpdated(event)
+	case ValidatorExited:
+		return e.ParseValidatorExited(event)
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnknownEvent, abiEvent.Name)
 	}
