@@ -1,9 +1,7 @@
 package validator
 
 import (
-	"context"
 	"sync/atomic"
-	"time"
 
 	"github.com/bloxapp/ssv-spec/p2p"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -28,15 +26,15 @@ func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
 	if !ok {
 		return false, errors.New("network does not support subscription")
 	}
-	for role, r := range v.DutyRunners {
+	for role, dutyRunner := range v.DutyRunners {
 		logger := logger.With(fields.Role(role))
-		share := r.GetBaseRunner().Share
+		share := dutyRunner.GetBaseRunner().Share
 		if share == nil { // TODO: handle missing share?
 			logger.Warn("❗ share is missing", fields.Role(role))
 			continue
 		}
-		identifier := spectypes.NewMsgID(types.GetDefaultDomain(), r.GetBaseRunner().Share.ValidatorPubKey, role)
-		if ctrl := r.GetBaseRunner().QBFTController; ctrl != nil {
+		identifier := spectypes.NewMsgID(types.GetDefaultDomain(), dutyRunner.GetBaseRunner().Share.ValidatorPubKey, role)
+		if ctrl := dutyRunner.GetBaseRunner().QBFTController; ctrl != nil {
 			highestInstance, err := ctrl.LoadHighestInstance(identifier[:])
 			if err != nil {
 				logger.Warn("❗failed to load highest instance",
@@ -47,7 +45,7 @@ func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
 				if err := decidedValue.Decode(highestInstance.State.DecidedValue); err != nil {
 					logger.Warn("❗failed to decode decided value", zap.Error(err))
 				} else {
-					r.GetBaseRunner().SetHighestDecidedSlot(decidedValue.Duty.Slot)
+					dutyRunner.GetBaseRunner().SetHighestDecidedSlot(decidedValue.Duty.Slot)
 				}
 			}
 		}
@@ -56,7 +54,6 @@ func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
 			return true, err
 		}
 		go v.StartQueueConsumer(logger, identifier, v.ProcessMessage)
-		go v.sync(logger, identifier)
 	}
 	return true, nil
 }
@@ -71,29 +68,5 @@ func (v *Validator) Stop() {
 
 		// clear the msg q
 		v.Queues = make(map[spectypes.BeaconRole]queueContainer)
-	}
-}
-
-// sync performs highest decided sync
-func (v *Validator) sync(logger *zap.Logger, mid spectypes.MessageID) {
-	ctx, cancel := context.WithCancel(v.ctx)
-	defer cancel()
-
-	// TODO: config?
-	interval := time.Second
-	retries := 3
-
-	for ctx.Err() == nil {
-		err := v.Network.SyncHighestDecided(mid)
-		if err != nil {
-			logger.Debug("❌ failed to sync highest decided", zap.Error(err))
-			retries--
-			if retries > 0 {
-				interval *= 2
-				time.Sleep(interval)
-				continue
-			}
-		}
-		return
 	}
 }

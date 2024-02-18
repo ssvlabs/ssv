@@ -45,7 +45,7 @@ func NewPeersIndex(logger *zap.Logger, network libp2pnetwork.Network, self *reco
 	return &peersIndex{
 		network:        network,
 		scoreIdx:       newScoreIndex(),
-		SubnetsIndex:   newSubnetsIndex(subnetsCount),
+		SubnetsIndex:   NewSubnetsIndex(subnetsCount),
 		PeerInfoIndex:  NewPeerInfoIndex(),
 		self:           self,
 		selfLock:       &sync.RWMutex{},
@@ -91,7 +91,7 @@ func (pi *peersIndex) CanConnect(id peer.ID) bool {
 	return true
 }
 
-func (pi *peersIndex) Limit(dir libp2pnetwork.Direction) bool {
+func (pi *peersIndex) AtLimit(dir libp2pnetwork.Direction) bool {
 	maxPeers := pi.maxPeers("")
 	peers := pi.network.Peers()
 	return len(peers) > maxPeers

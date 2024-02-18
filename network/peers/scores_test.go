@@ -15,7 +15,7 @@ func TestScoresIndex(t *testing.T) {
 	nks, err := nettesting.CreateKeys(1)
 	require.NoError(t, err)
 
-	sk, err := commons.ConvertToInterfacePrivkey(nks[0].NetKey)
+	sk, err := commons.ECDSAPrivToInterface(nks[0].NetKey)
 	require.NoError(t, err)
 	pid, err := peer.IDFromPrivateKey(sk)
 	require.NoError(t, err)

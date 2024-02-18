@@ -1,8 +1,9 @@
 package metrics
 
 import (
-	"go.uber.org/zap"
 	"time"
+
+	"go.uber.org/zap"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -45,9 +46,6 @@ var (
 			2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 3.0,
 			3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, 3.9, 4.0,
 			4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 5.0,
-			5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 5.8, 5.9, 6.0,
-			6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.9, 7.0,
-			7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 7.8, 7.9, 8.0,
 		},
 	}, []string{"role"})
 	metricsRolesSubmitted = promauto.NewCounterVec(prometheus.CounterOpts{
@@ -57,6 +55,14 @@ var (
 	metricsRolesSubmissionFailures = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv_validator_roles_failed",
 		Help: "Submitted roles",
+	}, []string{"role"})
+	metricsInstancesStarted = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_instances_started",
+		Help: "Number of started QBFT instances",
+	}, []string{"role"})
+	metricsInstancesDecided = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "ssv_instances_decided",
+		Help: "Number of decided QBFT instances",
 	}, []string{"role"})
 )
 
@@ -88,6 +94,8 @@ type ConsensusMetrics struct {
 	dutyFullFlowFirstRound         prometheus.Observer
 	rolesSubmitted                 prometheus.Counter
 	rolesSubmissionFailures        prometheus.Counter
+	metricsInstancesStarted        prometheus.Counter
+	metricsInstancesDecided        prometheus.Counter
 	preConsensusStart              time.Time
 	consensusStart                 time.Time
 	postConsensusStart             time.Time
@@ -106,6 +114,8 @@ func NewConsensusMetrics(role spectypes.BeaconRole) ConsensusMetrics {
 		dutyFullFlowFirstRound:  metricsDutyFullFlowFirstRoundDuration.WithLabelValues(values...),
 		rolesSubmitted:          metricsRolesSubmitted.WithLabelValues(values...),
 		rolesSubmissionFailures: metricsRolesSubmissionFailures.WithLabelValues(values...),
+		metricsInstancesStarted: metricsInstancesStarted.WithLabelValues(values...),
+		metricsInstancesDecided: metricsInstancesDecided.WithLabelValues(values...),
 	}
 }
 
@@ -128,6 +138,7 @@ func (cm *ConsensusMetrics) EndPreConsensus() {
 func (cm *ConsensusMetrics) StartConsensus() {
 	if cm != nil {
 		cm.consensusStart = time.Now()
+		cm.metricsInstancesStarted.Inc()
 	}
 }
 
@@ -136,6 +147,7 @@ func (cm *ConsensusMetrics) EndConsensus() {
 	if cm != nil && cm.consensus != nil && !cm.consensusStart.IsZero() {
 		cm.consensus.Observe(time.Since(cm.consensusStart).Seconds())
 		cm.consensusStart = time.Time{}
+		cm.metricsInstancesDecided.Inc()
 	}
 }
 

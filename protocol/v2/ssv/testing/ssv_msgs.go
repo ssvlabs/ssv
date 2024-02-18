@@ -3,7 +3,7 @@ package testing
 import (
 	spec2 "github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
-	"github.com/attestantio/go-eth2-client/spec/capella"
+	"github.com/attestantio/go-eth2-client/spec/deneb"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -11,7 +11,7 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 )
 
-var TestingSSVDomainType = spectypes.V3Testnet
+var TestingSSVDomainType = spectypes.JatoTestnet
 var AttesterMsgID = func() []byte {
 	ret := spectypes.NewMsgID(TestingSSVDomainType, testingutils.TestingValidatorPubKey[:], spectypes.BNRoleAttester)
 	return ret[:]
@@ -50,17 +50,10 @@ var TestAggregatorConsensusData = &spectypes.ConsensusData{
 }
 var TestAggregatorConsensusDataByts, _ = TestAggregatorConsensusData.Encode()
 
-var TestProposerConsensusData = &spectypes.ConsensusData{
-	Duty:    *testingutils.TestingProposerDutyV(spec2.DataVersionBellatrix),
-	Version: spec2.DataVersionCapella,
-	DataSSZ: testingutils.TestingBeaconBlockBytesV(spec2.DataVersionBellatrix),
-}
-var TestProposerConsensusDataByts, _ = TestProposerConsensusData.Encode()
-
 var TestProposerBlindedBlockConsensusData = &spectypes.ConsensusData{
-	Duty:    *testingutils.TestingProposerDutyV(spec2.DataVersionBellatrix),
+	Duty:    *testingutils.TestingProposerDutyV(spec2.DataVersionCapella),
 	Version: spec2.DataVersionCapella,
-	DataSSZ: testingutils.TestingBlindedBeaconBlockBytesV(spec2.DataVersionBellatrix),
+	DataSSZ: testingutils.TestingBlindedBeaconBlockBytesV(spec2.DataVersionCapella),
 }
 var TestProposerBlindedBlockConsensusDataByts, _ = TestProposerBlindedBlockConsensusData.Encode()
 
@@ -295,9 +288,9 @@ var postConsensusBeaconBlockMsg = func(
 	signer := testingutils.NewTestingKeyManager()
 	beacon := testingutils.NewTestingBeaconNode()
 
-	block := testingutils.TestingBeaconBlock
+	block := testingutils.TestingBeaconBlockV(spec2.DataVersionDeneb).Deneb
 	if wrongRoot {
-		block = testingutils.TestingWrongBeaconBlockV(spec2.DataVersionBellatrix).Bellatrix
+		block = testingutils.TestingWrongBeaconBlockV(spec2.DataVersionDeneb).Deneb
 	}
 
 	d, _ := beacon.DomainData(1, spectypes.DomainProposer) // epoch doesn't matter here, hard coded
@@ -308,8 +301,8 @@ var postConsensusBeaconBlockMsg = func(
 	blsSig := spec.BLSSignature{}
 	copy(blsSig[:], sig)
 
-	signed := capella.SignedBeaconBlock{
-		Message:   testingutils.TestingBeaconBlockCapella,
+	signed := deneb.SignedBeaconBlock{
+		Message:   block.Block,
 		Signature: blsSig,
 	}
 

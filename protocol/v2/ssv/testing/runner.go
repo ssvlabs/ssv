@@ -23,14 +23,14 @@ var AttesterRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySe
 //}
 
 var ProposerRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
-	return baseRunner(logger, spectypes.BNRoleProposer, specssv.ProposerValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.BeaconTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex, nil, true), keySet)
+	return baseRunner(logger, spectypes.BNRoleProposer, specssv.ProposerValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.BeaconTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex, nil), keySet)
 }
 
 var ProposerBlindedBlockRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
 	ret := baseRunner(
 		logger,
 		spectypes.BNRoleProposer,
-		specssv.ProposerValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.BeaconTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex, nil, true),
+		specssv.ProposerValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.BeaconTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex, nil),
 		keySet,
 	)
 	ret.(*runner.ProposerRunner).ProducesBlindedBlocks = true
@@ -52,6 +52,10 @@ var SyncCommitteeContributionRunner = func(logger *zap.Logger, keySet *spectesti
 var ValidatorRegistrationRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
 	ret := baseRunner(logger, spectypes.BNRoleValidatorRegistration, nil, keySet)
 	return ret
+}
+
+var VoluntaryExitRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
+	return baseRunner(logger, spectypes.BNRoleVoluntaryExit, nil, keySet)
 }
 
 var UnknownDutyTypeRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
@@ -140,6 +144,14 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 			spectypes.BeaconTestNetwork,
 			share,
 			contr,
+			spectestingutils.NewTestingBeaconNode(),
+			net,
+			km,
+		)
+	case spectypes.BNRoleVoluntaryExit:
+		return runner.NewVoluntaryExitRunner(
+			spectypes.BeaconTestNetwork,
+			share,
 			spectestingutils.NewTestingBeaconNode(),
 			net,
 			km,

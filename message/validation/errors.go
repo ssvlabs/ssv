@@ -45,7 +45,7 @@ func (e Error) Text() string {
 
 var (
 	ErrEmptyData                           = Error{text: "empty data"}
-	ErrWrongDomain                         = Error{text: "wrong domain"}
+	ErrWrongDomain                         = Error{text: "wrong domain", silent: true}
 	ErrNoShareMetadata                     = Error{text: "share has no metadata"}
 	ErrUnknownValidator                    = Error{text: "unknown validator"}
 	ErrValidatorLiquidated                 = Error{text: "validator is liquidated"}
@@ -56,6 +56,8 @@ var (
 	ErrEarlyMessage                        = Error{text: "early message"}
 	ErrLateMessage                         = Error{text: "late message"}
 	ErrTooManySameTypeMessagesPerRound     = Error{text: "too many messages of same type per round"}
+	ErrRSADecryption                       = Error{text: "rsa decryption", reject: true}
+	ErrOperatorNotFound                    = Error{text: "operator not found", reject: true}
 	ErrPubSubMessageHasNoData              = Error{text: "pub-sub message has no data", reject: true}
 	ErrPubSubDataTooBig                    = Error{text: "pub-sub message data too big", reject: true}
 	ErrMalformedPubSubMessage              = Error{text: "pub-sub message is malformed", reject: true}
@@ -63,7 +65,7 @@ var (
 	ErrTopicNotFound                       = Error{text: "topic not found", reject: true}
 	ErrSSVDataTooBig                       = Error{text: "ssv message data too big", reject: true}
 	ErrInvalidRole                         = Error{text: "invalid role", reject: true}
-	ErrConsensusValidatorRegistration      = Error{text: "consensus message for validator registration role", reject: true}
+	ErrUnexpectedConsensusMessage          = Error{text: "unexpected consensus message for this role", reject: true}
 	ErrNoSigners                           = Error{text: "no signers", reject: true}
 	ErrWrongSignatureSize                  = Error{text: "wrong signature size", reject: true}
 	ErrZeroSignature                       = Error{text: "zero signature", reject: true}
@@ -74,10 +76,9 @@ var (
 	ErrSignersNotSorted                    = Error{text: "signers are not sorted", reject: true}
 	ErrUnexpectedSigner                    = Error{text: "signer is not expected", reject: true}
 	ErrInvalidHash                         = Error{text: "root doesn't match full data hash", reject: true}
-	ErrInvalidSignature                    = Error{text: "invalid signature", reject: true}
-	ErrInvalidPartialSignature             = Error{text: "invalid partial signature", reject: true}
 	ErrEstimatedRoundTooFar                = Error{text: "message round is too far from estimated"}
 	ErrMalformedMessage                    = Error{text: "message could not be decoded", reject: true}
+	ErrMalformedSignedMessage              = Error{text: "signed message could not be decoded", reject: true}
 	ErrUnknownSSVMessageType               = Error{text: "unknown SSV message type", reject: true}
 	ErrUnknownQBFTMessageType              = Error{text: "unknown QBFT message type", reject: true}
 	ErrUnknownPartialMessageType           = Error{text: "unknown partial signature message type", reject: true}

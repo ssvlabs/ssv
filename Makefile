@@ -32,7 +32,7 @@ UNFORMATTED=$(shell gofmt -s -l .)
 .PHONY: lint-prepare
 lint-prepare:
 	@echo "Preparing Linter"
-	curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh| sh -s latest
+	curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s latest
 
 .PHONY: lint
 lint:
@@ -90,7 +90,7 @@ docker-integration-test:
 #Build
 .PHONY: build
 build:
-	CGO_ENABLED=1 go build -o ./bin/ssvnode -ldflags "-X main.Version=`git describe --tags $(git rev-list --tags --max-count=1)`" ./cmd/ssvnode/
+	CGO_ENABLED=1 go build -o ./bin/ssvnode -ldflags "-X main.Commit=`git rev-parse HEAD` -X main.Version=`git describe --tags $(git rev-list --tags --max-count=1)`" ./cmd/ssvnode/
 
 .PHONY: start-node
 start-node:

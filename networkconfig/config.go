@@ -14,9 +14,12 @@ import (
 
 var SupportedConfigs = map[string]NetworkConfig{
 	Mainnet.Name:      Mainnet,
+	Holesky.Name:      Holesky,
+	HoleskyStage.Name: HoleskyStage,
 	JatoV2Stage.Name:  JatoV2Stage,
 	JatoV2.Name:       JatoV2,
 	LocalTestnet.Name: LocalTestnet,
+	HoleskyE2E.Name:   HoleskyE2E,
 }
 
 func GetNetworkConfigByName(name string) (NetworkConfig, error) {
@@ -28,14 +31,15 @@ func GetNetworkConfigByName(name string) (NetworkConfig, error) {
 }
 
 type NetworkConfig struct {
-	Name                    string
-	Beacon                  beacon.BeaconNetwork
-	Domain                  spectypes.DomainType
-	GenesisEpoch            spec.Epoch
-	RegistrySyncOffset      *big.Int
-	RegistryContractAddr    string // TODO: ethcommon.Address
-	Bootnodes               []string
-	WhitelistedOperatorKeys []string
+	Name                          string
+	Beacon                        beacon.BeaconNetwork
+	Domain                        spectypes.DomainType
+	GenesisEpoch                  spec.Epoch
+	RegistrySyncOffset            *big.Int
+	RegistryContractAddr          string // TODO: ethcommon.Address
+	Bootnodes                     []string
+	WhitelistedOperatorKeys       []string
+	PermissionlessActivationEpoch spec.Epoch
 }
 
 func (n NetworkConfig) String() string {

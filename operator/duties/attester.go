@@ -249,8 +249,7 @@ func (h *AttesterHandler) shouldExecute(duty *eth2apiv1.AttesterDuty) bool {
 		return true
 	}
 	if currentSlot+1 == duty.Slot {
-		h.logger.Debug("current slot and duty slot are not aligned, "+
-			"assuming diff caused by a time drift - ignoring and executing duty", zap.String("type", duty.String()))
+		h.warnMisalignedSlotAndDuty(duty.String())
 		return true
 	}
 	return false

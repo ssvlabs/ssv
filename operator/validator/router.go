@@ -5,7 +5,6 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
 
@@ -15,14 +14,12 @@ func newMessageRouter(logger *zap.Logger) *messageRouter {
 	return &messageRouter{
 		logger: logger,
 		ch:     make(chan *queue.DecodedSSVMessage, bufSize),
-		msgID:  commons.MsgID(),
 	}
 }
 
 type messageRouter struct {
 	logger *zap.Logger
 	ch     chan *queue.DecodedSSVMessage
-	msgID  commons.MsgIDFunc
 }
 
 func (r *messageRouter) Route(ctx context.Context, message *queue.DecodedSSVMessage) {

@@ -4,13 +4,14 @@ import (
 	"crypto/rsa"
 	"io"
 
-	"github.com/bloxapp/ssv/network/records"
 	"github.com/libp2p/go-libp2p/core/network"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/network/records"
 )
 
 const (
@@ -38,8 +39,8 @@ type ConnectionIndex interface {
 	// by checking if it is already connected or if we tried to connect to it recently and failed
 	CanConnect(id peer.ID) bool
 
-	// Limit checks if the node has reached peers limit
-	Limit(dir libp2pnetwork.Direction) bool
+	// AtLimit checks if the node has reached peers limit
+	AtLimit(dir libp2pnetwork.Direction) bool
 
 	// IsBad returns whether the given peer is bad
 	IsBad(logger *zap.Logger, id peer.ID) bool
@@ -71,7 +72,7 @@ type NodeInfoIndex interface {
 	NodeInfo(id peer.ID) *records.NodeInfo
 }
 
-// InfoIndex is an interface for managing PeerInfo of network peers
+// PeerInfoIndex is an interface for managing PeerInfo of network peers
 type PeerInfoIndex interface {
 	// PeerInfo returns the PeerInfo of the given peer, or nil if not found.
 	PeerInfo(peer.ID) *PeerInfo

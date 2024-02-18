@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math/big"
 	"sync"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prysmaticlabs/prysm/v4/async/event"
@@ -61,10 +63,14 @@ type BeaconNode interface {
 	SubmitSyncCommitteeSubscriptions(ctx context.Context, subscription []*eth2apiv1.SyncCommitteeSubscription) error
 }
 
+type ExecutionClient interface {
+	BlockByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Block, error)
+}
+
 // ValidatorController represents the component that controls validators via the scheduler
 type ValidatorController interface {
 	CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
-	AllActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
+	AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex
 	GetOperatorShares() []*types.SSVShare
 }
 
@@ -73,10 +79,12 @@ type ExecuteDutyFunc func(logger *zap.Logger, duty *spectypes.Duty)
 type SchedulerOptions struct {
 	Ctx                 context.Context
 	BeaconNode          BeaconNode
+	ExecutionClient     ExecutionClient
 	Network             networkconfig.NetworkConfig
 	ValidatorController ValidatorController
 	ExecuteDuty         ExecuteDutyFunc
 	IndicesChg          chan struct{}
+	ValidatorExitCh     <-chan ExitDescriptor
 	SlotTickerProvider  slotticker.Provider
 	BuilderProposals    bool
 	DutyStore           *dutystore.Store
@@ -84,6 +92,7 @@ type SchedulerOptions struct {
 
 type Scheduler struct {
 	beaconNode          BeaconNode
+	executionClient     ExecutionClient
 	network             networkconfig.NetworkConfig
 	validatorController ValidatorController
 	slotTickerProvider  slotticker.Provider
@@ -113,6 +122,7 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 
 	s := &Scheduler{
 		beaconNode:          opts.BeaconNode,
+		executionClient:     opts.ExecutionClient,
 		network:             opts.Network,
 		slotTickerProvider:  opts.SlotTickerProvider,
 		executeDuty:         opts.ExecuteDuty,
@@ -125,6 +135,7 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 			NewAttesterHandler(dutyStore.Attester),
 			NewProposerHandler(dutyStore.Proposer),
 			NewSyncCommitteeHandler(dutyStore.SyncCommittee),
+			NewVoluntaryExitHandler(opts.ValidatorExitCh),
 		},
 
 		ticker:   opts.SlotTickerProvider(),
@@ -143,6 +154,9 @@ type ReorgEvent struct {
 	Current  bool
 }
 
+// Start initializes the Scheduler and begins its operation.
+// Note: This function includes blocking operations, especially within the handler's HandleInitialDuties call,
+// which will block until initial duties are fully handled.
 func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 	logger = logger.Named(logging.NameDutyScheduler)
 	logger.Info("duty scheduler started")
@@ -159,8 +173,6 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 	reorgFeed := NewEventFeed[ReorgEvent]()
 
 	for _, handler := range s.handlers {
-		handler := handler
-
 		indicesChangeCh := make(chan struct{})
 		indicesChangeFeed.Subscribe(indicesChangeCh)
 		reorgCh := make(chan ReorgEvent)
@@ -170,6 +182,7 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 			handler.Name(),
 			logger,
 			s.beaconNode,
+			s.executionClient,
 			s.network,
 			s.validatorController,
 			s.ExecuteDuties,
@@ -178,6 +191,10 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 			indicesChangeCh,
 		)
 
+		// This call is blocking.
+		handler.HandleInitialDuties(ctx)
+
+		handler := handler
 		s.pool.Go(func(ctx context.Context) error {
 			// Wait for the head event subscription to complete before starting the handler.
 			handler.HandleDuties(ctx)

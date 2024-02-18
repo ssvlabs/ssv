@@ -4,6 +4,8 @@ import (
 	"strconv"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/network/peers/connections"
+	"github.com/bloxapp/ssv/network/topics"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/prometheus/client_golang/prometheus"
@@ -12,6 +14,11 @@ import (
 
 	"github.com/bloxapp/ssv/utils/format"
 )
+
+type Metrics interface {
+	connections.Metrics
+	topics.Metrics
+}
 
 var (
 	// MetricsAllConnectedPeers counts all connected peers
@@ -32,7 +39,7 @@ var (
 	metricsRouterIncoming = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "ssv:network:router:in",
 		Help: "Counts incoming messages",
-	}, []string{"identifier", "mt"})
+	}, []string{"mt"})
 )
 
 func init() {
@@ -96,7 +103,6 @@ func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
 	ni := n.idx.NodeInfo(pid)
 	if ni != nil {
 		if ni.Metadata != nil {
-			opPKHash = ni.Metadata.OperatorID
 			nodeVersion = ni.Metadata.NodeVersion
 		}
 		nodeType = "operator"
@@ -105,8 +111,8 @@ func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
 		}
 	}
 
-	if pubKey, ok := n.operatorPKCache.Load(opPKHash); ok {
-		operatorData, found, opDataErr := n.nodeStorage.GetOperatorDataByPubKey(nil, pubKey.([]byte))
+	if pubKey, ok := n.operatorPKHashToPKCache.Get(opPKHash); ok {
+		operatorData, found, opDataErr := n.nodeStorage.GetOperatorDataByPubKey(nil, pubKey)
 		if opDataErr == nil && found {
 			opID = strconv.FormatUint(operatorData.ID, 10)
 		}
@@ -118,7 +124,7 @@ func (n *p2pNetwork) reportPeerIdentity(logger *zap.Logger, pid peer.ID) {
 
 		for _, operator := range operators {
 			pubKeyHash := format.OperatorID(operator.PublicKey)
-			n.operatorPKCache.Store(pubKeyHash, operator.PublicKey)
+			n.operatorPKHashToPKCache.Set(pubKeyHash, operator.PublicKey)
 			if pubKeyHash == opPKHash {
 				opID = strconv.FormatUint(operator.ID, 10)
 			}

@@ -2,8 +2,15 @@ package p2pv1
 
 import (
 	"context"
+	"crypto"
+	"crypto/rsa"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"math/rand"
+	"time"
+
+	"github.com/bloxapp/ssv/protocol/v2/message"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -15,7 +22,6 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/records"
-	"github.com/bloxapp/ssv/protocol/v2/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
@@ -53,16 +59,27 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
 
-	raw, err := commons.EncodeNetworkMsg(msg)
+	encodedMsg, err := commons.EncodeNetworkMsg(msg)
 	if err != nil {
 		return errors.Wrap(err, "could not decode msg")
+	}
+
+	if n.cfg.Network.Beacon.EstimatedCurrentEpoch() > n.cfg.Network.PermissionlessActivationEpoch {
+		hash := sha256.Sum256(encodedMsg)
+
+		signature, err := rsa.SignPKCS1v15(nil, n.operatorPrivateKey, crypto.SHA256, hash[:])
+		if err != nil {
+			return err
+		}
+
+		encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, n.operatorID(), signature)
 	}
 
 	vpk := msg.GetID().GetPubKey()
 	topics := commons.ValidatorTopicID(vpk)
 
 	for _, topic := range topics {
-		if err := n.topicsCtrl.Broadcast(topic, raw, n.cfg.RequestTimeout); err != nil {
+		if err := n.topicsCtrl.Broadcast(topic, encodedMsg, n.cfg.RequestTimeout); err != nil {
 			n.interfaceLogger.Debug("could not broadcast msg", fields.PubKey(vpk), zap.Error(err))
 			return errors.Wrap(err, "could not broadcast msg")
 		}
@@ -81,6 +98,37 @@ func (n *p2pNetwork) SubscribeAll(logger *zap.Logger) error {
 			return err
 		}
 	}
+	return nil
+}
+
+// SubscribeRandoms subscribes to random subnets. This method isn't thread-safe.
+func (n *p2pNetwork) SubscribeRandoms(logger *zap.Logger, numSubnets int) error {
+	if !n.isReady() {
+		return p2pprotocol.ErrNetworkIsNotReady
+	}
+	if numSubnets > commons.Subnets() {
+		numSubnets = commons.Subnets()
+	}
+
+	// Subscribe to random subnets.
+	// #nosec G404
+	randomSubnets := rand.New(rand.NewSource(time.Now().UnixNano())).Perm(commons.Subnets())
+	randomSubnets = randomSubnets[:numSubnets]
+	for _, subnet := range randomSubnets {
+		err := n.topicsCtrl.Subscribe(logger, commons.SubnetTopicID(subnet))
+		if err != nil {
+			return fmt.Errorf("could not subscribe to subnet %d: %w", subnet, err)
+		}
+	}
+
+	// Update the subnets slice.
+	subnets := make([]byte, commons.Subnets())
+	copy(subnets, n.subnets)
+	for _, subnet := range randomSubnets {
+		subnets[subnet] = byte(1)
+	}
+	n.subnets = subnets
+
 	return nil
 }
 
@@ -155,14 +203,14 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 			return errors.New("message was not decoded")
 		}
 
-		p2pID := decodedMsg.GetID().String()
+		//p2pID := decodedMsg.GetID().String()
 
 		//	logger.With(
 		// 		zap.String("pubKey", hex.EncodeToString(ssvMsg.MsgID.GetPubKey())),
 		// 		zap.String("role", ssvMsg.MsgID.GetRoleType().String()),
 		// 	).Debug("handlePubsubMessages")
 
-		metricsRouterIncoming.WithLabelValues(p2pID, message.MsgTypeToString(decodedMsg.MsgType)).Inc()
+		metricsRouterIncoming.WithLabelValues(message.MsgTypeToString(decodedMsg.MsgType)).Inc()
 
 		n.msgRouter.Route(ctx, decodedMsg)
 

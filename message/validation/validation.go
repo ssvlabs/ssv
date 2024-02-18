@@ -6,6 +6,7 @@ package validation
 import (
 	"bytes"
 	"context"
+	"crypto/rsa"
 	"encoding/hex"
 	"fmt"
 	"strings"
@@ -24,13 +25,14 @@ import (
 	"golang.org/x/exp/slices"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
+	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )
 
 const (
@@ -50,33 +52,6 @@ const (
 	maxDutiesPerEpoch          = 2
 )
 
-// ConsensusID uniquely identifies a public key and role pair to keep track of state.
-type ConsensusID struct {
-	PubKey phase0.BLSPubKey
-	Role   spectypes.BeaconRole
-}
-
-// ConsensusState keeps track of the signers for a given public key and role.
-type ConsensusState struct {
-	// TODO: consider evicting old data to avoid excessive memory consumption
-	Signers *hashmap.Map[spectypes.OperatorID, *SignerState]
-}
-
-// GetSignerState retrieves the state for the given signer.
-// Returns nil if the signer is not found.
-func (cs *ConsensusState) GetSignerState(signer spectypes.OperatorID) *SignerState {
-	signerState, _ := cs.Signers.Get(signer)
-	return signerState
-}
-
-// CreateSignerState initializes and sets a new SignerState for the given signer.
-func (cs *ConsensusState) CreateSignerState(signer spectypes.OperatorID) *SignerState {
-	signerState := &SignerState{}
-	cs.Signers.Set(signer, signerState)
-
-	return signerState
-}
-
 // PubsubMessageValidator defines methods for validating pubsub messages.
 type PubsubMessageValidator interface {
 	ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
@@ -95,22 +70,32 @@ type MessageValidator interface {
 }
 
 type messageValidator struct {
-	logger           *zap.Logger
-	metrics          metrics
-	netCfg           networkconfig.NetworkConfig
-	index            sync.Map
-	shareStorage     registrystorage.Shares
-	dutyStore        *dutystore.Store
-	ownOperatorID    spectypes.OperatorID
-	verifySignatures bool
+	logger                  *zap.Logger
+	metrics                 metricsreporter.MetricsReporter
+	netCfg                  networkconfig.NetworkConfig
+	index                   sync.Map
+	nodeStorage             operatorstorage.Storage
+	dutyStore               *dutystore.Store
+	ownOperatorID           spectypes.OperatorID
+	operatorIDToPubkeyCache *hashmap.Map[spectypes.OperatorID, *rsa.PublicKey]
+
+	// validationLocks is a map of lock per SSV message ID to
+	// prevent concurrent access to the same state.
+	validationLocks map[spectypes.MessageID]*sync.Mutex
+	validationMutex sync.Mutex
+
+	selfPID    peer.ID
+	selfAccept bool
 }
 
 // NewMessageValidator returns a new MessageValidator with the given network configuration and options.
 func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) MessageValidator {
 	mv := &messageValidator{
-		logger:  zap.NewNop(),
-		metrics: &nopMetrics{},
-		netCfg:  netCfg,
+		logger:                  zap.NewNop(),
+		metrics:                 metricsreporter.NewNop(),
+		netCfg:                  netCfg,
+		operatorIDToPubkeyCache: hashmap.New[spectypes.OperatorID, *rsa.PublicKey](),
+		validationLocks:         make(map[spectypes.MessageID]*sync.Mutex),
 	}
 
 	for _, opt := range opts {
@@ -131,7 +116,7 @@ func WithLogger(logger *zap.Logger) Option {
 }
 
 // WithMetrics sets the metrics for the messageValidator.
-func WithMetrics(metrics metrics) Option {
+func WithMetrics(metrics metricsreporter.MetricsReporter) Option {
 	return func(mv *messageValidator) {
 		mv.metrics = metrics
 	}
@@ -151,17 +136,18 @@ func WithOwnOperatorID(id spectypes.OperatorID) Option {
 	}
 }
 
-// WithShareStorage sets the share storage for the messageValidator.
-func WithShareStorage(shareStorage registrystorage.Shares) Option {
+// WithNodeStorage sets the node storage for the messageValidator.
+func WithNodeStorage(nodeStorage operatorstorage.Storage) Option {
 	return func(mv *messageValidator) {
-		mv.shareStorage = shareStorage
+		mv.nodeStorage = nodeStorage
 	}
 }
 
-// WithSignatureVerification sets whether to verify signatures in the messageValidator.
-func WithSignatureVerification(check bool) Option {
+// WithSelfAccept blindly accepts messages sent from self. Useful for testing.
+func WithSelfAccept(selfPID peer.ID, selfAccept bool) Option {
 	return func(mv *messageValidator) {
-		mv.verifySignatures = check
+		mv.selfPID = selfPID
+		mv.selfAccept = selfAccept
 	}
 }
 
@@ -243,7 +229,14 @@ func (mv *messageValidator) ValidatorForTopic(_ string) func(ctx context.Context
 
 // ValidatePubsubMessage validates the given pubsub message.
 // Depending on the outcome, it will return one of the pubsub validation results (Accept, Ignore, or Reject).
-func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, _ peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+	if mv.selfAccept && peerID == mv.selfPID {
+		msg, _ := commons.DecodeNetworkMsg(pmsg.Data)
+		decMsg, _ := queue.DecodeSSVMessage(msg)
+		pmsg.ValidatorData = decMsg
+		return pubsub.ValidationAccept
+	}
+
 	start := time.Now()
 	var validationDurationLabels []string // TODO: implement
 
@@ -258,12 +251,14 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, _ peer.ID, 
 		round = descriptor.Consensus.Round
 	}
 
+	f := append(descriptor.Fields(), fields.PeerID(peerID))
+
 	if err != nil {
 		var valErr Error
 		if errors.As(err, &valErr) {
 			if valErr.Reject() {
 				if !valErr.Silent() {
-					f := append(descriptor.Fields(), zap.Error(err))
+					f = append(f, zap.Error(err))
 					mv.logger.Debug("rejecting invalid message", f...)
 				}
 
@@ -272,7 +267,7 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, _ peer.ID, 
 			}
 
 			if !valErr.Silent() {
-				f := append(descriptor.Fields(), zap.Error(err))
+				f = append(f, zap.Error(err))
 				mv.logger.Debug("ignoring invalid message", f...)
 			}
 			mv.metrics.MessageIgnored(valErr.Text(), descriptor.Role, round)
@@ -280,7 +275,7 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, _ peer.ID, 
 		}
 
 		mv.metrics.MessageIgnored(err.Error(), descriptor.Role, round)
-		f := append(descriptor.Fields(), zap.Error(err))
+		f = append(f, zap.Error(err))
 		mv.logger.Debug("ignoring invalid message", f...)
 		return pubsub.ValidationIgnore
 	}
@@ -295,16 +290,38 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, _ peer.ID, 
 // ValidateSSVMessage validates the given SSV message.
 // If successful, it returns the decoded message and its descriptor. Otherwise, it returns an error.
 func (mv *messageValidator) ValidateSSVMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, Descriptor, error) {
-	return mv.validateSSVMessage(ssvMessage, time.Now())
+	return mv.validateSSVMessage(ssvMessage, time.Now(), nil)
 }
 
 func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt time.Time) (*queue.DecodedSSVMessage, Descriptor, error) {
 	topic := pMsg.GetTopic()
 
 	mv.metrics.ActiveMsgValidation(topic)
+	mv.metrics.MessagesReceivedFromPeer(pMsg.ReceivedFrom)
+	mv.metrics.MessagesReceivedTotal()
+
 	defer mv.metrics.ActiveMsgValidationDone(topic)
 
 	messageData := pMsg.GetData()
+
+	var signatureVerifier func() error
+
+	currentEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Unix()))
+	if currentEpoch > mv.netCfg.PermissionlessActivationEpoch {
+		decMessageData, operatorID, signature, err := commons.DecodeSignedSSVMessage(messageData)
+		messageData = decMessageData
+		if err != nil {
+			e := ErrMalformedSignedMessage
+			e.innerErr = err
+			return nil, Descriptor{}, e
+		}
+
+		signatureVerifier = func() error {
+			mv.metrics.MessageValidationRSAVerifications()
+			return mv.verifyRSASignature(messageData, operatorID, signature)
+		}
+	}
+
 	if len(messageData) == 0 {
 		return nil, Descriptor{}, ErrPubSubMessageHasNoData
 	}
@@ -349,10 +366,10 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 
 	mv.metrics.SSVMessageType(msg.MsgType)
 
-	return mv.validateSSVMessage(msg, receivedAt)
+	return mv.validateSSVMessage(msg, receivedAt, signatureVerifier)
 }
 
-func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage, receivedAt time.Time) (*queue.DecodedSSVMessage, Descriptor, error) {
+func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage, receivedAt time.Time, signatureVerifier func() error) (*queue.DecodedSSVMessage, Descriptor, error) {
 	var descriptor Descriptor
 
 	if len(ssvMessage.Data) == 0 {
@@ -390,8 +407,8 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 	}
 
 	var share *ssvtypes.SSVShare
-	if mv.shareStorage != nil {
-		share = mv.shareStorage.Get(nil, publicKey.Serialize())
+	if mv.nodeStorage != nil {
+		share = mv.nodeStorage.Shares().Get(nil, publicKey.Serialize())
 		if share == nil {
 			e := ErrUnknownValidator
 			e.got = publicKey.SerializeToHexStr()
@@ -426,9 +443,20 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 		return nil, descriptor, e
 	}
 
+	// Lock this SSV message ID to prevent concurrent access to the same state.
+	mv.validationMutex.Lock()
+	mutex, ok := mv.validationLocks[msg.GetID()]
+	if !ok {
+		mutex = &sync.Mutex{}
+		mv.validationLocks[msg.GetID()] = mutex
+	}
+	mutex.Lock()
+	defer mutex.Unlock()
+	mv.validationMutex.Unlock()
+
 	descriptor.SSVMessageType = ssvMessage.MsgType
 
-	if mv.shareStorage != nil {
+	if mv.nodeStorage != nil {
 		switch ssvMessage.MsgType {
 		case spectypes.SSVConsensusMsgType:
 			if len(msg.Data) > maxConsensusMsgSize {
@@ -438,7 +466,8 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 				return nil, descriptor, e
 			}
 
-			consensusDescriptor, slot, err := mv.validateConsensusMessage(share, msg.Body.(*specqbft.SignedMessage), msg.GetID(), receivedAt)
+			signedMessage := msg.Body.(*specqbft.SignedMessage)
+			consensusDescriptor, slot, err := mv.validateConsensusMessage(share, signedMessage, msg.GetID(), receivedAt, signatureVerifier)
 			descriptor.Consensus = &consensusDescriptor
 			descriptor.Slot = slot
 			if err != nil {
@@ -453,7 +482,8 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 				return nil, descriptor, e
 			}
 
-			slot, err := mv.validatePartialSignatureMessage(share, msg.Body.(*spectypes.SignedPartialSignatureMessage), msg.GetID())
+			partialSignatureMessage := msg.Body.(*spectypes.SignedPartialSignatureMessage)
+			slot, err := mv.validatePartialSignatureMessage(share, partialSignatureMessage, msg.GetID(), signatureVerifier)
 			descriptor.Slot = slot
 			if err != nil {
 				return nil, descriptor, err
@@ -527,7 +557,7 @@ func (mv *messageValidator) lateMessage(slot phase0.Slot, role spectypes.BeaconR
 		ttl = 1 + lateSlotAllowance
 	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator:
 		ttl = 32 + lateSlotAllowance
-	case spectypes.BNRoleValidatorRegistration:
+	case spectypes.BNRoleValidatorRegistration, spectypes.BNRoleVoluntaryExit:
 		return 0
 	}
 

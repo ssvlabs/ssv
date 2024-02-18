@@ -2,11 +2,13 @@ package p2pv1
 
 import (
 	"context"
-	"sync"
+	"crypto/rsa"
 	"sync/atomic"
 	"time"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
+	"github.com/libp2p/go-libp2p/core/connmgr"
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -23,7 +25,6 @@ import (
 	"github.com/bloxapp/ssv/network/peers/connections"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/network/streams"
-	"github.com/bloxapp/ssv/network/syncing"
 	"github.com/bloxapp/ssv/network/topics"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/utils/async"
@@ -39,7 +40,7 @@ const (
 )
 
 const (
-	connManagerGCInterval           = time.Minute
+	connManagerGCInterval           = 3 * time.Minute
 	connManagerGCTimeout            = time.Minute
 	peersReportingInterval          = 60 * time.Second
 	peerIdentitiesReportingInterval = 5 * time.Minute
@@ -64,6 +65,8 @@ type p2pNetwork struct {
 	msgResolver  topics.MsgPeersResolver
 	msgValidator validation.MessageValidator
 	connHandler  connections.ConnHandler
+	connGater    connmgr.ConnectionGater
+	metrics      Metrics
 
 	state int32
 
@@ -72,29 +75,34 @@ type p2pNetwork struct {
 	backoffConnector *libp2pdiscbackoff.BackoffConnector
 	subnets          []byte
 	libConnManager   connmgrcore.ConnManager
-	syncer           syncing.Syncer
-	nodeStorage      operatorstorage.Storage
-	operatorPKCache  sync.Map
+
+	nodeStorage             operatorstorage.Storage
+	operatorPKHashToPKCache *hashmap.Map[string, []byte] // used for metrics
+	operatorPrivateKey      *rsa.PrivateKey
+	operatorID              func() spectypes.OperatorID
 }
 
 // New creates a new p2p network
-func New(logger *zap.Logger, cfg *Config) network.P2PNetwork {
+func New(logger *zap.Logger, cfg *Config, mr Metrics) network.P2PNetwork {
 	ctx, cancel := context.WithCancel(cfg.Ctx)
 
 	logger = logger.Named(logging.NameP2PNetwork)
 
 	return &p2pNetwork{
-		parentCtx:        cfg.Ctx,
-		ctx:              ctx,
-		cancel:           cancel,
-		interfaceLogger:  logger,
-		cfg:              cfg,
-		msgRouter:        cfg.Router,
-		msgValidator:     cfg.MessageValidator,
-		state:            stateClosed,
-		activeValidators: hashmap.New[string, validatorStatus](),
-		nodeStorage:      cfg.NodeStorage,
-		operatorPKCache:  sync.Map{},
+		parentCtx:               cfg.Ctx,
+		ctx:                     ctx,
+		cancel:                  cancel,
+		interfaceLogger:         logger,
+		cfg:                     cfg,
+		msgRouter:               cfg.Router,
+		msgValidator:            cfg.MessageValidator,
+		state:                   stateClosed,
+		activeValidators:        hashmap.New[string, validatorStatus](),
+		nodeStorage:             cfg.NodeStorage,
+		operatorPKHashToPKCache: hashmap.New[string, []byte](),
+		operatorPrivateKey:      cfg.OperatorPrivateKey,
+		operatorID:              cfg.OperatorID,
+		metrics:                 mr,
 	}
 }
 
@@ -161,21 +169,18 @@ func (n *p2pNetwork) Start(logger *zap.Logger) error {
 	go n.startDiscovery(logger)
 
 	async.Interval(n.ctx, connManagerGCInterval, n.peersBalancing(logger))
+	// don't report metrics in tests
+	if n.cfg.Metrics != nil {
+		async.Interval(n.ctx, peersReportingInterval, n.reportAllPeers(logger))
 
-	async.Interval(n.ctx, peersReportingInterval, n.reportAllPeers(logger))
+		async.Interval(n.ctx, peerIdentitiesReportingInterval, n.reportPeerIdentities(logger))
 
-	async.Interval(n.ctx, peerIdentitiesReportingInterval, n.reportPeerIdentities(logger))
-
-	async.Interval(n.ctx, topicsReportingInterval, n.reportTopics(logger))
+		async.Interval(n.ctx, topicsReportingInterval, n.reportTopics(logger))
+	}
 
 	if err := n.subscribeToSubnets(logger); err != nil {
 		return err
 	}
-
-	// Create & start ConcurrentSyncer.
-	syncer := syncing.NewConcurrent(n.ctx, syncing.New(n, n.msgValidator), 16, syncing.DefaultTimeouts, nil)
-	go syncer.Run(logger)
-	n.syncer = syncer
 
 	return nil
 }
@@ -235,14 +240,17 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 	// TODO: this is a temporary fix to update subnets when validators are added/removed,
 	// there is a pending PR to replace this: https://github.com/bloxapp/ssv/pull/990
 	logger = logger.Named(logging.NameP2PNetwork)
-	ticker := time.NewTicker(2 * time.Second)
+	ticker := time.NewTicker(time.Second)
 	registeredSubnets := make([]byte, commons.Subnets())
 	defer ticker.Stop()
-	for range ticker.C {
+
+	// Run immediately and then every second.
+	for ; true; <-ticker.C {
 		start := time.Now()
 
 		// Compute the new subnets according to the active validators.
 		newSubnets := make([]byte, commons.Subnets())
+		copy(newSubnets, n.subnets)
 		n.activeValidators.Range(func(pkHex string, status validatorStatus) bool {
 			subnet := commons.ValidatorSubnet(pkHex)
 			newSubnets[subnet] = byte(1)

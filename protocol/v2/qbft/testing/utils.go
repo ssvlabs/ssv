@@ -86,7 +86,6 @@ func NewTestingQBFTController(
 	ctrl := controller.NewController(
 		identifier,
 		share,
-		testingutils.TestingSSVDomainType,
 		config,
 		fullNode,
 	)

@@ -2,7 +2,9 @@ package operator
 
 import (
 	"context"
+	"crypto/rsa"
 	"crypto/x509"
+	"encoding/base64"
 	"fmt"
 	"log"
 	"math/big"
@@ -10,7 +12,10 @@ import (
 	"os"
 	"time"
 
+	"github.com/bloxapp/ssv/network"
+
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
@@ -37,8 +42,6 @@ import (
 	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/monitoring/metricsreporter"
-	"github.com/bloxapp/ssv/network"
-	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/nodeprobe"
 	"github.com/bloxapp/ssv/operator"
@@ -62,10 +65,6 @@ type KeyStore struct {
 	PasswordFile   string `yaml:"PasswordFile" env:"PASSWORD_FILE" env-description:"Password for operator private key file decryption"`
 }
 
-type MessageValidation struct {
-	VerifySignatures bool `yaml:"VerifySignatures" env:"MESSAGE_VALIDATION_VERIFY_SIGNATURES" env-default:"false" env-description:"Experimental feature to verify signatures in pubsub's message validation instead of in consensus protocol."`
-}
-
 type config struct {
 	global_config.GlobalConfig `yaml:"global"`
 	DBOptions                  basedb.Options                   `yaml:"db"`
@@ -82,7 +81,6 @@ type config struct {
 	WithPing                   bool                             `yaml:"WithPing" env:"WITH_PING" env-description:"Whether to send websocket ping messages'"`
 	SSVAPIPort                 int                              `yaml:"SSVAPIPort" env:"SSV_API_PORT" env-description:"Port to listen on for the SSV API."`
 	LocalEventsPath            string                           `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"path to local events"`
-	MessageValidation          MessageValidation                `yaml:"MessageValidation"`
 }
 
 var cfg config
@@ -96,11 +94,16 @@ var StartNodeCmd = &cobra.Command{
 	Use:   "start-node",
 	Short: "Starts an instance of SSV node",
 	Run: func(cmd *cobra.Command, args []string) {
-		logger, err := setupGlobal(cmd)
+		commons.SetBuildData(cmd.Parent().Short, cmd.Parent().Version)
+
+		logger, err := setupGlobal()
 		if err != nil {
 			log.Fatal("could not create logger", err)
 		}
+
 		defer logging.CapturePanic(logger)
+
+		logger.Info(fmt.Sprintf("starting %v", commons.GetBuildData()))
 
 		metricsReporter := metricsreporter.New(
 			metricsreporter.WithLogger(logger),
@@ -133,12 +136,15 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.Ctx = cmd.Context()
 
 		permissioned := func() bool {
-			currentEpoch := uint64(networkConfig.Beacon.EstimatedCurrentEpoch())
-			return currentEpoch >= cfg.P2pNetworkConfig.PermissionedActivateEpoch && currentEpoch < cfg.P2pNetworkConfig.PermissionedDeactivateEpoch
+			currentEpoch := networkConfig.Beacon.EstimatedCurrentEpoch()
+			return currentEpoch < networkConfig.PermissionlessActivationEpoch
 		}
 
 		slotTickerProvider := func() slotticker.SlotTicker {
-			return slotticker.New(networkConfig)
+			return slotticker.New(logger, slotticker.Config{
+				SlotDuration: networkConfig.SlotDurationSec(),
+				GenesisTime:  networkConfig.GetGenesisTime(),
+			})
 		}
 
 		cfg.ConsensusClient.Context = cmd.Context()
@@ -163,10 +169,13 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not connect to execution client", zap.Error(err))
 		}
 
+		var validatorCtrl validator.Controller
 		cfg.P2pNetworkConfig.Permissioned = permissioned
-		cfg.P2pNetworkConfig.WhitelistedOperatorKeys = append(cfg.P2pNetworkConfig.WhitelistedOperatorKeys, networkConfig.WhitelistedOperatorKeys...)
 		cfg.P2pNetworkConfig.NodeStorage = nodeStorage
-		cfg.P2pNetworkConfig.OperatorID = format.OperatorID(operatorData.PublicKey)
+		cfg.P2pNetworkConfig.OperatorPubKeyHash = format.OperatorID(operatorData.PublicKey)
+		cfg.P2pNetworkConfig.OperatorID = func() spectypes.OperatorID {
+			return validatorCtrl.GetOperatorData().ID
+		}
 		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
 		cfg.P2pNetworkConfig.Network = networkConfig
 
@@ -177,21 +186,18 @@ var StartNodeCmd = &cobra.Command{
 
 		messageValidator := validation.NewMessageValidator(
 			networkConfig,
-			validation.WithShareStorage(nodeStorage.Shares()),
+			validation.WithNodeStorage(nodeStorage),
 			validation.WithLogger(logger),
 			validation.WithMetrics(metricsReporter),
 			validation.WithDutyStore(dutyStore),
 			validation.WithOwnOperatorID(operatorData.ID),
-			validation.WithSignatureVerification(cfg.MessageValidation.VerifySignatures),
 		)
 
 		cfg.P2pNetworkConfig.Metrics = metricsReporter
 		cfg.P2pNetworkConfig.MessageValidator = messageValidator
 		cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
-		// if signature check is enabled in message validation then it's disabled in validator controller and vice versa
-		cfg.SSVOptions.ValidatorOptions.VerifySignatures = !cfg.MessageValidation.VerifySignatures
 
-		p2pNetwork := setupP2P(logger, db)
+		p2pNetwork := setupP2P(logger, db, metricsReporter)
 
 		cfg.SSVOptions.Context = cmd.Context()
 		cfg.SSVOptions.DB = db
@@ -210,6 +216,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = nodeStorage.GetPrivateKey
 		cfg.SSVOptions.ValidatorOptions.OperatorData = operatorData
 		cfg.SSVOptions.ValidatorOptions.RegistryStorage = nodeStorage
+		cfg.SSVOptions.ValidatorOptions.RecipientsStorage = nodeStorage
 		cfg.SSVOptions.ValidatorOptions.GasLimit = cfg.ConsensusClient.GasLimit
 
 		if cfg.WsAPIPort != 0 {
@@ -228,6 +235,7 @@ var StartNodeCmd = &cobra.Command{
 			spectypes.BNRoleSyncCommittee,
 			spectypes.BNRoleSyncCommitteeContribution,
 			spectypes.BNRoleValidatorRegistration,
+			spectypes.BNRoleVoluntaryExit,
 		}
 		storageMap := ibftstorage.NewStores()
 
@@ -239,7 +247,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.Metrics = metricsReporter
 		cfg.SSVOptions.Metrics = metricsReporter
 
-		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
+		validatorCtrl = validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 
 		operatorNode = operator.New(logger, cfg.SSVOptions, slotTickerProvider)
@@ -297,9 +305,11 @@ var StartNodeCmd = &cobra.Command{
 				fmt.Sprintf(":%d", cfg.SSVAPIPort),
 				&handlers.Node{
 					// TODO: replace with narrower interface! (instead of accessing the entire PeersIndex)
-					PeersIndex: p2pNetwork.(p2pv1.PeersIndexProvider).PeersIndex(),
-					Network:    p2pNetwork.(p2pv1.HostProvider).Host().Network(),
-					TopicIndex: p2pNetwork.(handlers.TopicIndex),
+					ListenAddresses: []string{fmt.Sprintf("tcp://%s:%d", cfg.P2pNetworkConfig.HostAddress, cfg.P2pNetworkConfig.TCPPort), fmt.Sprintf("udp://%s:%d", cfg.P2pNetworkConfig.HostAddress, cfg.P2pNetworkConfig.UDPPort)},
+					PeersIndex:      p2pNetwork.(p2pv1.PeersIndexProvider).PeersIndex(),
+					Network:         p2pNetwork.(p2pv1.HostProvider).Host().Network(),
+					TopicIndex:      p2pNetwork.(handlers.TopicIndex),
+					NodeProber:      nodeProber,
 				},
 				&handlers.Validators{
 					Shares: nodeStorage.Shares(),
@@ -347,10 +357,7 @@ func init() {
 	global_config.ProcessArgs(&cfg, &globalArgs, StartNodeCmd)
 }
 
-func setupGlobal(cmd *cobra.Command) (*zap.Logger, error) {
-	commons.SetBuildData(cmd.Parent().Short, cmd.Parent().Version)
-	log.Printf("starting SSV node (version %s)", commons.GetBuildData())
-
+func setupGlobal() (*zap.Logger, error) {
 	if globalArgs.ConfigPath != "" {
 		if err := cleanenv.ReadConfig(globalArgs.ConfigPath, &cfg); err != nil {
 			return nil, fmt.Errorf("could not read config: %w", err)
@@ -452,6 +459,11 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database) (operatorstora
 		cfg.OperatorPrivateKey = rsaencryption.ExtractPrivateKey(privateKey)
 	}
 
+	cfg.P2pNetworkConfig.OperatorPrivateKey, err = decodePrivateKey(cfg.OperatorPrivateKey)
+	if err != nil {
+		logger.Fatal("could not decode operator private key", zap.Error(err))
+	}
+
 	operatorPubKey, err := nodeStorage.SetupPrivateKey(cfg.OperatorPrivateKey)
 	if err != nil {
 		logger.Fatal("could not setup operator private key", zap.Error(err))
@@ -473,6 +485,20 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database) (operatorstora
 	}
 
 	return nodeStorage, operatorData
+}
+
+func decodePrivateKey(key string) (*rsa.PrivateKey, error) {
+	operatorKeyByte, err := base64.StdEncoding.DecodeString(key)
+	if err != nil {
+		return nil, err
+	}
+
+	sk, err := rsaencryption.ConvertPemToPrivateKey(string(operatorKeyByte))
+	if err != nil {
+		return nil, err
+	}
+
+	return sk, err
 }
 
 func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
@@ -505,7 +531,7 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 	return networkConfig, nil
 }
 
-func setupP2P(logger *zap.Logger, db basedb.Database) network.P2PNetwork {
+func setupP2P(logger *zap.Logger, db basedb.Database, mr metricsreporter.MetricsReporter) network.P2PNetwork {
 	istore := ssv_identity.NewIdentityStore(db)
 	netPrivKey, err := istore.SetupNetworkKey(logger, cfg.NetworkPrivateKey)
 	if err != nil {
@@ -513,7 +539,7 @@ func setupP2P(logger *zap.Logger, db basedb.Database) network.P2PNetwork {
 	}
 	cfg.P2pNetworkConfig.NetworkPrivateKey = netPrivKey
 
-	return p2pv1.New(logger, &cfg.P2pNetworkConfig)
+	return p2pv1.New(logger, &cfg.P2pNetworkConfig, mr)
 }
 
 func setupConsensusClient(
@@ -536,7 +562,7 @@ func setupEventHandling(
 	executionClient *executionclient.ExecutionClient,
 	validatorCtrl validator.Controller,
 	storageMap *ibftstorage.QBFTStores,
-	metricsReporter *metricsreporter.MetricsReporter,
+	metricsReporter metricsreporter.MetricsReporter,
 	networkConfig networkconfig.NetworkConfig,
 	nodeStorage operatorstorage.Storage,
 ) *eventsyncer.EventSyncer {
@@ -551,7 +577,7 @@ func setupEventHandling(
 		nodeStorage,
 		eventParser,
 		validatorCtrl,
-		networkConfig.Domain,
+		networkConfig,
 		validatorCtrl,
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider,
 		cfg.SSVOptions.ValidatorOptions.KeyManager,
@@ -650,7 +676,7 @@ func setupEventHandling(
 	return eventSyncer
 }
 
-func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.Database, metricsReporter *metricsreporter.MetricsReporter, port int, enableProf bool) {
+func startMetricsHandler(ctx context.Context, logger *zap.Logger, db basedb.Database, metricsReporter metricsreporter.MetricsReporter, port int, enableProf bool) {
 	logger = logger.Named(logging.NameMetricsHandler)
 	// init and start HTTP handler
 	metricsHandler := metrics.NewMetricsHandler(ctx, db, metricsReporter, enableProf, operatorNode.(metrics.HealthChecker))

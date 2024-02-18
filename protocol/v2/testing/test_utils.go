@@ -1,6 +1,7 @@
 package testing
 
 import (
+	"fmt"
 	"os"
 	"path"
 	"path/filepath"
@@ -145,9 +146,25 @@ func AggregateInvalidSign(t *testing.T, sks map[spectypes.OperatorID]*bls.Secret
 }
 
 func GetSpecTestJSON(path string, module string) ([]byte, error) {
+	p, err := GetSpecDir(path, module)
+	if err != nil {
+		return nil, fmt.Errorf("could not get spec test dir: %w", err)
+	}
+	return os.ReadFile(filepath.Join(filepath.Clean(p), filepath.Clean(specTestPath)))
+}
+
+// GetSpecDir returns the path to the ssv-spec module.
+func GetSpecDir(path, module string) (string, error) {
+	if path == "" {
+		var err error
+		path, err = os.Getwd()
+		if err != nil {
+			return "", errors.New("could not get current directory")
+		}
+	}
 	goModFile, err := getGoModFile(path)
 	if err != nil {
-		return nil, errors.New("could not get go.mod file")
+		return "", errors.New("could not get go.mod file")
 	}
 
 	// check if there is a replace
@@ -173,7 +190,7 @@ func GetSpecTestJSON(path string, module string) ([]byte, error) {
 			}
 		}
 		if req == nil {
-			return nil, errors.Errorf("could not find %s module", specModule)
+			return "", errors.Errorf("could not find %s module", specModule)
 		}
 		modPath = req.Mod.Path
 		modVersion = req.Mod.Version
@@ -182,14 +199,14 @@ func GetSpecTestJSON(path string, module string) ([]byte, error) {
 	// get module path
 	p, err := GetModulePath(modPath, modVersion)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not get module path")
+		return "", errors.Wrap(err, "could not get module path")
 	}
 
 	if _, err := os.Stat(p); os.IsNotExist(err) {
-		return nil, errors.Wrapf(err, "you don't have this module-%s/version-%s installed", modPath, modVersion)
+		return "", errors.Wrapf(err, "you don't have this module-%s/version-%s installed", modPath, modVersion)
 	}
 
-	return os.ReadFile(filepath.Join(filepath.Clean(p), filepath.Clean(module), filepath.Clean(specTestPath)))
+	return filepath.Join(filepath.Clean(p), module), nil
 }
 
 func GetModulePath(name, version string) (string, error) {

@@ -4,7 +4,6 @@ package validation
 
 import (
 	"bytes"
-	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -23,6 +22,7 @@ func (mv *messageValidator) validateConsensusMessage(
 	signedMsg *specqbft.SignedMessage,
 	messageID spectypes.MessageID,
 	receivedAt time.Time,
+	signatureVerifier func() error,
 ) (ConsensusDescriptor, phase0.Slot, error) {
 	var consensusDescriptor ConsensusDescriptor
 
@@ -44,8 +44,11 @@ func (mv *messageValidator) validateConsensusMessage(
 
 	mv.metrics.ConsensusMsgType(signedMsg.Message.MsgType, len(signedMsg.Signers))
 
-	if messageID.GetRoleType() == spectypes.BNRoleValidatorRegistration {
-		return consensusDescriptor, msgSlot, ErrConsensusValidatorRegistration
+	switch messageID.GetRoleType() {
+	case spectypes.BNRoleValidatorRegistration, spectypes.BNRoleVoluntaryExit:
+		e := ErrUnexpectedConsensusMessage
+		e.got = messageID.GetRoleType()
+		return consensusDescriptor, msgSlot, e
 	}
 
 	if err := mv.validateSignatureFormat(signedMsg.Signature); err != nil {
@@ -116,12 +119,9 @@ func (mv *messageValidator) validateConsensusMessage(
 		}
 	}
 
-	if mv.verifySignatures {
-		if err := ssvtypes.VerifyByOperators(signedMsg.Signature, signedMsg, mv.netCfg.Domain, spectypes.QBFTSignatureType, share.Committee); err != nil {
-			signErr := ErrInvalidSignature
-			signErr.innerErr = err
-			signErr.got = fmt.Sprintf("domain %v from %v", hex.EncodeToString(mv.netCfg.Domain[:]), hex.EncodeToString(share.ValidatorPubKey))
-			return consensusDescriptor, msgSlot, signErr
+	if signatureVerifier != nil {
+		if err := signatureVerifier(); err != nil {
+			return consensusDescriptor, msgSlot, err
 		}
 	}
 
@@ -178,7 +178,7 @@ func (mv *messageValidator) validateJustifications(
 	}
 
 	if signedMsg.Message.MsgType == specqbft.ProposalMsgType {
-		cfg := newQBFTConfig(mv.netCfg.Domain, mv.verifySignatures)
+		cfg := newQBFTConfig(mv.netCfg.Domain)
 
 		if err := instance.IsProposalJustification(
 			cfg,
@@ -243,7 +243,7 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 		return err
 	}
 
-	if !(msgSlot > signerState.Slot || msgSlot == signerState.Slot && msgRound > signerState.Round) {
+	if msgSlot == signerState.Slot && msgRound == signerState.Round {
 		if mv.hasFullData(signedMsg) && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
 			return ErrDuplicatedProposalWithDifferentData
 		}
@@ -263,7 +263,7 @@ func (mv *messageValidator) validateDutyCount(
 	newDutyInSameEpoch bool,
 ) error {
 	switch msgID.GetRoleType() {
-	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator, spectypes.BNRoleValidatorRegistration:
+	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator, spectypes.BNRoleValidatorRegistration, spectypes.BNRoleVoluntaryExit:
 		limit := maxDutiesPerEpoch
 
 		if sameSlot := !newDutyInSameEpoch; sameSlot {
@@ -333,7 +333,7 @@ func (mv *messageValidator) maxRound(role spectypes.BeaconRole) specqbft.Round {
 		return 12 // TODO: consider calculating based on quick timeout and slow timeout
 	case spectypes.BNRoleProposer, spectypes.BNRoleSyncCommittee, spectypes.BNRoleSyncCommitteeContribution:
 		return 6
-	case spectypes.BNRoleValidatorRegistration:
+	case spectypes.BNRoleValidatorRegistration, spectypes.BNRoleVoluntaryExit:
 		return 0
 	default:
 		panic("unknown role")
@@ -356,7 +356,7 @@ func (mv *messageValidator) waitAfterSlotStart(role spectypes.BeaconRole) time.D
 		return mv.netCfg.Beacon.SlotDurationSec() / 3
 	case spectypes.BNRoleAggregator, spectypes.BNRoleSyncCommitteeContribution:
 		return mv.netCfg.Beacon.SlotDurationSec() / 3 * 2
-	case spectypes.BNRoleProposer, spectypes.BNRoleValidatorRegistration:
+	case spectypes.BNRoleProposer, spectypes.BNRoleValidatorRegistration, spectypes.BNRoleVoluntaryExit:
 		return 0
 	default:
 		panic("unknown role")
@@ -370,7 +370,8 @@ func (mv *messageValidator) validRole(roleType spectypes.BeaconRole) bool {
 		spectypes.BNRoleProposer,
 		spectypes.BNRoleSyncCommittee,
 		spectypes.BNRoleSyncCommitteeContribution,
-		spectypes.BNRoleValidatorRegistration:
+		spectypes.BNRoleValidatorRegistration,
+		spectypes.BNRoleVoluntaryExit:
 		return true
 	}
 	return false

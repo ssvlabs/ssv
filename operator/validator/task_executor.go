@@ -3,12 +3,14 @@ package validator
 import (
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/operator/duties"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -53,7 +55,6 @@ func (c *controller) LiquidateCluster(owner common.Address, operatorIDs []specty
 
 func (c *controller) ReactivateCluster(owner common.Address, operatorIDs []spectypes.OperatorID, toReactivate []*types.SSVShare) error {
 	logger := c.taskLogger("ReactivateCluster", fields.Owner(owner), fields.OperatorIDs(operatorIDs))
-
 	var startedValidators int
 	var errs error
 	for _, share := range toReactivate {
@@ -96,6 +97,31 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address) error {
 		}
 		return true
 	})
+
+	return nil
+}
+
+func (c *controller) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex) error {
+	logger := c.taskLogger("ExitValidator",
+		fields.PubKey(pubKey[:]),
+		fields.BlockNumber(blockNumber),
+		zap.Uint64("validator_index", uint64(validatorIndex)),
+	)
+
+	exitDesc := duties.ExitDescriptor{
+		PubKey:         pubKey,
+		ValidatorIndex: validatorIndex,
+		BlockNumber:    blockNumber,
+	}
+
+	go func() {
+		select {
+		case c.validatorExitCh <- exitDesc:
+			logger.Debug("added voluntary exit task to pipeline")
+		case <-time.After(2 * c.beacon.GetBeaconNetwork().SlotDurationSec()):
+			logger.Error("failed to schedule ExitValidator duty!")
+		}
+	}()
 
 	return nil
 }

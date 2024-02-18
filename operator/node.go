@@ -3,6 +3,7 @@ package operator
 import (
 	"context"
 	"fmt"
+	"github.com/bloxapp/ssv/network"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
@@ -12,7 +13,6 @@ import (
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/duties"
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
@@ -52,6 +52,7 @@ type operatorNode struct {
 	network          networkconfig.NetworkConfig
 	context          context.Context
 	validatorsCtrl   validator.Controller
+	validatorOptions validator.ControllerOptions
 	consensusClient  beaconprotocol.BeaconNode
 	executionClient  *executionclient.ExecutionClient
 	net              network.P2PNetwork
@@ -77,26 +78,30 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 		spectypes.BNRoleSyncCommittee,
 		spectypes.BNRoleSyncCommitteeContribution,
 		spectypes.BNRoleValidatorRegistration,
+		spectypes.BNRoleVoluntaryExit,
 	}
 	for _, role := range roles {
 		storageMap.Add(role, qbftstorage.New(opts.DB, role.String()))
 	}
 
 	node := &operatorNode{
-		context:         opts.Context,
-		validatorsCtrl:  opts.ValidatorController,
-		network:         opts.Network,
-		consensusClient: opts.BeaconNode,
-		executionClient: opts.ExecutionClient,
-		net:             opts.P2PNetwork,
-		storage:         opts.ValidatorOptions.RegistryStorage,
-		qbftStorage:     storageMap,
+		context:          opts.Context,
+		validatorsCtrl:   opts.ValidatorController,
+		validatorOptions: opts.ValidatorOptions,
+		network:          opts.Network,
+		consensusClient:  opts.BeaconNode,
+		executionClient:  opts.ExecutionClient,
+		net:              opts.P2PNetwork,
+		storage:          opts.ValidatorOptions.RegistryStorage,
+		qbftStorage:      storageMap,
 		dutyScheduler: duties.NewScheduler(&duties.SchedulerOptions{
 			Ctx:                 opts.Context,
 			BeaconNode:          opts.BeaconNode,
+			ExecutionClient:     opts.ExecutionClient,
 			Network:             opts.Network,
 			ValidatorController: opts.ValidatorController,
 			IndicesChg:          opts.ValidatorController.IndicesChangeChan(),
+			ValidatorExitCh:     opts.ValidatorController.ValidatorExitChan(),
 			ExecuteDuty:         opts.ValidatorController.ExecuteDuty,
 			BuilderProposals:    opts.ValidatorOptions.BuilderProposals,
 			DutyStore:           opts.DutyStore,
@@ -139,19 +144,27 @@ func (n *operatorNode) Start(logger *zap.Logger) error {
 		}
 	}()
 
-	n.validatorsCtrl.StartNetworkHandlers()
-	n.validatorsCtrl.StartValidators()
-	go n.net.UpdateSubnets(logger)
-	go n.reportOperators(logger)
-
-	go n.feeRecipientCtrl.Start(logger)
-	go n.validatorsCtrl.UpdateValidatorMetaDataLoop()
-
 	// Start the duty scheduler, and a background goroutine to crash the node
 	// in case there were any errors.
 	if err := n.dutyScheduler.Start(n.context, logger); err != nil {
 		return fmt.Errorf("failed to run duty scheduler: %w", err)
 	}
+
+	n.validatorsCtrl.StartNetworkHandlers()
+
+	if n.validatorOptions.Exporter {
+		// Subscribe to all subnets.
+		err := n.net.SubscribeAll(logger)
+		if err != nil {
+			logger.Error("failed to subscribe to all subnets", zap.Error(err))
+		}
+	}
+	go n.net.UpdateSubnets(logger)
+	n.validatorsCtrl.StartValidators()
+	go n.reportOperators(logger)
+
+	go n.feeRecipientCtrl.Start(logger)
+	go n.validatorsCtrl.UpdateValidatorMetaDataLoop()
 
 	if err := n.dutyScheduler.Wait(); err != nil {
 		logger.Fatal("duty scheduler exited with error", zap.Error(err))

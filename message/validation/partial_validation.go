@@ -3,14 +3,9 @@ package validation
 // partial_validation.go contains methods for validating partial signature messages
 
 import (
-	"encoding/hex"
-	"fmt"
-	"time"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"golang.org/x/exp/slices"
 
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
@@ -20,6 +15,7 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 	share *ssvtypes.SSVShare,
 	signedMsg *spectypes.SignedPartialSignatureMessage,
 	msgID spectypes.MessageID,
+	signatureVerifier func() error,
 ) (phase0.Slot, error) {
 	if mv.inCommittee(share) {
 		mv.metrics.InCommitteeMessage(spectypes.SSVPartialSignatureMsgType, false)
@@ -56,8 +52,8 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 		return msgSlot, err
 	}
 
-	if mv.verifySignatures {
-		if err := mv.validPartialSignatures(share, signedMsg); err != nil {
+	if signatureVerifier != nil {
+		if err := signatureVerifier(); err != nil {
 			return msgSlot, err
 		}
 	}
@@ -88,7 +84,8 @@ func (mv *messageValidator) validPartialSigMsgType(msgType spectypes.PartialSigM
 		spectypes.RandaoPartialSig,
 		spectypes.SelectionProofPartialSig,
 		spectypes.ContributionProofs,
-		spectypes.ValidatorRegistrationPartialSig:
+		spectypes.ValidatorRegistrationPartialSig,
+		spectypes.VoluntaryExitPartialSig:
 		return true
 	default:
 		return false
@@ -109,66 +106,11 @@ func (mv *messageValidator) partialSignatureTypeMatchesRole(msgType spectypes.Pa
 		return msgType == spectypes.PostConsensusPartialSig || msgType == spectypes.ContributionProofs
 	case spectypes.BNRoleValidatorRegistration:
 		return msgType == spectypes.ValidatorRegistrationPartialSig
+	case spectypes.BNRoleVoluntaryExit:
+		return msgType == spectypes.VoluntaryExitPartialSig
 	default:
 		panic("invalid role") // role validity should be checked before
 	}
-}
-
-func (mv *messageValidator) validPartialSignatures(share *ssvtypes.SSVShare, signedMsg *spectypes.SignedPartialSignatureMessage) error {
-	if err := ssvtypes.VerifyByOperators(signedMsg.Signature, signedMsg, mv.netCfg.Domain, spectypes.PartialSignatureType, share.Committee); err != nil {
-		signErr := ErrInvalidSignature
-		signErr.innerErr = err
-		signErr.got = fmt.Sprintf("domain %v from %v", hex.EncodeToString(mv.netCfg.Domain[:]), hex.EncodeToString(share.ValidatorPubKey))
-		return signErr
-	}
-
-	for _, message := range signedMsg.Message.Messages {
-		if err := mv.verifyPartialSignature(message, share); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (mv *messageValidator) verifyPartialSignature(msg *spectypes.PartialSignatureMessage, share *ssvtypes.SSVShare) error {
-	signer := msg.Signer
-	signature := msg.PartialSignature
-	root := msg.SigningRoot
-
-	for _, n := range share.Committee {
-		if n.GetID() != signer {
-			continue
-		}
-
-		pk, err := ssvtypes.DeserializeBLSPublicKey(n.GetPublicKey())
-		if err != nil {
-			return fmt.Errorf("deserialize pk: %w", err)
-		}
-		sig := &bls.Sign{}
-		if err := sig.Deserialize(signature); err != nil {
-			return fmt.Errorf("deserialize signature: %w", err)
-		}
-
-		if !mv.aggregateVerify(sig, pk, root) {
-			return ErrInvalidPartialSignature
-		}
-
-		return nil
-	}
-
-	return ErrSignerNotInCommittee
-}
-
-func (mv *messageValidator) aggregateVerify(sig *bls.Sign, pk bls.PublicKey, root [32]byte) bool {
-	start := time.Now()
-
-	valid := sig.FastAggregateVerify([]bls.PublicKey{pk}, root[:])
-
-	sinceStart := time.Since(start)
-	mv.metrics.SignatureValidationDuration(sinceStart)
-
-	return valid
 }
 
 func (mv *messageValidator) validatePartialMessages(share *ssvtypes.SSVShare, m *spectypes.SignedPartialSignatureMessage) error {

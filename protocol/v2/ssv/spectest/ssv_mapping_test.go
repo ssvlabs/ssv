@@ -8,11 +8,11 @@ import (
 	"testing"
 
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests"
-	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/messages"
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/runner/duties/newduty"
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/runner/duties/synccommitteeaggregator"
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/valcheck"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv-spec/types/spectest/tests/partialsigmessage"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -69,8 +69,9 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test interface{}
 		typedTest := &MsgProcessingSpecTest{
 			Runner: &runner.AttesterRunner{},
 		}
-		// TODO fix blinded test
+		// TODO: fix blinded test
 		if strings.Contains(testName, "propose regular decide blinded") || strings.Contains(testName, "propose blinded decide regular") {
+			logger.Info("skipping blinded block test", zap.String("test", testName))
 			return nil
 		}
 		require.NoError(t, json.Unmarshal(byts, &typedTest))
@@ -96,10 +97,10 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test interface{}
 				typedTest.Run(t)
 			},
 		}
-	case reflect.TypeOf(&messages.MsgSpecTest{}).String(): // no use of internal structs so can run as spec test runs
+	case reflect.TypeOf(&partialsigmessage.MsgSpecTest{}).String(): // no use of internal structs so can run as spec test runs
 		byts, err := json.Marshal(test)
 		require.NoError(t, err)
-		typedTest := &messages.MsgSpecTest{}
+		typedTest := &partialsigmessage.MsgSpecTest{}
 		require.NoError(t, json.Unmarshal(byts, &typedTest))
 
 		return &runnable{
@@ -174,11 +175,13 @@ func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]interface{}) *Start
 	require.NoError(t, json.Unmarshal(byts, duty))
 
 	outputMsgs := make([]*spectypes.SignedPartialSignatureMessage, 0)
-	for _, msg := range m["OutputMessages"].([]interface{}) {
-		byts, _ = json.Marshal(msg)
-		typedMsg := &spectypes.SignedPartialSignatureMessage{}
-		require.NoError(t, json.Unmarshal(byts, typedMsg))
-		outputMsgs = append(outputMsgs, typedMsg)
+	if v, ok := m["OutputMessages"].([]interface{}); ok {
+		for _, msg := range v {
+			byts, _ = json.Marshal(msg)
+			typedMsg := &spectypes.SignedPartialSignatureMessage{}
+			require.NoError(t, json.Unmarshal(byts, typedMsg))
+			outputMsgs = append(outputMsgs, typedMsg)
+		}
 	}
 
 	ks := testingutils.KeySetForShare(&spectypes.Share{Quorum: uint64(baseRunnerMap["Share"].(map[string]interface{})["Quorum"].(float64))})
@@ -279,13 +282,11 @@ func fixControllerForRun(t *testing.T, logger *zap.Logger, runner runner.Runner,
 	newContr := controller.NewController(
 		contr.Identifier,
 		contr.Share,
-		testingutils.TestingConfig(ks).Domain,
 		config,
 		false,
 	)
 	newContr.StoredInstances = make(controller.InstanceContainer, 0, controller.InstanceContainerTestCapacity)
 	newContr.Height = contr.Height
-	newContr.Domain = contr.Domain
 	newContr.StoredInstances = contr.StoredInstances
 
 	for i, inst := range newContr.StoredInstances {
@@ -345,6 +346,10 @@ func baseRunnerForRole(logger *zap.Logger, role spectypes.BeaconRole, base *runn
 	case spectypes.BNRoleValidatorRegistration:
 		ret := ssvtesting.ValidatorRegistrationRunner(logger, ks)
 		ret.(*runner.ValidatorRegistrationRunner).BaseRunner = base
+		return ret
+	case spectypes.BNRoleVoluntaryExit:
+		ret := ssvtesting.VoluntaryExitRunner(logger, ks)
+		ret.(*runner.VoluntaryExitRunner).BaseRunner = base
 		return ret
 	case testingutils.UnknownDutyType:
 		ret := ssvtesting.UnknownDutyTypeRunner(logger, ks)

@@ -80,6 +80,7 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Slot
 	time.Duration,
 	context.CancelFunc,
 	*pool.ContextPool,
+	func(),
 ) {
 	ctrl := gomock.NewController(t)
 	// A 200ms timeout ensures the test passes, even with mockSlotTicker overhead.
@@ -89,6 +90,7 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Slot
 	logger := logging.TestLogger(t)
 
 	mockBeaconNode := mocks.NewMockBeaconNode(ctrl)
+	mockExecutionClient := mocks.NewMockExecutionClient(ctrl)
 	mockValidatorController := mocks.NewMockValidatorController(ctrl)
 	mockSlotService := &mockSlotTickerService{}
 	mockNetworkConfig := networkconfig.NetworkConfig{
@@ -98,6 +100,7 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Slot
 	opts := &SchedulerOptions{
 		Ctx:                 ctx,
 		BeaconNode:          mockBeaconNode,
+		ExecutionClient:     mockExecutionClient,
 		Network:             mockNetworkConfig,
 		ValidatorController: mockValidatorController,
 		SlotTickerProvider: func() slotticker.SlotTicker {
@@ -143,16 +146,19 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Slot
 
 	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().EpochsPerSyncCommitteePeriod().Return(uint64(256)).AnyTimes()
 
-	err := s.Start(ctx, logger)
-	require.NoError(t, err)
-
 	// Create a pool to wait for the scheduler to finish.
 	schedulerPool := pool.New().WithErrors().WithContext(ctx)
-	schedulerPool.Go(func(ctx context.Context) error {
-		return s.Wait()
-	})
 
-	return s, logger, mockSlotService, timeout, cancel, schedulerPool
+	startFunction := func() {
+		err := s.Start(ctx, logger)
+		require.NoError(t, err)
+
+		schedulerPool.Go(func(ctx context.Context) error {
+			return s.Wait()
+		})
+	}
+
+	return s, logger, mockSlotService, timeout, cancel, schedulerPool, startFunction
 }
 
 func setExecuteDutyFunc(s *Scheduler, executeDutiesCall chan []*spectypes.Duty, executeDutiesCallSize int) {
@@ -253,6 +259,9 @@ func TestScheduler_Run(t *testing.T) {
 	mockDutyHandler1 := NewMockdutyHandler(ctrl)
 	mockDutyHandler2 := NewMockdutyHandler(ctrl)
 
+	mockDutyHandler1.EXPECT().HandleInitialDuties(gomock.Any()).AnyTimes()
+	mockDutyHandler2.EXPECT().HandleInitialDuties(gomock.Any()).AnyTimes()
+
 	opts := &SchedulerOptions{
 		Ctx:                 ctx,
 		BeaconNode:          mockBeaconNode,
@@ -273,7 +282,7 @@ func TestScheduler_Run(t *testing.T) {
 
 	// setup mock duty handler expectations
 	for _, mockDutyHandler := range s.handlers {
-		mockDutyHandler.(*MockdutyHandler).EXPECT().Setup(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
+		mockDutyHandler.(*MockdutyHandler).EXPECT().Setup(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
 		mockDutyHandler.(*MockdutyHandler).EXPECT().HandleDuties(gomock.Any()).
 			DoAndReturn(func(ctx context.Context) {
 				<-ctx.Done()
@@ -289,7 +298,7 @@ func TestScheduler_Run(t *testing.T) {
 	require.NoError(t, s.Wait())
 }
 
-func TestScheduler_Regression_IndiciesChangeStuck(t *testing.T) {
+func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 

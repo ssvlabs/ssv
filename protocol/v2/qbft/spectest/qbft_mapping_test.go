@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
-	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/controller/futuremsg"
 	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/timeout"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
@@ -92,16 +91,6 @@ func TestQBFTMapping(t *testing.T) {
 			/*t.Run(typedTest.TestName(), func(t *testing.T) {
 				RunMsg(t, typedTest)
 			})*/
-		case reflect.TypeOf(&futuremsg.ControllerSyncSpecTest{}).String():
-			byts, err := json.Marshal(test)
-			require.NoError(t, err)
-			typedTest := &futuremsg.ControllerSyncSpecTest{}
-			require.NoError(t, json.Unmarshal(byts, &typedTest))
-
-			t.Run(typedTest.TestName(), func(t *testing.T) {
-				t.Parallel()
-				RunControllerSync(t, typedTest)
-			})
 		case reflect.TypeOf(&timeout.SpecTest{}).String():
 			byts, err := json.Marshal(test)
 			require.NoError(t, err)
