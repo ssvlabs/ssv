@@ -114,14 +114,23 @@ func TestEventSyncer(t *testing.T) {
 		}
 		require.Equal(t, uint64(0x1), receipt.Status)
 	}
+	db, err := kv.NewInMemory(logger, basedb.Options{
+		Ctx: ctx,
+	})
+	require.NoError(t, err)
+	nodeStorage, operatorData := setupOperatorStorage(logger, db)
 
-	eh := setupEventHandler(t, ctx, logger)
+	eh := setupEventHandler(t, ctx, logger, db, nodeStorage, operatorData)
 	eventSyncer := New(
-		nil,
+		nodeStorage,
 		client,
 		eh,
 		WithLogger(logger),
 	)
+
+	nodeStorage.SaveLastProcessedBlock(nil, big.NewInt(1))
+	err = eventSyncer.Healthy(ctx)
+	require.NoError(t, err)
 
 	lastProcessedBlock, err := eventSyncer.SyncHistory(ctx, 0)
 	require.NoError(t, err)
@@ -129,14 +138,16 @@ func TestEventSyncer(t *testing.T) {
 	require.NoError(t, eventSyncer.SyncOngoing(ctx, lastProcessedBlock+1))
 }
 
-func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger) *eventhandler.EventHandler {
-	db, err := kv.NewInMemory(logger, basedb.Options{
-		Ctx: ctx,
-	})
-	require.NoError(t, err)
+func setupEventHandler(
+	t *testing.T,
+	ctx context.Context,
+	logger *zap.Logger,
+	db *kv.BadgerDB,
+	nodeStorage operatorstorage.Storage,
+	operatorData *registrystorage.OperatorData,
+) *eventhandler.EventHandler {
 
 	storageMap := ibftstorage.NewStores()
-	nodeStorage, operatorData := setupOperatorStorage(logger, db)
 	testNetworkConfig := networkconfig.TestNetwork
 
 	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, true, "")
