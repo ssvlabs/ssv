@@ -1305,7 +1305,9 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 			bc,
 			storageMap,
 			WithFullNode(),
-			WithLogger(logger))
+			WithLogger(logger),
+			WithMetrics(nopMetrics{}),
+		)
 		if err != nil {
 			return nil, nil, err
 		}
