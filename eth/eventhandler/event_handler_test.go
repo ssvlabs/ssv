@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"math/big"
 	"net/http/httptest"
 	"strings"
@@ -682,6 +683,14 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			// Check the validator's shares are present in the state before removing
 			valShare := eh.nodeStorage.Shares().Get(nil, valPubKey)
 			require.NotNil(t, valShare)
+			valShare.BeaconMetadata = &beacon.ValidatorMetadata{
+				Index:           1,
+				ActivationEpoch: 0,
+				Status:          eth2apiv1.ValidatorStateActiveOngoing,
+				Balance:         phase0.Gwei(10000000000000000),
+			}
+			err := eh.nodeStorage.Shares().Save(nil, valShare)
+			require.NoError(t, err)
 			requireKeyManagerDataToExist(t, eh, 4, validatorData1)
 
 			_, err = boundContract.SimcontractTransactor.ExitValidator(
@@ -1305,7 +1314,9 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 			bc,
 			storageMap,
 			WithFullNode(),
-			WithLogger(logger))
+			WithLogger(logger),
+			WithMetrics(nopMetrics{}),
+		)
 		if err != nil {
 			return nil, nil, err
 		}
