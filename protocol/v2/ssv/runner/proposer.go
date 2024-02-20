@@ -21,7 +21,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec"
 
-	"github.com/bloxapp/ssv/beacon/goclient"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
@@ -105,31 +104,59 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 	logger.Debug("🧩 reconstructed partial RANDAO signatures",
 		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)))
 
+	type res struct {
+		obj ssz.Marshaler
+		ver spec.DataVersion
+		err error
+	}
+
 	var ver spec.DataVersion
 	var obj ssz.Marshaler
+	var berr error
+
 	var start = time.Now()
 	if r.ProducesBlindedBlocks {
-		// get block data
-		obj, ver, err = r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
-		if err != nil {
-			// Prysm workaround: when Prysm can't retrieve an MEV block, it responds with an error
-			// saying the block isn't blinded, implying to request a standard block instead.
-			// https://github.com/prysmaticlabs/prysm/issues/12103
-			if nodeClientProvider, ok := r.GetBeaconNode().(goclient.NodeClientProvider); ok &&
-				nodeClientProvider.NodeClient() == goclient.NodePrysm {
-				logger.Debug("failed to get blinded beacon block, falling back to standard block")
-				obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
-				if err != nil {
-					return errors.Wrap(err, "failed falling back from blinded to standard beacon block")
-				}
-			} else {
-				return errors.Wrap(err, "failed to get blinded beacon block")
+		// Get blinded and non-blinded blocks in parallel to save time. if blinded fails, non blinded is ready without waiting.
+		blindedch := make(chan res, 1)
+		ch := make(chan res, 1)
+
+		go func() {
+			o, v, e := r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
+			blindedch <- res{o, v, e}
+		}()
+		go func() {
+			o, v, e := r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
+			ch <- res{o, v, e}
+		}()
+
+		var blindedfailed bool
+
+		select {
+		case bblock := <-blindedch:
+			obj, ver, berr = bblock.obj, bblock.ver, bblock.err
+		case <-time.After(2 * time.Second):
+			blindedfailed = true
+		}
+
+		if blindedfailed || berr != nil {
+			var berr2 error
+			select {
+			case block := <-ch:
+				obj, ver, berr2 = block.obj, block.ver, block.err
+			case <-time.After(2 * time.Second):
+				return errors.Wrap(berr, "error or timeout getting blinded and non-blinded block")
+			}
+
+			if berr2 != nil {
+				return errors.Wrap(berr2, "failed to get beacon block")
 			}
 		}
+		//todo cancel the regular block goroutine if blinded succeeded
+
 	} else {
 		// get block data
-		obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
-		if err != nil {
+		obj, ver, berr = r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
+		if berr != nil {
 			return errors.Wrap(err, "failed to get beacon block")
 		}
 	}
