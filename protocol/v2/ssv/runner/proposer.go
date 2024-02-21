@@ -158,13 +158,12 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 
 		if blindedFailed || berr != nil {
 			logger.Debug("🧊 failed to get blinded block, trying non-blinded")
-			var berr2 error
 			select {
 			case block := <-nonBlindedCh:
 				cancel() // Cancel blinded fetch so it doesn't hang
-				obj, ver, berr2 = block.obj, block.ver, block.err
-				if berr2 != nil {
-					return errors.Wrap(berr2, "failed to get beacon block")
+				obj, ver, berr = block.obj, block.ver, block.err
+				if berr != nil {
+					return errors.Wrap(berr, "failed to get beacon block")
 				}
 			case <-time.After(TimeToGetBlock): // Handle timeout for non-blinded
 				return errors.Wrap(berr, "error or timeout getting blinded and non-blinded block")
