@@ -132,7 +132,7 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 			o, v, e := r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
 			select {
 			case blindedCh <- res{o, v, e}:
-			case <-ctx.Done(): // Handle cancellation
+			case <-ctx.Done(): // timed out
 			}
 		}()
 
@@ -141,7 +141,7 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 			o, v, e := r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
 			select {
 			case nonBlindedCh <- res{o, v, e}:
-			case <-ctx.Done(): // Handle cancellation from the other operation
+			case <-ctx.Done(): // cancelled by blinded
 			}
 		}()
 
@@ -157,7 +157,13 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 		}
 
 		if blindedFailed || berr != nil {
-			logger.Debug("🧊 failed to get blinded block, trying non-blinded")
+			var logErr error
+			if berr != nil {
+				logErr = berr
+			} else {
+				logErr = errors.New("timeout")
+			}
+			logger.Debug("🧊 failed to get blinded block, trying non-blinded", zap.Error(logErr))
 			select {
 			case block := <-nonBlindedCh:
 				cancel() // Cancel blinded fetch so it doesn't hang
@@ -166,7 +172,7 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 					return errors.Wrap(berr, "failed to get beacon block")
 				}
 			case <-time.After(TimeToGetBlock): // Handle timeout for non-blinded
-				return errors.Wrap(berr, "error or timeout getting blinded and non-blinded block")
+				return errors.New("timeout getting blinded and non-blinded block")
 			}
 		}
 
