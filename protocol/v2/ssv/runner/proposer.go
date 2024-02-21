@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -25,6 +26,9 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 )
+
+const TimeToGetBlindedBlock = 2 * time.Second
+const TimeToGetBlock = TimeToGetBlindedBlock + 100*time.Millisecond
 
 type ProposerRunner struct {
 	BaseRunner *BaseRunner
@@ -116,42 +120,56 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 
 	var start = time.Now()
 	if r.ProducesBlindedBlocks {
-		// Get blinded and non-blinded blocks in parallel to save time. if blinded fails, non blinded is ready without waiting.
-		blindedch := make(chan res, 1)
-		ch := make(chan res, 1)
+		// Fetch blinded and non-blinded blocks in parallel to save time. if blinded fails, non blinded is ready without waiting.
+		// 	cancel non-blinded if blinded finishes first, cancel blinded if it times out.
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel() // Ensure cleanup on exit
+		blindedCh := make(chan res)
+		nonBlindedCh := make(chan res)
 
+		// Fetch blinded block
 		go func() {
 			o, v, e := r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
-			blindedch <- res{o, v, e}
+			select {
+			case blindedCh <- res{o, v, e}:
+			case <-ctx.Done(): // Handle cancellation
+			}
 		}()
+
+		// Fetch non-blinded block
 		go func() {
 			o, v, e := r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
-			ch <- res{o, v, e}
+			select {
+			case nonBlindedCh <- res{o, v, e}:
+			case <-ctx.Done(): // Handle cancellation from the other operation
+			}
 		}()
 
-		var blindedfailed bool
-
+		var blindedFailed bool
 		select {
-		case bblock := <-blindedch:
+		case bblock := <-blindedCh:
 			obj, ver, berr = bblock.obj, bblock.ver, bblock.err
-		case <-time.After(2 * time.Second):
-			blindedfailed = true
+			if berr == nil {
+				cancel() // Cancel non-blinded fetch if blinded succeeds without error
+			}
+		case <-time.After(TimeToGetBlindedBlock): // Handle timeout
+			blindedFailed = true
 		}
 
-		if blindedfailed || berr != nil {
+		if blindedFailed || berr != nil {
+			logger.Debug("🧊 failed to get blinded block, trying non-blinded")
 			var berr2 error
 			select {
-			case block := <-ch:
+			case block := <-nonBlindedCh:
+				cancel() // Cancel blinded fetch so it doesn't hang
 				obj, ver, berr2 = block.obj, block.ver, block.err
-			case <-time.After(2 * time.Second):
+				if berr2 != nil {
+					return errors.Wrap(berr2, "failed to get beacon block")
+				}
+			case <-time.After(TimeToGetBlock): // Handle timeout for non-blinded
 				return errors.Wrap(berr, "error or timeout getting blinded and non-blinded block")
 			}
-
-			if berr2 != nil {
-				return errors.Wrap(berr2, "failed to get beacon block")
-			}
 		}
-		//todo cancel the regular block goroutine if blinded succeeded
 
 	} else {
 		// get block data
