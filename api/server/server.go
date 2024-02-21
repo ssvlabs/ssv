@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/jwtauth/v5"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/api"
@@ -19,6 +20,7 @@ type Server struct {
 
 	node       *handlers.Node
 	validators *handlers.Validators
+	tokenAuth  *jwtauth.JWTAuth
 }
 
 func New(
@@ -26,16 +28,29 @@ func New(
 	addr string,
 	node *handlers.Node,
 	validators *handlers.Validators,
+	tokenAuth *jwtauth.JWTAuth,
 ) *Server {
 	return &Server{
 		logger:     logger,
 		addr:       addr,
 		node:       node,
 		validators: validators,
+		tokenAuth:  tokenAuth,
 	}
 }
 
 func (s *Server) Run() error {
+	s.logger.Info("Serving SSV API", zap.String("addr", s.addr))
+	server := &http.Server{
+		Addr:         s.addr,
+		Handler:      s.routes(),
+		ReadTimeout:  12 * time.Second,
+		WriteTimeout: 12 * time.Second,
+	}
+	return server.ListenAndServe()
+}
+
+func (s *Server) routes() chi.Router {
 	router := chi.NewRouter()
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.Throttle(runtime.NumCPU() * 4))
@@ -48,15 +63,13 @@ func (s *Server) Run() error {
 	router.Get("/v1/node/health", api.Handler(s.node.Health))
 	router.Get("/v1/validators", api.Handler(s.validators.List))
 
-	s.logger.Info("Serving SSV API", zap.String("addr", s.addr))
-
-	server := &http.Server{
-		Addr:         s.addr,
-		Handler:      router,
-		ReadTimeout:  12 * time.Second,
-		WriteTimeout: 12 * time.Second,
-	}
-	return server.ListenAndServe()
+	// Authorized endpoints
+	router.Group(func(router chi.Router) {
+		router.Use(jwtauth.Verifier(s.tokenAuth))
+		router.Use(jwtauth.Authenticator(s.tokenAuth))
+		router.Post("/v1/operator/sign", api.Handler(s.node.Sign))
+	})
+	return router
 }
 
 func middlewareLogger(logger *zap.Logger) func(next http.Handler) http.Handler {

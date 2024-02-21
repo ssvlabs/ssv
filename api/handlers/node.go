@@ -2,16 +2,19 @@ package handlers
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+
+	"github.com/libp2p/go-libp2p/core/network"
+	"github.com/libp2p/go-libp2p/core/peer"
 
 	"github.com/bloxapp/ssv/api"
 	networkpeers "github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/nodeprobe"
-	"github.com/libp2p/go-libp2p/core/network"
-	"github.com/libp2p/go-libp2p/core/peer"
 )
 
 const (
@@ -23,31 +26,31 @@ type TopicIndex interface {
 	PeersByTopic() ([]peer.ID, map[string][]peer.ID)
 }
 
-type AllPeersAndTopicsJSON struct {
-	AllPeers     []peer.ID        `json:"all_peers"`
-	PeersByTopic []topicIndexJSON `json:"peers_by_topic"`
+type allPeersAndTopics struct {
+	AllPeers     []peer.ID    `json:"all_peers"`
+	PeersByTopic []topicIndex `json:"peers_by_topic"`
 }
 
-type topicIndexJSON struct {
+type topicIndex struct {
 	TopicName string    `json:"topic"`
 	Peers     []peer.ID `json:"peers"`
 }
 
-type connectionJSON struct {
+type connection struct {
 	Address   string `json:"address"`
 	Direction string `json:"direction"`
 }
 
-type peerJSON struct {
-	ID            peer.ID          `json:"id"`
-	Addresses     []string         `json:"addresses"`
-	Connections   []connectionJSON `json:"connections"`
-	Connectedness string           `json:"connectedness"`
-	Subnets       string           `json:"subnets"`
-	Version       string           `json:"version"`
+type peerInfo struct {
+	ID            peer.ID      `json:"id"`
+	Addresses     []string     `json:"addresses"`
+	Connections   []connection `json:"connections"`
+	Connectedness string       `json:"connectedness"`
+	Subnets       string       `json:"subnets"`
+	Version       string       `json:"version"`
 }
 
-type identityJSON struct {
+type nodeIdentity struct {
 	PeerID    peer.ID  `json:"peer_id"`
 	Addresses []string `json:"addresses"`
 	Subnets   string   `json:"subnets"`
@@ -65,7 +68,7 @@ func (h healthStatus) MarshalJSON() ([]byte, error) {
 	return json.Marshal(fmt.Sprintf("bad: %s", h.err.Error()))
 }
 
-type healthCheckJSON struct {
+type healthCheck struct {
 	P2P           healthStatus `json:"p2p"`
 	BeaconNode    healthStatus `json:"beacon_node"`
 	ExecutionNode healthStatus `json:"execution_node"`
@@ -78,7 +81,7 @@ type healthCheckJSON struct {
 	} `json:"advanced"`
 }
 
-func (hc healthCheckJSON) String() string {
+func (hc healthCheck) String() string {
 	b, err := json.MarshalIndent(hc, "", "  ")
 	if err != nil {
 		return fmt.Sprintf("error marshalling healthCheckJSON: %s", err.Error())
@@ -92,11 +95,12 @@ type Node struct {
 	TopicIndex      TopicIndex
 	Network         network.Network
 	NodeProber      *nodeprobe.Prober
+	Signer          func(data []byte) ([]byte, error)
 }
 
 func (h *Node) Identity(w http.ResponseWriter, r *http.Request) error {
 	nodeInfo := h.PeersIndex.Self()
-	resp := identityJSON{
+	resp := nodeIdentity{
 		PeerID:  h.Network.LocalPeer(),
 		Subnets: nodeInfo.Metadata.Subnets,
 		Version: nodeInfo.Metadata.NodeVersion,
@@ -116,11 +120,11 @@ func (h *Node) Peers(w http.ResponseWriter, r *http.Request) error {
 func (h *Node) Topics(w http.ResponseWriter, r *http.Request) error {
 	peers, byTopic := h.TopicIndex.PeersByTopic()
 
-	resp := AllPeersAndTopicsJSON{
+	resp := allPeersAndTopics{
 		AllPeers: peers,
 	}
 	for topic, peers := range byTopic {
-		resp.PeersByTopic = append(resp.PeersByTopic, topicIndexJSON{TopicName: topic, Peers: peers})
+		resp.PeersByTopic = append(resp.PeersByTopic, topicIndex{TopicName: topic, Peers: peers})
 	}
 
 	return api.Render(w, r, resp)
@@ -128,7 +132,7 @@ func (h *Node) Topics(w http.ResponseWriter, r *http.Request) error {
 
 func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	ctx := context.Background()
-	var resp healthCheckJSON
+	var resp healthCheck
 
 	// Retrieve P2P listen addresses.
 	resp.Advanced.ListenAddresses = h.ListenAddresses
@@ -165,10 +169,40 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	return api.Render(w, r, resp)
 }
 
-func (h *Node) peers(peers []peer.ID) []peerJSON {
-	resp := make([]peerJSON, len(peers))
+func (h *Node) Sign(w http.ResponseWriter, r *http.Request) error {
+	// TODO: there is a limit to amount of data can be signed at once. Or brake down to chunks
+	rawdata, err := io.ReadAll(r.Body)
+	if err != nil {
+		return err
+	}
+	var request struct {
+		Data string `json:"data"`
+	}
+	if err := json.Unmarshal(rawdata, &request); err != nil {
+		return err
+	}
+	data, err := hex.DecodeString(request.Data)
+	if err != nil {
+		return err
+	}
+	if len(data) > 256 {
+		return fmt.Errorf("data to sign should be <= 256 bytes")
+	}
+	signature, err := h.Signer(data[:])
+	if err != nil {
+		return err
+	}
+	var response struct {
+		Signature string `json:"signature"`
+	}
+	response.Signature = hex.EncodeToString(signature)
+	return api.Render(w, r, response)
+}
+
+func (h *Node) peers(peers []peer.ID) []peerInfo {
+	resp := make([]peerInfo, len(peers))
 	for i, id := range peers {
-		resp[i] = peerJSON{
+		resp[i] = peerInfo{
 			ID:            id,
 			Connectedness: h.Network.Connectedness(id).String(),
 			Subnets:       h.PeersIndex.GetPeerSubnets(id).String(),
@@ -180,7 +214,7 @@ func (h *Node) peers(peers []peer.ID) []peerJSON {
 
 		conns := h.Network.ConnsToPeer(id)
 		for _, conn := range conns {
-			resp[i].Connections = append(resp[i].Connections, connectionJSON{
+			resp[i].Connections = append(resp[i].Connections, connection{
 				Address:   conn.RemoteMultiaddr().String(),
 				Direction: conn.Stat().Direction.String(),
 			})
