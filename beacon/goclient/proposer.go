@@ -15,6 +15,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
+	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
@@ -101,8 +102,81 @@ func (gc *goClient) GetBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byt
 	}
 }
 
-// GetBlindedBeaconBlock returns blinded beacon block by the given slot, graffiti, and randao.
 func (gc *goClient) GetBlindedBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
+	if NodeClient(gc.nodeVersion) == NodePrysm {
+		return gc.PrsymGetParallelBlocks(slot, graffitiBytes, randao)
+	}
+	return gc.DefaultGetBlindedBeaconBlock(slot, graffitiBytes, randao)
+}
+
+func (gc *goClient) PrsymGetParallelBlocks(slot phase0.Slot, graffitiBytes, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
+
+	var obj ssz.Marshaler
+	var ver spec.DataVersion
+	var berr error
+
+	const TimeToGetBlindedBlock = 2*time.Second + time.Second/2
+
+	// Fetch blinded and non-blinded blocks in parallel to save time. if blinded fails, non blinded is ready without waiting.
+	// 	cancel non-blinded if blinded finishes first, cancel blinded if it times out.
+	type res struct {
+		obj ssz.Marshaler
+		ver spec.DataVersion
+		err error
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel() // Ensure cleanup on exit
+	blindedCh := make(chan res)
+	fullBlockCh := make(chan res)
+
+	blindedTimer := time.NewTimer(TimeToGetBlindedBlock)
+
+	// Fetch blinded block
+	go func() {
+		o, v, e := gc.DefaultGetBlindedBeaconBlock(slot, graffitiBytes, randao)
+		select {
+		case blindedCh <- res{o, v, e}:
+		case <-ctx.Done(): // timed out
+		}
+	}()
+
+	// Fetch full block
+	go func() {
+		o, v, e := gc.GetBeaconBlock(slot, graffitiBytes, randao)
+		select {
+		case fullBlockCh <- res{o, v, e}:
+		case <-ctx.Done(): // cancelled by blinded
+		}
+	}()
+
+	var blindedTimedout bool
+	select {
+	case bblock := <-blindedCh:
+		obj, ver, berr = bblock.obj, bblock.ver, bblock.err
+		if berr == nil {
+			cancel() // Cancel non-blinded fetch if blinded succeeds without error
+		}
+	case <-blindedTimer.C: // Handle timeout
+		blindedTimedout = true
+	}
+
+	if berr != nil || blindedTimedout {
+		gc.log.Debug("🧊 failed to get blinded block, defaulting to full block", zap.Error(berr))
+		block := <-fullBlockCh
+		cancel() // Cancel blinded fetch so it doesn't hang
+		obj, ver, berr = block.obj, block.ver, block.err
+		if berr != nil {
+			return nil, ver, errors.Wrap(berr, "failed to get beacon block")
+		}
+	}
+
+	return obj, ver, nil
+}
+
+// GetBlindedBeaconBlock returns blinded beacon block by the given slot, graffiti, and randao.
+func (gc *goClient) DefaultGetBlindedBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
+
 	sig := phase0.BLSSignature{}
 	copy(sig[:], randao[:])
 

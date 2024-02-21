@@ -1,7 +1,6 @@
 package runner
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -26,9 +25,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 )
-
-const TimeToGetBlindedBlock = 2 * time.Second
-const TimeToGetBlock = TimeToGetBlindedBlock + 100*time.Millisecond
 
 type ProposerRunner struct {
 	BaseRunner *BaseRunner
@@ -108,78 +104,20 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 	logger.Debug("🧩 reconstructed partial RANDAO signatures",
 		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)))
 
-	type res struct {
-		obj ssz.Marshaler
-		ver spec.DataVersion
-		err error
-	}
-
 	var ver spec.DataVersion
 	var obj ssz.Marshaler
-	var berr error
-
 	var start = time.Now()
+
 	if r.ProducesBlindedBlocks {
-		// Fetch blinded and non-blinded blocks in parallel to save time. if blinded fails, non blinded is ready without waiting.
-		// 	cancel non-blinded if blinded finishes first, cancel blinded if it times out.
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel() // Ensure cleanup on exit
-		blindedCh := make(chan res)
-		nonBlindedCh := make(chan res)
-
-		// Fetch blinded block
-		go func() {
-			o, v, e := r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
-			select {
-			case blindedCh <- res{o, v, e}:
-			case <-ctx.Done(): // timed out
-			}
-		}()
-
-		// Fetch non-blinded block
-		go func() {
-			o, v, e := r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
-			select {
-			case nonBlindedCh <- res{o, v, e}:
-			case <-ctx.Done(): // cancelled by blinded
-			}
-		}()
-
-		var blindedFailed bool
-		select {
-		case bblock := <-blindedCh:
-			obj, ver, berr = bblock.obj, bblock.ver, bblock.err
-			if berr == nil {
-				cancel() // Cancel non-blinded fetch if blinded succeeds without error
-			}
-		case <-time.After(TimeToGetBlindedBlock): // Handle timeout
-			blindedFailed = true
+		// get block data
+		obj, ver, err = r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
+		if err != nil {
+			return errors.Wrap(err, "failed to get blinded beacon block")
 		}
-
-		if blindedFailed || berr != nil {
-			var logErr error
-			if berr != nil {
-				logErr = berr
-			} else {
-				logErr = errors.New("timeout")
-			}
-			logger.Debug("🧊 failed to get blinded block, trying non-blinded", zap.Error(logErr))
-			select {
-			case block := <-nonBlindedCh:
-				cancel() // Cancel blinded fetch so it doesn't hang
-				obj, ver, berr = block.obj, block.ver, block.err
-				if berr != nil {
-					return errors.Wrap(berr, "failed to get beacon block")
-				}
-			case <-time.After(TimeToGetBlock): // Handle timeout for non-blinded
-				return errors.New("timeout getting blinded and non-blinded block")
-			}
-		}
-
 	} else {
 		// get block data
-		obj, ver, berr = r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
-		if berr != nil {
+		obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
+		if err != nil {
 			return errors.Wrap(err, "failed to get beacon block")
 		}
 	}
