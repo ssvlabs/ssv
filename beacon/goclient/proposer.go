@@ -112,7 +112,7 @@ func (gc *goClient) GetBlindedBeaconBlock(slot phase0.Slot, graffitiBytes, randa
 	return gc.DefaultGetBlindedBeaconBlock(slot, graffitiBytes, randao)
 }
 
-// GethParallelBlocks fetches blinded and non-blinded blocks in parallel to save time. if blinded fails, non blinded is ready without waiting.
+// GetParallelBlocks fetches blinded and non-blinded blocks in parallel to save time. if blinded fails, non blinded is ready without waiting.
 func (gc *goClient) GetParallelBlocks(slot phase0.Slot, graffitiBytes, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
 	type blockFetchResult struct {
 		obj ssz.Marshaler
