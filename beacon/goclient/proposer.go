@@ -25,8 +25,8 @@ import (
 const (
 	batchSize = 500
 
-	// parallelBlindedBlockPatience is the time to wait for the blinded block before falling back to the full block.
-	parallelBlindedBlockPatience = 2500 * time.Millisecond
+	// parallelFetchBlindedBlockPatience is the time to wait for blinded block before falling back to full block.
+	parallelFetchBlindedBlockPatience = 2500 * time.Millisecond
 )
 
 // ProposerDuties returns proposer duties for the given epoch.
@@ -123,7 +123,7 @@ func (gc *goClient) GetParallelBlocks(slot phase0.Slot, graffitiBytes, randao []
 	fullBlockCh := make(chan blockFetchResult, 1)
 
 	// Fetch blinded and non-blinded blocks in parallel.
-	blindedBlockTimeout := time.After(parallelBlindedBlockPatience)
+	blindedBlockTimeout := time.After(parallelFetchBlindedBlockPatience)
 	go func() {
 		o, v, e := gc.DefaultGetBlindedBeaconBlock(slot, graffitiBytes, randao)
 		blindedBlockCh <- blockFetchResult{o, v, e}
@@ -136,8 +136,7 @@ func (gc *goClient) GetParallelBlocks(slot phase0.Slot, graffitiBytes, randao []
 	// Wait for blinded block with a timeout.
 	var result blockFetchResult
 	select {
-	case r := <-blindedBlockCh:
-		result = r
+	case result = <-blindedBlockCh:
 	case <-blindedBlockTimeout:
 		result.err = errors.New("timed out waiting for blinded block")
 	}
