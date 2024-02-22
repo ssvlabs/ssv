@@ -103,13 +103,13 @@ func (gc *goClient) GetBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byt
 }
 
 func (gc *goClient) GetBlindedBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
-	if gc.nodeClient == NodePrysm {
-		return gc.PrsymGetParallelBlocks(slot, graffitiBytes, randao)
+	if gc.nodeClient == NodePrysm || gc.nodeClient == NodeNimbus {
+		return gc.GetParallelBlocks(slot, graffitiBytes, randao)
 	}
 	return gc.DefaultGetBlindedBeaconBlock(slot, graffitiBytes, randao)
 }
 
-func (gc *goClient) PrsymGetParallelBlocks(slot phase0.Slot, graffitiBytes, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
+func (gc *goClient) GetParallelBlocks(slot phase0.Slot, graffitiBytes, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
 
 	var obj ssz.Marshaler
 	var ver spec.DataVersion
