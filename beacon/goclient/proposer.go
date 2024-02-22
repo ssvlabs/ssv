@@ -24,6 +24,9 @@ import (
 
 const (
 	batchSize = 500
+
+	// parallelBlindedBlockPatience is the time to wait for the blinded block before falling back to the full block.
+	parallelBlindedBlockPatience = 2500 * time.Millisecond
 )
 
 // ProposerDuties returns proposer duties for the given epoch.
@@ -109,69 +112,46 @@ func (gc *goClient) GetBlindedBeaconBlock(slot phase0.Slot, graffitiBytes, randa
 	return gc.DefaultGetBlindedBeaconBlock(slot, graffitiBytes, randao)
 }
 
+// GethParallelBlocks fetches blinded and non-blinded blocks in parallel to save time. if blinded fails, non blinded is ready without waiting.
 func (gc *goClient) GetParallelBlocks(slot phase0.Slot, graffitiBytes, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
-
-	var obj ssz.Marshaler
-	var ver spec.DataVersion
-	var berr error
-
-	const TimeToGetBlindedBlock = 2*time.Second + time.Second/2
-
-	// Fetch blinded and non-blinded blocks in parallel to save time. if blinded fails, non blinded is ready without waiting.
-	// 	cancel non-blinded if blinded finishes first, cancel blinded if it times out.
-	type res struct {
+	type blockFetchResult struct {
 		obj ssz.Marshaler
 		ver spec.DataVersion
 		err error
 	}
+	blindedBlockCh := make(chan blockFetchResult, 1)
+	fullBlockCh := make(chan blockFetchResult, 1)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel() // Ensure cleanup on exit
-	blindedCh := make(chan res)
-	fullBlockCh := make(chan res)
-
-	blindedTimer := time.NewTimer(TimeToGetBlindedBlock)
-
-	// Fetch blinded block
+	// Fetch blinded and non-blinded blocks in parallel.
+	blindedBlockTimeout := time.After(parallelBlindedBlockPatience)
 	go func() {
 		o, v, e := gc.DefaultGetBlindedBeaconBlock(slot, graffitiBytes, randao)
-		select {
-		case blindedCh <- res{o, v, e}:
-		case <-ctx.Done(): // timed out
-		}
+		blindedBlockCh <- blockFetchResult{o, v, e}
 	}()
-
-	// Fetch full block
 	go func() {
 		o, v, e := gc.GetBeaconBlock(slot, graffitiBytes, randao)
-		select {
-		case fullBlockCh <- res{o, v, e}:
-		case <-ctx.Done(): // cancelled by blinded
-		}
+		fullBlockCh <- blockFetchResult{o, v, e}
 	}()
 
-	var blindedTimedout bool
+	// Wait for blinded block with a timeout.
+	var result blockFetchResult
 	select {
-	case bblock := <-blindedCh:
-		obj, ver, berr = bblock.obj, bblock.ver, bblock.err
-		if berr == nil {
-			cancel() // Cancel non-blinded fetch if blinded succeeds without error
-		}
-	case <-blindedTimer.C: // Handle timeout
-		blindedTimedout = true
+	case r := <-blindedBlockCh:
+		result = r
+	case <-blindedBlockTimeout:
+		result.err = errors.New("timed out waiting for blinded block")
 	}
 
-	if berr != nil || blindedTimedout {
-		gc.log.Debug("🧊 failed to get blinded block, defaulting to full block", zap.Error(berr))
-		block := <-fullBlockCh
-		cancel() // Cancel blinded fetch so it doesn't hang
-		obj, ver, berr = block.obj, block.ver, block.err
-		if berr != nil {
-			return nil, ver, errors.Wrap(berr, "failed to get beacon block")
+	// If blinded block failed, wait for full block and return it.
+	if result.err != nil {
+		gc.log.Debug("🧊 failed to get blinded block, falling back to full block", zap.Error(result.err))
+		result = <-fullBlockCh
+		if result.err != nil {
+			return nil, result.ver, fmt.Errorf("failed to get full block: %w", result.err)
 		}
 	}
 
-	return obj, ver, nil
+	return result.obj, result.ver, nil
 }
 
 // GetBlindedBeaconBlock returns blinded beacon block by the given slot, graffiti, and randao.
