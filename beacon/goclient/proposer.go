@@ -103,7 +103,7 @@ func (gc *goClient) GetBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byt
 }
 
 func (gc *goClient) GetBlindedBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
-	if NodeClient(gc.nodeVersion) == NodePrysm {
+	if gc.nodeClient == NodePrysm {
 		return gc.PrsymGetParallelBlocks(slot, graffitiBytes, randao)
 	}
 	return gc.DefaultGetBlindedBeaconBlock(slot, graffitiBytes, randao)
@@ -128,6 +128,8 @@ func (gc *goClient) PrsymGetParallelBlocks(slot phase0.Slot, graffitiBytes, rand
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel() // Ensure cleanup on exit
 	blindedCh := make(chan res)
+	fullBlockCh := make(chan res)
+
 	blindedTimer := time.NewTimer(TimeToGetBlindedBlock)
 
 	// Fetch blinded block
@@ -136,6 +138,15 @@ func (gc *goClient) PrsymGetParallelBlocks(slot phase0.Slot, graffitiBytes, rand
 		select {
 		case blindedCh <- res{o, v, e}:
 		case <-ctx.Done(): // timed out
+		}
+	}()
+
+	// Fetch full block
+	go func() {
+		o, v, e := gc.GetBeaconBlock(slot, graffitiBytes, randao)
+		select {
+		case fullBlockCh <- res{o, v, e}:
+		case <-ctx.Done(): // cancelled by blinded
 		}
 	}()
 
@@ -152,8 +163,9 @@ func (gc *goClient) PrsymGetParallelBlocks(slot phase0.Slot, graffitiBytes, rand
 
 	if berr != nil || blindedTimedout {
 		gc.log.Debug("🧊 failed to get blinded block, defaulting to full block", zap.Error(berr))
+		block := <-fullBlockCh
 		cancel() // Cancel blinded fetch so it doesn't hang
-		obj, ver, berr = gc.GetBeaconBlock(slot, graffitiBytes, randao)
+		obj, ver, berr = block.obj, block.ver, block.err
 		if berr != nil {
 			return nil, ver, errors.Wrap(berr, "failed to get beacon block")
 		}
