@@ -143,6 +143,7 @@ func (gc *goClient) PrsymGetParallelBlocks(slot phase0.Slot, graffitiBytes, rand
 
 	// Fetch full block
 	go func() {
+		time.Sleep(time.Second / 2) // Wait a bit to let blinded fetch
 		o, v, e := gc.GetBeaconBlock(slot, graffitiBytes, randao)
 		select {
 		case fullBlockCh <- res{o, v, e}:
