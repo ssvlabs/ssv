@@ -542,8 +542,8 @@ github.com/modern-go/reflect2 v0.0.0-20180701023420-4b7aa43c6742/go.mod h1:bx2lN
 github.com/modern-go/reflect2 v1.0.1/go.mod h1:bx2lNnkwVCuqBIxFjflWJWanXIb3RllmbCylyMrvgv0=
 github.com/modern-go/reflect2 v1.0.2 h1:xBagoLtFs94CBntxluKeaWgTMpvLxC4ur3nMaC9Gz0M=
 github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826 h1:RWengNIwukTxcDr9M+97sNutRR1RKhG96O6jWumTTnw=
-github.com/moshe-blox/go-eth2-client v0.7.2-0.20240223170243-cd2e6bbdb8f9 h1:xMCR7nwmZGCGDH+/esdgERMxjQ/qbQq6a/Byd3COK8I=
-github.com/moshe-blox/go-eth2-client v0.7.2-0.20240223170243-cd2e6bbdb8f9/go.mod h1:TTz7YF6w4z6ahvxKiHuGPn6DbQn7gH6HPuWm/DEQeGE=
+github.com/moshe-blox/go-eth2-client v0.7.2-0.20240223182013-4ec11347c082 h1:EVh8+l3lFSmwUvfuXJQIOhLrSmykw4Tc5ZP0tXTau08=
+github.com/moshe-blox/go-eth2-client v0.7.2-0.20240223182013-4ec11347c082/go.mod h1:TTz7YF6w4z6ahvxKiHuGPn6DbQn7gH6HPuWm/DEQeGE=
 github.com/moul/http2curl v1.0.0/go.mod h1:8UbvGypXm98wA/IqH45anm5Y2Z6ep6O31QGOAZ3H0fQ=
 github.com/mr-tron/base58 v1.1.2/go.mod h1:BinMc/sQntlIE1frQmRFPUoPA1Zkr8VRgBdjWI2mNwc=
 github.com/mr-tron/base58 v1.1.3/go.mod h1:BinMc/sQntlIE1frQmRFPUoPA1Zkr8VRgBdjWI2mNwc=
