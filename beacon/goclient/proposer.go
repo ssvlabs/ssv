@@ -129,8 +129,11 @@ func (gc *goClient) GetParallelBlocks(slot phase0.Slot, graffitiBytes, randao []
 		blindedBlockCh <- blockFetchResult{o, v, e}
 	}()
 	go func() {
+		gc.log.Debug("GetParallelBlocks: GetBeaconBlock starting")
 		o, v, e := gc.GetBeaconBlock(slot, graffitiBytes, randao)
+		gc.log.Debug("GetParallelBlocks: GetBeaconBlock done", zap.Error(e))
 		fullBlockCh <- blockFetchResult{o, v, e}
+		gc.log.Debug("GetParallelBlocks: GetBeaconBlock sent", zap.Error(e))
 	}()
 
 	// Wait for blinded block with a timeout.
@@ -145,6 +148,7 @@ func (gc *goClient) GetParallelBlocks(slot phase0.Slot, graffitiBytes, randao []
 	if result.err != nil {
 		gc.log.Debug("🧊 failed to get blinded block, falling back to full block", zap.Error(result.err))
 		result = <-fullBlockCh
+		gc.log.Debug("GetParallelBlocks: GetBeaconBlock received", zap.Error(result.err))
 		if result.err != nil {
 			return nil, result.ver, fmt.Errorf("failed to get full block: %w", result.err)
 		}
