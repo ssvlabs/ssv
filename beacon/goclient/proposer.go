@@ -107,6 +107,7 @@ func (gc *goClient) GetBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byt
 
 func (gc *goClient) GetBlindedBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
 	if gc.nodeClient == NodePrysm {
+		gc.log.Debug("using V3 endpoint for prysm blinded block")
 		return gc.V3Proposal(slot, graffitiBytes, randao)
 	}
 	return gc.DefaultGetBlindedBeaconBlock(slot, graffitiBytes, randao)
