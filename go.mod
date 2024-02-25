@@ -8,6 +8,7 @@ require (
 	github.com/bloxapp/eth2-key-manager v1.4.0
 	github.com/bloxapp/ssv-spec v0.3.6
 	github.com/btcsuite/btcd/btcec/v2 v2.3.2
+	github.com/carlmjohnson/requests v0.23.5
 	github.com/cespare/xxhash/v2 v2.2.0
 	github.com/cornelk/hashmap v1.0.8
 	github.com/dgraph-io/badger/v4 v4.1.0
@@ -207,7 +208,7 @@ require (
 	go.uber.org/dig v1.17.0 // indirect
 	go.uber.org/fx v1.19.2 // indirect
 	golang.org/x/crypto v0.18.0 // indirect
-	golang.org/x/net v0.10.0 // indirect
+	golang.org/x/net v0.15.0 // indirect
 	golang.org/x/sys v0.16.0 // indirect
 	golang.org/x/term v0.16.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
