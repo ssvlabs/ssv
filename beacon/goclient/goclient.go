@@ -235,9 +235,11 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 			GenesisTime:  time.Unix(int64(opt.Network.MinGenesisTime()), 0),
 		})
 		var duties []*v1.ProposerDuty
+		logger.Info("FakeProposals: Starting")
 		for {
 			<-slotTicker.Next()
 			slot := slotTicker.Slot()
+			logger.Info("FakeProposals: Slot", zap.Uint64("slot", uint64(slot)), zap.Uint64("epoch", uint64(slot/32)))
 
 			if duties == nil || slot%32 == 0 {
 				resp, err := client.client.(eth2client.ProposerDutiesProvider).ProposerDuties(ctx, &api.ProposerDutiesOpts{
