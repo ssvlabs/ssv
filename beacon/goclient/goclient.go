@@ -10,13 +10,19 @@ import (
 
 	eth2client "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/api"
+	v1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/api/v1/deneb"
 	eth2clienthttp "github.com/attestantio/go-eth2-client/http"
 	"github.com/attestantio/go-eth2-client/spec"
+	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/carlmjohnson/requests"
+	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/rs/zerolog"
+	"github.com/sourcegraph/conc/pool"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
@@ -135,6 +141,15 @@ type NodeClientProvider interface {
 	NodeClient() NodeClient
 }
 
+var infinityBLSSignature = phase0.BLSSignature{
+	0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+}
+
 var _ NodeClientProvider = (*goClient)(nil)
 
 // goClient implementing Beacon struct
@@ -212,6 +227,101 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 
 	// Start registration submitter.
 	go client.registrationSubmitter(slotTickerProvider)
+
+	go func() {
+		ctx := context.Background()
+		slotTicker := slotticker.New(logger, slotticker.Config{
+			SlotDuration: opt.Network.SlotDurationSec(),
+			GenesisTime:  time.Unix(int64(opt.Network.MinGenesisTime()), 0),
+		})
+		var duties []*v1.ProposerDuty
+		for {
+			<-slotTicker.Next()
+			slot := slotTicker.Slot()
+
+			if duties == nil || slot%32 == 0 {
+				resp, err := client.client.(eth2client.ProposerDutiesProvider).ProposerDuties(ctx, &api.ProposerDutiesOpts{
+					Epoch: phase0.Epoch(slot / 32),
+				})
+				if err != nil {
+					panic(err)
+				}
+				duties = resp.Data
+				logger.Info("Got duties for epoch", zap.Int("duties", len(duties)), zap.Uint64("epoch", uint64(slot/32)))
+
+				// Send proposal preparations
+				var preparations []*v1.ProposalPreparation
+				for _, duty := range duties {
+					preparations = append(preparations, &v1.ProposalPreparation{
+						ValidatorIndex: duty.ValidatorIndex,
+						FeeRecipient:   bellatrix.ExecutionAddress{0x01},
+					})
+				}
+				err = client.client.(eth2client.ProposalPreparationsSubmitter).SubmitProposalPreparations(ctx, preparations)
+				if err != nil {
+					panic(err)
+				}
+
+				// Send validator registrations.
+				p := pool.NewWithResults[*api.VersionedSignedValidatorRegistration]().WithContext(ctx)
+				for _, duty := range duties {
+					duty := duty
+					p.Go(func(ctx context.Context) (*api.VersionedSignedValidatorRegistration, error) {
+						registration := &api.VersionedSignedValidatorRegistration{}
+						u := fmt.Sprintf("https://boost-relay-holesky.flashbots.net/relay/v1/data/validator_registration?pubkey=%s", duty.PubKey.String())
+						err := requests.URL(u).ToJSON(&registration.V1).Fetch(ctx)
+						if err != nil {
+							return nil, nil
+						}
+						if registration.V1 == nil {
+							return nil, errors.New("no registration")
+						}
+						if registration.V1.Signature == (phase0.BLSSignature{}) {
+							return nil, errors.New("no signature")
+						}
+						if registration.V1.Message.Pubkey != duty.PubKey {
+							return nil, errors.New("wrong pubkey")
+						}
+						return registration, nil
+					})
+				}
+				regs, err := p.Wait()
+				if err != nil {
+					panic(err)
+				}
+				toSubmit := make([]*api.VersionedSignedValidatorRegistration, 0, len(regs))
+				for _, reg := range regs {
+					if reg != nil {
+						toSubmit = append(toSubmit, reg)
+					}
+				}
+				if len(toSubmit) == 0 {
+					logger.Info("No registrations to submit")
+				} else {
+					start := time.Now()
+					err = client.client.(eth2client.ValidatorRegistrationsSubmitter).SubmitValidatorRegistrations(ctx, toSubmit)
+					if err != nil {
+						panic(err)
+					}
+					logger.Info("Submitted registrations", zap.Int("count", len(toSubmit)), zap.String("duration", time.Since(start).String()))
+				}
+			}
+
+			start := time.Now()
+			proposal, _, err := client.V3Proposal(slot, client.graffiti, infinityBLSSignature[:])
+			if err != nil {
+				panic(err)
+			}
+			typ := ""
+			switch proposal.(type) {
+			case *deneb.BlockContents:
+				typ = "block"
+			case *deneb.BlindedBeaconBlock:
+				typ = "blinded"
+			}
+			logger.Info("GotV3Proposal", zap.String("type", typ), zap.Float64("duration", time.Since(start).Seconds()))
+		}
+	}()
 
 	return client, nil
 }
