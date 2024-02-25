@@ -15,7 +15,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
@@ -24,9 +23,6 @@ import (
 
 const (
 	batchSize = 500
-
-	// parallelFetchBlindedBlockPatience is the time to wait for blinded block before falling back to full block.
-	parallelFetchBlindedBlockPatience = 2500 * time.Millisecond
 )
 
 // ProposerDuties returns proposer duties for the given epoch.
@@ -111,47 +107,6 @@ func (gc *goClient) GetBlindedBeaconBlock(slot phase0.Slot, graffitiBytes, randa
 		return gc.V3Proposal(slot, graffitiBytes, randao)
 	}
 	return gc.DefaultGetBlindedBeaconBlock(slot, graffitiBytes, randao)
-}
-
-// GetParallelBlocks fetches blinded and non-blinded blocks in parallel to save time. if blinded fails, non blinded is ready without waiting.
-func (gc *goClient) GetParallelBlocks(slot phase0.Slot, graffitiBytes, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
-	type blockFetchResult struct {
-		obj ssz.Marshaler
-		ver spec.DataVersion
-		err error
-	}
-	blindedBlockCh := make(chan blockFetchResult, 1)
-	fullBlockCh := make(chan blockFetchResult, 1)
-
-	// Fetch blinded and non-blinded blocks in parallel.
-	blindedBlockTimeout := time.After(parallelFetchBlindedBlockPatience)
-	go func() {
-		o, v, e := gc.DefaultGetBlindedBeaconBlock(slot, graffitiBytes, randao)
-		blindedBlockCh <- blockFetchResult{o, v, e}
-	}()
-	go func() {
-		o, v, e := gc.GetBeaconBlock(slot, graffitiBytes, randao)
-		fullBlockCh <- blockFetchResult{o, v, e}
-	}()
-
-	// Wait for blinded block with a timeout.
-	var result blockFetchResult
-	select {
-	case result = <-blindedBlockCh:
-	case <-blindedBlockTimeout:
-		result.err = errors.New("timed out waiting for blinded block")
-	}
-
-	// If blinded block failed, wait for full block and return it.
-	if result.err != nil {
-		gc.log.Debug("🧊 failed to get blinded block, falling back to full block", zap.Error(result.err))
-		result = <-fullBlockCh
-		if result.err != nil {
-			return nil, result.ver, fmt.Errorf("failed to get full block: %w", result.err)
-		}
-	}
-
-	return result.obj, result.ver, nil
 }
 
 // GetBlindedBeaconBlock returns blinded beacon block by the given slot, graffiti, and randao.
