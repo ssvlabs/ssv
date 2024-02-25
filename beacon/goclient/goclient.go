@@ -247,7 +247,7 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 					panic(err)
 				}
 				duties = resp.Data
-				logger.Info("Got duties for epoch", zap.Int("duties", len(duties)), zap.Uint64("epoch", uint64(slot/32)))
+				logger.Info("FakeProposals: Got duties for epoch", zap.Int("duties", len(duties)), zap.Uint64("epoch", uint64(slot/32)))
 
 				// Send proposal preparations
 				var preparations []*v1.ProposalPreparation
@@ -296,14 +296,14 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 					}
 				}
 				if len(toSubmit) == 0 {
-					logger.Info("No registrations to submit")
+					logger.Info("FakeProposals: No registrations to submit")
 				} else {
 					start := time.Now()
 					err = client.client.(eth2client.ValidatorRegistrationsSubmitter).SubmitValidatorRegistrations(ctx, toSubmit)
 					if err != nil {
 						panic(err)
 					}
-					logger.Info("Submitted registrations", zap.Int("count", len(toSubmit)), zap.String("duration", time.Since(start).String()))
+					logger.Info("FakeProposals: Submitted registrations", zap.Int("count", len(toSubmit)), zap.String("duration", time.Since(start).String()))
 				}
 			}
 
@@ -319,7 +319,7 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 			case *deneb.BlindedBeaconBlock:
 				typ = "blinded"
 			}
-			logger.Info("GotV3Proposal", zap.String("type", typ), zap.Float64("duration", time.Since(start).Seconds()))
+			logger.Info("FakeProposals: GotV3Proposal", zap.String("type", typ), zap.Float64("duration", time.Since(start).Seconds()))
 		}
 	}()
 
