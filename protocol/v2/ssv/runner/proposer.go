@@ -107,7 +107,6 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 	var ver spec.DataVersion
 	var obj ssz.Marshaler
 	var start = time.Now()
-
 	if r.ProducesBlindedBlocks {
 		// get block data
 		obj, ver, err = r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
@@ -441,6 +440,7 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 		default:
 			return summary, fmt.Errorf("unsupported block version %d", b.Version)
 		}
+
 	case *capella.BeaconBlock:
 		if b == nil || b.Body == nil || b.Body.ExecutionPayload == nil {
 			return summary, fmt.Errorf("block, body or execution payload is nil")
