@@ -467,6 +467,9 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 		summary.Hash = b.Body.ExecutionPayload.BlockHash
 		summary.Version = spec.DataVersionDeneb
 
+	case *apiv1deneb.BlockContents:
+		return summarizeBlock(b.Block)
+
 	case *apiv1capella.BlindedBeaconBlock:
 		if b == nil || b.Body == nil || b.Body.ExecutionPayloadHeader == nil {
 			return summary, fmt.Errorf("block, body or execution payload header is nil")
