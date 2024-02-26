@@ -79,7 +79,7 @@ type NodeClient string
 const (
 	NodeLighthouse NodeClient = "lighthouse"
 	NodePrysm      NodeClient = "prysm"
-	NodeNimbus                = "nimbus"
+	NodeNimbus     NodeClient = "nimbus"
 	NodeUnknown    NodeClient = "unknown"
 )
 
