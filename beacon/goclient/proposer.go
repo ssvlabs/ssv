@@ -180,13 +180,13 @@ func (gc *goClient) V3Proposal(slot phase0.Slot, graffitiBytes, randao []byte) (
 		SkipRandaoVerification: false,
 	})
 	if err != nil {
-		return nil, DataVersionNil, fmt.Errorf("failed to get blinded proposal: %w", err)
+		return nil, DataVersionNil, fmt.Errorf("failed to get v3 proposal: %w", err)
 	}
 	if v3ProposalResp == nil {
-		return nil, DataVersionNil, fmt.Errorf("blinded proposal response is nil")
+		return nil, DataVersionNil, fmt.Errorf("v3 proposal response is nil")
 	}
 	if v3ProposalResp.Data == nil {
-		return nil, DataVersionNil, fmt.Errorf("blinded proposal data is nil")
+		return nil, DataVersionNil, fmt.Errorf("v3 proposal data is nil")
 	}
 
 	metricsProposerDataRequest.Observe(time.Since(reqStart).Seconds())
@@ -196,28 +196,28 @@ func (gc *goClient) V3Proposal(slot phase0.Slot, graffitiBytes, randao []byte) (
 		switch beaconBlock.Version {
 		case spec.DataVersionCapella:
 			if beaconBlock.BlindedCapella == nil {
-				return nil, DataVersionNil, fmt.Errorf("capella block is nil")
+				return nil, DataVersionNil, fmt.Errorf("capella blinded block is nil")
 			}
 			if beaconBlock.BlindedCapella.Body == nil {
-				return nil, DataVersionNil, fmt.Errorf("capella block body is nil")
+				return nil, DataVersionNil, fmt.Errorf("capella blinded block body is nil")
 			}
 			if beaconBlock.BlindedCapella.Body.ExecutionPayloadHeader == nil {
-				return nil, DataVersionNil, fmt.Errorf("capella block execution payload header is nil")
+				return nil, DataVersionNil, fmt.Errorf("capella blinded block execution payload header is nil")
 			}
 			return beaconBlock.BlindedCapella, beaconBlock.Version, nil
 		case spec.DataVersionDeneb:
 			if beaconBlock.BlindedDeneb == nil {
-				return nil, DataVersionNil, fmt.Errorf("deneb block contents is nil")
+				return nil, DataVersionNil, fmt.Errorf("deneb blinded block contents is nil")
 			}
 			if beaconBlock.BlindedDeneb.Body == nil {
-				return nil, DataVersionNil, fmt.Errorf("deneb block body is nil")
+				return nil, DataVersionNil, fmt.Errorf("deneb blinded block body is nil")
 			}
 			if beaconBlock.BlindedDeneb.Body.ExecutionPayloadHeader == nil {
-				return nil, DataVersionNil, fmt.Errorf("deneb block execution payload header is nil")
+				return nil, DataVersionNil, fmt.Errorf("deneb blinded block execution payload header is nil")
 			}
 			return beaconBlock.BlindedDeneb, beaconBlock.Version, nil
 		default:
-			return nil, DataVersionNil, fmt.Errorf("beacon block version %s not supported", beaconBlock.Version)
+			return nil, DataVersionNil, fmt.Errorf("beacon blinded block version %s not supported", beaconBlock.Version)
 		}
 	}
 
