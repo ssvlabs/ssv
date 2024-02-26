@@ -1,17 +1,22 @@
-{
-  "participants": [
-    {
-      "el_client_type": "geth",
-      "cl_client_type": "lighthouse",
-    }
-  ],
-  "network_params": {
-    "preregistered_validator_keys_mnemonic": "giant issue aisle success illegal bike spike question tent bar rely arctic volcano long crawl hungry vocal artwork sniff fantasy very lucky have athlete",
-    "num_validator_keys_per_node": 64,
-    "network_id": "3151908",
-    "deposit_contract_address": "0x4242424242424242424242424242424242424242",
-    "seconds_per_slot": 12,
-    "genesis_delay": 120,
-    "capella_fork_epoch": 5
-  }
-}
+participants:
+  - el_client_type: geth
+    cl_client_type: lighthouse
+
+network_params:
+  preregistered_validator_keys_mnemonic: giant issue aisle success illegal bike spike question tent bar rely arctic volcano long crawl hungry vocal artwork sniff fantasy very lucky have athlete
+  preregistered_validator_count: 128
+  num_validator_keys_per_node: 64
+  network_id: "3151908"
+  network: kurtosis
+  deposit_contract_address: "0x4242424242424242424242424242424242424242"
+  seconds_per_slot: 12
+  genesis_delay: 120
+  capella_fork_epoch: 5
+
+additional_services:
+  - tx_spammer
+  - blob_spammer
+  - el_forkmon
+  - beacon_metrics_gazer
+  - prometheus_grafana
+  - dora

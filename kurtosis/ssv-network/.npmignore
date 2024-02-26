@@ -1,0 +1,19 @@
+/.github/
+/.vscode/
+
+node_modules
+.env
+.env.prod
+.env.stage
+#Hardhat files
+cache
+coverage
+coverage.json
+artifacts
+typechain-types/
+.openzeppelin/dev-*.json
+.DS_Store
+.history
+.dccache
+
+package-lock.json
