@@ -31,7 +31,7 @@ var config Config
 
 func main() {
 	if len(os.Args) < 3 {
-		fmt.Println("Usage: go run script.go <config_filename> <results_filename>")
+		fmt.Println("Usage: degradation-tester <config_filename> <results_filename>")
 		os.Exit(1)
 	}
 

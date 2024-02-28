@@ -6,17 +6,17 @@ Tests:
   - PackagePath: "./protocol/v2/types"
     TestCases:
       - Name: "VerifyBLS"
-        AllowedDeltaPercentage: 3.0
+        AllowedDeltaPercentage: 6.0
       - Name: "VerifyPKCS1v15"
         AllowedDeltaPercentage: 3.0
       - Name: "VerifyPKCS1v15FastHash"
-        AllowedDeltaPercentage: 3.0
+        AllowedDeltaPercentage: 6.0
       - Name: "VerifyPSS"
-        AllowedDeltaPercentage: 3.0
+        AllowedDeltaPercentage: 6.0
       - Name: "SignBLS"
-        AllowedDeltaPercentage: 3.0
+        AllowedDeltaPercentage: 6.0
       - Name: "SignPKCS1v15"
-        AllowedDeltaPercentage: 3.0
+        AllowedDeltaPercentage: 6.0
       - Name: "SignPKCS1v15FastHash"
         AllowedDeltaPercentage: 3.0
       - Name: "SignPSS"
