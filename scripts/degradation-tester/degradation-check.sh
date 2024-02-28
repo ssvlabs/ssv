@@ -15,7 +15,7 @@ for pkgPath in "${packagePaths[@]}"; do
 
     go test -bench=. -count=10 -benchmem "$pkgPath" | tee "$outputFile"
 
-    benchstat "$oldBenchmarks" "$outputFile" &> "${benchStatFile}"
+    benchstat "$oldBenchmarks" "$outputFile" | tee "${benchStatFile}"
 
     degradation-tester "${configFile}" "${benchStatFile}"
     if [ $? -ne 0 ]; then
