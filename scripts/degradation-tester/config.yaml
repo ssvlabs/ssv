@@ -1,0 +1,4 @@
+Tests:
+  - TestPath: "/Users/daddy/ssv/ssv/protocol/v2/types/signature_benchmark_test.go"
+    ComparisonBenchPath: "/Users/daddy/ssv/scripts/degradation-tester/benchmarks/signature_benchmark_test_benchmarks_base.txt"
+    AllowedDeltaPercentage: 2
