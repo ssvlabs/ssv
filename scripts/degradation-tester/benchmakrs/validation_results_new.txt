@@ -1,0 +1,16 @@
+goos: darwin
+goarch: amd64
+pkg: github.com/bloxapp/ssv/message/validation
+cpu: Intel(R) Core(TM) i7-8700B CPU @ 3.20GHz
+BenchmarkVerifyRSASignature-12    	    4342	    239563 ns/op	    1331 B/op	       7 allocs/op
+BenchmarkVerifyRSASignature-12    	    5748	    220878 ns/op	    1404 B/op	       7 allocs/op
+BenchmarkVerifyRSASignature-12    	    5004	    247006 ns/op	    1565 B/op	       8 allocs/op
+BenchmarkVerifyRSASignature-12    	    5547	    225008 ns/op	    1607 B/op	       8 allocs/op
+BenchmarkVerifyRSASignature-12    	    5774	    207074 ns/op	    1632 B/op	       8 allocs/op
+BenchmarkVerifyRSASignature-12    	    5779	    213619 ns/op	    1740 B/op	       9 allocs/op
+BenchmarkVerifyRSASignature-12    	    5809	    208181 ns/op	    1815 B/op	       9 allocs/op
+BenchmarkVerifyRSASignature-12    	    5847	    208410 ns/op	    1915 B/op	       9 allocs/op
+BenchmarkVerifyRSASignature-12    	    5806	    206386 ns/op	    1972 B/op	      10 allocs/op
+BenchmarkVerifyRSASignature-12    	    5803	    218297 ns/op	    2139 B/op	      10 allocs/op
+PASS
+ok  	github.com/bloxapp/ssv/message/validation	36.534s

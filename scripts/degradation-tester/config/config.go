@@ -5,7 +5,11 @@ type Config struct {
 }
 
 type BenchmarkingTestConfig struct {
-	TestPath               string `yaml:"TestPath"`
-	ComparisonBenchPath    string `yaml:"ComparisonBenchPath"`
-	AllowedDeltaPercentage uint32 `yaml:"AllowedDeltaPercentage"`
+	PackagePath string     `yaml:"PackagePath"`
+	Tests       []TestCase `yaml:"TestCases"`
+}
+
+type TestCase struct {
+	Name                   string  `yaml:"Name"`
+	AllowedDeltaPercentage float32 `yaml:"AllowedDeltaPercentage"`
 }
