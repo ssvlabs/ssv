@@ -533,11 +533,7 @@ func (eh *EventHandler) processClusterEvent(
 	operatorIDs []uint64,
 	toLiquidate bool,
 ) ([]*ssvtypes.SSVShare, []string, error) {
-	clusterID, err := ssvtypes.ComputeClusterIDHash(owner.Bytes(), operatorIDs)
-	if err != nil {
-		return nil, nil, fmt.Errorf("could not compute share cluster id: %w", err)
-	}
-
+	clusterID := ssvtypes.ComputeClusterIDHash(owner, operatorIDs)
 	shares := eh.nodeStorage.Shares().List(txn, registrystorage.ByClusterID(clusterID))
 	toUpdate := make([]*ssvtypes.SSVShare, 0)
 	updatedPubKeys := make([]string, 0)
@@ -554,7 +550,7 @@ func (eh *EventHandler) processClusterEvent(
 	}
 
 	if len(toUpdate) > 0 {
-		if err = eh.nodeStorage.Shares().Save(txn, toUpdate...); err != nil {
+		if err := eh.nodeStorage.Shares().Save(txn, toUpdate...); err != nil {
 			return nil, nil, fmt.Errorf("could not save validator shares: %w", err)
 		}
 	}
