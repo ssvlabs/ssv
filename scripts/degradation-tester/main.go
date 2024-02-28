@@ -4,11 +4,14 @@ import (
 	"bufio"
 	"fmt"
 	"gopkg.in/yaml.v3"
+	"math"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
 )
+
+var testThresholds map[string]float64
 
 type Config struct {
 	Tests []BenchmarkingTestConfig `yaml:"Tests"`
@@ -67,11 +70,8 @@ func main() {
 	}
 
 	if totalErrors > 0 {
-		fmt.Printf("\n❌ Degradation tests have failed.\n")
 		os.Exit(1)
 	}
-
-	fmt.Printf("\n✅ Degradation tests have passed.\n")
 }
 
 func loadConfig(filename string) {
@@ -85,6 +85,14 @@ func loadConfig(filename string) {
 		fmt.Printf("Error parsing config file: %v\n", err)
 		os.Exit(1)
 	}
+
+	testThresholds = make(map[string]float64)
+	for _, pkg := range config.Tests {
+		for _, testCase := range pkg.TestCases {
+			testThresholds[testCase.Name] = testCase.AllowedDeltaPercentage
+		}
+	}
+
 }
 
 func checkLine(line, section string) int {
@@ -113,8 +121,8 @@ func checkLine(line, section string) int {
 			os.Exit(1)
 		}
 
-		if abs(change) > threshold {
-			fmt.Printf("❌Change in section %s for test %s exceeds threshold: %s\n", section, normalizedTestName, changeStr)
+		if math.Abs(change) > threshold {
+			fmt.Printf("❌ Change in section %s for test %s exceeds threshold: %s\n", section, normalizedTestName, changeStr)
 			return 1
 		}
 	}
@@ -127,19 +135,8 @@ func normalizeTestName(testName string) string {
 }
 
 func findThresholdForTest(testName string) float64 {
-	for _, pkg := range config.Tests {
-		for _, testCase := range pkg.TestCases {
-			if testCase.Name == testName {
-				return testCase.AllowedDeltaPercentage
-			}
-		}
+	if threshold, exists := testThresholds[testName]; exists {
+		return threshold
 	}
 	return 0
-}
-
-func abs(x float64) float64 {
-	if x < 0 {
-		return -x
-	}
-	return x
 }

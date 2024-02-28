@@ -5,7 +5,6 @@ import (
 	crand "crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
-	"fmt"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -106,7 +105,7 @@ func BenchmarkVerifyRSASignature(b *testing.B) {
 	}
 
 	if found {
-		b.Fatal(fmt.Sprintf("operator data already exists"))
+		b.Fatal("operator data already exists")
 	}
 
 	signature, err := rsa.SignPKCS1v15(crand.Reader, privateKey, crypto.SHA256, hash[:])

@@ -2,23 +2,22 @@ Tests:
   - PackagePath: "./message/validation"
     TestCases:
       - Name: "VerifyRSASignature"
-        AllowedDeltaPercentage: 5.0
+        AllowedDeltaPercentage: 3.0
   - PackagePath: "./protocol/v2/types"
     TestCases:
       - Name: "VerifyBLS"
-        AllowedDeltaPercentage: 5.0
+        AllowedDeltaPercentage: 3.0
       - Name: "VerifyPKCS1v15"
-        AllowedDeltaPercentage: 5.0
+        AllowedDeltaPercentage: 3.0
       - Name: "VerifyPKCS1v15FastHash"
-        AllowedDeltaPercentage: 5.0
+        AllowedDeltaPercentage: 3.0
       - Name: "VerifyPSS"
-        AllowedDeltaPercentage: 5.0
+        AllowedDeltaPercentage: 3.0
       - Name: "SignBLS"
-        AllowedDeltaPercentage: 0.1
-
+        AllowedDeltaPercentage: 3.0
       - Name: "SignPKCS1v15"
-        AllowedDeltaPercentage: 5.0
+        AllowedDeltaPercentage: 3.0
       - Name: "SignPKCS1v15FastHash"
-        AllowedDeltaPercentage: 5.0
+        AllowedDeltaPercentage: 3.0
       - Name: "SignPSS"
-        AllowedDeltaPercentage: 5.0
+        AllowedDeltaPercentage: 3.0

@@ -1,18 +1,26 @@
 #!/bin/bash
 
-prefix="scripts/degradation-tester"
-pathsFile="$prefix/paths.txt"
-benchmarksResults="$prefix/benchmakrs"
+prefix="./scripts/degradation-tester"
+configFile="$prefix/config.yaml"
+benchmarksResults="$prefix/benchmarks"
 
-while IFS= read -r line; do
-    # removing .go from filename
-    packageName=$(basename "$line" .go)
+packagePaths=($(yq e '.Tests[].PackagePath' $configFile))
+
+for pkgPath in "${packagePaths[@]}"; do
+    packageName=$(basename "$pkgPath")
     outputFile="${benchmarksResults}/${packageName}_results_new.txt"
     oldBenchmarks="${benchmarksResults}/${packageName}_results_old.txt"
 
-    echo "benchmarking package $packageName..."
+#    echo "Benchmarking package $packageName..."
 
-    go test -bench=. -count=10 -benchmem "$line" | tee "$outputFile"
+    benchStatFile="${benchmarksResults}/${packageName}_benchstat.txt"
+    benchstat "$oldBenchmarks" "$outputFile" &> "${benchStatFile}"
 
-    benchstat $oldBenchmarks $outputFile &>"${benchmarksResults}/${packageName}_benchstat.txt"
-done <"$pathsFile"
+    "${prefix}/degradation-tester" "${configFile}" "${benchStatFile}"
+    if [ $? -ne 0 ]; then
+      echo "❌ Degradation tests have failed for ${packageName} package."
+      exit 1
+    fi
+
+    echo "✅ Degradation tests have passed for ${packageName} package."
+done
