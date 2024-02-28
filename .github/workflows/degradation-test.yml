@@ -26,6 +26,9 @@ jobs:
       - name: Install yq
         run: sudo snap install yq
 
+      - name: Install benchstat
+        run: go install golang.org/x/perf/cmd/benchstat@latest
+
       - name: Build degradation tester tool
         run: |
           cd ./scripts/degradation-tester
