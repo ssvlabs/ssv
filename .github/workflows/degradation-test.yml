@@ -31,8 +31,8 @@ jobs:
           cd ./scripts/degradation-tester
           go install .
 
-      - name: Run degradation tester tool
+      - name: Run degradation-test
         run: |
-          make degradation-tester
+          make degradation-test
         env:
           GO111MODULE: on
