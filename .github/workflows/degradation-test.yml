@@ -30,6 +30,10 @@ jobs:
 
       - name: Run performance tests
         run: |
+          pwd
+          cd ..
+          cd ..
+          pwd
           make degradation-tester
         env:
           GO111MODULE: on
