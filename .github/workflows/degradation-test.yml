@@ -12,6 +12,9 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v3
 
+      - name: Setup make
+        run: sudo apt-get update && sudo apt-get install make
+
       - name: Set up Go
         uses: actions/setup-go@v4
         with:
@@ -28,12 +31,8 @@ jobs:
           cd ./scripts/degradation-tester
           go install .
 
-      - name: Run performance tests
+      - name: Run degradation tester tool
         run: |
-          pwd
-          cd ..
-          cd ..
-          pwd
           make degradation-tester
         env:
           GO111MODULE: on
