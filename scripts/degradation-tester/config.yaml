@@ -1,23 +1,17 @@
+DefaultOpDelta: 4.0
+DefaultAllocDelta: 0
 Tests:
   - PackagePath: "./message/validation"
     TestCases:
       - Name: "VerifyRSASignature"
-        AllowedDeltaPercentage: 3.0
+        OpDelta: 3.0
   - PackagePath: "./protocol/v2/types"
     TestCases:
       - Name: "VerifyBLS"
-        AllowedDeltaPercentage: 6.0
+        OpDelta: 6.0
       - Name: "VerifyPKCS1v15"
-        AllowedDeltaPercentage: 3.0
+        OpDelta: 3.0
       - Name: "VerifyPKCS1v15FastHash"
-        AllowedDeltaPercentage: 6.0
+        OpDelta: 6.0
       - Name: "VerifyPSS"
-        AllowedDeltaPercentage: 6.0
-      - Name: "SignBLS"
-        AllowedDeltaPercentage: 6.0
-      - Name: "SignPKCS1v15"
-        AllowedDeltaPercentage: 6.0
-      - Name: "SignPKCS1v15FastHash"
-        AllowedDeltaPercentage: 3.0
-      - Name: "SignPSS"
-        AllowedDeltaPercentage: 3.0
+        OpDelta: 4.0

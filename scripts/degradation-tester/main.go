@@ -11,10 +11,13 @@ import (
 	"strings"
 )
 
-var testThresholds map[string]float64
+var opThresholds map[string]float64
+var allocThresholds map[string]float64
 
 type Config struct {
-	Tests []BenchmarkingTestConfig `yaml:"Tests"`
+	DefaultOpDelta    float64                  `yaml:"DefaultOpDelta"`
+	DefaultAllocDelta float64                  `yaml:"DefaultAllocDelta"`
+	Tests             []BenchmarkingTestConfig `yaml:"Tests"`
 }
 
 type BenchmarkingTestConfig struct {
@@ -23,8 +26,9 @@ type BenchmarkingTestConfig struct {
 }
 
 type TestCase struct {
-	Name                   string  `yaml:"Name"`
-	AllowedDeltaPercentage float64 `yaml:"AllowedDeltaPercentage"`
+	Name       string  `yaml:"Name"`
+	OpDelta    float64 `yaml:"OpDelta"`
+	AllocDelta float64 `yaml:"AllocDelta"`
 }
 
 var config Config
@@ -54,11 +58,12 @@ func main() {
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		if strings.Contains(line, "sec/op") {
+		switch {
+		case strings.Contains(line, "sec/op"):
 			currentSection = "sec/op"
-		} else if strings.Contains(line, "B/op") {
+		case strings.Contains(line, "B/op"):
 			currentSection = "B/op"
-		} else if strings.Contains(line, "allocs/op") {
+		case strings.Contains(line, "allocs/op"):
 			currentSection = "allocs/op"
 		}
 
@@ -86,15 +91,21 @@ func loadConfig(filename string) {
 		os.Exit(1)
 	}
 
-	testThresholds = make(map[string]float64)
+	opThresholds = make(map[string]float64)
+	allocThresholds = make(map[string]float64)
+
 	for _, pkg := range config.Tests {
 		for _, testCase := range pkg.TestCases {
-			testThresholds[testCase.Name] = testCase.AllowedDeltaPercentage
+			if testCase.OpDelta > 0 {
+				opThresholds[testCase.Name] = testCase.OpDelta
+			}
+			if testCase.AllocDelta > 0 {
+				opThresholds[testCase.Name] = testCase.OpDelta
+			}
 		}
 	}
 
 }
-
 func checkLine(line, section string) int {
 	reChange := regexp.MustCompile(`-?\d+\.\d+%`)
 	reTestName := regexp.MustCompile(`^\S+`)
@@ -111,15 +122,11 @@ func checkLine(line, section string) int {
 		changeStr := matches[len(matches)-1]
 		change, err := strconv.ParseFloat(strings.TrimSuffix(changeStr, "%"), 64)
 		if err != nil {
-			fmt.Printf("Error parsing float: %v\n", err)
-			os.Exit(1)
+			fmt.Printf("⚠️ Error parsing float: %v\n", err)
+			return 1
 		}
 
-		threshold := findThresholdForTest(normalizedTestName)
-		if threshold == 0 {
-			fmt.Printf("Test %s not found in config\n", normalizedTestName)
-			os.Exit(1)
-		}
+		threshold := getThresholdForTestCase(normalizedTestName, section)
 
 		if math.Abs(change) > threshold {
 			fmt.Printf("❌ Change in section %s for test %s exceeds threshold: %s\n", section, normalizedTestName, changeStr)
@@ -134,9 +141,19 @@ func normalizeTestName(testName string) string {
 	return re.ReplaceAllString(testName, "")
 }
 
-func findThresholdForTest(testName string) float64 {
-	if threshold, exists := testThresholds[testName]; exists {
-		return threshold
+func getThresholdForTestCase(testName, section string) float64 {
+	switch section {
+	case "sec/op":
+		if threshold, exists := opThresholds[testName]; exists {
+			return threshold
+		}
+		return config.DefaultOpDelta
+	case "allocs/op":
+		if threshold, exists := allocThresholds[testName]; exists {
+			return threshold
+		}
+		return config.DefaultAllocDelta
+	default:
+		return 0.0
 	}
-	return 0
 }
