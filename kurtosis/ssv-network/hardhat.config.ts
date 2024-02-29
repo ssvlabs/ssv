@@ -1,7 +1,7 @@
 import 'dotenv/config';
 
-import { HardhatUserConfig } from 'hardhat/config';
-import { NetworkUserConfig } from 'hardhat/types';
+import {HardhatUserConfig} from 'hardhat/config';
+import {NetworkUserConfig} from 'hardhat/types';
 import '@nomicfoundation/hardhat-toolbox';
 import '@openzeppelin/hardhat-upgrades';
 import 'hardhat-tracer';
@@ -22,7 +22,7 @@ type SSVNetworkConfig = NetworkUserConfig & {
 const config: HardhatUserConfig = {
   // Your type-safe config goes here
   mocha: {
-    timeout: 40000000000000000,
+    timeout: 1000,
   },
   solidity: {
     compilers: [
@@ -55,15 +55,20 @@ const config: HardhatUserConfig = {
       // These are private keys associated with prefunded test accounts created by the eth-network-package
       // https://github.com/kurtosis-tech/eth-network-package/blob/main/src/prelaunch_data_generator/genesis_constants/genesis_constants.star
       accounts: [
-        "ef5177cd0b6b21c87db5a0bf35d4084a8a57a9d6a064f86d51ac85f2b873a4e2",
-        "48fcc39ae27a0e8bf0274021ae6ebd8fe4a0e12623d61464c498900b28feb567",
-        "7988b3a148716ff800414935b305436493e1f25237a2a03e5eebc343735e2f31",
-        "b3c409b6b0b3aa5e65ab2dc1930534608239a478106acf6f3d9178e9f9b00b35",
-        "df9bb6de5d3dc59595bcaa676397d837ff49441d211878c024eabda2cd067c9f",
-        "7da08f856b5956d40a72968f93396f6acff17193f013e8053f6fbb6c08c194d6",
-        "17fdf89989597e8bcac6cdfcc001b6241c64cece2c358ffc818b72ca70f5e1ce",
+        "bcdf20249abf0ed6d944c0288fad489e33f66b3960d9e6229c1cd214ed3bbe31",
+        "39725efee3fb28614de3bacaffe4cc4bd8c436257e2c8bb887c4b5c4be45e76d",
+        "53321db7c1e331d93a11a41d16f004d7ff63972ec8ec7c25db329728ceeb1710",
+        "ab63b23eb7941c1251757e24b3d2350d2bc05c3c388d06f8fe6feafefb1e8c70",
+        "5d2344259f42259f82d2c140aa66102ba89b57b4883ee441a8b312622bd42491",
+        "27515f805127bebad2fb9b183508bdacb8c763da16f54e0678b16e8f28ef3fff",
+        "7ff1a4c1d57e5e784d327c4c7651e952350bc271f156afb3d00d20f5ef924856",
+        "3a91003acaf4c21b3953d94fa4a6db694fa69e5242b2e37be05dd82761058899",
+        "bb1d0f125b4fb2bb173c318cdead45468474ca71474e2247776b2b4c0fa2d3f5",
+        "850643a0224065ecce3882673c21f56bcf6eef86274cc21cadff15930b59fc8c",
+        "94eb3102993b41ec55c241060f47daa0f6372e2e3ad7e91612ae36c364042e44",
       ],
-      allowUnlimitedContractSize: true
+      allowUnlimitedContractSize: true,
+      ssvToken: process.env.SSVTOKEN_ADDRESS,
     },
   },
   etherscan: {
@@ -127,16 +132,7 @@ if (process.env.GOERLI_ETH_NODE_URL) {
 if (process.env.HOLESKY_ETH_NODE_URL) {
   const sharedConfig = {
     url: process.env.HOLESKY_ETH_NODE_URL,
-    accounts: [
-      // `0x${process.env.HOLESKY_OWNER_PRIVATE_KEY}`
-      "ef5177cd0b6b21c87db5a0bf35d4084a8a57a9d6a064f86d51ac85f2b873a4e2",
-      "48fcc39ae27a0e8bf0274021ae6ebd8fe4a0e12623d61464c498900b28feb567",
-      "7988b3a148716ff800414935b305436493e1f25237a2a03e5eebc343735e2f31",
-      "b3c409b6b0b3aa5e65ab2dc1930534608239a478106acf6f3d9178e9f9b00b35",
-      "df9bb6de5d3dc59595bcaa676397d837ff49441d211878c024eabda2cd067c9f",
-      "7da08f856b5956d40a72968f93396f6acff17193f013e8053f6fbb6c08c194d6",
-      "17fdf89989597e8bcac6cdfcc001b6241c64cece2c358ffc818b72ca70f5e1ce",
-    ],
+    accounts: [`0x${process.env.HOLESKY_OWNER_PRIVATE_KEY}`],
     gasPrice: +(process.env.GAS_PRICE || ''),
     gas: +(process.env.GAS || ''),
   };
