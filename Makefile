@@ -62,6 +62,11 @@ degradation-test:
 	@echo "Running degradation tests"
 	@bash ./scripts/degradation-tester/degradation-check.sh
 
+.PHONY: update-benchmarks
+update-benchmarks:
+	@echo "Updating benchmarks"
+	@bash ./scripts/degradation-tester/update-benchmarks.sh
+
 .PHONY: spec-test
 spec-test:
 	@echo "Running spec tests"

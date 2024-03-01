@@ -17,12 +17,12 @@ var allocThresholds map[string]float64
 type Config struct {
 	DefaultOpDelta    float64                  `yaml:"DefaultOpDelta"`
 	DefaultAllocDelta float64                  `yaml:"DefaultAllocDelta"`
-	Tests             []BenchmarkingTestConfig `yaml:"Tests"`
+	Packages          []BenchmarkingTestConfig `yaml:"Packages"`
 }
 
 type BenchmarkingTestConfig struct {
-	PackagePath string     `yaml:"PackagePath"`
-	TestCases   []TestCase `yaml:"TestCases"`
+	Path  string     `yaml:"Path"`
+	Tests []TestCase `yaml:"Tests"`
 }
 
 type TestCase struct {
@@ -94,8 +94,8 @@ func loadConfig(filename string) {
 	opThresholds = make(map[string]float64)
 	allocThresholds = make(map[string]float64)
 
-	for _, pkg := range config.Tests {
-		for _, testCase := range pkg.TestCases {
+	for _, pkg := range config.Packages {
+		for _, testCase := range pkg.Tests {
 			if testCase.OpDelta > 0 {
 				opThresholds[testCase.Name] = testCase.OpDelta
 			}
