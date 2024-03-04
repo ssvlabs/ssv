@@ -3,8 +3,8 @@
 #
 FROM golang:1.20.7 AS preparer
 
-RUN apt-get update                                                        && \
-  DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
+RUN apt-get update
+RUN DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
   curl \
   git \
   zip \
