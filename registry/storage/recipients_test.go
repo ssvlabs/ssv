@@ -52,7 +52,7 @@ func TestStorage_DropRecipients(t *testing.T) {
 	err = storageCollection.DropRecipients()
 	require.NoError(t, err)
 
-	rdFromDB, found, err = storageCollection.GetRecipientData(nil, rd.Owner)
+	_, found, err = storageCollection.GetRecipientData(nil, rd.Owner)
 	require.NoError(t, err)
 	require.False(t, found)
 }
