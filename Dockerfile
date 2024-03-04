@@ -13,7 +13,8 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
   gcc-aarch64-linux-gnu \
   bzip2 \
   make \
-  && rm -rf /var/cache/apt/*
+  && rm -rf /var/cache/apt/* \
+  && RUN rm -f /var/cache/apt/archives/*.deb /var/cache/apt/archives/partial/*.deb /var/cache/apt/*.bin || true
 
 # install jemalloc
 WORKDIR /tmp/jemalloc-temp
