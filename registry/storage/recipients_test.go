@@ -15,6 +15,57 @@ import (
 	"github.com/bloxapp/ssv/storage/kv"
 )
 
+func TestStorage_DropRecipients(t *testing.T) {
+	logger := logging.TestLogger(t)
+	storageCollection, done := newRecipientStorageForTest(logger)
+	require.NotNil(t, storageCollection)
+	defer done()
+
+	var nonce storage.Nonce
+	rdToSave := &storage.RecipientData{
+		Owner: common.BytesToAddress([]byte("0x3")),
+		Nonce: &nonce,
+	}
+	copy(rdToSave.FeeRecipient[:], "0x3")
+
+	rd, err := storageCollection.SaveRecipientData(nil, rdToSave)
+	require.NoError(t, err)
+	require.NotNil(t, rd)
+	require.NotNil(t, rd.Nonce)
+	require.Equal(t, storage.Nonce(0), *rd.Nonce)
+
+	rdToSave, found, err := storageCollection.GetRecipientData(nil, rd.Owner)
+	require.NoError(t, err)
+	require.True(t, found)
+	rdDup, err := storageCollection.SaveRecipientData(nil, rdToSave)
+	require.NoError(t, err)
+	require.Nil(t, rdDup)
+	require.NotNil(t, rd.Nonce)
+	require.Equal(t, storage.Nonce(0), *rd.Nonce)
+
+	rdFromDB, found, err := storageCollection.GetRecipientData(nil, rd.Owner)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.NotNil(t, rdFromDB.Nonce)
+	require.Equal(t, storage.Nonce(0), *rdFromDB.Nonce)
+
+	err = storageCollection.DropRecipients()
+	require.NoError(t, err)
+
+	rdFromDB, found, err = storageCollection.GetRecipientData(nil, rd.Owner)
+	require.NoError(t, err)
+	require.False(t, found)
+}
+
+func TestStorage_GetRecipientsPrefix(t *testing.T) {
+	logger := logging.TestLogger(t)
+	storageCollection, done := newRecipientStorageForTest(logger)
+	require.NotNil(t, storageCollection)
+	defer done()
+
+	require.Equal(t, []byte("recipients"), storageCollection.GetRecipientsPrefix())
+}
+
 func TestStorage_SaveAndGetRecipientData(t *testing.T) {
 	logger := logging.TestLogger(t)
 	storageCollection, done := newRecipientStorageForTest(logger)
