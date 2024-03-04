@@ -12,9 +12,8 @@ RUN apt-get update                                                        && \
   g++ \
   gcc-aarch64-linux-gnu \
   bzip2 \
-  make \
-  && rm -rf /var/lib/apt/lists/* \
-  && rm -f /var/cache/apt/archives/*.deb /var/cache/apt/archives/partial/*.deb /var/cache/apt/*.bin || true
+  make
+
 # install jemalloc
 WORKDIR /tmp/jemalloc-temp
 RUN curl -s -L "https://github.com/jemalloc/jemalloc/releases/download/5.2.1/jemalloc-5.2.1.tar.bz2" -o jemalloc.tar.bz2 \
