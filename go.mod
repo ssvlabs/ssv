@@ -8,7 +8,6 @@ require (
 	github.com/bloxapp/eth2-key-manager v1.4.0
 	github.com/bloxapp/ssv-spec v0.3.6
 	github.com/btcsuite/btcd/btcec/v2 v2.3.2
-	github.com/carlmjohnson/requests v0.23.5
 	github.com/cespare/xxhash/v2 v2.2.0
 	github.com/cornelk/hashmap v1.0.8
 	github.com/dgraph-io/badger/v4 v4.1.0
@@ -228,4 +227,4 @@ replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
 
-replace github.com/attestantio/go-eth2-client => github.com/y0sher/go-eth2-client v0.0.0-20240225155350-c396641b4956
+replace github.com/attestantio/go-eth2-client => github.com/y0sher/go-eth2-client v0.0.0-20240305092513-92d154b203a6
