@@ -8,6 +8,7 @@ import (
 
 	"github.com/bloxapp/ssv/cli/bootnode"
 	"github.com/bloxapp/ssv/cli/operator"
+	"github.com/bloxapp/ssv/cli/tests"
 )
 
 // RootCmd represents the root command of SSV CLI
@@ -30,7 +31,8 @@ func Execute(appName, version string) {
 }
 
 func init() {
-	RootCmd.AddCommand(bootnode.StartBootNodeCmd)
 	RootCmd.AddCommand(operator.StartNodeCmd)
 	RootCmd.AddCommand(operator.GenerateDocCmd)
+	RootCmd.AddCommand(bootnode.StartBootNodeCmd)
+	RootCmd.AddCommand(tests.RsaCmd)
 }

@@ -107,6 +107,15 @@ else
 	@${BUILD_PATH} start-node ${NODE_COMMAND}
 endif
 
+.PHONY: test-rsa
+test-rsa:
+	@echo "Build ${BUILD_PATH}"
+	@echo "Build ${CONFIG_PATH}"
+	@echo "Build ${CONFIG_PATH2}"
+	@echo "Command ${NODE_COMMAND}"
+	@echo "Running node on address: ${HOST_ADDRESS})"
+	@${BUILD_PATH} test-rsa ${NODE_COMMAND}
+
 .PHONY: docker
 docker:
 	@echo "node ${NODES_ID}"

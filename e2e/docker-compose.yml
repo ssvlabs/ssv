@@ -83,6 +83,23 @@ services:
   #    environment:
   #      CONFIG_PATH: ./config/config.yaml
 
+  rsa_signature:
+    <<: *default-base
+    container_name: rsa_signature
+    command: make BUILD_PATH=/go/bin/ssvnode test-rsa
+    image: rsa_signature:latest
+    depends_on: []
+    environment:
+      BEACON_NODE_ADDR: http://beacon_proxy:6631
+      ETH_1_ADDR: ${EXECUTION_NODE_URL}
+      CONFIG_PATH: ./tconfig/config.yaml
+      SHARE_CONFIG: ./tconfig/share.yaml
+    networks:
+      - blox-docker
+    volumes:
+      - ${PWD}/config/config.yaml:/tconfig/config.yaml
+      - ${PWD}/config/share5.yaml:/tconfig/share.yaml
+
   ssv-node-1:
     <<: *default-base
     container_name: ssv-node-1

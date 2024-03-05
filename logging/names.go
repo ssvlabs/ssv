@@ -19,6 +19,7 @@ const (
 	NameCreateThreshold   = "CreateThreshold"
 	NameDiscoveryV5Logger = "DiscoveryV5Logger"
 	NameExportKeys        = "ExportKeys"
+	NamesRsaTest          = "RsaTest"
 	NameP2PStorage        = "P2PStorage"
 	NamePubsubTrace       = "PubsubTrace"
 	NameScoreInspector    = "ScoreInspector"

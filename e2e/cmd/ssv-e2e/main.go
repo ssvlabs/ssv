@@ -15,6 +15,8 @@ type Globals struct {
 	NetworkName    string `env:"NETWORK" default:"holesky-e2e" help:"Network config name"`
 	LogLevel       string `env:"LOG_LEVEL"       enum:"debug,info,warn,error" default:"debug"             help:"Log level."`
 	LogFormat      string `env:"LOG_FORMAT"      enum:"console,json"           default:"console"           help:"Log format."`
+	ShareFile      string `env:"SHARE_CONFIG"                              default:"./tconfig/share.yaml" help:"Path to Share file." type:"path"`
+	ConfigFile     string `env:"CONFIG_PATH"                              default:"./tconfig/config.yaml" help:"Path to config file." type:"path"`
 	ValidatorsFile string `env:"VALIDATORS_FILE"                              default:"./validators.json" help:"Path to the validators.json file." type:"path"`
 }
 
