@@ -2,6 +2,8 @@ package storage
 
 import (
 	"encoding/base64"
+	"fmt"
+	"math/big"
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
@@ -165,6 +167,10 @@ func TestDropRegistryData(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.False(t, found)
+
+		found, err = storage.OperatorsExist(nil, []spectypes.OperatorID{id})
+		require.NoError(t, err)
+		require.True(t, found)
 	}
 	for _, pk := range sharePubKeys {
 		err := storage.Shares().Save(nil, &types.SSVShare{
@@ -183,6 +189,7 @@ func TestDropRegistryData(t *testing.T) {
 			FeeRecipient: fr,
 		})
 		require.NoError(t, err)
+
 	}
 
 	// Check that everything was saved.
@@ -254,4 +261,175 @@ func TestNetworkAndLocalEventsConfig(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, found)
 	require.Equal(t, c2, storedCfg)
+}
+
+func TestGetOperatorsPrefix(t *testing.T) {
+	logger := logging.TestLogger(t)
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	defer db.Close()
+
+	require.NoError(t, err)
+
+	operatorStorage, err := NewNodeStorage(logger, db)
+	require.NoError(t, err)
+	require.Equal(t, []byte("operators"), operatorStorage.GetOperatorsPrefix())
+}
+
+func TestGetRecipientsPrefix(t *testing.T) {
+	logger := logging.TestLogger(t)
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	defer db.Close()
+
+	require.NoError(t, err)
+
+	operatorStorage, err := NewNodeStorage(logger, db)
+	require.NoError(t, err)
+
+	require.Equal(t, []byte("recipients"), operatorStorage.GetRecipientsPrefix())
+}
+
+func Test_Config(t *testing.T) {
+	logger := logging.TestLogger(t)
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	defer db.Close()
+
+	require.NoError(t, err)
+
+	operatorStorage, err := NewNodeStorage(logger, db)
+	require.NoError(t, err)
+
+	cfgData := &ConfigLock{
+		NetworkName:      "test",
+		UsingLocalEvents: false,
+	}
+
+	err = operatorStorage.SaveConfig(nil, cfgData)
+	require.NoError(t, err)
+
+	cfg, validAndFound, err := operatorStorage.GetConfig(nil)
+	require.NoError(t, err)
+	require.True(t, validAndFound)
+	require.NotNil(t, cfg)
+	require.Equal(t, cfgData.NetworkName, cfg.NetworkName)
+	require.Equal(t, cfgData.UsingLocalEvents, cfg.UsingLocalEvents)
+
+	require.NoError(t, operatorStorage.DeleteConfig(nil))
+
+	cfg, validAndFound, err = operatorStorage.GetConfig(nil)
+	require.NoError(t, err)
+	require.False(t, validAndFound)
+	require.Nil(t, cfg)
+}
+
+func Test_LastProcessedBlock(t *testing.T) {
+	logger := logging.TestLogger(t)
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	defer db.Close()
+
+	require.NoError(t, err)
+
+	operatorStorage, err := NewNodeStorage(logger, db)
+	require.NoError(t, err)
+
+	_, found, err := operatorStorage.GetLastProcessedBlock(nil)
+	require.NoError(t, err)
+	require.False(t, found)
+
+	err = operatorStorage.SaveLastProcessedBlock(nil, big.NewInt(123))
+	require.NoError(t, err)
+
+	blockNum, found, err := operatorStorage.GetLastProcessedBlock(nil)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, *big.NewInt(123), *blockNum)
+}
+
+func Test_OperatorData(t *testing.T) {
+	logger := logging.TestLogger(t)
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	defer db.Close()
+
+	require.NoError(t, err)
+
+	operatorStorage, err := NewNodeStorage(logger, db)
+	require.NoError(t, err)
+
+	operatorIDs := []uint64{1, 2, 3}
+
+	for _, id := range operatorIDs {
+		pubkey := []byte(fmt.Sprintf("publicKey%d", id))
+		operatorData := &registrystorage.OperatorData{
+			ID:           id,
+			PublicKey:    pubkey,
+			OwnerAddress: common.Address{byte(id)},
+		}
+
+		found, err := operatorStorage.SaveOperatorData(nil, operatorData)
+		require.NoError(t, err)
+		require.False(t, found)
+
+		opData, found, err := operatorStorage.GetOperatorData(nil, id)
+		require.NoError(t, err)
+		require.True(t, found)
+		require.Equal(t, *operatorData, *opData)
+
+		opData, found, err = operatorStorage.GetOperatorDataByPubKey(nil, pubkey)
+		require.NoError(t, err)
+		require.True(t, found)
+		require.Equal(t, *operatorData, *opData)
+
+		err = operatorStorage.DeleteOperatorData(nil, id)
+		require.NoError(t, err)
+
+		opData, found, err = operatorStorage.GetOperatorData(nil, id)
+		require.NoError(t, err)
+		require.False(t, found)
+		require.Nil(t, opData)
+	}
+}
+
+func Test_NonceBumping(t *testing.T) {
+	logger := logging.TestLogger(t)
+	db, err := kv.NewInMemory(logger, basedb.Options{})
+	defer db.Close()
+
+	require.NoError(t, err)
+
+	operatorStorage, err := NewNodeStorage(logger, db)
+	require.NoError(t, err)
+
+	owner := common.Address{1}
+
+	var fr bellatrix.ExecutionAddress
+	copy(fr[:], append([]byte{1}, owner[:]...))
+
+	recipientData := &registrystorage.RecipientData{
+		Owner:        owner,
+		FeeRecipient: fr,
+	}
+	_, err = operatorStorage.SaveRecipientData(nil, recipientData)
+	require.NoError(t, err)
+
+	data, found, err := operatorStorage.GetRecipientData(nil, owner)
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, *recipientData, *data)
+
+	require.NoError(t, operatorStorage.BumpNonce(nil, owner))
+	require.NoError(t, operatorStorage.BumpNonce(nil, owner))
+	nonce, err := operatorStorage.GetNextNonce(nil, owner)
+	require.NoError(t, err)
+	require.Equal(t, registrystorage.Nonce(2), nonce)
+
+	err = operatorStorage.DeleteRecipientData(nil, owner)
+	require.NoError(t, err)
+
+	data, found, err = operatorStorage.GetRecipientData(nil, owner)
+	require.NoError(t, err)
+	require.False(t, found)
+	require.Nil(t, data)
+
+	nonce, err = operatorStorage.GetNextNonce(nil, owner)
+	require.NoError(t, err)
+	require.Equal(t, registrystorage.Nonce(0), nonce)
 }
