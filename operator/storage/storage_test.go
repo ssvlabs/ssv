@@ -31,7 +31,9 @@ func TestSaveAndGetPrivateKey(t *testing.T) {
 	logger := logging.TestLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	operatorStorage := storage{
 		db: db,
@@ -93,7 +95,9 @@ func TestSetupPrivateKey(t *testing.T) {
 			logger := logging.TestLogger(t)
 			db, err := kv.NewInMemory(logger, basedb.Options{})
 			require.NoError(t, err)
-			defer db.Close()
+			defer func() {
+				_ = db.Close()
+			}()
 
 			operatorStorage := storage{
 				logger: zaptest.NewLogger(t),
@@ -148,7 +152,9 @@ func TestDropRegistryData(t *testing.T) {
 	logger := logging.TestLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	storage, err := NewNodeStorage(logger, db)
 	require.NoError(t, err)
@@ -230,7 +236,9 @@ func TestNetworkAndLocalEventsConfig(t *testing.T) {
 	logger := logging.TestLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	storage, err := NewNodeStorage(logger, db)
 	require.NoError(t, err)
@@ -266,7 +274,9 @@ func TestNetworkAndLocalEventsConfig(t *testing.T) {
 func TestGetOperatorsPrefix(t *testing.T) {
 	logger := logging.TestLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	require.NoError(t, err)
 
@@ -278,7 +288,9 @@ func TestGetOperatorsPrefix(t *testing.T) {
 func TestGetRecipientsPrefix(t *testing.T) {
 	logger := logging.TestLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	require.NoError(t, err)
 
@@ -291,7 +303,9 @@ func TestGetRecipientsPrefix(t *testing.T) {
 func Test_Config(t *testing.T) {
 	logger := logging.TestLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	require.NoError(t, err)
 
@@ -324,7 +338,9 @@ func Test_Config(t *testing.T) {
 func Test_LastProcessedBlock(t *testing.T) {
 	logger := logging.TestLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	require.NoError(t, err)
 
@@ -347,7 +363,9 @@ func Test_LastProcessedBlock(t *testing.T) {
 func Test_OperatorData(t *testing.T) {
 	logger := logging.TestLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	require.NoError(t, err)
 
@@ -391,7 +409,9 @@ func Test_OperatorData(t *testing.T) {
 func Test_NonceBumping(t *testing.T) {
 	logger := logging.TestLogger(t)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
-	defer db.Close()
+	defer func() {
+		_ = db.Close()
+	}()
 
 	require.NoError(t, err)
 
