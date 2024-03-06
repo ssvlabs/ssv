@@ -1,8 +1,8 @@
 package sameduty
 
 import (
+	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -26,7 +26,8 @@ func New(signer spectypes.BeaconSigner, sharePublicKey []byte) *Wrapper {
 func (saf *Wrapper) AttesterValueCheck(valueCheckF specqbft.ProposedValueCheckF) specqbft.ProposedValueCheckF {
 	return func(data []byte) error {
 		if valueCheckErr := valueCheckF(data); valueCheckErr != nil {
-			if !strings.Contains(valueCheckErr.Error(), "slashable") {
+			var slashableErr ekm.SlashableAttestationError
+			if !errors.As(valueCheckErr, &slashableErr) {
 				return valueCheckErr
 			}
 
@@ -64,7 +65,8 @@ func (saf *Wrapper) AttesterValueCheck(valueCheckF specqbft.ProposedValueCheckF)
 func (saf *Wrapper) ProposerValueCheck(valueCheckF specqbft.ProposedValueCheckF) specqbft.ProposedValueCheckF {
 	return func(data []byte) error {
 		if valueCheckErr := valueCheckF(data); valueCheckErr != nil {
-			if !strings.Contains(valueCheckErr.Error(), "slashable") {
+			var slashableErr ekm.SlashableProposalError
+			if !errors.As(valueCheckErr, &slashableErr) {
 				return valueCheckErr
 			}
 

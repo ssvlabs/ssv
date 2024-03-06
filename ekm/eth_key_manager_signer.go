@@ -235,7 +235,7 @@ func (km *ethKeyManagerSigner) IsAttestationSlashable(pk []byte, data *phase0.At
 		if err != nil {
 			return err
 		}
-		return errors.Errorf("slashable attestation (%s), not signing", val.Status)
+		return SlashableAttestationError{val.Status}
 	}
 	return nil
 }
@@ -246,7 +246,7 @@ func (km *ethKeyManagerSigner) IsBeaconBlockSlashable(pk []byte, slot phase0.Slo
 		return err
 	}
 	if status.Status != core.ValidProposal {
-		return errors.Errorf("slashable proposal (%s), not signing", status.Status)
+		return SlashableProposalError{status.Status}
 	}
 
 	return nil
