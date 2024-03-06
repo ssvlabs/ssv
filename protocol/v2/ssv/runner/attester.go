@@ -92,6 +92,11 @@ func (r *AttesterRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbf
 		return errors.Wrap(err, "could not get attestation data")
 	}
 
+	logger.Info("signing attestation",
+		zap.Uint64("source_epoch", uint64(attestationData.Source.Epoch)),
+		zap.Uint64("target_epoch", uint64(attestationData.Target.Epoch)),
+	)
+
 	// specific duty sig
 	msg, err := r.BaseRunner.signBeaconObject(r, attestationData, decidedValue.Duty.Slot, spectypes.DomainAttester)
 	if err != nil {
