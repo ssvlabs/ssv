@@ -15,12 +15,14 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/operator/validator/sameduty"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging"
@@ -916,11 +918,14 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 		qbftCtrl.NewDecidedHandler = options.NewDecidedHandler
 		return qbftCtrl
 	}
+
+	sameDutyWrapper := sameduty.New(options.Signer, options.SSVShare.SharePubKey)
+
 	runners := runner.DutyRunners{}
 	for _, role := range runnersType {
 		switch role {
 		case spectypes.BNRoleAttester:
-			valCheck := specssv.AttesterValueCheckF(options.Signer, options.BeaconNetwork.GetBeaconNetwork(), options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index, options.SSVShare.SharePubKey)
+			valCheck := sameDutyWrapper.AttesterValueCheck(specssv.AttesterValueCheckF(options.Signer, options.BeaconNetwork.GetBeaconNetwork(), options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index, options.SSVShare.SharePubKey))
 			qbftCtrl := buildController(spectypes.BNRoleAttester, valCheck)
 			runners[role] = runner.NewAttesterRunnner(options.BeaconNetwork.GetBeaconNetwork(), &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, valCheck, 0)
 		case spectypes.BNRoleProposer:
