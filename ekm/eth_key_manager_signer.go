@@ -235,7 +235,21 @@ func (km *ethKeyManagerSigner) IsAttestationSlashable(pk []byte, data *phase0.At
 		if err != nil {
 			return err
 		}
-		return SlashableAttestationError{val.Status}
+		highest, _, err := km.slashingProtector.FetchHighestAttestation(pk)
+		if err != nil {
+			return err
+		}
+
+		e := SlashableAttestationError{
+			Status:                 val.Status,
+			AttestationSourceEpoch: data.Source.Epoch,
+			AttestationTargetEpoch: data.Target.Epoch,
+		}
+		if highest != nil {
+			e.HighestSourceEpoch = highest.Source.Epoch
+			e.HighestTargetEpoch = highest.Target.Epoch
+		}
+		return e
 	}
 	return nil
 }
