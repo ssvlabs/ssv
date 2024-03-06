@@ -4,28 +4,26 @@ import (
 	"bytes"
 	"fmt"
 
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv-spec/types"
-
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
 type ValueChecker struct {
 	signer         types.BeaconSigner
-	network        beaconprotocol.BeaconNetwork
+	network        types.BeaconNetwork
 	validatorPK    types.ValidatorPK
-	validatorIndex spec.ValidatorIndex
+	validatorIndex phase0.ValidatorIndex
 	sharePublicKey []byte
 
-	currentAttestationData *spec.AttestationData
+	currentAttestationData *phase0.AttestationData
 	currentBlockHashRoot   [32]byte
 }
 
 func New(
 	signer types.BeaconSigner,
-	network beaconprotocol.BeaconNetwork,
+	network types.BeaconNetwork,
 	validatorPK types.ValidatorPK,
-	validatorIndex spec.ValidatorIndex,
+	validatorIndex phase0.ValidatorIndex,
 	sharePublicKey []byte,
 ) *ValueChecker {
 	return &ValueChecker{

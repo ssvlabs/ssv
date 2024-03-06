@@ -3,7 +3,7 @@ package valuechecker
 import (
 	"fmt"
 
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv-spec/types"
 )
 
@@ -42,7 +42,7 @@ func (vc *ValueChecker) AttesterValueCheckF(data []byte) error {
 	return vc.checkSlashableAttestation(attestationData)
 }
 
-func (vc *ValueChecker) checkSlashableAttestation(attestationData *spec.AttestationData) error {
+func (vc *ValueChecker) checkSlashableAttestation(attestationData *phase0.AttestationData) error {
 	if equalAttestationData(vc.currentAttestationData, attestationData) {
 		return nil
 	}
@@ -55,7 +55,7 @@ func (vc *ValueChecker) checkSlashableAttestation(attestationData *spec.Attestat
 	return nil
 }
 
-func equalAttestationData(a, b *spec.AttestationData) bool {
+func equalAttestationData(a, b *phase0.AttestationData) bool {
 	return a != nil && b != nil &&
 		a.Slot == b.Slot &&
 		a.Index == b.Index &&
@@ -64,7 +64,7 @@ func equalAttestationData(a, b *spec.AttestationData) bool {
 		equalCheckpoint(a.Target, b.Target)
 }
 
-func equalCheckpoint(a, b *spec.Checkpoint) bool {
+func equalCheckpoint(a, b *phase0.Checkpoint) bool {
 	return a != nil && b != nil &&
 		a.Epoch == b.Epoch &&
 		a.Root == b.Root

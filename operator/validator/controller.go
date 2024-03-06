@@ -919,7 +919,7 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 
 	vc := valuechecker.New(
 		options.Signer,
-		options.BeaconNetwork,
+		options.BeaconNetwork.GetBeaconNetwork(),
 		options.SSVShare.Share.ValidatorPubKey,
 		options.SSVShare.BeaconMetadata.Index,
 		options.SSVShare.SharePubKey,
