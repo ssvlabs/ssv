@@ -51,7 +51,7 @@ func (saf *Wrapper) AttesterValueCheck(valueCheckF specqbft.ProposedValueCheckF)
 				return valueCheckErr
 			}
 
-			if !equalAttestationData(attestationData, highest) {
+			if !sameEpochAttestationData(attestationData, highest) {
 				return valueCheckErr
 			}
 
@@ -101,19 +101,15 @@ func (saf *Wrapper) ProposerValueCheck(valueCheckF specqbft.ProposedValueCheckF)
 	}
 }
 
-func equalAttestationData(a, b *phase0.AttestationData) bool {
+func sameEpochAttestationData(a, b *phase0.AttestationData) bool {
 	return a != nil && b != nil &&
-		a.Slot == b.Slot &&
-		a.Index == b.Index &&
-		a.BeaconBlockRoot == b.BeaconBlockRoot &&
-		equalCheckpoint(a.Source, b.Source) &&
-		equalCheckpoint(a.Target, b.Target)
+		sameEpochCheckpoint(a.Source, b.Source) &&
+		sameEpochCheckpoint(a.Target, b.Target)
 }
 
-func equalCheckpoint(a, b *phase0.Checkpoint) bool {
+func sameEpochCheckpoint(a, b *phase0.Checkpoint) bool {
 	return a != nil && b != nil &&
-		a.Epoch == b.Epoch &&
-		a.Root == b.Root
+		a.Epoch == b.Epoch
 }
 
 func getBlockSlot(cd *spectypes.ConsensusData) (phase0.Slot, error) {
