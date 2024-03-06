@@ -163,7 +163,7 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.SignedMessage) error {
 	}
 
 	if msg.Message.Round < i.State.Round {
-		//return errors.New("past round")
+		return errors.New("past round")
 	}
 
 	switch msg.Message.MsgType {
