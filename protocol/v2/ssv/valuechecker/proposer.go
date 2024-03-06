@@ -3,12 +3,12 @@ package valuechecker
 import (
 	"fmt"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
 )
 
-func (vc *ValueChecker) getBlockData(cd *types.ConsensusData) (phase0.Slot, ssz.HashRoot, error) {
+func (vc *ValueChecker) getBlockData(cd *types.ConsensusData) (spec.Slot, ssz.HashRoot, error) {
 	blindedBlockData, blindedHashRoot, err := cd.GetBlindedBlockData()
 	if err != nil {
 		blockData, hashRoot, err := cd.GetBlockData()
@@ -32,7 +32,7 @@ func (vc *ValueChecker) getBlockData(cd *types.ConsensusData) (phase0.Slot, ssz.
 	return slot, blindedHashRoot, nil
 }
 
-func (vc *ValueChecker) checkSlashableProposal(slot phase0.Slot, hashRoot ssz.HashRoot) error {
+func (vc *ValueChecker) checkSlashableProposal(slot spec.Slot, hashRoot ssz.HashRoot) error {
 	blockHashRoot, err := hashRoot.HashTreeRoot()
 	if err != nil {
 		return fmt.Errorf("get blinded block data hash: %w", err)
