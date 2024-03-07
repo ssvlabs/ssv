@@ -252,6 +252,9 @@ func TestSlashing(t *testing.T) {
 	}
 
 	t.Run("sign once", func(t *testing.T) {
+		err := km.(*ethKeyManagerSigner).IsAttestationSlashable(sk1.GetPublicKey().Serialize(), attestationData)
+		require.NoError(t, err)
+
 		_, sig, err := km.(*ethKeyManagerSigner).SignBeaconObject(attestationData, phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainAttester)
 		require.NoError(t, err)
 		require.NotNil(t, sig)
@@ -261,9 +264,14 @@ func TestSlashing(t *testing.T) {
 		_, sig, err := km.(*ethKeyManagerSigner).SignBeaconObject(attestationData, phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainAttester)
 		require.EqualError(t, err, "slashable attestation (HighestAttestationVote), not signing")
 		require.Equal(t, [32]byte{}, sig)
+
+		err = km.(*ethKeyManagerSigner).IsAttestationSlashable(sk1.GetPublicKey().Serialize(), attestationData)
+		require.EqualError(t, err, "slashable attestation (HighestAttestationVote), not signing")
 	})
 
 	t.Run("sign once", func(t *testing.T) {
+		err := km.(*ethKeyManagerSigner).IsBeaconBlockSlashable(sk1.GetPublicKey().Serialize(), beaconBlock.Slot)
+		require.NoError(t, err)
 		_, sig, err := km.(*ethKeyManagerSigner).SignBeaconObject(beaconBlock, phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainProposer)
 		require.NoError(t, err)
 		require.NotNil(t, sig)
@@ -273,6 +281,9 @@ func TestSlashing(t *testing.T) {
 		_, sig, err := km.(*ethKeyManagerSigner).SignBeaconObject(beaconBlock, phase0.Domain{}, sk1.GetPublicKey().Serialize(), spectypes.DomainProposer)
 		require.EqualError(t, err, "slashable proposal (HighestProposalVote), not signing")
 		require.Equal(t, [32]byte{}, sig)
+
+		err = km.(*ethKeyManagerSigner).IsBeaconBlockSlashable(sk1.GetPublicKey().Serialize(), beaconBlock.Slot)
+		require.EqualError(t, err, "slashable proposal (HighestProposalVote), not signing")
 	})
 	t.Run("slashable sign after duplicate AddShare, fail", func(t *testing.T) {
 		require.NoError(t, km.AddShare(sk1))
@@ -292,7 +303,7 @@ func TestSignBeaconObject(t *testing.T) {
 	currentSlot := km.(*ethKeyManagerSigner).storage.Network().EstimatedCurrentSlot()
 	highestProposal := currentSlot + minSPProposalSlotGap + 1
 
-	t.Run("sign deneb block", func(t *testing.T) {
+	t.Run("Sign Deneb block", func(t *testing.T) {
 		var beaconBlock = &deneb.BeaconBlock{
 			Slot:          highestProposal,
 			ProposerIndex: 0,
@@ -505,8 +516,7 @@ func TestSignBeaconObject(t *testing.T) {
 				Slot:              currentSlot,
 				BeaconBlockRoot:   [32]byte{1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2, 3, 4, 5, 6, 1, 2},
 				SubcommitteeIndex: 1,
-				// AggregationBits size is SYNC_COMMITTEE_SIZE // SYNC_COMMITTEE_SUBNET_COUNT
-				AggregationBits: bitfield.Bitvector128{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0xa, 0xb, 0xc, 0xd, 0xe},
+				AggregationBits:   bitfield.Bitvector128{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 0xa, 0xb, 0xc, 0xd, 0xe},
 				Signature: phase0.BLSSignature{
 					0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
 					0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
@@ -748,7 +758,7 @@ func TestRemoveShare(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("key exists", func(t *testing.T) {
+	t.Run("key doesn't exist", func(t *testing.T) {
 		km := testKeyManager(t, nil)
 
 		pk := &bls.SecretKey{}
@@ -757,4 +767,13 @@ func TestRemoveShare(t *testing.T) {
 		err := km.RemoveShare(pk.GetPublicKey().GetHexString())
 		require.NoError(t, err)
 	})
+}
+
+func TestEkmListAccounts(t *testing.T) {
+	require.NoError(t, bls.Init(bls.BLS12_381))
+
+	km := testKeyManager(t, nil)
+	accounts, err := km.(*ethKeyManagerSigner).ListAccounts()
+	require.NoError(t, err)
+	require.Equal(t, 2, len(accounts))
 }
