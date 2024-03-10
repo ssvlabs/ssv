@@ -69,6 +69,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg 
 		return errors.Wrap(err, "failed processing voluntary exit message")
 	}
 
+	logger.Debug("voluntary exit pre-consensus message processed", zap.Uint64("signers", signedMsg.Signer))
 	// quorum returns true only once (first time quorum achieved)
 	if !quorum {
 		return nil
@@ -88,6 +89,8 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg 
 		Message:   r.voluntaryExit,
 		Signature: specSig,
 	}
+
+	logger.Debug("got quorum for voluntary exit", zap.Uint64("voluntary_exit_epoch", uint64(r.voluntaryExit.Epoch)), zap.Uint64("voluntary_exit_vindex", uint64(r.voluntaryExit.ValidatorIndex)), zap.String("signature", specSig.String()))
 
 	if err := r.beacon.SubmitVoluntaryExit(signedVoluntaryExit); err != nil {
 		return errors.Wrap(err, "could not submit voluntary exit")
