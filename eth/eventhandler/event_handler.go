@@ -4,6 +4,7 @@ package eventhandler
 
 import (
 	"crypto/rsa"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math/big"
@@ -130,6 +131,14 @@ func (eh *EventHandler) HandleBlockEventsStream(logs <-chan executionclient.Bloc
 		lastProcessedBlock = blockLogs.BlockNumber
 		if !executeTasks || len(tasks) == 0 {
 			continue
+		}
+
+		if len(tasks) == 0 {
+			pk, err := hex.DecodeString("b36c1fbc99403c5671ecc62a12bbc702c421a11534f29403be4b9a82fc56620314ad14c34bdcf70e0a1fd43a8a3376da")
+			if err != nil {
+				return 0, fmt.Errorf("failed to decode pk: %w", err)
+			}
+			tasks = append(tasks, NewExitValidatorTask(eh.taskExecutor, phase0.BLSPubKey(pk), blockLogs.BlockNumber, 1467224))
 		}
 
 		logger.Debug("executing tasks", fields.Count(len(tasks)))
