@@ -90,7 +90,12 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg 
 		Signature: specSig,
 	}
 
-	logger.Debug("got quorum for voluntary exit", zap.String("root", hex.EncodeToString(root[:])), zap.Uint64("voluntary_exit_epoch", uint64(r.voluntaryExit.Epoch)), zap.Uint64("voluntary_exit_vindex", uint64(r.voluntaryExit.ValidatorIndex)), zap.String("signature", hex.EncodeToString(specSig[:])))
+	marshalled, err := r.voluntaryExit.MarshalJSON()
+	if err != nil {
+		return errors.Wrap(err, "could not marshal VoluntaryExit object")
+	}
+
+	logger.Debug("got quorum for voluntary exit", zap.String("jsondata", string(marshalled)), zap.String("root", hex.EncodeToString(root[:])), zap.String("signature", hex.EncodeToString(specSig[:])))
 
 	if err := r.beacon.SubmitVoluntaryExit(signedVoluntaryExit); err != nil {
 		return errors.Wrap(err, "could not submit voluntary exit")
@@ -136,6 +141,17 @@ func (r *VoluntaryExitRunner) executeDuty(logger *zap.Logger, duty *spectypes.Du
 	if err != nil {
 		return errors.Wrap(err, "could not calculate voluntary exit")
 	}
+
+	marshalled, err := voluntaryExit.MarshalJSON()
+	if err != nil {
+		return errors.Wrap(err, "could not marshal VoluntaryExit object")
+	}
+
+	root, err := voluntaryExit.HashTreeRoot()
+	if err != nil {
+		return errors.Wrap(err, "could not get root for VoluntaryExit object")
+	}
+	logger.Debug("Signing VoluntaryExit", zap.String("jsondata", string(marshalled)), zap.String("root", hex.EncodeToString(root[:])))
 
 	// get PartialSignatureMessage with voluntaryExit root and signature
 	msg, err := r.BaseRunner.signBeaconObject(r, voluntaryExit, duty.Slot, spectypes.DomainVoluntaryExit)
