@@ -90,7 +90,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg 
 		Signature: specSig,
 	}
 
-	logger.Debug("got quorum for voluntary exit", zap.Uint64("voluntary_exit_epoch", uint64(r.voluntaryExit.Epoch)), zap.Uint64("voluntary_exit_vindex", uint64(r.voluntaryExit.ValidatorIndex)), zap.String("signature", specSig.String()))
+	logger.Debug("got quorum for voluntary exit", zap.String("root", hex.EncodeToString(root[:])), zap.Uint64("voluntary_exit_epoch", uint64(r.voluntaryExit.Epoch)), zap.Uint64("voluntary_exit_vindex", uint64(r.voluntaryExit.ValidatorIndex)), zap.String("signature", specSig.String()))
 
 	if err := r.beacon.SubmitVoluntaryExit(signedVoluntaryExit); err != nil {
 		return errors.Wrap(err, "could not submit voluntary exit")
