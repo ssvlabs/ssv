@@ -5,6 +5,8 @@ import (
 	crand "crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"testing"
+
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -21,21 +23,17 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
-	"testing"
 )
 
 func BenchmarkVerifyRSASignature(b *testing.B) {
 	logger := zaptest.NewLogger(b)
 	db, err := kv.NewInMemory(logger, basedb.Options{})
-	if err != nil {
-		b.Fatal(err)
-	}
+	require.NoError(b, err)
 
 	ns, err := storage.NewNodeStorage(logger, db)
-	if err != nil {
-		b.Fatal(err)
-	}
+	require.NoError(b, err)
 
 	const validatorIndex = 123
 	const operatorID = spectypes.OperatorID(1)
@@ -52,9 +50,7 @@ func BenchmarkVerifyRSASignature(b *testing.B) {
 		},
 	}
 	err = ns.Shares().Save(nil, share)
-	if err != nil {
-		b.Fatal(err)
-	}
+	require.NoError(b, err)
 
 	netCfg := networkconfig.TestNetwork
 
@@ -67,9 +63,7 @@ func BenchmarkVerifyRSASignature(b *testing.B) {
 	validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, specqbft.Height(slot))
 
 	encoded, err := validSignedMessage.Encode()
-	if err != nil {
-		b.Fatal(err)
-	}
+	require.NoError(b, err)
 
 	message := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVConsensusMsgType,
@@ -78,20 +72,14 @@ func BenchmarkVerifyRSASignature(b *testing.B) {
 	}
 
 	encodedMsg, err := commons.EncodeNetworkMsg(message)
-	if err != nil {
-		b.Fatal(err)
-	}
+	require.NoError(b, err)
 
 	hash := sha256.Sum256(encodedMsg)
 	privateKey, err := rsa.GenerateKey(crand.Reader, 2048)
-	if err != nil {
-		b.Fatal(err)
-	}
+	require.NoError(b, err)
 
 	pubKey, err := rsaencryption.ExtractPublicKey(privateKey)
-	if err != nil {
-		b.Fatal(err)
-	}
+	require.NoError(b, err)
 
 	od := &registrystorage.OperatorData{
 		ID:           operatorID,
@@ -100,18 +88,12 @@ func BenchmarkVerifyRSASignature(b *testing.B) {
 	}
 
 	found, err := ns.SaveOperatorData(nil, od)
-	if err != nil {
-		b.Fatal(err)
-	}
+	require.NoError(b, err)
 
-	if found {
-		b.Fatal("operator data already exists")
-	}
+	require.False(b, found)
 
 	signature, err := rsa.SignPKCS1v15(crand.Reader, privateKey, crypto.SHA256, hash[:])
-	if err != nil {
-		b.Fatal(err)
-	}
+	require.NoError(b, err)
 
 	encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, operatorID, signature)
 
@@ -125,17 +107,13 @@ func BenchmarkVerifyRSASignature(b *testing.B) {
 
 	messageData := pMsg.GetData()
 	decMessageData, operatorIDX, signature, err := commons.DecodeSignedSSVMessage(messageData)
-	if err != nil {
-		b.Fatal(err)
-	}
+	require.NoError(b, err)
 
 	messageData = decMessageData
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		err := mv.verifyRSASignature(messageData, operatorIDX, signature)
-		if err != nil {
-			b.Fatal(err)
-		}
+		require.NoError(b, err)
 	}
 }

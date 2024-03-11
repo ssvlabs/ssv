@@ -3,12 +3,13 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"gopkg.in/yaml.v3"
 	"math"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 var opThresholds map[string]float64
@@ -31,8 +32,6 @@ type TestCase struct {
 	AllocDelta float64 `yaml:"AllocDelta"`
 }
 
-var config Config
-
 func main() {
 	if len(os.Args) < 3 {
 		fmt.Println("Usage: degradation-tester <config_filename> <results_filename>")
@@ -42,7 +41,7 @@ func main() {
 	configFilename := os.Args[1]
 	resultsFilename := os.Args[2]
 
-	loadConfig(configFilename)
+	config := loadConfig(configFilename)
 
 	file, err := os.Open(resultsFilename)
 	if err != nil {
@@ -67,7 +66,7 @@ func main() {
 			currentSection = "allocs/op"
 		}
 
-		totalErrors += checkLine(line, currentSection)
+		totalErrors += checkLine(config, line, currentSection)
 	}
 
 	if err := scanner.Err(); err != nil {
@@ -79,7 +78,8 @@ func main() {
 	}
 }
 
-func loadConfig(filename string) {
+func loadConfig(filename string) *Config {
+	config := &Config{}
 	file, err := os.ReadFile(filename)
 	if err != nil {
 		fmt.Printf("Error reading config file: %v\n", err)
@@ -100,18 +100,25 @@ func loadConfig(filename string) {
 				opThresholds[testCase.Name] = testCase.OpDelta
 			}
 			if testCase.AllocDelta > 0 {
-				opThresholds[testCase.Name] = testCase.OpDelta
+				allocThresholds[testCase.Name] = testCase.AllocDelta
 			}
 		}
 	}
-
+	return config
 }
-func checkLine(line, section string) int {
+
+func checkLine(
+	config *Config,
+	line string,
+	section string,
+) int {
 	reChange := regexp.MustCompile(`-?\d+\.\d+%`)
 	reTestName := regexp.MustCompile(`^\S+`)
 	matches := reChange.FindAllString(line, -1)
 	testNameMatch := reTestName.FindString(line)
 
+	// The "geomean" represents a statistical summary (geometric mean) of multiple test results,
+	// not an individual test result, hence we should just skip it
 	if testNameMatch == "geomean" {
 		return 0
 	}
@@ -126,7 +133,7 @@ func checkLine(line, section string) int {
 			return 1
 		}
 
-		threshold := getThresholdForTestCase(normalizedTestName, section)
+		threshold := getThresholdForTestCase(config, normalizedTestName, section)
 
 		if math.Abs(change) > threshold {
 			fmt.Printf("❌ Change in section %s for test %s exceeds threshold: %s\n", section, normalizedTestName, changeStr)
@@ -141,7 +148,11 @@ func normalizeTestName(testName string) string {
 	return re.ReplaceAllString(testName, "")
 }
 
-func getThresholdForTestCase(testName, section string) float64 {
+func getThresholdForTestCase(
+	config *Config,
+	testName string,
+	section string,
+) float64 {
 	switch section {
 	case "sec/op":
 		if threshold, exists := opThresholds[testName]; exists {
