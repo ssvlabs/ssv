@@ -90,12 +90,16 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg 
 		Signature: specSig,
 	}
 
+	htr, err := r.voluntaryExit.HashTreeRoot()
+	if err != nil {
+		return errors.Wrap(err, "could not get root for VoluntaryExit object")
+	}
 	marshalled, err := r.voluntaryExit.MarshalJSON()
 	if err != nil {
 		return errors.Wrap(err, "could not marshal VoluntaryExit object")
 	}
 
-	logger.Debug("got quorum for voluntary exit", zap.String("jsondata", string(marshalled)), zap.String("root", hex.EncodeToString(root[:])), zap.String("signature", hex.EncodeToString(specSig[:])))
+	logger.Debug("got quorum for voluntary exit", zap.String("jsondata", string(marshalled)), zap.String("root", hex.EncodeToString(htr[:])), zap.String("signature", hex.EncodeToString(specSig[:])))
 
 	if err := r.beacon.SubmitVoluntaryExit(signedVoluntaryExit); err != nil {
 		return errors.Wrap(err, "could not submit voluntary exit")
