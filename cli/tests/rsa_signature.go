@@ -17,7 +17,6 @@ import (
 	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/network"
-	p2pcommons "github.com/bloxapp/ssv/network/commons"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator"
@@ -34,11 +33,11 @@ import (
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/ilyakaznacheev/cleanenv"
-	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"log"
+	"math/rand"
 	"time"
 )
 
@@ -86,10 +85,8 @@ var RsaCmd = &cobra.Command{
 	Use:   "test-rsa",
 	Short: "Test Rsa Wrong signature",
 	Run: func(cmd *cobra.Command, args []string) {
-		//commons.SetBuildData(cmd.Parent().Short, cmd.Parent().Version)
 		logger, err := setupGlobal()
 		ctx := context.Background()
-		//defer cancel()
 		if err != nil {
 			log.Fatal("could not create logger", err)
 		}
@@ -128,10 +125,13 @@ var RsaCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.Permissioned = func() bool {
 			return false
 		}
+
 		cfg.P2pNetworkConfig.NodeStorage = nodeStorage
 		cfg.P2pNetworkConfig.OperatorPubKeyHash = format.OperatorID(operatorData.PublicKey)
+		operatorId := 0
 		cfg.P2pNetworkConfig.OperatorID = func() spectypes.OperatorID {
-			return validatorCtrl.GetOperatorData().ID
+			operatorId++
+			return spectypes.OperatorID(operatorId)
 		}
 		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
 		cfg.P2pNetworkConfig.Network = networkConfig
@@ -141,26 +141,11 @@ var RsaCmd = &cobra.Command{
 		dutyStore := dutystore.New()
 		cfg.SSVOptions.DutyStore = dutyStore
 
-		istore := ssv_identity.NewIdentityStore(db)
-		netPrivKey, err := istore.SetupNetworkKey(logger, cfg.NetworkPrivateKey)
-		if err != nil {
-			logger.Fatal("failed to setup network private key", zap.Error(err))
-		}
-		pubKey, err := p2pcommons.ECDSAPrivToInterface(netPrivKey)
-		if err != nil {
-			panic(err)
-		}
-		selfPeerID, err := peer.IDFromPublicKey(pubKey.GetPublic())
-		if err != nil {
-			panic(err)
-		}
-
 		messageValidator := validation.NewMessageValidator(
 			networkConfig,
 			validation.WithLogger(logger),
 			validation.WithMetrics(metricsReporter),
 			validation.WithOwnOperatorID(operatorData.ID),
-			validation.WithSelfAccept(selfPeerID, true),
 		)
 
 		cfg.P2pNetworkConfig.Metrics = metricsReporter
@@ -200,37 +185,41 @@ var RsaCmd = &cobra.Command{
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
 			ch := messageRoute.GetMessageChan()
-			changed := false
+			sendMessageCount := 0
 			for {
 				select {
 				case <-ctx.Done():
 					logger.Debug("router message handler stopped")
 					return
-				case msg := <-ch:
-					//// TODO temp solution to prevent getting event msgs from network. need to to add validation in p2p
-					//if msg.MsgType == message.SSVEventMsgType {
-					//	continue
-					//}
-					newMessage := msg.SSVMessage
-					if !changed {
-						newMessage.MsgType = 2
-						changed = true
-					}
-					err = p2pNetwork.Broadcast(newMessage)
-					if err != nil {
-						logger.Fatal("failed to broadcast message", zap.Error(err))
-					}
+				case incomingMessage := <-ch:
+					ssvMessage := incomingMessage.SSVMessage
+					if mm, ok := incomingMessage.Body.(*spectypes.SignedPartialSignatureMessage); ok {
+						// Seed the random number generator
+						rand.Seed(time.Now().UnixNano())
 
-					//if v, ok := c.validatorsMap.GetValidator(hexPK); ok {
-					//	v.HandleMessage(c.logger, msg)
-					//} else if c.validatorOptions.Exporter {
-					//	if msg.MsgType != spectypes.SSVConsensusMsgType {
-					//		continue // not supporting other types
-					//	}
-					//	if !c.messageWorker.TryEnqueue(msg) { // start to save non committee decided messages only post fork
-					//		c.logger.Warn("Failed to enqueue post consensus message: buffer is full")
-					//	}
-					//}
+						// Generate a random number, for example between 0 and 9
+						dynamicValue := rand.Intn(10) // This will give you a random integer between 0 and 9
+
+						// Using fmt.Sprintf to insert the dynamic value into the string
+						signatureString := fmt.Sprintf("sVV0fsvqQlqliKv/ussGIatxpe8LDWhc8uoaM5WpjbiYvvxUr1eCpz0ja7UT%dPGNDdmoGi6xbMC1g/ozhAt4uCdpy0Xdfqbv", dynamicValue)
+
+						// Converting the formatted string to a byte slice
+						signature := []byte(signatureString)
+						mm.Signature = signature
+						incomingMessage.Data, err = mm.Encode()
+						incomingMessage.Body, err = incomingMessage.Encode()
+						if err != nil {
+							logger.Fatal("failed to encode message", zap.Error(err))
+						}
+
+						if sendMessageCount < 4 {
+							err = p2pNetwork.Broadcast(ssvMessage)
+							if err != nil {
+								logger.Fatal("failed to broadcast message", zap.Error(err))
+							}
+							sendMessageCount++
+						}
+					}
 				}
 			}
 		}()
@@ -270,6 +259,7 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database) (operatorstora
 	if !found {
 		operatorData = &registrystorage.OperatorData{
 			PublicKey: operatorPubKey,
+			ID:        4,
 		}
 	}
 

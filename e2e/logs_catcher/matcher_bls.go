@@ -61,7 +61,8 @@ func VerifyBLSSignature(pctx context.Context, logger *zap.Logger, cli DockerCLI,
 	defer startc()
 
 	validatorIndex := fmt.Sprintf("v%d", share.ValidatorIndex)
-	conditionLog, err := StartCondition(startctx, logger, []string{gotDutiesSuccess, validatorIndex}, targetContainer, cli)
+	matcher := NewLogMatcher(logger, cli, "")
+	conditionLog, err := matcher.waitForStartCondition(startctx, []string{gotDutiesSuccess, validatorIndex}, targetContainer)
 	if err != nil {
 		return fmt.Errorf("failed to start condition: %w", err)
 	}
@@ -81,7 +82,7 @@ func VerifyBLSSignature(pctx context.Context, logger *zap.Logger, cli DockerCLI,
 	leader := DetermineLeader(dutySlot, committee)
 	logger.Debug("Leader: ", zap.Uint64("leader", leader))
 
-	_, err = StartCondition(startctx, logger, []string{submittedAttSuccess, share.ValidatorPubKey}, targetContainer, cli)
+	_, err = matcher.waitForStartCondition(startctx, []string{submittedAttSuccess, share.ValidatorPubKey}, targetContainer)
 	if err != nil {
 		return fmt.Errorf("failed to start condition: %w", err)
 	}
