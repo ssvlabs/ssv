@@ -1,7 +1,10 @@
 package goclient
 
 import (
+	"context"
 	"crypto/sha256"
+	"encoding/hex"
+	"github.com/attestantio/go-eth2-client/api"
 	"hash"
 	"sync"
 
@@ -10,6 +13,54 @@ import (
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 )
+
+func (gc *goClient) selfComputeDomain(ctx context.Context,
+	domainType phase0.DomainType,
+) (phase0.Domain, error) {
+	specs, err := gc.client.Spec(gc.ctx, &api.SpecOpts{})
+	if err != nil {
+		return phase0.Domain{}, errors.Wrap(err, "failed to obtain fork schedule")
+	}
+
+	forkVersionRaw, err := hex.DecodeString(specs.Data["CAPELLA_FORK_VERSION"].(string))
+	if err != nil {
+		return phase0.Domain{}, errors.Wrap(err, "failed to decode fork version")
+	}
+
+	//forkEpochRaw, err := strconv.ParseUint(specs.Data["CAPELLA_FORK_EPOCH"].(string), 10, 64)
+	//if err != nil {
+	//	return phase0.Domain{}, errors.Wrap(err, "failed to decode fork epoch")
+	//}
+
+	if len(forkVersionRaw) != 4 {
+		return phase0.Domain{}, errors.New("fork version is invalid")
+	}
+
+	var forkVersion phase0.Version
+	copy(forkVersion[:], forkVersionRaw)
+
+	forkData := &phase0.ForkData{
+		CurrentVersion: forkVersion,
+	}
+
+	response, err := gc.client.Genesis(ctx, &api.GenesisOpts{})
+	if err != nil {
+		return phase0.Domain{}, errors.Wrap(err, "failed to obtain genesis")
+	}
+
+	forkData.GenesisValidatorsRoot = response.Data.GenesisValidatorsRoot
+
+	root, err := forkData.HashTreeRoot()
+	if err != nil {
+		return phase0.Domain{}, errors.Wrap(err, "failed to calculate signature domain")
+	}
+
+	var domain phase0.Domain
+	copy(domain[:], domainType[:])
+	copy(domain[4:], root[:])
+
+	return domain, nil
+}
 
 func (gc *goClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
 	if domain == spectypes.DomainApplicationBuilder { // no domain for DomainApplicationBuilder. need to create.  https://github.com/bloxapp/ethereum2-validator/blob/v2-main/signing/keyvault/signer.go#L62
@@ -25,6 +76,8 @@ func (gc *goClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (ph
 		copy(appDomain[:], domain[:])
 		copy(appDomain[4:], root[:])
 		return appDomain, nil
+	} else if domain == spectypes.DomainVoluntaryExit {
+		return gc.selfComputeDomain(gc.ctx, domain)
 	}
 
 	data, err := gc.client.Domain(gc.ctx, domain, epoch)
