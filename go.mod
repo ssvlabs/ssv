@@ -207,7 +207,7 @@ require (
 	go.uber.org/dig v1.17.0 // indirect
 	go.uber.org/fx v1.19.2 // indirect
 	golang.org/x/crypto v0.18.0 // indirect
-	golang.org/x/net v0.10.0 // indirect
+	golang.org/x/net v0.15.0 // indirect
 	golang.org/x/sys v0.16.0 // indirect
 	golang.org/x/term v0.16.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
@@ -227,4 +227,4 @@ replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
 
-replace github.com/attestantio/go-eth2-client => github.com/moshe-blox/go-eth2-client v0.7.2-0.20240204094454-17f5c145f39f
+replace github.com/attestantio/go-eth2-client => github.com/y0sher/go-eth2-client v0.0.0-20240305092513-92d154b203a6
