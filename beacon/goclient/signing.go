@@ -1,7 +1,9 @@
 package goclient
 
 import (
+	"context"
 	"crypto/sha256"
+	"github.com/attestantio/go-eth2-client/api"
 	"hash"
 	"sync"
 
@@ -10,6 +12,41 @@ import (
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 )
+
+func (gc *goClient) computeVoluntaryExitDomain(ctx context.Context,
+) (phase0.Domain, error) {
+	specs, err := gc.client.Spec(gc.ctx, &api.SpecOpts{})
+	if err != nil {
+		return phase0.Domain{}, errors.Wrap(err, "failed to obtain fork schedule")
+	}
+
+	forkVersion, ok := specs.Data["CAPELLA_FORK_VERSION"].(phase0.Version)
+	if !ok {
+		return phase0.Domain{}, errors.New("failed to decode fork version")
+	}
+
+	forkData := &phase0.ForkData{
+		CurrentVersion: forkVersion,
+	}
+
+	response, err := gc.client.Genesis(ctx, &api.GenesisOpts{})
+	if err != nil {
+		return phase0.Domain{}, errors.Wrap(err, "failed to obtain genesis")
+	}
+
+	forkData.GenesisValidatorsRoot = response.Data.GenesisValidatorsRoot
+
+	root, err := forkData.HashTreeRoot()
+	if err != nil {
+		return phase0.Domain{}, errors.Wrap(err, "failed to calculate signature domain")
+	}
+
+	var domain phase0.Domain
+	copy(domain[:], spectypes.DomainVoluntaryExit[:])
+	copy(domain[4:], root[:])
+
+	return domain, nil
+}
 
 func (gc *goClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
 	if domain == spectypes.DomainApplicationBuilder { // no domain for DomainApplicationBuilder. need to create.  https://github.com/bloxapp/ethereum2-validator/blob/v2-main/signing/keyvault/signer.go#L62
@@ -25,6 +62,8 @@ func (gc *goClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (ph
 		copy(appDomain[:], domain[:])
 		copy(appDomain[4:], root[:])
 		return appDomain, nil
+	} else if domain == spectypes.DomainVoluntaryExit {
+		return gc.computeVoluntaryExitDomain(gc.ctx)
 	}
 
 	data, err := gc.client.Domain(gc.ctx, domain, epoch)
