@@ -3,7 +3,6 @@ package goclient
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/hex"
 	"github.com/attestantio/go-eth2-client/api"
 	"hash"
 	"sync"
@@ -22,22 +21,15 @@ func (gc *goClient) selfComputeDomain(ctx context.Context,
 		return phase0.Domain{}, errors.Wrap(err, "failed to obtain fork schedule")
 	}
 
-	forkVersionRaw, err := hex.DecodeString(specs.Data["CAPELLA_FORK_VERSION"].(string))
-	if err != nil {
-		return phase0.Domain{}, errors.Wrap(err, "failed to decode fork version")
+	forkVersion, ok := specs.Data["CAPELLA_FORK_VERSION"].(phase0.Version)
+	if !ok {
+		return phase0.Domain{}, errors.New("failed to decode fork version")
 	}
 
 	//forkEpochRaw, err := strconv.ParseUint(specs.Data["CAPELLA_FORK_EPOCH"].(string), 10, 64)
 	//if err != nil {
 	//	return phase0.Domain{}, errors.Wrap(err, "failed to decode fork epoch")
 	//}
-
-	if len(forkVersionRaw) != 4 {
-		return phase0.Domain{}, errors.New("fork version is invalid")
-	}
-
-	var forkVersion phase0.Version
-	copy(forkVersion[:], forkVersionRaw)
 
 	forkData := &phase0.ForkData{
 		CurrentVersion: forkVersion,
