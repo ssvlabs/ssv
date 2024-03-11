@@ -195,9 +195,11 @@ var RsaCmd = &cobra.Command{
 					ssvMessage := incomingMessage.SSVMessage
 					if mm, ok := incomingMessage.Body.(*spectypes.SignedPartialSignatureMessage); ok {
 						// Seed the random number generator
+						// #nosec G404
 						rand.Seed(time.Now().UnixNano())
 
 						// Generate a random number, for example between 0 and 9
+						// #nosec G404
 						dynamicValue := rand.Intn(10) // This will give you a random integer between 0 and 9
 
 						// Using fmt.Sprintf to insert the dynamic value into the string
