@@ -13,12 +13,14 @@ import (
 	"github.com/pkg/errors"
 )
 
-func (gc *goClient) computeVoluntaryExitDomain(ctx context.Context,
-) (phase0.Domain, error) {
+func (gc *goClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Domain, error) {
 	specs, err := gc.client.Spec(gc.ctx, &api.SpecOpts{})
 	if err != nil {
 		return phase0.Domain{}, errors.Wrap(err, "failed to obtain fork schedule")
 	}
+
+	// TODO: consider storing fork version and genesis validators root in goClient
+	//		instead of fetching it every time
 
 	forkVersion, ok := specs.Data["CAPELLA_FORK_VERSION"].(phase0.Version)
 	if !ok {
@@ -33,7 +35,9 @@ func (gc *goClient) computeVoluntaryExitDomain(ctx context.Context,
 	if err != nil {
 		return phase0.Domain{}, errors.Wrap(err, "failed to obtain genesis")
 	}
-
+	if response.Data == nil {
+		return phase0.Domain{}, errors.New("failed to obtain genesis")
+	}
 	forkData.GenesisValidatorsRoot = response.Data.GenesisValidatorsRoot
 
 	root, err := forkData.HashTreeRoot()
