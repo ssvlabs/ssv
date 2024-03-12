@@ -56,7 +56,7 @@ func (gc *goClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Doma
 
 	root, err := forkData.HashTreeRoot()
 	if err != nil {
-		return phase0.Domain{}, errors.Wrap(err, "failed to calculate signature domain")
+		return phase0.Domain{}, fmt.Errorf("failed to calculate signature domain, err: %w", err)
 	}
 
 	var domain phase0.Domain
