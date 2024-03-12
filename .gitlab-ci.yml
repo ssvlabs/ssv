@@ -40,7 +40,7 @@ Build stage Docker image:
     - docker tag $IMAGE_NAME:$CI_COMMIT_SHA $DOCKER_REPO_INFRA_STAGE:$CI_COMMIT_SHA
     - $DOCKER_LOGIN_TO_INFRA_STAGE_REPO && docker push $DOCKER_REPO_INFRA_STAGE:$CI_COMMIT_SHA
   only:
-    - stage
+    - deploy/voluntary-exit-domain-aftercr
 
 # +---------------------+
 # | STAGE HETZNER NODES |
@@ -83,7 +83,7 @@ Deploy nodes to hetzner stage:
     - .k8/hetzner-stage/scripts/deploy-cluster-65--68.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE hetzner.stage.k8s.local hetzner.stage.k8s.local stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
     - .k8/hetzner-stage/scripts/deploy-cluster-69--72.sh $DOCKER_REPO_INFRA_STAGE $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_STAGE hetzner.stage.k8s.local hetzner.stage.k8s.local stage.ssv.network $K8S_API_VERSION $STAGE_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT $SSV_NODES_MEM_LIMIT
   only:
-    - stage
+    - deploy/voluntary-exit-domain-aftercr
 
 Deploy exporter to hetzner stage:
   stage: deploy
@@ -120,7 +120,7 @@ Build prod Docker image:
     - $DOCKER_LOGIN_TO_INFRA_PROD_REPO && docker push $DOCKER_REPO_INFRA_PROD:$CI_COMMIT_SHA
 
   only:
-    - main
+    - deploy/voluntary-exit-domain-aftercr
 
 Deploy nodes to prod:
   stage: deploy
@@ -171,7 +171,7 @@ Deploy nodes to prod:
     # - .k8/production/mainnet/scripts/deploy-boot-nodes.sh $DOCKER_REPO_INFRA_PROD $CI_COMMIT_SHA ssv $APP_REPLICAS_INFRA_PROD blox-infra-prod kubernetes-admin@blox-infra-prod ssv.network $K8S_API_VERSION $PROD_HEALTH_CHECK_IMAGE $SSV_NODES_CPU_LIMIT_V3 $SSV_NODES_MEM_LIMIT_V3
 
   only:
-    - main
+    - deploy/voluntary-exit-domain-aftercr
 
 Deploy exporter to prod:
   stage: deploy
