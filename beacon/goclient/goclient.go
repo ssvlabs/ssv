@@ -103,6 +103,8 @@ type Client interface {
 	eth2client.Service
 	eth2client.NodeVersionProvider
 	eth2client.NodeClientProvider
+	eth2client.SpecProvider
+	eth2client.GenesisProvider
 
 	eth2client.AttestationDataProvider
 	eth2client.AttestationsSubmitter
