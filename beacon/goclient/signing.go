@@ -3,6 +3,7 @@ package goclient
 import (
 	"context"
 	"crypto/sha256"
+	"fmt"
 	"github.com/attestantio/go-eth2-client/api"
 	"hash"
 	"sync"
@@ -16,15 +17,25 @@ import (
 func (gc *goClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Domain, error) {
 	specs, err := gc.client.Spec(gc.ctx, &api.SpecOpts{})
 	if err != nil {
-		return phase0.Domain{}, errors.Wrap(err, "failed to obtain fork schedule")
+		return phase0.Domain{}, errors.Wrap(err, "failed to obtain specs")
+	}
+	if specs == nil {
+		return phase0.Domain{}, fmt.Errorf("failed to obtain specs")
+	}
+	if specs.Data == nil {
+		return phase0.Domain{}, fmt.Errorf("failed to obtain specs")
 	}
 
 	// TODO: consider storing fork version and genesis validators root in goClient
 	//		instead of fetching it every time
 
-	forkVersion, ok := specs.Data["CAPELLA_FORK_VERSION"].(phase0.Version)
+	forkVersionRaw, ok := specs.Data["CAPELLA_FORK_VERSION"]
 	if !ok {
-		return phase0.Domain{}, errors.New("failed to decode fork version")
+		return phase0.Domain{}, fmt.Errorf("capella fork version not known by chain")
+	}
+	forkVersion, ok := forkVersionRaw.(phase0.Version)
+	if !ok {
+		return phase0.Domain{}, fmt.Errorf("failed to decode capella fork version")
 	}
 
 	forkData := &phase0.ForkData{
@@ -35,8 +46,11 @@ func (gc *goClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Doma
 	if err != nil {
 		return phase0.Domain{}, errors.Wrap(err, "failed to obtain genesis")
 	}
+	if response == nil {
+		return phase0.Domain{}, fmt.Errorf("failed to obtain genesis")
+	}
 	if response.Data == nil {
-		return phase0.Domain{}, errors.New("failed to obtain genesis")
+		return phase0.Domain{}, fmt.Errorf("failed to obtain genesis")
 	}
 	forkData.GenesisValidatorsRoot = response.Data.GenesisValidatorsRoot
 
