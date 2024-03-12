@@ -4,10 +4,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
-	"github.com/attestantio/go-eth2-client/api"
 	"hash"
 	"sync"
 
+	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
@@ -15,21 +15,21 @@ import (
 )
 
 func (gc *goClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Domain, error) {
-	specs, err := gc.client.Spec(gc.ctx, &api.SpecOpts{})
+	specResponse, err := gc.client.Spec(gc.ctx, &api.SpecOpts{})
 	if err != nil {
-		return phase0.Domain{}, errors.Wrap(err, "failed to obtain specs")
+		return phase0.Domain{}, fmt.Errorf("failed to obtain spec response: %w", err)
 	}
-	if specs == nil {
-		return phase0.Domain{}, fmt.Errorf("failed to obtain specs")
+	if specResponse == nil {
+		return phase0.Domain{}, fmt.Errorf("spec response is nil")
 	}
-	if specs.Data == nil {
-		return phase0.Domain{}, fmt.Errorf("failed to obtain specs")
+	if specResponse.Data == nil {
+		return phase0.Domain{}, fmt.Errorf("spec response data is nil")
 	}
 
 	// TODO: consider storing fork version and genesis validators root in goClient
 	//		instead of fetching it every time
 
-	forkVersionRaw, ok := specs.Data["CAPELLA_FORK_VERSION"]
+	forkVersionRaw, ok := specResponse.Data["CAPELLA_FORK_VERSION"]
 	if !ok {
 		return phase0.Domain{}, fmt.Errorf("capella fork version not known by chain")
 	}
@@ -42,17 +42,17 @@ func (gc *goClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Doma
 		CurrentVersion: forkVersion,
 	}
 
-	response, err := gc.client.Genesis(ctx, &api.GenesisOpts{})
+	genesisResponse, err := gc.client.Genesis(ctx, &api.GenesisOpts{})
 	if err != nil {
-		return phase0.Domain{}, errors.Wrap(err, "failed to obtain genesis")
+		return phase0.Domain{}, fmt.Errorf("failed to obtain genesis response: %w", err)
 	}
-	if response == nil {
-		return phase0.Domain{}, fmt.Errorf("failed to obtain genesis")
+	if genesisResponse == nil {
+		return phase0.Domain{}, fmt.Errorf("genesis response is nil")
 	}
-	if response.Data == nil {
-		return phase0.Domain{}, fmt.Errorf("failed to obtain genesis")
+	if genesisResponse.Data == nil {
+		return phase0.Domain{}, fmt.Errorf("genesis response data is nil")
 	}
-	forkData.GenesisValidatorsRoot = response.Data.GenesisValidatorsRoot
+	forkData.GenesisValidatorsRoot = genesisResponse.Data.GenesisValidatorsRoot
 
 	root, err := forkData.HashTreeRoot()
 	if err != nil {
