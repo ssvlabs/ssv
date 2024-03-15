@@ -40,14 +40,14 @@ func TestSameDuty(t *testing.T) {
 	shareSK.SetByCSPRNG()
 	sharePKBytes := shareSK.GetPublicKey().Serialize()
 
-	km, err := ekm.NewETHKeyManagerSigner(logger, db, networkConfig, true, "")
+	km, err := ekm.NewETHKeyManagerSigner(logger, db, networkConfig, false, "")
 	require.NoError(t, err)
 
 	require.NoError(t, km.AddShare(shareSK))
 
-	vc := New(km, sharePKBytes)
-
 	t.Run("attester", func(t *testing.T) {
+		vc := New(km, sharePKBytes)
+
 		attestationData := &phase0.AttestationData{
 			Slot:            currentSlot.GetSlot(),
 			Index:           3,
@@ -90,5 +90,38 @@ func TestSameDuty(t *testing.T) {
 		require.NoError(t, vc.AttesterValueCheck(ssv.AttesterValueCheckF(km, networkConfig.Beacon.GetBeaconNetwork(), consensusData.Duty.PubKey[:], consensusData.Duty.ValidatorIndex, sharePKBytes))(data))
 
 		require.ErrorAs(t, ssv.AttesterValueCheckF(km, networkConfig.Beacon.GetBeaconNetwork(), consensusData.Duty.PubKey[:], consensusData.Duty.ValidatorIndex, sharePKBytes)(data), &ekm.SlashableAttestationError{})
+	})
+
+	t.Run("proposer", func(t *testing.T) {
+		vc := New(km, sharePKBytes)
+
+		block := testingutils.TestingBeaconBlockCapella
+		block.Slot = currentSlot.GetSlot()
+
+		attestationDataBytes, err := block.MarshalSSZ()
+		require.NoError(t, err)
+
+		consensusData := &spectypes.ConsensusData{
+			Duty: spectypes.Duty{
+				Type:                    spectypes.BNRoleProposer,
+				PubKey:                  testingutils.TestingValidatorPubKey,
+				Slot:                    currentSlot.GetSlot(),
+				ValidatorIndex:          testingutils.TestingValidatorIndex,
+				CommitteeIndex:          3,
+				CommitteesAtSlot:        36,
+				CommitteeLength:         128,
+				ValidatorCommitteeIndex: 11,
+			},
+			DataSSZ: attestationDataBytes,
+			Version: spec.DataVersionCapella,
+		}
+
+		data, err := consensusData.Encode()
+		require.NoError(t, err)
+
+		require.NoError(t, vc.ProposerValueCheck(ssv.ProposerValueCheckF(km, networkConfig.Beacon.GetBeaconNetwork(), consensusData.Duty.PubKey[:], consensusData.Duty.ValidatorIndex, sharePKBytes))(data))
+		require.NoError(t, vc.ProposerValueCheck(ssv.ProposerValueCheckF(km, networkConfig.Beacon.GetBeaconNetwork(), consensusData.Duty.PubKey[:], consensusData.Duty.ValidatorIndex, sharePKBytes))(data))
+
+		require.ErrorAs(t, ssv.ProposerValueCheckF(km, networkConfig.Beacon.GetBeaconNetwork(), consensusData.Duty.PubKey[:], consensusData.Duty.ValidatorIndex, sharePKBytes)(data), &ekm.SlashableProposalError{})
 	})
 }
