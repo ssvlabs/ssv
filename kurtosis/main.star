@@ -22,12 +22,12 @@ def run(plan, args):
 def run_main(plan, args):
     ethereum_network = ethereum_package.run(plan, args)
 
-    el_ip_addr = ethereum_network.all_participants[0].el_client_context.ip_addr
-    el_client_port = ethereum_network.all_participants[0].el_client_context.rpc_port_num
-    el_url = "http://{0}:{1}".format(el_ip_addr, el_client_port)
+    el_ip_addr = ethereum_network.all_participants[0].el_context.ip_addr
+    el_port = ethereum_network.all_participants[0].el_context.rpc_port_num
+    el_url = "http://{0}:{1}".format(el_ip_addr, el_port)
 
-    beacon_node_addr = ethereum_network.all_participants[0].cl_client_context.ip_addr
-    beacon_node_port = ethereum_network.all_participants[0].cl_client_context.http_port_num
+    beacon_node_addr = ethereum_network.all_participants[0].cl_context.ip_addr
+    beacon_node_port = ethereum_network.all_participants[0].cl_context.http_port_num
     beacon_url = "http://{0}:{1}".format(beacon_node_addr, beacon_node_port)
 
     validator_data = validator_keystores.generate_validator_keystores(
