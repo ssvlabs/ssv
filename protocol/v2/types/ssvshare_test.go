@@ -1,7 +1,10 @@
 package types
 
 import (
+	"encoding/hex"
 	"testing"
+
+	"github.com/ethereum/go-ethereum/crypto"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
@@ -18,6 +21,22 @@ func TestSSVShare_BelongsToOperator(t *testing.T) {
 
 	require.True(t, metadata.BelongsToOperator(1))
 	require.False(t, metadata.BelongsToOperator(2))
+}
+func TestSSVShare_ComputeClusterIDHash(t *testing.T) {
+	var (
+		aliceClusterHash = "a341933234aa1e6dfd3b8d6677172bdcd0986b1e6afc2e84d321f154d9736717"
+		testKeyAlice, _  = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+		testAddrAlice    = crypto.PubkeyToAddress(testKeyAlice.PublicKey)
+	)
+
+	clusterHash := ComputeClusterIDHash(testAddrAlice, []uint64{3, 2, 1, 4})
+	clusterHash2 := ComputeClusterIDHash(testAddrAlice, []uint64{4, 3, 1, 2})
+	// Convert the hash to a hexadecimal string
+	hashString := hex.EncodeToString(clusterHash)
+	hashString2 := hex.EncodeToString(clusterHash2)
+
+	require.Equal(t, aliceClusterHash, hashString)
+	require.Equal(t, aliceClusterHash, hashString2)
 }
 
 func TestSSVShare_HasBeaconMetadata(t *testing.T) {

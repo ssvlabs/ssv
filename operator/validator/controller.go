@@ -96,7 +96,7 @@ type ControllerOptions struct {
 type Controller interface {
 	StartValidators()
 	CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
-	AllActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
+	AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex
 	GetValidator(pubKey string) (*validator.Validator, bool)
 	ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty)
 	UpdateValidatorMetaDataLoop()
@@ -164,9 +164,10 @@ type controller struct {
 	operatorData               *registrystorage.OperatorData
 	operatorDataMutex          sync.RWMutex
 
-	validatorOptions   validator.Options
-	validatorsMap      *validatorsmap.ValidatorsMap
-	validatorStartFunc func(validator *validator.Validator) (bool, error)
+	validatorOptions        validator.Options
+	validatorsMap           *validatorsmap.ValidatorsMap
+	validatorStartFunc      func(validator *validator.Validator) (bool, error)
+	committeeValidatorSetup chan struct{}
 
 	metadataUpdateInterval time.Duration
 
@@ -260,9 +261,10 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		nonCommitteeValidators: ttlcache.New(
 			ttlcache.WithTTL[spectypes.MessageID, *nonCommitteeValidator](time.Minute * 13),
 		),
-		metadataLastUpdated: make(map[string]time.Time),
-		indicesChange:       make(chan struct{}),
-		validatorExitCh:     make(chan duties.ExitDescriptor),
+		metadataLastUpdated:     make(map[string]time.Time),
+		indicesChange:           make(chan struct{}),
+		validatorExitCh:         make(chan duties.ExitDescriptor),
+		committeeValidatorSetup: make(chan struct{}, 1),
 
 		messageValidator: options.MessageValidator,
 	}
@@ -413,6 +415,10 @@ func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
 // StartValidators loads all persisted shares and setup the corresponding validators
 func (c *controller) StartValidators() {
 	if c.validatorOptions.Exporter {
+		// There are no committee validators to setup.
+		close(c.committeeValidatorSetup)
+
+		// Setup non-committee validators.
 		c.setupNonCommitteeValidators()
 		return
 	}
@@ -433,15 +439,19 @@ func (c *controller) StartValidators() {
 		allPubKeys = append(allPubKeys, share.ValidatorPubKey)
 	}
 
-	// Start own validators.
-	startedValidators := c.setupValidators(ownShares)
-	if startedValidators == 0 {
+	// Setup committee validators.
+	inited := c.setupValidators(ownShares)
+	if len(inited) == 0 {
 		// If no validators were started and therefore we're not subscribed to any subnets,
 		// then subscribe to a random subnet to participate in the network.
 		if err := c.network.SubscribeRandoms(c.logger, 1); err != nil {
 			c.logger.Error("failed to subscribe to random subnets", zap.Error(err))
 		}
 	}
+	close(c.committeeValidatorSetup)
+
+	// Start validators.
+	c.startValidators(inited)
 
 	// Fetch metadata for all validators.
 	start := time.Now()
@@ -460,28 +470,54 @@ func (c *controller) StartValidators() {
 
 // setupValidators setup and starts validators from the given shares.
 // shares w/o validator's metadata won't start, but the metadata will be fetched and the validator will start afterwards
-func (c *controller) setupValidators(shares []*ssvtypes.SSVShare) (started int) {
+func (c *controller) setupValidators(shares []*ssvtypes.SSVShare) []*validator.Validator {
 	c.logger.Info("starting validators setup...", zap.Int("shares count", len(shares)))
 	var errs []error
 	var fetchMetadata [][]byte
+	var validators []*validator.Validator
 	for _, validatorShare := range shares {
-		isStarted, err := c.onShareStart(validatorShare)
+		var initialized bool
+		v, err := c.onShareInit(validatorShare)
 		if err != nil {
 			c.logger.Warn("could not start validator", fields.PubKey(validatorShare.ValidatorPubKey), zap.Error(err))
 			errs = append(errs, err)
 		}
-		if !isStarted && err == nil {
+		if v != nil {
+			initialized = true
+		}
+		if !initialized && err == nil {
 			// Fetch metadata, if needed.
 			fetchMetadata = append(fetchMetadata, validatorShare.ValidatorPubKey)
 		}
-		if isStarted {
+		if initialized {
+			validators = append(validators, v)
+		}
+	}
+	c.logger.Info("init validators done", zap.Int("map size", c.validatorsMap.Size()),
+		zap.Int("failures", len(errs)), zap.Int("missing_metadata", len(fetchMetadata)),
+		zap.Int("shares", len(shares)), zap.Int("initialized", len(validators)))
+	return validators
+}
+
+func (c *controller) startValidators(validators []*validator.Validator) int {
+	var started int
+	var errs []error
+	for _, v := range validators {
+		s, err := c.startValidator(v)
+		if err != nil {
+			c.logger.Error("could not start validator", zap.Error(err))
+			errs = append(errs, err)
+			continue
+		}
+		if s {
 			started++
 		}
 	}
+
 	c.logger.Info("setup validators done", zap.Int("map size", c.validatorsMap.Size()),
-		zap.Int("failures", len(errs)), zap.Int("missing_metadata", len(fetchMetadata)),
-		zap.Int("shares", len(shares)), zap.Int("started", started))
-	return
+		zap.Int("failures", len(errs)),
+		zap.Int("shares", len(validators)), zap.Int("started", started))
+	return started
 }
 
 // setupNonCommitteeValidators trigger SyncHighestDecided for each validator
@@ -631,7 +667,10 @@ func (c *controller) CommitteeActiveIndices(epoch phase0.Epoch) []phase0.Validat
 	return indices
 }
 
-func (c *controller) AllActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
+func (c *controller) AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex {
+	if afterInit {
+		<-c.committeeValidatorSetup
+	}
 	shares := c.sharesStorage.List(nil, isShareActive(epoch))
 	indices := make([]phase0.ValidatorIndex, len(shares))
 	for i, share := range shares {
@@ -684,19 +723,19 @@ func (c *controller) onShareStop(pubKey spectypes.ValidatorPK) {
 	}
 }
 
-func (c *controller) onShareStart(share *ssvtypes.SSVShare) (bool, error) {
+func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator, error) {
 	if !share.HasBeaconMetadata() { // fetching index and status in case not exist
 		c.logger.Warn("skipping validator until it becomes active", fields.PubKey(share.ValidatorPubKey))
-		return false, nil
+		return nil, nil
 	}
 	if err := c.setShareFeeRecipient(share, c.recipientsStorage.GetRecipientData); err != nil {
-		return false, fmt.Errorf("could not set share fee recipient: %w", err)
+		return nil, fmt.Errorf("could not set share fee recipient: %w", err)
 	}
 	// Start a committee validator.
 	v, found := c.validatorsMap.GetValidator(hex.EncodeToString(share.ValidatorPubKey))
 	if !found {
 		if !share.HasBeaconMetadata() {
-			return false, fmt.Errorf("beacon metadata is missing")
+			return nil, fmt.Errorf("beacon metadata is missing")
 		}
 		// Share context with both the validator and the runners,
 		// so that when the validator is stopped, the runners are stopped as well.
@@ -712,6 +751,15 @@ func (c *controller) onShareStart(share *ssvtypes.SSVShare) (bool, error) {
 
 	} else {
 		c.printShare(v.Share, "get validator")
+	}
+
+	return v, nil
+}
+
+func (c *controller) onShareStart(share *ssvtypes.SSVShare) (bool, error) {
+	v, err := c.onShareInit(share)
+	if err != nil || v == nil {
+		return false, err
 	}
 
 	return c.startValidator(v)
