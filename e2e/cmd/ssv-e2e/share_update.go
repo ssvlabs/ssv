@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
@@ -9,6 +10,9 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv-spec/types"
+	"go.uber.org/zap"
+	"gopkg.in/yaml.v3"
+
 	"github.com/bloxapp/ssv/ekm"
 	"github.com/bloxapp/ssv/networkconfig"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
@@ -16,8 +20,6 @@ import (
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/blskeygen"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
-	"go.uber.org/zap"
-	"gopkg.in/yaml.v3"
 
 	"github.com/bloxapp/ssv/e2e/logs_catcher"
 )
@@ -27,8 +29,9 @@ type ShareUpdateCmd struct {
 }
 
 const (
-	dbPathFormat  = "/ssv-node-%d-data/db"
-	shareYAMLPath = "/tconfig/share%d.yaml"
+	dbPathFormat   = "/ssv-node-%d-data/db"
+	spDBPathFormat = "/ssv-node-%d-data/sp-db"
+	shareYAMLPath  = "/tconfig/share%d.yaml"
 )
 
 func (cmd *ShareUpdateCmd) Run(logger *zap.Logger, globals Globals) error {
@@ -63,9 +66,16 @@ func Process(logger *zap.Logger, networkConfig networkconfig.NetworkConfig, oper
 	dbPath := fmt.Sprintf(dbPathFormat, operatorID)
 	db, err := openDB(logger, dbPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to open db: %w", err)
 	}
 	defer db.Close()
+
+	spDBPath := fmt.Sprintf(spDBPathFormat, operatorID)
+	spDB, err := openDB(logger, spDBPath)
+	if err != nil {
+		return fmt.Errorf("failed to open sp db: %w", err)
+	}
+	defer spDB.Close()
 
 	nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)
 	if err != nil {
@@ -102,7 +112,7 @@ func Process(logger *zap.Logger, networkConfig networkconfig.NetworkConfig, oper
 	keyBytes := x509.MarshalPKCS1PrivateKey(rsaPriv)
 	hashedKey, _ := rsaencryption.HashRsaKey(keyBytes)
 
-	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkConfig, false, hashedKey)
+	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, spDB, networkConfig, false, hashedKey)
 	if err != nil {
 		return fmt.Errorf("failed to create key manager: %w", err)
 	}
@@ -154,7 +164,7 @@ func Process(logger *zap.Logger, networkConfig networkconfig.NetworkConfig, oper
 }
 
 func openDB(logger *zap.Logger, dbPath string) (*kv.BadgerDB, error) {
-	db, err := kv.New(logger, basedb.Options{Path: dbPath})
+	db, err := kv.New(context.Background(), logger, basedb.Options{Path: dbPath})
 	if err != nil {
 		return nil, fmt.Errorf("failed to open db: %w", err)
 	}
