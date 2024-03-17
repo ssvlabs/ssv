@@ -4,6 +4,9 @@ global:
 db:
   Path: ./data/db
 
+slashing_protection:
+  DBPath: ./data/sp-db
+
 eth2:
   BeaconNodeAddr: example.url
   Network: prater
