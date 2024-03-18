@@ -85,27 +85,22 @@ var RsaCmd = &cobra.Command{
 	Short: "Test Rsa Wrong signature",
 	Run: func(cmd *cobra.Command, args []string) {
 		logger, err := setupGlobal()
-		ctx := context.Background()
 		if err != nil {
 			log.Fatal("could not create logger", err)
 		}
-
-		metricsReporter := metricsreporter.New(
-			metricsreporter.WithLogger(logger),
-		)
+		ctx := context.Background()
 
 		networkConfig, err := setupSSVNetwork(logger)
 		if err != nil {
 			logger.Fatal("could not setup network", zap.Error(err))
 		}
-		cfg.DBOptions.Ctx = ctx
+
 		db, err := setupDB(logger, networkConfig.Beacon.GetNetwork())
 		if err != nil {
 			logger.Fatal("could not setup db", zap.Error(err))
 		}
 
 		nodeStorage, operatorData := setupOperatorStorage(logger, db)
-
 		operatorKey, _, _ := nodeStorage.GetPrivateKey()
 		keyBytes := x509.MarshalPKCS1PrivateKey(operatorKey)
 		hashedKey, _ := rsaencryption.HashRsaKey(keyBytes)
@@ -113,59 +108,40 @@ var RsaCmd = &cobra.Command{
 		if err != nil {
 			logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 		}
-
-		cfg.P2pNetworkConfig.Ctx = ctx
-
-		if err != nil {
-			logger.Fatal("could not connect to execution client", zap.Error(err))
-		}
-
-		var validatorCtrl validator.Controller
-		cfg.P2pNetworkConfig.Permissioned = func() bool {
-			return false
-		}
-
-		cfg.P2pNetworkConfig.NodeStorage = nodeStorage
-		cfg.P2pNetworkConfig.OperatorPubKeyHash = format.OperatorID(operatorData.PublicKey)
 		operatorId := 0
-		cfg.P2pNetworkConfig.OperatorID = func() spectypes.OperatorID {
-			operatorId++
-			return spectypes.OperatorID(operatorId)
-		}
-		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
-		cfg.P2pNetworkConfig.Network = networkConfig
-
 		dutyStore := dutystore.New()
-		cfg.SSVOptions.DutyStore = dutyStore
-
 		messageValidator := validation.NewMessageValidator(
 			networkConfig,
 			validation.WithLogger(logger),
-			validation.WithMetrics(metricsReporter),
 			validation.WithOwnOperatorID(operatorData.ID),
 		)
-
-		cfg.P2pNetworkConfig.Metrics = metricsReporter
+		cfg.P2pNetworkConfig.Ctx = ctx
+		cfg.DBOptions.Ctx = ctx
+		cfg.P2pNetworkConfig.Network = networkConfig
+		cfg.P2pNetworkConfig.NodeStorage = nodeStorage
 		cfg.P2pNetworkConfig.MessageValidator = messageValidator
-		cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
+		cfg.P2pNetworkConfig.Permissioned = func() bool { return false }
+		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
+		cfg.P2pNetworkConfig.OperatorPubKeyHash = format.OperatorID(operatorData.PublicKey)
+		cfg.P2pNetworkConfig.OperatorID = func() spectypes.OperatorID { operatorId++; return spectypes.OperatorID(operatorId) }
 
-		p2pNetwork := setupP2P(logger, db, metricsReporter)
-
+		p2pNetwork := setupP2P(logger, db, metricsreporter.New())
 		cfg.SSVOptions.DB = db
 		cfg.SSVOptions.Context = ctx
-		cfg.SSVOptions.Network = networkConfig
+		cfg.SSVOptions.DutyStore = dutyStore
 		cfg.SSVOptions.P2PNetwork = p2pNetwork
-		cfg.SSVOptions.ValidatorOptions.DB = db
 		cfg.SSVOptions.ValidatorOptions.Context = ctx
 		cfg.SSVOptions.ValidatorOptions.Network = p2pNetwork
 		cfg.SSVOptions.ValidatorOptions.KeyManager = keyManager
 		cfg.SSVOptions.ValidatorOptions.OperatorData = operatorData
 		cfg.SSVOptions.ValidatorOptions.RegistryStorage = nodeStorage
+		cfg.SSVOptions.ValidatorOptions.MessageValidator = messageValidator
 		cfg.SSVOptions.ValidatorOptions.BeaconNetwork = networkConfig.Beacon.GetNetwork()
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = nodeStorage.GetPrivateKey
 
-		validatorCtrl = validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
+		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
+
 		if err := p2pNetwork.Setup(logger); err != nil {
 			logger.Fatal("failed to setup network", zap.Error(err))
 		}
