@@ -165,10 +165,10 @@ type controller struct {
 	operatorData               *registrystorage.OperatorData
 	operatorDataMutex          sync.RWMutex
 
-	validatorOptions      validator.Options
-	validatorsMap         *validatorsmap.ValidatorsMap
-	validatorStartFunc    func(validator *validator.Validator) (bool, error)
-	initialValidatorSetup chan struct{}
+	validatorOptions        validator.Options
+	validatorsMap           *validatorsmap.ValidatorsMap
+	validatorStartFunc      func(validator *validator.Validator) (bool, error)
+	committeeValidatorSetup chan struct{}
 
 	metadataUpdateInterval time.Duration
 
@@ -262,10 +262,10 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		nonCommitteeValidators: ttlcache.New(
 			ttlcache.WithTTL[spectypes.MessageID, *nonCommitteeValidator](time.Minute * 13),
 		),
-		metadataLastUpdated:   make(map[string]time.Time),
-		indicesChange:         make(chan struct{}),
-		validatorExitCh:       make(chan duties.ExitDescriptor),
-		initialValidatorSetup: make(chan struct{}, 1),
+		metadataLastUpdated:     make(map[string]time.Time),
+		indicesChange:           make(chan struct{}),
+		validatorExitCh:         make(chan duties.ExitDescriptor),
+		committeeValidatorSetup: make(chan struct{}, 1),
 
 		messageValidator: options.MessageValidator,
 	}
@@ -420,6 +420,10 @@ func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
 // StartValidators loads all persisted shares and setup the corresponding validators
 func (c *controller) StartValidators() {
 	if c.validatorOptions.Exporter {
+		// There are no committee validators to setup.
+		close(c.committeeValidatorSetup)
+
+		// Setup non-committee validators.
 		c.setupNonCommitteeValidators()
 		return
 	}
@@ -439,7 +443,7 @@ func (c *controller) StartValidators() {
 		allPubKeys = append(allPubKeys, share.ValidatorPubKey)
 	}
 
-	// Start own validators.
+	// Setup committee validators.
 	inited := c.setupValidators(ownShares)
 	if len(inited) == 0 {
 		// If no validators were started and therefore we're not subscribed to any subnets,
@@ -448,9 +452,9 @@ func (c *controller) StartValidators() {
 			c.logger.Error("failed to subscribe to random subnets", zap.Error(err))
 		}
 	}
+	close(c.committeeValidatorSetup)
 
-	close(c.initialValidatorSetup)
-
+	// Start validators.
 	c.startValidators(inited)
 
 	// Fetch metadata for all validators.
@@ -671,7 +675,7 @@ func (c *controller) CommitteeActiveIndices(epoch phase0.Epoch) []phase0.Validat
 
 func (c *controller) AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex {
 	if afterInit {
-		<-c.initialValidatorSetup
+		<-c.committeeValidatorSetup
 	}
 	shares := c.sharesStorage.List(nil, isShareActive(epoch))
 	indices := make([]phase0.ValidatorIndex, len(shares))

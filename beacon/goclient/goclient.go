@@ -79,6 +79,7 @@ type NodeClient string
 const (
 	NodeLighthouse NodeClient = "lighthouse"
 	NodePrysm      NodeClient = "prysm"
+	NodeNimbus     NodeClient = "nimbus"
 	NodeUnknown    NodeClient = "unknown"
 )
 
@@ -90,6 +91,8 @@ func ParseNodeClient(version string) NodeClient {
 		return NodeLighthouse
 	case strings.Contains(version, "prysm"):
 		return NodePrysm
+	case strings.Contains(version, "nimbus"):
+		return NodeNimbus
 	default:
 		return NodeUnknown
 	}
@@ -100,6 +103,8 @@ type Client interface {
 	eth2client.Service
 	eth2client.NodeVersionProvider
 	eth2client.NodeClientProvider
+	eth2client.SpecProvider
+	eth2client.GenesisProvider
 
 	eth2client.AttestationDataProvider
 	eth2client.AttestationsSubmitter
@@ -114,6 +119,7 @@ type Client interface {
 	eth2client.ProposalProvider
 	eth2client.ProposalSubmitter
 	eth2client.BlindedProposalProvider
+	eth2client.V3ProposalProvider
 	eth2client.BlindedProposalSubmitter
 	eth2client.DomainProvider
 	eth2client.SyncCommitteeMessagesSubmitter
