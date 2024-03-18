@@ -69,6 +69,9 @@ type MessageValidator interface {
 	SSVMessageValidator
 }
 
+// OperatorIDGetter defines a function that returns operator ID.
+type OperatorIDGetter func() spectypes.OperatorID
+
 type messageValidator struct {
 	logger                  *zap.Logger
 	metrics                 metricsreporter.MetricsReporter
@@ -76,7 +79,7 @@ type messageValidator struct {
 	index                   sync.Map
 	nodeStorage             operatorstorage.Storage
 	dutyStore               *dutystore.Store
-	getOwnOperatorID        func() spectypes.OperatorID
+	getOwnOperatorID        OperatorIDGetter
 	operatorIDToPubkeyCache *hashmap.Map[spectypes.OperatorID, *rsa.PublicKey]
 
 	// validationLocks is a map of lock per SSV message ID to
@@ -131,7 +134,7 @@ func WithDutyStore(dutyStore *dutystore.Store) Option {
 }
 
 // WithOwnOperatorID sets the operator ID getter for the messageValidator.
-func WithOwnOperatorID(f func() spectypes.OperatorID) Option {
+func WithOwnOperatorID(f OperatorIDGetter) Option {
 	return func(mv *messageValidator) {
 		mv.getOwnOperatorID = f
 	}

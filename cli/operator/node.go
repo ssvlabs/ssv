@@ -15,12 +15,13 @@ import (
 	"github.com/bloxapp/ssv/network"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
+
+	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 
 	"github.com/bloxapp/ssv/api/handlers"
 	apiserver "github.com/bloxapp/ssv/api/server"
@@ -546,7 +547,7 @@ func setupP2P(logger *zap.Logger, db basedb.Database, mr metricsreporter.Metrics
 
 func setupConsensusClient(
 	logger *zap.Logger,
-	getOperatorID func() spectypes.OperatorID,
+	getOperatorID validation.OperatorIDGetter,
 	slotTickerProvider slotticker.Provider,
 ) beaconprotocol.BeaconNode {
 	cl, err := goclient.New(logger, cfg.ConsensusClient, getOperatorID, slotTickerProvider)

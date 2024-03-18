@@ -20,6 +20,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/message/validation"
 	"github.com/bloxapp/ssv/operator/slotticker"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
@@ -149,7 +150,7 @@ type goClient struct {
 	nodeClient           NodeClient
 	graffiti             []byte
 	gasLimit             uint64
-	getOperatorID        func() spectypes.OperatorID
+	getOperatorID        validation.OperatorIDGetter
 	registrationMu       sync.Mutex
 	registrationLastSlot phase0.Slot
 	registrationCache    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration
@@ -161,7 +162,7 @@ type goClient struct {
 func New(
 	logger *zap.Logger,
 	opt beaconprotocol.Options,
-	getOperatorID func() spectypes.OperatorID,
+	getOperatorID validation.OperatorIDGetter,
 	slotTickerProvider slotticker.Provider,
 ) (beaconprotocol.BeaconNode, error) {
 	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(string(opt.Network.BeaconNetwork)))
