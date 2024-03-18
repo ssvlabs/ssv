@@ -86,7 +86,10 @@ services:
   rsa_signature:
     <<: *default-base
     container_name: rsa_signature
-    command: make BUILD_PATH=/go/bin/ssvnode test-rsa
+    build:
+      context: ../
+      dockerfile: ../DockerfileTest
+    command: make BUILD_PATH=/go/bin/tests test-rsa
     image: rsa_signature:latest
     depends_on: []
     environment:

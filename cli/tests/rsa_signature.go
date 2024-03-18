@@ -89,7 +89,6 @@ var RsaCmd = &cobra.Command{
 			log.Fatal("could not create logger", err)
 		}
 		ctx := context.Background()
-
 		networkConfig, err := setupSSVNetwork(logger)
 		if err != nil {
 			logger.Fatal("could not setup network", zap.Error(err))
