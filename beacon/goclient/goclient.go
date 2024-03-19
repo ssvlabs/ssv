@@ -20,6 +20,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/message/validation"
 	"github.com/bloxapp/ssv/operator/slotticker"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
@@ -149,7 +150,7 @@ type goClient struct {
 	nodeClient           NodeClient
 	graffiti             []byte
 	gasLimit             uint64
-	operatorID           spectypes.OperatorID
+	getOperatorID        validation.OperatorIDGetter
 	registrationMu       sync.Mutex
 	registrationLastSlot phase0.Slot
 	registrationCache    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration
@@ -158,7 +159,12 @@ type goClient struct {
 }
 
 // New init new client and go-client instance
-func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.OperatorID, slotTickerProvider slotticker.Provider) (beaconprotocol.BeaconNode, error) {
+func New(
+	logger *zap.Logger,
+	opt beaconprotocol.Options,
+	getOperatorID validation.OperatorIDGetter,
+	slotTickerProvider slotticker.Provider,
+) (beaconprotocol.BeaconNode, error) {
 	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(string(opt.Network.BeaconNetwork)))
 
 	commonTimeout := opt.CommonTimeout
@@ -188,7 +194,7 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 		client:            httpClient.(*eth2clienthttp.Service),
 		graffiti:          opt.Graffiti,
 		gasLimit:          opt.GasLimit,
-		operatorID:        operatorID,
+		getOperatorID:     getOperatorID,
 		registrationCache: map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
 		commonTimeout:     commonTimeout,
 		longTimeout:       longTimeout,
