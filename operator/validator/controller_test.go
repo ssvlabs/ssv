@@ -176,16 +176,9 @@ func TestSetupNonCommitteeValidators(t *testing.T) {
 			}
 			mockValidatorsMap := validatorsmap.New(context.TODO(), validatorsmap.WithInitialState(testValidatorsMap))
 
-			if tc.syncHighestDecidedResponse != nil {
-				bc.EXPECT().GetValidatorData(gomock.Any()).Return(bcResponse, nil).Times(1)
-				sharesStorage.EXPECT().Get(gomock.Any(), gomock.Any()).Return(sharesSlice[0]).AnyTimes()
-				network.EXPECT().SyncHighestDecided(gomock.Any()).Return(tc.syncHighestDecidedResponse).AnyTimes()
-				sharesStorage.EXPECT().UpdateValidatorMetadata(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-				sharesStorage.EXPECT().List(gomock.Any(), gomock.Any()).Return(tc.shareStorageListResponse).Times(1)
-			} else if tc.shareStorageListResponse == nil {
+			if tc.shareStorageListResponse == nil {
 				sharesStorage.EXPECT().List(gomock.Any(), gomock.Any()).Return(tc.shareStorageListResponse).Times(1)
 			} else {
-				network.EXPECT().SyncHighestDecided(gomock.Any()).Return(nil).AnyTimes()
 				sharesStorage.EXPECT().Get(gomock.Any(), gomock.Any()).Return(sharesSlice[0]).AnyTimes()
 				bc.EXPECT().GetValidatorData(gomock.Any()).Return(bcResponse, tc.getValidatorDataResponse).Times(1)
 				sharesStorage.EXPECT().List(gomock.Any(), gomock.Any()).Return(tc.shareStorageListResponse).Times(1)

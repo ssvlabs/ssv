@@ -67,7 +67,7 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 			return err
 		}
 
-		encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, n.operatorID(), signature)
+		encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, n.getOperatorID(), signature)
 	}
 
 	vpk := msg.GetID().GetPubKey()
