@@ -10,7 +10,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
-
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 )
 
