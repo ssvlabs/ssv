@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	globalconfig "github.com/bloxapp/ssv/cli/config"
 	"github.com/bloxapp/ssv/logging"
@@ -20,6 +21,8 @@ type config struct {
 
 var cfg config
 var globalArgs globalconfig.Args
+
+const compressedFileExtension = ".gz"
 
 // CompressLogsCmd is the command to compress logs file with gzip
 var CompressLogsCmd = &cobra.Command{
@@ -46,18 +49,21 @@ var CompressLogsCmd = &cobra.Command{
 }
 
 func compressFile(path string) (int64, error) {
-	file, err := os.Open(path)
+	file, err := os.Open(filepath.Clean(path))
 	if err != nil {
 		return 0, err
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
-	compressedFile, err := os.Create(path + ".gz")
+	compressedFile, err := os.Create(filepath.Clean(path + compressedFileExtension))
 	if err != nil {
 		return 0, err
 	}
-	defer compressedFile.Close()
-
+	defer func() {
+		_ = compressedFile.Close()
+	}()
 	gzWriter := gzip.NewWriter(compressedFile)
 	if _, err := io.Copy(gzWriter, file); err != nil {
 		return 0, err

@@ -2,6 +2,7 @@ package cmd_compress_logs
 
 import (
 	"compress/gzip"
+	"path/filepath"
 
 	"bufio"
 	"bytes"
@@ -26,7 +27,7 @@ func BenchmarkCompressLogs(b *testing.B) {
 		b.Run(fmt.Sprintf("%dMB", tc.SizeInMB), func(b *testing.B) {
 			testLogFilePath := fmt.Sprintf("test_%dMB.log", tc.SizeInMB)
 
-			gzPath := testLogFilePath + ".gz"
+			gzPath := testLogFilePath + compressedFileExtension
 
 			// generate log file
 			err := generateLogFile(tc.SizeInMB, testLogFilePath)
@@ -48,7 +49,7 @@ func BenchmarkCompressLogs(b *testing.B) {
 
 			// unzip and compare the files
 			unzippedFileName := testLogFilePath + ".unzipped.log"
-			err = unzip(testLogFilePath+".gz", unzippedFileName)
+			err = unzip(testLogFilePath+compressedFileExtension, unzippedFileName)
 			require.NoError(b, err)
 
 			eq, err := compareFiles(testLogFilePath, unzippedFileName)
@@ -64,13 +65,14 @@ func BenchmarkCompressLogs(b *testing.B) {
 }
 
 func compareFiles(file1Path, file2Path string) (bool, error) {
-	file1, err := os.Open(file1Path)
+	file1, err := os.Open(filepath.Clean(file1Path))
 	if err != nil {
 		return false, err
 	}
-	defer file1.Close()
-
-	file2, err := os.Open(file2Path)
+	defer func() {
+		_ = file1.Close()
+	}()
+	file2, err := os.Open(filepath.Clean(file2Path))
 	if err != nil {
 		return false, err
 	}
@@ -106,7 +108,7 @@ const chunkSize = 200 * 1024 * 1024 // 200MB
 // generateLogFile generates a valid log file with the given size in MB
 // chunks are used to write the file to avoid memory issues with large files
 func generateLogFile(sizeInMB int, path string) error {
-	file, err := os.Create(path)
+	file, err := os.Create(filepath.Clean(path))
 	if err != nil {
 		return err
 	}
@@ -145,18 +147,22 @@ func generateLogFile(sizeInMB int, path string) error {
 
 func unzip(src string, dest string) error {
 	// Open the gzip file
-	r, err := os.Open(src)
+	r, err := os.Open(filepath.Clean(src))
 	if err != nil {
 		return err
 	}
-	defer r.Close()
+	defer func() {
+		_ = r.Close()
+	}()
 
 	// Create a gzip reader
 	gr, err := gzip.NewReader(r)
 	if err != nil {
 		return err
 	}
-	defer gr.Close()
+	defer func() {
+		_ = gr.Close()
+	}()
 
 	// Create destination file
 	destFile, err := os.Create(dest)
@@ -182,3 +188,13 @@ func deleteFiles(paths ...string) error {
 	}
 	return nil
 }
+
+//func cleanPath(path string) (string, error) {
+//	absPath, err := filepath.Abs(filepath.Clean(path))
+//
+//	if err != nil {
+//		return path, err
+//	}
+//
+//	return absPath, nil
+//}
