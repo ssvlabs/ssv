@@ -2,8 +2,9 @@ package bootnode
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv/utils/commons"
 	"log"
+
+	"github.com/bloxapp/ssv/utils/commons"
 
 	"github.com/bloxapp/ssv/logging"
 
@@ -65,5 +66,7 @@ var StartBootNodeCmd = &cobra.Command{
 }
 
 func init() {
-	global_config.ProcessArgs(&cfg, &globalArgs, StartBootNodeCmd)
+	global_config.ProcessConfigArg(&cfg, &globalArgs, StartBootNodeCmd)
+	global_config.ProcessSharesConfigArg(&cfg, &globalArgs, StartBootNodeCmd)
+	global_config.ProcessHelpCmd(&cfg, &globalArgs, StartBootNodeCmd)
 }

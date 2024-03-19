@@ -12,9 +12,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/bloxapp/ssv/network"
-
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/network"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ilyakaznacheev/cleanenv"
@@ -354,7 +353,9 @@ func verifyConfig(logger *zap.Logger, nodeStorage operatorstorage.Storage, netwo
 }
 
 func init() {
-	global_config.ProcessArgs(&cfg, &globalArgs, StartNodeCmd)
+	global_config.ProcessConfigArg(&cfg, &globalArgs, StartNodeCmd)
+	global_config.ProcessSharesConfigArg(&cfg, &globalArgs, StartNodeCmd)
+	global_config.ProcessHelpCmd(&cfg, &globalArgs, StartNodeCmd)
 }
 
 func setupGlobal() (*zap.Logger, error) {

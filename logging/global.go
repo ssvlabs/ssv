@@ -109,7 +109,7 @@ func (o LogFileOptions) writer(options *LogFileOptions) io.Writer {
 		MaxSize:    options.MaxSize, // megabytes
 		MaxBackups: options.MaxBackups,
 		MaxAge:     28, // days
-		Compress:   false,
+		Compress:   true,
 	}
 }
 

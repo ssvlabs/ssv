@@ -22,16 +22,25 @@ type GlobalConfig struct {
 }
 
 // ProcessArgs processes and handles CLI arguments
-func ProcessArgs(cfg interface{}, a *Args, cmd *cobra.Command) {
+func ProcessConfigArg(cfg interface{}, a *Args, cmd *cobra.Command) {
 	configFlag := "config"
 	cmd.PersistentFlags().StringVarP(&a.ConfigPath, configFlag, "c", "./config/config.yaml", "Path to configuration file")
 	_ = cmd.MarkFlagRequired(configFlag)
 
-	shareConfigFlag := "share-config"
-	cmd.PersistentFlags().StringVarP(&a.ShareConfigPath, shareConfigFlag, "s", "", "Path to local share configuration file")
-	_ = cmd.MarkFlagRequired(shareConfigFlag)
-
 	envHelp, _ := cleanenv.GetDescription(cfg, nil)
 	cmd.SetUsageTemplate(envHelp + "\n" + cmd.UsageTemplate())
 
+}
+
+// ProcessArgs processes and handles CLI arguments
+func ProcessSharesConfigArg(cfg interface{}, a *Args, cmd *cobra.Command) {
+	shareConfigFlag := "share-config"
+	cmd.PersistentFlags().StringVarP(&a.ShareConfigPath, shareConfigFlag, "s", "", "Path to local share configuration file")
+	_ = cmd.MarkFlagRequired(shareConfigFlag)
+}
+
+// ProcessArgs processes and handles CLI arguments
+func ProcessHelpCmd(cfg interface{}, a *Args, cmd *cobra.Command) {
+	envHelp, _ := cleanenv.GetDescription(cfg, nil)
+	cmd.SetUsageTemplate(envHelp + "\n" + cmd.UsageTemplate())
 }
