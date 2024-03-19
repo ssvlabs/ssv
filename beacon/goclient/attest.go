@@ -2,8 +2,10 @@ package goclient
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/api"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -14,20 +16,36 @@ import (
 
 // AttesterDuties returns attester duties for a given epoch.
 func (gc *goClient) AttesterDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.AttesterDuty, error) {
-	return gc.client.AttesterDuties(ctx, epoch, validatorIndices)
+	resp, err := gc.client.AttesterDuties(ctx, &api.AttesterDutiesOpts{
+		Epoch:   epoch,
+		Indices: validatorIndices,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to obtain attester duties: %w", err)
+	}
+	if resp == nil {
+		return nil, fmt.Errorf("attester duties response is nil")
+	}
+
+	return resp.Data, nil
 }
 
 func (gc *goClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (ssz.Marshaler, spec.DataVersion, error) {
-
-	startTime := time.Now()
-	attestationData, err := gc.client.AttestationData(gc.ctx, slot, committeeIndex)
+	attDataReqStart := time.Now()
+	resp, err := gc.client.AttestationData(gc.ctx, &api.AttestationDataOpts{
+		Slot:           slot,
+		CommitteeIndex: committeeIndex,
+	})
 	if err != nil {
-		return nil, DataVersionNil, err
+		return nil, DataVersionNil, fmt.Errorf("failed to get attestation data: %w", err)
+	}
+	if resp == nil {
+		return nil, DataVersionNil, fmt.Errorf("attestation data response is nil")
 	}
 
-	metricsAttesterDataRequest.Observe(time.Since(startTime).Seconds())
+	metricsAttesterDataRequest.Observe(time.Since(attDataReqStart).Seconds())
 
-	return attestationData, spec.DataVersionPhase0, nil
+	return resp.Data, spec.DataVersionPhase0, nil
 }
 
 // SubmitAttestation implements Beacon interface

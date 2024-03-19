@@ -3,11 +3,14 @@ package runner
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
 	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
+	apiv1deneb "github.com/attestantio/go-eth2-client/api/v1/deneb"
 	"github.com/attestantio/go-eth2-client/spec/capella"
+	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -18,7 +21,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec"
 
-	"github.com/bloxapp/ssv/beacon/goclient"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
@@ -109,19 +111,7 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 		// get block data
 		obj, ver, err = r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
 		if err != nil {
-			// Prysm workaround: when Prysm can't retrieve an MEV block, it responds with an error
-			// saying the block isn't blinded, implying to request a standard block instead.
-			// https://github.com/prysmaticlabs/prysm/issues/12103
-			if nodeClientProvider, ok := r.GetBeaconNode().(goclient.NodeClientProvider); ok &&
-				nodeClientProvider.NodeClient() == goclient.NodePrysm {
-				logger.Debug("failed to get blinded beacon block, falling back to standard block")
-				obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
-				if err != nil {
-					return errors.Wrap(err, "failed falling back from blinded to standard beacon block")
-				}
-			} else {
-				return errors.Wrap(err, "failed to get blinded beacon block")
-			}
+			return errors.Wrap(err, "failed to get blinded beacon block")
 		}
 	} else {
 		// get block data
@@ -130,13 +120,13 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 			return errors.Wrap(err, "failed to get beacon block")
 		}
 	}
-
+	took := time.Since(start)
 	// Log essentials about the retrieved block.
 	blockSummary, summarizeErr := summarizeBlock(obj)
 	logger.Info("🧊 got beacon block proposal",
 		zap.String("block_hash", blockSummary.Hash.String()),
 		zap.Bool("blinded", blockSummary.Blinded),
-		zap.Duration("took", time.Since(start)),
+		zap.Duration("took", took),
 		zap.NamedError("summarize_err", summarizeErr))
 
 	byts, err := obj.MarshalSSZ()
@@ -425,34 +415,64 @@ type blockSummary struct {
 // summarizeBlock returns a blockSummary for the given block.
 func summarizeBlock(block any) (summary blockSummary, err error) {
 	if block == nil {
-		return summary, errors.New("block is nil")
+		return summary, fmt.Errorf("block is nil")
 	}
 	switch b := block.(type) {
-	case *api.VersionedBlindedBeaconBlock:
-		switch b.Version {
-		case spec.DataVersionCapella:
-			return summarizeBlock(b.Capella)
+	case *api.VersionedV3Proposal:
+		if b.ExecutionPayloadBlinded {
+			switch b.Version {
+			case spec.DataVersionCapella:
+				return summarizeBlock(b.BlindedCapella)
+			case spec.DataVersionDeneb:
+				return summarizeBlock(b.BlindedDeneb)
+			default:
+				return summary, fmt.Errorf("unsupported blinded block version %d", b.Version)
+			}
 		}
-	case *spec.VersionedBeaconBlock:
 		switch b.Version {
 		case spec.DataVersionCapella:
 			return summarizeBlock(b.Capella)
+		case spec.DataVersionDeneb:
+			if b.Deneb == nil {
+				return summary, fmt.Errorf("deneb block contents is nil")
+			}
+			return summarizeBlock(b.Deneb.Block)
+		default:
+			return summary, fmt.Errorf("unsupported block version %d", b.Version)
 		}
 
 	case *capella.BeaconBlock:
 		if b == nil || b.Body == nil || b.Body.ExecutionPayload == nil {
-			return summary, errors.New("block, body or execution payload is nil")
+			return summary, fmt.Errorf("block, body or execution payload is nil")
 		}
 		summary.Hash = b.Body.ExecutionPayload.BlockHash
 		summary.Version = spec.DataVersionCapella
 
+	case *deneb.BeaconBlock:
+		if b == nil || b.Body == nil || b.Body.ExecutionPayload == nil {
+			return summary, fmt.Errorf("block, body or execution payload is nil")
+		}
+		summary.Hash = b.Body.ExecutionPayload.BlockHash
+		summary.Version = spec.DataVersionDeneb
+
+	case *apiv1deneb.BlockContents:
+		return summarizeBlock(b.Block)
+
 	case *apiv1capella.BlindedBeaconBlock:
 		if b == nil || b.Body == nil || b.Body.ExecutionPayloadHeader == nil {
-			return summary, errors.New("block, body or execution payload header is nil")
+			return summary, fmt.Errorf("block, body or execution payload header is nil")
 		}
 		summary.Hash = b.Body.ExecutionPayloadHeader.BlockHash
 		summary.Blinded = true
 		summary.Version = spec.DataVersionCapella
+
+	case *apiv1deneb.BlindedBeaconBlock:
+		if b == nil || b.Body == nil || b.Body.ExecutionPayloadHeader == nil {
+			return summary, fmt.Errorf("block, body or execution payload header is nil")
+		}
+		summary.Hash = b.Body.ExecutionPayloadHeader.BlockHash
+		summary.Blinded = true
+		summary.Version = spec.DataVersionDeneb
 	}
 	return
 }
