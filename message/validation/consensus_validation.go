@@ -141,7 +141,7 @@ func (mv *messageValidator) validateConsensusMessage(
 			signerState.ResetRound(msgRound)
 		}
 
-		if mv.needDuplicatedFullDataCheck(signedMsg) && signerState.ProposalData == nil {
+		if mv.needDifferentFullDataCheck(signedMsg) && signerState.ProposalData == nil {
 			signerState.ProposalData = signedMsg.FullData
 		}
 
@@ -248,7 +248,7 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 	}
 
 	if msgSlot == signerState.Slot && msgRound == signerState.Round {
-		if mv.needDuplicatedFullDataCheck(signedMsg) && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
+		if mv.needDifferentFullDataCheck(signedMsg) && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
 			return ErrDuplicatedProposalWithDifferentData
 		}
 
@@ -321,12 +321,12 @@ func (mv *messageValidator) validateBeaconDuty(
 	return nil
 }
 
-func (mv *messageValidator) needDuplicatedFullDataCheck(signedMsg *specqbft.SignedMessage) bool {
+func (mv *messageValidator) needDifferentFullDataCheck(signedMsg *specqbft.SignedMessage) bool {
 	return signedMsg.Message.MsgType == specqbft.ProposalMsgType || mv.isDecidedMessage(signedMsg)
 }
 
 func (mv *messageValidator) needFullDataHashCheck(signedMsg *specqbft.SignedMessage) bool {
-	return signedMsg.Message.MsgType == specqbft.RoundChangeMsgType || mv.needDuplicatedFullDataCheck(signedMsg)
+	return signedMsg.Message.MsgType == specqbft.RoundChangeMsgType || mv.needDifferentFullDataCheck(signedMsg)
 }
 
 func (mv *messageValidator) isDecidedMessage(signedMsg *specqbft.SignedMessage) bool {
