@@ -270,7 +270,7 @@ func (eh *EventHandler) validatorAddedEventToShare(
 	validatorShare.ValidatorPubKey = publicKey.Serialize()
 	validatorShare.OwnerAddress = event.Owner
 
-	selfOperatorID := eh.operatorData.GetOperatorData().ID
+	selfOperatorID := eh.operatorData.GetOperatorID()
 	var shareSecret *bls.SecretKey
 
 	committee := make([]*spectypes.Operator, 0)
