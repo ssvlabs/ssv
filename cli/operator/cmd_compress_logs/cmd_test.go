@@ -11,8 +11,68 @@ import (
 	"os"
 	"testing"
 
+	globalconfig "github.com/bloxapp/ssv/cli/config"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
 )
+
+func TestCompressFile(t *testing.T) {
+	// Create a temporary file
+	file, err := os.Create(filepath.Clean("test.log"))
+	require.NoError(t, err)
+	defer func() {
+		_ = os.Remove(file.Name())
+	}()
+
+	// Write some content to the file
+	_, err = file.WriteString("Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.")
+	require.NoError(t, err)
+	_ = file.Close()
+
+	// Get the size of the original file
+	info, err := os.Stat(file.Name())
+	require.NoError(t, err)
+	originalSize := info.Size()
+
+	// Call the compressFile function
+	_, err = compressFile(file.Name())
+	require.NoError(t, err)
+
+	// Check that the compressed file exists
+	compressedFileName := file.Name() + compressedFileExtension
+	_, err = os.Stat(filepath.Clean(compressedFileName))
+	require.NoError(t, err)
+
+	// Get the size of the compressed file
+	info, err = os.Stat(filepath.Clean(compressedFileName))
+	require.NoError(t, err)
+	compressedSize := info.Size()
+
+	// Check that the compressed file is smaller than the original file
+	require.Less(t, compressedSize, originalSize)
+
+	// Clean up the compressed file
+	_ = os.Remove(compressedFileName)
+}
+
+func TestSetGlobalLogger(t *testing.T) {
+	// Create a config object
+	cfg := &config{
+		GlobalConfig: globalconfig.GlobalConfig{
+			LogLevel:       "debug",
+			LogLevelFormat: "console",
+		},
+	}
+
+	// Call the setGlobalLogger function
+	logger, err := setGlobalLogger(cfg)
+
+	// Check that the function does not return an error
+	require.NoError(t, err)
+
+	// Check that the function returns a valid logger
+	require.IsType(t, &zap.Logger{}, logger)
+}
 
 func BenchmarkCompressLogs(b *testing.B) {
 	testCases := []struct {
@@ -76,7 +136,9 @@ func compareFiles(file1Path, file2Path string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer file2.Close()
+	defer func() {
+		_ = file2.Close()
+	}()
 
 	scanner1 := bufio.NewScanner(file1)
 	scanner2 := bufio.NewScanner(file2)
@@ -112,7 +174,9 @@ func generateLogFile(sizeInMB int, path string) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
 	var buffer bytes.Buffer
 	var totalSize int64 = 0
@@ -169,7 +233,9 @@ func unzip(src string, dest string) error {
 	if err != nil {
 		return err
 	}
-	defer destFile.Close()
+	defer func() {
+		_ = destFile.Close()
+	}()
 
 	// Copy the gzip reader to the destination file
 	_, err = io.Copy(destFile, gr)
