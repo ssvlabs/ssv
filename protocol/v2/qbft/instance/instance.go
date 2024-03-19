@@ -4,13 +4,12 @@ import (
 	"encoding/json"
 	"sync"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging/fields"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 )
@@ -166,7 +165,7 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.SignedMessage) error {
 	// If a node gets a commit quorum before round change and other nodes get it after,
 	// then the node with quorum before wouldn't be able to receive next round messages from others
 	// due to slashing protection, unless we allow decided messages from previous round.
-	if controller.IsDecidedMsg(i.State.Share, msg) {
+	if decided := msg.Message.MsgType == specqbft.CommitMsgType && len(msg.Signers) > 1; decided {
 		if msg.Message.Round < i.State.Round-1 {
 			return errors.New("past round")
 		}
