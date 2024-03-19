@@ -211,6 +211,7 @@ func setupEventHandler(
 		}
 
 		validatorCtrl.EXPECT().GetOperatorData().Return(operatorData).AnyTimes()
+		validatorCtrl.EXPECT().GetOperatorID().Return(operatorData.ID).AnyTimes()
 
 		return eh, validatorCtrl, ctrl, nodeStorage, nil
 	}

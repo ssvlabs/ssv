@@ -61,6 +61,7 @@ type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
 type OperatorData interface {
 	GetOperatorData() *storage.OperatorData
 	SetOperatorData(*storage.OperatorData)
+	GetOperatorID() spectypes.OperatorID
 }
 
 type EventHandler struct {
