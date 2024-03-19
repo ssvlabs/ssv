@@ -146,7 +146,7 @@ func (h *ProposerHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch) error {
 	start := time.Now()
 
-	allIndices := h.validatorController.AllActiveIndices(epoch)
+	allIndices := h.validatorController.AllActiveIndices(epoch, false)
 	if len(allIndices) == 0 {
 		return nil
 	}

@@ -7,15 +7,14 @@ import (
 
 	"github.com/attestantio/go-eth2-client/api"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
-	apiv1bellatrix "github.com/attestantio/go-eth2-client/api/v1/bellatrix"
 	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
+	apiv1deneb "github.com/attestantio/go-eth2-client/api/v1/deneb"
 	"github.com/attestantio/go-eth2-client/spec"
-	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/capella"
+	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
@@ -28,39 +27,53 @@ const (
 
 // ProposerDuties returns proposer duties for the given epoch.
 func (gc *goClient) ProposerDuties(ctx context.Context, epoch phase0.Epoch, validatorIndices []phase0.ValidatorIndex) ([]*eth2apiv1.ProposerDuty, error) {
-	return gc.client.ProposerDuties(ctx, epoch, validatorIndices)
+	resp, err := gc.client.ProposerDuties(ctx, &api.ProposerDutiesOpts{
+		Epoch:   epoch,
+		Indices: validatorIndices,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to obtain proposer duties: %w", err)
+	}
+	if resp == nil {
+		return nil, fmt.Errorf("proposer duties response is nil")
+	}
+
+	return resp.Data, nil
 }
 
 // GetBeaconBlock returns beacon block by the given slot, graffiti, and randao.
-func (gc *goClient) GetBeaconBlock(slot phase0.Slot, graffiti, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
+func (gc *goClient) GetBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
 	sig := phase0.BLSSignature{}
 	copy(sig[:], randao[:])
 
-	reqStart := time.Now()
-	beaconBlock, err := gc.client.BeaconBlockProposal(gc.ctx, slot, sig, graffiti)
-	if err != nil {
-		return nil, DataVersionNil, err
-	}
-	metricsProposerDataRequest.Observe(time.Since(reqStart).Seconds())
+	graffiti := [32]byte{}
+	copy(graffiti[:], graffitiBytes[:])
 
-	if beaconBlock == nil {
-		return nil, 0, fmt.Errorf("block is nil")
+	reqStart := time.Now()
+	proposalResp, err := gc.client.Proposal(gc.ctx, &api.ProposalOpts{
+		Slot:                   slot,
+		RandaoReveal:           sig,
+		Graffiti:               graffiti,
+		SkipRandaoVerification: false,
+	})
+	if err != nil {
+		return nil, DataVersionNil, fmt.Errorf("failed to get proposal: %w", err)
 	}
+	if proposalResp == nil {
+		return nil, DataVersionNil, fmt.Errorf("proposal response is nil")
+	}
+	if proposalResp.Data == nil {
+		return nil, DataVersionNil, fmt.Errorf("proposal data is nil")
+	}
+
+	metricsProposerDataRequest.Observe(time.Since(reqStart).Seconds())
+	beaconBlock := proposalResp.Data
 
 	switch beaconBlock.Version {
-	case spec.DataVersionPhase0:
-		return beaconBlock.Phase0, beaconBlock.Version, nil
-	case spec.DataVersionAltair:
-		return beaconBlock.Altair, beaconBlock.Version, nil
-	case spec.DataVersionBellatrix:
-		if beaconBlock.Bellatrix.Body == nil {
-			return nil, DataVersionNil, fmt.Errorf("bellatrix block body is nil")
-		}
-		if beaconBlock.Bellatrix.Body.ExecutionPayload == nil {
-			return nil, DataVersionNil, fmt.Errorf("bellatrix block execution payload is nil")
-		}
-		return beaconBlock.Bellatrix, beaconBlock.Version, nil
 	case spec.DataVersionCapella:
+		if beaconBlock.Capella == nil {
+			return nil, DataVersionNil, fmt.Errorf("capella block is nil")
+		}
 		if beaconBlock.Capella.Body == nil {
 			return nil, DataVersionNil, fmt.Errorf("capella block body is nil")
 		}
@@ -68,37 +81,67 @@ func (gc *goClient) GetBeaconBlock(slot phase0.Slot, graffiti, randao []byte) (s
 			return nil, DataVersionNil, fmt.Errorf("capella block execution payload is nil")
 		}
 		return beaconBlock.Capella, beaconBlock.Version, nil
+	case spec.DataVersionDeneb:
+		if beaconBlock.Deneb == nil {
+			return nil, DataVersionNil, fmt.Errorf("deneb block contents is nil")
+		}
+		if beaconBlock.Deneb.Block == nil {
+			return nil, DataVersionNil, fmt.Errorf("deneb block is nil")
+		}
+		if beaconBlock.Deneb.Block.Body == nil {
+			return nil, DataVersionNil, fmt.Errorf("deneb block body is nil")
+		}
+		if beaconBlock.Deneb.Block.Body.ExecutionPayload == nil {
+			return nil, DataVersionNil, fmt.Errorf("deneb block execution payload is nil")
+		}
+		return beaconBlock.Deneb, beaconBlock.Version, nil
+
 	default:
 		return nil, DataVersionNil, fmt.Errorf("beacon block version %s not supported", beaconBlock.Version)
 	}
 }
 
+func (gc *goClient) GetBlindedBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
+	if gc.nodeClient == NodePrysm {
+		gc.log.Debug("using V3 endpoint for prysm blinded block")
+		return gc.V3Proposal(slot, graffitiBytes, randao)
+	}
+	return gc.DefaultGetBlindedBeaconBlock(slot, graffitiBytes, randao)
+}
+
 // GetBlindedBeaconBlock returns blinded beacon block by the given slot, graffiti, and randao.
-func (gc *goClient) GetBlindedBeaconBlock(slot phase0.Slot, graffiti, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
+func (gc *goClient) DefaultGetBlindedBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
 	sig := phase0.BLSSignature{}
 	copy(sig[:], randao[:])
 
-	reqStart := time.Now()
-	beaconBlock, err := gc.client.BlindedBeaconBlockProposal(gc.ctx, slot, sig, graffiti)
-	if err != nil {
-		return nil, 0, err
-	}
-	metricsProposerDataRequest.Observe(time.Since(reqStart).Seconds())
+	graffiti := [32]byte{}
+	copy(graffiti[:], graffitiBytes[:])
 
-	if beaconBlock == nil {
-		return nil, 0, fmt.Errorf("blinded block is nil")
+	reqStart := time.Now()
+	blindedProposalResp, err := gc.client.BlindedProposal(gc.ctx, &api.BlindedProposalOpts{
+		Slot:                   slot,
+		RandaoReveal:           sig,
+		Graffiti:               graffiti,
+		SkipRandaoVerification: false,
+	})
+	if err != nil {
+		return nil, DataVersionNil, fmt.Errorf("failed to get blinded proposal: %w", err)
 	}
+	if blindedProposalResp == nil {
+		return nil, DataVersionNil, fmt.Errorf("blinded proposal response is nil")
+	}
+	if blindedProposalResp.Data == nil {
+		return nil, DataVersionNil, fmt.Errorf("blinded proposal data is nil")
+	}
+
+	metricsProposerDataRequest.Observe(time.Since(reqStart).Seconds())
+	beaconBlock := blindedProposalResp.Data
 
 	switch beaconBlock.Version {
-	case spec.DataVersionBellatrix:
-		if beaconBlock.Bellatrix.Body == nil {
-			return nil, DataVersionNil, fmt.Errorf("bellatrix block body is nil")
-		}
-		if beaconBlock.Bellatrix.Body.ExecutionPayloadHeader == nil {
-			return nil, DataVersionNil, fmt.Errorf("bellatrix block execution payload header is nil")
-		}
-		return beaconBlock.Bellatrix, beaconBlock.Version, nil
 	case spec.DataVersionCapella:
+		if beaconBlock.Capella == nil {
+			return nil, DataVersionNil, fmt.Errorf("capella block is nil")
+		}
 		if beaconBlock.Capella.Body == nil {
 			return nil, DataVersionNil, fmt.Errorf("capella block body is nil")
 		}
@@ -106,82 +149,185 @@ func (gc *goClient) GetBlindedBeaconBlock(slot phase0.Slot, graffiti, randao []b
 			return nil, DataVersionNil, fmt.Errorf("capella block execution payload header is nil")
 		}
 		return beaconBlock.Capella, beaconBlock.Version, nil
+	case spec.DataVersionDeneb:
+		if beaconBlock.Deneb == nil {
+			return nil, DataVersionNil, fmt.Errorf("deneb block contents is nil")
+		}
+		if beaconBlock.Deneb.Body == nil {
+			return nil, DataVersionNil, fmt.Errorf("deneb block body is nil")
+		}
+		if beaconBlock.Deneb.Body.ExecutionPayloadHeader == nil {
+			return nil, DataVersionNil, fmt.Errorf("deneb block execution payload header is nil")
+		}
+		return beaconBlock.Deneb, beaconBlock.Version, nil
 	default:
 		return nil, DataVersionNil, fmt.Errorf("beacon block version %s not supported", beaconBlock.Version)
 	}
 }
 
-func (gc *goClient) SubmitBlindedBeaconBlock(block *api.VersionedBlindedBeaconBlock, sig phase0.BLSSignature) error {
-	signedBlock := &api.VersionedSignedBlindedBeaconBlock{
+func (gc *goClient) V3Proposal(slot phase0.Slot, graffitiBytes, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
+	sig := phase0.BLSSignature{}
+	copy(sig[:], randao[:])
+
+	graffiti := [32]byte{}
+	copy(graffiti[:], graffitiBytes[:])
+
+	reqStart := time.Now()
+	v3ProposalResp, err := gc.client.V3Proposal(gc.ctx, &api.V3ProposalOpts{
+		Slot:                   slot,
+		RandaoReveal:           sig,
+		Graffiti:               graffiti,
+		SkipRandaoVerification: false,
+	})
+	if err != nil {
+		return nil, DataVersionNil, fmt.Errorf("failed to get v3 proposal: %w", err)
+	}
+	if v3ProposalResp == nil {
+		return nil, DataVersionNil, fmt.Errorf("v3 proposal response is nil")
+	}
+	if v3ProposalResp.Data == nil {
+		return nil, DataVersionNil, fmt.Errorf("v3 proposal data is nil")
+	}
+
+	metricsProposerDataRequest.Observe(time.Since(reqStart).Seconds())
+	beaconBlock := v3ProposalResp.Data
+
+	if beaconBlock.ExecutionPayloadBlinded {
+		switch beaconBlock.Version {
+		case spec.DataVersionCapella:
+			if beaconBlock.BlindedCapella == nil {
+				return nil, DataVersionNil, fmt.Errorf("capella blinded block is nil")
+			}
+			if beaconBlock.BlindedCapella.Body == nil {
+				return nil, DataVersionNil, fmt.Errorf("capella blinded block body is nil")
+			}
+			if beaconBlock.BlindedCapella.Body.ExecutionPayloadHeader == nil {
+				return nil, DataVersionNil, fmt.Errorf("capella blinded block execution payload header is nil")
+			}
+			return beaconBlock.BlindedCapella, beaconBlock.Version, nil
+		case spec.DataVersionDeneb:
+			if beaconBlock.BlindedDeneb == nil {
+				return nil, DataVersionNil, fmt.Errorf("deneb blinded block contents is nil")
+			}
+			if beaconBlock.BlindedDeneb.Body == nil {
+				return nil, DataVersionNil, fmt.Errorf("deneb blinded block body is nil")
+			}
+			if beaconBlock.BlindedDeneb.Body.ExecutionPayloadHeader == nil {
+				return nil, DataVersionNil, fmt.Errorf("deneb blinded block execution payload header is nil")
+			}
+			return beaconBlock.BlindedDeneb, beaconBlock.Version, nil
+		default:
+			return nil, DataVersionNil, fmt.Errorf("beacon blinded block version %s not supported", beaconBlock.Version)
+		}
+	}
+
+	switch beaconBlock.Version {
+	case spec.DataVersionCapella:
+		if beaconBlock.Capella == nil {
+			return nil, DataVersionNil, fmt.Errorf("capella block is nil")
+		}
+		if beaconBlock.Capella.Body == nil {
+			return nil, DataVersionNil, fmt.Errorf("capella block body is nil")
+		}
+		if beaconBlock.Capella.Body.ExecutionPayload == nil {
+			return nil, DataVersionNil, fmt.Errorf("capella block execution payload is nil")
+		}
+		return beaconBlock.Capella, beaconBlock.Version, nil
+	case spec.DataVersionDeneb:
+		if beaconBlock.Deneb == nil {
+			return nil, DataVersionNil, fmt.Errorf("deneb block contents is nil")
+		}
+		if beaconBlock.Deneb.Block == nil {
+			return nil, DataVersionNil, fmt.Errorf("deneb block is nil")
+		}
+		if beaconBlock.Deneb.Block.Body == nil {
+			return nil, DataVersionNil, fmt.Errorf("deneb block body is nil")
+		}
+		if beaconBlock.Deneb.Block.Body.ExecutionPayload == nil {
+			return nil, DataVersionNil, fmt.Errorf("deneb block execution payload is nil")
+		}
+		return beaconBlock.Deneb, beaconBlock.Version, nil
+
+	default:
+		return nil, DataVersionNil, fmt.Errorf("beacon block version %s not supported", beaconBlock.Version)
+	}
+
+}
+
+func (gc *goClient) SubmitBlindedBeaconBlock(block *api.VersionedBlindedProposal, sig phase0.BLSSignature) error {
+	signedBlock := &api.VersionedSignedBlindedProposal{
 		Version: block.Version,
 	}
 	switch block.Version {
-	case spec.DataVersionBellatrix:
-		if block.Bellatrix == nil {
-			return errors.New("bellatrix blinded block is nil")
-		}
-		signedBlock.Bellatrix = &apiv1bellatrix.SignedBlindedBeaconBlock{
-			Message: block.Bellatrix,
-		}
-		copy(signedBlock.Bellatrix.Signature[:], sig[:])
 	case spec.DataVersionCapella:
 		if block.Capella == nil {
-			return errors.New("capella blinded block is nil")
+			return fmt.Errorf("capella blinded block is nil")
 		}
 		signedBlock.Capella = &apiv1capella.SignedBlindedBeaconBlock{
 			Message: block.Capella,
 		}
 		copy(signedBlock.Capella.Signature[:], sig[:])
+	case spec.DataVersionDeneb:
+		if block.Deneb == nil {
+			return fmt.Errorf("deneb block contents is nil")
+		}
+		if block.Deneb.Body == nil {
+			return fmt.Errorf("deneb block body is nil")
+		}
+		if block.Deneb.Body.ExecutionPayloadHeader == nil {
+			return fmt.Errorf("deneb block execution payload header is nil")
+		}
+		signedBlock.Deneb = &apiv1deneb.SignedBlindedBeaconBlock{
+			Message: block.Deneb,
+		}
+		copy(signedBlock.Deneb.Signature[:], sig[:])
 	default:
-		return errors.New("unknown block version")
+		return fmt.Errorf("unknown block version")
 	}
 
-	return gc.client.SubmitBlindedBeaconBlock(gc.ctx, signedBlock)
+	return gc.client.SubmitBlindedProposal(gc.ctx, signedBlock)
 }
 
 // SubmitBeaconBlock submit the block to the node
-func (gc *goClient) SubmitBeaconBlock(block *spec.VersionedBeaconBlock, sig phase0.BLSSignature) error {
-	signedBlock := &spec.VersionedSignedBeaconBlock{
+func (gc *goClient) SubmitBeaconBlock(block *api.VersionedProposal, sig phase0.BLSSignature) error {
+	signedBlock := &api.VersionedSignedProposal{
 		Version: block.Version,
 	}
 	switch block.Version {
-	case spec.DataVersionPhase0:
-		if block.Phase0 == nil {
-			return errors.New("phase0 block is nil")
-		}
-		signedBlock.Phase0 = &phase0.SignedBeaconBlock{
-			Message: block.Phase0,
-		}
-		copy(signedBlock.Phase0.Signature[:], sig[:])
-	case spec.DataVersionAltair:
-		if block.Altair == nil {
-			return errors.New("altair block is nil")
-		}
-		signedBlock.Altair = &altair.SignedBeaconBlock{
-			Message: block.Altair,
-		}
-		copy(signedBlock.Altair.Signature[:], sig[:])
-	case spec.DataVersionBellatrix:
-		if block.Bellatrix == nil {
-			return errors.New("bellatrix block is nil")
-		}
-		signedBlock.Bellatrix = &bellatrix.SignedBeaconBlock{
-			Message: block.Bellatrix,
-		}
-		copy(signedBlock.Bellatrix.Signature[:], sig[:])
 	case spec.DataVersionCapella:
 		if block.Capella == nil {
-			return errors.New("capella block is nil")
+			return fmt.Errorf("capella block is nil")
 		}
 		signedBlock.Capella = &capella.SignedBeaconBlock{
 			Message: block.Capella,
 		}
 		copy(signedBlock.Capella.Signature[:], sig[:])
+	case spec.DataVersionDeneb:
+		if block.Deneb == nil {
+			return fmt.Errorf("deneb block contents is nil")
+		}
+		if block.Deneb.Block == nil {
+			return fmt.Errorf("deneb block is nil")
+		}
+		if block.Deneb.Block.Body == nil {
+			return fmt.Errorf("deneb block body is nil")
+		}
+		if block.Deneb.Block.Body.ExecutionPayload == nil {
+			return fmt.Errorf("deneb block execution payload header is nil")
+		}
+		signedBlock.Deneb = &apiv1deneb.SignedBlockContents{
+			SignedBlock: &deneb.SignedBeaconBlock{
+				Message: block.Deneb.Block,
+			},
+			KZGProofs: block.Deneb.KZGProofs,
+			Blobs:     block.Deneb.Blobs,
+		}
+		copy(signedBlock.Deneb.SignedBlock.Signature[:], sig[:])
 	default:
-		return errors.New("unknown block version")
+		return fmt.Errorf("unknown block version")
 	}
 
-	return gc.client.SubmitBeaconBlock(gc.ctx, signedBlock)
+	return gc.client.SubmitProposal(gc.ctx, signedBlock)
 }
 
 func (gc *goClient) SubmitValidatorRegistration(pubkey []byte, feeRecipient bellatrix.ExecutionAddress, sig phase0.BLSSignature) error {
@@ -252,7 +398,7 @@ func (gc *goClient) submitRegistrationsFromCache(currentSlot phase0.Slot) {
 	gc.registrationMu.Lock()
 
 	slotsSinceLastRegistration := currentSlot - gc.registrationLastSlot
-	operatorSubmissionSlotModulo := gc.operatorID % slotsPerEpoch
+	operatorSubmissionSlotModulo := gc.getOperatorID() % slotsPerEpoch
 
 	hasRegistrations := len(gc.registrationCache) != 0
 	operatorSubmissionSlot := uint64(currentSlot)%slotsPerEpoch == operatorSubmissionSlotModulo

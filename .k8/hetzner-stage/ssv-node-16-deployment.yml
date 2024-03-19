@@ -115,7 +115,7 @@ spec:
             - name: PUBSUB_TRACE
               value: 'false'
             - name: BUILDER_PROPOSALS
-              value: "false"
+              value: "true"
           volumeMounts:
             - mountPath: /data
               name: ssv-node-16

@@ -9,12 +9,17 @@ import (
 
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	types "github.com/bloxapp/ssv-spec/types"
+	network "github.com/bloxapp/ssv/network"
 	duties "github.com/bloxapp/ssv/operator/duties"
+	beacon "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 	validator "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	types0 "github.com/bloxapp/ssv/protocol/v2/types"
 	storage "github.com/bloxapp/ssv/registry/storage"
+	basedb "github.com/bloxapp/ssv/storage/basedb"
 	common "github.com/ethereum/go-ethereum/common"
 	gomock "github.com/golang/mock/gomock"
+	peer "github.com/libp2p/go-libp2p/core/peer"
 	zap "go.uber.org/zap"
 )
 
@@ -42,17 +47,17 @@ func (m *MockController) EXPECT() *MockControllerMockRecorder {
 }
 
 // AllActiveIndices mocks base method.
-func (m *MockController) AllActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
+func (m *MockController) AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AllActiveIndices", epoch)
+	ret := m.ctrl.Call(m, "AllActiveIndices", epoch, afterInit)
 	ret0, _ := ret[0].([]phase0.ValidatorIndex)
 	return ret0
 }
 
 // AllActiveIndices indicates an expected call of AllActiveIndices.
-func (mr *MockControllerMockRecorder) AllActiveIndices(epoch interface{}) *gomock.Call {
+func (mr *MockControllerMockRecorder) AllActiveIndices(epoch, afterInit interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AllActiveIndices", reflect.TypeOf((*MockController)(nil).AllActiveIndices), epoch)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AllActiveIndices", reflect.TypeOf((*MockController)(nil).AllActiveIndices), epoch, afterInit)
 }
 
 // CommitteeActiveIndices mocks base method.
@@ -107,6 +112,20 @@ func (m *MockController) GetOperatorData() *storage.OperatorData {
 func (mr *MockControllerMockRecorder) GetOperatorData() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorData", reflect.TypeOf((*MockController)(nil).GetOperatorData))
+}
+
+// GetOperatorID mocks base method.
+func (m *MockController) GetOperatorID() types.OperatorID {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetOperatorID")
+	ret0, _ := ret[0].(types.OperatorID)
+	return ret0
+}
+
+// GetOperatorID indicates an expected call of GetOperatorID.
+func (mr *MockControllerMockRecorder) GetOperatorID() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorID", reflect.TypeOf((*MockController)(nil).GetOperatorID))
 }
 
 // GetOperatorShares mocks base method.
@@ -299,4 +318,208 @@ func (m *MockController) ValidatorExitChan() <-chan duties.ExitDescriptor {
 func (mr *MockControllerMockRecorder) ValidatorExitChan() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidatorExitChan", reflect.TypeOf((*MockController)(nil).ValidatorExitChan))
+}
+
+// MockRecipients is a mock of Recipients interface.
+type MockRecipients struct {
+	ctrl     *gomock.Controller
+	recorder *MockRecipientsMockRecorder
+}
+
+// MockRecipientsMockRecorder is the mock recorder for MockRecipients.
+type MockRecipientsMockRecorder struct {
+	mock *MockRecipients
+}
+
+// NewMockRecipients creates a new mock instance.
+func NewMockRecipients(ctrl *gomock.Controller) *MockRecipients {
+	mock := &MockRecipients{ctrl: ctrl}
+	mock.recorder = &MockRecipientsMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockRecipients) EXPECT() *MockRecipientsMockRecorder {
+	return m.recorder
+}
+
+// GetRecipientData mocks base method.
+func (m *MockRecipients) GetRecipientData(r basedb.Reader, owner common.Address) (*storage.RecipientData, bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRecipientData", r, owner)
+	ret0, _ := ret[0].(*storage.RecipientData)
+	ret1, _ := ret[1].(bool)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// GetRecipientData indicates an expected call of GetRecipientData.
+func (mr *MockRecipientsMockRecorder) GetRecipientData(r, owner interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRecipientData", reflect.TypeOf((*MockRecipients)(nil).GetRecipientData), r, owner)
+}
+
+// MockSharesStorage is a mock of SharesStorage interface.
+type MockSharesStorage struct {
+	ctrl     *gomock.Controller
+	recorder *MockSharesStorageMockRecorder
+}
+
+// MockSharesStorageMockRecorder is the mock recorder for MockSharesStorage.
+type MockSharesStorageMockRecorder struct {
+	mock *MockSharesStorage
+}
+
+// NewMockSharesStorage creates a new mock instance.
+func NewMockSharesStorage(ctrl *gomock.Controller) *MockSharesStorage {
+	mock := &MockSharesStorage{ctrl: ctrl}
+	mock.recorder = &MockSharesStorageMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockSharesStorage) EXPECT() *MockSharesStorageMockRecorder {
+	return m.recorder
+}
+
+// Get mocks base method.
+func (m *MockSharesStorage) Get(txn basedb.Reader, pubKey []byte) *types0.SSVShare {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Get", txn, pubKey)
+	ret0, _ := ret[0].(*types0.SSVShare)
+	return ret0
+}
+
+// Get indicates an expected call of Get.
+func (mr *MockSharesStorageMockRecorder) Get(txn, pubKey interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockSharesStorage)(nil).Get), txn, pubKey)
+}
+
+// List mocks base method.
+func (m *MockSharesStorage) List(txn basedb.Reader, filters ...storage.SharesFilter) []*types0.SSVShare {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{txn}
+	for _, a := range filters {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "List", varargs...)
+	ret0, _ := ret[0].([]*types0.SSVShare)
+	return ret0
+}
+
+// List indicates an expected call of List.
+func (mr *MockSharesStorageMockRecorder) List(txn interface{}, filters ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{txn}, filters...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*MockSharesStorage)(nil).List), varargs...)
+}
+
+// UpdateValidatorMetadata mocks base method.
+func (m *MockSharesStorage) UpdateValidatorMetadata(pk string, metadata *beacon.ValidatorMetadata) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateValidatorMetadata", pk, metadata)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateValidatorMetadata indicates an expected call of UpdateValidatorMetadata.
+func (mr *MockSharesStorageMockRecorder) UpdateValidatorMetadata(pk, metadata interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateValidatorMetadata", reflect.TypeOf((*MockSharesStorage)(nil).UpdateValidatorMetadata), pk, metadata)
+}
+
+// MockP2PNetwork is a mock of P2PNetwork interface.
+type MockP2PNetwork struct {
+	ctrl     *gomock.Controller
+	recorder *MockP2PNetworkMockRecorder
+}
+
+// MockP2PNetworkMockRecorder is the mock recorder for MockP2PNetwork.
+type MockP2PNetworkMockRecorder struct {
+	mock *MockP2PNetwork
+}
+
+// NewMockP2PNetwork creates a new mock instance.
+func NewMockP2PNetwork(ctrl *gomock.Controller) *MockP2PNetwork {
+	mock := &MockP2PNetwork{ctrl: ctrl}
+	mock.recorder = &MockP2PNetworkMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockP2PNetwork) EXPECT() *MockP2PNetworkMockRecorder {
+	return m.recorder
+}
+
+// Broadcast mocks base method.
+func (m *MockP2PNetwork) Broadcast(message *types.SSVMessage) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Broadcast", message)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Broadcast indicates an expected call of Broadcast.
+func (mr *MockP2PNetworkMockRecorder) Broadcast(message interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Broadcast", reflect.TypeOf((*MockP2PNetwork)(nil).Broadcast), message)
+}
+
+// Peers mocks base method.
+func (m *MockP2PNetwork) Peers(pk types.ValidatorPK) ([]peer.ID, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Peers", pk)
+	ret0, _ := ret[0].([]peer.ID)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Peers indicates an expected call of Peers.
+func (mr *MockP2PNetworkMockRecorder) Peers(pk interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Peers", reflect.TypeOf((*MockP2PNetwork)(nil).Peers), pk)
+}
+
+// RegisterHandlers mocks base method.
+func (m *MockP2PNetwork) RegisterHandlers(logger *zap.Logger, handlers ...*protocolp2p.SyncHandler) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{logger}
+	for _, a := range handlers {
+		varargs = append(varargs, a)
+	}
+	m.ctrl.Call(m, "RegisterHandlers", varargs...)
+}
+
+// RegisterHandlers indicates an expected call of RegisterHandlers.
+func (mr *MockP2PNetworkMockRecorder) RegisterHandlers(logger interface{}, handlers ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{logger}, handlers...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterHandlers", reflect.TypeOf((*MockP2PNetwork)(nil).RegisterHandlers), varargs...)
+}
+
+// SubscribeRandoms mocks base method.
+func (m *MockP2PNetwork) SubscribeRandoms(logger *zap.Logger, numSubnets int) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubscribeRandoms", logger, numSubnets)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SubscribeRandoms indicates an expected call of SubscribeRandoms.
+func (mr *MockP2PNetworkMockRecorder) SubscribeRandoms(logger, numSubnets interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeRandoms", reflect.TypeOf((*MockP2PNetwork)(nil).SubscribeRandoms), logger, numSubnets)
+}
+
+// UseMessageRouter mocks base method.
+func (m *MockP2PNetwork) UseMessageRouter(router network.MessageRouter) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "UseMessageRouter", router)
+}
+
+// UseMessageRouter indicates an expected call of UseMessageRouter.
+func (mr *MockP2PNetworkMockRecorder) UseMessageRouter(router interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UseMessageRouter", reflect.TypeOf((*MockP2PNetwork)(nil).UseMessageRouter), router)
 }

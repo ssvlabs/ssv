@@ -82,11 +82,11 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
 			if h.fetchFirst {
 				h.fetchFirst = false
-				h.processFetching(ctx, period, slot)
+				h.processFetching(ctx, period, slot, true)
 				h.processExecution(period, slot)
 			} else {
 				h.processExecution(period, slot)
-				h.processFetching(ctx, period, slot)
+				h.processFetching(ctx, period, slot, true)
 			}
 			cancel()
 
@@ -140,19 +140,19 @@ func (h *SyncCommitteeHandler) HandleInitialDuties(ctx context.Context) {
 	slot := h.network.Beacon.EstimatedCurrentSlot()
 	epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 	period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
-	h.processFetching(ctx, period, slot)
+	h.processFetching(ctx, period, slot, false)
 	// At the init time we may not have enough duties to fetch
 	// we should not set those values to false in processFetching() call
 	h.fetchNextPeriod = true
 	h.fetchCurrentPeriod = true
 }
 
-func (h *SyncCommitteeHandler) processFetching(ctx context.Context, period uint64, slot phase0.Slot) {
+func (h *SyncCommitteeHandler) processFetching(ctx context.Context, period uint64, slot phase0.Slot, waitForInitial bool) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	if h.fetchCurrentPeriod {
-		if err := h.fetchAndProcessDuties(ctx, period); err != nil {
+		if err := h.fetchAndProcessDuties(ctx, period, waitForInitial); err != nil {
 			h.logger.Error("failed to fetch duties for current epoch", zap.Error(err))
 			return
 		}
@@ -160,7 +160,7 @@ func (h *SyncCommitteeHandler) processFetching(ctx context.Context, period uint6
 	}
 
 	if h.fetchNextPeriod {
-		if err := h.fetchAndProcessDuties(ctx, period+1); err != nil {
+		if err := h.fetchAndProcessDuties(ctx, period+1, waitForInitial); err != nil {
 			h.logger.Error("failed to fetch duties for next epoch", zap.Error(err))
 			return
 		}
@@ -185,7 +185,7 @@ func (h *SyncCommitteeHandler) processExecution(period uint64, slot phase0.Slot)
 	h.executeDuties(h.logger, toExecute)
 }
 
-func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period uint64) error {
+func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period uint64, waitForInitial bool) error {
 	start := time.Now()
 	firstEpoch := h.network.Beacon.FirstEpochOfSyncPeriod(period)
 	currentEpoch := h.network.Beacon.EstimatedCurrentEpoch()
@@ -194,7 +194,7 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period
 	}
 	lastEpoch := h.network.Beacon.FirstEpochOfSyncPeriod(period+1) - 1
 
-	allActiveIndices := h.validatorController.AllActiveIndices(firstEpoch)
+	allActiveIndices := h.validatorController.AllActiveIndices(firstEpoch, waitForInitial)
 	if len(allActiveIndices) == 0 {
 		return nil
 	}

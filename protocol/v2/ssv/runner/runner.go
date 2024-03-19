@@ -67,6 +67,7 @@ func (b *BaseRunner) SetHighestDecidedSlot(slot spec.Slot) {
 
 // setupForNewDuty is sets the runner for a new duty
 func (b *BaseRunner) baseSetupForNewDuty(duty *spectypes.Duty) {
+	// start new state
 	state := NewRunnerState(b.Share.Quorum, duty)
 
 	// TODO: potentially incomplete locking of b.State. runner.Execute(duty) has access to
@@ -99,7 +100,9 @@ func (b *BaseRunner) baseStartNewDuty(logger *zap.Logger, runner Runner, duty *s
 	if err := b.ShouldProcessDuty(duty); err != nil {
 		return errors.Wrap(err, "can't start duty")
 	}
+
 	b.baseSetupForNewDuty(duty)
+
 	return runner.executeDuty(logger, duty)
 }
 
