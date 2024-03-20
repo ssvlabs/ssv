@@ -229,13 +229,46 @@ func (mv *messageValidator) ValidatorForTopic(_ string) func(ctx context.Context
 
 // ValidatePubsubMessage validates the given pubsub message.
 // Depending on the outcome, it will return one of the pubsub validation results (Accept, Ignore, or Reject).
-func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer.ID, pmsg *pubsub.Message) (finalResult pubsub.ValidationResult) {
 	if mv.selfAccept && peerID == mv.selfPID {
 		msg, _ := commons.DecodeNetworkMsg(pmsg.Data)
 		decMsg, _ := queue.DecodeSSVMessage(msg)
 		pmsg.ValidatorData = decMsg
 		return pubsub.ValidationAccept
 	}
+
+	defer func() {
+		var id227 = `16Uiu2HAmTh9wvAi5H8wirS8S8nH8t19wkAZM7sjgAgbttARBaunY`
+		if pmsg.GetFrom().String() == id227 || pmsg.ReceivedFrom.String() == id227 {
+			msg, err := commons.DecodeNetworkMsg(pmsg.Data)
+			if err != nil {
+				mv.logger.Debug("id227: failed to decode network message", zap.Any("validation", finalResult), zap.Error(err))
+				return
+			}
+			decMsg, err := queue.DecodeSSVMessage(msg)
+			if err != nil {
+				mv.logger.Debug("id227: failed to decode ssv message", zap.Any("validation", finalResult), zap.Error(err))
+			}
+			var height specqbft.Height
+			var round specqbft.Round
+			var consensusType specqbft.MessageType
+			switch m := decMsg.Body.(type) {
+			case *specqbft.SignedMessage:
+				height = m.Message.Height
+				round = m.Message.Round
+				consensusType = m.Message.MsgType
+			}
+			mv.logger.Debug("id227: decoded ssv message",
+				zap.Any("type", decMsg.MsgType),
+				zap.Any("consensus_type", consensusType),
+				zap.Any("pubkey", hex.EncodeToString(decMsg.GetID().GetPubKey())),
+				zap.Any("role", decMsg.GetID().GetRoleType().String()),
+				zap.Any("height", height),
+				zap.Any("round", round),
+				zap.Any("validation", finalResult),
+			)
+		}
+	}()
 
 	start := time.Now()
 	var validationDurationLabels []string // TODO: implement
