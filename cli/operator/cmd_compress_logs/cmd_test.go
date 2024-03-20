@@ -254,13 +254,3 @@ func deleteFiles(paths ...string) error {
 	}
 	return nil
 }
-
-//func cleanPath(path string) (string, error) {
-//	absPath, err := filepath.Abs(filepath.Clean(path))
-//
-//	if err != nil {
-//		return path, err
-//	}
-//
-//	return absPath, nil
-//}

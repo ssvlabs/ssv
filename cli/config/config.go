@@ -21,25 +21,21 @@ type GlobalConfig struct {
 	LogFileBackups int    `yaml:"LogFileBackups" env:"LOG_FILE_BACKUPS" env-default:"3" env-description:"Defines a number of backups to keep when rotating logs"`
 }
 
-// ProcessArgs processes and handles CLI arguments
+// ProcessConfigArg adds the --config flag to the command
 func ProcessConfigArg(cfg interface{}, a *Args, cmd *cobra.Command) {
 	configFlag := "config"
 	cmd.PersistentFlags().StringVarP(&a.ConfigPath, configFlag, "c", "./config/config.yaml", "Path to configuration file")
 	_ = cmd.MarkFlagRequired(configFlag)
-
-	envHelp, _ := cleanenv.GetDescription(cfg, nil)
-	cmd.SetUsageTemplate(envHelp + "\n" + cmd.UsageTemplate())
-
 }
 
-// ProcessArgs processes and handles CLI arguments
+// ProcessSharesConfigArg adds the --share-config flag to the command
 func ProcessSharesConfigArg(cfg interface{}, a *Args, cmd *cobra.Command) {
 	shareConfigFlag := "share-config"
 	cmd.PersistentFlags().StringVarP(&a.ShareConfigPath, shareConfigFlag, "s", "", "Path to local share configuration file")
 	_ = cmd.MarkFlagRequired(shareConfigFlag)
 }
 
-// ProcessArgs processes and handles CLI arguments
+// ProcessHelpCmd adds the configuration help to the command
 func ProcessHelpCmd(cfg interface{}, a *Args, cmd *cobra.Command) {
 	envHelp, _ := cleanenv.GetDescription(cfg, nil)
 	cmd.SetUsageTemplate(envHelp + "\n" + cmd.UsageTemplate())

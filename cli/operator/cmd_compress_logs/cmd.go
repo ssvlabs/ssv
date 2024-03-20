@@ -35,7 +35,7 @@ var CompressLogsCmd = &cobra.Command{
 			logger.Fatal("initialization failed", zap.Error(err))
 		}
 
-		logger.Info(fmt.Sprintf("starting logs compression%v", commons.GetBuildData()))
+		logger.Info(fmt.Sprintf("starting logs compression %v", commons.GetBuildData()))
 
 		logsFilePath := cfg.LogFilePath
 
