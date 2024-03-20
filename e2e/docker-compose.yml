@@ -88,7 +88,7 @@ services:
     container_name: rsa_signature
     build:
       context: ../
-      dockerfile: ../DockerfileTest
+      dockerfile: DockerfileTest
     command: make BUILD_PATH=/go/bin/tests test-rsa
     image: rsa_signature:latest
     depends_on: []
