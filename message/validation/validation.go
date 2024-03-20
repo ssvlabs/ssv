@@ -240,7 +240,14 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer
 	defer func() {
 		var id227 = `16Uiu2HAmTh9wvAi5H8wirS8S8nH8t19wkAZM7sjgAgbttARBaunY`
 		if pmsg.GetFrom().String() == id227 || pmsg.ReceivedFrom.String() == id227 {
-			msg, err := commons.DecodeNetworkMsg(pmsg.Data)
+			decMessageData, _, _, err := commons.DecodeSignedSSVMessage(pmsg.Data)
+			if err != nil {
+				e := ErrMalformedSignedMessage
+				e.innerErr = err
+				mv.logger.Debug("id227: failed to decode signed ssv message", zap.Any("validation", finalResult), zap.Error(e))
+				return
+			}
+			msg, err := commons.DecodeNetworkMsg(decMessageData)
 			if err != nil {
 				mv.logger.Debug("id227: failed to decode network message", zap.Any("validation", finalResult), zap.Error(err))
 				return
