@@ -74,7 +74,7 @@ spec:
               hostPort: 16002
           env:
             - name: SHARE_CONFIG
-              value: "./data/share.yaml"
+              value: "./ssv-data/share.yaml"
             - name: CONFIG_PATH
               valueFrom:
                 secretKeyRef:
@@ -99,7 +99,7 @@ spec:
             - name: HOST_ADDRESS
               value: ""
             - name: DB_PATH
-              value: "./data/db-holesky-stage"
+              value: "./ssv-data/db-holesky-stage"
             - name: NETWORK
               value: "holesky-stage"
             - name: DB_REPORTING
@@ -117,9 +117,9 @@ spec:
             - name: BUILDER_PROPOSALS
               value: "true"
           volumeMounts:
-            - mountPath: /data
+            - mountPath: /ssv-data
               name: ssv-node-2
-            - mountPath: /data/share.yaml
+            - mountPath: /ssv-data/share.yaml
               subPath: share.yaml
               name: ssv-node-2-cm
       imagePullSecrets:
