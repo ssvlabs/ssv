@@ -162,7 +162,6 @@ func deleteFiles(paths ...string) error {
 
 func generateLogFile(sizeInMB int, chunkSize int, path string) error {
 	path = filepath.Clean(path)
-	logger, _ := zap.NewProduction()
 
 	lumberjackLogger := &lumberjack.Logger{
 		Filename:   path,
@@ -181,7 +180,7 @@ func generateLogFile(sizeInMB int, chunkSize int, path string) error {
 		zap.InfoLevel,
 	)
 
-	logger = zap.New(core)
+	logger := zap.New(core)
 
 	logger.Info("Generating log file", zap.Int("sizeInMB", sizeInMB), zap.String("path", path))
 
@@ -194,7 +193,8 @@ func generateLogFile(sizeInMB int, chunkSize int, path string) error {
 }
 
 func generate1MBString() string {
-	rand.Seed(time.Now().UnixNano())
+	source := rand.NewSource(time.Now().UnixNano())
+	rnd := rand.New(source)
 
 	const MB = 1 << 20 // 1MB in bytes
 	const charSize = 1 // size in bytes of the character we're appending
@@ -206,7 +206,7 @@ func generate1MBString() string {
 
 	strSize := MB / charSize
 	for i := 0; i < strSize; i++ {
-		symbol := rand.Intn('z'-'a') + 'a'
+		symbol := rnd.Intn('z'-'a') + 'a'
 		b.WriteRune(rune(symbol))
 	}
 

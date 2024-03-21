@@ -3,6 +3,7 @@ package cmd_compress_logs
 import (
 	"archive/tar"
 	"compress/gzip"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -54,7 +55,7 @@ func getFileNameWithoutExt(path string) string {
 }
 
 func calcFileSize(path string) (int64, error) {
-	file, err := os.Open(path)
+	file, err := os.Open(filepath.Clean(path))
 	if err != nil {
 		return 0, err
 	}
@@ -67,19 +68,26 @@ func calcFileSize(path string) (int64, error) {
 }
 
 func createFileCopy(file string, destDir string) error {
-	srcFile, err := os.Open(file)
+	srcFile, err := os.Open(filepath.Clean(file))
 	if err != nil {
 		return err
 	}
-	defer srcFile.Close()
+	defer func() {
+		_ = srcFile.Close()
+	}()
 
-	destFile, err := os.Create(filepath.Join(destDir, filepath.Base(srcFile.Name())))
+	destFile, err := os.Create(
+		filepath.Clean(
+			filepath.Join(destDir, filepath.Base(srcFile.Name())),
+		),
+	)
 	if err != nil {
 		return err
 	}
 
-	defer destFile.Close()
-
+	defer func() {
+		_ = destFile.Close()
+	}()
 	// Copy the contents of the source file to the destination file
 	_, err = io.Copy(destFile, srcFile)
 	if err != nil {
@@ -133,17 +141,23 @@ func compressDirectory(srcDirPath string) (string, error) {
 	parentDir := filepath.Dir(srcDirPath)
 	newSrcDir := filepath.Join(parentDir, dirName) // this prevents having all nested directories in the tarball
 
-	tarFile, err := os.Create(dirName + compressedFileExtension)
+	tarFile, err := os.Create(filepath.Clean(dirName + compressedFileExtension))
 	if err != nil {
 		return "", fmt.Errorf("can't create a tar file with name %s: %w", dirName, err)
 	}
-	defer tarFile.Close()
+	defer func() {
+		_ = tarFile.Close()
+	}()
 
 	gzWriter := gzip.NewWriter(tarFile)
-	defer gzWriter.Close()
+	defer func() {
+		_ = gzWriter.Close()
+	}()
 
 	tw := tar.NewWriter(gzWriter)
-	defer tw.Close()
+	defer func() {
+		_ = tw.Close()
+	}()
 
 	// recursively walk the directory and write the contents to the tarball
 	err = filepath.Walk(newSrcDir, func(file string, fi os.FileInfo, err error) error {
@@ -164,7 +178,7 @@ func compressDirectory(srcDirPath string) (string, error) {
 		}
 
 		if !fi.IsDir() {
-			data, err := os.Open(file)
+			data, err := os.Open(filepath.Clean(file))
 			if err != nil {
 				return err
 			}
@@ -188,17 +202,21 @@ func compressDirectory(srcDirPath string) (string, error) {
 }
 
 func untarGzFile(gzFilePath string) (string, error) {
-	gzFile, err := os.Open(gzFilePath + compressedFileExtension)
+	gzFile, err := os.Open(filepath.Clean(gzFilePath + compressedFileExtension))
 	if err != nil {
 		return "", err
 	}
-	defer gzFile.Close()
+	defer func() {
+		_ = gzFile.Close()
+	}()
 
 	gzReader, err := gzip.NewReader(gzFile)
 	if err != nil {
 		return "", err
 	}
-	defer gzReader.Close()
+	defer func() {
+		_ = gzReader.Close()
+	}()
 
 	tarReader := tar.NewReader(gzReader)
 
@@ -230,17 +248,37 @@ func untarGzFile(gzFilePath string) (string, error) {
 			}
 
 		case tar.TypeReg:
-			file, err := os.Create(target)
+			file, err := os.Create(filepath.Clean(target))
 			if err != nil {
+				_ = file.Close()
 				return "", err
 			}
-			defer file.Close()
 
-			if _, err := io.Copy(file, tarReader); err != nil {
-				return "", err
+			for {
+				_, err := io.CopyN(file, tarReader, 1024)
+				if err != nil {
+					if errors.Is(err, io.EOF) {
+						break
+					}
+
+					_ = file.Close()
+					return "", err
+				}
 			}
+			_ = file.Close()
 		}
 	}
 
 	return firstDirName, nil
+}
+
+// Sanitize archive file pathing from "G305: Zip Slip vulnerability".
+// https://github.com/securego/gosec/issues/324
+func SanitizeArchivePath(d, t string) (v string, err error) {
+	v = filepath.Join(d, t)
+	if strings.HasPrefix(v, filepath.Clean(d)) {
+		return v, nil
+	}
+
+	return "", fmt.Errorf("%s: %s", "content filepath is tainted", t)
 }

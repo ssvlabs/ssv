@@ -3,7 +3,6 @@ package cmd_compress_logs
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -11,12 +10,6 @@ import (
 
 	globalconfig "github.com/bloxapp/ssv/cli/config"
 )
-
-func TestCompression(t *testing.T) {
-	path := filepath.Clean("/Users/dev/ssv/ssv/logs_xxx/test_logs_dir/test.log")
-	_, err := compressLogFiles(&CompressLogsArgs{logFilePath: path})
-	require.NoError(t, err)
-}
 
 func TestSetGlobalLogger(t *testing.T) {
 	// Create a config object

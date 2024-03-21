@@ -24,7 +24,6 @@ const compressedFileExtension = ".gz"
 type CompressLogsArgs struct {
 	logFilePath string
 	destName    string
-	strategy    string
 }
 
 var compressLogsArgs CompressLogsArgs
@@ -80,7 +79,9 @@ func compressLogFiles(args *CompressLogsArgs) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer os.RemoveAll(destName) // clean up the temporary dir
+	defer func() {
+		_ = os.RemoveAll(destName)
+	}() // clean up the temporary dir
 
 	err = copyFilesToDir(destName, logFiles)
 	if err != nil {
