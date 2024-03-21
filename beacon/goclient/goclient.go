@@ -119,8 +119,6 @@ type Client interface {
 	eth2client.NodeSyncingProvider
 	eth2client.ProposalProvider
 	eth2client.ProposalSubmitter
-	eth2client.BlindedProposalProvider
-	eth2client.V3ProposalProvider
 	eth2client.BlindedProposalSubmitter
 	eth2client.DomainProvider
 	eth2client.SyncCommitteeMessagesSubmitter
