@@ -43,10 +43,8 @@ var CompressLogsCmd = &cobra.Command{
 
 		logFilePath := cfg.LogFilePath
 
-		//compressedFileName := filepath.Base(logFilePath) + "_" + time.Now().Format(time.RFC3339) + compressedFileExtension
 		fileSizeBytes, err := compressLogFiles(&CompressLogsArgs{
 			logFilePath: logFilePath,
-			//destName:    compressedFileName,
 		})
 
 		if err != nil {
