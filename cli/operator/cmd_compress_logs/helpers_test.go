@@ -1,6 +1,10 @@
 package cmd_compress_logs
 
 import (
+	"archive/tar"
+	"compress/gzip"
+	"errors"
+	"io"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -190,6 +194,81 @@ func generateLogFile(sizeInMB int, chunkSize int, path string) error {
 	}
 
 	return nil
+}
+
+func untarGzFile(gzFilePath string) (string, error) {
+	gzFile, err := os.Open(filepath.Clean(gzFilePath + compressedFileExtension))
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		_ = gzFile.Close()
+	}()
+
+	gzReader, err := gzip.NewReader(gzFile)
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		_ = gzReader.Close()
+	}()
+
+	tarReader := tar.NewReader(gzReader)
+
+	var firstDirName string
+
+	outputDir := filepath.Clean(
+		filepath.Join(filepath.Dir(gzFilePath), "unsizpped"),
+	)
+
+	for {
+		header, err := tarReader.Next()
+
+		if err == io.EOF {
+			break
+		}
+
+		if err != nil {
+			return "", err
+		}
+
+		target := filepath.Clean(
+			filepath.Join(filepath.Dir(outputDir), header.Name),
+		)
+
+		switch header.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(target, os.FileMode(header.Mode)); err != nil {
+				return "", err
+			}
+
+			if firstDirName == "" {
+				firstDirName = header.Name
+			}
+
+		case tar.TypeReg:
+			file, err := os.Create(filepath.Clean(target))
+			if err != nil {
+				_ = file.Close()
+				return "", err
+			}
+
+			for {
+				_, err := io.CopyN(file, tarReader, 1024)
+				if err != nil {
+					if errors.Is(err, io.EOF) {
+						break
+					}
+
+					_ = file.Close()
+					return "", err
+				}
+			}
+			_ = file.Close()
+		}
+	}
+
+	return firstDirName, nil
 }
 
 func generate1MBString() string {

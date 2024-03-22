@@ -3,7 +3,6 @@ package cmd_compress_logs
 import (
 	"archive/tar"
 	"compress/gzip"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -199,86 +198,4 @@ func compressDirectory(srcDirPath string) (string, error) {
 	}
 
 	return absTarFilePath, nil
-}
-
-func untarGzFile(gzFilePath string) (string, error) {
-	gzFile, err := os.Open(filepath.Clean(gzFilePath + compressedFileExtension))
-	if err != nil {
-		return "", err
-	}
-	defer func() {
-		_ = gzFile.Close()
-	}()
-
-	gzReader, err := gzip.NewReader(gzFile)
-	if err != nil {
-		return "", err
-	}
-	defer func() {
-		_ = gzReader.Close()
-	}()
-
-	tarReader := tar.NewReader(gzReader)
-
-	var firstDirName string
-
-	outputDir := filepath.Join(filepath.Dir(gzFilePath), "unsizpped")
-
-	for {
-		header, err := tarReader.Next()
-
-		if err == io.EOF {
-			break
-		}
-
-		if err != nil {
-			return "", err
-		}
-
-		target := filepath.Join(filepath.Dir(outputDir), header.Name)
-
-		switch header.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(target, os.FileMode(header.Mode)); err != nil {
-				return "", err
-			}
-
-			if firstDirName == "" {
-				firstDirName = header.Name
-			}
-
-		case tar.TypeReg:
-			file, err := os.Create(filepath.Clean(target))
-			if err != nil {
-				_ = file.Close()
-				return "", err
-			}
-
-			for {
-				_, err := io.CopyN(file, tarReader, 1024)
-				if err != nil {
-					if errors.Is(err, io.EOF) {
-						break
-					}
-
-					_ = file.Close()
-					return "", err
-				}
-			}
-			_ = file.Close()
-		}
-	}
-
-	return firstDirName, nil
-}
-
-// Sanitize archive file pathing from "G305: Zip Slip vulnerability".
-// https://github.com/securego/gosec/issues/324
-func SanitizeArchivePath(d, t string) (v string, err error) {
-	v = filepath.Join(d, t)
-	if strings.HasPrefix(v, filepath.Clean(d)) {
-		return v, nil
-	}
-
-	return "", fmt.Errorf("%s: %s", "content filepath is tainted", t)
 }
