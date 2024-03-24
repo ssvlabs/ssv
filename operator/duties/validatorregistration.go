@@ -25,6 +25,9 @@ func (h *ValidatorRegistrationHandler) Name() string {
 func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
 
+	// should be registered within validatorRegistrationEpochInterval epochs time in a corresponding slot
+	registrationSlotInterval := h.network.SlotsPerEpoch() * validatorRegistrationEpochInterval
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -32,17 +35,14 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 
 		case <-h.ticker.Next():
 			slot := h.ticker.Slot()
+			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			shares := h.validatorController.GetOperatorShares()
 
-			validators := []phase0.ValidatorIndex{}
+			var validators []phase0.ValidatorIndex
 			for _, share := range shares {
-				if !share.HasBeaconMetadata() || !share.BeaconMetadata.IsAttesting() {
+				if !share.IsActive(epoch) {
 					continue
 				}
-
-				// if not passed first registration, should be registered within one epoch time in a corresponding slot
-				// if passed first registration, should be registered within validatorRegistrationEpochInterval epochs time in a corresponding slot
-				registrationSlotInterval := h.network.SlotsPerEpoch() * validatorRegistrationEpochInterval
 
 				if uint64(share.BeaconMetadata.Index)%registrationSlotInterval != uint64(slot)%registrationSlotInterval {
 					continue
