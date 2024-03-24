@@ -4,9 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-
 	"go.uber.org/zap"
+	"os"
 
 	"github.com/bloxapp/ssv/e2e/logs_catcher"
 	"github.com/bloxapp/ssv/e2e/logs_catcher/docker"
@@ -20,18 +19,6 @@ type BlsVerificationJSON struct {
 	CorruptedShares []*logs_catcher.CorruptedShare `json:"bls_verification"`
 }
 
-// InterpretMode takes the input string and maps it to the appropriate ModeType.
-func (cmd *LogsCatcherCmd) InterpretMode() logs_catcher.Mode {
-	switch cmd.Mode {
-	case logs_catcher.Slashable, logs_catcher.RsaVerification:
-		return logs_catcher.DutiesMode
-	case logs_catcher.BlsVerificationMode:
-		return logs_catcher.BlsVerificationMode
-	default:
-		return "" // Indicates an unsupported mode
-	}
-}
-
 func (cmd *LogsCatcherCmd) Run(logger *zap.Logger, globals Globals) error {
 	// TODO: where do we stop?
 	ctx := context.Background()
@@ -42,14 +29,11 @@ func (cmd *LogsCatcherCmd) Run(logger *zap.Logger, globals Globals) error {
 	}
 	defer cli.Close()
 
-	// Convert the input string to a ModeType using InterpretMode method
-	mode := cmd.InterpretMode()
-
 	//TODO: run fataler and matcher in parallel?
 
 	// Execute different logic based on the value of the Mode flag
-	switch mode {
-	case logs_catcher.DutiesMode:
+	switch cmd.Mode {
+	case logs_catcher.Slashable, logs_catcher.RsaVerification:
 		logger.Info("Running", zap.String("mode: ", cmd.Mode))
 		err = logs_catcher.FatalListener(ctx, logger, cli)
 		if err != nil {
@@ -61,6 +45,14 @@ func (cmd *LogsCatcherCmd) Run(logger *zap.Logger, globals Globals) error {
 		if err != nil {
 			return err
 		}
+	case logs_catcher.RestartMode:
+		logger.Info("Running", zap.String("mode: ", cmd.Mode))
+		matcher := logs_catcher.NewLogMatcher(logger, cli, "")
+		err := matcher.TestRestartNode(ctx)
+		if err != nil {
+			return fmt.Errorf("faild to find submitted attestation %d: ", err)
+		}
+
 	case logs_catcher.BlsVerificationMode:
 		logger.Info("Running BlsVerification mode")
 		corruptedShares, err := UnmarshalBlsVerificationJSON(globals.ValidatorsFile)

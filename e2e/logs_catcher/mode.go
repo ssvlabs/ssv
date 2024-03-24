@@ -4,7 +4,7 @@ type Mode = string
 type SubMode = string
 
 const (
-	DutiesMode          = "Duties"
+	RestartMode         = "Restart"
 	BlsVerificationMode = "BlsVerification"
 	// Add other modes as necessary
 )

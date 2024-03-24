@@ -3,6 +3,7 @@ package logs_catcher
 import (
 	"context"
 	"fmt"
+	"github.com/docker/docker/client"
 	"strconv"
 	"strings"
 	"time"
@@ -22,12 +23,12 @@ import (
 const (
 	targetContainer = "ssv-node-1"
 
-	verifySignatureErr           = "failed processing consensus message: could not process msg: invalid signed message: msg signature invalid: failed to verify signature"
-	reconstructSignatureErr      = "could not reconstruct post consensus signature: could not reconstruct beacon sig: failed to verify reconstruct signature: could not reconstruct a valid signature"
-	pastRoundErr                 = "failed processing consensus message: could not process msg: invalid signed message: past round"
+	gotDutiesSuccess             = "🗂 got duties"
 	reconstructSignaturesSuccess = "reconstructed partial signatures"
 	submittedAttSuccess          = "✅ successfully submitted attestation"
-	gotDutiesSuccess             = "🗂 got duties"
+	pastRoundErr                 = "failed processing consensus message: could not process msg: invalid signed message: past round"
+	verifySignatureErr           = "failed processing consensus message: could not process msg: invalid signed message: msg signature invalid: failed to verify signature"
+	reconstructSignatureErr      = "could not reconstruct post consensus signature: could not reconstruct beacon sig: failed to verify reconstruct signature: could not reconstruct a valid signature"
 
 	msgHeightField        = "\"msg_height\":%d"
 	msgRoundField         = "\"msg_round\":%d"
@@ -56,7 +57,7 @@ type CorruptedShare struct {
 	OperatorID      types.OperatorID `json:"operator_id"`
 }
 
-func VerifyBLSSignature(pctx context.Context, logger *zap.Logger, cli DockerCLI, share *CorruptedShare) error {
+func VerifyBLSSignature(pctx context.Context, logger *zap.Logger, cli *client.Client, share *CorruptedShare) error {
 	startctx, startc := context.WithTimeout(pctx, time.Second*12*35) // wait max 35 slots
 	defer startc()
 

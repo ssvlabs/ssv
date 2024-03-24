@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/client"
 	"go.uber.org/zap"
 	"regexp"
 	"strconv"
@@ -20,12 +22,12 @@ const beaconProxyContainer = "beacon_proxy"
 var ssvNodesContainers = []string{"ssv-node-1", "ssv-node-2", "ssv-node-3", "ssv-node-4"}
 
 type Matcher struct {
-	logger *zap.Logger
-	cli    DockerCLI
 	mode   SubMode
+	logger *zap.Logger
+	cli    *client.Client
 }
 
-func NewLogMatcher(logger *zap.Logger, cli DockerCLI, mode SubMode) *Matcher {
+func NewLogMatcher(logger *zap.Logger, cli *client.Client, mode SubMode) *Matcher {
 	return &Matcher{mode: mode, cli: cli, logger: logger}
 }
 
@@ -38,6 +40,50 @@ func (m *Matcher) Match(pctx context.Context) error {
 		return err
 	}
 	return m.testDuty(ctx)
+}
+
+// TestRestartNode waits until first successfully attestation then restart the nodes and look for miss attestation
+func (m *Matcher) TestRestartNode(pctx context.Context) error {
+	ctx, c := context.WithCancel(pctx)
+	defer c()
+
+	_, err := m.waitForStartCondition(ctx, []string{reconstructSignaturesSuccess}, ssvNodesContainers[0])
+	if err != nil {
+		return err
+	}
+	_, cancel := context.WithCancel(pctx)
+	defer cancel()
+
+	//err = m.restartContainer(beaconProxyContainer)
+	//if err != nil {
+	//	return err
+	//}
+	//println("<<<<<<before timeout>>>>>")
+	//time.Sleep(time.Duration(2) * time.Second)
+	//println("<<<<<<after timeout>>>>>")
+	for _, ssvNode := range ssvNodesContainers {
+		err := m.restartContainer(ssvNode)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (m *Matcher) restartContainer(containerName string) error {
+	// Context with a timeout to avoid hanging restarts
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Restart the container
+	err := m.cli.ContainerRestart(ctx, containerName, container.StopOptions{})
+	if err != nil {
+		return fmt.Errorf("error restarting container %s: %w", containerName, err)
+	}
+
+	fmt.Printf("Successfully restarted container %s\n", containerName)
+	return nil
 }
 
 func (m *Matcher) testDuty(ctx context.Context) error {
@@ -110,7 +156,7 @@ func (m *Matcher) getModeCriteria() (beaconCriteria, nodeCriteria []string, disc
 
 func (m *Matcher) waitForStartCondition(ctx context.Context, condition []string, targetContainer string) (string, error) {
 	ch := make(chan string, 1024)
-	defer close(ch)
+	found := make(chan bool)
 
 	m.logger.Debug("Waiting for start condition", zap.String("target", targetContainer), zap.Strings("condition", condition))
 
@@ -120,17 +166,24 @@ func (m *Matcher) waitForStartCondition(ctx context.Context, condition []string,
 			if logs.GrepLine(log, condition) {
 				conditionLog = log
 				m.logger.Info("Start condition met", zap.String("log_message", log))
-				break
+				found <- true
+				return
 			}
 		}
 	}()
 
-	if err := docker.StreamDockerLogs(ctx, m.cli, targetContainer, ch); err != nil && !errors.Is(err, context.Canceled) {
-		m.logger.Error("Log streaming error", zap.Error(err))
-		return conditionLog, err
-	}
+	go func() {
+		if err := docker.StreamDockerLogs(ctx, m.cli, targetContainer, ch); err != nil && !errors.Is(err, context.Canceled) {
+			m.logger.Error("Log streaming error", zap.Error(err))
+		}
+	}()
 
-	return conditionLog, nil
+	select {
+	case <-ctx.Done():
+		return conditionLog, ctx.Err()
+	case <-found:
+		return conditionLog, nil
+	}
 }
 
 func (m *Matcher) processDockerLogs(ctx context.Context, containerName string, matchStrings []string) ([]map[string]any, error) {
