@@ -659,7 +659,7 @@ func CreateDutyExecuteMsg(duty *spectypes.Duty, pubKey phase0.BLSPubKey, domain 
 	}, nil
 }
 
-// CommitteeActiveIndices fetches indices of in-committee validators who are attest eligible at the given epoch.
+// CommitteeActiveIndices fetches indices of in-committee validators who are active at the given epoch.
 func (c *controller) CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
 	validators := c.validatorsMap.GetAll()
 	indices := make([]phase0.ValidatorIndex, 0, len(validators))
