@@ -122,7 +122,7 @@ func dockerLogsByPubKey(ctx context.Context, logger *zap.Logger, cli DockerCLI, 
 		return nil, err
 	}
 	grepped := res.Grep(matchStrings).ParseAll(func(log string) (map[string]any, error) {
-		var result map[string]any // Corrected to `any` to match the return type
+		var result logs.ParsedLine // Corrected to `any` to match the return type
 		err := json.Unmarshal([]byte(log), &result)
 		if err != nil {
 			return nil, err // Return an error if parsing fails
