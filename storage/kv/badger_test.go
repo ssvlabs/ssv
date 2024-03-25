@@ -141,7 +141,7 @@ func TestBadgerDb_GetMany(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, 4, len(results))
-	
+
 	err = db.GetMany(prefix, [][]byte{}, func(obj basedb.Obj) error {
 		results = append(results, obj)
 		return nil
@@ -200,14 +200,14 @@ func TestBadgerDb_Update(t *testing.T) {
 	value := []byte("value")
 	err = db.Set(prefix, key, value)
 	require.NoError(t, err)
-	
+
 	newValue := []byte("newValue")
 	tx := func(txn basedb.Txn) error {
 		return db.Set(prefix, key, newValue)
 	}
 	err = db.Update(tx)
 	require.NoError(t, err)
-	
+
 	obj, _, err := db.Get(prefix, key)
 	require.NoError(t, err)
 	require.Equal(t, obj.Value, newValue)
