@@ -2,11 +2,9 @@ package handlers
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 
 	"github.com/libp2p/go-libp2p/core/network"
@@ -167,36 +165,6 @@ func (h *Node) Health(w http.ResponseWriter, r *http.Request) error {
 	resp.EventSyncer = healthStatus{(h.NodeProber.CheckEventSyncerHealth(ctx))}
 
 	return api.Render(w, r, resp)
-}
-
-func (h *Node) Sign(w http.ResponseWriter, r *http.Request) error {
-	// TODO: there is a limit to amount of data can be signed at once. Or brake down to chunks
-	rawdata, err := io.ReadAll(r.Body)
-	if err != nil {
-		return err
-	}
-	var request struct {
-		Data string `json:"data"`
-	}
-	if err := json.Unmarshal(rawdata, &request); err != nil {
-		return err
-	}
-	data, err := hex.DecodeString(request.Data)
-	if err != nil {
-		return err
-	}
-	if len(data) > 256 {
-		return fmt.Errorf("data to sign should be <= 256 bytes")
-	}
-	signature, err := h.Signer(data[:])
-	if err != nil {
-		return err
-	}
-	var response struct {
-		Signature string `json:"signature"`
-	}
-	response.Signature = hex.EncodeToString(signature)
-	return api.Render(w, r, response)
 }
 
 func (h *Node) peers(peers []peer.ID) []peerInfo {

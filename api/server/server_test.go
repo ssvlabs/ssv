@@ -53,14 +53,14 @@ func TestAPI(t *testing.T) {
 	testServer := httptest.NewServer(router)
 	t.Run("authorized /v1/operator/sign", func(t *testing.T) {
 		hash := sha256.Sum256([]byte("Hello"))
-		data := []byte(fmt.Sprintf(`{"data":"%s"}`, hex.EncodeToString(hash[:])))
+		data := []byte(fmt.Sprintf(`{"hashed_data":"%s"}`, hex.EncodeToString(hash[:])))
 		r := bytes.NewReader(data)
 		require.NoError(t, err)
 		_, tokenString, err := jwtauth.New("HS256", []byte("secret"), nil).Encode(nil)
 		require.NoError(t, err)
 		resp, respData, err := testRequest(testServer, "POST", "/v1/operator/sign", tokenString, r)
 		require.NoError(t, err)
-		require.Equal(t, resp.StatusCode, 200)
+		require.Equal(t, 200, resp.StatusCode)
 		var sigResp struct {
 			Signature string `json:"signature"`
 		}
@@ -73,13 +73,13 @@ func TestAPI(t *testing.T) {
 	})
 	t.Run("authorized /v1/operator/sign provided JWT token", func(t *testing.T) {
 		hash := sha256.Sum256([]byte("Hello"))
-		data := []byte(fmt.Sprintf(`{"data":"%s"}`, hex.EncodeToString(hash[:])))
+		data := []byte(fmt.Sprintf(`{"hashed_data":"%s"}`, hex.EncodeToString(hash[:])))
 		r := bytes.NewReader(data)
 		require.NoError(t, err)
 		tokenString := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.t-IDcSemACt8x4iTMCda8Yhe3iZaWbvV5XKSTbuAn0M"
 		resp, respData, err := testRequest(testServer, "POST", "/v1/operator/sign", tokenString, r)
 		require.NoError(t, err)
-		require.Equal(t, resp.StatusCode, 200)
+		require.Equal(t, 200, resp.StatusCode)
 		var sigResp struct {
 			Signature string `json:"signature"`
 		}
@@ -92,7 +92,7 @@ func TestAPI(t *testing.T) {
 	})
 	t.Run("authorized /v1/operator/sign wrong JWT token", func(t *testing.T) {
 		hash := sha256.Sum256([]byte("Hello"))
-		data := []byte(fmt.Sprintf(`{"data":"%s"}`, hex.EncodeToString(hash[:])))
+		data := []byte(fmt.Sprintf(`{"hashed_data":"%s"}`, hex.EncodeToString(hash[:])))
 		r := bytes.NewReader(data)
 		require.NoError(t, err)
 		tokenString := "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.-h11M7Sw09EUpd-vqBIwAOMuIcogkBfpsYnIHVcVoEc"
