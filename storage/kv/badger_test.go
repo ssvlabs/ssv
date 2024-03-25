@@ -207,6 +207,7 @@ func TestBadgerDb_Update(t *testing.T) {
 	}
 	err = db.Update(tx)
 	require.NoError(t, err)
+	
 	obj, _, err := db.Get(prefix, key)
 	require.NoError(t, err)
 	require.Equal(t, obj.Value, newValue)
