@@ -474,8 +474,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, ns.Shares().Delete(nil, liquidatedShare.ValidatorPubKey))
 	})
 
-	// Ignore messages related to a validator that is not active
-	t.Run("inactive validator", func(t *testing.T) {
+	// Ignore messages related to a validator with unknown state
+	t.Run("unknown state validator", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
 		inactiveSK, err := eth2types.GenerateBLSPrivateKey()
@@ -513,6 +513,105 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, expectedErr)
 
 		require.NoError(t, ns.Shares().Delete(nil, inactiveShare.ValidatorPubKey))
+	})
+
+	// Ignore messages related to a validator that in pending queued state
+	t.Run("pending queued state validator", func(t *testing.T) {
+		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+
+		nonUpdatedMetadataSK, err := eth2types.GenerateBLSPrivateKey()
+		require.NoError(t, err)
+
+		slot := netCfg.Beacon.EstimatedCurrentSlot()
+		epoch := netCfg.Beacon.EstimatedEpochAtSlot(slot)
+		height := specqbft.Height(slot)
+
+		nonUpdatedMetadataShare := &ssvtypes.SSVShare{
+			Share: *spectestingutils.TestingShare(ks),
+			Metadata: ssvtypes.Metadata{
+				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+					Status:          eth2apiv1.ValidatorStatePendingQueued,
+					ActivationEpoch: epoch + 1,
+				},
+				Liquidated: false,
+			},
+		}
+		nonUpdatedMetadataShare.ValidatorPubKey = nonUpdatedMetadataSK.PublicKey().Marshal()
+
+		require.NoError(t, ns.Shares().Save(nil, nonUpdatedMetadataShare))
+
+		qbftState := &specqbft.State{
+			Height: height,
+			Share:  &nonUpdatedMetadataShare.Share,
+		}
+		leader := specqbft.RoundRobinProposer(qbftState, specqbft.FirstRound)
+
+		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[leader], leader, height)
+		encodedValidSignedMessage, err := validSignedMessage.Encode()
+		require.NoError(t, err)
+
+		message := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, nonUpdatedMetadataShare.ValidatorPubKey, roleAttester),
+			Data:    encodedValidSignedMessage,
+		}
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
+
+		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		expectedErr := ErrValidatorNotAttesting
+		expectedErr.got = eth2apiv1.ValidatorStatePendingQueued.String()
+		require.ErrorIs(t, err, expectedErr)
+
+		require.NoError(t, ns.Shares().Delete(nil, nonUpdatedMetadataShare.ValidatorPubKey))
+	})
+
+	// Don't ignore messages related to a validator that in pending queued state (in case metadata is not updated),
+	// but he is active (activation epoch <= current epoch)
+	t.Run("active validator with pending queued state", func(t *testing.T) {
+		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+
+		nonUpdatedMetadataSK, err := eth2types.GenerateBLSPrivateKey()
+		require.NoError(t, err)
+
+		slot := netCfg.Beacon.EstimatedCurrentSlot()
+		epoch := netCfg.Beacon.EstimatedEpochAtSlot(slot)
+		height := specqbft.Height(slot)
+
+		nonUpdatedMetadataShare := &ssvtypes.SSVShare{
+			Share: *spectestingutils.TestingShare(ks),
+			Metadata: ssvtypes.Metadata{
+				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+					Status:          eth2apiv1.ValidatorStatePendingQueued,
+					ActivationEpoch: epoch,
+				},
+				Liquidated: false,
+			},
+		}
+		nonUpdatedMetadataShare.ValidatorPubKey = nonUpdatedMetadataSK.PublicKey().Marshal()
+
+		require.NoError(t, ns.Shares().Save(nil, nonUpdatedMetadataShare))
+
+		qbftState := &specqbft.State{
+			Height: height,
+			Share:  &nonUpdatedMetadataShare.Share,
+		}
+		leader := specqbft.RoundRobinProposer(qbftState, specqbft.FirstRound)
+
+		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[leader], leader, height)
+		encodedValidSignedMessage, err := validSignedMessage.Encode()
+		require.NoError(t, err)
+
+		message := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, nonUpdatedMetadataShare.ValidatorPubKey, roleAttester),
+			Data:    encodedValidSignedMessage,
+		}
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
+
+		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		require.NoError(t, err)
+
+		require.NoError(t, ns.Shares().Delete(nil, nonUpdatedMetadataShare.ValidatorPubKey))
 	})
 
 	// Unable to process a message with a validator that is not on the network

@@ -689,7 +689,11 @@ func TestGetValidatorStats(t *testing.T) {
 	logger := logging.TestLogger(t)
 	ctrl := gomock.NewController(t)
 	sharesStorage := mocks.NewMockSharesStorage(ctrl)
+	bc := beacon.NewMockBeaconNode(ctrl)
 	passedEpoch := phase0.Epoch(1)
+
+	netCfg := networkconfig.TestNetwork
+	bc.EXPECT().GetBeaconNetwork().Return(netCfg.Beacon.GetBeaconNetwork()).AnyTimes()
 
 	t.Run("Test with multiple operators", func(t *testing.T) {
 		// Setup for this subtest
@@ -736,6 +740,7 @@ func TestGetValidatorStats(t *testing.T) {
 			sharesStorage: sharesStorage,
 			validatorsMap: validatorsmap.New(context.TODO()),
 			operatorData:  buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"),
+			beacon:        bc,
 		}
 
 		ctr := setupController(logger, controllerOptions)
@@ -785,6 +790,7 @@ func TestGetValidatorStats(t *testing.T) {
 			sharesStorage: sharesStorage,
 			validatorsMap: validatorsmap.New(context.TODO()),
 			operatorData:  buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"),
+			beacon:        bc,
 		}
 		ctr := setupController(logger, controllerOptions)
 
@@ -822,6 +828,7 @@ func TestGetValidatorStats(t *testing.T) {
 			sharesStorage: sharesStorage,
 			validatorsMap: validatorsmap.New(context.TODO()),
 			operatorData:  buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"),
+			beacon:        bc,
 		}
 		ctr := setupController(logger, controllerOptions)
 
@@ -881,6 +888,7 @@ func TestGetValidatorStats(t *testing.T) {
 			sharesStorage: sharesStorage,
 			validatorsMap: validatorsmap.New(context.TODO()),
 			operatorData:  buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"),
+			beacon:        bc,
 		}
 		ctr := setupController(logger, controllerOptions)
 
