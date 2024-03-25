@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/ekm"
 	"github.com/bloxapp/ssv/networkconfig"
@@ -116,7 +117,7 @@ func Process(logger *zap.Logger, networkConfig networkconfig.NetworkConfig, oper
 		if validatorShare == nil {
 			return fmt.Errorf(fmt.Sprintf("validator share not found for %s", corruptedShare.ValidatorPubKey))
 		}
-		if validatorShare.Metadata.BeaconMetadata.Index != corruptedShare.ValidatorIndex {
+		if validatorShare.Metadata.BeaconMetadata.Index != phase0.ValidatorIndex(corruptedShare.ValidatorIndex) {
 			return fmt.Errorf("validator index mismatch for validator %s", corruptedShare.ValidatorPubKey)
 		}
 

@@ -5,8 +5,17 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"sync"
+	"testing"
+	"time"
+
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/golang/mock/gomock"
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/pkg/errors"
+
 	"github.com/bloxapp/ssv/ekm"
 	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/operator/storage"
@@ -15,13 +24,6 @@ import (
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/golang/mock/gomock"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/pkg/errors"
-	"sync"
-	"testing"
-	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -174,16 +176,9 @@ func TestSetupNonCommitteeValidators(t *testing.T) {
 			}
 			mockValidatorsMap := validatorsmap.New(context.TODO(), validatorsmap.WithInitialState(testValidatorsMap))
 
-			if tc.syncHighestDecidedResponse != nil {
-				bc.EXPECT().GetValidatorData(gomock.Any()).Return(bcResponse, nil).Times(1)
-				sharesStorage.EXPECT().Get(gomock.Any(), gomock.Any()).Return(sharesSlice[0]).AnyTimes()
-				network.EXPECT().SyncHighestDecided(gomock.Any()).Return(tc.syncHighestDecidedResponse).AnyTimes()
-				sharesStorage.EXPECT().UpdateValidatorMetadata(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
-				sharesStorage.EXPECT().List(gomock.Any(), gomock.Any()).Return(tc.shareStorageListResponse).Times(1)
-			} else if tc.shareStorageListResponse == nil {
+			if tc.shareStorageListResponse == nil {
 				sharesStorage.EXPECT().List(gomock.Any(), gomock.Any()).Return(tc.shareStorageListResponse).Times(1)
 			} else {
-				network.EXPECT().SyncHighestDecided(gomock.Any()).Return(nil).AnyTimes()
 				sharesStorage.EXPECT().Get(gomock.Any(), gomock.Any()).Return(sharesSlice[0]).AnyTimes()
 				bc.EXPECT().GetValidatorData(gomock.Any()).Return(bcResponse, tc.getValidatorDataResponse).Times(1)
 				sharesStorage.EXPECT().List(gomock.Any(), gomock.Any()).Return(tc.shareStorageListResponse).Times(1)
@@ -474,6 +469,7 @@ func TestSetupValidators(t *testing.T) {
 		recipientMockTimes int
 		bcMockTimes        int
 		recipientFound     bool
+		inited             int
 		started            int
 		recipientErr       error
 		name               string
@@ -490,6 +486,7 @@ func TestSetupValidators(t *testing.T) {
 			recipientErr:       nil,
 			recipientMockTimes: 1,
 			bcResponse:         bcResponse,
+			inited:             1,
 			started:            1,
 			bcMockTimes:        1,
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
@@ -504,6 +501,7 @@ func TestSetupValidators(t *testing.T) {
 			recipientErr:       nil,
 			recipientMockTimes: 1,
 			bcResponse:         bcResponse,
+			inited:             1,
 			started:            1,
 			bcMockTimes:        1,
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
@@ -518,6 +516,7 @@ func TestSetupValidators(t *testing.T) {
 			recipientErr:       errors.New("some error"),
 			recipientMockTimes: 1,
 			bcResponse:         bcResponse,
+			inited:             0,
 			started:            0,
 			bcMockTimes:        0,
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
@@ -532,6 +531,7 @@ func TestSetupValidators(t *testing.T) {
 			recipientErr:       nil,
 			recipientMockTimes: 1,
 			bcResponse:         bcResponse,
+			inited:             1,
 			started:            1,
 			bcMockTimes:        0,
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
@@ -541,6 +541,7 @@ func TestSetupValidators(t *testing.T) {
 		{
 			name:               "start share without metadata",
 			bcMockTimes:        1,
+			inited:             0,
 			started:            0,
 			recipientMockTimes: 0,
 			recipientData:      nil,
@@ -560,6 +561,7 @@ func TestSetupValidators(t *testing.T) {
 			recipientErr:       nil,
 			bcResponse:         nil,
 			recipientFound:     false,
+			inited:             0,
 			started:            0,
 			shares:             []*types.SSVShare{shareWithoutMetaData},
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
@@ -574,6 +576,7 @@ func TestSetupValidators(t *testing.T) {
 			recipientErr:       nil,
 			recipientMockTimes: 1,
 			bcResponse:         bcResponse,
+			inited:             1,
 			started:            0,
 			bcMockTimes:        0,
 			validatorStartFunc: func(validator *validator.Validator) (bool, error) {
@@ -625,8 +628,11 @@ func TestSetupValidators(t *testing.T) {
 			recipientStorage.EXPECT().GetRecipientData(gomock.Any(), gomock.Any()).Return(tc.recipientData, tc.recipientFound, tc.recipientErr).Times(tc.recipientMockTimes)
 			ctr := setupController(logger, controllerOptions)
 			ctr.validatorStartFunc = tc.validatorStartFunc
-			started := ctr.setupValidators(tc.shares)
-			require.Equal(t, tc.started, started)
+			inited := ctr.setupValidators(tc.shares)
+			require.Len(t, inited, tc.inited)
+			started := ctr.startValidators(inited)
+			require.Equal(t, started, tc.started)
+
 			//Add any assertions here to validate the behavior
 		})
 	}

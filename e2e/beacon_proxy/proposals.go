@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	eth2client "github.com/attestantio/go-eth2-client"
+	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -31,25 +32,31 @@ func (b *BeaconProxy) handleProposerDuties(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Obtain duties.
-	duties, err := b.client.(eth2client.ProposerDutiesProvider).ProposerDuties(
+	dutiesResp, err := b.client.(eth2client.ProposerDutiesProvider).ProposerDuties(
 		r.Context(),
-		epoch,
-		indices,
+		&api.ProposerDutiesOpts{
+			Epoch:   epoch,
+			Indices: indices,
+		},
 	)
 	if err != nil {
 		b.error(r, w, 500, fmt.Errorf("failed to obtain proposer duties: %w", err))
 		return
 	}
+	if dutiesResp == nil {
+		b.error(r, w, 500, fmt.Errorf("failed to obtain proposer duties, duties response is nil"))
+		return
+	}
 
 	// Intercept.
-	duties, err = gateway.Interceptor.InterceptProposerDuties(r.Context(), epoch, indices, duties)
+	dutiesResp.Data, err = gateway.Interceptor.InterceptProposerDuties(r.Context(), epoch, indices, dutiesResp.Data)
 	if err != nil {
 		b.error(r, w, 500, fmt.Errorf("failed to intercept proposer duties: %w", err))
 		return
 	}
 
 	// Respond.
-	if err := b.respond(r, w, duties); err != nil {
+	if err := b.respond(r, w, dutiesResp.Data); err != nil {
 		b.error(r, w, 500, fmt.Errorf("failed to encode response: %w", err))
 		return
 	}
@@ -57,7 +64,7 @@ func (b *BeaconProxy) handleProposerDuties(w http.ResponseWriter, r *http.Reques
 	logger.Info("obtained proposer duties",
 		zap.Uint64("epoch", uint64(epoch)),
 		zap.Int("indices", len(indices)),
-		zap.Int("duties", len(duties)),
+		zap.Int("duties", len(dutiesResp.Data)),
 	)
 }
 

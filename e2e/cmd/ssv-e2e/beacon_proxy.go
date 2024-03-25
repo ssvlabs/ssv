@@ -7,13 +7,15 @@ import (
 	"os"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/http"
 
 	eth2client "github.com/attestantio/go-eth2-client"
 	"github.com/attestantio/go-eth2-client/auto"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv/networkconfig"
 	"golang.org/x/exp/maps"
+
+	"github.com/bloxapp/ssv/networkconfig"
 
 	//eth2client "github.com/attestantio/go-eth2-client/http"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -48,11 +50,18 @@ func GetValidators(ctx context.Context, beaconURL string, idxs []phase0.Validato
 		return nil, fmt.Errorf("failed to connect to remote beacon node: %w", err)
 	}
 
-	vmap, err := client.(eth2client.ValidatorsProvider).Validators(ctx, "head", idxs)
+	validatorsResp, err := client.(eth2client.ValidatorsProvider).Validators(ctx, &api.ValidatorsOpts{
+		State:              "head",
+		Indices:            idxs,
+		WithoutBeaconState: true,
+	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get validators: %w", err)
 	}
-	return vmap, nil
+	if validatorsResp == nil {
+		return nil, fmt.Errorf("failed to get validators, response is nil")
+	}
+	return validatorsResp.Data, nil
 }
 
 func BeaconClientConnection(pctx context.Context, beaconUrl string) error {
@@ -67,7 +76,7 @@ func BeaconClientConnection(pctx context.Context, beaconUrl string) error {
 	if err != nil {
 		return err
 	}
-	_, err = client.(eth2client.GenesisProvider).Genesis(ctx)
+	_, err = client.(eth2client.GenesisProvider).Genesis(ctx, &api.GenesisOpts{})
 	if err != nil {
 		return err
 	}
