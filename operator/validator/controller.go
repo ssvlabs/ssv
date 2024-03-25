@@ -323,7 +323,7 @@ func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
 		if ok := s.BelongsToOperator(c.GetOperatorID()); ok {
 			operatorShares++
 		}
-		if s.HasBeaconMetadata() && s.BeaconMetadata.IsAttesting() {
+		if s.IsAttesting(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch()) {
 			active++
 		}
 	}
