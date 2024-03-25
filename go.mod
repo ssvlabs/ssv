@@ -4,7 +4,7 @@ go 1.20
 
 require (
 	github.com/aquasecurity/table v1.8.0
-	github.com/attestantio/go-eth2-client v0.21.0
+	github.com/attestantio/go-eth2-client v0.21.1-0.20240325145558-858fa8a893fa
 	github.com/bloxapp/eth2-key-manager v1.4.0
 	github.com/bloxapp/ssv-spec v0.3.6
 	github.com/btcsuite/btcd/btcec/v2 v2.3.2
@@ -227,6 +227,3 @@ require (
 replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
-
-// until https://github.com/attestantio/go-eth2-client/pull/121 is merged
-replace github.com/attestantio/go-eth2-client => github.com/nkryuchkov/go-eth2-client v0.0.0-20240325140931-cf6656b6641f
