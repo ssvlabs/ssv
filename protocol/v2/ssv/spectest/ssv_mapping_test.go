@@ -259,11 +259,6 @@ func fixRunnerForRun(t *testing.T, runnerMap map[string]interface{}, ks *testing
 
 	ret := baseRunnerForRole(logger, base.BeaconRoleType, base, ks)
 
-	// specific for blinded block
-	if blindedBlocks, ok := runnerMap["ProducesBlindedBlocks"]; ok {
-		ret.(*runner.ProposerRunner).ProducesBlindedBlocks = blindedBlocks.(bool)
-	}
-
 	if ret.GetBaseRunner().QBFTController != nil {
 		ret.GetBaseRunner().QBFTController = fixControllerForRun(t, logger, ret, ret.GetBaseRunner().QBFTController, ks)
 		if ret.GetBaseRunner().State != nil {

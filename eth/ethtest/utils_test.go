@@ -174,7 +174,7 @@ func setupEventHandler(
 	nodeStorage, operatorData := setupOperatorStorage(logger, db, operator, ownerAddress)
 	testNetworkConfig := networkconfig.TestNetwork
 
-	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, true, "")
+	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, "")
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}

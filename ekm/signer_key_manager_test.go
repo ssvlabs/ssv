@@ -51,7 +51,7 @@ func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig) spectype
 		}
 	}
 
-	km, err := NewETHKeyManagerSigner(logger, db, *network, true, "")
+	km, err := NewETHKeyManagerSigner(logger, db, *network, "")
 	require.NoError(t, err)
 
 	sk1 := &bls.SecretKey{}
