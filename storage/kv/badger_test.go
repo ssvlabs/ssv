@@ -200,6 +200,7 @@ func TestBadgerDb_Update(t *testing.T) {
 	value := []byte("value")
 	err = db.Set(prefix, key, value)
 	require.NoError(t, err)
+	
 	newValue := []byte("newValue")
 	tx := func(txn basedb.Txn) error {
 		return db.Set(prefix, key, newValue)
