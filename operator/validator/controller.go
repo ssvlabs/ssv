@@ -9,7 +9,6 @@ import (
 	"sync"
 	"time"
 
-	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -323,7 +322,7 @@ func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
 		if ok := s.BelongsToOperator(c.GetOperatorID()); ok {
 			operatorShares++
 		}
-		if s.HasBeaconMetadata() && s.BeaconMetadata.IsAttesting() {
+		if s.IsAttesting(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch()) {
 			active++
 		}
 	}
@@ -659,13 +658,12 @@ func CreateDutyExecuteMsg(duty *spectypes.Duty, pubKey phase0.BLSPubKey, domain 
 	}, nil
 }
 
-// CommitteeActiveIndices fetches indices of in-committee validators who are either attesting or queued and
-// whose activation epoch is not greater than the passed epoch. It logs a warning if an error occurs.
+// CommitteeActiveIndices fetches indices of in-committee validators who are active at the given epoch.
 func (c *controller) CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
 	validators := c.validatorsMap.GetAll()
 	indices := make([]phase0.ValidatorIndex, 0, len(validators))
 	for _, v := range validators {
-		if isShareActive(epoch)(v.Share) {
+		if v.Share.IsAttesting(epoch) {
 			indices = append(indices, v.Share.BeaconMetadata.Index)
 		}
 	}
@@ -676,20 +674,12 @@ func (c *controller) AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phas
 	if afterInit {
 		<-c.committeeValidatorSetup
 	}
-	shares := c.sharesStorage.List(nil, isShareActive(epoch))
+	shares := c.sharesStorage.List(nil, registrystorage.ByAttesting(epoch))
 	indices := make([]phase0.ValidatorIndex, len(shares))
 	for i, share := range shares {
 		indices[i] = share.BeaconMetadata.Index
 	}
 	return indices
-}
-
-func isShareActive(epoch phase0.Epoch) func(share *ssvtypes.SSVShare) bool {
-	return func(share *ssvtypes.SSVShare) bool {
-		return share != nil && share.BeaconMetadata != nil &&
-			(share.BeaconMetadata.IsAttesting() || share.BeaconMetadata.Status == v1.ValidatorStatePendingQueued) &&
-			share.BeaconMetadata.ActivationEpoch <= epoch
-	}
 }
 
 // onMetadataUpdated is called when validator's metadata was updated
