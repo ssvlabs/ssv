@@ -180,6 +180,7 @@ func New(
 		// LogLevel supplies the level of logging to carry out.
 		eth2clienthttp.WithLogLevel(zerolog.DebugLevel),
 		eth2clienthttp.WithTimeout(commonTimeout),
+		eth2clienthttp.WithReducedMemoryUsage(true),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create http client: %w", err)
