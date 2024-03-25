@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 
@@ -16,9 +17,9 @@ func (h *Node) Sign(w http.ResponseWriter, r *http.Request) error {
 	limitedReader := http.MaxBytesReader(w, r.Body, maxRequestBodySize)
 	bodyContent := make([]byte, maxRequestBodySize)
 	_, err := limitedReader.Read(bodyContent)
-	if err != nil && err != io.EOF {
-		if err == io.ErrUnexpectedEOF {
-			return errors.New("request body too large")
+	if err != nil && !errors.Is(err, io.EOF) {
+		if errors.Is(err, io.ErrUnexpectedEOF) {
+			return fmt.Errorf("request body too large")
 		} else {
 			return err
 		}
