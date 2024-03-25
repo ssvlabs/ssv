@@ -141,6 +141,7 @@ func TestBadgerDb_GetMany(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, 4, len(results))
+	
 	err = db.GetMany(prefix, [][]byte{}, func(obj basedb.Obj) error {
 		results = append(results, obj)
 		return nil
