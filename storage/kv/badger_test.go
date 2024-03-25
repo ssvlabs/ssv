@@ -180,8 +180,7 @@ func TestBadgerDb_CountPrefix(t *testing.T) {
 	defer db.Close()
 
 	prefix := []byte("prefix")
-	var i uint64
-	for i = 0; i < 100; i++ {
+	for i := uint64(0); i < 100; i++ {
 		require.NoError(t, db.Set(prefix, uInt64ToByteSlice(i+1), uInt64ToByteSlice(i+1)))
 	}
 
