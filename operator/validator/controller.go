@@ -664,7 +664,7 @@ func (c *controller) CommitteeActiveIndices(epoch phase0.Epoch) []phase0.Validat
 	validators := c.validatorsMap.GetAll()
 	indices := make([]phase0.ValidatorIndex, 0, len(validators))
 	for _, v := range validators {
-		if v.Share.IsActive(epoch) {
+		if v.Share.IsAttesting(epoch) {
 			indices = append(indices, v.Share.BeaconMetadata.Index)
 		}
 	}

@@ -209,7 +209,7 @@ func ByActiveValidator() SharesFilter {
 // ByAttesting filters for attesting validators.
 func ByAttesting(epoch phase0.Epoch) SharesFilter {
 	return func(share *types.SSVShare) bool {
-		return share.IsActive(epoch)
+		return share.IsAttesting(epoch)
 	}
 }
 

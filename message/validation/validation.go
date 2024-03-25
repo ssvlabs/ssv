@@ -427,7 +427,7 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 			return nil, descriptor, ErrNoShareMetadata
 		}
 
-		if !share.IsActive(mv.netCfg.Beacon.EstimatedCurrentEpoch()) {
+		if !share.IsAttesting(mv.netCfg.Beacon.EstimatedCurrentEpoch()) {
 			err := ErrValidatorNotAttesting
 			err.got = share.BeaconMetadata.Status.String()
 			return nil, descriptor, err

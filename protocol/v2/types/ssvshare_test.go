@@ -107,7 +107,7 @@ func TestValidCommitteeSize(t *testing.T) {
 	}
 }
 
-func TestSSVShare_IsActive(t *testing.T) {
+func TestSSVShare_IsAttesting(t *testing.T) {
 	currentEpoch := phase0.Epoch(100) // Example current epoch for testing
 	tt := []struct {
 		Name     string
@@ -179,8 +179,9 @@ func TestSSVShare_IsActive(t *testing.T) {
 	}
 
 	for _, tc := range tt {
+		tc := tc
 		t.Run(tc.Name, func(t *testing.T) {
-			result := tc.Share.IsActive(tc.Epoch)
+			result := tc.Share.IsAttesting(tc.Epoch)
 			require.Equal(t, tc.Expected, result)
 		})
 	}

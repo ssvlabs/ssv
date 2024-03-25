@@ -40,7 +40,7 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 
 			var validators []phase0.ValidatorIndex
 			for _, share := range shares {
-				if !share.IsActive(epoch + phase0.Epoch(validatorRegistrationEpochInterval)) {
+				if !share.IsAttesting(epoch + phase0.Epoch(validatorRegistrationEpochInterval)) {
 					continue
 				}
 

@@ -63,7 +63,7 @@ func (s *SSVShare) HasBeaconMetadata() bool {
 	return s != nil && s.BeaconMetadata != nil
 }
 
-func (s *SSVShare) IsActive(epoch phase0.Epoch) bool {
+func (s *SSVShare) IsAttesting(epoch phase0.Epoch) bool {
 	return s.HasBeaconMetadata() &&
 		(s.BeaconMetadata.IsAttesting() || (s.BeaconMetadata.Status == eth2apiv1.ValidatorStatePendingQueued && s.BeaconMetadata.ActivationEpoch <= epoch))
 }
