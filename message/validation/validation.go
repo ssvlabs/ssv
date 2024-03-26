@@ -5,7 +5,6 @@ package validation
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
 	"crypto/rsa"
 	"encoding/hex"
@@ -18,7 +17,6 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
-	"github.com/golang/snappy"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
@@ -238,40 +236,6 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer
 		pmsg.ValidatorData = decMsg
 		return pubsub.ValidationAccept
 	}
-
-	func() {
-		buff := bytes.NewBuffer(make([]byte, 0, len(pmsg.Data)))
-		n, err := gzip.NewWriter(buff).Write(pmsg.Data)
-		if err != nil {
-			mv.logger.Error("COMPRESSTEST: failed to compress message", zap.Error(err))
-			return
-		}
-		if n != len(pmsg.Data) {
-			mv.logger.Error("COMPRESSTEST: failed to compress message", zap.Int("n", n), zap.Int("len", len(pmsg.Data)))
-			return
-		}
-		gzipLen := buff.Len()
-		buff.Reset()
-
-		n, err = snappy.NewBufferedWriter(buff).Write(pmsg.Data)
-		if err != nil {
-			mv.logger.Error("COMPRESSTEST: failed to compress message", zap.Error(err))
-			return
-		}
-		if n != len(pmsg.Data) {
-			mv.logger.Error("COMPRESSTEST: failed to compress message", zap.Int("n", n), zap.Int("len", len(pmsg.Data)))
-			return
-		}
-		snappyLen := buff.Len()
-
-		mv.logger.Debug("COMPRESSTEST: done",
-			zap.Int("original", len(pmsg.Data)),
-			zap.Int("gzip", gzipLen),
-			zap.String("gzip_ratio", fmt.Sprintf("%.2f", float64(gzipLen)/float64(len(pmsg.Data)))),
-			zap.Int("snappy", snappyLen),
-			zap.String("snappy_ratio", fmt.Sprintf("%.2f", float64(snappyLen)/float64(len(pmsg.Data)))),
-		)
-	}()
 
 	start := time.Now()
 	var validationDurationLabels []string // TODO: implement
