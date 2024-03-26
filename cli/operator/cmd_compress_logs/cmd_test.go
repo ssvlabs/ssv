@@ -2,6 +2,7 @@ package cmd_compress_logs
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"testing"
 
@@ -43,16 +44,35 @@ func BenchmarkCompressLogs(b *testing.B) {
 		{1024, 500},
 	}
 
+	cfg.MetricsAPIPort = 9093
+	metricsSrv := runMetricsServ(9093)
+
+	defer func() {
+		require.NoError(b, metricsSrv.Close())
+	}()
+	go func() {
+		err := metricsSrv.ListenAndServe()
+		require.Equal(b, http.ErrServerClosed, err)
+	}()
+
 	for _, tc := range testCases {
 		b.Run(fmt.Sprintf("%dMB", tc.SizeInMB), func(b *testing.B) {
+
+			logger := zap.NewNop()
 			testLogFilePath := fmt.Sprintf("test_%dMB.log", tc.SizeInMB)
 
 			err := generateLogFile(tc.SizeInMB, tc.ChunkSizeMB, testLogFilePath)
 			require.NoError(b, err)
 
 			tarName := fmt.Sprintf("tmp_output_%dMB.log", tc.SizeInMB)
-			_, err = compressLogFiles(&CompressLogsArgs{logFilePath: testLogFilePath, destName: tarName})
+			_, err = compressLogFiles(logger, &CompressLogsArgs{
+				logFilePath: testLogFilePath,
+				destName:    tarName,
+			})
 			require.NoError(b, err)
+
+			_, err = os.ReadFile("metrics_dump.txt")
+			require.Error(b, err) // make sure collectLogFiles cleans up the metrics dump file
 
 			// clean up all
 			require.NoError(b, os.RemoveAll(tarName))

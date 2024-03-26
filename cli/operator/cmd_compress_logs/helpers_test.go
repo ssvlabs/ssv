@@ -2,16 +2,22 @@ package cmd_compress_logs
 
 import (
 	"archive/tar"
+	"bufio"
 	"compress/gzip"
 	"errors"
+	"fmt"
 	"io"
 	"math/rand"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -114,14 +120,92 @@ func TestGetLogFilesAbsPaths(t *testing.T) {
 	}
 }
 
+const superImportMetricName = "super_important_metric"
+
+func runMetricsServ(port int) *http.Server {
+	srv := &http.Server{Addr: fmt.Sprintf(":%d", port)}
+
+	http.Handle("/metrics", promhttp.Handler())
+
+	yetAnotherCounter := promauto.NewCounter(prometheus.CounterOpts{
+		Name: superImportMetricName,
+		Help: "Don't forget to monitor this!",
+	})
+
+	for i := 0; i < 42; i++ {
+		yetAnotherCounter.Inc()
+	}
+	return srv
+}
+
+func TestCollectMetrics(t *testing.T) {
+	metricsPort := 2112
+	srv := runMetricsServ(metricsPort)
+
+	defer func() {
+		require.NoError(t, srv.Close())
+	}()
+	go func() {
+		err := srv.ListenAndServe()
+		require.Equal(t, http.ErrServerClosed, err)
+	}()
+
+	dumpFilePath, err := dumpMetrics(fmt.Sprintf("http://localhost:%d/metrics", metricsPort), "metrics_dump.txt")
+	require.NoError(t, err)
+
+	metrics, err := parseMetrics(t, dumpFilePath)
+	require.NoError(t, err)
+
+	metricValue, found := metrics["super_important_metric"]
+	require.True(t, found)
+	require.Equal(t, "42", metricValue)
+
+	// clean up
+	err = os.Remove(dumpFilePath)
+	require.NoError(t, err)
+}
+
+func parseMetrics(t *testing.T, path string) (map[string]string, error) {
+	f, err := os.Open(path)
+	require.NoError(t, err)
+	scanner := bufio.NewScanner(f)
+	metrics := make(map[string]string)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		// Skip comments
+		if strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		// Split the line into a key and a value
+		parts := strings.SplitN(line, " ", 2)
+		require.Equalf(t, 2, len(parts), fmt.Sprintf("invalid line: %s", line))
+
+		key := parts[0]
+		value := parts[1]
+
+		metrics[key] = value
+	}
+
+	require.NoError(t, scanner.Err())
+
+	return metrics, nil
+}
+
 func TestCompressFile(t *testing.T) {
+	logger := zap.NewNop()
 	fileName := "test.log"
 	err := generateLogFile(50, 20, fileName)
 	require.NoError(t, err)
 
 	tarName := "tmp_output"
 
-	_, err = compressLogFiles(&CompressLogsArgs{logFilePath: fileName, destName: tarName})
+	_, err = compressLogFiles(logger, &CompressLogsArgs{
+		logFilePath: fileName,
+		destName:    tarName,
+	})
 	require.NoError(t, err)
 
 	untarPath, err := untarGzFile(tarName)

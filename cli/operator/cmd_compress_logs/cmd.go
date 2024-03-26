@@ -2,7 +2,10 @@ package cmd_compress_logs
 
 import (
 	"fmt"
+	"io"
+	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -14,6 +17,7 @@ import (
 
 type config struct {
 	globalconfig.GlobalConfig `yaml:"global"`
+	MetricsAPIPort            int `yaml:"MetricsAPIPort" env:"METRICS_API_PORT" env-description:"Port to listen on for the metrics API."`
 }
 
 var cfg config
@@ -39,13 +43,17 @@ var CompressLogsCmd = &cobra.Command{
 			logger.Fatal("initialization failed", zap.Error(err))
 		}
 
-		logger.Info(fmt.Sprintf("starting logs compression %v", commons.GetBuildData()))
+		if compressLogsArgs.logFilePath == "" {
+			compressLogsArgs.logFilePath = cfg.GlobalConfig.LogFilePath
+		}
 
-		logFilePath := cfg.LogFilePath
+		logger.Info("starting logs compression",
+			zap.Any("buildData", commons.GetBuildData()),
+			zap.String("compressLogsArgs.logFilePath", compressLogsArgs.logFilePath),
+			zap.String("compressLogsArgs.destName", compressLogsArgs.destName),
+		)
 
-		fileSizeBytes, err := compressLogFiles(&CompressLogsArgs{
-			logFilePath: logFilePath,
-		})
+		fileSizeBytes, err := compressLogFiles(logger, &compressLogsArgs)
 
 		if err != nil {
 			logger.Fatal("logs file compression failed", zap.Error(err))
@@ -57,7 +65,7 @@ var CompressLogsCmd = &cobra.Command{
 
 const tmpDirPermissions os.FileMode = 0755
 
-func compressLogFiles(args *CompressLogsArgs) (int64, error) {
+func compressLogFiles(logger *zap.Logger, args *CompressLogsArgs) (int64, error) {
 	logFilePath := args.logFilePath
 	destName := getFileNameWithoutExt(args.destName)
 
@@ -66,9 +74,26 @@ func compressLogFiles(args *CompressLogsArgs) (int64, error) {
 	}
 
 	// Find all log files in the directory of the provided file
-	logFiles, err := getLogFilesAbsPaths(logFilePath)
+	pathToInclude, err := getLogFilesAbsPaths(logFilePath)
 	if err != nil {
 		return 0, err
+	}
+
+	if cfg.MetricsAPIPort > 0 {
+		promRoute := fmt.Sprintf("http://localhost:%d/metrics", cfg.MetricsAPIPort)
+		dumpFileName := "metrics_dump.txt"
+
+		metricsDumpFileAbsPath, err := dumpMetrics(promRoute, dumpFileName)
+
+		// Metrics are optional. Ignore if error, else include the metrics dump to the tar file
+		if err != nil {
+			logger.Error("failed to dump metrics", zap.Error(err))
+		} else {
+			pathToInclude = append(pathToInclude, metricsDumpFileAbsPath)
+			defer func() {
+				_ = os.Remove(dumpFileName)
+			}()
+		}
 	}
 
 	// Create a temporary directory
@@ -77,11 +102,13 @@ func compressLogFiles(args *CompressLogsArgs) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
+
+	// clean up the tmp dir
 	defer func() {
 		_ = os.RemoveAll(destName)
-	}() // clean up the temporary dir
+	}()
 
-	err = copyFilesToDir(destName, logFiles)
+	err = copyFilesToDir(destName, pathToInclude)
 	if err != nil {
 		return 0, fmt.Errorf("copyFilesToDir failed: %w", err)
 	}
@@ -99,9 +126,41 @@ func compressLogFiles(args *CompressLogsArgs) (int64, error) {
 	return tarSize, nil
 }
 
+func dumpMetrics(promRoute string, metricsDumpFileName string) (string, error) {
+	resp, err := http.Get(promRoute)
+	if err != nil {
+		return "", fmt.Errorf("failed to get metrics from route %s with error: %w", promRoute, err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	file, err := os.Create(metricsDumpFileName)
+	if err != nil {
+		return "", fmt.Errorf("failed to create dump file: %w", err)
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+
+	_, err = io.Copy(file, resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to write to file: %w", err)
+	}
+	absPath, err := filepath.Abs(file.Name())
+	if err != nil {
+		return "", fmt.Errorf("failed to get absolute path for file: %w", err)
+	}
+	return absPath, nil
+}
+
 func init() {
 	globalconfig.ProcessConfigArg(&cfg, &globalArgs, CompressLogsCmd)
-	globalconfig.ProcessHelpCmd(&cfg, &globalArgs, CompressLogsCmd)
 
-	CompressLogsCmd.Flags().StringVarP(&compressLogsArgs.destName, "out", "o", "", "output destination file name")
+	CompressLogsCmd.Flags().StringVarP(
+		&compressLogsArgs.destName,
+		"out", "o", "", "output destination file name",
+	)
+
+	globalconfig.ProcessHelpCmd(&cfg, &globalArgs, CompressLogsCmd)
 }

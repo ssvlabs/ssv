@@ -3,9 +3,10 @@ package cli
 import (
 	"log"
 
-	"github.com/bloxapp/ssv/cli/operator/cmd_compress_logs"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/cli/operator/cmd_compress_logs"
 
 	"github.com/bloxapp/ssv/cli/bootnode"
 	"github.com/bloxapp/ssv/cli/operator"
@@ -33,6 +34,6 @@ func Execute(appName, version string) {
 func init() {
 	RootCmd.AddCommand(bootnode.StartBootNodeCmd)
 	RootCmd.AddCommand(operator.StartNodeCmd)
-	RootCmd.AddCommand(cmd_compress_logs.CompressLogsCmd)
 	RootCmd.AddCommand(operator.GenerateDocCmd)
+	RootCmd.AddCommand(cmd_compress_logs.CompressLogsCmd)
 }

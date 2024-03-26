@@ -1,7 +1,11 @@
 package cmd_compress_logs
 
 import (
+	"bytes"
 	"fmt"
+	"io"
+	"net/http"
+	"os"
 
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -18,7 +22,8 @@ var cfg config
 var globalArgs globalconfig.Args
 
 type UploadLogsArg struct {
-	logFilePath string
+	tarFilePath string
+	url         string
 }
 
 var compressLogsArgs UploadLogsArg
@@ -32,18 +37,38 @@ var UploadLogsCmd = &cobra.Command{
 
 		logger.Info(fmt.Sprintf("starting logs uploading to S3 %v", commons.GetBuildData()))
 
-		err := uploadLogs(&compressLogsArgs)
+		err := uploadLogs(compressLogsArgs.tarFilePath, compressLogsArgs.url)
 
 		if err != nil {
 			logger.Fatal("logs file upload failed", zap.Error(err))
 		}
-		logger.Info("✅ logs've been uploaded to S3")
+		logger.Info("✅ logs have been uploaded to S3")
 	},
 }
 
-func uploadLogs(args *UploadLogsArg) error {
-
+func uploadLogs(tarPath string, url string) error {
 	return nil
+}
+
+func uploadFile(filePath string, url string) error {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	buffer := bytes.NewBuffer(nil)
+	if _, err := io.Copy(buffer, file); err != nil {
+		return err
+	}
+	request, err := http.NewRequest(http.MethodPut, url, buffer)
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Content-Type", "multipart/form-data")
+	client := &http.Client{}
+	_, err = client.Do(request)
+
+	return err
 }
 
 func init() {
