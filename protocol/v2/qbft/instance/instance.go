@@ -201,7 +201,7 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.SignedMessage) error {
 			i.State.Share.Committee,
 		)
 	case specqbft.RoundChangeMsgType:
-		return validRoundChangeForDataWithVerification(i.State, i.config, msg, i.State.Height, msg.Message.Round, msg.FullData)
+		return validRoundChangeForDataNoVerification(i.State, i.config, msg, i.State.Height, msg.Message.Round, msg.FullData)
 	default:
 		return errors.New("signed message type not supported")
 	}
