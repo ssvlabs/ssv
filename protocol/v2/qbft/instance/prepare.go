@@ -108,8 +108,7 @@ func validSignedPrepareForHeightRoundAndRootNoVerification(
 	height specqbft.Height,
 	round specqbft.Round,
 	root [32]byte,
-	operators []*spectypes.Operator,
-) error {
+	operators []*spectypes.Operator) error {
 
 	if signedPrepare.Message.MsgType != specqbft.PrepareMsgType {
 		return errors.New("prepare msg type is wrong")
@@ -146,8 +145,7 @@ func validSignedPrepareForHeightRoundAndRootWithVerification(
 	height specqbft.Height,
 	round specqbft.Round,
 	root [32]byte,
-	operators []*spectypes.Operator,
-) error {
+	operators []*spectypes.Operator) error {
 
 	if err := validSignedPrepareForHeightRoundAndRootNoVerification(signedPrepare, height, round, root, operators); err != nil {
 		return err
