@@ -3,6 +3,7 @@ package operator
 import (
 	"context"
 	"fmt"
+	"github.com/bloxapp/ssv/operator/keystore"
 	"log"
 	"math/big"
 	"net/http"
@@ -131,7 +132,11 @@ var StartNodeCmd = &cobra.Command{
 				logger.Fatal("could not read password file", zap.Error(err))
 			}
 
-			operatorPrivKey, err = keys.PrivateKeyFromEncryptedJSON(encryptedJSON, string(keyStorePassword))
+			decryptedKeystore, err := keystore.DecryptKeystore(encryptedJSON, string(keyStorePassword))
+			if err != nil {
+				logger.Fatal("could not decrypt operator private key keystore", zap.Error(err))
+			}
+			operatorPrivKey, err = keys.PrivateKeyFromBytes(decryptedKeystore)
 			if err != nil {
 				logger.Fatal("could not extract operator private key from file", zap.Error(err))
 			}

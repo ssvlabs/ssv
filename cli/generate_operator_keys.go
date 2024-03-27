@@ -1,13 +1,12 @@
 package cli
 
 import (
-	"encoding/json"
+	"github.com/bloxapp/ssv/operator/keystore"
 	"log"
 	"os"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
-	keystorev4 "github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging"
@@ -54,7 +53,7 @@ var generateOperatorKeysCmd = &cobra.Command{
 				logger.Fatal("Failed to read password file", zap.Error(err))
 			}
 
-			encryptedJSON, encryptedJSONErr := encryptPrivateKey(privKey.Bytes(), string(pubKeyBase64), passwordBytes)
+			encryptedJSON, encryptedJSONErr := keystore.EncryptKeystore(privKey.Bytes(), string(pubKeyBase64), string(passwordBytes))
 			if encryptedJSONErr != nil {
 				logger.Fatal("Failed to encrypt private key", zap.Error(err))
 			}
@@ -70,22 +69,6 @@ var generateOperatorKeysCmd = &cobra.Command{
 			logger.Info("generated private key (base64)", zap.String("sk", string(privKey.Base64())))
 		}
 	},
-}
-
-func encryptPrivateKey(privKey []byte, pubKeyBase64 string, passwordBytes []byte) ([]byte, error) {
-	encryptionPassword := string(passwordBytes)
-	encryptedData, err := keystorev4.New().Encrypt(privKey, encryptionPassword)
-	if err != nil {
-		return nil, err
-	}
-
-	encryptedData["publicKey"] = pubKeyBase64
-	encryptedJSON, err := json.Marshal(encryptedData)
-	if err != nil {
-		return nil, err
-	}
-
-	return encryptedJSON, nil
 }
 
 func writeFile(fileName string, data []byte) error {

@@ -43,7 +43,7 @@ func PrivateKeyFromString(privKeyString string) (OperatorPrivateKey, error) {
 		return nil, err
 	}
 
-	privKey, err := rsaencryption.ConvertPemToPrivateKey(string(operatorKeyByte))
+	privKey, err := rsaencryption.PemToPrivateKey(operatorKeyByte)
 	if err != nil {
 		return nil, err
 	}
@@ -51,12 +51,11 @@ func PrivateKeyFromString(privKeyString string) (OperatorPrivateKey, error) {
 	return &privateKey{privKey: privKey}, nil
 }
 
-func PrivateKeyFromEncryptedJSON(pem []byte, password string) (OperatorPrivateKey, error) {
-	privKey, err := rsaencryption.ConvertEncryptedPemToPrivateKey(pem, password)
+func PrivateKeyFromBytes(pemData []byte) (OperatorPrivateKey, error) {
+	privKey, err := rsaencryption.PemToPrivateKey(pemData)
 	if err != nil {
-		return nil, fmt.Errorf("decrypt operator private key: %w", err)
+		return nil, fmt.Errorf("can't decode operator private key: %w", err)
 	}
-
 	return &privateKey{privKey: privKey}, nil
 }
 
