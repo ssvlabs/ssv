@@ -57,11 +57,15 @@ unit-test:
 	@echo "Running unit tests"
 	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -race -p 1 -v `go list ./... | grep -ve "spectest\|integration\|ssv/scripts/"`
 
-# FIXME
 .PHONY: degradation-test
 degradation-test:
 	@echo "Running degradation tests"
-	@go run ./scripts/degradation-tester/main.go --config ./scripts/degradation-tester/config.yaml
+	@bash ./scripts/degradation-tester/degradation-check.sh
+
+.PHONY: update-benchmarks
+update-benchmarks:
+	@echo "Updating benchmarks"
+	@bash ./scripts/degradation-tester/update-benchmarks.sh
 
 .PHONY: spec-test
 spec-test:
