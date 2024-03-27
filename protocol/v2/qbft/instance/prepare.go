@@ -83,8 +83,7 @@ func getRoundChangeJustification(state *specqbft.State, config qbft.IConfig, pre
 	prepareMsgs := prepareMsgContainer.MessagesForRound(state.LastPreparedRound)
 	ret := make([]*specqbft.SignedMessage, 0)
 	for _, msg := range prepareMsgs {
-		if err := validSignedPrepareForHeightRoundAndRoot(
-			config,
+		if err := validSignedPrepareForHeightRoundAndRootNoVerification(
 			msg,
 			state.Height,
 			state.LastPreparedRound,
@@ -102,38 +101,16 @@ func getRoundChangeJustification(state *specqbft.State, config qbft.IConfig, pre
 	return ret, nil
 }
 
-// validPreparesForHeightRoundAndValue returns an aggregated prepare msg for a specific Height and round
-// func validPreparesForHeightRoundAndValue(
-//	config IConfig,
-//	prepareMessages []*SignedMessage,
-//	height Height,
-//	round Round,
-//	value []byte,
-//	operators []*types.Operator) *SignedMessage {
-//	var aggregatedPrepareMsg *SignedMessage
-//	for _, signedMsg := range prepareMessages {
-//		if err := validSignedPrepareForHeightRoundAndValue(config, signedMsg, height, round, value, operators); err == nil {
-//			if aggregatedPrepareMsg == nil {
-//				aggregatedPrepareMsg = signedMsg
-//			} else {
-//				// TODO: check error
-//				// nolint
-//				aggregatedPrepareMsg.Aggregate(signedMsg)
-//			}
-//		}
-//	}
-//	return aggregatedPrepareMsg
-// }
-
-// validSignedPrepareForHeightRoundAndValue known in dafny spec as validSignedPrepareForHeightRoundAndDigest
+// validSignedPrepareForHeightRoundAndRoot known in dafny spec as validSignedPrepareForHeightRoundAndDigest
 // https://entethalliance.github.io/client-spec/qbft_spec.html#dfn-qbftspecification
-func validSignedPrepareForHeightRoundAndRoot(
-	config qbft.IConfig,
+func validSignedPrepareForHeightRoundAndRootNoVerification(
 	signedPrepare *specqbft.SignedMessage,
 	height specqbft.Height,
 	round specqbft.Round,
 	root [32]byte,
-	operators []*spectypes.Operator) error {
+	operators []*spectypes.Operator,
+) error {
+
 	if signedPrepare.Message.MsgType != specqbft.PrepareMsgType {
 		return errors.New("prepare msg type is wrong")
 	}
@@ -154,6 +131,26 @@ func validSignedPrepareForHeightRoundAndRoot(
 
 	if len(signedPrepare.GetSigners()) != 1 {
 		return errors.New("msg allows 1 signer")
+	}
+
+	if !signedPrepare.CheckSignersInCommittee(operators) {
+		return errors.New("signers not in committee")
+	}
+
+	return nil
+}
+
+func validSignedPrepareForHeightRoundAndRootWithVerification(
+	config qbft.IConfig,
+	signedPrepare *specqbft.SignedMessage,
+	height specqbft.Height,
+	round specqbft.Round,
+	root [32]byte,
+	operators []*spectypes.Operator,
+) error {
+
+	if err := validSignedPrepareForHeightRoundAndRootNoVerification(signedPrepare, height, round, root, operators); err != nil {
+		return err
 	}
 
 	if config.VerifySignatures() {

@@ -238,7 +238,7 @@ func isReceivedProposalJustification(
 	return nil
 }
 
-func validRoundChangeForData(
+func validRoundChangeForDataNoVerification(
 	state *specqbft.State,
 	config qbft.IConfig,
 	signedMsg *specqbft.SignedMessage,
@@ -259,14 +259,12 @@ func validRoundChangeForData(
 		return errors.New("msg allows 1 signer")
 	}
 
-	if config.VerifySignatures() {
-		if err := types.VerifyByOperators(signedMsg.Signature, signedMsg, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, state.Share.Committee); err != nil {
-			return errors.Wrap(err, "msg signature invalid")
-		}
+	if err := signedMsg.Validate(); err != nil {
+		return errors.Wrap(err, "roundChange invalid")
 	}
 
-	if err := signedMsg.Message.Validate(); err != nil {
-		return errors.Wrap(err, "roundChange invalid")
+	if !signedMsg.CheckSignersInCommittee(state.Share.Committee) {
+		return errors.New("signers not in committee")
 	}
 
 	// Addition to formal spec
@@ -280,7 +278,7 @@ func validRoundChangeForData(
 		// validate prepare message justifications
 		prepareMsgs, _ := signedMsg.Message.GetRoundChangeJustifications() // no need to check error, checked on signedMsg.Message.Validate()
 		for _, pm := range prepareMsgs {
-			if err := validSignedPrepareForHeightRoundAndRoot(
+			if err := validSignedPrepareForHeightRoundAndRootWithVerification(
 				config,
 				pm,
 				state.Height,
@@ -305,6 +303,29 @@ func validRoundChangeForData(
 
 		return nil
 	}
+
+	return nil
+}
+
+func validRoundChangeForDataWithVerification(
+	state *specqbft.State,
+	config qbft.IConfig,
+	signedMsg *specqbft.SignedMessage,
+	height specqbft.Height,
+	round specqbft.Round,
+	fullData []byte,
+) error {
+
+	if err := validRoundChangeForDataNoVerification(state, config, signedMsg, height, round, fullData); err != nil {
+		return err
+	}
+
+	if config.VerifySignatures() {
+		if err := types.VerifyByOperators(signedMsg.Signature, signedMsg, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, state.Share.Committee); err != nil {
+			return errors.Wrap(err, "msg signature invalid")
+		}
+	}
+
 	return nil
 }
 
