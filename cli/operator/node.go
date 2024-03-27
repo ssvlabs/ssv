@@ -2,8 +2,6 @@ package operator
 
 import (
 	"context"
-	"crypto"
-	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/base64"
@@ -315,9 +313,7 @@ var StartNodeCmd = &cobra.Command{
 					Network:         p2pNetwork.(p2pv1.HostProvider).Host().Network(),
 					TopicIndex:      p2pNetwork.(handlers.TopicIndex),
 					NodeProber:      nodeProber,
-					Signer: func(data []byte) ([]byte, error) {
-						return rsa.SignPKCS1v15(rand.Reader, operatorKey, crypto.SHA256, data[:])
-					},
+					Signer:          operatorKey.Sign,
 				},
 				&handlers.Validators{
 					Shares: nodeStorage.Shares(),

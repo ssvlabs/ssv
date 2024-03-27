@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	"crypto"
+	"crypto/rand"
+	"crypto/rsa"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -34,7 +37,7 @@ func (h *Node) Sign(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	signature, err := h.Signer(data[:])
+	signature, err := h.Signer(rand.Reader, data[:], &rsa.PSSOptions{SaltLength: rsa.PSSSaltLengthAuto, Hash: crypto.SHA256})
 	if err != nil {
 		return err
 	}

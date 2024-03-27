@@ -2,9 +2,11 @@ package handlers
 
 import (
 	"context"
+	"crypto"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/libp2p/go-libp2p/core/network"
@@ -93,7 +95,7 @@ type Node struct {
 	TopicIndex      TopicIndex
 	Network         network.Network
 	NodeProber      *nodeprobe.Prober
-	Signer          func(data []byte) ([]byte, error)
+	Signer          func(rand io.Reader, digest []byte, opts crypto.SignerOpts) ([]byte, error)
 }
 
 func (h *Node) Identity(w http.ResponseWriter, r *http.Request) error {

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto"
-	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/hex"
@@ -68,7 +67,7 @@ func TestAPI(t *testing.T) {
 		require.NoError(t, err)
 		sigBytes, err := hex.DecodeString(sigResp.Signature)
 		require.NoError(t, err)
-		err = rsa.VerifyPKCS1v15(&priv.PublicKey, crypto.SHA256, hash[:], sigBytes)
+		err = rsa.VerifyPSS(&priv.PublicKey, crypto.SHA256, hash[:], sigBytes, &rsa.PSSOptions{SaltLength: rsa.PSSSaltLengthAuto, Hash: crypto.SHA256})
 		require.NoError(t, err)
 	})
 	t.Run("authorized /v1/operator/sign provided JWT token", func(t *testing.T) {
@@ -87,7 +86,7 @@ func TestAPI(t *testing.T) {
 		require.NoError(t, err)
 		sigBytes, err := hex.DecodeString(sigResp.Signature)
 		require.NoError(t, err)
-		err = rsa.VerifyPKCS1v15(&priv.PublicKey, crypto.SHA256, hash[:], sigBytes)
+		err = rsa.VerifyPSS(&priv.PublicKey, crypto.SHA256, hash[:], sigBytes, &rsa.PSSOptions{SaltLength: rsa.PSSSaltLengthAuto, Hash: crypto.SHA256})
 		require.NoError(t, err)
 	})
 	t.Run("authorized /v1/operator/sign wrong JWT token", func(t *testing.T) {
@@ -179,9 +178,7 @@ func createTestNodeWithAPI(t *testing.T, priv *rsa.PrivateKey, n int, ctx contex
 			Network:         ln.Nodes[0].(p2pv1.HostProvider).Host().Network(),
 			TopicIndex:      ln.Nodes[0].(handlers.TopicIndex),
 			NodeProber:      nodeProber,
-			Signer: func(data []byte) ([]byte, error) {
-				return rsa.SignPKCS1v15(rand.Reader, priv, crypto.SHA256, data[:])
-			},
+			Signer:          priv.Sign,
 		},
 		&handlers.Validators{
 			Shares: nodeStorage.Shares(),
