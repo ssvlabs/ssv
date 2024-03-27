@@ -215,12 +215,8 @@ func (b *BaseRunner) basePartialSigMsgProcessing(
 
 		hasQuorum := container.HasQuorum(msg.SigningRoot)
 
-		if prevQuorum && hasQuorum {
-			// Previously had quorum and still has quorum
-			continue
-		}
-
-		if hasQuorum {
+		if hasQuorum && !prevQuorum {
+			// Notify about first quorum only
 			roots = append(roots, msg.SigningRoot)
 			anyQuorum = true
 		}
