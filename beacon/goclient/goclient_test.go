@@ -11,10 +11,11 @@ import (
 	"time"
 
 	"github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/operator/slotticker"
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/operator/slotticker"
+	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
 func TestTimeouts(t *testing.T) {
@@ -93,7 +94,7 @@ func mockClient(t *testing.T, ctx context.Context, serverURL string, commonTimeo
 			CommonTimeout:  commonTimeout,
 			LongTimeout:    longTimeout,
 		},
-		0,
+		func() types.OperatorID { return 0 },
 		func() slotticker.SlotTicker {
 			return slotticker.New(zap.NewNop(), slotticker.Config{
 				SlotDuration: 12 * time.Second,

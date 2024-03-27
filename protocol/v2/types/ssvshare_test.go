@@ -4,9 +4,10 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/crypto"
-
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
 
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
@@ -102,6 +103,86 @@ func TestValidCommitteeSize(t *testing.T) {
 			for _, size := range tc.sizes {
 				require.Equal(t, tc.valid, ValidCommitteeSize(size))
 			}
+		})
+	}
+}
+
+func TestSSVShare_IsAttesting(t *testing.T) {
+	currentEpoch := phase0.Epoch(100) // Example current epoch for testing
+	tt := []struct {
+		Name     string
+		Share    *SSVShare
+		Epoch    phase0.Epoch
+		Expected bool
+	}{
+		{
+			Name: "No BeaconMetadata",
+			Share: &SSVShare{
+				Metadata: Metadata{
+					BeaconMetadata: nil,
+				},
+			},
+			Epoch:    currentEpoch,
+			Expected: false,
+		},
+		{
+			Name: "Is Attesting",
+			Share: &SSVShare{
+				Metadata: Metadata{
+					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+						Status: eth2apiv1.ValidatorStateActiveOngoing,
+					},
+				},
+			},
+			Epoch:    currentEpoch,
+			Expected: true,
+		},
+		{
+			Name: "Pending Queued with Future Activation Epoch",
+			Share: &SSVShare{
+				Metadata: Metadata{
+					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+						Status:          eth2apiv1.ValidatorStatePendingQueued,
+						ActivationEpoch: currentEpoch + 1,
+					},
+				},
+			},
+			Epoch:    currentEpoch,
+			Expected: false,
+		},
+		{
+			Name: "Pending Queued with Current Epoch as Activation Epoch",
+			Share: &SSVShare{
+				Metadata: Metadata{
+					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+						Status:          eth2apiv1.ValidatorStatePendingQueued,
+						ActivationEpoch: currentEpoch,
+					},
+				},
+			},
+			Epoch:    currentEpoch,
+			Expected: true,
+		},
+		{
+			Name: "Pending Queued with Past Activation Epoch",
+			Share: &SSVShare{
+				Metadata: Metadata{
+					BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+						Status:          eth2apiv1.ValidatorStatePendingQueued,
+						ActivationEpoch: currentEpoch - 1,
+					},
+				},
+			},
+			Epoch:    currentEpoch,
+			Expected: true,
+		},
+	}
+
+	for _, tc := range tt {
+		tc := tc
+		t.Run(tc.Name, func(t *testing.T) {
+			result := tc.Share.IsAttesting(tc.Epoch)
+			require.Equal(t, tc.Expected, result)
 		})
 	}
 }
