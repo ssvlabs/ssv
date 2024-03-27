@@ -15,7 +15,7 @@ for pkgPath in "${packagePaths[@]}"; do
 
   go test -bench=. -count=10 -benchmem "$pkgPath" | tee "$outputFile"
 
-  benchstat "$oldBenchmarks" "$outputFile" | tee "${benchStatFile}"
+  benchstat -format csv "$oldBenchmarks" "$outputFile" | tee "${benchStatFile}"
 
   degradation-tester "${configFile}" "${benchStatFile}"
   if [ $? -ne 0 ]; then
@@ -25,6 +25,5 @@ for pkgPath in "${packagePaths[@]}"; do
   fi
 
   echo "✅ Degradation tests have passed for ${packageName} package."
-
   rm "${benchStatFile}" "${outputFile}"
 done

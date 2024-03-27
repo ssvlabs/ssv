@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"encoding/csv"
 	"fmt"
 	"math"
 	"os"
@@ -32,6 +33,21 @@ type TestCase struct {
 	AllocDelta float64 `yaml:"AllocDelta"`
 }
 
+type Benchmark struct {
+	TestName string
+	OldValue float64
+	OldCI    float64
+	NewValue float64
+	NewCI    float64
+	VsBase   string
+	P        string
+}
+
+type BenchStatOutput struct {
+	OsData     string
+	benchmarks []Benchmark
+}
+
 func main() {
 	if len(os.Args) < 3 {
 		fmt.Println("Usage: degradation-tester <config_filename> <results_filename>")
@@ -50,6 +66,14 @@ func main() {
 	}
 	defer file.Close()
 
+	totalErrors := checkFile(file, config)
+
+	if totalErrors > 0 {
+		os.Exit(1)
+	}
+}
+
+func checkFile(file *os.File, config *Config) int {
 	var currentSection string
 
 	scanner := bufio.NewScanner(file)
@@ -60,10 +84,13 @@ func main() {
 		switch {
 		case strings.Contains(line, "sec/op"):
 			currentSection = "sec/op"
+			continue
 		case strings.Contains(line, "B/op"):
 			currentSection = "B/op"
+			continue
 		case strings.Contains(line, "allocs/op"):
 			currentSection = "allocs/op"
+			continue
 		}
 
 		totalErrors += checkLine(config, line, currentSection)
@@ -73,9 +100,84 @@ func main() {
 		fmt.Printf("Error reading results file: %v\n", err)
 	}
 
-	if totalErrors > 0 {
+	return totalErrors
+}
+
+func checkLine(
+	config *Config,
+	line string,
+	section string,
+) int {
+	if line == "" {
+		return 0
+	}
+	csvRowReader := csv.NewReader(strings.NewReader(line))
+	csvRowReader.Comment = '#'
+	csvRowReader.Comma = ','
+
+	row, err := csvRowReader.Read()
+	if err != nil {
+		fmt.Printf("failed parsing CSV line %s with erorr: %v\n", line, err)
 		os.Exit(1)
 	}
+
+	if len(row) != 7 {
+		// ignore all except the becnhmark result lines with exactly 7 columns
+		return 0
+	}
+
+	// The "geomean" represents a statistical summary (geometric mean) of multiple test results,
+	// not an individual test result, hence we should just skip it
+	if row[0] == "geomean" {
+		return 0
+	}
+
+	normalizedTestName := normalizeTestName(row[0])
+
+	oldValue, err := strconv.ParseFloat(row[1], 64)
+	if err != nil {
+		fmt.Printf("⚠️ Error parsing float: %v\n", err)
+		return 1
+	}
+	oldChangeStr := row[2]
+	newValue, err := strconv.ParseFloat(row[3], 64)
+	if err != nil {
+		fmt.Printf("⚠️ Error parsing float: %v\n", err)
+		return 1
+	}
+	newChangeStr := row[4]
+
+	oldChange, err := strconv.ParseFloat(strings.TrimSuffix(oldChangeStr, "%"), 64)
+	if err != nil {
+		fmt.Printf("⚠️ Error parsing float: %v\n", err)
+		return 1
+	}
+	newChange, err := strconv.ParseFloat(strings.TrimSuffix(newChangeStr, "%"), 64)
+	if err != nil {
+		fmt.Printf("⚠️ Error parsing float: %v\n", err)
+		return 1
+	}
+
+	threshold := getThresholdForTestCase(config, normalizedTestName, section)
+
+	if math.Abs(oldChange-newChange) > threshold {
+		fmt.Printf("❌ Change in section %s for test %s exceeds threshold: %s\n", section, normalizedTestName, newChangeStr)
+		return 1
+	}
+
+	b := &Benchmark{
+		TestName: row[0],
+		OldValue: oldValue,
+		OldCI:    oldChange,
+		NewValue: newValue,
+		NewCI:    newChange,
+		VsBase:   row[5],
+		P:        row[6],
+	}
+
+	fmt.Printf("Debug: bench [TestName %s], [OldValue %f], [OldCI %f], [NewValue %f], [NewCI %f], [VsBase %s], [P %s]\n", b.TestName, b.OldValue, b.OldCI, b.NewValue, b.NewCI, b.VsBase, b.P)
+
+	return 0
 }
 
 func loadConfig(filename string) *Config {
@@ -107,7 +209,7 @@ func loadConfig(filename string) *Config {
 	return config
 }
 
-func checkLine(
+func checkLine2(
 	config *Config,
 	line string,
 	section string,
