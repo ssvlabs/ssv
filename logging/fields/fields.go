@@ -43,6 +43,7 @@ const (
 	FieldConfig              = "config"
 	FieldConnectionID        = "connection_id"
 	FieldConsensusTime       = "consensus_time"
+	FieldSubmissionTime      = "submission_time"
 	FieldCount               = "count"
 	FieldTook                = "took"
 	FieldCurrentSlot         = "current_slot"
@@ -270,6 +271,10 @@ func Topic(val string) zap.Field {
 
 func ConsensusTime(val time.Duration) zap.Field {
 	return zap.Float64(FieldConsensusTime, val.Seconds())
+}
+
+func SubmissionTime(val time.Duration) zap.Field {
+	return zap.Float64(FieldSubmissionTime, val.Seconds())
 }
 
 func DutyID(val string) zap.Field {
