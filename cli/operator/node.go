@@ -2,13 +2,15 @@ package operator
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
-	"github.com/bloxapp/ssv/operator/keystore"
 	"log"
 	"math/big"
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/bloxapp/ssv/operator/keystore"
 
 	"github.com/bloxapp/ssv/network"
 
@@ -57,6 +59,7 @@ import (
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/format"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
 type KeyStore struct {
@@ -481,7 +484,16 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, configPrivKey 
 		logger.Fatal("could not get hashed private key", zap.Error(err))
 	}
 
-	configStoragePrivKeyHash, err := configPrivKey.StorageHash()
+	// configStoragePrivKeyHash, err := configPrivKey.StorageHash()
+	// if err != nil {
+	// 	logger.Fatal("could not hash private key", zap.Error(err))
+	// }
+
+	x, err := base64.StdEncoding.DecodeString(cfg.OperatorPrivateKey)
+	if err != nil {
+		logger.Fatal("could not decode private key", zap.Error(err))
+	}
+	configStoragePrivKeyHash, err := rsaencryption.HashRsaKey(x)
 	if err != nil {
 		logger.Fatal("could not hash private key", zap.Error(err))
 	}
