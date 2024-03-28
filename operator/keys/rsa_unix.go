@@ -46,7 +46,13 @@ func checkCachePrivkey(priv *privateKey) (*openssl.PrivateKeyRSA, error) {
 			return opriv, nil
 		}
 	}
-	return rsaPrivateKeyToOpenSSL(priv.privKey)
+	opriv, err := rsPrivateKeyToOpenSSL(priv.privKey)
+	if err != nil {
+		return nil, err
+	}
+	priv.cachedPrivKey = opriv
+
+	return opriv, nil
 }
 
 func SignRSA(priv *privateKey, data []byte) ([]byte, error) {
@@ -54,7 +60,8 @@ func SignRSA(priv *privateKey, data []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return openssl.HashSignRSAPKCS1v15(opriv, crypto.SHA256, data)
+	hashed := sha256.Sum256(data)
+	return openssl.SignRSAPKCS1v15(opriv, crypto.SHA256, hashed[:])
 }
 
 func checkCachePubkey(pub *publicKey) (*openssl.PublicKeyRSA, error) {
@@ -65,7 +72,13 @@ func checkCachePubkey(pub *publicKey) (*openssl.PublicKeyRSA, error) {
 		}
 	}
 
-	return rsaPublicKeyToOpenSSL(pub.pubKey)
+	opub, err := rsaPublicKeyToOpenSSL(pub.pubKey)
+	if err != nil {
+		return nil, err
+	}
+	pub.cachedPubkey = opub
+
+	return opub, nil
 }
 
 func EncryptRSA(pub *publicKey, data []byte) ([]byte, error) {
@@ -81,5 +94,6 @@ func VerifyRSA(pub *publicKey, data, signature []byte) error {
 	if err != nil {
 		return err
 	}
-	return openssl.HashVerifyRSAPKCS1v15(opub, crypto.SHA256, data, signature)
+	hashed := sha256.Sum256(data)
+	return openssl.VerifyRSAPKCS1v15(opub, crypto.SHA256, hashed[:], signature)
 }
