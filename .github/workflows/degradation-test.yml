@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - "**"
+  workflow_dispatch:  # This allows the workflow to be manually triggered
 
 jobs:
   align:
@@ -39,3 +40,26 @@ jobs:
           make degradation-test
         env:
           GO111MODULE: on
+
+  update-benchmarks: # New job for updating the benchmarks
+    needs: align  # This job runs after the 'align' job
+    if: github.event_name == 'workflow_dispatch'  # Runs only when triggered manually
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+
+      - name: Setup make
+        run: sudo apt-get update && sudo apt-get install make
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.20.x"
+
+      - name: Tidy up dependencies
+        run: go mod tidy
+
+      - name: Update benchmarks
+        run: |
+          make update-benchmarks
