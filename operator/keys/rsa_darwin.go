@@ -1,4 +1,4 @@
-// build !windows && !unixs
+// build !windows && !unix
 package keys
 
 import (

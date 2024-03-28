@@ -1,4 +1,6 @@
-// build +unix || +windows
+//go:build !darwin
+// +build !darwin
+
 package keys
 
 import (
