@@ -19,7 +19,7 @@ import (
 func init() {
 	// TODO: check multiple versions of openssl
 	// TODO: fallback to stdlib when openssl is not available
-	if err := msopenssl.Init(); err != nil {
+	if err := openssl.Init(); err != nil {
 		panic(err)
 	}
 }
