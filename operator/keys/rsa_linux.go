@@ -11,6 +11,8 @@ import (
 )
 
 func init() {
+	// TODO: check multiple versions of openssl
+	// TODO: fallback to stdlib when openssl is not available
 	if err := openssl.Init("libcrypto.so.3"); err != nil {
 		panic(err)
 	}
