@@ -503,7 +503,10 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, configPrivKey 
 			logger.Fatal("could not save hashed private key", zap.Error(err))
 		}
 	} else if configStoragePrivKeyHash != storedPrivKeyHash {
-		logger.Fatal("operator private key is not matching the one encrypted the storage")
+		logger.Fatal("operator private key is not matching the one encrypted the storage",
+			zap.Any("got", configStoragePrivKeyHash),
+			zap.Any("want", storedPrivKeyHash),
+		)
 	}
 
 	encodedPubKey, err := configPrivKey.Public().Base64()
