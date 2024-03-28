@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"testing"
 
-	openssl "github.com/go-fips/openssl/v2"
+	openssl "github.com/golang-fips/openssl/v2"
 )
 
 func init() {
