@@ -1,7 +1,6 @@
 package keys
 
 import (
-	"crypto/rand"
 	crand "crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -126,7 +125,7 @@ func PublicKeyFromString(pubKeyString string) (OperatorPublicKey, error) {
 }
 
 func (p *publicKey) Encrypt(data []byte) ([]byte, error) {
-	return rsa.EncryptPKCS1v15(rand.Reader, p.pubKey, data)
+	return EncryptRSA(p, data)
 }
 
 func (p *publicKey) Verify(data []byte, signature []byte) error {
