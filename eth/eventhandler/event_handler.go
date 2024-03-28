@@ -3,7 +3,6 @@
 package eventhandler
 
 import (
-	"crypto/rsa"
 	"errors"
 	"fmt"
 	"math/big"
@@ -22,6 +21,7 @@ import (
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/operator/keys"
 	nodestorage "github.com/bloxapp/ssv/operator/storage"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
@@ -56,23 +56,22 @@ type taskExecutor interface {
 	ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex) error
 }
 
-type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
-
 type OperatorData interface {
 	GetOperatorData() *storage.OperatorData
 	SetOperatorData(*storage.OperatorData)
+	GetOperatorID() spectypes.OperatorID
 }
 
 type EventHandler struct {
-	nodeStorage                nodestorage.Storage
-	taskExecutor               taskExecutor
-	eventParser                eventparser.Parser
-	networkConfig              networkconfig.NetworkConfig
-	operatorData               OperatorData
-	shareEncryptionKeyProvider ShareEncryptionKeyProvider
-	keyManager                 spectypes.KeyManager
-	beacon                     beaconprotocol.BeaconNode
-	storageMap                 *qbftstorage.QBFTStores
+	nodeStorage       nodestorage.Storage
+	taskExecutor      taskExecutor
+	eventParser       eventparser.Parser
+	networkConfig     networkconfig.NetworkConfig
+	operatorData      OperatorData
+	operatorDecrypter keys.OperatorDecrypter
+	keyManager        spectypes.KeyManager
+	beacon            beaconprotocol.BeaconNode
+	storageMap        *qbftstorage.QBFTStores
 
 	fullNode bool
 	logger   *zap.Logger
@@ -85,24 +84,24 @@ func New(
 	taskExecutor taskExecutor,
 	networkConfig networkconfig.NetworkConfig,
 	operatorData OperatorData,
-	shareEncryptionKeyProvider ShareEncryptionKeyProvider,
+	operatorDecrypter keys.OperatorDecrypter,
 	keyManager spectypes.KeyManager,
 	beacon beaconprotocol.BeaconNode,
 	storageMap *qbftstorage.QBFTStores,
 	opts ...Option,
 ) (*EventHandler, error) {
 	eh := &EventHandler{
-		nodeStorage:                nodeStorage,
-		taskExecutor:               taskExecutor,
-		eventParser:                eventParser,
-		networkConfig:              networkConfig,
-		operatorData:               operatorData,
-		shareEncryptionKeyProvider: shareEncryptionKeyProvider,
-		keyManager:                 keyManager,
-		beacon:                     beacon,
-		storageMap:                 storageMap,
-		logger:                     zap.NewNop(),
-		metrics:                    nopMetrics{},
+		nodeStorage:       nodeStorage,
+		taskExecutor:      taskExecutor,
+		eventParser:       eventParser,
+		networkConfig:     networkConfig,
+		operatorData:      operatorData,
+		operatorDecrypter: operatorDecrypter,
+		keyManager:        keyManager,
+		beacon:            beacon,
+		storageMap:        storageMap,
+		logger:            zap.NewNop(),
+		metrics:           nopMetrics{},
 	}
 
 	for _, opt := range opts {

@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/microsoft/go-crypto-openssl/openssl"
+	openssl "github.com/microsoft/go-crypto-openssl/openssl"
 	"github.com/microsoft/go-crypto-openssl/openssl/bbig/bridge"
 )
 

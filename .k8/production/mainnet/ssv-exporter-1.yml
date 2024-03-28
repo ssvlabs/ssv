@@ -158,7 +158,7 @@ spec:
           hostPort: 16015
         env:
           - name: SHARE_CONFIG
-            value: "./data/share.yaml"
+            value: "/data/share.yaml"
           - name: LOG_LEVEL
             value: "debug"
           - name: DB_REPORTING
@@ -170,7 +170,7 @@ spec:
           - name: NETWORK
             value: "mainnet"
           - name: DB_PATH
-            value: "./data/db-mainnet"
+            value: "/data/db-mainnet"
           - name: METRICS_API_PORT
             value: "15015"
           - name: SSV_API_PORT

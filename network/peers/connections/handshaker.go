@@ -2,7 +2,6 @@ package connections
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
@@ -15,7 +14,7 @@ import (
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/network/streams"
-	"github.com/bloxapp/ssv/operator/storage"
+	"github.com/bloxapp/ssv/operator/keys"
 )
 
 // errPeerWasFiltered is thrown when a peer is filtered during handshake
@@ -47,14 +46,14 @@ type handshaker struct {
 	Permissioned func() bool
 	filters      func() []HandshakeFilter
 
-	streams     streams.StreamController
-	nodeInfos   peers.NodeInfoIndex
-	peerInfos   peers.PeerInfoIndex
-	connIdx     peers.ConnectionIndex
-	subnetsIdx  peers.SubnetsIndex
-	ids         identify.IDService
-	net         libp2pnetwork.Network
-	nodeStorage storage.Storage
+	streams        streams.StreamController
+	nodeInfos      peers.NodeInfoIndex
+	peerInfos      peers.PeerInfoIndex
+	connIdx        peers.ConnectionIndex
+	subnetsIdx     peers.SubnetsIndex
+	ids            identify.IDService
+	net            libp2pnetwork.Network
+	operatorSigner keys.OperatorSigner
 
 	subnetsProvider SubnetsProvider
 }
@@ -68,7 +67,7 @@ type HandshakerCfg struct {
 	ConnIdx         peers.ConnectionIndex
 	SubnetsIdx      peers.SubnetsIndex
 	IDService       identify.IDService
-	NodeStorage     storage.Storage
+	OperatorSigner  keys.OperatorSigner
 	SubnetsProvider SubnetsProvider
 	Permissioned    func() bool
 }
@@ -86,7 +85,7 @@ func NewHandshaker(ctx context.Context, cfg *HandshakerCfg, filters func() []Han
 		peerInfos:       cfg.PeerInfos,
 		subnetsProvider: cfg.SubnetsProvider,
 		net:             cfg.Network,
-		nodeStorage:     cfg.NodeStorage,
+		operatorSigner:  cfg.OperatorSigner,
 		Permissioned:    cfg.Permissioned,
 	}
 	return h
@@ -117,15 +116,11 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 			return errors.Wrap(err, "could not consume node info request")
 		}
 
-		// Respond with our own NodeInfo.
-		privateKey, found, err := h.nodeStorage.GetPrivateKey()
-		if !found {
-			return errors.Wrap(err, "could not get private key")
-		}
-		self, err := h.nodeInfos.SelfSealed(h.net.LocalPeer(), pid, permissioned, privateKey)
+		self, err := h.nodeInfos.SelfSealed(h.net.LocalPeer(), pid, permissioned, h.operatorSigner)
 		if err != nil {
 			return errors.Wrap(err, "could not seal self node info")
 		}
+
 		if err := respond(self); err != nil {
 			return errors.Wrap(err, "could not send self node info")
 		}
@@ -224,14 +219,7 @@ func (h *handshaker) updateNodeSubnets(logger *zap.Logger, pid peer.ID, ni *reco
 func (h *handshaker) requestNodeInfo(logger *zap.Logger, conn libp2pnetwork.Conn) (records.AnyNodeInfo, error) {
 	permissioned := h.Permissioned()
 
-	privateKey, found, err := h.nodeStorage.GetPrivateKey()
-	if err != nil {
-		return nil, fmt.Errorf("could not get private key: %w", err)
-	}
-	if !found {
-		return nil, errors.New("could not get private key")
-	}
-	data, err := h.nodeInfos.SelfSealed(h.net.LocalPeer(), conn.RemotePeer(), permissioned, privateKey)
+	data, err := h.nodeInfos.SelfSealed(h.net.LocalPeer(), conn.RemotePeer(), permissioned, h.operatorSigner)
 	if err != nil {
 		return nil, err
 	}

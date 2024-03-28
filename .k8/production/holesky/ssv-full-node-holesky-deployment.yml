@@ -158,7 +158,7 @@ spec:
           hostPort: 16021
         env:
           - name: SHARE_CONFIG
-            value: "./data/share.yaml"
+            value: "/data/share.yaml"
           - name: LOG_LEVEL
             value: "debug"
           - name: DB_REPORTING
@@ -168,7 +168,7 @@ spec:
           - name: DISCOVERY_TYPE_KEY
             value: "discv5"
           - name: DB_PATH
-            value: ./data/db-holesky
+            value: "/data/db-holesky"
           - name: NETWORK
             value: holesky
           - name: METRICS_API_PORT

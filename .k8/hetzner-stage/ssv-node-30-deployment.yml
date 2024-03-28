@@ -74,7 +74,7 @@ spec:
               hostPort: 16030
           env:
             - name: SHARE_CONFIG
-              value: "./data/share.yaml"
+              value: "/data/share.yaml"
             - name: CONFIG_PATH
               valueFrom:
                 secretKeyRef:
@@ -99,7 +99,7 @@ spec:
             - name: HOST_ADDRESS
               value: ""
             - name: DB_PATH
-              value: "./data/db-holesky-stage"
+              value: "/data/db-holesky-stage"
             - name: NETWORK
               value: "holesky-stage"
             - name: DB_REPORTING
