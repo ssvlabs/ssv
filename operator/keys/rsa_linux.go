@@ -61,8 +61,7 @@ func SignRSA(priv *privateKey, data []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	hashed := sha256.Sum256(data)
-	return openssl.SignRSAPKCS1v15(opriv, crypto.SHA256, hashed[:])
+	return openssl.SignRSAPKCS1v15(opriv, crypto.SHA256, data)
 }
 
 func checkCachePubkey(pub *publicKey) (*openssl.PublicKeyRSA, error) {
