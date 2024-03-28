@@ -53,15 +53,17 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 #
 # STEP 3: Prepare image to run the binary
 #
-FROM alpine:3.18.3 AS runner
+FROM golang:1.20.7 AS runner
 
-# Install ca-certificates, bash
-RUN apk -v --update add \
-  ca-certificates=20240226-r0 \
-  bash=5.2.15-r5 \
-  make=4.4.1-r1 \
-  bind-tools=9.18.24-r0 && \
-  rm /var/cache/apk/*
+## Install ca-certificates, bash
+#RUN apk -v --update add \
+#  ca-certificates=20230506-r0 \
+#  bash=5.2.15-r5 \
+#  make=4.4.1-r1 \
+#  bind-tools=9.18.24-r0 && \
+#  rm /var/cache/apk/*
+
+WORKDIR /
 
 COPY --from=builder /go/bin/ssvnode /go/bin/ssvnode
 COPY ./Makefile .env* ./
