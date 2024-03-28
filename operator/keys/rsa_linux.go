@@ -11,7 +11,9 @@ import (
 )
 
 func init() {
-	openssl.Init("libcrypto.so.3")
+	if err := openssl.Init("libcrypto.so.3"); err != nil {
+		panic(err)
+	}
 }
 
 func rsaPrivateKeyToOpenSSL(priv *rsa.PrivateKey) (*openssl.PrivateKeyRSA, error) {
