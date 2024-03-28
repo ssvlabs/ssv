@@ -14,7 +14,7 @@ import (
 
 type privateKey struct {
 	privKey       *rsa.PrivateKey
-	cachedPrivKey openssl.PrivateKeyRSA
+	cachedPrivKey *openssl.PrivateKeyRSA
 }
 
 type publicKey struct {
