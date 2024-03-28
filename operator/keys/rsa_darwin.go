@@ -1,4 +1,4 @@
-// build !windows && !unix
+// go:build !windows && !unix
 package keys
 
 import (
