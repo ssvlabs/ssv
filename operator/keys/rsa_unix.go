@@ -5,6 +5,7 @@ package keys
 import (
 	"crypto"
 	"crypto/rsa"
+	"crypto/sha256"
 	"math/big"
 
 	openssl "github.com/golang-fips/openssl/v2"
@@ -46,7 +47,7 @@ func checkCachePrivkey(priv *privateKey) (*openssl.PrivateKeyRSA, error) {
 			return opriv, nil
 		}
 	}
-	opriv, err := rsPrivateKeyToOpenSSL(priv.privKey)
+	opriv, err := rsaPrivateKeyToOpenSSL(priv.privKey)
 	if err != nil {
 		return nil, err
 	}
