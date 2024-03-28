@@ -8,9 +8,19 @@ import (
 	"crypto/sha256"
 	"math/big"
 
-	openssl "github.com/microsoft/go-crypto-openssl/openssl"
+	"github.com/microsoft/go-crypto-openssl/openssl"
 	"github.com/microsoft/go-crypto-openssl/openssl/bbig/bridge"
 )
+
+type privateKey struct {
+	privKey       *rsa.PrivateKey
+	cachedPrivKey openssl.PrivateKeyRSA
+}
+
+type publicKey struct {
+	pubKey       *rsa.PublicKey
+	cachedPubkey *openssl.PublicKeyRSA
+}
 
 func init() {
 	// TODO: check multiple versions of openssl
@@ -42,10 +52,7 @@ func rsaPublicKeyToOpenSSL(pub *rsa.PublicKey) (*openssl.PublicKeyRSA, error) {
 
 func checkCachePrivkey(priv *privateKey) (*openssl.PrivateKeyRSA, error) {
 	if priv.cachedPrivKey != nil {
-		opriv, ok := priv.cachedPrivKey.(*openssl.PrivateKeyRSA)
-		if ok {
-			return opriv, nil
-		}
+		return priv.cachedPrivKey, nil
 	}
 	opriv, err := rsaPrivateKeyToOpenSSL(priv.privKey)
 	if err != nil {
@@ -66,10 +73,7 @@ func SignRSA(priv *privateKey, data []byte) ([]byte, error) {
 
 func checkCachePubkey(pub *publicKey) (*openssl.PublicKeyRSA, error) {
 	if pub.cachedPubkey != nil {
-		opub, ok := pub.cachedPubkey.(*openssl.PublicKeyRSA)
-		if ok {
-			return opub, nil
-		}
+		return pub.cachePubkey, nil
 	}
 
 	opub, err := rsaPublicKeyToOpenSSL(pub.pubKey)

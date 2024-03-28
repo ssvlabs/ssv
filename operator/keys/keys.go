@@ -68,11 +68,6 @@ func GeneratePrivateKey() (OperatorPrivateKey, error) {
 	return &privateKey{privKey: privKey}, nil
 }
 
-type privateKey struct {
-	privKey       *rsa.PrivateKey
-	cachedPrivKey any
-}
-
 func (p *privateKey) Public() OperatorPublicKey {
 	pubKey := p.privKey.PublicKey
 	return &publicKey{pubKey: &pubKey}
@@ -101,11 +96,6 @@ func (p *privateKey) StorageHash() (string, error) {
 
 func (p *privateKey) EKMHash() (string, error) {
 	return rsaencryption.HashRsaKey(x509.MarshalPKCS1PrivateKey(p.privKey))
-}
-
-type publicKey struct {
-	pubKey       *rsa.PublicKey
-	cachedPubkey any
 }
 
 func PublicKeyFromString(pubKeyString string) (OperatorPublicKey, error) {
