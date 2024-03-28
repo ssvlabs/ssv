@@ -12,7 +12,7 @@ import (
 	//bbig "github.com/golang-fips/openssl/v2/bbig"
 
 	openssl "github.com/microsoft/go-crypto-openssl/openssl"
-	bbig "github.com/microsoft/go-crypto-openssl/openssl/bbig"
+	//bbig "github.com/microsoft/go-crypto-openssl/openssl/bbig"
 	"github.com/microsoft/go-crypto-openssl/openssl/bbig/bridge"
 )
 
@@ -26,21 +26,21 @@ func init() {
 
 func rsaPrivateKeyToOpenSSL(priv *rsa.PrivateKey) (*openssl.PrivateKeyRSA, error) {
 	return bridge.NewPrivateKeyRSA(
-		bbig.Enc(priv.N),
-		bbig.Enc(big.NewInt(int64(priv.E))),
-		bbig.Enc(priv.D),
-		bbig.Enc(priv.Primes[0]),
-		bbig.Enc(priv.Primes[1]),
-		bbig.Enc(priv.Precomputed.Dp),
-		bbig.Enc(priv.Precomputed.Dq),
-		bbig.Enc(priv.Precomputed.Qinv),
+		priv.N,
+		big.NewInt(int64(priv.E)),
+		priv.D,
+		priv.Primes[0],
+		priv.Primes[1],
+		priv.Precomputed.Dp,
+		priv.Precomputed.Dq,
+		priv.Precomputed.Qinv,
 	)
 }
 
 func rsaPublicKeyToOpenSSL(pub *rsa.PublicKey) (*openssl.PublicKeyRSA, error) {
 	return bridge.NewPublicKeyRSA(
-		bbig.Enc(pub.N),
-		bbig.Enc(big.NewInt(int64(pub.E))),
+		pub.N,
+		big.NewInt(int64(pub.E)),
 	)
 }
 
