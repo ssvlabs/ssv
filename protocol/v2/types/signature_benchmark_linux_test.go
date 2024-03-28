@@ -12,7 +12,7 @@ import (
 )
 
 func init() {
-	if err := openssl.Init(); err != nil {
+	if err := openssl.Init("libcrypto.so.3"); err != nil {
 		panic(err)
 	}
 }
