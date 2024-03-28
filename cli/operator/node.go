@@ -494,7 +494,8 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, configPrivKey 
 	}
 
 	// Backwards compatibility for the old hashing method,
-	// which was hashing the text from the configuration directly.
+	// which was hashing the text from the configuration directly,
+	// whereas StorageHash re-encodes with PEM format.
 	cliPrivKeyDecoded, err := base64.StdEncoding.DecodeString(configPrivKeyText)
 	if err != nil {
 		logger.Fatal("could not decode private key", zap.Error(err))
