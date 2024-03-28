@@ -8,11 +8,12 @@ import (
 	"fmt"
 	"testing"
 
-	openssl "github.com/golang-fips/openssl/v2"
+	openssl "github.com/microsoft/go-crypto-openssl/openssl"
+	"github.com/microsoft/go-crypto-openssl/openssl/bbig/bridge"
 )
 
 func init() {
-	if err := openssl.Init("libcrypto.so.3"); err != nil {
+	if err := openssl.Init(); err != nil {
 		panic(err)
 	}
 }
@@ -53,15 +54,15 @@ func BenchmarkSignPKCS1v15OpenSSL(b *testing.B) {
 }
 
 func newOpenSSLRSAKey(size int) (*openssl.PrivateKeyRSA, *openssl.PublicKeyRSA) {
-	N, E, D, P, Q, Dp, Dq, Qinv, err := openssl.GenerateKeyRSA(size)
+	N, E, D, P, Q, Dp, Dq, Qinv, err := bridge.GenerateKeyRSA(size)
 	if err != nil {
 		panic(fmt.Sprintf("GenerateKeyRSA(%d): %v", size, err))
 	}
-	priv, err := openssl.NewPrivateKeyRSA(N, E, D, P, Q, Dp, Dq, Qinv)
+	priv, err := bridge.NewPrivateKeyRSA(N, E, D, P, Q, Dp, Dq, Qinv)
 	if err != nil {
 		panic(fmt.Sprintf("NewPrivateKeyRSA(%d): %v", size, err))
 	}
-	pub, err := openssl.NewPublicKeyRSA(N, E)
+	pub, err := bridge.NewPublicKeyRSA(N, E)
 	if err != nil {
 		panic(fmt.Sprintf("NewPublicKeyRSA(%d): %v", size, err))
 	}

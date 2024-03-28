@@ -8,11 +8,7 @@ import (
 	"crypto/sha256"
 	"math/big"
 
-	//openssl "github.com/golang-fips/openssl/v2"
-	//bbig "github.com/golang-fips/openssl/v2/bbig"
-
 	openssl "github.com/microsoft/go-crypto-openssl/openssl"
-	//bbig "github.com/microsoft/go-crypto-openssl/openssl/bbig"
 	"github.com/microsoft/go-crypto-openssl/openssl/bbig/bridge"
 )
 
