@@ -122,6 +122,7 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		var operatorPrivKey keys.OperatorPrivateKey
+		var operatorPrivKeyText string
 		if cfg.KeyStore.PrivateKeyFile != "" {
 			// nolint: gosec
 			encryptedJSON, err := os.ReadFile(cfg.KeyStore.PrivateKeyFile)
@@ -143,15 +144,18 @@ var StartNodeCmd = &cobra.Command{
 			if err != nil {
 				logger.Fatal("could not extract operator private key from file", zap.Error(err))
 			}
+
+			operatorPrivKeyText = string(decryptedKeystore)
 		} else {
 			operatorPrivKey, err = keys.PrivateKeyFromString(cfg.OperatorPrivateKey)
 			if err != nil {
 				logger.Fatal("could not decode operator private key", zap.Error(err))
 			}
+			operatorPrivKeyText = cfg.OperatorPrivateKey
 		}
 		cfg.P2pNetworkConfig.OperatorSigner = operatorPrivKey
 
-		nodeStorage, operatorData := setupOperatorStorage(logger, db, operatorPrivKey)
+		nodeStorage, operatorData := setupOperatorStorage(logger, db, operatorPrivKey, operatorPrivKeyText)
 
 		usingLocalEvents := len(cfg.LocalEventsPath) != 0
 
@@ -473,7 +477,7 @@ func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.Badger
 	return db, nil
 }
 
-func setupOperatorStorage(logger *zap.Logger, db basedb.Database, configPrivKey keys.OperatorPrivateKey) (operatorstorage.Storage, *registrystorage.OperatorData) {
+func setupOperatorStorage(logger *zap.Logger, db basedb.Database, configPrivKey keys.OperatorPrivateKey, configPrivKeyText string) (operatorstorage.Storage, *registrystorage.OperatorData) {
 	nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
@@ -484,27 +488,28 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, configPrivKey 
 		logger.Fatal("could not get hashed private key", zap.Error(err))
 	}
 
-	configStoragePrivKeyHash2, err := configPrivKey.StorageHash()
+	configStoragePrivKeyHash, err := configPrivKey.StorageHash()
 	if err != nil {
 		logger.Fatal("could not hash private key", zap.Error(err))
 	}
 
-	x, err := base64.StdEncoding.DecodeString(cfg.OperatorPrivateKey)
+	// Backwards compatibility for the old hashing method,
+	// which was hashing the text from the configuration directly.
+	cliPrivKeyDecoded, err := base64.StdEncoding.DecodeString(configPrivKeyText)
 	if err != nil {
 		logger.Fatal("could not decode private key", zap.Error(err))
 	}
-	configStoragePrivKeyHash, err := rsaencryption.HashRsaKey(x)
+	configStoragePrivKeyLegacyHash, err := rsaencryption.HashRsaKey(cliPrivKeyDecoded)
 	if err != nil {
 		logger.Fatal("could not hash private key", zap.Error(err))
 	}
-
-	log.Printf("hash1: %s, hash2: %s", configStoragePrivKeyHash, configStoragePrivKeyHash2)
 
 	if !found {
 		if err := nodeStorage.SavePrivateKeyHash(configStoragePrivKeyHash); err != nil {
 			logger.Fatal("could not save hashed private key", zap.Error(err))
 		}
-	} else if configStoragePrivKeyHash != storedPrivKeyHash {
+	} else if configStoragePrivKeyHash != storedPrivKeyHash &&
+		configStoragePrivKeyLegacyHash != storedPrivKeyHash {
 		logger.Fatal("operator private key is not matching the one encrypted the storage",
 			zap.Any("got", configStoragePrivKeyHash),
 			zap.Any("want", storedPrivKeyHash),
