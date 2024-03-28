@@ -484,10 +484,10 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, configPrivKey 
 		logger.Fatal("could not get hashed private key", zap.Error(err))
 	}
 
-	// configStoragePrivKeyHash, err := configPrivKey.StorageHash()
-	// if err != nil {
-	// 	logger.Fatal("could not hash private key", zap.Error(err))
-	// }
+	configStoragePrivKeyHash2, err := configPrivKey.StorageHash()
+	if err != nil {
+		logger.Fatal("could not hash private key", zap.Error(err))
+	}
 
 	x, err := base64.StdEncoding.DecodeString(cfg.OperatorPrivateKey)
 	if err != nil {
@@ -497,6 +497,8 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, configPrivKey 
 	if err != nil {
 		logger.Fatal("could not hash private key", zap.Error(err))
 	}
+
+	log.Printf("hash1: %s, hash2: %s", configStoragePrivKeyHash, configStoragePrivKeyHash2)
 
 	if !found {
 		if err := nodeStorage.SavePrivateKeyHash(configStoragePrivKeyHash); err != nil {
