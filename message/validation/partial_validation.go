@@ -6,7 +6,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"golang.org/x/exp/slices"
 
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -70,12 +69,6 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 	signerState.MessageCounts.RecordPartialSignatureMessage(signedMsg)
 
 	return msgSlot, nil
-}
-
-func (mv *messageValidator) inCommittee(share *ssvtypes.SSVShare) bool {
-	return slices.ContainsFunc(share.Committee, func(operator *spectypes.Operator) bool {
-		return operator.OperatorID == mv.ownOperatorID
-	})
 }
 
 func (mv *messageValidator) validPartialSigMsgType(msgType spectypes.PartialSigMsgType) bool {

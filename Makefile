@@ -1,14 +1,14 @@
-ifndef $(GOPATH)
+ifndef GOPATH
     GOPATH=$(shell go env GOPATH)
     export GOPATH
 endif
 
-ifndef $(HOST_ADDRESS)
+ifndef HOST_ADDRESS
     HOST_ADDRESS=$(shell dig @resolver4.opendns.com myip.opendns.com +short)
     export HOST_ADDRESS
 endif
 
-ifndef $(BUILD_PATH)
+ifndef BUILD_PATH
     BUILD_PATH="/go/bin/ssvnode"
     export BUILD_PATH
 endif
@@ -55,7 +55,7 @@ integration-test:
 .PHONY: unit-test
 unit-test:
 	@echo "Running unit tests"
-	@go test -tags blst_enabled -timeout 20m ${COV_CMD} -race -p 1 -v `go list ./... | grep -ve "spectest\|integration\|ssv/scripts/"`
+	@go test -tags blst_enabled -timeout 20m -race -covermode=atomic -coverprofile=coverage.out -p 1 `go list ./... | grep -ve "spectest\|integration\|ssv/scripts/"`
 
 .PHONY: spec-test
 spec-test:

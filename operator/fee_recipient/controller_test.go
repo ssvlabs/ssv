@@ -46,7 +46,9 @@ func TestSubmitProposal(t *testing.T) {
 		Network:          network,
 		ShareStorage:     shareStorage,
 		RecipientStorage: recipientStorage,
-		OperatorData:     operatorData,
+		GetOperatorID: func() spectypes.OperatorID {
+			return operatorData.ID
+		},
 	})
 
 	t.Run("submit first time or halfway through epoch", func(t *testing.T) {

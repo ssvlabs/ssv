@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
 	"golang.org/x/exp/maps"
@@ -206,9 +207,9 @@ func ByActiveValidator() SharesFilter {
 }
 
 // ByAttesting filters for attesting validators.
-func ByAttesting() SharesFilter {
+func ByAttesting(epoch phase0.Epoch) SharesFilter {
 	return func(share *types.SSVShare) bool {
-		return share.HasBeaconMetadata() && share.BeaconMetadata.IsAttesting()
+		return share.IsAttesting(epoch)
 	}
 }
 
@@ -220,7 +221,7 @@ func ByClusterID(clusterID []byte) SharesFilter {
 			operatorIDs = append(operatorIDs, op.OperatorID)
 		}
 
-		shareClusterID, _ := types.ComputeClusterIDHash(share.OwnerAddress.Bytes(), operatorIDs)
+		shareClusterID := types.ComputeClusterIDHash(share.OwnerAddress, operatorIDs)
 		return bytes.Equal(shareClusterID, clusterID)
 	}
 }

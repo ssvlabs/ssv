@@ -2,10 +2,8 @@ package goclient
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math"
-	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -22,6 +20,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/message/validation"
 	"github.com/bloxapp/ssv/operator/slotticker"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
@@ -32,8 +31,8 @@ const (
 	DataVersionNil spec.DataVersion = math.MaxUint64
 
 	// Client timeouts.
-	DefaultCommonTimeout = time.Second * 5   // For dialing and most requests.
-	DefaultLongTimeout   = time.Second * 120 // For long requests.
+	DefaultCommonTimeout = time.Second * 5  // For dialing and most requests.
+	DefaultLongTimeout   = time.Second * 10 // For long requests.
 )
 
 type beaconNodeStatus int32
@@ -81,6 +80,7 @@ type NodeClient string
 const (
 	NodeLighthouse NodeClient = "lighthouse"
 	NodePrysm      NodeClient = "prysm"
+	NodeNimbus     NodeClient = "nimbus"
 	NodeUnknown    NodeClient = "unknown"
 )
 
@@ -92,6 +92,8 @@ func ParseNodeClient(version string) NodeClient {
 		return NodeLighthouse
 	case strings.Contains(version, "prysm"):
 		return NodePrysm
+	case strings.Contains(version, "nimbus"):
+		return NodeNimbus
 	default:
 		return NodeUnknown
 	}
@@ -102,6 +104,8 @@ type Client interface {
 	eth2client.Service
 	eth2client.NodeVersionProvider
 	eth2client.NodeClientProvider
+	eth2client.SpecProvider
+	eth2client.GenesisProvider
 
 	eth2client.AttestationDataProvider
 	eth2client.AttestationsSubmitter
@@ -116,6 +120,7 @@ type Client interface {
 	eth2client.ProposalProvider
 	eth2client.ProposalSubmitter
 	eth2client.BlindedProposalProvider
+	eth2client.V3ProposalProvider
 	eth2client.BlindedProposalSubmitter
 	eth2client.DomainProvider
 	eth2client.SyncCommitteeMessagesSubmitter
@@ -145,7 +150,7 @@ type goClient struct {
 	nodeClient           NodeClient
 	graffiti             []byte
 	gasLimit             uint64
-	operatorID           spectypes.OperatorID
+	getOperatorID        validation.OperatorIDGetter
 	registrationMu       sync.Mutex
 	registrationLastSlot phase0.Slot
 	registrationCache    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration
@@ -154,7 +159,12 @@ type goClient struct {
 }
 
 // New init new client and go-client instance
-func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.OperatorID, slotTickerProvider slotticker.Provider) (beaconprotocol.BeaconNode, error) {
+func New(
+	logger *zap.Logger,
+	opt beaconprotocol.Options,
+	getOperatorID validation.OperatorIDGetter,
+	slotTickerProvider slotticker.Provider,
+) (beaconprotocol.BeaconNode, error) {
 	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(string(opt.Network.BeaconNetwork)))
 
 	commonTimeout := opt.CommonTimeout
@@ -184,7 +194,7 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 		client:            httpClient.(*eth2clienthttp.Service),
 		graffiti:          opt.Graffiti,
 		gasLimit:          opt.GasLimit,
-		operatorID:        operatorID,
+		getOperatorID:     getOperatorID,
 		registrationCache: map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
 		commonTimeout:     commonTimeout,
 		longTimeout:       longTimeout,
@@ -207,15 +217,6 @@ func New(logger *zap.Logger, opt beaconprotocol.Options, operatorID spectypes.Op
 		zap.String("client", string(client.nodeClient)),
 		zap.String("version", client.nodeVersion),
 	)
-
-	// If it's a Prysm, check that the debug endpoints are enabled, otherwise
-	// the Validators method might fail when calling BeaconState.
-	// TODO: remove this once Prysm enables debug endpoints by default.
-	if client.nodeClient == NodePrysm {
-		if err := client.checkPrysmDebugEndpoints(); err != nil {
-			return nil, err
-		}
-	}
 
 	// Start registration submitter.
 	go client.registrationSubmitter(slotTickerProvider)
@@ -274,46 +275,4 @@ func (gc *goClient) slotStartTime(slot phase0.Slot) time.Time {
 
 func (gc *goClient) Events(ctx context.Context, topics []string, handler eth2client.EventHandlerFunc) error {
 	return gc.client.Events(ctx, topics, handler)
-}
-
-func (gc *goClient) checkPrysmDebugEndpoints() error {
-	start := time.Now()
-	address := strings.TrimSuffix(gc.client.Address(), "/")
-	if !strings.HasPrefix(address, "http") {
-		address = fmt.Sprintf("http://%s", address)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), DefaultCommonTimeout)
-	defer cancel()
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/eth/v2/debug/beacon/heads", address), nil)
-	if err != nil {
-		return fmt.Errorf("failed to create beacon heads request: %w", err)
-	}
-	resp, err := (&http.Client{}).Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to get beacon heads: %w", err)
-	}
-	if resp.StatusCode == http.StatusNotFound {
-		return fmt.Errorf("Prysm node doesn't have debug endpoints enabled, please enable them with --enable-debug-rpc-endpoints")
-	}
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to get beacon heads: %s", resp.Status)
-	}
-	var data struct {
-		Data []struct {
-			Root phase0.Root `json:"root"`
-		} `json:"data"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		return fmt.Errorf("failed to decode beacon heads response: %w", err)
-	}
-	if len(data.Data) == 0 {
-		return fmt.Errorf("no beacon heads found")
-	}
-	if data.Data[0].Root == (phase0.Root{}) {
-		return fmt.Errorf("beacon head is empty")
-	}
-	gc.log.Debug("Prysm debug endpoints are enabled", zap.Duration("took", time.Since(start)))
-	return nil
 }

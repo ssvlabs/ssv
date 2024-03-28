@@ -11,10 +11,11 @@ import (
 	"time"
 
 	"github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/operator/slotticker"
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/operator/slotticker"
+	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 
 func TestTimeouts(t *testing.T) {
@@ -37,13 +38,14 @@ func TestTimeouts(t *testing.T) {
 	// Too slow to respond to the Validators request.
 	{
 		unresponsiveServer := mockServer(t, delays{
-			BeaconStateDelay: longTimeout * 2,
+			ValidatorsDelay:  longTimeout * 2,
+			BeaconStateDelay: longTimeout / 2,
 		})
 		client, err := mockClient(t, ctx, unresponsiveServer.URL, commonTimeout, longTimeout)
 		require.NoError(t, err)
 
 		require.NoError(t, err)
-		_, err = client.(*goClient).GetValidatorData(nil) // Should call BeaconState internally.
+		_, err = client.(*goClient).GetValidatorData(nil) // Shouldn't call BeaconState internally.
 		require.ErrorContains(t, err, "context deadline exceeded")
 
 		duties, err := client.(*goClient).ProposerDuties(ctx, mockServerEpoch, nil)
@@ -92,7 +94,7 @@ func mockClient(t *testing.T, ctx context.Context, serverURL string, commonTimeo
 			CommonTimeout:  commonTimeout,
 			LongTimeout:    longTimeout,
 		},
-		0,
+		func() types.OperatorID { return 0 },
 		func() slotticker.SlotTicker {
 			return slotticker.New(zap.NewNop(), slotticker.Config{
 				SlotDuration: 12 * time.Second,
