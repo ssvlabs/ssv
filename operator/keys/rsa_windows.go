@@ -9,8 +9,7 @@ import (
 )
 
 func SignRSA(priv *privateKey, data []byte) ([]byte, error) {
-	hash := sha256.Sum256(data)
-	return rsa.SignPKCS1v15(rand.Reader, priv.privKey, crypto.SHA256, hash[:])
+	return rsa.SignPKCS1v15(rand.Reader, priv.privKey, crypto.SHA256, data)
 }
 
 func EncryptRSA(pub *publicKey, data []byte) ([]byte, error) {
