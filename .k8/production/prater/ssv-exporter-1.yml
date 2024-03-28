@@ -158,7 +158,7 @@ spec:
           hostPort: 16009
         env:
           - name: SHARE_CONFIG
-            value: "./data/share.yaml"
+            value: "/data/share.yaml"
           - name: LOG_LEVEL
             value: "debug"
           - name: DB_REPORTING
@@ -170,7 +170,7 @@ spec:
           - name: NETWORK
             value: "jato-v2"
           - name: DB_PATH
-            value: "./data/db-jato-v2"
+            value: "/data/db-jato-v2"
           - name: METRICS_API_PORT
             value: "15009"
           - name: SSV_API_PORT

@@ -88,7 +88,7 @@ spec:
               hostPort: 16073
           env:
             - name: SHARE_CONFIG
-              value: "./data/share.yaml"
+              value: "/data/share.yaml"
             - name: CONFIG_PATH
               valueFrom:
                 secretKeyRef:
@@ -107,7 +107,7 @@ spec:
             - name: DISCOVERY_TYPE_KEY
               value: "discv5"
             - name: DB_PATH
-              value: "./data/db-holesky-stage"
+              value: "/data/db-holesky-stage"
             - name: NETWORK
               value: "holesky-stage"
             - name: DB_REPORTING
