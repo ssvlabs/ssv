@@ -69,7 +69,7 @@ func checkCachePubkey(pub *publicKey) (*openssl.PublicKeyRSA, error) {
 }
 
 func EncryptRSA(pub *publicKey, data []byte) ([]byte, error) {
-	opub, err := rsaPublicKeyToOpenSSL(pub.pubKey)
+	opub, err := checkCachePubkey(pub)
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +77,7 @@ func EncryptRSA(pub *publicKey, data []byte) ([]byte, error) {
 }
 
 func VerifyRSA(pub *publicKey, data, signature []byte) error {
-	opub, err := rsaPublicKeyToOpenSSL(pub.pubKey)
+	opub, err := checkCachePubkey(pub)
 	if err != nil {
 		return err
 	}
