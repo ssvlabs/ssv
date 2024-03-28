@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"sort"
 
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -59,6 +61,11 @@ func (s *SSVShare) BelongsToOperator(operatorID spectypes.OperatorID) bool {
 // HasBeaconMetadata checks whether the BeaconMetadata field is not nil.
 func (s *SSVShare) HasBeaconMetadata() bool {
 	return s != nil && s.BeaconMetadata != nil
+}
+
+func (s *SSVShare) IsAttesting(epoch phase0.Epoch) bool {
+	return s.HasBeaconMetadata() &&
+		(s.BeaconMetadata.IsAttesting() || (s.BeaconMetadata.Status == eth2apiv1.ValidatorStatePendingQueued && s.BeaconMetadata.ActivationEpoch <= epoch))
 }
 
 func (s *SSVShare) SetFeeRecipient(feeRecipient bellatrix.ExecutionAddress) {

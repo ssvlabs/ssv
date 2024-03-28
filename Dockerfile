@@ -57,10 +57,10 @@ FROM alpine:3.18.3 AS runner
 
 # Install ca-certificates, bash
 RUN apk -v --update add \
-  ca-certificates=20230506-r0 \
+  ca-certificates=20240226-r0 \
   bash=5.2.15-r5 \
   make=4.4.1-r1 \
-  bind-tools=9.18.19-r0 && \
+  bind-tools=9.18.24-r0 && \
   rm /var/cache/apk/*
 
 COPY --from=builder /go/bin/ssvnode /go/bin/ssvnode

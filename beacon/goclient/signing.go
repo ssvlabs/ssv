@@ -1,15 +1,70 @@
 package goclient
 
 import (
+	"context"
 	"crypto/sha256"
+	"fmt"
 	"hash"
 	"sync"
 
+	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 )
+
+func (gc *goClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Domain, error) {
+	specResponse, err := gc.client.Spec(gc.ctx, &api.SpecOpts{})
+	if err != nil {
+		return phase0.Domain{}, fmt.Errorf("failed to obtain spec response: %w", err)
+	}
+	if specResponse == nil {
+		return phase0.Domain{}, fmt.Errorf("spec response is nil")
+	}
+	if specResponse.Data == nil {
+		return phase0.Domain{}, fmt.Errorf("spec response data is nil")
+	}
+
+	// TODO: consider storing fork version and genesis validators root in goClient
+	//		instead of fetching it every time
+
+	forkVersionRaw, ok := specResponse.Data["CAPELLA_FORK_VERSION"]
+	if !ok {
+		return phase0.Domain{}, fmt.Errorf("capella fork version not known by chain")
+	}
+	forkVersion, ok := forkVersionRaw.(phase0.Version)
+	if !ok {
+		return phase0.Domain{}, fmt.Errorf("failed to decode capella fork version")
+	}
+
+	forkData := &phase0.ForkData{
+		CurrentVersion: forkVersion,
+	}
+
+	genesisResponse, err := gc.client.Genesis(ctx, &api.GenesisOpts{})
+	if err != nil {
+		return phase0.Domain{}, fmt.Errorf("failed to obtain genesis response: %w", err)
+	}
+	if genesisResponse == nil {
+		return phase0.Domain{}, fmt.Errorf("genesis response is nil")
+	}
+	if genesisResponse.Data == nil {
+		return phase0.Domain{}, fmt.Errorf("genesis response data is nil")
+	}
+	forkData.GenesisValidatorsRoot = genesisResponse.Data.GenesisValidatorsRoot
+
+	root, err := forkData.HashTreeRoot()
+	if err != nil {
+		return phase0.Domain{}, fmt.Errorf("failed to calculate signature domain, err: %w", err)
+	}
+
+	var domain phase0.Domain
+	copy(domain[:], spectypes.DomainVoluntaryExit[:])
+	copy(domain[4:], root[:])
+
+	return domain, nil
+}
 
 func (gc *goClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (phase0.Domain, error) {
 	if domain == spectypes.DomainApplicationBuilder { // no domain for DomainApplicationBuilder. need to create.  https://github.com/bloxapp/ethereum2-validator/blob/v2-main/signing/keyvault/signer.go#L62
@@ -25,6 +80,8 @@ func (gc *goClient) DomainData(epoch phase0.Epoch, domain phase0.DomainType) (ph
 		copy(appDomain[:], domain[:])
 		copy(appDomain[4:], root[:])
 		return appDomain, nil
+	} else if domain == spectypes.DomainVoluntaryExit {
+		return gc.computeVoluntaryExitDomain(gc.ctx)
 	}
 
 	data, err := gc.client.Domain(gc.ctx, domain, epoch)
