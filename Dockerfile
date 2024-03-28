@@ -63,6 +63,8 @@ FROM golang:1.20.7 AS runner
 #  bind-tools=9.18.24-r0 && \
 #  rm /var/cache/apk/*
 
+WORKDIR /
+
 COPY --from=builder /go/bin/ssvnode /go/bin/ssvnode
 COPY ./Makefile .env* ./
 COPY config/* ./config/
