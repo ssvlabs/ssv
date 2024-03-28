@@ -193,7 +193,6 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.SignedMessage) error {
 			return errors.New("did not receive proposal for this round")
 		}
 		return validateCommit(
-			i.config,
 			msg,
 			i.State.Height,
 			i.State.Round,

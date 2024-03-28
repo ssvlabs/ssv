@@ -167,7 +167,6 @@ func BaseCommitValidationWithVerification(
 }
 
 func validateCommit(
-	config qbft.IConfig,
 	signedCommit *specqbft.SignedMessage,
 	height specqbft.Height,
 	round specqbft.Round,
