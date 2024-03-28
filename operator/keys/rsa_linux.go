@@ -1,4 +1,4 @@
-//go:build !darwin
+//go:build linux
 
 package keys
 
@@ -8,35 +8,35 @@ import (
 	"crypto/sha256"
 	"math/big"
 
-	openssl "github.com/golang-fips/openssl/v2"
-	bbig "github.com/golang-fips/openssl/v2/bbig"
+	openssl "github.com/microsoft/go-crypto-openssl/openssl"
+	"github.com/microsoft/go-crypto-openssl/openssl/bbig/bridge"
 )
 
 func init() {
 	// TODO: check multiple versions of openssl
 	// TODO: fallback to stdlib when openssl is not available
-	if err := openssl.Init("libcrypto.so.3"); err != nil {
+	if err := openssl.Init(); err != nil {
 		panic(err)
 	}
 }
 
 func rsaPrivateKeyToOpenSSL(priv *rsa.PrivateKey) (*openssl.PrivateKeyRSA, error) {
-	return openssl.NewPrivateKeyRSA(
-		bbig.Enc(priv.N),
-		bbig.Enc(big.NewInt(int64(priv.E))),
-		bbig.Enc(priv.D),
-		bbig.Enc(priv.Primes[0]),
-		bbig.Enc(priv.Primes[1]),
-		bbig.Enc(priv.Precomputed.Dp),
-		bbig.Enc(priv.Precomputed.Dq),
-		bbig.Enc(priv.Precomputed.Qinv),
+	return bridge.NewPrivateKeyRSA(
+		priv.N,
+		big.NewInt(int64(priv.E)),
+		priv.D,
+		priv.Primes[0],
+		priv.Primes[1],
+		priv.Precomputed.Dp,
+		priv.Precomputed.Dq,
+		priv.Precomputed.Qinv,
 	)
 }
 
 func rsaPublicKeyToOpenSSL(pub *rsa.PublicKey) (*openssl.PublicKeyRSA, error) {
-	return openssl.NewPublicKeyRSA(
-		bbig.Enc(pub.N),
-		bbig.Enc(big.NewInt(int64(pub.E))),
+	return bridge.NewPublicKeyRSA(
+		pub.N,
+		big.NewInt(int64(pub.E)),
 	)
 }
 
