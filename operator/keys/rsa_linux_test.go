@@ -31,7 +31,7 @@ func Test_VerifyOpenSSLWithOpenSSL(t *testing.T) {
 	require.NoError(t, err)
 	msg := []byte("hello")
 	priv := &privateKey{key, nil}
-	sig, err := SignRSA(priv, msg)
+	sig, err := priv.Sign(msg)
 	require.NoError(t, err)
 
 	pub := priv.Public().(*publicKey)
