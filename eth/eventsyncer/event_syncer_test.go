@@ -11,6 +11,7 @@ import (
 
 	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/eth/simulator"
+	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/validatorsmap"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 
@@ -137,6 +138,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger) *e
 
 	storageMap := ibftstorage.NewStores()
 	nodeStorage, operatorData := setupOperatorStorage(logger, db)
+	operatorDataStore := operatordatastore.New(operatorData)
 	testNetworkConfig := networkconfig.TestNetwork
 
 	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, true, "")
@@ -149,11 +151,11 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger) *e
 
 	bc := beacon.NewMockBeaconNode(ctrl)
 	validatorCtrl := validator.NewController(logger, validator.ControllerOptions{
-		Context:         ctx,
-		DB:              db,
-		RegistryStorage: nodeStorage,
-		OperatorData:    operatorData,
-		ValidatorsMap:   validatorsmap.New(ctx),
+		Context:           ctx,
+		DB:                db,
+		RegistryStorage:   nodeStorage,
+		OperatorDataStore: operatorDataStore,
+		ValidatorsMap:     validatorsmap.New(ctx),
 	})
 
 	contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
@@ -166,7 +168,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger) *e
 		parser,
 		validatorCtrl,
 		testNetworkConfig,
-		validatorCtrl,
+		operatorDataStore,
 		nodeStorage.GetPrivateKey,
 		keyManager,
 		bc,

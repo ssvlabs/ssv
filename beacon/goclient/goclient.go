@@ -20,7 +20,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/message/validation"
+	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/slotticker"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
@@ -150,7 +150,7 @@ type goClient struct {
 	nodeClient           NodeClient
 	graffiti             []byte
 	gasLimit             uint64
-	getOperatorID        validation.OperatorIDGetter
+	operatorDataStore    operatordatastore.OperatorDataStore
 	registrationMu       sync.Mutex
 	registrationLastSlot phase0.Slot
 	registrationCache    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration
@@ -162,7 +162,7 @@ type goClient struct {
 func New(
 	logger *zap.Logger,
 	opt beaconprotocol.Options,
-	getOperatorID validation.OperatorIDGetter,
+	operatorDataStore operatordatastore.OperatorDataStore,
 	slotTickerProvider slotticker.Provider,
 ) (beaconprotocol.BeaconNode, error) {
 	logger.Info("consensus client: connecting", fields.Address(opt.BeaconNodeAddr), fields.Network(string(opt.Network.BeaconNetwork)))
@@ -194,13 +194,12 @@ func New(
 		client:            httpClient.(*eth2clienthttp.Service),
 		graffiti:          opt.Graffiti,
 		gasLimit:          opt.GasLimit,
-		getOperatorID:     getOperatorID,
+		operatorDataStore: operatorDataStore,
 		registrationCache: map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
 		commonTimeout:     commonTimeout,
 		longTimeout:       longTimeout,
 	}
 
-	// Get the node's version and client.
 	nodeVersionResp, err := client.client.NodeVersion(opt.Context, &api.NodeVersionOpts{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get node version: %w", err)
@@ -218,8 +217,9 @@ func New(
 		zap.String("version", client.nodeVersion),
 	)
 
-	// Start registration submitter.
-	go client.registrationSubmitter(slotTickerProvider)
+	if operatorDataStore != nil {
+		go client.registrationSubmitter(slotTickerProvider)
+	}
 
 	return client, nil
 }

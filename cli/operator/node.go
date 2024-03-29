@@ -12,16 +12,12 @@ import (
 	"os"
 	"time"
 
-	"github.com/bloxapp/ssv/network"
-
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
-
-	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 
 	"github.com/bloxapp/ssv/api/handlers"
 	apiserver "github.com/bloxapp/ssv/api/server"
@@ -43,9 +39,12 @@ import (
 	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/monitoring/metricsreporter"
+	"github.com/bloxapp/ssv/network"
+	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/nodeprobe"
 	"github.com/bloxapp/ssv/operator"
+	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
 	"github.com/bloxapp/ssv/operator/slotticker"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
@@ -121,6 +120,7 @@ var StartNodeCmd = &cobra.Command{
 		}
 
 		nodeStorage, operatorData := setupOperatorStorage(logger, db)
+		operatorDataStore := operatordatastore.New(operatorData)
 
 		usingLocalEvents := len(cfg.LocalEventsPath) != 0
 
@@ -153,12 +153,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.ConsensusClient.GasLimit = spectypes.DefaultGasLimit
 		cfg.ConsensusClient.Network = networkConfig.Beacon.GetNetwork()
 
-		var validatorCtrl validator.Controller
-		getOperatorID := func() spectypes.OperatorID {
-			return validatorCtrl.GetOperatorID()
-		}
-
-		consensusClient := setupConsensusClient(logger, getOperatorID, slotTickerProvider)
+		consensusClient := setupConsensusClient(logger, operatorDataStore, slotTickerProvider)
 
 		executionClient, err := executionclient.New(
 			cmd.Context(),
@@ -178,7 +173,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.Permissioned = permissioned
 		cfg.P2pNetworkConfig.NodeStorage = nodeStorage
 		cfg.P2pNetworkConfig.OperatorPubKeyHash = format.OperatorID(operatorData.PublicKey)
-		cfg.P2pNetworkConfig.GetOperatorID = getOperatorID
+		cfg.P2pNetworkConfig.OperatorDataStore = operatorDataStore
 		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
 		cfg.P2pNetworkConfig.Network = networkConfig
 
@@ -193,7 +188,7 @@ var StartNodeCmd = &cobra.Command{
 			validation.WithLogger(logger),
 			validation.WithMetrics(metricsReporter),
 			validation.WithDutyStore(dutyStore),
-			validation.WithOwnOperatorID(getOperatorID),
+			validation.WithOwnOperatorID(operatorDataStore),
 		)
 
 		cfg.P2pNetworkConfig.Metrics = metricsReporter
@@ -217,7 +212,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.ValidatorsMap = validatorsMap
 
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = nodeStorage.GetPrivateKey
-		cfg.SSVOptions.ValidatorOptions.OperatorData = operatorData
+		cfg.SSVOptions.ValidatorOptions.OperatorDataStore = operatorDataStore
 		cfg.SSVOptions.ValidatorOptions.RegistryStorage = nodeStorage
 		cfg.SSVOptions.ValidatorOptions.RecipientsStorage = nodeStorage
 		cfg.SSVOptions.ValidatorOptions.GasLimit = cfg.ConsensusClient.GasLimit
@@ -250,7 +245,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.Metrics = metricsReporter
 		cfg.SSVOptions.Metrics = metricsReporter
 
-		validatorCtrl = validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
+		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 
 		operatorNode = operator.New(logger, cfg.SSVOptions, slotTickerProvider)
@@ -289,6 +284,7 @@ var StartNodeCmd = &cobra.Command{
 			metricsReporter,
 			networkConfig,
 			nodeStorage,
+			operatorDataStore,
 		)
 		nodeProber.AddNode("event syncer", eventSyncer)
 
@@ -547,10 +543,10 @@ func setupP2P(logger *zap.Logger, db basedb.Database, mr metricsreporter.Metrics
 
 func setupConsensusClient(
 	logger *zap.Logger,
-	getOperatorID validation.OperatorIDGetter,
+	operatorDataStore operatordatastore.OperatorDataStore,
 	slotTickerProvider slotticker.Provider,
 ) beaconprotocol.BeaconNode {
-	cl, err := goclient.New(logger, cfg.ConsensusClient, getOperatorID, slotTickerProvider)
+	cl, err := goclient.New(logger, cfg.ConsensusClient, operatorDataStore, slotTickerProvider)
 	if err != nil {
 		logger.Fatal("failed to create beacon go-client", zap.Error(err),
 			fields.Address(cfg.ConsensusClient.BeaconNodeAddr))
@@ -568,6 +564,7 @@ func setupEventHandling(
 	metricsReporter metricsreporter.MetricsReporter,
 	networkConfig networkconfig.NetworkConfig,
 	nodeStorage operatorstorage.Storage,
+	operatorDataStore operatordatastore.OperatorDataStore,
 ) *eventsyncer.EventSyncer {
 	eventFilterer, err := executionClient.Filterer()
 	if err != nil {
@@ -581,7 +578,7 @@ func setupEventHandling(
 		eventParser,
 		validatorCtrl,
 		networkConfig,
-		validatorCtrl,
+		operatorDataStore,
 		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider,
 		cfg.SSVOptions.ValidatorOptions.KeyManager,
 		cfg.SSVOptions.ValidatorOptions.Beacon,
@@ -645,10 +642,11 @@ func setupEventHandling(
 		if err != nil {
 			logger.Error("failed to get operators", zap.Error(err))
 		}
-		operatorID := validatorCtrl.GetOperatorID()
+
 		operatorValidators := 0
 		liquidatedValidators := 0
-		if operatorID != 0 {
+		operatorID := operatorDataStore.GetOperatorID()
+		if operatorDataStore.OperatorIDReady() {
 			for _, share := range shares {
 				if share.BelongsToOperator(operatorID) {
 					operatorValidators++

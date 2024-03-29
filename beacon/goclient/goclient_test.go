@@ -94,7 +94,7 @@ func mockClient(t *testing.T, ctx context.Context, serverURL string, commonTimeo
 			CommonTimeout:  commonTimeout,
 			LongTimeout:    longTimeout,
 		},
-		func() types.OperatorID { return 0 },
+		nil,
 		func() slotticker.SlotTicker {
 			return slotticker.New(zap.NewNop(), slotticker.Config{
 				SlotDuration: 12 * time.Second,

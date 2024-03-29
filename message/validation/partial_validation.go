@@ -16,10 +16,12 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 	msgID spectypes.MessageID,
 	signatureVerifier func() error,
 ) (phase0.Slot, error) {
-	if mv.inCommittee(share) {
-		mv.metrics.InCommitteeMessage(spectypes.SSVPartialSignatureMsgType, false)
-	} else {
-		mv.metrics.NonCommitteeMessage(spectypes.SSVPartialSignatureMsgType, false)
+	if mv.operatorDataStore != nil && mv.operatorDataStore.OperatorIDReady() {
+		if mv.inCommittee(share) {
+			mv.metrics.InCommitteeMessage(spectypes.SSVPartialSignatureMsgType, false)
+		} else {
+			mv.metrics.NonCommitteeMessage(spectypes.SSVPartialSignatureMsgType, false)
+		}
 	}
 
 	msgSlot := signedMsg.Message.Slot
