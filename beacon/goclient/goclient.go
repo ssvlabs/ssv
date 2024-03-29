@@ -217,9 +217,7 @@ func New(
 		zap.String("version", client.nodeVersion),
 	)
 
-	if operatorDataStore != nil {
-		go client.registrationSubmitter(slotTickerProvider)
-	}
+	go client.registrationSubmitter(slotTickerProvider)
 
 	return client, nil
 }
