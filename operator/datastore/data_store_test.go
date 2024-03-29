@@ -42,6 +42,37 @@ func TestSetAndGetOperatorData(t *testing.T) {
 	assert.Equal(t, data, returnedData)
 }
 
+func TestSetOperatorDataConditions(t *testing.T) {
+	t.Run("valid data sets operator ID ready", func(t *testing.T) {
+		store := New(nil).(*operatorDataStore)
+		data := &registrystorage.OperatorData{ID: 123}
+
+		store.SetOperatorData(data)
+
+		assert.True(t, store.OperatorIDReady(), "Operator ID should be marked as ready")
+		assert.Equal(t, spectypes.OperatorID(123), store.operatorData.ID, "Operator ID should match the input data")
+	})
+
+	t.Run("nil data does not set operator ID ready", func(t *testing.T) {
+		store := New(nil).(*operatorDataStore)
+
+		store.SetOperatorData(nil)
+
+		assert.False(t, store.OperatorIDReady(), "Operator ID should not be marked as ready with nil data")
+		assert.Nil(t, store.operatorData, "Operator data should remain nil")
+	})
+
+	t.Run("data with zero ID does not set operator ID ready", func(t *testing.T) {
+		store := New(nil).(*operatorDataStore)
+		data := &registrystorage.OperatorData{ID: 0}
+
+		store.SetOperatorData(data)
+
+		assert.False(t, store.OperatorIDReady(), "Operator ID should not be marked as ready with zero ID")
+		assert.Equal(t, spectypes.OperatorID(0), store.operatorData.ID, "Operator ID should be zero")
+	})
+}
+
 func TestGetOperatorID(t *testing.T) {
 	data := &registrystorage.OperatorData{ID: 123}
 	store := New(data).(*operatorDataStore)

@@ -77,12 +77,14 @@ func (ods *operatorDataStore) AwaitOperatorID() spectypes.OperatorID {
 }
 
 // SetOperatorData sets the operator data in a thread-safe manner and marks the operator ID as ready if valid.
-func (ods *operatorDataStore) SetOperatorData(data *registrystorage.OperatorData) {
+func (ods *operatorDataStore) SetOperatorData(od *registrystorage.OperatorData) {
 	ods.operatorDataMu.Lock()
 	defer ods.operatorDataMu.Unlock()
 
-	ods.operatorData = data
-	ods.setOperatorIDReady()
+	ods.operatorData = od
+	if od != nil && od.ID != 0 {
+		ods.setOperatorIDReady()
+	}
 }
 
 // setOperatorIDReady marks the operator ID as ready and notifies waiting goroutines.
