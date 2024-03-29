@@ -285,7 +285,11 @@ func (c *controller) setupNetworkHandlers() error {
 }
 
 func (c *controller) GetOperatorShares() []*ssvtypes.SSVShare {
-	return c.sharesStorage.List(nil, registrystorage.ByOperatorID(c.operatorDataStore.GetOperatorID()), registrystorage.ByActiveValidator())
+	return c.sharesStorage.List(
+		nil,
+		registrystorage.ByOperatorID(c.operatorDataStore.GetOperatorID()),
+		registrystorage.ByActiveValidator(),
+	)
 }
 
 func (c *controller) IndicesChangeChan() chan struct{} {
