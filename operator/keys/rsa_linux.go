@@ -73,7 +73,7 @@ func SignRSA(priv *privateKey, data []byte) ([]byte, error) {
 
 func checkCachePubkey(pub *publicKey) (*openssl.PublicKeyRSA, error) {
 	if pub.cachedPubkey != nil {
-		return pub.cachePubkey, nil
+		return pub.cachedPubkey, nil
 	}
 
 	opub, err := rsaPublicKeyToOpenSSL(pub.pubKey)
