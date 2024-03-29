@@ -38,7 +38,6 @@ import (
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/network"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/nodeprobe"

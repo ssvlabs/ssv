@@ -153,7 +153,7 @@ type controller struct {
 	beacon     beaconprotocol.BeaconNode
 	keyManager spectypes.KeyManager
 
-	operatorDataStore          operatordatastore.OperatorDataStore
+	operatorDataStore operatordatastore.OperatorDataStore
 
 	validatorOptions        validator.Options
 	validatorsMap           *validatorsmap.ValidatorsMap

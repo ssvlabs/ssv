@@ -61,7 +61,7 @@ type EventHandler struct {
 	taskExecutor      taskExecutor
 	eventParser       eventparser.Parser
 	networkConfig     networkconfig.NetworkConfig
-	operatorDataStore          operatordatastore.OperatorDataStore
+	operatorDataStore operatordatastore.OperatorDataStore
 	operatorDecrypter keys.OperatorDecrypter
 	keyManager        spectypes.KeyManager
 	beacon            beaconprotocol.BeaconNode
