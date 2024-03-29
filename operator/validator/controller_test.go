@@ -18,6 +18,7 @@ import (
 
 	"github.com/bloxapp/ssv/ekm"
 	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
+	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator/mocks"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
@@ -62,11 +63,11 @@ type MockControllerOptions struct {
 	metadataLastUpdated map[string]time.Time
 	StorageMap          *ibftstorage.QBFTStores
 	validatorsMap       *validatorsmap.ValidatorsMap
-	operatorData        *registrystorage.OperatorData
+	operatorDataStore   operatordatastore.OperatorDataStore
 }
 
 func TestNewController(t *testing.T) {
-	operatorData := buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")
+	operatorDataStore := operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
 	_, logger, _, network, _, recipientStorage, bc := setupCommonTestComponents(t)
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
@@ -77,7 +78,7 @@ func TestNewController(t *testing.T) {
 		Metrics:           nil,
 		FullNode:          true,
 		Network:           network,
-		OperatorData:      operatorData,
+		OperatorDataStore: operatorDataStore,
 		RegistryStorage:   registryStorage,
 		RecipientsStorage: recipientStorage,
 		Context:           context.Background(),
@@ -90,7 +91,7 @@ func TestSetupNonCommitteeValidators(t *testing.T) {
 	passedEpoch := phase0.Epoch(1)
 	operators := buildOperators(t)
 
-	operatorData := buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")
+	operatorDataStore := operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
 	recipientData := buildFeeRecipient("67Ce5c69260bd819B4e0AD13f4b873074D479811", "45E668aba4b7fc8761331EC3CE77584B7A99A51A")
 
 	secretKey := &bls.SecretKey{}
@@ -192,7 +193,7 @@ func TestSetupNonCommitteeValidators(t *testing.T) {
 			controllerOptions := MockControllerOptions{
 				beacon:              bc,
 				network:             network,
-				operatorData:        operatorData,
+				operatorDataStore:   operatorDataStore,
 				sharesStorage:       sharesStorage,
 				recipientsStorage:   recipientStorage,
 				validatorsMap:       mockValidatorsMap,
@@ -341,7 +342,7 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 			// Initialize common setup
 			ctrl, logger, sharesStorage, network, km, recipientStorage, _ := setupCommonTestComponents(t)
 			defer ctrl.Finish()
-			operatorData := buildOperatorData(tc.operatorDataId, "67Ce5c69260bd819B4e0AD13f4b873074D479811")
+			operatorDataStore := operatordatastore.New(buildOperatorData(tc.operatorDataId, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
 			recipientData := buildFeeRecipient("67Ce5c69260bd819B4e0AD13f4b873074D479811", "45E668aba4b7fc8761331EC3CE77584B7A99A51A")
 			firstValidatorPublicKey := secretKey.GetPublicKey().SerializeToHexStr()
 
@@ -354,7 +355,7 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 			controllerOptions := MockControllerOptions{
 				keyManager:          km,
 				network:             network,
-				operatorData:        operatorData,
+				operatorDataStore:   operatorDataStore,
 				sharesStorage:       sharesStorage,
 				recipientsStorage:   recipientStorage,
 				validatorsMap:       mockValidatorsMap,
@@ -445,7 +446,7 @@ func TestSetupValidators(t *testing.T) {
 		},
 	}
 
-	operatorData := buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")
+	operatorDataStore := operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
 	recipientData := buildFeeRecipient("67Ce5c69260bd819B4e0AD13f4b873074D479811", "45E668aba4b7fc8761331EC3CE77584B7A99A51A")
 	ownerAddressBytes := decodeHex(t, "67Ce5c69260bd819B4e0AD13f4b873074D479811", "Failed to decode owner address")
 	feeRecipientBytes := decodeHex(t, "45E668aba4b7fc8761331EC3CE77584B7A99A51A", "Failed to decode second fee recipient address")
@@ -614,7 +615,7 @@ func TestSetupValidators(t *testing.T) {
 				beacon:            bc,
 				network:           network,
 				sharesStorage:     sharesStorage,
-				operatorData:      operatorData,
+				operatorDataStore: operatorDataStore,
 				recipientsStorage: recipientStorage,
 				validatorsMap:     mockValidatorsMap,
 				validatorOptions: validator.Options{
@@ -636,24 +637,6 @@ func TestSetupValidators(t *testing.T) {
 			//Add any assertions here to validate the behavior
 		})
 	}
-}
-
-func TestAssertionOperatorData(t *testing.T) {
-	// Setup logger and mock controller
-	logger := logging.TestLogger(t)
-	operatorData := buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")
-	newOperatorData := buildOperatorData(2, "64Ce5c69260bd819B4e0AD13f4b873074D479811")
-
-	// Set up the controller with mock data
-	controllerOptions := MockControllerOptions{
-		operatorData:  operatorData,
-		validatorsMap: validatorsmap.New(context.TODO()),
-	}
-	ctr := setupController(logger, controllerOptions)
-	ctr.SetOperatorData(newOperatorData)
-
-	// Compare the objects
-	require.Equal(t, newOperatorData, ctr.GetOperatorData(), "The operator data did not match the expected value")
 }
 
 func TestGetValidator(t *testing.T) {
@@ -737,10 +720,10 @@ func TestGetValidatorStats(t *testing.T) {
 
 		// Set up the controller with mock data for this subtest
 		controllerOptions := MockControllerOptions{
-			sharesStorage: sharesStorage,
-			validatorsMap: validatorsmap.New(context.TODO()),
-			operatorData:  buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"),
-			beacon:        bc,
+			sharesStorage:     sharesStorage,
+			validatorsMap:     validatorsmap.New(context.TODO()),
+			operatorDataStore: operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")),
+			beacon:            bc,
 		}
 
 		ctr := setupController(logger, controllerOptions)
@@ -787,10 +770,10 @@ func TestGetValidatorStats(t *testing.T) {
 
 		// Set up the controller with mock data for this subtest
 		controllerOptions := MockControllerOptions{
-			sharesStorage: sharesStorage,
-			validatorsMap: validatorsmap.New(context.TODO()),
-			operatorData:  buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"),
-			beacon:        bc,
+			sharesStorage:     sharesStorage,
+			validatorsMap:     validatorsmap.New(context.TODO()),
+			operatorDataStore: operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")),
+			beacon:            bc,
 		}
 		ctr := setupController(logger, controllerOptions)
 
@@ -825,10 +808,10 @@ func TestGetValidatorStats(t *testing.T) {
 
 		// Set up the controller with mock data for this subtest
 		controllerOptions := MockControllerOptions{
-			sharesStorage: sharesStorage,
-			validatorsMap: validatorsmap.New(context.TODO()),
-			operatorData:  buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"),
-			beacon:        bc,
+			sharesStorage:     sharesStorage,
+			validatorsMap:     validatorsmap.New(context.TODO()),
+			operatorDataStore: operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")),
+			beacon:            bc,
 		}
 		ctr := setupController(logger, controllerOptions)
 
@@ -885,10 +868,10 @@ func TestGetValidatorStats(t *testing.T) {
 
 		// Set up the controller with mock data for this subtest
 		controllerOptions := MockControllerOptions{
-			sharesStorage: sharesStorage,
-			validatorsMap: validatorsmap.New(context.TODO()),
-			operatorData:  buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"),
-			beacon:        bc,
+			sharesStorage:     sharesStorage,
+			validatorsMap:     validatorsmap.New(context.TODO()),
+			operatorDataStore: operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")),
+			beacon:            bc,
 		}
 		ctr := setupController(logger, controllerOptions)
 
@@ -1035,7 +1018,7 @@ func setupController(logger *zap.Logger, opts MockControllerOptions) controller 
 		metrics:                opts.metrics,
 		keyManager:             opts.keyManager,
 		ibftStorageMap:         opts.StorageMap,
-		operatorData:           opts.operatorData,
+		operatorDataStore:      opts.operatorDataStore,
 		sharesStorage:          opts.sharesStorage,
 		validatorsMap:          opts.validatorsMap,
 		context:                context.Background(),

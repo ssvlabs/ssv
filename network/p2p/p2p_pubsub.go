@@ -56,6 +56,10 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
 
+	if !n.operatorDataStore.OperatorIDReady() {
+		return fmt.Errorf("operator ID is not ready")
+	}
+
 	encodedMsg, err := commons.EncodeNetworkMsg(msg)
 	if err != nil {
 		return errors.Wrap(err, "could not decode msg")
@@ -67,7 +71,7 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 			return err
 		}
 
-		encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, n.getOperatorID(), signature)
+		encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, n.operatorDataStore.GetOperatorID(), signature)
 	}
 
 	vpk := msg.GetID().GetPubKey()

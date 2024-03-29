@@ -54,7 +54,7 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 	}
 
 	// throw an error if there is an existing operator with the same public key and different operator id
-	operatorData := eh.operatorData.GetOperatorData()
+	operatorData := eh.operatorDataStore.GetOperatorData()
 	if operatorData.ID != 0 && bytes.Equal(operatorData.PublicKey, event.PublicKey) && operatorData.ID != event.OperatorId {
 		logger.Warn("malformed event: operator registered with the same operator public key",
 			zap.Uint64("expected_operator_id", operatorData.ID))
@@ -71,10 +71,9 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 		return nil
 	}
 
-	ownOperator := bytes.Equal(event.PublicKey, operatorData.PublicKey)
-	if ownOperator {
-		eh.operatorData.SetOperatorData(od)
-		logger = logger.With(zap.Bool("own_operator", ownOperator))
+	if bytes.Equal(event.PublicKey, operatorData.PublicKey) {
+		eh.operatorDataStore.SetOperatorData(od)
+		logger = logger.With(zap.Bool("own_operator", true))
 	}
 
 	eh.metrics.OperatorPublicKey(od.ID, od.PublicKey)
@@ -207,11 +206,10 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 		return nil, &MalformedEventError{Err: ErrShareBelongsToDifferentOwner}
 	}
 
-	isOperatorShare := validatorShare.BelongsToOperator(eh.operatorData.GetOperatorID())
-	if isOperatorShare {
+	if validatorShare.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
 		eh.metrics.ValidatorInactive(event.PublicKey)
 		ownShare = validatorShare
-		logger = logger.With(zap.Bool("own_validator", isOperatorShare))
+		logger = logger.With(zap.Bool("own_validator", true))
 	}
 
 	logger.Debug("processed event")
@@ -234,7 +232,7 @@ func (eh *EventHandler) handleShareCreation(
 		return nil, fmt.Errorf("could not extract validator share from event: %w", err)
 	}
 
-	if share.BelongsToOperator(eh.operatorData.GetOperatorID()) {
+	if share.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
 		if shareSecret == nil {
 			return nil, errors.New("could not decode shareSecret")
 		}
@@ -269,7 +267,7 @@ func (eh *EventHandler) validatorAddedEventToShare(
 	validatorShare.ValidatorPubKey = publicKey.Serialize()
 	validatorShare.OwnerAddress = event.Owner
 
-	selfOperatorID := eh.operatorData.GetOperatorID()
+	selfOperatorID := eh.operatorDataStore.GetOperatorID()
 	var shareSecret *bls.SecretKey
 
 	committee := make([]*spectypes.Operator, 0)
@@ -357,7 +355,7 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 		return nil, fmt.Errorf("could not remove validator share: %w", err)
 	}
 
-	isOperatorShare := share.BelongsToOperator(eh.operatorData.GetOperatorID())
+	isOperatorShare := share.BelongsToOperator(eh.operatorDataStore.GetOperatorID())
 	if isOperatorShare || eh.fullNode {
 		logger = logger.With(zap.String("validator_pubkey", hex.EncodeToString(share.ValidatorPubKey)))
 	}
@@ -482,7 +480,7 @@ func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.Co
 		return nil, &MalformedEventError{Err: ErrShareBelongsToDifferentOwner}
 	}
 
-	if !share.BelongsToOperator(eh.operatorData.GetOperatorID()) {
+	if !share.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
 		return nil, nil
 	}
 
@@ -528,7 +526,7 @@ func (eh *EventHandler) processClusterEvent(
 	updatedPubKeys := make([]string, 0)
 
 	for _, share := range shares {
-		isOperatorShare := share.BelongsToOperator(eh.operatorData.GetOperatorID())
+		isOperatorShare := share.BelongsToOperator(eh.operatorDataStore.GetOperatorID())
 		if isOperatorShare || eh.fullNode {
 			updatedPubKeys = append(updatedPubKeys, hex.EncodeToString(share.ValidatorPubKey))
 		}
