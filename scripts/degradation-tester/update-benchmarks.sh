@@ -7,12 +7,10 @@ benchmarksResults="$prefix/benchmarks"
 packagePaths=($(yq e '.Packages[].Path' $configFile))
 
 for pkgPath in "${packagePaths[@]}"; do
-    packageName=$(basename "$pkgPath")
-    benchmarksPath="${benchmarksResults}/${packageName}_results_old.txt"
-    
-    echo "Updating benchmarks for ${packageName}"
-    
+    packageBenchName=$(echo "$pkgPath" | sed 's/\.\///g; s/\//_/g')
+    benchmarksPath="${benchmarksResults}/${packageBenchName}_benchmarks_old.txt"
+
     go test -bench=. -count=10 -benchmem "$pkgPath" | tee "$benchmarksPath"
-    
+
     echo "✅ Benchmarks updated for ${packageName} package."
 done

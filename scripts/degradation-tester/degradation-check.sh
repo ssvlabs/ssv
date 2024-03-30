@@ -1,18 +1,22 @@
 #!/bin/bash
 
 
-prefix="./scripts/degradation-tester"
+prefix="scripts/degradation-tester"
 configFile="$prefix/config.yaml"
 benchmarksResults="$prefix/benchmarks"
 
+# Requires yq and benchstat to be installed
 packagePaths=($(yq e '.Packages[].Path' $configFile))
 
 for pkgPath in "${packagePaths[@]}"; do
-  packageName=$(basename "$pkgPath")
-  outputFile="${benchmarksResults}/${packageName}_results_new.txt"
-  oldBenchmarks="${benchmarksResults}/${packageName}_results_old.txt"
-  benchStatFile="${benchmarksResults}/${packageName}_benchstat.txt"
+  # Get the package name from the path. Replacing the / with _ to get a unique name for the benchmark test
+  packageBenchName=$(echo "$pkgPath" | sed 's/\.\///g; s/\//_/g')
+  outputFile="${benchmarksResults}/${packageBenchName}_benchmarks_new.txt"
+  oldBenchmarks="${benchmarksResults}/${packageBenchName}_benchmarks_old.txt"
+  benchStatFile="${benchmarksResults}/${packageBenchName}_benchstat.txt"
 
+
+  # count should be at least 10. Ideally 20
   go test -bench=. -count=10 -benchmem "$pkgPath" | tee "$outputFile"
 
   benchstat -format csv "$oldBenchmarks" "$outputFile" | tee "${benchStatFile}"

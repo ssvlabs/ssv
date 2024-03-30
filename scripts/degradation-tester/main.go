@@ -33,21 +33,6 @@ type TestCase struct {
 	AllocDelta float64 `yaml:"AllocDelta"`
 }
 
-type Benchmark struct {
-	TestName string
-	OldValue float64
-	OldCI    float64
-	NewValue float64
-	NewCI    float64
-	VsBase   string
-	P        string
-}
-
-type BenchStatOutput struct {
-	OsData     string
-	benchmarks []Benchmark
-}
-
 func main() {
 	if len(os.Args) < 3 {
 		fmt.Println("Usage: degradation-tester <config_filename> <results_filename>")
@@ -57,11 +42,15 @@ func main() {
 	configFilename := os.Args[1]
 	resultsFilename := os.Args[2]
 
-	config := loadConfig(configFilename)
+	config, err := loadConfig(configFilename)
+	if err != nil {
+		fmt.Printf("Error loading conifg: %v", err)
+		os.Exit(1)
+	}
 
 	file, err := os.Open(resultsFilename)
 	if err != nil {
-		fmt.Printf("Error opening results file: %v\n", err)
+		fmt.Printf("Error opening results file: %v", err)
 		os.Exit(1)
 	}
 	defer file.Close()
@@ -133,25 +122,14 @@ func checkLine(
 	}
 
 	normalizedTestName := normalizeTestName(row[0])
-
-	oldValue, err := strconv.ParseFloat(row[1], 64)
-	if err != nil {
-		fmt.Printf("⚠️ Error parsing float: %v\n", err)
-		return 1
-	}
 	oldChangeStr := row[2]
-	newValue, err := strconv.ParseFloat(row[3], 64)
-	if err != nil {
-		fmt.Printf("⚠️ Error parsing float: %v\n", err)
-		return 1
-	}
-	newChangeStr := row[4]
-
 	oldChange, err := strconv.ParseFloat(strings.TrimSuffix(oldChangeStr, "%"), 64)
 	if err != nil {
 		fmt.Printf("⚠️ Error parsing float: %v\n", err)
 		return 1
 	}
+
+	newChangeStr := row[4]
 	newChange, err := strconv.ParseFloat(strings.TrimSuffix(newChangeStr, "%"), 64)
 	if err != nil {
 		fmt.Printf("⚠️ Error parsing float: %v\n", err)
@@ -165,32 +143,18 @@ func checkLine(
 		return 1
 	}
 
-	b := &Benchmark{
-		TestName: row[0],
-		OldValue: oldValue,
-		OldCI:    oldChange,
-		NewValue: newValue,
-		NewCI:    newChange,
-		VsBase:   row[5],
-		P:        row[6],
-	}
-
-	fmt.Printf("Debug: bench [TestName %s], [OldValue %f], [OldCI %f], [NewValue %f], [NewCI %f], [VsBase %s], [P %s]\n", b.TestName, b.OldValue, b.OldCI, b.NewValue, b.NewCI, b.VsBase, b.P)
-
 	return 0
 }
 
-func loadConfig(filename string) *Config {
+func loadConfig(filename string) (*Config, error) {
 	config := &Config{}
 	file, err := os.ReadFile(filename)
 	if err != nil {
-		fmt.Printf("Error reading config file: %v\n", err)
-		os.Exit(1)
+		return nil, fmt.Errorf("Error reading config file: %v\n", err)
 	}
 	err = yaml.Unmarshal(file, &config)
 	if err != nil {
-		fmt.Printf("Error parsing config file: %v\n", err)
-		os.Exit(1)
+		return nil, fmt.Errorf("Error parsing config file: %v\n", err)
 	}
 
 	opThresholds = make(map[string]float64)
@@ -206,43 +170,7 @@ func loadConfig(filename string) *Config {
 			}
 		}
 	}
-	return config
-}
-
-func checkLine2(
-	config *Config,
-	line string,
-	section string,
-) int {
-	reChange := regexp.MustCompile(`-?\d+\.\d+%`)
-	reTestName := regexp.MustCompile(`^\S+`)
-	matches := reChange.FindAllString(line, -1)
-	testNameMatch := reTestName.FindString(line)
-
-	// The "geomean" represents a statistical summary (geometric mean) of multiple test results,
-	// not an individual test result, hence we should just skip it
-	if testNameMatch == "geomean" {
-		return 0
-	}
-
-	normalizedTestName := normalizeTestName(testNameMatch)
-
-	if len(matches) > 0 {
-		changeStr := matches[len(matches)-1]
-		change, err := strconv.ParseFloat(strings.TrimSuffix(changeStr, "%"), 64)
-		if err != nil {
-			fmt.Printf("⚠️ Error parsing float: %v\n", err)
-			return 1
-		}
-
-		threshold := getThresholdForTestCase(config, normalizedTestName, section)
-
-		if math.Abs(change) > threshold {
-			fmt.Printf("❌ Change in section %s for test %s exceeds threshold: %s\n", section, normalizedTestName, changeStr)
-			return 1
-		}
-	}
-	return 0
+	return config, nil
 }
 
 func normalizeTestName(testName string) string {

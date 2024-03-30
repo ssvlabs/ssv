@@ -1,4 +1,4 @@
-name: Degradation test
+name: Benchmarks Degradation Test
 
 on:
   push:
