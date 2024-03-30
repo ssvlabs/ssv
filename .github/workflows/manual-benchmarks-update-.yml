@@ -1,0 +1,40 @@
+name: Manual Benchmarks Update
+
+on:
+  pull_request_target:
+    types: [ opened, synchronize, reopened ]
+  workflow_dispatch:
+
+jobs:
+  optional-benchmark-update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }} # Ensures the PR's head is checked out
+
+      - name: Setup make
+        run: sudo apt-get update && sudo apt-get install make
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: "1.20.x"
+
+      - name: Tidy up dependencies
+        run: go mod tidy
+
+      - name: Update benchmarks
+        if: github.event_name == 'workflow_dispatch'
+        run: make update-benchmarks
+
+      - name: Update repo
+        uses: EndBug/add-and-commit@v9.1.4
+        with:
+          # limit the scope of the commit with the benchmarks dir path only
+          add: "scripts/degradation-tester/benchmarks"
+          default_author: github_actor
+          pathspec_error_handling: exitImmediately
+          message: "benchmarks updated"
+
