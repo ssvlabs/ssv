@@ -5,13 +5,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/libp2p/go-libp2p/core/peer"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network/peers/connections/mock"
 	"github.com/bloxapp/ssv/network/records"
-	"github.com/stretchr/testify/require"
 )
 
 // TestHandshakeTestData is a test for testing data and mocks
@@ -39,12 +39,6 @@ func TestHandshakeTestData(t *testing.T) {
 		require.NotNil(t, pi)
 		require.True(t, pi.LastHandshake.After(beforeHandshake) && pi.LastHandshake.Before(time.Now()))
 		require.ErrorContains(t, pi.LastHandshakeError, "failed requesting node info")
-	})
-
-	t.Run("wrong NodeStorage", func(t *testing.T) {
-		td := getTestingData(t)
-		td.Handshaker.nodeStorage = mock.NodeStorage{}
-		require.Error(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn))
 	})
 
 	t.Run("wrong StreamController", func(t *testing.T) {
@@ -159,9 +153,9 @@ func TestHandshakeProcessIncomingNodeInfoFlow(t *testing.T) {
 		require.NoError(t, err)
 		td.Handshaker.streams = mock.StreamController{MockRequest: sealedIncomingMessage}
 
-		senderPublicKey, err := rsaencryption.ExtractPublicKey(td.SenderPrivateKey)
+		senderPublicKey, err := td.SenderPrivateKey.Public().Base64()
 		require.NoError(t, err)
-		storgmock := mock.NodeStorage{RegisteredOperatorPublicKeyPEMs: []string{senderPublicKey}}
+		storgmock := mock.NodeStorage{RegisteredOperatorPublicKeyPEMs: []string{string(senderPublicKey)}}
 		td.Handshaker.filters = func() []HandshakeFilter {
 			return []HandshakeFilter{RegisteredOperatorsFilter(storgmock, []string{})}
 		}
@@ -174,14 +168,16 @@ func TestHandshakeProcessIncomingNodeInfoFlow(t *testing.T) {
 		td.Handshaker.Permissioned = func() bool { return true }
 		sealedIncomingMessage, err := td.SignedNodeInfo.Seal(td.NetworkPrivateKey)
 		require.NoError(t, err)
+
 		td.Handshaker.streams = mock.StreamController{MockRequest: sealedIncomingMessage}
-		senderPublicKey, err := rsaencryption.ExtractPublicKey(td.SenderPrivateKey)
+
+		senderPublicKey, err := td.SenderPrivateKey.Public().Base64()
 		require.NoError(t, err)
 
 		storgmock := mock.NodeStorage{RegisteredOperatorPublicKeyPEMs: []string{}}
 
 		td.Handshaker.filters = func() []HandshakeFilter {
-			return []HandshakeFilter{RegisteredOperatorsFilter(storgmock, []string{senderPublicKey})}
+			return []HandshakeFilter{RegisteredOperatorsFilter(storgmock, []string{string(senderPublicKey)})}
 		}
 
 		require.ErrorIs(t, td.Handshaker.Handshake(logging.TestLogger(t), td.Conn), nil)

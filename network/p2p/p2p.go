@@ -2,7 +2,6 @@ package p2pv1
 
 import (
 	"context"
-	"crypto/rsa"
 	"sync/atomic"
 	"time"
 
@@ -26,6 +25,7 @@ import (
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/network/streams"
 	"github.com/bloxapp/ssv/network/topics"
+	"github.com/bloxapp/ssv/operator/keys"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/utils/async"
 	"github.com/bloxapp/ssv/utils/tasks"
@@ -78,7 +78,7 @@ type p2pNetwork struct {
 
 	nodeStorage             operatorstorage.Storage
 	operatorPKHashToPKCache *hashmap.Map[string, []byte] // used for metrics
-	operatorPrivateKey      *rsa.PrivateKey
+	operatorSigner          keys.OperatorSigner
 	getOperatorID           func() spectypes.OperatorID
 }
 
@@ -100,7 +100,7 @@ func New(logger *zap.Logger, cfg *Config, mr Metrics) network.P2PNetwork {
 		activeValidators:        hashmap.New[string, validatorStatus](),
 		nodeStorage:             cfg.NodeStorage,
 		operatorPKHashToPKCache: hashmap.New[string, []byte](),
-		operatorPrivateKey:      cfg.OperatorPrivateKey,
+		operatorSigner:          cfg.OperatorSigner,
 		getOperatorID:           cfg.GetOperatorID,
 		metrics:                 mr,
 	}

@@ -3,7 +3,6 @@ package p2pv1
 import (
 	"context"
 	"crypto/ecdsa"
-	"crypto/rsa"
 	"fmt"
 	"strings"
 	"time"
@@ -22,6 +21,7 @@ import (
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/operator/keys"
 	"github.com/bloxapp/ssv/operator/storage"
 	uc "github.com/bloxapp/ssv/utils/commons"
 )
@@ -57,8 +57,8 @@ type Config struct {
 	DiscoveryTrace bool `yaml:"DiscoveryTrace" env:"DISCOVERY_TRACE" env-description:"Flag to turn on/off discovery tracing in logs"`
 	// NetworkPrivateKey is used for network identity, MUST be injected
 	NetworkPrivateKey *ecdsa.PrivateKey
-	// OperatorPrivateKey is used for operator identity, MUST be injected
-	OperatorPrivateKey *rsa.PrivateKey
+	// OperatorSigner is used for signing with operator private key, MUST be injected
+	OperatorSigner keys.OperatorSigner
 	// OperatorPubKeyHash is hash of operator public key, used for identity, optional
 	OperatorPubKeyHash string
 	// GetOperatorID contains numeric operator ID getter

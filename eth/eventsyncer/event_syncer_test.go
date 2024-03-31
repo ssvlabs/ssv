@@ -11,6 +11,7 @@ import (
 
 	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/eth/simulator"
+	"github.com/bloxapp/ssv/operator/keys"
 	"github.com/bloxapp/ssv/operator/validatorsmap"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 
@@ -136,7 +137,13 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger) *e
 	require.NoError(t, err)
 
 	storageMap := ibftstorage.NewStores()
-	nodeStorage, operatorData := setupOperatorStorage(logger, db)
+
+	privateKey, err := keys.GeneratePrivateKey()
+	if err != nil {
+		logger.Fatal("failed generating operator key %v", zap.Error(err))
+	}
+
+	nodeStorage, operatorData := setupOperatorStorage(logger, db, privateKey)
 	testNetworkConfig := networkconfig.TestNetwork
 
 	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, true, "")
@@ -167,7 +174,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger) *e
 		validatorCtrl,
 		testNetworkConfig,
 		validatorCtrl,
-		nodeStorage.GetPrivateKey,
+		privateKey,
 		keyManager,
 		bc,
 		storageMap,
@@ -188,32 +195,38 @@ func simTestBackend(testAddr ethcommon.Address) *simulator.SimulatedBackend {
 	)
 }
 
-func setupOperatorStorage(logger *zap.Logger, db basedb.Database) (operatorstorage.Storage, *registrystorage.OperatorData) {
+func setupOperatorStorage(logger *zap.Logger, db basedb.Database, privKey keys.OperatorPrivateKey) (operatorstorage.Storage, *registrystorage.OperatorData) {
 	nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
-	_, pv, err := rsaencryption.GenerateKeys()
+
+	privKeyHash, err := privKey.StorageHash()
 	if err != nil {
-		logger.Fatal("failed generating operator key %v", zap.Error(err))
+		logger.Fatal("failed to hash operator private key", zap.Error(err))
 	}
-	operatorPubKey, err := nodeStorage.SetupPrivateKey(base64.StdEncoding.EncodeToString(pv))
+
+	encodedPubKey, err := privKey.Public().Base64()
 	if err != nil {
+		logger.Fatal("failed to encode operator public key", zap.Error(err))
+	}
+
+	if err := nodeStorage.SavePrivateKeyHash(privKeyHash); err != nil {
 		logger.Fatal("could not setup operator private key", zap.Error(err))
 	}
 
-	_, found, err := nodeStorage.GetPrivateKey()
+	_, found, err := nodeStorage.GetPrivateKeyHash()
 	if err != nil || !found {
 		logger.Fatal("failed to get operator private key", zap.Error(err))
 	}
 	var operatorData *registrystorage.OperatorData
-	operatorData, found, err = nodeStorage.GetOperatorDataByPubKey(nil, operatorPubKey)
+	operatorData, found, err = nodeStorage.GetOperatorDataByPubKey(nil, encodedPubKey)
 	if err != nil {
 		logger.Fatal("could not get operator data by public key", zap.Error(err))
 	}
 	if !found {
 		operatorData = &registrystorage.OperatorData{
-			PublicKey: operatorPubKey,
+			PublicKey: encodedPubKey,
 		}
 	}
 

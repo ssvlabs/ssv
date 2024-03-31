@@ -2,7 +2,6 @@ package validator
 
 import (
 	"context"
-	"crypto/rsa"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -50,9 +49,6 @@ const (
 	networkRouterConcurrency = 2048
 )
 
-// ShareEncryptionKeyProvider is a function that returns the operator private key
-type ShareEncryptionKeyProvider = func() (*rsa.PrivateKey, bool, error)
-
 type GetRecipientDataFunc func(r basedb.Reader, owner common.Address) (*registrystorage.RecipientData, bool, error)
 
 // ShareEventHandlerFunc is a function that handles event in an extended mode
@@ -69,7 +65,6 @@ type ControllerOptions struct {
 	BeaconNetwork              beaconprotocol.Network
 	Network                    P2PNetwork
 	Beacon                     beaconprotocol.BeaconNode
-	ShareEncryptionKeyProvider ShareEncryptionKeyProvider
 	FullNode                   bool `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Save decided history rather than just highest messages"`
 	Exporter                   bool `yaml:"Exporter" env:"EXPORTER" env-default:"false" env-description:""`
 	BuilderProposals           bool `yaml:"BuilderProposals" env:"BUILDER_PROPOSALS" env-default:"false" env-description:"Use external builders to produce blocks"`
@@ -160,9 +155,8 @@ type controller struct {
 	beacon     beaconprotocol.BeaconNode
 	keyManager spectypes.KeyManager
 
-	shareEncryptionKeyProvider ShareEncryptionKeyProvider
-	operatorData               *registrystorage.OperatorData
-	operatorDataMutex          sync.RWMutex
+	operatorData      *registrystorage.OperatorData
+	operatorDataMutex sync.RWMutex
 
 	validatorOptions        validator.Options
 	validatorsMap           *validatorsmap.ValidatorsMap
@@ -234,18 +228,17 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	}
 
 	ctrl := controller{
-		logger:                     logger.Named(logging.NameController),
-		metrics:                    metrics,
-		sharesStorage:              options.RegistryStorage.Shares(),
-		operatorsStorage:           options.RegistryStorage,
-		recipientsStorage:          options.RegistryStorage,
-		ibftStorageMap:             options.StorageMap,
-		context:                    options.Context,
-		beacon:                     options.Beacon,
-		shareEncryptionKeyProvider: options.ShareEncryptionKeyProvider,
-		operatorData:               options.OperatorData,
-		keyManager:                 options.KeyManager,
-		network:                    options.Network,
+		logger:            logger.Named(logging.NameController),
+		metrics:           metrics,
+		sharesStorage:     options.RegistryStorage.Shares(),
+		operatorsStorage:  options.RegistryStorage,
+		recipientsStorage: options.RegistryStorage,
+		ibftStorageMap:    options.StorageMap,
+		context:           options.Context,
+		beacon:            options.Beacon,
+		operatorData:      options.OperatorData,
+		keyManager:        options.KeyManager,
+		network:           options.Network,
 
 		validatorsMap:    options.ValidatorsMap,
 		validatorOptions: validatorOptions,
