@@ -25,6 +25,8 @@ type SyncCommitteeHandler struct {
 	duties             *dutystore.SyncCommitteeDuties
 	fetchCurrentPeriod bool
 	fetchNextPeriod    bool
+
+	metadataUpdated bool
 }
 
 func NewSyncCommitteeHandler(duties *dutystore.SyncCommitteeDuties) *SyncCommitteeHandler {
@@ -90,6 +92,10 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			}
 			cancel()
 
+			if h.metadataUpdated {
+				h.duties.SetReady()
+			}
+
 			// If we have reached the mid-point of the epoch, fetch the duties for the next period in the next slot.
 			// This allows us to set them up at a time when the beacon node should be less busy.
 			epochsPerPeriod := h.network.Beacon.EpochsPerSyncCommitteePeriod()
@@ -123,6 +129,8 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
 			h.logger.Info("🔁 indices change received", zap.String("period_epoch_slot_seq", buildStr))
+
+			h.metadataUpdated = true
 
 			h.fetchCurrentPeriod = true
 

@@ -434,6 +434,7 @@ func (c *controller) StartValidators() {
 	// Start validators.
 	c.startValidators(inited)
 
+	allActive := c.AllActiveIndices(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch(), false)
 	// Fetch metadata for all validators.
 	start := time.Now()
 	err := beaconprotocol.UpdateValidatorsMetadata(c.logger, allPubKeys, c, c.beacon, c.onMetadataUpdated)
@@ -447,6 +448,23 @@ func (c *controller) StartValidators() {
 			zap.Int("shares", len(allPubKeys)),
 			fields.Took(time.Since(start)))
 	}
+
+	if newValidators(allActive, c.AllActiveIndices(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch(), false)) {
+		c.indicesChange <- struct{}{}
+	}
+}
+
+func newValidators(first []phase0.ValidatorIndex, second []phase0.ValidatorIndex) bool {
+	firstmap := make(map[phase0.ValidatorIndex]struct{})
+	for _, v := range first {
+		firstmap[v] = struct{}{}
+	}
+	for _, v := range second {
+		if _, ok := firstmap[v]; !ok {
+			return true
+		}
+	}
+	return false
 }
 
 // setupValidators setup and starts validators from the given shares.

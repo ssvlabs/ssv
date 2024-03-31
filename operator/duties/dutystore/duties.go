@@ -2,6 +2,7 @@ package dutystore
 
 import (
 	"sync"
+	"sync/atomic"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -17,8 +18,9 @@ type dutyDescriptor[D Duty] struct {
 }
 
 type Duties[D Duty] struct {
-	mu sync.RWMutex
-	m  map[phase0.Epoch]map[phase0.Slot]map[phase0.ValidatorIndex]dutyDescriptor[D]
+	mu    sync.RWMutex
+	m     map[phase0.Epoch]map[phase0.Slot]map[phase0.ValidatorIndex]dutyDescriptor[D]
+	ready atomic.Bool
 }
 
 func NewDuties[D Duty]() *Duties[D] {
@@ -94,4 +96,12 @@ func (d *Duties[D]) ResetEpoch(epoch phase0.Epoch) {
 	defer d.mu.Unlock()
 
 	delete(d.m, epoch)
+}
+
+func (s *Duties[D]) Ready() bool {
+	return s.ready.Load()
+}
+
+func (s *Duties[D]) SetReady() {
+	s.ready.Store(true)
 }

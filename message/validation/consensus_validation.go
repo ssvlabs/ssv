@@ -292,6 +292,9 @@ func (mv *messageValidator) validateBeaconDuty(
 ) error {
 	switch role {
 	case spectypes.BNRoleProposer:
+		if !mv.dutyStore.Proposer.Ready() {
+			return ErrDutyStoreNotReady
+		}
 		if share.Metadata.BeaconMetadata == nil {
 			return ErrNoShareMetadata
 		}
@@ -304,6 +307,9 @@ func (mv *messageValidator) validateBeaconDuty(
 		return nil
 
 	case spectypes.BNRoleSyncCommittee, spectypes.BNRoleSyncCommitteeContribution:
+		if !mv.dutyStore.SyncCommittee.Ready() {
+			return ErrDutyStoreNotReady
+		}
 		if share.Metadata.BeaconMetadata == nil {
 			return ErrNoShareMetadata
 		}
