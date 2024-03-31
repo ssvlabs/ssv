@@ -2,9 +2,6 @@ package p2pv1
 
 import (
 	"context"
-	"crypto"
-	"crypto/rsa"
-	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"math/rand"
@@ -69,9 +66,7 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 	}
 
 	if n.cfg.Network.Beacon.EstimatedCurrentEpoch() > n.cfg.Network.PermissionlessActivationEpoch {
-		hash := sha256.Sum256(encodedMsg)
-
-		signature, err := rsa.SignPKCS1v15(nil, n.operatorPrivateKey, crypto.SHA256, hash[:])
+		signature, err := n.operatorSigner.Sign(encodedMsg)
 		if err != nil {
 			return err
 		}

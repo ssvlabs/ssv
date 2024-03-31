@@ -6,7 +6,6 @@ package validation
 import (
 	"bytes"
 	"context"
-	"crypto/rsa"
 	"encoding/hex"
 	"fmt"
 	"strings"
@@ -30,6 +29,7 @@ import (
 	"github.com/bloxapp/ssv/networkconfig"
 	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
+	"github.com/bloxapp/ssv/operator/keys"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
@@ -78,7 +78,7 @@ type messageValidator struct {
 	nodeStorage             operatorstorage.Storage
 	dutyStore               *dutystore.Store
 	operatorDataStore       operatordatastore.OperatorDataStore
-	operatorIDToPubkeyCache *hashmap.Map[spectypes.OperatorID, *rsa.PublicKey]
+	operatorIDToPubkeyCache *hashmap.Map[spectypes.OperatorID, keys.OperatorPublicKey]
 
 	// validationLocks is a map of lock per SSV message ID to
 	// prevent concurrent access to the same state.
@@ -95,7 +95,7 @@ func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) Mes
 		logger:                  zap.NewNop(),
 		metrics:                 metricsreporter.NewNop(),
 		netCfg:                  netCfg,
-		operatorIDToPubkeyCache: hashmap.New[spectypes.OperatorID, *rsa.PublicKey](),
+		operatorIDToPubkeyCache: hashmap.New[spectypes.OperatorID, keys.OperatorPublicKey](),
 		validationLocks:         make(map[spectypes.MessageID]*sync.Mutex),
 	}
 
@@ -319,7 +319,7 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 
 		signatureVerifier = func() error {
 			mv.metrics.MessageValidationRSAVerifications()
-			return mv.verifyRSASignature(messageData, operatorID, signature)
+			return mv.verifySignature(messageData, operatorID, signature)
 		}
 	}
 

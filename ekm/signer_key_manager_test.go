@@ -1,9 +1,6 @@
 package ekm
 
 import (
-	"crypto/rand"
-	"crypto/rsa"
-	"crypto/x509"
 	"encoding/hex"
 	"testing"
 
@@ -23,9 +20,9 @@ import (
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/operator/keys"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
 
@@ -68,10 +65,10 @@ func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig) spectype
 
 func TestEncryptedKeyManager(t *testing.T) {
 	// Generate key 1.
-	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	privateKey, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
-	keyBytes := x509.MarshalPKCS1PrivateKey(privateKey)
-	encryptionKey, err := rsaencryption.HashRsaKey(keyBytes)
+
+	encryptionKey, err := privateKey.EKMHash()
 	require.NoError(t, err)
 
 	// Create account with key 1.
@@ -82,31 +79,36 @@ func TestEncryptedKeyManager(t *testing.T) {
 	logger := logging.TestLogger(t)
 	db, err := getBaseStorage(logger)
 	require.NoError(t, err)
+
 	signerStorage := NewSignerStorage(db, networkconfig.TestNetwork.Beacon.GetNetwork(), logger)
 	err = signerStorage.SetEncryptionKey(encryptionKey)
 	require.NoError(t, err)
+
 	defer func(db basedb.Database, logger *zap.Logger) {
 		err := db.Close()
 		if err != nil {
 			t.Fatal(err)
 		}
 	}(db, logging.TestLogger(t))
+
 	hdwallet := hd.NewWallet(&core.WalletContext{Storage: signerStorage})
 	require.NoError(t, signerStorage.SaveWallet(hdwallet))
+
 	a, err := hdwallet.CreateValidatorAccountFromPrivateKey(sk.Serialize(), &index)
 	require.NoError(t, err)
 
 	// Load account with key 1 (should succeed).
 	wallet, err := signerStorage.OpenWallet()
 	require.NoError(t, err)
+
 	_, err = wallet.AccountByPublicKey(hex.EncodeToString(a.ValidatorPublicKey()))
 	require.NoError(t, err)
 
 	// Generate key 2.
-	privateKey2, err := rsa.GenerateKey(rand.Reader, 2048)
+	privateKey2, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
-	keyBytes2 := x509.MarshalPKCS1PrivateKey(privateKey2)
-	encryptionKey2, err := rsaencryption.HashRsaKey(keyBytes2)
+
+	encryptionKey2, err := privateKey2.EKMHash()
 	require.NoError(t, err)
 
 	// Load account with key 2 (should fail).

@@ -20,7 +20,6 @@ import (
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
 // b64 encrypted key length is 256
@@ -286,16 +285,8 @@ func (eh *EventHandler) validatorAddedEventToShare(
 		validatorShare.OperatorID = operatorID
 		validatorShare.SharePubKey = sharePublicKeys[i]
 
-		operatorPrivateKey, found, err := eh.shareEncryptionKeyProvider()
-		if err != nil {
-			return nil, nil, fmt.Errorf("could not get operator private key: %w", err)
-		}
-		if !found {
-			return nil, nil, errors.New("could not find operator private key")
-		}
-
 		shareSecret = &bls.SecretKey{}
-		decryptedSharePrivateKey, err := rsaencryption.DecodeKey(operatorPrivateKey, encryptedKeys[i])
+		decryptedSharePrivateKey, err := eh.operatorDecrypter.Decrypt(encryptedKeys[i])
 		if err != nil {
 			return nil, nil, &MalformedEventError{
 				Err: fmt.Errorf("could not decrypt share private key: %w", err),

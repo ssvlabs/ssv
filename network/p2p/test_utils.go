@@ -26,7 +26,6 @@ import (
 	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/utils/format"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
 // PeersIndexProvider holds peers index instance
@@ -132,16 +131,21 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 
 // NewTestP2pNetwork creates a new network.P2PNetwork instance
 func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys testing.NodeKeys, logger *zap.Logger, options LocalNetOptions) (network.P2PNetwork, error) {
-	operatorPubkey, err := rsaencryption.ExtractPublicKey(keys.OperatorKey)
+	operatorPubkey, err := keys.OperatorKey.Public().Base64()
 	if err != nil {
 		return nil, err
 	}
 
-	cfg := NewNetConfig(keys, format.OperatorID([]byte(operatorPubkey)), ln.Bootnode, testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), options.Nodes)
+	hash, err := keys.OperatorKey.StorageHash()
+	if err != nil {
+		panic(err)
+	}
+
+	cfg := NewNetConfig(keys, format.OperatorID(operatorPubkey), ln.Bootnode, testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), options.Nodes)
 	cfg.Ctx = ctx
 	cfg.Subnets = "00000000000000000000020000000000" //PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
 	cfg.NodeStorage = mock.NodeStorage{
-		MockGetPrivateKey:               keys.OperatorKey,
+		MockPrivateKeyHash:              hash,
 		RegisteredOperatorPublicKeyPEMs: []string{},
 	}
 	cfg.Metrics = nil
@@ -244,7 +248,7 @@ func NewNetConfig(keys testing.NodeKeys, operatorPubKeyHash string, bn *discover
 		PubSubTrace:        false,
 		PubSubScoring:      true,
 		NetworkPrivateKey:  keys.NetKey,
-		OperatorPrivateKey: keys.OperatorKey,
+		OperatorSigner:     keys.OperatorKey,
 		OperatorPubKeyHash: operatorPubKeyHash,
 		UserAgent:          ua,
 		Discovery:          discT,

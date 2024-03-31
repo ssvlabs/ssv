@@ -1,9 +1,6 @@
 package connections
 
 import (
-	"crypto"
-	"crypto/rsa"
-	"encoding/base64"
 	"fmt"
 	"time"
 
@@ -11,8 +8,8 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/bloxapp/ssv/network/records"
+	"github.com/bloxapp/ssv/operator/keys"
 	"github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
 var AllowedDifference = 30 * time.Second
@@ -52,18 +49,13 @@ func SignatureCheckFilter() HandshakeFilter {
 		if !ok {
 			return fmt.Errorf("wrong format nodeinfo sent")
 		}
-		decodedPublicKey, err := base64.StdEncoding.DecodeString(string(sni.HandshakeData.SenderPublicKey))
+
+		publicKey, err := keys.PublicKeyFromString(string(sni.HandshakeData.SenderPublicKey))
 		if err != nil {
 			return errors.Wrap(err, "failed to decode sender public key from signed node info")
 		}
 
-		publicKey, err := rsaencryption.ConvertPemToPublicKey(decodedPublicKey)
-		if err != nil {
-			return err
-		}
-
-		hashed := sni.HandshakeData.Hash()
-		if err := rsa.VerifyPKCS1v15(publicKey, crypto.SHA256, hashed[:], sni.Signature); err != nil {
+		if err := publicKey.Verify(sni.HandshakeData.Encode(), sni.Signature); err != nil {
 			return err
 		}
 
