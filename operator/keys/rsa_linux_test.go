@@ -13,6 +13,7 @@ import (
 )
 
 func Test_VerifyRegularSigWithOpenSSL(t *testing.T) {
+	// Check valid signature.
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 	msg := []byte("hello")
@@ -24,6 +25,16 @@ func Test_VerifyRegularSigWithOpenSSL(t *testing.T) {
 	pub := pk.Public().(*publicKey)
 
 	require.NoError(t, VerifyRSA(pub, msg, sig))
+
+	// Check wrong signature.
+	key2, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	hashed2 := sha256.Sum256(msg)
+	sig2, err := rsa.SignPKCS1v15(rand.Reader, key2, crypto.SHA256, hashed2[:])
+	require.NoError(t, err)
+
+	require.Error(t, VerifyRSA(pub, msg, sig2))
 }
 
 func Test_VerifyOpenSSLWithOpenSSL(t *testing.T) {
@@ -37,6 +48,11 @@ func Test_VerifyOpenSSLWithOpenSSL(t *testing.T) {
 	pub := priv.Public().(*publicKey)
 
 	require.NoError(t, VerifyRSA(pub, msg, sig))
+
+	// Verify with Go RSA.
+	hash := sha256.Sum256(msg)
+	err = rsa.VerifyPKCS1v15(pub.pubKey, crypto.SHA256, hash[:], sig)
+	require.NoError(t, err)
 }
 
 func Test_Caches(t *testing.T) {
