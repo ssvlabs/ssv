@@ -3,12 +3,13 @@ package p2p
 import (
 	"crypto/ecdsa"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils"
 	gcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/utils"
 )
 
 var (
@@ -24,12 +25,9 @@ var (
 )
 
 // Store represents the interface for accessing the node's keys (operator and network keys)
-// TODO: add operator key
 type Store interface {
 	GetNetworkKey() (*ecdsa.PrivateKey, bool, error)
 	SetupNetworkKey(logger *zap.Logger, skEncoded string) (*ecdsa.PrivateKey, error)
-	// GetOperatorKey() (*rsa.PrivateKey, bool, error)
-	// SetupOperatorkKey(skEncoded string) (*rsa.PrivateKey, error)
 }
 
 type identityStore struct {
