@@ -208,6 +208,7 @@ func (s *storage) OpenAccount(accountID uuid.UUID) (core.ValidatorAccount, error
 	defer s.lock.RUnlock()
 
 	key := fmt.Sprintf(accountsPath, accountID.String())
+	s.logger.Debug("Debug OpenAccount", zap.String("key", key))
 
 	// get account bytes
 	obj, found, err := s.db.Get(s.objPrefix(accountsPrefix), []byte(key))
