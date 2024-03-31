@@ -35,6 +35,10 @@ type OperatorDecrypter interface {
 	Decrypt(data []byte) ([]byte, error)
 }
 
+type privateKey struct {
+	privKey *rsa.PrivateKey
+}
+
 func PrivateKeyFromString(privKeyString string) (OperatorPrivateKey, error) {
 	operatorKeyByte, err := base64.StdEncoding.DecodeString(privKeyString)
 	if err != nil {

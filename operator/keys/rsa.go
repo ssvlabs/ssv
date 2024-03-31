@@ -8,10 +8,6 @@ import (
 	"crypto/sha256"
 )
 
-type privateKey struct {
-	privKey *rsa.PrivateKey
-}
-
 type publicKey struct {
 	pubKey *rsa.PublicKey
 }
