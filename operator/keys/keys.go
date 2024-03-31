@@ -1,13 +1,13 @@
 package keys
 
 import (
+	"crypto"
 	crand "crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
 	"fmt"
-
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
@@ -76,6 +76,14 @@ func (p *privateKey) Public() OperatorPublicKey {
 func (p *privateKey) Sign(data []byte) ([]byte, error) {
 	hash := sha256.Sum256(data)
 	return SignRSA(p, hash[:])
+}
+
+func SignRSA(priv *privateKey, data []byte) ([]byte, error) {
+	return rsa.SignPKCS1v15(crand.Reader, priv.privKey, crypto.SHA256, data)
+}
+
+func EncryptRSA(pub *publicKey, data []byte) ([]byte, error) {
+	return rsa.EncryptPKCS1v15(crand.Reader, pub.pubKey, data)
 }
 
 func (p *privateKey) Decrypt(data []byte) ([]byte, error) {

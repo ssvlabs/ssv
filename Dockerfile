@@ -15,6 +15,14 @@ RUN apt-get update                                                        && \
   make=4.3-4.1 \
   && rm -rf /var/lib/apt/lists/*
 
+# install jemalloc
+WORKDIR /tmp/jemalloc-temp
+RUN curl -s -L "https://github.com/jemalloc/jemalloc/releases/download/5.2.1/jemalloc-5.2.1.tar.bz2" -o jemalloc.tar.bz2 \
+  && tar xjf ./jemalloc.tar.bz2
+RUN cd jemalloc-5.2.1 \
+  && ./configure --with-jemalloc-prefix='je_' --with-malloc-conf='background_thread:true,metadata_thp:auto' \
+  && make && make install
+
 RUN go version
 
 WORKDIR /go/src/github.com/bloxapp/ssv/
@@ -38,7 +46,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
   COMMIT=$(git rev-parse HEAD) && \
   VERSION=$(git describe --tags $(git rev-list --tags --max-count=1) --always) && \
   CGO_ENABLED=1 GOOS=linux go install \
-  -tags="blst_enabled" \
+  -tags="blst_enabled,jemalloc,allocator" \
   -ldflags "-X main.Commit=$COMMIT -X main.Version=$VERSION -linkmode external -extldflags \"-static -lm\"" \
   ./cmd/ssvnode
 
