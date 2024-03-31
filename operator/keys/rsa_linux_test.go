@@ -55,6 +55,28 @@ func Test_VerifyOpenSSLWithOpenSSL(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func Test_ConversionError(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	key.D = nil
+	msg := []byte("hello")
+	priv := &privateKey{key, nil}
+	_, err = priv.Sign(msg)
+	require.Error(t, err)
+
+	key2, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	priv2 := &privateKey{key2, nil}
+	sig, err := priv2.Sign(msg)
+	require.NoError(t, err)
+	pub := priv2.Public().(*publicKey)
+
+	pub.pubKey.N = nil
+	require.Error(t, VerifyRSA(pub, msg, sig))
+}
+
 func Test_Caches(t *testing.T) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
