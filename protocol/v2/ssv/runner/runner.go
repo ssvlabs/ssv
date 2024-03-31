@@ -227,15 +227,18 @@ func (b *BaseRunner) basePartialSigMsgProcessing(
 
 // didDecideCorrectly returns true if the expected consensus instance decided correctly
 func (b *BaseRunner) didDecideCorrectly(prevDecided bool, decidedMsg *specqbft.SignedMessage) (bool, error) {
-	decided := decidedMsg != nil
-	decidedRunningInstance := decided && b.State.RunningInstance != nil && decidedMsg.Message.Height == b.State.RunningInstance.GetHeight()
-
-	if !decided {
+	if decidedMsg == nil {
 		return false, nil
 	}
-	if !decidedRunningInstance {
+
+	if b.State.RunningInstance == nil {
 		return false, errors.New("decided wrong instance")
 	}
+
+	if decidedMsg.Message.Height != b.State.RunningInstance.GetHeight() {
+		return false, errors.New("decided wrong instance")
+	}
+
 	// verify we decided running instance only, if not we do not proceed
 	if prevDecided {
 		return false, nil
