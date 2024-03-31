@@ -527,6 +527,9 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, configPrivKey 
 			PublicKey: encodedPubKey,
 		}
 	}
+	if operatorData == nil {
+		logger.Fatal("invalid operator data in database: nil")
+	}
 
 	return nodeStorage, operatorData
 }
