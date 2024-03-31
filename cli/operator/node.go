@@ -145,7 +145,7 @@ var StartNodeCmd = &cobra.Command{
 				logger.Fatal("could not extract operator private key from file", zap.Error(err))
 			}
 
-			operatorPrivKeyText = string(decryptedKeystore)
+			operatorPrivKeyText = base64.StdEncoding.EncodeToString(decryptedKeystore)
 		} else {
 			operatorPrivKey, err = keys.PrivateKeyFromString(cfg.OperatorPrivateKey)
 			if err != nil {
