@@ -482,6 +482,9 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database) (operatorstora
 			PublicKey: operatorPubKey,
 		}
 	}
+	if operatorData == nil {
+		logger.Fatal("invalid operator data in database: nil")
+	}
 
 	return nodeStorage, operatorData
 }
