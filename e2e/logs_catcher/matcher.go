@@ -54,13 +54,6 @@ func (m *Matcher) TestRestartNode(pctx context.Context) error {
 	_, cancel := context.WithCancel(pctx)
 	defer cancel()
 
-	//err = m.restartContainer(beaconProxyContainer)
-	//if err != nil {
-	//	return err
-	//}
-	//println("<<<<<<before timeout>>>>>")
-	//time.Sleep(time.Duration(2) * time.Second)
-	//println("<<<<<<after timeout>>>>>")
 	for _, ssvNode := range ssvNodesContainers {
 		err := m.restartContainer(ssvNode)
 		if err != nil {

@@ -2,8 +2,10 @@ package logs_catcher
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/docker/docker/client"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -40,6 +42,10 @@ const (
 	roleField             = "\"role\":\"%s\""
 	slotField             = "\"slot\":%d"
 )
+
+type BlsVerificationJSON struct {
+	CorruptedShares []*CorruptedShare `json:"bls_verification"`
+}
 
 type logCondition struct {
 	role             string
@@ -92,6 +98,21 @@ func VerifyBLSSignature(pctx context.Context, logger *zap.Logger, cli *client.Cl
 	defer c()
 
 	return ProcessLogs(ctx, logger, cli, committee, leader, dutyID, dutySlot, share.OperatorID)
+}
+
+// UnmarshalBlsVerificationJSON reads the JSON file and unmarshals it into []*CorruptedShare.
+func UnmarshalBlsVerificationJSON(filePath string) ([]*CorruptedShare, error) {
+	contents, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("error reading json file for BLS verification: %s, %w", filePath, err)
+	}
+
+	var blsVerificationJSON BlsVerificationJSON
+	if err = json.Unmarshal(contents, &blsVerificationJSON); err != nil {
+		return nil, fmt.Errorf("error parsing json file for BLS verification: %s, %w", filePath, err)
+	}
+
+	return blsVerificationJSON.CorruptedShares, nil
 }
 
 func ParseAndExtractDutyInfo(conditionLog string, corruptedValidatorIndex string) (string, phase0.Slot, error) {
