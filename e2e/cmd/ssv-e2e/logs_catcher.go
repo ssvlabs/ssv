@@ -33,7 +33,24 @@ func (cmd *LogsCatcherCmd) Run(logger *zap.Logger, globals Globals) error {
 
 	// Execute different logic based on the value of the Mode flag
 	switch cmd.Mode {
-	case logs_catcher.Slashable, logs_catcher.RsaVerification:
+	case logs_catcher.Slashable:
+		logger.Info("Running", zap.String("mode: ", cmd.Mode))
+		err = logs_catcher.FatalListener(ctx, logger, cli)
+		if err != nil {
+			return err
+		}
+
+		matcher := logs_catcher.NewLogMatcher(logger, cli, logs_catcher.Slashable)
+		err = matcher.Match(ctx)
+		if err != nil {
+			return err
+		}
+		matcher2 := logs_catcher.NewLogMatcher(logger, cli, logs_catcher.NonSlashable)
+		err = matcher2.Match(ctx)
+		if err != nil {
+			return err
+		}
+	case logs_catcher.RsaVerification:
 		logger.Info("Running", zap.String("mode: ", cmd.Mode))
 		err = logs_catcher.FatalListener(ctx, logger, cli)
 		if err != nil {

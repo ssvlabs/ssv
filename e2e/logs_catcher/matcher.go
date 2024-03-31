@@ -186,7 +186,7 @@ func (m *Matcher) waitForStartCondition(ctx context.Context, condition []string,
 	}
 }
 
-func (m *Matcher) processDockerLogs(ctx context.Context, containerName string, matchStrings []string) ([]map[string]any, error) {
+func (m *Matcher) processDockerLogs(ctx context.Context, containerName string, matchStrings []string) (logs.Parsed, error) {
 	if matchStrings == nil {
 		return nil, nil // No matching strings provided
 	}
@@ -197,18 +197,23 @@ func (m *Matcher) processDockerLogs(ctx context.Context, containerName string, m
 		return nil, err
 	}
 
-	var processedLogs []map[string]any
-	for _, log := range res.Grep(matchStrings) {
-		var logEntry map[string]any
-		if err := json.Unmarshal([]byte(log), &logEntry); err != nil {
-			m.logger.Error("Failed to unmarshal log", zap.Error(err))
-			continue // Skip this log entry on error
+	grepped := res.Grep(matchStrings).ParseAll(func(log string) (map[string]any, error) {
+		var result logs.ParsedLine // Corrected to `any` to match the return type
+		err := json.Unmarshal([]byte(log), &result)
+		if err != nil {
+			return nil, err // Return an error if parsing fails
 		}
-		processPubKey(logEntry) // Process the public key if present
-		processedLogs = append(processedLogs, logEntry)
-	}
+		if pubkey, ok := result["pubkey"].(string); ok {
+			// Check if pubkey starts with "0x" and remove it if present
+			if strings.HasPrefix(pubkey, "0x") {
+				pubkey = strings.TrimPrefix(pubkey, "0x")
+			}
+			result["pubkey"] = pubkey
+		}
+		return result, nil // Return the parsed result if successful
+	})
 
-	return processedLogs, nil
+	return grepped, nil
 }
 
 func (m *Matcher) logsByPublicKey(ctx context.Context, containerName string, matchStrings []string) (map[string][]any, error) {
@@ -223,6 +228,7 @@ func (m *Matcher) logsByPublicKey(ctx context.Context, containerName string, mat
 			publicKeyLogs[pubkey] = append(publicKeyLogs[pubkey], log)
 		}
 	}
+
 	m.logger.Info("Logs organized by public key", zap.Int("count", len(publicKeyLogs)), zap.String("container", containerName))
 	return publicKeyLogs, nil
 }
@@ -233,7 +239,7 @@ func processPubKey(logEntry map[string]any) {
 	}
 }
 
-func (m *Matcher) validateOpids(nodeLogs []map[string]any, opidRegex *regexp.Regexp, nodeContainer string) error {
+func (m *Matcher) validateOpids(nodeLogs logs.Parsed, opidRegex *regexp.Regexp, nodeContainer string) error {
 	nodeOpids := make(map[int]bool)
 	for _, log := range nodeLogs {
 		if errorMsg, ok := log["error"].(string); ok {
