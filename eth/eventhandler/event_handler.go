@@ -21,11 +21,11 @@ import (
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/networkconfig"
+	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/keys"
 	nodestorage "github.com/bloxapp/ssv/operator/storage"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
@@ -56,18 +56,12 @@ type taskExecutor interface {
 	ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint64, validatorIndex phase0.ValidatorIndex) error
 }
 
-type OperatorData interface {
-	GetOperatorData() *storage.OperatorData
-	SetOperatorData(*storage.OperatorData)
-	GetOperatorID() spectypes.OperatorID
-}
-
 type EventHandler struct {
 	nodeStorage       nodestorage.Storage
 	taskExecutor      taskExecutor
 	eventParser       eventparser.Parser
 	networkConfig     networkconfig.NetworkConfig
-	operatorData      OperatorData
+	operatorDataStore operatordatastore.OperatorDataStore
 	operatorDecrypter keys.OperatorDecrypter
 	keyManager        spectypes.KeyManager
 	beacon            beaconprotocol.BeaconNode
@@ -83,7 +77,7 @@ func New(
 	eventParser eventparser.Parser,
 	taskExecutor taskExecutor,
 	networkConfig networkconfig.NetworkConfig,
-	operatorData OperatorData,
+	operatorDataStore operatordatastore.OperatorDataStore,
 	operatorDecrypter keys.OperatorDecrypter,
 	keyManager spectypes.KeyManager,
 	beacon beaconprotocol.BeaconNode,
@@ -95,7 +89,7 @@ func New(
 		taskExecutor:      taskExecutor,
 		eventParser:       eventParser,
 		networkConfig:     networkConfig,
-		operatorData:      operatorData,
+		operatorDataStore: operatorDataStore,
 		operatorDecrypter: operatorDecrypter,
 		keyManager:        keyManager,
 		beacon:            beacon,

@@ -12,7 +12,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ekmcore "github.com/bloxapp/eth2-key-manager/core"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
@@ -34,6 +33,7 @@ import (
 	"github.com/bloxapp/ssv/eth/simulator/simcontract"
 	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/networkconfig"
+	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/keys"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
@@ -1282,6 +1282,8 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 	storageMap := ibftstorage.NewStores()
 	nodeStorage, operatorData := setupOperatorStorage(logger, db, operator)
 
+	operatorDataStore := operatordatastore.New(operatorData)
+
 	if network == nil {
 		network = &networkconfig.NetworkConfig{
 			Beacon: utils.SetupMockBeaconNetwork(t, &utils.SlotValue{}),
@@ -1310,7 +1312,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 			parser,
 			validatorCtrl,
 			*network,
-			validatorCtrl,
+			operatorDataStore,
 			operator.privateKey,
 			keyManager,
 			bc,
@@ -1321,9 +1323,6 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 			return nil, nil, err
 		}
 
-		validatorCtrl.EXPECT().GetOperatorData().Return(&registrystorage.OperatorData{}).AnyTimes()
-		validatorCtrl.EXPECT().GetOperatorID().Return(spectypes.OperatorID(0)).AnyTimes()
-
 		return eh, validatorCtrl, nil
 	}
 	ctrl := gomock.NewController(t)
@@ -1331,13 +1330,13 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 
 	bc := beacon.NewMockBeaconNode(ctrl)
 	validatorCtrl := validator.NewController(logger, validator.ControllerOptions{
-		Context:         ctx,
-		DB:              db,
-		RegistryStorage: nodeStorage,
-		KeyManager:      keyManager,
-		StorageMap:      storageMap,
-		OperatorData:    operatorData,
-		ValidatorsMap:   validatorsmap.New(ctx),
+		Context:           ctx,
+		DB:                db,
+		RegistryStorage:   nodeStorage,
+		KeyManager:        keyManager,
+		StorageMap:        storageMap,
+		OperatorDataStore: operatorDataStore,
+		ValidatorsMap:     validatorsmap.New(ctx),
 	})
 
 	contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
@@ -1350,7 +1349,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 		parser,
 		validatorCtrl,
 		*network,
-		validatorCtrl,
+		operatorDataStore,
 		operator.privateKey,
 		keyManager,
 		bc,
@@ -1397,9 +1396,6 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, operator *test
 		logger.Fatal("couldn't get operator data by public key", zap.Error(err))
 	}
 
-	if err != nil {
-		logger.Fatal("couldn't get operator data by public key", zap.Error(err))
-	}
 	if !found {
 		operatorData = &registrystorage.OperatorData{
 			PublicKey:    encodedPubKey,

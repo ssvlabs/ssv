@@ -21,6 +21,7 @@ import (
 	"github.com/bloxapp/ssv/eth/simulator"
 	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/networkconfig"
+	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/keys"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
@@ -159,6 +160,7 @@ func setupEventHandler(
 
 	storageMap := ibftstorage.NewStores()
 	nodeStorage, operatorData := setupOperatorStorage(logger, db, operator, ownerAddress)
+	operatorDataStore := operatordatastore.New(operatorData)
 	testNetworkConfig := networkconfig.TestNetwork
 
 	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, true, "")
@@ -184,7 +186,7 @@ func setupEventHandler(
 			parser,
 			validatorCtrl,
 			testNetworkConfig,
-			validatorCtrl,
+			operatorDataStore,
 			operator.privateKey,
 			keyManager,
 			bc,
@@ -197,20 +199,16 @@ func setupEventHandler(
 			return nil, nil, nil, nil, err
 		}
 
-		validatorCtrl.EXPECT().GetOperatorData().Return(operatorData).AnyTimes()
-		validatorCtrl.EXPECT().GetOperatorID().Return(operatorData.ID).AnyTimes()
-		validatorCtrl.EXPECT().SetOperatorData(gomock.Any()).AnyTimes()
-
 		return eh, validatorCtrl, ctrl, nodeStorage, nil
 	}
 
 	validatorCtrl := validator.NewController(logger, validator.ControllerOptions{
-		Context:         ctx,
-		DB:              db,
-		RegistryStorage: nodeStorage,
-		KeyManager:      keyManager,
-		StorageMap:      storageMap,
-		OperatorData:    operatorData,
+		Context:           ctx,
+		DB:                db,
+		RegistryStorage:   nodeStorage,
+		KeyManager:        keyManager,
+		StorageMap:        storageMap,
+		OperatorDataStore: operatorDataStore,
 	})
 
 	parser := eventparser.New(contractFilterer)
@@ -220,7 +218,7 @@ func setupEventHandler(
 		parser,
 		validatorCtrl,
 		testNetworkConfig,
-		validatorCtrl,
+		operatorDataStore,
 		operator.privateKey,
 		keyManager,
 		bc,

@@ -24,6 +24,7 @@ import (
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/message/validation"
 	"github.com/bloxapp/ssv/network"
+	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/duties"
 	nodestorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validatorsmap"
@@ -69,7 +70,7 @@ type ControllerOptions struct {
 	Exporter                   bool `yaml:"Exporter" env:"EXPORTER" env-default:"false" env-description:""`
 	BuilderProposals           bool `yaml:"BuilderProposals" env:"BUILDER_PROPOSALS" env-default:"false" env-description:"Use external builders to produce blocks"`
 	KeyManager                 spectypes.KeyManager
-	OperatorData               *registrystorage.OperatorData
+	OperatorDataStore          operatordatastore.OperatorDataStore
 	RegistryStorage            nodestorage.Storage
 	RecipientsStorage          Recipients
 	NewDecidedHandler          qbftcontroller.NewDecidedHandler
@@ -101,9 +102,6 @@ type Controller interface {
 	//  - the amount of active validators (i.e. not slashed or existed)
 	//  - the amount of validators assigned to this operator
 	GetValidatorStats() (uint64, uint64, uint64, error)
-	GetOperatorData() *registrystorage.OperatorData
-	SetOperatorData(data *registrystorage.OperatorData)
-	GetOperatorID() spectypes.OperatorID
 	IndicesChangeChan() chan struct{}
 	ValidatorExitChan() <-chan duties.ExitDescriptor
 
@@ -155,8 +153,7 @@ type controller struct {
 	beacon     beaconprotocol.BeaconNode
 	keyManager spectypes.KeyManager
 
-	operatorData      *registrystorage.OperatorData
-	operatorDataMutex sync.RWMutex
+	operatorDataStore operatordatastore.OperatorDataStore
 
 	validatorOptions        validator.Options
 	validatorsMap           *validatorsmap.ValidatorsMap
@@ -236,7 +233,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		ibftStorageMap:    options.StorageMap,
 		context:           options.Context,
 		beacon:            options.Beacon,
-		operatorData:      options.OperatorData,
+		operatorDataStore: options.OperatorDataStore,
 		keyManager:        options.KeyManager,
 		network:           options.Network,
 
@@ -281,23 +278,11 @@ func (c *controller) setupNetworkHandlers() error {
 }
 
 func (c *controller) GetOperatorShares() []*ssvtypes.SSVShare {
-	return c.sharesStorage.List(nil, registrystorage.ByOperatorID(c.GetOperatorID()), registrystorage.ByActiveValidator())
-}
-
-func (c *controller) GetOperatorData() *registrystorage.OperatorData {
-	c.operatorDataMutex.RLock()
-	defer c.operatorDataMutex.RUnlock()
-	return c.operatorData
-}
-
-func (c *controller) SetOperatorData(data *registrystorage.OperatorData) {
-	c.operatorDataMutex.Lock()
-	defer c.operatorDataMutex.Unlock()
-	c.operatorData = data
-}
-
-func (c *controller) GetOperatorID() spectypes.OperatorID {
-	return c.GetOperatorData().ID
+	return c.sharesStorage.List(
+		nil,
+		registrystorage.ByOperatorID(c.operatorDataStore.GetOperatorID()),
+		registrystorage.ByActiveValidator(),
+	)
 }
 
 func (c *controller) IndicesChangeChan() chan struct{} {
@@ -313,7 +298,7 @@ func (c *controller) GetValidatorStats() (uint64, uint64, uint64, error) {
 	operatorShares := uint64(0)
 	active := uint64(0)
 	for _, s := range allShares {
-		if ok := s.BelongsToOperator(c.GetOperatorID()); ok {
+		if ok := s.BelongsToOperator(c.operatorDataStore.GetOperatorID()); ok {
 			operatorShares++
 		}
 		if s.IsAttesting(c.beacon.GetBeaconNetwork().EstimatedCurrentEpoch()) {
@@ -429,7 +414,7 @@ func (c *controller) StartValidators() {
 	var ownShares []*ssvtypes.SSVShare
 	var allPubKeys = make([][]byte, 0, len(shares))
 	for _, share := range shares {
-		if share.BelongsToOperator(c.GetOperatorID()) {
+		if share.BelongsToOperator(c.operatorDataStore.GetOperatorID()) {
 			ownShares = append(ownShares, share)
 		}
 		allPubKeys = append(allPubKeys, share.ValidatorPubKey)
@@ -573,7 +558,7 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 	if share == nil {
 		return errors.New("share was not found")
 	}
-	if !share.BelongsToOperator(c.GetOperatorID()) || share.Liquidated {
+	if !share.BelongsToOperator(c.operatorDataStore.GetOperatorID()) || share.Liquidated {
 		return nil
 	}
 
