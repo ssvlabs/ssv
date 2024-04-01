@@ -11,13 +11,9 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
-	"encoding/json"
 	"encoding/pem"
 	"fmt"
-	"strings"
-
 	"github.com/pkg/errors"
-	"github.com/wealdtech/go-eth2-wallet-encryptor-keystorev4"
 )
 
 var keySize = 2048
@@ -61,16 +57,6 @@ func DecodeKey(sk *rsa.PrivateKey, hash []byte) ([]byte, error) {
 	return decryptedKey, nil
 }
 
-// ConvertPemToPrivateKey return rsa private key from secret key
-func ConvertPemToPrivateKey(skPem string) (*rsa.PrivateKey, error) {
-	block, _ := pem.Decode([]byte(skPem))
-	if block == nil {
-		return nil, errors.New("decode PEM block")
-	}
-	b := block.Bytes
-	return parsePrivateKey(b)
-}
-
 // HashRsaKey return sha256 hash of rsa private key
 func HashRsaKey(keyBytes []byte) (string, error) {
 	hash := sha256.Sum256(keyBytes)
@@ -78,37 +64,17 @@ func HashRsaKey(keyBytes []byte) (string, error) {
 	return keyString, nil
 }
 
-// ConvertEncryptedPemToPrivateKey return rsa private key from secret key
-func ConvertEncryptedPemToPrivateKey(pemData []byte, password string) (*rsa.PrivateKey, error) {
-	if strings.TrimSpace(password) == "" {
-		return nil, errors.New("Password required for encrypted PEM block")
-	}
-
-	// Unmarshal the JSON-encoded data
-	var data map[string]interface{}
-	if err := json.Unmarshal(pemData, &data); err != nil {
-		return nil, fmt.Errorf("parse JSON data: %w", err)
-	}
-
-	// Decrypt the private key using keystorev4
-	decryptedBytes, err := keystorev4.New().Decrypt(data, password)
-	if err != nil {
-		return nil, fmt.Errorf("decrypt private key: %w", err)
-	}
-
-	// Parse the decrypted PEM data
-	block, _ := pem.Decode(decryptedBytes)
+func PemToPrivateKey(pemData []byte) (*rsa.PrivateKey, error) {
+	block, _ := pem.Decode(pemData)
 	if block == nil {
-		return nil, errors.New("parse PEM block")
+		return nil, errors.New("failed to parse PEM block containing the private key")
 	}
 
-	// Parse the RSA private key
-	rsaKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("parse RSA private key: %w", err)
+	if block.Type != "RSA PRIVATE KEY" {
+		return nil, errors.New("invalid PEM block type")
 	}
 
-	return rsaKey, nil
+	return parsePrivateKey(block.Bytes)
 }
 
 func parsePrivateKey(derBytes []byte) (*rsa.PrivateKey, error) {
@@ -149,8 +115,8 @@ func PrivateKeyToByte(sk *rsa.PrivateKey) []byte {
 }
 
 // ExtractPublicKey get public key from private key and return base64 encoded public key
-func ExtractPublicKey(sk *rsa.PrivateKey) (string, error) {
-	pkBytes, err := x509.MarshalPKIXPublicKey(&sk.PublicKey)
+func ExtractPublicKey(pk *rsa.PublicKey) (string, error) {
+	pkBytes, err := x509.MarshalPKIXPublicKey(pk)
 	if err != nil {
 		return "", errors.Wrap(err, "Failed to marshal private key")
 	}
