@@ -241,20 +241,11 @@ func (b *BaseRunner) didDecideCorrectly(prevDecided bool, decidedMsg *specqbft.S
 	return true, nil
 }
 
-func (b *BaseRunner) decide(logger *zap.Logger, runner Runner, input *spectypes.ConsensusData) error {
-	byts, err := input.Encode()
-	if err != nil {
-		return errors.Wrap(err, "could not encode ConsensusData")
-	}
-
-	if err := runner.GetValCheckF()(byts); err != nil {
-		return errors.Wrap(err, "input data invalid")
-
-	}
-
-	if err := runner.GetBaseRunner().QBFTController.StartNewInstance(logger,
-		specqbft.Height(input.Duty.Slot),
-		byts,
+func (b *BaseRunner) decide(logger *zap.Logger, runner Runner, cdFetcher *spectypes.DataFetcher) error {
+	if err := runner.GetBaseRunner().QBFTController.StartNewInstance(
+		logger,
+		specqbft.Height(runner.GetBaseRunner().State.StartingDuty.Slot),
+		cdFetcher,
 	); err != nil {
 		return errors.Wrap(err, "could not start new QBFT instance")
 	}

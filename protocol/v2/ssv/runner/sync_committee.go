@@ -196,25 +196,34 @@ func (r *SyncCommitteeRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashR
 // 4) collect 2f+1 partial sigs, reconstruct and broadcast valid sync committee sig to the BN
 func (r *SyncCommitteeRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 	// TODO - waitOneThirdOrValidBlock
+	syncCommitteeFetcher := syncCommitteeFetcher(r, duty)
 
-	root, ver, err := r.GetBeaconNode().GetSyncMessageBlockRoot(duty.Slot)
-	if err != nil {
-		return errors.Wrap(err, "failed to get sync committee block root")
-	}
-
-	r.metrics.StartDutyFullFlow()
-	r.metrics.StartConsensus()
-
-	input := &spectypes.ConsensusData{
-		Duty:    *duty,
-		Version: ver,
-		DataSSZ: root[:],
-	}
-
-	if err := r.BaseRunner.decide(logger, r, input); err != nil {
+	if err := r.BaseRunner.decide(logger, r, syncCommitteeFetcher); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}
 	return nil
+}
+
+// syncCommitteeFetcher returns a data fetcher for sync committee duty
+func syncCommitteeFetcher(r *SyncCommitteeRunner, duty *spectypes.Duty) *spectypes.DataFetcher {
+	return &spectypes.DataFetcher{
+		GetConsensusData: func() ([]byte, error) {
+			root, ver, err := r.GetBeaconNode().GetSyncMessageBlockRoot(duty.Slot)
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to get sync committee block root")
+			}
+
+			r.metrics.StartDutyFullFlow()
+			r.metrics.StartConsensus()
+
+			cd := spectypes.ConsensusData{
+				Duty:    *duty,
+				Version: ver,
+				DataSSZ: root[:],
+			}
+			return cd.Encode()
+		},
+	}
 }
 
 func (r *SyncCommitteeRunner) GetBaseRunner() *BaseRunner {

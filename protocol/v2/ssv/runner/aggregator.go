@@ -84,39 +84,48 @@ func (r *AggregatorRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *sp
 		return errors.Wrap(err, "could not reconstruct selection proof sig")
 	}
 
-	duty := r.GetState().StartingDuty
-
 	logger.Debug("🧩 got partial signature quorum",
 		zap.Any("signer", signedMsg.Signer),
-		fields.Slot(duty.Slot),
+		fields.Slot(r.GetState().StartingDuty.Slot),
 	)
 
-	r.metrics.PauseDutyFullFlow()
-
-	// get block data
-	res, ver, err := r.GetBeaconNode().SubmitAggregateSelectionProof(duty.Slot, duty.CommitteeIndex, duty.CommitteeLength, duty.ValidatorIndex, fullSig)
-	if err != nil {
-		return errors.Wrap(err, "failed to submit aggregate and proof")
-	}
-
-	r.metrics.ContinueDutyFullFlow()
-	r.metrics.StartConsensus()
-
-	byts, err := res.MarshalSSZ()
-	if err != nil {
-		return errors.Wrap(err, "could not marshal aggregate and proof")
-	}
-	input := &spectypes.ConsensusData{
-		Duty:    *duty,
-		Version: ver,
-		DataSSZ: byts,
-	}
-
-	if err := r.BaseRunner.decide(logger, r, input); err != nil {
+	aggregationFetcher := aggregationFetcher(r, fullSig)
+	if err := r.BaseRunner.decide(logger, r, aggregationFetcher); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}
 
 	return nil
+}
+
+func aggregationFetcher(r *AggregatorRunner, fullSig []byte) *spectypes.DataFetcher {
+	duty := r.GetState().StartingDuty
+	return &spectypes.DataFetcher{
+		GetConsensusData: func() ([]byte, error) {
+			// TODO(Oleg) metrics fix?
+			r.metrics.PauseDutyFullFlow()
+
+			aggData, ver, err := r.GetBeaconNode().SubmitAggregateSelectionProof(duty.Slot, duty.CommitteeIndex,
+				duty.CommitteeLength, duty.ValidatorIndex, fullSig)
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to submit aggregate and proof")
+			}
+
+			r.metrics.ContinueDutyFullFlow()
+			r.metrics.StartConsensus()
+
+			aggDataByts, err := aggData.MarshalSSZ()
+			if err != nil {
+				return nil, errors.Wrap(err, "could not marshal aggregate and proof")
+			}
+
+			cd := spectypes.ConsensusData{
+				Duty:    *duty,
+				Version: ver,
+				DataSSZ: aggDataByts,
+			}
+			return cd.Encode()
+		},
+	}
 }
 
 func (r *AggregatorRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbft.SignedMessage) error {

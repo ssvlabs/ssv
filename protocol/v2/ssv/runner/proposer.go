@@ -104,48 +104,61 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 	logger.Debug("🧩 reconstructed partial RANDAO signatures",
 		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)))
 
-	var ver spec.DataVersion
-	var obj ssz.Marshaler
-	var start = time.Now()
-	if r.ProducesBlindedBlocks {
-		// get block data
-		obj, ver, err = r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
-		if err != nil {
-			return errors.Wrap(err, "failed to get blinded beacon block")
-		}
-	} else {
-		// get block data
-		obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
-		if err != nil {
-			return errors.Wrap(err, "failed to get beacon block")
-		}
-	}
-	took := time.Since(start)
-	// Log essentials about the retrieved block.
-	blockSummary, summarizeErr := summarizeBlock(obj)
-	logger.Info("🧊 got beacon block proposal",
-		zap.String("block_hash", blockSummary.Hash.String()),
-		zap.Bool("blinded", blockSummary.Blinded),
-		zap.Duration("took", took),
-		zap.NamedError("summarize_err", summarizeErr))
-
-	byts, err := obj.MarshalSSZ()
-	if err != nil {
-		return errors.Wrap(err, "could not marshal beacon block")
-	}
-
-	input := &spectypes.ConsensusData{
-		Duty:    *duty,
-		Version: ver,
-		DataSSZ: byts,
-	}
+	beaconBlockFetcher := beaconBlockFetcher(logger, r, fullSig)
 
 	r.metrics.StartConsensus()
-	if err := r.BaseRunner.decide(logger, r, input); err != nil {
+	if err := r.BaseRunner.decide(logger, r, beaconBlockFetcher); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}
 
 	return nil
+}
+
+func beaconBlockFetcher(logger *zap.Logger, r *ProposerRunner, fullSig []byte) *spectypes.DataFetcher {
+	return &spectypes.DataFetcher{
+		GetConsensusData: func() ([]byte, error) {
+			duty := r.GetState().StartingDuty
+
+			var ver spec.DataVersion
+			var obj ssz.Marshaler
+			var err error
+			var start = time.Now()
+
+			if r.ProducesBlindedBlocks {
+				// get block data
+				obj, ver, err = r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
+				if err != nil {
+					return nil, errors.Wrap(err, "failed to get Beacon block")
+				}
+			} else {
+				// get block data
+				obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
+				if err != nil {
+					return nil, errors.Wrap(err, "failed to get Beacon block")
+				}
+			}
+			took := time.Since(start)
+			// Log essentials about the retrieved block.
+			blockSummary, summarizeErr := summarizeBlock(obj)
+			logger.Info("🧊 got beacon block proposal",
+				zap.String("block_hash", blockSummary.Hash.String()),
+				zap.Bool("blinded", blockSummary.Blinded),
+				zap.Duration("took", took),
+				zap.NamedError("summarize_err", summarizeErr))
+
+			byts, err := obj.MarshalSSZ()
+			if err != nil {
+				return nil, errors.Wrap(err, "could not marshal beacon block")
+			}
+
+			cd := spectypes.ConsensusData{
+				Duty:    *duty,
+				Version: ver,
+				DataSSZ: byts,
+			}
+			return cd.Encode()
+		},
+	}
 }
 
 func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbft.SignedMessage) error {

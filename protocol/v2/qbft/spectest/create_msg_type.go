@@ -96,5 +96,5 @@ func createRoundChange(test *spectests.CreateMsgSpecTest) (*specqbft.SignedMessa
 		}
 	}
 
-	return specqbft.CreateRoundChange(state, config, 1, test.Value[:])
+	return specqbft.CreateRoundChange(state, config, 1)
 }

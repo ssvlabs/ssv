@@ -147,5 +147,10 @@ func (b *BaseRunner) processPreConsensusJustification(logger *zap.Logger, runner
 		return errors.New("invalid pre-consensus justification quorum")
 	}
 
-	return b.decide(logger, runner, cd)
+	cdFetcher := &spectypes.DataFetcher{
+		GetConsensusData: func() ([]byte, error) {
+			return cd.Encode()
+		},
+	}
+	return b.decide(logger, runner, cdFetcher)
 }

@@ -114,33 +114,41 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(logger *zap.Logger, 
 		return nil
 	}
 
-	duty := r.GetState().StartingDuty
-
-	// fetch contributions
-	r.metrics.PauseDutyFullFlow()
-	contributions, ver, err := r.GetBeaconNode().GetSyncCommitteeContribution(duty.Slot, selectionProofs, subnets)
-	if err != nil {
-		return errors.Wrap(err, "could not get sync committee contribution")
-	}
-	r.metrics.ContinueDutyFullFlow()
-
-	byts, err := contributions.MarshalSSZ()
-	if err != nil {
-		return errors.Wrap(err, "could not marshal contributions")
-	}
-
-	// create consensus object
-	input := &spectypes.ConsensusData{
-		Duty:    *duty,
-		Version: ver,
-		DataSSZ: byts,
-	}
+	syncCommitteeContributionFetcher := syncCommitteeContributionFetcher(r, selectionProofs, subnets)
 
 	r.metrics.StartConsensus()
-	if err := r.BaseRunner.decide(logger, r, input); err != nil {
+	if err := r.BaseRunner.decide(logger, r, syncCommitteeContributionFetcher); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}
 	return nil
+}
+
+// syncCommitteeContributionFetcher returns a data fetcher for sync committee contribution duty
+func syncCommitteeContributionFetcher(r *SyncCommitteeAggregatorRunner, selectionProofs []phase0.BLSSignature, subnets []uint64) *spectypes.DataFetcher {
+	duty := r.GetState().StartingDuty
+
+	return &spectypes.DataFetcher{
+		GetConsensusData: func() ([]byte, error) {
+			r.metrics.PauseDutyFullFlow()
+			contributions, ver, err := r.GetBeaconNode().GetSyncCommitteeContribution(duty.Slot, selectionProofs, subnets)
+			if err != nil {
+				return nil, errors.Wrap(err, "could not get sync committee contribution")
+			}
+			r.metrics.ContinueDutyFullFlow()
+
+			byts, err := contributions.MarshalSSZ()
+			if err != nil {
+				return nil, errors.Wrap(err, "could not marshal contributions")
+			}
+
+			cd := spectypes.ConsensusData{
+				Duty:    *duty,
+				Version: ver,
+				DataSSZ: byts,
+			}
+			return cd.Encode()
+		},
+	}
 }
 
 func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbft.SignedMessage) error {

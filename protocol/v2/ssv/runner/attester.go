@@ -213,33 +213,41 @@ func (r *AttesterRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, 
 // 3) Once consensus decides, sign partial attestation and broadcast
 // 4) collect 2f+1 partial sigs, reconstruct and broadcast valid attestation sig to the BN
 func (r *AttesterRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
-	start := time.Now()
-	attData, ver, err := r.GetBeaconNode().GetAttestationData(duty.Slot, duty.CommitteeIndex)
-	if err != nil {
-		return errors.Wrap(err, "failed to get attestation data")
-	}
-	logger = logger.With(zap.Duration("attestation_data_time", time.Since(start)))
-
 	r.started = time.Now()
-
 	r.metrics.StartDutyFullFlow()
 	r.metrics.StartConsensus()
 
-	attDataByts, err := attData.MarshalSSZ()
-	if err != nil {
-		return errors.Wrap(err, "could not marshal attestation data")
-	}
-
-	input := &spectypes.ConsensusData{
-		Duty:    *duty,
-		Version: ver,
-		DataSSZ: attDataByts,
-	}
-
-	if err := r.BaseRunner.decide(logger, r, input); err != nil {
+	attestationFetcher := attestationFetcher(logger, r, duty)
+	if err := r.BaseRunner.decide(logger, r, attestationFetcher); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}
 	return nil
+}
+
+func attestationFetcher(logger *zap.Logger, r *AttesterRunner, duty *spectypes.Duty) *spectypes.DataFetcher {
+	return &spectypes.DataFetcher{
+		GetConsensusData: func() ([]byte, error) {
+			start := time.Now()
+			attData, ver, err := r.GetBeaconNode().GetAttestationData(duty.Slot, duty.CommitteeIndex)
+			if err != nil {
+				return nil, errors.Wrap(err, "failed to get attestation data")
+			}
+			// TODO(Oleg) fix logger
+			logger = logger.With(zap.Duration("attestation_data_time", time.Since(start)))
+
+			attDataByts, err := attData.MarshalSSZ()
+			if err != nil {
+				return nil, errors.Wrap(err, "could not marshal attestation data")
+			}
+
+			cd := spectypes.ConsensusData{
+				Duty:    *duty,
+				Version: ver,
+				DataSSZ: attDataByts,
+			}
+			return cd.Encode()
+		},
+	}
 }
 
 func (r *AttesterRunner) GetBaseRunner() *BaseRunner {

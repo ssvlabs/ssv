@@ -25,6 +25,7 @@ type Instance struct {
 
 	forceStop  bool
 	StartValue []byte
+	CDFetcher  *spectypes.DataFetcher `json:"-"`
 
 	metrics *metrics
 }
@@ -59,9 +60,9 @@ func (i *Instance) ForceStop() {
 }
 
 // Start is an interface implementation
-func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Height) {
+func (i *Instance) Start(logger *zap.Logger, cdFetcher *spectypes.DataFetcher, height specqbft.Height, valueCheckF specqbft.ProposedValueCheckF) {
 	i.startOnce.Do(func() {
-		i.StartValue = value
+		i.CDFetcher = cdFetcher
 		i.bumpToRound(specqbft.FirstRound)
 		i.State.Height = height
 		i.metrics.StartStage()
@@ -77,10 +78,21 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Heigh
 
 		// propose if this node is the proposer
 		if proposerID == i.State.Share.OperatorID {
+			value, err := cdFetcher.GetConsensusData()
+			if err != nil {
+				logger.Warn("❗failed to get consensus data", zap.Error(err))
+				return
+			}
+			if err = valueCheckF(value); err != nil {
+				logger.Warn("❗failed to validate consensus data", zap.Error(err))
+				return
+			}
+			i.StartValue = value
+
 			proposal, err := CreateProposal(i.State, i.config, i.StartValue, nil, nil)
 			// nolint
 			if err != nil {
-				logger.Warn("❗ failed to create proposal", zap.Error(err))
+				logger.Warn("❗failed to create proposal", zap.Error(err))
 				// TODO align spec to add else to avoid broadcast errored proposal
 			} else {
 				// nolint
@@ -146,7 +158,7 @@ func (i *Instance) ProcessMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (
 			}
 			return err
 		case specqbft.RoundChangeMsgType:
-			return i.uponRoundChange(logger, i.StartValue, msg, i.State.RoundChangeContainer, i.config.GetValueCheckF())
+			return i.uponRoundChange(logger, msg, i.State.RoundChangeContainer, i.config.GetValueCheckF())
 		default:
 			return errors.New("signed message type not supported")
 		}

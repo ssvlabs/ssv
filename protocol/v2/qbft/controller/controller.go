@@ -49,12 +49,7 @@ func NewController(
 }
 
 // StartNewInstance will start a new QBFT instance, if can't will return error
-func (c *Controller) StartNewInstance(logger *zap.Logger, height specqbft.Height, value []byte) error {
-
-	if err := c.GetConfig().GetValueCheckF()(value); err != nil {
-		return errors.Wrap(err, "value invalid")
-	}
-
+func (c *Controller) StartNewInstance(logger *zap.Logger, height specqbft.Height, cdFetcher *spectypes.DataFetcher) error {
 	if height < c.Height {
 		return errors.New("attempting to start an instance with a past height")
 	}
@@ -64,10 +59,11 @@ func (c *Controller) StartNewInstance(logger *zap.Logger, height specqbft.Height
 	}
 
 	c.Height = height
-
 	newInstance := c.addAndStoreNewInstance()
-	newInstance.Start(logger, value, height)
+	newInstance.Start(logger, cdFetcher, height, c.GetConfig().GetValueCheckF())
+
 	c.forceStopAllInstanceExceptCurrent()
+
 	return nil
 }
 
