@@ -3,6 +3,7 @@ package runner
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	"github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -52,6 +53,7 @@ func (b *BaseRunner) validatePreConsensusJustifications(data *spectypes.Consensu
 	signers := make(map[spectypes.OperatorID]bool)
 	roots := make(map[[32]byte]bool)
 	rootCount := 0
+	partialSigContainer := ssv.NewPartialSigContainer(b.Share.Quorum)
 	for i, msg := range data.PreConsensusJustifications {
 		if err := msg.Validate(); err != nil {
 			return err
@@ -74,29 +76,39 @@ func (b *BaseRunner) validatePreConsensusJustifications(data *spectypes.Consensu
 		}
 
 		// validate roots
-		for _, msgRoot := range msg.Message.Messages {
+		for _, partialSigMessage := range msg.Message.Messages {
 			// validate roots
 			if i == 0 {
 				// check signer did not sign duplicate root
-				if roots[msgRoot.SigningRoot] {
+				if roots[partialSigMessage.SigningRoot] {
 					return errors.New("duplicate signed root")
 				}
 
 				// record roots
-				roots[msgRoot.SigningRoot] = true
+				roots[partialSigMessage.SigningRoot] = true
 			} else {
 				// compare roots
-				if !roots[msgRoot.SigningRoot] {
+				if !roots[partialSigMessage.SigningRoot] {
 					return errors.New("inconsistent roots")
 				}
 			}
+			partialSigContainer.AddSignature(partialSigMessage)
 		}
 
-		// verify sigs and duty.slot == msg.slot
+		// verify duty.slot == msg.slot
 		if err := b.validatePartialSigMsgForSlot(msg, data.Duty.Slot); err != nil {
 			return err
 		}
 	}
+
+	// Verify the reconstructed signature for each root
+	for root := range roots {
+		_, err := b.State.ReconstructBeaconSig(partialSigContainer, root, b.Share.ValidatorPubKey)
+		if err != nil {
+			return errors.Wrap(err, "wrong pre-consensus partial signature")
+		}
+	}
+
 	return nil
 }
 

@@ -78,7 +78,9 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg 
 	root := roots[0]
 	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey)
 	if err != nil {
-		return errors.Wrap(err, "could not reconstruct voluntary exit sig")
+		// If the reconstructed signature verification failed, fall back to verifying each partial signature
+		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root)
+		return errors.Wrap(err, "got pre-consensus quorum but it has invalid signatures")
 	}
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], fullSig)

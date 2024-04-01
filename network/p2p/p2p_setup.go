@@ -221,7 +221,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 		IDService:       ids,
 		Network:         n.host.Network(),
 		SubnetsProvider: subnetsProvider,
-		NodeStorage:     n.nodeStorage,
+		OperatorSigner:  n.operatorSigner,
 		Permissioned:    n.cfg.Permissioned,
 	}, filters)
 

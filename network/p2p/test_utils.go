@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -22,8 +23,9 @@ import (
 	"github.com/bloxapp/ssv/network/peers/connections/mock"
 	"github.com/bloxapp/ssv/network/testing"
 	"github.com/bloxapp/ssv/networkconfig"
+	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
+	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/utils/format"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
 // PeersIndexProvider holds peers index instance
@@ -129,15 +131,21 @@ func CreateAndStartLocalNet(pCtx context.Context, logger *zap.Logger, options Lo
 
 // NewTestP2pNetwork creates a new network.P2PNetwork instance
 func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys testing.NodeKeys, logger *zap.Logger, options LocalNetOptions) (network.P2PNetwork, error) {
-	operatorPubkey, err := rsaencryption.ExtractPublicKey(keys.OperatorKey)
+	operatorPubkey, err := keys.OperatorKey.Public().Base64()
 	if err != nil {
 		return nil, err
 	}
-	cfg := NewNetConfig(keys, format.OperatorID([]byte(operatorPubkey)), ln.Bootnode, testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), options.Nodes)
+
+	hash, err := keys.OperatorKey.StorageHash()
+	if err != nil {
+		panic(err)
+	}
+
+	cfg := NewNetConfig(keys, format.OperatorID(operatorPubkey), ln.Bootnode, testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), options.Nodes)
 	cfg.Ctx = ctx
 	cfg.Subnets = "00000000000000000000020000000000" //PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
 	cfg.NodeStorage = mock.NodeStorage{
-		MockGetPrivateKey:               keys.OperatorKey,
+		MockPrivateKeyHash:              hash,
 		RegisteredOperatorPublicKeyPEMs: []string{},
 	}
 	cfg.Metrics = nil
@@ -170,6 +178,8 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 		}
 		cfg.PeerScoreInspectorInterval = options.PeerScoreInspectorInterval
 	}
+
+	cfg.OperatorDataStore = operatordatastore.New(&registrystorage.OperatorData{ID: spectypes.OperatorID(nodeIndex + 1)})
 
 	mr := metricsreporter.New()
 	p := New(logger, cfg, mr)
@@ -238,7 +248,7 @@ func NewNetConfig(keys testing.NodeKeys, operatorPubKeyHash string, bn *discover
 		PubSubTrace:        false,
 		PubSubScoring:      true,
 		NetworkPrivateKey:  keys.NetKey,
-		OperatorPrivateKey: keys.OperatorKey,
+		OperatorSigner:     keys.OperatorKey,
 		OperatorPubKeyHash: operatorPubKeyHash,
 		UserAgent:          ua,
 		Discovery:          discT,

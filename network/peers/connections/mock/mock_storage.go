@@ -2,7 +2,6 @@ package mock
 
 import (
 	"bytes"
-	"crypto/rsa"
 	"math/big"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
@@ -18,7 +17,7 @@ import (
 var _ storage.Storage = NodeStorage{}
 
 type NodeStorage struct {
-	MockGetPrivateKey               *rsa.PrivateKey
+	MockPrivateKeyHash              string
 	RegisteredOperatorPublicKeyPEMs []string
 }
 
@@ -142,15 +141,15 @@ func (m NodeStorage) DropShares() error {
 	panic("implement me")
 }
 
-func (m NodeStorage) GetPrivateKey() (*rsa.PrivateKey, bool, error) {
-	if m.MockGetPrivateKey != nil {
-		return m.MockGetPrivateKey, true, nil
+func (m NodeStorage) GetPrivateKeyHash() (string, bool, error) {
+	if m.MockPrivateKeyHash != "" {
+		return m.MockPrivateKeyHash, true, nil
 	} else {
-		return nil, false, errors.New("error")
+		return "", false, errors.New("error")
 	}
 }
 
-func (m NodeStorage) SetupPrivateKey(operatorKeyBase64 string) ([]byte, error) {
+func (m NodeStorage) SavePrivateKeyHash(privKeyHash string) error {
 	//TODO implement me
 	panic("implement me")
 }
