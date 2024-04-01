@@ -3,6 +3,7 @@ package mock
 import (
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/records"
+
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 )

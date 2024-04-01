@@ -7,10 +7,11 @@ import (
 
 	"github.com/libp2p/go-libp2p/core/peer"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network/peers/connections/mock"
 	"github.com/bloxapp/ssv/network/records"
-	"github.com/stretchr/testify/require"
 )
 
 // TestHandshakeTestData is a test for testing data and mocks

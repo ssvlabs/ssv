@@ -56,13 +56,13 @@ var (
 	ErrEarlyMessage                        = Error{text: "early message"}
 	ErrLateMessage                         = Error{text: "late message"}
 	ErrTooManySameTypeMessagesPerRound     = Error{text: "too many messages of same type per round"}
-	ErrRSADecryption                       = Error{text: "rsa decryption", reject: true}
+	ErrSignatureVerification               = Error{text: "signature verification", reject: true}
 	ErrOperatorNotFound                    = Error{text: "operator not found", reject: true}
 	ErrPubSubMessageHasNoData              = Error{text: "pub-sub message has no data", reject: true}
 	ErrDecodedPubSubMessageHasEmptyData    = Error{text: "pub-sub decoded message has empty data", reject: true}
 	ErrPubSubDataTooBig                    = Error{text: "pub-sub message data too big", reject: true}
 	ErrMalformedPubSubMessage              = Error{text: "pub-sub message is malformed", reject: true}
-	ErrEmptySSVMessage                     = Error{text: "decoded ssv message is empty", reject: true}
+	ErrEmptyPubSubMessage                  = Error{text: "pub-sub message is empty", reject: true}
 	ErrTopicNotFound                       = Error{text: "topic not found", reject: true}
 	ErrSSVDataTooBig                       = Error{text: "ssv message data too big", reject: true}
 	ErrInvalidRole                         = Error{text: "invalid role", reject: true}

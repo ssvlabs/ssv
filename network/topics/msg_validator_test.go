@@ -3,7 +3,6 @@ package topics
 import (
 	"context"
 	"crypto"
-	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
 	"testing"
@@ -59,12 +58,14 @@ func TestMsgValidator(t *testing.T) {
 		ssvMsg, err := dummySSVConsensusMsg(share.ValidatorPubKey, qbft.Height(slot))
 		require.NoError(t, err)
 
-		operatorPrivateKey, err := rsa.GenerateKey(rand.Reader, 2048)
+		_, skByte, err := rsaencryption.GenerateKeys()
+		require.NoError(t, err)
+		operatorPrivateKey, err := rsaencryption.PemToPrivateKey(skByte)
 		require.NoError(t, err)
 
 		operatorId := uint64(1)
 
-		operatorPubKey, err := rsaencryption.ExtractPublicKey(operatorPrivateKey)
+		operatorPubKey, err := rsaencryption.ExtractPublicKey(&operatorPrivateKey.PublicKey)
 		require.NoError(t, err)
 
 		od := &storage.OperatorData{

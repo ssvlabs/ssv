@@ -14,7 +14,7 @@ import (
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/network/streams"
-	"github.com/bloxapp/ssv/operator/storage"
+	"github.com/bloxapp/ssv/operator/keys"
 )
 
 // errPeerWasFiltered is thrown when a peer is filtered during handshake
@@ -44,14 +44,13 @@ type handshaker struct {
 
 	filters func() []HandshakeFilter
 
-	streams     streams.StreamController
-	nodeInfos   peers.NodeInfoIndex
-	peerInfos   peers.PeerInfoIndex
-	connIdx     peers.ConnectionIndex
-	subnetsIdx  peers.SubnetsIndex
-	ids         identify.IDService
-	net         libp2pnetwork.Network
-	nodeStorage storage.Storage
+	streams    streams.StreamController
+	nodeInfos  peers.NodeInfoIndex
+	peerInfos  peers.PeerInfoIndex
+	connIdx    peers.ConnectionIndex
+	subnetsIdx peers.SubnetsIndex
+	ids        identify.IDService
+	net        libp2pnetwork.Network
 
 	subnetsProvider SubnetsProvider
 }
@@ -65,7 +64,7 @@ type HandshakerCfg struct {
 	ConnIdx         peers.ConnectionIndex
 	SubnetsIdx      peers.SubnetsIndex
 	IDService       identify.IDService
-	NodeStorage     storage.Storage
+	OperatorSigner  keys.OperatorSigner
 	SubnetsProvider SubnetsProvider
 }
 
@@ -82,7 +81,6 @@ func NewHandshaker(ctx context.Context, cfg *HandshakerCfg, filters func() []Han
 		peerInfos:       cfg.PeerInfos,
 		subnetsProvider: cfg.SubnetsProvider,
 		net:             cfg.Network,
-		nodeStorage:     cfg.NodeStorage,
 	}
 	return h
 }
@@ -109,6 +107,7 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 		if err != nil {
 			return errors.Wrap(err, "could not seal self node info")
 		}
+
 		if err := respond(self); err != nil {
 			return errors.Wrap(err, "could not send self node info")
 		}

@@ -2,9 +2,6 @@ package p2pv1
 
 import (
 	"context"
-	"crypto"
-	"crypto/rsa"
-	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"math/rand"
@@ -59,19 +56,21 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
 
+	if !n.operatorDataStore.OperatorIDReady() {
+		return fmt.Errorf("operator ID is not ready")
+	}
+
 	encodedMsg, err := commons.EncodeNetworkMsg(msg)
 	if err != nil {
 		return errors.Wrap(err, "could not decode msg")
 	}
 
-	hash := sha256.Sum256(encodedMsg)
-
-	signature, err := rsa.SignPKCS1v15(nil, n.operatorPrivateKey, crypto.SHA256, hash[:])
+	signature, err := n.operatorSigner.Sign(encodedMsg)
 	if err != nil {
 		return err
 	}
 
-	encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, n.getOperatorID(), signature)
+	encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, n.operatorDataStore.GetOperatorID(), signature)
 
 	vpk := msg.GetID().GetPubKey()
 	topics := commons.ValidatorTopicID(vpk)

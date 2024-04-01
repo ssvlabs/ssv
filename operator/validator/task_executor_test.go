@@ -8,21 +8,23 @@ import (
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/golang/mock/gomock"
+	"github.com/herumi/bls-eth-go-binary/bls"
+	"github.com/stretchr/testify/require"
+
 	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/networkconfig"
+	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/validatorsmap"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/golang/mock/gomock"
-	"github.com/herumi/bls-eth-go-binary/bls"
-	"github.com/stretchr/testify/require"
 )
 
 func TestController_LiquidateCluster(t *testing.T) {
-	operatorData := buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")
+	operatorDataStore := operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
 	secretKey := &bls.SecretKey{}
 	secretKey2 := &bls.SecretKey{}
 	require.NoError(t, secretKey.SetHexString(sk1Str))
@@ -51,7 +53,7 @@ func TestController_LiquidateCluster(t *testing.T) {
 	controllerOptions := MockControllerOptions{
 		beacon:              bc,
 		network:             network,
-		operatorData:        operatorData,
+		operatorDataStore:   operatorDataStore,
 		sharesStorage:       sharesStorage,
 		recipientsStorage:   recipientStorage,
 		validatorsMap:       mockValidatorsMap,
@@ -84,7 +86,7 @@ func (signable) GetRoot() ([32]byte, error) {
 }
 
 func TestController_StopValidator(t *testing.T) {
-	operatorData := buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")
+	operatorDataStore := operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
 	secretKey := &bls.SecretKey{}
 	secretKey2 := &bls.SecretKey{}
 	require.NoError(t, secretKey.SetHexString(sk1Str))
@@ -114,7 +116,7 @@ func TestController_StopValidator(t *testing.T) {
 	controllerOptions := MockControllerOptions{
 		beacon:              bc,
 		network:             network,
-		operatorData:        operatorData,
+		operatorDataStore:   operatorDataStore,
 		sharesStorage:       sharesStorage,
 		recipientsStorage:   recipientStorage,
 		validatorsMap:       mockValidatorsMap,
@@ -145,7 +147,7 @@ func TestController_StopValidator(t *testing.T) {
 func TestController_ReactivateCluster(t *testing.T) {
 	storageMap := ibftstorage.NewStores()
 
-	operatorData := buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")
+	operatorDataStore := operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811"))
 	secretKey := &bls.SecretKey{}
 	secretKey2 := &bls.SecretKey{}
 	require.NoError(t, secretKey.SetHexString(sk1Str))
@@ -160,7 +162,7 @@ func TestController_ReactivateCluster(t *testing.T) {
 	controllerOptions := MockControllerOptions{
 		beacon:            bc,
 		network:           network,
-		operatorData:      operatorData,
+		operatorDataStore: operatorDataStore,
 		sharesStorage:     sharesStorage,
 		recipientsStorage: recipientStorage,
 		validatorsMap:     mockValidatorsMap,

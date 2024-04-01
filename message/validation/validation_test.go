@@ -2,10 +2,6 @@ package validation
 
 import (
 	"bytes"
-	"crypto"
-	crand "crypto/rand"
-	"crypto/rsa"
-	"crypto/sha256"
 	"encoding/hex"
 	"math"
 	"testing"
@@ -27,6 +23,7 @@ import (
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
+	"github.com/bloxapp/ssv/operator/keys"
 	"github.com/bloxapp/ssv/operator/storage"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
@@ -34,7 +31,6 @@ import (
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
 func Test_ValidateSSVMessage(t *testing.T) {
@@ -1896,18 +1892,17 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			encodedMsg, err := commons.EncodeNetworkMsg(message)
 			require.NoError(t, err)
 
-			hash := sha256.Sum256(encodedMsg)
-			privKey, err := rsa.GenerateKey(crand.Reader, 2048)
+			privKey, err := keys.GeneratePrivateKey()
+			require.NoError(t, err)
+
+			pubKey, err := privKey.Public().Base64()
 			require.NoError(t, err)
 
 			const operatorID = spectypes.OperatorID(1)
 
-			pubKey, err := rsaencryption.ExtractPublicKey(privKey)
-			require.NoError(t, err)
-
 			od := &registrystorage.OperatorData{
 				ID:           operatorID,
-				PublicKey:    []byte(pubKey),
+				PublicKey:    pubKey,
 				OwnerAddress: common.Address{},
 			}
 
@@ -1915,7 +1910,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			require.NoError(t, err)
 			require.False(t, found)
 
-			signature, err := rsa.SignPKCS1v15(crand.Reader, privKey, crypto.SHA256, hash[:])
+			signature, err := privKey.Sign(encodedMsg)
 			require.NoError(t, err)
 
 			encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, operatorID, signature)
@@ -1954,18 +1949,17 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			encodedMsg, err := commons.EncodeNetworkMsg(message)
 			require.NoError(t, err)
 
-			hash := sha256.Sum256(encodedMsg)
-			privKey, err := rsa.GenerateKey(crand.Reader, 2048)
+			privKey, err := keys.GeneratePrivateKey()
+			require.NoError(t, err)
+
+			pubKey, err := privKey.Public().Base64()
 			require.NoError(t, err)
 
 			const operatorID = spectypes.OperatorID(1)
 
-			pubKey, err := rsaencryption.ExtractPublicKey(privKey)
-			require.NoError(t, err)
-
 			od := &registrystorage.OperatorData{
 				ID:           operatorID,
-				PublicKey:    []byte(pubKey),
+				PublicKey:    pubKey,
 				OwnerAddress: common.Address{},
 			}
 
@@ -1973,7 +1967,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			require.NoError(t, err)
 			require.False(t, found)
 
-			signature, err := rsa.SignPKCS1v15(crand.Reader, privKey, crypto.SHA256, hash[:])
+			signature, err := privKey.Sign(encodedMsg)
 			require.NoError(t, err)
 
 			const unexpectedOperatorID = 2
@@ -2013,17 +2007,17 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			encodedMsg, err := commons.EncodeNetworkMsg(message)
 			require.NoError(t, err)
 
-			privKey, err := rsa.GenerateKey(crand.Reader, 2048)
+			privKey, err := keys.GeneratePrivateKey()
+			require.NoError(t, err)
+
+			pubKey, err := privKey.Public().Base64()
 			require.NoError(t, err)
 
 			const operatorID = spectypes.OperatorID(1)
 
-			pubKey, err := rsaencryption.ExtractPublicKey(privKey)
-			require.NoError(t, err)
-
 			od := &registrystorage.OperatorData{
 				ID:           operatorID,
-				PublicKey:    []byte(pubKey),
+				PublicKey:    pubKey,
 				OwnerAddress: common.Address{},
 			}
 
@@ -2043,7 +2037,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
 			_, _, err = validator.validateP2PMessage(pMsg, receivedAt)
-			require.ErrorContains(t, err, ErrRSADecryption.Error())
+			require.ErrorContains(t, err, ErrSignatureVerification.Error())
 
 			require.NoError(t, ns.DeleteOperatorData(nil, operatorID))
 		})
