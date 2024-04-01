@@ -88,7 +88,6 @@ func TestGetMaxPeers(t *testing.T) {
 	require.Equal(t, 40, n.getMaxPeers(""))
 	require.Equal(t, 8, n.getMaxPeers("100"))
 }
-
 func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	n := 4
 	ctx, cancel := context.WithCancel(context.Background())
@@ -114,7 +113,8 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	node1, node2 := ln.Nodes[1], ln.Nodes[2]
 
 	var wg sync.WaitGroup
-	wg.Add(1)
+	wg.Add(2) // Add 2 for the two goroutines we are going to create
+
 	go func() {
 		defer wg.Done()
 		msg1 := dummyMsgAttester(t, pks[0], 1)
@@ -126,16 +126,15 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 		require.NoError(t, node2.Broadcast(msg1))
 	}()
 
-	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		msg1 := dummyMsgAttester(t, pks[0], 1)
 		msg2 := dummyMsgAttester(t, pks[1], 2)
 		msg3 := dummyMsgAttester(t, pks[0], 3)
 		require.NoError(t, err)
-		<-time.After(time.Millisecond * 10)
+		time.Sleep(time.Millisecond * 10)
 		require.NoError(t, node1.Broadcast(msg2))
-		<-time.After(time.Millisecond * 2)
+		time.Sleep(time.Millisecond * 2)
 		require.NoError(t, node2.Broadcast(msg1))
 		require.NoError(t, node1.Broadcast(msg3))
 	}()
@@ -162,6 +161,81 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 
 	<-time.After(time.Millisecond * 10)
 }
+
+//
+//func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
+//	n := 4
+//	ctx, cancel := context.WithCancel(context.Background())
+//	defer cancel()
+//
+//	pks := []string{"b768cdc2b2e0a859052bf04d1cd66383c96d95096a5287d08151494ce709556ba39c1300fbb902a0e2ebb7c31dc4e400",
+//		"824b9024767a01b56790a72afb5f18bb0f97d5bddb946a7bd8dd35cc607c35a4d76be21f24f484d0d478b99dc63ed170"}
+//	ln, routers, err := createNetworkAndSubscribe(t, ctx, LocalNetOptions{
+//		Nodes:        n,
+//		MinConnected: n/2 - 1,
+//		UseDiscv5:    false,
+//	}, pks...)
+//	require.NoError(t, err)
+//	require.NotNil(t, routers)
+//	require.NotNil(t, ln)
+//
+//	defer func() {
+//		for _, node := range ln.Nodes {
+//			require.NoError(t, node.(*p2pNetwork).Close())
+//		}
+//	}()
+//
+//	node1, node2 := ln.Nodes[1], ln.Nodes[2]
+//
+//	var wg sync.WaitGroup
+//	wg.Add(1)
+//	go func() {
+//		defer wg.Done()
+//		msg1 := dummyMsgAttester(t, pks[0], 1)
+//		msg3 := dummyMsgAttester(t, pks[0], 3)
+//		require.NoError(t, node1.Broadcast(msg1))
+//		<-time.After(time.Millisecond * 10)
+//		require.NoError(t, node2.Broadcast(msg3))
+//		<-time.After(time.Millisecond * 2)
+//		require.NoError(t, node2.Broadcast(msg1))
+//	}()
+//
+//	wg.Add(1)
+//	go func() {
+//		defer wg.Done()
+//		msg1 := dummyMsgAttester(t, pks[0], 1)
+//		msg2 := dummyMsgAttester(t, pks[1], 2)
+//		msg3 := dummyMsgAttester(t, pks[0], 3)
+//		require.NoError(t, err)
+//		<-time.After(time.Millisecond * 10)
+//		require.NoError(t, node1.Broadcast(msg2))
+//		<-time.After(time.Millisecond * 2)
+//		require.NoError(t, node2.Broadcast(msg1))
+//		require.NoError(t, node1.Broadcast(msg3))
+//	}()
+//
+//	wg.Wait()
+//
+//	// waiting for messages
+//	wg.Add(1)
+//	go func() {
+//		ct, cancel := context.WithTimeout(ctx, time.Second*5)
+//		defer cancel()
+//		defer wg.Done()
+//		for _, r := range routers {
+//			for ct.Err() == nil && atomic.LoadUint64(&r.count) < uint64(2) {
+//				time.Sleep(100 * time.Millisecond)
+//			}
+//		}
+//	}()
+//	wg.Wait()
+//
+//	for _, r := range routers {
+//		require.GreaterOrEqual(t, atomic.LoadUint64(&r.count), uint64(2), "router", r.i)
+//	}
+//
+//	<-time.After(time.Millisecond * 10)
+//}
 
 func TestP2pNetwork_Stream(t *testing.T) {
 	n := 12
