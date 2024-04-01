@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/networkconfig"
+	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/slotticker"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
@@ -31,7 +32,7 @@ type ControllerOptions struct {
 	ShareStorage       storage.Shares
 	RecipientStorage   storage.Recipients
 	SlotTickerProvider slotticker.Provider
-	OperatorData       *storage.OperatorData
+	OperatorDataStore  operatordatastore.OperatorDataStore
 }
 
 // recipientController implementation of RecipientController
@@ -42,7 +43,7 @@ type recipientController struct {
 	shareStorage       storage.Shares
 	recipientStorage   storage.Recipients
 	slotTickerProvider slotticker.Provider
-	operatorData       *storage.OperatorData
+	operatorDataStore  operatordatastore.OperatorDataStore
 }
 
 func NewController(opts *ControllerOptions) *recipientController {
@@ -53,7 +54,7 @@ func NewController(opts *ControllerOptions) *recipientController {
 		shareStorage:       opts.ShareStorage,
 		recipientStorage:   opts.RecipientStorage,
 		slotTickerProvider: opts.SlotTickerProvider,
-		operatorData:       opts.OperatorData,
+		operatorDataStore:  opts.OperatorDataStore,
 	}
 }
 
@@ -86,7 +87,11 @@ func (rc *recipientController) listenToTicker(logger *zap.Logger) {
 }
 
 func (rc *recipientController) prepareAndSubmit(logger *zap.Logger, slot phase0.Slot) error {
-	shares := rc.shareStorage.List(nil, storage.ByOperatorID(rc.operatorData.ID), storage.ByActiveValidator())
+	shares := rc.shareStorage.List(
+		nil,
+		storage.ByOperatorID(rc.operatorDataStore.GetOperatorID()),
+		storage.ByActiveValidator(),
+	)
 
 	const batchSize = 500
 	var submitted int

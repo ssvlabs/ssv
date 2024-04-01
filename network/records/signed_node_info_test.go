@@ -1,9 +1,7 @@
 package records
 
 import (
-	"crypto"
 	"crypto/rand"
-	"crypto/rsa"
 	"reflect"
 	"testing"
 	"time"
@@ -12,7 +10,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/utils/rsaencryption"
+	"github.com/bloxapp/ssv/operator/keys"
 )
 
 func TestSignedNodeInfo_Seal_Consume(t *testing.T) {
@@ -26,26 +24,17 @@ func TestSignedNodeInfo_Seal_Consume(t *testing.T) {
 		},
 	}
 
-	_, senderPrivateKeyPem, err := rsaencryption.GenerateKeys()
-	require.NoError(t, err)
-
-	senderPrivateKey, err := rsaencryption.ConvertPemToPrivateKey(string(senderPrivateKeyPem))
-	require.NoError(t, err)
-
-	senderBase64PublicKeyPem, err := rsaencryption.ExtractPublicKey(senderPrivateKey)
+	senderPrivateKey, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
 
 	handshakeData := HandshakeData{
 		SenderPeerID:    peer.ID("1.1.1.1"),
 		RecipientPeerID: peer.ID("2.2.2.2"),
 		Timestamp:       time.Now().Round(time.Second),
-		SenderPublicKey: []byte(senderBase64PublicKeyPem),
+		SenderPublicKey: senderPrivateKey.Base64(),
 	}
-	hashed := handshakeData.Hash()
 
-	hashedHandshakeData := hashed[:]
-
-	signature, err := rsa.SignPKCS1v15(nil, senderPrivateKey, crypto.SHA256, hashedHandshakeData)
+	signature, err := senderPrivateKey.Sign(handshakeData.Encode())
 	require.NoError(t, err)
 
 	sni := &SignedNodeInfo{
@@ -77,26 +66,17 @@ func TestSignedNodeInfo_Marshal_Unmarshal(t *testing.T) {
 		},
 	}
 
-	_, senderPrivateKeyPem, err := rsaencryption.GenerateKeys()
-	require.NoError(t, err)
-
-	senderPrivateKey, err := rsaencryption.ConvertPemToPrivateKey(string(senderPrivateKeyPem))
-	require.NoError(t, err)
-
-	senderBase64PublicKeyPem, err := rsaencryption.ExtractPublicKey(senderPrivateKey)
+	senderPrivateKey, err := keys.GeneratePrivateKey()
 	require.NoError(t, err)
 
 	handshakeData := HandshakeData{
 		SenderPeerID:    peer.ID("1.1.1.1"),
 		RecipientPeerID: peer.ID("2.2.2.2"),
 		Timestamp:       time.Now().Round(time.Second),
-		SenderPublicKey: []byte(senderBase64PublicKeyPem),
+		SenderPublicKey: senderPrivateKey.Base64(),
 	}
-	hashed := handshakeData.Hash()
 
-	hashedHandshakeData := hashed[:]
-
-	signature, err := rsa.SignPKCS1v15(nil, senderPrivateKey, crypto.SHA256, hashedHandshakeData)
+	signature, err := senderPrivateKey.Sign(handshakeData.Encode())
 	require.NoError(t, err)
 
 	sni := &SignedNodeInfo{
