@@ -5,7 +5,7 @@ FROM golang:1.20.14 AS preparer
 
 RUN apt-get update                                                        && \
   DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
-  curl=7.88.1-10+deb12u1 \
+  curl \
   git=1:2.39.2-1.1 \
   zip=3.0-13 \
   unzip=6.0-28 \
