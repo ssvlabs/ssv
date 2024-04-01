@@ -1,18 +1,23 @@
 # Degradation Tester
 
-#### Continuous Benchmarking
+### Continuous Benchmarking
 
-Degradation Tester is a tool for detecting performance degradation in Go projects. It allows comparing current benchmark results against previous ones to identify potential performance issues.
+Degradation Tester is a tool for detecting performance degradation. It allows to compare current benchmark results against previous ones to identify potential performance issues.
+It's important to use the same environment and CPU for testing. We use the Github Actions workflow for the benchmarks, which currently uses the `AMD EPYC 7763 64-Core Processor`.
 
-#### Approving Performance Changes
+### Approving Performance Changes
 
-If you've made changes that affect performance, whether improvements or degradations, it's essential to regenerate the benchmarks and replace the existing files in the `benchmarks` directory. This ensures that future comparisons accurately reflect the impact of your changes and maintains the integrity of the performance testing process.
+If you've made changes that affect performance, whether they are improvements or degradations, it's essential to regenerate the benchmarks and replace the existing files in the `benchmarks` directory. This ensures that future comparisons accurately reflect the impact of your changes and maintains the integrity of the performance testing process.
 
- To regenerate and update the benchmarks, use the `update-benchmarks`:
+To regenerate and update the benchmarks, use the `update-benchmarks` command in the Makefile. To update the benchmarks in the repo using Github Actions, you should use the manually triggered workflow for your Pull Request named **Manual Benchmarks Update**.
 
-```bash
-make update-benchmarks
-```
+To run the workflow:
+- Open the PR
+- Go to Actions
+- Choose `Manual Benchmarks Update` from the list of available actions
+- Click `Run workflow` and choose your branch from the dropdown menu
+
+The workflow is located in `.github/workflows/manual-benchmarks-update-.yml`.
 
 ## Configuration
 
@@ -44,6 +49,11 @@ Packages:
 
 ## Local Usage
 
+### Dependecies
+
+- `yq`
+- `benchstat`
+
 ### Installation
 
 Install the benchmarks degradation checker tool:
@@ -52,7 +62,7 @@ Install the benchmarks degradation checker tool:
 
 ### Running Degradation Tests
 
-To run degradation tests, execute:
+To run the degradation tests, execute:
 
 ```bash
 make degradation-test
@@ -60,7 +70,7 @@ make degradation-test
 
 ### Updating Benchmarks
 
-To update benchmarks, execute:
+To replace the benchmarks with your local ones, execute:
 
 ```bash
 make update-benchmarks
@@ -70,14 +80,12 @@ make update-benchmarks
 
 `.github/workflows/degradation-test.yml` containing a workflow for automatically running degradation tests as part of the CI/CD process
 
-### Scripts
+`.github/workflows/manual-benchmarks-update-.yml`. containing a workflow for updating the benchmarks with manual triggering
+
+## Scripts
 
 The `./scripts/degradation-tester` directory contains the following scripts:
 
 - `degradation-check.sh` - running degradation tests. Runs benchmarks, saves the new results, compares benchmarking results per all listed packages in `config.yaml`
 
 - `update-benchmarks.sh` - A script for updating benchmarks
-
-### Dependencies
-
-> Note: Ensure yq is installed in your system for proper YAML config parsing.
