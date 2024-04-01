@@ -7,7 +7,8 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"math/big"
-	"sync"
+	"sync/atomic"
+	"unsafe"
 
 	"github.com/microsoft/go-crypto-openssl/openssl"
 	"github.com/microsoft/go-crypto-openssl/openssl/bbig/bridge"
@@ -20,8 +21,7 @@ type privateKey struct {
 
 type publicKey struct {
 	pubKey       *rsa.PublicKey
-	cachedPubkey *openssl.PublicKeyRSA
-	mu           sync.RWMutex
+	cachedPubkey unsafe.Pointer // changed to unsafe.Pointer
 }
 
 func init() {
@@ -74,21 +74,18 @@ func SignRSA(priv *privateKey, data []byte) ([]byte, error) {
 }
 
 func checkCachePubkey(pub *publicKey) (*openssl.PublicKeyRSA, error) {
-	pub.mu.RLock()
-	defer pub.mu.RUnlock()
-
-	if pub.cachedPubkey != nil {
-		return pub.cachedPubkey, nil
+	cachedPubkey := (*openssl.PublicKeyRSA)(atomic.LoadPointer(&pub.cachedPubkey))
+	if cachedPubkey != nil {
+		return cachedPubkey, nil
 	}
 
 	opub, err := rsaPublicKeyToOpenSSL(pub.pubKey)
 	if err != nil {
 		return nil, err
 	}
-	pub.mu.Lock()
-	defer pub.mu.Unlock()
 
-	pub.cachedPubkey = opub
+	// Atomically store the pointer to the new openssl.PublicKeyRSA
+	atomic.StorePointer(&pub.cachedPubkey, unsafe.Pointer(opub))
 
 	return opub, nil
 }
