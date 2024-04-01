@@ -7,6 +7,7 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"math/big"
+	"sync"
 
 	"github.com/microsoft/go-crypto-openssl/openssl"
 	"github.com/microsoft/go-crypto-openssl/openssl/bbig/bridge"
@@ -20,6 +21,7 @@ type privateKey struct {
 type publicKey struct {
 	pubKey       *rsa.PublicKey
 	cachedPubkey *openssl.PublicKeyRSA
+	mu           sync.RWMutex
 }
 
 func init() {
@@ -72,6 +74,9 @@ func SignRSA(priv *privateKey, data []byte) ([]byte, error) {
 }
 
 func checkCachePubkey(pub *publicKey) (*openssl.PublicKeyRSA, error) {
+	pub.mu.RLock()
+	defer pub.mu.RUnlock()
+
 	if pub.cachedPubkey != nil {
 		return pub.cachedPubkey, nil
 	}
@@ -80,6 +85,9 @@ func checkCachePubkey(pub *publicKey) (*openssl.PublicKeyRSA, error) {
 	if err != nil {
 		return nil, err
 	}
+	pub.mu.Lock()
+	defer pub.mu.Unlock()
+
 	pub.cachedPubkey = opub
 
 	return opub, nil
