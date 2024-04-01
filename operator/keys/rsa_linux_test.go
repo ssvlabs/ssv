@@ -6,9 +6,8 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
-	"sync"
-
 	"github.com/stretchr/testify/require"
+	"sync"
 
 	"testing"
 )
@@ -22,7 +21,7 @@ func Test_VerifyRegularSigWithOpenSSL(t *testing.T) {
 	sig, err := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, hashed[:])
 	require.NoError(t, err)
 
-	pk := &privateKey{key, nil, &sync.Mutex{}}
+	pk := &privateKey{key, nil, sync.Mutex{}}
 	pub := pk.Public().(*publicKey)
 
 	require.NoError(t, VerifyRSA(pub, msg, sig))
@@ -42,8 +41,7 @@ func Test_VerifyOpenSSLWithOpenSSL(t *testing.T) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 	msg := []byte("hello")
-	mtx := &sync.Mutex{}
-	priv := &privateKey{key, nil, mtx}
+	priv := &privateKey{key, nil, sync.Mutex{}}
 	sig, err := priv.Sign(msg)
 	require.NoError(t, err)
 
@@ -63,14 +61,14 @@ func Test_ConversionError(t *testing.T) {
 
 	key.D = nil
 	msg := []byte("hello")
-	priv := &privateKey{key, nil, &sync.Mutex{}}
+	priv := &privateKey{key, nil, sync.Mutex{}}
 	_, err = priv.Sign(msg)
 	require.Error(t, err)
 
 	key2, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
-	priv2 := &privateKey{key2, nil, &sync.Mutex{}}
+	priv2 := &privateKey{key2, nil, sync.Mutex{}}
 	sig, err := priv2.Sign(msg)
 	require.NoError(t, err)
 	pub := priv2.Public().(*publicKey)
@@ -83,7 +81,7 @@ func Test_Caches(t *testing.T) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 	msg := []byte("hello")
-	priv := &privateKey{key, nil, &sync.Mutex{}}
+	priv := &privateKey{key, nil, sync.Mutex{}}
 	sig, err := priv.Sign(msg)
 	require.NoError(t, err)
 

@@ -16,13 +16,13 @@ import (
 type privateKey struct {
 	privKey       *rsa.PrivateKey
 	cachedPrivKey *openssl.PrivateKeyRSA
-	mutex         *sync.Mutex
+	mu            sync.Mutex
 }
 
 type publicKey struct {
 	pubKey       *rsa.PublicKey
 	cachedPubkey *openssl.PublicKeyRSA
-	mutex        *sync.Mutex
+	mu           sync.Mutex
 }
 
 func init() {
@@ -67,8 +67,8 @@ func checkCachePrivkey(priv *privateKey) (*openssl.PrivateKeyRSA, error) {
 }
 
 func SignRSA(priv *privateKey, data []byte) ([]byte, error) {
-	priv.mutex.Lock()
-	defer priv.mutex.Unlock()
+	priv.mu.Lock()
+	defer priv.mu.Unlock()
 
 	opriv, err := checkCachePrivkey(priv)
 	if err != nil {
@@ -92,6 +92,9 @@ func checkCachePubkey(pub *publicKey) (*openssl.PublicKeyRSA, error) {
 }
 
 func EncryptRSA(pub *publicKey, data []byte) ([]byte, error) {
+	pub.mu.Lock()
+	defer pub.mu.Unlock()
+
 	opub, err := checkCachePubkey(pub)
 	if err != nil {
 		return nil, err
@@ -100,8 +103,8 @@ func EncryptRSA(pub *publicKey, data []byte) ([]byte, error) {
 }
 
 func VerifyRSA(pub *publicKey, data, signature []byte) error {
-	pub.mutex.Lock()
-	defer pub.mutex.Unlock()
+	pub.mu.Lock()
+	defer pub.mu.Unlock()
 
 	opub, err := checkCachePubkey(pub)
 	if err != nil {
