@@ -1,7 +1,7 @@
 #
 # STEP 1: Prepare environment
 #
-FROM golang:1.20.7 AS preparer
+FROM golang:1.20.14 AS preparer
 
 RUN apt-get update                                                        && \
   DEBIAN_FRONTEND=noninteractive apt-get install -yq --no-install-recommends \
@@ -45,7 +45,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
   --mount=type=cache,mode=0755,target=/go/pkg \
   COMMIT=$(git rev-parse HEAD) && \
   VERSION=$(git describe --tags $(git rev-list --tags --max-count=1) --always) && \
-  CGO_ENABLED=1 GOOS=linux go install \
+  CGO_ENABLED=1 GOOS=linux GOEXPERIMENT=boringcrypto BUILD_GOEXPERIMENT=boringcrypto go install \
   -tags="blst_enabled,jemalloc,allocator" \
   -ldflags "-X main.Commit=$COMMIT -X main.Version=$VERSION -linkmode external -extldflags \"-static -lm\"" \
   ./cmd/ssvnode
@@ -53,7 +53,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 #
 # STEP 3: Prepare image to run the binary
 #
-FROM golang:1.20.7 AS runner
+FROM golang:1.20.14 AS runner
 
 WORKDIR /
 
