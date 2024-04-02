@@ -102,7 +102,7 @@ func compressLogFiles(logger *zap.Logger, args *CompressLogsArgs) (int64, error)
 	}
 
 	// Create a new zip file
-	zipFile, err := os.Create(filepath.Join(filepath.Clean(destName), compressedFileExtension))
+	zipFile, err := os.Create(filepath.Clean(destName + compressedFileExtension))
 	if err != nil {
 		return 0, err
 	}

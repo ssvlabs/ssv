@@ -2,12 +2,10 @@ package cmd_compress_logs
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
-
 	"github.com/ilyakaznacheev/cleanenv"
 	"go.uber.org/zap"
+	"os"
+	"path/filepath"
 
 	"github.com/bloxapp/ssv/logging"
 )
@@ -63,17 +61,19 @@ func calcFileSize(path string) (int64, error) {
 	return info.Size(), nil
 }
 
-func getLogFilesAbsPaths(path string) ([]string, error) {
-	logFileName := getFileNameWithoutExt(path)
-	ext := filepath.Ext(path)
-	absDirPath, err := filepath.Abs(filepath.Dir(path))
+func getLogFilesAbsPaths(fpath string) ([]string, error) {
+	logFileName := getFileNameWithoutExt(fpath)
+	ext := filepath.Ext(fpath)
+	absDirPath, err := filepath.Abs(filepath.Dir(fpath))
 	if err != nil {
 		return nil, err
 	}
-	files, err := os.ReadDir(filepath.Dir(path))
+	files, err := os.ReadDir(filepath.Dir(fpath))
 	if err != nil {
 		return nil, err
 	}
+
+	matchPattern := logFileName + "*" + ext
 
 	var logFiles []string
 	for _, file := range files {
@@ -82,10 +82,12 @@ func getLogFilesAbsPaths(path string) ([]string, error) {
 		}
 
 		fileName := file.Name()
-		filePrefix := strings.TrimSuffix(fileName, filepath.Ext(fileName))
 
-		// filter to have .log files
-		if filepath.Ext(fileName) == ext && strings.Contains(filePrefix, logFileName) {
+		matches, err := filepath.Match(matchPattern, fileName)
+		if err != nil {
+			return nil, err
+		}
+		if matches {
 			logFiles = append(logFiles, filepath.Join(absDirPath, fileName))
 		}
 	}
