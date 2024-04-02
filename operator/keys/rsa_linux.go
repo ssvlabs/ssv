@@ -16,13 +16,13 @@ import (
 type privateKey struct {
 	privKey       *rsa.PrivateKey
 	cachedPrivKey *openssl.PrivateKeyRSA
-	mu            sync.Mutex
+	once          sync.Once
 }
 
 type publicKey struct {
 	pubKey       *rsa.PublicKey
 	cachedPubkey *openssl.PublicKeyRSA
-	mu           sync.Mutex
+	once         sync.Once
 }
 
 func init() {
@@ -54,22 +54,14 @@ func rsaPublicKeyToOpenSSL(pub *rsa.PublicKey) (*openssl.PublicKeyRSA, error) {
 }
 
 func checkCachePrivkey(priv *privateKey) (*openssl.PrivateKeyRSA, error) {
-	if priv.cachedPrivKey != nil {
-		return priv.cachedPrivKey, nil
-	}
-	opriv, err := rsaPrivateKeyToOpenSSL(priv.privKey)
-	if err != nil {
-		return nil, err
-	}
-	priv.cachedPrivKey = opriv
-
-	return opriv, nil
+	var err error
+	priv.once.Do(func() {
+		priv.cachedPrivKey, err = rsaPrivateKeyToOpenSSL(priv.privKey)
+	})
+	return priv.cachedPrivKey, err
 }
 
 func SignRSA(priv *privateKey, data []byte) ([]byte, error) {
-	priv.mu.Lock()
-	defer priv.mu.Unlock()
-
 	opriv, err := checkCachePrivkey(priv)
 	if err != nil {
 		return nil, err
@@ -78,23 +70,14 @@ func SignRSA(priv *privateKey, data []byte) ([]byte, error) {
 }
 
 func checkCachePubkey(pub *publicKey) (*openssl.PublicKeyRSA, error) {
-	if pub.cachedPubkey != nil {
-		return pub.cachedPubkey, nil
-	}
-
-	opub, err := rsaPublicKeyToOpenSSL(pub.pubKey)
-	if err != nil {
-		return nil, err
-	}
-	pub.cachedPubkey = opub
-
-	return opub, nil
+	var err error
+	pub.once.Do(func() {
+		pub.cachedPubkey, err = rsaPublicKeyToOpenSSL(pub.pubKey)
+	})
+	return pub.cachedPubkey, err
 }
 
 func EncryptRSA(pub *publicKey, data []byte) ([]byte, error) {
-	pub.mu.Lock()
-	defer pub.mu.Unlock()
-
 	opub, err := checkCachePubkey(pub)
 	if err != nil {
 		return nil, err
@@ -103,9 +86,6 @@ func EncryptRSA(pub *publicKey, data []byte) ([]byte, error) {
 }
 
 func VerifyRSA(pub *publicKey, data, signature []byte) error {
-	pub.mu.Lock()
-	defer pub.mu.Unlock()
-
 	opub, err := checkCachePubkey(pub)
 	if err != nil {
 		return err
