@@ -2,7 +2,6 @@ package cmd_compress_logs
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -62,36 +61,6 @@ func calcFileSize(path string) (int64, error) {
 		return 0, err
 	}
 	return info.Size(), nil
-}
-
-func createFileCopy(file string, destDir string) error {
-	srcFile, err := os.Open(filepath.Clean(file))
-	if err != nil {
-		return err
-	}
-	defer func() {
-		_ = srcFile.Close()
-	}()
-
-	destFile, err := os.Create(
-		filepath.Clean(
-			filepath.Join(destDir, filepath.Base(srcFile.Name())),
-		),
-	)
-	if err != nil {
-		return err
-	}
-
-	defer func() {
-		_ = destFile.Close()
-	}()
-	// Copy the contents of the source file to the destination file
-	_, err = io.Copy(destFile, srcFile)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func getLogFilesAbsPaths(path string) ([]string, error) {

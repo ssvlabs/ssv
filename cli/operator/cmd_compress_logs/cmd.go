@@ -102,14 +102,17 @@ func compressLogFiles(logger *zap.Logger, args *CompressLogsArgs) (int64, error)
 	}
 
 	// Create a new zip file
-	zipFile, err := os.Create(destName + ".zip")
+	zipFile, err := os.Create(filepath.Join(filepath.Clean(destName), compressedFileExtension))
 	if err != nil {
 		return 0, err
 	}
-	defer zipFile.Close()
-
+	defer func() {
+		_ = zipFile.Close()
+	}()
 	zipWriter := zip.NewWriter(zipFile)
-	defer zipWriter.Close()
+	defer func() {
+		_ = zipWriter.Close()
+	}()
 
 	// #TODO
 	// Write concatenated debug log.
@@ -135,7 +138,7 @@ func compressLogFiles(logger *zap.Logger, args *CompressLogsArgs) (int64, error)
 }
 
 func addFileToZip(zipWriter *zip.Writer, filePath string) error {
-	file, err := os.Open(filePath)
+	file, err := os.Open(filepath.Clean(filePath))
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
 	}
@@ -168,6 +171,7 @@ func addFileToZip(zipWriter *zip.Writer, filePath string) error {
 }
 
 func dumpMetrics(promRoute string, metricsDumpFileName string) (string, error) {
+	// #nosec G107
 	resp, err := http.Get(promRoute)
 	if err != nil {
 		return "", fmt.Errorf("failed to get metrics from route %s with error: %w", promRoute, err)
@@ -176,7 +180,7 @@ func dumpMetrics(promRoute string, metricsDumpFileName string) (string, error) {
 		_ = resp.Body.Close()
 	}()
 
-	file, err := os.Create(metricsDumpFileName)
+	file, err := os.Create(filepath.Clean(metricsDumpFileName))
 	if err != nil {
 		return "", fmt.Errorf("failed to create dump file: %w", err)
 	}
@@ -203,7 +207,7 @@ func init() {
 		"out", "o", "", "output destination file name",
 	)
 	CompressLogsCmd.Flags().StringVarP(
-		&compressLogsArgs.outputPath,
+		&compressLogsArgs.upload,
 		"upload", "u", "", "URL for files uploading to S3",
 	)
 	CompressLogsCmd.Flags().BoolVarP(

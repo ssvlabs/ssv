@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -50,12 +51,14 @@ func uploadLogs(tarPath string, url string) error {
 	return nil
 }
 
-func uploadFile(filePath string, url string) error {
-	file, err := os.Open(filePath)
+func UploadFile(filePath string, url string) error {
+	file, err := os.Open(filepath.Clean(filePath))
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 	buffer := bytes.NewBuffer(nil)
 	if _, err := io.Copy(buffer, file); err != nil {
 		return err
