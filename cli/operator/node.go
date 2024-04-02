@@ -2,8 +2,6 @@ package operator
 
 import (
 	"context"
-	"crypto/rsa"
-	"crypto/x509"
 	"encoding/base64"
 	"fmt"
 	"log"
@@ -12,16 +10,11 @@ import (
 	"os"
 	"time"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ilyakaznacheev/cleanenv"
-	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
-	"go.uber.org/zap"
+	"github.com/bloxapp/ssv/operator/keystore"
 
 	"github.com/bloxapp/ssv/network"
-	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/api/handlers"
 	apiserver "github.com/bloxapp/ssv/api/server"
 	"github.com/bloxapp/ssv/beacon/goclient"
@@ -42,10 +35,13 @@ import (
 	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/monitoring/metricsreporter"
+	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/nodeprobe"
 	"github.com/bloxapp/ssv/operator"
+	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
+	"github.com/bloxapp/ssv/operator/keys"
 	"github.com/bloxapp/ssv/operator/slotticker"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
@@ -58,6 +54,11 @@ import (
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
+	ethcommon "github.com/ethereum/go-ethereum/common"
+	"github.com/ilyakaznacheev/cleanenv"
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 )
 
 type KeyStore struct {
@@ -119,16 +120,53 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not setup db", zap.Error(err))
 		}
 
-		nodeStorage, operatorData := setupOperatorStorage(logger, db)
+		var operatorPrivKey keys.OperatorPrivateKey
+		var operatorPrivKeyText string
+		if cfg.KeyStore.PrivateKeyFile != "" {
+			// nolint: gosec
+			encryptedJSON, err := os.ReadFile(cfg.KeyStore.PrivateKeyFile)
+			if err != nil {
+				logger.Fatal("could not read PEM file", zap.Error(err))
+			}
+
+			// nolint: gosec
+			keyStorePassword, err := os.ReadFile(cfg.KeyStore.PasswordFile)
+			if err != nil {
+				logger.Fatal("could not read password file", zap.Error(err))
+			}
+
+			decryptedKeystore, err := keystore.DecryptKeystore(encryptedJSON, string(keyStorePassword))
+			if err != nil {
+				logger.Fatal("could not decrypt operator private key keystore", zap.Error(err))
+			}
+			operatorPrivKey, err = keys.PrivateKeyFromBytes(decryptedKeystore)
+			if err != nil {
+				logger.Fatal("could not extract operator private key from file", zap.Error(err))
+			}
+
+			operatorPrivKeyText = base64.StdEncoding.EncodeToString(decryptedKeystore)
+		} else {
+			operatorPrivKey, err = keys.PrivateKeyFromString(cfg.OperatorPrivateKey)
+			if err != nil {
+				logger.Fatal("could not decode operator private key", zap.Error(err))
+			}
+			operatorPrivKeyText = cfg.OperatorPrivateKey
+		}
+		cfg.P2pNetworkConfig.OperatorSigner = operatorPrivKey
+
+		nodeStorage, operatorData := setupOperatorStorage(logger, db, operatorPrivKey, operatorPrivKeyText)
+		operatorDataStore := operatordatastore.New(operatorData)
 
 		usingLocalEvents := len(cfg.LocalEventsPath) != 0
 
 		verifyConfig(logger, nodeStorage, networkConfig.Name, usingLocalEvents)
 
-		operatorKey, _, _ := nodeStorage.GetPrivateKey()
-		keyBytes := x509.MarshalPKCS1PrivateKey(operatorKey)
-		hashedKey, _ := rsaencryption.HashRsaKey(keyBytes)
-		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkConfig, cfg.SSVOptions.ValidatorOptions.BuilderProposals, hashedKey)
+		ekmHashedKey, err := operatorPrivKey.EKMHash()
+		if err != nil {
+			logger.Fatal("could not get operator private key hash", zap.Error(err))
+		}
+
+		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkConfig, cfg.SSVOptions.ValidatorOptions.BuilderProposals, ekmHashedKey)
 		if err != nil {
 			logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 		}
@@ -152,12 +190,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.ConsensusClient.GasLimit = spectypes.DefaultGasLimit
 		cfg.ConsensusClient.Network = networkConfig.Beacon.GetNetwork()
 
-		var validatorCtrl validator.Controller
-		getOperatorID := func() spectypes.OperatorID {
-			return validatorCtrl.GetOperatorID()
-		}
-
-		consensusClient := setupConsensusClient(logger, getOperatorID, slotTickerProvider)
+		consensusClient := setupConsensusClient(logger, operatorDataStore, slotTickerProvider)
 
 		executionClient, err := executionclient.New(
 			cmd.Context(),
@@ -177,7 +210,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.Permissioned = permissioned
 		cfg.P2pNetworkConfig.NodeStorage = nodeStorage
 		cfg.P2pNetworkConfig.OperatorPubKeyHash = format.OperatorID(operatorData.PublicKey)
-		cfg.P2pNetworkConfig.GetOperatorID = getOperatorID
+		cfg.P2pNetworkConfig.OperatorDataStore = operatorDataStore
 		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
 		cfg.P2pNetworkConfig.Network = networkConfig
 
@@ -192,7 +225,7 @@ var StartNodeCmd = &cobra.Command{
 			validation.WithLogger(logger),
 			validation.WithMetrics(metricsReporter),
 			validation.WithDutyStore(dutyStore),
-			validation.WithOwnOperatorID(getOperatorID),
+			validation.WithOwnOperatorID(operatorDataStore),
 		)
 
 		cfg.P2pNetworkConfig.Metrics = metricsReporter
@@ -215,8 +248,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.KeyManager = keyManager
 		cfg.SSVOptions.ValidatorOptions.ValidatorsMap = validatorsMap
 
-		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider = nodeStorage.GetPrivateKey
-		cfg.SSVOptions.ValidatorOptions.OperatorData = operatorData
+		cfg.SSVOptions.ValidatorOptions.OperatorDataStore = operatorDataStore
 		cfg.SSVOptions.ValidatorOptions.RegistryStorage = nodeStorage
 		cfg.SSVOptions.ValidatorOptions.RecipientsStorage = nodeStorage
 		cfg.SSVOptions.ValidatorOptions.GasLimit = cfg.ConsensusClient.GasLimit
@@ -249,7 +281,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.Metrics = metricsReporter
 		cfg.SSVOptions.Metrics = metricsReporter
 
-		validatorCtrl = validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
+		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 
 		operatorNode = operator.New(logger, cfg.SSVOptions, slotTickerProvider)
@@ -288,6 +320,8 @@ var StartNodeCmd = &cobra.Command{
 			metricsReporter,
 			networkConfig,
 			nodeStorage,
+			operatorDataStore,
+			operatorPrivKey,
 		)
 		nodeProber.AddNode("event syncer", eventSyncer)
 
@@ -441,68 +475,64 @@ func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.Badger
 	return db, nil
 }
 
-func setupOperatorStorage(logger *zap.Logger, db basedb.Database) (operatorstorage.Storage, *registrystorage.OperatorData) {
+func setupOperatorStorage(logger *zap.Logger, db basedb.Database, configPrivKey keys.OperatorPrivateKey, configPrivKeyText string) (operatorstorage.Storage, *registrystorage.OperatorData) {
 	nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
-	if cfg.KeyStore.PrivateKeyFile != "" {
-		encryptedJSON, err := os.ReadFile(cfg.KeyStore.PrivateKeyFile)
-		if err != nil {
-			log.Fatal("Error reading PEM file", zap.Error(err))
-		}
-		keyStorePassword, err := os.ReadFile(cfg.KeyStore.PasswordFile)
-		if err != nil {
-			log.Fatal("Error reading Password file", zap.Error(err))
-		}
 
-		privateKey, err := rsaencryption.ConvertEncryptedPemToPrivateKey(encryptedJSON, string(keyStorePassword))
-		if err != nil {
-			logger.Fatal("could not decrypt operator private key", zap.Error(err))
-		}
-		cfg.OperatorPrivateKey = rsaencryption.ExtractPrivateKey(privateKey)
-	}
-
-	cfg.P2pNetworkConfig.OperatorPrivateKey, err = decodePrivateKey(cfg.OperatorPrivateKey)
+	storedPrivKeyHash, found, err := nodeStorage.GetPrivateKeyHash()
 	if err != nil {
-		logger.Fatal("could not decode operator private key", zap.Error(err))
+		logger.Fatal("could not get hashed private key", zap.Error(err))
 	}
 
-	operatorPubKey, err := nodeStorage.SetupPrivateKey(cfg.OperatorPrivateKey)
+	configStoragePrivKeyHash, err := configPrivKey.StorageHash()
 	if err != nil {
-		logger.Fatal("could not setup operator private key", zap.Error(err))
+		logger.Fatal("could not hash private key", zap.Error(err))
 	}
 
-	_, found, err := nodeStorage.GetPrivateKey()
-	if err != nil || !found {
-		logger.Fatal("failed to get operator private key", zap.Error(err))
+	// Backwards compatibility for the old hashing method,
+	// which was hashing the text from the configuration directly,
+	// whereas StorageHash re-encodes with PEM format.
+	cliPrivKeyDecoded, err := base64.StdEncoding.DecodeString(configPrivKeyText)
+	if err != nil {
+		logger.Fatal("could not decode private key", zap.Error(err))
 	}
-	var operatorData *registrystorage.OperatorData
-	operatorData, found, err = nodeStorage.GetOperatorDataByPubKey(nil, operatorPubKey)
+	configStoragePrivKeyLegacyHash, err := rsaencryption.HashRsaKey(cliPrivKeyDecoded)
+	if err != nil {
+		logger.Fatal("could not hash private key", zap.Error(err))
+	}
+
+	if !found {
+		if err := nodeStorage.SavePrivateKeyHash(configStoragePrivKeyHash); err != nil {
+			logger.Fatal("could not save hashed private key", zap.Error(err))
+		}
+	} else if configStoragePrivKeyHash != storedPrivKeyHash &&
+		configStoragePrivKeyLegacyHash != storedPrivKeyHash {
+		logger.Fatal("operator private key is not matching the one encrypted the storage")
+	}
+
+	encodedPubKey, err := configPrivKey.Public().Base64()
+	if err != nil {
+		logger.Fatal("could not encode public key", zap.Error(err))
+	}
+
+	logger.Info("successfully loaded operator keys", zap.String("pubkey", string(encodedPubKey)))
+
+	operatorData, found, err := nodeStorage.GetOperatorDataByPubKey(nil, encodedPubKey)
 	if err != nil {
 		logger.Fatal("could not get operator data by public key", zap.Error(err))
 	}
 	if !found {
 		operatorData = &registrystorage.OperatorData{
-			PublicKey: operatorPubKey,
+			PublicKey: encodedPubKey,
 		}
+	}
+	if operatorData == nil {
+		logger.Fatal("invalid operator data in database: nil")
 	}
 
 	return nodeStorage, operatorData
-}
-
-func decodePrivateKey(key string) (*rsa.PrivateKey, error) {
-	operatorKeyByte, err := base64.StdEncoding.DecodeString(key)
-	if err != nil {
-		return nil, err
-	}
-
-	sk, err := rsaencryption.ConvertPemToPrivateKey(string(operatorKeyByte))
-	if err != nil {
-		return nil, err
-	}
-
-	return sk, err
 }
 
 func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
@@ -548,10 +578,10 @@ func setupP2P(logger *zap.Logger, db basedb.Database, mr metricsreporter.Metrics
 
 func setupConsensusClient(
 	logger *zap.Logger,
-	getOperatorID validation.OperatorIDGetter,
+	operatorDataStore operatordatastore.OperatorDataStore,
 	slotTickerProvider slotticker.Provider,
 ) beaconprotocol.BeaconNode {
-	cl, err := goclient.New(logger, cfg.ConsensusClient, getOperatorID, slotTickerProvider)
+	cl, err := goclient.New(logger, cfg.ConsensusClient, operatorDataStore, slotTickerProvider)
 	if err != nil {
 		logger.Fatal("failed to create beacon go-client", zap.Error(err),
 			fields.Address(cfg.ConsensusClient.BeaconNodeAddr))
@@ -569,6 +599,8 @@ func setupEventHandling(
 	metricsReporter metricsreporter.MetricsReporter,
 	networkConfig networkconfig.NetworkConfig,
 	nodeStorage operatorstorage.Storage,
+	operatorDataStore operatordatastore.OperatorDataStore,
+	operatorDecrypter keys.OperatorDecrypter,
 ) *eventsyncer.EventSyncer {
 	eventFilterer, err := executionClient.Filterer()
 	if err != nil {
@@ -582,8 +614,8 @@ func setupEventHandling(
 		eventParser,
 		validatorCtrl,
 		networkConfig,
-		validatorCtrl,
-		cfg.SSVOptions.ValidatorOptions.ShareEncryptionKeyProvider,
+		operatorDataStore,
+		operatorDecrypter,
 		cfg.SSVOptions.ValidatorOptions.KeyManager,
 		cfg.SSVOptions.ValidatorOptions.Beacon,
 		storageMap,
@@ -646,10 +678,11 @@ func setupEventHandling(
 		if err != nil {
 			logger.Error("failed to get operators", zap.Error(err))
 		}
-		operatorID := validatorCtrl.GetOperatorID()
+
 		operatorValidators := 0
 		liquidatedValidators := 0
-		if operatorID != 0 {
+		operatorID := operatorDataStore.GetOperatorID()
+		if operatorDataStore.OperatorIDReady() {
 			for _, share := range shares {
 				if share.BelongsToOperator(operatorID) {
 					operatorValidators++

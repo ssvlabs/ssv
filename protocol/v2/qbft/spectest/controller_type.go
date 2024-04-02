@@ -33,6 +33,10 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 	logger := logging.TestLogger(t)
 	contr := generateController(logger)
 
+	if test.StartHeight != nil {
+		contr.Height = *test.StartHeight
+	}
+
 	var lastErr error
 	for i, runData := range test.RunInstanceData {
 		height := specqbft.Height(i)

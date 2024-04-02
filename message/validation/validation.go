@@ -6,7 +6,6 @@ package validation
 import (
 	"bytes"
 	"context"
-	"crypto/rsa"
 	"encoding/hex"
 	"fmt"
 	"strings"
@@ -28,7 +27,9 @@ import (
 	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/networkconfig"
+	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
+	"github.com/bloxapp/ssv/operator/keys"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
@@ -69,9 +70,6 @@ type MessageValidator interface {
 	SSVMessageValidator
 }
 
-// OperatorIDGetter defines a function that returns operator ID.
-type OperatorIDGetter func() spectypes.OperatorID
-
 type messageValidator struct {
 	logger                  *zap.Logger
 	metrics                 metricsreporter.MetricsReporter
@@ -79,8 +77,8 @@ type messageValidator struct {
 	index                   sync.Map
 	nodeStorage             operatorstorage.Storage
 	dutyStore               *dutystore.Store
-	getOwnOperatorID        OperatorIDGetter
-	operatorIDToPubkeyCache *hashmap.Map[spectypes.OperatorID, *rsa.PublicKey]
+	operatorDataStore       operatordatastore.OperatorDataStore
+	operatorIDToPubkeyCache *hashmap.Map[spectypes.OperatorID, keys.OperatorPublicKey]
 
 	// validationLocks is a map of lock per SSV message ID to
 	// prevent concurrent access to the same state.
@@ -97,8 +95,7 @@ func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) Mes
 		logger:                  zap.NewNop(),
 		metrics:                 metricsreporter.NewNop(),
 		netCfg:                  netCfg,
-		operatorIDToPubkeyCache: hashmap.New[spectypes.OperatorID, *rsa.PublicKey](),
-		getOwnOperatorID:        func() spectypes.OperatorID { return 0 },
+		operatorIDToPubkeyCache: hashmap.New[spectypes.OperatorID, keys.OperatorPublicKey](),
 		validationLocks:         make(map[spectypes.MessageID]*sync.Mutex),
 	}
 
@@ -134,9 +131,9 @@ func WithDutyStore(dutyStore *dutystore.Store) Option {
 }
 
 // WithOwnOperatorID sets the operator ID getter for the messageValidator.
-func WithOwnOperatorID(f OperatorIDGetter) Option {
+func WithOwnOperatorID(ods operatordatastore.OperatorDataStore) Option {
 	return func(mv *messageValidator) {
-		mv.getOwnOperatorID = f
+		mv.operatorDataStore = ods
 	}
 }
 
@@ -322,7 +319,7 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 
 		signatureVerifier = func() error {
 			mv.metrics.MessageValidationRSAVerifications()
-			return mv.verifyRSASignature(messageData, operatorID, signature)
+			return mv.verifySignature(messageData, operatorID, signature)
 		}
 	}
 
@@ -427,7 +424,7 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 			return nil, descriptor, ErrNoShareMetadata
 		}
 
-		if !share.BeaconMetadata.IsAttesting() {
+		if !share.IsAttesting(mv.netCfg.Beacon.EstimatedCurrentEpoch()) {
 			err := ErrValidatorNotAttesting
 			err.got = share.BeaconMetadata.Status.String()
 			return nil, descriptor, err
@@ -589,8 +586,9 @@ func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *Conse
 	return cs.(*ConsensusState)
 }
 
+// inCommittee should be called only when WithOwnOperatorID is set
 func (mv *messageValidator) inCommittee(share *ssvtypes.SSVShare) bool {
 	return slices.ContainsFunc(share.Committee, func(operator *spectypes.Operator) bool {
-		return operator.OperatorID == mv.getOwnOperatorID()
+		return operator.OperatorID == mv.operatorDataStore.GetOperatorID()
 	})
 }

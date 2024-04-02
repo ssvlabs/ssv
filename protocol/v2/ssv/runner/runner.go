@@ -196,7 +196,7 @@ func (b *BaseRunner) basePostConsensusMsgProcessing(logger *zap.Logger, runner R
 	return hasQuorum, roots, errors.Wrap(err, "could not process post-consensus partial signature msg")
 }
 
-// basePartialSigMsgProcessing adds an already validated partial msg to the container, checks for quorum and returns true (and roots) if quorum exists
+// basePartialSigMsgProcessing adds a validated (without signature verification) validated partial msg to the container, checks for quorum and returns true (and roots) if quorum exists
 func (b *BaseRunner) basePartialSigMsgProcessing(
 	signedMsg *spectypes.SignedPartialSignatureMessage,
 	container *specssv.PartialSigContainer,
@@ -206,14 +206,17 @@ func (b *BaseRunner) basePartialSigMsgProcessing(
 	for _, msg := range signedMsg.Message.Messages {
 		prevQuorum := container.HasQuorum(msg.SigningRoot)
 
-		container.AddSignature(msg)
-
-		if prevQuorum {
-			continue
+		// Check if it has two signatures for the same signer
+		if container.HasSigner(msg.Signer, msg.SigningRoot) {
+			b.resolveDuplicateSignature(container, msg)
+		} else {
+			container.AddSignature(msg)
 		}
 
-		quorum := container.HasQuorum(msg.SigningRoot)
-		if quorum {
+		hasQuorum := container.HasQuorum(msg.SigningRoot)
+
+		if hasQuorum && !prevQuorum {
+			// Notify about first quorum only
 			roots = append(roots, msg.SigningRoot)
 			anyQuorum = true
 		}
@@ -224,15 +227,18 @@ func (b *BaseRunner) basePartialSigMsgProcessing(
 
 // didDecideCorrectly returns true if the expected consensus instance decided correctly
 func (b *BaseRunner) didDecideCorrectly(prevDecided bool, decidedMsg *specqbft.SignedMessage) (bool, error) {
-	decided := decidedMsg != nil
-	decidedRunningInstance := decided && b.State.RunningInstance != nil && decidedMsg.Message.Height == b.State.RunningInstance.GetHeight()
-
-	if !decided {
+	if decidedMsg == nil {
 		return false, nil
 	}
-	if !decidedRunningInstance {
+
+	if b.State.RunningInstance == nil {
 		return false, errors.New("decided wrong instance")
 	}
+
+	if decidedMsg.Message.Height != b.State.RunningInstance.GetHeight() {
+		return false, errors.New("decided wrong instance")
+	}
+
 	// verify we decided running instance only, if not we do not proceed
 	if prevDecided {
 		return false, nil

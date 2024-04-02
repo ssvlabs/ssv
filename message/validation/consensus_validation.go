@@ -26,10 +26,12 @@ func (mv *messageValidator) validateConsensusMessage(
 ) (ConsensusDescriptor, phase0.Slot, error) {
 	var consensusDescriptor ConsensusDescriptor
 
-	if mv.inCommittee(share) {
-		mv.metrics.InCommitteeMessage(spectypes.SSVConsensusMsgType, mv.isDecidedMessage(signedMsg))
-	} else {
-		mv.metrics.NonCommitteeMessage(spectypes.SSVConsensusMsgType, mv.isDecidedMessage(signedMsg))
+	if mv.operatorDataStore != nil && mv.operatorDataStore.OperatorIDReady() {
+		if mv.inCommittee(share) {
+			mv.metrics.InCommitteeMessage(spectypes.SSVConsensusMsgType, mv.isDecidedMessage(signedMsg))
+		} else {
+			mv.metrics.NonCommitteeMessage(spectypes.SSVConsensusMsgType, mv.isDecidedMessage(signedMsg))
+		}
 	}
 
 	msgSlot := phase0.Slot(signedMsg.Message.Height)
