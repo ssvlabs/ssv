@@ -31,6 +31,51 @@ func TestSetGlobalLogger(t *testing.T) {
 	require.IsType(t, &zap.Logger{}, logger)
 }
 
+func TestCompressFile(t *testing.T) {
+	logger := zap.NewNop()
+	fileName := "test.log"
+	err := generateLogFile(50, 20, fileName)
+	require.NoError(t, err)
+
+	zipName := "tmp_output"
+
+	_, err = compressLogFiles(logger, &CompressLogsArgs{
+		logFilePath: fileName,
+		outputPath:  zipName,
+	})
+	require.NoError(t, err)
+
+	unzippedPath, err := unzipFile(zipName)
+	require.NoError(t, err)
+
+	dir, err := os.ReadDir(unzippedPath)
+	require.NoError(t, err)
+
+	logFiles, err := getLogFilesAbsPaths(fileName)
+	require.NoError(t, err)
+
+	logFilesTotalSize := int64(0)
+	for _, file := range logFiles {
+		fi, err := os.Stat(file)
+		require.NoError(t, err)
+		logFilesTotalSize += fi.Size()
+	}
+
+	tarFilesTotalSize := int64(0)
+	for _, file := range dir {
+		fi, err := file.Info()
+		require.NoError(t, err)
+		tarFilesTotalSize += fi.Size()
+	}
+
+	require.Equal(t, logFilesTotalSize, tarFilesTotalSize)
+
+	// clean up all
+	require.NoError(t, os.RemoveAll(zipName))
+	require.NoError(t, deleteFiles(zipName+compressedFileExtension))
+	require.NoError(t, deleteFiles(logFiles...))
+}
+
 func BenchmarkCompressLogs(b *testing.B) {
 	testCases := []struct {
 		SizeInMB    int
@@ -64,10 +109,10 @@ func BenchmarkCompressLogs(b *testing.B) {
 			err := generateLogFile(tc.SizeInMB, tc.ChunkSizeMB, testLogFilePath)
 			require.NoError(b, err)
 
-			tarName := fmt.Sprintf("tmp_output_%dMB.log", tc.SizeInMB)
+			zipName := fmt.Sprintf("tmp_output_%dMB.log", tc.SizeInMB)
 			_, err = compressLogFiles(logger, &CompressLogsArgs{
 				logFilePath: testLogFilePath,
-				destName:    tarName,
+				outputPath:  zipName,
 			})
 			require.NoError(b, err)
 
@@ -75,8 +120,8 @@ func BenchmarkCompressLogs(b *testing.B) {
 			require.Error(b, err) // make sure collectLogFiles cleans up the metrics dump file
 
 			// clean up all
-			require.NoError(b, os.RemoveAll(tarName))
-			require.NoError(b, deleteFiles(getFileNameWithoutExt(tarName)+compressedFileExtension))
+			require.NoError(b, os.RemoveAll(zipName))
+			require.NoError(b, deleteFiles(getFileNameWithoutExt(zipName)+compressedFileExtension))
 
 			logFiles, err := getLogFilesAbsPaths(testLogFilePath)
 

@@ -1,8 +1,6 @@
 package cmd_compress_logs
 
 import (
-	"archive/tar"
-	"compress/gzip"
 	"fmt"
 	"io"
 	"os"
@@ -96,15 +94,6 @@ func createFileCopy(file string, destDir string) error {
 	return nil
 }
 
-func copyFilesToDir(destDir string, files []string) error {
-	for _, file := range files {
-		if err := createFileCopy(file, destDir); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func getLogFilesAbsPaths(path string) ([]string, error) {
 	logFileName := getFileNameWithoutExt(path)
 	ext := filepath.Ext(path)
@@ -133,69 +122,4 @@ func getLogFilesAbsPaths(path string) ([]string, error) {
 	}
 
 	return logFiles, nil
-}
-
-func compressDirectory(srcDirPath string) (string, error) {
-	dirName := filepath.Base(srcDirPath)
-	parentDir := filepath.Dir(srcDirPath)
-	newSrcDir := filepath.Join(parentDir, dirName) // this prevents having all nested directories in the tarball
-
-	tarFile, err := os.Create(filepath.Clean(dirName + compressedFileExtension))
-	if err != nil {
-		return "", fmt.Errorf("can't create a tar file with name %s: %w", dirName, err)
-	}
-	defer func() {
-		_ = tarFile.Close()
-	}()
-
-	gzWriter := gzip.NewWriter(tarFile)
-	defer func() {
-		_ = gzWriter.Close()
-	}()
-
-	tw := tar.NewWriter(gzWriter)
-	defer func() {
-		_ = tw.Close()
-	}()
-
-	// recursively walk the directory and write the contents to the tarball
-	err = filepath.Walk(newSrcDir, func(file string, fi os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		// Create a new dir/file header
-		header, err := tar.FileInfoHeader(fi, fi.Name())
-		if err != nil {
-			return err
-		}
-
-		// Update the name to correctly reflect the desired destination when un-taring
-		header.Name = strings.TrimPrefix(filepath.ToSlash(file), parentDir)
-		if err := tw.WriteHeader(header); err != nil {
-			return err
-		}
-
-		if !fi.IsDir() {
-			data, err := os.Open(filepath.Clean(file))
-			if err != nil {
-				return err
-			}
-			if _, err := io.Copy(tw, data); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-
-	if err != nil {
-		return "", err
-	}
-
-	absTarFilePath, err := filepath.Abs(tarFile.Name())
-	if err != nil {
-		return "", err
-	}
-
-	return absTarFilePath, nil
 }

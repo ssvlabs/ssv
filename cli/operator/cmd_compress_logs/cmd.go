@@ -1,6 +1,7 @@
 package cmd_compress_logs
 
 import (
+	"archive/zip"
 	"fmt"
 	"io"
 	"net/http"
@@ -23,19 +24,25 @@ type config struct {
 var cfg config
 var globalArgs globalconfig.Args
 
-const compressedFileExtension = ".gz"
+const compressedFileExtension = ".zip"
 
 type CompressLogsArgs struct {
 	logFilePath string
-	destName    string
+	outputPath  string
+	upload      string
+	clean       bool
+	metrics     bool
 }
 
 var compressLogsArgs CompressLogsArgs
 
 // CompressLogsCmd is the command to compress logs file with gzip
 var CompressLogsCmd = &cobra.Command{
-	Use:   "compress-logs",
-	Short: "Compresses logs",
+	Use:   "archive",
+	Short: "Compresses internal logs into a zip file",
+	Long: "Compresses internal logs into a zip file." +
+		" The output file will be named after the provided destination name. " +
+		"If no destination name is provided, the output file will be named after the input log file name with the current date and time appended to it.",
 	Run: func(cmd *cobra.Command, args []string) {
 		logger, err := setupGlobal(&cfg)
 
@@ -50,7 +57,7 @@ var CompressLogsCmd = &cobra.Command{
 		logger.Info("starting logs compression",
 			zap.Any("buildData", commons.GetBuildData()),
 			zap.String("compressLogsArgs.logFilePath", compressLogsArgs.logFilePath),
-			zap.String("compressLogsArgs.destName", compressLogsArgs.destName),
+			zap.String("compressLogsArgs.outputPath", compressLogsArgs.outputPath),
 		)
 
 		fileSizeBytes, err := compressLogFiles(logger, &compressLogsArgs)
@@ -63,18 +70,16 @@ var CompressLogsCmd = &cobra.Command{
 	},
 }
 
-const tmpDirPermissions os.FileMode = 0755
-
 func compressLogFiles(logger *zap.Logger, args *CompressLogsArgs) (int64, error) {
 	logFilePath := args.logFilePath
-	destName := getFileNameWithoutExt(args.destName)
+	destName := getFileNameWithoutExt(args.outputPath)
 
-	if args.destName == "" {
+	if args.outputPath == "" {
 		destName = getFileNameWithoutExt(logFilePath) + "_" + time.Now().Format(time.DateOnly) + "T" + time.Now().Format(time.TimeOnly)
 	}
 
 	// Find all log files in the directory of the provided file
-	pathToInclude, err := getLogFilesAbsPaths(logFilePath)
+	pathsToInclude, err := getLogFilesAbsPaths(logFilePath)
 	if err != nil {
 		return 0, err
 	}
@@ -85,45 +90,81 @@ func compressLogFiles(logger *zap.Logger, args *CompressLogsArgs) (int64, error)
 
 		metricsDumpFileAbsPath, err := dumpMetrics(promRoute, dumpFileName)
 
-		// Metrics are optional. Ignore if error, else include the metrics dump to the tar file
+		// Metrics are optional. Ignore if error, else include the metrics dump to the zip file
 		if err != nil {
 			logger.Error("failed to dump metrics", zap.Error(err))
 		} else {
-			pathToInclude = append(pathToInclude, metricsDumpFileAbsPath)
+			pathsToInclude = append(pathsToInclude, metricsDumpFileAbsPath)
 			defer func() {
 				_ = os.Remove(dumpFileName)
 			}()
 		}
 	}
 
-	// Create a temporary directory
-	err = os.Mkdir(destName, tmpDirPermissions)
+	// Create a new zip file
+	zipFile, err := os.Create(destName + ".zip")
+	if err != nil {
+		return 0, err
+	}
+	defer zipFile.Close()
 
+	zipWriter := zip.NewWriter(zipFile)
+	defer zipWriter.Close()
+
+	// #TODO
+	// Write concatenated debug log.
+	//debugFile, _ := zipWriter.Create(`debug.log`)
+	//for _, logFilename := filepath.Match(filepath.Join(filepath.Dir(logFilePath)), `debug*.log`)) {
+	//	err := addFileToZip(logFilename, )
+	//	fmt.Fprintf(debugFile, "\n") // separate log files in case they dont end with a newline
+	//}
+	//
+
+	for _, path := range pathsToInclude {
+		if err := addFileToZip(zipWriter, path); err != nil {
+			return 0, err
+		}
+	}
+
+	zipSize, err := calcFileSize(zipFile.Name())
 	if err != nil {
 		return 0, err
 	}
 
-	// clean up the tmp dir
+	return zipSize, nil
+}
+
+func addFileToZip(zipWriter *zip.Writer, filePath string) error {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to open file: %w", err)
+	}
 	defer func() {
-		_ = os.RemoveAll(destName)
+		_ = file.Close()
 	}()
 
-	err = copyFilesToDir(destName, pathToInclude)
+	info, err := file.Stat()
 	if err != nil {
-		return 0, fmt.Errorf("copyFilesToDir failed: %w", err)
+		return fmt.Errorf("failed to get file info: %w", err)
 	}
 
-	tarAbsPath, err := compressDirectory(destName)
+	// Create a header based on file info
+	header, err := zip.FileInfoHeader(info)
 	if err != nil {
-		return 0, fmt.Errorf("compressDirectory failed: %w", err)
+		return fmt.Errorf("failed to create header for file: %w", err)
+	}
+	header.Name = filepath.Base(filePath) // Use only the base name of the file
+	header.Method = zip.Deflate           // Use deflate to compress the data
+
+	writer, err := zipWriter.CreateHeader(header)
+	if err != nil {
+		return fmt.Errorf("failed to create writer for file: %w", err)
 	}
 
-	tarSize, err := calcFileSize(tarAbsPath)
-	if err != nil {
-		return 0, err
+	if _, err = io.Copy(writer, file); err != nil {
+		return fmt.Errorf("failed to copy file data to zip: %w", err)
 	}
-
-	return tarSize, nil
+	return nil
 }
 
 func dumpMetrics(promRoute string, metricsDumpFileName string) (string, error) {
@@ -158,8 +199,20 @@ func init() {
 	globalconfig.ProcessConfigArg(&cfg, &globalArgs, CompressLogsCmd)
 
 	CompressLogsCmd.Flags().StringVarP(
-		&compressLogsArgs.destName,
+		&compressLogsArgs.outputPath,
 		"out", "o", "", "output destination file name",
+	)
+	CompressLogsCmd.Flags().StringVarP(
+		&compressLogsArgs.outputPath,
+		"upload", "u", "", "URL for files uploading to S3",
+	)
+	CompressLogsCmd.Flags().BoolVarP(
+		&compressLogsArgs.clean,
+		"clean", "c", true, "remove .zip file after uploading it to S3",
+	)
+	CompressLogsCmd.Flags().BoolVarP(
+		&compressLogsArgs.metrics,
+		"metrics", "m", true, "try to collect metrics dump from the /metrics",
 	)
 
 	globalconfig.ProcessHelpCmd(&cfg, &globalArgs, CompressLogsCmd)

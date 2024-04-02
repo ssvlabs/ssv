@@ -1,12 +1,11 @@
 package cmd_compress_logs
 
 import (
-	"archive/tar"
+	"archive/zip"
 	"bufio"
-	"compress/gzip"
-	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math/rand"
 	"net/http"
 	"os"
@@ -59,41 +58,6 @@ func TestGetFileNameWithoutExt(t *testing.T) {
 				t.Errorf("getFileNameWithoutExt(%q) = %q, want %q", tt.path, result, tt.expected)
 			}
 		})
-	}
-}
-
-func TestCopyFilesToDir(t *testing.T) {
-	srcDir, err := os.MkdirTemp("", "src")
-	require.NoError(t, err)
-	defer os.RemoveAll(srcDir) // clean up
-
-	files := []string{"test1.txt", "test2.txt", "test3.txt"}
-	for _, file := range files {
-		_, err := os.Create(filepath.Join(srcDir, file))
-		require.NoError(t, err)
-	}
-
-	// Create a temporary destination directory
-	destDir, err := os.MkdirTemp("", "dest")
-	require.NoError(t, err)
-
-	defer os.RemoveAll(destDir) // clean up
-
-	// Get the absolute paths of the source files
-	var srcFiles []string
-	for _, file := range files {
-		srcFiles = append(srcFiles, filepath.Join(srcDir, file))
-	}
-
-	err = copyFilesToDir(destDir, srcFiles)
-	require.NoError(t, err)
-
-	// Check that the function has copied all the files from the source to the destination directory
-	destFiles, err := os.ReadDir(destDir)
-	require.NoError(t, err)
-	require.Len(t, destFiles, len(files))
-	for _, file := range destFiles {
-		require.Contains(t, files, file.Name())
 	}
 }
 
@@ -194,51 +158,6 @@ func parseMetrics(t *testing.T, path string) (map[string]string, error) {
 	return metrics, nil
 }
 
-func TestCompressFile(t *testing.T) {
-	logger := zap.NewNop()
-	fileName := "test.log"
-	err := generateLogFile(50, 20, fileName)
-	require.NoError(t, err)
-
-	tarName := "tmp_output"
-
-	_, err = compressLogFiles(logger, &CompressLogsArgs{
-		logFilePath: fileName,
-		destName:    tarName,
-	})
-	require.NoError(t, err)
-
-	untarPath, err := untarGzFile(tarName)
-	require.NoError(t, err)
-
-	dir, err := os.ReadDir(untarPath)
-	require.NoError(t, err)
-
-	logFiles, err := getLogFilesAbsPaths(fileName)
-	require.NoError(t, err)
-
-	logFilesTotalSize := int64(0)
-	for _, file := range logFiles {
-		fi, err := os.Stat(file)
-		require.NoError(t, err)
-		logFilesTotalSize += fi.Size()
-	}
-
-	tarFilesTotalSize := int64(0)
-	for _, file := range dir {
-		fi, err := file.Info()
-		require.NoError(t, err)
-		tarFilesTotalSize += fi.Size()
-	}
-
-	require.Equal(t, logFilesTotalSize, tarFilesTotalSize)
-
-	// clean up all
-	require.NoError(t, os.RemoveAll(tarName))
-	require.NoError(t, deleteFiles(tarName+compressedFileExtension))
-	require.NoError(t, deleteFiles(logFiles...))
-}
-
 func deleteFiles(paths ...string) error {
 	for _, path := range paths {
 		if err := os.Remove(path); err != nil {
@@ -273,86 +192,85 @@ func generateLogFile(sizeInMB int, chunkSize int, path string) error {
 	logger.Info("Generating log file", zap.Int("sizeInMB", sizeInMB), zap.String("path", path))
 
 	for i := 0; i < sizeInMB; i++ {
-		// Write another log message
 		logger.Info("Some dummy log", zap.String("data", generate1MBString()))
 	}
 
 	return nil
 }
 
-func untarGzFile(gzFilePath string) (string, error) {
-	gzFile, err := os.Open(filepath.Clean(gzFilePath + compressedFileExtension))
+func unzipFile(zipFilePath string) (string, error) {
+	destDir := getFileNameWithoutExt(zipFilePath)
+
+	fmt.Println(zipFilePath, destDir)
+	r, err := zip.OpenReader(filepath.Clean(zipFilePath + compressedFileExtension))
 	if err != nil {
 		return "", err
 	}
 	defer func() {
-		_ = gzFile.Close()
+		_ = r.Close()
 	}()
 
-	gzReader, err := gzip.NewReader(gzFile)
-	if err != nil {
-		return "", err
-	}
-	defer func() {
-		_ = gzReader.Close()
-	}()
-
-	tarReader := tar.NewReader(gzReader)
-
-	var firstDirName string
-
-	outputDir := filepath.Clean(
-		filepath.Join(filepath.Dir(gzFilePath), "unsizpped"),
-	)
-
-	for {
-		header, err := tarReader.Next()
-
-		if err == io.EOF {
-			break
-		}
-
+	// Iterate through the files in the archive and extract them.
+	for _, f := range r.File {
+		err = extractFile(destDir, f)
 		if err != nil {
 			return "", err
 		}
-
-		target := filepath.Clean(
-			filepath.Join(filepath.Dir(outputDir), header.Name),
-		)
-
-		switch header.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(target, os.FileMode(header.Mode)); err != nil {
-				return "", err
-			}
-
-			if firstDirName == "" {
-				firstDirName = header.Name
-			}
-
-		case tar.TypeReg:
-			file, err := os.Create(filepath.Clean(target))
-			if err != nil {
-				_ = file.Close()
-				return "", err
-			}
-
-			for {
-				_, err := io.CopyN(file, tarReader, 1024)
-				if err != nil {
-					if errors.Is(err, io.EOF) {
-						break
-					}
-
-					_ = file.Close()
-					return "", err
-				}
-			}
-			_ = file.Close()
-		}
 	}
 
-	return firstDirName, nil
+	absPath, err := filepath.Abs(destDir)
+	if err != nil {
+		return "", err
+	}
+
+	return absPath, nil
+}
+
+func extractFile(destDir string, f *zip.File) error {
+	fpath := filepath.Join(destDir, f.Name)
+
+	// Check for ZipSlip (Directory traversal vulnerability)
+	if !strings.HasPrefix(fpath, filepath.Clean(destDir)+string(os.PathSeparator)) {
+		log.Fatalf("illegal file path: %s", fpath)
+	}
+
+	// Create directory tree
+	if f.FileInfo().IsDir() {
+		err := os.MkdirAll(fpath, os.ModePerm)
+		if err != nil {
+			return fmt.Errorf("failed to create sub directory: %w", err)
+		}
+		return nil
+	}
+
+	if err := os.MkdirAll(filepath.Dir(fpath), os.ModePerm); err != nil {
+		return err
+	}
+
+	outFile, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
+	defer func() {
+		_ = outFile.Close()
+	}()
+
+	if err != nil {
+		return err
+	}
+
+	rc, err := f.Open()
+
+	if err != nil {
+
+		return err
+	}
+	defer func() {
+		_ = rc.Close()
+	}()
+
+	_, err = io.Copy(outFile, rc)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func generate1MBString() string {
