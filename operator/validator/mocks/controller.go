@@ -100,34 +100,6 @@ func (mr *MockControllerMockRecorder) ExitValidator(pubKey, blockNumber, validat
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExitValidator", reflect.TypeOf((*MockController)(nil).ExitValidator), pubKey, blockNumber, validatorIndex)
 }
 
-// GetOperatorData mocks base method.
-func (m *MockController) GetOperatorData() *storage.OperatorData {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetOperatorData")
-	ret0, _ := ret[0].(*storage.OperatorData)
-	return ret0
-}
-
-// GetOperatorData indicates an expected call of GetOperatorData.
-func (mr *MockControllerMockRecorder) GetOperatorData() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorData", reflect.TypeOf((*MockController)(nil).GetOperatorData))
-}
-
-// GetOperatorID mocks base method.
-func (m *MockController) GetOperatorID() types.OperatorID {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetOperatorID")
-	ret0, _ := ret[0].(types.OperatorID)
-	return ret0
-}
-
-// GetOperatorID indicates an expected call of GetOperatorID.
-func (mr *MockControllerMockRecorder) GetOperatorID() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorID", reflect.TypeOf((*MockController)(nil).GetOperatorID))
-}
-
 // GetOperatorShares mocks base method.
 func (m *MockController) GetOperatorShares() []*types0.SSVShare {
 	m.ctrl.T.Helper()
@@ -214,18 +186,6 @@ func (m *MockController) ReactivateCluster(owner common.Address, operatorIDs []u
 func (mr *MockControllerMockRecorder) ReactivateCluster(owner, operatorIDs, toReactivate interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReactivateCluster", reflect.TypeOf((*MockController)(nil).ReactivateCluster), owner, operatorIDs, toReactivate)
-}
-
-// SetOperatorData mocks base method.
-func (m *MockController) SetOperatorData(data *storage.OperatorData) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetOperatorData", data)
-}
-
-// SetOperatorData indicates an expected call of SetOperatorData.
-func (mr *MockControllerMockRecorder) SetOperatorData(data interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetOperatorData", reflect.TypeOf((*MockController)(nil).SetOperatorData), data)
 }
 
 // StartNetworkHandlers mocks base method.

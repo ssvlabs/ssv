@@ -5,7 +5,7 @@ import (
 	cryptorand "crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"github.com/cornelk/hashmap"
+	"math/rand"
 	"os"
 	"sort"
 	"sync"
@@ -13,17 +13,17 @@ import (
 	"testing"
 	"time"
 
-	"math/rand"
-
 	"github.com/aquasecurity/table"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/message/validation"
-	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
+	"github.com/cornelk/hashmap"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sourcegraph/conc/pool"
 	"github.com/stretchr/testify/require"
+
+	"github.com/bloxapp/ssv/message/validation"
+	"github.com/bloxapp/ssv/network/commons"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
 
 // TestP2pNetwork_MessageValidation tests p2pNetwork would score peers according
