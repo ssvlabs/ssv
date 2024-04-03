@@ -14,6 +14,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
 	"go.uber.org/zap"
 
@@ -268,18 +269,20 @@ func (gc *goClient) createValidatorRegistration(pubkey []byte, feeRecipient bell
 }
 
 func (gc *goClient) registrationSubmitter(slotTickerProvider slotticker.Provider) {
+	operatorID := gc.operatorDataStore.AwaitOperatorID()
+
 	ticker := slotTickerProvider()
 	for {
 		select {
 		case <-gc.ctx.Done():
 			return
 		case <-ticker.Next():
-			gc.submitRegistrationsFromCache(ticker.Slot())
+			gc.submitRegistrationsFromCache(ticker.Slot(), operatorID)
 		}
 	}
 }
 
-func (gc *goClient) submitRegistrationsFromCache(currentSlot phase0.Slot) {
+func (gc *goClient) submitRegistrationsFromCache(currentSlot phase0.Slot, operatorID spectypes.OperatorID) {
 	slotsPerEpoch := gc.network.SlotsPerEpoch()
 
 	// Lock:
@@ -288,7 +291,7 @@ func (gc *goClient) submitRegistrationsFromCache(currentSlot phase0.Slot) {
 	gc.registrationMu.Lock()
 
 	slotsSinceLastRegistration := currentSlot - gc.registrationLastSlot
-	operatorSubmissionSlotModulo := gc.getOperatorID() % slotsPerEpoch
+	operatorSubmissionSlotModulo := operatorID % slotsPerEpoch
 
 	hasRegistrations := len(gc.registrationCache) != 0
 	operatorSubmissionSlot := uint64(currentSlot)%slotsPerEpoch == operatorSubmissionSlotModulo

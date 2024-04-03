@@ -189,7 +189,6 @@ func TestHandleBlockEventsStreamWithExecution(t *testing.T) {
 		observedLogsFlow = append(observedLogsFlow, entry.Message)
 	}
 	happyFlow := []string{
-		"successfully setup operator keys",
 		"setting up validator controller",
 		"malformed event: failed to verify signature",
 		"processed events from block",

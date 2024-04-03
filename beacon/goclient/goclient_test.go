@@ -15,8 +15,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
+	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/slotticker"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )
 
 func TestTimeouts(t *testing.T) {
@@ -103,7 +105,7 @@ func mockClient(t *testing.T, ctx context.Context, serverURL string, commonTimeo
 			LongTimeout:    longTimeout,
 			DelayedStart:   true,
 		},
-		func() types.OperatorID { return 0 },
+		operatordatastore.New(&registrystorage.OperatorData{ID: 1}),
 		func() slotticker.SlotTicker {
 			return slotticker.New(zap.NewNop(), slotticker.Config{
 				SlotDuration: 12 * time.Second,
