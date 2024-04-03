@@ -164,11 +164,8 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.SignedMessage) error {
 	// If a node gets a commit quorum before round change and other nodes don't,
 	// then the other nodes wouldn't be able to get the commit quorum,
 	// unless we allow decided messages from previous round.
-	if decided := msg.Message.MsgType == specqbft.CommitMsgType && i.State.Share.HasQuorum(len(msg.Signers)); decided {
-		if msg.Message.Round < i.State.Round-1 {
-			return errors.New("past round")
-		}
-	} else if msg.Message.Round < i.State.Round {
+	decided := msg.Message.MsgType == specqbft.CommitMsgType && i.State.Share.HasQuorum(len(msg.Signers))
+	if !decided && msg.Message.Round < i.State.Round {
 		return errors.New("past round")
 	}
 
