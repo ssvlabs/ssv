@@ -28,10 +28,11 @@ type Validator struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	DutyRunners runner.DutyRunners
-	Network     specqbft.Network
-	Share       *types.SSVShare
-	Signer      spectypes.KeyManager
+	DutyRunners       runner.DutyRunners
+	Network           specqbft.Network
+	Share             *types.SSVShare
+	Signer            spectypes.KeyManager
+	SignatureVerifier spectypes.SignatureVerifier
 
 	Storage *storage.QBFTStores
 	Queues  map[spectypes.BeaconRole]queueContainer
@@ -53,18 +54,19 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 	}
 
 	v := &Validator{
-		mtx:              &sync.RWMutex{},
-		ctx:              pctx,
-		cancel:           cancel,
-		DutyRunners:      options.DutyRunners,
-		Network:          options.Network,
-		Storage:          options.Storage,
-		Share:            options.SSVShare,
-		Signer:           options.Signer,
-		Queues:           make(map[spectypes.BeaconRole]queueContainer),
-		state:            uint32(NotStarted),
-		dutyIDs:          hashmap.New[spectypes.BeaconRole, string](),
-		messageValidator: options.MessageValidator,
+		mtx:               &sync.RWMutex{},
+		ctx:               pctx,
+		cancel:            cancel,
+		DutyRunners:       options.DutyRunners,
+		Network:           options.Network,
+		Storage:           options.Storage,
+		Share:             options.SSVShare,
+		Signer:            options.Signer,
+		SignatureVerifier: options.SignatureVerifier,
+		Queues:            make(map[spectypes.BeaconRole]queueContainer),
+		state:             uint32(NotStarted),
+		dutyIDs:           hashmap.New[spectypes.BeaconRole, string](),
+		messageValidator:  options.MessageValidator,
 	}
 
 	for _, dutyRunner := range options.DutyRunners {
@@ -110,14 +112,45 @@ func (v *Validator) StartDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 	return dutyRunner.StartNewDuty(logger, duty)
 }
 
+//func (v *Validator) ProcessMessage(signedSSVMessage *types.SignedSSVMessage) error {
+//
+//	// Validate message
+//	if err := signedSSVMessage.Validate(); err != nil {
+//		return errors.Wrap(err, "invalid SignedSSVMessage")
+//	}
+//
+//	// Decode the nested SSVMessage
+//	msg := &types.SSVMessage{}
+//	if err := msg.Decode(signedSSVMessage.Data); err != nil {
+//		return errors.Wrap(err, "could not decode data into an SSVMessage")
+//	}
+//
+//	// Verify SignedSSVMessage's signature
+//	if err := v.SignatureVerifier.Verify(signedSSVMessage, v.Share.Committee); err != nil {
+//		return errors.Wrap(err, "SignedSSVMessage has an invalid signature")
+//	}
+//}
+
 // ProcessMessage processes Network Message of all types
 func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage) error {
+	// Validate message
+	if err := msg.SignedSSVMessage.Validate(); err != nil {
+		return errors.Wrap(err, "invalid SignedSSVMessage")
+	}
+
+	// Verify SignedSSVMessage's signature
+	if err := v.SignatureVerifier.Verify(msg.SignedSSVMessage, v.Share.Committee); err != nil {
+		return errors.Wrap(err, "SignedSSVMessage has an invalid signature")
+	}
+
 	messageID := msg.GetID()
+	// Get runner
 	dutyRunner := v.DutyRunners.DutyRunnerForMsgID(messageID)
 	if dutyRunner == nil {
 		return fmt.Errorf("could not get duty runner for msg ID %v", messageID)
 	}
 
+	// Validate message for runner
 	if err := validateMessage(v.Share.Share, msg); err != nil {
 		return fmt.Errorf("message invalid for msg ID %v: %w", messageID, err)
 	}
@@ -130,6 +163,12 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 		if !ok {
 			return errors.New("could not decode consensus message from network message")
 		}
+
+		// Check signer consistency
+		if !signedMsg.CommonSigners([]spectypes.OperatorID{msg.GetOperatorID()}) {
+			return errors.New("SignedSSVMessage's signer not consistent with SignedMessage's signers")
+		}
+
 		logger = logger.With(fields.Height(signedMsg.Message.Height))
 		return dutyRunner.ProcessConsensus(logger, signedMsg)
 	case spectypes.SSVPartialSignatureMsgType:
@@ -139,6 +178,12 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 		if !ok {
 			return errors.New("could not decode post consensus message from network message")
 		}
+
+		// Check signer consistency
+		if signedMsg.Signer != msg.GetOperatorID() {
+			return errors.New("SignedSSVMessage's signer not consistent with SignedPartialSignatureMessage's signer")
+		}
+
 		if signedMsg.Message.Type == spectypes.PostConsensusPartialSig {
 			return dutyRunner.ProcessPostConsensus(logger, signedMsg)
 		}
@@ -155,7 +200,7 @@ func validateMessage(share spectypes.Share, msg *queue.DecodedSSVMessage) error 
 		return errors.New("msg ID doesn't match validator ID")
 	}
 
-	if len(msg.GetData()) == 0 {
+	if len(msg.SSVMessage.GetData()) == 0 {
 		return errors.New("msg data is invalid")
 	}
 

@@ -1,6 +1,7 @@
 package ekm
 
 import (
+	"crypto/rsa"
 	"encoding/hex"
 	"fmt"
 	"sync"
@@ -274,6 +275,11 @@ func (km *ethKeyManagerSigner) SignRoot(data spectypes.Root, sigType spectypes.S
 	return sig, nil
 }
 
+func (km *ethKeyManagerSigner) SignNetworkData(data []byte, pk []byte) ([]byte, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (km *ethKeyManagerSigner) AddShare(shareKey *bls.SecretKey) error {
 	km.walletLock.Lock()
 	defer km.walletLock.Unlock()
@@ -318,6 +324,11 @@ func (km *ethKeyManagerSigner) RemoveShare(pubKey string) error {
 		}
 	}
 	return nil
+}
+
+func (km *ethKeyManagerSigner) AddNetworkKey(sk *rsa.PrivateKey) error {
+	//TODO implement me
+	panic("implement me")
 }
 
 // BumpSlashingProtection updates the slashing protection data for a given public key.

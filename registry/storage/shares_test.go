@@ -115,8 +115,8 @@ func generateRandomValidatorShare(splitKeys map[uint64]*bls.SecretKey) (*ssvtype
 	var ibftCommittee []*spectypes.Operator
 	for operatorID, sk := range splitKeys {
 		ibftCommittee = append(ibftCommittee, &spectypes.Operator{
-			OperatorID: operatorID,
-			PubKey:     sk.Serialize(),
+			OperatorID:  operatorID,
+			SharePubKey: sk.Serialize(),
 		})
 	}
 	sort.Slice(ibftCommittee, func(i, j int) bool {

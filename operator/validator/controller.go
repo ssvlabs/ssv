@@ -746,7 +746,7 @@ func (c *controller) onShareStart(share *ssvtypes.SSVShare) (bool, error) {
 func (c *controller) printShare(s *ssvtypes.SSVShare, msg string) {
 	committee := make([]string, len(s.Committee))
 	for i, c := range s.Committee {
-		committee[i] = fmt.Sprintf(`[OperatorID=%d, PubKey=%x]`, c.OperatorID, c.PubKey)
+		committee[i] = fmt.Sprintf(`[OperatorID=%d, PubKey=%x]`, c.OperatorID, c.SharePubKey)
 	}
 	c.logger.Debug(msg,
 		fields.PubKey(s.ValidatorPubKey),

@@ -57,14 +57,22 @@ func TestRSAUsage(t *testing.T) {
 	})
 
 	const operatorID = spectypes.OperatorID(0x12345678)
-	encodedSignedSSVMessage := commons.EncodeSignedSSVMessage(testMessage, operatorID, signature)
-
-	decodedMessage, decodedOperatorID, decodedSignature, err := commons.DecodeSignedSSVMessage(encodedSignedSSVMessage)
+	encodedSignedSSVMessage, err := commons.EncodeSignedNetworkMsg(&spectypes.SignedSSVMessage{
+		Signature:  signature,
+		OperatorID: operatorID,
+		Data:       testMessage,
+	})
 	require.NoError(t, err)
-	require.Equal(t, operatorID, decodedOperatorID)
-	require.Equal(t, signature, decodedSignature)
 
-	messageHash := sha256.Sum256(decodedMessage)
+	decodedMsg := &spectypes.SignedSSVMessage{}
+	err = decodedMsg.Decode(encodedSignedSSVMessage)
+	require.NoError(t, err)
+
+	require.NoError(t, err)
+	require.Equal(t, operatorID, decodedMsg.OperatorID)
+	require.Equal(t, signature, decodedMsg.Signature)
+
+	messageHash := sha256.Sum256(decodedMsg.Data)
 
 	block, rest := pem.Decode(pubPEM)
 	require.NotNil(t, block)
@@ -76,8 +84,8 @@ func TestRSAUsage(t *testing.T) {
 	rsaPubKey, ok := pub.(*rsa.PublicKey)
 	require.True(t, ok)
 
-	require.NoError(t, rsa.VerifyPKCS1v15(rsaPubKey, crypto.SHA256, messageHash[:], decodedSignature))
-	require.Equal(t, testMessage, decodedMessage)
+	require.NoError(t, rsa.VerifyPKCS1v15(rsaPubKey, crypto.SHA256, messageHash[:], decodedMsg.Signature))
+	require.Equal(t, testMessage, decodedMsg.Data)
 }
 
 func TestGetMaxPeers(t *testing.T) {

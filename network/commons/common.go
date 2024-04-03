@@ -39,27 +39,6 @@ const (
 	messageOffset    = operatorIDOffset + operatorIDSize
 )
 
-// EncodeSignedSSVMessage serializes the message, op id and signature into bytes
-func EncodeSignedSSVMessage(message []byte, operatorID spectypes.OperatorID, signature []byte) []byte {
-	b := make([]byte, signatureSize+operatorIDSize+len(message))
-	copy(b[signatureOffset:], signature)
-	binary.LittleEndian.PutUint64(b[operatorIDOffset:], operatorID)
-	copy(b[messageOffset:], message)
-	return b
-}
-
-// DecodeSignedSSVMessage deserializes signed message bytes messsage, op id and a signature
-func DecodeSignedSSVMessage(encoded []byte) ([]byte, spectypes.OperatorID, []byte, error) {
-	if len(encoded) < messageOffset {
-		return nil, 0, nil, fmt.Errorf("unexpected encoded message size of %d", len(encoded))
-	}
-
-	message := encoded[messageOffset:]
-	operatorID := binary.LittleEndian.Uint64(encoded[operatorIDOffset : operatorIDOffset+operatorIDSize])
-	signature := encoded[signatureOffset : signatureOffset+signatureSize]
-	return message, operatorID, signature, nil
-}
-
 // SubnetTopicID returns the topic to use for the given subnet
 func SubnetTopicID(subnet int) string {
 	if subnet < 0 {
@@ -146,6 +125,23 @@ func DecodeNetworkMsg(data []byte) (*spectypes.SSVMessage, error) {
 		return nil, err
 	}
 	return &msg, nil
+}
+
+// EncodeSignedNetworkMsg encodes signed network message
+func EncodeSignedNetworkMsg(msg *spectypes.SignedSSVMessage) ([]byte, error) {
+	return msg.Encode()
+}
+
+// DecodeSignedSSVMessage deserializes signed message bytes messsage, op id and a signature
+func DecodeSignedSSVMessage(encoded []byte) ([]byte, spectypes.OperatorID, []byte, error) {
+	if len(encoded) < messageOffset {
+		return nil, 0, nil, fmt.Errorf("unexpected encoded message size of %d", len(encoded))
+	}
+
+	message := encoded[messageOffset:]
+	operatorID := binary.LittleEndian.Uint64(encoded[operatorIDOffset : operatorIDOffset+operatorIDSize])
+	signature := encoded[signatureOffset : signatureOffset+signatureSize]
+	return message, operatorID, signature, nil
 }
 
 // ProtocolID returns the protocol id of the given protocol,

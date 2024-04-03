@@ -274,8 +274,8 @@ func (eh *EventHandler) validatorAddedEventToShare(
 	for i := range event.OperatorIds {
 		operatorID := event.OperatorIds[i]
 		committee = append(committee, &spectypes.Operator{
-			OperatorID: operatorID,
-			PubKey:     sharePublicKeys[i],
+			OperatorID:  operatorID,
+			SharePubKey: sharePublicKeys[i],
 		})
 
 		if operatorID != selfOperatorID {

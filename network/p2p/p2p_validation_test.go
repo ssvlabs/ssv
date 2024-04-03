@@ -273,7 +273,7 @@ func (v *MockMessageValidator) ValidatePubsubMessage(ctx context.Context, p peer
 	return v.ValidateFunc(ctx, p, pmsg)
 }
 
-func (v *MockMessageValidator) ValidateSSVMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, validation.Descriptor, error) {
+func (v *MockMessageValidator) ValidateSSVMessage(ssvMessage *queue.DecodedSSVMessage) (*queue.DecodedSSVMessage, validation.Descriptor, error) {
 	panic("not implemented") // TODO: Implement
 }
 

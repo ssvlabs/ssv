@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
+
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/networkconfig"
@@ -127,11 +129,12 @@ func (handler *msgIDHandler) MsgID(logger *zap.Logger) func(pmsg *ps_pb.Message)
 func (handler *msgIDHandler) pubsubMsgToMsgID(msg []byte) string {
 	currentEpoch := handler.networkConfig.Beacon.EstimatedCurrentEpoch()
 	if currentEpoch > handler.networkConfig.PermissionlessActivationEpoch {
-		decodedMsg, _, _, err := commons.DecodeSignedSSVMessage(msg)
+		signedMsg := &spectypes.SignedSSVMessage{}
+		err := signedMsg.Decode(msg)
 		if err != nil {
 			// todo: should err here or just log and let the decode function err?
 		} else {
-			return commons.MsgID()(decodedMsg)
+			return commons.MsgID()(signedMsg.Data)
 		}
 	}
 	return commons.MsgID()(msg)

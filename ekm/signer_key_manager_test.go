@@ -418,7 +418,7 @@ func TestSignRoot(t *testing.T) {
 			Message:   msg,
 		}
 
-		err = signed.GetSignature().VerifyByOperators(signed, networkconfig.TestNetwork.Domain, spectypes.QBFTSignatureType, []*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}})
+		err = signed.GetSignature().VerifyByOperators(signed, networkconfig.TestNetwork.Domain, spectypes.QBFTSignatureType, []*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), SharePubKey: pk.Serialize()}})
 		// res, err := signed.VerifySig(pk)
 		require.NoError(t, err)
 		// require.True(t, res)
@@ -447,7 +447,7 @@ func TestSignRoot(t *testing.T) {
 			Message:   msg,
 		}
 
-		err = signed.GetSignature().VerifyByOperators(signed, networkconfig.TestNetwork.Domain, spectypes.QBFTSignatureType, []*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}})
+		err = signed.GetSignature().VerifyByOperators(signed, networkconfig.TestNetwork.Domain, spectypes.QBFTSignatureType, []*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), SharePubKey: pk.Serialize()}})
 		// res, err := signed.VerifySig(pk)
 		require.NoError(t, err)
 		// require.True(t, res)

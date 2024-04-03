@@ -61,7 +61,7 @@ type PubsubMessageValidator interface {
 
 // SSVMessageValidator defines methods for validating SSV messages.
 type SSVMessageValidator interface {
-	ValidateSSVMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, Descriptor, error)
+	ValidateSSVMessage(ssvMessage *queue.DecodedSSVMessage) (*queue.DecodedSSVMessage, Descriptor, error)
 }
 
 // MessageValidator is an interface that combines both PubsubMessageValidator and SSVMessageValidator.
@@ -290,7 +290,7 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer
 
 // ValidateSSVMessage validates the given SSV message.
 // If successful, it returns the decoded message and its descriptor. Otherwise, it returns an error.
-func (mv *messageValidator) ValidateSSVMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, Descriptor, error) {
+func (mv *messageValidator) ValidateSSVMessage(ssvMessage *queue.DecodedSSVMessage) (*queue.DecodedSSVMessage, Descriptor, error) {
 	return mv.validateSSVMessage(ssvMessage, time.Now(), nil)
 }
 
@@ -304,22 +304,23 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 	defer mv.metrics.ActiveMsgValidationDone(topic)
 
 	messageData := pMsg.GetData()
+	signedMsg := &spectypes.SignedSSVMessage{}
 
 	var signatureVerifier func() error
 
 	currentEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Unix()))
 	if currentEpoch > mv.netCfg.PermissionlessActivationEpoch {
-		decMessageData, operatorID, signature, err := commons.DecodeSignedSSVMessage(messageData)
-		messageData = decMessageData
-		if err != nil {
+		if err := signedMsg.Decode(messageData); err != nil {
 			e := ErrMalformedSignedMessage
 			e.innerErr = err
 			return nil, Descriptor{}, e
 		}
 
+		messageData = signedMsg.Data
+
 		signatureVerifier = func() error {
 			mv.metrics.MessageValidationRSAVerifications()
-			return mv.verifySignature(messageData, operatorID, signature)
+			return mv.verifySignature(signedMsg)
 		}
 	}
 
@@ -338,7 +339,7 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 		return nil, Descriptor{}, e
 	}
 
-	msg, err := commons.DecodeNetworkMsg(messageData)
+	msg, err := queue.DecodeSignedSSVMessage(signedMsg)
 	if err != nil {
 		e := ErrMalformedPubSubMessage
 		e.innerErr = err
@@ -370,8 +371,9 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 	return mv.validateSSVMessage(msg, receivedAt, signatureVerifier)
 }
 
-func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage, receivedAt time.Time, signatureVerifier func() error) (*queue.DecodedSSVMessage, Descriptor, error) {
+func (mv *messageValidator) validateSSVMessage(msg *queue.DecodedSSVMessage, receivedAt time.Time, signatureVerifier func() error) (*queue.DecodedSSVMessage, Descriptor, error) {
 	var descriptor Descriptor
+	ssvMessage := msg.SSVMessage
 
 	if len(ssvMessage.Data) == 0 {
 		return nil, descriptor, ErrEmptyData
@@ -431,19 +433,6 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 		}
 	}
 
-	msg, err := queue.DecodeSSVMessage(ssvMessage)
-	if err != nil {
-		if errors.Is(err, queue.ErrUnknownMessageType) {
-			e := ErrUnknownSSVMessageType
-			e.got = ssvMessage.GetType()
-			return nil, descriptor, e
-		}
-
-		e := ErrMalformedMessage
-		e.innerErr = err
-		return nil, descriptor, e
-	}
-
 	// Lock this SSV message ID to prevent concurrent access to the same state.
 	mv.validationMutex.Lock()
 	mutex, ok := mv.validationLocks[msg.GetID()]
@@ -460,7 +449,7 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 	if mv.nodeStorage != nil {
 		switch ssvMessage.MsgType {
 		case spectypes.SSVConsensusMsgType:
-			if len(msg.Data) > maxConsensusMsgSize {
+			if len(ssvMessage.Data) > maxConsensusMsgSize {
 				e := ErrSSVDataTooBig
 				e.got = len(ssvMessage.Data)
 				e.want = maxConsensusMsgSize
@@ -476,7 +465,7 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 			}
 
 		case spectypes.SSVPartialSignatureMsgType:
-			if len(msg.Data) > maxPartialSignatureMsgSize {
+			if len(ssvMessage.Data) > maxPartialSignatureMsgSize {
 				e := ErrSSVDataTooBig
 				e.got = len(ssvMessage.Data)
 				e.want = maxPartialSignatureMsgSize

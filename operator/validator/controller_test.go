@@ -288,7 +288,7 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 	for i, id := range operatorIds {
 		operatorKey, keyError := createKey()
 		require.NoError(t, keyError)
-		operators[i] = &spectypes.Operator{OperatorID: id, PubKey: operatorKey}
+		operators[i] = &spectypes.Operator{OperatorID: id, SharePubKey: operatorKey}
 	}
 
 	firstValidator := &validator.Validator{
@@ -414,7 +414,7 @@ func TestSetupValidators(t *testing.T) {
 	for i, id := range operatorIds {
 		operatorKey, keyError := createKey()
 		require.NoError(t, keyError)
-		operators[i] = &spectypes.Operator{OperatorID: id, PubKey: operatorKey}
+		operators[i] = &spectypes.Operator{OperatorID: id, SharePubKey: operatorKey}
 	}
 
 	shareWithMetaData := &types.SSVShare{
@@ -1153,7 +1153,7 @@ func buildOperators(t *testing.T) []*spectypes.Operator {
 	for i, id := range operatorIds {
 		operatorKey, keyError := createKey()
 		require.NoError(t, keyError)
-		operators[i] = &spectypes.Operator{OperatorID: id, PubKey: operatorKey}
+		operators[i] = &spectypes.Operator{OperatorID: id, SharePubKey: operatorKey}
 	}
 	return operators
 }

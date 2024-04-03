@@ -8,19 +8,19 @@ import (
 	"github.com/bloxapp/ssv/operator/keys"
 )
 
-func (mv *messageValidator) verifySignature(messageData []byte, operatorID spectypes.OperatorID, signature []byte) error {
-	operatorPubKey, ok := mv.operatorIDToPubkeyCache.Get(operatorID)
+func (mv *messageValidator) verifySignature(msg *spectypes.SignedSSVMessage) error {
+	operatorPubKey, ok := mv.operatorIDToPubkeyCache.Get(msg.OperatorID)
 	if !ok {
-		operator, found, err := mv.nodeStorage.GetOperatorData(nil, operatorID)
+		operator, found, err := mv.nodeStorage.GetOperatorData(nil, msg.OperatorID)
 		if err != nil {
 			e := ErrOperatorNotFound
-			e.got = operatorID
+			e.got = msg.OperatorID
 			e.innerErr = err
 			return e
 		}
 		if !found {
 			e := ErrOperatorNotFound
-			e.got = operatorID
+			e.got = msg.OperatorID
 			return e
 		}
 
@@ -31,12 +31,12 @@ func (mv *messageValidator) verifySignature(messageData []byte, operatorID spect
 			return e
 		}
 
-		mv.operatorIDToPubkeyCache.Set(operatorID, operatorPubKey)
+		mv.operatorIDToPubkeyCache.Set(msg.OperatorID, operatorPubKey)
 	}
 
-	if err := operatorPubKey.Verify(messageData, signature); err != nil {
+	if err := operatorPubKey.Verify(msg.Data, msg.Signature); err != nil {
 		e := ErrSignatureVerification
-		e.innerErr = fmt.Errorf("verify opid: %v signature: %w", operatorID, err)
+		e.innerErr = fmt.Errorf("verify opid: %v signature: %w", msg.OperatorID, err)
 		return e
 	}
 

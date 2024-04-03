@@ -15,6 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	typescomparable "github.com/bloxapp/ssv-spec/types/testingutils/comparable"
+
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
@@ -27,7 +28,7 @@ type MsgProcessingSpecTest struct {
 	Name                    string
 	Runner                  runner.Runner
 	Duty                    *spectypes.Duty
-	Messages                []*spectypes.SSVMessage
+	Messages                []*spectypes.SignedSSVMessage
 	PostDutyRunnerStateRoot string
 	PostDutyRunnerState     spectypes.Root `json:"-"` // Field is ignored by encoding/json
 	// OutputMessages compares pre/ post signed partial sigs to output. We exclude consensus msgs as it's tested in consensus
@@ -57,7 +58,7 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 		lastErr = v.StartDuty(logger, test.Duty)
 	}
 	for _, msg := range test.Messages {
-		dmsg, err := queue.DecodeSSVMessage(msg)
+		dmsg, err := queue.DecodeSignedSSVMessage(msg)
 		if err != nil {
 			lastErr = err
 			continue
