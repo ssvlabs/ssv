@@ -61,8 +61,8 @@ func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *queue.
 			logger.Debug("❗ failed to get consensus Message from network Message", zap.Error(err))
 			return
 		}
-
-		if signedMsg.Message.MsgType != specqbft.CommitMsgType && signedMsg.Message.MsgType != specqbft.ProposalMsgType {
+		// only supports commit msg's
+		if signedMsg.Message.MsgType != specqbft.CommitMsgType {
 			return
 		}
 
