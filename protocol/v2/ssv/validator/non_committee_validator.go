@@ -58,7 +58,7 @@ func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *queue.
 	case spectypes.SSVConsensusMsgType:
 		signedMsg := &specqbft.SignedMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
-			logger.Debug("❗ failed to get consensus Message from network Message", zap.Error(err))
+			logger.Warn("❗ failed to get consensus Message from network Message", zap.Error(err))
 			return
 		}
 		// only supports commit msg's
@@ -80,9 +80,11 @@ func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *queue.
 		//}
 
 		//if decided == nil {
+		logger.Info("ncv add to container")
 		addMsg, err := ncv.commitMsgContainer.AddFirstMsgForSignerAndRound(signedMsg)
+		logger.Info("ncv add to container done")
 		if err != nil {
-			logger.Debug("❌ could not add commit msg to container",
+			logger.Warn("❌ could not add commit msg to container",
 				zap.Uint64("msg_height", uint64(signedMsg.Message.Height)),
 				zap.Any("signers", signedMsg.Signers),
 				zap.Error(err))
@@ -103,7 +105,7 @@ func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *queue.
 
 		signedMsg, err = aggregateCommitMsgs(commitMsgs)
 		if err != nil {
-			logger.Debug("❌ could not add aggregate commit messages",
+			logger.Warn("❌ could not add aggregate commit messages",
 				zap.Uint64("msg_height", uint64(signedMsg.Message.Height)),
 				zap.Any("signers", signedMsg.Signers),
 				zap.Error(err))
@@ -119,9 +121,9 @@ func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *queue.
 				zap.Any("signers", signedMsg.Signers),
 			)
 			if err = ncv.qbftController.SaveInstance(inst, signedMsg); err != nil {
-				logger.Debug("❗failed to save instance", zap.Error(err))
+				logger.Warn("❗failed to save instance", zap.Error(err))
 			} else {
-				logger.Debug("💾 saved instance")
+				logger.Info("💾 saved instance")
 			}
 		}
 
