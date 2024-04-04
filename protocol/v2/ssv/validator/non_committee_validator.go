@@ -39,9 +39,10 @@ func NewNonCommitteeValidator(logger *zap.Logger, identifier spectypes.MessageID
 	}
 
 	return &NonCommitteeValidator{
-		Share:          opts.SSVShare,
-		Storage:        opts.Storage,
-		qbftController: ctrl,
+		Share:              opts.SSVShare,
+		Storage:            opts.Storage,
+		qbftController:     ctrl,
+		commitMsgContainer: specqbft.NewMsgContainer(),
 	}
 }
 
