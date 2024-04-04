@@ -161,7 +161,7 @@ type goClient struct {
 	registrationCache    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration
 
 	attestationDataCacheMu  sync.Mutex
-	attestationDataPendings map[SlotAndCommittee]sync.Mutex
+	attestationDataPendings map[SlotAndCommittee]*sync.Mutex
 	attestationDataCache    map[SlotAndCommittee]*phase0.AttestationData
 	commonTimeout           time.Duration
 	longTimeout             time.Duration
@@ -206,7 +206,7 @@ func New(
 		operatorDataStore:       operatorDataStore,
 		registrationCache:       map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
 		attestationDataCache:    make(map[SlotAndCommittee]*phase0.AttestationData),
-		attestationDataPendings: make(map[SlotAndCommittee]sync.Mutex),
+		attestationDataPendings: make(map[SlotAndCommittee]*sync.Mutex),
 		commonTimeout:           commonTimeout,
 		longTimeout:             longTimeout,
 	}
