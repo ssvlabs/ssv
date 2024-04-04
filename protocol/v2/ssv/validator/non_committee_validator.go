@@ -68,6 +68,8 @@ func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *queue.
 
 		logger = logger.With(fields.Height(signedMsg.Message.Height))
 
+		logger.Info("processing message")
+
 		//decided, err := ncv.qbftController.ProcessMsg(logger, signedMsg)
 		//if err != nil {
 		//	logger.Debug("❌ failed to process message",
