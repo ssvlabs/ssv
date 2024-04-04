@@ -89,13 +89,17 @@ func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *queue.
 			return
 		}
 		if !addMsg {
+			logger.Info("ncv didn't add commit")
 			return
 		}
+		logger.Info("ncv added commit")
 
 		signers, commitMsgs := ncv.commitMsgContainer.LongestUniqueSignersForRoundAndRoot(signedMsg.Message.Round, signedMsg.Message.Root)
 		if !ncv.Share.HasQuorum(len(signers)) {
+			logger.Info("ncv has no quorum")
 			return
 		}
+		logger.Info("ncv has quorum")
 
 		signedMsg, err = aggregateCommitMsgs(commitMsgs)
 		if err != nil {
@@ -105,6 +109,7 @@ func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *queue.
 				zap.Error(err))
 			return
 		}
+		logger.Info("ncv aggregated commits")
 		//}
 
 		if inst := ncv.qbftController.StoredInstances.FindInstance(signedMsg.Message.Height); inst != nil {
