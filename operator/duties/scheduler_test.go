@@ -2,6 +2,10 @@ package duties
 
 import (
 	"context"
+	"fmt"
+	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ethereum/go-ethereum/common"
 	"sync"
 	"testing"
 	"time"
@@ -340,5 +344,92 @@ func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 	case <-time.After(1 * time.Second):
 		t.Fatal("Channel is jammed")
 	}
+}
 
+func TestValidatorRegistrationHandler_HandleDuties(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	logger := logging.TestLogger(t)
+
+	mockTicker := mocks.NewMockSlotTicker(ctrl)
+	mockValidatorController := mocks.NewMockValidatorController(ctrl)
+
+	slotCounts := make(map[phase0.Slot]int)
+	mockTimeChan := make(chan time.Time, 1)
+	mockSlotChan := make(chan phase0.Slot, 1)
+
+	mockTicker.EXPECT().Next().Return(mockTimeChan).AnyTimes()
+	mockTicker.EXPECT().Slot().DoAndReturn(func() phase0.Slot {
+		return <-mockSlotChan
+	}).AnyTimes()
+
+	shares := []*types.SSVShare{{
+		Share: spectypes.Share{
+			OperatorID:      1,
+			ValidatorPubKey: []byte(fmt.Sprintf("pk%d", 1)),
+		},
+		Metadata: types.Metadata{
+			OwnerAddress: common.BytesToAddress([]byte("67Ce5c69260bd819B4e0AD13f4b873074D479811")),
+			BeaconMetadata: &beacon.ValidatorMetadata{
+				Balance:         0,
+				Status:          3, // ValidatorStateActiveOngoing
+				Index:           125832,
+				ActivationEpoch: networkconfig.TestNetwork.Beacon.EstimatedCurrentEpoch(),
+			},
+		},
+	}}
+
+	mockValidatorController.EXPECT().GetOperatorShares().Return(shares).AnyTimes()
+	handler := NewValidatorRegistrationHandler()
+	handler.logger = logger
+	handler.ticker = mockTicker
+	handler.network = networkconfig.TestNetwork
+	handler.validatorController = mockValidatorController
+	handler.executeDuties = func(logger *zap.Logger, duties []*spectypes.Duty) {
+		for _, duty := range duties {
+			// Increment the count for the slot found in duties
+			slotCounts[duty.Slot]++
+		}
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var wg sync.WaitGroup
+	numberOfRequest := 1000
+	wg.Add(numberOfRequest)
+
+	go func() {
+		handler.HandleDuties(ctx)
+	}()
+
+	for i := 1; i <= numberOfRequest; i++ {
+		slot := phase0.Slot(i)
+		mockTimeChan <- time.Now()
+		mockSlotChan <- slot
+	}
+	time.Sleep(time.Millisecond * 100)
+	wg.Add(-numberOfRequest)
+
+	wg.Wait()
+
+	expectedSlots := map[phase0.Slot]int{
+		8:   1,
+		72:  1,
+		392: 1,
+		712: 1,
+	}
+	for slot, expectedCount := range expectedSlots {
+		actualCount, exists := slotCounts[slot]
+		if !exists || actualCount != expectedCount {
+			t.Errorf("expected slot %d to be processed exactly %d times, found %d times", slot, expectedCount, actualCount)
+		}
+	}
+
+	// Check for any unexpected slots
+	for slot, count := range slotCounts {
+		if _, expected := expectedSlots[slot]; !expected {
+			t.Errorf("unexpected slot %d processed %d times", slot, count)
+		}
+	}
 }
