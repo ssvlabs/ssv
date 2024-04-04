@@ -3,6 +3,7 @@ package goclient
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -31,6 +32,29 @@ func (gc *goClient) AttesterDuties(ctx context.Context, epoch phase0.Epoch, vali
 }
 
 func (gc *goClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (ssz.Marshaler, spec.DataVersion, error) {
+	gc.attestationDataCacheMu.Lock()
+	m, ok := gc.attestationDataPendings[SlotAndCommittee{slot, committeeIndex}]
+	if ok {
+		gc.attestationDataCacheMu.Unlock()
+		m.Lock()
+		defer m.Unlock()
+		attdata, ok := gc.attestationDataCache[SlotAndCommittee{slot, committeeIndex}]
+		if !ok {
+			return nil, DataVersionNil, fmt.Errorf("attestation data not found in cache")
+		}
+		return attdata, spec.DataVersionPhase0, nil
+	} else {
+		m = sync.Mutex{}
+		gc.attestationDataPendings[SlotAndCommittee{slot, committeeIndex}] = m
+	}
+	m.Lock()
+	defer m.Unlock()
+	gc.attestationDataCacheMu.Unlock()
+
+	attData, ok := gc.attestationDataCache[SlotAndCommittee{slot, committeeIndex}]
+	if ok {
+		return attData, spec.DataVersionPhase0, nil
+	}
 	attDataReqStart := time.Now()
 	resp, err := gc.client.AttestationData(gc.ctx, &api.AttestationDataOpts{
 		Slot:           slot,
@@ -42,6 +66,8 @@ func (gc *goClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 	if resp == nil {
 		return nil, DataVersionNil, fmt.Errorf("attestation data response is nil")
 	}
+
+	gc.attestationDataCache[SlotAndCommittee{slot, committeeIndex}] = resp.Data
 
 	metricsAttesterDataRequest.Observe(time.Since(attDataReqStart).Seconds())
 

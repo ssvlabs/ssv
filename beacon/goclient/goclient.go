@@ -140,6 +140,11 @@ type NodeClientProvider interface {
 
 var _ NodeClientProvider = (*goClient)(nil)
 
+type SlotAndCommittee struct {
+	Slot           phase0.Slot
+	CommitteeIndex phase0.CommitteeIndex
+}
+
 // goClient implementing Beacon struct
 type goClient struct {
 	log                  *zap.Logger
@@ -154,8 +159,12 @@ type goClient struct {
 	registrationMu       sync.Mutex
 	registrationLastSlot phase0.Slot
 	registrationCache    map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration
-	commonTimeout        time.Duration
-	longTimeout          time.Duration
+
+	attestationDataCacheMu  sync.Mutex
+	attestationDataPendings map[SlotAndCommittee]sync.Mutex
+	attestationDataCache    map[SlotAndCommittee]*phase0.AttestationData
+	commonTimeout           time.Duration
+	longTimeout             time.Duration
 }
 
 // New init new client and go-client instance
@@ -188,16 +197,18 @@ func New(
 	}
 
 	client := &goClient{
-		log:               logger,
-		ctx:               opt.Context,
-		network:           opt.Network,
-		client:            httpClient.(*eth2clienthttp.Service),
-		graffiti:          opt.Graffiti,
-		gasLimit:          opt.GasLimit,
-		operatorDataStore: operatorDataStore,
-		registrationCache: map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
-		commonTimeout:     commonTimeout,
-		longTimeout:       longTimeout,
+		log:                     logger,
+		ctx:                     opt.Context,
+		network:                 opt.Network,
+		client:                  httpClient.(*eth2clienthttp.Service),
+		graffiti:                opt.Graffiti,
+		gasLimit:                opt.GasLimit,
+		operatorDataStore:       operatorDataStore,
+		registrationCache:       map[phase0.BLSPubKey]*api.VersionedSignedValidatorRegistration{},
+		attestationDataCache:    make(map[SlotAndCommittee]*phase0.AttestationData),
+		attestationDataPendings: make(map[SlotAndCommittee]sync.Mutex),
+		commonTimeout:           commonTimeout,
+		longTimeout:             longTimeout,
 	}
 
 	nodeVersionResp, err := client.client.NodeVersion(opt.Context, &api.NodeVersionOpts{})
