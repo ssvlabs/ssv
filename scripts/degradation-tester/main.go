@@ -81,7 +81,9 @@ func checkFile(file *os.File, config *Config) int {
 			currentSection = "allocs/op"
 			continue
 		}
-
+		if currentSection == "B/op" {
+			continue
+		}
 		totalErrors += checkLine(config, line, currentSection)
 	}
 

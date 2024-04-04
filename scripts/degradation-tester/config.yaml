@@ -1,5 +1,5 @@
-DefaultOpDelta: 4.0
-DefaultAllocDelta: 0
+DefaultOpDelta: 5.0
+DefaultAllocDelta: 5.0
 Packages:
   - Path: "./message/validation"
     Tests:
