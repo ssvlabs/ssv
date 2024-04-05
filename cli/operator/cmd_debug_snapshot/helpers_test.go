@@ -61,6 +61,86 @@ func TestGetFileNameWithoutExt(t *testing.T) {
 	}
 }
 
+func TestSortLogsPaths(t *testing.T) {
+	type args struct {
+		paths          []string
+		cfgLogFilePath string
+	}
+	tests := []struct {
+		name     string
+		args     args
+		expected []string
+	}{
+		{
+			name: "happy flow",
+			args: args{
+				paths:          []string{"test-2024-04-05T12-43-26.941.log", "test-2024-04-05T12-43-26.810.log", "test.log"},
+				cfgLogFilePath: "test.log",
+			},
+			expected: []string{"test-2024-04-05T12-43-26.810.log", "test-2024-04-05T12-43-26.941.log", "test.log"},
+		},
+		{
+			name: "happy flow",
+			args: args{
+				paths: []string{
+					"test-2024-04-04T12-43-26.999.log",
+					"test-2024-04-04T12-43-26.810.log",
+					"test-2024-04-04T12-43-26.941.log",
+					"test.log",
+					"test-2024-04-04T12-43-26.700.log",
+				},
+				cfgLogFilePath: "test.log",
+			},
+			expected: []string{
+				"test-2024-04-04T12-43-26.700.log",
+				"test-2024-04-04T12-43-26.810.log",
+				"test-2024-04-04T12-43-26.941.log",
+				"test-2024-04-04T12-43-26.999.log",
+				"test.log",
+			},
+		},
+		{
+			name: "happy flow",
+			args: args{
+				paths: []string{
+					"test-2024-04-04T12-43-26.999.log",
+					"test-2024-04-04T12-43-26.810.log",
+					"test-2024-04-04T12-43-26.941.log",
+					"test.log",
+					"test-2024-04-04T12-43-26.700.log",
+				},
+				cfgLogFilePath: "test.log",
+			},
+			expected: []string{
+				"test-2024-04-04T12-43-26.700.log",
+				"test-2024-04-04T12-43-26.810.log",
+				"test-2024-04-04T12-43-26.941.log",
+				"test-2024-04-04T12-43-26.999.log",
+				"test.log",
+			},
+		},
+		{
+			name: "happy flow",
+			args: args{
+				paths: []string{
+					"test.log",
+				},
+				cfgLogFilePath: "test.log",
+			},
+			expected: []string{
+				"test.log",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sortFiles(tt.args.paths, tt.args.cfgLogFilePath)
+			require.Equal(t, tt.expected, tt.args.paths)
+			fmt.Println(tt.args.paths)
+		})
+	}
+}
+
 func TestGetLogFilesAbsPaths(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "test")
 	require.NoError(t, err)

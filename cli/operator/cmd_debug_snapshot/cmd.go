@@ -84,6 +84,8 @@ func compressLogFiles(logger *zap.Logger, args *DebugSnapshotArgs) (int64, error
 		return 0, err
 	}
 
+	sortFiles(pathsToInclude, logFilePath)
+
 	if cfg.MetricsAPIPort > 0 {
 		promRoute := fmt.Sprintf("http://localhost:%d/metrics", cfg.MetricsAPIPort)
 		dumpFileName := "metrics_dump.txt"
