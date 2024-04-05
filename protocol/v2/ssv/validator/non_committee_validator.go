@@ -30,6 +30,9 @@ func NewNonCommitteeValidator(logger *zap.Logger, identifier spectypes.MessageID
 		Storage:               opts.Storage.Get(identifier.GetRoleType()),
 		Network:               opts.Network,
 		SignatureVerification: true,
+		ValueCheckF: func(data []byte) error {
+			return nil
+		},
 	}
 	ctrl := qbftcontroller.NewController(identifier[:], &opts.SSVShare.Share, config, opts.FullNode)
 	ctrl.StoredInstances = make(qbftcontroller.InstanceContainer, 0, nonCommitteeInstanceContainerCapacity(opts.FullNode))
