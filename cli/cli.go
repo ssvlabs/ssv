@@ -6,7 +6,7 @@ import (
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/cli/operator/cmd_compress_logs"
+	"github.com/bloxapp/ssv/cli/operator/cmd_debug_snapshot"
 
 	"github.com/bloxapp/ssv/cli/bootnode"
 	"github.com/bloxapp/ssv/cli/operator"
@@ -35,5 +35,5 @@ func init() {
 	RootCmd.AddCommand(bootnode.StartBootNodeCmd)
 	RootCmd.AddCommand(operator.StartNodeCmd)
 	RootCmd.AddCommand(operator.GenerateDocCmd)
-	RootCmd.AddCommand(cmd_compress_logs.CompressLogsCmd)
+	RootCmd.AddCommand(cmd_debug_snapshot.DebugSnapshotCmd)
 }

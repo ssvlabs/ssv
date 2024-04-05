@@ -1,4 +1,4 @@
-package cmd_compress_logs
+package cmd_debug_snapshot
 
 import (
 	"archive/zip"

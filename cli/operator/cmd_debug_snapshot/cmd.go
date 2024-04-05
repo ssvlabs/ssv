@@ -1,4 +1,4 @@
-package cmd_compress_logs
+package cmd_debug_snapshot
 
 import (
 	"archive/zip"
@@ -26,7 +26,7 @@ var globalArgs globalconfig.Args
 
 const compressedFileExtension = ".zip"
 
-type CompressLogsArgs struct {
+type DebugSnapshotArgs struct {
 	logFilePath string
 	outputPath  string
 	upload      string
@@ -34,10 +34,10 @@ type CompressLogsArgs struct {
 	metrics     bool
 }
 
-var compressLogsArgs CompressLogsArgs
+var debugSnapshotArgs DebugSnapshotArgs
 
-// CompressLogsCmd is the command to compress logs file with gzip
-var CompressLogsCmd = &cobra.Command{
+// DebugSnapshotCmd is the command to compress logs file with gzip
+var DebugSnapshotCmd = &cobra.Command{
 	Use:   "archive",
 	Short: "Compresses internal logs into a zip file",
 	Long: "Compresses internal logs into a zip file." +
@@ -50,17 +50,17 @@ var CompressLogsCmd = &cobra.Command{
 			logger.Fatal("initialization failed", zap.Error(err))
 		}
 
-		if compressLogsArgs.logFilePath == "" {
-			compressLogsArgs.logFilePath = cfg.GlobalConfig.LogFilePath
+		if debugSnapshotArgs.logFilePath == "" {
+			debugSnapshotArgs.logFilePath = cfg.GlobalConfig.LogFilePath
 		}
 
 		logger.Info("starting logs compression",
 			zap.Any("buildData", commons.GetBuildData()),
-			zap.String("compressLogsArgs.logFilePath", compressLogsArgs.logFilePath),
-			zap.String("compressLogsArgs.outputPath", compressLogsArgs.outputPath),
+			zap.String("debugSnapshotArgs.logFilePath", debugSnapshotArgs.logFilePath),
+			zap.String("debugSnapshotArgs.outputPath", debugSnapshotArgs.outputPath),
 		)
 
-		fileSizeBytes, err := compressLogFiles(logger, &compressLogsArgs)
+		fileSizeBytes, err := compressLogFiles(logger, &debugSnapshotArgs)
 
 		if err != nil {
 			logger.Fatal("logs file compression failed", zap.Error(err))
@@ -70,7 +70,7 @@ var CompressLogsCmd = &cobra.Command{
 	},
 }
 
-func compressLogFiles(logger *zap.Logger, args *CompressLogsArgs) (int64, error) {
+func compressLogFiles(logger *zap.Logger, args *DebugSnapshotArgs) (int64, error) {
 	logFilePath := args.logFilePath
 	destName := getFileNameWithoutExt(args.outputPath)
 
@@ -200,24 +200,24 @@ func dumpMetrics(promRoute string, metricsDumpFileName string) (string, error) {
 }
 
 func init() {
-	globalconfig.ProcessConfigArg(&cfg, &globalArgs, CompressLogsCmd)
+	globalconfig.ProcessConfigArg(&cfg, &globalArgs, DebugSnapshotCmd)
 
-	CompressLogsCmd.Flags().StringVarP(
-		&compressLogsArgs.outputPath,
+	DebugSnapshotCmd.Flags().StringVarP(
+		&debugSnapshotArgs.outputPath,
 		"out", "o", "", "output destination file name",
 	)
-	CompressLogsCmd.Flags().StringVarP(
-		&compressLogsArgs.upload,
+	DebugSnapshotCmd.Flags().StringVarP(
+		&debugSnapshotArgs.upload,
 		"upload", "u", "", "URL for files uploading to S3",
 	)
-	CompressLogsCmd.Flags().BoolVarP(
-		&compressLogsArgs.clean,
+	DebugSnapshotCmd.Flags().BoolVarP(
+		&debugSnapshotArgs.clean,
 		"clean", "c", true, "remove .zip file after uploading it to S3",
 	)
-	CompressLogsCmd.Flags().BoolVarP(
-		&compressLogsArgs.metrics,
+	DebugSnapshotCmd.Flags().BoolVarP(
+		&debugSnapshotArgs.metrics,
 		"metrics", "m", true, "try to collect metrics dump from the /metrics",
 	)
 
-	globalconfig.ProcessHelpCmd(&cfg, &globalArgs, CompressLogsCmd)
+	globalconfig.ProcessHelpCmd(&cfg, &globalArgs, DebugSnapshotCmd)
 }

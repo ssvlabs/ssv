@@ -1,4 +1,4 @@
-package cmd_compress_logs
+package cmd_debug_snapshot
 
 import (
 	"fmt"
@@ -39,7 +39,7 @@ func TestCompressFile(t *testing.T) {
 
 	zipName := "tmp_output"
 
-	_, err = compressLogFiles(logger, &CompressLogsArgs{
+	_, err = compressLogFiles(logger, &DebugSnapshotArgs{
 		logFilePath: fileName,
 		outputPath:  zipName,
 	})
@@ -76,7 +76,7 @@ func TestCompressFile(t *testing.T) {
 	require.NoError(t, deleteFiles(logFiles...))
 }
 
-func BenchmarkCompressLogs(b *testing.B) {
+func BenchmarkDebugSnapshot(b *testing.B) {
 	testCases := []struct {
 		SizeInMB    int
 		ChunkSizeMB int
@@ -110,7 +110,7 @@ func BenchmarkCompressLogs(b *testing.B) {
 			require.NoError(b, err)
 
 			zipName := fmt.Sprintf("tmp_output_%dMB.log", tc.SizeInMB)
-			_, err = compressLogFiles(logger, &CompressLogsArgs{
+			_, err = compressLogFiles(logger, &DebugSnapshotArgs{
 				logFilePath: testLogFilePath,
 				outputPath:  zipName,
 			})
