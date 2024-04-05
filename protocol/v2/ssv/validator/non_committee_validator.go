@@ -114,6 +114,14 @@ func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *queue.
 		logger.Info("ncv aggregated commits")
 		//}
 
+		if err := ncv.qbftController.StartNewInstance(logger,
+			signedMsg.Message.Height,
+			signedMsg.Message.Root[:], // TODO: fix
+		); err != nil {
+			logger.Error("could not start new QBFT instance", zap.Error(err))
+			return
+		}
+
 		if inst := ncv.qbftController.StoredInstances.FindInstance(signedMsg.Message.Height); inst != nil {
 			logger := logger.With(
 				zap.Uint64("msg_height", uint64(signedMsg.Message.Height)),
