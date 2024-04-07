@@ -38,6 +38,8 @@ func (gc *goClient) GetAttestationData(slot phase0.Slot, committeeIndex phase0.C
 		gc.attestationDataCacheMu.Unlock()
 		m.Lock()
 		defer m.Unlock()
+		gc.attestationDataCacheMu.Lock()
+		defer gc.attestationDataCacheMu.Unlock()
 		attdata, ok := gc.attestationDataCache[SlotAndCommittee{slot, committeeIndex}]
 		if !ok {
 			return nil, DataVersionNil, fmt.Errorf("attestation data not found in cache")
