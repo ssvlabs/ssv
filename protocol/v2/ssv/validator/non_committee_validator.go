@@ -76,56 +76,48 @@ func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *queue.
 
 		logger.Info("ncv processing message")
 
-		//decided, err := ncv.qbftController.ProcessMsg(logger, signedMsg)
-		//if err != nil {
-		//	logger.Debug("❌ failed to process message",
-		//		zap.Uint64("msg_height", uint64(signedMsg.Message.Height)),
-		//		zap.Any("signers", signedMsg.Signers),
-		//		zap.Error(err))
-		//	return
-		//}
-
-		//if decided == nil {
-		logger.Info("ncv add to container")
-		addMsg, err := ncv.commitMsgContainer.AddFirstMsgForSignerAndRound(signedMsg)
-		logger.Info("ncv add to container done")
+		decided, err := ncv.qbftController.ProcessMsg(logger, signedMsg)
 		if err != nil {
-			logger.Warn("❌ could not add commit msg to container",
+			logger.Debug("❌ failed to process message",
 				zap.Uint64("msg_height", uint64(signedMsg.Message.Height)),
 				zap.Any("signers", signedMsg.Signers),
 				zap.Error(err))
 			return
 		}
-		if !addMsg {
-			logger.Info("ncv didn't add commit")
-			return
-		}
-		logger.Info("ncv added commit")
 
-		signers, commitMsgs := ncv.commitMsgContainer.LongestUniqueSignersForRoundAndRoot(signedMsg.Message.Round, signedMsg.Message.Root)
-		if !ncv.Share.HasQuorum(len(signers)) {
-			logger.Info("ncv has no quorum")
-			return
-		}
-		logger.Info("ncv has quorum")
+		if decided == nil {
+			logger.Info("ncv add to container")
+			addMsg, err := ncv.commitMsgContainer.AddFirstMsgForSignerAndRound(signedMsg)
+			logger.Info("ncv add to container done")
+			if err != nil {
+				logger.Warn("❌ could not add commit msg to container",
+					zap.Uint64("msg_height", uint64(signedMsg.Message.Height)),
+					zap.Any("signers", signedMsg.Signers),
+					zap.Error(err))
+				return
+			}
+			if !addMsg {
+				logger.Info("ncv didn't add commit")
+				return
+			}
+			logger.Info("ncv added commit")
 
-		signedMsg, err = aggregateCommitMsgs(commitMsgs)
-		if err != nil {
-			logger.Warn("❌ could not add aggregate commit messages",
-				zap.Uint64("msg_height", uint64(signedMsg.Message.Height)),
-				zap.Any("signers", signedMsg.Signers),
-				zap.Error(err))
-			return
-		}
-		logger.Info("ncv aggregated commits")
-		//}
+			signers, commitMsgs := ncv.commitMsgContainer.LongestUniqueSignersForRoundAndRoot(signedMsg.Message.Round, signedMsg.Message.Root)
+			if !ncv.Share.HasQuorum(len(signers)) {
+				logger.Info("ncv has no quorum")
+				return
+			}
+			logger.Info("ncv has quorum")
 
-		if err := ncv.qbftController.StartNewInstance(logger,
-			signedMsg.Message.Height,
-			signedMsg.Message.Root[:], // TODO: fix
-		); err != nil {
-			logger.Error("could not start new QBFT instance", zap.Error(err))
-			return
+			signedMsg, err = aggregateCommitMsgs(commitMsgs)
+			if err != nil {
+				logger.Warn("❌ could not add aggregate commit messages",
+					zap.Uint64("msg_height", uint64(signedMsg.Message.Height)),
+					zap.Any("signers", signedMsg.Signers),
+					zap.Error(err))
+				return
+			}
+			logger.Info("ncv aggregated commits")
 		}
 
 		if inst := ncv.qbftController.StoredInstances.FindInstance(signedMsg.Message.Height); inst != nil {
