@@ -57,7 +57,7 @@ func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *queue.
 	logger = logger.With(fields.PubKey(msg.MsgID.GetPubKey()), fields.Role(msg.MsgID.GetRoleType()))
 
 	if err := validateMessage(ncv.Share.Share, msg); err != nil {
-		logger.Warn("❌ got invalid message", zap.Error(err))
+		logger.Debug("❌ got invalid message", zap.Error(err))
 		return
 	}
 
@@ -65,7 +65,7 @@ func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *queue.
 	case spectypes.SSVConsensusMsgType:
 		signedMsg := &specqbft.SignedMessage{}
 		if err := signedMsg.Decode(msg.GetData()); err != nil {
-			logger.Warn("❗ failed to get consensus Message from network Message", zap.Error(err))
+			logger.Debug("❗ failed to get consensus Message from network Message", zap.Error(err))
 			return
 		}
 		// only supports commit msg's
@@ -74,8 +74,6 @@ func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *queue.
 		}
 
 		logger = logger.With(fields.Height(signedMsg.Message.Height))
-
-		logger.Info("ncv processing message")
 
 		decided, err := ncv.UponDecided(logger, signedMsg)
 		if err != nil {
@@ -87,38 +85,31 @@ func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *queue.
 		}
 
 		if decided == nil {
-			logger.Info("ncv add to container")
 			addMsg, err := ncv.commitMsgContainer.AddFirstMsgForSignerAndRound(signedMsg)
-			logger.Info("ncv add to container done")
 			if err != nil {
-				logger.Warn("❌ could not add commit msg to container",
+				logger.Debug("❌ could not add commit msg to container",
 					zap.Uint64("msg_height", uint64(signedMsg.Message.Height)),
 					zap.Any("signers", signedMsg.Signers),
 					zap.Error(err))
 				return
 			}
 			if !addMsg {
-				logger.Info("ncv didn't add commit")
 				return
 			}
-			logger.Info("ncv added commit")
 
 			signers, commitMsgs := ncv.commitMsgContainer.LongestUniqueSignersForRoundAndRoot(signedMsg.Message.Round, signedMsg.Message.Root)
 			if !ncv.Share.HasQuorum(len(signers)) {
-				logger.Info("ncv has no quorum")
 				return
 			}
-			logger.Info("ncv has quorum")
 
 			signedMsg, err = aggregateCommitMsgs(commitMsgs)
 			if err != nil {
-				logger.Warn("❌ could not add aggregate commit messages",
+				logger.Debug("❌ could not add aggregate commit messages",
 					zap.Uint64("msg_height", uint64(signedMsg.Message.Height)),
 					zap.Any("signers", signedMsg.Signers),
 					zap.Error(err))
 				return
 			}
-			logger.Info("ncv aggregated commits")
 		}
 
 		if inst := ncv.qbftController.StoredInstances.FindInstance(signedMsg.Message.Height); inst != nil {
