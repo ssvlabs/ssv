@@ -56,7 +56,7 @@ func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *queue.
 	logger = logger.With(fields.PubKey(msg.MsgID.GetPubKey()), fields.Role(msg.MsgID.GetRoleType()))
 
 	if err := validateMessage(ncv.Share.Share, msg); err != nil {
-		logger.Debug("❌ got invalid message", zap.Error(err))
+		logger.Warn("❌ got invalid message", zap.Error(err))
 		return
 	}
 
