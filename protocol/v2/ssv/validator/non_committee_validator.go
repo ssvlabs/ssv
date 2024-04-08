@@ -82,7 +82,7 @@ func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *queue.
 				return
 			}
 
-			logger.Debug("ncv processing pk")
+			logger.Debug("ncv processing pk", zap.Any("signers", signedMsg.Signers))
 
 			addMsg, err := ncv.commitMsgContainer.AddFirstMsgForSignerAndRound(signedMsg)
 			if err != nil {
