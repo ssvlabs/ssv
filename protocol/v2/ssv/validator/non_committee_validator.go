@@ -101,33 +101,13 @@ func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *queue.
 			return
 		}
 
-		decided, err := ncv.UponDecided(logger, signedMsg)
-		if err != nil {
+		if _, err := ncv.UponDecided(logger, signedMsg); err != nil {
 			logger.Debug("❌ failed to process message",
 				zap.Uint64("msg_height", uint64(signedMsg.Message.Height)),
 				zap.Any("signers", signedMsg.Signers),
 				zap.Error(err))
 			return
 		}
-
-		if decided == nil {
-			return
-		}
-
-		if inst := ncv.qbftController.StoredInstances.FindInstance(signedMsg.Message.Height); inst != nil {
-			logger := logger.With(
-				zap.Uint64("msg_height", uint64(signedMsg.Message.Height)),
-				zap.Uint64("ctrl_height", uint64(ncv.qbftController.Height)),
-				zap.Any("signers", signedMsg.Signers),
-			)
-			if err = ncv.qbftController.SaveInstance(inst, signedMsg); err != nil {
-				logger.Warn("❗failed to save instance", zap.Error(err))
-			} else {
-				logger.Info("💾 saved instance")
-			}
-		}
-
-		return
 	}
 }
 
