@@ -8,7 +8,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
 
-const bufSize = 1024 * 64
+const bufSize = 1024
 
 func newMessageRouter(logger *zap.Logger) *messageRouter {
 	return &messageRouter{
