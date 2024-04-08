@@ -1,12 +1,14 @@
 package validator
 
 import (
+	"encoding/hex"
 	"fmt"
 	"sort"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
+	"golang.org/x/exp/slices"
 
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging/fields"
@@ -68,6 +70,18 @@ func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *queue.
 		}
 
 		logger = logger.With(fields.Height(signedMsg.Message.Height))
+
+		watchedPKList := []string{
+			"857400e153569ee54a202b92ef1223c00b1d39891c93aafdd776698ae9b2d3d54c6319763d9bb0ecf72e06cb3c16724d",
+			"98ee39df56331d7e10c23a26024b5054b6e64c490fb02a463a0f925b873cfbd5f230e2472fbcd266f7012e26fa3ceb68",
+		}
+
+		if !slices.Contains(watchedPKList, hex.EncodeToString(msg.MsgID.GetPubKey())) {
+			logger.Debug("ncv ignoring pk")
+			return
+		}
+
+		logger.Debug("ncv processing pk")
 
 		addMsg, err := ncv.commitMsgContainer.AddFirstMsgForSignerAndRound(signedMsg)
 		if err != nil {
