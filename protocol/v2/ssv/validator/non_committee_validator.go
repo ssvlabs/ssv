@@ -75,6 +75,32 @@ func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *queue.
 
 		logger = logger.With(fields.Height(signedMsg.Message.Height))
 
+		addMsg, err := ncv.commitMsgContainer.AddFirstMsgForSignerAndRound(signedMsg)
+		if err != nil {
+			logger.Debug("❌ could not add commit msg to container",
+				zap.Uint64("msg_height", uint64(signedMsg.Message.Height)),
+				zap.Any("signers", signedMsg.Signers),
+				zap.Error(err))
+			return
+		}
+		if !addMsg {
+			return
+		}
+
+		signers, commitMsgs := ncv.commitMsgContainer.LongestUniqueSignersForRoundAndRoot(signedMsg.Message.Round, signedMsg.Message.Root)
+		if !ncv.Share.HasQuorum(len(signers)) {
+			return
+		}
+
+		signedMsg, err = aggregateCommitMsgs(commitMsgs)
+		if err != nil {
+			logger.Debug("❌ could not add aggregate commit messages",
+				zap.Uint64("msg_height", uint64(signedMsg.Message.Height)),
+				zap.Any("signers", signedMsg.Signers),
+				zap.Error(err))
+			return
+		}
+
 		decided, err := ncv.UponDecided(logger, signedMsg)
 		if err != nil {
 			logger.Debug("❌ failed to process message",
@@ -85,31 +111,7 @@ func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *queue.
 		}
 
 		if decided == nil {
-			addMsg, err := ncv.commitMsgContainer.AddFirstMsgForSignerAndRound(signedMsg)
-			if err != nil {
-				logger.Debug("❌ could not add commit msg to container",
-					zap.Uint64("msg_height", uint64(signedMsg.Message.Height)),
-					zap.Any("signers", signedMsg.Signers),
-					zap.Error(err))
-				return
-			}
-			if !addMsg {
-				return
-			}
-
-			signers, commitMsgs := ncv.commitMsgContainer.LongestUniqueSignersForRoundAndRoot(signedMsg.Message.Round, signedMsg.Message.Root)
-			if !ncv.Share.HasQuorum(len(signers)) {
-				return
-			}
-
-			signedMsg, err = aggregateCommitMsgs(commitMsgs)
-			if err != nil {
-				logger.Debug("❌ could not add aggregate commit messages",
-					zap.Uint64("msg_height", uint64(signedMsg.Message.Height)),
-					zap.Any("signers", signedMsg.Signers),
-					zap.Error(err))
-				return
-			}
+			return
 		}
 
 		if inst := ncv.qbftController.StoredInstances.FindInstance(signedMsg.Message.Height); inst != nil {
