@@ -63,7 +63,7 @@ func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *queue.
 			return
 		}
 		// only supports commit msg's
-		if signedMsg.Message.MsgType != specqbft.CommitMsgType {
+		if signedMsg.Message.MsgType != specqbft.CommitMsgType || !ncv.Share.HasQuorum(len(signedMsg.Signers)) {
 			return
 		}
 
