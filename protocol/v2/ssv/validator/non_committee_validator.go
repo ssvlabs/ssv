@@ -75,6 +75,8 @@ func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *queue.
 
 		logger = logger.With(fields.Height(signedMsg.Message.Height))
 
+		return
+
 		addMsg, err := ncv.commitMsgContainer.AddFirstMsgForSignerAndRound(signedMsg)
 		if err != nil {
 			logger.Debug("❌ could not add commit msg to container",
