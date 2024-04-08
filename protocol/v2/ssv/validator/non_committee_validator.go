@@ -13,6 +13,7 @@ import (
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	qbftcontroller "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/types"
@@ -76,7 +77,7 @@ func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *queue.
 
 		logger.Info("ncv processing message")
 
-		decided, err := ncv.qbftController.ProcessMsg(logger, signedMsg)
+		decided, err := ncv.UponDecided(logger, signedMsg)
 		if err != nil {
 			logger.Debug("❌ failed to process message",
 				zap.Uint64("msg_height", uint64(signedMsg.Message.Height)),
@@ -167,4 +168,63 @@ func aggregateCommitMsgs(msgs []*specqbft.SignedMessage) (*specqbft.SignedMessag
 	})
 
 	return ret, nil
+}
+
+// UponDecided returns decided msg if decided, nil otherwise
+func (ncv *NonCommitteeValidator) UponDecided(logger *zap.Logger, msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
+	// try to find instance
+	inst := ncv.qbftController.InstanceForHeight(logger, msg.Message.Height)
+	prevDecided := inst != nil && inst.State.Decided
+	isFutureDecided := msg.Message.Height > ncv.qbftController.Height
+	save := true
+
+	if inst == nil {
+		i := instance.NewInstance(ncv.qbftController.GetConfig(), ncv.qbftController.Share, ncv.qbftController.Identifier, msg.Message.Height)
+		i.State.Round = msg.Message.Round
+		i.State.Decided = true
+		i.State.DecidedValue = msg.FullData
+		i.State.CommitContainer.AddMsg(msg)
+		ncv.qbftController.StoredInstances.AddNewInstance(i)
+	} else if decided, _ := inst.IsDecided(); !decided {
+		inst.State.Decided = true
+		inst.State.Round = msg.Message.Round
+		inst.State.DecidedValue = msg.FullData
+		inst.State.CommitContainer.AddMsg(msg)
+	} else { // decide previously, add if has more signers
+		signers, _ := inst.State.CommitContainer.LongestUniqueSignersForRoundAndRoot(msg.Message.Round, msg.Message.Root)
+		if len(msg.Signers) > len(signers) {
+			inst.State.CommitContainer.AddMsg(msg)
+		} else {
+			save = false
+		}
+	}
+
+	if save {
+		// Retrieve instance from StoredInstances (in case it was created above)
+		// and save it together with the decided message.
+		if inst := ncv.qbftController.StoredInstances.FindInstance(msg.Message.Height); inst != nil {
+			logger := logger.With(
+				zap.Uint64("msg_height", uint64(msg.Message.Height)),
+				zap.Uint64("ctrl_height", uint64(ncv.qbftController.Height)),
+				zap.Any("signers", msg.Signers),
+			)
+			if err := ncv.qbftController.SaveInstance(inst, msg); err != nil {
+				logger.Debug("❗failed to save instance", zap.Error(err))
+			} else {
+				logger.Debug("💾 saved instance upon decided", zap.Error(err))
+			}
+		}
+	}
+
+	if isFutureDecided {
+		// bump height
+		ncv.qbftController.Height = msg.Message.Height
+	}
+	if ncv.qbftController.NewDecidedHandler != nil {
+		ncv.qbftController.NewDecidedHandler(msg)
+	}
+	if !prevDecided {
+		return msg, nil
+	}
+	return nil, nil
 }

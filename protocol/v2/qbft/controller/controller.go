@@ -189,7 +189,7 @@ func (c *Controller) isFutureMessage(msg *specqbft.SignedMessage) bool {
 // addAndStoreNewInstance returns creates a new QBFT instance, stores it in an array and returns it
 func (c *Controller) addAndStoreNewInstance() *instance.Instance {
 	i := instance.NewInstance(c.GetConfig(), c.Share, c.Identifier, c.Height)
-	c.StoredInstances.addNewInstance(i)
+	c.StoredInstances.AddNewInstance(i)
 	return i
 }
 

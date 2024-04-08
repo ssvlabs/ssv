@@ -70,7 +70,7 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 
 	// Simulate a scenario where the instance is at a higher round
 	inst.State.Round = specqbft.Round(2)
-	contr.StoredInstances.addNewInstance(inst)
+	contr.StoredInstances.AddNewInstance(inst)
 
 	// Call OnTimeout and capture the error
 	err = contr.OnTimeout(logger, *msg)

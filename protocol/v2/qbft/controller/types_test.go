@@ -39,14 +39,14 @@ func TestInstances_AddNewInstance(t *testing.T) {
 			&instance.Instance{State: &specqbft.State{Height: 4}},
 			&instance.Instance{State: &specqbft.State{Height: 5}},
 		)
-		i.addNewInstance(&instance.Instance{State: &specqbft.State{Height: 6}})
+		i.AddNewInstance(&instance.Instance{State: &specqbft.State{Height: 6}})
 
 		requireHeights(t, i, 6, 1, 2, 3, 4)
 	})
 
 	t.Run("add to empty", func(t *testing.T) {
 		i := make(InstanceContainer, 0, 5)
-		i.addNewInstance(&instance.Instance{State: &specqbft.State{Height: 1}})
+		i.AddNewInstance(&instance.Instance{State: &specqbft.State{Height: 1}})
 
 		require.EqualValues(t, 1, i[0].State.Height)
 		require.Len(t, i, 1)
@@ -59,7 +59,7 @@ func TestInstances_AddNewInstance(t *testing.T) {
 			&instance.Instance{State: &specqbft.State{Height: 2}},
 			&instance.Instance{State: &specqbft.State{Height: 3}},
 		)
-		i.addNewInstance(&instance.Instance{State: &specqbft.State{Height: 4}})
+		i.AddNewInstance(&instance.Instance{State: &specqbft.State{Height: 4}})
 
 		requireHeights(t, i, 4, 1, 2, 3)
 	})
@@ -73,7 +73,7 @@ func TestInstances_AddNewInstance(t *testing.T) {
 			&instance.Instance{State: &specqbft.State{Height: 4}},
 			&instance.Instance{State: &specqbft.State{Height: 5}},
 		)
-		i.addNewInstance(&instance.Instance{State: &specqbft.State{Height: 0}})
+		i.AddNewInstance(&instance.Instance{State: &specqbft.State{Height: 0}})
 
 		requireHeights(t, i, 1, 2, 3, 4, 5)
 	})
@@ -87,7 +87,7 @@ func TestInstances_AddNewInstance(t *testing.T) {
 			&instance.Instance{State: &specqbft.State{Height: 4}},
 			&instance.Instance{State: &specqbft.State{Height: 5}},
 		)
-		i.addNewInstance(&instance.Instance{State: &specqbft.State{Height: 6}})
+		i.AddNewInstance(&instance.Instance{State: &specqbft.State{Height: 6}})
 
 		requireHeights(t, i, 6, 1, 2, 3, 4)
 	})
@@ -100,11 +100,11 @@ func TestInstances_AddNewInstance(t *testing.T) {
 			&instance.Instance{State: &specqbft.State{Height: 5}},
 			&instance.Instance{State: &specqbft.State{Height: 1}},
 		)
-		i.addNewInstance(&instance.Instance{State: &specqbft.State{Height: 4}})
-		i.addNewInstance(&instance.Instance{State: &specqbft.State{Height: 3}})
-		i.addNewInstance(&instance.Instance{State: &specqbft.State{Height: 6}})
-		i.addNewInstance(&instance.Instance{State: &specqbft.State{Height: 8}})
-		i.addNewInstance(&instance.Instance{State: &specqbft.State{Height: 8}})
+		i.AddNewInstance(&instance.Instance{State: &specqbft.State{Height: 4}})
+		i.AddNewInstance(&instance.Instance{State: &specqbft.State{Height: 3}})
+		i.AddNewInstance(&instance.Instance{State: &specqbft.State{Height: 6}})
+		i.AddNewInstance(&instance.Instance{State: &specqbft.State{Height: 8}})
+		i.AddNewInstance(&instance.Instance{State: &specqbft.State{Height: 8}})
 
 		requireHeights(t, i, 9, 8, 8, 7, 6)
 	})
@@ -121,7 +121,7 @@ func TestInstances_AddNewInstance(t *testing.T) {
 			numberOfRandomHeights := 100
 			for _, height := range rand.Perm(numberOfRandomHeights) {
 				// Add height to InstanceContainer.
-				i.addNewInstance(&instance.Instance{State: &specqbft.State{Height: specqbft.Height(height)}})
+				i.AddNewInstance(&instance.Instance{State: &specqbft.State{Height: specqbft.Height(height)}})
 
 				// Add height to mirror.
 				mirror = append(mirror, specqbft.Height(height))

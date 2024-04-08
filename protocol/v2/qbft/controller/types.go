@@ -31,8 +31,8 @@ func (i InstanceContainer) FindInstance(height specqbft.Height) *instance.Instan
 	return nil
 }
 
-// addNewInstance will add the new instance at index 0, pushing all other stored InstanceContainer one index up (ejecting last one if existing)
-func (i *InstanceContainer) addNewInstance(instance *instance.Instance) {
+// AddNewInstance will add the new instance at index 0, pushing all other stored InstanceContainer one index up (ejecting last one if existing)
+func (i *InstanceContainer) AddNewInstance(instance *instance.Instance) {
 	if cap(*i) == 0 {
 		*i = make(InstanceContainer, 0, InstanceContainerDefaultCapacity)
 	}
