@@ -17,9 +17,6 @@ import (
 	"github.com/bloxapp/ssv/operator/keys"
 )
 
-// errPeerWasFiltered is thrown when a peer is filtered during handshake
-var errPeerWasFiltered = errors.New("peer was filtered during handshake")
-
 // errConsumingMessage is thrown when we сan't consume(parse) message: data is broken or incoming msg is from node with different Permissioned mode
 var errConsumingMessage = errors.New("error consuming message")
 
