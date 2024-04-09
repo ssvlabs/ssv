@@ -5,6 +5,16 @@ Packages:
     Tests:
       - Name: "VerifyRSASignature"
         OpDelta: 10
+  - Path: "./protocol/v2/ssv/queue"
+    Tests:
+      - Name: "BenchmarkPriorityQueue_Parallel"
+        OpDelta: 5.0
+      - Name: "BenchmarkPriorityQueue_Parallel_Lossy"
+        OpDelta: 5.0
+      - Name: "benchmarkPriorityQueueParallel"
+        OpDelta: 5.0
+      - Name: "BenchmarkPriorityQueue_Concurrent"
+        OpDelta: 5.0
   - Path: "./protocol/v2/types"
     Tests:
       - Name: "VerifyBLS"
@@ -14,4 +24,5 @@ Packages:
       - Name: "VerifyPKCS1v15FastHash"
         OpDelta: 6.0
       - Name: "VerifyPSS"
-        OpDelta: 5.0
+      - Name: "BenchmarkVerifyPKCS1v15OpenSSL"
+      - Name: "BenchmarkSignPKCS1v15OpenSSL"
