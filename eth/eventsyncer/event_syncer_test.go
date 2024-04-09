@@ -11,6 +11,8 @@ import (
 
 	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/eth/simulator"
+	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
+	"github.com/bloxapp/ssv/operator/keys"
 	"github.com/bloxapp/ssv/operator/validatorsmap"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 
@@ -118,9 +120,12 @@ func TestEventSyncer(t *testing.T) {
 		Ctx: ctx,
 	})
 	require.NoError(t, err)
-	nodeStorage, operatorData := setupOperatorStorage(logger, db)
+	privateKey, err := keys.GeneratePrivateKey()
+	require.NoError(t, err)
+	nodeStorage, operatorData := setupOperatorStorage(logger, db, privateKey)
+	require.NoError(t, err)
 
-	eh := setupEventHandler(t, ctx, logger, db, nodeStorage, operatorData)
+	eh := setupEventHandler(t, ctx, logger, db, nodeStorage, operatorData, privateKey)
 	eventSyncer := New(
 		nodeStorage,
 		client,
@@ -147,9 +152,10 @@ func setupEventHandler(
 	db *kv.BadgerDB,
 	nodeStorage operatorstorage.Storage,
 	operatorData *registrystorage.OperatorData,
+	privateKey keys.OperatorPrivateKey,
 ) *eventhandler.EventHandler {
-
 	storageMap := ibftstorage.NewStores()
+	operatorDataStore := operatordatastore.New(operatorData)
 	testNetworkConfig := networkconfig.TestNetwork
 
 	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, true, "")
@@ -162,11 +168,11 @@ func setupEventHandler(
 
 	bc := beacon.NewMockBeaconNode(ctrl)
 	validatorCtrl := validator.NewController(logger, validator.ControllerOptions{
-		Context:         ctx,
-		DB:              db,
-		RegistryStorage: nodeStorage,
-		OperatorData:    operatorData,
-		ValidatorsMap:   validatorsmap.New(ctx),
+		Context:           ctx,
+		DB:                db,
+		RegistryStorage:   nodeStorage,
+		OperatorDataStore: operatorDataStore,
+		ValidatorsMap:     validatorsmap.New(ctx),
 	})
 
 	contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
@@ -179,8 +185,8 @@ func setupEventHandler(
 		parser,
 		validatorCtrl,
 		testNetworkConfig,
-		validatorCtrl,
-		nodeStorage.GetPrivateKey,
+		operatorDataStore,
+		privateKey,
 		keyManager,
 		bc,
 		storageMap,
@@ -201,32 +207,38 @@ func simTestBackend(testAddr ethcommon.Address) *simulator.SimulatedBackend {
 	)
 }
 
-func setupOperatorStorage(logger *zap.Logger, db basedb.Database) (operatorstorage.Storage, *registrystorage.OperatorData) {
+func setupOperatorStorage(logger *zap.Logger, db basedb.Database, privKey keys.OperatorPrivateKey) (operatorstorage.Storage, *registrystorage.OperatorData) {
 	nodeStorage, err := operatorstorage.NewNodeStorage(logger, db)
 	if err != nil {
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
-	_, pv, err := rsaencryption.GenerateKeys()
+
+	privKeyHash, err := privKey.StorageHash()
 	if err != nil {
-		logger.Fatal("failed generating operator key %v", zap.Error(err))
+		logger.Fatal("failed to hash operator private key", zap.Error(err))
 	}
-	operatorPubKey, err := nodeStorage.SetupPrivateKey(base64.StdEncoding.EncodeToString(pv))
+
+	encodedPubKey, err := privKey.Public().Base64()
 	if err != nil {
+		logger.Fatal("failed to encode operator public key", zap.Error(err))
+	}
+
+	if err := nodeStorage.SavePrivateKeyHash(privKeyHash); err != nil {
 		logger.Fatal("could not setup operator private key", zap.Error(err))
 	}
 
-	_, found, err := nodeStorage.GetPrivateKey()
+	_, found, err := nodeStorage.GetPrivateKeyHash()
 	if err != nil || !found {
 		logger.Fatal("failed to get operator private key", zap.Error(err))
 	}
 	var operatorData *registrystorage.OperatorData
-	operatorData, found, err = nodeStorage.GetOperatorDataByPubKey(nil, operatorPubKey)
+	operatorData, found, err = nodeStorage.GetOperatorDataByPubKey(nil, encodedPubKey)
 	if err != nil {
 		logger.Fatal("could not get operator data by public key", zap.Error(err))
 	}
 	if !found {
 		operatorData = &registrystorage.OperatorData{
-			PublicKey: operatorPubKey,
+			PublicKey: encodedPubKey,
 		}
 	}
 

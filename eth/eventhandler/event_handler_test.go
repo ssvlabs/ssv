@@ -3,9 +3,6 @@ package eventhandler
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -24,6 +21,8 @@ import (
 	"github.com/bloxapp/ssv/eth/simulator/simcontract"
 	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/networkconfig"
+	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
+	"github.com/bloxapp/ssv/operator/keys"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
 	"github.com/bloxapp/ssv/operator/validator/mocks"
@@ -34,7 +33,6 @@ import (
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils"
 	"github.com/bloxapp/ssv/utils/blskeygen"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/bloxapp/ssv/utils/threshold"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -148,10 +146,12 @@ func TestHandleBlockEventsStream(t *testing.T) {
 	currentSlot.SetSlot(100)
 
 	t.Run("test OperatorAdded event handle", func(t *testing.T) {
-
 		for _, op := range ops {
+			encodedPubKey, err := op.privateKey.Public().Base64()
+			require.NoError(t, err)
+
 			// Call the contract method
-			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(op.rsaPub)
+			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(encodedPubKey)
 			require.NoError(t, err)
 			_, err = boundContract.SimcontractTransactor.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
 			require.NoError(t, err)
@@ -189,11 +189,16 @@ func TestHandleBlockEventsStream(t *testing.T) {
 		for i, log := range block.Logs {
 			operatorAddedEvent, err := contractFilterer.ParseOperatorAdded(log)
 			require.NoError(t, err)
+
 			data, _, err := eh.nodeStorage.GetOperatorData(nil, operatorAddedEvent.OperatorId)
 			require.NoError(t, err)
 			require.Equal(t, operatorAddedEvent.OperatorId, data.ID)
 			require.Equal(t, operatorAddedEvent.Owner, data.OwnerAddress)
-			require.Equal(t, ops[i].rsaPub, data.PublicKey)
+
+			encodedPubKey, err := ops[i].privateKey.Public().Base64()
+			require.NoError(t, err)
+
+			require.Equal(t, encodedPubKey, data.PublicKey)
 		}
 	})
 
@@ -241,8 +246,11 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			require.NoError(t, err)
 			operatorsCount++
 
+			encodedPubKey, err := op[0].privateKey.Public().Base64()
+			require.NoError(t, err)
+
 			// Call the contract method
-			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(op[0].rsaPub)
+			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(encodedPubKey)
 			require.NoError(t, err)
 			_, err = boundContract.SimcontractTransactor.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
 			require.NoError(t, err)
@@ -1095,8 +1103,11 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			operatorsCount++
 			op := tmpOps[0]
 
+			encodedPubKey, err := op.privateKey.Public().Base64()
+			require.NoError(t, err)
+
 			// Call the RegisterOperator contract method
-			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(op.rsaPub)
+			packedOperatorPubKey, err := eventparser.PackOperatorPublicKey(encodedPubKey)
 			require.NoError(t, err)
 			_, err = boundContract.SimcontractTransactor.RegisterOperator(auth, packedOperatorPubKey, big.NewInt(100_000_000))
 			require.NoError(t, err)
@@ -1279,6 +1290,8 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 	storageMap := ibftstorage.NewStores()
 	nodeStorage, operatorData := setupOperatorStorage(logger, db, operator)
 
+	operatorDataStore := operatordatastore.New(operatorData)
+
 	if network == nil {
 		network = &networkconfig.NetworkConfig{
 			Beacon: utils.SetupMockBeaconNetwork(t, &utils.SlotValue{}),
@@ -1307,8 +1320,8 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 			parser,
 			validatorCtrl,
 			*network,
-			validatorCtrl,
-			nodeStorage.GetPrivateKey,
+			operatorDataStore,
+			operator.privateKey,
 			keyManager,
 			bc,
 			storageMap,
@@ -1319,7 +1332,6 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 		if err != nil {
 			return nil, nil, err
 		}
-		validatorCtrl.EXPECT().GetOperatorData().Return(&registrystorage.OperatorData{}).AnyTimes()
 
 		return eh, validatorCtrl, nil
 	}
@@ -1328,13 +1340,13 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 
 	bc := beacon.NewMockBeaconNode(ctrl)
 	validatorCtrl := validator.NewController(logger, validator.ControllerOptions{
-		Context:         ctx,
-		DB:              db,
-		RegistryStorage: nodeStorage,
-		KeyManager:      keyManager,
-		StorageMap:      storageMap,
-		OperatorData:    operatorData,
-		ValidatorsMap:   validatorsmap.New(ctx),
+		Context:           ctx,
+		DB:                db,
+		RegistryStorage:   nodeStorage,
+		KeyManager:        keyManager,
+		StorageMap:        storageMap,
+		OperatorDataStore: operatorDataStore,
+		ValidatorsMap:     validatorsmap.New(ctx),
 	})
 
 	contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
@@ -1347,8 +1359,8 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 		parser,
 		validatorCtrl,
 		*network,
-		validatorCtrl,
-		nodeStorage.GetPrivateKey,
+		operatorDataStore,
+		operator.privateKey,
 		keyManager,
 		bc,
 		storageMap,
@@ -1370,24 +1382,33 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, operator *test
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
 
-	operatorPubKey, err := nodeStorage.SetupPrivateKey(base64.StdEncoding.EncodeToString(operator.rsaPriv))
+	encodedPrivKey, err := operator.privateKey.StorageHash()
 	if err != nil {
+		logger.Fatal("failed to encode operator private key", zap.Error(err))
+	}
+
+	encodedPubKey, err := operator.privateKey.Public().Base64()
+	if err != nil {
+		logger.Fatal("failed to encode operator public key", zap.Error(err))
+	}
+
+	if err := nodeStorage.SavePrivateKeyHash(encodedPrivKey); err != nil {
 		logger.Fatal("couldn't setup operator private key", zap.Error(err))
 	}
 
-	_, found, err := nodeStorage.GetPrivateKey()
+	_, found, err := nodeStorage.GetPrivateKeyHash()
 	if err != nil || !found {
 		logger.Fatal("failed to get operator private key", zap.Error(err))
 	}
-	var operatorData *registrystorage.OperatorData
-	operatorData, found, err = nodeStorage.GetOperatorDataByPubKey(nil, operatorPubKey)
 
+	operatorData, found, err := nodeStorage.GetOperatorDataByPubKey(nil, encodedPubKey)
 	if err != nil {
 		logger.Fatal("couldn't get operator data by public key", zap.Error(err))
 	}
+
 	if !found {
 		operatorData = &registrystorage.OperatorData{
-			PublicKey:    operatorPubKey,
+			PublicKey:    encodedPubKey,
 			ID:           operator.id,
 			OwnerAddress: testAddr,
 		}
@@ -1426,10 +1447,11 @@ func TestCreatingSharesData(t *testing.T) {
 
 	validatorData, err := createNewValidator(ops)
 	require.NoError(t, err)
+
 	// TODO: maybe we can merge createNewValidator and generateSharesData
 	sharesData, err := generateSharesData(validatorData, ops, owner, nonce)
-
 	require.NoError(t, err)
+
 	operatorCount := len(ops)
 	signatureOffset := phase0.SignatureLength
 	pubKeysOffset := phase0.PublicKeyLength*operatorCount + signatureOffset
@@ -1445,11 +1467,10 @@ func TestCreatingSharesData(t *testing.T) {
 	sharePublicKeys := splitBytes(sharesData[signatureOffset:pubKeysOffset], phase0.PublicKeyLength)
 	encryptedKeys := splitBytes(sharesData[pubKeysOffset:], len(sharesData[pubKeysOffset:])/operatorCount)
 
-	for i, enck := range encryptedKeys {
-		priv, err := rsaencryption.ConvertPemToPrivateKey(string(ops[i].rsaPriv))
+	for i, encryptedKey := range encryptedKeys {
+		decryptedSharePrivateKey, err := ops[i].privateKey.Decrypt(encryptedKey)
 		require.NoError(t, err)
-		decryptedSharePrivateKey, err := rsaencryption.DecodeKey(priv, enck)
-		require.NoError(t, err)
+
 		share := &bls.SecretKey{}
 		require.NoError(t, share.SetHexString(string(decryptedSharePrivateKey)))
 
@@ -1467,9 +1488,8 @@ type testValidatorData struct {
 }
 
 type testOperator struct {
-	id      uint64
-	rsaPub  []byte
-	rsaPriv []byte
+	id         uint64
+	privateKey keys.OperatorPrivateKey
 }
 
 type testShare struct {
@@ -1522,14 +1542,14 @@ func createOperators(num uint64, idOffset uint64) ([]*testOperator, error) {
 	testOps := make([]*testOperator, num)
 
 	for i := uint64(1); i <= num; i++ {
-		pb, sk, err := rsaencryption.GenerateKeys()
+		privateKey, err := keys.GeneratePrivateKey()
 		if err != nil {
 			return nil, err
 		}
+
 		testOps[i-1] = &testOperator{
-			id:      idOffset + i,
-			rsaPub:  pb,
-			rsaPriv: sk,
+			id:         idOffset + i,
+			privateKey: privateKey,
 		}
 	}
 
@@ -1541,35 +1561,25 @@ func generateSharesData(validatorData *testValidatorData, operators []*testOpera
 	var encryptedShares []byte
 
 	for i, op := range operators {
-		rsaKey, err := rsaencryption.ConvertPemToPublicKey(op.rsaPub)
-		if err != nil {
-			return nil, fmt.Errorf("can't convert public key: %w", err)
-		}
-
 		rawShare := validatorData.operatorsShares[i].sec.SerializeToHexStr()
-		cipherText, err := rsa.EncryptPKCS1v15(rand.Reader, rsaKey, []byte(rawShare))
+		cipherText, err := op.privateKey.Public().Encrypt([]byte(rawShare))
 		if err != nil {
 			return nil, fmt.Errorf("can't encrypt share: %w", err)
 		}
 
-		rsaPriv, err := rsaencryption.ConvertPemToPrivateKey(string(op.rsaPriv))
-		if err != nil {
-			return nil, fmt.Errorf("can't convert secret key to a private key share: %w", err)
-		}
-
 		// check that we encrypt right
-		shareSecret := &bls.SecretKey{}
-		decryptedSharePrivateKey, err := rsaencryption.DecodeKey(rsaPriv, cipherText)
+		decryptedSharePrivateKey, err := op.privateKey.Decrypt(cipherText)
 		if err != nil {
 			return nil, err
 		}
+
+		shareSecret := &bls.SecretKey{}
 		if err = shareSecret.SetHexString(string(decryptedSharePrivateKey)); err != nil {
 			return nil, err
 		}
 
 		pubKeys = append(pubKeys, validatorData.operatorsShares[i].pub.Serialize()...)
 		encryptedShares = append(encryptedShares, cipherText...)
-
 	}
 
 	toSign := fmt.Sprintf("%s:%d", owner.String(), nonce)

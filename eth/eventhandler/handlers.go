@@ -20,7 +20,6 @@ import (
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
 // b64 encrypted key length is 256
@@ -55,7 +54,7 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 	}
 
 	// throw an error if there is an existing operator with the same public key and different operator id
-	operatorData := eh.operatorData.GetOperatorData()
+	operatorData := eh.operatorDataStore.GetOperatorData()
 	if operatorData.ID != 0 && bytes.Equal(operatorData.PublicKey, event.PublicKey) && operatorData.ID != event.OperatorId {
 		logger.Warn("malformed event: operator registered with the same operator public key",
 			zap.Uint64("expected_operator_id", operatorData.ID))
@@ -72,10 +71,9 @@ func (eh *EventHandler) handleOperatorAdded(txn basedb.Txn, event *contract.Cont
 		return nil
 	}
 
-	ownOperator := bytes.Equal(event.PublicKey, operatorData.PublicKey)
-	if ownOperator {
-		eh.operatorData.SetOperatorData(od)
-		logger = logger.With(zap.Bool("own_operator", ownOperator))
+	if bytes.Equal(event.PublicKey, operatorData.PublicKey) {
+		eh.operatorDataStore.SetOperatorData(od)
+		logger = logger.With(zap.Bool("own_operator", true))
 	}
 
 	eh.metrics.OperatorPublicKey(od.ID, od.PublicKey)
@@ -208,11 +206,10 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 		return nil, &MalformedEventError{Err: ErrShareBelongsToDifferentOwner}
 	}
 
-	isOperatorShare := validatorShare.BelongsToOperator(eh.operatorData.GetOperatorData().ID)
-	if isOperatorShare {
+	if validatorShare.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
 		eh.metrics.ValidatorInactive(event.PublicKey)
 		ownShare = validatorShare
-		logger = logger.With(zap.Bool("own_validator", isOperatorShare))
+		logger = logger.With(zap.Bool("own_validator", true))
 	}
 
 	logger.Debug("processed event")
@@ -228,8 +225,6 @@ func (eh *EventHandler) handleShareCreation(
 ) (*ssvtypes.SSVShare, error) {
 	share, shareSecret, err := eh.validatorAddedEventToShare(
 		validatorEvent,
-		eh.shareEncryptionKeyProvider,
-		eh.operatorData.GetOperatorData(),
 		sharePublicKeys,
 		encryptedKeys,
 	)
@@ -237,7 +232,7 @@ func (eh *EventHandler) handleShareCreation(
 		return nil, fmt.Errorf("could not extract validator share from event: %w", err)
 	}
 
-	if share.BelongsToOperator(eh.operatorData.GetOperatorData().ID) {
+	if share.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
 		if shareSecret == nil {
 			return nil, errors.New("could not decode shareSecret")
 		}
@@ -258,8 +253,6 @@ func (eh *EventHandler) handleShareCreation(
 
 func (eh *EventHandler) validatorAddedEventToShare(
 	event *contract.ContractValidatorAdded,
-	shareEncryptionKeyProvider ShareEncryptionKeyProvider,
-	operatorData *registrystorage.OperatorData,
 	sharePublicKeys [][]byte,
 	encryptedKeys [][]byte,
 ) (*ssvtypes.SSVShare, *bls.SecretKey, error) {
@@ -273,6 +266,8 @@ func (eh *EventHandler) validatorAddedEventToShare(
 	}
 	validatorShare.ValidatorPubKey = publicKey.Serialize()
 	validatorShare.OwnerAddress = event.Owner
+
+	selfOperatorID := eh.operatorDataStore.GetOperatorID()
 	var shareSecret *bls.SecretKey
 
 	committee := make([]*spectypes.Operator, 0)
@@ -283,23 +278,15 @@ func (eh *EventHandler) validatorAddedEventToShare(
 			PubKey:     sharePublicKeys[i],
 		})
 
-		if operatorID != operatorData.ID {
+		if operatorID != selfOperatorID {
 			continue
 		}
 
 		validatorShare.OperatorID = operatorID
 		validatorShare.SharePubKey = sharePublicKeys[i]
 
-		operatorPrivateKey, found, err := shareEncryptionKeyProvider()
-		if err != nil {
-			return nil, nil, fmt.Errorf("could not get operator private key: %w", err)
-		}
-		if !found {
-			return nil, nil, errors.New("could not find operator private key")
-		}
-
 		shareSecret = &bls.SecretKey{}
-		decryptedSharePrivateKey, err := rsaencryption.DecodeKey(operatorPrivateKey, encryptedKeys[i])
+		decryptedSharePrivateKey, err := eh.operatorDecrypter.Decrypt(encryptedKeys[i])
 		if err != nil {
 			return nil, nil, &MalformedEventError{
 				Err: fmt.Errorf("could not decrypt share private key: %w", err),
@@ -368,7 +355,7 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 		return nil, fmt.Errorf("could not remove validator share: %w", err)
 	}
 
-	isOperatorShare := share.BelongsToOperator(eh.operatorData.GetOperatorData().ID)
+	isOperatorShare := share.BelongsToOperator(eh.operatorDataStore.GetOperatorID())
 	if isOperatorShare || eh.fullNode {
 		logger = logger.With(zap.String("validator_pubkey", hex.EncodeToString(share.ValidatorPubKey)))
 	}
@@ -493,7 +480,7 @@ func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.Co
 		return nil, &MalformedEventError{Err: ErrShareBelongsToDifferentOwner}
 	}
 
-	if !share.BelongsToOperator(eh.operatorData.GetOperatorData().ID) {
+	if !share.BelongsToOperator(eh.operatorDataStore.GetOperatorID()) {
 		return nil, nil
 	}
 
@@ -539,7 +526,7 @@ func (eh *EventHandler) processClusterEvent(
 	updatedPubKeys := make([]string, 0)
 
 	for _, share := range shares {
-		isOperatorShare := share.BelongsToOperator(eh.operatorData.GetOperatorData().ID)
+		isOperatorShare := share.BelongsToOperator(eh.operatorDataStore.GetOperatorID())
 		if isOperatorShare || eh.fullNode {
 			updatedPubKeys = append(updatedPubKeys, hex.EncodeToString(share.ValidatorPubKey))
 		}
