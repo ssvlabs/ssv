@@ -1,30 +1,26 @@
 package validation
 
 import (
-	"crypto"
-	crand "crypto/rand"
-	"crypto/rsa"
-	"crypto/sha256"
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/operator/keys"
+	"github.com/bloxapp/ssv/operator/storage"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/bloxapp/ssv/storage/kv"
+	"go.uber.org/zap/zaptest"
 	"testing"
 
-	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/operator/storage"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/ethereum/go-ethereum/common"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zaptest"
 )
 
 func BenchmarkVerifyRSASignature(b *testing.B) {
@@ -56,8 +52,6 @@ func BenchmarkVerifyRSASignature(b *testing.B) {
 
 	roleAttester := spectypes.BNRoleAttester
 
-	mv := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
-
 	slot := netCfg.Beacon.FirstSlotAtEpoch(123456789)
 
 	validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, specqbft.Height(slot))
@@ -74,26 +68,23 @@ func BenchmarkVerifyRSASignature(b *testing.B) {
 	encodedMsg, err := commons.EncodeNetworkMsg(message)
 	require.NoError(b, err)
 
-	hash := sha256.Sum256(encodedMsg)
-	privateKey, err := rsa.GenerateKey(crand.Reader, 2048)
+	privKey, err := keys.GeneratePrivateKey()
 	require.NoError(b, err)
-	pubkey := privateKey.Public().(*rsa.PublicKey)
 
-	pubKey, err := rsaencryption.ExtractPublicKey(pubkey)
+	pubKey, err := privKey.Public().Base64()
 	require.NoError(b, err)
 
 	od := &registrystorage.OperatorData{
 		ID:           operatorID,
-		PublicKey:    []byte(pubKey),
+		PublicKey:    pubKey,
 		OwnerAddress: common.Address{},
 	}
 
 	found, err := ns.SaveOperatorData(nil, od)
 	require.NoError(b, err)
-
 	require.False(b, found)
 
-	signature, err := rsa.SignPKCS1v15(crand.Reader, privateKey, crypto.SHA256, hash[:])
+	signature, err := privKey.Sign(encodedMsg)
 	require.NoError(b, err)
 
 	encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, operatorID, signature)
@@ -105,6 +96,8 @@ func BenchmarkVerifyRSASignature(b *testing.B) {
 			Data:  encodedMsg,
 		},
 	}
+
+	mv := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
 	messageData := pMsg.GetData()
 	decMessageData, operatorIDX, signature, err := commons.DecodeSignedSSVMessage(messageData)
