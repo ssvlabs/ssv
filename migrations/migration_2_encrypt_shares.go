@@ -28,7 +28,7 @@ var migration_2_encrypt_shares = Migration{
 			if !found {
 				return completed(txn)
 			}
-			operatorKey, err := rsaencryption.ConvertPemToPrivateKey(string(obj.Value))
+			operatorKey, err := rsaencryption.PemToPrivateKey(obj.Value)
 			if err != nil {
 				return fmt.Errorf("failed to get private key: %w", err)
 			}

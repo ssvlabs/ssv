@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests"
+	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/partialsigcontainer"
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/runner/duties/newduty"
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/runner/duties/synccommitteeaggregator"
 	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/valcheck"
@@ -158,6 +159,18 @@ func prepareTest(t *testing.T, logger *zap.Logger, name string, test interface{}
 					typedTest.Tests = append(typedTest.Tests, newRunnerDutySpecTestFromMap(t, subtest.(map[string]interface{})))
 				}
 				typedTest.Run(t, logger)
+			},
+		}
+	case reflect.TypeOf(&partialsigcontainer.PartialSigContainerTest{}).String():
+		byts, err := json.Marshal(test)
+		require.NoError(t, err)
+		typedTest := &partialsigcontainer.PartialSigContainerTest{}
+		require.NoError(t, json.Unmarshal(byts, &typedTest))
+
+		return &runnable{
+			name: typedTest.TestName(),
+			test: func(t *testing.T) {
+				typedTest.Run(t)
 			},
 		}
 	default:

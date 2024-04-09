@@ -6,7 +6,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"golang.org/x/exp/slices"
 
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -17,10 +16,12 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 	msgID spectypes.MessageID,
 	signatureVerifier func() error,
 ) (phase0.Slot, error) {
-	if mv.inCommittee(share) {
-		mv.metrics.InCommitteeMessage(spectypes.SSVPartialSignatureMsgType, false)
-	} else {
-		mv.metrics.NonCommitteeMessage(spectypes.SSVPartialSignatureMsgType, false)
+	if mv.operatorDataStore != nil && mv.operatorDataStore.OperatorIDReady() {
+		if mv.inCommittee(share) {
+			mv.metrics.InCommitteeMessage(spectypes.SSVPartialSignatureMsgType, false)
+		} else {
+			mv.metrics.NonCommitteeMessage(spectypes.SSVPartialSignatureMsgType, false)
+		}
 	}
 
 	msgSlot := signedMsg.Message.Slot
@@ -70,12 +71,6 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 	signerState.MessageCounts.RecordPartialSignatureMessage(signedMsg)
 
 	return msgSlot, nil
-}
-
-func (mv *messageValidator) inCommittee(share *ssvtypes.SSVShare) bool {
-	return slices.ContainsFunc(share.Committee, func(operator *spectypes.Operator) bool {
-		return operator.OperatorID == mv.ownOperatorID
-	})
 }
 
 func (mv *messageValidator) validPartialSigMsgType(msgType spectypes.PartialSigMsgType) bool {

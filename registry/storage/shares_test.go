@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"sort"
 	"strconv"
 	"testing"
@@ -87,7 +88,7 @@ func TestSharesStorage(t *testing.T) {
 	validatorShare.Metadata = ssvtypes.Metadata{
 		BeaconMetadata: &beaconprotocol.ValidatorMetadata{
 			Balance:         1,
-			Status:          2,
+			Status:          eth2apiv1.ValidatorStateActiveOngoing,
 			Index:           3,
 			ActivationEpoch: 4,
 		},
@@ -141,7 +142,7 @@ func TestSharesStorage(t *testing.T) {
 	})
 
 	t.Run("List_Filter_ByAttesting", func(t *testing.T) {
-		validators := shareStorage.List(nil, ByAttesting())
+		validators := shareStorage.List(nil, ByAttesting(phase0.Epoch(1)))
 		require.Equal(t, 1, len(validators))
 	})
 

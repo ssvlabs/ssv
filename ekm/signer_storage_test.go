@@ -520,3 +520,29 @@ func TestRemovingHighestProposal(t *testing.T) {
 		})
 	}
 }
+
+func TestListAccounts(t *testing.T) {
+	_, signerStorage, done := testWallet(t)
+	defer done()
+
+	accounts, err := signerStorage.ListAccounts()
+
+	require.NoError(t, err)
+	require.Equal(t, 1, len(accounts))
+}
+
+func TestName(t *testing.T) {
+	_, signerStorage, done := testWallet(t)
+	defer done()
+
+	name := signerStorage.Name()
+	require.Equal(t, "SSV Storage", name)
+}
+
+func TestDropRegistryData(t *testing.T) {
+	_, signerStorage, done := testWallet(t)
+	defer done()
+
+	err := signerStorage.DropRegistryData()
+	require.NoError(t, err)
+}

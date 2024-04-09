@@ -3,6 +3,7 @@ package operator
 import (
 	"context"
 	"fmt"
+
 	"github.com/bloxapp/ssv/network"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -113,7 +114,7 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 			Network:            opts.Network,
 			ShareStorage:       opts.ValidatorOptions.RegistryStorage.Shares(),
 			RecipientStorage:   opts.ValidatorOptions.RegistryStorage,
-			OperatorData:       opts.ValidatorOptions.OperatorData,
+			OperatorDataStore:  opts.ValidatorOptions.OperatorDataStore,
 			SlotTickerProvider: slotTickerProvider,
 		}),
 

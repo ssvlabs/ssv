@@ -2,10 +2,6 @@ package validation
 
 import (
 	"bytes"
-	"crypto"
-	crand "crypto/rand"
-	"crypto/rsa"
-	"crypto/sha256"
 	"encoding/hex"
 	"math"
 	"testing"
@@ -27,6 +23,7 @@ import (
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
+	"github.com/bloxapp/ssv/operator/keys"
 	"github.com/bloxapp/ssv/operator/storage"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
@@ -34,7 +31,6 @@ import (
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
 func Test_ValidateSSVMessage(t *testing.T) {
@@ -474,8 +470,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, ns.Shares().Delete(nil, liquidatedShare.ValidatorPubKey))
 	})
 
-	// Ignore messages related to a validator that is not active
-	t.Run("inactive validator", func(t *testing.T) {
+	// Ignore messages related to a validator with unknown state
+	t.Run("unknown state validator", func(t *testing.T) {
 		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
 
 		inactiveSK, err := eth2types.GenerateBLSPrivateKey()
@@ -513,6 +509,105 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, expectedErr)
 
 		require.NoError(t, ns.Shares().Delete(nil, inactiveShare.ValidatorPubKey))
+	})
+
+	// Ignore messages related to a validator that in pending queued state
+	t.Run("pending queued state validator", func(t *testing.T) {
+		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+
+		nonUpdatedMetadataSK, err := eth2types.GenerateBLSPrivateKey()
+		require.NoError(t, err)
+
+		slot := netCfg.Beacon.EstimatedCurrentSlot()
+		epoch := netCfg.Beacon.EstimatedEpochAtSlot(slot)
+		height := specqbft.Height(slot)
+
+		nonUpdatedMetadataShare := &ssvtypes.SSVShare{
+			Share: *spectestingutils.TestingShare(ks),
+			Metadata: ssvtypes.Metadata{
+				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+					Status:          eth2apiv1.ValidatorStatePendingQueued,
+					ActivationEpoch: epoch + 1,
+				},
+				Liquidated: false,
+			},
+		}
+		nonUpdatedMetadataShare.ValidatorPubKey = nonUpdatedMetadataSK.PublicKey().Marshal()
+
+		require.NoError(t, ns.Shares().Save(nil, nonUpdatedMetadataShare))
+
+		qbftState := &specqbft.State{
+			Height: height,
+			Share:  &nonUpdatedMetadataShare.Share,
+		}
+		leader := specqbft.RoundRobinProposer(qbftState, specqbft.FirstRound)
+
+		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[leader], leader, height)
+		encodedValidSignedMessage, err := validSignedMessage.Encode()
+		require.NoError(t, err)
+
+		message := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, nonUpdatedMetadataShare.ValidatorPubKey, roleAttester),
+			Data:    encodedValidSignedMessage,
+		}
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
+
+		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		expectedErr := ErrValidatorNotAttesting
+		expectedErr.got = eth2apiv1.ValidatorStatePendingQueued.String()
+		require.ErrorIs(t, err, expectedErr)
+
+		require.NoError(t, ns.Shares().Delete(nil, nonUpdatedMetadataShare.ValidatorPubKey))
+	})
+
+	// Don't ignore messages related to a validator that in pending queued state (in case metadata is not updated),
+	// but he is active (activation epoch <= current epoch)
+	t.Run("active validator with pending queued state", func(t *testing.T) {
+		validator := NewMessageValidator(netCfg, WithNodeStorage(ns)).(*messageValidator)
+
+		nonUpdatedMetadataSK, err := eth2types.GenerateBLSPrivateKey()
+		require.NoError(t, err)
+
+		slot := netCfg.Beacon.EstimatedCurrentSlot()
+		epoch := netCfg.Beacon.EstimatedEpochAtSlot(slot)
+		height := specqbft.Height(slot)
+
+		nonUpdatedMetadataShare := &ssvtypes.SSVShare{
+			Share: *spectestingutils.TestingShare(ks),
+			Metadata: ssvtypes.Metadata{
+				BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+					Status:          eth2apiv1.ValidatorStatePendingQueued,
+					ActivationEpoch: epoch,
+				},
+				Liquidated: false,
+			},
+		}
+		nonUpdatedMetadataShare.ValidatorPubKey = nonUpdatedMetadataSK.PublicKey().Marshal()
+
+		require.NoError(t, ns.Shares().Save(nil, nonUpdatedMetadataShare))
+
+		qbftState := &specqbft.State{
+			Height: height,
+			Share:  &nonUpdatedMetadataShare.Share,
+		}
+		leader := specqbft.RoundRobinProposer(qbftState, specqbft.FirstRound)
+
+		validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[leader], leader, height)
+		encodedValidSignedMessage, err := validSignedMessage.Encode()
+		require.NoError(t, err)
+
+		message := &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   spectypes.NewMsgID(netCfg.Domain, nonUpdatedMetadataShare.ValidatorPubKey, roleAttester),
+			Data:    encodedValidSignedMessage,
+		}
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
+
+		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		require.NoError(t, err)
+
+		require.NoError(t, ns.Shares().Delete(nil, nonUpdatedMetadataShare.ValidatorPubKey))
 	})
 
 	// Unable to process a message with a validator that is not on the network
@@ -1828,18 +1923,17 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			encodedMsg, err := commons.EncodeNetworkMsg(message)
 			require.NoError(t, err)
 
-			hash := sha256.Sum256(encodedMsg)
-			privKey, err := rsa.GenerateKey(crand.Reader, 2048)
+			privKey, err := keys.GeneratePrivateKey()
+			require.NoError(t, err)
+
+			pubKey, err := privKey.Public().Base64()
 			require.NoError(t, err)
 
 			const operatorID = spectypes.OperatorID(1)
 
-			pubKey, err := rsaencryption.ExtractPublicKey(privKey)
-			require.NoError(t, err)
-
 			od := &registrystorage.OperatorData{
 				ID:           operatorID,
-				PublicKey:    []byte(pubKey),
+				PublicKey:    pubKey,
 				OwnerAddress: common.Address{},
 			}
 
@@ -1847,7 +1941,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			require.NoError(t, err)
 			require.False(t, found)
 
-			signature, err := rsa.SignPKCS1v15(crand.Reader, privKey, crypto.SHA256, hash[:])
+			signature, err := privKey.Sign(encodedMsg)
 			require.NoError(t, err)
 
 			encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, operatorID, signature)
@@ -1886,18 +1980,17 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			encodedMsg, err := commons.EncodeNetworkMsg(message)
 			require.NoError(t, err)
 
-			hash := sha256.Sum256(encodedMsg)
-			privKey, err := rsa.GenerateKey(crand.Reader, 2048)
+			privKey, err := keys.GeneratePrivateKey()
+			require.NoError(t, err)
+
+			pubKey, err := privKey.Public().Base64()
 			require.NoError(t, err)
 
 			const operatorID = spectypes.OperatorID(1)
 
-			pubKey, err := rsaencryption.ExtractPublicKey(privKey)
-			require.NoError(t, err)
-
 			od := &registrystorage.OperatorData{
 				ID:           operatorID,
-				PublicKey:    []byte(pubKey),
+				PublicKey:    pubKey,
 				OwnerAddress: common.Address{},
 			}
 
@@ -1905,7 +1998,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			require.NoError(t, err)
 			require.False(t, found)
 
-			signature, err := rsa.SignPKCS1v15(crand.Reader, privKey, crypto.SHA256, hash[:])
+			signature, err := privKey.Sign(encodedMsg)
 			require.NoError(t, err)
 
 			encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, operatorID, signature)
@@ -1944,18 +2037,17 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			encodedMsg, err := commons.EncodeNetworkMsg(message)
 			require.NoError(t, err)
 
-			hash := sha256.Sum256(encodedMsg)
-			privKey, err := rsa.GenerateKey(crand.Reader, 2048)
+			privKey, err := keys.GeneratePrivateKey()
+			require.NoError(t, err)
+
+			pubKey, err := privKey.Public().Base64()
 			require.NoError(t, err)
 
 			const operatorID = spectypes.OperatorID(1)
 
-			pubKey, err := rsaencryption.ExtractPublicKey(privKey)
-			require.NoError(t, err)
-
 			od := &registrystorage.OperatorData{
 				ID:           operatorID,
-				PublicKey:    []byte(pubKey),
+				PublicKey:    pubKey,
 				OwnerAddress: common.Address{},
 			}
 
@@ -1963,7 +2055,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			require.NoError(t, err)
 			require.False(t, found)
 
-			signature, err := rsa.SignPKCS1v15(crand.Reader, privKey, crypto.SHA256, hash[:])
+			signature, err := privKey.Sign(encodedMsg)
 			require.NoError(t, err)
 
 			const unexpectedOperatorID = 2
@@ -2003,17 +2095,17 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			encodedMsg, err := commons.EncodeNetworkMsg(message)
 			require.NoError(t, err)
 
-			privKey, err := rsa.GenerateKey(crand.Reader, 2048)
+			privKey, err := keys.GeneratePrivateKey()
+			require.NoError(t, err)
+
+			pubKey, err := privKey.Public().Base64()
 			require.NoError(t, err)
 
 			const operatorID = spectypes.OperatorID(1)
 
-			pubKey, err := rsaencryption.ExtractPublicKey(privKey)
-			require.NoError(t, err)
-
 			od := &registrystorage.OperatorData{
 				ID:           operatorID,
-				PublicKey:    []byte(pubKey),
+				PublicKey:    pubKey,
 				OwnerAddress: common.Address{},
 			}
 
@@ -2033,7 +2125,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
 			_, _, err = validator.validateP2PMessage(pMsg, receivedAt)
-			require.ErrorContains(t, err, ErrRSADecryption.Error())
+			require.ErrorContains(t, err, ErrSignatureVerification.Error())
 
 			require.NoError(t, ns.DeleteOperatorData(nil, operatorID))
 		})
