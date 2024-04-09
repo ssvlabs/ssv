@@ -24,7 +24,7 @@ var errPeerWasFiltered = errors.New("peer was filtered during handshake")
 var errConsumingMessage = errors.New("error consuming message")
 
 // HandshakeFilter can be used to filter nodes once we handshaked with them
-type HandshakeFilter func(senderID peer.ID, sni records.AnyNodeInfo) error
+type HandshakeFilter func(senderID peer.ID, sni records.NodeInfo) error
 
 // SubnetsProvider returns the subnets of or node
 type SubnetsProvider func() records.Subnets
@@ -137,19 +137,15 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 	}
 }
 
-func (h *handshaker) verifyTheirNodeInfo(logger *zap.Logger, sender peer.ID, ani records.AnyNodeInfo) error {
-	h.updateNodeSubnets(logger, sender, ani.GetNodeInfo())
+func (h *handshaker) verifyTheirNodeInfo(logger *zap.Logger, sender peer.ID, ni *records.NodeInfo) error {
+	h.updateNodeSubnets(logger, sender, ni.GetNodeInfo())
 
-	if err := h.applyFilters(sender, ani); err != nil {
-		return err
-	}
-
-	h.nodeInfos.SetNodeInfo(sender, ani.GetNodeInfo())
+	h.nodeInfos.SetNodeInfo(sender, ni.GetNodeInfo())
 
 	logger.Info("Verified handshake nodeinfo",
 		fields.PeerID(sender),
-		zap.Any("metadata", ani.GetNodeInfo().Metadata),
-		zap.String("networkID", ani.GetNodeInfo().NetworkID),
+		zap.Any("metadata", ni.GetNodeInfo().Metadata),
+		zap.String("networkID", ni.GetNodeInfo().NetworkID),
 	)
 
 	return nil
@@ -158,7 +154,7 @@ func (h *handshaker) verifyTheirNodeInfo(logger *zap.Logger, sender peer.ID, ani
 // Handshake initiates handshake with the given conn
 func (h *handshaker) Handshake(logger *zap.Logger, conn libp2pnetwork.Conn) (err error) {
 	pid := conn.RemotePeer()
-	var nodeInfo records.AnyNodeInfo
+	var nodeInfo *records.NodeInfo
 
 	// Update PeerInfo with the result of this handshake.
 	defer func() {
@@ -203,7 +199,7 @@ func (h *handshaker) updateNodeSubnets(logger *zap.Logger, pid peer.ID, ni *reco
 	}
 }
 
-func (h *handshaker) requestNodeInfo(logger *zap.Logger, conn libp2pnetwork.Conn) (records.AnyNodeInfo, error) {
+func (h *handshaker) requestNodeInfo(logger *zap.Logger, conn libp2pnetwork.Conn) (*records.NodeInfo, error) {
 	data, err := h.nodeInfos.SelfSealed()
 
 	if err != nil {
@@ -221,16 +217,4 @@ func (h *handshaker) requestNodeInfo(logger *zap.Logger, conn libp2pnetwork.Conn
 		return nil, errors.Wrap(errConsumingMessage, err.Error())
 	}
 	return nodeInfo, nil
-}
-
-func (h *handshaker) applyFilters(sender peer.ID, ani records.AnyNodeInfo) error {
-	fltrs := h.filters()
-	for i := range fltrs {
-		err := fltrs[i](sender, ani)
-		if err != nil {
-			return errors.Wrap(errPeerWasFiltered, err.Error())
-		}
-	}
-
-	return nil
 }
