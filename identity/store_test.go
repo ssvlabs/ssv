@@ -102,4 +102,14 @@ func TestSetupPrivateKey(t *testing.T) {
 			require.Equal(t, test.passedKey, hex.EncodeToString(b))
 		})
 	}
+
+	t.Run("NewIdentityStore", func(t *testing.T) {
+		db, err := kv.NewInMemory(logging.TestLogger(t), basedb.Options{})
+		require.NoError(t, err)
+		defer db.Close()
+
+		p2pStorage := NewIdentityStore(db)
+
+		require.NotNil(t, p2pStorage)
+	})
 }

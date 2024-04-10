@@ -3,6 +3,8 @@ package storage
 import (
 	"bytes"
 	"encoding/hex"
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"sort"
 	"strconv"
 	"testing"
@@ -67,9 +69,9 @@ func TestMaxPossibleShareSize(t *testing.T) {
 	require.Equal(t, ssvtypes.MaxPossibleShareSize, len(b))
 }
 
-func TestSaveAndGetValidatorStorage(t *testing.T) {
+func TestSharesStorage(t *testing.T) {
 	logger := logging.TestLogger(t)
-	shareStorage, done := newShareStorageForTest(logger)
+	shareStorage, db, done := newShareStorageForTest(logger)
 	require.NotNil(t, shareStorage)
 	defer done()
 
@@ -83,6 +85,16 @@ func TestSaveAndGetValidatorStorage(t *testing.T) {
 	require.NoError(t, err)
 
 	validatorShare, _ := generateRandomValidatorShare(splitKeys)
+	validatorShare.Metadata = ssvtypes.Metadata{
+		BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+			Balance:         1,
+			Status:          eth2apiv1.ValidatorStateActiveOngoing,
+			Index:           3,
+			ActivationEpoch: 4,
+		},
+		OwnerAddress: common.HexToAddress("0xFeedB14D8b2C76FdF808C29818b06b830E8C2c0e"),
+		Liquidated:   false,
+	}
 	require.NoError(t, shareStorage.Save(nil, validatorShare))
 
 	validatorShare2, _ := generateRandomValidatorShare(splitKeys)
@@ -97,10 +109,73 @@ func TestSaveAndGetValidatorStorage(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 2, len(validators))
 
+	t.Run("UpdateValidatorMetadata_shareExists", func(t *testing.T) {
+		valPk := hex.EncodeToString(validatorShare.ValidatorPubKey)
+		require.NoError(t, shareStorage.UpdateValidatorMetadata(valPk, &beaconprotocol.ValidatorMetadata{
+			Balance:         10000,
+			Index:           3,
+			Status:          eth2apiv1.ValidatorStateActiveOngoing,
+			ActivationEpoch: 4,
+		}))
+	})
+
+	t.Run("List_Filter_ByClusterId", func(t *testing.T) {
+		clusterID := ssvtypes.ComputeClusterIDHash(validatorShare.Metadata.OwnerAddress, []uint64{1, 2, 3, 4})
+
+		validators := shareStorage.List(nil, ByClusterID(clusterID))
+		require.Equal(t, 2, len(validators))
+	})
+
+	t.Run("List_Filter_ByOperatorID", func(t *testing.T) {
+		validators := shareStorage.List(nil, ByOperatorID(1))
+		require.Equal(t, 2, len(validators))
+	})
+
+	t.Run("List_Filter_ByActiveValidator", func(t *testing.T) {
+		validators := shareStorage.List(nil, ByActiveValidator())
+		require.Equal(t, 2, len(validators))
+	})
+
+	t.Run("List_Filter_ByNotLiquidated", func(t *testing.T) {
+		validators := shareStorage.List(nil, ByNotLiquidated())
+		require.Equal(t, 1, len(validators))
+	})
+
+	t.Run("List_Filter_ByAttesting", func(t *testing.T) {
+		validators := shareStorage.List(nil, ByAttesting(phase0.Epoch(1)))
+		require.Equal(t, 1, len(validators))
+	})
+
+	t.Run("KV_reuse_works", func(t *testing.T) {
+		storageDuplicate, err := NewSharesStorage(logger, db, []byte("test"))
+		require.NoError(t, err)
+		existingValidators := storageDuplicate.List(nil)
+
+		require.Equal(t, 2, len(existingValidators))
+	})
+
 	require.NoError(t, shareStorage.Delete(nil, validatorShare.ValidatorPubKey))
 	share := shareStorage.Get(nil, validatorShare.ValidatorPubKey)
 	require.NoError(t, err)
 	require.Nil(t, share)
+
+	t.Run("UpdateValidatorMetadata_shareIsDeleted", func(t *testing.T) {
+		valPk := hex.EncodeToString(validatorShare.ValidatorPubKey)
+		require.NoError(t, shareStorage.UpdateValidatorMetadata(valPk, &beaconprotocol.ValidatorMetadata{
+			Balance:         10000,
+			Index:           3,
+			Status:          2,
+			ActivationEpoch: 4,
+		}))
+	})
+
+	t.Run("Drop", func(t *testing.T) {
+		require.NoError(t, shareStorage.Drop())
+
+		validators := shareStorage.List(nil, ByOperatorID(1))
+		require.NoError(t, err)
+		require.EqualValues(t, 0, len(validators))
+	})
 }
 
 func generateRandomValidatorShare(splitKeys map[uint64]*bls.SecretKey) (*ssvtypes.SSVShare, *bls.SecretKey) {
@@ -167,18 +242,18 @@ func generateMaxPossibleShare() (*ssvtypes.SSVShare, error) {
 	return validatorShare, nil
 }
 
-func newShareStorageForTest(logger *zap.Logger) (Shares, func()) {
+func newShareStorageForTest(logger *zap.Logger) (Shares, *kv.BadgerDB, func()) {
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	if err != nil {
-		return nil, func() {}
+		return nil, nil, func() {}
 	}
 
 	s, err := NewSharesStorage(logger, db, []byte("test"))
 	if err != nil {
-		return nil, func() {}
+		return nil, nil, func() {}
 	}
 
-	return s, func() {
-		db.Close()
+	return s, db, func() {
+		_ = db.Close()
 	}
 }
