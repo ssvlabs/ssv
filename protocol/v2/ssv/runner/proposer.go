@@ -124,7 +124,8 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 	}
 	took := time.Since(start)
 	const totalDesiredTime = 3 * time.Second
-	if remainingTime := totalDesiredTime - took; remainingTime > 0 {
+	remainingTime := totalDesiredTime - took
+	if remainingTime > 0 {
 		time.Sleep(remainingTime)
 	}
 	// Log essentials about the retrieved block.
@@ -132,7 +133,7 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 	logger.Info("🧊 got beacon block proposal",
 		zap.String("block_hash", blockSummary.Hash.String()),
 		zap.Bool("blinded", blockSummary.Blinded),
-		zap.Duration("took", took),
+		zap.Duration("took", remainingTime),
 		zap.NamedError("summarize_err", summarizeErr))
 
 	byts, err := obj.MarshalSSZ()
