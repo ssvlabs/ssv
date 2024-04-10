@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/holiman/uint256"
 	"math/big"
 	"sync"
 	"time"
@@ -241,8 +242,13 @@ func (b *SimulatedBackend) BalanceAt(ctx context.Context, contract common.Addres
 	if err != nil {
 		return nil, err
 	}
+	// GetBalance now returns *uint256.Int, need to convert to *big.Int
+	uint256Balance := stateDB.GetBalance(contract)
 
-	return stateDB.GetBalance(contract), nil
+	// Convert *uint256.Int to *big.Int
+	bigIntBalance := new(big.Int).SetBytes(uint256Balance.Bytes())
+
+	return bigIntBalance, nil
 }
 
 // NonceAt returns the nonce of a certain account in the blockchain.
@@ -507,7 +513,7 @@ func (b *SimulatedBackend) PendingNonceAt(ctx context.Context, account common.Ad
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	return b.pendingState.GetOrNewStateObject(account).Nonce(), nil
+	return b.pendingState.GetNonce(account), nil
 }
 
 // SuggestGasPrice implements ContractTransactor.SuggestGasPrice. Since the simulated
@@ -559,7 +565,7 @@ func (b *SimulatedBackend) EstimateGas(ctx context.Context, call ethereum.CallMs
 	// Recap the highest gas allowance with account's balance.
 	if feeCap.BitLen() != 0 {
 		balance := b.pendingState.GetBalance(call.From) // from can't be nil
-		available := new(big.Int).Set(balance)
+		available := new(big.Int).SetBytes(balance.Bytes())
 		if call.Value != nil {
 			if call.Value.Cmp(available) >= 0 {
 				return 0, core.ErrInsufficientFundsForTransfer
@@ -675,8 +681,9 @@ func (b *SimulatedBackend) callContract(ctx context.Context, call ethereum.CallM
 	}
 
 	// Set infinite balance to the fake caller account.
-	from := stateDB.GetOrNewStateObject(call.From)
-	from.SetBalance(math.MaxBig256)
+	maxUint2561 := big.NewInt(0).Sub(big.NewInt(0).Exp(big.NewInt(2), big.NewInt(256), nil), big.NewInt(1))
+	uint256Max, _ := uint256.FromBig(maxUint2561)
+	stateDB.SetBalance(call.From, uint256Max)
 
 	// Execute the call.
 	msg := &core.Message{
