@@ -123,6 +123,10 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 		}
 	}
 	took := time.Since(start)
+	const totalDesiredTime = 3 * time.Second
+	if remainingTime := totalDesiredTime - took; remainingTime > 0 {
+		time.Sleep(remainingTime)
+	}
 	// Log essentials about the retrieved block.
 	blockSummary, summarizeErr := summarizeBlock(obj)
 	logger.Info("🧊 got beacon block proposal",
