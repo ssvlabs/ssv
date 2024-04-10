@@ -4,13 +4,12 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"github.com/bloxapp/ssv/operator/keystore"
+	"github.com/bloxapp/ssv/storage/bbolt"
 	"log"
 	"math/big"
 	"net/http"
 	"os"
-	"time"
-
-	"github.com/bloxapp/ssv/operator/keystore"
 
 	"github.com/bloxapp/ssv/network"
 
@@ -56,7 +55,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/commons"
 	"github.com/bloxapp/ssv/utils/format"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
@@ -423,8 +421,8 @@ func setupGlobal() (*zap.Logger, error) {
 	return zap.L(), nil
 }
 
-func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.BadgerDB, error) {
-	db, err := kv.New(logger, cfg.DBOptions)
+func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*bbolt.BboltDB, error) {
+	db, err := bbolt.New(logger, cfg.DBOptions)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to open db")
 	}
@@ -432,7 +430,7 @@ func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.Badger
 		if err := db.Close(); err != nil {
 			return errors.Wrap(err, "failed to close db")
 		}
-		db, err = kv.New(logger, cfg.DBOptions)
+		db, err = bbolt.New(logger, cfg.DBOptions)
 		return errors.Wrap(err, "failed to reopen db")
 	}
 
@@ -453,23 +451,9 @@ func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*kv.Badger
 	// to reclaim any space that may have been freed up.
 	// Close & reopen the database to trigger any unknown internal
 	// startup/shutdown procedures that the storage engine may have.
-	start := time.Now()
 	if err := reopenDb(); err != nil {
 		return nil, err
 	}
-
-	// Run a long garbage collection cycle with a timeout.
-	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
-	defer cancel()
-	if err := db.FullGC(ctx); err != nil {
-		return nil, errors.Wrap(err, "failed to collect garbage")
-	}
-
-	// Close & reopen again.
-	if err := reopenDb(); err != nil {
-		return nil, err
-	}
-	logger.Debug("post-migrations garbage collection completed", fields.Duration(start))
 
 	return db, nil
 }
