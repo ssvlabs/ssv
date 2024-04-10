@@ -37,7 +37,6 @@ import (
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/message/validation"
-	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
@@ -434,18 +433,18 @@ func setupDB(logger *zap.Logger, eth2Network beaconprotocol.Network) (*bbolt.Bbo
 		return errors.Wrap(err, "failed to reopen db")
 	}
 
-	migrationOpts := migrations.Options{
-		Db:      db,
-		DbPath:  cfg.DBOptions.Path,
-		Network: eth2Network,
-	}
-	applied, err := migrations.Run(cfg.DBOptions.Ctx, logger, migrationOpts)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to run migrations")
-	}
-	if applied == 0 {
-		return db, nil
-	}
+	//migrationOpts := migrations.Options{
+	//	Db:      db,
+	//	DbPath:  cfg.DBOptions.Path,
+	//	Network: eth2Network,
+	//}
+	//applied, err := migrations.Run(cfg.DBOptions.Ctx, logger, migrationOpts)
+	//if err != nil {
+	//	return nil, errors.Wrap(err, "failed to run migrations")
+	//}
+	//if applied == 0 {
+	//	return db, nil
+	//}
 
 	// If migrations were applied, we run a full garbage collection cycle
 	// to reclaim any space that may have been freed up.
