@@ -95,7 +95,7 @@ func (opts *DiscV5Options) DiscV5Cfg(logger *zap.Logger) (*discover.Config, erro
 
 	if opts.EnableLogging {
 		newLogger := log.New()
-		newLogger.SetHandler(&dv5Logger{logger.Named(logging.NameDiscoveryV5Logger)})
+		newLogger.With(&dv5Logger{logger.Named(logging.NameDiscoveryV5Logger)})
 		dv5Cfg.Log = newLogger
 	}
 
