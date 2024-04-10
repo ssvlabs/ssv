@@ -8,8 +8,6 @@ import (
 
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/networkconfig"
-
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
@@ -54,23 +52,21 @@ type msgIDEntry struct {
 
 // msgIDHandler implements MsgIDHandler
 type msgIDHandler struct {
-	ctx           context.Context
-	added         chan addedEvent
-	ids           map[string]*msgIDEntry
-	locker        sync.Locker
-	ttl           time.Duration
-	networkConfig networkconfig.NetworkConfig
+	ctx    context.Context
+	added  chan addedEvent
+	ids    map[string]*msgIDEntry
+	locker sync.Locker
+	ttl    time.Duration
 }
 
 // NewMsgIDHandler creates a new MsgIDHandler
-func NewMsgIDHandler(ctx context.Context, ttl time.Duration, networkConfig networkconfig.NetworkConfig) MsgIDHandler {
+func NewMsgIDHandler(ctx context.Context, ttl time.Duration) MsgIDHandler {
 	handler := &msgIDHandler{
-		ctx:           ctx,
-		added:         make(chan addedEvent, msgIDHandlerBufferSize),
-		ids:           make(map[string]*msgIDEntry),
-		locker:        &sync.Mutex{},
-		ttl:           ttl,
-		networkConfig: networkConfig,
+		ctx:    ctx,
+		added:  make(chan addedEvent, msgIDHandlerBufferSize),
+		ids:    make(map[string]*msgIDEntry),
+		locker: &sync.Mutex{},
+		ttl:    ttl,
 	}
 	return handler
 }
@@ -125,15 +121,13 @@ func (handler *msgIDHandler) MsgID(logger *zap.Logger) func(pmsg *ps_pb.Message)
 }
 
 func (handler *msgIDHandler) pubsubMsgToMsgID(msg []byte) string {
-	currentEpoch := handler.networkConfig.Beacon.EstimatedCurrentEpoch()
-	if currentEpoch > handler.networkConfig.PermissionlessActivationEpoch {
-		decodedMsg, _, _, err := commons.DecodeSignedSSVMessage(msg)
-		if err != nil {
-			// todo: should err here or just log and let the decode function err?
-		} else {
-			return commons.MsgID()(decodedMsg)
-		}
+	decodedMsg, _, _, err := commons.DecodeSignedSSVMessage(msg)
+	if err != nil {
+		// todo: should err here or just log and let the decode function err?
+	} else {
+		return commons.MsgID()(decodedMsg)
 	}
+
 	return commons.MsgID()(msg)
 }
 

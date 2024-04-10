@@ -232,7 +232,17 @@ func (mv *messageValidator) ValidatorForTopic(_ string) func(ctx context.Context
 // Depending on the outcome, it will return one of the pubsub validation results (Accept, Ignore, or Reject).
 func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 	if mv.selfAccept && peerID == mv.selfPID {
-		msg, _ := commons.DecodeNetworkMsg(pmsg.Data)
+		rawMsgPayload, _, _, err := commons.DecodeSignedSSVMessage(pmsg.Data)
+		if err != nil {
+			mv.logger.Error("failed to decode signed ssv message", zap.Error(err))
+			return pubsub.ValidationReject
+		}
+		msg, err := commons.DecodeNetworkMsg(rawMsgPayload)
+		if err != nil {
+			mv.logger.Error("failed to decode network message", zap.Error(err))
+			return pubsub.ValidationReject
+		}
+		// skipping the error check for testing simplifying
 		decMsg, _ := queue.DecodeSSVMessage(msg)
 		pmsg.ValidatorData = decMsg
 		return pubsub.ValidationAccept
@@ -303,28 +313,29 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 
 	defer mv.metrics.ActiveMsgValidationDone(topic)
 
-	messageData := pMsg.GetData()
+	encMessageData := pMsg.GetData()
 
 	var signatureVerifier func() error
 
-	currentEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Unix()))
-	if currentEpoch > mv.netCfg.PermissionlessActivationEpoch {
-		decMessageData, operatorID, signature, err := commons.DecodeSignedSSVMessage(messageData)
-		messageData = decMessageData
-		if err != nil {
-			e := ErrMalformedSignedMessage
-			e.innerErr = err
-			return nil, Descriptor{}, e
-		}
+	if len(encMessageData) == 0 {
+		return nil, Descriptor{}, ErrPubSubMessageHasNoData
+	}
 
-		signatureVerifier = func() error {
-			mv.metrics.MessageValidationRSAVerifications()
-			return mv.verifySignature(messageData, operatorID, signature)
-		}
+	messageData, operatorID, signature, err := commons.DecodeSignedSSVMessage(encMessageData)
+
+	if err != nil {
+		e := ErrMalformedSignedMessage
+		e.innerErr = err
+		return nil, Descriptor{}, e
 	}
 
 	if len(messageData) == 0 {
-		return nil, Descriptor{}, ErrPubSubMessageHasNoData
+		return nil, Descriptor{}, ErrDecodedPubSubMessageHasEmptyData
+	}
+
+	signatureVerifier = func() error {
+		mv.metrics.MessageValidationRSAVerifications()
+		return mv.verifySignature(messageData, operatorID, signature)
 	}
 
 	mv.metrics.MessageSize(len(messageData))

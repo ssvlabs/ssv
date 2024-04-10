@@ -198,19 +198,7 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 		return n.subnets
 	}
 
-	filters := func() []connections.HandshakeFilter {
-		filters := []connections.HandshakeFilter{
-			connections.NetworkIDFilter(domain),
-		}
-
-		if n.cfg.Permissioned() {
-			filters = append(filters,
-				connections.SenderRecipientIPsCheckFilter(n.host.ID()),
-				connections.SignatureCheckFilter(),
-				connections.RegisteredOperatorsFilter(n.nodeStorage, n.cfg.Network.WhitelistedOperatorKeys))
-		}
-		return filters
-	}
+	var filters func() []connections.HandshakeFilter
 
 	handshaker := connections.NewHandshaker(n.ctx, &connections.HandshakerCfg{
 		Streams:         n.streamCtrl,
@@ -221,8 +209,6 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 		IDService:       ids,
 		Network:         n.host.Network(),
 		SubnetsProvider: subnetsProvider,
-		OperatorSigner:  n.operatorSigner,
-		Permissioned:    n.cfg.Permissioned,
 	}, filters)
 
 	n.host.SetStreamHandler(peers.NodeInfoProtocol, handshaker.Handler(logger))
@@ -302,7 +288,7 @@ func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
 		cfg.ScoreIndex = nil
 	}
 
-	midHandler := topics.NewMsgIDHandler(n.ctx, time.Minute*2, n.cfg.Network)
+	midHandler := topics.NewMsgIDHandler(n.ctx, time.Minute*2)
 	n.msgResolver = midHandler
 	cfg.MsgIDHandler = midHandler
 	go cfg.MsgIDHandler.Start()

@@ -88,7 +88,6 @@ func TestGetMaxPeers(t *testing.T) {
 	require.Equal(t, 40, n.getMaxPeers(""))
 	require.Equal(t, 8, n.getMaxPeers("100"))
 }
-
 func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	n := 4
 	ctx, cancel := context.WithCancel(context.Background())
@@ -115,6 +114,7 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 
 	var wg sync.WaitGroup
 	wg.Add(1)
+
 	go func() {
 		defer wg.Done()
 		msg1 := dummyMsgAttester(t, pks[0], 1)
@@ -127,15 +127,16 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	}()
 
 	wg.Add(1)
+
 	go func() {
 		defer wg.Done()
 		msg1 := dummyMsgAttester(t, pks[0], 1)
 		msg2 := dummyMsgAttester(t, pks[1], 2)
 		msg3 := dummyMsgAttester(t, pks[0], 3)
 		require.NoError(t, err)
-		<-time.After(time.Millisecond * 10)
+		time.Sleep(time.Millisecond * 10)
 		require.NoError(t, node1.Broadcast(msg2))
-		<-time.After(time.Millisecond * 2)
+		time.Sleep(time.Millisecond * 2)
 		require.NoError(t, node2.Broadcast(msg1))
 		require.NoError(t, node1.Broadcast(msg3))
 	}()

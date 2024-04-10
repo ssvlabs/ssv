@@ -65,14 +65,12 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 		return errors.Wrap(err, "could not decode msg")
 	}
 
-	if n.cfg.Network.Beacon.EstimatedCurrentEpoch() > n.cfg.Network.PermissionlessActivationEpoch {
-		signature, err := n.operatorSigner.Sign(encodedMsg)
-		if err != nil {
-			return err
-		}
-
-		encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, n.operatorDataStore.GetOperatorID(), signature)
+	signature, err := n.operatorSigner.Sign(encodedMsg)
+	if err != nil {
+		return err
 	}
+
+	encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, n.operatorDataStore.GetOperatorID(), signature)
 
 	vpk := msg.GetID().GetPubKey()
 	topics := commons.ValidatorTopicID(vpk)
