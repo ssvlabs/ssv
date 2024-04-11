@@ -264,7 +264,7 @@ func validRoundChangeForDataIgnoreSignature(
 	}
 
 	if !signedMsg.CheckSignersInCommittee(state.Share.Committee) {
-		return errors.New("signers not in committee")
+		return errors.New("signer not in committee")
 	}
 
 	// Addition to formal spec

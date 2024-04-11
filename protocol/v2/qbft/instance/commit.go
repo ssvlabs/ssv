@@ -140,7 +140,7 @@ func baseCommitValidationIgnoreSignature(
 	}
 
 	if !signedCommit.CheckSignersInCommittee(operators) {
-		return errors.New("signers not in committee")
+		return errors.New("signer not in committee")
 	}
 
 	return nil
