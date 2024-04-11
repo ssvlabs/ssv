@@ -28,7 +28,9 @@ var BaseValidator = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet
 			SSVShare: &types.SSVShare{
 				Share: *spectestingutils.TestingShare(keySet),
 			},
-			Signer: spectestingutils.NewTestingKeyManager(),
+			Signer:            spectestingutils.NewTestingKeyManager(),
+			OperatorSigner:    spectestingutils.NewTestingOperatorSigner(keySet, 1),
+			SignatureVerifier: &validator.SignatureVerifier{},
 			DutyRunners: map[spectypes.BeaconRole]runner.Runner{
 				spectypes.BNRoleAttester:                  AttesterRunner(logger, keySet),
 				spectypes.BNRoleProposer:                  ProposerRunner(logger, keySet),
