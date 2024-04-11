@@ -85,6 +85,9 @@ func (t bboltTxn) GetAll(prefix []byte, handler func(int, basedb.Obj) error) err
 }
 
 func (t bboltTxn) Delete(prefix []byte, key []byte) error {
-	b := t.txn.Bucket(prefix)
+	b, err := t.txn.CreateBucketIfNotExists(prefix)
+	if err != nil {
+		return err
+	}
 	return b.Delete(key)
 }

@@ -57,10 +57,10 @@ func createDB(logger *zap.Logger, options basedb.Options, inMemory bool) (*Bbolt
 	}
 
 	// Start periodic reporting.
-	if options.Reporting && options.Ctx != nil {
-		BboltDB.wg.Add(1)
-		go BboltDB.periodicallyReport(1 * time.Minute)
-	}
+	//if options.Reporting && options.Ctx != nil {
+	//	BboltDB.wg.Add(1)
+	//	go BboltDB.periodicallyReport(1 * time.Minute)
+	//}
 
 	// Start periodic garbage collection.
 	//if options.GCInterval > 0 {
@@ -151,7 +151,10 @@ func (b *BboltDB) DeletePrefix(prefix []byte) (int, error) {
 	count := 0
 	err := b.db.Update(func(txn *bbolt.Tx) error {
 		rawKeys := b.listRawKeys(prefix, txn)
-		bu := txn.Bucket(prefix)
+		bu, err := txn.CreateBucketIfNotExists(prefix)
+		if err != nil {
+			return err
+		}
 		for _, k := range rawKeys {
 			if err := bu.Delete(k); err != nil {
 				return err
@@ -176,7 +179,10 @@ func (b *BboltDB) GetAll(prefix []byte, handler func(int, basedb.Obj) error) err
 func (b *BboltDB) CountPrefix(prefix []byte) (int64, error) {
 	var res int64
 	err := b.db.View(func(txn *bbolt.Tx) error {
-		bu := txn.Bucket(prefix)
+		bu, err := txn.CreateBucketIfNotExists(prefix)
+		if err != nil {
+			return err
+		}
 		_ = bu.ForEach(func(k, v []byte) error {
 			res++
 			return nil
@@ -197,7 +203,7 @@ func (b *BboltDB) DropPrefix(prefix []byte) error {
 func (b *BboltDB) Close() error {
 	// Stop & wait for background goroutines.
 	b.cancel()
-	b.wg.Wait()
+	//b.wg.Wait()
 
 	// Close the database.
 	err := b.db.Close()
@@ -220,7 +226,7 @@ func (b *BboltDB) report() {
 }
 
 func (b *BboltDB) periodicallyReport(interval time.Duration) {
-	defer b.wg.Done()
+	//defer b.wg.Done()
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
@@ -261,7 +267,10 @@ func (b *BboltDB) Update(fn func(basedb.Txn) error) error {
 func (b *BboltDB) allGetter(prefix []byte, handler func(int, basedb.Obj) error) func(txn *bbolt.Tx) error {
 	return func(txn *bbolt.Tx) error {
 		rawKeys := b.listRawKeys(prefix, txn)
-		bu := txn.Bucket(prefix)
+		bu, err := txn.CreateBucketIfNotExists(prefix)
+		if err != nil {
+			return err
+		}
 		if bu == nil {
 			return fmt.Errorf("bucket not found")
 		}
