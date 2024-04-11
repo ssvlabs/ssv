@@ -13,12 +13,13 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	typescomparable "github.com/bloxapp/ssv-spec/types/testingutils/comparable"
+	"github.com/stretchr/testify/require"
+
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
 	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
-	"github.com/stretchr/testify/require"
 )
 
 // RunMsgProcessing processes MsgProcessingSpecTest. It probably may be removed.
@@ -74,8 +75,11 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 		for i, msg := range test.OutputMessages {
 			r1, _ := msg.GetRoot()
 
+			ssvMsg := &spectypes.SSVMessage{}
+			require.NoError(t, ssvMsg.Decode(broadcastedMsgs[i].Data))
+
 			msg2 := &specqbft.SignedMessage{}
-			require.NoError(t, msg2.Decode(broadcastedMsgs[i].Data))
+			require.NoError(t, msg2.Decode(ssvMsg.Data))
 			r2, _ := msg2.GetRoot()
 
 			require.EqualValues(t, r1, r2, fmt.Sprintf("output msg %d roots not equal", i))
