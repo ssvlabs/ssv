@@ -65,20 +65,18 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 		return fmt.Errorf("could not encode network message: %w", err)
 	}
 
-	if n.cfg.Network.Beacon.EstimatedCurrentEpoch() > n.cfg.Network.PermissionlessActivationEpoch {
-		signature, err := n.operatorSigner.Sign(encodedMsg)
-		if err != nil {
-			return err
-		}
+	signature, err := n.operatorSigner.Sign(encodedMsg)
+	if err != nil {
+		return err
+	}
 
-		encodedMsg, err = commons.EncodeSignedNetworkMsg(&spectypes.SignedSSVMessage{
-			Signature:  signature,
-			OperatorID: n.operatorDataStore.GetOperatorID(),
-			Data:       encodedMsg,
-		})
-		if err != nil {
-			return fmt.Errorf("could not encode signed network message: %w", err)
-		}
+	encodedMsg, err = commons.EncodeSignedNetworkMsg(&spectypes.SignedSSVMessage{
+		Signature:  signature,
+		OperatorID: n.operatorDataStore.GetOperatorID(),
+		Data:       encodedMsg,
+	})
+	if err != nil {
+		return fmt.Errorf("could not encode signed network message: %w", err)
 	}
 
 	vpk := msg.GetID().GetPubKey()

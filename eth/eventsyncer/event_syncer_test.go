@@ -116,14 +116,28 @@ func TestEventSyncer(t *testing.T) {
 		}
 		require.Equal(t, uint64(0x1), receipt.Status)
 	}
+	db, err := kv.NewInMemory(logger, basedb.Options{
+		Ctx: ctx,
+	})
+	require.NoError(t, err)
+	privateKey, err := keys.GeneratePrivateKey()
+	require.NoError(t, err)
+	nodeStorage, operatorData := setupOperatorStorage(logger, db, privateKey)
+	require.NoError(t, err)
 
-	eh := setupEventHandler(t, ctx, logger)
+	eh := setupEventHandler(t, ctx, logger, db, nodeStorage, operatorData, privateKey)
 	eventSyncer := New(
-		nil,
+		nodeStorage,
 		client,
 		eh,
 		WithLogger(logger),
+		WithStalenessThreshold(time.Second*10),
+		WithMetrics(nopMetrics{}),
 	)
+
+	nodeStorage.SaveLastProcessedBlock(nil, big.NewInt(1))
+	err = eventSyncer.Healthy(ctx)
+	require.NoError(t, err)
 
 	lastProcessedBlock, err := eventSyncer.SyncHistory(ctx, 0)
 	require.NoError(t, err)
@@ -131,20 +145,16 @@ func TestEventSyncer(t *testing.T) {
 	require.NoError(t, eventSyncer.SyncOngoing(ctx, lastProcessedBlock+1))
 }
 
-func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger) *eventhandler.EventHandler {
-	db, err := kv.NewInMemory(logger, basedb.Options{
-		Ctx: ctx,
-	})
-	require.NoError(t, err)
-
+func setupEventHandler(
+	t *testing.T,
+	ctx context.Context,
+	logger *zap.Logger,
+	db *kv.BadgerDB,
+	nodeStorage operatorstorage.Storage,
+	operatorData *registrystorage.OperatorData,
+	privateKey keys.OperatorPrivateKey,
+) *eventhandler.EventHandler {
 	storageMap := ibftstorage.NewStores()
-
-	privateKey, err := keys.GeneratePrivateKey()
-	if err != nil {
-		logger.Fatal("failed generating operator key %v", zap.Error(err))
-	}
-
-	nodeStorage, operatorData := setupOperatorStorage(logger, db, privateKey)
 	operatorDataStore := operatordatastore.New(operatorData)
 	testNetworkConfig := networkconfig.TestNetwork
 

@@ -9,11 +9,10 @@ import (
 	"time"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/cespare/xxhash/v2"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/protocol"
-
-	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 )
 
 const (
@@ -36,7 +35,7 @@ const (
 	signatureOffset  = 0
 	operatorIDSize   = 8
 	operatorIDOffset = signatureOffset + signatureSize
-	messageOffset    = operatorIDOffset + operatorIDSize
+	MessageOffset    = operatorIDOffset + operatorIDSize
 )
 
 // SubnetTopicID returns the topic to use for the given subnet
@@ -134,11 +133,11 @@ func EncodeSignedNetworkMsg(msg *spectypes.SignedSSVMessage) ([]byte, error) {
 
 // DecodeSignedSSVMessage deserializes signed message bytes messsage, op id and a signature
 func DecodeSignedSSVMessage(encoded []byte) ([]byte, spectypes.OperatorID, []byte, error) {
-	if len(encoded) < messageOffset {
+	if len(encoded) < MessageOffset {
 		return nil, 0, nil, fmt.Errorf("unexpected encoded message size of %d", len(encoded))
 	}
 
-	message := encoded[messageOffset:]
+	message := encoded[MessageOffset:]
 	operatorID := binary.LittleEndian.Uint64(encoded[operatorIDOffset : operatorIDOffset+operatorIDSize])
 	signature := encoded[signatureOffset : signatureOffset+signatureSize]
 	return message, operatorID, signature, nil

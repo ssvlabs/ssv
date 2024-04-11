@@ -2,12 +2,10 @@ package connections
 
 import (
 	"context"
-	"testing"
-	"time"
-
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
+	"testing"
 
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/peers/connections/mock"
@@ -19,8 +17,7 @@ type TestData struct {
 	NetworkPrivateKey libp2pcrypto.PrivKey
 	SenderPrivateKey  keys.OperatorPrivateKey
 
-	HandshakeData records.HandshakeData
-	Signature     []byte
+	Signature []byte
 
 	SenderPeerID    peer.ID
 	RecipientPeerID peer.ID
@@ -30,8 +27,7 @@ type TestData struct {
 	Handshaker handshaker
 	Conn       mock.Conn
 
-	NodeInfo       *records.NodeInfo
-	SignedNodeInfo *records.SignedNodeInfo
+	NodeInfo *records.NodeInfo
 }
 
 func getTestingData(t *testing.T) TestData {
@@ -52,22 +48,6 @@ func getTestingData(t *testing.T) TestData {
 			ConsensusNode: "some-consensus-node",
 			Subnets:       "some-subnets",
 		},
-	}
-
-	handshakeData := records.HandshakeData{
-		SenderPeerID:    peerID2,
-		RecipientPeerID: peerID1,
-		Timestamp:       time.Now(),
-		SenderPublicKey: senderPublicKey,
-	}
-
-	signature, err := privateKey.Sign(handshakeData.Encode())
-	require.NoError(t, err)
-
-	sni := &records.SignedNodeInfo{
-		NodeInfo:      nodeInfo,
-		HandshakeData: handshakeData,
-		Signature:     signature,
 	}
 
 	nii := mock.NodeInfoIndex{
@@ -99,15 +79,13 @@ func getTestingData(t *testing.T) TestData {
 	}
 
 	mockHandshaker := handshaker{
-		ctx:            context.Background(),
-		nodeInfos:      nii,
-		peerInfos:      ns,
-		ids:            ids,
-		net:            net,
-		operatorSigner: privateKey,
-		streams:        sc,
-		filters:        func() []HandshakeFilter { return []HandshakeFilter{} },
-		Permissioned:   func() bool { return false },
+		ctx:       context.Background(),
+		nodeInfos: nii,
+		peerInfos: ns,
+		ids:       ids,
+		net:       net,
+		streams:   sc,
+		filters:   func() []HandshakeFilter { return []HandshakeFilter{} },
 	}
 
 	mockConn := mock.Conn{
@@ -116,8 +94,6 @@ func getTestingData(t *testing.T) TestData {
 
 	return TestData{
 		SenderPrivateKey:         privateKey,
-		HandshakeData:            handshakeData,
-		Signature:                signature,
 		SenderPeerID:             peerID2,
 		RecipientPeerID:          peerID1,
 		SenderBase64PublicKeyPEM: string(senderPublicKey),
@@ -125,6 +101,5 @@ func getTestingData(t *testing.T) TestData {
 		Conn:                     mockConn,
 		NetworkPrivateKey:        networkPrivateKey,
 		NodeInfo:                 nodeInfo,
-		SignedNodeInfo:           sni,
 	}
 }

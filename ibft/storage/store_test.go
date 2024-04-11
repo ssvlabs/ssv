@@ -60,6 +60,7 @@ func TestCleanInstances(t *testing.T) {
 	differMsgID := spectypes.NewMsgID(types.GetDefaultDomain(), []byte("differ_pk"), spectypes.BNRoleAttester)
 	require.NoError(t, storage.SaveInstance(generateInstance(differMsgID, specqbft.Height(1))))
 	require.NoError(t, storage.SaveHighestInstance(generateInstance(differMsgID, specqbft.Height(msgsCount))))
+	require.NoError(t, storage.SaveHighestAndHistoricalInstance(generateInstance(differMsgID, specqbft.Height(1))))
 
 	res, err := storage.GetInstancesInRange(msgID[:], 0, specqbft.Height(msgsCount))
 	require.NoError(t, err)

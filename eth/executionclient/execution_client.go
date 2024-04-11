@@ -195,7 +195,7 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 				}
 
 				// streamLogsToChan should never return without an error,
-				// so we treat a nil error as a an error by itself.
+				// so we treat a nil error as an error by itself.
 				if err == nil {
 					err = errors.New("streamLogsToChan halted without an error")
 				}
