@@ -32,7 +32,9 @@ func (s *SignatureVerifier) Verify(msg *spectypes.SignedSSVMessage, operators []
 			hash := sha256.Sum256(msg.Data)
 
 			// Verify
-			err = rsa.VerifyPKCS1v15(pk, crypto.SHA256, hash[:], msg.Signature[:])
+			if err := rsa.VerifyPKCS1v15(pk, crypto.SHA256, hash[:], msg.Signature[:]); err != nil {
+				return fmt.Errorf("could not verify signature: %w", err)
+			}
 		}
 	}
 
