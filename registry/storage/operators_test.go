@@ -80,6 +80,12 @@ func TestStorage_SaveAndGetOperatorData(t *testing.T) {
 		require.True(t, found)
 	})
 
+	t.Run("check operator exists", func(t *testing.T) {
+		found, err := storageCollection.OperatorsExist(nil, []spectypes.OperatorID{operatorData.ID})
+		require.NoError(t, err)
+		require.True(t, found)
+	})
+
 	t.Run("create and get multiple operators", func(t *testing.T) {
 		ods := []storage.OperatorData{
 			{
@@ -141,6 +147,50 @@ func TestStorage_ListOperators(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 2, len(operators))
 	})
+}
+
+func TestStorage_DeleteOperatorAndDropOperators(t *testing.T) {
+	logger := logging.TestLogger(t)
+	storageCollection, done := newOperatorStorageForTest(logger)
+	require.NotNil(t, storageCollection)
+	defer done()
+
+	// prepare storage test fixture
+	n := 5
+	for i := 0; i < n; i++ {
+		pk, _, err := rsaencryption.GenerateKeys()
+		require.NoError(t, err)
+		operator := storage.OperatorData{
+			PublicKey: pk,
+			ID:        spectypes.OperatorID(i),
+		}
+		_, err = storageCollection.SaveOperatorData(nil, &operator)
+		require.NoError(t, err)
+	}
+
+	t.Run("DeleteOperator_OperatorNotExists", func(t *testing.T) {
+		err := storageCollection.DeleteOperatorData(nil, spectypes.OperatorID(12345))
+		require.NoError(t, err)
+	})
+
+	t.Run("DeleteOperator_OperatorExists", func(t *testing.T) {
+		err := storageCollection.DeleteOperatorData(nil, spectypes.OperatorID(1))
+		require.NoError(t, err)
+
+		operators, err := storageCollection.ListOperators(nil, 0, 0)
+		require.NoError(t, err)
+		require.Equal(t, n-1, len(operators))
+	})
+
+	t.Run("DropRecipients", func(t *testing.T) {
+		err := storageCollection.DropOperators()
+		require.NoError(t, err)
+
+		operators, err := storageCollection.ListOperators(nil, 0, 0)
+		require.NoError(t, err)
+		require.Equal(t, 0, len(operators))
+	})
+
 }
 
 func newOperatorStorageForTest(logger *zap.Logger) (storage.Operators, func()) {

@@ -2,25 +2,31 @@ package topics
 
 import (
 	"context"
+	"crypto"
+	"crypto/rsa"
+	"crypto/sha256"
 	"testing"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zaptest"
-
 	"github.com/bloxapp/ssv/message/validation"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/operator/storage"
+	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
+	"github.com/ethereum/go-ethereum/common"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
+	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zaptest"
 )
 
 func TestMsgValidator(t *testing.T) {
@@ -28,7 +34,7 @@ func TestMsgValidator(t *testing.T) {
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	ns, err := storage.NewNodeStorage(logger, db)
+	ns, err := operatorstorage.NewNodeStorage(logger, db)
 	require.NoError(t, err)
 
 	ks := spectestingutils.Testing4SharesSet()
@@ -49,14 +55,46 @@ func TestMsgValidator(t *testing.T) {
 	slot := networkconfig.TestNetwork.Beacon.GetBeaconNetwork().EstimatedCurrentSlot()
 
 	t.Run("valid consensus msg", func(t *testing.T) {
-		msg, err := dummySSVConsensusMsg(share.ValidatorPubKey, qbft.Height(slot))
+		ssvMsg, err := dummySSVConsensusMsg(share.ValidatorPubKey, qbft.Height(slot))
 		require.NoError(t, err)
 
-		raw, err := msg.Encode()
+		_, skByte, err := rsaencryption.GenerateKeys()
+		require.NoError(t, err)
+		operatorPrivateKey, err := rsaencryption.PemToPrivateKey(skByte)
 		require.NoError(t, err)
 
-		topics := commons.ValidatorTopicID(share.ValidatorPubKey)
-		pmsg := newPBMsg(raw, commons.GetTopicFullName(topics[0]), []byte("16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r"))
+		operatorId := uint64(1)
+
+		operatorPubKey, err := rsaencryption.ExtractPublicKey(&operatorPrivateKey.PublicKey)
+		require.NoError(t, err)
+
+		od := &storage.OperatorData{
+			PublicKey:    []byte(operatorPubKey),
+			OwnerAddress: common.Address{},
+			ID:           operatorId,
+		}
+
+		found, err := ns.SaveOperatorData(nil, od)
+		require.False(t, found)
+		require.NoError(t, err)
+
+		encodedMsg, err := commons.EncodeNetworkMsg(ssvMsg)
+		require.NoError(t, err)
+
+		hash := sha256.Sum256(encodedMsg)
+		signature, err := rsa.SignPKCS1v15(nil, operatorPrivateKey, crypto.SHA256, hash[:])
+		require.NoError(t, err)
+
+		packedPubSubMsgPayload := commons.EncodeSignedSSVMessage(encodedMsg, operatorId, signature)
+		topicID := commons.ValidatorTopicID(ssvMsg.GetID().GetPubKey())
+
+		pmsg := &pubsub.Message{
+			Message: &pspb.Message{
+				Topic: &topicID[0],
+				Data:  packedPubSubMsgPayload,
+			},
+		}
+
 		res := mv.ValidatePubsubMessage(context.Background(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
 		require.Equal(t, pubsub.ValidationAccept, res)
 	})

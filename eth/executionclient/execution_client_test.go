@@ -79,7 +79,16 @@ func TestFetchHistoricalLogs(t *testing.T) {
 
 	// Create a client and connect to the simulator
 	const followDistance = 8
-	client, err := New(ctx, addr, contractAddr, WithLogger(logger), WithFollowDistance(followDistance))
+	client, err := New(
+		ctx,
+		addr,
+		contractAddr,
+		WithLogger(logger),
+		WithFollowDistance(followDistance),
+		WithMetrics(nopMetrics{}),
+		WithConnectionTimeout(2*time.Second),
+		WithReconnectionInitialInterval(2*time.Second),
+	)
 	require.NoError(t, err)
 
 	err = client.Healthy(ctx)
