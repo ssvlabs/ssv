@@ -122,6 +122,7 @@ func (s *storage) OpenWallet() (core.Wallet, error) {
 
 	// get wallet bytes
 	obj, found, err := s.db.Get(s.objPrefix(walletPrefix), []byte(walletPath))
+	s.logger.Debug("OpenWallet", zap.Bool("found", found), zap.Error(err))
 	if !found {
 		return nil, errors.New("could not find wallet")
 	}

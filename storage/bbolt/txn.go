@@ -55,8 +55,8 @@ func (t bboltTxn) SetMany(prefix []byte, n int, next func(int) (basedb.Obj, erro
 }
 
 func (t bboltTxn) Get(prefix []byte, key []byte) (obj basedb.Obj, found bool, err error) {
-	b, err := t.txn.CreateBucketIfNotExists(prefix)
-	if err != nil {
+	b := t.txn.Bucket(prefix)
+	if b == nil {
 		return basedb.Obj{}, false, nil
 	}
 	value := b.Get(key)
