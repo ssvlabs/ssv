@@ -68,7 +68,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 		}
 		messageValidators[i].ValidateFunc = func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 			peer := vNet.NodeByPeerID(p)
-			rawMsgPayload, _, _, err := commons.DecodeSignedSSVMessage(pmsg.Data)
+			rawMsgPayload, _, _, err := spectypes.DecodeSignedSSVMessage(pmsg.Data)
 			require.NoError(t, err)
 
 			msg, err := commons.DecodeNetworkMsg(rawMsgPayload)

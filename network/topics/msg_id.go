@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
@@ -122,15 +123,7 @@ func (handler *msgIDHandler) MsgID(logger *zap.Logger) func(pmsg *ps_pb.Message)
 }
 
 func (handler *msgIDHandler) pubsubMsgToMsgID(msg []byte) string {
-	// TODO(Oleg): check the diff, also we should handle err now
-	//signedMsg := &spectypes.SignedSSVMessage{}
-	//err := signedMsg.Decode(msg)
-	//if err != nil {
-	//	// todo: should err here or just log and let the decode function err?
-	//} else {
-	//	return commons.MsgID()(signedMsg.Data)
-	//}
-	decodedMsg, _, _, err := commons.DecodeSignedSSVMessage(msg)
+	decodedMsg, _, _, err := spectypes.DecodeSignedSSVMessage(msg)
 	if err != nil {
 		// todo: should err here or just log and let the decode function err?
 	} else {

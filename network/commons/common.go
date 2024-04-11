@@ -126,23 +126,6 @@ func DecodeNetworkMsg(data []byte) (*spectypes.SSVMessage, error) {
 	return &msg, nil
 }
 
-// EncodeSignedNetworkMsg encodes signed network message
-func EncodeSignedNetworkMsg(msg *spectypes.SignedSSVMessage) ([]byte, error) {
-	return msg.Encode()
-}
-
-// DecodeSignedSSVMessage deserializes signed message bytes messsage, op id and a signature
-func DecodeSignedSSVMessage(encoded []byte) ([]byte, spectypes.OperatorID, []byte, error) {
-	if len(encoded) < MessageOffset {
-		return nil, 0, nil, fmt.Errorf("unexpected encoded message size of %d", len(encoded))
-	}
-
-	message := encoded[MessageOffset:]
-	operatorID := binary.LittleEndian.Uint64(encoded[operatorIDOffset : operatorIDOffset+operatorIDSize])
-	signature := encoded[signatureOffset : signatureOffset+signatureSize]
-	return message, operatorID, signature, nil
-}
-
 // ProtocolID returns the protocol id of the given protocol,
 // and the amount of peers for distribution
 func ProtocolID(prot p2pprotocol.SyncProtocol) (protocol.ID, int) {

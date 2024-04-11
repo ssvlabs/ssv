@@ -2170,11 +2170,12 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			signature, err := privKey.Sign(encodedMsg)
 			require.NoError(t, err)
 
-			encodedMsg, err = commons.EncodeSignedNetworkMsg(&spectypes.SignedSSVMessage{
+			signedSSVMsg := &spectypes.SignedSSVMessage{
 				Signature:  signature,
 				OperatorID: operatorID,
 				Data:       encodedMsg,
-			})
+			}
+			encodedMsg, err = signedSSVMsg.Encode()
 			require.NoError(t, err)
 
 			topicID := commons.ValidatorTopicID(message.GetID().GetPubKey())
@@ -2233,11 +2234,12 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			require.NoError(t, err)
 
 			const unexpectedOperatorID = 2
-			encodedMsg, err = commons.EncodeSignedNetworkMsg(&spectypes.SignedSSVMessage{
+			signedSSVMsg := &spectypes.SignedSSVMessage{
 				Signature:  signature,
 				OperatorID: unexpectedOperatorID,
 				Data:       encodedMsg,
-			})
+			}
+			encodedMsg, err = signedSSVMsg.Encode()
 			require.NoError(t, err)
 
 			topicID := commons.ValidatorTopicID(message.GetID().GetPubKey())
@@ -2295,11 +2297,12 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			signature := bytes.Repeat([]byte{1}, 256)
 			sig := [256]byte{}
 			copy(sig[:], signature)
-			encodedMsg, err = commons.EncodeSignedNetworkMsg(&spectypes.SignedSSVMessage{
+			signedSSVMsg := &spectypes.SignedSSVMessage{
 				Signature:  sig,
 				OperatorID: operatorID,
 				Data:       encodedMsg,
-			})
+			}
+			encodedMsg, err = signedSSVMsg.Encode()
 			require.NoError(t, err)
 
 			topicID := commons.ValidatorTopicID(message.GetID().GetPubKey())

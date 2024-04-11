@@ -59,11 +59,12 @@ func TestRSAUsage(t *testing.T) {
 	const operatorID = spectypes.OperatorID(0x12345678)
 	sig := [256]byte{}
 	copy(sig[:], signature)
-	encodedSignedSSVMessage, err := commons.EncodeSignedNetworkMsg(&spectypes.SignedSSVMessage{
+	signedSSVMsg := &spectypes.SignedSSVMessage{
 		Signature:  sig,
 		OperatorID: operatorID,
 		Data:       testMessage,
-	})
+	}
+	encodedSignedSSVMessage, err := signedSSVMsg.Encode()
 	require.NoError(t, err)
 
 	decodedMsg := &spectypes.SignedSSVMessage{}

@@ -232,7 +232,7 @@ func (mv *messageValidator) ValidatorForTopic(_ string) func(ctx context.Context
 // Depending on the outcome, it will return one of the pubsub validation results (Accept, Ignore, or Reject).
 func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 	if mv.selfAccept && peerID == mv.selfPID {
-		rawMsgPayload, _, _, err := commons.DecodeSignedSSVMessage(pmsg.Data)
+		rawMsgPayload, _, _, err := spectypes.DecodeSignedSSVMessage(pmsg.Data)
 		if err != nil {
 			mv.logger.Error("failed to decode signed ssv message", zap.Error(err))
 			return pubsub.ValidationReject
@@ -313,26 +313,24 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 
 	defer mv.metrics.ActiveMsgValidationDone(topic)
 
-	messageData := pMsg.GetData()
-	if len(messageData) == 0 {
+	encMessageData := pMsg.GetData()
+	if len(encMessageData) == 0 {
 		return nil, Descriptor{}, ErrPubSubMessageHasNoData
 	}
 
-	// TODO(Oleg): validate the msg is decoded as before
-	// DecodeSignedSSVMessage has an offset??
-	var signatureVerifier func() error
-	signedMsg := &spectypes.SignedSSVMessage{}
-	if err := signedMsg.Decode(messageData); err != nil {
+	messageData, operatorID, signature, err := spectypes.DecodeSignedSSVMessage(encMessageData)
+	if err != nil {
 		e := ErrMalformedSignedMessage
 		e.innerErr = err
 		return nil, Descriptor{}, e
 	}
+	if len(messageData) == 0 {
+		return nil, Descriptor{}, ErrDecodedPubSubMessageHasEmptyData
+	}
 
-	messageData = signedMsg.Data
-
-	signatureVerifier = func() error {
+	signatureVerifier := func() error {
 		mv.metrics.MessageValidationRSAVerifications()
-		return mv.verifySignature(signedMsg)
+		return mv.verifySignature(messageData, operatorID, signature)
 	}
 
 	mv.metrics.MessageSize(len(messageData))
@@ -343,6 +341,13 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 	if len(messageData) > maxEncodedMsgSize {
 		e := ErrPubSubDataTooBig
 		e.got = len(messageData)
+		return nil, Descriptor{}, e
+	}
+
+	signedMsg := &spectypes.SignedSSVMessage{}
+	if err := signedMsg.Decode(messageData); err != nil {
+		e := ErrMalformedSignedMessage
+		e.innerErr = err
 		return nil, Descriptor{}, e
 	}
 
