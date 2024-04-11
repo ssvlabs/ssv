@@ -33,7 +33,7 @@ func (s *SignatureVerifier) Verify(msg *spectypes.SignedSSVMessage, operators []
 
 			// Verify
 			if err := rsa.VerifyPKCS1v15(pk, crypto.SHA256, hash[:], msg.Signature[:]); err != nil {
-				return fmt.Errorf("could not verify signature: %w", err)
+				return err
 			}
 		}
 	}
