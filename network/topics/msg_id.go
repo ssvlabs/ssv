@@ -6,13 +6,12 @@ import (
 	"sync"
 	"time"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
-
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/network/commons"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/network/commons"
 )
 
 const (

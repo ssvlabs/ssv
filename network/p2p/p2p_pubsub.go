@@ -51,7 +51,7 @@ func (n *p2pNetwork) Peers(pk spectypes.ValidatorPK) ([]peer.ID, error) {
 }
 
 // Broadcast publishes the message to all peers in subnet
-func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
+func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedSSVMessage) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
@@ -60,26 +60,12 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
 		return fmt.Errorf("operator ID is not ready")
 	}
 
-	encodedMsg, err := commons.EncodeNetworkMsg(msg)
+	encodedMsg, err := msg.Encode()
 	if err != nil {
-		return fmt.Errorf("could not encode network message: %w", err)
+		return fmt.Errorf("could not encode signed ssv message: %w", err)
 	}
 
-	signature, err := n.operatorSigner.Sign(encodedMsg)
-	if err != nil {
-		return err
-	}
-
-	encodedMsg, err = commons.EncodeSignedNetworkMsg(&spectypes.SignedSSVMessage{
-		Signature:  signature,
-		OperatorID: n.operatorDataStore.GetOperatorID(),
-		Data:       encodedMsg,
-	})
-	if err != nil {
-		return fmt.Errorf("could not encode signed network message: %w", err)
-	}
-
-	vpk := msg.GetID().GetPubKey()
+	vpk := msgID.GetPubKey()
 	topics := commons.ValidatorTopicID(vpk)
 
 	for _, topic := range topics {

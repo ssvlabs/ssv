@@ -109,11 +109,14 @@ func testBroadcastedDecided(
 	config *qbft.Config,
 	identifier []byte,
 	runData *spectests.RunInstanceData,
+	operators []*spectypes.Operator,
 ) {
 	if runData.ExpectedDecidedState.BroadcastedDecided != nil {
 		// test broadcasted
-		broadcastedMsgs := config.GetNetwork().(*spectestingutils.TestingNetwork).BroadcastedMsgs
-		require.Greater(t, len(broadcastedMsgs), 0)
+		broadcastedSignedMsgs := config.GetNetwork().(*spectestingutils.TestingNetwork).BroadcastedMsgs
+		require.Greater(t, len(broadcastedSignedMsgs), 0)
+		require.NoError(t, spectestingutils.VerifyListOfSignedSSVMessages(broadcastedSignedMsgs, operators))
+		broadcastedMsgs := spectestingutils.ConvertBroadcastedMessagesToSSVMessages(broadcastedSignedMsgs)
 		found := false
 		for _, msg := range broadcastedMsgs {
 
@@ -157,7 +160,7 @@ func runInstanceWithData(t *testing.T, logger *zap.Logger, height specqbft.Heigh
 		lastErr = err
 	}
 
-	testBroadcastedDecided(t, contr.GetConfig().(*qbft.Config), contr.Identifier, runData)
+	testBroadcastedDecided(t, contr.GetConfig().(*qbft.Config), contr.Identifier, runData, contr.Share.Committee)
 
 	// test root
 	r, err := contr.GetRoot()

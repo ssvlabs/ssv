@@ -57,10 +57,10 @@ github.com/bits-and-blooms/bitset v1.7.0 h1:YjAGVd3XmtK9ktAbX8Zg2g2PwLIMjGREZJHl
 github.com/bits-and-blooms/bitset v1.7.0/go.mod h1:gIdJ4wp64HaoK2YrL1Q5/N7Y16edYb8uY+O0FJTyyDA=
 github.com/bloxapp/eth2-key-manager v1.4.0 h1:fwAW886z2mSUb/u4Kq/ln+wvSkIxLqEgxvE+x8gZiz8=
 github.com/bloxapp/eth2-key-manager v1.4.0/go.mod h1:m2DsvNCyLAAcgkN2JuroXUGpM61OeKSclmWuaRNW4Ss=
-github.com/bloxapp/ssv-spec v0.3.8-0.20240402020839-279753341c8e h1:csESgKUl4F8V7FVNQPIteZjjYb3JpYpLbYTxed2xvJM=
-github.com/bloxapp/ssv-spec v0.3.8-0.20240402020839-279753341c8e/go.mod h1:f9UvuHTb8N3PQpvA6fKYW/l7fzkfyX0Oj9qS34cSOVw=
-github.com/bloxapp/ssv-spec v0.3.8-0.20240402122349-6776b59bae82 h1:W5JuZbAkzSbAyP40zDNo3CPXTtnStmNNSKd4b4OBoME=
-github.com/bloxapp/ssv-spec v0.3.8-0.20240402122349-6776b59bae82/go.mod h1:f9UvuHTb8N3PQpvA6fKYW/l7fzkfyX0Oj9qS34cSOVw=
+github.com/bloxapp/ssv-spec v0.3.10-0.20240411135858-bc31719703ec h1:qJnfNadcKY5u1r3wn7j/854fsrRY23OltSmUb+n8fTI=
+github.com/bloxapp/ssv-spec v0.3.10-0.20240411135858-bc31719703ec/go.mod h1:f9UvuHTb8N3PQpvA6fKYW/l7fzkfyX0Oj9qS34cSOVw=
+github.com/bloxapp/ssv-spec v0.3.10-0.20240411140724-92f248784b8a h1:vSqsrhccCsitNM6MJf1kX16Ho7hDSKAjrCZRPDb1TVM=
+github.com/bloxapp/ssv-spec v0.3.10-0.20240411140724-92f248784b8a/go.mod h1:f9UvuHTb8N3PQpvA6fKYW/l7fzkfyX0Oj9qS34cSOVw=
 github.com/bradfitz/go-smtpd v0.0.0-20170404230938-deb6d6237625/go.mod h1:HYsPBTaaSFSlLx/70C2HPIMNZpVV8+vt/A+FMnYP11g=
 github.com/bradfitz/gomemcache v0.0.0-20170208213004-1952afaa557d/go.mod h1:PmM6Mmwb0LSuEubjR8N7PtNe1KxZLtOUHtbeikc5h60=
 github.com/btcsuite/btcd/btcec/v2 v2.3.2 h1:5n0X6hX0Zk+6omWcihdYvdAlGf2DfasC0GMf7DClJ3U=

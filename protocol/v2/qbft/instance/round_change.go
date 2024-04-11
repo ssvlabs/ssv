@@ -238,7 +238,7 @@ func isReceivedProposalJustification(
 	return nil
 }
 
-func validRoundChangeForDataNoVerification(
+func validRoundChangeForDataIgnoreSignature(
 	state *specqbft.State,
 	config qbft.IConfig,
 	signedMsg *specqbft.SignedMessage,
@@ -278,7 +278,7 @@ func validRoundChangeForDataNoVerification(
 		// validate prepare message justifications
 		prepareMsgs, _ := signedMsg.Message.GetRoundChangeJustifications() // no need to check error, checked on signedMsg.Message.Validate()
 		for _, pm := range prepareMsgs {
-			if err := validSignedPrepareForHeightRoundAndRootWithVerification(
+			if err := validSignedPrepareForHeightRoundAndRootVerifySignature(
 				config,
 				pm,
 				state.Height,
@@ -307,7 +307,7 @@ func validRoundChangeForDataNoVerification(
 	return nil
 }
 
-func validRoundChangeForDataWithVerification(
+func validRoundChangeForDataVerifySignature(
 	state *specqbft.State,
 	config qbft.IConfig,
 	signedMsg *specqbft.SignedMessage,
@@ -316,7 +316,7 @@ func validRoundChangeForDataWithVerification(
 	fullData []byte,
 ) error {
 
-	if err := validRoundChangeForDataNoVerification(state, config, signedMsg, height, round, fullData); err != nil {
+	if err := validRoundChangeForDataIgnoreSignature(state, config, signedMsg, height, round, fullData); err != nil {
 		return err
 	}
 
@@ -410,7 +410,7 @@ func CreateRoundChange(state *specqbft.State, config qbft.IConfig, newRound spec
 		DataRound:                round,
 		RoundChangeJustification: justificationsData,
 	}
-	sig, err := config.GetSigner().SignRoot(msg, spectypes.QBFTSignatureType, state.Share.SharePubKey)
+	sig, err := config.GetShareSigner().SignRoot(msg, spectypes.QBFTSignatureType, state.Share.SharePubKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed signing round change msg")
 	}

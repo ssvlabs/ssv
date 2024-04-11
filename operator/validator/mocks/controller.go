@@ -413,17 +413,17 @@ func (m *MockP2PNetwork) EXPECT() *MockP2PNetworkMockRecorder {
 }
 
 // Broadcast mocks base method.
-func (m *MockP2PNetwork) Broadcast(message *types.SSVMessage) error {
+func (m *MockP2PNetwork) Broadcast(msgID types.MessageID, message *types.SignedSSVMessage) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Broadcast", message)
+	ret := m.ctrl.Call(m, "Broadcast", msgID, message)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Broadcast indicates an expected call of Broadcast.
-func (mr *MockP2PNetworkMockRecorder) Broadcast(message interface{}) *gomock.Call {
+func (mr *MockP2PNetworkMockRecorder) Broadcast(msgID, message interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Broadcast", reflect.TypeOf((*MockP2PNetwork)(nil).Broadcast), message)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Broadcast", reflect.TypeOf((*MockP2PNetwork)(nil).Broadcast), msgID, message)
 }
 
 // Peers mocks base method.

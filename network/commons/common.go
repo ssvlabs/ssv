@@ -9,10 +9,11 @@ import (
 	"time"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/cespare/xxhash/v2"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/protocol"
+
+	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 )
 
 const (
@@ -119,8 +120,7 @@ func EncodeNetworkMsg(msg *spectypes.SSVMessage) ([]byte, error) {
 // DecodeNetworkMsg decodes network message
 func DecodeNetworkMsg(data []byte) (*spectypes.SSVMessage, error) {
 	msg := spectypes.SSVMessage{}
-	err := msg.Decode(data)
-	if err != nil {
+	if err := msg.Decode(data); err != nil {
 		return nil, err
 	}
 	return &msg, nil

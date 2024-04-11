@@ -9,8 +9,10 @@ import (
 )
 
 type signing interface {
-	// GetSigner returns a Signer instance
-	GetSigner() spectypes.SSVSigner
+	// GetShareSigner returns a ShareSigner instance
+	GetShareSigner() spectypes.ShareSigner
+	// GetOperatorSigner returns an operator signer instance
+	GetOperatorSigner() spectypes.OperatorSigner
 	// GetSignatureDomainType returns the Domain type used for signatures
 	GetSignatureDomainType() spectypes.DomainType
 }
@@ -32,7 +34,8 @@ type IConfig interface {
 }
 
 type Config struct {
-	Signer                spectypes.SSVSigner
+	ShareSigner           spectypes.ShareSigner
+	OperatorSigner        spectypes.OperatorSigner
 	SigningPK             []byte
 	Domain                spectypes.DomainType
 	ValueCheckF           specqbft.ProposedValueCheckF
@@ -43,9 +46,14 @@ type Config struct {
 	SignatureVerification bool
 }
 
-// GetSigner returns a Signer instance
-func (c *Config) GetSigner() spectypes.SSVSigner {
-	return c.Signer
+// GetShareSigner returns a ShareSigner instance
+func (c *Config) GetShareSigner() spectypes.ShareSigner {
+	return c.ShareSigner
+}
+
+// GetOperatorSigner returns a OperatorSigner instance
+func (c *Config) GetOperatorSigner() spectypes.OperatorSigner {
+	return c.OperatorSigner
 }
 
 // GetSigningPubKey returns the public key used to sign all QBFT messages

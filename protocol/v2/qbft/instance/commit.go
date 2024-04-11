@@ -110,7 +110,7 @@ func CreateCommit(state *specqbft.State, config qbft.IConfig, root [32]byte) (*s
 
 		Root: root,
 	}
-	sig, err := config.GetSigner().SignRoot(msg, spectypes.QBFTSignatureType, state.Share.SharePubKey)
+	sig, err := config.GetShareSigner().SignRoot(msg, spectypes.QBFTSignatureType, state.Share.SharePubKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed signing commit msg")
 	}
@@ -123,7 +123,7 @@ func CreateCommit(state *specqbft.State, config qbft.IConfig, root [32]byte) (*s
 	return signedMsg, nil
 }
 
-func baseCommitValidationNoVerification(
+func baseCommitValidationIgnoreSignature(
 	signedCommit *specqbft.SignedMessage,
 	height specqbft.Height,
 	operators []*spectypes.Operator,
@@ -146,14 +146,14 @@ func baseCommitValidationNoVerification(
 	return nil
 }
 
-func BaseCommitValidationWithVerification(
+func BaseCommitValidationVerifySignature(
 	config qbft.IConfig,
 	signedCommit *specqbft.SignedMessage,
 	height specqbft.Height,
 	operators []*spectypes.Operator,
 ) error {
 
-	if err := baseCommitValidationNoVerification(signedCommit, height, operators); err != nil {
+	if err := baseCommitValidationIgnoreSignature(signedCommit, height, operators); err != nil {
 		return err
 	}
 
@@ -173,7 +173,7 @@ func validateCommit(
 	proposedMsg *specqbft.SignedMessage,
 	operators []*spectypes.Operator,
 ) error {
-	if err := baseCommitValidationNoVerification(signedCommit, height, operators); err != nil {
+	if err := baseCommitValidationIgnoreSignature(signedCommit, height, operators); err != nil {
 		return err
 	}
 

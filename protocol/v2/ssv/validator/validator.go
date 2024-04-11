@@ -32,6 +32,7 @@ type Validator struct {
 	Network           specqbft.Network
 	Share             *types.SSVShare
 	Signer            spectypes.KeyManager
+	OperatorSigner    spectypes.OperatorSigner
 	SignatureVerifier spectypes.SignatureVerifier
 
 	Storage *storage.QBFTStores
@@ -62,6 +63,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		Storage:           options.Storage,
 		Share:             options.SSVShare,
 		Signer:            options.Signer,
+		OperatorSigner:    options.OperatorSigner,
 		SignatureVerifier: options.SignatureVerifier,
 		Queues:            make(map[spectypes.BeaconRole]queueContainer),
 		state:             uint32(NotStarted),
@@ -112,27 +114,9 @@ func (v *Validator) StartDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 	return dutyRunner.StartNewDuty(logger, duty)
 }
 
-//func (v *Validator) ProcessMessage(signedSSVMessage *types.SignedSSVMessage) error {
-//
-//	// Validate message
-//	if err := signedSSVMessage.Validate(); err != nil {
-//		return errors.Wrap(err, "invalid SignedSSVMessage")
-//	}
-//
-//	// Decode the nested SSVMessage
-//	msg := &types.SSVMessage{}
-//	if err := msg.Decode(signedSSVMessage.Data); err != nil {
-//		return errors.Wrap(err, "could not decode data into an SSVMessage")
-//	}
-//
-//	// Verify SignedSSVMessage's signature
-//	if err := v.SignatureVerifier.Verify(signedSSVMessage, v.Share.Committee); err != nil {
-//		return errors.Wrap(err, "SignedSSVMessage has an invalid signature")
-//	}
-//}
-
 // ProcessMessage processes Network Message of all types
 func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage) error {
+
 	// Validate message
 	if err := msg.SignedSSVMessage.Validate(); err != nil {
 		return errors.Wrap(err, "invalid SignedSSVMessage")
@@ -170,6 +154,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 		}
 
 		logger = logger.With(fields.Height(signedMsg.Message.Height))
+		// Process
 		return dutyRunner.ProcessConsensus(logger, signedMsg)
 	case spectypes.SSVPartialSignatureMsgType:
 		logger = trySetDutyID(logger, v.dutyIDs, messageID.GetRoleType())

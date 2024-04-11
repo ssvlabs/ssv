@@ -13,7 +13,7 @@ import (
 
 type OperatorPublicKey interface {
 	Encrypt(data []byte) ([]byte, error)
-	Verify(data []byte, signature []byte) error
+	Verify(data []byte, signature [256]byte) error
 	Base64() ([]byte, error)
 }
 
@@ -27,7 +27,7 @@ type OperatorPrivateKey interface {
 }
 
 type OperatorSigner interface {
-	Sign(data []byte) ([]byte, error)
+	Sign(data []byte) ([256]byte, error)
 	Public() OperatorPublicKey
 }
 
@@ -73,7 +73,7 @@ func (p *privateKey) Public() OperatorPublicKey {
 	return &publicKey{pubKey: &pubKey}
 }
 
-func (p *privateKey) Sign(data []byte) ([]byte, error) {
+func (p *privateKey) Sign(data []byte) ([256]byte, error) {
 	hash := sha256.Sum256(data)
 	return SignRSA(p, hash[:])
 }
@@ -114,11 +114,22 @@ func PublicKeyFromString(pubKeyString string) (OperatorPublicKey, error) {
 	}, nil
 }
 
+func PublicKeyFromBytes(pk []byte) (OperatorPublicKey, error) {
+	pubKey, err := rsaencryption.ConvertPemToPublicKey(pk)
+	if err != nil {
+		return nil, err
+	}
+
+	return &publicKey{
+		pubKey: pubKey,
+	}, nil
+}
+
 func (p *publicKey) Encrypt(data []byte) ([]byte, error) {
 	return EncryptRSA(p, data)
 }
 
-func (p *publicKey) Verify(data []byte, signature []byte) error {
+func (p *publicKey) Verify(data []byte, signature [256]byte) error {
 	return VerifyRSA(p, data, signature)
 }
 

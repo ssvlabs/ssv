@@ -83,7 +83,7 @@ func getRoundChangeJustification(state *specqbft.State, config qbft.IConfig, pre
 	prepareMsgs := prepareMsgContainer.MessagesForRound(state.LastPreparedRound)
 	ret := make([]*specqbft.SignedMessage, 0)
 	for _, msg := range prepareMsgs {
-		if err := validSignedPrepareForHeightRoundAndRootNoVerification(
+		if err := validSignedPrepareForHeightRoundAndRootIgnoreSignature(
 			msg,
 			state.Height,
 			state.LastPreparedRound,
@@ -103,7 +103,7 @@ func getRoundChangeJustification(state *specqbft.State, config qbft.IConfig, pre
 
 // validSignedPrepareForHeightRoundAndRoot known in dafny spec as validSignedPrepareForHeightRoundAndDigest
 // https://entethalliance.github.io/client-spec/qbft_spec.html#dfn-qbftspecification
-func validSignedPrepareForHeightRoundAndRootNoVerification(
+func validSignedPrepareForHeightRoundAndRootIgnoreSignature(
 	signedPrepare *specqbft.SignedMessage,
 	height specqbft.Height,
 	round specqbft.Round,
@@ -139,7 +139,7 @@ func validSignedPrepareForHeightRoundAndRootNoVerification(
 	return nil
 }
 
-func validSignedPrepareForHeightRoundAndRootWithVerification(
+func validSignedPrepareForHeightRoundAndRootVerifySignature(
 	config qbft.IConfig,
 	signedPrepare *specqbft.SignedMessage,
 	height specqbft.Height,
@@ -147,7 +147,7 @@ func validSignedPrepareForHeightRoundAndRootWithVerification(
 	root [32]byte,
 	operators []*spectypes.Operator) error {
 
-	if err := validSignedPrepareForHeightRoundAndRootNoVerification(signedPrepare, height, round, root, operators); err != nil {
+	if err := validSignedPrepareForHeightRoundAndRootIgnoreSignature(signedPrepare, height, round, root, operators); err != nil {
 		return err
 	}
 
@@ -181,7 +181,7 @@ func CreatePrepare(state *specqbft.State, config qbft.IConfig, newRound specqbft
 
 		Root: root,
 	}
-	sig, err := config.GetSigner().SignRoot(msg, spectypes.QBFTSignatureType, state.Share.SharePubKey)
+	sig, err := config.GetShareSigner().SignRoot(msg, spectypes.QBFTSignatureType, state.Share.SharePubKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed signing prepare msg")
 	}

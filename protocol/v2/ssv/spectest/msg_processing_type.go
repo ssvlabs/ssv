@@ -115,7 +115,10 @@ func (test *MsgProcessingSpecTest) compareOutputMsgs(t *testing.T, v *validator.
 	}
 
 	net := v.Network.(specssv.Network)
-	broadcastedMsgs := filterPartialSigs(net.(*spectestingutils.TestingNetwork).BroadcastedMsgs)
+	broadcastedSignedMsgs := net.(*spectestingutils.TestingNetwork).BroadcastedMsgs
+	require.NoError(t, spectestingutils.VerifyListOfSignedSSVMessages(broadcastedSignedMsgs, v.Share.Committee))
+	broadcastedMsgs := spectestingutils.ConvertBroadcastedMessagesToSSVMessages(broadcastedSignedMsgs)
+	broadcastedMsgs = filterPartialSigs(broadcastedMsgs)
 	require.Len(t, broadcastedMsgs, len(test.OutputMessages))
 	index := 0
 	for _, msg := range broadcastedMsgs {

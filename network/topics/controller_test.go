@@ -5,12 +5,13 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"math"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -467,20 +468,15 @@ func (m *DummyMessageValidator) ValidatePubsubMessage(ctx context.Context, p pee
 	return pubsub.ValidationAccept
 }
 
-func (m *DummyMessageValidator) ValidateSSVMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, validation.Descriptor, error) {
+func (m *DummyMessageValidator) ValidateSSVMessage(msg *queue.DecodedSSVMessage) (*queue.DecodedSSVMessage, validation.Descriptor, error) {
 	var descriptor validation.Descriptor
 
-	msg, err := queue.DecodeSSVMessage(ssvMessage)
-	if err != nil {
-		return nil, descriptor, err
-	}
-
-	validatorPK := ssvMessage.GetID().GetPubKey()
-	role := ssvMessage.GetID().GetRoleType()
+	validatorPK := msg.SSVMessage.GetID().GetPubKey()
+	role := msg.SSVMessage.GetID().GetRoleType()
 	descriptor.Role = role
 	descriptor.ValidatorPK = validatorPK
 
-	descriptor.SSVMessageType = ssvMessage.MsgType
+	descriptor.SSVMessageType = msg.SSVMessage.GetType()
 
 	return msg, descriptor, nil
 }

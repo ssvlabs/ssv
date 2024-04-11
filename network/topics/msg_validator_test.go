@@ -11,6 +11,13 @@ import (
 	"github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
+	"github.com/ethereum/go-ethereum/common"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
+	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zaptest"
+
 	"github.com/bloxapp/ssv/message/validation"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/networkconfig"
@@ -21,12 +28,6 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
-	"github.com/ethereum/go-ethereum/common"
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
-	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zaptest"
 )
 
 func TestMsgValidator(t *testing.T) {
@@ -85,7 +86,10 @@ func TestMsgValidator(t *testing.T) {
 		signature, err := rsa.SignPKCS1v15(nil, operatorPrivateKey, crypto.SHA256, hash[:])
 		require.NoError(t, err)
 
-		packedPubSubMsgPayload := commons.EncodeSignedSSVMessage(encodedMsg, operatorId, signature)
+		sig := [256]byte{}
+		copy(sig[:], signature)
+
+		packedPubSubMsgPayload := spectypes.EncodeSignedSSVMessage(encodedMsg, operatorId, sig)
 		topicID := commons.ValidatorTopicID(ssvMsg.GetID().GetPubKey())
 
 		pmsg := &pubsub.Message{
