@@ -87,7 +87,7 @@ func (b *BboltDB) Begin() basedb.Txn {
 
 // BeginRead creates a read-only transaction.
 func (b *BboltDB) BeginRead() basedb.ReadTxn {
-	tx, err := b.db.Begin(false)
+	tx, err := b.db.Begin(true)
 	if err != nil {
 		return nil
 	}
