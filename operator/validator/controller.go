@@ -70,6 +70,7 @@ type ControllerOptions struct {
 	Exporter                   bool `yaml:"Exporter" env:"EXPORTER" env-default:"false" env-description:""`
 	BuilderProposals           bool `yaml:"BuilderProposals" env:"BUILDER_PROPOSALS" env-default:"false" env-description:"Use external builders to produce blocks"`
 	KeyManager                 spectypes.KeyManager
+	OperatorSigner             spectypes.OperatorSigner
 	OperatorDataStore          operatordatastore.OperatorDataStore
 	RegistryStorage            nodestorage.Storage
 	RecipientsStorage          Recipients
@@ -150,8 +151,9 @@ type controller struct {
 	recipientsStorage Recipients
 	ibftStorageMap    *storage.QBFTStores
 
-	beacon     beaconprotocol.BeaconNode
-	keyManager spectypes.KeyManager
+	beacon         beaconprotocol.BeaconNode
+	keyManager     spectypes.KeyManager
+	operatorSigner spectypes.OperatorSigner
 
 	operatorDataStore operatordatastore.OperatorDataStore
 
@@ -199,6 +201,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		Storage:       options.StorageMap,
 		//Share:   nil,  // set per validator
 		Signer:            options.KeyManager,
+		OperatorSigner:    options.OperatorSigner,
 		SignatureVerifier: &validator.SignatureVerifier{},
 		//Mode: validator.ModeRW // set per validator
 		DutyRunners:       nil, // set per validator
@@ -236,6 +239,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		beacon:            options.Beacon,
 		operatorDataStore: options.OperatorDataStore,
 		keyManager:        options.KeyManager,
+		operatorSigner:    options.OperatorSigner,
 		network:           options.Network,
 
 		validatorsMap:    options.ValidatorsMap,
