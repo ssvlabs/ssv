@@ -79,7 +79,11 @@ func (p *privateKey) Sign(data []byte) ([256]byte, error) {
 	if err != nil {
 		return [256]byte{}, err
 	}
-	return signature, nil
+
+	var sig [256]byte
+	copy(sig[:], signature)
+
+	return sig, nil
 }
 
 func (p *privateKey) Decrypt(data []byte) ([]byte, error) {
@@ -134,7 +138,7 @@ func (p *publicKey) Encrypt(data []byte) ([]byte, error) {
 }
 
 func (p *publicKey) Verify(data []byte, signature [256]byte) error {
-	return VerifyRSA(p, data, signature)
+	return VerifyRSA(p, data, signature[:])
 }
 
 func (p *publicKey) Base64() ([]byte, error) {
