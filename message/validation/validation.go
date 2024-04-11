@@ -344,11 +344,10 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 		return nil, Descriptor{}, e
 	}
 
-	signedMsg := &spectypes.SignedSSVMessage{}
-	if err := signedMsg.Decode(messageData); err != nil {
-		e := ErrMalformedSignedMessage
-		e.innerErr = err
-		return nil, Descriptor{}, e
+	signedMsg := &spectypes.SignedSSVMessage{
+		Signature:  signature,
+		OperatorID: operatorID,
+		Data:       messageData,
 	}
 
 	msg, err := queue.DecodeSignedSSVMessage(signedMsg)
