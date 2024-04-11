@@ -26,6 +26,7 @@ import (
 	"github.com/bloxapp/ssv/network"
 	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/duties"
+	"github.com/bloxapp/ssv/operator/keys"
 	nodestorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validatorsmap"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
@@ -71,6 +72,7 @@ type ControllerOptions struct {
 	BuilderProposals           bool `yaml:"BuilderProposals" env:"BUILDER_PROPOSALS" env-default:"false" env-description:"Use external builders to produce blocks"`
 	KeyManager                 spectypes.KeyManager
 	OperatorSigner             spectypes.OperatorSigner
+	OperatorPubKey             keys.OperatorPublicKey
 	OperatorDataStore          operatordatastore.OperatorDataStore
 	RegistryStorage            nodestorage.Storage
 	RecipientsStorage          Recipients
@@ -194,6 +196,10 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		Buffer:       options.QueueBufferSize,
 	}
 
+	sigVerifier := &validator.SignatureVerifier{
+		OperatorPubKey: options.OperatorPubKey,
+	}
+
 	validatorOptions := validator.Options{ //TODO add vars
 		Network:       options.Network,
 		Beacon:        options.Beacon,
@@ -202,7 +208,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		//Share:   nil,  // set per validator
 		Signer:            options.KeyManager,
 		OperatorSigner:    options.OperatorSigner,
-		SignatureVerifier: &validator.SignatureVerifier{},
+		SignatureVerifier: sigVerifier,
 		//Mode: validator.ModeRW // set per validator
 		DutyRunners:       nil, // set per validator
 		NewDecidedHandler: options.NewDecidedHandler,

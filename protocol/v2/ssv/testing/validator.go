@@ -30,7 +30,7 @@ var BaseValidator = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet
 			},
 			Signer:            spectestingutils.NewTestingKeyManager(),
 			OperatorSigner:    spectestingutils.NewTestingOperatorSigner(keySet, 1),
-			SignatureVerifier: &validator.SignatureVerifier{},
+			SignatureVerifier: spectestingutils.NewTestingVerifier(),
 			DutyRunners: map[spectypes.BeaconRole]runner.Runner{
 				spectypes.BNRoleAttester:                  AttesterRunner(logger, keySet),
 				spectypes.BNRoleProposer:                  ProposerRunner(logger, keySet),
