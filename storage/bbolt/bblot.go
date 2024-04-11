@@ -179,9 +179,9 @@ func (b *BboltDB) GetAll(prefix []byte, handler func(int, basedb.Obj) error) err
 func (b *BboltDB) CountPrefix(prefix []byte) (int64, error) {
 	var res int64
 	err := b.db.View(func(txn *bbolt.Tx) error {
-		bu, err := txn.CreateBucketIfNotExists(prefix)
-		if err != nil {
-			return err
+		bu := txn.Bucket(prefix)
+		if bu != nil {
+			return nil
 		}
 		_ = bu.ForEach(func(k, v []byte) error {
 			res++
@@ -267,12 +267,9 @@ func (b *BboltDB) Update(fn func(basedb.Txn) error) error {
 func (b *BboltDB) allGetter(prefix []byte, handler func(int, basedb.Obj) error) func(txn *bbolt.Tx) error {
 	return func(txn *bbolt.Tx) error {
 		rawKeys := b.listRawKeys(prefix, txn)
-		bu, err := txn.CreateBucketIfNotExists(prefix)
-		if err != nil {
-			return err
-		}
+		bu := txn.Bucket(prefix)
 		if bu == nil {
-			return fmt.Errorf("bucket not found")
+			return nil
 		}
 		for i, k := range rawKeys {
 			trimmedResKey := bytes.TrimPrefix(k, prefix)
@@ -295,9 +292,9 @@ func (b *BboltDB) allGetter(prefix []byte, handler func(int, basedb.Obj) error) 
 
 func (b *BboltDB) manyGetter(prefix []byte, keys [][]byte, iterator func(basedb.Obj) error) func(txn *bbolt.Tx) error {
 	return func(txn *bbolt.Tx) error {
-		bu, err := txn.CreateBucketIfNotExists(prefix)
-		if err != nil {
-			return err
+		bu := txn.Bucket(prefix)
+		if bu == nil {
+			return nil
 		}
 
 		var value, cp []byte
