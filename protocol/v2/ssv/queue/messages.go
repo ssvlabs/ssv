@@ -42,7 +42,7 @@ func DecodeSSVMessage(m *spectypes.SSVMessage) (*DecodedSSVMessage, error) {
 func DecodeSignedSSVMessage(sm *spectypes.SignedSSVMessage) (*DecodedSSVMessage, error) {
 	m, err := commons.DecodeNetworkMsg(sm.GetData())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not decode data into an SSVMessage: %w", err)
 	}
 
 	d, err := DecodeSSVMessage(m)

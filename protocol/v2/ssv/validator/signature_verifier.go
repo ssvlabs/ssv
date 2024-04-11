@@ -19,11 +19,11 @@ func (s *SignatureVerifier) Verify(msg *spectypes.SignedSSVMessage, operators []
 		// Find operator
 		if op.OperatorID == msg.GetOperatorID() {
 
+			// Get public key
 			parsedPk, err := x509.ParsePKIXPublicKey(op.SSVOperatorPubKey)
 			if err != nil {
 				return fmt.Errorf("could not parse signer public key: %w", err)
 			}
-
 			pk, ok := parsedPk.(*rsa.PublicKey)
 			if !ok {
 				return fmt.Errorf("could not parse signer public key")
@@ -32,11 +32,9 @@ func (s *SignatureVerifier) Verify(msg *spectypes.SignedSSVMessage, operators []
 			hash := sha256.Sum256(msg.Data)
 
 			// Verify
-			if err := rsa.VerifyPKCS1v15(pk, crypto.SHA256, hash[:], msg.Signature[:]); err != nil {
-				return err
-			}
+			return rsa.VerifyPKCS1v15(pk, crypto.SHA256, hash[:], msg.Signature[:])
 		}
 	}
 
-	return nil
+	return fmt.Errorf("unknown signer")
 }
