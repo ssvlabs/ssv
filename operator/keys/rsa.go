@@ -23,7 +23,7 @@ func SignRSA(priv *privateKey, data []byte) ([256]byte, error) {
 		return [256]byte{}, err
 	}
 
-	sig := [256]byte{}
+	var sig [256]byte
 	copy(sig[:], signature)
 
 	return sig, nil

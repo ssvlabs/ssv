@@ -75,7 +75,11 @@ func (p *privateKey) Public() OperatorPublicKey {
 
 func (p *privateKey) Sign(data []byte) ([256]byte, error) {
 	hash := sha256.Sum256(data)
-	return SignRSA(p, hash[:])
+	signature, err := SignRSA(p, hash[:])
+	if err != nil {
+		return [256]byte{}, err
+	}
+	return signature, nil
 }
 
 func (p *privateKey) Decrypt(data []byte) ([]byte, error) {
