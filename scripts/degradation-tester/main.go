@@ -6,16 +6,13 @@ import (
 	"fmt"
 	"os"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 )
 
-var opThresholds map[string]float64
-var allocThresholds map[string]float64
-
 func main() {
+
 	if len(os.Args) < 3 {
 		fmt.Println("Usage: degradation-tester <config_filename> <results_filename>")
 		os.Exit(1)
@@ -39,17 +36,100 @@ func main() {
 		_ = file.Close()
 	}()
 
-	checkResult := checkFile(file, cfg)
+	scenario := DetermineScenarioType(file)
+	var checkResult *DegradationCheckResult
+	switch scenario {
+	case CompactScenarioType:
+		checkResult = checkFileCompact(file, cfg)
+		break
+	case FullScenarioType:
+		checkResult = checkFileFull(file, cfg)
+		break
+	case UnknownScenarioType:
+		panic("Unknown format of becnhstat file")
+	}
 
 	if checkResult.TotalIssues > 0 {
-		for _, issue := range checkResult.Issues[SectionTypeBop] {
-			fmt.Println(issue)
+		for section, issues := range checkResult.Issues {
+			for _, issue := range issues {
+				fmt.Printf("❌ Test %s / %s in section %s exceeds thereshold of %.1f%%, with diff %.8f%%!\n", checkResult.PkgName, issue.TestName, section, issue.Threshold, issue.Diff)
+			}
 		}
+
 		os.Exit(1)
 	}
 }
 
-func checkFile(file *os.File, cfg *Config) *DegradationCheckResult {
+func DetermineScenarioType(file *os.File) int {
+	scanner := bufio.NewScanner(file)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		if strings.Contains(line, "old.txt") {
+			if strings.Contains(line, "new.txt") {
+				return CompactScenarioType
+			}
+			return FullScenarioType
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		fmt.Printf("Error reading results file: %v\n", err)
+	}
+
+	return UnknownScenarioType
+}
+
+func checkFileCompact(file *os.File, cfg *Config) *DegradationCheckResult {
+	var currentSection string
+	var currentPkgPath string
+
+	oldRes := NewBenchmarkResult(currentPkgPath)
+	newRes := NewBenchmarkResult(currentPkgPath)
+
+	scanner := bufio.NewScanner(file)
+
+	ignoreBErrorsRegexp := regexp.MustCompile(`B\d+:`)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		switch {
+		case line == "",
+			ignoreBErrorsRegexp.MatchString(line),
+			strings.HasPrefix(line, "pkg:"),
+			strings.HasPrefix(line, "cpu:"),
+			strings.HasPrefix(line, "goarch:"),
+			strings.HasPrefix(line, "goos:"),
+			strings.Contains(line, "old.txt") && strings.Contains(line, "new.txt"),
+			strings.Contains(line, "geomean"):
+			continue
+		case strings.Contains(line, "sec/op"):
+			currentSection = "sec/op"
+			continue
+		case strings.Contains(line, "B/op"):
+			currentSection = "B/op"
+			continue
+		case strings.Contains(line, "allocs/op"):
+			currentSection = "allocs/op"
+			continue
+		}
+
+		err := handleDoubleResultRow(line, currentSection, oldRes, newRes)
+		if err != nil {
+			panic(err)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		fmt.Printf("Error reading results file: %v\n", err)
+	}
+
+	return CheckDegradation(cfg, oldRes, newRes)
+}
+
+func checkFileFull(file *os.File, cfg *Config) *DegradationCheckResult {
 	var currentSection string
 	var currentPkgPath string
 
@@ -99,7 +179,7 @@ func checkFile(file *os.File, cfg *Config) *DegradationCheckResult {
 			continue
 		}
 
-		err := handleResultRow(line, currentSection, curRes)
+		err := handleSingleResultRow(line, currentSection, curRes)
 		if err != nil {
 			panic(err)
 		}
@@ -112,31 +192,33 @@ func checkFile(file *os.File, cfg *Config) *DegradationCheckResult {
 	return CheckDegradation(cfg, oldRes, newRes)
 }
 
-func handleResultRow(
+func handleSingleResultRow(
 	line string,
 	section string,
 	results *BenchmarkResult,
 ) error {
 	row := MustParseCsvLine(line)
+	return results.MustFillTestResult(section, row...)
+}
 
-	if len(row) != 3 {
-		return fmt.Errorf("invalid row: %v", row)
+func handleDoubleResultRow(
+	line string,
+	section string,
+	oldRes *BenchmarkResult,
+	newRes *BenchmarkResult,
+) error {
+	row := MustParseCsvLine(line)
+	if err := oldRes.MustFillTestResult(section, row...); err != nil {
+		return err
 	}
 
-	normalizedTestName := normalizeTestName(row[0])
-	valueStr := row[1]
-	value, err := strconv.ParseFloat(strings.TrimSuffix(valueStr, "%"), 64)
-
-	if err != nil {
-		return fmt.Errorf("⚠️ Error parsing value %s: %v\n", valueStr, err)
+	newResRow := make([]string, 3)
+	newResRow[0] = row[0]
+	newResRow[1] = row[3]
+	newResRow[2] = row[4]
+	if err := newRes.MustFillTestResult(section, newResRow...); err != nil {
+		return err
 	}
-
-	results.Res[section][normalizedTestName] = &TestResult{
-		Name:  normalizedTestName,
-		Value: value,
-		CI:    row[2],
-	}
-
 	return nil
 }
 
@@ -151,16 +233,16 @@ func loadConfig(filename string) (*Config, error) {
 		return nil, fmt.Errorf("Error parsing config file: %v\n", err)
 	}
 
-	opThresholds = make(map[string]float64)
-	allocThresholds = make(map[string]float64)
+	config.opThresholds = make(map[string]float64)
+	config.allocThresholds = make(map[string]float64)
 
 	for _, pkg := range config.Packages {
 		for _, testCase := range pkg.Tests {
 			if testCase.OpDelta > 0 {
-				opThresholds[testCase.Name] = testCase.OpDelta
+				config.opThresholds[testCase.Name] = testCase.OpDelta
 			}
 			if testCase.AllocDelta > 0 {
-				allocThresholds[testCase.Name] = testCase.AllocDelta
+				config.allocThresholds[testCase.Name] = testCase.AllocDelta
 			}
 		}
 	}
@@ -179,17 +261,17 @@ func getThresholdForTestCase(
 ) float64 {
 	switch section {
 	case "sec/op":
-		if threshold, exists := opThresholds[testName]; exists {
+		if threshold, exists := config.opThresholds[testName]; exists {
 			return threshold
 		}
 		return config.DefaultSecOpDelta
 	case "B/op":
-		if threshold, exists := opThresholds[testName]; exists {
+		if threshold, exists := config.opThresholds[testName]; exists {
 			return threshold
 		}
 		return config.DefaultBOpDelta
 	case "allocs/op":
-		if threshold, exists := allocThresholds[testName]; exists {
+		if threshold, exists := config.allocThresholds[testName]; exists {
 			return threshold
 		}
 		return config.DefaultAllocOpDelta
@@ -203,7 +285,7 @@ func CheckDegradation(
 	oldRes *BenchmarkResult,
 	newRes *BenchmarkResult,
 ) *DegradationCheckResult {
-	checkRes := NewDegradationCheckResult(oldRes.Pkg)
+	checkRes := NewDegradationCheckResult(newRes.Pkg)
 	for section, oldTests := range oldRes.Res {
 		newTests, exists := newRes.Res[section]
 		if !exists {

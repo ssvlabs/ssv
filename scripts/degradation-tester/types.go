@@ -1,12 +1,19 @@
 package main
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+	"strconv"
+	"strings"
+)
 
 type Config struct {
 	DefaultSecOpDelta   float64                  `yaml:"DefaultSecOpDelta"`
 	DefaultBOpDelta     float64                  `yaml:"DefaultBOpDelta"`
 	DefaultAllocOpDelta float64                  `yaml:"DefaultAllocOpDelta"`
 	Packages            []BenchmarkingTestConfig `yaml:"Packages"`
+	opThresholds        map[string]float64
+	allocThresholds     map[string]float64
 }
 
 type BenchmarkingTestConfig struct {
@@ -38,8 +45,8 @@ type BenchmarkResult struct {
 	Res map[string]map[string]*TestResult `json:"res"`
 }
 
-func (r *BenchmarkResult) MustMarshalJsonIndent() []byte {
-	jsonBytes, err := json.MarshalIndent(r, "", "	")
+func (br *BenchmarkResult) MustMarshalJsonIndent() []byte {
+	jsonBytes, err := json.MarshalIndent(br, "", "	")
 	if err != nil {
 		panic(err)
 	}
@@ -51,7 +58,6 @@ func NewBenchmarkResult(pkg string) *BenchmarkResult {
 		Pkg: pkg,
 		Res: make(map[string]map[string]*TestResult),
 	}
-	r.Res = make(map[string]map[string]*TestResult)
 	r.Res[SectionTypeSecOp] = make(map[string]*TestResult)
 	r.Res[SectionTypeBop] = make(map[string]*TestResult)
 	r.Res[SectionTypeAllocOp] = make(map[string]*TestResult)
@@ -77,4 +83,27 @@ func NewDegradationCheckResult(pkgName string) *DegradationCheckResult {
 	}
 	dc.Issues = make(map[string][]*DegradationIssue)
 	return dc
+}
+
+const (
+	FullScenarioType    = iota
+	CompactScenarioType = iota
+	UnknownScenarioType = iota
+)
+
+func (br *BenchmarkResult) MustFillTestResult(section string, row ...string) error {
+	normalizedTestName := normalizeTestName(row[0])
+	valueStr := row[1]
+	value, err := strconv.ParseFloat(strings.TrimSuffix(valueStr, "%"), 64)
+
+	if err != nil {
+		return fmt.Errorf("⚠️ Error parsing value %s: %v\n", valueStr, err)
+	}
+
+	br.Res[section][normalizedTestName] = &TestResult{
+		Name:  normalizedTestName,
+		Value: value,
+		CI:    row[2],
+	}
+	return nil
 }
