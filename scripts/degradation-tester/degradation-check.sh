@@ -17,7 +17,7 @@ for pkgPath in "${packagePaths[@]}"; do
 
 
   # count should be at least 10. Ideally 20
-  go test -bench=. -count=10 -benchmem "$pkgPath" | tee "$outputFile"
+  go test -bench=. -count=16 -benchmem "$pkgPath" | tee "$outputFile"
 
   benchstat -format csv "$oldBenchmarks" "$outputFile" | tee "${benchStatFile}"
 

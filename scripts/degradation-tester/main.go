@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"encoding/csv"
 	"fmt"
-	"math"
 	"os"
 	"regexp"
 	"strconv"
@@ -16,23 +15,6 @@ import (
 var opThresholds map[string]float64
 var allocThresholds map[string]float64
 
-type Config struct {
-	DefaultOpDelta    float64                  `yaml:"DefaultOpDelta"`
-	DefaultAllocDelta float64                  `yaml:"DefaultAllocDelta"`
-	Packages          []BenchmarkingTestConfig `yaml:"Packages"`
-}
-
-type BenchmarkingTestConfig struct {
-	Path  string     `yaml:"Path"`
-	Tests []TestCase `yaml:"Tests"`
-}
-
-type TestCase struct {
-	Name       string  `yaml:"Name"`
-	OpDelta    float64 `yaml:"OpDelta"`
-	AllocDelta float64 `yaml:"AllocDelta"`
-}
-
 func main() {
 	if len(os.Args) < 3 {
 		fmt.Println("Usage: degradation-tester <config_filename> <results_filename>")
@@ -42,7 +24,7 @@ func main() {
 	configFilename := os.Args[1]
 	resultsFilename := os.Args[2]
 
-	config, err := loadConfig(configFilename)
+	cfg, err := loadConfig(configFilename)
 	if err != nil {
 		fmt.Printf("Error loading conifg: %v", err)
 		os.Exit(1)
@@ -53,24 +35,59 @@ func main() {
 		fmt.Printf("Error opening results file: %v", err)
 		os.Exit(1)
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
-	totalErrors := checkFile(file, config)
+	checkResult := checkFile(file, cfg)
 
-	if totalErrors > 0 {
+	if checkResult.TotalIssues > 0 {
+		for _, issue := range checkResult.Issues[SectionTypeBop] {
+			fmt.Println(issue)
+		}
 		os.Exit(1)
 	}
 }
 
-func checkFile(file *os.File, config *Config) int {
+func checkFile(file *os.File, cfg *Config) *DegradationCheckResult {
 	var currentSection string
+	var currentPkgPath string
+
+	var oldRes, newRes, curRes *BenchmarkResult
 
 	scanner := bufio.NewScanner(file)
-	totalErrors := 0
+
+	ignoreBErrorsRegexp := regexp.MustCompile(`B\d+:`)
 	for scanner.Scan() {
 		line := scanner.Text()
 
 		switch {
+		case line == "",
+			ignoreBErrorsRegexp.MatchString(line),
+			strings.HasPrefix(line, "pkg:"),
+			strings.HasPrefix(line, "cpu:"),
+			strings.HasPrefix(line, "goarch:"),
+			strings.HasPrefix(line, "goos:"),
+			strings.Contains(line, "geomean"):
+			continue
+		case strings.Contains(line, "old.txt"):
+			if oldRes != nil {
+				continue
+			}
+			row := MustParseCsvLine(line)
+			currentPkgPath = row[1]
+			oldRes = NewBenchmarkResult(currentPkgPath)
+			curRes = oldRes
+			continue
+		case strings.Contains(line, "new.txt"):
+			if newRes != nil {
+				continue
+			}
+			row := MustParseCsvLine(line)
+			currentPkgPath = row[1]
+			newRes = NewBenchmarkResult(currentPkgPath)
+			curRes = newRes
+			continue
 		case strings.Contains(line, "sec/op"):
 			currentSection = "sec/op"
 			continue
@@ -81,71 +98,46 @@ func checkFile(file *os.File, config *Config) int {
 			currentSection = "allocs/op"
 			continue
 		}
-		if currentSection == "B/op" {
-			continue
+
+		err := handleResultRow(line, currentSection, curRes)
+		if err != nil {
+			panic(err)
 		}
-		totalErrors += checkLine(config, line, currentSection)
 	}
 
 	if err := scanner.Err(); err != nil {
 		fmt.Printf("Error reading results file: %v\n", err)
 	}
 
-	return totalErrors
+	return CheckDegradation(cfg, oldRes, newRes)
 }
 
-func checkLine(
-	config *Config,
+func handleResultRow(
 	line string,
 	section string,
-) int {
-	if line == "" {
-		return 0
-	}
-	csvRowReader := csv.NewReader(strings.NewReader(line))
-	csvRowReader.Comment = '#'
-	csvRowReader.Comma = ','
+	results *BenchmarkResult,
+) error {
+	row := MustParseCsvLine(line)
 
-	row, err := csvRowReader.Read()
-	if err != nil {
-		fmt.Printf("failed parsing CSV line %s with erorr: %v\n", line, err)
-		os.Exit(1)
-	}
-
-	if len(row) != 7 {
-		// ignore all except the becnhmark result lines with exactly 7 columns
-		return 0
-	}
-
-	// The "geomean" represents a statistical summary (geometric mean) of multiple test results,
-	// not an individual test result, hence we should just skip it
-	if row[0] == "geomean" {
-		return 0
+	if len(row) != 3 {
+		return fmt.Errorf("invalid row: %v", row)
 	}
 
 	normalizedTestName := normalizeTestName(row[0])
-	oldChangeStr := row[2]
-	oldChange, err := strconv.ParseFloat(strings.TrimSuffix(oldChangeStr, "%"), 64)
+	valueStr := row[1]
+	value, err := strconv.ParseFloat(strings.TrimSuffix(valueStr, "%"), 64)
+
 	if err != nil {
-		fmt.Printf("⚠️ Error parsing float: %v\n", err)
-		return 1
+		return fmt.Errorf("⚠️ Error parsing value %s: %v\n", valueStr, err)
 	}
 
-	newChangeStr := row[4]
-	newChange, err := strconv.ParseFloat(strings.TrimSuffix(newChangeStr, "%"), 64)
-	if err != nil {
-		fmt.Printf("⚠️ Error parsing float: %v\n", err)
-		return 1
+	results.Res[section][normalizedTestName] = &TestResult{
+		Name:  normalizedTestName,
+		Value: value,
+		CI:    row[2],
 	}
 
-	threshold := getThresholdForTestCase(config, normalizedTestName, section)
-
-	if math.Abs(oldChange-newChange) > threshold {
-		fmt.Printf("❌ Change in section %s for test %s exceeds threshold: %s\n", section, normalizedTestName, newChangeStr)
-		return 1
-	}
-
-	return 0
+	return nil
 }
 
 func loadConfig(filename string) (*Config, error) {
@@ -190,13 +182,75 @@ func getThresholdForTestCase(
 		if threshold, exists := opThresholds[testName]; exists {
 			return threshold
 		}
-		return config.DefaultOpDelta
+		return config.DefaultSecOpDelta
+	case "B/op":
+		if threshold, exists := opThresholds[testName]; exists {
+			return threshold
+		}
+		return config.DefaultBOpDelta
 	case "allocs/op":
 		if threshold, exists := allocThresholds[testName]; exists {
 			return threshold
 		}
-		return config.DefaultAllocDelta
+		return config.DefaultAllocOpDelta
 	default:
 		return 0.0
 	}
+}
+
+func CheckDegradation(
+	cfg *Config,
+	oldRes *BenchmarkResult,
+	newRes *BenchmarkResult,
+) *DegradationCheckResult {
+	checkRes := NewDegradationCheckResult(oldRes.Pkg)
+	for section, oldTests := range oldRes.Res {
+		newTests, exists := newRes.Res[section]
+		if !exists {
+			panic(fmt.Sprintf("❌ Section %s not found in new benchmarks of pkg %s. Please manualy update the benchmarks!\n", section, newRes.Pkg))
+		}
+
+		for testName, oldTest := range oldTests {
+			newTest, exists := newTests[testName]
+			if !exists {
+				panic(fmt.Sprintf("❌ Test %s not found in new benchmarks of pkg %s. Please manualy update the benchmarks!\n", testName, newRes.Pkg))
+			}
+
+			threshold := getThresholdForTestCase(cfg, testName, section)
+
+			a := newTest.Value
+			b := oldTest.Value
+
+			// Floats comparison. Swap values if `a` is greater than `b`.
+			if a-b > 1e-6 {
+				a, b = b, a
+			}
+
+			// Calculate the absolute change in percentage
+			absChange := (b - a) / a * 100.0
+
+			if absChange > threshold {
+				checkRes.TotalIssues++
+				checkRes.Issues[section] = append(checkRes.Issues[section], &DegradationIssue{
+					TestName:  testName,
+					Diff:      absChange,
+					Threshold: threshold,
+				})
+			}
+		}
+	}
+	return checkRes
+}
+
+func MustParseCsvLine(line string) []string {
+	csvRowReader := csv.NewReader(strings.NewReader(line))
+	csvRowReader.Comment = '#'
+	csvRowReader.Comma = ','
+
+	row, err := csvRowReader.Read()
+	if err != nil {
+		panic(fmt.Sprintf("failed parsing CSV line %s with erorr: %v\n", line, err))
+	}
+
+	return row
 }

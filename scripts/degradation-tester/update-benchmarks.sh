@@ -10,7 +10,7 @@ for pkgPath in "${packagePaths[@]}"; do
     packageBenchName=$(echo "$pkgPath" | sed 's/\.\///g; s/\//_/g')
     benchmarksPath="${benchmarksResults}/${packageBenchName}_benchmarks_old.txt"
 
-    go test -bench=. -count=10 -benchmem "$pkgPath" | tee "$benchmarksPath"
+    go test -bench=. -count=16 -benchmem "$pkgPath" | tee "$benchmarksPath"
 
     echo "✅ Benchmarks updated for ${packageName} package."
 done
