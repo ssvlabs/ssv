@@ -2,8 +2,11 @@ package storage
 
 import (
 	"encoding/binary"
+	"fmt"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -17,6 +20,7 @@ import (
 const (
 	highestInstanceKey = "highest_instance"
 	instanceKey        = "instance"
+	participantsKey    = "participants"
 )
 
 var (
@@ -150,6 +154,45 @@ func (i *ibftStorage) CleanAllInstances(logger *zap.Logger, msgID []byte) error 
 	return nil
 }
 
+func (i *ibftStorage) SaveParticipants(identifier spectypes.MessageID, slot phase0.Slot, operators []spectypes.OperatorID) error {
+	if err := i.save(encodeOperators(operators), participantsKey, identifier[:], uInt64ToByteSlice(uint64(slot))); err != nil {
+		return fmt.Errorf("could not save participants: %w", err)
+	}
+
+	return nil
+}
+
+func (i *ibftStorage) GetParticipantsInRange(identifier spectypes.MessageID, from, to phase0.Slot) ([]qbftstorage.ParticipantsRangeEntry, error) {
+	participantsRange := make([]qbftstorage.ParticipantsRangeEntry, 0)
+
+	for slot := from; slot <= to; slot++ {
+		participants, err := i.GetParticipants(identifier, slot)
+		if err != nil {
+			return nil, errors.Wrap(err, "failed to get instance")
+		}
+
+		participantsRange = append(participantsRange, qbftstorage.ParticipantsRangeEntry{
+			Slot:       slot,
+			Operators:  participants,
+			Identifier: identifier,
+		})
+	}
+
+	return participantsRange, nil
+}
+
+func (i *ibftStorage) GetParticipants(identifier spectypes.MessageID, slot phase0.Slot) ([]spectypes.OperatorID, error) {
+	val, found, err := i.get(participantsKey, identifier[:], uInt64ToByteSlice(uint64(slot)))
+	if !found {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return decodeOperators(val), nil
+}
+
 func (i *ibftStorage) save(value []byte, id string, pk []byte, keyParams ...[]byte) error {
 	prefix := append(i.prefix, pk...)
 	key := i.key(id, keyParams...)
@@ -187,4 +230,26 @@ func uInt64ToByteSlice(n uint64) []byte {
 	b := make([]byte, 8)
 	binary.LittleEndian.PutUint64(b, n)
 	return b
+}
+
+func encodeOperators(operators []spectypes.OperatorID) []byte {
+	encoded := make([]byte, len(operators)*8)
+	for i, v := range operators {
+		binary.BigEndian.PutUint64(encoded[i*8:], v)
+	}
+
+	return encoded
+}
+
+func decodeOperators(encoded []byte) []spectypes.OperatorID {
+	if len(encoded)%8 != 0 {
+		panic("corrupted storage: wrong encoded operators length")
+	}
+
+	decoded := make([]uint64, len(encoded)/8)
+	for i := 0; i < len(decoded); i++ {
+		decoded[i] = binary.BigEndian.Uint64(encoded[i*8 : (i+1)*8])
+	}
+
+	return decoded
 }

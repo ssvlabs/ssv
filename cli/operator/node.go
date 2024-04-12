@@ -253,6 +253,7 @@ var StartNodeCmd = &cobra.Command{
 			cfg.SSVOptions.WS = ws
 			cfg.SSVOptions.WsAPIPort = cfg.WsAPIPort
 			cfg.SSVOptions.ValidatorOptions.NewDecidedHandler = decided.NewStreamPublisher(logger, ws)
+			cfg.SSVOptions.ValidatorOptions.NewParticipantsHandler = decided.NewStreamPublisherParticipants(logger, ws)
 		}
 
 		cfg.SSVOptions.ValidatorOptions.DutyRoles = []spectypes.BeaconRole{spectypes.BNRoleAttester} // TODO could be better to set in other place

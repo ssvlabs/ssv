@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"fmt"
 	"testing"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -179,4 +180,25 @@ func newTestIbftStorage(logger *zap.Logger, prefix string) (qbftstorage.QBFTStor
 	}
 
 	return New(db, prefix), nil
+}
+
+func TestEncodeDecodeOperators(t *testing.T) {
+	testCases := []struct {
+		input   []uint64
+		encoded []byte
+	}{
+		{[]uint64{0x0123456789ABCDEF, 0xFEDCBA9876543210}, []byte{0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF, 0xFE, 0xDC, 0xBA, 0x98, 0x76, 0x54, 0x32, 0x10}},
+		{[]uint64{0, 1, 2, 3}, []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 3}},
+		{[]uint64{}, []byte{}},
+	}
+
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("Case %d", i+1), func(t *testing.T) {
+			encoded := encodeOperators(tc.input)
+			require.Equal(t, tc.encoded, encoded)
+
+			decoded := decodeOperators(encoded)
+			require.Equal(t, tc.input, decoded)
+		})
+	}
 }

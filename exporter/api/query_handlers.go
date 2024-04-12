@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"fmt"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
@@ -103,4 +104,59 @@ func HandleUnknownQuery(logger *zap.Logger, nm *NetworkMessage) {
 		Type: TypeError,
 		Data: []string{fmt.Sprintf("bad request - unknown message type '%s'", nm.Msg.Type)},
 	}
+}
+
+// HandleParticipantsQuery handles TypeParticipants queries.
+func HandleParticipantsQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores, nm *NetworkMessage) {
+	logger.Debug("handles participants request",
+		zap.Uint64("from", nm.Msg.Filter.From),
+		zap.Uint64("to", nm.Msg.Filter.To),
+		zap.String("pk", nm.Msg.Filter.PublicKey),
+		zap.String("role", nm.Msg.Filter.Role))
+	res := Message{
+		Type:   nm.Msg.Type,
+		Filter: nm.Msg.Filter,
+	}
+
+	pkRaw, err := hex.DecodeString(nm.Msg.Filter.PublicKey)
+	if err != nil {
+		logger.Warn("failed to decode validator public key", zap.Error(err))
+		res.Data = []string{"internal error - could not read validator key"}
+		nm.Msg = res
+		return
+	}
+
+	beaconRole, err := message.BeaconRoleFromString(nm.Msg.Filter.Role)
+	if err != nil {
+		logger.Warn("failed to parse role", zap.Error(err))
+		res.Data = []string{"role doesn't exist"}
+		nm.Msg = res
+		return
+	}
+
+	roleStorage := qbftStorage.Get(beaconRole)
+	if roleStorage == nil {
+		logger.Warn("role storage doesn't exist", fields.Role(beaconRole))
+		res.Data = []string{"internal error - role storage doesn't exist"}
+		nm.Msg = res
+		return
+	}
+
+	msgID := spectypes.NewMsgID(types.GetDefaultDomain(), pkRaw, beaconRole)
+	from := phase0.Slot(nm.Msg.Filter.From)
+	to := phase0.Slot(nm.Msg.Filter.To)
+	participantsList, err := roleStorage.GetParticipantsInRange(msgID, from, to)
+	if err != nil {
+		logger.Warn("failed to get participants", zap.Error(err))
+		res.Data = []string{"internal error - could not get participants messages"}
+	} else {
+		data, err := ParticipantsAPIData(participantsList...)
+		if err != nil {
+			res.Data = []string{err.Error()}
+		} else {
+			res.Data = data
+		}
+	}
+
+	nm.Msg = res
 }

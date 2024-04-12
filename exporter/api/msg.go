@@ -7,6 +7,8 @@ import (
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
+
+	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 )
 
 // Message represents an exporter message
@@ -53,6 +55,31 @@ func NewDecidedAPIMsg(msgs ...*specqbft.SignedMessage) Message {
 	}
 }
 
+// TODO rewrite
+func NewParticipantsAPIMsg(msgs ...qbftstorage.ParticipantsRangeEntry) Message {
+	data, err := ParticipantsAPIData(msgs...)
+	if err != nil {
+		return Message{
+			Type: TypeParticipants,
+			Data: []string{},
+		}
+	}
+
+	identifier := specqbft.ControllerIdToMessageID(msgs[0].Identifier[:])
+	pkv := identifier.GetPubKey()
+	role := identifier.GetRoleType()
+	return Message{
+		Type: TypeDecided,
+		Filter: MessageFilter{
+			PublicKey: hex.EncodeToString(pkv),
+			From:      uint64(msgs[0].Slot),
+			To:        uint64(msgs[len(msgs)-1].Slot),
+			Role:      role.String(),
+		},
+		Data: data,
+	}
+}
+
 // DecidedAPIData creates a new message from the given message
 func DecidedAPIData(msgs ...*specqbft.SignedMessage) (interface{}, error) {
 	if len(msgs) == 0 {
@@ -85,6 +112,36 @@ func DecidedAPIData(msgs ...*specqbft.SignedMessage) (interface{}, error) {
 	return apiMsgs, nil
 }
 
+// ParticipantsAPIData creates a new message from the given participants message
+// TODO: rewrite
+func ParticipantsAPIData(msgs ...qbftstorage.ParticipantsRangeEntry) (interface{}, error) {
+	if len(msgs) == 0 {
+		return nil, errors.New("no messages")
+	}
+
+	apiMsgs := make([]*SignedMessageAPI, 0)
+	for _, msg := range msgs {
+		apiMsg := &SignedMessageAPI{
+			Signature: []byte{}, // TODO
+			Signers:   msg.Operators,
+			Message: specqbft.Message{
+				MsgType:                  specqbft.CommitMsgType,
+				Height:                   specqbft.Height(msg.Slot),
+				Round:                    specqbft.FirstRound,
+				Identifier:               msg.Identifier[:],
+				Root:                     [32]byte{},
+				DataRound:                0,
+				RoundChangeJustification: nil,
+				PrepareJustification:     nil,
+			},
+		}
+
+		apiMsgs = append(apiMsgs, apiMsg)
+	}
+
+	return apiMsgs, nil
+}
+
 // MessageFilter is a criteria for query in request messages and projection in responses
 type MessageFilter struct {
 	// From is the starting index of the desired data
@@ -109,4 +166,6 @@ const (
 	TypeDecided MessageType = "decided"
 	// TypeError is an enum for error type messages
 	TypeError MessageType = "error"
+	// TypeParticipants is an enum for participants type messages
+	TypeParticipants MessageType = "participants"
 )

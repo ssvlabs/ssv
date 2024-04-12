@@ -12,6 +12,7 @@ import (
 	"github.com/bloxapp/ssv/exporter/api"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 )
 
 // NewStreamPublisher handles incoming newly decided messages.
@@ -31,5 +32,23 @@ func NewStreamPublisher(logger *zap.Logger, ws api.WebSocketServer) controller.N
 		logger.Debug("broadcast decided stream", zap.String("identifier", identifier), fields.Height(msg.Message.Height))
 
 		feed.Send(api.NewDecidedAPIMsg(msg))
+	}
+}
+
+func NewStreamPublisherParticipants(logger *zap.Logger, ws api.WebSocketServer) controller.NewParticipantsHandler {
+	c := cache.New(time.Minute, time.Minute*3/2)
+	feed := ws.BroadcastFeed()
+	return func(msg qbftstorage.ParticipantsRangeEntry) {
+		identifier := hex.EncodeToString(msg.Identifier[:])
+		key := fmt.Sprintf("%s:%d:%d", identifier, msg.Slot, len(msg.Operators))
+		_, ok := c.Get(key)
+		if ok {
+			return
+		}
+		c.SetDefault(key, true)
+
+		logger.Debug("broadcast decided stream", zap.String("identifier", identifier), fields.Slot(msg.Slot))
+
+		feed.Send(api.NewParticipantsAPIMsg(msg))
 	}
 }
