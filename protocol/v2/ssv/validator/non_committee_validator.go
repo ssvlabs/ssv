@@ -7,6 +7,7 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"go.uber.org/zap"
+	"golang.org/x/exp/slices"
 
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging/fields"
@@ -133,6 +134,7 @@ func (ncv *NonCommitteeValidator) processMessage(
 				for signer := range rootSignatures {
 					newSigners = append(newSigners, signer)
 				}
+				slices.Sort(newSigners)
 				quorums[msg.SigningRoot] = newSigners
 			}
 		}
