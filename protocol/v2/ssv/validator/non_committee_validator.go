@@ -57,6 +57,8 @@ type loggerCtx struct{}
 func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 	logger := ncv.logger.With(fields.PubKey(msg.MsgID.GetPubKey()), fields.Role(msg.MsgID.GetRoleType()))
 
+	logger.Debug("ncv got a message")
+
 	if err := validateMessage(ncv.Share.Share, msg); err != nil {
 		logger.Debug("❌ got invalid message", zap.Error(err))
 		return
