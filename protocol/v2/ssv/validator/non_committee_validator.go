@@ -103,11 +103,13 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 			return
 		}
 
-		ncv.newParticipantsHandler(qbftstorage.ParticipantsRangeEntry{
-			Slot:       spsm.Message.Slot,
-			Operators:  quorum,
-			Identifier: msg.GetID(),
-		})
+		if ncv.newParticipantsHandler != nil {
+			ncv.newParticipantsHandler(qbftstorage.ParticipantsRangeEntry{
+				Slot:       spsm.Message.Slot,
+				Operators:  quorum,
+				Identifier: msg.GetID(),
+			})
+		}
 	}
 }
 
