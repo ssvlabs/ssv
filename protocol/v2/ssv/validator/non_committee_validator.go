@@ -65,8 +65,6 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 		return
 	}
 
-	logger.Debug("ncv got a SSVPartialSignatureMsgType message")
-
 	spsm := &spectypes.SignedPartialSignatureMessage{}
 	if err := spsm.Decode(msg.GetData()); err != nil {
 		logger.Debug("❗ failed to get consensus Message from network Message", zap.Error(err))
@@ -87,11 +85,8 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 		return
 	}
 	if len(quorums) == 0 {
-		logger.Debug("received SignedPartialSignatureMessage, no quorum")
 		return
 	}
-
-	logger.Debug("received SignedPartialSignatureMessage, has quorum", fields.Count(len(quorums)))
 
 	for _, quorum := range quorums {
 		if err := ncv.Storage.Get(msg.GetID().GetRoleType()).SaveParticipants(msg.GetID(), spsm.Message.Slot, quorum); err != nil {
