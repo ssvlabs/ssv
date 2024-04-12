@@ -67,6 +67,9 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 	if msg.GetType() != spectypes.SSVPartialSignatureMsgType {
 		return
 	}
+
+	logger.Debug("ncv got a SSVPartialSignatureMsgType message")
+
 	spsm := &spectypes.SignedPartialSignatureMessage{}
 	if err := spsm.Decode(msg.GetData()); err != nil {
 		logger.Debug("❗ failed to get consensus Message from network Message", zap.Error(err))
@@ -77,6 +80,8 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 	if spsm.Message.Type != spectypes.PostConsensusPartialSig {
 		return
 	}
+
+	logger.Debug("ncv got a PostConsensusPartialSig message")
 
 	logger = logger.With(fields.Slot(spsm.Message.Slot))
 
