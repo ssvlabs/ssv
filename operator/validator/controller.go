@@ -390,7 +390,7 @@ func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
 
 	// Process the message.
 	defer ncv.Unlock()
-	ncv.ProcessMessage(c.logger, msg)
+	ncv.ProcessMessage(msg)
 
 	return nil
 }

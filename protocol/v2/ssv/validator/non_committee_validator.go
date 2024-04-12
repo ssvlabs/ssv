@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"context"
 	"fmt"
 
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -18,6 +19,7 @@ import (
 )
 
 type NonCommitteeValidator struct {
+	logger                 *zap.Logger
 	Share                  *types.SSVShare
 	Storage                *storage.QBFTStores
 	qbftController         *qbftcontroller.Controller
@@ -41,6 +43,7 @@ func NewNonCommitteeValidator(logger *zap.Logger, identifier spectypes.MessageID
 	}
 
 	return &NonCommitteeValidator{
+		logger:                 logger,
 		Share:                  opts.SSVShare,
 		Storage:                opts.Storage,
 		qbftController:         ctrl,
@@ -49,8 +52,8 @@ func NewNonCommitteeValidator(logger *zap.Logger, identifier spectypes.MessageID
 	}
 }
 
-func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage) {
-	logger = logger.With(fields.PubKey(msg.MsgID.GetPubKey()), fields.Role(msg.MsgID.GetRoleType()))
+func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
+	logger := ncv.logger.With(fields.PubKey(msg.MsgID.GetPubKey()), fields.Role(msg.MsgID.GetRoleType()))
 
 	if err := validateMessage(ncv.Share.Share, msg); err != nil {
 		logger.Debug("❌ got invalid message", zap.Error(err))
@@ -73,6 +76,7 @@ func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *queue.
 
 	logger = logger.With(fields.Slot(spsm.Message.Slot))
 
+	ctx := context.WithValue(context.Background(), "logger", logger)
 	quorums, err := ncv.processMessage(spsm)
 	if err != nil {
 		logger.Debug("❌ could not process SignedPartialSignatureMessage",
@@ -110,6 +114,7 @@ func nonCommitteeInstanceContainerCapacity(fullNode bool) int {
 }
 
 func (ncv *NonCommitteeValidator) processMessage(
+	ctx context.Context,
 	signedMsg *spectypes.SignedPartialSignatureMessage,
 ) (map[[32]byte][]spectypes.OperatorID, error) {
 	quorums := make(map[[32]byte][]spectypes.OperatorID)
@@ -123,6 +128,8 @@ func (ncv *NonCommitteeValidator) processMessage(
 
 		rootSignatures := ncv.postConsensusContainer.GetSignatures(msg.SigningRoot)
 		if uint64(len(rootSignatures)) >= ncv.Share.Quorum {
+			ctx.Value("logger").(*zap.Logger).Debug("ncv found quorum", fields.Count(len(rootSignatures)))
+
 			longestSigners := quorums[msg.SigningRoot]
 			if newLength := len(rootSignatures); newLength > len(longestSigners) {
 				newSigners := make([]spectypes.OperatorID, 0, newLength)
