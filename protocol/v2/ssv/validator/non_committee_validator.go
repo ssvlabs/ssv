@@ -52,6 +52,8 @@ func NewNonCommitteeValidator(logger *zap.Logger, identifier spectypes.MessageID
 	}
 }
 
+type loggerCtx struct{}
+
 func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 	logger := ncv.logger.With(fields.PubKey(msg.MsgID.GetPubKey()), fields.Role(msg.MsgID.GetRoleType()))
 
@@ -76,8 +78,8 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 
 	logger = logger.With(fields.Slot(spsm.Message.Slot))
 
-	ctx := context.WithValue(context.Background(), "logger", logger)
-	quorums, err := ncv.processMessage(spsm)
+	ctx := context.WithValue(context.Background(), loggerCtx{}, logger)
+	quorums, err := ncv.processMessage(ctx, spsm)
 	if err != nil {
 		logger.Debug("❌ could not process SignedPartialSignatureMessage",
 			zap.Error(err))
@@ -128,7 +130,7 @@ func (ncv *NonCommitteeValidator) processMessage(
 
 		rootSignatures := ncv.postConsensusContainer.GetSignatures(msg.SigningRoot)
 		if uint64(len(rootSignatures)) >= ncv.Share.Quorum {
-			ctx.Value("logger").(*zap.Logger).Debug("ncv found quorum", fields.Count(len(rootSignatures)))
+			ctx.Value(loggerCtx{}).(*zap.Logger).Debug("ncv found quorum", fields.Count(len(rootSignatures)))
 
 			longestSigners := quorums[msg.SigningRoot]
 			if newLength := len(rootSignatures); newLength > len(longestSigners) {
