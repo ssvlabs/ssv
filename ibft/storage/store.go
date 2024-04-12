@@ -176,7 +176,11 @@ func (i *ibftStorage) GetParticipantsInRange(identifier spectypes.MessageID, fro
 	for slot := from; slot <= to; slot++ {
 		participants, err := i.GetParticipants(identifier, slot)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to get instance")
+			return nil, errors.Wrap(err, "failed to get participants")
+		}
+
+		if len(participants) == 0 {
+			continue
 		}
 
 		participantsRange = append(participantsRange, qbftstorage.ParticipantsRangeEntry{
@@ -190,8 +194,10 @@ func (i *ibftStorage) GetParticipantsInRange(identifier spectypes.MessageID, fro
 }
 
 func (i *ibftStorage) GetParticipants(identifier spectypes.MessageID, slot phase0.Slot) ([]spectypes.OperatorID, error) {
-
 	val, found, err := i.get(participantsKey, identifier[:], uInt64ToByteSlice(uint64(slot)))
+	if err != nil {
+		return nil, err
+	}
 	if !found {
 		zap.L().Debug("getting participants: not found",
 			zap.Any("identifier", identifier),
@@ -200,9 +206,6 @@ func (i *ibftStorage) GetParticipants(identifier spectypes.MessageID, slot phase
 			zap.Int("slot", int(slot)),
 			zap.Any("val", val))
 		return nil, nil
-	}
-	if err != nil {
-		return nil, err
 	}
 
 	operators := decodeOperators(val)
