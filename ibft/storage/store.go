@@ -206,7 +206,7 @@ func (i *ibftStorage) GetParticipants(identifier spectypes.MessageID, slot phase
 	}
 
 	operators := decodeOperators(val)
-	zap.L().Debug("getting participants: not found", zap.Any("identifier", identifier), zap.Int("slot", int(slot)), zap.Any("operators", operators))
+	zap.L().Debug("getting participants: found", zap.Any("identifier", identifier), zap.Int("slot", int(slot)), zap.Any("operators", operators))
 	return operators, nil
 }
 
