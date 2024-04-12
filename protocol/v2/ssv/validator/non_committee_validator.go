@@ -1,7 +1,6 @@
 package validator
 
 import (
-	"context"
 	"fmt"
 
 	specssv "github.com/bloxapp/ssv-spec/ssv"
@@ -79,12 +78,9 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 		return
 	}
 
-	logger.Debug("ncv got a PostConsensusPartialSig message")
-
 	logger = logger.With(fields.Slot(spsm.Message.Slot))
 
-	ctx := context.WithValue(context.Background(), loggerCtx{}, logger)
-	quorums, err := ncv.processMessage(ctx, spsm)
+	quorums, err := ncv.processMessage(spsm)
 	if err != nil {
 		logger.Debug("❌ could not process SignedPartialSignatureMessage",
 			zap.Error(err))
@@ -123,7 +119,6 @@ func nonCommitteeInstanceContainerCapacity(fullNode bool) int {
 }
 
 func (ncv *NonCommitteeValidator) processMessage(
-	ctx context.Context,
 	signedMsg *spectypes.SignedPartialSignatureMessage,
 ) (map[[32]byte][]spectypes.OperatorID, error) {
 	quorums := make(map[[32]byte][]spectypes.OperatorID)
@@ -137,8 +132,6 @@ func (ncv *NonCommitteeValidator) processMessage(
 
 		rootSignatures := ncv.postConsensusContainer.GetSignatures(msg.SigningRoot)
 		if uint64(len(rootSignatures)) >= ncv.Share.Quorum {
-			ctx.Value(loggerCtx{}).(*zap.Logger).Debug("ncv found quorum", fields.Count(len(rootSignatures)))
-
 			longestSigners := quorums[msg.SigningRoot]
 			if newLength := len(rootSignatures); newLength > len(longestSigners) {
 				newSigners := make([]spectypes.OperatorID, 0, newLength)
