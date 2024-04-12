@@ -155,6 +155,8 @@ func (i *ibftStorage) CleanAllInstances(logger *zap.Logger, msgID []byte) error 
 }
 
 func (i *ibftStorage) SaveParticipants(identifier spectypes.MessageID, slot phase0.Slot, operators []spectypes.OperatorID) error {
+	zap.L().Debug("saving participants", zap.Any("identifier", identifier), zap.Int("slot", int(slot)), zap.Any("operators", operators))
+
 	if err := i.save(encodeOperators(operators), participantsKey, identifier[:], uInt64ToByteSlice(uint64(slot))); err != nil {
 		return fmt.Errorf("could not save participants: %w", err)
 	}
@@ -182,15 +184,19 @@ func (i *ibftStorage) GetParticipantsInRange(identifier spectypes.MessageID, fro
 }
 
 func (i *ibftStorage) GetParticipants(identifier spectypes.MessageID, slot phase0.Slot) ([]spectypes.OperatorID, error) {
+
 	val, found, err := i.get(participantsKey, identifier[:], uInt64ToByteSlice(uint64(slot)))
 	if !found {
+		zap.L().Debug("getting participants: not found", zap.Any("identifier", identifier), zap.Int("slot", int(slot)), zap.Any("val", val))
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
 
-	return decodeOperators(val), nil
+	operators := decodeOperators(val)
+	zap.L().Debug("getting participants: not found", zap.Any("identifier", identifier), zap.Int("slot", int(slot)), zap.Any("operators", operators))
+	return operators, nil
 }
 
 func (i *ibftStorage) save(value []byte, id string, pk []byte, keyParams ...[]byte) error {
