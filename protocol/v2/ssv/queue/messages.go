@@ -6,6 +6,7 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
+	"github.com/bloxapp/ssv/network/commons"
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -39,9 +40,9 @@ func DecodeSSVMessage(m *spectypes.SSVMessage) (*DecodedSSVMessage, error) {
 
 // DecodeSignedSSVMessage decodes a SignedSSVMessage into a DecodedSSVMessage.
 func DecodeSignedSSVMessage(sm *spectypes.SignedSSVMessage) (*DecodedSSVMessage, error) {
-	m, err := sm.GetSSVMessageFromData()
+	m, err := commons.DecodeNetworkMsg(sm.GetData())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not decode data into an SSVMessage: %w", err)
 	}
 
 	d, err := DecodeSSVMessage(m)
