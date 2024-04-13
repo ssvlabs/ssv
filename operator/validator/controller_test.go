@@ -19,6 +19,7 @@ import (
 	"github.com/bloxapp/ssv/ekm"
 	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
 	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
+	"github.com/bloxapp/ssv/operator/keys"
 	"github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator/mocks"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
@@ -73,12 +74,16 @@ func TestNewController(t *testing.T) {
 	require.NoError(t, err)
 	registryStorage, newStorageErr := storage.NewNodeStorage(logger, db)
 	require.NoError(t, newStorageErr)
+	operatorSigner, err := keys.GeneratePrivateKey()
+	require.NoError(t, err)
+
 	controllerOptions := ControllerOptions{
 		Beacon:            bc,
 		Metrics:           nil,
 		FullNode:          true,
 		Network:           network,
 		OperatorDataStore: operatorDataStore,
+		OperatorSigner:    operatorSigner,
 		RegistryStorage:   registryStorage,
 		RecipientsStorage: recipientStorage,
 		Context:           context.Background(),
