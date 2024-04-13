@@ -73,7 +73,7 @@ func TestRSAUsage(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, operatorID, decodedMsg.OperatorID)
-	require.Equal(t, signature, decodedMsg.Signature)
+	require.Equal(t, sig, decodedMsg.Signature)
 
 	messageHash := sha256.Sum256(decodedMsg.Data)
 

@@ -71,8 +71,7 @@ type ControllerOptions struct {
 	Exporter                   bool `yaml:"Exporter" env:"EXPORTER" env-default:"false" env-description:""`
 	BuilderProposals           bool `yaml:"BuilderProposals" env:"BUILDER_PROPOSALS" env-default:"false" env-description:"Use external builders to produce blocks"`
 	KeyManager                 spectypes.KeyManager
-	OperatorSigner             spectypes.OperatorSigner
-	OperatorPubKey             keys.OperatorPublicKey
+	OperatorSigner             keys.OperatorSigner
 	OperatorDataStore          operatordatastore.OperatorDataStore
 	RegistryStorage            nodestorage.Storage
 	RecipientsStorage          Recipients
@@ -197,7 +196,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 	}
 
 	sigVerifier := &validator.SignatureVerifier{
-		OperatorPubKey: options.OperatorPubKey,
+		OperatorPubKey: options.OperatorSigner.Public(),
 	}
 
 	validatorOptions := validator.Options{ //TODO add vars

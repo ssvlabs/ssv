@@ -22,7 +22,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/message/validation"
-	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
 
@@ -68,11 +67,11 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 		}
 		messageValidators[i].ValidateFunc = func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 			peer := vNet.NodeByPeerID(p)
-			rawMsgPayload, _, _, err := spectypes.DecodeSignedSSVMessage(pmsg.Data)
+			signedSSVMsg := &spectypes.SignedSSVMessage{}
+			require.NoError(t, signedSSVMsg.Decode(pmsg.GetData()))
+			msg, err := signedSSVMsg.GetSSVMessageFromData()
 			require.NoError(t, err)
 
-			msg, err := commons.DecodeNetworkMsg(rawMsgPayload)
-			require.NoError(t, err)
 			decodedMsg, err := queue.DecodeSSVMessage(msg)
 			require.NoError(t, err)
 			pmsg.ValidatorData = decodedMsg

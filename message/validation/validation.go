@@ -232,16 +232,18 @@ func (mv *messageValidator) ValidatorForTopic(_ string) func(ctx context.Context
 // Depending on the outcome, it will return one of the pubsub validation results (Accept, Ignore, or Reject).
 func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 	if mv.selfAccept && peerID == mv.selfPID {
-		rawMsgPayload, _, _, err := spectypes.DecodeSignedSSVMessage(pmsg.Data)
-		if err != nil {
+		signedSSVMsg := &spectypes.SignedSSVMessage{}
+		if err := signedSSVMsg.Decode(pmsg.GetData()); err != nil {
 			mv.logger.Error("failed to decode signed ssv message", zap.Error(err))
 			return pubsub.ValidationReject
 		}
-		msg, err := commons.DecodeNetworkMsg(rawMsgPayload)
+
+		msg, err := signedSSVMsg.GetSSVMessageFromData()
 		if err != nil {
 			mv.logger.Error("failed to decode network message", zap.Error(err))
 			return pubsub.ValidationReject
 		}
+
 		// skipping the error check for testing simplifying
 		decMsg, _ := queue.DecodeSSVMessage(msg)
 		pmsg.ValidatorData = decMsg
@@ -318,19 +320,20 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 		return nil, Descriptor{}, ErrPubSubMessageHasNoData
 	}
 
-	messageData, operatorID, signature, err := spectypes.DecodeSignedSSVMessage(encMessageData)
-	if err != nil {
+	signedSSVMsg := &spectypes.SignedSSVMessage{}
+	if err := signedSSVMsg.Decode(encMessageData); err != nil {
 		e := ErrMalformedSignedMessage
 		e.innerErr = err
 		return nil, Descriptor{}, e
 	}
-	if len(messageData) == 0 {
+	messageData := signedSSVMsg.GetData()
+	if len(signedSSVMsg.GetData()) == 0 {
 		return nil, Descriptor{}, ErrDecodedPubSubMessageHasEmptyData
 	}
 
 	signatureVerifier := func() error {
 		mv.metrics.MessageValidationRSAVerifications()
-		return mv.verifySignature(messageData, operatorID, signature)
+		return mv.verifySignature(signedSSVMsg)
 	}
 
 	mv.metrics.MessageSize(len(messageData))
@@ -344,19 +347,12 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 		return nil, Descriptor{}, e
 	}
 
-	signedMsg := &spectypes.SignedSSVMessage{
-		Signature:  signature,
-		OperatorID: operatorID,
-		Data:       messageData,
-	}
-
-	msg, err := queue.DecodeSignedSSVMessage(signedMsg)
+	msg, err := queue.DecodeSignedSSVMessage(signedSSVMsg)
 	if err != nil {
 		e := ErrMalformedPubSubMessage
 		e.innerErr = err
 		return nil, Descriptor{}, e
 	}
-
 	if msg == nil {
 		return nil, Descriptor{}, ErrEmptyPubSubMessage
 	}

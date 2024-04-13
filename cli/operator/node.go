@@ -157,10 +157,6 @@ var StartNodeCmd = &cobra.Command{
 
 		nodeStorage, operatorData := setupOperatorStorage(logger, db, operatorPrivKey, operatorPrivKeyText)
 		operatorDataStore := operatordatastore.New(operatorData)
-		operatorPubKey, err := keys.PublicKeyFromString(string(operatorData.PublicKey))
-		if err != nil {
-			logger.Fatal("could not decode operator public key", zap.Error(err))
-		}
 
 		usingLocalEvents := len(cfg.LocalEventsPath) != 0
 
@@ -279,7 +275,6 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
 		cfg.SSVOptions.ValidatorOptions.Metrics = metricsReporter
 		cfg.SSVOptions.ValidatorOptions.OperatorSigner = operatorPrivKey
-		cfg.SSVOptions.ValidatorOptions.OperatorPubKey = operatorPubKey
 		cfg.SSVOptions.Metrics = metricsReporter
 
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)

@@ -8,7 +8,8 @@ import (
 	"github.com/bloxapp/ssv/operator/keys"
 )
 
-func (mv *messageValidator) verifySignature(messageData []byte, operatorID spectypes.OperatorID, signature [256]byte) error {
+func (mv *messageValidator) verifySignature(msg *spectypes.SignedSSVMessage) error {
+	operatorID := msg.GetOperatorID()
 	operatorPubKey, ok := mv.operatorIDToPubkeyCache.Get(operatorID)
 	if !ok {
 		operator, found, err := mv.nodeStorage.GetOperatorData(nil, operatorID)
@@ -34,7 +35,7 @@ func (mv *messageValidator) verifySignature(messageData []byte, operatorID spect
 		mv.operatorIDToPubkeyCache.Set(operatorID, operatorPubKey)
 	}
 
-	if err := operatorPubKey.Verify(messageData, signature); err != nil {
+	if err := operatorPubKey.Verify(msg.GetData(), msg.GetSignature()); err != nil {
 		e := ErrSignatureVerification
 		e.innerErr = fmt.Errorf("verify opid: %v signature: %w", operatorID, err)
 		return e
