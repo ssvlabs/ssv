@@ -44,7 +44,7 @@ const (
 	clockErrorTolerance = time.Millisecond * 50
 
 	maxMessageSize             = maxConsensusMsgSize
-	maxConsensusMsgSize        = 8388608
+	maxConsensusMsgSize        = 6291829
 	maxPartialSignatureMsgSize = 1952
 	allowedRoundsInFuture      = 1
 	allowedRoundsInPast        = 2
@@ -327,7 +327,7 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 		return nil, Descriptor{}, e
 	}
 	messageData := signedSSVMsg.GetData()
-	if len(signedSSVMsg.GetData()) == 0 {
+	if len(messageData) == 0 {
 		return nil, Descriptor{}, ErrDecodedPubSubMessageHasEmptyData
 	}
 
@@ -349,7 +349,17 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 
 	msg, err := queue.DecodeSignedSSVMessage(signedSSVMsg)
 	if err != nil {
-		e := ErrMalformedPubSubMessage
+		if strings.Contains(err.Error(), queue.ErrMsgDecodeNetworkMsg) {
+			e := ErrMalformedPubSubMessage
+			e.innerErr = err
+			return nil, Descriptor{}, e
+		}
+		if errors.Is(err, queue.ErrUnknownMessageType) {
+			e := ErrUnknownSSVMessageType
+			e.innerErr = err
+			return nil, Descriptor{}, e
+		}
+		e := ErrMalformedMessage
 		e.innerErr = err
 		return nil, Descriptor{}, e
 	}

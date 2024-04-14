@@ -28,23 +28,9 @@ type OperatorPrivateKey interface {
 	Base64() []byte
 }
 
-func (p *privateKey) SignSSVMessage(data []byte) ([256]byte, error) {
-	hash := sha256.Sum256(data)
-	signature, err := SignRSA(p, hash[:])
-	if err != nil {
-		return [256]byte{}, err
-	}
-
-	var sig [256]byte
-	copy(sig[:], signature)
-
-	return sig, nil
-}
-
 type OperatorSigner interface {
-	Sign(data []byte) ([256]byte, error)
-	Public() OperatorPublicKey
 	spectypes.OperatorSigner
+	Public() OperatorPublicKey
 }
 
 type OperatorDecrypter interface {
@@ -89,7 +75,7 @@ func (p *privateKey) Public() OperatorPublicKey {
 	return &publicKey{pubKey: &pubKey}
 }
 
-func (p *privateKey) Sign(data []byte) ([256]byte, error) {
+func (p *privateKey) SignSSVMessage(data []byte) ([256]byte, error) {
 	hash := sha256.Sum256(data)
 	signature, err := SignRSA(p, hash[:])
 	if err != nil {
@@ -129,17 +115,6 @@ func PublicKeyFromString(pubKeyString string) (OperatorPublicKey, error) {
 	}
 
 	pubKey, err := rsaencryption.ConvertPemToPublicKey(pubPem)
-	if err != nil {
-		return nil, err
-	}
-
-	return &publicKey{
-		pubKey: pubKey,
-	}, nil
-}
-
-func PublicKeyFromBytes(pk []byte) (OperatorPublicKey, error) {
-	pubKey, err := rsaencryption.ConvertPemToPublicKey(pk)
 	if err != nil {
 		return nil, err
 	}

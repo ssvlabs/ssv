@@ -61,8 +61,6 @@ func TestValidatorSerializer(t *testing.T) {
 }
 
 func TestMaxPossibleShareSize(t *testing.T) {
-	t.Skip()
-	// TODO(oleg) unskip after fixing the test
 	s, err := generateMaxPossibleShare()
 	require.NoError(t, err)
 
