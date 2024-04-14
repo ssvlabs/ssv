@@ -56,7 +56,7 @@ func TestSignVerify(t *testing.T) {
 	pubKey := privKey.Public()
 
 	dataToSign := []byte("test1")
-	signature, err := privKey.SignSSVMessage(dataToSign)
+	signature, err := privKey.Sign(dataToSign)
 	require.NoError(t, err, "Failed to sign data")
 
 	err = pubKey.Verify(dataToSign, signature)

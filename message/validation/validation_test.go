@@ -2198,7 +2198,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			require.NoError(t, err)
 			require.False(t, found)
 
-			signature, err := privKey.SignSSVMessage(encodedMsg)
+			signature, err := privKey.Sign(encodedMsg)
 			require.NoError(t, err)
 
 			signedSSVMsg := &spectypes.SignedSSVMessage{
@@ -2261,7 +2261,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			require.NoError(t, err)
 			require.False(t, found)
 
-			signature, err := privKey.SignSSVMessage(encodedMsg)
+			signature, err := privKey.Sign(encodedMsg)
 			require.NoError(t, err)
 
 			const unexpectedOperatorID = 2
