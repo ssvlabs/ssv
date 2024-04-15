@@ -382,6 +382,36 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 }
 
 func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage, receivedAt time.Time, signatureVerifier func() error) (*queue.DecodedSSVMessage, Descriptor, error) {
+	// TODO: Need access to data structure
+	// cached committee,  need to know if cluster is liquidated
+	// example:
+	// struct committee {
+	// 	status: string (active/liquidated etc) - atleast on of the shares is active then its active
+	//  shares: []SSVShare (all shares in cluster)
+
+	// when a message is for validator we calc the cluster and then access the shares
+
+	// refactor the design
+
+	// example of a validation function structure
+	// syntax
+	// p2p_message_validation(ssvMessage)
+	// type specific functions
+
+	// err:= generic_validation(ssvMessage)
+	//if msgid is cluster
+	// cluster_validation(ssvMessage)
+	//else if msgid is validator
+	// validator_validation(ssvMessage)
+
+	// by role type functions - adjusted to support cluster
+	// switch role is cluster role (attest/sync committee)
+	// cluster_role_validation(ssvMessage)
+
+	// by msg type functions - adjusted to support cluster
+	// if msg type is consensus
+	// consensus_validation(ssvMessage)
+
 	var descriptor Descriptor
 
 	if len(ssvMessage.Data) == 0 {
@@ -401,6 +431,8 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 		err.want = hex.EncodeToString(mv.netCfg.Domain[:])
 		return nil, descriptor, err
 	}
+
+	// TODO determine if message is cluster or validator message
 
 	validatorPK := ssvMessage.GetID().GetPubKey()
 	role := ssvMessage.GetID().GetRoleType()
@@ -469,6 +501,7 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 	descriptor.SSVMessageType = ssvMessage.MsgType
 
 	if mv.nodeStorage != nil {
+		// TODO need to add default case with an error, cause currently we allow unknown types?
 		switch ssvMessage.MsgType {
 		case spectypes.SSVConsensusMsgType:
 			if len(msg.Data) > maxConsensusMsgSize {

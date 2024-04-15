@@ -7,6 +7,7 @@ import (
 )
 
 // ConsensusID uniquely identifies a public key and role pair to keep track of state.
+// TODO change ConsensusID struct to use recipient id(to determine if message is for validator or cluster) instead of public key
 type ConsensusID struct {
 	PubKey phase0.BLSPubKey
 	Role   spectypes.BeaconRole
