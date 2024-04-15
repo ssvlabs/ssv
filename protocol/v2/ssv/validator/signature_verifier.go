@@ -26,7 +26,7 @@ func (s *SignatureVerifier) Verify(msg *spectypes.SignedSSVMessage, operators []
 			operatorPubKey, ok := s.operatorIDToPubkeyCache.Get(op.OperatorID)
 			if !ok {
 				var err error
-				operatorPubKey, err = keys.PublicKeyFromBytes(op.SSVOperatorPubKey)
+				operatorPubKey, err = keys.PublicKeyFromString(string(op.SSVOperatorPubKey))
 				if err != nil {
 					return fmt.Errorf("could not parse signer public key: %w", err)
 				}

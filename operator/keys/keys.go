@@ -129,17 +129,6 @@ func PublicKeyFromString(pubKeyString string) (OperatorPublicKey, error) {
 	}, nil
 }
 
-func PublicKeyFromBytes(pk []byte) (OperatorPublicKey, error) {
-	pubKey, err := rsaencryption.ConvertPemToPublicKey(pk)
-	if err != nil {
-		return nil, err
-	}
-
-	return &publicKey{
-		pubKey: pubKey,
-	}, nil
-}
-
 func (p *publicKey) Encrypt(data []byte) ([]byte, error) {
 	return EncryptRSA(p, data)
 }
