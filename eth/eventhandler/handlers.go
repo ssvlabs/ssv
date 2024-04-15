@@ -224,6 +224,7 @@ func (eh *EventHandler) handleShareCreation(
 	encryptedKeys [][]byte,
 ) (*ssvtypes.SSVShare, error) {
 	share, shareSecret, err := eh.validatorAddedEventToShare(
+		txn,
 		validatorEvent,
 		sharePublicKeys,
 		encryptedKeys,
@@ -252,6 +253,7 @@ func (eh *EventHandler) handleShareCreation(
 }
 
 func (eh *EventHandler) validatorAddedEventToShare(
+	txn basedb.Txn,
 	event *contract.ContractValidatorAdded,
 	sharePublicKeys [][]byte,
 	encryptedKeys [][]byte,
@@ -273,7 +275,7 @@ func (eh *EventHandler) validatorAddedEventToShare(
 	committee := make([]*spectypes.Operator, 0)
 	for i := range event.OperatorIds {
 		operatorID := event.OperatorIds[i]
-		od, found, err := eh.nodeStorage.GetOperatorData(nil, operatorID)
+		od, found, err := eh.nodeStorage.GetOperatorData(txn, operatorID)
 		if err != nil {
 			return nil, nil, fmt.Errorf("could not get operator data: %w", err)
 		}
