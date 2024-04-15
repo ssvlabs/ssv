@@ -893,7 +893,6 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 
 		identifier := spectypes.NewMsgID(ssvtypes.GetDefaultDomain(), options.SSVShare.Share.ValidatorPubKey, role)
 		qbftCtrl := qbftcontroller.NewController(identifier[:], &options.SSVShare.Share, config, options.FullNode)
-		qbftCtrl.NewDecidedHandler = options.NewDecidedHandler
 		return qbftCtrl
 	}
 

@@ -26,11 +26,10 @@ type Controller struct {
 	Identifier []byte
 	Height     specqbft.Height // incremental Height for InstanceContainer
 	// StoredInstances stores the last HistoricalInstanceCapacity in an array for message processing purposes.
-	StoredInstances   InstanceContainer
-	Share             *spectypes.Share
-	NewDecidedHandler NewDecidedHandler `json:"-"`
-	config            qbft.IConfig
-	fullNode          bool
+	StoredInstances InstanceContainer
+	Share           *spectypes.Share
+	config          qbft.IConfig
+	fullNode        bool
 }
 
 func NewController(

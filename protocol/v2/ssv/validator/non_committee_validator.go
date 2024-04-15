@@ -37,7 +37,6 @@ func NewNonCommitteeValidator(logger *zap.Logger, identifier spectypes.MessageID
 	}
 	ctrl := qbftcontroller.NewController(identifier[:], &opts.SSVShare.Share, config, opts.FullNode)
 	ctrl.StoredInstances = make(qbftcontroller.InstanceContainer, 0, nonCommitteeInstanceContainerCapacity(opts.FullNode))
-	ctrl.NewDecidedHandler = opts.NewDecidedHandler
 	if _, err := ctrl.LoadHighestInstance(identifier[:]); err != nil {
 		logger.Debug("❗ failed to load highest instance", zap.Error(err))
 	}
