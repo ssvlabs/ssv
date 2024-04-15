@@ -83,7 +83,7 @@ func (s *storageShare) Encode() ([]byte, error) {
 	var b bytes.Buffer
 	e := gob.NewEncoder(&b)
 	if err := e.Encode(s); err != nil {
-		return nil, fmt.Errorf("encode Share: %w", err)
+		return nil, fmt.Errorf("encode storageShare: %w", err)
 	}
 
 	return b.Bytes(), nil
@@ -97,7 +97,7 @@ func (s *storageShare) Decode(data []byte) error {
 
 	d := gob.NewDecoder(bytes.NewReader(data))
 	if err := d.Decode(s); err != nil {
-		return fmt.Errorf("decode Share: %w", err)
+		return fmt.Errorf("decode storageShare: %w", err)
 	}
 	s.Quorum, s.PartialQuorum = types.ComputeQuorumAndPartialQuorum(len(s.Committee))
 	return nil

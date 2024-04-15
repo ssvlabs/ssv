@@ -243,7 +243,10 @@ func generateRandomValidatorSpecShare(splitKeys map[uint64]*bls.SecretKey) (*ssv
 
 	var ibftCommittee []*spectypes.Operator
 	for operatorID, sk := range splitKeys {
-		pk, _, _ := rsaencryption.GenerateKeys()
+		pk, _, err := rsaencryption.GenerateKeys()
+		if err != nil {
+			panic(err)
+		}
 		ibftCommittee = append(ibftCommittee, &spectypes.Operator{
 			OperatorID:        operatorID,
 			SharePubKey:       sk.Serialize(),

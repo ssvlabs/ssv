@@ -11,8 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/libp2p/go-libp2p"
@@ -29,6 +27,7 @@ import (
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"
 	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
 
 func TestTopicManager(t *testing.T) {

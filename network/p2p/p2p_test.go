@@ -431,7 +431,7 @@ func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.BeaconRole)
 		MsgID:   id,
 		Data:    data,
 	}
-	signedSSVMsg, err := spectypes.SSVMessageToSignedSSVMessage(ssvMsg, 1, dummySignSSvMessage)
+	signedSSVMsg, err := spectypes.SSVMessageToSignedSSVMessage(ssvMsg, 1, dummySignSSVMessage)
 	require.NoError(t, err)
 
 	return id, signedSSVMsg
@@ -441,6 +441,6 @@ func dummyMsgAttester(t *testing.T, pkHex string, height int) (spectypes.Message
 	return dummyMsg(t, pkHex, height, spectypes.BNRoleAttester)
 }
 
-func dummySignSSvMessage(data []byte) ([256]byte, error) {
+func dummySignSSVMessage(data []byte) ([256]byte, error) {
 	return [256]byte{}, nil
 }

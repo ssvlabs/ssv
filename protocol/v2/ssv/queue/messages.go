@@ -12,8 +12,8 @@ import (
 )
 
 var (
-	ErrUnknownMessageType  = fmt.Errorf("unknown message type")
-	ErrMsgDecodeNetworkMsg = "could not decode data into an SSVMessage"
+	ErrUnknownMessageType = fmt.Errorf("unknown message type")
+	ErrDecodeNetworkMsg   = fmt.Errorf("could not decode data into an SSVMessage")
 )
 
 // DecodedSSVMessage is a bundle of SSVMessage and it's decoding.
@@ -43,7 +43,7 @@ func DecodeSSVMessage(m *spectypes.SSVMessage) (*DecodedSSVMessage, error) {
 func DecodeSignedSSVMessage(sm *spectypes.SignedSSVMessage) (*DecodedSSVMessage, error) {
 	m, err := commons.DecodeNetworkMsg(sm.GetData())
 	if err != nil {
-		return nil, fmt.Errorf(ErrMsgDecodeNetworkMsg+": %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrDecodeNetworkMsg, err)
 	}
 
 	d, err := DecodeSSVMessage(m)

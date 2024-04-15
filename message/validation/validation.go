@@ -349,7 +349,7 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 
 	msg, err := queue.DecodeSignedSSVMessage(signedSSVMsg)
 	if err != nil {
-		if strings.Contains(err.Error(), queue.ErrMsgDecodeNetworkMsg) {
+		if errors.Is(err, queue.ErrDecodeNetworkMsg) {
 			e := ErrMalformedPubSubMessage
 			e.innerErr = err
 			return nil, Descriptor{}, e
