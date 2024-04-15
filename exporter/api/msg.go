@@ -101,6 +101,7 @@ func DecidedAPIData(msgs ...qbftstorage.ParticipantsRangeEntry) (interface{}, er
 		apiMsg := &SignedMessageAPI{
 			Signers: msg.Operators,
 			Message: specqbft.Message{
+				MsgType:    specqbft.CommitMsgType,
 				Height:     specqbft.Height(msg.Slot),
 				Identifier: msg.Identifier[:],
 			},
