@@ -177,7 +177,7 @@ func (i *ibftStorage) GetParticipantsInRange(identifier spectypes.MessageID, fro
 
 		participantsRange = append(participantsRange, qbftstorage.ParticipantsRangeEntry{
 			Slot:       slot,
-			Operators:  participants,
+			Signers:    participants,
 			Identifier: identifier,
 		})
 	}

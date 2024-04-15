@@ -28,7 +28,7 @@ func (si *StoredInstance) Decode(data []byte) error {
 
 type ParticipantsRangeEntry struct {
 	Slot       phase0.Slot
-	Operators  []spectypes.OperatorID
+	Signers    []spectypes.OperatorID
 	Identifier spectypes.MessageID
 }
 

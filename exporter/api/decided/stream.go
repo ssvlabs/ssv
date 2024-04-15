@@ -21,7 +21,7 @@ func NewStreamPublisher(logger *zap.Logger, ws api.WebSocketServer) controller.N
 	feed := ws.BroadcastFeed()
 	return func(msg qbftstorage.ParticipantsRangeEntry) {
 		identifier := hex.EncodeToString(msg.Identifier[:])
-		key := fmt.Sprintf("%s:%d:%d", identifier, msg.Slot, len(msg.Operators))
+		key := fmt.Sprintf("%s:%d:%d", identifier, msg.Slot, len(msg.Signers))
 		_, ok := c.Get(key)
 		if ok {
 			return
