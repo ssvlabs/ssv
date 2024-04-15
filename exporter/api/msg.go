@@ -37,7 +37,7 @@ type ParticipantsAPI struct {
 	Role        string
 }
 
-// NewDecidedAPIMsg creates a new message from the given message
+// NewDecidedAPIMsg creates a new message in an old format from the given message.
 // TODO: avoid converting to v0 once explorer is upgraded
 // DEPRECATED.
 func NewDecidedAPIMsg(msgs ...qbftstorage.ParticipantsRangeEntry) Message {
@@ -64,7 +64,7 @@ func NewDecidedAPIMsg(msgs ...qbftstorage.ParticipantsRangeEntry) Message {
 	}
 }
 
-// TODO godoc
+// NewParticipantsAPIMsg creates a new message in a new format from the given message.
 func NewParticipantsAPIMsg(msgs ...qbftstorage.ParticipantsRangeEntry) Message {
 	data, err := ParticipantsAPIData(msgs...)
 	if err != nil {
@@ -89,7 +89,7 @@ func NewParticipantsAPIMsg(msgs ...qbftstorage.ParticipantsRangeEntry) Message {
 	}
 }
 
-// DecidedAPIData creates a new message from the given message
+// DecidedAPIData creates a new message from the given message in an old compatible format, which misses some fields.
 // DEPRECATED.
 func DecidedAPIData(msgs ...qbftstorage.ParticipantsRangeEntry) (interface{}, error) {
 	if len(msgs) == 0 {
@@ -113,8 +113,7 @@ func DecidedAPIData(msgs ...qbftstorage.ParticipantsRangeEntry) (interface{}, er
 	return apiMsgs, nil
 }
 
-// ParticipantsAPIData creates a new message from the given participants message
-// TODO: godoc
+// ParticipantsAPIData creates a new message from the given message in a new format.
 func ParticipantsAPIData(msgs ...qbftstorage.ParticipantsRangeEntry) (interface{}, error) {
 	if len(msgs) == 0 {
 		return nil, errors.New("no messages")
