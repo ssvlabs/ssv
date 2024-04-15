@@ -3,6 +3,7 @@ package validator
 import (
 	"fmt"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -60,46 +61,79 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 		return
 	}
 
-	if msg.GetType() != spectypes.SSVPartialSignatureMsgType {
-		return
-	}
-
-	spsm := &spectypes.SignedPartialSignatureMessage{}
-	if err := spsm.Decode(msg.GetData()); err != nil {
-		logger.Debug("❗ failed to get partial signature message from network message", zap.Error(err))
-		return
-	}
-
-	// only supports post consensus msg's
-	if spsm.Message.Type != spectypes.PostConsensusPartialSig {
-		return
-	}
-
-	logger = logger.With(fields.Slot(spsm.Message.Slot))
-
-	quorums, err := ncv.processMessage(spsm)
-	if err != nil {
-		logger.Debug("❌ could not process SignedPartialSignatureMessage",
-			zap.Error(err))
-		return
-	}
-
-	if len(quorums) == 0 {
-		return
-	}
-
-	for _, quorum := range quorums {
-		if err := ncv.Storage.Get(msg.GetID().GetRoleType()).SaveParticipants(msg.GetID(), spsm.Message.Slot, quorum); err != nil {
-			logger.Error("❌ could not save participants", zap.Error(err))
+	switch msg.GetType() {
+	case spectypes.SSVConsensusMsgType: // deprecated, to be removed when explorer is adjusted to the API changes
+		signedMsg := &specqbft.SignedMessage{}
+		if err := signedMsg.Decode(msg.GetData()); err != nil {
+			logger.Debug("❗ failed to get consensus Message from network Message", zap.Error(err))
+			return
+		}
+		// only supports decided msg's
+		if signedMsg.Message.MsgType != specqbft.CommitMsgType || !ncv.Share.HasQuorum(len(signedMsg.Signers)) {
 			return
 		}
 
-		if ncv.newParticipantsHandler != nil {
-			ncv.newParticipantsHandler(qbftstorage.ParticipantsRangeEntry{
-				Slot:       spsm.Message.Slot,
-				Operators:  quorum,
-				Identifier: msg.GetID(),
-			})
+		logger = logger.With(fields.Height(signedMsg.Message.Height))
+
+		if decided, err := ncv.qbftController.ProcessMsg(logger, signedMsg); err != nil {
+			logger.Debug("❌ failed to process message",
+				zap.Uint64("msg_height", uint64(signedMsg.Message.Height)),
+				zap.Any("signers", signedMsg.Signers),
+				zap.Error(err))
+		} else if decided != nil {
+			if inst := ncv.qbftController.StoredInstances.FindInstance(signedMsg.Message.Height); inst != nil {
+				logger := logger.With(
+					zap.Uint64("msg_height", uint64(signedMsg.Message.Height)),
+					zap.Uint64("ctrl_height", uint64(ncv.qbftController.Height)),
+					zap.Any("signers", signedMsg.Signers),
+				)
+				if err = ncv.qbftController.SaveInstance(inst, signedMsg); err != nil {
+					logger.Debug("❗failed to save instance", zap.Error(err))
+				} else {
+					logger.Debug("💾 saved instance")
+				}
+			}
+		}
+		return
+
+	case spectypes.SSVPartialSignatureMsgType:
+		spsm := &spectypes.SignedPartialSignatureMessage{}
+		if err := spsm.Decode(msg.GetData()); err != nil {
+			logger.Debug("❗ failed to get partial signature message from network message", zap.Error(err))
+			return
+		}
+
+		// only supports post consensus msg's
+		if spsm.Message.Type != spectypes.PostConsensusPartialSig {
+			return
+		}
+
+		logger = logger.With(fields.Slot(spsm.Message.Slot))
+
+		quorums, err := ncv.processPartialSigMessage(spsm)
+		if err != nil {
+			logger.Debug("❌ could not process SignedPartialSignatureMessage",
+				zap.Error(err))
+			return
+		}
+
+		if len(quorums) == 0 {
+			return
+		}
+
+		for _, quorum := range quorums {
+			if err := ncv.Storage.Get(msg.GetID().GetRoleType()).SaveParticipants(msg.GetID(), spsm.Message.Slot, quorum); err != nil {
+				logger.Error("❌ could not save participants", zap.Error(err))
+				return
+			}
+
+			if ncv.newParticipantsHandler != nil {
+				ncv.newParticipantsHandler(qbftstorage.ParticipantsRangeEntry{
+					Slot:       spsm.Message.Slot,
+					Operators:  quorum,
+					Identifier: msg.GetID(),
+				})
+			}
 		}
 	}
 }
@@ -113,7 +147,7 @@ func nonCommitteeInstanceContainerCapacity(fullNode bool) int {
 	return 1
 }
 
-func (ncv *NonCommitteeValidator) processMessage(
+func (ncv *NonCommitteeValidator) processPartialSigMessage(
 	signedMsg *spectypes.SignedPartialSignatureMessage,
 ) (map[[32]byte][]spectypes.OperatorID, error) {
 	quorums := make(map[[32]byte][]spectypes.OperatorID)
