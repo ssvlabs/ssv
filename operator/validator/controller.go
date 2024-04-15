@@ -74,7 +74,6 @@ type ControllerOptions struct {
 	RegistryStorage            nodestorage.Storage
 	RecipientsStorage          Recipients
 	NewDecidedHandler          qbftcontroller.NewDecidedHandler
-	NewParticipantsHandler     qbftcontroller.NewParticipantsHandler
 	DutyRoles                  []spectypes.BeaconRole
 	StorageMap                 *storage.QBFTStores
 	Metrics                    validator.Metrics
@@ -201,15 +200,14 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		//Share:   nil,  // set per validator
 		Signer: options.KeyManager,
 		//Mode: validator.ModeRW // set per validator
-		DutyRunners:            nil, // set per validator
-		NewDecidedHandler:      options.NewDecidedHandler,
-		NewParticipantsHandler: options.NewParticipantsHandler,
-		FullNode:               options.FullNode,
-		Exporter:               options.Exporter,
-		BuilderProposals:       options.BuilderProposals,
-		GasLimit:               options.GasLimit,
-		MessageValidator:       options.MessageValidator,
-		Metrics:                options.Metrics,
+		DutyRunners:       nil, // set per validator
+		NewDecidedHandler: options.NewDecidedHandler,
+		FullNode:          options.FullNode,
+		Exporter:          options.Exporter,
+		BuilderProposals:  options.BuilderProposals,
+		GasLimit:          options.GasLimit,
+		MessageValidator:  options.MessageValidator,
+		Metrics:           options.Metrics,
 	}
 
 	// If full node, increase queue size to make enough room

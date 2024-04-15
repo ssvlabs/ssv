@@ -3,10 +3,10 @@ package api
 import (
 	"encoding/hex"
 
-	"github.com/pkg/errors"
-
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/pkg/errors"
 
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 )
@@ -22,16 +22,25 @@ type Message struct {
 }
 
 type SignedMessageAPI struct {
-	Signature types.Signature
-	Signers   []types.OperatorID
+	Signature spectypes.Signature
+	Signers   []spectypes.OperatorID
 	Message   specqbft.Message
 
-	FullData *types.ConsensusData
+	FullData *spectypes.ConsensusData
+}
+
+type ParticipantsAPI struct {
+	Operators   []spectypes.OperatorID
+	Slot        phase0.Slot
+	Identifier  spectypes.MessageID
+	ValidatorPK string
+	Role        string
 }
 
 // NewDecidedAPIMsg creates a new message from the given message
 // TODO: avoid converting to v0 once explorer is upgraded
-func NewDecidedAPIMsg(msgs ...*specqbft.SignedMessage) Message {
+// DEPRECATED.
+func NewDecidedAPIMsg(msgs ...qbftstorage.ParticipantsRangeEntry) Message {
 	data, err := DecidedAPIData(msgs...)
 	if err != nil {
 		return Message{
@@ -40,22 +49,22 @@ func NewDecidedAPIMsg(msgs ...*specqbft.SignedMessage) Message {
 		}
 	}
 
-	identifier := specqbft.ControllerIdToMessageID(msgs[0].Message.Identifier)
+	identifier := specqbft.ControllerIdToMessageID(msgs[0].Identifier[:])
 	pkv := identifier.GetPubKey()
 	role := identifier.GetRoleType()
 	return Message{
 		Type: TypeDecided,
 		Filter: MessageFilter{
 			PublicKey: hex.EncodeToString(pkv),
-			From:      uint64(msgs[0].Message.Height),
-			To:        uint64(msgs[len(msgs)-1].Message.Height),
+			From:      uint64(msgs[0].Slot),
+			To:        uint64(msgs[len(msgs)-1].Slot),
 			Role:      role.String(),
 		},
 		Data: data,
 	}
 }
 
-// TODO rewrite
+// TODO godoc
 func NewParticipantsAPIMsg(msgs ...qbftstorage.ParticipantsRangeEntry) Message {
 	data, err := ParticipantsAPIData(msgs...)
 	if err != nil {
@@ -81,40 +90,8 @@ func NewParticipantsAPIMsg(msgs ...qbftstorage.ParticipantsRangeEntry) Message {
 }
 
 // DecidedAPIData creates a new message from the given message
-func DecidedAPIData(msgs ...*specqbft.SignedMessage) (interface{}, error) {
-	if len(msgs) == 0 {
-		return nil, errors.New("no messages")
-	}
-
-	apiMsgs := make([]*SignedMessageAPI, 0)
-	for _, msg := range msgs {
-		if msg == nil {
-			return nil, errors.New("nil message")
-		}
-
-		apiMsg := &SignedMessageAPI{
-			Signature: msg.Signature,
-			Signers:   msg.Signers,
-			Message:   msg.Message,
-		}
-
-		if msg.FullData != nil {
-			var cd types.ConsensusData
-			if err := cd.UnmarshalSSZ(msg.FullData); err != nil {
-				return nil, errors.Wrap(err, "failed to unmarshal consensus data")
-			}
-			apiMsg.FullData = &cd
-		}
-
-		apiMsgs = append(apiMsgs, apiMsg)
-	}
-
-	return apiMsgs, nil
-}
-
-// ParticipantsAPIData creates a new message from the given participants message
-// TODO: rewrite
-func ParticipantsAPIData(msgs ...qbftstorage.ParticipantsRangeEntry) (interface{}, error) {
+// DEPRECATED.
+func DecidedAPIData(msgs ...qbftstorage.ParticipantsRangeEntry) (interface{}, error) {
 	if len(msgs) == 0 {
 		return nil, errors.New("no messages")
 	}
@@ -134,6 +111,29 @@ func ParticipantsAPIData(msgs ...qbftstorage.ParticipantsRangeEntry) (interface{
 				RoundChangeJustification: nil,
 				PrepareJustification:     nil,
 			},
+		}
+
+		apiMsgs = append(apiMsgs, apiMsg)
+	}
+
+	return apiMsgs, nil
+}
+
+// ParticipantsAPIData creates a new message from the given participants message
+// TODO: godoc
+func ParticipantsAPIData(msgs ...qbftstorage.ParticipantsRangeEntry) (interface{}, error) {
+	if len(msgs) == 0 {
+		return nil, errors.New("no messages")
+	}
+
+	apiMsgs := make([]*ParticipantsAPI, 0)
+	for _, msg := range msgs {
+		apiMsg := &ParticipantsAPI{
+			Operators:   msg.Operators,
+			Slot:        msg.Slot,
+			Identifier:  msg.Identifier,
+			ValidatorPK: hex.EncodeToString(msg.Identifier.GetPubKey()),
+			Role:        msg.Identifier.GetRoleType().String(),
 		}
 
 		apiMsgs = append(apiMsgs, apiMsg)

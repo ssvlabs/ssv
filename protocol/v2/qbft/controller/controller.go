@@ -19,9 +19,7 @@ import (
 
 // NewDecidedHandler handles newly saved decided messages.
 // it will be called in a new goroutine to avoid concurrency issues
-type NewDecidedHandler func(msg *specqbft.SignedMessage)
-
-type NewParticipantsHandler func(msg qbftstorage.ParticipantsRangeEntry)
+type NewDecidedHandler func(msg qbftstorage.ParticipantsRangeEntry)
 
 // Controller is a QBFT coordinator responsible for starting and following the entire life cycle of multiple QBFT InstanceContainer
 type Controller struct {

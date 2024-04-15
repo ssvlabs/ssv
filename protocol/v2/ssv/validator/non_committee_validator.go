@@ -24,7 +24,7 @@ type NonCommitteeValidator struct {
 	Storage                *storage.QBFTStores
 	qbftController         *qbftcontroller.Controller
 	postConsensusContainer *specssv.PartialSigContainer
-	newParticipantsHandler qbftcontroller.NewParticipantsHandler
+	newDecidedHandler      qbftcontroller.NewDecidedHandler
 }
 
 func NewNonCommitteeValidator(logger *zap.Logger, identifier spectypes.MessageID, opts Options) *NonCommitteeValidator {
@@ -48,7 +48,7 @@ func NewNonCommitteeValidator(logger *zap.Logger, identifier spectypes.MessageID
 		Storage:                opts.Storage,
 		qbftController:         ctrl,
 		postConsensusContainer: specssv.NewPartialSigContainer(opts.SSVShare.Share.Quorum),
-		newParticipantsHandler: opts.NewParticipantsHandler,
+		newDecidedHandler:      opts.NewDecidedHandler,
 	}
 }
 
@@ -94,8 +94,8 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 			return
 		}
 
-		if ncv.newParticipantsHandler != nil {
-			ncv.newParticipantsHandler(qbftstorage.ParticipantsRangeEntry{
+		if ncv.newDecidedHandler != nil {
+			ncv.newDecidedHandler(qbftstorage.ParticipantsRangeEntry{
 				Slot:       spsm.Message.Slot,
 				Operators:  quorum,
 				Identifier: msg.GetID(),

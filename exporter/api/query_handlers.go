@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
 
@@ -56,18 +55,14 @@ func HandleDecidedQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores, nm 
 	}
 
 	msgID := spectypes.NewMsgID(types.GetDefaultDomain(), pkRaw, beaconRole)
-	from := specqbft.Height(nm.Msg.Filter.From)
-	to := specqbft.Height(nm.Msg.Filter.To)
-	instances, err := roleStorage.GetInstancesInRange(msgID[:], from, to)
+	from := phase0.Slot(nm.Msg.Filter.From)
+	to := phase0.Slot(nm.Msg.Filter.To)
+	participantsList, err := roleStorage.GetParticipantsInRange(msgID, from, to)
 	if err != nil {
-		logger.Warn("failed to get instances", zap.Error(err))
-		res.Data = []string{"internal error - could not get decided messages"}
+		logger.Warn("failed to get participants", zap.Error(err))
+		res.Data = []string{"internal error - could not get participants messages"}
 	} else {
-		msgs := make([]*specqbft.SignedMessage, 0, len(instances))
-		for _, instance := range instances {
-			msgs = append(msgs, instance.DecidedMessage)
-		}
-		data, err := DecidedAPIData(msgs...)
+		data, err := DecidedAPIData(participantsList...)
 		if err != nil {
 			res.Data = []string{err.Error()}
 		} else {
