@@ -99,17 +99,10 @@ func DecidedAPIData(msgs ...qbftstorage.ParticipantsRangeEntry) (interface{}, er
 	apiMsgs := make([]*SignedMessageAPI, 0)
 	for _, msg := range msgs {
 		apiMsg := &SignedMessageAPI{
-			Signature: []byte{}, // TODO
-			Signers:   msg.Operators,
+			Signers: msg.Operators,
 			Message: specqbft.Message{
-				MsgType:                  specqbft.CommitMsgType,
-				Height:                   specqbft.Height(msg.Slot),
-				Round:                    specqbft.FirstRound,
-				Identifier:               msg.Identifier[:],
-				Root:                     [32]byte{},
-				DataRound:                0,
-				RoundChangeJustification: nil,
-				PrepareJustification:     nil,
+				Height:     specqbft.Height(msg.Slot),
+				Identifier: msg.Identifier[:],
 			},
 		}
 
