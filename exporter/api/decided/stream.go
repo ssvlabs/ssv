@@ -47,7 +47,7 @@ func NewStreamPublisherParticipants(logger *zap.Logger, ws api.WebSocketServer) 
 		}
 		c.SetDefault(key, true)
 
-		logger.Debug("broadcast decided stream", zap.String("identifier", identifier), fields.Slot(msg.Slot))
+		logger.Debug("broadcast participants stream", zap.String("identifier", identifier), fields.Slot(msg.Slot))
 
 		feed.Send(api.NewParticipantsAPIMsg(msg))
 	}

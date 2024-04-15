@@ -52,8 +52,6 @@ func NewNonCommitteeValidator(logger *zap.Logger, identifier spectypes.MessageID
 	}
 }
 
-type loggerCtx struct{}
-
 func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 	logger := ncv.logger.With(fields.PubKey(msg.MsgID.GetPubKey()), fields.Role(msg.MsgID.GetRoleType()))
 
@@ -68,7 +66,7 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 
 	spsm := &spectypes.SignedPartialSignatureMessage{}
 	if err := spsm.Decode(msg.GetData()); err != nil {
-		logger.Debug("❗ failed to get consensus Message from network Message", zap.Error(err))
+		logger.Debug("❗ failed to get partial signature message from network message", zap.Error(err))
 		return
 	}
 
@@ -85,6 +83,7 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 			zap.Error(err))
 		return
 	}
+
 	if len(quorums) == 0 {
 		return
 	}
