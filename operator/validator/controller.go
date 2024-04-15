@@ -196,7 +196,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		Buffer:       options.QueueBufferSize,
 	}
 
-	sigVerifier := validator.NewSignatureVerifier(options.RegistryStorage)
+	sigVerifier := validator.NewSignatureVerifier()
 
 	validatorOptions := validator.Options{ //TODO add vars
 		Network:       options.Network,

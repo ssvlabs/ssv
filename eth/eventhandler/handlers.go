@@ -273,9 +273,20 @@ func (eh *EventHandler) validatorAddedEventToShare(
 	committee := make([]*spectypes.Operator, 0)
 	for i := range event.OperatorIds {
 		operatorID := event.OperatorIds[i]
+		od, found, err := eh.nodeStorage.GetOperatorData(nil, operatorID)
+		if err != nil {
+			return nil, nil, fmt.Errorf("could not get operator data: %w", err)
+		}
+		if !found {
+			return nil, nil, &MalformedEventError{
+				Err: fmt.Errorf("operator data not found: %w", err),
+			}
+		}
+
 		committee = append(committee, &spectypes.Operator{
-			OperatorID:  operatorID,
-			SharePubKey: sharePublicKeys[i],
+			OperatorID:        operatorID,
+			SharePubKey:       sharePublicKeys[i],
+			SSVOperatorPubKey: od.PublicKey,
 		})
 
 		if operatorID != selfOperatorID {

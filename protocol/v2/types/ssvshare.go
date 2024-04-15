@@ -1,10 +1,7 @@
 package types
 
 import (
-	"bytes"
 	"encoding/binary"
-	"encoding/gob"
-	"fmt"
 	"sort"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -18,7 +15,7 @@ import (
 )
 
 const (
-	MaxPossibleShareSize = 1272
+	MaxPossibleShareSize = 1258
 	MaxAllowedShareSize  = MaxPossibleShareSize * 8 // Leaving some room for protocol updates and calculation mistakes.
 )
 
@@ -26,31 +23,6 @@ const (
 type SSVShare struct {
 	spectypes.Share
 	Metadata
-}
-
-// Encode encodes SSVShare using gob.
-func (s *SSVShare) Encode() ([]byte, error) {
-	var b bytes.Buffer
-	e := gob.NewEncoder(&b)
-	if err := e.Encode(s); err != nil {
-		return nil, fmt.Errorf("encode SSVShare: %w", err)
-	}
-
-	return b.Bytes(), nil
-}
-
-// Decode decodes SSVShare using gob.
-func (s *SSVShare) Decode(data []byte) error {
-	if len(data) > MaxAllowedShareSize {
-		return fmt.Errorf("share size is too big, got %v, max allowed %v", len(data), MaxAllowedShareSize)
-	}
-
-	d := gob.NewDecoder(bytes.NewReader(data))
-	if err := d.Decode(s); err != nil {
-		return fmt.Errorf("decode SSVShare: %w", err)
-	}
-	s.Quorum, s.PartialQuorum = ComputeQuorumAndPartialQuorum(len(s.Committee))
-	return nil
 }
 
 // BelongsToOperator checks whether the share belongs to operator.
