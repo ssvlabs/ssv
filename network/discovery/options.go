@@ -2,9 +2,10 @@ package discovery
 
 import (
 	"crypto/ecdsa"
+	"github.com/bloxapp/ssv/logging"
+	compatibale_logger "github.com/bloxapp/ssv/network/discovery/logger"
 	"net"
 
-	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -94,8 +95,9 @@ func (opts *DiscV5Options) DiscV5Cfg(logger *zap.Logger) (*discover.Config, erro
 	}
 
 	if opts.EnableLogging {
-		newLogger := log.New()
-		newLogger.With(&dv5Logger{logger.Named(logging.NameDiscoveryV5Logger)})
+		zapLogger := logger.Named(logging.NameDiscoveryV5Logger)
+		zapHandler := compatibale_logger.Option{Logger: zapLogger}.NewZapHandler()
+		newLogger := log.NewLogger(zapHandler)
 		dv5Cfg.Log = newLogger
 	}
 
