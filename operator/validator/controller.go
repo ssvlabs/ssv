@@ -331,7 +331,7 @@ func (c *controller) handleRouterMessages() {
 			if v, ok := c.validatorsMap.GetValidator(hexPK); ok {
 				v.HandleMessage(c.logger, msg)
 			} else if c.validatorOptions.Exporter {
-				if msg.MsgType != spectypes.SSVPartialSignatureMsgType {
+				if msg.MsgType != spectypes.SSVPartialSignatureMsgType && msg.MsgType != spectypes.SSVConsensusMsgType {
 					continue // not supporting other types
 				}
 				if !c.messageWorker.TryEnqueue(msg) { // start to save non committee decided messages only post fork
