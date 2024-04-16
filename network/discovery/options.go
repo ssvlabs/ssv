@@ -96,7 +96,7 @@ func (opts *DiscV5Options) DiscV5Cfg(logger *zap.Logger) (*discover.Config, erro
 
 	if opts.EnableLogging {
 		zapLogger := logger.Named(logging.NameDiscoveryV5Logger)
-		//TODO: this is a work around for using slog without upgrade go to 1.21
+		//TODO: this is a workaround for using slog without upgrade go to 1.21
 		zapHandler := compatibale_logger.Option{Logger: zapLogger}.NewZapHandler()
 		newLogger := log.NewLogger(zapHandler)
 		dv5Cfg.Log = newLogger
