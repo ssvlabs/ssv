@@ -168,7 +168,7 @@ func (i *ibftStorage) GetParticipantsInRange(identifier spectypes.MessageID, fro
 	for slot := from; slot <= to; slot++ {
 		participants, err := i.GetParticipants(identifier, slot)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to get participants")
+			return nil, fmt.Errorf("failed to get participants: %w", err)
 		}
 
 		if len(participants) == 0 {
