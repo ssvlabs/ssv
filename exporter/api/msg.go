@@ -105,6 +105,7 @@ func DecidedAPIData(msgs ...qbftstorage.ParticipantsRangeEntry) (interface{}, er
 				Height:     specqbft.Height(msg.Slot),
 				Identifier: msg.Identifier[:],
 			},
+			FullData: &spectypes.ConsensusData{Duty: spectypes.Duty{Slot: msg.Slot}},
 		}
 
 		apiMsgs = append(apiMsgs, apiMsg)
