@@ -16,7 +16,8 @@ import (
 
 // NewStreamPublisher handles incoming newly decided messages.
 // it forward messages to websocket stream, where messages are cached (1m TTL) to avoid flooding
-func NewStreamPublisher(logger *zap.Logger, ws api.WebSocketServer) controller.NewDecidedHandler {
+// TODO: remove useNewAPI parameter when explorer migrates to the new API
+func NewStreamPublisher(logger *zap.Logger, ws api.WebSocketServer, useNewAPI bool) controller.NewDecidedHandler {
 	c := cache.New(time.Minute, time.Minute*3/2)
 	feed := ws.BroadcastFeed()
 	return func(msg qbftstorage.ParticipantsRangeEntry) {
@@ -30,7 +31,10 @@ func NewStreamPublisher(logger *zap.Logger, ws api.WebSocketServer) controller.N
 
 		logger.Debug("broadcast decided stream", zap.String("identifier", identifier), fields.Slot(msg.Slot))
 
-		feed.Send(api.NewDecidedAPIMsg(msg))
-		//feed.Send(api.NewParticipantsAPIMsg(msg))
+		if useNewAPI {
+			feed.Send(api.NewParticipantsAPIMsg(msg))
+		} else {
+			feed.Send(api.NewDecidedAPIMsg(msg))
+		}
 	}
 }

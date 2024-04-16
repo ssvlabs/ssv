@@ -79,6 +79,7 @@ type ControllerOptions struct {
 	Metrics                    validator.Metrics
 	MessageValidator           validation.MessageValidator
 	ValidatorsMap              *validatorsmap.ValidatorsMap
+	UseNewExporterAPI          bool `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-description:"Use new exporter API which is simpler and has no workarounds"`
 
 	// worker flags
 	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of goroutines to use for message workers"`
