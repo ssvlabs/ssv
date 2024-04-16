@@ -173,12 +173,12 @@ func (ncv *NonCommitteeValidator) verifyBeaconPartialSignature(signer uint64, si
 			if err != nil {
 				return fmt.Errorf("could not deserialized pk: %w", err)
 			}
+
 			sig := &bls.Sign{}
 			if err := sig.Deserialize(signature); err != nil {
 				return fmt.Errorf("could not deserialized Signature: %w", err)
 			}
 
-			// verify
 			if !sig.VerifyByte(&pk, root[:]) {
 				return fmt.Errorf("wrong signature")
 			}
