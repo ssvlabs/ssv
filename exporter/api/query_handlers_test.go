@@ -4,6 +4,8 @@ import (
 	"math"
 	"testing"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/storage/kv"
 
@@ -117,6 +119,11 @@ func TestHandleDecidedQuery(t *testing.T) {
 	// save decided
 	for _, d := range decided250Seq {
 		require.NoError(t, ibftStorage.Get(role).SaveInstance(d))
+		require.NoError(t, ibftStorage.Get(role).SaveParticipants(
+			spectypes.MessageIDFromBytes(d.DecidedMessage.Message.Identifier),
+			phase0.Slot(d.DecidedMessage.Message.Height),
+			d.DecidedMessage.Signers),
+		)
 	}
 
 	t.Run("valid range", func(t *testing.T) {
