@@ -69,7 +69,6 @@ func (ncv *NonCommitteeValidator) ProcessMessage(msg *queue.DecodedSSVMessage) {
 		return
 	}
 
-	// only supports post consensus msg's
 	if spsm.Message.Type != spectypes.PostConsensusPartialSig {
 		return
 	}
@@ -142,6 +141,7 @@ func (ncv *NonCommitteeValidator) processMessage(
 }
 
 // Stores the container's existing signature or the new one, depending on their validity. If both are invalid, remove the existing one
+// copied from BaseRunner
 func (ncv *NonCommitteeValidator) resolveDuplicateSignature(container *specssv.PartialSigContainer, msg *spectypes.PartialSignatureMessage) {
 	// Check previous signature validity
 	previousSignature, err := container.GetSignature(msg.Signer, msg.SigningRoot)
@@ -163,6 +163,7 @@ func (ncv *NonCommitteeValidator) resolveDuplicateSignature(container *specssv.P
 	}
 }
 
+// copied from BaseRunner
 func (ncv *NonCommitteeValidator) verifyBeaconPartialSignature(signer uint64, signature spectypes.Signature, root [32]byte) error {
 	types.MetricsSignaturesVerifications.WithLabelValues().Inc()
 
