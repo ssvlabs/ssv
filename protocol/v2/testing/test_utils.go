@@ -18,6 +18,7 @@ import (
 
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
 var (
@@ -38,9 +39,15 @@ func GenerateBLSKeys(oids ...spectypes.OperatorID) (map[spectypes.OperatorID]*bl
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
 
+		opPubKey, _, err := rsaencryption.GenerateKeys()
+		if err != nil {
+			panic(err)
+		}
+
 		nodes = append(nodes, &spectypes.Operator{
-			OperatorID:  spectypes.OperatorID(i),
-			SharePubKey: sk.GetPublicKey().Serialize(),
+			OperatorID:        spectypes.OperatorID(i),
+			SharePubKey:       sk.GetPublicKey().Serialize(),
+			SSVOperatorPubKey: opPubKey,
 		})
 		sks[oid] = sk
 	}
