@@ -30,7 +30,7 @@ type SignedMessageAPI struct {
 }
 
 type ParticipantsAPI struct {
-	Operators   []spectypes.OperatorID
+	Signers     []spectypes.OperatorID
 	Slot        phase0.Slot
 	Identifier  []byte
 	ValidatorPK string
@@ -124,7 +124,7 @@ func ParticipantsAPIData(msgs ...qbftstorage.ParticipantsRangeEntry) (interface{
 	apiMsgs := make([]*ParticipantsAPI, 0)
 	for _, msg := range msgs {
 		apiMsg := &ParticipantsAPI{
-			Operators:   msg.Signers,
+			Signers:     msg.Signers,
 			Slot:        msg.Slot,
 			Identifier:  msg.Identifier[:],
 			ValidatorPK: hex.EncodeToString(msg.Identifier.GetPubKey()),
