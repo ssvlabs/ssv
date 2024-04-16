@@ -1,4 +1,4 @@
-package compatibale_logger
+package compatible_logger
 
 import (
 	"golang.org/x/exp/slices"
