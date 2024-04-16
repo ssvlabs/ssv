@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/core/types"
 	"math/big"
 	"testing"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/golang/mock/gomock"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -253,7 +253,8 @@ func setupOperatorStorage(
 		logger.Fatal("failed to encode operator public key", zap.Error(err))
 	}
 
-	privKeyHash, err := operator.privateKey.StorageHash()
+	privKey := operator.privateKey
+	privKeyHash, err := privKey.StorageHash()
 	if err != nil {
 		logger.Fatal("failed to encode operator private key", zap.Error(err))
 	}
@@ -283,10 +284,10 @@ func setupOperatorStorage(
 }
 
 func simTestBackend(testAddresses []*ethcommon.Address) *simulator.SimulatedBackend {
-	genesis := core.GenesisAlloc{}
+	genesis := types.GenesisAlloc{}
 
 	for _, testAddr := range testAddresses {
-		genesis[*testAddr] = core.GenesisAccount{Balance: big.NewInt(10000000000000000)}
+		genesis[*testAddr] = types.Account{Balance: big.NewInt(10000000000000000)}
 	}
 
 	return simulator.NewSimulatedBackend(

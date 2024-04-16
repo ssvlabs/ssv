@@ -15,11 +15,11 @@ import (
 	"github.com/bloxapp/ssv/operator/keys"
 	"github.com/bloxapp/ssv/operator/validatorsmap"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
+	"github.com/ethereum/go-ethereum/core/types"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/golang/mock/gomock"
@@ -201,7 +201,7 @@ func setupEventHandler(
 
 func simTestBackend(testAddr ethcommon.Address) *simulator.SimulatedBackend {
 	return simulator.NewSimulatedBackend(
-		core.GenesisAlloc{
+		types.GenesisAlloc{
 			testAddr: {Balance: big.NewInt(10000000000000000)},
 		}, 10000000,
 	)

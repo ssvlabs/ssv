@@ -13,6 +13,7 @@ import (
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ekmcore "github.com/bloxapp/eth2-key-manager/core"
+
 	"github.com/bloxapp/ssv/ekm"
 	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/eth/eventparser"
@@ -37,7 +38,6 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/golang/mock/gomock"
@@ -1382,7 +1382,8 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, operator *test
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
 
-	encodedPrivKey, err := operator.privateKey.StorageHash()
+	privKey := operator.privateKey
+	encodedPrivKey, err := privKey.StorageHash()
 	if err != nil {
 		logger.Fatal("failed to encode operator private key", zap.Error(err))
 	}
@@ -1428,10 +1429,10 @@ func unmarshalLog(t *testing.T, rawOperatorAdded string) ethtypes.Log {
 }
 
 func simTestBackend(testAddresses []*ethcommon.Address) *simulator.SimulatedBackend {
-	genesis := core.GenesisAlloc{}
+	genesis := ethtypes.GenesisAlloc{}
 
 	for _, testAddr := range testAddresses {
-		genesis[*testAddr] = core.GenesisAccount{Balance: big.NewInt(10000000000000000)}
+		genesis[*testAddr] = ethtypes.Account{Balance: big.NewInt(10000000000000000)}
 	}
 
 	return simulator.NewSimulatedBackend(
