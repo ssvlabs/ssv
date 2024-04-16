@@ -233,7 +233,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 	identifier := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, []byte("pk"), spectypes.BNRoleAttester)
 
 	ctr.messageRouter.Route(context.TODO(), &queue.DecodedSSVMessage{
-		SSVMessage: &spectypes.SSVMessage{
+		SSVMessage: &spectypes.SSVMessage{ // checks that not process unnecessary message
 			MsgType: spectypes.SSVConsensusMsgType,
 			MsgID:   identifier,
 			Data:    generateDecidedMessage(t, identifier),
@@ -241,7 +241,7 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 	})
 
 	ctr.messageRouter.Route(context.TODO(), &queue.DecodedSSVMessage{
-		SSVMessage: &spectypes.SSVMessage{
+		SSVMessage: &spectypes.SSVMessage{ // checks that not process unnecessary message
 			MsgType: spectypes.SSVConsensusMsgType,
 			MsgID:   identifier,
 			Data:    generateChangeRoundMsg(t, identifier),
@@ -257,10 +257,18 @@ func TestHandleNonCommitteeMessages(t *testing.T) {
 	})
 
 	ctr.messageRouter.Route(context.TODO(), &queue.DecodedSSVMessage{
-		SSVMessage: &spectypes.SSVMessage{ // checks that not process unnecessary message
+		SSVMessage: &spectypes.SSVMessage{
 			MsgType: spectypes.SSVPartialSignatureMsgType,
 			MsgID:   identifier,
 			Data:    []byte("data"),
+		},
+	})
+
+	ctr.messageRouter.Route(context.TODO(), &queue.DecodedSSVMessage{
+		SSVMessage: &spectypes.SSVMessage{
+			MsgType: spectypes.SSVPartialSignatureMsgType,
+			MsgID:   identifier,
+			Data:    []byte("data2"),
 		},
 	})
 
