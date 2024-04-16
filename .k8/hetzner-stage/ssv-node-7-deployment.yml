@@ -111,7 +111,7 @@ spec:
             - name: ENABLE_PROFILE
               value: "true"
             - name: DISCOVERY_TRACE
-              value: 'true'
+              value: 'false'
             - name: PUBSUB_TRACE
               value: 'false'
             - name: BUILDER_PROPOSALS
