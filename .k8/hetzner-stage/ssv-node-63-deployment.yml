@@ -116,6 +116,8 @@ spec:
               value: 'false'
             - name: BUILDER_PROPOSALS
               value: "true"
+            - name: DISABLE_IP_RATE_LIMIT
+              value: "true"
           volumeMounts:
             - mountPath: /data
               name: ssv-node-63
