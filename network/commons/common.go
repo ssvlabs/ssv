@@ -9,10 +9,11 @@ import (
 	"time"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/cespare/xxhash/v2"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/protocol"
+
+	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 )
 
 const (
@@ -39,6 +40,7 @@ const (
 )
 
 // EncodeSignedSSVMessage serializes the message, op id and signature into bytes
+// DEPRECATED, TODO: remove
 func EncodeSignedSSVMessage(message []byte, operatorID spectypes.OperatorID, signature []byte) []byte {
 	b := make([]byte, signatureSize+operatorIDSize+len(message))
 	copy(b[signatureOffset:], signature)
@@ -48,6 +50,7 @@ func EncodeSignedSSVMessage(message []byte, operatorID spectypes.OperatorID, sig
 }
 
 // DecodeSignedSSVMessage deserializes signed message bytes messsage, op id and a signature
+// DEPRECATED, TODO: remove
 func DecodeSignedSSVMessage(encoded []byte) ([]byte, spectypes.OperatorID, []byte, error) {
 	if len(encoded) < MessageOffset {
 		return nil, 0, nil, fmt.Errorf("unexpected encoded message size of %d", len(encoded))

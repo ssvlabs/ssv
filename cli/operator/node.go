@@ -38,6 +38,7 @@ import (
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/message/validation"
+	alanvalidation "github.com/bloxapp/ssv/message/validation/alan"
 	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/monitoring/metricsreporter"
@@ -83,6 +84,7 @@ type config struct {
 	WithPing                   bool                             `yaml:"WithPing" env:"WITH_PING" env-description:"Whether to send websocket ping messages'"`
 	SSVAPIPort                 int                              `yaml:"SSVAPIPort" env:"SSV_API_PORT" env-description:"Port to listen on for the SSV API."`
 	LocalEventsPath            string                           `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"path to local events"`
+	AlanFork                   bool                             `yaml:"AlanFork" env:"ALAN_FORK" env-description:"use alan fork"`
 }
 
 var cfg config
@@ -214,14 +216,26 @@ var StartNodeCmd = &cobra.Command{
 		dutyStore := dutystore.New()
 		cfg.SSVOptions.DutyStore = dutyStore
 
-		messageValidator := validation.NewMessageValidator(
-			networkConfig,
-			validation.WithNodeStorage(nodeStorage),
-			validation.WithLogger(logger),
-			validation.WithMetrics(metricsReporter),
-			validation.WithDutyStore(dutyStore),
-			validation.WithOwnOperatorID(operatorDataStore),
-		)
+		var messageValidator validation.MessageValidator
+		if cfg.AlanFork {
+			messageValidator = alanvalidation.NewMessageValidator(
+				networkConfig,
+				alanvalidation.WithNodeStorage(nodeStorage),
+				alanvalidation.WithLogger(logger),
+				alanvalidation.WithMetrics(metricsReporter),
+				alanvalidation.WithDutyStore(dutyStore),
+				alanvalidation.WithOwnOperatorID(operatorDataStore),
+			)
+		} else {
+			messageValidator = validation.NewMessageValidator(
+				networkConfig,
+				validation.WithNodeStorage(nodeStorage),
+				validation.WithLogger(logger),
+				validation.WithMetrics(metricsReporter),
+				validation.WithDutyStore(dutyStore),
+				validation.WithOwnOperatorID(operatorDataStore),
+			)
+		}
 
 		cfg.P2pNetworkConfig.Metrics = metricsReporter
 		cfg.P2pNetworkConfig.MessageValidator = messageValidator

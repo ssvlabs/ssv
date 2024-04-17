@@ -7,6 +7,7 @@ require (
 	github.com/attestantio/go-eth2-client v0.19.11-0.20240129201044-9d799aaab2bd
 	github.com/bloxapp/eth2-key-manager v1.4.0
 	github.com/bloxapp/ssv-spec v0.3.7
+	github.com/bloxapp/ssv-spec/alan v0.0.0-00010101000000-000000000000
 	github.com/btcsuite/btcd/btcec/v2 v2.3.2
 	github.com/cespare/xxhash/v2 v2.2.0
 	github.com/cornelk/hashmap v1.0.8
@@ -16,7 +17,6 @@ require (
 	github.com/ferranbt/fastssz v0.1.3
 	github.com/go-chi/chi/v5 v5.0.8
 	github.com/go-chi/render v1.0.2
-	github.com/go-redis/redis/v8 v8.11.5
 	github.com/golang/gddo v0.0.0-20200528160355-8d077c1d8f4c
 	github.com/golang/mock v1.6.0
 	github.com/google/uuid v1.3.0
@@ -80,7 +80,6 @@ require (
 	github.com/davidlazar/go-crypto v0.0.0-20200604182044-b73af7476f6c // indirect
 	github.com/deckarep/golang-set/v2 v2.1.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0 // indirect
-	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/dustin/go-humanize v1.0.0 // indirect
 	github.com/elastic/gosigar v0.14.2 // indirect
@@ -231,3 +230,5 @@ replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
 
 replace github.com/attestantio/go-eth2-client => github.com/y0sher/go-eth2-client v0.0.0-20240305092513-92d154b203a6
+
+replace github.com/bloxapp/ssv-spec/alan => github.com/bloxapp/ssv-spec v0.3.9-0.20240417142955-7d4c35fb26f1
