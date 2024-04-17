@@ -40,7 +40,7 @@ const (
 )
 
 // EncodeSignedSSVMessage serializes the message, op id and signature into bytes
-// DEPRECATED, TODO: remove
+// DEPRECATED, TODO: remove post-fork
 func EncodeSignedSSVMessage(message []byte, operatorID spectypes.OperatorID, signature []byte) []byte {
 	b := make([]byte, signatureSize+operatorIDSize+len(message))
 	copy(b[signatureOffset:], signature)
@@ -50,7 +50,7 @@ func EncodeSignedSSVMessage(message []byte, operatorID spectypes.OperatorID, sig
 }
 
 // DecodeSignedSSVMessage deserializes signed message bytes messsage, op id and a signature
-// DEPRECATED, TODO: remove
+// DEPRECATED, TODO: remove post-fork
 func DecodeSignedSSVMessage(encoded []byte) ([]byte, spectypes.OperatorID, []byte, error) {
 	if len(encoded) < MessageOffset {
 		return nil, 0, nil, fmt.Errorf("unexpected encoded message size of %d", len(encoded))
