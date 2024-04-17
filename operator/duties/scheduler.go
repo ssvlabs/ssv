@@ -68,36 +68,35 @@ type ExecutionClient interface {
 }
 
 // ValidatorController represents the component that controls validators via the scheduler
-type ValidatorController interface {
-	CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
-	AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex
-	GetOperatorShares() []*types.SSVShare
+type ValidatorProvider interface {
+	ParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
+	SelfParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
 }
 
 type ExecuteDutyFunc func(logger *zap.Logger, duty *spectypes.Duty)
 
 type SchedulerOptions struct {
-	Ctx                 context.Context
-	BeaconNode          BeaconNode
-	ExecutionClient     ExecutionClient
-	Network             networkconfig.NetworkConfig
-	ValidatorController ValidatorController
-	ExecuteDuty         ExecuteDutyFunc
-	IndicesChg          chan struct{}
-	ValidatorExitCh     <-chan ExitDescriptor
-	SlotTickerProvider  slotticker.Provider
-	BuilderProposals    bool
-	DutyStore           *dutystore.Store
+	Ctx                context.Context
+	BeaconNode         BeaconNode
+	ExecutionClient    ExecutionClient
+	Network            networkconfig.NetworkConfig
+	ValidatorProvider  ValidatorProvider
+	ExecuteDuty        ExecuteDutyFunc
+	IndicesChg         chan struct{}
+	ValidatorExitCh    <-chan ExitDescriptor
+	SlotTickerProvider slotticker.Provider
+	BuilderProposals   bool
+	DutyStore          *dutystore.Store
 }
 
 type Scheduler struct {
-	beaconNode          BeaconNode
-	executionClient     ExecutionClient
-	network             networkconfig.NetworkConfig
-	validatorController ValidatorController
-	slotTickerProvider  slotticker.Provider
-	executeDuty         ExecuteDutyFunc
-	builderProposals    bool
+	beaconNode         BeaconNode
+	executionClient    ExecutionClient
+	network            networkconfig.NetworkConfig
+	ValidatorProvider  ValidatorProvider
+	slotTickerProvider slotticker.Provider
+	executeDuty        ExecuteDutyFunc
+	builderProposals   bool
 
 	handlers            []dutyHandler
 	blockPropagateDelay time.Duration
@@ -126,7 +125,7 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 		network:             opts.Network,
 		slotTickerProvider:  opts.SlotTickerProvider,
 		executeDuty:         opts.ExecuteDuty,
-		validatorController: opts.ValidatorController,
+		ValidatorProvider:   opts.ValidatorProvider,
 		builderProposals:    opts.BuilderProposals,
 		indicesChg:          opts.IndicesChg,
 		blockPropagateDelay: blockPropagationDelay,
@@ -184,7 +183,7 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 			s.beaconNode,
 			s.executionClient,
 			s.network,
-			s.validatorController,
+			s.ValidatorProvider,
 			s.ExecuteDuties,
 			s.slotTickerProvider,
 			reorgCh,
@@ -397,4 +396,15 @@ func (s *Scheduler) waitOneThirdOrValidBlock(slot phase0.Slot) {
 		s.waitCond.Wait()
 	}
 	s.waitCond.L.Unlock()
+}
+
+func indicesFromShares(shares []*types.SSVShare) []phase0.ValidatorIndex {
+	indices := make([]phase0.ValidatorIndex, len(shares))
+	for i, share := range shares {
+		if share.BeaconMetadata == nil || share.BeaconMetadata.Index == 0 {
+			continue
+		}
+		indices[i] = share.BeaconMetadata.Index
+	}
+	return indices
 }

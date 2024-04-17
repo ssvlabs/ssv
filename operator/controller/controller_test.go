@@ -1,4 +1,4 @@
-package validator
+package controller
 
 import (
 	"context"
@@ -18,9 +18,9 @@ import (
 
 	"github.com/bloxapp/ssv/ekm"
 	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
+	"github.com/bloxapp/ssv/operator/controller/mocks"
 	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/operator/validator/mocks"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -34,7 +34,6 @@ import (
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/operator/validatorsmap"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 

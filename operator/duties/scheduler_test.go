@@ -98,11 +98,11 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Slot
 	}
 
 	opts := &SchedulerOptions{
-		Ctx:                 ctx,
-		BeaconNode:          mockBeaconNode,
-		ExecutionClient:     mockExecutionClient,
-		Network:             mockNetworkConfig,
-		ValidatorController: mockValidatorController,
+		Ctx:               ctx,
+		BeaconNode:        mockBeaconNode,
+		ExecutionClient:   mockExecutionClient,
+		Network:           mockNetworkConfig,
+		ValidatorProvider: mockValidatorController,
 		SlotTickerProvider: func() slotticker.SlotTicker {
 			ticker := NewMockSlotTicker()
 			mockSlotService.Subscribe(ticker.Subscribe())
@@ -263,11 +263,11 @@ func TestScheduler_Run(t *testing.T) {
 	mockDutyHandler2.EXPECT().HandleInitialDuties(gomock.Any()).AnyTimes()
 
 	opts := &SchedulerOptions{
-		Ctx:                 ctx,
-		BeaconNode:          mockBeaconNode,
-		Network:             networkconfig.TestNetwork,
-		ValidatorController: mockValidatorController,
-		BuilderProposals:    false,
+		Ctx:               ctx,
+		BeaconNode:        mockBeaconNode,
+		Network:           networkconfig.TestNetwork,
+		ValidatorProvider: mockValidatorController,
+		BuilderProposals:  false,
 		SlotTickerProvider: func() slotticker.SlotTicker {
 			return mockTicker
 		},
@@ -312,10 +312,10 @@ func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 	// create multiple mock duty handlers
 
 	opts := &SchedulerOptions{
-		Ctx:                 ctx,
-		BeaconNode:          mockBeaconNode,
-		Network:             networkconfig.TestNetwork,
-		ValidatorController: mockValidatorController,
+		Ctx:               ctx,
+		BeaconNode:        mockBeaconNode,
+		Network:           networkconfig.TestNetwork,
+		ValidatorProvider: mockValidatorController,
 		SlotTickerProvider: func() slotticker.SlotTicker {
 			return mockTicker
 		},

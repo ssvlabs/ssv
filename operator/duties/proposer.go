@@ -146,15 +146,15 @@ func (h *ProposerHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch) error {
 	start := time.Now()
 
-	allIndices := h.validatorController.AllActiveIndices(epoch, false)
+	allIndices := indicesFromShares(h.validatorProvider.ParticipatingValidators(epoch))
 	if len(allIndices) == 0 {
 		return nil
 	}
 
-	inCommitteeIndices := h.validatorController.CommitteeActiveIndices(epoch)
-	inCommitteeIndicesSet := map[phase0.ValidatorIndex]struct{}{}
-	for _, idx := range inCommitteeIndices {
-		inCommitteeIndicesSet[idx] = struct{}{}
+	selfIndices := indicesFromShares(h.validatorProvider.SelfParticipatingValidators(epoch))
+	selfIndicesSet := map[phase0.ValidatorIndex]struct{}{}
+	for _, idx := range selfIndices {
+		selfIndicesSet[idx] = struct{}{}
 	}
 
 	duties, err := h.beaconNode.ProposerDuties(ctx, epoch, allIndices)
@@ -166,7 +166,7 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 
 	specDuties := make([]*spectypes.Duty, 0, len(duties))
 	for _, d := range duties {
-		_, inCommitteeDuty := inCommitteeIndicesSet[d.ValidatorIndex]
+		_, inCommitteeDuty := selfIndicesSet[d.ValidatorIndex]
 		h.duties.Add(epoch, d.Slot, d.ValidatorIndex, d, inCommitteeDuty)
 		specDuties = append(specDuties, h.toSpecDuty(d, spectypes.BNRoleProposer))
 	}

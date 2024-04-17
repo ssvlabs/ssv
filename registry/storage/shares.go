@@ -46,24 +46,30 @@ type Shares interface {
 }
 
 type sharesStorage struct {
-	logger *zap.Logger
-	db     basedb.Database
-	prefix []byte
-	shares map[string]*types.SSVShare
-	mu     sync.RWMutex
+	logger         *zap.Logger
+	db             basedb.Database
+	prefix         []byte
+	shares         map[string]*types.SSVShare
+	validatorStore *validatorStore
+	mu             sync.RWMutex
 }
 
-func NewSharesStorage(logger *zap.Logger, db basedb.Database, prefix []byte) (Shares, error) {
+func NewSharesStorage(logger *zap.Logger, db basedb.Database, prefix []byte, operatorID func() spectypes.OperatorID) (Shares, error) {
 	storage := &sharesStorage{
 		logger: logger,
-		shares: make(map[string]*types.SSVShare),
 		db:     db,
 		prefix: prefix,
+		shares: make(map[string]*types.SSVShare),
 	}
 	err := storage.load()
 	if err != nil {
 		return nil, err
 	}
+	storage.validatorStore = newValidatorStore(
+		operatorID,
+		func() []*types.SSVShare { return storage.List(nil) },
+		func(pk []byte) *types.SSVShare { return storage.Get(nil, pk) },
+	)
 	return storage, nil
 }
 
@@ -130,6 +136,14 @@ func (s *sharesStorage) Save(rw basedb.ReadWriter, shares ...*types.SSVShare) er
 
 	for _, share := range shares {
 		key := hex.EncodeToString(share.ValidatorPubKey)
+
+		// Update validatorStore indices.
+		if _, ok := s.shares[key]; ok {
+			s.validatorStore.handleShareUpdated(share)
+		} else {
+			s.validatorStore.handleShareAdded(share)
+		}
+
 		s.shares[key] = share
 	}
 	return nil
@@ -144,7 +158,15 @@ func (s *sharesStorage) Delete(rw basedb.ReadWriter, pubKey []byte) error {
 		return err
 	}
 
-	delete(s.shares, hex.EncodeToString(pubKey))
+	key := hex.EncodeToString(pubKey)
+	if _, ok := s.shares[key]; !ok {
+		return nil
+	}
+
+	s.validatorStore.handleShareRemoved(pubKey)
+
+	delete(s.shares, key)
+
 	return nil
 }
 
@@ -160,6 +182,9 @@ func (s *sharesStorage) UpdateValidatorMetadata(pk string, metadata *beaconproto
 	}
 
 	share.BeaconMetadata = metadata
+
+	s.validatorStore.handleShareUpdated(share)
+
 	return s.Save(nil, share)
 }
 

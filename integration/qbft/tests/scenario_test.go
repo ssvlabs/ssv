@@ -18,7 +18,7 @@ import (
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/operator/validator"
+	"github.com/bloxapp/ssv/operator/controller"
 	protocolbeacon "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	protocolstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"

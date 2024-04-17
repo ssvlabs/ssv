@@ -1,4 +1,4 @@
-package validator
+package controller
 
 import (
 	"context"
@@ -27,7 +27,6 @@ import (
 	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/duties"
 	nodestorage "github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/operator/validatorsmap"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
@@ -78,7 +77,6 @@ type ControllerOptions struct {
 	StorageMap                 *storage.QBFTStores
 	Metrics                    validator.Metrics
 	MessageValidator           validation.MessageValidator
-	ValidatorsMap              *validatorsmap.ValidatorsMap
 
 	// worker flags
 	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of goroutines to use for message workers"`
@@ -156,7 +154,7 @@ type controller struct {
 	operatorDataStore operatordatastore.OperatorDataStore
 
 	validatorOptions        validator.Options
-	validatorsMap           *validatorsmap.ValidatorsMap
+	entities                *entityService
 	validatorStartFunc      func(validator *validator.Validator) (bool, error)
 	committeeValidatorSetup chan struct{}
 
@@ -237,7 +235,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		keyManager:        options.KeyManager,
 		network:           options.Network,
 
-		validatorsMap:    options.ValidatorsMap,
+		entities:         newEntityService(),
 		validatorOptions: validatorOptions,
 
 		metadataUpdateInterval: options.MetadataUpdateInterval,
@@ -324,10 +322,9 @@ func (c *controller) handleRouterMessages() {
 				continue
 			}
 
-			pk := msg.GetID().GetPubKey()
-			hexPK := hex.EncodeToString(pk)
-			if v, ok := c.validatorsMap.GetValidator(hexPK); ok {
-				v.HandleMessage(c.logger, msg)
+			recipient := msg.GetID().GetRecipientID()
+			if c.entities.Has(recipient) {
+				c.entities.PushMessage(msg)
 			} else if c.validatorOptions.Exporter {
 				if msg.MsgType != spectypes.SSVConsensusMsgType {
 					continue // not supporting other types
