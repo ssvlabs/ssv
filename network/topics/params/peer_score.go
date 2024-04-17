@@ -26,8 +26,8 @@ const (
 	appSpecificWeight = 0
 
 	// P6
-	ipColocationFactorThreshold = 10
-	ipColocationFactorWeight    = -topicScoreCap
+	ipColocationFactorThreshold = 100
+	ipColocationFactorWeight    = 0
 
 	// P7
 	behaviourPenaltyThreshold = 6

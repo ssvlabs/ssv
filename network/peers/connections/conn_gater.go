@@ -17,8 +17,8 @@ import (
 
 const (
 	// Rate, burst and period over which we allow inbound connections from a single IP.
-	ipLimitRate   = 4
-	ipLimitBurst  = 8
+	ipLimitRate   = 400
+	ipLimitBurst  = 800
 	ipLimitPeriod = 30 * time.Second
 
 	//
