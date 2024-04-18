@@ -323,6 +323,9 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.GetValidatorStats = func() (uint64, uint64, uint64, error) {
 			return validatorCtrl.GetValidatorStats()
 		}
+
+		cfg.P2pNetworkConfig.DisableIPRateLimit = true
+
 		if err := p2pNetwork.Setup(logger); err != nil {
 			logger.Fatal("failed to setup network", zap.Error(err))
 		}
