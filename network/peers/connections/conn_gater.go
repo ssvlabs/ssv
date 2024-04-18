@@ -28,14 +28,16 @@ const (
 // https://github.com/libp2p/go-libp2p/core/blob/master/connmgr/gater.go
 type connGater struct {
 	logger    *zap.Logger // struct logger to implement connmgr.ConnectionGater
+	disable   bool
 	atLimit   func() bool
 	ipLimiter *leakybucket.Collector
 }
 
 // NewConnectionGater creates a new instance of ConnectionGater
-func NewConnectionGater(logger *zap.Logger, atLimit func() bool) connmgr.ConnectionGater {
+func NewConnectionGater(logger *zap.Logger, disable bool, atLimit func() bool) connmgr.ConnectionGater {
 	return &connGater{
 		logger:    logger,
+		disable:   disable,
 		atLimit:   atLimit,
 		ipLimiter: leakybucket.NewCollector(ipLimitRate, ipLimitBurst, ipLimitPeriod, true),
 	}
@@ -60,6 +62,9 @@ func (n *connGater) InterceptAddrDial(id peer.ID, multiaddr ma.Multiaddr) bool {
 // accept already secure and/or multiplexed connections (e.g. possibly QUIC)
 // MUST call this method regardless, for correctness/consistency.
 func (n *connGater) InterceptAccept(multiaddrs libp2pnetwork.ConnMultiaddrs) bool {
+	if n.disable {
+		return true
+	}
 	remoteAddr := multiaddrs.RemoteMultiaddr()
 	if !n.validateDial(remoteAddr) {
 		// Yield this goroutine to allow others to run in-between connection attempts.

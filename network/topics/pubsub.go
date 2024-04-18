@@ -61,6 +61,7 @@ type PubSubConfig struct {
 	OutboundQueueSize   int
 	MsgIDCacheTTL       time.Duration
 
+	DisableIPRateLimit     bool
 	GetValidatorStats      network.GetValidatorStats
 	ScoreInspector         pubsub.ExtendedPeerScoreInspectFn
 	ScoreInspectorInterval time.Duration
@@ -154,7 +155,7 @@ func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, metri
 			inspectInterval = defaultScoreInspectInterval
 		}
 
-		peerScoreParams := params.PeerScoreParams(cfg.Scoring.OneEpochDuration, cfg.MsgIDCacheTTL, cfg.Scoring.IPWhilelist...)
+		peerScoreParams := params.PeerScoreParams(cfg.Scoring.OneEpochDuration, cfg.MsgIDCacheTTL, cfg.DisableIPRateLimit, cfg.Scoring.IPWhilelist...)
 		psOpts = append(psOpts, pubsub.WithPeerScore(peerScoreParams, params.PeerScoreThresholds()),
 			pubsub.WithPeerScoreInspect(inspector, inspectInterval))
 		if cfg.GetValidatorStats == nil {
