@@ -45,7 +45,7 @@ func PeerScoreThresholds() *pubsub.PeerScoreThresholds {
 }
 
 // PeerScoreParams returns peer score params according to the given options
-func PeerScoreParams(oneEpoch, msgIDCacheTTL time.Duration, disableCoLocation bool, ipWhilelist ...*net.IPNet) *pubsub.PeerScoreParams {
+func PeerScoreParams(oneEpoch, msgIDCacheTTL time.Duration, disableColocation bool, ipWhilelist ...*net.IPNet) *pubsub.PeerScoreParams {
 	if oneEpoch == 0 {
 		oneEpoch = oneEpochDuration
 	}
@@ -57,9 +57,9 @@ func PeerScoreParams(oneEpoch, msgIDCacheTTL time.Duration, disableCoLocation bo
 	targetVal = targetVal - behaviourPenaltyThreshold
 	behaviourPenaltyWeight := gossipThreshold / (targetVal * targetVal)
 
-	localIPColocationFactorWeight := ipColocationFactorWeight
-	if disableCoLocation {
-		localIPColocationFactorWeight = 0
+	finalIPColocationFactorWeight := ipColocationFactorWeight
+	if disableColocation {
+		finalIPColocationFactorWeight = 0
 	}
 
 	return &pubsub.PeerScoreParams{
@@ -78,7 +78,7 @@ func PeerScoreParams(oneEpoch, msgIDCacheTTL time.Duration, disableCoLocation bo
 		AppSpecificWeight: appSpecificWeight,
 
 		// P6
-		IPColocationFactorWeight:    localIPColocationFactorWeight,
+		IPColocationFactorWeight:    finalIPColocationFactorWeight,
 		IPColocationFactorThreshold: ipColocationFactorThreshold,
 		IPColocationFactorWhitelist: ipWhilelist,
 
