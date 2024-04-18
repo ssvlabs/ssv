@@ -94,7 +94,6 @@ type Controller interface {
 	ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty)
 	UpdateValidatorMetaDataLoop()
 	StartNetworkHandlers()
-	GetOperatorShares() []*ssvtypes.SSVShare
 	// GetValidatorStats returns stats of validators, including the following:
 	//  - the amount of validators in the network
 	//  - the amount of active validators (i.e. not slashed or existed)
@@ -273,14 +272,6 @@ func (c *controller) setupNetworkHandlers() error {
 		zap.Int("queue_size", c.validatorOptions.QueueSize))
 	c.network.RegisterHandlers(c.logger, syncHandlers...)
 	return nil
-}
-
-func (c *controller) GetOperatorShares() []*ssvtypes.SSVShare {
-	return c.sharesStorage.List(
-		nil,
-		registrystorage.ByOperatorID(c.operatorDataStore.GetOperatorID()),
-		registrystorage.ByActiveValidator(),
-	)
 }
 
 func (c *controller) IndicesChangeChan() chan struct{} {
@@ -644,7 +635,7 @@ func (c *controller) AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phas
 	if afterInit {
 		<-c.committeeValidatorSetup
 	}
-	shares := c.sharesStorage.List(nil, registrystorage.ByAttesting(epoch))
+	shares := c.sharesStorage.List(nil, registrystorage.ByAttesting(epoch)) // TODO: need to check liquidated?
 	indices := make([]phase0.ValidatorIndex, len(shares))
 	for i, share := range shares {
 		indices[i] = share.BeaconMetadata.Index
