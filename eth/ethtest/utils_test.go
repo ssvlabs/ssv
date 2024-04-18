@@ -4,9 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum/core/types"
 	"math/big"
 	"testing"
+
+	"github.com/ethereum/go-ethereum/core/types"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -202,7 +203,7 @@ func setupEventHandler(
 		return eh, validatorCtrl, ctrl, nodeStorage, nil
 	}
 
-	validatorCtrl := validator.NewController(logger, validator.ControllerOptions{
+	validatorCtrl := controller.NewController(logger, controller.ControllerOptions{
 		Context:           ctx,
 		DB:                db,
 		RegistryStorage:   nodeStorage,

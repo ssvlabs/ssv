@@ -10,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/bloxapp/ssv/operator/controller"
 	"github.com/bloxapp/ssv/operator/keystore"
 
 	"github.com/bloxapp/ssv/network"
@@ -45,7 +46,6 @@ import (
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/nodeprobe"
 	"github.com/bloxapp/ssv/operator"
-	"github.com/bloxapp/ssv/operator/controller"
 	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
 	"github.com/bloxapp/ssv/operator/keys"
@@ -208,8 +208,6 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
 		cfg.P2pNetworkConfig.Network = networkConfig
 
-		validatorsMap := validatorsmap.New(cmd.Context())
-
 		dutyStore := dutystore.New()
 		cfg.SSVOptions.DutyStore = dutyStore
 
@@ -240,7 +238,6 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.Network = p2pNetwork
 		cfg.SSVOptions.ValidatorOptions.Beacon = consensusClient
 		cfg.SSVOptions.ValidatorOptions.KeyManager = keyManager
-		cfg.SSVOptions.ValidatorOptions.ValidatorsMap = validatorsMap
 
 		cfg.SSVOptions.ValidatorOptions.OperatorDataStore = operatorDataStore
 		cfg.SSVOptions.ValidatorOptions.RegistryStorage = nodeStorage
@@ -275,7 +272,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.Metrics = metricsReporter
 		cfg.SSVOptions.Metrics = metricsReporter
 
-		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
+		validatorCtrl := controller.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
 
 		operatorNode = operator.New(logger, cfg.SSVOptions, slotTickerProvider)
@@ -586,7 +583,7 @@ func setupEventHandling(
 	ctx context.Context,
 	logger *zap.Logger,
 	executionClient *executionclient.ExecutionClient,
-	validatorCtrl validator.Controller,
+	validatorCtrl controller.Controller,
 	storageMap *ibftstorage.QBFTStores,
 	metricsReporter metricsreporter.MetricsReporter,
 	networkConfig networkconfig.NetworkConfig,

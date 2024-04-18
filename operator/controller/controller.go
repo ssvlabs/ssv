@@ -322,8 +322,8 @@ func (c *controller) handleRouterMessages() {
 				continue
 			}
 
-			recipient := msg.GetID().GetRecipientID()
-			if c.entities.Has(recipient) {
+			sender := msg.GetID().GetSenderID()
+			if c.entities.Has(sender) {
 				c.entities.PushMessage(msg)
 			} else if c.validatorOptions.Exporter {
 				if msg.MsgType != spectypes.SSVConsensusMsgType {
@@ -358,9 +358,9 @@ func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
 			ncv = item.Value()
 		} else {
 			// Create a new nonCommitteeValidator and cache it.
-			share := c.sharesStorage.Get(nil, msg.GetID().GetPubKey())
+			share := c.sharesStorage.Get(nil, msg.GetID().GetSenderID())
 			if share == nil {
-				return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetID().GetPubKey()))
+				return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetID().GetSenderID()))
 			}
 
 			opts := c.validatorOptions
@@ -414,7 +414,7 @@ func (c *controller) StartValidators() {
 		if share.BelongsToOperator(c.operatorDataStore.GetOperatorID()) {
 			ownShares = append(ownShares, share)
 		}
-		allPubKeys = append(allPubKeys, share.ValidatorPubKey)
+		allPubKeys = append(allPubKeys, share.ValidatorPubKey[:])
 	}
 
 	// Setup committee validators.
@@ -457,7 +457,7 @@ func (c *controller) setupValidators(shares []*ssvtypes.SSVShare) []*validator.V
 		var initialized bool
 		v, err := c.onShareInit(validatorShare)
 		if err != nil {
-			c.logger.Warn("could not start validator", fields.PubKey(validatorShare.ValidatorPubKey), zap.Error(err))
+			c.logger.Warn("could not start validator", fields.PubKey(validatorShare.ValidatorPubKey[:]), zap.Error(err))
 			errs = append(errs, err)
 		}
 		if v != nil {
@@ -465,13 +465,13 @@ func (c *controller) setupValidators(shares []*ssvtypes.SSVShare) []*validator.V
 		}
 		if !initialized && err == nil {
 			// Fetch metadata, if needed.
-			fetchMetadata = append(fetchMetadata, validatorShare.ValidatorPubKey)
+			fetchMetadata = append(fetchMetadata, validatorShare.ValidatorPubKey[:])
 		}
 		if initialized {
 			validators = append(validators, v)
 		}
 	}
-	c.logger.Info("init validators done", zap.Int("map size", c.validatorsMap.Size()),
+	c.logger.Info("init validators done", zap.Int("map size", len(validators)),
 		zap.Int("failures", len(errs)), zap.Int("missing_metadata", len(fetchMetadata)),
 		zap.Int("shares", len(shares)), zap.Int("initialized", len(validators)))
 	return validators
@@ -492,7 +492,7 @@ func (c *controller) startValidators(validators []*validator.Validator) int {
 		}
 	}
 
-	c.logger.Info("setup validators done", zap.Int("map size", c.validatorsMap.Size()),
+	c.logger.Info("setup validators done", zap.Int("map size", len(validators)),
 		zap.Int("failures", len(errs)),
 		zap.Int("shares", len(validators)), zap.Int("started", started))
 	return started
@@ -580,19 +580,13 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 	return nil
 }
 
-// GetValidator returns a validator instance from ValidatorsMap
-func (c *controller) GetValidator(pubKey string) (*validator.Validator, bool) {
-	return c.validatorsMap.GetValidator(pubKey)
-}
-
 func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) {
 	// because we're using the same duty for more than 1 duty (e.g. attest + aggregator) there is an error in bls.Deserialize func for cgo pointer to pointer.
 	// so we need to copy the pubkey val to avoid pointer
 	var pk phase0.BLSPubKey
 	copy(pk[:], duty.PubKey[:])
 
-	pubKeyString := hex.EncodeToString(pk[:])
-	if v, ok := c.GetValidator(pubKeyString); ok {
+	if c.entities.Has(pk[:]) {
 		ssvMsg, err := CreateDutyExecuteMsg(duty, pk, types.GetDefaultDomain())
 		if err != nil {
 			logger.Error("could not create duty execute msg", zap.Error(err))

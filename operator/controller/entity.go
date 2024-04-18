@@ -7,7 +7,7 @@ import (
 )
 
 type Entity interface {
-	RecipientID() string
+	SenderID() []byte
 	PushMessage(msg *queue.DecodedSSVMessage)
 	Stop()
 }
@@ -25,20 +25,20 @@ func newEntityService() *entityService {
 
 func (s *entityService) Register(agent Entity) {
 	s.mu.Lock()
-	s.entities[agent.RecipientID()] = agent
+	s.entities[string(agent.SenderID())] = agent
 	s.mu.Unlock()
 }
 
-func (s *entityService) Has(recipientID string) bool {
+func (s *entityService) Has(senderID []byte) bool {
 	s.mu.RLock()
-	_, ok := s.entities[recipientID]
+	_, ok := s.entities[string(senderID)]
 	s.mu.RUnlock()
 	return ok
 }
 
 func (s *entityService) PushMessage(msg *queue.DecodedSSVMessage) {
 	s.mu.RLock()
-	agent := s.entities[msg.MsgID.GetRecipientID()]
+	agent := s.entities[string(msg.MsgID.GetSenderID())]
 	s.mu.RUnlock()
 
 	if agent != nil {
@@ -46,13 +46,13 @@ func (s *entityService) PushMessage(msg *queue.DecodedSSVMessage) {
 	}
 }
 
-func (s *entityService) Kill(recipientID string) {
+func (s *entityService) Kill(senderID string) {
 	s.mu.Lock()
-	agent := s.entities[recipientID]
+	agent := s.entities[senderID]
 	s.mu.Unlock()
 
 	if agent != nil {
 		agent.Stop()
-		delete(s.entities, recipientID)
+		delete(s.entities, senderID)
 	}
 }

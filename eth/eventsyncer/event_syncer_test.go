@@ -166,12 +166,11 @@ func setupEventHandler(
 	defer ctrl.Finish()
 
 	bc := beacon.NewMockBeaconNode(ctrl)
-	validatorCtrl := validator.NewController(logger, validator.ControllerOptions{
+	validatorCtrl := controller.NewController(logger, controller.ControllerOptions{
 		Context:           ctx,
 		DB:                db,
 		RegistryStorage:   nodeStorage,
 		OperatorDataStore: operatorDataStore,
-		ValidatorsMap:     validatorsmap.New(ctx),
 	})
 
 	contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)

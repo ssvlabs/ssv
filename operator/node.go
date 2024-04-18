@@ -40,8 +40,8 @@ type Options struct {
 	P2PNetwork          network.P2PNetwork
 	Context             context.Context
 	DB                  basedb.Database
-	ValidatorController validator.Controller
-	ValidatorOptions    validator.ControllerOptions `yaml:"ValidatorOptions"`
+	ValidatorController controller.Controller
+	ValidatorOptions    controller.ControllerOptions `yaml:"ValidatorOptions"`
 	DutyStore           *dutystore.Store
 	WS                  api.WebSocketServer
 	WsAPIPort           int
@@ -52,8 +52,8 @@ type Options struct {
 type operatorNode struct {
 	network          networkconfig.NetworkConfig
 	context          context.Context
-	validatorsCtrl   validator.Controller
-	validatorOptions validator.ControllerOptions
+	validatorsCtrl   controller.Controller
+	validatorOptions controller.ControllerOptions
 	consensusClient  beaconprotocol.BeaconNode
 	executionClient  *executionclient.ExecutionClient
 	net              network.P2PNetwork
