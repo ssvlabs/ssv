@@ -3,12 +3,14 @@ package controller
 import (
 	"sync"
 
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
 
 type Entity interface {
 	SenderID() []byte
 	PushMessage(msg *queue.DecodedSSVMessage)
+	UpdateMetadata(metadata *beaconprotocol.ValidatorMetadata)
 	Stop()
 }
 
@@ -46,13 +48,21 @@ func (s *entityService) PushMessage(msg *queue.DecodedSSVMessage) {
 	}
 }
 
-func (s *entityService) Kill(senderID string) {
+func (s *entityService) Kill(senderID []byte) {
 	s.mu.Lock()
-	agent := s.entities[senderID]
+	agent := s.entities[string(senderID)]
 	s.mu.Unlock()
 
 	if agent != nil {
 		agent.Stop()
-		delete(s.entities, senderID)
+		delete(s.entities, string(senderID))
 	}
+}
+
+func (s *entityService) Get(senderID []byte) Entity {
+	s.mu.RLock()
+	agent := s.entities[string(senderID)]
+	s.mu.RUnlock()
+
+	return agent
 }

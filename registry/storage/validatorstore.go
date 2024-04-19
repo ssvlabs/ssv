@@ -23,6 +23,8 @@ type ValidatorStore interface {
 }
 
 type SelfValidatorStore interface {
+	ValidatorStore
+
 	SelfValidators() []*types.SSVShare
 	SelfParticipatingValidators(phase0.Epoch) []*types.SSVShare
 

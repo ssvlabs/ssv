@@ -6,7 +6,8 @@ require (
 	github.com/aquasecurity/table v1.8.0
 	github.com/attestantio/go-eth2-client v0.19.11-0.20240129201044-9d799aaab2bd
 	github.com/bloxapp/eth2-key-manager v1.4.0
-	github.com/bloxapp/ssv-spec v0.3.7 // Replaced with Alan (#cluster-consensus)
+	github.com/bloxapp/ssv-spec v0.3.9-0.20240418193307-4b4528a2dad5 // Replaced with Alan (#cluster-consensus)
+	github.com/bloxapp/ssv-spec-genesis v0.0.0
 	github.com/btcsuite/btcd/btcec/v2 v2.3.2
 	github.com/cespare/xxhash/v2 v2.2.0
 	github.com/cornelk/hashmap v1.0.8
@@ -231,6 +232,4 @@ replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-
 
 replace github.com/attestantio/go-eth2-client => github.com/y0sher/go-eth2-client v0.0.0-20240305092513-92d154b203a6
 
-replace github.com/bloxapp/ssv-spec => github.com/moshe-blox/ssv-spec v0.0.0-20240417153411-da7262a6acca // Alan
-
-replace github.com/bloxapp/ssv-spec-genesis => github.com/moshe-blox/ssv-spec-genesis v0.0.0-20240418064557-a060c082d4e9 // Genesis
+replace github.com/bloxapp/ssv-spec-genesis => github.com/bloxapp/ssv-spec v0.3.7 // Genesis
