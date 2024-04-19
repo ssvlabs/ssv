@@ -220,7 +220,7 @@ var StartNodeCmd = &cobra.Command{
 		if cfg.AlanFork {
 			messageValidator = alanvalidation.NewMessageValidator(
 				networkConfig,
-				alanvalidation.WithNodeStorage(nodeStorage),
+				alanvalidation.WithValidatorStore(nodeStorage),
 				alanvalidation.WithLogger(logger),
 				alanvalidation.WithMetrics(metricsReporter),
 				alanvalidation.WithDutyStore(dutyStore),

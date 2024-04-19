@@ -18,20 +18,21 @@ import (
 )
 
 func (mv *messageValidator) validateConsensusMessage(
-	share *ssvtypes.SSVShare,
-	ssvMessage *spectypes.SSVMessage,
+	signedSSVMessage *spectypes.SignedSSVMessage,
 	receivedAt time.Time,
 	signatureVerifier func() error,
 ) (ConsensusDescriptor, phase0.Slot, error) {
 	var consensusDescriptor ConsensusDescriptor
 
-	if mv.operatorDataStore != nil && mv.operatorDataStore.OperatorIDReady() {
-		if mv.inCommittee(share) {
-			mv.metrics.InCommitteeMessage(spectypes.SSVConsensusMsgType, mv.isDecidedMessage(signedMsg))
-		} else {
-			mv.metrics.NonCommitteeMessage(spectypes.SSVConsensusMsgType, mv.isDecidedMessage(signedMsg))
-		}
-	}
+	ssvMessage := signedSSVMessage.GetSSVMessage()
+
+	//if mv.operatorDataStore != nil && mv.operatorDataStore.OperatorIDReady() {
+	//	if mv.inCommittee(share) {
+	//		mv.metrics.InCommitteeMessage(spectypes.SSVConsensusMsgType, mv.isDecidedMessage(signedMsg))
+	//	} else {
+	//		mv.metrics.NonCommitteeMessage(spectypes.SSVConsensusMsgType, mv.isDecidedMessage(signedMsg))
+	//	}
+	//}
 
 	if len(ssvMessage.Data) > maxConsensusMsgSize {
 		e := ErrSSVDataTooBig
@@ -55,11 +56,11 @@ func (mv *messageValidator) validateConsensusMessage(
 	consensusDescriptor = ConsensusDescriptor{
 		QBFTMessageType: signedMsg.MsgType,
 		Round:           msgRound,
-		Signers:         ssvMessage.Signers,
-		Committee:       share.Committee,
+		//Signers:         ssvMessage.Signers,
+		//Committee:       share.Committee,
 	}
 
-	mv.metrics.ConsensusMsgType(signedMsg.MsgType, len(signedMsg.Signers))
+	//mv.metrics.ConsensusMsgType(signedMsg.MsgType, len(signedMsg.Signers))
 
 	switch messageID.GetRoleType() {
 	case spectypes.BNRoleValidatorRegistration, spectypes.BNRoleVoluntaryExit:
@@ -68,8 +69,10 @@ func (mv *messageValidator) validateConsensusMessage(
 		return consensusDescriptor, msgSlot, e
 	}
 
-	if err := mv.validateSignatureFormat(signedMsg.Signature); err != nil {
-		return consensusDescriptor, msgSlot, err
+	for _, signature := range signedSSVMessage.GetSignature() {
+		if err := mv.validateSignatureFormat(signature); err != nil {
+			return consensusDescriptor, msgSlot, err
+		}
 	}
 
 	if !mv.validQBFTMsgType(signedMsg.MsgType) {
@@ -115,7 +118,7 @@ func (mv *messageValidator) validateConsensusMessage(
 	}
 
 	if mv.hasFullData(signedMsg) {
-		hashedFullData, err := specqbft.HashDataRoot(signedMsg.FullData)
+		hashedFullData, err := specqbft.HashDataRoot(signedSSVMessage.FullData)
 		if err != nil {
 			return consensusDescriptor, msgSlot, fmt.Errorf("hash data root: %w", err)
 		}
@@ -155,7 +158,7 @@ func (mv *messageValidator) validateConsensusMessage(
 		}
 
 		if mv.hasFullData(signedMsg) && signerState.ProposalData == nil {
-			signerState.ProposalData = signedMsg.FullData
+			signerState.ProposalData = signedSSVMessage.FullData
 		}
 
 		signerState.MessageCounts.RecordConsensusMessage(signedMsg)
@@ -382,6 +385,7 @@ func (mv *messageValidator) waitAfterSlotStart(role spectypes.BeaconRole) time.D
 
 func (mv *messageValidator) validRole(roleType spectypes.BeaconRole) bool {
 	switch roleType {
+	// TODO: add committee roles
 	case spectypes.BNRoleAttester,
 		spectypes.BNRoleAggregator,
 		spectypes.BNRoleProposer,

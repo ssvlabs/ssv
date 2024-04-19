@@ -13,7 +13,7 @@ func (mv *messageValidator) verifySignatures(ssvMessage *spectypes.SSVMessage, o
 
 	operatorPubKey, ok := mv.operatorIDToPubkeyCache.Get(operatorID)
 	if !ok {
-		operator, found, err := mv.nodeStorage.GetOperatorData(nil, operatorID)
+		operator, found, err := mv.validatorStore.GetOperatorData(nil, operatorID)
 		if err != nil {
 			e := ErrOperatorNotFound
 			e.got = operatorID

@@ -28,7 +28,6 @@ import (
 	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
 	"github.com/bloxapp/ssv/operator/keys"
-	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -79,7 +78,7 @@ type messageValidator struct {
 	metrics                 metricsreporter.MetricsReporter
 	netCfg                  networkconfig.NetworkConfig
 	consensusStateIndex     sync.Map // TODO: use a map with explicit type
-	nodeStorage             operatorstorage.Storage
+	validatorStore          ValidatorStore
 	dutyStore               *dutystore.Store
 	operatorDataStore       operatordatastore.OperatorDataStore
 	operatorIDToPubkeyCache *hashmap.Map[spectypes.OperatorID, keys.OperatorPublicKey]
@@ -141,10 +140,10 @@ func WithOwnOperatorID(ods operatordatastore.OperatorDataStore) Option {
 	}
 }
 
-// WithNodeStorage sets the node storage for the messageValidator.
-func WithNodeStorage(nodeStorage operatorstorage.Storage) Option {
+// WithValidatorStore sets the validator store for the messageValidator.
+func WithValidatorStore(validatorStore ValidatorStore) Option {
 	return func(mv *messageValidator) {
-		mv.nodeStorage = nodeStorage
+		mv.validatorStore = validatorStore
 	}
 }
 
@@ -257,41 +256,14 @@ func (mv *messageValidator) validateSignedSSVMessage(signedSSVMessage *spectypes
 		return mv.verifySignatures(ssvMessage, signedSSVMessage.GetOperatorIDs(), signedSSVMessage.GetSignature())
 	}
 
-	return mv.validateSSVMessage(ssvMessage, topic, receivedAt, signatureVerifier)
+	return mv.validateSSVMessage(signedSSVMessage, topic, receivedAt, signatureVerifier)
 }
 
-func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage, topic string, receivedAt time.Time, signatureVerifier func() error) (*queue.DecodedSSVMessage, Descriptor, error) {
-	// TODO: Need access to data structure
-	// cached committee,  need to know if cluster is liquidated
-	// example:
-	// struct committee {
-	// 	status: string (active/liquidated etc) - atleast on of the shares is active then its active
-	//  shares: []SSVShare (all shares in cluster)
-
-	// when a message is for validator we calc the cluster and then access the shares
-
-	// refactor the design
-
-	// example of a validation function structure
-	// syntax
-	// p2p_message_validation(ssvMessage)
-	// type specific functions
-
-	// err:= generic_validation(ssvMessage)
-	//if msgid is cluster
-	// cluster_validation(ssvMessage)
-	//else if msgid is validator
-	// validator_validation(ssvMessage)
-
-	// by role type functions - adjusted to support cluster
-	// switch role is cluster role (attest/sync committee)
-	// cluster_role_validation(ssvMessage)
-
-	// by msg type functions - adjusted to support cluster
-	// if msg type is consensus
-	// consensus_validation(ssvMessage)
+func (mv *messageValidator) validateSSVMessage(signedSSVMessage *spectypes.SignedSSVMessage, topic string, receivedAt time.Time, signatureVerifier func() error) (*queue.DecodedSSVMessage, Descriptor, error) {
 
 	var descriptor Descriptor
+
+	ssvMessage := signedSSVMessage.GetSSVMessage()
 
 	if ssvMessage == nil {
 		return nil, descriptor, ErrNilSSVMessage
@@ -323,12 +295,6 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 	}
 
 	role := ssvMessage.GetID().GetRoleType()
-	// TODO determine if message is cluster or validator message
-	committeeMessage := false
-	if role == spectypes.BNRoleSyncCommittee { // TODO: fix role name once it's implemented in spec
-		committeeMessage = true
-	}
-
 	senderID := ssvMessage.GetID().GetSenderID()
 	descriptor.Role = role
 	descriptor.SenderID = senderID
@@ -337,34 +303,44 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 		return nil, descriptor, ErrInvalidRole
 	}
 
-	publicKey, err := ssvtypes.DeserializeBLSPublicKey(senderID)
-	if err != nil {
-		e := ErrDeserializePublicKey
-		e.innerErr = err
-		return nil, descriptor, e
+	// TODO determine if message is cluster or validator message
+	committeeMessage := false
+	if role == spectypes.BNRoleSyncCommittee { // TODO: fix role name once it's implemented in spec
+		committeeMessage = true
 	}
 
-	var share *ssvtypes.SSVShare
-	if mv.nodeStorage != nil {
-		share = mv.nodeStorage.Shares().Get(nil, publicKey.Serialize())
-		if share == nil {
-			e := ErrUnknownValidator
-			e.got = publicKey.SerializeToHexStr()
-			return nil, descriptor, e
-		}
+	if mv.validatorStore != nil {
+		if committeeMessage {
+			committee := mv.validatorStore.Committee(CommitteeID(senderID[16:])) // TODO: consider passing whole senderID
+			_ = committee                                                        // TODO: committee checks
+		} else {
+			publicKey, err := ssvtypes.DeserializeBLSPublicKey(senderID)
+			if err != nil {
+				e := ErrDeserializePublicKey
+				e.innerErr = err
+				return nil, descriptor, e
+			}
 
-		if share.Liquidated {
-			return nil, descriptor, ErrValidatorLiquidated
-		}
+			share := mv.validatorStore.Validator(publicKey.Serialize())
+			if share == nil {
+				e := ErrUnknownValidator
+				e.got = publicKey.SerializeToHexStr()
+				return nil, descriptor, e
+			}
 
-		if share.BeaconMetadata == nil {
-			return nil, descriptor, ErrNoShareMetadata
-		}
+			if share.Liquidated {
+				return nil, descriptor, ErrValidatorLiquidated
+			}
 
-		if !share.IsAttesting(mv.netCfg.Beacon.EstimatedCurrentEpoch()) {
-			err := ErrValidatorNotAttesting
-			err.got = share.BeaconMetadata.Status.String()
-			return nil, descriptor, err
+			if share.BeaconMetadata == nil {
+				return nil, descriptor, ErrNoShareMetadata
+			}
+
+			if !share.IsAttesting(mv.netCfg.Beacon.EstimatedCurrentEpoch()) {
+				err := ErrValidatorNotAttesting
+				err.got = share.BeaconMetadata.Status.String()
+				return nil, descriptor, err
+			}
 		}
 	}
 
@@ -379,10 +355,10 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 	defer mutex.Unlock()
 	mv.validationMutex.Unlock()
 
-	if mv.nodeStorage != nil {
+	if mv.validatorStore != nil {
 		switch ssvMessage.MsgType {
 		case spectypes.SSVConsensusMsgType:
-			consensusDescriptor, slot, err := mv.validateConsensusMessage(share, ssvMessage, receivedAt, signatureVerifier)
+			consensusDescriptor, slot, err := mv.validateConsensusMessage(signedSSVMessage, receivedAt, signatureVerifier)
 			descriptor.Consensus = &consensusDescriptor
 			descriptor.Slot = slot
 			if err != nil {
@@ -390,7 +366,7 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 			}
 
 		case spectypes.SSVPartialSignatureMsgType:
-			slot, err := mv.validatePartialSignatureMessage(share, ssvMessage, signatureVerifier)
+			slot, err := mv.validatePartialSignatureMessage(ssvMessage, signatureVerifier)
 			descriptor.Slot = slot
 			if err != nil {
 				return nil, descriptor, err

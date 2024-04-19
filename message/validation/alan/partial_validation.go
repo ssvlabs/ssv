@@ -6,16 +6,16 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/alan/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/alan/types"
-	"github.com/bloxapp/ssv-spec/types"
 
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 func (mv *messageValidator) validatePartialSignatureMessage(
-	share *ssvtypes.SSVShare,
-	ssvMessage *spectypes.SSVMessage,
+	signedSSVMessage *spectypes.SignedSSVMessage,
 	signatureVerifier func() error,
 ) (phase0.Slot, error) {
+	ssvMessage := signedSSVMessage.GetSSVMessage()
+
 	if len(ssvMessage.Data) > maxPartialSignatureMsgSize {
 		e := ErrSSVDataTooBig
 		e.got = len(ssvMessage.Data)
@@ -23,32 +23,32 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 		return 0, e
 	}
 
-	partialSignatureMessage := &types.PartialSignatureMessages{}
-	if err := partialSignatureMessage.Decode(ssvMessage.Data); err != nil {
+	signedMsg := &spectypes.PartialSignatureMessages{}
+	if err := signedMsg.Decode(ssvMessage.Data); err != nil {
 		e := ErrMalformedMessage
 		e.innerErr = err
 		return 0, e
 	}
 
-	if mv.operatorDataStore != nil && mv.operatorDataStore.OperatorIDReady() {
-		if mv.inCommittee(share) {
-			mv.metrics.InCommitteeMessage(spectypes.SSVPartialSignatureMsgType, false)
-		} else {
-			mv.metrics.NonCommitteeMessage(spectypes.SSVPartialSignatureMsgType, false)
-		}
-	}
+	//if mv.operatorDataStore != nil && mv.operatorDataStore.OperatorIDReady() {
+	//	if mv.inCommittee(share) {
+	//		mv.metrics.InCommitteeMessage(spectypes.SSVPartialSignatureMsgType, false)
+	//	} else {
+	//		mv.metrics.NonCommitteeMessage(spectypes.SSVPartialSignatureMsgType, false)
+	//	}
+	//}
 
-	msgSlot := signedMsg.Message.Slot
+	msgSlot := signedMsg.Slot
 
-	if !mv.validPartialSigMsgType(signedMsg.Message.Type) {
+	if !mv.validPartialSigMsgType(signedMsg.Type) {
 		e := ErrUnknownPartialMessageType
-		e.got = signedMsg.Message.Type
+		e.got = signedMsg.Type
 		return msgSlot, e
 	}
 
 	msgID := ssvMessage.GetID()
 	role := msgID.GetRoleType()
-	if !mv.partialSignatureTypeMatchesRole(signedMsg.Message.Type, role) {
+	if !mv.partialSignatureTypeMatchesRole(signedMsg.Type, role) {
 		return msgSlot, ErrPartialSignatureTypeRoleMismatch
 	}
 
@@ -57,7 +57,7 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 	}
 
 	state := mv.consensusState(msgID)
-	signerState := state.GetSignerState(signedMsg.Signer)
+	signerState := state.GetSignerState(signedSSVMessage.GetSignature())
 	if signerState != nil {
 		if err := mv.validateSignerBehaviorPartial(state, signedMsg.Signer, share, msgID, signedMsg); err != nil {
 			return msgSlot, err
