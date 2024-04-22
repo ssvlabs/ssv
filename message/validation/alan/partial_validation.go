@@ -161,7 +161,7 @@ func (mv *messageValidator) validatePartialMessages(committee []spectypes.Operat
 }
 
 func (mv *messageValidator) validateSignerBehaviorPartial(
-	state *ConsensusState,
+	state *consensusState,
 	signer spectypes.OperatorID,
 	committee []spectypes.OperatorID,
 	msgID spectypes.MessageID,

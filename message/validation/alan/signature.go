@@ -11,7 +11,9 @@ import (
 func (mv *messageValidator) verifySignature(ssvMessage *spectypes.SSVMessage, operatorID spectypes.OperatorID, signature []byte) error {
 	mv.metrics.MessageValidationRSAVerifications()
 
-	operatorPubKey, ok := mv.operatorIDToPubkeyCache.Get(operatorID)
+	mv.operatorIDToPubkeyCacheMu.Lock()
+	operatorPubKey, ok := mv.operatorIDToPubkeyCache[operatorID]
+	mv.operatorIDToPubkeyCacheMu.Unlock()
 	if !ok {
 		operator, found, err := mv.operatorStore.GetOperatorData(operatorID)
 		if err != nil {
@@ -33,7 +35,9 @@ func (mv *messageValidator) verifySignature(ssvMessage *spectypes.SSVMessage, op
 			return e
 		}
 
-		mv.operatorIDToPubkeyCache.Set(operatorID, operatorPubKey)
+		mv.operatorIDToPubkeyCacheMu.Lock()
+		mv.operatorIDToPubkeyCache[operatorID] = operatorPubKey
+		mv.operatorIDToPubkeyCacheMu.Unlock()
 	}
 
 	encodedMsg, err := ssvMessage.Encode() // TODO: should we abstract this?

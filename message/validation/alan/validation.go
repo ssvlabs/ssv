@@ -4,16 +4,11 @@ package validation
 // validator.go contains main code for validation and most of the rule checks.
 
 import (
-	"bytes"
 	"context"
-	"encoding/hex"
 	"sync"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/alan/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/alan/types"
-	"github.com/cornelk/hashmap"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
@@ -22,7 +17,6 @@ import (
 
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/monitoring/metricsreporter"
-	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/networkconfig"
 	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
@@ -54,15 +48,17 @@ type MessageValidator interface {
 }
 
 type messageValidator struct {
-	logger                  *zap.Logger
-	metrics                 metricsreporter.MetricsReporter
-	netCfg                  networkconfig.NetworkConfig
-	consensusStateIndex     sync.Map // TODO: use a map with explicit type
-	validatorStore          ValidatorStore
-	operatorStore           OperatorStore
-	dutyStore               *dutystore.Store
-	operatorDataStore       operatordatastore.OperatorDataStore
-	operatorIDToPubkeyCache *hashmap.Map[spectypes.OperatorID, keys.OperatorPublicKey]
+	logger                    *zap.Logger
+	metrics                   metricsreporter.MetricsReporter
+	netCfg                    networkconfig.NetworkConfig
+	consensusStateIndex       map[consensusID]*consensusState
+	consensusStateIndexMu     sync.Mutex
+	validatorStore            ValidatorStore
+	operatorStore             OperatorStore
+	dutyStore                 *dutystore.Store
+	operatorDataStore         operatordatastore.OperatorDataStore
+	operatorIDToPubkeyCache   map[spectypes.OperatorID]keys.OperatorPublicKey
+	operatorIDToPubkeyCacheMu sync.Mutex
 
 	// validationLocks is a map of lock per SSV message ID to
 	// prevent concurrent access to the same state.
@@ -79,7 +75,7 @@ func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) Mes
 		logger:                  zap.NewNop(),
 		metrics:                 metricsreporter.NewNop(),
 		netCfg:                  netCfg,
-		operatorIDToPubkeyCache: hashmap.New[spectypes.OperatorID, keys.OperatorPublicKey](),
+		operatorIDToPubkeyCache: make(map[spectypes.OperatorID]keys.OperatorPublicKey),
 		validationLocks:         make(map[spectypes.MessageID]*sync.Mutex),
 	}
 
@@ -159,9 +155,9 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer
 
 	decodedMessage, err := mv.validateP2PMessage(pmsg, time.Now())
 
-	descriptor := mv.buildDebugDescriptor(decodedMessage)
+	loggerFields := mv.buildLoggerFields(decodedMessage)
 
-	f := append(descriptor.Fields(), fields.PeerID(peerID))
+	f := append(loggerFields.Fields(), fields.PeerID(peerID))
 
 	if err != nil {
 		var valErr Error
@@ -172,7 +168,7 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer
 					mv.logger.Debug("rejecting invalid message", f...)
 				}
 
-				mv.metrics.MessageRejected(valErr.Text(), descriptor.Role, descriptor.Consensus.Round)
+				mv.metrics.MessageRejected(valErr.Text(), loggerFields.Role, loggerFields.Consensus.Round)
 				return pubsub.ValidationReject
 			}
 
@@ -180,11 +176,11 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer
 				f = append(f, zap.Error(err))
 				mv.logger.Debug("ignoring invalid message", f...)
 			}
-			mv.metrics.MessageIgnored(valErr.Text(), descriptor.Role, descriptor.Consensus.Round)
+			mv.metrics.MessageIgnored(valErr.Text(), loggerFields.Role, loggerFields.Consensus.Round)
 			return pubsub.ValidationIgnore
 		}
 
-		mv.metrics.MessageIgnored(err.Error(), descriptor.Role, descriptor.Consensus.Round)
+		mv.metrics.MessageIgnored(err.Error(), loggerFields.Role, loggerFields.Consensus.Round)
 		f = append(f, zap.Error(err))
 		mv.logger.Debug("ignoring invalid message", f...)
 		return pubsub.ValidationIgnore
@@ -192,36 +188,9 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer
 
 	pmsg.ValidatorData = decodedMessage
 
-	mv.metrics.MessageAccepted(descriptor.Role, descriptor.Consensus.Round)
+	mv.metrics.MessageAccepted(loggerFields.Role, loggerFields.Consensus.Round)
 
 	return pubsub.ValidationAccept
-}
-
-func (mv *messageValidator) buildDebugDescriptor(decodedMessage *DecodedMessage) *DebugDescriptor {
-	descriptor := &DebugDescriptor{
-		Consensus: &ConsensusDescriptor{},
-	}
-
-	if decodedMessage == nil {
-		return descriptor
-	}
-
-	descriptor.SenderID = decodedMessage.SignedSSVMessage.SSVMessage.GetID().GetSenderID()
-	descriptor.Role = decodedMessage.SignedSSVMessage.SSVMessage.GetID().GetRoleType()
-	descriptor.SSVMessageType = decodedMessage.SignedSSVMessage.SSVMessage.MsgType
-	descriptor.Consensus.Signers = decodedMessage.SignedSSVMessage.GetOperatorIDs()
-
-	switch m := decodedMessage.Body.(type) {
-	case *specqbft.Message:
-		descriptor.Slot = phase0.Slot(m.Height)
-		descriptor.Consensus.Round = m.Round
-		descriptor.Consensus.QBFTMessageType = m.MsgType
-		//descriptor.Consensus.Committee = m // TODO: can be removed?
-	case *spectypes.PartialSignatureMessages:
-		descriptor.Slot = m.Slot
-	}
-
-	return descriptor
 }
 
 func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt time.Time) (*DecodedMessage, error) {
@@ -235,60 +204,24 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 		return nil, err
 	}
 
-	signedSSVMessage := &spectypes.SignedSSVMessage{}
-	if err := signedSSVMessage.Decode(pMsg.GetData()); err != nil {
-		e := ErrMalformedPubSubMessage
-		e.innerErr = err
-		return nil, e
+	signedSSVMessage, err := mv.decodeSignedSSVMessage(pMsg)
+	if err != nil {
+		return nil, err
 	}
 
-	if signedSSVMessage == nil {
-		return nil, ErrEmptyPubSubMessage
-	}
-
-	if err := signedSSVMessage.Validate(); err != nil {
-		e := ErrSignedSSVMessageValidation
-		e.innerErr = err
-		return nil, e
+	if err := mv.validateSignedSSVMessage(signedSSVMessage); err != nil {
+		return nil, err
 	}
 
 	return mv.validateSSVMessage(signedSSVMessage, pMsg.GetTopic(), receivedAt)
 }
 
 func (mv *messageValidator) validateSSVMessage(signedSSVMessage *spectypes.SignedSSVMessage, topic string, receivedAt time.Time) (*DecodedMessage, error) {
+	if err := mv.ssvMessageValidation(signedSSVMessage, topic); err != nil {
+		return nil, err
+	}
+
 	ssvMessage := signedSSVMessage.GetSSVMessage()
-
-	if ssvMessage == nil {
-		return nil, ErrNilSSVMessage
-	}
-
-	//mv.metrics.SSVMessageType(ssvMessage.MsgType) // TODO
-
-	if len(ssvMessage.Data) == 0 {
-		return nil, ErrEmptyData
-	}
-
-	if len(ssvMessage.Data) > maxMessageSize {
-		err := ErrSSVDataTooBig
-		err.got = len(ssvMessage.Data)
-		err.want = maxMessageSize
-		return nil, err
-	}
-
-	if !mv.topicMatches(ssvMessage, topic) {
-		return nil, ErrTopicNotFound
-	}
-
-	if !bytes.Equal(ssvMessage.MsgID.GetDomain(), mv.netCfg.Domain[:]) {
-		err := ErrWrongDomain
-		err.got = hex.EncodeToString(ssvMessage.MsgID.GetDomain())
-		err.want = hex.EncodeToString(mv.netCfg.Domain[:])
-		return nil, err
-	}
-
-	if !mv.validRole(ssvMessage.GetID().GetRoleType()) {
-		return nil, ErrInvalidRole
-	}
 
 	committee, err := mv.getCommittee(ssvMessage.GetID())
 	if err != nil {
@@ -338,20 +271,6 @@ func (mv *messageValidator) validateSSVMessage(signedSSVMessage *spectypes.Signe
 	}
 }
 
-func (mv *messageValidator) validRole(roleType spectypes.RunnerRole) bool {
-	switch roleType {
-	case spectypes.RoleCommittee,
-		spectypes.RoleAggregator,
-		spectypes.RoleProposer,
-		spectypes.RoleSyncCommitteeContribution,
-		spectypes.RoleValidatorRegistration,
-		spectypes.RoleVoluntaryExit:
-		return true
-	default:
-		return false
-	}
-}
-
 func (mv *messageValidator) getCommittee(msgID spectypes.MessageID) ([]spectypes.OperatorID, error) {
 	if msgID.GetRoleType() == spectypes.RoleCommittee {
 		// TODO: add metrics and logs for committee role
@@ -394,12 +313,6 @@ func (mv *messageValidator) getCommittee(msgID spectypes.MessageID) ([]spectypes
 	return committee, nil
 }
 
-// topicMatches checks if the message was sent on the right topic.
-func (mv *messageValidator) topicMatches(ssvMessage *spectypes.SSVMessage, topic string) bool {
-	topics := commons.ValidatorTopicID(ssvMessage.GetID().GetSenderID()) // TODO: what topic if sender is committee?
-	return slices.Contains(topics, commons.GetTopicBaseName(topic))
-}
-
 func (mv *messageValidator) validateSignatureFormat(signature []byte) error {
 	if len(signature) != signatureSize {
 		e := ErrWrongSignatureSize
@@ -425,51 +338,28 @@ func (mv *messageValidator) commonSignerValidation(signer spectypes.OperatorID, 
 	return nil
 }
 
-func (mv *messageValidator) earlyMessage(slot phase0.Slot, receivedAt time.Time) bool {
-	return mv.netCfg.Beacon.GetSlotEndTime(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Unix())).
-		Add(-clockErrorTolerance).Before(mv.netCfg.Beacon.GetSlotStartTime(slot))
-}
+func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *consensusState {
+	mv.consensusStateIndexMu.Lock()
+	defer mv.consensusStateIndexMu.Unlock()
 
-func (mv *messageValidator) lateMessage(slot phase0.Slot, role spectypes.RunnerRole, receivedAt time.Time) time.Duration {
-	var ttl phase0.Slot
-	switch role {
-	case spectypes.RoleProposer, spectypes.RoleSyncCommitteeContribution:
-		ttl = 1 + lateSlotAllowance
-	case spectypes.RoleCommittee, spectypes.RoleAggregator:
-		ttl = 32 + lateSlotAllowance
-	case spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
-		return 0
-	default:
-		panic("unexpected role")
-	}
-
-	deadline := mv.netCfg.Beacon.GetSlotStartTime(slot + ttl).
-		Add(lateMessageMargin).Add(clockErrorTolerance)
-
-	return mv.netCfg.Beacon.GetSlotStartTime(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Unix())).
-		Sub(deadline)
-}
-
-func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *ConsensusState {
-	id := ConsensusID{
+	id := consensusID{
 		SenderID: string(messageID.GetSenderID()),
 		Role:     messageID.GetRoleType(),
 	}
 
-	if _, ok := mv.consensusStateIndex.Load(id); !ok {
-		cs := &ConsensusState{
-			Signers: hashmap.New[spectypes.OperatorID, *SignerState](),
+	if _, ok := mv.consensusStateIndex[id]; !ok {
+		cs := &consensusState{
+			signers: make(map[spectypes.OperatorID]*SignerState),
 		}
-		mv.consensusStateIndex.Store(id, cs)
+		mv.consensusStateIndex[id] = cs
 	}
 
-	cs, _ := mv.consensusStateIndex.Load(id)
-	return cs.(*ConsensusState)
+	return mv.consensusStateIndex[id]
 }
 
 // inCommittee should be called only when WithOwnOperatorID is set
-func (mv *messageValidator) inCommittee(share Share) bool {
-	return slices.ContainsFunc(share.GetCommittee(), func(operator *spectypes.Operator) bool {
-		return operator.OperatorID == mv.operatorDataStore.GetOperatorID()
+func (mv *messageValidator) inCommittee(committee []spectypes.OperatorID) bool {
+	return slices.ContainsFunc(committee, func(operatorID spectypes.OperatorID) bool {
+		return operatorID == mv.operatorDataStore.GetOperatorID()
 	})
 }

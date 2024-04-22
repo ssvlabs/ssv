@@ -11,26 +11,25 @@ import (
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
 )
 
-// ConsensusDescriptor provides details about the consensus for a message. It's used for logging and metrics.
-type ConsensusDescriptor struct {
+// ConsensusFields provides details about the consensus for a message. It's used for logging and metrics.
+type ConsensusFields struct {
 	Round           specqbft.Round
 	QBFTMessageType specqbft.MessageType
 	Signers         []spectypes.OperatorID
 	Committee       []*spectypes.Operator
 }
 
-// DebugDescriptor provides details about a message. It's used for logging and metrics.
-// TODO: consider using context.Context
-type DebugDescriptor struct {
+// LoggerFields provides details about a message. It's used for logging and metrics.
+type LoggerFields struct {
 	SenderID       []byte
 	Role           spectypes.RunnerRole
 	SSVMessageType spectypes.MsgType
 	Slot           phase0.Slot
-	Consensus      *ConsensusDescriptor
+	Consensus      *ConsensusFields
 }
 
 // Fields returns zap logging fields for the descriptor.
-func (d DebugDescriptor) Fields() []zapcore.Field {
+func (d LoggerFields) Fields() []zapcore.Field {
 	result := []zapcore.Field{
 		fields.SenderID(d.SenderID),
 		fields.Role(d.Role),
@@ -53,4 +52,31 @@ func (d DebugDescriptor) Fields() []zapcore.Field {
 	}
 
 	return result
+}
+
+func (mv *messageValidator) buildLoggerFields(decodedMessage *DecodedMessage) *LoggerFields {
+	descriptor := &LoggerFields{
+		Consensus: &ConsensusFields{},
+	}
+
+	if decodedMessage == nil {
+		return descriptor
+	}
+
+	descriptor.SenderID = decodedMessage.SignedSSVMessage.SSVMessage.GetID().GetSenderID()
+	descriptor.Role = decodedMessage.SignedSSVMessage.SSVMessage.GetID().GetRoleType()
+	descriptor.SSVMessageType = decodedMessage.SignedSSVMessage.SSVMessage.MsgType
+	descriptor.Consensus.Signers = decodedMessage.SignedSSVMessage.GetOperatorIDs()
+
+	switch m := decodedMessage.Body.(type) {
+	case *specqbft.Message:
+		descriptor.Slot = phase0.Slot(m.Height)
+		descriptor.Consensus.Round = m.Round
+		descriptor.Consensus.QBFTMessageType = m.MsgType
+		//descriptor.Consensus.Committee = m // TODO: can be removed?
+	case *spectypes.PartialSignatureMessages:
+		descriptor.Slot = m.Slot
+	}
+
+	return descriptor
 }

@@ -215,7 +215,7 @@ func (mv *messageValidator) validateJustifications(
 }
 
 func (mv *messageValidator) validateSignerBehaviorConsensus(
-	state *ConsensusState,
+	state *consensusState,
 	signer spectypes.OperatorID,
 	committee []spectypes.OperatorID,
 	signedSSVMessage *spectypes.SignedSSVMessage,
@@ -402,6 +402,31 @@ func (mv *messageValidator) validateSlotTime(messageSlot phase0.Slot, role spect
 	}
 
 	return nil
+}
+
+func (mv *messageValidator) earlyMessage(slot phase0.Slot, receivedAt time.Time) bool {
+	return mv.netCfg.Beacon.GetSlotEndTime(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Unix())).
+		Add(-clockErrorTolerance).Before(mv.netCfg.Beacon.GetSlotStartTime(slot))
+}
+
+func (mv *messageValidator) lateMessage(slot phase0.Slot, role spectypes.RunnerRole, receivedAt time.Time) time.Duration {
+	var ttl phase0.Slot
+	switch role {
+	case spectypes.RoleProposer, spectypes.RoleSyncCommitteeContribution:
+		ttl = 1 + lateSlotAllowance
+	case spectypes.RoleCommittee, spectypes.RoleAggregator:
+		ttl = 32 + lateSlotAllowance
+	case spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
+		return 0
+	default:
+		panic("unexpected role")
+	}
+
+	deadline := mv.netCfg.Beacon.GetSlotStartTime(slot + ttl).
+		Add(lateMessageMargin).Add(clockErrorTolerance)
+
+	return mv.netCfg.Beacon.GetSlotStartTime(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Unix())).
+		Sub(deadline)
 }
 
 func (mv *messageValidator) validConsensusSigners(signedMessage *spectypes.SignedSSVMessage, consensusMessage *specqbft.Message, committee []spectypes.OperatorID) error {

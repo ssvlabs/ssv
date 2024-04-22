@@ -1,33 +1,40 @@
 package validation
 
 import (
+	"sync"
+
 	spectypes "github.com/bloxapp/ssv-spec/alan/types"
-	"github.com/cornelk/hashmap"
 )
 
-// ConsensusID uniquely identifies a public key and role pair to keep track of state.
-type ConsensusID struct {
+// consensusID uniquely identifies a public key and role pair to keep track of state.
+type consensusID struct {
 	SenderID string
 	Role     spectypes.RunnerRole
 }
 
-// ConsensusState keeps track of the signers for a given public key and role.
-type ConsensusState struct {
+// consensusState keeps track of the signers for a given public key and role.
+type consensusState struct {
 	// TODO: consider evicting old data to avoid excessive memory consumption
-	Signers *hashmap.Map[spectypes.OperatorID, *SignerState]
+	signers map[spectypes.OperatorID]*SignerState
+	mu      sync.Mutex
 }
 
 // GetSignerState retrieves the state for the given signer.
 // Returns nil if the signer is not found.
-func (cs *ConsensusState) GetSignerState(signer spectypes.OperatorID) *SignerState {
-	signerState, _ := cs.Signers.Get(signer)
-	return signerState
+func (cs *consensusState) GetSignerState(signer spectypes.OperatorID) *SignerState {
+	cs.mu.Lock()
+	defer cs.mu.Unlock()
+
+	return cs.signers[signer]
 }
 
 // CreateSignerState initializes and sets a new SignerState for the given signer.
-func (cs *ConsensusState) CreateSignerState(signer spectypes.OperatorID) *SignerState {
+func (cs *consensusState) CreateSignerState(signer spectypes.OperatorID) *SignerState {
 	signerState := &SignerState{}
-	cs.Signers.Set(signer, signerState)
+
+	cs.mu.Lock()
+	cs.signers[signer] = signerState
+	cs.mu.Unlock()
 
 	return signerState
 }
