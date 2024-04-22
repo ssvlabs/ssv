@@ -281,7 +281,7 @@ func (mv *messageValidator) validateDutyCount(
 	newDutyInSameEpoch bool,
 ) error {
 	switch msgID.GetRoleType() {
-	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator, spectypes.BNRoleValidatorRegistration, spectypes.BNRoleVoluntaryExit:
+	case spectypes.RoleAggregator, spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
 		limit := maxDutiesPerEpoch
 
 		if sameSlot := !newDutyInSameEpoch; sameSlot {
@@ -302,12 +302,12 @@ func (mv *messageValidator) validateDutyCount(
 }
 
 func (mv *messageValidator) validateBeaconDuty(
-	role spectypes.BeaconRole,
+	role spectypes.RunnerRole,
 	slot phase0.Slot,
 	share *ssvtypes.SSVShare,
 ) error {
 	switch role {
-	case spectypes.BNRoleProposer:
+	case spectypes.RoleProposer:
 		if share.Metadata.BeaconMetadata == nil {
 			return ErrNoShareMetadata
 		}
@@ -319,7 +319,7 @@ func (mv *messageValidator) validateBeaconDuty(
 
 		return nil
 
-	case spectypes.BNRoleSyncCommittee, spectypes.BNRoleSyncCommitteeContribution:
+	case spectypes.RoleSyncCommittee, spectypes.RoleSyncCommitteeContribution: // TODO: what to do with RoleSyncCommittee?
 		if share.Metadata.BeaconMetadata == nil {
 			return ErrNoShareMetadata
 		}
@@ -345,13 +345,13 @@ func (mv *messageValidator) isDecidedMessage(signedSSVMessage *spectypes.SignedS
 	return message.MsgType == specqbft.CommitMsgType && len(signedSSVMessage.GetOperatorIDs()) > 1
 }
 
-func (mv *messageValidator) maxRound(role spectypes.BeaconRole) specqbft.Round {
+func (mv *messageValidator) maxRound(role spectypes.RunnerRole) specqbft.Round {
 	switch role {
-	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator: // TODO: check if value for aggregator is correct as there are messages on stage exceeding the limit
+	case spectypes.RoleCommittee, spectypes.RoleAggregator: // TODO: check if value for aggregator is correct as there are messages on stage exceeding the limit
 		return 12 // TODO: consider calculating based on quick timeout and slow timeout
-	case spectypes.BNRoleProposer, spectypes.BNRoleSyncCommittee, spectypes.BNRoleSyncCommitteeContribution:
+	case spectypes.RoleProposer, spectypes.RoleSyncCommitteeContribution:
 		return 6
-	case spectypes.BNRoleValidatorRegistration, spectypes.BNRoleVoluntaryExit:
+	case spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
 		return 0
 	default:
 		panic("unknown role")
@@ -368,32 +368,16 @@ func (mv *messageValidator) currentEstimatedRound(sinceSlotStart time.Duration) 
 	return estimatedRound
 }
 
-func (mv *messageValidator) waitAfterSlotStart(role spectypes.BeaconRole) time.Duration {
+func (mv *messageValidator) waitAfterSlotStart(role spectypes.RunnerRole) time.Duration {
 	switch role {
-	case spectypes.BNRoleAttester, spectypes.BNRoleSyncCommittee:
+	case spectypes.RoleCommittee:
 		return mv.netCfg.Beacon.SlotDurationSec() / 3
-	case spectypes.BNRoleAggregator, spectypes.BNRoleSyncCommitteeContribution:
+	case spectypes.RoleAggregator, spectypes.RoleSyncCommitteeContribution:
 		return mv.netCfg.Beacon.SlotDurationSec() / 3 * 2
-	case spectypes.BNRoleProposer, spectypes.BNRoleValidatorRegistration, spectypes.BNRoleVoluntaryExit:
+	case spectypes.RoleProposer, spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
 		return 0
 	default:
 		panic("unknown role")
-	}
-}
-
-func (mv *messageValidator) validRole(roleType spectypes.BeaconRole) bool {
-	switch roleType {
-	// TODO: add committee roles
-	case spectypes.BNRoleAttester,
-		spectypes.BNRoleAggregator,
-		spectypes.BNRoleProposer,
-		spectypes.BNRoleSyncCommittee,
-		spectypes.BNRoleSyncCommitteeContribution,
-		spectypes.BNRoleValidatorRegistration,
-		spectypes.BNRoleVoluntaryExit:
-		return true
-	default:
-		return false
 	}
 }
 
@@ -404,6 +388,20 @@ func (mv *messageValidator) validQBFTMsgType(msgType specqbft.MessageType) bool 
 	default:
 		return false
 	}
+}
+
+func (mv *messageValidator) validateSlotTime(messageSlot phase0.Slot, role spectypes.RunnerRole, receivedAt time.Time) error {
+	if mv.earlyMessage(messageSlot, receivedAt) {
+		return ErrEarlyMessage
+	}
+
+	if lateness := mv.lateMessage(messageSlot, role, receivedAt); lateness > 0 {
+		e := ErrLateMessage
+		e.got = fmt.Sprintf("late by %v", lateness)
+		return e
+	}
+
+	return nil
 }
 
 func (mv *messageValidator) validConsensusSigners(signedMessage *spectypes.SignedSSVMessage, consensusMessage *specqbft.Message, committee []spectypes.OperatorID) error {

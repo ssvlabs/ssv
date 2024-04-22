@@ -231,4 +231,4 @@ replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-
 
 replace github.com/attestantio/go-eth2-client => github.com/y0sher/go-eth2-client v0.0.0-20240305092513-92d154b203a6
 
-replace github.com/bloxapp/ssv-spec/alan => github.com/bloxapp/ssv-spec v0.3.9-0.20240418193307-4b4528a2dad5
+replace github.com/bloxapp/ssv-spec/alan => github.com/bloxapp/ssv-spec v0.3.9-0.20240422154719-3e7532e5d794

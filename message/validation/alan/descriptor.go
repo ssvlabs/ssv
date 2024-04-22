@@ -23,7 +23,7 @@ type ConsensusDescriptor struct {
 // TODO: consider using context.Context
 type DebugDescriptor struct {
 	SenderID       []byte
-	Role           spectypes.BeaconRole
+	Role           spectypes.RunnerRole
 	SSVMessageType spectypes.MsgType
 	Slot           phase0.Slot
 	Consensus      *ConsensusDescriptor

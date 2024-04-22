@@ -48,6 +48,7 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 
 	msgID := ssvMessage.GetID()
 	role := msgID.GetRoleType()
+
 	if !mv.partialSignatureTypeMatchesRole(partialSignatureMessages.Type, role) {
 		return partialSignatureMessages, ErrPartialSignatureTypeRoleMismatch
 	}
@@ -105,24 +106,22 @@ func (mv *messageValidator) validPartialSigMsgType(msgType spectypes.PartialSigM
 	}
 }
 
-func (mv *messageValidator) partialSignatureTypeMatchesRole(msgType spectypes.PartialSigMsgType, role spectypes.BeaconRole) bool {
+func (mv *messageValidator) partialSignatureTypeMatchesRole(msgType spectypes.PartialSigMsgType, role spectypes.RunnerRole) bool {
 	switch role {
-	case spectypes.BNRoleAttester:
+	case spectypes.RoleCommittee:
 		return msgType == spectypes.PostConsensusPartialSig
-	case spectypes.BNRoleAggregator:
+	case spectypes.RoleAggregator:
 		return msgType == spectypes.PostConsensusPartialSig || msgType == spectypes.SelectionProofPartialSig
-	case spectypes.BNRoleProposer:
+	case spectypes.RoleProposer:
 		return msgType == spectypes.PostConsensusPartialSig || msgType == spectypes.RandaoPartialSig
-	case spectypes.BNRoleSyncCommittee:
-		return msgType == spectypes.PostConsensusPartialSig
-	case spectypes.BNRoleSyncCommitteeContribution:
+	case spectypes.RoleSyncCommitteeContribution:
 		return msgType == spectypes.PostConsensusPartialSig || msgType == spectypes.ContributionProofs
-	case spectypes.BNRoleValidatorRegistration:
+	case spectypes.RoleValidatorRegistration:
 		return msgType == spectypes.ValidatorRegistrationPartialSig
-	case spectypes.BNRoleVoluntaryExit:
+	case spectypes.RoleVoluntaryExit:
 		return msgType == spectypes.VoluntaryExitPartialSig
 	default:
-		panic("invalid role") // role validity should be checked before
+		return false
 	}
 }
 

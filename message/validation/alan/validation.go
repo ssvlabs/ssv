@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
-	"fmt"
 	"sync"
 	"time"
 
@@ -339,8 +338,22 @@ func (mv *messageValidator) validateSSVMessage(signedSSVMessage *spectypes.Signe
 	}
 }
 
+func (mv *messageValidator) validRole(roleType spectypes.RunnerRole) bool {
+	switch roleType {
+	case spectypes.RoleCommittee,
+		spectypes.RoleAggregator,
+		spectypes.RoleProposer,
+		spectypes.RoleSyncCommitteeContribution,
+		spectypes.RoleValidatorRegistration,
+		spectypes.RoleVoluntaryExit:
+		return true
+	default:
+		return false
+	}
+}
+
 func (mv *messageValidator) getCommittee(msgID spectypes.MessageID) ([]spectypes.OperatorID, error) {
-	if msgID.GetRoleType() == spectypes.BNRoleSyncCommittee { // TODO: fix role name once it's implemented in spec
+	if msgID.GetRoleType() == spectypes.RoleCommittee {
 		// TODO: add metrics and logs for committee role
 		return mv.validatorStore.Committee(CommitteeID(msgID.GetSenderID()[16:])).Operators, nil // TODO: consider passing whole senderID
 	}
@@ -412,34 +425,22 @@ func (mv *messageValidator) commonSignerValidation(signer spectypes.OperatorID, 
 	return nil
 }
 
-func (mv *messageValidator) validateSlotTime(messageSlot phase0.Slot, role spectypes.BeaconRole, receivedAt time.Time) error {
-	if mv.earlyMessage(messageSlot, receivedAt) {
-		return ErrEarlyMessage
-	}
-
-	if lateness := mv.lateMessage(messageSlot, role, receivedAt); lateness > 0 {
-		e := ErrLateMessage
-		e.got = fmt.Sprintf("late by %v", lateness)
-		return e
-	}
-
-	return nil
-}
-
 func (mv *messageValidator) earlyMessage(slot phase0.Slot, receivedAt time.Time) bool {
 	return mv.netCfg.Beacon.GetSlotEndTime(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Unix())).
 		Add(-clockErrorTolerance).Before(mv.netCfg.Beacon.GetSlotStartTime(slot))
 }
 
-func (mv *messageValidator) lateMessage(slot phase0.Slot, role spectypes.BeaconRole, receivedAt time.Time) time.Duration {
+func (mv *messageValidator) lateMessage(slot phase0.Slot, role spectypes.RunnerRole, receivedAt time.Time) time.Duration {
 	var ttl phase0.Slot
 	switch role {
-	case spectypes.BNRoleProposer, spectypes.BNRoleSyncCommittee, spectypes.BNRoleSyncCommitteeContribution:
+	case spectypes.RoleProposer, spectypes.RoleSyncCommitteeContribution:
 		ttl = 1 + lateSlotAllowance
-	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator:
+	case spectypes.RoleCommittee, spectypes.RoleAggregator:
 		ttl = 32 + lateSlotAllowance
-	case spectypes.BNRoleValidatorRegistration, spectypes.BNRoleVoluntaryExit:
+	case spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
 		return 0
+	default:
+		panic("unexpected role")
 	}
 
 	deadline := mv.netCfg.Beacon.GetSlotStartTime(slot + ttl).
