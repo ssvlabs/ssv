@@ -8,12 +8,12 @@ import (
 	"github.com/bloxapp/ssv/operator/keys"
 )
 
-func (mv *messageValidator) verifySignatures(ssvMessage *spectypes.SSVMessage, operatorIDs []spectypes.OperatorID, signatures [][]byte) error {
-	mv.metrics.MessageValidationRSAVerifications() // TODO: pass len(signatures)
+func (mv *messageValidator) verifySignature(ssvMessage *spectypes.SSVMessage, operatorID spectypes.OperatorID, signature []byte) error {
+	mv.metrics.MessageValidationRSAVerifications()
 
 	operatorPubKey, ok := mv.operatorIDToPubkeyCache.Get(operatorID)
 	if !ok {
-		operator, found, err := mv.validatorStore.GetOperatorData(nil, operatorID)
+		operator, found, err := mv.operatorStore.GetOperatorData(operatorID)
 		if err != nil {
 			e := ErrOperatorNotFound
 			e.got = operatorID
@@ -36,7 +36,14 @@ func (mv *messageValidator) verifySignatures(ssvMessage *spectypes.SSVMessage, o
 		mv.operatorIDToPubkeyCache.Set(operatorID, operatorPubKey)
 	}
 
-	if err := operatorPubKey.Verify(messageData, signature); err != nil {
+	encodedMsg, err := ssvMessage.Encode() // TODO: should we abstract this?
+	if err != nil {
+		e := ErrSignatureVerification
+		e.innerErr = fmt.Errorf("encode ssv message: %w", err)
+		return e
+	}
+
+	if err := operatorPubKey.Verify(encodedMsg, signature); err != nil {
 		e := ErrSignatureVerification
 		e.innerErr = fmt.Errorf("verify opid: %v signature: %w", operatorID, err)
 		return e

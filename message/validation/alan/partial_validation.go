@@ -3,31 +3,31 @@ package validation
 // partial_validation.go contains methods for validating partial signature messages
 
 import (
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/alan/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/alan/types"
-
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 func (mv *messageValidator) validatePartialSignatureMessage(
 	signedSSVMessage *spectypes.SignedSSVMessage,
-	signatureVerifier func() error,
-) (phase0.Slot, error) {
+	committee []spectypes.OperatorID,
+) (
+	*spectypes.PartialSignatureMessages,
+	error,
+) {
 	ssvMessage := signedSSVMessage.GetSSVMessage()
 
 	if len(ssvMessage.Data) > maxPartialSignatureMsgSize {
 		e := ErrSSVDataTooBig
 		e.got = len(ssvMessage.Data)
 		e.want = maxPartialSignatureMsgSize
-		return 0, e
+		return nil, e
 	}
 
-	signedMsg := &spectypes.PartialSignatureMessages{}
-	if err := signedMsg.Decode(ssvMessage.Data); err != nil {
+	partialSignatureMessages := &spectypes.PartialSignatureMessages{}
+	if err := partialSignatureMessages.Decode(ssvMessage.Data); err != nil {
 		e := ErrMalformedMessage
 		e.innerErr = err
-		return 0, e
+		return nil, e
 	}
 
 	//if mv.operatorDataStore != nil && mv.operatorDataStore.OperatorIDReady() {
@@ -38,44 +38,47 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 	//	}
 	//}
 
-	msgSlot := signedMsg.Slot
+	msgSlot := partialSignatureMessages.Slot
 
-	if !mv.validPartialSigMsgType(signedMsg.Type) {
+	if !mv.validPartialSigMsgType(partialSignatureMessages.Type) {
 		e := ErrUnknownPartialMessageType
-		e.got = signedMsg.Type
-		return msgSlot, e
+		e.got = partialSignatureMessages.Type
+		return partialSignatureMessages, e
 	}
 
 	msgID := ssvMessage.GetID()
 	role := msgID.GetRoleType()
-	if !mv.partialSignatureTypeMatchesRole(signedMsg.Type, role) {
-		return msgSlot, ErrPartialSignatureTypeRoleMismatch
+	if !mv.partialSignatureTypeMatchesRole(partialSignatureMessages.Type, role) {
+		return partialSignatureMessages, ErrPartialSignatureTypeRoleMismatch
 	}
 
-	if err := mv.validatePartialMessages(share, signedMsg); err != nil {
-		return msgSlot, err
-	}
+	// TODO: make sure there's only one signer and only one signature
+
+	signer := signedSSVMessage.GetOperatorIDs()[0]
+	signature := signedSSVMessage.GetSignature()[0]
 
 	state := mv.consensusState(msgID)
-	signerState := state.GetSignerState(signedSSVMessage.GetSignature())
+	if err := mv.validatePartialMessages(committee, partialSignatureMessages, signer); err != nil {
+		return partialSignatureMessages, err
+	}
+
+	signerState := state.GetSignerState(signer)
 	if signerState != nil {
-		if err := mv.validateSignerBehaviorPartial(state, signedMsg.Signer, share, msgID, signedMsg); err != nil {
-			return msgSlot, err
+		if err := mv.validateSignerBehaviorPartial(state, signer, committee, msgID, partialSignatureMessages); err != nil {
+			return partialSignatureMessages, err
 		}
 	}
 
-	if err := mv.validateSignatureFormat(signedMsg.Signature); err != nil {
-		return msgSlot, err
+	if err := mv.validateSignatureFormat(signature); err != nil {
+		return partialSignatureMessages, err
 	}
 
-	if signatureVerifier != nil {
-		if err := signatureVerifier(); err != nil {
-			return msgSlot, err
-		}
+	if err := mv.verifySignature(ssvMessage, signer, signature); err != nil {
+		return partialSignatureMessages, err
 	}
 
 	if signerState == nil {
-		signerState = state.CreateSignerState(signedMsg.Signer)
+		signerState = state.CreateSignerState(signer)
 	}
 
 	if msgSlot > signerState.Slot {
@@ -83,9 +86,9 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 		signerState.ResetSlot(msgSlot, specqbft.FirstRound, newEpoch)
 	}
 
-	signerState.MessageCounts.RecordPartialSignatureMessage(signedMsg)
+	signerState.MessageCounts.RecordPartialSignatureMessage(partialSignatureMessages)
 
-	return msgSlot, nil
+	return partialSignatureMessages, nil
 }
 
 func (mv *messageValidator) validPartialSigMsgType(msgType spectypes.PartialSigMsgType) bool {
@@ -123,30 +126,30 @@ func (mv *messageValidator) partialSignatureTypeMatchesRole(msgType spectypes.Pa
 	}
 }
 
-func (mv *messageValidator) validatePartialMessages(share *ssvtypes.SSVShare, m *spectypes.SignedPartialSignatureMessage) error {
-	if err := mv.commonSignerValidation(m.Signer, share); err != nil {
+func (mv *messageValidator) validatePartialMessages(committee []spectypes.OperatorID, messages *spectypes.PartialSignatureMessages, signer spectypes.OperatorID) error {
+	if err := mv.commonSignerValidation(signer, committee); err != nil {
 		return err
 	}
 
-	if len(m.Message.Messages) == 0 {
+	if len(messages.Messages) == 0 {
 		return ErrNoPartialMessages
 	}
 
 	seen := map[[32]byte]struct{}{}
-	for _, message := range m.Message.Messages {
+	for _, message := range messages.Messages {
 		if _, ok := seen[message.SigningRoot]; ok {
 			return ErrDuplicatedPartialSignatureMessage
 		}
 		seen[message.SigningRoot] = struct{}{}
 
-		if message.Signer != m.Signer {
+		if message.Signer != signer {
 			err := ErrUnexpectedSigner
-			err.want = m.Signer
+			err.want = signer
 			err.got = message.Signer
 			return err
 		}
 
-		if err := mv.commonSignerValidation(message.Signer, share); err != nil {
+		if err := mv.commonSignerValidation(message.Signer, committee); err != nil {
 			return err
 		}
 
@@ -161,9 +164,9 @@ func (mv *messageValidator) validatePartialMessages(share *ssvtypes.SSVShare, m 
 func (mv *messageValidator) validateSignerBehaviorPartial(
 	state *ConsensusState,
 	signer spectypes.OperatorID,
-	share *ssvtypes.SSVShare,
+	committee []spectypes.OperatorID,
 	msgID spectypes.MessageID,
-	signedMsg *spectypes.SignedPartialSignatureMessage,
+	messages *spectypes.PartialSignatureMessages,
 ) error {
 	signerState := state.GetSignerState(signer)
 
@@ -171,7 +174,7 @@ func (mv *messageValidator) validateSignerBehaviorPartial(
 		return nil
 	}
 
-	msgSlot := signedMsg.Message.Slot
+	msgSlot := messages.Slot
 
 	if msgSlot < signerState.Slot {
 		// Signers aren't allowed to decrease their slot.
@@ -193,8 +196,8 @@ func (mv *messageValidator) validateSignerBehaviorPartial(
 	}
 
 	if msgSlot <= signerState.Slot {
-		limits := maxMessageCounts(len(share.Committee))
-		if err := signerState.MessageCounts.ValidatePartialSignatureMessage(signedMsg, limits); err != nil {
+		limits := maxMessageCounts(len(committee))
+		if err := signerState.MessageCounts.ValidatePartialSignatureMessage(messages, limits); err != nil {
 			return err
 		}
 	}

@@ -10,27 +10,25 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/alan/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/alan/types"
+	"github.com/bloxapp/ssv-spec/types"
 	"golang.org/x/exp/slices"
 
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 func (mv *messageValidator) validateConsensusMessage(
 	signedSSVMessage *spectypes.SignedSSVMessage,
+	committee []spectypes.OperatorID,
 	receivedAt time.Time,
-	signatureVerifier func() error,
-) (ConsensusDescriptor, phase0.Slot, error) {
-	var consensusDescriptor ConsensusDescriptor
-
+) (*specqbft.Message, error) {
 	ssvMessage := signedSSVMessage.GetSSVMessage()
 
 	//if mv.operatorDataStore != nil && mv.operatorDataStore.OperatorIDReady() {
 	//	if mv.inCommittee(share) {
-	//		mv.metrics.InCommitteeMessage(spectypes.SSVConsensusMsgType, mv.isDecidedMessage(signedMsg))
+	//		mv.metrics.InCommitteeMessage(spectypes.SSVConsensusMsgType, mv.isDecidedMessage(consensusMessage))
 	//	} else {
-	//		mv.metrics.NonCommitteeMessage(spectypes.SSVConsensusMsgType, mv.isDecidedMessage(signedMsg))
+	//		mv.metrics.NonCommitteeMessage(spectypes.SSVConsensusMsgType, mv.isDecidedMessage(consensusMessage))
 	//	}
 	//}
 
@@ -38,62 +36,55 @@ func (mv *messageValidator) validateConsensusMessage(
 		e := ErrSSVDataTooBig
 		e.got = len(ssvMessage.Data)
 		e.want = maxConsensusMsgSize
-		return consensusDescriptor, 0, e
+		return nil, e
 	}
 
-	signedMsg, err := specqbft.DecodeMessage(ssvMessage.Data)
+	consensusMessage, err := specqbft.DecodeMessage(ssvMessage.Data)
 	if err != nil {
 		e := ErrMalformedMessage
 		e.innerErr = err
-		return consensusDescriptor, 0, e
+		return nil, e
 	}
 
 	messageID := ssvMessage.GetID()
 
-	msgSlot := phase0.Slot(signedMsg.Height)
-	msgRound := signedMsg.Round
+	msgSlot := phase0.Slot(consensusMessage.Height)
+	msgRound := consensusMessage.Round
 
-	consensusDescriptor = ConsensusDescriptor{
-		QBFTMessageType: signedMsg.MsgType,
-		Round:           msgRound,
-		//Signers:         ssvMessage.Signers,
-		//Committee:       share.Committee,
-	}
-
-	//mv.metrics.ConsensusMsgType(signedMsg.MsgType, len(signedMsg.Signers))
+	//mv.metrics.ConsensusMsgType(consensusMessage.MsgType, len(consensusMessage.Signers))
 
 	switch messageID.GetRoleType() {
 	case spectypes.BNRoleValidatorRegistration, spectypes.BNRoleVoluntaryExit:
 		e := ErrUnexpectedConsensusMessage
 		e.got = messageID.GetRoleType()
-		return consensusDescriptor, msgSlot, e
+		return consensusMessage, e
 	}
 
 	for _, signature := range signedSSVMessage.GetSignature() {
 		if err := mv.validateSignatureFormat(signature); err != nil {
-			return consensusDescriptor, msgSlot, err
+			return consensusMessage, err
 		}
 	}
 
-	if !mv.validQBFTMsgType(signedMsg.MsgType) {
-		return consensusDescriptor, msgSlot, ErrUnknownQBFTMessageType
+	if !mv.validQBFTMsgType(consensusMessage.MsgType) {
+		return consensusMessage, ErrUnknownQBFTMessageType
 	}
 
-	if err := mv.validConsensusSigners(share, signedMsg); err != nil {
-		return consensusDescriptor, msgSlot, err
+	if err := mv.validConsensusSigners(signedSSVMessage, consensusMessage, committee); err != nil {
+		return consensusMessage, err
 	}
 
 	role := messageID.GetRoleType()
 
 	if err := mv.validateSlotTime(msgSlot, role, receivedAt); err != nil {
-		return consensusDescriptor, msgSlot, err
+		return consensusMessage, err
 	}
 
 	if maxRound := mv.maxRound(role); msgRound > maxRound {
 		err := ErrRoundTooHigh
 		err.got = fmt.Sprintf("%v (%v role)", msgRound, role)
 		err.want = fmt.Sprintf("%v (%v role)", maxRound, role)
-		return consensusDescriptor, msgSlot, err
+		return consensusMessage, err
 	}
 
 	slotStartTime := mv.netCfg.Beacon.GetSlotStartTime(msgSlot) /*.
@@ -114,38 +105,41 @@ func (mv *messageValidator) validateConsensusMessage(
 		err := ErrEstimatedRoundTooFar
 		err.got = fmt.Sprintf("%v (%v role)", msgRound, role)
 		err.want = fmt.Sprintf("between %v and %v (%v role) / %v passed", lowestAllowed, highestAllowed, role, sinceSlotStart)
-		return consensusDescriptor, msgSlot, err
+		return consensusMessage, err
 	}
 
-	if mv.hasFullData(signedMsg) {
+	if mv.hasFullData(signedSSVMessage, consensusMessage) {
 		hashedFullData, err := specqbft.HashDataRoot(signedSSVMessage.FullData)
 		if err != nil {
-			return consensusDescriptor, msgSlot, fmt.Errorf("hash data root: %w", err)
+			return consensusMessage, fmt.Errorf("hash data root: %w", err)
 		}
 
-		if hashedFullData != signedMsg.Root {
-			return consensusDescriptor, msgSlot, ErrInvalidHash
+		if hashedFullData != consensusMessage.Root {
+			return consensusMessage, ErrInvalidHash
 		}
 	}
 
-	if err := mv.validateBeaconDuty(messageID.GetRoleType(), msgSlot, share); err != nil {
-		return consensusDescriptor, msgSlot, err
-	}
+	// TODO: enable
+	//if err := mv.validateBeaconDuty(messageID.GetRoleType(), msgSlot, share); err != nil {
+	//	return consensusMessage, err
+	//}
 
 	state := mv.consensusState(messageID)
-	for _, signer := range signedMsg.Signers {
-		if err := mv.validateSignerBehaviorConsensus(state, signer, share, messageID, signedMsg); err != nil {
-			return consensusDescriptor, msgSlot, fmt.Errorf("bad signer behavior: %w", err)
+	for _, signer := range signedSSVMessage.GetOperatorIDs() {
+		if err := mv.validateSignerBehaviorConsensus(state, signer, committee, signedSSVMessage, consensusMessage); err != nil {
+			return consensusMessage, fmt.Errorf("bad signer behavior: %w", err)
 		}
 	}
 
-	if signatureVerifier != nil {
-		if err := signatureVerifier(); err != nil {
-			return consensusDescriptor, msgSlot, err
+	// TODO: assert len(signers) == len(signatures)
+
+	for i, signature := range signedSSVMessage.GetSignature() {
+		if err := mv.verifySignature(ssvMessage, signedSSVMessage.GetOperatorIDs()[i], signature); err != nil {
+			return consensusMessage, err
 		}
 	}
 
-	for _, signer := range signedMsg.Signers {
+	for _, signer := range signedSSVMessage.GetOperatorIDs() {
 		signerState := state.GetSignerState(signer)
 		if signerState == nil {
 			signerState = state.CreateSignerState(signer)
@@ -157,63 +151,65 @@ func (mv *messageValidator) validateConsensusMessage(
 			signerState.ResetRound(msgRound)
 		}
 
-		if mv.hasFullData(signedMsg) && signerState.ProposalData == nil {
+		if mv.hasFullData(signedSSVMessage, consensusMessage) && signerState.ProposalData == nil {
 			signerState.ProposalData = signedSSVMessage.FullData
 		}
 
-		signerState.MessageCounts.RecordConsensusMessage(signedMsg)
+		signerState.MessageCounts.RecordConsensusMessage(signedSSVMessage, consensusMessage)
 	}
 
-	return consensusDescriptor, msgSlot, nil
+	return consensusMessage, nil
 }
 
 func (mv *messageValidator) validateJustifications(
 	share *ssvtypes.SSVShare,
-	signedMsg *specqbft.SignedMessage,
+	signedSSVMessage *spectypes.SignedSSVMessage,
+	message *specqbft.Message,
 ) error {
-	pj, err := signedMsg.Message.GetPrepareJustifications()
+	pj, err := message.GetPrepareJustifications()
 	if err != nil {
 		e := ErrMalformedPrepareJustifications
 		e.innerErr = err
 		return e
 	}
 
-	if len(pj) != 0 && signedMsg.Message.MsgType != specqbft.ProposalMsgType {
+	if len(pj) != 0 && message.MsgType != specqbft.ProposalMsgType {
 		e := ErrUnexpectedPrepareJustifications
-		e.got = signedMsg.Message.MsgType
+		e.got = message.MsgType
 		return e
 	}
 
-	rcj, err := signedMsg.Message.GetRoundChangeJustifications()
+	rcj, err := message.GetRoundChangeJustifications()
 	if err != nil {
 		e := ErrMalformedRoundChangeJustifications
 		e.innerErr = err
 		return e
 	}
 
-	if len(rcj) != 0 && signedMsg.Message.MsgType != specqbft.ProposalMsgType && signedMsg.Message.MsgType != specqbft.RoundChangeMsgType {
+	if len(rcj) != 0 && message.MsgType != specqbft.ProposalMsgType && message.MsgType != specqbft.RoundChangeMsgType {
 		e := ErrUnexpectedRoundChangeJustifications
-		e.got = signedMsg.Message.MsgType
+		e.got = message.MsgType
 		return e
 	}
 
-	if signedMsg.Message.MsgType == specqbft.ProposalMsgType {
-		cfg := newQBFTConfig(mv.netCfg.Domain)
-
-		if err := instance.IsProposalJustification(
-			cfg,
-			share,
-			rcj,
-			pj,
-			signedMsg.Message.Height,
-			signedMsg.Message.Round,
-			signedMsg.FullData,
-		); err != nil {
-			e := ErrInvalidJustifications
-			e.innerErr = err
-			return e
-		}
-	}
+	// TODO: enable justification check
+	//if message.MsgType == specqbft.ProposalMsgType {
+	//	cfg := newQBFTConfig(spectypes.DomainType(mv.netCfg.Domain))
+	//
+	//	if err := instance.IsProposalJustification(
+	//		cfg,
+	//		share,
+	//		rcj,
+	//		pj,
+	//		message.Message.Height,
+	//		message.Message.Round,
+	//		message.FullData,
+	//	); err != nil {
+	//		e := ErrInvalidJustifications
+	//		e.innerErr = err
+	//		return e
+	//	}
+	//}
 
 	return nil
 }
@@ -221,18 +217,19 @@ func (mv *messageValidator) validateJustifications(
 func (mv *messageValidator) validateSignerBehaviorConsensus(
 	state *ConsensusState,
 	signer spectypes.OperatorID,
-	share *ssvtypes.SSVShare,
-	msgID spectypes.MessageID,
-	signedMsg *specqbft.Message,
+	committee []spectypes.OperatorID,
+	signedSSVMessage *spectypes.SignedSSVMessage,
+	consensusMessage *specqbft.Message,
 ) error {
 	signerState := state.GetSignerState(signer)
 
 	if signerState == nil {
-		return mv.validateJustifications(share, signedMsg)
+		return nil
+		//return mv.validateJustifications(share, consensusMessage) // TODO: enable justification checks
 	}
 
-	msgSlot := phase0.Slot(signedMsg.Height)
-	msgRound := signedMsg.Round
+	msgSlot := phase0.Slot(consensusMessage.Height)
+	msgRound := consensusMessage.Round
 
 	if msgSlot < signerState.Slot {
 		// Signers aren't allowed to decrease their slot.
@@ -259,22 +256,23 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 		newDutyInSameEpoch = true
 	}
 
-	if err := mv.validateDutyCount(signerState, msgID, newDutyInSameEpoch); err != nil {
+	if err := mv.validateDutyCount(signerState, signedSSVMessage.SSVMessage.GetID(), newDutyInSameEpoch); err != nil {
 		return err
 	}
 
 	if msgSlot == signerState.Slot && msgRound == signerState.Round {
-		if mv.hasFullData(signedMsg) && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedMsg.FullData) {
+		if mv.hasFullData(signedSSVMessage, consensusMessage) && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedSSVMessage.FullData) {
 			return ErrDuplicatedProposalWithDifferentData
 		}
 
-		limits := maxMessageCounts(len(share.Committee))
-		if err := signerState.MessageCounts.ValidateConsensusMessage(signedMsg, limits); err != nil {
+		limits := maxMessageCounts(len(committee))
+		if err := signerState.MessageCounts.ValidateConsensusMessage(signedSSVMessage, consensusMessage, limits); err != nil {
 			return err
 		}
 	}
 
-	return mv.validateJustifications(share, signedMsg)
+	return nil // TODO: enable justification check
+	//return mv.validateJustifications(share, consensusMessage) //
 }
 
 func (mv *messageValidator) validateDutyCount(
@@ -298,9 +296,9 @@ func (mv *messageValidator) validateDutyCount(
 		}
 
 		return nil
+	default:
+		return nil
 	}
-
-	return nil
 }
 
 func (mv *messageValidator) validateBeaconDuty(
@@ -332,19 +330,19 @@ func (mv *messageValidator) validateBeaconDuty(
 		}
 
 		return nil
+	default:
+		return nil
 	}
-
-	return nil
 }
 
-func (mv *messageValidator) hasFullData(signedMsg *specqbft.SignedMessage) bool {
-	return (signedMsg.Message.MsgType == specqbft.ProposalMsgType ||
-		signedMsg.Message.MsgType == specqbft.RoundChangeMsgType ||
-		mv.isDecidedMessage(signedMsg)) && len(signedMsg.FullData) != 0 // TODO: more complex check of FullData
+func (mv *messageValidator) hasFullData(signedSSVMessage *spectypes.SignedSSVMessage, message *specqbft.Message) bool {
+	return (message.MsgType == specqbft.ProposalMsgType ||
+		message.MsgType == specqbft.RoundChangeMsgType ||
+		mv.isDecidedMessage(signedSSVMessage, message)) && len(signedSSVMessage.FullData) != 0 // TODO: more complex check of FullData
 }
 
-func (mv *messageValidator) isDecidedMessage(signedMsg *specqbft.SignedMessage) bool {
-	return signedMsg.Message.MsgType == specqbft.CommitMsgType && len(signedMsg.Signers) > 1
+func (mv *messageValidator) isDecidedMessage(signedSSVMessage *spectypes.SignedSSVMessage, message *specqbft.Message) bool {
+	return message.MsgType == specqbft.CommitMsgType && len(signedSSVMessage.GetOperatorIDs()) > 1
 }
 
 func (mv *messageValidator) maxRound(role spectypes.BeaconRole) specqbft.Round {
@@ -361,12 +359,12 @@ func (mv *messageValidator) maxRound(role spectypes.BeaconRole) specqbft.Round {
 }
 
 func (mv *messageValidator) currentEstimatedRound(sinceSlotStart time.Duration) specqbft.Round {
-	if currentQuickRound := specqbft.FirstRound + specqbft.Round(sinceSlotStart/roundtimer.QuickTimeout); currentQuickRound <= roundtimer.QuickTimeoutThreshold {
+	if currentQuickRound := specqbft.FirstRound + specqbft.Round(sinceSlotStart/roundtimer.QuickTimeout); currentQuickRound <= specqbft.Round(roundtimer.QuickTimeoutThreshold) {
 		return currentQuickRound
 	}
 
-	sinceFirstSlowRound := sinceSlotStart - (time.Duration(roundtimer.QuickTimeoutThreshold) * roundtimer.QuickTimeout)
-	estimatedRound := roundtimer.QuickTimeoutThreshold + specqbft.FirstRound + specqbft.Round(sinceFirstSlowRound/roundtimer.SlowTimeout)
+	sinceFirstSlowRound := sinceSlotStart - (time.Duration(specqbft.Round(roundtimer.QuickTimeoutThreshold)) * roundtimer.QuickTimeout)
+	estimatedRound := specqbft.Round(roundtimer.QuickTimeoutThreshold) + specqbft.FirstRound + specqbft.Round(sinceFirstSlowRound/roundtimer.SlowTimeout)
 	return estimatedRound
 }
 
@@ -394,57 +392,58 @@ func (mv *messageValidator) validRole(roleType spectypes.BeaconRole) bool {
 		spectypes.BNRoleValidatorRegistration,
 		spectypes.BNRoleVoluntaryExit:
 		return true
+	default:
+		return false
 	}
-	return false
 }
 
 func (mv *messageValidator) validQBFTMsgType(msgType specqbft.MessageType) bool {
 	switch msgType {
 	case specqbft.ProposalMsgType, specqbft.PrepareMsgType, specqbft.CommitMsgType, specqbft.RoundChangeMsgType:
 		return true
+	default:
+		return false
 	}
-	return false
 }
 
-func (mv *messageValidator) validConsensusSigners(share *ssvtypes.SSVShare, m *specqbft.SignedMessage) error {
+func (mv *messageValidator) validConsensusSigners(signedMessage *spectypes.SignedSSVMessage, consensusMessage *specqbft.Message, committee []spectypes.OperatorID) error {
+	signerCount := len(signedMessage.GetOperatorIDs())
+	quorumSize, _ := ssvtypes.ComputeQuorumAndPartialQuorum(len(committee))
+
 	switch {
-	case len(m.Signers) == 0:
+	case signerCount == 0:
 		return ErrNoSigners
 
-	case len(m.Signers) == 1:
-		if m.Message.MsgType == specqbft.ProposalMsgType {
-			qbftState := &specqbft.State{
-				Height: m.Message.Height,
-				Share:  &share.Share,
-			}
-			leader := specqbft.RoundRobinProposer(qbftState, m.Message.Round)
-			if m.Signers[0] != leader {
+	case signerCount == 1:
+		if consensusMessage.MsgType == specqbft.ProposalMsgType {
+			leader := mv.roundRobinProposer(consensusMessage.Height, consensusMessage.Round, committee)
+			if signedMessage.GetOperatorIDs()[0] != leader {
 				err := ErrSignerNotLeader
-				err.got = m.Signers[0]
+				err.got = signedMessage.GetOperatorIDs()[0]
 				err.want = leader
 				return err
 			}
 		}
 
-	case m.Message.MsgType != specqbft.CommitMsgType:
+	case consensusMessage.MsgType != specqbft.CommitMsgType:
 		e := ErrNonDecidedWithMultipleSigners
-		e.got = len(m.Signers)
+		e.got = signerCount
 		return e
 
-	case !share.HasQuorum(len(m.Signers)) || len(m.Signers) > len(share.Committee):
+	case uint64(signerCount) < quorumSize || signerCount > len(committee):
 		e := ErrWrongSignersLength
-		e.want = fmt.Sprintf("between %v and %v", share.Quorum, len(share.Committee))
-		e.got = len(m.Signers)
+		e.want = fmt.Sprintf("between %v and %v", quorumSize, len(committee))
+		e.got = len(signedMessage.GetOperatorIDs())
 		return e
 	}
 
-	if !slices.IsSorted(m.Signers) {
+	if !slices.IsSorted(signedMessage.GetOperatorIDs()) {
 		return ErrSignersNotSorted
 	}
 
 	var prevSigner spectypes.OperatorID
-	for _, signer := range m.Signers {
-		if err := mv.commonSignerValidation(signer, share); err != nil {
+	for _, signer := range signedMessage.GetOperatorIDs() {
+		if err := mv.commonSignerValidation(signer, committee); err != nil {
 			return err
 		}
 		if signer == prevSigner {
@@ -453,4 +452,14 @@ func (mv *messageValidator) validConsensusSigners(share *ssvtypes.SSVShare, m *s
 		prevSigner = signer
 	}
 	return nil
+}
+
+func (mv *messageValidator) roundRobinProposer(height specqbft.Height, round specqbft.Round, committee []spectypes.OperatorID) types.OperatorID {
+	firstRoundIndex := 0
+	if height != specqbft.FirstHeight {
+		firstRoundIndex += int(height) % len(committee)
+	}
+
+	index := (firstRoundIndex + int(round) - int(specqbft.FirstRound)) % len(committee)
+	return committee[index]
 }

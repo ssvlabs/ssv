@@ -72,6 +72,10 @@ func (s *SSVShare) SetFeeRecipient(feeRecipient bellatrix.ExecutionAddress) {
 	s.FeeRecipientAddress = feeRecipient
 }
 
+func (s *SSVShare) GetCommittee() []*spectypes.Operator {
+	return s.Committee
+}
+
 // ComputeClusterIDHash will compute cluster ID hash with given owner address and operator ids
 func ComputeClusterIDHash(address common.Address, operatorIds []uint64) []byte {
 	sort.Slice(operatorIds, func(i, j int) bool {

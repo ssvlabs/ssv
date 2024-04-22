@@ -15,6 +15,11 @@ type Committee struct {
 	Validators []*ssvtypes.SSVShare
 }
 
+func (c *Committee) HasQuorum(cnt int) bool {
+	quorum, _ := ssvtypes.ComputeQuorumAndPartialQuorum(len(c.Operators))
+	return uint64(cnt) >= quorum
+}
+
 type ValidatorStore interface {
 	Validator(pubKey []byte) *ssvtypes.SSVShare
 	Validators() []*ssvtypes.SSVShare
