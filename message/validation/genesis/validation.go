@@ -58,7 +58,7 @@ const (
 // MessageValidator defines methods for validating pubsub messages.
 type MessageValidator interface {
 	ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
-	ValidatePubsubMessage(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
+	Validate(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
 }
 
 type messageValidator struct {
@@ -217,12 +217,12 @@ func (d Descriptor) String() string {
 // ValidatorForTopic returns a validation function for the given topic.
 // This function can be used to validate messages within the libp2p pubsub framework.
 func (mv *messageValidator) ValidatorForTopic(_ string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
-	return mv.ValidatePubsubMessage
+	return mv.Validate
 }
 
 // ValidatePubsubMessage validates the given pubsub message.
 // Depending on the outcome, it will return one of the pubsub validation results (Accept, Ignore, or Reject).
-func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 	if mv.selfAccept && peerID == mv.selfPID {
 		rawMsgPayload, _, _, err := commons.DecodeSignedSSVMessage(pmsg.Data)
 		if err != nil {

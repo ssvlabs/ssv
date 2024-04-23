@@ -70,14 +70,13 @@ var (
 	ErrMalformedPubSubMessage                 = Error{text: "pub-sub message is malformed", reject: true}
 	ErrEmptyPubSubMessage                     = Error{text: "pub-sub message is empty", reject: true}
 	ErrNilSSVMessage                          = Error{text: "ssv message is nil", reject: true}
-	ErrSignedSSVMessageValidation             = Error{text: "signed ssv message invalid", reject: true}
-	ErrTopicNotFound                          = Error{text: "topic not found", reject: true}
+	ErrIncorrectTopic                         = Error{text: "incorrect topic", reject: true}
 	ErrSSVDataTooBig                          = Error{text: "ssv message data too big", reject: true}
 	ErrInvalidRole                            = Error{text: "invalid role", reject: true}
 	ErrUnexpectedConsensusMessage             = Error{text: "unexpected consensus message for this role", reject: true}
 	ErrNoSigners                              = Error{text: "no signers", reject: true}
 	ErrWrongSignatureSize                     = Error{text: "wrong signature size", reject: true}
-	ErrZeroSignature                          = Error{text: "zero signature", reject: true}
+	ErrEmptySignature                         = Error{text: "empty signature", reject: true}
 	ErrZeroSigner                             = Error{text: "zero signer ID", reject: true}
 	ErrSignerNotInCommittee                   = Error{text: "signer is not in committee", reject: true}
 	ErrDuplicatedSigner                       = Error{text: "signer is duplicated", reject: true}
@@ -85,14 +84,16 @@ var (
 	ErrSignersNotSorted                       = Error{text: "signers are not sorted", reject: true}
 	ErrUnexpectedSigner                       = Error{text: "signer is not expected", reject: true}
 	ErrInvalidHash                            = Error{text: "root doesn't match full data hash", reject: true}
+	ErrFullDataHash                           = Error{text: "couldn't hash root", reject: true}
 	ErrEstimatedRoundTooFar                   = Error{text: "message round is too far from estimated"}
-	ErrMalformedMessage                       = Error{text: "message could not be decoded", reject: true}
+	ErrUndecodableData                        = Error{text: "message could not be decoded", reject: true}
 	ErrWrongSSVMessageType                    = Error{text: "wrong SSV message type", reject: true}
 	ErrUnknownQBFTMessageType                 = Error{text: "unknown QBFT message type", reject: true}
 	ErrUnknownPartialMessageType              = Error{text: "unknown partial signature message type", reject: true}
 	ErrPartialSignatureTypeRoleMismatch       = Error{text: "partial signature type and role don't match", reject: true}
 	ErrNonDecidedWithMultipleSigners          = Error{text: "non-decided with multiple signers", reject: true}
-	ErrWrongSignersLength                     = Error{text: "decided signers size is not between quorum and committee size", reject: true}
+	ErrTooManySigners                         = Error{text: "too many signers", reject: true}
+	ErrDecidedNotEnoughSigners                = Error{text: "not enough signers in decided message", reject: true}
 	ErrDuplicatedProposalWithDifferentData    = Error{text: "duplicated proposal with different data", reject: true}
 	ErrMalformedPrepareJustifications         = Error{text: "malformed prepare justifications", reject: true}
 	ErrUnexpectedPrepareJustifications        = Error{text: "prepare justifications unexpected for this message type", reject: true}
@@ -103,9 +104,14 @@ var (
 	ErrDeserializePublicKey                   = Error{text: "deserialize public key", reject: true}
 	ErrNoPartialMessages                      = Error{text: "no partial messages", reject: true}
 	ErrDuplicatedPartialSignatureMessage      = Error{text: "duplicated partial signature message", reject: true}
-	ErrNonExistingCommitteeID                 = Error{text: "cluster ID doesn't exist", reject: true}
+	ErrNonExistentCommitteeID                 = Error{text: "committee ID doesn't exist", reject: true}
 	ErrNoValidators                           = Error{text: "no validators for this committee ID", reject: true}
 	ErrPartialSignatureValidatorIndexNotFound = Error{text: "partial signature validator index not found", reject: true}
+	ErrNoSignatures                           = Error{text: "no signatures", reject: true}
+	ErrSignatureOperatorIDLengthMismatch      = Error{text: "signature and operator ID length mismatch", reject: true}
+	ErrPartialSignatureSeveralSignatures      = Error{text: "partial signature message contains several signatures", reject: true}
+	ErrPrepareOrCommitWithFullData            = Error{text: "prepare or commit with full data", reject: true}
+	ErrMismatchedIdentifier                   = Error{text: "identifier mismatch", reject: true}
 )
 
 func (mv *messageValidator) handleValidationError(peerID peer.ID, decodedMessage *DecodedMessage, err error) pubsub.ValidationResult {

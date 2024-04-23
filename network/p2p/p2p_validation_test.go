@@ -268,10 +268,10 @@ type MockMessageValidator struct {
 }
 
 func (v *MockMessageValidator) ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
-	return v.ValidatePubsubMessage
+	return v.Validate
 }
 
-func (v *MockMessageValidator) ValidatePubsubMessage(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+func (v *MockMessageValidator) Validate(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 	return v.ValidateFunc(ctx, p, pmsg)
 }
 

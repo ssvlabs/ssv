@@ -464,7 +464,7 @@ func (m *DummyMessageValidator) ValidatorForTopic(topic string) func(ctx context
 	}
 }
 
-func (m *DummyMessageValidator) ValidatePubsubMessage(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+func (m *DummyMessageValidator) Validate(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 	return pubsub.ValidationAccept
 }
 

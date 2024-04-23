@@ -26,7 +26,7 @@ import (
 // MessageValidator defines methods for validating pubsub messages.
 type MessageValidator interface {
 	ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
-	ValidatePubsubMessage(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
+	Validate(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
 }
 
 type messageValidator struct {
@@ -71,12 +71,12 @@ func New(netCfg networkconfig.NetworkConfig, opts ...Option) MessageValidator {
 // ValidatorForTopic returns a validation function for the given topic.
 // This function can be used to validate messages within the libp2p pubsub framework.
 func (mv *messageValidator) ValidatorForTopic(_ string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
-	return mv.ValidatePubsubMessage
+	return mv.Validate
 }
 
-// ValidatePubsubMessage validates the given pubsub message.
+// Validate validates the given pubsub message.
 // Depending on the outcome, it will return one of the pubsub validation results (Accept, Ignore, or Reject).
-func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 	if mv.selfAccept && peerID == mv.selfPID {
 		return mv.validateSelf(pmsg)
 	}
@@ -107,16 +107,20 @@ func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt
 		return nil, err
 	}
 
-	return mv.validateSSVMessage(signedSSVMessage, pMsg.GetTopic(), receivedAt)
+	return mv.handleSSVMessage(signedSSVMessage, pMsg.GetTopic(), receivedAt)
 }
 
-func (mv *messageValidator) validateSSVMessage(signedSSVMessage *spectypes.SignedSSVMessage, topic string, receivedAt time.Time) (*DecodedMessage, error) {
-	if err := mv.signedSSVMessageCheck(signedSSVMessage, topic); err != nil {
+func (mv *messageValidator) handleSSVMessage(signedSSVMessage *spectypes.SignedSSVMessage, topic string, receivedAt time.Time) (*DecodedMessage, error) {
+	if err := mv.validateSSVMessage(signedSSVMessage, topic); err != nil {
 		return nil, err
 	}
 
 	committee, validatorIndices, err := mv.getCommitteeAndValidatorIndices(signedSSVMessage.GetSSVMessage().GetID())
 	if err != nil {
+		return nil, err
+	}
+
+	if err := mv.belongsToCommittee(signedSSVMessage.GetOperatorIDs(), committee); err != nil {
 		return nil, err
 	}
 
@@ -176,7 +180,7 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 		committeeID := CommitteeID(msgID.GetSenderID()[16:])
 		committee := mv.validatorStore.Committee(committeeID) // TODO: consider passing whole senderID
 		if committee == nil {
-			e := ErrNonExistingCommitteeID
+			e := ErrNonExistentCommitteeID
 			e.got = hex.EncodeToString(committeeID[:])
 			return nil, nil, e
 		}

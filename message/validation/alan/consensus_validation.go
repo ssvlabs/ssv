@@ -4,6 +4,7 @@ package msgvalidation
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -11,7 +12,6 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/alan/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/alan/types"
 	"github.com/bloxapp/ssv-spec/types"
-	"golang.org/x/exp/slices"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
@@ -34,7 +34,7 @@ func (mv *messageValidator) validateConsensusMessage(
 
 	consensusMessage, err := specqbft.DecodeMessage(ssvMessage.Data)
 	if err != nil {
-		e := ErrMalformedMessage
+		e := ErrUndecodableData
 		e.innerErr = err
 		return nil, e
 	}
@@ -69,6 +69,31 @@ func (mv *messageValidator) validateConsensusMessage(
 		return consensusMessage, err
 	}
 
+	if !bytes.Equal(consensusMessage.Identifier, signedSSVMessage.GetSSVMessage().MsgID[:]) {
+		e := ErrMismatchedIdentifier
+		e.want = hex.EncodeToString(signedSSVMessage.GetSSVMessage().MsgID[:])
+		e.got = hex.EncodeToString(consensusMessage.Identifier)
+		return consensusMessage, e
+	}
+
+	if len(signedSSVMessage.FullData) != 0 {
+		if consensusMessage.MsgType == specqbft.PrepareMsgType ||
+			consensusMessage.MsgType == specqbft.CommitMsgType && len(signedSSVMessage.GetOperatorIDs()) == 1 {
+			return consensusMessage, ErrPrepareOrCommitWithFullData
+		}
+
+		hashedFullData, err := specqbft.HashDataRoot(signedSSVMessage.FullData)
+		if err != nil {
+			e := ErrFullDataHash
+			e.innerErr = err
+			return consensusMessage, e
+		}
+
+		if hashedFullData != consensusMessage.Root {
+			return consensusMessage, ErrInvalidHash
+		}
+	}
+
 	role := messageID.GetRoleType()
 
 	if err := mv.validateSlotTime(msgSlot, role, receivedAt); err != nil {
@@ -97,21 +122,10 @@ func (mv *messageValidator) validateConsensusMessage(
 	highestAllowed := estimatedRound + allowedRoundsInFuture
 
 	if msgRound < lowestAllowed || msgRound > highestAllowed {
-		err := ErrEstimatedRoundTooFar
-		err.got = fmt.Sprintf("%v (%v role)", msgRound, role)
-		err.want = fmt.Sprintf("between %v and %v (%v role) / %v passed", lowestAllowed, highestAllowed, role, sinceSlotStart)
-		return consensusMessage, err
-	}
-
-	if mv.hasFullData(signedSSVMessage, consensusMessage) {
-		hashedFullData, err := specqbft.HashDataRoot(signedSSVMessage.FullData)
-		if err != nil {
-			return consensusMessage, fmt.Errorf("hash data root: %w", err)
-		}
-
-		if hashedFullData != consensusMessage.Root {
-			return consensusMessage, ErrInvalidHash
-		}
+		e := ErrEstimatedRoundTooFar
+		e.got = fmt.Sprintf("%v (%v role)", msgRound, role)
+		e.want = fmt.Sprintf("between %v and %v (%v role) / %v passed", lowestAllowed, highestAllowed, role, sinceSlotStart)
+		return consensusMessage, e
 	}
 
 	if err := mv.validateBeaconDuty(messageID.GetRoleType(), msgSlot, validatorIndices); err != nil {
@@ -121,7 +135,7 @@ func (mv *messageValidator) validateConsensusMessage(
 	state := mv.consensusState(messageID)
 	for _, signer := range signedSSVMessage.GetOperatorIDs() {
 		if err := mv.validateSignerBehaviorConsensus(state, signer, committee, signedSSVMessage, consensusMessage); err != nil {
-			return consensusMessage, fmt.Errorf("bad signer behavior: %w", err)
+			return consensusMessage, err
 		}
 	}
 
@@ -147,7 +161,7 @@ func (mv *messageValidator) validateConsensusMessage(
 			signerState.ResetRound(msgRound)
 		}
 
-		if mv.hasFullData(signedSSVMessage, consensusMessage) && signerState.ProposalData == nil {
+		if len(signedSSVMessage.FullData) != 0 && signerState.ProposalData == nil {
 			signerState.ProposalData = signedSSVMessage.FullData
 		}
 
@@ -232,7 +246,7 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 	}
 
 	if msgSlot == signerState.Slot && msgRound == signerState.Round {
-		if mv.hasFullData(signedSSVMessage, consensusMessage) && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedSSVMessage.FullData) {
+		if len(signedSSVMessage.FullData) != 0 && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedSSVMessage.FullData) {
 			return ErrDuplicatedProposalWithDifferentData
 		}
 
@@ -354,16 +368,16 @@ func (mv *messageValidator) validQBFTMsgType(msgType specqbft.MessageType) bool 
 }
 
 func (mv *messageValidator) validConsensusSigners(signedMessage *spectypes.SignedSSVMessage, consensusMessage *specqbft.Message, committee []spectypes.OperatorID) error {
-	signerCount := len(signedMessage.GetOperatorIDs())
+	signers := signedMessage.GetOperatorIDs()
 	quorumSize, _ := ssvtypes.ComputeQuorumAndPartialQuorum(len(committee))
 
 	switch {
-	case signerCount == 1:
+	case len(signers) == 1:
 		if consensusMessage.MsgType == specqbft.ProposalMsgType {
 			leader := mv.roundRobinProposer(consensusMessage.Height, consensusMessage.Round, committee)
-			if signedMessage.GetOperatorIDs()[0] != leader {
+			if signers[0] != leader {
 				err := ErrSignerNotLeader
-				err.got = signedMessage.GetOperatorIDs()[0]
+				err.got = signers[0]
 				err.want = leader
 				return err
 			}
@@ -371,21 +385,16 @@ func (mv *messageValidator) validConsensusSigners(signedMessage *spectypes.Signe
 
 	case consensusMessage.MsgType != specqbft.CommitMsgType:
 		e := ErrNonDecidedWithMultipleSigners
-		e.got = signerCount
+		e.got = len(signers)
 		return e
 
-	case uint64(signerCount) < quorumSize || signerCount > len(committee):
-		e := ErrWrongSignersLength
-		e.want = fmt.Sprintf("between %v and %v", quorumSize, len(committee))
-		e.got = len(signedMessage.GetOperatorIDs())
+	case uint64(len(signers)) < quorumSize:
+		e := ErrDecidedNotEnoughSigners
+		e.want = quorumSize
+		e.got = len(signers)
 		return e
 	}
 
-	for _, signer := range signedMessage.GetOperatorIDs() {
-		if !slices.Contains(committee, signer) {
-			return ErrSignerNotInCommittee
-		}
-	}
 	return nil
 }
 

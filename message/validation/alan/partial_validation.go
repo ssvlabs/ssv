@@ -31,7 +31,7 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 
 	partialSignatureMessages := &spectypes.PartialSignatureMessages{}
 	if err := partialSignatureMessages.Decode(ssvMessage.Data); err != nil {
-		e := ErrMalformedMessage
+		e := ErrUndecodableData
 		e.innerErr = err
 		return nil, e
 	}
@@ -63,11 +63,15 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 		return partialSignatureMessages, err
 	}
 
+	if len(signedSSVMessage.GetSignature()) > 1 {
+		return partialSignatureMessages, ErrPartialSignatureSeveralSignatures
+	}
+
 	signer := signedSSVMessage.GetOperatorIDs()[0]
 	signature := signedSSVMessage.GetSignature()[0]
 
 	state := mv.consensusState(msgID)
-	if err := mv.validatePartialMessages(partialSignatureMessages, signer, committee, validatorIndices); err != nil {
+	if err := mv.validatePartialMessages(partialSignatureMessages, signer, validatorIndices); err != nil {
 		return partialSignatureMessages, err
 	}
 
@@ -132,13 +136,8 @@ func (mv *messageValidator) partialSignatureTypeMatchesRole(msgType spectypes.Pa
 func (mv *messageValidator) validatePartialMessages(
 	messages *spectypes.PartialSignatureMessages,
 	signer spectypes.OperatorID,
-	committee []spectypes.OperatorID,
 	validatorIndices []phase0.ValidatorIndex,
 ) error {
-	if !slices.Contains(committee, signer) {
-		return ErrSignerNotInCommittee
-	}
-
 	if len(messages.Messages) == 0 {
 		return ErrNoPartialMessages
 	}
@@ -155,10 +154,6 @@ func (mv *messageValidator) validatePartialMessages(
 			err.want = signer
 			err.got = message.Signer
 			return err
-		}
-
-		if !slices.Contains(committee, message.Signer) {
-			return ErrSignerNotInCommittee
 		}
 
 		if err := mv.validateBLSSignatureFormat(message.PartialSignature); err != nil {
@@ -184,7 +179,7 @@ func (mv *messageValidator) validateBLSSignatureFormat(signature []byte) error {
 	}
 
 	if [rsaSignatureSize]byte(signature) == [rsaSignatureSize]byte{} {
-		return ErrZeroSignature
+		return ErrEmptySignature
 	}
 	return nil
 }

@@ -3,6 +3,7 @@ package msgvalidation
 import (
 	"bytes"
 	"encoding/hex"
+	"fmt"
 
 	spectypes "github.com/bloxapp/ssv-spec/alan/types"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -22,19 +23,85 @@ func (mv *messageValidator) decodeSignedSSVMessage(pMsg *pubsub.Message) (*spect
 	return signedSSVMessage, nil
 }
 
-func (mv *messageValidator) signedSSVMessageCheck(signedSSVMessage *spectypes.SignedSSVMessage, topic string) error {
+func (mv *messageValidator) validateSSVMessage(signedSSVMessage *spectypes.SignedSSVMessage, topic string) error {
 	if signedSSVMessage == nil {
 		return ErrEmptyPubSubMessage
 	}
 
-	if err := signedSSVMessage.Validate(); err != nil { // TODO: think whether we need to extract it
-		e := ErrSignedSSVMessageValidation
-		e.innerErr = err
+	operatorIDs := signedSSVMessage.GetOperatorIDs()
+	signatures := signedSSVMessage.GetSignature()
+
+	if len(operatorIDs) != len(signatures) {
+		e := ErrSignatureOperatorIDLengthMismatch
+		e.got = fmt.Sprintf("%d/%d", len(operatorIDs), len(signatures))
 		return e
 	}
 
-	operatorIDs := signedSSVMessage.GetOperatorIDs()
+	if err := mv.validateOperators(operatorIDs); err != nil {
+		return err
+	}
 
+	ssvMessage := signedSSVMessage.GetSSVMessage()
+	if ssvMessage == nil {
+		return ErrNilSSVMessage
+	}
+
+	mv.metrics.SSVMessageType(ssvMessage.MsgType)
+
+	if err := mv.validateSignatures(signatures); err != nil {
+		return err
+	}
+
+	if len(ssvMessage.Data) == 0 {
+		return ErrEmptyData
+	}
+
+	if len(ssvMessage.Data) > maxMessageSize {
+		err := ErrSSVDataTooBig
+		err.got = len(ssvMessage.Data)
+		err.want = maxMessageSize
+		return err
+	}
+
+	if !mv.topicMatches(ssvMessage, topic) {
+		return ErrIncorrectTopic
+	}
+
+	if !bytes.Equal(ssvMessage.MsgID.GetDomain(), mv.netCfg.Domain[:]) {
+		err := ErrWrongDomain
+		err.got = hex.EncodeToString(ssvMessage.MsgID.GetDomain())
+		err.want = hex.EncodeToString(mv.netCfg.Domain[:])
+		return err
+	}
+
+	if !mv.validRole(ssvMessage.GetID().GetRoleType()) {
+		return ErrInvalidRole
+	}
+
+	return nil
+}
+
+func (mv *messageValidator) validateSignatures(signatures [][]byte) error {
+	if len(signatures) == 0 {
+		return ErrNoSignatures
+	}
+
+	for _, signature := range signatures {
+		if len(signature) == 0 {
+			return ErrEmptySignature
+		}
+
+		if len(signature) != rsaSignatureSize {
+			e := ErrWrongSignatureSize
+			e.got = len(signature)
+			return e
+		}
+	}
+
+	return nil
+}
+
+func (mv *messageValidator) validateOperators(operatorIDs []spectypes.OperatorID) error {
 	if len(operatorIDs) == 0 {
 		return ErrNoSigners
 	}
@@ -54,59 +121,6 @@ func (mv *messageValidator) signedSSVMessageCheck(signedSSVMessage *spectypes.Si
 		prevSigner = signer
 	}
 
-	for _, signature := range signedSSVMessage.GetSignature() {
-		if err := mv.validateRSASignatureFormat(signature); err != nil {
-			return err
-		}
-	}
-
-	ssvMessage := signedSSVMessage.GetSSVMessage()
-
-	if ssvMessage == nil {
-		return ErrNilSSVMessage
-	}
-
-	mv.metrics.SSVMessageType(ssvMessage.MsgType)
-
-	if len(ssvMessage.Data) == 0 {
-		return ErrEmptyData
-	}
-
-	if len(ssvMessage.Data) > maxMessageSize {
-		err := ErrSSVDataTooBig
-		err.got = len(ssvMessage.Data)
-		err.want = maxMessageSize
-		return err
-	}
-
-	if !mv.topicMatches(ssvMessage, topic) {
-		return ErrTopicNotFound
-	}
-
-	if !bytes.Equal(ssvMessage.MsgID.GetDomain(), mv.netCfg.Domain[:]) {
-		err := ErrWrongDomain
-		err.got = hex.EncodeToString(ssvMessage.MsgID.GetDomain())
-		err.want = hex.EncodeToString(mv.netCfg.Domain[:])
-		return err
-	}
-
-	if !mv.validRole(ssvMessage.GetID().GetRoleType()) {
-		return ErrInvalidRole
-	}
-
-	return nil
-}
-
-func (mv *messageValidator) validateRSASignatureFormat(signature []byte) error {
-	if len(signature) != rsaSignatureSize {
-		e := ErrWrongSignatureSize
-		e.got = len(signature)
-		return e
-	}
-
-	if [rsaSignatureSize]byte(signature) == [rsaSignatureSize]byte{} {
-		return ErrZeroSignature
-	}
 	return nil
 }
 
@@ -133,4 +147,23 @@ func (mv *messageValidator) topicMatches(ssvMessage *spectypes.SSVMessage, topic
 
 	topics := getTopics(ssvMessage.GetID().GetSenderID())
 	return slices.Contains(topics, commons.GetTopicBaseName(topic))
+}
+
+func (mv *messageValidator) belongsToCommittee(operatorIDs []spectypes.OperatorID, committee []spectypes.OperatorID) error {
+	for _, signer := range operatorIDs {
+		if !slices.Contains(committee, signer) {
+			e := ErrSignerNotInCommittee
+			e.got = signer
+			e.want = committee
+			return e
+		}
+	}
+
+	if len(operatorIDs) > len(committee) {
+		e := ErrTooManySigners
+		e.got = len(operatorIDs)
+		return e
+	}
+
+	return nil
 }

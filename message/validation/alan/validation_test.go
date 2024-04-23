@@ -78,7 +78,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 		require.NoError(t, err)
 	})
 
@@ -107,10 +107,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(ssvMsg, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(ssvMsg, receivedAt, nil)
 		require.NoError(t, err)
 
-		_, _, err = validator.validateSSVMessage(ssvMsg, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(ssvMsg, receivedAt, nil)
 		require.ErrorContains(t, err, ErrTooManySameTypeMessagesPerRound.Error())
 
 		state1 := state.GetSignerState(1)
@@ -128,7 +128,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		ssvMsg.Data = encodedMsg
-		_, _, err = validator.validateSSVMessage(ssvMsg, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(ssvMsg, receivedAt, nil)
 		require.NoError(t, err)
 
 		require.NotNil(t, state1)
@@ -136,7 +136,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.EqualValues(t, 2, state1.Round)
 		require.EqualValues(t, MessageCounts{Prepare: 1}, state1.MessageCounts)
 
-		_, _, err = validator.validateSSVMessage(ssvMsg, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(ssvMsg, receivedAt, nil)
 		require.ErrorContains(t, err, ErrTooManySameTypeMessagesPerRound.Error())
 
 		signedMsg = spectestingutils.TestingCommitMessageWithHeight(ks.Shares[1], 1, height+1)
@@ -144,14 +144,14 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		ssvMsg.Data = encodedMsg
-		_, _, err = validator.validateSSVMessage(ssvMsg, receivedAt.Add(netCfg.Beacon.SlotDurationSec()), nil)
+		_, _, err = validator.handleSSVMessage(ssvMsg, receivedAt.Add(netCfg.Beacon.SlotDurationSec()), nil)
 		require.NoError(t, err)
 		require.NotNil(t, state1)
 		require.EqualValues(t, height+1, state1.Slot)
 		require.EqualValues(t, 1, state1.Round)
 		require.EqualValues(t, MessageCounts{Commit: 1}, state1.MessageCounts)
 
-		_, _, err = validator.validateSSVMessage(ssvMsg, receivedAt.Add(netCfg.Beacon.SlotDurationSec()), nil)
+		_, _, err = validator.handleSSVMessage(ssvMsg, receivedAt.Add(netCfg.Beacon.SlotDurationSec()), nil)
 		require.ErrorContains(t, err, ErrTooManySameTypeMessagesPerRound.Error())
 
 		signedMsg = spectestingutils.TestingCommitMultiSignerMessageWithHeight([]*bls.SecretKey{ks.Shares[1], ks.Shares[2], ks.Shares[3]}, []spectypes.OperatorID{1, 2, 3}, height+1)
@@ -159,7 +159,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		ssvMsg.Data = encodedMsg
-		_, _, err = validator.validateSSVMessage(ssvMsg, receivedAt.Add(netCfg.Beacon.SlotDurationSec()), nil)
+		_, _, err = validator.handleSSVMessage(ssvMsg, receivedAt.Add(netCfg.Beacon.SlotDurationSec()), nil)
 		require.NoError(t, err)
 		require.NotNil(t, state1)
 		require.EqualValues(t, height+1, state1.Slot)
@@ -238,9 +238,9 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 
-		require.ErrorContains(t, err, ErrMalformedMessage.Error())
+		require.ErrorContains(t, err, ErrUndecodableData.Error())
 	})
 
 	// Send a message with no data should return an error
@@ -253,7 +253,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    []byte{},
 		}
 
-		_, _, err := validator.validateSSVMessage(message, time.Now(), nil)
+		_, _, err := validator.handleSSVMessage(message, time.Now(), nil)
 		require.ErrorIs(t, err, ErrEmptyData)
 
 		message = &spectypes.SSVMessage{
@@ -262,7 +262,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    nil,
 		}
 
-		_, _, err = validator.validateSSVMessage(message, time.Now(), nil)
+		_, _, err = validator.handleSSVMessage(message, time.Now(), nil)
 		require.ErrorIs(t, err, ErrEmptyData)
 	})
 
@@ -278,7 +278,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    bytes.Repeat([]byte{0x1}, tooBigMsgSize),
 		}
 
-		_, _, err := validator.validateSSVMessage(message, time.Now(), nil)
+		_, _, err := validator.handleSSVMessage(message, time.Now(), nil)
 		expectedErr := ErrSSVDataTooBig
 		expectedErr.got = tooBigMsgSize
 		expectedErr.want = maxMessageSize
@@ -295,8 +295,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    bytes.Repeat([]byte{0x1}, maxMessageSize),
 		}
 
-		_, _, err := validator.validateSSVMessage(message, time.Now(), nil)
-		require.ErrorContains(t, err, ErrMalformedMessage.Error())
+		_, _, err := validator.handleSSVMessage(message, time.Now(), nil)
+		require.ErrorContains(t, err, ErrUndecodableData.Error())
 	})
 
 	// Send an invalid SSV message type returns an error
@@ -309,7 +309,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    []byte{0x1},
 		}
 
-		_, _, err = validator.validateSSVMessage(message, time.Now(), nil)
+		_, _, err = validator.handleSSVMessage(message, time.Now(), nil)
 		require.ErrorContains(t, err, ErrWrongSSVMessageType.Error())
 	})
 
@@ -327,7 +327,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedValidSignedMessage,
 		}
 
-		_, _, err = validator.validateSSVMessage(message, time.Now(), nil)
+		_, _, err = validator.handleSSVMessage(message, time.Now(), nil)
 		require.ErrorContains(t, err, ErrDeserializePublicKey.Error())
 	})
 
@@ -348,7 +348,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedValidSignedMessage,
 		}
 
-		_, _, err = validator.validateSSVMessage(message, time.Now(), nil)
+		_, _, err = validator.handleSSVMessage(message, time.Now(), nil)
 		expectedErr := ErrUnknownValidator
 		expectedErr.got = hex.EncodeToString(sk.PublicKey().Marshal())
 		require.ErrorIs(t, err, expectedErr)
@@ -373,7 +373,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 		expectedErr := ErrWrongDomain
 		expectedErr.got = hex.EncodeToString(wrongDomain[:])
 		expectedErr.want = hex.EncodeToString(netCfg.Domain[:])
@@ -398,7 +398,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 		require.ErrorIs(t, err, ErrInvalidRole)
 	})
 
@@ -420,7 +420,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 		require.ErrorContains(t, err, ErrUnexpectedConsensusMessage.Error())
 
 		message = &spectypes.SSVMessage{
@@ -429,7 +429,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedValidSignedMessage,
 		}
 
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 		require.ErrorContains(t, err, ErrUnexpectedConsensusMessage.Error())
 	})
 
@@ -463,7 +463,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedValidSignedMessage,
 		}
 
-		_, _, err = validator.validateSSVMessage(message, time.Now(), nil)
+		_, _, err = validator.handleSSVMessage(message, time.Now(), nil)
 		expectedErr := ErrValidatorLiquidated
 		require.ErrorIs(t, err, expectedErr)
 
@@ -503,7 +503,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
 
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 		expectedErr := ErrValidatorNotAttesting
 		expectedErr.got = eth2apiv1.ValidatorStateUnknown.String()
 		require.ErrorIs(t, err, expectedErr)
@@ -553,7 +553,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
 
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 		expectedErr := ErrValidatorNotAttesting
 		expectedErr.got = eth2apiv1.ValidatorStatePendingQueued.String()
 		require.ErrorIs(t, err, expectedErr)
@@ -604,7 +604,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
 
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 		require.NoError(t, err)
 
 		require.NoError(t, ns.Shares().Delete(nil, nonUpdatedMetadataShare.ValidatorPubKey))
@@ -641,7 +641,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
 
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 		require.ErrorIs(t, err, ErrNoShareMetadata)
 
 		require.NoError(t, ns.Shares().Delete(nil, noMetadataShare.ValidatorPubKey))
@@ -664,7 +664,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedValidSignedMessage,
 		}
 
-		_, _, err = validator.validateSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester)), nil)
+		_, _, err = validator.handleSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester)), nil)
 		require.NoError(t, err)
 
 		validSignedMessage = spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height+4)
@@ -672,7 +672,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		message.Data = encodedValidSignedMessage
-		_, _, err = validator.validateSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot+4).Add(validator.waitAfterSlotStart(roleAttester)), nil)
+		_, _, err = validator.handleSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot+4).Add(validator.waitAfterSlotStart(roleAttester)), nil)
 		require.NoError(t, err)
 
 		validSignedMessage = spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height+8)
@@ -680,7 +680,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		message.Data = encodedValidSignedMessage
-		_, _, err = validator.validateSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot+8).Add(validator.waitAfterSlotStart(roleAttester)), nil)
+		_, _, err = validator.handleSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot+8).Add(validator.waitAfterSlotStart(roleAttester)), nil)
 		require.ErrorContains(t, err, ErrTooManyDutiesPerEpoch.Error())
 	})
 
@@ -704,13 +704,13 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedValidSignedMessage,
 		}
 
-		_, _, err = validator.validateSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(spectypes.BNRoleProposer)), nil)
+		_, _, err = validator.handleSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(spectypes.BNRoleProposer)), nil)
 		require.ErrorContains(t, err, ErrNoDuty.Error())
 
 		dutyStore = dutystore.New()
 		dutyStore.Proposer.Add(epoch, slot, validatorIndex, &eth2apiv1.ProposerDuty{}, true)
 		validator = New(netCfg, WithValidatorStore(ns), WithDutyStore(dutyStore)).(*messageValidator)
-		_, _, err = validator.validateSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(spectypes.BNRoleProposer)), nil)
+		_, _, err = validator.handleSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(spectypes.BNRoleProposer)), nil)
 		require.NoError(t, err)
 	})
 
@@ -745,7 +745,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 		require.ErrorIs(t, err, ErrSignerNotInCommittee)
 	})
 
@@ -767,7 +767,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 		require.ErrorIs(t, err, ErrZeroSigner)
 	})
 
@@ -790,7 +790,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 		expectedErr := ErrUnexpectedSigner
 		expectedErr.got = spectypes.OperatorID(2)
 		expectedErr.want = spectypes.OperatorID(1)
@@ -816,7 +816,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 		require.ErrorIs(t, err, ErrDuplicatedPartialSignatureMessage)
 	})
 
@@ -839,7 +839,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 		require.ErrorIs(t, err, ErrNoPartialMessages)
 	})
 
@@ -862,8 +862,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
-		require.ErrorContains(t, err, ErrMalformedMessage.Error())
+		_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
+		require.ErrorContains(t, err, ErrUndecodableData.Error())
 	})
 
 	// Run partial message type validation tests
@@ -920,7 +920,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 					}
 
 					receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-					_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+					_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 					require.NoError(t, err)
 				}
 			}
@@ -949,7 +949,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			}
 
 			receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-			_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+			_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 			require.ErrorContains(t, err, ErrUnknownPartialMessageType.Error())
 		})
 
@@ -988,7 +988,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 					}
 
 					receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-					_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+					_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 					require.ErrorContains(t, err, ErrPartialSignatureTypeRoleMismatch.Error())
 				}
 			}
@@ -1021,7 +1021,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 		expectedErr := ErrUnknownQBFTMessageType
 		require.ErrorIs(t, err, expectedErr)
 	})
@@ -1061,8 +1061,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			}
 
 			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-			_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
-			require.ErrorIs(t, err, ErrZeroSignature)
+			_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
+			require.ErrorIs(t, err, ErrEmptySignature)
 		})
 
 		// Get error when receiving a consensus message with a zero signature
@@ -1081,8 +1081,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			}
 
 			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-			_, _, err = validator.validateSSVMessage(ssvMessage, receivedAt, nil)
-			require.ErrorIs(t, err, ErrZeroSignature)
+			_, _, err = validator.handleSSVMessage(ssvMessage, receivedAt, nil)
+			require.ErrorIs(t, err, ErrEmptySignature)
 		})
 	})
 
@@ -1106,7 +1106,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 		require.ErrorIs(t, err, ErrNoSigners)
 	})
 
@@ -1149,7 +1149,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			}
 
 			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-			_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+			_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 			require.ErrorIs(t, err, ErrZeroSigner)
 		})
 
@@ -1168,7 +1168,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			}
 
 			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-			_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+			_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 			require.ErrorIs(t, err, ErrZeroSigner)
 		})
 
@@ -1196,7 +1196,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 		require.ErrorIs(t, err, ErrDuplicatedSigner)
 	})
 
@@ -1221,7 +1221,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 		require.ErrorIs(t, err, ErrSignersNotSorted)
 	})
 
@@ -1246,9 +1246,9 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 
-		expectedErr := ErrWrongSignersLength
+		expectedErr := ErrTooManySigners
 		expectedErr.got = 2
 		expectedErr.want = "between 3 and 4"
 		require.ErrorIs(t, err, expectedErr)
@@ -1273,7 +1273,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 
 		expectedErr := ErrNonDecidedWithMultipleSigners
 		expectedErr.got = 3
@@ -1310,7 +1310,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 					Data:    encodedValidSignedMessage,
 				}
 
-				_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+				_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 				require.ErrorContains(t, err, ErrLateMessage.Error())
 			})
 		}
@@ -1334,7 +1334,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot - 1)
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 		require.ErrorIs(t, err, ErrEarlyMessage)
 	})
 
@@ -1356,7 +1356,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 		expectedErr := ErrSignerNotLeader
 		expectedErr.got = spectypes.OperatorID(2)
 		expectedErr.want = spectypes.OperatorID(1)
@@ -1383,7 +1383,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 
 		require.ErrorContains(t, err, ErrMalformedPrepareJustifications.Error())
 	})
@@ -1412,7 +1412,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 
 		expectedErr := ErrUnexpectedPrepareJustifications
 		expectedErr.got = specqbft.PrepareMsgType
@@ -1444,7 +1444,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 
 		expectedErr := ErrUnexpectedRoundChangeJustifications
 		expectedErr.got = specqbft.PrepareMsgType
@@ -1471,7 +1471,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 
 		require.ErrorContains(t, err, ErrMalformedRoundChangeJustifications.Error())
 	})
@@ -1496,7 +1496,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 
 		expectedErr := ErrInvalidHash
 		require.ErrorIs(t, err, expectedErr)
@@ -1519,7 +1519,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message1, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message1, receivedAt, nil)
 		require.NoError(t, err)
 
 		signed2 := spectestingutils.TestingProposalMessageWithRound(ks.Shares[1], 1, 1)
@@ -1536,7 +1536,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedSigned2,
 		}
 
-		_, _, err = validator.validateSSVMessage(message2, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message2, receivedAt, nil)
 		expectedErr := ErrDuplicatedProposalWithDifferentData
 		require.ErrorIs(t, err, expectedErr)
 	})
@@ -1558,7 +1558,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message1, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message1, receivedAt, nil)
 		require.NoError(t, err)
 
 		signed2 := spectestingutils.TestingPrepareMessage(ks.Shares[1], 1)
@@ -1573,7 +1573,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedSigned2,
 		}
 
-		_, _, err = validator.validateSSVMessage(message2, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message2, receivedAt, nil)
 		expectedErr := ErrTooManySameTypeMessagesPerRound
 		expectedErr.got = "prepare, having pre-consensus: 0, proposal: 0, prepare: 1, commit: 0, decided: 0, round change: 0, post-consensus: 0"
 		require.ErrorIs(t, err, expectedErr)
@@ -1596,7 +1596,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message1, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message1, receivedAt, nil)
 		require.NoError(t, err)
 
 		signed2 := spectestingutils.TestingCommitMessage(ks.Shares[1], 1)
@@ -1609,7 +1609,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedSigned2,
 		}
 
-		_, _, err = validator.validateSSVMessage(message2, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message2, receivedAt, nil)
 		expectedErr := ErrTooManySameTypeMessagesPerRound
 		expectedErr.got = "commit, having pre-consensus: 0, proposal: 0, prepare: 0, commit: 1, decided: 0, round change: 0, post-consensus: 0"
 		require.ErrorIs(t, err, expectedErr)
@@ -1632,7 +1632,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(message1, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message1, receivedAt, nil)
 		require.NoError(t, err)
 
 		signed2 := spectestingutils.TestingRoundChangeMessage(ks.Shares[1], 1)
@@ -1645,7 +1645,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Data:    encodedSigned2,
 		}
 
-		_, _, err = validator.validateSSVMessage(message2, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message2, receivedAt, nil)
 		expectedErr := ErrTooManySameTypeMessagesPerRound
 		expectedErr.got = "round change, having pre-consensus: 0, proposal: 0, prepare: 0, commit: 0, decided: 0, round change: 1, post-consensus: 0"
 		require.ErrorIs(t, err, expectedErr)
@@ -1673,11 +1673,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
 
 		for i := 0; i < maxDecidedCount(len(share.Committee)); i++ {
-			_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+			_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 			require.NoError(t, err)
 		}
 
-		_, _, err = validator.validateSSVMessage(message, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(message, receivedAt, nil)
 		expectedErr := ErrTooManySameTypeMessagesPerRound
 		expectedErr.got = "decided, having pre-consensus: 0, proposal: 0, prepare: 0, commit: 0, decided: 8, round change: 0, post-consensus: 0"
 		require.ErrorIs(t, err, expectedErr)
@@ -1711,7 +1711,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				}
 
 				receivedAt := netCfg.Beacon.GetSlotStartTime(0).Add(validator.waitAfterSlotStart(role))
-				_, _, err = validator.validateSSVMessage(ssvMessage, receivedAt, nil)
+				_, _, err = validator.handleSSVMessage(ssvMessage, receivedAt, nil)
 				require.ErrorContains(t, err, ErrRoundTooHigh.Error())
 			})
 		}
@@ -1735,7 +1735,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(ssvMessage, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(ssvMessage, receivedAt, nil)
 		require.NoError(t, err)
 
 		signedMessage = spectestingutils.TestingPrepareMessageWithRound(ks.Shares[1], 1, 1)
@@ -1743,7 +1743,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		ssvMessage.Data = encodedMessage
-		_, _, err = validator.validateSSVMessage(ssvMessage, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(ssvMessage, receivedAt, nil)
 		require.ErrorContains(t, err, ErrRoundAlreadyAdvanced.Error())
 	})
 
@@ -1767,7 +1767,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				Data:    encodedMessage,
 			}
 
-			_, _, err = validator.validateSSVMessage(ssvMessage, netCfg.Beacon.GetSlotStartTime(slot+1).Add(validator.waitAfterSlotStart(roleAttester)), nil)
+			_, _, err = validator.handleSSVMessage(ssvMessage, netCfg.Beacon.GetSlotStartTime(slot+1).Add(validator.waitAfterSlotStart(roleAttester)), nil)
 			require.NoError(t, err)
 
 			signedMessage = spectestingutils.TestingPrepareMessageWithHeight(ks.Shares[1], 1, height)
@@ -1775,7 +1775,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			require.NoError(t, err)
 
 			ssvMessage.Data = encodedMessage
-			_, _, err = validator.validateSSVMessage(ssvMessage, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester)), nil)
+			_, _, err = validator.handleSSVMessage(ssvMessage, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester)), nil)
 			require.ErrorContains(t, err, ErrSlotAlreadyAdvanced.Error())
 		})
 
@@ -1798,7 +1798,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				Data:    encodedMessage,
 			}
 
-			_, _, err = validator.validateSSVMessage(ssvMessage, netCfg.Beacon.GetSlotStartTime(slot+1).Add(validator.waitAfterSlotStart(roleAttester)), nil)
+			_, _, err = validator.handleSSVMessage(ssvMessage, netCfg.Beacon.GetSlotStartTime(slot+1).Add(validator.waitAfterSlotStart(roleAttester)), nil)
 			require.NoError(t, err)
 
 			message = spectestingutils.PostConsensusAttestationMsg(ks.Shares[2], 2, height)
@@ -1811,7 +1811,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			require.NoError(t, err)
 
 			ssvMessage.Data = encodedMessage
-			_, _, err = validator.validateSSVMessage(ssvMessage, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester)), nil)
+			_, _, err = validator.handleSSVMessage(ssvMessage, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester)), nil)
 			require.ErrorContains(t, err, ErrSlotAlreadyAdvanced.Error())
 		})
 	})
@@ -1834,7 +1834,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateSSVMessage(ssvMessage, receivedAt, nil)
+		_, _, err = validator.handleSSVMessage(ssvMessage, receivedAt, nil)
 		require.ErrorIs(t, err, ErrEventMessage)
 	})
 
