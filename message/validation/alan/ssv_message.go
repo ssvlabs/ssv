@@ -63,6 +63,11 @@ func (mv *messageValidator) validRole(roleType spectypes.RunnerRole) bool {
 
 // topicMatches checks if the message was sent on the right topic.
 func (mv *messageValidator) topicMatches(ssvMessage *spectypes.SSVMessage, topic string) bool {
-	topics := commons.ValidatorTopicID(ssvMessage.GetID().GetSenderID()) // TODO: what topic if sender is committee?
+	getTopics := commons.ValidatorTopicID
+	if mv.committeeRole(ssvMessage.GetID().GetRoleType()) {
+		getTopics = commons.CommitteeTopicID
+	}
+
+	topics := getTopics(ssvMessage.GetID().GetSenderID())
 	return slices.Contains(topics, commons.GetTopicBaseName(topic))
 }

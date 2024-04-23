@@ -20,6 +20,7 @@ import (
 func (mv *messageValidator) validateConsensusMessage(
 	signedSSVMessage *spectypes.SignedSSVMessage,
 	committee []spectypes.OperatorID,
+	validatorIndices []phase0.ValidatorIndex,
 	receivedAt time.Time,
 ) (*specqbft.Message, error) {
 	ssvMessage := signedSSVMessage.GetSSVMessage()
@@ -54,7 +55,7 @@ func (mv *messageValidator) validateConsensusMessage(
 	//mv.metrics.ConsensusMsgType(consensusMessage.MsgType, len(consensusMessage.Signers))
 
 	switch messageID.GetRoleType() {
-	case spectypes.BNRoleValidatorRegistration, spectypes.BNRoleVoluntaryExit:
+	case spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
 		e := ErrUnexpectedConsensusMessage
 		e.got = messageID.GetRoleType()
 		return consensusMessage, e
@@ -119,10 +120,9 @@ func (mv *messageValidator) validateConsensusMessage(
 		}
 	}
 
-	// TODO: enable
-	//if err := mv.validateBeaconDuty(messageID.GetRoleType(), msgSlot, share); err != nil {
-	//	return consensusMessage, err
-	//}
+	if err := mv.validateBeaconDuty(messageID.GetRoleType(), msgSlot, validatorIndices); err != nil {
+		return consensusMessage, err
+	}
 
 	state := mv.consensusState(messageID)
 	for _, signer := range signedSSVMessage.GetOperatorIDs() {
@@ -131,7 +131,9 @@ func (mv *messageValidator) validateConsensusMessage(
 		}
 	}
 
-	// TODO: assert len(signers) == len(signatures)
+	if err := mv.validateJustifications(consensusMessage); err != nil {
+		return consensusMessage, err
+	}
 
 	for i, signature := range signedSSVMessage.GetSignature() {
 		if err := mv.verifySignature(ssvMessage, signedSSVMessage.GetOperatorIDs()[i], signature); err != nil {
@@ -161,11 +163,7 @@ func (mv *messageValidator) validateConsensusMessage(
 	return consensusMessage, nil
 }
 
-func (mv *messageValidator) validateJustifications(
-	share *ssvtypes.SSVShare,
-	signedSSVMessage *spectypes.SignedSSVMessage,
-	message *specqbft.Message,
-) error {
+func (mv *messageValidator) validateJustifications(message *specqbft.Message) error {
 	pj, err := message.GetPrepareJustifications()
 	if err != nil {
 		e := ErrMalformedPrepareJustifications
@@ -192,25 +190,6 @@ func (mv *messageValidator) validateJustifications(
 		return e
 	}
 
-	// TODO: enable justification check
-	//if message.MsgType == specqbft.ProposalMsgType {
-	//	cfg := newQBFTConfig(spectypes.DomainType(mv.netCfg.Domain))
-	//
-	//	if err := instance.IsProposalJustification(
-	//		cfg,
-	//		share,
-	//		rcj,
-	//		pj,
-	//		message.Message.Height,
-	//		message.Message.Round,
-	//		message.FullData,
-	//	); err != nil {
-	//		e := ErrInvalidJustifications
-	//		e.innerErr = err
-	//		return e
-	//	}
-	//}
-
 	return nil
 }
 
@@ -222,10 +201,8 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 	consensusMessage *specqbft.Message,
 ) error {
 	signerState := state.GetSignerState(signer)
-
 	if signerState == nil {
 		return nil
-		//return mv.validateJustifications(share, consensusMessage) // TODO: enable justification checks
 	}
 
 	msgSlot := phase0.Slot(consensusMessage.Height)
@@ -271,8 +248,7 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 		}
 	}
 
-	return nil // TODO: enable justification check
-	//return mv.validateJustifications(share, consensusMessage) //
+	return nil
 }
 
 func (mv *messageValidator) validateDutyCount(
@@ -304,32 +280,25 @@ func (mv *messageValidator) validateDutyCount(
 func (mv *messageValidator) validateBeaconDuty(
 	role spectypes.RunnerRole,
 	slot phase0.Slot,
-	share *ssvtypes.SSVShare,
+	indices []phase0.ValidatorIndex,
 ) error {
 	switch role {
 	case spectypes.RoleProposer:
-		if share.Metadata.BeaconMetadata == nil {
-			return ErrNoShareMetadata
-		}
-
 		epoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(slot)
-		if mv.dutyStore != nil && mv.dutyStore.Proposer.ValidatorDuty(epoch, slot, share.Metadata.BeaconMetadata.Index) == nil {
+		if mv.dutyStore != nil && mv.dutyStore.Proposer.ValidatorDuty(epoch, slot, indices[0]) == nil {
 			return ErrNoDuty
 		}
 
 		return nil
 
-	case spectypes.RoleSyncCommittee, spectypes.RoleSyncCommitteeContribution: // TODO: what to do with RoleSyncCommittee?
-		if share.Metadata.BeaconMetadata == nil {
-			return ErrNoShareMetadata
-		}
-
+	case spectypes.RoleSyncCommitteeContribution:
 		period := mv.netCfg.Beacon.EstimatedSyncCommitteePeriodAtEpoch(mv.netCfg.Beacon.EstimatedEpochAtSlot(slot))
-		if mv.dutyStore != nil && mv.dutyStore.SyncCommittee.Duty(period, share.Metadata.BeaconMetadata.Index) == nil {
+		if mv.dutyStore != nil && mv.dutyStore.SyncCommittee.Duty(period, indices[0]) == nil {
 			return ErrNoDuty
 		}
 
 		return nil
+
 	default:
 		return nil
 	}
@@ -338,7 +307,7 @@ func (mv *messageValidator) validateBeaconDuty(
 func (mv *messageValidator) hasFullData(signedSSVMessage *spectypes.SignedSSVMessage, message *specqbft.Message) bool {
 	return (message.MsgType == specqbft.ProposalMsgType ||
 		message.MsgType == specqbft.RoundChangeMsgType ||
-		mv.isDecidedMessage(signedSSVMessage, message)) && len(signedSSVMessage.FullData) != 0 // TODO: more complex check of FullData
+		mv.isDecidedMessage(signedSSVMessage, message)) && len(signedSSVMessage.FullData) != 0
 }
 
 func (mv *messageValidator) isDecidedMessage(signedSSVMessage *spectypes.SignedSSVMessage, message *specqbft.Message) bool {
@@ -388,45 +357,6 @@ func (mv *messageValidator) validQBFTMsgType(msgType specqbft.MessageType) bool 
 	default:
 		return false
 	}
-}
-
-func (mv *messageValidator) validateSlotTime(messageSlot phase0.Slot, role spectypes.RunnerRole, receivedAt time.Time) error {
-	if mv.earlyMessage(messageSlot, receivedAt) {
-		return ErrEarlyMessage
-	}
-
-	if lateness := mv.lateMessage(messageSlot, role, receivedAt); lateness > 0 {
-		e := ErrLateMessage
-		e.got = fmt.Sprintf("late by %v", lateness)
-		return e
-	}
-
-	return nil
-}
-
-func (mv *messageValidator) earlyMessage(slot phase0.Slot, receivedAt time.Time) bool {
-	return mv.netCfg.Beacon.GetSlotEndTime(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Unix())).
-		Add(-clockErrorTolerance).Before(mv.netCfg.Beacon.GetSlotStartTime(slot))
-}
-
-func (mv *messageValidator) lateMessage(slot phase0.Slot, role spectypes.RunnerRole, receivedAt time.Time) time.Duration {
-	var ttl phase0.Slot
-	switch role {
-	case spectypes.RoleProposer, spectypes.RoleSyncCommitteeContribution:
-		ttl = 1 + lateSlotAllowance
-	case spectypes.RoleCommittee, spectypes.RoleAggregator:
-		ttl = 32 + lateSlotAllowance
-	case spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
-		return 0
-	default:
-		panic("unexpected role")
-	}
-
-	deadline := mv.netCfg.Beacon.GetSlotStartTime(slot + ttl).
-		Add(lateMessageMargin).Add(clockErrorTolerance)
-
-	return mv.netCfg.Beacon.GetSlotStartTime(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Unix())).
-		Sub(deadline)
 }
 
 func (mv *messageValidator) validConsensusSigners(signedMessage *spectypes.SignedSSVMessage, consensusMessage *specqbft.Message, committee []spectypes.OperatorID) error {

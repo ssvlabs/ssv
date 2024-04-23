@@ -21,7 +21,7 @@ func (mv *messageValidator) validateSignedSSVMessage(signedSSVMessage *spectypes
 		return ErrEmptyPubSubMessage
 	}
 
-	if err := signedSSVMessage.Validate(); err != nil {
+	if err := signedSSVMessage.Validate(); err != nil { // TODO: think whether we need to extract it
 		e := ErrSignedSSVMessageValidation
 		e.innerErr = err
 		return e

@@ -123,6 +123,7 @@ func isValidProposal(
 	return errors.New("proposal is not valid with current state")
 }
 
+// IsProposalJustification is DEPRECATED. It needs to be deleted after the Alan fork.
 func IsProposalJustification(
 	config qbft.IConfig,
 	share *ssvtypes.SSVShare,

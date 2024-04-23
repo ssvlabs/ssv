@@ -5,9 +5,12 @@ package validation
 
 import (
 	"context"
+	"encoding/hex"
+	"fmt"
 	"sync"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/alan/types"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -223,7 +226,7 @@ func (mv *messageValidator) validateSSVMessage(signedSSVMessage *spectypes.Signe
 
 	ssvMessage := signedSSVMessage.GetSSVMessage()
 
-	committee, err := mv.getCommittee(ssvMessage.GetID())
+	committee, validatorIndices, err := mv.getCommitteeAndValidatorIndices(ssvMessage.GetID())
 	if err != nil {
 		return nil, err
 	}
@@ -241,7 +244,7 @@ func (mv *messageValidator) validateSSVMessage(signedSSVMessage *spectypes.Signe
 
 	switch ssvMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
-		consensusMessage, err := mv.validateConsensusMessage(signedSSVMessage, committee, receivedAt)
+		consensusMessage, err := mv.validateConsensusMessage(signedSSVMessage, committee, validatorIndices, receivedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -253,7 +256,7 @@ func (mv *messageValidator) validateSSVMessage(signedSSVMessage *spectypes.Signe
 		return decodedMessage, nil
 
 	case spectypes.SSVPartialSignatureMsgType:
-		partialSignatureMessages, err := mv.validatePartialSignatureMessage(signedSSVMessage, committee)
+		partialSignatureMessages, err := mv.validatePartialSignatureMessage(signedSSVMessage, committee, validatorIndices, receivedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -271,38 +274,57 @@ func (mv *messageValidator) validateSSVMessage(signedSSVMessage *spectypes.Signe
 	}
 }
 
-func (mv *messageValidator) getCommittee(msgID spectypes.MessageID) ([]spectypes.OperatorID, error) {
+func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.MessageID) ([]spectypes.OperatorID, []phase0.ValidatorIndex, error) {
 	if msgID.GetRoleType() == spectypes.RoleCommittee {
 		// TODO: add metrics and logs for committee role
-		return mv.validatorStore.Committee(CommitteeID(msgID.GetSenderID()[16:])).Operators, nil // TODO: consider passing whole senderID
+		committeeID := CommitteeID(msgID.GetSenderID()[16:])
+		committee := mv.validatorStore.Committee(committeeID) // TODO: consider passing whole senderID
+		if committee == nil {
+			e := ErrNonExistingCommitteeID
+			e.got = hex.EncodeToString(committeeID[:])
+			return nil, nil, e
+		}
+
+		validatorIndices := make([]phase0.ValidatorIndex, 0)
+		for _, v := range committee.Validators {
+			if v.BeaconMetadata != nil {
+				validatorIndices = append(validatorIndices, v.BeaconMetadata.Index)
+			}
+		}
+
+		if len(validatorIndices) == 0 {
+			return nil, nil, ErrNoValidators
+		}
+
+		return committee.Operators, validatorIndices, nil
 	}
 
 	publicKey, err := ssvtypes.DeserializeBLSPublicKey(msgID.GetSenderID())
 	if err != nil {
 		e := ErrDeserializePublicKey
 		e.innerErr = err
-		return nil, e
+		return nil, nil, e
 	}
 
 	validator := mv.validatorStore.Validator(publicKey.Serialize())
 	if validator == nil {
 		e := ErrUnknownValidator
 		e.got = publicKey.SerializeToHexStr()
-		return nil, e
+		return nil, nil, e
 	}
 
 	if validator.Liquidated {
-		return nil, ErrValidatorLiquidated
+		return nil, nil, ErrValidatorLiquidated
 	}
 
 	if validator.BeaconMetadata == nil {
-		return nil, ErrNoShareMetadata
+		return nil, nil, ErrNoShareMetadata
 	}
 
 	if !validator.IsAttesting(mv.netCfg.Beacon.EstimatedCurrentEpoch()) {
 		e := ErrValidatorNotAttesting
 		e.got = validator.BeaconMetadata.Status.String()
-		return nil, e
+		return nil, nil, e
 	}
 
 	var committee []spectypes.OperatorID
@@ -310,7 +332,7 @@ func (mv *messageValidator) getCommittee(msgID spectypes.MessageID) ([]spectypes
 		committee = append(committee, c.OperatorID)
 	}
 
-	return committee, nil
+	return committee, []phase0.ValidatorIndex{validator.BeaconMetadata.Index}, nil
 }
 
 func (mv *messageValidator) validateSignatureFormat(signature []byte) error {
@@ -362,4 +384,47 @@ func (mv *messageValidator) inCommittee(committee []spectypes.OperatorID) bool {
 	return slices.ContainsFunc(committee, func(operatorID spectypes.OperatorID) bool {
 		return operatorID == mv.operatorDataStore.GetOperatorID()
 	})
+}
+
+func (mv *messageValidator) committeeRole(role spectypes.RunnerRole) bool {
+	return role == spectypes.RoleCommittee
+}
+
+func (mv *messageValidator) validateSlotTime(messageSlot phase0.Slot, role spectypes.RunnerRole, receivedAt time.Time) error {
+	if mv.earlyMessage(messageSlot, receivedAt) {
+		return ErrEarlyMessage
+	}
+
+	if lateness := mv.lateMessage(messageSlot, role, receivedAt); lateness > 0 {
+		e := ErrLateMessage
+		e.got = fmt.Sprintf("late by %v", lateness)
+		return e
+	}
+
+	return nil
+}
+
+func (mv *messageValidator) earlyMessage(slot phase0.Slot, receivedAt time.Time) bool {
+	return mv.netCfg.Beacon.GetSlotEndTime(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Unix())).
+		Add(-clockErrorTolerance).Before(mv.netCfg.Beacon.GetSlotStartTime(slot))
+}
+
+func (mv *messageValidator) lateMessage(slot phase0.Slot, role spectypes.RunnerRole, receivedAt time.Time) time.Duration {
+	var ttl phase0.Slot
+	switch role {
+	case spectypes.RoleProposer, spectypes.RoleSyncCommitteeContribution:
+		ttl = 1 + lateSlotAllowance
+	case spectypes.RoleCommittee, spectypes.RoleAggregator:
+		ttl = 32 + lateSlotAllowance
+	case spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
+		return 0
+	default:
+		panic("unexpected role")
+	}
+
+	deadline := mv.netCfg.Beacon.GetSlotStartTime(slot + ttl).
+		Add(lateMessageMargin).Add(clockErrorTolerance)
+
+	return mv.netCfg.Beacon.GetSlotStartTime(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Unix())).
+		Sub(deadline)
 }

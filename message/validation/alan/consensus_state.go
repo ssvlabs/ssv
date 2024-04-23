@@ -14,7 +14,6 @@ type consensusID struct {
 
 // consensusState keeps track of the signers for a given public key and role.
 type consensusState struct {
-	// TODO: consider evicting old data to avoid excessive memory consumption
 	signers map[spectypes.OperatorID]*SignerState
 	mu      sync.Mutex
 }

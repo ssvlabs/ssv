@@ -3,13 +3,19 @@ package validation
 // partial_validation.go contains methods for validating partial signature messages
 
 import (
+	"time"
+
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/alan/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/alan/types"
+	"golang.org/x/exp/slices"
 )
 
 func (mv *messageValidator) validatePartialSignatureMessage(
 	signedSSVMessage *spectypes.SignedSSVMessage,
 	committee []spectypes.OperatorID,
+	validatorIndices []phase0.ValidatorIndex,
+	receivedAt time.Time,
 ) (
 	*spectypes.PartialSignatureMessages,
 	error,
@@ -53,13 +59,15 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 		return partialSignatureMessages, ErrPartialSignatureTypeRoleMismatch
 	}
 
-	// TODO: make sure there's only one signer and only one signature
+	if err := mv.validateSlotTime(msgSlot, role, receivedAt); err != nil {
+		return partialSignatureMessages, err
+	}
 
 	signer := signedSSVMessage.GetOperatorIDs()[0]
 	signature := signedSSVMessage.GetSignature()[0]
 
 	state := mv.consensusState(msgID)
-	if err := mv.validatePartialMessages(committee, partialSignatureMessages, signer); err != nil {
+	if err := mv.validatePartialMessages(partialSignatureMessages, signer, committee, validatorIndices); err != nil {
 		return partialSignatureMessages, err
 	}
 
@@ -125,7 +133,12 @@ func (mv *messageValidator) partialSignatureTypeMatchesRole(msgType spectypes.Pa
 	}
 }
 
-func (mv *messageValidator) validatePartialMessages(committee []spectypes.OperatorID, messages *spectypes.PartialSignatureMessages, signer spectypes.OperatorID) error {
+func (mv *messageValidator) validatePartialMessages(
+	messages *spectypes.PartialSignatureMessages,
+	signer spectypes.OperatorID,
+	committee []spectypes.OperatorID,
+	validatorIndices []phase0.ValidatorIndex,
+) error {
 	if err := mv.commonSignerValidation(signer, committee); err != nil {
 		return err
 	}
@@ -154,6 +167,13 @@ func (mv *messageValidator) validatePartialMessages(committee []spectypes.Operat
 
 		if err := mv.validateSignatureFormat(message.PartialSignature); err != nil {
 			return err
+		}
+
+		if !slices.Contains(validatorIndices, message.ValidatorIndex) {
+			e := ErrPartialSignatureValidatorIndexNotFound
+			e.got = message.ValidatorIndex
+			e.want = validatorIndices
+			return e
 		}
 	}
 

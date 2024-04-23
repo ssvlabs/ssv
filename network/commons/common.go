@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"math/big"
 	"strconv"
 	"strings"
 	"time"
@@ -75,6 +76,14 @@ func ValidatorTopicID(pkByts []byte) []string {
 	pkHex := hex.EncodeToString(pkByts)
 	subnet := ValidatorSubnet(pkHex)
 	return []string{SubnetTopicID(subnet)}
+}
+
+// CommitteeTopicID returns the topic to use for the given committee
+func CommitteeTopicID(senderID []byte) []string {
+	committeeID := senderID[16:]
+
+	subnet := new(big.Int).Mod(new(big.Int).SetBytes(committeeID), new(big.Int).SetUint64(subnetsCount)).String()
+	return []string{subnet}
 }
 
 // GetTopicFullName returns the topic full name, including prefix
