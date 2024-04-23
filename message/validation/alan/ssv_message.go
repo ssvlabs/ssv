@@ -1,4 +1,4 @@
-package validation
+package msgvalidation
 
 import (
 	"bytes"
@@ -17,7 +17,7 @@ func (mv *messageValidator) ssvMessageValidation(signedSSVMessage *spectypes.Sig
 		return ErrNilSSVMessage
 	}
 
-	//mv.metrics.SSVMessageType(ssvMessage.MsgType) // TODO
+	mv.metrics.SSVMessageType(ssvMessage.MsgType)
 
 	if len(ssvMessage.Data) == 0 {
 		return ErrEmptyData

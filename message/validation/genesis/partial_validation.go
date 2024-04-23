@@ -1,9 +1,10 @@
-package validation
+package msgvalidation
 
 // partial_validation.go contains methods for validating partial signature messages
 
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	alanspectypes "github.com/bloxapp/ssv-spec/alan/types"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
@@ -18,9 +19,9 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 ) (phase0.Slot, error) {
 	if mv.operatorDataStore != nil && mv.operatorDataStore.OperatorIDReady() {
 		if mv.inCommittee(share) {
-			mv.metrics.InCommitteeMessage(spectypes.SSVPartialSignatureMsgType, false)
+			mv.metrics.CommitteeMessage(alanspectypes.SSVPartialSignatureMsgType, false)
 		} else {
-			mv.metrics.NonCommitteeMessage(spectypes.SSVPartialSignatureMsgType, false)
+			mv.metrics.NonCommitteeMessage(alanspectypes.SSVPartialSignatureMsgType, false)
 		}
 	}
 

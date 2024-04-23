@@ -1,4 +1,4 @@
-package validation
+package msgvalidation
 
 // message_counts.go contains code for counting and validating messages per validator-slot-round.
 

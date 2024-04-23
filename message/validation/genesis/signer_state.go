@@ -1,4 +1,4 @@
-package validation
+package msgvalidation
 
 // signer_state.go describes state of a signer.
 

@@ -15,7 +15,7 @@ import (
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/message/validation"
+	msgvalidation "github.com/bloxapp/ssv/message/validation/genesis"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"
@@ -63,7 +63,7 @@ type p2pNetwork struct {
 	topicsCtrl   topics.Controller
 	msgRouter    network.MessageRouter
 	msgResolver  topics.MsgPeersResolver
-	msgValidator validation.MessageValidator
+	msgValidator msgvalidation.MessageValidator
 	connHandler  connections.ConnHandler
 	connGater    connmgr.ConnectionGater
 	metrics      Metrics

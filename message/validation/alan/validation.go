@@ -1,5 +1,5 @@
-// Package validation provides functions and structures for validating messages.
-package validation
+// Package msgvalidation provides functions and structures for validating messages.
+package msgvalidation
 
 // validator.go contains main code for validation and most of the rule checks.
 
@@ -72,8 +72,8 @@ type messageValidator struct {
 	selfAccept bool
 }
 
-// NewMessageValidator returns a new MessageValidator with the given network configuration and options.
-func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) MessageValidator {
+// New returns a new MessageValidator with the given network configuration and options.
+func New(netCfg networkconfig.NetworkConfig, opts ...Option) MessageValidator {
 	mv := &messageValidator{
 		logger:                  zap.NewNop(),
 		metrics:                 metricsreporter.NewNop(),
@@ -379,8 +379,8 @@ func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *conse
 	return mv.consensusStateIndex[id]
 }
 
-// inCommittee should be called only when WithOwnOperatorID is set
-func (mv *messageValidator) inCommittee(committee []spectypes.OperatorID) bool {
+// ownCommittee should be called only when WithOwnOperatorID is set
+func (mv *messageValidator) ownCommittee(committee []spectypes.OperatorID) bool {
 	return slices.ContainsFunc(committee, func(operatorID spectypes.OperatorID) bool {
 		return operatorID == mv.operatorDataStore.GetOperatorID()
 	})

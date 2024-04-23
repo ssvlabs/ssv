@@ -174,7 +174,7 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	h.logger.Debug("📚 got duties",
 		fields.Count(len(duties)),
 		fields.Epoch(epoch),
-		fields.Duties(epoch, specDuties),
+		fields.GenesisDuties(epoch, specDuties),
 		fields.Duration(start))
 
 	return nil

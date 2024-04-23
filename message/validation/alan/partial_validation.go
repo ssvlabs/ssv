@@ -1,4 +1,4 @@
-package validation
+package msgvalidation
 
 // partial_validation.go contains methods for validating partial signature messages
 
@@ -36,13 +36,13 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 		return nil, e
 	}
 
-	//if mv.operatorDataStore != nil && mv.operatorDataStore.OperatorIDReady() {
-	//	if mv.inCommittee(share) {
-	//		mv.metrics.InCommitteeMessage(spectypes.SSVPartialSignatureMsgType, false)
-	//	} else {
-	//		mv.metrics.NonCommitteeMessage(spectypes.SSVPartialSignatureMsgType, false)
-	//	}
-	//}
+	if mv.operatorDataStore != nil && mv.operatorDataStore.OperatorIDReady() {
+		if mv.ownCommittee(committee) {
+			mv.metrics.CommitteeMessage(spectypes.SSVPartialSignatureMsgType, false)
+		} else {
+			mv.metrics.NonCommitteeMessage(spectypes.SSVPartialSignatureMsgType, false)
+		}
+	}
 
 	msgSlot := partialSignatureMessages.Slot
 

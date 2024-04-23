@@ -1,4 +1,4 @@
-package validation
+package msgvalidation
 
 // consensus_validation.go contains methods for validating consensus messages
 
@@ -25,14 +25,6 @@ func (mv *messageValidator) validateConsensusMessage(
 ) (*specqbft.Message, error) {
 	ssvMessage := signedSSVMessage.GetSSVMessage()
 
-	//if mv.operatorDataStore != nil && mv.operatorDataStore.OperatorIDReady() {
-	//	if mv.inCommittee(share) {
-	//		mv.metrics.InCommitteeMessage(spectypes.SSVConsensusMsgType, mv.isDecidedMessage(consensusMessage))
-	//	} else {
-	//		mv.metrics.NonCommitteeMessage(spectypes.SSVConsensusMsgType, mv.isDecidedMessage(consensusMessage))
-	//	}
-	//}
-
 	if len(ssvMessage.Data) > maxConsensusMsgSize {
 		e := ErrSSVDataTooBig
 		e.got = len(ssvMessage.Data)
@@ -47,12 +39,20 @@ func (mv *messageValidator) validateConsensusMessage(
 		return nil, e
 	}
 
+	if mv.operatorDataStore != nil && mv.operatorDataStore.OperatorIDReady() {
+		if mv.ownCommittee(committee) {
+			mv.metrics.CommitteeMessage(spectypes.SSVConsensusMsgType, mv.isDecidedMessage(signedSSVMessage, consensusMessage))
+		} else {
+			mv.metrics.NonCommitteeMessage(spectypes.SSVConsensusMsgType, mv.isDecidedMessage(signedSSVMessage, consensusMessage))
+		}
+	}
+
 	messageID := ssvMessage.GetID()
 
 	msgSlot := phase0.Slot(consensusMessage.Height)
 	msgRound := consensusMessage.Round
 
-	//mv.metrics.ConsensusMsgType(consensusMessage.MsgType, len(consensusMessage.Signers))
+	mv.metrics.ConsensusMsgType(consensusMessage.MsgType, len(signedSSVMessage.GetOperatorIDs()))
 
 	switch messageID.GetRoleType() {
 	case spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:

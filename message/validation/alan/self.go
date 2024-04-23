@@ -1,4 +1,4 @@
-package validation
+package msgvalidation
 
 import (
 	specqbft "github.com/bloxapp/ssv-spec/alan/qbft"

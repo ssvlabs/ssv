@@ -1,4 +1,4 @@
-package validation
+package msgvalidation
 
 import (
 	spectypes "github.com/bloxapp/ssv-spec/alan/types"

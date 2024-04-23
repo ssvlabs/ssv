@@ -1,4 +1,4 @@
-package validation
+package msgvalidation
 
 // consensus_validation.go contains methods for validating consensus messages
 
@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	alanspecqbft "github.com/bloxapp/ssv-spec/alan/qbft"
+	alanspectypes "github.com/bloxapp/ssv-spec/alan/types"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"golang.org/x/exp/slices"
@@ -28,9 +30,9 @@ func (mv *messageValidator) validateConsensusMessage(
 
 	if mv.operatorDataStore != nil && mv.operatorDataStore.OperatorIDReady() {
 		if mv.inCommittee(share) {
-			mv.metrics.InCommitteeMessage(spectypes.SSVConsensusMsgType, mv.isDecidedMessage(signedMsg))
+			mv.metrics.CommitteeMessage(alanspectypes.SSVConsensusMsgType, mv.isDecidedMessage(signedMsg))
 		} else {
-			mv.metrics.NonCommitteeMessage(spectypes.SSVConsensusMsgType, mv.isDecidedMessage(signedMsg))
+			mv.metrics.NonCommitteeMessage(alanspectypes.SSVConsensusMsgType, mv.isDecidedMessage(signedMsg))
 		}
 	}
 
@@ -44,7 +46,7 @@ func (mv *messageValidator) validateConsensusMessage(
 		Committee:       share.Committee,
 	}
 
-	mv.metrics.ConsensusMsgType(signedMsg.Message.MsgType, len(signedMsg.Signers))
+	mv.metrics.ConsensusMsgType(alanspecqbft.MessageType(signedMsg.Message.MsgType), len(signedMsg.Signers))
 
 	switch messageID.GetRoleType() {
 	case spectypes.BNRoleValidatorRegistration, spectypes.BNRoleVoluntaryExit:

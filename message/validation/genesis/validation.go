@@ -1,5 +1,5 @@
-// Package validation provides functions and structures for validating messages.
-package validation
+// Package msgvalidation provides functions and structures for validating messages.
+package msgvalidation
 
 // validator.go contains main code for validation and most of the rule checks.
 
@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	alanspecqbft "github.com/bloxapp/ssv-spec/alan/qbft"
+	alanspectypes "github.com/bloxapp/ssv-spec/alan/types"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
@@ -78,9 +80,9 @@ type messageValidator struct {
 	selfAccept bool
 }
 
-// NewMessageValidator returns a new MessageValidator with the given network configuration and options.
+// New returns a new MessageValidator with the given network configuration and options.
 // DEPRECATED, TODO: remove post-fork
-func NewMessageValidator(netCfg networkconfig.NetworkConfig, opts ...Option) MessageValidator {
+func New(netCfg networkconfig.NetworkConfig, opts ...Option) MessageValidator {
 	mv := &messageValidator{
 		logger:                  zap.NewNop(),
 		metrics:                 metricsreporter.NewNop(),
@@ -163,8 +165,8 @@ type Descriptor struct {
 func (d Descriptor) Fields() []zapcore.Field {
 	result := []zapcore.Field{
 		fields.Validator(d.ValidatorPK),
-		fields.Role(d.Role),
-		zap.String("ssv_message_type", ssvmessage.MsgTypeToString(d.SSVMessageType)),
+		fields.Role(alanspectypes.BeaconRole(d.Role)),
+		zap.String("ssv_message_type", ssvmessage.MsgTypeToString(alanspectypes.MsgType(d.SSVMessageType))),
 		fields.Slot(d.Slot),
 	}
 
@@ -175,8 +177,8 @@ func (d Descriptor) Fields() []zapcore.Field {
 		}
 
 		result = append(result,
-			fields.Round(d.Consensus.Round),
-			zap.String("qbft_message_type", ssvmessage.QBFTMsgTypeToString(d.Consensus.QBFTMessageType)),
+			fields.Round(alanspecqbft.Round(d.Consensus.Round)),
+			zap.String("qbft_message_type", ssvmessage.QBFTMsgTypeToString(alanspecqbft.MessageType(d.Consensus.QBFTMessageType))),
 			zap.Uint64s("signers", d.Consensus.Signers),
 			zap.Uint64s("committee", committee),
 		)
@@ -191,7 +193,7 @@ func (d Descriptor) String() string {
 	sb.WriteString(fmt.Sprintf("validator PK: %v, role: %v, ssv message type: %v, slot: %v",
 		hex.EncodeToString(d.ValidatorPK),
 		d.Role.String(),
-		ssvmessage.MsgTypeToString(d.SSVMessageType),
+		ssvmessage.MsgTypeToString(alanspectypes.MsgType(d.SSVMessageType)),
 		d.Slot,
 	))
 
@@ -203,7 +205,7 @@ func (d Descriptor) String() string {
 
 		sb.WriteString(fmt.Sprintf(", round: %v, qbft message type: %v, signers: %v, committee: %v",
 			d.Consensus.Round,
-			ssvmessage.QBFTMsgTypeToString(d.Consensus.QBFTMessageType),
+			ssvmessage.QBFTMsgTypeToString(alanspecqbft.MessageType(d.Consensus.QBFTMessageType)),
 			d.Consensus.Signers,
 			committee,
 		))
@@ -263,7 +265,7 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer
 					mv.logger.Debug("rejecting invalid message", f...)
 				}
 
-				mv.metrics.MessageRejected(valErr.Text(), descriptor.Role, round)
+				mv.metrics.GenesisMessageRejected(valErr.Text(), descriptor.Role, round)
 				return pubsub.ValidationReject
 			}
 
@@ -271,11 +273,11 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer
 				f = append(f, zap.Error(err))
 				mv.logger.Debug("ignoring invalid message", f...)
 			}
-			mv.metrics.MessageIgnored(valErr.Text(), descriptor.Role, round)
+			mv.metrics.GenesisMessageIgnored(valErr.Text(), descriptor.Role, round)
 			return pubsub.ValidationIgnore
 		}
 
-		mv.metrics.MessageIgnored(err.Error(), descriptor.Role, round)
+		mv.metrics.GenesisMessageIgnored(err.Error(), descriptor.Role, round)
 		f = append(f, zap.Error(err))
 		mv.logger.Debug("ignoring invalid message", f...)
 		return pubsub.ValidationIgnore
@@ -283,7 +285,7 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer
 
 	pmsg.ValidatorData = decodedMessage
 
-	mv.metrics.MessageAccepted(descriptor.Role, round)
+	mv.metrics.GenesisMessageAccepted(descriptor.Role, round)
 
 	return pubsub.ValidationAccept
 }
@@ -360,7 +362,7 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 		return nil, Descriptor{}, ErrTopicNotFound
 	}
 
-	mv.metrics.SSVMessageType(msg.MsgType)
+	mv.metrics.SSVMessageType(alanspectypes.MsgType(msg.MsgType))
 
 	return mv.validateSSVMessage(msg, receivedAt, signatureVerifier)
 }
@@ -487,7 +489,7 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 				return nil, descriptor, err
 			}
 
-		case ssvmessage.SSVEventMsgType:
+		case spectypes.MsgType(ssvmessage.SSVEventMsgType):
 			return nil, descriptor, ErrEventMessage
 
 		case spectypes.DKGMsgType:

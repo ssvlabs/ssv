@@ -13,7 +13,7 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/bloxapp/ssv/message/validation"
+	msgvalidation "github.com/bloxapp/ssv/message/validation/genesis"
 	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
@@ -149,7 +149,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 		RegisteredOperatorPublicKeyPEMs: []string{},
 	}
 	cfg.Metrics = nil
-	cfg.MessageValidator = validation.NewMessageValidator(networkconfig.TestNetwork)
+	cfg.MessageValidator = msgvalidation.New(networkconfig.TestNetwork)
 	cfg.Network = networkconfig.TestNetwork
 	if options.TotalValidators > 0 {
 		cfg.GetValidatorStats = func() (uint64, uint64, uint64, error) {
@@ -169,7 +169,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 	if options.MessageValidatorProvider != nil {
 		cfg.MessageValidator = options.MessageValidatorProvider(nodeIndex)
 	} else {
-		cfg.MessageValidator = validation.NewMessageValidator(networkconfig.TestNetwork, validation.WithSelfAccept(selfPeerID, true))
+		cfg.MessageValidator = msgvalidation.New(networkconfig.TestNetwork, msgvalidation.WithSelfAccept(selfPeerID, true))
 	}
 
 	if options.PeerScoreInspector != nil && options.PeerScoreInspectorInterval > 0 {
@@ -191,7 +191,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 }
 
 type LocalNetOptions struct {
-	MessageValidatorProvider                        func(int) validation.MessageValidator
+	MessageValidatorProvider                        func(int) msgvalidation.MessageValidator
 	Nodes                                           int
 	MinConnected                                    int
 	UseDiscv5                                       bool

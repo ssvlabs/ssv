@@ -16,7 +16,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/message/validation"
+	msgvalidation "github.com/bloxapp/ssv/message/validation/genesis"
 	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
@@ -73,7 +73,7 @@ type Config struct {
 	// Network defines a network configuration.
 	Network networkconfig.NetworkConfig
 	// MessageValidator validates incoming messages.
-	MessageValidator validation.MessageValidator
+	MessageValidator msgvalidation.MessageValidator
 	// Metrics report metrics.
 	Metrics metricsreporter.MetricsReporter
 

@@ -3,8 +3,8 @@ package message
 import (
 	"fmt"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	specqbft "github.com/bloxapp/ssv-spec/alan/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/alan/types"
 )
 
 const (
@@ -66,5 +66,44 @@ func BeaconRoleFromString(s string) (spectypes.BeaconRole, error) {
 		return spectypes.BNRoleVoluntaryExit, nil
 	default:
 		return 0, fmt.Errorf("unknown role: %s", s)
+	}
+}
+
+// RunnerRoleFromString returns RunnerRole from string
+func RunnerRoleFromString(s string) (spectypes.RunnerRole, error) {
+	switch s {
+	case "COMMITTEE":
+		return spectypes.RoleCommittee, nil
+	case "AGGREGATOR":
+		return spectypes.RoleAggregator, nil
+	case "PROPOSER":
+		return spectypes.RoleProposer, nil
+	case "SYNC_COMMITTEE_CONTRIBUTION":
+		return spectypes.RoleSyncCommitteeContribution, nil
+	case "VALIDATOR_REGISTRATION":
+		return spectypes.RoleValidatorRegistration, nil
+	case "VOLUNTARY_EXIT":
+		return spectypes.RoleVoluntaryExit, nil
+	default:
+		return 0, fmt.Errorf("unknown role: %s", s)
+	}
+}
+
+func RunnerRoleToString(r spectypes.RunnerRole) string {
+	switch r {
+	case spectypes.RoleCommittee:
+		return "COMMITTEE"
+	case spectypes.RoleAggregator:
+		return "AGGREGATOR"
+	case spectypes.RoleProposer:
+		return "PROPOSER"
+	case spectypes.RoleSyncCommitteeContribution:
+		return "SYNC_COMMITTEE_CONTRIBUTION"
+	case spectypes.RoleValidatorRegistration:
+		return "VALIDATOR_REGISTRATION"
+	case spectypes.RoleVoluntaryExit:
+		return "VOLUNTARY_EXIT"
+	default:
+		return fmt.Sprintf("unknown(%d)", r)
 	}
 }

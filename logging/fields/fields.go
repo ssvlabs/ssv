@@ -11,8 +11,8 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	specqbft "github.com/bloxapp/ssv-spec/alan/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/alan/types"
 	"github.com/dgraph-io/ristretto"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -222,6 +222,10 @@ func Role(val spectypes.BeaconRole) zap.Field {
 	return zap.Stringer(FieldRole, val)
 }
 
+func RunnerRole(val spectypes.RunnerRole) zap.Field {
+	return zap.String(FieldRole, message.RunnerRoleToString(val))
+}
+
 func MessageID(val spectypes.MessageID) zap.Field {
 	return zap.Stringer(FieldMessageID, val)
 }
@@ -326,11 +330,11 @@ func BuilderProposals(v bool) zap.Field {
 	return zap.Bool(FieldBuilderProposals, v)
 }
 
-func FormatDutyID(epoch phase0.Epoch, duty *spectypes.Duty) string {
+func FormatDutyID(epoch phase0.Epoch, duty *spectypes.BeaconDuty) string {
 	return fmt.Sprintf("%v-e%v-s%v-v%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
 }
 
-func Duties(epoch phase0.Epoch, duties []*spectypes.Duty) zap.Field {
+func Duties(epoch phase0.Epoch, duties []*spectypes.BeaconDuty) zap.Field {
 	var b strings.Builder
 	for i, duty := range duties {
 		if i > 0 {

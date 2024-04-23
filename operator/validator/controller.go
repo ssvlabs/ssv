@@ -22,7 +22,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/message/validation"
+	msgvalidation "github.com/bloxapp/ssv/message/validation/genesis"
 	"github.com/bloxapp/ssv/network"
 	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/duties"
@@ -77,7 +77,7 @@ type ControllerOptions struct {
 	DutyRoles                  []spectypes.BeaconRole
 	StorageMap                 *storage.QBFTStores
 	Metrics                    validator.Metrics
-	MessageValidator           validation.MessageValidator
+	MessageValidator           msgvalidation.MessageValidator
 	ValidatorsMap              *validatorsmap.ValidatorsMap
 
 	// worker flags
@@ -167,7 +167,7 @@ type controller struct {
 	messageRouter        *messageRouter
 	messageWorker        *worker.Worker
 	historySyncBatchSize int
-	messageValidator     validation.MessageValidator
+	messageValidator     msgvalidation.MessageValidator
 
 	// nonCommittees is a cache of initialized nonCommitteeValidator instances
 	nonCommitteeValidators *ttlcache.Cache[spectypes.MessageID, *nonCommitteeValidator]

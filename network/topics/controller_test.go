@@ -5,12 +5,14 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"math"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	msgvalidation "github.com/bloxapp/ssv/message/validation/genesis"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -23,7 +25,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/message/validation"
 	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"
@@ -68,7 +69,7 @@ func TestTopicManager(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		validator := validation.NewMessageValidator(networkconfig.TestNetwork)
+		validator := msgvalidation.New(networkconfig.TestNetwork)
 
 		scoreMap := map[peer.ID]*pubsub.PeerScoreSnapshot{}
 		var scoreMapMu sync.Mutex
@@ -320,7 +321,7 @@ func (p *P) saveMsg(t string, msg *pubsub.Message) {
 }
 
 // TODO: use p2p/testing
-func newPeers(ctx context.Context, logger *zap.Logger, t *testing.T, n int, msgValidator validation.MessageValidator, msgID bool, scoreInspector pubsub.ExtendedPeerScoreInspectFn) []*P {
+func newPeers(ctx context.Context, logger *zap.Logger, t *testing.T, n int, msgValidator msgvalidation.MessageValidator, msgID bool, scoreInspector pubsub.ExtendedPeerScoreInspectFn) []*P {
 	peers := make([]*P, n)
 	for i := 0; i < n; i++ {
 		peers[i] = newPeer(ctx, logger, t, msgValidator, msgID, scoreInspector)
@@ -342,7 +343,7 @@ func newPeers(ctx context.Context, logger *zap.Logger, t *testing.T, n int, msgV
 	return peers
 }
 
-func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator validation.MessageValidator, msgID bool, scoreInspector pubsub.ExtendedPeerScoreInspectFn) *P {
+func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator msgvalidation.MessageValidator, msgID bool, scoreInspector pubsub.ExtendedPeerScoreInspectFn) *P {
 	h, err := libp2p.New(libp2p.ListenAddrStrings("/ip4/0.0.0.0/tcp/0"))
 	require.NoError(t, err)
 	ds, err := discovery.NewLocalDiscovery(ctx, logger, h)
@@ -467,8 +468,8 @@ func (m *DummyMessageValidator) ValidatePubsubMessage(ctx context.Context, p pee
 	return pubsub.ValidationAccept
 }
 
-func (m *DummyMessageValidator) ValidateSSVMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, validation.Descriptor, error) {
-	var descriptor validation.Descriptor
+func (m *DummyMessageValidator) ValidateSSVMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, msgvalidation.Descriptor, error) {
+	var descriptor msgvalidation.Descriptor
 
 	msg, err := queue.DecodeSSVMessage(ssvMessage)
 	if err != nil {

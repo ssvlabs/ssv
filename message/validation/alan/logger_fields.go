@@ -1,4 +1,4 @@
-package validation
+package msgvalidation
 
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -16,7 +16,6 @@ type ConsensusFields struct {
 	Round           specqbft.Round
 	QBFTMessageType specqbft.MessageType
 	Signers         []spectypes.OperatorID
-	Committee       []*spectypes.Operator
 }
 
 // LoggerFields provides details about a message. It's used for logging and metrics.
@@ -32,22 +31,16 @@ type LoggerFields struct {
 func (d LoggerFields) Fields() []zapcore.Field {
 	result := []zapcore.Field{
 		fields.SenderID(d.SenderID),
-		fields.Role(d.Role),
+		fields.RunnerRole(d.Role),
 		zap.String("ssv_message_type", ssvmessage.MsgTypeToString(d.SSVMessageType)),
 		fields.Slot(d.Slot),
 	}
 
 	if d.Consensus != nil {
-		var committee []spectypes.OperatorID
-		for _, o := range d.Consensus.Committee {
-			committee = append(committee, o.OperatorID)
-		}
-
 		result = append(result,
 			fields.Round(d.Consensus.Round),
 			zap.String("qbft_message_type", ssvmessage.QBFTMsgTypeToString(d.Consensus.QBFTMessageType)),
 			zap.Uint64s("signers", d.Consensus.Signers),
-			zap.Uint64s("committee", committee),
 		)
 	}
 
@@ -73,7 +66,6 @@ func (mv *messageValidator) buildLoggerFields(decodedMessage *DecodedMessage) *L
 		descriptor.Slot = phase0.Slot(m.Height)
 		descriptor.Consensus.Round = m.Round
 		descriptor.Consensus.QBFTMessageType = m.MsgType
-		//descriptor.Consensus.Committee = m // TODO: can be removed?
 	case *spectypes.PartialSignatureMessages:
 		descriptor.Slot = m.Slot
 	}
