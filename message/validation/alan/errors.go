@@ -1,8 +1,15 @@
 package msgvalidation
 
 import (
+	"errors"
 	"fmt"
 	"strings"
+
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging/fields"
 )
 
 type Error struct {
@@ -100,3 +107,33 @@ var (
 	ErrNoValidators                           = Error{text: "no validators for this committee ID", reject: true}
 	ErrPartialSignatureValidatorIndexNotFound = Error{text: "partial signature validator index not found", reject: true}
 )
+
+func (mv *messageValidator) handleValidationError(peerID peer.ID, decodedMessage *DecodedMessage, err error) pubsub.ValidationResult {
+	loggerFields := mv.buildLoggerFields(decodedMessage)
+
+	logger := mv.logger.
+		With(loggerFields.AsZapFields()...).
+		With(fields.PeerID(peerID))
+
+	var valErr Error
+	if !errors.As(err, &valErr) {
+		mv.metrics.MessageIgnored(err.Error(), loggerFields.Role, loggerFields.Consensus.Round)
+		logger.Debug("ignoring invalid message", zap.Error(err))
+		return pubsub.ValidationIgnore
+	}
+
+	if !valErr.Reject() {
+		if !valErr.Silent() {
+			logger.Debug("ignoring invalid message", zap.Error(valErr))
+		}
+		mv.metrics.MessageIgnored(valErr.Text(), loggerFields.Role, loggerFields.Consensus.Round)
+		return pubsub.ValidationIgnore
+	}
+
+	if !valErr.Silent() {
+		logger.Debug("rejecting invalid message", zap.Error(valErr))
+	}
+
+	mv.metrics.MessageRejected(valErr.Text(), loggerFields.Role, loggerFields.Consensus.Round)
+	return pubsub.ValidationReject
+}

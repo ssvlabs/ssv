@@ -47,7 +47,7 @@ func (mv *messageValidator) verifySignature(ssvMessage *spectypes.SSVMessage, op
 		return e
 	}
 
-	if err := operatorPubKey.Verify(encodedMsg, signature); err != nil {
+	if err := operatorPubKey.Verify(encodedMsg, signature); err != nil { // TODO: replace with SignatureVerifier?
 		e := ErrSignatureVerification
 		e.innerErr = fmt.Errorf("verify opid: %v signature: %w", operatorID, err)
 		return e

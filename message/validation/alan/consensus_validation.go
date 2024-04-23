@@ -61,12 +61,6 @@ func (mv *messageValidator) validateConsensusMessage(
 		return consensusMessage, e
 	}
 
-	for _, signature := range signedSSVMessage.GetSignature() {
-		if err := mv.validateSignatureFormat(signature); err != nil {
-			return consensusMessage, err
-		}
-	}
-
 	if !mv.validQBFTMsgType(consensusMessage.MsgType) {
 		return consensusMessage, ErrUnknownQBFTMessageType
 	}
@@ -364,9 +358,6 @@ func (mv *messageValidator) validConsensusSigners(signedMessage *spectypes.Signe
 	quorumSize, _ := ssvtypes.ComputeQuorumAndPartialQuorum(len(committee))
 
 	switch {
-	case signerCount == 0:
-		return ErrNoSigners
-
 	case signerCount == 1:
 		if consensusMessage.MsgType == specqbft.ProposalMsgType {
 			leader := mv.roundRobinProposer(consensusMessage.Height, consensusMessage.Round, committee)
@@ -390,19 +381,10 @@ func (mv *messageValidator) validConsensusSigners(signedMessage *spectypes.Signe
 		return e
 	}
 
-	if !slices.IsSorted(signedMessage.GetOperatorIDs()) {
-		return ErrSignersNotSorted
-	}
-
-	var prevSigner spectypes.OperatorID
 	for _, signer := range signedMessage.GetOperatorIDs() {
-		if err := mv.commonSignerValidation(signer, committee); err != nil {
-			return err
+		if !slices.Contains(committee, signer) {
+			return ErrSignerNotInCommittee
 		}
-		if signer == prevSigner {
-			return ErrDuplicatedSigner
-		}
-		prevSigner = signer
 	}
 	return nil
 }

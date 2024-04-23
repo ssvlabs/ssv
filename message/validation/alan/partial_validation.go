@@ -78,10 +78,6 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 		}
 	}
 
-	if err := mv.validateSignatureFormat(signature); err != nil {
-		return partialSignatureMessages, err
-	}
-
 	if err := mv.verifySignature(ssvMessage, signer, signature); err != nil {
 		return partialSignatureMessages, err
 	}
@@ -139,8 +135,8 @@ func (mv *messageValidator) validatePartialMessages(
 	committee []spectypes.OperatorID,
 	validatorIndices []phase0.ValidatorIndex,
 ) error {
-	if err := mv.commonSignerValidation(signer, committee); err != nil {
-		return err
+	if !slices.Contains(committee, signer) {
+		return ErrSignerNotInCommittee
 	}
 
 	if len(messages.Messages) == 0 {
@@ -161,11 +157,11 @@ func (mv *messageValidator) validatePartialMessages(
 			return err
 		}
 
-		if err := mv.commonSignerValidation(message.Signer, committee); err != nil {
-			return err
+		if !slices.Contains(committee, message.Signer) {
+			return ErrSignerNotInCommittee
 		}
 
-		if err := mv.validateSignatureFormat(message.PartialSignature); err != nil {
+		if err := mv.validateBLSSignatureFormat(message.PartialSignature); err != nil {
 			return err
 		}
 
@@ -177,6 +173,19 @@ func (mv *messageValidator) validatePartialMessages(
 		}
 	}
 
+	return nil
+}
+
+func (mv *messageValidator) validateBLSSignatureFormat(signature []byte) error {
+	if len(signature) != rsaSignatureSize {
+		e := ErrWrongSignatureSize
+		e.got = len(signature)
+		return e
+	}
+
+	if [rsaSignatureSize]byte(signature) == [rsaSignatureSize]byte{} {
+		return ErrZeroSignature
+	}
 	return nil
 }
 

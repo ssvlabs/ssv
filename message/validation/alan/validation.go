@@ -6,7 +6,6 @@ package msgvalidation
 import (
 	"context"
 	"encoding/hex"
-	"fmt"
 	"sync"
 	"time"
 
@@ -14,34 +13,14 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/alan/types"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"golang.org/x/exp/slices"
 
-	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/networkconfig"
 	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
 	"github.com/bloxapp/ssv/operator/keys"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
-)
-
-const (
-	// lateMessageMargin is the duration past a message's TTL in which it is still considered valid.
-	lateMessageMargin = time.Second * 3
-
-	// clockErrorTolerance is the maximum amount of clock error we expect to see between nodes.
-	clockErrorTolerance = time.Millisecond * 50
-
-	maxMessageSize             = maxConsensusMsgSize // TODO: calculate new value
-	maxConsensusMsgSize        = 8388608
-	maxPartialSignatureMsgSize = 1952
-	allowedRoundsInFuture      = 1
-	allowedRoundsInPast        = 2
-	lateSlotAllowance          = 2
-	signatureSize              = 96
-	maxDutiesPerEpoch          = 2
 )
 
 // MessageValidator defines methods for validating pubsub messages.
@@ -89,52 +68,6 @@ func New(netCfg networkconfig.NetworkConfig, opts ...Option) MessageValidator {
 	return mv
 }
 
-// Option represents a functional option for configuring a messageValidator.
-type Option func(validator *messageValidator)
-
-// WithLogger sets the logger for the messageValidator.
-func WithLogger(logger *zap.Logger) Option {
-	return func(mv *messageValidator) {
-		mv.logger = logger
-	}
-}
-
-// WithMetrics sets the metrics for the messageValidator.
-func WithMetrics(metrics metricsreporter.MetricsReporter) Option {
-	return func(mv *messageValidator) {
-		mv.metrics = metrics
-	}
-}
-
-// WithDutyStore sets the duty store for the messageValidator.
-func WithDutyStore(dutyStore *dutystore.Store) Option {
-	return func(mv *messageValidator) {
-		mv.dutyStore = dutyStore
-	}
-}
-
-// WithOwnOperatorID sets the operator ID getter for the messageValidator.
-func WithOwnOperatorID(ods operatordatastore.OperatorDataStore) Option {
-	return func(mv *messageValidator) {
-		mv.operatorDataStore = ods
-	}
-}
-
-// WithValidatorStore sets the validator store for the messageValidator.
-func WithValidatorStore(validatorStore ValidatorStore) Option {
-	return func(mv *messageValidator) {
-		mv.validatorStore = validatorStore
-	}
-}
-
-// WithSelfAccept blindly accepts messages sent from self. Useful for testing.
-func WithSelfAccept(selfPID peer.ID, selfAccept bool) Option {
-	return func(mv *messageValidator) {
-		mv.selfPID = selfPID
-		mv.selfAccept = selfAccept
-	}
-}
-
 // ValidatorForTopic returns a validation function for the given topic.
 // This function can be used to validate messages within the libp2p pubsub framework.
 func (mv *messageValidator) ValidatorForTopic(_ string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
@@ -148,61 +81,23 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer
 		return mv.validateSelf(pmsg)
 	}
 
-	start := time.Now()
-	var validationDurationLabels []string // TODO: implement
+	reportDone := mv.reportPubSubMetrics(pmsg)
+	defer reportDone()
 
-	defer func() {
-		sinceStart := time.Since(start)
-		mv.metrics.MessageValidationDuration(sinceStart, validationDurationLabels...)
-	}()
-
-	decodedMessage, err := mv.validateP2PMessage(pmsg, time.Now())
-
-	loggerFields := mv.buildLoggerFields(decodedMessage)
-
-	f := append(loggerFields.Fields(), fields.PeerID(peerID))
-
+	decodedMessage, err := mv.handlePubsubMessage(pmsg, time.Now())
 	if err != nil {
-		var valErr Error
-		if errors.As(err, &valErr) {
-			if valErr.Reject() {
-				if !valErr.Silent() {
-					f = append(f, zap.Error(err))
-					mv.logger.Debug("rejecting invalid message", f...)
-				}
-
-				mv.metrics.MessageRejected(valErr.Text(), loggerFields.Role, loggerFields.Consensus.Round)
-				return pubsub.ValidationReject
-			}
-
-			if !valErr.Silent() {
-				f = append(f, zap.Error(err))
-				mv.logger.Debug("ignoring invalid message", f...)
-			}
-			mv.metrics.MessageIgnored(valErr.Text(), loggerFields.Role, loggerFields.Consensus.Round)
-			return pubsub.ValidationIgnore
-		}
-
-		mv.metrics.MessageIgnored(err.Error(), loggerFields.Role, loggerFields.Consensus.Round)
-		f = append(f, zap.Error(err))
-		mv.logger.Debug("ignoring invalid message", f...)
-		return pubsub.ValidationIgnore
+		return mv.handleValidationError(peerID, decodedMessage, err)
 	}
 
 	pmsg.ValidatorData = decodedMessage
 
+	loggerFields := mv.buildLoggerFields(decodedMessage)
 	mv.metrics.MessageAccepted(loggerFields.Role, loggerFields.Consensus.Round)
 
 	return pubsub.ValidationAccept
 }
 
-func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt time.Time) (*DecodedMessage, error) {
-	mv.metrics.ActiveMsgValidation(pMsg.GetTopic())
-	mv.metrics.MessagesReceivedFromPeer(pMsg.ReceivedFrom)
-	mv.metrics.MessagesReceivedTotal()
-	mv.metrics.MessageSize(len(pMsg.GetData()))
-	defer mv.metrics.ActiveMsgValidationDone(pMsg.GetTopic())
-
+func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt time.Time) (*DecodedMessage, error) {
 	if err := mv.validatePubSubMessage(pMsg); err != nil {
 		return nil, err
 	}
@@ -212,37 +107,25 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 		return nil, err
 	}
 
-	if err := mv.validateSignedSSVMessage(signedSSVMessage); err != nil {
-		return nil, err
-	}
-
 	return mv.validateSSVMessage(signedSSVMessage, pMsg.GetTopic(), receivedAt)
 }
 
 func (mv *messageValidator) validateSSVMessage(signedSSVMessage *spectypes.SignedSSVMessage, topic string, receivedAt time.Time) (*DecodedMessage, error) {
-	if err := mv.ssvMessageValidation(signedSSVMessage, topic); err != nil {
+	if err := mv.signedSSVMessageCheck(signedSSVMessage, topic); err != nil {
 		return nil, err
 	}
 
-	ssvMessage := signedSSVMessage.GetSSVMessage()
-
-	committee, validatorIndices, err := mv.getCommitteeAndValidatorIndices(ssvMessage.GetID())
+	committee, validatorIndices, err := mv.getCommitteeAndValidatorIndices(signedSSVMessage.GetSSVMessage().GetID())
 	if err != nil {
 		return nil, err
 	}
 
-	// Lock this SSV message ID to prevent concurrent access to the same state.
-	mv.validationMutex.Lock()
-	mutex, ok := mv.validationLocks[ssvMessage.GetID()]
-	if !ok {
-		mutex = &sync.Mutex{}
-		mv.validationLocks[ssvMessage.GetID()] = mutex
-	}
-	mutex.Lock()
-	defer mutex.Unlock()
-	mv.validationMutex.Unlock()
+	validationMu := mv.obtainValidationLock(signedSSVMessage.GetSSVMessage().GetID())
 
-	switch ssvMessage.MsgType {
+	validationMu.Lock()
+	defer validationMu.Unlock()
+
+	switch signedSSVMessage.GetSSVMessage().MsgType {
 	case spectypes.SSVConsensusMsgType:
 		consensusMessage, err := mv.validateConsensusMessage(signedSSVMessage, committee, validatorIndices, receivedAt)
 		if err != nil {
@@ -269,13 +152,26 @@ func (mv *messageValidator) validateSSVMessage(signedSSVMessage *spectypes.Signe
 
 	default:
 		e := ErrWrongSSVMessageType
-		e.got = ssvMessage.GetType()
+		e.got = signedSSVMessage.GetSSVMessage().GetType()
 		return nil, e
 	}
 }
 
+func (mv *messageValidator) obtainValidationLock(messageID spectypes.MessageID) *sync.Mutex {
+	// Lock this SSV message ID to prevent concurrent access to the same state.
+	mv.validationMutex.Lock()
+	mutex, ok := mv.validationLocks[messageID]
+	if !ok {
+		mutex = &sync.Mutex{}
+		mv.validationLocks[messageID] = mutex
+	}
+	mv.validationMutex.Unlock()
+
+	return mutex
+}
+
 func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.MessageID) ([]spectypes.OperatorID, []phase0.ValidatorIndex, error) {
-	if msgID.GetRoleType() == spectypes.RoleCommittee {
+	if mv.committeeRole(msgID.GetRoleType()) {
 		// TODO: add metrics and logs for committee role
 		committeeID := CommitteeID(msgID.GetSenderID()[16:])
 		committee := mv.validatorStore.Committee(committeeID) // TODO: consider passing whole senderID
@@ -335,31 +231,6 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 	return committee, []phase0.ValidatorIndex{validator.BeaconMetadata.Index}, nil
 }
 
-func (mv *messageValidator) validateSignatureFormat(signature []byte) error {
-	if len(signature) != signatureSize {
-		e := ErrWrongSignatureSize
-		e.got = len(signature)
-		return e
-	}
-
-	if [signatureSize]byte(signature) == [signatureSize]byte{} {
-		return ErrZeroSignature
-	}
-	return nil
-}
-
-func (mv *messageValidator) commonSignerValidation(signer spectypes.OperatorID, committee []spectypes.OperatorID) error {
-	if signer == 0 {
-		return ErrZeroSigner
-	}
-
-	if !slices.Contains(committee, signer) {
-		return ErrSignerNotInCommittee
-	}
-
-	return nil
-}
-
 func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *consensusState {
 	mv.consensusStateIndexMu.Lock()
 	defer mv.consensusStateIndexMu.Unlock()
@@ -379,52 +250,18 @@ func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *conse
 	return mv.consensusStateIndex[id]
 }
 
-// ownCommittee should be called only when WithOwnOperatorID is set
-func (mv *messageValidator) ownCommittee(committee []spectypes.OperatorID) bool {
-	return slices.ContainsFunc(committee, func(operatorID spectypes.OperatorID) bool {
-		return operatorID == mv.operatorDataStore.GetOperatorID()
-	})
-}
+func (mv *messageValidator) reportPubSubMetrics(pmsg *pubsub.Message) (done func()) {
+	mv.metrics.ActiveMsgValidation(pmsg.GetTopic())
+	mv.metrics.MessagesReceivedFromPeer(pmsg.ReceivedFrom)
+	mv.metrics.MessagesReceivedTotal()
+	mv.metrics.MessageSize(len(pmsg.GetData()))
 
-func (mv *messageValidator) committeeRole(role spectypes.RunnerRole) bool {
-	return role == spectypes.RoleCommittee
-}
+	start := time.Now()
 
-func (mv *messageValidator) validateSlotTime(messageSlot phase0.Slot, role spectypes.RunnerRole, receivedAt time.Time) error {
-	if mv.earlyMessage(messageSlot, receivedAt) {
-		return ErrEarlyMessage
+	return func() {
+		sinceStart := time.Since(start)
+
+		mv.metrics.MessageValidationDuration(sinceStart)
+		mv.metrics.ActiveMsgValidationDone(pmsg.GetTopic())
 	}
-
-	if lateness := mv.lateMessage(messageSlot, role, receivedAt); lateness > 0 {
-		e := ErrLateMessage
-		e.got = fmt.Sprintf("late by %v", lateness)
-		return e
-	}
-
-	return nil
-}
-
-func (mv *messageValidator) earlyMessage(slot phase0.Slot, receivedAt time.Time) bool {
-	return mv.netCfg.Beacon.GetSlotEndTime(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Unix())).
-		Add(-clockErrorTolerance).Before(mv.netCfg.Beacon.GetSlotStartTime(slot))
-}
-
-func (mv *messageValidator) lateMessage(slot phase0.Slot, role spectypes.RunnerRole, receivedAt time.Time) time.Duration {
-	var ttl phase0.Slot
-	switch role {
-	case spectypes.RoleProposer, spectypes.RoleSyncCommitteeContribution:
-		ttl = 1 + lateSlotAllowance
-	case spectypes.RoleCommittee, spectypes.RoleAggregator:
-		ttl = 32 + lateSlotAllowance
-	case spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
-		return 0
-	default:
-		panic("unexpected role")
-	}
-
-	deadline := mv.netCfg.Beacon.GetSlotStartTime(slot + ttl).
-		Add(lateMessageMargin).Add(clockErrorTolerance)
-
-	return mv.netCfg.Beacon.GetSlotStartTime(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Unix())).
-		Sub(deadline)
 }

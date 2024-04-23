@@ -176,7 +176,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		pmsg := &pubsub.Message{}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err := validator.validateP2PMessage(pmsg, receivedAt)
+		_, _, err := validator.handlePubsubMessage(pmsg, receivedAt)
 
 		require.ErrorIs(t, err, ErrPubSubMessageHasNoData)
 	})
@@ -197,7 +197,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateP2PMessage(pmsg, receivedAt)
+		_, _, err = validator.handlePubsubMessage(pmsg, receivedAt)
 
 		e := ErrPubSubDataTooBig
 		e.got = 10_000_000
@@ -220,7 +220,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-		_, _, err = validator.validateP2PMessage(pmsg, receivedAt)
+		_, _, err = validator.handlePubsubMessage(pmsg, receivedAt)
 
 		require.ErrorContains(t, err, ErrMalformedPubSubMessage.Error())
 	})
@@ -1048,7 +1048,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		// Get error when receiving a consensus message with a zero signature
 		t.Run("consensus message", func(t *testing.T) {
 			validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
-			zeroSignature := [signatureSize]byte{}
+			zeroSignature := [rsaSignatureSize]byte{}
 			validSignedMessage.Signature = zeroSignature[:]
 
 			encoded, err := validSignedMessage.Encode()
@@ -1068,7 +1068,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		// Get error when receiving a consensus message with a zero signature
 		t.Run("partial signature message", func(t *testing.T) {
 			partialSigMessage := spectestingutils.PostConsensusAttestationMsg(ks.Shares[1], 1, height)
-			zeroSignature := [signatureSize]byte{}
+			zeroSignature := [rsaSignatureSize]byte{}
 			partialSigMessage.Signature = zeroSignature[:]
 
 			encoded, err := partialSigMessage.Encode()
@@ -1869,7 +1869,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			slot := netCfg.Beacon.FirstSlotAtEpoch(epoch)
 			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-			_, _, err = validator.validateP2PMessage(pMsg, receivedAt)
+			_, _, err = validator.handlePubsubMessage(pMsg, receivedAt)
 			require.ErrorContains(t, err, ErrMalformedPubSubMessage.Error())
 		})
 
@@ -1924,7 +1924,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			}
 
 			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-			_, _, err = validator.validateP2PMessage(pMsg, receivedAt)
+			_, _, err = validator.handlePubsubMessage(pMsg, receivedAt)
 			require.NoError(t, err)
 
 			require.NoError(t, ns.DeleteOperatorData(nil, operatorID))
@@ -1982,7 +1982,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			}
 
 			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-			_, _, err = validator.validateP2PMessage(pMsg, receivedAt)
+			_, _, err = validator.handlePubsubMessage(pMsg, receivedAt)
 			require.ErrorContains(t, err, ErrOperatorNotFound.Error())
 
 			require.NoError(t, ns.DeleteOperatorData(nil, operatorID))
@@ -2036,7 +2036,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			}
 
 			receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
-			_, _, err = validator.validateP2PMessage(pMsg, receivedAt)
+			_, _, err = validator.handlePubsubMessage(pMsg, receivedAt)
 			require.ErrorContains(t, err, ErrSignatureVerification.Error())
 
 			require.NoError(t, ns.DeleteOperatorData(nil, operatorID))

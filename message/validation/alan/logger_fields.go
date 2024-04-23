@@ -27,8 +27,8 @@ type LoggerFields struct {
 	Consensus      *ConsensusFields
 }
 
-// Fields returns zap logging fields for the descriptor.
-func (d LoggerFields) Fields() []zapcore.Field {
+// AsZapFields returns zap logging fields for the descriptor.
+func (d LoggerFields) AsZapFields() []zapcore.Field {
 	result := []zapcore.Field{
 		fields.SenderID(d.SenderID),
 		fields.RunnerRole(d.Role),
