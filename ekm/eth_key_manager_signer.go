@@ -19,6 +19,7 @@ import (
 	"github.com/bloxapp/eth2-key-manager/signer"
 	slashingprotection "github.com/bloxapp/eth2-key-manager/slashing_protection"
 	"github.com/bloxapp/eth2-key-manager/wallets"
+	genesisspectypes "github.com/bloxapp/ssv-spec-genesis/types"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -59,7 +60,7 @@ type StorageProvider interface {
 }
 
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
-func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, network networkconfig.NetworkConfig, builderProposals bool, encryptionKey string) (spectypes.KeyManager, error) {
+func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, network networkconfig.NetworkConfig, builderProposals bool, encryptionKey string) (genesisspectypes.KeyManager, error) {
 	signerStore := NewSignerStorage(db, network.Beacon, logger)
 	if encryptionKey != "" {
 		err := signerStore.SetEncryptionKey(encryptionKey)
@@ -112,7 +113,7 @@ func (km *ethKeyManagerSigner) RetrieveHighestProposal(pubKey []byte) (phase0.Sl
 	return km.storage.RetrieveHighestProposal(pubKey)
 }
 
-func (km *ethKeyManagerSigner) SignBeaconObject(obj ssz.HashRoot, domain phase0.Domain, pk []byte, domainType phase0.DomainType) (spectypes.Signature, [32]byte, error) {
+func (km *ethKeyManagerSigner) SignBeaconObject(obj ssz.HashRoot, domain phase0.Domain, pk []byte, domainType phase0.DomainType) (genesisspectypes.Signature, [32]byte, error) {
 	sig, rootSlice, err := km.signBeaconObject(obj, domain, pk, domainType)
 	if err != nil {
 		return nil, [32]byte{}, err
@@ -122,7 +123,7 @@ func (km *ethKeyManagerSigner) SignBeaconObject(obj ssz.HashRoot, domain phase0.
 	return sig, root, nil
 }
 
-func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.Domain, pk []byte, domainType phase0.DomainType) (spectypes.Signature, []byte, error) {
+func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.Domain, pk []byte, domainType phase0.DomainType) (genesisspectypes.Signature, []byte, error) {
 	km.walletLock.RLock()
 	defer km.walletLock.RUnlock()
 
@@ -252,7 +253,7 @@ func (km *ethKeyManagerSigner) IsBeaconBlockSlashable(pk []byte, slot phase0.Slo
 	return nil
 }
 
-func (km *ethKeyManagerSigner) SignRoot(data spectypes.Root, sigType spectypes.SignatureType, pk []byte) (spectypes.Signature, error) {
+func (km *ethKeyManagerSigner) SignRoot(data genesisspectypes.Root, sigType genesisspectypes.SignatureType, pk []byte) (genesisspectypes.Signature, error) {
 	km.walletLock.RLock()
 	defer km.walletLock.RUnlock()
 
@@ -261,7 +262,7 @@ func (km *ethKeyManagerSigner) SignRoot(data spectypes.Root, sigType spectypes.S
 		return nil, errors.Wrap(err, "could not get signing account")
 	}
 
-	root, err := spectypes.ComputeSigningRoot(data, spectypes.ComputeSignatureDomain(km.domain, sigType))
+	root, err := spectypes.ComputeSigningRoot(data, spectypes.ComputeSignatureDomain(km.domain, spectypes.SignatureType(sigType)))
 	if err != nil {
 		return nil, errors.Wrap(err, "could not compute signing root")
 	}

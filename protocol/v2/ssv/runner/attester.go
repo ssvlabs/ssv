@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	genesisspectypes "github.com/bloxapp/ssv-spec-genesis/types"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -25,7 +26,7 @@ type AttesterRunner struct {
 
 	beacon   specssv.BeaconNode
 	network  specssv.Network
-	signer   spectypes.KeyManager
+	signer   genesisspectypes.KeyManager
 	valCheck specqbft.ProposedValueCheckF
 
 	started time.Time
@@ -34,11 +35,11 @@ type AttesterRunner struct {
 
 func NewAttesterRunnner(
 	beaconNetwork spectypes.BeaconNetwork,
-	share *spectypes.Share,
+	shares *map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
 	beacon specssv.BeaconNode,
 	network specssv.Network,
-	signer spectypes.KeyManager,
+	signer genesisspectypes.KeyManager,
 	valCheck specqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
 ) Runner {
@@ -46,7 +47,7 @@ func NewAttesterRunnner(
 		BaseRunner: &BaseRunner{
 			BeaconRoleType:     spectypes.BNRoleAttester,
 			BeaconNetwork:      beaconNetwork,
-			Share:              share,
+			Shares:             *shares,
 			QBFTController:     qbftController,
 			highestDecidedSlot: highestDecidedSlot,
 		},
@@ -60,7 +61,7 @@ func NewAttesterRunnner(
 	}
 }
 
-func (r *AttesterRunner) StartNewDuty(logger *zap.Logger, duty *spectypes.Duty) error {
+func (r *AttesterRunner) StartNewDuty(logger *zap.Logger, duty spectypes.Duty) error {
 	return r.BaseRunner.baseStartNewDuty(logger, r, duty)
 }
 
@@ -259,7 +260,10 @@ func (r *AttesterRunner) GetBeaconNode() specssv.BeaconNode {
 }
 
 func (r *AttesterRunner) GetShare() *spectypes.Share {
-	return r.BaseRunner.Share
+	for _, share := range r.BaseRunner.Shares {
+		return share
+	}
+	return nil
 }
 
 func (r *AttesterRunner) GetState() *State {

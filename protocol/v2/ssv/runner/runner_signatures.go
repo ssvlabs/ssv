@@ -2,7 +2,8 @@ package runner
 
 import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	specssv "github.com/bloxapp/ssv-spec/ssv"
+	genesisspecssv "github.com/bloxapp/ssv-spec-genesis/ssv"
+	genesisspectypes "github.com/bloxapp/ssv-spec-genesis/types"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -100,8 +101,7 @@ func (b *BaseRunner) verifyBeaconPartialSignature(signer uint64, signature spect
 }
 
 // Stores the container's existing signature or the new one, depending on their validity. If both are invalid, remove the existing one
-func (b *BaseRunner) resolveDuplicateSignature(container *specssv.PartialSigContainer, msg *spectypes.PartialSignatureMessage) {
-
+func (b *BaseRunner) resolveDuplicateSignature(container *genesisspecssv.PartialSigContainer, msg *genesisspectypes.PartialSignatureMessage) {
 	// Check previous signature validity
 	previousSignature, err := container.GetSignature(msg.Signer, msg.SigningRoot)
 	if err == nil {

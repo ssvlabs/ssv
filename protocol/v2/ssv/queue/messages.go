@@ -3,6 +3,8 @@ package queue
 import (
 	"fmt"
 
+	genesisspecqbft "github.com/bloxapp/ssv-spec-genesis/qbft"
+	genesisspectypes "github.com/bloxapp/ssv-spec-genesis/types"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
@@ -29,13 +31,13 @@ func DecodeSSVMessage(m *spectypes.SSVMessage) (*DecodedSSVMessage, error) {
 	var body interface{}
 	switch m.MsgType {
 	case spectypes.SSVConsensusMsgType: // TODO: Or message.SSVDecidedMsgType?
-		sm := &specqbft.SignedMessage{}
+		sm := &genesisspecqbft.SignedMessage{}
 		if err := sm.Decode(m.Data); err != nil {
 			return nil, errors.Wrap(err, "failed to decode SignedMessage")
 		}
 		body = sm
 	case spectypes.SSVPartialSignatureMsgType:
-		sm := &spectypes.SignedPartialSignatureMessage{}
+		sm := &genesisspectypes.SignedPartialSignatureMessage{}
 		if err := sm.Decode(m.Data); err != nil {
 			return nil, errors.Wrap(err, "failed to decode SignedPartialSignatureMessage")
 		}
@@ -58,14 +60,14 @@ func DecodeSSVMessage(m *spectypes.SSVMessage) (*DecodedSSVMessage, error) {
 // compareHeightOrSlot returns an integer comparing the message's height/slot to the current.
 // The reuslt will be 0 if equal, -1 if lower, 1 if higher.
 func compareHeightOrSlot(state *State, m *DecodedSSVMessage) int {
-	if mm, ok := m.Body.(*specqbft.SignedMessage); ok {
-		if mm.Message.Height == state.Height {
+	if mm, ok := m.Body.(*genesisspecqbft.SignedMessage); ok {
+		if specqbft.Height(mm.Message.Height) == state.Height {
 			return 0
 		}
-		if mm.Message.Height > state.Height {
+		if specqbft.Height(mm.Message.Height) > state.Height {
 			return 1
 		}
-	} else if mm, ok := m.Body.(*spectypes.SignedPartialSignatureMessage); ok {
+	} else if mm, ok := m.Body.(*genesisspectypes.SignedPartialSignatureMessage); ok {
 		if mm.Message.Slot == state.Slot {
 			return 0
 		}
@@ -79,11 +81,11 @@ func compareHeightOrSlot(state *State, m *DecodedSSVMessage) int {
 // scoreRound returns an integer comparing the message's round (if exist) to the current.
 // The reuslt will be 0 if equal, -1 if lower, 1 if higher.
 func scoreRound(state *State, m *DecodedSSVMessage) int {
-	if mm, ok := m.Body.(*specqbft.SignedMessage); ok {
-		if mm.Message.Round == state.Round {
+	if mm, ok := m.Body.(*genesisspecqbft.SignedMessage); ok {
+		if specqbft.Round(mm.Message.Round) == state.Round {
 			return 2
 		}
-		if mm.Message.Round > state.Round {
+		if specqbft.Round(mm.Message.Round) > state.Round {
 			return 1
 		}
 		return -1
@@ -110,14 +112,14 @@ func scoreMessageType(m *DecodedSSVMessage) int {
 
 // scoreMessageSubtype returns an integer score for the message's type.
 func scoreMessageSubtype(state *State, m *DecodedSSVMessage, relativeHeight int) int {
-	consensusMessage, isConsensusMessage := m.Body.(*specqbft.SignedMessage)
+	consensusMessage, isConsensusMessage := m.Body.(*genesisspecqbft.SignedMessage)
 
 	var (
 		isPreConsensusMessage  = false
 		isPostConsensusMessage = false
 	)
-	if mm, ok := m.Body.(*spectypes.SignedPartialSignatureMessage); ok {
-		isPostConsensusMessage = mm.Message.Type == spectypes.PostConsensusPartialSig
+	if mm, ok := m.Body.(*genesisspectypes.SignedPartialSignatureMessage); ok {
+		isPostConsensusMessage = mm.Message.Type == genesisspectypes.PostConsensusPartialSig
 		isPreConsensusMessage = !isPostConsensusMessage
 	}
 
@@ -164,7 +166,7 @@ func scoreMessageSubtype(state *State, m *DecodedSSVMessage, relativeHeight int)
 	switch {
 	case isDecidedMesssage(state, consensusMessage):
 		return 2
-	case isConsensusMessage && consensusMessage.Message.MsgType == specqbft.CommitMsgType:
+	case isConsensusMessage && consensusMessage.Message.MsgType == genesisspecqbft.CommitMsgType:
 		return 1
 	}
 	return 0
@@ -173,25 +175,25 @@ func scoreMessageSubtype(state *State, m *DecodedSSVMessage, relativeHeight int)
 // scoreConsensusType returns an integer score for the type of a consensus message.
 // When given a non-consensus message, scoreConsensusType returns 0.
 func scoreConsensusType(state *State, m *DecodedSSVMessage) int {
-	if mm, ok := m.Body.(*specqbft.SignedMessage); ok {
+	if mm, ok := m.Body.(*genesisspecqbft.SignedMessage); ok {
 		switch mm.Message.MsgType {
-		case specqbft.ProposalMsgType:
+		case genesisspecqbft.ProposalMsgType:
 			return 4
-		case specqbft.PrepareMsgType:
+		case genesisspecqbft.PrepareMsgType:
 			return 3
-		case specqbft.CommitMsgType:
+		case genesisspecqbft.CommitMsgType:
 			return 2
-		case specqbft.RoundChangeMsgType:
+		case genesisspecqbft.RoundChangeMsgType:
 			return 1
 		}
 	}
 	return 0
 }
 
-func isDecidedMesssage(s *State, sm *specqbft.SignedMessage) bool {
+func isDecidedMesssage(s *State, sm *genesisspecqbft.SignedMessage) bool {
 	if sm == nil {
 		return false
 	}
-	return sm.Message.MsgType == specqbft.CommitMsgType &&
+	return sm.Message.MsgType == genesisspecqbft.CommitMsgType &&
 		len(sm.Signers) > int(s.Quorum)
 }

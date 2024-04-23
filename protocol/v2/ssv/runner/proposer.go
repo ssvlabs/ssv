@@ -376,7 +376,10 @@ func (r *ProposerRunner) GetBeaconNode() specssv.BeaconNode {
 }
 
 func (r *ProposerRunner) GetShare() *spectypes.Share {
-	return r.BaseRunner.Share
+	for _, share := range r.BaseRunner.Shares {
+		return share
+	}
+	return nil
 }
 
 func (r *ProposerRunner) GetState() *State {

@@ -19,12 +19,12 @@ type State struct {
 	RunningInstance        *instance.Instance
 	DecidedValue           *spectypes.ConsensusData
 	// CurrentDuty is the duty the node pulled locally from the beacon node, might be different from decided duty
-	StartingDuty *spectypes.Duty
+	StartingDuty spectypes.Duty
 	// flags
 	Finished bool // Finished marked true when there is a full successful cycle (pre, consensus and post) with quorum
 }
 
-func NewRunnerState(quorum uint64, duty *spectypes.Duty) *State {
+func NewRunnerState(quorum uint64, duty spectypes.Duty) *State {
 	return &State{
 		PreConsensusContainer:  specssv.NewPartialSigContainer(quorum),
 		PostConsensusContainer: specssv.NewPartialSigContainer(quorum),
