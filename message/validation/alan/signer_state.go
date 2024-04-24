@@ -12,12 +12,13 @@ import (
 // SignerState represents the state of a signer, including its start time, slot, round,
 // message counts, proposal data, and the number of duties performed in the current epoch.
 type SignerState struct {
-	Start         time.Time
-	Slot          phase0.Slot
-	Round         specqbft.Round
-	MessageCounts MessageCounts
-	ProposalData  []byte
-	EpochDuties   int
+	Start              time.Time
+	Slot               phase0.Slot
+	Round              specqbft.Round
+	MessageCounts      MessageCounts
+	ProposalData       []byte
+	EpochDuties        int
+	SeenDecidedLengths map[int]struct{}
 }
 
 // ResetSlot resets the state's slot, round, message counts, and proposal data to the given values.
@@ -33,6 +34,7 @@ func (s *SignerState) ResetSlot(slot phase0.Slot, round specqbft.Round, newEpoch
 	} else {
 		s.EpochDuties++
 	}
+	s.SeenDecidedLengths = make(map[int]struct{})
 }
 
 // ResetRound resets the state's round, message counts, and proposal data to the given values.
@@ -42,4 +44,5 @@ func (s *SignerState) ResetRound(round specqbft.Round) {
 	s.Round = round
 	s.MessageCounts = MessageCounts{}
 	s.ProposalData = nil
+	s.SeenDecidedLengths = make(map[int]struct{})
 }

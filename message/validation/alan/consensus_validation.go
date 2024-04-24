@@ -150,15 +150,19 @@ func (mv *messageValidator) validateQBFTLogic(
 		}
 	}
 
-	// TODO: if mv.HasSentDecidedWithSameNumberOfSigners(peerID, signedSSVMessage) {
-	//			return ErrDecidedWithSameNumberOfSigners
-	//		}
-
 	msgSlot := phase0.Slot(consensusMessage.Height)
 	for _, signer := range signedSSVMessage.GetOperatorIDs() {
 		signerState := state.GetSignerState(signer)
 		if signerState == nil {
 			continue
+		}
+
+		// It should be checked after ErrNonDecidedWithMultipleSigners
+		signerCount := len(signedSSVMessage.GetOperatorIDs())
+		if signerCount > 1 {
+			if _, ok := signerState.SeenDecidedLengths[signerCount]; ok {
+				return ErrDecidedWithSameNumberOfSigners
+			}
 		}
 
 		if msgSlot == signerState.Slot && consensusMessage.Round == signerState.Round {
@@ -237,6 +241,11 @@ func (mv *messageValidator) updateConsensusState(signedSSVMessage *spectypes.Sig
 
 		if len(signedSSVMessage.FullData) != 0 && signerState.ProposalData == nil {
 			signerState.ProposalData = signedSSVMessage.FullData
+		}
+
+		signerCount := len(signedSSVMessage.GetOperatorIDs())
+		if signerCount > 1 {
+			signerState.SeenDecidedLengths[signerCount] = struct{}{}
 		}
 
 		signerState.MessageCounts.RecordConsensusMessage(signedSSVMessage, consensusMessage)
