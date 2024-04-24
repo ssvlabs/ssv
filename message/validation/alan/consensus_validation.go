@@ -192,16 +192,6 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 			continue
 		}
 
-		if msgSlot < signerState.Slot {
-			// Signers aren't allowed to decrease their slot.
-			// If they've sent a future message due to clock error,
-			// this should be caught by the earlyMessage check.
-			err := ErrSlotAlreadyAdvanced
-			err.want = signerState.Slot
-			err.got = msgSlot
-			return err
-		}
-
 		if msgSlot == signerState.Slot && consensusMessage.Round < signerState.Round {
 			// Signers aren't allowed to decrease their round.
 			// If they've sent a future message due to clock error,

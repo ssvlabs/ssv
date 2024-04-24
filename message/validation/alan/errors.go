@@ -57,7 +57,6 @@ var (
 	ErrUnknownValidator                        = Error{text: "unknown validator"}
 	ErrValidatorLiquidated                     = Error{text: "validator is liquidated"}
 	ErrValidatorNotAttesting                   = Error{text: "validator is not attesting"}
-	ErrSlotAlreadyAdvanced                     = Error{text: "signer has already advanced to a later slot"}
 	ErrRoundAlreadyAdvanced                    = Error{text: "signer has already advanced to a later round"}
 	ErrEarlyMessage                            = Error{text: "early message"}
 	ErrLateMessage                             = Error{text: "late message"}

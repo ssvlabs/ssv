@@ -148,16 +148,6 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		return err
 	}
 
-	if messageSlot < signerState.Slot {
-		// Signers aren't allowed to decrease their slot.
-		// If they've sent a future message due to clock error,
-		// this should be caught by the earlyMessage check.
-		err := ErrSlotAlreadyAdvanced
-		err.want = signerState.Slot
-		err.got = messageSlot
-		return err
-	}
-
 	newDutyInSameEpoch := false
 	if messageSlot > signerState.Slot && messageEpoch == stateEpoch {
 		newDutyInSameEpoch = true
