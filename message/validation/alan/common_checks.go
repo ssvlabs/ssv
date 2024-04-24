@@ -58,27 +58,34 @@ func (mv *messageValidator) lateMessage(slot phase0.Slot, role spectypes.RunnerR
 }
 
 func (mv *messageValidator) validateDutyCount(
+	validatorIndices []phase0.ValidatorIndex,
 	state *SignerState,
 	msgID spectypes.MessageID,
 	newDutyInSameEpoch bool,
 ) error {
+	var dutyLimit int
+
 	switch msgID.GetRoleType() {
 	case spectypes.RoleAggregator, spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
-		limit := maxDutiesPerEpoch
+		dutyLimit = 2
 
-		if sameSlot := !newDutyInSameEpoch; sameSlot {
-			limit++
-		}
+	case spectypes.RoleCommittee:
+		dutyLimit = 2 * len(validatorIndices)
 
-		if state.EpochDuties >= limit {
-			err := ErrTooManyDutiesPerEpoch
-			err.got = fmt.Sprintf("%v (role %v)", state.EpochDuties, msgID.GetRoleType())
-			err.want = fmt.Sprintf("less than %v", maxDutiesPerEpoch)
-			return err
-		}
-
-		return nil
 	default:
 		return nil
 	}
+
+	if sameSlot := !newDutyInSameEpoch; sameSlot {
+		dutyLimit++
+	}
+
+	if state.EpochDuties >= dutyLimit {
+		err := ErrTooManyDutiesPerEpoch
+		err.got = fmt.Sprintf("%v (role %v)", state.EpochDuties, msgID.GetRoleType())
+		err.want = fmt.Sprintf("less than %v", dutyLimit)
+		return err
+	}
+
+	return nil
 }

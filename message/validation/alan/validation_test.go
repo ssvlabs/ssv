@@ -791,7 +791,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
 		_, _, err = validator.handleSignedSSVMessage(message, receivedAt, nil)
-		expectedErr := ErrUnexpectedSigner
+		expectedErr := ErrInconsistentSigners
 		expectedErr.got = spectypes.OperatorID(2)
 		expectedErr.want = spectypes.OperatorID(1)
 		require.ErrorIs(t, err, expectedErr)
@@ -840,7 +840,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(roleAttester))
 		_, _, err = validator.handleSignedSSVMessage(message, receivedAt, nil)
-		require.ErrorIs(t, err, ErrNoPartialMessages)
+		require.ErrorIs(t, err, ErrNoPartialSignatureMessages)
 	})
 
 	// Receive error when the partial signature message is not enough bytes

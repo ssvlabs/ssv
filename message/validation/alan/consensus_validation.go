@@ -218,7 +218,7 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 			}
 		}
 
-		if err := mv.validNumberOfCommitteeDutiesPerEpoch(signedSSVMessage, signerState, msgSlot); err != nil {
+		if err := mv.validNumberOfCommitteeDutiesPerEpoch(signedSSVMessage, validatorIndices, signerState, msgSlot); err != nil {
 			return err
 		}
 	}
@@ -256,13 +256,18 @@ func (mv *messageValidator) updateConsensusState(signedSSVMessage *spectypes.Sig
 	}
 }
 
-func (mv *messageValidator) validNumberOfCommitteeDutiesPerEpoch(signedSSVMessage *spectypes.SignedSSVMessage, signerState *SignerState, msgSlot phase0.Slot) error {
+func (mv *messageValidator) validNumberOfCommitteeDutiesPerEpoch(
+	signedSSVMessage *spectypes.SignedSSVMessage,
+	validatorIndices []phase0.ValidatorIndex,
+	signerState *SignerState,
+	msgSlot phase0.Slot,
+) error {
 	newDutyInSameEpoch := false
 	if msgSlot > signerState.Slot && mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) == mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot) {
 		newDutyInSameEpoch = true
 	}
 
-	if err := mv.validateDutyCount(signerState, signedSSVMessage.SSVMessage.GetID(), newDutyInSameEpoch); err != nil {
+	if err := mv.validateDutyCount(validatorIndices, signerState, signedSSVMessage.SSVMessage.GetID(), newDutyInSameEpoch); err != nil {
 		return err
 	}
 
