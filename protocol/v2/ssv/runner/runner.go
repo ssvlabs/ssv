@@ -6,11 +6,10 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	genesisspecqbft "github.com/bloxapp/ssv-spec-genesis/qbft"
-	genesisspecssv "github.com/bloxapp/ssv-spec-genesis/ssv"
-	genesisspectypes "github.com/bloxapp/ssv-spec-genesis/types"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -22,7 +21,8 @@ type Getters interface {
 	GetBaseRunner() *BaseRunner
 	GetBeaconNode() specssv.BeaconNode
 	GetValCheckF() specqbft.ProposedValueCheckF
-	GetSigner() genesisspectypes.KeyManager
+	GetSigner() spectypes.BeaconSigner
+	GetOperatorSigner() spectypes.OperatorSigner
 	GetNetwork() specssv.Network
 }
 
@@ -36,11 +36,11 @@ type Runner interface {
 	// HasRunningDuty returns true if it has a running duty
 	HasRunningDuty() bool
 	// ProcessPreConsensus processes all pre-consensus msgs, returns error if can't process
-	ProcessPreConsensus(logger *zap.Logger, signedMsg *genesisspectypes.SignedPartialSignatureMessage) error
+	ProcessPreConsensus(logger *zap.Logger, signedMsg ssvtypes.PartialSignatureMessages) error
 	// ProcessConsensus processes all consensus msgs, returns error if can't process
-	ProcessConsensus(logger *zap.Logger, msg *genesisspecqbft.SignedMessage) error
+	ProcessConsensus(logger *zap.Logger, msg ssvtypes.SignedMessage) error
 	// ProcessPostConsensus processes all post-consensus msgs, returns error if can't process
-	ProcessPostConsensus(logger *zap.Logger, signedMsg *genesisspectypes.SignedPartialSignatureMessage) error
+	ProcessPostConsensus(logger *zap.Logger, signedMsg ssvtypes.PartialSignatureMessages) error
 	// expectedPreConsensusRootsAndDomain an INTERNAL function, returns the expected pre-consensus roots to sign
 	expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, spec.DomainType, error)
 	// expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
@@ -120,7 +120,7 @@ func (b *BaseRunner) baseStartNewNonBeaconDuty(logger *zap.Logger, runner Runner
 }
 
 // basePreConsensusMsgProcessing is a base func that all runner implementation can call for processing a pre-consensus msg
-func (b *BaseRunner) basePreConsensusMsgProcessing(runner Runner, signedMsg *genesisspectypes.SignedPartialSignatureMessage) (bool, [][32]byte, error) {
+func (b *BaseRunner) basePreConsensusMsgProcessing(runner Runner, signedMsg ssvtypes.PartialSignatureMessages) (bool, [][32]byte, error) {
 	if err := b.ValidatePreConsensusMsg(runner, signedMsg); err != nil {
 		return false, nil, errors.Wrap(err, "invalid pre-consensus message")
 	}
@@ -130,7 +130,7 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(runner Runner, signedMsg *gen
 }
 
 // baseConsensusMsgProcessing is a base func that all runner implementation can call for processing a consensus msg
-func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runner, msg *genesisspecqbft.SignedMessage) (decided bool, decidedValue *spectypes.ConsensusData, err error) {
+func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runner, msg ssvtypes.SignedMessage) (decided bool, decidedValue *spectypes.ConsensusData, err error) {
 	prevDecided := false
 	if b.hasRunningDuty() && b.State != nil && b.State.RunningInstance != nil {
 		prevDecided, _ = b.State.RunningInstance.IsDecided()
@@ -160,9 +160,9 @@ func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runne
 	} else {
 		if inst := b.QBFTController.StoredInstances.FindInstance(decidedMsg.Message.Height); inst != nil {
 			logger := logger.With(
-				zap.Uint64("msg_height", uint64(msg.Message.Height)),
+				zap.Uint64("msg_height", uint64(msg.GetHeight())),
 				zap.Uint64("ctrl_height", uint64(b.QBFTController.Height)),
-				zap.Any("signers", msg.Signers),
+				zap.Any("signers", msg.GetOperatorIDs()),
 			)
 			if err = b.QBFTController.SaveInstance(inst, decidedMsg); err != nil {
 				logger.Debug("❗ failed to save instance", zap.Error(err))
@@ -191,7 +191,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runne
 }
 
 // basePostConsensusMsgProcessing is a base func that all runner implementation can call for processing a post-consensus msg
-func (b *BaseRunner) basePostConsensusMsgProcessing(logger *zap.Logger, runner Runner, signedMsg *genesisspectypes.SignedPartialSignatureMessage) (bool, [][32]byte, error) {
+func (b *BaseRunner) basePostConsensusMsgProcessing(logger *zap.Logger, runner Runner, signedMsg ssvtypes.PartialSignatureMessages) (bool, [][32]byte, error) {
 	if err := b.ValidatePostConsensusMsg(runner, signedMsg); err != nil {
 		return false, nil, errors.Wrap(err, "invalid post-consensus message")
 	}
@@ -202,26 +202,26 @@ func (b *BaseRunner) basePostConsensusMsgProcessing(logger *zap.Logger, runner R
 
 // basePartialSigMsgProcessing adds a validated (without signature verification) validated partial msg to the container, checks for quorum and returns true (and roots) if quorum exists
 func (b *BaseRunner) basePartialSigMsgProcessing(
-	signedMsg *genesisspectypes.SignedPartialSignatureMessage,
-	container *genesisspecssv.PartialSigContainer,
+	signedMsg ssvtypes.PartialSignatureMessages,
+	container ssvtypes.PartialSigContainer,
 ) (bool, [][32]byte, error) {
 	roots := make([][32]byte, 0)
 	anyQuorum := false
-	for _, msg := range signedMsg.Message.Messages {
-		prevQuorum := container.HasQuorum(msg.SigningRoot)
+	for _, msg := range signedMsg.GetMessages() {
+		prevQuorum := container.HasQuorum(msg)
 
 		// Check if it has two signatures for the same signer
-		if container.HasSigner(msg.Signer, msg.SigningRoot) {
+		if container.HasSigner(msg) {
 			b.resolveDuplicateSignature(container, msg)
 		} else {
 			container.AddSignature(msg)
 		}
 
-		hasQuorum := container.HasQuorum(msg.SigningRoot)
+		hasQuorum := container.HasQuorum(msg)
 
 		if hasQuorum && !prevQuorum {
 			// Notify about first quorum only
-			roots = append(roots, msg.SigningRoot)
+			roots = append(roots, msg.GetSigningRoot())
 			anyQuorum = true
 		}
 	}
@@ -306,4 +306,13 @@ func (b *BaseRunner) ShouldProcessNonBeaconDuty(duty spectypes.Duty) error {
 			b.State.StartingDuty.DutySlot())
 	}
 	return nil
+}
+
+func (b *BaseRunner) getCommittee(validatorIndex spec.ValidatorIndex) []*spectypes.ShareMember {
+	if len(b.Shares) == 1 {
+		for _, share := range b.Shares {
+			return share.Committee
+		}
+	}
+	return b.Shares[validatorIndex].Committee
 }

@@ -205,7 +205,7 @@ func (r *CommitteeRunner) ProcessPostConsensus(signedMsg *spectypes.PartialSigna
 			// TODO should we return an error here? maybe other sigs are fine?
 			if err != nil {
 				for _, root := range roots {
-					cr.BaseRunner.FallBackAndVerifyEachSignature(cr.BaseRunner.State.PostConsensusContainer, root,
+					r.BaseRunner.FallBackAndVerifyEachSignature(r.BaseRunner.State.PostConsensusContainer, root,
 						share.Committee, validator)
 				}
 				return errors.Wrap(err, "got post-consensus quorum but it has invalid signatures")

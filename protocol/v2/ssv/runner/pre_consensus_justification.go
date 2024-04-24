@@ -45,15 +45,21 @@ func (b *BaseRunner) validatePreConsensusJustifications(data *spectypes.Consensu
 		return errors.New("duty.slot <= highest decided slot")
 	}
 
+	var share *spectypes.Share
+	for _, s := range b.Shares {
+		share = s
+		break
+	}
+
 	// validate justification quorum
-	if !b.Share.HasQuorum(len(data.PreConsensusJustifications)) {
+	if !share.HasQuorum(len(data.PreConsensusJustifications)) {
 		return errors.New("no quorum")
 	}
 
 	signers := make(map[spectypes.OperatorID]bool)
 	roots := make(map[[32]byte]bool)
 	rootCount := 0
-	partialSigContainer := ssv.NewPartialSigContainer(b.Share.Quorum)
+	partialSigContainer := ssv.NewPartialSigContainer(share.Quorum)
 	for i, msg := range data.PreConsensusJustifications {
 		if err := msg.Validate(); err != nil {
 			return err
@@ -103,7 +109,7 @@ func (b *BaseRunner) validatePreConsensusJustifications(data *spectypes.Consensu
 
 	// Verify the reconstructed signature for each root
 	for root := range roots {
-		_, err := b.State.ReconstructBeaconSig(partialSigContainer, root, b.Share.ValidatorPubKey)
+		_, err := b.State.ReconstructBeaconSig(partialSigContainer, root, share.ValidatorPubKey[:], share.ValidatorIndex)
 		if err != nil {
 			return errors.Wrap(err, "wrong pre-consensus partial signature")
 		}

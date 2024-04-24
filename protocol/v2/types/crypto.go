@@ -3,7 +3,7 @@ package types
 import (
 	"encoding/hex"
 
-	specssv "github.com/bloxapp/ssv-spec/ssv"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -69,9 +69,9 @@ func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, d
 	return nil
 }
 
-func ReconstructSignature(ps *specssv.PartialSigContainer, root [32]byte, validatorPubKey []byte) ([]byte, error) {
+func ReconstructSignature(ps PartialSigContainer, root [32]byte, validatorPubKey []byte, validatorIndex phase0.ValidatorIndex) ([]byte, error) {
 	// Reconstruct signatures
-	signature, err := spectypes.ReconstructSignatures(ps.Signatures[rootHex(root)])
+	signature, err := ps.ReconstructSignature(root, validatorPubKey, validatorIndex)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to reconstruct signatures")
 	}
