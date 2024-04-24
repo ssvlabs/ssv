@@ -59,10 +59,10 @@ var (
 	ErrValidatorNotAttesting                  = Error{text: "validator is not attesting"}
 	ErrSlotAlreadyAdvanced                    = Error{text: "signer has already advanced to a later slot"}
 	ErrRoundAlreadyAdvanced                   = Error{text: "signer has already advanced to a later round"}
-	ErrRoundTooHigh                           = Error{text: "round is too high for this role" /*, reject: true*/} // TODO: enable reject
 	ErrEarlyMessage                           = Error{text: "early message"}
 	ErrLateMessage                            = Error{text: "late message"}
 	ErrTooManySameTypeMessagesPerRound        = Error{text: "too many messages of same type per round"}
+	ErrRoundTooHigh                           = Error{text: "round is too high for this role" /*, reject: true*/} // TODO: enable reject
 	ErrSignatureVerification                  = Error{text: "signature verification", reject: true}
 	ErrOperatorNotFound                       = Error{text: "operator not found", reject: true}
 	ErrPubSubMessageHasNoData                 = Error{text: "pub-sub message has no data", reject: true}
@@ -75,7 +75,8 @@ var (
 	ErrInvalidRole                            = Error{text: "invalid role", reject: true}
 	ErrUnexpectedConsensusMessage             = Error{text: "unexpected consensus message for this role", reject: true}
 	ErrNoSigners                              = Error{text: "no signers", reject: true}
-	ErrWrongSignatureSize                     = Error{text: "wrong signature size", reject: true}
+	ErrWrongRSASignatureSize                  = Error{text: "wrong RSA signature size", reject: true}
+	ErrWrongBLSSignatureSize                  = Error{text: "wrong BLS signature size", reject: true}
 	ErrEmptySignature                         = Error{text: "empty signature", reject: true}
 	ErrZeroSigner                             = Error{text: "zero signer ID", reject: true}
 	ErrSignerNotInCommittee                   = Error{text: "signer is not in committee", reject: true}
@@ -86,8 +87,10 @@ var (
 	ErrInvalidHash                            = Error{text: "root doesn't match full data hash", reject: true}
 	ErrFullDataHash                           = Error{text: "couldn't hash root", reject: true}
 	ErrEstimatedRoundTooFar                   = Error{text: "message round is too far from estimated"}
-	ErrUndecodableData                        = Error{text: "message could not be decoded", reject: true}
-	ErrWrongSSVMessageType                    = Error{text: "wrong SSV message type", reject: true}
+	ErrUndecodableMessageData                 = Error{text: "message data could not be decoded", reject: true}
+	ErrEventMessage                           = Error{text: "unexpected event message", reject: true}
+	ErrDKGMessage                             = Error{text: "unexpected DKG message", reject: true}
+	ErrUnknownSSVMessageType                  = Error{text: "unknown SSV message type", reject: true}
 	ErrUnknownQBFTMessageType                 = Error{text: "unknown QBFT message type", reject: true}
 	ErrUnknownPartialMessageType              = Error{text: "unknown partial signature message type", reject: true}
 	ErrPartialSignatureTypeRoleMismatch       = Error{text: "partial signature type and role don't match", reject: true}
@@ -109,7 +112,7 @@ var (
 	ErrPartialSignatureValidatorIndexNotFound = Error{text: "partial signature validator index not found", reject: true}
 	ErrNoSignatures                           = Error{text: "no signatures", reject: true}
 	ErrSignatureOperatorIDLengthMismatch      = Error{text: "signature and operator ID length mismatch", reject: true}
-	ErrPartialSignatureSeveralSignatures      = Error{text: "partial signature message contains several signatures", reject: true}
+	ErrPartialSigOneSigner                    = Error{text: "partial signature message must have only one signer", reject: true}
 	ErrPrepareOrCommitWithFullData            = Error{text: "prepare or commit with full data", reject: true}
 	ErrMismatchedIdentifier                   = Error{text: "identifier mismatch", reject: true}
 )
@@ -142,4 +145,11 @@ func (mv *messageValidator) handleValidationError(peerID peer.ID, decodedMessage
 
 	mv.metrics.MessageRejected(valErr.Text(), loggerFields.Role, loggerFields.Consensus.Round)
 	return pubsub.ValidationReject
+}
+
+func (mv *messageValidator) handleValidationSuccess(decodedMessage *DecodedMessage) pubsub.ValidationResult {
+	loggerFields := mv.buildLoggerFields(decodedMessage)
+	mv.metrics.MessageAccepted(loggerFields.Role, loggerFields.Consensus.Round)
+
+	return pubsub.ValidationAccept
 }

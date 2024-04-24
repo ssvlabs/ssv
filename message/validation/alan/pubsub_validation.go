@@ -9,10 +9,6 @@ func (mv *messageValidator) validatePubSubMessage(pMsg *pubsub.Message) error {
 		return ErrPubSubMessageHasNoData
 	}
 
-	// Max possible MsgType + MsgID + Data plus 10% for encoding overhead
-	// TODO: adjust the number
-	const maxMsgSize = 4 + 56 + 8388668
-	const maxEncodedMsgSize = maxMsgSize + maxMsgSize/10
 	if len(pMsg.GetData()) > maxEncodedMsgSize {
 		e := ErrPubSubDataTooBig
 		e.got = len(pMsg.GetData())

@@ -46,8 +46,6 @@ func (mv *messageValidator) lateMessage(slot phase0.Slot, role spectypes.RunnerR
 		ttl = 1 + lateSlotAllowance
 	case spectypes.RoleCommittee, spectypes.RoleAggregator:
 		ttl = 32 + lateSlotAllowance
-	case spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
-		return 0
 	default:
 		panic("unexpected role")
 	}
@@ -57,4 +55,30 @@ func (mv *messageValidator) lateMessage(slot phase0.Slot, role spectypes.RunnerR
 
 	return mv.netCfg.Beacon.GetSlotStartTime(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Unix())).
 		Sub(deadline)
+}
+
+func (mv *messageValidator) validateDutyCount(
+	state *SignerState,
+	msgID spectypes.MessageID,
+	newDutyInSameEpoch bool,
+) error {
+	switch msgID.GetRoleType() {
+	case spectypes.RoleAggregator, spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
+		limit := maxDutiesPerEpoch
+
+		if sameSlot := !newDutyInSameEpoch; sameSlot {
+			limit++
+		}
+
+		if state.EpochDuties >= limit {
+			err := ErrTooManyDutiesPerEpoch
+			err.got = fmt.Sprintf("%v (role %v)", state.EpochDuties, msgID.GetRoleType())
+			err.want = fmt.Sprintf("less than %v", maxDutiesPerEpoch)
+			return err
+		}
+
+		return nil
+	default:
+		return nil
+	}
 }

@@ -11,9 +11,11 @@ const (
 	// clockErrorTolerance is the maximum amount of clock error we expect to see between nodes.
 	clockErrorTolerance = time.Millisecond * 50
 
-	maxMessageSize             = maxConsensusMsgSize // TODO: calculate new value
-	maxConsensusMsgSize        = 8388608
+	maxConsensusMsgSize        = 8388608 // TODO: calculate new value
 	maxPartialSignatureMsgSize = 1952
+	maxPayloadSize             = maxConsensusMsgSize
+	maxSignedMsgSize           = 4 + 56 + maxPayloadSize                // Max possible MsgType + MsgID + Data
+	maxEncodedMsgSize          = maxSignedMsgSize + maxSignedMsgSize/10 // 10% for encoding overhead
 	allowedRoundsInFuture      = 1
 	allowedRoundsInPast        = 2
 	lateSlotAllowance          = 2

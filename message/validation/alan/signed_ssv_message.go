@@ -10,6 +10,7 @@ import (
 	"golang.org/x/exp/slices"
 
 	"github.com/bloxapp/ssv/network/commons"
+	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
 )
 
 func (mv *messageValidator) decodeSignedSSVMessage(pMsg *pubsub.Message) (*spectypes.SignedSSVMessage, error) {
@@ -23,22 +24,55 @@ func (mv *messageValidator) decodeSignedSSVMessage(pMsg *pubsub.Message) (*spect
 	return signedSSVMessage, nil
 }
 
-func (mv *messageValidator) validateSSVMessage(signedSSVMessage *spectypes.SignedSSVMessage, topic string) error {
+func (mv *messageValidator) validateSignedSSVMessage(signedSSVMessage *spectypes.SignedSSVMessage) error {
 	if signedSSVMessage == nil {
 		return ErrEmptyPubSubMessage
 	}
 
-	operatorIDs := signedSSVMessage.GetOperatorIDs()
-	signatures := signedSSVMessage.GetSignature()
+	signers := signedSSVMessage.GetOperatorIDs()
 
-	if len(operatorIDs) != len(signatures) {
-		e := ErrSignatureOperatorIDLengthMismatch
-		e.got = fmt.Sprintf("%d/%d", len(operatorIDs), len(signatures))
-		return e
+	if len(signers) == 0 {
+		return ErrNoSigners
 	}
 
-	if err := mv.validateOperators(operatorIDs); err != nil {
-		return err
+	if !slices.IsSorted(signers) {
+		return ErrSignersNotSorted
+	}
+
+	var prevSigner spectypes.OperatorID
+	for _, signer := range signers {
+		// This check assumes that signers is sorted, so this rule should be after the check for ErrSignersNotSorted.
+		if signer == prevSigner {
+			return ErrDuplicatedSigner
+		}
+		if signer == 0 {
+			return ErrZeroSigner
+		}
+		prevSigner = signer
+	}
+
+	signatures := signedSSVMessage.GetSignature()
+
+	if len(signatures) == 0 {
+		return ErrNoSignatures
+	}
+
+	for _, signature := range signatures {
+		if len(signature) == 0 {
+			return ErrEmptySignature
+		}
+
+		if len(signature) != rsaSignatureSize {
+			e := ErrWrongRSASignatureSize
+			e.got = len(signature)
+			return e
+		}
+	}
+
+	if len(signers) != len(signatures) {
+		e := ErrSignatureOperatorIDLengthMismatch
+		e.got = fmt.Sprintf("%d/%d", len(signers), len(signatures))
+		return e
 	}
 
 	ssvMessage := signedSSVMessage.GetSSVMessage()
@@ -46,25 +80,27 @@ func (mv *messageValidator) validateSSVMessage(signedSSVMessage *spectypes.Signe
 		return ErrNilSSVMessage
 	}
 
-	mv.metrics.SSVMessageType(ssvMessage.MsgType)
+	return nil
+}
 
-	if err := mv.validateSignatures(signatures); err != nil {
-		return err
-	}
+func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage, topic string) error {
+	mv.metrics.SSVMessageType(ssvMessage.MsgType)
 
 	if len(ssvMessage.Data) == 0 {
 		return ErrEmptyData
 	}
 
-	if len(ssvMessage.Data) > maxMessageSize {
-		err := ErrSSVDataTooBig
-		err.got = len(ssvMessage.Data)
-		err.want = maxMessageSize
-		return err
-	}
-
-	if !mv.topicMatches(ssvMessage, topic) {
-		return ErrIncorrectTopic
+	switch ssvMessage.MsgType {
+	case spectypes.SSVConsensusMsgType, spectypes.SSVPartialSignatureMsgType:
+		break
+	case ssvmessage.SSVEventMsgType:
+		return ErrEventMessage
+	case spectypes.DKGMsgType:
+		return ErrDKGMessage
+	default:
+		e := ErrUnknownSSVMessageType
+		e.got = ssvMessage.MsgType
+		return e
 	}
 
 	if !bytes.Equal(ssvMessage.MsgID.GetDomain(), mv.netCfg.Domain[:]) {
@@ -78,47 +114,15 @@ func (mv *messageValidator) validateSSVMessage(signedSSVMessage *spectypes.Signe
 		return ErrInvalidRole
 	}
 
-	return nil
-}
-
-func (mv *messageValidator) validateSignatures(signatures [][]byte) error {
-	if len(signatures) == 0 {
-		return ErrNoSignatures
+	if !mv.topicMatches(ssvMessage, topic) {
+		return ErrIncorrectTopic
 	}
 
-	for _, signature := range signatures {
-		if len(signature) == 0 {
-			return ErrEmptySignature
-		}
-
-		if len(signature) != rsaSignatureSize {
-			e := ErrWrongSignatureSize
-			e.got = len(signature)
-			return e
-		}
-	}
-
-	return nil
-}
-
-func (mv *messageValidator) validateOperators(operatorIDs []spectypes.OperatorID) error {
-	if len(operatorIDs) == 0 {
-		return ErrNoSigners
-	}
-
-	if !slices.IsSorted(operatorIDs) {
-		return ErrSignersNotSorted
-	}
-
-	var prevSigner spectypes.OperatorID
-	for _, signer := range operatorIDs {
-		if signer == 0 {
-			return ErrZeroSigner
-		}
-		if signer == prevSigner {
-			return ErrDuplicatedSigner
-		}
-		prevSigner = signer
+	if len(ssvMessage.Data) > maxPayloadSize {
+		err := ErrSSVDataTooBig
+		err.got = len(ssvMessage.Data)
+		err.want = maxPayloadSize
+		return err
 	}
 
 	return nil
