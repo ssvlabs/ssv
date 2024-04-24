@@ -586,7 +586,6 @@ func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) {
 		return
 	}
 	if c.entities.Has(dec.MsgID[:]) {
-
 		c.entities.PushMessage(dec)
 		// logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
 	} else {
@@ -614,18 +613,6 @@ func CreateDutyExecuteMsg(duty *spectypes.BeaconDuty, pubKey phase0.BLSPubKey, d
 		MsgID:   spectypes.NewMsgID(domain, pubKey[:], duty.Type),
 		Data:    data,
 	}, nil
-}
-
-// CommitteeActiveIndices fetches indices of in-committee validators who are active at the given epoch.
-func (c *controller) CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
-	validators := c.validatorsMap.GetAll()
-	indices := make([]phase0.ValidatorIndex, 0, len(validators))
-	for _, v := range validators {
-		if v.Share.IsAttesting(epoch) {
-			indices = append(indices, v.Share.BeaconMetadata.Index)
-		}
-	}
-	return indices
 }
 
 func (c *controller) AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex {
@@ -687,10 +674,17 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 		opts := c.validatorOptions
 		opts.SSVShare = share
 		opts.DutyRunners = SetupRunners(ctx, c.logger, opts)
+		var e Entity
+		if true { // pre-fork
+			e = validator.NewValidator(ctx, cancel, opts)
+		} else { // after fork
+			//e = Entity{CC}
+		}
 
 		v = validator.NewValidator(ctx, cancel, opts)
+		// not there anymore
 		c.validatorsMap.CreateValidator(hex.EncodeToString(share.ValidatorPubKey), v)
-
+		c.entities.Register(e)
 		c.printShare(share, "setup validator done")
 
 	} else {

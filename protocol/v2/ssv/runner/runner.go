@@ -32,7 +32,7 @@ type Runner interface {
 	Getters
 
 	// StartNewDuty starts a new duty for the runner, returns error if can't
-	StartNewDuty(logger *zap.Logger, duty *spectypes.Duty) error
+	StartNewDuty(logger *zap.Logger, duty spectypes.Duty) error
 	// HasRunningDuty returns true if it has a running duty
 	HasRunningDuty() bool
 	// ProcessPreConsensus processes all pre-consensus msgs, returns error if can't process

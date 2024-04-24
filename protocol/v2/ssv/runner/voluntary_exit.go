@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	genesisspecqbft "github.com/bloxapp/ssv-spec-genesis/qbft"
+	genesisspectypes "github.com/bloxapp/ssv-spec-genesis/types"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -23,7 +25,7 @@ type VoluntaryExitRunner struct {
 
 	beacon   specssv.BeaconNode
 	network  specssv.Network
-	signer   spectypes.KeyManager
+	signer   genesisspectypes.KeyManager
 	valCheck specqbft.ProposedValueCheckF
 
 	voluntaryExit *phase0.VoluntaryExit
@@ -36,7 +38,7 @@ func NewVoluntaryExitRunner(
 	share *spectypes.Share,
 	beacon specssv.BeaconNode,
 	network specssv.Network,
-	signer spectypes.KeyManager,
+	signer genesisspectypes.KeyManager,
 ) Runner {
 	return &VoluntaryExitRunner{
 		BaseRunner: &BaseRunner{
@@ -52,7 +54,7 @@ func NewVoluntaryExitRunner(
 	}
 }
 
-func (r *VoluntaryExitRunner) StartNewDuty(logger *zap.Logger, duty *spectypes.Duty) error {
+func (r *VoluntaryExitRunner) StartNewDuty(logger *zap.Logger, duty spectypes.Duty) error {
 	return r.BaseRunner.baseStartNewNonBeaconDuty(logger, r, duty)
 }
 
@@ -63,7 +65,7 @@ func (r *VoluntaryExitRunner) HasRunningDuty() bool {
 
 // Check for quorum of partial signatures over VoluntaryExit and,
 // if has quorum, constructs SignedVoluntaryExit and submits to BeaconNode
-func (r *VoluntaryExitRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spectypes.SignedPartialSignatureMessage) error {
+func (r *VoluntaryExitRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *genesisspectypes.SignedPartialSignatureMessage) error {
 	quorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing voluntary exit message")
@@ -76,7 +78,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg 
 
 	// only 1 root, verified in basePreConsensusMsgProcessing
 	root := roots[0]
-	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey)
+	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:])
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
 		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root)
@@ -105,11 +107,11 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg 
 	return nil
 }
 
-func (r *VoluntaryExitRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbft.SignedMessage) error {
+func (r *VoluntaryExitRunner) ProcessConsensus(logger *zap.Logger, signedMsg *genesisspecqbft.SignedMessage) error {
 	return errors.New("no consensus phase for voluntary exit")
 }
 
-func (r *VoluntaryExitRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spectypes.SignedPartialSignatureMessage) error {
+func (r *VoluntaryExitRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *genesisspectypes.SignedPartialSignatureMessage) error {
 	return errors.New("no post consensus phase for voluntary exit")
 }
 
@@ -129,21 +131,21 @@ func (r *VoluntaryExitRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashR
 // Validator voluntary exit duty doesn't need consensus nor post-consensus.
 // It just performs pre-consensus with VoluntaryExitPartialSig over
 // a VoluntaryExit object to create a SignedVoluntaryExit
-func (r *VoluntaryExitRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
+func (r *VoluntaryExitRunner) executeDuty(logger *zap.Logger, duty spectypes.Duty) error {
 	voluntaryExit, err := r.calculateVoluntaryExit()
 	if err != nil {
 		return errors.Wrap(err, "could not calculate voluntary exit")
 	}
 
 	// get PartialSignatureMessage with voluntaryExit root and signature
-	msg, err := r.BaseRunner.signBeaconObject(r, voluntaryExit, duty.Slot, spectypes.DomainVoluntaryExit)
+	msg, err := r.BaseRunner.signBeaconObject(r, voluntaryExit, duty.DutySlot(), spectypes.DomainVoluntaryExit)
 	if err != nil {
 		return errors.Wrap(err, "could not sign VoluntaryExit object")
 	}
 
 	msgs := spectypes.PartialSignatureMessages{
 		Type:     spectypes.VoluntaryExitPartialSig,
-		Slot:     duty.Slot,
+		Slot:     duty.DutySlot(),
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
@@ -165,7 +167,7 @@ func (r *VoluntaryExitRunner) executeDuty(logger *zap.Logger, duty *spectypes.Du
 	}
 	msgToBroadcast := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID:   spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
+		MsgID:   spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.BeaconRoleType),
 		Data:    data,
 	}
 	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
@@ -180,8 +182,8 @@ func (r *VoluntaryExitRunner) executeDuty(logger *zap.Logger, duty *spectypes.Du
 
 // Returns *phase0.VoluntaryExit object with current epoch and own validator index
 func (r *VoluntaryExitRunner) calculateVoluntaryExit() (*phase0.VoluntaryExit, error) {
-	epoch := r.BaseRunner.BeaconNetwork.EstimatedEpochAtSlot(r.BaseRunner.State.StartingDuty.Slot)
-	validatorIndex := r.GetState().StartingDuty.ValidatorIndex
+	epoch := r.BaseRunner.BeaconNetwork.EstimatedEpochAtSlot(r.BaseRunner.State.StartingDuty.DutySlot())
+	validatorIndex := r.GetShare().ValidatorIndex
 	return &phase0.VoluntaryExit{
 		Epoch:          epoch,
 		ValidatorIndex: validatorIndex,
@@ -201,7 +203,10 @@ func (r *VoluntaryExitRunner) GetBeaconNode() specssv.BeaconNode {
 }
 
 func (r *VoluntaryExitRunner) GetShare() *spectypes.Share {
-	return r.BaseRunner.Share
+	for _, share := range r.BaseRunner.Shares {
+		return share
+	}
+	return nil
 }
 
 func (r *VoluntaryExitRunner) GetState() *State {
@@ -212,7 +217,7 @@ func (r *VoluntaryExitRunner) GetValCheckF() specqbft.ProposedValueCheckF {
 	return r.valCheck
 }
 
-func (r *VoluntaryExitRunner) GetSigner() spectypes.KeyManager {
+func (r *VoluntaryExitRunner) GetSigner() genesisspectypes.KeyManager {
 	return r.signer
 }
 
