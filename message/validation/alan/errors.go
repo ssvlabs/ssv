@@ -57,7 +57,6 @@ var (
 	ErrUnknownValidator                        = Error{text: "unknown validator"}
 	ErrValidatorLiquidated                     = Error{text: "validator is liquidated"}
 	ErrValidatorNotAttesting                   = Error{text: "validator is not attesting"}
-	ErrRoundAlreadyAdvanced                    = Error{text: "signer has already advanced to a later round"}
 	ErrEarlyMessage                            = Error{text: "early message"}
 	ErrLateMessage                             = Error{text: "late message"}
 	ErrTooManySameTypeMessagesPerRound         = Error{text: "too many messages of same type per round"}
@@ -91,6 +90,7 @@ var (
 	ErrDKGMessage                              = Error{text: "unexpected DKG message", reject: true}
 	ErrUnknownSSVMessageType                   = Error{text: "unknown SSV message type", reject: true}
 	ErrUnknownQBFTMessageType                  = Error{text: "unknown QBFT message type", reject: true}
+	ErrInvalidPartialSignatureType             = Error{text: "unknown partial signature message type", reject: true}
 	ErrPartialSignatureTypeRoleMismatch        = Error{text: "partial signature type and role don't match", reject: true}
 	ErrNonDecidedWithMultipleSigners           = Error{text: "non-decided with multiple signers", reject: true}
 	ErrTooManySigners                          = Error{text: "too many signers", reject: true}
@@ -115,6 +115,7 @@ var (
 	ErrFullDataNotInConsensusMessage           = Error{text: "full data not in consensus message", reject: true}
 	ErrTooManyPartialSignatureMessages         = Error{text: "too many partial signature messages", reject: true}
 	ErrTripleValidatorIndexInPartialSignatures = Error{text: "triple validator index in partial signatures", reject: true}
+	ErrInvalidRound                            = Error{text: "invalid round", reject: true}
 )
 
 func (mv *messageValidator) handleValidationError(peerID peer.ID, decodedMessage *DecodedMessage, err error) pubsub.ValidationResult {

@@ -86,6 +86,12 @@ func (mv *messageValidator) validatePartialSignatureMessageSemantics(
 		return ErrFullDataNotInConsensusMessage
 	}
 
+	if !mv.validPartialSigMsgType(partialSignatureMessages.Type) {
+		e := ErrInvalidPartialSignatureType
+		e.got = partialSignatureMessages.Type
+		return e
+	}
+
 	if !mv.partialSignatureTypeMatchesRole(partialSignatureMessages.Type, role) {
 		return ErrPartialSignatureTypeRoleMismatch
 	}

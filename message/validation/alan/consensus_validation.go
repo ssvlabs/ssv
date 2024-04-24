@@ -113,6 +113,12 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 		return ErrUnknownQBFTMessageType
 	}
 
+	if consensusMessage.Round == specqbft.NoRound {
+		e := ErrInvalidRound
+		e.got = specqbft.NoRound
+		return e
+	}
+
 	if !bytes.Equal(consensusMessage.Identifier, signedSSVMessage.GetSSVMessage().MsgID[:]) {
 		e := ErrMismatchedIdentifier
 		e.want = hex.EncodeToString(signedSSVMessage.GetSSVMessage().MsgID[:])
@@ -144,15 +150,22 @@ func (mv *messageValidator) validateQBFTLogic(
 		}
 	}
 
-	// TODO: ErrDecidedWithLessSignersThanPrevious ?
+	// TODO: if mv.HasSentDecidedWithSameNumberOfSigners(peerID, signedSSVMessage) {
+	//			return ErrDecidedWithSameNumberOfSigners
+	//		}
 
+	msgSlot := phase0.Slot(consensusMessage.Height)
 	for _, signer := range signedSSVMessage.GetOperatorIDs() {
 		signerState := state.GetSignerState(signer)
 		if signerState == nil {
 			continue
 		}
 
-		if phase0.Slot(consensusMessage.Height) == signerState.Slot && consensusMessage.Round == signerState.Round {
+		if msgSlot == signerState.Slot && consensusMessage.Round == signerState.Round {
+			if len(signedSSVMessage.FullData) != 0 && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedSSVMessage.FullData) {
+				return ErrDuplicatedProposalWithDifferentData
+			}
+
 			limits := maxMessageCounts(len(committee))
 			if err := signerState.MessageCounts.ValidateConsensusMessage(signedSSVMessage, consensusMessage, limits); err != nil {
 				return err
@@ -190,22 +203,6 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 		signerState := state.GetSignerState(signer)
 		if signerState == nil {
 			continue
-		}
-
-		if msgSlot == signerState.Slot && consensusMessage.Round < signerState.Round {
-			// Signers aren't allowed to decrease their round.
-			// If they've sent a future message due to clock error,
-			// they'd have to wait for the next slot/round to be accepted.
-			err := ErrRoundAlreadyAdvanced
-			err.want = signerState.Round
-			err.got = consensusMessage.Round
-			return err
-		}
-
-		if msgSlot == signerState.Slot && consensusMessage.Round == signerState.Round {
-			if len(signedSSVMessage.FullData) != 0 && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedSSVMessage.FullData) {
-				return ErrDuplicatedProposalWithDifferentData
-			}
 		}
 
 		if err := mv.validNumberOfCommitteeDutiesPerEpoch(signedSSVMessage, validatorIndices, signerState, msgSlot); err != nil {

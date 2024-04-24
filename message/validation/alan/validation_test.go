@@ -950,7 +950,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 			receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
 			_, _, err = validator.handleSignedSSVMessage(message, receivedAt, nil)
-			require.ErrorContains(t, err, ErrUnknownPartialMessageType.Error())
+			require.ErrorContains(t, err, ErrInvalidPartialSignatureType.Error())
 		})
 
 		// Get error when sending an unexpected message type for the required duty (sending randao for attestor duty)
