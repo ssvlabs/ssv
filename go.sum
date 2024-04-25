@@ -59,8 +59,8 @@ github.com/bloxapp/eth2-key-manager v1.4.0 h1:fwAW886z2mSUb/u4Kq/ln+wvSkIxLqEgxv
 github.com/bloxapp/eth2-key-manager v1.4.0/go.mod h1:m2DsvNCyLAAcgkN2JuroXUGpM61OeKSclmWuaRNW4Ss=
 github.com/bloxapp/ssv-spec v0.3.7 h1:lz8WgbopVY02lomNzn0P0iFMXyGEZ+ujqH9B/LYVt5I=
 github.com/bloxapp/ssv-spec v0.3.7/go.mod h1:f9UvuHTb8N3PQpvA6fKYW/l7fzkfyX0Oj9qS34cSOVw=
-github.com/bloxapp/ssv-spec v0.3.9-0.20240422154719-3e7532e5d794 h1:mkNYM3G8uPNu/Q95sLNUkZqM3i2qV8OSjqXP90OmR7w=
-github.com/bloxapp/ssv-spec v0.3.9-0.20240422154719-3e7532e5d794/go.mod h1:T/Zogxx4SM/jBYQejkYQNNSntaWXqiGg2uHEwWQbRV8=
+github.com/bloxapp/ssv-spec v0.3.9-0.20240424091047-be63d922511b h1:au9oit/gll5D7ZKZ6jQ0jqfG8c3rt9v6s9kj8A6vT8U=
+github.com/bloxapp/ssv-spec v0.3.9-0.20240424091047-be63d922511b/go.mod h1:T/Zogxx4SM/jBYQejkYQNNSntaWXqiGg2uHEwWQbRV8=
 github.com/bradfitz/go-smtpd v0.0.0-20170404230938-deb6d6237625/go.mod h1:HYsPBTaaSFSlLx/70C2HPIMNZpVV8+vt/A+FMnYP11g=
 github.com/bradfitz/gomemcache v0.0.0-20170208213004-1952afaa557d/go.mod h1:PmM6Mmwb0LSuEubjR8N7PtNe1KxZLtOUHtbeikc5h60=
 github.com/btcsuite/btcd/btcec/v2 v2.3.2 h1:5n0X6hX0Zk+6omWcihdYvdAlGf2DfasC0GMf7DClJ3U=

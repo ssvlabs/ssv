@@ -25,6 +25,7 @@ type AggregatorRunner struct {
 	beacon         specssv.BeaconNode
 	network        specssv.Network
 	signer         genesisspectypes.KeyManager
+	beaconSigner   spectypes.BeaconSigner
 	operatorSigner spectypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
 	metrics        metrics.ConsensusMetrics
@@ -38,7 +39,8 @@ func NewAggregatorRunner(
 	qbftController *controller.Controller,
 	beacon specssv.BeaconNode,
 	network specssv.Network,
-	signer genesisspectypes.KeyManager,
+	signer genesisspectypes.BeaconSigner,
+	beaconSigner spectypes.BeaconSigner,
 	valCheck specqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
 ) Runner {
@@ -50,11 +52,12 @@ func NewAggregatorRunner(
 			QBFTController:     qbftController,
 			highestDecidedSlot: highestDecidedSlot,
 		},
-		beacon:   beacon,
-		network:  network,
-		signer:   signer,
-		valCheck: valCheck,
-		metrics:  metrics.NewConsensusMetrics(spectypes.BNRoleAggregator),
+		beacon:       beacon,
+		network:      network,
+		signer:       signer,
+		beaconSigner: beaconSigner,
+		valCheck:     valCheck,
+		metrics:      metrics.NewConsensusMetrics(spectypes.BNRoleAggregator),
 	}
 }
 
@@ -318,7 +321,7 @@ func (r *AggregatorRunner) GetValCheckF() specqbft.ProposedValueCheckF {
 	return r.valCheck
 }
 
-func (r *AggregatorRunner) GetSigner() genesisspectypes.KeyManager {
+func (r *AggregatorRunner) GetSigner() genesisspectypes.BeaconSigner {
 	return r.signer
 }
 

@@ -6,8 +6,8 @@ require (
 	github.com/aquasecurity/table v1.8.0
 	github.com/attestantio/go-eth2-client v0.19.11-0.20240129201044-9d799aaab2bd
 	github.com/bloxapp/eth2-key-manager v1.4.0
-	github.com/bloxapp/ssv-spec v0.3.9-0.20240422154719-3e7532e5d794
-	github.com/bloxapp/ssv-spec-genesis v0.0.0
+	github.com/bloxapp/ssv-spec v0.3.9-0.20240424091047-be63d922511b
+	github.com/bloxapp/ssv-spec-genesis v0.0.0-00010101000000-000000000000
 	github.com/btcsuite/btcd/btcec/v2 v2.3.2
 	github.com/cespare/xxhash/v2 v2.2.0
 	github.com/cornelk/hashmap v1.0.8

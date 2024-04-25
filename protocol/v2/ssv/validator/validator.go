@@ -3,6 +3,8 @@ package validator
 import (
 	"context"
 	"fmt"
+	genesisspectypes "github.com/bloxapp/ssv-spec-genesis/types"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"sync"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -31,7 +33,9 @@ type Validator struct {
 	DutyRunners runner.DutyRunners
 	Network     specqbft.Network
 	Share       *types.SSVShare
-	Signer      spectypes.KeyManager
+
+	Signer       genesisspectypes.KeyManager
+	BeaconSigner spectypes.BeaconSigner
 
 	Storage *storage.QBFTStores
 	Queues  map[spectypes.BeaconRole]queueContainer
@@ -61,6 +65,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		Storage:          options.Storage,
 		Share:            options.SSVShare,
 		Signer:           options.Signer,
+		BeaconSigner:     options.BeaconSigner,
 		Queues:           make(map[spectypes.BeaconRole]queueContainer),
 		state:            uint32(NotStarted),
 		dutyIDs:          hashmap.New[spectypes.BeaconRole, string](),
@@ -148,6 +153,18 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 	default:
 		return errors.New("unknown msg")
 	}
+}
+
+func (v *Validator) SenderID() []byte {
+	return v.Share.ValidatorPubKey[:]
+}
+
+func (v *Validator) PushMessage(msg *queue.DecodedSSVMessage) {
+	v.ProcessMessage(zap.L(), msg)
+}
+
+func (v *Validator) UpdateMetadata(metadata *beaconprotocol.ValidatorMetadata) {
+
 }
 
 func validateMessage(share spectypes.Share, msg *queue.DecodedSSVMessage) error {

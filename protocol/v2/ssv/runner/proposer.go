@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/api"
@@ -33,7 +34,7 @@ type ProposerRunner struct {
 
 	beacon   specssv.BeaconNode
 	network  specssv.Network
-	signer   spectypes.KeyManager
+	signer   spectypes.BeaconSigner
 	valCheck specqbft.ProposedValueCheckF
 
 	metrics metrics.ConsensusMetrics
@@ -41,11 +42,11 @@ type ProposerRunner struct {
 
 func NewProposerRunner(
 	beaconNetwork spectypes.BeaconNetwork,
-	share *spectypes.Share,
+	shares map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
 	beacon specssv.BeaconNode,
 	network specssv.Network,
-	signer spectypes.KeyManager,
+	signer spectypes.BeaconSigner,
 	valCheck specqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
 ) Runner {
@@ -53,7 +54,7 @@ func NewProposerRunner(
 		BaseRunner: &BaseRunner{
 			BeaconRoleType:     spectypes.BNRoleProposer,
 			BeaconNetwork:      beaconNetwork,
-			Share:              share,
+			Shares:             shares, // make it map
 			QBFTController:     qbftController,
 			highestDecidedSlot: highestDecidedSlot,
 		},
@@ -66,8 +67,13 @@ func NewProposerRunner(
 	}
 }
 
-func (r *ProposerRunner) StartNewDuty(logger *zap.Logger, duty *spectypes.Duty) error {
+func (r *ProposerRunner) StartNewDuty(logger *zap.Logger, duty spectypes.Duty) error {
 	return r.BaseRunner.baseStartNewDuty(logger, r, duty)
+}
+
+func (r *ProposerRunner) GetOperatorSigner() spectypes.OperatorSigner {
+	// #TODO
+	return nil
 }
 
 // HasRunningDuty returns true if a duty is already running (StartNewDuty called and returned nil)
@@ -75,16 +81,16 @@ func (r *ProposerRunner) HasRunningDuty() bool {
 	return r.BaseRunner.hasRunningDuty()
 }
 
-func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spectypes.SignedPartialSignatureMessage) error {
+func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg ssvtypes.PartialSignatureMessages) error {
 	quorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing randao message")
 	}
 
 	duty := r.GetState().StartingDuty
-	logger = logger.With(fields.Slot(duty.Slot))
+	logger = logger.With(fields.Slot(duty.DutySlot()))
 	logger.Debug("🧩 got partial RANDAO signatures",
-		zap.Uint64("signer", signedMsg.Signer))
+		zap.Uint64("signer", signedMsg.GetSigner()))
 
 	// quorum returns true only once (first time quorum achieved)
 	if !quorum {
@@ -111,13 +117,13 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 	var start = time.Now()
 	if r.ProducesBlindedBlocks {
 		// get block data
-		obj, ver, err = r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
+		obj, ver, err = r.GetBeaconNode().GetBlindedBeaconBlock(duty.DutySlot(), r.GetShare().Graffiti, fullSig)
 		if err != nil {
 			return errors.Wrap(err, "failed to get blinded beacon block")
 		}
 	} else {
 		// get block data
-		obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
+		obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.DutySlot(), r.GetShare().Graffiti, fullSig)
 		if err != nil {
 			return errors.Wrap(err, "failed to get beacon block")
 		}
@@ -150,7 +156,7 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 	return nil
 }
 
-func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbft.SignedMessage) error {
+func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg ssvtypes.SignedMessage) error {
 	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(logger, r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing consensus message")
@@ -179,6 +185,7 @@ func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbf
 
 	msg, err := r.BaseRunner.signBeaconObject(
 		r,
+		&decidedValue.Duty,
 		blkToSign,
 		decidedValue.Duty.Slot,
 		spectypes.DomainProposer,
@@ -211,7 +218,7 @@ func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbf
 	return nil
 }
 
-func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spectypes.SignedPartialSignatureMessage) error {
+func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg ssvtypes.PartialSignatureMessages) error {
 	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(logger, r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
@@ -317,7 +324,7 @@ func (r *ProposerRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, 
 // 3) start consensus on duty + block data
 // 4) Once consensus decides, sign partial block and broadcast
 // 5) collect 2f+1 partial sigs, reconstruct and broadcast valid block sig to the BN
-func (r *ProposerRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
+func (r *ProposerRunner) executeDuty(logger *zap.Logger, duty spectypes.Duty) error {
 	r.metrics.StartDutyFullFlow()
 	r.metrics.StartPreConsensus()
 
@@ -329,7 +336,7 @@ func (r *ProposerRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) e
 	}
 	msgs := spectypes.PartialSignatureMessages{
 		Type:     spectypes.RandaoPartialSig,
-		Slot:     duty.Slot,
+		Slot:     duty.DutySlot(),
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
@@ -390,7 +397,7 @@ func (r *ProposerRunner) GetValCheckF() specqbft.ProposedValueCheckF {
 	return r.valCheck
 }
 
-func (r *ProposerRunner) GetSigner() spectypes.KeyManager {
+func (r *ProposerRunner) GetSigner() spectypes.BeaconSigner {
 	return r.signer
 }
 

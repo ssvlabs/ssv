@@ -26,6 +26,7 @@ type Options struct {
 	Storage           *storage.QBFTStores
 	SSVShare          *types.SSVShare
 	Signer            genesisspectypes.KeyManager
+	BeaconSigner      spectypes.BeaconSigner
 	DutyRunners       runner.DutyRunners
 	NewDecidedHandler qbftctrl.NewDecidedHandler
 	FullNode          bool
