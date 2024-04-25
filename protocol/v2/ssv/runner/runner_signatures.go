@@ -46,13 +46,13 @@ func (b *BaseRunner) signBeaconObject(
 	}
 }
 
-func (b *BaseRunner) signPostConsensusMsg(runner Runner, msg *spectypes.PartialSignatureMessages) (ssvtypes.PartialSignatureMessage, error) {
-	signature, err := runner.GetSigner().SignRoot(msg, spectypes.PartialSignatureType, b.Share.SharePubKey)
+func (b *BaseRunner) signPostConsensusMsg(runner Runner, msg *genesisspectypes.PartialSignatureMessages) (*genesisspectypes.SignedPartialSignatureMessage, error) {
+	signature, err := runner.GetGenesisSigner().SignRoot(msg, spectypes.PartialSignatureType, b.Share.SharePubKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not sign PartialSignatureMessage for PostConsensusContainer")
 	}
 
-	return &spectypes.SignedPartialSignatureMessage{
+	return &genesisspectypes.SignedPartialSignatureMessage{
 		Message:   *msg,
 		Signature: signature,
 		Signer:    b.Share.OperatorID,

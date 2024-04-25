@@ -6,6 +6,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	genesisspecqbft "github.com/bloxapp/ssv-spec-genesis/qbft"
+	genesisspectypes "github.com/bloxapp/ssv-spec-genesis/types"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -22,6 +23,7 @@ type Getters interface {
 	GetBeaconNode() specssv.BeaconNode
 	GetValCheckF() specqbft.ProposedValueCheckF
 	GetSigner() spectypes.BeaconSigner
+	GetGenesisSigner() genesisspectypes.KeyManager
 	GetOperatorSigner() spectypes.OperatorSigner
 	GetNetwork() specssv.Network
 }
@@ -55,7 +57,8 @@ type BaseRunner struct {
 	Shares         map[phase0.ValidatorIndex]*spectypes.Share
 	QBFTController *controller.Controller
 	BeaconNetwork  spectypes.BeaconNetwork
-	BeaconRoleType spectypes.BeaconRole
+	BeaconRoleType genesisspectypes.BeaconRole
+	RunnerRoleType spectypes.RunnerRole
 
 	// implementation vars
 	TimeoutF TimeoutF `json:"-"`
@@ -86,7 +89,7 @@ func NewBaseRunner(
 	shares *map[spec.ValidatorIndex]*spectypes.Share,
 	controller *controller.Controller,
 	beaconNetwork spectypes.BeaconNetwork,
-	beaconRoleType spectypes.BeaconRole,
+	beaconRoleType genesisspectypes.BeaconRole,
 	highestDecidedSlot spec.Slot,
 ) *BaseRunner {
 	return &BaseRunner{
@@ -179,7 +182,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runne
 	}
 
 	// update the highest decided slot
-	b.highestDecidedSlot = decidedValue.Duty.Slot
+	b.highestDecidedSlot = decidedValue.Duty.DutySlot()
 
 	if err := b.validateDecidedConsensusData(runner, decidedValue); err != nil {
 		return true, nil, errors.Wrap(err, "decided ConsensusData invalid")
@@ -263,7 +266,7 @@ func (b *BaseRunner) decide(logger *zap.Logger, runner Runner, input *spectypes.
 	}
 
 	if err := runner.GetBaseRunner().QBFTController.StartNewInstance(logger,
-		specqbft.Height(input.Duty.Slot),
+		specqbft.Height(input.Duty.DutySlot()),
 		byts,
 	); err != nil {
 		return errors.Wrap(err, "could not start new QBFT instance")

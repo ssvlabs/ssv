@@ -7,11 +7,13 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	genesisspectypes "github.com/bloxapp/ssv-spec-genesis/types"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
+	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
@@ -30,7 +32,7 @@ type CommitteeRunner struct {
 }
 
 func NewCommitteeRunner(beaconNetwork spectypes.BeaconNetwork,
-	shares map[phase0.ValidatorIndex]*spectypes.Share,
+	shares *map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
 	beacon specssv.BeaconNode,
 	network specssv.Network,
@@ -40,11 +42,10 @@ func NewCommitteeRunner(beaconNetwork spectypes.BeaconNetwork,
 ) Runner {
 	return &CommitteeRunner{
 		BaseRunner: &BaseRunner{
-			RunnerRoleType:     spectypes.RoleCommittee,
-			BeaconNetwork:      beaconNetwork,
-			Share:              shares,
-			QBFTController:     qbftController,
-			highestDecidedSlot: highestDecidedSlot,
+			RunnerRoleType: spectypes.RoleCommittee,
+			BeaconNetwork:  beaconNetwork,
+			Shares:         *shares,
+			QBFTController: qbftController,
 		},
 		beacon:         beacon,
 		network:        network,
@@ -54,8 +55,16 @@ func NewCommitteeRunner(beaconNetwork spectypes.BeaconNetwork,
 	}
 }
 
-func (r *CommitteeRunner) StartNewDuty(logger *zap.Logger, duty *spectypes.Duty) error {
+func (r *CommitteeRunner) StartNewDuty(logger *zap.Logger, duty spectypes.Duty) error {
 	return r.BaseRunner.baseStartNewDuty(logger, r, duty)
+}
+
+func (r *CommitteeRunner) GetBaseRunner() *BaseRunner {
+	return r.BaseRunner
+}
+
+func (r *CommitteeRunner) GetBeaconNode() specssv.BeaconNode {
+	return r.beacon
 }
 
 func (r *CommitteeRunner) HasRunningDuty() bool {
@@ -96,13 +105,13 @@ func (r *CommitteeRunner) GetNetwork() specssv.Network {
 	return r.network
 }
 
-func (r *CommitteeRunner) ProcessPreConsensus(signedMsg *spectypes.PartialSignatureMessages) error {
+func (r *CommitteeRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg ssvtypes.PartialSignatureMessages) error {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (r *CommitteeRunner) ProcessConsensus(msg *spectypes.SignedSSVMessage) error {
-	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(cr, msg)
+func (r *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg ssvtypes.SignedMessage) error {
+	decided, decidedValue, err := r.BaseRunner.baseConsensusMsgProcessing(logger, r, msg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing consensus message")
 	}
@@ -160,7 +169,7 @@ func (r *CommitteeRunner) ProcessConsensus(msg *spectypes.SignedSSVMessage) erro
 		Data: data,
 	}
 
-	msgToBroadcast, err := spectypes.SSVMessageToSignedSSVMessage(ssvMsg, cr.BaseRunner.QBFTController.Share.OperatorID,
+	msgToBroadcast, err := spectypes.SSVMessageToSignedSSVMessage(ssvMsg, r.BaseRunner.QBFTController.Share.OperatorID,
 		r.operatorSigner.SignSSVMessage)
 	if err != nil {
 		return errors.Wrap(err, "could not create SignedSSVMessage from SSVMessage")
@@ -174,8 +183,8 @@ func (r *CommitteeRunner) ProcessConsensus(msg *spectypes.SignedSSVMessage) erro
 }
 
 // TODO finish edge case where some roots may be missing
-func (r *CommitteeRunner) ProcessPostConsensus(signedMsg *spectypes.PartialSignatureMessages) error {
-	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(&cr, signedMsg)
+func (r *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg ssvtypes.PartialSignatureMessages) error {
+	quorum, roots, err := r.BaseRunner.basePostConsensusMsgProcessing(logger, r, signedMsg)
 
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
@@ -309,7 +318,7 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects() (attesta
 	return attestationMap, syncCommitteeMap, beaconObjects, nil
 }
 
-func (r *CommitteeRunner) executeDuty(duty spectypes.Duty) error {
+func (r *CommitteeRunner) executeDuty(logger *zap.Logger, duty spectypes.Duty) error {
 	//TODO committeeIndex is 0, is this correct?
 	attData, ver, err := r.GetBeaconNode().GetAttestationData(duty.DutySlot(), 0)
 	if err != nil {
@@ -347,9 +356,13 @@ func (r *CommitteeRunner) GetOperatorSigner() spectypes.OperatorSigner {
 	return r.operatorSigner
 }
 
+func (r *CommitteeRunner) GetGenesisSigner() genesisspectypes.KeyManager {
+	panic("should not be called")
+}
+
 func constructAttestationData(vote *spectypes.BeaconVote, duty *spectypes.BeaconDuty) *phase0.AttestationData {
 	return &phase0.AttestationData{
-		Slot:            duty.Slot,
+		Slot:            duty.DutySlot(),
 		Index:           duty.CommitteeIndex,
 		BeaconBlockRoot: vote.BlockRoot,
 		Source:          vote.Source,
@@ -358,7 +371,7 @@ func constructAttestationData(vote *spectypes.BeaconVote, duty *spectypes.Beacon
 }
 func ConstructSyncCommittee(vote *spectypes.BeaconVote, duty *spectypes.BeaconDuty) *altair.SyncCommitteeMessage {
 	return &altair.SyncCommitteeMessage{
-		Slot:            duty.Slot,
+		Slot:            duty.DutySlot(),
 		BeaconBlockRoot: vote.BlockRoot,
 		ValidatorIndex:  duty.ValidatorIndex,
 	}

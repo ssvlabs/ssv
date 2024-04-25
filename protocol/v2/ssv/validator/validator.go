@@ -3,9 +3,11 @@ package validator
 import (
 	"context"
 	"fmt"
+	"sync"
+
+	genesisspecqbft "github.com/bloxapp/ssv-spec-genesis/qbft"
 	genesisspectypes "github.com/bloxapp/ssv-spec-genesis/types"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	"sync"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -131,7 +133,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 	case spectypes.SSVConsensusMsgType:
 		logger = trySetDutyID(logger, v.dutyIDs, messageID.GetRoleType())
 
-		signedMsg, ok := msg.Body.(*specqbft.SignedMessage)
+		signedMsg, ok := msg.Body.(*genesisspecqbft.SignedMessage)
 		if !ok {
 			return errors.New("could not decode consensus message from network message")
 		}

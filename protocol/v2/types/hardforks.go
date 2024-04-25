@@ -94,10 +94,6 @@ func (g *AlanPartialSigContainer) GetSignature(sigMsg PartialSignatureMessage) (
 }
 
 func (g *AlanPartialSigContainer) Remove(validatorIndex phase0.ValidatorIndex, signer uint64, signingRoot [32]byte) {
-	msg, ok := sigMsg.(*spectypes.PartialSignatureMessage)
-	if !ok {
-		panic("invalid type")
-	}
 	g.PartialSigContainer.Remove(validatorIndex, signer, signingRoot)
 }
 

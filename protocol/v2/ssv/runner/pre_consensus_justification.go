@@ -41,8 +41,8 @@ func (b *BaseRunner) validatePreConsensusJustifications(data *spectypes.Consensu
 		return errors.New("wrong beacon role")
 	}
 
-	if data.Duty.Slot <= highestDecidedDutySlot {
-		return errors.New("duty.slot <= highest decided slot")
+	if data.duty.DutySlot() <= highestDecidedDutySlot {
+		return errors.New("duty.DutySlot() <= highest decided slot")
 	}
 
 	var share *spectypes.Share
@@ -101,8 +101,8 @@ func (b *BaseRunner) validatePreConsensusJustifications(data *spectypes.Consensu
 			partialSigContainer.AddSignature(partialSigMessage)
 		}
 
-		// verify duty.slot == msg.slot
-		if err := b.validatePartialSigMsgForSlot(msg, data.Duty.Slot); err != nil {
+		// verify duty.DutySlot() == msg.slot
+		if err := b.validatePartialSigMsgForSlot(msg, data.duty.DutySlot()); err != nil {
 			return err
 		}
 	}

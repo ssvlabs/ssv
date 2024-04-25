@@ -4,8 +4,10 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	"time"
+
+	genesisspectypes "github.com/bloxapp/ssv-spec-genesis/types"
+	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 
 	"github.com/attestantio/go-eth2-client/api"
 	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
@@ -32,10 +34,12 @@ type ProposerRunner struct {
 	// ProducesBlindedBlocks is true when the runner will only produce blinded blocks
 	ProducesBlindedBlocks bool
 
-	beacon   specssv.BeaconNode
-	network  specssv.Network
-	signer   spectypes.BeaconSigner
-	valCheck specqbft.ProposedValueCheckF
+	beacon         specssv.BeaconNode
+	network        specssv.Network
+	signer         genesisspectypes.KeyManager
+	beaconSigner   spectypes.BeaconSigner
+	operatorSigner spectypes.OperatorSigner
+	valCheck       specqbft.ProposedValueCheckF
 
 	metrics metrics.ConsensusMetrics
 }
@@ -69,11 +73,6 @@ func NewProposerRunner(
 
 func (r *ProposerRunner) StartNewDuty(logger *zap.Logger, duty spectypes.Duty) error {
 	return r.BaseRunner.baseStartNewDuty(logger, r, duty)
-}
-
-func (r *ProposerRunner) GetOperatorSigner() spectypes.OperatorSigner {
-	// #TODO
-	return nil
 }
 
 // HasRunningDuty returns true if a duty is already running (StartNewDuty called and returned nil)
@@ -187,7 +186,7 @@ func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg ssvtypes
 		r,
 		&decidedValue.Duty,
 		blkToSign,
-		decidedValue.Duty.Slot,
+		decidedValue.duty.DutySlot(),
 		spectypes.DomainProposer,
 	)
 	if err != nil {
@@ -195,7 +194,7 @@ func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg ssvtypes
 	}
 	postConsensusMsg := &spectypes.PartialSignatureMessages{
 		Type:     spectypes.PostConsensusPartialSig,
-		Slot:     decidedValue.Duty.Slot,
+		Slot:     decidedValue.duty.DutySlot(),
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
@@ -209,7 +208,7 @@ func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg ssvtypes
 	}
 	msgToBroadcast := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID:   spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
+		MsgID:   genesisspectypes.NewMsgID(genesisspectypes.DomainType(r.GetShare().DomainType), r.GetShare().ValidatorPubKey[:], r.BaseRunner.BeaconRoleType),
 		Data:    data,
 	}
 	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
@@ -329,8 +328,8 @@ func (r *ProposerRunner) executeDuty(logger *zap.Logger, duty spectypes.Duty) er
 	r.metrics.StartPreConsensus()
 
 	// sign partial randao
-	epoch := r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(duty.Slot)
-	msg, err := r.BaseRunner.signBeaconObject(r, spectypes.SSZUint64(epoch), duty.Slot, spectypes.DomainRandao)
+	epoch := r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(duty.DutySlot())
+	msg, err := r.BaseRunner.signBeaconObject(r, spectypes.SSZUint64(epoch), duty.DutySlot(), spectypes.DomainRandao)
 	if err != nil {
 		return errors.Wrap(err, "could not sign randao")
 	}
@@ -348,7 +347,7 @@ func (r *ProposerRunner) executeDuty(logger *zap.Logger, duty spectypes.Duty) er
 	signedPartialMsg := &spectypes.SignedPartialSignatureMessage{
 		Message:   msgs,
 		Signature: signature,
-		Signer:    r.GetShare().OperatorID,
+		Signer:    r.GetOperatorSigner().GetOperatorID(),
 	}
 
 	// broadcast
@@ -358,7 +357,7 @@ func (r *ProposerRunner) executeDuty(logger *zap.Logger, duty spectypes.Duty) er
 	}
 	msgToBroadcast := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID:   spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
+		MsgID:   spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey[:] r.BaseRunner.BeaconRoleType),
 		Data:    data,
 	}
 	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
@@ -397,8 +396,16 @@ func (r *ProposerRunner) GetValCheckF() specqbft.ProposedValueCheckF {
 	return r.valCheck
 }
 
-func (r *ProposerRunner) GetSigner() spectypes.BeaconSigner {
+func (r *ProposerRunner) GetGenesisSigner() genesisspectypes.KeyManager {
 	return r.signer
+}
+
+func (r *ProposerRunner) GetSigner() spectypes.BeaconSigner {
+	return r.beaconSigner
+}
+
+func (r *ProposerRunner) GetOperatorSigner() spectypes.OperatorSigner {
+	return r.operatorSigner
 }
 
 // Encode returns the encoded struct in bytes or error

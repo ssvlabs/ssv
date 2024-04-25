@@ -64,7 +64,7 @@ func (b *BaseRunner) ValidatePostConsensusMsg(runner Runner, signedMsg ssvtypes.
 		return errors.Wrap(err, "failed to parse decided value to ConsensusData")
 	}
 
-	if err := b.validatePartialSigMsgForSlot(signedMsg, decidedValue.Duty.Slot); err != nil {
+	if err := b.validatePartialSigMsgForSlot(signedMsg, decidedValue.Duty.DutySlot()); err != nil {
 		return err
 	}
 
