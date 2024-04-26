@@ -72,7 +72,7 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 				copy(pk[:], getKeySet(s.Committee).ValidatorPK.Serialize())
 				ssvMsg, err := validator.CreateDutyExecuteMsg(duty, pk, networkconfig.TestNetwork.Domain)
 				require.NoError(t, err)
-				dec, err := queue.DecodeSSVMessage(ssvMsg)
+				dec, err := queue.DecodeGenesisSSVMessage(ssvMsg)
 				require.NoError(t, err)
 
 				s.validators[id].Queues[role].Q.Push(dec)

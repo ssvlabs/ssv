@@ -73,7 +73,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 
 			msg, err := commons.DecodeNetworkMsg(rawMsgPayload)
 			require.NoError(t, err)
-			decodedMsg, err := queue.DecodeSSVMessage(msg)
+			decodedMsg, err := queue.DecodeGenesisSSVMessage(msg)
 			require.NoError(t, err)
 			pmsg.ValidatorData = decodedMsg
 			mtx.Lock()

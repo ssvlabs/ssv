@@ -7,12 +7,11 @@ import (
 	"math/rand"
 	"time"
 
-	alanspectypes "github.com/bloxapp/ssv-spec/types"
-
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
@@ -38,7 +37,7 @@ func (n *p2pNetwork) UseMessageRouter(router network.MessageRouter) {
 }
 
 // Peers registers a message router to handle incoming messages
-func (n *p2pNetwork) Peers(pk spectypes.ValidatorPK) ([]peer.ID, error) {
+func (n *p2pNetwork) Peers(pk genesisspectypes.ValidatorPK) ([]peer.ID, error) {
 	all := make([]peer.ID, 0)
 	topics := commons.ValidatorTopicID(pk)
 	for _, topic := range topics {
@@ -52,7 +51,7 @@ func (n *p2pNetwork) Peers(pk spectypes.ValidatorPK) ([]peer.ID, error) {
 }
 
 // Broadcast publishes the message to all peers in subnet
-func (n *p2pNetwork) Broadcast(msg *spectypes.SSVMessage) error {
+func (n *p2pNetwork) Broadcast(msg *genesisspectypes.SSVMessage) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
@@ -131,7 +130,7 @@ func (n *p2pNetwork) SubscribeRandoms(logger *zap.Logger, numSubnets int) error 
 }
 
 // Subscribe subscribes to validator subnet
-func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
+func (n *p2pNetwork) Subscribe(pk genesisspectypes.ValidatorPK) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
@@ -149,7 +148,7 @@ func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 }
 
 // Unsubscribe unsubscribes from the validator subnet
-func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) error {
+func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk genesisspectypes.ValidatorPK) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
@@ -168,7 +167,7 @@ func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) e
 }
 
 // subscribe to validator topics, as defined in the fork
-func (n *p2pNetwork) subscribe(logger *zap.Logger, pk spectypes.ValidatorPK) error {
+func (n *p2pNetwork) subscribe(logger *zap.Logger, pk genesisspectypes.ValidatorPK) error {
 	topics := commons.ValidatorTopicID(pk)
 	for _, topic := range topics {
 		if err := n.topicsCtrl.Subscribe(logger, topic); err != nil {
@@ -208,7 +207,7 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 		// 		zap.String("role", ssvMsg.MsgID.GetRoleType().String()),
 		// 	).Debug("handlePubsubMessages")
 
-		metricsRouterIncoming.WithLabelValues(message.MsgTypeToString(alanspectypes.MsgType(decodedMsg.MsgType))).Inc()
+		metricsRouterIncoming.WithLabelValues(message.MsgTypeToString(spectypes.MsgType(decodedMsg.MsgType))).Inc()
 
 		n.msgRouter.Route(ctx, decodedMsg)
 

@@ -12,16 +12,15 @@ import (
 	"sync"
 	"time"
 
-	alanspecqbft "github.com/bloxapp/ssv-spec/qbft"
-	alanspectypes "github.com/bloxapp/ssv-spec/types"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
-	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"golang.org/x/exp/slices"
@@ -70,11 +69,11 @@ type messageValidator struct {
 	nodeStorage             operatorstorage.Storage
 	dutyStore               *dutystore.Store
 	operatorDataStore       operatordatastore.OperatorDataStore
-	operatorIDToPubkeyCache *hashmap.Map[spectypes.OperatorID, keys.OperatorPublicKey]
+	operatorIDToPubkeyCache *hashmap.Map[genesisspectypes.OperatorID, keys.OperatorPublicKey]
 
 	// validationLocks is a map of lock per SSV message ID to
 	// prevent concurrent access to the same state.
-	validationLocks map[spectypes.MessageID]*sync.Mutex
+	validationLocks map[genesisspectypes.MessageID]*sync.Mutex
 	validationMutex sync.Mutex
 
 	selfPID    peer.ID
@@ -88,8 +87,8 @@ func New(netCfg networkconfig.NetworkConfig, opts ...Option) MessageValidator {
 		logger:                  zap.NewNop(),
 		metrics:                 metricsreporter.NewNop(),
 		netCfg:                  netCfg,
-		operatorIDToPubkeyCache: hashmap.New[spectypes.OperatorID, keys.OperatorPublicKey](),
-		validationLocks:         make(map[spectypes.MessageID]*sync.Mutex),
+		operatorIDToPubkeyCache: hashmap.New[genesisspectypes.OperatorID, keys.OperatorPublicKey](),
+		validationLocks:         make(map[genesisspectypes.MessageID]*sync.Mutex),
 	}
 
 	for _, opt := range opts {
@@ -147,17 +146,17 @@ func WithSelfAccept(selfPID peer.ID, selfAccept bool) Option {
 
 // ConsensusDescriptor provides details about the consensus for a message. It's used for logging and metrics.
 type ConsensusDescriptor struct {
-	Round           specqbft.Round
-	QBFTMessageType specqbft.MessageType
-	Signers         []spectypes.OperatorID
-	Committee       []*spectypes.Operator
+	Round           genesisspecqbft.Round
+	QBFTMessageType genesisspecqbft.MessageType
+	Signers         []genesisspectypes.OperatorID
+	Committee       []*genesisspectypes.Operator
 }
 
 // Descriptor provides details about a message. It's used for logging and metrics.
 type Descriptor struct {
-	ValidatorPK    spectypes.ValidatorPK
-	Role           spectypes.BeaconRole
-	SSVMessageType spectypes.MsgType
+	ValidatorPK    genesisspectypes.ValidatorPK
+	Role           genesisspectypes.BeaconRole
+	SSVMessageType genesisspectypes.MsgType
 	Slot           phase0.Slot
 	Consensus      *ConsensusDescriptor
 }
@@ -166,20 +165,20 @@ type Descriptor struct {
 func (d Descriptor) Fields() []zapcore.Field {
 	result := []zapcore.Field{
 		fields.Validator(d.ValidatorPK),
-		fields.Role(alanspectypes.BeaconRole(d.Role)),
-		zap.String("ssv_message_type", ssvmessage.MsgTypeToString(alanspectypes.MsgType(d.SSVMessageType))),
+		fields.Role(spectypes.BeaconRole(d.Role)),
+		zap.String("ssv_message_type", ssvmessage.MsgTypeToString(spectypes.MsgType(d.SSVMessageType))),
 		fields.Slot(d.Slot),
 	}
 
 	if d.Consensus != nil {
-		var committee []spectypes.OperatorID
+		var committee []genesisspectypes.OperatorID
 		for _, o := range d.Consensus.Committee {
 			committee = append(committee, o.OperatorID)
 		}
 
 		result = append(result,
-			fields.Round(alanspecqbft.Round(d.Consensus.Round)),
-			zap.String("qbft_message_type", ssvmessage.QBFTMsgTypeToString(alanspecqbft.MessageType(d.Consensus.QBFTMessageType))),
+			fields.Round(specqbft.Round(d.Consensus.Round)),
+			zap.String("qbft_message_type", ssvmessage.QBFTMsgTypeToString(specqbft.MessageType(d.Consensus.QBFTMessageType))),
 			zap.Uint64s("signers", d.Consensus.Signers),
 			zap.Uint64s("committee", committee),
 		)
@@ -194,19 +193,19 @@ func (d Descriptor) String() string {
 	sb.WriteString(fmt.Sprintf("validator PK: %v, role: %v, ssv message type: %v, slot: %v",
 		hex.EncodeToString(d.ValidatorPK),
 		d.Role.String(),
-		ssvmessage.MsgTypeToString(alanspectypes.MsgType(d.SSVMessageType)),
+		ssvmessage.MsgTypeToString(spectypes.MsgType(d.SSVMessageType)),
 		d.Slot,
 	))
 
 	if d.Consensus != nil {
-		var committee []spectypes.OperatorID
+		var committee []genesisspectypes.OperatorID
 		for _, o := range d.Consensus.Committee {
 			committee = append(committee, o.OperatorID)
 		}
 
 		sb.WriteString(fmt.Sprintf(", round: %v, qbft message type: %v, signers: %v, committee: %v",
 			d.Consensus.Round,
-			ssvmessage.QBFTMsgTypeToString(alanspecqbft.MessageType(d.Consensus.QBFTMessageType)),
+			ssvmessage.QBFTMsgTypeToString(specqbft.MessageType(d.Consensus.QBFTMessageType)),
 			d.Consensus.Signers,
 			committee,
 		))
@@ -221,7 +220,7 @@ func (mv *messageValidator) ValidatorForTopic(_ string) func(ctx context.Context
 	return mv.Validate
 }
 
-// ValidatePubsubMessage validates the given pubsub message.
+// Validate validates the given pubsub message.
 // Depending on the outcome, it will return one of the pubsub validation results (Accept, Ignore, or Reject).
 func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 	if mv.selfAccept && peerID == mv.selfPID {
@@ -236,7 +235,7 @@ func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pu
 			return pubsub.ValidationReject
 		}
 		// skipping the error check for testing simplifying
-		decMsg, _ := queue.DecodeSSVMessage(msg)
+		decMsg, _ := queue.DecodeGenesisSSVMessage(msg)
 		pmsg.ValidatorData = decMsg
 		return pubsub.ValidationAccept
 	}
@@ -250,7 +249,7 @@ func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pu
 	}()
 
 	decodedMessage, descriptor, err := mv.validateP2PMessage(pmsg, time.Now())
-	round := specqbft.Round(0)
+	round := genesisspecqbft.Round(0)
 	if descriptor.Consensus != nil {
 		round = descriptor.Consensus.Round
 	}
@@ -363,12 +362,12 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 		return nil, Descriptor{}, ErrTopicNotFound
 	}
 
-	mv.metrics.SSVMessageType(alanspectypes.MsgType(msg.MsgType))
+	mv.metrics.SSVMessageType(spectypes.MsgType(msg.MsgType))
 
 	return mv.validateSSVMessage(msg, receivedAt, signatureVerifier)
 }
 
-func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage, receivedAt time.Time, signatureVerifier func() error) (*queue.DecodedSSVMessage, Descriptor, error) {
+func (mv *messageValidator) validateSSVMessage(ssvMessage *genesisspectypes.SSVMessage, receivedAt time.Time, signatureVerifier func() error) (*queue.DecodedSSVMessage, Descriptor, error) {
 	var descriptor Descriptor
 
 	if len(ssvMessage.Data) == 0 {
@@ -429,7 +428,7 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 		}
 	}
 
-	msg, err := queue.DecodeSSVMessage(ssvMessage)
+	msg, err := queue.DecodeGenesisSSVMessage(ssvMessage)
 	if err != nil {
 		if errors.Is(err, queue.ErrUnknownMessageType) {
 			e := ErrUnknownSSVMessageType
@@ -444,10 +443,10 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 
 	// Lock this SSV message ID to prevent concurrent access to the same state.
 	mv.validationMutex.Lock()
-	mutex, ok := mv.validationLocks[msg.GetID()]
+	mutex, ok := mv.validationLocks[msg.GenesisSSVMessage.GetID()]
 	if !ok {
 		mutex = &sync.Mutex{}
-		mv.validationLocks[msg.GetID()] = mutex
+		mv.validationLocks[msg.GenesisSSVMessage.GetID()] = mutex
 	}
 	mutex.Lock()
 	defer mutex.Unlock()
@@ -456,10 +455,10 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 	descriptor.SSVMessageType = ssvMessage.MsgType
 
 	if mv.nodeStorage != nil {
-		// Other types are caught in queue.DecodeSSVMessage, so the default case is not necessary,
-		// although it'd need to be added if queue.DecodeSSVMessage is removed.
+		// Other types are caught in queue.DecodeGenesisSSVMessage, so the default case is not necessary,
+		// although it'd need to be added if queue.DecodeGenesisSSVMessage is removed.
 		switch ssvMessage.MsgType {
-		case spectypes.SSVConsensusMsgType:
+		case genesisspectypes.SSVConsensusMsgType:
 			if len(msg.Data) > maxConsensusMsgSize {
 				e := ErrSSVDataTooBig
 				e.got = len(ssvMessage.Data)
@@ -467,15 +466,15 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 				return nil, descriptor, e
 			}
 
-			signedMessage := msg.Body.(*specqbft.SignedMessage)
-			consensusDescriptor, slot, err := mv.validateConsensusMessage(share, signedMessage, msg.GetID(), receivedAt, signatureVerifier)
+			signedMessage := msg.Body.(*genesisspecqbft.SignedMessage)
+			consensusDescriptor, slot, err := mv.validateConsensusMessage(share, signedMessage, msg.GenesisSSVMessage.GetID(), receivedAt, signatureVerifier)
 			descriptor.Consensus = &consensusDescriptor
 			descriptor.Slot = slot
 			if err != nil {
 				return nil, descriptor, err
 			}
 
-		case spectypes.SSVPartialSignatureMsgType:
+		case genesisspectypes.SSVPartialSignatureMsgType:
 			if len(msg.Data) > maxPartialSignatureMsgSize {
 				e := ErrSSVDataTooBig
 				e.got = len(ssvMessage.Data)
@@ -483,17 +482,17 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 				return nil, descriptor, e
 			}
 
-			partialSignatureMessage := msg.Body.(*spectypes.SignedPartialSignatureMessage)
-			slot, err := mv.validatePartialSignatureMessage(share, partialSignatureMessage, msg.GetID(), signatureVerifier)
+			partialSignatureMessage := msg.Body.(*genesisspectypes.SignedPartialSignatureMessage)
+			slot, err := mv.validatePartialSignatureMessage(share, partialSignatureMessage, msg.GenesisSSVMessage.GetID(), signatureVerifier)
 			descriptor.Slot = slot
 			if err != nil {
 				return nil, descriptor, err
 			}
 
-		case spectypes.MsgType(ssvmessage.SSVEventMsgType):
+		case genesisspectypes.MsgType(ssvmessage.SSVEventMsgType):
 			return nil, descriptor, ErrEventMessage
 
-		case spectypes.DKGMsgType:
+		case genesisspectypes.DKGMsgType:
 			return nil, descriptor, ErrDKGMessage
 		}
 	}
@@ -501,8 +500,8 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 	return msg, descriptor, nil
 }
 
-func (mv *messageValidator) containsSignerFunc(signer spectypes.OperatorID) func(operator *spectypes.Operator) bool {
-	return func(operator *spectypes.Operator) bool {
+func (mv *messageValidator) containsSignerFunc(signer genesisspectypes.OperatorID) func(operator *genesisspectypes.Operator) bool {
+	return func(operator *genesisspectypes.Operator) bool {
 		return operator.OperatorID == signer
 	}
 }
@@ -520,7 +519,7 @@ func (mv *messageValidator) validateSignatureFormat(signature []byte) error {
 	return nil
 }
 
-func (mv *messageValidator) commonSignerValidation(signer spectypes.OperatorID, share *ssvtypes.SSVShare) error {
+func (mv *messageValidator) commonSignerValidation(signer genesisspectypes.OperatorID, share *ssvtypes.SSVShare) error {
 	if signer == 0 {
 		return ErrZeroSigner
 	}
@@ -532,7 +531,7 @@ func (mv *messageValidator) commonSignerValidation(signer spectypes.OperatorID, 
 	return nil
 }
 
-func (mv *messageValidator) validateSlotTime(messageSlot phase0.Slot, role spectypes.BeaconRole, receivedAt time.Time) error {
+func (mv *messageValidator) validateSlotTime(messageSlot phase0.Slot, role genesisspectypes.BeaconRole, receivedAt time.Time) error {
 	if mv.earlyMessage(messageSlot, receivedAt) {
 		return ErrEarlyMessage
 	}
@@ -551,14 +550,14 @@ func (mv *messageValidator) earlyMessage(slot phase0.Slot, receivedAt time.Time)
 		Add(-clockErrorTolerance).Before(mv.netCfg.Beacon.GetSlotStartTime(slot))
 }
 
-func (mv *messageValidator) lateMessage(slot phase0.Slot, role spectypes.BeaconRole, receivedAt time.Time) time.Duration {
+func (mv *messageValidator) lateMessage(slot phase0.Slot, role genesisspectypes.BeaconRole, receivedAt time.Time) time.Duration {
 	var ttl phase0.Slot
 	switch role {
-	case spectypes.BNRoleProposer, spectypes.BNRoleSyncCommittee, spectypes.BNRoleSyncCommitteeContribution:
+	case genesisspectypes.BNRoleProposer, genesisspectypes.BNRoleSyncCommittee, genesisspectypes.BNRoleSyncCommitteeContribution:
 		ttl = 1 + lateSlotAllowance
-	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator:
+	case genesisspectypes.BNRoleAttester, genesisspectypes.BNRoleAggregator:
 		ttl = 32 + lateSlotAllowance
-	case spectypes.BNRoleValidatorRegistration, spectypes.BNRoleVoluntaryExit:
+	case genesisspectypes.BNRoleValidatorRegistration, genesisspectypes.BNRoleVoluntaryExit:
 		return 0
 	}
 
@@ -569,7 +568,7 @@ func (mv *messageValidator) lateMessage(slot phase0.Slot, role spectypes.BeaconR
 		Sub(deadline)
 }
 
-func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *ConsensusState {
+func (mv *messageValidator) consensusState(messageID genesisspectypes.MessageID) *ConsensusState {
 	id := ConsensusID{
 		PubKey: phase0.BLSPubKey(messageID.GetPubKey()),
 		Role:   messageID.GetRoleType(),
@@ -577,7 +576,7 @@ func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *Conse
 
 	if _, ok := mv.index.Load(id); !ok {
 		cs := &ConsensusState{
-			Signers: hashmap.New[spectypes.OperatorID, *SignerState](),
+			Signers: hashmap.New[genesisspectypes.OperatorID, *SignerState](),
 		}
 		mv.index.Store(id, cs)
 	}
@@ -588,7 +587,7 @@ func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *Conse
 
 // inCommittee should be called only when WithOwnOperatorID is set
 func (mv *messageValidator) inCommittee(share *ssvtypes.SSVShare) bool {
-	return slices.ContainsFunc(share.Committee, func(operator *spectypes.Operator) bool {
+	return slices.ContainsFunc(share.Committee, func(operator *genesisspectypes.Operator) bool {
 		return operator.OperatorID == mv.operatorDataStore.GetOperatorID()
 	})
 }

@@ -124,7 +124,7 @@ func TestMessagePrioritizer(t *testing.T) {
 			messages := make(messageSlice, len(test.messages))
 			for i, m := range test.messages {
 				var err error
-				messages[i], err = DecodeSSVMessage(m.ssvMessage(test.state))
+				messages[i], err = DecodeGenesisSSVMessage(m.ssvMessage(test.state))
 				require.NoError(t, err)
 			}
 

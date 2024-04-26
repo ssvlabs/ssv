@@ -471,7 +471,7 @@ func (m *DummyMessageValidator) Validate(ctx context.Context, p peer.ID, pmsg *p
 func (m *DummyMessageValidator) ValidateSSVMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, msgvalidation.Descriptor, error) {
 	var descriptor msgvalidation.Descriptor
 
-	msg, err := queue.DecodeSSVMessage(ssvMessage)
+	msg, err := queue.DecodeGenesisSSVMessage(ssvMessage)
 	if err != nil {
 		return nil, descriptor, err
 	}

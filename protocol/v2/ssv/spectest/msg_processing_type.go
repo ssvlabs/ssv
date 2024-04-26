@@ -57,7 +57,7 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 		lastErr = v.StartDuty(logger, test.Duty)
 	}
 	for _, msg := range test.Messages {
-		dmsg, err := queue.DecodeSSVMessage(msg)
+		dmsg, err := queue.DecodeGenesisSSVMessage(msg)
 		if err != nil {
 			lastErr = err
 			continue

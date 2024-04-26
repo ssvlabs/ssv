@@ -7,12 +7,11 @@ import (
 	"fmt"
 	"time"
 
-	alanspecqbft "github.com/bloxapp/ssv-spec/qbft"
-	alanspectypes "github.com/bloxapp/ssv-spec/types"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"golang.org/x/exp/slices"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
@@ -22,8 +21,8 @@ import (
 
 func (mv *messageValidator) validateConsensusMessage(
 	share *ssvtypes.SSVShare,
-	signedMsg *specqbft.SignedMessage,
-	messageID spectypes.MessageID,
+	signedMsg *genesisspecqbft.SignedMessage,
+	messageID genesisspectypes.MessageID,
 	receivedAt time.Time,
 	signatureVerifier func() error,
 ) (ConsensusDescriptor, phase0.Slot, error) {
@@ -31,9 +30,9 @@ func (mv *messageValidator) validateConsensusMessage(
 
 	if mv.operatorDataStore != nil && mv.operatorDataStore.OperatorIDReady() {
 		if mv.inCommittee(share) {
-			mv.metrics.CommitteeMessage(alanspectypes.SSVConsensusMsgType, mv.isDecidedMessage(signedMsg))
+			mv.metrics.CommitteeMessage(spectypes.SSVConsensusMsgType, mv.isDecidedMessage(signedMsg))
 		} else {
-			mv.metrics.NonCommitteeMessage(alanspectypes.SSVConsensusMsgType, mv.isDecidedMessage(signedMsg))
+			mv.metrics.NonCommitteeMessage(spectypes.SSVConsensusMsgType, mv.isDecidedMessage(signedMsg))
 		}
 	}
 
@@ -47,10 +46,10 @@ func (mv *messageValidator) validateConsensusMessage(
 		Committee:       share.Committee,
 	}
 
-	mv.metrics.ConsensusMsgType(alanspecqbft.MessageType(signedMsg.Message.MsgType), len(signedMsg.Signers))
+	mv.metrics.ConsensusMsgType(specqbft.MessageType(signedMsg.Message.MsgType), len(signedMsg.Signers))
 
 	switch messageID.GetRoleType() {
-	case spectypes.BNRoleValidatorRegistration, spectypes.BNRoleVoluntaryExit:
+	case genesisspectypes.BNRoleValidatorRegistration, genesisspectypes.BNRoleVoluntaryExit:
 		e := ErrUnexpectedConsensusMessage
 		e.got = messageID.GetRoleType()
 		return consensusDescriptor, msgSlot, e
@@ -85,14 +84,14 @@ func (mv *messageValidator) validateConsensusMessage(
 	Add(mv.waitAfterSlotStart(role))*/ // TODO: not supported yet because first round is non-deterministic now
 
 	sinceSlotStart := time.Duration(0)
-	estimatedRound := specqbft.FirstRound
+	estimatedRound := genesisspecqbft.FirstRound
 	if receivedAt.After(slotStartTime) {
 		sinceSlotStart = receivedAt.Sub(slotStartTime)
 		estimatedRound = mv.currentEstimatedRound(sinceSlotStart)
 	}
 
 	// TODO: lowestAllowed is not supported yet because first round is non-deterministic now
-	lowestAllowed := /*estimatedRound - allowedRoundsInPast*/ specqbft.FirstRound
+	lowestAllowed := /*estimatedRound - allowedRoundsInPast*/ genesisspecqbft.FirstRound
 	highestAllowed := estimatedRound + allowedRoundsInFuture
 
 	if msgRound < lowestAllowed || msgRound > highestAllowed {
@@ -103,7 +102,7 @@ func (mv *messageValidator) validateConsensusMessage(
 	}
 
 	if mv.hasFullData(signedMsg) {
-		hashedFullData, err := specqbft.HashDataRoot(signedMsg.FullData)
+		hashedFullData, err := genesisspecqbft.HashDataRoot(signedMsg.FullData)
 		if err != nil {
 			return consensusDescriptor, msgSlot, fmt.Errorf("hash data root: %w", err)
 		}
@@ -154,7 +153,7 @@ func (mv *messageValidator) validateConsensusMessage(
 
 func (mv *messageValidator) validateJustifications(
 	share *ssvtypes.SSVShare,
-	signedMsg *specqbft.SignedMessage,
+	signedMsg *genesisspecqbft.SignedMessage,
 ) error {
 	pj, err := signedMsg.Message.GetPrepareJustifications()
 	if err != nil {
@@ -163,7 +162,7 @@ func (mv *messageValidator) validateJustifications(
 		return e
 	}
 
-	if len(pj) != 0 && signedMsg.Message.MsgType != specqbft.ProposalMsgType {
+	if len(pj) != 0 && signedMsg.Message.MsgType != genesisspecqbft.ProposalMsgType {
 		e := ErrUnexpectedPrepareJustifications
 		e.got = signedMsg.Message.MsgType
 		return e
@@ -176,13 +175,13 @@ func (mv *messageValidator) validateJustifications(
 		return e
 	}
 
-	if len(rcj) != 0 && signedMsg.Message.MsgType != specqbft.ProposalMsgType && signedMsg.Message.MsgType != specqbft.RoundChangeMsgType {
+	if len(rcj) != 0 && signedMsg.Message.MsgType != genesisspecqbft.ProposalMsgType && signedMsg.Message.MsgType != genesisspecqbft.RoundChangeMsgType {
 		e := ErrUnexpectedRoundChangeJustifications
 		e.got = signedMsg.Message.MsgType
 		return e
 	}
 
-	if signedMsg.Message.MsgType == specqbft.ProposalMsgType {
+	if signedMsg.Message.MsgType == genesisspecqbft.ProposalMsgType {
 		cfg := newQBFTConfig(mv.netCfg.Domain)
 
 		if err := instance.IsProposalJustification(
@@ -205,10 +204,10 @@ func (mv *messageValidator) validateJustifications(
 
 func (mv *messageValidator) validateSignerBehaviorConsensus(
 	state *ConsensusState,
-	signer spectypes.OperatorID,
+	signer genesisspectypes.OperatorID,
 	share *ssvtypes.SSVShare,
-	msgID spectypes.MessageID,
-	signedMsg *specqbft.SignedMessage,
+	msgID genesisspectypes.MessageID,
+	signedMsg *genesisspecqbft.SignedMessage,
 ) error {
 	signerState := state.GetSignerState(signer)
 
@@ -264,11 +263,11 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 
 func (mv *messageValidator) validateDutyCount(
 	state *SignerState,
-	msgID spectypes.MessageID,
+	msgID genesisspectypes.MessageID,
 	newDutyInSameEpoch bool,
 ) error {
 	switch msgID.GetRoleType() {
-	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator, spectypes.BNRoleValidatorRegistration, spectypes.BNRoleVoluntaryExit:
+	case genesisspectypes.BNRoleAttester, genesisspectypes.BNRoleAggregator, genesisspectypes.BNRoleValidatorRegistration, genesisspectypes.BNRoleVoluntaryExit:
 		limit := maxDutiesPerEpoch
 
 		if sameSlot := !newDutyInSameEpoch; sameSlot {
@@ -289,12 +288,12 @@ func (mv *messageValidator) validateDutyCount(
 }
 
 func (mv *messageValidator) validateBeaconDuty(
-	role spectypes.BeaconRole,
+	role genesisspectypes.BeaconRole,
 	slot phase0.Slot,
 	share *ssvtypes.SSVShare,
 ) error {
 	switch role {
-	case spectypes.BNRoleProposer:
+	case genesisspectypes.BNRoleProposer:
 		if share.Metadata.BeaconMetadata == nil {
 			return ErrNoShareMetadata
 		}
@@ -306,7 +305,7 @@ func (mv *messageValidator) validateBeaconDuty(
 
 		return nil
 
-	case spectypes.BNRoleSyncCommittee, spectypes.BNRoleSyncCommitteeContribution:
+	case genesisspectypes.BNRoleSyncCommittee, genesisspectypes.BNRoleSyncCommitteeContribution:
 		if share.Metadata.BeaconMetadata == nil {
 			return ErrNoShareMetadata
 		}
@@ -322,86 +321,86 @@ func (mv *messageValidator) validateBeaconDuty(
 	return nil
 }
 
-func (mv *messageValidator) hasFullData(signedMsg *specqbft.SignedMessage) bool {
-	return (signedMsg.Message.MsgType == specqbft.ProposalMsgType ||
-		signedMsg.Message.MsgType == specqbft.RoundChangeMsgType ||
+func (mv *messageValidator) hasFullData(signedMsg *genesisspecqbft.SignedMessage) bool {
+	return (signedMsg.Message.MsgType == genesisspecqbft.ProposalMsgType ||
+		signedMsg.Message.MsgType == genesisspecqbft.RoundChangeMsgType ||
 		mv.isDecidedMessage(signedMsg)) && len(signedMsg.FullData) != 0 // TODO: more complex check of FullData
 }
 
-func (mv *messageValidator) isDecidedMessage(signedMsg *specqbft.SignedMessage) bool {
-	return signedMsg.Message.MsgType == specqbft.CommitMsgType && len(signedMsg.Signers) > 1
+func (mv *messageValidator) isDecidedMessage(signedMsg *genesisspecqbft.SignedMessage) bool {
+	return signedMsg.Message.MsgType == genesisspecqbft.CommitMsgType && len(signedMsg.Signers) > 1
 }
 
-func (mv *messageValidator) maxRound(role spectypes.BeaconRole) specqbft.Round {
+func (mv *messageValidator) maxRound(role genesisspectypes.BeaconRole) genesisspecqbft.Round {
 	switch role {
-	case spectypes.BNRoleAttester, spectypes.BNRoleAggregator: // TODO: check if value for aggregator is correct as there are messages on stage exceeding the limit
+	case genesisspectypes.BNRoleAttester, genesisspectypes.BNRoleAggregator: // TODO: check if value for aggregator is correct as there are messages on stage exceeding the limit
 		return 12 // TODO: consider calculating based on quick timeout and slow timeout
-	case spectypes.BNRoleProposer, spectypes.BNRoleSyncCommittee, spectypes.BNRoleSyncCommitteeContribution:
+	case genesisspectypes.BNRoleProposer, genesisspectypes.BNRoleSyncCommittee, genesisspectypes.BNRoleSyncCommitteeContribution:
 		return 6
-	case spectypes.BNRoleValidatorRegistration, spectypes.BNRoleVoluntaryExit:
+	case genesisspectypes.BNRoleValidatorRegistration, genesisspectypes.BNRoleVoluntaryExit:
 		return 0
 	default:
 		panic("unknown role")
 	}
 }
 
-func (mv *messageValidator) currentEstimatedRound(sinceSlotStart time.Duration) specqbft.Round {
-	if currentQuickRound := specqbft.FirstRound + specqbft.Round(sinceSlotStart/roundtimer.QuickTimeout); currentQuickRound <= roundtimer.QuickTimeoutThreshold {
+func (mv *messageValidator) currentEstimatedRound(sinceSlotStart time.Duration) genesisspecqbft.Round {
+	if currentQuickRound := genesisspecqbft.FirstRound + genesisspecqbft.Round(sinceSlotStart/roundtimer.QuickTimeout); currentQuickRound <= roundtimer.QuickTimeoutThreshold {
 		return currentQuickRound
 	}
 
 	sinceFirstSlowRound := sinceSlotStart - (time.Duration(roundtimer.QuickTimeoutThreshold) * roundtimer.QuickTimeout)
-	estimatedRound := roundtimer.QuickTimeoutThreshold + specqbft.FirstRound + specqbft.Round(sinceFirstSlowRound/roundtimer.SlowTimeout)
+	estimatedRound := roundtimer.QuickTimeoutThreshold + genesisspecqbft.FirstRound + genesisspecqbft.Round(sinceFirstSlowRound/roundtimer.SlowTimeout)
 	return estimatedRound
 }
 
-func (mv *messageValidator) waitAfterSlotStart(role spectypes.BeaconRole) time.Duration {
+func (mv *messageValidator) waitAfterSlotStart(role genesisspectypes.BeaconRole) time.Duration {
 	switch role {
-	case spectypes.BNRoleAttester, spectypes.BNRoleSyncCommittee:
+	case genesisspectypes.BNRoleAttester, genesisspectypes.BNRoleSyncCommittee:
 		return mv.netCfg.Beacon.SlotDurationSec() / 3
-	case spectypes.BNRoleAggregator, spectypes.BNRoleSyncCommitteeContribution:
+	case genesisspectypes.BNRoleAggregator, genesisspectypes.BNRoleSyncCommitteeContribution:
 		return mv.netCfg.Beacon.SlotDurationSec() / 3 * 2
-	case spectypes.BNRoleProposer, spectypes.BNRoleValidatorRegistration, spectypes.BNRoleVoluntaryExit:
+	case genesisspectypes.BNRoleProposer, genesisspectypes.BNRoleValidatorRegistration, genesisspectypes.BNRoleVoluntaryExit:
 		return 0
 	default:
 		panic("unknown role")
 	}
 }
 
-func (mv *messageValidator) validRole(roleType spectypes.BeaconRole) bool {
+func (mv *messageValidator) validRole(roleType genesisspectypes.BeaconRole) bool {
 	switch roleType {
-	case spectypes.BNRoleAttester,
-		spectypes.BNRoleAggregator,
-		spectypes.BNRoleProposer,
-		spectypes.BNRoleSyncCommittee,
-		spectypes.BNRoleSyncCommitteeContribution,
-		spectypes.BNRoleValidatorRegistration,
-		spectypes.BNRoleVoluntaryExit:
+	case genesisspectypes.BNRoleAttester,
+		genesisspectypes.BNRoleAggregator,
+		genesisspectypes.BNRoleProposer,
+		genesisspectypes.BNRoleSyncCommittee,
+		genesisspectypes.BNRoleSyncCommitteeContribution,
+		genesisspectypes.BNRoleValidatorRegistration,
+		genesisspectypes.BNRoleVoluntaryExit:
 		return true
 	}
 	return false
 }
 
-func (mv *messageValidator) validQBFTMsgType(msgType specqbft.MessageType) bool {
+func (mv *messageValidator) validQBFTMsgType(msgType genesisspecqbft.MessageType) bool {
 	switch msgType {
-	case specqbft.ProposalMsgType, specqbft.PrepareMsgType, specqbft.CommitMsgType, specqbft.RoundChangeMsgType:
+	case genesisspecqbft.ProposalMsgType, genesisspecqbft.PrepareMsgType, genesisspecqbft.CommitMsgType, genesisspecqbft.RoundChangeMsgType:
 		return true
 	}
 	return false
 }
 
-func (mv *messageValidator) validConsensusSigners(share *ssvtypes.SSVShare, m *specqbft.SignedMessage) error {
+func (mv *messageValidator) validConsensusSigners(share *ssvtypes.SSVShare, m *genesisspecqbft.SignedMessage) error {
 	switch {
 	case len(m.Signers) == 0:
 		return ErrNoSigners
 
 	case len(m.Signers) == 1:
-		if m.Message.MsgType == specqbft.ProposalMsgType {
-			qbftState := &specqbft.State{
+		if m.Message.MsgType == genesisspecqbft.ProposalMsgType {
+			qbftState := &genesisspecqbft.State{
 				Height: m.Message.Height,
 				Share:  &share.Share,
 			}
-			leader := specqbft.RoundRobinProposer(qbftState, m.Message.Round)
+			leader := genesisspecqbft.RoundRobinProposer(qbftState, m.Message.Round)
 			if m.Signers[0] != leader {
 				err := ErrSignerNotLeader
 				err.got = m.Signers[0]
@@ -410,7 +409,7 @@ func (mv *messageValidator) validConsensusSigners(share *ssvtypes.SSVShare, m *s
 			}
 		}
 
-	case m.Message.MsgType != specqbft.CommitMsgType:
+	case m.Message.MsgType != genesisspecqbft.CommitMsgType:
 		e := ErrNonDecidedWithMultipleSigners
 		e.got = len(m.Signers)
 		return e
@@ -426,7 +425,7 @@ func (mv *messageValidator) validConsensusSigners(share *ssvtypes.SSVShare, m *s
 		return ErrSignersNotSorted
 	}
 
-	var prevSigner spectypes.OperatorID
+	var prevSigner genesisspectypes.OperatorID
 	for _, signer := range m.Signers {
 		if err := mv.commonSignerValidation(signer, share); err != nil {
 			return err

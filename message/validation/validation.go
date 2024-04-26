@@ -132,7 +132,7 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 	defer validationMu.Unlock()
 
 	decodedMessage := &queue.DecodedSSVMessage{
-		AlanSSVMessage: signedSSVMessage.GetSSVMessage(),
+		SSVMessage: signedSSVMessage.GetSSVMessage(),
 	}
 
 	switch signedSSVMessage.GetSSVMessage().MsgType {
