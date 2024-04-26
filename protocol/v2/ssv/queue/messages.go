@@ -3,6 +3,8 @@ package queue
 import (
 	"fmt"
 
+	alanspecqbft "github.com/bloxapp/ssv-spec/alan/qbft"
+	alanspectypes "github.com/bloxapp/ssv-spec/alan/types"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
@@ -19,12 +21,13 @@ var (
 // TODO: try to make it generic
 type DecodedSSVMessage struct {
 	*spectypes.SSVMessage
+	AlanSSVMessage *alanspectypes.SSVMessage
 
 	// Body is the decoded Data.
 	Body interface{} // *SignedMessage | *SignedPartialSignatureMessage | *EventMsg
 }
 
-// DecodeSSVMessage decodes an SSVMessage and returns a DecodedSSVMessage.
+// DecodeSSVMessage decodes a genesis SSVMessage and returns a DecodedSSVMessage.
 func DecodeSSVMessage(m *spectypes.SSVMessage) (*DecodedSSVMessage, error) {
 	var body interface{}
 	switch m.MsgType {
@@ -40,7 +43,7 @@ func DecodeSSVMessage(m *spectypes.SSVMessage) (*DecodedSSVMessage, error) {
 			return nil, errors.Wrap(err, "failed to decode SignedPartialSignatureMessage")
 		}
 		body = sm
-	case ssvmessage.SSVEventMsgType:
+	case spectypes.MsgType(ssvmessage.SSVEventMsgType):
 		msg := &ssvtypes.EventMsg{}
 		if err := msg.Decode(m.Data); err != nil {
 			return nil, errors.Wrap(err, "failed to decode EventMsg")
@@ -52,6 +55,37 @@ func DecodeSSVMessage(m *spectypes.SSVMessage) (*DecodedSSVMessage, error) {
 	return &DecodedSSVMessage{
 		SSVMessage: m,
 		Body:       body,
+	}, nil
+}
+
+// DecodeAlanSSVMessage decodes an SSVMessage and returns a DecodedSSVMessage.
+func DecodeAlanSSVMessage(m *alanspectypes.SSVMessage) (*DecodedSSVMessage, error) {
+	var body interface{}
+	switch m.MsgType {
+	case alanspectypes.SSVConsensusMsgType: // TODO: Or message.SSVDecidedMsgType?
+		sm := &alanspecqbft.Message{}
+		if err := sm.Decode(m.Data); err != nil {
+			return nil, errors.Wrap(err, "failed to decode Message")
+		}
+		body = sm
+	case alanspectypes.SSVPartialSignatureMsgType:
+		sm := &alanspectypes.PartialSignatureMessages{}
+		if err := sm.Decode(m.Data); err != nil {
+			return nil, errors.Wrap(err, "failed to decode PartialSignatureMessages")
+		}
+		body = sm
+	case ssvmessage.SSVEventMsgType:
+		msg := &ssvtypes.EventMsg{}
+		if err := msg.Decode(m.Data); err != nil {
+			return nil, errors.Wrap(err, "failed to decode EventMsg")
+		}
+		body = msg
+	default:
+		return nil, ErrUnknownMessageType
+	}
+	return &DecodedSSVMessage{
+		AlanSSVMessage: m,
+		Body:           body,
 	}, nil
 }
 

@@ -7,6 +7,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
 
 func (mv *messageValidator) validateSelf(pMsg *pubsub.Message) pubsub.ValidationResult {
@@ -16,8 +17,8 @@ func (mv *messageValidator) validateSelf(pMsg *pubsub.Message) pubsub.Validation
 		return pubsub.ValidationReject
 	}
 
-	decodedMessage := &DecodedMessage{
-		SignedSSVMessage: signedSSVMessage,
+	decodedMessage := &queue.DecodedSSVMessage{
+		AlanSSVMessage: signedSSVMessage.GetSSVMessage(),
 	}
 
 	switch signedSSVMessage.SSVMessage.MsgType {

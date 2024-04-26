@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
 
 type Error struct {
@@ -119,7 +120,7 @@ var (
 	ErrDecidedWithSameNumberOfSigners          = Error{text: "decided with same number of signers", reject: true}
 )
 
-func (mv *messageValidator) handleValidationError(peerID peer.ID, decodedMessage *DecodedMessage, err error) pubsub.ValidationResult {
+func (mv *messageValidator) handleValidationError(peerID peer.ID, decodedMessage *queue.DecodedSSVMessage, err error) pubsub.ValidationResult {
 	loggerFields := mv.buildLoggerFields(decodedMessage)
 
 	logger := mv.logger.
@@ -149,7 +150,7 @@ func (mv *messageValidator) handleValidationError(peerID peer.ID, decodedMessage
 	return pubsub.ValidationReject
 }
 
-func (mv *messageValidator) handleValidationSuccess(decodedMessage *DecodedMessage) pubsub.ValidationResult {
+func (mv *messageValidator) handleValidationSuccess(decodedMessage *queue.DecodedSSVMessage) pubsub.ValidationResult {
 	loggerFields := mv.buildLoggerFields(decodedMessage)
 	mv.metrics.MessageAccepted(loggerFields.Role, loggerFields.Consensus.Round)
 

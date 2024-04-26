@@ -9,13 +9,13 @@ import (
 
 	"github.com/bloxapp/ssv/logging/fields"
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
 
 // ConsensusFields provides details about the consensus for a message. It's used for logging and metrics.
 type ConsensusFields struct {
 	Round           specqbft.Round
 	QBFTMessageType specqbft.MessageType
-	Signers         []spectypes.OperatorID
 }
 
 // LoggerFields provides details about a message. It's used for logging and metrics.
@@ -40,14 +40,13 @@ func (d LoggerFields) AsZapFields() []zapcore.Field {
 		result = append(result,
 			fields.Round(d.Consensus.Round),
 			zap.String("qbft_message_type", ssvmessage.QBFTMsgTypeToString(d.Consensus.QBFTMessageType)),
-			zap.Uint64s("signers", d.Consensus.Signers),
 		)
 	}
 
 	return result
 }
 
-func (mv *messageValidator) buildLoggerFields(decodedMessage *DecodedMessage) *LoggerFields {
+func (mv *messageValidator) buildLoggerFields(decodedMessage *queue.DecodedSSVMessage) *LoggerFields {
 	descriptor := &LoggerFields{
 		Consensus: &ConsensusFields{},
 	}
@@ -56,10 +55,9 @@ func (mv *messageValidator) buildLoggerFields(decodedMessage *DecodedMessage) *L
 		return descriptor
 	}
 
-	descriptor.SenderID = decodedMessage.SignedSSVMessage.SSVMessage.GetID().GetSenderID()
-	descriptor.Role = decodedMessage.SignedSSVMessage.SSVMessage.GetID().GetRoleType()
-	descriptor.SSVMessageType = decodedMessage.SignedSSVMessage.SSVMessage.MsgType
-	descriptor.Consensus.Signers = decodedMessage.SignedSSVMessage.GetOperatorIDs()
+	descriptor.SenderID = decodedMessage.AlanSSVMessage.GetID().GetSenderID()
+	descriptor.Role = decodedMessage.AlanSSVMessage.GetID().GetRoleType()
+	descriptor.SSVMessageType = decodedMessage.AlanSSVMessage.MsgType
 
 	switch m := decodedMessage.Body.(type) {
 	case *specqbft.Message:

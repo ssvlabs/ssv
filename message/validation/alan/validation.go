@@ -20,6 +20,7 @@ import (
 	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
 	"github.com/bloxapp/ssv/operator/keys"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
@@ -94,7 +95,7 @@ func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pu
 	return mv.handleValidationSuccess(decodedMessage)
 }
 
-func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt time.Time) (*DecodedMessage, error) {
+func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt time.Time) (*queue.DecodedSSVMessage, error) {
 	if err := mv.validatePubSubMessage(pMsg); err != nil {
 		return nil, err
 	}
@@ -107,7 +108,7 @@ func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt
 	return mv.handleSignedSSVMessage(signedSSVMessage, pMsg.GetTopic(), receivedAt)
 }
 
-func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.SignedSSVMessage, topic string, receivedAt time.Time) (*DecodedMessage, error) {
+func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.SignedSSVMessage, topic string, receivedAt time.Time) (*queue.DecodedSSVMessage, error) {
 	if err := mv.validateSignedSSVMessage(signedSSVMessage); err != nil {
 		return nil, err
 	}
@@ -130,8 +131,8 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 	validationMu.Lock()
 	defer validationMu.Unlock()
 
-	decodedMessage := &DecodedMessage{
-		SignedSSVMessage: signedSSVMessage,
+	decodedMessage := &queue.DecodedSSVMessage{
+		AlanSSVMessage: signedSSVMessage.GetSSVMessage(),
 	}
 
 	switch signedSSVMessage.GetSSVMessage().MsgType {
