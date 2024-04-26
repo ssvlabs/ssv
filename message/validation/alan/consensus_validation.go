@@ -59,8 +59,10 @@ func (mv *messageValidator) validateConsensusMessage(
 		operatorID := signedSSVMessage.GetOperatorIDs()[i]
 		signature := signedSSVMessage.GetSignature()[i]
 
-		if err := mv.verifySignature(ssvMessage, operatorID, signature); err != nil {
-			return consensusMessage, err
+		if err := mv.signatureVerifier.VerifySignature(operatorID, ssvMessage, signature); err != nil {
+			e := ErrSignatureVerification
+			e.innerErr = fmt.Errorf("verify opid: %v signature: %w", operatorID, err)
+			return consensusMessage, e
 		}
 	}
 

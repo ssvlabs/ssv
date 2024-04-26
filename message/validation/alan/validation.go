@@ -19,7 +19,6 @@ import (
 	"github.com/bloxapp/ssv/networkconfig"
 	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
-	"github.com/bloxapp/ssv/operator/keys"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -31,17 +30,16 @@ type MessageValidator interface {
 }
 
 type messageValidator struct {
-	logger                    *zap.Logger
-	metrics                   metricsreporter.MetricsReporter
-	netCfg                    networkconfig.NetworkConfig
-	consensusStateIndex       map[consensusID]*consensusState
-	consensusStateIndexMu     sync.Mutex
-	validatorStore            ValidatorStore
-	operatorStore             OperatorStore
-	dutyStore                 *dutystore.Store
-	operatorDataStore         operatordatastore.OperatorDataStore
-	operatorIDToPubkeyCache   map[spectypes.OperatorID]keys.OperatorPublicKey
-	operatorIDToPubkeyCacheMu sync.Mutex
+	logger                *zap.Logger
+	metrics               metricsreporter.MetricsReporter
+	netCfg                networkconfig.NetworkConfig
+	consensusStateIndex   map[consensusID]*consensusState
+	consensusStateIndexMu sync.Mutex
+	validatorStore        ValidatorStore
+	operatorStore         OperatorStore
+	dutyStore             *dutystore.Store
+	operatorDataStore     operatordatastore.OperatorDataStore
+	signatureVerifier     SignatureVerifier
 
 	// validationLocks is a map of lock per SSV message ID to
 	// prevent concurrent access to the same state.
@@ -55,16 +53,17 @@ type messageValidator struct {
 // New returns a new MessageValidator with the given network configuration and options.
 func New(netCfg networkconfig.NetworkConfig, opts ...Option) MessageValidator {
 	mv := &messageValidator{
-		logger:                  zap.NewNop(),
-		metrics:                 metricsreporter.NewNop(),
-		netCfg:                  netCfg,
-		operatorIDToPubkeyCache: make(map[spectypes.OperatorID]keys.OperatorPublicKey),
-		validationLocks:         make(map[spectypes.MessageID]*sync.Mutex),
+		logger:          zap.NewNop(),
+		metrics:         metricsreporter.NewNop(),
+		netCfg:          netCfg,
+		validationLocks: make(map[spectypes.MessageID]*sync.Mutex),
 	}
 
 	for _, opt := range opts {
 		opt(mv)
 	}
+
+	mv.signatureVerifier = newSignatureVerifier(mv.operatorStore) // TODO: pass from outside
 
 	return mv
 }

@@ -3,6 +3,7 @@ package msgvalidation
 // partial_validation.go contains methods for validating partial signature messages
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -51,8 +52,10 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 
 	signature := signedSSVMessage.GetSignature()[0]
 	signer := signedSSVMessage.GetOperatorIDs()[0]
-	if err := mv.verifySignature(ssvMessage, signer, signature); err != nil {
-		return partialSignatureMessages, err
+	if err := mv.signatureVerifier.VerifySignature(signer, ssvMessage, signature); err != nil {
+		e := ErrSignatureVerification
+		e.innerErr = fmt.Errorf("verify opid: %v signature: %w", signer, err)
+		return partialSignatureMessages, e
 	}
 
 	mv.updatePartialSignatureState(partialSignatureMessages, state.GetSignerState(signer))
