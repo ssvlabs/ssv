@@ -5,8 +5,8 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 )
 
 const (

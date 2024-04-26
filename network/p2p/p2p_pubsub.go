@@ -7,11 +7,12 @@ import (
 	"math/rand"
 	"time"
 
-	alanspectypes "github.com/bloxapp/ssv-spec/alan/types"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	alanspectypes "github.com/bloxapp/ssv-spec/types"
+
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"

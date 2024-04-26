@@ -8,7 +8,6 @@ import (
 	reflect "reflect"
 
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
-	types "github.com/bloxapp/ssv-spec/types"
 	network "github.com/bloxapp/ssv/network"
 	duties "github.com/bloxapp/ssv/operator/duties"
 	beacon "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
@@ -20,6 +19,7 @@ import (
 	common "github.com/ethereum/go-ethereum/common"
 	gomock "github.com/golang/mock/gomock"
 	peer "github.com/libp2p/go-libp2p/core/peer"
+	types "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	zap "go.uber.org/zap"
 )
 

@@ -1,7 +1,7 @@
-package msgvalidation
+package validation
 
 import (
-	spectypes "github.com/bloxapp/ssv-spec/alan/types"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )

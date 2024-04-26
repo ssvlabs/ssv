@@ -1,4 +1,4 @@
-package msgvalidation
+package validation
 
 import (
 	"errors"

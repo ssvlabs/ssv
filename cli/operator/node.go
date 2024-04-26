@@ -10,11 +10,11 @@ import (
 	"os"
 	"time"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/api/handlers"
@@ -33,7 +33,7 @@ import (
 	ssv_identity "github.com/bloxapp/ssv/identity"
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
-	alanvalidation "github.com/bloxapp/ssv/message/validation/alan"
+	"github.com/bloxapp/ssv/message/validation"
 	msgvalidation "github.com/bloxapp/ssv/message/validation/genesis"
 	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
@@ -216,13 +216,13 @@ var StartNodeCmd = &cobra.Command{
 
 		var messageValidator msgvalidation.MessageValidator
 		if cfg.AlanFork {
-			messageValidator = alanvalidation.New(
+			messageValidator = validation.New(
 				networkConfig,
-				alanvalidation.WithValidatorStore(nodeStorage),
-				alanvalidation.WithLogger(logger),
-				alanvalidation.WithMetrics(metricsReporter),
-				alanvalidation.WithDutyStore(dutyStore),
-				alanvalidation.WithOwnOperatorID(operatorDataStore),
+				validation.WithValidatorStore(nodeStorage),
+				validation.WithLogger(logger),
+				validation.WithMetrics(metricsReporter),
+				validation.WithDutyStore(dutyStore),
+				validation.WithOwnOperatorID(operatorDataStore),
 			)
 		} else {
 			messageValidator = msgvalidation.New(

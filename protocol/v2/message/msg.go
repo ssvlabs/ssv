@@ -3,8 +3,8 @@ package message
 import (
 	"fmt"
 
-	specqbft "github.com/bloxapp/ssv-spec/alan/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/alan/types"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
 const (

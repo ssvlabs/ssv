@@ -1,12 +1,12 @@
-package msgvalidation
+package validation
 
 // message_counts.go contains code for counting and validating messages per validator-slot-round.
 
 import (
 	"fmt"
 
-	specqbft "github.com/bloxapp/ssv-spec/alan/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/alan/types"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
 // MessageCounts tracks the number of various message types received for validation.

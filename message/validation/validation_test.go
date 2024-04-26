@@ -1,4 +1,4 @@
-package msgvalidation
+package validation
 
 import (
 	"bytes"
@@ -7,11 +7,12 @@ import (
 	"testing"
 	"time"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
+
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/alan/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/alan/types"
-	spectestingutils "github.com/bloxapp/ssv-spec/alan/types/testingutils"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"

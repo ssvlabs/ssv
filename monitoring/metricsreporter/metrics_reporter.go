@@ -6,8 +6,9 @@ import (
 	"strconv"
 	"time"
 
-	specqbft "github.com/bloxapp/ssv-spec/alan/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/alan/types"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/prometheus/client_golang/prometheus"

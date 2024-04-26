@@ -1,4 +1,4 @@
-package msgvalidation
+package validation
 
 import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"

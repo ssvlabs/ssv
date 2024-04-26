@@ -1,10 +1,11 @@
-package msgvalidation
+package validation
 
 // signer_state.go describes state of a signer.
 
 import (
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/alan/qbft"
 )
 
 // SignerState represents the state of a signer, including its start time, slot, round,

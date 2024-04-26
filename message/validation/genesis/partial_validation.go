@@ -3,10 +3,11 @@ package msgvalidation
 // partial_validation.go contains methods for validating partial signature messages
 
 import (
+	alanspectypes "github.com/bloxapp/ssv-spec/types"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	alanspectypes "github.com/bloxapp/ssv-spec/alan/types"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )

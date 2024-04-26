@@ -1,8 +1,9 @@
-package msgvalidation
+package validation
 
 import (
+	spectypes "github.com/bloxapp/ssv-spec/types"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/alan/types"
 
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )

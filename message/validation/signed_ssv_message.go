@@ -1,11 +1,12 @@
-package msgvalidation
+package validation
 
 import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
 
-	spectypes "github.com/bloxapp/ssv-spec/alan/types"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"golang.org/x/exp/slices"
 

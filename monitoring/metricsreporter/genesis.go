@@ -5,8 +5,8 @@ package metricsreporter
 import (
 	"strconv"
 
-	genesisspecqbft "github.com/bloxapp/ssv-spec/qbft"
-	genesisspectypes "github.com/bloxapp/ssv-spec/types"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 )
 
 type Genesis interface {

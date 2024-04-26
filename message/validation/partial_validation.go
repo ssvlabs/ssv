@@ -1,4 +1,4 @@
-package msgvalidation
+package validation
 
 // partial_validation.go contains methods for validating partial signature messages
 
@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"time"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	"github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/alan/qbft"
-	"github.com/bloxapp/ssv-spec/alan/types"
-	spectypes "github.com/bloxapp/ssv-spec/alan/types"
 	"golang.org/x/exp/slices"
 )
 

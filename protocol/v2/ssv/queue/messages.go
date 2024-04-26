@@ -3,11 +3,12 @@ package queue
 import (
 	"fmt"
 
-	alanspecqbft "github.com/bloxapp/ssv-spec/alan/qbft"
-	alanspectypes "github.com/bloxapp/ssv-spec/alan/types"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	alanspecqbft "github.com/bloxapp/ssv-spec/qbft"
+	alanspectypes "github.com/bloxapp/ssv-spec/types"
+
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"

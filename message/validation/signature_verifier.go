@@ -1,10 +1,10 @@
-package msgvalidation
+package validation
 
 import (
 	"fmt"
 	"sync"
 
-	spectypes "github.com/bloxapp/ssv-spec/alan/types"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	"github.com/bloxapp/ssv/operator/keys"
 )

@@ -1,10 +1,11 @@
-package msgvalidation
+package validation
 
 import (
 	"testing"
 	"time"
 
-	specqbft "github.com/bloxapp/ssv-spec/alan/qbft"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"

@@ -7,11 +7,12 @@ import (
 	"fmt"
 	"time"
 
+	alanspecqbft "github.com/bloxapp/ssv-spec/qbft"
+	alanspectypes "github.com/bloxapp/ssv-spec/types"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	alanspecqbft "github.com/bloxapp/ssv-spec/alan/qbft"
-	alanspectypes "github.com/bloxapp/ssv-spec/alan/types"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"golang.org/x/exp/slices"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"

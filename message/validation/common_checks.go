@@ -1,11 +1,12 @@
-package msgvalidation
+package validation
 
 import (
 	"fmt"
 	"time"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/alan/types"
 	"golang.org/x/exp/slices"
 )
 

@@ -1,9 +1,9 @@
-package msgvalidation
+package validation
 
 import (
 	"sync"
 
-	spectypes "github.com/bloxapp/ssv-spec/alan/types"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
 // consensusID uniquely identifies a public key and role pair to keep track of state.
