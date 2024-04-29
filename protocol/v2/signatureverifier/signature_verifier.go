@@ -11,7 +11,7 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
-//go:generate mockgen -package=mocks -destination=./mocks/signature_verifier.go -source=./signature_verifier.go
+//go:generate mockgen -package=signatureverifier -destination=./mock.go -source=./signature_verifier.go
 
 type SignatureVerifier interface {
 	VerifySignature(operatorID spectypes.OperatorID, message *spectypes.SSVMessage, signature []byte) error

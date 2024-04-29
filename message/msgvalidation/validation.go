@@ -39,7 +39,7 @@ type messageValidator struct {
 	consensusStateIndexMu sync.Mutex
 	validatorStore        storage.ValidatorStore
 	dutyStore             *dutystore.Store
-	signatureVerifier     signatureverifier.SignatureVerifier
+	signatureVerifier     signatureverifier.SignatureVerifier // TODO: use spectypes.SignatureVerifier
 
 	// validationLocks is a map of lock per SSV message ID to
 	// prevent concurrent access to the same state.
