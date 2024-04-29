@@ -1,6 +1,7 @@
 package msgvalidation
 
 import (
+	"crypto/sha256"
 	"testing"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -10,7 +11,10 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
+	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slices"
 
+	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
 	"github.com/bloxapp/ssv/operator/storage"
@@ -45,16 +49,30 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			Liquidated: false,
 		},
 	}
+
 	require.NoError(t, ns.Shares().Save(nil, share))
 
 	netCfg := networkconfig.TestNetwork
-
 	role := spectypes.RoleCommittee
-	const topic = ""
+	dutyStore := dutystore.New()
 
 	validatorStore := mocks.NewMockValidatorStore(ctrl)
-	dutyStore := dutystore.New()
+
+	committee := maps.Keys(ks.Shares)
+	slices.Sort(committee)
+
+	validatorStore.EXPECT().Committee(gomock.Any()).DoAndReturn(func(id ssvtypes.CommitteeID) *storage.Committee {
+		return &storage.Committee{
+			ID:        id,
+			Operators: committee,
+			Validators: []*ssvtypes.SSVShare{
+				share,
+			},
+		}
+	}).AnyTimes()
+
 	signatureVerifier := signatureverifier.NewMockSignatureVerifier(ctrl)
+	signatureVerifier.EXPECT().VerifySignature(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
 	// Message validation happy flow, messages are not ignored or rejected and there are no errors
 	t.Run("happy flow", func(t *testing.T) {
@@ -63,10 +81,25 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 		height := specqbft.Height(slot)
 
-		signedSSVMessage := spectestingutils.TestingProposalMessageWithHeight(ks.OperatorKeys[1], 1, height)
+		fullData := spectestingutils.TestingQBFTFullData
+		identifier := spectypes.NewMsgID(netCfg.Domain, ks.ValidatorPK.Serialize(), role)
+
+		qbftMessage := &specqbft.Message{
+			MsgType:    specqbft.ProposalMsgType,
+			Height:     height,
+			Round:      specqbft.FirstRound,
+			Identifier: identifier[:],
+			Root:       sha256.Sum256(fullData),
+
+			RoundChangeJustification: [][]byte{},
+			PrepareJustification:     [][]byte{},
+		}
+		signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[1], 1, qbftMessage)
+		signedSSVMessage.FullData = fullData
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
-		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topic, receivedAt)
+		topicID := commons.CommitteeTopicID(signedSSVMessage.GetSSVMessage().GetID().GetSenderID())[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.NoError(t, err)
 	})
 	//

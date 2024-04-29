@@ -59,13 +59,14 @@ func New(
 	opts ...Option,
 ) MessageValidator {
 	mv := &messageValidator{
-		logger:            zap.NewNop(),
-		metrics:           metricsreporter.NewNop(),
-		netCfg:            netCfg,
-		validationLocks:   make(map[spectypes.MessageID]*sync.Mutex),
-		validatorStore:    validatorStore,
-		dutyStore:         dutyStore,
-		signatureVerifier: signatureVerifier,
+		logger:              zap.NewNop(),
+		metrics:             metricsreporter.NewNop(),
+		netCfg:              netCfg,
+		consensusStateIndex: make(map[consensusID]*consensusState),
+		validationLocks:     make(map[spectypes.MessageID]*sync.Mutex),
+		validatorStore:      validatorStore,
+		dutyStore:           dutyStore,
+		signatureVerifier:   signatureVerifier,
 	}
 
 	for _, opt := range opts {
