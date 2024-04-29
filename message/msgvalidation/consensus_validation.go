@@ -1,4 +1,4 @@
-package validation
+package msgvalidation
 
 // consensus_validation.go contains methods for validating consensus messages
 
@@ -40,7 +40,7 @@ func (mv *messageValidator) validateConsensusMessage(
 		return nil, e
 	}
 
-	mv.reportConsensusMessageMetrics(signedSSVMessage, consensusMessage, committee)
+	mv.metrics.ConsensusMsgType(consensusMessage.MsgType, len(signedSSVMessage.GetOperatorIDs()))
 
 	if err := mv.validateConsensusMessageSemantics(signedSSVMessage, consensusMessage, committee); err != nil {
 		return consensusMessage, err
@@ -407,24 +407,4 @@ func (mv *messageValidator) roundRobinProposer(height specqbft.Height, round spe
 
 	index := (firstRoundIndex + int(round) - int(specqbft.FirstRound)) % len(committee)
 	return committee[index]
-}
-
-func (mv *messageValidator) reportConsensusMessageMetrics(
-	signedSSVMessage *spectypes.SignedSSVMessage,
-	consensusMessage *specqbft.Message,
-	committee []spectypes.OperatorID,
-) {
-	if mv.operatorDataStore != nil && mv.operatorDataStore.OperatorIDReady() {
-		if mv.ownCommittee(committee) {
-			mv.metrics.CommitteeMessage(spectypes.SSVConsensusMsgType, mv.isDecidedMessage(signedSSVMessage, consensusMessage))
-		} else {
-			mv.metrics.NonCommitteeMessage(spectypes.SSVConsensusMsgType, mv.isDecidedMessage(signedSSVMessage, consensusMessage))
-		}
-	}
-
-	mv.metrics.ConsensusMsgType(consensusMessage.MsgType, len(signedSSVMessage.GetOperatorIDs()))
-}
-
-func (mv *messageValidator) isDecidedMessage(signedSSVMessage *spectypes.SignedSSVMessage, message *specqbft.Message) bool {
-	return message.MsgType == specqbft.CommitMsgType && len(signedSSVMessage.GetOperatorIDs()) > 1
 }

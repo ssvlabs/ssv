@@ -1,5 +1,5 @@
 // Package msgvalidation provides functions and structures for validating messages.
-package validation
+package msgvalidation
 
 // validator.go contains main code for validation and most of the rule checks.
 
@@ -18,9 +18,9 @@ import (
 
 	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/networkconfig"
-	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
 	"github.com/bloxapp/ssv/operator/storage"
+	"github.com/bloxapp/ssv/protocol/v2/signatureverifier"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -38,10 +38,8 @@ type messageValidator struct {
 	consensusStateIndex   map[consensusID]*consensusState
 	consensusStateIndexMu sync.Mutex
 	validatorStore        storage.ValidatorStore
-	operatorStore         OperatorStore
 	dutyStore             *dutystore.Store
-	operatorDataStore     operatordatastore.OperatorDataStore
-	signatureVerifier     SignatureVerifier
+	signatureVerifier     signatureverifier.SignatureVerifier
 
 	// validationLocks is a map of lock per SSV message ID to
 	// prevent concurrent access to the same state.
@@ -53,19 +51,26 @@ type messageValidator struct {
 }
 
 // New returns a new MessageValidator with the given network configuration and options.
-func New(netCfg networkconfig.NetworkConfig, opts ...Option) MessageValidator {
+func New(
+	netCfg networkconfig.NetworkConfig,
+	validatorStore storage.ValidatorStore,
+	dutyStore *dutystore.Store,
+	signatureVerifier signatureverifier.SignatureVerifier,
+	opts ...Option,
+) MessageValidator {
 	mv := &messageValidator{
-		logger:          zap.NewNop(),
-		metrics:         metricsreporter.NewNop(),
-		netCfg:          netCfg,
-		validationLocks: make(map[spectypes.MessageID]*sync.Mutex),
+		logger:            zap.NewNop(),
+		metrics:           metricsreporter.NewNop(),
+		netCfg:            netCfg,
+		validationLocks:   make(map[spectypes.MessageID]*sync.Mutex),
+		validatorStore:    validatorStore,
+		dutyStore:         dutyStore,
+		signatureVerifier: signatureVerifier,
 	}
 
 	for _, opt := range opts {
 		opt(mv)
 	}
-
-	mv.signatureVerifier = newSignatureVerifier(mv.operatorStore) // TODO: pass from outside
 
 	return mv
 }

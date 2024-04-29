@@ -1,4 +1,4 @@
-package validation
+package signatureverifier
 
 import (
 	"fmt"
@@ -7,13 +7,19 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	"github.com/bloxapp/ssv/operator/keys"
+	registrystorage "github.com/bloxapp/ssv/registry/storage"
+	"github.com/bloxapp/ssv/storage/basedb"
 )
+
+//go:generate mockgen -package=mocks -destination=./mocks/signature_verifier.go -source=./signature_verifier.go
 
 type SignatureVerifier interface {
 	VerifySignature(operatorID spectypes.OperatorID, message *spectypes.SSVMessage, signature []byte) error
 }
 
-// TODO: move signatureVerifier outside of message validation
+type OperatorStore interface {
+	GetOperatorData(r basedb.Reader, id spectypes.OperatorID) (*registrystorage.OperatorData, bool, error)
+}
 
 type signatureVerifier struct {
 	operatorIDToPubkeyCache   map[spectypes.OperatorID]keys.OperatorPublicKey
@@ -21,7 +27,7 @@ type signatureVerifier struct {
 	operatorStore             OperatorStore
 }
 
-func newSignatureVerifier(operatorStore OperatorStore) *signatureVerifier {
+func NewSignatureVerifier(operatorStore OperatorStore) SignatureVerifier {
 	return &signatureVerifier{
 		operatorIDToPubkeyCache: make(map[spectypes.OperatorID]keys.OperatorPublicKey),
 		operatorStore:           operatorStore,
@@ -33,24 +39,17 @@ func (sv *signatureVerifier) VerifySignature(operatorID spectypes.OperatorID, me
 	operatorPubKey, ok := sv.operatorIDToPubkeyCache[operatorID]
 	sv.operatorIDToPubkeyCacheMu.Unlock()
 	if !ok {
-		operator, found, err := sv.operatorStore.GetOperatorData(operatorID)
+		operator, found, err := sv.operatorStore.GetOperatorData(nil, operatorID)
 		if err != nil {
-			e := ErrOperatorNotFound
-			e.got = operatorID
-			e.innerErr = err
-			return e
+			return err
 		}
 		if !found {
-			e := ErrOperatorNotFound
-			e.got = operatorID
-			return e
+			return fmt.Errorf("operator not found")
 		}
 
 		operatorPubKey, err = keys.PublicKeyFromString(string(operator.PublicKey))
 		if err != nil {
-			e := ErrSignatureVerification
-			e.innerErr = fmt.Errorf("decode public key: %w", err)
-			return e
+			return err
 		}
 
 		sv.operatorIDToPubkeyCacheMu.Lock()

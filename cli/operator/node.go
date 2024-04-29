@@ -33,8 +33,8 @@ import (
 	ssv_identity "github.com/bloxapp/ssv/identity"
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/message/validation"
-	msgvalidation "github.com/bloxapp/ssv/message/validation/genesis"
+	"github.com/bloxapp/ssv/message/msgvalidation"
+	genesismsgvalidation "github.com/bloxapp/ssv/message/msgvalidation/genesis"
 	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/monitoring/metricsreporter"
@@ -52,6 +52,7 @@ import (
 	"github.com/bloxapp/ssv/operator/validator"
 	"github.com/bloxapp/ssv/operator/validatorsmap"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v2/signatureverifier"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -214,24 +215,26 @@ var StartNodeCmd = &cobra.Command{
 		dutyStore := dutystore.New()
 		cfg.SSVOptions.DutyStore = dutyStore
 
-		var messageValidator msgvalidation.MessageValidator
+		var messageValidator genesismsgvalidation.MessageValidator
 		if cfg.AlanFork {
-			messageValidator = validation.New(
-				networkConfig,
-				validation.WithValidatorStore(nodeStorage),
-				validation.WithLogger(logger),
-				validation.WithMetrics(metricsReporter),
-				validation.WithDutyStore(dutyStore),
-				validation.WithOwnOperatorID(operatorDataStore),
-			)
-		} else {
+			signatureVerifier := signatureverifier.NewSignatureVerifier(nodeStorage) // TODO: pass from outside
+
+			var validatorStore operatorstorage.ValidatorStore // TODO: fix
+
 			messageValidator = msgvalidation.New(
 				networkConfig,
-				msgvalidation.WithNodeStorage(nodeStorage),
-				msgvalidation.WithLogger(logger),
-				msgvalidation.WithMetrics(metricsReporter),
-				msgvalidation.WithDutyStore(dutyStore),
-				msgvalidation.WithOwnOperatorID(operatorDataStore),
+				validatorStore,
+				dutyStore,
+				signatureVerifier,
+			)
+		} else {
+			messageValidator = genesismsgvalidation.New(
+				networkConfig,
+				genesismsgvalidation.WithNodeStorage(nodeStorage),
+				genesismsgvalidation.WithLogger(logger),
+				genesismsgvalidation.WithMetrics(metricsReporter),
+				genesismsgvalidation.WithDutyStore(dutyStore),
+				genesismsgvalidation.WithOwnOperatorID(operatorDataStore),
 			)
 		}
 

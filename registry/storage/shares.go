@@ -221,7 +221,7 @@ func ByClusterID(clusterID []byte) SharesFilter {
 			operatorIDs = append(operatorIDs, op.Signer)
 		}
 
-		shareClusterID := types.ComputeClusterIDHash(share.OwnerAddress, operatorIDs)
+		shareClusterID := types.ComputeCommitteeIDHash(share.OwnerAddress, operatorIDs)
 		return bytes.Equal(shareClusterID, clusterID)
 	}
 }

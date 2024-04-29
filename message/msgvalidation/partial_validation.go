@@ -1,4 +1,4 @@
-package validation
+package msgvalidation
 
 // partial_validation.go contains methods for validating partial signature messages
 
@@ -39,8 +39,6 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 		return nil, e
 	}
 
-	mv.reportPartialSignatureMessageMetrics(committee)
-
 	if err := mv.validatePartialSignatureMessageSemantics(signedSSVMessage, partialSignatureMessages, validatorIndices); err != nil {
 		return nil, err
 	}
@@ -62,16 +60,6 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 	mv.updatePartialSignatureState(partialSignatureMessages, state.GetSignerState(signer))
 
 	return partialSignatureMessages, nil
-}
-
-func (mv *messageValidator) reportPartialSignatureMessageMetrics(committee []spectypes.OperatorID) {
-	if mv.operatorDataStore != nil && mv.operatorDataStore.OperatorIDReady() {
-		if mv.ownCommittee(committee) {
-			mv.metrics.CommitteeMessage(spectypes.SSVPartialSignatureMsgType, false)
-		} else {
-			mv.metrics.NonCommitteeMessage(spectypes.SSVPartialSignatureMsgType, false)
-		}
-	}
 }
 
 func (mv *messageValidator) validatePartialSignatureMessageSemantics(

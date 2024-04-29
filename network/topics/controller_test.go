@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	msgvalidation "github.com/bloxapp/ssv/message/validation/genesis"
+	msgvalidation "github.com/bloxapp/ssv/message/msgvalidation/genesis"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 
 	"github.com/libp2p/go-libp2p"

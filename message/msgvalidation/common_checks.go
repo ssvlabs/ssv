@@ -1,4 +1,4 @@
-package validation
+package msgvalidation
 
 import (
 	"fmt"
@@ -7,15 +7,7 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"golang.org/x/exp/slices"
 )
-
-// ownCommittee should be called only when WithOwnOperatorID is set
-func (mv *messageValidator) ownCommittee(committee []spectypes.OperatorID) bool {
-	return slices.ContainsFunc(committee, func(operatorID spectypes.OperatorID) bool {
-		return operatorID == mv.operatorDataStore.GetOperatorID()
-	})
-}
 
 func (mv *messageValidator) committeeRole(role spectypes.RunnerRole) bool {
 	return role == spectypes.RoleCommittee
