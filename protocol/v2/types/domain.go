@@ -1,7 +1,7 @@
 package types
 
 import (
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	"github.com/bloxapp/ssv/networkconfig"
 )
