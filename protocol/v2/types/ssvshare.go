@@ -14,6 +14,7 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"golang.org/x/exp/slices"
 
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
@@ -53,13 +54,19 @@ func (s *SSVShare) Decode(data []byte) error {
 	if err := d.Decode(s); err != nil {
 		return fmt.Errorf("decode SSVShare: %w", err)
 	}
-	s.Quorum, s.PartialQuorum = ComputeQuorumAndPartialQuorum(len(s.Committee))
+	s.Quorum, _ = ComputeQuorumAndPartialQuorum(len(s.Committee))
 	return nil
 }
 
 // BelongsToOperator checks whether the share belongs to operator.
 func (s *SSVShare) BelongsToOperator(operatorID spectypes.OperatorID) bool {
-	return operatorID != 0 && s.OperatorID == operatorID
+	if operatorID == 0 {
+		return false
+	}
+
+	return slices.ContainsFunc(s.Committee, func(shareMember *spectypes.ShareMember) bool {
+		return shareMember.Signer == operatorID
+	})
 }
 
 // HasBeaconMetadata checks whether the BeaconMetadata field is not nil.

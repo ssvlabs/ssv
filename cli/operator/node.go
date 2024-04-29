@@ -10,17 +10,13 @@ import (
 	"os"
 	"time"
 
-	"github.com/bloxapp/ssv/operator/controller"
-	"github.com/bloxapp/ssv/operator/keystore"
-
-	"github.com/bloxapp/ssv/network"
-
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
+
+	msgvalidation "github.com/bloxapp/ssv/message/validation/genesis"
 
 	"github.com/bloxapp/ssv/api/handlers"
 	apiserver "github.com/bloxapp/ssv/api/server"
@@ -42,6 +38,7 @@ import (
 	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/monitoring/metricsreporter"
+	"github.com/bloxapp/ssv/network"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/nodeprobe"
@@ -49,6 +46,7 @@ import (
 	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
 	"github.com/bloxapp/ssv/operator/keys"
+	"github.com/bloxapp/ssv/operator/keystore"
 	"github.com/bloxapp/ssv/operator/slotticker"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
@@ -82,6 +80,7 @@ type config struct {
 	WithPing                   bool                             `yaml:"WithPing" env:"WITH_PING" env-description:"Whether to send websocket ping messages'"`
 	SSVAPIPort                 int                              `yaml:"SSVAPIPort" env:"SSV_API_PORT" env-description:"Port to listen on for the SSV API."`
 	LocalEventsPath            string                           `yaml:"LocalEventsPath" env:"EVENTS_PATH" env-description:"path to local events"`
+	AlanFork                   bool                             `yaml:"AlanFork" env:"ALAN_FORK" env-description:"use alan fork"`
 }
 
 var cfg config
@@ -211,14 +210,26 @@ var StartNodeCmd = &cobra.Command{
 		dutyStore := dutystore.New()
 		cfg.SSVOptions.DutyStore = dutyStore
 
-		messageValidator := validation.NewMessageValidator(
-			networkConfig,
-			validation.WithNodeStorage(nodeStorage),
-			validation.WithLogger(logger),
-			validation.WithMetrics(metricsReporter),
-			validation.WithDutyStore(dutyStore),
-			validation.WithOwnOperatorID(operatorDataStore),
-		)
+		var messageValidator msgvalidation.MessageValidator
+		if cfg.AlanFork {
+			messageValidator = validation.New(
+				networkConfig,
+				validation.WithValidatorStore(nodeStorage),
+				validation.WithLogger(logger),
+				validation.WithMetrics(metricsReporter),
+				validation.WithDutyStore(dutyStore),
+				validation.WithOwnOperatorID(operatorDataStore),
+			)
+		} else {
+			messageValidator = msgvalidation.New(
+				networkConfig,
+				msgvalidation.WithNodeStorage(nodeStorage),
+				msgvalidation.WithLogger(logger),
+				msgvalidation.WithMetrics(metricsReporter),
+				msgvalidation.WithDutyStore(dutyStore),
+				msgvalidation.WithOwnOperatorID(operatorDataStore),
+			)
+		}
 
 		cfg.P2pNetworkConfig.Metrics = metricsReporter
 		cfg.P2pNetworkConfig.MessageValidator = messageValidator

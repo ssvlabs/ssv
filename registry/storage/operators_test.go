@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"testing"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 

@@ -20,26 +20,27 @@ var (
 // DecodedSSVMessage is a bundle of SSVMessage and it's decoding.
 // TODO: try to make it generic
 type DecodedSSVMessage struct {
-	*spectypes.SSVMessage
+	*spectypes.SSVMessage // TODO: interface
+	GenesisSSVMessage     *genesisspectypes.SSVMessage
 
 	// Body is the decoded Data.
-	Body interface{} // *SignedMessage | *SignedPartialSignatureMessage | *EventMsg
+	Body interface{} // *genesisspecqbft.SignedMessage | *genesisspectypes.SignedPartialSignatureMessage | *EventMsg | *specqbft.Message | *spectypes.PartialSignatureMessages
 }
 
-// DecodeSSVMessage decodes an SSVMessage and returns a DecodedSSVMessage.
-func DecodeSSVMessage(m *spectypes.SSVMessage) (*DecodedSSVMessage, error) {
+// DecodeAlanSSVMessage decodes an SSVMessage and returns a DecodedSSVMessage.
+func DecodeAlanSSVMessage(m *spectypes.SSVMessage) (*DecodedSSVMessage, error) {
 	var body interface{}
 	switch m.MsgType {
 	case spectypes.SSVConsensusMsgType: // TODO: Or message.SSVDecidedMsgType?
-		sm := &genesisspecqbft.SignedMessage{}
+		sm := &genesisspecqbft.Message{}
 		if err := sm.Decode(m.Data); err != nil {
-			return nil, errors.Wrap(err, "failed to decode SignedMessage")
+			return nil, errors.Wrap(err, "failed to decode Message")
 		}
 		body = sm
 	case spectypes.SSVPartialSignatureMsgType:
-		sm := &genesisspectypes.SignedPartialSignatureMessage{}
+		sm := &genesisspectypes.PartialSignatureMessages{}
 		if err := sm.Decode(m.Data); err != nil {
-			return nil, errors.Wrap(err, "failed to decode SignedPartialSignatureMessage")
+			return nil, errors.Wrap(err, "failed to decode PartialSignatureMessages")
 		}
 		body = sm
 	case ssvmessage.SSVEventMsgType:
@@ -54,6 +55,37 @@ func DecodeSSVMessage(m *spectypes.SSVMessage) (*DecodedSSVMessage, error) {
 	return &DecodedSSVMessage{
 		SSVMessage: m,
 		Body:       body,
+	}, nil
+}
+
+// DecodeGenesisSSVMessage decodes a genesis SSVMessage and returns a DecodedSSVMessage.
+func DecodeGenesisSSVMessage(m *genesisspectypes.SSVMessage) (*DecodedSSVMessage, error) {
+	var body interface{}
+	switch m.MsgType {
+	case genesisspectypes.SSVConsensusMsgType: // TODO: Or message.SSVDecidedMsgType?
+		sm := &genesisspecqbft.SignedMessage{}
+		if err := sm.Decode(m.Data); err != nil {
+			return nil, errors.Wrap(err, "failed to decode SignedMessage")
+		}
+		body = sm
+	case genesisspectypes.SSVPartialSignatureMsgType:
+		sm := &genesisspectypes.SignedPartialSignatureMessage{}
+		if err := sm.Decode(m.Data); err != nil {
+			return nil, errors.Wrap(err, "failed to decode SignedPartialSignatureMessage")
+		}
+		body = sm
+	case genesisspectypes.MsgType(ssvmessage.SSVEventMsgType):
+		msg := &ssvtypes.EventMsg{}
+		if err := msg.Decode(m.Data); err != nil {
+			return nil, errors.Wrap(err, "failed to decode EventMsg")
+		}
+		body = msg
+	default:
+		return nil, ErrUnknownMessageType
+	}
+	return &DecodedSSVMessage{
+		GenesisSSVMessage: m,
+		Body:              body,
 	}, nil
 }
 

@@ -7,18 +7,18 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/bloxapp/ssv/protocol/v2/message"
-
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
+	genesisspectypes "github.com/bloxapp/ssv-spec/genesis/types"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/records"
+	"github.com/bloxapp/ssv/protocol/v2/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
@@ -37,7 +37,7 @@ func (n *p2pNetwork) UseMessageRouter(router network.MessageRouter) {
 }
 
 // Peers registers a message router to handle incoming messages
-func (n *p2pNetwork) Peers(pk spectypes.ValidatorPK) ([]peer.ID, error) {
+func (n *p2pNetwork) Peers(pk genesisspectypes.ValidatorPK) ([]peer.ID, error) {
 	all := make([]peer.ID, 0)
 	topics := commons.ValidatorTopicID(pk)
 	for _, topic := range topics {
@@ -51,7 +51,7 @@ func (n *p2pNetwork) Peers(pk spectypes.ValidatorPK) ([]peer.ID, error) {
 }
 
 // Broadcast publishes the message to all peers in subnet
-func (n *p2pNetwork) Broadcast(msg *spectypes.SignedSSVMessage) error {
+func (n *p2pNetwork) Broadcast(msg *genesisspectypes.SignedSSVMessage) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
@@ -72,7 +72,7 @@ func (n *p2pNetwork) Broadcast(msg *spectypes.SignedSSVMessage) error {
 
 	encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, n.operatorDataStore.GetOperatorID(), signature)
 
-	vpk := msg.GetSSVMessage().GetID().GetSenderID()
+	vpk := msg.GetID().GetPubKey()
 	topics := commons.ValidatorTopicID(vpk)
 
 	for _, topic := range topics {

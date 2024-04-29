@@ -8,10 +8,17 @@ import (
 	"testing"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
-	"github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
-	"github.com/bloxapp/ssv/message/validation"
+	"github.com/ethereum/go-ethereum/common"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
+	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
+	"github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zaptest"
+
+	msgvalidation "github.com/bloxapp/ssv/message/validation/genesis"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/networkconfig"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
@@ -21,12 +28,6 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
-	"github.com/ethereum/go-ethereum/common"
-	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
-	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap/zaptest"
 )
 
 func TestMsgValidator(t *testing.T) {
@@ -49,7 +50,7 @@ func TestMsgValidator(t *testing.T) {
 	}
 	require.NoError(t, ns.Shares().Save(nil, share))
 
-	mv := validation.NewMessageValidator(networkconfig.TestNetwork, validation.WithNodeStorage(ns))
+	mv := msgvalidation.New(networkconfig.TestNetwork, msgvalidation.WithNodeStorage(ns))
 	require.NotNil(t, mv)
 
 	slot := networkconfig.TestNetwork.Beacon.GetBeaconNetwork().EstimatedCurrentSlot()
@@ -95,7 +96,7 @@ func TestMsgValidator(t *testing.T) {
 			},
 		}
 
-		res := mv.ValidatePubsubMessage(context.Background(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
+		res := mv.Validate(context.Background(), "16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r", pmsg)
 		require.Equal(t, pubsub.ValidationAccept, res)
 	})
 
@@ -116,7 +117,7 @@ func TestMsgValidator(t *testing.T) {
 
 	t.Run("empty message", func(t *testing.T) {
 		pmsg := newPBMsg([]byte{}, "xxx", []byte{})
-		res := mv.ValidatePubsubMessage(context.Background(), "xxxx", pmsg)
+		res := mv.Validate(context.Background(), "xxxx", pmsg)
 		require.Equal(t, pubsub.ValidationReject, res)
 	})
 

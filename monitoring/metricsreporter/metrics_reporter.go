@@ -8,12 +8,14 @@ import (
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/protocol/v2/message"
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
 )
 
@@ -159,6 +161,8 @@ var (
 )
 
 type MetricsReporter interface {
+	Genesis // DEPRECATED
+
 	SSVNodeHealthy()
 	SSVNodeNotHealthy()
 	ExecutionClientReady()
@@ -184,9 +188,9 @@ type MetricsReporter interface {
 	MessageValidationRSAVerifications()
 	LastBlockProcessed(block uint64)
 	LogsProcessingError(err error)
-	MessageAccepted(role spectypes.BeaconRole, round specqbft.Round)
-	MessageIgnored(reason string, role spectypes.BeaconRole, round specqbft.Round)
-	MessageRejected(reason string, role spectypes.BeaconRole, round specqbft.Round)
+	MessageAccepted(role spectypes.RunnerRole, round specqbft.Round)
+	MessageIgnored(reason string, role spectypes.RunnerRole, round specqbft.Round)
+	MessageRejected(reason string, role spectypes.RunnerRole, round specqbft.Round)
 	SSVMessageType(msgType spectypes.MsgType)
 	ConsensusMsgType(msgType specqbft.MessageType, signers int)
 	MessageValidationDuration(duration time.Duration, labels ...string)
@@ -200,7 +204,7 @@ type MetricsReporter interface {
 	MessageQueueSize(size int)
 	MessageQueueCapacity(size int)
 	MessageTimeInQueue(messageID spectypes.MessageID, d time.Duration)
-	InCommitteeMessage(msgType spectypes.MsgType, decided bool)
+	CommitteeMessage(msgType spectypes.MsgType, decided bool)
 	NonCommitteeMessage(msgType spectypes.MsgType, decided bool)
 	PeerScore(peerId peer.ID, score float64)
 	PeerP4Score(peerId peer.ID, score float64)
@@ -353,39 +357,39 @@ func (m *metricsReporter) LastBlockProcessed(uint64) {}
 func (m *metricsReporter) LogsProcessingError(error) {}
 
 func (m *metricsReporter) MessageAccepted(
-	role spectypes.BeaconRole,
+	role spectypes.RunnerRole,
 	round specqbft.Round,
 ) {
 	messageValidationResult.WithLabelValues(
 		messageAccepted,
 		"",
-		role.String(),
+		message.RunnerRoleToString(role),
 		strconv.FormatUint(uint64(round), 10),
 	).Inc()
 }
 
 func (m *metricsReporter) MessageIgnored(
 	reason string,
-	role spectypes.BeaconRole,
+	role spectypes.RunnerRole,
 	round specqbft.Round,
 ) {
 	messageValidationResult.WithLabelValues(
 		messageIgnored,
 		reason,
-		role.String(),
+		message.RunnerRoleToString(role),
 		strconv.FormatUint(uint64(round), 10),
 	).Inc()
 }
 
 func (m *metricsReporter) MessageRejected(
 	reason string,
-	role spectypes.BeaconRole,
+	role spectypes.RunnerRole,
 	round specqbft.Round,
 ) {
 	messageValidationResult.WithLabelValues(
 		messageRejected,
 		reason,
-		role.String(),
+		message.RunnerRoleToString(role),
 		strconv.FormatUint(uint64(round), 10),
 	).Inc()
 }
@@ -442,7 +446,7 @@ func (m *metricsReporter) MessageTimeInQueue(messageID spectypes.MessageID, d ti
 	messageTimeInQueue.WithLabelValues(messageID.String()).Observe(d.Seconds())
 }
 
-func (m *metricsReporter) InCommitteeMessage(msgType spectypes.MsgType, decided bool) {
+func (m *metricsReporter) CommitteeMessage(msgType spectypes.MsgType, decided bool) {
 	str := "non-decided"
 	if decided {
 		str = "decided"

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
+	spectests "github.com/ssvlabs/ssv-spec-pre-cc/qbft/spectest/tests"
 	"github.com/stretchr/testify/require"
 )
 

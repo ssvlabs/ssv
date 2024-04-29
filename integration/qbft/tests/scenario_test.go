@@ -6,10 +6,10 @@ import (
 	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv-spec/types/testingutils"
-	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/ethereum/go-ethereum/common"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
+	spectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -72,7 +72,7 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 				copy(pk[:], getKeySet(s.Committee).ValidatorPK.Serialize())
 				ssvMsg, err := controller.CreateDutyExecuteMsg(duty, pk, networkconfig.TestNetwork.Domain)
 				require.NoError(t, err)
-				dec, err := queue.DecodeSSVMessage(ssvMsg)
+				dec, err := queue.DecodeGenesisSSVMessage(ssvMsg)
 				require.NoError(t, err)
 
 				s.validators[id].Queues[role].Q.Push(dec)

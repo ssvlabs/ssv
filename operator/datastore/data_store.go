@@ -3,7 +3,7 @@ package datastore
 import (
 	"sync"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )

@@ -3,9 +3,9 @@ package validator
 import (
 	"encoding/json"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
@@ -36,7 +36,7 @@ func (v *Validator) onTimeout(logger *zap.Logger, identifier spectypes.MessageID
 			logger.Debug("❗ failed to create timer msg", zap.Error(err))
 			return
 		}
-		dec, err := queue.DecodeSSVMessage(msg)
+		dec, err := queue.DecodeGenesisSSVMessage(msg)
 		if err != nil {
 			logger.Debug("❌ failed to decode timer msg", zap.Error(err))
 			return

@@ -1,9 +1,9 @@
 package runner
 
 import (
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
+	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 )
 
 // Compacts the given message's associated instance if it's either...

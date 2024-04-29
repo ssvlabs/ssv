@@ -1,7 +1,7 @@
 package eventhandler
 
 import (
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 )
 
 type metrics interface {

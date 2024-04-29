@@ -14,14 +14,14 @@ import (
 	"time"
 
 	"github.com/aquasecurity/table"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sourcegraph/conc/pool"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/message/validation"
+	msgvalidation "github.com/bloxapp/ssv/message/validation/genesis"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
@@ -73,7 +73,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 
 			msg, err := commons.DecodeNetworkMsg(rawMsgPayload)
 			require.NoError(t, err)
-			decodedMsg, err := queue.DecodeSSVMessage(msg)
+			decodedMsg, err := queue.DecodeGenesisSSVMessage(msg)
 			require.NoError(t, err)
 			pmsg.ValidatorData = decodedMsg
 			mtx.Lock()
@@ -108,7 +108,7 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 	}
 
 	// Create a VirtualNet with 4 nodes.
-	vNet = CreateVirtualNet(t, ctx, 4, validators, func(nodeIndex int) validation.MessageValidator {
+	vNet = CreateVirtualNet(t, ctx, 4, validators, func(nodeIndex int) msgvalidation.MessageValidator {
 		return messageValidators[nodeIndex]
 	})
 	defer func() {
@@ -268,14 +268,14 @@ type MockMessageValidator struct {
 }
 
 func (v *MockMessageValidator) ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
-	return v.ValidatePubsubMessage
+	return v.Validate
 }
 
-func (v *MockMessageValidator) ValidatePubsubMessage(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+func (v *MockMessageValidator) Validate(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 	return v.ValidateFunc(ctx, p, pmsg)
 }
 
-func (v *MockMessageValidator) ValidateSSVMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, validation.Descriptor, error) {
+func (v *MockMessageValidator) ValidateSSVMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, msgvalidation.Descriptor, error) {
 	panic("not implemented") // TODO: Implement
 }
 
@@ -301,7 +301,7 @@ func CreateVirtualNet(
 	ctx context.Context,
 	nodes int,
 	validatorPubKeys []string,
-	messageValidatorProvider func(int) validation.MessageValidator,
+	messageValidatorProvider func(int) msgvalidation.MessageValidator,
 ) *VirtualNet {
 	var doneSetup atomic.Bool
 	vn := &VirtualNet{}

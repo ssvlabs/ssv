@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/patrickmn/go-cache"
+	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/exporter/api"

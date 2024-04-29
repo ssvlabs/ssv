@@ -3,7 +3,7 @@ package networkconfig
 import (
 	"math/big"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )

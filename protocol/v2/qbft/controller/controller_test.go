@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
+	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	spectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/logging"
