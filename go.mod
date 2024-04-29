@@ -6,8 +6,7 @@ require (
 	github.com/aquasecurity/table v1.8.0
 	github.com/attestantio/go-eth2-client v0.19.11-0.20240129201044-9d799aaab2bd
 	github.com/bloxapp/eth2-key-manager v1.4.0
-	github.com/bloxapp/ssv-spec v0.3.9-0.20240424091047-be63d922511b
-	github.com/bloxapp/ssv-spec-genesis v0.0.0-00010101000000-000000000000
+	github.com/bloxapp/ssv-spec v0.3.9-0.20240426041433-948848167435
 	github.com/btcsuite/btcd/btcec/v2 v2.3.2
 	github.com/cespare/xxhash/v2 v2.2.0
 	github.com/cornelk/hashmap v1.0.8
@@ -40,6 +39,7 @@ require (
 	github.com/rs/zerolog v1.29.1
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/cobra v1.7.0
+	github.com/ssvlabs/ssv-spec-pre-cc v0.0.0-20240417141827-0580ce071fa9
 	github.com/status-im/keycard-go v0.2.0
 	github.com/stretchr/testify v1.8.4
 	github.com/wealdtech/go-eth2-types/v2 v2.8.1
@@ -232,4 +232,4 @@ replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-
 
 replace github.com/attestantio/go-eth2-client => github.com/y0sher/go-eth2-client v0.0.0-20240305092513-92d154b203a6
 
-replace github.com/bloxapp/ssv-spec-genesis => github.com/bloxapp/ssv-spec v0.3.7 // Genesis
+replace github.com/ssvlabs/ssv-spec-pre-cc => github.com/MatusKysel/ssv-spec-pre-cc v0.0.0-20240417144536-0726f6ef227f

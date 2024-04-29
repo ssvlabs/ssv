@@ -1,9 +1,9 @@
 package validator
 
 import (
-	genesisspectypes "github.com/bloxapp/ssv-spec-genesis/types"
 	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	specssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	"github.com/bloxapp/ssv/ibft/storage"

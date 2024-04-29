@@ -2,11 +2,11 @@ package types
 
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	genesisspecssv "github.com/bloxapp/ssv-spec-genesis/ssv"
-	genesisspectypes "github.com/bloxapp/ssv-spec-genesis/types"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/types"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 )
 
 type GenesisPartialSigContainer struct {

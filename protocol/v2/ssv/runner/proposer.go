@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	genesisspectypes "github.com/bloxapp/ssv-spec-genesis/types"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 
 	"github.com/attestantio/go-eth2-client/api"

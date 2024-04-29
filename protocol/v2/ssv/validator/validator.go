@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"sync"
 
-	genesisspecqbft "github.com/bloxapp/ssv-spec-genesis/qbft"
-	genesisspectypes "github.com/bloxapp/ssv-spec-genesis/types"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
