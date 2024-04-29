@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	"github.com/attestantio/go-eth2-client/api"
 	apiv1capella "github.com/attestantio/go-eth2-client/api/v1/capella"
@@ -357,7 +357,7 @@ func (r *ProposerRunner) executeDuty(logger *zap.Logger, duty spectypes.Duty) er
 	}
 	msgToBroadcast := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID:   spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey[:] r.BaseRunner.BeaconRoleType),
+		MsgID:   spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.BeaconRoleType),
 		Data:    data,
 	}
 	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
