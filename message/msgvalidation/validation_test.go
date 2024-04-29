@@ -85,7 +85,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	signatureVerifier.EXPECT().VerifySignature(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
 	committeeRole := spectypes.RoleCommittee
-	nonCommitteeRole := spectypes.RoleAggregator
+	nonCommitteeRole := spectypes.RoleProposer
 
 	encodedCommitteeID := append(bytes.Repeat([]byte{0}, 16), committeeID[:]...)
 	committeeIdentifier := spectypes.NewMsgID(netCfg.Domain, encodedCommitteeID, committeeRole)
@@ -596,43 +596,34 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//	require.NoError(t, ns.Shares().Delete(nil, noMetadataShare.ValidatorPubKey))
 	//})
-	//
-	//// Receive error if more than 2 attestation duties in an epoch
-	//t.Run("too many duties", func(t *testing.T) {
-	//	validator := New(netCfg, WithValidatorStore(ns)).(*messageValidator)
-	//
-	//	slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-	//	height := specqbft.Height(slot)
-	//
-	//	validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
-	//	encodedValidSignedMessage, err := validSignedMessage.Encode()
-	//	require.NoError(t, err)
-	//
-	//	message := &spectypes.SSVMessage{
-	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole),
-	//		Data:    encodedValidSignedMessage,
-	//	}
-	//
-	//	_, _, err = validator.handleSignedSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole)), nil)
-	//	require.NoError(t, err)
-	//
-	//	validSignedMessage = spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height+4)
-	//	encodedValidSignedMessage, err = validSignedMessage.Encode()
-	//	require.NoError(t, err)
-	//
-	//	message.Data = encodedValidSignedMessage
-	//	_, _, err = validator.handleSignedSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot+4).Add(validator.waitAfterSlotStart(committeeRole)), nil)
-	//	require.NoError(t, err)
-	//
-	//	validSignedMessage = spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height+8)
-	//	encodedValidSignedMessage, err = validSignedMessage.Encode()
-	//	require.NoError(t, err)
-	//
-	//	message.Data = encodedValidSignedMessage
-	//	_, _, err = validator.handleSignedSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot+8).Add(validator.waitAfterSlotStart(committeeRole)), nil)
-	//	require.ErrorContains(t, err, ErrTooManyDutiesPerEpoch.Error())
-	//})
+
+	// Receive error if more than 2 attestation duties in an epoch
+	t.Run("too many duties", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, dutyStore, signatureVerifier).(*messageValidator)
+
+		epoch := phase0.Epoch(1)
+		slot := netCfg.Beacon.FirstSlotAtEpoch(epoch)
+
+		dutyStore.Proposer.Add(epoch, slot, shares.active.ValidatorIndex, &eth2apiv1.ProposerDuty{}, true)
+		dutyStore.Proposer.Add(epoch, slot+4, shares.active.ValidatorIndex, &eth2apiv1.ProposerDuty{}, true)
+		dutyStore.Proposer.Add(epoch, slot+8, shares.active.ValidatorIndex, &eth2apiv1.ProposerDuty{}, true)
+
+		role := spectypes.RoleAggregator
+		identifier := spectypes.NewMsgID(netCfg.Domain, ks.ValidatorPK.Serialize(), role)
+		signedSSVMessage := generateSignedMessage(ks, identifier, slot)
+
+		topicID := commons.ValidatorTopicID(signedSSVMessage.GetSSVMessage().GetID().GetSenderID())[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role)))
+		require.NoError(t, err)
+
+		signedSSVMessage = generateSignedMessage(ks, identifier, slot+4)
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, netCfg.Beacon.GetSlotStartTime(slot+4).Add(validator.waitAfterSlotStart(role)))
+		require.NoError(t, err)
+
+		signedSSVMessage = generateSignedMessage(ks, identifier, slot+8)
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, netCfg.Beacon.GetSlotStartTime(slot+8).Add(validator.waitAfterSlotStart(role)))
+		require.ErrorContains(t, err, ErrTooManyDutiesPerEpoch.Error())
+	})
 	//
 	//// Throw error if getting a message for proposal and see there is no message from beacon
 	//t.Run("no proposal duties", func(t *testing.T) {
@@ -1992,14 +1983,12 @@ type shareSet struct {
 }
 
 func generateShares(t *testing.T, ks *spectestingutils.TestKeySet, ns storage.Storage, netCfg networkconfig.NetworkConfig) shareSet {
-	const validatorIndex = 123
-
 	activeShare := &ssvtypes.SSVShare{
 		Share: *spectestingutils.TestingShare(ks),
 		Metadata: ssvtypes.Metadata{
 			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
 				Status: eth2apiv1.ValidatorStateActiveOngoing,
-				Index:  validatorIndex,
+				Index:  spectestingutils.TestingShare(ks).ValidatorIndex,
 			},
 			Liquidated: false,
 		},
@@ -2012,7 +2001,7 @@ func generateShares(t *testing.T, ks *spectestingutils.TestKeySet, ns storage.St
 		Metadata: ssvtypes.Metadata{
 			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
 				Status: eth2apiv1.ValidatorStateActiveOngoing,
-				Index:  validatorIndex,
+				Index:  spectestingutils.TestingShare(ks).ValidatorIndex,
 			},
 			Liquidated: true,
 		},
