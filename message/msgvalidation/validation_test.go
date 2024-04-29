@@ -1,15 +1,23 @@
 package msgvalidation
 
 import (
+	"bytes"
 	"crypto/sha256"
+	"encoding/hex"
+	"math"
 	"testing"
+	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/golang/mock/gomock"
+	pubsub "github.com/libp2p/go-libp2p-pubsub"
+	pspb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/stretchr/testify/require"
+	eth2types "github.com/wealdtech/go-eth2-types/v2"
 	"go.uber.org/zap/zaptest"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
@@ -36,68 +44,61 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	ns, err := storage.NewNodeStorage(logger, db)
 	require.NoError(t, err)
 
-	const validatorIndex = 123
+	netCfg := networkconfig.TestNetwork
 
 	ks := spectestingutils.Testing4SharesSet()
-	share := &ssvtypes.SSVShare{
-		Share: *spectestingutils.TestingShare(ks),
-		Metadata: ssvtypes.Metadata{
-			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-				Status: eth2apiv1.ValidatorStateActiveOngoing,
-				Index:  validatorIndex,
-			},
-			Liquidated: false,
-		},
-	}
+	shares := generateShares(t, ks, ns, netCfg)
 
-	require.NoError(t, ns.Shares().Save(nil, share))
-
-	netCfg := networkconfig.TestNetwork
-	role := spectypes.RoleCommittee
 	dutyStore := dutystore.New()
-
 	validatorStore := mocks.NewMockValidatorStore(ctrl)
 
 	committee := maps.Keys(ks.Shares)
 	slices.Sort(committee)
 
+	committeeID := shares.active.CommitteeID()
+
 	validatorStore.EXPECT().Committee(gomock.Any()).DoAndReturn(func(id ssvtypes.CommitteeID) *storage.Committee {
-		return &storage.Committee{
-			ID:        id,
-			Operators: committee,
-			Validators: []*ssvtypes.SSVShare{
-				share,
-			},
+		if id == committeeID {
+			return &storage.Committee{
+				ID:        id,
+				Operators: committee,
+				Validators: []*ssvtypes.SSVShare{
+					shares.active,
+				},
+			}
 		}
+
+		return nil
+	}).AnyTimes()
+
+	validatorStore.EXPECT().Validator(gomock.Any()).DoAndReturn(func(pubKey []byte) *ssvtypes.SSVShare {
+		for _, share := range []*ssvtypes.SSVShare{shares.active, shares.liquidated, shares.inactive, shares.nonUpdatedMetadata} {
+
+			if bytes.Equal(share.ValidatorPubKey[:], pubKey) {
+				return share
+			}
+		}
+		return nil
 	}).AnyTimes()
 
 	signatureVerifier := signatureverifier.NewMockSignatureVerifier(ctrl)
 	signatureVerifier.EXPECT().VerifySignature(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+	committeeRole := spectypes.RoleCommittee
+	nonCommitteeRole := spectypes.RoleAggregator
+
+	encodedCommitteeID := append(bytes.Repeat([]byte{0}, 16), committeeID[:]...)
+	committeeIdentifier := spectypes.NewMsgID(netCfg.Domain, encodedCommitteeID, committeeRole)
+	//nonCommitteeIdentifier := spectypes.NewMsgID(netCfg.Domain, ks.ValidatorPK.Serialize(), committeeRole)
 
 	// Message validation happy flow, messages are not ignored or rejected and there are no errors
 	t.Run("happy flow", func(t *testing.T) {
 		validator := New(netCfg, validatorStore, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-		height := specqbft.Height(slot)
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
 
-		fullData := spectestingutils.TestingQBFTFullData
-		identifier := spectypes.NewMsgID(netCfg.Domain, ks.ValidatorPK.Serialize(), role)
-
-		qbftMessage := &specqbft.Message{
-			MsgType:    specqbft.ProposalMsgType,
-			Height:     height,
-			Round:      specqbft.FirstRound,
-			Identifier: identifier[:],
-			Root:       sha256.Sum256(fullData),
-
-			RoundChangeJustification: [][]byte{},
-			PrepareJustification:     [][]byte{},
-		}
-		signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[1], 1, qbftMessage)
-		signedSSVMessage.FullData = fullData
-
-		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 		topicID := commons.CommitteeTopicID(signedSSVMessage.GetSSVMessage().GetID().GetSenderID())[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.NoError(t, err)
@@ -110,7 +111,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//	slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 	//	height := specqbft.Height(slot)
 	//
-	//	msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role)
+	//	msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole)
 	//	state := validator.consensusState(msgID)
 	//	for i := spectypes.OperatorID(1); i <= 4; i++ {
 	//		signerState := state.GetSignerState(i)
@@ -127,7 +128,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//		Data:    encodedMsg,
 	//	}
 	//
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//	_, _, err = validator.handleSignedSSVMessage(ssvMsg, receivedAt, nil)
 	//	require.NoError(t, err)
 	//
@@ -187,354 +188,282 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//	require.EqualValues(t, 1, state1.Round)
 	//	require.EqualValues(t, MessageCounts{Commit: 1, Decided: 1}, state1.MessageCounts)
 	//})
-	//
-	//// Send a pubsub message with no data should cause an error
-	//t.Run("pubsub message has no data", func(t *testing.T) {
-	//	validator := New(netCfg, WithValidatorStore(ns)).(*messageValidator)
-	//
-	//	slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-	//
-	//	pmsg := &pubsub.Message{}
-	//
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
-	//	_, _, err := validator.handlePubsubMessage(pmsg, receivedAt)
-	//
-	//	require.ErrorIs(t, err, ErrPubSubMessageHasNoData)
-	//})
-	//
-	//// Send a pubsub message where there is too much data should cause an error
-	//t.Run("pubsub data too big", func(t *testing.T) {
-	//	validator := New(netCfg, WithValidatorStore(ns)).(*messageValidator)
-	//
-	//	slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-	//
-	//	topic := commons.GetTopicFullName(commons.ValidatorTopicID(share.ValidatorPubKey)[0])
-	//	pmsg := &pubsub.Message{
-	//		Message: &pspb.Message{
-	//			Data:  bytes.Repeat([]byte{1}, 10_000_000+commons.MessageOffset),
-	//			Topic: &topic,
-	//			From:  []byte("16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r"),
-	//		},
-	//	}
-	//
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
-	//	_, _, err = validator.handlePubsubMessage(pmsg, receivedAt)
-	//
-	//	e := ErrPubSubDataTooBig
-	//	e.got = 10_000_000
-	//	require.ErrorIs(t, err, e)
-	//})
-	//
-	//// Send a malformed pubsub message (empty message) should return an error
-	//t.Run("empty pubsub message", func(t *testing.T) {
-	//	validator := New(netCfg, WithValidatorStore(ns)).(*messageValidator)
-	//
-	//	slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-	//
-	//	topic := commons.GetTopicFullName(commons.ValidatorTopicID(share.ValidatorPubKey)[0])
-	//	pmsg := &pubsub.Message{
-	//		Message: &pspb.Message{
-	//			Data:  bytes.Repeat([]byte{1}, 1+commons.MessageOffset),
-	//			Topic: &topic,
-	//			From:  []byte("16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r"),
-	//		},
-	//	}
-	//
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
-	//	_, _, err = validator.handlePubsubMessage(pmsg, receivedAt)
-	//
-	//	require.ErrorContains(t, err, ErrMalformedPubSubMessage.Error())
-	//})
-	//
-	//// Send a message with incorrect data (unable to decode incorrect message type)
-	//t.Run("bad data format", func(t *testing.T) {
-	//	validator := New(netCfg, WithValidatorStore(ns)).(*messageValidator)
-	//
-	//	slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-	//
-	//	message := &spectypes.SSVMessage{
-	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
-	//		Data:    bytes.Repeat([]byte{1}, 500),
-	//	}
-	//
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
-	//	_, _, err = validator.handleSignedSSVMessage(message, receivedAt, nil)
-	//
-	//	require.ErrorContains(t, err, ErrUndecodableMessageData.Error())
-	//})
-	//
-	//// Send a message with no data should return an error
-	//t.Run("no data", func(t *testing.T) {
-	//	validator := New(netCfg, WithValidatorStore(ns)).(*messageValidator)
-	//
-	//	message := &spectypes.SSVMessage{
-	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
-	//		Data:    []byte{},
-	//	}
-	//
-	//	_, _, err := validator.handleSignedSSVMessage(message, time.Now(), nil)
-	//	require.ErrorIs(t, err, ErrEmptyData)
-	//
-	//	message = &spectypes.SSVMessage{
-	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
-	//		Data:    nil,
-	//	}
-	//
-	//	_, _, err = validator.handleSignedSSVMessage(message, time.Now(), nil)
-	//	require.ErrorIs(t, err, ErrEmptyData)
-	//})
-	//
-	//// Send a message where there is too much data should cause an error
-	//t.Run("data too big", func(t *testing.T) {
-	//	validator := New(netCfg, WithValidatorStore(ns)).(*messageValidator)
-	//
-	//	const tooBigMsgSize = maxPayloadSize * 2
-	//
-	//	message := &spectypes.SSVMessage{
-	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
-	//		Data:    bytes.Repeat([]byte{0x1}, tooBigMsgSize),
-	//	}
-	//
-	//	_, _, err := validator.handleSignedSSVMessage(message, time.Now(), nil)
-	//	expectedErr := ErrSSVDataTooBig
-	//	expectedErr.got = tooBigMsgSize
-	//	expectedErr.want = maxPayloadSize
-	//	require.ErrorIs(t, err, expectedErr)
-	//})
-	//
-	//// Send exact allowed data size amount but with invalid data (fails to decode)
-	//t.Run("data size borderline / malformed message", func(t *testing.T) {
-	//	validator := New(netCfg, WithValidatorStore(ns)).(*messageValidator)
-	//
-	//	message := &spectypes.SSVMessage{
-	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
-	//		Data:    bytes.Repeat([]byte{0x1}, maxPayloadSize),
-	//	}
-	//
-	//	_, _, err := validator.handleSignedSSVMessage(message, time.Now(), nil)
-	//	require.ErrorContains(t, err, ErrUndecodableMessageData.Error())
-	//})
-	//
-	//// Send an invalid SSV message type returns an error
-	//t.Run("invalid SSV message type", func(t *testing.T) {
-	//	validator := New(netCfg, WithValidatorStore(ns)).(*messageValidator)
-	//
-	//	message := &spectypes.SSVMessage{
-	//		MsgType: math.MaxUint64,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
-	//		Data:    []byte{0x1},
-	//	}
-	//
-	//	_, _, err = validator.handleSignedSSVMessage(message, time.Now(), nil)
-	//	require.ErrorContains(t, err, ErrUnknownSSVMessageType.Error())
-	//})
-	//
-	//// Empty validator public key returns an error
-	//t.Run("empty validator public key", func(t *testing.T) {
-	//	validator := New(netCfg, WithValidatorStore(ns)).(*messageValidator)
-	//
-	//	validSignedMessage := spectestingutils.TestingProposalMessage(ks.Shares[1], 1)
-	//	encodedValidSignedMessage, err := validSignedMessage.Encode()
-	//	require.NoError(t, err)
-	//
-	//	message := &spectypes.SSVMessage{
-	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, spectypes.ValidatorPK{}, role),
-	//		Data:    encodedValidSignedMessage,
-	//	}
-	//
-	//	_, _, err = validator.handleSignedSSVMessage(message, time.Now(), nil)
-	//	require.ErrorContains(t, err, ErrDeserializePublicKey.Error())
-	//})
-	//
-	//// Generate random validator and validate it is unknown to the network
-	//t.Run("unknown validator", func(t *testing.T) {
-	//	validator := New(netCfg, WithValidatorStore(ns)).(*messageValidator)
-	//
-	//	sk, err := eth2types.GenerateBLSPrivateKey()
-	//	require.NoError(t, err)
-	//
-	//	validSignedMessage := spectestingutils.TestingProposalMessage(ks.Shares[1], 1)
-	//	encodedValidSignedMessage, err := validSignedMessage.Encode()
-	//	require.NoError(t, err)
-	//
-	//	message := &spectypes.SSVMessage{
-	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, sk.PublicKey().Marshal(), role),
-	//		Data:    encodedValidSignedMessage,
-	//	}
-	//
-	//	_, _, err = validator.handleSignedSSVMessage(message, time.Now(), nil)
-	//	expectedErr := ErrUnknownValidator
-	//	expectedErr.got = hex.EncodeToString(sk.PublicKey().Marshal())
-	//	require.ErrorIs(t, err, expectedErr)
-	//})
-	//
-	//// Make sure messages are dropped if on the incorrect network
-	//t.Run("wrong domain", func(t *testing.T) {
-	//	validator := New(netCfg, WithValidatorStore(ns)).(*messageValidator)
-	//
-	//	slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-	//	height := specqbft.Height(slot)
-	//
-	//	validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
-	//	encodedValidSignedMessage, err := validSignedMessage.Encode()
-	//	require.NoError(t, err)
-	//
-	//	wrongDomain := spectypes.DomainType{math.MaxUint8, math.MaxUint8, math.MaxUint8, math.MaxUint8}
-	//	message := &spectypes.SSVMessage{
-	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(wrongDomain, share.ValidatorPubKey, role),
-	//		Data:    encodedValidSignedMessage,
-	//	}
-	//
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
-	//	_, _, err = validator.handleSignedSSVMessage(message, receivedAt, nil)
-	//	expectedErr := ErrWrongDomain
-	//	expectedErr.got = hex.EncodeToString(wrongDomain[:])
-	//	expectedErr.want = hex.EncodeToString(netCfg.Domain[:])
-	//	require.ErrorIs(t, err, expectedErr)
-	//})
-	//
-	//// Send message with a value that refers to a non-existent role
-	//t.Run("invalid role", func(t *testing.T) {
-	//	validator := New(netCfg, WithValidatorStore(ns)).(*messageValidator)
-	//
-	//	slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-	//	height := specqbft.Height(slot)
-	//
-	//	validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
-	//	encodedValidSignedMessage, err := validSignedMessage.Encode()
-	//	require.NoError(t, err)
-	//
-	//	message := &spectypes.SSVMessage{
-	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, math.MaxUint64),
-	//		Data:    encodedValidSignedMessage,
-	//	}
-	//
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
-	//	_, _, err = validator.handleSignedSSVMessage(message, receivedAt, nil)
-	//	require.ErrorIs(t, err, ErrInvalidRole)
-	//})
-	//
-	//// Perform validator registration or voluntary exit with a consensus type message will give an error
-	//t.Run("unexpected consensus message", func(t *testing.T) {
-	//	validator := New(netCfg, WithValidatorStore(ns)).(*messageValidator)
-	//
-	//	slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-	//	height := specqbft.Height(slot)
-	//
-	//	validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
-	//	encodedValidSignedMessage, err := validSignedMessage.Encode()
-	//	require.NoError(t, err)
-	//
-	//	message := &spectypes.SSVMessage{
-	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, spectypes.BNRoleValidatorRegistration),
-	//		Data:    encodedValidSignedMessage,
-	//	}
-	//
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
-	//	_, _, err = validator.handleSignedSSVMessage(message, receivedAt, nil)
-	//	require.ErrorContains(t, err, ErrUnexpectedConsensusMessage.Error())
-	//
-	//	message = &spectypes.SSVMessage{
-	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, spectypes.BNRoleVoluntaryExit),
-	//		Data:    encodedValidSignedMessage,
-	//	}
-	//
-	//	_, _, err = validator.handleSignedSSVMessage(message, receivedAt, nil)
-	//	require.ErrorContains(t, err, ErrUnexpectedConsensusMessage.Error())
-	//})
-	//
-	//// Ignore messages related to a validator that is liquidated
-	//t.Run("liquidated validator", func(t *testing.T) {
-	//	validator := New(netCfg, WithValidatorStore(ns)).(*messageValidator)
-	//
-	//	liquidatedSK, err := eth2types.GenerateBLSPrivateKey()
-	//	require.NoError(t, err)
-	//
-	//	liquidatedShare := &ssvtypes.SSVShare{
-	//		Share: *spectestingutils.TestingShare(ks),
-	//		Metadata: ssvtypes.Metadata{
-	//			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-	//				Status: eth2apiv1.ValidatorStateActiveOngoing,
-	//			},
-	//			Liquidated: true,
-	//		},
-	//	}
-	//	liquidatedShare.ValidatorPubKey = liquidatedSK.PublicKey().Marshal()
-	//
-	//	require.NoError(t, ns.Shares().Save(nil, liquidatedShare))
-	//
-	//	validSignedMessage := spectestingutils.TestingProposalMessage(ks.Shares[1], 1)
-	//	encodedValidSignedMessage, err := validSignedMessage.Encode()
-	//	require.NoError(t, err)
-	//
-	//	message := &spectypes.SSVMessage{
-	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, liquidatedShare.ValidatorPubKey, role),
-	//		Data:    encodedValidSignedMessage,
-	//	}
-	//
-	//	_, _, err = validator.handleSignedSSVMessage(message, time.Now(), nil)
-	//	expectedErr := ErrValidatorLiquidated
-	//	require.ErrorIs(t, err, expectedErr)
-	//
-	//	require.NoError(t, ns.Shares().Delete(nil, liquidatedShare.ValidatorPubKey))
-	//})
-	//
-	//// Ignore messages related to a validator with unknown state
-	//t.Run("unknown state validator", func(t *testing.T) {
-	//	validator := New(netCfg, WithValidatorStore(ns)).(*messageValidator)
-	//
-	//	inactiveSK, err := eth2types.GenerateBLSPrivateKey()
-	//	require.NoError(t, err)
-	//
-	//	inactiveShare := &ssvtypes.SSVShare{
-	//		Share: *spectestingutils.TestingShare(ks),
-	//		Metadata: ssvtypes.Metadata{
-	//			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
-	//				Status: eth2apiv1.ValidatorStateUnknown,
-	//			},
-	//			Liquidated: false,
-	//		},
-	//	}
-	//	inactiveShare.ValidatorPubKey = inactiveSK.PublicKey().Marshal()
-	//
-	//	require.NoError(t, ns.Shares().Save(nil, inactiveShare))
-	//
-	//	validSignedMessage := spectestingutils.TestingProposalMessage(ks.Shares[1], 1)
-	//	encodedValidSignedMessage, err := validSignedMessage.Encode()
-	//	require.NoError(t, err)
-	//
-	//	message := &spectypes.SSVMessage{
-	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, inactiveShare.ValidatorPubKey, role),
-	//		Data:    encodedValidSignedMessage,
-	//	}
-	//
-	//	slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
-	//
-	//	_, _, err = validator.handleSignedSSVMessage(message, receivedAt, nil)
-	//	expectedErr := ErrValidatorNotAttesting
-	//	expectedErr.got = eth2apiv1.ValidatorStateUnknown.String()
-	//	require.ErrorIs(t, err, expectedErr)
-	//
-	//	require.NoError(t, ns.Shares().Delete(nil, inactiveShare.ValidatorPubKey))
-	//})
-	//
+
+	// Send a pubsub message with no data should cause an error
+	t.Run("pubsub message has no data", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		pmsg := &pubsub.Message{}
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
+		_, err := validator.handlePubsubMessage(pmsg, receivedAt)
+
+		require.ErrorIs(t, err, ErrPubSubMessageHasNoData)
+	})
+
+	// Send a pubsub message where there is too much data should cause an error
+	t.Run("pubsub data too big", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		topic := commons.GetTopicFullName(commons.CommitteeTopicID(committeeIdentifier[:])[0])
+		msgSize := 10_000_000 + commons.MessageOffset
+
+		pmsg := &pubsub.Message{
+			Message: &pspb.Message{
+				Data:  bytes.Repeat([]byte{1}, msgSize),
+				Topic: &topic,
+				From:  []byte("16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r"),
+			},
+		}
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
+		_, err = validator.handlePubsubMessage(pmsg, receivedAt)
+
+		e := ErrPubSubDataTooBig
+		e.got = msgSize
+		require.ErrorIs(t, err, e)
+	})
+
+	// Send a malformed pubsub message (empty message) should return an error
+	t.Run("empty pubsub message", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		topic := commons.GetTopicFullName(commons.CommitteeTopicID(committeeIdentifier[:])[0])
+		pmsg := &pubsub.Message{
+			Message: &pspb.Message{
+				Data:  bytes.Repeat([]byte{1}, 1+commons.MessageOffset),
+				Topic: &topic,
+				From:  []byte("16Uiu2HAkyWQyCb6reWXGQeBUt9EXArk6h3aq3PsFMwLNq3pPGH1r"),
+			},
+		}
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
+		_, err = validator.handlePubsubMessage(pmsg, receivedAt)
+
+		require.ErrorContains(t, err, ErrMalformedPubSubMessage.Error())
+	})
+
+	// Send a message with incorrect data (unable to decode incorrect message type)
+	t.Run("bad data format", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage.SSVMessage.Data = bytes.Repeat([]byte{1}, 500)
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
+		topicID := commons.CommitteeTopicID(signedSSVMessage.GetSSVMessage().GetID().GetSenderID())[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
+
+		require.ErrorContains(t, err, ErrUndecodableMessageData.Error())
+	})
+
+	// Send a message with no data should return an error
+	t.Run("no data", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage.SSVMessage.Data = []byte{}
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
+		topicID := commons.CommitteeTopicID(signedSSVMessage.GetSSVMessage().GetID().GetSenderID())[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
+		require.ErrorIs(t, err, ErrEmptyData)
+
+		signedSSVMessage.SSVMessage.Data = nil
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
+		require.ErrorIs(t, err, ErrEmptyData)
+	})
+
+	// Send a message where there is too much data should cause an error
+	t.Run("data too big", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+
+		const tooBigMsgSize = maxPayloadSize * 2
+		signedSSVMessage.SSVMessage.Data = bytes.Repeat([]byte{1}, tooBigMsgSize)
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
+		topicID := commons.CommitteeTopicID(signedSSVMessage.GetSSVMessage().GetID().GetSenderID())[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
+
+		expectedErr := ErrSSVDataTooBig
+		expectedErr.got = tooBigMsgSize
+		expectedErr.want = maxPayloadSize
+		require.ErrorIs(t, err, expectedErr)
+	})
+
+	// Send exact allowed data size amount but with invalid data (fails to decode)
+	t.Run("data size borderline / malformed message", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage.SSVMessage.Data = bytes.Repeat([]byte{1}, maxPayloadSize)
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
+		topicID := commons.CommitteeTopicID(signedSSVMessage.GetSSVMessage().GetID().GetSenderID())[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
+
+		require.ErrorContains(t, err, ErrUndecodableMessageData.Error())
+	})
+
+	// Send an invalid SSV message type returns an error
+	t.Run("invalid SSV message type", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage.SSVMessage.MsgType = math.MaxUint64
+
+		topicID := commons.CommitteeTopicID(signedSSVMessage.GetSSVMessage().GetID().GetSenderID())[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, time.Now())
+		require.ErrorContains(t, err, ErrUnknownSSVMessageType.Error())
+	})
+
+	// Empty validator public key returns an error
+	t.Run("empty validator public key", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		badPK := spectypes.ValidatorPK{}
+		badIdentifier := spectypes.NewMsgID(netCfg.Domain, badPK[:], nonCommitteeRole)
+		signedSSVMessage := generateSignedMessage(ks, badIdentifier, slot)
+
+		topicID := commons.ValidatorTopicID(signedSSVMessage.GetSSVMessage().GetID().GetSenderID())[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, time.Now())
+		require.ErrorContains(t, err, ErrDeserializePublicKey.Error())
+	})
+
+	// Generate random validator and validate it is unknown to the network
+	t.Run("unknown validator", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		sk, err := eth2types.GenerateBLSPrivateKey()
+		require.NoError(t, err)
+
+		badIdentifier := spectypes.NewMsgID(netCfg.Domain, sk.PublicKey().Marshal(), nonCommitteeRole)
+		signedSSVMessage := generateSignedMessage(ks, badIdentifier, slot)
+
+		topicID := commons.ValidatorTopicID(signedSSVMessage.GetSSVMessage().GetID().GetSenderID())[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, time.Now())
+		expectedErr := ErrUnknownValidator
+		expectedErr.got = hex.EncodeToString(sk.PublicKey().Marshal())
+		require.ErrorIs(t, err, expectedErr)
+	})
+
+	// Make sure messages are dropped if on the incorrect network
+	t.Run("wrong domain", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		wrongDomain := spectypes.DomainType{math.MaxUint8, math.MaxUint8, math.MaxUint8, math.MaxUint8}
+		badIdentifier := spectypes.NewMsgID(wrongDomain, encodedCommitteeID, committeeRole)
+		signedSSVMessage := generateSignedMessage(ks, badIdentifier, slot)
+
+		topicID := commons.ValidatorTopicID(signedSSVMessage.GetSSVMessage().GetID().GetSenderID())[0]
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
+		expectedErr := ErrWrongDomain
+		expectedErr.got = hex.EncodeToString(wrongDomain[:])
+		expectedErr.want = hex.EncodeToString(netCfg.Domain[:])
+		require.ErrorIs(t, err, expectedErr)
+	})
+
+	// Send message with a value that refers to a non-existent role
+	t.Run("invalid role", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		badIdentifier := spectypes.NewMsgID(netCfg.Domain, encodedCommitteeID, math.MaxInt32)
+		signedSSVMessage := generateSignedMessage(ks, badIdentifier, slot)
+
+		topicID := commons.ValidatorTopicID(signedSSVMessage.GetSSVMessage().GetID().GetSenderID())[0]
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
+		require.ErrorIs(t, err, ErrInvalidRole)
+	})
+
+	// Perform validator registration or voluntary exit with a consensus type message will give an error
+	t.Run("unexpected consensus message", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		badIdentifier := spectypes.NewMsgID(netCfg.Domain, shares.active.ValidatorPubKey[:], spectypes.RoleValidatorRegistration)
+		signedSSVMessage := generateSignedMessage(ks, badIdentifier, slot)
+
+		topicID := commons.ValidatorTopicID(signedSSVMessage.GetSSVMessage().GetID().GetSenderID())[0]
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
+		expectedErr := ErrUnexpectedConsensusMessage
+		expectedErr.got = spectypes.RoleValidatorRegistration
+		require.ErrorIs(t, err, expectedErr)
+
+		badIdentifier = spectypes.NewMsgID(netCfg.Domain, shares.active.ValidatorPubKey[:], spectypes.RoleVoluntaryExit)
+		signedSSVMessage = generateSignedMessage(ks, badIdentifier, slot)
+
+		topicID = commons.ValidatorTopicID(signedSSVMessage.GetSSVMessage().GetID().GetSenderID())[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
+		expectedErr.got = spectypes.RoleVoluntaryExit
+		require.ErrorIs(t, err, expectedErr)
+	})
+
+	// Ignore messages related to a validator that is liquidated
+	t.Run("liquidated validator", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		liquidatedIdentifier := spectypes.NewMsgID(netCfg.Domain, shares.liquidated.ValidatorPubKey[:], nonCommitteeRole)
+		signedSSVMessage := generateSignedMessage(ks, liquidatedIdentifier, slot)
+
+		topicID := commons.ValidatorTopicID(signedSSVMessage.GetSSVMessage().GetID().GetSenderID())[0]
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(nonCommitteeRole))
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
+		expectedErr := ErrValidatorLiquidated
+		require.ErrorIs(t, err, expectedErr)
+	})
+
+	// Ignore messages related to a validator with unknown state
+	t.Run("unknown state validator", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		inactiveIdentifier := spectypes.NewMsgID(netCfg.Domain, shares.inactive.ValidatorPubKey[:], nonCommitteeRole)
+		signedSSVMessage := generateSignedMessage(ks, inactiveIdentifier, slot)
+
+		topicID := commons.ValidatorTopicID(signedSSVMessage.GetSSVMessage().GetID().GetSenderID())[0]
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(nonCommitteeRole))
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
+		expectedErr := ErrValidatorNotAttesting
+		expectedErr.got = eth2apiv1.ValidatorStateUnknown.String()
+		require.ErrorIs(t, err, expectedErr)
+	})
+
 	//// Ignore messages related to a validator that in pending queued state
 	//t.Run("pending queued state validator", func(t *testing.T) {
-	//	validator := New(netCfg, WithValidatorStore(ns)).(*messageValidator)
+	//	validator := New(netCfg, validatorStore, dutyStore, signatureVerifier).(*messageValidator)
 	//
 	//	nonUpdatedMetadataSK, err := eth2types.GenerateBLSPrivateKey()
 	//	require.NoError(t, err)
@@ -569,10 +498,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//	message := &spectypes.SSVMessage{
 	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, nonUpdatedMetadataShare.ValidatorPubKey, role),
+	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, nonUpdatedMetadataShare.ValidatorPubKey, committeeRole),
 	//		Data:    encodedValidSignedMessage,
 	//	}
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//
 	//	_, _, err = validator.handleSignedSSVMessage(message, receivedAt, nil)
 	//	expectedErr := ErrValidatorNotAttesting
@@ -620,10 +549,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//	message := &spectypes.SSVMessage{
 	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, nonUpdatedMetadataShare.ValidatorPubKey, role),
+	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, nonUpdatedMetadataShare.ValidatorPubKey, committeeRole),
 	//		Data:    encodedValidSignedMessage,
 	//	}
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//
 	//	_, _, err = validator.handleSignedSSVMessage(message, receivedAt, nil)
 	//	require.NoError(t, err)
@@ -655,12 +584,12 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//	message := &spectypes.SSVMessage{
 	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, noMetadataShare.ValidatorPubKey, role),
+	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, noMetadataShare.ValidatorPubKey, committeeRole),
 	//		Data:    encodedValidSignedMessage,
 	//	}
 	//
 	//	slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//
 	//	_, _, err = validator.handleSignedSSVMessage(message, receivedAt, nil)
 	//	require.ErrorIs(t, err, ErrNoShareMetadata)
@@ -681,11 +610,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//	message := &spectypes.SSVMessage{
 	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
+	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole),
 	//		Data:    encodedValidSignedMessage,
 	//	}
 	//
-	//	_, _, err = validator.handleSignedSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role)), nil)
+	//	_, _, err = validator.handleSignedSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole)), nil)
 	//	require.NoError(t, err)
 	//
 	//	validSignedMessage = spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height+4)
@@ -693,7 +622,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//	require.NoError(t, err)
 	//
 	//	message.Data = encodedValidSignedMessage
-	//	_, _, err = validator.handleSignedSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot+4).Add(validator.waitAfterSlotStart(role)), nil)
+	//	_, _, err = validator.handleSignedSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot+4).Add(validator.waitAfterSlotStart(committeeRole)), nil)
 	//	require.NoError(t, err)
 	//
 	//	validSignedMessage = spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height+8)
@@ -701,7 +630,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//	require.NoError(t, err)
 	//
 	//	message.Data = encodedValidSignedMessage
-	//	_, _, err = validator.handleSignedSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot+8).Add(validator.waitAfterSlotStart(role)), nil)
+	//	_, _, err = validator.handleSignedSSVMessage(message, netCfg.Beacon.GetSlotStartTime(slot+8).Add(validator.waitAfterSlotStart(committeeRole)), nil)
 	//	require.ErrorContains(t, err, ErrTooManyDutiesPerEpoch.Error())
 	//})
 	//
@@ -761,11 +690,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//	message := &spectypes.SSVMessage{
 	//		MsgType: spectypes.SSVPartialSignatureMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
+	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole),
 	//		Data:    encoded,
 	//	}
 	//
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//	_, _, err = validator.handleSignedSSVMessage(message, receivedAt, nil)
 	//	require.ErrorIs(t, err, ErrSignerNotInCommittee)
 	//})
@@ -783,11 +712,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//	message := &spectypes.SSVMessage{
 	//		MsgType: spectypes.SSVPartialSignatureMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
+	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole),
 	//		Data:    encoded,
 	//	}
 	//
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//	_, _, err = validator.handleSignedSSVMessage(message, receivedAt, nil)
 	//	require.ErrorIs(t, err, ErrZeroSigner)
 	//})
@@ -806,11 +735,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//	message := &spectypes.SSVMessage{
 	//		MsgType: spectypes.SSVPartialSignatureMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
+	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole),
 	//		Data:    encoded,
 	//	}
 	//
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//	_, _, err = validator.handleSignedSSVMessage(message, receivedAt, nil)
 	//	expectedErr := ErrInconsistentSigners
 	//	expectedErr.got = spectypes.OperatorID(2)
@@ -832,11 +761,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//	message := &spectypes.SSVMessage{
 	//		MsgType: spectypes.SSVPartialSignatureMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
+	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole),
 	//		Data:    encoded,
 	//	}
 	//
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//	_, _, err = validator.handleSignedSSVMessage(message, receivedAt, nil)
 	//	require.ErrorIs(t, err, ErrDuplicatedPartialSignatureMessage)
 	//})
@@ -855,11 +784,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//	message := &spectypes.SSVMessage{
 	//		MsgType: spectypes.SSVPartialSignatureMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
+	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole),
 	//		Data:    encoded,
 	//	}
 	//
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//	_, _, err = validator.handleSignedSSVMessage(message, receivedAt, nil)
 	//	require.ErrorIs(t, err, ErrNoPartialSignatureMessages)
 	//})
@@ -878,11 +807,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//	message := &spectypes.SSVMessage{
 	//		MsgType: spectypes.SSVPartialSignatureMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
+	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole),
 	//		Data:    encoded,
 	//	}
 	//
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//	_, _, err = validator.handleSignedSSVMessage(message, receivedAt, nil)
 	//	require.ErrorContains(t, err, ErrUndecodableMessageData.Error())
 	//})
@@ -891,7 +820,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//t.Run("partial message type validation", func(t *testing.T) {
 	//	slot := netCfg.Beacon.FirstSlotAtEpoch(162304)
 	//
-	//	// Check happy flow of a duty for each role
+	//	// Check happy flow of a duty for each committeeRole
 	//	t.Run("valid", func(t *testing.T) {
 	//		tests := map[spectypes.BeaconRole][]spectypes.PartialSigMsgType{
 	//			spectypes.BNRoleAttester:                  {spectypes.PostConsensusPartialSig},
@@ -903,10 +832,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//			spectypes.BNRoleVoluntaryExit:             {spectypes.VoluntaryExitPartialSig},
 	//		}
 	//
-	//		for role, msgTypes := range tests {
+	//		for committeeRole, msgTypes := range tests {
 	//			for _, msgType := range msgTypes {
 	//				validator := New(netCfg, WithValidatorStore(ns)).(*messageValidator)
-	//				msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role)
+	//				msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole)
 	//
 	//				innerSig, r, err := spectestingutils.NewTestingKeyManager().SignBeaconObject(spectypes.SSZUint64(spectestingutils.TestingDutyEpoch), phase0.Domain{}, ks.Shares[1].GetPublicKey().Serialize(), phase0.DomainType{})
 	//				require.NoError(t, err)
@@ -950,7 +879,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//	// Get error when receiving a message with an incorrect message type
 	//	t.Run("invalid message type", func(t *testing.T) {
 	//		validator := New(netCfg, WithValidatorStore(ns)).(*messageValidator)
-	//		msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role)
+	//		msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole)
 	//
 	//		msg := &spectypes.SignedPartialSignatureMessage{
 	//			Message: spectypes.PartialSignatureMessages{
@@ -986,10 +915,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//			spectypes.BNRoleVoluntaryExit:             {spectypes.PostConsensusPartialSig, spectypes.RandaoPartialSig, spectypes.SelectionProofPartialSig, spectypes.ContributionProofs},
 	//		}
 	//
-	//		for role, msgTypes := range tests {
+	//		for committeeRole, msgTypes := range tests {
 	//			for _, msgType := range msgTypes {
 	//				validator := New(netCfg, WithValidatorStore(ns)).(*messageValidator)
-	//				msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role)
+	//				msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole)
 	//
 	//				msg := &spectypes.SignedPartialSignatureMessage{
 	//					Message: spectypes.PartialSignatureMessages{
@@ -1037,11 +966,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//	message := &spectypes.SSVMessage{
 	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
+	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole),
 	//		Data:    encodedValidSignedMessage,
 	//	}
 	//
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//	_, _, err = validator.handleSignedSSVMessage(message, receivedAt, nil)
 	//	expectedErr := ErrUnknownQBFTMessageType
 	//	require.ErrorIs(t, err, expectedErr)
@@ -1077,11 +1006,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//		message := &spectypes.SSVMessage{
 	//			MsgType: spectypes.SSVConsensusMsgType,
-	//			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
+	//			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole),
 	//			Data:    encoded,
 	//		}
 	//
-	//		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//		_, _, err = validator.handleSignedSSVMessage(message, receivedAt, nil)
 	//		require.ErrorIs(t, err, ErrEmptySignature)
 	//	})
@@ -1097,39 +1026,29 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//		ssvMessage := &spectypes.SSVMessage{
 	//			MsgType: spectypes.SSVPartialSignatureMsgType,
-	//			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
+	//			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole),
 	//			Data:    encoded,
 	//		}
 	//
-	//		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//		_, _, err = validator.handleSignedSSVMessage(ssvMessage, receivedAt, nil)
 	//		require.ErrorIs(t, err, ErrEmptySignature)
 	//	})
 	//})
 	//
-	//// Get error when receiving a message with an empty list of signers
-	//t.Run("no signers", func(t *testing.T) {
-	//	validator := New(netCfg, WithValidatorStore(ns)).(*messageValidator)
-	//
-	//	slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-	//	height := specqbft.Height(slot)
-	//
-	//	validSignedMessage := spectestingutils.TestingProposalMessageWithHeight(ks.Shares[1], 1, height)
-	//	validSignedMessage.Signers = []spectypes.OperatorID{}
-	//
-	//	encoded, err := validSignedMessage.Encode()
-	//	require.NoError(t, err)
-	//
-	//	message := &spectypes.SSVMessage{
-	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
-	//		Data:    encoded,
-	//	}
-	//
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
-	//	_, _, err = validator.handleSignedSSVMessage(message, receivedAt, nil)
-	//	require.ErrorIs(t, err, ErrNoSigners)
-	//})
+	// Get error when receiving a message with an empty list of signers
+	t.Run("no signers", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage.OperatorIDs = nil
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
+		topicID := commons.CommitteeTopicID(signedSSVMessage.GetSSVMessage().GetID().GetSenderID())[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
+		require.ErrorIs(t, err, ErrNoSigners)
+	})
 	//
 	//// Initialize no signer tests
 	//t.Run("zero signer", func(t *testing.T) {
@@ -1165,11 +1084,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//		message := &spectypes.SSVMessage{
 	//			MsgType: spectypes.SSVConsensusMsgType,
-	//			MsgID:   spectypes.NewMsgID(netCfg.Domain, zeroSignerShare.ValidatorPubKey, role),
+	//			MsgID:   spectypes.NewMsgID(netCfg.Domain, zeroSignerShare.ValidatorPubKey, committeeRole),
 	//			Data:    encodedValidSignedMessage,
 	//		}
 	//
-	//		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//		_, _, err = validator.handleSignedSSVMessage(message, receivedAt, nil)
 	//		require.ErrorIs(t, err, ErrZeroSigner)
 	//	})
@@ -1184,11 +1103,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//		message := &spectypes.SSVMessage{
 	//			MsgType: spectypes.SSVPartialSignatureMsgType,
-	//			MsgID:   spectypes.NewMsgID(netCfg.Domain, zeroSignerShare.ValidatorPubKey, role),
+	//			MsgID:   spectypes.NewMsgID(netCfg.Domain, zeroSignerShare.ValidatorPubKey, committeeRole),
 	//			Data:    encoded,
 	//		}
 	//
-	//		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//		_, _, err = validator.handleSignedSSVMessage(message, receivedAt, nil)
 	//		require.ErrorIs(t, err, ErrZeroSigner)
 	//	})
@@ -1212,11 +1131,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//	message := &spectypes.SSVMessage{
 	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
+	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole),
 	//		Data:    encoded,
 	//	}
 	//
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//	_, _, err = validator.handleSignedSSVMessage(message, receivedAt, nil)
 	//	require.ErrorIs(t, err, ErrDuplicatedSigner)
 	//})
@@ -1237,11 +1156,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//	message := &spectypes.SSVMessage{
 	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
+	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole),
 	//		Data:    encoded,
 	//	}
 	//
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//	_, _, err = validator.handleSignedSSVMessage(message, receivedAt, nil)
 	//	require.ErrorIs(t, err, ErrSignersNotSorted)
 	//})
@@ -1262,11 +1181,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//	message := &spectypes.SSVMessage{
 	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
+	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole),
 	//		Data:    encoded,
 	//	}
 	//
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//	_, _, err = validator.handleSignedSSVMessage(message, receivedAt, nil)
 	//
 	//	expectedErr := ErrTooManySigners
@@ -1289,11 +1208,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//	message := &spectypes.SSVMessage{
 	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
+	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole),
 	//		Data:    encoded,
 	//	}
 	//
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//	_, _, err = validator.handleSignedSSVMessage(message, receivedAt, nil)
 	//
 	//	expectedErr := ErrNonDecidedWithMultipleSigners
@@ -1320,10 +1239,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//		spectypes.BNRoleSyncCommitteeContribution: netCfg.Beacon.GetSlotStartTime(slot + 4).Add(validator.waitAfterSlotStart(spectypes.BNRoleSyncCommitteeContribution)),
 	//	}
 	//
-	//	for role, receivedAt := range tests {
-	//		role, receivedAt := role, receivedAt
-	//		t.Run(role.String(), func(t *testing.T) {
-	//			msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role)
+	//	for committeeRole, receivedAt := range tests {
+	//		committeeRole, receivedAt := committeeRole, receivedAt
+	//		t.Run(committeeRole.String(), func(t *testing.T) {
+	//			msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole)
 	//
 	//			message := &spectypes.SSVMessage{
 	//				MsgType: spectypes.SSVConsensusMsgType,
@@ -1350,7 +1269,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//	message := &spectypes.SSVMessage{
 	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
+	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole),
 	//		Data:    encodedValidSignedMessage,
 	//	}
 	//
@@ -1372,11 +1291,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//	message := &spectypes.SSVMessage{
 	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
+	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole),
 	//		Data:    encodedValidSignedMessage,
 	//	}
 	//
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//	_, _, err = validator.handleSignedSSVMessage(message, receivedAt, nil)
 	//	expectedErr := ErrSignerNotLeader
 	//	expectedErr.got = spectypes.OperatorID(2)
@@ -1399,11 +1318,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//	message := &spectypes.SSVMessage{
 	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
+	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole),
 	//		Data:    encodedValidSignedMessage,
 	//	}
 	//
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//	_, _, err = validator.handleSignedSSVMessage(message, receivedAt, nil)
 	//
 	//	require.ErrorContains(t, err, ErrMalformedPrepareJustifications.Error())
@@ -1428,11 +1347,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//	message := &spectypes.SSVMessage{
 	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
+	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole),
 	//		Data:    encodedValidSignedMessage,
 	//	}
 	//
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//	_, _, err = validator.handleSignedSSVMessage(message, receivedAt, nil)
 	//
 	//	expectedErr := ErrUnexpectedPrepareJustifications
@@ -1460,11 +1379,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//	message := &spectypes.SSVMessage{
 	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
+	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole),
 	//		Data:    encodedValidSignedMessage,
 	//	}
 	//
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//	_, _, err = validator.handleSignedSSVMessage(message, receivedAt, nil)
 	//
 	//	expectedErr := ErrUnexpectedRoundChangeJustifications
@@ -1487,11 +1406,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//	message := &spectypes.SSVMessage{
 	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
+	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole),
 	//		Data:    encodedValidSignedMessage,
 	//	}
 	//
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//	_, _, err = validator.handleSignedSSVMessage(message, receivedAt, nil)
 	//
 	//	require.ErrorContains(t, err, ErrMalformedRoundChangeJustifications.Error())
@@ -1512,11 +1431,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//	message := &spectypes.SSVMessage{
 	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
+	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole),
 	//		Data:    encodedValidSignedMessage,
 	//	}
 	//
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//	_, _, err = validator.handleSignedSSVMessage(message, receivedAt, nil)
 	//
 	//	expectedErr := ErrInvalidHash
@@ -1535,11 +1454,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//	message1 := &spectypes.SSVMessage{
 	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
+	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole),
 	//		Data:    encodedSigned1,
 	//	}
 	//
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//	_, _, err = validator.handleSignedSSVMessage(message1, receivedAt, nil)
 	//	require.NoError(t, err)
 	//
@@ -1553,7 +1472,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//	message2 := &spectypes.SSVMessage{
 	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
+	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole),
 	//		Data:    encodedSigned2,
 	//	}
 	//
@@ -1574,11 +1493,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//	message1 := &spectypes.SSVMessage{
 	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
+	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole),
 	//		Data:    encodedSigned1,
 	//	}
 	//
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//	_, _, err = validator.handleSignedSSVMessage(message1, receivedAt, nil)
 	//	require.NoError(t, err)
 	//
@@ -1590,7 +1509,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//	message2 := &spectypes.SSVMessage{
 	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
+	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole),
 	//		Data:    encodedSigned2,
 	//	}
 	//
@@ -1612,11 +1531,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//	message1 := &spectypes.SSVMessage{
 	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
+	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole),
 	//		Data:    encodedSigned1,
 	//	}
 	//
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//	_, _, err = validator.handleSignedSSVMessage(message1, receivedAt, nil)
 	//	require.NoError(t, err)
 	//
@@ -1626,7 +1545,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//	message2 := &spectypes.SSVMessage{
 	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
+	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole),
 	//		Data:    encodedSigned2,
 	//	}
 	//
@@ -1648,11 +1567,11 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//	message1 := &spectypes.SSVMessage{
 	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
+	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole),
 	//		Data:    encodedSigned1,
 	//	}
 	//
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//	_, _, err = validator.handleSignedSSVMessage(message1, receivedAt, nil)
 	//	require.NoError(t, err)
 	//
@@ -1662,7 +1581,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//	message2 := &spectypes.SSVMessage{
 	//		MsgType: spectypes.SSVConsensusMsgType,
-	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
+	//		MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole),
 	//		Data:    encodedSigned2,
 	//	}
 	//
@@ -1678,7 +1597,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//	slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 	//
-	//	msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role)
+	//	msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole)
 	//
 	//	signed := spectestingutils.TestingCommitMultiSignerMessageWithRound(
 	//		[]*bls.SecretKey{ks.Shares[1], ks.Shares[2], ks.Shares[3]}, []spectypes.OperatorID{1, 2, 3}, 1)
@@ -1691,7 +1610,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//		Data:    encodedSigned,
 	//	}
 	//
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//
 	//	for i := 0; i < maxDecidedCount(len(share.Committee)); i++ {
 	//		_, _, err = validator.handleSignedSSVMessage(message, receivedAt, nil)
@@ -1716,10 +1635,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//		spectypes.BNRoleSyncCommitteeContribution: 7,
 	//	}
 	//
-	//	for role, round := range tests {
-	//		role, round := role, round
-	//		t.Run(role.String(), func(t *testing.T) {
-	//			msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role)
+	//	for committeeRole, round := range tests {
+	//		committeeRole, round := committeeRole, round
+	//		t.Run(committeeRole.String(), func(t *testing.T) {
+	//			msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole)
 	//
 	//			signedMessage := spectestingutils.TestingPrepareMessageWithRound(ks.Shares[1], 1, round)
 	//			encodedMessage, err := signedMessage.Encode()
@@ -1731,7 +1650,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//				Data:    encodedMessage,
 	//			}
 	//
-	//			receivedAt := netCfg.Beacon.GetSlotStartTime(0).Add(validator.waitAfterSlotStart(role))
+	//			receivedAt := netCfg.Beacon.GetSlotStartTime(0).Add(validator.waitAfterSlotStart(committeeRole))
 	//			_, _, err = validator.handleSignedSSVMessage(ssvMessage, receivedAt, nil)
 	//			require.ErrorContains(t, err, ErrRoundTooHigh.Error())
 	//		})
@@ -1742,7 +1661,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//t.Run("round already advanced", func(t *testing.T) {
 	//	validator := New(netCfg, WithValidatorStore(ns)).(*messageValidator)
 	//
-	//	msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role)
+	//	msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole)
 	//	slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 	//
 	//	signedMessage := spectestingutils.TestingPrepareMessageWithRound(ks.Shares[1], 1, 2)
@@ -1755,7 +1674,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//		Data:    encodedMessage,
 	//	}
 	//
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//	_, _, err = validator.handleSignedSSVMessage(ssvMessage, receivedAt, nil)
 	//	require.NoError(t, err)
 	//
@@ -1770,7 +1689,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//// Initialize tests for testing when sending a message with a slot before the current one
 	//t.Run("slot already advanced", func(t *testing.T) {
-	//	msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role)
+	//	msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole)
 	//	slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 	//	height := specqbft.Height(slot)
 	//
@@ -1788,7 +1707,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//			Data:    encodedMessage,
 	//		}
 	//
-	//		_, _, err = validator.handleSignedSSVMessage(ssvMessage, netCfg.Beacon.GetSlotStartTime(slot+1).Add(validator.waitAfterSlotStart(role)), nil)
+	//		_, _, err = validator.handleSignedSSVMessage(ssvMessage, netCfg.Beacon.GetSlotStartTime(slot+1).Add(validator.waitAfterSlotStart(committeeRole)), nil)
 	//		require.NoError(t, err)
 	//
 	//		signedMessage = spectestingutils.TestingPrepareMessageWithHeight(ks.Shares[1], 1, height)
@@ -1796,7 +1715,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//		require.NoError(t, err)
 	//
 	//		ssvMessage.Data = encodedMessage
-	//		_, _, err = validator.handleSignedSSVMessage(ssvMessage, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role)), nil)
+	//		_, _, err = validator.handleSignedSSVMessage(ssvMessage, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole)), nil)
 	//		require.ErrorContains(t, err, ErrSlotAlreadyAdvanced.Error())
 	//	})
 	//
@@ -1819,7 +1738,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//			Data:    encodedMessage,
 	//		}
 	//
-	//		_, _, err = validator.handleSignedSSVMessage(ssvMessage, netCfg.Beacon.GetSlotStartTime(slot+1).Add(validator.waitAfterSlotStart(role)), nil)
+	//		_, _, err = validator.handleSignedSSVMessage(ssvMessage, netCfg.Beacon.GetSlotStartTime(slot+1).Add(validator.waitAfterSlotStart(committeeRole)), nil)
 	//		require.NoError(t, err)
 	//
 	//		message = spectestingutils.PostConsensusAttestationMsg(ks.Shares[2], 2, height)
@@ -1832,7 +1751,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//		require.NoError(t, err)
 	//
 	//		ssvMessage.Data = encodedMessage
-	//		_, _, err = validator.handleSignedSSVMessage(ssvMessage, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role)), nil)
+	//		_, _, err = validator.handleSignedSSVMessage(ssvMessage, netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole)), nil)
 	//		require.ErrorContains(t, err, ErrSlotAlreadyAdvanced.Error())
 	//	})
 	//})
@@ -1841,7 +1760,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//t.Run("event message", func(t *testing.T) {
 	//	validator := New(netCfg, WithValidatorStore(ns)).(*messageValidator)
 	//
-	//	msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role)
+	//	msgID := spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole)
 	//	slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 	//
 	//	eventMsg := &ssvtypes.EventMsg{}
@@ -1854,7 +1773,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//		Data:    encoded,
 	//	}
 	//
-	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//	receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//	_, _, err = validator.handleSignedSSVMessage(ssvMessage, receivedAt, nil)
 	//	require.ErrorIs(t, err, ErrEventMessage)
 	//})
@@ -1873,7 +1792,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//		message := &spectypes.SSVMessage{
 	//			MsgType: spectypes.SSVConsensusMsgType,
-	//			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
+	//			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole),
 	//			Data:    encoded,
 	//		}
 	//
@@ -1889,7 +1808,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//		}
 	//
 	//		slot := netCfg.Beacon.FirstSlotAtEpoch(epoch)
-	//		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//		_, _, err = validator.handlePubsubMessage(pMsg, receivedAt)
 	//		require.ErrorContains(t, err, ErrMalformedPubSubMessage.Error())
 	//	})
@@ -1906,7 +1825,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//		message := &spectypes.SSVMessage{
 	//			MsgType: spectypes.SSVConsensusMsgType,
-	//			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
+	//			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole),
 	//			Data:    encoded,
 	//		}
 	//
@@ -1944,7 +1863,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//			},
 	//		}
 	//
-	//		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//		_, _, err = validator.handlePubsubMessage(pMsg, receivedAt)
 	//		require.NoError(t, err)
 	//
@@ -1963,7 +1882,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//		message := &spectypes.SSVMessage{
 	//			MsgType: spectypes.SSVConsensusMsgType,
-	//			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
+	//			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole),
 	//			Data:    encoded,
 	//		}
 	//
@@ -2002,7 +1921,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//			},
 	//		}
 	//
-	//		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//		_, _, err = validator.handlePubsubMessage(pMsg, receivedAt)
 	//		require.ErrorContains(t, err, ErrOperatorNotFound.Error())
 	//
@@ -2021,7 +1940,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//
 	//		message := &spectypes.SSVMessage{
 	//			MsgType: spectypes.SSVConsensusMsgType,
-	//			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, role),
+	//			MsgID:   spectypes.NewMsgID(netCfg.Domain, share.ValidatorPubKey, committeeRole),
 	//			Data:    encoded,
 	//		}
 	//
@@ -2056,11 +1975,125 @@ func Test_ValidateSSVMessage(t *testing.T) {
 	//			},
 	//		}
 	//
-	//		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(role))
+	//		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(validator.waitAfterSlotStart(committeeRole))
 	//		_, _, err = validator.handlePubsubMessage(pMsg, receivedAt)
 	//		require.ErrorContains(t, err, ErrSignatureVerification.Error())
 	//
 	//		require.NoError(t, ns.DeleteOperatorData(nil, operatorID))
 	//	})
 	//})
+}
+
+type shareSet struct {
+	active             *ssvtypes.SSVShare
+	liquidated         *ssvtypes.SSVShare
+	inactive           *ssvtypes.SSVShare
+	nonUpdatedMetadata *ssvtypes.SSVShare
+}
+
+func generateShares(t *testing.T, ks *spectestingutils.TestKeySet, ns storage.Storage, netCfg networkconfig.NetworkConfig) shareSet {
+	const validatorIndex = 123
+
+	activeShare := &ssvtypes.SSVShare{
+		Share: *spectestingutils.TestingShare(ks),
+		Metadata: ssvtypes.Metadata{
+			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+				Status: eth2apiv1.ValidatorStateActiveOngoing,
+				Index:  validatorIndex,
+			},
+			Liquidated: false,
+		},
+	}
+
+	require.NoError(t, ns.Shares().Save(nil, activeShare))
+
+	liquidatedShare := &ssvtypes.SSVShare{
+		Share: *spectestingutils.TestingShare(ks),
+		Metadata: ssvtypes.Metadata{
+			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+				Status: eth2apiv1.ValidatorStateActiveOngoing,
+				Index:  validatorIndex,
+			},
+			Liquidated: true,
+		},
+	}
+
+	liquidatedSK, err := eth2types.GenerateBLSPrivateKey()
+	require.NoError(t, err)
+
+	copy(liquidatedShare.ValidatorPubKey[:], liquidatedSK.PublicKey().Marshal())
+	require.NoError(t, ns.Shares().Save(nil, liquidatedShare))
+
+	inactiveShare := &ssvtypes.SSVShare{
+		Share: *spectestingutils.TestingShare(ks),
+		Metadata: ssvtypes.Metadata{
+			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+				Status: eth2apiv1.ValidatorStateUnknown,
+			},
+			Liquidated: false,
+		},
+	}
+
+	inactiveSK, err := eth2types.GenerateBLSPrivateKey()
+	require.NoError(t, err)
+
+	copy(inactiveShare.ValidatorPubKey[:], inactiveSK.PublicKey().Marshal())
+	require.NoError(t, ns.Shares().Save(nil, inactiveShare))
+
+	slot := netCfg.Beacon.EstimatedCurrentSlot()
+	epoch := netCfg.Beacon.EstimatedEpochAtSlot(slot)
+
+	nonUpdatedMetadataShare := &ssvtypes.SSVShare{
+		Share: *spectestingutils.TestingShare(ks),
+		Metadata: ssvtypes.Metadata{
+			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
+				Status:          eth2apiv1.ValidatorStatePendingQueued,
+				ActivationEpoch: epoch + 1,
+			},
+			Liquidated: false,
+		},
+	}
+
+	nonUpdatedMetadataSK, err := eth2types.GenerateBLSPrivateKey()
+	require.NoError(t, err)
+
+	copy(nonUpdatedMetadataShare.ValidatorPubKey[:], nonUpdatedMetadataSK.PublicKey().Marshal())
+	require.NoError(t, ns.Shares().Save(nil, nonUpdatedMetadataShare))
+
+	return shareSet{
+		active:             activeShare,
+		liquidated:         liquidatedShare,
+		inactive:           inactiveShare,
+		nonUpdatedMetadata: nonUpdatedMetadataShare,
+	}
+}
+
+func generateSignedMessage(
+	ks *spectestingutils.TestKeySet,
+	identifier spectypes.MessageID,
+	slot phase0.Slot,
+	opts ...func(message *specqbft.Message),
+) *spectypes.SignedSSVMessage {
+	fullData := spectestingutils.TestingQBFTFullData
+	height := specqbft.Height(slot)
+
+	qbftMessage := &specqbft.Message{
+		MsgType:    specqbft.ProposalMsgType,
+		Height:     height,
+		Round:      specqbft.FirstRound,
+		Identifier: identifier[:],
+		Root:       sha256.Sum256(fullData),
+
+		RoundChangeJustification: [][]byte{},
+		PrepareJustification:     [][]byte{},
+	}
+
+	for _, opt := range opts {
+		opt(qbftMessage)
+	}
+
+	signedSSVMessage := spectestingutils.SignQBFTMsg(ks.OperatorKeys[1], 1, qbftMessage)
+	signedSSVMessage.FullData = fullData
+
+	return signedSSVMessage
 }

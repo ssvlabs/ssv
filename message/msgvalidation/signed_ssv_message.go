@@ -116,7 +116,9 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 	}
 
 	if !mv.topicMatches(ssvMessage, topic) {
-		return ErrIncorrectTopic
+		e := ErrIncorrectTopic
+		e.got = topic
+		return e
 	}
 
 	if len(ssvMessage.Data) > maxPayloadSize {
