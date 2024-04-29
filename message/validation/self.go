@@ -19,7 +19,7 @@ func (mv *messageValidator) validateSelf(pMsg *pubsub.Message) pubsub.Validation
 	}
 
 	decodedMessage := &queue.DecodedSSVMessage{
-		AlanSSVMessage: signedSSVMessage.GetSSVMessage(),
+		SSVMessage: signedSSVMessage.GetSSVMessage(),
 	}
 
 	switch signedSSVMessage.SSVMessage.MsgType {

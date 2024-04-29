@@ -56,9 +56,9 @@ func (mv *messageValidator) buildLoggerFields(decodedMessage *queue.DecodedSSVMe
 		return descriptor
 	}
 
-	descriptor.SenderID = decodedMessage.AlanSSVMessage.GetID().GetSenderID()
-	descriptor.Role = decodedMessage.AlanSSVMessage.GetID().GetRoleType()
-	descriptor.SSVMessageType = decodedMessage.AlanSSVMessage.MsgType
+	descriptor.SenderID = decodedMessage.GetID().GetSenderID()
+	descriptor.Role = decodedMessage.GetID().GetRoleType()
+	descriptor.SSVMessageType = decodedMessage.MsgType
 
 	switch m := decodedMessage.Body.(type) {
 	case *specqbft.Message:
