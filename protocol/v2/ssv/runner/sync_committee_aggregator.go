@@ -39,13 +39,13 @@ func NewSyncCommitteeAggregatorRunner(
 	qbftController *controller.Controller,
 	beacon specssv.BeaconNode,
 	network specssv.Network,
-	signer spectypes.KeyManager,
+	signer genesisspectypes.KeyManager,
 	valCheck specqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
 ) Runner {
 	return &SyncCommitteeAggregatorRunner{
 		BaseRunner: &BaseRunner{
-			BeaconRoleType:     spectypes.BNRoleSyncCommitteeContribution,
+			BeaconRoleType:     genesisspectypes.BNRoleSyncCommitteeContribution,
 			BeaconNetwork:      beaconNetwork,
 			Shares:             *shares,
 			QBFTController:     qbftController,
@@ -109,7 +109,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(logger *zap.Logger, 
 		}
 
 		// fetch sync committee contribution
-		subnet, err := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(r.GetState().StartingDuty.ValidatorSyncCommitteeIndices[i]))
+		subnet, err := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(r.GetState().StartingDuty.(*spectypes.BeaconDuty).ValidatorSyncCommitteeIndices[i]))
 		if err != nil {
 			return errors.Wrap(err, "could not get sync committee subnet ID")
 		}
@@ -139,7 +139,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(logger *zap.Logger, 
 
 	// create consensus object
 	input := &spectypes.ConsensusData{
-		Duty:    *duty,
+		Duty:    *duty.(*spectypes.BeaconDuty),
 		Version: ver,
 		DataSSZ: byts,
 	}
@@ -165,52 +165,87 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(logger *zap.Logger, sig
 	r.metrics.EndConsensus()
 	r.metrics.StartPostConsensus()
 
-	contributions, err := decidedValue.GetSyncCommitteeContributions()
+	cd := decidedValue.(*spectypes.ConsensusData)
+	contributions, err := cd.GetSyncCommitteeContributions()
 	if err != nil {
 		return errors.Wrap(err, "could not get contributions")
 	}
 
-	// specific duty sig
-	msgs := make([]*spectypes.PartialSignatureMessage, 0)
-	for _, c := range contributions {
-		contribAndProof, _, err := r.generateContributionAndProof(c.Contribution, c.SelectionProofSig)
-		if err != nil {
-			return errors.Wrap(err, "could not generate contribution and proof")
+	if true {
+		// specific duty sig
+		msgs := make([]*genesisspectypes.PartialSignatureMessage, 0)
+		for _, c := range contributions {
+			contribAndProof, _, err := r.generateContributionAndProof(c.Contribution, c.SelectionProofSig)
+			if err != nil {
+				return errors.Wrap(err, "could not generate contribution and proof")
+			}
+
+			signed, err := r.BaseRunner.signBeaconObject(r, r.BaseRunner.State.StartingDuty.(*spectypes.BeaconDuty), contribAndProof,
+				cd.Duty.DutySlot(),
+				spectypes.DomainContributionAndProof)
+			if err != nil {
+				return errors.Wrap(err, "failed to sign aggregate and proof")
+			}
+
+			msgs = append(msgs, signed.(*genesisspectypes.PartialSignatureMessage))
+		}
+		postConsensusMsg := &genesisspectypes.PartialSignatureMessages{
+			Type:     genesisspectypes.PostConsensusPartialSig,
+			Slot:     cd.Duty.DutySlot(),
+			Messages: msgs,
 		}
 
-		signed, err := r.BaseRunner.signBeaconObject(r, r.BaseRunner.State.StartingDuty.(*spectypes.BeaconDuty), contribAndProof,
-			decidedValue.duty.DutySlot(),
-			spectypes.DomainContributionAndProof)
+		postSignedMsg, err := r.BaseRunner.signPostConsensusMsg(r, postConsensusMsg)
 		if err != nil {
-			return errors.Wrap(err, "failed to sign aggregate and proof")
+			return errors.Wrap(err, "could not sign post consensus msg")
 		}
 
-		msgs = append(msgs, signed)
-	}
-	postConsensusMsg := &spectypes.PartialSignatureMessages{
-		Type:     spectypes.PostConsensusPartialSig,
-		Slot:     decidedValue.duty.DutySlot(),
-		Messages: msgs,
-	}
+		data, err := postSignedMsg.Encode()
+		if err != nil {
+			return errors.Wrap(err, "failed to encode post consensus signature msg")
+		}
 
-	postSignedMsg, err := r.BaseRunner.signPostConsensusMsg(r, postConsensusMsg)
-	if err != nil {
-		return errors.Wrap(err, "could not sign post consensus msg")
-	}
+		msgToBroadcast := &genesisspectypes.SSVMessage{
+			MsgType: genesisspectypes.SSVPartialSignatureMsgType,
+			MsgID:   genesisspectypes.NewMsgID(genesisspectypes.DomainType(r.GetShare().DomainType), r.GetShare().ValidatorPubKey[:], r.BaseRunner.BeaconRoleType),
+			Data:    data,
+		}
 
-	data, err := postSignedMsg.Encode()
-	if err != nil {
-		return errors.Wrap(err, "failed to encode post consensus signature msg")
-	}
+		if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
+			return errors.Wrap(err, "can't broadcast partial post consensus sig")
+		}
+	} else {
+		msgs := make([]*spectypes.PartialSignatureMessage, 0)
+		for _, c := range contributions {
+			contribAndProof, _, err := r.generateContributionAndProof(c.Contribution, c.SelectionProofSig)
+			if err != nil {
+				return errors.Wrap(err, "could not generate contribution and proof")
+			}
 
-	msgToBroadcast := &genesisspectypes.SSVMessage{
-		MsgType: genesisspectypes.SSVPartialSignatureMsgType,
-		MsgID:   genesisspectypes.NewMsgID(genesisspectypes.DomainType(r.GetShare().DomainType), r.GetShare().ValidatorPubKey[:], r.BaseRunner.BeaconRoleType),
-		Data:    data,
-	}
+			signed, err := r.BaseRunner.signBeaconObject(r, r.BaseRunner.State.StartingDuty.(*spectypes.BeaconDuty), contribAndProof,
+				cd.Duty.Slot,
+				spectypes.DomainContributionAndProof)
+			if err != nil {
+				return errors.Wrap(err, "failed to sign aggregate and proof")
+			}
 
-	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
-		return errors.Wrap(err, "can't broadcast partial post consensus sig")
+			msgs = append(msgs, signed.(*spectypes.PartialSignatureMessage))
+		}
+		postConsensusMsg := &spectypes.PartialSignatureMessages{
+			Type:     spectypes.PostConsensusPartialSig,
+			Slot:     cd.Duty.Slot,
+			Messages: msgs,
+		}
+
+		msgID := spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+		msgToBroadcast, err := spectypes.PartialSignatureMessagesToSignedSSVMessage(postConsensusMsg, msgID, r.operatorSigner)
+		if err != nil {
+			return errors.Wrap(err, "could not sign post-consensus partial signature message")
+		}
+
+		if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
+			return errors.Wrap(err, "can't broadcast partial post consensus sig")
+		}
 	}
 	return nil
 }
@@ -228,7 +263,11 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(logger *zap.Logger,
 	r.metrics.EndPostConsensus()
 
 	// get contributions
-	contributions, err := r.GetState().DecidedValue.GetSyncCommitteeContributions()
+	consensusData, err := spectypes.CreateConsensusData(r.GetState().DecidedValue)
+	if err != nil {
+		return errors.Wrap(err, "could not create consensus data")
+	}
+	contributions, err := consensusData.GetSyncCommitteeContributions()
 	if err != nil {
 		return errors.Wrap(err, "could not get contributions")
 	}
@@ -287,12 +326,12 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(logger *zap.Logger,
 
 func (r *SyncCommitteeAggregatorRunner) generateContributionAndProof(contrib altair.SyncCommitteeContribution, proof phase0.BLSSignature) (*altair.ContributionAndProof, phase0.Root, error) {
 	contribAndProof := &altair.ContributionAndProof{
-		AggregatorIndex: r.GetState().DecidedValue.Duty.ValidatorIndex,
+		AggregatorIndex: r.GetState().StartingDuty.(*spectypes.BeaconDuty).ValidatorIndex,
 		Contribution:    &contrib,
 		SelectionProof:  proof,
 	}
 
-	epoch := r.BaseRunner.BeaconNetwork.EstimatedEpochAtSlot(r.GetState().DecidedValue.duty.DutySlot())
+	epoch := r.BaseRunner.BeaconNetwork.EstimatedEpochAtSlot(r.GetState().StartingDuty.DutySlot())
 	dContribAndProof, err := r.GetBeaconNode().DomainData(epoch, spectypes.DomainContributionAndProof)
 	if err != nil {
 		return nil, phase0.Root{}, errors.Wrap(err, "could not get domain data")
@@ -306,13 +345,13 @@ func (r *SyncCommitteeAggregatorRunner) generateContributionAndProof(contrib alt
 
 func (r *SyncCommitteeAggregatorRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
 	sszIndexes := make([]ssz.HashRoot, 0)
-	for _, index := range r.GetState().StartingDuty.ValidatorSyncCommitteeIndices {
+	for _, index := range r.GetState().StartingDuty.(*spectypes.BeaconDuty).ValidatorSyncCommitteeIndices {
 		subnet, err := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(index))
 		if err != nil {
 			return nil, spectypes.DomainError, errors.Wrap(err, "could not get sync committee subnet ID")
 		}
 		data := &altair.SyncAggregatorSelectionData{
-			Slot:              r.GetState().StartingDuty.Slot,
+			Slot:              r.GetState().StartingDuty.DutySlot(),
 			SubcommitteeIndex: subnet,
 		}
 		sszIndexes = append(sszIndexes, data)
@@ -323,7 +362,11 @@ func (r *SyncCommitteeAggregatorRunner) expectedPreConsensusRootsAndDomain() ([]
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
 func (r *SyncCommitteeAggregatorRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
 	// get contributions
-	contributions, err := r.GetState().DecidedValue.GetSyncCommitteeContributions()
+	consensusData, err := spectypes.CreateConsensusData(r.GetState().DecidedValue)
+	if err != nil {
+		return nil, spectypes.DomainError, errors.Wrap(err, "could not create consensus data")
+	}
+	contributions, err := consensusData.GetSyncCommitteeContributions()
 	if err != nil {
 		return nil, phase0.DomainType{}, errors.Wrap(err, "could not get contributions")
 	}
@@ -348,53 +391,88 @@ func (r *SyncCommitteeAggregatorRunner) executeDuty(logger *zap.Logger, duty spe
 	r.metrics.StartDutyFullFlow()
 	r.metrics.StartPreConsensus()
 
-	// sign selection proofs
-	msgs := genesisspectypes.PartialSignatureMessages{
-		Type:     genesisspectypes.ContributionProofs,
-		Slot:     duty.DutySlot(),
-		Messages: []*genesisspectypes.PartialSignatureMessage{},
-	}
-	for _, index := range r.GetState().StartingDuty.ValidatorSyncCommitteeIndices {
-		subnet, err := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(index))
+	if true {
+		// sign selection proofs
+		msgs := genesisspectypes.PartialSignatureMessages{
+			Type:     genesisspectypes.ContributionProofs,
+			Slot:     duty.DutySlot(),
+			Messages: []*genesisspectypes.PartialSignatureMessage{},
+		}
+		for _, index := range r.GetState().StartingDuty.(*spectypes.BeaconDuty).ValidatorSyncCommitteeIndices {
+			subnet, err := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(index))
+			if err != nil {
+				return errors.Wrap(err, "could not get sync committee subnet ID")
+			}
+			data := &altair.SyncAggregatorSelectionData{
+				Slot:              duty.DutySlot(),
+				SubcommitteeIndex: subnet,
+			}
+			msg, err := r.BaseRunner.signBeaconObject(r, duty.(*spectypes.BeaconDuty), data, duty.DutySlot(),
+				spectypes.DomainSyncCommitteeSelectionProof)
+			if err != nil {
+				return errors.Wrap(err, "could not sign sync committee selection proof")
+			}
+
+			msgs.Messages = append(msgs.Messages, msg.(*genesisspectypes.PartialSignatureMessage))
+		}
+
+		// package into signed partial sig
+		signature, err := r.GetGenesisSigner().SignRoot(msgs, genesisspectypes.PartialSignatureType, r.GetShare().SharePubKey)
 		if err != nil {
-			return errors.Wrap(err, "could not get sync committee subnet ID")
+			return errors.Wrap(err, "could not sign PartialSignatureMessage for contribution proofs")
 		}
-		data := &altair.SyncAggregatorSelectionData{
-			Slot:              duty.DutySlot(),
-			SubcommitteeIndex: subnet,
+		signedPartialMsg := &genesisspectypes.SignedPartialSignatureMessage{
+			Message:   msgs,
+			Signature: signature,
+			Signer:    r.GetOperatorSigner().GetOperatorID(),
 		}
-		msg, err := r.BaseRunner.signBeaconObject(r, duty.(*spectypes.BeaconDuty), data, duty.DutySlot(),
-			spectypes.DomainSyncCommitteeSelectionProof)
+
+		// broadcast
+		data, err := signedPartialMsg.Encode()
 		if err != nil {
-			return errors.Wrap(err, "could not sign sync committee selection proof")
+			return errors.Wrap(err, "failed to encode contribution proofs pre-consensus signature msg")
+		}
+		msgToBroadcast := &genesisspectypes.SSVMessage{
+			MsgType: genesisspectypes.SSVPartialSignatureMsgType,
+			MsgID:   genesisspectypes.NewMsgID(genesisspectypes.DomainType(r.GetShare().DomainType), r.GetShare().ValidatorPubKey[:], r.BaseRunner.BeaconRoleType),
+			Data:    data,
+		}
+		if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
+			return errors.Wrap(err, "can't broadcast partial contribution proof sig")
+		}
+	} else {
+		msgs := &spectypes.PartialSignatureMessages{
+			Type:     spectypes.ContributionProofs,
+			Slot:     duty.DutySlot(),
+			Messages: []*spectypes.PartialSignatureMessage{},
+		}
+		for _, index := range r.GetState().StartingDuty.(*spectypes.BeaconDuty).ValidatorSyncCommitteeIndices {
+			subnet, err := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(index))
+			if err != nil {
+				return errors.Wrap(err, "could not get sync committee subnet ID")
+			}
+			data := &altair.SyncAggregatorSelectionData{
+				Slot:              duty.DutySlot(),
+				SubcommitteeIndex: subnet,
+			}
+			msg, err := r.BaseRunner.signBeaconObject(r, duty.(*spectypes.BeaconDuty), data, duty.DutySlot(),
+				spectypes.DomainSyncCommitteeSelectionProof)
+			if err != nil {
+				return errors.Wrap(err, "could not sign sync committee selection proof")
+			}
+
+			msgs.Messages = append(msgs.Messages, msg.(*spectypes.PartialSignatureMessage))
 		}
 
-		msgs.Messages = append(msgs.Messages, msg)
-	}
+		msgID := spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+		msgToBroadcast, err := spectypes.PartialSignatureMessagesToSignedSSVMessage(msgs, msgID, r.operatorSigner)
+		if err != nil {
+			return errors.Wrap(err, "could not sign pre-consensus partial signature message")
+		}
 
-	// package into signed partial sig
-	signature, err := r.GetGenesisSigner().SignRoot(msgs, genesisspectypes.PartialSignatureType, r.GetShare().SharePubKey)
-	if err != nil {
-		return errors.Wrap(err, "could not sign PartialSignatureMessage for contribution proofs")
-	}
-	signedPartialMsg := &genesisspectypes.SignedPartialSignatureMessage{
-		Message:   msgs,
-		Signature: signature,
-		Signer:    r.GetOperatorSigner().GetOperatorID(),
-	}
-
-	// broadcast
-	data, err := signedPartialMsg.Encode()
-	if err != nil {
-		return errors.Wrap(err, "failed to encode contribution proofs pre-consensus signature msg")
-	}
-	msgToBroadcast := &genesisspectypes.SSVMessage{
-		MsgType: genesisspectypes.SSVPartialSignatureMsgType,
-		MsgID:   genesisspectypes.NewMsgID(genesisspectypes.DomainType(r.GetShare().DomainType), r.GetShare().ValidatorPubKey[:], r.BaseRunner.BeaconRoleType),
-		Data:    data,
-	}
-	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
-		return errors.Wrap(err, "can't broadcast partial contribution proof sig")
+		if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
+			return errors.Wrap(err, "can't broadcast partial contribution proof sig")
+		}
 	}
 	return nil
 }

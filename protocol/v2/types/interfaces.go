@@ -22,6 +22,7 @@ type SignedMessage interface {
 	GetRoot() ([32]byte, error)
 	GetOperatorIDs() []types.OperatorID
 	GetHeight() qbft.Height
+	GetType() qbft.MessageType
 }
 
 type PartialSignatureMessage interface {

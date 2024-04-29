@@ -91,19 +91,22 @@ func (r *AttesterRunner) ProcessConsensus(logger *zap.Logger, signedMsg ssvtypes
 	r.metrics.EndConsensus()
 	r.metrics.StartPostConsensus()
 
-	attestationData, err := decidedValue.GetAttestationData()
+	attestationData, err := GetAttestationData(decidedValue.(*spectypes.ConsensusData))
 	if err != nil {
 		return errors.Wrap(err, "could not get attestation data")
 	}
 
 	// specific duty sig
-	msg, err := r.BaseRunner.signBeaconObject(r, attestationData, decidedValue.Duty.DutySlot(), spectypes.DomainAttester)
+	msg, err := r.BaseRunner.signBeaconObject(r, r.BaseRunner.State.StartingDuty.(*spectypes.BeaconDuty),
+		attestationData,
+		decidedValue.(*spectypes.ConsensusData).Duty.Slot,
+		spectypes.DomainAttester)
 	if err != nil {
 		return errors.Wrap(err, "failed signing attestation data")
 	}
 	postConsensusMsg := &genesisspectypes.PartialSignatureMessages{
 		Type:     genesisspectypes.PostConsensusPartialSig,
-		Slot:     decidedValue.Duty.DutySlot(),
+		Slot:     decidedValue.(*spectypes.ConsensusData).Duty.DutySlot(),
 		Messages: []*genesisspectypes.PartialSignatureMessage{msg.(*genesisspectypes.PartialSignatureMessage)},
 	}
 
@@ -135,7 +138,12 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg ssvt
 		return errors.Wrap(err, "failed processing post consensus message")
 	}
 
-	duty := r.GetState().DecidedValue.Duty
+	cd, err := spectypes.CreateConsensusData(r.GetState().DecidedValue)
+	if err != nil {
+		return errors.Wrap(err, "could not create consensus data")
+	}
+
+	duty := cd.Duty
 	logger = logger.With(fields.Slot(duty.DutySlot()))
 	logger.Debug("🧩 got partial signatures",
 		zap.Uint64("signer", signedMsg.GetSigner()))
@@ -146,7 +154,7 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg ssvt
 
 	r.metrics.EndPostConsensus()
 
-	attestationData, err := r.GetState().DecidedValue.GetAttestationData()
+	attestationData, err := GetAttestationData(cd)
 	if err != nil {
 		return errors.Wrap(err, "could not get attestation data")
 	}
@@ -166,7 +174,7 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg ssvt
 		logger.Debug("🧩 reconstructed partial signatures",
 			zap.Uint64s("signers", getPostConsensusSigners(r.GetState(), root)))
 
-		aggregationBitfield := bitfield.NewBitlist(r.GetState().DecidedValue.Duty.CommitteeLength)
+		aggregationBitfield := bitfield.NewBitlist(cd.Duty.CommitteeLength)
 		aggregationBitfield.SetBitAt(duty.ValidatorCommitteeIndex, true)
 		signedAtt := &phase0.Attestation{
 			Data:            attestationData,
@@ -207,7 +215,11 @@ func (r *AttesterRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, p
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
 func (r *AttesterRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	attestationData, err := r.GetState().DecidedValue.GetAttestationData()
+	cd, err := spectypes.CreateConsensusData(r.GetState().DecidedValue)
+	if err != nil {
+		return nil, phase0.DomainType{}, errors.Wrap(err, "could not create consensus data")
+	}
+	attestationData, err := GetAttestationData(cd)
 	if err != nil {
 		return nil, phase0.DomainType{}, errors.Wrap(err, "could not get attestation data")
 	}
@@ -306,5 +318,13 @@ func (r *AttesterRunner) GetRoot() ([32]byte, error) {
 		return [32]byte{}, errors.Wrap(err, "could not encode DutyRunnerState")
 	}
 	ret := sha256.Sum256(marshaledRoot)
+	return ret, nil
+}
+
+func GetAttestationData(ci *spectypes.ConsensusData) (*phase0.AttestationData, error) {
+	ret := &phase0.AttestationData{}
+	if err := ret.UnmarshalSSZ(ci.DataSSZ); err != nil {
+		return nil, errors.Wrap(err, "could not unmarshal ssz")
+	}
 	return ret, nil
 }

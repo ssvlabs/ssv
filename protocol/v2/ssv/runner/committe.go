@@ -143,7 +143,7 @@ func (r *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg ssvtypes.Sign
 			if err != nil {
 				return errors.Wrap(err, "failed signing attestation data")
 			}
-			postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialMsg)
+			postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialMsg.(*spectypes.PartialSignatureMessage))
 
 		case spectypes.BNRoleSyncCommittee:
 			syncCommitteeMessage := ConstructSyncCommittee(beaconVote, duty)
@@ -152,7 +152,7 @@ func (r *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg ssvtypes.Sign
 			if err != nil {
 				return errors.Wrap(err, "failed signing sync committee message")
 			}
-			postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialMsg)
+			postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialMsg.(*spectypes.PartialSignatureMessage))
 		}
 	}
 
@@ -342,7 +342,7 @@ func (r *CommitteeRunner) executeDuty(logger *zap.Logger, duty spectypes.Duty) e
 		DataSSZ: voteByts,
 	}
 
-	if err := r.BaseRunner.decide(r, input); err != nil {
+	if err := r.BaseRunner.decide(logger, r, input); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}
 	return nil

@@ -20,7 +20,7 @@ type State struct {
 	PreConsensusContainer  ssvtypes.PartialSigContainer
 	PostConsensusContainer ssvtypes.PartialSigContainer
 	RunningInstance        *instance.Instance
-	DecidedValue           *spectypes.ConsensusData
+	DecidedValue           []byte
 	// CurrentDuty is the duty the node pulled locally from the beacon node, might be different from decided duty
 	StartingDuty spectypes.Duty
 	// flags

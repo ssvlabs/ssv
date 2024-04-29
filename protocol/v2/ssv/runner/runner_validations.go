@@ -76,7 +76,7 @@ func (b *BaseRunner) ValidatePostConsensusMsg(runner Runner, signedMsg ssvtypes.
 	return b.verifyExpectedRoot(runner, signedMsg, roots, domain)
 }
 
-func (b *BaseRunner) validateDecidedConsensusData(runner Runner, val *spectypes.ConsensusData) error {
+func (b *BaseRunner) validateDecidedConsensusData(runner Runner, val spectypes.Encoder) error {
 	byts, err := val.Encode()
 	if err != nil {
 		return errors.Wrap(err, "could not encode decided value")

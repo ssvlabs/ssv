@@ -8,6 +8,7 @@ import (
 	genesisspectypes "github.com/bloxapp/ssv-spec-genesis/types"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
+	"github.com/bloxapp/ssv-spec/types"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
@@ -143,7 +144,7 @@ func (r *AggregatorRunner) ProcessConsensus(logger *zap.Logger, signedMsg ssvtyp
 	r.metrics.EndConsensus()
 	r.metrics.StartPostConsensus()
 
-	aggregateAndProof, err := decidedValue.GetAggregateAndProof()
+	aggregateAndProof, err := decidedValue.(*types.ConsensusData).GetAggregateAndProof()
 	if err != nil {
 		return errors.Wrap(err, "could not get aggregate and proof")
 	}
@@ -151,7 +152,7 @@ func (r *AggregatorRunner) ProcessConsensus(logger *zap.Logger, signedMsg ssvtyp
 	// specific duty sig
 	msg, err := r.BaseRunner.signBeaconObject(r, r.BaseRunner.State.StartingDuty.(*spectypes.BeaconDuty),
 		aggregateAndProof,
-		decidedValue.Duty.Slot,
+		decidedValue.(*spectypes.ConsensusData).Duty.Slot,
 		spectypes.DomainAggregateAndProof)
 	if err != nil {
 		return errors.Wrap(err, "failed signing attestation data")
@@ -160,7 +161,7 @@ func (r *AggregatorRunner) ProcessConsensus(logger *zap.Logger, signedMsg ssvtyp
 	if true {
 		postConsensusMsg := &genesisspectypes.PartialSignatureMessages{
 			Type:     genesisspectypes.PostConsensusPartialSig,
-			Slot:     decidedValue.Duty.DutySlot(),
+			Slot:     decidedValue.(*spectypes.ConsensusData).Duty.Slot,
 			Messages: []*genesisspectypes.PartialSignatureMessage{msg.(*genesisspectypes.PartialSignatureMessage)},
 		}
 
@@ -187,7 +188,7 @@ func (r *AggregatorRunner) ProcessConsensus(logger *zap.Logger, signedMsg ssvtyp
 
 		postConsensusMsg := &spectypes.PartialSignatureMessages{
 			Type:     spectypes.PostConsensusPartialSig,
-			Slot:     decidedValue.Duty.Slot,
+			Slot:     decidedValue.(*spectypes.ConsensusData).Duty.Slot,
 			Messages: []*spectypes.PartialSignatureMessage{msg.(*spectypes.PartialSignatureMessage)},
 		}
 
@@ -227,7 +228,11 @@ func (r *AggregatorRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg ss
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
 
-		aggregateAndProof, err := r.GetState().DecidedValue.GetAggregateAndProof()
+		cd, err := spectypes.CreateConsensusData(r.GetState().DecidedValue)
+		if err != nil {
+			return errors.Wrap(err, "could not create consensus data")
+		}
+		aggregateAndProof, err := cd.GetAggregateAndProof()
 		if err != nil {
 			return errors.Wrap(err, "could not get aggregate and proof")
 		}
@@ -261,7 +266,11 @@ func (r *AggregatorRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot,
 
 // expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
 func (r *AggregatorRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	aggregateAndProof, err := r.GetState().DecidedValue.GetAggregateAndProof()
+	cd, err := spectypes.CreateConsensusData(r.GetState().DecidedValue)
+	if err != nil {
+		return nil, types.DomainError, errors.Wrap(err, "could not create consensus data")
+	}
+	aggregateAndProof, err := cd.GetAggregateAndProof()
 	if err != nil {
 		return nil, phase0.DomainType{}, errors.Wrap(err, "could not get aggregate and proof")
 	}

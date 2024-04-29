@@ -133,18 +133,18 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(runner Runner, signedMsg ssvt
 }
 
 // baseConsensusMsgProcessing is a base func that all runner implementation can call for processing a consensus msg
-func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runner, msg ssvtypes.SignedMessage) (decided bool, decidedValue *spectypes.ConsensusData, err error) {
+func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runner, msg ssvtypes.SignedMessage) (decided bool, decidedValue spectypes.Encoder, err error) {
 	prevDecided := false
 	if b.hasRunningDuty() && b.State != nil && b.State.RunningInstance != nil {
 		prevDecided, _ = b.State.RunningInstance.IsDecided()
 	}
 
 	// TODO: revert after pre-consensus liveness is fixed
-	if false {
-		if err := b.processPreConsensusJustification(logger, runner, b.highestDecidedSlot, msg); err != nil {
-			return false, nil, errors.Wrap(err, "invalid pre-consensus justification")
-		}
-	}
+	// if false {
+	// 	if err := b.processPreConsensusJustification(logger, runner, b.highestDecidedSlot, msg); err != nil {
+	// 		return false, nil, errors.Wrap(err, "invalid pre-consensus justification")
+	// 	}
+	// }
 
 	decidedMsg, err := b.QBFTController.ProcessMsg(logger, msg)
 	b.compactInstanceIfNeeded(msg)
@@ -176,19 +176,30 @@ func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runne
 	}
 
 	// decode consensus data
+	switch runner.(type) {
+	case *CommitteeRunner:
+		decidedValue = &spectypes.BeaconVote{}
+	default:
+		decidedValue = &spectypes.ConsensusData{}
+	}
+
+	// decode consensus data
 	decidedValue = &spectypes.ConsensusData{}
 	if err := decidedValue.Decode(decidedMsg.FullData); err != nil {
 		return true, nil, errors.Wrap(err, "failed to parse decided value to ConsensusData")
 	}
 
 	// update the highest decided slot
-	b.highestDecidedSlot = decidedValue.Duty.DutySlot()
+	b.highestDecidedSlot = b.State.StartingDuty.DutySlot()
 
 	if err := b.validateDecidedConsensusData(runner, decidedValue); err != nil {
 		return true, nil, errors.Wrap(err, "decided ConsensusData invalid")
 	}
 
-	runner.GetBaseRunner().State.DecidedValue = decidedValue
+	runner.GetBaseRunner().State.DecidedValue, err = decidedValue.Encode()
+	if err != nil {
+		return true, nil, errors.Wrap(err, "could not encode decided value")
+	}
 
 	return true, decidedValue, nil
 }

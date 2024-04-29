@@ -59,7 +59,7 @@ func (b *BaseRunner) signPostConsensusMsg(runner Runner, msg *genesisspectypes.P
 	}, nil
 }
 
-func (b *BaseRunner) signBeaconObject(runner Runner, duty *types.BeaconDuty,
+func (b *BaseRunner) signBeaconObject(runner Runner, duty *spectypes.BeaconDuty,
 	obj ssz.HashRoot, slot spec.Slot, domainType spec.DomainType) (*types.PartialSignatureMessage, error) {
 	epoch := runner.GetBaseRunner().BeaconNetwork.EstimatedEpochAtSlot(slot)
 	domain, err := runner.GetBeaconNode().DomainData(epoch, domainType)
