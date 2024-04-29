@@ -20,6 +20,7 @@ import (
 	"github.com/bloxapp/ssv/networkconfig"
 	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
+	"github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -36,7 +37,7 @@ type messageValidator struct {
 	netCfg                networkconfig.NetworkConfig
 	consensusStateIndex   map[consensusID]*consensusState
 	consensusStateIndexMu sync.Mutex
-	validatorStore        ValidatorStore
+	validatorStore        storage.ValidatorStore
 	operatorStore         OperatorStore
 	dutyStore             *dutystore.Store
 	operatorDataStore     operatordatastore.OperatorDataStore
@@ -173,7 +174,7 @@ func (mv *messageValidator) obtainValidationLock(messageID spectypes.MessageID) 
 func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.MessageID) ([]spectypes.OperatorID, []phase0.ValidatorIndex, error) {
 	if mv.committeeRole(msgID.GetRoleType()) {
 		// TODO: add metrics and logs for committee role
-		committeeID := CommitteeID(msgID.GetSenderID()[16:])
+		committeeID := ssvtypes.CommitteeID(msgID.GetSenderID()[16:])
 		committee := mv.validatorStore.Committee(committeeID) // TODO: consider passing whole senderID
 		if committee == nil {
 			e := ErrNonExistentCommitteeID
