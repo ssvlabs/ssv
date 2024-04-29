@@ -225,7 +225,7 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 
 	var committee []spectypes.OperatorID
 	for _, c := range validator.Committee {
-		committee = append(committee, c.OperatorID)
+		committee = append(committee, c.Signer)
 	}
 
 	return committee, []phase0.ValidatorIndex{validator.BeaconMetadata.Index}, nil
