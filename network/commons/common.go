@@ -4,15 +4,17 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"math/big"
 	"strconv"
 	"strings"
 	"time"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/cespare/xxhash/v2"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/protocol"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+
+	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 )
 
 const (
@@ -39,6 +41,7 @@ const (
 )
 
 // EncodeSignedSSVMessage serializes the message, op id and signature into bytes
+// DEPRECATED, TODO: remove post-fork
 func EncodeSignedSSVMessage(message []byte, operatorID spectypes.OperatorID, signature []byte) []byte {
 	b := make([]byte, signatureSize+operatorIDSize+len(message))
 	copy(b[signatureOffset:], signature)
@@ -48,6 +51,7 @@ func EncodeSignedSSVMessage(message []byte, operatorID spectypes.OperatorID, sig
 }
 
 // DecodeSignedSSVMessage deserializes signed message bytes messsage, op id and a signature
+// DEPRECATED, TODO: remove post-fork
 func DecodeSignedSSVMessage(encoded []byte) ([]byte, spectypes.OperatorID, []byte, error) {
 	if len(encoded) < MessageOffset {
 		return nil, 0, nil, fmt.Errorf("unexpected encoded message size of %d", len(encoded))
@@ -72,6 +76,14 @@ func ValidatorTopicID(pkByts []byte) []string {
 	pkHex := hex.EncodeToString(pkByts)
 	subnet := ValidatorSubnet(pkHex)
 	return []string{SubnetTopicID(subnet)}
+}
+
+// CommitteeTopicID returns the topic to use for the given committee
+func CommitteeTopicID(senderID []byte) []string {
+	committeeID := senderID[16:]
+
+	subnet := new(big.Int).Mod(new(big.Int).SetBytes(committeeID), new(big.Int).SetUint64(subnetsCount)).String()
+	return []string{subnet}
 }
 
 // GetTopicFullName returns the topic full name, including prefix

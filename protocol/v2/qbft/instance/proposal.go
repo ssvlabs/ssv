@@ -3,9 +3,9 @@ package instance
 import (
 	"bytes"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
@@ -123,6 +123,7 @@ func isValidProposal(
 	return errors.New("proposal is not valid with current state")
 }
 
+// IsProposalJustification is DEPRECATED. It needs to be deleted after the Alan fork.
 func IsProposalJustification(
 	config qbft.IConfig,
 	share *ssvtypes.SSVShare,

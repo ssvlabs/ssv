@@ -1,12 +1,13 @@
-package validation
+package msgvalidation
 
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 )
 
 // ConsensusID uniquely identifies a public key and role pair to keep track of state.
+// TODO change ConsensusID struct to use recipient id(to determine if message is for validator or cluster) instead of public key
 type ConsensusID struct {
 	PubKey phase0.BLSPubKey
 	Role   spectypes.BeaconRole

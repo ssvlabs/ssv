@@ -4,6 +4,7 @@ import (
 	"math/big"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
+
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
 

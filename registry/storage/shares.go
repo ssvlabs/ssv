@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 	"golang.org/x/exp/maps"
 
@@ -77,7 +77,7 @@ func (s *sharesStorage) load() error {
 		if err := val.Decode(obj.Value); err != nil {
 			return fmt.Errorf("failed to deserialize share: %w", err)
 		}
-		s.shares[hex.EncodeToString(val.ValidatorPubKey)] = val
+		s.shares[hex.EncodeToString(val.ValidatorPubKey[:])] = val
 		return nil
 	})
 }
@@ -122,14 +122,14 @@ func (s *sharesStorage) Save(rw basedb.ReadWriter, shares ...*types.SSVShare) er
 		if err != nil {
 			return basedb.Obj{}, fmt.Errorf("failed to serialize share: %w", err)
 		}
-		return basedb.Obj{Key: s.storageKey(shares[i].ValidatorPubKey), Value: value}, nil
+		return basedb.Obj{Key: s.storageKey(shares[i].ValidatorPubKey[:]), Value: value}, nil
 	})
 	if err != nil {
 		return err
 	}
 
 	for _, share := range shares {
-		key := hex.EncodeToString(share.ValidatorPubKey)
+		key := hex.EncodeToString(share.ValidatorPubKey[:])
 		s.shares[key] = share
 	}
 	return nil
@@ -218,10 +218,10 @@ func ByClusterID(clusterID []byte) SharesFilter {
 	return func(share *types.SSVShare) bool {
 		var operatorIDs []uint64
 		for _, op := range share.Committee {
-			operatorIDs = append(operatorIDs, op.OperatorID)
+			operatorIDs = append(operatorIDs, op.Signer)
 		}
 
-		shareClusterID := types.ComputeClusterIDHash(share.OwnerAddress, operatorIDs)
+		shareClusterID := types.ComputeCommitteeIDHash(share.OwnerAddress, operatorIDs)
 		return bytes.Equal(shareClusterID, clusterID)
 	}
 }
