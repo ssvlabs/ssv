@@ -4,19 +4,20 @@ import (
 	"bytes"
 	"sort"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
-	specssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 )
 
-func (b *BaseRunner) ValidatePreConsensusMsg(runner Runner, signedMsg *spectypes.SignedPartialSignatureMessage) error {
+func (b *BaseRunner) ValidatePreConsensusMsg(runner Runner, signedMsg ssvtypes.PartialSignatureMessages) error {
 	if !b.hasRunningDuty() {
 		return errors.New("no running duty")
 	}
 
-	if err := b.validatePartialSigMsgForSlot(signedMsg, b.State.StartingDuty.Slot); err != nil {
+	if err := b.validatePartialSigMsgForSlot(signedMsg, b.State.StartingDuty.DutySlot()); err != nil {
 		return err
 	}
 
@@ -29,18 +30,18 @@ func (b *BaseRunner) ValidatePreConsensusMsg(runner Runner, signedMsg *spectypes
 }
 
 // Verify each signature in container removing the invalid ones
-func (b *BaseRunner) FallBackAndVerifyEachSignature(container *specssv.PartialSigContainer, root [32]byte) {
-
-	signatures := container.GetSignatures(root)
+func (b *BaseRunner) FallBackAndVerifyEachSignature(container ssvtypes.PartialSigContainer, root [32]byte,
+	committee []*spectypes.ShareMember, validatorIndex phase0.ValidatorIndex) {
+	signatures := container.GetSignatures(validatorIndex, root)
 
 	for operatorID, signature := range signatures {
-		if err := b.verifyBeaconPartialSignature(operatorID, signature, root); err != nil {
-			container.Remove(operatorID, root)
+		if err := b.verifyBeaconPartialSignature(operatorID, signature, root, b.getCommittee(validatorIndex)); err != nil {
+			container.Remove(validatorIndex, operatorID, root)
 		}
 	}
 }
 
-func (b *BaseRunner) ValidatePostConsensusMsg(runner Runner, signedMsg *spectypes.SignedPartialSignatureMessage) error {
+func (b *BaseRunner) ValidatePostConsensusMsg(runner Runner, signedMsg ssvtypes.PartialSignatureMessages) error {
 	if !b.hasRunningDuty() {
 		return errors.New("no running duty")
 	}
@@ -63,7 +64,7 @@ func (b *BaseRunner) ValidatePostConsensusMsg(runner Runner, signedMsg *spectype
 		return errors.Wrap(err, "failed to parse decided value to ConsensusData")
 	}
 
-	if err := b.validatePartialSigMsgForSlot(signedMsg, decidedValue.Duty.Slot); err != nil {
+	if err := b.validatePartialSigMsgForSlot(signedMsg, decidedValue.Duty.DutySlot()); err != nil {
 		return err
 	}
 
@@ -75,7 +76,7 @@ func (b *BaseRunner) ValidatePostConsensusMsg(runner Runner, signedMsg *spectype
 	return b.verifyExpectedRoot(runner, signedMsg, roots, domain)
 }
 
-func (b *BaseRunner) validateDecidedConsensusData(runner Runner, val *spectypes.ConsensusData) error {
+func (b *BaseRunner) validateDecidedConsensusData(runner Runner, val spectypes.Encoder) error {
 	byts, err := val.Encode()
 	if err != nil {
 		return errors.Wrap(err, "could not encode decided value")
@@ -87,14 +88,14 @@ func (b *BaseRunner) validateDecidedConsensusData(runner Runner, val *spectypes.
 	return nil
 }
 
-func (b *BaseRunner) verifyExpectedRoot(runner Runner, signedMsg *spectypes.SignedPartialSignatureMessage, expectedRootObjs []ssz.HashRoot, domain spec.DomainType) error {
-	if len(expectedRootObjs) != len(signedMsg.Message.Messages) {
+func (b *BaseRunner) verifyExpectedRoot(runner Runner, signedMsg ssvtypes.PartialSignatureMessages, expectedRootObjs []ssz.HashRoot, domain spec.DomainType) error {
+	if len(expectedRootObjs) != len(signedMsg.GetMessages()) {
 		return errors.New("wrong expected roots count")
 	}
 
 	// convert expected roots to map and mark unique roots when verified
 	sortedExpectedRoots, err := func(expectedRootObjs []ssz.HashRoot) ([][32]byte, error) {
-		epoch := b.BeaconNetwork.EstimatedEpochAtSlot(b.State.StartingDuty.Slot)
+		epoch := b.BeaconNetwork.EstimatedEpochAtSlot(b.State.StartingDuty.DutySlot())
 		d, err := runner.GetBeaconNode().DomainData(epoch, domain)
 		if err != nil {
 			return nil, errors.Wrap(err, "could not get pre consensus root domain")
@@ -118,17 +119,17 @@ func (b *BaseRunner) verifyExpectedRoot(runner Runner, signedMsg *spectypes.Sign
 		return err
 	}
 
-	sortedRoots := func(msgs spectypes.PartialSignatureMessages) [][32]byte {
+	sortedRoots := func(msgs ssvtypes.PartialSignatureMessages) [][32]byte {
 		ret := make([][32]byte, 0)
-		for _, msg := range msgs.Messages {
-			ret = append(ret, msg.SigningRoot)
+		for _, msg := range msgs.GetMessages() {
+			ret = append(ret, msg.GetSigningRoot())
 		}
 
 		sort.Slice(ret, func(i, j int) bool {
 			return string(ret[i][:]) < string(ret[j][:])
 		})
 		return ret
-	}(signedMsg.Message)
+	}(signedMsg)
 
 	// verify roots
 	for i, r := range sortedRoots {

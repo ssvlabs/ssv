@@ -3,12 +3,16 @@ package runner
 import (
 	"sync"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	specssv "github.com/bloxapp/ssv-spec/ssv"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
-	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	specssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
@@ -18,7 +22,9 @@ type Getters interface {
 	GetBaseRunner() *BaseRunner
 	GetBeaconNode() specssv.BeaconNode
 	GetValCheckF() specqbft.ProposedValueCheckF
-	GetSigner() spectypes.KeyManager
+	GetSigner() spectypes.BeaconSigner
+	GetGenesisSigner() genesisspectypes.KeyManager
+	GetOperatorSigner() spectypes.OperatorSigner
 	GetNetwork() specssv.Network
 }
 
@@ -28,30 +34,31 @@ type Runner interface {
 	Getters
 
 	// StartNewDuty starts a new duty for the runner, returns error if can't
-	StartNewDuty(logger *zap.Logger, duty *spectypes.Duty) error
+	StartNewDuty(logger *zap.Logger, duty spectypes.Duty) error
 	// HasRunningDuty returns true if it has a running duty
 	HasRunningDuty() bool
 	// ProcessPreConsensus processes all pre-consensus msgs, returns error if can't process
-	ProcessPreConsensus(logger *zap.Logger, signedMsg *spectypes.SignedPartialSignatureMessage) error
+	ProcessPreConsensus(logger *zap.Logger, signedMsg ssvtypes.PartialSignatureMessages) error
 	// ProcessConsensus processes all consensus msgs, returns error if can't process
-	ProcessConsensus(logger *zap.Logger, msg *specqbft.SignedMessage) error
+	ProcessConsensus(logger *zap.Logger, msg ssvtypes.SignedMessage) error
 	// ProcessPostConsensus processes all post-consensus msgs, returns error if can't process
-	ProcessPostConsensus(logger *zap.Logger, signedMsg *spectypes.SignedPartialSignatureMessage) error
+	ProcessPostConsensus(logger *zap.Logger, signedMsg ssvtypes.PartialSignatureMessages) error
 	// expectedPreConsensusRootsAndDomain an INTERNAL function, returns the expected pre-consensus roots to sign
 	expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, spec.DomainType, error)
 	// expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
 	expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, spec.DomainType, error)
 	// executeDuty an INTERNAL function, executes a duty.
-	executeDuty(logger *zap.Logger, duty *spectypes.Duty) error
+	executeDuty(logger *zap.Logger, duty spectypes.Duty) error
 }
 
 type BaseRunner struct {
 	mtx            sync.RWMutex
 	State          *State
-	Share          *spectypes.Share
+	Shares         map[phase0.ValidatorIndex]*spectypes.Share
 	QBFTController *controller.Controller
 	BeaconNetwork  spectypes.BeaconNetwork
-	BeaconRoleType spectypes.BeaconRole
+	BeaconRoleType genesisspectypes.BeaconRole
+	RunnerRoleType spectypes.RunnerRole
 
 	// implementation vars
 	TimeoutF TimeoutF `json:"-"`
@@ -66,9 +73,9 @@ func (b *BaseRunner) SetHighestDecidedSlot(slot spec.Slot) {
 }
 
 // setupForNewDuty is sets the runner for a new duty
-func (b *BaseRunner) baseSetupForNewDuty(duty *spectypes.Duty) {
+func (b *BaseRunner) baseSetupForNewDuty(duty spectypes.Duty) {
 	// start new state
-	state := NewRunnerState(b.Share.Quorum, duty)
+	state := NewRunnerState(b.QBFTController.Share.Quorum, duty)
 
 	// TODO: potentially incomplete locking of b.State. runner.Execute(duty) has access to
 	// b.State but currently does not write to it
@@ -79,15 +86,15 @@ func (b *BaseRunner) baseSetupForNewDuty(duty *spectypes.Duty) {
 
 func NewBaseRunner(
 	state *State,
-	share *spectypes.Share,
+	shares *map[spec.ValidatorIndex]*spectypes.Share,
 	controller *controller.Controller,
 	beaconNetwork spectypes.BeaconNetwork,
-	beaconRoleType spectypes.BeaconRole,
+	beaconRoleType genesisspectypes.BeaconRole,
 	highestDecidedSlot spec.Slot,
 ) *BaseRunner {
 	return &BaseRunner{
 		State:              state,
-		Share:              share,
+		Shares:             *shares,
 		QBFTController:     controller,
 		BeaconNetwork:      beaconNetwork,
 		BeaconRoleType:     beaconRoleType,
@@ -96,7 +103,7 @@ func NewBaseRunner(
 }
 
 // baseStartNewDuty is a base func that all runner implementation can call to start a duty
-func (b *BaseRunner) baseStartNewDuty(logger *zap.Logger, runner Runner, duty *spectypes.Duty) error {
+func (b *BaseRunner) baseStartNewDuty(logger *zap.Logger, runner Runner, duty spectypes.Duty) error {
 	if err := b.ShouldProcessDuty(duty); err != nil {
 		return errors.Wrap(err, "can't start duty")
 	}
@@ -107,7 +114,7 @@ func (b *BaseRunner) baseStartNewDuty(logger *zap.Logger, runner Runner, duty *s
 }
 
 // baseStartNewBeaconDuty is a base func that all runner implementation can call to start a non-beacon duty
-func (b *BaseRunner) baseStartNewNonBeaconDuty(logger *zap.Logger, runner Runner, duty *spectypes.Duty) error {
+func (b *BaseRunner) baseStartNewNonBeaconDuty(logger *zap.Logger, runner Runner, duty spectypes.Duty) error {
 	if err := b.ShouldProcessNonBeaconDuty(duty); err != nil {
 		return errors.Wrap(err, "can't start non-beacon duty")
 	}
@@ -116,7 +123,7 @@ func (b *BaseRunner) baseStartNewNonBeaconDuty(logger *zap.Logger, runner Runner
 }
 
 // basePreConsensusMsgProcessing is a base func that all runner implementation can call for processing a pre-consensus msg
-func (b *BaseRunner) basePreConsensusMsgProcessing(runner Runner, signedMsg *spectypes.SignedPartialSignatureMessage) (bool, [][32]byte, error) {
+func (b *BaseRunner) basePreConsensusMsgProcessing(runner Runner, signedMsg ssvtypes.PartialSignatureMessages) (bool, [][32]byte, error) {
 	if err := b.ValidatePreConsensusMsg(runner, signedMsg); err != nil {
 		return false, nil, errors.Wrap(err, "invalid pre-consensus message")
 	}
@@ -126,18 +133,18 @@ func (b *BaseRunner) basePreConsensusMsgProcessing(runner Runner, signedMsg *spe
 }
 
 // baseConsensusMsgProcessing is a base func that all runner implementation can call for processing a consensus msg
-func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runner, msg *specqbft.SignedMessage) (decided bool, decidedValue *spectypes.ConsensusData, err error) {
+func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runner, msg ssvtypes.SignedMessage) (decided bool, decidedValue spectypes.Encoder, err error) {
 	prevDecided := false
 	if b.hasRunningDuty() && b.State != nil && b.State.RunningInstance != nil {
 		prevDecided, _ = b.State.RunningInstance.IsDecided()
 	}
 
 	// TODO: revert after pre-consensus liveness is fixed
-	if false {
-		if err := b.processPreConsensusJustification(logger, runner, b.highestDecidedSlot, msg); err != nil {
-			return false, nil, errors.Wrap(err, "invalid pre-consensus justification")
-		}
-	}
+	// if false {
+	// 	if err := b.processPreConsensusJustification(logger, runner, b.highestDecidedSlot, msg); err != nil {
+	// 		return false, nil, errors.Wrap(err, "invalid pre-consensus justification")
+	// 	}
+	// }
 
 	decidedMsg, err := b.QBFTController.ProcessMsg(logger, msg)
 	b.compactInstanceIfNeeded(msg)
@@ -156,9 +163,9 @@ func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runne
 	} else {
 		if inst := b.QBFTController.StoredInstances.FindInstance(decidedMsg.Message.Height); inst != nil {
 			logger := logger.With(
-				zap.Uint64("msg_height", uint64(msg.Message.Height)),
+				zap.Uint64("msg_height", uint64(msg.GetHeight())),
 				zap.Uint64("ctrl_height", uint64(b.QBFTController.Height)),
-				zap.Any("signers", msg.Signers),
+				zap.Any("signers", msg.GetOperatorIDs()),
 			)
 			if err = b.QBFTController.SaveInstance(inst, decidedMsg); err != nil {
 				logger.Debug("❗ failed to save instance", zap.Error(err))
@@ -169,25 +176,36 @@ func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runne
 	}
 
 	// decode consensus data
+	switch runner.(type) {
+	case *CommitteeRunner:
+		decidedValue = &spectypes.BeaconVote{}
+	default:
+		decidedValue = &spectypes.ConsensusData{}
+	}
+
+	// decode consensus data
 	decidedValue = &spectypes.ConsensusData{}
 	if err := decidedValue.Decode(decidedMsg.FullData); err != nil {
 		return true, nil, errors.Wrap(err, "failed to parse decided value to ConsensusData")
 	}
 
 	// update the highest decided slot
-	b.highestDecidedSlot = decidedValue.Duty.Slot
+	b.highestDecidedSlot = b.State.StartingDuty.DutySlot()
 
 	if err := b.validateDecidedConsensusData(runner, decidedValue); err != nil {
 		return true, nil, errors.Wrap(err, "decided ConsensusData invalid")
 	}
 
-	runner.GetBaseRunner().State.DecidedValue = decidedValue
+	runner.GetBaseRunner().State.DecidedValue, err = decidedValue.Encode()
+	if err != nil {
+		return true, nil, errors.Wrap(err, "could not encode decided value")
+	}
 
 	return true, decidedValue, nil
 }
 
 // basePostConsensusMsgProcessing is a base func that all runner implementation can call for processing a post-consensus msg
-func (b *BaseRunner) basePostConsensusMsgProcessing(logger *zap.Logger, runner Runner, signedMsg *spectypes.SignedPartialSignatureMessage) (bool, [][32]byte, error) {
+func (b *BaseRunner) basePostConsensusMsgProcessing(logger *zap.Logger, runner Runner, signedMsg ssvtypes.PartialSignatureMessages) (bool, [][32]byte, error) {
 	if err := b.ValidatePostConsensusMsg(runner, signedMsg); err != nil {
 		return false, nil, errors.Wrap(err, "invalid post-consensus message")
 	}
@@ -198,26 +216,26 @@ func (b *BaseRunner) basePostConsensusMsgProcessing(logger *zap.Logger, runner R
 
 // basePartialSigMsgProcessing adds a validated (without signature verification) validated partial msg to the container, checks for quorum and returns true (and roots) if quorum exists
 func (b *BaseRunner) basePartialSigMsgProcessing(
-	signedMsg *spectypes.SignedPartialSignatureMessage,
-	container *specssv.PartialSigContainer,
+	signedMsg ssvtypes.PartialSignatureMessages,
+	container ssvtypes.PartialSigContainer,
 ) (bool, [][32]byte, error) {
 	roots := make([][32]byte, 0)
 	anyQuorum := false
-	for _, msg := range signedMsg.Message.Messages {
-		prevQuorum := container.HasQuorum(msg.SigningRoot)
+	for _, msg := range signedMsg.GetMessages() {
+		prevQuorum := container.HasQuorum(msg)
 
 		// Check if it has two signatures for the same signer
-		if container.HasSigner(msg.Signer, msg.SigningRoot) {
+		if container.HasSigner(msg) {
 			b.resolveDuplicateSignature(container, msg)
 		} else {
 			container.AddSignature(msg)
 		}
 
-		hasQuorum := container.HasQuorum(msg.SigningRoot)
+		hasQuorum := container.HasQuorum(msg)
 
 		if hasQuorum && !prevQuorum {
 			// Notify about first quorum only
-			roots = append(roots, msg.SigningRoot)
+			roots = append(roots, msg.GetSigningRoot())
 			anyQuorum = true
 		}
 	}
@@ -226,7 +244,7 @@ func (b *BaseRunner) basePartialSigMsgProcessing(
 }
 
 // didDecideCorrectly returns true if the expected consensus instance decided correctly
-func (b *BaseRunner) didDecideCorrectly(prevDecided bool, decidedMsg *specqbft.SignedMessage) (bool, error) {
+func (b *BaseRunner) didDecideCorrectly(prevDecided bool, decidedMsg *genesisspecqbft.SignedMessage) (bool, error) {
 	if decidedMsg == nil {
 		return false, nil
 	}
@@ -235,7 +253,7 @@ func (b *BaseRunner) didDecideCorrectly(prevDecided bool, decidedMsg *specqbft.S
 		return false, errors.New("decided wrong instance")
 	}
 
-	if decidedMsg.Message.Height != b.State.RunningInstance.GetHeight() {
+	if specqbft.Height(decidedMsg.Message.Height) != b.State.RunningInstance.GetHeight() {
 		return false, errors.New("decided wrong instance")
 	}
 
@@ -259,7 +277,7 @@ func (b *BaseRunner) decide(logger *zap.Logger, runner Runner, input *spectypes.
 	}
 
 	if err := runner.GetBaseRunner().QBFTController.StartNewInstance(logger,
-		specqbft.Height(input.Duty.Slot),
+		specqbft.Height(input.Duty.DutySlot()),
 		byts,
 	); err != nil {
 		return errors.Wrap(err, "could not start new QBFT instance")
@@ -287,19 +305,28 @@ func (b *BaseRunner) hasRunningDuty() bool {
 	return !b.State.Finished
 }
 
-func (b *BaseRunner) ShouldProcessDuty(duty *spectypes.Duty) error {
-	if b.QBFTController.Height >= specqbft.Height(duty.Slot) && b.QBFTController.Height != 0 {
-		return errors.Errorf("duty for slot %d already passed. Current height is %d", duty.Slot,
+func (b *BaseRunner) ShouldProcessDuty(duty spectypes.Duty) error {
+	if b.QBFTController.Height >= specqbft.Height(duty.DutySlot()) && b.QBFTController.Height != 0 {
+		return errors.Errorf("duty for slot %d already passed. Current height is %d", duty.DutySlot(),
 			b.QBFTController.Height)
 	}
 	return nil
 }
 
-func (b *BaseRunner) ShouldProcessNonBeaconDuty(duty *spectypes.Duty) error {
+func (b *BaseRunner) ShouldProcessNonBeaconDuty(duty spectypes.Duty) error {
 	// assume StartingDuty is not nil if state is not nil
-	if b.State != nil && b.State.StartingDuty.Slot >= duty.Slot {
-		return errors.Errorf("duty for slot %d already passed. Current slot is %d", duty.Slot,
-			b.State.StartingDuty.Slot)
+	if b.State != nil && b.State.StartingDuty.DutySlot() >= duty.DutySlot() {
+		return errors.Errorf("duty for slot %d already passed. Current slot is %d", duty.DutySlot(),
+			b.State.StartingDuty.DutySlot())
 	}
 	return nil
+}
+
+func (b *BaseRunner) getCommittee(validatorIndex spec.ValidatorIndex) []*spectypes.ShareMember {
+	if len(b.Shares) == 1 {
+		for _, share := range b.Shares {
+			return share.Committee
+		}
+	}
+	return b.Shares[validatorIndex].Committee
 }

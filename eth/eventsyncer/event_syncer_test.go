@@ -13,13 +13,12 @@ import (
 	"github.com/bloxapp/ssv/eth/simulator"
 	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/keys"
-	"github.com/bloxapp/ssv/operator/validatorsmap"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
+	"github.com/ethereum/go-ethereum/core/types"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/golang/mock/gomock"
@@ -35,8 +34,8 @@ import (
 	"github.com/bloxapp/ssv/eth/simulator/simcontract"
 	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/operator/controller"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/operator/validator"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -167,12 +166,11 @@ func setupEventHandler(
 	defer ctrl.Finish()
 
 	bc := beacon.NewMockBeaconNode(ctrl)
-	validatorCtrl := validator.NewController(logger, validator.ControllerOptions{
+	validatorCtrl := controller.NewController(logger, controller.ControllerOptions{
 		Context:           ctx,
 		DB:                db,
 		RegistryStorage:   nodeStorage,
 		OperatorDataStore: operatorDataStore,
-		ValidatorsMap:     validatorsmap.New(ctx),
 	})
 
 	contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)
@@ -201,7 +199,7 @@ func setupEventHandler(
 
 func simTestBackend(testAddr ethcommon.Address) *simulator.SimulatedBackend {
 	return simulator.NewSimulatedBackend(
-		core.GenesisAlloc{
+		types.GenesisAlloc{
 			testAddr: {Balance: big.NewInt(10000000000000000)},
 		}, 10000000,
 	)

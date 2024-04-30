@@ -15,12 +15,12 @@ import (
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/operator/controller"
 	"github.com/bloxapp/ssv/operator/duties"
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
 	"github.com/bloxapp/ssv/operator/fee_recipient"
 	"github.com/bloxapp/ssv/operator/slotticker"
 	"github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/operator/validator"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
@@ -40,8 +40,8 @@ type Options struct {
 	P2PNetwork          network.P2PNetwork
 	Context             context.Context
 	DB                  basedb.Database
-	ValidatorController validator.Controller
-	ValidatorOptions    validator.ControllerOptions `yaml:"ValidatorOptions"`
+	ValidatorController controller.Controller
+	ValidatorOptions    controller.ControllerOptions `yaml:"ValidatorOptions"`
 	DutyStore           *dutystore.Store
 	WS                  api.WebSocketServer
 	WsAPIPort           int
@@ -52,8 +52,8 @@ type Options struct {
 type operatorNode struct {
 	network          networkconfig.NetworkConfig
 	context          context.Context
-	validatorsCtrl   validator.Controller
-	validatorOptions validator.ControllerOptions
+	validatorsCtrl   controller.Controller
+	validatorOptions controller.ControllerOptions
 	consensusClient  beaconprotocol.BeaconNode
 	executionClient  *executionclient.ExecutionClient
 	net              network.P2PNetwork
@@ -96,17 +96,17 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 		storage:          opts.ValidatorOptions.RegistryStorage,
 		qbftStorage:      storageMap,
 		dutyScheduler: duties.NewScheduler(&duties.SchedulerOptions{
-			Ctx:                 opts.Context,
-			BeaconNode:          opts.BeaconNode,
-			ExecutionClient:     opts.ExecutionClient,
-			Network:             opts.Network,
-			ValidatorController: opts.ValidatorController,
-			IndicesChg:          opts.ValidatorController.IndicesChangeChan(),
-			ValidatorExitCh:     opts.ValidatorController.ValidatorExitChan(),
-			ExecuteDuty:         opts.ValidatorController.ExecuteDuty,
-			BuilderProposals:    opts.ValidatorOptions.BuilderProposals,
-			DutyStore:           opts.DutyStore,
-			SlotTickerProvider:  slotTickerProvider,
+			Ctx:                opts.Context,
+			BeaconNode:         opts.BeaconNode,
+			ExecutionClient:    opts.ExecutionClient,
+			Network:            opts.Network,
+			ValidatorProvider:  opts.ValidatorController,
+			IndicesChg:         opts.ValidatorController.IndicesChangeChan(),
+			ValidatorExitCh:    opts.ValidatorController.ValidatorExitChan(),
+			ExecuteDuty:        opts.ValidatorController.ExecuteDuty,
+			BuilderProposals:   opts.ValidatorOptions.BuilderProposals,
+			DutyStore:          opts.DutyStore,
+			SlotTickerProvider: slotTickerProvider,
 		}),
 		feeRecipientCtrl: fee_recipient.NewController(&fee_recipient.ControllerOptions{
 			Ctx:                opts.Context,

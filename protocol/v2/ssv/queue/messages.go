@@ -31,13 +31,13 @@ func DecodeSSVMessage(m *spectypes.SSVMessage) (*DecodedSSVMessage, error) {
 	var body interface{}
 	switch m.MsgType {
 	case spectypes.SSVConsensusMsgType: // TODO: Or message.SSVDecidedMsgType?
-		sm := &specqbft.Message{}
+		sm := &genesisspecqbft.SignedMessage{}
 		if err := sm.Decode(m.Data); err != nil {
 			return nil, errors.Wrap(err, "failed to decode Message")
 		}
 		body = sm
 	case spectypes.SSVPartialSignatureMsgType:
-		sm := &spectypes.PartialSignatureMessages{}
+		sm := &genesisspectypes.SignedPartialSignatureMessage{}
 		if err := sm.Decode(m.Data); err != nil {
 			return nil, errors.Wrap(err, "failed to decode PartialSignatureMessages")
 		}
@@ -95,7 +95,7 @@ func compareHeightOrSlot(state *State, m *DecodedSSVMessage) int {
 		if mm.Message.Height == state.Height {
 			return 0
 		}
-		if mm.Message.Height > state.Height {
+		if specqbft.Height(mm.Message.Height) > state.Height {
 			return 1
 		}
 	} else if mm, ok := m.Body.(*genesisspectypes.SignedPartialSignatureMessage); ok {
@@ -116,7 +116,7 @@ func scoreRound(state *State, m *DecodedSSVMessage) int {
 		if mm.Message.Round == state.Round {
 			return 2
 		}
-		if mm.Message.Round > state.Round {
+		if specqbft.Round(mm.Message.Round) > state.Round {
 			return 1
 		}
 		return -1

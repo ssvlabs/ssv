@@ -20,8 +20,8 @@ import (
 	"github.com/bloxapp/ssv/eth/simulator"
 	"github.com/bloxapp/ssv/eth/simulator/simcontract"
 	"github.com/bloxapp/ssv/monitoring/metricsreporter"
+	"github.com/bloxapp/ssv/operator/controller/mocks"
 	"github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/operator/validator/mocks"
 )
 
 type CommonTestInput struct {

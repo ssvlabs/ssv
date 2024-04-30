@@ -67,7 +67,9 @@ func NewNodeStorage(logger *zap.Logger, db basedb.Database) (Storage, error) {
 		recipientStore: registrystorage.NewRecipientsStorage(logger, db, storagePrefix),
 	}
 	var err error
-	stg.shareStore, err = registrystorage.NewSharesStorage(logger, db, storagePrefix)
+	stg.shareStore, err = registrystorage.NewSharesStorage(logger, db, storagePrefix, func() spectypes.OperatorID {
+		return spectypes.OperatorID(123)
+	})
 	if err != nil {
 		return nil, err
 	}

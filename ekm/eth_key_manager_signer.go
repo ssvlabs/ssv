@@ -22,7 +22,7 @@ import (
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/networkconfig"
@@ -45,7 +45,7 @@ type ethKeyManagerSigner struct {
 	walletLock        *sync.RWMutex
 	signer            signer.ValidatorSigner
 	storage           Storage
-	domain            spectypes.DomainType
+	domain            genesisspectypes.DomainType
 	slashingProtector core.SlashingProtector
 	builderProposals  bool
 }
@@ -59,7 +59,7 @@ type StorageProvider interface {
 }
 
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
-func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, network networkconfig.NetworkConfig, builderProposals bool, encryptionKey string) (spectypes.KeyManager, error) {
+func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, network networkconfig.NetworkConfig, builderProposals bool, encryptionKey string) (genesisspectypes.KeyManager, error) {
 	signerStore := NewSignerStorage(db, network.Beacon, logger)
 	if encryptionKey != "" {
 		err := signerStore.SetEncryptionKey(encryptionKey)
@@ -112,7 +112,7 @@ func (km *ethKeyManagerSigner) RetrieveHighestProposal(pubKey []byte) (phase0.Sl
 	return km.storage.RetrieveHighestProposal(pubKey)
 }
 
-func (km *ethKeyManagerSigner) SignBeaconObject(obj ssz.HashRoot, domain phase0.Domain, pk []byte, domainType phase0.DomainType) (spectypes.Signature, [32]byte, error) {
+func (km *ethKeyManagerSigner) SignBeaconObject(obj ssz.HashRoot, domain phase0.Domain, pk []byte, domainType phase0.DomainType) (genesisspectypes.Signature, [32]byte, error) {
 	sig, rootSlice, err := km.signBeaconObject(obj, domain, pk, domainType)
 	if err != nil {
 		return nil, [32]byte{}, err
@@ -122,18 +122,18 @@ func (km *ethKeyManagerSigner) SignBeaconObject(obj ssz.HashRoot, domain phase0.
 	return sig, root, nil
 }
 
-func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.Domain, pk []byte, domainType phase0.DomainType) (spectypes.Signature, []byte, error) {
+func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.Domain, pk []byte, domainType phase0.DomainType) (genesisspectypes.Signature, []byte, error) {
 	km.walletLock.RLock()
 	defer km.walletLock.RUnlock()
 
 	switch domainType {
-	case spectypes.DomainAttester:
+	case genesisspectypes.DomainAttester:
 		data, ok := obj.(*phase0.AttestationData)
 		if !ok {
 			return nil, nil, errors.New("could not cast obj to AttestationData")
 		}
 		return km.signer.SignBeaconAttestation(data, domain, pk)
-	case spectypes.DomainProposer:
+	case genesisspectypes.DomainProposer:
 		if km.builderProposals {
 			var vBlindedBlock *api.VersionedBlindedBeaconBlock
 			switch v := obj.(type) {
@@ -169,51 +169,51 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 		}
 
 		return km.signer.SignBeaconBlock(vBlock, domain, pk)
-	case spectypes.DomainVoluntaryExit:
+	case genesisspectypes.DomainVoluntaryExit:
 		data, ok := obj.(*phase0.VoluntaryExit)
 		if !ok {
 			return nil, nil, errors.New("could not cast obj to VoluntaryExit")
 		}
 		return km.signer.SignVoluntaryExit(data, domain, pk)
-	case spectypes.DomainAggregateAndProof:
+	case genesisspectypes.DomainAggregateAndProof:
 		data, ok := obj.(*phase0.AggregateAndProof)
 		if !ok {
 			return nil, nil, errors.New("could not cast obj to AggregateAndProof")
 		}
 		return km.signer.SignAggregateAndProof(data, domain, pk)
-	case spectypes.DomainSelectionProof:
-		data, ok := obj.(spectypes.SSZUint64)
+	case genesisspectypes.DomainSelectionProof:
+		data, ok := obj.(genesisspectypes.SSZUint64)
 		if !ok {
 			return nil, nil, errors.New("could not cast obj to SSZUint64")
 		}
 
 		return km.signer.SignSlot(phase0.Slot(data), domain, pk)
-	case spectypes.DomainRandao:
-		data, ok := obj.(spectypes.SSZUint64)
+	case genesisspectypes.DomainRandao:
+		data, ok := obj.(genesisspectypes.SSZUint64)
 		if !ok {
 			return nil, nil, errors.New("could not cast obj to SSZUint64")
 		}
 
 		return km.signer.SignEpoch(phase0.Epoch(data), domain, pk)
-	case spectypes.DomainSyncCommittee:
-		data, ok := obj.(spectypes.SSZBytes)
+	case genesisspectypes.DomainSyncCommittee:
+		data, ok := obj.(genesisspectypes.SSZBytes)
 		if !ok {
 			return nil, nil, errors.New("could not cast obj to SSZBytes")
 		}
 		return km.signer.SignSyncCommittee(data, domain, pk)
-	case spectypes.DomainSyncCommitteeSelectionProof:
+	case genesisspectypes.DomainSyncCommitteeSelectionProof:
 		data, ok := obj.(*altair.SyncAggregatorSelectionData)
 		if !ok {
 			return nil, nil, errors.New("could not cast obj to SyncAggregatorSelectionData")
 		}
 		return km.signer.SignSyncCommitteeSelectionData(data, domain, pk)
-	case spectypes.DomainContributionAndProof:
+	case genesisspectypes.DomainContributionAndProof:
 		data, ok := obj.(*altair.ContributionAndProof)
 		if !ok {
 			return nil, nil, errors.New("could not cast obj to ContributionAndProof")
 		}
 		return km.signer.SignSyncCommitteeContributionAndProof(data, domain, pk)
-	case spectypes.DomainApplicationBuilder:
+	case genesisspectypes.DomainApplicationBuilder:
 		var data *api.VersionedValidatorRegistration
 		switch v := obj.(type) {
 		case *eth2apiv1.ValidatorRegistration:
@@ -252,7 +252,7 @@ func (km *ethKeyManagerSigner) IsBeaconBlockSlashable(pk []byte, slot phase0.Slo
 	return nil
 }
 
-func (km *ethKeyManagerSigner) SignRoot(data spectypes.Root, sigType spectypes.SignatureType, pk []byte) (spectypes.Signature, error) {
+func (km *ethKeyManagerSigner) SignRoot(data genesisspectypes.Root, sigType genesisspectypes.SignatureType, pk []byte) (genesisspectypes.Signature, error) {
 	km.walletLock.RLock()
 	defer km.walletLock.RUnlock()
 
@@ -261,7 +261,7 @@ func (km *ethKeyManagerSigner) SignRoot(data spectypes.Root, sigType spectypes.S
 		return nil, errors.Wrap(err, "could not get signing account")
 	}
 
-	root, err := spectypes.ComputeSigningRoot(data, spectypes.ComputeSignatureDomain(km.domain, sigType))
+	root, err := genesisspectypes.ComputeSigningRoot(data, genesisspectypes.ComputeSignatureDomain(km.domain, genesisspectypes.SignatureType(sigType)))
 	if err != nil {
 		return nil, errors.Wrap(err, "could not compute signing root")
 	}

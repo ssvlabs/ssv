@@ -194,12 +194,12 @@ func (h *SyncCommitteeHandler) fetchAndProcessDuties(ctx context.Context, period
 	}
 	lastEpoch := h.network.Beacon.FirstEpochOfSyncPeriod(period+1) - 1
 
-	allActiveIndices := h.validatorController.AllActiveIndices(firstEpoch, waitForInitial)
+	allActiveIndices := indicesFromShares(h.validatorProvider.ParticipatingValidators(firstEpoch))
 	if len(allActiveIndices) == 0 {
 		return nil
 	}
 
-	inCommitteeIndices := h.validatorController.CommitteeActiveIndices(firstEpoch)
+	inCommitteeIndices := indicesFromShares(h.validatorProvider.SelfParticipatingValidators(firstEpoch))
 	inCommitteeIndicesSet := map[phase0.ValidatorIndex]struct{}{}
 	for _, idx := range inCommitteeIndices {
 		inCommitteeIndicesSet[idx] = struct{}{}

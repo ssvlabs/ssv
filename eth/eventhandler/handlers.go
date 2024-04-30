@@ -520,15 +520,15 @@ func (eh *EventHandler) processClusterEvent(
 	operatorIDs []uint64,
 	toLiquidate bool,
 ) ([]*ssvtypes.SSVShare, []string, error) {
-	clusterID := ssvtypes.ComputeClusterIDHash(owner, operatorIDs)
-	shares := eh.nodeStorage.Shares().List(txn, registrystorage.ByClusterID(clusterID))
+	clusterID := ssvtypes.ComputeCommitteeIDHash(owner, operatorIDs)
+	shares := eh.nodeStorage.Shares().List(txn, registrystorage.ByCommitteeID(clusterID))
 	toUpdate := make([]*ssvtypes.SSVShare, 0)
 	updatedPubKeys := make([]string, 0)
 
 	for _, share := range shares {
 		isOperatorShare := share.BelongsToOperator(eh.operatorDataStore.GetOperatorID())
 		if isOperatorShare || eh.fullNode {
-			updatedPubKeys = append(updatedPubKeys, hex.EncodeToString(share.ValidatorPubKey))
+			updatedPubKeys = append(updatedPubKeys, hex.EncodeToString(share.ValidatorPubKey[:]))
 		}
 		if isOperatorShare {
 			share.Liquidated = toLiquidate

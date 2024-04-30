@@ -36,14 +36,10 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 		case <-h.ticker.Next():
 			slot := h.ticker.Slot()
 			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
-			shares := h.validatorController.GetOperatorShares()
+			shares := h.validatorProvider.SelfParticipatingValidators(epoch + phase0.Epoch(validatorRegistrationEpochInterval))
 
 			var validators []phase0.ValidatorIndex
 			for _, share := range shares {
-				if !share.IsAttesting(epoch + phase0.Epoch(validatorRegistrationEpochInterval)) {
-					continue
-				}
-
 				if uint64(share.BeaconMetadata.Index)%registrationSlotInterval != uint64(slot)%registrationSlotInterval {
 					continue
 				}

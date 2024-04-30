@@ -7,42 +7,47 @@ import (
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	"github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	specssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
+	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 type ValidatorRegistrationRunner struct {
 	BaseRunner *BaseRunner
 
-	beacon   specssv.BeaconNode
-	network  specssv.Network
-	signer   spectypes.KeyManager
-	valCheck qbft.ProposedValueCheckF
+	beacon         specssv.BeaconNode
+	network        specssv.Network
+	signer         genesisspectypes.KeyManager
+	beaconSigner   spectypes.BeaconSigner
+	operatorSigner spectypes.OperatorSigner
+	valCheck       qbft.ProposedValueCheckF
 
 	metrics metrics.ConsensusMetrics
 }
 
 func NewValidatorRegistrationRunner(
 	beaconNetwork spectypes.BeaconNetwork,
-	share *spectypes.Share,
+	shares *map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
 	beacon specssv.BeaconNode,
 	network specssv.Network,
-	signer spectypes.KeyManager,
+	signer genesisspectypes.KeyManager,
 ) Runner {
 	return &ValidatorRegistrationRunner{
 		BaseRunner: &BaseRunner{
-			BeaconRoleType: spectypes.BNRoleValidatorRegistration,
+			BeaconRoleType: genesisspectypes.BNRoleValidatorRegistration,
+			RunnerRoleType: spectypes.RoleValidatorRegistration,
 			BeaconNetwork:  beaconNetwork,
-			Share:          share,
+			Shares:         *shares,
 			QBFTController: qbftController,
 		},
 
@@ -53,7 +58,7 @@ func NewValidatorRegistrationRunner(
 	}
 }
 
-func (r *ValidatorRegistrationRunner) StartNewDuty(logger *zap.Logger, duty *spectypes.Duty) error {
+func (r *ValidatorRegistrationRunner) StartNewDuty(logger *zap.Logger, duty spectypes.Duty) error {
 	return r.BaseRunner.baseStartNewNonBeaconDuty(logger, r, duty)
 }
 
@@ -62,7 +67,7 @@ func (r *ValidatorRegistrationRunner) HasRunningDuty() bool {
 	return r.BaseRunner.hasRunningDuty()
 }
 
-func (r *ValidatorRegistrationRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spectypes.SignedPartialSignatureMessage) error {
+func (r *ValidatorRegistrationRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg ssvtypes.PartialSignatureMessages) error {
 	quorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
 		return errors.Wrap(err, "failed processing validator registration message")
@@ -75,32 +80,32 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(logger *zap.Logger, si
 
 	// only 1 root, verified in basePreConsensusMsgProcessing
 	root := roots[0]
-	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey)
+	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey[:], r.GetShare().ValidatorIndex)
 	if err != nil {
 		// If the reconstructed signature verification failed, fall back to verifying each partial signature
-		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root)
+		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root, r.GetShare().Committee, r.GetShare().ValidatorIndex)
 		return errors.Wrap(err, "got pre-consensus quorum but it has invalid signatures")
 	}
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], fullSig)
 
-	if err := r.beacon.SubmitValidatorRegistration(r.BaseRunner.Share.ValidatorPubKey, r.BaseRunner.Share.FeeRecipientAddress, specSig); err != nil {
+	if err := r.beacon.SubmitValidatorRegistration(r.GetShare().ValidatorPubKey[:], r.GetShare().FeeRecipientAddress, specSig); err != nil {
 		return errors.Wrap(err, "could not submit validator registration")
 	}
 
 	logger.Debug("validator registration submitted successfully",
-		fields.FeeRecipient(r.BaseRunner.Share.FeeRecipientAddress[:]),
+		fields.FeeRecipient(r.GetShare().FeeRecipientAddress[:]),
 		zap.String("signature", hex.EncodeToString(specSig[:])))
 
 	r.GetState().Finished = true
 	return nil
 }
 
-func (r *ValidatorRegistrationRunner) ProcessConsensus(logger *zap.Logger, signedMsg *qbft.SignedMessage) error {
+func (r *ValidatorRegistrationRunner) ProcessConsensus(logger *zap.Logger, signedMsg ssvtypes.SignedMessage) error {
 	return errors.New("no consensus phase for validator registration")
 }
 
-func (r *ValidatorRegistrationRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spectypes.SignedPartialSignatureMessage) error {
+func (r *ValidatorRegistrationRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg ssvtypes.PartialSignatureMessages) error {
 	return errors.New("no post consensus phase for validator registration")
 }
 
@@ -117,58 +122,77 @@ func (r *ValidatorRegistrationRunner) expectedPostConsensusRootsAndDomain() ([]s
 	return nil, [4]byte{}, errors.New("no post consensus roots for validator registration")
 }
 
-func (r *ValidatorRegistrationRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
+func (r *ValidatorRegistrationRunner) executeDuty(logger *zap.Logger, duty spectypes.Duty) error {
 	vr, err := r.calculateValidatorRegistration()
 	if err != nil {
 		return errors.Wrap(err, "could not calculate validator registration")
 	}
 
 	// sign partial randao
-	msg, err := r.BaseRunner.signBeaconObject(r, vr, duty.Slot, spectypes.DomainApplicationBuilder)
+	msg, err := r.BaseRunner.signBeaconObject(r, duty.(*spectypes.BeaconDuty), vr, duty.DutySlot(),
+		spectypes.DomainApplicationBuilder)
 	if err != nil {
 		return errors.Wrap(err, "could not sign validator registration")
 	}
-	msgs := spectypes.PartialSignatureMessages{
-		Type:     spectypes.ValidatorRegistrationPartialSig,
-		Slot:     duty.Slot,
-		Messages: []*spectypes.PartialSignatureMessage{msg},
-	}
+	if true {
+		msgs := genesisspectypes.PartialSignatureMessages{
+			Type:     genesisspectypes.ValidatorRegistrationPartialSig,
+			Slot:     duty.DutySlot(),
+			Messages: []*genesisspectypes.PartialSignatureMessage{msg.(*genesisspectypes.PartialSignatureMessage)},
+		}
 
-	// sign msg
-	signature, err := r.GetSigner().SignRoot(msgs, spectypes.PartialSignatureType, r.GetShare().SharePubKey)
-	if err != nil {
-		return errors.Wrap(err, "could not sign randao msg")
-	}
-	signedPartialMsg := &spectypes.SignedPartialSignatureMessage{
-		Message:   msgs,
-		Signature: signature,
-		Signer:    r.GetShare().OperatorID,
-	}
+		// sign msg
+		signature, err := r.GetGenesisSigner().SignRoot(msgs, genesisspectypes.PartialSignatureType, r.GetShare().SharePubKey)
+		if err != nil {
+			return errors.Wrap(err, "could not sign randao msg")
+		}
+		signedPartialMsg := &genesisspectypes.SignedPartialSignatureMessage{
+			Message:   msgs,
+			Signature: signature,
+			Signer:    r.GetOperatorSigner().GetOperatorID(),
+		}
 
-	// broadcast
-	data, err := signedPartialMsg.Encode()
-	if err != nil {
-		return errors.Wrap(err, "failed to encode randao pre-consensus signature msg")
-	}
-	msgToBroadcast := &spectypes.SSVMessage{
-		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID:   spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
-		Data:    data,
-	}
-	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
-		return errors.Wrap(err, "can't broadcast partial randao sig")
+		// broadcast
+		data, err := signedPartialMsg.Encode()
+		if err != nil {
+			return errors.Wrap(err, "failed to encode randao pre-consensus signature msg")
+		}
+		msgToBroadcast := &genesisspectypes.SSVMessage{
+			MsgType: genesisspectypes.SSVPartialSignatureMsgType,
+			MsgID:   genesisspectypes.NewMsgID(genesisspectypes.DomainType(r.GetShare().DomainType), r.GetShare().ValidatorPubKey[:], r.BaseRunner.BeaconRoleType),
+			Data:    data,
+		}
+		if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
+			return errors.Wrap(err, "can't broadcast partial randao sig")
+		}
+	} else {
+		msgs := &spectypes.PartialSignatureMessages{
+			Type:     spectypes.ValidatorRegistrationPartialSig,
+			Slot:     duty.DutySlot(),
+			Messages: []*spectypes.PartialSignatureMessage{msg.(*spectypes.PartialSignatureMessage)},
+		}
+
+		msgID := spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
+		msgToBroadcast, err := spectypes.PartialSignatureMessagesToSignedSSVMessage(msgs, msgID, r.operatorSigner)
+		if err != nil {
+			return errors.Wrap(err, "could not sign pre-consensus partial signature message")
+		}
+
+		if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
+			return errors.Wrap(err, "can't broadcast partial randao sig")
+		}
 	}
 	return nil
 }
 
 func (r *ValidatorRegistrationRunner) calculateValidatorRegistration() (*v1.ValidatorRegistration, error) {
 	pk := phase0.BLSPubKey{}
-	copy(pk[:], r.BaseRunner.Share.ValidatorPubKey)
+	copy(pk[:], r.GetShare().ValidatorPubKey[:])
 
-	epoch := r.BaseRunner.BeaconNetwork.EstimatedEpochAtSlot(r.BaseRunner.State.StartingDuty.Slot)
+	epoch := r.BaseRunner.BeaconNetwork.EstimatedEpochAtSlot(r.BaseRunner.State.StartingDuty.DutySlot())
 
 	return &v1.ValidatorRegistration{
-		FeeRecipient: r.BaseRunner.Share.FeeRecipientAddress,
+		FeeRecipient: r.GetShare().FeeRecipientAddress,
 		GasLimit:     spectypes.DefaultGasLimit,
 		Timestamp:    r.BaseRunner.BeaconNetwork.EpochStartTime(epoch),
 		Pubkey:       pk,
@@ -188,7 +212,10 @@ func (r *ValidatorRegistrationRunner) GetBeaconNode() specssv.BeaconNode {
 }
 
 func (r *ValidatorRegistrationRunner) GetShare() *spectypes.Share {
-	return r.BaseRunner.Share
+	for _, share := range r.BaseRunner.Shares {
+		return share
+	}
+	return nil
 }
 
 func (r *ValidatorRegistrationRunner) GetState() *State {
@@ -199,8 +226,16 @@ func (r *ValidatorRegistrationRunner) GetValCheckF() qbft.ProposedValueCheckF {
 	return r.valCheck
 }
 
-func (r *ValidatorRegistrationRunner) GetSigner() spectypes.KeyManager {
+func (r *ValidatorRegistrationRunner) GetGenesisSigner() genesisspectypes.KeyManager {
 	return r.signer
+}
+
+func (r *ValidatorRegistrationRunner) GetSigner() spectypes.BeaconSigner {
+	return r.beaconSigner
+}
+
+func (r *ValidatorRegistrationRunner) GetOperatorSigner() spectypes.OperatorSigner {
+	return r.operatorSigner
 }
 
 // Encode returns the encoded struct in bytes or error

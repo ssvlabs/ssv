@@ -31,7 +31,7 @@ Execution layer communication is an important part of SSV, we are basing our sta
 - `EventSyncer` - Reads events from `ExecutionClient` and processes them using `EventHandler`.
 - `EventHandler` - Handles the data aspects of the events, process each block as a DB transaction. has access to database. can shoot the event data or process data again after finishing successfull tx. this component also updates what we know today as "SyncOffset", can be named "LastProcessedBlock".
 - `operator/node` - Glues together options to create the `ExecutionClient`, `EventSyncer` and `EventHandler`.
-- `operator/validator` use of successfully handeled data events (`EventHandler`) to execute tasks (validator start/stop, etc)
+- `operator/controller` use of successfully handeled data events (`EventHandler`) to execute tasks (validator start/stop, etc)
 
 ## :question: APIs, suggestions and examples
 

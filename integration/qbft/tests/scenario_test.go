@@ -18,7 +18,7 @@ import (
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/operator/validator"
+	"github.com/bloxapp/ssv/operator/controller"
 	protocolbeacon "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	protocolstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
@@ -70,7 +70,7 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 				duty := createDuty(getKeySet(s.Committee).ValidatorPK.Serialize(), dutyProp.Slot, dutyProp.ValidatorIndex, role)
 				var pk spec.BLSPubKey
 				copy(pk[:], getKeySet(s.Committee).ValidatorPK.Serialize())
-				ssvMsg, err := validator.CreateDutyExecuteMsg(duty, pk, networkconfig.TestNetwork.Domain)
+				ssvMsg, err := controller.CreateDutyExecuteMsg(duty, pk, networkconfig.TestNetwork.Domain)
 				require.NoError(t, err)
 				dec, err := queue.DecodeGenesisSSVMessage(ssvMsg)
 				require.NoError(t, err)
@@ -206,7 +206,7 @@ func createValidator(t *testing.T, pCtx context.Context, id spectypes.OperatorID
 		Signer: km,
 	}
 
-	options.DutyRunners = validator.SetupRunners(ctx, logger, options)
+	options.DutyRunners = controller.SetupRunners(ctx, logger, options)
 	val := protocolvalidator.NewValidator(ctx, cancel, options)
 	node.UseMessageRouter(newMsgRouter(logger, val))
 	started, err := val.Start(logger)

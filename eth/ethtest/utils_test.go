@@ -7,8 +7,9 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/ethereum/go-ethereum/core/types"
+
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/golang/mock/gomock"
 	"github.com/herumi/bls-eth-go-binary/bls"
@@ -21,11 +22,11 @@ import (
 	"github.com/bloxapp/ssv/eth/simulator"
 	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/operator/controller"
+	"github.com/bloxapp/ssv/operator/controller/mocks"
 	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/keys"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/operator/validator"
-	"github.com/bloxapp/ssv/operator/validator/mocks"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
@@ -202,7 +203,7 @@ func setupEventHandler(
 		return eh, validatorCtrl, ctrl, nodeStorage, nil
 	}
 
-	validatorCtrl := validator.NewController(logger, validator.ControllerOptions{
+	validatorCtrl := controller.NewController(logger, controller.ControllerOptions{
 		Context:           ctx,
 		DB:                db,
 		RegistryStorage:   nodeStorage,
@@ -253,7 +254,8 @@ func setupOperatorStorage(
 		logger.Fatal("failed to encode operator public key", zap.Error(err))
 	}
 
-	privKeyHash, err := operator.privateKey.StorageHash()
+	privKey := operator.privateKey
+	privKeyHash, err := privKey.StorageHash()
 	if err != nil {
 		logger.Fatal("failed to encode operator private key", zap.Error(err))
 	}
@@ -283,10 +285,10 @@ func setupOperatorStorage(
 }
 
 func simTestBackend(testAddresses []*ethcommon.Address) *simulator.SimulatedBackend {
-	genesis := core.GenesisAlloc{}
+	genesis := types.GenesisAlloc{}
 
 	for _, testAddr := range testAddresses {
-		genesis[*testAddr] = core.GenesisAccount{Balance: big.NewInt(10000000000000000)}
+		genesis[*testAddr] = types.Account{Balance: big.NewInt(10000000000000000)}
 	}
 
 	return simulator.NewSimulatedBackend(

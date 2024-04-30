@@ -77,8 +77,8 @@ func setupSyncCommitteeDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[uint64, [
 		return getDuties(epoch)
 	}
 
-	s.validatorController.(*mocks.MockValidatorController).EXPECT().CommitteeActiveIndices(gomock.Any()).DoAndReturn(getDuties).AnyTimes()
-	s.validatorController.(*mocks.MockValidatorController).EXPECT().AllActiveIndices(gomock.Any(), gomock.Any()).DoAndReturn(getDutiesBool).AnyTimes()
+	s.ValidatorProvider.(*mocks.MockValidatorController).EXPECT().CommitteeActiveIndices(gomock.Any()).DoAndReturn(getDuties).AnyTimes()
+	s.ValidatorProvider.(*mocks.MockValidatorController).EXPECT().AllActiveIndices(gomock.Any(), gomock.Any()).DoAndReturn(getDutiesBool).AnyTimes()
 
 	s.beaconNode.(*mocks.MockBeaconNode).EXPECT().SubmitSyncCommitteeSubscriptions(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 

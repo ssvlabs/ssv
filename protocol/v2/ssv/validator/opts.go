@@ -1,9 +1,10 @@
 package validator
 
 import (
-	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	specssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	specssv "github.com/bloxapp/ssv-spec/ssv"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	"github.com/bloxapp/ssv/ibft/storage"
 	msgvalidation "github.com/bloxapp/ssv/message/msgvalidation/genesis"
@@ -24,7 +25,8 @@ type Options struct {
 	BeaconNetwork     beacon.BeaconNetwork
 	Storage           *storage.QBFTStores
 	SSVShare          *types.SSVShare
-	Signer            spectypes.KeyManager
+	Signer            genesisspectypes.KeyManager
+	BeaconSigner      spectypes.BeaconSigner
 	DutyRunners       runner.DutyRunners
 	NewDecidedHandler qbftctrl.NewDecidedHandler
 	FullNode          bool

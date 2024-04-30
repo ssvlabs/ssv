@@ -5,10 +5,14 @@ import (
 	"fmt"
 	"sync"
 
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
 	"github.com/pkg/errors"
-	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/storage"
@@ -31,7 +35,9 @@ type Validator struct {
 	DutyRunners runner.DutyRunners
 	Network     specqbft.Network
 	Share       *types.SSVShare
-	Signer      spectypes.KeyManager
+
+	Signer       genesisspectypes.KeyManager
+	BeaconSigner spectypes.BeaconSigner
 
 	Storage *storage.QBFTStores
 	Queues  map[spectypes.BeaconRole]queueContainer
@@ -61,6 +67,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		Storage:          options.Storage,
 		Share:            options.SSVShare,
 		Signer:           options.Signer,
+		BeaconSigner:     options.BeaconSigner,
 		Queues:           make(map[spectypes.BeaconRole]queueContainer),
 		state:            uint32(NotStarted),
 		dutyIDs:          hashmap.New[spectypes.BeaconRole, string](),
@@ -89,7 +96,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 }
 
 // StartDuty starts a duty for the validator
-func (v *Validator) StartDuty(logger *zap.Logger, duty *spectypes.Duty) error {
+func (v *Validator) StartDuty(logger *zap.Logger, duty spectypes.Duty) error {
 	dutyRunner := v.DutyRunners[duty.Type]
 	if dutyRunner == nil {
 		return errors.Errorf("no runner for duty type %s", duty.Type.String())
@@ -126,7 +133,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 	case spectypes.SSVConsensusMsgType:
 		logger = trySetDutyID(logger, v.dutyIDs, messageID.GetRoleType())
 
-		signedMsg, ok := msg.Body.(*specqbft.SignedMessage)
+		signedMsg, ok := msg.Body.(*genesisspecqbft.SignedMessage)
 		if !ok {
 			return errors.New("could not decode consensus message from network message")
 		}
@@ -148,6 +155,18 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 	default:
 		return errors.New("unknown msg")
 	}
+}
+
+func (v *Validator) SenderID() []byte {
+	return v.Share.ValidatorPubKey[:]
+}
+
+func (v *Validator) PushMessage(msg *queue.DecodedSSVMessage) {
+	v.ProcessMessage(zap.L(), msg)
+}
+
+func (v *Validator) UpdateMetadata(metadata *beaconprotocol.ValidatorMetadata) {
+
 }
 
 func validateMessage(share spectypes.Share, msg *queue.DecodedSSVMessage) error {
