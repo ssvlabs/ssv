@@ -1,24 +1,25 @@
-package validation
+package msgvalidation
 
 // partial_validation.go contains methods for validating partial signature messages
 
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 func (mv *messageValidator) validatePartialSignatureMessage(
 	share *ssvtypes.SSVShare,
-	signedMsg *spectypes.SignedPartialSignatureMessage,
-	msgID spectypes.MessageID,
+	signedMsg *genesisspectypes.SignedPartialSignatureMessage,
+	msgID genesisspectypes.MessageID,
 	signatureVerifier func() error,
 ) (phase0.Slot, error) {
 	if mv.operatorDataStore != nil && mv.operatorDataStore.OperatorIDReady() {
 		if mv.inCommittee(share) {
-			mv.metrics.InCommitteeMessage(spectypes.SSVPartialSignatureMsgType, false)
+			mv.metrics.CommitteeMessage(spectypes.SSVPartialSignatureMsgType, false)
 		} else {
 			mv.metrics.NonCommitteeMessage(spectypes.SSVPartialSignatureMsgType, false)
 		}
@@ -65,7 +66,7 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 
 	if msgSlot > signerState.Slot {
 		newEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) > mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot)
-		signerState.ResetSlot(msgSlot, specqbft.FirstRound, newEpoch)
+		signerState.ResetSlot(msgSlot, genesisspecqbft.FirstRound, newEpoch)
 	}
 
 	signerState.MessageCounts.RecordPartialSignatureMessage(signedMsg)
@@ -73,42 +74,42 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 	return msgSlot, nil
 }
 
-func (mv *messageValidator) validPartialSigMsgType(msgType spectypes.PartialSigMsgType) bool {
+func (mv *messageValidator) validPartialSigMsgType(msgType genesisspectypes.PartialSigMsgType) bool {
 	switch msgType {
-	case spectypes.PostConsensusPartialSig,
-		spectypes.RandaoPartialSig,
-		spectypes.SelectionProofPartialSig,
-		spectypes.ContributionProofs,
-		spectypes.ValidatorRegistrationPartialSig,
-		spectypes.VoluntaryExitPartialSig:
+	case genesisspectypes.PostConsensusPartialSig,
+		genesisspectypes.RandaoPartialSig,
+		genesisspectypes.SelectionProofPartialSig,
+		genesisspectypes.ContributionProofs,
+		genesisspectypes.ValidatorRegistrationPartialSig,
+		genesisspectypes.VoluntaryExitPartialSig:
 		return true
 	default:
 		return false
 	}
 }
 
-func (mv *messageValidator) partialSignatureTypeMatchesRole(msgType spectypes.PartialSigMsgType, role spectypes.BeaconRole) bool {
+func (mv *messageValidator) partialSignatureTypeMatchesRole(msgType genesisspectypes.PartialSigMsgType, role genesisspectypes.BeaconRole) bool {
 	switch role {
-	case spectypes.BNRoleAttester:
-		return msgType == spectypes.PostConsensusPartialSig
-	case spectypes.BNRoleAggregator:
-		return msgType == spectypes.PostConsensusPartialSig || msgType == spectypes.SelectionProofPartialSig
-	case spectypes.BNRoleProposer:
-		return msgType == spectypes.PostConsensusPartialSig || msgType == spectypes.RandaoPartialSig
-	case spectypes.BNRoleSyncCommittee:
-		return msgType == spectypes.PostConsensusPartialSig
-	case spectypes.BNRoleSyncCommitteeContribution:
-		return msgType == spectypes.PostConsensusPartialSig || msgType == spectypes.ContributionProofs
-	case spectypes.BNRoleValidatorRegistration:
-		return msgType == spectypes.ValidatorRegistrationPartialSig
-	case spectypes.BNRoleVoluntaryExit:
-		return msgType == spectypes.VoluntaryExitPartialSig
+	case genesisspectypes.BNRoleAttester:
+		return msgType == genesisspectypes.PostConsensusPartialSig
+	case genesisspectypes.BNRoleAggregator:
+		return msgType == genesisspectypes.PostConsensusPartialSig || msgType == genesisspectypes.SelectionProofPartialSig
+	case genesisspectypes.BNRoleProposer:
+		return msgType == genesisspectypes.PostConsensusPartialSig || msgType == genesisspectypes.RandaoPartialSig
+	case genesisspectypes.BNRoleSyncCommittee:
+		return msgType == genesisspectypes.PostConsensusPartialSig
+	case genesisspectypes.BNRoleSyncCommitteeContribution:
+		return msgType == genesisspectypes.PostConsensusPartialSig || msgType == genesisspectypes.ContributionProofs
+	case genesisspectypes.BNRoleValidatorRegistration:
+		return msgType == genesisspectypes.ValidatorRegistrationPartialSig
+	case genesisspectypes.BNRoleVoluntaryExit:
+		return msgType == genesisspectypes.VoluntaryExitPartialSig
 	default:
 		panic("invalid role") // role validity should be checked before
 	}
 }
 
-func (mv *messageValidator) validatePartialMessages(share *ssvtypes.SSVShare, m *spectypes.SignedPartialSignatureMessage) error {
+func (mv *messageValidator) validatePartialMessages(share *ssvtypes.SSVShare, m *genesisspectypes.SignedPartialSignatureMessage) error {
 	if err := mv.commonSignerValidation(m.Signer, share); err != nil {
 		return err
 	}
@@ -145,10 +146,10 @@ func (mv *messageValidator) validatePartialMessages(share *ssvtypes.SSVShare, m 
 
 func (mv *messageValidator) validateSignerBehaviorPartial(
 	state *ConsensusState,
-	signer spectypes.OperatorID,
+	signer genesisspectypes.OperatorID,
 	share *ssvtypes.SSVShare,
-	msgID spectypes.MessageID,
-	signedMsg *spectypes.SignedPartialSignatureMessage,
+	msgID genesisspectypes.MessageID,
+	signedMsg *genesisspectypes.SignedPartialSignatureMessage,
 ) error {
 	signerState := state.GetSignerState(signer)
 

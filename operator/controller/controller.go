@@ -10,13 +10,12 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
@@ -24,7 +23,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/message/validation"
+	msgvalidation "github.com/bloxapp/ssv/message/msgvalidation/genesis"
 	"github.com/bloxapp/ssv/network"
 	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/duties"
@@ -75,10 +74,11 @@ type ControllerOptions struct {
 	RegistryStorage            nodestorage.Storage
 	RecipientsStorage          Recipients
 	NewDecidedHandler          qbftcontroller.NewDecidedHandler
-	DutyRoles                  []spectypes.BeaconRole
+	DutyRoles                  []genesisspectypes.BeaconRole
 	StorageMap                 *storage.QBFTStores
 	Metrics                    validator.Metrics
 	MessageValidator           validation.MessageValidator
+	MessageValidator           msgvalidation.MessageValidator
 
 	// worker flags
 	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of goroutines to use for message workers"`
@@ -91,7 +91,7 @@ type ControllerOptions struct {
 type Controller interface {
 	StartValidators()
 	GetValidator(pubKey string) (*validator.Validator, bool)
-	ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty)
+	ExecuteDuty(logger *zap.Logger, duty *genesisspectypes.Duty)
 	UpdateValidatorMetaDataLoop()
 	StartNetworkHandlers()
 	// GetValidatorStats returns stats of validators, including the following:
@@ -103,7 +103,7 @@ type Controller interface {
 	ValidatorExitChan() <-chan duties.ExitDescriptor
 
 	StartValidator(share *ssvtypes.SSVShare) error
-	StopValidator(pubKey spectypes.ValidatorPK) error
+	StopValidator(pubKey genesisspectypes.ValidatorPK) error
 	LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
 	ReactivateCluster(owner common.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error
 	UpdateFeeRecipient(owner, recipient common.Address) error
@@ -128,9 +128,9 @@ type SharesStorage interface {
 }
 
 type P2PNetwork interface {
-	Broadcast(message *spectypes.SignedSSVMessage) error
+	Broadcast(message *genesisspectypes.SSVMessage) error
 	UseMessageRouter(router network.MessageRouter)
-	Peers(pk spectypes.ValidatorPK) ([]peer.ID, error)
+	Peers(pk genesisspectypes.ValidatorPK) ([]peer.ID, error)
 	SubscribeRandoms(logger *zap.Logger, numSubnets int) error
 	RegisterHandlers(logger *zap.Logger, handlers ...*p2pprotocol.SyncHandler)
 }
@@ -165,10 +165,10 @@ type controller struct {
 	messageRouter        *messageRouter
 	messageWorker        *worker.Worker
 	historySyncBatchSize int
-	messageValidator     validation.MessageValidator
+	messageValidator     msgvalidation.MessageValidator
 
 	// nonCommittees is a cache of initialized nonCommitteeValidator instances
-	nonCommitteeValidators *ttlcache.Cache[spectypes.MessageID, *nonCommitteeValidator]
+	nonCommitteeValidators *ttlcache.Cache[genesisspectypes.MessageID, *nonCommitteeValidator]
 	nonCommitteeMutex      sync.Mutex
 
 	recentlyStartedValidators uint64
@@ -247,7 +247,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		historySyncBatchSize: options.HistorySyncBatchSize,
 
 		nonCommitteeValidators: ttlcache.New(
-			ttlcache.WithTTL[spectypes.MessageID, *nonCommitteeValidator](time.Minute * 13),
+			ttlcache.WithTTL[genesisspectypes.MessageID, *nonCommitteeValidator](time.Minute * 13),
 		),
 		metadataLastUpdated:     make(map[spectypes.ValidatorPK]time.Time),
 		indicesChange:           make(chan struct{}),
@@ -310,7 +310,7 @@ func (c *controller) handleRouterMessages() {
 			return
 		case msg := <-ch:
 			// TODO temp solution to prevent getting event msgs from network. need to to add validation in p2p
-			if msg.MsgType == message.SSVEventMsgType {
+			if msg.GetType() == message.SSVEventMsgType {
 				continue
 			}
 
@@ -344,9 +344,8 @@ func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
 		c.nonCommitteeMutex.Lock()
 		defer c.nonCommitteeMutex.Unlock()
 
-		item := c.nonCommitteeValidators.Get(msg.GetID())
-		if item != nil {
-			ncv = item.Value()
+		if msg.SSVMessage == nil {
+			// TODO: handle post-fork
 		} else {
 			// Create a new nonCommitteeValidator and cache it.
 			share := c.sharesStorage.Get(nil, msg.GetID().GetSenderID())
@@ -563,7 +562,7 @@ func (c *controller) UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata 
 	return nil
 }
 
-func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) {
+func (c *controller) ExecuteDuty(logger *zap.Logger, duty spectypes.Duty) {
 	// because we're using the same duty for more than 1 duty (e.g. attest + aggregator) there is an error in bls.Deserialize func for cgo pointer to pointer.
 	// so we need to copy the pubkey val to avoid pointer
 
@@ -595,7 +594,7 @@ func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) {
 }
 
 // CreateDutyExecuteMsg returns ssvMsg with event type of duty execute
-func CreateDutyExecuteMsg(duty *spectypes.BeaconDuty, pubKey phase0.BLSPubKey, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
+func CreateDutyExecuteMsg(duty *genesisspectypes.Duty, pubKey phase0.BLSPubKey, domain genesisspectypes.DomainType) (*genesisspectypes.SSVMessage, error) {
 	executeDutyData := types.ExecuteDutyData{Duty: duty}
 	edd, err := json.Marshal(executeDutyData)
 	if err != nil {
@@ -609,9 +608,9 @@ func CreateDutyExecuteMsg(duty *spectypes.BeaconDuty, pubKey phase0.BLSPubKey, d
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to encode event msg")
 	}
-	return &spectypes.SSVMessage{
-		MsgType: message.SSVEventMsgType,
-		MsgID:   spectypes.NewMsgID(domain, pubKey[:], duty.Type),
+	return &genesisspectypes.SSVMessage{
+		MsgType: genesisspectypes.MsgType(message.SSVEventMsgType),
+		MsgID:   genesisspectypes.NewMsgID(domain, pubKey[:], duty.Type),
 		Data:    data,
 	}, nil
 }
@@ -647,7 +646,7 @@ func (c *controller) onMetadataUpdated(pk spectypes.ValidatorPK, meta *beaconpro
 }
 
 // onShareStop is called when a validator was removed or liquidated
-func (c *controller) onShareStop(pubKey spectypes.ValidatorPK) {
+func (c *controller) onShareStop(pubKey genesisspectypes.ValidatorPK) {
 	// remove from ValidatorsMap
 	c.entities.Kill(pubKey[:])
 }
@@ -711,7 +710,7 @@ func (c *controller) onShareStart(share *ssvtypes.SSVShare) (bool, error) {
 func (c *controller) printShare(s *ssvtypes.SSVShare, msg string) {
 	committee := make([]string, len(s.Committee))
 	for i, c := range s.Committee {
-		committee[i] = fmt.Sprintf(`[OperatorID=%d, PubKey=%x]`, c.OperatorID, c.PubKey)
+		committee[i] = fmt.Sprintf(`[OperatorID=%d, PubKey=%x]`, c.OperatorID, c.SSVOperatorPubKey)
 	}
 	c.logger.Debug(msg,
 		fields.PubKey(s.ValidatorPubKey[:]),
@@ -859,7 +858,7 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 	}
 
 	domainType := ssvtypes.GetDefaultDomain()
-	buildController := func(role spectypes.BeaconRole, valueCheckF specqbft.ProposedValueCheckF) *qbftcontroller.Controller {
+	buildController := func(role genesisspectypes.BeaconRole, valueCheckF genesisspecqbft.ProposedValueCheckF) *qbftcontroller.Controller {
 		config := &qbft.Config{
 			Signer:      options.Signer,
 			SigningPK:   options.SSVShare.ValidatorPubKey[:], // TODO right val?
@@ -938,8 +937,8 @@ func SetupRunnersAfterFork(ctx context.Context, logger *zap.Logger, options vali
 			SigningPK:   options.SSVShare.ValidatorPubKey[:], // TODO right val?
 			Domain:      domainType,
 			ValueCheckF: nil, // sets per role type
-			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
-				leader := specqbft.RoundRobinProposer(state, round)
+			ProposerF: func(state *genesisspecqbft.State, round genesisspecqbft.Round) genesisspectypes.OperatorID {
+				leader := genesisspecqbft.RoundRobinProposer(state, round)
 				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
 				return leader
 			},

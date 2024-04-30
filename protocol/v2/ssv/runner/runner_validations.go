@@ -46,7 +46,7 @@ func (b *BaseRunner) ValidatePostConsensusMsg(runner Runner, signedMsg ssvtypes.
 		return errors.New("no running duty")
 	}
 
-	// TODO https://github.com/bloxapp/ssv-spec/issues/142 need to fix with this issue solution instead.
+	// TODO https://github.com/ssvlabs/ssv-spec-pre-cc/issues/142 need to fix with this issue solution instead.
 	if b.State.DecidedValue == nil {
 		return errors.New("no decided value")
 	}

@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv-spec/types/testingutils"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 

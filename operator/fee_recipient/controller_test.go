@@ -9,10 +9,10 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/golang/mock/gomock"
 	"github.com/pkg/errors"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 

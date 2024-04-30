@@ -23,7 +23,7 @@ type DecodedSSVMessage struct {
 	*spectypes.SSVMessage
 
 	// Body is the decoded Data.
-	Body interface{} // *SignedMessage | *SignedPartialSignatureMessage | *EventMsg
+	Body interface{} // *genesisspecqbft.SignedMessage | *genesisspectypes.SignedPartialSignatureMessage | *EventMsg | *specqbft.Message | *spectypes.PartialSignatureMessages
 }
 
 // DecodeSSVMessage decodes an SSVMessage and returns a DecodedSSVMessage.
@@ -33,16 +33,47 @@ func DecodeSSVMessage(m *spectypes.SSVMessage) (*DecodedSSVMessage, error) {
 	case spectypes.SSVConsensusMsgType: // TODO: Or message.SSVDecidedMsgType?
 		sm := &genesisspecqbft.SignedMessage{}
 		if err := sm.Decode(m.Data); err != nil {
-			return nil, errors.Wrap(err, "failed to decode SignedMessage")
+			return nil, errors.Wrap(err, "failed to decode Message")
 		}
 		body = sm
 	case spectypes.SSVPartialSignatureMsgType:
 		sm := &genesisspectypes.SignedPartialSignatureMessage{}
 		if err := sm.Decode(m.Data); err != nil {
-			return nil, errors.Wrap(err, "failed to decode SignedPartialSignatureMessage")
+			return nil, errors.Wrap(err, "failed to decode PartialSignatureMessages")
 		}
 		body = sm
 	case ssvmessage.SSVEventMsgType:
+		msg := &ssvtypes.EventMsg{}
+		if err := msg.Decode(m.Data); err != nil {
+			return nil, errors.Wrap(err, "failed to decode EventMsg")
+		}
+		body = msg
+	default:
+		return nil, ErrUnknownMessageType
+	}
+	return &DecodedSSVMessage{
+		SSVMessage: m,
+		Body:       body,
+	}, nil
+}
+
+// DecodeGenesisSSVMessage decodes a genesis SSVMessage and returns a DecodedSSVMessage.
+func DecodeGenesisSSVMessage(m *genesisspectypes.SSVMessage) (*DecodedSSVMessage, error) {
+	var body interface{}
+	switch m.MsgType {
+	case genesisspectypes.SSVConsensusMsgType: // TODO: Or message.SSVDecidedMsgType?
+		sm := &genesisspecqbft.SignedMessage{}
+		if err := sm.Decode(m.Data); err != nil {
+			return nil, errors.Wrap(err, "failed to decode SignedMessage")
+		}
+		body = sm
+	case genesisspectypes.SSVPartialSignatureMsgType:
+		sm := &genesisspectypes.SignedPartialSignatureMessage{}
+		if err := sm.Decode(m.Data); err != nil {
+			return nil, errors.Wrap(err, "failed to decode SignedPartialSignatureMessage")
+		}
+		body = sm
+	case genesisspectypes.MsgType(ssvmessage.SSVEventMsgType):
 		msg := &ssvtypes.EventMsg{}
 		if err := msg.Decode(m.Data); err != nil {
 			return nil, errors.Wrap(err, "failed to decode EventMsg")
@@ -61,7 +92,7 @@ func DecodeSSVMessage(m *spectypes.SSVMessage) (*DecodedSSVMessage, error) {
 // The reuslt will be 0 if equal, -1 if lower, 1 if higher.
 func compareHeightOrSlot(state *State, m *DecodedSSVMessage) int {
 	if mm, ok := m.Body.(*genesisspecqbft.SignedMessage); ok {
-		if specqbft.Height(mm.Message.Height) == state.Height {
+		if mm.Message.Height == state.Height {
 			return 0
 		}
 		if specqbft.Height(mm.Message.Height) > state.Height {
@@ -82,7 +113,7 @@ func compareHeightOrSlot(state *State, m *DecodedSSVMessage) int {
 // The reuslt will be 0 if equal, -1 if lower, 1 if higher.
 func scoreRound(state *State, m *DecodedSSVMessage) int {
 	if mm, ok := m.Body.(*genesisspecqbft.SignedMessage); ok {
-		if specqbft.Round(mm.Message.Round) == state.Round {
+		if mm.Message.Round == state.Round {
 			return 2
 		}
 		if specqbft.Round(mm.Message.Round) > state.Round {

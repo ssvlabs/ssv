@@ -6,11 +6,11 @@ import (
 	"encoding/json"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	specssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 
@@ -26,8 +26,8 @@ type VoluntaryExitRunner struct {
 	beacon         specssv.BeaconNode
 	network        specssv.Network
 	signer         genesisspectypes.KeyManager
-	beaconSigner   spectypes.BeaconSigner
-	operatorSigner spectypes.OperatorSigner
+	beaconSigner   genesisspectypes.BeaconSigner
+	operatorSigner genesisspectypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
 
 	voluntaryExit *phase0.VoluntaryExit
@@ -36,8 +36,8 @@ type VoluntaryExitRunner struct {
 }
 
 func NewVoluntaryExitRunner(
-	beaconNetwork spectypes.BeaconNetwork,
-	shares *map[phase0.ValidatorIndex]*spectypes.Share,
+	beaconNetwork genesisspectypes.BeaconNetwork,
+	shares *map[phase0.ValidatorIndex]*genesisspectypes.Share,
 	beacon specssv.BeaconNode,
 	network specssv.Network,
 	signer genesisspectypes.KeyManager,

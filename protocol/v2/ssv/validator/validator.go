@@ -17,7 +17,7 @@ import (
 
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/message/validation"
+	msgvalidation "github.com/bloxapp/ssv/message/msgvalidation/genesis"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
@@ -47,7 +47,7 @@ type Validator struct {
 
 	state uint32
 
-	messageValidator validation.MessageValidator
+	messageValidator msgvalidation.MessageValidator
 }
 
 // NewValidator creates a new instance of Validator.
@@ -104,7 +104,7 @@ func (v *Validator) StartDuty(logger *zap.Logger, duty spectypes.Duty) error {
 
 	// Log with duty ID.
 	baseRunner := dutyRunner.GetBaseRunner()
-	v.dutyIDs.Set(duty.Type, fields.FormatDutyID(baseRunner.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty))
+	v.dutyIDs.Set(duty.Type, fields.GenesisFormatDutyID(baseRunner.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty))
 	logger = trySetDutyID(logger, v.dutyIDs, duty.Type)
 
 	// Log with height.

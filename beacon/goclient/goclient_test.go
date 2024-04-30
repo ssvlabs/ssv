@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv-spec/types"
+	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 

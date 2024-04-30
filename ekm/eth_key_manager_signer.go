@@ -19,7 +19,6 @@ import (
 	"github.com/bloxapp/eth2-key-manager/signer"
 	slashingprotection "github.com/bloxapp/eth2-key-manager/slashing_protection"
 	"github.com/bloxapp/eth2-key-manager/wallets"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
@@ -46,7 +45,7 @@ type ethKeyManagerSigner struct {
 	walletLock        *sync.RWMutex
 	signer            signer.ValidatorSigner
 	storage           Storage
-	domain            spectypes.DomainType
+	domain            genesisspectypes.DomainType
 	slashingProtector core.SlashingProtector
 	builderProposals  bool
 }
@@ -128,13 +127,13 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 	defer km.walletLock.RUnlock()
 
 	switch domainType {
-	case spectypes.DomainAttester:
+	case genesisspectypes.DomainAttester:
 		data, ok := obj.(*phase0.AttestationData)
 		if !ok {
 			return nil, nil, errors.New("could not cast obj to AttestationData")
 		}
 		return km.signer.SignBeaconAttestation(data, domain, pk)
-	case spectypes.DomainProposer:
+	case genesisspectypes.DomainProposer:
 		if km.builderProposals {
 			var vBlindedBlock *api.VersionedBlindedBeaconBlock
 			switch v := obj.(type) {
@@ -170,51 +169,51 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 		}
 
 		return km.signer.SignBeaconBlock(vBlock, domain, pk)
-	case spectypes.DomainVoluntaryExit:
+	case genesisspectypes.DomainVoluntaryExit:
 		data, ok := obj.(*phase0.VoluntaryExit)
 		if !ok {
 			return nil, nil, errors.New("could not cast obj to VoluntaryExit")
 		}
 		return km.signer.SignVoluntaryExit(data, domain, pk)
-	case spectypes.DomainAggregateAndProof:
+	case genesisspectypes.DomainAggregateAndProof:
 		data, ok := obj.(*phase0.AggregateAndProof)
 		if !ok {
 			return nil, nil, errors.New("could not cast obj to AggregateAndProof")
 		}
 		return km.signer.SignAggregateAndProof(data, domain, pk)
-	case spectypes.DomainSelectionProof:
-		data, ok := obj.(spectypes.SSZUint64)
+	case genesisspectypes.DomainSelectionProof:
+		data, ok := obj.(genesisspectypes.SSZUint64)
 		if !ok {
 			return nil, nil, errors.New("could not cast obj to SSZUint64")
 		}
 
 		return km.signer.SignSlot(phase0.Slot(data), domain, pk)
-	case spectypes.DomainRandao:
-		data, ok := obj.(spectypes.SSZUint64)
+	case genesisspectypes.DomainRandao:
+		data, ok := obj.(genesisspectypes.SSZUint64)
 		if !ok {
 			return nil, nil, errors.New("could not cast obj to SSZUint64")
 		}
 
 		return km.signer.SignEpoch(phase0.Epoch(data), domain, pk)
-	case spectypes.DomainSyncCommittee:
-		data, ok := obj.(spectypes.SSZBytes)
+	case genesisspectypes.DomainSyncCommittee:
+		data, ok := obj.(genesisspectypes.SSZBytes)
 		if !ok {
 			return nil, nil, errors.New("could not cast obj to SSZBytes")
 		}
 		return km.signer.SignSyncCommittee(data, domain, pk)
-	case spectypes.DomainSyncCommitteeSelectionProof:
+	case genesisspectypes.DomainSyncCommitteeSelectionProof:
 		data, ok := obj.(*altair.SyncAggregatorSelectionData)
 		if !ok {
 			return nil, nil, errors.New("could not cast obj to SyncAggregatorSelectionData")
 		}
 		return km.signer.SignSyncCommitteeSelectionData(data, domain, pk)
-	case spectypes.DomainContributionAndProof:
+	case genesisspectypes.DomainContributionAndProof:
 		data, ok := obj.(*altair.ContributionAndProof)
 		if !ok {
 			return nil, nil, errors.New("could not cast obj to ContributionAndProof")
 		}
 		return km.signer.SignSyncCommitteeContributionAndProof(data, domain, pk)
-	case spectypes.DomainApplicationBuilder:
+	case genesisspectypes.DomainApplicationBuilder:
 		var data *api.VersionedValidatorRegistration
 		switch v := obj.(type) {
 		case *eth2apiv1.ValidatorRegistration:
@@ -262,7 +261,7 @@ func (km *ethKeyManagerSigner) SignRoot(data genesisspectypes.Root, sigType gene
 		return nil, errors.Wrap(err, "could not get signing account")
 	}
 
-	root, err := spectypes.ComputeSigningRoot(data, spectypes.ComputeSignatureDomain(km.domain, spectypes.SignatureType(sigType)))
+	root, err := genesisspectypes.ComputeSigningRoot(data, genesisspectypes.ComputeSignatureDomain(km.domain, genesisspectypes.SignatureType(sigType)))
 	if err != nil {
 		return nil, errors.Wrap(err, "could not compute signing root")
 	}

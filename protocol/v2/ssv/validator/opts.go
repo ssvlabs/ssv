@@ -7,7 +7,7 @@ import (
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	"github.com/bloxapp/ssv/ibft/storage"
-	"github.com/bloxapp/ssv/message/validation"
+	msgvalidation "github.com/bloxapp/ssv/message/msgvalidation/genesis"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	qbftctrl "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
@@ -34,7 +34,7 @@ type Options struct {
 	BuilderProposals  bool
 	QueueSize         int
 	GasLimit          uint64
-	MessageValidator  validation.MessageValidator
+	MessageValidator  msgvalidation.MessageValidator
 	Metrics           Metrics
 }
 

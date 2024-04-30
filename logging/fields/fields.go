@@ -9,10 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/spec"
-	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+
+	"github.com/attestantio/go-eth2-client/spec"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/dgraph-io/ristretto"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -74,6 +75,7 @@ const (
 	FieldPubKey              = "pubkey"
 	FieldRole                = "role"
 	FieldRound               = "round"
+	FieldSenderID            = "sender_id"
 	FieldSlot                = "slot"
 	FieldStartTimeUnixMilli  = "start_time_unix_milli"
 	FieldSubnets             = "subnets"
@@ -119,6 +121,10 @@ func OperatorPubKey(pubKey []byte) zapcore.Field {
 
 func Validator(pubKey []byte) zapcore.Field {
 	return zap.Stringer(FieldValidator, stringer.HexStringer{Val: pubKey})
+}
+
+func SenderID(senderID []byte) zapcore.Field {
+	return zap.Stringer(FieldSenderID, stringer.HexStringer{Val: senderID})
 }
 
 func AddressURL(val url.URL) zapcore.Field {
@@ -215,6 +221,10 @@ func Round(round specqbft.Round) zap.Field {
 
 func Role(val spectypes.BeaconRole) zap.Field {
 	return zap.Stringer(FieldRole, val)
+}
+
+func RunnerRole(val spectypes.RunnerRole) zap.Field {
+	return zap.String(FieldRole, message.RunnerRoleToString(val))
 }
 
 func MessageID(val spectypes.MessageID) zap.Field {
@@ -321,11 +331,11 @@ func BuilderProposals(v bool) zap.Field {
 	return zap.Bool(FieldBuilderProposals, v)
 }
 
-func FormatDutyID(epoch phase0.Epoch, duty *spectypes.Duty) string {
+func FormatDutyID(epoch phase0.Epoch, duty *spectypes.BeaconDuty) string {
 	return fmt.Sprintf("%v-e%v-s%v-v%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
 }
 
-func Duties(epoch phase0.Epoch, duties []*spectypes.Duty) zap.Field {
+func Duties(epoch phase0.Epoch, duties []*spectypes.BeaconDuty) zap.Field {
 	var b strings.Builder
 	for i, duty := range duties {
 		if i > 0 {

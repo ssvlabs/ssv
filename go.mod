@@ -6,8 +6,7 @@ require (
 	github.com/aquasecurity/table v1.8.0
 	github.com/attestantio/go-eth2-client v0.19.11-0.20240129201044-9d799aaab2bd
 	github.com/bloxapp/eth2-key-manager v1.4.0
-	github.com/bloxapp/ssv-spec v0.3.9-0.20240424091047-be63d922511b
-	github.com/ssvlabs/ssv-spec-pre-cc v0.0.0-20240417141827-0580ce071fa9
+	github.com/bloxapp/ssv-spec v0.3.9-0.20240426041433-948848167435
 	github.com/btcsuite/btcd/btcec/v2 v2.3.2
 	github.com/cespare/xxhash/v2 v2.2.0
 	github.com/cornelk/hashmap v1.0.8
@@ -25,7 +24,6 @@ require (
 	github.com/herumi/bls-eth-go-binary v1.29.1
 	github.com/holiman/uint256 v1.2.4
 	github.com/ilyakaznacheev/cleanenv v1.4.2
-	github.com/jellydator/ttlcache/v3 v3.0.1
 	github.com/libp2p/go-libp2p v0.28.2
 	github.com/libp2p/go-libp2p-kad-dht v0.23.0
 	github.com/libp2p/go-libp2p-pubsub v0.9.3
@@ -40,6 +38,7 @@ require (
 	github.com/rs/zerolog v1.29.1
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/cobra v1.7.0
+	github.com/ssvlabs/ssv-spec-pre-cc v0.0.0-20240430144319-0b52aac25006
 	github.com/status-im/keycard-go v0.2.0
 	github.com/stretchr/testify v1.8.4
 	github.com/wealdtech/go-eth2-types/v2 v2.8.1
@@ -231,6 +230,3 @@ replace github.com/google/flatbuffers => github.com/google/flatbuffers v1.11.0
 replace github.com/dgraph-io/ristretto => github.com/dgraph-io/ristretto v0.1.1-0.20211108053508-297c39e6640f
 
 replace github.com/attestantio/go-eth2-client => github.com/y0sher/go-eth2-client v0.0.0-20240305092513-92d154b203a6
-
-// remove this once this is merged https://github.com/ssvlabs/ssv-spec-pre-cc/pull/1
-replace github.com/ssvlabs/ssv-spec-pre-cc => github.com/MatusKysel/ssv-spec-pre-cc v0.0.0-20240417144536-0726f6ef227f 

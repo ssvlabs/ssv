@@ -3,12 +3,12 @@ package types
 import (
 	"encoding/hex"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 )
 
@@ -31,7 +31,7 @@ func init() {
 // DeserializeBLSPublicKey function and bounded.CGO
 //
 // TODO: rethink this function and consider moving/refactoring it.
-func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, domain spectypes.DomainType, sigType spectypes.SignatureType, operators []*spectypes.Operator) error {
+func VerifyByOperators(s genesisspectypes.Signature, data genesisspectypes.MessageSignature, domain genesisspectypes.DomainType, sigType genesisspectypes.SignatureType, operators []*genesisspectypes.Operator) error {
 	MetricsSignaturesVerifications.WithLabelValues().Inc()
 
 	sign := &bls.Sign{}
@@ -44,7 +44,7 @@ func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, d
 		found := false
 		for _, n := range operators {
 			if id == n.GetID() {
-				pk, err := DeserializeBLSPublicKey(n.GetPublicKey())
+				pk, err := DeserializeBLSPublicKey(n.GetSSVOperatorPublicKey())
 				if err != nil {
 					return errors.Wrap(err, "failed to deserialize public key")
 				}
@@ -58,7 +58,7 @@ func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, d
 		}
 	}
 
-	computedRoot, err := spectypes.ComputeSigningRoot(data, spectypes.ComputeSignatureDomain(domain, sigType))
+	computedRoot, err := genesisspectypes.ComputeSigningRoot(data, genesisspectypes.ComputeSignatureDomain(domain, sigType))
 	if err != nil {
 		return errors.Wrap(err, "could not compute signing root")
 	}
@@ -69,9 +69,9 @@ func VerifyByOperators(s spectypes.Signature, data spectypes.MessageSignature, d
 	return nil
 }
 
-func ReconstructSignature(ps PartialSigContainer, root [32]byte, validatorPubKey []byte, validatorIndex phase0.ValidatorIndex) ([]byte, error) {
+func ReconstructSignature(ps *genesisspecssv.PartialSigContainer, root [32]byte, validatorPubKey []byte) ([]byte, error) {
 	// Reconstruct signatures
-	signature, err := ps.ReconstructSignature(root, validatorPubKey, validatorIndex)
+	signature, err := ps.ReconstructSignature(root, validatorPubKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to reconstruct signatures")
 	}

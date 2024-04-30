@@ -1,7 +1,7 @@
 package queue
 
 import (
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 )
 
 // Metrics records metrics about the Queue.
@@ -25,7 +25,7 @@ func WithMetrics(q Queue, metrics Metrics) Queue {
 func (q *queueWithMetrics) TryPush(msg *DecodedSSVMessage) bool {
 	pushed := q.Queue.TryPush(msg)
 	if !pushed {
-		q.metrics.DroppedQueueMessage(msg.GetID())
+		q.metrics.DroppedQueueMessage(spectypes.MessageID(msg.GetID()))
 	}
 
 	return pushed

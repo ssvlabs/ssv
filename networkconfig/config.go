@@ -7,7 +7,7 @@ import (
 	"time"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 )
@@ -33,7 +33,7 @@ func GetNetworkConfigByName(name string) (NetworkConfig, error) {
 type NetworkConfig struct {
 	Name                 string
 	Beacon               beacon.BeaconNetwork
-	Domain               spectypes.DomainType
+	Domain               genesisspectypes.DomainType
 	GenesisEpoch         spec.Epoch
 	RegistrySyncOffset   *big.Int
 	RegistryContractAddr string // TODO: ethcommon.Address

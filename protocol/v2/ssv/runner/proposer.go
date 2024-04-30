@@ -21,6 +21,7 @@ import (
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
+
 	"go.uber.org/zap"
 
 	"github.com/attestantio/go-eth2-client/spec"
