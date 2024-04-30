@@ -428,7 +428,7 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *genesisspectypes.SSVM
 		}
 	}
 
-	msg, err := queue.DecodeGenesisSSVMessage(ssvMessage)
+	queueMsg, err := queue.DecodeGenesisSSVMessage(ssvMessage)
 	if err != nil {
 		if errors.Is(err, queue.ErrUnknownMessageType) {
 			e := ErrUnknownSSVMessageType
@@ -441,12 +441,14 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *genesisspectypes.SSVM
 		return nil, descriptor, e
 	}
 
+	msg := queueMsg.SSVMessage.(queue.WrappedGenesisMessage).SSVMessage
+
 	// Lock this SSV message ID to prevent concurrent access to the same state.
 	mv.validationMutex.Lock()
-	mutex, ok := mv.validationLocks[msg.GenesisSSVMessage.GetID()]
+	mutex, ok := mv.validationLocks[msg.GetID()]
 	if !ok {
 		mutex = &sync.Mutex{}
-		mv.validationLocks[msg.GenesisSSVMessage.GetID()] = mutex
+		mv.validationLocks[msg.GetID()] = mutex
 	}
 	mutex.Lock()
 	defer mutex.Unlock()
@@ -466,8 +468,8 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *genesisspectypes.SSVM
 				return nil, descriptor, e
 			}
 
-			signedMessage := msg.Body.(*genesisspecqbft.SignedMessage)
-			consensusDescriptor, slot, err := mv.validateConsensusMessage(share, signedMessage, msg.GenesisSSVMessage.GetID(), receivedAt, signatureVerifier)
+			signedMessage := queueMsg.Body.(*genesisspecqbft.SignedMessage)
+			consensusDescriptor, slot, err := mv.validateConsensusMessage(share, signedMessage, msg.GetID(), receivedAt, signatureVerifier)
 			descriptor.Consensus = &consensusDescriptor
 			descriptor.Slot = slot
 			if err != nil {
@@ -482,8 +484,8 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *genesisspectypes.SSVM
 				return nil, descriptor, e
 			}
 
-			partialSignatureMessage := msg.Body.(*genesisspectypes.SignedPartialSignatureMessage)
-			slot, err := mv.validatePartialSignatureMessage(share, partialSignatureMessage, msg.GenesisSSVMessage.GetID(), signatureVerifier)
+			partialSignatureMessage := queueMsg.Body.(*genesisspectypes.SignedPartialSignatureMessage)
+			slot, err := mv.validatePartialSignatureMessage(share, partialSignatureMessage, msg.GetID(), signatureVerifier)
 			descriptor.Slot = slot
 			if err != nil {
 				return nil, descriptor, err
@@ -497,7 +499,7 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *genesisspectypes.SSVM
 		}
 	}
 
-	return msg, descriptor, nil
+	return queueMsg, descriptor, nil
 }
 
 func (mv *messageValidator) containsSignerFunc(signer genesisspectypes.OperatorID) func(operator *genesisspectypes.Operator) bool {

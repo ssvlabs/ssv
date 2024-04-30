@@ -321,14 +321,14 @@ func (c *controller) handleRouterMessages() {
 			return
 		case msg := <-ch:
 			// TODO temp solution to prevent getting event msgs from network. need to to add validation in p2p
-			if msg.MsgType == message.SSVEventMsgType {
+			if msg.GetType() == message.SSVEventMsgType {
 				continue
 			}
 
 			if msg.SSVMessage != nil {
 				// TODO: handle post-fork, use ValidatorStore
 			} else {
-				pk := msg.GenesisSSVMessage.GetID().GetPubKey()
+				pk := msg.GetID().GetPubKey()
 				hexPK := hex.EncodeToString(pk)
 				if v, ok := c.validatorsMap.GetValidator(hexPK); ok {
 					v.HandleMessage(c.logger, msg)
@@ -364,25 +364,25 @@ func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
 		if msg.SSVMessage == nil {
 			// TODO: handle post-fork
 		} else {
-			item := c.nonCommitteeValidators.Get(msg.GenesisSSVMessage.GetID())
+			item := c.nonCommitteeValidators.Get(msg.GetID())
 			if item != nil {
 				ncv = item.Value()
 			} else {
 				// Create a new nonCommitteeValidator and cache it.
-				share := c.sharesStorage.Get(nil, msg.GenesisSSVMessage.GetID().GetPubKey())
+				share := c.sharesStorage.Get(nil, msg.GetID().GetPubKey())
 				if share == nil {
-					return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GenesisSSVMessage.GetID().GetPubKey()))
+					return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetID().GetPubKey()))
 				}
 
 				opts := c.validatorOptions
 				opts.SSVShare = share
 				ncv = &nonCommitteeValidator{
-					NonCommitteeValidator: validator.NewNonCommitteeValidator(c.logger, msg.GenesisSSVMessage.GetID(), opts),
+					NonCommitteeValidator: validator.NewNonCommitteeValidator(c.logger, msg.GetID(), opts),
 				}
 
-				ttlSlots := nonCommitteeValidatorTTLs[msg.GenesisSSVMessage.MsgID.GetRoleType()]
+				ttlSlots := nonCommitteeValidatorTTLs[msg.GetID().GetRoleType()]
 				c.nonCommitteeValidators.Set(
-					msg.GenesisSSVMessage.GetID(),
+					msg.GetID(),
 					ncv,
 					time.Duration(ttlSlots)*c.beacon.GetBeaconNetwork().SlotDurationSec(),
 				)

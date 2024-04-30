@@ -17,18 +17,23 @@ var (
 	ErrUnknownMessageType = fmt.Errorf("unknown message type")
 )
 
+type SSVMessage interface {
+	GetType() spectypes.MsgType
+	GetID() spectypes.MessageID
+	GetData() []byte
+}
+
 // DecodedSSVMessage is a bundle of SSVMessage and it's decoding.
 // TODO: try to make it generic
 type DecodedSSVMessage struct {
-	*spectypes.SSVMessage // TODO: interface
-	GenesisSSVMessage     *genesisspectypes.SSVMessage
+	SSVMessage
 
 	// Body is the decoded Data.
 	Body interface{} // *genesisspecqbft.SignedMessage | *genesisspectypes.SignedPartialSignatureMessage | *EventMsg | *specqbft.Message | *spectypes.PartialSignatureMessages
 }
 
-// DecodeAlanSSVMessage decodes an SSVMessage and returns a DecodedSSVMessage.
-func DecodeAlanSSVMessage(m *spectypes.SSVMessage) (*DecodedSSVMessage, error) {
+// DecodeSSVMessage decodes an SSVMessage and returns a DecodedSSVMessage.
+func DecodeSSVMessage(m *spectypes.SSVMessage) (*DecodedSSVMessage, error) {
 	var body interface{}
 	switch m.MsgType {
 	case spectypes.SSVConsensusMsgType: // TODO: Or message.SSVDecidedMsgType?
@@ -84,8 +89,8 @@ func DecodeGenesisSSVMessage(m *genesisspectypes.SSVMessage) (*DecodedSSVMessage
 		return nil, ErrUnknownMessageType
 	}
 	return &DecodedSSVMessage{
-		GenesisSSVMessage: m,
-		Body:              body,
+		SSVMessage: WrappedGenesisMessage{SSVMessage: m},
+		Body:       body,
 	}, nil
 }
 

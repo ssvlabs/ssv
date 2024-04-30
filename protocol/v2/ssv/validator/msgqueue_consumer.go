@@ -37,16 +37,16 @@ func (v *Validator) HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessa
 	// 	zap.Uint64("type", uint64(msg.MsgType)),
 	// 	fields.Role(msg.MsgID.GetRoleType()))
 
-	if q, ok := v.Queues[msg.MsgID.GetRoleType()]; ok {
+	if q, ok := v.Queues[msg.GetID().GetRoleType()]; ok {
 		if pushed := q.Q.TryPush(msg); !pushed {
 			msgID := msg.MsgID.String()
 			logger.Warn("❗ dropping message because the queue is full",
-				zap.String("msg_type", message.MsgTypeToString(msg.MsgType)),
+				zap.String("msg_type", message.MsgTypeToString(msg.GetType())),
 				zap.String("msg_id", msgID))
 		}
 		// logger.Debug("📬 queue: pushed message", fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType))
 	} else {
-		logger.Error("❌ missing queue for role type", fields.Role(msg.MsgID.GetRoleType()))
+		logger.Error("❌ missing queue for role type", fields.Role(msg.GetID().GetRoleType()))
 	}
 }
 

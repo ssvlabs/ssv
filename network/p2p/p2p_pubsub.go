@@ -7,7 +7,6 @@ import (
 	"math/rand"
 	"time"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
@@ -207,7 +206,7 @@ func (n *p2pNetwork) handlePubsubMessages(logger *zap.Logger) func(ctx context.C
 		// 		zap.String("role", ssvMsg.MsgID.GetRoleType().String()),
 		// 	).Debug("handlePubsubMessages")
 
-		metricsRouterIncoming.WithLabelValues(message.MsgTypeToString(spectypes.MsgType(decodedMsg.MsgType))).Inc()
+		metricsRouterIncoming.WithLabelValues(message.MsgTypeToString(decodedMsg.GetType())).Inc()
 
 		n.msgRouter.Route(ctx, decodedMsg)
 

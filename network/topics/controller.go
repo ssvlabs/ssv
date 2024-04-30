@@ -243,7 +243,7 @@ func (ctrl *topicsCtrl) listen(logger *zap.Logger, sub *pubsub.Subscription) err
 		if ssvMsg, ok := msg.ValidatorData.(*queue.DecodedSSVMessage); ok {
 			metricPubsubInbound.WithLabelValues(
 				commons.GetTopicBaseName(topicName),
-				strconv.FormatUint(uint64(ssvMsg.MsgType), 10),
+				strconv.FormatUint(uint64(ssvMsg.GetType()), 10),
 			).Inc()
 		}
 
