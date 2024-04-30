@@ -25,7 +25,8 @@ eth2:
 
 eth1:
   # WebSocket URL of the Eth1 node to connect to.
-  ETH1Addr: ws://example.url:8546/ws
+  # using ETH1Addr: ws://example.url:8546/ws results in Bad handshake with Geth
+  ETH1Addr: ws://example.url:8546
 
 p2p:
   # Optionally specify the external IP address of the node, if it cannot be determined automatically.
