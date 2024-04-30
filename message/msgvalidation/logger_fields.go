@@ -58,7 +58,7 @@ func (mv *messageValidator) buildLoggerFields(decodedMessage *queue.DecodedSSVMe
 
 	descriptor.SenderID = decodedMessage.GetID().GetSenderID()
 	descriptor.Role = decodedMessage.GetID().GetRoleType()
-	descriptor.SSVMessageType = decodedMessage.MsgType
+	descriptor.SSVMessageType = decodedMessage.GetType()
 
 	switch m := decodedMessage.Body.(type) {
 	case *specqbft.Message:
