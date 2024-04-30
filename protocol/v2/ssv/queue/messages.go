@@ -57,37 +57,6 @@ func DecodeSSVMessage(m *spectypes.SSVMessage) (*DecodedSSVMessage, error) {
 	}, nil
 }
 
-// DecodeGenesisSSVMessage decodes a genesis SSVMessage and returns a DecodedSSVMessage.
-func DecodeGenesisSSVMessage(m *genesisspectypes.SSVMessage) (*DecodedSSVMessage, error) {
-	var body interface{}
-	switch m.MsgType {
-	case genesisspectypes.SSVConsensusMsgType: // TODO: Or message.SSVDecidedMsgType?
-		sm := &genesisspecqbft.SignedMessage{}
-		if err := sm.Decode(m.Data); err != nil {
-			return nil, errors.Wrap(err, "failed to decode SignedMessage")
-		}
-		body = sm
-	case genesisspectypes.SSVPartialSignatureMsgType:
-		sm := &genesisspectypes.SignedPartialSignatureMessage{}
-		if err := sm.Decode(m.Data); err != nil {
-			return nil, errors.Wrap(err, "failed to decode SignedPartialSignatureMessage")
-		}
-		body = sm
-	case genesisspectypes.MsgType(ssvmessage.SSVEventMsgType):
-		msg := &ssvtypes.EventMsg{}
-		if err := msg.Decode(m.Data); err != nil {
-			return nil, errors.Wrap(err, "failed to decode EventMsg")
-		}
-		body = msg
-	default:
-		return nil, ErrUnknownMessageType
-	}
-	return &DecodedSSVMessage{
-		SSVMessage: m,
-		Body:       body,
-	}, nil
-}
-
 // compareHeightOrSlot returns an integer comparing the message's height/slot to the current.
 // The reuslt will be 0 if equal, -1 if lower, 1 if higher.
 func compareHeightOrSlot(state *State, m *DecodedSSVMessage) int {
