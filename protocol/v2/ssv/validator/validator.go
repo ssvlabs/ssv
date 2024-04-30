@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"sync"
 
-	genesisspecqbft "github.com/bloxapp/ssv-spec-genesis/qbft"
-	genesisspectypes "github.com/bloxapp/ssv-spec-genesis/types"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -96,7 +96,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 }
 
 // StartDuty starts a duty for the validator
-func (v *Validator) StartDuty(logger *zap.Logger, duty *spectypes.Duty) error {
+func (v *Validator) StartDuty(logger *zap.Logger, duty spectypes.Duty) error {
 	dutyRunner := v.DutyRunners[duty.Type]
 	if dutyRunner == nil {
 		return errors.Errorf("no runner for duty type %s", duty.Type.String())

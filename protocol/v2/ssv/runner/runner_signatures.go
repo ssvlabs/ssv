@@ -2,12 +2,12 @@ package runner
 
 import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	genesisspectypes "github.com/bloxapp/ssv-spec-genesis/types"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )

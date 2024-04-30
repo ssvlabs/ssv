@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	genesisspecssv "github.com/bloxapp/ssv-spec-genesis/ssv"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/pkg/errors"
+	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v2/types"
