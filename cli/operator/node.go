@@ -51,7 +51,6 @@ import (
 	"github.com/bloxapp/ssv/operator/slotticker"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/signatureverifier"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
@@ -270,19 +269,21 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.DutyRoles = []spectypes.BeaconRole{spectypes.BNRoleAttester} // TODO could be better to set in other place
 
 		// TODO: fork support
-		storageRoles := []spectypes.RunnerRole{
-			// spectypes.BNRoleAttester,
-			spectypes.RoleProposer,
-			spectypes.RoleAggregator,
-			// spectypes.BNRoleSyncCommittee,
-			spectypes.RoleSyncCommitteeContribution,
-			spectypes.RoleValidatorRegistration,
-			spectypes.RoleVoluntaryExit,
+		storageRoles := []types.RunnerRole{
+			types.RoleProposer,
+			types.RoleAggregator,
+			types.RoleSyncCommitteeContribution,
+			types.RoleValidatorRegistration,
+			types.RoleVoluntaryExit,
+
+			// Genesis:
+			types.RoleAttester,
+			types.RoleSyncCommittee,
 		}
 		storageMap := ibftstorage.NewStores()
 
 		for _, storageRole := range storageRoles {
-			storageMap.Add(storageRole, ibftstorage.New(cfg.SSVOptions.ValidatorOptions.DB, message.RunnerRoleToString(storageRole)))
+			storageMap.Add(storageRole, ibftstorage.New(cfg.SSVOptions.ValidatorOptions.DB, storageRole.String()))
 		}
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap

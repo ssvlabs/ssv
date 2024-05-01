@@ -343,8 +343,12 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 		return spectypes.ValidatorPK{}, &MalformedEventError{Err: ErrShareBelongsToDifferentOwner}
 	}
 
-	removeDecidedMessages := func(role spectypes.RunnerRole, store qbftstorage.QBFTStore) error {
-		messageID := spectypes.NewMsgID(eh.networkConfig.Domain, share.ValidatorPubKey[:], role)
+	removeDecidedMessages := func(role ssvtypes.RunnerRole, store qbftstorage.QBFTStore) error {
+		specRole, ok := role.Spec()
+		if !ok {
+			return fmt.Errorf("could not convert role to spec role")
+		}
+		messageID := spectypes.NewMsgID(eh.networkConfig.Domain, share.ValidatorPubKey[:], specRole)
 		return store.CleanAllInstances(logger, messageID[:])
 	}
 	err := eh.storageMap.Each(removeDecidedMessages)

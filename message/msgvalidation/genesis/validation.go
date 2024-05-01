@@ -165,7 +165,7 @@ type Descriptor struct {
 func (d Descriptor) Fields() []zapcore.Field {
 	result := []zapcore.Field{
 		fields.Validator(d.ValidatorPK),
-		fields.Role(spectypes.BeaconRole(d.Role)),
+		fields.BeaconRole(spectypes.BeaconRole(d.Role)),
 		zap.String("ssv_message_type", ssvmessage.MsgTypeToString(spectypes.MsgType(d.SSVMessageType))),
 		fields.Slot(d.Slot),
 	}

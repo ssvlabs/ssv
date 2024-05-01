@@ -3,7 +3,6 @@ package queue
 import (
 	"fmt"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
@@ -20,6 +19,10 @@ var (
 // DecodedSSVMessage is a bundle of SSVMessage and it's decoding.
 // TODO: try to make it generic
 type DecodedSSVMessage struct {
+	// TODO: fork support
+	// Fields are identical between the forks except for the role in MessageID
+	// which can't contain attester and proposer roles atm.
+	SignedSSVMessage *spectypes.SignedSSVMessage
 	*spectypes.SSVMessage
 
 	// Body is the decoded Data.
@@ -27,24 +30,24 @@ type DecodedSSVMessage struct {
 }
 
 // DecodeSSVMessage decodes an SSVMessage and returns a DecodedSSVMessage.
-func DecodeSSVMessage(m *spectypes.SSVMessage) (*DecodedSSVMessage, error) {
+func DecodeSSVMessage(m *spectypes.SignedSSVMessage) (*DecodedSSVMessage, error) {
 	var body interface{}
-	switch m.MsgType {
+	switch m.SSVMessage.MsgType {
 	case spectypes.SSVConsensusMsgType: // TODO: Or message.SSVDecidedMsgType?
 		sm := &genesisspecqbft.SignedMessage{}
-		if err := sm.Decode(m.Data); err != nil {
+		if err := sm.Decode(m.SSVMessage.Data); err != nil {
 			return nil, errors.Wrap(err, "failed to decode Message")
 		}
 		body = sm
 	case spectypes.SSVPartialSignatureMsgType:
 		sm := &genesisspectypes.SignedPartialSignatureMessage{}
-		if err := sm.Decode(m.Data); err != nil {
+		if err := sm.Decode(m.SSVMessage.Data); err != nil {
 			return nil, errors.Wrap(err, "failed to decode PartialSignatureMessages")
 		}
 		body = sm
 	case ssvmessage.SSVEventMsgType:
 		msg := &ssvtypes.EventMsg{}
-		if err := msg.Decode(m.Data); err != nil {
+		if err := msg.Decode(m.SSVMessage.Data); err != nil {
 			return nil, errors.Wrap(err, "failed to decode EventMsg")
 		}
 		body = msg
@@ -52,8 +55,9 @@ func DecodeSSVMessage(m *spectypes.SSVMessage) (*DecodedSSVMessage, error) {
 		return nil, ErrUnknownMessageType
 	}
 	return &DecodedSSVMessage{
-		SSVMessage: m,
-		Body:       body,
+		SignedSSVMessage: m,
+		SSVMessage:       m.SSVMessage,
+		Body:             body,
 	}, nil
 }
 
@@ -83,19 +87,24 @@ func DecodeGenesisSSVMessage(m *genesisspectypes.SSVMessage) (*DecodedSSVMessage
 		return nil, ErrUnknownMessageType
 	}
 	return &DecodedSSVMessage{
-		SSVMessage: m,
-		Body:       body,
+		SSVMessage: &spectypes.SSVMessage{
+			MsgType: spectypes.MsgType(m.MsgType),
+			MsgID:   spectypes.MessageID(m.MsgID),
+			Data:    m.Data,
+		},
+		Body: body,
 	}, nil
 }
 
 // compareHeightOrSlot returns an integer comparing the message's height/slot to the current.
 // The reuslt will be 0 if equal, -1 if lower, 1 if higher.
 func compareHeightOrSlot(state *State, m *DecodedSSVMessage) int {
+	// TODO: fork support
 	if mm, ok := m.Body.(*genesisspecqbft.SignedMessage); ok {
-		if mm.Message.Height == state.Height {
+		if mm.Message.Height == genesisspecqbft.Height(state.Height) {
 			return 0
 		}
-		if specqbft.Height(mm.Message.Height) > state.Height {
+		if mm.Message.Height > genesisspecqbft.Height(state.Height) {
 			return 1
 		}
 	} else if mm, ok := m.Body.(*genesisspectypes.SignedPartialSignatureMessage); ok {
@@ -112,11 +121,12 @@ func compareHeightOrSlot(state *State, m *DecodedSSVMessage) int {
 // scoreRound returns an integer comparing the message's round (if exist) to the current.
 // The reuslt will be 0 if equal, -1 if lower, 1 if higher.
 func scoreRound(state *State, m *DecodedSSVMessage) int {
+	// TODO: fork support
 	if mm, ok := m.Body.(*genesisspecqbft.SignedMessage); ok {
-		if mm.Message.Round == state.Round {
+		if mm.Message.Round == genesisspecqbft.Round(state.Round) {
 			return 2
 		}
-		if specqbft.Round(mm.Message.Round) > state.Round {
+		if mm.Message.Round > genesisspecqbft.Round(state.Round) {
 			return 1
 		}
 		return -1

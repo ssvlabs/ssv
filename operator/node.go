@@ -6,7 +6,6 @@ import (
 
 	"github.com/bloxapp/ssv/network"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth/executionclient"
@@ -22,6 +21,7 @@ import (
 	"github.com/bloxapp/ssv/operator/slotticker"
 	"github.com/bloxapp/ssv/operator/storage"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
@@ -72,14 +72,15 @@ type operatorNode struct {
 func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provider) Node {
 	storageMap := qbftstorage.NewStores()
 
-	roles := []spectypes.BeaconRole{
-		spectypes.BNRoleAttester,
-		spectypes.BNRoleProposer,
-		spectypes.BNRoleAggregator,
-		spectypes.BNRoleSyncCommittee,
-		spectypes.BNRoleSyncCommitteeContribution,
-		spectypes.BNRoleValidatorRegistration,
-		spectypes.BNRoleVoluntaryExit,
+	roles := []types.RunnerRole{
+		types.RoleAttester,
+		types.RoleProposer,
+		types.RoleAggregator,
+		types.RoleSyncCommittee,
+		types.RoleSyncCommitteeContribution,
+		types.RoleValidatorRegistration,
+		types.RoleVoluntaryExit,
+		types.RoleCommittee,
 	}
 	for _, role := range roles {
 		storageMap.Add(role, qbftstorage.New(opts.DB, role.String()))

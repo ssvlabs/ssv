@@ -379,7 +379,7 @@ func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []spectypes.Duty) {
 // loggerWithDutyContext returns an instance of logger with the given duty's information
 func (s *Scheduler) loggerWithDutyContext(logger *zap.Logger, duty *spectypes.Duty) *zap.Logger {
 	return logger.
-		With(fields.Role(duty.Type)).
+		With(fields.BeaconRole(duty.Type)).
 		With(zap.Uint64("committee_index", uint64(duty.CommitteeIndex))).
 		With(fields.CurrentSlot(s.network.Beacon.EstimatedCurrentSlot())).
 		With(fields.Slot(duty.Slot)).

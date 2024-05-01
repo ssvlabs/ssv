@@ -8,6 +8,7 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
@@ -26,6 +27,7 @@ type Getters interface {
 	GetGenesisSigner() genesisspectypes.KeyManager
 	GetOperatorSigner() spectypes.OperatorSigner
 	GetNetwork() specssv.Network
+	GetRunnerRole() types.RunnerRole
 }
 
 type Runner interface {
@@ -57,7 +59,6 @@ type BaseRunner struct {
 	Shares         map[phase0.ValidatorIndex]*spectypes.Share
 	QBFTController *controller.Controller
 	BeaconNetwork  spectypes.BeaconNetwork
-	BeaconRoleType genesisspectypes.BeaconRole
 	RunnerRoleType spectypes.RunnerRole
 
 	// implementation vars

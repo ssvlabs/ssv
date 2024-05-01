@@ -14,7 +14,7 @@ func (v *Validator) OnExecuteDuty(logger *zap.Logger, msg types.EventMsg) error 
 		return errors.Wrap(err, "failed to get execute duty data")
 	}
 
-	logger = logger.With(fields.Slot(executeDutyData.Duty.Slot), fields.Role(executeDutyData.Duty.Type))
+	logger = logger.With(fields.Slot(executeDutyData.Duty.Slot), fields.BeaconRole(executeDutyData.Duty.Type))
 
 	// force the validator to be started (subscribed to validator's topic and synced)
 	if _, err := v.Start(logger); err != nil {

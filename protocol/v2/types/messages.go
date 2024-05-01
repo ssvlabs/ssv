@@ -3,8 +3,8 @@ package types
 import (
 	"encoding/json"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 )
 
 type EventType int
@@ -33,8 +33,8 @@ type EventMsg struct {
 }
 
 type TimeoutData struct {
-	Height qbft.Height
-	Round  qbft.Round
+	Height specqbft.Height
+	Round  specqbft.Round
 }
 
 type ExecuteDutyData struct {
