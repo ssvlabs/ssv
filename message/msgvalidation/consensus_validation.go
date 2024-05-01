@@ -14,6 +14,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 
+	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -219,8 +220,8 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 
 	if maxRound := mv.maxRound(role); consensusMessage.Round > maxRound {
 		err := ErrRoundTooHigh
-		err.got = fmt.Sprintf("%v (%v role)", consensusMessage.Round, role)
-		err.want = fmt.Sprintf("%v (%v role)", maxRound, role)
+		err.got = fmt.Sprintf("%v (%v role)", consensusMessage.Round, message.RunnerRoleToString(role))
+		err.want = fmt.Sprintf("%v (%v role)", maxRound, message.RunnerRoleToString(role))
 		return err
 	}
 
@@ -378,8 +379,8 @@ func (mv *messageValidator) roundBelongsToAllowedSpread(
 
 	if consensusMessage.Round < lowestAllowed || consensusMessage.Round > highestAllowed {
 		e := ErrEstimatedRoundTooFar
-		e.got = fmt.Sprintf("%v (%v role)", consensusMessage.Round, role)
-		e.want = fmt.Sprintf("between %v and %v (%v role) / %v passed", lowestAllowed, highestAllowed, role, sinceSlotStart)
+		e.got = fmt.Sprintf("%v (%v role)", consensusMessage.Round, message.RunnerRoleToString(role))
+		e.want = fmt.Sprintf("between %v and %v (%v role) / %v passed", lowestAllowed, highestAllowed, message.RunnerRoleToString(role), sinceSlotStart)
 		return e
 	}
 
