@@ -47,6 +47,25 @@ func QBFTMsgTypeToString(mt specqbft.MessageType) string {
 	}
 }
 
+func PartialMsgTypeToString(mt spectypes.PartialSigMsgType) string {
+	switch mt {
+	case spectypes.PostConsensusPartialSig:
+		return "PostConsensusPartialSig"
+	case spectypes.RandaoPartialSig:
+		return "RandaoPartialSig"
+	case spectypes.SelectionProofPartialSig:
+		return "SelectionProofPartialSig"
+	case spectypes.ContributionProofs:
+		return "ContributionProofs"
+	case spectypes.ValidatorRegistrationPartialSig:
+		return "ValidatorRegistrationPartialSig"
+	case spectypes.VoluntaryExitPartialSig:
+		return "VoluntaryExitPartialSig"
+	default:
+		return fmt.Sprintf("unknown(%d)", mt)
+	}
+}
+
 // BeaconRoleFromString returns BeaconRole from string
 func BeaconRoleFromString(s string) (spectypes.BeaconRole, error) {
 	switch s {
