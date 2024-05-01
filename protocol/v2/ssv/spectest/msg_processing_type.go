@@ -97,6 +97,14 @@ func (test *MsgProcessingSpecTest) compareBroadcastedBeaconMsgs(t *testing.T) {
 				break
 			}
 		}
+		if !found {
+			println("<<<<<<<<<<<<<<<<<<<<<<here>>>>>>>>>>>>>>>>>>>>>>")
+			println(r1)
+			for _, r2 := range broadcastedRoots {
+				println(hex.EncodeToString(r2[:]))
+			}
+			println("<<<<<<<<<<<<<<<<<<<<<<here>>>>>>>>>>>>>>>>>>>>>>")
+		}
 		require.Truef(t, found, "broadcasted beacon root not found")
 	}
 }
