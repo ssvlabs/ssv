@@ -346,19 +346,6 @@ func (mv *messageValidator) currentEstimatedRound(sinceSlotStart time.Duration) 
 	return estimatedRound
 }
 
-func (mv *messageValidator) waitAfterSlotStart(role spectypes.RunnerRole) time.Duration {
-	switch role {
-	case spectypes.RoleCommittee:
-		return mv.netCfg.Beacon.SlotDurationSec() / 3
-	case spectypes.RoleAggregator, spectypes.RoleSyncCommitteeContribution:
-		return mv.netCfg.Beacon.SlotDurationSec() / 3 * 2
-	case spectypes.RoleProposer:
-		return 0
-	default:
-		panic("unknown role")
-	}
-}
-
 func (mv *messageValidator) validConsensusMsgType(msgType specqbft.MessageType) bool {
 	switch msgType {
 	case specqbft.ProposalMsgType, specqbft.PrepareMsgType, specqbft.CommitMsgType, specqbft.RoundChangeMsgType:
