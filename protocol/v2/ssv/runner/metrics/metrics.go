@@ -5,10 +5,10 @@ import (
 
 	"go.uber.org/zap"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
-	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 )
 
 var (
@@ -103,7 +103,7 @@ type ConsensusMetrics struct {
 	dutyFullFlowCumulativeDuration time.Duration
 }
 
-func NewConsensusMetrics(role spectypes.BeaconRole) ConsensusMetrics {
+func NewConsensusMetrics(role spectypes.RunnerRole) ConsensusMetrics {
 	values := []string{role.String()}
 	return ConsensusMetrics{
 		preConsensus:            metricsPreConsensusDuration.WithLabelValues(values...),

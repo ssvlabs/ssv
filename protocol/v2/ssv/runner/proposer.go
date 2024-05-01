@@ -112,7 +112,7 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg ssvty
 	}
 
 	logger.Debug("🧩 reconstructed partial RANDAO signatures",
-		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)))
+		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), r.GetShare().ValidatorIndex, root)))
 
 	var ver spec.DataVersion
 	var obj ssz.Marshaler

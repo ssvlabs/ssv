@@ -7,18 +7,15 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/pkg/errors"
-	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // State holds all the relevant progress the duty execution progress
 type State struct {
-	PreConsensusContainer  ssvtypes.PartialSigContainer
-	PostConsensusContainer ssvtypes.PartialSigContainer
+	PreConsensusContainer  *specssv.PartialSigContainer
+	PostConsensusContainer *specssv.PartialSigContainer
 	RunningInstance        *instance.Instance
 	DecidedValue           []byte
 	// CurrentDuty is the duty the node pulled locally from the beacon node, might be different from decided duty
@@ -28,30 +25,19 @@ type State struct {
 }
 
 func NewRunnerState(quorum uint64, duty spectypes.Duty) *State {
-	if true {
-		return &State{
-			PreConsensusContainer:  &types.GenesisPartialSigContainer{PartialSigContainer: genesisspecssv.NewPartialSigContainer(quorum)},
-			PostConsensusContainer: &types.GenesisPartialSigContainer{PartialSigContainer: genesisspecssv.NewPartialSigContainer(quorum)},
-
-			StartingDuty: duty,
-			Finished:     false,
-		}
-	}
-
 	return &State{
-		PreConsensusContainer:  &types.AlanPartialSigContainer{PartialSigContainer: specssv.NewPartialSigContainer(quorum)},
-		PostConsensusContainer: &types.AlanPartialSigContainer{PartialSigContainer: specssv.NewPartialSigContainer(quorum)},
+		PreConsensusContainer:  specssv.NewPartialSigContainer(quorum),
+		PostConsensusContainer: specssv.NewPartialSigContainer(quorum),
 
 		StartingDuty: duty,
 		Finished:     false,
 	}
-
 }
 
 // ReconstructBeaconSig aggregates collected partial beacon sigs
-func (pcs *State) ReconstructBeaconSig(container ssvtypes.PartialSigContainer, root [32]byte, validatorPubKey []byte, validatorIndex phase0.ValidatorIndex) ([]byte, error) {
+func (pcs *State) ReconstructBeaconSig(container *specssv.PartialSigContainer, root [32]byte, validatorPubKey []byte, validatorIndex phase0.ValidatorIndex) ([]byte, error) {
 	// Reconstruct signatures
-	signature, err := ssvtypes.ReconstructSignature(container, root, validatorPubKey, validatorIndex)
+	signature, err := container.ReconstructSignature(root, validatorPubKey, validatorIndex)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not reconstruct beacon sig")
 	}
