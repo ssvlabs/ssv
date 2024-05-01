@@ -99,8 +99,8 @@ func (mv *messageValidator) validatePartialSignatureMessageSemantics(
 
 		if message.Signer != signers[0] {
 			err := ErrInconsistentSigners
-			err.want = signers[0]
-			err.got = message.Signer
+			err.got = signers[0]
+			err.want = message.Signer
 			return err
 		}
 
@@ -130,12 +130,13 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		return err
 	}
 
-	signerState := state.GetSignerState(signedSSVMessage.GetOperatorIDs()[0])
+	signer := signedSSVMessage.GetOperatorIDs()[0]
+	signerState := state.GetSignerState(signer)
+	if signerState == nil {
+		signerState = state.CreateSignerState(signer)
+	}
 
-	messageEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(messageSlot)
-	stateEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot)
-
-	if messageSlot == signerState.Slot {
+	if signerState != nil && messageSlot == signerState.Slot {
 		limits := maxMessageCounts(len(committee))
 		if err := signerState.MessageCounts.ValidatePartialSignatureMessage(partialSignatureMessages, limits); err != nil {
 			return err
@@ -146,6 +147,8 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		return err
 	}
 
+	messageEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(messageSlot)
+	stateEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot)
 	newDutyInSameEpoch := false
 	if messageSlot > signerState.Slot && messageEpoch == stateEpoch {
 		newDutyInSameEpoch = true

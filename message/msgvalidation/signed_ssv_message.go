@@ -42,12 +42,12 @@ func (mv *messageValidator) validateSignedSSVMessage(signedSSVMessage *spectypes
 
 	var prevSigner spectypes.OperatorID
 	for _, signer := range signers {
+		if signer == 0 {
+			return ErrZeroSigner
+		}
 		// This check assumes that signers is sorted, so this rule should be after the check for ErrSignersNotSorted.
 		if signer == prevSigner {
 			return ErrDuplicatedSigner
-		}
-		if signer == 0 {
-			return ErrZeroSigner
 		}
 		prevSigner = signer
 	}

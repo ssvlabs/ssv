@@ -63,7 +63,6 @@ var (
 	ErrTooManySameTypeMessagesPerRound         = Error{text: "too many messages of same type per round"}
 	ErrRoundTooHigh                            = Error{text: "round is too high for this role" /*, reject: true*/} // TODO: enable reject
 	ErrSignatureVerification                   = Error{text: "signature verification", reject: true}
-	ErrOperatorNotFound                        = Error{text: "operator not found", reject: true}
 	ErrPubSubMessageHasNoData                  = Error{text: "pub-sub message has no data", reject: true}
 	ErrPubSubDataTooBig                        = Error{text: "pub-sub message data too big", reject: true}
 	ErrMalformedPubSubMessage                  = Error{text: "pub-sub message is malformed", reject: true}
