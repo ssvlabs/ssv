@@ -93,8 +93,8 @@ func (mv *messageValidator) validatePartialSignatureMessageSemantics(
 	}
 
 	for _, message := range partialSignatureMessages.Messages {
-		if err := mv.validateBLSSignatureFormat(message.PartialSignature); err != nil {
-			return err
+		if len(message.PartialSignature) == 0 {
+			return ErrEmptySignature
 		}
 
 		if message.Signer != signers[0] {
@@ -229,20 +229,6 @@ func (mv *messageValidator) partialSignatureTypeMatchesRole(msgType spectypes.Pa
 	default:
 		return false
 	}
-}
-
-func (mv *messageValidator) validateBLSSignatureFormat(signature []byte) error {
-	if len(signature) == 0 {
-		return ErrEmptySignature
-	}
-
-	if len(signature) != blsSignatureSize {
-		e := ErrWrongBLSSignatureSize
-		e.got = len(signature)
-		return e
-	}
-
-	return nil
 }
 
 // TODO: delete after updating to Go 1.21

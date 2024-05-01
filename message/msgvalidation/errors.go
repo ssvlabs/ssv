@@ -66,7 +66,7 @@ var (
 	ErrPubSubMessageHasNoData                  = Error{text: "pub-sub message has no data", reject: true}
 	ErrPubSubDataTooBig                        = Error{text: "pub-sub message data too big", reject: true}
 	ErrMalformedPubSubMessage                  = Error{text: "pub-sub message is malformed", reject: true}
-	ErrEmptyPubSubMessage                      = Error{text: "pub-sub message is empty", reject: true}
+	ErrNilSignedSSVMessage                     = Error{text: "signed ssv message is nil", reject: true}
 	ErrNilSSVMessage                           = Error{text: "ssv message is nil", reject: true}
 	ErrIncorrectTopic                          = Error{text: "incorrect topic", reject: true}
 	ErrSSVDataTooBig                           = Error{text: "ssv message data too big", reject: true}
@@ -74,7 +74,6 @@ var (
 	ErrUnexpectedConsensusMessage              = Error{text: "unexpected consensus message for this role", reject: true}
 	ErrNoSigners                               = Error{text: "no signers", reject: true}
 	ErrWrongRSASignatureSize                   = Error{text: "wrong RSA signature size", reject: true}
-	ErrWrongBLSSignatureSize                   = Error{text: "wrong BLS signature size", reject: true}
 	ErrEmptySignature                          = Error{text: "empty signature", reject: true}
 	ErrZeroSigner                              = Error{text: "zero signer ID", reject: true}
 	ErrSignerNotInCommittee                    = Error{text: "signer is not in committee", reject: true}
@@ -93,7 +92,6 @@ var (
 	ErrInvalidPartialSignatureType             = Error{text: "unknown partial signature message type", reject: true}
 	ErrPartialSignatureTypeRoleMismatch        = Error{text: "partial signature type and role don't match", reject: true}
 	ErrNonDecidedWithMultipleSigners           = Error{text: "non-decided with multiple signers", reject: true}
-	ErrTooManySigners                          = Error{text: "too many signers", reject: true}
 	ErrDecidedNotEnoughSigners                 = Error{text: "not enough signers in decided message", reject: true}
 	ErrDuplicatedProposalWithDifferentData     = Error{text: "duplicated proposal with different data", reject: true}
 	ErrMalformedPrepareJustifications          = Error{text: "malformed prepare justifications", reject: true}

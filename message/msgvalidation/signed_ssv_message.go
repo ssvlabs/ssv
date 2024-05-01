@@ -27,7 +27,7 @@ func (mv *messageValidator) decodeSignedSSVMessage(pMsg *pubsub.Message) (*spect
 
 func (mv *messageValidator) validateSignedSSVMessage(signedSSVMessage *spectypes.SignedSSVMessage) error {
 	if signedSSVMessage == nil {
-		return ErrEmptyPubSubMessage
+		return ErrNilSignedSSVMessage
 	}
 
 	signers := signedSSVMessage.GetOperatorIDs()
@@ -164,12 +164,6 @@ func (mv *messageValidator) belongsToCommittee(operatorIDs []spectypes.OperatorI
 			e.want = committee
 			return e
 		}
-	}
-
-	if len(operatorIDs) > len(committee) {
-		e := ErrTooManySigners
-		e.got = len(operatorIDs)
-		return e
 	}
 
 	return nil
