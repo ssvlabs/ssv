@@ -3,7 +3,7 @@ package runner
 import (
 	"encoding/hex"
 
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
 func getPreConsensusSigners(state *State, root [32]byte) []spectypes.OperatorID {

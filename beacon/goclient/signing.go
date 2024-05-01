@@ -9,9 +9,9 @@ import (
 
 	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 )
 
 func (gc *goClient) computeVoluntaryExitDomain(ctx context.Context) (phase0.Domain, error) {

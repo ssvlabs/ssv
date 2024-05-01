@@ -10,12 +10,12 @@ import (
 	"os"
 	"time"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/operator/controller"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/api/handlers"
@@ -51,6 +51,7 @@ import (
 	"github.com/bloxapp/ssv/operator/slotticker"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/signatureverifier"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
@@ -268,19 +269,20 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.SSVOptions.ValidatorOptions.DutyRoles = []spectypes.BeaconRole{spectypes.BNRoleAttester} // TODO could be better to set in other place
 
-		storageRoles := []spectypes.BeaconRole{
-			spectypes.BNRoleAttester,
-			spectypes.BNRoleProposer,
-			spectypes.BNRoleAggregator,
-			spectypes.BNRoleSyncCommittee,
-			spectypes.BNRoleSyncCommitteeContribution,
-			spectypes.BNRoleValidatorRegistration,
-			spectypes.BNRoleVoluntaryExit,
+		// TODO: fork support
+		storageRoles := []spectypes.RunnerRole{
+			// spectypes.BNRoleAttester,
+			spectypes.RoleProposer,
+			spectypes.RoleAggregator,
+			// spectypes.BNRoleSyncCommittee,
+			spectypes.RoleSyncCommitteeContribution,
+			spectypes.RoleValidatorRegistration,
+			spectypes.RoleVoluntaryExit,
 		}
 		storageMap := ibftstorage.NewStores()
 
 		for _, storageRole := range storageRoles {
-			storageMap.Add(storageRole, ibftstorage.New(cfg.SSVOptions.ValidatorOptions.DB, storageRole.String()))
+			storageMap.Add(storageRole, ibftstorage.New(cfg.SSVOptions.ValidatorOptions.DB, message.RunnerRoleToString(storageRole)))
 		}
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap

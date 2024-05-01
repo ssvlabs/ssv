@@ -94,7 +94,7 @@ func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, network netw
 		walletLock:        &sync.RWMutex{},
 		signer:            beaconSigner,
 		storage:           signerStore,
-		domain:            network.Domain,
+		domain:            genesisspectypes.DomainType(network.Domain),
 		slashingProtector: slashingProtector,
 		builderProposals:  builderProposals,
 	}, nil

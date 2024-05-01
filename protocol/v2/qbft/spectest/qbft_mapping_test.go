@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	spectests "github.com/ssvlabs/ssv-spec-pre-cc/qbft/spectest/tests"
+	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec-pre-cc/qbft/spectest/tests/timeout"
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 	"github.com/stretchr/testify/require"
 

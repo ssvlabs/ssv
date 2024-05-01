@@ -213,15 +213,17 @@ func (c *validatorStore) handleShareAdded(share *types.SSVShare) {
 	c.byCommitteeID[committee.ID] = committee
 
 	// Update byOperatorID
-	data := c.byOperatorID[share.OperatorID]
-	if data == nil {
-		data = &sharesAndCommittees{
-			shares:     []*types.SSVShare{share},
-			committees: []*Committee{committee},
+	for _, operator := range share.Committee {
+		data := c.byOperatorID[operator.Signer]
+		if data == nil {
+			data = &sharesAndCommittees{
+				shares:     []*types.SSVShare{share},
+				committees: []*Committee{committee},
+			}
+		} else {
+			data.shares = append(data.shares, share)
+			data.committees = append(data.committees, committee)
 		}
-	} else {
-		data.shares = append(data.shares, share)
-		data.committees = append(data.committees, committee)
 	}
 }
 
@@ -229,8 +231,7 @@ func (c *validatorStore) handleShareRemoved(pk spectypes.ValidatorPK) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	pubKeyStr := string(pk)
-	share := c.byPubKey(pk)
+	share := c.byPubKey(pk[:])
 	if share == nil {
 		return
 	}
@@ -245,7 +246,7 @@ func (c *validatorStore) handleShareRemoved(pk spectypes.ValidatorPK) {
 	}
 	validators := make([]*types.SSVShare, 0, len(committee.Validators)-1)
 	for _, validator := range committee.Validators {
-		if string(validator.ValidatorPubKey) != pubKeyStr {
+		if validator.ValidatorPubKey != pk {
 			validators = append(validators, validator)
 		}
 	}
@@ -256,20 +257,22 @@ func (c *validatorStore) handleShareRemoved(pk spectypes.ValidatorPK) {
 	}
 
 	// Update byOperatorID
-	data := c.byOperatorID[share.OperatorID]
-	if data == nil {
-		return
-	}
-	shares := make([]*types.SSVShare, 0, len(data.shares)-1)
-	for _, s := range data.shares {
-		if string(s.ValidatorPubKey) != pubKeyStr {
-			shares = append(shares, s)
+	for _, operator := range share.Committee {
+		data := c.byOperatorID[operator.Signer]
+		if data == nil {
+			return
 		}
-	}
-	if len(shares) == 0 {
-		delete(c.byOperatorID, share.OperatorID)
-	} else {
-		data.shares = shares
+		shares := make([]*types.SSVShare, 0, len(data.shares)-1)
+		for _, s := range data.shares {
+			if s.ValidatorPubKey != pk {
+				shares = append(shares, s)
+			}
+		}
+		if len(shares) == 0 {
+			delete(c.byOperatorID, operator.Signer)
+		} else {
+			data.shares = shares
+		}
 	}
 }
 
@@ -283,10 +286,9 @@ func (c *validatorStore) handleShareUpdated(share *types.SSVShare) {
 	}
 
 	// Update byCommitteeID
-	pubKeyStr := string(share.ValidatorPubKey)
 	for _, committee := range c.byCommitteeID {
 		for i, validator := range committee.Validators {
-			if string(validator.ValidatorPubKey) == pubKeyStr {
+			if validator.ValidatorPubKey == share.ValidatorPubKey {
 				committee.Validators[i] = share
 				break
 			}
@@ -296,7 +298,7 @@ func (c *validatorStore) handleShareUpdated(share *types.SSVShare) {
 	// Update byOperatorID
 	for _, data := range c.byOperatorID {
 		for i, s := range data.shares {
-			if string(s.ValidatorPubKey) == pubKeyStr {
+			if s.ValidatorPubKey == share.ValidatorPubKey {
 				data.shares[i] = share
 				break
 			}
@@ -311,7 +313,7 @@ func buildCommittee(shares []*types.SSVShare) *Committee {
 		Validators: shares,
 	}
 	for i, share := range shares {
-		committee.Operators[i] = share.OperatorID
+		committee.Operators[i] = share.Committee[i].Signer
 	}
 	return committee
 }

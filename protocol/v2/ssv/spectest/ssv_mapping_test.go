@@ -7,12 +7,12 @@ import (
 	"strings"
 	"testing"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec-pre-cc/ssv/spectest/tests"
 	"github.com/ssvlabs/ssv-spec-pre-cc/ssv/spectest/tests/partialsigcontainer"
 	"github.com/ssvlabs/ssv-spec-pre-cc/ssv/spectest/tests/runner/duties/newduty"
 	"github.com/ssvlabs/ssv-spec-pre-cc/ssv/spectest/tests/runner/duties/synccommitteeaggregator"
 	"github.com/ssvlabs/ssv-spec-pre-cc/ssv/spectest/tests/valcheck"
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"github.com/ssvlabs/ssv-spec-pre-cc/types/spectest/tests/partialsigmessage"
 	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 	"github.com/stretchr/testify/require"

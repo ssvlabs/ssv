@@ -6,7 +6,7 @@ package validator
 //	"testing"
 //
 //	"github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-//	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+//	spectypes "github.com/bloxapp/ssv-spec/types"
 //	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 //	"github.com/stretchr/testify/require"
 //)

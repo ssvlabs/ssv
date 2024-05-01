@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"time"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
@@ -50,7 +51,7 @@ func (n *p2pNetwork) Peers(pk genesisspectypes.ValidatorPK) ([]peer.ID, error) {
 }
 
 // Broadcast publishes the message to all peers in subnet
-func (n *p2pNetwork) Broadcast(msg *genesisspectypes.SSVMessage) error {
+func (n *p2pNetwork) Broadcast(msg *spectypes.SignedSSVMessage) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
@@ -59,24 +60,27 @@ func (n *p2pNetwork) Broadcast(msg *genesisspectypes.SSVMessage) error {
 		return fmt.Errorf("operator ID is not ready")
 	}
 
-	encodedMsg, err := commons.EncodeNetworkMsg(msg)
+	// TODO: fork support
+	// encodedMsg, err := commons.EncodeNetworkMsg(msg)
+	// if err != nil {
+	// 	return errors.Wrap(err, "could not decode msg")
+	// }
+	// signature, err := n.operatorSigner.Sign(encodedMsg)
+	// if err != nil {
+	// 	return err
+	// }
+	// encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, n.operatorDataStore.GetOperatorID(), signature)
+
+	encodedMsg, err := msg.Encode()
 	if err != nil {
-		return errors.Wrap(err, "could not decode msg")
+		return errors.Wrap(err, "could not encode msg")
 	}
-
-	signature, err := n.operatorSigner.Sign(encodedMsg)
-	if err != nil {
-		return err
-	}
-
-	encodedMsg = commons.EncodeSignedSSVMessage(encodedMsg, n.operatorDataStore.GetOperatorID(), signature)
-
-	vpk := msg.GetID().GetPubKey()
-	topics := commons.ValidatorTopicID(vpk)
+	senderID := msg.SSVMessage.MsgID.GetSenderID()
+	topics := commons.CommitteeTopicID(senderID)
 
 	for _, topic := range topics {
 		if err := n.topicsCtrl.Broadcast(topic, encodedMsg, n.cfg.RequestTimeout); err != nil {
-			n.interfaceLogger.Debug("could not broadcast msg", fields.PubKey(vpk), zap.Error(err))
+			n.interfaceLogger.Debug("could not broadcast msg", fields.PubKey(senderID), zap.Error(err))
 			return errors.Wrap(err, "could not broadcast msg")
 		}
 	}

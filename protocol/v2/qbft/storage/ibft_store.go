@@ -5,7 +5,7 @@ import (
 
 	"go.uber.org/zap"
 
-	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 )
 
 // StoredInstance contains instance state alongside with a decided message (aggregated commits).

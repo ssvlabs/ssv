@@ -1,8 +1,8 @@
 package instance
 
 import (
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
-	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 )
 
 // Compact trims the given qbft.State down to the minimum required

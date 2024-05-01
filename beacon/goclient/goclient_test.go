@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -91,7 +91,7 @@ func mockClient(t *testing.T, ctx context.Context, serverURL string, commonTimeo
 		zap.NewNop(),
 		beacon.Options{
 			Context:        ctx,
-			Network:        beacon.NewNetwork(types.MainNetwork),
+			Network:        beacon.NewNetwork(spectypes.MainNetwork),
 			BeaconNodeAddr: serverURL,
 			CommonTimeout:  commonTimeout,
 			LongTimeout:    longTimeout,

@@ -3,8 +3,8 @@ package types
 import (
 	"encoding/json"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 )
 
 type EventType int
@@ -38,7 +38,7 @@ type TimeoutData struct {
 }
 
 type ExecuteDutyData struct {
-	Duty *types.BeaconDuty
+	Duty *spectypes.BeaconDuty
 }
 
 func (m *EventMsg) GetTimeoutData() (*TimeoutData, error) {

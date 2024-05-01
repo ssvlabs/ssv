@@ -11,9 +11,9 @@ import (
 	"github.com/bloxapp/ssv/e2e/logs_catcher/parser"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/protocol/v2/message"
-	"github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/e2e/logs_catcher/docker"
@@ -44,16 +44,16 @@ type logCondition struct {
 	role             string
 	slot             phase0.Slot
 	round            int
-	msgType          types.MsgType
-	consensusMsgType qbft.MessageType
-	signer           types.OperatorID
+	msgType          spectypes.MsgType
+	consensusMsgType specqbft.MessageType
+	signer           spectypes.OperatorID
 	error            string
 }
 
 type CorruptedShare struct {
-	ValidatorIndex  uint64           `json:"validator_index"`
-	ValidatorPubKey string           `json:"validator_pub_key"`
-	OperatorID      types.OperatorID `json:"operator_id"`
+	ValidatorIndex  uint64               `json:"validator_index"`
+	ValidatorPubKey string               `json:"validator_pub_key"`
+	OperatorID      spectypes.OperatorID `json:"operator_id"`
 }
 
 func VerifyBLSSignature(pctx context.Context, logger *zap.Logger, cli DockerCLI, share *CorruptedShare) error {
@@ -72,7 +72,7 @@ func VerifyBLSSignature(pctx context.Context, logger *zap.Logger, cli DockerCLI,
 	}
 	logger.Debug("Duty ID: ", zap.String("duty_id", dutyID))
 
-	committee := []*types.Operator{
+	committee := []*spectypes.Operator{
 		{OperatorID: 1},
 		{OperatorID: 2},
 		{OperatorID: 3},
@@ -111,18 +111,18 @@ func ParseAndExtractDutyInfo(conditionLog string, corruptedValidatorIndex string
 	return dutyID, dutySlot, nil
 }
 
-func DetermineLeader(dutySlot phase0.Slot, committee []*types.Operator) types.OperatorID {
-	leader := qbft.RoundRobinProposer(&qbft.State{
-		Share: &types.Share{
+func DetermineLeader(dutySlot phase0.Slot, committee []*spectypes.Operator) spectypes.OperatorID {
+	leader := specqbft.RoundRobinProposer(&specqbft.State{
+		Share: &spectypes.Share{
 			Committee: committee,
 		},
-		Height: qbft.Height(dutySlot),
-	}, qbft.FirstRound)
+		Height: specqbft.Height(dutySlot),
+	}, specqbft.FirstRound)
 
 	return leader
 }
 
-func ProcessLogs(ctx context.Context, logger *zap.Logger, cli DockerCLI, committee []*types.Operator, leader types.OperatorID, dutyID string, dutySlot phase0.Slot, corruptedOperator types.OperatorID) error {
+func ProcessLogs(ctx context.Context, logger *zap.Logger, cli DockerCLI, committee []*spectypes.Operator, leader spectypes.OperatorID, dutyID string, dutySlot phase0.Slot, corruptedOperator spectypes.OperatorID) error {
 	for _, operator := range committee {
 		target := fmt.Sprintf("ssv-node-%d", operator.OperatorID)
 		if operator.OperatorID == corruptedOperator {
@@ -140,57 +140,57 @@ func ProcessLogs(ctx context.Context, logger *zap.Logger, cli DockerCLI, committ
 	return nil
 }
 
-func processCorruptedOperatorLogs(ctx context.Context, logger *zap.Logger, cli DockerCLI, dutyID string, dutySlot phase0.Slot, corruptedOperator types.OperatorID, target string) error {
+func processCorruptedOperatorLogs(ctx context.Context, logger *zap.Logger, cli DockerCLI, dutyID string, dutySlot phase0.Slot, corruptedOperator spectypes.OperatorID, target string) error {
 	successConditions := []string{
 		reconstructSignaturesSuccess,
 		fmt.Sprintf(dutyIDField, dutyID),
 	}
 	failConditions := []string{
-		fmt.Sprintf(roleField, types.BNRoleAttester.String()),
+		fmt.Sprintf(roleField, spectypes.BNRoleAttester.String()),
 		fmt.Sprintf(slotField, dutySlot),
-		fmt.Sprintf(msgTypeField, message.MsgTypeToString(types.SSVPartialSignatureMsgType)),
+		fmt.Sprintf(msgTypeField, message.MsgTypeToString(spectypes.SSVPartialSignatureMsgType)),
 		fmt.Sprintf(errorField, reconstructSignatureErr),
 	}
 	return matchDualConditionLog(ctx, logger, cli, corruptedOperator, successConditions, failConditions, target)
 }
 
-func processNonCorruptedOperatorLogs(ctx context.Context, logger *zap.Logger, cli DockerCLI, leader types.OperatorID, dutySlot phase0.Slot, corruptedOperator types.OperatorID, target string) error {
+func processNonCorruptedOperatorLogs(ctx context.Context, logger *zap.Logger, cli DockerCLI, leader spectypes.OperatorID, dutySlot phase0.Slot, corruptedOperator spectypes.OperatorID, target string) error {
 	var conditions []logCondition
 	if leader == corruptedOperator {
 		conditions = []logCondition{
 			{
-				role:             types.BNRoleAttester.String(),
+				role:             spectypes.BNRoleAttester.String(),
 				slot:             dutySlot,
 				round:            1,
-				msgType:          types.SSVConsensusMsgType,
-				consensusMsgType: qbft.ProposalMsgType,
+				msgType:          spectypes.SSVConsensusMsgType,
+				consensusMsgType: specqbft.ProposalMsgType,
 				signer:           corruptedOperator,
 				error:            verifySignatureErr,
 			},
 			{
-				role:             types.BNRoleAttester.String(),
+				role:             spectypes.BNRoleAttester.String(),
 				slot:             dutySlot,
 				round:            1,
-				msgType:          types.SSVConsensusMsgType,
-				consensusMsgType: qbft.PrepareMsgType,
+				msgType:          spectypes.SSVConsensusMsgType,
+				consensusMsgType: specqbft.PrepareMsgType,
 				signer:           corruptedOperator,
 				error:            pastRoundErr,
 			},
 			{
-				role:             types.BNRoleAttester.String(),
+				role:             spectypes.BNRoleAttester.String(),
 				slot:             dutySlot,
 				round:            2,
-				msgType:          types.SSVConsensusMsgType,
-				consensusMsgType: qbft.RoundChangeMsgType,
+				msgType:          spectypes.SSVConsensusMsgType,
+				consensusMsgType: specqbft.RoundChangeMsgType,
 				signer:           corruptedOperator,
 				error:            verifySignatureErr,
 			},
 			{
-				role:             types.BNRoleAttester.String(),
+				role:             spectypes.BNRoleAttester.String(),
 				slot:             dutySlot,
 				round:            2,
-				msgType:          types.SSVConsensusMsgType,
-				consensusMsgType: qbft.PrepareMsgType,
+				msgType:          spectypes.SSVConsensusMsgType,
+				consensusMsgType: specqbft.PrepareMsgType,
 				signer:           corruptedOperator,
 				error:            verifySignatureErr,
 			},
@@ -199,20 +199,20 @@ func processNonCorruptedOperatorLogs(ctx context.Context, logger *zap.Logger, cl
 	} else {
 		conditions = []logCondition{
 			{
-				role:             types.BNRoleAttester.String(),
+				role:             spectypes.BNRoleAttester.String(),
 				slot:             dutySlot,
 				round:            1,
-				msgType:          types.SSVConsensusMsgType,
-				consensusMsgType: qbft.PrepareMsgType,
+				msgType:          spectypes.SSVConsensusMsgType,
+				consensusMsgType: specqbft.PrepareMsgType,
 				signer:           corruptedOperator,
 				error:            verifySignatureErr,
 			},
 			{
-				role:             types.BNRoleAttester.String(),
+				role:             spectypes.BNRoleAttester.String(),
 				slot:             dutySlot,
 				round:            1,
-				msgType:          types.SSVConsensusMsgType,
-				consensusMsgType: qbft.CommitMsgType,
+				msgType:          spectypes.SSVConsensusMsgType,
+				consensusMsgType: specqbft.CommitMsgType,
 				signer:           corruptedOperator,
 				error:            verifySignatureErr,
 			},
@@ -258,7 +258,7 @@ func matchSingleConditionLog(ctx context.Context, logger *zap.Logger, cli Docker
 	return nil
 }
 
-func matchDualConditionLog(ctx context.Context, logger *zap.Logger, cli DockerCLI, corruptedOperator types.OperatorID, success []string, fail []string, target string) error {
+func matchDualConditionLog(ctx context.Context, logger *zap.Logger, cli DockerCLI, corruptedOperator spectypes.OperatorID, success []string, fail []string, target string) error {
 	res, err := docker.DockerLogs(ctx, cli, target, "")
 	if err != nil {
 		return err
@@ -326,12 +326,12 @@ func extractDutySlot(dutyID string) (phase0.Slot, error) {
 	return 0, fmt.Errorf("no duty slot found for %v", dutyID)
 }
 
-func extractSigners(parsedData logs.ParsedLine) ([]types.OperatorID, error) {
+func extractSigners(parsedData logs.ParsedLine) ([]spectypes.OperatorID, error) {
 	if signers, ok := parsedData["signers"].([]interface{}); ok {
-		signerIDs := make([]types.OperatorID, len(signers))
+		signerIDs := make([]spectypes.OperatorID, len(signers))
 		for i, signer := range signers {
 			if signerNum, ok := signer.(float64); ok { // JSON numbers are parsed as float64
-				signerIDs[i] = types.OperatorID(signerNum)
+				signerIDs[i] = spectypes.OperatorID(signerNum)
 			} else {
 				return nil, fmt.Errorf("failed to parse signer to int: %v", signer)
 			}
