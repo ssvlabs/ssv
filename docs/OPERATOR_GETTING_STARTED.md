@@ -1,4 +1,4 @@
-[<img src="./resources/bloxstaking_header_image.png" >](https://www.bloxstaking.com/)
+[<img src="./resources/ssv_header_image.png" >](https://www.ssvlabs.io/)
 
 <br>
 <br>
