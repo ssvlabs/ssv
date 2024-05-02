@@ -103,8 +103,28 @@ type ConsensusMetrics struct {
 	dutyFullFlowCumulativeDuration time.Duration
 }
 
+// create function that will convert RunnerRole to string
+func String(r spectypes.RunnerRole) string {
+	switch r {
+	case spectypes.RoleCommittee:
+		return "RoleCommittee"
+	case spectypes.RoleAggregator:
+		return "RoleAggregator"
+	case spectypes.RoleProposer:
+		return "RoleProposer"
+	case spectypes.RoleSyncCommitteeContribution:
+		return "RoleSyncCommitteeContribution"
+	case spectypes.RoleValidatorRegistration:
+		return "RoleValidatorRegistration"
+	case spectypes.RoleVoluntaryExit:
+		return "RoleVoluntaryExit"
+	default:
+		return "RoleUnknown"
+	}
+}
+
 func NewConsensusMetrics(role spectypes.RunnerRole) ConsensusMetrics {
-	values := []string{role.String()}
+	values := []string{String(role)}
 	return ConsensusMetrics{
 		preConsensus:            metricsPreConsensusDuration.WithLabelValues(values...),
 		consensus:               metricsConsensusDuration.WithLabelValues(values...),

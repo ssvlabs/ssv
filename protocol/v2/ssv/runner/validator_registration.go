@@ -34,7 +34,7 @@ type ValidatorRegistrationRunner struct {
 func NewValidatorRegistrationRunner(
 	beaconNetwork spectypes.BeaconNetwork,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
-	qbftController *controller.Controller, // TODO it's not in spec
+	qbftController *controller.Controller,
 	beacon specssv.BeaconNode,
 	network specssv.Network,
 	signer spectypes.BeaconSigner,
