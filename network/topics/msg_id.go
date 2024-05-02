@@ -6,11 +6,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/network/commons"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/network/commons"
 )
 
 const (
@@ -121,7 +123,7 @@ func (handler *msgIDHandler) MsgID(logger *zap.Logger) func(pmsg *ps_pb.Message)
 }
 
 func (handler *msgIDHandler) pubsubMsgToMsgID(msg []byte) string {
-	decodedMsg, _, _, err := commons.DecodeSignedSSVMessage(msg)
+	decodedMsg, _, _, err := spectypes.DecodeSignedSSVMessage(msg)
 	if err != nil {
 		// todo: should err here or just log and let the decode function err?
 	} else {

@@ -121,6 +121,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 			// If no proposal was accepted for the current round, skip prepare & commit messages
 			// for the current height and round.
 			filter = func(m *queue.DecodedSSVMessage) bool {
+
 				sm, ok := m.Body.(*specqbft.SignedMessage)
 				if !ok {
 					return true

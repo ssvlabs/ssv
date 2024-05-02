@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
 
 	"github.com/bloxapp/ssv/logging"
@@ -48,8 +49,11 @@ func RunTimeout(t *testing.T, test *SpecTest) {
 		for i, msg := range test.OutputMessages {
 			r1, _ := msg.GetRoot()
 
+			ssvMsg := &spectypes.SSVMessage{}
+			require.NoError(t, ssvMsg.Decode(broadcastedMsgs[i].Data))
+
 			msg2 := &qbft.SignedMessage{}
-			require.NoError(t, msg2.Decode(broadcastedMsgs[i].Data))
+			require.NoError(t, msg2.Decode(ssvMsg.Data))
 			r2, _ := msg2.GetRoot()
 
 			require.EqualValuesf(t, r1, r2, fmt.Sprintf("output msg %d roots not equal", i))

@@ -2,6 +2,9 @@ package ekm
 
 import (
 	"encoding/hex"
+	"testing"
+	"time"
+
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
@@ -18,14 +21,13 @@ import (
 	"github.com/prysmaticlabs/go-bitfield"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
-	"testing"
-	"time"
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/keys"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
 
@@ -686,6 +688,8 @@ func TestSignRoot(t *testing.T) {
 	require.NoError(t, bls.Init(bls.BLS12_381))
 
 	km := testKeyManager(t, nil)
+	opPubKey, _, err := rsaencryption.GenerateKeys()
+	require.NoError(t, err)
 
 	t.Run("pk 1", func(t *testing.T) {
 		pk := &bls.PublicKey{}
@@ -710,10 +714,13 @@ func TestSignRoot(t *testing.T) {
 			Message:   msg,
 		}
 
-		err = signed.GetSignature().VerifyByOperators(signed, networkconfig.TestNetwork.Domain, spectypes.QBFTSignatureType, []*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}})
-		// res, err := signed.VerifySig(pk)
+		err = signed.GetSignature().VerifyByOperators(
+			signed,
+			networkconfig.TestNetwork.Domain,
+			spectypes.QBFTSignatureType,
+			[]*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), SharePubKey: pk.Serialize(), SSVOperatorPubKey: opPubKey}},
+		)
 		require.NoError(t, err)
-		// require.True(t, res)
 	})
 
 	t.Run("pk 2", func(t *testing.T) {
@@ -739,10 +746,13 @@ func TestSignRoot(t *testing.T) {
 			Message:   msg,
 		}
 
-		err = signed.GetSignature().VerifyByOperators(signed, networkconfig.TestNetwork.Domain, spectypes.QBFTSignatureType, []*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), PubKey: pk.Serialize()}})
-		// res, err := signed.VerifySig(pk)
+		err = signed.GetSignature().VerifyByOperators(
+			signed,
+			networkconfig.TestNetwork.Domain,
+			spectypes.QBFTSignatureType,
+			[]*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), SharePubKey: pk.Serialize(), SSVOperatorPubKey: opPubKey}},
+		)
 		require.NoError(t, err)
-		// require.True(t, res)
 	})
 }
 

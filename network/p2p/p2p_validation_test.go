@@ -22,7 +22,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/message/validation"
-	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
 
@@ -68,11 +67,11 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 		}
 		messageValidators[i].ValidateFunc = func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 			peer := vNet.NodeByPeerID(p)
-			rawMsgPayload, _, _, err := commons.DecodeSignedSSVMessage(pmsg.Data)
+			signedSSVMsg := &spectypes.SignedSSVMessage{}
+			require.NoError(t, signedSSVMsg.Decode(pmsg.GetData()))
+			msg, err := signedSSVMsg.GetSSVMessageFromData()
 			require.NoError(t, err)
 
-			msg, err := commons.DecodeNetworkMsg(rawMsgPayload)
-			require.NoError(t, err)
 			decodedMsg, err := queue.DecodeSSVMessage(msg)
 			require.NoError(t, err)
 			pmsg.ValidatorData = decodedMsg
@@ -129,8 +128,8 @@ func TestP2pNetwork_MessageValidation(t *testing.T) {
 				roleBroadcasts[role]++
 				mu.Unlock()
 
-				msg := dummyMsg(t, validators[rand.Intn(len(validators))], int(height.Add(1)), role)
-				err := node.Broadcast(msg)
+				msgID, msg := dummyMsg(t, validators[rand.Intn(len(validators))], int(height.Add(1)), role)
+				err := node.Broadcast(msgID, msg)
 				if err != nil {
 					return err
 				}
@@ -275,7 +274,7 @@ func (v *MockMessageValidator) ValidatePubsubMessage(ctx context.Context, p peer
 	return v.ValidateFunc(ctx, p, pmsg)
 }
 
-func (v *MockMessageValidator) ValidateSSVMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, validation.Descriptor, error) {
+func (v *MockMessageValidator) ValidateSSVMessage(ssvMessage *queue.DecodedSSVMessage) (*queue.DecodedSSVMessage, validation.Descriptor, error) {
 	panic("not implemented") // TODO: Implement
 }
 
@@ -287,8 +286,8 @@ type VirtualNode struct {
 	PeerScores *hashmap.Map[NodeIndex, *pubsub.PeerScoreSnapshot]
 }
 
-func (n *VirtualNode) Broadcast(msg *spectypes.SSVMessage) error {
-	return n.Network.Broadcast(msg)
+func (n *VirtualNode) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedSSVMessage) error {
+	return n.Network.Broadcast(msgID, msg)
 }
 
 // VirtualNet is a utility to create & interact with a virtual network of nodes.

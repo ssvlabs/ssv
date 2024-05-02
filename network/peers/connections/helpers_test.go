@@ -17,7 +17,7 @@ type TestData struct {
 	NetworkPrivateKey libp2pcrypto.PrivKey
 	SenderPrivateKey  keys.OperatorPrivateKey
 
-	Signature []byte
+	Signature [256]byte
 
 	SenderPeerID    peer.ID
 	RecipientPeerID peer.ID

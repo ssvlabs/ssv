@@ -23,12 +23,12 @@ type MockMessageEvent struct {
 	From     peer.ID
 	Topic    string
 	Protocol string
-	Msg      *spectypes.SSVMessage
+	Msg      *spectypes.SignedSSVMessage
 }
 
 // testNetworkHelpers consist of helper functions for tests
 type testNetworkHelpers interface {
-	SendStreamMessage(protocol string, pi peer.ID, msg *spectypes.SSVMessage) error
+	SendStreamMessage(protocol string, pi peer.ID, msg *spectypes.SignedSSVMessage) error
 	Self() peer.ID
 	PushMsg(e MockMessageEvent)
 	AddPeers(pk spectypes.ValidatorPK, toAdd ...TestNetwork)
@@ -68,10 +68,10 @@ type mockNetwork struct {
 	peers     map[peer.ID]TestNetwork
 
 	messagesLock sync.Locker
-	messages     map[string]*spectypes.SSVMessage
+	messages     map[string]*spectypes.SignedSSVMessage
 
 	broadcastMessagesLock sync.Locker
-	broadcastMessages     []spectypes.SSVMessage
+	broadcastMessages     []spectypes.SignedSSVMessage
 
 	lastDecidedHandler TestEventHandler
 	getHistoryHandler  TestEventHandler
@@ -98,7 +98,7 @@ func NewMockNetwork(logger *zap.Logger, self peer.ID, inBufSize int) TestNetwork
 		inBufSize:              inBufSize,
 		inPubsub:               make(chan MockMessageEvent, inBufSize),
 		inStream:               make(chan MockMessageEvent, inBufSize),
-		messages:               make(map[string]*spectypes.SSVMessage),
+		messages:               make(map[string]*spectypes.SignedSSVMessage),
 		lastDecidedReady:       make(chan struct{}),
 		getHistoryReady:        make(chan struct{}),
 		topicsLock:             &sync.Mutex{},
@@ -201,8 +201,8 @@ func (m *mockNetwork) Peers(pk spectypes.ValidatorPK) ([]peer.ID, error) {
 	return peers, nil
 }
 
-func (m *mockNetwork) Broadcast(msg *spectypes.SSVMessage) error {
-	pk := msg.GetID().GetPubKey()
+func (m *mockNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedSSVMessage) error {
+	pk := msgID.GetPubKey()
 	spk := hex.EncodeToString(pk)
 	topic := spk
 
@@ -275,12 +275,23 @@ func (m *mockNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
 		MsgType: message.SSVSyncMsgType,
 	}
 
+	encodedMsg, err := msg.Encode()
+	if err != nil {
+		return err
+	}
+
+	signedMsg := &spectypes.SignedSSVMessage{
+		Signature:  [256]byte{},
+		OperatorID: 1,
+		Data:       encodedMsg,
+	}
+
 	m.topicsLock.Lock()
 	ids := m.topics[topic]
 	m.topicsLock.Unlock()
 
 	for _, pi := range ids {
-		if err := m.SendStreamMessage("last_decided", pi, msg); err != nil {
+		if err := m.SendStreamMessage("last_decided", pi, signedMsg); err != nil {
 			return err
 		}
 	}
@@ -310,12 +321,23 @@ func (m *mockNetwork) SyncHighestRoundChange(mid spectypes.MessageID, height spe
 		MsgType: message.SSVSyncMsgType,
 	}
 
+	encodedMsg, err := msg.Encode()
+	if err != nil {
+		return err
+	}
+
+	signedMsg := &spectypes.SignedSSVMessage{
+		Signature:  [256]byte{},
+		OperatorID: 1,
+		Data:       encodedMsg,
+	}
+
 	m.topicsLock.Lock()
 	ids := m.topics[topic]
 	m.topicsLock.Unlock()
 
 	for _, pi := range ids {
-		if err := m.SendStreamMessage("last_changeround", pi, msg); err != nil {
+		if err := m.SendStreamMessage("last_changeround", pi, signedMsg); err != nil {
 			return err
 		}
 	}
@@ -323,7 +345,7 @@ func (m *mockNetwork) SyncHighestRoundChange(mid spectypes.MessageID, height spe
 	return nil
 }
 
-func (m *mockNetwork) SendStreamMessage(protocol string, pi peer.ID, msg *spectypes.SSVMessage) error {
+func (m *mockNetwork) SendStreamMessage(protocol string, pi peer.ID, msg *spectypes.SignedSSVMessage) error {
 	e := MockMessageEvent{
 		From:     m.self,
 		Protocol: protocol,
@@ -383,7 +405,7 @@ func (m *mockNetwork) AddPeers(pk spectypes.ValidatorPK, toAdd ...TestNetwork) {
 	m.topicsLock.Unlock()
 }
 
-func (m *mockNetwork) GetBroadcastMessages() []spectypes.SSVMessage {
+func (m *mockNetwork) GetBroadcastMessages() []spectypes.SignedSSVMessage {
 	m.broadcastMessagesLock.Lock()
 	defer m.broadcastMessagesLock.Unlock()
 

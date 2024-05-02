@@ -6,9 +6,10 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
-	"github.com/stretchr/testify/require"
 	"sync"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func Test_VerifyRegularSigWithOpenSSL(t *testing.T) {
@@ -46,11 +47,11 @@ func Test_VerifyOpenSSLWithOpenSSL(t *testing.T) {
 
 	pub := priv.Public().(*publicKey)
 
-	require.NoError(t, VerifyRSA(pub, msg, sig))
+	require.NoError(t, VerifyRSA(pub, msg, sig[:]))
 
 	// Verify with Go RSA.
 	hash := sha256.Sum256(msg)
-	err = rsa.VerifyPKCS1v15(pub.pubKey, crypto.SHA256, hash[:], sig)
+	err = rsa.VerifyPKCS1v15(pub.pubKey, crypto.SHA256, hash[:], sig[:])
 	require.NoError(t, err)
 }
 
@@ -73,7 +74,7 @@ func Test_ConversionError(t *testing.T) {
 	pub := priv2.Public().(*publicKey)
 
 	pub.pubKey.N = nil
-	require.Error(t, VerifyRSA(pub, msg, sig))
+	require.Error(t, VerifyRSA(pub, msg, sig[:]))
 }
 
 func Test_Caches(t *testing.T) {
@@ -86,7 +87,7 @@ func Test_Caches(t *testing.T) {
 
 	pub := priv.Public().(*publicKey)
 
-	require.NoError(t, VerifyRSA(pub, msg, sig))
+	require.NoError(t, VerifyRSA(pub, msg, sig[:]))
 
 	// should sign using cache
 	require.NotNil(t, priv.cachedPrivKey)
@@ -96,5 +97,5 @@ func Test_Caches(t *testing.T) {
 
 	require.NotNil(t, pub.cachedPubkey)
 
-	require.NoError(t, VerifyRSA(pub, msg, sig2))
+	require.NoError(t, VerifyRSA(pub, msg, sig2[:]))
 }

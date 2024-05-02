@@ -19,7 +19,11 @@ func newQBFTConfig(domain spectypes.DomainType) qbftConfig {
 	}
 }
 
-func (q qbftConfig) GetSigner() spectypes.SSVSigner {
+func (q qbftConfig) GetShareSigner() spectypes.ShareSigner {
+	panic("should not be called")
+}
+
+func (q qbftConfig) GetOperatorSigner() spectypes.OperatorSigner {
 	panic("should not be called")
 }
 

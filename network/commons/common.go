@@ -9,10 +9,11 @@ import (
 	"time"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/cespare/xxhash/v2"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/protocol"
+
+	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 )
 
 const (
@@ -37,27 +38,6 @@ const (
 	operatorIDOffset = signatureOffset + signatureSize
 	MessageOffset    = operatorIDOffset + operatorIDSize
 )
-
-// EncodeSignedSSVMessage serializes the message, op id and signature into bytes
-func EncodeSignedSSVMessage(message []byte, operatorID spectypes.OperatorID, signature []byte) []byte {
-	b := make([]byte, signatureSize+operatorIDSize+len(message))
-	copy(b[signatureOffset:], signature)
-	binary.LittleEndian.PutUint64(b[operatorIDOffset:], operatorID)
-	copy(b[MessageOffset:], message)
-	return b
-}
-
-// DecodeSignedSSVMessage deserializes signed message bytes messsage, op id and a signature
-func DecodeSignedSSVMessage(encoded []byte) ([]byte, spectypes.OperatorID, []byte, error) {
-	if len(encoded) < MessageOffset {
-		return nil, 0, nil, fmt.Errorf("unexpected encoded message size of %d", len(encoded))
-	}
-
-	message := encoded[MessageOffset:]
-	operatorID := binary.LittleEndian.Uint64(encoded[operatorIDOffset : operatorIDOffset+operatorIDSize])
-	signature := encoded[signatureOffset : signatureOffset+signatureSize]
-	return message, operatorID, signature, nil
-}
 
 // SubnetTopicID returns the topic to use for the given subnet
 func SubnetTopicID(subnet int) string {
@@ -140,8 +120,7 @@ func EncodeNetworkMsg(msg *spectypes.SSVMessage) ([]byte, error) {
 // DecodeNetworkMsg decodes network message
 func DecodeNetworkMsg(data []byte) (*spectypes.SSVMessage, error) {
 	msg := spectypes.SSVMessage{}
-	err := msg.Decode(data)
-	if err != nil {
+	if err := msg.Decode(data); err != nil {
 		return nil, err
 	}
 	return &msg, nil

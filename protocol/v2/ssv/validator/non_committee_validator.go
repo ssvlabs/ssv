@@ -52,7 +52,7 @@ func (ncv *NonCommitteeValidator) ProcessMessage(logger *zap.Logger, msg *queue.
 	switch msg.GetType() {
 	case spectypes.SSVConsensusMsgType:
 		signedMsg := &specqbft.SignedMessage{}
-		if err := signedMsg.Decode(msg.GetData()); err != nil {
+		if err := signedMsg.Decode(msg.SSVMessage.GetData()); err != nil {
 			logger.Debug("❗ failed to get consensus Message from network Message", zap.Error(err))
 			return
 		}

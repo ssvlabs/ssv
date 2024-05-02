@@ -6,6 +6,7 @@ import (
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/storage/kv"
+	"github.com/bloxapp/ssv/utils/rsaencryption"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -214,9 +215,15 @@ func GenerateNodes(cnt int) (map[spectypes.OperatorID]*bls.SecretKey, []*spectyp
 		sk := &bls.SecretKey{}
 		sk.SetByCSPRNG()
 
+		opPubKey, _, err := rsaencryption.GenerateKeys()
+		if err != nil {
+			panic(err)
+		}
+
 		nodes = append(nodes, &spectypes.Operator{
-			OperatorID: spectypes.OperatorID(i),
-			PubKey:     sk.GetPublicKey().Serialize(),
+			OperatorID:        spectypes.OperatorID(i),
+			SharePubKey:       sk.GetPublicKey().Serialize(),
+			SSVOperatorPubKey: opPubKey,
 		})
 		sks[spectypes.OperatorID(i)] = sk
 	}
