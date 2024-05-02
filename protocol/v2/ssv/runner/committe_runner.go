@@ -352,6 +352,10 @@ func (r *CommitteeRunner) GetOperatorSigner() spectypes.OperatorSigner {
 	return r.operatorSigner
 }
 
+func (r *CommitteeRunner) GetRunnerRole() spectypes.RunnerRole {
+	return r.BaseRunner.RunnerRoleType
+}
+
 func constructAttestationData(vote *spectypes.BeaconVote, duty *spectypes.BeaconDuty) *phase0.AttestationData {
 	return &phase0.AttestationData{
 		Slot:            duty.DutySlot(),

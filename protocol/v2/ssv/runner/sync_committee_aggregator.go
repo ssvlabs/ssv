@@ -46,7 +46,7 @@ func NewSyncCommitteeAggregatorRunner(
 		BaseRunner: &BaseRunner{
 			RunnerRoleType:     spectypes.RoleSyncCommitteeContribution,
 			BeaconNetwork:      beaconNetwork,
-			Share:              *share,
+			Share:              share,
 			QBFTController:     qbftController,
 			highestDecidedSlot: highestDecidedSlot,
 		},
@@ -415,6 +415,10 @@ func (r *SyncCommitteeAggregatorRunner) GetSigner() spectypes.BeaconSigner {
 
 func (r *SyncCommitteeAggregatorRunner) GetOperatorSigner() spectypes.OperatorSigner {
 	return r.operatorSigner
+}
+
+func (r *SyncCommitteeAggregatorRunner) GetRunnerRole() spectypes.RunnerRole {
+	return r.BaseRunner.RunnerRoleType
 }
 
 // Encode returns the encoded struct in bytes or error

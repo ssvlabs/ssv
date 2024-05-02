@@ -7,7 +7,9 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
 // type Entity interface {
@@ -26,7 +28,7 @@ type Committee struct {
 }
 
 // StartDuty starts a new duty for the given slot
-func (c *Committee) StartDuty(duty *spectypes.CommitteeDuty) error {
+func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
 	if _, exists := c.Runners[duty.Slot]; exists {
 		return errors.New(fmt.Sprintf("CommitteeRunner for slot %d already exists", duty.Slot))
 	}
@@ -37,7 +39,7 @@ func (c *Committee) StartDuty(duty *spectypes.CommitteeDuty) error {
 	// Stop validators with old duties
 	c.stopDuties(validatorToStopMap)
 	c.updateAttestingSlotMap(duty)
-	return c.Runners[duty.Slot].StartNewDuty(duty)
+	return c.Runners[duty.Slot].StartNewDuty(logger, duty)
 }
 
 func (c *Committee) stopDuties(validatorToStopMap map[phase0.Slot]spectypes.ValidatorPK) {
@@ -72,26 +74,31 @@ func FilterCommitteeDuty(duty *spectypes.CommitteeDuty, slotMap map[spectypes.Va
 }
 
 // ProcessMessage processes Network Message of all types
-func (c *Committee) PushMessage(signedSSVMessage *queue.DecodedSSVMessage) error {
-	switch signedSSVMessage.GetType() {
+func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage) error {
+	switch msg.GetType() {
 	case spectypes.SSVConsensusMsgType:
 		qbftMsg := &specqbft.Message{}
-		if err := qbftMsg.Decode(signedSSVMessage.GetData()); err != nil {
+		if err := qbftMsg.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get consensus Message from network Message")
 		}
 		runner := c.Runners[phase0.Slot(qbftMsg.Height)]
-		// TODO: check if runner is nil
-		return runner.ProcessConsensus(signedSSVMessage)
+		if runner == nil {
+			return errors.New("could not get duty runner for msg ID")
+		}
+		return runner.ProcessConsensus(logger, msg.SignedSSVMessage)
 	case spectypes.SSVPartialSignatureMsgType:
 		pSigMessages := &spectypes.PartialSignatureMessages{}
-		if err := pSigMessages.Decode(signedSSVMessage.GetData()); err != nil {
+		if err := pSigMessages.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get post consensus Message from network Message")
 		}
-		if pSigMessages.Type == spectypes.PostConsensusPartialSig {
-			runner := c.Runners[pSigMessages.Slot]
-			// TODO: check if runner is nil
-			return runner.ProcessPostConsensus(pSigMessages)
+		if pSigMessages.Type != spectypes.PostConsensusPartialSig {
+			return errors.New("invalid non-post consensus message type")
 		}
+		runner := c.Runners[pSigMessages.Slot]
+		if runner == nil {
+			return errors.New("could not get duty runner for msg ID")
+		}
+		return runner.ProcessPostConsensus(logger, pSigMessages)
 	default:
 		return errors.New("unknown msg")
 	}

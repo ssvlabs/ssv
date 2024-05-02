@@ -14,7 +14,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"

@@ -3,11 +3,11 @@ package validator
 import (
 	"sync/atomic"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/pkg/errors"
 	"github.com/ssvlabs/ssv-spec-pre-cc/p2p"
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	"go.uber.org/zap"
 
@@ -16,7 +16,7 @@ import (
 
 // Start starts a Validator.
 func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
-	logger = logger.Named(logging.NameValidator).With(fields.PubKey(v.Share.ValidatorPubKey))
+	logger = logger.Named(logging.NameValidator).With(fields.PubKey(v.Share.ValidatorPubKey[:]))
 
 	if !atomic.CompareAndSwapUint32(&v.state, uint32(NotStarted), uint32(Started)) {
 		return false, nil
@@ -27,10 +27,10 @@ func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
 		return false, errors.New("network does not support subscription")
 	}
 	for role, dutyRunner := range v.DutyRunners {
-		logger := logger.With(fields.Role(role))
+		logger := logger.With(fields.BeaconRole(role))
 		share := dutyRunner.GetBaseRunner().Share
 		if share == nil { // TODO: handle missing share?
-			logger.Warn("❗ share is missing", fields.Role(role))
+			logger.Warn("❗ share is missing", fields.BeaconRole(role))
 			continue
 		}
 		identifier := spectypes.NewMsgID(types.GetDefaultDomain(), dutyRunner.GetBaseRunner().Share.ValidatorPubKey, role)

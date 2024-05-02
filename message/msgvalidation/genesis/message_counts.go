@@ -5,8 +5,8 @@ package msgvalidation
 import (
 	"fmt"
 
-	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
 // MessageCounts tracks the number of various message types received for validation.

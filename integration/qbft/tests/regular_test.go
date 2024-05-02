@@ -3,9 +3,9 @@ package tests
 import (
 	"testing"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	protocolstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"github.com/stretchr/testify/require"
 )
 

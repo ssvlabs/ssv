@@ -201,6 +201,10 @@ func (r *ValidatorRegistrationRunner) GetOperatorSigner() spectypes.OperatorSign
 	return r.operatorSigner
 }
 
+func (r *ValidatorRegistrationRunner) GetRunnerRole() spectypes.RunnerRole {
+	return r.BaseRunner.RunnerRoleType
+}
+
 // Encode returns the encoded struct in bytes or error
 func (r *ValidatorRegistrationRunner) Encode() ([]byte, error) {
 	return json.Marshal(r)

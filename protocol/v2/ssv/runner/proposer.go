@@ -278,7 +278,7 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 
 		blockSummary, summarizeErr := summarizeBlock(blk)
 		logger.Info("✅ successfully submitted block proposal",
-			fields.Slot(signedMsg.GetSlot()),
+			fields.Slot(signedMsg.Slot),
 			fields.Height(r.BaseRunner.QBFTController.Height),
 			fields.Round(r.GetState().RunningInstance.State.Round),
 			zap.String("block_hash", blockSummary.Hash.String()),
@@ -399,6 +399,10 @@ func (r *ProposerRunner) GetSigner() spectypes.BeaconSigner {
 
 func (r *ProposerRunner) GetOperatorSigner() spectypes.OperatorSigner {
 	return r.operatorSigner
+}
+
+func (r *ProposerRunner) GetRunnerRole() spectypes.RunnerRole {
+	return r.BaseRunner.RunnerRoleType
 }
 
 // Encode returns the encoded struct in bytes or error

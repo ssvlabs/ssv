@@ -9,7 +9,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
 
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
 var ErrEntryNotFound = errors.New("not found")

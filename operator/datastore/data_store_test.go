@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 )

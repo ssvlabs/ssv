@@ -212,6 +212,10 @@ func (r *VoluntaryExitRunner) GetOperatorSigner() spectypes.OperatorSigner {
 	return r.operatorSigner
 }
 
+func (r *VoluntaryExitRunner) GetRunnerRole() spectypes.RunnerRole {
+	return r.BaseRunner.RunnerRoleType
+}
+
 // Encode returns the encoded struct in bytes or error
 func (r *VoluntaryExitRunner) Encode() ([]byte, error) {
 	return json.Marshal(r)

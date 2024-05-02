@@ -22,6 +22,7 @@ type Getters interface {
 	GetSigner() spectypes.BeaconSigner
 	GetOperatorSigner() spectypes.OperatorSigner
 	GetNetwork() specssv.Network
+	GetRunnerRole() spectypes.RunnerRole
 }
 
 type Runner interface {

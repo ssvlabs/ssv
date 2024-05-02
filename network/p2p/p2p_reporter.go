@@ -6,7 +6,7 @@ import (
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/network/commons"
 
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
 
 	ssvpeers "github.com/bloxapp/ssv/network/peers"

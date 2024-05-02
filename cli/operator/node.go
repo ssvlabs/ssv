@@ -10,12 +10,12 @@ import (
 	"os"
 	"time"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/operator/controller"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/api/handlers"
@@ -268,14 +268,17 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.SSVOptions.ValidatorOptions.DutyRoles = []spectypes.BeaconRole{spectypes.BNRoleAttester} // TODO could be better to set in other place
 
-		storageRoles := []spectypes.BeaconRole{
-			spectypes.BNRoleAttester,
-			spectypes.BNRoleProposer,
-			spectypes.BNRoleAggregator,
-			spectypes.BNRoleSyncCommittee,
-			spectypes.BNRoleSyncCommitteeContribution,
-			spectypes.BNRoleValidatorRegistration,
-			spectypes.BNRoleVoluntaryExit,
+		// TODO: fork support
+		storageRoles := []types.RunnerRole{
+			types.RoleProposer,
+			types.RoleAggregator,
+			types.RoleSyncCommitteeContribution,
+			types.RoleValidatorRegistration,
+			types.RoleVoluntaryExit,
+
+			// Genesis:
+			types.RoleAttester,
+			types.RoleSyncCommittee,
 		}
 		storageMap := ibftstorage.NewStores()
 

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/patrickmn/go-cache"
-	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/exporter/api"
@@ -19,7 +19,7 @@ import (
 func NewStreamPublisher(logger *zap.Logger, ws api.WebSocketServer) controller.NewDecidedHandler {
 	c := cache.New(time.Minute, time.Minute*3/2)
 	feed := ws.BroadcastFeed()
-	return func(msg *specqbft.SignedMessage) {
+	return func(msg *genesisspecqbft.SignedMessage) {
 		identifier := hex.EncodeToString(msg.Message.Identifier)
 		key := fmt.Sprintf("%s:%d:%d", identifier, msg.Message.Height, len(msg.Signers))
 		_, ok := c.Get(key)

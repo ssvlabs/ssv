@@ -11,12 +11,12 @@ import (
 	eth2client "github.com/attestantio/go-eth2-client"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"github.com/sourcegraph/conc/pool"
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/beacon/goclient"
@@ -379,7 +379,7 @@ func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []spectypes.Duty) {
 // loggerWithDutyContext returns an instance of logger with the given duty's information
 func (s *Scheduler) loggerWithDutyContext(logger *zap.Logger, duty *spectypes.Duty) *zap.Logger {
 	return logger.
-		With(fields.Role(duty.Type)).
+		With(fields.BeaconRole(duty.Type)).
 		With(zap.Uint64("committee_index", uint64(duty.CommitteeIndex))).
 		With(fields.CurrentSlot(s.network.Beacon.EstimatedCurrentSlot())).
 		With(fields.Slot(duty.Slot)).
