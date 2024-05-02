@@ -10,6 +10,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
@@ -80,7 +81,6 @@ type ControllerOptions struct {
 	StorageMap                 *storage.QBFTStores
 	Metrics                    validator.Metrics
 	MessageValidator           validation.MessageValidator
-	MessageValidator           genesisvalidation.MessageValidator
 
 	// worker flags
 	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of goroutines to use for message workers"`
@@ -130,9 +130,9 @@ type SharesStorage interface {
 }
 
 type P2PNetwork interface {
-	Broadcast(message *genesisspectypes.SSVMessage) error
+	Broadcast(message *spectypes.SSVMessage) error
 	UseMessageRouter(router network.MessageRouter)
-	Peers(pk genesisspectypes.ValidatorPK) ([]peer.ID, error)
+	Peers(pk spectypes.ValidatorPK) ([]peer.ID, error)
 	SubscribeRandoms(logger *zap.Logger, numSubnets int) error
 	RegisterHandlers(logger *zap.Logger, handlers ...*p2pprotocol.SyncHandler)
 }

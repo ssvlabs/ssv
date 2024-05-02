@@ -11,7 +11,6 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
@@ -37,9 +36,9 @@ func (n *p2pNetwork) UseMessageRouter(router network.MessageRouter) {
 }
 
 // Peers registers a message router to handle incoming messages
-func (n *p2pNetwork) Peers(pk genesisspectypes.ValidatorPK) ([]peer.ID, error) {
+func (n *p2pNetwork) Peers(pk spectypes.ValidatorPK) ([]peer.ID, error) {
 	all := make([]peer.ID, 0)
-	topics := commons.ValidatorTopicID(pk)
+	topics := commons.ValidatorTopicID(pk[:])
 	for _, topic := range topics {
 		peers, err := n.topicsCtrl.Peers(topic)
 		if err != nil {
@@ -133,11 +132,11 @@ func (n *p2pNetwork) SubscribeRandoms(logger *zap.Logger, numSubnets int) error 
 }
 
 // Subscribe subscribes to validator subnet
-func (n *p2pNetwork) Subscribe(pk genesisspectypes.ValidatorPK) error {
+func (n *p2pNetwork) Subscribe(pk spectypes.ValidatorPK) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
-	pkHex := hex.EncodeToString(pk)
+	pkHex := hex.EncodeToString(pk[:])
 	status, found := n.activeValidators.GetOrInsert(pkHex, validatorStatusSubscribing)
 	if found && status != validatorStatusInactive {
 		return nil
@@ -151,15 +150,15 @@ func (n *p2pNetwork) Subscribe(pk genesisspectypes.ValidatorPK) error {
 }
 
 // Unsubscribe unsubscribes from the validator subnet
-func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk genesisspectypes.ValidatorPK) error {
+func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) error {
 	if !n.isReady() {
 		return p2pprotocol.ErrNetworkIsNotReady
 	}
-	pkHex := hex.EncodeToString(pk)
+	pkHex := hex.EncodeToString(pk[:])
 	if status, _ := n.activeValidators.Get(pkHex); status != validatorStatusSubscribed {
 		return nil
 	}
-	topics := commons.ValidatorTopicID(pk)
+	topics := commons.ValidatorTopicID(pk[:])
 	for _, topic := range topics {
 		if err := n.topicsCtrl.Unsubscribe(logger, topic, false); err != nil {
 			return err
@@ -170,8 +169,8 @@ func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk genesisspectypes.Validat
 }
 
 // subscribe to validator topics, as defined in the fork
-func (n *p2pNetwork) subscribe(logger *zap.Logger, pk genesisspectypes.ValidatorPK) error {
-	topics := commons.ValidatorTopicID(pk)
+func (n *p2pNetwork) subscribe(logger *zap.Logger, pk spectypes.ValidatorPK) error {
+	topics := commons.ValidatorTopicID(pk[:])
 	for _, topic := range topics {
 		if err := n.topicsCtrl.Subscribe(logger, topic); err != nil {
 			// return errors.Wrap(err, "could not broadcast message")

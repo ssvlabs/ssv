@@ -13,7 +13,7 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
-	msgvalidation "github.com/bloxapp/ssv/message/msgvalidation/genesis"
+	"github.com/bloxapp/ssv/message/msgvalidation"
 	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"

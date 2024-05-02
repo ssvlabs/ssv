@@ -55,12 +55,6 @@ const (
 	maxDutiesPerEpoch          = 2
 )
 
-// MessageValidator defines methods for validating pubsub messages.
-type MessageValidator interface {
-	ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
-	Validate(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
-}
-
 type messageValidator struct {
 	logger                  *zap.Logger
 	metrics                 metricsreporter.MetricsReporter

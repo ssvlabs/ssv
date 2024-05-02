@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/bloxapp/ssv-spec/p2p"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/ssvlabs/ssv-spec-pre-cc/p2p"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	"go.uber.org/zap"
 
