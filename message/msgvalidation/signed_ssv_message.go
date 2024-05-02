@@ -27,7 +27,7 @@ func (mv *messageValidator) decodeSignedSSVMessage(pMsg *pubsub.Message) (*spect
 
 func (mv *messageValidator) validateSignedSSVMessage(signedSSVMessage *spectypes.SignedSSVMessage) error {
 	if signedSSVMessage == nil {
-		return ErrEmptyPubSubMessage
+		return ErrNilSignedSSVMessage
 	}
 
 	signers := signedSSVMessage.GetOperatorIDs()
@@ -42,12 +42,12 @@ func (mv *messageValidator) validateSignedSSVMessage(signedSSVMessage *spectypes
 
 	var prevSigner spectypes.OperatorID
 	for _, signer := range signers {
+		if signer == 0 {
+			return ErrZeroSigner
+		}
 		// This check assumes that signers is sorted, so this rule should be after the check for ErrSignersNotSorted.
 		if signer == prevSigner {
 			return ErrDuplicatedSigner
-		}
-		if signer == 0 {
-			return ErrZeroSigner
 		}
 		prevSigner = signer
 	}
@@ -164,12 +164,6 @@ func (mv *messageValidator) belongsToCommittee(operatorIDs []spectypes.OperatorI
 			e.want = committee
 			return e
 		}
-	}
-
-	if len(operatorIDs) > len(committee) {
-		e := ErrTooManySigners
-		e.got = len(operatorIDs)
-		return e
 	}
 
 	return nil

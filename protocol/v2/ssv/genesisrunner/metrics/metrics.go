@@ -5,10 +5,10 @@ import (
 
 	"go.uber.org/zap"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 )
 
 var (
@@ -103,28 +103,8 @@ type ConsensusMetrics struct {
 	dutyFullFlowCumulativeDuration time.Duration
 }
 
-// create function that will convert RunnerRole to string
-func String(r spectypes.RunnerRole) string {
-	switch r {
-	case spectypes.RoleCommittee:
-		return "RoleCommittee"
-	case spectypes.RoleAggregator:
-		return "RoleAggregator"
-	case spectypes.RoleProposer:
-		return "RoleProposer"
-	case spectypes.RoleSyncCommitteeContribution:
-		return "RoleSyncCommitteeContribution"
-	case spectypes.RoleValidatorRegistration:
-		return "RoleValidatorRegistration"
-	case spectypes.RoleVoluntaryExit:
-		return "RoleVoluntaryExit"
-	default:
-		return "RoleUnknown"
-	}
-}
-
-func NewConsensusMetrics(role spectypes.RunnerRole) ConsensusMetrics {
-	values := []string{String(role)}
+func NewConsensusMetrics(role genesisspectypes.BeaconRole) ConsensusMetrics {
+	values := []string{role.String()}
 	return ConsensusMetrics{
 		preConsensus:            metricsPreConsensusDuration.WithLabelValues(values...),
 		consensus:               metricsConsensusDuration.WithLabelValues(values...),
@@ -210,7 +190,7 @@ func (cm *ConsensusMetrics) ContinueDutyFullFlow() {
 }
 
 // EndDutyFullFlow sends metrics for duty full flow duration.
-func (cm *ConsensusMetrics) EndDutyFullFlow(round specqbft.Round) {
+func (cm *ConsensusMetrics) EndDutyFullFlow(round genesisspecqbft.Round) {
 	if cm != nil && cm.dutyFullFlow != nil && !cm.dutyFullFlowStart.IsZero() {
 		cm.dutyFullFlowCumulativeDuration += time.Since(cm.dutyFullFlowStart)
 		cm.dutyFullFlow.Observe(cm.dutyFullFlowCumulativeDuration.Seconds())

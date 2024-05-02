@@ -4,9 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
 func (mv *messageValidator) committeeRole(role spectypes.RunnerRole) bool {
@@ -39,8 +38,8 @@ func (mv *messageValidator) lateMessage(slot phase0.Slot, role spectypes.RunnerR
 		ttl = 1 + lateSlotAllowance
 	case spectypes.RoleCommittee, spectypes.RoleAggregator:
 		ttl = 32 + lateSlotAllowance
-	default:
-		panic("unexpected role")
+	case spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
+		return 0
 	}
 
 	deadline := mv.netCfg.Beacon.GetSlotStartTime(slot + ttl).

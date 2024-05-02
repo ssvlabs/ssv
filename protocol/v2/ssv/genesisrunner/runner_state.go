@@ -1,33 +1,33 @@
-package runner
+package genesisrunner
 
 import (
 	"crypto/sha256"
 	"encoding/json"
 
-	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specssv "github.com/bloxapp/ssv-spec/ssv"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
+	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // State holds all the relevant progress the duty execution progress
 type State struct {
-	PreConsensusContainer  *specssv.PartialSigContainer
-	PostConsensusContainer *specssv.PartialSigContainer
+	PreConsensusContainer  *genesisspecssv.PartialSigContainer
+	PostConsensusContainer *genesisspecssv.PartialSigContainer
 	RunningInstance        *instance.Instance
-	DecidedValue           []byte
+	DecidedValue           *genesisspectypes.ConsensusData
 	// CurrentDuty is the duty the node pulled locally from the beacon node, might be different from decided duty
-	StartingDuty spectypes.Duty
+	StartingDuty *genesisspectypes.Duty
 	// flags
 	Finished bool // Finished marked true when there is a full successful cycle (pre, consensus and post) with quorum
 }
 
-func NewRunnerState(quorum uint64, duty spectypes.Duty) *State {
+func NewRunnerState(quorum uint64, duty *genesisspectypes.Duty) *State {
 	return &State{
-		PreConsensusContainer:  specssv.NewPartialSigContainer(quorum),
-		PostConsensusContainer: specssv.NewPartialSigContainer(quorum),
+		PreConsensusContainer:  genesisspecssv.NewPartialSigContainer(quorum),
+		PostConsensusContainer: genesisspecssv.NewPartialSigContainer(quorum),
 
 		StartingDuty: duty,
 		Finished:     false,
@@ -35,9 +35,9 @@ func NewRunnerState(quorum uint64, duty spectypes.Duty) *State {
 }
 
 // ReconstructBeaconSig aggregates collected partial beacon sigs
-func (pcs *State) ReconstructBeaconSig(container *specssv.PartialSigContainer, root [32]byte, validatorPubKey []byte, validatorIndex phase0.ValidatorIndex) ([]byte, error) {
+func (pcs *State) ReconstructBeaconSig(container *genesisspecssv.PartialSigContainer, root [32]byte, validatorPubKey []byte) ([]byte, error) {
 	// Reconstruct signatures
-	signature, err := container.ReconstructSignature(root, validatorPubKey, validatorIndex)
+	signature, err := types.ReconstructSignature(container, root, validatorPubKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not reconstruct beacon sig")
 	}
