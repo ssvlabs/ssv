@@ -12,6 +12,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
@@ -271,8 +272,8 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *gen
 		blockSummary, summarizeErr := summarizeBlock(blk)
 		logger.Info("✅ successfully submitted block proposal",
 			fields.Slot(signedMsg.Message.Slot),
-			fields.Height(r.BaseRunner.QBFTController.Height),
-			fields.Round(r.GetState().RunningInstance.State.Round),
+			fields.Height(specqbft.Height(r.BaseRunner.QBFTController.Height)),
+			fields.Round(specqbft.Round(r.GetState().RunningInstance.State.Round)),
 			zap.String("block_hash", blockSummary.Hash.String()),
 			zap.Bool("blinded", blockSummary.Blinded),
 			zap.Duration("took", time.Since(start)),

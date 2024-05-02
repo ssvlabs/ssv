@@ -2,9 +2,9 @@ package genesisrunner
 
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv-spec/ssv"
 	"github.com/pkg/errors"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 )
@@ -53,7 +53,7 @@ func (b *BaseRunner) validatePreConsensusJustifications(data *genesisspectypes.C
 	signers := make(map[genesisspectypes.OperatorID]bool)
 	roots := make(map[[32]byte]bool)
 	rootCount := 0
-	partialSigContainer := ssv.NewPartialSigContainer(b.Share.Quorum)
+	partialSigContainer := genesisspecssv.NewPartialSigContainer(b.Share.Quorum)
 	for i, msg := range data.PreConsensusJustifications {
 		if err := msg.Validate(); err != nil {
 			return err

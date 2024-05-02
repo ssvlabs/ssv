@@ -7,9 +7,9 @@ import (
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv-spec/qbft"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
@@ -25,7 +25,7 @@ type ValidatorRegistrationRunner struct {
 	beacon   genesisspecssv.BeaconNode
 	network  genesisspecssv.Network
 	signer   genesisspectypes.KeyManager
-	valCheck qbft.ProposedValueCheckF
+	valCheck genesisspecqbft.ProposedValueCheckF
 
 	metrics metrics.ConsensusMetrics
 }
@@ -96,7 +96,7 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(logger *zap.Logger, si
 	return nil
 }
 
-func (r *ValidatorRegistrationRunner) ProcessConsensus(logger *zap.Logger, signedMsg *qbft.SignedMessage) error {
+func (r *ValidatorRegistrationRunner) ProcessConsensus(logger *zap.Logger, signedMsg *genesisspecqbft.SignedMessage) error {
 	return errors.New("no consensus phase for validator registration")
 }
 
@@ -195,7 +195,7 @@ func (r *ValidatorRegistrationRunner) GetState() *State {
 	return r.BaseRunner.State
 }
 
-func (r *ValidatorRegistrationRunner) GetValCheckF() qbft.ProposedValueCheckF {
+func (r *ValidatorRegistrationRunner) GetValCheckF() genesisspecqbft.ProposedValueCheckF {
 	return r.valCheck
 }
 
