@@ -5,8 +5,10 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slices"
+
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 type ValidatorStore interface {
@@ -309,11 +311,20 @@ func (c *validatorStore) handleShareUpdated(share *types.SSVShare) {
 func buildCommittee(shares []*types.SSVShare) *Committee {
 	committee := &Committee{
 		ID:         shares[0].CommitteeID(),
-		Operators:  make([]spectypes.OperatorID, len(shares)),
+		Operators:  make([]spectypes.OperatorID, 0, len(shares)),
 		Validators: shares,
 	}
-	for i, share := range shares {
-		committee.Operators[i] = share.Committee[i].Signer
+
+	seenOperators := make(map[spectypes.OperatorID]struct{})
+
+	for _, share := range shares {
+		for _, shareMember := range share.Committee {
+			seenOperators[shareMember.Signer] = struct{}{}
+		}
 	}
+
+	committee.Operators = maps.Keys(seenOperators)
+	slices.Sort(committee.Operators)
+
 	return committee
 }

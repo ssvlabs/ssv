@@ -224,8 +224,8 @@ func BeaconRole(val spectypes.BeaconRole) zap.Field {
 	return zap.Stringer(FieldRole, val)
 }
 
-func RunnerRole(val types.RunnerRole) zap.Field {
-	return zap.String(FieldRole, val.String())
+func RunnerRole(val spectypes.RunnerRole) zap.Field {
+	return zap.String(FieldRole, message.RunnerRoleToString(val))
 }
 
 func SpecRunnerRole(val spectypes.RunnerRole) zap.Field {
