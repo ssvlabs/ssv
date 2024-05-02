@@ -12,7 +12,7 @@ import (
 //   - Advanced a round: to discard messages from previous rounds. (otherwise it might grow indefinitely)
 func (b *BaseRunner) compactInstanceIfNeeded(msg *spectypes.SignedSSVMessage) {
 	if inst := b.QBFTController.StoredInstances.FindInstance(msg.SSVMessage.Height); inst != nil {
-		if controller.IsDecidedMsg(b.GetShare(), msg) || msg.GetType() == specqbft.RoundChangeMsgType {
+		if controller.IsDecidedMsg(b.Share, msg) || specqbft.MessageType(msg.SSVMessage.MsgType) == specqbft.RoundChangeMsgType {
 			instance.Compact(inst.State, msg)
 		}
 	}

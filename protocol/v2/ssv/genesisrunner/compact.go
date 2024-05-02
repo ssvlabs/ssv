@@ -1,4 +1,4 @@
-package runner
+package genesisrunner
 
 import (
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"

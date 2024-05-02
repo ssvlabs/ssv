@@ -1,4 +1,4 @@
-package runner
+package genesisrunner
 
 import (
 	"bytes"
@@ -15,7 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/genesisrunner/metrics"
 )
 
 type SyncCommitteeAggregatorRunner struct {

@@ -1,4 +1,4 @@
-package runner
+package genesisrunner
 
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"

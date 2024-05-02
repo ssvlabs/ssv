@@ -1,4 +1,4 @@
-package runner
+package genesisrunner
 
 import (
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"

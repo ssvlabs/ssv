@@ -1,6 +1,6 @@
 package runner
 
-import spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+import spectypes "github.com/bloxapp/ssv-spec/types"
 
 // DutyRunners is a map of duty runners mapped by msg id hex.
 type DutyRunners map[spectypes.RunnerRole]Runner

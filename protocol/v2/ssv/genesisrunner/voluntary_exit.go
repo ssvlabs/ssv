@@ -1,4 +1,4 @@
-package runner
+package genesisrunner
 
 import (
 	"crypto/sha256"
@@ -14,7 +14,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/genesisrunner/metrics"
 )
 
 // Duty runner for validator voluntary exit duty
