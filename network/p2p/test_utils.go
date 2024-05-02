@@ -6,14 +6,14 @@ import (
 	"fmt"
 	"time"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
-	msgvalidation "github.com/bloxapp/ssv/message/msgvalidation/genesis"
+	"github.com/bloxapp/ssv/message/msgvalidation"
 	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"

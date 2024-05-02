@@ -9,9 +9,10 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth/contract"
@@ -63,7 +64,7 @@ type EventHandler struct {
 	networkConfig     networkconfig.NetworkConfig
 	operatorDataStore operatordatastore.OperatorDataStore
 	operatorDecrypter keys.OperatorDecrypter
-	keyManager        spectypes.KeyManager
+	keyManager        genesisspectypes.KeyManager
 	beacon            beaconprotocol.BeaconNode
 	storageMap        *qbftstorage.QBFTStores
 
@@ -79,7 +80,7 @@ func New(
 	networkConfig networkconfig.NetworkConfig,
 	operatorDataStore operatordatastore.OperatorDataStore,
 	operatorDecrypter keys.OperatorDecrypter,
-	keyManager spectypes.KeyManager,
+	keyManager genesisspectypes.KeyManager,
 	beacon beaconprotocol.BeaconNode,
 	storageMap *qbftstorage.QBFTStores,
 	opts ...Option,
@@ -295,7 +296,7 @@ func (eh *EventHandler) processEvent(txn basedb.Txn, event ethtypes.Log) (Task, 
 
 		defer eh.metrics.EventProcessed(abiEvent.Name)
 
-		if validatorPubKey != nil {
+		if validatorPubKey != (spectypes.ValidatorPK{}) {
 			return NewStopValidatorTask(eh.taskExecutor, validatorPubKey), nil
 		}
 

@@ -75,10 +75,17 @@ func ReconstructSignature(ps *genesisspecssv.PartialSigContainer, root [32]byte,
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to reconstruct signatures")
 	}
-	if err := VerifyReconstructedSignature(signature, validatorPubKey, root); err != nil {
+	// TODO: fork support
+	// Clone PartialSigContainer from spec to ours so we dont do double BLS serialization here
+	// which is too heavy (because of CGO)
+	blsSig := &bls.Sign{}
+	if err := blsSig.Deserialize(signature); err != nil {
+		return nil, errors.Wrap(err, "failed to deserialize signature")
+	}
+	if err := VerifyReconstructedSignature(blsSig, validatorPubKey, root); err != nil {
 		return nil, errors.Wrap(err, "failed to verify reconstruct signature")
 	}
-	return signature.Serialize(), nil
+	return signature, nil
 }
 
 func VerifyReconstructedSignature(sig *bls.Sign, validatorPubKey []byte, root [32]byte) error {

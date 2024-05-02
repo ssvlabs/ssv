@@ -10,6 +10,8 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/jellydator/ttlcache/v3"
@@ -23,7 +25,8 @@ import (
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
-	msgvalidation "github.com/bloxapp/ssv/message/msgvalidation/genesis"
+	validation "github.com/bloxapp/ssv/message/msgvalidation"
+	genesisvalidation "github.com/bloxapp/ssv/message/msgvalidation/genesis"
 	"github.com/bloxapp/ssv/network"
 	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/duties"
@@ -74,11 +77,10 @@ type ControllerOptions struct {
 	RegistryStorage            nodestorage.Storage
 	RecipientsStorage          Recipients
 	NewDecidedHandler          qbftcontroller.NewDecidedHandler
-	DutyRoles                  []genesisspectypes.BeaconRole
+	DutyRoles                  []spectypes.BeaconRole
 	StorageMap                 *storage.QBFTStores
 	Metrics                    validator.Metrics
 	MessageValidator           validation.MessageValidator
-	MessageValidator           msgvalidation.MessageValidator
 
 	// worker flags
 	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of goroutines to use for message workers"`
@@ -128,9 +130,9 @@ type SharesStorage interface {
 }
 
 type P2PNetwork interface {
-	Broadcast(message *genesisspectypes.SSVMessage) error
+	Broadcast(message *spectypes.SSVMessage) error
 	UseMessageRouter(router network.MessageRouter)
-	Peers(pk genesisspectypes.ValidatorPK) ([]peer.ID, error)
+	Peers(pk spectypes.ValidatorPK) ([]peer.ID, error)
 	SubscribeRandoms(logger *zap.Logger, numSubnets int) error
 	RegisterHandlers(logger *zap.Logger, handlers ...*p2pprotocol.SyncHandler)
 }
@@ -165,7 +167,7 @@ type controller struct {
 	messageRouter        *messageRouter
 	messageWorker        *worker.Worker
 	historySyncBatchSize int
-	messageValidator     msgvalidation.MessageValidator
+	messageValidator     genesisvalidation.MessageValidator
 
 	// nonCommittees is a cache of initialized nonCommitteeValidator instances
 	nonCommitteeValidators *ttlcache.Cache[genesisspectypes.MessageID, *nonCommitteeValidator]

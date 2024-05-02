@@ -5,8 +5,8 @@ import (
 
 	"github.com/pkg/errors"
 
-	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	"github.com/ssvlabs/ssv-spec-pre-cc/types"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 )
 
 // Message represents an exporter message
@@ -20,16 +20,17 @@ type Message struct {
 }
 
 type SignedMessageAPI struct {
-	Signature types.Signature
-	Signers   []types.OperatorID
-	Message   specqbft.Message
+	Signature genesisspectypes.Signature
+	Signers   []genesisspectypes.OperatorID
+	Message   genesisspecqbft.Message
 
-	FullData *types.ConsensusData
+	FullData *genesisspectypes.ConsensusData
 }
 
 // NewDecidedAPIMsg creates a new message from the given message
 // TODO: avoid converting to v0 once explorer is upgraded
-func NewDecidedAPIMsg(msgs ...*specqbft.SignedMessage) Message {
+// TODO: fork support
+func NewDecidedAPIMsg(msgs ...*genesisspecqbft.SignedMessage) Message {
 	data, err := DecidedAPIData(msgs...)
 	if err != nil {
 		return Message{
@@ -38,7 +39,7 @@ func NewDecidedAPIMsg(msgs ...*specqbft.SignedMessage) Message {
 		}
 	}
 
-	identifier := specqbft.ControllerIdToMessageID(msgs[0].Message.Identifier)
+	identifier := genesisspecqbft.ControllerIdToMessageID(msgs[0].Message.Identifier)
 	pkv := identifier.GetPubKey()
 	role := identifier.GetRoleType()
 	return Message{
@@ -54,7 +55,7 @@ func NewDecidedAPIMsg(msgs ...*specqbft.SignedMessage) Message {
 }
 
 // DecidedAPIData creates a new message from the given message
-func DecidedAPIData(msgs ...*specqbft.SignedMessage) (interface{}, error) {
+func DecidedAPIData(msgs ...*genesisspecqbft.SignedMessage) (interface{}, error) {
 	if len(msgs) == 0 {
 		return nil, errors.New("no messages")
 	}
@@ -72,7 +73,7 @@ func DecidedAPIData(msgs ...*specqbft.SignedMessage) (interface{}, error) {
 		}
 
 		if msg.FullData != nil {
-			var cd types.ConsensusData
+			var cd genesisspectypes.ConsensusData
 			if err := cd.UnmarshalSSZ(msg.FullData); err != nil {
 				return nil, errors.Wrap(err, "failed to unmarshal consensus data")
 			}

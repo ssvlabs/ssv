@@ -4,13 +4,13 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
@@ -38,23 +38,30 @@ func HandleDecidedQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores, nm 
 		return
 	}
 
-	beaconRole, err := message.BeaconRoleFromString(nm.Msg.Filter.Role)
-	if err != nil {
-		logger.Warn("failed to parse role", zap.Error(err))
+	runnerRole, ok := types.RunnerRoleFromString(nm.Msg.Filter.Role)
+	if !ok {
+		logger.Warn("role doesn't exist", zap.String("role", nm.Msg.Filter.Role))
 		res.Data = []string{"role doesn't exist"}
 		nm.Msg = res
 		return
 	}
 
-	roleStorage := qbftStorage.Get(beaconRole)
+	roleStorage := qbftStorage.Get(runnerRole)
 	if roleStorage == nil {
-		logger.Warn("role storage doesn't exist", fields.Role(beaconRole))
+		logger.Warn("role storage doesn't exist", fields.RunnerRole(runnerRole))
 		res.Data = []string{"internal error - role storage doesn't exist"}
 		nm.Msg = res
 		return
 	}
 
-	msgID := spectypes.NewMsgID(types.GetDefaultDomain(), pkRaw, beaconRole)
+	specRole, ok := runnerRole.Spec()
+	if !ok {
+		logger.Warn("failed to get spec role", fields.RunnerRole(runnerRole))
+		res.Data = []string{"internal error - could not get spec role"}
+		nm.Msg = res
+		return
+	}
+	msgID := spectypes.NewMsgID(types.GetDefaultDomain(), pkRaw, specRole)
 	from := specqbft.Height(nm.Msg.Filter.From)
 	to := specqbft.Height(nm.Msg.Filter.To)
 	instances, err := roleStorage.GetInstancesInRange(msgID[:], from, to)
@@ -62,7 +69,7 @@ func HandleDecidedQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores, nm 
 		logger.Warn("failed to get instances", zap.Error(err))
 		res.Data = []string{"internal error - could not get decided messages"}
 	} else {
-		msgs := make([]*specqbft.SignedMessage, 0, len(instances))
+		msgs := make([]*genesisspecqbft.SignedMessage, 0, len(instances))
 		for _, instance := range instances {
 			msgs = append(msgs, instance.DecidedMessage)
 		}

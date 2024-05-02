@@ -3,7 +3,7 @@ package format
 import (
 	"testing"
 
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 )
 

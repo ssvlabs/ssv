@@ -16,7 +16,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	msgvalidation "github.com/bloxapp/ssv/message/msgvalidation/genesis"
+	"github.com/bloxapp/ssv/message/msgvalidation"
 	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/network"
 	"github.com/bloxapp/ssv/network/commons"

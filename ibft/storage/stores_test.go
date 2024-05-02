@@ -3,10 +3,10 @@ package storage
 import (
 	"testing"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
-	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 
 	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"github.com/stretchr/testify/require"

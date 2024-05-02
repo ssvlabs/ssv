@@ -27,6 +27,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/utils/format"
 )
 
@@ -219,12 +220,16 @@ func Round(round specqbft.Round) zap.Field {
 	return zap.Uint64(FieldRound, uint64(round))
 }
 
-func Role(val spectypes.BeaconRole) zap.Field {
+func BeaconRole(val spectypes.BeaconRole) zap.Field {
 	return zap.Stringer(FieldRole, val)
 }
 
-func RunnerRole(val spectypes.RunnerRole) zap.Field {
-	return zap.String(FieldRole, message.RunnerRoleToString(val))
+func RunnerRole(val types.RunnerRole) zap.Field {
+	return zap.String(FieldRole, val.String())
+}
+
+func SpecRunnerRole(val spectypes.RunnerRole) zap.Field {
+	return zap.String(FieldRole, types.RunnerRoleFromSpec(val).String())
 }
 
 func MessageID(val spectypes.MessageID) zap.Field {
@@ -331,11 +336,19 @@ func BuilderProposals(v bool) zap.Field {
 	return zap.Bool(FieldBuilderProposals, v)
 }
 
-func FormatDutyID(epoch phase0.Epoch, duty *spectypes.BeaconDuty) string {
-	return fmt.Sprintf("%v-e%v-s%v-v%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
+func FormatDutyID(epoch phase0.Epoch, duty spectypes.Duty) string {
+	switch d := duty.(type) {
+	case *spectypes.BeaconDuty:
+		return fmt.Sprintf("%v-e%v-s%v-v%v", d.Type.String(), epoch, d.Slot, d.ValidatorIndex)
+	case *spectypes.CommitteeDuty:
+		// TODO: add CommitteeID field to CommitteeDuty and log it here
+		return fmt.Sprintf("COMMITTEE-e%v-s%v-c%v", epoch, d.Slot)
+	default:
+		return fmt.Sprintf("UNKNOWN-e%v", epoch)
+	}
 }
 
-func Duties(epoch phase0.Epoch, duties []*spectypes.BeaconDuty) zap.Field {
+func BeaconDuties(epoch phase0.Epoch, duties []*spectypes.BeaconDuty) zap.Field {
 	var b strings.Builder
 	for i, duty := range duties {
 		if i > 0 {

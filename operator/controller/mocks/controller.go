@@ -8,6 +8,7 @@ import (
 	reflect "reflect"
 
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
+	types "github.com/bloxapp/ssv-spec/types"
 	network "github.com/bloxapp/ssv/network"
 	duties "github.com/bloxapp/ssv/operator/duties"
 	beacon "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
@@ -19,7 +20,7 @@ import (
 	common "github.com/ethereum/go-ethereum/common"
 	gomock "github.com/golang/mock/gomock"
 	peer "github.com/libp2p/go-libp2p/core/peer"
-	types "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	types1 "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	zap "go.uber.org/zap"
 )
 
@@ -46,36 +47,8 @@ func (m *MockController) EXPECT() *MockControllerMockRecorder {
 	return m.recorder
 }
 
-// AllActiveIndices mocks base method.
-func (m *MockController) AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AllActiveIndices", epoch, afterInit)
-	ret0, _ := ret[0].([]phase0.ValidatorIndex)
-	return ret0
-}
-
-// AllActiveIndices indicates an expected call of AllActiveIndices.
-func (mr *MockControllerMockRecorder) AllActiveIndices(epoch, afterInit interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AllActiveIndices", reflect.TypeOf((*MockController)(nil).AllActiveIndices), epoch, afterInit)
-}
-
-// CommitteeActiveIndices mocks base method.
-func (m *MockController) CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CommitteeActiveIndices", epoch)
-	ret0, _ := ret[0].([]phase0.ValidatorIndex)
-	return ret0
-}
-
-// CommitteeActiveIndices indicates an expected call of CommitteeActiveIndices.
-func (mr *MockControllerMockRecorder) CommitteeActiveIndices(epoch interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CommitteeActiveIndices", reflect.TypeOf((*MockController)(nil).CommitteeActiveIndices), epoch)
-}
-
 // ExecuteDuty mocks base method.
-func (m *MockController) ExecuteDuty(logger *zap.Logger, duty *types.Duty) {
+func (m *MockController) ExecuteDuty(logger *zap.Logger, duty *types1.Duty) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "ExecuteDuty", logger, duty)
 }
@@ -98,20 +71,6 @@ func (m *MockController) ExitValidator(pubKey phase0.BLSPubKey, blockNumber uint
 func (mr *MockControllerMockRecorder) ExitValidator(pubKey, blockNumber, validatorIndex interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExitValidator", reflect.TypeOf((*MockController)(nil).ExitValidator), pubKey, blockNumber, validatorIndex)
-}
-
-// GetOperatorShares mocks base method.
-func (m *MockController) GetOperatorShares() []*types0.SSVShare {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetOperatorShares")
-	ret0, _ := ret[0].([]*types0.SSVShare)
-	return ret0
-}
-
-// GetOperatorShares indicates an expected call of GetOperatorShares.
-func (mr *MockControllerMockRecorder) GetOperatorShares() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorShares", reflect.TypeOf((*MockController)(nil).GetOperatorShares))
 }
 
 // GetValidator mocks base method.
@@ -227,7 +186,7 @@ func (mr *MockControllerMockRecorder) StartValidators() *gomock.Call {
 }
 
 // StopValidator mocks base method.
-func (m *MockController) StopValidator(pubKey types.ValidatorPK) error {
+func (m *MockController) StopValidator(pubKey types1.ValidatorPK) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StopValidator", pubKey)
 	ret0, _ := ret[0].(error)
@@ -376,7 +335,7 @@ func (mr *MockSharesStorageMockRecorder) List(txn interface{}, filters ...interf
 }
 
 // UpdateValidatorMetadata mocks base method.
-func (m *MockSharesStorage) UpdateValidatorMetadata(pk string, metadata *beacon.ValidatorMetadata) error {
+func (m *MockSharesStorage) UpdateValidatorMetadata(pk types.ValidatorPK, metadata *beacon.ValidatorMetadata) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateValidatorMetadata", pk, metadata)
 	ret0, _ := ret[0].(error)

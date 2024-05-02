@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	spectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils/comparable"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"

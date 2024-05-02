@@ -8,6 +8,8 @@ import (
 	"os"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/ekm"
 	"github.com/bloxapp/ssv/networkconfig"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
@@ -15,7 +17,6 @@ import (
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/blskeygen"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
-	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 
@@ -59,7 +60,7 @@ func (cmd *ShareUpdateCmd) Run(logger *zap.Logger, globals Globals) error {
 	return nil
 }
 
-func Process(logger *zap.Logger, networkConfig networkconfig.NetworkConfig, operatorPrivateKey string, operatorID types.OperatorID, operatorCorruptedShares []*logs_catcher.CorruptedShare) error {
+func Process(logger *zap.Logger, networkConfig networkconfig.NetworkConfig, operatorPrivateKey string, operatorID spectypes.OperatorID, operatorCorruptedShares []*logs_catcher.CorruptedShare) error {
 	dbPath := fmt.Sprintf(dbPathFormat, operatorID)
 	db, err := openDB(logger, dbPath)
 	if err != nil {

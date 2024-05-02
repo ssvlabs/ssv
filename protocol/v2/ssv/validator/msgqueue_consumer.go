@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 
-	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -37,7 +40,8 @@ func (v *Validator) HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessa
 	// 	zap.Uint64("type", uint64(msg.MsgType)),
 	// 	fields.Role(msg.MsgID.GetRoleType()))
 
-	if q, ok := v.Queues[msg.GetID().GetRoleType()]; ok {
+	role := types.RunnerRoleFromSpec(msg.GetID().GetRoleType())
+	if q, ok := v.Queues[role]; ok {
 		if pushed := q.Q.TryPush(msg); !pushed {
 			msgID := msg.MsgID.String()
 			logger.Warn("❗ dropping message because the queue is full",
@@ -46,7 +50,7 @@ func (v *Validator) HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessa
 		}
 		// logger.Debug("📬 queue: pushed message", fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType))
 	} else {
-		logger.Error("❌ missing queue for role type", fields.Role(msg.GetID().GetRoleType()))
+		logger.Error("❌ missing queue for role type", fields.RunnerRole(role))
 	}
 }
 
@@ -74,9 +78,10 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		v.mtx.RLock() // read v.Queues
 		defer v.mtx.RUnlock()
 		var ok bool
-		q, ok = v.Queues[msgID.GetRoleType()]
+		role := types.RunnerRoleFromSpec(msgID.GetRoleType())
+		q, ok = v.Queues[role]
 		if !ok {
-			return errors.New(fmt.Sprintf("queue not found for role %s", msgID.GetRoleType().String()))
+			return errors.New(fmt.Sprintf("queue not found for role %s", role.String()))
 		}
 		return nil
 	}()
@@ -91,7 +96,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 	for ctx.Err() == nil {
 		// Construct a representation of the current state.
 		state := *q.queueState
-		runner := v.DutyRunners.DutyRunnerForMsgID(msgID)
+		runner := v.DutyRunners.ByMessageID(msgID)
 		if runner == nil {
 			return fmt.Errorf("could not get duty runner for msg ID %v", msgID)
 		}
@@ -121,14 +126,14 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 			// If no proposal was accepted for the current round, skip prepare & commit messages
 			// for the current height and round.
 			filter = func(m *queue.DecodedSSVMessage) bool {
-				sm, ok := m.Body.(*specqbft.SignedMessage)
+				sm, ok := m.Body.(*genesisspecqbft.SignedMessage)
 				if !ok {
 					return true
 				}
-				if sm.Message.Height != state.Height || sm.Message.Round != state.Round {
+				if sm.Message.Height != genesisspecqbft.Height(state.Height) || sm.Message.Round != genesisspecqbft.Round(state.Round) {
 					return true
 				}
-				return sm.Message.MsgType != specqbft.PrepareMsgType && sm.Message.MsgType != specqbft.CommitMsgType
+				return sm.Message.MsgType != genesisspecqbft.MessageType(specqbft.PrepareMsgType) && sm.Message.MsgType != genesisspecqbft.MessageType(specqbft.CommitMsgType)
 			}
 		}
 
@@ -165,7 +170,7 @@ func (v *Validator) logMsg(logger *zap.Logger, msg *queue.DecodedSSVMessage, log
 	baseFields := []zap.Field{}
 	switch msg.SSVMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
-		sm := msg.Body.(*specqbft.SignedMessage)
+		sm := msg.Body.(*genesisspecqbft.SignedMessage)
 		baseFields = []zap.Field{
 			zap.Int64("msg_height", int64(sm.Message.Height)),
 			zap.Int64("msg_round", int64(sm.Message.Round)),
@@ -173,7 +178,7 @@ func (v *Validator) logMsg(logger *zap.Logger, msg *queue.DecodedSSVMessage, log
 			zap.Any("signers", sm.Signers),
 		}
 	case spectypes.SSVPartialSignatureMsgType:
-		psm := msg.Body.(*spectypes.SignedPartialSignatureMessage)
+		psm := msg.Body.(*genesisspectypes.SignedPartialSignatureMessage)
 		baseFields = []zap.Field{
 			zap.Int64("signer", int64(psm.Signer)),
 			fields.Slot(psm.Message.Slot),
@@ -184,7 +189,7 @@ func (v *Validator) logMsg(logger *zap.Logger, msg *queue.DecodedSSVMessage, log
 
 // GetLastHeight returns the last height for the given identifier
 func (v *Validator) GetLastHeight(identifier spectypes.MessageID) specqbft.Height {
-	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
+	r := v.DutyRunners.ByMessageID(identifier)
 	if r == nil {
 		return specqbft.Height(0)
 	}
@@ -196,7 +201,7 @@ func (v *Validator) GetLastHeight(identifier spectypes.MessageID) specqbft.Heigh
 
 // GetLastRound returns the last height for the given identifier
 func (v *Validator) GetLastRound(identifier spectypes.MessageID) specqbft.Round {
-	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
+	r := v.DutyRunners.ByMessageID(identifier)
 	if r == nil {
 		return specqbft.Round(1)
 	}

@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"

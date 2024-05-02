@@ -14,14 +14,14 @@ import (
 	"time"
 
 	"github.com/aquasecurity/table"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/sourcegraph/conc/pool"
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"github.com/stretchr/testify/require"
 
-	msgvalidation "github.com/bloxapp/ssv/message/msgvalidation/genesis"
+	"github.com/bloxapp/ssv/message/msgvalidation"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )

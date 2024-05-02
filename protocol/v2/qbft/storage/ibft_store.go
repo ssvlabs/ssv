@@ -5,13 +5,14 @@ import (
 
 	"go.uber.org/zap"
 
-	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 )
 
 // StoredInstance contains instance state alongside with a decided message (aggregated commits).
 type StoredInstance struct {
 	State          *specqbft.State
-	DecidedMessage *specqbft.SignedMessage
+	DecidedMessage *genesisspecqbft.SignedMessage
 }
 
 // Encode returns a StoredInstance encoded bytes or error.

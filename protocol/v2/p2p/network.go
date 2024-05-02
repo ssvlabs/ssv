@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/bloxapp/ssv-spec/p2p"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/ssvlabs/ssv-spec-pre-cc/p2p"
-	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/message"
@@ -64,9 +64,9 @@ type SyncResults []SyncResult
 func (s SyncResults) String() string {
 	var v []string
 	for _, m := range s {
-		var sm *specqbft.SignedMessage
+		var sm *genesisspecqbft.SignedMessage
 		if m.Msg.MsgType == spectypes.SSVConsensusMsgType {
-			sm = &specqbft.SignedMessage{}
+			sm = &genesisspecqbft.SignedMessage{}
 			if err := sm.Decode(m.Msg.Data); err != nil {
 				v = append(v, fmt.Sprintf("(%v)", err))
 				continue
@@ -87,7 +87,7 @@ func (s SyncResults) String() string {
 	return strings.Join(v, ", ")
 }
 
-func (results SyncResults) ForEachSignedMessage(iterator func(message *specqbft.SignedMessage) (stop bool)) {
+func (results SyncResults) ForEachSignedMessage(iterator func(message *genesisspecqbft.SignedMessage) (stop bool)) {
 	for _, res := range results {
 		if res.Msg == nil {
 			continue

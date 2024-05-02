@@ -3,7 +3,7 @@ package testing
 import (
 	"bytes"
 
-	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 

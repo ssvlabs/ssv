@@ -3,9 +3,9 @@ package validator
 import (
 	"encoding/json"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
-	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
@@ -25,7 +25,7 @@ func (v *Validator) onTimeout(logger *zap.Logger, identifier spectypes.MessageID
 			return
 		}
 
-		dr := v.DutyRunners[identifier.GetRoleType()]
+		dr := v.DutyRunners.ByMessageID(identifier)
 		hasDuty := dr.HasRunningDuty()
 		if !hasDuty {
 			return
@@ -36,21 +36,22 @@ func (v *Validator) onTimeout(logger *zap.Logger, identifier spectypes.MessageID
 			logger.Debug("❗ failed to create timer msg", zap.Error(err))
 			return
 		}
-		dec, err := queue.DecodeGenesisSSVMessage(msg)
+		dec, err := queue.DecodeSSVMessage(msg)
 		if err != nil {
 			logger.Debug("❌ failed to decode timer msg", zap.Error(err))
 			return
 		}
 
-		if pushed := v.Queues[identifier.GetRoleType()].Q.TryPush(dec); !pushed {
+		runnerRole := types.RunnerRoleFromSpec(identifier.GetRoleType())
+		if pushed := v.Queues[runnerRole].Q.TryPush(dec); !pushed {
 			logger.Warn("❗️ dropping timeout message because the queue is full",
-				fields.Role(identifier.GetRoleType()))
+				fields.RunnerRole(runnerRole))
 		}
 		// logger.Debug("📬 queue: pushed message", fields.PubKey(identifier.GetPubKey()), fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
 	}
 }
 
-func (v *Validator) createTimerMessage(identifier spectypes.MessageID, height specqbft.Height, round specqbft.Round) (*spectypes.SSVMessage, error) {
+func (v *Validator) createTimerMessage(identifier spectypes.MessageID, height specqbft.Height, round specqbft.Round) (*spectypes.SignedSSVMessage, error) {
 	td := types.TimeoutData{
 		Height: height,
 		Round:  round,
@@ -68,9 +69,14 @@ func (v *Validator) createTimerMessage(identifier spectypes.MessageID, height sp
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to encode timeout signed msg")
 	}
-	return &spectypes.SSVMessage{
-		MsgType: message.SSVEventMsgType,
-		MsgID:   identifier,
-		Data:    eventMsgData,
+	return &spectypes.SignedSSVMessage{
+		Signatures:  [][]byte{},
+		OperatorIDs: []uint64{},
+		FullData:    nil,
+		SSVMessage: &spectypes.SSVMessage{
+			MsgType: message.SSVEventMsgType,
+			MsgID:   identifier,
+			Data:    eventMsgData,
+		},
 	}, nil
 }

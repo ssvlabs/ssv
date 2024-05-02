@@ -6,18 +6,18 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 )
 
-func (b *BaseRunner) ValidatePreConsensusMsg(runner Runner, signedMsg ssvtypes.PartialSignatureMessages) error {
+func (b *BaseRunner) ValidatePreConsensusMsg(runner Runner, psigMsgs *spectypes.PartialSignatureMessages) error {
 	if !b.hasRunningDuty() {
 		return errors.New("no running duty")
 	}
 
-	if err := b.validatePartialSigMsgForSlot(signedMsg, b.State.StartingDuty.DutySlot()); err != nil {
+	if err := b.validatePartialSigMsgForSlot(psigMsgs, b.State.StartingDuty.DutySlot()); err != nil {
 		return err
 	}
 
@@ -26,22 +26,22 @@ func (b *BaseRunner) ValidatePreConsensusMsg(runner Runner, signedMsg ssvtypes.P
 		return err
 	}
 
-	return b.verifyExpectedRoot(runner, signedMsg, roots, domain)
+	return b.verifyExpectedRoot(runner, psigMsgs, roots, domain)
 }
 
 // Verify each signature in container removing the invalid ones
-func (b *BaseRunner) FallBackAndVerifyEachSignature(container ssvtypes.PartialSigContainer, root [32]byte,
+func (b *BaseRunner) FallBackAndVerifyEachSignature(container *specssv.PartialSigContainer, root [32]byte,
 	committee []*spectypes.ShareMember, validatorIndex phase0.ValidatorIndex) {
 	signatures := container.GetSignatures(validatorIndex, root)
 
 	for operatorID, signature := range signatures {
-		if err := b.verifyBeaconPartialSignature(operatorID, signature, root, b.getCommittee(validatorIndex)); err != nil {
+		if err := b.verifyBeaconPartialSignature(operatorID, signature, root, committee); err != nil {
 			container.Remove(validatorIndex, operatorID, root)
 		}
 	}
 }
 
-func (b *BaseRunner) ValidatePostConsensusMsg(runner Runner, signedMsg ssvtypes.PartialSignatureMessages) error {
+func (b *BaseRunner) ValidatePostConsensusMsg(runner Runner, signedMsg *spectypes.PartialSignatureMessages) error {
 	if !b.hasRunningDuty() {
 		return errors.New("no running duty")
 	}
@@ -88,8 +88,8 @@ func (b *BaseRunner) validateDecidedConsensusData(runner Runner, val spectypes.E
 	return nil
 }
 
-func (b *BaseRunner) verifyExpectedRoot(runner Runner, signedMsg ssvtypes.PartialSignatureMessages, expectedRootObjs []ssz.HashRoot, domain spec.DomainType) error {
-	if len(expectedRootObjs) != len(signedMsg.GetMessages()) {
+func (b *BaseRunner) verifyExpectedRoot(runner Runner, psigMsgs *spectypes.PartialSignatureMessages, expectedRootObjs []ssz.HashRoot, domain spec.DomainType) error {
+	if len(expectedRootObjs) != len(psigMsgs.Messages) {
 		return errors.New("wrong expected roots count")
 	}
 
@@ -119,17 +119,17 @@ func (b *BaseRunner) verifyExpectedRoot(runner Runner, signedMsg ssvtypes.Partia
 		return err
 	}
 
-	sortedRoots := func(msgs ssvtypes.PartialSignatureMessages) [][32]byte {
+	sortedRoots := func(msgs spectypes.PartialSignatureMessages) [][32]byte {
 		ret := make([][32]byte, 0)
-		for _, msg := range msgs.GetMessages() {
-			ret = append(ret, msg.GetSigningRoot())
+		for _, msg := range msgs.Messages {
+			ret = append(ret, msg.SigningRoot)
 		}
 
 		sort.Slice(ret, func(i, j int) bool {
 			return string(ret[i][:]) < string(ret[j][:])
 		})
 		return ret
-	}(signedMsg)
+	}(*psigMsgs)
 
 	// verify roots
 	for i, r := range sortedRoots {

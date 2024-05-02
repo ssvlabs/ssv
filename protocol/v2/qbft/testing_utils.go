@@ -2,8 +2,8 @@ package qbft
 
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/herumi/bls-eth-go-binary/bls"
-	specqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 )

@@ -3,7 +3,7 @@ package msgvalidation
 import (
 	"fmt"
 
-	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	"github.com/bloxapp/ssv/operator/keys"
 )

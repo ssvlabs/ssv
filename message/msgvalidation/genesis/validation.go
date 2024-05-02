@@ -55,12 +55,6 @@ const (
 	maxDutiesPerEpoch          = 2
 )
 
-// MessageValidator defines methods for validating pubsub messages.
-type MessageValidator interface {
-	ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
-	Validate(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult
-}
-
 type messageValidator struct {
 	logger                  *zap.Logger
 	metrics                 metricsreporter.MetricsReporter
@@ -165,7 +159,7 @@ type Descriptor struct {
 func (d Descriptor) Fields() []zapcore.Field {
 	result := []zapcore.Field{
 		fields.Validator(d.ValidatorPK),
-		fields.Role(spectypes.BeaconRole(d.Role)),
+		fields.BeaconRole(spectypes.BeaconRole(d.Role)),
 		zap.String("ssv_message_type", ssvmessage.MsgTypeToString(spectypes.MsgType(d.SSVMessageType))),
 		fields.Slot(d.Slot),
 	}
