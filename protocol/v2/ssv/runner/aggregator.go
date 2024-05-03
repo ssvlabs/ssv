@@ -37,7 +37,6 @@ func NewAggregatorRunner(
 	beacon specssv.BeaconNode,
 	network specssv.Network,
 	signer spectypes.BeaconSigner,
-	beaconSigner spectypes.BeaconSigner,
 	operatorSigner spectypes.OperatorSigner,
 	valCheck specqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
