@@ -1,13 +1,12 @@
 package instance
 
 import (
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
 )
-
-var CutoffRound = 15 // stop processing instances after 8*2+120*6 = 14.2 min (~ 2 epochs)
 
 func (i *Instance) UponRoundTimeout(logger *zap.Logger) error {
 	if !i.CanProcessMessages() {
@@ -31,14 +30,19 @@ func (i *Instance) UponRoundTimeout(logger *zap.Logger) error {
 		return errors.Wrap(err, "could not generate round change msg")
 	}
 
+	roundChangeMsg, err := specqbft.DecodeMessage(roundChange.SSVMessage.Data)
+	if err != nil {
+		return err
+	}
+
 	logger.Debug("📢 broadcasting round change message",
 		fields.Round(i.State.Round),
-		fields.Root(roundChange.Message.Root),
-		zap.Any("round-change-signers", roundChange.Signers),
+		fields.Root(roundChangeMsg.Root),
+		zap.Any("round-change-signers", roundChange.GetOperatorIDs()),
 		fields.Height(i.State.Height),
 		zap.String("reason", "timeout"))
 
-	if err := i.Broadcast(logger, roundChange); err != nil {
+	if err := i.Broadcast(roundChange); err != nil {
 		return errors.Wrap(err, "failed to broadcast round change message")
 	}
 

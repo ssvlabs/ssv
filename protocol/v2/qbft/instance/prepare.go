@@ -10,12 +10,11 @@ import (
 
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // uponPrepare process prepare message
 // Assumes prepare message is valid!
-func (i *Instance) uponPrepare(logger *zap.Logger, signedPrepare *specqbft.SignedMessage, prepareMsgContainer *specqbft.MsgContainer) error {
+func (i *Instance) uponPrepare(logger *zap.Logger, signedPrepare *spectypes.SignedSSVMessage, prepareMsgContainer *specqbft.MsgContainer) error {
 	hasQuorumBefore := specqbft.HasQuorum(i.State.Share, prepareMsgContainer.MessagesForRound(i.State.Round))
 
 	addedMsg, err := prepareMsgContainer.AddFirstMsgForSignerAndRound(signedPrepare)
@@ -28,8 +27,8 @@ func (i *Instance) uponPrepare(logger *zap.Logger, signedPrepare *specqbft.Signe
 
 	logger.Debug("📬 got prepare message",
 		fields.Round(i.State.Round),
-		zap.Any("prepare-signers", signedPrepare.Signers),
-		fields.Root(signedPrepare.Message.Root))
+		zap.Any("prepare-signers", signedPrepare.GetOperatorIDs()),
+	)
 
 	if hasQuorumBefore {
 		return nil // already moved to commit stage
@@ -39,7 +38,12 @@ func (i *Instance) uponPrepare(logger *zap.Logger, signedPrepare *specqbft.Signe
 		return nil // no quorum yet
 	}
 
-	proposedRoot := i.State.ProposalAcceptedForCurrentRound.Message.Root
+	proposalMsgAccepted, err := specqbft.DecodeMessage(i.State.ProposalAcceptedForCurrentRound.SSVMessage.Data)
+	if err != nil {
+		return err
+	}
+
+	proposedRoot := proposalMsgAccepted.Root
 
 	i.State.LastPreparedValue = i.State.ProposalAcceptedForCurrentRound.FullData
 	i.State.LastPreparedRound = i.State.Round
@@ -51,17 +55,23 @@ func (i *Instance) uponPrepare(logger *zap.Logger, signedPrepare *specqbft.Signe
 		zap.Any("prepare-signers", allSigners(prepareMsgContainer.MessagesForRound(i.State.Round))),
 		fields.Root(proposedRoot))
 
-	commitMsg, err := CreateCommit(i.State, i.config, proposedRoot)
+	commit, err := CreateCommit(i.State, i.config, proposedRoot)
 	if err != nil {
 		return errors.Wrap(err, "could not create commit msg")
 	}
 
+	commitMsg, err := specqbft.DecodeMessage(commit.SSVMessage.Data)
+	if err != nil {
+		return err
+	}
+
 	logger.Debug("📢 broadcasting commit message",
 		fields.Round(i.State.Round),
-		zap.Any("commit-singers", commitMsg.Signers),
-		fields.Root(commitMsg.Message.Root))
+		zap.Any("commit-singers", commit.GetOperatorIDs()),
+		fields.Root(commitMsg.Root),
+	)
 
-	if err := i.Broadcast(logger, commitMsg); err != nil {
+	if err := i.Broadcast(commit); err != nil {
 		return errors.Wrap(err, "failed to broadcast commit message")
 	}
 
@@ -70,7 +80,7 @@ func (i *Instance) uponPrepare(logger *zap.Logger, signedPrepare *specqbft.Signe
 
 // getRoundChangeJustification returns the round change justification for the current round.
 // The justification is a quorum of signed prepare messages that agree on state.LastPreparedValue
-func getRoundChangeJustification(state *specqbft.State, config qbft.IConfig, prepareMsgContainer *specqbft.MsgContainer) ([]*specqbft.SignedMessage, error) {
+func getRoundChangeJustification(state *specqbft.State, config qbft.IConfig, prepareMsgContainer *specqbft.MsgContainer) ([]*spectypes.SignedSSVMessage, error) {
 	if state.LastPreparedValue == nil {
 		return nil, nil
 	}
@@ -81,7 +91,7 @@ func getRoundChangeJustification(state *specqbft.State, config qbft.IConfig, pre
 	}
 
 	prepareMsgs := prepareMsgContainer.MessagesForRound(state.LastPreparedRound)
-	ret := make([]*specqbft.SignedMessage, 0)
+	ret := make([]*spectypes.SignedSSVMessage, 0)
 	for _, msg := range prepareMsgs {
 		if err := validSignedPrepareForHeightRoundAndRoot(
 			config,
@@ -129,18 +139,23 @@ func getRoundChangeJustification(state *specqbft.State, config qbft.IConfig, pre
 // https://entethalliance.github.io/client-spec/qbft_spec.html#dfn-qbftspecification
 func validSignedPrepareForHeightRoundAndRoot(
 	config qbft.IConfig,
-	signedPrepare *specqbft.SignedMessage,
+	signedPrepare *spectypes.SignedSSVMessage,
 	height specqbft.Height,
 	round specqbft.Round,
 	root [32]byte,
-	operators []*spectypes.Operator) error {
-	if signedPrepare.Message.MsgType != specqbft.PrepareMsgType {
+	operators []*spectypes.CommitteeMember) error {
+	msg, err := specqbft.DecodeMessage(signedPrepare.SSVMessage.Data)
+	if err != nil {
+		return err
+	}
+
+	if msg.MsgType != specqbft.PrepareMsgType {
 		return errors.New("prepare msg type is wrong")
 	}
-	if signedPrepare.Message.Height != height {
+	if msg.Height != height {
 		return errors.New("wrong msg height")
 	}
-	if signedPrepare.Message.Round != round {
+	if msg.Round != round {
 		return errors.New("wrong msg round")
 	}
 
@@ -148,16 +163,16 @@ func validSignedPrepareForHeightRoundAndRoot(
 		return errors.Wrap(err, "prepareData invalid")
 	}
 
-	if !bytes.Equal(signedPrepare.Message.Root[:], root[:]) {
+	if !bytes.Equal(msg.Root[:], root[:]) {
 		return errors.New("proposed data mistmatch")
 	}
 
-	if len(signedPrepare.GetSigners()) != 1 {
+	if len(signedPrepare.GetOperatorIDs()) != 1 {
 		return errors.New("msg allows 1 signer")
 	}
 
 	if config.VerifySignatures() {
-		if err := types.VerifyByOperators(signedPrepare.Signature, signedPrepare, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
+		if err := config.GetSignatureVerifier().Verify(signedPrepare, operators); err != nil {
 			return errors.Wrap(err, "msg signature invalid")
 		}
 	}
@@ -177,7 +192,7 @@ Prepare(
                         )
                 );
 */
-func CreatePrepare(state *specqbft.State, config qbft.IConfig, newRound specqbft.Round, root [32]byte) (*specqbft.SignedMessage, error) {
+func CreatePrepare(state *specqbft.State, config qbft.IConfig, newRound specqbft.Round, root [32]byte) (*spectypes.SignedSSVMessage, error) {
 	msg := &specqbft.Message{
 		MsgType:    specqbft.PrepareMsgType,
 		Height:     state.Height,
@@ -186,15 +201,6 @@ func CreatePrepare(state *specqbft.State, config qbft.IConfig, newRound specqbft
 
 		Root: root,
 	}
-	sig, err := config.GetSigner().SignRoot(msg, spectypes.QBFTSignatureType, state.Share.SharePubKey)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed signing prepare msg")
-	}
 
-	signedMsg := &specqbft.SignedMessage{
-		Signature: sig,
-		Signers:   []spectypes.OperatorID{state.Share.OperatorID},
-		Message:   *msg,
-	}
-	return signedMsg, nil
+	return specqbft.MessageToSignedSSVMessage(msg, state.Share.OperatorID, config.GetOperatorSigner())
 }

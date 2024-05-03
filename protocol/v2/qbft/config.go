@@ -9,8 +9,8 @@ import (
 )
 
 type signing interface {
-	// GetSigner returns a Signer instance
-	GetSigner() spectypes.SSVSigner
+	// GetOperatorSigner returns an OperatorSigner instance
+	GetOperatorSigner() spectypes.OperatorSigner
 	// GetSignatureDomainType returns the Domain type used for signatures
 	GetSignatureDomainType() spectypes.DomainType
 }
@@ -27,12 +27,16 @@ type IConfig interface {
 	GetStorage() qbftstorage.QBFTStore
 	// GetTimer returns round timer
 	GetTimer() roundtimer.Timer
+	// GetSignatureVerifier returns the signature verifier for operator signatures
+	GetSignatureVerifier() spectypes.SignatureVerifier
+	// GetCutOffRound returns the round cut-off
+	GetCutOffRound() int
 	// VerifySignatures returns if signature is checked
 	VerifySignatures() bool
 }
 
 type Config struct {
-	Signer                spectypes.SSVSigner
+	Signer                spectypes.OperatorSigner
 	SigningPK             []byte
 	Domain                spectypes.DomainType
 	ValueCheckF           specqbft.ProposedValueCheckF
@@ -44,7 +48,7 @@ type Config struct {
 }
 
 // GetSigner returns a Signer instance
-func (c *Config) GetSigner() spectypes.SSVSigner {
+func (c *Config) GetSigner() spectypes.OperatorSigner {
 	return c.Signer
 }
 

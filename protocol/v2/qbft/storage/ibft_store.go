@@ -3,16 +3,16 @@ package qbftstorage
 import (
 	"encoding/json"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"go.uber.org/zap"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 )
 
 // StoredInstance contains instance state alongside with a decided message (aggregated commits).
 type StoredInstance struct {
 	State          *specqbft.State
-	DecidedMessage *genesisspecqbft.SignedMessage
+	DecidedMessage *spectypes.SignedSSVMessage
 }
 
 // Encode returns a StoredInstance encoded bytes or error.
