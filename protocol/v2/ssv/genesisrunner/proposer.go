@@ -23,7 +23,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/genesisrunner/metrics"
 )
 

@@ -1,8 +1,8 @@
 package genesisrunner
 
 import (
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
+	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/controller"
+	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/instance"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 )
 
