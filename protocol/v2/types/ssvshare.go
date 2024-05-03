@@ -30,7 +30,8 @@ type CommitteeID [32]byte
 type SSVShare struct {
 	spectypes.Share
 	Metadata
-	committeeID *CommitteeID
+	spectypes.Operator // TODO: workaround for compilation, perhaps spectypes.Share needs to be removed
+	committeeID        *CommitteeID
 }
 
 // Encode encodes SSVShare using gob.
@@ -54,7 +55,8 @@ func (s *SSVShare) Decode(data []byte) error {
 	if err := d.Decode(s); err != nil {
 		return fmt.Errorf("decode SSVShare: %w", err)
 	}
-	s.Quorum, _ = ComputeQuorumAndPartialQuorum(len(s.Committee))
+	s.Share.Quorum, _ = ComputeQuorumAndPartialQuorum(len(s.Share.Committee))
+	s.Operator.Quorum, _ = ComputeQuorumAndPartialQuorum(len(s.Operator.Committee))
 	return nil
 }
 
@@ -64,7 +66,7 @@ func (s *SSVShare) BelongsToOperator(operatorID spectypes.OperatorID) bool {
 		return false
 	}
 
-	return slices.ContainsFunc(s.Committee, func(shareMember *spectypes.ShareMember) bool {
+	return slices.ContainsFunc(s.Share.Committee, func(shareMember *spectypes.ShareMember) bool {
 		return shareMember.Signer == operatorID
 	})
 }
@@ -91,8 +93,8 @@ func (s *SSVShare) CommitteeID() CommitteeID {
 	if s.committeeID != nil {
 		return *s.committeeID
 	}
-	ids := make([]spectypes.OperatorID, len(s.Committee))
-	for i, v := range s.Committee {
+	ids := make([]spectypes.OperatorID, len(s.Share.Committee))
+	for i, v := range s.Share.Committee {
 		ids[i] = v.Signer
 	}
 	id := ComputeCommitteeID(ids)
@@ -101,7 +103,12 @@ func (s *SSVShare) CommitteeID() CommitteeID {
 }
 
 func (s *SSVShare) GetCommittee() []*spectypes.ShareMember {
-	return s.Committee
+	return s.Share.Committee
+}
+
+// TODO: remove after Share is deleted, it's a temporary workaround
+func (s *SSVShare) HasQuorum(cnt int) bool {
+	return s.Share.HasQuorum(cnt)
 }
 
 // ComputeCommitteeIDHash will compute committee ID hash with given owner address and operator ids

@@ -9,11 +9,10 @@ import (
 	"strings"
 	"time"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/dgraph-io/ristretto"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -27,7 +26,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/utils/format"
 )
 
@@ -220,16 +219,17 @@ func Round(round specqbft.Round) zap.Field {
 	return zap.Uint64(FieldRound, uint64(round))
 }
 
-func BeaconRole(val spectypes.BeaconRole) zap.Field {
+func BeaconRole(val ssvtypes.BeaconRole) zap.Field {
 	return zap.Stringer(FieldRole, val)
 }
 
-func RunnerRole(val spectypes.RunnerRole) zap.Field {
-	return zap.String(FieldRole, message.RunnerRoleToString(val))
+func RunnerRole(val ssvtypes.RunnerRole) zap.Field {
+	specRole, _ := val.Spec()
+	return zap.String(FieldRole, message.RunnerRoleToString(specRole))
 }
 
 func SpecRunnerRole(val spectypes.RunnerRole) zap.Field {
-	return zap.String(FieldRole, types.RunnerRoleFromSpec(val).String())
+	return zap.String(FieldRole, ssvtypes.RunnerRoleFromSpec(val).String())
 }
 
 func MessageID(val spectypes.MessageID) zap.Field {

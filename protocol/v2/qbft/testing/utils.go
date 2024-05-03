@@ -17,9 +17,9 @@ import (
 
 var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, role types.BeaconRole) *qbft.Config {
 	return &qbft.Config{
-		Signer:    testingutils.NewTestingKeyManager(),
-		SigningPK: keySet.Shares[1].GetPublicKey().Serialize(),
-		Domain:    testingutils.TestingSSVDomainType,
+		OperatorSigner: testingutils.NewTestingKeyManager(),
+		SigningPK:      keySet.Shares[1].GetPublicKey().Serialize(),
+		Domain:         testingutils.TestingSSVDomainType,
 		ValueCheckF: func(data []byte) error {
 			if bytes.Equal(data, TestingInvalidValueCheck) {
 				return errors.New("invalid value")

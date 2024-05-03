@@ -2,6 +2,7 @@ package qbft
 
 import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	"github.com/bloxapp/ssv-spec/types"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
@@ -36,7 +37,7 @@ type IConfig interface {
 }
 
 type Config struct {
-	Signer                spectypes.OperatorSigner
+	OperatorSigner        spectypes.OperatorSigner
 	SigningPK             []byte
 	Domain                spectypes.DomainType
 	ValueCheckF           specqbft.ProposedValueCheckF
@@ -44,12 +45,14 @@ type Config struct {
 	Storage               qbftstorage.QBFTStore
 	Network               specqbft.Network
 	Timer                 roundtimer.Timer
+	SignatureVerifier     types.SignatureVerifier
+	CutOffRound           int
 	SignatureVerification bool
 }
 
-// GetSigner returns a Signer instance
-func (c *Config) GetSigner() spectypes.OperatorSigner {
-	return c.Signer
+// GetOperatorSigner returns an OperatorSigner instance
+func (c *Config) GetOperatorSigner() spectypes.OperatorSigner {
+	return c.OperatorSigner
 }
 
 // GetSigningPubKey returns the public key used to sign all QBFT messages
@@ -85,6 +88,14 @@ func (c *Config) GetStorage() qbftstorage.QBFTStore {
 // GetTimer returns round timer
 func (c *Config) GetTimer() roundtimer.Timer {
 	return c.Timer
+}
+
+func (c *Config) GetSignatureVerifier() spectypes.SignatureVerifier {
+	return c.SignatureVerifier
+}
+
+func (c *Config) GetCutOffRound() int {
+	return c.CutOffRound
 }
 
 func (c *Config) VerifySignatures() bool {

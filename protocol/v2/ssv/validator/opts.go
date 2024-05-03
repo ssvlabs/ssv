@@ -4,10 +4,9 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	"github.com/bloxapp/ssv/ibft/storage"
-	msgvalidation "github.com/bloxapp/ssv/message/msgvalidation/genesis"
+	"github.com/bloxapp/ssv/message/msgvalidation"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	qbftctrl "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
@@ -25,8 +24,8 @@ type Options struct {
 	BeaconNetwork     beacon.BeaconNetwork
 	Storage           *storage.QBFTStores
 	SSVShare          *types.SSVShare
-	Signer            genesisspectypes.KeyManager
-	BeaconSigner      spectypes.BeaconSigner
+	Signer            spectypes.BeaconSigner
+	OperatorSigner    spectypes.OperatorSigner
 	DutyRunners       runner.DutyRunners
 	NewDecidedHandler qbftctrl.NewDecidedHandler
 	FullNode          bool

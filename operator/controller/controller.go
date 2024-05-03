@@ -862,10 +862,10 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 	domainType := ssvtypes.GetDefaultDomain()
 	buildController := func(role genesisspectypes.BeaconRole, valueCheckF genesisspecqbft.ProposedValueCheckF) *qbftcontroller.Controller {
 		config := &qbft.Config{
-			Signer:      options.Signer,
-			SigningPK:   options.SSVShare.ValidatorPubKey[:], // TODO right val?
-			Domain:      domainType,
-			ValueCheckF: nil, // sets per role type
+			OperatorSigner: options.Signer,
+			SigningPK:      options.SSVShare.ValidatorPubKey[:], // TODO right val?
+			Domain:         domainType,
+			ValueCheckF:    nil, // sets per role type
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 				leader := specqbft.RoundRobinProposer(state, round)
 				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
@@ -935,10 +935,10 @@ func SetupRunnersAfterFork(ctx context.Context, logger *zap.Logger, options vali
 	domainType := ssvtypes.GetDefaultDomain()
 	buildController := func(role spectypes.RunnerRole, valueCheckF specqbft.ProposedValueCheckF) *qbftcontroller.Controller {
 		config := &qbft.Config{
-			Signer:      options.Signer,
-			SigningPK:   options.SSVShare.ValidatorPubKey[:], // TODO right val?
-			Domain:      domainType,
-			ValueCheckF: nil, // sets per role type
+			OperatorSigner: options.Signer,
+			SigningPK:      options.SSVShare.ValidatorPubKey[:], // TODO right val?
+			Domain:         domainType,
+			ValueCheckF:    nil, // sets per role type
 			ProposerF: func(state *genesisspecqbft.State, round genesisspecqbft.Round) genesisspectypes.OperatorID {
 				leader := genesisspecqbft.RoundRobinProposer(state, round)
 				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
