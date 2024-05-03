@@ -1,17 +1,16 @@
-package qbftstorage
+package genesisqbftstorage
 
 import (
 	"encoding/json"
 
 	"go.uber.org/zap"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 )
 
 // StoredInstance contains instance state alongside with a decided message (aggregated commits).
 type StoredInstance struct {
-	State          *specqbft.State
+	State          *genesisspecqbft.State
 	DecidedMessage *genesisspecqbft.SignedMessage
 }
 
@@ -31,7 +30,7 @@ type InstanceStore interface {
 	GetHighestInstance(identifier []byte) (*StoredInstance, error)
 
 	// GetInstancesInRange returns historical instances in the given range.
-	GetInstancesInRange(identifier []byte, from specqbft.Height, to specqbft.Height) ([]*StoredInstance, error)
+	GetInstancesInRange(identifier []byte, from genesisspecqbft.Height, to genesisspecqbft.Height) ([]*StoredInstance, error)
 
 	// SaveInstance updates/inserts the given instance to it's identifier's history.
 	SaveInstance(instance *StoredInstance) error
@@ -43,7 +42,7 @@ type InstanceStore interface {
 	SaveHighestAndHistoricalInstance(instance *StoredInstance) error
 
 	// GetInstance returns an historical instance for the given identifier and height.
-	GetInstance(identifier []byte, height specqbft.Height) (*StoredInstance, error)
+	GetInstance(identifier []byte, height genesisspecqbft.Height) (*StoredInstance, error)
 
 	// CleanAllInstances removes all historical and highest instances for the given identifier.
 	CleanAllInstances(logger *zap.Logger, msgID []byte) error
