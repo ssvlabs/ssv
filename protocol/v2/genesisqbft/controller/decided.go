@@ -3,17 +3,17 @@ package controller
 import (
 	"bytes"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v2/genesisqbft"
+	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/instance"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 )
 
 // UponDecided returns decided msg if decided, nil otherwise
-func (c *Controller) UponDecided(logger *zap.Logger, msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
+func (c *Controller) UponDecided(logger *zap.Logger, msg *genesisspecqbft.SignedMessage) (*genesisspecqbft.SignedMessage, error) {
 	if err := ValidateDecided(
 		c.config,
 		msg,
@@ -80,9 +80,9 @@ func (c *Controller) UponDecided(logger *zap.Logger, msg *specqbft.SignedMessage
 }
 
 func ValidateDecided(
-	config qbft.IConfig,
-	signedDecided *specqbft.SignedMessage,
-	share *spectypes.Share,
+	config genesisqbft.IConfig,
+	signedDecided *genesisspecqbft.SignedMessage,
+	share *genesisspectypes.Share,
 ) error {
 	if !IsDecidedMsg(share, signedDecided) {
 		return errors.New("not a decided msg")
@@ -100,7 +100,7 @@ func ValidateDecided(
 		return errors.Wrap(err, "invalid decided")
 	}
 
-	r, err := specqbft.HashDataRoot(signedDecided.FullData)
+	r, err := genesisspecqbft.HashDataRoot(signedDecided.FullData)
 	if err != nil {
 		return errors.Wrap(err, "could not hash input data")
 	}
@@ -112,6 +112,6 @@ func ValidateDecided(
 }
 
 // IsDecidedMsg returns true if signed commit has all quorum sigs
-func IsDecidedMsg(share *spectypes.Share, signedDecided *specqbft.SignedMessage) bool {
-	return share.HasQuorum(len(signedDecided.Signers)) && signedDecided.Message.MsgType == specqbft.CommitMsgType
+func IsDecidedMsg(share *genesisspectypes.Share, signedDecided *genesisspecqbft.SignedMessage) bool {
+	return share.HasQuorum(len(signedDecided.Signers)) && signedDecided.Message.MsgType == genesisspecqbft.CommitMsgType
 }

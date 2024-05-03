@@ -3,11 +3,12 @@ package instance
 import (
 	"time"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
+
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 )
 
 var (
@@ -43,7 +44,7 @@ type metrics struct {
 	round            prometheus.Gauge
 }
 
-func newMetrics(msgID spectypes.MessageID) *metrics {
+func newMetrics(msgID genesisspectypes.MessageID) *metrics {
 	return &metrics{
 		proposalDuration: metricsStageDuration.WithLabelValues("proposal"),
 		prepareDuration:  metricsStageDuration.WithLabelValues("prepare"),
@@ -71,6 +72,6 @@ func (m *metrics) EndStageCommit() {
 	m.StageStart = time.Now()
 }
 
-func (m *metrics) SetRound(round specqbft.Round) {
+func (m *metrics) SetRound(round genesisspecqbft.Round) {
 	m.round.Set(float64(round))
 }

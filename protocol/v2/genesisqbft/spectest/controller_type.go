@@ -10,23 +10,23 @@ import (
 	"reflect"
 	"testing"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
-	typescomparable "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils/comparable"
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/protocol/v2/genesisqbft"
+	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/controller"
+	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/roundtimer"
+	qbfttesting "github.com/bloxapp/ssv/protocol/v2/genesisqbft/testing"
+	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
-	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
+	genesisspectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
+	genesisspectests "github.com/ssvlabs/ssv-spec-pre-cc/qbft/spectest/tests"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	typescomparable "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils/comparable"
 )
 
-func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
+func RunControllerSpecTest(t *testing.T, test *genesisspectests.ControllerSpecTest) {
 	//temporary to override state comparisons from file not inputted one
 	overrideStateComparisonForControllerSpecTest(t, test)
 
@@ -39,7 +39,7 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 
 	var lastErr error
 	for i, runData := range test.RunInstanceData {
-		height := specqbft.Height(i)
+		height := genesisspecqbft.Height(i)
 		if runData.Height != nil {
 			height = *runData.Height
 		}
@@ -57,10 +57,10 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 
 func generateController(logger *zap.Logger) *controller.Controller {
 	identifier := []byte{1, 2, 3, 4}
-	config := qbfttesting.TestingConfig(logger, spectestingutils.Testing4SharesSet(), spectypes.BNRoleAttester)
+	config := qbfttesting.TestingConfig(logger, genesisspectestingutils.Testing4SharesSet(), genesisspectypes.BNRoleAttester)
 	return qbfttesting.NewTestingQBFTController(
 		identifier[:],
-		spectestingutils.TestingShare(spectestingutils.Testing4SharesSet()),
+		genesisspectestingutils.TestingShare(genesisspectestingutils.Testing4SharesSet()),
 		config,
 		false,
 	)
@@ -68,8 +68,8 @@ func generateController(logger *zap.Logger) *controller.Controller {
 
 func testTimer(
 	t *testing.T,
-	config *qbft.Config,
-	runData *spectests.RunInstanceData,
+	config *genesisqbft.Config,
+	runData *genesisspectests.RunInstanceData,
 ) {
 	if runData.ExpectedTimerState != nil {
 		if timer, ok := config.GetTimer().(*roundtimer.TestQBFTTimer); ok {
@@ -83,8 +83,8 @@ func testProcessMsg(
 	t *testing.T,
 	logger *zap.Logger,
 	contr *controller.Controller,
-	config *qbft.Config,
-	runData *spectests.RunInstanceData,
+	config *genesisqbft.Config,
+	runData *genesisspectests.RunInstanceData,
 ) error {
 	decidedCnt := uint(0)
 	var lastErr error
@@ -106,26 +106,26 @@ func testProcessMsg(
 
 func testBroadcastedDecided(
 	t *testing.T,
-	config *qbft.Config,
+	config *genesisqbft.Config,
 	identifier []byte,
-	runData *spectests.RunInstanceData,
+	runData *genesisspectests.RunInstanceData,
 ) {
 	if runData.ExpectedDecidedState.BroadcastedDecided != nil {
 		// test broadcasted
-		broadcastedMsgs := config.GetNetwork().(*spectestingutils.TestingNetwork).BroadcastedMsgs
+		broadcastedMsgs := config.GetNetwork().(*genesisspectestingutils.TestingNetwork).BroadcastedMsgs
 		require.Greater(t, len(broadcastedMsgs), 0)
 		found := false
 		for _, msg := range broadcastedMsgs {
 
 			// a hack for testing non standard messageID identifiers since we copy them into a MessageID this fixes it
-			msgID := spectypes.MessageID{}
+			msgID := genesisspectypes.MessageID{}
 			copy(msgID[:], identifier)
 
 			if !bytes.Equal(msgID[:], msg.MsgID[:]) {
 				continue
 			}
 
-			msg1 := &specqbft.SignedMessage{}
+			msg1 := &genesisspecqbft.SignedMessage{}
 			require.NoError(t, msg1.Decode(msg.Data))
 			r1, err := msg1.GetRoot()
 			require.NoError(t, err)
@@ -144,20 +144,20 @@ func testBroadcastedDecided(
 	}
 }
 
-func runInstanceWithData(t *testing.T, logger *zap.Logger, height specqbft.Height, contr *controller.Controller, runData *spectests.RunInstanceData) error {
+func runInstanceWithData(t *testing.T, logger *zap.Logger, height genesisspecqbft.Height, contr *controller.Controller, runData *genesisspectests.RunInstanceData) error {
 	err := contr.StartNewInstance(logger, height, runData.InputValue)
 	var lastErr error
 	if err != nil {
 		lastErr = err
 	}
 
-	testTimer(t, contr.GetConfig().(*qbft.Config), runData)
+	testTimer(t, contr.GetConfig().(*genesisqbft.Config), runData)
 
-	if err := testProcessMsg(t, logger, contr, contr.GetConfig().(*qbft.Config), runData); err != nil {
+	if err := testProcessMsg(t, logger, contr, contr.GetConfig().(*genesisqbft.Config), runData); err != nil {
 		lastErr = err
 	}
 
-	testBroadcastedDecided(t, contr.GetConfig().(*qbft.Config), contr.Identifier, runData)
+	testBroadcastedDecided(t, contr.GetConfig().(*genesisqbft.Config), contr.Identifier, runData)
 
 	// test root
 	r, err := contr.GetRoot()
@@ -167,7 +167,7 @@ func runInstanceWithData(t *testing.T, logger *zap.Logger, height specqbft.Heigh
 	return lastErr
 }
 
-func overrideStateComparisonForControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
+func overrideStateComparisonForControllerSpecTest(t *testing.T, test *genesisspectests.ControllerSpecTest) {
 	specDir, err := protocoltesting.GetSpecDir("", filepath.Join("qbft", "spectest"))
 	require.NoError(t, err)
 	specDir = filepath.Join(specDir, "generate")

@@ -4,12 +4,11 @@ import (
 	"context"
 	"sync"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	"go.uber.org/zap"
-
-	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
+	"go.uber.org/zap"
+
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 )
 
 var db basedb.Database
@@ -28,14 +27,14 @@ func getDB(logger *zap.Logger) basedb.Database {
 	return db
 }
 
-var allRoles = []spectypes.BeaconRole{
-	spectypes.BNRoleAttester,
-	spectypes.BNRoleProposer,
-	spectypes.BNRoleAggregator,
-	spectypes.BNRoleSyncCommittee,
-	spectypes.BNRoleSyncCommitteeContribution,
-	spectypes.BNRoleValidatorRegistration,
-	spectypes.BNRoleVoluntaryExit,
+var allRoles = []genesisspectypes.BeaconRole{
+	genesisspectypes.BNRoleAttester,
+	genesisspectypes.BNRoleProposer,
+	genesisspectypes.BNRoleAggregator,
+	genesisspectypes.BNRoleSyncCommittee,
+	genesisspectypes.BNRoleSyncCommitteeContribution,
+	genesisspectypes.BNRoleValidatorRegistration,
+	genesisspectypes.BNRoleVoluntaryExit,
 }
 
 func TestingStores(logger *zap.Logger) *qbftstorage.QBFTStores {

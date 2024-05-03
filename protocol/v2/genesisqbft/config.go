@@ -1,11 +1,11 @@
 package genesisqbft
 
 import (
+	qbftstorage "github.com/bloxapp/ssv/protocol/v2/genesisqbft/storage"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
+
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 )
 
 type signing interface {

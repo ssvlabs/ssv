@@ -7,18 +7,17 @@ import (
 	"strings"
 	"testing"
 
-	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/ssvlabs/ssv-spec-pre-cc/qbft/spectest/tests/timeout"
-	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 	"github.com/stretchr/testify/require"
-
 	"github.com/bloxapp/ssv/logging"
 	testing2 "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
-
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
 	"github.com/bloxapp/ssv/protocol/v2/types"
+
+	genesisspectests "github.com/ssvlabs/ssv-spec-pre-cc/qbft/spectest/tests"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	genesisspectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
+	"github.com/ssvlabs/ssv-spec-pre-cc/qbft/spectest/tests/timeout"
 )
 
 func TestQBFTMapping(t *testing.T) {
@@ -31,57 +30,57 @@ func TestQBFTMapping(t *testing.T) {
 		panic(err.Error())
 	}
 
-	types.SetDefaultDomain(testingutils.TestingSSVDomainType)
+	types.SetDefaultDomain(genesisspectestingutils.TestingSSVDomainType)
 
 	for name, test := range untypedTests {
 		name, test := name, test
 		testName := strings.Split(name, "_")[1]
 		testType := strings.Split(name, "_")[0]
 		switch testType {
-		case reflect.TypeOf(&spectests.MsgProcessingSpecTest{}).String():
+		case reflect.TypeOf(&genesisspectests.MsgProcessingSpecTest{}).String():
 			byts, err := json.Marshal(test)
 			require.NoError(t, err)
-			typedTest := &spectests.MsgProcessingSpecTest{}
+			typedTest := &genesisspectests.MsgProcessingSpecTest{}
 			require.NoError(t, json.Unmarshal(byts, &typedTest))
 
 			t.Run(typedTest.TestName(), func(t *testing.T) {
 				t.Parallel()
 				RunMsgProcessing(t, typedTest)
 			})
-		case reflect.TypeOf(&spectests.MsgSpecTest{}).String():
+		case reflect.TypeOf(&genesisspectests.MsgSpecTest{}).String():
 			byts, err := json.Marshal(test)
 			require.NoError(t, err)
-			typedTest := &spectests.MsgSpecTest{}
+			typedTest := &genesisspectests.MsgSpecTest{}
 			require.NoError(t, json.Unmarshal(byts, &typedTest))
 
 			t.Run(typedTest.TestName(), func(t *testing.T) {
 				t.Parallel()
 				RunMsg(t, typedTest)
 			})
-		case reflect.TypeOf(&spectests.ControllerSpecTest{}).String():
+		case reflect.TypeOf(&genesisspectests.ControllerSpecTest{}).String():
 			byts, err := json.Marshal(test)
 			require.NoError(t, err)
-			typedTest := &spectests.ControllerSpecTest{}
+			typedTest := &genesisspectests.ControllerSpecTest{}
 			require.NoError(t, json.Unmarshal(byts, &typedTest))
 
 			t.Run(typedTest.TestName(), func(t *testing.T) {
 				t.Parallel()
 				RunControllerSpecTest(t, typedTest)
 			})
-		case reflect.TypeOf(&spectests.CreateMsgSpecTest{}).String():
+		case reflect.TypeOf(&genesisspectests.CreateMsgSpecTest{}).String():
 			byts, err := json.Marshal(test)
 			require.NoError(t, err)
-			typedTest := &spectests.CreateMsgSpecTest{}
+			typedTest := &genesisspectests.CreateMsgSpecTest{}
 			require.NoError(t, json.Unmarshal(byts, &typedTest))
 
 			t.Run(typedTest.TestName(), func(t *testing.T) {
 				t.Parallel()
 				RunCreateMsg(t, typedTest)
 			})
-		case reflect.TypeOf(&spectests.RoundRobinSpecTest{}).String():
+		case reflect.TypeOf(&genesisspectests.RoundRobinSpecTest{}).String():
 			byts, err := json.Marshal(test)
 			require.NoError(t, err)
-			typedTest := &spectests.RoundRobinSpecTest{}
+			typedTest := &genesisspectests.RoundRobinSpecTest{}
 			require.NoError(t, json.Unmarshal(byts, &typedTest))
 
 			t.Run(typedTest.TestName(), func(t *testing.T) { // using only spec struct so no need to run our version (TODO: check how we choose leader)
@@ -99,11 +98,11 @@ func TestQBFTMapping(t *testing.T) {
 
 			// a little trick we do to instantiate all the internal instance params
 
-			identifier := spectypes.MessageIDFromBytes(typedTest.Pre.State.ID)
+			identifier := genesisspectypes.MessageIDFromBytes(typedTest.Pre.State.ID)
 			preByts, _ := typedTest.Pre.Encode()
 			logger := logging.TestLogger(t)
 			pre := instance.NewInstance(
-				testing2.TestingConfig(logger, testingutils.KeySetForShare(typedTest.Pre.State.Share), identifier.GetRoleType()),
+				testing2.TestingConfig(logger, genesisspectestingutils.KeySetForShare(typedTest.Pre.State.Share), identifier.GetRoleType()),
 				typedTest.Pre.State.Share,
 				typedTest.Pre.State.ID,
 				typedTest.Pre.State.Height,

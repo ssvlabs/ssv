@@ -3,20 +3,20 @@ package instance
 import (
 	"bytes"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/protocol/v2/genesisqbft"
+	genesisqbfttypes "github.com/bloxapp/ssv/protocol/v2/genesisqbft/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 )
 
 // uponPrepare process prepare message
 // Assumes prepare message is valid!
-func (i *Instance) uponPrepare(logger *zap.Logger, signedPrepare *specqbft.SignedMessage, prepareMsgContainer *specqbft.MsgContainer) error {
-	hasQuorumBefore := specqbft.HasQuorum(i.State.Share, prepareMsgContainer.MessagesForRound(i.State.Round))
+func (i *Instance) uponPrepare(logger *zap.Logger, signedPrepare *genesisspecqbft.SignedMessage, prepareMsgContainer *genesisspecqbft.MsgContainer) error {
+	hasQuorumBefore := genesisspecqbft.HasQuorum(i.State.Share, prepareMsgContainer.MessagesForRound(i.State.Round))
 
 	addedMsg, err := prepareMsgContainer.AddFirstMsgForSignerAndRound(signedPrepare)
 	if err != nil {
@@ -35,7 +35,7 @@ func (i *Instance) uponPrepare(logger *zap.Logger, signedPrepare *specqbft.Signe
 		return nil // already moved to commit stage
 	}
 
-	if !specqbft.HasQuorum(i.State.Share, prepareMsgContainer.MessagesForRound(i.State.Round)) {
+	if !genesisspecqbft.HasQuorum(i.State.Share, prepareMsgContainer.MessagesForRound(i.State.Round)) {
 		return nil // no quorum yet
 	}
 
@@ -70,18 +70,18 @@ func (i *Instance) uponPrepare(logger *zap.Logger, signedPrepare *specqbft.Signe
 
 // getRoundChangeJustification returns the round change justification for the current round.
 // The justification is a quorum of signed prepare messages that agree on state.LastPreparedValue
-func getRoundChangeJustification(state *specqbft.State, config qbft.IConfig, prepareMsgContainer *specqbft.MsgContainer) ([]*specqbft.SignedMessage, error) {
+func getRoundChangeJustification(state *genesisspecqbft.State, config genesisqbft.IConfig, prepareMsgContainer *genesisspecqbft.MsgContainer) ([]*genesisspecqbft.SignedMessage, error) {
 	if state.LastPreparedValue == nil {
 		return nil, nil
 	}
 
-	r, err := specqbft.HashDataRoot(state.LastPreparedValue)
+	r, err := genesisspecqbft.HashDataRoot(state.LastPreparedValue)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not hash input data")
 	}
 
 	prepareMsgs := prepareMsgContainer.MessagesForRound(state.LastPreparedRound)
-	ret := make([]*specqbft.SignedMessage, 0)
+	ret := make([]*genesisspecqbft.SignedMessage, 0)
 	for _, msg := range prepareMsgs {
 		if err := validSignedPrepareForHeightRoundAndRoot(
 			config,
@@ -95,7 +95,7 @@ func getRoundChangeJustification(state *specqbft.State, config qbft.IConfig, pre
 		}
 	}
 
-	if !specqbft.HasQuorum(state.Share, ret) {
+	if !genesisspecqbft.HasQuorum(state.Share, ret) {
 		return nil, nil
 	}
 
@@ -128,13 +128,13 @@ func getRoundChangeJustification(state *specqbft.State, config qbft.IConfig, pre
 // validSignedPrepareForHeightRoundAndValue known in dafny spec as validSignedPrepareForHeightRoundAndDigest
 // https://entethalliance.github.io/client-spec/qbft_spec.html#dfn-qbftspecification
 func validSignedPrepareForHeightRoundAndRoot(
-	config qbft.IConfig,
-	signedPrepare *specqbft.SignedMessage,
-	height specqbft.Height,
-	round specqbft.Round,
+	config genesisqbft.IConfig,
+	signedPrepare *genesisspecqbft.SignedMessage,
+	height genesisspecqbft.Height,
+	round genesisspecqbft.Round,
 	root [32]byte,
-	operators []*spectypes.Operator) error {
-	if signedPrepare.Message.MsgType != specqbft.PrepareMsgType {
+	operators []*genesisspectypes.Operator) error {
+	if signedPrepare.Message.MsgType != genesisspecqbft.PrepareMsgType {
 		return errors.New("prepare msg type is wrong")
 	}
 	if signedPrepare.Message.Height != height {
@@ -157,7 +157,7 @@ func validSignedPrepareForHeightRoundAndRoot(
 	}
 
 	if config.VerifySignatures() {
-		if err := types.VerifyByOperators(signedPrepare.Signature, signedPrepare, config.GetSignatureDomainType(), spectypes.QBFTSignatureType, operators); err != nil {
+		if err := genesisqbfttypes.VerifyByOperators(signedPrepare.Signature, signedPrepare, config.GetSignatureDomainType(), genesisspectypes.QBFTSignatureType, operators); err != nil {
 			return errors.Wrap(err, "msg signature invalid")
 		}
 	}
@@ -177,23 +177,23 @@ Prepare(
                         )
                 );
 */
-func CreatePrepare(state *specqbft.State, config qbft.IConfig, newRound specqbft.Round, root [32]byte) (*specqbft.SignedMessage, error) {
-	msg := &specqbft.Message{
-		MsgType:    specqbft.PrepareMsgType,
+func CreatePrepare(state *genesisspecqbft.State, config genesisqbft.IConfig, newRound genesisspecqbft.Round, root [32]byte) (*genesisspecqbft.SignedMessage, error) {
+	msg := &genesisspecqbft.Message{
+		MsgType:    genesisspecqbft.PrepareMsgType,
 		Height:     state.Height,
 		Round:      newRound,
 		Identifier: state.ID,
 
 		Root: root,
 	}
-	sig, err := config.GetSigner().SignRoot(msg, spectypes.QBFTSignatureType, state.Share.SharePubKey)
+	sig, err := config.GetSigner().SignRoot(msg, genesisspectypes.QBFTSignatureType, state.Share.SharePubKey)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed signing prepare msg")
 	}
 
-	signedMsg := &specqbft.SignedMessage{
+	signedMsg := &genesisspecqbft.SignedMessage{
 		Signature: sig,
-		Signers:   []spectypes.OperatorID{state.Share.OperatorID},
+		Signers:   []genesisspectypes.OperatorID{state.Share.OperatorID},
 		Message:   *msg,
 	}
 	return signedMsg, nil

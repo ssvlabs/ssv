@@ -5,22 +5,21 @@ import (
 	"sync"
 
 	"github.com/bloxapp/ssv/logging/fields"
-
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v2/genesisqbft"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 )
 
 // Instance is a single QBFT instance that starts with a Start call (including a value).
 // Every new msg the ProcessMsg function needs to be called
 type Instance struct {
-	State  *specqbft.State
-	config qbft.IConfig
+	State  *genesisspecqbft.State
+	config genesisqbft.IConfig
 
-	processMsgF *spectypes.ThreadSafeF
+	processMsgF *genesisspectypes.ThreadSafeF
 	startOnce   sync.Once
 
 	forceStop  bool
@@ -30,26 +29,26 @@ type Instance struct {
 }
 
 func NewInstance(
-	config qbft.IConfig,
-	share *spectypes.Share,
+	config genesisqbft.IConfig,
+	share *genesisspectypes.Share,
 	identifier []byte,
-	height specqbft.Height,
+	height genesisspecqbft.Height,
 ) *Instance {
-	msgId := spectypes.MessageIDFromBytes(identifier)
+	msgId := genesisspectypes.MessageIDFromBytes(identifier)
 	return &Instance{
-		State: &specqbft.State{
+		State: &genesisspecqbft.State{
 			Share:                share,
 			ID:                   identifier,
-			Round:                specqbft.FirstRound,
+			Round:                genesisspecqbft.FirstRound,
 			Height:               height,
-			LastPreparedRound:    specqbft.NoRound,
-			ProposeContainer:     specqbft.NewMsgContainer(),
-			PrepareContainer:     specqbft.NewMsgContainer(),
-			CommitContainer:      specqbft.NewMsgContainer(),
-			RoundChangeContainer: specqbft.NewMsgContainer(),
+			LastPreparedRound:    genesisspecqbft.NoRound,
+			ProposeContainer:     genesisspecqbft.NewMsgContainer(),
+			PrepareContainer:     genesisspecqbft.NewMsgContainer(),
+			CommitContainer:      genesisspecqbft.NewMsgContainer(),
+			RoundChangeContainer: genesisspecqbft.NewMsgContainer(),
 		},
 		config:      config,
-		processMsgF: spectypes.NewThreadSafeF(),
+		processMsgF: genesisspectypes.NewThreadSafeF(),
 		metrics:     newMetrics(msgId),
 	}
 }
@@ -59,20 +58,20 @@ func (i *Instance) ForceStop() {
 }
 
 // Start is an interface implementation
-func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Height) {
+func (i *Instance) Start(logger *zap.Logger, value []byte, height genesisspecqbft.Height) {
 	i.startOnce.Do(func() {
 		i.StartValue = value
-		i.bumpToRound(specqbft.FirstRound)
+		i.bumpToRound(genesisspecqbft.FirstRound)
 		i.State.Height = height
 		i.metrics.StartStage()
 
-		i.config.GetTimer().TimeoutForRound(height, specqbft.FirstRound)
+		i.config.GetTimer().TimeoutForRound(height, genesisspecqbft.FirstRound)
 
 		logger = logger.With(
 			fields.Round(i.State.Round),
 			fields.Height(i.State.Height))
 
-		proposerID := proposer(i.State, i.GetConfig(), specqbft.FirstRound)
+		proposerID := proposer(i.State, i.GetConfig(), genesisspecqbft.FirstRound)
 		logger.Debug("ℹ️ starting QBFT instance", zap.Uint64("leader", proposerID))
 
 		// propose if this node is the proposer
@@ -94,7 +93,7 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height specqbft.Heigh
 	})
 }
 
-func (i *Instance) Broadcast(logger *zap.Logger, msg *specqbft.SignedMessage) error {
+func (i *Instance) Broadcast(logger *zap.Logger, msg *genesisspecqbft.SignedMessage) error {
 	if !i.CanProcessMessages() {
 		return errors.New("instance stopped processing messages")
 	}
@@ -103,19 +102,19 @@ func (i *Instance) Broadcast(logger *zap.Logger, msg *specqbft.SignedMessage) er
 		return errors.Wrap(err, "could not encode message")
 	}
 
-	msgID := spectypes.MessageID{}
+	msgID := genesisspectypes.MessageID{}
 	copy(msgID[:], msg.Message.Identifier)
 
-	msgToBroadcast := &spectypes.SSVMessage{
-		MsgType: spectypes.SSVConsensusMsgType,
+	msgToBroadcast := &genesisspectypes.SSVMessage{
+		MsgType: genesisspectypes.SSVConsensusMsgType,
 		MsgID:   msgID,
 		Data:    byts,
 	}
 	return i.config.GetNetwork().Broadcast(msgToBroadcast)
 }
 
-func allSigners(all []*specqbft.SignedMessage) []spectypes.OperatorID {
-	signers := make([]spectypes.OperatorID, 0, len(all))
+func allSigners(all []*genesisspecqbft.SignedMessage) []genesisspectypes.OperatorID {
+	signers := make([]genesisspectypes.OperatorID, 0, len(all))
 	for _, m := range all {
 		signers = append(signers, m.Signers...)
 	}
@@ -123,7 +122,7 @@ func allSigners(all []*specqbft.SignedMessage) []spectypes.OperatorID {
 }
 
 // ProcessMsg processes a new QBFT msg, returns non nil error on msg processing error
-func (i *Instance) ProcessMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (decided bool, decidedValue []byte, aggregatedCommit *specqbft.SignedMessage, err error) {
+func (i *Instance) ProcessMsg(logger *zap.Logger, msg *genesisspecqbft.SignedMessage) (decided bool, decidedValue []byte, aggregatedCommit *genesisspecqbft.SignedMessage, err error) {
 	if !i.CanProcessMessages() {
 		return false, nil, nil, errors.New("instance stopped processing messages")
 	}
@@ -134,18 +133,18 @@ func (i *Instance) ProcessMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (
 
 	res := i.processMsgF.Run(func() interface{} {
 		switch msg.Message.MsgType {
-		case specqbft.ProposalMsgType:
+		case genesisspecqbft.ProposalMsgType:
 			return i.uponProposal(logger, msg, i.State.ProposeContainer)
-		case specqbft.PrepareMsgType:
+		case genesisspecqbft.PrepareMsgType:
 			return i.uponPrepare(logger, msg, i.State.PrepareContainer)
-		case specqbft.CommitMsgType:
+		case genesisspecqbft.CommitMsgType:
 			decided, decidedValue, aggregatedCommit, err = i.UponCommit(logger, msg, i.State.CommitContainer)
 			if decided {
 				i.State.Decided = decided
 				i.State.DecidedValue = decidedValue
 			}
 			return err
-		case specqbft.RoundChangeMsgType:
+		case genesisspecqbft.RoundChangeMsgType:
 			return i.uponRoundChange(logger, i.StartValue, msg, i.State.RoundChangeContainer, i.config.GetValueCheckF())
 		default:
 			return errors.New("signed message type not supported")
@@ -157,7 +156,7 @@ func (i *Instance) ProcessMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (
 	return i.State.Decided, i.State.DecidedValue, aggregatedCommit, nil
 }
 
-func (i *Instance) BaseMsgValidation(msg *specqbft.SignedMessage) error {
+func (i *Instance) BaseMsgValidation(msg *genesisspecqbft.SignedMessage) error {
 	if err := msg.Validate(); err != nil {
 		return errors.Wrap(err, "invalid signed message")
 	}
@@ -167,7 +166,7 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.SignedMessage) error {
 	}
 
 	switch msg.Message.MsgType {
-	case specqbft.ProposalMsgType:
+	case genesisspecqbft.ProposalMsgType:
 		return isValidProposal(
 			i.State,
 			i.config,
@@ -175,7 +174,7 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.SignedMessage) error {
 			i.config.GetValueCheckF(),
 			i.State.Share.Committee,
 		)
-	case specqbft.PrepareMsgType:
+	case genesisspecqbft.PrepareMsgType:
 		proposedMsg := i.State.ProposalAcceptedForCurrentRound
 		if proposedMsg == nil {
 			return errors.New("did not receive proposal for this round")
@@ -188,7 +187,7 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.SignedMessage) error {
 			proposedMsg.Message.Root,
 			i.State.Share.Committee,
 		)
-	case specqbft.CommitMsgType:
+	case genesisspecqbft.CommitMsgType:
 		proposedMsg := i.State.ProposalAcceptedForCurrentRound
 		if proposedMsg == nil {
 			return errors.New("did not receive proposal for this round")
@@ -201,7 +200,7 @@ func (i *Instance) BaseMsgValidation(msg *specqbft.SignedMessage) error {
 			i.State.ProposalAcceptedForCurrentRound,
 			i.State.Share.Committee,
 		)
-	case specqbft.RoundChangeMsgType:
+	case genesisspecqbft.RoundChangeMsgType:
 		return validRoundChangeForData(i.State, i.config, msg, i.State.Height, msg.Message.Round, msg.FullData)
 	default:
 		return errors.New("signed message type not supported")
@@ -217,17 +216,17 @@ func (i *Instance) IsDecided() (bool, []byte) {
 }
 
 // GetConfig returns the instance config
-func (i *Instance) GetConfig() qbft.IConfig {
+func (i *Instance) GetConfig() genesisqbft.IConfig {
 	return i.config
 }
 
 // SetConfig returns the instance config
-func (i *Instance) SetConfig(config qbft.IConfig) {
+func (i *Instance) SetConfig(config genesisqbft.IConfig) {
 	i.config = config
 }
 
 // GetHeight interface implementation
-func (i *Instance) GetHeight() specqbft.Height {
+func (i *Instance) GetHeight() genesisspecqbft.Height {
 	return i.State.Height
 }
 
@@ -247,7 +246,7 @@ func (i *Instance) Decode(data []byte) error {
 }
 
 // bumpToRound sets round and sends current round metrics.
-func (i *Instance) bumpToRound(round specqbft.Round) {
+func (i *Instance) bumpToRound(round genesisspecqbft.Round) {
 	i.State.Round = round
 	i.metrics.SetRound(round)
 }

@@ -3,20 +3,19 @@ package testing
 import (
 	"bytes"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/ssvlabs/ssv-spec-pre-cc/types"
-	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
-
+	"github.com/bloxapp/ssv/protocol/v2/genesisqbft"
+	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/controller"
+	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/roundtimer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	"github.com/ssvlabs/ssv-spec-pre-cc/types"
+	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 )
 
-var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, role types.BeaconRole) *qbft.Config {
-	return &qbft.Config{
+var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, role types.BeaconRole) *genesisqbft.Config {
+	return &genesisqbft.Config{
 		Signer:    testingutils.NewTestingKeyManager(),
 		SigningPK: keySet.Shares[1].GetPublicKey().Serialize(),
 		Domain:    testingutils.TestingSSVDomainType,
@@ -31,7 +30,7 @@ var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, ro
 			}
 			return nil
 		},
-		ProposerF: func(state *specqbft.State, round specqbft.Round) types.OperatorID {
+		ProposerF: func(state *genesisspecqbft.State, round genesisspecqbft.Round) types.OperatorID {
 			return 1
 		},
 		Storage:               TestingStores(logger).Get(role),
@@ -55,24 +54,24 @@ var TestingShare = func(keysSet *testingutils.TestKeySet) *types.Share {
 	}
 }
 
-var BaseInstance = func() *specqbft.Instance {
+var BaseInstance = func() *genesisspecqbft.Instance {
 	return baseInstance(TestingShare(testingutils.Testing4SharesSet()), testingutils.Testing4SharesSet(), []byte{1, 2, 3, 4})
 }
 
-var SevenOperatorsInstance = func() *specqbft.Instance {
+var SevenOperatorsInstance = func() *genesisspecqbft.Instance {
 	return baseInstance(TestingShare(testingutils.Testing7SharesSet()), testingutils.Testing7SharesSet(), []byte{1, 2, 3, 4})
 }
 
-var TenOperatorsInstance = func() *specqbft.Instance {
+var TenOperatorsInstance = func() *genesisspecqbft.Instance {
 	return baseInstance(TestingShare(testingutils.Testing10SharesSet()), testingutils.Testing10SharesSet(), []byte{1, 2, 3, 4})
 }
 
-var ThirteenOperatorsInstance = func() *specqbft.Instance {
+var ThirteenOperatorsInstance = func() *genesisspecqbft.Instance {
 	return baseInstance(TestingShare(testingutils.Testing13SharesSet()), testingutils.Testing13SharesSet(), []byte{1, 2, 3, 4})
 }
 
-var baseInstance = func(share *types.Share, keySet *testingutils.TestKeySet, identifier []byte) *specqbft.Instance {
-	ret := specqbft.NewInstance(testingutils.TestingConfig(keySet), share, identifier, specqbft.FirstHeight)
+var baseInstance = func(share *types.Share, keySet *testingutils.TestKeySet, identifier []byte) *genesisspecqbft.Instance {
+	ret := genesisspecqbft.NewInstance(testingutils.TestingConfig(keySet), share, identifier, genesisspecqbft.FirstHeight)
 	ret.StartValue = []byte{1, 2, 3, 4}
 	return ret
 }
@@ -80,7 +79,7 @@ var baseInstance = func(share *types.Share, keySet *testingutils.TestKeySet, ide
 func NewTestingQBFTController(
 	identifier []byte,
 	share *types.Share,
-	config qbft.IConfig,
+	config genesisqbft.IConfig,
 	fullNode bool,
 ) *controller.Controller {
 	ctrl := controller.NewController(

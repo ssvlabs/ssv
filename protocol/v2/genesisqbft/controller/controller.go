@@ -6,41 +6,41 @@ import (
 	"encoding/json"
 	"fmt"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/protocol/v2/genesisqbft"
+	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/instance"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 )
 
 // NewDecidedHandler handles newly saved decided messages.
 // it will be called in a new goroutine to avoid concurrency issues
-type NewDecidedHandler func(msg *specqbft.SignedMessage)
+type NewDecidedHandler func(msg *genesisspecqbft.SignedMessage)
 
 // Controller is a QBFT coordinator responsible for starting and following the entire life cycle of multiple QBFT InstanceContainer
 type Controller struct {
 	Identifier []byte
-	Height     specqbft.Height // incremental Height for InstanceContainer
+	Height     genesisspecqbft.Height // incremental Height for InstanceContainer
 	// StoredInstances stores the last HistoricalInstanceCapacity in an array for message processing purposes.
 	StoredInstances   InstanceContainer
-	Share             *spectypes.Share
+	Share             *genesisspectypes.Share
 	NewDecidedHandler NewDecidedHandler `json:"-"`
-	config            qbft.IConfig
+	config            genesisqbft.IConfig
 	fullNode          bool
 }
 
 func NewController(
 	identifier []byte,
-	share *spectypes.Share,
-	config qbft.IConfig,
+	share *genesisspectypes.Share,
+	config genesisqbft.IConfig,
 	fullNode bool,
 ) *Controller {
 	return &Controller{
 		Identifier:      identifier,
-		Height:          specqbft.FirstHeight,
+		Height:          genesisspecqbft.FirstHeight,
 		Share:           share,
 		StoredInstances: make(InstanceContainer, 0, InstanceContainerDefaultCapacity),
 		config:          config,
@@ -49,7 +49,7 @@ func NewController(
 }
 
 // StartNewInstance will start a new QBFT instance, if can't will return error
-func (c *Controller) StartNewInstance(logger *zap.Logger, height specqbft.Height, value []byte) error {
+func (c *Controller) StartNewInstance(logger *zap.Logger, height genesisspecqbft.Height, value []byte) error {
 
 	if err := c.GetConfig().GetValueCheckF()(value); err != nil {
 		return errors.Wrap(err, "value invalid")
@@ -80,7 +80,7 @@ func (c *Controller) forceStopAllInstanceExceptCurrent() {
 }
 
 // ProcessMsg processes a new msg, returns decided message or error
-func (c *Controller) ProcessMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
+func (c *Controller) ProcessMsg(logger *zap.Logger, msg *genesisspecqbft.SignedMessage) (*genesisspecqbft.SignedMessage, error) {
 	if err := c.BaseMsgValidation(msg); err != nil {
 		return nil, errors.Wrap(err, "invalid msg")
 	}
@@ -100,7 +100,7 @@ func (c *Controller) ProcessMsg(logger *zap.Logger, msg *specqbft.SignedMessage)
 	return c.UponExistingInstanceMsg(logger, msg)
 }
 
-func (c *Controller) UponExistingInstanceMsg(logger *zap.Logger, msg *specqbft.SignedMessage) (*specqbft.SignedMessage, error) {
+func (c *Controller) UponExistingInstanceMsg(logger *zap.Logger, msg *genesisspecqbft.SignedMessage) (*genesisspecqbft.SignedMessage, error) {
 	inst := c.InstanceForHeight(logger, msg.Message.Height)
 	if inst == nil {
 		return nil, errors.New("instance not found")
@@ -137,7 +137,7 @@ func (c *Controller) UponExistingInstanceMsg(logger *zap.Logger, msg *specqbft.S
 }
 
 // BaseMsgValidation returns error if msg is invalid (base validation)
-func (c *Controller) BaseMsgValidation(msg *specqbft.SignedMessage) error {
+func (c *Controller) BaseMsgValidation(msg *genesisspecqbft.SignedMessage) error {
 	// verify msg belongs to controller
 	if !bytes.Equal(c.Identifier, msg.Message.Identifier) {
 		return errors.New("message doesn't belong to Identifier")
@@ -146,7 +146,7 @@ func (c *Controller) BaseMsgValidation(msg *specqbft.SignedMessage) error {
 	return nil
 }
 
-func (c *Controller) InstanceForHeight(logger *zap.Logger, height specqbft.Height) *instance.Instance {
+func (c *Controller) InstanceForHeight(logger *zap.Logger, height genesisspecqbft.Height) *instance.Instance {
 	// Search in memory.
 	if inst := c.StoredInstances.FindInstance(height); inst != nil {
 		return inst
@@ -179,8 +179,8 @@ func (c *Controller) GetIdentifier() []byte {
 
 // isFutureMessage returns true if message height is from a future instance.
 // It takes into consideration a special case where FirstHeight didn't start but  c.Height == FirstHeight (since we bump height on start instance)
-func (c *Controller) isFutureMessage(msg *specqbft.SignedMessage) bool {
-	if c.Height == specqbft.FirstHeight && c.StoredInstances.FindInstance(c.Height) == nil {
+func (c *Controller) isFutureMessage(msg *genesisspecqbft.SignedMessage) bool {
+	if c.Height == genesisspecqbft.FirstHeight && c.StoredInstances.FindInstance(c.Height) == nil {
 		return true
 	}
 	return msg.Message.Height > c.Height
@@ -225,16 +225,16 @@ func (c *Controller) Decode(data []byte) error {
 	return nil
 }
 
-func (c *Controller) broadcastDecided(aggregatedCommit *specqbft.SignedMessage) error {
+func (c *Controller) broadcastDecided(aggregatedCommit *genesisspecqbft.SignedMessage) error {
 	// Broadcast Decided msg
 	byts, err := aggregatedCommit.Encode()
 	if err != nil {
 		return errors.Wrap(err, "could not encode decided message")
 	}
 
-	msgToBroadcast := &spectypes.SSVMessage{
-		MsgType: spectypes.SSVConsensusMsgType,
-		MsgID:   specqbft.ControllerIdToMessageID(c.Identifier),
+	msgToBroadcast := &genesisspectypes.SSVMessage{
+		MsgType: genesisspectypes.SSVConsensusMsgType,
+		MsgID:   genesisspecqbft.ControllerIdToMessageID(c.Identifier),
 		Data:    byts,
 	}
 	if err := c.GetConfig().GetNetwork().Broadcast(msgToBroadcast); err != nil {
@@ -244,6 +244,6 @@ func (c *Controller) broadcastDecided(aggregatedCommit *specqbft.SignedMessage) 
 	return nil
 }
 
-func (c *Controller) GetConfig() qbft.IConfig {
+func (c *Controller) GetConfig() genesisqbft.IConfig {
 	return c.config
 }

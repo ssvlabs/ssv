@@ -2,32 +2,33 @@ package genesisqbft
 
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/herumi/bls-eth-go-binary/bls"
+
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 )
 
-var TestingMessage = &specqbft.Message{
-	MsgType:    specqbft.ProposalMsgType,
-	Height:     specqbft.FirstHeight,
-	Round:      specqbft.FirstRound,
+var TestingMessage = &genesisspecqbft.Message{
+	MsgType:    genesisspecqbft.ProposalMsgType,
+	Height:     genesisspecqbft.FirstHeight,
+	Round:      genesisspecqbft.FirstRound,
 	Identifier: []byte{1, 2, 3, 4},
 	Root:       [32]byte{1, 2, 3, 4},
 }
 
-var TestingSignedMsg = func() *specqbft.SignedMessage {
+var TestingSignedMsg = func() *genesisspecqbft.SignedMessage {
 	return SignMsg(TestingSK, 1, TestingMessage)
 }()
 
-var SignMsg = func(sk *bls.SecretKey, id types.OperatorID, msg *specqbft.Message) *specqbft.SignedMessage {
+var SignMsg = func(sk *bls.SecretKey, id types.OperatorID, msg *genesisspecqbft.Message) *genesisspecqbft.SignedMessage {
 	domain := testingutils.TestingSSVDomainType
 	sigType := types.QBFTSignatureType
 
 	r, _ := types.ComputeSigningRoot(msg, types.ComputeSignatureDomain(domain, sigType))
 	sig := sk.SignByte(r[:])
 
-	return &specqbft.SignedMessage{
+	return &genesisspecqbft.SignedMessage{
 		Message:   *msg,
 		Signers:   []types.OperatorID{id},
 		Signature: sig.Serialize(),
@@ -58,8 +59,8 @@ var testingShare = &types.Share{
 	},
 }
 
-var TestingInstanceStruct = &specqbft.Instance{
-	State: &specqbft.State{
+var TestingInstanceStruct = &genesisspecqbft.Instance{
+	State: &genesisspecqbft.State{
 		Share:                           testingShare,
 		ID:                              []byte{1, 2, 3, 4},
 		Round:                           1,
@@ -70,29 +71,29 @@ var TestingInstanceStruct = &specqbft.Instance{
 		Decided:                         false,
 		DecidedValue:                    []byte{1, 2, 3, 4},
 
-		ProposeContainer: &specqbft.MsgContainer{
-			Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
+		ProposeContainer: &genesisspecqbft.MsgContainer{
+			Msgs: map[genesisspecqbft.Round][]*genesisspecqbft.SignedMessage{
 				1: {
 					TestingSignedMsg,
 				},
 			},
 		},
-		PrepareContainer: &specqbft.MsgContainer{
-			Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
+		PrepareContainer: &genesisspecqbft.MsgContainer{
+			Msgs: map[genesisspecqbft.Round][]*genesisspecqbft.SignedMessage{
 				1: {
 					TestingSignedMsg,
 				},
 			},
 		},
-		CommitContainer: &specqbft.MsgContainer{
-			Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
+		CommitContainer: &genesisspecqbft.MsgContainer{
+			Msgs: map[genesisspecqbft.Round][]*genesisspecqbft.SignedMessage{
 				1: {
 					TestingSignedMsg,
 				},
 			},
 		},
-		RoundChangeContainer: &specqbft.MsgContainer{
-			Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
+		RoundChangeContainer: &genesisspecqbft.MsgContainer{
+			Msgs: map[genesisspecqbft.Round][]*genesisspecqbft.SignedMessage{
 				1: {
 					TestingSignedMsg,
 				},
@@ -101,9 +102,9 @@ var TestingInstanceStruct = &specqbft.Instance{
 	},
 }
 
-var TestingControllerStruct = &specqbft.Controller{
+var TestingControllerStruct = &genesisspecqbft.Controller{
 	Identifier:      []byte{1, 2, 3, 4},
-	Height:          specqbft.Height(1),
+	Height:          genesisspecqbft.Height(1),
 	Share:           testingShare,
-	StoredInstances: specqbft.InstanceContainer{TestingInstanceStruct},
+	StoredInstances: genesisspecqbft.InstanceContainer{TestingInstanceStruct},
 }

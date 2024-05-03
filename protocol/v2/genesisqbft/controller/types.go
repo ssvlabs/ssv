@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/instance"
 
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 )
 
 const (
@@ -20,7 +20,7 @@ const (
 // InstanceContainer is a fixed-capacity container for instances.
 type InstanceContainer []*instance.Instance
 
-func (i InstanceContainer) FindInstance(height specqbft.Height) *instance.Instance {
+func (i InstanceContainer) FindInstance(height genesisspecqbft.Height) *instance.Instance {
 	for _, inst := range i {
 		if inst != nil {
 			if inst.GetHeight() == height {

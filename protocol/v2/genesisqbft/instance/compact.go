@@ -1,8 +1,9 @@
 package instance
 
 import (
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
+	genesisqbfttypes "github.com/bloxapp/ssv/protocol/v2/genesisqbft/types"
+
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 )
 
 // Compact trims the given qbft.State down to the minimum required
@@ -12,7 +13,7 @@ import (
 // Compact discards all non-commit messages, only if the given state is decided.
 //
 // This helps reduce the state's memory footprint.
-func Compact(state *specqbft.State, decidedMessage ssvtypes.SignedMessage) {
+func Compact(state *genesisspecqbft.State, decidedMessage genesisqbfttypes.SignedMessage) {
 	compact(state, decidedMessage, compactContainerEdit)
 }
 
@@ -23,13 +24,13 @@ func Compact(state *specqbft.State, decidedMessage ssvtypes.SignedMessage) {
 // TODO: this is a temporary solution to not break spec-tests. Revert this once spec is aligned.
 //
 // See Compact for more details.
-func CompactCopy(state *specqbft.State, decidedMessage ssvtypes.SignedMessage) *specqbft.State {
+func CompactCopy(state *genesisspecqbft.State, decidedMessage genesisqbfttypes.SignedMessage) *genesisspecqbft.State {
 	stateCopy := *state
 	compact(&stateCopy, decidedMessage, compactContainerCopy)
 	return &stateCopy
 }
 
-func compact(state *specqbft.State, decidedMessage ssvtypes.SignedMessage, compactContainer compactContainerFunc) {
+func compact(state *genesisspecqbft.State, decidedMessage genesisqbfttypes.SignedMessage, compactContainer compactContainerFunc) {
 	state.ProposeContainer = compactContainer(state.ProposeContainer, state.Round, state.Decided)
 	state.PrepareContainer = compactContainer(state.PrepareContainer, state.LastPreparedRound, state.Decided)
 	state.RoundChangeContainer = compactContainer(state.RoundChangeContainer, state.Round, state.Decided)
@@ -55,15 +56,15 @@ func compact(state *specqbft.State, decidedMessage ssvtypes.SignedMessage, compa
 	// state.CommitContainer = compactContainer(state.CommitContainer, state.Round, wholeCommitteeDecided)
 }
 
-type compactContainerFunc func(container *specqbft.MsgContainer, currentRound specqbft.Round, clear bool) *specqbft.MsgContainer
+type compactContainerFunc func(container *genesisspecqbft.MsgContainer, currentRound genesisspecqbft.Round, clear bool) *genesisspecqbft.MsgContainer
 
-func compactContainerEdit(container *specqbft.MsgContainer, currentRound specqbft.Round, clear bool) *specqbft.MsgContainer {
+func compactContainerEdit(container *genesisspecqbft.MsgContainer, currentRound genesisspecqbft.Round, clear bool) *genesisspecqbft.MsgContainer {
 	switch {
 	case container == nil || len(container.Msgs) == 0:
 		// Empty already.
 	case clear:
 		// Discard all messages.
-		container.Msgs = map[specqbft.Round][]ssvtypes.SignedMessage{}
+		container.Msgs = map[genesisspecqbft.Round][]genesisqbfttypes.SignedMessage{}
 	default:
 		// Trim down to the current and future rounds.
 		for r := range container.Msgs {
@@ -75,20 +76,20 @@ func compactContainerEdit(container *specqbft.MsgContainer, currentRound specqbf
 	return container
 }
 
-func compactContainerCopy(container *specqbft.MsgContainer, currentRound specqbft.Round, clear bool) *specqbft.MsgContainer {
+func compactContainerCopy(container *genesisspecqbft.MsgContainer, currentRound genesisspecqbft.Round, clear bool) *genesisspecqbft.MsgContainer {
 	switch {
 	case container == nil || len(container.Msgs) == 0:
 		// Empty already.
 		return container
 	case clear:
 		// Discard all messages.
-		return &specqbft.MsgContainer{
-			Msgs: map[specqbft.Round][]ssvtypes.SignedMessage{},
+		return &genesisspecqbft.MsgContainer{
+			Msgs: map[genesisspecqbft.Round][]genesisqbfttypes.SignedMessage{},
 		}
 	default:
 		// Trim down to the current and future rounds.
-		compact := specqbft.MsgContainer{
-			Msgs: map[specqbft.Round][]ssvtypes.SignedMessage{},
+		compact := genesisspecqbft.MsgContainer{
+			Msgs: map[genesisspecqbft.Round][]genesisqbfttypes.SignedMessage{},
 		}
 		for r, msgs := range container.Msgs {
 			if r >= currentRound {

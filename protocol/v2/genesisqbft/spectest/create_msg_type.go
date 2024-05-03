@@ -4,24 +4,25 @@ import (
 	"encoding/hex"
 	"testing"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
 	"github.com/pkg/errors"
-	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 	"github.com/stretchr/testify/require"
+
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectests "github.com/ssvlabs/ssv-spec-pre-cc/qbft/spectest/tests"
+	genesisspectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 )
 
-func RunCreateMsg(t *testing.T, test *spectests.CreateMsgSpecTest) {
-	var msg *specqbft.SignedMessage
+func RunCreateMsg(t *testing.T, test *genesisspectests.CreateMsgSpecTest) {
+	var msg *genesisspecqbft.SignedMessage
 	var err error
 	switch test.CreateType {
-	case spectests.CreateProposal:
+	case genesisspectests.CreateProposal:
 		msg, err = createProposal(test)
-	case spectests.CreatePrepare:
+	case genesisspectests.CreatePrepare:
 		msg, err = createPrepare(test)
-	case spectests.CreateCommit:
+	case genesisspectests.CreateCommit:
 		msg, err = createCommit(test)
-	case spectests.CreateRoundChange:
+	case genesisspectests.CreateRoundChange:
 		msg, err = createRoundChange(test)
 	default:
 		t.Fail()
@@ -42,47 +43,47 @@ func RunCreateMsg(t *testing.T, test *spectests.CreateMsgSpecTest) {
 	require.EqualValues(t, test.ExpectedRoot, hex.EncodeToString(r[:]))
 }
 
-func createCommit(test *spectests.CreateMsgSpecTest) (*specqbft.SignedMessage, error) {
-	ks := testingutils.Testing4SharesSet()
-	state := &specqbft.State{
-		Share: testingutils.TestingShare(ks),
+func createCommit(test *genesisspectests.CreateMsgSpecTest) (*genesisspecqbft.SignedMessage, error) {
+	ks := genesisspectestingutils.Testing4SharesSet()
+	state := &genesisspecqbft.State{
+		Share: genesisspectestingutils.TestingShare(ks),
 		ID:    []byte{1, 2, 3, 4},
 	}
-	config := testingutils.TestingConfig(ks)
+	config := genesisspectestingutils.TestingConfig(ks)
 
-	return specqbft.CreateCommit(state, config, test.Value)
+	return genesisspecqbft.CreateCommit(state, config, test.Value)
 }
 
-func createPrepare(test *spectests.CreateMsgSpecTest) (*specqbft.SignedMessage, error) {
-	ks := testingutils.Testing4SharesSet()
-	state := &specqbft.State{
-		Share: testingutils.TestingShare(ks),
+func createPrepare(test *genesisspectests.CreateMsgSpecTest) (*genesisspecqbft.SignedMessage, error) {
+	ks := genesisspectestingutils.Testing4SharesSet()
+	state := &genesisspecqbft.State{
+		Share: genesisspectestingutils.TestingShare(ks),
 		ID:    []byte{1, 2, 3, 4},
 	}
-	config := testingutils.TestingConfig(ks)
+	config := genesisspectestingutils.TestingConfig(ks)
 
-	return specqbft.CreatePrepare(state, config, test.Round, test.Value)
+	return genesisspecqbft.CreatePrepare(state, config, test.Round, test.Value)
 }
 
-func createProposal(test *spectests.CreateMsgSpecTest) (*specqbft.SignedMessage, error) {
-	ks := testingutils.Testing4SharesSet()
-	state := &specqbft.State{
-		Share: testingutils.TestingShare(ks),
+func createProposal(test *genesisspectests.CreateMsgSpecTest) (*genesisspecqbft.SignedMessage, error) {
+	ks := genesisspectestingutils.Testing4SharesSet()
+	state := &genesisspecqbft.State{
+		Share: genesisspectestingutils.TestingShare(ks),
 		ID:    []byte{1, 2, 3, 4},
 	}
-	config := testingutils.TestingConfig(ks)
+	config := genesisspectestingutils.TestingConfig(ks)
 
-	return specqbft.CreateProposal(state, config, test.Value[:], test.RoundChangeJustifications, test.PrepareJustifications)
+	return genesisspecqbft.CreateProposal(state, config, test.Value[:], test.RoundChangeJustifications, test.PrepareJustifications)
 }
 
-func createRoundChange(test *spectests.CreateMsgSpecTest) (*specqbft.SignedMessage, error) {
-	ks := testingutils.Testing4SharesSet()
-	state := &specqbft.State{
-		Share:            testingutils.TestingShare(ks),
+func createRoundChange(test *genesisspectests.CreateMsgSpecTest) (*genesisspecqbft.SignedMessage, error) {
+	ks := genesisspectestingutils.Testing4SharesSet()
+	state := &genesisspecqbft.State{
+		Share:            genesisspectestingutils.TestingShare(ks),
 		ID:               []byte{1, 2, 3, 4},
-		PrepareContainer: specqbft.NewMsgContainer(),
+		PrepareContainer: genesisspecqbft.NewMsgContainer(),
 	}
-	config := testingutils.TestingConfig(ks)
+	config := genesisspectestingutils.TestingConfig(ks)
 
 	if len(test.PrepareJustifications) > 0 {
 		state.LastPreparedRound = test.PrepareJustifications[0].Message.Round
@@ -96,5 +97,5 @@ func createRoundChange(test *spectests.CreateMsgSpecTest) (*specqbft.SignedMessa
 		}
 	}
 
-	return specqbft.CreateRoundChange(state, config, 1, test.Value[:])
+	return genesisspecqbft.CreateRoundChange(state, config, 1, test.Value[:])
 }
