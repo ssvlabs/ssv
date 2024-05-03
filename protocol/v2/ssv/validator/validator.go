@@ -83,7 +83,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 				HasRunningInstance: false,
 				Height:             0,
 				Slot:               0,
-				Quorum:             options.SSVShare.Share.Quorum, // TODO replace with Operator.Quorum
+				Quorum:             options.SSVShare.GetQuorum(),
 			},
 		}
 	}

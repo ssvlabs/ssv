@@ -3,10 +3,9 @@ package api
 import (
 	"encoding/hex"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
-
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 )
 
 // Message represents an exporter message
@@ -20,17 +19,17 @@ type Message struct {
 }
 
 type SignedMessageAPI struct {
-	Signature genesisspectypes.Signature
-	Signers   []genesisspectypes.OperatorID
-	Message   genesisspecqbft.Message
+	Signature [][]byte
+	Signers   []spectypes.OperatorID
+	Message   *specqbft.Message
 
-	FullData *genesisspectypes.ConsensusData
+	FullData *spectypes.ConsensusData
 }
 
 // NewDecidedAPIMsg creates a new message from the given message
 // TODO: avoid converting to v0 once explorer is upgraded
 // TODO: fork support
-func NewDecidedAPIMsg(msgs ...*genesisspecqbft.SignedMessage) Message {
+func NewDecidedAPIMsg(msgs ...*spectypes.SignedSSVMessage) Message {
 	data, err := DecidedAPIData(msgs...)
 	if err != nil {
 		return Message{
@@ -39,15 +38,25 @@ func NewDecidedAPIMsg(msgs ...*genesisspecqbft.SignedMessage) Message {
 		}
 	}
 
-	identifier := genesisspecqbft.ControllerIdToMessageID(msgs[0].Message.Identifier)
-	pkv := identifier.GetPubKey()
+	firstQBFTMessage, err := specqbft.DecodeMessage(msgs[0].SSVMessage.Data)
+	if err != nil {
+		return Message{}
+	}
+
+	lastQBFTMessage, err := specqbft.DecodeMessage(msgs[len(msgs)-1].SSVMessage.Data)
+	if err != nil {
+		return Message{}
+	}
+
+	identifier := specqbft.ControllerIdToMessageID(firstQBFTMessage.Identifier)
+	pkv := identifier.GetSenderID()
 	role := identifier.GetRoleType()
 	return Message{
 		Type: TypeDecided,
 		Filter: MessageFilter{
 			PublicKey: hex.EncodeToString(pkv),
-			From:      uint64(msgs[0].Message.Height),
-			To:        uint64(msgs[len(msgs)-1].Message.Height),
+			From:      uint64(firstQBFTMessage.Height),
+			To:        uint64(lastQBFTMessage.Height),
 			Role:      role.String(),
 		},
 		Data: data,
@@ -55,7 +64,7 @@ func NewDecidedAPIMsg(msgs ...*genesisspecqbft.SignedMessage) Message {
 }
 
 // DecidedAPIData creates a new message from the given message
-func DecidedAPIData(msgs ...*genesisspecqbft.SignedMessage) (interface{}, error) {
+func DecidedAPIData(msgs ...*spectypes.SignedSSVMessage) (interface{}, error) {
 	if len(msgs) == 0 {
 		return nil, errors.New("no messages")
 	}
@@ -66,14 +75,19 @@ func DecidedAPIData(msgs ...*genesisspecqbft.SignedMessage) (interface{}, error)
 			return nil, errors.New("nil message")
 		}
 
+		qbftMessage, err := specqbft.DecodeMessage(msgs[len(msgs)-1].SSVMessage.Data)
+		if err != nil {
+			return nil, err
+		}
+
 		apiMsg := &SignedMessageAPI{
-			Signature: msg.Signature,
-			Signers:   msg.Signers,
-			Message:   msg.Message,
+			Signature: msg.GetSignature(),
+			Signers:   msg.GetOperatorIDs(),
+			Message:   qbftMessage,
 		}
 
 		if msg.FullData != nil {
-			var cd genesisspectypes.ConsensusData
+			var cd spectypes.ConsensusData
 			if err := cd.UnmarshalSSZ(msg.FullData); err != nil {
 				return nil, errors.Wrap(err, "failed to unmarshal consensus data")
 			}

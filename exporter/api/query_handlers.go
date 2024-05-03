@@ -6,7 +6,6 @@ import (
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/storage"
@@ -69,7 +68,7 @@ func HandleDecidedQuery(logger *zap.Logger, qbftStorage *storage.QBFTStores, nm 
 		logger.Warn("failed to get instances", zap.Error(err))
 		res.Data = []string{"internal error - could not get decided messages"}
 	} else {
-		msgs := make([]*genesisspecqbft.SignedMessage, 0, len(instances))
+		msgs := make([]*spectypes.SignedSSVMessage, 0, len(instances))
 		for _, instance := range instances {
 			msgs = append(msgs, instance.DecidedMessage)
 		}

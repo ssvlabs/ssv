@@ -13,7 +13,7 @@ import (
 //go:generate mockgen -package=duties -destination=./base_handler_mock.go -source=./base_handler.go
 
 // ExecuteDutiesFunc is a non-blocking functions which executes the given duties.
-type ExecuteDutiesFunc func(logger *zap.Logger, duties []*spectypes.Duty)
+type ExecuteDutiesFunc func(logger *zap.Logger, duties []*spectypes.BeaconDuty)
 
 type dutyHandler interface {
 	Setup(string, *zap.Logger, BeaconNode, ExecutionClient, networkconfig.NetworkConfig, ValidatorProvider, ExecuteDutiesFunc, slotticker.Provider, chan ReorgEvent, chan struct{})

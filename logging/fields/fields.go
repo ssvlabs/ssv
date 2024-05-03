@@ -219,7 +219,7 @@ func Round(round specqbft.Round) zap.Field {
 	return zap.Uint64(FieldRound, uint64(round))
 }
 
-func BeaconRole(val ssvtypes.BeaconRole) zap.Field {
+func BeaconRole(val spectypes.BeaconRole) zap.Field {
 	return zap.Stringer(FieldRole, val)
 }
 

@@ -172,7 +172,7 @@ func (h *AttesterHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 	}
 
 	// range over duties and execute
-	toExecute := make([]*spectypes.Duty, 0, len(duties)*2)
+	toExecute := make([]*spectypes.BeaconDuty, 0, len(duties)*2)
 	for _, d := range duties {
 		if h.shouldExecute(d) {
 			toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleAttester))
@@ -196,7 +196,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 		return fmt.Errorf("failed to fetch attester duties: %w", err)
 	}
 
-	specDuties := make([]*spectypes.Duty, 0, len(duties))
+	specDuties := make([]*spectypes.BeaconDuty, 0, len(duties))
 	for _, d := range duties {
 		h.duties.Add(epoch, d.Slot, d.ValidatorIndex, d, true)
 		specDuties = append(specDuties, h.toSpecDuty(d, spectypes.BNRoleAttester))
@@ -205,7 +205,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	h.logger.Debug("🗂 got duties",
 		fields.Count(len(duties)),
 		fields.Epoch(epoch),
-		fields.GenesisDuties(epoch, specDuties),
+		fields.BeaconDuties(epoch, specDuties),
 		fields.Duration(start))
 
 	// calculate subscriptions
@@ -228,8 +228,8 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	return nil
 }
 
-func (h *AttesterHandler) toSpecDuty(duty *eth2apiv1.AttesterDuty, role spectypes.BeaconRole) *spectypes.Duty {
-	return &spectypes.Duty{
+func (h *AttesterHandler) toSpecDuty(duty *eth2apiv1.AttesterDuty, role spectypes.BeaconRole) *spectypes.BeaconDuty {
+	return &spectypes.BeaconDuty{
 		Type:                    role,
 		PubKey:                  duty.PubKey,
 		Slot:                    duty.Slot,

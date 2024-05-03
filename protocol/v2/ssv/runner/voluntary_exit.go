@@ -44,7 +44,7 @@ func NewVoluntaryExitRunner(
 		BaseRunner: &BaseRunner{
 			RunnerRoleType: spectypes.RoleVoluntaryExit,
 			BeaconNetwork:  beaconNetwork,
-			Share:          share,
+			ShareMap:       share,
 		},
 
 		beacon:         beacon,
@@ -190,7 +190,7 @@ func (r *VoluntaryExitRunner) GetBeaconNode() specssv.BeaconNode {
 }
 
 func (r *VoluntaryExitRunner) GetShare() *spectypes.Share {
-	for _, share := range r.BaseRunner.Share {
+	for _, share := range r.BaseRunner.ShareMap {
 		return share
 	}
 	return nil

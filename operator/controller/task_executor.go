@@ -11,7 +11,6 @@ import (
 
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/operator/duties"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
@@ -32,10 +31,10 @@ func (c *controller) StartValidator(share *types.SSVShare) error {
 }
 
 func (c *controller) StopValidator(pubKey spectypes.ValidatorPK) error {
-	logger := c.taskLogger("StopValidator", fields.PubKey(pubKey))
+	logger := c.taskLogger("StopValidator", fields.PubKey(pubKey[:]))
 
-	c.metrics.ValidatorRemoved(pubKey)
-	c.onShareStop(pubKey)
+	c.metrics.ValidatorRemoved(pubKey[:])
+	c.onShareStop(pubKey[:])
 
 	logger.Info("removed validator")
 
@@ -46,8 +45,8 @@ func (c *controller) LiquidateCluster(owner common.Address, operatorIDs []specty
 	logger := c.taskLogger("LiquidateCluster", fields.Owner(owner), fields.OperatorIDs(operatorIDs))
 
 	for _, share := range toLiquidate {
-		c.onShareStop(share.ValidatorPubKey)
-		logger.With(fields.PubKey(share.ValidatorPubKey)).Debug("liquidated share")
+		c.onShareStop(share.ValidatorPubKey[:])
+		logger.With(fields.PubKey(share.ValidatorPubKey[:])).Debug("liquidated share")
 	}
 
 	return nil
@@ -89,14 +88,14 @@ func (c *controller) UpdateFeeRecipient(owner, recipient common.Address) error {
 		zap.String("owner", owner.String()),
 		zap.String("fee_recipient", recipient.String()))
 
-	c.validatorsMap.ForEach(func(v *validator.Validator) bool {
-		if v.Share.OwnerAddress == owner {
-			v.Share.FeeRecipientAddress = recipient
+	for _, share := range c.validatorStore.Validators() {
+		if share.OwnerAddress == owner {
+			// TODO: save this
+			share.FeeRecipientAddress = recipient
 
 			logger.Debug("updated recipient address")
 		}
-		return true
-	})
+	}
 
 	return nil
 }

@@ -77,7 +77,7 @@ func byOwners(owners []api.Hex) registrystorage.SharesFilter {
 func byOperators(operators []uint64) registrystorage.SharesFilter {
 	return func(share *types.SSVShare) bool {
 		for _, a := range operators {
-			for _, b := range share.Committee {
+			for _, b := range share.GetCommittee() {
 				if a == b.Signer {
 					return true
 				}
@@ -90,8 +90,8 @@ func byOperators(operators []uint64) registrystorage.SharesFilter {
 // byClusters returns a filter that matches shares that match or contain any of the given clusters.
 func byClusters(clusters requestClusters, contains bool) registrystorage.SharesFilter {
 	return func(share *types.SSVShare) bool {
-		shareCommittee := make([]string, len(share.Committee))
-		for i, c := range share.Committee {
+		shareCommittee := make([]string, len(share.GetCommittee()))
+		for i, c := range share.GetCommittee() {
 			shareCommittee[i] = strconv.FormatUint(c.Signer, 10)
 		}
 		shareStr := strings.Join(shareCommittee, ",")
@@ -171,13 +171,13 @@ type validatorJSON struct {
 }
 
 func validatorFromShare(share *types.SSVShare) *validatorJSON {
-	quorum, partialQuorum := types.ComputeQuorumAndPartialQuorum(len(share.Committee))
+	quorum, partialQuorum := types.ComputeQuorumAndPartialQuorum(len(share.GetCommittee()))
 	v := &validatorJSON{
 		PubKey: api.Hex(share.ValidatorPubKey[:]),
 		Owner:  api.Hex(share.OwnerAddress[:]),
 		Committee: func() []spectypes.OperatorID {
-			committee := make([]spectypes.OperatorID, len(share.Committee))
-			for i, op := range share.Committee {
+			committee := make([]spectypes.OperatorID, len(share.GetCommittee()))
+			for i, op := range share.GetCommittee() {
 				committee[i] = op.Signer
 			}
 			return committee

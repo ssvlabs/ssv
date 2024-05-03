@@ -26,6 +26,11 @@ const (
 
 type CommitteeID [32]byte
 
+// TODO: consider removing
+type HasQuorum interface {
+	HasQuorum(cnt int) bool
+}
+
 // SSVShare is a combination of spectypes.Share and its Metadata.
 type SSVShare struct {
 	spectypes.Share
@@ -104,6 +109,10 @@ func (s *SSVShare) CommitteeID() CommitteeID {
 
 func (s *SSVShare) GetCommittee() []*spectypes.ShareMember {
 	return s.Share.Committee
+}
+
+func (s *SSVShare) GetQuorum() uint64 {
+	return s.Share.Quorum
 }
 
 // TODO: remove after Share is deleted, it's a temporary workaround

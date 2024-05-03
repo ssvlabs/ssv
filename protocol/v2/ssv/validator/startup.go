@@ -28,14 +28,14 @@ func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
 	}
 	for role, dutyRunner := range v.DutyRunners {
 		logger := logger.With(fields.RunnerRole(role))
-		share := dutyRunner.GetBaseRunner().Share
+		share := dutyRunner.GetBaseRunner().ShareMap
 		if share == nil { // TODO: handle missing share?
-			logger.Warn("❗ share is missing", fields.BeaconRole(role))
+			logger.Warn("❗ share is missing", fields.RunnerRole(role))
 			continue
 		}
 
 		// TODO: rewrite this temporary workaround
-		shares := dutyRunner.GetBaseRunner().Share
+		shares := dutyRunner.GetBaseRunner().ShareMap
 		firstShare := shares[maps.Keys(shares)[0]]
 		senderID := firstShare.ValidatorPubKey[:]
 		if len(shares) > 1 {

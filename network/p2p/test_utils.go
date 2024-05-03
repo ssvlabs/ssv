@@ -24,6 +24,9 @@ import (
 	"github.com/bloxapp/ssv/network/testing"
 	"github.com/bloxapp/ssv/networkconfig"
 	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
+	"github.com/bloxapp/ssv/operator/duties/dutystore"
+	"github.com/bloxapp/ssv/operator/storage"
+	"github.com/bloxapp/ssv/protocol/v2/signatureverifier"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
 	"github.com/bloxapp/ssv/utils/format"
 )
@@ -141,6 +144,10 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 		panic(err)
 	}
 
+	var validatorStore storage.ValidatorStore                 // TODO: pass/create validator store
+	dutyStore := dutystore.New()                              // TODO: consider passing it
+	var signatureVerifier signatureverifier.SignatureVerifier // TODO: pass/create validator store
+
 	cfg := NewNetConfig(keys, format.OperatorID(operatorPubkey), ln.Bootnode, testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), options.Nodes)
 	cfg.Ctx = ctx
 	cfg.Subnets = "00000000000000000000020000000000" //PAY ATTENTION for future test scenarios which use more than one eth-validator we need to make this field dynamically changing
@@ -149,7 +156,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 		RegisteredOperatorPublicKeyPEMs: []string{},
 	}
 	cfg.Metrics = nil
-	cfg.MessageValidator = msgvalidation.New(networkconfig.TestNetwork)
+	cfg.MessageValidator = msgvalidation.New(networkconfig.TestNetwork, validatorStore, dutyStore, signatureVerifier)
 	cfg.Network = networkconfig.TestNetwork
 	if options.TotalValidators > 0 {
 		cfg.GetValidatorStats = func() (uint64, uint64, uint64, error) {
@@ -169,7 +176,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 	if options.MessageValidatorProvider != nil {
 		cfg.MessageValidator = options.MessageValidatorProvider(nodeIndex)
 	} else {
-		cfg.MessageValidator = msgvalidation.New(networkconfig.TestNetwork, msgvalidation.WithSelfAccept(selfPeerID, true))
+		cfg.MessageValidator = msgvalidation.New(networkconfig.TestNetwork, validatorStore, dutyStore, signatureVerifier, msgvalidation.WithSelfAccept(selfPeerID, true))
 	}
 
 	if options.PeerScoreInspector != nil && options.PeerScoreInspectorInterval > 0 {
