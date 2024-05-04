@@ -1,8 +1,8 @@
 package genesisqbft
 
 import (
+	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/roundtimer"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/genesisqbft/storage"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"

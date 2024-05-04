@@ -1,8 +1,9 @@
 package controller
 
 import (
-	"github.com/pkg/errors"
 	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/instance"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v2/genesisqbft/storage"
+	"github.com/pkg/errors"
 
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 )
@@ -45,7 +46,7 @@ func (c *Controller) getHighestInstance(identifier []byte) (*instance.Instance, 
 
 // SaveInstance saves the given instance to the storage.
 func (c *Controller) SaveInstance(i *instance.Instance, msg *genesisspecqbft.SignedMessage) error {
-	storedInstance := &genesisspecqbft.StoredInstance{
+	storedInstance := &qbftstorage.StoredInstance{
 		State:          i.State,
 		DecidedMessage: msg,
 	}

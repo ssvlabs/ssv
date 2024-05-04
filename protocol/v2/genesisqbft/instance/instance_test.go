@@ -4,47 +4,47 @@ import (
 	"testing"
 
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 	"github.com/stretchr/testify/require"
 )
 
 func TestInstance_Marshaling(t *testing.T) {
-	var TestingMessage = &specqbft.Message{
-		MsgType:    specqbft.ProposalMsgType,
-		Height:     specqbft.FirstHeight,
-		Round:      specqbft.FirstRound,
+	var TestingMessage = &genesisspecqbft.Message{
+		MsgType:    genesisspecqbft.ProposalMsgType,
+		Height:     genesisspecqbft.FirstHeight,
+		Round:      genesisspecqbft.FirstRound,
 		Identifier: []byte{1, 2, 3, 4},
 		Root:       testingutils.TestingQBFTRootData,
 	}
 	TestingSK := func() *bls.SecretKey {
-		spectypes.InitBLS()
+		genesisspectypes.InitBLS()
 		ret := &bls.SecretKey{}
 		ret.SetByCSPRNG()
 		return ret
 	}()
-	testingSignedMsg := func() *specqbft.SignedMessage {
+	testingSignedMsg := func() *genesisspecqbft.SignedMessage {
 		return testingutils.SignQBFTMsg(TestingSK, 1, TestingMessage)
 	}()
 	testingValidatorPK := spec.BLSPubKey{1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4}
-	testingShare := &spectypes.Share{
+	testingShare := &genesisspectypes.Share{
 		OperatorID:      1,
 		ValidatorPubKey: testingValidatorPK[:],
 		SharePubKey:     TestingSK.GetPublicKey().Serialize(),
-		DomainType:      spectypes.PrimusTestnet,
+		DomainType:      genesisspectypes.PrimusTestnet,
 		Quorum:          3,
 		PartialQuorum:   2,
-		Committee: []*spectypes.Operator{
+		Committee: []*genesisspectypes.Operator{
 			{
 				OperatorID: 1,
 				PubKey:     TestingSK.GetPublicKey().Serialize(),
 			},
 		},
 	}
-	i := &specqbft.Instance{
-		State: &specqbft.State{
+	i := &genesisspecqbft.Instance{
+		State: &genesisspecqbft.State{
 			Share:                           testingShare,
 			ID:                              []byte{1, 2, 3, 4},
 			Round:                           1,
@@ -55,29 +55,29 @@ func TestInstance_Marshaling(t *testing.T) {
 			Decided:                         false,
 			DecidedValue:                    []byte{1, 2, 3, 4},
 
-			ProposeContainer: &specqbft.MsgContainer{
-				Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
+			ProposeContainer: &genesisspecqbft.MsgContainer{
+				Msgs: map[genesisspecqbft.Round][]*genesisspecqbft.SignedMessage{
 					1: {
 						testingSignedMsg,
 					},
 				},
 			},
-			PrepareContainer: &specqbft.MsgContainer{
-				Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
+			PrepareContainer: &genesisspecqbft.MsgContainer{
+				Msgs: map[genesisspecqbft.Round][]*genesisspecqbft.SignedMessage{
 					1: {
 						testingSignedMsg,
 					},
 				},
 			},
-			CommitContainer: &specqbft.MsgContainer{
-				Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
+			CommitContainer: &genesisspecqbft.MsgContainer{
+				Msgs: map[genesisspecqbft.Round][]*genesisspecqbft.SignedMessage{
 					1: {
 						testingSignedMsg,
 					},
 				},
 			},
-			RoundChangeContainer: &specqbft.MsgContainer{
-				Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
+			RoundChangeContainer: &genesisspecqbft.MsgContainer{
+				Msgs: map[genesisspecqbft.Round][]*genesisspecqbft.SignedMessage{
 					1: {
 						testingSignedMsg,
 					},
@@ -89,7 +89,7 @@ func TestInstance_Marshaling(t *testing.T) {
 	byts, err := i.Encode()
 	require.NoError(t, err)
 
-	decoded := &specqbft.Instance{}
+	decoded := &genesisspecqbft.Instance{}
 	require.NoError(t, decoded.Decode(byts))
 
 	bytsDecoded, err := decoded.Encode()

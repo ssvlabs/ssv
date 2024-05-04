@@ -1,8 +1,6 @@
 package instance
 
 import (
-	genesisqbfttypes "github.com/bloxapp/ssv/protocol/v2/genesisqbft/types"
-
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 )
 
@@ -13,7 +11,7 @@ import (
 // Compact discards all non-commit messages, only if the given state is decided.
 //
 // This helps reduce the state's memory footprint.
-func Compact(state *genesisspecqbft.State, decidedMessage genesisqbfttypes.SignedMessage) {
+func Compact(state *genesisspecqbft.State, decidedMessage *genesisspecqbft.SignedMessage) {
 	compact(state, decidedMessage, compactContainerEdit)
 }
 
@@ -24,13 +22,13 @@ func Compact(state *genesisspecqbft.State, decidedMessage genesisqbfttypes.Signe
 // TODO: this is a temporary solution to not break spec-tests. Revert this once spec is aligned.
 //
 // See Compact for more details.
-func CompactCopy(state *genesisspecqbft.State, decidedMessage genesisqbfttypes.SignedMessage) *genesisspecqbft.State {
+func CompactCopy(state *genesisspecqbft.State, decidedMessage *genesisspecqbft.SignedMessage) *genesisspecqbft.State {
 	stateCopy := *state
 	compact(&stateCopy, decidedMessage, compactContainerCopy)
 	return &stateCopy
 }
 
-func compact(state *genesisspecqbft.State, decidedMessage genesisqbfttypes.SignedMessage, compactContainer compactContainerFunc) {
+func compact(state *genesisspecqbft.State, decidedMessage *genesisspecqbft.SignedMessage, compactContainer compactContainerFunc) {
 	state.ProposeContainer = compactContainer(state.ProposeContainer, state.Round, state.Decided)
 	state.PrepareContainer = compactContainer(state.PrepareContainer, state.LastPreparedRound, state.Decided)
 	state.RoundChangeContainer = compactContainer(state.RoundChangeContainer, state.Round, state.Decided)
@@ -64,7 +62,7 @@ func compactContainerEdit(container *genesisspecqbft.MsgContainer, currentRound 
 		// Empty already.
 	case clear:
 		// Discard all messages.
-		container.Msgs = map[genesisspecqbft.Round][]genesisqbfttypes.SignedMessage{}
+		container.Msgs = map[genesisspecqbft.Round][]*genesisspecqbft.SignedMessage{}
 	default:
 		// Trim down to the current and future rounds.
 		for r := range container.Msgs {
@@ -84,12 +82,12 @@ func compactContainerCopy(container *genesisspecqbft.MsgContainer, currentRound 
 	case clear:
 		// Discard all messages.
 		return &genesisspecqbft.MsgContainer{
-			Msgs: map[genesisspecqbft.Round][]genesisqbfttypes.SignedMessage{},
+			Msgs: map[genesisspecqbft.Round][]*genesisspecqbft.SignedMessage{},
 		}
 	default:
 		// Trim down to the current and future rounds.
 		compact := genesisspecqbft.MsgContainer{
-			Msgs: map[genesisspecqbft.Round][]genesisqbfttypes.SignedMessage{},
+			Msgs: map[genesisspecqbft.Round][]*genesisspecqbft.SignedMessage{},
 		}
 		for r, msgs := range container.Msgs {
 			if r >= currentRound {

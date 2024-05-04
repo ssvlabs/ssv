@@ -7,16 +7,16 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/timer.go -source=./timer.go
 
-type OnRoundTimeoutF func(round specqbft.Round)
+type OnRoundTimeoutF func(round genesisspecqbft.Round)
 
 const (
-	QuickTimeoutThreshold = specqbft.Round(8)
+	QuickTimeoutThreshold = genesisspecqbft.Round(8)
 	QuickTimeout          = 2 * time.Second
 	SlowTimeout           = 2 * time.Minute
 )
@@ -24,7 +24,7 @@ const (
 // Timer is an interface for a round timer, calling the UponRoundTimeout when times out
 type Timer interface {
 	// TimeoutForRound will reset running timer if exists and will start a new timer for a specific round
-	TimeoutForRound(height specqbft.Height, round specqbft.Round)
+	TimeoutForRound(height genesisspecqbft.Height, round genesisspecqbft.Round)
 }
 
 type BeaconNetwork interface {
@@ -33,7 +33,7 @@ type BeaconNetwork interface {
 }
 
 type TimeoutOptions struct {
-	quickThreshold specqbft.Round
+	quickThreshold genesisspecqbft.Round
 	quick          time.Duration
 	slow           time.Duration
 }
@@ -53,13 +53,13 @@ type RoundTimer struct {
 	// timeoutOptions holds the timeoutOptions for the timer
 	timeoutOptions TimeoutOptions
 	// role is the role of the instance
-	role spectypes.BeaconRole
+	role genesisspectypes.BeaconRole
 	// beaconNetwork is the beacon network
 	beaconNetwork BeaconNetwork
 }
 
 // New creates a new instance of RoundTimer.
-func New(pctx context.Context, beaconNetwork BeaconNetwork, role spectypes.BeaconRole, done OnRoundTimeoutF) *RoundTimer {
+func New(pctx context.Context, beaconNetwork BeaconNetwork, role genesisspectypes.BeaconRole, done OnRoundTimeoutF) *RoundTimer {
 	ctx, cancelCtx := context.WithCancel(pctx)
 	return &RoundTimer{
 		mtx:           &sync.RWMutex{},
@@ -98,16 +98,16 @@ func New(pctx context.Context, beaconNetwork BeaconNetwork, role spectypes.Beaco
 // To ensure synchronized timeouts across instances, the timeout is based on the duty start time,
 // which is calculated from the slot height. The base timeout is set based on the role,
 // and the additional timeout is added based on the round number.
-func (t *RoundTimer) RoundTimeout(height specqbft.Height, round specqbft.Round) time.Duration {
+func (t *RoundTimer) RoundTimeout(height genesisspecqbft.Height, round genesisspecqbft.Round) time.Duration {
 	// Initialize duration to zero
 	var baseDuration time.Duration
 
 	// Set base duration based on role
 	switch t.role {
-	case spectypes.BNRoleAttester, spectypes.BNRoleSyncCommittee:
+	case genesisspectypes.BNRoleAttester, genesisspectypes.BNRoleSyncCommittee:
 		// third of the slot time
 		baseDuration = t.beaconNetwork.SlotDurationSec() / 3
-	case spectypes.BNRoleAggregator, spectypes.BNRoleSyncCommitteeContribution:
+	case genesisspectypes.BNRoleAggregator, genesisspectypes.BNRoleSyncCommitteeContribution:
 		// two-third of the slot time
 		baseDuration = t.beaconNetwork.SlotDurationSec() / 3 * 2
 	default:
@@ -146,12 +146,12 @@ func (t *RoundTimer) OnTimeout(done OnRoundTimeoutF) {
 }
 
 // Round returns a round.
-func (t *RoundTimer) Round() specqbft.Round {
-	return specqbft.Round(atomic.LoadInt64(&t.round))
+func (t *RoundTimer) Round() genesisspecqbft.Round {
+	return genesisspecqbft.Round(atomic.LoadInt64(&t.round))
 }
 
 // TimeoutForRound times out for a given round.
-func (t *RoundTimer) TimeoutForRound(height specqbft.Height, round specqbft.Round) {
+func (t *RoundTimer) TimeoutForRound(height genesisspecqbft.Height, round genesisspecqbft.Round) {
 	atomic.StoreInt64(&t.round, int64(round))
 	timeout := t.RoundTimeout(height, round)
 
@@ -172,7 +172,7 @@ func (t *RoundTimer) TimeoutForRound(height specqbft.Height, round specqbft.Roun
 	go t.waitForRound(round, timer.C)
 }
 
-func (t *RoundTimer) waitForRound(round specqbft.Round, timeout <-chan time.Time) {
+func (t *RoundTimer) waitForRound(round genesisspecqbft.Round, timeout <-chan time.Time) {
 	ctx, cancel := context.WithCancel(t.ctx)
 	defer cancel()
 	select {

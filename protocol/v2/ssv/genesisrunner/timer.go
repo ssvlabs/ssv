@@ -5,8 +5,8 @@ import (
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/instance"
+	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/roundtimer"
 )
 
 type TimeoutF func(logger *zap.Logger, identifier genesisspectypes.MessageID, height genesisspecqbft.Height) roundtimer.OnRoundTimeoutF

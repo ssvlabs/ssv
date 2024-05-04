@@ -1,7 +1,9 @@
 package controller
 
 import (
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/pkg/errors"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	"go.uber.org/zap"
 )
 
@@ -13,12 +15,12 @@ func (c *Controller) OnTimeout(logger *zap.Logger, msg types.EventMsg) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to get timeout data")
 	}
-	instance := c.StoredInstances.FindInstance(timeoutData.Height)
+	instance := c.StoredInstances.FindInstance(genesisspecqbft.Height(timeoutData.Height))
 	if instance == nil {
 		return errors.New("instance is nil")
 	}
 
-	if timeoutData.Round < instance.State.Round {
+	if genesisspecqbft.Round(timeoutData.Round) < instance.State.Round {
 		logger.Debug("timeout for old round", zap.Uint64("timeout round", uint64(timeoutData.Round)), zap.Uint64("instance round", uint64(instance.State.Round)))
 		return nil
 	}

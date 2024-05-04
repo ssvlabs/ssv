@@ -6,9 +6,11 @@ import (
 
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/genesisqbft"
-	genesisqbfttypes "github.com/bloxapp/ssv/protocol/v2/genesisqbft/types"
+	genesisqbfttypes "github.com/bloxapp/ssv/protocol/v2/genesistypes"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
@@ -26,7 +28,7 @@ func (i *Instance) UponCommit(logger *zap.Logger, signedCommit *genesisspecqbft.
 	}
 
 	logger.Debug("📬 got commit message",
-		fields.Round(i.State.Round),
+		fields.Round(specqbft.Round(i.State.Round)),
 		zap.Any("commit-signers", signedCommit.Signers),
 		fields.Root(signedCommit.Message.Root))
 
@@ -45,7 +47,7 @@ func (i *Instance) UponCommit(logger *zap.Logger, signedCommit *genesisspecqbft.
 		}
 
 		logger.Debug("🎯 got commit quorum",
-			fields.Round(i.State.Round),
+			fields.Round(specqbft.Round(i.State.Round)),
 			zap.Any("agg-signers", agg.Signers),
 			fields.Root(signedCommit.Message.Root))
 
