@@ -44,7 +44,7 @@ func NewValidatorRegistrationRunner(
 		BaseRunner: &BaseRunner{
 			RunnerRoleType: spectypes.RoleValidatorRegistration,
 			BeaconNetwork:  beaconNetwork,
-			Share:          share,
+			ShareMap:       share,
 			QBFTController: qbftController,
 		},
 
@@ -179,7 +179,7 @@ func (r *ValidatorRegistrationRunner) GetBeaconNode() specssv.BeaconNode {
 }
 
 func (r *ValidatorRegistrationRunner) GetShare() *spectypes.Share {
-	for _, share := range r.BaseRunner.Share {
+	for _, share := range r.BaseRunner.ShareMap {
 		return share
 	}
 	return nil

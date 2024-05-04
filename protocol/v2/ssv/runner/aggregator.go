@@ -37,7 +37,6 @@ func NewAggregatorRunner(
 	beacon specssv.BeaconNode,
 	network specssv.Network,
 	signer spectypes.BeaconSigner,
-	beaconSigner spectypes.BeaconSigner,
 	operatorSigner spectypes.OperatorSigner,
 	valCheck specqbft.ProposedValueCheckF,
 	highestDecidedSlot phase0.Slot,
@@ -46,7 +45,7 @@ func NewAggregatorRunner(
 		BaseRunner: &BaseRunner{
 			RunnerRoleType:     spectypes.RoleAggregator,
 			BeaconNetwork:      beaconNetwork,
-			Share:              share,
+			ShareMap:           share,
 			QBFTController:     qbftController,
 			highestDecidedSlot: highestDecidedSlot,
 		},
@@ -296,7 +295,7 @@ func (r *AggregatorRunner) GetBeaconNode() specssv.BeaconNode {
 }
 
 func (r *AggregatorRunner) GetShare() *spectypes.Share {
-	for _, share := range r.BaseRunner.Share {
+	for _, share := range r.BaseRunner.ShareMap {
 		return share
 	}
 	return nil

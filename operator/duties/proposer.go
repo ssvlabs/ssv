@@ -134,7 +134,7 @@ func (h *ProposerHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 	}
 
 	// range over duties and execute
-	toExecute := make([]*spectypes.Duty, 0, len(duties))
+	toExecute := make([]*spectypes.BeaconDuty, 0, len(duties))
 	for _, d := range duties {
 		if h.shouldExecute(d) {
 			toExecute = append(toExecute, h.toSpecDuty(d, spectypes.BNRoleProposer))
@@ -164,7 +164,7 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 
 	h.duties.ResetEpoch(epoch)
 
-	specDuties := make([]*spectypes.Duty, 0, len(duties))
+	specDuties := make([]*spectypes.BeaconDuty, 0, len(duties))
 	for _, d := range duties {
 		_, inCommitteeDuty := selfIndicesSet[d.ValidatorIndex]
 		h.duties.Add(epoch, d.Slot, d.ValidatorIndex, d, inCommitteeDuty)
@@ -174,14 +174,14 @@ func (h *ProposerHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	h.logger.Debug("📚 got duties",
 		fields.Count(len(duties)),
 		fields.Epoch(epoch),
-		fields.GenesisDuties(epoch, specDuties),
+		fields.BeaconDuties(epoch, specDuties),
 		fields.Duration(start))
 
 	return nil
 }
 
-func (h *ProposerHandler) toSpecDuty(duty *eth2apiv1.ProposerDuty, role spectypes.BeaconRole) *spectypes.Duty {
-	return &spectypes.Duty{
+func (h *ProposerHandler) toSpecDuty(duty *eth2apiv1.ProposerDuty, role spectypes.BeaconRole) *spectypes.BeaconDuty {
+	return &spectypes.BeaconDuty{
 		Type:           role,
 		PubKey:         duty.PubKey,
 		Slot:           duty.Slot,

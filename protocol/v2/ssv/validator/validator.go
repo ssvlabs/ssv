@@ -5,10 +5,6 @@ import (
 	"fmt"
 	"sync"
 
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
@@ -17,7 +13,8 @@ import (
 
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging/fields"
-	msgvalidation "github.com/bloxapp/ssv/message/msgvalidation/genesis"
+	"github.com/bloxapp/ssv/message/msgvalidation"
+	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
@@ -34,10 +31,11 @@ type Validator struct {
 
 	DutyRunners runner.DutyRunners
 	Network     specqbft.Network
+	Operator    *spectypes.Operator
 	Share       *types.SSVShare
 
-	Signer       genesisspectypes.KeyManager
-	BeaconSigner spectypes.BeaconSigner
+	Signer         spectypes.BeaconSigner
+	OperatorSigner spectypes.OperatorSigner
 
 	Storage *storage.QBFTStores
 	Queues  map[types.RunnerRole]queueContainer
@@ -67,7 +65,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		Storage:          options.Storage,
 		Share:            options.SSVShare,
 		Signer:           options.Signer,
-		BeaconSigner:     options.BeaconSigner,
+		OperatorSigner:   options.OperatorSigner,
 		Queues:           make(map[types.RunnerRole]queueContainer),
 		state:            uint32(NotStarted),
 		dutyIDs:          hashmap.New[types.RunnerRole, string](),
@@ -79,13 +77,13 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		dutyRunner.GetBaseRunner().TimeoutF = v.onTimeout
 
 		// Setup the queue.
-		v.Queues[dutyRunner.GetRunnerRole()] = queueContainer{
+		v.Queues[types.RunnerRoleFromSpec(dutyRunner.GetRunnerRole())] = queueContainer{
 			Q: queue.WithMetrics(queue.New(options.QueueSize), options.Metrics),
 			queueState: &queue.State{
 				HasRunningInstance: false,
 				Height:             0,
 				Slot:               0,
-				//Quorum:             options.SSVShare.Share,// TODO
+				Quorum:             options.SSVShare.GetQuorum(),
 			},
 		}
 	}
@@ -137,23 +135,23 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 	case spectypes.SSVConsensusMsgType:
 		logger = trySetDutyID(logger, v.dutyIDs, types.RunnerRoleFromSpec(messageID.GetRoleType()))
 
-		signedMsg, ok := msg.Body.(*genesisspecqbft.SignedMessage)
+		qbftMsg, ok := msg.Body.(*specqbft.Message)
 		if !ok {
 			return errors.New("could not decode consensus message from network message")
 		}
-		logger = logger.With(fields.Height(specqbft.Height(signedMsg.Message.Height)))
-		return dutyRunner.ProcessConsensus(logger, signedMsg)
+		logger = logger.With(fields.Height(qbftMsg.Height))
+		return dutyRunner.ProcessConsensus(logger, msg.SignedSSVMessage)
 	case spectypes.SSVPartialSignatureMsgType:
 		logger = trySetDutyID(logger, v.dutyIDs, types.RunnerRoleFromSpec(messageID.GetRoleType()))
 
-		signedMsg, ok := msg.Body.(*genesisspectypes.SignedPartialSignatureMessage)
+		partSigMsg, ok := msg.Body.(*spectypes.PartialSignatureMessages)
 		if !ok {
 			return errors.New("could not decode post consensus message from network message")
 		}
-		if signedMsg.Message.Type == genesisspectypes.PostConsensusPartialSig {
-			return dutyRunner.ProcessPostConsensus(logger, signedMsg)
+		if partSigMsg.Type == spectypes.PostConsensusPartialSig {
+			return dutyRunner.ProcessPostConsensus(logger, partSigMsg)
 		}
-		return dutyRunner.ProcessPreConsensus(logger, signedMsg)
+		return dutyRunner.ProcessPreConsensus(logger, partSigMsg)
 	case message.SSVEventMsgType:
 		return v.handleEventMessage(logger, msg, dutyRunner)
 	default:

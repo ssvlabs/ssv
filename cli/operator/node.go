@@ -35,7 +35,6 @@ import (
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/message/msgvalidation"
-	genesismsgvalidation "github.com/bloxapp/ssv/message/msgvalidation/genesis"
 	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/monitoring/metricsreporter"
@@ -212,7 +211,7 @@ var StartNodeCmd = &cobra.Command{
 		dutyStore := dutystore.New()
 		cfg.SSVOptions.DutyStore = dutyStore
 
-		var messageValidator genesismsgvalidation.MessageValidator
+		var messageValidator msgvalidation.MessageValidator
 		if cfg.AlanFork {
 			signatureVerifier := signatureverifier.NewSignatureVerifier(nodeStorage) // TODO: pass from outside
 
@@ -224,15 +223,16 @@ var StartNodeCmd = &cobra.Command{
 				dutyStore,
 				signatureVerifier,
 			)
-		} else {
-			messageValidator = genesismsgvalidation.New(
-				networkConfig,
-				genesismsgvalidation.WithNodeStorage(nodeStorage),
-				genesismsgvalidation.WithLogger(logger),
-				genesismsgvalidation.WithMetrics(metricsReporter),
-				genesismsgvalidation.WithDutyStore(dutyStore),
-				genesismsgvalidation.WithOwnOperatorID(operatorDataStore),
-			)
+			// TODO: use old message validation once compilation errors are fixed
+			//} else {
+			//	messageValidator = genesismsgvalidation.New(
+			//		networkConfig,
+			//		genesismsgvalidation.WithNodeStorage(nodeStorage),
+			//		genesismsgvalidation.WithLogger(logger),
+			//		genesismsgvalidation.WithMetrics(metricsReporter),
+			//		genesismsgvalidation.WithDutyStore(dutyStore),
+			//		genesismsgvalidation.WithOwnOperatorID(operatorDataStore),
+			//	)
 		}
 
 		cfg.P2pNetworkConfig.Metrics = metricsReporter

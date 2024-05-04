@@ -53,13 +53,13 @@ type RoundTimer struct {
 	// timeoutOptions holds the timeoutOptions for the timer
 	timeoutOptions TimeoutOptions
 	// role is the role of the instance
-	role spectypes.BeaconRole
+	role spectypes.RunnerRole
 	// beaconNetwork is the beacon network
 	beaconNetwork BeaconNetwork
 }
 
 // New creates a new instance of RoundTimer.
-func New(pctx context.Context, beaconNetwork BeaconNetwork, role spectypes.BeaconRole, done OnRoundTimeoutF) *RoundTimer {
+func New(pctx context.Context, beaconNetwork BeaconNetwork, role spectypes.RunnerRole, done OnRoundTimeoutF) *RoundTimer {
 	ctx, cancelCtx := context.WithCancel(pctx)
 	return &RoundTimer{
 		mtx:           &sync.RWMutex{},
@@ -104,10 +104,10 @@ func (t *RoundTimer) RoundTimeout(height specqbft.Height, round specqbft.Round) 
 
 	// Set base duration based on role
 	switch t.role {
-	case spectypes.BNRoleAttester, spectypes.BNRoleSyncCommittee:
+	case spectypes.RoleCommittee:
 		// third of the slot time
 		baseDuration = t.beaconNetwork.SlotDurationSec() / 3
-	case spectypes.BNRoleAggregator, spectypes.BNRoleSyncCommitteeContribution:
+	case spectypes.RoleAggregator, spectypes.RoleSyncCommitteeContribution:
 		// two-third of the slot time
 		baseDuration = t.beaconNetwork.SlotDurationSec() / 3 * 2
 	default:

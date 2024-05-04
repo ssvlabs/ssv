@@ -11,6 +11,7 @@ import (
 	"github.com/bloxapp/ssv/logging/fields"
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
+	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // ConsensusFields provides details about the consensus for a message. It's used for logging and metrics.
@@ -32,7 +33,7 @@ type LoggerFields struct {
 func (d LoggerFields) AsZapFields() []zapcore.Field {
 	result := []zapcore.Field{
 		fields.SenderID(d.SenderID),
-		fields.RunnerRole(d.Role),
+		fields.RunnerRole(ssvtypes.RunnerRoleFromSpec(d.Role)),
 		zap.String("ssv_message_type", ssvmessage.MsgTypeToString(d.SSVMessageType)),
 		fields.Slot(d.Slot),
 	}

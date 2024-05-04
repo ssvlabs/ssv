@@ -51,7 +51,7 @@ type Runner interface {
 type BaseRunner struct {
 	mtx            sync.RWMutex
 	State          *State
-	Share          map[phase0.ValidatorIndex]*spectypes.Share
+	ShareMap       map[phase0.ValidatorIndex]*spectypes.Share
 	QBFTController *controller.Controller
 	BeaconNetwork  spectypes.BeaconNetwork
 	RunnerRoleType spectypes.RunnerRole
@@ -91,7 +91,7 @@ func NewBaseRunner(
 ) *BaseRunner {
 	return &BaseRunner{
 		State:              state,
-		Share:              share,
+		ShareMap:           share,
 		QBFTController:     controller,
 		BeaconNetwork:      beaconNetwork,
 		RunnerRoleType:     runnerRoleType,
@@ -144,8 +144,11 @@ func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runne
 	// }
 
 	decidedMsg, err := b.QBFTController.ProcessMsg(logger, msg)
-	b.compactInstanceIfNeeded(msg)
 	if err != nil {
+		return false, nil, err
+	}
+
+	if err := b.compactInstanceIfNeeded(msg); err != nil {
 		return false, nil, err
 	}
 
@@ -157,18 +160,23 @@ func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runne
 
 	if decideCorrectly, err := b.didDecideCorrectly(prevDecided, decidedMsg); !decideCorrectly {
 		return false, nil, err
-	} else {
-		if inst := b.QBFTController.StoredInstances.FindInstance(decidedMsg.Message.Height); inst != nil {
-			logger := logger.With(
-				zap.Uint64("msg_height", uint64(msg.GetSSVMessage())),
-				zap.Uint64("ctrl_height", uint64(b.QBFTController.Height)),
-				zap.Any("signers", msg.GetOperatorIDs()),
-			)
-			if err = b.QBFTController.SaveInstance(inst, decidedMsg); err != nil {
-				logger.Debug("❗ failed to save instance", zap.Error(err))
-			} else {
-				logger.Debug("💾 saved instance")
-			}
+	}
+
+	decidedQBFTMsg, err := specqbft.DecodeMessage(decidedMsg.SSVMessage.Data)
+	if err != nil {
+		return false, nil, err
+	}
+
+	if inst := b.QBFTController.StoredInstances.FindInstance(decidedQBFTMsg.Height); inst != nil {
+		logger := logger.With(
+			zap.Uint64("msg_height", uint64(decidedQBFTMsg.Height)),
+			zap.Uint64("ctrl_height", uint64(b.QBFTController.Height)),
+			zap.Any("signers", msg.GetOperatorIDs()),
+		)
+		if err = b.QBFTController.SaveInstance(inst, decidedMsg); err != nil {
+			logger.Debug("❗ failed to save instance", zap.Error(err))
+		} else {
+			logger.Debug("💾 saved instance")
 		}
 	}
 

@@ -45,9 +45,9 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 				}
 
 				pk := phase0.BLSPubKey{}
-				copy(pk[:], share.ValidatorPubKey)
+				copy(pk[:], share.ValidatorPubKey[:])
 
-				h.executeDuties(h.logger, []*spectypes.Duty{{
+				h.executeDuties(h.logger, []*spectypes.BeaconDuty{{
 					Type:   spectypes.BNRoleValidatorRegistration,
 					PubKey: pk,
 					Slot:   slot,

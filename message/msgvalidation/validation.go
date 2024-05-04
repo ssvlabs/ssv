@@ -231,7 +231,7 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 	}
 
 	var committee []spectypes.OperatorID
-	for _, c := range validator.Committee {
+	for _, c := range validator.GetCommittee() {
 		committee = append(committee, c.Signer)
 	}
 

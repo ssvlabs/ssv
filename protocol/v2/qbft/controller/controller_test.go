@@ -38,9 +38,9 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 	logger := logging.TestLogger(t)
 
 	testConfig := &qbft.Config{
-		Signer:  spectestingutils.NewTestingKeyManager(),
-		Network: spectestingutils.NewTestingNetwork(),
-		Timer:   roundtimer.NewTestingTimer(),
+		OperatorSigner: spectestingutils.NewTestingKeyManager(),
+		Network:        spectestingutils.NewTestingNetwork(),
+		Timer:          roundtimer.NewTestingTimer(),
 	}
 
 	share := spectestingutils.TestingShare(spectestingutils.Testing4SharesSet())

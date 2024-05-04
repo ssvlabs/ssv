@@ -57,7 +57,7 @@ func NewProposerRunner(
 		BaseRunner: &BaseRunner{
 			RunnerRoleType:     spectypes.RoleProposer,
 			BeaconNetwork:      beaconNetwork,
-			Share:              share,
+			ShareMap:           share,
 			QBFTController:     qbftController,
 			highestDecidedSlot: highestDecidedSlot,
 		},
@@ -379,7 +379,7 @@ func (r *ProposerRunner) GetBeaconNode() specssv.BeaconNode {
 }
 
 func (r *ProposerRunner) GetShare() *spectypes.Share {
-	for _, share := range r.BaseRunner.Share {
+	for _, share := range r.BaseRunner.ShareMap {
 		return share
 	}
 	return nil

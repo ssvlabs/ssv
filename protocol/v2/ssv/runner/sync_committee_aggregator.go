@@ -46,7 +46,7 @@ func NewSyncCommitteeAggregatorRunner(
 		BaseRunner: &BaseRunner{
 			RunnerRoleType:     spectypes.RoleSyncCommitteeContribution,
 			BeaconNetwork:      beaconNetwork,
-			Share:              share,
+			ShareMap:           share,
 			QBFTController:     qbftController,
 			highestDecidedSlot: highestDecidedSlot,
 		},
@@ -395,7 +395,7 @@ func (r *SyncCommitteeAggregatorRunner) GetBeaconNode() specssv.BeaconNode {
 }
 
 func (r *SyncCommitteeAggregatorRunner) GetShare() *spectypes.Share {
-	for _, share := range r.BaseRunner.Share {
+	for _, share := range r.BaseRunner.ShareMap {
 		return share
 	}
 	return nil

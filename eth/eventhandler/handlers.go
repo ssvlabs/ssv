@@ -305,9 +305,9 @@ func (eh *EventHandler) validatorAddedEventToShare(
 		}
 	}
 
-	validatorShare.Quorum, _ = ssvtypes.ComputeQuorumAndPartialQuorum(len(committee))
+	validatorShare.Share.Quorum, _ = ssvtypes.ComputeQuorumAndPartialQuorum(len(committee)) // TODO: handle validatorShare.Operator.Quorum
 	validatorShare.DomainType = eh.networkConfig.Domain
-	validatorShare.Committee = committee
+	validatorShare.Share.Committee = committee // TODO: handle validatorShare.Operator.Committee
 	validatorShare.Graffiti = []byte("ssv.network")
 
 	return &validatorShare, shareSecret, nil

@@ -12,6 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 )
@@ -159,7 +160,7 @@ func (c *Controller) InstanceForHeight(logger *zap.Logger, height genesisspecqbf
 	storedInst, err := c.config.GetStorage().GetInstance(c.Identifier, height)
 	if err != nil {
 		logger.Debug("❗ could not load instance from storage",
-			fields.Height(height),
+			fields.Height(specqbft.Height(height)),
 			zap.Uint64("ctrl_height", uint64(c.Height)),
 			zap.Error(err))
 		return nil

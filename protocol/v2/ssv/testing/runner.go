@@ -74,7 +74,7 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 		return 1
 	}
 	config.Network = net
-	config.Signer = km
+	config.OperatorSigner = km
 
 	contr := testing.NewTestingQBFTController(
 		identifier[:],

@@ -10,6 +10,7 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
+	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // UponDecided returns decided msg if decided, nil otherwise
@@ -132,7 +133,7 @@ func ValidateDecided(
 }
 
 // IsDecidedMsg returns true if signed commit has all quorum sigs
-func IsDecidedMsg(share *spectypes.Operator, signedDecided *spectypes.SignedSSVMessage) (bool, error) {
+func IsDecidedMsg(share ssvtypes.HasQuorum, signedDecided *spectypes.SignedSSVMessage) (bool, error) {
 	msg, err := specqbft.DecodeMessage(signedDecided.SSVMessage.Data)
 	if err != nil {
 		return false, err

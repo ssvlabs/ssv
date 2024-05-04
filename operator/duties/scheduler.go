@@ -73,7 +73,7 @@ type ValidatorProvider interface {
 	SelfParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
 }
 
-type ExecuteDutyFunc func(logger *zap.Logger, duty *spectypes.Duty)
+type ExecuteDutyFunc func(logger *zap.Logger, duty *spectypes.BeaconDuty)
 
 type SchedulerOptions struct {
 	Ctx                context.Context
@@ -358,7 +358,7 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.Ev
 }
 
 // ExecuteDuties tries to execute the given duties
-func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []spectypes.Duty) {
+func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []*spectypes.BeaconDuty) {
 	for _, duty := range duties {
 		duty := duty
 		logger := s.loggerWithDutyContext(logger, duty)
@@ -371,13 +371,15 @@ func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []spectypes.Duty) {
 			if duty.Type == spectypes.BNRoleAttester || duty.Type == spectypes.BNRoleSyncCommittee {
 				s.waitOneThirdOrValidBlock(duty.DutySlot())
 			}
+
+			// TODO: think if committee duty are handled correctly
 			s.executeDuty(logger, duty)
 		}()
 	}
 }
 
 // loggerWithDutyContext returns an instance of logger with the given duty's information
-func (s *Scheduler) loggerWithDutyContext(logger *zap.Logger, duty *spectypes.Duty) *zap.Logger {
+func (s *Scheduler) loggerWithDutyContext(logger *zap.Logger, duty *spectypes.BeaconDuty) *zap.Logger {
 	return logger.
 		With(fields.BeaconRole(duty.Type)).
 		With(zap.Uint64("committee_index", uint64(duty.CommitteeIndex))).

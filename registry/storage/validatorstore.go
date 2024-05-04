@@ -22,6 +22,8 @@ type ValidatorStore interface {
 	Committees() []*Committee
 	ParticipatingCommittees(epoch phase0.Epoch) []*Committee
 	OperatorCommittees(id spectypes.OperatorID) []*Committee
+
+	// TODO: save recipient address
 }
 
 type SelfValidatorStore interface {
@@ -215,7 +217,7 @@ func (c *validatorStore) handleShareAdded(share *types.SSVShare) {
 	c.byCommitteeID[committee.ID] = committee
 
 	// Update byOperatorID
-	for _, operator := range share.Committee {
+	for _, operator := range share.GetCommittee() {
 		data := c.byOperatorID[operator.Signer]
 		if data == nil {
 			data = &sharesAndCommittees{
@@ -259,7 +261,7 @@ func (c *validatorStore) handleShareRemoved(pk spectypes.ValidatorPK) {
 	}
 
 	// Update byOperatorID
-	for _, operator := range share.Committee {
+	for _, operator := range share.GetCommittee() {
 		data := c.byOperatorID[operator.Signer]
 		if data == nil {
 			return
@@ -318,7 +320,7 @@ func buildCommittee(shares []*types.SSVShare) *Committee {
 	seenOperators := make(map[spectypes.OperatorID]struct{})
 
 	for _, share := range shares {
-		for _, shareMember := range share.Committee {
+		for _, shareMember := range share.GetCommittee() {
 			seenOperators[shareMember.Signer] = struct{}{}
 		}
 	}

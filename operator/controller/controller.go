@@ -17,8 +17,6 @@ import (
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
-	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
-	genesisspecssv "github.com/ssvlabs/ssv-spec-pre-cc/ssv"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 
@@ -26,7 +24,6 @@ import (
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
 	validation "github.com/bloxapp/ssv/message/msgvalidation"
-	genesisvalidation "github.com/bloxapp/ssv/message/msgvalidation/genesis"
 	"github.com/bloxapp/ssv/network"
 	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/duties"
@@ -72,7 +69,7 @@ type ControllerOptions struct {
 	FullNode                   bool `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Save decided history rather than just highest messages"`
 	Exporter                   bool `yaml:"Exporter" env:"EXPORTER" env-default:"false" env-description:""`
 	BuilderProposals           bool `yaml:"BuilderProposals" env:"BUILDER_PROPOSALS" env-default:"false" env-description:"Use external builders to produce blocks"`
-	KeyManager                 genesisspectypes.KeyManager
+	KeyManager                 spectypes.BeaconSigner
 	OperatorDataStore          operatordatastore.OperatorDataStore
 	RegistryStorage            nodestorage.Storage
 	RecipientsStorage          Recipients
@@ -92,8 +89,8 @@ type ControllerOptions struct {
 // it takes care of bootstrapping, updating and managing existing validators and their shares
 type Controller interface {
 	StartValidators()
-	GetValidator(pubKey string) (*validator.Validator, bool)
-	ExecuteDuty(logger *zap.Logger, duty *genesisspectypes.Duty)
+	//GetValidator(pubKey string) (*validator.Validator, bool) // TODO: check its usages and delete
+	ExecuteDuty(logger *zap.Logger, duty spectypes.Duty)
 	UpdateValidatorMetaDataLoop()
 	StartNetworkHandlers()
 	// GetValidatorStats returns stats of validators, including the following:
@@ -105,7 +102,7 @@ type Controller interface {
 	ValidatorExitChan() <-chan duties.ExitDescriptor
 
 	StartValidator(share *ssvtypes.SSVShare) error
-	StopValidator(pubKey genesisspectypes.ValidatorPK) error
+	StopValidator(pubKey spectypes.ValidatorPK) error
 	LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*ssvtypes.SSVShare) error
 	ReactivateCluster(owner common.Address, operatorIDs []uint64, toReactivate []*ssvtypes.SSVShare) error
 	UpdateFeeRecipient(owner, recipient common.Address) error
@@ -130,7 +127,7 @@ type SharesStorage interface {
 }
 
 type P2PNetwork interface {
-	Broadcast(message *spectypes.SSVMessage) error
+	Broadcast(message *spectypes.SignedSSVMessage) error
 	UseMessageRouter(router network.MessageRouter)
 	Peers(pk spectypes.ValidatorPK) ([]peer.ID, error)
 	SubscribeRandoms(logger *zap.Logger, numSubnets int) error
@@ -151,7 +148,7 @@ type controller struct {
 	ibftStorageMap    *storage.QBFTStores
 
 	beacon     beaconprotocol.BeaconNode
-	keyManager genesisspectypes.KeyManager
+	keyManager spectypes.BeaconSigner
 
 	operatorDataStore operatordatastore.OperatorDataStore
 
@@ -167,10 +164,10 @@ type controller struct {
 	messageRouter        *messageRouter
 	messageWorker        *worker.Worker
 	historySyncBatchSize int
-	messageValidator     genesisvalidation.MessageValidator
+	messageValidator     validation.MessageValidator
 
 	// nonCommittees is a cache of initialized nonCommitteeValidator instances
-	nonCommitteeValidators *ttlcache.Cache[genesisspectypes.MessageID, *nonCommitteeValidator]
+	nonCommitteeValidators *ttlcache.Cache[spectypes.MessageID, *nonCommitteeValidator]
 	nonCommitteeMutex      sync.Mutex
 
 	recentlyStartedValidators uint64
@@ -249,7 +246,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		historySyncBatchSize: options.HistorySyncBatchSize,
 
 		nonCommitteeValidators: ttlcache.New(
-			ttlcache.WithTTL[genesisspectypes.MessageID, *nonCommitteeValidator](time.Minute * 13),
+			ttlcache.WithTTL[spectypes.MessageID, *nonCommitteeValidator](time.Minute * 13),
 		),
 		metadataLastUpdated:     make(map[spectypes.ValidatorPK]time.Time),
 		indicesChange:           make(chan struct{}),
@@ -596,7 +593,7 @@ func (c *controller) ExecuteDuty(logger *zap.Logger, duty spectypes.Duty) {
 }
 
 // CreateDutyExecuteMsg returns ssvMsg with event type of duty execute
-func CreateDutyExecuteMsg(duty *genesisspectypes.Duty, pubKey phase0.BLSPubKey, domain genesisspectypes.DomainType) (*genesisspectypes.SSVMessage, error) {
+func CreateDutyExecuteMsg(duty *spectypes.BeaconDuty, pubKey phase0.BLSPubKey, domain spectypes.DomainType) (*spectypes.SignedSSVMessage, error) {
 	executeDutyData := types.ExecuteDutyData{Duty: duty}
 	edd, err := json.Marshal(executeDutyData)
 	if err != nil {
@@ -610,11 +607,28 @@ func CreateDutyExecuteMsg(duty *genesisspectypes.Duty, pubKey phase0.BLSPubKey, 
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to encode event msg")
 	}
-	return &genesisspectypes.SSVMessage{
-		MsgType: genesisspectypes.MsgType(message.SSVEventMsgType),
-		MsgID:   genesisspectypes.NewMsgID(domain, pubKey[:], duty.Type),
+
+	ssvMsg := &spectypes.SSVMessage{
+		MsgType: message.SSVEventMsgType,
+		MsgID:   spectypes.NewMsgID(domain, pubKey[:], CastBeaconRoleToRunnerRole(duty.Type)),
 		Data:    data,
-	}, nil
+	}
+
+	// TODO: sign
+	//signedSSVMessage, err := types.SSVMessageToSignedSSVMessage(ssvMsg, operatorID, operatorSigner.SignSSVMessage)
+	//if err != nil {
+	//	return nil, errors.Wrap(err, "could not create SignedSSVMessage from SSVMessage")
+	//}
+	//return signedSSVMessage, nil
+
+	// TODO: remove
+	signedSSVMsg := &spectypes.SignedSSVMessage{
+		Signatures:  nil,
+		OperatorIDs: nil,
+		SSVMessage:  ssvMsg,
+	}
+
+	return signedSSVMsg, nil
 }
 
 func (c *controller) AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex {
@@ -638,7 +652,7 @@ func (c *controller) onMetadataUpdated(pk spectypes.ValidatorPK, meta *beaconpro
 
 	if entity := c.entities.Get(pk[:]); entity != nil {
 		entity.UpdateMetadata(meta)
-		_, err := c.startValidator(v)
+		_, err := c.startValidator(entity)
 		if err != nil {
 			logger.Warn("could not start validator after metadata update",
 				fields.PubKey(pk[:]), zap.Error(err), zap.Any("metadata", meta))
@@ -710,8 +724,8 @@ func (c *controller) onShareStart(share *ssvtypes.SSVShare) (bool, error) {
 }
 
 func (c *controller) printShare(s *ssvtypes.SSVShare, msg string) {
-	committee := make([]string, len(s.Committee))
-	for i, c := range s.Committee {
+	committee := make([]string, len(s.GetCommittee()))
+	for i, c := range s.GetCommittee() {
 		committee[i] = fmt.Sprintf(`[OperatorID=%d, PubKey=%x]`, c.OperatorID, c.SSVOperatorPubKey)
 	}
 	c.logger.Debug(msg,
@@ -844,107 +858,107 @@ func CastBeaconRoleToRunnerRole(role spectypes.BeaconRole) spectypes.RunnerRole 
 
 // #FIXME
 // SetupRunners initializes duty runners for the given validator
+//func SetupGenesisRunners(ctx context.Context, logger *zap.Logger, options validator.Options) runner.DutyRunners {
+//	if options.SSVShare == nil || options.SSVShare.BeaconMetadata == nil {
+//		logger.Error("missing validator metadata", zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey[:])))
+//		return runner.DutyRunners{} // TODO need to find better way to fix it
+//	}
+//
+//	runnersType := []spectypes.BeaconRole{
+//		spectypes.BNRoleAttester,
+//		spectypes.BNRoleProposer,
+//		spectypes.BNRoleAggregator,
+//		spectypes.BNRoleSyncCommittee,
+//		spectypes.BNRoleSyncCommitteeContribution,
+//		spectypes.BNRoleValidatorRegistration,
+//	}
+//
+//	domainType := ssvtypes.GetDefaultDomain()
+//	buildController := func(role genesisspectypes.BeaconRole, valueCheckF genesisspecqbft.ProposedValueCheckF) *qbftcontroller.Controller {
+//		config := &qbft.Config{
+//			OperatorSigner: options.Signer,
+//			SigningPK:      options.SSVShare.ValidatorPubKey[:], // TODO right val?
+//			Domain:         domainType,
+//			ValueCheckF:    nil, // sets per role type
+//			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
+//				leader := specqbft.RoundRobinProposer(state, round)
+//				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
+//				return leader
+//			},
+//			Storage: options.Storage.Get(role),
+//			Network: options.Network,
+//			Timer:   roundtimer.New(ctx, nil),
+//		}
+//		config.ValueCheckF = valueCheckF
+//
+//		identifier := spectypes.NewMsgID(ssvtypes.GetDefaultDomain(), options.SSVShare.Share.ValidatorPubKey, role)
+//		qbftCtrl := qbftcontroller.NewController(identifier[:], &options.SSVShare.Share, domainType, config, options.FullNode)
+//		qbftCtrl.NewDecidedHandler = options.NewDecidedHandler
+//		return qbftCtrl
+//	}
+//
+//	runners := runner.DutyRunners{}
+//	for _, role := range runnersType {
+//		switch role {
+//		case spectypes.BNRoleAttester:
+//			valCheck := genesisspecssv.AttesterValueCheckF(options.Signer, options.BeaconNetwork, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index, options.SSVShare.SharePubKey)
+//			qbftCtrl := buildController(spectypes.BNRoleAttester, valCheck)
+//			runners[role] = runner.NewAttesterRunnner(options.BeaconNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, valCheck, 0)
+//		case spectypes.BNRoleProposer:
+//			proposedValueCheck := genesisspecssv.ProposerValueCheckF(options.Signer, options.BeaconNetwork, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index, options.SSVShare.SharePubKey, options.BuilderProposals)
+//			qbftCtrl := buildController(spectypes.BNRoleProposer, proposedValueCheck)
+//			runners[role] = runner.NewProposerRunner(options.BeaconNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck, 0)
+//			runners[role].(*runner.ProposerRunner).ProducesBlindedBlocks = options.BuilderProposals // apply blinded block flag
+//		case spectypes.BNRoleAggregator:
+//			aggregatorValueCheckF := genesisspecssv.AggregatorValueCheckF(options.Signer, options.BeaconNetwork, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
+//			qbftCtrl := buildController(spectypes.BNRoleAggregator, aggregatorValueCheckF)
+//			runners[role] = runner.NewAggregatorRunner(options.BeaconNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, aggregatorValueCheckF, 0)
+//		case spectypes.BNRoleSyncCommittee:
+//			syncCommitteeValueCheckF := genesisspecssv.SyncCommitteeValueCheckF(options.Signer, options.BeaconNetwork, options.SSVShare.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
+//			qbftCtrl := buildController(spectypes.BNRoleSyncCommittee, syncCommitteeValueCheckF)
+//			runners[role] = runner.NewSyncCommitteeRunner(options.BeaconNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, syncCommitteeValueCheckF, 0)
+//		case spectypes.BNRoleSyncCommitteeContribution:
+//			syncCommitteeContributionValueCheckF := genesisspecssv.SyncCommitteeContributionValueCheckF(options.Signer, options.BeaconNetwork, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
+//			qbftCtrl := buildController(spectypes.BNRoleSyncCommitteeContribution, syncCommitteeContributionValueCheckF)
+//			runners[role] = runner.NewSyncCommitteeAggregatorRunner(options.BeaconNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, syncCommitteeContributionValueCheckF, 0)
+//		case spectypes.BNRoleValidatorRegistration:
+//			qbftCtrl := buildController(spectypes.BNRoleValidatorRegistration, nil)
+//			runners[role] = runner.NewValidatorRegistrationRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer)
+//		}
+//	}
+//	return runners
+//}
+
+// #FIXME
+// SetupRunners initializes duty runners for the given validator
 func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Options) runner.DutyRunners {
 	if options.SSVShare == nil || options.SSVShare.BeaconMetadata == nil {
 		logger.Error("missing validator metadata", zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey[:])))
 		return runner.DutyRunners{} // TODO need to find better way to fix it
 	}
 
-	runnersType := []spectypes.BeaconRole{
-		spectypes.BNRoleAttester,
-		spectypes.BNRoleProposer,
-		spectypes.BNRoleAggregator,
-		spectypes.BNRoleSyncCommittee,
-		spectypes.BNRoleSyncCommitteeContribution,
-		spectypes.BNRoleValidatorRegistration,
-	}
-
-	domainType := ssvtypes.GetDefaultDomain()
-	buildController := func(role genesisspectypes.BeaconRole, valueCheckF genesisspecqbft.ProposedValueCheckF) *qbftcontroller.Controller {
-		config := &qbft.Config{
-			Signer:      options.Signer,
-			SigningPK:   options.SSVShare.ValidatorPubKey[:], // TODO right val?
-			Domain:      domainType,
-			ValueCheckF: nil, // sets per role type
-			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
-				leader := specqbft.RoundRobinProposer(state, round)
-				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
-				return leader
-			},
-			Storage: options.Storage.Get(role),
-			Network: options.Network,
-			Timer:   roundtimer.New(ctx, nil),
-		}
-		config.ValueCheckF = valueCheckF
-
-		identifier := spectypes.NewMsgID(ssvtypes.GetDefaultDomain(), options.SSVShare.Share.ValidatorPubKey, role)
-		qbftCtrl := qbftcontroller.NewController(identifier[:], &options.SSVShare.Share, domainType, config, options.FullNode)
-		qbftCtrl.NewDecidedHandler = options.NewDecidedHandler
-		return qbftCtrl
-	}
-
-	runners := runner.DutyRunners{}
-	for _, role := range runnersType {
-		switch role {
-		case spectypes.BNRoleAttester:
-			valCheck := genesisspecssv.AttesterValueCheckF(options.Signer, options.BeaconNetwork, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index, options.SSVShare.SharePubKey)
-			qbftCtrl := buildController(spectypes.BNRoleAttester, valCheck)
-			runners[role] = runner.NewAttesterRunnner(options.BeaconNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, valCheck, 0)
-		case spectypes.BNRoleProposer:
-			proposedValueCheck := genesisspecssv.ProposerValueCheckF(options.Signer, options.BeaconNetwork, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index, options.SSVShare.SharePubKey, options.BuilderProposals)
-			qbftCtrl := buildController(spectypes.BNRoleProposer, proposedValueCheck)
-			runners[role] = runner.NewProposerRunner(options.BeaconNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck, 0)
-			runners[role].(*runner.ProposerRunner).ProducesBlindedBlocks = options.BuilderProposals // apply blinded block flag
-		case spectypes.BNRoleAggregator:
-			aggregatorValueCheckF := genesisspecssv.AggregatorValueCheckF(options.Signer, options.BeaconNetwork, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
-			qbftCtrl := buildController(spectypes.BNRoleAggregator, aggregatorValueCheckF)
-			runners[role] = runner.NewAggregatorRunner(options.BeaconNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, aggregatorValueCheckF, 0)
-		case spectypes.BNRoleSyncCommittee:
-			syncCommitteeValueCheckF := genesisspecssv.SyncCommitteeValueCheckF(options.Signer, options.BeaconNetwork, options.SSVShare.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
-			qbftCtrl := buildController(spectypes.BNRoleSyncCommittee, syncCommitteeValueCheckF)
-			runners[role] = runner.NewSyncCommitteeRunner(options.BeaconNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, syncCommitteeValueCheckF, 0)
-		case spectypes.BNRoleSyncCommitteeContribution:
-			syncCommitteeContributionValueCheckF := genesisspecssv.SyncCommitteeContributionValueCheckF(options.Signer, options.BeaconNetwork, options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
-			qbftCtrl := buildController(spectypes.BNRoleSyncCommitteeContribution, syncCommitteeContributionValueCheckF)
-			runners[role] = runner.NewSyncCommitteeAggregatorRunner(options.BeaconNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, syncCommitteeContributionValueCheckF, 0)
-		case spectypes.BNRoleValidatorRegistration:
-			qbftCtrl := buildController(spectypes.BNRoleValidatorRegistration, nil)
-			runners[role] = runner.NewValidatorRegistrationRunner(spectypes.PraterNetwork, &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer)
-		}
-	}
-	return runners
-}
-
-// #FIXME
-// SetupRunners initializes duty runners for the given validator
-func SetupRunnersAfterFork(ctx context.Context, logger *zap.Logger, options validator.Options) runner.DutyRunners {
-	if options.SSVShare == nil || options.SSVShare.BeaconMetadata == nil {
-		logger.Error("missing validator metadata", zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey[:])))
-		return runner.DutyRunners{} // TODO need to find better way to fix it
-	}
-
-	runnersType := []spectypes.RunnerRole{
-		spectypes.RoleCommittee,
-		spectypes.RoleProposer,
-		spectypes.RoleAggregator,
-		spectypes.RoleSyncCommitteeContribution,
-		spectypes.RoleValidatorRegistration,
-		spectypes.RoleVoluntaryExit,
+	runnersType := []ssvtypes.RunnerRole{
+		ssvtypes.RoleCommittee,
+		ssvtypes.RoleProposer,
+		ssvtypes.RoleAggregator,
+		ssvtypes.RoleSyncCommitteeContribution,
+		ssvtypes.RoleValidatorRegistration,
+		ssvtypes.RoleVoluntaryExit,
 	}
 
 	domainType := ssvtypes.GetDefaultDomain()
 	buildController := func(role spectypes.RunnerRole, valueCheckF specqbft.ProposedValueCheckF) *qbftcontroller.Controller {
 		config := &qbft.Config{
-			Signer:      options.Signer,
-			SigningPK:   options.SSVShare.ValidatorPubKey[:], // TODO right val?
-			Domain:      domainType,
-			ValueCheckF: nil, // sets per role type
-			ProposerF: func(state *genesisspecqbft.State, round genesisspecqbft.Round) genesisspectypes.OperatorID {
-				leader := genesisspecqbft.RoundRobinProposer(state, round)
+			OperatorSigner: options.OperatorSigner,
+			SigningPK:      options.SSVShare.ValidatorPubKey[:], // TODO right val?
+			Domain:         domainType,
+			ValueCheckF:    nil, // sets per role type
+			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
+				leader := specqbft.RoundRobinProposer(state, round)
 				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
 				return leader
 			},
-			Storage:               options.Storage.Get(role),
+			Storage:               options.Storage.Get(ssvtypes.RunnerRoleFromSpec(role)),
 			Network:               options.Network,
 			Timer:                 roundtimer.New(ctx, options.BeaconNetwork, role, nil),
 			SignatureVerification: true,
@@ -959,31 +973,31 @@ func SetupRunnersAfterFork(ctx context.Context, logger *zap.Logger, options vali
 
 	runners := runner.DutyRunners{}
 	for _, role := range runnersType {
-		shareMap := make(map[phase0.ValidatorIndex]*spectypes.Share)
+		shareMap := make(map[phase0.ValidatorIndex]*spectypes.Share) // TODO: fill the map
 
 		switch role {
-		case spectypes.RoleCommittee:
-			valCheck := specssv.BeaconVoteValueCheckF(options.Signer, options.BeaconNetwork.GetBeaconNetwork(), options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index, options.SSVShare.SharePubKey)
+		case ssvtypes.RoleCommittee:
+			valCheck := specssv.BeaconVoteValueCheckF(options.Signer, options.BeaconNetwork.GetBeaconNetwork().EstimatedCurrentSlot(), options.SSVShare.SharePubKey, options.BeaconNetwork.GetBeaconNetwork().EstimatedCurrentEpoch())
 			qbftCtrl := buildController(spectypes.RoleCommittee, valCheck)
-			runners[role] = runner.NewAttesterRunnner(options.BeaconNetwork.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, valCheck, 0)
-		case spectypes.RoleProposer:
+			runners[role] = runner.NewCommitteeRunner(options.BeaconNetwork.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, valCheck)
+		case ssvtypes.RoleProposer:
 			proposedValueCheck := specssv.ProposerValueCheckF(options.Signer, options.BeaconNetwork.GetBeaconNetwork(), options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index, options.SSVShare.SharePubKey)
 			qbftCtrl := buildController(spectypes.RoleProposer, proposedValueCheck)
-			runners[role] = runner.NewProposerRunner(options.BeaconNetwork.GetBeaconNetwork(), &options.SSVShare.Share, qbftCtrl, options.Beacon, options.Network, options.Signer, proposedValueCheck, 0)
+			runners[role] = runner.NewProposerRunner(options.BeaconNetwork.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, proposedValueCheck, 0)
 			runners[role].(*runner.ProposerRunner).ProducesBlindedBlocks = options.BuilderProposals // apply blinded block flag
-		case spectypes.RoleAggregator:
+		case ssvtypes.RoleAggregator:
 			aggregatorValueCheckF := specssv.AggregatorValueCheckF(options.Signer, options.BeaconNetwork.GetBeaconNetwork(), options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
 			qbftCtrl := buildController(spectypes.RoleAggregator, aggregatorValueCheckF)
-			runners[role] = runner.NewAggregatorRunner(options.BeaconNetwork.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, aggregatorValueCheckF, 0)
-		case spectypes.RoleSyncCommitteeContribution:
+			runners[role] = runner.NewAggregatorRunner(options.BeaconNetwork.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, aggregatorValueCheckF, 0)
+		case ssvtypes.RoleSyncCommitteeContribution:
 			syncCommitteeContributionValueCheckF := specssv.SyncCommitteeContributionValueCheckF(options.Signer, options.BeaconNetwork.GetBeaconNetwork(), options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
 			qbftCtrl := buildController(spectypes.RoleSyncCommitteeContribution, syncCommitteeContributionValueCheckF)
-			runners[role] = runner.NewSyncCommitteeAggregatorRunner(options.BeaconNetwork.GetBeaconNetwork(), &shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, syncCommitteeContributionValueCheckF, 0)
-		case spectypes.RoleValidatorRegistration:
+			runners[role] = runner.NewSyncCommitteeAggregatorRunner(options.BeaconNetwork.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, syncCommitteeContributionValueCheckF, 0)
+		case ssvtypes.RoleValidatorRegistration:
 			qbftCtrl := buildController(spectypes.RoleValidatorRegistration, nil)
-			runners[role] = runner.NewValidatorRegistrationRunner(options.BeaconNetwork.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer)
-		case spectypes.RoleVoluntaryExit:
-			runners[role] = runner.NewVoluntaryExitRunner(options.BeaconNetwork.GetBeaconNetwork(), shareMap, options.Beacon, options.Network, options.Signer)
+			runners[role] = runner.NewValidatorRegistrationRunner(options.BeaconNetwork.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner)
+		case ssvtypes.RoleVoluntaryExit:
+			runners[role] = runner.NewVoluntaryExitRunner(options.BeaconNetwork.GetBeaconNetwork(), shareMap, options.Beacon, options.Network, options.Signer, options.OperatorSigner)
 		}
 	}
 	return runners
@@ -1006,14 +1020,14 @@ func UpdateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte, collection b
 	for pk, meta := range results {
 		if err := collection.UpdateValidatorMetadata(pk, meta); err != nil {
 			logger.Error("❗ failed to update validator metadata",
-				fields.PubKey(pk), zap.Error(err))
+				fields.PubKey(pk[:]), zap.Error(err))
 			errs = append(errs, err)
 		}
 		if onUpdated != nil {
 			onUpdated(pk, meta)
 		}
 		logger.Debug("💾️ successfully updated validator metadata",
-			fields.PubKey(pk), zap.Any("metadata", meta))
+			fields.PubKey(pk[:]), zap.Any("metadata", meta))
 	}
 	if len(errs) > 0 {
 		logger.Error("❌ failed to process validators returned from Beacon node",

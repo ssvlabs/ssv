@@ -10,12 +10,13 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 )
 
 type CommitteeRunner struct {
@@ -42,7 +43,7 @@ func NewCommitteeRunner(beaconNetwork spectypes.BeaconNetwork,
 		BaseRunner: &BaseRunner{
 			RunnerRoleType: spectypes.RoleCommittee,
 			BeaconNetwork:  beaconNetwork,
-			Share:          share,
+			ShareMap:       share,
 			QBFTController: qbftController,
 		},
 		beacon:         beacon,
@@ -204,7 +205,7 @@ func (r *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *sp
 		}
 
 		for _, validator := range validators {
-			share := r.BaseRunner.Share[validator]
+			share := r.BaseRunner.ShareMap[validator]
 			pubKey := share.ValidatorPubKey
 			sig, err := r.BaseRunner.State.ReconstructBeaconSig(r.BaseRunner.State.PostConsensusContainer, root,
 				pubKey[:], validator)
@@ -273,7 +274,7 @@ func (r *CommitteeRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, 
 // This function signature returns only one domain type
 // instead we rely on expectedPostConsensusRootsAndBeaconObjects that is called later
 func (r *CommitteeRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	return []ssz.HashRoot{}, spectypes.DomainCommittee, nil
+	return []ssz.HashRoot{}, spectypes.DomainAttester, nil // TODO: perhaps needs to be changed once https://github.com/ssvlabs/ssv-spec/pull/379#discussion_r1589057220 is resolved
 }
 
 func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects() (attestationMap map[phase0.ValidatorIndex][32]byte,
