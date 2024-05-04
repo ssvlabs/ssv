@@ -125,7 +125,7 @@ func getRoundChangeJustification(state *specqbft.State, config qbft.IConfig, pre
 //	return aggregatedPrepareMsg
 // }
 
-// validSignedPrepareForHeightRoundAndValue known in dafny spec as validSignedPrepareForHeightRoundAndDigest
+// validSignedPrepareForHeightRoundAndRoot known in dafny spec as validSignedPrepareForHeightRoundAndDigest
 // https://entethalliance.github.io/client-spec/qbft_spec.html#dfn-qbftspecification
 func validSignedPrepareForHeightRoundAndRoot(
 	config qbft.IConfig,

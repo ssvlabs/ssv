@@ -50,7 +50,7 @@ func (dvs *DiscV5Service) subnetFilter(subnets ...uint64) func(node *enode.Node)
 	}
 }
 
-// subnetFilter checks if the node has an interest in the given subnet
+// sharedSubnetsFilter checks if the node has an interest in the given subnet
 func (dvs *DiscV5Service) sharedSubnetsFilter(n int) func(node *enode.Node) bool {
 	return func(node *enode.Node) bool {
 		if n == 0 {

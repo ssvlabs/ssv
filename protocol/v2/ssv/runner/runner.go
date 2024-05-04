@@ -106,7 +106,7 @@ func (b *BaseRunner) baseStartNewDuty(logger *zap.Logger, runner Runner, duty *s
 	return runner.executeDuty(logger, duty)
 }
 
-// baseStartNewBeaconDuty is a base func that all runner implementation can call to start a non-beacon duty
+// baseStartNewNonBeaconDuty is a base func that all runner implementation can call to start a non-beacon duty
 func (b *BaseRunner) baseStartNewNonBeaconDuty(logger *zap.Logger, runner Runner, duty *spectypes.Duty) error {
 	if err := b.ShouldProcessNonBeaconDuty(duty); err != nil {
 		return errors.Wrap(err, "can't start non-beacon duty")
