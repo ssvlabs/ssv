@@ -19,23 +19,29 @@ type Committee struct {
 
 	mtx     sync.RWMutex
 	Storage *storage.QBFTStores
-	Queues  map[spectypes.RunnerRole]queueContainer
 
-	Runners                 map[phase0.Slot]*runner.CommitteeRunner
-	Operator                spectypes.Operator
+	Queues map[spectypes.RunnerRole]queueContainer
+
+	Runners map[phase0.Slot]*runner.CommitteeRunner
+
+	sharesMtx sync.RWMutex
+	Shares    map[phase0.ValidatorIndex]*spectypes.Share
+
+	Operator                *spectypes.Operator
 	SignatureVerifier       spectypes.SignatureVerifier
-	CreateRunnerFn          func() *runner.CommitteeRunner
+	CreateRunnerFn          func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share) *runner.CommitteeRunner
 	HighestAttestingSlotMap map[spectypes.ValidatorPK]phase0.Slot
 }
 
 // NewCommittee creates a new cluster
 func NewCommittee(
-	operator spectypes.Operator,
+	operator *spectypes.Operator,
 	verifier spectypes.SignatureVerifier,
-	createRunnerFn func() *runner.CommitteeRunner,
+	createRunnerFn func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share) *runner.CommitteeRunner,
 ) *Committee {
 	return &Committee{
 		Runners:           make(map[phase0.Slot]*runner.CommitteeRunner),
+		Shares:            make(map[phase0.ValidatorIndex]*spectypes.Share),
 		Operator:          operator,
 		SignatureVerifier: verifier,
 		CreateRunnerFn:    createRunnerFn,
@@ -43,12 +49,28 @@ func NewCommittee(
 
 }
 
+func (c *Committee) AddShare(share *spectypes.Share) {
+	c.sharesMtx.Lock()
+	defer c.sharesMtx.Unlock()
+	c.Shares[share.ValidatorIndex] = share
+}
+
+func (c *Committee) RemoveShare(validatorIndex phase0.ValidatorIndex) {
+	c.sharesMtx.Lock()
+	defer c.sharesMtx.Unlock()
+	delete(c.Shares, validatorIndex)
+}
+
 // StartDuty starts a new duty for the given slot
 func (c *Committee) StartDuty(duty *spectypes.CommitteeDuty) error {
 	if _, exists := c.Runners[duty.Slot]; exists {
 		return errors.New(fmt.Sprintf("CommitteeRunner for slot %d already exists", duty.Slot))
 	}
-	c.Runners[duty.Slot] = c.CreateRunnerFn()
+	//todo: mtx to get shares copy
+	//c.mtx.RLock()
+	//shares := c.sh\z
+	//c.mtx.RUnlock()
+	c.Runners[duty.Slot] = c.CreateRunnerFn(duty.Slot, c.Shares)
 	var validatorToStopMap map[phase0.Slot]spectypes.ValidatorPK
 	// Filter old duties based on highest attesting slot
 	duty, validatorToStopMap, c.HighestAttestingSlotMap = FilterCommitteeDuty(duty, c.HighestAttestingSlotMap)
@@ -60,9 +82,9 @@ func (c *Committee) StartDuty(duty *spectypes.CommitteeDuty) error {
 
 func (c *Committee) stopDuties(validatorToStopMap map[phase0.Slot]spectypes.ValidatorPK) {
 	for slot, validator := range validatorToStopMap {
-		runner, exists := c.Runners[slot]
+		r, exists := c.Runners[slot]
 		if exists {
-			runner.StopDuty(validator)
+			r.StopDuty(validator)
 		}
 	}
 }
@@ -111,18 +133,18 @@ func (c *Committee) ProcessMessage(signedSSVMessage *spectypes.SignedSSVMessage)
 		if err := qbftMsg.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get consensus Message from network Message")
 		}
-		runner := c.Runners[phase0.Slot(qbftMsg.Height)]
+		r := c.Runners[phase0.Slot(qbftMsg.Height)]
 		// TODO: check if runner is nil
-		return runner.ProcessConsensus(c.logger, signedSSVMessage)
+		return r.ProcessConsensus(c.logger, signedSSVMessage)
 	case spectypes.SSVPartialSignatureMsgType:
 		pSigMessages := &spectypes.PartialSignatureMessages{}
 		if err := pSigMessages.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get post consensus Message from network Message")
 		}
 		if pSigMessages.Type == spectypes.PostConsensusPartialSig {
-			runner := c.Runners[pSigMessages.Slot]
+			r := c.Runners[pSigMessages.Slot]
 			// TODO: check if runner is nil
-			return runner.ProcessPostConsensus(c.logger, pSigMessages)
+			return r.ProcessPostConsensus(c.logger, pSigMessages)
 		}
 	default:
 		return errors.New("unknown msg")

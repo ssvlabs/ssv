@@ -3,34 +3,34 @@ package validators
 // TODO(nkryuchkov): remove old validator interface(s)
 import (
 	"context"
-	"github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
-	"go.uber.org/zap"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"sync"
+
+	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 )
 
 // TODO: use queues
 
 // validatorIterator is the function used to iterate over existing validators
-type validatorIterator func(validator ValidatorOrCommittee) bool
-
-type ValidatorOrCommittee interface {
-	HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage)
-	ProcessMessage(signedSSVMessage *types.SignedSSVMessage)
-}
+type validatorIterator func(validator *validator.Validator) bool
+type committeeIterator func(validator *validator.Committee) bool
 
 // ValidatorsMap manages a collection of running validators
 type ValidatorsMap struct {
-	ctx           context.Context
-	lock          sync.RWMutex
-	validatorsMap map[string]ValidatorOrCommittee
+	ctx        context.Context
+	vlock      sync.RWMutex
+	mlock      sync.RWMutex
+	validators map[string]*validator.Validator
+	committees map[spectypes.ClusterID]*validator.Committee
 }
 
 func New(ctx context.Context, opts ...Option) *ValidatorsMap {
 	vm := &ValidatorsMap{
-		ctx:           ctx,
-		lock:          sync.RWMutex{},
-		validatorsMap: make(map[string]ValidatorOrCommittee),
+		ctx:        ctx,
+		vlock:      sync.RWMutex{},
+		mlock:      sync.RWMutex{},
+		validators: make(map[string]*validator.Validator),
+		committees: make(map[spectypes.ClusterID]*validator.Committee),
 	}
 
 	for _, opt := range opts {
@@ -44,18 +44,19 @@ func New(ctx context.Context, opts ...Option) *ValidatorsMap {
 type Option func(*ValidatorsMap)
 
 // WithInitialState sets initial state
-func WithInitialState(state map[string]ValidatorOrCommittee) Option {
+func WithInitialState(vstate map[string]*validator.Validator, mstate map[spectypes.ClusterID]*validator.Committee) Option {
 	return func(vm *ValidatorsMap) {
-		vm.validatorsMap = state
+		vm.validators = vstate
+		vm.committees = mstate
 	}
 }
 
 // ForEach loops over validators
-func (vm *ValidatorsMap) ForEach(iterator validatorIterator) bool {
-	vm.lock.RLock()
-	defer vm.lock.RUnlock()
+func (vm *ValidatorsMap) ForEachValidator(iterator validatorIterator) bool {
+	vm.vlock.RLock()
+	defer vm.vlock.RUnlock()
 
-	for _, val := range vm.validatorsMap {
+	for _, val := range vm.validators {
 		if !iterator(val) {
 			return false
 		}
@@ -63,56 +64,122 @@ func (vm *ValidatorsMap) ForEach(iterator validatorIterator) bool {
 	return true
 }
 
-// GetAll returns all validators.
-func (vm *ValidatorsMap) GetAll() []ValidatorOrCommittee {
-	vm.lock.RLock()
-	defer vm.lock.RUnlock()
+// GetAllValidators returns all validators.
+func (vm *ValidatorsMap) GetAllValidators() []*validator.Validator {
+	vm.vlock.RLock()
+	defer vm.vlock.RUnlock()
 
-	var validators []ValidatorOrCommittee
-	for _, val := range vm.validatorsMap {
+	var validators []*validator.Validator
+	for _, val := range vm.validators {
 		validators = append(validators, val)
 	}
 
 	return validators
 }
 
-// Get returns a validator
+// GetValidator returns a validator
 // TODO: pass spectypes.ValidatorPK instead of string
-func (vm *ValidatorsMap) Get(pubKey string) (ValidatorOrCommittee, bool) {
-	vm.lock.RLock()
-	defer vm.lock.RUnlock()
+func (vm *ValidatorsMap) GetValidator(pubKey string) (*validator.Validator, bool) {
+	vm.vlock.RLock()
+	defer vm.vlock.RUnlock()
 
-	v, ok := vm.validatorsMap[pubKey]
+	v, ok := vm.validators[pubKey]
 
 	return v, ok
 }
 
-// Create creates a new validator instance
+// PutValidator creates a new validator instance
 // TODO: pass spectypes.ValidatorPK instead of string
-func (vm *ValidatorsMap) Create(pubKey string, v ValidatorOrCommittee) {
-	vm.lock.Lock()
-	defer vm.lock.Unlock()
+func (vm *ValidatorsMap) PutValidator(pubKey string, v *validator.Validator) {
+	vm.vlock.Lock()
+	defer vm.vlock.Unlock()
 
-	vm.validatorsMap[pubKey] = v
+	vm.validators[pubKey] = v
 }
 
 // Remove removes a validator instance from the map
 // TODO: pass spectypes.ValidatorPK instead of string
-func (vm *ValidatorsMap) Remove(pubKey string) ValidatorOrCommittee {
-	if v, found := vm.Get(pubKey); found {
-		vm.lock.Lock()
-		defer vm.lock.Unlock()
+func (vm *ValidatorsMap) RemoveValidator(pubKey string) *validator.Validator {
+	if v, found := vm.GetValidator(pubKey); found {
+		vm.vlock.Lock()
+		defer vm.vlock.Unlock()
 
-		delete(vm.validatorsMap, pubKey)
+		delete(vm.validators, pubKey)
 		return v
 	}
 	return nil
 }
 
-// Size returns the number of validators in the map
-func (vm *ValidatorsMap) Size() int {
-	vm.lock.RLock()
-	defer vm.lock.RUnlock()
+// SizeValidators returns the number of validators in the map
+func (vm *ValidatorsMap) SizeValidators() int {
+	vm.vlock.RLock()
+	defer vm.vlock.RUnlock()
 
-	return len(vm.validatorsMap)
+	return len(vm.validators)
+}
+
+// Committee methods
+
+// ForEach loops over committees
+func (vm *ValidatorsMap) ForEachCommittee(iterator committeeIterator) bool {
+	vm.mlock.RLock()
+	defer vm.mlock.RUnlock()
+
+	for _, val := range vm.committees {
+		if !iterator(val) {
+			return false
+		}
+	}
+	return true
+}
+
+// GetAllCommittees returns all committees.
+func (vm *ValidatorsMap) GetAllCommittees() []*validator.Committee {
+	vm.mlock.RLock()
+	defer vm.mlock.RUnlock()
+
+	var committees []*validator.Committee
+	for _, val := range vm.committees {
+		committees = append(committees, val)
+	}
+
+	return committees
+}
+
+// GetCommittee returns a committee
+func (vm *ValidatorsMap) GetCommittee(pubKey spectypes.ClusterID) (*validator.Committee, bool) {
+	vm.mlock.RLock()
+	defer vm.mlock.RUnlock()
+
+	v, ok := vm.committees[pubKey]
+
+	return v, ok
+}
+
+// PutCommittee creates a new committee instance
+func (vm *ValidatorsMap) PutCommittee(pubKey spectypes.ClusterID, v *validator.Committee) {
+	vm.mlock.Lock()
+	defer vm.mlock.Unlock()
+
+	vm.committees[pubKey] = v
+}
+
+// Remove removes a committee instance from the map
+func (vm *ValidatorsMap) RemoveCommittee(pubKey spectypes.ClusterID) *validator.Committee {
+	if v, found := vm.GetCommittee(pubKey); found {
+		vm.mlock.Lock()
+		defer vm.mlock.Unlock()
+
+		delete(vm.committees, pubKey)
+		return v
+	}
+	return nil
+}
+
+// SizeCommittees returns the number of committees in the map
+func (vm *ValidatorsMap) SizeCommittees() int {
+	vm.mlock.RLock()
+	defer vm.mlock.RUnlock()
+
+	return len(vm.committees)
 }

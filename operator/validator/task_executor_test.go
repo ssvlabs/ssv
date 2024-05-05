@@ -64,8 +64,8 @@ func TestController_LiquidateCluster(t *testing.T) {
 	ctr := setupController(logger, controllerOptions)
 	ctr.validatorStartFunc = validatorStartFunc
 
-	require.Equal(t, mockValidatorsMap.Size(), 1)
-	_, ok := mockValidatorsMap.Get(secretKey.GetPublicKey().SerializeToHexStr())
+	require.Equal(t, mockValidatorsMap.SizeValidators(), 1)
+	_, ok := mockValidatorsMap.GetValidator(secretKey.GetPublicKey().SerializeToHexStr())
 	require.True(t, ok, "validator not found")
 
 	err := ctr.LiquidateCluster(common.HexToAddress("123"), []uint64{1, 2, 3, 4}, []*types.SSVShare{{Share: spectypes.Share{
@@ -73,8 +73,8 @@ func TestController_LiquidateCluster(t *testing.T) {
 	}}})
 	require.NoError(t, err)
 
-	require.Equal(t, mockValidatorsMap.Size(), 0)
-	_, ok = mockValidatorsMap.Get(secretKey.GetPublicKey().SerializeToHexStr())
+	require.Equal(t, mockValidatorsMap.SizeValidators(), 0)
+	_, ok = mockValidatorsMap.GetValidator(secretKey.GetPublicKey().SerializeToHexStr())
 	require.False(t, ok, "validator still exists")
 }
 
@@ -132,15 +132,15 @@ func TestController_StopValidator(t *testing.T) {
 	_, err := km.SignRoot(signable{}, [4]byte{0, 0, 0, 0}, secretKey.GetPublicKey().Serialize())
 	require.NoError(t, err)
 
-	require.Equal(t, mockValidatorsMap.Size(), 1)
-	_, ok := mockValidatorsMap.Get(secretKey.GetPublicKey().SerializeToHexStr())
+	require.Equal(t, mockValidatorsMap.SizeValidators(), 1)
+	_, ok := mockValidatorsMap.GetValidator(secretKey.GetPublicKey().SerializeToHexStr())
 	require.True(t, ok, "validator not found")
 
 	err = ctr.StopValidator(secretKey.GetPublicKey().Serialize())
 	require.NoError(t, err)
 
-	require.Equal(t, mockValidatorsMap.Size(), 0)
-	_, ok = mockValidatorsMap.Get(secretKey.GetPublicKey().SerializeToHexStr())
+	require.Equal(t, mockValidatorsMap.SizeValidators(), 0)
+	_, ok = mockValidatorsMap.GetValidator(secretKey.GetPublicKey().SerializeToHexStr())
 	require.False(t, ok, "validator still exists")
 }
 
@@ -182,7 +182,7 @@ func TestController_ReactivateCluster(t *testing.T) {
 	//_, err := km.SignRoot(signable{}, [4]byte{0, 0, 0, 0}, secretKey.GetPublicKey().Serialize())
 	//require.NoError(t, err)
 
-	require.Equal(t, mockValidatorsMap.Size(), 0)
+	require.Equal(t, mockValidatorsMap.SizeValidators(), 0)
 	toReactivate := []*types.SSVShare{
 		{
 			Share: spectypes.Share{ValidatorPubKey: secretKey.GetPublicKey().Serialize()},
@@ -218,10 +218,10 @@ func TestController_ReactivateCluster(t *testing.T) {
 	err := ctr.ReactivateCluster(common.HexToAddress("0x1231231"), []uint64{1, 2, 3, 4}, toReactivate)
 
 	require.NoError(t, err)
-	require.Equal(t, mockValidatorsMap.Size(), 2)
-	_, ok := mockValidatorsMap.Get(secretKey.GetPublicKey().SerializeToHexStr())
+	require.Equal(t, mockValidatorsMap.SizeValidators(), 2)
+	_, ok := mockValidatorsMap.GetValidator(secretKey.GetPublicKey().SerializeToHexStr())
 	require.True(t, ok, "validator not found")
-	_, ok = mockValidatorsMap.Get(secretKey2.GetPublicKey().SerializeToHexStr())
+	_, ok = mockValidatorsMap.GetValidator(secretKey2.GetPublicKey().SerializeToHexStr())
 	require.True(t, ok, "validator not found")
 
 	select {
