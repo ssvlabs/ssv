@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
@@ -123,12 +122,13 @@ func (handler *msgIDHandler) MsgID(logger *zap.Logger) func(pmsg *ps_pb.Message)
 }
 
 func (handler *msgIDHandler) pubsubMsgToMsgID(msg []byte) string {
-	decodedMsg, _, _, err := spectypes.DecodeSignedSSVMessage(msg)
-	if err != nil {
-		// todo: should err here or just log and let the decode function err?
-	} else {
-		return commons.MsgID()(decodedMsg)
-	}
+	// TODO: (Alan) should we hash only the message body or what? @GalRogozinski @MatheusFranco99
+	// decodedMsg, _, _, err := spectypes.DecodeSignedSSVMessage(msg)
+	// if err != nil {
+	// 	// todo: should err here or just log and let the decode function err?
+	// } else {
+	// 	return commons.MsgID()(decodedMsg)
+	// }
 
 	return commons.MsgID()(msg)
 }

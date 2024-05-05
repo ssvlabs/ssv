@@ -35,6 +35,10 @@ func NewSignatureVerifier(operatorStore OperatorStore) SignatureVerifier {
 }
 
 func (sv *signatureVerifier) VerifySignature(operatorID spectypes.OperatorID, message *spectypes.SSVMessage, signature []byte) error {
+	if len(signature) != 256 {
+		return fmt.Errorf("invalid signature length")
+	}
+
 	sv.operatorIDToPubkeyCacheMu.Lock()
 	operatorPubKey, ok := sv.operatorIDToPubkeyCache[operatorID]
 	sv.operatorIDToPubkeyCacheMu.Unlock()
@@ -62,5 +66,5 @@ func (sv *signatureVerifier) VerifySignature(operatorID spectypes.OperatorID, me
 		return err
 	}
 
-	return operatorPubKey.Verify(encodedMsg, signature)
+	return operatorPubKey.Verify(encodedMsg, [256]byte(signature))
 }

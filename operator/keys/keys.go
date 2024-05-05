@@ -8,8 +8,6 @@ import (
 	"encoding/base64"
 	"fmt"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
-
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
@@ -29,7 +27,6 @@ type OperatorPrivateKey interface {
 }
 
 type OperatorSigner interface {
-	spectypes.OperatorSigner
 	Sign(data []byte) ([256]byte, error)
 	Public() OperatorPublicKey
 }
