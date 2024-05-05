@@ -1,4 +1,4 @@
-package validation
+package genesisvalidation
 
 import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -19,11 +19,7 @@ func newQBFTConfig(domain spectypes.DomainType) qbftConfig {
 	}
 }
 
-func (q qbftConfig) GetShareSigner() spectypes.ShareSigner {
-	panic("should not be called")
-}
-
-func (q qbftConfig) GetOperatorSigner() spectypes.OperatorSigner {
+func (q qbftConfig) GetSigner() spectypes.OperatorSigner {
 	panic("should not be called")
 }
 

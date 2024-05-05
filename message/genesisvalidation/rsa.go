@@ -1,4 +1,4 @@
-package validation
+package genesisvalidation
 
 import (
 	"fmt"
@@ -8,8 +8,7 @@ import (
 	"github.com/bloxapp/ssv/operator/keys"
 )
 
-func (mv *messageValidator) verifySignature(msg *spectypes.SignedSSVMessage) error {
-	operatorID := msg.GetOperatorID()
+func (mv *messageValidator) verifySignature(messageData []byte, operatorID spectypes.OperatorID, signature []byte) error {
 	operatorPubKey, ok := mv.operatorIDToPubkeyCache.Get(operatorID)
 	if !ok {
 		operator, found, err := mv.nodeStorage.GetOperatorData(nil, operatorID)
@@ -35,7 +34,7 @@ func (mv *messageValidator) verifySignature(msg *spectypes.SignedSSVMessage) err
 		mv.operatorIDToPubkeyCache.Set(operatorID, operatorPubKey)
 	}
 
-	if err := operatorPubKey.Verify(msg.GetData(), msg.GetSignature()); err != nil {
+	if err := operatorPubKey.Verify(messageData, signature); err != nil {
 		e := ErrSignatureVerification
 		e.innerErr = fmt.Errorf("verify opid: %v signature: %w", operatorID, err)
 		return e

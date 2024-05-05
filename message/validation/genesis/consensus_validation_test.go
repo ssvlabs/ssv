@@ -5,7 +5,6 @@ import (
 	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
-
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
@@ -70,27 +69,27 @@ func TestMessageValidator_currentEstimatedRound(t *testing.T) {
 		{
 			name:           "QuickTimeout*9 - expected first+8 round",
 			sinceSlotStart: roundtimer.QuickTimeout * time.Duration(roundtimer.QuickTimeoutThreshold+1),
-			want:           specqbft.Round(roundtimer.QuickTimeoutThreshold) + 1,
+			want:           roundtimer.QuickTimeoutThreshold + 1,
 		},
 		{
 			name:           "QuickTimeout*10 - expected first+8 round",
 			sinceSlotStart: roundtimer.QuickTimeout * time.Duration(roundtimer.QuickTimeoutThreshold+2),
-			want:           specqbft.Round(roundtimer.QuickTimeoutThreshold + 1),
+			want:           roundtimer.QuickTimeoutThreshold + 1,
 		},
 		{
 			name:           "(QuickTimeout*8 + SlowTimeout) - expected first+9 round",
 			sinceSlotStart: roundtimer.QuickTimeout*time.Duration(roundtimer.QuickTimeoutThreshold) + roundtimer.SlowTimeout,
-			want:           specqbft.Round(roundtimer.QuickTimeoutThreshold + 2),
+			want:           roundtimer.QuickTimeoutThreshold + 2,
 		},
 		{
 			name:           "(QuickTimeout*8 + SlowTimeout*2) - expected first+10 round",
 			sinceSlotStart: roundtimer.QuickTimeout*time.Duration(roundtimer.QuickTimeoutThreshold) + roundtimer.SlowTimeout*2,
-			want:           specqbft.Round(roundtimer.QuickTimeoutThreshold + 3),
+			want:           roundtimer.QuickTimeoutThreshold + 3,
 		},
 		{
 			name:           "(QuickTimeout*8 + SlowTimeout*3) - expected first+11 round",
 			sinceSlotStart: roundtimer.QuickTimeout*time.Duration(roundtimer.QuickTimeoutThreshold) + roundtimer.SlowTimeout*3,
-			want:           specqbft.Round(roundtimer.QuickTimeoutThreshold + 4),
+			want:           roundtimer.QuickTimeoutThreshold + 4,
 		},
 	}
 
