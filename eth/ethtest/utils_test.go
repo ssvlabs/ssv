@@ -206,7 +206,7 @@ func setupEventHandler(
 		Context:           ctx,
 		DB:                db,
 		RegistryStorage:   nodeStorage,
-		KeyManager:        keyManager,
+		BeaconSigner:      keyManager,
 		StorageMap:        storageMap,
 		OperatorDataStore: operatorDataStore,
 	})

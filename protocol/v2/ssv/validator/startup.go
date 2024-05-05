@@ -16,7 +16,7 @@ import (
 
 // Start starts a Validator.
 func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
-	logger = logger.Named(logging.NameValidator).With(fields.PubKey(v.Share.ValidatorPubKey))
+	logger = logger.Named(logging.NameValidator).With(fields.PubKey(v.Share.ValidatorPubKey[:]))
 
 	if !atomic.CompareAndSwapUint32(&v.state, uint32(NotStarted), uint32(Started)) {
 		return false, nil
@@ -28,17 +28,26 @@ func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
 	}
 	for role, dutyRunner := range v.DutyRunners {
 		logger := logger.With(fields.Role(role))
-		share := dutyRunner.GetBaseRunner().Share
+		var share *spectypes.Share
+
+		for _, s := range dutyRunner.GetBaseRunner().Share {
+			if s.ValidatorPubKey == v.Share.ValidatorPubKey {
+				share = s
+				break
+			}
+		}
+
 		if share == nil { // TODO: handle missing share?
 			logger.Warn("❗ share is missing", fields.Role(role))
 			continue
 		}
-		identifier := spectypes.NewMsgID(types.GetDefaultDomain(), dutyRunner.GetBaseRunner().Share.ValidatorPubKey, role)
+
+		identifier := spectypes.NewMsgID(types.GetDefaultDomain(), share.ValidatorPubKey[:], role)
 		if ctrl := dutyRunner.GetBaseRunner().QBFTController; ctrl != nil {
 			highestInstance, err := ctrl.LoadHighestInstance(identifier[:])
 			if err != nil {
 				logger.Warn("❗failed to load highest instance",
-					fields.PubKey(identifier.GetPubKey()),
+					fields.PubKey(identifier.GetSenderID()),
 					zap.Error(err))
 			} else if highestInstance != nil {
 				decidedValue := &spectypes.ConsensusData{}
@@ -50,7 +59,11 @@ func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
 			}
 		}
 
-		if err := n.Subscribe(identifier.GetPubKey()); err != nil {
+		// TODO: P2P
+		var valpk spectypes.ValidatorPK
+		copy(valpk[:], identifier.GetSenderID()[:])
+
+		if err := n.Subscribe(valpk); err != nil {
 			return true, err
 		}
 		go v.StartQueueConsumer(logger, identifier, v.ProcessMessage)
@@ -67,6 +80,6 @@ func (v *Validator) Stop() {
 		defer v.mtx.Unlock()
 
 		// clear the msg q
-		v.Queues = make(map[spectypes.BeaconRole]queueContainer)
+		v.Queues = make(map[spectypes.RunnerRole]queueContainer)
 	}
 }

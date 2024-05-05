@@ -1,33 +1,41 @@
 package validator
 
 import (
+	"context"
 	"fmt"
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"sync"
 )
 
 type Committee struct {
 	logger *zap.Logger
+	ctx    context.Context
 
-	Runners                 map[spec.Slot]*runner.CommitteeRunner
-	Operator                types.Operator
-	SignatureVerifier       types.SignatureVerifier
+	mtx     sync.RWMutex
+	Storage *storage.QBFTStores
+	Queues  map[spectypes.RunnerRole]queueContainer
+
+	Runners                 map[phase0.Slot]*runner.CommitteeRunner
+	Operator                spectypes.Operator
+	SignatureVerifier       spectypes.SignatureVerifier
 	CreateRunnerFn          func() *runner.CommitteeRunner
-	HighestAttestingSlotMap map[types.ValidatorPK]spec.Slot
+	HighestAttestingSlotMap map[spectypes.ValidatorPK]phase0.Slot
 }
 
 // NewCommittee creates a new cluster
 func NewCommittee(
-	operator types.Operator,
-	verifier types.SignatureVerifier,
+	operator spectypes.Operator,
+	verifier spectypes.SignatureVerifier,
 	createRunnerFn func() *runner.CommitteeRunner,
 ) *Committee {
 	return &Committee{
-		Runners:           make(map[spec.Slot]*runner.CommitteeRunner),
+		Runners:           make(map[phase0.Slot]*runner.CommitteeRunner),
 		Operator:          operator,
 		SignatureVerifier: verifier,
 		CreateRunnerFn:    createRunnerFn,
@@ -36,12 +44,12 @@ func NewCommittee(
 }
 
 // StartDuty starts a new duty for the given slot
-func (c *Committee) StartDuty(duty *types.CommitteeDuty) error {
+func (c *Committee) StartDuty(duty *spectypes.CommitteeDuty) error {
 	if _, exists := c.Runners[duty.Slot]; exists {
 		return errors.New(fmt.Sprintf("CommitteeRunner for slot %d already exists", duty.Slot))
 	}
 	c.Runners[duty.Slot] = c.CreateRunnerFn()
-	var validatorToStopMap map[spec.Slot]types.ValidatorPK
+	var validatorToStopMap map[phase0.Slot]spectypes.ValidatorPK
 	// Filter old duties based on highest attesting slot
 	duty, validatorToStopMap, c.HighestAttestingSlotMap = FilterCommitteeDuty(duty, c.HighestAttestingSlotMap)
 	// Stop validators with old duties
@@ -50,7 +58,7 @@ func (c *Committee) StartDuty(duty *types.CommitteeDuty) error {
 	return c.Runners[duty.Slot].StartNewDuty(c.logger, duty)
 }
 
-func (c *Committee) stopDuties(validatorToStopMap map[spec.Slot]types.ValidatorPK) {
+func (c *Committee) stopDuties(validatorToStopMap map[phase0.Slot]spectypes.ValidatorPK) {
 	for slot, validator := range validatorToStopMap {
 		runner, exists := c.Runners[slot]
 		if exists {
@@ -61,15 +69,15 @@ func (c *Committee) stopDuties(validatorToStopMap map[spec.Slot]types.ValidatorP
 
 // FilterCommitteeDuty filters the committee duties by the slots given per validator.
 // It returns the filtered duties, the validators to stop and updated slot map.
-func FilterCommitteeDuty(duty *types.CommitteeDuty, slotMap map[types.ValidatorPK]spec.Slot) (
-	*types.CommitteeDuty,
-	map[spec.Slot]types.ValidatorPK,
-	map[types.ValidatorPK]spec.Slot,
+func FilterCommitteeDuty(duty *spectypes.CommitteeDuty, slotMap map[spectypes.ValidatorPK]phase0.Slot) (
+	*spectypes.CommitteeDuty,
+	map[phase0.Slot]spectypes.ValidatorPK,
+	map[spectypes.ValidatorPK]phase0.Slot,
 ) {
-	validatorsToStop := make(map[spec.Slot]types.ValidatorPK)
+	validatorsToStop := make(map[phase0.Slot]spectypes.ValidatorPK)
 
 	for i, beaconDuty := range duty.BeaconDuties {
-		validatorPK := types.ValidatorPK(beaconDuty.PubKey)
+		validatorPK := spectypes.ValidatorPK(beaconDuty.PubKey)
 		slot, exists := slotMap[validatorPK]
 		if exists {
 			if slot < beaconDuty.Slot {
@@ -84,7 +92,7 @@ func FilterCommitteeDuty(duty *types.CommitteeDuty, slotMap map[types.ValidatorP
 }
 
 // ProcessMessage processes Network Message of all types
-func (c *Committee) ProcessMessage(signedSSVMessage *types.SignedSSVMessage) error {
+func (c *Committee) ProcessMessage(signedSSVMessage *spectypes.SignedSSVMessage) error {
 	// Validate message
 	if err := signedSSVMessage.Validate(); err != nil {
 		return errors.Wrap(err, "invalid SignedSSVMessage")
@@ -98,20 +106,20 @@ func (c *Committee) ProcessMessage(signedSSVMessage *types.SignedSSVMessage) err
 	msg := signedSSVMessage.SSVMessage
 
 	switch msg.GetType() {
-	case types.SSVConsensusMsgType:
+	case spectypes.SSVConsensusMsgType:
 		qbftMsg := &qbft.Message{}
 		if err := qbftMsg.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get consensus Message from network Message")
 		}
-		runner := c.Runners[spec.Slot(qbftMsg.Height)]
+		runner := c.Runners[phase0.Slot(qbftMsg.Height)]
 		// TODO: check if runner is nil
 		return runner.ProcessConsensus(c.logger, signedSSVMessage)
-	case types.SSVPartialSignatureMsgType:
-		pSigMessages := &types.PartialSignatureMessages{}
+	case spectypes.SSVPartialSignatureMsgType:
+		pSigMessages := &spectypes.PartialSignatureMessages{}
 		if err := pSigMessages.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get post consensus Message from network Message")
 		}
-		if pSigMessages.Type == types.PostConsensusPartialSig {
+		if pSigMessages.Type == spectypes.PostConsensusPartialSig {
 			runner := c.Runners[pSigMessages.Slot]
 			// TODO: check if runner is nil
 			return runner.ProcessPostConsensus(c.logger, pSigMessages)
@@ -124,10 +132,10 @@ func (c *Committee) ProcessMessage(signedSSVMessage *types.SignedSSVMessage) err
 }
 
 // updateAttestingSlotMap updates the highest attesting slot map from beacon duties
-func (c *Committee) updateAttestingSlotMap(duty *types.CommitteeDuty) {
+func (c *Committee) updateAttestingSlotMap(duty *spectypes.CommitteeDuty) {
 	for _, beaconDuty := range duty.BeaconDuties {
-		if beaconDuty.Type == types.BNRoleAttester {
-			validatorPK := types.ValidatorPK(beaconDuty.PubKey)
+		if beaconDuty.Type == spectypes.BNRoleAttester {
+			validatorPK := spectypes.ValidatorPK(beaconDuty.PubKey)
 			if c.HighestAttestingSlotMap[validatorPK] < beaconDuty.Slot {
 				c.HighestAttestingSlotMap[validatorPK] = beaconDuty.Slot
 			}

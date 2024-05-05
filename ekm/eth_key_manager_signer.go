@@ -50,7 +50,7 @@ type ethKeyManagerSigner struct {
 	builderProposals  bool
 }
 
-// StorageProvider provides the underlying KeyManager storage.
+// StorageProvider provides the underlying BeaconSigner storage.
 type StorageProvider interface {
 	ListAccounts() ([]core.ValidatorAccount, error)
 	RetrieveHighestAttestation(pubKey []byte) (*phase0.AttestationData, bool, error)
@@ -58,8 +58,16 @@ type StorageProvider interface {
 	BumpSlashingProtection(pubKey []byte) error
 }
 
+type KeyManager interface {
+	spectypes.BeaconSigner
+	// AddShare saves a share key
+	AddShare(shareKey *bls.SecretKey) error
+	// RemoveShare removes a share key
+	RemoveShare(pubKey string) error
+}
+
 // NewETHKeyManagerSigner returns a new instance of ethKeyManagerSigner
-func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, network networkconfig.NetworkConfig, builderProposals bool, encryptionKey string) (spectypes.KeyManager, error) {
+func NewETHKeyManagerSigner(logger *zap.Logger, db basedb.Database, network networkconfig.NetworkConfig, builderProposals bool, encryptionKey string) (KeyManager, error) {
 	signerStore := NewSignerStorage(db, network.Beacon, logger)
 	if encryptionKey != "" {
 		err := signerStore.SetEncryptionKey(encryptionKey)

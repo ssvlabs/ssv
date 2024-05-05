@@ -28,7 +28,7 @@ type Validator struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	DutyRunners runner.DutyRunners
+	DutyRunners runner.ValidatorDutyRunners
 	Network     specqbft.Network
 
 	Operator          *spectypes.Operator
@@ -77,18 +77,18 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		// Set timeout function.
 		dutyRunner.GetBaseRunner().TimeoutF = v.onTimeout
 
-		// Setup the queue.
-		//role := dutyRunner.GetBaseRunner().RunnerRoleType
+		//Setup the queue.
+		role := dutyRunner.GetBaseRunner().RunnerRoleType
 
-		//v.Queues[role] = queueContainer{
-		//	Q: queue.WithMetrics(queue.New(options.QueueSize), options.Metrics),
-		//	queueState: &queue.State{
-		//		HasRunningInstance: false,
-		//		Height:             0,
-		//		Slot:               0,
-		//		//Quorum:             options.SSVShare.Share,// TODO
-		//	},
-		//}
+		v.Queues[role] = queueContainer{
+			Q: queue.WithMetrics(queue.New(options.QueueSize), options.Metrics),
+			queueState: &queue.State{
+				HasRunningInstance: false,
+				Height:             0,
+				Slot:               0,
+				//Quorum:             options.SSVShare.Share,// TODO
+			},
+		}
 	}
 
 	return v
@@ -99,7 +99,7 @@ func (v *Validator) StartDuty(logger *zap.Logger, iduty spectypes.Duty) error {
 
 	duty := iduty.(*spectypes.BeaconDuty) // TODO: err handling
 
-	dutyRunner := v.DutyRunners[duty.Type]
+	dutyRunner := v.DutyRunners[spectypes.MapDutyToRunnerRole(duty.Type)]
 	if dutyRunner == nil {
 		return errors.Errorf("no runner for duty type %s", duty.Type.String())
 	}
@@ -182,10 +182,10 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 		if err := signedMsg.ValidateForSigner(msg.OperatorIDs[0]); err != nil {
 			return errors.Wrap(err, "invalid PartialSignatureMessages")
 		}
-		//// Check signer consistency
-		//if signedMsg.Signer != msg.GetOperatorID() {
-		//	return errors.New("SignedSSVMessage's signer not consistent with SignedPartialSignatureMessage's signer")
-		//}
+		// Check signer consistency
+		if signedMsg.Messages[0].Signer != msg.OperatorIDs[0] {
+			return errors.New("SignedSSVMessage's signer not consistent with SignedPartialSignatureMessage's signer")
+		}
 
 		if signedMsg.Type == spectypes.PostConsensusPartialSig {
 			return dutyRunner.ProcessPostConsensus(logger, signedMsg)

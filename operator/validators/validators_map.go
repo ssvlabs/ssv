@@ -4,6 +4,8 @@ package validators
 import (
 	"context"
 	"github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
+	"go.uber.org/zap"
 	"sync"
 )
 
@@ -13,6 +15,7 @@ import (
 type validatorIterator func(validator ValidatorOrCommittee) bool
 
 type ValidatorOrCommittee interface {
+	HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage)
 	ProcessMessage(signedSSVMessage *types.SignedSSVMessage)
 }
 

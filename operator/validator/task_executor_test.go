@@ -31,7 +31,7 @@ func TestController_LiquidateCluster(t *testing.T) {
 	require.NoError(t, secretKey2.SetHexString(sk2Str))
 
 	firstValidator := &validator.Validator{
-		DutyRunners: runner.DutyRunners{},
+		DutyRunners: runner.ValidatorDutyRunners{},
 		Storage:     ibftstorage.NewStores(),
 		Share: &types.SSVShare{
 			Share: spectypes.Share{
@@ -93,7 +93,7 @@ func TestController_StopValidator(t *testing.T) {
 	require.NoError(t, secretKey2.SetHexString(sk2Str))
 
 	firstValidator := &validator.Validator{
-		DutyRunners: runner.DutyRunners{},
+		DutyRunners: runner.ValidatorDutyRunners{},
 		Storage:     ibftstorage.NewStores(),
 		Share: &types.SSVShare{
 			Share: spectypes.Share{

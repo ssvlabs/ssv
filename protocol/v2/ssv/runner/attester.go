@@ -259,7 +259,7 @@ package runner
 //	return r.valCheck
 //}
 //
-//func (r *AttesterRunner) GetSigner() spectypes.KeyManager {
+//func (r *AttesterRunner) GetSigner() spectypes.BeaconSigner {
 //	return r.signer
 //}
 //

@@ -202,7 +202,7 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 //	consensusDataByts, _ := consensusInput.Encode()
 //	msgs := DecidingMsgsForHeight(consensusDataByts, []byte{1, 2, 3, 4}, height, keySet)
 //
-//	if err := v.DutyRunners[spectypes.BNRoleAttester].StartNewDuty(consensusInput.Duty); err != nil {
+//	if err := v.ValidatorDutyRunners[spectypes.BNRoleAttester].StartNewDuty(consensusInput.Duty); err != nil {
 //		panic(err.Error())
 //	}
 //	for _, msg := range msgs {
@@ -212,7 +212,7 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 //		}
 //	}
 //
-//	return v.DutyRunners[spectypes.BNRoleAttester]
+//	return v.ValidatorDutyRunners[spectypes.BNRoleAttester]
 //}
 //
 //var DecidingMsgsForHeight = func(consensusData, msgIdentifier []byte, height specqbft.Height, keySet *spectestingutils.TestKeySet) []*spectypes.SignedSSVMessage {

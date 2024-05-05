@@ -194,7 +194,7 @@ func (eh *EventHandler) handleValidatorAdded(txn basedb.Txn, event *contract.Con
 
 		validatorShare = shareCreated
 
-		logger.Debug("share not found, created a new one", fields.OperatorID(validatorShare.OperatorID))
+		logger.Debug("share not found, created a new one")
 	} else if event.Owner != validatorShare.OwnerAddress {
 		// Prevent multiple registration of the same validator with different owner address
 		// owner A registers validator with public key X (OK)
@@ -238,7 +238,7 @@ func (eh *EventHandler) handleShareCreation(
 			return nil, errors.New("could not decode shareSecret")
 		}
 
-		// Save secret key into KeyManager.
+		// Save secret key into BeaconSigner.
 		if err := eh.keyManager.AddShare(shareSecret); err != nil {
 			return nil, fmt.Errorf("could not add share secret to key manager: %w", err)
 		}
@@ -266,13 +266,21 @@ func (eh *EventHandler) validatorAddedEventToShare(
 			Err: fmt.Errorf("failed to deserialize validator public key: %w", err),
 		}
 	}
-	validatorShare.ValidatorPubKey = publicKey.Serialize()
+
+	var validatorPK spectypes.ValidatorPK
+	copy(validatorPK[:], publicKey.Serialize())
+
+	validatorShare.ValidatorPubKey = validatorPK
 	validatorShare.OwnerAddress = event.Owner
 
 	selfOperatorID := eh.operatorDataStore.GetOperatorID()
 	var shareSecret *bls.SecretKey
 
-	committee := make([]*spectypes.Operator, 0)
+	operators := make([]*spectypes.Operator, 0)
+	committeeIDs := make([]spectypes.OperatorID, 0)
+	committee := make([]*spectypes.CommitteeMember, 0)
+	shareMembers := make([]*spectypes.ShareMember, 0)
+
 	for i := range event.OperatorIds {
 		operatorID := event.OperatorIds[i]
 		od, found, err := eh.nodeStorage.GetOperatorData(txn, operatorID)
@@ -285,17 +293,21 @@ func (eh *EventHandler) validatorAddedEventToShare(
 			}
 		}
 
-		committee = append(committee, &spectypes.Operator{
+		committee = append(committee, &spectypes.CommitteeMember{
 			OperatorID:        operatorID,
-			SharePubKey:       sharePublicKeys[i],
 			SSVOperatorPubKey: od.PublicKey,
+		})
+
+		shareMembers = append(shareMembers, &spectypes.ShareMember{
+			Signer:      operatorID,
+			SharePubKey: sharePublicKeys[i],
 		})
 
 		if operatorID != selfOperatorID {
 			continue
 		}
 
-		validatorShare.OperatorID = operatorID
+		//validatorShare.OperatorID = operatorID
 		validatorShare.SharePubKey = sharePublicKeys[i]
 
 		shareSecret = &bls.SecretKey{}
@@ -315,15 +327,28 @@ func (eh *EventHandler) validatorAddedEventToShare(
 				Err: errors.New("share private key does not match public key"),
 			}
 		}
+
+		q, pq := ssvtypes.ComputeQuorumAndPartialQuorum(len(committee))
+
+		operators = append(operators, &spectypes.Operator{
+			OperatorID:        operatorID,
+			SSVOperatorPubKey: od.PublicKey,
+			ClusterID:         spectypes.GetClusterID(committeeIDs),
+			Committee:         committee,
+			Quorum:            q,
+			PartialQuorum:     pq,
+		})
 	}
 
-	validatorShare.Quorum, validatorShare.PartialQuorum = ssvtypes.ComputeQuorumAndPartialQuorum(len(committee))
+	validatorShare.Quorum = operators[0].Quorum
 	validatorShare.DomainType = eh.networkConfig.Domain
-	validatorShare.Committee = committee
+	validatorShare.Committee = shareMembers
 	validatorShare.Graffiti = []byte("ssv.network")
 
 	return &validatorShare, shareSecret, nil
 }
+
+var emptyPK = [48]byte{}
 
 func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.ContractValidatorRemoved) (spectypes.ValidatorPK, error) {
 	logger := eh.logger.With(
@@ -339,7 +364,7 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 	share := eh.nodeStorage.Shares().Get(txn, event.PublicKey)
 	if share == nil {
 		logger.Warn("malformed event: could not find validator share")
-		return nil, &MalformedEventError{Err: ErrValidatorShareNotFound}
+		return emptyPK, &MalformedEventError{Err: ErrValidatorShareNotFound}
 	}
 
 	// Prevent removal of the validator registered with different owner address
@@ -352,30 +377,30 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 			zap.String("expected", share.OwnerAddress.String()),
 			zap.String("got", event.Owner.String()))
 
-		return nil, &MalformedEventError{Err: ErrShareBelongsToDifferentOwner}
+		return emptyPK, &MalformedEventError{Err: ErrShareBelongsToDifferentOwner}
 	}
 
-	removeDecidedMessages := func(role spectypes.BeaconRole, store qbftstorage.QBFTStore) error {
-		messageID := spectypes.NewMsgID(eh.networkConfig.Domain, share.ValidatorPubKey, role)
+	removeDecidedMessages := func(role spectypes.RunnerRole, store qbftstorage.QBFTStore) error {
+		messageID := spectypes.NewMsgID(eh.networkConfig.Domain, share.ValidatorPubKey[:], role)
 		return store.CleanAllInstances(logger, messageID[:])
 	}
 	err := eh.storageMap.Each(removeDecidedMessages)
 	if err != nil {
-		return nil, fmt.Errorf("could not clean all decided messages: %w", err)
+		return emptyPK, fmt.Errorf("could not clean all decided messages: %w", err)
 	}
 
-	if err := eh.nodeStorage.Shares().Delete(txn, share.ValidatorPubKey); err != nil {
-		return nil, fmt.Errorf("could not remove validator share: %w", err)
+	if err := eh.nodeStorage.Shares().Delete(txn, share.ValidatorPubKey[:]); err != nil {
+		return emptyPK, fmt.Errorf("could not remove validator share: %w", err)
 	}
 
 	isOperatorShare := share.BelongsToOperator(eh.operatorDataStore.GetOperatorID())
 	if isOperatorShare || eh.fullNode {
-		logger = logger.With(zap.String("validator_pubkey", hex.EncodeToString(share.ValidatorPubKey)))
+		logger = logger.With(zap.String("validator_pubkey", hex.EncodeToString(share.ValidatorPubKey[:])))
 	}
 	if isOperatorShare {
 		err = eh.keyManager.RemoveShare(hex.EncodeToString(share.SharePubKey))
 		if err != nil {
-			return nil, fmt.Errorf("could not remove share from ekm storage: %w", err)
+			return emptyPK, fmt.Errorf("could not remove share from ekm storage: %w", err)
 		}
 
 		eh.metrics.ValidatorRemoved(event.PublicKey)
@@ -384,7 +409,7 @@ func (eh *EventHandler) handleValidatorRemoved(txn basedb.Txn, event *contract.C
 	}
 
 	logger.Debug("processed event")
-	return nil, nil
+	return emptyPK, nil
 }
 
 func (eh *EventHandler) handleClusterLiquidated(txn basedb.Txn, event *contract.ContractClusterLiquidated) ([]*ssvtypes.SSVShare, error) {
@@ -502,7 +527,7 @@ func (eh *EventHandler) handleValidatorExited(txn basedb.Txn, event *contract.Co
 	}
 
 	pk := phase0.BLSPubKey{}
-	copy(pk[:], share.ValidatorPubKey)
+	copy(pk[:], share.ValidatorPubKey[:])
 
 	ed := &duties.ExitDescriptor{
 		PubKey:         pk,
@@ -541,7 +566,7 @@ func (eh *EventHandler) processClusterEvent(
 	for _, share := range shares {
 		isOperatorShare := share.BelongsToOperator(eh.operatorDataStore.GetOperatorID())
 		if isOperatorShare || eh.fullNode {
-			updatedPubKeys = append(updatedPubKeys, hex.EncodeToString(share.ValidatorPubKey))
+			updatedPubKeys = append(updatedPubKeys, hex.EncodeToString(share.ValidatorPubKey[:]))
 		}
 		if isOperatorShare {
 			share.Liquidated = toLiquidate

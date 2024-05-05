@@ -24,10 +24,10 @@ type Options struct {
 	BeaconNetwork     beacon.BeaconNetwork
 	Storage           *storage.QBFTStores
 	SSVShare          *types.SSVShare
-	Signer            spectypes.KeyManager
+	Signer            spectypes.BeaconSigner
 	OperatorSigner    spectypes.OperatorSigner
 	SignatureVerifier spectypes.SignatureVerifier
-	DutyRunners       runner.DutyRunners
+	DutyRunners       runner.ValidatorDutyRunners
 	NewDecidedHandler qbftctrl.NewDecidedHandler
 	FullNode          bool
 	Exporter          bool

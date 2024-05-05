@@ -71,7 +71,7 @@ type ControllerOptions struct {
 	FullNode                   bool `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Save decided history rather than just highest messages"`
 	Exporter                   bool `yaml:"Exporter" env:"EXPORTER" env-default:"false" env-description:""`
 	BuilderProposals           bool `yaml:"BuilderProposals" env:"BUILDER_PROPOSALS" env-default:"false" env-description:"Use external builders to produce blocks"`
-	KeyManager                 spectypes.KeyManager
+	BeaconSigner               spectypes.BeaconSigner
 	OperatorSigner             keys.OperatorSigner
 	OperatorDataStore          operatordatastore.OperatorDataStore
 	RegistryStorage            nodestorage.Storage
@@ -154,7 +154,7 @@ type controller struct {
 	ibftStorageMap    *storage.QBFTStores
 
 	beacon         beaconprotocol.BeaconNode
-	keyManager     spectypes.KeyManager
+	beaconSigner   spectypes.BeaconSigner
 	operatorSigner spectypes.OperatorSigner
 
 	operatorDataStore operatordatastore.OperatorDataStore
@@ -204,7 +204,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		BeaconNetwork: options.BeaconNetwork.GetNetwork(),
 		Storage:       options.StorageMap,
 		//Share:   nil,  // set per validator
-		Signer:            options.KeyManager,
+		Signer:            options.BeaconSigner,
 		OperatorSigner:    options.OperatorSigner,
 		SignatureVerifier: sigVerifier,
 		//Mode: validator.ModeRW // set per validator
@@ -242,7 +242,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		context:           options.Context,
 		beacon:            options.Beacon,
 		operatorDataStore: options.OperatorDataStore,
-		keyManager:        options.KeyManager,
+		beaconSigner:      options.BeaconSigner,
 		operatorSigner:    options.OperatorSigner,
 		network:           options.Network,
 
@@ -333,7 +333,7 @@ func (c *controller) handleRouterMessages() {
 				continue
 			}
 
-			pk := msg.GetID().GetPubKey()
+			pk := msg.GetID().GetSenderID()
 			hexPK := hex.EncodeToString(pk)
 			if v, ok := c.validatorsMap.Get(hexPK); ok {
 				v.HandleMessage(c.logger, msg)
@@ -865,10 +865,10 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 }
 
 // SetupRunners initializes duty runners for the given validator
-func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Options) runner.DutyRunners {
+func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Options) runner.ValidatorDutyRunners {
 	if options.SSVShare == nil || options.SSVShare.BeaconMetadata == nil {
 		logger.Error("missing validator metadata", zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey)))
-		return runner.DutyRunners{} // TODO need to find better way to fix it
+		return runner.ValidatorDutyRunners{} // TODO need to find better way to fix it
 	}
 
 	runnersType := []spectypes.BeaconRole{
@@ -907,7 +907,7 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 		return qbftCtrl
 	}
 
-	runners := runner.DutyRunners{}
+	runners := runner.ValidatorDutyRunners{}
 	for _, role := range runnersType {
 		switch role {
 		case spectypes.BNRoleAttester:
