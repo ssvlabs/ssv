@@ -255,14 +255,14 @@ func (s *sharesStorage) storageShareToSpecShare(share *storageShare) (*types.SSV
 			SSVOperatorPubKey: opPubKey,
 		}
 	}
+	quorum, _ := types.ComputeQuorumAndPartialQuorum(len(committee))
 	specShare := &types.SSVShare{
 		Share: spectypes.Share{
 			OperatorID:          share.OperatorID,
 			ValidatorPubKey:     share.ValidatorPubKey,
 			SharePubKey:         share.SharePubKey,
 			Committee:           committee,
-			Quorum:              share.Quorum,
-			PartialQuorum:       share.PartialQuorum,
+			Quorum:              quorum,
 			DomainType:          share.DomainType,
 			FeeRecipientAddress: share.FeeRecipientAddress,
 			Graffiti:            share.Graffiti,
