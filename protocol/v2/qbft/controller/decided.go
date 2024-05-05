@@ -72,7 +72,7 @@ func (c *Controller) UponDecided(logger *zap.Logger, signedMsg *spectypes.Signed
 				zap.Uint64("ctrl_height", uint64(c.Height)),
 				zap.Any("signers", signedMsg.OperatorIDs),
 			)
-			if err := c.SaveInstance(inst, msg); err != nil {
+			if err := c.SaveInstance(inst, signedMsg); err != nil {
 				logger.Debug("❗failed to save instance", zap.Error(err))
 			} else {
 				logger.Debug("💾 saved instance upon decided", zap.Error(err))
