@@ -58,10 +58,7 @@ func (s *SignatureVerifier) VerifySignatureForSigner(root [32]byte, signature []
 				s.operatorIDToPubkeyCache.Set(op.OperatorID, operatorPubKey)
 			}
 
-			// put signature into [256]byte array
-			var signature256 [256]byte
-			copy(signature256[:], signature)
-			return operatorPubKey.Verify(root[:], signature256)
+			return operatorPubKey.Verify(root[:], signature)
 		}
 	}
 	return errors.New("unknown signer")
