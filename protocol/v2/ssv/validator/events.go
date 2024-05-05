@@ -23,7 +23,7 @@ func (v *Validator) handleEventMessage(logger *zap.Logger, msg *queue.DecodedSSV
 		}
 		return nil
 	case types.ExecuteDuty:
-		if err := v.OnExecuteDuty(logger, *eventMsg); err != nil {
+		if err := v.OnExecuteDuty(logger, eventMsg); err != nil {
 			return fmt.Errorf("execute duty event: %w", err)
 		}
 		return nil
