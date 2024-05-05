@@ -66,5 +66,5 @@ func (sv *signatureVerifier) VerifySignature(operatorID spectypes.OperatorID, me
 		return err
 	}
 
-	return operatorPubKey.Verify(encodedMsg, [256]byte(signature))
+	return operatorPubKey.Verify(encodedMsg, signature)
 }
