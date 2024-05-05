@@ -2,6 +2,7 @@ package controller
 
 import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
@@ -50,7 +51,13 @@ func (c *Controller) SaveInstance(i *instance.Instance, msg *spectypes.SignedSSV
 		State:          i.State,
 		DecidedMessage: msg,
 	}
-	isHighest := msg.Message.Height >= c.Height
+
+	decMsg, err := specqbft.DecodeMessage(msg.SSVMessage.Data)
+	if err != nil {
+		return err
+	}
+
+	isHighest := decMsg.Height >= c.Height
 
 	// Full nodes save both highest and historical instances.
 	if c.fullNode {

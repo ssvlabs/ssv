@@ -38,7 +38,7 @@ type Validator struct {
 	SignatureVerifier spectypes.SignatureVerifier
 
 	Storage *storage.QBFTStores
-	Queues  map[spectypes.BeaconRole]queueContainer
+	Queues  map[spectypes.RunnerRole]queueContainer
 
 	// dutyIDs is a map for logging a unique ID for a given duty
 	dutyIDs *hashmap.Map[spectypes.RunnerRole, string]
@@ -67,7 +67,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		Signer:            options.Signer,
 		OperatorSigner:    options.OperatorSigner,
 		SignatureVerifier: options.SignatureVerifier,
-		Queues:            make(map[spectypes.BeaconRole]queueContainer),
+		Queues:            make(map[spectypes.RunnerRole]queueContainer),
 		state:             uint32(NotStarted),
 		dutyIDs:           hashmap.New[spectypes.RunnerRole, string](), // TODO: use beaconrole here?
 		messageValidator:  options.MessageValidator,

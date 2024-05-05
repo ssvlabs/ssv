@@ -123,13 +123,20 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 			filter = func(m *queue.DecodedSSVMessage) bool {
 
 				sm, ok := m.Body.(*spectypes.SignedSSVMessage)
+
 				if !ok {
 					return true
 				}
-				if sm.Message.Height != state.Height || sm.Message.Round != state.Round {
+
+				decMsg, err := specqbft.DecodeMessage(sm.SSVMessage.Data)
+				if err != nil {
 					return true
 				}
-				return sm.Message.MsgType != specqbft.PrepareMsgType && sm.Message.MsgType != specqbft.CommitMsgType
+
+				if decMsg.Height != state.Height || decMsg.Round != state.Round {
+					return true
+				}
+				return decMsg.MsgType != specqbft.PrepareMsgType && decMsg.MsgType != specqbft.CommitMsgType
 			}
 		}
 
@@ -167,17 +174,26 @@ func (v *Validator) logMsg(logger *zap.Logger, msg *queue.DecodedSSVMessage, log
 	switch msg.SSVMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
 		sm := msg.Body.(*spectypes.SignedSSVMessage)
-		baseFields = []zap.Field{
-			zap.Int64("msg_height", int64(sm.Message.Height)),
-			zap.Int64("msg_round", int64(sm.Message.Round)),
-			zap.Int64("consensus_msg_type", int64(sm.Message.MsgType)),
-			zap.Any("signers", sm.Signers),
+
+		decMsg, err := specqbft.DecodeMessage(sm.SSVMessage.Data)
+		if err != nil {
+			baseFields = []zap.Field{
+				zap.Error(errors.Wrap(err, "error decoding msg")),
+			}
+		} else {
+
+			baseFields = []zap.Field{
+				zap.Int64("msg_height", int64(decMsg.Height)),
+				zap.Int64("msg_round", int64(decMsg.Round)),
+				zap.Int64("consensus_msg_type", int64(decMsg.MsgType)),
+				zap.Any("signers", sm.OperatorIDs),
+			}
 		}
 	case spectypes.SSVPartialSignatureMsgType:
-		psm := msg.Body.(*spectypes.SignedPartialSignatureMessage)
+		psm := msg.Body.(*spectypes.PartialSignatureMessages)
 		baseFields = []zap.Field{
-			zap.Int64("signer", int64(psm.Signer)),
-			fields.Slot(psm.Message.Slot),
+			zap.Int64("signer", int64(psm.Messages[0].Signer)), // TODO: only one signer?
+			fields.Slot(psm.Slot),
 		}
 	}
 	logger.Debug(logMsg, append(baseFields, withFields...)...)

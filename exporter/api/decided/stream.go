@@ -3,9 +3,10 @@ package decided
 import (
 	"encoding/hex"
 	"fmt"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	"time"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/patrickmn/go-cache"
 	"go.uber.org/zap"
 
@@ -19,17 +20,23 @@ import (
 func NewStreamPublisher(logger *zap.Logger, ws api.WebSocketServer) controller.NewDecidedHandler {
 	c := cache.New(time.Minute, time.Minute*3/2)
 	feed := ws.BroadcastFeed()
-	return func(msg *spectypes.SignedSSVMessage) {
-		identifier := hex.EncodeToString(msg.Message.Identifier)
-		key := fmt.Sprintf("%s:%d:%d", identifier, msg.Message.Height, len(msg.Signers))
+	return func(signedMsg *spectypes.SignedSSVMessage) {
+
+		msg, err := specqbft.DecodeMessage(signedMsg.SSVMessage.Data)
+		if err != nil {
+			return
+		}
+
+		identifier := hex.EncodeToString(msg.Identifier)
+		key := fmt.Sprintf("%s:%d:%d", identifier, msg.Height, len(signedMsg.OperatorIDs))
 		_, ok := c.Get(key)
 		if ok {
 			return
 		}
 		c.SetDefault(key, true)
 
-		logger.Debug("broadcast decided stream", zap.String("identifier", identifier), fields.Height(msg.Message.Height))
+		logger.Debug("broadcast decided stream", zap.String("identifier", identifier), fields.Height(msg.Height))
 
-		feed.Send(api.NewDecidedAPIMsg(msg))
+		feed.Send(api.NewDecidedAPIMsg(signedMsg))
 	}
 }

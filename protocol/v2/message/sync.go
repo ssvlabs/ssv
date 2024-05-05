@@ -102,10 +102,21 @@ func (sm *SyncMessage) UpdateResults(err error, results ...*spectypes.SignedSSVM
 		sm.Data = make([]*spectypes.SignedSSVMessage, len(results))
 		copy(sm.Data, results)
 		nResults := len(sm.Data)
+
+		decMsg, err := specqbft.DecodeMessage(sm.Data[0].SSVMessage.Data)
+		if err != nil {
+			return
+		}
+
 		// updating params with the actual height of the messages
-		sm.Params.Height = []specqbft.Height{sm.Data[0].Message.Height}
+		sm.Params.Height = []specqbft.Height{decMsg.Height}
 		if nResults > 1 {
-			sm.Params.Height = []specqbft.Height{sm.Data[0].Message.Height, sm.Data[nResults-1].Message.Height}
+			decMsg2, err := specqbft.DecodeMessage(sm.Data[nResults-1].SSVMessage.Data)
+			if err != nil {
+				return
+			}
+
+			sm.Params.Height = []specqbft.Height{decMsg.Height, decMsg2.Height}
 		}
 		sm.Status = StatusSuccess
 	}

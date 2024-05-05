@@ -2,6 +2,7 @@ package instance
 
 import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
 // Compact trims the given qbft.State down to the minimum required

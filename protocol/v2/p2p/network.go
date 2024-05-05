@@ -66,18 +66,20 @@ func (s SyncResults) String() string {
 	for _, m := range s {
 		var sm *spectypes.SignedSSVMessage
 		if m.Msg.MsgType == spectypes.SSVConsensusMsgType {
-			sm = &specqbft.SignedMessage{}
-			if err := sm.Decode(m.Msg.Data); err != nil {
+
+			decMsg, err := specqbft.DecodeMessage(sm.SSVMessage.Data)
+			if err != nil {
 				v = append(v, fmt.Sprintf("(%v)", err))
 				continue
 			}
+
 			v = append(
 				v,
 				fmt.Sprintf(
 					"(type=%d height=%d round=%d)",
 					m.Msg.MsgType,
-					sm.Message.Height,
-					sm.Message.Round,
+					decMsg.Height,
+					decMsg.Round,
 				),
 			)
 		}
