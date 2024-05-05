@@ -559,7 +559,7 @@ func (eh *EventHandler) processClusterEvent(
 	toLiquidate bool,
 ) ([]*ssvtypes.SSVShare, []string, error) {
 	clusterID := ssvtypes.ComputeClusterIDHash(owner, operatorIDs)
-	shares := eh.nodeStorage.Shares().List(txn, registrystorage.ByClusterID(clusterID))
+	shares := eh.nodeStorage.Shares().List(txn, registrystorage.ByClusterIDHash(clusterID))
 	toUpdate := make([]*ssvtypes.SSVShare, 0)
 	updatedPubKeys := make([]string, 0)
 

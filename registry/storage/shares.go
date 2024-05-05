@@ -156,7 +156,7 @@ func (s *sharesStorage) load() error {
 			return fmt.Errorf("failed to convert storage share to spec share: %w", err)
 		}
 
-		s.shares[hex.EncodeToString(val.ValidatorPubKey)] = share
+		s.shares[hex.EncodeToString(val.ValidatorPubKey[:])] = share
 		return nil
 	})
 }
@@ -202,14 +202,14 @@ func (s *sharesStorage) Save(rw basedb.ReadWriter, shares ...*types.SSVShare) er
 		if err != nil {
 			return basedb.Obj{}, fmt.Errorf("failed to serialize share: %w", err)
 		}
-		return basedb.Obj{Key: s.storageKey(share.ValidatorPubKey), Value: value}, nil
+		return basedb.Obj{Key: s.storageKey(share.ValidatorPubKey[:]), Value: value}, nil
 	})
 	if err != nil {
 		return err
 	}
 
 	for _, share := range shares {
-		key := hex.EncodeToString(share.ValidatorPubKey)
+		key := hex.EncodeToString(share.ValidatorPubKey[:])
 		s.shares[key] = share
 	}
 	return nil
@@ -219,18 +219,18 @@ func specShareToStorageShare(share *types.SSVShare) *storageShare {
 	committee := make([]*storageOperator, len(share.Committee))
 	for i, c := range share.Committee {
 		committee[i] = &storageOperator{
-			OperatorID: c.OperatorID,
+			OperatorID: c.Signer,
 			PubKey:     c.SharePubKey,
 		}
 	}
+	quorum, partialQuorum := types.ComputeQuorumAndPartialQuorum(len(committee))
 	stShare := &storageShare{
 		Share: Share{
-			OperatorID:          share.OperatorID,
 			ValidatorPubKey:     share.ValidatorPubKey,
 			SharePubKey:         share.SharePubKey,
 			Committee:           committee,
-			Quorum:              share.Quorum,
-			PartialQuorum:       share.PartialQuorum,
+			Quorum:              quorum,
+			PartialQuorum:       partialQuorum,
 			DomainType:          share.DomainType,
 			FeeRecipientAddress: share.FeeRecipientAddress,
 			Graffiti:            share.Graffiti,
@@ -242,23 +242,22 @@ func specShareToStorageShare(share *types.SSVShare) *storageShare {
 }
 
 func (s *sharesStorage) storageShareToSpecShare(share *storageShare) (*types.SSVShare, error) {
-	committee := make([]*spectypes.Operator, len(share.Committee))
+	committee := make([]*spectypes.ShareMember, len(share.Committee))
 	for i, c := range share.Committee {
-		opPubKey, ok := s.operators[c.OperatorID]
-		if !ok {
-			return nil, fmt.Errorf("operator not found: %d", c.OperatorID)
-		}
+		// TODO: (FORK) this is needed to fill in genesis committees
+		// opPubKey, ok := s.operators[c.OperatorID]
+		// if !ok {
+		// 	return nil, fmt.Errorf("operator not found: %d", c.OperatorID)
+		// }
 
-		committee[i] = &spectypes.Operator{
-			OperatorID:        c.OperatorID,
-			SharePubKey:       c.PubKey,
-			SSVOperatorPubKey: opPubKey,
+		committee[i] = &spectypes.ShareMember{
+			Signer:      c.OperatorID,
+			SharePubKey: c.PubKey,
 		}
 	}
 	quorum, _ := types.ComputeQuorumAndPartialQuorum(len(committee))
 	specShare := &types.SSVShare{
 		Share: spectypes.Share{
-			OperatorID:          share.OperatorID,
 			ValidatorPubKey:     share.ValidatorPubKey,
 			SharePubKey:         share.SharePubKey,
 			Committee:           committee,
@@ -351,12 +350,12 @@ func ByAttesting(epoch phase0.Epoch) SharesFilter {
 	}
 }
 
-// ByClusterID filters by cluster id.
-func ByClusterID(clusterID []byte) SharesFilter {
+// ByClusterIDHash filters by cluster id.
+func ByClusterIDHash(clusterID []byte) SharesFilter {
 	return func(share *types.SSVShare) bool {
 		var operatorIDs []uint64
 		for _, op := range share.Committee {
-			operatorIDs = append(operatorIDs, op.OperatorID)
+			operatorIDs = append(operatorIDs, op.Signer)
 		}
 
 		shareClusterID := types.ComputeClusterIDHash(share.OwnerAddress, operatorIDs)

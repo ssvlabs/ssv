@@ -246,7 +246,7 @@ func TestEthExecLayer(t *testing.T) {
 
 			clusterID := ssvtypes.ComputeClusterIDHash(testAddrAlice, []uint64{1, 2, 3, 4})
 
-			shares := nodeStorage.Shares().List(nil, registrystorage.ByClusterID(clusterID))
+			shares := nodeStorage.Shares().List(nil, registrystorage.ByClusterIDHash(clusterID))
 			require.NotEmpty(t, shares)
 			require.Equal(t, 5, len(shares))
 
@@ -261,7 +261,7 @@ func TestEthExecLayer(t *testing.T) {
 
 			clusterID := ssvtypes.ComputeClusterIDHash(testAddrAlice, []uint64{1, 2, 3, 4})
 
-			shares := nodeStorage.Shares().List(nil, registrystorage.ByClusterID(clusterID))
+			shares := nodeStorage.Shares().List(nil, registrystorage.ByClusterIDHash(clusterID))
 			require.NotEmpty(t, shares)
 			require.Equal(t, 5, len(shares))
 
@@ -284,7 +284,7 @@ func TestEthExecLayer(t *testing.T) {
 			// Wait until the state is changed
 			time.Sleep(time.Millisecond * 300)
 
-			shares = nodeStorage.Shares().List(nil, registrystorage.ByClusterID(clusterID))
+			shares = nodeStorage.Shares().List(nil, registrystorage.ByClusterIDHash(clusterID))
 			require.NotEmpty(t, shares)
 			require.Equal(t, 5, len(shares))
 

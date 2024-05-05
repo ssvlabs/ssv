@@ -129,7 +129,7 @@ func TestSharesStorage(t *testing.T) {
 	t.Run("List_Filter_ByClusterId", func(t *testing.T) {
 		clusterID := ssvtypes.ComputeClusterIDHash(validatorShare.Metadata.OwnerAddress, []uint64{1, 2, 3, 4})
 
-		validators := shareStorage.List(nil, ByClusterID(clusterID))
+		validators := shareStorage.List(nil, ByClusterIDHash(clusterID))
 		require.Equal(t, 2, len(validators))
 	})
 
