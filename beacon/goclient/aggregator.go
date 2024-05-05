@@ -27,16 +27,12 @@ func (gc *goClient) SubmitAggregateSelectionProof(slot phase0.Slot, committeeInd
 		return nil, DataVersionNil, fmt.Errorf("validator is not an aggregator")
 	}
 
-	attDataSSZMarshal, _, err := gc.GetAttestationData(slot, committeeIndex)
+	attData, _, err := gc.GetAttestationData(slot, committeeIndex)
 	if err != nil {
 		return nil, DataVersionNil, fmt.Errorf("failed to get attestation data: %w", err)
 	}
-	if attDataSSZMarshal == nil {
+	if attData == nil {
 		return nil, DataVersionNil, fmt.Errorf("attestation data is nil")
-	}
-	attData, ok := attDataSSZMarshal.(*phase0.AttestationData)
-	if !ok {
-		return nil, DataVersionNil, fmt.Errorf("failed to cast attestation data")
 	}
 
 	// Get aggregate attestation data.
