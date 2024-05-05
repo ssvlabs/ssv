@@ -53,7 +53,7 @@ type Config struct {
 }
 
 // GetShareSigner returns a BeaconSigner instance
-func (c *Config) GetBeaconSigner() spectypes.BeaconSigner {
+func (c *Config) GetShareSigner() spectypes.BeaconSigner {
 	return c.BeaconSigner
 }
 
@@ -103,4 +103,8 @@ func (c *Config) GetCutOffRound() int {
 
 func (c *Config) VerifySignatures() bool {
 	return c.SignatureVerification
+}
+
+func (c *Config) GetSignatureVerifier() spectypes.SignatureVerifier {
+	return c.SignatureVerifier
 }

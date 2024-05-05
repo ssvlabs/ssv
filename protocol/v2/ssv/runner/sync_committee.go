@@ -255,7 +255,7 @@ package runner
 //	return r.valCheck
 //}
 //
-//func (r *SyncCommitteeRunner) GetSigner() spectypes.KeyManager {
+//func (r *SyncCommitteeRunner) GetSigner() spectypes.BeaconSigner {
 //	return r.signer
 //}
 //

@@ -240,7 +240,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.DB = db
 		cfg.SSVOptions.ValidatorOptions.Network = p2pNetwork
 		cfg.SSVOptions.ValidatorOptions.Beacon = consensusClient
-		cfg.SSVOptions.ValidatorOptions.KeyManager = keyManager
+		cfg.SSVOptions.ValidatorOptions.BeaconSigner = keyManager
 		cfg.SSVOptions.ValidatorOptions.ValidatorsMap = validatorsMap
 
 		cfg.SSVOptions.ValidatorOptions.OperatorDataStore = operatorDataStore
@@ -610,7 +610,7 @@ func setupEventHandling(
 		networkConfig,
 		operatorDataStore,
 		operatorDecrypter,
-		cfg.SSVOptions.ValidatorOptions.KeyManager,
+		cfg.SSVOptions.ValidatorOptions.BeaconSigner,
 		cfg.SSVOptions.ValidatorOptions.Beacon,
 		storageMap,
 		eventhandler.WithFullNode(),

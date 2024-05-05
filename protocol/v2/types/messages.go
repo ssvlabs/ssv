@@ -38,7 +38,7 @@ type TimeoutData struct {
 }
 
 type ExecuteDutyData struct {
-	Duty *types.Duty
+	Duty types.Duty
 }
 
 func (m *EventMsg) GetTimeoutData() (*TimeoutData, error) {

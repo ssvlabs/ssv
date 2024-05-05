@@ -1,7 +1,9 @@
 package validator
 
 import (
+	"crypto/sha256"
 	"fmt"
+	"github.com/pkg/errors"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
@@ -19,26 +21,48 @@ func NewSignatureVerifier() *SignatureVerifier {
 	}
 }
 
-func (s *SignatureVerifier) Verify(msg *spectypes.SignedSSVMessage, operators []*spectypes.Operator) error {
+func (s *SignatureVerifier) Verify(msg *spectypes.SignedSSVMessage, operators []*spectypes.CommitteeMember) error {
 	// Find operator that matches ID with the signer and verify signature
-	for _, op := range operators {
-		if op.OperatorID != msg.GetOperatorID() {
-			continue
+
+	encodedMsg, err := msg.SSVMessage.Encode()
+	if err != nil {
+		return err
+	}
+
+	// Get message hash
+	hash := sha256.Sum256(encodedMsg)
+
+	// Find operator that matches ID with the signer and verify signature
+	for i, signer := range msg.OperatorIDs {
+		if err := s.VerifySignatureForSigner(hash, msg.Signatures[i], signer, operators); err != nil {
+			return err
 		}
-
-		operatorPubKey, ok := s.operatorIDToPubkeyCache.Get(op.OperatorID)
-		if !ok {
-			var err error
-			operatorPubKey, err = keys.PublicKeyFromString(string(op.SSVOperatorPubKey))
-			if err != nil {
-				return fmt.Errorf("could not parse signer public key: %w", err)
-			}
-
-			s.operatorIDToPubkeyCache.Set(op.OperatorID, operatorPubKey)
-		}
-
-		return operatorPubKey.Verify(msg.Data, msg.Signature)
 	}
 
 	return fmt.Errorf("unknown signer")
+}
+
+func (s *SignatureVerifier) VerifySignatureForSigner(root [32]byte, signature []byte, signer spectypes.OperatorID, operators []*spectypes.CommitteeMember) error {
+
+	for _, op := range operators {
+		// Find signer
+		if signer == op.OperatorID {
+			operatorPubKey, ok := s.operatorIDToPubkeyCache.Get(signer)
+			if !ok {
+				var err error
+				operatorPubKey, err = keys.PublicKeyFromString(string(op.SSVOperatorPubKey))
+				if err != nil {
+					return fmt.Errorf("could not parse signer public key: %w", err)
+				}
+
+				s.operatorIDToPubkeyCache.Set(op.OperatorID, operatorPubKey)
+			}
+
+			// put signature into [256]byte array
+			var signature256 [256]byte
+			copy(signature256[:], signature)
+			return operatorPubKey.Verify(root[:], signature256)
+		}
+	}
+	return errors.New("unknown signer")
 }

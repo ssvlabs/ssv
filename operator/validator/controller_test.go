@@ -105,7 +105,7 @@ func TestSetupNonCommitteeValidators(t *testing.T) {
 	require.NoError(t, secretKey2.SetHexString(sk2Str))
 
 	firstValidator := &validator.Validator{
-		DutyRunners: runner.DutyRunners{},
+		DutyRunners: runner.ValidatorDutyRunners{},
 		Storage:     ibftstorage.NewStores(),
 		Share: &types.SSVShare{
 			Share: spectypes.Share{
@@ -297,7 +297,7 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 	}
 
 	firstValidator := &validator.Validator{
-		DutyRunners: runner.DutyRunners{},
+		DutyRunners: runner.ValidatorDutyRunners{},
 		Storage:     ibftstorage.NewStores(),
 		Share: &types.SSVShare{
 			Share: spectypes.Share{
@@ -1021,7 +1021,7 @@ func setupController(logger *zap.Logger, opts MockControllerOptions) controller 
 		beacon:                 opts.beacon,
 		network:                opts.network,
 		metrics:                opts.metrics,
-		keyManager:             opts.keyManager,
+		beaconSigner:           opts.keyManager,
 		ibftStorageMap:         opts.StorageMap,
 		operatorDataStore:      opts.operatorDataStore,
 		sharesStorage:          opts.sharesStorage,
@@ -1085,7 +1085,7 @@ func generateDecidedMessage(t *testing.T, identifier spectypes.MessageID) []byte
 
 func setupTestValidator(ownerAddressBytes, feeRecipientBytes []byte) *validator.Validator {
 	return &validator.Validator{
-		DutyRunners: runner.DutyRunners{},
+		DutyRunners: runner.ValidatorDutyRunners{},
 		Storage:     ibftstorage.NewStores(),
 		Share: &types.SSVShare{
 			Share: spectypes.Share{
