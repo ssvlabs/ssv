@@ -30,7 +30,7 @@ type Subscriber interface {
 
 // Broadcaster enables to broadcast messages
 type Broadcaster interface {
-	p2p.Broadcaster
+	Broadcast(id spectypes.MessageID, message *spectypes.SignedSSVMessage) error
 }
 
 // RequestHandler handles p2p requests

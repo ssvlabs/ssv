@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"math/big"
 	"strconv"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/cespare/xxhash/v2"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/protocol"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 )
@@ -39,6 +41,29 @@ const (
 	MessageOffset    = operatorIDOffset + operatorIDSize
 )
 
+// EncodeGenesisSignedSSVMessage serializes the message, op id and signature into bytes
+// DEPRECATED, TODO: remove post-fork
+func EncodeGenesisSignedSSVMessage(message []byte, operatorID genesisspectypes.OperatorID, signature []byte) []byte {
+	b := make([]byte, signatureSize+operatorIDSize+len(message))
+	copy(b[signatureOffset:], signature)
+	binary.LittleEndian.PutUint64(b[operatorIDOffset:], operatorID)
+	copy(b[MessageOffset:], message)
+	return b
+}
+
+// DecodeGenesisSignedSSVMessage deserializes signed message bytes messsage, op id and a signature
+// DEPRECATED, TODO: remove post-fork
+func DecodeGenesisSignedSSVMessage(encoded []byte) ([]byte, genesisspectypes.OperatorID, []byte, error) {
+	if len(encoded) < MessageOffset {
+		return nil, 0, nil, fmt.Errorf("unexpected encoded message size of %d", len(encoded))
+	}
+
+	message := encoded[MessageOffset:]
+	operatorID := binary.LittleEndian.Uint64(encoded[operatorIDOffset : operatorIDOffset+operatorIDSize])
+	signature := encoded[signatureOffset : signatureOffset+signatureSize]
+	return message, operatorID, signature, nil
+}
+
 // SubnetTopicID returns the topic to use for the given subnet
 func SubnetTopicID(subnet int) string {
 	if subnet < 0 {
@@ -52,6 +77,14 @@ func ValidatorTopicID(pkByts []byte) []string {
 	pkHex := hex.EncodeToString(pkByts)
 	subnet := ValidatorSubnet(pkHex)
 	return []string{SubnetTopicID(subnet)}
+}
+
+// CommitteeTopicID returns the topic to use for the given committee
+func CommitteeTopicID(senderID []byte) []string {
+	committeeID := senderID[16:]
+
+	subnet := new(big.Int).Mod(new(big.Int).SetBytes(committeeID), new(big.Int).SetUint64(subnetsCount)).String()
+	return []string{subnet}
 }
 
 // GetTopicFullName returns the topic full name, including prefix

@@ -82,10 +82,11 @@ func (n *p2pNetwork) handleStream(logger *zap.Logger, handler p2pprotocol.Reques
 }
 
 // getSubsetOfPeers returns a subset of the peers from that topic
-func (n *p2pNetwork) getSubsetOfPeers(logger *zap.Logger, vpk spectypes.ValidatorPK, maxPeers int, filter func(peer.ID) bool) (peers []peer.ID, err error) {
+func (n *p2pNetwork) getSubsetOfPeers(logger *zap.Logger, senderID []byte, maxPeers int, filter func(peer.ID) bool) (peers []peer.ID, err error) {
 	var ps []peer.ID
 	seen := make(map[peer.ID]struct{})
-	topics := commons.ValidatorTopicID(vpk)
+	// TODO: fork support
+	topics := commons.CommitteeTopicID(senderID)
 	for _, topic := range topics {
 		ps, err = n.topicsCtrl.Peers(topic)
 		if err != nil {
@@ -100,7 +101,7 @@ func (n *p2pNetwork) getSubsetOfPeers(logger *zap.Logger, vpk spectypes.Validato
 	}
 	// if we seen some peers, ignore the error
 	if err != nil && len(seen) == 0 {
-		return nil, errors.Wrapf(err, "could not read peers for validator %s", hex.EncodeToString(vpk))
+		return nil, errors.Wrapf(err, "could not read peers for validator %s", hex.EncodeToString(senderID))
 	}
 	if len(peers) == 0 {
 		return nil, nil
