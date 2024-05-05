@@ -244,7 +244,7 @@ func specShareToStorageShare(share *types.SSVShare) *storageShare {
 func (s *sharesStorage) storageShareToSpecShare(share *storageShare) (*types.SSVShare, error) {
 	committee := make([]*spectypes.ShareMember, len(share.Committee))
 	for i, c := range share.Committee {
-		// TODO: (FORK) this is needed to fill in genesis committees
+		// TODO: (genesis) this is needed to fill in genesis committees
 		// opPubKey, ok := s.operators[c.OperatorID]
 		// if !ok {
 		// 	return nil, fmt.Errorf("operator not found: %d", c.OperatorID)
