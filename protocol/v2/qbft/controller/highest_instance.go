@@ -45,7 +45,7 @@ func (c *Controller) getHighestInstance(identifier []byte) (*instance.Instance, 
 }
 
 // SaveInstance saves the given instance to the storage.
-func (c *Controller) SaveInstance(i *instance.Instance, msg *specqbft.SignedMessage) error {
+func (c *Controller) SaveInstance(i *instance.Instance, msg *spectypes.SignedSSVMessage) error {
 	storedInstance := &qbftstorage.StoredInstance{
 		State:          i.State,
 		DecidedMessage: msg,

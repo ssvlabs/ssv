@@ -16,11 +16,11 @@ var TestingMessage = &specqbft.Message{
 	Root:       [32]byte{1, 2, 3, 4},
 }
 
-var TestingSignedMsg = func() *specqbft.SignedMessage {
+var TestingSignedMsg = func() *spectypes.SignedSSVMessage {
 	return SignMsg(TestingSK, 1, TestingMessage)
 }()
 
-var SignMsg = func(sk *bls.SecretKey, id types.OperatorID, msg *specqbft.Message) *specqbft.SignedMessage {
+var SignMsg = func(sk *bls.SecretKey, id types.OperatorID, msg *specqbft.Message) *spectypes.SignedSSVMessage {
 	domain := testingutils.TestingSSVDomainType
 	sigType := types.QBFTSignatureType
 
@@ -71,28 +71,28 @@ var TestingInstanceStruct = &specqbft.Instance{
 		DecidedValue:                    []byte{1, 2, 3, 4},
 
 		ProposeContainer: &specqbft.MsgContainer{
-			Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
+			Msgs: map[specqbft.Round][]*spectypes.SignedSSVMessage{
 				1: {
 					TestingSignedMsg,
 				},
 			},
 		},
 		PrepareContainer: &specqbft.MsgContainer{
-			Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
+			Msgs: map[specqbft.Round][]*spectypes.SignedSSVMessage{
 				1: {
 					TestingSignedMsg,
 				},
 			},
 		},
 		CommitContainer: &specqbft.MsgContainer{
-			Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
+			Msgs: map[specqbft.Round][]*spectypes.SignedSSVMessage{
 				1: {
 					TestingSignedMsg,
 				},
 			},
 		},
 		RoundChangeContainer: &specqbft.MsgContainer{
-			Msgs: map[specqbft.Round][]*specqbft.SignedMessage{
+			Msgs: map[specqbft.Round][]*spectypes.SignedSSVMessage{
 				1: {
 					TestingSignedMsg,
 				},

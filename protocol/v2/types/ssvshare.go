@@ -2,6 +2,7 @@ package types
 
 import (
 	"encoding/binary"
+	"golang.org/x/exp/slices"
 	"sort"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -27,7 +28,13 @@ type SSVShare struct {
 
 // BelongsToOperator checks whether the share belongs to operator.
 func (s *SSVShare) BelongsToOperator(operatorID spectypes.OperatorID) bool {
-	return operatorID != 0 && s.OperatorID == operatorID
+	if operatorID == 0 {
+		return false
+	}
+
+	return slices.ContainsFunc(s.Committee, func(shareMember *spectypes.ShareMember) bool {
+		return shareMember.Signer == operatorID
+	})
 }
 
 // HasBeaconMetadata checks whether the BeaconMetadata field is not nil.

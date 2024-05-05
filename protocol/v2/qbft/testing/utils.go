@@ -17,7 +17,7 @@ import (
 
 var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, role types.BeaconRole) *qbft.Config {
 	return &qbft.Config{
-		ShareSigner:    testingutils.NewTestingKeyManager(),
+		BeaconSigner:   testingutils.NewTestingKeyManager(),
 		OperatorSigner: testingutils.NewTestingOperatorSigner(keySet, 1),
 		SigningPK:      keySet.Shares[1].GetPublicKey().Serialize(),
 		Domain:         testingutils.TestingSSVDomainType,

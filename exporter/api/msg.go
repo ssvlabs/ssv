@@ -3,8 +3,6 @@ package api
 import (
 	"encoding/hex"
 
-	"github.com/pkg/errors"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
 )
@@ -29,7 +27,7 @@ type SignedMessageAPI struct {
 
 // NewDecidedAPIMsg creates a new message from the given message
 // TODO: avoid converting to v0 once explorer is upgraded
-func NewDecidedAPIMsg(msgs ...*specqbft.SignedMessage) Message {
+func NewDecidedAPIMsg(msgs ...*types.SignedSSVMessage) Message {
 	data, err := DecidedAPIData(msgs...)
 	if err != nil {
 		return Message{
@@ -38,15 +36,30 @@ func NewDecidedAPIMsg(msgs ...*specqbft.SignedMessage) Message {
 		}
 	}
 
-	identifier := specqbft.ControllerIdToMessageID(msgs[0].Message.Identifier)
-	pkv := identifier.GetPubKey()
+	decMsg, err := specqbft.DecodeMessage(msgs[0].SSVMessage.Data)
+	if err != nil {
+		return Message{
+			Type: TypeDecided,
+			Data: []string{},
+		}
+	}
+	decMsg2, err := specqbft.DecodeMessage(msgs[len(msgs)-1].SSVMessage.Data)
+	if err != nil {
+		return Message{
+			Type: TypeDecided,
+			Data: []string{},
+		}
+	}
+
+	identifier := specqbft.ControllerIdToMessageID(decMsg.Identifier)
+	pkv := identifier.GetSenderID()
 	role := identifier.GetRoleType()
 	return Message{
 		Type: TypeDecided,
 		Filter: MessageFilter{
 			PublicKey: hex.EncodeToString(pkv),
-			From:      uint64(msgs[0].Message.Height),
-			To:        uint64(msgs[len(msgs)-1].Message.Height),
+			From:      uint64(decMsg.Height),
+			To:        uint64(decMsg2.Height),
 			Role:      role.String(),
 		},
 		Data: data,
@@ -54,35 +67,41 @@ func NewDecidedAPIMsg(msgs ...*specqbft.SignedMessage) Message {
 }
 
 // DecidedAPIData creates a new message from the given message
-func DecidedAPIData(msgs ...*specqbft.SignedMessage) (interface{}, error) {
-	if len(msgs) == 0 {
-		return nil, errors.New("no messages")
-	}
-
-	apiMsgs := make([]*SignedMessageAPI, 0)
-	for _, msg := range msgs {
-		if msg == nil {
-			return nil, errors.New("nil message")
-		}
-
-		apiMsg := &SignedMessageAPI{
-			Signature: msg.Signature,
-			Signers:   msg.Signers,
-			Message:   msg.Message,
-		}
-
-		if msg.FullData != nil {
-			var cd types.ConsensusData
-			if err := cd.UnmarshalSSZ(msg.FullData); err != nil {
-				return nil, errors.Wrap(err, "failed to unmarshal consensus data")
-			}
-			apiMsg.FullData = &cd
-		}
-
-		apiMsgs = append(apiMsgs, apiMsg)
-	}
-
-	return apiMsgs, nil
+func DecidedAPIData(msgs ...*types.SignedSSVMessage) (interface{}, error) {
+	//if len(msgs) == 0 {
+	//	return nil, errors.New("no messages")
+	//}
+	//
+	//apiMsgs := make([]*SignedMessageAPI, 0)
+	//for _, msg := range msgs {
+	//	if msg == nil {
+	//		return nil, errors.New("nil message")
+	//	}
+	//
+	//	decMsg, err := specqbft.DecodeMessage(msg.SSVMessage.Data)
+	//	if err != nil {
+	//		return nil, err
+	//	}
+	//
+	//	apiMsg := &SignedMessageAPI{
+	//		Signature: decMsg.sog,
+	//		Signers:   decMsg.Signers,
+	//		Message:   msg.Message,
+	//	}
+	//
+	//	if msg.FullData != nil {
+	//		var cd types.ConsensusData
+	//		if err := cd.UnmarshalSSZ(msg.FullData); err != nil {
+	//			return nil, errors.Wrap(err, "failed to unmarshal consensus data")
+	//		}
+	//		apiMsg.FullData = &cd
+	//	}
+	//
+	//	apiMsgs = append(apiMsgs, apiMsg)
+	//}
+	//
+	//return apiMsgs, nil
+	return nil, nil
 }
 
 // MessageFilter is a criteria for query in request messages and projection in responses

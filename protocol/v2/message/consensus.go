@@ -8,7 +8,7 @@ import (
 )
 
 // Aggregate is a utility that helps to ensure sorted signers
-func Aggregate(signedMsg *specqbft.SignedMessage, s spectypes.MessageSignature) error {
+func Aggregate(signedMsg *spectypes.SignedSSVMessage, s spectypes.MessageSignature) error {
 	if err := signedMsg.Aggregate(s); err != nil {
 		return err
 	}

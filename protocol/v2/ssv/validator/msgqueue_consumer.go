@@ -122,7 +122,7 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 			// for the current height and round.
 			filter = func(m *queue.DecodedSSVMessage) bool {
 
-				sm, ok := m.Body.(*specqbft.SignedMessage)
+				sm, ok := m.Body.(*spectypes.SignedSSVMessage)
 				if !ok {
 					return true
 				}
@@ -166,7 +166,7 @@ func (v *Validator) logMsg(logger *zap.Logger, msg *queue.DecodedSSVMessage, log
 	baseFields := []zap.Field{}
 	switch msg.SSVMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
-		sm := msg.Body.(*specqbft.SignedMessage)
+		sm := msg.Body.(*spectypes.SignedSSVMessage)
 		baseFields = []zap.Field{
 			zap.Int64("msg_height", int64(sm.Message.Height)),
 			zap.Int64("msg_round", int64(sm.Message.Round)),

@@ -51,7 +51,7 @@ import (
 	"github.com/bloxapp/ssv/operator/slotticker"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
-	"github.com/bloxapp/ssv/operator/validatorsmap"
+	"github.com/bloxapp/ssv/operator/validators"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
@@ -209,7 +209,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.P2pNetworkConfig.FullNode = cfg.SSVOptions.ValidatorOptions.FullNode
 		cfg.P2pNetworkConfig.Network = networkConfig
 
-		validatorsMap := validatorsmap.New(cmd.Context())
+		validatorsMap := validators.New(cmd.Context())
 
 		dutyStore := dutystore.New()
 		cfg.SSVOptions.DutyStore = dutyStore

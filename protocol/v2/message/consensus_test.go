@@ -18,7 +18,7 @@ func TestAggregateSorting(t *testing.T) {
 
 	identifier := []byte("pk")
 
-	generateSignedMsg := func(operatorId spectypes.OperatorID) *specqbft.SignedMessage {
+	generateSignedMsg := func(operatorId spectypes.OperatorID) *spectypes.SignedSSVMessage {
 		return protocoltesting.SignMsg(t, secretKeys, []spectypes.OperatorID{operatorId}, &specqbft.Message{
 			MsgType:    specqbft.CommitMsgType,
 			Height:     0,

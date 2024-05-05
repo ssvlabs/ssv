@@ -3,6 +3,7 @@ package runner
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -17,14 +18,14 @@ type State struct {
 	PreConsensusContainer  *specssv.PartialSigContainer
 	PostConsensusContainer *specssv.PartialSigContainer
 	RunningInstance        *instance.Instance
-	DecidedValue           *spectypes.ConsensusData
+	DecidedValue           []byte //spectypes.Encoder
 	// CurrentDuty is the duty the node pulled locally from the beacon node, might be different from decided duty
-	StartingDuty *spectypes.Duty
+	StartingDuty spectypes.Duty
 	// flags
 	Finished bool // Finished marked true when there is a full successful cycle (pre, consensus and post) with quorum
 }
 
-func NewRunnerState(quorum uint64, duty *spectypes.Duty) *State {
+func NewRunnerState(quorum uint64, duty spectypes.Duty) *State {
 	return &State{
 		PreConsensusContainer:  specssv.NewPartialSigContainer(quorum),
 		PostConsensusContainer: specssv.NewPartialSigContainer(quorum),
@@ -35,7 +36,7 @@ func NewRunnerState(quorum uint64, duty *spectypes.Duty) *State {
 }
 
 // ReconstructBeaconSig aggregates collected partial beacon sigs
-func (pcs *State) ReconstructBeaconSig(container *specssv.PartialSigContainer, root [32]byte, validatorPubKey []byte) ([]byte, error) {
+func (pcs *State) ReconstructBeaconSig(container *specssv.PartialSigContainer, root [32]byte, validatorPubKey []byte, validatorIndex phase0.ValidatorIndex) ([]byte, error) {
 	// Reconstruct signatures
 	signature, err := types.ReconstructSignature(container, root, validatorPubKey)
 	if err != nil {

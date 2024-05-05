@@ -75,7 +75,7 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 		return 1
 	}
 	config.Network = net
-	config.ShareSigner = km
+	config.BeaconSigner = km
 	config.OperatorSigner = opSigner
 
 	contr := testing.NewTestingQBFTController(
@@ -215,8 +215,8 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 //	return v.DutyRunners[spectypes.BNRoleAttester]
 //}
 //
-//var DecidingMsgsForHeight = func(consensusData, msgIdentifier []byte, height specqbft.Height, keySet *spectestingutils.TestKeySet) []*specqbft.SignedMessage {
-//	msgs := make([]*specqbft.SignedMessage, 0)
+//var DecidingMsgsForHeight = func(consensusData, msgIdentifier []byte, height specqbft.Height, keySet *spectestingutils.TestKeySet) []*spectypes.SignedSSVMessage {
+//	msgs := make([]*spectypes.SignedSSVMessage, 0)
 //	for h := specqbft.FirstHeight; h <= height; h++ {
 //		msgs = append(msgs, spectestingutils.SignQBFTMsg(keySet.Shares[1], 1, &specqbft.Message{
 //			MsgType:    specqbft.ProposalMsgType,

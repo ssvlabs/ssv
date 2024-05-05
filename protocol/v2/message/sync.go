@@ -77,7 +77,7 @@ type SyncMessage struct {
 	// Params holds request parameters
 	Params *SyncParams
 	// Data holds the results
-	Data []*specqbft.SignedMessage
+	Data []*spectypes.SignedSSVMessage
 	// Status is the status code of the operation
 	Status StatusCode
 }
@@ -93,13 +93,13 @@ func (sm *SyncMessage) Decode(data []byte) error {
 }
 
 // UpdateResults updates the given sync message with results or potential error
-func (sm *SyncMessage) UpdateResults(err error, results ...*specqbft.SignedMessage) {
+func (sm *SyncMessage) UpdateResults(err error, results ...*spectypes.SignedSSVMessage) {
 	if err != nil {
 		sm.Status = StatusInternalError
 	} else if len(results) == 0 || results[0] == nil {
 		sm.Status = StatusNotFound
 	} else {
-		sm.Data = make([]*specqbft.SignedMessage, len(results))
+		sm.Data = make([]*spectypes.SignedSSVMessage, len(results))
 		copy(sm.Data, results)
 		nResults := len(sm.Data)
 		// updating params with the actual height of the messages

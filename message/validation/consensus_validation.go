@@ -19,7 +19,7 @@ import (
 
 func (mv *messageValidator) validateConsensusMessage(
 	share *ssvtypes.SSVShare,
-	signedMsg *specqbft.SignedMessage,
+	signedMsg *spectypes.SignedSSVMessage,
 	messageID spectypes.MessageID,
 	receivedAt time.Time,
 	signatureVerifier func() error,
@@ -151,7 +151,7 @@ func (mv *messageValidator) validateConsensusMessage(
 
 func (mv *messageValidator) validateJustifications(
 	share *ssvtypes.SSVShare,
-	signedMsg *specqbft.SignedMessage,
+	signedMsg *spectypes.SignedSSVMessage,
 ) error {
 	pj, err := signedMsg.Message.GetPrepareJustifications()
 	if err != nil {
@@ -205,7 +205,7 @@ func (mv *messageValidator) validateSignerBehaviorConsensus(
 	signer spectypes.OperatorID,
 	share *ssvtypes.SSVShare,
 	msgID spectypes.MessageID,
-	signedMsg *specqbft.SignedMessage,
+	signedMsg *spectypes.SignedSSVMessage,
 ) error {
 	signerState := state.GetSignerState(signer)
 
@@ -319,13 +319,13 @@ func (mv *messageValidator) validateBeaconDuty(
 	return nil
 }
 
-func (mv *messageValidator) hasFullData(signedMsg *specqbft.SignedMessage) bool {
+func (mv *messageValidator) hasFullData(signedMsg *spectypes.SignedSSVMessage) bool {
 	return (signedMsg.Message.MsgType == specqbft.ProposalMsgType ||
 		signedMsg.Message.MsgType == specqbft.RoundChangeMsgType ||
 		mv.isDecidedMessage(signedMsg)) && len(signedMsg.FullData) != 0 // TODO: more complex check of FullData
 }
 
-func (mv *messageValidator) isDecidedMessage(signedMsg *specqbft.SignedMessage) bool {
+func (mv *messageValidator) isDecidedMessage(signedMsg *spectypes.SignedSSVMessage) bool {
 	return signedMsg.Message.MsgType == specqbft.CommitMsgType && len(signedMsg.Signers) > 1
 }
 
@@ -387,7 +387,7 @@ func (mv *messageValidator) validQBFTMsgType(msgType specqbft.MessageType) bool 
 	return false
 }
 
-func (mv *messageValidator) validConsensusSigners(share *ssvtypes.SSVShare, m *specqbft.SignedMessage) error {
+func (mv *messageValidator) validConsensusSigners(share *ssvtypes.SSVShare, m *spectypes.SignedSSVMessage) error {
 	switch {
 	case len(m.Signers) == 0:
 		return ErrNoSigners

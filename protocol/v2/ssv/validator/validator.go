@@ -3,6 +3,7 @@ package validator
 import (
 	"context"
 	"fmt"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 	"sync"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -17,7 +18,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // Validator represents an SSV ETH consensus validator Share assigned, coordinates duty execution and more.
@@ -28,10 +28,12 @@ type Validator struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	DutyRunners       runner.DutyRunners
-	Network           specqbft.Network
+	DutyRunners runner.DutyRunners
+	Network     specqbft.Network
+
+	Operator          *spectypes.Operator
 	Share             *types.SSVShare
-	Signer            spectypes.KeyManager
+	Signer            spectypes.BeaconSigner
 	OperatorSigner    spectypes.OperatorSigner
 	SignatureVerifier spectypes.SignatureVerifier
 
@@ -39,7 +41,7 @@ type Validator struct {
 	Queues  map[spectypes.BeaconRole]queueContainer
 
 	// dutyIDs is a map for logging a unique ID for a given duty
-	dutyIDs *hashmap.Map[spectypes.BeaconRole, string]
+	dutyIDs *hashmap.Map[spectypes.RunnerRole, string]
 
 	state uint32
 
@@ -67,7 +69,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		SignatureVerifier: options.SignatureVerifier,
 		Queues:            make(map[spectypes.BeaconRole]queueContainer),
 		state:             uint32(NotStarted),
-		dutyIDs:           hashmap.New[spectypes.BeaconRole, string](),
+		dutyIDs:           hashmap.New[spectypes.RunnerRole, string](), // TODO: use beaconrole here?
 		messageValidator:  options.MessageValidator,
 	}
 
@@ -76,24 +78,27 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		dutyRunner.GetBaseRunner().TimeoutF = v.onTimeout
 
 		// Setup the queue.
-		role := dutyRunner.GetBaseRunner().BeaconRoleType
+		//role := dutyRunner.GetBaseRunner().RunnerRoleType
 
-		v.Queues[role] = queueContainer{
-			Q: queue.WithMetrics(queue.New(options.QueueSize), options.Metrics),
-			queueState: &queue.State{
-				HasRunningInstance: false,
-				Height:             0,
-				Slot:               0,
-				//Quorum:             options.SSVShare.Share,// TODO
-			},
-		}
+		//v.Queues[role] = queueContainer{
+		//	Q: queue.WithMetrics(queue.New(options.QueueSize), options.Metrics),
+		//	queueState: &queue.State{
+		//		HasRunningInstance: false,
+		//		Height:             0,
+		//		Slot:               0,
+		//		//Quorum:             options.SSVShare.Share,// TODO
+		//	},
+		//}
 	}
 
 	return v
 }
 
 // StartDuty starts a duty for the validator
-func (v *Validator) StartDuty(logger *zap.Logger, duty *spectypes.Duty) error {
+func (v *Validator) StartDuty(logger *zap.Logger, iduty spectypes.Duty) error {
+
+	duty := iduty.(*spectypes.BeaconDuty) // TODO: err handling
+
 	dutyRunner := v.DutyRunners[duty.Type]
 	if dutyRunner == nil {
 		return errors.Errorf("no runner for duty type %s", duty.Type.String())
@@ -101,8 +106,8 @@ func (v *Validator) StartDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 
 	// Log with duty ID.
 	baseRunner := dutyRunner.GetBaseRunner()
-	v.dutyIDs.Set(duty.Type, fields.FormatDutyID(baseRunner.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty))
-	logger = trySetDutyID(logger, v.dutyIDs, duty.Type)
+	v.dutyIDs.Set(spectypes.MapDutyToRunnerRole(duty.Type), fields.FormatDutyID(baseRunner.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty))
+	logger = trySetDutyID(logger, v.dutyIDs, spectypes.MapDutyToRunnerRole(duty.Type))
 
 	// Log with height.
 	if baseRunner.QBFTController != nil {
@@ -123,7 +128,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 		}
 
 		// Verify SignedSSVMessage's signature
-		if err := v.SignatureVerifier.Verify(msg.SignedSSVMessage, v.Share.Committee); err != nil {
+		if err := v.SignatureVerifier.Verify(msg.SignedSSVMessage, v.Operator.Committee); err != nil {
 			return errors.Wrap(err, "SignedSSVMessage has an invalid signature")
 		}
 	}
@@ -144,33 +149,45 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 	case spectypes.SSVConsensusMsgType:
 		logger = trySetDutyID(logger, v.dutyIDs, messageID.GetRoleType())
 
-		signedMsg, ok := msg.Body.(*specqbft.SignedMessage)
+		signedMsg, ok := msg.Body.(*spectypes.SignedSSVMessage)
 		if !ok {
 			return errors.New("could not decode consensus message from network message")
 		}
 
+		qbftMsg := &specqbft.Message{}
+		if err := qbftMsg.Decode(msg.GetData()); err != nil {
+			return errors.Wrap(err, "could not get consensus Message from network Message")
+		}
+
 		// Check signer consistency
-		if !signedMsg.CommonSigners([]spectypes.OperatorID{msg.GetOperatorID()}) {
+		if !signedMsg.CommonSigners([]spectypes.OperatorID{msg.OperatorIDs[0]}) { // todo: array check
 			return errors.New("SignedSSVMessage's signer not consistent with SignedMessage's signers")
 		}
 
-		logger = logger.With(fields.Height(signedMsg.Message.Height))
+		logger = logger.With(fields.Height(qbftMsg.Height))
 		// Process
 		return dutyRunner.ProcessConsensus(logger, signedMsg)
 	case spectypes.SSVPartialSignatureMsgType:
 		logger = trySetDutyID(logger, v.dutyIDs, messageID.GetRoleType())
 
-		signedMsg, ok := msg.Body.(*spectypes.SignedPartialSignatureMessage)
+		signedMsg, ok := msg.Body.(*spectypes.PartialSignatureMessages)
 		if !ok {
 			return errors.New("could not decode post consensus message from network message")
 		}
 
-		// Check signer consistency
-		if signedMsg.Signer != msg.GetOperatorID() {
-			return errors.New("SignedSSVMessage's signer not consistent with SignedPartialSignatureMessage's signer")
+		if len(msg.OperatorIDs) != 1 {
+			return errors.New("PartialSignatureMessage has more than 1 signer")
 		}
 
-		if signedMsg.Message.Type == spectypes.PostConsensusPartialSig {
+		if err := signedMsg.ValidateForSigner(msg.OperatorIDs[0]); err != nil {
+			return errors.Wrap(err, "invalid PartialSignatureMessages")
+		}
+		//// Check signer consistency
+		//if signedMsg.Signer != msg.GetOperatorID() {
+		//	return errors.New("SignedSSVMessage's signer not consistent with SignedPartialSignatureMessage's signer")
+		//}
+
+		if signedMsg.Type == spectypes.PostConsensusPartialSig {
 			return dutyRunner.ProcessPostConsensus(logger, signedMsg)
 		}
 		return dutyRunner.ProcessPreConsensus(logger, signedMsg)
@@ -193,7 +210,7 @@ func validateMessage(share spectypes.Share, msg *queue.DecodedSSVMessage) error 
 	return nil
 }
 
-func trySetDutyID(logger *zap.Logger, dutyIDs *hashmap.Map[spectypes.BeaconRole, string], role spectypes.BeaconRole) *zap.Logger {
+func trySetDutyID(logger *zap.Logger, dutyIDs *hashmap.Map[spectypes.RunnerRole, string], role spectypes.RunnerRole) *zap.Logger {
 	if dutyID, ok := dutyIDs.Get(role); ok {
 		return logger.With(fields.DutyID(dutyID))
 	}

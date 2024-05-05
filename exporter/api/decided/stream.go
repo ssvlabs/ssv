@@ -19,7 +19,7 @@ import (
 func NewStreamPublisher(logger *zap.Logger, ws api.WebSocketServer) controller.NewDecidedHandler {
 	c := cache.New(time.Minute, time.Minute*3/2)
 	feed := ws.BroadcastFeed()
-	return func(msg *specqbft.SignedMessage) {
+	return func(msg *spectypes.SignedSSVMessage) {
 		identifier := hex.EncodeToString(msg.Message.Identifier)
 		key := fmt.Sprintf("%s:%d:%d", identifier, msg.Message.Height, len(msg.Signers))
 		_, ok := c.Get(key)

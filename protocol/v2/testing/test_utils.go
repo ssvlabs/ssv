@@ -105,7 +105,7 @@ func signMessage(msg *specqbft.Message, sk *bls.SecretKey) (*bls.Sign, error) {
 }
 
 // MultiSignMsg signs a msg with multiple signers
-func MultiSignMsg(sks map[spectypes.OperatorID]*bls.SecretKey, signers []spectypes.OperatorID, msg *specqbft.Message) (*specqbft.SignedMessage, error) {
+func MultiSignMsg(sks map[spectypes.OperatorID]*bls.SecretKey, signers []spectypes.OperatorID, msg *specqbft.Message) (*spectypes.SignedSSVMessage, error) {
 	_ = bls.Init(bls.BLS12_381)
 
 	var operators = make([]spectypes.OperatorID, 0)
@@ -131,14 +131,14 @@ func MultiSignMsg(sks map[spectypes.OperatorID]*bls.SecretKey, signers []spectyp
 }
 
 // SignMsg handle MultiSignMsg error and return just specqbft.SignedMessage
-func SignMsg(t *testing.T, sks map[spectypes.OperatorID]*bls.SecretKey, signers []spectypes.OperatorID, msg *specqbft.Message) *specqbft.SignedMessage {
+func SignMsg(t *testing.T, sks map[spectypes.OperatorID]*bls.SecretKey, signers []spectypes.OperatorID, msg *specqbft.Message) *spectypes.SignedSSVMessage {
 	res, err := MultiSignMsg(sks, signers, msg)
 	require.NoError(t, err)
 	return res
 }
 
 // AggregateSign sign specqbft.Message and then aggregate
-func AggregateSign(t *testing.T, sks map[spectypes.OperatorID]*bls.SecretKey, signers []spectypes.OperatorID, consensusMessage *specqbft.Message) *specqbft.SignedMessage {
+func AggregateSign(t *testing.T, sks map[spectypes.OperatorID]*bls.SecretKey, signers []spectypes.OperatorID, consensusMessage *specqbft.Message) *spectypes.SignedSSVMessage {
 	signedMsg := SignMsg(t, sks, signers, consensusMessage)
 	// TODO: use SignMsg instead of AggregateSign
 	// require.NoError(t, sigSignMsgnedMsg.Aggregate(signedMsg))
@@ -146,7 +146,7 @@ func AggregateSign(t *testing.T, sks map[spectypes.OperatorID]*bls.SecretKey, si
 }
 
 // AggregateInvalidSign sign specqbft.Message and then change the signer id to mock invalid sig
-func AggregateInvalidSign(t *testing.T, sks map[spectypes.OperatorID]*bls.SecretKey, consensusMessage *specqbft.Message) *specqbft.SignedMessage {
+func AggregateInvalidSign(t *testing.T, sks map[spectypes.OperatorID]*bls.SecretKey, consensusMessage *specqbft.Message) *spectypes.SignedSSVMessage {
 	sigend := SignMsg(t, sks, []spectypes.OperatorID{1}, consensusMessage)
 	sigend.Signers = []spectypes.OperatorID{2}
 	return sigend

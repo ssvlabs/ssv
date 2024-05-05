@@ -473,7 +473,7 @@ func (mv *messageValidator) validateSSVMessage(msg *queue.DecodedSSVMessage, rec
 				return nil, descriptor, e
 			}
 
-			signedMessage := msg.Body.(*specqbft.SignedMessage)
+			signedMessage := msg.Body.(*spectypes.SignedSSVMessage)
 			consensusDescriptor, slot, err := mv.validateConsensusMessage(share, signedMessage, msg.GetID(), receivedAt, signatureVerifier)
 			descriptor.Consensus = &consensusDescriptor
 			descriptor.Slot = slot

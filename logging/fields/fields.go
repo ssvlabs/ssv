@@ -321,11 +321,11 @@ func BuilderProposals(v bool) zap.Field {
 	return zap.Bool(FieldBuilderProposals, v)
 }
 
-func FormatDutyID(epoch phase0.Epoch, duty *spectypes.Duty) string {
+func FormatDutyID(epoch phase0.Epoch, duty *spectypes.BeaconDuty) string {
 	return fmt.Sprintf("%v-e%v-s%v-v%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
 }
 
-func Duties(epoch phase0.Epoch, duties []*spectypes.Duty) zap.Field {
+func Duties(epoch phase0.Epoch, duties []*spectypes.BeaconDuty) zap.Field {
 	var b strings.Builder
 	for i, duty := range duties {
 		if i > 0 {

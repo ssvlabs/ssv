@@ -29,7 +29,7 @@ import (
 	"github.com/bloxapp/ssv/operator/duties"
 	"github.com/bloxapp/ssv/operator/keys"
 	nodestorage "github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/operator/validatorsmap"
+	"github.com/bloxapp/ssv/operator/validators"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
@@ -81,7 +81,7 @@ type ControllerOptions struct {
 	StorageMap                 *storage.QBFTStores
 	Metrics                    validator.Metrics
 	MessageValidator           validation.MessageValidator
-	ValidatorsMap              *validatorsmap.ValidatorsMap
+	ValidatorsMap              *validators.ValidatorsMap
 
 	// worker flags
 	WorkersCount    int `yaml:"MsgWorkersCount" env:"MSG_WORKERS_COUNT" env-default:"256" env-description:"Number of goroutines to use for message workers"`
@@ -160,7 +160,7 @@ type controller struct {
 	operatorDataStore operatordatastore.OperatorDataStore
 
 	validatorOptions        validator.Options
-	validatorsMap           *validatorsmap.ValidatorsMap
+	validatorsMap           *validators.ValidatorsMap
 	validatorStartFunc      func(validator *validator.Validator) (bool, error)
 	committeeValidatorSetup chan struct{}
 
@@ -335,7 +335,7 @@ func (c *controller) handleRouterMessages() {
 
 			pk := msg.GetID().GetPubKey()
 			hexPK := hex.EncodeToString(pk)
-			if v, ok := c.validatorsMap.GetValidator(hexPK); ok {
+			if v, ok := c.validatorsMap.Get(hexPK); ok {
 				v.HandleMessage(c.logger, msg)
 			} else if c.validatorOptions.Exporter {
 				if msg.MsgType != spectypes.SSVConsensusMsgType {
@@ -572,7 +572,7 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 	}
 
 	// Start validator (if not already started).
-	if v, found := c.validatorsMap.GetValidator(pk); found {
+	if v, found := c.validatorsMap.Get(pk); found {
 		v.Share.BeaconMetadata = metadata
 		_, err := c.startValidator(v)
 		if err != nil {
@@ -594,7 +594,7 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 
 // GetValidator returns a validator instance from ValidatorsMap
 func (c *controller) GetValidator(pubKey string) (*validator.Validator, bool) {
-	return c.validatorsMap.GetValidator(pubKey)
+	return c.validatorsMap.Get(pubKey)
 }
 
 func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty) {
@@ -698,7 +698,7 @@ func (c *controller) onMetadataUpdated(pk string, meta *beaconprotocol.Validator
 // onShareStop is called when a validator was removed or liquidated
 func (c *controller) onShareStop(pubKey spectypes.ValidatorPK) {
 	// remove from ValidatorsMap
-	v := c.validatorsMap.RemoveValidator(hex.EncodeToString(pubKey))
+	v := c.validatorsMap.Remove(hex.EncodeToString(pubKey))
 
 	// stop instance
 	if v != nil {
@@ -717,7 +717,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 	}
 
 	// Start a committee validator.
-	v, found := c.validatorsMap.GetValidator(hex.EncodeToString(share.ValidatorPubKey))
+	v, found := c.validatorsMap.Get(hex.EncodeToString(share.ValidatorPubKey))
 	if !found {
 		if !share.HasBeaconMetadata() {
 			return nil, fmt.Errorf("beacon metadata is missing")
@@ -732,7 +732,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 		opts.DutyRunners = SetupRunners(ctx, c.logger, opts)
 
 		v = validator.NewValidator(ctx, cancel, opts)
-		c.validatorsMap.CreateValidator(hex.EncodeToString(share.ValidatorPubKey), v)
+		c.validatorsMap.Create(hex.EncodeToString(share.ValidatorPubKey), v)
 
 		c.printShare(share, "setup validator done")
 
@@ -884,7 +884,7 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 	domainType := ssvtypes.GetDefaultDomain()
 	buildController := func(role spectypes.BeaconRole, valueCheckF specqbft.ProposedValueCheckF) *qbftcontroller.Controller {
 		config := &qbft.Config{
-			ShareSigner:    options.Signer,
+			BeaconSigner:   options.Signer,
 			OperatorSigner: options.OperatorSigner,
 			SigningPK:      options.SSVShare.ValidatorPubKey, // TODO right val?
 			Domain:         domainType,

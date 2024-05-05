@@ -117,7 +117,7 @@ func (mr *MockControllerMockRecorder) GetOperatorShares() *gomock.Call {
 // GetValidator mocks base method.
 func (m *MockController) GetValidator(pubKey string) (*validator.Validator, bool) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetValidator", pubKey)
+	ret := m.ctrl.Call(m, "Get", pubKey)
 	ret0, _ := ret[0].(*validator.Validator)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
@@ -126,7 +126,7 @@ func (m *MockController) GetValidator(pubKey string) (*validator.Validator, bool
 // GetValidator indicates an expected call of GetValidator.
 func (mr *MockControllerMockRecorder) GetValidator(pubKey interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidator", reflect.TypeOf((*MockController)(nil).GetValidator), pubKey)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockController)(nil).GetValidator), pubKey)
 }
 
 // GetValidatorStats mocks base method.

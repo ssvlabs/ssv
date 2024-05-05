@@ -10,7 +10,7 @@ import (
 )
 
 // correctQBFTState returns true if QBFT controller state requires pre-consensus justification
-func (b *BaseRunner) correctQBFTState(logger *zap.Logger, msg *specqbft.SignedMessage) bool {
+func (b *BaseRunner) correctQBFTState(logger *zap.Logger, msg *spectypes.SignedSSVMessage) bool {
 	inst := b.QBFTController.InstanceForHeight(logger, b.QBFTController.Height)
 	decidedInstance := inst != nil && inst.State != nil && inst.State.Decided
 
@@ -24,7 +24,7 @@ func (b *BaseRunner) correctQBFTState(logger *zap.Logger, msg *specqbft.SignedMe
 }
 
 // shouldProcessingJustificationsForHeight returns true if pre-consensus justification should be processed, false otherwise
-func (b *BaseRunner) shouldProcessingJustificationsForHeight(logger *zap.Logger, msg *specqbft.SignedMessage) bool {
+func (b *BaseRunner) shouldProcessingJustificationsForHeight(logger *zap.Logger, msg *spectypes.SignedSSVMessage) bool {
 	correctMsgTYpe := msg.Message.MsgType == specqbft.ProposalMsgType || msg.Message.MsgType == specqbft.RoundChangeMsgType
 	correctBeaconRole := b.BeaconRoleType == spectypes.BNRoleProposer || b.BeaconRoleType == spectypes.BNRoleAggregator || b.BeaconRoleType == spectypes.BNRoleSyncCommitteeContribution
 	return b.correctQBFTState(logger, msg) && correctMsgTYpe && correctBeaconRole
@@ -123,7 +123,7 @@ func (b *BaseRunner) validatePreConsensusJustifications(data *spectypes.Consensu
 5) add pre-consensus sigs to container
 6) decided on duty
 */
-func (b *BaseRunner) processPreConsensusJustification(logger *zap.Logger, runner Runner, highestDecidedDutySlot phase0.Slot, msg *specqbft.SignedMessage) error {
+func (b *BaseRunner) processPreConsensusJustification(logger *zap.Logger, runner Runner, highestDecidedDutySlot phase0.Slot, msg *spectypes.SignedSSVMessage) error {
 	if !b.shouldProcessingJustificationsForHeight(logger, msg) {
 		return nil
 	}

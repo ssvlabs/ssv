@@ -35,7 +35,7 @@ func (c *MessageCounts) String() string {
 
 // ValidateConsensusMessage checks if the provided consensus message exceeds the set limits.
 // Returns an error if the message type exceeds its respective count limit.
-func (c *MessageCounts) ValidateConsensusMessage(msg *specqbft.SignedMessage, limits MessageCounts) error {
+func (c *MessageCounts) ValidateConsensusMessage(msg *spectypes.SignedSSVMessage, limits MessageCounts) error {
 	switch msg.Message.MsgType {
 	case specqbft.ProposalMsgType:
 		if c.Proposal >= limits.Proposal {
@@ -101,7 +101,7 @@ func (c *MessageCounts) ValidatePartialSignatureMessage(m *spectypes.SignedParti
 }
 
 // RecordConsensusMessage updates the counts based on the provided consensus message type.
-func (c *MessageCounts) RecordConsensusMessage(msg *specqbft.SignedMessage) {
+func (c *MessageCounts) RecordConsensusMessage(msg *spectypes.SignedSSVMessage) {
 	switch msg.Message.MsgType {
 	case specqbft.ProposalMsgType:
 		c.Proposal++

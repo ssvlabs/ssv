@@ -64,7 +64,7 @@ type SyncResults []SyncResult
 func (s SyncResults) String() string {
 	var v []string
 	for _, m := range s {
-		var sm *specqbft.SignedMessage
+		var sm *spectypes.SignedSSVMessage
 		if m.Msg.MsgType == spectypes.SSVConsensusMsgType {
 			sm = &specqbft.SignedMessage{}
 			if err := sm.Decode(m.Msg.Data); err != nil {
@@ -87,7 +87,7 @@ func (s SyncResults) String() string {
 	return strings.Join(v, ", ")
 }
 
-func (results SyncResults) ForEachSignedMessage(iterator func(message *specqbft.SignedMessage) (stop bool)) {
+func (results SyncResults) ForEachSignedMessage(iterator func(message *spectypes.SignedSSVMessage) (stop bool)) {
 	for _, res := range results {
 		if res.Msg == nil {
 			continue

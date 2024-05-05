@@ -11,7 +11,7 @@ import (
 // StoredInstance contains instance state alongside with a decided message (aggregated commits).
 type StoredInstance struct {
 	State          *specqbft.State
-	DecidedMessage *specqbft.SignedMessage
+	DecidedMessage *spectypes.SignedSSVMessage
 }
 
 // Encode returns a StoredInstance encoded bytes or error.

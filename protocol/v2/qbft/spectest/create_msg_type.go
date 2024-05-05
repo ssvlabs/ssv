@@ -12,7 +12,7 @@ import (
 )
 
 func RunCreateMsg(t *testing.T, test *spectests.CreateMsgSpecTest) {
-	var msg *specqbft.SignedMessage
+	var msg *spectypes.SignedSSVMessage
 	var err error
 	switch test.CreateType {
 	case spectests.CreateProposal:
@@ -42,7 +42,7 @@ func RunCreateMsg(t *testing.T, test *spectests.CreateMsgSpecTest) {
 	require.EqualValues(t, test.ExpectedRoot, hex.EncodeToString(r[:]))
 }
 
-func createCommit(test *spectests.CreateMsgSpecTest) (*specqbft.SignedMessage, error) {
+func createCommit(test *spectests.CreateMsgSpecTest) (*spectypes.SignedSSVMessage, error) {
 	ks := testingutils.Testing4SharesSet()
 	state := &specqbft.State{
 		Share: testingutils.TestingShare(ks),
@@ -53,7 +53,7 @@ func createCommit(test *spectests.CreateMsgSpecTest) (*specqbft.SignedMessage, e
 	return specqbft.CreateCommit(state, config, test.Value)
 }
 
-func createPrepare(test *spectests.CreateMsgSpecTest) (*specqbft.SignedMessage, error) {
+func createPrepare(test *spectests.CreateMsgSpecTest) (*spectypes.SignedSSVMessage, error) {
 	ks := testingutils.Testing4SharesSet()
 	state := &specqbft.State{
 		Share: testingutils.TestingShare(ks),
@@ -64,7 +64,7 @@ func createPrepare(test *spectests.CreateMsgSpecTest) (*specqbft.SignedMessage, 
 	return specqbft.CreatePrepare(state, config, test.Round, test.Value)
 }
 
-func createProposal(test *spectests.CreateMsgSpecTest) (*specqbft.SignedMessage, error) {
+func createProposal(test *spectests.CreateMsgSpecTest) (*spectypes.SignedSSVMessage, error) {
 	ks := testingutils.Testing4SharesSet()
 	state := &specqbft.State{
 		Share: testingutils.TestingShare(ks),
@@ -75,7 +75,7 @@ func createProposal(test *spectests.CreateMsgSpecTest) (*specqbft.SignedMessage,
 	return specqbft.CreateProposal(state, config, test.Value[:], test.RoundChangeJustifications, test.PrepareJustifications)
 }
 
-func createRoundChange(test *spectests.CreateMsgSpecTest) (*specqbft.SignedMessage, error) {
+func createRoundChange(test *spectests.CreateMsgSpecTest) (*spectypes.SignedSSVMessage, error) {
 	ks := testingutils.Testing4SharesSet()
 	state := &specqbft.State{
 		Share:            testingutils.TestingShare(ks),

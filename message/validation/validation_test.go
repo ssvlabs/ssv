@@ -1607,7 +1607,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		msg := spectestingutils.TestingProposalMessageWithParams(
 			ks.Shares[1], spectypes.OperatorID(1), specqbft.FirstRound, specqbft.FirstHeight, spectestingutils.TestingQBFTRootData,
 			nil,
-			spectestingutils.MarshalJustifications([]*specqbft.SignedMessage{
+			spectestingutils.MarshalJustifications([]*spectypes.SignedSSVMessage{
 				spectestingutils.TestingRoundChangeMessage(ks.Shares[1], spectypes.OperatorID(1)),
 			}))
 		msg.Message.MsgType = specqbft.PrepareMsgType
@@ -1640,7 +1640,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		msg := spectestingutils.TestingProposalMessageWithParams(
 			ks.Shares[1], spectypes.OperatorID(1), specqbft.FirstRound, specqbft.FirstHeight, spectestingutils.TestingQBFTRootData,
-			spectestingutils.MarshalJustifications([]*specqbft.SignedMessage{
+			spectestingutils.MarshalJustifications([]*spectypes.SignedSSVMessage{
 				spectestingutils.TestingPrepareMessage(ks.Shares[1], spectypes.OperatorID(1)),
 			}),
 			nil,

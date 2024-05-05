@@ -13,7 +13,7 @@ import (
 	"github.com/bloxapp/ssv/eth/simulator"
 	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/keys"
-	"github.com/bloxapp/ssv/operator/validatorsmap"
+	"github.com/bloxapp/ssv/operator/validators"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/ethereum/go-ethereum/core/types"
 
@@ -172,7 +172,7 @@ func setupEventHandler(
 		DB:                db,
 		RegistryStorage:   nodeStorage,
 		OperatorDataStore: operatorDataStore,
-		ValidatorsMap:     validatorsmap.New(ctx),
+		ValidatorsMap:     validators.New(ctx),
 	})
 
 	contractFilterer, err := contract.NewContractFilterer(ethcommon.Address{}, nil)

@@ -35,7 +35,7 @@ import (
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/operator/validatorsmap"
+	"github.com/bloxapp/ssv/operator/validators"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 
@@ -63,7 +63,7 @@ type MockControllerOptions struct {
 	keyManager          spectypes.KeyManager
 	metadataLastUpdated map[string]time.Time
 	StorageMap          *ibftstorage.QBFTStores
-	validatorsMap       *validatorsmap.ValidatorsMap
+	validatorsMap       *validators.ValidatorsMap
 	operatorDataStore   operatordatastore.OperatorDataStore
 }
 
@@ -180,7 +180,7 @@ func TestSetupNonCommitteeValidators(t *testing.T) {
 			testValidatorsMap := map[string]*validator.Validator{
 				secretKey.GetPublicKey().SerializeToHexStr(): firstValidator,
 			}
-			mockValidatorsMap := validatorsmap.New(context.TODO(), validatorsmap.WithInitialState(testValidatorsMap))
+			mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap))
 
 			if tc.shareStorageListResponse == nil {
 				sharesStorage.EXPECT().List(gomock.Any(), gomock.Any()).Return(tc.shareStorageListResponse).Times(1)
@@ -215,7 +215,7 @@ func TestSetupNonCommitteeValidators(t *testing.T) {
 
 func TestHandleNonCommitteeMessages(t *testing.T) {
 	logger := logging.TestLogger(t)
-	mockValidatorsMap := validatorsmap.New(context.TODO())
+	mockValidatorsMap := validators.New(context.TODO())
 	controllerOptions := MockControllerOptions{
 		validatorsMap: mockValidatorsMap,
 	}
@@ -354,7 +354,7 @@ func TestUpdateValidatorMetadata(t *testing.T) {
 			testValidatorsMap := map[string]*validator.Validator{
 				firstValidatorPublicKey: firstValidator,
 			}
-			mockValidatorsMap := validatorsmap.New(context.TODO(), validatorsmap.WithInitialState(testValidatorsMap))
+			mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap))
 
 			// Assuming controllerOptions is set up correctly
 			controllerOptions := MockControllerOptions{
@@ -613,7 +613,7 @@ func TestSetupValidators(t *testing.T) {
 			testValidatorsMap := map[string]*validator.Validator{
 				"0": testValidator,
 			}
-			mockValidatorsMap := validatorsmap.New(context.TODO(), validatorsmap.WithInitialState(testValidatorsMap))
+			mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap))
 
 			// Set up the controller with mock data
 			controllerOptions := MockControllerOptions{
@@ -658,7 +658,7 @@ func TestGetValidator(t *testing.T) {
 	testValidatorsMap := map[string]*validator.Validator{
 		"0": testValidator,
 	}
-	mockValidatorsMap := validatorsmap.New(context.TODO(), validatorsmap.WithInitialState(testValidatorsMap))
+	mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap))
 	// Set up the controller with mock data
 	controllerOptions := MockControllerOptions{
 		validatorsMap: mockValidatorsMap,
@@ -726,7 +726,7 @@ func TestGetValidatorStats(t *testing.T) {
 		// Set up the controller with mock data for this subtest
 		controllerOptions := MockControllerOptions{
 			sharesStorage:     sharesStorage,
-			validatorsMap:     validatorsmap.New(context.TODO()),
+			validatorsMap:     validators.New(context.TODO()),
 			operatorDataStore: operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")),
 			beacon:            bc,
 		}
@@ -776,7 +776,7 @@ func TestGetValidatorStats(t *testing.T) {
 		// Set up the controller with mock data for this subtest
 		controllerOptions := MockControllerOptions{
 			sharesStorage:     sharesStorage,
-			validatorsMap:     validatorsmap.New(context.TODO()),
+			validatorsMap:     validators.New(context.TODO()),
 			operatorDataStore: operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")),
 			beacon:            bc,
 		}
@@ -814,7 +814,7 @@ func TestGetValidatorStats(t *testing.T) {
 		// Set up the controller with mock data for this subtest
 		controllerOptions := MockControllerOptions{
 			sharesStorage:     sharesStorage,
-			validatorsMap:     validatorsmap.New(context.TODO()),
+			validatorsMap:     validators.New(context.TODO()),
 			operatorDataStore: operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")),
 			beacon:            bc,
 		}
@@ -874,7 +874,7 @@ func TestGetValidatorStats(t *testing.T) {
 		// Set up the controller with mock data for this subtest
 		controllerOptions := MockControllerOptions{
 			sharesStorage:     sharesStorage,
-			validatorsMap:     validatorsmap.New(context.TODO()),
+			validatorsMap:     validators.New(context.TODO()),
 			operatorDataStore: operatordatastore.New(buildOperatorData(1, "67Ce5c69260bd819B4e0AD13f4b873074D479811")),
 			beacon:            bc,
 		}
@@ -904,7 +904,7 @@ func TestUpdateFeeRecipient(t *testing.T) {
 		testValidatorsMap := map[string]*validator.Validator{
 			"0": testValidator,
 		}
-		mockValidatorsMap := validatorsmap.New(context.TODO(), validatorsmap.WithInitialState(testValidatorsMap))
+		mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap))
 
 		controllerOptions := MockControllerOptions{validatorsMap: mockValidatorsMap}
 		ctr := setupController(logger, controllerOptions)
@@ -921,7 +921,7 @@ func TestUpdateFeeRecipient(t *testing.T) {
 		testValidatorsMap := map[string]*validator.Validator{
 			"0": testValidator,
 		}
-		mockValidatorsMap := validatorsmap.New(context.TODO(), validatorsmap.WithInitialState(testValidatorsMap))
+		mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap))
 		controllerOptions := MockControllerOptions{validatorsMap: mockValidatorsMap}
 		ctr := setupController(logger, controllerOptions)
 
@@ -1000,7 +1000,7 @@ func TestGetIndices(t *testing.T) {
 			ActivationEpoch: phase0.Epoch(100),
 		}),
 	}
-	mockValidatorsMap := validatorsmap.New(context.TODO(), validatorsmap.WithInitialState(testValidatorsMap))
+	mockValidatorsMap := validators.New(context.TODO(), validators.WithInitialState(testValidatorsMap))
 	logger := logging.TestLogger(t)
 	controllerOptions := MockControllerOptions{
 		validatorsMap: mockValidatorsMap,

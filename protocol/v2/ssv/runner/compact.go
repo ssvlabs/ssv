@@ -1,18 +1,22 @@
 package runner
 
 import (
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 )
 
 // Compacts the given message's associated instance if it's either...
 //   - Got a decided: to discard messages that are no longer needed. (proposes, prepares and sometimes commits)
 //   - Advanced a round: to discard messages from previous rounds. (otherwise it might grow indefinitely)
-func (b *BaseRunner) compactInstanceIfNeeded(msg *specqbft.SignedMessage) {
-	if inst := b.QBFTController.StoredInstances.FindInstance(msg.Message.Height); inst != nil {
-		if controller.IsDecidedMsg(b.Share, msg) || msg.Message.MsgType == specqbft.RoundChangeMsgType {
-			instance.Compact(inst.State, msg)
-		}
-	}
+func (b *BaseRunner) compactInstanceIfNeeded(signedMsg *spectypes.SignedSSVMessage) {
+	//
+	//msg, err := specqbft.DecodeMessage(signedMsg.SSVMessage.Data)
+	//if err != nil {
+	//
+	//}
+	//
+	////if inst := b.QBFTController.StoredInstances.FindInstance(msg.Height); inst != nil {
+	////	if controller.IsDecidedMsg(b.Share[signedMsg.OperatorIDs.], msg) || msg.MsgType == specqbft.RoundChangeMsgType {
+	////		instance.Compact(inst.State, msg)
+	////	}
+	////}
 }

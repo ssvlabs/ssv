@@ -11,7 +11,7 @@ import (
 var compactTests = []struct {
 	name       string
 	inputState *specqbft.State
-	inputMsg   *specqbft.SignedMessage
+	inputMsg   *spectypes.SignedSSVMessage
 	expected   *specqbft.State // if nil, expected to be equal to input
 }{
 	{
