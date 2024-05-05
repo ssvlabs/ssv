@@ -38,7 +38,7 @@ func NewRunnerState(quorum uint64, duty spectypes.Duty) *State {
 // ReconstructBeaconSig aggregates collected partial beacon sigs
 func (pcs *State) ReconstructBeaconSig(container *specssv.PartialSigContainer, root [32]byte, validatorPubKey []byte, validatorIndex phase0.ValidatorIndex) ([]byte, error) {
 	// Reconstruct signatures
-	signature, err := types.ReconstructSignature(container, root, validatorPubKey)
+	signature, err := types.ReconstructSignature(container, root, validatorPubKey[:], validatorIndex)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not reconstruct beacon sig")
 	}
