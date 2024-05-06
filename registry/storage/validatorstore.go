@@ -24,6 +24,8 @@ type ValidatorStore interface {
 	ParticipatingCommittees(epoch phase0.Epoch) []*Committee
 	OperatorCommittees(id spectypes.OperatorID) []*Committee
 
+	WithOperatorID(operatorID func() spectypes.OperatorID) SelfValidatorStore
+
 	// TODO: save recipient address
 }
 

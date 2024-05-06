@@ -3,6 +3,7 @@ package operator
 import (
 	"context"
 	"fmt"
+
 	storage2 "github.com/bloxapp/ssv/registry/storage"
 
 	"github.com/bloxapp/ssv/network"
@@ -101,7 +102,7 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 			BeaconNode:           opts.BeaconNode,
 			ExecutionClient:      opts.ExecutionClient,
 			Network:              opts.Network,
-			ValidatorProvider:    opts.ValidatorStore,
+			ValidatorProvider:    opts.ValidatorStore.WithOperatorID(opts.ValidatorOptions.OperatorDataStore.GetOperatorID),
 			IndicesChg:           opts.ValidatorController.IndicesChangeChan(),
 			ValidatorExitCh:      opts.ValidatorController.ValidatorExitChan(),
 			ExecuteDuty:          opts.ValidatorController.ExecuteDuty,
