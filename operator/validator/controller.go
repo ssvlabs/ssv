@@ -335,10 +335,16 @@ func (c *controller) handleRouterMessages() {
 				continue
 			}
 
+			// TODO: only try copying clusterid if validator failed
 			pk := msg.GetID().GetSenderID()
 			hexPK := hex.EncodeToString(pk)
+			var cid spectypes.ClusterID
+			copy(cid[:], pk)
+
 			if v, ok := c.validatorsMap.GetValidator(hexPK); ok {
 				v.HandleMessage(c.logger, msg)
+			} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
+				vc.HandleMessage(c.logger, msg)
 			} else if c.validatorOptions.Exporter {
 				if msg.MsgType != spectypes.SSVConsensusMsgType {
 					continue // not supporting other types
@@ -655,7 +661,7 @@ func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.BeaconDuty)
 }
 
 func (c *controller) ExecuteCommitteeDuty(logger *zap.Logger, committeeID spectypes.ClusterID, duty *spectypes.CommitteeDuty) {
-	if cm, ok := c.GetCommittee(committeeID); ok {
+	if cm, ok := c.validatorsMap.GetCommittee(committeeID); ok {
 		ssvMsg, err := CreateCommitteeDutyExecuteMsg(duty, committeeID, types.GetDefaultDomain())
 		if err != nil {
 			logger.Error("could not create duty execute msg", zap.Error(err))
@@ -666,9 +672,12 @@ func (c *controller) ExecuteCommitteeDuty(logger *zap.Logger, committeeID specty
 			logger.Error("could not decode duty execute msg", zap.Error(err))
 			return
 		}
-		if pushed := cm.Queues[duty.Slot].Q.TryPush(dec); !pushed {
-			logger.Warn("dropping ExecuteDuty message because the queue is full")
+		slot, err := dec.Slot()
+		if err != nil {
+			logger.Error("could not get slot from message", zap.Error(err))
+			return
 		}
+		cm.PushToQueue(slot, dec)
 		// logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
 	} else {
 		logger.Warn("could not find committee", fields.CommitteeID(committeeID))

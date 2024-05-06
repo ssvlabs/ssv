@@ -7,6 +7,7 @@ import (
 	"github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/ibft/storage"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -20,9 +21,10 @@ type Committee struct {
 	mtx     sync.RWMutex
 	Storage *storage.QBFTStores
 
-	Queues map[spectypes.RunnerRole]queueContainer
+	Queues map[phase0.Slot]queueContainer
 
-	Runners map[phase0.Slot]*runner.CommitteeRunner
+	runnersMtx sync.RWMutex
+	Runners    map[phase0.Slot]*runner.CommitteeRunner
 
 	sharesMtx sync.RWMutex
 	Shares    map[phase0.ValidatorIndex]*spectypes.Share
@@ -50,27 +52,51 @@ func NewCommittee(
 }
 
 func (c *Committee) AddShare(share *spectypes.Share) {
-	c.sharesMtx.Lock()
-	defer c.sharesMtx.Unlock()
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
 	c.Shares[share.ValidatorIndex] = share
 }
 
 func (c *Committee) RemoveShare(validatorIndex phase0.ValidatorIndex) {
-	c.sharesMtx.Lock()
-	defer c.sharesMtx.Unlock()
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
 	delete(c.Shares, validatorIndex)
 }
 
 // StartDuty starts a new duty for the given slot
 func (c *Committee) StartDuty(duty *spectypes.CommitteeDuty) error {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+	// TODO alan : lock per slot?
+
 	if _, exists := c.Runners[duty.Slot]; exists {
 		return errors.New(fmt.Sprintf("CommitteeRunner for slot %d already exists", duty.Slot))
 	}
 	//todo: mtx to get shares copy
-	//c.mtx.RLock()
-	//shares := c.sh\z
-	//c.mtx.RUnlock()
-	c.Runners[duty.Slot] = c.CreateRunnerFn(duty.Slot, c.Shares)
+	var sharesCopy = make(map[phase0.ValidatorIndex]*spectypes.Share, len(c.Shares))
+	for k, v := range c.Shares {
+		sharesCopy[k] = v
+	}
+
+	r := c.CreateRunnerFn(duty.Slot, sharesCopy)
+	// Set timeout function.
+	r.GetBaseRunner().TimeoutF = c.onTimeout
+
+	c.Runners[duty.Slot] = r
+
+	c.Queues[duty.Slot] = queueContainer{
+		Q: queue.WithMetrics(queue.New(1000), nil), // TODO alan: get queue opts from options
+		queueState: &queue.State{
+			HasRunningInstance: false,
+			Height:             qbft.Height(duty.Slot),
+			Slot:               0,
+			//Quorum:             options.SSVShare.Share,// TODO
+		},
+	}
+
+	// TODO alan: stop queue
+	go c.ConsumeQueue(c.logger, duty.Slot, c.ProcessMessage)
+
 	var validatorToStopMap map[phase0.Slot]spectypes.ValidatorPK
 	// Filter old duties based on highest attesting slot
 	duty, validatorToStopMap, c.HighestAttestingSlotMap = FilterCommitteeDuty(duty, c.HighestAttestingSlotMap)
@@ -80,6 +106,7 @@ func (c *Committee) StartDuty(duty *spectypes.CommitteeDuty) error {
 	return c.Runners[duty.Slot].StartNewDuty(c.logger, duty)
 }
 
+// NOT threadsafe
 func (c *Committee) stopDuties(validatorToStopMap map[phase0.Slot]spectypes.ValidatorPK) {
 	for slot, validator := range validatorToStopMap {
 		r, exists := c.Runners[slot]
@@ -89,8 +116,17 @@ func (c *Committee) stopDuties(validatorToStopMap map[phase0.Slot]spectypes.Vali
 	}
 }
 
+func (c *Committee) PushToQueue(slot phase0.Slot, dec *queue.DecodedSSVMessage) {
+	c.mtx.RLock()
+	defer c.mtx.RUnlock()
+	if pushed := c.Queues[slot].Q.TryPush(dec); !pushed {
+		c.logger.Warn("dropping ExecuteDuty message because the queue is full")
+	}
+}
+
 // FilterCommitteeDuty filters the committee duties by the slots given per validator.
 // It returns the filtered duties, the validators to stop and updated slot map.
+// NOT threadsafe
 func FilterCommitteeDuty(duty *spectypes.CommitteeDuty, slotMap map[spectypes.ValidatorPK]phase0.Slot) (
 	*spectypes.CommitteeDuty,
 	map[phase0.Slot]spectypes.ValidatorPK,
@@ -114,18 +150,18 @@ func FilterCommitteeDuty(duty *spectypes.CommitteeDuty, slotMap map[spectypes.Va
 }
 
 // ProcessMessage processes Network Message of all types
-func (c *Committee) ProcessMessage(signedSSVMessage *spectypes.SignedSSVMessage) error {
+func (c *Committee) ProcessMessage(logger *zap.Logger, message *queue.DecodedSSVMessage) error {
 	// Validate message
-	if err := signedSSVMessage.Validate(); err != nil {
+	if err := message.SignedSSVMessage.Validate(); err != nil {
 		return errors.Wrap(err, "invalid SignedSSVMessage")
 	}
 
 	// Verify SignedSSVMessage's signature
-	if err := c.SignatureVerifier.Verify(signedSSVMessage, c.Operator.Committee); err != nil {
+	if err := c.SignatureVerifier.Verify(message.SignedSSVMessage, c.Operator.Committee); err != nil {
 		return errors.Wrap(err, "SignedSSVMessage has an invalid signature")
 	}
 
-	msg := signedSSVMessage.SSVMessage
+	msg := message.SignedSSVMessage.SSVMessage
 
 	switch msg.GetType() {
 	case spectypes.SSVConsensusMsgType:
@@ -133,16 +169,20 @@ func (c *Committee) ProcessMessage(signedSSVMessage *spectypes.SignedSSVMessage)
 		if err := qbftMsg.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get consensus Message from network Message")
 		}
+		c.mtx.Lock()
 		r := c.Runners[phase0.Slot(qbftMsg.Height)]
+		c.mtx.Unlock()
 		// TODO: check if runner is nil
-		return r.ProcessConsensus(c.logger, signedSSVMessage)
+		return r.ProcessConsensus(c.logger, message.SignedSSVMessage)
 	case spectypes.SSVPartialSignatureMsgType:
 		pSigMessages := &spectypes.PartialSignatureMessages{}
 		if err := pSigMessages.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get post consensus Message from network Message")
 		}
 		if pSigMessages.Type == spectypes.PostConsensusPartialSig {
+			c.mtx.Lock()
 			r := c.Runners[pSigMessages.Slot]
+			c.mtx.Unlock()
 			// TODO: check if runner is nil
 			return r.ProcessPostConsensus(c.logger, pSigMessages)
 		}

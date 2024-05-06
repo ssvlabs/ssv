@@ -2,6 +2,7 @@ package queue
 
 import (
 	"fmt"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -24,6 +25,23 @@ type DecodedSSVMessage struct {
 
 	// Body is the decoded Data.
 	Body interface{} // *specqbft.Message | *spectypes.PartialSignatureMessages | *EventMsg
+}
+
+func (d *DecodedSSVMessage) Slot() (phase0.Slot, error) {
+	switch m := d.Body.(type) {
+	case *specqbft.Message: // TODO: Or message.SSVDecidedMsgType?
+		return phase0.Slot(m.Height), nil
+	case *spectypes.PartialSignatureMessages:
+		return m.Slot, nil
+	//case ssvmessage.SSVEventMsgType: // TODO: do we need slot in events?
+	//	msg := &ssvtypes.EventMsg{}
+	//	if err := msg.Decode(d.Data); err != nil {
+	//		return nil, fmt.Errorf("failed to decode EventMsg: %w", err)
+	//	}
+	//	body = msg
+	default:
+		return 0, ErrUnknownMessageType
+	}
 }
 
 // DecodeSSVMessage decodes a SSVMessage into a DecodedSSVMessage.
