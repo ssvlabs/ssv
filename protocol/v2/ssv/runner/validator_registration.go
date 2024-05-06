@@ -7,7 +7,7 @@ import (
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv-spec/qbft"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
@@ -15,6 +15,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 )
@@ -23,10 +24,10 @@ type ValidatorRegistrationRunner struct {
 	BaseRunner *BaseRunner
 
 	beacon         specssv.BeaconNode
-	network        FutureSpecNetwork
+	network        qbft.FutureSpecNetwork
 	signer         spectypes.BeaconSigner
 	operatorSigner spectypes.OperatorSigner
-	valCheck       qbft.ProposedValueCheckF
+	valCheck       specqbft.ProposedValueCheckF
 
 	metrics metrics.ConsensusMetrics
 }
@@ -36,7 +37,7 @@ func NewValidatorRegistrationRunner(
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
 	beacon specssv.BeaconNode,
-	network FutureSpecNetwork,
+	network qbft.FutureSpecNetwork,
 	signer spectypes.BeaconSigner,
 	operatorSigner spectypes.OperatorSigner,
 ) Runner {
@@ -185,7 +186,7 @@ func (r *ValidatorRegistrationRunner) GetBaseRunner() *BaseRunner {
 	return r.BaseRunner
 }
 
-func (r *ValidatorRegistrationRunner) GetNetwork() FutureSpecNetwork {
+func (r *ValidatorRegistrationRunner) GetNetwork() qbft.FutureSpecNetwork {
 	return r.network
 }
 
@@ -204,7 +205,7 @@ func (r *ValidatorRegistrationRunner) GetState() *State {
 	return r.BaseRunner.State
 }
 
-func (r *ValidatorRegistrationRunner) GetValCheckF() qbft.ProposedValueCheckF {
+func (r *ValidatorRegistrationRunner) GetValCheckF() specqbft.ProposedValueCheckF {
 	return r.valCheck
 }
 

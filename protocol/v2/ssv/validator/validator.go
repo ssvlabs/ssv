@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -30,7 +31,7 @@ type Validator struct {
 	cancel context.CancelFunc
 
 	DutyRunners runner.ValidatorDutyRunners
-	Network     runner.FutureSpecNetwork
+	Network     qbft.FutureSpecNetwork
 
 	Operator          *spectypes.Operator
 	Share             *types.SSVShare

@@ -14,6 +14,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 )
 
@@ -22,7 +23,7 @@ type VoluntaryExitRunner struct {
 	BaseRunner *BaseRunner
 
 	beacon         specssv.BeaconNode
-	network        FutureSpecNetwork
+	network        qbft.FutureSpecNetwork
 	signer         spectypes.BeaconSigner
 	operatorSigner spectypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
@@ -36,7 +37,7 @@ func NewVoluntaryExitRunner(
 	beaconNetwork spectypes.BeaconNetwork,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	beacon specssv.BeaconNode,
-	network FutureSpecNetwork,
+	network qbft.FutureSpecNetwork,
 	signer spectypes.BeaconSigner,
 	operatorSigner spectypes.OperatorSigner,
 ) Runner {
@@ -181,7 +182,7 @@ func (r *VoluntaryExitRunner) GetBaseRunner() *BaseRunner {
 	return r.BaseRunner
 }
 
-func (r *VoluntaryExitRunner) GetNetwork() FutureSpecNetwork {
+func (r *VoluntaryExitRunner) GetNetwork() qbft.FutureSpecNetwork {
 	return r.network
 }
 

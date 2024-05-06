@@ -6,10 +6,11 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv-spec/qbft"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	"github.com/bloxapp/ssv-spec/types"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
@@ -29,20 +30,20 @@ import (
 type CommitteeRunner struct {
 	BaseRunner     *BaseRunner
 	beacon         specssv.BeaconNode
-	network        FutureSpecNetwork
+	network        qbft.FutureSpecNetwork
 	signer         types.BeaconSigner
 	operatorSigner types.OperatorSigner
-	valCheck       qbft.ProposedValueCheckF
+	valCheck       specqbft.ProposedValueCheckF
 }
 
 func NewCommitteeRunner(beaconNetwork types.BeaconNetwork,
 	share map[phase0.ValidatorIndex]*types.Share,
 	qbftController *controller.Controller,
 	beacon specssv.BeaconNode,
-	network FutureSpecNetwork,
+	network qbft.FutureSpecNetwork,
 	signer types.BeaconSigner,
 	operatorSigner types.OperatorSigner,
-	valCheck qbft.ProposedValueCheckF,
+	valCheck specqbft.ProposedValueCheckF,
 ) Runner {
 	return &CommitteeRunner{
 		BaseRunner: &BaseRunner{
@@ -97,11 +98,11 @@ func (cr *CommitteeRunner) GetBeaconNode() specssv.BeaconNode {
 	return cr.beacon
 }
 
-func (cr *CommitteeRunner) GetValCheckF() qbft.ProposedValueCheckF {
+func (cr *CommitteeRunner) GetValCheckF() specqbft.ProposedValueCheckF {
 	return cr.valCheck
 }
 
-func (cr *CommitteeRunner) GetNetwork() FutureSpecNetwork {
+func (cr *CommitteeRunner) GetNetwork() qbft.FutureSpecNetwork {
 	return cr.network
 }
 

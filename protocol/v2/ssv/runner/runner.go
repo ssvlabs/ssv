@@ -12,7 +12,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 )
 
@@ -22,12 +22,7 @@ type Getters interface {
 	GetValCheckF() specqbft.ProposedValueCheckF
 	GetSigner() spectypes.BeaconSigner
 	GetOperatorSigner() spectypes.OperatorSigner
-	GetNetwork() FutureSpecNetwork
-}
-
-// TODO: (Alan) revert back to using spec Network once they merge in the msgID passing with cluster consensus branch.
-type FutureSpecNetwork interface {
-	protocolp2p.Broadcaster
+	GetNetwork() qbft.FutureSpecNetwork
 }
 
 type Runner interface {

@@ -129,7 +129,7 @@ func (i *Instance) Broadcast(logger *zap.Logger, msg *spectypes.SignedSSVMessage
 		return errors.Wrap(err, "could not create SignedSSVMessage from SSVMessage")
 	}
 
-	return i.config.GetNetwork().Broadcast(msgToBroadcast)
+	return i.config.GetNetwork().Broadcast(ssvMsg.MsgID, msgToBroadcast)
 }
 
 func allSigners(all []*spectypes.SignedSSVMessage) []spectypes.OperatorID {

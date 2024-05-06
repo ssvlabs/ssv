@@ -16,6 +16,7 @@ import (
 	typescomparable "github.com/bloxapp/ssv-spec/types/testingutils/comparable"
 
 	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	ssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
@@ -50,7 +51,7 @@ func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
 func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *zap.Logger) {
 	v := ssvtesting.BaseValidator(logger, spectestingutils.KeySetForShare(test.Runner.GetBaseRunner().Share))
 	v.DutyRunners[test.Runner.GetBaseRunner().BeaconRoleType] = test.Runner
-	v.Network = test.Runner.GetNetwork().(runner.FutureSpecNetwork) // TODO need to align
+	v.Network = test.Runner.GetNetwork().(qbft.FutureSpecNetwork) // TODO need to align
 
 	var lastErr error
 	if !test.DontStartDuty {

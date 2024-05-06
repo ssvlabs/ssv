@@ -5,7 +5,7 @@ package runner
 //	BaseRunner *BaseRunner
 //
 //	beacon         specssv.BeaconNode
-//	network        FutureSpecNetwork
+//	network        qbft.FutureSpecNetwork
 //	signer         spectypes.BeaconSigner
 //	operatorSigner spectypes.OperatorSigner
 //	valCheck       specqbft.ProposedValueCheckF
@@ -19,7 +19,7 @@ package runner
 //	share *spectypes.Share,
 //	qbftController *controller.Controller,
 //	beacon specssv.BeaconNode,
-//	network FutureSpecNetwork,
+//	network qbft.FutureSpecNetwork,
 //	signer spectypes.BeaconSigner,
 //	operatorSigner spectypes.OperatorSigner,
 //	valCheck specqbft.ProposedValueCheckF,
@@ -239,7 +239,7 @@ package runner
 //	return r.BaseRunner
 //}
 //
-//func (r *AttesterRunner) GetNetwork() FutureSpecNetwork {
+//func (r *AttesterRunner) GetNetwork() qbft.FutureSpecNetwork {
 //	return r.network
 //}
 //
