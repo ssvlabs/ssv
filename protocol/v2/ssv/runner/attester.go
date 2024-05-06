@@ -88,7 +88,14 @@ func (r *AttesterRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbf
 	}
 
 	r.metrics.EndConsensus()
+	logger.Debug("🧩 got decided",
+		zap.Duration("decided_time", r.metrics.GetConsensusTime()))
+
 	r.metrics.StartPostConsensus()
+
+	startTime := time.Now()
+	duty := r.GetState().StartingDuty
+	logger = logger.With(fields.Slot(duty.Slot))
 
 	attestationData, err := decidedValue.GetAttestationData()
 	if err != nil {
@@ -128,8 +135,15 @@ func (r *AttesterRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbf
 	}
 
 	if err := r.GetNetwork().Broadcast(ssvMsg.GetID(), msgToBroadcast); err != nil {
+		logger.Error("❌ can't broadcast partial post consensus sig",
+			zap.Duration("took: ", time.Since(startTime)),
+			zap.Duration("decided_time", r.metrics.GetConsensusTime()),
+			zap.Error(err))
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
+	logger.Info("✅ partial post consensus sig broadcast successfully",
+		zap.Duration("took", time.Since(startTime)),
+		zap.Duration("decided_time", r.metrics.GetConsensusTime()))
 	return nil
 }
 
@@ -168,7 +182,8 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		copy(specSig[:], sig)
 
 		logger.Debug("🧩 reconstructed partial signatures",
-			zap.Uint64s("signers", getPostConsensusSigners(r.GetState(), root)))
+			zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)),
+			zap.Duration("quorum_time", r.metrics.GetPostConsensusTime()))
 
 		aggregationBitfield := bitfield.NewBitlist(r.GetState().DecidedValue.Duty.CommitteeLength)
 		aggregationBitfield.SetBitAt(duty.ValidatorCommitteeIndex, true)
@@ -179,13 +194,15 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		}
 
 		attestationSubmissionEnd := r.metrics.StartBeaconSubmission()
-		consensusDuration := time.Since(r.started)
 
 		// Submit it to the BN.
 		start := time.Now()
 		if err := r.beacon.SubmitAttestation(signedAtt); err != nil {
 			r.metrics.RoleSubmissionFailed()
-			logger.Error("❌ failed to submit attestation", zap.Error(err))
+			logger.Error("❌ failed to submit attestation",
+				zap.Duration("took: ", time.Since(start)),
+				zap.Duration("decided_time", r.metrics.GetPostConsensusTime()),
+				zap.Error(err))
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
 		}
 
@@ -195,7 +212,7 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 
 		logger.Info("✅ successfully submitted attestation",
 			zap.String("block_root", hex.EncodeToString(signedAtt.Data.BeaconBlockRoot[:])),
-			fields.ConsensusTime(consensusDuration),
+			fields.ConsensusTime(r.metrics.GetPostConsensusTime()),
 			fields.SubmissionTime(time.Since(start)),
 			fields.Height(r.BaseRunner.QBFTController.Height),
 			fields.Round(r.GetState().RunningInstance.State.Round))
