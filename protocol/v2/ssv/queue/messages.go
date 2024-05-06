@@ -23,7 +23,7 @@ type DecodedSSVMessage struct {
 	*spectypes.SSVMessage
 
 	// Body is the decoded Data.
-	Body interface{} // *SignedMessage | *SignedPartialSignatureMessage | *EventMsg
+	Body interface{} // *specqbft.Message | *spectypes.PartialSignatureMessages | *EventMsg
 }
 
 // DecodeSSVMessage decodes a SSVMessage into a DecodedSSVMessage.
