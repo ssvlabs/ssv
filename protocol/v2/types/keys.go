@@ -7,18 +7,18 @@ import (
 
 type SsvOperatorSigner struct {
 	keys.OperatorSigner
-	Id spectypes.OperatorID
+	GetOperatorIdF func() spectypes.OperatorID
 }
 
-func NewSsvOperatorSigner(pk keys.OperatorPrivateKey, id spectypes.OperatorID) *SsvOperatorSigner {
+func NewSsvOperatorSigner(pk keys.OperatorPrivateKey, getOperatorId func() spectypes.OperatorID) *SsvOperatorSigner {
 	return &SsvOperatorSigner{
 		OperatorSigner: pk,
-		Id:             id,
+		GetOperatorIdF: getOperatorId,
 	}
 }
 
 func (s *SsvOperatorSigner) GetOperatorID() spectypes.OperatorID {
-	return s.Id
+	return s.GetOperatorIdF()
 }
 
 func (s *SsvOperatorSigner) SignSSVMessage(ssvMsg *spectypes.SSVMessage) ([]byte, error) {
