@@ -10,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/bloxapp/ssv/message/signatureverifier"
 	"github.com/bloxapp/ssv/operator/keystore"
 
 	"github.com/bloxapp/ssv/network"
@@ -214,13 +215,16 @@ var StartNodeCmd = &cobra.Command{
 		dutyStore := dutystore.New()
 		cfg.SSVOptions.DutyStore = dutyStore
 
-		messageValidator := validation.NewMessageValidator(
+		signatureVerifier := signatureverifier.NewSignatureVerifier(nodeStorage)
+
+		var validatorStore registrystorage.ValidatorStore
+		// validatorStore = newValidatorStore(...) // TODO
+
+		messageValidator := validation.New(
 			networkConfig,
-			validation.WithNodeStorage(nodeStorage),
-			validation.WithLogger(logger),
-			validation.WithMetrics(metricsReporter),
-			validation.WithDutyStore(dutyStore),
-			validation.WithOwnOperatorID(operatorDataStore),
+			validatorStore,
+			dutyStore,
+			signatureVerifier,
 		)
 
 		cfg.P2pNetworkConfig.Metrics = metricsReporter
