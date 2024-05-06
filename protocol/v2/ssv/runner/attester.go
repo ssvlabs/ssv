@@ -86,10 +86,7 @@ func (r *AttesterRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbf
 	if !decided {
 		return nil
 	}
-
 	r.metrics.EndConsensus()
-	logger.Debug("🧩 got decided",
-		zap.Duration("decided_time", r.metrics.GetConsensusTime()))
 
 	r.metrics.StartPostConsensus()
 
@@ -136,13 +133,13 @@ func (r *AttesterRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbf
 
 	if err := r.GetNetwork().Broadcast(ssvMsg.GetID(), msgToBroadcast); err != nil {
 		logger.Error("❌ can't broadcast partial post consensus sig",
-			zap.Duration("took: ", time.Since(startTime)),
+			zap.Duration("broadcast_took", time.Since(startTime)),
 			zap.Duration("decided_time", r.metrics.GetConsensusTime()),
 			zap.Error(err))
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
 	logger.Info("✅ partial post consensus sig broadcast successfully",
-		zap.Duration("took", time.Since(startTime)),
+		zap.Duration("broadcast_took", time.Since(startTime)),
 		zap.Duration("decided_time", r.metrics.GetConsensusTime()))
 	return nil
 }

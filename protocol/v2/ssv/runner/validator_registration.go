@@ -100,7 +100,7 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(logger *zap.Logger, si
 	if err := r.beacon.SubmitValidatorRegistration(r.BaseRunner.Share.ValidatorPubKey, r.BaseRunner.Share.FeeRecipientAddress, specSig); err != nil {
 		logger.Error("❌ failed to submit validator registration",
 			zap.Duration("quorum_time", r.metrics.GetPreConsensusTime()),
-			zap.Duration("time to submit: ", time.Since(timeToSubmit)),
+			zap.Duration("time time_to_submit submit: ", time.Since(timeToSubmit)),
 			zap.Error(err))
 		return errors.Wrap(err, "could not submit validator registration")
 	}

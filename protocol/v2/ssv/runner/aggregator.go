@@ -150,8 +150,7 @@ func (r *AggregatorRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specq
 	r.metrics.EndConsensus()
 	duty := r.GetState().StartingDuty
 	logger = logger.With(fields.Slot(duty.Slot))
-	logger.Debug("🧩 got decided",
-		zap.Duration("decided_time", r.metrics.GetConsensusTime()))
+
 	r.metrics.StartPostConsensus()
 
 	startTime := time.Now()
@@ -194,13 +193,13 @@ func (r *AggregatorRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specq
 
 	if err := r.GetNetwork().Broadcast(ssvMsg.GetID(), msgToBroadcast); err != nil {
 		logger.Error("❌ can't broadcast partial post consensus sig",
-			zap.Duration("took: ", time.Since(startTime)),
+			zap.Duration("broadcast_took: ", time.Since(startTime)),
 			zap.Duration("decided_time", r.metrics.GetConsensusTime()),
 			zap.Error(err))
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
 	logger.Info("✅ partial post consensus sig broadcast successfully",
-		zap.Duration("took", time.Since(startTime)),
+		zap.Duration("broadcast_took", time.Since(startTime)),
 		zap.Duration("decided_time", r.metrics.GetConsensusTime()))
 	return nil
 }
@@ -250,7 +249,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 		if err := r.GetBeaconNode().SubmitSignedAggregateSelectionProof(msg); err != nil {
 			r.metrics.RoleSubmissionFailed()
 			logger.Error("❌ could not submit to Beacon chain reconstructed contribution and proof",
-				zap.Duration("took: ", time.Since(start)),
+				zap.Duration("submit_took: ", time.Since(start)),
 				zap.Duration("decided_time", r.metrics.GetPostConsensusTime()),
 				zap.Error(err))
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed aggregate")
@@ -261,7 +260,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 		r.metrics.RoleSubmitted()
 
 		logger.Debug("✅ successful submitted aggregate!",
-			zap.Duration("took", time.Since(start)),
+			zap.Duration("submit_took", time.Since(start)),
 			zap.Duration("quorum_took", r.metrics.GetPostConsensusTime()))
 	}
 	r.GetState().Finished = true
