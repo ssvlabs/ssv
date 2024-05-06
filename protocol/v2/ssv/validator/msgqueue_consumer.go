@@ -121,22 +121,15 @@ func (v *Validator) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 			// If no proposal was accepted for the current round, skip prepare & commit messages
 			// for the current height and round.
 			filter = func(m *queue.DecodedSSVMessage) bool {
-
-				sm, ok := m.Body.(*spectypes.SignedSSVMessage)
-
+				qbftMsg, ok := m.Body.(*specqbft.Message)
 				if !ok {
 					return true
 				}
 
-				decMsg, err := specqbft.DecodeMessage(sm.SSVMessage.Data)
-				if err != nil {
+				if qbftMsg.Height != state.Height || qbftMsg.Round != state.Round {
 					return true
 				}
-
-				if decMsg.Height != state.Height || decMsg.Round != state.Round {
-					return true
-				}
-				return decMsg.MsgType != specqbft.PrepareMsgType && decMsg.MsgType != specqbft.CommitMsgType
+				return qbftMsg.MsgType != specqbft.PrepareMsgType && qbftMsg.MsgType != specqbft.CommitMsgType
 			}
 		}
 
@@ -173,21 +166,13 @@ func (v *Validator) logMsg(logger *zap.Logger, msg *queue.DecodedSSVMessage, log
 	baseFields := []zap.Field{}
 	switch msg.SSVMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
-		sm := msg.Body.(*spectypes.SignedSSVMessage)
+		qbftMsg := msg.Body.(*specqbft.Message)
 
-		decMsg, err := specqbft.DecodeMessage(sm.SSVMessage.Data)
-		if err != nil {
-			baseFields = []zap.Field{
-				zap.Error(errors.Wrap(err, "error decoding msg")),
-			}
-		} else {
-
-			baseFields = []zap.Field{
-				zap.Int64("msg_height", int64(decMsg.Height)),
-				zap.Int64("msg_round", int64(decMsg.Round)),
-				zap.Int64("consensus_msg_type", int64(decMsg.MsgType)),
-				zap.Any("signers", sm.OperatorIDs),
-			}
+		baseFields = []zap.Field{
+			zap.Int64("msg_height", int64(qbftMsg.Height)),
+			zap.Int64("msg_round", int64(qbftMsg.Round)),
+			zap.Int64("consensus_msg_type", int64(qbftMsg.MsgType)),
+			zap.Any("signers", msg.GetOperatorIDs()),
 		}
 	case spectypes.SSVPartialSignatureMsgType:
 		psm := msg.Body.(*spectypes.PartialSignatureMessages)

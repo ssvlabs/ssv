@@ -337,23 +337,23 @@ func (m messageSlice) dump(s *State) string {
 		}
 
 		switch mm := msg.Body.(type) {
-		case *spectypes.SignedPartialSignatureMessage:
+		case *spectypes.PartialSignatureMessages:
 			// heightOrSlot = mm.Message.Messages[0].Slot
-			typ = mm.Message.Type
+			typ = mm.Type
 			if typ == spectypes.PostConsensusPartialSig {
 				kind = "post-consensus"
 			} else {
 				kind = "pre-consensus"
 			}
-		case *qbft.SignedMessage:
+		case *qbft.Message:
 			kind = "consensus"
-			heightOrSlot = mm.Message.Height
-			typ = mm.Message.MsgType
+			heightOrSlot = mm.Height
+			typ = mm.MsgType
 		}
 
 		decided := false
-		if sm, ok := msg.Body.(*qbft.SignedMessage); ok {
-			decided = isDecidedMesssage(s, sm)
+		if sm, ok := msg.Body.(*qbft.Message); ok {
+			decided = isDecidedMesssage(s, msg.SignedSSVMessage)
 		}
 		tbl.AddRow(
 			fmt.Sprint(i),

@@ -3,10 +3,12 @@ package validator
 import (
 	"context"
 	"fmt"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/message"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/pkg/errors"
@@ -108,15 +110,14 @@ func (v *Committee) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 			// If no proposal was accepted for the current round, skip prepare & commit messages
 			// for the current height and round.
 			filter = func(m *queue.DecodedSSVMessage) bool {
-
-				sm, ok := m.Body.(*specqbft.SignedMessage)
+				qbftMsg, ok := m.Body.(*specqbft.Message)
 				if !ok {
 					return true
 				}
-				if sm.Message.Height != state.Height || sm.Message.Round != state.Round {
+				if qbftMsg.Height != state.Height || qbftMsg.Round != state.Round {
 					return true
 				}
-				return sm.Message.MsgType != specqbft.PrepareMsgType && sm.Message.MsgType != specqbft.CommitMsgType
+				return qbftMsg.MsgType != specqbft.PrepareMsgType && qbftMsg.MsgType != specqbft.CommitMsgType
 			}
 		}
 
@@ -153,18 +154,18 @@ func (v *Committee) logMsg(logger *zap.Logger, msg *queue.DecodedSSVMessage, log
 	baseFields := []zap.Field{}
 	switch msg.SSVMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
-		sm := msg.Body.(*specqbft.SignedMessage)
+		qbftMsg := msg.Body.(*specqbft.Message)
 		baseFields = []zap.Field{
-			zap.Int64("msg_height", int64(sm.Message.Height)),
-			zap.Int64("msg_round", int64(sm.Message.Round)),
-			zap.Int64("consensus_msg_type", int64(sm.Message.MsgType)),
-			zap.Any("signers", sm.Signers),
+			zap.Int64("msg_height", int64(qbftMsg.Height)),
+			zap.Int64("msg_round", int64(qbftMsg.Round)),
+			zap.Int64("consensus_msg_type", int64(qbftMsg.MsgType)),
+			zap.Any("signers", msg.GetOperatorIDs()),
 		}
 	case spectypes.SSVPartialSignatureMsgType:
-		psm := msg.Body.(*spectypes.SignedPartialSignatureMessage)
+		psm := msg.Body.(*spectypes.PartialSignatureMessages)
 		baseFields = []zap.Field{
-			zap.Int64("signer", int64(psm.Signer)),
-			fields.Slot(psm.Message.Slot),
+			zap.Int64("signer", int64(msg.GetOperatorIDs()[0])),
+			fields.Slot(psm.Slot),
 		}
 	}
 	logger.Debug(logMsg, append(baseFields, withFields...)...)

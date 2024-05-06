@@ -5,9 +5,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/types"
-
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
@@ -18,8 +15,10 @@ import (
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/message/validation"
 	"github.com/bloxapp/ssv/protocol/v2/message"
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
+	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 // Validator represents an SSV ETH consensus validator Share assigned, coordinates duty execution and more.
@@ -151,24 +150,19 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 	case spectypes.SSVConsensusMsgType:
 		logger = trySetDutyID(logger, v.dutyIDs, messageID.GetRoleType())
 
-		signedMsg, ok := msg.Body.(*spectypes.SignedSSVMessage)
+		qbftMsg, ok := msg.Body.(*specqbft.Message)
 		if !ok {
 			return errors.New("could not decode consensus message from network message")
 		}
 
-		qbftMsg := &specqbft.Message{}
-		if err := qbftMsg.Decode(msg.GetData()); err != nil {
-			return errors.Wrap(err, "could not get consensus Message from network Message")
-		}
-
 		// Check signer consistency
-		if !signedMsg.CommonSigners([]spectypes.OperatorID{msg.OperatorIDs[0]}) { // todo: array check
+		if !msg.CommonSigners([]spectypes.OperatorID{msg.OperatorIDs[0]}) { // todo: array check
 			return errors.New("SignedSSVMessage's signer not consistent with SignedMessage's signers")
 		}
 
 		logger = logger.With(fields.Height(qbftMsg.Height))
 		// Process
-		return dutyRunner.ProcessConsensus(logger, signedMsg)
+		return dutyRunner.ProcessConsensus(logger, msg.SignedSSVMessage)
 	case spectypes.SSVPartialSignatureMsgType:
 		logger = trySetDutyID(logger, v.dutyIDs, messageID.GetRoleType())
 

@@ -57,14 +57,14 @@ func TestPriorityQueue_Filter(t *testing.T) {
 
 	// Pop non-matching message.
 	popped := queue.TryPop(NewMessagePrioritizer(mockState), func(msg *DecodedSSVMessage) bool {
-		return msg.Body.(*qbft.SignedMessage).Message.Height == 101
+		return msg.Body.(*qbft.Message).Height == 101
 	})
 	require.False(t, queue.Empty())
 	require.Nil(t, popped)
 
 	// Pop matching message.
 	popped = queue.TryPop(NewMessagePrioritizer(mockState), func(msg *DecodedSSVMessage) bool {
-		return msg.Body.(*qbft.SignedMessage).Message.Height == 100
+		return msg.Body.(*qbft.Message).Height == 100
 	})
 	require.True(t, queue.Empty())
 	require.NotNil(t, popped)
@@ -76,14 +76,14 @@ func TestPriorityQueue_Filter(t *testing.T) {
 
 	// Pop 2nd message.
 	popped = queue.TryPop(NewMessagePrioritizer(mockState), func(msg *DecodedSSVMessage) bool {
-		return msg.Body.(*qbft.SignedMessage).Message.Height == 101
+		return msg.Body.(*qbft.Message).Height == 101
 	})
 	require.NotNil(t, popped)
 	require.Equal(t, msg2, popped)
 
 	// Pop 1st message.
 	popped = queue.TryPop(NewMessagePrioritizer(mockState), func(msg *DecodedSSVMessage) bool {
-		return msg.Body.(*qbft.SignedMessage).Message.Height == 100
+		return msg.Body.(*qbft.Message).Height == 100
 	})
 	require.True(t, queue.Empty())
 	require.NotNil(t, popped)
@@ -91,7 +91,7 @@ func TestPriorityQueue_Filter(t *testing.T) {
 
 	// Pop nil.
 	popped = queue.TryPop(NewMessagePrioritizer(mockState), func(msg *DecodedSSVMessage) bool {
-		return msg.Body.(*qbft.SignedMessage).Message.Height == 100
+		return msg.Body.(*qbft.Message).Height == 100
 	})
 	require.Nil(t, popped)
 }
