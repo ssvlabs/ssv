@@ -261,15 +261,15 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.SSVOptions.ValidatorOptions.DutyRoles = []spectypes.BeaconRole{spectypes.BNRoleAttester} // TODO could be better to set in other place
 
-		storageRoles := []spectypes.BeaconRole{
-			spectypes.BNRoleAttester,
-			spectypes.BNRoleProposer,
-			spectypes.BNRoleAggregator,
-			spectypes.BNRoleSyncCommittee,
-			spectypes.BNRoleSyncCommitteeContribution,
-			spectypes.BNRoleValidatorRegistration,
-			spectypes.BNRoleVoluntaryExit,
+		storageRoles := []spectypes.RunnerRole{
+			spectypes.RoleCommittee,
+			spectypes.RoleProposer,
+			spectypes.RoleAggregator,
+			spectypes.RoleSyncCommitteeContribution,
+			spectypes.RoleValidatorRegistration,
+			spectypes.RoleVoluntaryExit,
 		}
+
 		storageMap := ibftstorage.NewStores()
 
 		for _, storageRole := range storageRoles {
@@ -322,6 +322,7 @@ var StartNodeCmd = &cobra.Command{
 			nodeStorage,
 			operatorDataStore,
 			operatorPrivKey,
+			keyManager,
 		)
 		nodeProber.AddNode("event syncer", eventSyncer)
 
@@ -599,6 +600,7 @@ func setupEventHandling(
 	nodeStorage operatorstorage.Storage,
 	operatorDataStore operatordatastore.OperatorDataStore,
 	operatorDecrypter keys.OperatorDecrypter,
+	keyManager ekm.KeyManager,
 ) *eventsyncer.EventSyncer {
 	eventFilterer, err := executionClient.Filterer()
 	if err != nil {
@@ -614,7 +616,7 @@ func setupEventHandling(
 		networkConfig,
 		operatorDataStore,
 		operatorDecrypter,
-		cfg.SSVOptions.ValidatorOptions.BeaconSigner,
+		keyManager,
 		cfg.SSVOptions.ValidatorOptions.Beacon,
 		storageMap,
 		eventhandler.WithFullNode(),
