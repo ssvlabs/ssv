@@ -33,12 +33,15 @@ func (d *DecodedSSVMessage) Slot() (phase0.Slot, error) {
 		return phase0.Slot(m.Height), nil
 	case *spectypes.PartialSignatureMessages:
 		return m.Slot, nil
-	//case ssvmessage.SSVEventMsgType: // TODO: do we need slot in events?
-	//	msg := &ssvtypes.EventMsg{}
-	//	if err := msg.Decode(d.Data); err != nil {
-	//		return nil, fmt.Errorf("failed to decode EventMsg: %w", err)
-	//	}
-	//	body = msg
+	case *ssvtypes.EventMsg: // TODO: do we need slot in events?
+		if m.Type == ssvtypes.Timeout {
+			data, err := m.GetTimeoutData()
+			if err != nil {
+				return 0, ErrUnknownMessageType // TODO alan: other error
+			}
+			return phase0.Slot(data.Height), nil
+		}
+		return 0, ErrUnknownMessageType // TODO: alan: slot not supporting dutyexec msg?
 	default:
 		return 0, ErrUnknownMessageType
 	}
@@ -103,7 +106,7 @@ func ExtractMsgBody(m *spectypes.SSVMessage) (interface{}, error) {
 }
 
 // compareHeightOrSlot returns an integer comparing the message's height/slot to the current.
-// The reuslt will be 0 if equal, -1 if lower, 1 if higher.
+// The result will be 0 if equal, -1 if lower, 1 if higher.
 func compareHeightOrSlot(state *State, m *DecodedSSVMessage) int {
 	if qbftMsg, ok := m.Body.(*specqbft.Message); ok {
 		if qbftMsg.Height == state.Height {
@@ -124,7 +127,7 @@ func compareHeightOrSlot(state *State, m *DecodedSSVMessage) int {
 }
 
 // scoreRound returns an integer comparing the message's round (if exist) to the current.
-// The reuslt will be 0 if equal, -1 if lower, 1 if higher.
+// The result will be 0 if equal, -1 if lower, 1 if higher.
 func scoreRound(state *State, m *DecodedSSVMessage) int {
 	if qbftMsg, ok := m.Body.(*specqbft.Message); ok {
 		if qbftMsg.Round == state.Round {

@@ -3,15 +3,18 @@ package validator
 import (
 	"context"
 	"fmt"
-	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
+	"sync"
+
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv/ibft/storage"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
-	"sync"
+
+	"github.com/bloxapp/ssv/ibft/storage"
+	"github.com/bloxapp/ssv/protocol/v2/message"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 )
 
 type Committee struct {
@@ -64,11 +67,10 @@ func (c *Committee) RemoveShare(validatorIndex phase0.ValidatorIndex) {
 }
 
 // StartDuty starts a new duty for the given slot
-func (c *Committee) StartDuty(duty *spectypes.CommitteeDuty) error {
+func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 	// TODO alan : lock per slot?
-
 	if _, exists := c.Runners[duty.Slot]; exists {
 		return errors.New(fmt.Sprintf("CommitteeRunner for slot %d already exists", duty.Slot))
 	}
@@ -150,18 +152,16 @@ func FilterCommitteeDuty(duty *spectypes.CommitteeDuty, slotMap map[spectypes.Va
 }
 
 // ProcessMessage processes Network Message of all types
-func (c *Committee) ProcessMessage(logger *zap.Logger, message *queue.DecodedSSVMessage) error {
+func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage) error {
 	// Validate message
-	if err := message.SignedSSVMessage.Validate(); err != nil {
+	if err := msg.SignedSSVMessage.Validate(); err != nil {
 		return errors.Wrap(err, "invalid SignedSSVMessage")
 	}
 
 	// Verify SignedSSVMessage's signature
-	if err := c.SignatureVerifier.Verify(message.SignedSSVMessage, c.Operator.Committee); err != nil {
+	if err := c.SignatureVerifier.Verify(msg.SignedSSVMessage, c.Operator.Committee); err != nil {
 		return errors.Wrap(err, "SignedSSVMessage has an invalid signature")
 	}
-
-	msg := message.SignedSSVMessage.SSVMessage
 
 	switch msg.GetType() {
 	case spectypes.SSVConsensusMsgType:
@@ -173,10 +173,10 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, message *queue.DecodedSSV
 		r := c.Runners[phase0.Slot(qbftMsg.Height)]
 		c.mtx.Unlock()
 		// TODO: check if runner is nil
-		return r.ProcessConsensus(c.logger, message.SignedSSVMessage)
+		return r.ProcessConsensus(c.logger, msg.SignedSSVMessage)
 	case spectypes.SSVPartialSignatureMsgType:
 		pSigMessages := &spectypes.PartialSignatureMessages{}
-		if err := pSigMessages.Decode(msg.GetData()); err != nil {
+		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
 			return errors.Wrap(err, "could not get post consensus Message from network Message")
 		}
 		if pSigMessages.Type == spectypes.PostConsensusPartialSig {
@@ -186,6 +186,8 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, message *queue.DecodedSSV
 			// TODO: check if runner is nil
 			return r.ProcessPostConsensus(c.logger, pSigMessages)
 		}
+	case message.SSVEventMsgType:
+		return c.handleEventMessage(logger, msg)
 	default:
 		return errors.New("unknown msg")
 	}

@@ -3,6 +3,7 @@ package operator
 import (
 	"context"
 	"fmt"
+	storage2 "github.com/bloxapp/ssv/registry/storage"
 
 	"github.com/bloxapp/ssv/network"
 
@@ -41,6 +42,7 @@ type Options struct {
 	Context             context.Context
 	DB                  basedb.Database
 	ValidatorController validator.Controller
+	ValidatorStore      storage2.ValidatorStore
 	ValidatorOptions    validator.ControllerOptions `yaml:"ValidatorOptions"`
 	DutyStore           *dutystore.Store
 	WS                  api.WebSocketServer
@@ -99,7 +101,7 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 			BeaconNode:           opts.BeaconNode,
 			ExecutionClient:      opts.ExecutionClient,
 			Network:              opts.Network,
-			ValidatorProvider:    opts.ValidatorController,
+			ValidatorProvider:    opts.ValidatorStore,
 			IndicesChg:           opts.ValidatorController.IndicesChangeChan(),
 			ValidatorExitCh:      opts.ValidatorController.ValidatorExitChan(),
 			ExecuteDuty:          opts.ValidatorController.ExecuteDuty,
