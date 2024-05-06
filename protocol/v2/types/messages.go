@@ -14,6 +14,8 @@ const (
 	Timeout EventType = iota
 	// ExecuteDuty for when to start duty runner
 	ExecuteDuty
+	// ExecuteCommitteeDuty for when to start duty runner
+	ExecuteCommitteeDuty
 )
 
 func (e EventType) String() string {
@@ -22,6 +24,8 @@ func (e EventType) String() string {
 		return "timeoutData"
 	case ExecuteDuty:
 		return "executeDuty"
+	case ExecuteCommitteeDuty:
+		return "executeCommitteeDuty"
 	default:
 		return "unknown"
 	}
@@ -38,7 +42,11 @@ type TimeoutData struct {
 }
 
 type ExecuteDutyData struct {
-	Duty types.Duty
+	Duty *types.BeaconDuty
+}
+
+type ExecuteCommitteeDutyData struct {
+	Duty *types.CommitteeDuty
 }
 
 func (m *EventMsg) GetTimeoutData() (*TimeoutData, error) {

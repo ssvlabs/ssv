@@ -22,14 +22,14 @@ type ExitDescriptor struct {
 type VoluntaryExitHandler struct {
 	baseHandler
 	validatorExitCh <-chan ExitDescriptor
-	dutyQueue       []spectypes.Duty
+	dutyQueue       []*spectypes.BeaconDuty
 	blockSlots      map[uint64]phase0.Slot
 }
 
 func NewVoluntaryExitHandler(validatorExitCh <-chan ExitDescriptor) *VoluntaryExitHandler {
 	return &VoluntaryExitHandler{
 		validatorExitCh: validatorExitCh,
-		dutyQueue:       make([]spectypes.Duty, 0),
+		dutyQueue:       make([]*spectypes.BeaconDuty, 0),
 		blockSlots:      map[uint64]phase0.Slot{},
 	}
 }
@@ -51,10 +51,10 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 
 			h.logger.Debug("🛠 ticker event", fields.Slot(currentSlot))
 
-			var dutiesForExecution, pendingDuties []spectypes.Duty
+			var dutiesForExecution, pendingDuties []*spectypes.BeaconDuty
 
 			for _, duty := range h.dutyQueue {
-				if duty.DutySlot() <= currentSlot {
+				if duty.Slot <= currentSlot {
 					dutiesForExecution = append(dutiesForExecution, duty)
 				} else {
 					pendingDuties = append(pendingDuties, duty)
@@ -84,7 +84,7 @@ func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 
 			dutySlot := blockSlot + voluntaryExitSlotsToPostpone
 
-			duty := &spectypes.Duty{
+			duty := &spectypes.BeaconDuty{
 				Type:           spectypes.BNRoleVoluntaryExit,
 				PubKey:         exitDescriptor.PubKey,
 				Slot:           dutySlot,
