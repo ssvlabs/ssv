@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -88,21 +89,30 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg 
 	}
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], fullSig)
+	r.metrics.EndPreConsensus()
+	logger.Debug("🧩 reconstructed partial signatures",
+		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)),
+		zap.Duration("quorum_time", r.metrics.GetPreConsensusTime()))
 
 	// create SignedVoluntaryExit using VoluntaryExit created on r.executeDuty() and reconstructed signature
 	signedVoluntaryExit := &phase0.SignedVoluntaryExit{
 		Message:   r.voluntaryExit,
 		Signature: specSig,
 	}
-
+	timeToSubmit := time.Now()
 	if err := r.beacon.SubmitVoluntaryExit(signedVoluntaryExit); err != nil {
+		took := time.Since(timeToSubmit)
+		logger.Error("failed to submit voluntary exit",
+			zap.Duration("time to submit: ", took),
+			zap.Error(err))
 		return errors.Wrap(err, "could not submit voluntary exit")
 	}
-
+	took := time.Since(timeToSubmit)
 	logger.Debug("voluntary exit submitted successfully",
 		fields.Epoch(r.voluntaryExit.Epoch),
 		zap.Uint64("validator_index", uint64(r.voluntaryExit.ValidatorIndex)),
 		zap.String("signature", hex.EncodeToString(specSig[:])),
+		zap.Duration("time_to_submit", took),
 	)
 
 	r.GetState().Finished = true
@@ -134,6 +144,7 @@ func (r *VoluntaryExitRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashR
 // It just performs pre-consensus with VoluntaryExitPartialSig over
 // a VoluntaryExit object to create a SignedVoluntaryExit
 func (r *VoluntaryExitRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
+	r.metrics.StartPreConsensus()
 	voluntaryExit, err := r.calculateVoluntaryExit()
 	if err != nil {
 		return errors.Wrap(err, "could not calculate voluntary exit")

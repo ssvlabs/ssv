@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
-
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -80,8 +79,6 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(logger *zap.Logger, 
 		return nil
 	}
 
-	r.metrics.EndPreConsensus()
-
 	// collect selection proofs and subnets
 	var (
 		selectionProofs []phase0.BLSSignature
@@ -97,6 +94,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(logger *zap.Logger, 
 			}
 			return errors.Wrap(err, "got pre-consensus quorum but it has invalid signatures")
 		}
+
 		blsSigSelectionProof := phase0.BLSSignature{}
 		copy(blsSigSelectionProof[:], sig)
 
@@ -117,10 +115,14 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(logger *zap.Logger, 
 		selectionProofs = append(selectionProofs, blsSigSelectionProof)
 		subnets = append(subnets, subnet)
 	}
+
 	if len(selectionProofs) == 0 {
 		r.GetState().Finished = true
 		return nil
 	}
+	r.metrics.EndPreConsensus()
+	logger.Debug("🧩 reconstructed partial signatures",
+		zap.Duration("quorum_time", r.metrics.GetPreConsensusTime()))
 
 	duty := r.GetState().StartingDuty
 

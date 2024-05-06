@@ -100,6 +100,9 @@ type ConsensusMetrics struct {
 	consensusStart                 time.Time
 	postConsensusStart             time.Time
 	dutyFullFlowStart              time.Time
+	preConsensusDuration           time.Duration
+	consensusDuration              time.Duration
+	postConsensusDuration          time.Duration
 	dutyFullFlowCumulativeDuration time.Duration
 }
 
@@ -119,6 +122,16 @@ func NewConsensusMetrics(role spectypes.BeaconRole) ConsensusMetrics {
 	}
 }
 
+func (cm *ConsensusMetrics) GetPreConsensusTime() time.Duration {
+	return cm.preConsensusDuration
+}
+func (cm *ConsensusMetrics) GetConsensusTime() time.Duration {
+	return cm.consensusDuration
+}
+func (cm *ConsensusMetrics) GetPostConsensusTime() time.Duration {
+	return cm.postConsensusDuration
+}
+
 // StartPreConsensus stores pre-consensus start time.
 func (cm *ConsensusMetrics) StartPreConsensus() {
 	if cm != nil {
@@ -129,7 +142,9 @@ func (cm *ConsensusMetrics) StartPreConsensus() {
 // EndPreConsensus sends metrics for pre-consensus duration.
 func (cm *ConsensusMetrics) EndPreConsensus() {
 	if cm != nil && cm.preConsensus != nil && !cm.preConsensusStart.IsZero() {
-		cm.preConsensus.Observe(time.Since(cm.preConsensusStart).Seconds())
+		duration := time.Since(cm.preConsensusStart)
+		cm.preConsensusDuration = duration
+		cm.preConsensus.Observe(duration.Seconds())
 		cm.preConsensusStart = time.Time{}
 	}
 }
@@ -145,7 +160,9 @@ func (cm *ConsensusMetrics) StartConsensus() {
 // EndConsensus sends metrics for consensus duration.
 func (cm *ConsensusMetrics) EndConsensus() {
 	if cm != nil && cm.consensus != nil && !cm.consensusStart.IsZero() {
-		cm.consensus.Observe(time.Since(cm.consensusStart).Seconds())
+		duration := time.Since(cm.consensusStart)
+		cm.consensusDuration = duration
+		cm.consensus.Observe(duration.Seconds())
 		cm.consensusStart = time.Time{}
 		cm.metricsInstancesDecided.Inc()
 	}
@@ -161,7 +178,9 @@ func (cm *ConsensusMetrics) StartPostConsensus() {
 // EndPostConsensus sends metrics for post-consensus duration.
 func (cm *ConsensusMetrics) EndPostConsensus() {
 	if cm != nil && cm.postConsensus != nil && !cm.postConsensusStart.IsZero() {
-		cm.postConsensus.Observe(time.Since(cm.postConsensusStart).Seconds())
+		duration := time.Since(cm.postConsensusStart)
+		cm.postConsensus.Observe(duration.Seconds())
+		cm.postConsensusDuration = duration
 		cm.postConsensusStart = time.Time{}
 	}
 }

@@ -87,15 +87,13 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 
 	duty := r.GetState().StartingDuty
 	logger = logger.With(fields.Slot(duty.Slot))
-	logger.Debug("🧩 got partial RANDAO signatures",
+	logger.Debug("🧩 got partial RANDAO signature",
 		zap.Uint64("signer", signedMsg.Signer))
 
 	// quorum returns true only once (first time quorum achieved)
 	if !quorum {
 		return nil
 	}
-
-	r.metrics.EndPreConsensus()
 
 	// only 1 root, verified in basePreConsensusMsgProcessing
 	root := roots[0]
@@ -107,8 +105,10 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 		return errors.Wrap(err, "got pre-consensus quorum but it has invalid signatures")
 	}
 
+	r.metrics.EndPreConsensus()
 	logger.Debug("🧩 reconstructed partial RANDAO signatures",
-		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)))
+		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)),
+		zap.Duration("quorum_time", r.metrics.GetPreConsensusTime()))
 
 	var ver spec.DataVersion
 	var obj ssz.Marshaler
@@ -117,12 +117,20 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 		// get block data
 		obj, ver, err = r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
 		if err != nil {
+			took := time.Since(start)
+			logger.Error("failed to get beacon block",
+				zap.Duration("time to get block: ", took),
+				zap.Error(err))
 			return errors.Wrap(err, "failed to get blinded beacon block")
 		}
 	} else {
 		// get block data
 		obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
 		if err != nil {
+			took := time.Since(start)
+			logger.Error("failed to get beacon block",
+				zap.Duration("time to get block: ", took),
+				zap.Error(err))
 			return errors.Wrap(err, "failed to get beacon block")
 		}
 	}
@@ -165,6 +173,9 @@ func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbf
 	}
 
 	r.metrics.EndConsensus()
+	logger.Debug("🧩 got decided",
+		zap.Duration("decided_time", r.metrics.GetConsensusTime()))
+
 	r.metrics.StartPostConsensus()
 
 	// specific duty sig
@@ -232,6 +243,8 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 	}
 
 	r.metrics.EndPostConsensus()
+	//logger.Debug("🧩 got decided",
+	//	zap.Duration("decided_time", r.metrics.GetPostConsensusTime()))
 
 	for _, root := range roots {
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey)

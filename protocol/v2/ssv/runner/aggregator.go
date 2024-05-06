@@ -2,7 +2,10 @@ package runner
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"github.com/bloxapp/ssv/logging/fields"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -12,7 +15,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 )
@@ -80,8 +82,6 @@ func (r *AggregatorRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *sp
 		return nil
 	}
 
-	r.metrics.EndPreConsensus()
-
 	// only 1 root, verified by basePreConsensusMsgProcessing
 	root := roots[0]
 	// reconstruct selection proof sig
@@ -91,22 +91,31 @@ func (r *AggregatorRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *sp
 		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root)
 		return errors.Wrap(err, "got pre-consensus quorum but it has invalid signatures")
 	}
+	r.metrics.EndPreConsensus()
+	logger.Debug("🧩 reconstructed partial signatures",
+		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)),
+		zap.Duration("quorum_time", r.metrics.GetPreConsensusTime()))
 
 	duty := r.GetState().StartingDuty
 
-	logger.Debug("🧩 got partial signature quorum",
-		zap.Any("signer", signedMsg.Signer),
-		fields.Slot(duty.Slot),
-	)
-
 	r.metrics.PauseDutyFullFlow()
-
+	timeToSubmit := time.Now()
 	// get block data
 	res, ver, err := r.GetBeaconNode().SubmitAggregateSelectionProof(duty.Slot, duty.CommitteeIndex, duty.CommitteeLength, duty.ValidatorIndex, fullSig)
 	if err != nil {
+		took := time.Since(timeToSubmit)
+		logger.Error("failed to aggregate and proof",
+			zap.Duration("time to submit: ", took),
+			zap.Error(err))
 		return errors.Wrap(err, "failed to submit aggregate and proof")
 	}
-
+	took := time.Since(timeToSubmit)
+	logger.Debug("aggregate selection proof submitted successfully",
+		fields.Slot(duty.Slot),
+		zap.Uint64("validator_index", uint64(duty.ValidatorIndex)),
+		zap.String("signature", hex.EncodeToString(fullSig[:])),
+		zap.Duration("time_to_submit", took),
+	)
 	r.metrics.ContinueDutyFullFlow()
 	r.metrics.StartConsensus()
 

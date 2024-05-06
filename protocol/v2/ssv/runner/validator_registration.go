@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"time"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -88,13 +89,24 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(logger *zap.Logger, si
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], fullSig)
 
+	r.metrics.EndPreConsensus()
+	logger.Debug("🧩 reconstructed partial signatures",
+		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)),
+		zap.Duration("quorum_time", r.metrics.GetPreConsensusTime()))
+
+	timeToSubmit := time.Now()
 	if err := r.beacon.SubmitValidatorRegistration(r.BaseRunner.Share.ValidatorPubKey, r.BaseRunner.Share.FeeRecipientAddress, specSig); err != nil {
+		took := time.Since(timeToSubmit)
+		logger.Error("failed to submit validator registration",
+			zap.Duration("time to submit: ", took),
+			zap.Error(err))
 		return errors.Wrap(err, "could not submit validator registration")
 	}
-
+	took := time.Since(timeToSubmit)
 	logger.Debug("validator registration submitted successfully",
 		fields.FeeRecipient(r.BaseRunner.Share.FeeRecipientAddress[:]),
-		zap.String("signature", hex.EncodeToString(specSig[:])))
+		zap.String("signature", hex.EncodeToString(specSig[:])),
+		zap.Duration("time_to_submit", took))
 
 	r.GetState().Finished = true
 	return nil
@@ -122,6 +134,7 @@ func (r *ValidatorRegistrationRunner) expectedPostConsensusRootsAndDomain() ([]s
 }
 
 func (r *ValidatorRegistrationRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
+	r.metrics.StartPreConsensus()
 	vr, err := r.calculateValidatorRegistration()
 	if err != nil {
 		return errors.Wrap(err, "could not calculate validator registration")
