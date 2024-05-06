@@ -216,7 +216,7 @@ var StartNodeCmd = &cobra.Command{
 
 		signatureVerifier := signatureverifier.NewSignatureVerifier(nodeStorage)
 
-		var validatorStore registrystorage.ValidatorStore
+		validatorStore := nodeStorage.ValidatorStore()
 		// validatorStore = newValidatorStore(...) // TODO
 
 		var messageValidator validation.MessageValidator

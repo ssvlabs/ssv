@@ -46,6 +46,7 @@ type Storage interface {
 	registrystorage.Recipients
 	Shares() registrystorage.Shares
 	GenesisShares() genesisregistrystorage.Shares // DEPRECATED, TODO: remove post-fork
+	ValidatorStore() registrystorage.ValidatorStore
 
 	GetPrivateKeyHash() (string, bool, error)
 	SavePrivateKeyHash(privKeyHash string) error
