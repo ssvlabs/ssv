@@ -5,7 +5,7 @@ package runner
 //	BaseRunner *BaseRunner
 //
 //	beacon         specssv.BeaconNode
-//	network        specssv.Network
+//	network        FutureSpecNetwork
 //	signer         spectypes.BeaconSigner
 //	operatorSigner spectypes.OperatorSigner
 //	valCheck       specqbft.ProposedValueCheckF
@@ -19,7 +19,7 @@ package runner
 //	share *spectypes.Share,
 //	qbftController *controller.Controller,
 //	beacon specssv.BeaconNode,
-//	network specssv.Network,
+//	network FutureSpecNetwork,
 //	signer spectypes.BeaconSigner,
 //	operatorSigner spectypes.OperatorSigner,
 //	valCheck specqbft.ProposedValueCheckF,
@@ -108,7 +108,7 @@ package runner
 //		return errors.Wrap(err, "could not create SignedSSVMessage from SSVMessage")
 //	}
 //
-//	if err := r.GetNetwork().Broadcast(ssvMsg.GetID(), msgToBroadcast); err != nil {
+//	if err := r.GetNetwork().Broadcast(msgID, ssvMsg.GetID(), msgToBroadcast); err != nil {
 //		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 //	}
 //	return nil
@@ -239,7 +239,7 @@ package runner
 //	return r.BaseRunner
 //}
 //
-//func (r *AttesterRunner) GetNetwork() specssv.Network {
+//func (r *AttesterRunner) GetNetwork() FutureSpecNetwork {
 //	return r.network
 //}
 //

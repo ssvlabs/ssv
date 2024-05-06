@@ -1,7 +1,6 @@
 package validator
 
 import (
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
@@ -19,7 +18,7 @@ const (
 
 // Options represents options that should be passed to a new instance of Validator.
 type Options struct {
-	Network           specqbft.Network
+	Network           runner.FutureSpecNetwork
 	Beacon            specssv.BeaconNode
 	BeaconNetwork     beacon.BeaconNetwork
 	Storage           *storage.QBFTStores

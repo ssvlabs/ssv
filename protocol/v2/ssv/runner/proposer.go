@@ -32,7 +32,7 @@ type ProposerRunner struct {
 	ProducesBlindedBlocks bool
 
 	beacon         specssv.BeaconNode
-	network        specssv.Network
+	network        FutureSpecNetwork
 	signer         spectypes.BeaconSigner
 	operatorSigner spectypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
@@ -45,7 +45,7 @@ func NewProposerRunner(
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
 	beacon specssv.BeaconNode,
-	network specssv.Network,
+	network FutureSpecNetwork,
 	signer spectypes.BeaconSigner,
 	operatorSigner spectypes.OperatorSigner,
 	valCheck specqbft.ProposedValueCheckF,
@@ -212,7 +212,7 @@ func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg *spectyp
 		return errors.Wrap(err, "could not sign post-consensus partial signature message")
 	}
 
-	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
+	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
 	return nil
@@ -360,7 +360,7 @@ func (r *ProposerRunner) executeDuty(logger *zap.Logger, duty spectypes.Duty) er
 	if err != nil {
 		return errors.Wrap(err, "could not sign pre-consensus partial signature message")
 	}
-	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
+	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
 		return errors.Wrap(err, "can't broadcast partial randao sig")
 	}
 
@@ -373,7 +373,7 @@ func (r *ProposerRunner) GetBaseRunner() *BaseRunner {
 	return r.BaseRunner
 }
 
-func (r *ProposerRunner) GetNetwork() specssv.Network {
+func (r *ProposerRunner) GetNetwork() FutureSpecNetwork {
 	return r.network
 }
 

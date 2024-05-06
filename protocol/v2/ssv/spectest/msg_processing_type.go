@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
@@ -51,7 +50,7 @@ func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
 func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *zap.Logger) {
 	v := ssvtesting.BaseValidator(logger, spectestingutils.KeySetForShare(test.Runner.GetBaseRunner().Share))
 	v.DutyRunners[test.Runner.GetBaseRunner().BeaconRoleType] = test.Runner
-	v.Network = test.Runner.GetNetwork().(specqbft.Network) // TODO need to align
+	v.Network = test.Runner.GetNetwork().(runner.FutureSpecNetwork) // TODO need to align
 
 	var lastErr error
 	if !test.DontStartDuty {

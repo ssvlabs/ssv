@@ -6,6 +6,7 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 )
 
 // qbftConfig is used in message validation and has no signature verification.
@@ -35,7 +36,7 @@ func (q qbftConfig) GetProposerF() specqbft.ProposerF {
 	panic("should not be called")
 }
 
-func (q qbftConfig) GetNetwork() specqbft.Network {
+func (q qbftConfig) GetNetwork() runner.FutureSpecNetwork {
 	panic("should not be called")
 }
 

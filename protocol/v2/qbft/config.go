@@ -6,6 +6,7 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 )
 
 type signing interface {
@@ -24,7 +25,7 @@ type IConfig interface {
 	// GetProposerF returns func used to calculate proposer
 	GetProposerF() specqbft.ProposerF
 	// GetNetwork returns a p2p Network instance
-	GetNetwork() specqbft.Network
+	GetNetwork() runner.FutureSpecNetwork
 	// GetStorage returns a storage instance
 	GetStorage() qbftstorage.QBFTStore
 	// GetTimer returns round timer
@@ -45,7 +46,7 @@ type Config struct {
 	ValueCheckF           specqbft.ProposedValueCheckF
 	ProposerF             specqbft.ProposerF
 	Storage               qbftstorage.QBFTStore
-	Network               specqbft.Network
+	Network               runner.FutureSpecNetwork
 	Timer                 roundtimer.Timer
 	SignatureVerification bool
 	SignatureVerifier     spectypes.SignatureVerifier
@@ -83,7 +84,7 @@ func (c *Config) GetProposerF() specqbft.ProposerF {
 }
 
 // GetNetwork returns a p2p Network instance
-func (c *Config) GetNetwork() specqbft.Network {
+func (c *Config) GetNetwork() runner.FutureSpecNetwork {
 	return c.Network
 }
 

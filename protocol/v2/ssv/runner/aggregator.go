@@ -21,7 +21,7 @@ type AggregatorRunner struct {
 	BaseRunner *BaseRunner
 
 	beacon         specssv.BeaconNode
-	network        specssv.Network
+	network        FutureSpecNetwork
 	signer         spectypes.BeaconSigner
 	operatorSigner spectypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
@@ -36,7 +36,7 @@ func NewAggregatorRunner(
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
 	beacon specssv.BeaconNode,
-	network specssv.Network,
+	network FutureSpecNetwork,
 	signer spectypes.BeaconSigner,
 	operatorSigner spectypes.OperatorSigner,
 	valCheck specqbft.ProposedValueCheckF,
@@ -170,7 +170,7 @@ func (r *AggregatorRunner) ProcessConsensus(logger *zap.Logger, signedMsg *spect
 		return errors.Wrap(err, "could not sign post-consensus partial signature message")
 	}
 
-	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
+	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
 
@@ -278,7 +278,7 @@ func (r *AggregatorRunner) executeDuty(logger *zap.Logger, duty spectypes.Duty) 
 		return errors.Wrap(err, "could not sign pre-consensus partial signature message")
 	}
 
-	if err := r.GetNetwork().Broadcast(msgToBroadcast); err != nil {
+	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
 		return errors.Wrap(err, "can't broadcast partial selection proof sig")
 	}
 	return nil
@@ -288,7 +288,7 @@ func (r *AggregatorRunner) GetBaseRunner() *BaseRunner {
 	return r.BaseRunner
 }
 
-func (r *AggregatorRunner) GetNetwork() specssv.Network {
+func (r *AggregatorRunner) GetNetwork() FutureSpecNetwork {
 	return r.network
 }
 

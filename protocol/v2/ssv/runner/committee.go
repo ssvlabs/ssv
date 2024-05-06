@@ -3,6 +3,7 @@ package runner
 import (
 	"crypto/sha256"
 	"encoding/json"
+
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv-spec/qbft"
@@ -28,7 +29,7 @@ import (
 type CommitteeRunner struct {
 	BaseRunner     *BaseRunner
 	beacon         specssv.BeaconNode
-	network        specssv.Network
+	network        FutureSpecNetwork
 	signer         types.BeaconSigner
 	operatorSigner types.OperatorSigner
 	valCheck       qbft.ProposedValueCheckF
@@ -38,7 +39,7 @@ func NewCommitteeRunner(beaconNetwork types.BeaconNetwork,
 	share map[phase0.ValidatorIndex]*types.Share,
 	qbftController *controller.Controller,
 	beacon specssv.BeaconNode,
-	network specssv.Network,
+	network FutureSpecNetwork,
 	signer types.BeaconSigner,
 	operatorSigner types.OperatorSigner,
 	valCheck qbft.ProposedValueCheckF,
@@ -100,7 +101,7 @@ func (cr *CommitteeRunner) GetValCheckF() qbft.ProposedValueCheckF {
 	return cr.valCheck
 }
 
-func (cr *CommitteeRunner) GetNetwork() specssv.Network {
+func (cr *CommitteeRunner) GetNetwork() FutureSpecNetwork {
 	return cr.network
 }
 
@@ -175,7 +176,7 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *types.Signe
 		return errors.Wrap(err, "could not create SignedSSVMessage from SSVMessage")
 	}
 
-	if err := cr.GetNetwork().Broadcast(msgToBroadcast); err != nil {
+	if err := cr.GetNetwork().Broadcast(ssvMsg.MsgID, msgToBroadcast); err != nil {
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
 	return nil
