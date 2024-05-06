@@ -11,6 +11,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
+// TODO: (Alan) add ValidatorStore tests
 type ValidatorStore interface {
 	Validator(pubKey []byte) *types.SSVShare
 	ValidatorByIndex(index phase0.ValidatorIndex) *types.SSVShare
@@ -70,12 +71,10 @@ type validatorStore struct {
 }
 
 func newValidatorStore(
-	operatorID func() spectypes.OperatorID,
 	shares func() []*types.SSVShare,
 	shareByPubKey func([]byte) *types.SSVShare,
 ) *validatorStore {
 	return &validatorStore{
-		operatorID:       operatorID,
 		shares:           shares,
 		byPubKey:         shareByPubKey,
 		byValidatorIndex: make(map[phase0.ValidatorIndex]*types.SSVShare),
@@ -159,11 +158,22 @@ func (c *validatorStore) OperatorCommittees(id spectypes.OperatorID) []*Committe
 	return nil
 }
 
+func (c *validatorStore) WithOperatorID(operatorID func() spectypes.OperatorID) SelfValidatorStore {
+	c.operatorID = operatorID
+	return c
+}
+
 func (c *validatorStore) SelfValidators() []*types.SSVShare {
+	if c.operatorID == nil {
+		return nil
+	}
 	return c.OperatorValidators(c.operatorID())
 }
 
 func (c *validatorStore) SelfParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare {
+	if c.operatorID == nil {
+		return nil
+	}
 	validators := c.OperatorValidators(c.operatorID())
 
 	c.mu.RLock()
@@ -179,10 +189,16 @@ func (c *validatorStore) SelfParticipatingValidators(epoch phase0.Epoch) []*type
 }
 
 func (c *validatorStore) SelfCommittees() []*Committee {
+	if c.operatorID == nil {
+		return nil
+	}
 	return c.OperatorCommittees(c.operatorID())
 }
 
 func (c *validatorStore) SelfParticipatingCommittees(epoch phase0.Epoch) []*Committee {
+	if c.operatorID == nil {
+		return nil
+	}
 	committees := c.OperatorCommittees(c.operatorID())
 
 	c.mu.RLock()
@@ -308,6 +324,15 @@ func (c *validatorStore) handleShareUpdated(share *types.SSVShare) {
 			}
 		}
 	}
+}
+
+func (c *validatorStore) handleDrop() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.byValidatorIndex = make(map[phase0.ValidatorIndex]*types.SSVShare)
+	c.byCommitteeID = make(map[spectypes.ClusterID]*Committee)
+	c.byOperatorID = make(map[spectypes.OperatorID]*sharesAndCommittees)
 }
 
 func buildCommittee(shares []*types.SSVShare) *Committee {

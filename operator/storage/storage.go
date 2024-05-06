@@ -56,6 +56,7 @@ type storage struct {
 	operatorStore  registrystorage.Operators
 	recipientStore registrystorage.Recipients
 	shareStore     registrystorage.Shares
+	validatorStore registrystorage.ValidatorStore
 }
 
 // NewNodeStorage creates a new instance of Storage
@@ -67,7 +68,7 @@ func NewNodeStorage(logger *zap.Logger, db basedb.Database) (Storage, error) {
 		recipientStore: registrystorage.NewRecipientsStorage(logger, db, storagePrefix),
 	}
 	var err error
-	stg.shareStore, err = registrystorage.NewSharesStorage(logger, db, storagePrefix)
+	stg.shareStore, stg.validatorStore, err = registrystorage.NewSharesStorage(logger, db, storagePrefix)
 	if err != nil {
 		return nil, err
 	}
@@ -84,6 +85,10 @@ func (s *storage) BeginRead() basedb.ReadTxn {
 
 func (s *storage) Shares() registrystorage.Shares {
 	return s.shareStore
+}
+
+func (s *storage) ValidatorStore() registrystorage.ValidatorStore {
+	return s.validatorStore
 }
 
 func (s *storage) GetOperatorDataByPubKey(r basedb.Reader, operatorPubKey []byte) (*registrystorage.OperatorData, bool, error) {
