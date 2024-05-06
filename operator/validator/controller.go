@@ -27,7 +27,6 @@ import (
 	"github.com/bloxapp/ssv/network"
 	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/duties"
-	"github.com/bloxapp/ssv/operator/keys"
 	nodestorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validators"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
@@ -72,7 +71,7 @@ type ControllerOptions struct {
 	Exporter                   bool `yaml:"Exporter" env:"EXPORTER" env-default:"false" env-description:""`
 	BuilderProposals           bool `yaml:"BuilderProposals" env:"BUILDER_PROPOSALS" env-default:"false" env-description:"Use external builders to produce blocks"`
 	BeaconSigner               spectypes.BeaconSigner
-	OperatorSigner             keys.OperatorSigner
+	OperatorSigner             spectypes.OperatorSigner
 	OperatorDataStore          operatordatastore.OperatorDataStore
 	RegistryStorage            nodestorage.Storage
 	RecipientsStorage          Recipients
@@ -245,7 +244,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		beacon:            options.Beacon,
 		operatorDataStore: options.OperatorDataStore,
 		beaconSigner:      options.BeaconSigner,
-		operatorSigner:    options.OperatorSigner, // TODO alan: create wrapper (around keys.OperatorSigner) to support spec interface
+		operatorSigner:    options.OperatorSigner,
 		network:           options.Network,
 
 		validatorsMap:    options.ValidatorsMap,
