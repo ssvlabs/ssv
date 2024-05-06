@@ -75,7 +75,7 @@ type ValidatorProvider interface {
 }
 
 type ExecuteDutyFunc func(logger *zap.Logger, duty *spectypes.BeaconDuty)
-type ExecuteCommitteeDutyFunc func(logger *zap.Logger, duty *spectypes.CommitteeDuty)
+type ExecuteCommitteeDutyFunc func(logger *zap.Logger, committeeID spectypes.ClusterID, duty *spectypes.CommitteeDuty)
 
 type SchedulerOptions struct {
 	Ctx                  context.Context
@@ -385,7 +385,8 @@ func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []*spectypes.Beacon
 
 // ExecuteCommitteeDuties tries to execute the given committee duties
 func (s *Scheduler) ExecuteCommitteeDuties(logger *zap.Logger, duties map[[32]byte]*spectypes.CommitteeDuty) {
-	for _, duty := range duties {
+	for committeeID, duty := range duties {
+		committeeID := committeeID
 		duty := duty
 		//logger := s.loggerWithDutyContext(logger, duty)
 		slotDelay := time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot))
@@ -395,7 +396,7 @@ func (s *Scheduler) ExecuteCommitteeDuties(logger *zap.Logger, duties map[[32]by
 		slotDelayHistogram.Observe(float64(slotDelay.Milliseconds()))
 		go func() {
 			s.waitOneThirdOrValidBlock(duty.Slot)
-			s.executeCommitteeDuty(logger, duty)
+			s.executeCommitteeDuty(logger, committeeID, duty)
 		}()
 	}
 }

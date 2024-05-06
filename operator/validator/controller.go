@@ -13,12 +13,13 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging"
@@ -684,47 +685,47 @@ func (c *controller) ExecuteCommitteeDuty(logger *zap.Logger, committeeID specty
 	}
 }
 
-// CreateDutyExecuteMsg returns ssvMsg with event type of duty execute
+// CreateDutyExecuteMsg returns ssvMsg with event type of execute duty
 func CreateDutyExecuteMsg(duty *spectypes.BeaconDuty, pubKey []byte, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
 	executeDutyData := types.ExecuteDutyData{Duty: duty}
-	edd, err := json.Marshal(executeDutyData)
+	data, err := json.Marshal(executeDutyData)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to marshal execute duty data")
+		return nil, fmt.Errorf("failed to marshal execute duty data: %w", err)
 	}
-	msg := types.EventMsg{
-		Type: types.ExecuteDuty,
-		Data: edd,
-	}
-	data, err := msg.Encode()
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to encode event msg")
-	}
-	return &spectypes.SSVMessage{
-		MsgType: message.SSVEventMsgType,
-		MsgID:   spectypes.NewMsgID(domain, pubKey, duty.RunnerRole()),
-		Data:    data,
-	}, nil
+
+	return dutyDataToSSVMsg(domain, types.ExecuteDuty, pubKey, duty.RunnerRole(), data)
 }
 
-// CreateCommitteeDutyExecuteMsg returns ssvMsg with event type of duty execute
+// CreateCommitteeDutyExecuteMsg returns ssvMsg with event type of execute committee duty
 func CreateCommitteeDutyExecuteMsg(duty *spectypes.CommitteeDuty, committeeID spectypes.ClusterID, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
 	executeCommitteeDutyData := types.ExecuteCommitteeDutyData{Duty: duty}
-	edd, err := json.Marshal(executeCommitteeDutyData)
+	data, err := json.Marshal(executeCommitteeDutyData)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to marshal execute duty data")
+		return nil, fmt.Errorf("failed to marshal execute committee duty data: %w", err)
 	}
+
+	return dutyDataToSSVMsg(domain, committeeID[:], spectypes.RoleCommittee, data)
+}
+
+func dutyDataToSSVMsg(
+	domain spectypes.DomainType,
+	msgIdentifier []byte,
+	runnerRole spectypes.RunnerRole,
+	data []byte,
+) (*spectypes.SSVMessage, error) {
 	msg := types.EventMsg{
-		Type: types.ExecuteCommitteeDuty,
-		Data: edd,
+		Type: ssvtypes.ExecuteDuty,
+		Data: data,
 	}
-	data, err := msg.Encode()
+	msgData, err := msg.Encode()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to encode event msg")
+		return nil, fmt.Errorf("failed to encode event msg: %w", err)
 	}
+
 	return &spectypes.SSVMessage{
 		MsgType: message.SSVEventMsgType,
-		MsgID:   spectypes.NewMsgID(domain, committeeID[:], duty.RunnerRole()),
-		Data:    data,
+		MsgID:   spectypes.NewMsgID(domain, msgIdentifier, runnerRole),
+		Data:    msgData,
 	}, nil
 }
 
