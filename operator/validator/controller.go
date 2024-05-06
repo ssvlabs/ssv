@@ -692,7 +692,7 @@ func CreateDutyExecuteMsg(duty *spectypes.BeaconDuty, pubKey []byte, domain spec
 		return nil, fmt.Errorf("failed to marshal execute duty data: %w", err)
 	}
 
-	return dutyDataToSSVMsg(domain, types.ExecuteDuty, pubKey, duty.RunnerRole(), data)
+	return dutyDataToSSVMsg(domain, pubKey, duty.RunnerRole(), data)
 }
 
 // CreateCommitteeDutyExecuteMsg returns ssvMsg with event type of execute committee duty
@@ -988,15 +988,17 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 }
 
 func (c *controller) startCommittee(vc *validator.Committee) (bool, error) {
-	cstarted, err := vc.Start() // TODO alan : make it testable
-	if err != nil {
-		// todo alan: metrics
-		//c.metrics.ValidatorError(vc.Share.ValidatorPubKey[:])
-		return false, errors.Wrap(err, "could not start committee")
-	}
-	if cstarted {
-		c.recentlyStartedCommittees++
-	}
+	//TODO alan: currently nothing to start in committee?
+	c.logger.Debug("committee started ", zap.String("committee_id", hex.EncodeToString(vc.Operator.ClusterID[:])))
+	//cstarted, err := vc.Start() // TODO alan : make it testable
+	//if err != nil {
+	//	// todo alan: metrics
+	//	//c.metrics.ValidatorError(vc.Share.ValidatorPubKey[:])
+	//	return false, errors.Wrap(err, "could not start committee")
+	//}
+	//if cstarted {
+	//	c.recentlyStartedCommittees++
+	//}
 
 	return true, nil
 }

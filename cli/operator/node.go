@@ -283,6 +283,7 @@ var StartNodeCmd = &cobra.Command{
 
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
+		cfg.SSVOptions.ValidatorStore = validatorStore
 
 		operatorNode = operator.New(logger, cfg.SSVOptions, slotTickerProvider)
 

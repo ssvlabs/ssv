@@ -187,7 +187,7 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 			return r.ProcessPostConsensus(c.logger, pSigMessages)
 		}
 	case message.SSVEventMsgType:
-		return c.handleEventMessage(logger, msg, dutyRunner)
+		return c.handleEventMessage(logger, msg)
 	default:
 		return errors.New("unknown msg")
 	}

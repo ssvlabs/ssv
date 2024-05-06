@@ -31,13 +31,21 @@ func (v *Validator) handleEventMessage(logger *zap.Logger, msg *queue.DecodedSSV
 	}
 }
 
-func (c *Committee) handleEventMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage, dutyRunner runner.CommitteeRunner) error {
+func (c *Committee) handleEventMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage) error {
 	eventMsg, ok := msg.Body.(*types.EventMsg)
 	if !ok {
 		return fmt.Errorf("could not decode event message")
 	}
 	switch eventMsg.Type {
 	case types.Timeout:
+		slot, err := msg.Slot()
+		if err != nil {
+			return err
+		}
+		c.mtx.Lock()
+		dutyRunner := c.Runners[slot] // TODO: err check , runner exist?
+		c.mtx.Unlock()
+
 		if err := dutyRunner.GetBaseRunner().QBFTController.OnTimeout(logger, *eventMsg); err != nil {
 			return fmt.Errorf("timeout event: %w", err)
 		}

@@ -33,12 +33,15 @@ func (d *DecodedSSVMessage) Slot() (phase0.Slot, error) {
 		return phase0.Slot(m.Height), nil
 	case *spectypes.PartialSignatureMessages:
 		return m.Slot, nil
-	//case ssvmessage.SSVEventMsgType: // TODO: do we need slot in events?
-	//	msg := &ssvtypes.EventMsg{}
-	//	if err := msg.Decode(d.Data); err != nil {
-	//		return nil, fmt.Errorf("failed to decode EventMsg: %w", err)
-	//	}
-	//	body = msg
+	case *ssvtypes.EventMsg: // TODO: do we need slot in events?
+		if m.Type == ssvtypes.Timeout {
+			data, err := m.GetTimeoutData()
+			if err != nil {
+				return 0, ErrUnknownMessageType // TODO alan: other error
+			}
+			return phase0.Slot(data.Height), nil
+		}
+		return 0, ErrUnknownMessageType // TODO: alan: slot not supporting dutyexec msg?
 	default:
 		return 0, ErrUnknownMessageType
 	}
