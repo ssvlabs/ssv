@@ -47,6 +47,16 @@ const (
 	topicsReportingInterval         = 180 * time.Second
 )
 
+// PeersIndexProvider holds peers index instance
+type PeersIndexProvider interface {
+	PeersIndex() peers.Index
+}
+
+// HostProvider holds host instance
+type HostProvider interface {
+	Host() host.Host
+}
+
 // p2pNetwork implements network.P2PNetwork
 type p2pNetwork struct {
 	parentCtx context.Context

@@ -11,6 +11,7 @@ import (
 
 	"github.com/bloxapp/ssv/operator/storage"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
+	genesisregistrystorage "github.com/bloxapp/ssv/registry/storage/genesis"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
@@ -122,6 +123,11 @@ func (m NodeStorage) GetRecipientsPrefix() []byte {
 }
 
 func (m NodeStorage) Shares() registrystorage.Shares {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m NodeStorage) GenesisShares() genesisregistrystorage.Shares {
 	//TODO implement me
 	panic("implement me")
 }
