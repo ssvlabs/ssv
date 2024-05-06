@@ -278,11 +278,7 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
 		cfg.SSVOptions.ValidatorOptions.Metrics = metricsReporter
-		cfg.SSVOptions.ValidatorOptions.OperatorSigner = types.NewSsvOperatorSigner(operatorPrivKey,
-			func() spectypes.OperatorID {
-				return operatorDataStore.GetOperatorID()
-			},
-		)
+		cfg.SSVOptions.ValidatorOptions.OperatorSigner = types.NewSsvOperatorSigner(operatorPrivKey, operatorDataStore.GetOperatorID)
 		cfg.SSVOptions.Metrics = metricsReporter
 
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)

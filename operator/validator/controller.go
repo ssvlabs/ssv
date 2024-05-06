@@ -244,7 +244,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		beacon:            options.Beacon,
 		operatorDataStore: options.OperatorDataStore,
 		beaconSigner:      options.BeaconSigner,
-		operatorSigner:    options.OperatorSigner, // TODO alan: create wrapper (around keys.OperatorSigner) to support spec interface
+		operatorSigner:    options.OperatorSigner,
 		network:           options.Network,
 
 		validatorsMap:    options.ValidatorsMap,
