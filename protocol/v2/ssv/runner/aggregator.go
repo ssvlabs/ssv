@@ -230,7 +230,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
 		logger.Debug("🧩 reconstructed partial signatures",
-			zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)),
+			zap.Uint64s("signers", getPostConsensusSigners(r.GetState(), root)),
 			zap.Duration("quorum_time", r.metrics.GetPreConsensusTime()))
 
 		start := time.Now()
