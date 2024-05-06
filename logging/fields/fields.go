@@ -33,19 +33,19 @@ const (
 	FieldABI                 = "abi"
 	FieldABIVersion          = "abi_version"
 	FieldAddress             = "address"
+	FieldBeaconRole          = "beacon_role"
 	FieldBindIP              = "bind_ip"
 	FieldBlock               = "block"
 	FieldBlockHash           = "block_hash"
-	FieldBlockVersion        = "block_version"
 	FieldBlockCacheMetrics   = "block_cache_metrics_field"
+	FieldBlockVersion        = "block_version"
 	FieldBuilderProposals    = "builder_proposals"
 	FieldClusterIndex        = "cluster_index"
+	FieldCommitteeID         = "committee_id"
 	FieldConfig              = "config"
 	FieldConnectionID        = "connection_id"
 	FieldConsensusTime       = "consensus_time"
-	FieldSubmissionTime      = "submission_time"
 	FieldCount               = "count"
-	FieldTook                = "took"
 	FieldCurrentSlot         = "current_slot"
 	FieldDomain              = "domain"
 	FieldDuration            = "duration"
@@ -76,11 +76,13 @@ const (
 	FieldRound               = "round"
 	FieldSlot                = "slot"
 	FieldStartTimeUnixMilli  = "start_time_unix_milli"
+	FieldSubmissionTime      = "submission_time"
 	FieldSubnets             = "subnets"
 	FieldSyncOffset          = "sync_offset"
 	FieldSyncResults         = "sync_results"
 	FieldTargetNodeENR       = "target_node_enr"
 	FieldToBlock             = "to_block"
+	FieldTook                = "took"
 	FieldTopic               = "topic"
 	FieldTxHash              = "tx_hash"
 	FieldType                = "type"
@@ -211,6 +213,10 @@ func Height(height specqbft.Height) zap.Field {
 
 func Round(round specqbft.Round) zap.Field {
 	return zap.Uint64(FieldRound, uint64(round))
+}
+
+func BeaconRole(val spectypes.BeaconRole) zap.Field {
+	return zap.Stringer(FieldBeaconRole, val)
 }
 
 func Role(val spectypes.RunnerRole) zap.Field {
@@ -346,6 +352,10 @@ func Config(val fmt.Stringer) zap.Field {
 
 func ClusterIndex(cluster contract.ISSVNetworkCoreCluster) zap.Field {
 	return zap.Uint64(FieldClusterIndex, cluster.Index)
+}
+
+func CommitteeID(val spectypes.ClusterID) zap.Field {
+	return zap.String(FieldCommitteeID, string(val[:]))
 }
 
 func Owner(addr common.Address) zap.Field {

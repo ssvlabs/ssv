@@ -96,7 +96,8 @@ type Controller interface {
 	CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
 	AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex
 	GetValidator(pubKey string) (*validator.Validator, bool)
-	ExecuteDuty(logger *zap.Logger, duty *spectypes.Duty)
+	ExecuteDuty(logger *zap.Logger, duty *spectypes.BeaconDuty)
+	ExecuteCommitteeDuty(logger *zap.Logger, committeeID spectypes.ClusterID, duty *spectypes.CommitteeDuty)
 	UpdateValidatorMetaDataLoop()
 	StartNetworkHandlers()
 	GetOperatorShares() []*ssvtypes.SSVShare
@@ -627,62 +628,55 @@ func (c *controller) GetValidator(pubKey string) (*validator.Validator, bool) {
 	return c.validatorsMap.GetValidator(pubKey)
 }
 
-func (c *controller) ExecuteDuty(logger *zap.Logger, iduty spectypes.Duty) {
+func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.BeaconDuty) {
 	// because we're using the same duty for more than 1 duty (e.g. attest + aggregator) there is an error in bls.Deserialize func for cgo pointer to pointer.
 	// so we need to copy the pubkey val to avoid pointer
+	var pk []byte
+	copy(pk[:], duty.PubKey[:])
 
-	if iduty.RunnerRole() == spectypes.RoleCommittee {
-		duty := iduty.(*spectypes.CommitteeDuty)
-		//TODO alan: create duty with committeeID wrapper from scheduler
-		committeeid := CommitteeID(duty.CommitteeID)
-		if v, ok := c.validatorsMap.GetCommittee(committeeid); ok {
-			ssvMsg, err := CreateDutyExecuteMsg(iduty, []byte(committeeid), types.GetDefaultDomain())
-			if err != nil {
-				logger.Error("could not create duty execute msg", zap.Error(err))
-				return
-			}
-			dec, err := queue.DecodeSSVMessage(ssvMsg)
-			if err != nil {
-				logger.Error("could not decode duty execute msg", zap.Error(err))
-				return
-			}
-			if pushed := v.Queues[duty.RunnerRole()].Q.TryPush(dec); !pushed {
-				logger.Warn("dropping ExecuteDuty message because the queue is full")
-			}
-			// logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
-		} else {
-			logger.Warn("could not find committee", fields.PubKey([]byte(committeeid)))
+	if v, ok := c.GetValidator(hex.EncodeToString(pk)); ok {
+		ssvMsg, err := CreateDutyExecuteMsg(duty, pk, types.GetDefaultDomain())
+		if err != nil {
+			logger.Error("could not create duty execute msg", zap.Error(err))
+			return
 		}
-
+		dec, err := queue.DecodeSSVMessage(ssvMsg)
+		if err != nil {
+			logger.Error("could not decode duty execute msg", zap.Error(err))
+			return
+		}
+		if pushed := v.Queues[duty.RunnerRole()].Q.TryPush(dec); !pushed {
+			logger.Warn("dropping ExecuteDuty message because the queue is full")
+		}
+		// logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
 	} else {
-		duty := iduty.(*spectypes.BeaconDuty)
-		var pk phase0.BLSPubKey
-		copy(pk[:], duty.PubKey[:])
+		logger.Warn("could not find validator")
+	}
+}
 
-		pubKeyString := hex.EncodeToString(pk[:])
-		if v, ok := c.GetValidator(pubKeyString); ok {
-			ssvMsg, err := CreateDutyExecuteMsg(duty, pk[:], types.GetDefaultDomain())
-			if err != nil {
-				logger.Error("could not create duty execute msg", zap.Error(err))
-				return
-			}
-			dec, err := queue.DecodeSSVMessage(ssvMsg)
-			if err != nil {
-				logger.Error("could not decode duty execute msg", zap.Error(err))
-				return
-			}
-			if pushed := v.Queues[duty.RunnerRole()].Q.TryPush(dec); !pushed {
-				logger.Warn("dropping ExecuteDuty message because the queue is full")
-			}
-			// logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
-		} else {
-			logger.Warn("could not find validator", fields.PubKey(duty.PubKey[:]))
+func (c *controller) ExecuteCommitteeDuty(logger *zap.Logger, committeeID spectypes.ClusterID, duty *spectypes.CommitteeDuty) {
+	if cm, ok := c.GetCommittee(committeeID); ok {
+		ssvMsg, err := CreateCommitteeDutyExecuteMsg(duty, committeeID, types.GetDefaultDomain())
+		if err != nil {
+			logger.Error("could not create duty execute msg", zap.Error(err))
+			return
 		}
+		dec, err := queue.DecodeSSVMessage(ssvMsg)
+		if err != nil {
+			logger.Error("could not decode duty execute msg", zap.Error(err))
+			return
+		}
+		if pushed := cm.Queues[duty.Slot].Q.TryPush(dec); !pushed {
+			logger.Warn("dropping ExecuteDuty message because the queue is full")
+		}
+		// logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
+	} else {
+		logger.Warn("could not find committee", fields.CommitteeID(committeeID))
 	}
 }
 
 // CreateDutyExecuteMsg returns ssvMsg with event type of duty execute
-func CreateDutyExecuteMsg(duty spectypes.Duty, pubKey []byte, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
+func CreateDutyExecuteMsg(duty *spectypes.BeaconDuty, pubKey []byte, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
 	executeDutyData := types.ExecuteDutyData{Duty: duty}
 	edd, err := json.Marshal(executeDutyData)
 	if err != nil {
@@ -699,6 +693,28 @@ func CreateDutyExecuteMsg(duty spectypes.Duty, pubKey []byte, domain spectypes.D
 	return &spectypes.SSVMessage{
 		MsgType: message.SSVEventMsgType,
 		MsgID:   spectypes.NewMsgID(domain, pubKey, duty.RunnerRole()),
+		Data:    data,
+	}, nil
+}
+
+// CreateCommitteeDutyExecuteMsg returns ssvMsg with event type of duty execute
+func CreateCommitteeDutyExecuteMsg(duty *spectypes.CommitteeDuty, committeeID spectypes.ClusterID, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
+	executeCommitteeDutyData := types.ExecuteCommitteeDutyData{Duty: duty}
+	edd, err := json.Marshal(executeCommitteeDutyData)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to marshal execute duty data")
+	}
+	msg := types.EventMsg{
+		Type: types.ExecuteCommitteeDuty,
+		Data: edd,
+	}
+	data, err := msg.Encode()
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to encode event msg")
+	}
+	return &spectypes.SSVMessage{
+		MsgType: message.SSVEventMsgType,
+		MsgID:   spectypes.NewMsgID(domain, committeeID[:], duty.RunnerRole()),
 		Data:    data,
 	}, nil
 }
@@ -882,14 +898,6 @@ func (c *controller) operatorFromShare(share *ssvtypes.SSVShare) (*spectypes.Ope
 		PartialQuorum:     pc,
 		Committee:         committeemembers,
 	}, nil
-}
-
-func CommitteeID(share spectypes.Share) spectypes.ClusterID {
-	opids := make([]uint64, len(share.Committee))
-	for i, c := range share.Committee {
-		opids[i] = c.Signer
-	}
-	return spectypes.GetClusterID(opids)
 }
 
 func (c *controller) onShareStart(share *ssvtypes.SSVShare) (bool, error) {

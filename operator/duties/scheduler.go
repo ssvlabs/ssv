@@ -67,37 +67,40 @@ type ExecutionClient interface {
 	BlockByNumber(ctx context.Context, blockNumber *big.Int) (*ethtypes.Block, error)
 }
 
-// ValidatorController represents the component that controls validators via the scheduler
-type ValidatorController interface {
-	CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
-	AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex
-	GetOperatorShares() []*types.SSVShare
+// ValidatorProvider represents the component that controls validators via the scheduler
+type ValidatorProvider interface {
+	ParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
+	SelfParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
+	Validator(pubKey []byte) *types.SSVShare
 }
 
-type ExecuteDutyFunc func(logger *zap.Logger, duty *spectypes.Duty)
+type ExecuteDutyFunc func(logger *zap.Logger, duty *spectypes.BeaconDuty)
+type ExecuteCommitteeDutyFunc func(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 
 type SchedulerOptions struct {
-	Ctx                 context.Context
-	BeaconNode          BeaconNode
-	ExecutionClient     ExecutionClient
-	Network             networkconfig.NetworkConfig
-	ValidatorController ValidatorController
-	ExecuteDuty         ExecuteDutyFunc
-	IndicesChg          chan struct{}
-	ValidatorExitCh     <-chan ExitDescriptor
-	SlotTickerProvider  slotticker.Provider
-	BuilderProposals    bool
-	DutyStore           *dutystore.Store
+	Ctx                  context.Context
+	BeaconNode           BeaconNode
+	ExecutionClient      ExecutionClient
+	Network              networkconfig.NetworkConfig
+	ValidatorProvider    ValidatorProvider
+	ExecuteDuty          ExecuteDutyFunc
+	ExecuteCommitteeDuty ExecuteCommitteeDutyFunc
+	IndicesChg           chan struct{}
+	ValidatorExitCh      <-chan ExitDescriptor
+	SlotTickerProvider   slotticker.Provider
+	BuilderProposals     bool
+	DutyStore            *dutystore.Store
 }
 
 type Scheduler struct {
-	beaconNode          BeaconNode
-	executionClient     ExecutionClient
-	network             networkconfig.NetworkConfig
-	validatorController ValidatorController
-	slotTickerProvider  slotticker.Provider
-	executeDuty         ExecuteDutyFunc
-	builderProposals    bool
+	beaconNode           BeaconNode
+	executionClient      ExecutionClient
+	network              networkconfig.NetworkConfig
+	ValidatorProvider    ValidatorProvider
+	slotTickerProvider   slotticker.Provider
+	executeDuty          ExecuteDutyFunc
+	executeCommitteeDuty ExecuteCommitteeDutyFunc
+	builderProposals     bool
 
 	handlers            []dutyHandler
 	blockPropagateDelay time.Duration
@@ -121,21 +124,23 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 	}
 
 	s := &Scheduler{
-		beaconNode:          opts.BeaconNode,
-		executionClient:     opts.ExecutionClient,
-		network:             opts.Network,
-		slotTickerProvider:  opts.SlotTickerProvider,
-		executeDuty:         opts.ExecuteDuty,
-		validatorController: opts.ValidatorController,
-		builderProposals:    opts.BuilderProposals,
-		indicesChg:          opts.IndicesChg,
-		blockPropagateDelay: blockPropagationDelay,
+		beaconNode:           opts.BeaconNode,
+		executionClient:      opts.ExecutionClient,
+		network:              opts.Network,
+		slotTickerProvider:   opts.SlotTickerProvider,
+		executeDuty:          opts.ExecuteDuty,
+		executeCommitteeDuty: opts.ExecuteCommitteeDuty,
+		ValidatorProvider:    opts.ValidatorProvider,
+		builderProposals:     opts.BuilderProposals,
+		indicesChg:           opts.IndicesChg,
+		blockPropagateDelay:  blockPropagationDelay,
 
 		handlers: []dutyHandler{
 			NewAttesterHandler(dutyStore.Attester),
 			NewProposerHandler(dutyStore.Proposer),
 			NewSyncCommitteeHandler(dutyStore.SyncCommittee),
 			NewVoluntaryExitHandler(opts.ValidatorExitCh),
+			NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee),
 		},
 
 		ticker:   opts.SlotTickerProvider(),
@@ -184,8 +189,9 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 			s.beaconNode,
 			s.executionClient,
 			s.network,
-			s.validatorController,
+			s.ValidatorProvider,
 			s.ExecuteDuties,
+			s.ExecuteCommitteeDuties,
 			s.slotTickerProvider,
 			reorgCh,
 			indicesChangeCh,
@@ -290,7 +296,7 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.Ev
 		// check for reorg
 		epoch := s.network.Beacon.EstimatedEpochAtSlot(data.Slot)
 		buildStr := fmt.Sprintf("e%v-s%v-#%v", epoch, data.Slot, data.Slot%32+1)
-		logger := logger.With(zap.String("epoch_slot_seq", buildStr))
+		logger := logger.With(zap.String("epoch_slot_pos", buildStr))
 		if s.lastBlockEpoch != 0 {
 			if epoch > s.lastBlockEpoch {
 				// Change of epoch.
@@ -359,7 +365,7 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.Ev
 }
 
 // ExecuteDuties tries to execute the given duties
-func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []*spectypes.Duty) {
+func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []*spectypes.BeaconDuty) {
 	for _, duty := range duties {
 		duty := duty
 		logger := s.loggerWithDutyContext(logger, duty)
@@ -377,10 +383,27 @@ func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []*spectypes.Duty) 
 	}
 }
 
+// ExecuteCommitteeDuties tries to execute the given committee duties
+func (s *Scheduler) ExecuteCommitteeDuties(logger *zap.Logger, duties map[[32]byte]*spectypes.CommitteeDuty) {
+	for _, duty := range duties {
+		duty := duty
+		//logger := s.loggerWithDutyContext(logger, duty)
+		slotDelay := time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot))
+		if slotDelay >= 100*time.Millisecond {
+			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
+		}
+		slotDelayHistogram.Observe(float64(slotDelay.Milliseconds()))
+		go func() {
+			s.waitOneThirdOrValidBlock(duty.Slot)
+			s.executeCommitteeDuty(logger, duty)
+		}()
+	}
+}
+
 // loggerWithDutyContext returns an instance of logger with the given duty's information
-func (s *Scheduler) loggerWithDutyContext(logger *zap.Logger, duty *spectypes.Duty) *zap.Logger {
+func (s *Scheduler) loggerWithDutyContext(logger *zap.Logger, duty *spectypes.BeaconDuty) *zap.Logger {
 	return logger.
-		With(fields.Role(duty.Type)).
+		With(fields.BeaconRole(duty.Type)).
 		With(zap.Uint64("committee_index", uint64(duty.CommitteeIndex))).
 		With(fields.CurrentSlot(s.network.Beacon.EstimatedCurrentSlot())).
 		With(fields.Slot(duty.Slot)).
@@ -397,4 +420,15 @@ func (s *Scheduler) waitOneThirdOrValidBlock(slot phase0.Slot) {
 		s.waitCond.Wait()
 	}
 	s.waitCond.L.Unlock()
+}
+
+func indicesFromShares(shares []*types.SSVShare) []phase0.ValidatorIndex {
+	indices := make([]phase0.ValidatorIndex, len(shares))
+	for i, share := range shares {
+		if share.BeaconMetadata == nil || share.BeaconMetadata.Index == 0 {
+			continue
+		}
+		indices[i] = share.BeaconMetadata.Index
+	}
+	return indices
 }

@@ -217,67 +217,67 @@ func (mr *MockExecutionClientMockRecorder) BlockByNumber(ctx, blockNumber interf
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BlockByNumber", reflect.TypeOf((*MockExecutionClient)(nil).BlockByNumber), ctx, blockNumber)
 }
 
-// MockValidatorController is a mock of ValidatorController interface.
-type MockValidatorController struct {
+// MockValidatorProvider is a mock of ValidatorProvider interface.
+type MockValidatorProvider struct {
 	ctrl     *gomock.Controller
-	recorder *MockValidatorControllerMockRecorder
+	recorder *MockValidatorProviderMockRecorder
 }
 
-// MockValidatorControllerMockRecorder is the mock recorder for MockValidatorController.
-type MockValidatorControllerMockRecorder struct {
-	mock *MockValidatorController
+// MockValidatorProviderMockRecorder is the mock recorder for MockValidatorProvider.
+type MockValidatorProviderMockRecorder struct {
+	mock *MockValidatorProvider
 }
 
-// NewMockValidatorController creates a new mock instance.
-func NewMockValidatorController(ctrl *gomock.Controller) *MockValidatorController {
-	mock := &MockValidatorController{ctrl: ctrl}
-	mock.recorder = &MockValidatorControllerMockRecorder{mock}
+// NewMockValidatorProvider creates a new mock instance.
+func NewMockValidatorProvider(ctrl *gomock.Controller) *MockValidatorProvider {
+	mock := &MockValidatorProvider{ctrl: ctrl}
+	mock.recorder = &MockValidatorProviderMockRecorder{mock}
 	return mock
 }
 
 // EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockValidatorController) EXPECT() *MockValidatorControllerMockRecorder {
+func (m *MockValidatorProvider) EXPECT() *MockValidatorProviderMockRecorder {
 	return m.recorder
 }
 
-// AllActiveIndices mocks base method.
-func (m *MockValidatorController) AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex {
+// ParticipatingValidators mocks base method.
+func (m *MockValidatorProvider) ParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AllActiveIndices", epoch, afterInit)
-	ret0, _ := ret[0].([]phase0.ValidatorIndex)
-	return ret0
-}
-
-// AllActiveIndices indicates an expected call of AllActiveIndices.
-func (mr *MockValidatorControllerMockRecorder) AllActiveIndices(epoch, afterInit interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AllActiveIndices", reflect.TypeOf((*MockValidatorController)(nil).AllActiveIndices), epoch, afterInit)
-}
-
-// CommitteeActiveIndices mocks base method.
-func (m *MockValidatorController) CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CommitteeActiveIndices", epoch)
-	ret0, _ := ret[0].([]phase0.ValidatorIndex)
-	return ret0
-}
-
-// CommitteeActiveIndices indicates an expected call of CommitteeActiveIndices.
-func (mr *MockValidatorControllerMockRecorder) CommitteeActiveIndices(epoch interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CommitteeActiveIndices", reflect.TypeOf((*MockValidatorController)(nil).CommitteeActiveIndices), epoch)
-}
-
-// GetOperatorShares mocks base method.
-func (m *MockValidatorController) GetOperatorShares() []*types.SSVShare {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetOperatorShares")
+	ret := m.ctrl.Call(m, "ParticipatingValidators", epoch)
 	ret0, _ := ret[0].([]*types.SSVShare)
 	return ret0
 }
 
-// GetOperatorShares indicates an expected call of GetOperatorShares.
-func (mr *MockValidatorControllerMockRecorder) GetOperatorShares() *gomock.Call {
+// ParticipatingValidators indicates an expected call of ParticipatingValidators.
+func (mr *MockValidatorProviderMockRecorder) ParticipatingValidators(epoch interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorShares", reflect.TypeOf((*MockValidatorController)(nil).GetOperatorShares))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ParticipatingValidators", reflect.TypeOf((*MockValidatorProvider)(nil).ParticipatingValidators), epoch)
+}
+
+// SelfParticipatingValidators mocks base method.
+func (m *MockValidatorProvider) SelfParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SelfParticipatingValidators", epoch)
+	ret0, _ := ret[0].([]*types.SSVShare)
+	return ret0
+}
+
+// SelfParticipatingValidators indicates an expected call of SelfParticipatingValidators.
+func (mr *MockValidatorProviderMockRecorder) SelfParticipatingValidators(epoch interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SelfParticipatingValidators", reflect.TypeOf((*MockValidatorProvider)(nil).SelfParticipatingValidators), epoch)
+}
+
+// Validator mocks base method.
+func (m *MockValidatorProvider) Validator(pubKey []byte) *types.SSVShare {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Validator", pubKey)
+	ret0, _ := ret[0].(*types.SSVShare)
+	return ret0
+}
+
+// Validator indicates an expected call of Validator.
+func (mr *MockValidatorProviderMockRecorder) Validator(pubKey interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validator", reflect.TypeOf((*MockValidatorProvider)(nil).Validator), pubKey)
 }
