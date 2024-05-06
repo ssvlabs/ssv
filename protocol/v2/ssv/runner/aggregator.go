@@ -77,6 +77,8 @@ func (r *AggregatorRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *sp
 	if err != nil {
 		return errors.Wrap(err, "failed processing selection proof message")
 	}
+	duty := r.GetState().StartingDuty
+	logger = logger.With(fields.Slot(duty.Slot))
 	// quorum returns true only once (first time quorum achieved)
 	if !quorum {
 		return nil
@@ -95,8 +97,6 @@ func (r *AggregatorRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *sp
 	logger.Debug("🧩 reconstructed partial signatures",
 		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)),
 		zap.Duration("quorum_time", r.metrics.GetPreConsensusTime()))
-
-	duty := r.GetState().StartingDuty
 
 	r.metrics.PauseDutyFullFlow()
 	timeToSubmit := time.Now()
@@ -148,8 +148,13 @@ func (r *AggregatorRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specq
 	}
 
 	r.metrics.EndConsensus()
+	duty := r.GetState().StartingDuty
+	logger = logger.With(fields.Slot(duty.Slot))
+	logger.Debug("🧩 got decided",
+		zap.Duration("decided_time", r.metrics.GetConsensusTime()))
 	r.metrics.StartPostConsensus()
 
+	startTime := time.Now()
 	aggregateAndProof, err := decidedValue.GetAggregateAndProof()
 	if err != nil {
 		return errors.Wrap(err, "could not get aggregate and proof")
@@ -188,8 +193,15 @@ func (r *AggregatorRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specq
 	}
 
 	if err := r.GetNetwork().Broadcast(ssvMsg.GetID(), msgToBroadcast); err != nil {
+		logger.Error("❌ can't broadcast partial post consensus sig",
+			zap.Duration("took: ", time.Since(startTime)),
+			zap.Duration("decided_time", r.metrics.GetConsensusTime()),
+			zap.Error(err))
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
+	logger.Info("✅ partial post consensus sig broadcast successfully",
+		zap.Duration("took", time.Since(startTime)),
+		zap.Duration("decided_time", r.metrics.GetConsensusTime()))
 	return nil
 }
 
@@ -202,7 +214,8 @@ func (r *AggregatorRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 	if !quorum {
 		return nil
 	}
-
+	duty := r.GetState().StartingDuty
+	logger = logger.With(fields.Slot(duty.Slot))
 	r.metrics.EndPostConsensus()
 
 	for _, root := range roots {
@@ -216,6 +229,11 @@ func (r *AggregatorRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 		}
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
+		logger.Debug("🧩 reconstructed partial signatures",
+			zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)),
+			zap.Duration("quorum_time", r.metrics.GetPreConsensusTime()))
+
+		start := time.Now()
 
 		aggregateAndProof, err := r.GetState().DecidedValue.GetAggregateAndProof()
 		if err != nil {
@@ -231,6 +249,10 @@ func (r *AggregatorRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 
 		if err := r.GetBeaconNode().SubmitSignedAggregateSelectionProof(msg); err != nil {
 			r.metrics.RoleSubmissionFailed()
+			logger.Error("❌ could not submit to Beacon chain reconstructed contribution and proof",
+				zap.Duration("took: ", time.Since(start)),
+				zap.Duration("decided_time", r.metrics.GetPostConsensusTime()),
+				zap.Error(err))
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed aggregate")
 		}
 
@@ -238,7 +260,9 @@ func (r *AggregatorRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 		r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
 		r.metrics.RoleSubmitted()
 
-		logger.Debug("✅ successful submitted aggregate")
+		logger.Debug("✅ successful submitted aggregate!",
+			zap.Duration("took", time.Since(start)),
+			zap.Duration("quorum_took", r.metrics.GetPostConsensusTime()))
 	}
 	r.GetState().Finished = true
 

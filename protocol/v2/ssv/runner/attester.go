@@ -141,7 +141,7 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 
 	duty := r.GetState().DecidedValue.Duty
 	logger = logger.With(fields.Slot(duty.Slot))
-	logger.Debug("🧩 got partial signatures",
+	logger.Debug("🧩 got partial signature",
 		zap.Uint64("signer", signedMsg.Signer))
 
 	if !quorum {

@@ -73,6 +73,8 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(logger *zap.Logger, si
 		return errors.Wrap(err, "failed processing validator registration message")
 	}
 
+	duty := r.GetState().StartingDuty
+	logger = logger.With(fields.Slot(duty.Slot))
 	// quorum returns true only once (first time quorum achieved)
 	if !quorum {
 		return nil
@@ -96,17 +98,17 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(logger *zap.Logger, si
 
 	timeToSubmit := time.Now()
 	if err := r.beacon.SubmitValidatorRegistration(r.BaseRunner.Share.ValidatorPubKey, r.BaseRunner.Share.FeeRecipientAddress, specSig); err != nil {
-		took := time.Since(timeToSubmit)
 		logger.Error("failed to submit validator registration",
-			zap.Duration("time to submit: ", took),
+			zap.Duration("quorum_time", r.metrics.GetPreConsensusTime()),
+			zap.Duration("time to submit: ", time.Since(timeToSubmit)),
 			zap.Error(err))
 		return errors.Wrap(err, "could not submit validator registration")
 	}
-	took := time.Since(timeToSubmit)
 	logger.Debug("validator registration submitted successfully",
 		fields.FeeRecipient(r.BaseRunner.Share.FeeRecipientAddress[:]),
 		zap.String("signature", hex.EncodeToString(specSig[:])),
-		zap.Duration("time_to_submit", took))
+		zap.Duration("quorum_time", r.metrics.GetPreConsensusTime()),
+		zap.Duration("time_to_submit", time.Since(timeToSubmit)))
 
 	r.GetState().Finished = true
 	return nil

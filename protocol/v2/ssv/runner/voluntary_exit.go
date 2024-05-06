@@ -78,7 +78,8 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg 
 	if !quorum {
 		return nil
 	}
-
+	duty := r.GetState().StartingDuty
+	logger = logger.With(fields.Slot(duty.Slot))
 	// only 1 root, verified in basePreConsensusMsgProcessing
 	root := roots[0]
 	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey)
@@ -101,18 +102,19 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg 
 	}
 	timeToSubmit := time.Now()
 	if err := r.beacon.SubmitVoluntaryExit(signedVoluntaryExit); err != nil {
-		took := time.Since(timeToSubmit)
 		logger.Error("failed to submit voluntary exit",
-			zap.Duration("time to submit: ", took),
+			zap.Duration("time to submit: ", time.Since(timeToSubmit)),
+			zap.Duration("quorum_time", r.metrics.GetPreConsensusTime()),
 			zap.Error(err))
 		return errors.Wrap(err, "could not submit voluntary exit")
 	}
-	took := time.Since(timeToSubmit)
+
 	logger.Debug("voluntary exit submitted successfully",
 		fields.Epoch(r.voluntaryExit.Epoch),
 		zap.Uint64("validator_index", uint64(r.voluntaryExit.ValidatorIndex)),
 		zap.String("signature", hex.EncodeToString(specSig[:])),
-		zap.Duration("time_to_submit", took),
+		zap.Duration("time_to_submit", time.Since(timeToSubmit)),
+		zap.Duration("quorum_time", r.metrics.GetPreConsensusTime()),
 	)
 
 	r.GetState().Finished = true

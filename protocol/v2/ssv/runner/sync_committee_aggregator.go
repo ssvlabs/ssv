@@ -9,9 +9,11 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/bloxapp/ssv/logging/fields"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+	"time"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
@@ -73,7 +75,8 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(logger *zap.Logger, 
 	if err != nil {
 		return errors.Wrap(err, "failed processing sync committee selection proof message")
 	}
-
+	duty := r.GetState().StartingDuty
+	logger = logger.With(fields.Slot(duty.Slot))
 	// quorum returns true only once (first time quorum achieved)
 	if !quorum {
 		return nil
@@ -121,10 +124,8 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(logger *zap.Logger, 
 		return nil
 	}
 	r.metrics.EndPreConsensus()
-	logger.Debug("🧩 reconstructed partial signatures",
+	logger.Debug("🧩 reconstructed selection proofs",
 		zap.Duration("quorum_time", r.metrics.GetPreConsensusTime()))
-
-	duty := r.GetState().StartingDuty
 
 	// fetch contributions
 	r.metrics.PauseDutyFullFlow()
@@ -165,7 +166,12 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(logger *zap.Logger, sig
 	}
 
 	r.metrics.EndConsensus()
+	duty := r.GetState().StartingDuty
+	logger = logger.With(fields.Slot(duty.Slot))
+	logger.Debug("🧩 got decided",
+		zap.Duration("decided_time", r.metrics.GetConsensusTime()))
 	r.metrics.StartPostConsensus()
+	startTime := time.Now()
 
 	contributions, err := decidedValue.GetSyncCommitteeContributions()
 	if err != nil {
@@ -215,8 +221,15 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(logger *zap.Logger, sig
 	}
 
 	if err := r.GetNetwork().Broadcast(ssvMsg.GetID(), msgToBroadcast); err != nil {
+		logger.Error("❌ can't broadcast partial post consensus sig",
+			zap.Duration("took: ", time.Since(startTime)),
+			zap.Duration("decided_time", r.metrics.GetConsensusTime()),
+			zap.Error(err))
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
+	logger.Info("✅ partial post consensus sig broadcast successfully",
+		zap.Duration("took", time.Since(startTime)),
+		zap.Duration("decided_time", r.metrics.GetConsensusTime()))
 	return nil
 }
 
@@ -229,6 +242,8 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(logger *zap.Logger,
 	if !quorum {
 		return nil
 	}
+	duty := r.GetState().StartingDuty
+	logger = logger.With(fields.Slot(duty.Slot))
 
 	r.metrics.EndPostConsensus()
 
@@ -249,8 +264,12 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(logger *zap.Logger,
 		}
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
+		logger.Debug("🧩 reconstructed selection proofs",
+			zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)),
+			zap.Duration("quorum_time", r.metrics.GetPostConsensusTime()))
 
 		for _, contribution := range contributions {
+			start := time.Now()
 			// match the right contrib and proof root to signed root
 			contribAndProof, contribAndProofRoot, err := r.generateContributionAndProof(contribution.Contribution, contribution.SelectionProofSig)
 			if err != nil {
@@ -275,14 +294,19 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(logger *zap.Logger,
 
 			if err := r.GetBeaconNode().SubmitSignedContributionAndProof(signedContribAndProof); err != nil {
 				r.metrics.RoleSubmissionFailed()
+				logger.Error("❌ could not submit to Beacon chain reconstructed contribution and proof",
+					zap.Duration("took: ", time.Since(start)),
+					zap.Duration("decided_time", r.metrics.GetPostConsensusTime()),
+					zap.Error(err))
 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed contribution and proof")
 			}
 
 			submissionEnd()
 			r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
 			r.metrics.RoleSubmitted()
-
-			logger.Debug("✅ submitted successfully sync committee aggregator!")
+			logger.Debug("✅ submitted successfully sync committee aggregator!",
+				zap.Duration("took", time.Since(start)),
+				zap.Duration("quorum_took", r.metrics.GetPostConsensusTime()))
 			break
 		}
 	}

@@ -117,9 +117,8 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 		// get block data
 		obj, ver, err = r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
 		if err != nil {
-			took := time.Since(start)
-			logger.Error("failed to get beacon block",
-				zap.Duration("time to get block: ", took),
+			logger.Error("❌ failed to get blinded beacon block",
+				zap.Duration("time to get block: ", time.Since(start)),
 				zap.Error(err))
 			return errors.Wrap(err, "failed to get blinded beacon block")
 		}
@@ -127,20 +126,18 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 		// get block data
 		obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
 		if err != nil {
-			took := time.Since(start)
-			logger.Error("failed to get beacon block",
-				zap.Duration("time to get block: ", took),
+			logger.Error("❌ failed to get beacon block",
+				zap.Duration("time to get block: ", time.Since(start)),
 				zap.Error(err))
 			return errors.Wrap(err, "failed to get beacon block")
 		}
 	}
-	took := time.Since(start)
 	// Log essentials about the retrieved block.
 	blockSummary, summarizeErr := summarizeBlock(obj)
 	logger.Info("🧊 got beacon block proposal",
 		zap.String("block_hash", blockSummary.Hash.String()),
 		zap.Bool("blinded", blockSummary.Blinded),
-		zap.Duration("took", took),
+		zap.Duration("took", time.Since(start)),
 		zap.NamedError("summarize_err", summarizeErr))
 
 	byts, err := obj.MarshalSSZ()
@@ -173,11 +170,14 @@ func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbf
 	}
 
 	r.metrics.EndConsensus()
+	duty := r.GetState().StartingDuty
+	logger = logger.With(fields.Slot(duty.Slot))
+
 	logger.Debug("🧩 got decided",
 		zap.Duration("decided_time", r.metrics.GetConsensusTime()))
 
 	r.metrics.StartPostConsensus()
-
+	startTime := time.Now()
 	// specific duty sig
 	var blkToSign ssz.HashRoot
 	if r.decidedBlindedBlock() {
@@ -228,8 +228,15 @@ func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbf
 	}
 
 	if err := r.GetNetwork().Broadcast(ssvMsg.GetID(), msgToBroadcast); err != nil {
+		logger.Error("❌ can't broadcast partial post consensus sig",
+			zap.Duration("took: ", time.Since(startTime)),
+			zap.Duration("decided_time", r.metrics.GetConsensusTime()),
+			zap.Error(err))
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
+	logger.Info("✅ partial post consensus sig broadcast successfully",
+		zap.Duration("took", time.Since(startTime)),
+		zap.Duration("decided_time", r.metrics.GetConsensusTime()))
 	return nil
 }
 
@@ -238,13 +245,14 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
 	}
+
 	if !quorum {
 		return nil
 	}
+	duty := r.GetState().StartingDuty
+	logger = logger.With(fields.Slot(duty.Slot))
 
 	r.metrics.EndPostConsensus()
-	//logger.Debug("🧩 got decided",
-	//	zap.Duration("decided_time", r.metrics.GetPostConsensusTime()))
 
 	for _, root := range roots {
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey)
@@ -257,7 +265,9 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		}
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
-
+		logger.Debug("🧩 reconstructed partial RANDAO signatures",
+			zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)),
+			zap.Duration("quorum_time", r.metrics.GetPostConsensusTime()))
 		blockSubmissionEnd := r.metrics.StartBeaconSubmission()
 
 		start := time.Now()
@@ -283,7 +293,10 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 
 			if err := r.GetBeaconNode().SubmitBeaconBlock(vBlk, specSig); err != nil {
 				r.metrics.RoleSubmissionFailed()
-
+				logger.Error("❌ could not submit to Beacon chain reconstructed signed Beacon block",
+					zap.Duration("took: ", time.Since(start)),
+					zap.Duration("decided_time", r.metrics.GetPostConsensusTime()),
+					zap.Error(err))
 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed Beacon block")
 			}
 		}
@@ -294,12 +307,12 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 
 		blockSummary, summarizeErr := summarizeBlock(blk)
 		logger.Info("✅ successfully submitted block proposal",
-			fields.Slot(signedMsg.Message.Slot),
 			fields.Height(r.BaseRunner.QBFTController.Height),
 			fields.Round(r.GetState().RunningInstance.State.Round),
 			zap.String("block_hash", blockSummary.Hash.String()),
 			zap.Bool("blinded", blockSummary.Blinded),
 			zap.Duration("took", time.Since(start)),
+			zap.Duration("quorum_took", r.metrics.GetPostConsensusTime()),
 			zap.NamedError("summarize_err", summarizeErr))
 	}
 	r.GetState().Finished = true
