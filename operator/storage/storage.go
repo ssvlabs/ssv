@@ -45,7 +45,6 @@ type Storage interface {
 	registrystorage.Operators
 	registrystorage.Recipients
 	Shares() registrystorage.Shares
-	GenesisShares() genesisregistrystorage.Shares // DEPRECATED, TODO: remove post-fork
 	ValidatorStore() registrystorage.ValidatorStore
 
 	GetPrivateKeyHash() (string, bool, error)
@@ -76,11 +75,6 @@ func NewNodeStorage(logger *zap.Logger, db basedb.Database) (Storage, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	stg.genesisShareStore, err = genesisregistrystorage.NewSharesStorage(logger, db, storagePrefix)
-	if err != nil {
-		return nil, err
-	}
 	return stg, nil
 }
 
@@ -94,11 +88,6 @@ func (s *storage) BeginRead() basedb.ReadTxn {
 
 func (s *storage) Shares() registrystorage.Shares {
 	return s.shareStore
-}
-
-// DEPRECATED, TODO: remove post-fork
-func (s *storage) GenesisShares() genesisregistrystorage.Shares {
-	return s.genesisShareStore
 }
 
 func (s *storage) ValidatorStore() registrystorage.ValidatorStore {

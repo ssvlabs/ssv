@@ -288,6 +288,8 @@ func (s *sharesStorage) storageShareToSpecShare(share *storageShare) (*types.SSV
 
 func (s *sharesStorage) Delete(rw basedb.ReadWriter, pubKey []byte) error {
 	s.mu.Lock()
+	// TODO: (Alan) fix hack to avoid double-locking mutex
+	defer s.validatorStore.handleShareRemoved((spectypes.ValidatorPK)(pubKey))
 	defer s.mu.Unlock()
 
 	err := s.db.Using(rw).Delete(s.prefix, s.storageKey(pubKey))
@@ -297,7 +299,6 @@ func (s *sharesStorage) Delete(rw basedb.ReadWriter, pubKey []byte) error {
 
 	delete(s.shares, hex.EncodeToString(pubKey))
 
-	s.validatorStore.handleShareRemoved((spectypes.ValidatorPK)(pubKey))
 	return nil
 }
 

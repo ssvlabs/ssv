@@ -402,37 +402,38 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 		return nil, descriptor, ErrInvalidRole
 	}
 
-	publicKey, err := ssvtypes.DeserializeBLSPublicKey(validatorPK)
-	if err != nil {
-		e := ErrDeserializePublicKey
-		e.innerErr = err
-		return nil, descriptor, e
-	}
+	// TODO: (Genesis) uncomment
+	// publicKey, err := ssvtypes.DeserializeBLSPublicKey(validatorPK)
+	// if err != nil {
+	// 	e := ErrDeserializePublicKey
+	// 	e.innerErr = err
+	// 	return nil, descriptor, e
+	// }
 
 	var share *ssvtypes.GenesisSSVShare
-	if mv.nodeStorage != nil {
-		shareStorage := mv.nodeStorage.GenesisShares()
-		share = shareStorage.Get(nil, publicKey.Serialize())
-		if share == nil {
-			e := ErrUnknownValidator
-			e.got = publicKey.SerializeToHexStr()
-			return nil, descriptor, e
-		}
+	// if mv.nodeStorage != nil {
+	// shareStorage := mv.nodeStorage.GenesisShares()
+	// share = shareStorage.Get(nil, publicKey.Serialize())
+	// if share == nil {
+	// 	e := ErrUnknownValidator
+	// 	e.got = publicKey.SerializeToHexStr()
+	// 	return nil, descriptor, e
+	// }
 
-		if share.Liquidated {
-			return nil, descriptor, ErrValidatorLiquidated
-		}
+	// if share.Liquidated {
+	// 	return nil, descriptor, ErrValidatorLiquidated
+	// }
 
-		if share.BeaconMetadata == nil {
-			return nil, descriptor, ErrNoShareMetadata
-		}
+	// if share.BeaconMetadata == nil {
+	// 	return nil, descriptor, ErrNoShareMetadata
+	// }
 
-		if !share.IsAttesting(mv.netCfg.Beacon.EstimatedCurrentEpoch()) {
-			err := ErrValidatorNotAttesting
-			err.got = share.BeaconMetadata.Status.String()
-			return nil, descriptor, err
-		}
-	}
+	// if !share.IsAttesting(mv.netCfg.Beacon.EstimatedCurrentEpoch()) {
+	// 	err := ErrValidatorNotAttesting
+	// 	err.got = share.BeaconMetadata.Status.String()
+	// 	return nil, descriptor, err
+	// }
+	// }
 
 	msg, err := queue.DecodeGenesisSSVMessage(ssvMessage)
 	if err != nil {
