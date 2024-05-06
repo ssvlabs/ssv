@@ -159,6 +159,8 @@ var (
 )
 
 type MetricsReporter interface {
+	Genesis // DEPRECATED
+
 	SSVNodeHealthy()
 	SSVNodeNotHealthy()
 	ExecutionClientReady()

@@ -4,24 +4,25 @@ package validation
 
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	alanspectypes "github.com/bloxapp/ssv-spec/types"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 func (mv *messageValidator) validatePartialSignatureMessage(
-	share *ssvtypes.SSVShare,
+	share *ssvtypes.GenesisSSVShare,
 	signedMsg *genesisspectypes.SignedPartialSignatureMessage,
 	msgID genesisspectypes.MessageID,
 	signatureVerifier func() error,
 ) (phase0.Slot, error) {
 	if mv.operatorDataStore != nil && mv.operatorDataStore.OperatorIDReady() {
 		if mv.inCommittee(share) {
-			mv.metrics.CommitteeMessage(spectypes.SSVPartialSignatureMsgType, false)
+			mv.metrics.InCommitteeMessage(alanspectypes.MsgType(spectypes.SSVPartialSignatureMsgType), false)
 		} else {
-			mv.metrics.NonCommitteeMessage(spectypes.SSVPartialSignatureMsgType, false)
+			mv.metrics.NonCommitteeMessage(alanspectypes.MsgType(spectypes.SSVPartialSignatureMsgType), false)
 		}
 	}
 
@@ -109,7 +110,7 @@ func (mv *messageValidator) partialSignatureTypeMatchesRole(msgType genesisspect
 	}
 }
 
-func (mv *messageValidator) validatePartialMessages(share *ssvtypes.SSVShare, m *genesisspectypes.SignedPartialSignatureMessage) error {
+func (mv *messageValidator) validatePartialMessages(share *ssvtypes.GenesisSSVShare, m *genesisspectypes.SignedPartialSignatureMessage) error {
 	if err := mv.commonSignerValidation(m.Signer, share); err != nil {
 		return err
 	}
@@ -147,7 +148,7 @@ func (mv *messageValidator) validatePartialMessages(share *ssvtypes.SSVShare, m 
 func (mv *messageValidator) validateSignerBehaviorPartial(
 	state *ConsensusState,
 	signer genesisspectypes.OperatorID,
-	share *ssvtypes.SSVShare,
+	share *ssvtypes.GenesisSSVShare,
 	msgID genesisspectypes.MessageID,
 	signedMsg *genesisspectypes.SignedPartialSignatureMessage,
 ) error {
