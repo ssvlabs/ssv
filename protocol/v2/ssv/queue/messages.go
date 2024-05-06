@@ -103,7 +103,7 @@ func ExtractMsgBody(m *spectypes.SSVMessage) (interface{}, error) {
 }
 
 // compareHeightOrSlot returns an integer comparing the message's height/slot to the current.
-// The reuslt will be 0 if equal, -1 if lower, 1 if higher.
+// The result will be 0 if equal, -1 if lower, 1 if higher.
 func compareHeightOrSlot(state *State, m *DecodedSSVMessage) int {
 	if qbftMsg, ok := m.Body.(*specqbft.Message); ok {
 		if qbftMsg.Height == state.Height {
@@ -124,7 +124,7 @@ func compareHeightOrSlot(state *State, m *DecodedSSVMessage) int {
 }
 
 // scoreRound returns an integer comparing the message's round (if exist) to the current.
-// The reuslt will be 0 if equal, -1 if lower, 1 if higher.
+// The result will be 0 if equal, -1 if lower, 1 if higher.
 func scoreRound(state *State, m *DecodedSSVMessage) int {
 	if qbftMsg, ok := m.Body.(*specqbft.Message); ok {
 		if qbftMsg.Round == state.Round {
