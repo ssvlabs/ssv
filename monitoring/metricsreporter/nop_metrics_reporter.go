@@ -39,9 +39,9 @@ func (n *nopMetrics) MessagesReceivedTotal()                                    
 func (n *nopMetrics) MessageValidationRSAVerifications()                                            {}
 func (n *nopMetrics) LastBlockProcessed(block uint64)                                               {}
 func (n *nopMetrics) LogsProcessingError(err error)                                                 {}
-func (n *nopMetrics) MessageAccepted(role spectypes.BeaconRole, round specqbft.Round)               {}
-func (n *nopMetrics) MessageIgnored(reason string, role spectypes.BeaconRole, round specqbft.Round) {}
-func (n *nopMetrics) MessageRejected(reason string, role spectypes.BeaconRole, round specqbft.Round) {
+func (n *nopMetrics) MessageAccepted(role spectypes.RunnerRole, round specqbft.Round)               {}
+func (n *nopMetrics) MessageIgnored(reason string, role spectypes.RunnerRole, round specqbft.Round) {}
+func (n *nopMetrics) MessageRejected(reason string, role spectypes.RunnerRole, round specqbft.Round) {
 }
 func (n *nopMetrics) SSVMessageType(msgType spectypes.MsgType)                             {}
 func (n *nopMetrics) ConsensusMsgType(msgType specqbft.MessageType, signers int)           {}

@@ -68,3 +68,41 @@ func BeaconRoleFromString(s string) (spectypes.BeaconRole, error) {
 		return 0, fmt.Errorf("unknown role: %s", s)
 	}
 }
+
+func RunnerRoleToString(r spectypes.RunnerRole) string {
+	switch r {
+	case spectypes.RoleCommittee:
+		return "COMMITTEE"
+	case spectypes.RoleAggregator:
+		return "AGGREGATOR"
+	case spectypes.RoleProposer:
+		return "PROPOSER"
+	case spectypes.RoleSyncCommitteeContribution:
+		return "SYNC_COMMITTEE_CONTRIBUTION"
+	case spectypes.RoleValidatorRegistration:
+		return "VALIDATOR_REGISTRATION"
+	case spectypes.RoleVoluntaryExit:
+		return "VOLUNTARY_EXIT"
+	default:
+		return fmt.Sprintf("unknown(%d)", r)
+	}
+}
+
+func PartialMsgTypeToString(mt spectypes.PartialSigMsgType) string {
+	switch mt {
+	case spectypes.PostConsensusPartialSig:
+		return "PostConsensusPartialSig"
+	case spectypes.RandaoPartialSig:
+		return "RandaoPartialSig"
+	case spectypes.SelectionProofPartialSig:
+		return "SelectionProofPartialSig"
+	case spectypes.ContributionProofs:
+		return "ContributionProofs"
+	case spectypes.ValidatorRegistrationPartialSig:
+		return "ValidatorRegistrationPartialSig"
+	case spectypes.VoluntaryExitPartialSig:
+		return "VoluntaryExitPartialSig"
+	default:
+		return fmt.Sprintf("unknown(%d)", mt)
+	}
+}

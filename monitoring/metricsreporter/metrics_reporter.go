@@ -184,9 +184,9 @@ type MetricsReporter interface {
 	MessageValidationRSAVerifications()
 	LastBlockProcessed(block uint64)
 	LogsProcessingError(err error)
-	MessageAccepted(role spectypes.BeaconRole, round specqbft.Round)
-	MessageIgnored(reason string, role spectypes.BeaconRole, round specqbft.Round)
-	MessageRejected(reason string, role spectypes.BeaconRole, round specqbft.Round)
+	MessageAccepted(role spectypes.RunnerRole, round specqbft.Round)
+	MessageIgnored(reason string, role spectypes.RunnerRole, round specqbft.Round)
+	MessageRejected(reason string, role spectypes.RunnerRole, round specqbft.Round)
 	SSVMessageType(msgType spectypes.MsgType)
 	ConsensusMsgType(msgType specqbft.MessageType, signers int)
 	MessageValidationDuration(duration time.Duration, labels ...string)
@@ -352,10 +352,7 @@ func (m *metricsReporter) MessageValidationRSAVerifications() {
 func (m *metricsReporter) LastBlockProcessed(uint64) {}
 func (m *metricsReporter) LogsProcessingError(error) {}
 
-func (m *metricsReporter) MessageAccepted(
-	role spectypes.BeaconRole,
-	round specqbft.Round,
-) {
+func (m *metricsReporter) MessageAccepted(role spectypes.RunnerRole, round specqbft.Round) {
 	messageValidationResult.WithLabelValues(
 		messageAccepted,
 		"",
@@ -364,11 +361,7 @@ func (m *metricsReporter) MessageAccepted(
 	).Inc()
 }
 
-func (m *metricsReporter) MessageIgnored(
-	reason string,
-	role spectypes.BeaconRole,
-	round specqbft.Round,
-) {
+func (m *metricsReporter) MessageIgnored(reason string, role spectypes.RunnerRole, round specqbft.Round) {
 	messageValidationResult.WithLabelValues(
 		messageIgnored,
 		reason,
@@ -377,11 +370,7 @@ func (m *metricsReporter) MessageIgnored(
 	).Inc()
 }
 
-func (m *metricsReporter) MessageRejected(
-	reason string,
-	role spectypes.BeaconRole,
-	round specqbft.Round,
-) {
+func (m *metricsReporter) MessageRejected(reason string, role spectypes.RunnerRole, round specqbft.Round) {
 	messageValidationResult.WithLabelValues(
 		messageRejected,
 		reason,

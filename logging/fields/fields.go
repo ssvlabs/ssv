@@ -74,6 +74,7 @@ const (
 	FieldPubKey              = "pubkey"
 	FieldRole                = "role"
 	FieldRound               = "round"
+	FieldSenderID            = "sender_id"
 	FieldSlot                = "slot"
 	FieldStartTimeUnixMilli  = "start_time_unix_milli"
 	FieldSubnets             = "subnets"
@@ -119,6 +120,10 @@ func OperatorPubKey(pubKey []byte) zapcore.Field {
 
 func Validator(pubKey []byte) zapcore.Field {
 	return zap.Stringer(FieldValidator, stringer.HexStringer{Val: pubKey})
+}
+
+func SenderID(senderID []byte) zapcore.Field {
+	return zap.Stringer(FieldSenderID, stringer.HexStringer{Val: senderID})
 }
 
 func AddressURL(val url.URL) zapcore.Field {

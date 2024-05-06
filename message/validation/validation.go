@@ -9,9 +9,8 @@ import (
 	"sync"
 	"time"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
@@ -20,9 +19,9 @@ import (
 	"github.com/bloxapp/ssv/monitoring/metricsreporter"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
-	"github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/bloxapp/ssv/registry/storage"
 )
 
 // MessageValidator defines methods for validating pubsub messages.
@@ -180,7 +179,7 @@ func (mv *messageValidator) obtainValidationLock(messageID spectypes.MessageID) 
 func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.MessageID) ([]spectypes.OperatorID, []phase0.ValidatorIndex, error) {
 	if mv.committeeRole(msgID.GetRoleType()) {
 		// TODO: add metrics and logs for committee role
-		committeeID := ssvtypes.CommitteeID(msgID.GetSenderID()[16:])
+		committeeID := spectypes.ClusterID(msgID.GetSenderID()[16:])
 		committee := mv.validatorStore.Committee(committeeID) // TODO: consider passing whole senderID
 		if committee == nil {
 			e := ErrNonExistentCommitteeID
@@ -230,12 +229,12 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 		return nil, nil, e
 	}
 
-	var committee []spectypes.OperatorID
-	for _, c := range validator.GetCommittee() {
-		committee = append(committee, c.Signer)
+	var operators []spectypes.OperatorID
+	for _, c := range validator.Committee {
+		operators = append(operators, c.Signer)
 	}
 
-	return committee, []phase0.ValidatorIndex{validator.BeaconMetadata.Index}, nil
+	return operators, []phase0.ValidatorIndex{validator.BeaconMetadata.Index}, nil
 }
 
 func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *consensusState {
