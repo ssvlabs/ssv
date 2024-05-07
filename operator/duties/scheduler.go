@@ -383,7 +383,7 @@ func (s *Scheduler) ExecuteCommitteeDuties(logger *zap.Logger, duties map[[32]by
 	for committeeID, duty := range duties {
 		committeeID := committeeID
 		duty := duty
-		//logger := s.loggerWithDutyContext(logger, duty)
+		logger := s.loggerWithCommitteeDutyContext(logger, committeeID, duty)
 		slotDelay := time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
 			logger.Debug("⚠️ late duty execution", zap.Int64("slot_delay", slotDelay.Milliseconds()))
@@ -405,6 +405,19 @@ func (s *Scheduler) loggerWithDutyContext(logger *zap.Logger, duty *spectypes.Be
 		With(fields.Slot(duty.Slot)).
 		With(fields.Epoch(s.network.Beacon.EstimatedEpochAtSlot(duty.Slot))).
 		With(fields.PubKey(duty.PubKey[:])).
+		With(fields.StartTimeUnixMilli(s.network.Beacon.GetSlotStartTime(duty.Slot)))
+}
+
+// loggerWithCommitteeDutyContext returns an instance of logger with the given committee duty's information
+func (s *Scheduler) loggerWithCommitteeDutyContext(logger *zap.Logger, committeeID spectypes.ClusterID, duty *spectypes.CommitteeDuty) *zap.Logger {
+	dutyEpoch := s.network.Beacon.EstimatedEpochAtSlot(duty.Slot)
+	return logger.
+		With(fields.CommitteeID(committeeID)).
+		With(fields.Role(duty.RunnerRole())).
+		With(fields.Duties(dutyEpoch, duty.BeaconDuties)).
+		With(fields.CurrentSlot(s.network.Beacon.EstimatedCurrentSlot())).
+		With(fields.Slot(duty.Slot)).
+		With(fields.Epoch(dutyEpoch)).
 		With(fields.StartTimeUnixMilli(s.network.Beacon.GetSlotStartTime(duty.Slot)))
 }
 
