@@ -125,6 +125,7 @@ func NewSharesStorage(logger *zap.Logger, db basedb.Database, prefix []byte) (Sh
 		func() []*types.SSVShare { return storage.List(nil) },
 		func(pk []byte) *types.SSVShare { return storage.Get(nil, pk) },
 	)
+	storage.validatorStore.handleSharesAdded(maps.Values(storage.shares)...)
 	return storage, storage.validatorStore, nil
 }
 
@@ -221,7 +222,7 @@ func (s *sharesStorage) Save(rw basedb.ReadWriter, shares ...*types.SSVShare) er
 		if _, ok := s.shares[key]; ok {
 			s.validatorStore.handleShareUpdated(share)
 		} else {
-			s.validatorStore.handleShareAdded(share)
+			s.validatorStore.handleSharesAdded(share)
 		}
 
 		s.shares[key] = share

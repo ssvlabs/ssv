@@ -215,36 +215,38 @@ func (c *validatorStore) SelfParticipatingCommittees(epoch phase0.Epoch) []*Comm
 	return participating
 }
 
-func (c *validatorStore) handleShareAdded(share *types.SSVShare) {
+func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	// Update byValidatorIndex
-	if share.HasBeaconMetadata() {
-		c.byValidatorIndex[share.BeaconMetadata.Index] = share
-	}
+	for _, share := range shares {
+		if share.HasBeaconMetadata() {
+			c.byValidatorIndex[share.BeaconMetadata.Index] = share
+		}
 
-	// Update byCommitteeID
-	committee := c.byCommitteeID[share.CommitteeID()]
-	if committee == nil {
-		committee = buildCommittee([]*types.SSVShare{share})
-		c.byCommitteeID[committee.ID] = committee
-	} else {
-		committee = buildCommittee(append(committee.Validators, share))
-	}
-	c.byCommitteeID[committee.ID] = committee
-
-	// Update byOperatorID
-	for _, operator := range share.Committee {
-		data := c.byOperatorID[operator.Signer]
-		if data == nil {
-			data = &sharesAndCommittees{
-				shares:     []*types.SSVShare{share},
-				committees: []*Committee{committee},
-			}
+		// Update byCommitteeID
+		committee := c.byCommitteeID[share.CommitteeID()]
+		if committee == nil {
+			committee = buildCommittee([]*types.SSVShare{share})
+			c.byCommitteeID[committee.ID] = committee
 		} else {
-			data.shares = append(data.shares, share)
-			data.committees = append(data.committees, committee)
+			committee = buildCommittee(append(committee.Validators, share))
+		}
+		c.byCommitteeID[committee.ID] = committee
+
+		// Update byOperatorID
+		for _, operator := range share.Committee {
+			data := c.byOperatorID[operator.Signer]
+			if data == nil {
+				data = &sharesAndCommittees{
+					shares:     []*types.SSVShare{share},
+					committees: []*Committee{committee},
+				}
+			} else {
+				data.shares = append(data.shares, share)
+				data.committees = append(data.committees, committee)
+			}
 		}
 	}
 }
