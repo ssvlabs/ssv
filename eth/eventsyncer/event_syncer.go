@@ -101,9 +101,7 @@ func (es *EventSyncer) SyncHistory(ctx context.Context, fromBlock uint64) (lastP
 		return 0, fmt.Errorf("handle historical block events: %w", err)
 	}
 	// TODO: (Alan) should it really be here?
-	zap.L().Debug("GOT HERE")
 	if err := <-fetchError; err != nil {
-		zap.L().Debug("GOT THERE")
 		return 0, fmt.Errorf("error occurred while fetching historical logs: %w", err)
 	}
 	if lastProcessedBlock == 0 {
