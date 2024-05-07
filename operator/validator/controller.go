@@ -1095,7 +1095,8 @@ func SetupCommitteeRunners(ctx context.Context, logger *zap.Logger, options vali
 		return nil // TODO need to find better way to fix it
 	}
 
-	domainType := ssvtypes.GetDefaultDomain()
+	// TODO: (Alan) fix domain type
+	domainType := spectypes.GenesisMainnet
 	buildController := func(role spectypes.RunnerRole, valueCheckF specqbft.ProposedValueCheckF) *qbftcontroller.Controller {
 		config := &qbft.Config{
 			BeaconSigner:   options.Signer,
@@ -1115,7 +1116,7 @@ func SetupCommitteeRunners(ctx context.Context, logger *zap.Logger, options vali
 		}
 		config.ValueCheckF = valueCheckF
 
-		identifier := spectypes.NewMsgID(ssvtypes.GetDefaultDomain(), options.SSVShare.Share.ValidatorPubKey[:], role)
+		identifier := spectypes.NewMsgID(spectypes.GenesisMainnet, options.Operator.ClusterID[:], role)
 		qbftCtrl := qbftcontroller.NewController(identifier[:], options.Operator, config, options.FullNode)
 		qbftCtrl.NewDecidedHandler = options.NewDecidedHandler
 		return qbftCtrl
