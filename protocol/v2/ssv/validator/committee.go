@@ -46,8 +46,9 @@ func NewCommittee(
 	createRunnerFn func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share) *runner.CommitteeRunner,
 ) *Committee {
 	return &Committee{
-		logger:                  zap.L().Named("committee"),
-		ctx:                     ctx,
+		logger: zap.L().Named("committee"),
+		ctx:    ctx,
+		// TODO alan: drain maps
 		Queues:                  make(map[phase0.Slot]queueContainer),
 		Runners:                 make(map[phase0.Slot]*runner.CommitteeRunner),
 		Shares:                  make(map[phase0.ValidatorIndex]*spectypes.Share),
@@ -73,6 +74,7 @@ func (c *Committee) RemoveShare(validatorIndex phase0.ValidatorIndex) {
 
 // StartDuty starts a new duty for the given slot
 func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty) error {
+	c.logger.Debug("Starting committee duty runner", zap.Uint64("slot", uint64(duty.Slot)))
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
 	// TODO alan : lock per slot?
@@ -88,9 +90,7 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	r := c.CreateRunnerFn(duty.Slot, sharesCopy)
 	// Set timeout function.
 	r.GetBaseRunner().TimeoutF = c.onTimeout
-
 	c.Runners[duty.Slot] = r
-
 	c.Queues[duty.Slot] = queueContainer{
 		Q: queue.WithMetrics(queue.New(1000), nil), // TODO alan: get queue opts from options
 		queueState: &queue.State{

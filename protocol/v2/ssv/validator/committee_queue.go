@@ -39,7 +39,7 @@ func (v *Committee) HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessa
 		}
 		// logger.Debug("📬 queue: pushed message", fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType))
 	} else {
-		logger.Error("❌ missing queue for role type", fields.Role(msg.MsgID.GetRoleType()))
+		logger.Error("❌ missing queue for slot", fields.Slot(slot))
 	}
 }
 
