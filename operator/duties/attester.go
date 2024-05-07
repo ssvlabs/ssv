@@ -80,9 +80,11 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 				h.fetchFirst = false
 				h.indicesChanged = false
 				h.processFetching(ctx, currentEpoch, slot)
-				h.processExecution(currentEpoch, slot)
+				// TODO: (Alan) genesis support
+				//h.processExecution(currentEpoch, slot)
 			} else {
-				h.processExecution(currentEpoch, slot)
+				// TODO: (Alan) genesis support
+				//h.processExecution(currentEpoch, slot)
 				if h.indicesChanged {
 					h.duties.ResetEpoch(currentEpoch)
 					h.indicesChanged = false
