@@ -319,3 +319,26 @@ func TestValidatorStore_Concurrency(t *testing.T) {
 
 	wg.Wait()
 }
+
+func TestSelfValidatorStore_NilOperatorID(t *testing.T) {
+	shareMap := map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}
+
+	store := newValidatorStore(
+		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
+		func(pubKey []byte) *ssvtypes.SSVShare {
+			return shareMap[spectypes.ValidatorPK(pubKey)]
+		},
+	)
+
+	shareMap[share1.ValidatorPubKey] = share1
+	shareMap[share2.ValidatorPubKey] = share2
+	store.handleSharesAdded(share1, share2)
+
+	selfStore := store.WithOperatorID(nil)
+	require.Nil(t, selfStore.SelfValidators())
+	require.Nil(t, selfStore.SelfCommittees())
+	require.Nil(t, selfStore.SelfParticipatingValidators(99))
+	require.Nil(t, selfStore.SelfParticipatingValidators(201))
+	require.Nil(t, selfStore.SelfParticipatingCommittees(99))
+	require.Nil(t, selfStore.SelfParticipatingCommittees(201))
+}
