@@ -11,6 +11,8 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/types"
 )
 
+//go:generate mockgen -package=mocks -destination=./mocks/validatorstore.go -source=./validatorstore.go
+
 // TODO: (Alan) add ValidatorStore tests
 type ValidatorStore interface {
 	Validator(pubKey []byte) *types.SSVShare
