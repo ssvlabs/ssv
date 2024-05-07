@@ -3,9 +3,11 @@ package testing
 import (
 	"bytes"
 
+	spectypes "github.com/bloxapp/ssv-spec/types"
 	qbft "github.com/bloxapp/ssv/protocol/v2/genesisqbft"
 	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/roundtimer"
+	genesisqbftstorage "github.com/bloxapp/ssv/protocol/v2/genesisqbft/storage"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
@@ -15,6 +17,8 @@ import (
 )
 
 var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, role types.BeaconRole) *qbft.Config {
+	stores := TestingStores(logger)
+	instance := stores.Get(spectypes.RunnerRole(role))
 	return &qbft.Config{
 		ShareSigner:    testingutils.NewTestingKeyManager(),
 		OperatorSigner: testingutils.NewTestingOperatorSigner(keySet, 1),
@@ -34,7 +38,7 @@ var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, ro
 		ProposerF: func(state *genesisspecqbft.State, round genesisspecqbft.Round) types.OperatorID {
 			return 1
 		},
-		Storage:               TestingStores(logger).Get(role),
+		Storage:               genesisqbftstorage.QBFTStore(instance),
 		Network:               testingutils.NewTestingNetwork(1, keySet.OperatorKeys[1]),
 		Timer:                 roundtimer.NewTestingTimer(),
 		SignatureVerification: true,
