@@ -54,7 +54,7 @@ var testingShare = &types.Share{
 	Committee: []*types.Operator{
 		{
 			OperatorID:  1,
-			PubKey: TestingSK.GetPublicKey().Serialize(),
+			SharePubKey: TestingSK.GetPublicKey().Serialize(),
 		},
 	},
 }

@@ -40,7 +40,7 @@ func TestInstance_Marshaling(t *testing.T) {
 		Committee: []*genesisspectypes.Operator{
 			{
 				OperatorID:  1,
-				PubKey: TestingSK.GetPublicKey().Serialize(),
+				SharePubKey: TestingSK.GetPublicKey().Serialize(),
 			},
 		},
 	}
