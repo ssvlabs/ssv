@@ -87,9 +87,15 @@ func TestValidatorStore(t *testing.T) {
 		},
 	)
 
+	selfStore := store.WithOperatorID(func() spectypes.OperatorID {
+		return share2.Committee[0].Signer
+	})
+
 	t.Run("check initial store state", func(t *testing.T) {
 		require.Len(t, store.Validators(), 0)
 		require.Len(t, store.Committees(), 0)
+		require.Len(t, selfStore.SelfValidators(), 0)
+		require.Len(t, selfStore.SelfCommittees(), 0)
 	})
 
 	shareMap[share1.ValidatorPubKey] = share1
@@ -136,6 +142,19 @@ func TestValidatorStore(t *testing.T) {
 		require.Len(t, store.OperatorCommittees(2), 1)
 		require.Equal(t, buildCommittee([]*ssvtypes.SSVShare{share1}), store.OperatorCommittees(1)[0])
 		require.Equal(t, buildCommittee([]*ssvtypes.SSVShare{share2}), store.OperatorCommittees(2)[0])
+
+		require.Len(t, selfStore.SelfValidators(), 1)
+		require.Equal(t, share2, selfStore.SelfValidators()[0])
+		require.Len(t, selfStore.SelfCommittees(), 1)
+		require.Equal(t, buildCommittee([]*ssvtypes.SSVShare{share2}), selfStore.SelfCommittees()[0])
+
+		require.Empty(t, selfStore.SelfParticipatingValidators(99))
+		require.Len(t, selfStore.SelfParticipatingValidators(201), 1)
+		require.Contains(t, selfStore.SelfParticipatingValidators(201), share2)
+
+		require.Empty(t, selfStore.SelfParticipatingCommittees(99))
+		require.Len(t, selfStore.SelfParticipatingCommittees(201), 1)
+		require.Contains(t, selfStore.SelfParticipatingCommittees(201), buildCommittee([]*ssvtypes.SSVShare{share2}))
 	})
 
 	shareMap[share2.ValidatorPubKey] = updatedShare2
@@ -183,6 +202,19 @@ func TestValidatorStore(t *testing.T) {
 		require.Len(t, store.OperatorCommittees(2), 1)
 		require.Equal(t, buildCommittee([]*ssvtypes.SSVShare{share1}), store.OperatorCommittees(1)[0])
 		require.Equal(t, buildCommittee([]*ssvtypes.SSVShare{updatedShare2}), store.OperatorCommittees(2)[0])
+
+		require.Len(t, selfStore.SelfValidators(), 1)
+		require.Equal(t, updatedShare2, selfStore.SelfValidators()[0])
+		require.Len(t, selfStore.SelfCommittees(), 1)
+		require.Equal(t, buildCommittee([]*ssvtypes.SSVShare{updatedShare2}), selfStore.SelfCommittees()[0])
+
+		require.Empty(t, selfStore.SelfParticipatingValidators(99))
+		require.Len(t, selfStore.SelfParticipatingValidators(201), 1)
+		require.Contains(t, selfStore.SelfParticipatingValidators(201), updatedShare2)
+
+		require.Empty(t, selfStore.SelfParticipatingCommittees(99))
+		require.Len(t, selfStore.SelfParticipatingCommittees(201), 1)
+		require.Contains(t, selfStore.SelfParticipatingCommittees(201), buildCommittee([]*ssvtypes.SSVShare{updatedShare2}))
 	})
 
 	store.handleShareRemoved(share2.ValidatorPubKey)
@@ -220,6 +252,15 @@ func TestValidatorStore(t *testing.T) {
 		require.Len(t, store.OperatorCommittees(1), 1)
 		require.Equal(t, buildCommittee([]*ssvtypes.SSVShare{share1}), store.OperatorCommittees(1)[0])
 		require.Len(t, store.OperatorCommittees(2), 0)
+
+		require.Len(t, selfStore.SelfValidators(), 0)
+		require.Len(t, selfStore.SelfCommittees(), 0)
+
+		require.Empty(t, selfStore.SelfParticipatingValidators(99))
+		require.Empty(t, selfStore.SelfParticipatingValidators(201))
+
+		require.Empty(t, selfStore.SelfParticipatingCommittees(99))
+		require.Empty(t, selfStore.SelfParticipatingCommittees(201))
 	})
 
 	store.handleDrop()
@@ -228,5 +269,7 @@ func TestValidatorStore(t *testing.T) {
 	t.Run("check drop", func(t *testing.T) {
 		require.Len(t, store.Validators(), 0)
 		require.Len(t, store.Committees(), 0)
+		require.Len(t, selfStore.SelfValidators(), 0)
+		require.Len(t, selfStore.SelfCommittees(), 0)
 	})
 }
