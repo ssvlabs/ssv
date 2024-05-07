@@ -79,10 +79,10 @@ func NewNodeStorage(logger *zap.Logger, db basedb.Database) (Storage, error) {
 		return nil, err
 	}
 
-	stg.genesisShareStore, err = genesisregistrystorage.NewSharesStorage(logger, db, storagePrefix)
-	if err != nil {
-		return nil, err
-	}
+	// stg.genesisShareStore, err = genesisregistrystorage.NewSharesStorage(logger, db, storagePrefix)
+	// if err != nil {
+	// 	return nil, err
+	// }
 
 	return stg, nil
 }
