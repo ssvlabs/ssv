@@ -163,6 +163,20 @@ func (mr *MockValidatorStoreMockRecorder) Validators() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validators", reflect.TypeOf((*MockValidatorStore)(nil).Validators))
 }
 
+// WithOperatorID mocks base method.
+func (m *MockValidatorStore) WithOperatorID(operatorID func() types.OperatorID) storage.SelfValidatorStore {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WithOperatorID", operatorID)
+	ret0, _ := ret[0].(storage.SelfValidatorStore)
+	return ret0
+}
+
+// WithOperatorID indicates an expected call of WithOperatorID.
+func (mr *MockValidatorStoreMockRecorder) WithOperatorID(operatorID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WithOperatorID", reflect.TypeOf((*MockValidatorStore)(nil).WithOperatorID), operatorID)
+}
+
 // MockSelfValidatorStore is a mock of SelfValidatorStore interface.
 type MockSelfValidatorStore struct {
 	ctrl     *gomock.Controller
@@ -366,4 +380,18 @@ func (m *MockSelfValidatorStore) Validators() []*types0.SSVShare {
 func (mr *MockSelfValidatorStoreMockRecorder) Validators() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validators", reflect.TypeOf((*MockSelfValidatorStore)(nil).Validators))
+}
+
+// WithOperatorID mocks base method.
+func (m *MockSelfValidatorStore) WithOperatorID(operatorID func() types.OperatorID) storage.SelfValidatorStore {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WithOperatorID", operatorID)
+	ret0, _ := ret[0].(storage.SelfValidatorStore)
+	return ret0
+}
+
+// WithOperatorID indicates an expected call of WithOperatorID.
+func (mr *MockSelfValidatorStoreMockRecorder) WithOperatorID(operatorID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WithOperatorID", reflect.TypeOf((*MockSelfValidatorStore)(nil).WithOperatorID), operatorID)
 }
