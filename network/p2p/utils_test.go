@@ -8,7 +8,6 @@ import (
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
-	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -19,7 +18,6 @@ import (
 	"github.com/bloxapp/ssv/network/commons"
 	p2pcommons "github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/discovery"
-	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/peers/connections/mock"
 	"github.com/bloxapp/ssv/network/testing"
 	"github.com/bloxapp/ssv/networkconfig"
@@ -28,15 +26,7 @@ import (
 	"github.com/bloxapp/ssv/utils/format"
 )
 
-// PeersIndexProvider holds peers index instance
-type PeersIndexProvider interface {
-	PeersIndex() peers.Index
-}
-
-// HostProvider holds host instance
-type HostProvider interface {
-	Host() host.Host
-}
+// TODO: (Alan) might have to rename this file back to test_utils.go if non-test files require it.
 
 // LocalNet holds the nodes in the local network
 type LocalNet struct {

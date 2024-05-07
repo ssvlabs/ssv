@@ -13,8 +13,6 @@ const (
 	Timeout EventType = iota
 	// ExecuteDuty for when to start duty runner
 	ExecuteDuty
-	// ExecuteCommitteeDuty for when to start duty runner
-	ExecuteCommitteeDuty
 )
 
 func (e EventType) String() string {
@@ -23,8 +21,6 @@ func (e EventType) String() string {
 		return "timeoutData"
 	case ExecuteDuty:
 		return "executeDuty"
-	case ExecuteCommitteeDuty:
-		return "executeCommitteeDuty"
 	default:
 		return "unknown"
 	}
@@ -58,6 +54,14 @@ func (m *EventMsg) GetTimeoutData() (*TimeoutData, error) {
 
 func (m *EventMsg) GetExecuteDutyData() (*ExecuteDutyData, error) {
 	ed := &ExecuteDutyData{}
+	if err := json.Unmarshal(m.Data, ed); err != nil {
+		return nil, err
+	}
+	return ed, nil
+}
+
+func (m *EventMsg) GetExecuteCommitteeDutyData() (*ExecuteCommitteeDutyData, error) {
+	ed := &ExecuteCommitteeDutyData{}
 	if err := json.Unmarshal(m.Data, ed); err != nil {
 		return nil, err
 	}

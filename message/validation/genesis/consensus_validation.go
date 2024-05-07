@@ -8,19 +8,19 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	alanspecqbft "github.com/bloxapp/ssv-spec/qbft"
+	alanspectypes "github.com/bloxapp/ssv-spec/types"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"golang.org/x/exp/slices"
 
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
 func (mv *messageValidator) validateConsensusMessage(
-	share *ssvtypes.SSVShare,
+	share *ssvtypes.GenesisSSVShare,
 	signedMsg *genesisspecqbft.SignedMessage,
 	messageID genesisspectypes.MessageID,
 	receivedAt time.Time,
@@ -30,9 +30,9 @@ func (mv *messageValidator) validateConsensusMessage(
 
 	if mv.operatorDataStore != nil && mv.operatorDataStore.OperatorIDReady() {
 		if mv.inCommittee(share) {
-			mv.metrics.CommitteeMessage(spectypes.SSVConsensusMsgType, mv.isDecidedMessage(signedMsg))
+			mv.metrics.InCommitteeMessage(alanspectypes.MsgType(spectypes.SSVConsensusMsgType), mv.isDecidedMessage(signedMsg))
 		} else {
-			mv.metrics.NonCommitteeMessage(spectypes.SSVConsensusMsgType, mv.isDecidedMessage(signedMsg))
+			mv.metrics.NonCommitteeMessage(alanspectypes.MsgType(spectypes.SSVConsensusMsgType), mv.isDecidedMessage(signedMsg))
 		}
 	}
 
@@ -46,7 +46,7 @@ func (mv *messageValidator) validateConsensusMessage(
 		Committee:       share.Committee,
 	}
 
-	mv.metrics.ConsensusMsgType(specqbft.MessageType(signedMsg.Message.MsgType), len(signedMsg.Signers))
+	mv.metrics.ConsensusMsgType(alanspecqbft.MessageType(signedMsg.Message.MsgType), len(signedMsg.Signers))
 
 	switch messageID.GetRoleType() {
 	case genesisspectypes.BNRoleValidatorRegistration, genesisspectypes.BNRoleVoluntaryExit:
@@ -152,7 +152,7 @@ func (mv *messageValidator) validateConsensusMessage(
 }
 
 func (mv *messageValidator) validateJustifications(
-	share *ssvtypes.SSVShare,
+	share *ssvtypes.GenesisSSVShare,
 	signedMsg *genesisspecqbft.SignedMessage,
 ) error {
 	pj, err := signedMsg.Message.GetPrepareJustifications()
@@ -182,21 +182,23 @@ func (mv *messageValidator) validateJustifications(
 	}
 
 	if signedMsg.Message.MsgType == genesisspecqbft.ProposalMsgType {
-		cfg := newQBFTConfig(mv.netCfg.Domain)
+		// TODO: can we keep it disabled for simplicity?
 
-		if err := instance.IsProposalJustification(
-			cfg,
-			share,
-			rcj,
-			pj,
-			signedMsg.Message.Height,
-			signedMsg.Message.Round,
-			signedMsg.FullData,
-		); err != nil {
-			e := ErrInvalidJustifications
-			e.innerErr = err
-			return e
-		}
+		//cfg := newQBFTConfig(mv.netCfg.Domain)
+		//
+		//if err := instance.IsProposalJustification(
+		//	cfg,
+		//	share,
+		//	rcj,
+		//	pj,
+		//	signedMsg.Message.Height,
+		//	signedMsg.Message.Round,
+		//	signedMsg.FullData,
+		//); err != nil {
+		//	e := ErrInvalidJustifications
+		//	e.innerErr = err
+		//	return e
+		//}
 	}
 
 	return nil
@@ -205,7 +207,7 @@ func (mv *messageValidator) validateJustifications(
 func (mv *messageValidator) validateSignerBehaviorConsensus(
 	state *ConsensusState,
 	signer genesisspectypes.OperatorID,
-	share *ssvtypes.SSVShare,
+	share *ssvtypes.GenesisSSVShare,
 	msgID genesisspectypes.MessageID,
 	signedMsg *genesisspecqbft.SignedMessage,
 ) error {
@@ -290,7 +292,7 @@ func (mv *messageValidator) validateDutyCount(
 func (mv *messageValidator) validateBeaconDuty(
 	role genesisspectypes.BeaconRole,
 	slot phase0.Slot,
-	share *ssvtypes.SSVShare,
+	share *ssvtypes.GenesisSSVShare,
 ) error {
 	switch role {
 	case genesisspectypes.BNRoleProposer:
@@ -345,12 +347,12 @@ func (mv *messageValidator) maxRound(role genesisspectypes.BeaconRole) genesissp
 }
 
 func (mv *messageValidator) currentEstimatedRound(sinceSlotStart time.Duration) genesisspecqbft.Round {
-	if currentQuickRound := genesisspecqbft.FirstRound + genesisspecqbft.Round(sinceSlotStart/roundtimer.QuickTimeout); currentQuickRound <= roundtimer.QuickTimeoutThreshold {
+	if currentQuickRound := genesisspecqbft.FirstRound + genesisspecqbft.Round(sinceSlotStart/roundtimer.QuickTimeout); currentQuickRound <= genesisspecqbft.Round(roundtimer.QuickTimeoutThreshold) {
 		return currentQuickRound
 	}
 
-	sinceFirstSlowRound := sinceSlotStart - (time.Duration(roundtimer.QuickTimeoutThreshold) * roundtimer.QuickTimeout)
-	estimatedRound := roundtimer.QuickTimeoutThreshold + genesisspecqbft.FirstRound + genesisspecqbft.Round(sinceFirstSlowRound/roundtimer.SlowTimeout)
+	sinceFirstSlowRound := sinceSlotStart - (time.Duration(genesisspecqbft.Round(roundtimer.QuickTimeoutThreshold)) * roundtimer.QuickTimeout)
+	estimatedRound := genesisspecqbft.Round(roundtimer.QuickTimeoutThreshold) + genesisspecqbft.FirstRound + genesisspecqbft.Round(sinceFirstSlowRound/roundtimer.SlowTimeout)
 	return estimatedRound
 }
 
@@ -389,7 +391,7 @@ func (mv *messageValidator) validQBFTMsgType(msgType genesisspecqbft.MessageType
 	return false
 }
 
-func (mv *messageValidator) validConsensusSigners(share *ssvtypes.SSVShare, m *genesisspecqbft.SignedMessage) error {
+func (mv *messageValidator) validConsensusSigners(share *ssvtypes.GenesisSSVShare, m *genesisspecqbft.SignedMessage) error {
 	switch {
 	case len(m.Signers) == 0:
 		return ErrNoSigners

@@ -70,7 +70,7 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 			slot := h.ticker.Slot()
 			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
-			buildStr := fmt.Sprintf("p%v-%v-s%v-#%v", period, epoch, slot, slot%32+1)
+			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
 
 			h.processExecution(period, epoch, slot)

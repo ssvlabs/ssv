@@ -146,6 +146,23 @@ func AddOptions(opts []libp2p.Option) []libp2p.Option {
 }
 
 // EncodeNetworkMsg encodes network message
+// TODO: DEPRECATED, remove post-fork
+func EncodeGenesisNetworkMsg(msg *genesisspectypes.SSVMessage) ([]byte, error) {
+	return msg.Encode()
+}
+
+// DecodeGenesisNetworkMsg decodes network message
+// TODO: DEPRECATED, remove post-fork
+func DecodeGenesisNetworkMsg(data []byte) (*genesisspectypes.SSVMessage, error) {
+	msg := genesisspectypes.SSVMessage{}
+	err := msg.Decode(data)
+	if err != nil {
+		return nil, err
+	}
+	return &msg, nil
+}
+
+// EncodeNetworkMsg encodes network message
 func EncodeNetworkMsg(msg *spectypes.SSVMessage) ([]byte, error) {
 	return msg.Encode()
 }

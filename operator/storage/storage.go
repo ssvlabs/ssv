@@ -14,6 +14,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	registry "github.com/bloxapp/ssv/protocol/v2/blockchain/eth1"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
+	genesisregistrystorage "github.com/bloxapp/ssv/registry/storage/genesis"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
@@ -44,6 +45,7 @@ type Storage interface {
 	registrystorage.Operators
 	registrystorage.Recipients
 	Shares() registrystorage.Shares
+	ValidatorStore() registrystorage.ValidatorStore
 
 	GetPrivateKeyHash() (string, bool, error)
 	SavePrivateKeyHash(privKeyHash string) error
@@ -53,9 +55,11 @@ type storage struct {
 	logger *zap.Logger
 	db     basedb.Database
 
-	operatorStore  registrystorage.Operators
-	recipientStore registrystorage.Recipients
-	shareStore     registrystorage.Shares
+	operatorStore     registrystorage.Operators
+	recipientStore    registrystorage.Recipients
+	shareStore        registrystorage.Shares
+	genesisShareStore genesisregistrystorage.Shares
+	validatorStore    registrystorage.ValidatorStore
 }
 
 // NewNodeStorage creates a new instance of Storage
@@ -67,7 +71,7 @@ func NewNodeStorage(logger *zap.Logger, db basedb.Database) (Storage, error) {
 		recipientStore: registrystorage.NewRecipientsStorage(logger, db, storagePrefix),
 	}
 	var err error
-	stg.shareStore, err = registrystorage.NewSharesStorage(logger, db, storagePrefix)
+	stg.shareStore, stg.validatorStore, err = registrystorage.NewSharesStorage(logger, db, storagePrefix)
 	if err != nil {
 		return nil, err
 	}
@@ -84,6 +88,10 @@ func (s *storage) BeginRead() basedb.ReadTxn {
 
 func (s *storage) Shares() registrystorage.Shares {
 	return s.shareStore
+}
+
+func (s *storage) ValidatorStore() registrystorage.ValidatorStore {
+	return s.validatorStore
 }
 
 func (s *storage) GetOperatorDataByPubKey(r basedb.Reader, operatorPubKey []byte) (*registrystorage.OperatorData, bool, error) {

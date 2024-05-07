@@ -2,8 +2,8 @@ package validation
 
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 )
 
 // ConsensusID uniquely identifies a public key and role pair to keep track of state.

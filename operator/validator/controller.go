@@ -13,12 +13,13 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	specssv "github.com/bloxapp/ssv-spec/ssv"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/jellydator/ttlcache/v3"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
+
+	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging"
@@ -27,7 +28,6 @@ import (
 	"github.com/bloxapp/ssv/network"
 	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/duties"
-	"github.com/bloxapp/ssv/operator/keys"
 	nodestorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validators"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
@@ -72,7 +72,7 @@ type ControllerOptions struct {
 	Exporter                   bool `yaml:"Exporter" env:"EXPORTER" env-default:"false" env-description:""`
 	BuilderProposals           bool `yaml:"BuilderProposals" env:"BUILDER_PROPOSALS" env-default:"false" env-description:"Use external builders to produce blocks"`
 	BeaconSigner               spectypes.BeaconSigner
-	OperatorSigner             keys.OperatorSigner
+	OperatorSigner             spectypes.OperatorSigner
 	OperatorDataStore          operatordatastore.OperatorDataStore
 	RegistryStorage            nodestorage.Storage
 	RecipientsStorage          Recipients
@@ -245,7 +245,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		beacon:            options.Beacon,
 		operatorDataStore: options.OperatorDataStore,
 		beaconSigner:      options.BeaconSigner,
-		operatorSigner:    options.OperatorSigner, // TODO alan: create wrapper (around keys.OperatorSigner) to support spec interface
+		operatorSigner:    options.OperatorSigner,
 		network:           options.Network,
 
 		validatorsMap:    options.ValidatorsMap,
@@ -335,10 +335,16 @@ func (c *controller) handleRouterMessages() {
 				continue
 			}
 
+			// TODO: only try copying clusterid if validator failed
 			pk := msg.GetID().GetSenderID()
 			hexPK := hex.EncodeToString(pk)
+			var cid spectypes.ClusterID
+			copy(cid[:], pk)
+
 			if v, ok := c.validatorsMap.GetValidator(hexPK); ok {
 				v.HandleMessage(c.logger, msg)
+			} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
+				vc.HandleMessage(c.logger, msg)
 			} else if c.validatorOptions.Exporter {
 				if msg.MsgType != spectypes.SSVConsensusMsgType {
 					continue // not supporting other types
@@ -655,7 +661,7 @@ func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.BeaconDuty)
 }
 
 func (c *controller) ExecuteCommitteeDuty(logger *zap.Logger, committeeID spectypes.ClusterID, duty *spectypes.CommitteeDuty) {
-	if cm, ok := c.GetCommittee(committeeID); ok {
+	if cm, ok := c.validatorsMap.GetCommittee(committeeID); ok {
 		ssvMsg, err := CreateCommitteeDutyExecuteMsg(duty, committeeID, types.GetDefaultDomain())
 		if err != nil {
 			logger.Error("could not create duty execute msg", zap.Error(err))
@@ -666,8 +672,9 @@ func (c *controller) ExecuteCommitteeDuty(logger *zap.Logger, committeeID specty
 			logger.Error("could not decode duty execute msg", zap.Error(err))
 			return
 		}
-		if pushed := cm.Queues[duty.Slot].Q.TryPush(dec); !pushed {
-			logger.Warn("dropping ExecuteDuty message because the queue is full")
+		// TODO alan: no queue in cc, what should we do?
+		if err := cm.OnExecuteDuty(c.logger, dec.Body.(*types.EventMsg)); err != nil {
+			logger.Error("could not execute committee duty", zap.Error(err))
 		}
 		// logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
 	} else {
@@ -675,47 +682,47 @@ func (c *controller) ExecuteCommitteeDuty(logger *zap.Logger, committeeID specty
 	}
 }
 
-// CreateDutyExecuteMsg returns ssvMsg with event type of duty execute
+// CreateDutyExecuteMsg returns ssvMsg with event type of execute duty
 func CreateDutyExecuteMsg(duty *spectypes.BeaconDuty, pubKey []byte, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
 	executeDutyData := types.ExecuteDutyData{Duty: duty}
-	edd, err := json.Marshal(executeDutyData)
+	data, err := json.Marshal(executeDutyData)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to marshal execute duty data")
+		return nil, fmt.Errorf("failed to marshal execute duty data: %w", err)
 	}
-	msg := types.EventMsg{
-		Type: types.ExecuteDuty,
-		Data: edd,
-	}
-	data, err := msg.Encode()
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to encode event msg")
-	}
-	return &spectypes.SSVMessage{
-		MsgType: message.SSVEventMsgType,
-		MsgID:   spectypes.NewMsgID(domain, pubKey, duty.RunnerRole()),
-		Data:    data,
-	}, nil
+
+	return dutyDataToSSVMsg(domain, pubKey, duty.RunnerRole(), data)
 }
 
-// CreateCommitteeDutyExecuteMsg returns ssvMsg with event type of duty execute
+// CreateCommitteeDutyExecuteMsg returns ssvMsg with event type of execute committee duty
 func CreateCommitteeDutyExecuteMsg(duty *spectypes.CommitteeDuty, committeeID spectypes.ClusterID, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
 	executeCommitteeDutyData := types.ExecuteCommitteeDutyData{Duty: duty}
-	edd, err := json.Marshal(executeCommitteeDutyData)
+	data, err := json.Marshal(executeCommitteeDutyData)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to marshal execute duty data")
+		return nil, fmt.Errorf("failed to marshal execute committee duty data: %w", err)
 	}
+
+	return dutyDataToSSVMsg(domain, committeeID[:], spectypes.RoleCommittee, data)
+}
+
+func dutyDataToSSVMsg(
+	domain spectypes.DomainType,
+	msgIdentifier []byte,
+	runnerRole spectypes.RunnerRole,
+	data []byte,
+) (*spectypes.SSVMessage, error) {
 	msg := types.EventMsg{
-		Type: types.ExecuteCommitteeDuty,
-		Data: edd,
+		Type: ssvtypes.ExecuteDuty,
+		Data: data,
 	}
-	data, err := msg.Encode()
+	msgData, err := msg.Encode()
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to encode event msg")
+		return nil, fmt.Errorf("failed to encode event msg: %w", err)
 	}
+
 	return &spectypes.SSVMessage{
 		MsgType: message.SSVEventMsgType,
-		MsgID:   spectypes.NewMsgID(domain, committeeID[:], duty.RunnerRole()),
-		Data:    data,
+		MsgID:   spectypes.NewMsgID(domain, msgIdentifier, runnerRole),
+		Data:    msgData,
 	}, nil
 }
 
@@ -855,7 +862,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 
 		committeRunnerFunc := SetupCommitteeRunners(ctx, c.logger, opts)
 
-		vc = validator.NewCommittee(operator, opts.SignatureVerifier, committeRunnerFunc)
+		vc = validator.NewCommittee(c.context, operator, opts.SignatureVerifier, committeRunnerFunc)
 		vc.AddShare(&share.Share)
 		c.validatorsMap.PutCommittee(share.CommitteeID(), vc)
 
@@ -979,15 +986,17 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 }
 
 func (c *controller) startCommittee(vc *validator.Committee) (bool, error) {
-	cstarted, err := vc.Start() // TODO alan : make it testable
-	if err != nil {
-		// todo alan: metrics
-		//c.metrics.ValidatorError(vc.Share.ValidatorPubKey[:])
-		return false, errors.Wrap(err, "could not start committee")
-	}
-	if cstarted {
-		c.recentlyStartedCommittees++
-	}
+	//TODO alan: currently nothing to start in committee?
+	c.logger.Debug("committee started ", zap.String("committee_id", hex.EncodeToString(vc.Operator.ClusterID[:])))
+	//cstarted, err := vc.Start() // TODO alan : make it testable
+	//if err != nil {
+	//	// todo alan: metrics
+	//	//c.metrics.ValidatorError(vc.Share.ValidatorPubKey[:])
+	//	return false, errors.Wrap(err, "could not start committee")
+	//}
+	//if cstarted {
+	//	c.recentlyStartedCommittees++
+	//}
 
 	return true, nil
 }
@@ -1046,6 +1055,40 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 	}
 }
 
+// TODO alan: use spec when they fix bugs
+func TempBeaconVoteValueCheckF(
+	signer spectypes.BeaconSigner,
+	slot phase0.Slot,
+	sharePublicKey []byte,
+	estimatedCurrentEpoch phase0.Epoch,
+) specqbft.ProposedValueCheckF {
+	return func(data []byte) error {
+		bv := spectypes.BeaconVote{}
+		if err := bv.Decode(data); err != nil {
+			return errors.Wrap(err, "failed decoding beacon vote")
+		}
+
+		if bv.Target.Epoch > estimatedCurrentEpoch+1 {
+			return errors.New("attestation data target epoch is into far future")
+		}
+
+		if bv.Source.Epoch >= bv.Target.Epoch {
+			return errors.New("attestation data source > target")
+		}
+
+		attestationData := &phase0.AttestationData{
+			Slot: slot,
+			// CommitteeIndex doesn't matter for slashing checks
+			Index:           0,
+			BeaconBlockRoot: bv.BlockRoot,
+			Source:          bv.Source,
+			Target:          bv.Target,
+		}
+
+		return signer.IsAttestationSlashable(sharePublicKey, attestationData)
+	}
+}
+
 func SetupCommitteeRunners(ctx context.Context, logger *zap.Logger, options validator.Options) func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share) *runner.CommitteeRunner {
 	if options.SSVShare == nil || options.SSVShare.BeaconMetadata == nil {
 		logger.Error("missing validator metadata", zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey[:])))
@@ -1081,7 +1124,7 @@ func SetupCommitteeRunners(ctx context.Context, logger *zap.Logger, options vali
 	return func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share) *runner.CommitteeRunner {
 		// Create a committee runner.
 		epoch := options.BeaconNetwork.GetBeaconNetwork().EstimatedEpochAtSlot(slot)
-		valCheck := specssv.BeaconVoteValueCheckF(options.Signer, slot, options.SSVShare.Share.SharePubKey, epoch)
+		valCheck := TempBeaconVoteValueCheckF(options.Signer, slot, options.SSVShare.Share.SharePubKey, epoch)
 		crunner := runner.NewCommitteeRunner(options.BeaconNetwork.GetBeaconNetwork(), shares, buildController(spectypes.RoleCommittee, valCheck), options.Beacon, options.Network, options.Signer, options.OperatorSigner, valCheck)
 		return crunner.(*runner.CommitteeRunner)
 	}

@@ -10,11 +10,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/bloxapp/ssv/message/signatureverifier"
-	"github.com/bloxapp/ssv/operator/keystore"
-
-	"github.com/bloxapp/ssv/network"
-
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ilyakaznacheev/cleanenv"
@@ -38,10 +33,13 @@ import (
 	ssv_identity "github.com/bloxapp/ssv/identity"
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/message/signatureverifier"
 	"github.com/bloxapp/ssv/message/validation"
+	genesisvalidation "github.com/bloxapp/ssv/message/validation/genesis"
 	"github.com/bloxapp/ssv/migrations"
 	"github.com/bloxapp/ssv/monitoring/metrics"
 	"github.com/bloxapp/ssv/monitoring/metricsreporter"
+	"github.com/bloxapp/ssv/network"
 	p2pv1 "github.com/bloxapp/ssv/network/p2p"
 	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/nodeprobe"
@@ -49,6 +47,7 @@ import (
 	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
 	"github.com/bloxapp/ssv/operator/keys"
+	"github.com/bloxapp/ssv/operator/keystore"
 	"github.com/bloxapp/ssv/operator/slotticker"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
 	"github.com/bloxapp/ssv/operator/validator"
@@ -217,15 +216,30 @@ var StartNodeCmd = &cobra.Command{
 
 		signatureVerifier := signatureverifier.NewSignatureVerifier(nodeStorage)
 
-		var validatorStore registrystorage.ValidatorStore
+		validatorStore := nodeStorage.ValidatorStore()
 		// validatorStore = newValidatorStore(...) // TODO
 
-		messageValidator := validation.New(
-			networkConfig,
-			validatorStore,
-			dutyStore,
-			signatureVerifier,
-		)
+		var messageValidator validation.MessageValidator
+
+		alanFork := true
+
+		if alanFork {
+			messageValidator = validation.New(
+				networkConfig,
+				validatorStore,
+				dutyStore,
+				signatureVerifier,
+			)
+		} else {
+			messageValidator = genesisvalidation.New(
+				networkConfig,
+				genesisvalidation.WithNodeStorage(nodeStorage),
+				genesisvalidation.WithLogger(logger),
+				genesisvalidation.WithMetrics(metricsReporter),
+				genesisvalidation.WithDutyStore(dutyStore),
+				genesisvalidation.WithOwnOperatorID(operatorDataStore),
+			)
+		}
 
 		cfg.P2pNetworkConfig.Metrics = metricsReporter
 		cfg.P2pNetworkConfig.MessageValidator = messageValidator
@@ -278,11 +292,12 @@ var StartNodeCmd = &cobra.Command{
 
 		cfg.SSVOptions.ValidatorOptions.StorageMap = storageMap
 		cfg.SSVOptions.ValidatorOptions.Metrics = metricsReporter
-		cfg.SSVOptions.ValidatorOptions.OperatorSigner = operatorPrivKey
+		cfg.SSVOptions.ValidatorOptions.OperatorSigner = types.NewSsvOperatorSigner(operatorPrivKey, operatorDataStore.GetOperatorID)
 		cfg.SSVOptions.Metrics = metricsReporter
 
 		validatorCtrl := validator.NewController(logger, cfg.SSVOptions.ValidatorOptions)
 		cfg.SSVOptions.ValidatorController = validatorCtrl
+		cfg.SSVOptions.ValidatorStore = validatorStore
 
 		operatorNode = operator.New(logger, cfg.SSVOptions, slotTickerProvider)
 

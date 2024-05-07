@@ -129,7 +129,7 @@ func createStorage(t *testing.T) (basedb.Database, registrystorage.Shares, regis
 	db, err := kv.NewInMemory(logger, basedb.Options{})
 	require.NoError(t, err)
 
-	shareStorage, err := registrystorage.NewSharesStorage(logger, db, []byte("test"))
+	shareStorage, _, err := registrystorage.NewSharesStorage(logger, db, []byte("test"))
 	if err != nil {
 		t.Fatal(err)
 	}

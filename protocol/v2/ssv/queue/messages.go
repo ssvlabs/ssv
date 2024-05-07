@@ -3,6 +3,11 @@ package queue
 import (
 	"fmt"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/pkg/errors"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
@@ -24,6 +29,26 @@ type DecodedSSVMessage struct {
 
 	// Body is the decoded Data.
 	Body interface{} // *specqbft.Message | *spectypes.PartialSignatureMessages | *EventMsg
+}
+
+func (d *DecodedSSVMessage) Slot() (phase0.Slot, error) {
+	switch m := d.Body.(type) {
+	case *specqbft.Message: // TODO: Or message.SSVDecidedMsgType?
+		return phase0.Slot(m.Height), nil
+	case *spectypes.PartialSignatureMessages:
+		return m.Slot, nil
+	case *ssvtypes.EventMsg: // TODO: do we need slot in events?
+		if m.Type == ssvtypes.Timeout {
+			data, err := m.GetTimeoutData()
+			if err != nil {
+				return 0, ErrUnknownMessageType // TODO alan: other error
+			}
+			return phase0.Slot(data.Height), nil
+		}
+		return 0, ErrUnknownMessageType // TODO: alan: slot not supporting dutyexec msg?
+	default:
+		return 0, ErrUnknownMessageType
+	}
 }
 
 // DecodeSSVMessage decodes a SSVMessage into a DecodedSSVMessage.
@@ -56,6 +81,42 @@ func DecodeSignedSSVMessage(sm *spectypes.SignedSSVMessage) (*DecodedSSVMessage,
 	return d, nil
 }
 
+// DecodeGenesisSSVMessage decodes a genesis SSVMessage and returns a DecodedSSVMessage.
+// TODO: deprecated, remove post-fork
+func DecodeGenesisSSVMessage(m *genesisspectypes.SSVMessage) (*DecodedSSVMessage, error) {
+	var body interface{}
+	switch m.MsgType {
+	case genesisspectypes.SSVConsensusMsgType: // TODO: Or message.SSVDecidedMsgType?
+		sm := &genesisspecqbft.SignedMessage{}
+		if err := sm.Decode(m.Data); err != nil {
+			return nil, errors.Wrap(err, "failed to decode SignedMessage")
+		}
+		body = sm
+	case genesisspectypes.SSVPartialSignatureMsgType:
+		sm := &genesisspectypes.SignedPartialSignatureMessage{}
+		if err := sm.Decode(m.Data); err != nil {
+			return nil, errors.Wrap(err, "failed to decode SignedPartialSignatureMessage")
+		}
+		body = sm
+	case genesisspectypes.MsgType(ssvmessage.SSVEventMsgType):
+		msg := &ssvtypes.EventMsg{}
+		if err := msg.Decode(m.Data); err != nil {
+			return nil, errors.Wrap(err, "failed to decode EventMsg")
+		}
+		body = msg
+	default:
+		return nil, ErrUnknownMessageType
+	}
+	return &DecodedSSVMessage{
+		SSVMessage: &spectypes.SSVMessage{
+			MsgType: spectypes.MsgType(m.MsgType),
+			MsgID:   spectypes.MessageID(m.MsgID),
+			Data:    m.Data,
+		},
+		Body: body,
+	}, nil
+}
+
 func ExtractMsgBody(m *spectypes.SSVMessage) (interface{}, error) {
 	var body interface{}
 	switch m.MsgType {
@@ -85,7 +146,7 @@ func ExtractMsgBody(m *spectypes.SSVMessage) (interface{}, error) {
 }
 
 // compareHeightOrSlot returns an integer comparing the message's height/slot to the current.
-// The reuslt will be 0 if equal, -1 if lower, 1 if higher.
+// The result will be 0 if equal, -1 if lower, 1 if higher.
 func compareHeightOrSlot(state *State, m *DecodedSSVMessage) int {
 	if qbftMsg, ok := m.Body.(*specqbft.Message); ok {
 		if qbftMsg.Height == state.Height {
@@ -106,7 +167,7 @@ func compareHeightOrSlot(state *State, m *DecodedSSVMessage) int {
 }
 
 // scoreRound returns an integer comparing the message's round (if exist) to the current.
-// The reuslt will be 0 if equal, -1 if lower, 1 if higher.
+// The result will be 0 if equal, -1 if lower, 1 if higher.
 func scoreRound(state *State, m *DecodedSSVMessage) int {
 	if qbftMsg, ok := m.Body.(*specqbft.Message); ok {
 		if qbftMsg.Round == state.Round {

@@ -3,14 +3,12 @@ package validator
 import (
 	"context"
 	"fmt"
-
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/message"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 )
@@ -26,7 +24,13 @@ func (v *Committee) HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessa
 	// 	zap.Uint64("type", uint64(msg.MsgType)),
 	// 	fields.Role(msg.MsgID.GetRoleType()))
 
-	if q, ok := v.Queues[msg.MsgID.GetRoleType()]; ok {
+	slot, err := msg.Slot()
+	if err != nil {
+		logger.Error("❌ could not get slot from message", fields.MessageID(msg.MsgID), zap.Error(err))
+		return
+	}
+
+	if q, ok := v.Queues[slot]; ok {
 		if pushed := q.Q.TryPush(msg); !pushed {
 			msgID := msg.MsgID.String()
 			logger.Warn("❗ dropping message because the queue is full",
@@ -39,22 +43,22 @@ func (v *Committee) HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessa
 	}
 }
 
-// StartQueueConsumer start ConsumeQueue with handler
-func (v *Committee) StartQueueConsumer(logger *zap.Logger, msgID spectypes.MessageID, handler MessageHandler) {
-	ctx, cancel := context.WithCancel(v.ctx)
-	defer cancel()
-
-	for ctx.Err() == nil {
-		err := v.ConsumeQueue(logger, msgID, handler)
-		if err != nil {
-			logger.Debug("❗ failed consuming queue", zap.Error(err))
-		}
-	}
-}
+//// StartQueueConsumer start ConsumeQueue with handler
+//func (v *Committee) StartQueueConsumer(logger *zap.Logger, msgID spectypes.MessageID, handler MessageHandler) {
+//	ctx, cancel := context.WithCancel(v.ctx)
+//	defer cancel()
+//
+//	for ctx.Err() == nil {
+//		err := v.ConsumeQueue(logger, msgID, handler)
+//		if err != nil {
+//			logger.Debug("❗ failed consuming queue", zap.Error(err))
+//		}
+//	}
+//}
 
 // ConsumeQueue consumes messages from the queue.Queue of the controller
 // it checks for current state
-func (v *Committee) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, handler MessageHandler) error {
+func (v *Committee) ConsumeQueue(logger *zap.Logger, slot phase0.Slot, handler MessageHandler) error {
 	ctx, cancel := context.WithCancel(v.ctx)
 	defer cancel()
 
@@ -63,9 +67,9 @@ func (v *Committee) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 		v.mtx.RLock() // read v.Queues
 		defer v.mtx.RUnlock()
 		var ok bool
-		q, ok = v.Queues[msgID.GetRoleType()]
+		q, ok = v.Queues[slot]
 		if !ok {
-			return errors.New(fmt.Sprintf("queue not found for role %s", msgID.GetRoleType().String()))
+			return errors.New(fmt.Sprintf("queue not found for slot %d", slot))
 		}
 		return nil
 	}()
@@ -80,45 +84,46 @@ func (v *Committee) ConsumeQueue(logger *zap.Logger, msgID spectypes.MessageID, 
 	for ctx.Err() == nil {
 		// Construct a representation of the current state.
 		state := *q.queueState
-		runner := v.Runners.DutyRunnerForMsgID(msgID)
-		if runner == nil {
-			return fmt.Errorf("could not get duty runner for msg ID %v", msgID)
-		}
-		var runningInstance *instance.Instance
-		if runner.HasRunningDuty() {
-			runningInstance = runner.GetBaseRunner().State.RunningInstance
-			if runningInstance != nil {
-				decided, _ := runningInstance.IsDecided()
-				state.HasRunningInstance = !decided
-			}
-		}
-		state.Height = v.GetLastHeight(msgID)
-		state.Round = v.GetLastRound(msgID)
-		state.Quorum = v.Share.Quorum
 
-		filter := queue.FilterAny
-		if !runner.HasRunningDuty() {
-			// If no duty is running, pop only ExecuteDuty messages.
-			filter = func(m *queue.DecodedSSVMessage) bool {
-				e, ok := m.Body.(*types.EventMsg)
-				if !ok {
-					return false
-				}
-				return e.Type == types.ExecuteDuty
+		//runner := v.Runners.DutyRunnerForMsgID(msgID)
+		//if runner == nil {
+		//	return fmt.Errorf("could not get duty runner for msg ID %v", msgID)
+		//}
+		//var runningInstance *instance.Instance
+		//if runner.HasRunningDuty() {
+		//	runningInstance = runner.GetBaseRunner().State.RunningInstance
+		//	if runningInstance != nil {
+		//		decided, _ := runningInstance.IsDecided()
+		//		state.HasRunningInstance = !decided
+		//	}
+		//}
+		//state.Height = v.GetLastHeight(msgID)
+		//state.Round = v.GetLastRound(msgID)
+		//state.Quorum = v.Share.Quorum
+		//
+		//filter := queue.FilterAny
+		//if !runner.HasRunningDuty() {
+		//	// If no duty is running, pop only ExecuteDuty messages.
+		//	filter = func(m *queue.DecodedSSVMessage) bool {
+		//		e, ok := m.Body.(*types.EventMsg)
+		//		if !ok {
+		//			return false
+		//		}
+		//		return e.Type == types.ExecuteDuty
+		//	}
+		//} else if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
+		//	// If no proposal was accepted for the current round, skip prepare & commit messages
+		//	// for the current height and round.
+		filter := func(m *queue.DecodedSSVMessage) bool {
+			sm, ok := m.Body.(*specqbft.Message)
+			if !ok {
+				return true
 			}
-		} else if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
-			// If no proposal was accepted for the current round, skip prepare & commit messages
-			// for the current height and round.
-			filter = func(m *queue.DecodedSSVMessage) bool {
-				qbftMsg, ok := m.Body.(*specqbft.Message)
-				if !ok {
-					return true
-				}
-				if qbftMsg.Height != state.Height || qbftMsg.Round != state.Round {
-					return true
-				}
-				return qbftMsg.MsgType != specqbft.PrepareMsgType && qbftMsg.MsgType != specqbft.CommitMsgType
+
+			if sm.Height != state.Height || sm.Round != state.Round {
+				return true
 			}
+			return sm.MsgType != specqbft.PrepareMsgType && sm.MsgType != specqbft.CommitMsgType
 		}
 
 		// Pop the highest priority message for the current state.
@@ -154,46 +159,47 @@ func (v *Committee) logMsg(logger *zap.Logger, msg *queue.DecodedSSVMessage, log
 	baseFields := []zap.Field{}
 	switch msg.SSVMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
-		qbftMsg := msg.Body.(*specqbft.Message)
+		sm := msg.Body.(*specqbft.Message)
 		baseFields = []zap.Field{
-			zap.Int64("msg_height", int64(qbftMsg.Height)),
-			zap.Int64("msg_round", int64(qbftMsg.Round)),
-			zap.Int64("consensus_msg_type", int64(qbftMsg.MsgType)),
-			zap.Any("signers", msg.GetOperatorIDs()),
+			zap.Int64("msg_height", int64(sm.Height)),
+			zap.Int64("msg_round", int64(sm.Round)),
+			zap.Int64("consensus_msg_type", int64(sm.MsgType)),
+			zap.Any("signers", msg.SignedSSVMessage.OperatorIDs),
 		}
 	case spectypes.SSVPartialSignatureMsgType:
 		psm := msg.Body.(*spectypes.PartialSignatureMessages)
 		baseFields = []zap.Field{
-			zap.Int64("signer", int64(msg.GetOperatorIDs()[0])),
+			zap.Int64("signer", int64(psm.Messages[0].Signer)),
 			fields.Slot(psm.Slot),
 		}
 	}
 	logger.Debug(logMsg, append(baseFields, withFields...)...)
 }
 
-// GetLastHeight returns the last height for the given identifier
-func (v *Committee) GetLastHeight(identifier spectypes.MessageID) specqbft.Height {
-	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
-	if r == nil {
-		return specqbft.Height(0)
-	}
-	if ctrl := r.GetBaseRunner().QBFTController; ctrl != nil {
-		return ctrl.Height
-	}
-	return specqbft.Height(0)
-}
-
-// GetLastRound returns the last height for the given identifier
-func (v *Committee) GetLastRound(identifier spectypes.MessageID) specqbft.Round {
-	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
-	if r == nil {
-		return specqbft.Round(1)
-	}
-	if r != nil && r.HasRunningDuty() {
-		inst := r.GetBaseRunner().State.RunningInstance
-		if inst != nil {
-			return inst.State.Round
-		}
-	}
-	return specqbft.Round(1)
-}
+//
+//// GetLastHeight returns the last height for the given identifier
+//func (v *Committee) GetLastHeight(identifier spectypes.MessageID) specqbft.Height {
+//	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
+//	if r == nil {
+//		return specqbft.Height(0)
+//	}
+//	if ctrl := r.GetBaseRunner().QBFTController; ctrl != nil {
+//		return ctrl.Height
+//	}
+//	return specqbft.Height(0)
+//}
+//
+//// GetLastRound returns the last height for the given identifier
+//func (v *Committee) GetLastRound(identifier spectypes.MessageID) specqbft.Round {
+//	r := v.DutyRunners.DutyRunnerForMsgID(identifier)
+//	if r == nil {
+//		return specqbft.Round(1)
+//	}
+//	if r != nil && r.HasRunningDuty() {
+//		inst := r.GetBaseRunner().State.RunningInstance
+//		if inst != nil {
+//			return inst.State.Round
+//		}
+//	}
+//	return specqbft.Round(1)
+//}

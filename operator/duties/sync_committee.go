@@ -76,17 +76,19 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			slot := h.ticker.Slot()
 			epoch := h.network.Beacon.EstimatedEpochAtSlot(slot)
 			period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
-			buildStr := fmt.Sprintf("p%v-%v-s%v-#%v", period, epoch, slot, slot%32+1)
+			buildStr := fmt.Sprintf("p%v-e%v-s%v-#%v", period, epoch, slot, slot%32+1)
 			h.logger.Debug("🛠 ticker event", zap.String("period_epoch_slot_pos", buildStr))
 
 			ctx, cancel := context.WithDeadline(ctx, h.network.Beacon.GetSlotStartTime(slot+1).Add(100*time.Millisecond))
 			if h.fetchFirst {
 				h.fetchFirst = false
 				h.processFetching(ctx, period, true)
-				h.processExecution(period, slot)
+				// TODO: (Alan) genesis support
+				//h.processExecution(period, slot)
 			} else {
 				h.processExecution(period, slot)
-				h.processFetching(ctx, period, true)
+				// TODO: (Alan) genesis support
+				//h.processFetching(ctx, period, true)
 			}
 			cancel()
 

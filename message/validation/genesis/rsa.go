@@ -3,7 +3,7 @@ package validation
 import (
 	"fmt"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	"github.com/bloxapp/ssv/operator/keys"
 )

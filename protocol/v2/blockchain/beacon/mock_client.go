@@ -349,10 +349,10 @@ func (mr *MockBeaconNodeMockRecorder) Events(ctx, topics, handler interface{}) *
 }
 
 // GetAttestationData mocks base method.
-func (m *MockBeaconNode) GetAttestationData(slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (ssz.Marshaler, spec.DataVersion, error) {
+func (m *MockBeaconNode) GetAttestationData(slot phase0.Slot, committeeIndex phase0.CommitteeIndex) (*phase0.AttestationData, spec.DataVersion, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetAttestationData", slot, committeeIndex)
-	ret0, _ := ret[0].(ssz.Marshaler)
+	ret0, _ := ret[0].(*phase0.AttestationData)
 	ret1, _ := ret[1].(spec.DataVersion)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2

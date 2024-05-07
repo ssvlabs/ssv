@@ -74,8 +74,20 @@ func (mr *MockControllerMockRecorder) CommitteeActiveIndices(epoch interface{}) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CommitteeActiveIndices", reflect.TypeOf((*MockController)(nil).CommitteeActiveIndices), epoch)
 }
 
+// ExecuteCommitteeDuty mocks base method.
+func (m *MockController) ExecuteCommitteeDuty(logger *zap.Logger, committeeID types.ClusterID, duty *types.CommitteeDuty) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ExecuteCommitteeDuty", logger, committeeID, duty)
+}
+
+// ExecuteCommitteeDuty indicates an expected call of ExecuteCommitteeDuty.
+func (mr *MockControllerMockRecorder) ExecuteCommitteeDuty(logger, committeeID, duty interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteCommitteeDuty", reflect.TypeOf((*MockController)(nil).ExecuteCommitteeDuty), logger, committeeID, duty)
+}
+
 // ExecuteDuty mocks base method.
-func (m *MockController) ExecuteDuty(logger *zap.Logger, duty *types.Duty) {
+func (m *MockController) ExecuteDuty(logger *zap.Logger, duty *types.BeaconDuty) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "ExecuteDuty", logger, duty)
 }
@@ -117,7 +129,7 @@ func (mr *MockControllerMockRecorder) GetOperatorShares() *gomock.Call {
 // GetValidator mocks base method.
 func (m *MockController) GetValidator(pubKey string) (*validator.Validator, bool) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Get", pubKey)
+	ret := m.ctrl.Call(m, "GetValidator", pubKey)
 	ret0, _ := ret[0].(*validator.Validator)
 	ret1, _ := ret[1].(bool)
 	return ret0, ret1
@@ -126,7 +138,7 @@ func (m *MockController) GetValidator(pubKey string) (*validator.Validator, bool
 // GetValidator indicates an expected call of GetValidator.
 func (mr *MockControllerMockRecorder) GetValidator(pubKey interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockController)(nil).GetValidator), pubKey)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValidator", reflect.TypeOf((*MockController)(nil).GetValidator), pubKey)
 }
 
 // GetValidatorStats mocks base method.
@@ -413,17 +425,17 @@ func (m *MockP2PNetwork) EXPECT() *MockP2PNetworkMockRecorder {
 }
 
 // Broadcast mocks base method.
-func (m *MockP2PNetwork) Broadcast(msgID types.MessageID, message *types.SignedSSVMessage) error {
+func (m *MockP2PNetwork) Broadcast(id types.MessageID, message *types.SignedSSVMessage) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Broadcast", msgID, message)
+	ret := m.ctrl.Call(m, "Broadcast", id, message)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Broadcast indicates an expected call of Broadcast.
-func (mr *MockP2PNetworkMockRecorder) Broadcast(msgID, message interface{}) *gomock.Call {
+func (mr *MockP2PNetworkMockRecorder) Broadcast(id, message interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Broadcast", reflect.TypeOf((*MockP2PNetwork)(nil).Broadcast), msgID, message)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Broadcast", reflect.TypeOf((*MockP2PNetwork)(nil).Broadcast), id, message)
 }
 
 // Peers mocks base method.
@@ -482,4 +494,41 @@ func (m *MockP2PNetwork) UseMessageRouter(router network.MessageRouter) {
 func (mr *MockP2PNetworkMockRecorder) UseMessageRouter(router interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UseMessageRouter", reflect.TypeOf((*MockP2PNetwork)(nil).UseMessageRouter), router)
+}
+
+// Mockstarter is a mock of starter interface.
+type Mockstarter struct {
+	ctrl     *gomock.Controller
+	recorder *MockstarterMockRecorder
+}
+
+// MockstarterMockRecorder is the mock recorder for Mockstarter.
+type MockstarterMockRecorder struct {
+	mock *Mockstarter
+}
+
+// NewMockstarter creates a new mock instance.
+func NewMockstarter(ctrl *gomock.Controller) *Mockstarter {
+	mock := &Mockstarter{ctrl: ctrl}
+	mock.recorder = &MockstarterMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *Mockstarter) EXPECT() *MockstarterMockRecorder {
+	return m.recorder
+}
+
+// Start mocks base method.
+func (m *Mockstarter) Start() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Start")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Start indicates an expected call of Start.
+func (mr *MockstarterMockRecorder) Start() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*Mockstarter)(nil).Start))
 }

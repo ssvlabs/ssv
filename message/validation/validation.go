@@ -1,4 +1,4 @@
-// package validation provides functions and structures for validating messages.
+// Package validation provides functions and structures for validating messages.
 package validation
 
 // validator.go contains main code for validation and most of the rule checks.
