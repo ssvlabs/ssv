@@ -177,7 +177,6 @@ func (c *validatorStore) SelfParticipatingValidators(epoch phase0.Epoch) []*type
 		return nil
 	}
 	validators := c.OperatorValidators(c.operatorID())
-
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -247,6 +246,7 @@ func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) {
 				data.shares = append(data.shares, share)
 				data.committees = append(data.committees, committee)
 			}
+			c.byOperatorID[operator.Signer] = data
 		}
 	}
 }
