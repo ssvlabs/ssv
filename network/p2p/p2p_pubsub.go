@@ -77,7 +77,7 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 	}
 
 	senderID := msgID.GetSenderID()
-	topics := commons.ValidatorTopicID(senderID)
+	topics := commons.CommitteeTopicID(senderID)
 
 	for _, topic := range topics {
 		if err := n.topicsCtrl.Broadcast(topic, encodedMsg, n.cfg.RequestTimeout); err != nil {
@@ -160,7 +160,8 @@ func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) e
 	if status, _ := n.activeValidators.Get(pkHex); status != validatorStatusSubscribed {
 		return nil
 	}
-	topics := commons.ValidatorTopicID(pk[:])
+	cmtid := n.nodeStorage.ValidatorStore().Validator(pk[:]).CommitteeID()
+	topics := commons.CommitteeTopicID(cmtid[:])
 	for _, topic := range topics {
 		if err := n.topicsCtrl.Unsubscribe(logger, topic, false); err != nil {
 			return err
@@ -170,9 +171,23 @@ func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) e
 	return nil
 }
 
+//TODO: alan genesis
+// subscribe to validator topics, as defined in the fork
+//func (n *p2pNetwork) subscribe(logger *zap.Logger, pk spectypes.ValidatorPK) error {
+//	topics := commons.ValidatorTopicID(pk[:])
+//	for _, topic := range topics {
+//		if err := n.topicsCtrl.Subscribe(logger, topic); err != nil {
+//			// return errors.Wrap(err, "could not broadcast message")
+//			return err
+//		}
+//	}
+//	return nil
+//}
+
 // subscribe to validator topics, as defined in the fork
 func (n *p2pNetwork) subscribe(logger *zap.Logger, pk spectypes.ValidatorPK) error {
-	topics := commons.ValidatorTopicID(pk[:])
+	cmtid := n.nodeStorage.ValidatorStore().Validator(pk[:]).CommitteeID()
+	topics := commons.CommitteeTopicID(cmtid[:])
 	for _, topic := range topics {
 		if err := n.topicsCtrl.Subscribe(logger, topic); err != nil {
 			// return errors.Wrap(err, "could not broadcast message")
