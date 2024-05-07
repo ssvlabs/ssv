@@ -4,12 +4,12 @@ import (
 	"context"
 	"sync"
 
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-	"go.uber.org/zap"
-
 	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
+	"go.uber.org/zap"
+
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 )
 
 var db basedb.Database

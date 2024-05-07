@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 
 	"go.uber.org/zap"
+
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 )
 
 // StoredInstance contains instance state alongside with a decided message (aggregated commits).

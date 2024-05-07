@@ -8,17 +8,18 @@ import (
 	"testing"
 	"time"
 
-	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
-	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
-	typescomparable "github.com/bloxapp/ssv-spec/types/testingutils/comparable"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/instance"
+	qbfttesting "github.com/bloxapp/ssv/protocol/v2/genesisqbft/testing"
+	"github.com/bloxapp/ssv/protocol/v2/genesisqbft"
+	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
-	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	spectests "github.com/ssvlabs/ssv-spec-pre-cc/qbft/spectest/tests"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
+	typescomparable "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils/comparable"
 )
 
 // RunMsgProcessing processes MsgProcessingSpecTest. It probably may be removed.

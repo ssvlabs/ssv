@@ -3,13 +3,14 @@ package instance
 import (
 	"bytes"
 
+	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/protocol/v2/genesisqbft"
+	"github.com/bloxapp/ssv/protocol/v2/genesistypes"
 	"github.com/pkg/errors"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 )
 
 // uponPrepare process prepare message
@@ -26,7 +27,7 @@ func (i *Instance) uponPrepare(logger *zap.Logger, signedPrepare *genesisspecqbf
 	}
 
 	logger.Debug("📬 got prepare message",
-		fields.Round(i.State.Round),
+		fields.Round(uint64(i.State.Round)),
 		zap.Any("prepare-signers", signedPrepare.Signers),
 		fields.Root(signedPrepare.Message.Root))
 
@@ -46,7 +47,7 @@ func (i *Instance) uponPrepare(logger *zap.Logger, signedPrepare *genesisspecqbf
 	i.metrics.EndStagePrepare()
 
 	logger.Debug("🎯 got prepare quorum",
-		fields.Round(i.State.Round),
+		fields.Round(uint64(i.State.Round)),
 		zap.Any("prepare-signers", allSigners(prepareMsgContainer.MessagesForRound(i.State.Round))),
 		fields.Root(proposedRoot))
 
@@ -56,7 +57,7 @@ func (i *Instance) uponPrepare(logger *zap.Logger, signedPrepare *genesisspecqbf
 	}
 
 	logger.Debug("📢 broadcasting commit message",
-		fields.Round(i.State.Round),
+		fields.Round(uint64(i.State.Round)),
 		zap.Any("commit-singers", commitMsg.Signers),
 		fields.Root(commitMsg.Message.Root))
 

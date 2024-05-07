@@ -13,13 +13,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/dgraph-io/ristretto"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/p2p/enode"
-	"github.com/libp2p/go-libp2p/core/peer"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
-
 	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/logging/fields/stringer"
 	"github.com/bloxapp/ssv/network/records"
@@ -27,6 +20,12 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/bloxapp/ssv/utils/format"
+	"github.com/dgraph-io/ristretto"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 const (
@@ -212,12 +211,12 @@ func OperatorIDStr(operatorId string) zap.Field {
 	return zap.String(FieldOperatorId, operatorId)
 }
 
-func Height(height specqbft.Height) zap.Field {
-	return zap.Uint64(FieldHeight, uint64(height))
+func Height(height uint64) zap.Field {
+	return zap.Uint64(FieldHeight, height)
 }
 
-func Round(round specqbft.Round) zap.Field {
-	return zap.Uint64(FieldRound, uint64(round))
+func Round(round uint64) zap.Field {
+	return zap.Uint64(FieldRound, round)
 }
 
 func BeaconRole(val spectypes.BeaconRole) zap.Field {

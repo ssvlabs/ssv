@@ -1,6 +1,6 @@
 package instance
 
-import genesisspecqbft "github.com/bloxapp/ssv-spec/qbft"
+import genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 
 // Compact trims the given qbft.State down to the minimum required
 // for consensus to proceed.

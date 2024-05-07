@@ -1,6 +1,6 @@
 package roundtimer
 
-import genesisspecqbft "github.com/bloxapp/ssv-spec/qbft"
+import 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 
 type TimerState struct {
 	Timeouts int

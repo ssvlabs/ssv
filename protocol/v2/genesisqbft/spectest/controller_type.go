@@ -10,19 +10,20 @@ import (
 	"reflect"
 	"testing"
 
-	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
-	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
-	typescomparable "github.com/bloxapp/ssv-spec/types/testingutils/comparable"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/controller"
+	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/roundtimer"
+	qbfttesting "github.com/bloxapp/ssv/protocol/v2/genesisqbft/testing"
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
+	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
-	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	spectests "github.com/ssvlabs/ssv-spec-pre-cc/qbft/spectest/tests"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
+	typescomparable "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils/comparable"
 )
 
 func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {

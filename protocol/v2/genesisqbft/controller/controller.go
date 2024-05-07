@@ -159,7 +159,7 @@ func (c *Controller) InstanceForHeight(logger *zap.Logger, height genesisspecqbf
 	storedInst, err := c.config.GetStorage().GetInstance(c.Identifier, height)
 	if err != nil {
 		logger.Debug("❗ could not load instance from storage",
-			fields.Height(height),
+			fields.Height(uint64(height)),
 			zap.Uint64("ctrl_height", uint64(c.Height)),
 			zap.Error(err))
 		return nil

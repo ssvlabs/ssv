@@ -3,15 +3,15 @@ package testing
 import (
 	"bytes"
 
-	"github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv-spec/types/testingutils"
-
+	qbft "github.com/bloxapp/ssv/protocol/v2/genesisqbft"
+	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/controller"
+	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/roundtimer"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	"github.com/ssvlabs/ssv-spec-pre-cc/types"
+	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 )
 
 var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, role types.BeaconRole) *qbft.Config {

@@ -26,7 +26,7 @@ func (i *Instance) UponCommit(logger *zap.Logger, signedCommit *genesisspecqbft.
 	}
 
 	logger.Debug("📬 got commit message",
-		fields.Round(i.State.Round),
+		fields.Round(uint64(i.State.Round)),
 		zap.Any("commit-signers", signedCommit.Signers),
 		fields.Root(signedCommit.Message.Root))
 
@@ -45,7 +45,7 @@ func (i *Instance) UponCommit(logger *zap.Logger, signedCommit *genesisspecqbft.
 		}
 
 		logger.Debug("🎯 got commit quorum",
-			fields.Round(i.State.Round),
+			fields.Round(uint64(i.State.Round)),
 			zap.Any("agg-signers", agg.Signers),
 			fields.Root(signedCommit.Message.Root))
 

@@ -3,13 +3,14 @@ package instance
 import (
 	"bytes"
 
+	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/protocol/v2/genesisqbft"
+	"github.com/bloxapp/ssv/protocol/v2/genesistypes"
 	"github.com/pkg/errors"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 )
 
 // uponRoundChange process round change messages.
@@ -37,8 +38,8 @@ func (i *Instance) uponRoundChange(
 	}
 
 	logger = logger.With(
-		fields.Round(i.State.Round),
-		fields.Height(i.State.Height),
+		fields.Round(uint64(i.State.Round)),
+		fields.Height(uint64(i.State.Height)),
 		zap.Uint64("msg_round", uint64(signedRoundChange.Message.Round)),
 	)
 
@@ -71,7 +72,7 @@ func (i *Instance) uponRoundChange(
 		}
 
 		logger.Debug("🔄 got justified round change, broadcasting proposal message",
-			fields.Round(i.State.Round),
+			fields.Round(uint64(i.State.Round)),
 			zap.Any("round-change-signers", allSigners(roundChangeMsgContainer.MessagesForRound(i.State.Round))),
 			fields.Root(proposal.Message.Root))
 
@@ -103,10 +104,10 @@ func (i *Instance) uponChangeRoundPartialQuorum(logger *zap.Logger, newRound gen
 	}
 
 	logger.Debug("📢 got partial quorum, broadcasting round change message",
-		fields.Round(i.State.Round),
+		fields.Round(uint64(i.State.Round)),
 		fields.Root(roundChange.Message.Root),
 		zap.Any("round-change-signers", roundChange.Signers),
-		fields.Height(i.State.Height),
+		fields.Height(uint64(i.State.Height)),
 		zap.String("reason", "partial-quorum"))
 
 	if err := i.Broadcast(logger, roundChange); err != nil {

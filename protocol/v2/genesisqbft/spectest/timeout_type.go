@@ -5,15 +5,14 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/types/testingutils"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
-
 	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-
+	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/instance"
+	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/roundtimer"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 )
 
 type SpecTest struct {
