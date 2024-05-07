@@ -1090,12 +1090,8 @@ func TempBeaconVoteValueCheckF(
 }
 
 func SetupCommitteeRunners(ctx context.Context, logger *zap.Logger, options validator.Options) func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share) *runner.CommitteeRunner {
-	if options.SSVShare == nil || options.SSVShare.BeaconMetadata == nil {
-		logger.Error("missing validator metadata", zap.String("validator", hex.EncodeToString(options.SSVShare.ValidatorPubKey[:])))
-		return nil // TODO need to find better way to fix it
-	}
-
-	domainType := ssvtypes.GetDefaultDomain()
+	// TODO: alan fix domains (from netCfg)
+	domainType := spectypes.GenesisMainnet
 	buildController := func(role spectypes.RunnerRole, valueCheckF specqbft.ProposedValueCheckF) *qbftcontroller.Controller {
 		config := &qbft.Config{
 			BeaconSigner:   options.Signer,
@@ -1115,7 +1111,7 @@ func SetupCommitteeRunners(ctx context.Context, logger *zap.Logger, options vali
 		}
 		config.ValueCheckF = valueCheckF
 
-		identifier := spectypes.NewMsgID(ssvtypes.GetDefaultDomain(), options.SSVShare.Share.ValidatorPubKey[:], role)
+		identifier := spectypes.NewMsgID(spectypes.GenesisMainnet, options.Operator.ClusterID[:], role)
 		qbftCtrl := qbftcontroller.NewController(identifier[:], options.Operator, config, options.FullNode)
 		qbftCtrl.NewDecidedHandler = options.NewDecidedHandler
 		return qbftCtrl
