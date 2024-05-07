@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"sync"
 	"testing"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -272,4 +273,49 @@ func TestValidatorStore(t *testing.T) {
 		require.Len(t, selfStore.SelfValidators(), 0)
 		require.Len(t, selfStore.SelfCommittees(), 0)
 	})
+}
+
+func TestValidatorStore_Concurrency(t *testing.T) {
+	shareMap := map[spectypes.ValidatorPK]*ssvtypes.SSVShare{}
+
+	store := newValidatorStore(
+		func() []*ssvtypes.SSVShare { return maps.Values(shareMap) },
+		func(pubKey []byte) *ssvtypes.SSVShare {
+			return shareMap[spectypes.ValidatorPK(pubKey)]
+		},
+	)
+
+	shareMap[share1.ValidatorPubKey] = share1
+	shareMap[share2.ValidatorPubKey] = share2
+	store.handleSharesAdded(share1, share2)
+
+	var wg sync.WaitGroup
+	wg.Add(6)
+
+	go func() {
+		defer wg.Done()
+		store.Validator(share1.ValidatorPubKey[:])
+	}()
+	go func() {
+		defer wg.Done()
+		store.Validator(share2.ValidatorPubKey[:])
+	}()
+	go func() {
+		defer wg.Done()
+		store.Committee(share1.CommitteeID())
+	}()
+	go func() {
+		defer wg.Done()
+		store.Committee(share2.CommitteeID())
+	}()
+	go func() {
+		defer wg.Done()
+		store.Validators()
+	}()
+	go func() {
+		defer wg.Done()
+		store.Committees()
+	}()
+
+	wg.Wait()
 }
