@@ -380,7 +380,7 @@ func (cr *CommitteeRunner) executeDuty(logger *zap.Logger, duty types.Duty) erro
 		return errors.Wrap(err, "could not marshal attestation data")
 	}
 
-	if err := cr.BaseRunner.decide(nil, cr, duty.DutySlot(), voteByts); err != nil {
+	if err := cr.BaseRunner.decide(logger, cr, duty.DutySlot(), voteByts); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}
 	return nil

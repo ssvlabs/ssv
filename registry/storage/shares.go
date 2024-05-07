@@ -271,6 +271,7 @@ func (s *sharesStorage) storageShareToSpecShare(share *storageShare) (*types.SSV
 		}
 	}
 	quorum, _ := types.ComputeQuorumAndPartialQuorum(len(committee))
+
 	specShare := &types.SSVShare{
 		Share: spectypes.Share{
 			ValidatorPubKey:     share.ValidatorPubKey,
@@ -282,6 +283,10 @@ func (s *sharesStorage) storageShareToSpecShare(share *storageShare) (*types.SSV
 			Graffiti:            share.Graffiti,
 		},
 		Metadata: share.Metadata,
+	}
+
+	if share.BeaconMetadata != nil && share.BeaconMetadata.Index != 0 {
+		specShare.Share.ValidatorIndex = share.Metadata.BeaconMetadata.Index
 	}
 
 	return specShare, nil

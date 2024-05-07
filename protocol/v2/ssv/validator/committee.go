@@ -26,11 +26,11 @@ type Committee struct {
 
 	Queues map[phase0.Slot]queueContainer
 
-	runnersMtx sync.RWMutex
-	Runners    map[phase0.Slot]*runner.CommitteeRunner
+	//runnersMtx sync.RWMutex
+	Runners map[phase0.Slot]*runner.CommitteeRunner
 
-	sharesMtx sync.RWMutex
-	Shares    map[phase0.ValidatorIndex]*spectypes.Share
+	//sharesMtx sync.RWMutex
+	Shares map[phase0.ValidatorIndex]*spectypes.Share
 
 	Operator                *spectypes.Operator
 	SignatureVerifier       spectypes.SignatureVerifier
@@ -40,16 +40,21 @@ type Committee struct {
 
 // NewCommittee creates a new cluster
 func NewCommittee(
+	ctx context.Context,
 	operator *spectypes.Operator,
 	verifier spectypes.SignatureVerifier,
 	createRunnerFn func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share) *runner.CommitteeRunner,
 ) *Committee {
 	return &Committee{
-		Runners:           make(map[phase0.Slot]*runner.CommitteeRunner),
-		Shares:            make(map[phase0.ValidatorIndex]*spectypes.Share),
-		Operator:          operator,
-		SignatureVerifier: verifier,
-		CreateRunnerFn:    createRunnerFn,
+		logger:                  zap.L().Named("committee"),
+		ctx:                     ctx,
+		Queues:                  make(map[phase0.Slot]queueContainer),
+		Runners:                 make(map[phase0.Slot]*runner.CommitteeRunner),
+		Shares:                  make(map[phase0.ValidatorIndex]*spectypes.Share),
+		HighestAttestingSlotMap: make(map[spectypes.ValidatorPK]phase0.Slot),
+		Operator:                operator,
+		SignatureVerifier:       verifier,
+		CreateRunnerFn:          createRunnerFn,
 	}
 
 }
@@ -97,7 +102,7 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	}
 
 	// TODO alan: stop queue
-	go c.ConsumeQueue(c.logger, duty.Slot, c.ProcessMessage)
+	go c.ConsumeQueue(logger, duty.Slot, c.ProcessMessage)
 
 	var validatorToStopMap map[phase0.Slot]spectypes.ValidatorPK
 	// Filter old duties based on highest attesting slot
@@ -105,7 +110,7 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	// Stop validators with old duties
 	c.stopDuties(validatorToStopMap)
 	c.updateAttestingSlotMap(duty)
-	return c.Runners[duty.Slot].StartNewDuty(c.logger, duty)
+	return c.Runners[duty.Slot].StartNewDuty(logger, duty)
 }
 
 // NOT threadsafe
@@ -154,13 +159,15 @@ func FilterCommitteeDuty(duty *spectypes.CommitteeDuty, slotMap map[spectypes.Va
 // ProcessMessage processes Network Message of all types
 func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage) error {
 	// Validate message
-	if err := msg.SignedSSVMessage.Validate(); err != nil {
-		return errors.Wrap(err, "invalid SignedSSVMessage")
-	}
+	if msg.GetType() != message.SSVEventMsgType {
+		if err := msg.SignedSSVMessage.Validate(); err != nil {
+			return errors.Wrap(err, "invalid SignedSSVMessage")
+		}
 
-	// Verify SignedSSVMessage's signature
-	if err := c.SignatureVerifier.Verify(msg.SignedSSVMessage, c.Operator.Committee); err != nil {
-		return errors.Wrap(err, "SignedSSVMessage has an invalid signature")
+		// Verify SignedSSVMessage's signature
+		if err := c.SignatureVerifier.Verify(msg.SignedSSVMessage, c.Operator.Committee); err != nil {
+			return errors.Wrap(err, "SignedSSVMessage has an invalid signature")
+		}
 	}
 
 	switch msg.GetType() {
