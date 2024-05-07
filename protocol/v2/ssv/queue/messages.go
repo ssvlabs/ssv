@@ -11,7 +11,6 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
 
-	"github.com/bloxapp/ssv/network/commons"
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
@@ -24,7 +23,7 @@ var (
 // DecodedSSVMessage is a bundle of SSVMessage and it's decoding.
 // TODO: try to make it generic
 type DecodedSSVMessage struct {
-	*spectypes.SignedSSVMessage
+	SignedSSVMessage *spectypes.SignedSSVMessage
 	*spectypes.SSVMessage
 
 	// Body is the decoded Data.
@@ -66,17 +65,18 @@ func DecodeSSVMessage(m *spectypes.SSVMessage) (*DecodedSSVMessage, error) {
 
 // DecodeSignedSSVMessage decodes a SignedSSVMessage into a DecodedSSVMessage.
 func DecodeSignedSSVMessage(sm *spectypes.SignedSSVMessage) (*DecodedSSVMessage, error) {
-	m, err := commons.DecodeNetworkMsg(sm.SSVMessage.Data)
+	m, err := specqbft.DecodeMessage(sm.SSVMessage.Data)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrDecodeNetworkMsg, err)
 	}
 
-	d, err := DecodeSSVMessage(m)
+	d, err := DecodeSSVMessage(sm.SSVMessage)
 	if err != nil {
 		return nil, err
 	}
 
 	d.SignedSSVMessage = sm
+	d.Body = m
 
 	return d, nil
 }

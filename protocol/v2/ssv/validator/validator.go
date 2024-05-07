@@ -156,7 +156,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 		}
 
 		// Check signer consistency
-		if !msg.CommonSigners([]spectypes.OperatorID{msg.OperatorIDs[0]}) { // todo: array check
+		if !msg.SignedSSVMessage.CommonSigners([]spectypes.OperatorID{msg.SignedSSVMessage.OperatorIDs[0]}) { // todo: array check
 			return errors.New("SignedSSVMessage's signer not consistent with SignedMessage's signers")
 		}
 
@@ -171,15 +171,15 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 			return errors.New("could not decode post consensus message from network message")
 		}
 
-		if len(msg.OperatorIDs) != 1 {
+		if len(msg.SignedSSVMessage.OperatorIDs) != 1 {
 			return errors.New("PartialSignatureMessage has more than 1 signer")
 		}
 
-		if err := signedMsg.ValidateForSigner(msg.OperatorIDs[0]); err != nil {
+		if err := signedMsg.ValidateForSigner(msg.SignedSSVMessage.OperatorIDs[0]); err != nil {
 			return errors.Wrap(err, "invalid PartialSignatureMessages")
 		}
 		// Check signer consistency
-		if signedMsg.Messages[0].Signer != msg.OperatorIDs[0] {
+		if signedMsg.Messages[0].Signer != msg.SignedSSVMessage.OperatorIDs[0] {
 			return errors.New("SignedSSVMessage's signer not consistent with SignedPartialSignatureMessage's signer")
 		}
 

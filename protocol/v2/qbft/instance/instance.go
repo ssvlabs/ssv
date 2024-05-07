@@ -104,32 +104,10 @@ func (i *Instance) Broadcast(logger *zap.Logger, msg *spectypes.SignedSSVMessage
 	if !i.CanProcessMessages() {
 		return errors.New("instance stopped processing messages")
 	}
-	byts, err := msg.Encode()
-	if err != nil {
-		return errors.Wrap(err, "could not encode message")
-	}
-
-	decMsg, err := specqbft.DecodeMessage(msg.SSVMessage.Data)
-	if err != nil {
-		return err
-	}
-
 	msgID := spectypes.MessageID{}
-	copy(msgID[:], decMsg.Identifier)
+	copy(msgID[:], i.State.ID)
 
-	ssvMsg := &spectypes.SSVMessage{
-		MsgType: spectypes.SSVConsensusMsgType,
-		MsgID:   msgID,
-		Data:    byts,
-	}
-
-	operatorSigner := i.GetConfig().GetOperatorSigner()
-	msgToBroadcast, err := spectypes.SSVMessageToSignedSSVMessage(ssvMsg, i.State.Share.OperatorID, operatorSigner.SignSSVMessage)
-	if err != nil {
-		return errors.Wrap(err, "could not create SignedSSVMessage from SSVMessage")
-	}
-
-	return i.config.GetNetwork().Broadcast(ssvMsg.MsgID, msgToBroadcast)
+	return i.config.GetNetwork().Broadcast(msgID, msg)
 }
 
 func allSigners(all []*spectypes.SignedSSVMessage) []spectypes.OperatorID {
