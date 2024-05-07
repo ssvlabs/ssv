@@ -14,7 +14,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/roundtimer"
 	qbfttesting "github.com/bloxapp/ssv/protocol/v2/genesisqbft/testing"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
+	"github.com/bloxapp/ssv/protocol/v2/genesisqbft"
 	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"

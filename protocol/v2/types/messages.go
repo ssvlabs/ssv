@@ -3,7 +3,6 @@ package types
 import (
 	"encoding/json"
 
-	"github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
 )
 
@@ -37,8 +36,8 @@ type EventMsg struct {
 }
 
 type TimeoutData struct {
-	Height qbft.Height
-	Round  qbft.Round
+	Height uint64
+	Round  uint64
 }
 
 type ExecuteDutyData struct {

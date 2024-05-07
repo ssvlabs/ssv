@@ -8,6 +8,7 @@ import (
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
 	"go.uber.org/zap"
+	oldqbftstorage "github.com/bloxapp/ssv/protocol/v2/genesisqbft/storage"
 
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 )

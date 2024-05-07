@@ -58,8 +58,8 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 
 	// Initialize EventMsg for the test
 	timeoutData := types.TimeoutData{
-		Height: genesisspecqbft.FirstHeight,
-		Round:  genesisspecqbft.FirstRound,
+		Height: uint64(genesisspecqbft.FirstHeight),
+		Round:  uint64(genesisspecqbft.FirstRound),
 	}
 
 	data, err := json.Marshal(timeoutData)

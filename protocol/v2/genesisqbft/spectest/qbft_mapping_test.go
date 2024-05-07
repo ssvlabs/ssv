@@ -7,18 +7,17 @@ import (
 	"strings"
 	"testing"
 
-	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
-	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/timeout"
-	"github.com/bloxapp/ssv-spec/types/testingutils"
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	"github.com/bloxapp/ssv/logging"
+	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/instance"
+	testing2 "github.com/bloxapp/ssv/protocol/v2/genesisqbft/testing"
+	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
+	"github.com/bloxapp/ssv/protocol/v2/genesistypes"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/logging"
-	testing2 "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
-
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	spectests "github.com/ssvlabs/ssv-spec-pre-cc/qbft/spectest/tests"
+	"github.com/ssvlabs/ssv-spec-pre-cc/qbft/spectest/tests/timeout"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 )
 
 func TestQBFTMapping(t *testing.T) {
