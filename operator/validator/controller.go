@@ -339,7 +339,7 @@ func (c *controller) handleRouterMessages() {
 			pk := msg.GetID().GetSenderID()
 			hexPK := hex.EncodeToString(pk)
 			var cid spectypes.ClusterID
-			copy(cid[:], pk)
+			copy(cid[:], pk[16:])
 
 			if v, ok := c.validatorsMap.GetValidator(hexPK); ok {
 				v.HandleMessage(c.logger, msg)
