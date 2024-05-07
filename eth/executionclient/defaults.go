@@ -10,6 +10,6 @@ const (
 	DefaultReconnectionMaxInterval     = 64 * time.Second
 	DefaultFollowDistance              = 8
 	// TODO ALAN: revert
-	DefaultHistoricalLogsBatchSize = 1000
+	DefaultHistoricalLogsBatchSize = 100
 	defaultLogBuf                  = 8 * 1024
 )
