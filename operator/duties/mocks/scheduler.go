@@ -281,3 +281,40 @@ func (mr *MockValidatorProviderMockRecorder) Validator(pubKey interface{}) *gomo
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Validator", reflect.TypeOf((*MockValidatorProvider)(nil).Validator), pubKey)
 }
+
+// MockValidatorController is a mock of ValidatorController interface.
+type MockValidatorController struct {
+	ctrl     *gomock.Controller
+	recorder *MockValidatorControllerMockRecorder
+}
+
+// MockValidatorControllerMockRecorder is the mock recorder for MockValidatorController.
+type MockValidatorControllerMockRecorder struct {
+	mock *MockValidatorController
+}
+
+// NewMockValidatorController creates a new mock instance.
+func NewMockValidatorController(ctrl *gomock.Controller) *MockValidatorController {
+	mock := &MockValidatorController{ctrl: ctrl}
+	mock.recorder = &MockValidatorControllerMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockValidatorController) EXPECT() *MockValidatorControllerMockRecorder {
+	return m.recorder
+}
+
+// AllActiveIndices mocks base method.
+func (m *MockValidatorController) AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AllActiveIndices", epoch, afterInit)
+	ret0, _ := ret[0].([]phase0.ValidatorIndex)
+	return ret0
+}
+
+// AllActiveIndices indicates an expected call of AllActiveIndices.
+func (mr *MockValidatorControllerMockRecorder) AllActiveIndices(epoch, afterInit interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AllActiveIndices", reflect.TypeOf((*MockValidatorController)(nil).AllActiveIndices), epoch, afterInit)
+}

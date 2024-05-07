@@ -256,8 +256,8 @@ func TestScheduler_Run(t *testing.T) {
 	mockValidatorProvider := mocks.NewMockValidatorProvider(ctrl)
 	mockTicker := mockslotticker.NewMockSlotTicker(ctrl)
 	// create multiple mock duty handlers
-	mockDutyHandler1 := mocks.NewMockdutyHandler(ctrl)
-	mockDutyHandler2 := mocks.NewMockdutyHandler(ctrl)
+	mockDutyHandler1 := NewMockdutyHandler(ctrl)
+	mockDutyHandler2 := NewMockdutyHandler(ctrl)
 
 	mockDutyHandler1.EXPECT().HandleInitialDuties(gomock.Any()).AnyTimes()
 	mockDutyHandler2.EXPECT().HandleInitialDuties(gomock.Any()).AnyTimes()
@@ -282,13 +282,13 @@ func TestScheduler_Run(t *testing.T) {
 
 	// setup mock duty handler expectations
 	for _, mockDutyHandler := range s.handlers {
-		mockDutyHandler.(*mocks.MockdutyHandler).EXPECT().Setup(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
-		mockDutyHandler.(*mocks.MockdutyHandler).EXPECT().HandleDuties(gomock.Any()).
+		mockDutyHandler.(*MockdutyHandler).EXPECT().Setup(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(1)
+		mockDutyHandler.(*MockdutyHandler).EXPECT().HandleDuties(gomock.Any()).
 			DoAndReturn(func(ctx context.Context) {
 				<-ctx.Done()
 			}).
 			Times(1)
-		mockDutyHandler.(*mocks.MockdutyHandler).EXPECT().Name().Times(1)
+		mockDutyHandler.(*MockdutyHandler).EXPECT().Name().Times(1)
 	}
 
 	require.NoError(t, s.Start(ctx, logger))

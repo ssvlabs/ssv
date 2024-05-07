@@ -10,7 +10,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/slotticker"
 )
 
-//go:generate mockgen -package=mocks -destination=./mocks/base_handler.go -source=./base_handler.go
+//go:generate mockgen -package=duties -destination=./base_handler_mock.go -source=./base_handler.go
 
 // ExecuteDutiesFunc is a non-blocking functions which executes the given duties.
 type ExecuteDutiesFunc func(logger *zap.Logger, duties []*spectypes.BeaconDuty)
@@ -19,7 +19,7 @@ type ExecuteDutiesFunc func(logger *zap.Logger, duties []*spectypes.BeaconDuty)
 type ExecuteCommitteeDutiesFunc func(logger *zap.Logger, duties map[[32]byte]*spectypes.CommitteeDuty)
 
 type dutyHandler interface {
-	Setup(string, *zap.Logger, BeaconNode, ExecutionClient, networkconfig.NetworkConfig, ValidatorProvider, ExecuteDutiesFunc, ExecuteCommitteeDutiesFunc, slotticker.Provider, chan ReorgEvent, chan struct{})
+	Setup(string, *zap.Logger, BeaconNode, ExecutionClient, networkconfig.NetworkConfig, ValidatorProvider, ValidatorController, ExecuteDutiesFunc, ExecuteCommitteeDutiesFunc, slotticker.Provider, chan ReorgEvent, chan struct{})
 	HandleDuties(context.Context)
 	HandleInitialDuties(context.Context)
 	Name() string
@@ -31,6 +31,7 @@ type baseHandler struct {
 	executionClient        ExecutionClient
 	network                networkconfig.NetworkConfig
 	validatorProvider      ValidatorProvider
+	validatorController    ValidatorController
 	executeDuties          ExecuteDutiesFunc
 	executeCommitteeDuties ExecuteCommitteeDutiesFunc
 	ticker                 slotticker.SlotTicker
@@ -49,6 +50,7 @@ func (h *baseHandler) Setup(
 	executionClient ExecutionClient,
 	network networkconfig.NetworkConfig,
 	validatorProvider ValidatorProvider,
+	validatorController ValidatorController,
 	executeDuties ExecuteDutiesFunc,
 	executeCommitteeDuties ExecuteCommitteeDutiesFunc,
 	slotTickerProvider slotticker.Provider,
@@ -60,6 +62,7 @@ func (h *baseHandler) Setup(
 	h.executionClient = executionClient
 	h.network = network
 	h.validatorProvider = validatorProvider
+	h.validatorController = validatorController
 	h.executeDuties = executeDuties
 	h.executeCommitteeDuties = executeCommitteeDuties
 	h.ticker = slotTickerProvider()

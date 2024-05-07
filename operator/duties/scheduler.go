@@ -72,6 +72,13 @@ type ValidatorProvider interface {
 	ParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
 	SelfParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
 	Validator(pubKey []byte) *types.SSVShare
+
+	//AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex
+}
+
+// ValidatorController represents the component that controls validators via the scheduler
+type ValidatorController interface {
+	AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex
 }
 
 type ExecuteDutyFunc func(logger *zap.Logger, duty *spectypes.BeaconDuty)
@@ -83,6 +90,7 @@ type SchedulerOptions struct {
 	ExecutionClient      ExecutionClient
 	Network              networkconfig.NetworkConfig
 	ValidatorProvider    ValidatorProvider
+	ValidatorController  ValidatorController
 	ExecuteDuty          ExecuteDutyFunc
 	ExecuteCommitteeDuty ExecuteCommitteeDutyFunc
 	IndicesChg           chan struct{}
@@ -95,7 +103,8 @@ type Scheduler struct {
 	beaconNode           BeaconNode
 	executionClient      ExecutionClient
 	network              networkconfig.NetworkConfig
-	ValidatorProvider    ValidatorProvider
+	validatorProvider    ValidatorProvider
+	validatorController  ValidatorController
 	slotTickerProvider   slotticker.Provider
 	executeDuty          ExecuteDutyFunc
 	executeCommitteeDuty ExecuteCommitteeDutyFunc
@@ -128,7 +137,8 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 		slotTickerProvider:   opts.SlotTickerProvider,
 		executeDuty:          opts.ExecuteDuty,
 		executeCommitteeDuty: opts.ExecuteCommitteeDuty,
-		ValidatorProvider:    opts.ValidatorProvider,
+		validatorProvider:    opts.ValidatorProvider,
+		validatorController:  opts.ValidatorController,
 		indicesChg:           opts.IndicesChg,
 		blockPropagateDelay:  blockPropagationDelay,
 
@@ -184,7 +194,8 @@ func (s *Scheduler) Start(ctx context.Context, logger *zap.Logger) error {
 			s.beaconNode,
 			s.executionClient,
 			s.network,
-			s.ValidatorProvider,
+			s.validatorProvider,
+			s.validatorController,
 			s.ExecuteDuties,
 			s.ExecuteCommitteeDuties,
 			s.slotTickerProvider,
