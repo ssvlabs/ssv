@@ -991,7 +991,7 @@ func (c *controller) startValidator(v *validator.Validator) (bool, error) {
 
 func (c *controller) startCommittee(vc *validator.Committee) (bool, error) {
 	//TODO alan: currently nothing to start in committee?
-	c.logger.Debug("committee started ", zap.String("committee_id", hex.EncodeToString(vc.Operator.ClusterID[:])))
+	// c.logger.Debug("committee started ", zap.String("committee_id", hex.EncodeToString(vc.Operator.ClusterID[:])))
 	//cstarted, err := vc.Start() // TODO alan : make it testable
 	//if err != nil {
 	//	// todo alan: metrics
