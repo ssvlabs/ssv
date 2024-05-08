@@ -179,6 +179,7 @@ func (c *validatorStore) SelfParticipatingValidators(epoch phase0.Epoch) []*type
 		return nil
 	}
 	validators := c.OperatorValidators(c.operatorID())
+
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 

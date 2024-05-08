@@ -210,6 +210,7 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	if err != nil {
 		return fmt.Errorf("failed to fetch attester duties: %w", err)
 	}
+	h.logger.Debug("🔍 fetching duties: got duties", fields.Epoch(epoch), zap.Int("len", len(duties)))
 
 	specDuties := make([]*spectypes.BeaconDuty, 0, len(duties))
 	for _, d := range duties {
