@@ -3,6 +3,7 @@ package validator
 import (
 	"context"
 	"fmt"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/message"
@@ -114,20 +115,20 @@ func (v *Committee) ConsumeQueue(logger *zap.Logger, slot phase0.Slot, handler M
 		//} else if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
 		//	// If no proposal was accepted for the current round, skip prepare & commit messages
 		//	// for the current height and round.
-		filter := func(m *queue.DecodedSSVMessage) bool {
-			sm, ok := m.Body.(*specqbft.Message)
-			if !ok {
-				return true
-			}
+		// filter := func(m *queue.DecodedSSVMessage) bool {
+		// 	sm, ok := m.Body.(*specqbft.Message)
+		// 	if !ok {
+		// 		return true
+		// 	}
 
-			if sm.Height != state.Height || sm.Round != state.Round {
-				return true
-			}
-			return sm.MsgType != specqbft.PrepareMsgType && sm.MsgType != specqbft.CommitMsgType
-		}
+		// 	if sm.Height != state.Height || sm.Round != state.Round {
+		// 		return true
+		// 	}
+		// 	return sm.MsgType != specqbft.PrepareMsgType && sm.MsgType != specqbft.CommitMsgType
+		// }
 
 		// Pop the highest priority message for the current state.
-		msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state), filter)
+		msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state), nil) // TODO: (Alan) bring back filter
 		if ctx.Err() != nil {
 			break
 		}
