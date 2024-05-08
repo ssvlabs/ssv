@@ -48,7 +48,7 @@ func (mv *messageValidator) validateSelf(pMsg *pubsub.Message) pubsub.Validation
 	//	mv.logger.Error("unsupported message type", fields.MessageType(signedSSVMessage.SSVMessage.MsgType))
 	//}
 
-	zap.L().Debug("gotp2pmessage",
+	mv.logger.Debug("gotp2pmessage",
 		zap.Int("type", int(signedSSVMessage.SSVMessage.MsgType)),
 		zap.String("role", signedSSVMessage.SSVMessage.GetID().GetRoleType().String()),
 		zap.String("id", hex.EncodeToString(signedSSVMessage.SSVMessage.GetID().GetSenderID()[16:])),
