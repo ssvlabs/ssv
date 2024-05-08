@@ -1,6 +1,8 @@
 package validation
 
 import (
+	"encoding/hex"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -46,6 +48,11 @@ func (mv *messageValidator) validateSelf(pMsg *pubsub.Message) pubsub.Validation
 	//	mv.logger.Error("unsupported message type", fields.MessageType(signedSSVMessage.SSVMessage.MsgType))
 	//}
 
+	mv.logger.Debug("got message",
+		zap.Int("type", int(signedSSVMessage.SSVMessage.MsgType)),
+		zap.String("role", signedSSVMessage.SSVMessage.GetID().GetRoleType().String()),
+		zap.String("id", hex.EncodeToString(signedSSVMessage.SSVMessage.GetID().GetSenderID())),
+	)
 	pMsg.ValidatorData = d
 	return pubsub.ValidationAccept
 }
