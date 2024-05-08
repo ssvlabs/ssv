@@ -1080,16 +1080,18 @@ func TempBeaconVoteValueCheckF(
 			return errors.New("attestation data source > target")
 		}
 
-		attestationData := &phase0.AttestationData{
-			Slot: slot,
-			// CommitteeIndex doesn't matter for slashing checks
-			Index:           0,
-			BeaconBlockRoot: bv.BlockRoot,
-			Source:          bv.Source,
-			Target:          bv.Target,
-		}
+		// attestationData := &phase0.AttestationData{
+		// 	Slot: slot,
+		// 	// CommitteeIndex doesn't matter for slashing checks
+		// 	Index:           0,
+		// 	BeaconBlockRoot: bv.BlockRoot,
+		// 	Source:          bv.Source,
+		// 	Target:          bv.Target,
+		// }
 
-		return signer.IsAttestationSlashable(sharePublicKey, attestationData)
+		// TODO: (Alan) REVERT SLASHING CHECK
+		// return signer.IsAttestationSlashable(sharePublicKey, attestationData)
+		return nil
 	}
 }
 
