@@ -6,16 +6,14 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv-spec/types/testingutils"
-
-	"github.com/pkg/errors"
-	"go.uber.org/zap"
-
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 
-var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, role types.BeaconRole) *qbft.Config {
+var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, role types.RunnerRole) *qbft.Config {
 	return &qbft.Config{
 		BeaconSigner:   testingutils.NewTestingKeyManager(),
 		OperatorSigner: testingutils.NewTestingOperatorSigner(keySet, 1),
@@ -45,14 +43,21 @@ var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, ro
 var TestingInvalidValueCheck = []byte{1, 1, 1, 1}
 
 var TestingShare = func(keysSet *testingutils.TestKeySet) *types.Share {
+
+	// Decode validator public key
+	pkBytesSlice := keysSet.ValidatorPK.Serialize()
+	pkBytesArray := [48]byte{}
+	copy(pkBytesArray[:], pkBytesSlice)
+
 	return &types.Share{
-		OperatorID:      1,
-		ValidatorPubKey: keysSet.ValidatorPK.Serialize(),
-		SharePubKey:     keysSet.Shares[1].GetPublicKey().Serialize(),
-		DomainType:      testingutils.TestingSSVDomainType,
-		Quorum:          keysSet.Threshold,
-		PartialQuorum:   keysSet.PartialThreshold,
-		Committee:       keysSet.Committee(),
+		ValidatorIndex:      testingutils.TestingValidatorIndex,
+		ValidatorPubKey:     pkBytesArray,
+		SharePubKey:         keysSet.Shares[1].GetPublicKey().Serialize(),
+		Committee:           keysSet.Committee(),
+		Quorum:              keysSet.Threshold,
+		DomainType:          testingutils.TestingSSVDomainType,
+		FeeRecipientAddress: testingutils.TestingFeeRecipient,
+		Graffiti:            testingutils.TestingGraffiti[:],
 	}
 }
 

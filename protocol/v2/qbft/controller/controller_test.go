@@ -7,7 +7,6 @@ import (
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
-
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
