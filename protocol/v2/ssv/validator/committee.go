@@ -51,7 +51,7 @@ func CommitteeOperators(operator *spectypes.Operator) string {
 }
 
 func CommitteeDutyID(operator *spectypes.Operator, slot phase0.Slot) string {
-	return "COMMITTEE_" + "_c" + CommitteeOperators(operator) + "_s" + fmt.Sprint(slot)
+	return "COMMITTEE_" + "c" + CommitteeOperators(operator) + "_s" + fmt.Sprint(slot)
 }
 
 func CommitteeLogFields(operator *spectypes.Operator) []zap.Field {
