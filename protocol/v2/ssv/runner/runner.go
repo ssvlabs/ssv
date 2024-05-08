@@ -163,6 +163,7 @@ func (b *BaseRunner) baseConsensusMsgProcessing(logger *zap.Logger, runner Runne
 	// we allow all consensus msgs to be processed, once the process finishes we check if there is an actual running duty
 	// do not return error if no running duty
 	if !b.hasRunningDuty() {
+		logger.Debug("TEMP: no running duty")
 		return false, nil, nil
 	}
 

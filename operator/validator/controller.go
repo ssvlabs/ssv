@@ -1125,7 +1125,7 @@ func SetupCommitteeRunners(ctx context.Context, logger *zap.Logger, options vali
 	return func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share) *runner.CommitteeRunner {
 		// Create a committee runner.
 		epoch := options.BeaconNetwork.GetBeaconNetwork().EstimatedEpochAtSlot(slot)
-		valCheck := TempBeaconVoteValueCheckF(options.Signer, slot, options.SSVShare.Share.SharePubKey, epoch)
+		valCheck := TempBeaconVoteValueCheckF(options.Signer, slot, options.SSVShare.Share.SharePubKey, epoch) // TODO: (Alan) fix slashing check (committee is not 1 pubkey)
 		crunner := runner.NewCommitteeRunner(options.BeaconNetwork.GetBeaconNetwork(), shares, buildController(spectypes.RoleCommittee, valCheck), options.Beacon, options.Network, options.Signer, options.OperatorSigner, valCheck)
 		return crunner.(*runner.CommitteeRunner)
 	}
