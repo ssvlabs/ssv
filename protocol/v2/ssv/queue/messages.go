@@ -69,10 +69,7 @@ func DecodeSignedSSVMessage(sm *spectypes.SignedSSVMessage) (*DecodedSSVMessage,
 	if err != nil {
 		return nil, err
 	}
-
 	d.SignedSSVMessage = sm
-	d.Body = d
-
 	return d, nil
 }
 
