@@ -128,12 +128,12 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	// TODO alan: stop queue
 	go c.ConsumeQueue(logger, duty.Slot, c.ProcessMessage)
 
-	//var validatorToStopMap map[phase0.Slot]spectypes.ValidatorPK
-	// Filter old duties based on highest attesting slot
-	//duty, _, c.HighestAttestingSlotMap = FilterCommitteeDuty(duty, c.HighestAttestingSlotMap)
-	//// Stop validators with old duties
-	//c.stopDuties(validatorToStopMap)
-	//c.updateAttestingSlotMap(duty)
+	var validatorToStopMap map[phase0.Slot]spectypes.ValidatorPK
+	//Filter old duties based on highest attesting slot
+	duty, validatorToStopMap, c.HighestAttestingSlotMap = FilterCommitteeDuty(duty, c.HighestAttestingSlotMap)
+	// Stop validators with old duties
+	c.stopDuties(validatorToStopMap)
+	c.updateAttestingSlotMap(duty)
 
 	logger.Info("ℹ️ starting duty processing")
 	return c.Runners[duty.Slot].StartNewDuty(logger, duty)
