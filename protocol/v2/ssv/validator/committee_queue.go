@@ -128,7 +128,7 @@ func (v *Committee) ConsumeQueue(logger *zap.Logger, slot phase0.Slot, handler M
 		// }
 
 		// Pop the highest priority message for the current state.
-		msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state), nil) // TODO: (Alan) bring back filter
+		msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state), queue.FilterAny) // TODO: (Alan) bring back filter
 		if ctx.Err() != nil {
 			break
 		}
