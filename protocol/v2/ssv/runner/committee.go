@@ -6,6 +6,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	ssz "github.com/ferranbt/fastssz"
@@ -177,6 +178,12 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *types.Signe
 		return errors.Wrap(err, "could not create SignedSSVMessage from SSVMessage")
 	}
 
+	// TODO: revert?
+	logger.Debug("📢 broadcasting post consensus message",
+		fields.Slot(duty.DutySlot()),
+		zap.Int("sigs", len(postConsensusMsg.Messages)),
+	)
+
 	if err := cr.GetNetwork().Broadcast(ssvMsg.MsgID, msgToBroadcast); err != nil {
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
@@ -187,10 +194,15 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *types.Signe
 // TODO finish edge case where some roots may be missing
 func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *types.PartialSignatureMessages) error {
 	quorum, roots, err := cr.BaseRunner.basePostConsensusMsgProcessing(logger, cr, signedMsg)
-
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
 	}
+
+	// TODO: revert?
+	logger.Debug("got post consensus",
+		zap.Bool("quorum", quorum),
+		fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()),
+	)
 
 	if !quorum {
 		return nil
@@ -231,6 +243,10 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 				if err := cr.beacon.SubmitAttestation(att); err != nil {
 					return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
 				}
+				// TODO: like AttesterRunner
+				logger.Debug("📢 submitted attestation",
+					fields.Slot(att.Data.Slot),
+				)
 			} else if role == types.BNRoleSyncCommittee {
 				syncMsg := beaconObjects[root].(*altair.SyncCommitteeMessage)
 				syncMsg.Signature = specSig
@@ -240,7 +256,6 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 				}
 			}
 		}
-
 	}
 	cr.BaseRunner.State.Finished = true
 	return nil
