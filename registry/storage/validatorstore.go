@@ -5,6 +5,7 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"go.uber.org/zap"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 
@@ -116,6 +117,8 @@ func (c *validatorStore) ParticipatingValidators(epoch phase0.Epoch) []*types.SS
 }
 
 func (c *validatorStore) OperatorValidators(id spectypes.OperatorID) []*types.SSVShare {
+	zap.L().Debug("OperatorValidators: LOCK")
+	defer zap.L().Debug("OperatorValidators: UNLOCK")
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -176,10 +179,13 @@ func (c *validatorStore) SelfValidators() []*types.SSVShare {
 
 func (c *validatorStore) SelfParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare {
 	if c.operatorID == nil {
+		zap.L().Debug("SelfParticipatingValidators: NIL")
 		return nil
 	}
 	validators := c.OperatorValidators(c.operatorID())
 
+	zap.L().Debug("SelfParticipatingValidators: LOCK")
+	defer zap.L().Debug("SelfParticipatingValidators: UNLOCK")
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
