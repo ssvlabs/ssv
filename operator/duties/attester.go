@@ -198,7 +198,9 @@ func (h *AttesterHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 
 func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch) error {
 	start := time.Now()
+	h.logger.Debug("🔍 fetching duties", fields.Epoch(epoch))
 	indices := indicesFromShares(h.validatorProvider.SelfParticipatingValidators(epoch))
+	h.logger.Debug("🔍 fetching duties: got indices from shares", fields.Epoch(epoch), zap.Int("len", len(indices)))
 
 	if len(indices) == 0 {
 		return nil
