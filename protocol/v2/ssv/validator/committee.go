@@ -2,7 +2,9 @@ package validator
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
+	"github.com/bloxapp/ssv/logging/fields"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -46,7 +48,7 @@ func NewCommittee(
 	createRunnerFn func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share) *runner.CommitteeRunner,
 ) *Committee {
 	return &Committee{
-		logger: zap.L().Named("committee"),
+		logger: zap.L().Named("committee").With(zap.String("committee_id", hex.EncodeToString(operator.ClusterID[:]))), // TODO alan: pass logger
 		ctx:    ctx,
 		// TODO alan: drain maps
 		Queues:                  make(map[phase0.Slot]queueContainer),
@@ -102,7 +104,7 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	}
 
 	// TODO alan: stop queue
-	go c.ConsumeQueue(logger, duty.Slot, c.ProcessMessage)
+	go c.ConsumeQueue(c.logger.With(fields.Slot(duty.Slot)), duty.Slot, c.ProcessMessage)
 
 	//var validatorToStopMap map[phase0.Slot]spectypes.ValidatorPK
 	// Filter old duties based on highest attesting slot
@@ -211,7 +213,7 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 			return runner.ProcessPostConsensus(c.logger, pSigMessages)
 		}
 	case message.SSVEventMsgType:
-		return c.handleEventMessage(logger, msg)
+		return c.handleEventMessage(c.logger, msg)
 	default:
 		return errors.New("unknown msg")
 	}

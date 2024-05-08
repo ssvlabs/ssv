@@ -846,7 +846,9 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 	}
 
 	// Start a committee validator.
-	vc, found := c.validatorsMap.GetCommittee(share.CommitteeID())
+	cmtid := share.CommitteeID()
+	idstr := hex.EncodeToString(cmtid[:])
+	vc, found := c.validatorsMap.GetCommittee(cmtid)
 	if !found {
 		if !share.HasBeaconMetadata() {
 			return nil, nil, fmt.Errorf("beacon metadata is missing")
@@ -860,11 +862,11 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 		opts.SSVShare = share
 		opts.Operator = operator
 
-		committeRunnerFunc := SetupCommitteeRunners(ctx, c.logger, opts)
+		committeRunnerFunc := SetupCommitteeRunners(ctx, c.logger.With(zap.String("committee_id", idstr)), opts)
 
 		vc = validator.NewCommittee(c.context, operator, opts.SignatureVerifier, committeRunnerFunc)
 		vc.AddShare(&share.Share)
-		c.validatorsMap.PutCommittee(share.CommitteeID(), vc)
+		c.validatorsMap.PutCommittee(cmtid, vc)
 
 		c.printShare(share, "setup validator done")
 
