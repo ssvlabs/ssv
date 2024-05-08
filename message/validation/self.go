@@ -51,7 +51,7 @@ func (mv *messageValidator) validateSelf(pMsg *pubsub.Message) pubsub.Validation
 	zap.L().Debug("gotp2pmessage",
 		zap.Int("type", int(signedSSVMessage.SSVMessage.MsgType)),
 		zap.String("role", signedSSVMessage.SSVMessage.GetID().GetRoleType().String()),
-		zap.String("id", hex.EncodeToString(signedSSVMessage.SSVMessage.GetID().GetSenderID())),
+		zap.String("id", hex.EncodeToString(signedSSVMessage.SSVMessage.GetID().GetSenderID()[16:])),
 	)
 	pMsg.ValidatorData = d
 	return pubsub.ValidationAccept
