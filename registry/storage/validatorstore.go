@@ -104,9 +104,6 @@ func (c *validatorStore) Validators() []*types.SSVShare {
 }
 
 func (c *validatorStore) ParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
 	var validators []*types.SSVShare
 	for _, share := range c.shares() {
 		if share.IsParticipating(epoch) {
@@ -179,16 +176,9 @@ func (c *validatorStore) SelfValidators() []*types.SSVShare {
 
 func (c *validatorStore) SelfParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare {
 	if c.operatorID == nil {
-		zap.L().Debug("SelfParticipatingValidators: NIL")
 		return nil
 	}
 	validators := c.OperatorValidators(c.operatorID())
-
-	zap.L().Debug("SelfParticipatingValidators: LOCK")
-	defer zap.L().Debug("SelfParticipatingValidators: UNLOCK")
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
 	var participating []*types.SSVShare
 	for _, validator := range validators {
 		if validator.IsParticipating(epoch) {
@@ -210,10 +200,6 @@ func (c *validatorStore) SelfParticipatingCommittees(epoch phase0.Epoch) []*Comm
 		return nil
 	}
 	committees := c.OperatorCommittees(c.operatorID())
-
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
 	var participating []*Committee
 	for _, committee := range committees {
 		if committee.IsParticipating(epoch) {
@@ -261,6 +247,7 @@ func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) {
 }
 
 func (c *validatorStore) handleShareRemoved(pk spectypes.ValidatorPK) {
+	zap.L().Debug("handleShareRemoved: LOCK")
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
