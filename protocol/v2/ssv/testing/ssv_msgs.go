@@ -155,35 +155,23 @@ var PostConsensusAttestationMsg = func(sk *bls.SecretKey, id spectypes.OperatorI
 
 var PostConsensusAttestationTooManyRootsMsg = func(sk *bls.SecretKey, id spectypes.OperatorID, height specqbft.Height) *spectypes.PartialSignatureMessages {
 	ret := postConsensusAttestationMsg(sk, id, height, false, false)
-	ret.Message.Messages = append(ret.Message.Messages, ret.Message.Messages[0])
+	ret.Messages = append(ret.Messages, ret.Messages[0])
 
 	msg := &spectypes.PartialSignatureMessages{
 		Type:     spectypes.PostConsensusPartialSig,
-		Slot:     testingutils.TestingDutySlot,
-		Messages: ret.Message.Messages,
+		Slot:     spectestingutils.TestingDutySlot,
+		Messages: ret.Messages,
 	}
-
-	sig, _ := testingutils.NewTestingKeyManager().SignRoot(msg, spectypes.PartialSignatureType, sk.GetPublicKey().Serialize())
-	return &spectypes.PartialSignatureMessage{
-		Message:   *msg,
-		Signature: sig,
-		Signer:    id,
-	}
+	return msg
 }
 
 var PostConsensusAttestationTooFewRootsMsg = func(sk *bls.SecretKey, id spectypes.OperatorID, height specqbft.Height) *spectypes.PartialSignatureMessages {
 	msg := &spectypes.PartialSignatureMessages{
 		Type:     spectypes.PostConsensusPartialSig,
-		Slot:     testingutils.TestingDutySlot,
+		Slot:     spectestingutils.TestingDutySlot,
 		Messages: []*spectypes.PartialSignatureMessage{},
 	}
-
-	sig, _ := testingutils.NewTestingKeyManager().SignRoot(msg, spectypes.PartialSignatureType, sk.GetPublicKey().Serialize())
-	return &spectypes.PartialSignatureMessage{
-		Message:   *msg,
-		Signature: sig,
-		Signer:    id,
-	}
+	return msg
 }
 
 var postConsensusAttestationMsg = func(
@@ -193,37 +181,32 @@ var postConsensusAttestationMsg = func(
 	wrongRoot bool,
 	wrongBeaconSig bool,
 ) *spectypes.PartialSignatureMessages {
-	signer := testingutils.NewTestingKeyManager()
-	beacon := testingutils.NewTestingBeaconNode()
-	d, _ := beacon.DomainData(testingutils.TestingAttestationData.Target.Epoch, spectypes.DomainAttester)
+	signer := spectestingutils.NewTestingKeyManager()
+	beacon := spectestingutils.NewTestingBeaconNode()
+	d, _ := beacon.DomainData(spectestingutils.TestingAttestationData.Target.Epoch, types.DomainAttester)
 
-	attData := testingutils.TestingAttestationData
+	attData := spectestingutils.TestingAttestationData
 	if wrongRoot {
-		attData = testingutils.TestingWrongAttestationData
+		attData = spectestingutils.TestingWrongAttestationData
 	}
 
-	signed, root, _ := signer.SignBeaconObject(attData, d, sk.GetPublicKey().Serialize(), spectypes.DomainAttester)
+	signed, root, _ := signer.SignBeaconObject(attData, d, sk.GetPublicKey().Serialize(), types.DomainAttester)
 
 	if wrongBeaconSig {
-		signed, _, _ = signer.SignBeaconObject(attData, d, testingutils.Testing7SharesSet().ValidatorPK.Serialize(), spectypes.DomainAttester)
+		signed, _, _ = signer.SignBeaconObject(attData, d, spectestingutils.Testing7SharesSet().ValidatorPK.Serialize(), types.DomainAttester)
 	}
 
-	msgs := spectypes.PartialSignatureMessages{
+	return &spectypes.PartialSignatureMessages{
 		Type: spectypes.PostConsensusPartialSig,
-		Slot: testingutils.TestingDutySlot,
+		Slot: spectestingutils.TestingDutySlot,
 		Messages: []*spectypes.PartialSignatureMessage{
 			{
 				PartialSignature: signed,
 				SigningRoot:      root,
 				Signer:           id,
+				ValidatorIndex:   spectestingutils.TestingValidatorIndex,
 			},
 		},
-	}
-	sig, _ := signer.SignRoot(msgs, spectypes.PartialSignatureType, sk.GetPublicKey().Serialize())
-	return &spectypes.PartialSignatureMessage{
-		Message:   msgs,
-		Signature: sig,
-		Signer:    id,
 	}
 }
 
