@@ -20,8 +20,8 @@ import (
 )
 
 type SyncCommitteeAggregatorRunner struct {
-	BaseRunner *BaseRunner
-
+	BaseRunner     *BaseRunner
+	started        time.Time
 	beacon         specssv.BeaconNode
 	network        specssv.Network
 	signer         spectypes.KeyManager
@@ -68,6 +68,72 @@ func (r *SyncCommitteeAggregatorRunner) StartNewDuty(logger *zap.Logger, duty *s
 // HasRunningDuty returns true if a duty is already running (StartNewDuty called and returned nil)
 func (r *SyncCommitteeAggregatorRunner) HasRunningDuty() bool {
 	return r.BaseRunner.hasRunningDuty()
+}
+
+// executeDuty steps:
+// 1) sign a partial contribution proof (for each subcommittee index) and wait for 2f+1 partial sigs from peers
+// 2) Reconstruct contribution proofs, check IsSyncCommitteeAggregator and start consensus on duty + contribution data
+// 3) Once consensus decides, sign partial contribution data (for each subcommittee) and broadcast
+// 4) collect 2f+1 partial sigs, reconstruct and broadcast valid SignedContributionAndProof (for each subcommittee) sig to the BN
+func (r *SyncCommitteeAggregatorRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
+	r.metrics.StartDutyFullFlow()
+	r.metrics.StartPreConsensus()
+	r.started = time.Now()
+	// sign selection proofs
+	msgs := spectypes.PartialSignatureMessages{
+		Type:     spectypes.ContributionProofs,
+		Slot:     duty.Slot,
+		Messages: []*spectypes.PartialSignatureMessage{},
+	}
+	for _, index := range r.GetState().StartingDuty.ValidatorSyncCommitteeIndices {
+		subnet, err := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(index))
+		if err != nil {
+			return errors.Wrap(err, "could not get sync committee subnet ID")
+		}
+		data := &altair.SyncAggregatorSelectionData{
+			Slot:              duty.Slot,
+			SubcommitteeIndex: subnet,
+		}
+		msg, err := r.BaseRunner.signBeaconObject(r, data, duty.Slot, spectypes.DomainSyncCommitteeSelectionProof)
+		if err != nil {
+			return errors.Wrap(err, "could not sign sync committee selection proof")
+		}
+
+		msgs.Messages = append(msgs.Messages, msg)
+	}
+
+	// package into signed partial sig
+	signature, err := r.GetSigner().SignRoot(msgs, spectypes.PartialSignatureType, r.GetShare().SharePubKey)
+	if err != nil {
+		return errors.Wrap(err, "could not sign PartialSignatureMessage for contribution proofs")
+	}
+	signedPartialMsg := &spectypes.SignedPartialSignatureMessage{
+		Message:   msgs,
+		Signature: signature,
+		Signer:    r.GetShare().OperatorID,
+	}
+
+	// broadcast
+	data, err := signedPartialMsg.Encode()
+	if err != nil {
+		return errors.Wrap(err, "failed to encode contribution proofs pre-consensus signature msg")
+	}
+
+	ssvMsg := &spectypes.SSVMessage{
+		MsgType: spectypes.SSVPartialSignatureMsgType,
+		MsgID:   spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
+		Data:    data,
+	}
+
+	msgToBroadcast, err := spectypes.SSVMessageToSignedSSVMessage(ssvMsg, r.BaseRunner.Share.OperatorID, r.operatorSigner.SignSSVMessage)
+	if err != nil {
+		return errors.Wrap(err, "could not create SignedSSVMessage from SSVMessage")
+	}
+
+	if err := r.GetNetwork().Broadcast(ssvMsg.GetID(), msgToBroadcast); err != nil {
+		return errors.Wrap(err, "can't broadcast partial contribution proof sig")
+	}
+	return nil
 }
 
 func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spectypes.SignedPartialSignatureMessage) error {
@@ -123,9 +189,10 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(logger *zap.Logger, 
 		r.GetState().Finished = true
 		return nil
 	}
+
 	r.metrics.EndPreConsensus()
-	logger.Debug("🧩 reconstructed selection proofs",
-		zap.Duration("quorum_time", r.metrics.GetPreConsensusTime()))
+	r.metrics.StartConsensus()
+	logger.Debug("🧩 reconstructed selection proofs", fields.QuorumTime(r.metrics.GetPreConsensusTime()))
 
 	// fetch contributions
 	r.metrics.PauseDutyFullFlow()
@@ -147,7 +214,6 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(logger *zap.Logger, 
 		DataSSZ: byts,
 	}
 
-	r.metrics.StartConsensus()
 	if err := r.BaseRunner.decide(logger, r, input); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}
@@ -166,10 +232,9 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(logger *zap.Logger, sig
 	}
 
 	r.metrics.EndConsensus()
+	r.metrics.StartPostConsensus()
 	duty := r.GetState().StartingDuty
 	logger = logger.With(fields.Slot(duty.Slot))
-
-	r.metrics.StartPostConsensus()
 	startTime := time.Now()
 
 	contributions, err := decidedValue.GetSyncCommitteeContributions()
@@ -221,14 +286,11 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(logger *zap.Logger, sig
 
 	if err := r.GetNetwork().Broadcast(ssvMsg.GetID(), msgToBroadcast); err != nil {
 		logger.Error("❌ can't broadcast partial post consensus sig",
-			zap.Duration("broadcast_took: ", time.Since(startTime)),
-			zap.Duration("decided_time", r.metrics.GetConsensusTime()),
+			fields.BroadcastTime(time.Since(startTime)),
 			zap.Error(err))
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
-	logger.Info("✅ partial post consensus sig broadcast successfully",
-		zap.Duration("broadcast_took", time.Since(startTime)),
-		zap.Duration("decided_time", r.metrics.GetConsensusTime()))
+	logger.Info("✅ partial post consensus sig broadcast successfully", fields.BroadcastTime(time.Since(startTime)))
 	return nil
 }
 
@@ -243,8 +305,6 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(logger *zap.Logger,
 	}
 	duty := r.GetState().StartingDuty
 	logger = logger.With(fields.Slot(duty.Slot))
-
-	r.metrics.EndPostConsensus()
 
 	// get contributions
 	contributions, err := r.GetState().DecidedValue.GetSyncCommitteeContributions()
@@ -263,9 +323,10 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(logger *zap.Logger,
 		}
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
+		r.metrics.EndPostConsensus()
 		logger.Debug("🧩 reconstructed selection proofs",
-			zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)),
-			zap.Duration("quorum_time", r.metrics.GetPostConsensusTime()))
+			zap.Uint64s("signers", getPostConsensusSigners(r.GetState(), root)),
+			fields.QuorumTime(r.metrics.GetPostConsensusTime()))
 
 		for _, contribution := range contributions {
 			start := time.Now()
@@ -290,12 +351,12 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(logger *zap.Logger,
 			}
 
 			submissionEnd := r.metrics.StartBeaconSubmission()
-
+			consensusDuration := time.Since(r.started)
 			if err := r.GetBeaconNode().SubmitSignedContributionAndProof(signedContribAndProof); err != nil {
 				r.metrics.RoleSubmissionFailed()
 				logger.Error("❌ could not submit to Beacon chain reconstructed contribution and proof",
-					zap.Duration("submit_took: ", time.Since(start)),
-					zap.Duration("decided_time", r.metrics.GetPostConsensusTime()),
+					fields.SubmissionTime(time.Since(start)),
+					fields.ConsensusTime(consensusDuration),
 					zap.Error(err))
 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed contribution and proof")
 			}
@@ -304,8 +365,8 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(logger *zap.Logger,
 			r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
 			r.metrics.RoleSubmitted()
 			logger.Debug("✅ submitted successfully sync committee aggregator!",
-				zap.Duration("submit_took", time.Since(start)),
-				zap.Duration("quorum_took", r.metrics.GetPostConsensusTime()))
+				fields.SubmissionTime(time.Since(start)),
+				fields.ConsensusTime(consensusDuration))
 			break
 		}
 	}
@@ -365,72 +426,6 @@ func (r *SyncCommitteeAggregatorRunner) expectedPostConsensusRootsAndDomain() ([
 		ret = append(ret, contribAndProof)
 	}
 	return ret, spectypes.DomainContributionAndProof, nil
-}
-
-// executeDuty steps:
-// 1) sign a partial contribution proof (for each subcommittee index) and wait for 2f+1 partial sigs from peers
-// 2) Reconstruct contribution proofs, check IsSyncCommitteeAggregator and start consensus on duty + contribution data
-// 3) Once consensus decides, sign partial contribution data (for each subcommittee) and broadcast
-// 4) collect 2f+1 partial sigs, reconstruct and broadcast valid SignedContributionAndProof (for each subcommittee) sig to the BN
-func (r *SyncCommitteeAggregatorRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
-	r.metrics.StartDutyFullFlow()
-	r.metrics.StartPreConsensus()
-
-	// sign selection proofs
-	msgs := spectypes.PartialSignatureMessages{
-		Type:     spectypes.ContributionProofs,
-		Slot:     duty.Slot,
-		Messages: []*spectypes.PartialSignatureMessage{},
-	}
-	for _, index := range r.GetState().StartingDuty.ValidatorSyncCommitteeIndices {
-		subnet, err := r.GetBeaconNode().SyncCommitteeSubnetID(phase0.CommitteeIndex(index))
-		if err != nil {
-			return errors.Wrap(err, "could not get sync committee subnet ID")
-		}
-		data := &altair.SyncAggregatorSelectionData{
-			Slot:              duty.Slot,
-			SubcommitteeIndex: subnet,
-		}
-		msg, err := r.BaseRunner.signBeaconObject(r, data, duty.Slot, spectypes.DomainSyncCommitteeSelectionProof)
-		if err != nil {
-			return errors.Wrap(err, "could not sign sync committee selection proof")
-		}
-
-		msgs.Messages = append(msgs.Messages, msg)
-	}
-
-	// package into signed partial sig
-	signature, err := r.GetSigner().SignRoot(msgs, spectypes.PartialSignatureType, r.GetShare().SharePubKey)
-	if err != nil {
-		return errors.Wrap(err, "could not sign PartialSignatureMessage for contribution proofs")
-	}
-	signedPartialMsg := &spectypes.SignedPartialSignatureMessage{
-		Message:   msgs,
-		Signature: signature,
-		Signer:    r.GetShare().OperatorID,
-	}
-
-	// broadcast
-	data, err := signedPartialMsg.Encode()
-	if err != nil {
-		return errors.Wrap(err, "failed to encode contribution proofs pre-consensus signature msg")
-	}
-
-	ssvMsg := &spectypes.SSVMessage{
-		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID:   spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
-		Data:    data,
-	}
-
-	msgToBroadcast, err := spectypes.SSVMessageToSignedSSVMessage(ssvMsg, r.BaseRunner.Share.OperatorID, r.operatorSigner.SignSSVMessage)
-	if err != nil {
-		return errors.Wrap(err, "could not create SignedSSVMessage from SSVMessage")
-	}
-
-	if err := r.GetNetwork().Broadcast(ssvMsg.GetID(), msgToBroadcast); err != nil {
-		return errors.Wrap(err, "can't broadcast partial contribution proof sig")
-	}
-	return nil
 }
 
 func (r *SyncCommitteeAggregatorRunner) GetBaseRunner() *BaseRunner {

@@ -23,6 +23,7 @@ import (
 type ValidatorRegistrationRunner struct {
 	BaseRunner *BaseRunner
 
+	started        time.Time
 	beacon         specssv.BeaconNode
 	network        specssv.Network
 	signer         spectypes.KeyManager
@@ -67,75 +68,8 @@ func (r *ValidatorRegistrationRunner) HasRunningDuty() bool {
 	return r.BaseRunner.hasRunningDuty()
 }
 
-func (r *ValidatorRegistrationRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spectypes.SignedPartialSignatureMessage) error {
-	quorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(r, signedMsg)
-	if err != nil {
-		return errors.Wrap(err, "failed processing validator registration message")
-	}
-
-	duty := r.GetState().StartingDuty
-	logger = logger.With(fields.Slot(duty.Slot))
-	// quorum returns true only once (first time quorum achieved)
-	if !quorum {
-		return nil
-	}
-
-	// only 1 root, verified in basePreConsensusMsgProcessing
-	root := roots[0]
-	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey)
-	if err != nil {
-		// If the reconstructed signature verification failed, fall back to verifying each partial signature
-		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root)
-		return errors.Wrap(err, "got pre-consensus quorum but it has invalid signatures")
-	}
-	specSig := phase0.BLSSignature{}
-	copy(specSig[:], fullSig)
-
-	r.metrics.EndPreConsensus()
-	logger.Debug("🧩 reconstructed partial signatures",
-		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)),
-		zap.Duration("quorum_time", r.metrics.GetPreConsensusTime()))
-
-	timeToSubmit := time.Now()
-	if err := r.beacon.SubmitValidatorRegistration(r.BaseRunner.Share.ValidatorPubKey, r.BaseRunner.Share.FeeRecipientAddress, specSig); err != nil {
-		logger.Error("❌ failed to submit validator registration",
-			zap.Duration("quorum_time", r.metrics.GetPreConsensusTime()),
-			zap.Duration("time time_to_submit submit: ", time.Since(timeToSubmit)),
-			zap.Error(err))
-		return errors.Wrap(err, "could not submit validator registration")
-	}
-	logger.Debug("✅ validator registration submitted successfully",
-		fields.FeeRecipient(r.BaseRunner.Share.FeeRecipientAddress[:]),
-		zap.String("signature", hex.EncodeToString(specSig[:])),
-		zap.Duration("quorum_time", r.metrics.GetPreConsensusTime()),
-		zap.Duration("time_to_submit", time.Since(timeToSubmit)))
-
-	r.GetState().Finished = true
-	return nil
-}
-
-func (r *ValidatorRegistrationRunner) ProcessConsensus(logger *zap.Logger, signedMsg *qbft.SignedMessage) error {
-	return errors.New("no consensus phase for validator registration")
-}
-
-func (r *ValidatorRegistrationRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spectypes.SignedPartialSignatureMessage) error {
-	return errors.New("no post consensus phase for validator registration")
-}
-
-func (r *ValidatorRegistrationRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	vr, err := r.calculateValidatorRegistration()
-	if err != nil {
-		return nil, spectypes.DomainError, errors.Wrap(err, "could not calculate validator registration")
-	}
-	return []ssz.HashRoot{vr}, spectypes.DomainApplicationBuilder, nil
-}
-
-// expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
-func (r *ValidatorRegistrationRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
-	return nil, [4]byte{}, errors.New("no post consensus roots for validator registration")
-}
-
 func (r *ValidatorRegistrationRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
+	r.started = time.Now()
 	r.metrics.StartPreConsensus()
 	vr, err := r.calculateValidatorRegistration()
 	if err != nil {
@@ -185,6 +119,74 @@ func (r *ValidatorRegistrationRunner) executeDuty(logger *zap.Logger, duty *spec
 		return errors.Wrap(err, "can't broadcast partial randao sig")
 	}
 	return nil
+}
+
+func (r *ValidatorRegistrationRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spectypes.SignedPartialSignatureMessage) error {
+	quorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(r, signedMsg)
+	if err != nil {
+		return errors.Wrap(err, "failed processing validator registration message")
+	}
+
+	duty := r.GetState().StartingDuty
+	logger = logger.With(fields.Slot(duty.Slot))
+	// quorum returns true only once (first time quorum achieved)
+	if !quorum {
+		return nil
+	}
+
+	// only 1 root, verified in basePreConsensusMsgProcessing
+	root := roots[0]
+	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey)
+	if err != nil {
+		// If the reconstructed signature verification failed, fall back to verifying each partial signature
+		r.BaseRunner.FallBackAndVerifyEachSignature(r.GetState().PreConsensusContainer, root)
+		return errors.Wrap(err, "got pre-consensus quorum but it has invalid signatures")
+	}
+	specSig := phase0.BLSSignature{}
+	copy(specSig[:], fullSig)
+	r.metrics.EndPreConsensus()
+	logger.Debug("🧩 reconstructed partial signatures",
+		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)),
+		fields.QuorumTime(r.metrics.GetPreConsensusTime()))
+
+	consensusDuration := time.Since(r.started)
+	timeToSubmit := time.Now()
+	if err := r.beacon.SubmitValidatorRegistration(r.BaseRunner.Share.ValidatorPubKey, r.BaseRunner.Share.FeeRecipientAddress, specSig); err != nil {
+		logger.Error("❌ failed to submit validator registration",
+			fields.QuorumTime(r.metrics.GetPreConsensusTime()),
+			fields.SubmissionTime(time.Since(timeToSubmit)),
+			zap.Error(err))
+		return errors.Wrap(err, "could not submit validator registration")
+	}
+	logger.Debug("✅ validator registration submitted successfully",
+		fields.FeeRecipient(r.BaseRunner.Share.FeeRecipientAddress[:]),
+		zap.String("signature", hex.EncodeToString(specSig[:])),
+		fields.SubmissionTime(time.Since(timeToSubmit)))
+	fields.ConsensusTime(consensusDuration)
+
+	r.GetState().Finished = true
+	return nil
+}
+
+func (r *ValidatorRegistrationRunner) ProcessConsensus(logger *zap.Logger, signedMsg *qbft.SignedMessage) error {
+	return errors.New("no consensus phase for validator registration")
+}
+
+func (r *ValidatorRegistrationRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spectypes.SignedPartialSignatureMessage) error {
+	return errors.New("no post consensus phase for validator registration")
+}
+
+func (r *ValidatorRegistrationRunner) expectedPreConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+	vr, err := r.calculateValidatorRegistration()
+	if err != nil {
+		return nil, spectypes.DomainError, errors.Wrap(err, "could not calculate validator registration")
+	}
+	return []ssz.HashRoot{vr}, spectypes.DomainApplicationBuilder, nil
+}
+
+// expectedPostConsensusRootsAndDomain an INTERNAL function, returns the expected post-consensus roots to sign
+func (r *ValidatorRegistrationRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, phase0.DomainType, error) {
+	return nil, [4]byte{}, errors.New("no post consensus roots for validator registration")
 }
 
 func (r *ValidatorRegistrationRunner) calculateValidatorRegistration() (*v1.ValidatorRegistration, error) {

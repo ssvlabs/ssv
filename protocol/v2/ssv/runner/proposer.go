@@ -31,13 +31,13 @@ type ProposerRunner struct {
 	// ProducesBlindedBlocks is true when the runner will only produce blinded blocks
 	ProducesBlindedBlocks bool
 
+	started        time.Time
 	beacon         specssv.BeaconNode
 	network        specssv.Network
 	signer         spectypes.KeyManager
 	operatorSigner spectypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
-
-	metrics metrics.ConsensusMetrics
+	metrics        metrics.ConsensusMetrics
 }
 
 func NewProposerRunner(
@@ -79,6 +79,65 @@ func (r *ProposerRunner) HasRunningDuty() bool {
 	return r.BaseRunner.hasRunningDuty()
 }
 
+// executeDuty steps:
+// 1) sign a partial randao sig and wait for 2f+1 partial sigs from peers
+// 2) reconstruct randao and send GetBeaconBlock to BN
+// 3) start consensus on duty + block data
+// 4) Once consensus decides, sign partial block and broadcast
+// 5) collect 2f+1 partial sigs, reconstruct and broadcast valid block sig to the BN
+func (r *ProposerRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
+	r.metrics.StartDutyFullFlow()
+	r.metrics.StartPreConsensus()
+	r.started = time.Now()
+	// sign partial randao
+	epoch := r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(duty.Slot)
+	msg, err := r.BaseRunner.signBeaconObject(r, spectypes.SSZUint64(epoch), duty.Slot, spectypes.DomainRandao)
+	if err != nil {
+		return errors.Wrap(err, "could not sign randao")
+	}
+	msgs := spectypes.PartialSignatureMessages{
+		Type:     spectypes.RandaoPartialSig,
+		Slot:     duty.Slot,
+		Messages: []*spectypes.PartialSignatureMessage{msg},
+	}
+
+	// sign msg
+	signature, err := r.GetSigner().SignRoot(msgs, spectypes.PartialSignatureType, r.GetShare().SharePubKey)
+	if err != nil {
+		return errors.Wrap(err, "could not sign randao msg")
+	}
+	signedPartialMsg := &spectypes.SignedPartialSignatureMessage{
+		Message:   msgs,
+		Signature: signature,
+		Signer:    r.GetShare().OperatorID,
+	}
+
+	// broadcast
+	data, err := signedPartialMsg.Encode()
+	if err != nil {
+		return errors.Wrap(err, "failed to encode randao pre-consensus signature msg")
+	}
+
+	ssvMsg := &spectypes.SSVMessage{
+		MsgType: spectypes.SSVPartialSignatureMsgType,
+		MsgID:   spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
+		Data:    data,
+	}
+
+	msgToBroadcast, err := spectypes.SSVMessageToSignedSSVMessage(ssvMsg, r.BaseRunner.Share.OperatorID, r.operatorSigner.SignSSVMessage)
+	if err != nil {
+		return errors.Wrap(err, "could not create SignedSSVMessage from SSVMessage")
+	}
+
+	if err := r.GetNetwork().Broadcast(ssvMsg.GetID(), msgToBroadcast); err != nil {
+		return errors.Wrap(err, "can't broadcast partial randao sig")
+	}
+
+	logger.Debug("🔏 signed & broadcasted partial RANDAO signature")
+
+	return nil
+}
+
 func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spectypes.SignedPartialSignatureMessage) error {
 	quorum, roots, err := r.BaseRunner.basePreConsensusMsgProcessing(r, signedMsg)
 	if err != nil {
@@ -105,20 +164,22 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 		return errors.Wrap(err, "got pre-consensus quorum but it has invalid signatures")
 	}
 	r.metrics.EndPreConsensus()
-
+	r.metrics.StartConsensus()
+	var start = time.Now()
 	logger.Debug("🧩 reconstructed partial RANDAO signatures",
 		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)),
-		zap.Duration("quorum_time", r.metrics.GetPreConsensusTime()))
+		fields.QuorumTime(r.metrics.GetPreConsensusTime()))
 
 	var ver spec.DataVersion
 	var obj ssz.Marshaler
-	var start = time.Now()
+
 	if r.ProducesBlindedBlocks {
 		// get block data
 		obj, ver, err = r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
 		if err != nil {
 			logger.Error("❌ failed to get blinded beacon block",
-				zap.Duration("time to get block: ", time.Since(start)),
+				fields.QuorumTime(r.metrics.GetPreConsensusTime()),
+				fields.BlockTime(time.Since(start)),
 				zap.Error(err))
 			return errors.Wrap(err, "failed to get blinded beacon block")
 		}
@@ -127,7 +188,8 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 		obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
 		if err != nil {
 			logger.Error("❌ failed to get beacon block",
-				zap.Duration("time to get block: ", time.Since(start)),
+				fields.QuorumTime(r.metrics.GetPreConsensusTime()),
+				fields.BlockTime(time.Since(start)),
 				zap.Error(err))
 			return errors.Wrap(err, "failed to get beacon block")
 		}
@@ -137,7 +199,7 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 	logger.Info("🧊 got beacon block proposal",
 		zap.String("block_hash", blockSummary.Hash.String()),
 		zap.Bool("blinded", blockSummary.Blinded),
-		zap.Duration("took", time.Since(start)),
+		fields.BlockTime(time.Since(start)),
 		zap.NamedError("summarize_err", summarizeErr))
 
 	byts, err := obj.MarshalSSZ()
@@ -151,7 +213,6 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 		DataSSZ: byts,
 	}
 
-	r.metrics.StartConsensus()
 	if err := r.BaseRunner.decide(logger, r, input); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}
@@ -170,10 +231,10 @@ func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbf
 	}
 
 	r.metrics.EndConsensus()
+	r.metrics.StartPostConsensus()
 	duty := r.GetState().StartingDuty
 	logger = logger.With(fields.Slot(duty.Slot))
 
-	r.metrics.StartPostConsensus()
 	startTime := time.Now()
 	// specific duty sig
 	var blkToSign ssz.HashRoot
@@ -226,12 +287,11 @@ func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbf
 
 	if err := r.GetNetwork().Broadcast(ssvMsg.GetID(), msgToBroadcast); err != nil {
 		logger.Error("❌ can't broadcast partial post consensus sig",
-			zap.Duration("broadcast_took: ", time.Since(startTime)),
+			fields.BroadcastTime(time.Since(startTime)),
 			zap.Error(err))
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
-	logger.Info("✅ partial post consensus sig broadcast successfully",
-		zap.Duration("broadcast_took", time.Since(startTime)))
+	logger.Info("✅ partial post consensus sig broadcast successfully", fields.BroadcastTime(time.Since(startTime)))
 	return nil
 }
 
@@ -247,8 +307,6 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 	duty := r.GetState().StartingDuty
 	logger = logger.With(fields.Slot(duty.Slot))
 
-	r.metrics.EndPostConsensus()
-
 	for _, root := range roots {
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey)
 		if err != nil {
@@ -260,9 +318,11 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		}
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
+		r.metrics.EndPostConsensus()
 		logger.Debug("🧩 reconstructed partial RANDAO signatures",
-			zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)),
-			zap.Duration("quorum_time", r.metrics.GetPostConsensusTime()))
+			zap.Uint64s("signers", getPostConsensusSigners(r.GetState(), root)),
+			fields.QuorumTime(r.metrics.GetPostConsensusTime()))
+		consensusDuration := time.Since(r.started)
 		blockSubmissionEnd := r.metrics.StartBeaconSubmission()
 
 		start := time.Now()
@@ -289,8 +349,8 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 			if err := r.GetBeaconNode().SubmitBeaconBlock(vBlk, specSig); err != nil {
 				r.metrics.RoleSubmissionFailed()
 				logger.Error("❌ could not submit to Beacon chain reconstructed signed Beacon block",
-					zap.Duration("submit_took: ", time.Since(start)),
-					zap.Duration("decided_time", r.metrics.GetPostConsensusTime()),
+					fields.SubmissionTime(time.Since(start)),
+					fields.QuorumTime(r.metrics.GetPostConsensusTime()),
 					zap.Error(err))
 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed Beacon block")
 			}
@@ -306,8 +366,8 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 			fields.Round(r.GetState().RunningInstance.State.Round),
 			zap.String("block_hash", blockSummary.Hash.String()),
 			zap.Bool("blinded", blockSummary.Blinded),
-			zap.Duration("submit_took", time.Since(start)),
-			zap.Duration("quorum_took", r.metrics.GetPostConsensusTime()),
+			fields.ConsensusTime(consensusDuration),
+			fields.SubmissionTime(time.Since(start)),
 			zap.NamedError("summarize_err", summarizeErr))
 	}
 	r.GetState().Finished = true
@@ -341,65 +401,6 @@ func (r *ProposerRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, 
 		return nil, phase0.DomainType{}, errors.Wrap(err, "could not get block data")
 	}
 	return []ssz.HashRoot{data}, spectypes.DomainProposer, nil
-}
-
-// executeDuty steps:
-// 1) sign a partial randao sig and wait for 2f+1 partial sigs from peers
-// 2) reconstruct randao and send GetBeaconBlock to BN
-// 3) start consensus on duty + block data
-// 4) Once consensus decides, sign partial block and broadcast
-// 5) collect 2f+1 partial sigs, reconstruct and broadcast valid block sig to the BN
-func (r *ProposerRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
-	r.metrics.StartDutyFullFlow()
-	r.metrics.StartPreConsensus()
-
-	// sign partial randao
-	epoch := r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(duty.Slot)
-	msg, err := r.BaseRunner.signBeaconObject(r, spectypes.SSZUint64(epoch), duty.Slot, spectypes.DomainRandao)
-	if err != nil {
-		return errors.Wrap(err, "could not sign randao")
-	}
-	msgs := spectypes.PartialSignatureMessages{
-		Type:     spectypes.RandaoPartialSig,
-		Slot:     duty.Slot,
-		Messages: []*spectypes.PartialSignatureMessage{msg},
-	}
-
-	// sign msg
-	signature, err := r.GetSigner().SignRoot(msgs, spectypes.PartialSignatureType, r.GetShare().SharePubKey)
-	if err != nil {
-		return errors.Wrap(err, "could not sign randao msg")
-	}
-	signedPartialMsg := &spectypes.SignedPartialSignatureMessage{
-		Message:   msgs,
-		Signature: signature,
-		Signer:    r.GetShare().OperatorID,
-	}
-
-	// broadcast
-	data, err := signedPartialMsg.Encode()
-	if err != nil {
-		return errors.Wrap(err, "failed to encode randao pre-consensus signature msg")
-	}
-
-	ssvMsg := &spectypes.SSVMessage{
-		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID:   spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
-		Data:    data,
-	}
-
-	msgToBroadcast, err := spectypes.SSVMessageToSignedSSVMessage(ssvMsg, r.BaseRunner.Share.OperatorID, r.operatorSigner.SignSSVMessage)
-	if err != nil {
-		return errors.Wrap(err, "could not create SignedSSVMessage from SSVMessage")
-	}
-
-	if err := r.GetNetwork().Broadcast(ssvMsg.GetID(), msgToBroadcast); err != nil {
-		return errors.Wrap(err, "can't broadcast partial randao sig")
-	}
-
-	logger.Debug("🔏 signed & broadcasted partial RANDAO signature")
-
-	return nil
 }
 
 func (r *ProposerRunner) GetBaseRunner() *BaseRunner {

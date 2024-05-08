@@ -93,7 +93,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg 
 	r.metrics.EndPreConsensus()
 	logger.Debug("🧩 reconstructed partial signatures",
 		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)),
-		zap.Duration("quorum_time", r.metrics.GetPreConsensusTime()))
+		fields.QuorumTime(r.metrics.GetPreConsensusTime()))
 
 	// create SignedVoluntaryExit using VoluntaryExit created on r.executeDuty() and reconstructed signature
 	signedVoluntaryExit := &phase0.SignedVoluntaryExit{
@@ -104,7 +104,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg 
 	if err := r.beacon.SubmitVoluntaryExit(signedVoluntaryExit); err != nil {
 		logger.Error("failed to submit voluntary exit",
 			zap.Duration("time to submit: ", time.Since(timeToSubmit)),
-			zap.Duration("quorum_time", r.metrics.GetPreConsensusTime()),
+			fields.QuorumTime(r.metrics.GetPreConsensusTime()),
 			zap.Error(err))
 		return errors.Wrap(err, "could not submit voluntary exit")
 	}
@@ -114,7 +114,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg 
 		zap.Uint64("validator_index", uint64(r.voluntaryExit.ValidatorIndex)),
 		zap.String("signature", hex.EncodeToString(specSig[:])),
 		zap.Duration("time_to_submit", time.Since(timeToSubmit)),
-		zap.Duration("quorum_time", r.metrics.GetPreConsensusTime()),
+		fields.QuorumTime(r.metrics.GetPreConsensusTime()),
 	)
 
 	r.GetState().Finished = true
