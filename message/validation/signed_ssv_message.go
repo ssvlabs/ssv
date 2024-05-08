@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"golang.org/x/exp/slices"
@@ -52,7 +52,7 @@ func (mv *messageValidator) validateSignedSSVMessage(signedSSVMessage *spectypes
 		prevSigner = signer
 	}
 
-	signatures := signedSSVMessage.GetSignature()
+	signatures := signedSSVMessage.Signatures
 
 	if len(signatures) == 0 {
 		return ErrNoSignatures
@@ -76,7 +76,7 @@ func (mv *messageValidator) validateSignedSSVMessage(signedSSVMessage *spectypes
 		return e
 	}
 
-	ssvMessage := signedSSVMessage.GetSSVMessage()
+	ssvMessage := signedSSVMessage.SSVMessage
 	if ssvMessage == nil {
 		return ErrNilSSVMessage
 	}

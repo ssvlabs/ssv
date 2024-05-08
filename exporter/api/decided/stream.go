@@ -3,8 +3,8 @@ package decided
 import (
 	"encoding/hex"
 	"fmt"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"time"
 
 	"github.com/patrickmn/go-cache"

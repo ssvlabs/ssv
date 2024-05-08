@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/types"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	"github.com/ssvlabs/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"golang.org/x/exp/slices"
@@ -23,7 +23,7 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 	*spectypes.PartialSignatureMessages,
 	error,
 ) {
-	ssvMessage := signedSSVMessage.GetSSVMessage()
+	ssvMessage := signedSSVMessage.SSVMessage
 
 	if len(ssvMessage.Data) > maxPartialSignatureMsgSize {
 		e := ErrSSVDataTooBig
@@ -49,7 +49,7 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 		return nil, err
 	}
 
-	signature := signedSSVMessage.GetSignature()[0]
+	signature := signedSSVMessage.Signatures[0]
 	signer := signedSSVMessage.GetOperatorIDs()[0]
 	if err := mv.signatureVerifier.VerifySignature(signer, ssvMessage, signature); err != nil {
 		e := ErrSignatureVerification
@@ -67,7 +67,7 @@ func (mv *messageValidator) validatePartialSignatureMessageSemantics(
 	partialSignatureMessages *spectypes.PartialSignatureMessages,
 	validatorIndices []phase0.ValidatorIndex,
 ) error {
-	role := signedSSVMessage.GetSSVMessage().GetID().GetRoleType()
+	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
 
 	signers := signedSSVMessage.GetOperatorIDs()
 	if len(signers) != 1 {
@@ -123,10 +123,10 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 	receivedAt time.Time,
 	state *consensusState,
 ) error {
-	role := signedSSVMessage.GetSSVMessage().GetID().GetRoleType()
+	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
 	messageSlot := partialSignatureMessages.Slot
 
-	if err := mv.validateBeaconDuty(signedSSVMessage.GetSSVMessage().GetID().GetRoleType(), messageSlot, validatorIndices); err != nil {
+	if err := mv.validateBeaconDuty(signedSSVMessage.SSVMessage.GetID().GetRoleType(), messageSlot, validatorIndices); err != nil {
 		return err
 	}
 
@@ -154,7 +154,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		newDutyInSameEpoch = true
 	}
 
-	if err := mv.validateDutyCount(validatorIndices, signerState, signedSSVMessage.GetSSVMessage().GetID(), newDutyInSameEpoch); err != nil {
+	if err := mv.validateDutyCount(validatorIndices, signerState, signedSSVMessage.SSVMessage.GetID(), newDutyInSameEpoch); err != nil {
 		return err
 	}
 

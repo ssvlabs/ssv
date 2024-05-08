@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	alanspecqbft "github.com/bloxapp/ssv-spec/qbft"
-	alanspectypes "github.com/bloxapp/ssv-spec/types"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	alanspecqbft "github.com/ssvlabs/ssv-spec/qbft"
+	alanspectypes "github.com/ssvlabs/ssv-spec/types"
 	"golang.org/x/exp/slices"
 
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"

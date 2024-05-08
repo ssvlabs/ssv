@@ -3,7 +3,7 @@ package message
 import (
 	"sort"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 // Aggregate is a utility that helps to ensure sorted signers

@@ -8,7 +8,7 @@ import (
 	reflect "reflect"
 
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
-	types "github.com/bloxapp/ssv-spec/types"
+	types "github.com/ssvlabs/ssv-spec/types"
 	types0 "github.com/bloxapp/ssv/protocol/v2/types"
 	storage "github.com/bloxapp/ssv/registry/storage"
 	gomock "github.com/golang/mock/gomock"

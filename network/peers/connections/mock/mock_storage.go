@@ -5,9 +5,9 @@ import (
 	"math/big"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/bloxapp/ssv/operator/storage"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
@@ -128,6 +128,11 @@ func (m NodeStorage) Shares() registrystorage.Shares {
 }
 
 func (m NodeStorage) GenesisShares() genesisregistrystorage.Shares {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m NodeStorage) ValidatorStore() registrystorage.ValidatorStore {
 	//TODO implement me
 	panic("implement me")
 }

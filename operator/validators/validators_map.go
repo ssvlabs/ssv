@@ -3,7 +3,7 @@ package validators
 // TODO(nkryuchkov): remove old validator interface(s)
 import (
 	"context"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"sync"
 
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"

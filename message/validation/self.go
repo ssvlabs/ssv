@@ -1,7 +1,7 @@
 package validation
 
 import (
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"go.uber.org/zap"
@@ -35,7 +35,7 @@ func (mv *messageValidator) validateSelf(pMsg *pubsub.Message) pubsub.Validation
 	//
 	//case spectypes.SSVPartialSignatureMsgType:
 	//	partialSignatureMessages := &spectypes.PartialSignatureMessages{}
-	//	if err := partialSignatureMessages.Decode(signedSSVMessage.GetSSVMessage().Data); err != nil {
+	//	if err := partialSignatureMessages.Decode(signedSSVMessage.SSVMessage.Data); err != nil {
 	//		mv.logger.Error("failed to decode partial signature messages", zap.Error(err))
 	//		return pubsub.ValidationReject
 	//	}

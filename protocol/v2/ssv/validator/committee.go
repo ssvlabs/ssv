@@ -6,9 +6,9 @@ import (
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
+	"github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ibft/storage"
@@ -176,22 +176,39 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 		if err := qbftMsg.Decode(msg.GetData()); err != nil {
 			return errors.Wrap(err, "could not get consensus Message from network Message")
 		}
+		if err := qbftMsg.Validate(); err != nil {
+			return errors.Wrap(err, "invalid qbft Message")
+		}
 		c.mtx.Lock()
-		r := c.Runners[phase0.Slot(qbftMsg.Height)]
+		runner, exists := c.Runners[phase0.Slot(qbftMsg.Height)]
 		c.mtx.Unlock()
-		// TODO: check if runner is nil
-		return r.ProcessConsensus(c.logger, msg.SignedSSVMessage)
+		if !exists {
+			return errors.New("no runner found for message's slot")
+		}
+		return runner.ProcessConsensus(c.logger, msg.SignedSSVMessage)
 	case spectypes.SSVPartialSignatureMsgType:
 		pSigMessages := &spectypes.PartialSignatureMessages{}
 		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
 			return errors.Wrap(err, "could not get post consensus Message from network Message")
 		}
+
+		// Validate
+		if len(msg.SignedSSVMessage.OperatorIDs) != 1 {
+			return errors.New("PartialSignatureMessage has more than 1 signer")
+		}
+
+		if err := pSigMessages.ValidateForSigner(msg.SignedSSVMessage.OperatorIDs[0]); err != nil {
+			return errors.Wrap(err, "invalid PartialSignatureMessages")
+		}
+
 		if pSigMessages.Type == spectypes.PostConsensusPartialSig {
 			c.mtx.Lock()
-			r := c.Runners[pSigMessages.Slot]
+			runner, exists := c.Runners[pSigMessages.Slot]
 			c.mtx.Unlock()
-			// TODO: check if runner is nil
-			return r.ProcessPostConsensus(c.logger, pSigMessages)
+			if !exists {
+				return errors.New("no runner found for message's slot")
+			}
+			return runner.ProcessPostConsensus(c.logger, pSigMessages)
 		}
 	case message.SSVEventMsgType:
 		return c.handleEventMessage(logger, msg)
@@ -207,6 +224,9 @@ func (c *Committee) updateAttestingSlotMap(duty *spectypes.CommitteeDuty) {
 	for _, beaconDuty := range duty.BeaconDuties {
 		if beaconDuty.Type == spectypes.BNRoleAttester {
 			validatorPK := spectypes.ValidatorPK(beaconDuty.PubKey)
+			if _, ok := c.HighestAttestingSlotMap[validatorPK]; !ok {
+				c.HighestAttestingSlotMap[validatorPK] = beaconDuty.Slot
+			}
 			if c.HighestAttestingSlotMap[validatorPK] < beaconDuty.Slot {
 				c.HighestAttestingSlotMap[validatorPK] = beaconDuty.Slot
 			}

@@ -3,7 +3,7 @@ package validator
 import (
 	"time"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )

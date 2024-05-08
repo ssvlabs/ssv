@@ -1,7 +1,7 @@
 package runner
 
 import (
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 // Compacts the given message's associated instance if it's either...

@@ -8,7 +8,6 @@ import (
 	"os"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/ekm"
 	"github.com/bloxapp/ssv/networkconfig"
 	operatorstorage "github.com/bloxapp/ssv/operator/storage"
@@ -16,6 +15,7 @@ import (
 	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/bloxapp/ssv/utils/blskeygen"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
+	"github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 

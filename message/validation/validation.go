@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/message/signatureverifier"
@@ -122,11 +122,11 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 		return nil, err
 	}
 
-	if err := mv.validateSSVMessage(signedSSVMessage.GetSSVMessage(), topic); err != nil {
+	if err := mv.validateSSVMessage(signedSSVMessage.SSVMessage, topic); err != nil {
 		return nil, err
 	}
 
-	committee, validatorIndices, err := mv.getCommitteeAndValidatorIndices(signedSSVMessage.GetSSVMessage().GetID())
+	committee, validatorIndices, err := mv.getCommitteeAndValidatorIndices(signedSSVMessage.SSVMessage.GetID())
 	if err != nil {
 		return nil, err
 	}
@@ -135,17 +135,17 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 		return nil, err
 	}
 
-	validationMu := mv.obtainValidationLock(signedSSVMessage.GetSSVMessage().GetID())
+	validationMu := mv.obtainValidationLock(signedSSVMessage.SSVMessage.GetID())
 
 	validationMu.Lock()
 	defer validationMu.Unlock()
 
 	decodedMessage := &queue.DecodedSSVMessage{
 		SignedSSVMessage: signedSSVMessage,
-		SSVMessage:       signedSSVMessage.GetSSVMessage(),
+		SSVMessage:       signedSSVMessage.SSVMessage,
 	}
 
-	switch signedSSVMessage.GetSSVMessage().MsgType {
+	switch signedSSVMessage.SSVMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
 		consensusMessage, err := mv.validateConsensusMessage(signedSSVMessage, committee, validatorIndices, receivedAt)
 		if err != nil {

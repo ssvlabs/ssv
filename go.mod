@@ -6,7 +6,6 @@ require (
 	github.com/aquasecurity/table v1.8.0
 	github.com/attestantio/go-eth2-client v0.19.11-0.20240129201044-9d799aaab2bd
 	github.com/bloxapp/eth2-key-manager v1.4.0
-	github.com/bloxapp/ssv-spec v0.3.9-0.20240430140829-a262996d4545
 	github.com/btcsuite/btcd/btcec/v2 v2.3.2
 	github.com/cespare/xxhash/v2 v2.2.0
 	github.com/cornelk/hashmap v1.0.8
@@ -39,6 +38,7 @@ require (
 	github.com/rs/zerolog v1.29.1
 	github.com/sourcegraph/conc v0.3.0
 	github.com/spf13/cobra v1.7.0
+	github.com/ssvlabs/ssv-spec v0.3.9-0.20240508090531-5306390b38c0
 	github.com/ssvlabs/ssv-spec-pre-cc v0.0.0-20240502072846-bba633c4ed61
 	github.com/status-im/keycard-go v0.2.0
 	github.com/stretchr/testify v1.8.4

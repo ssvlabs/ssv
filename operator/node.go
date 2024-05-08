@@ -8,7 +8,7 @@ import (
 
 	"github.com/bloxapp/ssv/network"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/eth/executionclient"
