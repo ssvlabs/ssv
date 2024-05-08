@@ -105,6 +105,19 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	if _, exists := c.Runners[duty.Slot]; exists {
 		return errors.New(fmt.Sprintf("CommitteeRunner for slot %d already exists", duty.Slot))
 	}
+
+	var validatorToStopMap map[phase0.Slot]spectypes.ValidatorPK
+	//Filter old duties based on highest attesting slot
+	duty, validatorToStopMap, c.HighestAttestingSlotMap = FilterCommitteeDuty(duty, c.HighestAttestingSlotMap)
+	// Stop validators with old duties
+	c.stopDuties(validatorToStopMap)
+	c.updateAttestingSlotMap(duty)
+
+	if len(duty.BeaconDuties) == 0 {
+		logger.Debug("No beacon duties to run")
+		return nil
+	}
+
 	//todo: mtx to get shares copy
 	var sharesCopy = make(map[phase0.ValidatorIndex]*spectypes.Share, len(c.Shares))
 	for k, v := range c.Shares {
@@ -128,13 +141,6 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	// TODO alan: stop queue
 	go c.ConsumeQueue(logger, duty.Slot, c.ProcessMessage)
 
-	var validatorToStopMap map[phase0.Slot]spectypes.ValidatorPK
-	//Filter old duties based on highest attesting slot
-	duty, validatorToStopMap, c.HighestAttestingSlotMap = FilterCommitteeDuty(duty, c.HighestAttestingSlotMap)
-	// Stop validators with old duties
-	c.stopDuties(validatorToStopMap)
-	c.updateAttestingSlotMap(duty)
-
 	logger.Info("ℹ️ starting duty processing")
 	return c.Runners[duty.Slot].StartNewDuty(logger, duty)
 }
@@ -157,6 +163,12 @@ func (c *Committee) PushToQueue(slot phase0.Slot, dec *queue.DecodedSSVMessage) 
 	}
 }
 
+func removeIndex(s []*spectypes.BeaconDuty, index int) []*spectypes.BeaconDuty {
+	ret := make([]*spectypes.BeaconDuty, 0)
+	ret = append(ret, s[:index]...)
+	return append(ret, s[index+1:]...)
+}
+
 // FilterCommitteeDuty filters the committee duties by the slots given per validator.
 // It returns the filtered duties, the validators to stop and updated slot map.
 // NOT threadsafe
@@ -175,7 +187,8 @@ func FilterCommitteeDuty(duty *spectypes.CommitteeDuty, slotMap map[spectypes.Va
 				validatorsToStop[beaconDuty.Slot] = validatorPK
 				slotMap[validatorPK] = beaconDuty.Slot
 			} else { // else don't run duty with old slot
-				duty.BeaconDuties[i] = nil
+				// remove the duty
+				duty.BeaconDuties = removeIndex(duty.BeaconDuties, i)
 			}
 		}
 	}
