@@ -150,7 +150,7 @@ func (c *Committee) stopDuties(logger *zap.Logger, validatorToStopMap map[phase0
 	for slot, validator := range validatorToStopMap {
 		r, exists := c.Runners[slot]
 		if exists {
-			logger.Debug("stopping duty for validator", zap.Uint64("slot", uint64(slot)), zap.String("validator", hex.EncodeToString(validator[:])))
+			logger.Debug("stopping duty for validator", fields.DutyID(CommitteeDutyID(c.Operator, slot)), zap.Uint64("slot", uint64(slot)), zap.String("validator", hex.EncodeToString(validator[:])))
 			r.StopDuty(validator)
 		}
 	}
