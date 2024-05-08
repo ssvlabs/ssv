@@ -15,7 +15,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 )
 
-var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, role types.BeaconRole) *qbft.Config {
+var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, role types.RunnerRole) *qbft.Config {
 	return &qbft.Config{
 		BeaconSigner:   testingutils.NewTestingKeyManager(),
 		OperatorSigner: testingutils.NewTestingOperatorSigner(keySet, 1),
@@ -45,42 +45,85 @@ var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, ro
 var TestingInvalidValueCheck = []byte{1, 1, 1, 1}
 
 var TestingShare = func(keysSet *testingutils.TestKeySet) *types.Share {
+
+	// Decode validator public key
+	pkBytesSlice := keysSet.ValidatorPK.Serialize()
+	pkBytesArray := [48]byte{}
+	copy(pkBytesArray[:], pkBytesSlice)
+
 	return &types.Share{
-		OperatorID:      1,
-		ValidatorPubKey: keysSet.ValidatorPK.Serialize(),
-		SharePubKey:     keysSet.Shares[1].GetPublicKey().Serialize(),
-		DomainType:      testingutils.TestingSSVDomainType,
-		Quorum:          keysSet.Threshold,
-		PartialQuorum:   keysSet.PartialThreshold,
-		Committee:       keysSet.Committee(),
+		ValidatorIndex:      testingutils.TestingValidatorIndex,
+		ValidatorPubKey:     pkBytesArray,
+		SharePubKey:         keysSet.Shares[1].GetPublicKey().Serialize(),
+		Committee:           keysSet.Committee(),
+		Quorum:              keysSet.Threshold,
+		DomainType:          testingutils.TestingSSVDomainType,
+		FeeRecipientAddress: testingutils.TestingFeeRecipient,
+		Graffiti:            testingutils.TestingGraffiti[:],
+	}
+}
+var TestingOperator = func(keysSet *testingutils.TestKeySet) *types.Operator {
+	committeeMembers := []*types.CommitteeMember{}
+
+	for _, key := range keysSet.Committee() {
+
+		// Encode member's public key
+		pkBytes, err := types.MarshalPublicKey(keysSet.OperatorKeys[key.Signer])
+		if err != nil {
+			panic(err)
+		}
+
+		committeeMembers = append(committeeMembers, &types.CommitteeMember{
+			OperatorID:        key.Signer,
+			SSVOperatorPubKey: pkBytes,
+		})
+	}
+
+	opIds := []types.OperatorID{}
+	for _, key := range keysSet.Committee() {
+		opIds = append(opIds, key.Signer)
+	}
+
+	operatorPubKeyBytes, err := types.MarshalPublicKey(keysSet.OperatorKeys[1])
+	if err != nil {
+		panic(err)
+	}
+
+	return &types.Operator{
+		OperatorID:        1,
+		ClusterID:         types.GetClusterID(opIds),
+		SSVOperatorPubKey: operatorPubKeyBytes,
+		Quorum:            keysSet.Threshold,
+		PartialQuorum:     keysSet.PartialThreshold,
+		Committee:         committeeMembers,
 	}
 }
 
 var BaseInstance = func() *specqbft.Instance {
-	return baseInstance(TestingShare(testingutils.Testing4SharesSet()), testingutils.Testing4SharesSet(), []byte{1, 2, 3, 4})
+	return baseInstance(TestingOperator(testingutils.Testing4SharesSet()), testingutils.Testing4SharesSet(), []byte{1, 2, 3, 4})
 }
 
 var SevenOperatorsInstance = func() *specqbft.Instance {
-	return baseInstance(TestingShare(testingutils.Testing7SharesSet()), testingutils.Testing7SharesSet(), []byte{1, 2, 3, 4})
+	return baseInstance(TestingOperator(testingutils.Testing7SharesSet()), testingutils.Testing7SharesSet(), []byte{1, 2, 3, 4})
 }
 
 var TenOperatorsInstance = func() *specqbft.Instance {
-	return baseInstance(TestingShare(testingutils.Testing10SharesSet()), testingutils.Testing10SharesSet(), []byte{1, 2, 3, 4})
+	return baseInstance(TestingOperator(testingutils.Testing10SharesSet()), testingutils.Testing10SharesSet(), []byte{1, 2, 3, 4})
 }
 
 var ThirteenOperatorsInstance = func() *specqbft.Instance {
-	return baseInstance(TestingShare(testingutils.Testing13SharesSet()), testingutils.Testing13SharesSet(), []byte{1, 2, 3, 4})
+	return baseInstance(TestingOperator(testingutils.Testing13SharesSet()), testingutils.Testing13SharesSet(), []byte{1, 2, 3, 4})
 }
 
-var baseInstance = func(share *types.Share, keySet *testingutils.TestKeySet, identifier []byte) *specqbft.Instance {
-	ret := specqbft.NewInstance(testingutils.TestingConfig(keySet), share, identifier, specqbft.FirstHeight)
+var baseInstance = func(operator *types.Operator, keySet *testingutils.TestKeySet, identifier []byte) *specqbft.Instance {
+	ret := specqbft.NewInstance(testingutils.TestingConfig(keySet), operator, identifier, specqbft.FirstHeight)
 	ret.StartValue = []byte{1, 2, 3, 4}
 	return ret
 }
 
 func NewTestingQBFTController(
 	identifier []byte,
-	share *types.Share,
+	share *types.Operator,
 	config qbft.IConfig,
 	fullNode bool,
 ) *controller.Controller {

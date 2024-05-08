@@ -27,7 +27,7 @@ func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCo
 	share := testingutils.TestingShare(ks)
 	logger := logging.TestLogger(t)
 	v := ssvtesting.BaseValidator(logger, keySetForShare(share))
-	r := v.DutyRunners[types.BNRoleSyncCommitteeContribution]
+	r := v.DutyRunners[types.RoleSyncCommitteeContribution]
 	r.GetBeaconNode().(*testingutils.TestingBeaconNode).SetSyncCommitteeAggregatorRootHexes(test.ProofRootsMap)
 
 	lastErr := v.StartDuty(logger, &testingutils.TestingSyncCommitteeContributionDuty)

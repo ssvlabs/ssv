@@ -10,6 +10,8 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/ssvlabs/ssv-spec-pre-cc/types"
+
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -57,10 +59,12 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 
 func generateController(logger *zap.Logger) *controller.Controller {
 	identifier := []byte{1, 2, 3, 4}
-	config := qbfttesting.TestingConfig(logger, spectestingutils.Testing4SharesSet(), spectypes.BNRoleAttester)
+	keySet := spectestingutils.Testing4SharesSet()
+	config := qbfttesting.TestingConfig(logger, spectestingutils.Testing4SharesSet(), spectypes.RoleCommittee)
+	operator := spectestingutils.TestingOperator(keySet)
 	return qbfttesting.NewTestingQBFTController(
 		identifier[:],
-		spectestingutils.TestingShare(spectestingutils.Testing4SharesSet()),
+		operator,
 		config,
 		false,
 	)
@@ -109,36 +113,33 @@ func testBroadcastedDecided(
 	config *qbft.Config,
 	identifier []byte,
 	runData *spectests.RunInstanceData,
-	operators []*spectypes.Operator,
+	committee []*spectypes.CommitteeMember,
 ) {
 	if runData.ExpectedDecidedState.BroadcastedDecided != nil {
 		// test broadcasted
 		broadcastedSignedMsgs := config.GetNetwork().(*spectestingutils.TestingNetwork).BroadcastedMsgs
 		require.Greater(t, len(broadcastedSignedMsgs), 0)
-		require.NoError(t, spectestingutils.VerifyListOfSignedSSVMessages(broadcastedSignedMsgs, operators))
-		broadcastedMsgs := spectestingutils.ConvertBroadcastedMessagesToSSVMessages(broadcastedSignedMsgs)
+		require.NoError(t, spectestingutils.VerifyListOfSignedSSVMessages(broadcastedSignedMsgs, committee))
 		found := false
-		for _, msg := range broadcastedMsgs {
+		for _, msg := range broadcastedSignedMsgs {
 
 			// a hack for testing non standard messageID identifiers since we copy them into a MessageID this fixes it
-			msgID := spectypes.MessageID{}
+			msgID := types.MessageID{}
 			copy(msgID[:], identifier)
 
-			if !bytes.Equal(msgID[:], msg.MsgID[:]) {
+			if !bytes.Equal(msgID[:], msg.SSVMessage.MsgID[:]) {
 				continue
 			}
 
-			msg1 := &specqbft.SignedMessage{}
-			require.NoError(t, msg1.Decode(msg.Data))
-			r1, err := msg1.GetRoot()
+			r1, err := msg.GetRoot()
 			require.NoError(t, err)
 
 			r2, err := runData.ExpectedDecidedState.BroadcastedDecided.GetRoot()
 			require.NoError(t, err)
 
 			if r1 == r2 &&
-				reflect.DeepEqual(runData.ExpectedDecidedState.BroadcastedDecided.Signers, msg1.Signers) &&
-				reflect.DeepEqual(runData.ExpectedDecidedState.BroadcastedDecided.Signature, msg1.Signature) {
+				reflect.DeepEqual(runData.ExpectedDecidedState.BroadcastedDecided.GetOperatorIDs(), msg.GetOperatorIDs()) &&
+				reflect.DeepEqual(runData.ExpectedDecidedState.BroadcastedDecided.Signatures, msg.Signatures) {
 				require.False(t, found)
 				found = true
 			}

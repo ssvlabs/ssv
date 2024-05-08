@@ -31,14 +31,13 @@ var BaseValidator = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet
 			Signer:            spectestingutils.NewTestingKeyManager(),
 			OperatorSigner:    spectestingutils.NewTestingOperatorSigner(keySet, 1),
 			SignatureVerifier: spectestingutils.NewTestingVerifier(),
-			DutyRunners: map[spectypes.BeaconRole]runner.Runner{
-				spectypes.BNRoleAttester:                  AttesterRunner(logger, keySet),
-				spectypes.BNRoleProposer:                  ProposerRunner(logger, keySet),
-				spectypes.BNRoleAggregator:                AggregatorRunner(logger, keySet),
-				spectypes.BNRoleSyncCommittee:             SyncCommitteeRunner(logger, keySet),
-				spectypes.BNRoleSyncCommitteeContribution: SyncCommitteeContributionRunner(logger, keySet),
-				spectypes.BNRoleValidatorRegistration:     ValidatorRegistrationRunner(logger, keySet),
-				spectypes.BNRoleVoluntaryExit:             VoluntaryExitRunner(logger, keySet),
+			DutyRunners: map[spectypes.RunnerRole]runner.Runner{
+				spectypes.RoleCommittee:                 CommitteeRunner(logger, keySet),
+				spectypes.RoleProposer:                  ProposerRunner(logger, keySet),
+				spectypes.RoleAggregator:                AggregatorRunner(logger, keySet),
+				spectypes.RoleSyncCommitteeContribution: SyncCommitteeContributionRunner(logger, keySet),
+				spectypes.RoleValidatorRegistration:     ValidatorRegistrationRunner(logger, keySet),
+				spectypes.RoleVoluntaryExit:             VoluntaryExitRunner(logger, keySet),
 			},
 		},
 	)

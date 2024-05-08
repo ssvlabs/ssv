@@ -28,14 +28,13 @@ func getDB(logger *zap.Logger) basedb.Database {
 	return db
 }
 
-var allRoles = []spectypes.BeaconRole{
-	spectypes.BNRoleAttester,
-	spectypes.BNRoleProposer,
-	spectypes.BNRoleAggregator,
-	spectypes.BNRoleSyncCommittee,
-	spectypes.BNRoleSyncCommitteeContribution,
-	spectypes.BNRoleValidatorRegistration,
-	spectypes.BNRoleVoluntaryExit,
+var allRoles = []spectypes.RunnerRole{
+	spectypes.RoleCommittee,
+	spectypes.RoleProposer,
+	spectypes.RoleAggregator,
+	spectypes.RoleSyncCommitteeContribution,
+	spectypes.RoleValidatorRegistration,
+	spectypes.RoleVoluntaryExit,
 }
 
 func TestingStores(logger *zap.Logger) *qbftstorage.QBFTStores {

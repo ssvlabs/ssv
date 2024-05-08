@@ -23,7 +23,7 @@ type StartNewRunnerDutySpecTest struct {
 	Duty                    *spectypes.Duty
 	PostDutyRunnerStateRoot string
 	PostDutyRunnerState     spectypes.Root `json:"-"` // Field is ignored by encoding/json
-	OutputMessages          []*spectypes.SignedPartialSignatureMessage
+	OutputMessages          []*spectypes.PartialSignatureMessages
 	ExpectedError           string
 }
 
