@@ -108,9 +108,9 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 
 	var validatorToStopMap map[phase0.Slot]spectypes.ValidatorPK
 	//Filter old duties based on highest attesting slot
-	duty, validatorToStopMap, c.HighestAttestingSlotMap = FilterCommitteeDuty(duty, c.HighestAttestingSlotMap)
+	duty, validatorToStopMap, c.HighestAttestingSlotMap = FilterCommitteeDuty(logger, duty, c.HighestAttestingSlotMap)
 	// Stop validators with old duties
-	c.stopDuties(validatorToStopMap)
+	c.stopDuties(logger, validatorToStopMap)
 	c.updateAttestingSlotMap(duty)
 
 	if len(duty.BeaconDuties) == 0 {
@@ -146,10 +146,11 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 }
 
 // NOT threadsafe
-func (c *Committee) stopDuties(validatorToStopMap map[phase0.Slot]spectypes.ValidatorPK) {
+func (c *Committee) stopDuties(logger *zap.Logger, validatorToStopMap map[phase0.Slot]spectypes.ValidatorPK) {
 	for slot, validator := range validatorToStopMap {
 		r, exists := c.Runners[slot]
 		if exists {
+			logger.Debug("stopping duty for validator", zap.Uint64("slot", uint64(slot)), zap.String("validator", hex.EncodeToString(validator[:])))
 			r.StopDuty(validator)
 		}
 	}
@@ -172,7 +173,7 @@ func removeIndex(s []*spectypes.BeaconDuty, index int) []*spectypes.BeaconDuty {
 // FilterCommitteeDuty filters the committee duties by the slots given per validator.
 // It returns the filtered duties, the validators to stop and updated slot map.
 // NOT threadsafe
-func FilterCommitteeDuty(duty *spectypes.CommitteeDuty, slotMap map[spectypes.ValidatorPK]phase0.Slot) (
+func FilterCommitteeDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty, slotMap map[spectypes.ValidatorPK]phase0.Slot) (
 	*spectypes.CommitteeDuty,
 	map[phase0.Slot]spectypes.ValidatorPK,
 	map[spectypes.ValidatorPK]phase0.Slot,
@@ -188,6 +189,7 @@ func FilterCommitteeDuty(duty *spectypes.CommitteeDuty, slotMap map[spectypes.Va
 				slotMap[validatorPK] = beaconDuty.Slot
 			} else { // else don't run duty with old slot
 				// remove the duty
+				logger.Debug("removing beacon duty from committeeduty", zap.Uint64("slot", uint64(beaconDuty.Slot)), zap.String("validator", hex.EncodeToString(beaconDuty.PubKey[:])))
 				duty.BeaconDuties = removeIndex(duty.BeaconDuties, i)
 			}
 		}
