@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/bloxapp/ssv/logging/fields"
@@ -41,15 +42,35 @@ type Committee struct {
 	HighestAttestingSlotMap map[spectypes.ValidatorPK]phase0.Slot
 }
 
+func CommitteeOperators(operator *spectypes.Operator) string {
+	var opids []string
+	for _, op := range operator.Committee {
+		opids = append(opids, fmt.Sprint(op.OperatorID))
+	}
+	return strings.Join(opids, "-")
+}
+
+func CommitteeDutyID(operator *spectypes.Operator, slot phase0.Slot) string {
+	return "COMMITTEE_" + "_c" + CommitteeOperators(operator) + "_s" + fmt.Sprint(slot)
+}
+
+func CommitteeLogFields(operator *spectypes.Operator) []zap.Field {
+	return []zap.Field{
+		zap.String("committee", CommitteeOperators(operator)),
+		zap.String("committee_id", hex.EncodeToString(operator.ClusterID[:])),
+	}
+}
+
 // NewCommittee creates a new cluster
 func NewCommittee(
 	ctx context.Context,
+	logger *zap.Logger,
 	operator *spectypes.Operator,
 	verifier spectypes.SignatureVerifier,
 	createRunnerFn func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share) *runner.CommitteeRunner,
 ) *Committee {
 	return &Committee{
-		logger: zap.L().Named("committee").With(zap.String("committee_id", hex.EncodeToString(operator.ClusterID[:]))), // TODO alan: pass logger
+		logger: logger,
 		ctx:    ctx,
 		// TODO alan: drain maps
 		Queues:                  make(map[phase0.Slot]queueContainer),
@@ -103,9 +124,9 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 			//Quorum:             options.SSVShare.Share,// TODO
 		},
 	}
-
+	logger = c.logger.With(fields.DutyID(CommitteeDutyID(c.Operator, duty.Slot)), fields.Slot(duty.Slot))
 	// TODO alan: stop queue
-	go c.ConsumeQueue(c.logger.With(fields.Slot(duty.Slot)), duty.Slot, c.ProcessMessage)
+	go c.ConsumeQueue(logger, duty.Slot, c.ProcessMessage)
 
 	//var validatorToStopMap map[phase0.Slot]spectypes.ValidatorPK
 	// Filter old duties based on highest attesting slot
@@ -190,7 +211,7 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 		if !exists {
 			return errors.New("no runner found for message's slot")
 		}
-		return runner.ProcessConsensus(c.logger, msg.SignedSSVMessage)
+		return runner.ProcessConsensus(logger, msg.SignedSSVMessage)
 	case spectypes.SSVPartialSignatureMsgType:
 		pSigMessages := &spectypes.PartialSignatureMessages{}
 		if err := pSigMessages.Decode(msg.SignedSSVMessage.SSVMessage.GetData()); err != nil {
@@ -213,10 +234,10 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 			if !exists {
 				return errors.New("no runner found for message's slot")
 			}
-			return runner.ProcessPostConsensus(c.logger, pSigMessages)
+			return runner.ProcessPostConsensus(logger, pSigMessages)
 		}
 	case message.SSVEventMsgType:
-		return c.handleEventMessage(c.logger, msg)
+		return c.handleEventMessage(logger, msg)
 	default:
 		return errors.New("unknown msg")
 	}
