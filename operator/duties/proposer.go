@@ -53,6 +53,7 @@ func (h *ProposerHandler) Name() string {
 //  2. If necessary, fetch duties for the current epoch.
 func (h *ProposerHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
+	defer h.logger.Info("duty handler exited")
 
 	for {
 		select {

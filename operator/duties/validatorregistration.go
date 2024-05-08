@@ -24,6 +24,7 @@ func (h *ValidatorRegistrationHandler) Name() string {
 
 func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
+	defer h.logger.Info("duty handler exited")
 
 	// should be registered within validatorRegistrationEpochInterval epochs time in a corresponding slot
 	registrationSlotInterval := h.network.SlotsPerEpoch() * validatorRegistrationEpochInterval
