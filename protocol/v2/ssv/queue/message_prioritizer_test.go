@@ -367,21 +367,19 @@ func (m messageSlice) dump(s *State) string {
 	return b.String()
 }
 
-func ssvMessageFactory(role spectypes.BeaconRole) func(*spectypes.SignedSSVMessage, *spectypes.SignedPartialSignatureMessage) *spectypes.SSVMessage {
+func ssvMessageFactory(role spectypes.RunnerRole) func(*spectypes.SignedSSVMessage, *spectypes.PartialSignatureMessage) *spectypes.SSVMessage {
 	switch role {
-	case spectypes.BNRoleAttester:
+	case spectypes.RoleCommittee:
 		return testingutils.SSVMsgAttester
-	case spectypes.BNRoleProposer:
+	case spectypes.RoleProposer:
 		return testingutils.SSVMsgProposer
-	case spectypes.BNRoleAggregator:
+	case spectypes.RoleAggregator:
 		return testingutils.SSVMsgAggregator
-	case spectypes.BNRoleSyncCommittee:
-		return testingutils.SSVMsgSyncCommittee
-	case spectypes.BNRoleSyncCommitteeContribution:
+	case spectypes.RoleSyncCommitteeContribution:
 		return testingutils.SSVMsgSyncCommitteeContribution
-	case spectypes.BNRoleValidatorRegistration:
+	case spectypes.RoleValidatorRegistration:
 		return testingutils.SSVMsgValidatorRegistration
-	case spectypes.BNRoleVoluntaryExit:
+	case spectypes.RoleVoluntaryExit:
 		return testingutils.SSVMsgVoluntaryExit
 	default:
 		panic("invalid role")

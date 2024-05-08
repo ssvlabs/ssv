@@ -123,7 +123,7 @@ func MultiSignMsg(sks map[spectypes.OperatorID]*bls.SecretKey, signers []spectyp
 		}
 	}
 
-	return &specqbft.SignedMessage{
+	return &spectypes.SignedSSVMessage{
 		Message:   *msg,
 		Signature: agg.Serialize(),
 		Signers:   operators,
