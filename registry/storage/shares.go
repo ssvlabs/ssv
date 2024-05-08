@@ -327,7 +327,6 @@ func (s *sharesStorage) UpdateValidatorMetadata(pk string, metadata *beaconproto
 	}
 
 	share.BeaconMetadata = metadata
-	s.validatorStore.handleShareUpdated(share)
 	return s.Save(nil, share)
 }
 
