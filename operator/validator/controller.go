@@ -661,6 +661,8 @@ func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.BeaconDuty)
 }
 
 func (c *controller) ExecuteCommitteeDuty(logger *zap.Logger, committeeID spectypes.ClusterID, duty *spectypes.CommitteeDuty) {
+	logger = logger.With(fields.Slot(duty.Slot), fields.Role(duty.RunnerRole()))
+
 	if cm, ok := c.validatorsMap.GetCommittee(committeeID); ok {
 		ssvMsg, err := CreateCommitteeDutyExecuteMsg(duty, committeeID, types.GetDefaultDomain())
 		if err != nil {
@@ -673,7 +675,7 @@ func (c *controller) ExecuteCommitteeDuty(logger *zap.Logger, committeeID specty
 			return
 		}
 		// TODO alan: no queue in cc, what should we do?
-		if err := cm.OnExecuteDuty(c.logger, dec.Body.(*types.EventMsg)); err != nil {
+		if err := cm.OnExecuteDuty(logger, dec.Body.(*types.EventMsg)); err != nil {
 			logger.Error("could not execute committee duty", zap.Error(err))
 		}
 		// logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))

@@ -4,8 +4,9 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"github.com/bloxapp/ssv/logging/fields"
 	"sync"
+
+	"github.com/bloxapp/ssv/logging/fields"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
@@ -112,6 +113,8 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 	//// Stop validators with old duties
 	//c.stopDuties(validatorToStopMap)
 	//c.updateAttestingSlotMap(duty)
+
+	logger.Info("ℹ️ starting duty processing")
 	return c.Runners[duty.Slot].StartNewDuty(logger, duty)
 }
 
