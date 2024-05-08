@@ -5,10 +5,11 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/deneb"
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv-spec/types/testingutils"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	spectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv-spec/types/testingutils"
 )
 
 var TestingSSVDomainType = spectypes.JatoTestnet
@@ -105,8 +106,8 @@ var SSVMsgSyncCommitteeContribution = func(qbftMsg *spectypes.SignedSSVMessage, 
 	return ssvMsg(qbftMsg, partialSigMsg, spectypes.NewMsgID(TestingSSVDomainType, testingutils.TestingValidatorPubKey[:], spectypes.BNRoleSyncCommitteeContribution))
 }
 
-var SSVMsgValidatorRegistration = func(qbftMsg *spectypes.SignedSSVMessage, partialSigMsg *spectypes.SignedPartialSignatureMessage) *spectypes.SSVMessage {
-	return ssvMsg(qbftMsg, partialSigMsg, spectypes.NewMsgID(TestingSSVDomainType, testingutils.TestingValidatorPubKey[:], spectypes.BNRoleValidatorRegistration))
+var SSVMsgValidatorRegistration = func(qbftMsg *spectypes.SignedSSVMessage, partialSigMsg *spectypes.PartialSignatureMessages) *spectypes.SSVMessage {
+	return ssvMsg(qbftMsg, partialSigMsg, spectypes.NewMsgID(TestingSSVDomainType, spectestingutils.TestingValidatorPubKey[:], spectypes.RoleValidatorRegistration))
 }
 
 var ssvMsg = func(qbftMsg *spectypes.SignedSSVMessage, postMsg *spectypes.SignedPartialSignatureMessage, msgID spectypes.MessageID) *spectypes.SSVMessage {

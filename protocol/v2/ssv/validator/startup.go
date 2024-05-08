@@ -3,11 +3,11 @@ package validator
 import (
 	"sync/atomic"
 
-	"github.com/bloxapp/ssv-spec/p2p"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/pkg/errors"
+	"github.com/ssvlabs/ssv-spec/p2p"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"go.uber.org/zap"
 

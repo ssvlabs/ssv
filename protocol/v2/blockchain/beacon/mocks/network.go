@@ -9,7 +9,7 @@ import (
 	time "time"
 
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
-	types "github.com/bloxapp/ssv-spec/types"
+	types "github.com/ssvlabs/ssv-spec/types"
 	beacon "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	gomock "github.com/golang/mock/gomock"
 )

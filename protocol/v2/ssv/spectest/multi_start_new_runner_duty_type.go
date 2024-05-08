@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
-	typescomparable "github.com/bloxapp/ssv-spec/types/testingutils/comparable"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -57,7 +57,7 @@ func (test *StartNewRunnerDutySpecTest) RunAsPartOfMultiTest(t *testing.T, logge
 				continue
 			}
 
-			msg1 := &spectypes.SignedPartialSignatureMessage{}
+			msg1 := &spectypes.PartialSignatureMessage{}
 			require.NoError(t, msg1.Decode(msg.Data))
 			msg2 := test.OutputMessages[index]
 			require.Len(t, msg1.Message.Messages, len(msg2.Message.Messages))
@@ -137,14 +137,12 @@ func (tests *MultiStartNewRunnerDutySpecTest) overrideStateComparison(t *testing
 func overrideStateComparisonForStartNewRunnerDutySpecTest(t *testing.T, test *StartNewRunnerDutySpecTest, name string, testType string) {
 	var r runner.Runner
 	switch test.Runner.(type) {
-	case *runner.AttesterRunner:
-		r = &runner.AttesterRunner{}
+	case *runner.CommitteeRunner:
+		r = &runner.CommitteeRunner{}
 	case *runner.AggregatorRunner:
 		r = &runner.AggregatorRunner{}
 	case *runner.ProposerRunner:
 		r = &runner.ProposerRunner{}
-	case *runner.SyncCommitteeRunner:
-		r = &runner.SyncCommitteeRunner{}
 	case *runner.SyncCommitteeAggregatorRunner:
 		r = &runner.SyncCommitteeAggregatorRunner{}
 	case *runner.ValidatorRegistrationRunner:

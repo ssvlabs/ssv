@@ -4,7 +4,7 @@ import (
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"github.com/pkg/errors"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/bloxapp/ssv/operator/keys"
 )

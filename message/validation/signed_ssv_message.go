@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"golang.org/x/exp/slices"

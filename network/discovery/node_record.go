@@ -3,9 +3,9 @@ package discovery
 import (
 	"fmt"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/ethereum/go-ethereum/p2p/enode"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 type NodeRecordDecoration func(*enode.LocalNode) error

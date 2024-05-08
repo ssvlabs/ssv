@@ -9,13 +9,14 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/ssvlabs/ssv-spec-pre-cc/types"
+	specssv "github.com/ssvlabs/ssv-spec/ssv"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	typescomparable "github.com/bloxapp/ssv-spec/types/testingutils/comparable"
+	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
@@ -28,7 +29,7 @@ import (
 type MsgProcessingSpecTest struct {
 	Name                    string
 	Runner                  runner.Runner
-	Duty                    *spectypes.Duty
+	Duty                    types.Duty
 	Messages                []*spectypes.SignedSSVMessage
 	PostDutyRunnerStateRoot string
 	PostDutyRunnerState     spectypes.Root `json:"-"` // Field is ignored by encoding/json
@@ -47,6 +48,33 @@ func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
 	logger := logging.TestLogger(t)
 	test.overrideStateComparison(t)
 	test.RunAsPartOfMultiTest(t, logger)
+}
+
+func (test *MsgProcessingSpecTest) runPreTesting() (*specssv.Validator, error) {
+	var share *types.Share
+	if len(test.Runner.GetBaseRunner().Share) == 0 {
+		panic("No share in base runner for tests")
+	}
+	for _, validatorShare := range test.Runner.GetBaseRunner().Share {
+		share = validatorShare
+		break
+	}
+	v := spectestingutils.BaseValidator(spectestingutils.KeySetForShare(share))
+	v.DutyRunners[test.Runner.GetBaseRunner().RunnerRoleType] = test.Runner
+	v.Network = test.Runner.GetNetwork()
+
+	var lastErr error
+	if !test.DontStartDuty {
+		lastErr = v.StartDuty(test.Duty)
+	}
+	for _, msg := range test.Messages {
+		err := v.ProcessMessage(msg)
+		if err != nil {
+			lastErr = err
+		}
+	}
+
+	return v, lastErr
 }
 
 func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *zap.Logger) {

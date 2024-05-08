@@ -6,9 +6,9 @@ import (
 	"math/big"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/pkg/errors"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"

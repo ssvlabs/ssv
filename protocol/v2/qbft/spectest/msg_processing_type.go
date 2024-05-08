@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
-	typescomparable "github.com/bloxapp/ssv-spec/types/testingutils/comparable"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/logging"
@@ -82,7 +82,7 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 			ssvMsg := &spectypes.SSVMessage{}
 			require.NoError(t, ssvMsg.Decode(broadcastedMsgs[i].Data))
 
-			msg2 := &specqbft.SignedMessage{}
+			msg2 := &spectypes.SignedSSVMessage{}
 			require.NoError(t, msg2.Decode(ssvMsg.Data))
 			r2, _ := msg2.GetRoot()
 

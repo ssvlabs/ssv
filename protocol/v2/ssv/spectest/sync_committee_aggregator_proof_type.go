@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bloxapp/ssv-spec/ssv/spectest/tests/runner/duties/synccommitteeaggregator"
-	"github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv-spec/types/testingutils"
-	typescomparable "github.com/bloxapp/ssv-spec/types/testingutils/comparable"
+	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/runner/duties/synccommitteeaggregator"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv-spec/types/testingutils"
+	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/logging"
@@ -27,7 +27,7 @@ func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCo
 	share := testingutils.TestingShare(ks)
 	logger := logging.TestLogger(t)
 	v := ssvtesting.BaseValidator(logger, keySetForShare(share))
-	r := v.DutyRunners[types.RoleSyncCommitteeContribution]
+	r := v.DutyRunners[spectypes.RoleSyncCommitteeContribution]
 	r.GetBeaconNode().(*testingutils.TestingBeaconNode).SetSyncCommitteeAggregatorRootHexes(test.ProofRootsMap)
 
 	lastErr := v.StartDuty(logger, &testingutils.TestingSyncCommitteeContributionDuty)
@@ -71,7 +71,7 @@ func overrideStateComparisonForSyncCommitteeAggregatorProofSpecTest(t *testing.T
 	test.PostDutyRunnerStateRoot = hex.EncodeToString(root[:])
 }
 
-func keySetForShare(share *types.Share) *testingutils.TestKeySet {
+func keySetForShare(share *spectypes.Share) *testingutils.TestKeySet {
 	if share.Quorum == 5 {
 		return testingutils.Testing7SharesSet()
 	}

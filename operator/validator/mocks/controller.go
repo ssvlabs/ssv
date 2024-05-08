@@ -8,7 +8,7 @@ import (
 	reflect "reflect"
 
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
-	types "github.com/bloxapp/ssv-spec/types"
+	types "github.com/ssvlabs/ssv-spec/types"
 	network "github.com/bloxapp/ssv/network"
 	duties "github.com/bloxapp/ssv/operator/duties"
 	beacon "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"

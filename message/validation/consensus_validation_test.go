@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 
 	"github.com/stretchr/testify/require"
 

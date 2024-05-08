@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/bloxapp/ssv/operator/keys"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"

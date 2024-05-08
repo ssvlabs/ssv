@@ -15,7 +15,7 @@ import (
 	altair "github.com/attestantio/go-eth2-client/spec/altair"
 	bellatrix "github.com/attestantio/go-eth2-client/spec/bellatrix"
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
-	types "github.com/bloxapp/ssv-spec/types"
+	types "github.com/ssvlabs/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
 	gomock "github.com/golang/mock/gomock"
 )

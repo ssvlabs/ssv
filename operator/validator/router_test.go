@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/logging"

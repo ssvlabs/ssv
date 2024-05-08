@@ -4,10 +4,10 @@ package validation
 
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	alanspectypes "github.com/bloxapp/ssv-spec/types"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	alanspectypes "github.com/ssvlabs/ssv-spec/types"
 
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )

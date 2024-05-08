@@ -9,8 +9,8 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 func TestSSVShare_BelongsToOperator(t *testing.T) {
