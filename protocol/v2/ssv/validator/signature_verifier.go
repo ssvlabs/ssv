@@ -1,7 +1,6 @@
 package validator
 
 import (
-	"crypto/sha256"
 	"fmt"
 	"github.com/pkg/errors"
 
@@ -29,20 +28,22 @@ func (s *SignatureVerifier) Verify(msg *spectypes.SignedSSVMessage, operators []
 		return err
 	}
 
-	// Get message hash
-	hash := sha256.Sum256(encodedMsg)
-
+	verified := false
 	// Find operator that matches ID with the signer and verify signature
 	for i, signer := range msg.OperatorIDs {
-		if err := s.VerifySignatureForSigner(hash, msg.Signatures[i], signer, operators); err != nil {
+		verified = true
+		if err := s.VerifySignatureForSigner(encodedMsg, msg.Signatures[i], signer, operators); err != nil {
 			return err
 		}
 	}
 
-	return fmt.Errorf("unknown signer")
+	if !verified {
+		return fmt.Errorf("unknown signer")
+	}
+	return nil
 }
 
-func (s *SignatureVerifier) VerifySignatureForSigner(root [32]byte, signature []byte, signer spectypes.OperatorID, operators []*spectypes.CommitteeMember) error {
+func (s *SignatureVerifier) VerifySignatureForSigner(root []byte, signature []byte, signer spectypes.OperatorID, operators []*spectypes.CommitteeMember) error {
 
 	for _, op := range operators {
 		// Find signer

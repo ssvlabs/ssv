@@ -339,7 +339,7 @@ func (c *controller) handleRouterMessages() {
 			pk := msg.GetID().GetSenderID()
 			hexPK := hex.EncodeToString(pk)
 			var cid spectypes.ClusterID
-			copy(cid[:], pk)
+			copy(cid[:], pk[16:])
 
 			if v, ok := c.validatorsMap.GetValidator(hexPK); ok {
 				v.HandleMessage(c.logger, msg)
@@ -1095,14 +1095,16 @@ func SetupCommitteeRunners(ctx context.Context, logger *zap.Logger, options vali
 		return nil // TODO need to find better way to fix it
 	}
 
-	domainType := ssvtypes.GetDefaultDomain()
+	// TODO: (Alan) fix domain type
+	domainType := spectypes.GenesisMainnet
 	buildController := func(role spectypes.RunnerRole, valueCheckF specqbft.ProposedValueCheckF) *qbftcontroller.Controller {
 		config := &qbft.Config{
-			BeaconSigner:   options.Signer,
-			OperatorSigner: options.OperatorSigner,
-			SigningPK:      options.SSVShare.ValidatorPubKey[:], // TODO right val?
-			Domain:         domainType,
-			ValueCheckF:    nil, // sets per role type
+			BeaconSigner:      options.Signer,
+			OperatorSigner:    options.OperatorSigner,
+			SigningPK:         options.SSVShare.ValidatorPubKey[:], // TODO right val?
+			SignatureVerifier: options.SignatureVerifier,
+			Domain:            domainType,
+			ValueCheckF:       nil, // sets per role type
 			ProposerF: func(state *specqbft.State, round specqbft.Round) spectypes.OperatorID {
 				leader := specqbft.RoundRobinProposer(state, round)
 				//logger.Debug("leader", zap.Int("operator_id", int(leader)))
@@ -1115,7 +1117,7 @@ func SetupCommitteeRunners(ctx context.Context, logger *zap.Logger, options vali
 		}
 		config.ValueCheckF = valueCheckF
 
-		identifier := spectypes.NewMsgID(ssvtypes.GetDefaultDomain(), options.SSVShare.Share.ValidatorPubKey[:], role)
+		identifier := spectypes.NewMsgID(spectypes.GenesisMainnet, options.Operator.ClusterID[:], role)
 		qbftCtrl := qbftcontroller.NewController(identifier[:], options.Operator, config, options.FullNode)
 		qbftCtrl.NewDecidedHandler = options.NewDecidedHandler
 		return qbftCtrl

@@ -172,7 +172,7 @@ func (v *Validator) logMsg(logger *zap.Logger, msg *queue.DecodedSSVMessage, log
 			zap.Int64("msg_height", int64(qbftMsg.Height)),
 			zap.Int64("msg_round", int64(qbftMsg.Round)),
 			zap.Int64("consensus_msg_type", int64(qbftMsg.MsgType)),
-			zap.Any("signers", msg.GetOperatorIDs()),
+			zap.Any("signers", msg.SignedSSVMessage.GetOperatorIDs()),
 		}
 	case spectypes.SSVPartialSignatureMsgType:
 		psm := msg.Body.(*spectypes.PartialSignatureMessages)

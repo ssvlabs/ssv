@@ -143,7 +143,9 @@ func populateStorage(t *testing.T, logger *zap.Logger, storage registrystorage.S
 		copy(ownerAddrByte[:], ownerAddr)
 
 		return &types.SSVShare{
-			Share: spectypes.Share{ValidatorPubKey: []byte(fmt.Sprintf("pk%d", index)), OperatorID: operatorID},
+			Share: spectypes.Share{ValidatorPubKey: spectypes.ValidatorPK([]byte(fmt.Sprintf("pk%046d", index))),
+				ValidatorIndex: phase0.ValidatorIndex(index),
+			},
 			Metadata: types.Metadata{
 				BeaconMetadata: &beacon.ValidatorMetadata{
 					Index: phase0.ValidatorIndex(index),
