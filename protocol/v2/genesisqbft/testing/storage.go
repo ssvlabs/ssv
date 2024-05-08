@@ -4,8 +4,7 @@ import (
 	"context"
 	"sync"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
+	genesisqbftstorage "github.com/bloxapp/ssv/ibft/genesisstorage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
 	"go.uber.org/zap"
@@ -39,15 +38,6 @@ var allRoles = []genesisspectypes.BeaconRole{
 	genesisspectypes.BNRoleVoluntaryExit,
 }
 
-func TestingStores(logger *zap.Logger) *qbftstorage.QBFTStores {
-	roles := []spectypes.RunnerRole{
-		spectypes.RunnerRole(spectypes.BNRoleAttester),
-		spectypes.RunnerRole(spectypes.BNRoleProposer),
-		spectypes.RunnerRole(spectypes.BNRoleAggregator),
-		spectypes.RunnerRole(spectypes.BNRoleSyncCommittee),
-		spectypes.RunnerRole(spectypes.BNRoleSyncCommitteeContribution),
-		spectypes.RunnerRole(spectypes.BNRoleValidatorRegistration),
-		spectypes.RunnerRole(spectypes.BNRoleVoluntaryExit),
-	}
-	return qbftstorage.NewStoresFromRoles(getDB(logger), roles...)
+func TestingStores(logger *zap.Logger) *genesisqbftstorage.QBFTStores {
+	return genesisqbftstorage.NewStoresFromRoles(getDB(logger), allRoles...)
 }

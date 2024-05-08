@@ -8,7 +8,7 @@ import (
 	qbft "github.com/bloxapp/ssv/protocol/v2/genesisqbft"
 	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/instance"
 	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/roundtimer"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/bloxapp/ssv/protocol/v2/genesistypes"
 	"github.com/stretchr/testify/require"
 
 	spectestingutils "github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
@@ -58,8 +58,8 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 
 	// Initialize EventMsg for the test
 	timeoutData := types.TimeoutData{
-		Height: uint64(genesisspecqbft.FirstHeight),
-		Round:  uint64(genesisspecqbft.FirstRound),
+		Height: genesisspecqbft.FirstHeight,
+		Round:  genesisspecqbft.FirstRound,
 	}
 
 	data, err := json.Marshal(timeoutData)
