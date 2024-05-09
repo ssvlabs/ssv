@@ -207,6 +207,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 	logger.Debug("got post consensus",
 		zap.Bool("quorum", quorum),
 		fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()),
+		zap.Int("signer", int(signedMsg.Messages[0].Signer)),
 		zap.Int("sigs", len(roots)),
 		zap.Ints("validators", indices),
 	)
