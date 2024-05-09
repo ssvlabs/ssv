@@ -196,6 +196,38 @@ Shares:
 	return shares
 }
 
+func (s *sharesStorage) unsafeSave(rw basedb.ReadWriter, shares ...*types.SSVShare) error {
+	if len(shares) == 0 {
+		return nil
+	}
+
+	err := s.db.Using(rw).SetMany(s.prefix, len(shares), func(i int) (basedb.Obj, error) {
+		share := specShareToStorageShare(shares[i])
+		value, err := share.Encode()
+		if err != nil {
+			return basedb.Obj{}, fmt.Errorf("failed to serialize share: %w", err)
+		}
+		return basedb.Obj{Key: s.storageKey(share.ValidatorPubKey[:]), Value: value}, nil
+	})
+	if err != nil {
+		return err
+	}
+
+	for _, share := range shares {
+		key := hex.EncodeToString(share.ValidatorPubKey[:])
+
+		// Update validatorStore indices.
+		if _, ok := s.shares[key]; ok {
+			s.validatorStore.handleShareUpdated(share)
+		} else {
+			s.validatorStore.handleSharesAdded(share)
+		}
+
+		s.shares[key] = share
+	}
+	return nil
+}
+
 func (s *sharesStorage) Save(rw basedb.ReadWriter, shares ...*types.SSVShare) error {
 	if len(shares) == 0 {
 		return nil
@@ -328,6 +360,29 @@ func (s *sharesStorage) UpdateValidatorMetadata(pk string, metadata *beaconproto
 
 	share.BeaconMetadata = metadata
 	return s.Save(nil, share)
+}
+
+func (s *sharesStorage) unsafeGet(_ basedb.Reader, key string) *types.SSVShare {
+	return s.shares[key]
+}
+
+// UpdateValidatorsMetadata updates the metadata of the given validator
+func (s *sharesStorage) UpdateValidatorsMetadata(data map[string]*beaconprotocol.ValidatorMetadata) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	shares := make([]*types.SSVShare, 0)
+
+	for pk, metadata := range data {
+		share := s.unsafeGet(nil, pk)
+		if share == nil {
+			continue
+		}
+		share.BeaconMetadata = metadata
+		shares = append(shares, share)
+	}
+
+	return s.unsafeSave(nil, shares...)
 }
 
 // Drop deletes all shares.
