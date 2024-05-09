@@ -157,6 +157,7 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *types.Signe
 				return errors.Wrap(err, "failed to hash attestation data")
 			}
 			logger.Debug("signed attestation data",
+				zap.Int("validator_index", int(duty.ValidatorIndex)),
 				zap.String("pub_key", hex.EncodeToString(duty.PubKey[:])),
 				zap.Any("attestation_data", attestationData),
 				zap.String("attestation_data_root", hex.EncodeToString(adr[:])),
@@ -280,7 +281,8 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 					return errors.Wrap(err, "failed to hash attestation data")
 				}
 				logger.Debug("submitting attestation",
-					zap.String("pub_key", hex.EncodeToString(pubKey[:])),
+					zap.Int("validator_index", int(validator)),
+					zap.String("pubkey", hex.EncodeToString(pubKey[:])),
 					zap.Any("attestation", att.Data),
 					zap.String("attestation_data_root", hex.EncodeToString(adr[:])),
 					zap.String("signing_root", hex.EncodeToString(root[:])),
