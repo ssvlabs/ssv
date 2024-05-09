@@ -2,6 +2,7 @@ package beacon
 
 import (
 	"encoding/hex"
+	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -14,6 +15,7 @@ import (
 // ValidatorMetadataStorage interface for validator metadata
 type ValidatorMetadataStorage interface {
 	UpdateValidatorMetadata(pk string, metadata *ValidatorMetadata) error
+	//UpdateValidatorsMetadata(map[string]*ValidatorMetadata) error
 }
 
 // ValidatorMetadata represents validator metdata from beacon
@@ -68,20 +70,26 @@ type OnUpdated func(pk string, meta *ValidatorMetadata)
 
 // UpdateValidatorsMetadata updates validator information for the given public keys
 func UpdateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte, collection ValidatorMetadataStorage, bc BeaconNode, onUpdated OnUpdated) error {
+	start := time.Now()
 	results, err := FetchValidatorsMetadata(bc, pubKeys)
 	if err != nil {
 		return errors.Wrap(err, "failed to get validator data from Beacon")
 	}
+	logger.Debug("⏱️ fetched validators metadata", zap.Duration("elapsed", time.Since(start)))
 	// TODO: importing logging/fields causes import cycle
 	logger.Debug("🆕 got validators metadata", zap.Int("requested", len(pubKeys)),
 		zap.Int("received", len(results)))
 
+	startdb := time.Now()
+	success := 0
 	var errs []error
 	for pk, meta := range results {
 		if err := collection.UpdateValidatorMetadata(pk, meta); err != nil {
 			logger.Error("❗ failed to update validator metadata",
 				zap.String("validator", pk), zap.Error(err))
 			errs = append(errs, err)
+		} else {
+			success += 1
 		}
 		if onUpdated != nil {
 			onUpdated(pk, meta)
@@ -89,6 +97,7 @@ func UpdateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte, collection V
 		logger.Debug("💾️ successfully updated validator metadata",
 			zap.String("pk", pk), zap.Any("metadata", meta))
 	}
+	logger.Debug("🆕 updated validators metadata in storage", zap.Int("count", success), zap.Duration("elapsed", time.Since(startdb)))
 	if len(errs) > 0 {
 		logger.Error("❌ failed to process validators returned from Beacon node",
 			zap.Int("count", len(errs)), zap.Errors("errors", errs))
