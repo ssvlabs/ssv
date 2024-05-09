@@ -207,9 +207,13 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
 		r.metrics.EndPostConsensus()
+		consensusDuration := time.Since(r.started)
 		logger.Debug("🧩 reconstructed partial signatures",
 			zap.Uint64s("signers", getPostConsensusSigners(r.GetState(), root)),
 			fields.QuorumTime(r.metrics.GetPostConsensusTime()))
+
+		attestationSubmissionEnd := r.metrics.StartBeaconSubmission()
+		startSubmissionTime := time.Now()
 
 		aggregationBitfield := bitfield.NewBitlist(r.GetState().DecidedValue.Duty.CommitteeLength)
 		aggregationBitfield.SetBitAt(duty.ValidatorCommitteeIndex, true)
@@ -219,10 +223,7 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 			AggregationBits: aggregationBitfield,
 		}
 
-		attestationSubmissionEnd := r.metrics.StartBeaconSubmission()
-		consensusDuration := time.Since(r.started)
 		// Submit it to the BN.
-		startSubmissionTime := time.Now()
 		if err := r.beacon.SubmitAttestation(signedAtt); err != nil {
 			r.metrics.RoleSubmissionFailed()
 			logger.Error("❌ failed to submit attestation",
