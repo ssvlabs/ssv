@@ -866,7 +866,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 
 		committeRunnerFunc := SetupCommitteeRunners(ctx, logger, opts)
 
-		vc = validator.NewCommittee(c.context, logger, operator, opts.SignatureVerifier, committeRunnerFunc)
+		vc = validator.NewCommittee(c.context, logger, vc.BeaconNetwork, operator, opts.SignatureVerifier, committeRunnerFunc)
 		vc.AddShare(&share.Share)
 		c.validatorsMap.PutCommittee(operator.ClusterID, vc)
 

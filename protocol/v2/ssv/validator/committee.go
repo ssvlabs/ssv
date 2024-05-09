@@ -25,8 +25,9 @@ type Committee struct {
 	logger *zap.Logger
 	ctx    context.Context
 
-	mtx     sync.RWMutex
-	Storage *storage.QBFTStores
+	mtx           sync.RWMutex
+	BeaconNetwork spectypes.BeaconNetwork
+	Storage       *storage.QBFTStores
 
 	Queues map[phase0.Slot]queueContainer
 
@@ -65,13 +66,15 @@ func CommitteeLogFields(operator *spectypes.Operator) []zap.Field {
 func NewCommittee(
 	ctx context.Context,
 	logger *zap.Logger,
+	beaconNetwork spectypes.BeaconNetwork,
 	operator *spectypes.Operator,
 	verifier spectypes.SignatureVerifier,
 	createRunnerFn func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share) *runner.CommitteeRunner,
 ) *Committee {
 	return &Committee{
-		logger: logger,
-		ctx:    ctx,
+		logger:        logger,
+		BeaconNetwork: beaconNetwork,
+		ctx:           ctx,
 		// TODO alan: drain maps
 		Queues:                  make(map[phase0.Slot]queueContainer),
 		Runners:                 make(map[phase0.Slot]*runner.CommitteeRunner),
@@ -137,7 +140,7 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 			//Quorum:             options.SSVShare.Share,// TODO
 		},
 	}
-	logger = c.logger.With(fields.DutyID(CommitteeDutyID(c.Operator, duty.Slot)), fields.Slot(duty.Slot))
+	logger = c.logger.With(fields.DutyID(CommitteeDutyID(c.Operator, c.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty.Slot)), fields.Slot(duty.Slot))
 	// TODO alan: stop queue
 	go c.ConsumeQueue(logger, duty.Slot, c.ProcessMessage)
 
@@ -150,7 +153,10 @@ func (c *Committee) stopDuties(logger *zap.Logger, validatorToStopMap map[phase0
 	for slot, validator := range validatorToStopMap {
 		r, exists := c.Runners[slot]
 		if exists {
-			logger.Debug("stopping duty for validator", fields.DutyID(CommitteeDutyID(c.Operator, slot)), zap.Uint64("slot", uint64(slot)), zap.String("validator", hex.EncodeToString(validator[:])))
+			logger.Debug("stopping duty for validator",
+				fields.DutyID(CommitteeDutyID(c.Operator, c.BeaconNetwork.EstimatedEpochAtSlot(slot), slot)),
+				zap.Uint64("slot", uint64(slot)), zap.String("validator", hex.EncodeToString(validator[:])),
+			)
 			r.StopDuty(validator)
 		}
 	}
