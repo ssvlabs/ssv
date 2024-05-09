@@ -251,6 +251,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 				)
 				// TODO: @GalRogozinski
 				// return errors.Wrap(err, "got post-consensus quorum but it has invalid signatures")
+				continue
 			}
 			specSig := phase0.BLSSignature{}
 			copy(specSig[:], sig)
