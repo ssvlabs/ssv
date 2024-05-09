@@ -78,7 +78,6 @@ func (r *AttesterRunner) HasRunningDuty() bool {
 // 3) Once consensus decides, sign partial attestation and broadcast
 // 4) collect 2f+1 partial sigs, reconstruct and broadcast valid attestation sig to the BN
 func (r *AttesterRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
-	r.metrics.StartDutyFullFlow()
 	r.started = time.Now()
 	attData, ver, err := r.GetBeaconNode().GetAttestationData(duty.Slot, duty.CommitteeIndex)
 	if err != nil {
@@ -88,6 +87,7 @@ func (r *AttesterRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) e
 		return errors.Wrap(err, "failed to get attestation data")
 	}
 	logger.Info("🧊 got attestation data", fields.AttestationDataTime(time.Since(r.started)))
+	r.metrics.StartDutyFullFlow()
 	r.metrics.StartConsensus()
 
 	attDataByts, err := attData.MarshalSSZ()
@@ -121,13 +121,13 @@ func (r *AttesterRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbf
 	if !decided {
 		return nil
 	}
+	duty := r.GetState().StartingDuty
+	logger = logger.With(fields.Slot(duty.Slot))
 	r.metrics.EndConsensus()
-	logger.Debug("🧩 got decided", fields.QuorumTime(r.metrics.GetConsensusTime()))
+	logger.Debug("🧩 got decided", fields.DecidedTime(r.metrics.GetConsensusTime()))
 	r.metrics.StartPostConsensus()
 
 	startTime := time.Now()
-	duty := r.GetState().StartingDuty
-	logger = logger.With(fields.Slot(duty.Slot))
 
 	attestationData, err := decidedValue.GetAttestationData()
 	if err != nil {

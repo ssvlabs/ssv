@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -20,8 +21,8 @@ import (
 )
 
 type SyncCommitteeRunner struct {
-	BaseRunner *BaseRunner
-
+	BaseRunner     *BaseRunner
+	started        time.Time
 	beacon         specssv.BeaconNode
 	network        specssv.Network
 	signer         spectypes.KeyManager
@@ -70,6 +71,36 @@ func (r *SyncCommitteeRunner) HasRunningDuty() bool {
 	return r.BaseRunner.hasRunningDuty()
 }
 
+// executeDuty steps:
+// 1) get sync block root from BN
+// 2) start consensus on duty + block root data
+// 3) Once consensus decides, sign partial block root and broadcast
+// 4) collect 2f+1 partial sigs, reconstruct and broadcast valid sync committee sig to the BN
+func (r *SyncCommitteeRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
+	// TODO - waitOneThirdOrValidBlock
+	r.started = time.Now()
+
+	root, ver, err := r.GetBeaconNode().GetSyncMessageBlockRoot(duty.Slot)
+	if err != nil {
+		return errors.Wrap(err, "failed to get sync committee block root")
+	}
+	logger.Info("🧊 got sync message blockRoot", fields.BlockRootTime(time.Since(r.started)))
+
+	r.metrics.StartDutyFullFlow()
+	r.metrics.StartConsensus()
+
+	input := &spectypes.ConsensusData{
+		Duty:    *duty,
+		Version: ver,
+		DataSSZ: root[:],
+	}
+
+	if err := r.BaseRunner.decide(logger, r, input); err != nil {
+		return errors.Wrap(err, "can't start new duty runner instance for duty")
+	}
+	return nil
+}
+
 func (r *SyncCommitteeRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spectypes.SignedPartialSignatureMessage) error {
 	return errors.New("no pre consensus sigs required for sync committee role")
 }
@@ -85,9 +116,13 @@ func (r *SyncCommitteeRunner) ProcessConsensus(logger *zap.Logger, signedMsg *sp
 		return nil
 	}
 
-	r.metrics.EndConsensus()
-	r.metrics.StartPostConsensus()
+	duty := r.GetState().StartingDuty
+	logger = logger.With(fields.Slot(duty.Slot))
 
+	r.metrics.EndConsensus()
+	logger.Debug("🧩 got decided", fields.QuorumTime(r.metrics.GetConsensusTime()))
+	r.metrics.StartPostConsensus()
+	startTime := time.Now()
 	// specific duty sig
 	root, err := decidedValue.GetSyncCommitteeBlockRoot()
 	if err != nil {
@@ -127,6 +162,7 @@ func (r *SyncCommitteeRunner) ProcessConsensus(logger *zap.Logger, signedMsg *sp
 	if err := r.GetNetwork().Broadcast(ssvMsg.GetID(), msgToBroadcast); err != nil {
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
+	logger.Info("✅ partial post consensus sig broadcast successfully", fields.BroadcastTime(time.Since(startTime)))
 	return nil
 }
 
@@ -139,9 +175,8 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg
 	if !quorum {
 		return nil
 	}
-
-	r.metrics.EndPostConsensus()
-
+	duty := r.GetState().StartingDuty
+	logger = logger.With(fields.Slot(duty.Slot))
 	blockRoot, err := r.GetState().DecidedValue.GetSyncCommitteeBlockRoot()
 	if err != nil {
 		return errors.Wrap(err, "could not get sync committee block root")
@@ -158,7 +193,13 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg
 		}
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
+		r.metrics.EndPostConsensus()
+		logger.Debug("🧩 reconstructed partial signatures",
+			zap.Uint64s("signers", getPostConsensusSigners(r.GetState(), root)),
+			fields.QuorumTime(r.metrics.GetPostConsensusTime()))
 
+		messageSubmissionEnd := r.metrics.StartBeaconSubmission()
+		startSubmissionTime := time.Now()
 		msg := &altair.SyncCommitteeMessage{
 			Slot:            r.GetState().DecidedValue.Duty.Slot,
 			BeaconBlockRoot: blockRoot,
@@ -166,10 +207,13 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg
 			Signature:       specSig,
 		}
 
-		messageSubmissionEnd := r.metrics.StartBeaconSubmission()
-
 		if err := r.GetBeaconNode().SubmitSyncMessage(msg); err != nil {
 			r.metrics.RoleSubmissionFailed()
+			logger.Error("❌ failed to submit attestation",
+				fields.ConsensusTime(time.Since(r.started)),
+				fields.SubmissionTime(time.Since(startSubmissionTime)),
+				zap.Duration("decided_time", r.metrics.GetPostConsensusTime()),
+				zap.Error(err))
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed sync committee")
 		}
 
@@ -179,6 +223,8 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg
 
 		logger.Info("✅ successfully submitted sync committee",
 			fields.Slot(msg.Slot),
+			fields.ConsensusTime(time.Since(r.started)),
+			fields.SubmissionTime(time.Since(startSubmissionTime)),
 			zap.String("block_root", hex.EncodeToString(msg.BeaconBlockRoot[:])),
 			fields.Height(r.BaseRunner.QBFTController.Height),
 			fields.Round(r.GetState().RunningInstance.State.Round))
@@ -200,34 +246,6 @@ func (r *SyncCommitteeRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashR
 	}
 
 	return []ssz.HashRoot{spectypes.SSZBytes(root[:])}, spectypes.DomainSyncCommittee, nil
-}
-
-// executeDuty steps:
-// 1) get sync block root from BN
-// 2) start consensus on duty + block root data
-// 3) Once consensus decides, sign partial block root and broadcast
-// 4) collect 2f+1 partial sigs, reconstruct and broadcast valid sync committee sig to the BN
-func (r *SyncCommitteeRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
-	// TODO - waitOneThirdOrValidBlock
-
-	root, ver, err := r.GetBeaconNode().GetSyncMessageBlockRoot(duty.Slot)
-	if err != nil {
-		return errors.Wrap(err, "failed to get sync committee block root")
-	}
-
-	r.metrics.StartDutyFullFlow()
-	r.metrics.StartConsensus()
-
-	input := &spectypes.ConsensusData{
-		Duty:    *duty,
-		Version: ver,
-		DataSSZ: root[:],
-	}
-
-	if err := r.BaseRunner.decide(logger, r, input); err != nil {
-		return errors.Wrap(err, "can't start new duty runner instance for duty")
-	}
-	return nil
 }
 
 func (r *SyncCommitteeRunner) GetBaseRunner() *BaseRunner {

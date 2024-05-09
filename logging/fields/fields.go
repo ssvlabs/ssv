@@ -44,8 +44,10 @@ const (
 	FieldConnectionID        = "connection_id"
 	FieldConsensusTime       = "consensus_time"
 	FieldQuorumTime          = "quorum_time"
+	FieldDecidedTime         = "decided_time"
 	FieldBlockTime           = "block_time"
 	FieldAttestationDataTime = "attestation_data_time"
+	FieldBlockRootTime       = "block_root_time"
 	FieldBroadcastTime       = "broadcast_time"
 	FieldSubmissionTime      = "submission_time"
 	FieldCount               = "count"
@@ -280,12 +282,18 @@ func ConsensusTime(val time.Duration) zap.Field {
 func QuorumTime(val time.Duration) zap.Field {
 	return zap.String(FieldQuorumTime, strconv.FormatFloat(val.Seconds(), 'f', 5, 64))
 }
+func DecidedTime(val time.Duration) zap.Field {
+	return zap.String(FieldDecidedTime, strconv.FormatFloat(val.Seconds(), 'f', 5, 64))
+}
 
 func BlockTime(val time.Duration) zap.Field {
 	return zap.String(FieldBlockTime, strconv.FormatFloat(val.Seconds(), 'f', 5, 64))
 }
 func AttestationDataTime(val time.Duration) zap.Field {
 	return zap.String(FieldAttestationDataTime, strconv.FormatFloat(val.Seconds(), 'f', 5, 64))
+}
+func BlockRootTime(val time.Duration) zap.Field {
+	return zap.String(FieldBlockRootTime, strconv.FormatFloat(val.Seconds(), 'f', 5, 64))
 }
 
 func SubmissionTime(val time.Duration) zap.Field {
