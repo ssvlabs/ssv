@@ -290,16 +290,19 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 				)
 
 				// broadcast
-				if err := cr.beacon.SubmitAttestation(att); err != nil {
-					logger.Error("could not submit to Beacon chain reconstructed attestation",
-						fields.Slot(att.Data.Slot),
-						zap.Int("validator_index", int(validator)),
-						zap.Error(err),
-					)
-					// TODO: @GalRogozinski
-					// return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
-					continue
-				}
+				// TODO: (Alan) bulk submit instead of goroutine?
+				go func() {
+					if err := cr.beacon.SubmitAttestation(att); err != nil {
+						logger.Error("could not submit to Beacon chain reconstructed attestation",
+							fields.Slot(att.Data.Slot),
+							zap.Int("validator_index", int(validator)),
+							zap.Error(err),
+						)
+						// TODO: @GalRogozinski
+						// return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
+						// continue
+					}
+				}()
 				// TODO: like AttesterRunner
 				logger.Debug("📢 submitted attestation",
 					//fields.Slot(att.Data.Slot),
@@ -308,16 +311,19 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 				syncMsg := beaconObjects[BeaconObjectID{Root: root, ValidatorIndex: validator}].(*altair.SyncCommitteeMessage)
 				syncMsg.Signature = specSig
 				// Broadcast
-				if err := cr.beacon.SubmitSyncMessage(syncMsg); err != nil {
-					logger.Error("could not submit to Beacon chain reconstructed signed sync committee",
-						fields.Slot(syncMsg.Slot),
-						zap.Int("validator_index", int(validator)),
-						zap.Error(err),
-					)
-					// TODO: @GalRogozinski
-					// return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed sync committee")
-					continue
-				}
+				// TODO: (Alan) bulk submit instead of goroutine?
+				go func() {
+					if err := cr.beacon.SubmitSyncMessage(syncMsg); err != nil {
+						logger.Error("could not submit to Beacon chain reconstructed signed sync committee",
+							fields.Slot(syncMsg.Slot),
+							zap.Int("validator_index", int(validator)),
+							zap.Error(err),
+						)
+						// TODO: @GalRogozinski
+						// return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed sync committee")
+						// continue
+					}
+				}()
 				logger.Debug("📢 submitted sync committee message",
 					fields.Slot(syncMsg.Slot),
 					zap.Int("validator_index", int(validator)),
@@ -325,6 +331,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 			}
 		}
 	}
+
 	cr.BaseRunner.State.Finished = true
 	return nil
 }
