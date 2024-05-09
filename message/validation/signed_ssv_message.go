@@ -32,6 +32,8 @@ func (mv *messageValidator) decodeSignedSSVMessage(pMsg *pubsub.Message) (*spect
 		return nil, e
 	}
 
+	mv.logger.Info("received post-fork message")
+
 	return signedSSVMessage, nil
 }
 
