@@ -271,9 +271,8 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 				}
 				// TODO: like AttesterRunner
 				logger.Debug("📢 submitted attestation",
-					fields.Slot(att.Data.Slot),
-					zap.Int("validator_index", int(validator)),
-				)
+					//fields.Slot(att.Data.Slot),
+					zap.Int("validator_index", int(validator)), fields.Root(root), zap.String("block_root", hex.EncodeToString(att.Data.BeaconBlockRoot[:])))
 			} else if role == types.BNRoleSyncCommittee {
 				syncMsg := beaconObjects[root].(*altair.SyncCommitteeMessage)
 				syncMsg.Signature = specSig
