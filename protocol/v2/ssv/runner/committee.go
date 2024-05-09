@@ -244,7 +244,13 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 					cr.BaseRunner.FallBackAndVerifyEachSignature(cr.BaseRunner.State.PostConsensusContainer, root,
 						share.Committee, validator)
 				}
-				return errors.Wrap(err, "got post-consensus quorum but it has invalid signatures")
+				logger.Error("got post-consensus quorum but it has invalid signatures",
+					fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()),
+					zap.Int("validator_index", int(validator)),
+					zap.Error(err),
+				)
+				// TODO: @GalRogozinski
+				// return errors.Wrap(err, "got post-consensus quorum but it has invalid signatures")
 			}
 			specSig := phase0.BLSSignature{}
 			copy(specSig[:], sig)
@@ -259,7 +265,9 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 						zap.Int("validator_index", int(validator)),
 						zap.Error(err),
 					)
-					return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
+					// TODO: @GalRogozinski
+					// return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
+					continue
 				}
 				// TODO: like AttesterRunner
 				logger.Debug("📢 submitted attestation",
@@ -276,7 +284,9 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 						zap.Int("validator_index", int(validator)),
 						zap.Error(err),
 					)
-					return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed sync committee")
+					// TODO: @GalRogozinski
+					// return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed sync committee")
+					continue
 				}
 				logger.Debug("📢 submitted sync committee message",
 					fields.Slot(syncMsg.Slot),
