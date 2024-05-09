@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	spectypes "github.com/bloxapp/ssv-spec/types"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"golang.org/x/exp/slices"
@@ -15,6 +16,16 @@ import (
 )
 
 func (mv *messageValidator) decodeSignedSSVMessage(pMsg *pubsub.Message) (*spectypes.SignedSSVMessage, error) {
+	genesisSSVMessage := &genesisspectypes.SSVMessage{}
+	if err := genesisSSVMessage.Decode(pMsg.GetData()); err != nil {
+		return nil, ErrGenesisSSVMessage
+	}
+
+	genesisSignedSSVMessage := &genesisspectypes.SignedSSVMessage{}
+	if err := genesisSignedSSVMessage.Decode(pMsg.GetData()); err != nil {
+		return nil, ErrGenesisSignedSSVMessage
+	}
+
 	signedSSVMessage := &spectypes.SignedSSVMessage{}
 	if err := signedSSVMessage.Decode(pMsg.GetData()); err != nil {
 		e := ErrMalformedPubSubMessage
