@@ -272,7 +272,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 			copy(specSig[:], sig)
 
 			if role == types.BNRoleAttester {
-				att := beaconObjects[root].(*phase0.Attestation)
+				att := beaconObjects[BeaconObjectID{Root: root, ValidatorIndex: validator}].(*phase0.Attestation)
 				att.Signature = specSig
 
 				// TODO: revert log
@@ -305,7 +305,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 					//fields.Slot(att.Data.Slot),
 					zap.Int("validator_index", int(validator)), fields.Root(root), zap.String("block_root", hex.EncodeToString(att.Data.BeaconBlockRoot[:])))
 			} else if role == types.BNRoleSyncCommittee {
-				syncMsg := beaconObjects[root].(*altair.SyncCommitteeMessage)
+				syncMsg := beaconObjects[BeaconObjectID{Root: root, ValidatorIndex: validator}].(*altair.SyncCommitteeMessage)
 				syncMsg.Signature = specSig
 				// Broadcast
 				if err := cr.beacon.SubmitSyncMessage(syncMsg); err != nil {
@@ -364,14 +364,19 @@ func (cr CommitteeRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot,
 	return []ssz.HashRoot{}, types.DomainAttester, nil
 }
 
+type BeaconObjectID struct {
+	Root           [32]byte
+	ValidatorIndex phase0.ValidatorIndex
+}
+
 func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects() (
 	attestationMap map[phase0.ValidatorIndex][32]byte,
 	syncCommitteeMap map[phase0.ValidatorIndex][32]byte,
-	beaconObjects map[[32]byte]ssz.HashRoot, error error,
+	beaconObjects map[BeaconObjectID]ssz.HashRoot, error error,
 ) {
 	attestationMap = make(map[phase0.ValidatorIndex][32]byte)
 	syncCommitteeMap = make(map[phase0.ValidatorIndex][32]byte)
-	beaconObjects = make(map[[32]byte]ssz.HashRoot)
+	beaconObjects = make(map[BeaconObjectID]ssz.HashRoot)
 	duty := cr.BaseRunner.State.StartingDuty
 	// TODO DecidedValue should be interface??
 	beaconVoteData := cr.BaseRunner.State.DecidedValue
@@ -413,7 +418,7 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects() (
 
 			// Add to map
 			attestationMap[beaconDuty.ValidatorIndex] = root
-			beaconObjects[root] = unSignedAtt
+			beaconObjects[BeaconObjectID{Root: root, ValidatorIndex: beaconDuty.ValidatorIndex}] = unSignedAtt
 		case types.BNRoleSyncCommittee:
 			// Block root
 			blockRoot := types.SSZBytes(beaconVote.BlockRoot[:])
@@ -439,7 +444,7 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects() (
 
 			// Set root and beacon object
 			syncCommitteeMap[beaconDuty.ValidatorIndex] = root
-			beaconObjects[root] = syncMsg
+			beaconObjects[BeaconObjectID{Root: root, ValidatorIndex: beaconDuty.ValidatorIndex}] = syncMsg
 		}
 	}
 	return attestationMap, syncCommitteeMap, beaconObjects, nil
