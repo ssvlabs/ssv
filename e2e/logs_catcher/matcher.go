@@ -2,7 +2,9 @@ package logs_catcher
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"errors"
@@ -15,9 +17,9 @@ import (
 // Test conditions:
 
 const waitTarget = "beacon_proxy"
-const firstTarget = "beacon_proxy"
+const beaconProxyContainer = "beacon_proxy"
 
-var secondTargets = []string{"ssv-node-1", "ssv-node-2", "ssv-node-3", "ssv-node-4"}
+var ssvNodesContainers = []string{"ssv-node-1", "ssv-node-2", "ssv-node-3", "ssv-node-4"}
 
 const waitFor = "End epoch finished"
 
@@ -59,37 +61,92 @@ func StartCondition(pctx context.Context, logger *zap.Logger, condition []string
 	return conditionLog, nil
 }
 
-// Todo: match messages based on fields. ex: take all X messages from target one,
-// 	extract pubkey field and get all matching messages with this pubkey field on target two.
+// testDuty performs a generic validation of attestation logs by comparing entries across beacon proxy and SSV node containers.
+// It's designed to handle both non-slashable and slashable attestation log validations.
+func testDuty(ctx context.Context, logger *zap.Logger, dockerCLI DockerCLI, attestationType string) error {
+	var beaconCriteria, nodeCriteria []string
+	var discrepancyCheck func(beaconCount, nodeCount int) bool
 
-func matchMessages(ctx context.Context, logger *zap.Logger, cli DockerCLI, first []string, second []string, plus int) error {
-	res, err := docker.DockerLogs(ctx, cli, firstTarget, "")
+	switch attestationType {
+	case "nonSlashable":
+		beaconCriteria = []string{origMessage, nonSlashableMessage}
+		nodeCriteria = []string{nonSlashableMatchMessage}
+		// For non-slashable attestations, we expect the node count to be exactly 2.
+		discrepancyCheck = func(beaconCount, nodeCount int) bool {
+			return nodeCount != 2
+		}
+	case "slashable":
+		beaconCriteria = []string{origMessage, slashableMessage}
+		nodeCriteria = []string{slashableMatchMessage}
+		// For slashable attestations, the node count must match the beacon count exactly.
+		discrepancyCheck = func(beaconCount, nodeCount int) bool {
+			return beaconCount != nodeCount
+		}
+	default:
+		return fmt.Errorf("unknown attestation type: %s", attestationType)
+	}
+
+	// Extract and count logs from the beaconProxyContainer based on validator public key.
+	beaconLogsByPubKey, err := dockerLogsByPubKey(ctx, logger, dockerCLI, beaconProxyContainer, beaconCriteria)
 	if err != nil {
 		return err
 	}
 
-	grepped := res.Grep(first)
-
-	logger.Info("matched", zap.Int("count", len(grepped)), zap.String("target", firstTarget), zap.Strings("match_string", first))
-
-	for _, target := range secondTargets {
-		logger.Debug("Reading one of second targets logs", zap.String("target", target))
-
-		tres, err := docker.DockerLogs(ctx, cli, target, "")
+	// Verify corresponding logs in each SSV node container match the validator public key.
+	for _, nodeContainer := range ssvNodesContainers {
+		nodeLogsByPubKey, err := dockerLogsByPubKey(ctx, logger, dockerCLI, nodeContainer, nodeCriteria)
 		if err != nil {
 			return err
 		}
 
-		tgrepped := tres.Grep(second)
-
-		if len(tgrepped) != len(grepped)+plus {
-			return fmt.Errorf("found non matching messages on %v, want %v got %v", target, len(grepped), len(tgrepped))
+		// Compare the counts for each public key between beacon proxy and node container.
+		for validatorPubKey, validatorBeaconLogs := range beaconLogsByPubKey {
+			validatorNodeLogs, exists := nodeLogsByPubKey[validatorPubKey]
+			beaconCount := len(validatorBeaconLogs) // Get the count of beacon logs
+			nodeCount := len(validatorNodeLogs)     // Get the count of node logs
+			if !exists || discrepancyCheck(beaconCount, nodeCount) {
+				logger.Info("Discrepancy found", zap.String("PublicKey", validatorPubKey), zap.Int("BeaconCount", beaconCount), zap.Int("NodeCount", nodeCount))
+				return fmt.Errorf("discrepancy for pubkey %s in %s: expected %d, got %d", validatorPubKey, nodeContainer, beaconCount, nodeCount)
+			}
 		}
-
-		logger.Debug("found matching messages for target", zap.Strings("first", first), zap.Strings("second", second), zap.Int("count", len(tgrepped)), zap.String("target", target))
 	}
 
 	return nil
+}
+
+// Combines the docker log retrieval, grepping, and counting of public keys into one function.
+func dockerLogsByPubKey(ctx context.Context, logger *zap.Logger, cli DockerCLI, containerName string, matchStrings []string) (map[string][]any, error) {
+	res, err := docker.DockerLogs(ctx, cli, containerName, "")
+	if err != nil {
+		return nil, err
+	}
+	grepped := res.Grep(matchStrings).ParseAll(func(log string) (map[string]any, error) {
+		var result logs.ParsedLine // Corrected to `any` to match the return type
+		err := json.Unmarshal([]byte(log), &result)
+		if err != nil {
+			return nil, err // Return an error if parsing fails
+		}
+		if pubkey, ok := result["pubkey"].(string); ok {
+			// Check if pubkey starts with "0x" and remove it if present
+			if strings.HasPrefix(pubkey, "0x") {
+				pubkey = strings.TrimPrefix(pubkey, "0x")
+			}
+			result["pubkey"] = pubkey
+		}
+		return result, nil // Return the parsed result if successful
+	})
+
+	logger.Info("matched", zap.Int("count", len(grepped)), zap.String("target", containerName), zap.Strings("match_string", matchStrings))
+	publicKeyLogs := make(map[string][]any) // Corrected type
+
+	for _, logMap := range grepped {
+		if pubkey, ok := logMap["pubkey"].(string); ok {
+			// Append the log map to the slice associated with the pubkey
+			publicKeyLogs[pubkey] = append(publicKeyLogs[pubkey], logMap)
+		}
+	}
+
+	return publicKeyLogs, nil
 }
 
 func Match(pctx context.Context, logger *zap.Logger, cli DockerCLI) error {
@@ -105,12 +162,11 @@ func Match(pctx context.Context, logger *zap.Logger, cli DockerCLI) error {
 	defer c()
 
 	// find slashable attestation not signing for each slashable validator
-	if err := matchMessages(ctx, logger, cli, []string{origMessage, slashableMessage}, []string{slashableMatchMessage}, 0); err != nil {
+	if err := testDuty(ctx, logger, cli, "slashable"); err != nil {
 		return err
 	}
-
 	// find non-slashable validators successfully submitting (all first round + 1 for second round)
-	if err := matchMessages(ctx, logger, cli, []string{origMessage, nonSlashableMessage}, []string{nonSlashableMatchMessage}, 30); err != nil {
+	if err := testDuty(ctx, logger, cli, "nonSlashable"); err != nil {
 		return err
 	}
 
