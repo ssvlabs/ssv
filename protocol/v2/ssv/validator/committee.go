@@ -50,8 +50,8 @@ func CommitteeOperators(operator *spectypes.Operator) string {
 	return strings.Join(opids, "-")
 }
 
-func CommitteeDutyID(operator *spectypes.Operator, slot phase0.Slot) string {
-	return "COMMITTEE_" + "c" + CommitteeOperators(operator) + "_s" + fmt.Sprint(slot)
+func CommitteeDutyID(operator *spectypes.Operator, epoch phase0.Epoch, slot phase0.Slot) string {
+	return fmt.Sprintf("COMMITTEE_%s_e%d_s%d", CommitteeOperators(operator), epoch, slot)
 }
 
 func CommitteeLogFields(operator *spectypes.Operator) []zap.Field {
