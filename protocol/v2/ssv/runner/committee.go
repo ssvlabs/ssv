@@ -283,7 +283,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 				logger.Debug("submitting attestation",
 					zap.Int("validator_index", int(validator)),
 					zap.String("pubkey", hex.EncodeToString(pubKey[:])),
-					zap.Any("attestation", att.Data),
+					zap.Any("attestation", att),
 					zap.String("attestation_data_root", hex.EncodeToString(adr[:])),
 					zap.String("signing_root", hex.EncodeToString(root[:])),
 					zap.String("signature", hex.EncodeToString(att.Signature[:])),
