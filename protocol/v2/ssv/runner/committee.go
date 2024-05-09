@@ -151,6 +151,19 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *types.Signe
 			}
 			postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialMsg)
 
+			// TODO: revert log
+			adr, err := attestationData.HashTreeRoot()
+			if err != nil {
+				return errors.Wrap(err, "failed to hash attestation data")
+			}
+			logger.Debug("signed attestation data",
+				zap.String("pub_key", hex.EncodeToString(duty.PubKey[:])),
+				zap.Any("attestation_data", attestationData),
+				zap.String("attestation_data_root", hex.EncodeToString(adr[:])),
+				zap.String("signing_root", hex.EncodeToString(partialMsg.SigningRoot[:])),
+				zap.String("signature", hex.EncodeToString(partialMsg.PartialSignature[:])),
+			)
+
 		case types.BNRoleSyncCommittee:
 			blockRoot := beaconVote.BlockRoot
 			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, duty, types.SSZBytes(blockRoot[:]), duty.DutySlot(),
@@ -260,6 +273,20 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 			if role == types.BNRoleAttester {
 				att := beaconObjects[root].(*phase0.Attestation)
 				att.Signature = specSig
+
+				// TODO: revert log
+				adr, err := att.Data.HashTreeRoot()
+				if err != nil {
+					return errors.Wrap(err, "failed to hash attestation data")
+				}
+				logger.Debug("submitting attestation",
+					zap.String("pub_key", hex.EncodeToString(pubKey[:])),
+					zap.Any("attestation", att.Data),
+					zap.String("attestation_data_root", hex.EncodeToString(adr[:])),
+					zap.String("signing_root", hex.EncodeToString(root[:])),
+					zap.String("signature", hex.EncodeToString(att.Signature[:])),
+				)
+
 				// broadcast
 				if err := cr.beacon.SubmitAttestation(att); err != nil {
 					logger.Error("could not submit to Beacon chain reconstructed attestation",
