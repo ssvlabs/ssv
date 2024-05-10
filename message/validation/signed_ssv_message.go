@@ -10,6 +10,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"golang.org/x/exp/slices"
 
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/network/commons"
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
 )
@@ -35,7 +36,7 @@ func (mv *messageValidator) decodeSignedSSVMessage(pMsg *pubsub.Message) (*spect
 		return nil, e
 	}
 
-	mv.logger.Info("decodeSignedSSVMessage received post-fork message")
+	mv.logger.Info("decodeSignedSSVMessage received post-fork message", fields.OperatorIDs(signedSSVMessage.OperatorIDs))
 
 	return signedSSVMessage, nil
 }
