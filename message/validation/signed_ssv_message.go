@@ -19,23 +19,23 @@ func (mv *messageValidator) decodeSignedSSVMessage(pMsg *pubsub.Message) (*spect
 	if err := signedSSVMessage.Decode(pMsg.GetData()); err != nil {
 		genesisSSVMessage := &genesisspectypes.SSVMessage{}
 		if err := genesisSSVMessage.Decode(pMsg.GetData()); err == nil {
-			mv.logger.Info("decodeSignedSSVMessage2 received genesis message")
+			mv.logger.Info("decodeSignedSSVMessage received genesis message")
 			return nil, ErrGenesisSSVMessage
 		}
 
 		genesisSignedSSVMessage := &genesisspectypes.SignedSSVMessage{}
 		if err := genesisSignedSSVMessage.Decode(pMsg.GetData()); err == nil {
-			mv.logger.Info("decodeSignedSSVMessage2 received genesis signed message")
+			mv.logger.Info("decodeSignedSSVMessage received genesis signed message")
 			return nil, ErrGenesisSignedSSVMessage
 		}
 
-		mv.logger.Info("decodeSignedSSVMessage2 received malformed message")
+		mv.logger.Info("decodeSignedSSVMessage received malformed message")
 		e := ErrMalformedPubSubMessage
 		e.innerErr = err
 		return nil, e
 	}
 
-	mv.logger.Info("decodeSignedSSVMessage2 received post-fork message")
+	mv.logger.Info("decodeSignedSSVMessage received post-fork message")
 
 	return signedSSVMessage, nil
 }
