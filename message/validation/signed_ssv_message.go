@@ -15,20 +15,20 @@ import (
 )
 
 func (mv *messageValidator) decodeSignedSSVMessage(pMsg *pubsub.Message) (*spectypes.SignedSSVMessage, error) {
-	genesisSSVMessage := &genesisspectypes.SSVMessage{}
-	if err := genesisSSVMessage.Decode(pMsg.GetData()); err == nil {
-		mv.logger.Info("decodeSignedSSVMessage received genesis message")
-		return nil, ErrGenesisSSVMessage
-	}
-
-	genesisSignedSSVMessage := &genesisspectypes.SignedSSVMessage{}
-	if err := genesisSignedSSVMessage.Decode(pMsg.GetData()); err == nil {
-		mv.logger.Info("decodeSignedSSVMessage received genesis signed message")
-		return nil, ErrGenesisSignedSSVMessage
-	}
-
 	signedSSVMessage := &spectypes.SignedSSVMessage{}
 	if err := signedSSVMessage.Decode(pMsg.GetData()); err != nil {
+		genesisSSVMessage := &genesisspectypes.SSVMessage{}
+		if err := genesisSSVMessage.Decode(pMsg.GetData()); err == nil {
+			mv.logger.Info("decodeSignedSSVMessage received genesis message")
+			return nil, ErrGenesisSSVMessage
+		}
+
+		genesisSignedSSVMessage := &genesisspectypes.SignedSSVMessage{}
+		if err := genesisSignedSSVMessage.Decode(pMsg.GetData()); err == nil {
+			mv.logger.Info("decodeSignedSSVMessage received genesis signed message")
+			return nil, ErrGenesisSignedSSVMessage
+		}
+
 		mv.logger.Info("decodeSignedSSVMessage received malformed message")
 		e := ErrMalformedPubSubMessage
 		e.innerErr = err
