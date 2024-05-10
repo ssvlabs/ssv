@@ -152,6 +152,7 @@ func (mv *messageValidator) handleValidationError(peerID peer.ID, decodedMessage
 func (mv *messageValidator) handleValidationSuccess(decodedMessage *queue.DecodedSSVMessage) pubsub.ValidationResult {
 	loggerFields := mv.buildLoggerFields(decodedMessage)
 	mv.metrics.MessageAccepted(loggerFields.Role, loggerFields.Consensus.Round)
+	mv.logger.Info("accepting valid message")
 
 	return pubsub.ValidationAccept
 }
