@@ -44,6 +44,7 @@ type Shares interface {
 
 	// UpdateValidatorMetadata updates validator metadata.
 	UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata *beaconprotocol.ValidatorMetadata) error
+	UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error
 }
 
 type sharesStorage struct {
@@ -172,6 +173,10 @@ func (s *sharesStorage) Get(_ basedb.Reader, pubKey []byte) *types.SSVShare {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
+	return s.unsafeGet(pubKey)
+}
+
+func (s *sharesStorage) unsafeGet(pubKey []byte) *types.SSVShare {
 	return s.shares[hex.EncodeToString(pubKey)]
 }
 
@@ -203,6 +208,10 @@ func (s *sharesStorage) Save(rw basedb.ReadWriter, shares ...*types.SSVShare) er
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	return s.unsafeSave(rw, shares...)
+}
+
+func (s *sharesStorage) unsafeSave(rw basedb.ReadWriter, shares ...*types.SSVShare) error {
 	err := s.db.Using(rw).SetMany(s.prefix, len(shares), func(i int) (basedb.Obj, error) {
 		share := specShareToStorageShare(shares[i])
 		value, err := share.Encode()
@@ -324,6 +333,25 @@ func (s *sharesStorage) UpdateValidatorMetadata(pk spectypes.ValidatorPK, metada
 
 	share.BeaconMetadata = metadata
 	return s.Save(nil, share)
+}
+
+// UpdateValidatorMetadata updates the metadata of the given validator
+func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for pk, metadata := range data {
+		share := s.unsafeGet(pk[:])
+		if share == nil {
+			continue
+		}
+
+		share.BeaconMetadata = metadata
+		if err := s.unsafeSave(nil, share); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Drop deletes all shares.

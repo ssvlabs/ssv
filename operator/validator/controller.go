@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slices"
 	"sync"
 	"time"
 
@@ -132,6 +134,7 @@ type SharesStorage interface {
 	Get(txn basedb.Reader, pubKey []byte) *types.SSVShare
 	List(txn basedb.Reader, filters ...registrystorage.SharesFilter) []*types.SSVShare
 	UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata *beaconprotocol.ValidatorMetadata) error
+	UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error
 }
 
 type P2PNetwork interface {
@@ -624,6 +627,64 @@ func (c *controller) UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata 
 	return nil
 }
 
+// UpdateValidatorMetadata updates a given validator with metadata (implements ValidatorMetadataStorage)
+func (c *controller) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error {
+	// TODO: better log and err handling
+	for pk, metadata := range data {
+		c.metadataLastUpdated[pk] = time.Now()
+
+		if metadata == nil {
+			delete(data, pk)
+		}
+	}
+
+	// Save metadata to share storage.
+	err := c.sharesStorage.UpdateValidatorsMetadata(data)
+	if err != nil {
+		return errors.Wrap(err, "could not update validator metadata")
+	}
+
+	pks := maps.Keys(data)
+
+	shares := c.sharesStorage.List(nil, registrystorage.ByNotLiquidated(), registrystorage.ByOperatorID(c.operatorDataStore.GetOperatorID()), func(share *ssvtypes.SSVShare) bool {
+		return slices.Contains(pks, share.ValidatorPubKey)
+	})
+
+	for _, share := range shares {
+		// Start validator (if not already started).
+		// TODO: why its in the map if not started?
+		if v, found := c.validatorsMap.GetValidator(share.ValidatorPubKey); found {
+			v.Share.BeaconMetadata = share.BeaconMetadata
+			_, err := c.startValidator(v)
+			if err != nil {
+				c.logger.Warn("could not start validator", zap.Error(err))
+			}
+			vc, found := c.validatorsMap.GetCommittee(v.Share.CommitteeID())
+			if found {
+				vc.AddShare(&v.Share.Share)
+				_, err := c.startCommittee(vc)
+				if err != nil {
+					c.logger.Warn("could not start committee", zap.Error(err))
+				}
+			}
+		} else {
+			c.logger.Info("starting new validator", fields.PubKey(share.ValidatorPubKey[:]))
+
+			started, err := c.onShareStart(share)
+			if err != nil {
+				c.logger.Warn("could not start newly active validator", zap.Error(err))
+				continue
+			}
+			if started {
+				c.logger.Debug("started share after metadata update", zap.Bool("started", started))
+			}
+		}
+		return nil
+	}
+
+	return nil
+}
+
 // GetValidator returns a validator instance from ValidatorsMap
 func (c *controller) GetValidator(pubKey spectypes.ValidatorPK) (*validator.Validator, bool) {
 	return c.validatorsMap.GetValidator(pubKey)
@@ -747,6 +808,7 @@ func (c *controller) AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phas
 	return indices
 }
 
+// TODO: this looks like its duplicated behaviour, check if necessary
 // onMetadataUpdated is called when validator's metadata was updated
 func (c *controller) onMetadataUpdated(pk spectypes.ValidatorPK, meta *beaconprotocol.ValidatorMetadata) {
 	if meta == nil {
