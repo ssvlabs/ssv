@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"strings"
 	"sync"
 
 	"github.com/bloxapp/ssv/logging/fields"
@@ -41,25 +40,6 @@ type Committee struct {
 	SignatureVerifier       spectypes.SignatureVerifier
 	CreateRunnerFn          func(slot phase0.Slot, shares map[phase0.ValidatorIndex]*spectypes.Share) *runner.CommitteeRunner
 	HighestAttestingSlotMap map[spectypes.ValidatorPK]phase0.Slot
-}
-
-func CommitteeOperators(operator *spectypes.Operator) string {
-	var opids []string
-	for _, op := range operator.Committee {
-		opids = append(opids, fmt.Sprint(op.OperatorID))
-	}
-	return strings.Join(opids, "_")
-}
-
-func CommitteeDutyID(operator *spectypes.Operator, epoch phase0.Epoch, slot phase0.Slot) string {
-	return fmt.Sprintf("COMMITTEE-%s-e%d-s%d", CommitteeOperators(operator), epoch, slot)
-}
-
-func CommitteeLogFields(operator *spectypes.Operator) []zap.Field {
-	return []zap.Field{
-		zap.String("committee", CommitteeOperators(operator)),
-		zap.String("committee_id", hex.EncodeToString(operator.ClusterID[:])),
-	}
 }
 
 // NewCommittee creates a new cluster
@@ -140,7 +120,7 @@ func (c *Committee) StartDuty(logger *zap.Logger, duty *spectypes.CommitteeDuty)
 			//Quorum:             options.SSVShare.Share,// TODO
 		},
 	}
-	logger = c.logger.With(fields.DutyID(CommitteeDutyID(c.Operator, c.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty.Slot)), fields.Slot(duty.Slot))
+	logger = c.logger.With(fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty.Slot)), fields.Slot(duty.Slot))
 	// TODO alan: stop queue
 	go c.ConsumeQueue(logger, duty.Slot, c.ProcessMessage)
 
@@ -154,7 +134,7 @@ func (c *Committee) stopDuties(logger *zap.Logger, validatorToStopMap map[phase0
 		r, exists := c.Runners[slot]
 		if exists {
 			logger.Debug("stopping duty for validator",
-				fields.DutyID(CommitteeDutyID(c.Operator, c.BeaconNetwork.EstimatedEpochAtSlot(slot), slot)),
+				fields.DutyID(fields.FormatCommitteeDutyID(c.Operator.Committee, c.BeaconNetwork.EstimatedEpochAtSlot(slot), slot)),
 				zap.Uint64("slot", uint64(slot)), zap.String("validator", hex.EncodeToString(validator[:])),
 			)
 			r.StopDuty(validator)

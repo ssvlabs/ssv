@@ -336,6 +336,18 @@ func FormatDutyID(epoch phase0.Epoch, duty *spectypes.BeaconDuty) string {
 	return fmt.Sprintf("%v-e%v-s%v-v%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
 }
 
+func FormatCommittee(operators []*spectypes.CommitteeMember) string {
+	var opids []string
+	for _, op := range operators {
+		opids = append(opids, fmt.Sprint(op.OperatorID))
+	}
+	return strings.Join(opids, "_")
+}
+
+func FormatCommitteeDutyID(operators []*spectypes.CommitteeMember, epoch phase0.Epoch, slot phase0.Slot) string {
+	return fmt.Sprintf("COMMITTEE-%s-e%d-s%d", FormatCommittee(operators), epoch, slot)
+}
+
 func Duties(epoch phase0.Epoch, duties []*spectypes.BeaconDuty) zap.Field {
 	var b strings.Builder
 	for i, duty := range duties {
