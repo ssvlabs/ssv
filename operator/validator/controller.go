@@ -793,7 +793,7 @@ func (c *controller) onShareStop(pubKey spectypes.ValidatorPK) {
 	vc, ok := c.validatorsMap.GetCommittee(v.Share.CommitteeID())
 	if ok {
 		vc.RemoveShare(v.Share.Share.ValidatorIndex)
-		// TODO: remove committee if last share and stop
+		// TODO: (Alan) remove committee if last share and stop
 	}
 }
 
@@ -820,10 +820,6 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 	// Start a committee validator.
 	v, found := c.validatorsMap.GetValidator(share.ValidatorPubKey)
 	if !found {
-		if !share.HasBeaconMetadata() {
-			return nil, nil, fmt.Errorf("beacon metadata is missing")
-		}
-
 		// Share context with both the validator and the runners,
 		// so that when the validator is stopped, the runners are stopped as well.
 		ctx, cancel := context.WithCancel(c.context)
@@ -838,17 +834,11 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 
 		c.printShare(share, "setup validator done")
 
-	} else {
-		c.printShare(v.Share, "get validator")
 	}
 
 	// Start a committee validator.
 	vc, found := c.validatorsMap.GetCommittee(operator.ClusterID)
 	if !found {
-		if !share.HasBeaconMetadata() {
-			return nil, nil, fmt.Errorf("beacon metadata is missing")
-		}
-
 		// Share context with both the validator and the runners,
 		// so that when the validator is stopped, the runners are stopped as well.
 		ctx, _ := context.WithCancel(c.context)
@@ -868,11 +858,11 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 		vc.AddShare(&share.Share)
 		c.validatorsMap.PutCommittee(operator.ClusterID, vc)
 
-		c.printShare(share, "setup validator done")
+		c.printShare(share, "setup committee done")
 
 	} else {
 		vc.AddShare(&share.Share)
-		c.printShare(v.Share, "get validator")
+		c.printShare(v.Share, "added share to committee")
 	}
 
 	return v, vc, nil
