@@ -207,8 +207,8 @@ func (c *validatorStore) SelfParticipatingCommittees(epoch phase0.Epoch) []*Comm
 }
 
 func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	// Update byValidatorIndex
 	for _, share := range shares {
@@ -244,8 +244,8 @@ func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) {
 }
 
 func (c *validatorStore) handleShareRemoved(pk spectypes.ValidatorPK) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	share := c.byPubKey(pk[:])
 	if share == nil {
@@ -293,8 +293,8 @@ func (c *validatorStore) handleShareRemoved(pk spectypes.ValidatorPK) {
 }
 
 func (c *validatorStore) handleShareUpdated(share *types.SSVShare) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	// Update byValidatorIndex
 	if share.HasBeaconMetadata() {
@@ -323,8 +323,8 @@ func (c *validatorStore) handleShareUpdated(share *types.SSVShare) {
 }
 
 func (c *validatorStore) handleDrop() {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	c.byValidatorIndex = make(map[phase0.ValidatorIndex]*types.SSVShare)
 	c.byCommitteeID = make(map[spectypes.ClusterID]*Committee)
