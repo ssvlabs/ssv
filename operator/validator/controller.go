@@ -95,7 +95,7 @@ type Controller interface {
 	StartValidators()
 	CommitteeActiveIndices(epoch phase0.Epoch) []phase0.ValidatorIndex
 	AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex
-	GetValidator(pubKey string) (*validator.Validator, bool)
+	GetValidator(pubKey spectypes.ValidatorPK) (*validator.Validator, bool)
 	ExecuteDuty(logger *zap.Logger, duty *spectypes.BeaconDuty)
 	ExecuteCommitteeDuty(logger *zap.Logger, committeeID spectypes.ClusterID, duty *spectypes.CommitteeDuty)
 	UpdateValidatorMetaDataLoop()
@@ -131,7 +131,7 @@ type Recipients interface {
 type SharesStorage interface {
 	Get(txn basedb.Reader, pubKey []byte) *types.SSVShare
 	List(txn basedb.Reader, filters ...registrystorage.SharesFilter) []*types.SSVShare
-	UpdateValidatorMetadata(pk string, metadata *beaconprotocol.ValidatorMetadata) error
+	UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata *beaconprotocol.ValidatorMetadata) error
 }
 
 type P2PNetwork interface {
@@ -180,7 +180,7 @@ type controller struct {
 
 	recentlyStartedValidators uint64
 	recentlyStartedCommittees uint64
-	metadataLastUpdated       map[string]time.Time
+	metadataLastUpdated       map[spectypes.ValidatorPK]time.Time
 	indicesChange             chan struct{}
 	validatorExitCh           chan duties.ExitDescriptor
 }
@@ -262,7 +262,7 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		nonCommitteeValidators: ttlcache.New(
 			ttlcache.WithTTL[spectypes.MessageID, *nonCommitteeValidator](time.Minute * 13),
 		),
-		metadataLastUpdated:     make(map[string]time.Time),
+		metadataLastUpdated:     make(map[spectypes.ValidatorPK]time.Time),
 		indicesChange:           make(chan struct{}),
 		validatorExitCh:         make(chan duties.ExitDescriptor),
 		committeeValidatorSetup: make(chan struct{}, 1),
@@ -337,11 +337,10 @@ func (c *controller) handleRouterMessages() {
 
 			// TODO: only try copying clusterid if validator failed
 			pk := msg.GetID().GetSenderID()
-			hexPK := hex.EncodeToString(pk)
 			var cid spectypes.ClusterID
 			copy(cid[:], pk[16:])
 
-			if v, ok := c.validatorsMap.GetValidator(hexPK); ok {
+			if v, ok := c.validatorsMap.GetValidator(spectypes.ValidatorPK(pk)); ok {
 				v.HandleMessage(c.logger, msg)
 			} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
 				vc.HandleMessage(c.logger, msg)
@@ -574,7 +573,7 @@ func (c *controller) StartNetworkHandlers() {
 }
 
 // UpdateValidatorMetadata updates a given validator with metadata (implements ValidatorMetadataStorage)
-func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol.ValidatorMetadata) error {
+func (c *controller) UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata *beaconprotocol.ValidatorMetadata) error {
 	c.metadataLastUpdated[pk] = time.Now()
 
 	if metadata == nil {
@@ -587,11 +586,7 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 	}
 
 	// If this validator is not ours or is liquidated, don't start it.
-	pkBytes, err := hex.DecodeString(pk)
-	if err != nil {
-		return errors.Wrap(err, "could not decode public key")
-	}
-	share := c.sharesStorage.Get(nil, pkBytes)
+	share := c.sharesStorage.Get(nil, pk[:])
 	if share == nil {
 		return errors.New("share was not found")
 	}
@@ -616,7 +611,7 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 			}
 		}
 	} else {
-		c.logger.Info("starting new validator", zap.String("pubKey", pk))
+		c.logger.Info("starting new validator", fields.PubKey(pk[:]))
 
 		started, err := c.onShareStart(share)
 		if err != nil {
@@ -630,7 +625,7 @@ func (c *controller) UpdateValidatorMetadata(pk string, metadata *beaconprotocol
 }
 
 // GetValidator returns a validator instance from ValidatorsMap
-func (c *controller) GetValidator(pubKey string) (*validator.Validator, bool) {
+func (c *controller) GetValidator(pubKey spectypes.ValidatorPK) (*validator.Validator, bool) {
 	return c.validatorsMap.GetValidator(pubKey)
 }
 
@@ -640,7 +635,7 @@ func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.BeaconDuty)
 	var pk []byte
 	copy(pk[:], duty.PubKey[:])
 
-	if v, ok := c.GetValidator(hex.EncodeToString(pk)); ok {
+	if v, ok := c.GetValidator(spectypes.ValidatorPK(pk)); ok {
 		ssvMsg, err := CreateDutyExecuteMsg(duty, pk, types.GetDefaultDomain())
 		if err != nil {
 			logger.Error("could not create duty execute msg", zap.Error(err))
@@ -753,11 +748,11 @@ func (c *controller) AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phas
 }
 
 // onMetadataUpdated is called when validator's metadata was updated
-func (c *controller) onMetadataUpdated(pk string, meta *beaconprotocol.ValidatorMetadata) {
+func (c *controller) onMetadataUpdated(pk spectypes.ValidatorPK, meta *beaconprotocol.ValidatorMetadata) {
 	if meta == nil {
 		return
 	}
-	logger := c.logger.With(zap.String("pk", pk))
+	logger := c.logger.With(fields.PubKey(pk[:]))
 
 	if v, exist := c.GetValidator(pk); exist {
 		// update share object owned by the validator
@@ -771,14 +766,14 @@ func (c *controller) onMetadataUpdated(pk string, meta *beaconprotocol.Validator
 		_, err := c.startValidator(v)
 		if err != nil {
 			logger.Warn("could not start validator after metadata update",
-				zap.String("pk", pk), zap.Error(err), zap.Any("metadata", meta))
+				zap.Error(err), zap.Any("metadata", meta))
 		}
 		if vc, vcexist := c.validatorsMap.GetCommittee(v.Share.CommitteeID()); vcexist {
 			vc.AddShare(&v.Share.Share)
 			_, err := c.startCommittee(vc)
 			if err != nil {
 				logger.Warn("could not start committee after metadata update",
-					zap.String("pk", pk), zap.Error(err), zap.Any("metadata", meta))
+					zap.Error(err), zap.Any("metadata", meta))
 			}
 		}
 		return
@@ -788,7 +783,7 @@ func (c *controller) onMetadataUpdated(pk string, meta *beaconprotocol.Validator
 // onShareStop is called when a validator was removed or liquidated
 func (c *controller) onShareStop(pubKey spectypes.ValidatorPK) {
 	// remove from ValidatorsMap
-	v := c.validatorsMap.RemoveValidator(hex.EncodeToString(pubKey[:]))
+	v := c.validatorsMap.RemoveValidator(pubKey)
 
 	// stop instance
 	if v != nil {
@@ -823,7 +818,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 	}
 
 	// Start a committee validator.
-	v, found := c.validatorsMap.GetValidator(hex.EncodeToString(share.ValidatorPubKey[:]))
+	v, found := c.validatorsMap.GetValidator(share.ValidatorPubKey)
 	if !found {
 		if !share.HasBeaconMetadata() {
 			return nil, nil, fmt.Errorf("beacon metadata is missing")
@@ -839,7 +834,7 @@ func (c *controller) onShareInit(share *ssvtypes.SSVShare) (*validator.Validator
 		opts.DutyRunners = SetupRunners(ctx, c.logger, opts)
 
 		v = validator.NewValidator(ctx, cancel, opts)
-		c.validatorsMap.PutValidator(hex.EncodeToString(share.ValidatorPubKey[:]), v)
+		c.validatorsMap.PutValidator(share.ValidatorPubKey, v)
 
 		c.printShare(share, "setup validator done")
 
@@ -1020,7 +1015,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 
 	// Filter for validators which haven't been updated recently.
 	filters = append(filters, func(s *ssvtypes.SSVShare) bool {
-		last, ok := c.metadataLastUpdated[string(s.ValidatorPubKey[:])]
+		last, ok := c.metadataLastUpdated[s.ValidatorPubKey]
 		return !ok || time.Since(last) > c.metadataUpdateInterval
 	})
 
@@ -1033,7 +1028,7 @@ func (c *controller) UpdateValidatorMetaDataLoop() {
 		var pks [][]byte
 		for _, share := range shares {
 			pks = append(pks, share.ValidatorPubKey[:])
-			c.metadataLastUpdated[string(share.ValidatorPubKey[:])] = time.Now()
+			c.metadataLastUpdated[share.ValidatorPubKey] = time.Now()
 		}
 
 		// TODO: continue if there is nothing to update.

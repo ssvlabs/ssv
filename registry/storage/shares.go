@@ -43,7 +43,7 @@ type Shares interface {
 	Drop() error
 
 	// UpdateValidatorMetadata updates validator metadata.
-	UpdateValidatorMetadata(pk string, metadata *beaconprotocol.ValidatorMetadata) error
+	UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata *beaconprotocol.ValidatorMetadata) error
 }
 
 type sharesStorage struct {
@@ -316,12 +316,8 @@ func (s *sharesStorage) Delete(rw basedb.ReadWriter, pubKey []byte) error {
 }
 
 // UpdateValidatorMetadata updates the metadata of the given validator
-func (s *sharesStorage) UpdateValidatorMetadata(pk string, metadata *beaconprotocol.ValidatorMetadata) error {
-	key, err := hex.DecodeString(pk)
-	if err != nil {
-		return err
-	}
-	share := s.Get(nil, key)
+func (s *sharesStorage) UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata *beaconprotocol.ValidatorMetadata) error {
+	share := s.Get(nil, pk[:])
 	if share == nil {
 		return nil
 	}

@@ -229,7 +229,7 @@ func (s *storage) SavePrivateKeyHash(hashedKey string) error {
 	return s.db.Set(storagePrefix, []byte(HashedPrivateKey), []byte(hashedKey))
 }
 
-func (s *storage) UpdateValidatorMetadata(pk string, metadata *beacon.ValidatorMetadata) error {
+func (s *storage) UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata *beacon.ValidatorMetadata) error {
 	return s.shareStore.UpdateValidatorMetadata(pk, metadata)
 }
 

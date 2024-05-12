@@ -1,12 +1,13 @@
 package beacon
 
 import (
-	"encoding/hex"
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/pkg/errors"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 )
 
@@ -14,7 +15,7 @@ import (
 
 // ValidatorMetadataStorage interface for validator metadata
 type ValidatorMetadataStorage interface {
-	UpdateValidatorMetadata(pk string, metadata *ValidatorMetadata) error
+	UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata *ValidatorMetadata) error
 	//UpdateValidatorsMetadata(map[string]*ValidatorMetadata) error
 }
 
@@ -66,7 +67,7 @@ func (m *ValidatorMetadata) Slashed() bool {
 }
 
 // OnUpdated represents a function to be called once validator's metadata was updated
-type OnUpdated func(pk string, meta *ValidatorMetadata)
+type OnUpdated func(pk spectypes.ValidatorPK, meta *ValidatorMetadata)
 
 // UpdateValidatorsMetadata updates validator information for the given public keys
 func UpdateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte, collection ValidatorMetadataStorage, bc BeaconNode, onUpdated OnUpdated) error {
@@ -86,7 +87,7 @@ func UpdateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte, collection V
 	for pk, meta := range results {
 		if err := collection.UpdateValidatorMetadata(pk, meta); err != nil {
 			logger.Error("❗ failed to update validator metadata",
-				zap.String("validator", pk), zap.Error(err))
+				fields.PubKey(pk[:]), zap.Error(err))
 			errs = append(errs, err)
 		} else {
 			success += 1
@@ -95,7 +96,7 @@ func UpdateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte, collection V
 			onUpdated(pk, meta)
 		}
 		logger.Debug("💾️ successfully updated validator metadata",
-			zap.String("pk", pk), zap.Any("metadata", meta))
+			fields.PubKey(pk[:]), zap.Any("metadata", meta))
 	}
 	logger.Debug("🆕 updated validators metadata in storage", zap.Int("count", success), zap.Duration("elapsed", time.Since(startdb)))
 	if len(errs) > 0 {
@@ -107,7 +108,7 @@ func UpdateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte, collection V
 }
 
 // FetchValidatorsMetadata is fetching validators data from beacon
-func FetchValidatorsMetadata(bc BeaconNode, pubKeys [][]byte) (map[string]*ValidatorMetadata, error) {
+func FetchValidatorsMetadata(bc BeaconNode, pubKeys [][]byte) (map[spectypes.ValidatorPK]*ValidatorMetadata, error) {
 	if len(pubKeys) == 0 {
 		return nil, nil
 	}
@@ -121,16 +122,15 @@ func FetchValidatorsMetadata(bc BeaconNode, pubKeys [][]byte) (map[string]*Valid
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get validators data from beacon")
 	}
-	ret := make(map[string]*ValidatorMetadata)
+	ret := make(map[spectypes.ValidatorPK]*ValidatorMetadata)
 	for _, v := range validatorsIndexMap {
-		pk := hex.EncodeToString(v.Validator.PublicKey[:])
 		meta := &ValidatorMetadata{
 			Balance:         v.Balance,
 			Status:          v.Status,
 			Index:           v.Index,
 			ActivationEpoch: v.Validator.ActivationEpoch,
 		}
-		ret[pk] = meta
+		ret[spectypes.ValidatorPK(v.Validator.PublicKey)] = meta
 	}
 	return ret, nil
 }

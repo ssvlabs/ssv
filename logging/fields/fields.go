@@ -23,7 +23,6 @@ import (
 	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/logging/fields/stringer"
 	"github.com/bloxapp/ssv/network/records"
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/bloxapp/ssv/utils/format"
@@ -89,7 +88,6 @@ const (
 	FieldType                = "type"
 	FieldUpdatedENRLocalNode = "updated_enr"
 	FieldValidator           = "validator"
-	FieldValidatorMetadata   = "validator_metadata"
 )
 
 func FromBlock(val uint64) zapcore.Field {
@@ -242,10 +240,6 @@ func QBFTMessageType(val specqbft.MessageType) zap.Field {
 
 func EventName(val string) zap.Field {
 	return zap.String(FieldEvent, val)
-}
-
-func ValidatorMetadata(val *beacon.ValidatorMetadata) zap.Field {
-	return zap.Any(FieldValidatorMetadata, val)
 }
 
 func BlockNumber(val uint64) zap.Field {
