@@ -198,9 +198,7 @@ func (h *AttesterHandler) processExecution(epoch phase0.Epoch, slot phase0.Slot)
 
 func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase0.Epoch) error {
 	start := time.Now()
-	h.logger.Debug("🔍 fetching duties", fields.Epoch(epoch))
 	indices := indicesFromShares(h.validatorProvider.SelfParticipatingValidators(epoch))
-	h.logger.Debug("🔍 fetching duties: got indices from shares", fields.Epoch(epoch), zap.Int("len", len(indices)))
 
 	if len(indices) == 0 {
 		return nil
@@ -210,7 +208,6 @@ func (h *AttesterHandler) fetchAndProcessDuties(ctx context.Context, epoch phase
 	if err != nil {
 		return fmt.Errorf("failed to fetch attester duties: %w", err)
 	}
-	h.logger.Debug("🔍 fetching duties: got duties", fields.Epoch(epoch), zap.Int("len", len(duties)))
 
 	specDuties := make([]*spectypes.BeaconDuty, 0, len(duties))
 	for _, d := range duties {

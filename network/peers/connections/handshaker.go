@@ -146,6 +146,7 @@ func (h *handshaker) verifyTheirNodeInfo(logger *zap.Logger, sender peer.ID, ni 
 		zap.String("networkID", ni.GetNodeInfo().NetworkID),
 	)
 
+	// TODO: (Alan) revert
 	if !strings.Contains(ni.Metadata.NodeVersion, "ALANTEST") {
 		return errors.New("non Alan node version is not supported")
 	}

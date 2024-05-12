@@ -196,7 +196,7 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *types.Signe
 		return errors.Wrap(err, "could not create SignedSSVMessage from SSVMessage")
 	}
 
-	// TODO: revert?
+	// TODO: (Alan) revert?
 	logger.Debug("📢 broadcasting post consensus message",
 		fields.Slot(duty.DutySlot()),
 		zap.Int("sigs", len(postConsensusMsg.Messages)),
@@ -216,7 +216,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 		return errors.Wrap(err, "failed processing post consensus message")
 	}
 
-	// TODO: revert?
+	// TODO: (Alan) revert?
 	indices := make([]int, len(signedMsg.Messages))
 	for i, msg := range signedMsg.Messages {
 		indices[i] = int(msg.ValidatorIndex)
@@ -238,6 +238,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 	}
 	for _, root := range roots {
 		role, validators, found := findValidators(root, attestationMap, committeeMap)
+		// TODO: (Alan) revert?
 		logger.Debug("found validators for root",
 			fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()),
 			zap.String("role", role.String()),

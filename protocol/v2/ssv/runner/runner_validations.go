@@ -58,7 +58,7 @@ func (b *BaseRunner) ValidatePostConsensusMsg(runner Runner, psigMsgs *spectypes
 		return errors.New("consensus instance not decided")
 	}
 
-	// TODO maybe nicer to do this without switch
+	// TODO: (Alan) maybe nicer to do this without switch
 	switch runner.(type) {
 	case *CommitteeRunner:
 		decidedValue := &spectypes.BeaconVote{}
