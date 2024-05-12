@@ -632,11 +632,11 @@ func (c *controller) GetValidator(pubKey spectypes.ValidatorPK) (*validator.Vali
 func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.BeaconDuty) {
 	// because we're using the same duty for more than 1 duty (e.g. attest + aggregator) there is an error in bls.Deserialize func for cgo pointer to pointer.
 	// so we need to copy the pubkey val to avoid pointer
-	var pk spectypes.ValidatorPK
-	copy(pk[:], duty.PubKey[:])
+	pk := make([]byte, 48)
+	copy(pk, duty.PubKey[:])
 
 	if v, ok := c.GetValidator(spectypes.ValidatorPK(pk)); ok {
-		ssvMsg, err := CreateDutyExecuteMsg(duty, pk[:], types.GetDefaultDomain())
+		ssvMsg, err := CreateDutyExecuteMsg(duty, pk, types.GetDefaultDomain())
 		if err != nil {
 			logger.Error("could not create duty execute msg", zap.Error(err))
 			return
