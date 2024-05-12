@@ -73,6 +73,12 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(logger *zap.Logger, si
 		return errors.Wrap(err, "failed processing validator registration message")
 	}
 
+	// TODO: (Alan) revert
+	logger.Debug("got partial sig",
+		fields.Slot(signedMsg.Slot),
+		zap.Int("partial_sigs", len(signedMsg.Messages)),
+		zap.Bool("quorum", quorum))
+
 	// quorum returns true only once (first time quorum achieved)
 	if !quorum {
 		return nil
@@ -147,11 +153,17 @@ func (r *ValidatorRegistrationRunner) executeDuty(logger *zap.Logger, duty spect
 		Messages: []*spectypes.PartialSignatureMessage{msg},
 	}
 
-	msgID := spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey[:], spectypes.RunnerRole(r.BaseRunner.RunnerRoleType))
+	msgID := spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey[:], r.BaseRunner.RunnerRoleType)
 	msgToBroadcast, err := spectypes.PartialSignatureMessagesToSignedSSVMessage(msgs, msgID, r.operatorSigner)
 	if err != nil {
 		return errors.Wrap(err, "could not sign pre-consensus partial signature message")
 	}
+
+	logger.Debug(
+		"broadcasting validator registration partial sig",
+		fields.Slot(duty.DutySlot()),
+		zap.Any("validator_registration", vr),
+	)
 
 	if err := r.GetNetwork().Broadcast(msgID, msgToBroadcast); err != nil {
 		return errors.Wrap(err, "can't broadcast partial randao sig")
