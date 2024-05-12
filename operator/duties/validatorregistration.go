@@ -49,9 +49,10 @@ func (h *ValidatorRegistrationHandler) HandleDuties(ctx context.Context) {
 				copy(pk[:], share.ValidatorPubKey[:])
 
 				h.executeDuties(h.logger, []*spectypes.BeaconDuty{{
-					Type:   spectypes.BNRoleValidatorRegistration,
-					PubKey: pk,
-					Slot:   slot,
+					Type:           spectypes.BNRoleValidatorRegistration,
+					ValidatorIndex: share.ValidatorIndex,
+					PubKey:         pk,
+					Slot:           slot,
 					// no need for other params
 				}})
 
