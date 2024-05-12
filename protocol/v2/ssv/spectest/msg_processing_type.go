@@ -7,13 +7,13 @@ import (
 	"strings"
 	"testing"
 
-	specssv "github.com/bloxapp/ssv-spec/ssv"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
+	specssv "github.com/ssvlabs/ssv-spec/ssv"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	typescomparable "github.com/bloxapp/ssv-spec/types/testingutils/comparable"
+	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"

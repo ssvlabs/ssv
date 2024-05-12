@@ -1,7 +1,7 @@
 package validation
 
 import (
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"go.uber.org/zap"

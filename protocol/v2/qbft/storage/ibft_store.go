@@ -2,11 +2,11 @@ package qbftstorage
 
 import (
 	"encoding/json"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"go.uber.org/zap"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 )
 
 // StoredInstance contains instance state alongside with a decided message (aggregated commits).

@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 

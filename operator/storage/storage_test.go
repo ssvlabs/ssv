@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/logging"

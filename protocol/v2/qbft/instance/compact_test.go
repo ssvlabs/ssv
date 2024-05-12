@@ -3,9 +3,9 @@ package instance
 import (
 	"testing"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv-spec/types/testingutils"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -91,10 +91,10 @@ var compactTests = []struct {
 	{
 		name: "compact quorum decided with previous rounds",
 		inputState: &specqbft.State{
-			Round:             3,
-			LastPreparedRound: 3,
-			Decided:           true,
-			Share: testingutils.TestingOperator(TestingSK),
+			Round:                3,
+			LastPreparedRound:    3,
+			Decided:              true,
+			Share:                testingutils.TestingOperator(TestingSK),
 			ProposeContainer:     mockContainer(1, 2, 3, 4),
 			PrepareContainer:     mockContainer(1, 2, 3, 4),
 			CommitContainer:      mockContainer(1, 2, 3, 4),
@@ -115,10 +115,10 @@ var compactTests = []struct {
 	{
 		name: "compact whole committee decided with previous rounds",
 		inputState: &specqbft.State{
-			Round:             2,
-			LastPreparedRound: 2,
-			Decided:           true,
-			Share: testingutils.TestingOperator(TestingSK),
+			Round:                2,
+			LastPreparedRound:    2,
+			Decided:              true,
+			Share:                testingutils.TestingOperator(TestingSK),
 			ProposeContainer:     mockContainer(1, 2, 3, 4),
 			PrepareContainer:     mockContainer(1, 2, 3, 4),
 			CommitContainer:      mockContainer(1, 2, 3, 4),
@@ -126,10 +126,10 @@ var compactTests = []struct {
 		},
 		inputMsg: testingutils.SignQBFTMsg(TestingSK.OperatorKeys[1], 1, TestingMessage),
 		expected: &specqbft.State{
-			Round:             2,
-			LastPreparedRound: 2,
-			Decided:           true,
-			Share: testingutils.TestingOperator(TestingSK),
+			Round:                2,
+			LastPreparedRound:    2,
+			Decided:              true,
+			Share:                testingutils.TestingOperator(TestingSK),
 			ProposeContainer:     mockContainer(),
 			PrepareContainer:     mockContainer(),
 			CommitContainer:      mockContainer(2, 3, 4),
@@ -169,7 +169,7 @@ func mockContainer(rounds ...specqbft.Round) *specqbft.MsgContainer {
 	container := specqbft.NewMsgContainer()
 	for _, round := range rounds {
 		msg := &specqbft.Message{
-			Round:      round,
+			Round: round,
 		}
 		container.AddMsg(testingutils.SignQBFTMsg(TestingSK.OperatorKeys[1], 1, msg))
 	}

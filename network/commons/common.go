@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cespare/xxhash/v2"
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
 )

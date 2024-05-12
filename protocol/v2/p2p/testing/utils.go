@@ -10,11 +10,11 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 )
 

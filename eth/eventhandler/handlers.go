@@ -7,9 +7,9 @@ import (
 	"fmt"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/herumi/bls-eth-go-binary/bls"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/ekm"

@@ -6,7 +6,6 @@ import (
 	"os"
 	"testing"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/network/commons"
 	"github.com/bloxapp/ssv/network/peers"
 	"github.com/bloxapp/ssv/network/peers/connections/mock"
@@ -14,6 +13,7 @@ import (
 	"github.com/bloxapp/ssv/utils"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/pkg/errors"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )

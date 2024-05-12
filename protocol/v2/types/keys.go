@@ -1,8 +1,8 @@
 package types
 
 import (
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/bloxapp/ssv/operator/keys"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 type SsvOperatorSigner struct {

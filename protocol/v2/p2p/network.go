@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/bloxapp/ssv-spec/p2p"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/ssvlabs/ssv-spec/p2p"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/protocol/v2/message"

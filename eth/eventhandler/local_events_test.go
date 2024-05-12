@@ -5,8 +5,8 @@ import (
 	"encoding/binary"
 	"testing"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 	"gopkg.in/yaml.v3"

@@ -1,8 +1,8 @@
 package validator
 
 import (
-	specssv "github.com/bloxapp/ssv-spec/ssv"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	specssv "github.com/ssvlabs/ssv-spec/ssv"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/message/validation"

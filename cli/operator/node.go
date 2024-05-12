@@ -10,11 +10,11 @@ import (
 	"os"
 	"time"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/api/handlers"

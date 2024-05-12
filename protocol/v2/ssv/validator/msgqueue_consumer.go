@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
