@@ -132,6 +132,11 @@ func (m NodeStorage) GenesisShares() genesisregistrystorage.Shares {
 	panic("implement me")
 }
 
+func (m NodeStorage) ValidatorStore() registrystorage.ValidatorStore {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (m NodeStorage) DropOperators() error {
 	//TODO implement me
 	panic("implement me")

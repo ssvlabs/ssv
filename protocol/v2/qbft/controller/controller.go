@@ -92,11 +92,22 @@ func (c *Controller) ProcessMsg(logger *zap.Logger, msg *spectypes.SignedSSVMess
 	All valid future msgs are saved in a container and can trigger highest decided futuremsg
 	All other msgs (not future or decided) are processed normally by an existing instance (if found)
 	*/
-	if IsDecidedMsg(c.Share, msg) {
+	isDecided, err := IsDecidedMsg(c.Share, msg)
+	if err != nil {
+		return nil, err
+	}
+	if isDecided {
 		return c.UponDecided(logger, msg)
-	} else if c.isFutureMessage(msg) {
+	}
+
+	isFuture, err := c.isFutureMessage(msg)
+	if err != nil {
+		return nil, err
+	}
+	if isFuture {
 		return nil, fmt.Errorf("future msg from height, could not process")
 	}
+
 	return c.UponExistingInstanceMsg(logger, msg)
 }
 
@@ -190,17 +201,17 @@ func (c *Controller) GetIdentifier() []byte {
 
 // isFutureMessage returns true if message height is from a future instance.
 // It takes into consideration a special case where FirstHeight didn't start but  c.Height == FirstHeight (since we bump height on start instance)
-func (c *Controller) isFutureMessage(signedMsg *spectypes.SignedSSVMessage) bool {
+func (c *Controller) isFutureMessage(signedMsg *spectypes.SignedSSVMessage) (bool, error) {
 	if c.Height == specqbft.FirstHeight && c.StoredInstances.FindInstance(c.Height) == nil {
-		return true
+		return true, nil
 	}
 
 	msg, err := specqbft.DecodeMessage(signedMsg.SSVMessage.Data)
 	if err != nil {
-		return false // @yosher TODO: ret err?
+		return false, err
 	}
 
-	return msg.Height > c.Height
+	return msg.Height > c.Height, nil
 }
 
 // addAndStoreNewInstance returns creates a new QBFT instance, stores it in an array and returns it
@@ -243,25 +254,7 @@ func (c *Controller) Decode(data []byte) error {
 }
 
 func (c *Controller) broadcastDecided(aggregatedCommit *spectypes.SignedSSVMessage) error {
-	// Broadcast Decided msg
-	byts, err := aggregatedCommit.Encode()
-	if err != nil {
-		return errors.Wrap(err, "could not encode decided message")
-	}
-
-	ssvMsg := &spectypes.SSVMessage{
-		MsgType: spectypes.SSVConsensusMsgType,
-		MsgID:   specqbft.ControllerIdToMessageID(c.Identifier),
-		Data:    byts,
-	}
-
-	operatorSigner := c.GetConfig().GetOperatorSigner()
-	msgToBroadcast, err := spectypes.SSVMessageToSignedSSVMessage(ssvMsg, c.Share.OperatorID, operatorSigner.SignSSVMessage)
-	if err != nil {
-		return errors.Wrap(err, "could not create SignedSSVMessage from SSVMessage")
-	}
-
-	if err := c.GetConfig().GetNetwork().Broadcast(ssvMsg.MsgID, msgToBroadcast); err != nil {
+	if err := c.GetConfig().GetNetwork().Broadcast(aggregatedCommit.SSVMessage.MsgID, aggregatedCommit); err != nil {
 		// We do not return error here, just Log broadcasting error.
 		return errors.Wrap(err, "could not broadcast decided")
 	}

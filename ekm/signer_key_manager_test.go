@@ -17,6 +17,7 @@ import (
 	"github.com/holiman/uint256"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -680,6 +681,78 @@ func TestSlashing_Attestation(t *testing.T) {
 	// 14. Different signing root -> expect slashing.
 	//     The new point on the line s==t, strictly lower in source and target
 	signAttestation(secretKeys[2], phase0.Root{7}, createAttestationData(6, 6), true, "HighestAttestationVote")
+}
+
+func TestSignRoot(t *testing.T) {
+	require.NoError(t, bls.Init(bls.BLS12_381))
+
+	km := testKeyManager(t, nil)
+	opPubKey, _, err := rsaencryption.GenerateKeys()
+	require.NoError(t, err)
+
+	t.Run("pk 1", func(t *testing.T) {
+		pk := &bls.PublicKey{}
+		require.NoError(t, pk.Deserialize(_byteArray(pk1Str)))
+
+		msg := specqbft.Message{
+			MsgType:    specqbft.CommitMsgType,
+			Height:     specqbft.Height(3),
+			Round:      specqbft.Round(2),
+			Identifier: []byte("identifier1"),
+			Root:       [32]byte{1, 2, 3},
+		}
+
+		// sign
+		sig, err := km.SignRoot(&msg, spectypes.QBFTSignatureType, pk.Serialize())
+		require.NoError(t, err)
+
+		// verify
+		signed := &specqbft.SignedMessage{
+			Signature: sig,
+			Signers:   []spectypes.OperatorID{1},
+			Message:   msg,
+		}
+
+		err = signed.Signature.VerifyByOperators(
+			signed,
+			networkconfig.TestNetwork.Domain,
+			spectypes.QBFTSignatureType,
+			[]*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), SharePubKey: pk.Serialize(), SSVOperatorPubKey: opPubKey}},
+		)
+		require.NoError(t, err)
+	})
+
+	t.Run("pk 2", func(t *testing.T) {
+		pk := &bls.PublicKey{}
+		require.NoError(t, pk.Deserialize(_byteArray(pk2Str)))
+
+		msg := specqbft.Message{
+			MsgType:    specqbft.CommitMsgType,
+			Height:     specqbft.Height(1),
+			Round:      specqbft.Round(3),
+			Identifier: []byte("identifier2"),
+			Root:       [32]byte{4, 5, 6},
+		}
+
+		// sign
+		sig, err := km.SignRoot(&msg, spectypes.QBFTSignatureType, pk.Serialize())
+		require.NoError(t, err)
+
+		// verify
+		signed := &specqbft.SignedMessage{
+			Signature: sig,
+			Signers:   []spectypes.OperatorID{1},
+			Message:   msg,
+		}
+
+		err = signed.Signature.VerifyByOperators(
+			signed,
+			networkconfig.TestNetwork.Domain,
+			spectypes.QBFTSignatureType,
+			[]*spectypes.Operator{{OperatorID: spectypes.OperatorID(1), SharePubKey: pk.Serialize(), SSVOperatorPubKey: opPubKey}},
+		)
+		require.NoError(t, err)
+	})
 }
 
 func TestRemoveShare(t *testing.T) {

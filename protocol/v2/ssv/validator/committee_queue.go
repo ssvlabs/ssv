@@ -3,6 +3,7 @@ package validator
 import (
 	"context"
 	"fmt"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/message"
@@ -39,7 +40,7 @@ func (v *Committee) HandleMessage(logger *zap.Logger, msg *queue.DecodedSSVMessa
 		}
 		// logger.Debug("📬 queue: pushed message", fields.MessageID(msg.MsgID), fields.MessageType(msg.MsgType))
 	} else {
-		logger.Error("❌ missing queue for role type", fields.Role(msg.MsgID.GetRoleType()))
+		logger.Error("❌ missing queue for slot", fields.Slot(slot))
 	}
 }
 
@@ -114,20 +115,21 @@ func (v *Committee) ConsumeQueue(logger *zap.Logger, slot phase0.Slot, handler M
 		//} else if runningInstance != nil && runningInstance.State.ProposalAcceptedForCurrentRound == nil {
 		//	// If no proposal was accepted for the current round, skip prepare & commit messages
 		//	// for the current height and round.
-		filter := func(m *queue.DecodedSSVMessage) bool {
-			sm, ok := m.Body.(*specqbft.Message)
-			if !ok {
-				return true
-			}
+		// filter := func(m *queue.DecodedSSVMessage) bool {
+		// 	sm, ok := m.Body.(*specqbft.Message)
+		// 	if !ok {
+		// 		return true
+		// 	}
 
-			if sm.Height != state.Height || sm.Round != state.Round {
-				return true
-			}
-			return sm.MsgType != specqbft.PrepareMsgType && sm.MsgType != specqbft.CommitMsgType
-		}
+		// 	if sm.Height != state.Height || sm.Round != state.Round {
+		// 		return true
+		// 	}
+		// 	return sm.MsgType != specqbft.PrepareMsgType && sm.MsgType != specqbft.CommitMsgType
+		// }
 
 		// Pop the highest priority message for the current state.
-		msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state), filter)
+		// TODO: (Alan) bring back filter
+		msg := q.Q.Pop(ctx, queue.NewMessagePrioritizer(&state), queue.FilterAny)
 		if ctx.Err() != nil {
 			break
 		}

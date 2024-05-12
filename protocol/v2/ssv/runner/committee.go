@@ -2,7 +2,9 @@ package runner
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -15,6 +17,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 )
@@ -35,6 +38,8 @@ type CommitteeRunner struct {
 	signer         types.BeaconSigner
 	operatorSigner types.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
+
+	started time.Time
 }
 
 func NewCommitteeRunner(beaconNetwork types.BeaconNetwork,
@@ -152,6 +157,20 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *types.Signe
 			}
 			postConsensusMsg.Messages = append(postConsensusMsg.Messages, partialMsg)
 
+			// TODO: revert log
+			adr, err := attestationData.HashTreeRoot()
+			if err != nil {
+				return errors.Wrap(err, "failed to hash attestation data")
+			}
+			logger.Debug("signed attestation data",
+				zap.Int("validator_index", int(duty.ValidatorIndex)),
+				zap.String("pub_key", hex.EncodeToString(duty.PubKey[:])),
+				zap.Any("attestation_data", attestationData),
+				zap.String("attestation_data_root", hex.EncodeToString(adr[:])),
+				zap.String("signing_root", hex.EncodeToString(partialMsg.SigningRoot[:])),
+				zap.String("signature", hex.EncodeToString(partialMsg.PartialSignature[:])),
+			)
+
 		case types.BNRoleSyncCommittee:
 			blockRoot := beaconVote.BlockRoot
 			partialMsg, err := cr.BaseRunner.signBeaconObject(cr, duty, types.SSZBytes(blockRoot[:]), duty.DutySlot(),
@@ -180,6 +199,12 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *types.Signe
 		return errors.Wrap(err, "could not create SignedSSVMessage from SSVMessage")
 	}
 
+	// TODO: (Alan) revert?
+	logger.Debug("📢 broadcasting post consensus message",
+		fields.Slot(duty.DutySlot()),
+		zap.Int("sigs", len(postConsensusMsg.Messages)),
+	)
+
 	if err := cr.GetNetwork().Broadcast(ssvMsg.MsgID, msgToBroadcast); err != nil {
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
@@ -190,10 +215,22 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *types.Signe
 // TODO finish edge case where some roots may be missing
 func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *types.PartialSignatureMessages) error {
 	quorum, roots, err := cr.BaseRunner.basePostConsensusMsgProcessing(logger, cr, signedMsg)
-
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
 	}
+
+	// TODO: (Alan) revert?
+	indices := make([]int, len(signedMsg.Messages))
+	for i, msg := range signedMsg.Messages {
+		indices[i] = int(msg.ValidatorIndex)
+	}
+	logger.Debug("got post consensus",
+		zap.Bool("quorum", quorum),
+		fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()),
+		zap.Int("signer", int(signedMsg.Messages[0].Signer)),
+		zap.Int("sigs", len(roots)),
+		zap.Ints("validators", indices),
+	)
 
 	if !quorum {
 		return nil
@@ -204,6 +241,13 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 	}
 	for _, root := range roots {
 		role, validators, found := findValidators(root, attestationMap, committeeMap)
+		// TODO: (Alan) revert?
+		logger.Debug("found validators for root",
+			fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()),
+			zap.String("role", role.String()),
+			zap.String("root", hex.EncodeToString(root[:])),
+			zap.Any("validators", validators),
+		)
 
 		if !found {
 			// TODO error?
@@ -211,6 +255,8 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 		}
 
 		for _, validator := range validators {
+			validator := validator
+
 			share := cr.BaseRunner.Share[validator]
 			pubKey := share.ValidatorPubKey
 			sig, err := cr.BaseRunner.State.ReconstructBeaconSig(cr.BaseRunner.State.PostConsensusContainer, root,
@@ -222,29 +268,86 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 					cr.BaseRunner.FallBackAndVerifyEachSignature(cr.BaseRunner.State.PostConsensusContainer, root,
 						share.Committee, validator)
 				}
-				return errors.Wrap(err, "got post-consensus quorum but it has invalid signatures")
+				logger.Error("got post-consensus quorum but it has invalid signatures",
+					fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()),
+					zap.Int("validator_index", int(validator)),
+					zap.Error(err),
+				)
+				// TODO: @GalRogozinski
+				// return errors.Wrap(err, "got post-consensus quorum but it has invalid signatures")
+				continue
 			}
 			specSig := phase0.BLSSignature{}
 			copy(specSig[:], sig)
 
 			if role == types.BNRoleAttester {
-				att := beaconObjects[root].(*phase0.Attestation)
+				att := beaconObjects[BeaconObjectID{Root: root, ValidatorIndex: validator}].(*phase0.Attestation)
 				att.Signature = specSig
-				// broadcast
-				if err := cr.beacon.SubmitAttestation(att); err != nil {
-					return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
+
+				// TODO: revert log
+				adr, err := att.Data.HashTreeRoot()
+				if err != nil {
+					return errors.Wrap(err, "failed to hash attestation data")
 				}
+				logger.Debug("submitting attestation",
+					zap.Int("validator_index", int(validator)),
+					zap.String("pubkey", hex.EncodeToString(pubKey[:])),
+					zap.Any("attestation", att),
+					zap.String("attestation_data_root", hex.EncodeToString(adr[:])),
+					zap.String("signing_root", hex.EncodeToString(root[:])),
+					zap.String("signature", hex.EncodeToString(att.Signature[:])),
+				)
+
+				// broadcast
+				// TODO: (Alan) bulk submit instead of goroutine?
+				consensusDuration := time.Since(cr.started)
+				go func() {
+					start := time.Now()
+					if err := cr.beacon.SubmitAttestation(att); err != nil {
+						logger.Error("could not submit to Beacon chain reconstructed attestation",
+							fields.Slot(att.Data.Slot),
+							zap.Int("validator_index", int(validator)),
+							zap.Error(err),
+						)
+
+						// TODO: @GalRogozinski
+						// return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
+						// continue
+					}
+					logger.Info("✅ successfully submitted attestation",
+						zap.String("block_root", hex.EncodeToString(att.Data.BeaconBlockRoot[:])),
+						fields.ConsensusTime(consensusDuration),
+						fields.SubmissionTime(time.Since(start)),
+						fields.Height(cr.BaseRunner.QBFTController.Height),
+						fields.Round(cr.BaseRunner.State.RunningInstance.State.Round),
+					)
+				}()
+				// TODO: like AttesterRunner
 			} else if role == types.BNRoleSyncCommittee {
-				syncMsg := beaconObjects[root].(*altair.SyncCommitteeMessage)
+				syncMsg := beaconObjects[BeaconObjectID{Root: root, ValidatorIndex: validator}].(*altair.SyncCommitteeMessage)
 				syncMsg.Signature = specSig
 				// Broadcast
-				if err := cr.beacon.SubmitSyncMessage(syncMsg); err != nil {
-					return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed sync committee")
-				}
+				// TODO: (Alan) bulk submit instead of goroutine?
+				go func() {
+					if err := cr.beacon.SubmitSyncMessage(syncMsg); err != nil {
+						logger.Error("could not submit to Beacon chain reconstructed signed sync committee",
+							fields.Slot(syncMsg.Slot),
+							zap.Int("validator_index", int(validator)),
+							zap.Error(err),
+						)
+						// TODO: @GalRogozinski
+						// return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed sync committee")
+						// continue
+					}
+				}()
+				logger.Debug("📢 submitted sync committee message",
+					fields.Slot(syncMsg.Slot),
+					zap.Int("validator_index", int(validator)),
+				)
 			}
 		}
-
 	}
+
 	cr.BaseRunner.State.Finished = true
 	return nil
 }
@@ -284,14 +387,19 @@ func (cr CommitteeRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot,
 	return []ssz.HashRoot{}, types.DomainAttester, nil
 }
 
+type BeaconObjectID struct {
+	Root           [32]byte
+	ValidatorIndex phase0.ValidatorIndex
+}
+
 func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects() (
 	attestationMap map[phase0.ValidatorIndex][32]byte,
 	syncCommitteeMap map[phase0.ValidatorIndex][32]byte,
-	beaconObjects map[[32]byte]ssz.HashRoot, error error,
+	beaconObjects map[BeaconObjectID]ssz.HashRoot, error error,
 ) {
 	attestationMap = make(map[phase0.ValidatorIndex][32]byte)
 	syncCommitteeMap = make(map[phase0.ValidatorIndex][32]byte)
-	beaconObjects = make(map[[32]byte]ssz.HashRoot)
+	beaconObjects = make(map[BeaconObjectID]ssz.HashRoot)
 	duty := cr.BaseRunner.State.StartingDuty
 	// TODO DecidedValue should be interface??
 	beaconVoteData := cr.BaseRunner.State.DecidedValue
@@ -333,7 +441,7 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects() (
 
 			// Add to map
 			attestationMap[beaconDuty.ValidatorIndex] = root
-			beaconObjects[root] = unSignedAtt
+			beaconObjects[BeaconObjectID{Root: root, ValidatorIndex: beaconDuty.ValidatorIndex}] = unSignedAtt
 		case types.BNRoleSyncCommittee:
 			// Block root
 			blockRoot := types.SSZBytes(beaconVote.BlockRoot[:])
@@ -359,19 +467,20 @@ func (cr *CommitteeRunner) expectedPostConsensusRootsAndBeaconObjects() (
 
 			// Set root and beacon object
 			syncCommitteeMap[beaconDuty.ValidatorIndex] = root
-			beaconObjects[root] = syncMsg
+			beaconObjects[BeaconObjectID{Root: root, ValidatorIndex: beaconDuty.ValidatorIndex}] = syncMsg
 		}
 	}
 	return attestationMap, syncCommitteeMap, beaconObjects, nil
 }
 
 func (cr *CommitteeRunner) executeDuty(logger *zap.Logger, duty types.Duty) error {
-
 	//TODO committeeIndex is 0, is this correct?
 	attData, _, err := cr.GetBeaconNode().GetAttestationData(duty.DutySlot(), 0)
 	if err != nil {
 		return errors.Wrap(err, "failed to get attestation data")
 	}
+
+	cr.started = time.Now()
 
 	vote := types.BeaconVote{
 		BlockRoot: attData.BeaconBlockRoot,

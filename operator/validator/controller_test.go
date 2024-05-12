@@ -28,6 +28,7 @@ import (
 	"github.com/bloxapp/ssv/storage/kv"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -1040,52 +1041,52 @@ func newValidator(metaData *beacon.ValidatorMetadata) *validator.Validator {
 	}
 }
 
-// func generateChangeRoundMsg(t *testing.T, identifier spectypes.MessageID) []byte {
-// 	sm := specqbft.SignedMessage{
-// 		Signature: append([]byte{1, 2, 3, 4}, make([]byte, 92)...),
-// 		Signers:   []spectypes.OperatorID{1},
-// 		Message: specqbft.Message{
-// 			MsgType:    specqbft.RoundChangeMsgType,
-// 			Height:     0,
-// 			Round:      1,
-// 			Identifier: identifier[:],
-// 			Root:       [32]byte{1, 2, 3},
-// 		},
-// 	}
-// 	res, err := sm.Encode()
-// 	require.NoError(t, err)
-// 	return res
-// }
+func generateChangeRoundMsg(t *testing.T, identifier spectypes.MessageID) []byte {
+	sm := specqbft.SignedMessage{
+		Signature: append([]byte{1, 2, 3, 4}, make([]byte, 92)...),
+		Signers:   []spectypes.OperatorID{1},
+		Message: specqbft.Message{
+			MsgType:    specqbft.RoundChangeMsgType,
+			Height:     0,
+			Round:      1,
+			Identifier: identifier[:],
+			Root:       [32]byte{1, 2, 3},
+		},
+	}
+	res, err := sm.Encode()
+	require.NoError(t, err)
+	return res
+}
 
-// func generateDecidedMessage(t *testing.T, identifier spectypes.MessageID) []byte {
-// 	// sm := specqbft.SignedMessage{
-// 	// 	Signature: append([]byte{1, 2, 3, 4}, make([]byte, 92)...),
-// 	// 	Signers:   []spectypes.OperatorID{1, 2, 3},
-// 	// 	Message: specqbft.Message{
-// 	// 		MsgType:    specqbft.CommitMsgType,
-// 	// 		Height:     0,
-// 	// 		Round:      1,
-// 	// 		Identifier: identifier[:],
-// 	// 		Root:       [32]byte{1, 2, 3},
-// 	// 	},
-// 	// }
+func generateDecidedMessage(t *testing.T, identifier spectypes.MessageID) []byte {
+	// sm := specqbft.SignedMessage{
+	// 	Signature: append([]byte{1, 2, 3, 4}, make([]byte, 92)...),
+	// 	Signers:   []spectypes.OperatorID{1, 2, 3},
+	// 	Message: specqbft.Message{
+	// 		MsgType:    specqbft.CommitMsgType,
+	// 		Height:     0,
+	// 		Round:      1,
+	// 		Identifier: identifier[:],
+	// 		Root:       [32]byte{1, 2, 3},
+	// 	},
+	// }
 
-// 	sm := spectypes.SignedSSVMessage{
-// 		Signatures:  append([]byte{1, 2, 3, 4}, make([]byte, 92)...),
-// 		OperatorIDs: []spectypes.OperatorID{1, 2, 3},
-// 		Message: specqbft.Message{
-// 			MsgType:    specqbft.CommitMsgType,
-// 			Height:     0,
-// 			Round:      1,
-// 			Identifier: identifier[:],
-// 			Root:       [32]byte{1, 2, 3},
-// 		},
-// 	}
+	sm := spectypes.SignedSSVMessage{
+		Signatures:  append([]byte{1, 2, 3, 4}, make([]byte, 92)...),
+		OperatorIDs: []spectypes.OperatorID{1, 2, 3},
+		Message: specqbft.Message{
+			MsgType:    specqbft.CommitMsgType,
+			Height:     0,
+			Round:      1,
+			Identifier: identifier[:],
+			Root:       [32]byte{1, 2, 3},
+		},
+	}
 
-// 	res, err := sm.Encode()
-// 	require.NoError(t, err)
-// 	return res
-// }
+	res, err := sm.Encode()
+	require.NoError(t, err)
+	return res
+}
 
 func setupTestValidator(ownerAddressBytes, feeRecipientBytes []byte) *validator.Validator {
 	return &validator.Validator{

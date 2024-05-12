@@ -28,7 +28,6 @@ import (
 	"github.com/bloxapp/ssv/network/records"
 	"github.com/bloxapp/ssv/network/streams"
 	"github.com/bloxapp/ssv/network/topics"
-	"github.com/bloxapp/ssv/utils/commons"
 )
 
 const (
@@ -173,7 +172,9 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 	domain := "0x" + hex.EncodeToString(n.cfg.Network.Domain[:])
 	self := records.NewNodeInfo(domain)
 	self.Metadata = &records.NodeMetadata{
-		NodeVersion: commons.GetNodeVersion(),
+		// TODO: (Alan) revert
+		// NodeVersion: commons.GetNodeVersion(),
+		NodeVersion: "ALANTEST",
 		Subnets:     records.Subnets(n.subnets).String(),
 	}
 	getPrivKey := func() crypto.PrivKey {

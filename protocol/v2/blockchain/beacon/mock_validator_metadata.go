@@ -8,6 +8,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+	types "github.com/ssvlabs/ssv-spec/types"
 )
 
 // MockValidatorMetadataStorage is a mock of ValidatorMetadataStorage interface.
@@ -34,7 +35,7 @@ func (m *MockValidatorMetadataStorage) EXPECT() *MockValidatorMetadataStorageMoc
 }
 
 // UpdateValidatorMetadata mocks base method.
-func (m *MockValidatorMetadataStorage) UpdateValidatorMetadata(pk string, metadata *ValidatorMetadata) error {
+func (m *MockValidatorMetadataStorage) UpdateValidatorMetadata(pk types.ValidatorPK, metadata *ValidatorMetadata) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateValidatorMetadata", pk, metadata)
 	ret0, _ := ret[0].(error)

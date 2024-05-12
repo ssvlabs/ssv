@@ -62,6 +62,7 @@ func (h *AttesterHandler) Name() string {
 //  2. If necessary, fetch duties for the next epoch.
 func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
+	defer h.logger.Info("duty handler exited")
 
 	h.fetchNextEpoch = true
 
