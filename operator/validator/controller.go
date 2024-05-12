@@ -788,6 +788,7 @@ func (c *controller) onShareStop(pubKey spectypes.ValidatorPK) {
 	// stop instance
 	if v != nil {
 		v.Stop()
+		c.logger.Debug("validator was stopped", fields.PubKey(pubKey[:]))
 	}
 
 	vc, ok := c.validatorsMap.GetCommittee(v.Share.CommitteeID())
