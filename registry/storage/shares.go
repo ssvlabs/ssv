@@ -337,20 +337,24 @@ func (s *sharesStorage) UpdateValidatorMetadata(pk spectypes.ValidatorPK, metada
 
 // UpdateValidatorMetadata updates the metadata of the given validator
 func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*beaconprotocol.ValidatorMetadata) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
+	s.mu.RLock()
+	var shares []*types.SSVShare
 	for pk, metadata := range data {
 		share := s.unsafeGet(pk[:])
 		if share == nil {
 			continue
 		}
-
 		share.BeaconMetadata = metadata
-		if err := s.unsafeSave(nil, share); err != nil {
-			return err
-		}
+		shares = append(shares, share)
 	}
+	s.mu.RUnlock()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.unsafeSave(nil, shares...); err != nil {
+		return err
+	}
+
 	return nil
 }
 
