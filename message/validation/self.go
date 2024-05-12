@@ -1,8 +1,6 @@
 package validation
 
 import (
-	"encoding/hex"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
