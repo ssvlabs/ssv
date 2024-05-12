@@ -1,6 +1,8 @@
 package validation
 
 import (
+	"encoding/hex"
+
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -23,11 +25,18 @@ func (mv *messageValidator) validateSelf(pMsg *pubsub.Message) pubsub.Validation
 	}
 
 	// TODO: remove
-	// mv.logger.Debug("got p2p message",
-	// 	zap.Int("type", int(signedSSVMessage.SSVMessage.MsgType)),
-	// 	zap.String("role", signedSSVMessage.SSVMessage.GetID().GetRoleType().String()),
-	// 	zap.String("id", hex.EncodeToString(signedSSVMessage.SSVMessage.GetID().GetSenderID()[16:])),
-	// )
+	var identity zap.Field
+	if signedSSVMessage.SSVMessage.GetID().GetRoleType() == spectypes.RoleCommittee {
+		identity = zap.String("committee_id", hex.EncodeToString(signedSSVMessage.SSVMessage.GetID().GetSenderID()[16:]))
+	} else {
+		identity = zap.String("pubkey", hex.EncodeToString(signedSSVMessage.SSVMessage.GetID().GetSenderID()))
+	}
+	mv.logger.Debug("got p2p message",
+		append([]zap.Field{
+			zap.Int("type", int(signedSSVMessage.SSVMessage.MsgType)),
+			zap.String("role", signedSSVMessage.SSVMessage.GetID().GetRoleType().String()),
+		}, identity)...,
+	)
 
 	pMsg.ValidatorData = d
 	return pubsub.ValidationAccept
