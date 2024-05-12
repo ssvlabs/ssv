@@ -5,7 +5,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 
@@ -93,12 +92,8 @@ func (c *validatorStore) Validator(pubKey []byte) *types.SSVShare {
 }
 
 func (c *validatorStore) ValidatorByIndex(index phase0.ValidatorIndex) *types.SSVShare {
-	zap.L().Debug("ValidatorByIndex: LOCK")
 	c.mu.RLock()
-	defer func() {
-		zap.L().Debug("ValidatorByIndex: UNLOCK")
-		c.mu.RUnlock()
-	}()
+	defer c.mu.RUnlock()
 
 	return c.byValidatorIndex[index]
 }
@@ -118,12 +113,8 @@ func (c *validatorStore) ParticipatingValidators(epoch phase0.Epoch) []*types.SS
 }
 
 func (c *validatorStore) OperatorValidators(id spectypes.OperatorID) []*types.SSVShare {
-	zap.L().Debug("OperatorValidators: LOCK")
 	c.mu.RLock()
-	defer func() {
-		zap.L().Debug("OperatorValidators: UNLOCK")
-		c.mu.RUnlock()
-	}()
+	defer c.mu.RUnlock()
 
 	if data, ok := c.byOperatorID[id]; ok {
 		return data.shares
@@ -132,34 +123,22 @@ func (c *validatorStore) OperatorValidators(id spectypes.OperatorID) []*types.SS
 }
 
 func (c *validatorStore) Committee(id spectypes.ClusterID) *Committee {
-	zap.L().Debug("Committee: LOCK")
 	c.mu.RLock()
-	defer func() {
-		zap.L().Debug("Committee: UNLOCK")
-		c.mu.RUnlock()
-	}()
+	defer c.mu.RUnlock()
 
 	return c.byCommitteeID[id]
 }
 
 func (c *validatorStore) Committees() []*Committee {
-	zap.L().Debug("Committees: LOCK")
 	c.mu.RLock()
-	defer func() {
-		zap.L().Debug("Committees: UNLOCK")
-		c.mu.RUnlock()
-	}()
+	defer c.mu.RUnlock()
 
 	return maps.Values(c.byCommitteeID)
 }
 
 func (c *validatorStore) ParticipatingCommittees(epoch phase0.Epoch) []*Committee {
-	zap.L().Debug("ParticipatingCommittees: LOCK")
 	c.mu.RLock()
-	defer func() {
-		zap.L().Debug("ParticipatingCommittees: UNLOCK")
-		c.mu.RUnlock()
-	}()
+	defer c.mu.RUnlock()
 
 	var committees []*Committee
 	for _, committee := range c.byCommitteeID {
@@ -171,12 +150,8 @@ func (c *validatorStore) ParticipatingCommittees(epoch phase0.Epoch) []*Committe
 }
 
 func (c *validatorStore) OperatorCommittees(id spectypes.OperatorID) []*Committee {
-	zap.L().Debug("OperatorCommittees: LOCK")
 	c.mu.RLock()
-	defer func() {
-		zap.L().Debug("OperatorCommittees: UNLOCK")
-		c.mu.RUnlock()
-	}()
+	defer c.mu.RUnlock()
 
 	if data, ok := c.byOperatorID[id]; ok {
 		return data.committees
@@ -232,12 +207,8 @@ func (c *validatorStore) SelfParticipatingCommittees(epoch phase0.Epoch) []*Comm
 }
 
 func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) {
-	zap.L().Debug("handleSharesAdded: LOCK")
-	c.mu.Lock()
-	defer func() {
-		zap.L().Debug("handleSharesAdded: UNLOCK")
-		c.mu.Unlock()
-	}()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 
 	// Update byValidatorIndex
 	for _, share := range shares {
@@ -273,12 +244,8 @@ func (c *validatorStore) handleSharesAdded(shares ...*types.SSVShare) {
 }
 
 func (c *validatorStore) handleShareRemoved(pk spectypes.ValidatorPK) {
-	zap.L().Debug("handleShareRemoved: LOCK")
-	c.mu.Lock()
-	defer func() {
-		zap.L().Debug("handleShareRemoved: UNLOCK")
-		c.mu.Unlock()
-	}()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 
 	share := c.byPubKey(pk[:])
 	if share == nil {
@@ -326,12 +293,8 @@ func (c *validatorStore) handleShareRemoved(pk spectypes.ValidatorPK) {
 }
 
 func (c *validatorStore) handleShareUpdated(share *types.SSVShare) {
-	zap.L().Debug("handleShareUpdated: LOCK")
-	c.mu.Lock()
-	defer func() {
-		zap.L().Debug("handleShareUpdated: UNLOCK")
-		c.mu.Unlock()
-	}()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 
 	// Update byValidatorIndex
 	if share.HasBeaconMetadata() {
@@ -360,12 +323,8 @@ func (c *validatorStore) handleShareUpdated(share *types.SSVShare) {
 }
 
 func (c *validatorStore) handleDrop() {
-	zap.L().Debug("handleDrop: LOCK")
-	c.mu.Lock()
-	defer func() {
-		zap.L().Debug("handleDrop: UNLOCK")
-		c.mu.Unlock()
-	}()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 
 	c.byValidatorIndex = make(map[phase0.ValidatorIndex]*types.SSVShare)
 	c.byCommitteeID = make(map[spectypes.ClusterID]*Committee)
