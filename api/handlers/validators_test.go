@@ -8,10 +8,10 @@ import (
 )
 
 func mockShare(operatorIDs ...uint64) *types.SSVShare {
-	operators := make([]*spectypes.Operator, len(operatorIDs))
+	operators := make([]*spectypes.ShareMember, len(operatorIDs))
 	for i, id := range operatorIDs {
-		operators[i] = &spectypes.Operator{
-			OperatorID: id,
+		operators[i] = &spectypes.ShareMember{
+			Signer: id,
 		}
 	}
 	return &types.SSVShare{

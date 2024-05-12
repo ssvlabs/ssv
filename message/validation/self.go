@@ -24,35 +24,13 @@ func (mv *messageValidator) validateSelf(pMsg *pubsub.Message) pubsub.Validation
 		return pubsub.ValidationReject
 	}
 
-	//
-	//switch signedSSVMessage.SSVMessage.MsgType {
-	//case spectypes.SSVConsensusMsgType:
-	//	consensusMessage, err := specqbft.DecodeMessage(signedSSVMessage.SSVMessage.Data)
-	//	if err != nil {
-	//		mv.logger.Error("failed to decode consensus message", zap.Error(err))
-	//		return pubsub.ValidationReject
-	//	}
-	//
-	//	decodedMessage.Body = consensusMessage
-	//
-	//case spectypes.SSVPartialSignatureMsgType:
-	//	partialSignatureMessages := &spectypes.PartialSignatureMessages{}
-	//	if err := partialSignatureMessages.Decode(signedSSVMessage.SSVMessage.Data); err != nil {
-	//		mv.logger.Error("failed to decode partial signature messages", zap.Error(err))
-	//		return pubsub.ValidationReject
-	//	}
-	//
-	//	decodedMessage.Body = partialSignatureMessages
-	//
-	//default:
-	//	mv.logger.Error("unsupported message type", fields.MessageType(signedSSVMessage.SSVMessage.MsgType))
-	//}
+	// TODO: remove
+	// mv.logger.Debug("got p2p message",
+	// 	zap.Int("type", int(signedSSVMessage.SSVMessage.MsgType)),
+	// 	zap.String("role", signedSSVMessage.SSVMessage.GetID().GetRoleType().String()),
+	// 	zap.String("id", hex.EncodeToString(signedSSVMessage.SSVMessage.GetID().GetSenderID()[16:])),
+	// )
 
-	mv.logger.Debug("gotp2pmessage",
-		zap.Int("type", int(signedSSVMessage.SSVMessage.MsgType)),
-		zap.String("role", signedSSVMessage.SSVMessage.GetID().GetRoleType().String()),
-		zap.String("id", hex.EncodeToString(signedSSVMessage.SSVMessage.GetID().GetSenderID()[16:])),
-	)
 	pMsg.ValidatorData = d
 	return pubsub.ValidationAccept
 }

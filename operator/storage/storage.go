@@ -14,7 +14,6 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	registry "github.com/bloxapp/ssv/protocol/v2/blockchain/eth1"
 	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	genesisregistrystorage "github.com/bloxapp/ssv/registry/storage/genesis"
 	"github.com/bloxapp/ssv/storage/basedb"
 )
 
@@ -45,7 +44,6 @@ type Storage interface {
 	registrystorage.Operators
 	registrystorage.Recipients
 	Shares() registrystorage.Shares
-	GenesisShares() genesisregistrystorage.Shares
 	ValidatorStore() registrystorage.ValidatorStore
 
 	GetPrivateKeyHash() (string, bool, error)
@@ -56,11 +54,10 @@ type storage struct {
 	logger *zap.Logger
 	db     basedb.Database
 
-	operatorStore     registrystorage.Operators
-	recipientStore    registrystorage.Recipients
-	shareStore        registrystorage.Shares
-	genesisShareStore genesisregistrystorage.Shares
-	validatorStore    registrystorage.ValidatorStore
+	operatorStore  registrystorage.Operators
+	recipientStore registrystorage.Recipients
+	shareStore     registrystorage.Shares
+	validatorStore registrystorage.ValidatorStore
 }
 
 // NewNodeStorage creates a new instance of Storage
@@ -97,11 +94,6 @@ func (s *storage) BeginRead() basedb.ReadTxn {
 
 func (s *storage) Shares() registrystorage.Shares {
 	return s.shareStore
-}
-
-// DEPRECATED, TODO: remove post-fork
-func (s *storage) GenesisShares() genesisregistrystorage.Shares {
-	return s.genesisShareStore
 }
 
 func (s *storage) ValidatorStore() registrystorage.ValidatorStore {

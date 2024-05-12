@@ -7,9 +7,6 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
@@ -18,6 +15,10 @@ import (
 	"github.com/ssvlabs/ssv-spec/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
+
+	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/protocol/v2/qbft"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 )
 
 //type Broadcaster interface {
@@ -72,9 +73,11 @@ func (cr *CommitteeRunner) Encode() ([]byte, error) {
 
 // StopDuty stops the duty for the given validator
 func (cr *CommitteeRunner) StopDuty(validator types.ValidatorPK) {
-	for _, duty := range cr.BaseRunner.State.StartingDuty.(*types.CommitteeDuty).BeaconDuties {
-		if types.ValidatorPK(duty.PubKey) == validator {
-			duty.IsStopped = true
+	if cr != nil && cr.BaseRunner != nil && cr.BaseRunner.State != nil && cr.BaseRunner.State.StartingDuty != nil && cr.BaseRunner.State.StartingDuty.(*types.CommitteeDuty) != nil {
+		for _, duty := range cr.BaseRunner.State.StartingDuty.(*types.CommitteeDuty).BeaconDuties {
+			if types.ValidatorPK(duty.PubKey) == validator {
+				duty.IsStopped = true
+			}
 		}
 	}
 }

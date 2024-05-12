@@ -27,7 +27,6 @@ import (
 	"github.com/bloxapp/ssv/operator/keys"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/utils"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/bloxapp/ssv/utils/threshold"
 )
 
@@ -38,7 +37,7 @@ const (
 	pk2Str = "8796fafa576051372030a75c41caafea149e4368aebaca21c9f90d9974b3973d5cee7d7874e4ec9ec59fb2c8945b3e01"
 )
 
-func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig) spectypes.KeyManager {
+func testKeyManager(t *testing.T, network *networkconfig.NetworkConfig) KeyManager {
 	threshold.Init()
 
 	logger := logging.TestLogger(t)

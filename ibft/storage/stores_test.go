@@ -1,16 +1,15 @@
 package storage
 
 import (
+	"testing"
+
+	"github.com/bloxapp/ssv/logging"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	"testing"
-
-	"github.com/ssvlabs/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
-
-	"github.com/bloxapp/ssv/logging"
 )
 
 func TestQBFTStores(t *testing.T) {
@@ -20,28 +19,28 @@ func TestQBFTStores(t *testing.T) {
 
 	store, err := newTestIbftStorage(logger, "")
 	require.NoError(t, err)
-	qbftMap.Add(types.BNRoleAttester, store)
-	qbftMap.Add(types.BNRoleProposer, store)
+	qbftMap.Add(spectypes.RoleCommittee, store)
+	qbftMap.Add(spectypes.RoleCommittee, store)
 
-	require.NotNil(t, qbftMap.Get(types.BNRoleAttester))
-	require.NotNil(t, qbftMap.Get(types.BNRoleProposer))
+	require.NotNil(t, qbftMap.Get(spectypes.RoleCommittee))
+	require.NotNil(t, qbftMap.Get(spectypes.RoleCommittee))
 
 	db, err := kv.NewInMemory(logger.Named(logging.NameBadgerDBLog), basedb.Options{
 		Reporting: true,
 	})
 	require.NoError(t, err)
-	qbftMap = NewStoresFromRoles(db, types.BNRoleAttester, types.BNRoleProposer)
+	qbftMap = NewStoresFromRoles(db, spectypes.RoleCommittee, spectypes.RoleProposer)
 
-	require.NotNil(t, qbftMap.Get(types.BNRoleAttester))
-	require.NotNil(t, qbftMap.Get(types.BNRoleProposer))
+	require.NotNil(t, qbftMap.Get(spectypes.RoleCommittee))
+	require.NotNil(t, qbftMap.Get(spectypes.RoleCommittee))
 
 	id := []byte{1, 2, 3}
 
-	qbftMap.Each(func(role types.BeaconRole, store qbftstorage.QBFTStore) error {
+	qbftMap.Each(func(role spectypes.RunnerRole, store qbftstorage.QBFTStore) error {
 		return store.SaveInstance(&qbftstorage.StoredInstance{State: &specqbft.State{Height: 1, ID: id}})
 	})
 
-	instance, err := qbftMap.Get(types.BNRoleAttester).GetInstance(id, 1)
+	instance, err := qbftMap.Get(spectypes.RoleCommittee).GetInstance(id, 1)
 	require.NoError(t, err)
 	require.NotNil(t, instance)
 	require.Equal(t, specqbft.Height(1), instance.State.Height)
