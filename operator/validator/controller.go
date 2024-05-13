@@ -651,21 +651,7 @@ func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.BeaconDuty)
 			return
 		}
 
-		if v == nil {
-			panic("validator is nil")
-		}
-
-		roleQueueContainer, ok := v.Queues[duty.RunnerRole()]
-		if !ok {
-			panic("no queue container for this role: " + duty.RunnerRole().String())
-		}
-
-		roleQueue := roleQueueContainer.Q
-		if roleQueue == nil {
-			panic("queue for role is nil")
-		}
-
-		if pushed := roleQueue.TryPush(dec); !pushed {
+		if pushed := v.Queues[duty.RunnerRole()].Q.TryPush(dec); !pushed {
 			logger.Warn("dropping ExecuteDuty message because the queue is full")
 		}
 		// logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
