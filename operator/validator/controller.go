@@ -655,7 +655,12 @@ func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.BeaconDuty)
 			panic("validator is nil")
 		}
 
-		roleQueue := v.Queues[duty.RunnerRole()].Q
+		roleQueueContainer, ok := v.Queues[duty.RunnerRole()]
+		if !ok {
+			panic("no queue container for this role: " + duty.RunnerRole().String())
+		}
+
+		roleQueue := roleQueueContainer.Q
 		if roleQueue == nil {
 			panic("queue for role is nil")
 		}
