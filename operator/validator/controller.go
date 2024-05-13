@@ -650,7 +650,17 @@ func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.BeaconDuty)
 			logger.Error("could not decode duty execute msg", zap.Error(err))
 			return
 		}
-		if pushed := v.Queues[duty.RunnerRole()].Q.TryPush(dec); !pushed {
+
+		if v == nil {
+			panic("validator is nil")
+		}
+
+		roleQueue := v.Queues[duty.RunnerRole()].Q
+		if roleQueue == nil {
+			panic("queue for role is nil")
+		}
+
+		if pushed := roleQueue.TryPush(dec); !pushed {
 			logger.Warn("dropping ExecuteDuty message because the queue is full")
 		}
 		// logger.Debug("📬 queue: pushed message", fields.MessageID(dec.MsgID), fields.MessageType(dec.MsgType))
