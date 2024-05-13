@@ -136,9 +136,9 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 		blockPropagateDelay:  blockPropagationDelay,
 
 		handlers: []dutyHandler{
-			//NewAttesterHandler(dutyStore.Attester),
+			NewAttesterHandler(dutyStore.Attester),
 			NewProposerHandler(dutyStore.Proposer),
-			//NewSyncCommitteeHandler(dutyStore.SyncCommittee),
+			NewSyncCommitteeHandler(dutyStore.SyncCommittee),
 			NewVoluntaryExitHandler(opts.ValidatorExitCh),
 			NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee),
 		},
