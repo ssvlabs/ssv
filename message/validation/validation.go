@@ -91,9 +91,6 @@ func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pu
 	reportDone := mv.reportPubSubMetrics(pmsg)
 	defer reportDone()
 
-	// TODO: Alan revert blind accept
-	return mv.validateSelf(pmsg)
-
 	decodedMessage, err := mv.handlePubsubMessage(pmsg, time.Now())
 	if err != nil {
 		return mv.handleValidationError(peerID, decodedMessage, err)
