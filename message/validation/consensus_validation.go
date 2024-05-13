@@ -162,12 +162,12 @@ func (mv *messageValidator) validateQBFTLogic(
 		}
 
 		// It should be checked after ErrNonDecidedWithMultipleSigners
-		signerCount := len(signedSSVMessage.GetOperatorIDs())
-		if signerCount > 1 {
-			if _, ok := signerState.SeenDecidedLengths[signerCount]; ok {
-				return ErrDecidedWithSameNumberOfSigners
-			}
-		}
+		//signerCount := len(signedSSVMessage.GetOperatorIDs())
+		//if signerCount > 1 {
+		//	if _, ok := signerState.SeenDecidedLengths[signerCount]; ok {
+		//		return ErrDecidedWithSameNumberOfSigners
+		//	}
+		//}
 
 		if msgSlot == signerState.Slot && consensusMessage.Round == signerState.Round {
 			//if len(signedSSVMessage.FullData) != 0 && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedSSVMessage.FullData) {
