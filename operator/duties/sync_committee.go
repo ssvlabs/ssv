@@ -87,8 +87,8 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 				// TODO: (Alan) genesis support
 				//h.processExecution(period, slot)
 			} else {
-				h.processExecution(period, slot)
 				// TODO: (Alan) genesis support
+				//h.processExecution(period, slot)
 				//h.processFetching(ctx, period, true)
 			}
 			cancel()
