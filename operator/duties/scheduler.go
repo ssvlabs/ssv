@@ -136,9 +136,9 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 		blockPropagateDelay:  blockPropagationDelay,
 
 		handlers: []dutyHandler{
-			NewAttesterHandler(dutyStore.Attester),
+			//NewAttesterHandler(dutyStore.Attester),
 			NewProposerHandler(dutyStore.Proposer),
-			NewSyncCommitteeHandler(dutyStore.SyncCommittee),
+			//NewSyncCommitteeHandler(dutyStore.SyncCommittee),
 			NewVoluntaryExitHandler(opts.ValidatorExitCh),
 			NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee),
 		},
@@ -366,8 +366,6 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.Ev
 
 // ExecuteDuties tries to execute the given duties
 func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []*spectypes.BeaconDuty) {
-	logger.Debug("executing duty from", zap.Stack("stack"))
-
 	for _, duty := range duties {
 		duty := duty
 		logger := s.loggerWithDutyContext(logger, duty)
@@ -387,8 +385,6 @@ func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []*spectypes.Beacon
 
 // ExecuteCommitteeDuties tries to execute the given committee duties
 func (s *Scheduler) ExecuteCommitteeDuties(logger *zap.Logger, duties map[[32]byte]*spectypes.CommitteeDuty) {
-	logger.Debug("executing committee duty from", zap.Stack("stack"))
-
 	for committeeID, duty := range duties {
 		committeeID := committeeID
 		duty := duty
