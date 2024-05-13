@@ -17,11 +17,11 @@ func (mv *messageValidator) validateSlotTime(messageSlot phase0.Slot, role spect
 		return ErrEarlyMessage
 	}
 
-	if lateness := mv.lateMessage(messageSlot, role, receivedAt); lateness > 0 {
-		e := ErrLateMessage
-		e.got = fmt.Sprintf("late by %v", lateness)
-		return e
-	}
+	//if lateness := mv.lateMessage(messageSlot, role, receivedAt); lateness > 0 {
+	//	e := ErrLateMessage
+	//	e.got = fmt.Sprintf("late by %v", lateness)
+	//	return e
+	//}
 
 	return nil
 }
