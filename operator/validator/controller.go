@@ -1128,7 +1128,7 @@ func SetupCommitteeRunners(
 		}
 		config.ValueCheckF = valueCheckF
 
-		identifier := spectypes.NewMsgID(spectypes.GenesisMainnet, options.Operator.ClusterID[:], role)
+		identifier := spectypes.NewMsgID(networkConfig.Domain, options.Operator.ClusterID[:], role)
 		qbftCtrl := qbftcontroller.NewController(identifier[:], options.Operator, config, options.FullNode)
 		qbftCtrl.NewDecidedHandler = options.NewDecidedHandler
 		return qbftCtrl
@@ -1138,7 +1138,17 @@ func SetupCommitteeRunners(
 		// Create a committee runner.
 		epoch := options.BeaconNetwork.GetBeaconNetwork().EstimatedEpochAtSlot(slot)
 		valCheck := TempBeaconVoteValueCheckF(options.Signer, slot, options.SSVShare.Share.SharePubKey, epoch) // TODO: (Alan) fix slashing check (committee is not 1 pubkey)
-		crunner := runner.NewCommitteeRunner(options.BeaconNetwork.GetBeaconNetwork(), shares, buildController(spectypes.RoleCommittee, valCheck), options.Beacon, options.Network, options.Signer, options.OperatorSigner, valCheck)
+		crunner := runner.NewCommitteeRunner(
+			networkConfig,
+			options.BeaconNetwork.GetBeaconNetwork(),
+			shares,
+			buildController(spectypes.RoleCommittee, valCheck),
+			options.Beacon,
+			options.Network,
+			options.Signer,
+			options.OperatorSigner,
+			valCheck,
+		)
 		return crunner.(*runner.CommitteeRunner)
 	}
 }

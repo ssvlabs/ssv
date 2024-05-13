@@ -18,6 +18,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 )
@@ -33,6 +34,7 @@ import (
 
 type CommitteeRunner struct {
 	BaseRunner     *BaseRunner
+	networkConfig  networkconfig.NetworkConfig
 	beacon         specssv.BeaconNode
 	network        qbft.FutureSpecNetwork
 	signer         types.BeaconSigner
@@ -42,7 +44,9 @@ type CommitteeRunner struct {
 	started time.Time
 }
 
-func NewCommitteeRunner(beaconNetwork types.BeaconNetwork,
+func NewCommitteeRunner(
+	networkConfig networkconfig.NetworkConfig,
+	beaconNetwork types.BeaconNetwork,
 	share map[phase0.ValidatorIndex]*types.Share,
 	qbftController *controller.Controller,
 	beacon specssv.BeaconNode,
@@ -58,6 +62,7 @@ func NewCommitteeRunner(beaconNetwork types.BeaconNetwork,
 			Share:          share,
 			QBFTController: qbftController,
 		},
+		networkConfig:  networkConfig,
 		beacon:         beacon,
 		network:        network,
 		signer:         signer,
@@ -184,9 +189,11 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *types.Signe
 
 	ssvMsg := &types.SSVMessage{
 		MsgType: types.SSVPartialSignatureMsgType,
-		//TODO: The Domain will be updated after new Domain PR... Will be created after this PR is merged
-		MsgID: types.NewMsgID(types.GenesisMainnet, cr.GetBaseRunner().QBFTController.Share.ClusterID[:],
-			cr.BaseRunner.RunnerRoleType),
+		MsgID: types.NewMsgID(
+			cr.networkConfig.Domain,
+			cr.GetBaseRunner().QBFTController.Share.ClusterID[:],
+			cr.BaseRunner.RunnerRoleType,
+		),
 	}
 	ssvMsg.Data, err = postConsensusMsg.Encode()
 	if err != nil {
