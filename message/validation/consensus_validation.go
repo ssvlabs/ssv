@@ -170,9 +170,9 @@ func (mv *messageValidator) validateQBFTLogic(
 		}
 
 		if msgSlot == signerState.Slot && consensusMessage.Round == signerState.Round {
-			if len(signedSSVMessage.FullData) != 0 && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedSSVMessage.FullData) {
-				return ErrDuplicatedProposalWithDifferentData
-			}
+			//if len(signedSSVMessage.FullData) != 0 && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedSSVMessage.FullData) {
+			//	return ErrDuplicatedProposalWithDifferentData
+			//}
 
 			limits := maxMessageCounts(len(committee))
 			if err := signerState.MessageCounts.ValidateConsensusMessage(signedSSVMessage, consensusMessage, limits); err != nil {
