@@ -7,7 +7,8 @@ import (
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
-	"github.com/ssvlabs/ssv-spec/types/testingutils"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -43,46 +44,46 @@ func RunCreateMsg(t *testing.T, test *spectests.CreateMsgSpecTest) {
 }
 
 func createCommit(test *spectests.CreateMsgSpecTest) (*spectypes.SignedSSVMessage, error) {
-	ks := testingutils.Testing4SharesSet()
+	ks := spectestingutils.Testing4SharesSet()
 	state := &specqbft.State{
-		Share: testingutils.TestingShare(ks),
+		Share: spectestingutils.TestingOperator(ks),
 		ID:    []byte{1, 2, 3, 4},
 	}
-	config := testingutils.TestingConfig(ks)
+	config := spectestingutils.TestingConfig(ks)
 
 	return specqbft.CreateCommit(state, config, test.Value)
 }
 
 func createPrepare(test *spectests.CreateMsgSpecTest) (*spectypes.SignedSSVMessage, error) {
-	ks := testingutils.Testing4SharesSet()
+	ks := spectestingutils.Testing4SharesSet()
 	state := &specqbft.State{
-		Share: testingutils.TestingShare(ks),
+		Share: spectestingutils.TestingOperator(ks),
 		ID:    []byte{1, 2, 3, 4},
 	}
-	config := testingutils.TestingConfig(ks)
+	config := spectestingutils.TestingConfig(ks)
 
 	return specqbft.CreatePrepare(state, config, test.Round, test.Value)
 }
 
 func createProposal(test *spectests.CreateMsgSpecTest) (*spectypes.SignedSSVMessage, error) {
-	ks := testingutils.Testing4SharesSet()
+	ks := spectestingutils.Testing4SharesSet()
 	state := &specqbft.State{
-		Share: testingutils.TestingShare(ks),
+		Share: spectestingutils.TestingOperator(ks),
 		ID:    []byte{1, 2, 3, 4},
 	}
-	config := testingutils.TestingConfig(ks)
+	config := spectestingutils.TestingConfig(ks)
 
 	return specqbft.CreateProposal(state, config, test.Value[:], test.RoundChangeJustifications, test.PrepareJustifications)
 }
 
 func createRoundChange(test *spectests.CreateMsgSpecTest) (*spectypes.SignedSSVMessage, error) {
-	ks := testingutils.Testing4SharesSet()
+	ks := spectestingutils.Testing4SharesSet()
 	state := &specqbft.State{
-		Share:            testingutils.TestingShare(ks),
+		Share:            spectestingutils.TestingOperator(ks),
 		ID:               []byte{1, 2, 3, 4},
 		PrepareContainer: specqbft.NewMsgContainer(),
 	}
-	config := testingutils.TestingConfig(ks)
+	config := spectestingutils.TestingConfig(ks)
 
 	if len(test.PrepareJustifications) > 0 {
 		state.LastPreparedRound = test.PrepareJustifications[0].Message.Round

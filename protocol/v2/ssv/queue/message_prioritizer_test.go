@@ -209,7 +209,7 @@ func (m mockNonConsensusMessage) ssvMessage(state *State) *spectypes.SSVMessage 
 	factory := ssvMessageFactory(m.Role)
 	return factory(
 		nil,
-		&spectypes.SignedPartialSignatureMessage{
+		&spectypes.PartialSignatureMessage{
 			Message: spectypes.PartialSignatureMessages{
 				Type: m.Type,
 				Slot: m.Slot,

@@ -20,7 +20,7 @@ type SpecTest struct {
 	Name               string
 	Pre                *instance.Instance
 	PostRoot           string
-	OutputMessages     []*qbft.SignedMessage
+	OutputMessages     []*spectypes.SignedSSVMessage
 	ExpectedTimerState *testingutils.TimerState
 	ExpectedError      string
 }
