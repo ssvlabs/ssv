@@ -125,9 +125,12 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 		return ErrInvalidRole
 	}
 
-	if !mv.topicMatches(ssvMessage, topic) {
+	messageTopics := mv.messageTopics(ssvMessage)
+	topicBaseName := commons.GetTopicBaseName(topic)
+	if !slices.Contains(messageTopics, topicBaseName) {
 		e := ErrIncorrectTopic
-		e.got = topic
+		e.got = fmt.Sprintf("topic %v / base name %v", topic, topicBaseName)
+		e.want = messageTopics
 		return e
 	}
 
@@ -153,6 +156,16 @@ func (mv *messageValidator) validRole(roleType spectypes.RunnerRole) bool {
 	default:
 		return false
 	}
+}
+
+// messageTopics returns list of topics for given ssv message.
+func (mv *messageValidator) messageTopics(ssvMessage *spectypes.SSVMessage) []string {
+	getTopics := commons.ValidatorTopicID
+	if mv.committeeRole(ssvMessage.GetID().GetRoleType()) {
+		getTopics = commons.CommitteeTopicID
+	}
+
+	return getTopics(ssvMessage.GetID().GetSenderID())
 }
 
 // topicMatches checks if the message was sent on the right topic.
