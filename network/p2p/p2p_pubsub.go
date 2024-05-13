@@ -76,16 +76,25 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 		return fmt.Errorf("could not encode signed ssv message: %w", err)
 	}
 
-	senderID := msgID.GetSenderID()
-	topics := commons.CommitteeTopicID(senderID)
+	var committeeID spectypes.ClusterID
+	if msg.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
+		committeeID = spectypes.ClusterID(msg.SSVMessage.MsgID.GetSenderID()[16:])
+	} else {
+		share := n.nodeStorage.ValidatorStore().Validator(msg.SSVMessage.MsgID.GetSenderID())
+		if share == nil {
+			return fmt.Errorf("could not find validator: %x", msg.SSVMessage.MsgID.GetSenderID())
+		}
+		committeeID = share.CommitteeID()
+	}
+	topics := commons.CommitteeTopicID(committeeID[:])
 
 	for _, topic := range topics {
 		n.interfaceLogger.Debug("broadcasting msg",
-			zap.String("committee_id", hex.EncodeToString(senderID[16:])),
+			zap.String("committee_id", hex.EncodeToString(committeeID[:])),
 			zap.Int("msg_type", int(msg.SSVMessage.MsgType)),
 			fields.Topic(topic))
 		if err := n.topicsCtrl.Broadcast(topic, encodedMsg, n.cfg.RequestTimeout); err != nil {
-			n.interfaceLogger.Debug("could not broadcast msg", fields.PubKey(senderID), zap.Error(err))
+			n.interfaceLogger.Debug("could not broadcast msg", fields.CommitteeID(committeeID), zap.Error(err))
 			return fmt.Errorf("could not broadcast msg: %w", err)
 		}
 	}
