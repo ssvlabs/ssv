@@ -9,7 +9,6 @@ import (
 	"github.com/bloxapp/ssv/storage/kv"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
 	"github.com/stretchr/testify/require"
 )
 

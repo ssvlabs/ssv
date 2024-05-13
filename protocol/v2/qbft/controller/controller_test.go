@@ -4,15 +4,14 @@ import (
 	"encoding/json"
 	"testing"
 
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-	"github.com/stretchr/testify/require"
-
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	"github.com/bloxapp/ssv/protocol/v2/types"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	"github.com/stretchr/testify/require"
 )
 
 func TestController_Marshaling(t *testing.T) {

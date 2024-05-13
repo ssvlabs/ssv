@@ -98,7 +98,11 @@ func ValidateDecided(
 	signedDecided *spectypes.SignedSSVMessage,
 	share *spectypes.Operator,
 ) error {
-	if !IsDecidedMsg(share, signedDecided) {
+	isDecided, err := IsDecidedMsg(share, signedDecided)
+	if err != nil {
+		return err
+	}
+	if !isDecided {
 		return errors.New("not a decided msg")
 	}
 
@@ -131,15 +135,12 @@ func ValidateDecided(
 }
 
 // IsDecidedMsg returns true if signed commit has all quorum sigs
-func IsDecidedMsg(share *spectypes.Operator, signedDecided *spectypes.SignedSSVMessage) bool {
-	if !share.HasQuorum(len(signedDecided.Signatures)) {
-		return false
-	}
+func IsDecidedMsg(share *spectypes.Operator, signedDecided *spectypes.SignedSSVMessage) (bool, error) {
 
 	msg, err := specqbft.DecodeMessage(signedDecided.SSVMessage.Data)
 	if err != nil {
-		return false // @yosher TODO return err?
+		return false, err
 	}
 
-	return msg.MsgType == specqbft.CommitMsgType
+	return share.HasQuorum(len(signedDecided.GetOperatorIDs())) && msg.MsgType == specqbft.CommitMsgType, nil
 }

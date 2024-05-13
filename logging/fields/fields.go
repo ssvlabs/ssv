@@ -23,7 +23,6 @@ import (
 	"github.com/bloxapp/ssv/eth/contract"
 	"github.com/bloxapp/ssv/logging/fields/stringer"
 	"github.com/bloxapp/ssv/network/records"
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
 	"github.com/bloxapp/ssv/utils/format"
@@ -89,7 +88,6 @@ const (
 	FieldType                = "type"
 	FieldUpdatedENRLocalNode = "updated_enr"
 	FieldValidator           = "validator"
-	FieldValidatorMetadata   = "validator_metadata"
 )
 
 func FromBlock(val uint64) zapcore.Field {
@@ -244,10 +242,6 @@ func EventName(val string) zap.Field {
 	return zap.String(FieldEvent, val)
 }
 
-func ValidatorMetadata(val *beacon.ValidatorMetadata) zap.Field {
-	return zap.Any(FieldValidatorMetadata, val)
-}
-
 func BlockNumber(val uint64) zap.Field {
 	return zap.Stringer(FieldBlock, stringer.Uint64Stringer{Val: val})
 }
@@ -334,6 +328,18 @@ func BuilderProposals(v bool) zap.Field {
 
 func FormatDutyID(epoch phase0.Epoch, duty *spectypes.BeaconDuty) string {
 	return fmt.Sprintf("%v-e%v-s%v-v%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
+}
+
+func FormatCommittee(operators []*spectypes.CommitteeMember) string {
+	var opids []string
+	for _, op := range operators {
+		opids = append(opids, fmt.Sprint(op.OperatorID))
+	}
+	return strings.Join(opids, "_")
+}
+
+func FormatCommitteeDutyID(operators []*spectypes.CommitteeMember, epoch phase0.Epoch, slot phase0.Slot) string {
+	return fmt.Sprintf("COMMITTEE-%s-e%d-s%d", FormatCommittee(operators), epoch, slot)
 }
 
 func Duties(epoch phase0.Epoch, duties []*spectypes.BeaconDuty) zap.Field {

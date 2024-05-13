@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ssvlabs/ssv-spec-pre-cc/types/testingutils"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/partialsigcontainer"
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/runner/duties/newduty"
@@ -15,7 +14,7 @@ import (
 	"github.com/ssvlabs/ssv-spec/ssv/spectest/tests/valcheck"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/spectest/tests/partialsigmessage"
-	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 

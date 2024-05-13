@@ -64,6 +64,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		DutyRunners:       options.DutyRunners,
 		Network:           options.Network,
 		Storage:           options.Storage,
+		Operator:          options.Operator,
 		Share:             options.SSVShare,
 		Signer:            options.Signer,
 		OperatorSigner:    options.OperatorSigner,

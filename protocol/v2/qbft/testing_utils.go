@@ -1,102 +1,77 @@
 package qbft
 
-// TODO: (Alan) fix & align
-// var TestingMessage = &specqbft.Message{
-// 	MsgType:    specqbft.ProposalMsgType,
-// 	Height:     specqbft.FirstHeight,
-// 	Round:      specqbft.FirstRound,
-// 	Identifier: []byte{1, 2, 3, 4},
-// 	Root:       [32]byte{1, 2, 3, 4},
-// }
+import (
+	"crypto/rsa"
 
-// var TestingSignedMsg = func() *spectypes.SignedSSVMessage {
-// 	return SignMsg(TestingSK, 1, TestingMessage)
-// }()
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv-spec/types/testingutils"
+)
 
-// var SignMsg = func(sk *bls.SecretKey, id types.OperatorID, msg *specqbft.Message) *spectypes.SignedSSVMessage {
-// 	domain := testingutils.TestingSSVDomainType
-// 	sigType := types.QBFTSignatureType
+var TestingMessage = &specqbft.Message{
+	MsgType:    specqbft.ProposalMsgType,
+	Height:     specqbft.FirstHeight,
+	Round:      specqbft.FirstRound,
+	Identifier: []byte{1, 2, 3, 4},
+	Root:       [32]byte{1, 2, 3, 4},
+}
 
-// 	r, _ := types.ComputeSigningRoot(msg, types.ComputeSignatureDomain(domain, sigType))
-// 	sig := sk.SignByte(r[:])
+var TestingSignedMsg = func() *spectypes.SignedSSVMessage {
+	return testingutils.SignQBFTMsg(TestingSK, 1, TestingMessage)
+}()
 
-// 	return &specqbft.SignedMessage{
-// 		Message:   *msg,
-// 		Signers:   []types.OperatorID{id},
-// 		Signature: sig.Serialize(),
-// 	}
-// }
+var TestingSK = func() *rsa.PrivateKey {
+	skPem, _, _ := spectypes.GenerateKey()
+	ret, _ := spectypes.PemToPrivateKey(skPem)
+	return ret
+}()
 
-// var TestingSK = func() *bls.SecretKey {
-// 	types.InitBLS()
-// 	ret := &bls.SecretKey{}
-// 	ret.SetByCSPRNG()
-// 	return ret
-// }()
+var TestingInstanceStruct = &specqbft.Instance{
+	State: &specqbft.State{
+		Share:                           testingutils.TestingOperator(testingutils.Testing4SharesSet()),
+		ID:                              []byte{1, 2, 3, 4},
+		Round:                           1,
+		Height:                          1,
+		LastPreparedRound:               1,
+		LastPreparedValue:               []byte{1, 2, 3, 4},
+		ProposalAcceptedForCurrentRound: TestingSignedMsg,
+		Decided:                         false,
+		DecidedValue:                    []byte{1, 2, 3, 4},
 
-// var testingValidatorPK = phase0.BLSPubKey{1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4}
+		ProposeContainer: &specqbft.MsgContainer{
+			Msgs: map[specqbft.Round][]*spectypes.SignedSSVMessage{
+				1: {
+					TestingSignedMsg,
+				},
+			},
+		},
+		PrepareContainer: &specqbft.MsgContainer{
+			Msgs: map[specqbft.Round][]*spectypes.SignedSSVMessage{
+				1: {
+					TestingSignedMsg,
+				},
+			},
+		},
+		CommitContainer: &specqbft.MsgContainer{
+			Msgs: map[specqbft.Round][]*spectypes.SignedSSVMessage{
+				1: {
+					TestingSignedMsg,
+				},
+			},
+		},
+		RoundChangeContainer: &specqbft.MsgContainer{
+			Msgs: map[specqbft.Round][]*spectypes.SignedSSVMessage{
+				1: {
+					TestingSignedMsg,
+				},
+			},
+		},
+	},
+}
 
-// var testingShare = &types.Share{
-// 	OperatorID:      1,
-// 	ValidatorPubKey: testingValidatorPK[:],
-// 	SharePubKey:     TestingSK.GetPublicKey().Serialize(),
-// 	DomainType:      testingutils.TestingSSVDomainType,
-// 	Quorum:          3,
-// 	PartialQuorum:   2,
-// 	Committee: []*types.Operator{
-// 		{
-// 			OperatorID:  1,
-// 			SharePubKey: TestingSK.GetPublicKey().Serialize(),
-// 		},
-// 	},
-// }
-
-// var TestingInstanceStruct = &specqbft.Instance{
-// 	State: &specqbft.State{
-// 		Share:                           testingShare,
-// 		ID:                              []byte{1, 2, 3, 4},
-// 		Round:                           1,
-// 		Height:                          1,
-// 		LastPreparedRound:               1,
-// 		LastPreparedValue:               []byte{1, 2, 3, 4},
-// 		ProposalAcceptedForCurrentRound: TestingSignedMsg,
-// 		Decided:                         false,
-// 		DecidedValue:                    []byte{1, 2, 3, 4},
-
-// 		ProposeContainer: &specqbft.MsgContainer{
-// 			Msgs: map[specqbft.Round][]*spectypes.SignedSSVMessage{
-// 				1: {
-// 					TestingSignedMsg,
-// 				},
-// 			},
-// 		},
-// 		PrepareContainer: &specqbft.MsgContainer{
-// 			Msgs: map[specqbft.Round][]*spectypes.SignedSSVMessage{
-// 				1: {
-// 					TestingSignedMsg,
-// 				},
-// 			},
-// 		},
-// 		CommitContainer: &specqbft.MsgContainer{
-// 			Msgs: map[specqbft.Round][]*spectypes.SignedSSVMessage{
-// 				1: {
-// 					TestingSignedMsg,
-// 				},
-// 			},
-// 		},
-// 		RoundChangeContainer: &specqbft.MsgContainer{
-// 			Msgs: map[specqbft.Round][]*spectypes.SignedSSVMessage{
-// 				1: {
-// 					TestingSignedMsg,
-// 				},
-// 			},
-// 		},
-// 	},
-// }
-
-// var TestingControllerStruct = &specqbft.Controller{
-// 	Identifier:      []byte{1, 2, 3, 4},
-// 	Height:          specqbft.Height(1),
-// 	Share:           testingShare,
-// 	StoredInstances: specqbft.InstanceContainer{TestingInstanceStruct},
-// }
+var TestingControllerStruct = &specqbft.Controller{
+	Identifier:      []byte{1, 2, 3, 4},
+	Height:          specqbft.Height(1),
+	Share:           testingutils.TestingOperator(testingutils.Testing4SharesSet()),
+	StoredInstances: specqbft.InstanceContainer{TestingInstanceStruct},
+}

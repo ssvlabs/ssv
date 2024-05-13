@@ -65,19 +65,11 @@ func DecodeSSVMessage(m *spectypes.SSVMessage) (*DecodedSSVMessage, error) {
 
 // DecodeSignedSSVMessage decodes a SignedSSVMessage into a DecodedSSVMessage.
 func DecodeSignedSSVMessage(sm *spectypes.SignedSSVMessage) (*DecodedSSVMessage, error) {
-	m, err := specqbft.DecodeMessage(sm.SSVMessage.Data)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrDecodeNetworkMsg, err)
-	}
-
 	d, err := DecodeSSVMessage(sm.SSVMessage)
 	if err != nil {
 		return nil, err
 	}
-
 	d.SignedSSVMessage = sm
-	d.Body = m
-
 	return d, nil
 }
 

@@ -91,6 +91,9 @@ func (mv *messageValidator) Validate(_ context.Context, peerID peer.ID, pmsg *pu
 	reportDone := mv.reportPubSubMetrics(pmsg)
 	defer reportDone()
 
+	// TODO: Alan revert blind accept
+	return mv.validateSelf(pmsg)
+
 	decodedMessage, err := mv.handlePubsubMessage(pmsg, time.Now())
 	if err != nil {
 		return mv.handleValidationError(peerID, decodedMessage, err)
@@ -119,11 +122,11 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 		return nil, err
 	}
 
-	if err := mv.validateSSVMessage(signedSSVMessage.GetSSVMessage(), topic); err != nil {
+	if err := mv.validateSSVMessage(signedSSVMessage.SSVMessage, topic); err != nil {
 		return nil, err
 	}
 
-	committee, validatorIndices, err := mv.getCommitteeAndValidatorIndices(signedSSVMessage.GetSSVMessage().GetID())
+	committee, validatorIndices, err := mv.getCommitteeAndValidatorIndices(signedSSVMessage.SSVMessage.GetID())
 	if err != nil {
 		return nil, err
 	}
@@ -132,17 +135,17 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 		return nil, err
 	}
 
-	validationMu := mv.obtainValidationLock(signedSSVMessage.GetSSVMessage().GetID())
+	validationMu := mv.obtainValidationLock(signedSSVMessage.SSVMessage.GetID())
 
 	validationMu.Lock()
 	defer validationMu.Unlock()
 
 	decodedMessage := &queue.DecodedSSVMessage{
 		SignedSSVMessage: signedSSVMessage,
-		SSVMessage:       signedSSVMessage.GetSSVMessage(),
+		SSVMessage:       signedSSVMessage.SSVMessage,
 	}
 
-	switch signedSSVMessage.GetSSVMessage().MsgType {
+	switch signedSSVMessage.SSVMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
 		consensusMessage, err := mv.validateConsensusMessage(signedSSVMessage, committee, validatorIndices, receivedAt)
 		if err != nil {

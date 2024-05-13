@@ -76,6 +76,11 @@ func NewNodeStorage(logger *zap.Logger, db basedb.Database) (Storage, error) {
 		return nil, err
 	}
 
+	// stg.genesisShareStore, err = genesisregistrystorage.NewSharesStorage(logger, db, storagePrefix)
+	// if err != nil {
+	// 	return nil, err
+	// }
+
 	return stg, nil
 }
 
@@ -224,7 +229,7 @@ func (s *storage) SavePrivateKeyHash(hashedKey string) error {
 	return s.db.Set(storagePrefix, []byte(HashedPrivateKey), []byte(hashedKey))
 }
 
-func (s *storage) UpdateValidatorMetadata(pk string, metadata *beacon.ValidatorMetadata) error {
+func (s *storage) UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata *beacon.ValidatorMetadata) error {
 	return s.shareStore.UpdateValidatorMetadata(pk, metadata)
 }
 

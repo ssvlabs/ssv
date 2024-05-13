@@ -103,9 +103,6 @@ func (c *validatorStore) Validators() []*types.SSVShare {
 }
 
 func (c *validatorStore) ParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
 	var validators []*types.SSVShare
 	for _, share := range c.shares() {
 		if share.IsParticipating(epoch) {
@@ -179,9 +176,6 @@ func (c *validatorStore) SelfParticipatingValidators(epoch phase0.Epoch) []*type
 		return nil
 	}
 	validators := c.OperatorValidators(c.operatorID())
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
 	var participating []*types.SSVShare
 	for _, validator := range validators {
 		if validator.IsParticipating(epoch) {
@@ -203,10 +197,6 @@ func (c *validatorStore) SelfParticipatingCommittees(epoch phase0.Epoch) []*Comm
 		return nil
 	}
 	committees := c.OperatorCommittees(c.operatorID())
-
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
 	var participating []*Committee
 	for _, committee := range committees {
 		if committee.IsParticipating(epoch) {

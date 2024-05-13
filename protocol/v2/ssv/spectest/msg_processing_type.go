@@ -7,10 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
-	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
-
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"

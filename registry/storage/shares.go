@@ -43,7 +43,7 @@ type Shares interface {
 	Drop() error
 
 	// UpdateValidatorMetadata updates validator metadata.
-	UpdateValidatorMetadata(pk string, metadata *beaconprotocol.ValidatorMetadata) error
+	UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata *beaconprotocol.ValidatorMetadata) error
 }
 
 type sharesStorage struct {
@@ -293,34 +293,36 @@ func (s *sharesStorage) storageShareToSpecShare(share *storageShare) (*types.SSV
 }
 
 func (s *sharesStorage) Delete(rw basedb.ReadWriter, pubKey []byte) error {
-	s.mu.Lock()
-	// TODO: (Alan) fix hack to avoid double-locking mutex
-	defer s.validatorStore.handleShareRemoved((spectypes.ValidatorPK)(pubKey))
-	defer s.mu.Unlock()
+	err := func() error {
+		s.mu.Lock()
+		defer s.mu.Unlock()
 
-	err := s.db.Using(rw).Delete(s.prefix, s.storageKey(pubKey))
+		err := s.db.Using(rw).Delete(s.prefix, s.storageKey(pubKey))
+		if err != nil {
+			return err
+		}
+
+		delete(s.shares, hex.EncodeToString(pubKey))
+		return nil
+	}()
 	if err != nil {
 		return err
 	}
 
-	delete(s.shares, hex.EncodeToString(pubKey))
+	// TODO: (Alan) fix hack to avoid double-locking mutex
+	s.validatorStore.handleShareRemoved((spectypes.ValidatorPK)(pubKey))
 
 	return nil
 }
 
 // UpdateValidatorMetadata updates the metadata of the given validator
-func (s *sharesStorage) UpdateValidatorMetadata(pk string, metadata *beaconprotocol.ValidatorMetadata) error {
-	key, err := hex.DecodeString(pk)
-	if err != nil {
-		return err
-	}
-	share := s.Get(nil, key)
+func (s *sharesStorage) UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata *beaconprotocol.ValidatorMetadata) error {
+	share := s.Get(nil, pk[:])
 	if share == nil {
 		return nil
 	}
 
 	share.BeaconMetadata = metadata
-	s.validatorStore.handleShareUpdated(share)
 	return s.Save(nil, share)
 }
 

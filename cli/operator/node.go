@@ -229,6 +229,8 @@ var StartNodeCmd = &cobra.Command{
 				validatorStore,
 				dutyStore,
 				signatureVerifier,
+				validation.WithLogger(logger),
+				validation.WithMetrics(metricsReporter),
 			)
 		} else {
 			messageValidator = genesisvalidation.New(

@@ -40,6 +40,7 @@ func (h *VoluntaryExitHandler) Name() string {
 
 func (h *VoluntaryExitHandler) HandleDuties(ctx context.Context) {
 	h.logger.Info("starting duty handler")
+	defer h.logger.Info("duty handler exited")
 
 	for {
 		select {

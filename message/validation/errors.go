@@ -52,8 +52,10 @@ func (e Error) Text() string {
 }
 
 var (
+	ErrGenesisSSVMessage                       = Error{text: "genesis ssv message"}
+	ErrGenesisSignedSSVMessage                 = Error{text: "genesis signed ssv message"}
 	ErrEmptyData                               = Error{text: "empty data"}
-	ErrWrongDomain                             = Error{text: "wrong domain", silent: true}
+	ErrWrongDomain                             = Error{text: "wrong domain"}
 	ErrNoShareMetadata                         = Error{text: "share has no metadata"}
 	ErrUnknownValidator                        = Error{text: "unknown validator"}
 	ErrValidatorLiquidated                     = Error{text: "validator is liquidated"}

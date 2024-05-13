@@ -8,10 +8,10 @@ import (
 	reflect "reflect"
 
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
-	types "github.com/ssvlabs/ssv-spec/types"
-	types0 "github.com/bloxapp/ssv/protocol/v2/types"
+	types "github.com/bloxapp/ssv/protocol/v2/types"
 	storage "github.com/bloxapp/ssv/registry/storage"
 	gomock "github.com/golang/mock/gomock"
+	types0 "github.com/ssvlabs/ssv-spec/types"
 )
 
 // MockValidatorStore is a mock of ValidatorStore interface.
@@ -38,7 +38,7 @@ func (m *MockValidatorStore) EXPECT() *MockValidatorStoreMockRecorder {
 }
 
 // Committee mocks base method.
-func (m *MockValidatorStore) Committee(id types.ClusterID) *storage.Committee {
+func (m *MockValidatorStore) Committee(id types0.ClusterID) *storage.Committee {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Committee", id)
 	ret0, _ := ret[0].(*storage.Committee)
@@ -66,7 +66,7 @@ func (mr *MockValidatorStoreMockRecorder) Committees() *gomock.Call {
 }
 
 // OperatorCommittees mocks base method.
-func (m *MockValidatorStore) OperatorCommittees(id types.OperatorID) []*storage.Committee {
+func (m *MockValidatorStore) OperatorCommittees(id types0.OperatorID) []*storage.Committee {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "OperatorCommittees", id)
 	ret0, _ := ret[0].([]*storage.Committee)
@@ -80,10 +80,10 @@ func (mr *MockValidatorStoreMockRecorder) OperatorCommittees(id interface{}) *go
 }
 
 // OperatorValidators mocks base method.
-func (m *MockValidatorStore) OperatorValidators(id types.OperatorID) []*types0.SSVShare {
+func (m *MockValidatorStore) OperatorValidators(id types0.OperatorID) []*types.SSVShare {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "OperatorValidators", id)
-	ret0, _ := ret[0].([]*types0.SSVShare)
+	ret0, _ := ret[0].([]*types.SSVShare)
 	return ret0
 }
 
@@ -108,10 +108,10 @@ func (mr *MockValidatorStoreMockRecorder) ParticipatingCommittees(epoch interfac
 }
 
 // ParticipatingValidators mocks base method.
-func (m *MockValidatorStore) ParticipatingValidators(epoch phase0.Epoch) []*types0.SSVShare {
+func (m *MockValidatorStore) ParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ParticipatingValidators", epoch)
-	ret0, _ := ret[0].([]*types0.SSVShare)
+	ret0, _ := ret[0].([]*types.SSVShare)
 	return ret0
 }
 
@@ -122,10 +122,10 @@ func (mr *MockValidatorStoreMockRecorder) ParticipatingValidators(epoch interfac
 }
 
 // Validator mocks base method.
-func (m *MockValidatorStore) Validator(pubKey []byte) *types0.SSVShare {
+func (m *MockValidatorStore) Validator(pubKey []byte) *types.SSVShare {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Validator", pubKey)
-	ret0, _ := ret[0].(*types0.SSVShare)
+	ret0, _ := ret[0].(*types.SSVShare)
 	return ret0
 }
 
@@ -136,10 +136,10 @@ func (mr *MockValidatorStoreMockRecorder) Validator(pubKey interface{}) *gomock.
 }
 
 // ValidatorByIndex mocks base method.
-func (m *MockValidatorStore) ValidatorByIndex(index phase0.ValidatorIndex) *types0.SSVShare {
+func (m *MockValidatorStore) ValidatorByIndex(index phase0.ValidatorIndex) *types.SSVShare {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ValidatorByIndex", index)
-	ret0, _ := ret[0].(*types0.SSVShare)
+	ret0, _ := ret[0].(*types.SSVShare)
 	return ret0
 }
 
@@ -150,10 +150,10 @@ func (mr *MockValidatorStoreMockRecorder) ValidatorByIndex(index interface{}) *g
 }
 
 // Validators mocks base method.
-func (m *MockValidatorStore) Validators() []*types0.SSVShare {
+func (m *MockValidatorStore) Validators() []*types.SSVShare {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Validators")
-	ret0, _ := ret[0].([]*types0.SSVShare)
+	ret0, _ := ret[0].([]*types.SSVShare)
 	return ret0
 }
 
@@ -164,7 +164,7 @@ func (mr *MockValidatorStoreMockRecorder) Validators() *gomock.Call {
 }
 
 // WithOperatorID mocks base method.
-func (m *MockValidatorStore) WithOperatorID(operatorID func() types.OperatorID) storage.SelfValidatorStore {
+func (m *MockValidatorStore) WithOperatorID(operatorID func() types0.OperatorID) storage.SelfValidatorStore {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "WithOperatorID", operatorID)
 	ret0, _ := ret[0].(storage.SelfValidatorStore)
@@ -201,7 +201,7 @@ func (m *MockSelfValidatorStore) EXPECT() *MockSelfValidatorStoreMockRecorder {
 }
 
 // Committee mocks base method.
-func (m *MockSelfValidatorStore) Committee(id types.ClusterID) *storage.Committee {
+func (m *MockSelfValidatorStore) Committee(id types0.ClusterID) *storage.Committee {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Committee", id)
 	ret0, _ := ret[0].(*storage.Committee)
@@ -229,7 +229,7 @@ func (mr *MockSelfValidatorStoreMockRecorder) Committees() *gomock.Call {
 }
 
 // OperatorCommittees mocks base method.
-func (m *MockSelfValidatorStore) OperatorCommittees(id types.OperatorID) []*storage.Committee {
+func (m *MockSelfValidatorStore) OperatorCommittees(id types0.OperatorID) []*storage.Committee {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "OperatorCommittees", id)
 	ret0, _ := ret[0].([]*storage.Committee)
@@ -243,10 +243,10 @@ func (mr *MockSelfValidatorStoreMockRecorder) OperatorCommittees(id interface{})
 }
 
 // OperatorValidators mocks base method.
-func (m *MockSelfValidatorStore) OperatorValidators(id types.OperatorID) []*types0.SSVShare {
+func (m *MockSelfValidatorStore) OperatorValidators(id types0.OperatorID) []*types.SSVShare {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "OperatorValidators", id)
-	ret0, _ := ret[0].([]*types0.SSVShare)
+	ret0, _ := ret[0].([]*types.SSVShare)
 	return ret0
 }
 
@@ -271,10 +271,10 @@ func (mr *MockSelfValidatorStoreMockRecorder) ParticipatingCommittees(epoch inte
 }
 
 // ParticipatingValidators mocks base method.
-func (m *MockSelfValidatorStore) ParticipatingValidators(epoch phase0.Epoch) []*types0.SSVShare {
+func (m *MockSelfValidatorStore) ParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ParticipatingValidators", epoch)
-	ret0, _ := ret[0].([]*types0.SSVShare)
+	ret0, _ := ret[0].([]*types.SSVShare)
 	return ret0
 }
 
@@ -313,10 +313,10 @@ func (mr *MockSelfValidatorStoreMockRecorder) SelfParticipatingCommittees(arg0 i
 }
 
 // SelfParticipatingValidators mocks base method.
-func (m *MockSelfValidatorStore) SelfParticipatingValidators(arg0 phase0.Epoch) []*types0.SSVShare {
+func (m *MockSelfValidatorStore) SelfParticipatingValidators(arg0 phase0.Epoch) []*types.SSVShare {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SelfParticipatingValidators", arg0)
-	ret0, _ := ret[0].([]*types0.SSVShare)
+	ret0, _ := ret[0].([]*types.SSVShare)
 	return ret0
 }
 
@@ -327,10 +327,10 @@ func (mr *MockSelfValidatorStoreMockRecorder) SelfParticipatingValidators(arg0 i
 }
 
 // SelfValidators mocks base method.
-func (m *MockSelfValidatorStore) SelfValidators() []*types0.SSVShare {
+func (m *MockSelfValidatorStore) SelfValidators() []*types.SSVShare {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SelfValidators")
-	ret0, _ := ret[0].([]*types0.SSVShare)
+	ret0, _ := ret[0].([]*types.SSVShare)
 	return ret0
 }
 
@@ -341,10 +341,10 @@ func (mr *MockSelfValidatorStoreMockRecorder) SelfValidators() *gomock.Call {
 }
 
 // Validator mocks base method.
-func (m *MockSelfValidatorStore) Validator(pubKey []byte) *types0.SSVShare {
+func (m *MockSelfValidatorStore) Validator(pubKey []byte) *types.SSVShare {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Validator", pubKey)
-	ret0, _ := ret[0].(*types0.SSVShare)
+	ret0, _ := ret[0].(*types.SSVShare)
 	return ret0
 }
 
@@ -355,10 +355,10 @@ func (mr *MockSelfValidatorStoreMockRecorder) Validator(pubKey interface{}) *gom
 }
 
 // ValidatorByIndex mocks base method.
-func (m *MockSelfValidatorStore) ValidatorByIndex(index phase0.ValidatorIndex) *types0.SSVShare {
+func (m *MockSelfValidatorStore) ValidatorByIndex(index phase0.ValidatorIndex) *types.SSVShare {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ValidatorByIndex", index)
-	ret0, _ := ret[0].(*types0.SSVShare)
+	ret0, _ := ret[0].(*types.SSVShare)
 	return ret0
 }
 
@@ -369,10 +369,10 @@ func (mr *MockSelfValidatorStoreMockRecorder) ValidatorByIndex(index interface{}
 }
 
 // Validators mocks base method.
-func (m *MockSelfValidatorStore) Validators() []*types0.SSVShare {
+func (m *MockSelfValidatorStore) Validators() []*types.SSVShare {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Validators")
-	ret0, _ := ret[0].([]*types0.SSVShare)
+	ret0, _ := ret[0].([]*types.SSVShare)
 	return ret0
 }
 
@@ -383,7 +383,7 @@ func (mr *MockSelfValidatorStoreMockRecorder) Validators() *gomock.Call {
 }
 
 // WithOperatorID mocks base method.
-func (m *MockSelfValidatorStore) WithOperatorID(operatorID func() types.OperatorID) storage.SelfValidatorStore {
+func (m *MockSelfValidatorStore) WithOperatorID(operatorID func() types0.OperatorID) storage.SelfValidatorStore {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "WithOperatorID", operatorID)
 	ret0, _ := ret[0].(storage.SelfValidatorStore)

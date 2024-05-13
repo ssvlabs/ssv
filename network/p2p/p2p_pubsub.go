@@ -80,6 +80,10 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 	topics := commons.CommitteeTopicID(senderID)
 
 	for _, topic := range topics {
+		n.interfaceLogger.Debug("broadcasting msg",
+			zap.String("committee_id", hex.EncodeToString(senderID[16:])),
+			zap.Int("msg_type", int(msg.SSVMessage.MsgType)),
+			fields.Topic(topic))
 		if err := n.topicsCtrl.Broadcast(topic, encodedMsg, n.cfg.RequestTimeout); err != nil {
 			n.interfaceLogger.Debug("could not broadcast msg", fields.PubKey(senderID), zap.Error(err))
 			return fmt.Errorf("could not broadcast msg: %w", err)

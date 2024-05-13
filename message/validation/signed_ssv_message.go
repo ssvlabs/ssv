@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -17,6 +18,16 @@ import (
 func (mv *messageValidator) decodeSignedSSVMessage(pMsg *pubsub.Message) (*spectypes.SignedSSVMessage, error) {
 	signedSSVMessage := &spectypes.SignedSSVMessage{}
 	if err := signedSSVMessage.Decode(pMsg.GetData()); err != nil {
+		genesisSignedSSVMessage := &genesisspectypes.SignedSSVMessage{}
+		if err := genesisSignedSSVMessage.Decode(pMsg.GetData()); err == nil {
+			return nil, ErrGenesisSignedSSVMessage
+		}
+
+		genesisSSVMessage := &genesisspectypes.SSVMessage{}
+		if err := genesisSSVMessage.Decode(pMsg.GetData()); err == nil {
+			return nil, ErrGenesisSSVMessage
+		}
+
 		e := ErrMalformedPubSubMessage
 		e.innerErr = err
 		return nil, e
@@ -52,7 +63,7 @@ func (mv *messageValidator) validateSignedSSVMessage(signedSSVMessage *spectypes
 		prevSigner = signer
 	}
 
-	signatures := signedSSVMessage.GetSignature()
+	signatures := signedSSVMessage.Signatures
 
 	if len(signatures) == 0 {
 		return ErrNoSignatures
@@ -76,7 +87,7 @@ func (mv *messageValidator) validateSignedSSVMessage(signedSSVMessage *spectypes
 		return e
 	}
 
-	ssvMessage := signedSSVMessage.GetSSVMessage()
+	ssvMessage := signedSSVMessage.SSVMessage
 	if ssvMessage == nil {
 		return ErrNilSSVMessage
 	}

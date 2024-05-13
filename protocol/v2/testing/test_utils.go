@@ -22,7 +22,7 @@ import (
 )
 
 var (
-	specModule   = "github.com/bloxapp/ssv-spec"
+	specModule   = "github.com/ssvlabs/ssv-spec"
 	specTestPath = "spectest/generate/tests.json"
 )
 

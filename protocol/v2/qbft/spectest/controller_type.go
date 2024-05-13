@@ -10,8 +10,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/ssvlabs/ssv-spec-pre-cc/types"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
