@@ -1,8 +1,6 @@
 package validation
 
 import (
-	"bytes"
-	"encoding/hex"
 	"fmt"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
@@ -114,12 +112,12 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 		return e
 	}
 
-	if !bytes.Equal(ssvMessage.MsgID.GetDomain(), mv.netCfg.Domain[:]) {
-		err := ErrWrongDomain
-		err.got = hex.EncodeToString(ssvMessage.MsgID.GetDomain())
-		err.want = hex.EncodeToString(mv.netCfg.Domain[:])
-		return err
-	}
+	//if !bytes.Equal(ssvMessage.MsgID.GetDomain(), mv.netCfg.Domain[:]) {
+	//	err := ErrWrongDomain
+	//	err.got = hex.EncodeToString(ssvMessage.MsgID.GetDomain())
+	//	err.want = hex.EncodeToString(mv.netCfg.Domain[:])
+	//	return err
+	//}
 
 	if !mv.validRole(ssvMessage.GetID().GetRoleType()) {
 		return ErrInvalidRole
