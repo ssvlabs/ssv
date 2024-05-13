@@ -80,9 +80,7 @@ func ValidatorTopicID(pkByts []byte) []string {
 }
 
 // CommitteeTopicID returns the topic to use for the given committee
-func CommitteeTopicID(senderID []byte) []string {
-	committeeID := senderID[16:]
-
+func CommitteeTopicID(committeeID []byte) []string {
 	subnet := new(big.Int).Mod(new(big.Int).SetBytes(committeeID), new(big.Int).SetUint64(subnetsCount)).String()
 	return []string{subnet}
 }
