@@ -12,7 +12,6 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 )
 
@@ -22,7 +21,7 @@ type Getters interface {
 	GetValCheckF() specqbft.ProposedValueCheckF
 	GetSigner() spectypes.BeaconSigner
 	GetOperatorSigner() spectypes.OperatorSigner
-	GetNetwork() qbft.FutureSpecNetwork
+	GetNetwork() specqbft.Network
 }
 
 type Runner interface {

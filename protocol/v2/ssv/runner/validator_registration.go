@@ -15,7 +15,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 )
@@ -24,7 +23,7 @@ type ValidatorRegistrationRunner struct {
 	BaseRunner *BaseRunner
 
 	beacon         specssv.BeaconNode
-	network        qbft.FutureSpecNetwork
+	network        specqbft.Network
 	signer         spectypes.BeaconSigner
 	operatorSigner spectypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
@@ -37,7 +36,7 @@ func NewValidatorRegistrationRunner(
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
 	beacon specssv.BeaconNode,
-	network qbft.FutureSpecNetwork,
+	network specqbft.Network,
 	signer spectypes.BeaconSigner,
 	operatorSigner spectypes.OperatorSigner,
 ) Runner {
@@ -197,7 +196,7 @@ func (r *ValidatorRegistrationRunner) GetBaseRunner() *BaseRunner {
 	return r.BaseRunner
 }
 
-func (r *ValidatorRegistrationRunner) GetNetwork() qbft.FutureSpecNetwork {
+func (r *ValidatorRegistrationRunner) GetNetwork() specqbft.Network {
 	return r.network
 }
 

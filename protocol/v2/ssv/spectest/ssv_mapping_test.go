@@ -15,6 +15,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/spectest/tests/partialsigmessage"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -318,7 +319,7 @@ func msgProcessingSpecTestFromMap(t *testing.T, m map[string]interface{}) *MsgPr
 
 	return &MsgProcessingSpecTest{
 		Name:                    m["Name"].(string),
-		Duty:                    &duty,
+		Duty:                    duty,
 		Runner:                  r,
 		Messages:                msgs,
 		PostDutyRunnerStateRoot: m["PostDutyRunnerStateRoot"].(string),

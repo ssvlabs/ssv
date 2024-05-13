@@ -7,26 +7,24 @@ import (
 	"strings"
 	"testing"
 
-	specssv "github.com/ssvlabs/ssv-spec/ssv"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
+	"github.com/google/go-cmp/cmp"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
-
 	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	ssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
+	protocolssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
 	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
 )
 
 type MsgProcessingSpecTest struct {
 	Name                    string
 	Runner                  runner.Runner
-	Duty                    types.Duty
+	Duty                    spectypes.Duty
 	Messages                []*spectypes.SignedSSVMessage
 	PostDutyRunnerStateRoot string
 	PostDutyRunnerState     spectypes.Root `json:"-"` // Field is ignored by encoding/json
@@ -47,8 +45,8 @@ func RunMsgProcessing(t *testing.T, test *MsgProcessingSpecTest) {
 	test.RunAsPartOfMultiTest(t, logger)
 }
 
-func (test *MsgProcessingSpecTest) runPreTesting() (*specssv.Validator, error) {
-	var share *types.Share
+func (test *MsgProcessingSpecTest) runPreTesting(logger *zap.Logger) (*validator.Validator, error) {
+	var share *spectypes.Share
 	if len(test.Runner.GetBaseRunner().Share) == 0 {
 		panic("No share in base runner for tests")
 	}
@@ -56,16 +54,16 @@ func (test *MsgProcessingSpecTest) runPreTesting() (*specssv.Validator, error) {
 		share = validatorShare
 		break
 	}
-	v := spectestingutils.BaseValidator(spectestingutils.KeySetForShare(share))
+	v := protocolssvtesting.BaseValidator(logger, spectestingutils.KeySetForShare(share))
 	v.DutyRunners[test.Runner.GetBaseRunner().RunnerRoleType] = test.Runner
 	v.Network = test.Runner.GetNetwork()
 
 	var lastErr error
 	if !test.DontStartDuty {
-		lastErr = v.StartDuty(test.Duty)
+		lastErr = v.StartDuty(logger, test.Duty)
 	}
 	for _, msg := range test.Messages {
-		err := v.ProcessMessage(msg)
+		err := v.ProcessMessage(logger, msg)
 		if err != nil {
 			lastErr = err
 		}
@@ -75,28 +73,10 @@ func (test *MsgProcessingSpecTest) runPreTesting() (*specssv.Validator, error) {
 }
 
 func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *zap.Logger) {
-	v := ssvtesting.BaseValidator(logger, spectestingutils.KeySetForShare(test.Runner.GetBaseRunner().Share))
-	v.DutyRunners[test.Runner.GetBaseRunner().RunnerRoleType] = test.Runner
-	v.Network = test.Runner.GetNetwork().(qbft.FutureSpecNetwork) // TODO need to align
-
-	var lastErr error
-	if !test.DontStartDuty {
-		lastErr = v.StartDuty(logger, *test.Duty)
-	}
-	for _, msg := range test.Messages {
-		dmsg, err := queue.DecodeSignedSSVMessage(msg)
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		err = v.ProcessMessage(logger, dmsg)
-		if err != nil {
-			lastErr = err
-		}
-	}
+	v, lastErr := test.runPreTesting(logger)
 
 	if len(test.ExpectedError) != 0 {
-		require.EqualError(t, lastErr, test.ExpectedError, "expected: %v", test.ExpectedError)
+		require.EqualError(t, lastErr, test.ExpectedError)
 	} else {
 		require.NoError(t, lastErr)
 	}
@@ -110,7 +90,10 @@ func (test *MsgProcessingSpecTest) RunAsPartOfMultiTest(t *testing.T, logger *za
 	// post root
 	postRoot, err := test.Runner.GetRoot()
 	require.NoError(t, err)
-	require.EqualValues(t, test.PostDutyRunnerStateRoot, hex.EncodeToString(postRoot[:]))
+
+	if test.PostDutyRunnerStateRoot != hex.EncodeToString(postRoot[:]) {
+		logger.Error("post runner state not equal", zap.String("state", cmp.Diff(test.Runner, test.PostDutyRunnerState, cmp.Exporter(func(p reflect.Type) bool { return true }))))
+	}
 }
 
 func (test *MsgProcessingSpecTest) compareBroadcastedBeaconMsgs(t *testing.T) {
@@ -129,10 +112,10 @@ func (test *MsgProcessingSpecTest) compareBroadcastedBeaconMsgs(t *testing.T) {
 }
 
 func (test *MsgProcessingSpecTest) compareOutputMsgs(t *testing.T, v *validator.Validator) {
-	filterPartialSigs := func(messages []*types.SSVMessage) []*types.SSVMessage {
-		ret := make([]*types.SSVMessage, 0)
+	filterPartialSigs := func(messages []*spectypes.SSVMessage) []*spectypes.SSVMessage {
+		ret := make([]*spectypes.SSVMessage, 0)
 		for _, msg := range messages {
-			if msg.MsgType != types.SSVPartialSignatureMsgType {
+			if msg.MsgType != spectypes.SSVPartialSignatureMsgType {
 				continue
 			}
 			ret = append(ret, msg)

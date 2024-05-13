@@ -22,7 +22,6 @@ import (
 	"github.com/attestantio/go-eth2-client/spec"
 
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 )
@@ -33,7 +32,7 @@ type ProposerRunner struct {
 	ProducesBlindedBlocks bool
 
 	beacon         specssv.BeaconNode
-	network        qbft.FutureSpecNetwork
+	network        specqbft.Network
 	signer         spectypes.BeaconSigner
 	operatorSigner spectypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
@@ -46,7 +45,7 @@ func NewProposerRunner(
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
 	beacon specssv.BeaconNode,
-	network qbft.FutureSpecNetwork,
+	network specqbft.Network,
 	signer spectypes.BeaconSigner,
 	operatorSigner spectypes.OperatorSigner,
 	valCheck specqbft.ProposedValueCheckF,
@@ -374,7 +373,7 @@ func (r *ProposerRunner) GetBaseRunner() *BaseRunner {
 	return r.BaseRunner
 }
 
-func (r *ProposerRunner) GetNetwork() qbft.FutureSpecNetwork {
+func (r *ProposerRunner) GetNetwork() specqbft.Network {
 	return r.network
 }
 

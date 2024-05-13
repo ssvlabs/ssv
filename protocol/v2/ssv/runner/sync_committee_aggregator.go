@@ -14,7 +14,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
 )
@@ -23,7 +22,7 @@ type SyncCommitteeAggregatorRunner struct {
 	BaseRunner *BaseRunner
 
 	beacon         specssv.BeaconNode
-	network        qbft.FutureSpecNetwork
+	network        specqbft.Network
 	signer         spectypes.BeaconSigner
 	operatorSigner spectypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
@@ -36,7 +35,7 @@ func NewSyncCommitteeAggregatorRunner(
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
 	beacon specssv.BeaconNode,
-	network qbft.FutureSpecNetwork,
+	network specqbft.Network,
 	signer spectypes.BeaconSigner,
 	operatorSigner spectypes.OperatorSigner,
 	valCheck specqbft.ProposedValueCheckF,
@@ -388,7 +387,7 @@ func (r *SyncCommitteeAggregatorRunner) GetBaseRunner() *BaseRunner {
 	return r.BaseRunner
 }
 
-func (r *SyncCommitteeAggregatorRunner) GetNetwork() qbft.FutureSpecNetwork {
+func (r *SyncCommitteeAggregatorRunner) GetNetwork() specqbft.Network {
 	return r.network
 }
 

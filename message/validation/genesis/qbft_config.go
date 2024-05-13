@@ -5,7 +5,6 @@ import (
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 )
@@ -37,7 +36,7 @@ func (q qbftConfig) GetProposerF() specqbft.ProposerF {
 	panic("should not be called")
 }
 
-func (q qbftConfig) GetNetwork() qbft.FutureSpecNetwork {
+func (q qbftConfig) GetNetwork() specqbft.Network {
 	panic("should not be called")
 }
 

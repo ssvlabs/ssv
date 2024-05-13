@@ -5,12 +5,11 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/altair"
-	"github.com/attestantio/go-eth2-client/spec/deneb"
-	spec "github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv-spec/types/testingutils"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 )
 
 var TestingSSVDomainType = spectypes.JatoTestnet
@@ -234,11 +233,11 @@ var ssvMsg = func(qbftMsg *spectypes.SignedSSVMessage, postMsg *spectypes.Partia
 	panic("msg type undefined")
 }
 
-var PostConsensusWrongAttestationMsg = func(sk *bls.SecretKey, id spectypes.OperatorID, height qbft.Height) *spectypes.PartialSignatureMessages {
+var PostConsensusWrongAttestationMsg = func(sk *bls.SecretKey, id spectypes.OperatorID, height specqbft.Height) *spectypes.PartialSignatureMessages {
 	return postConsensusAttestationMsg(sk, id, height, true, false)
 }
 
-var PostConsensusWrongValidatorIndexAttestationMsg = func(sk *bls.SecretKey, id spectypes.OperatorID, height qbft.Height) *spectypes.PartialSignatureMessages {
+var PostConsensusWrongValidatorIndexAttestationMsg = func(sk *bls.SecretKey, id spectypes.OperatorID, height specqbft.Height) *spectypes.PartialSignatureMessages {
 	msg := postConsensusAttestationMsg(sk, id, height, true, false)
 	for _, m := range msg.Messages {
 		m.ValidatorIndex = spectestingutils.TestingWrongValidatorIndex
@@ -246,15 +245,15 @@ var PostConsensusWrongValidatorIndexAttestationMsg = func(sk *bls.SecretKey, id 
 	return msg
 }
 
-var PostConsensusWrongSigAttestationMsg = func(sk *bls.SecretKey, id spectypes.OperatorID, height qbft.Height) *spectypes.PartialSignatureMessages {
+var PostConsensusWrongSigAttestationMsg = func(sk *bls.SecretKey, id spectypes.OperatorID, height specqbft.Height) *spectypes.PartialSignatureMessages {
 	return postConsensusAttestationMsg(sk, id, height, false, true)
 }
 
-var PostConsensusAttestationMsg = func(sk *bls.SecretKey, id spectypes.OperatorID, height qbft.Height) *spectypes.PartialSignatureMessages {
+var PostConsensusAttestationMsg = func(sk *bls.SecretKey, id spectypes.OperatorID, height specqbft.Height) *spectypes.PartialSignatureMessages {
 	return postConsensusAttestationMsg(sk, id, height, false, false)
 }
 
-var PostConsensusAttestationTooManyRootsMsg = func(sk *bls.SecretKey, id spectypes.OperatorID, height qbft.Height) *spectypes.PartialSignatureMessages {
+var PostConsensusAttestationTooManyRootsMsg = func(sk *bls.SecretKey, id spectypes.OperatorID, height specqbft.Height) *spectypes.PartialSignatureMessages {
 	ret := postConsensusAttestationMsg(sk, id, height, false, false)
 	ret.Messages = append(ret.Messages, ret.Messages[0])
 
@@ -266,7 +265,7 @@ var PostConsensusAttestationTooManyRootsMsg = func(sk *bls.SecretKey, id spectyp
 	return msg
 }
 
-var PostConsensusAttestationTooFewRootsMsg = func(sk *bls.SecretKey, id spectypes.OperatorID, height qbft.Height) *spectypes.PartialSignatureMessages {
+var PostConsensusAttestationTooFewRootsMsg = func(sk *bls.SecretKey, id spectypes.OperatorID, height specqbft.Height) *spectypes.PartialSignatureMessages {
 	msg := &spectypes.PartialSignatureMessages{
 		Type:     spectypes.PostConsensusPartialSig,
 		Slot:     spectestingutils.TestingDutySlot,
@@ -278,7 +277,7 @@ var PostConsensusAttestationTooFewRootsMsg = func(sk *bls.SecretKey, id spectype
 var postConsensusAttestationMsg = func(
 	sk *bls.SecretKey,
 	id spectypes.OperatorID,
-	height qbft.Height,
+	height specqbft.Height,
 	wrongRoot bool,
 	wrongBeaconSig bool,
 ) *spectypes.PartialSignatureMessages {
@@ -314,15 +313,15 @@ var postConsensusAttestationMsg = func(
 
 // Post Consensus - Attestation and Sync Committee
 
-var PostConsensusAttestationAndSyncCommitteeMsg = func(sk *bls.SecretKey, id spectypes.OperatorID, height qbft.Height) *spectypes.PartialSignatureMessages {
+var PostConsensusAttestationAndSyncCommitteeMsg = func(sk *bls.SecretKey, id spectypes.OperatorID, height specqbft.Height) *spectypes.PartialSignatureMessages {
 	return postConsensusAttestationAndSyncCommitteeMsg(sk, id, height, false, false)
 }
 
-var PostConsensusWrongAttestationAndSyncCommitteeMsg = func(sk *bls.SecretKey, id spectypes.OperatorID, height qbft.Height) *spectypes.PartialSignatureMessages {
+var PostConsensusWrongAttestationAndSyncCommitteeMsg = func(sk *bls.SecretKey, id spectypes.OperatorID, height specqbft.Height) *spectypes.PartialSignatureMessages {
 	return postConsensusAttestationAndSyncCommitteeMsg(sk, id, height, true, false)
 }
 
-var PostConsensusWrongValidatorIndexAttestationAndSyncCommitteeMsg = func(sk *bls.SecretKey, id spectypes.OperatorID, height qbft.Height) *spectypes.PartialSignatureMessages {
+var PostConsensusWrongValidatorIndexAttestationAndSyncCommitteeMsg = func(sk *bls.SecretKey, id spectypes.OperatorID, height specqbft.Height) *spectypes.PartialSignatureMessages {
 	msg := postConsensusAttestationAndSyncCommitteeMsg(sk, id, height, true, false)
 	for _, m := range msg.Messages {
 		m.ValidatorIndex = spectestingutils.TestingWrongValidatorIndex
@@ -330,11 +329,11 @@ var PostConsensusWrongValidatorIndexAttestationAndSyncCommitteeMsg = func(sk *bl
 	return msg
 }
 
-var PostConsensusWrongSigAttestationAndSyncCommitteeMsg = func(sk *bls.SecretKey, id spectypes.OperatorID, height qbft.Height) *spectypes.PartialSignatureMessages {
+var PostConsensusWrongSigAttestationAndSyncCommitteeMsg = func(sk *bls.SecretKey, id spectypes.OperatorID, height specqbft.Height) *spectypes.PartialSignatureMessages {
 	return postConsensusAttestationAndSyncCommitteeMsg(sk, id, height, false, true)
 }
 
-var PostConsensusAttestationAndSyncCommitteeMsgTooManyRootsMsg = func(sk *bls.SecretKey, id spectypes.OperatorID, height qbft.Height) *spectypes.PartialSignatureMessages {
+var PostConsensusAttestationAndSyncCommitteeMsgTooManyRootsMsg = func(sk *bls.SecretKey, id spectypes.OperatorID, height specqbft.Height) *spectypes.PartialSignatureMessages {
 	ret := postConsensusAttestationAndSyncCommitteeMsg(sk, id, height, false, false)
 	ret.Messages = append(ret.Messages, ret.Messages[0])
 
@@ -358,7 +357,7 @@ var PostConsensusAttestationAndSyncCommitteeMsgTooFewRootsMsg = func(sk *bls.Sec
 var postConsensusAttestationAndSyncCommitteeMsg = func(
 	sk *bls.SecretKey,
 	id spectypes.OperatorID,
-	height qbft.Height,
+	height specqbft.Height,
 	wrongRoot bool,
 	wrongBeaconSig bool,
 ) *spectypes.PartialSignatureMessages {

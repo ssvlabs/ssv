@@ -8,6 +8,7 @@ import (
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"go.uber.org/zap"
 
+	"github.com/bloxapp/ssv/protocol/v2/qbft/testing"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 )
 

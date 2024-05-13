@@ -1,13 +1,13 @@
 package validator
 
 import (
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/message/validation"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	qbftctrl "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/types"
@@ -19,7 +19,7 @@ const (
 
 // Options represents options that should be passed to a new instance of Validator.
 type Options struct {
-	Network           qbft.FutureSpecNetwork
+	Network           specqbft.Network
 	Beacon            specssv.BeaconNode
 	BeaconNetwork     beacon.BeaconNetwork
 	Storage           *storage.QBFTStores

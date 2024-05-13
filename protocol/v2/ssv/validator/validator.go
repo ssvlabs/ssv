@@ -15,7 +15,6 @@ import (
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/message/validation"
 	"github.com/bloxapp/ssv/protocol/v2/message"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/types"
@@ -30,7 +29,7 @@ type Validator struct {
 	cancel context.CancelFunc
 
 	DutyRunners runner.ValidatorDutyRunners
-	Network     qbft.FutureSpecNetwork
+	Network     specqbft.Network
 
 	Operator          *spectypes.Operator
 	Share             *types.SSVShare
