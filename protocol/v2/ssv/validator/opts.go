@@ -6,6 +6,7 @@ import (
 
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/message/validation"
+	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	qbftctrl "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
@@ -19,6 +20,7 @@ const (
 
 // Options represents options that should be passed to a new instance of Validator.
 type Options struct {
+	NetworkConfig     networkconfig.NetworkConfig
 	Network           qbft.FutureSpecNetwork
 	Beacon            specssv.BeaconNode
 	BeaconNetwork     beacon.BeaconNetwork

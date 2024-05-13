@@ -262,6 +262,7 @@ var StartNodeCmd = &cobra.Command{
 		cfg.SSVOptions.ValidatorOptions.Beacon = consensusClient
 		cfg.SSVOptions.ValidatorOptions.BeaconSigner = keyManager
 		cfg.SSVOptions.ValidatorOptions.ValidatorsMap = validatorsMap
+		cfg.SSVOptions.ValidatorOptions.NetworkConfig = networkConfig
 
 		cfg.SSVOptions.ValidatorOptions.OperatorDataStore = operatorDataStore
 		cfg.SSVOptions.ValidatorOptions.RegistryStorage = nodeStorage
@@ -556,8 +557,6 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 	if err != nil {
 		return networkconfig.NetworkConfig{}, err
 	}
-
-	types.SetDefaultDomain(networkConfig.Domain)
 
 	nodeType := "light"
 	if cfg.SSVOptions.ValidatorOptions.FullNode {

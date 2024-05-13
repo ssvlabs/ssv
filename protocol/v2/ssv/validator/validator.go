@@ -14,6 +14,7 @@ import (
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/message/validation"
+	"github.com/bloxapp/ssv/networkconfig"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/qbft"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
@@ -29,8 +30,9 @@ type Validator struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	DutyRunners runner.ValidatorDutyRunners
-	Network     qbft.FutureSpecNetwork
+	NetworkConfig networkconfig.NetworkConfig
+	DutyRunners   runner.ValidatorDutyRunners
+	Network       qbft.FutureSpecNetwork
 
 	Operator          *spectypes.Operator
 	Share             *types.SSVShare
@@ -61,6 +63,7 @@ func NewValidator(pctx context.Context, cancel func(), options Options) *Validat
 		mtx:               &sync.RWMutex{},
 		ctx:               pctx,
 		cancel:            cancel,
+		NetworkConfig:     options.NetworkConfig,
 		DutyRunners:       options.DutyRunners,
 		Network:           options.Network,
 		Storage:           options.Storage,
