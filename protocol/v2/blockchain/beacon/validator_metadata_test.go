@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/bloxapp/ssv/logging"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 func TestValidatorMetadata_Status(t *testing.T) {
@@ -105,12 +106,12 @@ func TestUpdateValidatorsMetadata(t *testing.T) {
 		return results, nil
 	})
 
-	storageData := make(map[string]*ValidatorMetadata)
+	storageData := make(map[spectypes.ValidatorPK]*ValidatorMetadata)
 	storageMu := sync.Mutex{}
 
 	// storage := NewMockValidatorMetadataStorage()
 	storage := NewMockValidatorMetadataStorage(ctrl)
-	storage.EXPECT().UpdateValidatorMetadata(gomock.Any(), gomock.Any()).DoAndReturn(func(pk string, metadata *ValidatorMetadata) error {
+	storage.EXPECT().UpdateValidatorMetadata(gomock.Any(), gomock.Any()).DoAndReturn(func(pk spectypes.ValidatorPK, metadata *ValidatorMetadata) error {
 		storageMu.Lock()
 		defer storageMu.Unlock()
 
@@ -119,9 +120,10 @@ func TestUpdateValidatorsMetadata(t *testing.T) {
 		return nil
 	}).AnyTimes()
 
-	onUpdated := func(pk string, meta *ValidatorMetadata) {
+	onUpdated := func(pk spectypes.ValidatorPK, meta *ValidatorMetadata) {
 		joined := strings.Join(pks, ":")
-		require.True(t, strings.Contains(joined, pk))
+
+		require.True(t, strings.Contains(joined, strings.Trim(phase0.BLSPubKey(pk).String(), "0x")))
 		require.True(t, meta.Index == phase0.ValidatorIndex(210961) || meta.Index == phase0.ValidatorIndex(213820))
 		atomic.AddUint64(&updateCount, 1)
 	}
