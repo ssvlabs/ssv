@@ -36,8 +36,6 @@ func (c *MessageCounts) String() string {
 // ValidateConsensusMessage checks if the provided consensus message exceeds the set limits.
 // Returns an error if the message type exceeds its respective count limit.
 func (c *MessageCounts) ValidateConsensusMessage(signedSSVMessage *spectypes.SignedSSVMessage, msg *specqbft.Message, limits MessageCounts) error {
-	return nil
-
 	switch msg.MsgType {
 	case specqbft.ProposalMsgType:
 		if c.Proposal >= limits.Proposal {

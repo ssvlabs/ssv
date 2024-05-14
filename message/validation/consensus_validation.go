@@ -161,22 +161,25 @@ func (mv *messageValidator) validateQBFTLogic(
 			continue
 		}
 
-		// It should be checked after ErrNonDecidedWithMultipleSigners
-		//signerCount := len(signedSSVMessage.GetOperatorIDs())
-		//if signerCount > 1 {
-		//	if _, ok := signerState.SeenDecidedLengths[signerCount]; ok {
-		//		return ErrDecidedWithSameNumberOfSigners
-		//	}
-		//}
+		// TODO: consider checking committee role too by multiplying limits by amount of validators in committee
+		if !mv.committeeRole(signedSSVMessage.SSVMessage.GetID().GetRoleType()) {
+			// It should be checked after ErrNonDecidedWithMultipleSigners
+			signerCount := len(signedSSVMessage.GetOperatorIDs())
+			if signerCount > 1 {
+				if _, ok := signerState.SeenDecidedLengths[signerCount]; ok {
+					return ErrDecidedWithSameNumberOfSigners
+				}
+			}
 
-		if msgSlot == signerState.Slot && consensusMessage.Round == signerState.Round {
-			//if len(signedSSVMessage.FullData) != 0 && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedSSVMessage.FullData) {
-			//	return ErrDuplicatedProposalWithDifferentData
-			//}
+			if msgSlot == signerState.Slot && consensusMessage.Round == signerState.Round {
+				if len(signedSSVMessage.FullData) != 0 && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedSSVMessage.FullData) {
+					return ErrDuplicatedProposalWithDifferentData
+				}
 
-			limits := maxMessageCounts(len(committee))
-			if err := signerState.MessageCounts.ValidateConsensusMessage(signedSSVMessage, consensusMessage, limits); err != nil {
-				return err
+				limits := maxMessageCounts(len(committee))
+				if err := signerState.MessageCounts.ValidateConsensusMessage(signedSSVMessage, consensusMessage, limits); err != nil {
+					return err
+				}
 			}
 		}
 	}
