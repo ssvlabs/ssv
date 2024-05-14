@@ -37,7 +37,7 @@ var messagePriorityTests = []struct {
 			// 1.1. Events/ExecuteDuty
 			mockExecuteDutyMessage{Slot: 62, Role: spectypes.BNRoleProposer},
 			// 1.2. Events/Timeout
-			mockTimeoutMessage{Height: 98, Role: spectypes.BNRoleProposer},
+			mockTimeoutMessage{Height: 98, Role: spectypes.RunnerRole(spectypes.BNRoleProposer)},
 
 			// 2. Current height/slot:
 			// 2.1. Consensus
@@ -157,7 +157,7 @@ type mockMessage interface {
 }
 
 type mockConsensusMessage struct {
-	Role    spectypes.BeaconRole
+	Role    spectypes.RunnerRole
 	Type    qbft.MessageType
 	Decided bool
 	Height  qbft.Height
@@ -179,28 +179,37 @@ func (m mockConsensusMessage) ssvMessage(state *State) *spectypes.SSVMessage {
 	}
 
 	factory := ssvMessageFactory(m.Role)
+	msg := qbft.Message{
+		MsgType:                  typ,
+		Height:                   m.Height,
+		Round:                    2,
+		Identifier:               make([]byte, 56),
+		Root:                     [32]byte{1, 2, 3},
+		RoundChangeJustification: [][]byte{{1, 2, 3, 4}},
+		PrepareJustification:     [][]byte{{1, 2, 3, 4}},
+	}
+	copy(msg.Identifier[:3], []byte{1, 2, 3, 4})
+	msgEncoded, err := msg.Encode()
+	if err != nil {
+		panic(err)
+	}
 	return factory(
-		&qbft.SignedMessage{
-			Message: qbft.Message{
-				MsgType:                  typ,
-				Height:                   m.Height,
-				Round:                    2,
-				Identifier:               []byte{1, 2, 3, 4},
-				Root:                     [32]byte{1, 2, 3},
-				RoundChangeJustification: [][]byte{{1, 2, 3, 4}},
-				PrepareJustification:     [][]byte{{1, 2, 3, 4}},
+		&spectypes.SignedSSVMessage{
+			SSVMessage: &spectypes.SSVMessage{
+				MsgType: spectypes.SSVConsensusMsgType,
+				MsgID:   spectypes.MessageID(msg.Identifier),
+				Data:    msgEncoded,
 			},
-
-			FullData:  []byte{1, 2, 3, 4},
-			Signature: make([]byte, 96),
-			Signers:   signers,
+			FullData:    []byte{1, 2, 3, 4},
+			Signatures:  make([][]byte, 96),
+			OperatorIDs: signers,
 		},
 		nil,
 	)
 }
 
 type mockNonConsensusMessage struct {
-	Role spectypes.BeaconRole
+	Role spectypes.RunnerRole
 	Type spectypes.PartialSigMsgType
 	Slot phase0.Slot
 }
@@ -209,20 +218,15 @@ func (m mockNonConsensusMessage) ssvMessage(state *State) *spectypes.SSVMessage 
 	factory := ssvMessageFactory(m.Role)
 	return factory(
 		nil,
-		&spectypes.SignedPartialSignatureMessage{
-			Message: spectypes.PartialSignatureMessages{
-				Type: m.Type,
-				Slot: m.Slot,
-				Messages: []*spectypes.PartialSignatureMessage{
-					{
-						PartialSignature: make([]byte, 96),
-						SigningRoot:      [32]byte{},
-						Signer:           1,
-					},
-				},
+		&spectypes.PartialSignatureMessages{
+			Type: m.Type,
+			Slot: m.Slot,
+			Messages: []*spectypes.PartialSignatureMessage{{
+				SigningRoot:      [32]byte{},
+				PartialSignature: make([]byte, 96),
+				Signer:           spectypes.OperatorID(1),
 			},
-			Signature: make([]byte, 96),
-			Signer:    spectypes.OperatorID(1),
+			},
 		},
 	)
 }
@@ -233,7 +237,7 @@ type mockExecuteDutyMessage struct {
 }
 
 func (m mockExecuteDutyMessage) ssvMessage(state *State) *spectypes.SSVMessage {
-	edd, err := json.Marshal(types.ExecuteDutyData{Duty: &spectypes.Duty{
+	edd, err := json.Marshal(types.ExecuteDutyData{Duty: &spectypes.BeaconDuty{
 		Type: m.Role,
 		Slot: m.Slot,
 	}})
@@ -249,13 +253,13 @@ func (m mockExecuteDutyMessage) ssvMessage(state *State) *spectypes.SSVMessage {
 	}
 	return &spectypes.SSVMessage{
 		MsgType: message.SSVEventMsgType,
-		MsgID:   spectypes.NewMsgID(testingutils.TestingSSVDomainType, testingutils.TestingValidatorPubKey[:], m.Role),
+		MsgID:   spectypes.NewMsgID(testingutils.TestingSSVDomainType, testingutils.TestingValidatorPubKey[:], spectypes.RunnerRole(m.Role)),
 		Data:    data,
 	}
 }
 
 type mockTimeoutMessage struct {
-	Role   spectypes.BeaconRole
+	Role   spectypes.RunnerRole
 	Height qbft.Height
 }
 
@@ -352,7 +356,7 @@ func (m messageSlice) dump(s *State) string {
 		}
 
 		decided := false
-		if sm, ok := msg.Body.(*qbft.Message); ok {
+		if _, ok := msg.Body.(*qbft.Message); ok {
 			decided = isDecidedMesssage(s, msg.SignedSSVMessage)
 		}
 		tbl.AddRow(
@@ -367,21 +371,21 @@ func (m messageSlice) dump(s *State) string {
 	return b.String()
 }
 
-func ssvMessageFactory(role spectypes.BeaconRole) func(*qbft.SignedMessage, *spectypes.SignedPartialSignatureMessage) *spectypes.SSVMessage {
+func ssvMessageFactory(role spectypes.RunnerRole) func(*spectypes.SignedSSVMessage, *spectypes.PartialSignatureMessages) *spectypes.SSVMessage {
 	switch role {
-	case spectypes.BNRoleAttester:
+	case spectypes.RunnerRole(spectypes.BNRoleAttester):
 		return testingutils.SSVMsgAttester
-	case spectypes.BNRoleProposer:
+	case spectypes.RunnerRole(spectypes.BNRoleProposer):
 		return testingutils.SSVMsgProposer
-	case spectypes.BNRoleAggregator:
+	case spectypes.RunnerRole(spectypes.BNRoleAggregator):
 		return testingutils.SSVMsgAggregator
-	case spectypes.BNRoleSyncCommittee:
+	case spectypes.RunnerRole(spectypes.BNRoleSyncCommittee):
 		return testingutils.SSVMsgSyncCommittee
-	case spectypes.BNRoleSyncCommitteeContribution:
+	case spectypes.RunnerRole(spectypes.BNRoleSyncCommitteeContribution):
 		return testingutils.SSVMsgSyncCommitteeContribution
-	case spectypes.BNRoleValidatorRegistration:
+	case spectypes.RunnerRole(spectypes.BNRoleValidatorRegistration):
 		return testingutils.SSVMsgValidatorRegistration
-	case spectypes.BNRoleVoluntaryExit:
+	case spectypes.RunnerRole(spectypes.BNRoleVoluntaryExit):
 		return testingutils.SSVMsgVoluntaryExit
 	default:
 		panic("invalid role")
