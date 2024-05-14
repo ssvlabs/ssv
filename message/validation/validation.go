@@ -115,21 +115,26 @@ func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt
 }
 
 func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.SignedSSVMessage, topic string, receivedAt time.Time) (*queue.DecodedSSVMessage, error) {
+	decodedMessage := &queue.DecodedSSVMessage{
+		SignedSSVMessage: signedSSVMessage,
+		SSVMessage:       signedSSVMessage.SSVMessage,
+	}
+
 	if err := mv.validateSignedSSVMessage(signedSSVMessage); err != nil {
-		return nil, err
+		return decodedMessage, err
 	}
 
 	if err := mv.validateSSVMessage(signedSSVMessage.SSVMessage, topic); err != nil {
-		return nil, err
+		return decodedMessage, err
 	}
 
 	committee, validatorIndices, err := mv.getCommitteeAndValidatorIndices(signedSSVMessage.SSVMessage.GetID())
 	if err != nil {
-		return nil, err
+		return decodedMessage, err
 	}
 
 	if err := mv.belongsToCommittee(signedSSVMessage.GetOperatorIDs(), committee); err != nil {
-		return nil, err
+		return decodedMessage, err
 	}
 
 	validationMu := mv.obtainValidationLock(signedSSVMessage.SSVMessage.GetID())
@@ -137,23 +142,18 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 	validationMu.Lock()
 	defer validationMu.Unlock()
 
-	decodedMessage := &queue.DecodedSSVMessage{
-		SignedSSVMessage: signedSSVMessage,
-		SSVMessage:       signedSSVMessage.SSVMessage,
-	}
-
 	switch signedSSVMessage.SSVMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
 		consensusMessage, err := mv.validateConsensusMessage(signedSSVMessage, committee, validatorIndices, receivedAt)
 		if err != nil {
-			return nil, err
+			return decodedMessage, err
 		}
 
 		decodedMessage.Body = consensusMessage
 	case spectypes.SSVPartialSignatureMsgType:
 		partialSignatureMessages, err := mv.validatePartialSignatureMessage(signedSSVMessage, committee, validatorIndices, receivedAt)
 		if err != nil {
-			return nil, err
+			return decodedMessage, err
 		}
 
 		decodedMessage.Body = partialSignatureMessages
