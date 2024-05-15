@@ -409,7 +409,7 @@ func (r *dummyRouter) Route(_ context.Context, _ *queue.DecodedSSVMessage) {
 	atomic.AddUint64(&r.count, 1)
 }
 
-func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.BeaconRole) (spectypes.MessageID, *spectypes.SignedSSVMessage) {
+func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.RunnerRole) (spectypes.MessageID, *spectypes.SignedSSVMessage) {
 	pk, err := hex.DecodeString(pkHex)
 	require.NoError(t, err)
 	id := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, pk, role)
