@@ -16,7 +16,7 @@ import (
 // ValidatorMetadataStorage interface for validator metadata
 type ValidatorMetadataStorage interface {
 	UpdateValidatorMetadata(pk spectypes.ValidatorPK, metadata *ValidatorMetadata) error
-	//UpdateValidatorsMetadata(map[string]*ValidatorMetadata) error
+	UpdateValidatorsMetadata(map[spectypes.ValidatorPK]*ValidatorMetadata) error
 }
 
 // ValidatorMetadata represents validator metdata from beacon
@@ -82,27 +82,18 @@ func UpdateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte, collection V
 		zap.Int("received", len(results)))
 
 	startdb := time.Now()
-	success := 0
-	var errs []error
+
+	if err := collection.UpdateValidatorsMetadata(results); err != nil {
+		logger.Error("❗ failed to update validators metadata",
+			zap.Error(err))
+	}
+	logger.Debug("🆕 updated validators metadata in storage", zap.Duration("elapsed", time.Since(startdb)))
 	for pk, meta := range results {
-		if err := collection.UpdateValidatorMetadata(pk, meta); err != nil {
-			logger.Error("❗ failed to update validator metadata",
-				fields.PubKey(pk[:]), zap.Error(err))
-			errs = append(errs, err)
-		} else {
-			success += 1
-		}
 		if onUpdated != nil {
 			onUpdated(pk, meta)
 		}
 		logger.Debug("💾️ successfully updated validator metadata",
 			fields.PubKey(pk[:]), zap.Any("metadata", meta))
-	}
-	logger.Debug("🆕 updated validators metadata in storage", zap.Int("count", success), zap.Duration("elapsed", time.Since(startdb)))
-	if len(errs) > 0 {
-		logger.Error("❌ failed to process validators returned from Beacon node",
-			zap.Int("count", len(errs)), zap.Errors("errors", errs))
-		return errors.Errorf("could not process %d validators returned from beacon", len(errs))
 	}
 	return nil
 }
