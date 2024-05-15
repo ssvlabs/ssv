@@ -5,7 +5,6 @@ package validation
 import (
 	"bytes"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"time"
 
@@ -165,18 +164,18 @@ func (mv *messageValidator) validateQBFTLogic(
 		// It should be checked after ErrNonDecidedWithMultipleSigners
 		signerCount := len(signedSSVMessage.GetOperatorIDs())
 		if signerCount > 1 {
-			if prevMessage, ok := signerState.SeenDecidedLengths[signerCount]; ok {
-				e := ErrDecidedWithSameNumberOfSigners
-				gotJSON, _ := json.Marshal(queue.DecodedSSVMessage{
-					SignedSSVMessage: signedSSVMessage,
-					SSVMessage:       signedSSVMessage.SSVMessage,
-					Body:             consensusMessage,
-				})
-				wantJSON, _ := json.Marshal(prevMessage)
-				e.got = string(gotJSON)
-				e.want = string(wantJSON)
-				return e
-			}
+			//if prevMessage, ok := signerState.SeenDecidedLengths[signerCount]; ok {
+			//	e := ErrDecidedWithSameNumberOfSigners
+			//	gotJSON, _ := json.Marshal(queue.DecodedSSVMessage{
+			//		SignedSSVMessage: signedSSVMessage,
+			//		SSVMessage:       signedSSVMessage.SSVMessage,
+			//		Body:             consensusMessage,
+			//	})
+			//	wantJSON, _ := json.Marshal(prevMessage)
+			//	e.got = string(gotJSON)
+			//	e.want = string(wantJSON)
+			//	return e
+			//}
 		}
 
 		if msgSlot == signerState.Slot && consensusMessage.Round == signerState.Round {
