@@ -33,7 +33,7 @@ func (s *SignerState) ResetSlot(slot phase0.Slot, round specqbft.Round, newEpoch
 	} else {
 		s.EpochDuties++
 	}
-	s.SeenDecidedLengths = make(map[int]struct{})
+	s.SeenDecidedLengths = make(map[int]queue.DecodedSSVMessage)
 }
 
 // ResetRound resets the state's round, message counts, and proposal data to the given values.
@@ -42,5 +42,5 @@ func (s *SignerState) ResetRound(round specqbft.Round) {
 	s.Round = round
 	s.MessageCounts = MessageCounts{}
 	s.ProposalData = nil
-	s.SeenDecidedLengths = make(map[int]struct{})
+	s.SeenDecidedLengths = make(map[int]queue.DecodedSSVMessage)
 }
