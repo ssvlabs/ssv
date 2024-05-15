@@ -6,6 +6,8 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 )
 
 // SignerState represents the state of a signer, including its start time, slot, round,
@@ -16,7 +18,7 @@ type SignerState struct {
 	MessageCounts      MessageCounts
 	ProposalData       []byte
 	EpochDuties        int
-	SeenDecidedLengths map[int]struct{}
+	SeenDecidedLengths map[int]queue.DecodedSSVMessage
 }
 
 // ResetSlot resets the state's slot, round, message counts, and proposal data to the given values.

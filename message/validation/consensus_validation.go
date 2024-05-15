@@ -16,6 +16,7 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
@@ -163,8 +164,15 @@ func (mv *messageValidator) validateQBFTLogic(
 		// It should be checked after ErrNonDecidedWithMultipleSigners
 		signerCount := len(signedSSVMessage.GetOperatorIDs())
 		if signerCount > 1 {
-			if _, ok := signerState.SeenDecidedLengths[signerCount]; ok {
-				return ErrDecidedWithSameNumberOfSigners
+			if prevMessage, ok := signerState.SeenDecidedLengths[signerCount]; ok {
+				e := ErrDecidedWithSameNumberOfSigners
+				e.got = queue.DecodedSSVMessage{
+					SignedSSVMessage: signedSSVMessage,
+					SSVMessage:       signedSSVMessage.SSVMessage,
+					Body:             consensusMessage,
+				}
+				e.want = prevMessage
+				return e
 			}
 		}
 
@@ -248,7 +256,11 @@ func (mv *messageValidator) updateConsensusState(signedSSVMessage *spectypes.Sig
 
 		signerCount := len(signedSSVMessage.GetOperatorIDs())
 		if signerCount > 1 {
-			signerState.SeenDecidedLengths[signerCount] = struct{}{}
+			signerState.SeenDecidedLengths[signerCount] = queue.DecodedSSVMessage{
+				SignedSSVMessage: signedSSVMessage,
+				SSVMessage:       signedSSVMessage.SSVMessage,
+				Body:             consensusMessage,
+			}
 		}
 
 		signerState.MessageCounts.RecordConsensusMessage(signedSSVMessage, consensusMessage)
