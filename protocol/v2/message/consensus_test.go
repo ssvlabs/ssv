@@ -14,7 +14,7 @@ import (
 
 func TestAggregateSorting(t *testing.T) {
 	uids := []spectypes.OperatorID{spectypes.OperatorID(1), spectypes.OperatorID(2), spectypes.OperatorID(3), spectypes.OperatorID(4)}
-	secretKeys, _ := protocoltesting.GenerateBLSKeys(uids...)
+	secretKeys, _ := protocoltesting.GenerateOperatorSigner(uids...)
 
 	identifier := []byte("pk")
 
@@ -33,8 +33,9 @@ func TestAggregateSorting(t *testing.T) {
 		require.NoError(t, message.Aggregate(signedMessage, sig))
 	}
 
-	sorted := sort.SliceIsSorted(signedMessage.Signers, func(i, j int) bool {
-		return signedMessage.Signers[i] < signedMessage.Signers[j]
+	sorted := sort.SliceIsSorted(signedMessage.OperatorIDs, func(i, j int) bool {
+		return signedMessage.OperatorIDs[i] < signedMessage.OperatorIDs[j]
 	})
+
 	require.True(t, sorted)
 }
