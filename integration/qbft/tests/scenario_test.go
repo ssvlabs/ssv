@@ -70,18 +70,18 @@ func (s *Scenario) Run(t *testing.T, role spectypes.BeaconRole) {
 				duty := createDuty(getKeySet(s.Committee).ValidatorPK.Serialize(), dutyProp.Slot, dutyProp.ValidatorIndex, role)
 				var pk spec.BLSPubKey
 				copy(pk[:], getKeySet(s.Committee).ValidatorPK.Serialize())
-				ssvMsg, err := validator.CreateDutyExecuteMsg(duty, pk, networkconfig.TestNetwork.Domain)
+				ssvMsg, err := validator.CreateDutyExecuteMsg(duty.(*spectypes.BeaconDuty), pk[:], networkconfig.TestNetwork.Domain)
 				require.NoError(t, err)
 				dec, err := queue.DecodeSSVMessage(ssvMsg)
 				require.NoError(t, err)
 
-				s.validators[id].Queues[role].Q.Push(dec)
+				s.validators[id].Queues[spectypes.MapDutyToRunnerRole(role)].Q.Push(dec)
 			}(id, dutyProp)
 		}
 
 		//validating state of validator after invoking duties
 		for id, validationFunc := range s.ValidationFunctions {
-			identifier := spectypes.NewMsgID(types.GetDefaultDomain(), getKeySet(s.Committee).ValidatorPK.Serialize(), role)
+			identifier := spectypes.NewMsgID(types.GetDefaultDomain(), getKeySet(s.Committee).ValidatorPK.Serialize(), spectypes.MapDutyToRunnerRole(role))
 			//getting stored state of validator
 			var storedInstance *protocolstorage.StoredInstance
 			for {
@@ -140,12 +140,10 @@ func getKeySet(committee int) *spectestingutils.TestKeySet {
 
 func testingShare(keySet *spectestingutils.TestKeySet, id spectypes.OperatorID) *spectypes.Share { //TODO: check dead-locks
 	return &spectypes.Share{
-		OperatorID:      id,
-		ValidatorPubKey: keySet.ValidatorPK.Serialize(),
+		ValidatorPubKey: spectypes.ValidatorPK(keySet.ValidatorPK.Serialize()),
 		SharePubKey:     keySet.Shares[id].GetPublicKey().Serialize(),
 		DomainType:      testingutils.TestingSSVDomainType,
 		Quorum:          keySet.Threshold,
-		PartialQuorum:   keySet.PartialThreshold,
 		Committee:       keySet.Committee(),
 	}
 }
@@ -172,7 +170,7 @@ func newStores(logger *zap.Logger) *qbftstorage.QBFTStores {
 		spectypes.BNRoleVoluntaryExit,
 	}
 	for _, role := range roles {
-		storageMap.Add(role, qbftstorage.New(db, role.String()))
+		storageMap.Add(spectypes.MapDutyToRunnerRole(role), qbftstorage.New(db, role.String()))
 	}
 
 	return storageMap
