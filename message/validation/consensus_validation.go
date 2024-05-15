@@ -5,6 +5,7 @@ package validation
 import (
 	"bytes"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -166,12 +167,14 @@ func (mv *messageValidator) validateQBFTLogic(
 		if signerCount > 1 {
 			if prevMessage, ok := signerState.SeenDecidedLengths[signerCount]; ok {
 				e := ErrDecidedWithSameNumberOfSigners
-				e.got = queue.DecodedSSVMessage{
+				gotJSON, _ := json.Marshal(queue.DecodedSSVMessage{
 					SignedSSVMessage: signedSSVMessage,
 					SSVMessage:       signedSSVMessage.SSVMessage,
 					Body:             consensusMessage,
-				}
-				e.want = prevMessage
+				})
+				wantJSON, _ := json.Marshal(prevMessage)
+				e.got = gotJSON
+				e.want = wantJSON
 				return e
 			}
 		}
