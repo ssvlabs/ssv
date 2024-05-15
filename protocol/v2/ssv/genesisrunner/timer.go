@@ -1,11 +1,11 @@
 package genesisrunner
 
 import (
+	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/instance"
+	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/roundtimer"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	"go.uber.org/zap"
-	// "github.com/bloxapp/ssv/protocol/v2/genesisqbft/instance"
-	// "github.com/bloxapp/ssv/protocol/v2/genesisqbft/roundtimer"
 )
 
 type TimeoutF func(logger *zap.Logger, identifier genesisspectypes.MessageID, height genesisspecqbft.Height) roundtimer.OnRoundTimeoutF

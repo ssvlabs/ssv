@@ -7,13 +7,14 @@ import (
 	"fmt"
 
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/genesisqbft"
+	qbft "github.com/bloxapp/ssv/protocol/v2/genesisqbft"
 	"github.com/bloxapp/ssv/protocol/v2/genesisqbft/instance"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
+	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 )
 
 // NewDecidedHandler handles newly saved decided messages.
@@ -159,7 +160,7 @@ func (c *Controller) InstanceForHeight(logger *zap.Logger, height genesisspecqbf
 	storedInst, err := c.config.GetStorage().GetInstance(c.Identifier, height)
 	if err != nil {
 		logger.Debug("❗ could not load instance from storage",
-			fields.Height(uint64(height)),
+			fields.Height(specqbft.Height(height)),
 			zap.Uint64("ctrl_height", uint64(c.Height)),
 			zap.Error(err))
 		return nil

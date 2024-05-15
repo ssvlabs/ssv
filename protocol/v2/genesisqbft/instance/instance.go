@@ -5,10 +5,11 @@ import (
 	"sync"
 
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/genesisqbft"
+	qbft "github.com/bloxapp/ssv/protocol/v2/genesisqbft"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 )
@@ -68,8 +69,8 @@ func (i *Instance) Start(logger *zap.Logger, value []byte, height genesisspecqbf
 		i.config.GetTimer().TimeoutForRound(height, genesisspecqbft.FirstRound)
 
 		logger = logger.With(
-			fields.Round(uint64(i.State.Round)),
-			fields.Height(uint64(i.State.Height)))
+			fields.Round(specqbft.Round(i.State.Round)),
+			fields.Height(specqbft.Height(i.State.Height)))
 
 		proposerID := proposer(i.State, i.GetConfig(), genesisspecqbft.FirstRound)
 		logger.Debug("ℹ️ starting QBFT instance", zap.Uint64("leader", proposerID))

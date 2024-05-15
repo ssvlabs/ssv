@@ -211,12 +211,12 @@ func OperatorIDStr(operatorId string) zap.Field {
 	return zap.String(FieldOperatorId, operatorId)
 }
 
-func Height(height uint64) zap.Field {
-	return zap.Uint64(FieldHeight, height)
+func Height(height specqbft.Height) zap.Field {
+	return zap.Uint64(FieldHeight, uint64(height))
 }
 
-func Round(round uint64) zap.Field {
-	return zap.Uint64(FieldRound, round)
+func Round(round specqbft.Round) zap.Field {
+	return zap.Uint64(FieldRound, uint64(round))
 }
 
 func BeaconRole(val spectypes.BeaconRole) zap.Field {

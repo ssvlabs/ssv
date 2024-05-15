@@ -4,11 +4,12 @@ import (
 	"bytes"
 
 	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/genesisqbft"
+	qbft "github.com/bloxapp/ssv/protocol/v2/genesisqbft"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/genesistypes"
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
+	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	genesisspecqbft "github.com/ssvlabs/ssv-spec-pre-cc/qbft"
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 )
@@ -25,7 +26,7 @@ func (i *Instance) uponProposal(logger *zap.Logger, signedProposal *genesisspecq
 	}
 
 	logger.Debug("📬 got proposal message",
-		fields.Round(uint64(i.State.Round)),
+		fields.Round(specqbft.Round(i.State.Round)),
 		zap.Any("proposal-signers", signedProposal.Signers))
 
 	newRound := signedProposal.Message.Round
@@ -51,7 +52,7 @@ func (i *Instance) uponProposal(logger *zap.Logger, signedProposal *genesisspecq
 	}
 
 	logger.Debug("📢 got proposal, broadcasting prepare message",
-		fields.Round(uint64(i.State.Round)),
+		fields.Round(specqbft.Round(i.State.Round)),
 		zap.Any("proposal-signers", signedProposal.Signers),
 		zap.Any("prepare-signers", prepare.Signers))
 
