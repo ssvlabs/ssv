@@ -16,8 +16,7 @@ import (
 
 func (mv *messageValidator) validatePartialSignatureMessage(
 	signedSSVMessage *spectypes.SignedSSVMessage,
-	committee []spectypes.OperatorID,
-	validatorIndices []phase0.ValidatorIndex,
+	committeeData CommitteeData,
 	receivedAt time.Time,
 ) (
 	*spectypes.PartialSignatureMessages,
@@ -39,13 +38,13 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 		return nil, e
 	}
 
-	if err := mv.validatePartialSignatureMessageSemantics(signedSSVMessage, partialSignatureMessages, validatorIndices); err != nil {
+	if err := mv.validatePartialSignatureMessageSemantics(signedSSVMessage, partialSignatureMessages, committeeData.indices); err != nil {
 		return nil, err
 	}
 
 	msgID := ssvMessage.GetID()
 	state := mv.consensusState(msgID)
-	if err := mv.validatePartialSigMessagesByDutyLogic(signedSSVMessage, partialSignatureMessages, committee, validatorIndices, receivedAt, state); err != nil {
+	if err := mv.validatePartialSigMessagesByDutyLogic(signedSSVMessage, partialSignatureMessages, committeeData, receivedAt, state); err != nil {
 		return nil, err
 	}
 
@@ -118,15 +117,14 @@ func (mv *messageValidator) validatePartialSignatureMessageSemantics(
 func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 	signedSSVMessage *spectypes.SignedSSVMessage,
 	partialSignatureMessages *spectypes.PartialSignatureMessages,
-	committee []spectypes.OperatorID,
-	validatorIndices []phase0.ValidatorIndex,
+	committeeData CommitteeData,
 	receivedAt time.Time,
 	state *consensusState,
 ) error {
 	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
 	messageSlot := partialSignatureMessages.Slot
 
-	if err := mv.validateBeaconDuty(signedSSVMessage.SSVMessage.GetID().GetRoleType(), messageSlot, validatorIndices); err != nil {
+	if err := mv.validateBeaconDuty(signedSSVMessage.SSVMessage.GetID().GetRoleType(), messageSlot, committeeData.indices); err != nil {
 		return err
 	}
 
@@ -137,7 +135,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 	}
 
 	if signerState != nil && messageSlot == signerState.Slot {
-		limits := maxMessageCounts(len(committee))
+		limits := maxMessageCounts(len(committeeData.operatorIDs))
 		if err := signerState.MessageCounts.ValidatePartialSignatureMessage(partialSignatureMessages, limits); err != nil {
 			return err
 		}
@@ -154,12 +152,12 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		newDutyInSameEpoch = true
 	}
 
-	if err := mv.validateDutyCount(validatorIndices, signerState, signedSSVMessage.SSVMessage.GetID(), newDutyInSameEpoch); err != nil {
+	if err := mv.validateDutyCount(committeeData.indices, signerState, signedSSVMessage.SSVMessage.GetID(), newDutyInSameEpoch); err != nil {
 		return err
 	}
 
 	partialSignatureMessageCount := len(partialSignatureMessages.Messages)
-	clusterValidatorCount := len(validatorIndices)
+	clusterValidatorCount := len(committeeData.indices)
 
 	if signedSSVMessage.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
 		if partialSignatureMessageCount > min(2*clusterValidatorCount, clusterValidatorCount+syncCommitteeSize) {

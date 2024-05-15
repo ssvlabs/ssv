@@ -21,8 +21,7 @@ import (
 
 func (mv *messageValidator) validateConsensusMessage(
 	signedSSVMessage *spectypes.SignedSSVMessage,
-	committee []spectypes.OperatorID,
-	validatorIndices []phase0.ValidatorIndex,
+	committeeData CommitteeData,
 	receivedAt time.Time,
 ) (*specqbft.Message, error) {
 	ssvMessage := signedSSVMessage.SSVMessage
@@ -43,17 +42,17 @@ func (mv *messageValidator) validateConsensusMessage(
 
 	mv.metrics.ConsensusMsgType(consensusMessage.MsgType, len(signedSSVMessage.GetOperatorIDs()))
 
-	if err := mv.validateConsensusMessageSemantics(signedSSVMessage, consensusMessage, committee); err != nil {
+	if err := mv.validateConsensusMessageSemantics(signedSSVMessage, consensusMessage, committeeData.operatorIDs); err != nil {
 		return consensusMessage, err
 	}
 
 	state := mv.consensusState(signedSSVMessage.SSVMessage.GetID())
 
-	if err := mv.validateQBFTLogic(signedSSVMessage, consensusMessage, committee, receivedAt, state); err != nil {
+	if err := mv.validateQBFTLogic(signedSSVMessage, consensusMessage, committeeData.operatorIDs, receivedAt, state); err != nil {
 		return consensusMessage, err
 	}
 
-	if err := mv.validateQBFTMessageByDutyLogic(signedSSVMessage, consensusMessage, validatorIndices, receivedAt, state); err != nil {
+	if err := mv.validateQBFTMessageByDutyLogic(signedSSVMessage, consensusMessage, committeeData.indices, receivedAt, state); err != nil {
 		return consensusMessage, err
 	}
 
