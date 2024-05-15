@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"strconv"
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
@@ -39,7 +40,9 @@ type CommitteeRunner struct {
 	operatorSigner types.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
 
-	started time.Time
+	started       time.Time
+	consensusDone time.Time
+	postStarted   time.Time
 }
 
 func NewCommitteeRunner(beaconNetwork types.BeaconNetwork,
@@ -136,6 +139,11 @@ func (cr *CommitteeRunner) ProcessConsensus(logger *zap.Logger, msg *types.Signe
 	if !decided {
 		return nil
 	}
+
+	cr.consensusDone = time.Now()
+	cr.postStarted = time.Now()
+
+	// decided means consensus is done
 
 	duty := cr.BaseRunner.State.StartingDuty
 	postConsensusMsg := &types.PartialSignatureMessages{
@@ -235,10 +243,22 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 	if !quorum {
 		return nil
 	}
+
+	consensusDuration := cr.started.Sub(cr.consensusDone)
+	postConsensusDuration := time.Since(cr.postStarted)
+	totalDuration := consensusDuration + postConsensusDuration
+
+	durationFields := []zap.Field{
+		fields.ConsensusTime(consensusDuration),
+		zap.String("post_consensus_time", strconv.FormatFloat(postConsensusDuration.Seconds(), 'f', 5, 64)),
+		zap.String("total_consensus_time", strconv.FormatFloat(totalDuration.Seconds(), 'f', 5, 64)),
+	}
+
 	attestationMap, committeeMap, beaconObjects, err := cr.expectedPostConsensusRootsAndBeaconObjects()
 	if err != nil {
 		return errors.Wrap(err, "could not get expected post consensus roots and beacon objects")
 	}
+
 	for _, root := range roots {
 		role, validators, found := findValidators(root, attestationMap, committeeMap)
 		// TODO: (Alan) revert?
@@ -253,12 +273,14 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 			// TODO error?
 			continue
 		}
-
 		for _, validator := range validators {
 			validator := validator
-
 			share := cr.BaseRunner.Share[validator]
 			pubKey := share.ValidatorPubKey
+
+			vlogger := logger.With(zap.Int("validator_index", int(validator)), zap.String("pubkey", hex.EncodeToString(pubKey[:])))
+			vlogger = vlogger.With(durationFields...)
+
 			sig, err := cr.BaseRunner.State.ReconstructBeaconSig(cr.BaseRunner.State.PostConsensusContainer, root,
 				pubKey[:], validator)
 			// If the reconstructed signature verification failed, fall back to verifying each partial signature
@@ -268,9 +290,8 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 					cr.BaseRunner.FallBackAndVerifyEachSignature(cr.BaseRunner.State.PostConsensusContainer, root,
 						share.Committee, validator)
 				}
-				logger.Error("got post-consensus quorum but it has invalid signatures",
+				vlogger.Error("got post-consensus quorum but it has invalid signatures",
 					fields.Slot(cr.BaseRunner.State.StartingDuty.DutySlot()),
-					zap.Int("validator_index", int(validator)),
 					zap.Error(err),
 				)
 				// TODO: @GalRogozinski
@@ -279,7 +300,6 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 			}
 			specSig := phase0.BLSSignature{}
 			copy(specSig[:], sig)
-
 			if role == types.BNRoleAttester {
 				att := beaconObjects[BeaconObjectID{Root: root, ValidatorIndex: validator}].(*phase0.Attestation)
 				att.Signature = specSig
@@ -289,9 +309,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 				if err != nil {
 					return errors.Wrap(err, "failed to hash attestation data")
 				}
-				logger.Debug("submitting attestation",
-					zap.Int("validator_index", int(validator)),
-					zap.String("pubkey", hex.EncodeToString(pubKey[:])),
+				vlogger.Debug("submitting attestation",
 					zap.Any("attestation", att),
 					zap.String("attestation_data_root", hex.EncodeToString(adr[:])),
 					zap.String("signing_root", hex.EncodeToString(root[:])),
@@ -299,24 +317,22 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 				)
 
 				// broadcast
-				// TODO: (Alan) bulk submit instead of goroutine?
-				consensusDuration := time.Since(cr.started)
+				// TODO: (Alan) bulk submit instead of goroutine? (at least properly manage goroutines with wg)
 				go func() {
 					start := time.Now()
 					if err := cr.beacon.SubmitAttestation(att); err != nil {
-						logger.Error("could not submit to Beacon chain reconstructed attestation",
+						vlogger.Error("could not submit to Beacon chain reconstructed attestation",
 							fields.Slot(att.Data.Slot),
-							zap.Int("validator_index", int(validator)),
 							zap.Error(err),
 						)
 
 						// TODO: @GalRogozinski
 						// return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
 						// continue
+						return
 					}
-					logger.Info("✅ successfully submitted attestation",
+					vlogger.Info("✅ successfully submitted attestation",
 						zap.String("block_root", hex.EncodeToString(att.Data.BeaconBlockRoot[:])),
-						fields.ConsensusTime(consensusDuration),
 						fields.SubmissionTime(time.Since(start)),
 						fields.Height(cr.BaseRunner.QBFTController.Height),
 						fields.Round(cr.BaseRunner.State.RunningInstance.State.Round),
@@ -329,25 +345,25 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 				// Broadcast
 				// TODO: (Alan) bulk submit instead of goroutine?
 				go func() {
+					start := time.Now()
 					if err := cr.beacon.SubmitSyncMessage(syncMsg); err != nil {
-						logger.Error("could not submit to Beacon chain reconstructed signed sync committee",
+						vlogger.Error("could not submit to Beacon chain reconstructed signed sync committee",
 							fields.Slot(syncMsg.Slot),
-							zap.Int("validator_index", int(validator)),
 							zap.Error(err),
 						)
 						// TODO: @GalRogozinski
 						// return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed sync committee")
 						// continue
+						return
 					}
+					vlogger.Debug("📢 submitted sync committee message",
+						fields.SubmissionTime(time.Since(start)),
+						fields.Slot(syncMsg.Slot),
+					)
 				}()
-				logger.Debug("📢 submitted sync committee message",
-					fields.Slot(syncMsg.Slot),
-					zap.Int("validator_index", int(validator)),
-				)
 			}
 		}
 	}
-
 	cr.BaseRunner.State.Finished = true
 	return nil
 }
