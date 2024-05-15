@@ -3,6 +3,7 @@ package validation
 import (
 	"sync"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -10,6 +11,7 @@ import (
 type consensusID struct {
 	SenderID string
 	Role     spectypes.RunnerRole
+	Slot     phase0.Slot // temporarily only for committee role
 }
 
 // consensusState keeps track of the signers for a given public key and role.

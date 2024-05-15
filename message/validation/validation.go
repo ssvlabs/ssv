@@ -271,13 +271,14 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 	}, nil
 }
 
-func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *consensusState {
+func (mv *messageValidator) consensusState(messageID spectypes.MessageID, slot phase0.Slot) *consensusState {
 	mv.consensusStateIndexMu.Lock()
 	defer mv.consensusStateIndexMu.Unlock()
 
 	id := consensusID{
 		SenderID: string(messageID.GetSenderID()),
 		Role:     messageID.GetRoleType(),
+		Slot:     slot,
 	}
 
 	if _, ok := mv.consensusStateIndex[id]; !ok {
