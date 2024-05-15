@@ -6,18 +6,22 @@ import (
 
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	"github.com/stretchr/testify/require"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 )
 
 func RunMsg(t *testing.T, test *spectests.MsgSpecTest) { // using only spec struct so this test can be imported
 	var lastErr error
 
-	for i, msg := range test.Messages {
-		if err := msg.Validate(); err != nil {
+	for i, rc := range test.Messages {
+		if err := rc.Validate(); err != nil {
 			lastErr = err
 			continue
 		}
-
-		if msg.Message.RoundChangePrepared() && len(msg.Message.RoundChangeJustification) == 0 {
+		msg, err := specqbft.DecodeMessage(rc.SSVMessage.Data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if msg.RoundChangePrepared() && len(msg.RoundChangeJustification) == 0 {
 			lastErr = errors.New("round change justification invalid")
 		}
 

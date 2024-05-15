@@ -44,7 +44,7 @@ func TestController_OnTimeoutWithRoundCheck(t *testing.T) {
 		Timer:          roundtimer.NewTestingTimer(),
 	}
 
-	share := spectestingutils.TestingShare(keySet)
+	share := spectestingutils.TestingOperator(keySet)
 	inst := instance.NewInstance(
 		testConfig,
 		share,

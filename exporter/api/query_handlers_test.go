@@ -1,6 +1,9 @@
 package api
 
 import (
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"math"
 	"testing"
 
@@ -85,26 +88,35 @@ func TestHandleDecidedQuery(t *testing.T) {
 	db, l, done := newDBAndLoggerForTest(logger)
 	defer done()
 
-	roles := []spectypes.BeaconRole{
-		spectypes.BNRoleAttester,
-		spectypes.BNRoleProposer,
-		spectypes.BNRoleAggregator,
-		spectypes.BNRoleSyncCommittee,
+	roles := []spectypes.RunnerRole{
+		spectypes.RoleCommittee,
+		spectypes.RoleProposer,
+		spectypes.RoleAggregator,
+		spectypes.RoleSyncCommitteeContribution,
 		// skipping spectypes.BNRoleSyncCommitteeContribution to test non-existing storage
 	}
 	_, ibftStorage := newStorageForTest(db, l, roles...)
 	_ = bls.Init(bls.BLS12_381)
 
-	sks, _ := GenerateNodes(4)
-	oids := make([]spectypes.OperatorID, 0)
-	for oid := range sks {
-		oids = append(oids, oid)
+	sks, op := GenerateNodes(4)
+	oids := make([]spectypes.OperatorID, 0, len(op))
+	for _, o := range op {
+		oids = append(oids, o.OperatorID)
 	}
 
-	role := spectypes.BNRoleAttester
-	pk := sks[1].GetPublicKey()
+	role := spectypes.RoleCommittee
+	pkbytes, err := x509.MarshalPKIXPublicKey(sks[0].PublicKey)
+	require.NoError(t, err)
+	pk := pem.EncodeToMemory(
+		&pem.Block{
+			Type:  "RSA PUBLIC KEY",
+			Bytes: pkbytes,
+		},
+	)
+	pkString, err := rsaencryption.ExtractPublicKey(&sks[0].PublicKey)
+	require.NoError(t, err)
 	decided250Seq, err := protocoltesting.CreateMultipleStoredInstances(sks, specqbft.Height(0), specqbft.Height(250), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
-		id := spectypes.NewMsgID(types.GetDefaultDomain(), pk.Serialize(), role)
+		id := spectypes.NewMsgID(types.GetDefaultDomain(), pk, role)
 		return oids, &specqbft.Message{
 			MsgType:    specqbft.CommitMsgType,
 			Height:     height,
@@ -121,7 +133,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 	}
 
 	t.Run("valid range", func(t *testing.T) {
-		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), spectypes.BNRoleAttester, 0, 250)
+		nm := newDecidedAPIMsg(pkString, spectypes.BNRoleAttester, 0, 250)
 		HandleDecidedQuery(l, ibftStorage, nm)
 		require.NotNil(t, nm.Msg.Data)
 		msgs, ok := nm.Msg.Data.([]*SignedMessageAPI)
@@ -130,7 +142,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 	})
 
 	t.Run("invalid range", func(t *testing.T) {
-		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), spectypes.BNRoleAttester, 400, 404)
+		nm := newDecidedAPIMsg(pkString, spectypes.BNRoleAttester, 400, 404)
 		HandleDecidedQuery(l, ibftStorage, nm)
 		require.NotNil(t, nm.Msg.Data)
 		data, ok := nm.Msg.Data.([]string)
@@ -148,7 +160,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 	})
 
 	t.Run("non-existing role", func(t *testing.T) {
-		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), math.MaxUint64, 0, 250)
+		nm := newDecidedAPIMsg(pkString, math.MaxUint64, 0, 250)
 		HandleDecidedQuery(l, ibftStorage, nm)
 		require.NotNil(t, nm.Msg.Data)
 		errs, ok := nm.Msg.Data.([]string)
@@ -157,7 +169,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 	})
 
 	t.Run("non-existing storage", func(t *testing.T) {
-		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), spectypes.BNRoleSyncCommitteeContribution, 0, 250)
+		nm := newDecidedAPIMsg(pkString, spectypes.BNRoleSyncCommitteeContribution, 0, 250)
 		HandleDecidedQuery(l, ibftStorage, nm)
 		require.NotNil(t, nm.Msg.Data)
 		errs, ok := nm.Msg.Data.([]string)
@@ -192,7 +204,7 @@ func newDBAndLoggerForTest(logger *zap.Logger) (basedb.Database, *zap.Logger, fu
 	}
 }
 
-func newStorageForTest(db basedb.Database, logger *zap.Logger, roles ...spectypes.BeaconRole) (storage.Storage, *qbftstorage.QBFTStores) {
+func newStorageForTest(db basedb.Database, logger *zap.Logger, roles ...spectypes.RunnerRole) (storage.Storage, *qbftstorage.QBFTStores) {
 	sExporter, err := storage.NewNodeStorage(logger, db)
 	if err != nil {
 		panic(err)
@@ -207,25 +219,26 @@ func newStorageForTest(db basedb.Database, logger *zap.Logger, roles ...spectype
 }
 
 // GenerateNodes generates randomly nodes
-func GenerateNodes(cnt int) (map[spectypes.OperatorID]*bls.SecretKey, []*spectypes.Operator) {
-	_ = bls.Init(bls.BLS12_381)
-	nodes := make([]*spectypes.Operator, 0)
-	sks := make(map[spectypes.OperatorID]*bls.SecretKey)
+func GenerateNodes(cnt int) ([]*rsa.PrivateKey, []*spectypes.Operator) {
+	nodes := make([]*spectypes.Operator, 0, cnt)
+	sks := make([]*rsa.PrivateKey, 0, cnt)
 	for i := 1; i <= cnt; i++ {
-		sk := &bls.SecretKey{}
-		sk.SetByCSPRNG()
+		opPubKey, privKey, err := rsaencryption.GenerateKeys()
+		if err != nil {
+			panic(err)
+		}
 
-		opPubKey, _, err := rsaencryption.GenerateKeys()
+		pk, err := rsaencryption.PemToPrivateKey(privKey)
 		if err != nil {
 			panic(err)
 		}
 
 		nodes = append(nodes, &spectypes.Operator{
 			OperatorID:        spectypes.OperatorID(i),
-			SharePubKey:       sk.GetPublicKey().Serialize(),
 			SSVOperatorPubKey: opPubKey,
+			Committee:         []*spectypes.CommitteeMember{{OperatorID: spectypes.OperatorID(i), SSVOperatorPubKey: opPubKey}},
 		})
-		sks[spectypes.OperatorID(i)] = sk
+		sks = append(sks, pk)
 	}
 	return sks, nodes
 }

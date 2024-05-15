@@ -5,11 +5,13 @@ import (
 	crand "crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"strings"
 	"sync"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
-
+	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
@@ -170,7 +172,7 @@ func (m *mockNetwork) handleStreamEvent(e MockMessageEvent) {
 }
 
 func (m *mockNetwork) Subscribe(pk spectypes.ValidatorPK) error {
-	spk := hex.EncodeToString(pk)
+	spk := strings.Trim(phase0.BLSPubKey(pk).String(), "0x")
 
 	m.subscribedLock.Lock()
 	defer m.subscribedLock.Unlock()
@@ -182,17 +184,14 @@ func (m *mockNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) 
 	m.subscribedLock.Lock()
 	defer m.subscribedLock.Unlock()
 
-	spk := hex.EncodeToString(pk)
-	delete(m.subscribed, spk)
+	delete(m.subscribed, strings.Trim(phase0.BLSPubKey(pk).String(), "0x"))
 
 	return nil
 }
 
 func (m *mockNetwork) Peers(pk spectypes.ValidatorPK) ([]peer.ID, error) {
-	spk := hex.EncodeToString(pk)
-
 	m.topicsLock.Lock()
-	peers, ok := m.topics[spk]
+	peers, ok := m.topics[strings.Trim(phase0.BLSPubKey(pk).String(), "0x")]
 	m.topicsLock.Unlock()
 
 	if !ok {
@@ -202,8 +201,11 @@ func (m *mockNetwork) Peers(pk spectypes.ValidatorPK) ([]peer.ID, error) {
 }
 
 func (m *mockNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedSSVMessage) error {
-	pk := msgID.GetPubKey()
-	spk := hex.EncodeToString(pk)
+	pk, err := ssvtypes.DeserializeBLSPublicKey(msgID.GetSenderID())
+	if err != nil {
+		return err
+	}
+	spk := hex.EncodeToString(pk.Serialize())
 	topic := spk
 
 	e := MockMessageEvent{
@@ -254,8 +256,11 @@ func (m *mockNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
 
 	m.logger.Debug("🔀 CALL SYNC")
 	m.calledDecidedSyncCnt++
-
-	spk := hex.EncodeToString(mid.GetPubKey())
+	pk, err := ssvtypes.DeserializeBLSPublicKey(mid.GetSenderID())
+	if err != nil {
+		return err
+	}
+	spk := hex.EncodeToString(pk.Serialize())
 	topic := spk
 
 	syncMsg, err := (&message.SyncMessage{
@@ -281,9 +286,10 @@ func (m *mockNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
 	}
 
 	signedMsg := &spectypes.SignedSSVMessage{
-		Signature:  [256]byte{},
-		OperatorID: 1,
-		Data:       encodedMsg,
+		Signatures:  [][]byte{},
+		OperatorIDs: []uint64{1},
+		SSVMessage:  msg,
+		FullData:    encodedMsg,
 	}
 
 	m.topicsLock.Lock()
@@ -303,7 +309,11 @@ func (m *mockNetwork) SyncDecidedByRange(identifier spectypes.MessageID, to, fro
 }
 
 func (m *mockNetwork) SyncHighestRoundChange(mid spectypes.MessageID, height specqbft.Height) error {
-	spk := hex.EncodeToString(mid.GetPubKey())
+	pk, err := ssvtypes.DeserializeBLSPublicKey(mid.GetSenderID())
+	if err != nil {
+		return err
+	}
+	spk := hex.EncodeToString(pk.Serialize())
 	topic := spk
 
 	syncMsg, err := json.Marshal(&message.SyncMessage{
@@ -327,9 +337,10 @@ func (m *mockNetwork) SyncHighestRoundChange(mid spectypes.MessageID, height spe
 	}
 
 	signedMsg := &spectypes.SignedSSVMessage{
-		Signature:  [256]byte{},
-		OperatorID: 1,
-		Data:       encodedMsg,
+		Signatures:  [][]byte{},
+		OperatorIDs: []uint64{1},
+		SSVMessage:  msg,
+		FullData:    encodedMsg,
 	}
 
 	m.topicsLock.Lock()
@@ -381,7 +392,7 @@ func (m *mockNetwork) PushMsg(e MockMessageEvent) {
 // AddPeers enables to inject other peers
 func (m *mockNetwork) AddPeers(pk spectypes.ValidatorPK, toAdd ...TestNetwork) {
 	// TODO: support subnets
-	spk := hex.EncodeToString(pk)
+	spk := strings.Trim(phase0.BLSPubKey(pk).String(), "0x")
 
 	m.topicsLock.Lock()
 	peers, ok := m.topics[spk]
