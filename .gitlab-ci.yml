@@ -61,6 +61,7 @@ Deploy nodes to hetzner stage:
     - export KUBECONFIG=~/.kube/kubeconfig
     - kubectl config get-contexts
     #
+
     # +--------------------+
     # |  Deploy SSV nodes  |
     # +--------------------+
