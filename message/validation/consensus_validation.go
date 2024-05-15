@@ -173,8 +173,8 @@ func (mv *messageValidator) validateQBFTLogic(
 					Body:             consensusMessage,
 				})
 				wantJSON, _ := json.Marshal(prevMessage)
-				e.got = gotJSON
-				e.want = wantJSON
+				e.got = string(gotJSON)
+				e.want = string(wantJSON)
 				return e
 			}
 		}
