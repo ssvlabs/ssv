@@ -388,6 +388,7 @@ func (s *Scheduler) ExecuteCommitteeDuties(logger *zap.Logger, duties map[[32]by
 	for committeeID, duty := range duties {
 		committeeID := committeeID
 		duty := duty
+		logger.Debug("Executing duty for slot and committee", fields.Slot(duty.Slot), fields.CommitteeID(committeeID))
 		//logger := s.loggerWithDutyContext(logger, duty)
 		slotDelay := time.Since(s.network.Beacon.GetSlotStartTime(duty.Slot))
 		if slotDelay >= 100*time.Millisecond {
@@ -395,7 +396,9 @@ func (s *Scheduler) ExecuteCommitteeDuties(logger *zap.Logger, duties map[[32]by
 		}
 		slotDelayHistogram.Observe(float64(slotDelay.Milliseconds()))
 		go func() {
+			logger.Debug("waiting one third or valid block or head event", fields.Slot(duty.Slot), fields.CommitteeID(committeeID))
 			s.waitOneThirdOrValidBlock(duty.Slot)
+			logger.Debug("done waiting third or valid block", fields.Slot(duty.Slot), fields.CommitteeID(committeeID))
 			s.executeCommitteeDuty(logger, committeeID, duty)
 		}()
 	}
