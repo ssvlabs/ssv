@@ -34,7 +34,7 @@ type Broadcaster interface {
 }
 
 // RequestHandler handles p2p requests
-type RequestHandler func(*spectypes.SSVMessage) (*spectypes.SSVMessage, error)
+type RequestHandler func(ssvMessage *spectypes.SSVMessage) (*spectypes.SSVMessage, error)
 
 // CombineRequestHandlers combines multiple handlers into a single handler
 func CombineRequestHandlers(handlers ...RequestHandler) RequestHandler {
