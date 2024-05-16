@@ -13,11 +13,13 @@ func (mv *messageValidator) committeeRole(role spectypes.RunnerRole) bool {
 }
 
 func (mv *messageValidator) validateSlotTime(messageSlot phase0.Slot, role spectypes.RunnerRole, receivedAt time.Time) error {
-	if mv.earlyMessage(messageSlot, receivedAt) {
-		return ErrEarlyMessage
+	if earliness := mv.messageEarliness(messageSlot, receivedAt); earliness > 0 {
+		e := ErrEarlyMessage
+		e.got = fmt.Sprintf("early by %v", earliness)
+		return e
 	}
 
-	if lateness := mv.lateMessage(messageSlot, role, receivedAt); lateness > 0 {
+	if lateness := mv.messageLateness(messageSlot, role, receivedAt); lateness > 0 {
 		e := ErrLateMessage
 		e.got = fmt.Sprintf("late by %v", lateness)
 		return e
@@ -26,12 +28,15 @@ func (mv *messageValidator) validateSlotTime(messageSlot phase0.Slot, role spect
 	return nil
 }
 
-func (mv *messageValidator) earlyMessage(slot phase0.Slot, receivedAt time.Time) bool {
-	return mv.netCfg.Beacon.GetSlotEndTime(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Unix())).
-		Add(-clockErrorTolerance).Before(mv.netCfg.Beacon.GetSlotStartTime(slot))
+// messageEarliness returns how early message is or 0 if it's not
+func (mv *messageValidator) messageEarliness(slot phase0.Slot, receivedAt time.Time) time.Duration {
+	slotEndTimeWithError := mv.netCfg.Beacon.GetSlotEndTime(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Add(-clockErrorTolerance).Unix()))
+
+	return mv.netCfg.Beacon.GetSlotStartTime(slot).Sub(slotEndTimeWithError)
 }
 
-func (mv *messageValidator) lateMessage(slot phase0.Slot, role spectypes.RunnerRole, receivedAt time.Time) time.Duration {
+// messageLateness returns how late message is or 0 if it's not
+func (mv *messageValidator) messageLateness(slot phase0.Slot, role spectypes.RunnerRole, receivedAt time.Time) time.Duration {
 	var ttl phase0.Slot
 	switch role {
 	case spectypes.RoleProposer, spectypes.RoleSyncCommitteeContribution:

@@ -1335,7 +1335,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 				receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(sinceSlotStart)
 				_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
-				if validator.lateMessage(slot, role, receivedAt) > 0 {
+				if validator.messageLateness(slot, role, receivedAt) > 0 {
 					require.ErrorContains(t, err, ErrLateMessage.Error())
 				} else {
 					require.ErrorContains(t, err, ErrRoundTooHigh.Error())
