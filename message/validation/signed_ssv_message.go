@@ -10,7 +10,6 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"golang.org/x/exp/slices"
 
-	"github.com/bloxapp/ssv/network/commons"
 	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
 )
 
@@ -147,17 +146,6 @@ func (mv *messageValidator) validRole(roleType spectypes.RunnerRole) bool {
 	default:
 		return false
 	}
-}
-
-// topicMatches checks if the message was sent on the right topic.
-func (mv *messageValidator) topicMatches(ssvMessage *spectypes.SSVMessage, topic string) bool {
-	getTopics := commons.ValidatorTopicID
-	if mv.committeeRole(ssvMessage.GetID().GetRoleType()) {
-		getTopics = commons.CommitteeTopicID
-	}
-
-	topics := getTopics(ssvMessage.GetID().GetSenderID())
-	return slices.Contains(topics, commons.GetTopicBaseName(topic))
 }
 
 func (mv *messageValidator) belongsToCommittee(operatorIDs []spectypes.OperatorID, committee []spectypes.OperatorID) error {

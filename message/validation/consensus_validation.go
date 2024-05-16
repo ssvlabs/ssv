@@ -157,9 +157,6 @@ func (mv *messageValidator) validateQBFTLogic(
 	msgSlot := phase0.Slot(consensusMessage.Height)
 	for _, signer := range signedSSVMessage.GetOperatorIDs() {
 		signerState := state.GetSignerState(signer)
-		if signerState == nil {
-			continue
-		}
 
 		// It should be checked after ErrNonDecidedWithMultipleSigners
 		signerCount := len(signedSSVMessage.GetOperatorIDs())
@@ -218,10 +215,6 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 
 	for _, signer := range signedSSVMessage.GetOperatorIDs() {
 		signerState := state.GetSignerState(signer)
-		if signerState == nil {
-			continue
-		}
-
 		if err := mv.validNumberOfCommitteeDutiesPerEpoch(signedSSVMessage, validatorIndices, signerState, msgSlot); err != nil {
 			return err
 		}
@@ -242,9 +235,6 @@ func (mv *messageValidator) updateConsensusState(signedSSVMessage *spectypes.Sig
 
 	for _, signer := range signedSSVMessage.GetOperatorIDs() {
 		signerState := state.GetSignerState(signer)
-		if signerState == nil {
-			signerState = state.CreateSignerState(signer)
-		}
 		if msgSlot > signerState.Slot {
 			newEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) > mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot)
 			signerState.ResetSlot(msgSlot, consensusMessage.Round, newEpoch)
@@ -272,7 +262,7 @@ func (mv *messageValidator) updateConsensusState(signedSSVMessage *spectypes.Sig
 func (mv *messageValidator) validNumberOfCommitteeDutiesPerEpoch(
 	signedSSVMessage *spectypes.SignedSSVMessage,
 	validatorIndices []phase0.ValidatorIndex,
-	signerState *SignerState,
+	signerState SignerState,
 	msgSlot phase0.Slot,
 ) error {
 	newDutyInSameEpoch := false

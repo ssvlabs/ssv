@@ -42,7 +42,7 @@ func (mv *messageValidator) messageLateness(slot phase0.Slot, role spectypes.Run
 	case spectypes.RoleProposer, spectypes.RoleSyncCommitteeContribution:
 		ttl = 1 + lateSlotAllowance
 	case spectypes.RoleCommittee, spectypes.RoleAggregator:
-		ttl = 32 + lateSlotAllowance
+		ttl = phase0.Slot(mv.netCfg.Beacon.SlotsPerEpoch())
 	case spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
 		return 0
 	}
@@ -56,7 +56,7 @@ func (mv *messageValidator) messageLateness(slot phase0.Slot, role spectypes.Run
 
 func (mv *messageValidator) validateDutyCount(
 	validatorIndices []phase0.ValidatorIndex,
-	state *SignerState,
+	state SignerState,
 	msgID spectypes.MessageID,
 	newDutyInSameEpoch bool,
 ) error {

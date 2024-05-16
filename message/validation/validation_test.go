@@ -142,10 +142,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		height := specqbft.Height(slot)
 
 		msgID := committeeIdentifier
-		state := validator.consensusState(msgID)
+		state := validator.consensusState(msgID, slot)
 		for i := spectypes.OperatorID(1); i <= 4; i++ {
 			signerState := state.GetSignerState(i)
-			require.Nil(t, signerState)
+			require.NotNil(t, signerState)
 		}
 
 		signedSSVMessage := generateSignedMessage(ks, msgID, slot)
@@ -165,7 +165,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.EqualValues(t, MessageCounts{Proposal: 1}, state1.MessageCounts)
 		for i := spectypes.OperatorID(2); i <= 4; i++ {
 			signerState := state.GetSignerState(i)
-			require.Nil(t, signerState)
+			require.NotNil(t, signerState)
 		}
 
 		signedSSVMessage = generateSignedMessage(ks, msgID, slot, func(message *specqbft.Message) {
@@ -229,7 +229,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
 		topic := commons.GetTopicFullName(commons.CommitteeTopicID(committeeIdentifier[:])[0])
-		msgSize := 10_000_000 + commons.MessageOffset
+		msgSize := maxSignedMsgSize*2 + commons.MessageOffset
 
 		pmsg := &pubsub.Message{
 			Message: &pspb.Message{
