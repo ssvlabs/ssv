@@ -278,7 +278,6 @@ func (mv *messageValidator) consensusState(messageID spectypes.MessageID, slot p
 	id := consensusID{
 		SenderID: string(messageID.GetSenderID()),
 		Role:     messageID.GetRoleType(),
-		Slot:     slot,
 	}
 
 	if _, ok := mv.consensusStateIndex[id]; !ok {
