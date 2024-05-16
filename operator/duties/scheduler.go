@@ -267,13 +267,16 @@ func (s *Scheduler) SlotTicker(ctx context.Context) {
 			waitDuration := time.Until(finalTime)
 
 			if waitDuration > 0 {
+				zap.L().Debug("🕒 slot ticker event", zap.Uint64("slot", uint64(slot)), zap.Duration("wait_duration", waitDuration))
 				time.Sleep(waitDuration)
 
+				zap.L().Debug("🕒 locking", zap.Uint64("slot", uint64(slot)))
 				// Lock the mutex before broadcasting
 				s.waitCond.L.Lock()
 				s.headSlot = slot
 				s.waitCond.Broadcast()
 				s.waitCond.L.Unlock()
+				zap.L().Debug("🕒 released", zap.Uint64("slot", uint64(slot)))
 			}
 		}
 	}
