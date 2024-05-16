@@ -47,7 +47,7 @@ func (mv *messageValidator) validateConsensusMessage(
 		return consensusMessage, err
 	}
 
-	state := mv.consensusState(signedSSVMessage.SSVMessage.GetID(), phase0.Slot(consensusMessage.Height))
+	state := mv.consensusState(signedSSVMessage.SSVMessage.GetID())
 
 	if err := mv.validateQBFTLogic(signedSSVMessage, consensusMessage, committeeData.operatorIDs, receivedAt, state); err != nil {
 		return consensusMessage, err

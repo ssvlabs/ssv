@@ -142,7 +142,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		height := specqbft.Height(slot)
 
 		msgID := committeeIdentifier
-		state := validator.consensusState(msgID, slot)
+		state := validator.consensusState(msgID)
 		for i := spectypes.OperatorID(1); i <= 4; i++ {
 			signerState := state.GetSignerState(i)
 			require.NotNil(t, signerState)
