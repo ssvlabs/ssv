@@ -21,6 +21,7 @@ const (
 	allowedRoundsInPast                      = 2
 	lateSlotAllowance                        = 2
 	rsaSignatureSize                         = 256
+	blsSignatureSize                         = 96
 	syncCommitteeSize                        = 512
 	maxSignaturesInSyncCommitteeContribution = 13
 )

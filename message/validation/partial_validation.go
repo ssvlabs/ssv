@@ -130,6 +130,9 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 
 	signer := signedSSVMessage.GetOperatorIDs()[0]
 	signerState := state.GetSignerState(signer)
+	if signerState == nil {
+		signerState = state.CreateSignerState(signer)
+	}
 
 	if signerState != nil && messageSlot == signerState.Slot {
 		limits := maxMessageCounts(len(committeeData.operatorIDs))
