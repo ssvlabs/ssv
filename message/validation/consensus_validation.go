@@ -242,9 +242,6 @@ func (mv *messageValidator) updateConsensusState(signedSSVMessage *spectypes.Sig
 
 	for _, signer := range signedSSVMessage.GetOperatorIDs() {
 		signerState := state.GetSignerState(signer)
-		if signerState == nil {
-			signerState = state.CreateSignerState(signer)
-		}
 		if msgSlot > signerState.Slot {
 			newEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) > mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot)
 			signerState.ResetSlot(msgSlot, consensusMessage.Round, newEpoch)

@@ -37,7 +37,7 @@ func (mv *messageValidator) lateMessage(slot phase0.Slot, role spectypes.RunnerR
 	case spectypes.RoleProposer, spectypes.RoleSyncCommitteeContribution:
 		ttl = 1 + lateSlotAllowance
 	case spectypes.RoleCommittee, spectypes.RoleAggregator:
-		ttl = 32 + lateSlotAllowance
+		ttl = phase0.Slot(mv.netCfg.Beacon.SlotsPerEpoch()) + lateSlotAllowance
 	case spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
 		return 0
 	}

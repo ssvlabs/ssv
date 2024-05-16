@@ -37,7 +37,7 @@ type messageValidator struct {
 	logger                *zap.Logger
 	metrics               metricsreporter.MetricsReporter
 	netCfg                networkconfig.NetworkConfig
-	consensusStateIndex   map[consensusID]*consensusState
+	consensusStateIndex   map[phase0.Slot]map[consensusID]*consensusState
 	consensusStateIndexMu sync.Mutex
 	validatorStore        storage.ValidatorStore
 	dutyStore             *dutystore.Store
@@ -64,7 +64,7 @@ func New(
 		logger:              zap.NewNop(),
 		metrics:             metricsreporter.NewNop(),
 		netCfg:              netCfg,
-		consensusStateIndex: make(map[consensusID]*consensusState),
+		consensusStateIndex: make(map[phase0.Slot]map[consensusID]*consensusState),
 		validationLocks:     make(map[spectypes.MessageID]*sync.Mutex),
 		validatorStore:      validatorStore,
 		dutyStore:           dutyStore,
@@ -280,14 +280,34 @@ func (mv *messageValidator) consensusState(messageID spectypes.MessageID, slot p
 		Role:     messageID.GetRoleType(),
 	}
 
-	if _, ok := mv.consensusStateIndex[id]; !ok {
-		cs := &consensusState{
-			signers: make(map[spectypes.OperatorID]*SignerState),
-		}
-		mv.consensusStateIndex[id] = cs
+	if _, ok := mv.consensusStateIndex[slot]; !ok {
+		mv.consensusStateIndex[slot] = make(map[consensusID]*consensusState)
+		mv.cleanupOldConsensusStateSlots(slot)
 	}
 
-	return mv.consensusStateIndex[id]
+	if _, ok := mv.consensusStateIndex[slot][id]; !ok {
+		cs := &consensusState{
+			state: make(map[spectypes.OperatorID]*SignerState),
+		}
+		mv.consensusStateIndex[slot][id] = cs
+	}
+
+	return mv.consensusStateIndex[slot][id]
+}
+
+func (mv *messageValidator) cleanupOldConsensusStateSlots(latestSlot phase0.Slot) {
+	var oldSlots []phase0.Slot
+
+	// The map may contain max 34 slots, so iterating the whole map is likely still ok.
+	for slot := range mv.consensusStateIndex {
+		if slot < latestSlot-phase0.Slot(mv.netCfg.Beacon.SlotsPerEpoch())+lateSlotAllowance {
+			oldSlots = append(oldSlots, slot)
+		}
+	}
+
+	for _, slot := range oldSlots {
+		delete(mv.consensusStateIndex, slot)
+	}
 }
 
 func (mv *messageValidator) reportPubSubMetrics(pmsg *pubsub.Message) (done func()) {
