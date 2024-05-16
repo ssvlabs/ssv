@@ -120,12 +120,13 @@ func (mv *messageValidator) handlePubsubMessage(pMsg *pubsub.Message, receivedAt
 func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.SignedSSVMessage, topic string, receivedAt time.Time) (*queue.DecodedSSVMessage, error) {
 	decodedMessage := &queue.DecodedSSVMessage{
 		SignedSSVMessage: signedSSVMessage,
-		SSVMessage:       signedSSVMessage.SSVMessage,
 	}
 
 	if err := mv.validateSignedSSVMessage(signedSSVMessage); err != nil {
 		return decodedMessage, err
 	}
+
+	decodedMessage.SSVMessage = signedSSVMessage.SSVMessage
 
 	if err := mv.validateSSVMessage(signedSSVMessage.SSVMessage, topic); err != nil {
 		return decodedMessage, err
@@ -282,7 +283,7 @@ func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *conse
 
 	if _, ok := mv.consensusStateIndex[id]; !ok {
 		cs := &consensusState{
-			signers: make(map[spectypes.OperatorID]SignerState),
+			signers: make(map[spectypes.OperatorID]*SignerState),
 		}
 		mv.consensusStateIndex[id] = cs
 	}

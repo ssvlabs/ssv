@@ -262,7 +262,7 @@ func (mv *messageValidator) updateConsensusState(signedSSVMessage *spectypes.Sig
 func (mv *messageValidator) validNumberOfCommitteeDutiesPerEpoch(
 	signedSSVMessage *spectypes.SignedSSVMessage,
 	validatorIndices []phase0.ValidatorIndex,
-	signerState SignerState,
+	signerState *SignerState,
 	msgSlot phase0.Slot,
 ) error {
 	newDutyInSameEpoch := false
