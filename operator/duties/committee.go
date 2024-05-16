@@ -124,6 +124,7 @@ func (h *CommitteeHandler) processExecution(period uint64, epoch phase0.Epoch, s
 		return
 	}
 
+	h.logger.Debug("building att committee duties", zap.Uint64("period", period), zap.Uint64("epoch", uint64(epoch)), zap.Uint64("slot", uint64(slot)))
 	committeeMap := make(map[[32]byte]*spectypes.CommitteeDuty)
 	if attDuties != nil {
 		for _, d := range attDuties {
@@ -142,6 +143,7 @@ func (h *CommitteeHandler) processExecution(period uint64, epoch phase0.Epoch, s
 		}
 	}
 
+	h.logger.Debug("building sc committee duties", zap.Uint64("period", period), zap.Uint64("epoch", uint64(epoch)), zap.Uint64("slot", uint64(slot)))
 	if syncDuties != nil {
 		for _, d := range syncDuties {
 			if h.shouldExecuteSync(d, slot) {
@@ -158,7 +160,7 @@ func (h *CommitteeHandler) processExecution(period uint64, epoch phase0.Epoch, s
 			}
 		}
 	}
-
+	h.logger.Debug("executing committee duties", zap.Uint64("period", period), zap.Uint64("epoch", uint64(epoch)), zap.Uint64("slot", uint64(slot)), zap.Int("duties", len(committeeMap)))
 	h.executeCommitteeDuties(h.logger, committeeMap)
 }
 

@@ -355,10 +355,13 @@ func (s *Scheduler) HandleHeadEvent(logger *zap.Logger) func(event *eth2apiv1.Ev
 			// We give the block some time to propagate around the rest of the
 			// nodes before kicking off duties for the block's slot.
 			time.Sleep(s.blockPropagateDelay)
+			logger.Debug("slept for block propagation delay", zap.Duration("delay", s.blockPropagateDelay))
 
 			s.waitCond.L.Lock()
+			logger.Debug("broadcasting head event", zap.Uint64("slot", uint64(data.Slot)))
 			s.headSlot = data.Slot
 			s.waitCond.Broadcast()
+			logger.Debug("done broadcasting head event", zap.Uint64("slot", uint64(data.Slot)))
 			s.waitCond.L.Unlock()
 		}
 	}
