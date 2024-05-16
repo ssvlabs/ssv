@@ -1,6 +1,7 @@
 package message_test
 
 import (
+	"crypto/rsa"
 	"sort"
 	"testing"
 
@@ -19,7 +20,7 @@ func TestAggregateSorting(t *testing.T) {
 	identifier := []byte("pk")
 
 	generateSignedMsg := func(operatorId spectypes.OperatorID) *spectypes.SignedSSVMessage {
-		return protocoltesting.SignMsg(t, secretKeys, []spectypes.OperatorID{operatorId}, &specqbft.Message{
+		return protocoltesting.SignMsg(t, []*rsa.PrivateKey{secretKeys[operatorId-1]}, []spectypes.OperatorID{operatorId}, &specqbft.Message{
 			MsgType:    specqbft.CommitMsgType,
 			Height:     0,
 			Round:      1,
