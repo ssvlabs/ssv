@@ -2,8 +2,6 @@ package api
 
 import (
 	"crypto/rsa"
-	"crypto/x509"
-	"encoding/pem"
 	"math"
 	"testing"
 
@@ -98,25 +96,16 @@ func TestHandleDecidedQuery(t *testing.T) {
 	_, ibftStorage := newStorageForTest(db, l, roles...)
 	_ = bls.Init(bls.BLS12_381)
 
-	sks, op := GenerateNodes(4)
+	sks, op, rsaKeys := GenerateNodes(4)
 	oids := make([]spectypes.OperatorID, 0, len(op))
 	for _, o := range op {
 		oids = append(oids, o.OperatorID)
 	}
 
 	role := spectypes.RoleCommittee
-	pkbytes, err := x509.MarshalPKIXPublicKey(sks[0].PublicKey)
-	require.NoError(t, err)
-	pk := pem.EncodeToMemory(
-		&pem.Block{
-			Type:  "RSA PUBLIC KEY",
-			Bytes: pkbytes,
-		},
-	)
-	pkString, err := rsaencryption.ExtractPublicKey(&sks[0].PublicKey)
-	require.NoError(t, err)
-	decided250Seq, err := protocoltesting.CreateMultipleStoredInstances(sks, specqbft.Height(0), specqbft.Height(250), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
-		id := spectypes.NewMsgID(types.GetDefaultDomain(), pk, role)
+	pk := sks[1].GetPublicKey()
+	decided250Seq, err := protocoltesting.CreateMultipleStoredInstances(rsaKeys, specqbft.Height(0), specqbft.Height(250), func(height specqbft.Height) ([]spectypes.OperatorID, *specqbft.Message) {
+		id := spectypes.NewMsgID(types.GetDefaultDomain(), pk.Serialize(), role)
 		return oids, &specqbft.Message{
 			MsgType:    specqbft.CommitMsgType,
 			Height:     height,
@@ -133,7 +122,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 	}
 
 	t.Run("valid range", func(t *testing.T) {
-		nm := newDecidedAPIMsg(pkString, spectypes.BNRoleAttester, 0, 250)
+		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), spectypes.BNRoleAttester, 0, 250)
 		HandleDecidedQuery(l, ibftStorage, nm)
 		require.NotNil(t, nm.Msg.Data)
 		msgs, ok := nm.Msg.Data.([]*SignedMessageAPI)
@@ -142,7 +131,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 	})
 
 	t.Run("invalid range", func(t *testing.T) {
-		nm := newDecidedAPIMsg(pkString, spectypes.BNRoleAttester, 400, 404)
+		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), spectypes.BNRoleAttester, 400, 404)
 		HandleDecidedQuery(l, ibftStorage, nm)
 		require.NotNil(t, nm.Msg.Data)
 		data, ok := nm.Msg.Data.([]string)
@@ -160,7 +149,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 	})
 
 	t.Run("non-existing role", func(t *testing.T) {
-		nm := newDecidedAPIMsg(pkString, math.MaxUint64, 0, 250)
+		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), math.MaxUint64, 0, 250)
 		HandleDecidedQuery(l, ibftStorage, nm)
 		require.NotNil(t, nm.Msg.Data)
 		errs, ok := nm.Msg.Data.([]string)
@@ -169,7 +158,7 @@ func TestHandleDecidedQuery(t *testing.T) {
 	})
 
 	t.Run("non-existing storage", func(t *testing.T) {
-		nm := newDecidedAPIMsg(pkString, spectypes.BNRoleSyncCommitteeContribution, 0, 250)
+		nm := newDecidedAPIMsg(pk.SerializeToHexStr(), spectypes.BNRoleSyncCommitteeContribution, 0, 250)
 		HandleDecidedQuery(l, ibftStorage, nm)
 		require.NotNil(t, nm.Msg.Data)
 		errs, ok := nm.Msg.Data.([]string)
@@ -219,16 +208,20 @@ func newStorageForTest(db basedb.Database, logger *zap.Logger, roles ...spectype
 }
 
 // GenerateNodes generates randomly nodes
-func GenerateNodes(cnt int) ([]*rsa.PrivateKey, []*spectypes.Operator) {
+func GenerateNodes(cnt int) (map[spectypes.OperatorID]*bls.SecretKey, []*spectypes.Operator, []*rsa.PrivateKey) {
+	_ = bls.Init(bls.BLS12_381)
 	nodes := make([]*spectypes.Operator, 0, cnt)
-	sks := make([]*rsa.PrivateKey, 0, cnt)
+	sks := make(map[spectypes.OperatorID]*bls.SecretKey)
+	rsaKeys := make([]*rsa.PrivateKey, 0, cnt)
 	for i := 1; i <= cnt; i++ {
-		opPubKey, privKey, err := rsaencryption.GenerateKeys()
+		sk := &bls.SecretKey{}
+		sk.SetByCSPRNG()
+
+		opPubKey, privateKey, err := rsaencryption.GenerateKeys()
 		if err != nil {
 			panic(err)
 		}
-
-		pk, err := rsaencryption.PemToPrivateKey(privKey)
+		pk, err := rsaencryption.PemToPrivateKey(privateKey)
 		if err != nil {
 			panic(err)
 		}
@@ -238,7 +231,8 @@ func GenerateNodes(cnt int) ([]*rsa.PrivateKey, []*spectypes.Operator) {
 			SSVOperatorPubKey: opPubKey,
 			Committee:         []*spectypes.CommitteeMember{{OperatorID: spectypes.OperatorID(i), SSVOperatorPubKey: opPubKey}},
 		})
-		sks = append(sks, pk)
+		sks[spectypes.OperatorID(i)] = sk
+		rsaKeys = append(rsaKeys, pk)
 	}
-	return sks, nodes
+	return sks, nodes, rsaKeys
 }

@@ -35,7 +35,7 @@ func GenerateOperatorSigner(oids ...spectypes.OperatorID) ([]*rsa.PrivateKey, []
 	sks := make([]*rsa.PrivateKey, 0, len(oids))
 
 	for i, _ := range oids {
-		privKey, pubKey, err := rsaencryption.GenerateKeys()
+		pubKey, privKey, err := rsaencryption.GenerateKeys()
 		if err != nil {
 			panic(err)
 		}

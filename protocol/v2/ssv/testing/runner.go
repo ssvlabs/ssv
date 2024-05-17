@@ -2,20 +2,20 @@ package testing
 
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/bloxapp/ssv/protocol/v2/qbft/testing"
+	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
+	"go.uber.org/zap"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
-	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/protocol/v2/qbft/testing"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 )
 
 var TestingHighestDecidedSlot = phase0.Slot(0)
 
-var AttesterRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
-	return baseRunner(logger, spectypes.BNRoleAttester, specssv.AttesterValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.BeaconTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex, nil), keySet)
+var CommitteeRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
+	return baseRunner(logger, spectypes.RoleCommittee, specssv.BeaconVoteValueCheckF(spectestingutils.NewTestingKeyManager(), spectestingutils.TestingDutySlot, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingDutyEpoch), keySet)
 }
 
 //var AttesterRunner7Operators = func(keySet *spectestingutils.TestKeySet) runner.Runner {
@@ -23,14 +23,14 @@ var AttesterRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySe
 //}
 
 var ProposerRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
-	return baseRunner(logger, spectypes.BNRoleProposer, specssv.ProposerValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.BeaconTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex, nil), keySet)
+	return baseRunner(logger, spectypes.RoleProposer, specssv.ProposerValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.BeaconTestNetwork, (spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex, nil), keySet)
 }
 
 var ProposerBlindedBlockRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
 	ret := baseRunner(
 		logger,
-		spectypes.BNRoleProposer,
-		specssv.ProposerValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.BeaconTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex, nil),
+		spectypes.RoleProposer,
+		specssv.ProposerValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.BeaconTestNetwork, (spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex, nil),
 		keySet,
 	)
 	ret.(*runner.ProposerRunner).ProducesBlindedBlocks = true
@@ -38,33 +38,33 @@ var ProposerBlindedBlockRunner = func(logger *zap.Logger, keySet *spectestinguti
 }
 
 var AggregatorRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
-	return baseRunner(logger, spectypes.BNRoleAggregator, specssv.AggregatorValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.BeaconTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex), keySet)
+	return baseRunner(logger, spectypes.RoleAggregator, specssv.AggregatorValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.BeaconTestNetwork, (spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex), keySet)
 }
 
 var SyncCommitteeRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
-	return baseRunner(logger, spectypes.BNRoleSyncCommittee, specssv.SyncCommitteeValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.BeaconTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex), keySet)
+	return baseRunner(logger, spectypes.RoleCommittee, specssv.BeaconVoteValueCheckF(spectestingutils.NewTestingKeyManager(), spectestingutils.TestingDutySlot, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingDutyEpoch), keySet)
 }
 
 var SyncCommitteeContributionRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
-	return baseRunner(logger, spectypes.BNRoleSyncCommitteeContribution, specssv.SyncCommitteeContributionValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.BeaconTestNetwork, spectestingutils.TestingValidatorPubKey[:], spectestingutils.TestingValidatorIndex), keySet)
+	return baseRunner(logger, spectypes.RoleSyncCommitteeContribution, specssv.SyncCommitteeContributionValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.BeaconTestNetwork,  (spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex), keySet)
 }
 
 var ValidatorRegistrationRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
-	ret := baseRunner(logger, spectypes.BNRoleValidatorRegistration, nil, keySet)
+	ret := baseRunner(logger, spectypes.RoleValidatorRegistration, nil, keySet)
 	return ret
 }
 
 var VoluntaryExitRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
-	return baseRunner(logger, spectypes.BNRoleVoluntaryExit, nil, keySet)
+	return baseRunner(logger, spectypes.RoleVoluntaryExit, nil, keySet)
 }
 
 var UnknownDutyTypeRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
 	return baseRunner(logger, spectestingutils.UnknownDutyType, spectestingutils.UnknownDutyValueCheck(), keySet)
 }
 
-var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck specqbft.ProposedValueCheckF, keySet *spectestingutils.TestKeySet) runner.Runner {
+var baseRunner = func(logger *zap.Logger, role spectypes.RunnerRole, valCheck specqbft.ProposedValueCheckF, keySet *spectestingutils.TestKeySet) runner.Runner {
 	share := spectestingutils.TestingShare(keySet)
-	identifier := spectypes.NewMsgID(TestingSSVDomainType, spectestingutils.TestingValidatorPubKey[:], role)
+	identifier := spectypes.NewMsgID(TestingSSVDomainType, spectestingutils.TestingValidatorPubKey[:], spectypes.RunnerRole(role))
 	net := spectestingutils.NewTestingNetwork(1, keySet.OperatorKeys[1])
 	km := spectestingutils.NewTestingKeyManager()
 	opSigner := spectestingutils.NewTestingOperatorSigner(keySet, 1)
@@ -78,30 +78,32 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 	config.BeaconSigner = km
 	config.OperatorSigner = opSigner
 
+	shareMap := make(map[phase0.ValidatorIndex]*spectypes.Share)
+	shareMap[share.ValidatorIndex] = share
+
 	contr := testing.NewTestingQBFTController(
 		identifier[:],
-		share,
+		spectestingutils.TestingOperator(keySet),
 		config,
 		false,
 	)
 
 	switch role {
-	case spectypes.BNRoleAttester:
-		return runner.NewAttesterRunner(
+	case spectypes.RoleCommittee:
+		return runner.NewCommitteeRunner(
 			spectypes.BeaconTestNetwork,
-			share,
+			shareMap,
 			contr,
 			spectestingutils.NewTestingBeaconNode(),
 			net,
 			km,
 			opSigner,
 			valCheck,
-			TestingHighestDecidedSlot,
 		)
-	case spectypes.BNRoleAggregator:
+	case spectypes.RoleAggregator:
 		return runner.NewAggregatorRunner(
 			spectypes.BeaconTestNetwork,
-			share,
+			shareMap,
 			contr,
 			spectestingutils.NewTestingBeaconNode(),
 			net,
@@ -110,10 +112,10 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 			valCheck,
 			TestingHighestDecidedSlot,
 		)
-	case spectypes.BNRoleProposer:
+	case spectypes.RoleProposer:
 		return runner.NewProposerRunner(
 			spectypes.BeaconTestNetwork,
-			share,
+			shareMap,
 			contr,
 			spectestingutils.NewTestingBeaconNode(),
 			net,
@@ -122,22 +124,10 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 			valCheck,
 			TestingHighestDecidedSlot,
 		)
-	case spectypes.BNRoleSyncCommittee:
-		return runner.NewSyncCommitteeRunner(
-			spectypes.BeaconTestNetwork,
-			share,
-			contr,
-			spectestingutils.NewTestingBeaconNode(),
-			net,
-			km,
-			opSigner,
-			valCheck,
-			TestingHighestDecidedSlot,
-		)
-	case spectypes.BNRoleSyncCommitteeContribution:
+	case spectypes.RoleSyncCommitteeContribution:
 		return runner.NewSyncCommitteeAggregatorRunner(
 			spectypes.BeaconTestNetwork,
-			share,
+			shareMap,
 			contr,
 			spectestingutils.NewTestingBeaconNode(),
 			net,
@@ -146,38 +136,37 @@ var baseRunner = func(logger *zap.Logger, role spectypes.BeaconRole, valCheck sp
 			valCheck,
 			TestingHighestDecidedSlot,
 		)
-	case spectypes.BNRoleValidatorRegistration:
+	case spectypes.RoleValidatorRegistration:
 		return runner.NewValidatorRegistrationRunner(
 			spectypes.BeaconTestNetwork,
-			share,
+			shareMap,
 			contr,
 			spectestingutils.NewTestingBeaconNode(),
 			net,
 			km,
 			opSigner,
 		)
-	case spectypes.BNRoleVoluntaryExit:
+	case spectypes.RoleVoluntaryExit:
 		return runner.NewVoluntaryExitRunner(
 			spectypes.BeaconTestNetwork,
-			share,
+			shareMap,
 			spectestingutils.NewTestingBeaconNode(),
 			net,
 			km,
 			opSigner,
 		)
 	case spectestingutils.UnknownDutyType:
-		ret := runner.NewAttesterRunner(
+		ret := runner.NewCommitteeRunner(
 			spectypes.BeaconTestNetwork,
-			share,
+			shareMap,
 			contr,
 			spectestingutils.NewTestingBeaconNode(),
 			net,
 			km,
 			opSigner,
 			valCheck,
-			TestingHighestDecidedSlot,
 		)
-		ret.(*runner.AttesterRunner).BaseRunner.BeaconRoleType = spectestingutils.UnknownDutyType
+		ret.(*runner.CommitteeRunner).BaseRunner.RunnerRoleType = spectestingutils.UnknownDutyType
 		return ret
 	default:
 		panic("unknown role type")
