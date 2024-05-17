@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/emirpasic/gods/maps/treemap"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -40,7 +41,7 @@ func (mv *messageValidator) messageLateness(slot phase0.Slot, role spectypes.Run
 	case spectypes.RoleProposer, spectypes.RoleSyncCommitteeContribution:
 		ttl = 1 + lateSlotAllowance
 	case spectypes.RoleCommittee, spectypes.RoleAggregator:
-		ttl = phase0.Slot(mv.netCfg.Beacon.SlotsPerEpoch())
+		ttl = phase0.Slot(mv.netCfg.Beacon.SlotsPerEpoch()) + lateSlotAllowance
 	case spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
 		return 0
 	}
@@ -52,34 +53,46 @@ func (mv *messageValidator) messageLateness(slot phase0.Slot, role spectypes.Run
 }
 
 func (mv *messageValidator) validateDutyCount(
-	validatorIndices []phase0.ValidatorIndex,
-	state *SignerState,
 	msgID spectypes.MessageID,
-	newDutyInSameEpoch bool,
+	msgSlot phase0.Slot,
+	validatorIndices []phase0.ValidatorIndex,
+	signerStateBySlot *treemap.Map,
 ) error {
-	var dutyLimit int
+	msgEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot)
+	dutyCount := 0
+	signerStateBySlot.Each(func(slot any, state any) {
+		if mv.netCfg.Beacon.EstimatedEpochAtSlot(slot.(phase0.Slot)) == msgEpoch {
+			dutyCount++
+		}
+	})
+	if _, ok := signerStateBySlot.Get(msgSlot); !ok {
+		dutyCount++
+	}
 
-	switch msgID.GetRoleType() {
-	case spectypes.RoleAggregator, spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
-		dutyLimit = 2
-
-	case spectypes.RoleCommittee:
-		dutyLimit = 2 * len(validatorIndices)
-
-	default:
+	dutyLimit, exists := mv.dutyLimit(msgID, validatorIndices)
+	if !exists {
 		return nil
 	}
 
-	if sameSlot := !newDutyInSameEpoch; sameSlot {
-		dutyLimit++
-	}
-
-	if state.EpochDuties >= dutyLimit {
+	if dutyCount > dutyLimit {
 		err := ErrTooManyDutiesPerEpoch
-		err.got = fmt.Sprintf("%v (role %v)", state.EpochDuties, msgID.GetRoleType())
+		err.got = fmt.Sprintf("%v (role %v)", dutyCount, msgID.GetRoleType())
 		err.want = fmt.Sprintf("less than %v", dutyLimit)
 		return err
 	}
 
 	return nil
+}
+
+func (mv *messageValidator) dutyLimit(msgID spectypes.MessageID, validatorIndices []phase0.ValidatorIndex) (int, bool) {
+	switch msgID.GetRoleType() {
+	case spectypes.RoleAggregator, spectypes.RoleValidatorRegistration, spectypes.RoleVoluntaryExit:
+		return 2, true
+
+	case spectypes.RoleCommittee:
+		return 2 * len(validatorIndices), true
+
+	default:
+		return 0, false
+	}
 }

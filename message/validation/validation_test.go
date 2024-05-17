@@ -144,7 +144,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		msgID := committeeIdentifier
 		state := validator.consensusState(msgID)
 		for i := spectypes.OperatorID(1); i <= 4; i++ {
-			signerState := state.GetSignerState(i)
+			signerState := state.Get(i)
 			require.NotNil(t, signerState)
 		}
 
@@ -159,14 +159,17 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorContains(t, err, ErrTooManySameTypeMessagesPerRound.Error())
 
-		state1 := state.GetSignerState(1)
-		require.NotNil(t, state1)
-		require.EqualValues(t, height, state1.Slot)
-		require.EqualValues(t, 1, state1.Round)
-		require.EqualValues(t, MessageCounts{Proposal: 1}, state1.MessageCounts)
+		stateBySlot := state.Get(1)
+		require.NotNil(t, stateBySlot)
+		require.Equal(t, 1, stateBySlot.Size())
+		stateSlot, signerStateOldSlot := stateBySlot.Min()
+		require.NotNil(t, stateSlot)
+		require.NotNil(t, signerStateOldSlot)
+		require.EqualValues(t, height, stateSlot.(phase0.Slot))
+		require.EqualValues(t, 1, signerStateOldSlot.(*SignerState).Round)
+		require.EqualValues(t, MessageCounts{Proposal: 1}, signerStateOldSlot.(*SignerState).MessageCounts)
 		for i := spectypes.OperatorID(2); i <= 4; i++ {
-			signerState := state.GetSignerState(i)
-			require.NotNil(t, signerState)
+			require.NotNil(t, state.Get(i))
 		}
 
 		signedSSVMessage = generateSignedMessage(ks, msgID, slot, func(message *specqbft.Message) {
@@ -178,10 +181,10 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.NoError(t, err)
 
-		require.NotNil(t, state1)
-		require.EqualValues(t, height, state1.Slot)
-		require.EqualValues(t, 2, state1.Round)
-		require.EqualValues(t, MessageCounts{Prepare: 1}, state1.MessageCounts)
+		require.NotNil(t, stateBySlot)
+		require.EqualValues(t, height, stateSlot.(phase0.Slot))
+		require.EqualValues(t, 2, signerStateOldSlot.(*SignerState).Round)
+		require.EqualValues(t, MessageCounts{Prepare: 1}, signerStateOldSlot.(*SignerState).MessageCounts)
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorContains(t, err, ErrTooManySameTypeMessagesPerRound.Error())
@@ -192,10 +195,12 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage.FullData = nil
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt.Add(netCfg.Beacon.SlotDurationSec()))
 		require.NoError(t, err)
-		require.NotNil(t, state1)
-		require.EqualValues(t, height+1, state1.Slot)
-		require.EqualValues(t, 1, state1.Round)
-		require.EqualValues(t, MessageCounts{Commit: 1}, state1.MessageCounts)
+		require.Equal(t, 2, stateBySlot.Size())
+
+		signerStateNewSlot, ok := stateBySlot.Get(phase0.Slot(height) + 1)
+		require.True(t, ok)
+		require.EqualValues(t, 1, signerStateNewSlot.(*SignerState).Round)
+		require.EqualValues(t, MessageCounts{Commit: 1}, signerStateNewSlot.(*SignerState).MessageCounts)
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt.Add(netCfg.Beacon.SlotDurationSec()))
 		require.ErrorContains(t, err, ErrTooManySameTypeMessagesPerRound.Error())
@@ -203,10 +208,9 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage = generateMultiSignedMessage(ks, msgID, slot+1)
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt.Add(netCfg.Beacon.SlotDurationSec()))
 		require.NoError(t, err)
-		require.NotNil(t, state1)
-		require.EqualValues(t, height+1, state1.Slot)
-		require.EqualValues(t, 1, state1.Round)
-		require.EqualValues(t, MessageCounts{Commit: 1, Decided: 1}, state1.MessageCounts)
+		require.NotNil(t, stateBySlot)
+		require.EqualValues(t, 1, signerStateNewSlot.(*SignerState).Round)
+		require.EqualValues(t, MessageCounts{Commit: 1, Decided: 1}, signerStateNewSlot.(*SignerState).MessageCounts)
 	})
 
 	// Send a pubsub message with no data should cause an error

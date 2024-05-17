@@ -8,11 +8,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
+	"github.com/emirpasic/gods/maps/treemap"
+	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
@@ -156,11 +156,19 @@ func (mv *messageValidator) validateQBFTLogic(
 
 	msgSlot := phase0.Slot(consensusMessage.Height)
 	for _, signer := range signedSSVMessage.GetOperatorIDs() {
-		signerState := state.GetSignerState(signer)
+		signerStateBySlot := state.Get(signer)
+		signerStateInterface, ok := signerStateBySlot.Get(msgSlot)
+
+		if !ok || signerStateInterface.(*SignerState).Round != consensusMessage.Round {
+			continue
+		}
+
+		signerState := signerStateInterface.(*SignerState)
 
 		// It should be checked after ErrNonDecidedWithMultipleSigners
 		signerCount := len(signedSSVMessage.GetOperatorIDs())
 		if signerCount > 1 {
+			// TODO: this rule is being researched because it gets triggered often
 			//if prevMessage, ok := signerState.SeenDecidedLengths[signerCount]; ok {
 			//	e := ErrDecidedWithSameNumberOfSigners
 			//	gotJSON, _ := json.Marshal(queue.DecodedSSVMessage{
@@ -175,15 +183,13 @@ func (mv *messageValidator) validateQBFTLogic(
 			//}
 		}
 
-		if msgSlot == signerState.Slot && consensusMessage.Round == signerState.Round {
-			if len(signedSSVMessage.FullData) != 0 && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedSSVMessage.FullData) {
-				return ErrDuplicatedProposalWithDifferentData
-			}
+		if len(signedSSVMessage.FullData) != 0 && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedSSVMessage.FullData) {
+			return ErrDuplicatedProposalWithDifferentData
+		}
 
-			limits := maxMessageCounts(len(committee))
-			if err := signerState.MessageCounts.ValidateConsensusMessage(signedSSVMessage, consensusMessage, limits); err != nil {
-				return err
-			}
+		limits := maxMessageCounts(len(committee))
+		if err := signerState.MessageCounts.ValidateConsensusMessage(signedSSVMessage, consensusMessage, limits); err != nil {
+			return err
 		}
 	}
 
@@ -214,8 +220,8 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 	}
 
 	for _, signer := range signedSSVMessage.GetOperatorIDs() {
-		signerState := state.GetSignerState(signer)
-		if err := mv.validNumberOfCommitteeDutiesPerEpoch(signedSSVMessage, validatorIndices, signerState, msgSlot); err != nil {
+		signerStateBySlot := state.Get(signer)
+		if err := mv.validateDutyCount(signedSSVMessage.SSVMessage.GetID(), msgSlot, validatorIndices, signerStateBySlot); err != nil {
 			return err
 		}
 	}
@@ -229,52 +235,64 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 
 	return nil
 }
-
-func (mv *messageValidator) updateConsensusState(signedSSVMessage *spectypes.SignedSSVMessage, consensusMessage *specqbft.Message, state *consensusState) {
+func (mv *messageValidator) updateConsensusState(signedSSVMessage *spectypes.SignedSSVMessage, consensusMessage *specqbft.Message, consensusState *consensusState) {
 	msgSlot := phase0.Slot(consensusMessage.Height)
 
 	for _, signer := range signedSSVMessage.GetOperatorIDs() {
-		signerState := state.GetSignerState(signer)
-		if msgSlot > signerState.Slot {
-			newEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) > mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot)
-			signerState.ResetSlot(msgSlot, consensusMessage.Round, newEpoch)
-		} else if msgSlot == signerState.Slot && consensusMessage.Round > signerState.Round {
-			signerState.ResetRound(consensusMessage.Round)
-		}
+		stateBySlot := consensusState.Get(signer)
+		signerStateInterface, ok := stateBySlot.Get(msgSlot)
 
-		if len(signedSSVMessage.FullData) != 0 && signerState.ProposalData == nil {
-			signerState.ProposalData = signedSSVMessage.FullData
-		}
-
-		signerCount := len(signedSSVMessage.GetOperatorIDs())
-		if signerCount > 1 {
-			signerState.SeenDecidedLengths[signerCount] = queue.DecodedSSVMessage{
-				SignedSSVMessage: signedSSVMessage,
-				SSVMessage:       signedSSVMessage.SSVMessage,
-				Body:             consensusMessage,
+		if ok {
+			signerState := signerStateInterface.(*SignerState)
+			if consensusMessage.Round > signerState.Round {
+				signerState.ResetRound(consensusMessage.Round)
 			}
+			mv.processSignerState(signedSSVMessage, consensusMessage, signerState)
 		}
 
-		signerState.MessageCounts.RecordConsensusMessage(signedSSVMessage, consensusMessage)
+		if maxStateSlot, _ := stateBySlot.Max(); maxStateSlot == nil || msgSlot > maxStateSlot.(phase0.Slot) {
+			signerState := &SignerState{}
+			signerState.Init()
+			signerState.ResetRound(consensusMessage.Round)
+
+			stateBySlot.Put(msgSlot, signerState)
+			mv.pruneOldSlots(stateBySlot, msgSlot)
+			mv.processSignerState(signedSSVMessage, consensusMessage, signerState)
+		}
 	}
 }
 
-func (mv *messageValidator) validNumberOfCommitteeDutiesPerEpoch(
-	signedSSVMessage *spectypes.SignedSSVMessage,
-	validatorIndices []phase0.ValidatorIndex,
-	signerState *SignerState,
-	msgSlot phase0.Slot,
-) error {
-	newDutyInSameEpoch := false
-	if msgSlot > signerState.Slot && mv.netCfg.Beacon.EstimatedEpochAtSlot(msgSlot) == mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot) {
-		newDutyInSameEpoch = true
+func (mv *messageValidator) processSignerState(signedSSVMessage *spectypes.SignedSSVMessage, consensusMessage *specqbft.Message, signerState *SignerState) {
+	if len(signedSSVMessage.FullData) != 0 && signerState.ProposalData == nil {
+		signerState.ProposalData = signedSSVMessage.FullData
 	}
 
-	if err := mv.validateDutyCount(validatorIndices, signerState, signedSSVMessage.SSVMessage.GetID(), newDutyInSameEpoch); err != nil {
-		return err
+	signerCount := len(signedSSVMessage.GetOperatorIDs())
+	if signerCount > 1 {
+		signerState.SeenDecidedLengths[signerCount] = queue.DecodedSSVMessage{
+			SignedSSVMessage: signedSSVMessage,
+			SSVMessage:       signedSSVMessage.SSVMessage,
+			Body:             consensusMessage,
+		}
 	}
 
-	return nil
+	signerState.MessageCounts.RecordConsensusMessage(signedSSVMessage, consensusMessage)
+}
+
+func (mv *messageValidator) pruneOldSlots(stateBySlot *treemap.Map, lastSlot phase0.Slot) {
+	maxSlotsInState := phase0.Slot(mv.netCfg.SlotsPerEpoch()) + lateSlotAllowance
+
+	if lastSlot <= maxSlotsInState {
+		return
+	}
+
+	for {
+		slot, _ := stateBySlot.Min()
+		if slot == nil || slot.(phase0.Slot) >= lastSlot-maxSlotsInState {
+			break
+		}
+		stateBySlot.Remove(slot.(phase0.Slot))
+	}
 }
 
 func (mv *messageValidator) validateJustifications(message *specqbft.Message) error {

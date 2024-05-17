@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/ssvlabs/ssv-spec/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
@@ -56,7 +55,7 @@ func (mv *messageValidator) validatePartialSignatureMessage(
 		return partialSignatureMessages, e
 	}
 
-	mv.updatePartialSignatureState(partialSignatureMessages, state.GetSignerState(signer))
+	mv.updatePartialSignatureState(partialSignatureMessages, state, signer)
 
 	return partialSignatureMessages, nil
 }
@@ -129,11 +128,11 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 	}
 
 	signer := signedSSVMessage.GetOperatorIDs()[0]
-	signerState := state.GetSignerState(signer)
+	signerStateBySlot := state.Get(signer)
 
-	if messageSlot == signerState.Slot {
+	if signerState, ok := signerStateBySlot.Get(messageSlot); ok {
 		limits := maxMessageCounts(len(committeeData.operatorIDs))
-		if err := signerState.MessageCounts.ValidatePartialSignatureMessage(partialSignatureMessages, limits); err != nil {
+		if err := signerState.(*SignerState).MessageCounts.ValidatePartialSignatureMessage(partialSignatureMessages, limits); err != nil {
 			return err
 		}
 	}
@@ -142,14 +141,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 		return err
 	}
 
-	messageEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(messageSlot)
-	stateEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot)
-	newDutyInSameEpoch := false
-	if messageSlot > signerState.Slot && messageEpoch == stateEpoch {
-		newDutyInSameEpoch = true
-	}
-
-	if err := mv.validateDutyCount(committeeData.indices, signerState, signedSSVMessage.SSVMessage.GetID(), newDutyInSameEpoch); err != nil {
+	if err := mv.validateDutyCount(signedSSVMessage.SSVMessage.GetID(), messageSlot, committeeData.indices, signerStateBySlot); err != nil {
 		return err
 	}
 
@@ -184,13 +176,25 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 	return nil
 }
 
-func (mv *messageValidator) updatePartialSignatureState(partialSignatureMessages *spectypes.PartialSignatureMessages, signerState *SignerState) {
-	if partialSignatureMessages.Slot > signerState.Slot {
-		newEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(partialSignatureMessages.Slot) > mv.netCfg.Beacon.EstimatedEpochAtSlot(signerState.Slot)
-		signerState.ResetSlot(partialSignatureMessages.Slot, specqbft.FirstRound, newEpoch)
+func (mv *messageValidator) updatePartialSignatureState(
+	partialSignatureMessages *spectypes.PartialSignatureMessages,
+	state *consensusState,
+	signer spectypes.OperatorID,
+) {
+	stateBySlot := state.Get(signer)
+	msgSlot := partialSignatureMessages.Slot
+
+	if maxStateSlot, _ := stateBySlot.Max(); maxStateSlot != nil && msgSlot > maxStateSlot.(phase0.Slot) {
+		signerState := &SignerState{}
+		signerState.Init()
+		stateBySlot.Put(msgSlot, signerState)
+		mv.pruneOldSlots(stateBySlot, msgSlot)
 	}
 
-	signerState.MessageCounts.RecordPartialSignatureMessage(partialSignatureMessages)
+	signerState, ok := stateBySlot.Get(msgSlot)
+	if ok {
+		signerState.(*SignerState).MessageCounts.RecordPartialSignatureMessage(partialSignatureMessages)
+	}
 }
 
 func (mv *messageValidator) validPartialSigMsgType(msgType spectypes.PartialSigMsgType) bool {
