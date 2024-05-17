@@ -48,9 +48,7 @@ func (d LoggerFields) AsZapFields() []zapcore.Field {
 }
 
 func (mv *messageValidator) buildLoggerFields(decodedMessage *queue.DecodedSSVMessage) *LoggerFields {
-	descriptor := &LoggerFields{
-		Consensus: &ConsensusFields{},
-	}
+	descriptor := &LoggerFields{}
 
 	if decodedMessage == nil {
 		return descriptor
@@ -63,8 +61,10 @@ func (mv *messageValidator) buildLoggerFields(decodedMessage *queue.DecodedSSVMe
 	switch m := decodedMessage.Body.(type) {
 	case *specqbft.Message:
 		descriptor.Slot = phase0.Slot(m.Height)
-		descriptor.Consensus.Round = m.Round
-		descriptor.Consensus.QBFTMessageType = m.MsgType
+		descriptor.Consensus = &ConsensusFields{
+			Round:           m.Round,
+			QBFTMessageType: m.MsgType,
+		}
 	case *spectypes.PartialSignatureMessages:
 		descriptor.Slot = m.Slot
 	}

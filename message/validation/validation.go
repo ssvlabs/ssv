@@ -150,18 +150,18 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 	switch signedSSVMessage.SSVMessage.MsgType {
 	case spectypes.SSVConsensusMsgType:
 		consensusMessage, err := mv.validateConsensusMessage(signedSSVMessage, committeeData, receivedAt)
+		decodedMessage.Body = consensusMessage
 		if err != nil {
 			return decodedMessage, err
 		}
 
-		decodedMessage.Body = consensusMessage
 	case spectypes.SSVPartialSignatureMsgType:
 		partialSignatureMessages, err := mv.validatePartialSignatureMessage(signedSSVMessage, committeeData, receivedAt)
+		decodedMessage.Body = partialSignatureMessages
 		if err != nil {
 			return decodedMessage, err
 		}
 
-		decodedMessage.Body = partialSignatureMessages
 	default:
 		panic("unreachable: message type assertion should have been done")
 	}
