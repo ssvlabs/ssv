@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 func TestSSVShare_BelongsToOperator(t *testing.T) {

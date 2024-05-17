@@ -30,12 +30,9 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 	preByts, _ := test.Pre.Encode()
 	msgId := specqbft.ControllerIdToMessageID(test.Pre.State.ID)
 	logger := logging.TestLogger(t)
+	
 	pre := instance.NewInstance(
-		qbfttesting.TestingConfig(
-			logger,
-			spectestingutils.KeySetForShare(test.Pre.State.Share),
-			msgId.GetRoleType(),
-		),
+		qbfttesting.TestingConfig(logger, spectestingutils.KeySetForOperator(test.Pre.State.Share), msgId.GetRoleType()),
 		test.Pre.State.Share,
 		test.Pre.State.ID,
 		test.Pre.State.Height,
@@ -80,7 +77,7 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 			r1, _ := msg.GetRoot()
 
 			ssvMsg := &spectypes.SSVMessage{}
-			require.NoError(t, ssvMsg.Decode(broadcastedMsgs[i].Data))
+			require.NoError(t, ssvMsg.Decode(broadcastedMsgs[i].FullData))
 
 			msg2 := &spectypes.SignedSSVMessage{}
 			require.NoError(t, msg2.Decode(ssvMsg.Data))

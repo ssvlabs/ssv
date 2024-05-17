@@ -116,8 +116,7 @@ func TestSharesStorage(t *testing.T) {
 	require.EqualValues(t, 2, len(validators))
 
 	t.Run("UpdateValidatorMetadata_shareExists", func(t *testing.T) {
-		valPk := hex.EncodeToString(validatorShare.ValidatorPubKey[:])
-		require.NoError(t, shareStorage.UpdateValidatorMetadata(valPk, &beaconprotocol.ValidatorMetadata{
+		require.NoError(t, shareStorage.UpdateValidatorMetadata(validatorShare.ValidatorPubKey, &beaconprotocol.ValidatorMetadata{
 			Balance:         10000,
 			Index:           3,
 			Status:          eth2apiv1.ValidatorStateActiveOngoing,
@@ -166,8 +165,7 @@ func TestSharesStorage(t *testing.T) {
 	require.Nil(t, share)
 
 	t.Run("UpdateValidatorMetadata_shareIsDeleted", func(t *testing.T) {
-		valPk := hex.EncodeToString(validatorShare.ValidatorPubKey[:])
-		require.NoError(t, shareStorage.UpdateValidatorMetadata(valPk, &beaconprotocol.ValidatorMetadata{
+		require.NoError(t, shareStorage.UpdateValidatorMetadata(validatorShare.ValidatorPubKey, &beaconprotocol.ValidatorMetadata{
 			Balance:         10000,
 			Index:           3,
 			Status:          2,

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 
@@ -50,9 +49,9 @@ func RunTimeout(t *testing.T, test *SpecTest) {
 			r1, _ := msg.GetRoot()
 
 			ssvMsg := &spectypes.SSVMessage{}
-			require.NoError(t, ssvMsg.Decode(broadcastedMsgs[i].Data))
+			require.NoError(t, ssvMsg.Decode(broadcastedMsgs[i].FullData))
 
-			msg2 := &qbft.SignedMessage{}
+			msg2 := &spectypes.SignedSSVMessage{}
 			require.NoError(t, msg2.Decode(ssvMsg.Data))
 			r2, _ := msg2.GetRoot()
 

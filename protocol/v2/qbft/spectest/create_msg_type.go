@@ -86,7 +86,7 @@ func createRoundChange(test *spectests.CreateMsgSpecTest) (*spectypes.SignedSSVM
 	config := spectestingutils.TestingConfig(ks)
 
 	if len(test.PrepareJustifications) > 0 {
-		state.LastPreparedRound = test.PrepareJustifications[0].Message.Round
+		// state.LastPreparedRound = test.PrepareJustifications[0].Message.Round
 		state.LastPreparedValue = test.StateValue
 
 		for _, msg := range test.PrepareJustifications {

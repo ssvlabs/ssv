@@ -57,12 +57,10 @@ func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {
 
 func generateController(logger *zap.Logger) *controller.Controller {
 	identifier := []byte{1, 2, 3, 4}
-	keySet := spectestingutils.Testing4SharesSet()
-	config := qbfttesting.TestingConfig(logger, spectestingutils.Testing4SharesSet(), spectypes.RoleCommittee)
-	operator := spectestingutils.TestingOperator(keySet)
+	config := qbfttesting.TestingConfig(logger, spectestingutils.Testing4SharesSet(), spectypes.RunnerRole(spectypes.RoleCommittee))
 	return qbfttesting.NewTestingQBFTController(
 		identifier[:],
-		operator,
+		spectestingutils.TestingOperator(spectestingutils.Testing4SharesSet()),
 		config,
 		false,
 	)
@@ -111,7 +109,7 @@ func testBroadcastedDecided(
 	config *qbft.Config,
 	identifier []byte,
 	runData *spectests.RunInstanceData,
-	committee []*spectypes.CommitteeMember,
+	operators []*spectypes.CommitteeMember,
 ) {
 	if runData.ExpectedDecidedState.BroadcastedDecided != nil {
 		// test broadcasted
@@ -129,15 +127,17 @@ func testBroadcastedDecided(
 				continue
 			}
 
-			r1, err := msg.GetRoot()
+			msg1 := &spectypes.SignedSSVMessage{}
+			require.NoError(t, msg1.Decode(msg.Data))
+			r1, err := msg1.GetRoot()
 			require.NoError(t, err)
 
 			r2, err := runData.ExpectedDecidedState.BroadcastedDecided.GetRoot()
 			require.NoError(t, err)
 
 			if r1 == r2 &&
-				reflect.DeepEqual(runData.ExpectedDecidedState.BroadcastedDecided.GetOperatorIDs(), msg.GetOperatorIDs()) &&
-				reflect.DeepEqual(runData.ExpectedDecidedState.BroadcastedDecided.Signatures, msg.Signatures) {
+				reflect.DeepEqual(runData.ExpectedDecidedState.BroadcastedDecided.OperatorIDs, msg1.OperatorIDs) &&
+				reflect.DeepEqual(runData.ExpectedDecidedState.BroadcastedDecided.Signatures, msg1.Signatures) {
 				require.False(t, found)
 				found = true
 			}
