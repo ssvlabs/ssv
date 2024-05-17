@@ -44,24 +44,6 @@ var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, ro
 
 var TestingInvalidValueCheck = []byte{1, 1, 1, 1}
 
-var TestingShare = func(keysSet *testingutils.TestKeySet) *types.Share {
-
-	// Decode validator public key
-	pkBytesSlice := keysSet.ValidatorPK.Serialize()
-	pkBytesArray := [48]byte{}
-	copy(pkBytesArray[:], pkBytesSlice)
-
-	return &types.Share{
-		ValidatorIndex:      testingutils.TestingValidatorIndex,
-		ValidatorPubKey:     pkBytesArray,
-		SharePubKey:         keysSet.Shares[1].GetPublicKey().Serialize(),
-		Committee:           keysSet.Committee(),
-		Quorum:              keysSet.Threshold,
-		DomainType:          testingutils.TestingSSVDomainType,
-		FeeRecipientAddress: testingutils.TestingFeeRecipient,
-		Graffiti:            testingutils.TestingGraffiti[:],
-	}
-}
 var TestingOperator = func(keysSet *testingutils.TestKeySet) *types.Operator {
 	committeeMembers := []*types.CommitteeMember{}
 
@@ -92,43 +74,6 @@ var TestingOperator = func(keysSet *testingutils.TestKeySet) *types.Operator {
 	return &types.Operator{
 		OperatorID:        1,
 		ClusterID:         types.GetCommitteeID(opIds),
-		SSVOperatorPubKey: operatorPubKeyBytes,
-		Quorum:            keysSet.Threshold,
-		PartialQuorum:     keysSet.PartialThreshold,
-		Committee:         committeeMembers,
-	}
-}
-
-var TestingOperator = func(keysSet *testingutils.TestKeySet) *types.Operator {
-	committeeMembers := []*types.CommitteeMember{}
-
-	for _, key := range keysSet.Committee() {
-
-		// Encode member's public key
-		pkBytes, err := types.MarshalPublicKey(keysSet.OperatorKeys[key.Signer])
-		if err != nil {
-			panic(err)
-		}
-
-		committeeMembers = append(committeeMembers, &types.CommitteeMember{
-			OperatorID:        key.Signer,
-			SSVOperatorPubKey: pkBytes,
-		})
-	}
-
-	opIds := []types.OperatorID{}
-	for _, key := range keysSet.Committee() {
-		opIds = append(opIds, key.Signer)
-	}
-
-	operatorPubKeyBytes, err := types.MarshalPublicKey(keysSet.OperatorKeys[1])
-	if err != nil {
-		panic(err)
-	}
-
-	return &types.Operator{
-		OperatorID:        1,
-		ClusterID:         types.GetClusterID(opIds),
 		SSVOperatorPubKey: operatorPubKeyBytes,
 		Quorum:            keysSet.Threshold,
 		PartialQuorum:     keysSet.PartialThreshold,

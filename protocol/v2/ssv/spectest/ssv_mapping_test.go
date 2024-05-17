@@ -237,7 +237,7 @@ func newRunnerDutySpecTestFromMap(t *testing.T, m map[string]interface{}) *Start
 
 	return &StartNewRunnerDutySpecTest{
 		Name:                    m["Name"].(string),
-		Duty:                    &testDuty,
+		Duty:                    testDuty,
 		Runner:                  r,
 		PostDutyRunnerStateRoot: m["PostDutyRunnerStateRoot"].(string),
 		ExpectedError:           m["ExpectedError"].(string),

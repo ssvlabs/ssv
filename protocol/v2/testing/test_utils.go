@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -18,7 +17,6 @@ import (
 	"golang.org/x/mod/module"
 
 	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/bloxapp/ssv/utils/rsaencryption"
 )
 
@@ -34,7 +32,7 @@ func GenerateOperatorSigner(oids ...spectypes.OperatorID) ([]*rsa.PrivateKey, []
 	nodes := make([]*spectypes.Operator, 0, len(oids))
 	sks := make([]*rsa.PrivateKey, 0, len(oids))
 
-	for i, _ := range oids {
+	for i := range oids {
 		pubKey, privKey, err := rsaencryption.GenerateKeys()
 		if err != nil {
 			panic(err)
@@ -96,15 +94,6 @@ func CreateMultipleStoredInstances(
 		})
 	}
 	return results, nil
-}
-
-func signMessage(msg *specqbft.Message, sk *bls.SecretKey) (*bls.Sign, error) {
-	signatureDomain := spectypes.ComputeSignatureDomain(types.GetDefaultDomain(), spectypes.QBFTSignatureType)
-	root, err := spectypes.ComputeSigningRoot(msg, signatureDomain)
-	if err != nil {
-		return nil, err
-	}
-	return sk.SignByte(root[:]), nil
 }
 
 // SignMsg handle MultiSignMsg error and return just specqbft.SignedMessage
