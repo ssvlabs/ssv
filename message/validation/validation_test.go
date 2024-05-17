@@ -1038,9 +1038,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				signedSSVMessage := generateSignedMessage(ks, msgID, slot)
 
 				topicID := commons.CommitteeTopicID(committeeID[:])[0]
-				lateMsg, err := validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
-				loggerFields := validator.buildLoggerFields(lateMsg)
-				t.Log(loggerFields)
+				_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 				require.ErrorContains(t, err, ErrLateMessage.Error())
 			})
 		}
