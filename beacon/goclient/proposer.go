@@ -131,12 +131,6 @@ func (gc *goClient) GetBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byt
 	}
 }
 
-// GetBlindedBeaconBlock is DEPRECATED because GetBeaconBlock returns blinded block when possible and regular block otherwise.
-// Use GetBeaconBlock instead.
-func (gc *goClient) GetBlindedBeaconBlock(slot phase0.Slot, graffitiBytes, randao []byte) (ssz.Marshaler, spec.DataVersion, error) {
-	return gc.GetBeaconBlock(slot, graffitiBytes, randao)
-}
-
 func (gc *goClient) SubmitBlindedBeaconBlock(block *api.VersionedBlindedProposal, sig phase0.BLSSignature) error {
 	signedBlock := &api.VersionedSignedBlindedProposal{
 		Version: block.Version,
