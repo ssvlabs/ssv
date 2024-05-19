@@ -35,7 +35,7 @@ func TestTimeouts(t *testing.T) {
 			BaseDelay: commonTimeout * 2,
 		})
 		_, err := mockClient(t, ctx, undialableServer.URL, commonTimeout, longTimeout)
-		require.ErrorContains(t, err, "context deadline exceeded")
+		require.ErrorContains(t, err, "client is not active")
 	}
 
 	// Too slow to respond to the Validators request.
@@ -103,7 +103,6 @@ func mockClient(t *testing.T, ctx context.Context, serverURL string, commonTimeo
 			BeaconNodeAddr: serverURL,
 			CommonTimeout:  commonTimeout,
 			LongTimeout:    longTimeout,
-			DelayedStart:   true,
 		},
 		operatordatastore.New(&registrystorage.OperatorData{ID: 1}),
 		func() slotticker.SlotTicker {

@@ -180,7 +180,6 @@ func New(
 		// LogLevel supplies the level of logging to carry out.
 		eth2clienthttp.WithLogLevel(zerolog.DebugLevel),
 		eth2clienthttp.WithTimeout(commonTimeout),
-		eth2clienthttp.WithAllowDelayedStart(opt.DelayedStart),
 		eth2clienthttp.WithReducedMemoryUsage(true),
 	)
 	if err != nil {

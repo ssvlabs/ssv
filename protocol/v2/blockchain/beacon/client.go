@@ -65,5 +65,4 @@ type Options struct {
 	GasLimit       uint64
 	CommonTimeout  time.Duration // Optional.
 	LongTimeout    time.Duration // Optional.
-	DelayedStart   bool          // Used for tests.
 }
