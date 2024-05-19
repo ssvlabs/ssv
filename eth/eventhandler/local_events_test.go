@@ -5,15 +5,15 @@ import (
 	"encoding/binary"
 	"testing"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/ethereum/go-ethereum/common"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 	"gopkg.in/yaml.v3"
 
-	"github.com/bloxapp/ssv/eth/contract"
-	"github.com/bloxapp/ssv/eth/localevents"
-	"github.com/bloxapp/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/eth/contract"
+	"github.com/ssvlabs/ssv/eth/localevents"
+	"github.com/ssvlabs/ssv/registry/storage"
 )
 
 func TestHandleLocalEvent(t *testing.T) {

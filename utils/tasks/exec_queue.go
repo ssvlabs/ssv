@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bloxapp/ssv/protocol/v2/queue"
+	"github.com/ssvlabs/ssv/protocol/v2/queue"
 )
 
 // Fn represents a function to execute

@@ -1,9 +1,8 @@
 package mock
 
 import (
-	"github.com/bloxapp/ssv/network/peers"
-	"github.com/bloxapp/ssv/network/records"
-	"github.com/bloxapp/ssv/operator/keys"
+	"github.com/ssvlabs/ssv/network/peers"
+	"github.com/ssvlabs/ssv/network/records"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
@@ -16,7 +15,7 @@ type NodeInfoIndex struct {
 	MockSelfSealed []byte
 }
 
-func (m NodeInfoIndex) SelfSealed(sender, recipient peer.ID, permissioned bool, operatorSigner keys.OperatorSigner) ([]byte, error) {
+func (m NodeInfoIndex) SelfSealed() ([]byte, error) {
 	if len(m.MockSelfSealed) != 0 {
 		return m.MockSelfSealed, nil
 	} else {

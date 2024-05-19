@@ -14,9 +14,9 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/eth/contract"
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/utils/tasks"
+	"github.com/ssvlabs/ssv/eth/contract"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/utils/tasks"
 )
 
 var (
@@ -195,7 +195,7 @@ func (ec *ExecutionClient) StreamLogs(ctx context.Context, fromBlock uint64) <-c
 				}
 
 				// streamLogsToChan should never return without an error,
-				// so we treat a nil error as a an error by itself.
+				// so we treat a nil error as an error by itself.
 				if err == nil {
 					err = errors.New("streamLogsToChan halted without an error")
 				}

@@ -13,14 +13,14 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/types"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
-	"github.com/bloxapp/ssv/eth/simulator"
-	"github.com/bloxapp/ssv/eth/simulator/simcontract"
+	"github.com/ssvlabs/ssv/eth/simulator"
+	"github.com/ssvlabs/ssv/eth/simulator/simcontract"
 )
 
 var (
@@ -32,7 +32,7 @@ var (
 
 func simTestBackend(testAddr ethcommon.Address) *simulator.SimulatedBackend {
 	return simulator.NewSimulatedBackend(
-		core.GenesisAlloc{
+		types.GenesisAlloc{
 			testAddr: {Balance: big.NewInt(10000000000000000)},
 		}, 10000000,
 	)
@@ -79,7 +79,16 @@ func TestFetchHistoricalLogs(t *testing.T) {
 
 	// Create a client and connect to the simulator
 	const followDistance = 8
-	client, err := New(ctx, addr, contractAddr, WithLogger(logger), WithFollowDistance(followDistance))
+	client, err := New(
+		ctx,
+		addr,
+		contractAddr,
+		WithLogger(logger),
+		WithFollowDistance(followDistance),
+		WithMetrics(nopMetrics{}),
+		WithConnectionTimeout(2*time.Second),
+		WithReconnectionInitialInterval(2*time.Second),
+	)
 	require.NoError(t, err)
 
 	err = client.Healthy(ctx)

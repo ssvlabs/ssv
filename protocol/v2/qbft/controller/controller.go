@@ -6,14 +6,14 @@ import (
 	"encoding/json"
 	"fmt"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 )
 
 // NewDecidedHandler handles newly saved decided messages.
@@ -232,12 +232,19 @@ func (c *Controller) broadcastDecided(aggregatedCommit *specqbft.SignedMessage) 
 		return errors.Wrap(err, "could not encode decided message")
 	}
 
-	msgToBroadcast := &spectypes.SSVMessage{
+	ssvMsg := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVConsensusMsgType,
 		MsgID:   specqbft.ControllerIdToMessageID(c.Identifier),
 		Data:    byts,
 	}
-	if err := c.GetConfig().GetNetwork().Broadcast(msgToBroadcast); err != nil {
+
+	operatorSigner := c.GetConfig().GetOperatorSigner()
+	msgToBroadcast, err := spectypes.SSVMessageToSignedSSVMessage(ssvMsg, c.Share.OperatorID, operatorSigner.SignSSVMessage)
+	if err != nil {
+		return errors.Wrap(err, "could not create SignedSSVMessage from SSVMessage")
+	}
+
+	if err := c.GetConfig().GetNetwork().Broadcast(ssvMsg.GetID(), msgToBroadcast); err != nil {
 		// We do not return error here, just Log broadcasting error.
 		return errors.Wrap(err, "could not broadcast decided")
 	}

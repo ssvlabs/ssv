@@ -6,7 +6,7 @@ import (
 
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 
-	"github.com/bloxapp/ssv/logging"
+	"github.com/ssvlabs/ssv/logging"
 
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	"github.com/libp2p/go-libp2p/core/discovery"

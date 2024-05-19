@@ -63,7 +63,7 @@ func TestTopicScoreParams(t *testing.T) {
 }
 
 func TestPeerScoreParams(t *testing.T) {
-	peerScoreParams := PeerScoreParams(oneEpochDuration, 550*(time.Millisecond*700))
+	peerScoreParams := PeerScoreParams(oneEpochDuration, 550*(time.Millisecond*700), false)
 	raw, err := peerScoreParamsString(peerScoreParams)
 	require.NoError(t, err)
 	require.NotNil(t, raw)

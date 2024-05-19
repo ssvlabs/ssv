@@ -12,11 +12,11 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/network/peers"
-	"github.com/bloxapp/ssv/network/topics/params"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
+	"github.com/ssvlabs/ssv/network"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/peers"
+	"github.com/ssvlabs/ssv/network/topics/params"
 )
 
 const (
@@ -61,6 +61,7 @@ type PubSubConfig struct {
 	OutboundQueueSize   int
 	MsgIDCacheTTL       time.Duration
 
+	DisableIPRateLimit     bool
 	GetValidatorStats      network.GetValidatorStats
 	ScoreInspector         pubsub.ExtendedPeerScoreInspectFn
 	ScoreInspectorInterval time.Duration
@@ -154,7 +155,7 @@ func NewPubSub(ctx context.Context, logger *zap.Logger, cfg *PubSubConfig, metri
 			inspectInterval = defaultScoreInspectInterval
 		}
 
-		peerScoreParams := params.PeerScoreParams(cfg.Scoring.OneEpochDuration, cfg.MsgIDCacheTTL, cfg.Scoring.IPWhilelist...)
+		peerScoreParams := params.PeerScoreParams(cfg.Scoring.OneEpochDuration, cfg.MsgIDCacheTTL, cfg.DisableIPRateLimit, cfg.Scoring.IPWhilelist...)
 		psOpts = append(psOpts, pubsub.WithPeerScore(peerScoreParams, params.PeerScoreThresholds()),
 			pubsub.WithPeerScoreInspect(inspector, inspectInterval))
 		if cfg.GetValidatorStats == nil {

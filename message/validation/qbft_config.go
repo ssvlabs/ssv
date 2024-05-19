@@ -1,11 +1,11 @@
 package validation
 
 import (
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 )
 
 // qbftConfig is used in message validation and has no signature verification.
@@ -19,7 +19,11 @@ func newQBFTConfig(domain spectypes.DomainType) qbftConfig {
 	}
 }
 
-func (q qbftConfig) GetSigner() spectypes.SSVSigner {
+func (q qbftConfig) GetShareSigner() spectypes.ShareSigner {
+	panic("should not be called")
+}
+
+func (q qbftConfig) GetOperatorSigner() spectypes.OperatorSigner {
 	panic("should not be called")
 }
 

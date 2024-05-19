@@ -13,27 +13,27 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"golang.org/x/exp/slices"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/monitoring/metricsreporter"
-	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/networkconfig"
-	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
-	"github.com/bloxapp/ssv/operator/duties/dutystore"
-	"github.com/bloxapp/ssv/operator/keys"
-	operatorstorage "github.com/bloxapp/ssv/operator/storage"
-	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/networkconfig"
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
+	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/operator/keys"
+	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
+	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 const (
@@ -44,7 +44,7 @@ const (
 	clockErrorTolerance = time.Millisecond * 50
 
 	maxMessageSize             = maxConsensusMsgSize
-	maxConsensusMsgSize        = 8388608
+	maxConsensusMsgSize        = 6291829
 	maxPartialSignatureMsgSize = 1952
 	allowedRoundsInFuture      = 1
 	allowedRoundsInPast        = 2
@@ -61,7 +61,7 @@ type PubsubMessageValidator interface {
 
 // SSVMessageValidator defines methods for validating SSV messages.
 type SSVMessageValidator interface {
-	ValidateSSVMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, Descriptor, error)
+	ValidateSSVMessage(ssvMessage *queue.DecodedSSVMessage) (*queue.DecodedSSVMessage, Descriptor, error)
 }
 
 // MessageValidator is an interface that combines both PubsubMessageValidator and SSVMessageValidator.
@@ -232,7 +232,19 @@ func (mv *messageValidator) ValidatorForTopic(_ string) func(ctx context.Context
 // Depending on the outcome, it will return one of the pubsub validation results (Accept, Ignore, or Reject).
 func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
 	if mv.selfAccept && peerID == mv.selfPID {
-		msg, _ := commons.DecodeNetworkMsg(pmsg.Data)
+		signedSSVMsg := &spectypes.SignedSSVMessage{}
+		if err := signedSSVMsg.Decode(pmsg.GetData()); err != nil {
+			mv.logger.Error("failed to decode signed ssv message", zap.Error(err))
+			return pubsub.ValidationReject
+		}
+
+		msg, err := signedSSVMsg.GetSSVMessageFromData()
+		if err != nil {
+			mv.logger.Error("failed to decode network message", zap.Error(err))
+			return pubsub.ValidationReject
+		}
+
+		// skipping the error check for testing simplifying
 		decMsg, _ := queue.DecodeSSVMessage(msg)
 		pmsg.ValidatorData = decMsg
 		return pubsub.ValidationAccept
@@ -290,7 +302,7 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer
 
 // ValidateSSVMessage validates the given SSV message.
 // If successful, it returns the decoded message and its descriptor. Otherwise, it returns an error.
-func (mv *messageValidator) ValidateSSVMessage(ssvMessage *spectypes.SSVMessage) (*queue.DecodedSSVMessage, Descriptor, error) {
+func (mv *messageValidator) ValidateSSVMessage(ssvMessage *queue.DecodedSSVMessage) (*queue.DecodedSSVMessage, Descriptor, error) {
 	return mv.validateSSVMessage(ssvMessage, time.Now(), nil)
 }
 
@@ -303,28 +315,25 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 
 	defer mv.metrics.ActiveMsgValidationDone(topic)
 
-	messageData := pMsg.GetData()
-
-	var signatureVerifier func() error
-
-	currentEpoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(mv.netCfg.Beacon.EstimatedSlotAtTime(receivedAt.Unix()))
-	if currentEpoch > mv.netCfg.PermissionlessActivationEpoch {
-		decMessageData, operatorID, signature, err := commons.DecodeSignedSSVMessage(messageData)
-		messageData = decMessageData
-		if err != nil {
-			e := ErrMalformedSignedMessage
-			e.innerErr = err
-			return nil, Descriptor{}, e
-		}
-
-		signatureVerifier = func() error {
-			mv.metrics.MessageValidationRSAVerifications()
-			return mv.verifySignature(messageData, operatorID, signature)
-		}
+	encMessageData := pMsg.GetData()
+	if len(encMessageData) == 0 {
+		return nil, Descriptor{}, ErrPubSubMessageHasNoData
 	}
 
+	signedSSVMsg := &spectypes.SignedSSVMessage{}
+	if err := signedSSVMsg.Decode(encMessageData); err != nil {
+		e := ErrMalformedSignedMessage
+		e.innerErr = err
+		return nil, Descriptor{}, e
+	}
+	messageData := signedSSVMsg.GetData()
 	if len(messageData) == 0 {
-		return nil, Descriptor{}, ErrPubSubMessageHasNoData
+		return nil, Descriptor{}, ErrDecodedPubSubMessageHasEmptyData
+	}
+
+	signatureVerifier := func() error {
+		mv.metrics.MessageValidationRSAVerifications()
+		return mv.verifySignature(signedSSVMsg)
 	}
 
 	mv.metrics.MessageSize(len(messageData))
@@ -338,13 +347,22 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 		return nil, Descriptor{}, e
 	}
 
-	msg, err := commons.DecodeNetworkMsg(messageData)
+	msg, err := queue.DecodeSignedSSVMessage(signedSSVMsg)
 	if err != nil {
-		e := ErrMalformedPubSubMessage
+		if errors.Is(err, queue.ErrDecodeNetworkMsg) {
+			e := ErrMalformedPubSubMessage
+			e.innerErr = err
+			return nil, Descriptor{}, e
+		}
+		if errors.Is(err, queue.ErrUnknownMessageType) {
+			e := ErrUnknownSSVMessageType
+			e.innerErr = err
+			return nil, Descriptor{}, e
+		}
+		e := ErrMalformedMessage
 		e.innerErr = err
 		return nil, Descriptor{}, e
 	}
-
 	if msg == nil {
 		return nil, Descriptor{}, ErrEmptyPubSubMessage
 	}
@@ -370,8 +388,9 @@ func (mv *messageValidator) validateP2PMessage(pMsg *pubsub.Message, receivedAt 
 	return mv.validateSSVMessage(msg, receivedAt, signatureVerifier)
 }
 
-func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage, receivedAt time.Time, signatureVerifier func() error) (*queue.DecodedSSVMessage, Descriptor, error) {
+func (mv *messageValidator) validateSSVMessage(msg *queue.DecodedSSVMessage, receivedAt time.Time, signatureVerifier func() error) (*queue.DecodedSSVMessage, Descriptor, error) {
 	var descriptor Descriptor
+	ssvMessage := msg.SSVMessage
 
 	if len(ssvMessage.Data) == 0 {
 		return nil, descriptor, ErrEmptyData
@@ -431,19 +450,6 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 		}
 	}
 
-	msg, err := queue.DecodeSSVMessage(ssvMessage)
-	if err != nil {
-		if errors.Is(err, queue.ErrUnknownMessageType) {
-			e := ErrUnknownSSVMessageType
-			e.got = ssvMessage.GetType()
-			return nil, descriptor, e
-		}
-
-		e := ErrMalformedMessage
-		e.innerErr = err
-		return nil, descriptor, e
-	}
-
 	// Lock this SSV message ID to prevent concurrent access to the same state.
 	mv.validationMutex.Lock()
 	mutex, ok := mv.validationLocks[msg.GetID()]
@@ -460,7 +466,7 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 	if mv.nodeStorage != nil {
 		switch ssvMessage.MsgType {
 		case spectypes.SSVConsensusMsgType:
-			if len(msg.Data) > maxConsensusMsgSize {
+			if len(ssvMessage.Data) > maxConsensusMsgSize {
 				e := ErrSSVDataTooBig
 				e.got = len(ssvMessage.Data)
 				e.want = maxConsensusMsgSize
@@ -476,7 +482,7 @@ func (mv *messageValidator) validateSSVMessage(ssvMessage *spectypes.SSVMessage,
 			}
 
 		case spectypes.SSVPartialSignatureMsgType:
-			if len(msg.Data) > maxPartialSignatureMsgSize {
+			if len(ssvMessage.Data) > maxPartialSignatureMsgSize {
 				e := ErrSSVDataTooBig
 				e.got = len(ssvMessage.Data)
 				e.want = maxPartialSignatureMsgSize

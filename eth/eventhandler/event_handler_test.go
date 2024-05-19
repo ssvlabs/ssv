@@ -10,42 +10,42 @@ import (
 	"strings"
 	"testing"
 
+	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ekmcore "github.com/bloxapp/eth2-key-manager/core"
+
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/golang/mock/gomock"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+	"github.com/ssvlabs/ssv/ekm"
+	"github.com/ssvlabs/ssv/eth/contract"
+	"github.com/ssvlabs/ssv/eth/eventparser"
+	"github.com/ssvlabs/ssv/eth/executionclient"
+	"github.com/ssvlabs/ssv/eth/simulator"
+	"github.com/ssvlabs/ssv/eth/simulator/simcontract"
+	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/networkconfig"
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
+	"github.com/ssvlabs/ssv/operator/keys"
+	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/operator/validator"
+	"github.com/ssvlabs/ssv/operator/validator/mocks"
+	"github.com/ssvlabs/ssv/operator/validatorsmap"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/kv"
+	"github.com/ssvlabs/ssv/utils"
+	"github.com/ssvlabs/ssv/utils/blskeygen"
+	"github.com/ssvlabs/ssv/utils/threshold"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
-
-	"github.com/bloxapp/ssv/ekm"
-	"github.com/bloxapp/ssv/eth/contract"
-	"github.com/bloxapp/ssv/eth/eventparser"
-	"github.com/bloxapp/ssv/eth/executionclient"
-	"github.com/bloxapp/ssv/eth/simulator"
-	"github.com/bloxapp/ssv/eth/simulator/simcontract"
-	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
-	"github.com/bloxapp/ssv/networkconfig"
-	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
-	"github.com/bloxapp/ssv/operator/keys"
-	operatorstorage "github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/operator/validator"
-	"github.com/bloxapp/ssv/operator/validator/mocks"
-	"github.com/bloxapp/ssv/operator/validatorsmap"
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
-	"github.com/bloxapp/ssv/utils"
-	"github.com/bloxapp/ssv/utils/blskeygen"
-	"github.com/bloxapp/ssv/utils/threshold"
 )
 
 var (
@@ -690,6 +690,14 @@ func TestHandleBlockEventsStream(t *testing.T) {
 			// Check the validator's shares are present in the state before removing
 			valShare := eh.nodeStorage.Shares().Get(nil, valPubKey)
 			require.NotNil(t, valShare)
+			valShare.BeaconMetadata = &beacon.ValidatorMetadata{
+				Index:           1,
+				ActivationEpoch: 0,
+				Status:          eth2apiv1.ValidatorStateActiveOngoing,
+				Balance:         phase0.Gwei(10000000000000000),
+			}
+			err := eh.nodeStorage.Shares().Save(nil, valShare)
+			require.NoError(t, err)
 			requireKeyManagerDataToExist(t, eh, 4, validatorData1)
 
 			_, err = boundContract.SimcontractTransactor.ExitValidator(
@@ -1318,7 +1326,9 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger, ne
 			bc,
 			storageMap,
 			WithFullNode(),
-			WithLogger(logger))
+			WithLogger(logger),
+			WithMetrics(nopMetrics{}),
+		)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -1372,7 +1382,8 @@ func setupOperatorStorage(logger *zap.Logger, db basedb.Database, operator *test
 		logger.Fatal("failed to create node storage", zap.Error(err))
 	}
 
-	encodedPrivKey, err := operator.privateKey.StorageHash()
+	privKey := operator.privateKey
+	encodedPrivKey, err := privKey.StorageHash()
 	if err != nil {
 		logger.Fatal("failed to encode operator private key", zap.Error(err))
 	}
@@ -1418,10 +1429,10 @@ func unmarshalLog(t *testing.T, rawOperatorAdded string) ethtypes.Log {
 }
 
 func simTestBackend(testAddresses []*ethcommon.Address) *simulator.SimulatedBackend {
-	genesis := core.GenesisAlloc{}
+	genesis := ethtypes.GenesisAlloc{}
 
 	for _, testAddr := range testAddresses {
-		genesis[*testAddr] = core.GenesisAccount{Balance: big.NewInt(10000000000000000)}
+		genesis[*testAddr] = ethtypes.Account{Balance: big.NewInt(10000000000000000)}
 	}
 
 	return simulator.NewSimulatedBackend(

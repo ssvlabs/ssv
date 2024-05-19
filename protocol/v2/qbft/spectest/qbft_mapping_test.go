@@ -7,18 +7,18 @@ import (
 	"strings"
 	"testing"
 
-	spectests "github.com/bloxapp/ssv-spec/qbft/spectest/tests"
-	"github.com/bloxapp/ssv-spec/qbft/spectest/tests/timeout"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	"github.com/bloxapp/ssv-spec/types/testingutils"
+	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
+	"github.com/ssvlabs/ssv-spec/qbft/spectest/tests/timeout"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/logging"
-	testing2 "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
+	"github.com/ssvlabs/ssv/logging"
+	testing2 "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
 
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func TestQBFTMapping(t *testing.T) {

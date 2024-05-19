@@ -15,21 +15,21 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/protocol/v2/message"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/network"
-	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
+	"github.com/ssvlabs/ssv/network"
+	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
 )
 
 func TestRSAUsage(t *testing.T) {
@@ -57,14 +57,25 @@ func TestRSAUsage(t *testing.T) {
 	})
 
 	const operatorID = spectypes.OperatorID(0x12345678)
-	encodedSignedSSVMessage := commons.EncodeSignedSSVMessage(testMessage, operatorID, signature)
-
-	decodedMessage, decodedOperatorID, decodedSignature, err := commons.DecodeSignedSSVMessage(encodedSignedSSVMessage)
+	sig := [256]byte{}
+	copy(sig[:], signature)
+	signedSSVMsg := &spectypes.SignedSSVMessage{
+		Signature:  sig,
+		OperatorID: operatorID,
+		Data:       testMessage,
+	}
+	encodedSignedSSVMessage, err := signedSSVMsg.Encode()
 	require.NoError(t, err)
-	require.Equal(t, operatorID, decodedOperatorID)
-	require.Equal(t, signature, decodedSignature)
 
-	messageHash := sha256.Sum256(decodedMessage)
+	decodedMsg := &spectypes.SignedSSVMessage{}
+	err = decodedMsg.Decode(encodedSignedSSVMessage)
+	require.NoError(t, err)
+
+	require.NoError(t, err)
+	require.Equal(t, operatorID, decodedMsg.OperatorID)
+	require.Equal(t, sig, decodedMsg.Signature)
+
+	messageHash := sha256.Sum256(decodedMsg.Data)
 
 	block, rest := pem.Decode(pubPEM)
 	require.NotNil(t, block)
@@ -76,8 +87,8 @@ func TestRSAUsage(t *testing.T) {
 	rsaPubKey, ok := pub.(*rsa.PublicKey)
 	require.True(t, ok)
 
-	require.NoError(t, rsa.VerifyPKCS1v15(rsaPubKey, crypto.SHA256, messageHash[:], decodedSignature))
-	require.Equal(t, testMessage, decodedMessage)
+	require.NoError(t, rsa.VerifyPKCS1v15(rsaPubKey, crypto.SHA256, messageHash[:], decodedMsg.Signature[:]))
+	require.Equal(t, testMessage, decodedMsg.Data)
 }
 
 func TestGetMaxPeers(t *testing.T) {
@@ -88,7 +99,6 @@ func TestGetMaxPeers(t *testing.T) {
 	require.Equal(t, 40, n.getMaxPeers(""))
 	require.Equal(t, 8, n.getMaxPeers("100"))
 }
-
 func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 	n := 4
 	ctx, cancel := context.WithCancel(context.Background())
@@ -115,29 +125,31 @@ func TestP2pNetwork_SubscribeBroadcast(t *testing.T) {
 
 	var wg sync.WaitGroup
 	wg.Add(1)
+
 	go func() {
 		defer wg.Done()
-		msg1 := dummyMsgAttester(t, pks[0], 1)
-		msg3 := dummyMsgAttester(t, pks[0], 3)
-		require.NoError(t, node1.Broadcast(msg1))
+		msgID1, msg1 := dummyMsgAttester(t, pks[0], 1)
+		msgID3, msg3 := dummyMsgAttester(t, pks[0], 3)
+		require.NoError(t, node1.Broadcast(msgID1, msg1))
 		<-time.After(time.Millisecond * 10)
-		require.NoError(t, node2.Broadcast(msg3))
+		require.NoError(t, node2.Broadcast(msgID3, msg3))
 		<-time.After(time.Millisecond * 2)
-		require.NoError(t, node2.Broadcast(msg1))
+		require.NoError(t, node2.Broadcast(msgID1, msg1))
 	}()
 
 	wg.Add(1)
+
 	go func() {
 		defer wg.Done()
-		msg1 := dummyMsgAttester(t, pks[0], 1)
-		msg2 := dummyMsgAttester(t, pks[1], 2)
-		msg3 := dummyMsgAttester(t, pks[0], 3)
+		msgID1, msg1 := dummyMsgAttester(t, pks[0], 1)
+		msgID2, msg2 := dummyMsgAttester(t, pks[1], 2)
+		msgID3, msg3 := dummyMsgAttester(t, pks[0], 3)
 		require.NoError(t, err)
-		<-time.After(time.Millisecond * 10)
-		require.NoError(t, node1.Broadcast(msg2))
-		<-time.After(time.Millisecond * 2)
-		require.NoError(t, node2.Broadcast(msg1))
-		require.NoError(t, node1.Broadcast(msg3))
+		time.Sleep(time.Millisecond * 10)
+		require.NoError(t, node1.Broadcast(msgID2, msg2))
+		time.Sleep(time.Millisecond * 2)
+		require.NoError(t, node2.Broadcast(msgID1, msg1))
+		require.NoError(t, node1.Broadcast(msgID3, msg3))
 	}()
 
 	wg.Wait()
@@ -397,7 +409,7 @@ func (r *dummyRouter) Route(_ context.Context, _ *queue.DecodedSSVMessage) {
 	atomic.AddUint64(&r.count, 1)
 }
 
-func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.BeaconRole) *spectypes.SSVMessage {
+func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.BeaconRole) (spectypes.MessageID, *spectypes.SignedSSVMessage) {
 	pk, err := hex.DecodeString(pkHex)
 	require.NoError(t, err)
 	id := spectypes.NewMsgID(networkconfig.TestNetwork.Domain, pk, role)
@@ -414,13 +426,21 @@ func dummyMsg(t *testing.T, pkHex string, height int, role spectypes.BeaconRole)
 	}
 	data, err := signedMsg.Encode()
 	require.NoError(t, err)
-	return &spectypes.SSVMessage{
+	ssvMsg := &spectypes.SSVMessage{
 		MsgType: spectypes.SSVConsensusMsgType,
 		MsgID:   id,
 		Data:    data,
 	}
+	signedSSVMsg, err := spectypes.SSVMessageToSignedSSVMessage(ssvMsg, 1, dummySignSSVMessage)
+	require.NoError(t, err)
+
+	return id, signedSSVMsg
 }
 
-func dummyMsgAttester(t *testing.T, pkHex string, height int) *spectypes.SSVMessage {
+func dummyMsgAttester(t *testing.T, pkHex string, height int) (spectypes.MessageID, *spectypes.SignedSSVMessage) {
 	return dummyMsg(t, pkHex, height, spectypes.BNRoleAttester)
+}
+
+func dummySignSSVMessage(data []byte) ([256]byte, error) {
+	return [256]byte{}, nil
 }

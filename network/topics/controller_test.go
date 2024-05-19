@@ -11,27 +11,29 @@ import (
 	"testing"
 	"time"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/libp2p/go-libp2p"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/message/validation"
-	"github.com/bloxapp/ssv/monitoring/metricsreporter"
-	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/network/discovery"
-	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/message/validation"
+	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/discovery"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
 func TestTopicManager(t *testing.T) {
 	logger := logging.TestLogger(t)
 
+	// TODO: rework this test to use message validation
 	t.Run("happy flow", func(t *testing.T) {
 		nPeers := 4
 
@@ -47,7 +49,7 @@ func TestTopicManager(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		validator := validation.NewMessageValidator(networkconfig.TestNetwork)
+		validator := &DummyMessageValidator{}
 
 		peers := newPeers(ctx, logger, t, nPeers, validator, true, nil)
 		baseTest(t, ctx, logger, peers, pks, 1, 2)
@@ -349,7 +351,7 @@ func newPeer(ctx context.Context, logger *zap.Logger, t *testing.T, msgValidator
 	var p *P
 	var midHandler MsgIDHandler
 	if msgID {
-		midHandler = NewMsgIDHandler(ctx, 2*time.Minute, networkconfig.TestNetwork)
+		midHandler = NewMsgIDHandler(ctx, 2*time.Minute)
 		go midHandler.Start()
 	}
 	cfg := &PubSubConfig{
@@ -452,16 +454,28 @@ func dummyMsg(pkHex string, height int, malformed bool) (*spectypes.SSVMessage, 
 	return ssvMsg, nil
 }
 
-//
-// func createShares(n int) []*bls.SecretKey {
-//	threshold.Init()
-//
-//	var res []*bls.SecretKey
-//	for i := 0; i < n; i++ {
-//		sk := bls.SecretKey{}
-//		sk.SetByCSPRNG()
-//		res = append(res, &sk)
-//		fmt.Printf("\"%s\",", sk.GetPublicKey().SerializeToHexStr())
-//	}
-//	return res
-//}
+type DummyMessageValidator struct {
+}
+
+func (m *DummyMessageValidator) ValidatorForTopic(topic string) func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+	return func(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+		return pubsub.ValidationAccept
+	}
+}
+
+func (m *DummyMessageValidator) ValidatePubsubMessage(ctx context.Context, p peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
+	return pubsub.ValidationAccept
+}
+
+func (m *DummyMessageValidator) ValidateSSVMessage(msg *queue.DecodedSSVMessage) (*queue.DecodedSSVMessage, validation.Descriptor, error) {
+	var descriptor validation.Descriptor
+
+	validatorPK := msg.SSVMessage.GetID().GetPubKey()
+	role := msg.SSVMessage.GetID().GetRoleType()
+	descriptor.Role = role
+	descriptor.ValidatorPK = validatorPK
+
+	descriptor.SSVMessageType = msg.SSVMessage.GetType()
+
+	return msg, descriptor, nil
+}

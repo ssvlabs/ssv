@@ -9,17 +9,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv/eth/contract"
-	"github.com/bloxapp/ssv/eth/simulator"
-	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
-	"github.com/bloxapp/ssv/operator/keys"
-	"github.com/bloxapp/ssv/operator/validatorsmap"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ssvlabs/ssv/eth/contract"
+	"github.com/ssvlabs/ssv/eth/simulator"
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
+	"github.com/ssvlabs/ssv/operator/keys"
+	"github.com/ssvlabs/ssv/operator/validatorsmap"
+	"github.com/ssvlabs/ssv/utils/rsaencryption"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	ethcommon "github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/golang/mock/gomock"
@@ -27,20 +27,20 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 
-	"github.com/bloxapp/ssv/ekm"
+	"github.com/ssvlabs/ssv/ekm"
 
-	"github.com/bloxapp/ssv/eth/eventhandler"
-	"github.com/bloxapp/ssv/eth/eventparser"
-	"github.com/bloxapp/ssv/eth/executionclient"
-	"github.com/bloxapp/ssv/eth/simulator/simcontract"
-	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
-	"github.com/bloxapp/ssv/networkconfig"
-	operatorstorage "github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/operator/validator"
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
+	"github.com/ssvlabs/ssv/eth/eventhandler"
+	"github.com/ssvlabs/ssv/eth/eventparser"
+	"github.com/ssvlabs/ssv/eth/executionclient"
+	"github.com/ssvlabs/ssv/eth/simulator/simcontract"
+	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/networkconfig"
+	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/operator/validator"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/kv"
 )
 
 var (
@@ -116,14 +116,28 @@ func TestEventSyncer(t *testing.T) {
 		}
 		require.Equal(t, uint64(0x1), receipt.Status)
 	}
+	db, err := kv.NewInMemory(logger, basedb.Options{
+		Ctx: ctx,
+	})
+	require.NoError(t, err)
+	privateKey, err := keys.GeneratePrivateKey()
+	require.NoError(t, err)
+	nodeStorage, operatorData := setupOperatorStorage(logger, db, privateKey)
+	require.NoError(t, err)
 
-	eh := setupEventHandler(t, ctx, logger)
+	eh := setupEventHandler(t, ctx, logger, db, nodeStorage, operatorData, privateKey)
 	eventSyncer := New(
-		nil,
+		nodeStorage,
 		client,
 		eh,
 		WithLogger(logger),
+		WithStalenessThreshold(time.Second*10),
+		WithMetrics(nopMetrics{}),
 	)
+
+	nodeStorage.SaveLastProcessedBlock(nil, big.NewInt(1))
+	err = eventSyncer.Healthy(ctx)
+	require.NoError(t, err)
 
 	lastProcessedBlock, err := eventSyncer.SyncHistory(ctx, 0)
 	require.NoError(t, err)
@@ -131,20 +145,16 @@ func TestEventSyncer(t *testing.T) {
 	require.NoError(t, eventSyncer.SyncOngoing(ctx, lastProcessedBlock+1))
 }
 
-func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger) *eventhandler.EventHandler {
-	db, err := kv.NewInMemory(logger, basedb.Options{
-		Ctx: ctx,
-	})
-	require.NoError(t, err)
-
+func setupEventHandler(
+	t *testing.T,
+	ctx context.Context,
+	logger *zap.Logger,
+	db *kv.BadgerDB,
+	nodeStorage operatorstorage.Storage,
+	operatorData *registrystorage.OperatorData,
+	privateKey keys.OperatorPrivateKey,
+) *eventhandler.EventHandler {
 	storageMap := ibftstorage.NewStores()
-
-	privateKey, err := keys.GeneratePrivateKey()
-	if err != nil {
-		logger.Fatal("failed generating operator key %v", zap.Error(err))
-	}
-
-	nodeStorage, operatorData := setupOperatorStorage(logger, db, privateKey)
 	operatorDataStore := operatordatastore.New(operatorData)
 	testNetworkConfig := networkconfig.TestNetwork
 
@@ -191,7 +201,7 @@ func setupEventHandler(t *testing.T, ctx context.Context, logger *zap.Logger) *e
 
 func simTestBackend(testAddr ethcommon.Address) *simulator.SimulatedBackend {
 	return simulator.NewSimulatedBackend(
-		core.GenesisAlloc{
+		types.GenesisAlloc{
 			testAddr: {Balance: big.NewInt(10000000000000000)},
 		}, 10000000,
 	)

@@ -5,7 +5,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 )
 
 // validatorIterator is the function used to iterate over existing validators
