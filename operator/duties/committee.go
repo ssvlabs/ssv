@@ -3,6 +3,7 @@ package duties
 import (
 	"context"
 	"fmt"
+	"github.com/bloxapp/ssv/logging/fields"
 	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -126,14 +127,17 @@ func (h *CommitteeHandler) processExecution(period uint64, epoch phase0.Epoch, s
 	}
 
 	start := time.Now()
-	h.logger.Debug("building att committee duties", zap.Uint64("period", period), zap.Uint64("epoch", uint64(epoch)), zap.Uint64("slot", uint64(slot)), zap.Int("duties", len(attDuties)))
+	h.logger.Debug("building att committee duties", zap.Uint64("period", period), zap.Uint64("epoch", uint64(epoch)), fields.Slot(slot), zap.Int("duties", len(attDuties)))
 	committeeMap := make(map[[32]byte]*spectypes.CommitteeDuty)
 	if attDuties != nil {
 		for i, d := range attDuties {
 			if h.shouldExecuteAtt(d) {
 				startv := time.Now()
-				clusterID := h.validatorProvider.Validator(d.PubKey[:]).CommitteeID()
-				h.logger.Debug("time it takes to get validator", zap.Duration("took", time.Since(startv)), zap.Int("index", i))
+				v := h.validatorProvider.Validator(d.PubKey[:])
+				h.logger.Debug("time it takes to get validator", fields.Validator(d.PubKey[:]), zap.Duration("took", time.Since(startv)), zap.Int("index", i), fields.Slot(slot))
+				startc := time.Now()
+				clusterID := v.CommitteeID()
+				h.logger.Debug("time it takes to make committeeID", fields.Validator(d.PubKey[:]), zap.Duration("took", time.Since(startc)), zap.Int("index", i), fields.Slot(slot))
 				specDuty := h.toSpecAttDuty(d, spectypes.BNRoleAttester)
 
 				if _, ok := committeeMap[clusterID]; !ok {
