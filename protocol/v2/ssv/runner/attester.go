@@ -29,7 +29,6 @@ type AttesterRunner struct {
 	operatorSigner spectypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
 
-	started time.Time
 	metrics metrics.ConsensusMetrics
 }
 
@@ -72,41 +71,6 @@ func (r *AttesterRunner) HasRunningDuty() bool {
 	return r.BaseRunner.hasRunningDuty()
 }
 
-// executeDuty steps:
-// 1) get attestation data from BN
-// 2) start consensus on duty + attestation data
-// 3) Once consensus decides, sign partial attestation and broadcast
-// 4) collect 2f+1 partial sigs, reconstruct and broadcast valid attestation sig to the BN
-func (r *AttesterRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
-	r.started = time.Now()
-	attData, ver, err := r.GetBeaconNode().GetAttestationData(duty.Slot, duty.CommitteeIndex)
-	if err != nil {
-		logger.Error("❌ failed to get attestation data",
-			fields.AttestationDataTime(time.Since(r.started)),
-			zap.Error(err))
-		return errors.Wrap(err, "failed to get attestation data")
-	}
-	logger.Info("🧊 got attestation data", fields.AttestationDataTime(time.Since(r.started)))
-	r.metrics.StartDutyFullFlow()
-	r.metrics.StartConsensus()
-
-	attDataByts, err := attData.MarshalSSZ()
-	if err != nil {
-		return errors.Wrap(err, "could not marshal attestation data")
-	}
-
-	input := &spectypes.ConsensusData{
-		Duty:    *duty,
-		Version: ver,
-		DataSSZ: attDataByts,
-	}
-
-	if err := r.BaseRunner.decide(logger, r, input); err != nil {
-		return errors.Wrap(err, "can't start new duty runner instance for duty")
-	}
-	return nil
-}
-
 func (r *AttesterRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spectypes.SignedPartialSignatureMessage) error {
 	return errors.New("no pre consensus sigs required for attester role")
 }
@@ -124,15 +88,14 @@ func (r *AttesterRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbf
 	duty := r.GetState().StartingDuty
 	logger = logger.With(fields.Slot(duty.Slot))
 	r.metrics.EndConsensus()
-	logger.Debug("🧩 got decided", fields.DecidedTime(r.metrics.GetConsensusTime()))
 	r.metrics.StartPostConsensus()
 
-	startTime := time.Now()
-
+	r.metrics.StartBeaconData()
 	attestationData, err := decidedValue.GetAttestationData()
 	if err != nil {
 		return errors.Wrap(err, "could not get attestation data")
 	}
+	r.metrics.EndBeaconData()
 
 	// specific duty sig
 	msg, err := r.BaseRunner.signBeaconObject(r, attestationData, decidedValue.Duty.Slot, spectypes.DomainAttester)
@@ -168,11 +131,9 @@ func (r *AttesterRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbf
 
 	if err := r.GetNetwork().Broadcast(ssvMsg.GetID(), msgToBroadcast); err != nil {
 		logger.Error("❌ can't broadcast partial post consensus sig",
-			zap.Duration("broadcast_took", time.Since(startTime)),
 			zap.Error(err))
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
-	logger.Info("✅ partial post consensus sig broadcast successfully", fields.BroadcastTime(time.Since(startTime)))
 	return nil
 }
 
@@ -207,7 +168,6 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
 		r.metrics.EndPostConsensus()
-		consensusDuration := time.Since(r.started)
 		logger.Debug("🧩 reconstructed partial signatures",
 			zap.Uint64s("signers", getPostConsensusSigners(r.GetState(), root)),
 			fields.QuorumTime(r.metrics.GetPostConsensusTime()))
@@ -224,12 +184,17 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		}
 
 		// Submit it to the BN.
+		logger = logger.With(
+			fields.BeaconDataTime(r.metrics.GetBeaconDataDuration()),
+			fields.ConsensusTime(r.metrics.GetConsensusTime()),
+			fields.PostConsensusTime(r.metrics.GetPostConsensusTime()),
+			fields.Height(r.BaseRunner.QBFTController.Height),
+			fields.Round(r.GetState().RunningInstance.State.Round),
+		)
 		if err := r.beacon.SubmitAttestation(signedAtt); err != nil {
 			r.metrics.RoleSubmissionFailed()
 			logger.Error("❌ failed to submit attestation",
-				fields.ConsensusTime(time.Since(r.started)),
 				fields.SubmissionTime(time.Since(startSubmissionTime)),
-				zap.Duration("decided_time", r.metrics.GetPostConsensusTime()),
 				zap.Error(err))
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
 		}
@@ -240,10 +205,7 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 
 		logger.Info("✅ successfully submitted attestation",
 			zap.String("block_root", hex.EncodeToString(signedAtt.Data.BeaconBlockRoot[:])),
-			fields.ConsensusTime(consensusDuration),
-			fields.SubmissionTime(time.Since(startSubmissionTime)),
-			fields.Height(r.BaseRunner.QBFTController.Height),
-			fields.Round(r.GetState().RunningInstance.State.Round))
+			fields.SubmissionTime(time.Since(startSubmissionTime)))
 	}
 	r.GetState().Finished = true
 
@@ -262,6 +224,43 @@ func (r *AttesterRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, 
 	}
 
 	return []ssz.HashRoot{attestationData}, spectypes.DomainAttester, nil
+}
+
+// executeDuty steps:
+// 1) get attestation data from BN
+// 2) start consensus on duty + attestation data
+// 3) Once consensus decides, sign partial attestation and broadcast
+// 4) collect 2f+1 partial sigs, reconstruct and broadcast valid attestation sig to the BN
+func (r *AttesterRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
+	start := time.Now()
+	r.metrics.StartBeaconData()
+	attData, ver, err := r.GetBeaconNode().GetAttestationData(duty.Slot, duty.CommitteeIndex)
+	if err != nil {
+		logger.Error("❌ failed to get attestation data",
+			fields.BeaconDataTime(time.Since(start)),
+			zap.Error(err))
+		return errors.Wrap(err, "failed to get attestation data")
+	}
+	r.metrics.EndBeaconData()
+	r.metrics.StartDutyFullFlow()
+	r.metrics.StartConsensus()
+
+	attDataByts, err := attData.MarshalSSZ()
+	if err != nil {
+		return errors.Wrap(err, "could not marshal attestation data")
+	}
+
+	input := &spectypes.ConsensusData{
+		Duty:    *duty,
+		Version: ver,
+		DataSSZ: attDataByts,
+	}
+
+	logger = logger.With(fields.BeaconDataTime(r.metrics.GetBeaconDataDuration()))
+	if err := r.BaseRunner.decide(logger, r, input); err != nil {
+		return errors.Wrap(err, "can't start new duty runner instance for duty")
+	}
+	return nil
 }
 
 func (r *AttesterRunner) GetBaseRunner() *BaseRunner {

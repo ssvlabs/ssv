@@ -100,20 +100,20 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg 
 		Message:   r.voluntaryExit,
 		Signature: specSig,
 	}
-	timeToSubmit := time.Now()
+	submissionTime := time.Now()
 	if err := r.beacon.SubmitVoluntaryExit(signedVoluntaryExit); err != nil {
 		logger.Error("failed to submit voluntary exit",
-			zap.Duration("time to submit: ", time.Since(timeToSubmit)),
+			fields.SubmissionTime(time.Since(submissionTime)),
 			fields.QuorumTime(r.metrics.GetPreConsensusTime()),
 			zap.Error(err))
 		return errors.Wrap(err, "could not submit voluntary exit")
 	}
 
-	logger.Debug("voluntary exit submitted successfully",
+	logger.Debug("✅ successfully submitted voluntary exit",
 		fields.Epoch(r.voluntaryExit.Epoch),
 		zap.Uint64("validator_index", uint64(r.voluntaryExit.ValidatorIndex)),
 		zap.String("signature", hex.EncodeToString(specSig[:])),
-		zap.Duration("time_to_submit", time.Since(timeToSubmit)),
+		fields.SubmissionTime(time.Since(submissionTime)),
 		fields.QuorumTime(r.metrics.GetPreConsensusTime()),
 	)
 

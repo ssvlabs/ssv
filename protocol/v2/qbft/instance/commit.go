@@ -3,6 +3,7 @@ package instance
 import (
 	"bytes"
 	"sort"
+	"time"
 
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
 	spectypes "github.com/bloxapp/ssv-spec/types"
@@ -47,7 +48,8 @@ func (i *Instance) UponCommit(logger *zap.Logger, signedCommit *specqbft.SignedM
 		logger.Debug("🎯 got commit quorum",
 			fields.Round(i.State.Round),
 			zap.Any("agg-signers", agg.Signers),
-			fields.Root(signedCommit.Message.Root))
+			fields.Root(signedCommit.Message.Root),
+			fields.QuorumTime(time.Since(i.started)))
 
 		i.metrics.EndStageCommit()
 

@@ -22,7 +22,6 @@ import (
 
 type SyncCommitteeRunner struct {
 	BaseRunner     *BaseRunner
-	started        time.Time
 	beacon         specssv.BeaconNode
 	network        specssv.Network
 	signer         spectypes.KeyManager
@@ -69,36 +68,6 @@ func (r *SyncCommitteeRunner) StartNewDuty(logger *zap.Logger, duty *spectypes.D
 // HasRunningDuty returns true if a duty is already running (StartNewDuty called and returned nil)
 func (r *SyncCommitteeRunner) HasRunningDuty() bool {
 	return r.BaseRunner.hasRunningDuty()
-}
-
-// executeDuty steps:
-// 1) get sync block root from BN
-// 2) start consensus on duty + block root data
-// 3) Once consensus decides, sign partial block root and broadcast
-// 4) collect 2f+1 partial sigs, reconstruct and broadcast valid sync committee sig to the BN
-func (r *SyncCommitteeRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
-	// TODO - waitOneThirdOrValidBlock
-	r.started = time.Now()
-
-	root, ver, err := r.GetBeaconNode().GetSyncMessageBlockRoot(duty.Slot)
-	if err != nil {
-		return errors.Wrap(err, "failed to get sync committee block root")
-	}
-	logger.Info("🧊 got sync message blockRoot", fields.BlockRootTime(time.Since(r.started)))
-
-	r.metrics.StartDutyFullFlow()
-	r.metrics.StartConsensus()
-
-	input := &spectypes.ConsensusData{
-		Duty:    *duty,
-		Version: ver,
-		DataSSZ: root[:],
-	}
-
-	if err := r.BaseRunner.decide(logger, r, input); err != nil {
-		return errors.Wrap(err, "can't start new duty runner instance for duty")
-	}
-	return nil
 }
 
 func (r *SyncCommitteeRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spectypes.SignedPartialSignatureMessage) error {
@@ -246,6 +215,38 @@ func (r *SyncCommitteeRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashR
 	}
 
 	return []ssz.HashRoot{spectypes.SSZBytes(root[:])}, spectypes.DomainSyncCommittee, nil
+}
+
+// executeDuty steps:
+// 1) get sync block root from BN
+// 2) start consensus on duty + block root data
+// 3) Once consensus decides, sign partial block root and broadcast
+// 4) collect 2f+1 partial sigs, reconstruct and broadcast valid sync committee sig to the BN
+func (r *SyncCommitteeRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
+	// TODO - waitOneThirdOrValidBlock
+	r.started = time.Now()
+
+	r.metrics.StartBeaconData()
+	root, ver, err := r.GetBeaconNode().GetSyncMessageBlockRoot(duty.Slot)
+	if err != nil {
+		return errors.Wrap(err, "failed to get sync committee block root")
+	}
+	r.metrics.EndBeaconData()
+
+	r.metrics.StartDutyFullFlow()
+	r.metrics.StartConsensus()
+
+	input := &spectypes.ConsensusData{
+		Duty:    *duty,
+		Version: ver,
+		DataSSZ: root[:],
+	}
+
+	logger = logger.With(fields.BeaconDataTime(r.metrics.GetBeaconDataDuration()))
+	if err := r.BaseRunner.decide(logger, r, input); err != nil {
+		return errors.Wrap(err, "can't start new duty runner instance for duty")
+	}
+	return nil
 }
 
 func (r *SyncCommitteeRunner) GetBaseRunner() *BaseRunner {

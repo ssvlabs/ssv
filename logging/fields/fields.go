@@ -43,10 +43,11 @@ const (
 	FieldConfig              = "config"
 	FieldConnectionID        = "connection_id"
 	FieldConsensusTime       = "consensus_time"
+	FieldPostConsensusTime   = "post_consensus_time"
 	FieldQuorumTime          = "quorum_time"
 	FieldDecidedTime         = "decided_time"
 	FieldBlockTime           = "block_time"
-	FieldAttestationDataTime = "attestation_data_time"
+	FieldBeaconDataTime      = "beacon_data_time"
 	FieldBlockRootTime       = "block_root_time"
 	FieldBroadcastTime       = "broadcast_time"
 	FieldSubmissionTime      = "submission_time"
@@ -276,32 +277,40 @@ func Topic(val string) zap.Field {
 }
 
 func ConsensusTime(val time.Duration) zap.Field {
-	return zap.String(FieldConsensusTime, strconv.FormatFloat(val.Seconds(), 'f', 5, 64))
+	return zap.String(FieldConsensusTime, FormatDuration(val))
+}
+
+func PostConsensusTime(val time.Duration) zap.Field {
+	return zap.String(FieldPostConsensusTime, FormatDuration(val))
 }
 
 func QuorumTime(val time.Duration) zap.Field {
-	return zap.String(FieldQuorumTime, strconv.FormatFloat(val.Seconds(), 'f', 5, 64))
+	return zap.String(FieldQuorumTime, FormatDuration(val))
 }
 func DecidedTime(val time.Duration) zap.Field {
-	return zap.String(FieldDecidedTime, strconv.FormatFloat(val.Seconds(), 'f', 5, 64))
+	return zap.String(FieldDecidedTime, FormatDuration(val))
 }
 
 func BlockTime(val time.Duration) zap.Field {
-	return zap.String(FieldBlockTime, strconv.FormatFloat(val.Seconds(), 'f', 5, 64))
+	return zap.String(FieldBlockTime, FormatDuration(val))
 }
-func AttestationDataTime(val time.Duration) zap.Field {
-	return zap.String(FieldAttestationDataTime, strconv.FormatFloat(val.Seconds(), 'f', 5, 64))
+func BeaconDataTime(val time.Duration) zap.Field {
+	return zap.String(FieldBeaconDataTime, FormatDuration(val))
 }
 func BlockRootTime(val time.Duration) zap.Field {
-	return zap.String(FieldBlockRootTime, strconv.FormatFloat(val.Seconds(), 'f', 5, 64))
+	return zap.String(FieldBlockRootTime, FormatDuration(val))
 }
 
 func SubmissionTime(val time.Duration) zap.Field {
-	return zap.String(FieldSubmissionTime, strconv.FormatFloat(val.Seconds(), 'f', 5, 64))
+	return zap.String(FieldSubmissionTime, FormatDuration(val))
 }
 
 func BroadcastTime(val time.Duration) zap.Field {
-	return zap.String(FieldBroadcastTime, strconv.FormatFloat(val.Seconds(), 'f', 5, 64))
+	return zap.String(FieldBroadcastTime, FormatDuration(val))
+}
+
+func FormatDuration(val time.Duration) string {
+	return strconv.FormatFloat(val.Seconds(), 'f', 5, 64)
 }
 
 func DutyID(val string) zap.Field {

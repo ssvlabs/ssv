@@ -4,8 +4,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"github.com/bloxapp/ssv/logging/fields"
 	"time"
+
+	"github.com/bloxapp/ssv/logging/fields"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/bloxapp/ssv-spec/qbft"
@@ -21,7 +22,6 @@ import (
 
 type AggregatorRunner struct {
 	BaseRunner     *BaseRunner
-	started        time.Time
 	beacon         specssv.BeaconNode
 	network        specssv.Network
 	signer         spectypes.KeyManager
@@ -70,61 +70,6 @@ func (r *AggregatorRunner) StartNewDuty(logger *zap.Logger, duty *spectypes.Duty
 // HasRunningDuty returns true if a duty is already running (StartNewDuty called and returned nil)
 func (r *AggregatorRunner) HasRunningDuty() bool {
 	return r.BaseRunner.hasRunningDuty()
-}
-
-// executeDuty steps:
-// 1) sign a partial selection proof and wait for 2f+1 partial sigs from peers
-// 2) reconstruct selection proof and send SubmitAggregateSelectionProof to BN
-// 3) start consensus on duty + aggregation data
-// 4) Once consensus decides, sign partial aggregation data and broadcast
-// 5) collect 2f+1 partial sigs, reconstruct and broadcast valid SignedAggregateSubmitRequest sig to the BN
-func (r *AggregatorRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
-	r.started = time.Now()
-	r.metrics.StartDutyFullFlow()
-	r.metrics.StartPreConsensus()
-	// sign selection proof
-	msg, err := r.BaseRunner.signBeaconObject(r, spectypes.SSZUint64(duty.Slot), duty.Slot, spectypes.DomainSelectionProof)
-	if err != nil {
-		return errors.Wrap(err, "could not sign randao")
-	}
-	msgs := spectypes.PartialSignatureMessages{
-		Type:     spectypes.SelectionProofPartialSig,
-		Slot:     duty.Slot,
-		Messages: []*spectypes.PartialSignatureMessage{msg},
-	}
-
-	// sign msg
-	signature, err := r.GetSigner().SignRoot(msgs, spectypes.PartialSignatureType, r.GetShare().SharePubKey)
-	if err != nil {
-		return errors.Wrap(err, "could not sign PartialSignatureMessage for selection proof")
-	}
-	signedPartialMsg := &spectypes.SignedPartialSignatureMessage{
-		Message:   msgs,
-		Signature: signature,
-		Signer:    r.GetShare().OperatorID,
-	}
-
-	// broadcast
-	data, err := signedPartialMsg.Encode()
-	if err != nil {
-		return errors.Wrap(err, "failed to encode selection proof pre-consensus signature msg")
-	}
-
-	ssvMsg := &spectypes.SSVMessage{
-		MsgType: spectypes.SSVPartialSignatureMsgType,
-		MsgID:   spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
-		Data:    data,
-	}
-
-	msgToBroadcast, err := spectypes.SSVMessageToSignedSSVMessage(ssvMsg, r.BaseRunner.Share.OperatorID, r.operatorSigner.SignSSVMessage)
-	if err != nil {
-		return errors.Wrap(err, "could not create SignedSSVMessage from SSVMessage")
-	}
-
-	if err := r.GetNetwork().Broadcast(ssvMsg.GetID(), msgToBroadcast); err != nil {
-		return errors.Wrap(err, "can't broadcast partial selection proof sig")
-	}
-	return nil
 }
 
 func (r *AggregatorRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spectypes.SignedPartialSignatureMessage) error {
@@ -284,8 +229,6 @@ func (r *AggregatorRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 			zap.Uint64s("signers", getPostConsensusSigners(r.GetState(), root)),
 			fields.QuorumTime(r.metrics.GetPreConsensusTime()))
 
-		start := time.Now()
-
 		aggregateAndProof, err := r.GetState().DecidedValue.GetAggregateAndProof()
 		if err != nil {
 			return errors.Wrap(err, "could not get aggregate and proof")
@@ -296,14 +239,15 @@ func (r *AggregatorRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 			Signature: specSig,
 		}
 
+		start := time.Now()
 		proofSubmissionEnd := r.metrics.StartBeaconSubmission()
-		consensusDuration := time.Since(r.started)
 
 		if err := r.GetBeaconNode().SubmitSignedAggregateSelectionProof(msg); err != nil {
 			r.metrics.RoleSubmissionFailed()
 			logger.Error("❌ could not submit to Beacon chain reconstructed contribution and proof",
+				fields.ConsensusTime(r.metrics.GetConsensusTime()),
+				fields.PostConsensusTime(r.metrics.GetPostConsensusTime()),
 				fields.SubmissionTime(time.Since(start)),
-				zap.Duration("decided_time", r.metrics.GetPostConsensusTime()),
 				zap.Error(err))
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed aggregate")
 		}
@@ -313,8 +257,10 @@ func (r *AggregatorRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 		r.metrics.RoleSubmitted()
 
 		logger.Debug("✅ successful submitted aggregate!",
+			fields.ConsensusTime(r.metrics.GetConsensusTime()),
+			fields.PostConsensusTime(r.metrics.GetPostConsensusTime()),
 			fields.SubmissionTime(time.Since(start)),
-			fields.ConsensusTime(consensusDuration))
+		)
 	}
 	r.GetState().Finished = true
 
@@ -333,6 +279,61 @@ func (r *AggregatorRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot
 	}
 
 	return []ssz.HashRoot{aggregateAndProof}, spectypes.DomainAggregateAndProof, nil
+}
+
+// executeDuty steps:
+// 1) sign a partial selection proof and wait for 2f+1 partial sigs from peers
+// 2) reconstruct selection proof and send SubmitAggregateSelectionProof to BN
+// 3) start consensus on duty + aggregation data
+// 4) Once consensus decides, sign partial aggregation data and broadcast
+// 5) collect 2f+1 partial sigs, reconstruct and broadcast valid SignedAggregateSubmitRequest sig to the BN
+func (r *AggregatorRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
+	r.metrics.StartDutyFullFlow()
+	r.metrics.StartPreConsensus()
+
+	// sign selection proof
+	msg, err := r.BaseRunner.signBeaconObject(r, spectypes.SSZUint64(duty.Slot), duty.Slot, spectypes.DomainSelectionProof)
+	if err != nil {
+		return errors.Wrap(err, "could not sign randao")
+	}
+	msgs := spectypes.PartialSignatureMessages{
+		Type:     spectypes.SelectionProofPartialSig,
+		Slot:     duty.Slot,
+		Messages: []*spectypes.PartialSignatureMessage{msg},
+	}
+
+	// sign msg
+	signature, err := r.GetSigner().SignRoot(msgs, spectypes.PartialSignatureType, r.GetShare().SharePubKey)
+	if err != nil {
+		return errors.Wrap(err, "could not sign PartialSignatureMessage for selection proof")
+	}
+	signedPartialMsg := &spectypes.SignedPartialSignatureMessage{
+		Message:   msgs,
+		Signature: signature,
+		Signer:    r.GetShare().OperatorID,
+	}
+
+	// broadcast
+	data, err := signedPartialMsg.Encode()
+	if err != nil {
+		return errors.Wrap(err, "failed to encode selection proof pre-consensus signature msg")
+	}
+
+	ssvMsg := &spectypes.SSVMessage{
+		MsgType: spectypes.SSVPartialSignatureMsgType,
+		MsgID:   spectypes.NewMsgID(r.GetShare().DomainType, r.GetShare().ValidatorPubKey, r.BaseRunner.BeaconRoleType),
+		Data:    data,
+	}
+
+	msgToBroadcast, err := spectypes.SSVMessageToSignedSSVMessage(ssvMsg, r.BaseRunner.Share.OperatorID, r.operatorSigner.SignSSVMessage)
+	if err != nil {
+		return errors.Wrap(err, "could not create SignedSSVMessage from SSVMessage")
+	}
+
+	if err := r.GetNetwork().Broadcast(ssvMsg.GetID(), msgToBroadcast); err != nil {
+		return errors.Wrap(err, "can't broadcast partial selection proof sig")
+	}
+	return nil
 }
 
 func (r *AggregatorRunner) GetBaseRunner() *BaseRunner {
