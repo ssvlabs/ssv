@@ -122,6 +122,7 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 func (h *CommitteeHandler) processExecution(period uint64, epoch phase0.Epoch, slot phase0.Slot) {
 	attDuties := h.attDuties.CommitteeSlotDuties(epoch, slot)
 	syncDuties := h.syncDuties.CommitteePeriodDuties(period)
+	h.logger.Debug("processing duties execution", zap.Uint64("period", period), zap.Uint64("epoch", uint64(epoch)), fields.Slot(slot), zap.Int("att_duties", len(attDuties)), zap.Int("sync_duties", len(syncDuties)))
 	if attDuties == nil && syncDuties == nil {
 		return
 	}
