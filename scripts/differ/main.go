@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv/scripts/differ/transformer"
 	"io/ioutil"
 	"log"
 	"os"
@@ -70,10 +69,10 @@ func run() (changes int, err error) {
 	}
 
 	// Prepare the transformers.
-	transformers := transformer.Transformers{
-		transformer.NoComments(),
-		transformer.NoPackageNames(config.ReducedPackageNames),
-		transformer.NoEmptyLines(),
+	transformers := Transformers{
+		NoComments(),
+		NoPackageNames(config.ReducedPackageNames),
+		NoEmptyLines(),
 	}
 
 	// Allocate a map of approved changes for fast access.
