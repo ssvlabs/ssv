@@ -10,11 +10,11 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/network/peers"
-	"github.com/bloxapp/ssv/network/records"
-	"github.com/bloxapp/ssv/network/streams"
-	"github.com/bloxapp/ssv/operator/keys"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/network/peers"
+	"github.com/ssvlabs/ssv/network/records"
+	"github.com/ssvlabs/ssv/network/streams"
+	"github.com/ssvlabs/ssv/operator/keys"
 )
 
 // errConsumingMessage is thrown when we сan't consume(parse) message: data is broken or incoming msg is from node with different Permissioned mode

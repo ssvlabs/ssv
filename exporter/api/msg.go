@@ -5,8 +5,8 @@ import (
 
 	"github.com/pkg/errors"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	"github.com/bloxapp/ssv-spec/types"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	"github.com/ssvlabs/ssv-spec/types"
 )
 
 // Message represents an exporter message

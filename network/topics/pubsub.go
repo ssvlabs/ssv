@@ -12,11 +12,11 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/network/peers"
-	"github.com/bloxapp/ssv/network/topics/params"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
+	"github.com/ssvlabs/ssv/network"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/peers"
+	"github.com/ssvlabs/ssv/network/topics/params"
 )
 
 const (

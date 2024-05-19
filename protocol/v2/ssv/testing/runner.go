@@ -2,14 +2,14 @@ package testing
 
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	specssv "github.com/bloxapp/ssv-spec/ssv"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	specssv "github.com/ssvlabs/ssv-spec/ssv"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v2/qbft/testing"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 )
 
 var TestingHighestDecidedSlot = phase0.Slot(0)

@@ -4,22 +4,22 @@ import (
 	"math"
 	"testing"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/storage/kv"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/storage/kv"
+	"github.com/ssvlabs/ssv/utils/rsaencryption"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
-	"github.com/bloxapp/ssv/operator/storage"
-	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
-	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/storage/basedb"
+	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/operator/storage"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 func TestHandleUnknownQuery(t *testing.T) {

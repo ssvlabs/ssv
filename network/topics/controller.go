@@ -11,8 +11,8 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
 var (

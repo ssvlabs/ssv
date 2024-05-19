@@ -1,7 +1,7 @@
 package eventhandler
 
 import (
-	"github.com/bloxapp/ssv/logging"
+	"github.com/ssvlabs/ssv/logging"
 	"go.uber.org/zap"
 )
 

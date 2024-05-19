@@ -1,16 +1,17 @@
 package storage
 
 import (
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
 	"testing"
 
-	"github.com/bloxapp/ssv-spec/types"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/kv"
+
+	"github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/logging"
+	"github.com/ssvlabs/ssv/logging"
 )
 
 func TestQBFTStores(t *testing.T) {

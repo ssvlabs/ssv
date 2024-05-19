@@ -9,10 +9,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/registry/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/kv"
 )
 
 func TestStorage_DropRecipients(t *testing.T) {

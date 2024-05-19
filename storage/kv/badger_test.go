@@ -12,8 +12,8 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 func TestBadgerEndToEnd(t *testing.T) {

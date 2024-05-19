@@ -2,13 +2,13 @@ package runner
 
 import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
-	specssv "github.com/bloxapp/ssv-spec/ssv"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
+	specssv "github.com/ssvlabs/ssv-spec/ssv"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func (b *BaseRunner) signBeaconObject(

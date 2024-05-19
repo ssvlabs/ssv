@@ -15,7 +15,7 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"golang.org/x/exp/maps"
 
-	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/networkconfig"
 
 	//eth2client "github.com/attestantio/go-eth2-client/http"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -23,8 +23,8 @@ import (
 
 	"go.uber.org/zap"
 
-	beaconproxy "github.com/bloxapp/ssv/e2e/beacon_proxy"
-	"github.com/bloxapp/ssv/e2e/beacon_proxy/intercept/slashinginterceptor"
+	beaconproxy "github.com/ssvlabs/ssv/e2e/beacon_proxy"
+	"github.com/ssvlabs/ssv/e2e/beacon_proxy/intercept/slashinginterceptor"
 )
 
 type BeaconProxyCmd struct {

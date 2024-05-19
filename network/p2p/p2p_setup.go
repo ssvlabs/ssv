@@ -20,15 +20,15 @@ import (
 	"github.com/prysmaticlabs/prysm/v4/async"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging"
-	p2pcommons "github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/network/discovery"
-	"github.com/bloxapp/ssv/network/peers"
-	"github.com/bloxapp/ssv/network/peers/connections"
-	"github.com/bloxapp/ssv/network/records"
-	"github.com/bloxapp/ssv/network/streams"
-	"github.com/bloxapp/ssv/network/topics"
-	"github.com/bloxapp/ssv/utils/commons"
+	"github.com/ssvlabs/ssv/logging"
+	p2pcommons "github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/discovery"
+	"github.com/ssvlabs/ssv/network/peers"
+	"github.com/ssvlabs/ssv/network/peers/connections"
+	"github.com/ssvlabs/ssv/network/records"
+	"github.com/ssvlabs/ssv/network/streams"
+	"github.com/ssvlabs/ssv/network/topics"
+	"github.com/ssvlabs/ssv/utils/commons"
 )
 
 const (

@@ -6,12 +6,12 @@ import (
 	"sync"
 	"testing"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
 func TestRouter(t *testing.T) {

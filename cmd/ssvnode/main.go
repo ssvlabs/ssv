@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/bloxapp/ssv/cli"
+	"github.com/ssvlabs/ssv/cli"
 )
 
 // AppName is the application name

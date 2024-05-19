@@ -8,10 +8,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
-	operatorstorage "github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/registry/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
+	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/kv"
 )
 
 func Test_validateValidatorAddedEvent(t *testing.T) {

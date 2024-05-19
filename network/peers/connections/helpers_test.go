@@ -2,15 +2,16 @@ package connections
 
 import (
 	"context"
+	"testing"
+
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/stretchr/testify/require"
-	"testing"
 
-	"github.com/bloxapp/ssv/network/peers"
-	"github.com/bloxapp/ssv/network/peers/connections/mock"
-	"github.com/bloxapp/ssv/network/records"
-	"github.com/bloxapp/ssv/operator/keys"
+	"github.com/ssvlabs/ssv/network/peers"
+	"github.com/ssvlabs/ssv/network/peers/connections/mock"
+	"github.com/ssvlabs/ssv/network/records"
+	"github.com/ssvlabs/ssv/operator/keys"
 )
 
 type TestData struct {

@@ -1,10 +1,10 @@
-module github.com/bloxapp/ssv/e2e
+module github.com/ssvlabs/ssv/e2e
 
 go 1.20
 
 require (
 	github.com/attestantio/go-eth2-client v0.19.11-0.20240129201044-9d799aaab2bd
-	github.com/bloxapp/ssv v1.2.1-0.20240204104853-e3a662984cac
+	github.com/ssvlabs/ssv v1.2.1-0.20240204104853-e3a662984cac
 	github.com/go-chi/chi/v5 v5.0.10
 	github.com/pkg/errors v0.9.1
 	github.com/rs/zerolog v1.31.0
@@ -35,7 +35,7 @@ require (
 
 require (
 	github.com/alecthomas/kong v0.8.1
-	github.com/bloxapp/ssv-spec v0.3.6
+	github.com/ssvlabs/ssv-spec v0.3.6
 	github.com/docker/docker v24.0.7+incompatible
 	golang.org/x/exp v0.0.0-20230810033253-352e893a4cad
 	gopkg.in/yaml.v3 v3.0.1

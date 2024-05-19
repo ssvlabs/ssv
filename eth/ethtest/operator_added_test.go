@@ -7,7 +7,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/eth/eventparser"
+	"github.com/ssvlabs/ssv/eth/eventparser"
 )
 
 type testOperatorAddedEventInput struct {

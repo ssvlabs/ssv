@@ -4,7 +4,7 @@ import (
 	"encoding/base64"
 	"testing"
 
-	testingspace "github.com/bloxapp/ssv/utils/rsaencryption/testingspace"
+	testingspace "github.com/ssvlabs/ssv/utils/rsaencryption/testingspace"
 	"github.com/stretchr/testify/require"
 )
 
