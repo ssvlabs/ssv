@@ -3,6 +3,7 @@ package duties
 import (
 	"context"
 	"fmt"
+	"time"
 
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -124,12 +125,15 @@ func (h *CommitteeHandler) processExecution(period uint64, epoch phase0.Epoch, s
 		return
 	}
 
-	h.logger.Debug("building att committee duties", zap.Uint64("period", period), zap.Uint64("epoch", uint64(epoch)), zap.Uint64("slot", uint64(slot)))
+	start := time.Now()
+	h.logger.Debug("building att committee duties", zap.Uint64("period", period), zap.Uint64("epoch", uint64(epoch)), zap.Uint64("slot", uint64(slot)), zap.Int("duties", len(attDuties)))
 	committeeMap := make(map[[32]byte]*spectypes.CommitteeDuty)
 	if attDuties != nil {
-		for _, d := range attDuties {
+		for i, d := range attDuties {
 			if h.shouldExecuteAtt(d) {
+				startv := time.Now()
 				clusterID := h.validatorProvider.Validator(d.PubKey[:]).CommitteeID()
+				h.logger.Debug("time it takes to get validator", zap.Duration("took", time.Since(startv)), zap.Int("index", i))
 				specDuty := h.toSpecAttDuty(d, spectypes.BNRoleAttester)
 
 				if _, ok := committeeMap[clusterID]; !ok {
@@ -142,6 +146,7 @@ func (h *CommitteeHandler) processExecution(period uint64, epoch phase0.Epoch, s
 			}
 		}
 	}
+	h.logger.Debug("Done building att committee duties", zap.Uint64("period", period), zap.Uint64("epoch", uint64(epoch)), zap.Uint64("slot", uint64(slot)), zap.Int("duties", len(attDuties)), zap.Duration("took", time.Since(start)))
 
 	h.logger.Debug("building sc committee duties", zap.Uint64("period", period), zap.Uint64("epoch", uint64(epoch)), zap.Uint64("slot", uint64(slot)))
 	if syncDuties != nil {
