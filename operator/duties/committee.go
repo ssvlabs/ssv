@@ -126,13 +126,13 @@ func (h *CommitteeHandler) processExecution(period uint64, epoch phase0.Epoch, s
 		return
 	}
 
+	start := time.Now()
 	vsmap := make(map[phase0.ValidatorIndex]spectypes.ClusterID, 0)
 	vs := h.validatorProvider.SelfParticipatingValidators(epoch)
 	for _, v := range vs {
 		vsmap[v.ValidatorIndex] = v.CommitteeID()
 	}
 
-	start := time.Now()
 	h.logger.Debug("building att committee duties", zap.Uint64("period", period), zap.Uint64("epoch", uint64(epoch)), fields.Slot(slot), zap.Int("duties", len(attDuties)))
 	committeeMap := make(map[[32]byte]*spectypes.CommitteeDuty)
 	if attDuties != nil {
