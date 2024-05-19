@@ -4,11 +4,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv-spec/qbft"
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	"github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
-	protocolstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
+	protocolstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 )
 
 func TestRoundChange4CommitteeScenario(t *testing.T) {

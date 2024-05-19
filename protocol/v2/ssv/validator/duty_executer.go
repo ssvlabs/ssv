@@ -4,8 +4,8 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func (v *Validator) OnExecuteDuty(logger *zap.Logger, msg types.EventMsg) error {

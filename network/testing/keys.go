@@ -5,9 +5,9 @@ import (
 
 	"github.com/herumi/bls-eth-go-binary/bls"
 
-	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/operator/keys"
-	"github.com/bloxapp/ssv/utils/threshold"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/operator/keys"
+	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
 // NodeKeys holds node's keys

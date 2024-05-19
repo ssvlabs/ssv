@@ -3,9 +3,9 @@ package validation
 import (
 	"fmt"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/bloxapp/ssv/operator/keys"
+	"github.com/ssvlabs/ssv/operator/keys"
 )
 
 func (mv *messageValidator) verifySignature(msg *spectypes.SignedSSVMessage) error {

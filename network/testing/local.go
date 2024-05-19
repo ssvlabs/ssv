@@ -2,7 +2,8 @@ package testing
 
 import (
 	"context"
-	"github.com/bloxapp/ssv/network"
+
+	"github.com/ssvlabs/ssv/network"
 )
 
 // NetworkFactory is a generic factory for network instances

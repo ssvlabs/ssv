@@ -1,8 +1,8 @@
 package validator
 
 import (
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 func (c *controller) reportValidatorStatus(pk []byte, meta *beacon.ValidatorMetadata) {

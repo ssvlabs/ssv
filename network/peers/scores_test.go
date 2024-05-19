@@ -4,10 +4,10 @@ import (
 	crand "crypto/rand"
 	"testing"
 
-	"github.com/bloxapp/ssv/network/commons"
-	nettesting "github.com/bloxapp/ssv/network/testing"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/ssvlabs/ssv/network/commons"
+	nettesting "github.com/ssvlabs/ssv/network/testing"
 	"github.com/stretchr/testify/require"
 )
 

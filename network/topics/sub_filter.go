@@ -7,7 +7,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/commons"
 )
 
 // SubFilter is a wrapper on top of pubsub.SubscriptionFilter,

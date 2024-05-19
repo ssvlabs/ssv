@@ -8,9 +8,9 @@ import (
 	"encoding/base64"
 	"fmt"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/bloxapp/ssv/utils/rsaencryption"
+	"github.com/ssvlabs/ssv/utils/rsaencryption"
 )
 
 type OperatorPublicKey interface {

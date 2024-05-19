@@ -7,8 +7,8 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/eth/simulator/simcontract"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/eth/simulator/simcontract"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
 type testValidatorRegisteredInput struct {

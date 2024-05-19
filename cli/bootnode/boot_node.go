@@ -2,17 +2,18 @@ package bootnode
 
 import (
 	"fmt"
-	"github.com/bloxapp/ssv/utils/commons"
 	"log"
 
-	"github.com/bloxapp/ssv/logging"
+	"github.com/ssvlabs/ssv/utils/commons"
+
+	"github.com/ssvlabs/ssv/logging"
 
 	"github.com/ilyakaznacheev/cleanenv"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 
-	global_config "github.com/bloxapp/ssv/cli/config"
-	bootnode "github.com/bloxapp/ssv/utils/boot_node"
+	global_config "github.com/ssvlabs/ssv/cli/config"
+	bootnode "github.com/ssvlabs/ssv/utils/boot_node"
 )
 
 type config struct {

@@ -1,9 +1,9 @@
 package types
 
 import (
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/networkconfig"
 )
 
 // TODO: get rid of singleton, pass domain as a parameter

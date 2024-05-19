@@ -8,11 +8,11 @@ import (
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"go.uber.org/zap"
 	"golang.org/x/exp/maps"
 
-	beaconproxy "github.com/bloxapp/ssv/e2e/beacon_proxy"
+	beaconproxy "github.com/ssvlabs/ssv/e2e/beacon_proxy"
 )
 
 const startEndEpochsDiff = 2
