@@ -126,18 +126,19 @@ func (h *CommitteeHandler) processExecution(period uint64, epoch phase0.Epoch, s
 		return
 	}
 
+	vsmap := make(map[phase0.ValidatorIndex]spectypes.ClusterID, 0)
+	vs := h.validatorProvider.SelfParticipatingValidators(epoch)
+	for _, v := range vs {
+		vsmap[v.ValidatorIndex] = v.CommitteeID()
+	}
+
 	start := time.Now()
 	h.logger.Debug("building att committee duties", zap.Uint64("period", period), zap.Uint64("epoch", uint64(epoch)), fields.Slot(slot), zap.Int("duties", len(attDuties)))
 	committeeMap := make(map[[32]byte]*spectypes.CommitteeDuty)
 	if attDuties != nil {
-		for i, d := range attDuties {
+		for _, d := range attDuties {
 			if h.shouldExecuteAtt(d) {
-				startv := time.Now()
-				v := h.validatorProvider.Validator(d.PubKey[:])
-				h.logger.Debug("time it takes to get validator", fields.Validator(d.PubKey[:]), zap.Duration("took", time.Since(startv)), zap.Int("index", i), fields.Slot(slot))
-				startc := time.Now()
-				clusterID := v.CommitteeID()
-				h.logger.Debug("time it takes to make committeeID", fields.Validator(d.PubKey[:]), zap.Duration("took", time.Since(startc)), zap.Int("index", i), fields.Slot(slot))
+				clusterID := vsmap[d.ValidatorIndex]
 				specDuty := h.toSpecAttDuty(d, spectypes.BNRoleAttester)
 
 				if _, ok := committeeMap[clusterID]; !ok {
