@@ -19,6 +19,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
+	"github.com/ssvlabs/ssv/operator/keys"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/api/handlers"
@@ -45,9 +47,8 @@ import (
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/nodeprobe"
 	"github.com/ssvlabs/ssv/operator"
-	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
+
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
-	"github.com/ssvlabs/ssv/operator/keys"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
 	"github.com/ssvlabs/ssv/operator/validator"
@@ -167,7 +168,7 @@ var StartNodeCmd = &cobra.Command{
 			logger.Fatal("could not get operator private key hash", zap.Error(err))
 		}
 
-		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkConfig, cfg.SSVOptions.ValidatorOptions.BuilderProposals, ekmHashedKey)
+		keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, networkConfig, ekmHashedKey)
 		if err != nil {
 			logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 		}
@@ -541,16 +542,11 @@ func setupSSVNetwork(logger *zap.Logger) (networkconfig.NetworkConfig, error) {
 	if cfg.SSVOptions.ValidatorOptions.FullNode {
 		nodeType = "full"
 	}
-	builderProposals := "disabled"
-	if cfg.SSVOptions.ValidatorOptions.BuilderProposals {
-		builderProposals = "enabled"
-	}
 
 	logger.Info("setting ssv network",
 		fields.Network(networkConfig.Name),
 		fields.Domain(networkConfig.Domain),
 		zap.String("nodeType", nodeType),
-		zap.String("builderProposals(MEV)", builderProposals),
 		zap.Any("beaconNetwork", networkConfig.Beacon.GetNetwork().BeaconNetwork),
 		zap.Uint64("genesisEpoch", uint64(networkConfig.GenesisEpoch)),
 		zap.String("registryContract", networkConfig.RegistryContractAddr),
