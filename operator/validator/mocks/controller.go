@@ -8,6 +8,9 @@ import (
 	reflect "reflect"
 
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
+	common "github.com/ethereum/go-ethereum/common"
+	gomock "github.com/golang/mock/gomock"
+	peer "github.com/libp2p/go-libp2p/core/peer"
 	types "github.com/ssvlabs/ssv-spec/types"
 	network "github.com/ssvlabs/ssv/network"
 	duties "github.com/ssvlabs/ssv/operator/duties"
@@ -17,9 +20,6 @@ import (
 	types0 "github.com/ssvlabs/ssv/protocol/v2/types"
 	storage "github.com/ssvlabs/ssv/registry/storage"
 	basedb "github.com/ssvlabs/ssv/storage/basedb"
-	common "github.com/ethereum/go-ethereum/common"
-	gomock "github.com/golang/mock/gomock"
-	peer "github.com/libp2p/go-libp2p/core/peer"
 	zap "go.uber.org/zap"
 )
 
