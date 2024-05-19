@@ -72,8 +72,6 @@ type ValidatorProvider interface {
 	ParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
 	SelfParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
 	Validator(pubKey []byte) *types.SSVShare
-
-	//AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex
 }
 
 // ValidatorController represents the component that controls validators via the scheduler
