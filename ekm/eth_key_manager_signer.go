@@ -25,8 +25,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 const (

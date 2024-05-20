@@ -9,7 +9,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	alanspectypes "github.com/ssvlabs/ssv-spec/types"
 
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func (mv *messageValidator) validatePartialSignatureMessage(

@@ -9,8 +9,8 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/api"
-	"github.com/bloxapp/ssv/api/handlers"
+	"github.com/ssvlabs/ssv/api"
+	"github.com/ssvlabs/ssv/api/handlers"
 )
 
 type Server struct {

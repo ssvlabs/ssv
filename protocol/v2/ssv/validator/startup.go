@@ -3,15 +3,15 @@ package validator
 import (
 	"sync/atomic"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/pkg/errors"
 	"github.com/ssvlabs/ssv-spec/p2p"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/logging/fields"
 )
 
 // Start starts a Validator.

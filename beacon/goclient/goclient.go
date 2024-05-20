@@ -19,10 +19,10 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
-	"github.com/bloxapp/ssv/operator/slotticker"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/logging/fields"
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
+	"github.com/ssvlabs/ssv/operator/slotticker"
+	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 const (

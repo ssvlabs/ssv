@@ -5,8 +5,8 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/bloxapp/ssv/protocol/v2/message"
-	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"

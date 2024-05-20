@@ -3,8 +3,8 @@ package networkconfig
 import (
 	"math/big"
 
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 var HoleskyE2E = NetworkConfig{

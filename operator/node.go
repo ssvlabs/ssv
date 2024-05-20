@@ -4,27 +4,27 @@ import (
 	"context"
 	"fmt"
 
-	storage2 "github.com/bloxapp/ssv/registry/storage"
+	storage2 "github.com/ssvlabs/ssv/registry/storage"
 
-	"github.com/bloxapp/ssv/network"
+	"github.com/ssvlabs/ssv/network"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/eth/executionclient"
-	"github.com/bloxapp/ssv/exporter/api"
-	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/operator/duties"
-	"github.com/bloxapp/ssv/operator/duties/dutystore"
-	"github.com/bloxapp/ssv/operator/fee_recipient"
-	"github.com/bloxapp/ssv/operator/slotticker"
-	"github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/operator/validator"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/eth/executionclient"
+	"github.com/ssvlabs/ssv/exporter/api"
+	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/operator/duties"
+	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/operator/fee_recipient"
+	"github.com/ssvlabs/ssv/operator/slotticker"
+	"github.com/ssvlabs/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/operator/validator"
+	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 // Node represents the behavior of SSV node

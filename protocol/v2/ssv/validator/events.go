@@ -5,9 +5,9 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func (v *Validator) handleEventMessage(logger *zap.Logger, msg *queue.DecodedSSVMessage, dutyRunner runner.Runner) error {

@@ -23,13 +23,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/operator/keys"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/operator/keys"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/utils"
 
-	"github.com/bloxapp/ssv/utils/threshold"
+	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
 const (

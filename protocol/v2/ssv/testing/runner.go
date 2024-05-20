@@ -2,8 +2,8 @@ package testing
 
 import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/testing"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -46,7 +46,7 @@ var SyncCommitteeRunner = func(logger *zap.Logger, keySet *spectestingutils.Test
 }
 
 var SyncCommitteeContributionRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {
-	return baseRunner(logger, spectypes.RoleSyncCommitteeContribution, specssv.SyncCommitteeContributionValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.BeaconTestNetwork,  (spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex), keySet)
+	return baseRunner(logger, spectypes.RoleSyncCommitteeContribution, specssv.SyncCommitteeContributionValueCheckF(spectestingutils.NewTestingKeyManager(), spectypes.BeaconTestNetwork, (spectypes.ValidatorPK)(spectestingutils.TestingValidatorPubKey), spectestingutils.TestingValidatorIndex), keySet)
 }
 
 var ValidatorRegistrationRunner = func(logger *zap.Logger, keySet *spectestingutils.TestKeySet) runner.Runner {

@@ -10,9 +10,9 @@ import (
 	"github.com/patrickmn/go-cache"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/exporter/api"
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/exporter/api"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 )
 
 // NewStreamPublisher handles incoming newly decided messages.

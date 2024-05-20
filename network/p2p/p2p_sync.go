@@ -14,10 +14,10 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/protocol/v2/message"
-	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
+	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
 )
 
 // RegisterHandlers registers the given handlers

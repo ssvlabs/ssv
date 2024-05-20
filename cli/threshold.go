@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/bloxapp/ssv/logging"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/spf13/cobra"
+	"github.com/ssvlabs/ssv/logging"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/cli/flags"
-	"github.com/bloxapp/ssv/utils/threshold"
+	"github.com/ssvlabs/ssv/cli/flags"
+	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
 // createThreshold is the command to create threshold based on the given private key

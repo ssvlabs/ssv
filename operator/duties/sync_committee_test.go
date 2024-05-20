@@ -12,9 +12,9 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/operator/duties/dutystore"
-	"github.com/bloxapp/ssv/operator/duties/mocks"
-	mocknetwork "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon/mocks"
+	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/operator/duties/mocks"
+	mocknetwork "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/mocks"
 )
 
 func setupSyncCommitteeDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[uint64, []*v1.SyncCommitteeDuty]) (chan struct{}, chan []*spectypes.BeaconDuty) {

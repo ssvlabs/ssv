@@ -15,13 +15,13 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/message/signatureverifier"
-	"github.com/bloxapp/ssv/monitoring/metricsreporter"
-	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/operator/duties/dutystore"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/message/signatureverifier"
+	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/registry/storage"
 )
 
 // MessageValidator defines methods for validating pubsub messages.

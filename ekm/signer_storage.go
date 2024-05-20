@@ -20,10 +20,10 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	registry "github.com/bloxapp/ssv/protocol/v2/blockchain/eth1"
-	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	registry "github.com/ssvlabs/ssv/protocol/v2/blockchain/eth1"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 const (

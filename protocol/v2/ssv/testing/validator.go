@@ -3,11 +3,11 @@ package testing
 import (
 	"context"
 
-	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/testing"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"go.uber.org/zap"
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"

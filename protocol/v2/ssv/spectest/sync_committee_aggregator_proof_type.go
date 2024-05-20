@@ -13,11 +13,11 @@ import (
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	ssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
-	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	ssvtesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
 func RunSyncCommitteeAggProof(t *testing.T, test *synccommitteeaggregator.SyncCommitteeAggregatorProofSpecTest) {

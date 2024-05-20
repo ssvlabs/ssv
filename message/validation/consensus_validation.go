@@ -14,9 +14,9 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ssvlabs/ssv-spec-pre-cc/types"
 
-	"github.com/bloxapp/ssv/protocol/v2/message"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func (mv *messageValidator) validateConsensusMessage(

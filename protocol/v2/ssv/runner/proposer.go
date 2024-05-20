@@ -21,10 +21,10 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
 )
 
 type ProposerRunner struct {

@@ -3,8 +3,8 @@ package handlers
 import (
 	"testing"
 
-	"github.com/bloxapp/ssv/protocol/v2/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func mockShare(operatorIDs ...uint64) *types.SSVShare {

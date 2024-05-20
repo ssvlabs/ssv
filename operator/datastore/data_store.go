@@ -5,7 +5,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 )
 
 // OperatorDataStore defines an interface for operations related to operator data.

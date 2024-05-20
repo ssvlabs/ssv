@@ -2,7 +2,7 @@ package validator
 
 //
 //import (
-//	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
+//	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 //	"testing"
 //
 //	"github.com/ssvlabs/ssv-spec/qbft"

@@ -8,8 +8,8 @@ import (
 	"errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/e2e/logs_catcher/docker"
-	"github.com/bloxapp/ssv/e2e/logs_catcher/logs"
+	"github.com/ssvlabs/ssv/e2e/logs_catcher/docker"
+	"github.com/ssvlabs/ssv/e2e/logs_catcher/logs"
 )
 
 // Test conditions:

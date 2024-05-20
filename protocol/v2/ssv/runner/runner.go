@@ -12,8 +12,8 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 )
 
 type Getters interface {

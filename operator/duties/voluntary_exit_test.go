@@ -13,8 +13,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/operator/duties/mocks"
-	mocknetwork "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon/mocks"
+	"github.com/ssvlabs/ssv/operator/duties/mocks"
+	mocknetwork "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/mocks"
 )
 
 func TestVoluntaryExitHandler_HandleDuties(t *testing.T) {

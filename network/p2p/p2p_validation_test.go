@@ -21,8 +21,8 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/message/validation"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/message/validation"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
 // TestP2pNetwork_MessageValidation tests p2pNetwork would score peers according

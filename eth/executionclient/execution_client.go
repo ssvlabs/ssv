@@ -14,9 +14,9 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/eth/contract"
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/utils/tasks"
+	"github.com/ssvlabs/ssv/eth/contract"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/utils/tasks"
 )
 
 var (

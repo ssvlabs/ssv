@@ -14,10 +14,10 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
-	"github.com/bloxapp/ssv/eth/executionclient"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/eth/executionclient"
+	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/registry/storage"
 )
 
 // const rawOperatorAdded = `{

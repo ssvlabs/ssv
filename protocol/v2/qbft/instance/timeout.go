@@ -5,7 +5,7 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/logging/fields"
 )
 
 var CutoffRound = 15 // stop processing instances after 8*2+120*6 = 14.2 min (~ 2 epochs)

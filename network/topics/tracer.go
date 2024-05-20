@@ -3,7 +3,7 @@ package topics
 import (
 	"encoding/hex"
 
-	"github.com/bloxapp/ssv/logging"
+	"github.com/ssvlabs/ssv/logging"
 
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	ps_pb "github.com/libp2p/go-libp2p-pubsub/pb"

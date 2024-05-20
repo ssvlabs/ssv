@@ -15,13 +15,13 @@ import (
 
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	ssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
-	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	ssvtesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
 type MsgProcessingSpecTest struct {

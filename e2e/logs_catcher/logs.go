@@ -3,9 +3,9 @@ package logs_catcher
 import (
 	"context"
 	"fmt"
-	"github.com/bloxapp/ssv/e2e/logs_catcher/docker"
-	"github.com/bloxapp/ssv/e2e/logs_catcher/parser"
 	"github.com/pkg/errors"
+	"github.com/ssvlabs/ssv/e2e/logs_catcher/docker"
+	"github.com/ssvlabs/ssv/e2e/logs_catcher/parser"
 	"go.uber.org/zap"
 )
 

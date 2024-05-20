@@ -29,7 +29,7 @@ x-base-dev:
   cap_add:
     - SYS_PTRACE
   volumes:
-    - ./:/go/src/github.com/bloxapp/ssv
+    - ./:/go/src/github.com/ssvlabs/ssv
 
 services:
   ssv-node-1:
