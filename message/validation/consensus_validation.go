@@ -158,8 +158,7 @@ func (mv *messageValidator) validateQBFTLogic(
 	for _, signer := range signedSSVMessage.GetOperatorIDs() {
 		signerStateBySlot := state.Get(signer)
 		signerStateInterface, ok := signerStateBySlot.Get(msgSlot)
-
-		if !ok || signerStateInterface.(*SignerState).Round != consensusMessage.Round {
+		if !ok {
 			continue
 		}
 
@@ -177,14 +176,27 @@ func (mv *messageValidator) validateQBFTLogic(
 			}
 		}
 
-		if len(signedSSVMessage.FullData) != 0 && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedSSVMessage.FullData) {
-			return ErrDuplicatedProposalWithDifferentData
+		if len(signedSSVMessage.GetOperatorIDs()) == 1 {
+			if len(signedSSVMessage.FullData) != 0 && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedSSVMessage.FullData) {
+				return ErrDuplicatedProposalWithDifferentData
+			}
+
+			if consensusMessage.Round < signerState.Round {
+				// Signers aren't allowed to decrease their round.
+				// If they've sent a future message due to clock error,
+				// they'd have to wait for the next slot/round to be accepted.
+				err := ErrRoundAlreadyAdvanced
+				err.want = signerState.Round
+				err.got = consensusMessage.Round
+				return err
+			}
 		}
 
 		limits := maxMessageCounts(len(committee))
 		if err := signerState.MessageCounts.ValidateConsensusMessage(signedSSVMessage, consensusMessage, limits); err != nil {
 			return err
 		}
+
 	}
 
 	if len(signedSSVMessage.GetOperatorIDs()) == 1 {
@@ -360,12 +372,12 @@ func (mv *messageValidator) maxRound(role spectypes.RunnerRole) specqbft.Round {
 }
 
 func (mv *messageValidator) currentEstimatedRound(sinceSlotStart time.Duration) specqbft.Round {
-	if currentQuickRound := specqbft.FirstRound + specqbft.Round(sinceSlotStart/roundtimer.QuickTimeout); currentQuickRound <= specqbft.Round(roundtimer.QuickTimeoutThreshold) {
+	if currentQuickRound := specqbft.FirstRound + specqbft.Round(sinceSlotStart/roundtimer.QuickTimeout); currentQuickRound <= roundtimer.QuickTimeoutThreshold {
 		return currentQuickRound
 	}
 
 	sinceFirstSlowRound := sinceSlotStart - (time.Duration(specqbft.Round(roundtimer.QuickTimeoutThreshold)) * roundtimer.QuickTimeout)
-	estimatedRound := specqbft.Round(roundtimer.QuickTimeoutThreshold) + specqbft.FirstRound + specqbft.Round(sinceFirstSlowRound/roundtimer.SlowTimeout)
+	estimatedRound := roundtimer.QuickTimeoutThreshold + specqbft.FirstRound + specqbft.Round(sinceFirstSlowRound/roundtimer.SlowTimeout)
 	return estimatedRound
 }
 
@@ -427,15 +439,4 @@ func encodeOperators(operators []spectypes.OperatorID) ([]byte, error) {
 		}
 	}
 	return buf.Bytes(), nil
-}
-
-func decodeOperators(b []byte) ([]spectypes.OperatorID, error) {
-	buf := bytes.NewBuffer(b)
-	operators := make([]spectypes.OperatorID, len(b)/8)
-	for i := range operators {
-		if err := binary.Read(buf, binary.LittleEndian, &operators[i]); err != nil {
-			return nil, err
-		}
-	}
-	return operators, nil
 }

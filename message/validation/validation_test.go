@@ -1285,6 +1285,29 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, ErrDecidedWithSameSigners)
 	})
 
+	// Send message with a round lower than in the previous message
+	t.Run("round already advanced", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.Round = 5
+		})
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(5 * roundtimer.QuickTimeout)
+		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetSenderID()[16:])[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
+		require.NoError(t, err)
+
+		signedSSVMessage = generateSignedMessage(ks, committeeIdentifier, slot, func(message *specqbft.Message) {
+			message.Round = 1
+		})
+
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
+		require.ErrorContains(t, err, ErrRoundAlreadyAdvanced.Error())
+	})
+
 	// Receive message from a round that is too high for that epoch should receive an error
 	t.Run("round too high", func(t *testing.T) {
 		const epoch = 1
