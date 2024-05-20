@@ -82,8 +82,6 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 		return errors.Wrap(err, "failed processing randao message")
 	}
 
-	duty := r.GetState().StartingDuty
-	logger = logger.With(fields.Slot(duty.Slot))
 	logger.Debug("🧩 got partial RANDAO signature",
 		zap.Uint64("signer", signedMsg.Signer))
 
@@ -108,6 +106,7 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 
 	r.metrics.StartBeaconData()
 	start := time.Now()
+	duty := r.GetState().StartingDuty
 	obj, ver, err := r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
 	if err != nil {
 		logger.Error("❌ failed to get blinded beacon block",
@@ -158,8 +157,6 @@ func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbf
 
 	r.metrics.EndConsensus()
 	r.metrics.StartPostConsensus()
-	duty := r.GetState().StartingDuty
-	logger = logger.With(fields.Slot(duty.Slot))
 
 	// specific duty sig
 	var blkToSign ssz.HashRoot
@@ -211,8 +208,6 @@ func (r *ProposerRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbf
 	}
 
 	if err := r.GetNetwork().Broadcast(ssvMsg.GetID(), msgToBroadcast); err != nil {
-		logger.Error("❌ can't broadcast partial post consensus sig",
-			zap.Error(err))
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
 	return nil
@@ -223,12 +218,9 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 	if err != nil {
 		return errors.Wrap(err, "failed processing post consensus message")
 	}
-
 	if !quorum {
 		return nil
 	}
-	duty := r.GetState().StartingDuty
-	logger = logger.With(fields.Slot(duty.Slot))
 
 	for _, root := range roots {
 		sig, err := r.GetState().ReconstructBeaconSig(r.GetState().PostConsensusContainer, root, r.GetShare().ValidatorPubKey)
@@ -248,6 +240,16 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		blockSubmissionEnd := r.metrics.StartBeaconSubmission()
 
 		start := time.Now()
+
+		logger = logger.With(
+			fields.PreConsensusTime(r.metrics.GetPreConsensusTime()),
+			fields.ConsensusTime(r.metrics.GetConsensusTime()),
+			fields.PostConsensusTime(r.metrics.GetPostConsensusTime()),
+			fields.Height(r.BaseRunner.QBFTController.Height),
+			fields.Round(r.GetState().RunningInstance.State.Round),
+			zap.Bool("blinded", r.decidedBlindedBlock()),
+		)
+
 		var blk any
 		if r.decidedBlindedBlock() {
 			vBlindedBlk, _, err := r.GetState().DecidedValue.GetBlindedBlockData()
@@ -258,7 +260,9 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 
 			if err := r.GetBeaconNode().SubmitBlindedBeaconBlock(vBlindedBlk, specSig); err != nil {
 				r.metrics.RoleSubmissionFailed()
-
+				logger.Error("❌ could not submit blinded Beacon block",
+					fields.SubmissionTime(time.Since(start)),
+					zap.Error(err))
 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed blinded Beacon block")
 			}
 		} else {
@@ -270,9 +274,8 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 
 			if err := r.GetBeaconNode().SubmitBeaconBlock(vBlk, specSig); err != nil {
 				r.metrics.RoleSubmissionFailed()
-				logger.Error("❌ could not submit to Beacon chain reconstructed signed Beacon block",
-					fields.ConsensusTime(r.metrics.GetConsensusTime()),
-					fields.PostConsensusTime(r.metrics.GetPostConsensusTime()),
+				logger.Error("❌ could not submit Beacon block",
+					fields.SubmissionTime(time.Since(start)),
 					zap.Error(err))
 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed Beacon block")
 			}
@@ -284,14 +287,9 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 
 		blockSummary, summarizeErr := summarizeBlock(blk)
 		logger.Info("✅ successfully submitted block proposal",
-			fields.Height(r.BaseRunner.QBFTController.Height),
-			fields.Round(r.GetState().RunningInstance.State.Round),
 			zap.String("block_hash", blockSummary.Hash.String()),
-			zap.Bool("blinded", blockSummary.Blinded),
-			fields.ConsensusTime(r.metrics.GetConsensusTime()),
-			fields.PostConsensusTime(r.metrics.GetPostConsensusTime()),
-			fields.SubmissionTime(time.Since(start)),
-			zap.NamedError("summarize_err", summarizeErr))
+			zap.NamedError("summarize_err", summarizeErr),
+			fields.SubmissionTime(time.Since(start)))
 	}
 	r.GetState().Finished = true
 	return nil

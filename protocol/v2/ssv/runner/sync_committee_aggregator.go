@@ -75,8 +75,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(logger *zap.Logger, 
 	if err != nil {
 		return errors.Wrap(err, "failed processing sync committee selection proof message")
 	}
-	duty := r.GetState().StartingDuty
-	logger = logger.With(fields.Slot(duty.Slot))
+
 	// quorum returns true only once (first time quorum achieved)
 	if !quorum {
 		return nil
@@ -125,7 +124,6 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(logger *zap.Logger, 
 	}
 
 	r.metrics.EndPreConsensus()
-	logger.Debug("🧩 reconstructed selection proofs", fields.QuorumTime(r.metrics.GetPreConsensusTime()))
 
 	// fetch contributions
 	r.metrics.PauseDutyFullFlow()
@@ -143,6 +141,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(logger *zap.Logger, 
 	}
 
 	// create consensus object
+	duty := r.GetState().StartingDuty
 	input := &spectypes.ConsensusData{
 		Duty:    *duty,
 		Version: ver,
@@ -169,8 +168,6 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(logger *zap.Logger, sig
 
 	r.metrics.EndConsensus()
 	r.metrics.StartPostConsensus()
-	duty := r.GetState().StartingDuty
-	logger = logger.With(fields.Slot(duty.Slot))
 
 	contributions, err := decidedValue.GetSyncCommitteeContributions()
 	if err != nil {
@@ -220,8 +217,6 @@ func (r *SyncCommitteeAggregatorRunner) ProcessConsensus(logger *zap.Logger, sig
 	}
 
 	if err := r.GetNetwork().Broadcast(ssvMsg.GetID(), msgToBroadcast); err != nil {
-		logger.Error("❌ can't broadcast partial post consensus sig",
-			zap.Error(err))
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
 	return nil
@@ -236,8 +231,6 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(logger *zap.Logger,
 	if !quorum {
 		return nil
 	}
-	duty := r.GetState().StartingDuty
-	logger = logger.With(fields.Slot(duty.Slot))
 
 	// get contributions
 	contributions, err := r.GetState().DecidedValue.GetSyncCommitteeContributions()
@@ -257,9 +250,6 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(logger *zap.Logger,
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
 		r.metrics.EndPostConsensus()
-		logger.Debug("🧩 reconstructed selection proofs",
-			zap.Uint64s("signers", getPostConsensusSigners(r.GetState(), root)),
-			fields.QuorumTime(r.metrics.GetPostConsensusTime()))
 
 		for _, contribution := range contributions {
 			start := time.Now()
@@ -284,11 +274,14 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(logger *zap.Logger,
 			}
 
 			submissionEnd := r.metrics.StartBeaconSubmission()
+			logger = logger.With(
+				zap.Uint64s("signers", getPostConsensusSigners(r.GetState(), root)),
+				fields.ConsensusTime(r.metrics.GetConsensusTime()),
+				fields.PostConsensusTime(r.metrics.GetPostConsensusTime()),
+			)
 			if err := r.GetBeaconNode().SubmitSignedContributionAndProof(signedContribAndProof); err != nil {
 				r.metrics.RoleSubmissionFailed()
 				logger.Error("❌ could not submit to Beacon chain reconstructed contribution and proof",
-					fields.ConsensusTime(r.metrics.GetConsensusTime()),
-					fields.PostConsensusTime(r.metrics.GetPostConsensusTime()),
 					fields.SubmissionTime(time.Since(start)),
 					zap.Error(err))
 				return errors.Wrap(err, "could not submit to Beacon chain reconstructed contribution and proof")
@@ -298,8 +291,6 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPostConsensus(logger *zap.Logger,
 			r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
 			r.metrics.RoleSubmitted()
 			logger.Debug("✅ successfully submitted sync committee aggregator",
-				fields.ConsensusTime(r.metrics.GetConsensusTime()),
-				fields.PostConsensusTime(r.metrics.GetPostConsensusTime()),
 				fields.SubmissionTime(time.Since(start)),
 			)
 			break

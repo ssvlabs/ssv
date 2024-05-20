@@ -41,6 +41,7 @@ const (
 	FieldClusterIndex        = "cluster_index"
 	FieldConfig              = "config"
 	FieldConnectionID        = "connection_id"
+	FieldPreConsensusTime    = "pre_consensus_time"
 	FieldConsensusTime       = "consensus_time"
 	FieldPostConsensusTime   = "post_consensus_time"
 	FieldQuorumTime          = "quorum_time"
@@ -273,6 +274,10 @@ func Took(duration time.Duration) zap.Field {
 
 func Topic(val string) zap.Field {
 	return zap.String(FieldTopic, val)
+}
+
+func PreConsensusTime(val time.Duration) zap.Field {
+	return zap.String(FieldPreConsensusTime, FormatDuration(val))
 }
 
 func ConsensusTime(val time.Duration) zap.Field {

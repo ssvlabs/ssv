@@ -85,13 +85,9 @@ func (r *SyncCommitteeRunner) ProcessConsensus(logger *zap.Logger, signedMsg *sp
 		return nil
 	}
 
-	duty := r.GetState().StartingDuty
-	logger = logger.With(fields.Slot(duty.Slot))
-
 	r.metrics.EndConsensus()
-	logger.Debug("🧩 got decided", fields.QuorumTime(r.metrics.GetConsensusTime()))
 	r.metrics.StartPostConsensus()
-	startTime := time.Now()
+
 	// specific duty sig
 	root, err := decidedValue.GetSyncCommitteeBlockRoot()
 	if err != nil {
@@ -131,7 +127,6 @@ func (r *SyncCommitteeRunner) ProcessConsensus(logger *zap.Logger, signedMsg *sp
 	if err := r.GetNetwork().Broadcast(ssvMsg.GetID(), msgToBroadcast); err != nil {
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
-	logger.Info("✅ partial post consensus sig broadcast successfully", fields.BroadcastTime(time.Since(startTime)))
 	return nil
 }
 
@@ -144,8 +139,7 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg
 	if !quorum {
 		return nil
 	}
-	duty := r.GetState().StartingDuty
-	logger = logger.With(fields.Slot(duty.Slot))
+
 	blockRoot, err := r.GetState().DecidedValue.GetSyncCommitteeBlockRoot()
 	if err != nil {
 		return errors.Wrap(err, "could not get sync committee block root")
@@ -163,12 +157,9 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
 		r.metrics.EndPostConsensus()
-		logger.Debug("🧩 reconstructed partial signatures",
-			zap.Uint64s("signers", getPostConsensusSigners(r.GetState(), root)),
-			fields.QuorumTime(r.metrics.GetPostConsensusTime()))
 
 		messageSubmissionEnd := r.metrics.StartBeaconSubmission()
-		startSubmissionTime := time.Now()
+		start := time.Now()
 		msg := &altair.SyncCommitteeMessage{
 			Slot:            r.GetState().DecidedValue.Duty.Slot,
 			BeaconBlockRoot: blockRoot,
@@ -176,12 +167,18 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg
 			Signature:       specSig,
 		}
 
+		logger = logger.With(
+			zap.Uint64s("signers", getPostConsensusSigners(r.GetState(), root)),
+			fields.ConsensusTime(r.metrics.GetConsensusTime()),
+			fields.PostConsensusTime(r.metrics.GetPostConsensusTime()),
+			zap.String("block_root", hex.EncodeToString(msg.BeaconBlockRoot[:])),
+			fields.Height(r.BaseRunner.QBFTController.Height),
+			fields.Round(r.GetState().RunningInstance.State.Round),
+		)
 		if err := r.GetBeaconNode().SubmitSyncMessage(msg); err != nil {
 			r.metrics.RoleSubmissionFailed()
 			logger.Error("❌ failed to submit attestation",
-				fields.ConsensusTime(r.metrics.GetConsensusTime()),
-				fields.SubmissionTime(time.Since(startSubmissionTime)),
-				zap.Duration("decided_time", r.metrics.GetPostConsensusTime()),
+				fields.SubmissionTime(time.Since(start)),
 				zap.Error(err))
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed sync committee")
 		}
@@ -191,12 +188,7 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg
 		r.metrics.RoleSubmitted()
 
 		logger.Info("✅ successfully submitted sync committee",
-			fields.Slot(msg.Slot),
-			fields.ConsensusTime(r.metrics.GetConsensusTime()),
-			fields.SubmissionTime(time.Since(startSubmissionTime)),
-			zap.String("block_root", hex.EncodeToString(msg.BeaconBlockRoot[:])),
-			fields.Height(r.BaseRunner.QBFTController.Height),
-			fields.Round(r.GetState().RunningInstance.State.Round))
+			fields.SubmissionTime(time.Since(start)))
 	}
 	r.GetState().Finished = true
 

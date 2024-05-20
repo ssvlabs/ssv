@@ -78,8 +78,7 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg 
 	if !quorum {
 		return nil
 	}
-	duty := r.GetState().StartingDuty
-	logger = logger.With(fields.Slot(duty.Slot))
+
 	// only 1 root, verified in basePreConsensusMsgProcessing
 	root := roots[0]
 	fullSig, err := r.GetState().ReconstructBeaconSig(r.GetState().PreConsensusContainer, root, r.GetShare().ValidatorPubKey)
@@ -91,9 +90,6 @@ func (r *VoluntaryExitRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg 
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], fullSig)
 	r.metrics.EndPreConsensus()
-	logger.Debug("🧩 reconstructed partial signatures",
-		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)),
-		fields.QuorumTime(r.metrics.GetPreConsensusTime()))
 
 	// create SignedVoluntaryExit using VoluntaryExit created on r.executeDuty() and reconstructed signature
 	signedVoluntaryExit := &phase0.SignedVoluntaryExit{

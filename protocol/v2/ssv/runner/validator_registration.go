@@ -73,8 +73,6 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(logger *zap.Logger, si
 		return errors.Wrap(err, "failed processing validator registration message")
 	}
 
-	duty := r.GetState().StartingDuty
-	logger = logger.With(fields.Slot(duty.Slot))
 	// quorum returns true only once (first time quorum achieved)
 	if !quorum {
 		return nil
@@ -91,21 +89,21 @@ func (r *ValidatorRegistrationRunner) ProcessPreConsensus(logger *zap.Logger, si
 	specSig := phase0.BLSSignature{}
 	copy(specSig[:], fullSig)
 	r.metrics.EndPreConsensus()
-	logger.Debug("🧩 reconstructed partial signatures",
-		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)),
-		fields.QuorumTime(r.metrics.GetPreConsensusTime()))
 
 	submissionTime := time.Now()
+	logger = logger.With(
+		fields.FeeRecipient(r.BaseRunner.Share.FeeRecipientAddress[:]),
+		zap.String("signature", hex.EncodeToString(specSig[:])),
+		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)),
+		fields.QuorumTime(r.metrics.GetPreConsensusTime()),
+	)
 	if err := r.beacon.SubmitValidatorRegistration(r.BaseRunner.Share.ValidatorPubKey, r.BaseRunner.Share.FeeRecipientAddress, specSig); err != nil {
 		logger.Error("❌ failed to submit validator registration",
-			fields.QuorumTime(r.metrics.GetPreConsensusTime()),
 			fields.SubmissionTime(time.Since(submissionTime)),
 			zap.Error(err))
 		return errors.Wrap(err, "could not submit validator registration")
 	}
 	logger.Debug("✅ successfully submitted validator registration",
-		fields.FeeRecipient(r.BaseRunner.Share.FeeRecipientAddress[:]),
-		zap.String("signature", hex.EncodeToString(specSig[:])),
 		fields.SubmissionTime(time.Since(submissionTime)))
 
 	r.GetState().Finished = true

@@ -137,8 +137,6 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		return errors.Wrap(err, "failed processing post consensus message")
 	}
 
-	duty := r.GetState().DecidedValue.Duty
-	logger = logger.With(fields.Slot(duty.Slot))
 	logger.Debug("🧩 got partial signature",
 		zap.Uint64("signer", signedMsg.Signer))
 
@@ -170,6 +168,7 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		attestationSubmissionEnd := r.metrics.StartBeaconSubmission()
 		startSubmissionTime := time.Now()
 
+		duty := r.GetState().DecidedValue.Duty
 		aggregationBitfield := bitfield.NewBitlist(r.GetState().DecidedValue.Duty.CommitteeLength)
 		aggregationBitfield.SetBitAt(duty.ValidatorCommitteeIndex, true)
 		signedAtt := &phase0.Attestation{
