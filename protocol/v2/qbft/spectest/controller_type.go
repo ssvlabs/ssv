@@ -128,17 +128,15 @@ func testBroadcastedDecided(
 				continue
 			}
 
-			msg1 := &spectypes.SignedSSVMessage{}
-			require.NoError(t, msg1.Decode(msg.FullData))
-			r1, err := msg1.GetRoot()
+			r1, err := msg.GetRoot()
 			require.NoError(t, err)
 
 			r2, err := runData.ExpectedDecidedState.BroadcastedDecided.GetRoot()
 			require.NoError(t, err)
 
 			if r1 == r2 &&
-				reflect.DeepEqual(runData.ExpectedDecidedState.BroadcastedDecided.OperatorIDs, msg1.OperatorIDs) &&
-				reflect.DeepEqual(runData.ExpectedDecidedState.BroadcastedDecided.Signatures, msg1.Signatures) {
+				reflect.DeepEqual(runData.ExpectedDecidedState.BroadcastedDecided.OperatorIDs, msg.OperatorIDs) &&
+				reflect.DeepEqual(runData.ExpectedDecidedState.BroadcastedDecided.Signatures, msg.Signatures) {
 				require.False(t, found)
 				found = true
 			}
