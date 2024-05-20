@@ -6,18 +6,17 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/bloxapp/ssv/logging/fields"
-
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/pkg/errors"
-	"github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/bloxapp/ssv/ibft/storage"
+	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 type Committee struct {
@@ -188,7 +187,7 @@ func (c *Committee) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 	// Validate message
 	if msg.GetType() != message.SSVEventMsgType {
 		if err := msg.SignedSSVMessage.Validate(); err != nil {
-			return errors.Wrap(err, "invalid SignedSSVMessage")
+			return errors.Wrap(err, "invalid signed message")
 		}
 
 		// Verify SignedSSVMessage's signature

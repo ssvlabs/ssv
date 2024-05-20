@@ -5,14 +5,13 @@ import (
 	"fmt"
 	"testing"
 
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"github.com/ssvlabs/ssv-spec/types/testingutils"
-
 	"github.com/bloxapp/ssv/logging"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-
 	"github.com/stretchr/testify/require"
+
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv-spec/types/testingutils"
 )
 
 type SpecTest struct {
@@ -48,11 +47,7 @@ func RunTimeout(t *testing.T, test *SpecTest) {
 		for i, msg := range test.OutputMessages {
 			r1, _ := msg.GetRoot()
 
-			ssvMsg := &spectypes.SSVMessage{}
-			require.NoError(t, ssvMsg.Decode(broadcastedMsgs[i].FullData))
-
-			msg2 := &spectypes.SignedSSVMessage{}
-			require.NoError(t, msg2.Decode(ssvMsg.Data))
+			msg2 := broadcastedMsgs[i]
 			r2, _ := msg2.GetRoot()
 
 			require.EqualValuesf(t, r1, r2, fmt.Sprintf("output msg %d roots not equal", i))

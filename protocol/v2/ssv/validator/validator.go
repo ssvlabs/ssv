@@ -5,12 +5,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/cornelk/hashmap"
-	"github.com/pkg/errors"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
-	"go.uber.org/zap"
-
 	"github.com/bloxapp/ssv/ibft/storage"
 	"github.com/bloxapp/ssv/logging/fields"
 	"github.com/bloxapp/ssv/message/validation"
@@ -18,6 +12,12 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
 	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/cornelk/hashmap"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 // Validator represents an SSV ETH consensus validator Share assigned, coordinates duty execution and more.
@@ -125,7 +125,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 	if msg.GetType() != message.SSVEventMsgType {
 		// Validate message
 		if err := msg.SignedSSVMessage.Validate(); err != nil {
-			return errors.Wrap(err, "invalid SignedSSVMessage")
+			return errors.Wrap(err, "invalid signed message")
 		}
 
 		// Verify SignedSSVMessage's signature
