@@ -11,6 +11,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/message/validation"
@@ -102,7 +103,7 @@ func (v *Validator) StartDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 	// Log with duty ID.
 	baseRunner := dutyRunner.GetBaseRunner()
 	v.dutyIDs.Set(duty.Type, fields.FormatDutyID(baseRunner.BeaconNetwork.EstimatedEpochAtSlot(duty.Slot), duty))
-	logger = trySetDutyID(logger, v.dutyIDs, duty.Type)
+	logger = v.loggerForDuty(logger, duty.Type, duty.Slot)
 
 	// Log with height.
 	if baseRunner.QBFTController != nil {
@@ -142,12 +143,11 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 
 	switch msg.GetType() {
 	case spectypes.SSVConsensusMsgType:
-		logger = trySetDutyID(logger, v.dutyIDs, messageID.GetRoleType())
-
 		signedMsg, ok := msg.Body.(*specqbft.SignedMessage)
 		if !ok {
 			return errors.New("could not decode consensus message from network message")
 		}
+		logger = v.loggerForDuty(logger, messageID.GetRoleType(), phase0.Slot(signedMsg.Message.Height))
 
 		// Check signer consistency
 		if !signedMsg.CommonSigners([]spectypes.OperatorID{msg.GetOperatorID()}) {
@@ -158,12 +158,11 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 		// Process
 		return dutyRunner.ProcessConsensus(logger, signedMsg)
 	case spectypes.SSVPartialSignatureMsgType:
-		logger = trySetDutyID(logger, v.dutyIDs, messageID.GetRoleType())
-
 		signedMsg, ok := msg.Body.(*spectypes.SignedPartialSignatureMessage)
 		if !ok {
 			return errors.New("could not decode post consensus message from network message")
 		}
+		logger = v.loggerForDuty(logger, messageID.GetRoleType(), signedMsg.Message.Slot)
 
 		// Check signer consistency
 		if signedMsg.Signer != msg.GetOperatorID() {
@@ -181,6 +180,14 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 	}
 }
 
+func (v *Validator) loggerForDuty(logger *zap.Logger, role spectypes.BeaconRole, slot phase0.Slot) *zap.Logger {
+	logger = logger.With(fields.Slot(slot))
+	if dutyID, ok := v.dutyIDs.Get(role); ok {
+		return logger.With(fields.DutyID(dutyID))
+	}
+	return logger
+}
+
 func validateMessage(share spectypes.Share, msg *queue.DecodedSSVMessage) error {
 	if !share.ValidatorPubKey.MessageIDBelongs(msg.GetID()) {
 		return errors.New("msg ID doesn't match validator ID")
@@ -191,11 +198,4 @@ func validateMessage(share spectypes.Share, msg *queue.DecodedSSVMessage) error 
 	}
 
 	return nil
-}
-
-func trySetDutyID(logger *zap.Logger, dutyIDs *hashmap.Map[spectypes.BeaconRole, string], role spectypes.BeaconRole) *zap.Logger {
-	if dutyID, ok := dutyIDs.Get(role); ok {
-		return logger.With(fields.DutyID(dutyID))
-	}
-	return logger
 }
