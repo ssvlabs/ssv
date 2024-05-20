@@ -322,10 +322,6 @@ func FeeRecipient(pubKey []byte) zap.Field {
 	return zap.Stringer(FieldFeeRecipient, stringer.HexStringer{Val: pubKey})
 }
 
-func BuilderProposals(v bool) zap.Field {
-	return zap.Bool(FieldBuilderProposals, v)
-}
-
 func FormatDutyID(epoch phase0.Epoch, duty *spectypes.BeaconDuty) string {
 	return fmt.Sprintf("%v-e%v-s%v-v%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
 }

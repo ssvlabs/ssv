@@ -1,7 +1,6 @@
 package validator
 
 import (
-	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/ssvlabs/ssv/ibft/storage"
@@ -20,7 +19,7 @@ const (
 // Options represents options that should be passed to a new instance of Validator.
 type Options struct {
 	Network           qbft.FutureSpecNetwork
-	Beacon            specssv.BeaconNode
+	Beacon            beacon.BeaconNode
 	BeaconNetwork     beacon.BeaconNetwork
 	Storage           *storage.QBFTStores
 	SSVShare          *types.SSVShare
@@ -32,7 +31,6 @@ type Options struct {
 	NewDecidedHandler qbftctrl.NewDecidedHandler
 	FullNode          bool
 	Exporter          bool
-	BuilderProposals  bool
 	QueueSize         int
 	GasLimit          uint64
 	MessageValidator  validation.MessageValidator

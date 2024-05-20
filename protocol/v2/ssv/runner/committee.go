@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"strconv"
 	"time"
 
@@ -13,7 +14,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	"github.com/ssvlabs/ssv-spec/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
@@ -34,7 +34,7 @@ import (
 
 type CommitteeRunner struct {
 	BaseRunner     *BaseRunner
-	beacon         specssv.BeaconNode
+	beacon         beacon.BeaconNode
 	network        qbft.FutureSpecNetwork
 	signer         types.BeaconSigner
 	operatorSigner types.OperatorSigner
@@ -48,7 +48,7 @@ type CommitteeRunner struct {
 func NewCommitteeRunner(beaconNetwork types.BeaconNetwork,
 	share map[phase0.ValidatorIndex]*types.Share,
 	qbftController *controller.Controller,
-	beacon specssv.BeaconNode,
+	beacon beacon.BeaconNode,
 	network qbft.FutureSpecNetwork,
 	signer types.BeaconSigner,
 	operatorSigner types.OperatorSigner,
@@ -105,7 +105,7 @@ func (cr *CommitteeRunner) GetBaseRunner() *BaseRunner {
 	return cr.BaseRunner
 }
 
-func (cr *CommitteeRunner) GetBeaconNode() specssv.BeaconNode {
+func (cr *CommitteeRunner) GetBeaconNode() beacon.BeaconNode {
 	return cr.beacon
 }
 

@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
@@ -22,7 +22,7 @@ import (
 type SyncCommitteeAggregatorRunner struct {
 	BaseRunner *BaseRunner
 
-	beacon         specssv.BeaconNode
+	beacon         beacon.BeaconNode
 	network        qbft.FutureSpecNetwork
 	signer         spectypes.BeaconSigner
 	operatorSigner spectypes.OperatorSigner
@@ -35,7 +35,7 @@ func NewSyncCommitteeAggregatorRunner(
 	beaconNetwork spectypes.BeaconNetwork,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
-	beacon specssv.BeaconNode,
+	beacon beacon.BeaconNode,
 	network qbft.FutureSpecNetwork,
 	signer spectypes.BeaconSigner,
 	operatorSigner spectypes.OperatorSigner,
@@ -392,7 +392,7 @@ func (r *SyncCommitteeAggregatorRunner) GetNetwork() qbft.FutureSpecNetwork {
 	return r.network
 }
 
-func (r *SyncCommitteeAggregatorRunner) GetBeaconNode() specssv.BeaconNode {
+func (r *SyncCommitteeAggregatorRunner) GetBeaconNode() beacon.BeaconNode {
 	return r.beacon
 }
 

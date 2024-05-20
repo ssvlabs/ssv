@@ -1,10 +1,11 @@
 package cli
 
 import (
-	"github.com/ssvlabs/ssv/operator/keystore"
 	"log"
 	"os"
 	"path/filepath"
+
+	"github.com/ssvlabs/ssv/operator/keystore"
 
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"

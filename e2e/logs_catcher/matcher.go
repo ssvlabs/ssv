@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"errors"
+
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/e2e/logs_catcher/docker"

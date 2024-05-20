@@ -3,11 +3,12 @@ package decided
 import (
 	"encoding/hex"
 	"fmt"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"time"
 
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+
 	"github.com/patrickmn/go-cache"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/exporter/api"

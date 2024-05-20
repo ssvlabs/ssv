@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -18,7 +19,7 @@ import (
 
 type Getters interface {
 	GetBaseRunner() *BaseRunner
-	GetBeaconNode() specssv.BeaconNode
+	GetBeaconNode() beacon.BeaconNode
 	GetValCheckF() specqbft.ProposedValueCheckF
 	GetSigner() spectypes.BeaconSigner
 	GetOperatorSigner() spectypes.OperatorSigner

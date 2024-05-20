@@ -4,9 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum/core/types"
 	"math/big"
 	"testing"
+
+	"github.com/ethereum/go-ethereum/core/types"
 
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -163,7 +164,7 @@ func setupEventHandler(
 	operatorDataStore := operatordatastore.New(operatorData)
 	testNetworkConfig := networkconfig.TestNetwork
 
-	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, true, "")
+	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, "")
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}

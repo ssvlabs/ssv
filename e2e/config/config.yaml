@@ -27,7 +27,6 @@ p2p:
 ssv:
   Network: holesky-e2e
   ValidatorOptions:
-    BuilderProposals: false
 
 #bootnode:
 #  PrivateKey: 3b503a31004ae799fe93e547a96a27630d74f2555892e6c5190135e50d8f3bf1
