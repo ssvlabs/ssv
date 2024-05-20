@@ -21,7 +21,7 @@ type ValidatorStore interface {
 	ParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare
 	OperatorValidators(id spectypes.OperatorID) []*types.SSVShare
 
-	Committee(id spectypes.ClusterID) *Committee
+	Committee(id spectypes.CommitteeID) *Committee
 	Committees() []*Committee
 	ParticipatingCommittees(epoch phase0.Epoch) []*Committee
 	OperatorCommittees(id spectypes.OperatorID) []*Committee
@@ -42,7 +42,7 @@ type SelfValidatorStore interface {
 }
 
 type Committee struct {
-	ID         spectypes.ClusterID
+	ID         spectypes.CommitteeID
 	Operators  []spectypes.OperatorID
 	Validators []*types.SSVShare
 }
@@ -68,7 +68,7 @@ type validatorStore struct {
 	byPubKey   func([]byte) *types.SSVShare
 
 	byValidatorIndex map[phase0.ValidatorIndex]*types.SSVShare
-	byCommitteeID    map[spectypes.ClusterID]*Committee
+	byCommitteeID    map[spectypes.CommitteeID]*Committee
 	byOperatorID     map[spectypes.OperatorID]*sharesAndCommittees
 
 	mu sync.RWMutex
@@ -82,7 +82,7 @@ func newValidatorStore(
 		shares:           shares,
 		byPubKey:         shareByPubKey,
 		byValidatorIndex: make(map[phase0.ValidatorIndex]*types.SSVShare),
-		byCommitteeID:    make(map[spectypes.ClusterID]*Committee),
+		byCommitteeID:    make(map[spectypes.CommitteeID]*Committee),
 		byOperatorID:     make(map[spectypes.OperatorID]*sharesAndCommittees),
 	}
 }
@@ -122,7 +122,7 @@ func (c *validatorStore) OperatorValidators(id spectypes.OperatorID) []*types.SS
 	return nil
 }
 
-func (c *validatorStore) Committee(id spectypes.ClusterID) *Committee {
+func (c *validatorStore) Committee(id spectypes.CommitteeID) *Committee {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -327,7 +327,7 @@ func (c *validatorStore) handleDrop() {
 	defer c.mu.Unlock()
 
 	c.byValidatorIndex = make(map[phase0.ValidatorIndex]*types.SSVShare)
-	c.byCommitteeID = make(map[spectypes.ClusterID]*Committee)
+	c.byCommitteeID = make(map[spectypes.CommitteeID]*Committee)
 	c.byOperatorID = make(map[spectypes.OperatorID]*sharesAndCommittees)
 }
 

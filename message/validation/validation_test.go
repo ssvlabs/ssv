@@ -62,7 +62,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	committeeID := shares.active.CommitteeID()
 
-	validatorStore.EXPECT().Committee(gomock.Any()).DoAndReturn(func(id spectypes.ClusterID) *registrystorage.Committee {
+	validatorStore.EXPECT().Committee(gomock.Any()).DoAndReturn(func(id spectypes.CommitteeID) *registrystorage.Committee {
 		if id == committeeID {
 			beaconMetadata1 := *shares.active.BeaconMetadata
 			beaconMetadata2 := beaconMetadata1

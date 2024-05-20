@@ -183,7 +183,7 @@ func (mv *messageValidator) obtainValidationLock(messageID spectypes.MessageID) 
 func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.MessageID) ([]spectypes.OperatorID, []phase0.ValidatorIndex, error) {
 	if mv.committeeRole(msgID.GetRoleType()) {
 		// TODO: add metrics and logs for committee role
-		committeeID := spectypes.ClusterID(msgID.GetSenderID()[16:])
+		committeeID := spectypes.CommitteeID(msgID.GetSenderID()[16:])
 		committee := mv.validatorStore.Committee(committeeID) // TODO: consider passing whole senderID
 		if committee == nil {
 			e := ErrNonExistentCommitteeID
