@@ -16,7 +16,7 @@ import (
 type ExecuteDutiesFunc func(logger *zap.Logger, duties []*spectypes.BeaconDuty)
 
 // ExecuteCommitteeDutiesFunc is a non-blocking function which executes the given committee duties.
-type ExecuteCommitteeDutiesFunc func(logger *zap.Logger, duties map[[32]byte]*spectypes.CommitteeDuty)
+type ExecuteCommitteeDutiesFunc func(logger *zap.Logger, duties committeeDutiesMap)
 
 type dutyHandler interface {
 	Setup(string, *zap.Logger, BeaconNode, ExecutionClient, networkconfig.NetworkConfig, ValidatorProvider, ValidatorController, ExecuteDutiesFunc, ExecuteCommitteeDutiesFunc, slotticker.Provider, chan ReorgEvent, chan struct{})

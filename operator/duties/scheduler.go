@@ -388,7 +388,7 @@ func (s *Scheduler) ExecuteDuties(logger *zap.Logger, duties []*spectypes.Beacon
 }
 
 // ExecuteCommitteeDuties tries to execute the given committee duties
-func (s *Scheduler) ExecuteCommitteeDuties(logger *zap.Logger, duties map[[32]byte]*spectypes.CommitteeDuty) {
+func (s *Scheduler) ExecuteCommitteeDuties(logger *zap.Logger, duties committeeDutiesMap) {
 	for committeeID, duty := range duties {
 		committeeID := committeeID
 		duty := duty
