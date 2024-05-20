@@ -14,6 +14,7 @@ import (
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv-spec/qbft"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
@@ -124,7 +125,7 @@ func TestMessagePrioritizer(t *testing.T) {
 			messages := make(messageSlice, len(test.messages))
 			for i, m := range test.messages {
 				var err error
-				messages[i], err = DecodeSSVMessage(m.ssvMessage(test.state))
+				messages[i], err = DecodeSignedSSVMessage(m.ssvMessage(test.state))
 				require.NoError(t, err)
 			}
 
@@ -153,7 +154,7 @@ func TestMessagePrioritizer(t *testing.T) {
 }
 
 type mockMessage interface {
-	ssvMessage(*State) *spectypes.SSVMessage
+	ssvMessage(*State) *spectypes.SignedSSVMessage
 }
 
 type mockConsensusMessage struct {
@@ -163,7 +164,7 @@ type mockConsensusMessage struct {
 	Height  qbft.Height
 }
 
-func (m mockConsensusMessage) ssvMessage(state *State) *spectypes.SSVMessage {
+func (m mockConsensusMessage) ssvMessage(state *State) *spectypes.SignedSSVMessage {
 	var (
 		typ         = m.Type
 		signerCount = 1
@@ -193,19 +194,22 @@ func (m mockConsensusMessage) ssvMessage(state *State) *spectypes.SSVMessage {
 	if err != nil {
 		panic(err)
 	}
-	return factory(
-		&spectypes.SignedSSVMessage{
-			SSVMessage: &spectypes.SSVMessage{
-				MsgType: spectypes.SSVConsensusMsgType,
-				MsgID:   spectypes.MessageID(msg.Identifier),
-				Data:    msgEncoded,
-			},
-			FullData:    []byte{1, 2, 3, 4},
-			Signatures:  make([][]byte, 96),
-			OperatorIDs: signers,
+	signedMsg := &spectypes.SignedSSVMessage{
+		SSVMessage: &spectypes.SSVMessage{
+			MsgType: spectypes.SSVConsensusMsgType,
+			MsgID:   spectypes.MessageID(msg.Identifier),
+			Data:    msgEncoded,
 		},
-		nil,
-	)
+		FullData:    []byte{1, 2, 3, 4},
+		Signatures:  make([][]byte, len(signers)),
+		OperatorIDs: signers,
+	}
+	return &spectypes.SignedSSVMessage{
+		SSVMessage:  factory(signedMsg, nil),
+		FullData:    []byte{1, 2, 3, 4},
+		Signatures:  make([][]byte, len(signers)),
+		OperatorIDs: signers,
+	}
 }
 
 type mockNonConsensusMessage struct {
@@ -214,21 +218,35 @@ type mockNonConsensusMessage struct {
 	Slot phase0.Slot
 }
 
-func (m mockNonConsensusMessage) ssvMessage(state *State) *spectypes.SSVMessage {
+func (m mockNonConsensusMessage) ssvMessage(state *State) *spectypes.SignedSSVMessage {
 	factory := ssvMessageFactory(m.Role)
-	return factory(
-		nil,
-		&spectypes.PartialSignatureMessages{
-			Type: m.Type,
-			Slot: m.Slot,
-			Messages: []*spectypes.PartialSignatureMessage{{
-				SigningRoot:      [32]byte{},
-				PartialSignature: make([]byte, 96),
-				Signer:           spectypes.OperatorID(1),
-			},
-			},
+	partMsg := &spectypes.PartialSignatureMessages{
+		Type: m.Type,
+		Slot: m.Slot,
+		Messages: []*spectypes.PartialSignatureMessage{{
+			PartialSignature: make([]byte, 96),
+			SigningRoot:      [32]byte{},
+			Signer:           spectypes.OperatorID(1),
+			ValidatorIndex:   phase0.ValidatorIndex(1),
+		}},
+	}
+	msgEncoded, err := partMsg.Encode()
+	if err != nil {
+		panic(err)
+	}
+	signedMsg := &spectypes.SignedSSVMessage{
+		SSVMessage: &spectypes.SSVMessage{
+			MsgType: spectypes.SSVPartialSignatureMsgType,
+			MsgID:   spectypes.MessageID(make([]byte, 56)),
+			Data:    msgEncoded,
 		},
-	)
+	}
+	return &spectypes.SignedSSVMessage{
+		SSVMessage:  factory(signedMsg, nil),
+		FullData:    []byte{1, 2, 3, 4},
+		Signatures:  make([][]byte, 1),
+		OperatorIDs: []spectypes.OperatorID{1},
+	}
 }
 
 type mockExecuteDutyMessage struct {
@@ -236,7 +254,7 @@ type mockExecuteDutyMessage struct {
 	Slot phase0.Slot
 }
 
-func (m mockExecuteDutyMessage) ssvMessage(state *State) *spectypes.SSVMessage {
+func (m mockExecuteDutyMessage) ssvMessage(state *State) *spectypes.SignedSSVMessage {
 	edd, err := json.Marshal(types.ExecuteDutyData{Duty: &spectypes.BeaconDuty{
 		Type: m.Role,
 		Slot: m.Slot,
@@ -251,10 +269,15 @@ func (m mockExecuteDutyMessage) ssvMessage(state *State) *spectypes.SSVMessage {
 	if err != nil {
 		panic(err)
 	}
-	return &spectypes.SSVMessage{
-		MsgType: message.SSVEventMsgType,
-		MsgID:   spectypes.NewMsgID(testingutils.TestingSSVDomainType, testingutils.TestingValidatorPubKey[:], spectypes.RunnerRole(m.Role)),
-		Data:    data,
+	return &spectypes.SignedSSVMessage{
+		SSVMessage: &spectypes.SSVMessage{
+			MsgType: message.SSVEventMsgType,
+			MsgID:   spectypes.NewMsgID(testingutils.TestingSSVDomainType, testingutils.TestingValidatorPubKey[:], spectypes.RunnerRole(m.Role)),
+			Data:    data,
+		},
+		FullData:    []byte{1, 2, 3, 4},
+		Signatures:  make([][]byte, 1),
+		OperatorIDs: []spectypes.OperatorID{1},
 	}
 }
 
@@ -263,7 +286,7 @@ type mockTimeoutMessage struct {
 	Height qbft.Height
 }
 
-func (m mockTimeoutMessage) ssvMessage(state *State) *spectypes.SSVMessage {
+func (m mockTimeoutMessage) ssvMessage(state *State) *spectypes.SignedSSVMessage {
 	td := types.TimeoutData{Height: m.Height}
 	data, err := json.Marshal(td)
 	if err != nil {
@@ -276,10 +299,15 @@ func (m mockTimeoutMessage) ssvMessage(state *State) *spectypes.SSVMessage {
 	if err != nil {
 		panic(err)
 	}
-	return &spectypes.SSVMessage{
-		MsgType: message.SSVEventMsgType,
-		MsgID:   spectypes.NewMsgID(testingutils.TestingSSVDomainType, testingutils.TestingValidatorPubKey[:], m.Role),
-		Data:    eventMsgData,
+	return &spectypes.SignedSSVMessage{
+		SSVMessage: &spectypes.SSVMessage{
+			MsgType: message.SSVEventMsgType,
+			MsgID:   spectypes.NewMsgID(testingutils.TestingSSVDomainType, testingutils.TestingValidatorPubKey[:], m.Role),
+			Data:    eventMsgData,
+		},
+		FullData:    []byte{1, 2, 3, 4},
+		Signatures:  make([][]byte, 1),
+		OperatorIDs: []spectypes.OperatorID{1},
 	}
 }
 
@@ -356,8 +384,8 @@ func (m messageSlice) dump(s *State) string {
 		}
 
 		decided := false
-		if _, ok := msg.Body.(*qbft.Message); ok {
-			decided = isDecidedMesssage(s, msg.SignedSSVMessage)
+		if _, ok := msg.Body.(*specqbft.Message); ok {
+			decided = isDecidedMesssage(s, msg)
 		}
 		tbl.AddRow(
 			fmt.Sprint(i),

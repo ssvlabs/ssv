@@ -20,27 +20,27 @@ type DutyProperties struct {
 	Delay          time.Duration
 }
 
-func createDuty(pk []byte, slot phase0.Slot, idx phase0.ValidatorIndex, role spectypes.BeaconRole) *spectypes.Duty {
+func createDuty(pk []byte, slot phase0.Slot, idx phase0.ValidatorIndex, role spectypes.BeaconRole) spectypes.Duty {
 	var pkBytes [48]byte
 	copy(pkBytes[:], pk)
 
-	var testingDuty spectypes.Duty
+	var testingDuty spectypes.BeaconDuty
 	switch role {
 	case spectypes.BNRoleAttester:
-		testingDuty = spectestingutils.TestingAttesterDuty
+		return spectestingutils.TestingCommitteeAttesterDuty(slot, []int{int(idx)})
 	case spectypes.BNRoleAggregator:
 		testingDuty = spectestingutils.TestingAggregatorDuty
 	case spectypes.BNRoleProposer:
 		testingDuty = *spectestingutils.TestingProposerDutyV(spec.DataVersionCapella)
 	case spectypes.BNRoleSyncCommittee:
-		testingDuty = spectestingutils.TestingSyncCommitteeDuty
+		return spectestingutils.TestingCommitteeSyncCommitteeDuty(slot, []int{int(idx)})
 	case spectypes.BNRoleSyncCommitteeContribution:
 		testingDuty = spectestingutils.TestingSyncCommitteeContributionDuty
 	default:
 		panic("unknown role")
 	}
 
-	return &spectypes.Duty{
+	return &spectypes.BeaconDuty{
 		Type:                          role,
 		PubKey:                        pkBytes,
 		Slot:                          slot,
