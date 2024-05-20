@@ -74,7 +74,7 @@ var baseRunner = func(
 	valCheck specqbft.ProposedValueCheckF,
 	keySet *spectestingutils.TestKeySet,
 ) runner.Runner {
-	share := spectestingutils.TestingShare(keySet)
+	share := spectestingutils.TestingShare(keySet, spectestingutils.TestingValidatorIndex)
 	identifier := spectypes.NewMsgID(TestingSSVDomainType, spectestingutils.TestingValidatorPubKey[:], spectypes.RunnerRole(role))
 	net := spectestingutils.NewTestingNetwork(1, keySet.OperatorKeys[1])
 	km := spectestingutils.NewTestingKeyManager()
