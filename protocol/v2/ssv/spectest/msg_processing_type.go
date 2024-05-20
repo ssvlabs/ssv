@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/google/go-cmp/cmp"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
@@ -63,7 +64,12 @@ func (test *MsgProcessingSpecTest) runPreTesting(logger *zap.Logger) (*validator
 		lastErr = v.StartDuty(logger, test.Duty)
 	}
 	for _, msg := range test.Messages {
-		err := v.ProcessMessage(logger, msg)
+		dmsg, err := queue.DecodeSignedSSVMessage(msg)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		err = v.ProcessMessage(logger, dmsg)
 		if err != nil {
 			lastErr = err
 		}

@@ -115,12 +115,12 @@ func testBroadcastedDecided(
 		// test broadcasted
 		broadcastedSignedMsgs := config.GetNetwork().(*spectestingutils.TestingNetwork).BroadcastedMsgs
 		require.Greater(t, len(broadcastedSignedMsgs), 0)
-		require.NoError(t, spectestingutils.VerifyListOfSignedSSVMessages(broadcastedSignedMsgs, committee))
+		require.NoError(t, spectestingutils.VerifyListOfSignedSSVMessages(broadcastedSignedMsgs, operators))
 		found := false
 		for _, msg := range broadcastedSignedMsgs {
 
 			// a hack for testing non standard messageID identifiers since we copy them into a MessageID this fixes it
-			msgID := types.MessageID{}
+			msgID := spectypes.MessageID{}
 			copy(msgID[:], identifier)
 
 			if !bytes.Equal(msgID[:], msg.SSVMessage.MsgID[:]) {
@@ -128,7 +128,7 @@ func testBroadcastedDecided(
 			}
 
 			msg1 := &spectypes.SignedSSVMessage{}
-			require.NoError(t, msg1.Decode(msg.Data))
+			require.NoError(t, msg1.Decode(msg.FullData))
 			r1, err := msg1.GetRoot()
 			require.NoError(t, err)
 
