@@ -134,7 +134,6 @@ func (r *ValidatorRegistrationRunner) expectedPostConsensusRootsAndDomain() ([]s
 }
 
 func (r *ValidatorRegistrationRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
-	r.started = time.Now()
 	r.metrics.StartPreConsensus()
 	vr, err := r.calculateValidatorRegistration()
 	if err != nil {

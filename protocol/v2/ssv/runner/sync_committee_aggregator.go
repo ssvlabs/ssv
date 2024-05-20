@@ -8,12 +8,12 @@ import (
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv/logging/fields"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/logging/fields"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"

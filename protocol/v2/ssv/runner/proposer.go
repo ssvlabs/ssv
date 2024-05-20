@@ -335,7 +335,7 @@ func (r *ProposerRunner) expectedPostConsensusRootsAndDomain() ([]ssz.HashRoot, 
 func (r *ProposerRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) error {
 	r.metrics.StartDutyFullFlow()
 	r.metrics.StartPreConsensus()
-	r.started = time.Now()
+
 	// sign partial randao
 	epoch := r.GetBeaconNode().GetBeaconNetwork().EstimatedEpochAtSlot(duty.Slot)
 	msg, err := r.BaseRunner.signBeaconObject(r, spectypes.SSZUint64(epoch), duty.Slot, spectypes.DomainRandao)
