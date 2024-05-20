@@ -136,11 +136,21 @@ func (h *CommitteeHandler) processExecution(period uint64, epoch phase0.Epoch, s
 		return
 	}
 
+	vsmap := make(map[phase0.ValidatorIndex]spectypes.CommitteeID, 0)
+	vs := h.validatorProvider.SelfParticipatingValidators(epoch)
+	for _, v := range vs {
+		vsmap[v.ValidatorIndex] = v.CommitteeID()
+	}
+
 	committeeMap := make(map[[32]byte]*spectypes.CommitteeDuty)
 	if attDuties != nil {
 		for _, d := range attDuties {
 			if h.shouldExecuteAtt(d) {
-				clusterID := h.validatorProvider.Validator(d.PubKey[:]).CommitteeID()
+				clusterID, ok := vsmap[d.ValidatorIndex]
+				if !ok {
+					h.logger.Error("can't find validator committeeID in validator store", zap.Uint64("validator_index", uint64(d.ValidatorIndex)))
+					continue
+				}
 				specDuty := h.toSpecAttDuty(d, spectypes.BNRoleAttester)
 
 				if _, ok := committeeMap[clusterID]; !ok {
