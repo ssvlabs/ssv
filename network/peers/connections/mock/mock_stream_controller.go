@@ -1,11 +1,11 @@
 package mock
 
 import (
-	"github.com/bloxapp/ssv/network/streams"
 	"github.com/libp2p/go-libp2p/core"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
 	"github.com/pkg/errors"
+	"github.com/ssvlabs/ssv/network/streams"
 	"go.uber.org/zap"
 )
 

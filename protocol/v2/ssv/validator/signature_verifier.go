@@ -7,7 +7,7 @@ import (
 	"github.com/cornelk/hashmap"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/bloxapp/ssv/operator/keys"
+	"github.com/ssvlabs/ssv/operator/keys"
 )
 
 type SignatureVerifier struct {

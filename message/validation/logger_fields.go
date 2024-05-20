@@ -8,9 +8,9 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/logging/fields"
+	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
 // ConsensusFields provides details about the consensus for a message. It's used for logging and metrics.

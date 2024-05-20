@@ -11,7 +11,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v2/message"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
 )
 
 var (

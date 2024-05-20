@@ -25,17 +25,17 @@ import (
 	"go.uber.org/zap/zapcore"
 	"golang.org/x/exp/slices"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/monitoring/metricsreporter"
-	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/networkconfig"
-	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
-	"github.com/bloxapp/ssv/operator/duties/dutystore"
-	"github.com/bloxapp/ssv/operator/keys"
-	operatorstorage "github.com/bloxapp/ssv/operator/storage"
-	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/networkconfig"
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
+	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/operator/keys"
+	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
+	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 const (

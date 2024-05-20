@@ -18,10 +18,10 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 )
 
 //type Broadcaster interface {
@@ -251,7 +251,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 		return nil
 	}
 
-	consensusDuration := cr.started.Sub(cr.consensusDone)
+	consensusDuration := cr.consensusDone.Sub(cr.started)
 	postConsensusDuration := time.Since(cr.postStarted)
 	totalDuration := consensusDuration + postConsensusDuration
 

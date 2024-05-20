@@ -5,8 +5,8 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 )
 
 func (c *Controller) LoadHighestInstance(identifier []byte) (*instance.Instance, error) {

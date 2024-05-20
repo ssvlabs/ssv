@@ -7,9 +7,9 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/utils"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/utils"
 )
 
 var (

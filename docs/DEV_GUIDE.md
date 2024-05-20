@@ -162,7 +162,7 @@ In order to run a local environment, install the following:
 #### Clone Repository
 
 ```shell
-$ git clone https://github.com/bloxapp/ssv.git
+$ git clone https://github.com/ssvlabs/ssv.git
 ```
 
 #### Build Binary
@@ -178,8 +178,8 @@ $ make build
 By using this script, developers can simulate a real SSV environment, run multiple nodes, and start those nodes performing duties with the passed validator's keystore. This is incredibly beneficial for debugging, testing functionalities, or preparing for deployment in a live setting. It provides a realistic but controlled environment where developers can observe the interaction of multiple nodes in the SSV network. \
 The script simplifies configuration by automatically generating YAML files for each operator and an 'events.yaml' file. The 'events.yaml' emulates a 'happy flow' scenario, which includes the registration of four operators and one validator
 
-1. Download the latest executable version (v1.0.0 or later) from [ssv-keys](https://github.com/bloxapp/ssv-keys/releases).
-    - After downloading, follow these [steps](https://github.com/bloxapp/ssv-keys#option-1-running-an-executable-recommended-route) to provide the necessary permissions to the executable.
+1. Download the latest executable version (v1.0.0 or later) from [ssv-keys](https://github.com/ssvlabs/ssv-keys/releases).
+    - After downloading, follow these [steps](https://github.com/ssvlabs/ssv-keys#option-1-running-an-executable-recommended-route) to provide the necessary permissions to the executable.
 
 2. Generate a local configuration using the provided [script](../scripts/generate_local_config.sh).
     - Execute the script by typing the following command in your terminal:
@@ -229,7 +229,7 @@ These steps offer a detailed manual alternative to the script. They provide a st
 
 3. Populate the `OperatorPrivateKey` field in the `share[1..4].yaml` files with the operator private keys that you generated in step 1.
 
-4. Generate share keys using the 4 operator public keys generated in step 1. You can do this using [ssv-keys](https://github.com/bloxapp/ssv-keys#example).
+4. Generate share keys using the 4 operator public keys generated in step 1. You can do this using [ssv-keys](https://github.com/ssvlabs/ssv-keys#example).
 
 5. Create an `events.yaml` file based on the provided [template file](../config/events.example.yaml). Follow the validator registration happy flow example for proper configuration.
     - Populate the operator registration events with the data generated in step 4.

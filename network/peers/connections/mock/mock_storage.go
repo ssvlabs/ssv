@@ -9,10 +9,10 @@ import (
 	"github.com/pkg/errors"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/bloxapp/ssv/operator/storage"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	genesisregistrystorage "github.com/bloxapp/ssv/registry/storage/genesis"
-	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/operator/storage"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	genesisregistrystorage "github.com/ssvlabs/ssv/registry/storage/genesis"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 var _ storage.Storage = NodeStorage{}

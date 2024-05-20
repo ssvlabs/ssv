@@ -11,7 +11,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/logging"
+	"github.com/ssvlabs/ssv/logging"
 )
 
 func TestStreamCtrl(t *testing.T) {

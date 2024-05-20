@@ -6,7 +6,7 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
 )
 
 const (

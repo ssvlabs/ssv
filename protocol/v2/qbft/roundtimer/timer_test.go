@@ -9,10 +9,10 @@ import (
 	"time"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer/mocks"
 	"github.com/golang/mock/gomock"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer/mocks"
 	"github.com/stretchr/testify/require"
 )
 

@@ -6,7 +6,7 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
 func (mv *messageValidator) validateSelf(pMsg *pubsub.Message) pubsub.ValidationResult {

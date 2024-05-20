@@ -15,13 +15,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/networkconfig"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
-	"github.com/bloxapp/ssv/utils/threshold"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/networkconfig"
+	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/kv"
+	"github.com/ssvlabs/ssv/utils/threshold"
 )
 
 func TestValidatorSerializer(t *testing.T) {

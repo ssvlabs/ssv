@@ -17,7 +17,7 @@ RUN apt-get update                                                        && \
 
 RUN go version
 
-WORKDIR /go/src/github.com/bloxapp/ssv/
+WORKDIR /go/src/github.com/ssvlabs/ssv/
 COPY go.mod .
 COPY go.sum .
 RUN --mount=type=cache,target=/root/.cache/go-build \

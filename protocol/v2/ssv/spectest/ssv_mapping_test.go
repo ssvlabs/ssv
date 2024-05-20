@@ -18,14 +18,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	ssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
-	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
+	qbfttesting "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	ssvtesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func TestSSVMapping(t *testing.T) {

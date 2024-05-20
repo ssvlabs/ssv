@@ -5,7 +5,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
-	"github.com/bloxapp/ssv/operator/keys"
+	"github.com/ssvlabs/ssv/operator/keys"
 )
 
 func (mv *messageValidator) verifySignature(messageData []byte, operatorID spectypes.OperatorID, signature []byte) error {

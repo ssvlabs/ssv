@@ -12,7 +12,7 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/pkg/errors"
 
-	"github.com/bloxapp/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/commons"
 )
 
 // createLocalNode create a new enode.LocalNode instance

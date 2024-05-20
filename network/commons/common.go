@@ -15,7 +15,7 @@ import (
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
+	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
 )
 
 const (

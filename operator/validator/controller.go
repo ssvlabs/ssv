@@ -21,31 +21,31 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/ibft/storage"
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/message/validation"
-	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/networkconfig"
-	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
-	"github.com/bloxapp/ssv/operator/duties"
-	nodestorage "github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/operator/validators"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v2/message"
-	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
-	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	qbftcontroller "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-	"github.com/bloxapp/ssv/protocol/v2/queue/worker"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
-	"github.com/bloxapp/ssv/protocol/v2/types"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/message/validation"
+	"github.com/ssvlabs/ssv/network"
+	"github.com/ssvlabs/ssv/networkconfig"
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
+	"github.com/ssvlabs/ssv/operator/duties"
+	nodestorage "github.com/ssvlabs/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/operator/validators"
+	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
+	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/v2/queue/worker"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
@@ -642,11 +642,13 @@ func (c *controller) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*be
 		}
 	}
 
+	startdb := time.Now()
 	// Save metadata to share storage.
 	err := c.sharesStorage.UpdateValidatorsMetadata(data)
 	if err != nil {
 		return errors.Wrap(err, "could not update validator metadata")
 	}
+	c.logger.Debug("🆕 updated validators metadata in storage", zap.Duration("elapsed", time.Since(startdb)), zap.Int("count", len(data)))
 
 	pks := maps.Keys(data)
 

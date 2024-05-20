@@ -7,16 +7,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bloxapp/ssv/e2e/logs_catcher/logs"
-	"github.com/bloxapp/ssv/e2e/logs_catcher/parser"
+	"github.com/ssvlabs/ssv/e2e/logs_catcher/logs"
+	"github.com/ssvlabs/ssv/e2e/logs_catcher/parser"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/e2e/logs_catcher/docker"
+	"github.com/ssvlabs/ssv/e2e/logs_catcher/docker"
 )
 
 const (

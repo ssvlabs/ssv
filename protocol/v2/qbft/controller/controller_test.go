@@ -4,13 +4,13 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-	"github.com/bloxapp/ssv/protocol/v2/types"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/stretchr/testify/require"
 )
 

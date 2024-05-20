@@ -6,9 +6,9 @@ import (
 	"crypto/x509"
 	"fmt"
 
-	"github.com/bloxapp/ssv/utils/rsaencryption"
+	"github.com/ssvlabs/ssv/utils/rsaencryption"
 
-	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/basedb"
 
 	"go.uber.org/zap"
 )

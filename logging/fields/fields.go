@@ -20,12 +20,12 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/bloxapp/ssv/eth/contract"
-	"github.com/bloxapp/ssv/logging/fields/stringer"
-	"github.com/bloxapp/ssv/network/records"
-	"github.com/bloxapp/ssv/protocol/v2/message"
-	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
-	"github.com/bloxapp/ssv/utils/format"
+	"github.com/ssvlabs/ssv/eth/contract"
+	"github.com/ssvlabs/ssv/logging/fields/stringer"
+	"github.com/ssvlabs/ssv/network/records"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
+	"github.com/ssvlabs/ssv/utils/format"
 )
 
 const (

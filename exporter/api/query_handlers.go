@@ -5,7 +5,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/ibft/storage"
 )
 
 const (

@@ -1,4 +1,4 @@
-module github.com/bloxapp/ssv
+module github.com/ssvlabs/ssv
 
 go 1.20
 

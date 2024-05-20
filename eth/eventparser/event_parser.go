@@ -9,7 +9,7 @@ import (
 	ethcommon "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 
-	"github.com/bloxapp/ssv/eth/contract"
+	"github.com/ssvlabs/ssv/eth/contract"
 )
 
 type EventParser struct {

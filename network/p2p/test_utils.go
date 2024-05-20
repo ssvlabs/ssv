@@ -13,22 +13,22 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/bloxapp/ssv/message/signatureverifier"
-	"github.com/bloxapp/ssv/message/validation"
-	"github.com/bloxapp/ssv/monitoring/metricsreporter"
-	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/network/commons"
-	p2pcommons "github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/network/discovery"
-	"github.com/bloxapp/ssv/network/peers/connections/mock"
-	"github.com/bloxapp/ssv/network/testing"
-	"github.com/bloxapp/ssv/networkconfig"
-	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
+	"github.com/ssvlabs/ssv/message/validation"
+	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
+	"github.com/ssvlabs/ssv/network"
+	"github.com/ssvlabs/ssv/network/commons"
+	p2pcommons "github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/discovery"
+	"github.com/ssvlabs/ssv/network/peers/connections/mock"
+	"github.com/ssvlabs/ssv/network/testing"
+	"github.com/ssvlabs/ssv/networkconfig"
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/bloxapp/ssv/operator/duties/dutystore"
 	"github.com/bloxapp/ssv/operator/storage"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
 	"github.com/bloxapp/ssv/storage/basedb"
 	"github.com/bloxapp/ssv/storage/kv"
-	"github.com/bloxapp/ssv/utils/format"
+	"github.com/ssvlabs/ssv/utils/format"
 )
 
 // TODO: (Alan) might have to rename this file back to test_utils.go if non-test files require it.
@@ -157,7 +157,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 		RegisteredOperatorPublicKeyPEMs: []string{},
 	}
 	cfg.Metrics = nil
-	cfg.MessageValidator = validation.New(
+	cfg.MessageValidator = nil //validation.New(
 		networkconfig.TestNetwork,
 		nodeStorage.ValidatorStore(),
 		dutyStore,
@@ -182,7 +182,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 	if options.MessageValidatorProvider != nil {
 		cfg.MessageValidator = options.MessageValidatorProvider(nodeIndex)
 	} else {
-		cfg.MessageValidator = validation.New(
+		cfg.MessageValidator = nil //validation.New(
 			networkconfig.TestNetwork,
 			nodeStorage.ValidatorStore(),
 			dutyStore,

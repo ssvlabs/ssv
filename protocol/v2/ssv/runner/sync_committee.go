@@ -15,9 +15,9 @@ package runner
 //	"github.com/pkg/errors"
 //	"go.uber.org/zap"
 //
-//	"github.com/bloxapp/ssv/logging/fields"
-//	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-//	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
+//	"github.com/ssvlabs/ssv/logging/fields"
+//	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+//	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
 //)
 //
 //type SyncCommitteeRunner struct {

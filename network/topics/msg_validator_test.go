@@ -18,16 +18,16 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
 
-	"github.com/bloxapp/ssv/message/validation"
-	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/networkconfig"
-	operatorstorage "github.com/bloxapp/ssv/operator/storage"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/registry/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
+	"github.com/ssvlabs/ssv/message/validation"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/networkconfig"
+	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
+	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/kv"
+	"github.com/ssvlabs/ssv/utils/rsaencryption"
 )
 
 func TestMsgValidator(t *testing.T) {

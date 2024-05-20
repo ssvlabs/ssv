@@ -14,7 +14,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
+	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
 )
 
 const (

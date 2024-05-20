@@ -5,7 +5,7 @@ import (
 
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 var HoleskyStage = NetworkConfig{

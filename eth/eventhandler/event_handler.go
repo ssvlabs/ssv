@@ -5,7 +5,7 @@ package eventhandler
 import (
 	"errors"
 	"fmt"
-	"github.com/bloxapp/ssv/ekm"
+	"github.com/ssvlabs/ssv/ekm"
 	"math/big"
 	"time"
 
@@ -15,19 +15,19 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/eth/contract"
-	"github.com/bloxapp/ssv/eth/eventparser"
-	"github.com/bloxapp/ssv/eth/executionclient"
-	"github.com/bloxapp/ssv/eth/localevents"
-	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/networkconfig"
-	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
-	"github.com/bloxapp/ssv/operator/keys"
-	nodestorage "github.com/bloxapp/ssv/operator/storage"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/eth/contract"
+	"github.com/ssvlabs/ssv/eth/eventparser"
+	"github.com/ssvlabs/ssv/eth/executionclient"
+	"github.com/ssvlabs/ssv/eth/localevents"
+	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/networkconfig"
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
+	"github.com/ssvlabs/ssv/operator/keys"
+	nodestorage "github.com/ssvlabs/ssv/operator/storage"
+	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 // Event names

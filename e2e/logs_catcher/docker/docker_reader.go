@@ -3,10 +3,10 @@ package docker
 import (
 	"bufio"
 	"context"
-	"github.com/bloxapp/ssv/e2e/logs_catcher/logs"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 	"github.com/pkg/errors"
+	"github.com/ssvlabs/ssv/e2e/logs_catcher/logs"
 	"io"
 	"strings"
 )

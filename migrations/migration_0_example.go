@@ -5,7 +5,7 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 // This migration is an Example migration

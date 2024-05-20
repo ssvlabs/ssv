@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/protocol/v2/message"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
@@ -22,8 +22,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/network"
-	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
+	"github.com/ssvlabs/ssv/network"
+	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
 )
 
 func TestGetMaxPeers(t *testing.T) {

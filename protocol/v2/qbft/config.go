@@ -4,9 +4,9 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 )
 
 // TODO: (Alan) revert back to using spec Network once they merge in the msgID passing with cluster consensus branch.

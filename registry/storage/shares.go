@@ -12,9 +12,9 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/exp/maps"
 
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/storage/basedb"
+	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 var sharesPrefix = []byte("shares")
@@ -349,10 +349,25 @@ func (s *sharesStorage) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]
 	}
 	s.mu.RUnlock()
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if err := s.unsafeSave(nil, shares...); err != nil {
-		return err
+	saveShares := func(sshares []*types.SSVShare) error {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if err := s.unsafeSave(nil, sshares...); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	// split into chunks to avoid holding the lock for too long
+	chunkSize := 1000
+	for i := 0; i < len(shares); i += chunkSize {
+		end := i + chunkSize
+		if end > len(shares) {
+			end = len(shares)
+		}
+		if err := saveShares(shares[i:end]); err != nil {
+			return err
+		}
 	}
 
 	return nil

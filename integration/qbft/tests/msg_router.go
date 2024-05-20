@@ -5,8 +5,8 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
-	protocolvalidator "github.com/bloxapp/ssv/protocol/v2/ssv/validator"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	protocolvalidator "github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
 )
 
 type msgRouter struct {

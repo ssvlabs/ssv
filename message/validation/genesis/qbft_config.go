@@ -5,9 +5,9 @@ import (
 	genesisspectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 	spectypes "github.com/ssvlabs/ssv-spec-pre-cc/types"
 
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 )
 
 // qbftConfig is used in message validation and has no signature verification.

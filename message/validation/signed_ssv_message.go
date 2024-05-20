@@ -9,7 +9,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"golang.org/x/exp/slices"
 
-	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
+	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
 )
 
 func (mv *messageValidator) decodeSignedSSVMessage(pMsg *pubsub.Message) (*spectypes.SignedSSVMessage, error) {

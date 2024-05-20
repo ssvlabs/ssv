@@ -11,9 +11,9 @@ import (
 	"go.uber.org/zap/zaptest"
 	"gopkg.in/yaml.v3"
 
-	"github.com/bloxapp/ssv/eth/contract"
-	"github.com/bloxapp/ssv/eth/localevents"
-	"github.com/bloxapp/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/eth/contract"
+	"github.com/ssvlabs/ssv/eth/localevents"
+	"github.com/ssvlabs/ssv/registry/storage"
 )
 
 func TestHandleLocalEvent(t *testing.T) {

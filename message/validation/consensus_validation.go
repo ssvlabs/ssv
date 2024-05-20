@@ -15,9 +15,9 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/bloxapp/ssv/protocol/v2/message"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 func (mv *messageValidator) validateConsensusMessage(
