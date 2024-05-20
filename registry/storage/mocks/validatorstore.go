@@ -11,6 +11,7 @@ import (
 	types "github.com/bloxapp/ssv/protocol/v2/types"
 	storage "github.com/bloxapp/ssv/registry/storage"
 	gomock "github.com/golang/mock/gomock"
+
 	types0 "github.com/ssvlabs/ssv-spec/types"
 )
 
@@ -38,7 +39,7 @@ func (m *MockValidatorStore) EXPECT() *MockValidatorStoreMockRecorder {
 }
 
 // Committee mocks base method.
-func (m *MockValidatorStore) Committee(id types0.ClusterID) *storage.Committee {
+func (m *MockValidatorStore) Committee(id types0.CommitteeID) *storage.Committee {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Committee", id)
 	ret0, _ := ret[0].(*storage.Committee)
@@ -201,7 +202,7 @@ func (m *MockSelfValidatorStore) EXPECT() *MockSelfValidatorStoreMockRecorder {
 }
 
 // Committee mocks base method.
-func (m *MockSelfValidatorStore) Committee(id types0.ClusterID) *storage.Committee {
+func (m *MockSelfValidatorStore) Committee(id types0.CommitteeID) *storage.Committee {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Committee", id)
 	ret0, _ := ret[0].(*storage.Committee)
