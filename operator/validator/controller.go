@@ -340,7 +340,7 @@ func (c *controller) handleRouterMessages() {
 			}
 
 			// TODO: only try copying clusterid if validator failed
-			pk := msg.GetID().GetSenderID()
+			pk := msg.GetID().GetDutyExecutorID()
 			var cid spectypes.CommitteeID
 			copy(cid[:], pk[16:])
 
@@ -381,9 +381,9 @@ func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
 			ncv = item.Value()
 		} else {
 			// Create a new nonCommitteeValidator and cache it.
-			share := c.sharesStorage.Get(nil, msg.GetID().GetSenderID())
+			share := c.sharesStorage.Get(nil, msg.GetID().GetDutyExecutorID())
 			if share == nil {
-				return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetID().GetSenderID()))
+				return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetID().GetDutyExecutorID()))
 			}
 
 			opts := c.validatorOptions
@@ -639,11 +639,13 @@ func (c *controller) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*be
 		}
 	}
 
+	startdb := time.Now()
 	// Save metadata to share storage.
 	err := c.sharesStorage.UpdateValidatorsMetadata(data)
 	if err != nil {
 		return errors.Wrap(err, "could not update validator metadata")
 	}
+	c.logger.Debug("🆕 updated validators metadata in storage", zap.Duration("elapsed", time.Since(startdb)), zap.Int("count", len(data)))
 
 	pks := maps.Keys(data)
 

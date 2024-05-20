@@ -243,7 +243,7 @@ func (cr *CommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *t
 		return nil
 	}
 
-	consensusDuration := cr.started.Sub(cr.consensusDone)
+	consensusDuration := cr.consensusDone.Sub(cr.started)
 	postConsensusDuration := time.Since(cr.postStarted)
 	totalDuration := consensusDuration + postConsensusDuration
 
