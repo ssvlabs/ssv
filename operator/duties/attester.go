@@ -101,10 +101,11 @@ func (h *AttesterHandler) HandleDuties(ctx context.Context) {
 				h.fetchNextEpoch = true
 			}
 
-			// last slot of epoch
-			if uint64(slot)%slotsPerEpoch == slotsPerEpoch-1 {
-				h.duties.ResetEpoch(currentEpoch)
-			}
+			// TODO: (Alan) genesis support
+			//// last slot of epoch
+			//if uint64(slot)%slotsPerEpoch == slotsPerEpoch-1 {
+			//	h.duties.ResetEpoch(currentEpoch)
+			//}
 
 		case reorgEvent := <-h.reorg:
 			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(reorgEvent.Slot)
