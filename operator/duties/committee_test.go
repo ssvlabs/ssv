@@ -2,7 +2,6 @@ package duties
 
 import (
 	"context"
-	"sync"
 	"testing"
 	"time"
 
@@ -20,7 +19,7 @@ import (
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
-func setupCommitteeDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[phase0.Epoch, []*eth2apiv1.AttesterDuty], waitForDuties *BoolValue) (chan struct{}, chan committeeDutiesMap) {
+func setupCommitteeDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[phase0.Epoch, []*eth2apiv1.AttesterDuty], waitForDuties *SafeValue[bool]) (chan struct{}, chan committeeDutiesMap) {
 	fetchDutiesCall := make(chan struct{})
 	executeDutiesCall := make(chan committeeDutiesMap)
 
@@ -103,31 +102,14 @@ func setupCommitteeDutiesMock(s *Scheduler, dutiesMap *hashmap.Map[phase0.Epoch,
 	return fetchDutiesCall, executeDutiesCall
 }
 
-type BoolValue struct {
-	mu sync.Mutex
-	b  bool
-}
-
-func (bv *BoolValue) Set(b bool) {
-	bv.mu.Lock()
-	defer bv.mu.Unlock()
-	bv.b = b
-}
-
-func (bv *BoolValue) Get() bool {
-	bv.mu.Lock()
-	defer bv.mu.Unlock()
-	return bv.b
-}
-
-func TestScheduler_Committee_Same_Slot(t *testing.T) {
+func TestScheduler_Committee_Same_Slot_Attester_Only(t *testing.T) {
 	var (
 		dutyStore     = dutystore.New()
 		attHandler    = NewAttesterHandler(dutyStore.Attester)
 		syncHandler   = NewSyncCommitteeHandler(dutyStore.SyncCommittee)
 		commHandler   = NewCommitteeHandler(dutyStore.Attester, dutyStore.SyncCommittee)
-		currentSlot   = &SlotValue{}
-		waitForDuties = &BoolValue{}
+		currentSlot   = &SafeValue[phase0.Slot]{}
+		waitForDuties = &SafeValue[bool]{}
 		attDutiesMap  = hashmap.New[phase0.Epoch, []*eth2apiv1.AttesterDuty]()
 		//syncDutiesMap = hashmap.New[uint64, []*eth2apiv1.SyncCommitteeDuty]()
 	)
@@ -139,21 +121,19 @@ func TestScheduler_Committee_Same_Slot(t *testing.T) {
 		},
 	})
 
-	waitForDuties.Set(false)
-	currentSlot.SetSlot(phase0.Slot(1))
+	currentSlot.Set(phase0.Slot(1))
 	scheduler, logger, ticker, timeout, cancel, schedulerPool, startFn := setupSchedulerAndMocksCommittee(t, attHandler, syncHandler, commHandler, dutyStore, currentSlot)
 	fetchDutiesCall, executeDutiesCall := setupCommitteeDutiesMock(scheduler, attDutiesMap, waitForDuties)
 	startFn()
 
 	// STEP 1: wait for attester duties to be fetched and executed at the same slot
 	duties, _ := attDutiesMap.Get(phase0.Epoch(0))
-
-	committeeMap := commHandler.buildCommitteeDuties(duties, nil, currentSlot.GetSlot())
+	committeeMap := commHandler.buildCommitteeDuties(duties, nil, currentSlot.Get())
 
 	setExecuteDutyFuncs(scheduler, executeDutiesCall, len(committeeMap))
 
 	startTime := time.Now()
-	ticker.Send(currentSlot.GetSlot())
+	ticker.Send(currentSlot.Get())
 
 	waitForCommitteeDutiesExecution(t, logger, fetchDutiesCall, executeDutiesCall, timeout, committeeMap)
 

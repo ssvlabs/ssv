@@ -74,7 +74,7 @@ type mockSlotTickerService struct {
 	event.Feed
 }
 
-func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *SlotValue) (
+func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *SafeValue[phase0.Slot]) (
 	*Scheduler,
 	*zap.Logger,
 	*mockSlotTickerService,
@@ -135,13 +135,13 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Slot
 
 	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().EstimatedCurrentSlot().DoAndReturn(
 		func() phase0.Slot {
-			return currentSlot.GetSlot()
+			return currentSlot.Get()
 		},
 	).AnyTimes()
 
 	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().EstimatedCurrentEpoch().DoAndReturn(
 		func() phase0.Epoch {
-			return phase0.Epoch(uint64(currentSlot.GetSlot()) / s.network.SlotsPerEpoch())
+			return phase0.Epoch(uint64(currentSlot.Get()) / s.network.SlotsPerEpoch())
 		},
 	).AnyTimes()
 
@@ -162,7 +162,7 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Slot
 	return s, logger, mockSlotService, timeout, cancel, schedulerPool, startFunction
 }
 
-func setupSchedulerAndMocksCommittee(t *testing.T, attHandler, syncHandler, commHandler dutyHandler, dutyStore *dutystore.Store, currentSlot *SlotValue) (
+func setupSchedulerAndMocksCommittee(t *testing.T, attHandler, syncHandler, commHandler dutyHandler, dutyStore *dutystore.Store, currentSlot *SafeValue[phase0.Slot]) (
 	*Scheduler,
 	*zap.Logger,
 	*mockSlotTickerService,
@@ -225,13 +225,13 @@ func setupSchedulerAndMocksCommittee(t *testing.T, attHandler, syncHandler, comm
 
 	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().EstimatedCurrentSlot().DoAndReturn(
 		func() phase0.Slot {
-			return currentSlot.GetSlot()
+			return currentSlot.Get()
 		},
 	).AnyTimes()
 
 	s.network.Beacon.(*mocknetwork.MockBeaconNetwork).EXPECT().EstimatedCurrentEpoch().DoAndReturn(
 		func() phase0.Epoch {
-			return phase0.Epoch(uint64(currentSlot.GetSlot()) / s.network.SlotsPerEpoch())
+			return phase0.Epoch(uint64(currentSlot.Get()) / s.network.SlotsPerEpoch())
 		},
 	).AnyTimes()
 
@@ -402,21 +402,24 @@ func waitForCommitteeDutiesExecution(t *testing.T, logger *zap.Logger, fetchDuti
 	}
 }
 
-type SlotValue struct {
-	mu   sync.Mutex
-	slot phase0.Slot
+// SafeValue is a generic type that can hold any type specified by T.
+type SafeValue[T any] struct {
+	mu sync.Mutex
+	v  T
 }
 
-func (sv *SlotValue) SetSlot(s phase0.Slot) {
+// Set sets the value of SafeValue to the specified value of type T.
+func (sv *SafeValue[T]) Set(v T) {
 	sv.mu.Lock()
 	defer sv.mu.Unlock()
-	sv.slot = s
+	sv.v = v
 }
 
-func (sv *SlotValue) GetSlot() phase0.Slot {
+// Get returns the current value of SafeValue of type T.
+func (sv *SafeValue[T]) Get() T {
 	sv.mu.Lock()
 	defer sv.mu.Unlock()
-	return sv.slot
+	return sv.v
 }
 
 func TestScheduler_Run(t *testing.T) {
