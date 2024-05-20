@@ -19,14 +19,14 @@ import (
 	"github.com/bloxapp/eth2-key-manager/signer"
 	slashingprotection "github.com/bloxapp/eth2-key-manager/slashing_protection"
 	"github.com/bloxapp/eth2-key-manager/wallets"
+	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/bloxapp/ssv/storage/basedb"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/storage/basedb"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 const (
@@ -238,7 +238,7 @@ func (km *ethKeyManagerSigner) signBeaconObject(obj ssz.HashRoot, domain phase0.
 	}
 }
 
-func (km *ethKeyManagerSigner) IsAttestationSlashable(pk []byte, data *phase0.AttestationData) error {
+func (km *ethKeyManagerSigner) IsAttestationSlashable(pk spectypes.ShareValidatorPK, data *phase0.AttestationData) error {
 	if val, err := km.slashingProtector.IsSlashableAttestation(pk, data); err != nil || val != nil {
 		if err != nil {
 			return err
