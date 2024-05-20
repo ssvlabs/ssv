@@ -27,6 +27,7 @@ import (
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
 	"github.com/ssvlabs/ssv/operator/keys"
 	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 	"github.com/ssvlabs/ssv/utils/async"
 	"github.com/ssvlabs/ssv/utils/tasks"
 )
@@ -71,6 +72,7 @@ type p2pNetwork struct {
 	state int32
 
 	activeValidators *hashmap.Map[string, validatorStatus]
+	activeCommittees *hashmap.Map[string, validatorStatus]
 
 	backoffConnector *libp2pdiscbackoff.BackoffConnector
 	subnets          []byte
@@ -98,6 +100,7 @@ func New(logger *zap.Logger, cfg *Config, mr Metrics) network.P2PNetwork {
 		msgValidator:            cfg.MessageValidator,
 		state:                   stateClosed,
 		activeValidators:        hashmap.New[string, validatorStatus](),
+		activeCommittees:        hashmap.New[string, validatorStatus](),
 		nodeStorage:             cfg.NodeStorage,
 		operatorPKHashToPKCache: hashmap.New[string, []byte](),
 		operatorSigner:          cfg.OperatorSigner,
@@ -251,11 +254,19 @@ func (n *p2pNetwork) UpdateSubnets(logger *zap.Logger) {
 		// Compute the new subnets according to the active validators.
 		newSubnets := make([]byte, commons.Subnets())
 		copy(newSubnets, n.subnets)
-		n.activeValidators.Range(func(pkHex string, status validatorStatus) bool {
-			subnet := commons.ValidatorSubnet(pkHex)
-			newSubnets[subnet] = byte(1)
-			return true
-		})
+		if n.cfg.Network.CommitteeSubnetFork() {
+			n.activeCommittees.Range(func(cid string, status validatorStatus) bool {
+				subnet := commons.CommitteeSubnet(types.CommitteeID([]byte(cid)))
+				newSubnets[subnet] = byte(1)
+				return true
+			})
+		} else {
+			n.activeValidators.Range(func(pkHex string, status validatorStatus) bool {
+				subnet := commons.ValidatorSubnet(pkHex)
+				newSubnets[subnet] = byte(1)
+				return true
+			})
+		}
 		n.subnets = newSubnets
 
 		// Compute the not yet registered subnets.

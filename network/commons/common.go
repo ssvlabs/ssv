@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"math/big"
 	"strconv"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 const (
@@ -54,6 +56,11 @@ func ValidatorTopicID(pkByts []byte) []string {
 	return []string{SubnetTopicID(subnet)}
 }
 
+// CommitteeTopicID returns the topic to use for the given committee
+func CommitteeTopicID(cid types.CommitteeID) []string {
+	return []string{strconv.Itoa(CommitteeSubnet(cid))}
+}
+
 // GetTopicFullName returns the topic full name, including prefix
 func GetTopicFullName(baseName string) string {
 	return fmt.Sprintf("%s.%s", topicPrefix, baseName)
@@ -71,6 +78,12 @@ func ValidatorSubnet(validatorPKHex string) int {
 	}
 	val := hexToUint64(validatorPKHex[:10])
 	return int(val % subnetsCount)
+}
+
+// CommitteeSubnet returns the subnet for the given committee
+func CommitteeSubnet(cid types.CommitteeID) int {
+	subnet := new(big.Int).Mod(new(big.Int).SetBytes(cid[:]), new(big.Int).SetUint64(subnetsCount))
+	return int(subnet.Int64())
 }
 
 // MsgIDFunc is the function that maps a message to a msg_id
