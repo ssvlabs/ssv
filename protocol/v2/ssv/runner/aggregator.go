@@ -2,7 +2,6 @@ package runner
 
 import (
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"time"
 
@@ -94,28 +93,16 @@ func (r *AggregatorRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *sp
 	}
 	r.metrics.EndPreConsensus()
 	r.metrics.StartConsensus()
-	logger.Debug("🧩 reconstructed partial signatures",
+	logger.Debug("🧩 reconstructed pre-consensus partial signatures",
 		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)),
 		fields.QuorumTime(r.metrics.GetPreConsensusTime()))
 
 	r.metrics.PauseDutyFullFlow()
-	timeToSubmit := time.Now()
 	// get block data
 	res, ver, err := r.GetBeaconNode().SubmitAggregateSelectionProof(duty.Slot, duty.CommitteeIndex, duty.CommitteeLength, duty.ValidatorIndex, fullSig)
 	if err != nil {
-		took := time.Since(timeToSubmit)
-		logger.Error("failed to aggregate and proof",
-			zap.Duration("time to submit: ", took),
-			zap.Error(err))
 		return errors.Wrap(err, "failed to submit aggregate and proof")
 	}
-	took := time.Since(timeToSubmit)
-	logger.Debug("aggregate selection proof submitted successfully",
-		fields.Slot(duty.Slot),
-		zap.Uint64("validator_index", uint64(duty.ValidatorIndex)),
-		zap.String("signature", hex.EncodeToString(fullSig[:])),
-		zap.Duration("time_to_submit", took),
-	)
 	r.metrics.ContinueDutyFullFlow()
 
 	byts, err := res.MarshalSSZ()
@@ -148,10 +135,7 @@ func (r *AggregatorRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specq
 
 	r.metrics.EndConsensus()
 	r.metrics.StartPostConsensus()
-	duty := r.GetState().StartingDuty
-	logger = logger.With(fields.Slot(duty.Slot))
 
-	startTime := time.Now()
 	aggregateAndProof, err := decidedValue.GetAggregateAndProof()
 	if err != nil {
 		return errors.Wrap(err, "could not get aggregate and proof")
@@ -190,13 +174,8 @@ func (r *AggregatorRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specq
 	}
 
 	if err := r.GetNetwork().Broadcast(ssvMsg.GetID(), msgToBroadcast); err != nil {
-		logger.Error("❌ can't broadcast partial post consensus sig",
-			fields.BroadcastTime(time.Since(startTime)),
-			zap.Error(err))
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
-	logger.Info("✅ partial post consensus sig broadcast successfully",
-		fields.BroadcastTime(time.Since(startTime)))
 	return nil
 }
 
@@ -255,7 +234,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 		r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
 		r.metrics.RoleSubmitted()
 
-		logger.Debug("✅ successful submitted aggregate!",
+		logger.Debug("✅ successful submitted aggregate",
 			fields.ConsensusTime(r.metrics.GetConsensusTime()),
 			fields.PostConsensusTime(r.metrics.GetPostConsensusTime()),
 			fields.SubmissionTime(time.Since(start)),

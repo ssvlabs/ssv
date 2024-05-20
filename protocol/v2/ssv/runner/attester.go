@@ -85,8 +85,6 @@ func (r *AttesterRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbf
 	if !decided {
 		return nil
 	}
-	duty := r.GetState().StartingDuty
-	logger = logger.With(fields.Slot(duty.Slot))
 	r.metrics.EndConsensus()
 	r.metrics.StartPostConsensus()
 
@@ -128,8 +126,6 @@ func (r *AttesterRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbf
 	}
 
 	if err := r.GetNetwork().Broadcast(ssvMsg.GetID(), msgToBroadcast); err != nil {
-		logger.Error("❌ can't broadcast partial post consensus sig",
-			zap.Error(err))
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
 	return nil
@@ -143,7 +139,8 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 
 	duty := r.GetState().DecidedValue.Duty
 	logger = logger.With(fields.Slot(duty.Slot))
-	logger.Debug("🧩 got partial signature", zap.Uint64("signer", signedMsg.Signer))
+	logger.Debug("🧩 got partial signature",
+		zap.Uint64("signer", signedMsg.Signer))
 
 	if !quorum {
 		return nil
