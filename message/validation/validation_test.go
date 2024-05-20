@@ -654,12 +654,12 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
-		message := spectestingutils.SignPartialSigSSVMessage(ks, spectestingutils.SSVMsgAggregator(nil, spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1)))
-		message.OperatorIDs = []spectypes.OperatorID{0}
+		msg := spectestingutils.SignPartialSigSSVMessage(ks, spectestingutils.SSVMsgAggregator(nil, spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1)))
+		msg.OperatorIDs = []spectypes.OperatorID{0}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.ValidatorTopicID(message.SSVMessage.GetID().GetDutyExecutorID())[0]
-		_, err = validator.handleSignedSSVMessage(message, topicID, receivedAt)
+		topicID := commons.ValidatorTopicID(msg.SSVMessage.GetID().GetDutyExecutorID())[0]
+		_, err = validator.handleSignedSSVMessage(msg, topicID, receivedAt)
 		require.ErrorIs(t, err, ErrZeroSigner)
 	})
 
@@ -1632,11 +1632,11 @@ type shareSet struct {
 
 func generateShares(t *testing.T, ks *spectestingutils.TestKeySet, ns storage.Storage, netCfg networkconfig.NetworkConfig) shareSet {
 	activeShare := &ssvtypes.SSVShare{
-		Share: *spectestingutils.TestingShare(ks),
+		Share: *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
 		Metadata: ssvtypes.Metadata{
 			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
 				Status: eth2apiv1.ValidatorStateActiveOngoing,
-				Index:  spectestingutils.TestingShare(ks).ValidatorIndex,
+				Index:  spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex).ValidatorIndex,
 			},
 			Liquidated: false,
 		},
@@ -1645,11 +1645,11 @@ func generateShares(t *testing.T, ks *spectestingutils.TestKeySet, ns storage.St
 	require.NoError(t, ns.Shares().Save(nil, activeShare))
 
 	liquidatedShare := &ssvtypes.SSVShare{
-		Share: *spectestingutils.TestingShare(ks),
+		Share: *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
 		Metadata: ssvtypes.Metadata{
 			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
 				Status: eth2apiv1.ValidatorStateActiveOngoing,
-				Index:  spectestingutils.TestingShare(ks).ValidatorIndex,
+				Index:  spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex).ValidatorIndex,
 			},
 			Liquidated: true,
 		},
@@ -1662,7 +1662,7 @@ func generateShares(t *testing.T, ks *spectestingutils.TestKeySet, ns storage.St
 	require.NoError(t, ns.Shares().Save(nil, liquidatedShare))
 
 	inactiveShare := &ssvtypes.SSVShare{
-		Share: *spectestingutils.TestingShare(ks),
+		Share: *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
 		Metadata: ssvtypes.Metadata{
 			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
 				Status: eth2apiv1.ValidatorStateUnknown,
@@ -1681,7 +1681,7 @@ func generateShares(t *testing.T, ks *spectestingutils.TestKeySet, ns storage.St
 	epoch := netCfg.Beacon.EstimatedEpochAtSlot(slot)
 
 	nonUpdatedMetadataShare := &ssvtypes.SSVShare{
-		Share: *spectestingutils.TestingShare(ks),
+		Share: *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
 		Metadata: ssvtypes.Metadata{
 			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
 				Status:          eth2apiv1.ValidatorStatePendingQueued,
@@ -1698,7 +1698,7 @@ func generateShares(t *testing.T, ks *spectestingutils.TestKeySet, ns storage.St
 	require.NoError(t, ns.Shares().Save(nil, nonUpdatedMetadataShare))
 
 	nonUpdatedMetadataNextEpochShare := &ssvtypes.SSVShare{
-		Share: *spectestingutils.TestingShare(ks),
+		Share: *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
 		Metadata: ssvtypes.Metadata{
 			BeaconMetadata: &beaconprotocol.ValidatorMetadata{
 				Status:          eth2apiv1.ValidatorStatePendingQueued,
@@ -1715,7 +1715,7 @@ func generateShares(t *testing.T, ks *spectestingutils.TestKeySet, ns storage.St
 	require.NoError(t, ns.Shares().Save(nil, nonUpdatedMetadataNextEpochShare))
 
 	noMetadataShare := &ssvtypes.SSVShare{
-		Share: *spectestingutils.TestingShare(ks),
+		Share: *spectestingutils.TestingShare(ks, spectestingutils.TestingValidatorIndex),
 		Metadata: ssvtypes.Metadata{
 			BeaconMetadata: nil,
 			Liquidated:     false,

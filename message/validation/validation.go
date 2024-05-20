@@ -205,6 +205,7 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 		return committee.Operators, validatorIndices, nil
 	}
 
+	// #TODO fixme. can be not only publicKey, but also committeeID
 	publicKey, err := ssvtypes.DeserializeBLSPublicKey(msgID.GetDutyExecutorID())
 	if err != nil {
 		e := ErrDeserializePublicKey

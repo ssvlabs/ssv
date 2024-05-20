@@ -339,6 +339,7 @@ func (c *controller) handleRouterMessages() {
 				continue
 			}
 
+			// #TODO fixme. can be not only publicKey, but also committeeID
 			// TODO: only try copying clusterid if validator failed
 			pk := msg.GetID().GetDutyExecutorID()
 			var cid spectypes.CommitteeID
@@ -381,6 +382,7 @@ func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
 			ncv = item.Value()
 		} else {
 			// Create a new nonCommitteeValidator and cache it.
+			// #TODO fixme. GetDutyExecutorID can be not only publicKey, but also committeeID
 			share := c.sharesStorage.Get(nil, msg.GetID().GetDutyExecutorID())
 			if share == nil {
 				return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetID().GetDutyExecutorID()))
