@@ -102,10 +102,11 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 				h.fetchNextPeriod = true
 			}
 
-			// last slot of period
-			if slot == h.network.Beacon.LastSlotOfSyncPeriod(period) {
-				h.duties.Reset(period - 1)
-			}
+			// TODO: (Alan) genesis support
+			//// last slot of period
+			//if slot == h.network.Beacon.LastSlotOfSyncPeriod(period) {
+			//	h.duties.Reset(period - 1)
+			//}
 
 		case reorgEvent := <-h.reorg:
 			epoch := h.network.Beacon.EstimatedEpochAtSlot(reorgEvent.Slot)
