@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"log"
 	"time"
 
 	"go.uber.org/zap"
@@ -274,6 +275,7 @@ func (cm *ConsensusMetrics) EndBeaconData() {
 	if cm != nil && cm.beaconData != nil && !cm.beaconDataStart.IsZero() {
 		duration := time.Since(cm.beaconDataStart)
 		cm.beaconDataDuration = duration
+		log.Printf("setting beaconDataDuration to %v (started: %s)", duration, cm.beaconDataStart)
 		cm.beaconData.Observe(duration.Seconds())
 		cm.beaconDataStart = time.Time{}
 	}
