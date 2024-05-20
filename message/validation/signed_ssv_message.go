@@ -163,7 +163,7 @@ func (mv *messageValidator) topicMatches(ssvMessage *spectypes.SSVMessage, topic
 		getTopics = commons.CommitteeTopicID
 	}
 
-	topics := getTopics(ssvMessage.GetID().GetSenderID())
+	topics := getTopics(ssvMessage.GetID().GetDutyExecutorID())
 	return slices.Contains(topics, commons.GetTopicBaseName(topic))
 }
 

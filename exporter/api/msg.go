@@ -52,7 +52,7 @@ func NewDecidedAPIMsg(msgs ...*types.SignedSSVMessage) Message {
 	}
 
 	identifier := specqbft.ControllerIdToMessageID(decMsg.Identifier)
-	pkv := identifier.GetSenderID()
+	pkv := identifier.GetDutyExecutorID()
 	role := identifier.GetRoleType()
 	return Message{
 		Type: TypeDecided,

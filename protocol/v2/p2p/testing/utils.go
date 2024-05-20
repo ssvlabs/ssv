@@ -201,7 +201,7 @@ func (m *mockNetwork) Peers(pk spectypes.ValidatorPK) ([]peer.ID, error) {
 }
 
 func (m *mockNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedSSVMessage) error {
-	pk, err := ssvtypes.DeserializeBLSPublicKey(msgID.GetSenderID())
+	pk, err := ssvtypes.DeserializeBLSPublicKey(msgID.GetDutyExecutorID())
 	if err != nil {
 		return err
 	}
@@ -256,7 +256,7 @@ func (m *mockNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
 
 	m.logger.Debug("🔀 CALL SYNC")
 	m.calledDecidedSyncCnt++
-	pk, err := ssvtypes.DeserializeBLSPublicKey(mid.GetSenderID())
+	pk, err := ssvtypes.DeserializeBLSPublicKey(mid.GetDutyExecutorID())
 	if err != nil {
 		return err
 	}
@@ -309,7 +309,7 @@ func (m *mockNetwork) SyncDecidedByRange(identifier spectypes.MessageID, to, fro
 }
 
 func (m *mockNetwork) SyncHighestRoundChange(mid spectypes.MessageID, height specqbft.Height) error {
-	pk, err := ssvtypes.DeserializeBLSPublicKey(mid.GetSenderID())
+	pk, err := ssvtypes.DeserializeBLSPublicKey(mid.GetDutyExecutorID())
 	if err != nil {
 		return err
 	}

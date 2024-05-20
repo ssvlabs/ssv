@@ -56,7 +56,7 @@ func (mv *messageValidator) buildLoggerFields(decodedMessage *queue.DecodedSSVMe
 		return descriptor
 	}
 
-	descriptor.SenderID = decodedMessage.GetID().GetSenderID()
+	descriptor.SenderID = decodedMessage.GetID().GetDutyExecutorID()
 	descriptor.Role = decodedMessage.GetID().GetRoleType()
 	descriptor.SSVMessageType = decodedMessage.GetType()
 
