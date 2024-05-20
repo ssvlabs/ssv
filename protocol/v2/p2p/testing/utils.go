@@ -9,9 +9,6 @@ import (
 	"sync"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv/protocol/v2/message"
-	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
@@ -19,6 +16,9 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // MockMessageEvent is an abstraction used to push stream/pubsub messages

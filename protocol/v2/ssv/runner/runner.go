@@ -3,6 +3,8 @@ package runner
 import (
 	"sync"
 
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -10,14 +12,13 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
 	"github.com/pkg/errors"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"go.uber.org/zap"
-
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
 )
 
 type Getters interface {
 	GetBaseRunner() *BaseRunner
-	GetBeaconNode() specssv.BeaconNode
+	GetBeaconNode() beacon.BeaconNode
 	GetValCheckF() specqbft.ProposedValueCheckF
 	GetSigner() spectypes.BeaconSigner
 	GetOperatorSigner() spectypes.OperatorSigner

@@ -1,12 +1,11 @@
 package qbft
 
 import (
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 )
 
 type signing interface {
@@ -46,7 +45,7 @@ type Config struct {
 	ValueCheckF           specqbft.ProposedValueCheckF
 	ProposerF             specqbft.ProposerF
 	Storage               qbftstorage.QBFTStore
-	Network               specssv.Network
+	Network               specqbft.Network
 	Timer                 roundtimer.Timer
 	SignatureVerification bool
 	SignatureVerifier     spectypes.SignatureVerifier

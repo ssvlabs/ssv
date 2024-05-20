@@ -8,7 +8,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/logging/fields"
 )
 
 const voluntaryExitSlotsToPostpone = phase0.Slot(4)

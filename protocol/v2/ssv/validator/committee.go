@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/bloxapp/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/logging/fields"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/pkg/errors"
@@ -14,10 +14,10 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/ibft/storage"
-	"github.com/bloxapp/ssv/protocol/v2/message"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
+	"github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 )
 
 type Committee struct {

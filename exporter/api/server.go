@@ -9,9 +9,9 @@ import (
 	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/utils/tasks"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/utils/tasks"
 )
 
 const (

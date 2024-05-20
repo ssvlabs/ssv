@@ -19,10 +19,10 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
-	"github.com/bloxapp/ssv/operator/slotticker"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/logging/fields"
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
+	"github.com/ssvlabs/ssv/operator/slotticker"
+	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 const (
@@ -119,8 +119,6 @@ type Client interface {
 	eth2client.NodeSyncingProvider
 	eth2client.ProposalProvider
 	eth2client.ProposalSubmitter
-	eth2client.BlindedProposalProvider
-	eth2client.V3ProposalProvider
 	eth2client.BlindedProposalSubmitter
 	eth2client.DomainProvider
 	eth2client.SyncCommitteeMessagesSubmitter
@@ -182,6 +180,7 @@ func New(
 		// LogLevel supplies the level of logging to carry out.
 		eth2clienthttp.WithLogLevel(zerolog.DebugLevel),
 		eth2clienthttp.WithTimeout(commonTimeout),
+		eth2clienthttp.WithReducedMemoryUsage(true),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create http client: %w", err)

@@ -16,8 +16,8 @@ import (
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/module"
 
-	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
+	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
+	"github.com/ssvlabs/ssv/utils/rsaencryption"
 )
 
 var (

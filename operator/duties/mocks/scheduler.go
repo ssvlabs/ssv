@@ -13,9 +13,9 @@ import (
 	client "github.com/attestantio/go-eth2-client"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
-	types "github.com/bloxapp/ssv/protocol/v2/types"
 	types0 "github.com/ethereum/go-ethereum/core/types"
 	gomock "github.com/golang/mock/gomock"
+	types "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // MockSlotTicker is a mock of SlotTicker interface.

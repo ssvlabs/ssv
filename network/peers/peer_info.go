@@ -4,10 +4,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bloxapp/ssv/network/records"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	ma "github.com/multiformats/go-multiaddr"
+	"github.com/ssvlabs/ssv/network/records"
 )
 
 type PeerInfo struct {

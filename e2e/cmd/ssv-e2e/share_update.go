@@ -8,18 +8,18 @@ import (
 	"os"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	"github.com/bloxapp/ssv/ekm"
-	"github.com/bloxapp/ssv/networkconfig"
-	operatorstorage "github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
-	"github.com/bloxapp/ssv/utils/blskeygen"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/ssvlabs/ssv-spec/types"
+	"github.com/ssvlabs/ssv/ekm"
+	"github.com/ssvlabs/ssv/networkconfig"
+	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/kv"
+	"github.com/ssvlabs/ssv/utils/blskeygen"
+	"github.com/ssvlabs/ssv/utils/rsaencryption"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 
-	"github.com/bloxapp/ssv/e2e/logs_catcher"
+	"github.com/ssvlabs/ssv/e2e/logs_catcher"
 )
 
 type ShareUpdateCmd struct {

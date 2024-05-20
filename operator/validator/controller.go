@@ -22,31 +22,31 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 
-	"github.com/bloxapp/ssv/ibft/storage"
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/message/validation"
-	"github.com/bloxapp/ssv/network"
-	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
-	"github.com/bloxapp/ssv/operator/duties"
-	nodestorage "github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/operator/validators"
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v2/message"
-	p2pprotocol "github.com/bloxapp/ssv/protocol/v2/p2p"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	qbftcontroller "github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-	"github.com/bloxapp/ssv/protocol/v2/queue/worker"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
-	"github.com/bloxapp/ssv/protocol/v2/types"
-	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/message/validation"
+	"github.com/ssvlabs/ssv/network"
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
+	"github.com/ssvlabs/ssv/operator/duties"
+	nodestorage "github.com/ssvlabs/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/operator/validators"
+	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
+	p2pprotocol "github.com/ssvlabs/ssv/protocol/v2/p2p"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	qbftcontroller "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	"github.com/ssvlabs/ssv/protocol/v2/queue/worker"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
+	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/controller.go -source=./controller.go
@@ -73,7 +73,6 @@ type ControllerOptions struct {
 	Beacon                     beaconprotocol.BeaconNode
 	FullNode                   bool `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Save decided history rather than just highest messages"`
 	Exporter                   bool `yaml:"Exporter" env:"EXPORTER" env-default:"false" env-description:""`
-	BuilderProposals           bool `yaml:"BuilderProposals" env:"BUILDER_PROPOSALS" env-default:"false" env-description:"Use external builders to produce blocks"`
 	BeaconSigner               spectypes.BeaconSigner
 	OperatorSigner             spectypes.OperatorSigner
 	OperatorDataStore          operatordatastore.OperatorDataStore
@@ -100,7 +99,7 @@ type Controller interface {
 	AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex
 	GetValidator(pubKey spectypes.ValidatorPK) (*validator.Validator, bool)
 	ExecuteDuty(logger *zap.Logger, duty *spectypes.BeaconDuty)
-	ExecuteCommitteeDuty(logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty)
+	ExecuteCommitteeDuty(logger *zap.Logger, committeeID spectypes.ClusterID, duty *spectypes.CommitteeDuty)
 	UpdateValidatorMetaDataLoop()
 	StartNetworkHandlers()
 	GetOperatorShares() []*ssvtypes.SSVShare
@@ -218,7 +217,6 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		NewDecidedHandler: options.NewDecidedHandler,
 		FullNode:          options.FullNode,
 		Exporter:          options.Exporter,
-		BuilderProposals:  options.BuilderProposals,
 		GasLimit:          options.GasLimit,
 		MessageValidator:  options.MessageValidator,
 		Metrics:           options.Metrics,
@@ -341,8 +339,8 @@ func (c *controller) handleRouterMessages() {
 
 			// #TODO fixme. can be not only publicKey, but also committeeID
 			// TODO: only try copying clusterid if validator failed
-			pk := msg.GetID().GetDutyExecutorID()
-			var cid spectypes.CommitteeID
+			pk := msg.GetID().GetSenderID()
+			var cid spectypes.ClusterID
 			copy(cid[:], pk[16:])
 
 			if v, ok := c.validatorsMap.GetValidator(spectypes.ValidatorPK(pk)); ok {
@@ -385,7 +383,7 @@ func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
 			// #TODO fixme. GetDutyExecutorID can be not only publicKey, but also committeeID
 			share := c.sharesStorage.Get(nil, msg.GetID().GetDutyExecutorID())
 			if share == nil {
-				return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetID().GetDutyExecutorID()))
+				return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetID().GetSenderID()))
 			}
 
 			opts := c.validatorOptions
@@ -721,7 +719,7 @@ func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.BeaconDuty)
 	}
 }
 
-func (c *controller) ExecuteCommitteeDuty(logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) {
+func (c *controller) ExecuteCommitteeDuty(logger *zap.Logger, committeeID spectypes.ClusterID, duty *spectypes.CommitteeDuty) {
 	logger = logger.With(fields.Slot(duty.Slot), fields.Role(duty.RunnerRole()))
 
 	if cm, ok := c.validatorsMap.GetCommittee(committeeID); ok {
@@ -757,7 +755,7 @@ func CreateDutyExecuteMsg(duty *spectypes.BeaconDuty, pubKey []byte, domain spec
 }
 
 // CreateCommitteeDutyExecuteMsg returns ssvMsg with event type of execute committee duty
-func CreateCommitteeDutyExecuteMsg(duty *spectypes.CommitteeDuty, committeeID spectypes.CommitteeID, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
+func CreateCommitteeDutyExecuteMsg(duty *spectypes.CommitteeDuty, committeeID spectypes.ClusterID, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
 	executeCommitteeDutyData := types.ExecuteCommitteeDutyData{Duty: duty}
 	data, err := json.Marshal(executeCommitteeDutyData)
 	if err != nil {
@@ -1245,7 +1243,6 @@ func SetupRunners(ctx context.Context, logger *zap.Logger, options validator.Opt
 			proposedValueCheck := specssv.ProposerValueCheckF(options.Signer, options.BeaconNetwork.GetBeaconNetwork(), options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index, options.SSVShare.SharePubKey)
 			qbftCtrl := buildController(spectypes.RoleProposer, proposedValueCheck)
 			runners[role] = runner.NewProposerRunner(options.BeaconNetwork.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, proposedValueCheck, 0)
-			runners[role].(*runner.ProposerRunner).ProducesBlindedBlocks = options.BuilderProposals // apply blinded block flag
 		case spectypes.RoleAggregator:
 			aggregatorValueCheckF := specssv.AggregatorValueCheckF(options.Signer, options.BeaconNetwork.GetBeaconNetwork(), options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
 			qbftCtrl := buildController(spectypes.RoleAggregator, aggregatorValueCheckF)

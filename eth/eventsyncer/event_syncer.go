@@ -10,13 +10,13 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/eth/executionclient"
-	"github.com/bloxapp/ssv/logging/fields"
-	nodestorage "github.com/bloxapp/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/eth/executionclient"
+	"github.com/ssvlabs/ssv/logging/fields"
+	nodestorage "github.com/ssvlabs/ssv/operator/storage"
 )
 
 // TODO: check if something from these PRs need to be ported:
-// https://github.com/bloxapp/ssv/pull/1053
+// https://github.com/ssvlabs/ssv/pull/1053
 
 var (
 	// ErrNodeNotReady is returned when node is not ready.

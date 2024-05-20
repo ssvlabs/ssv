@@ -3,16 +3,16 @@ package p2pv1
 import (
 	"strconv"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/network/peers/connections"
-	"github.com/bloxapp/ssv/network/topics"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/network/peers/connections"
+	"github.com/ssvlabs/ssv/network/topics"
 
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/utils/format"
+	"github.com/ssvlabs/ssv/utils/format"
 )
 
 type Metrics interface {

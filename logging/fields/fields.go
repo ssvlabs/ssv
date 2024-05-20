@@ -20,12 +20,12 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
-	"github.com/bloxapp/ssv/eth/contract"
-	"github.com/bloxapp/ssv/logging/fields/stringer"
-	"github.com/bloxapp/ssv/network/records"
-	"github.com/bloxapp/ssv/protocol/v2/message"
-	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
-	"github.com/bloxapp/ssv/utils/format"
+	"github.com/ssvlabs/ssv/eth/contract"
+	"github.com/ssvlabs/ssv/logging/fields/stringer"
+	"github.com/ssvlabs/ssv/network/records"
+	"github.com/ssvlabs/ssv/protocol/v2/message"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
+	"github.com/ssvlabs/ssv/utils/format"
 )
 
 const (
@@ -322,10 +322,6 @@ func FeeRecipient(pubKey []byte) zap.Field {
 	return zap.Stringer(FieldFeeRecipient, stringer.HexStringer{Val: pubKey})
 }
 
-func BuilderProposals(v bool) zap.Field {
-	return zap.Bool(FieldBuilderProposals, v)
-}
-
 func FormatDutyID(epoch phase0.Epoch, duty *spectypes.BeaconDuty) string {
 	return fmt.Sprintf("%v-e%v-s%v-v%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
 }
@@ -365,8 +361,8 @@ func ClusterIndex(cluster contract.ISSVNetworkCoreCluster) zap.Field {
 	return zap.Uint64(FieldClusterIndex, cluster.Index)
 }
 
-func CommitteeID(val spectypes.CommitteeID) zap.Field {
-	return zap.String(FieldCommitteeID, hex.EncodeToString(val[:]))
+func CommitteeID(val spectypes.ClusterID) zap.Field {
+	return zap.String(FieldCommitteeID, string(val[:]))
 }
 
 func Owner(addr common.Address) zap.Field {

@@ -12,9 +12,9 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/exp/maps"
 
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	"github.com/bloxapp/ssv/protocol/v2/types"
-	"github.com/bloxapp/ssv/storage/basedb"
+	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/storage/basedb"
 )
 
 var sharesPrefix = []byte("shares")

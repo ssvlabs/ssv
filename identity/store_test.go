@@ -7,10 +7,10 @@ import (
 	gcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/kv"
 )
 
 var (

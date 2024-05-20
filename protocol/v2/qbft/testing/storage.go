@@ -4,10 +4,10 @@ import (
 	"context"
 	"sync"
 
-	qbftstorage "github.com/bloxapp/ssv/ibft/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+	qbftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/kv"
 	"go.uber.org/zap"
 )
 

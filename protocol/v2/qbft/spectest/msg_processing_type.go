@@ -15,11 +15,11 @@ import (
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 	"github.com/stretchr/testify/require"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/instance"
-	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
-	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/instance"
+	qbfttesting "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
 // RunMsgProcessing processes MsgProcessingSpecTest. It probably may be removed.
@@ -30,7 +30,6 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 	preByts, _ := test.Pre.Encode()
 	msgId := specqbft.ControllerIdToMessageID(test.Pre.State.ID)
 	logger := logging.TestLogger(t)
-	
 	pre := instance.NewInstance(
 		qbfttesting.TestingConfig(logger, spectestingutils.KeySetForOperator(test.Pre.State.Share), msgId.GetRoleType()),
 		test.Pre.State.Share,

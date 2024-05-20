@@ -4,23 +4,24 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
 )
 
 type AggregatorRunner struct {
 	BaseRunner *BaseRunner
 
-	beacon         specssv.BeaconNode
+	beacon         beacon.BeaconNode
 	network        specqbft.Network
 	signer         spectypes.BeaconSigner
 	operatorSigner spectypes.OperatorSigner
@@ -35,7 +36,7 @@ func NewAggregatorRunner(
 	beaconNetwork spectypes.BeaconNetwork,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
-	beacon specssv.BeaconNode,
+	beacon beacon.BeaconNode,
 	network specqbft.Network,
 	signer spectypes.BeaconSigner,
 	operatorSigner spectypes.OperatorSigner,
@@ -292,7 +293,7 @@ func (r *AggregatorRunner) GetNetwork() specqbft.Network {
 	return r.network
 }
 
-func (r *AggregatorRunner) GetBeaconNode() specssv.BeaconNode {
+func (r *AggregatorRunner) GetBeaconNode() beacon.BeaconNode {
 	return r.beacon
 }
 

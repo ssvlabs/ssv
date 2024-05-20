@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv/logging"
+	"github.com/ssvlabs/ssv/logging"
 	"github.com/stretchr/testify/require"
 )
 

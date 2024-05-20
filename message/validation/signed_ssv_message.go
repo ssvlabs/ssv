@@ -11,8 +11,8 @@ import (
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"golang.org/x/exp/slices"
 
-	"github.com/bloxapp/ssv/network/commons"
-	ssvmessage "github.com/bloxapp/ssv/protocol/v2/message"
+	"github.com/ssvlabs/ssv/network/commons"
+	ssvmessage "github.com/ssvlabs/ssv/protocol/v2/message"
 )
 
 func (mv *messageValidator) decodeSignedSSVMessage(pMsg *pubsub.Message) (*spectypes.SignedSSVMessage, error) {

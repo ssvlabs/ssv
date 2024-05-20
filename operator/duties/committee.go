@@ -9,7 +9,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
 type CommitteeHandler struct {
@@ -136,7 +136,7 @@ func (h *CommitteeHandler) processExecution(period uint64, epoch phase0.Epoch, s
 		return
 	}
 
-	vsmap := make(map[phase0.ValidatorIndex]spectypes.CommitteeID, 0)
+	vsmap := make(map[phase0.ValidatorIndex]spectypes.ClusterID, 0)
 	vs := h.validatorProvider.SelfParticipatingValidators(epoch)
 	for _, v := range vs {
 		vsmap[v.ValidatorIndex] = v.CommitteeID()

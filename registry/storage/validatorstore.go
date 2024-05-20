@@ -8,7 +8,7 @@ import (
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/validatorstore.go -source=./validatorstore.go

@@ -9,7 +9,7 @@ import (
 	spec "github.com/attestantio/go-eth2-client/spec/phase0"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 var SupportedConfigs = map[string]NetworkConfig{

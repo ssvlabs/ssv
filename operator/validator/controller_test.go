@@ -16,16 +16,16 @@ import (
 	"github.com/herumi/bls-eth-go-binary/bls"
 	"github.com/pkg/errors"
 
-	"github.com/bloxapp/ssv/ekm"
-	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
-	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
-	"github.com/bloxapp/ssv/operator/keys"
-	"github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/operator/validator/mocks"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
+	"github.com/ssvlabs/ssv/ekm"
+	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
+	"github.com/ssvlabs/ssv/operator/keys"
+	"github.com/ssvlabs/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/operator/validator/mocks"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/kv"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -33,14 +33,14 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/operator/validators"
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/operator/validators"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 
-	"github.com/bloxapp/ssv/protocol/v2/queue/worker"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/protocol/v2/queue/worker"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 const (

@@ -5,11 +5,11 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/network/records"
 	connmgrcore "github.com/libp2p/go-libp2p/core/connmgr"
 	libp2pnetwork "github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/network/records"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )

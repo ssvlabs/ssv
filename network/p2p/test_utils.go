@@ -12,18 +12,18 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/bloxapp/ssv/message/validation"
-	"github.com/bloxapp/ssv/monitoring/metricsreporter"
-	"github.com/bloxapp/ssv/network"
-	"github.com/bloxapp/ssv/network/commons"
-	p2pcommons "github.com/bloxapp/ssv/network/commons"
-	"github.com/bloxapp/ssv/network/discovery"
-	"github.com/bloxapp/ssv/network/peers/connections/mock"
-	"github.com/bloxapp/ssv/network/testing"
-	"github.com/bloxapp/ssv/networkconfig"
-	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	"github.com/bloxapp/ssv/utils/format"
+	"github.com/ssvlabs/ssv/message/validation"
+	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
+	"github.com/ssvlabs/ssv/network"
+	"github.com/ssvlabs/ssv/network/commons"
+	p2pcommons "github.com/ssvlabs/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/discovery"
+	"github.com/ssvlabs/ssv/network/peers/connections/mock"
+	"github.com/ssvlabs/ssv/network/testing"
+	"github.com/ssvlabs/ssv/networkconfig"
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/utils/format"
 )
 
 // TODO: (Alan) might have to rename this file back to test_utils.go if non-test files require it.
@@ -139,7 +139,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 		RegisteredOperatorPublicKeyPEMs: []string{},
 	}
 	cfg.Metrics = nil
-	cfg.MessageValidator = validation.NewMessageValidator(networkconfig.TestNetwork)
+	cfg.MessageValidator = nil //validation.NewMessageValidator(networkconfig.TestNetwork)
 	cfg.Network = networkconfig.TestNetwork
 	if options.TotalValidators > 0 {
 		cfg.GetValidatorStats = func() (uint64, uint64, uint64, error) {
@@ -159,7 +159,7 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 	if options.MessageValidatorProvider != nil {
 		cfg.MessageValidator = options.MessageValidatorProvider(nodeIndex)
 	} else {
-		cfg.MessageValidator = validation.NewMessageValidator(networkconfig.TestNetwork, validation.WithSelfAccept(selfPeerID, true))
+		cfg.MessageValidator = nil //validation.NewMessageValidator(networkconfig.TestNetwork, validation.WithSelfAccept(selfPeerID, true))
 	}
 
 	if options.PeerScoreInspector != nil && options.PeerScoreInspectorInterval > 0 {

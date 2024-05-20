@@ -10,20 +10,21 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/protocol/v2/qbft"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-	qbfttesting "github.com/bloxapp/ssv/protocol/v2/qbft/testing"
-	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
-
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
+
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
+	qbfttesting "github.com/ssvlabs/ssv/protocol/v2/qbft/testing"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
 func RunControllerSpecTest(t *testing.T, test *spectests.ControllerSpecTest) {

@@ -14,7 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	beaconprotocol "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
+	beaconprotocol "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 )
 
 const (

@@ -7,8 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
 	"github.com/google/go-cmp/cmp"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
@@ -16,10 +14,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	protocolssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
-	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
 type MsgProcessingSpecTest struct {
@@ -55,7 +54,7 @@ func (test *MsgProcessingSpecTest) runPreTesting(logger *zap.Logger) (*validator
 		share = validatorShare
 		break
 	}
-	v := protocolssvtesting.BaseValidator(logger, spectestingutils.KeySetForShare(share))
+	v := protocoltesting.BaseValidator(logger, spectestingutils.KeySetForShare(share))
 	v.DutyRunners[test.Runner.GetBaseRunner().RunnerRoleType] = test.Runner
 	v.Network = test.Runner.GetNetwork()
 
