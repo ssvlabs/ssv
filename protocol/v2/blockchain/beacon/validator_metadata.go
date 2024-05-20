@@ -80,14 +80,10 @@ func UpdateValidatorsMetadata(logger *zap.Logger, pubKeys [][]byte, collection V
 	// TODO: importing logging/fields causes import cycle
 	logger.Debug("🆕 got validators metadata", zap.Int("requested", len(pubKeys)),
 		zap.Int("received", len(results)))
-
-	startdb := time.Now()
-
 	if err := collection.UpdateValidatorsMetadata(results); err != nil {
 		logger.Error("❗ failed to update validators metadata",
 			zap.Error(err))
 	}
-	logger.Debug("🆕 updated validators metadata in storage", zap.Duration("elapsed", time.Since(startdb)))
 	for pk, meta := range results {
 		if onUpdated != nil {
 			onUpdated(pk, meta)

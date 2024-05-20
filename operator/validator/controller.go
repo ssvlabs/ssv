@@ -638,11 +638,13 @@ func (c *controller) UpdateValidatorsMetadata(data map[spectypes.ValidatorPK]*be
 		}
 	}
 
+	startdb := time.Now()
 	// Save metadata to share storage.
 	err := c.sharesStorage.UpdateValidatorsMetadata(data)
 	if err != nil {
 		return errors.Wrap(err, "could not update validator metadata")
 	}
+	c.logger.Debug("🆕 updated validators metadata in storage", zap.Duration("elapsed", time.Since(startdb)), zap.Int("count", len(data)))
 
 	pks := maps.Keys(data)
 
