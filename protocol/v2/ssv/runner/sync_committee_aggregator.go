@@ -128,6 +128,7 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(logger *zap.Logger, 
 	// fetch contributions
 	r.metrics.PauseDutyFullFlow()
 	r.metrics.StartBeaconData()
+	duty := r.GetState().StartingDuty
 	contributions, ver, err := r.GetBeaconNode().GetSyncCommitteeContribution(duty.Slot, selectionProofs, subnets)
 	if err != nil {
 		return errors.Wrap(err, "could not get sync committee contribution")
@@ -141,7 +142,6 @@ func (r *SyncCommitteeAggregatorRunner) ProcessPreConsensus(logger *zap.Logger, 
 	}
 
 	// create consensus object
-	duty := r.GetState().StartingDuty
 	input := &spectypes.ConsensusData{
 		Duty:    *duty,
 		Version: ver,
