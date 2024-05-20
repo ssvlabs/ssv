@@ -187,7 +187,13 @@ func (mv *messageValidator) validateQBFTLogic(
 		}
 	}
 
-	return mv.roundBelongsToAllowedSpread(signedSSVMessage, consensusMessage, receivedAt)
+	if len(signedSSVMessage.GetOperatorIDs()) == 1 {
+		if err := mv.roundBelongsToAllowedSpread(signedSSVMessage, consensusMessage, receivedAt); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (mv *messageValidator) validateQBFTMessageByDutyLogic(
