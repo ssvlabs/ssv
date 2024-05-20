@@ -9,13 +9,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bloxapp/ssv/eth/contract"
-	"github.com/bloxapp/ssv/eth/simulator"
-	operatordatastore "github.com/bloxapp/ssv/operator/datastore"
-	"github.com/bloxapp/ssv/operator/keys"
-	"github.com/bloxapp/ssv/operator/validatorsmap"
-	"github.com/bloxapp/ssv/utils/rsaencryption"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ssvlabs/ssv/eth/contract"
+	"github.com/ssvlabs/ssv/eth/simulator"
+	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
+	"github.com/ssvlabs/ssv/operator/keys"
+	"github.com/ssvlabs/ssv/operator/validatorsmap"
+	"github.com/ssvlabs/ssv/utils/rsaencryption"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -27,20 +27,20 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest"
 
-	"github.com/bloxapp/ssv/ekm"
+	"github.com/ssvlabs/ssv/ekm"
 
-	"github.com/bloxapp/ssv/eth/eventhandler"
-	"github.com/bloxapp/ssv/eth/eventparser"
-	"github.com/bloxapp/ssv/eth/executionclient"
-	"github.com/bloxapp/ssv/eth/simulator/simcontract"
-	ibftstorage "github.com/bloxapp/ssv/ibft/storage"
-	"github.com/bloxapp/ssv/networkconfig"
-	operatorstorage "github.com/bloxapp/ssv/operator/storage"
-	"github.com/bloxapp/ssv/operator/validator"
-	"github.com/bloxapp/ssv/protocol/v2/blockchain/beacon"
-	registrystorage "github.com/bloxapp/ssv/registry/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
+	"github.com/ssvlabs/ssv/eth/eventhandler"
+	"github.com/ssvlabs/ssv/eth/eventparser"
+	"github.com/ssvlabs/ssv/eth/executionclient"
+	"github.com/ssvlabs/ssv/eth/simulator/simcontract"
+	ibftstorage "github.com/ssvlabs/ssv/ibft/storage"
+	"github.com/ssvlabs/ssv/networkconfig"
+	operatorstorage "github.com/ssvlabs/ssv/operator/storage"
+	"github.com/ssvlabs/ssv/operator/validator"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
+	registrystorage "github.com/ssvlabs/ssv/registry/storage"
+	"github.com/ssvlabs/ssv/storage/basedb"
+	"github.com/ssvlabs/ssv/storage/kv"
 )
 
 var (
@@ -158,7 +158,7 @@ func setupEventHandler(
 	operatorDataStore := operatordatastore.New(operatorData)
 	testNetworkConfig := networkconfig.TestNetwork
 
-	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, true, "")
+	keyManager, err := ekm.NewETHKeyManagerSigner(logger, db, testNetworkConfig, "")
 	if err != nil {
 		logger.Fatal("could not create new eth-key-manager signer", zap.Error(err))
 	}

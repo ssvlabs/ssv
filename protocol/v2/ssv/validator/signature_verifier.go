@@ -3,10 +3,10 @@ package validator
 import (
 	"fmt"
 
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	"github.com/cornelk/hashmap"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/bloxapp/ssv/operator/keys"
+	"github.com/ssvlabs/ssv/operator/keys"
 )
 
 type SignatureVerifier struct {

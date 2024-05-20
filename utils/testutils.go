@@ -7,8 +7,8 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/golang/mock/gomock"
 
-	"github.com/bloxapp/ssv/networkconfig"
-	mocknetwork "github.com/bloxapp/ssv/protocol/v2/blockchain/beacon/mocks"
+	"github.com/ssvlabs/ssv/networkconfig"
+	mocknetwork "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon/mocks"
 )
 
 type SlotValue struct {

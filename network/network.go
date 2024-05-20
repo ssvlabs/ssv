@@ -6,8 +6,8 @@ import (
 
 	"go.uber.org/zap"
 
-	protocolp2p "github.com/bloxapp/ssv/protocol/v2/p2p"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
+	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
 // MessageRouter is accepting network messages and route them to the corresponding (internal) components

@@ -11,21 +11,21 @@ import (
 	eth2client "github.com/attestantio/go-eth2-client"
 	eth2apiv1 "github.com/attestantio/go-eth2-client/api/v1"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prysmaticlabs/prysm/v4/async/event"
 	"github.com/sourcegraph/conc/pool"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/beacon/goclient"
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/operator/duties/dutystore"
-	"github.com/bloxapp/ssv/operator/slotticker"
-	"github.com/bloxapp/ssv/protocol/v2/types"
+	"github.com/ssvlabs/ssv/beacon/goclient"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/operator/duties/dutystore"
+	"github.com/ssvlabs/ssv/operator/slotticker"
+	"github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 //go:generate mockgen -package=mocks -destination=./mocks/scheduler.go -source=./scheduler.go
@@ -86,7 +86,6 @@ type SchedulerOptions struct {
 	IndicesChg          chan struct{}
 	ValidatorExitCh     <-chan ExitDescriptor
 	SlotTickerProvider  slotticker.Provider
-	BuilderProposals    bool
 	DutyStore           *dutystore.Store
 }
 
@@ -97,7 +96,6 @@ type Scheduler struct {
 	validatorController ValidatorController
 	slotTickerProvider  slotticker.Provider
 	executeDuty         ExecuteDutyFunc
-	builderProposals    bool
 
 	handlers            []dutyHandler
 	blockPropagateDelay time.Duration
@@ -127,7 +125,6 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 		slotTickerProvider:  opts.SlotTickerProvider,
 		executeDuty:         opts.ExecuteDuty,
 		validatorController: opts.ValidatorController,
-		builderProposals:    opts.BuilderProposals,
 		indicesChg:          opts.IndicesChg,
 		blockPropagateDelay: blockPropagationDelay,
 
@@ -136,15 +133,14 @@ func NewScheduler(opts *SchedulerOptions) *Scheduler {
 			NewProposerHandler(dutyStore.Proposer),
 			NewSyncCommitteeHandler(dutyStore.SyncCommittee),
 			NewVoluntaryExitHandler(opts.ValidatorExitCh),
+			NewValidatorRegistrationHandler(),
 		},
 
 		ticker:   opts.SlotTickerProvider(),
 		reorg:    make(chan ReorgEvent),
 		waitCond: sync.NewCond(&sync.Mutex{}),
 	}
-	if s.builderProposals {
-		s.handlers = append(s.handlers, NewValidatorRegistrationHandler())
-	}
+
 	return s
 }
 

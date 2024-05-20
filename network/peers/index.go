@@ -10,7 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
 
-	"github.com/bloxapp/ssv/network/records"
+	"github.com/ssvlabs/ssv/network/records"
 )
 
 const (

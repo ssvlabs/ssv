@@ -3,8 +3,8 @@ package flags
 import (
 	"github.com/spf13/cobra"
 
-	"github.com/bloxapp/ssv/networkconfig"
-	"github.com/bloxapp/ssv/utils/cliflag"
+	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/utils/cliflag"
 )
 
 // Flag names.

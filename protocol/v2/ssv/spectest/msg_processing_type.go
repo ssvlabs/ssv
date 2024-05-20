@@ -7,21 +7,21 @@ import (
 	"strings"
 	"testing"
 
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	specssv "github.com/bloxapp/ssv-spec/ssv"
-	spectypes "github.com/bloxapp/ssv-spec/types"
-	spectestingutils "github.com/bloxapp/ssv-spec/types/testingutils"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	specssv "github.com/ssvlabs/ssv-spec/ssv"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
+	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
-	typescomparable "github.com/bloxapp/ssv-spec/types/testingutils/comparable"
+	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
 
-	"github.com/bloxapp/ssv/logging"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner"
-	ssvtesting "github.com/bloxapp/ssv/protocol/v2/ssv/testing"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/validator"
-	protocoltesting "github.com/bloxapp/ssv/protocol/v2/testing"
+	"github.com/ssvlabs/ssv/logging"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
+	ssvtesting "github.com/ssvlabs/ssv/protocol/v2/ssv/testing"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
+	protocoltesting "github.com/ssvlabs/ssv/protocol/v2/testing"
 )
 
 type MsgProcessingSpecTest struct {

@@ -12,24 +12,22 @@ import (
 	"github.com/attestantio/go-eth2-client/spec/capella"
 	"github.com/attestantio/go-eth2-client/spec/deneb"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
-	specqbft "github.com/bloxapp/ssv-spec/qbft"
-	specssv "github.com/bloxapp/ssv-spec/ssv"
-	spectypes "github.com/bloxapp/ssv-spec/types"
 	ssz "github.com/ferranbt/fastssz"
 	"github.com/pkg/errors"
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	specssv "github.com/ssvlabs/ssv-spec/ssv"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/attestantio/go-eth2-client/spec"
 
-	"github.com/bloxapp/ssv/logging/fields"
-	"github.com/bloxapp/ssv/protocol/v2/qbft/controller"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/runner/metrics"
+	"github.com/ssvlabs/ssv/logging/fields"
+	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
 )
 
 type ProposerRunner struct {
 	BaseRunner *BaseRunner
-	// ProducesBlindedBlocks is true when the runner will only produce blinded blocks
-	ProducesBlindedBlocks bool
 
 	beacon         specssv.BeaconNode
 	network        specssv.Network
@@ -109,36 +107,22 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 		fields.QuorumTime(r.metrics.GetPreConsensusTime()))
 
 	r.metrics.StartBeaconData()
-	var start = time.Now()
-	var ver spec.DataVersion
-	var obj ssz.Marshaler
-
-	if r.ProducesBlindedBlocks {
-		// get block data
-		obj, ver, err = r.GetBeaconNode().GetBlindedBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
-		if err != nil {
-			logger.Error("❌ failed to get blinded beacon block",
-				fields.QuorumTime(r.metrics.GetPreConsensusTime()),
-				fields.BlockTime(time.Since(start)),
-				zap.Error(err))
-			return errors.Wrap(err, "failed to get blinded beacon block")
-		}
-	} else {
-		// get block data
-		obj, ver, err = r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
-		if err != nil {
-			logger.Error("❌ failed to get beacon block",
-				fields.QuorumTime(r.metrics.GetPreConsensusTime()),
-				fields.BlockTime(time.Since(start)),
-				zap.Error(err))
-			return errors.Wrap(err, "failed to get beacon block")
-		}
+	start := time.Now()
+	obj, ver, err := r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
+	if err != nil {
+		logger.Error("❌ failed to get blinded beacon block",
+			fields.QuorumTime(r.metrics.GetPreConsensusTime()),
+			fields.BlockTime(time.Since(start)),
+			zap.Error(err))
+		return errors.Wrap(err, "failed to get beacon block")
 	}
+
 	// Log essentials about the retrieved block.
 	blockSummary, summarizeErr := summarizeBlock(obj)
 	logger.Info("🧊 got beacon block proposal",
 		zap.String("block_hash", blockSummary.Hash.String()),
 		zap.Bool("blinded", blockSummary.Blinded),
+		zap.Duration("took", time.Since(start)),
 		zap.NamedError("summarize_err", summarizeErr))
 
 	byts, err := obj.MarshalSSZ()
@@ -462,13 +446,13 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 		return summary, fmt.Errorf("block is nil")
 	}
 	switch b := block.(type) {
-	case *api.VersionedV3Proposal:
-		if b.ExecutionPayloadBlinded {
+	case *api.VersionedProposal:
+		if b.Blinded {
 			switch b.Version {
 			case spec.DataVersionCapella:
-				return summarizeBlock(b.BlindedCapella)
+				return summarizeBlock(b.CapellaBlinded)
 			case spec.DataVersionDeneb:
-				return summarizeBlock(b.BlindedDeneb)
+				return summarizeBlock(b.DenebBlinded)
 			default:
 				return summary, fmt.Errorf("unsupported blinded block version %d", b.Version)
 			}

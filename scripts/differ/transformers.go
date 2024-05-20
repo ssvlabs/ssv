@@ -8,6 +8,15 @@ import (
 // Transformer applies a transformation to a given code string.
 type Transformer func(string) string
 
+type Transformers []Transformer
+
+func (t Transformers) Transform(code string) string {
+	for _, transformer := range t {
+		code = transformer(code)
+	}
+	return code
+}
+
 func NopTransformer() Transformer {
 	return func(code string) string { return code }
 }

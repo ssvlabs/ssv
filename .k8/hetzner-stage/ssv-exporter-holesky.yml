@@ -132,6 +132,8 @@ spec:
               value: "false"
             - name: PUBSUB_TRACE
               value: "false"
+            - name: DISABLE_IP_RATE_LIMIT
+              value: "true"
           volumeMounts:
             - mountPath: /data
               name: ssv-exporter-holesky

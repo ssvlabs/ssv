@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/bloxapp/ssv/api"
-	networkpeers "github.com/bloxapp/ssv/network/peers"
-	"github.com/bloxapp/ssv/nodeprobe"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/ssvlabs/ssv/api"
+	networkpeers "github.com/ssvlabs/ssv/network/peers"
+	"github.com/ssvlabs/ssv/nodeprobe"
 )
 
 const (

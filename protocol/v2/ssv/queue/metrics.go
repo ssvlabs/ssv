@@ -1,7 +1,7 @@
 package queue
 
 import (
-	spectypes "github.com/bloxapp/ssv-spec/types"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 )
 
 // Metrics records metrics about the Queue.
