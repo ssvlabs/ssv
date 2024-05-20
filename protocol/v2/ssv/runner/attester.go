@@ -90,12 +90,10 @@ func (r *AttesterRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbf
 	r.metrics.EndConsensus()
 	r.metrics.StartPostConsensus()
 
-	r.metrics.StartBeaconData()
 	attestationData, err := decidedValue.GetAttestationData()
 	if err != nil {
 		return errors.Wrap(err, "could not get attestation data")
 	}
-	r.metrics.EndBeaconData()
 
 	// specific duty sig
 	msg, err := r.BaseRunner.signBeaconObject(r, attestationData, decidedValue.Duty.Slot, spectypes.DomainAttester)
