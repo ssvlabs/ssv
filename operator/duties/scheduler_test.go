@@ -109,7 +109,6 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Safe
 			mockSlotService.Subscribe(ticker.Subscribe())
 			return ticker
 		},
-		BuilderProposals: false,
 	}
 
 	s := NewScheduler(opts)
@@ -199,7 +198,6 @@ func setupSchedulerAndMocksCommittee(t *testing.T, attHandler, syncHandler, comm
 			mockSlotService.Subscribe(ticker.Subscribe())
 			return ticker
 		},
-		BuilderProposals: false,
 	}
 
 	s := NewScheduler(opts)
@@ -444,7 +442,6 @@ func TestScheduler_Run(t *testing.T) {
 		BeaconNode:        mockBeaconNode,
 		Network:           networkconfig.TestNetwork,
 		ValidatorProvider: mockValidatorProvider,
-		BuilderProposals:  false,
 		SlotTickerProvider: func() slotticker.SlotTicker {
 			return mockTicker
 		},
@@ -497,8 +494,6 @@ func TestScheduler_Regression_IndicesChangeStuck(t *testing.T) {
 			return mockTicker
 		},
 		IndicesChg: make(chan struct{}),
-
-		BuilderProposals: true,
 	}
 
 	s := NewScheduler(opts)
