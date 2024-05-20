@@ -1,1 +1,2 @@
 - [ ] Fork support in every place ValidatorTopicID is used, including tests.
+- [ ] Pre-subscribe to committee subnets before fork epoch?
