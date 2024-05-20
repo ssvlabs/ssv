@@ -114,7 +114,7 @@ var (
 	ErrTooManyPartialSignatureMessages         = Error{text: "too many partial signature messages", reject: true}
 	ErrTripleValidatorIndexInPartialSignatures = Error{text: "triple validator index in partial signatures", reject: true}
 	ErrInvalidRound                            = Error{text: "invalid round", reject: true}
-	ErrDecidedWithSameNumberOfSigners          = Error{text: "decided with same number of signers", reject: true}
+	ErrDecidedWithSameSigners                  = Error{text: "decided with same number of signers", reject: true}
 )
 
 func (mv *messageValidator) handleValidationError(peerID peer.ID, decodedMessage *queue.DecodedSSVMessage, err error) pubsub.ValidationResult {

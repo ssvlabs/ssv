@@ -1282,7 +1282,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.NoError(t, err)
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
-		require.ErrorIs(t, err, ErrDecidedWithSameNumberOfSigners)
+		require.ErrorIs(t, err, ErrDecidedWithSameSigners)
 	})
 
 	// Receive message from a round that is too high for that epoch should receive an error

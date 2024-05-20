@@ -4,6 +4,7 @@ package validation
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"time"
@@ -16,7 +17,6 @@ import (
 
 	"github.com/bloxapp/ssv/protocol/v2/message"
 	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-	"github.com/bloxapp/ssv/protocol/v2/ssv/queue"
 	ssvtypes "github.com/bloxapp/ssv/protocol/v2/types"
 )
 
@@ -166,21 +166,15 @@ func (mv *messageValidator) validateQBFTLogic(
 		signerState := signerStateInterface.(*SignerState)
 
 		// It should be checked after ErrNonDecidedWithMultipleSigners
-		signerCount := len(signedSSVMessage.GetOperatorIDs())
-		if signerCount > 1 {
-			// TODO: this rule is being researched because it gets triggered often
-			//if prevMessage, ok := signerState.SeenDecidedLengths[signerCount]; ok {
-			//	e := ErrDecidedWithSameNumberOfSigners
-			//	gotJSON, _ := json.Marshal(queue.DecodedSSVMessage{
-			//		SignedSSVMessage: signedSSVMessage,
-			//		SSVMessage:       signedSSVMessage.SSVMessage,
-			//		Body:             consensusMessage,
-			//	})
-			//	wantJSON, _ := json.Marshal(prevMessage)
-			//	e.got = string(gotJSON)
-			//	e.want = string(wantJSON)
-			//	return e
-			//}
+		if len(signedSSVMessage.GetOperatorIDs()) > 1 {
+			encodedOperators, err := encodeOperators(signedSSVMessage.GetOperatorIDs())
+			if err != nil {
+				return err
+			}
+
+			if _, ok := signerState.SeenSigners[string(encodedOperators)]; ok {
+				return ErrDecidedWithSameSigners
+			}
 		}
 
 		if len(signedSSVMessage.FullData) != 0 && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedSSVMessage.FullData) {
@@ -269,11 +263,12 @@ func (mv *messageValidator) processSignerState(signedSSVMessage *spectypes.Signe
 
 	signerCount := len(signedSSVMessage.GetOperatorIDs())
 	if signerCount > 1 {
-		signerState.SeenDecidedLengths[signerCount] = queue.DecodedSSVMessage{
-			SignedSSVMessage: signedSSVMessage,
-			SSVMessage:       signedSSVMessage.SSVMessage,
-			Body:             consensusMessage,
+		encodedOperators, err := encodeOperators(signedSSVMessage.GetOperatorIDs())
+		if err != nil {
+			return
 		}
+
+		signerState.SeenSigners[string(encodedOperators)] = struct{}{}
 	}
 
 	signerState.MessageCounts.RecordConsensusMessage(signedSSVMessage, consensusMessage)
@@ -416,4 +411,25 @@ func (mv *messageValidator) roundRobinProposer(height specqbft.Height, round spe
 
 	index := (firstRoundIndex + int(round) - int(specqbft.FirstRound)) % len(committee)
 	return committee[index]
+}
+
+func encodeOperators(operators []spectypes.OperatorID) ([]byte, error) {
+	buf := new(bytes.Buffer)
+	for _, operator := range operators {
+		if err := binary.Write(buf, binary.LittleEndian, operator); err != nil {
+			return nil, err
+		}
+	}
+	return buf.Bytes(), nil
+}
+
+func decodeOperators(b []byte) ([]spectypes.OperatorID, error) {
+	buf := bytes.NewBuffer(b)
+	operators := make([]spectypes.OperatorID, len(b)/8)
+	for i := range operators {
+		if err := binary.Read(buf, binary.LittleEndian, &operators[i]); err != nil {
+			return nil, err
+		}
+	}
+	return operators, nil
 }
