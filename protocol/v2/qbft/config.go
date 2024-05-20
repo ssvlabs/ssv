@@ -1,12 +1,12 @@
 package qbft
 
 import (
+	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
+	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/bloxapp/ssv/protocol/v2/qbft/roundtimer"
-	qbftstorage "github.com/bloxapp/ssv/protocol/v2/qbft/storage"
 )
 
 type signing interface {
@@ -35,7 +35,7 @@ type IConfig interface {
 	// GetSignatureVerifier returns the signature verifier for operator signatures
 	GetSignatureVerifier() spectypes.SignatureVerifier
 	// GetRoundCutOff returns the round cut off
-	GetCutOffRound() int
+	GetCutOffRound() specqbft.Round
 }
 
 type Config struct {
@@ -50,7 +50,7 @@ type Config struct {
 	Timer                 roundtimer.Timer
 	SignatureVerification bool
 	SignatureVerifier     spectypes.SignatureVerifier
-	CutOffRound           int
+	CutOffRound           specqbft.Round
 }
 
 // GetShareSigner returns a BeaconSigner instance
@@ -98,7 +98,7 @@ func (c *Config) GetTimer() roundtimer.Timer {
 	return c.Timer
 }
 
-func (c *Config) GetCutOffRound() int {
+func (c *Config) GetCutOffRound() specqbft.Round {
 	return c.CutOffRound
 }
 

@@ -46,7 +46,7 @@ func (v *Validator) Start(logger *zap.Logger) (started bool, err error) {
 			highestInstance, err := ctrl.LoadHighestInstance(identifier[:])
 			if err != nil {
 				logger.Warn("❗failed to load highest instance",
-					fields.MessageID(identifier),
+					fields.PubKey(identifier.GetDutyExecutorID()), // TODO: check if GetDutyExecutorID correct identifier
 					zap.Error(err))
 			} else if highestInstance != nil {
 				decidedValue := &spectypes.ConsensusData{}
