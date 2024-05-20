@@ -12,7 +12,6 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/bloxapp/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
 	"github.com/ssvlabs/ssv/network"
@@ -23,11 +22,7 @@ import (
 	"github.com/ssvlabs/ssv/network/testing"
 	"github.com/ssvlabs/ssv/networkconfig"
 	operatordatastore "github.com/ssvlabs/ssv/operator/datastore"
-	"github.com/bloxapp/ssv/operator/duties/dutystore"
-	"github.com/bloxapp/ssv/operator/storage"
 	registrystorage "github.com/ssvlabs/ssv/registry/storage"
-	"github.com/bloxapp/ssv/storage/basedb"
-	"github.com/bloxapp/ssv/storage/kv"
 	"github.com/ssvlabs/ssv/utils/format"
 )
 
@@ -136,18 +131,18 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 		panic(err)
 	}
 
-	db, err := kv.NewInMemory(logger, basedb.Options{})
-	if err != nil {
-		return nil, err
-	}
+	//db, err := kv.NewInMemory(logger, basedb.Options{})
+	//if err != nil {
+	//	return nil, err
+	//}
 
-	nodeStorage, err := storage.NewNodeStorage(logger, db)
-	if err != nil {
-		return nil, err
-	}
+	//nodeStorage, err := storage.NewNodeStorage(logger, db)
+	//if err != nil {
+	//	return nil, err
+	//}
 
-	dutyStore := dutystore.New()
-	signatureVerifier := signatureverifier.NewSignatureVerifier(nodeStorage)
+	//dutyStore := dutystore.New()
+	//signatureVerifier := signatureverifier.NewSignatureVerifier(nodeStorage)
 
 	cfg := NewNetConfig(keys, format.OperatorID(operatorPubkey), ln.Bootnode, testing.RandomTCPPort(12001, 12999), ln.udpRand.Next(13001, 13999), options.Nodes)
 	cfg.Ctx = ctx
@@ -158,11 +153,11 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 	}
 	cfg.Metrics = nil
 	cfg.MessageValidator = nil //validation.New(
-		networkconfig.TestNetwork,
-		nodeStorage.ValidatorStore(),
-		dutyStore,
-		signatureVerifier,
-	)
+	//networkconfig.TestNetwork,
+	//nodeStorage.ValidatorStore(),
+	//dutyStore,
+	//signatureVerifier,
+	//)
 	cfg.Network = networkconfig.TestNetwork
 	if options.TotalValidators > 0 {
 		cfg.GetValidatorStats = func() (uint64, uint64, uint64, error) {
@@ -183,12 +178,12 @@ func (ln *LocalNet) NewTestP2pNetwork(ctx context.Context, nodeIndex int, keys t
 		cfg.MessageValidator = options.MessageValidatorProvider(nodeIndex)
 	} else {
 		cfg.MessageValidator = nil //validation.New(
-			networkconfig.TestNetwork,
-			nodeStorage.ValidatorStore(),
-			dutyStore,
-			signatureVerifier,
-			validation.WithSelfAccept(selfPeerID, true),
-		)
+		//networkconfig.TestNetwork,
+		//nodeStorage.ValidatorStore(),
+		//dutyStore,
+		//signatureVerifier,
+		//validation.WithSelfAccept(selfPeerID, true),
+		//)
 	}
 
 	if options.PeerScoreInspector != nil && options.PeerScoreInspectorInterval > 0 {

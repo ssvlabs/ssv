@@ -20,7 +20,7 @@ import (
 
 	"github.com/ssvlabs/ssv/message/signatureverifier"
 	"github.com/ssvlabs/ssv/monitoring/metricsreporter"
-	"github.com/bloxapp/ssv/network/commons"
+	"github.com/ssvlabs/ssv/network/commons"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"

@@ -6,7 +6,7 @@ import (
 
 	"github.com/ssvlabs/ssv/ibft/storage"
 	"github.com/ssvlabs/ssv/message/validation"
-	"github.com/bloxapp/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	qbftctrl "github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
