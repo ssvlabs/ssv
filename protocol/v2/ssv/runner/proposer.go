@@ -138,7 +138,7 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 	}
 
 	r.metrics.StartConsensus()
-	logger = logger.With(fields.BeaconDataTime(r.metrics.GetBeaconDataDuration()))
+	logger = logger.With(fields.BeaconDataTime(r.metrics.GetBeaconDataTime()))
 	if err := r.BaseRunner.decide(logger, r, input); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}

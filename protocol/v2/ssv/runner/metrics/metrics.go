@@ -141,7 +141,7 @@ func (cm *ConsensusMetrics) GetConsensusTime() time.Duration {
 func (cm *ConsensusMetrics) GetPostConsensusTime() time.Duration {
 	return cm.postConsensusDuration
 }
-func (cm *ConsensusMetrics) GetBeaconDataDuration() time.Duration {
+func (cm *ConsensusMetrics) GetBeaconDataTime() time.Duration {
 	return cm.beaconDataDuration
 }
 

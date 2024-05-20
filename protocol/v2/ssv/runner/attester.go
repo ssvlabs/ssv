@@ -185,7 +185,7 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 
 		// Submit it to the BN.
 		logger = logger.With(
-			fields.BeaconDataTime(r.metrics.GetBeaconDataDuration()),
+			fields.BeaconDataTime(r.metrics.GetBeaconDataTime()),
 			fields.ConsensusTime(r.metrics.GetConsensusTime()),
 			fields.PostConsensusTime(r.metrics.GetPostConsensusTime()),
 			fields.Height(r.BaseRunner.QBFTController.Height),
@@ -256,7 +256,7 @@ func (r *AttesterRunner) executeDuty(logger *zap.Logger, duty *spectypes.Duty) e
 		DataSSZ: attDataByts,
 	}
 
-	logger = logger.With(fields.BeaconDataTime(r.metrics.GetBeaconDataDuration()))
+	logger = logger.With(fields.BeaconDataTime(r.metrics.GetBeaconDataTime()))
 	if err := r.BaseRunner.decide(logger, r, input); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}

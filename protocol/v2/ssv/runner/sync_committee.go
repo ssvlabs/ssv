@@ -241,7 +241,7 @@ func (r *SyncCommitteeRunner) executeDuty(logger *zap.Logger, duty *spectypes.Du
 		DataSSZ: root[:],
 	}
 
-	logger = logger.With(fields.BeaconDataTime(r.metrics.GetBeaconDataDuration()))
+	logger = logger.With(fields.BeaconDataTime(r.metrics.GetBeaconDataTime()))
 	if err := r.BaseRunner.decide(logger, r, input); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}
