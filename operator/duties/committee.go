@@ -144,21 +144,18 @@ func (h *CommitteeHandler) processExecution(period uint64, epoch phase0.Epoch, s
 
 func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterDuty, syncDuties []*eth2apiv1.SyncCommitteeDuty, slot phase0.Slot) committeeDutiesMap {
 	committeeMap := make(committeeDutiesMap)
-	if attDuties != nil {
-		for _, d := range attDuties {
-			if h.shouldExecuteAtt(d) {
-				specDuty := h.toSpecAttDuty(d, spectypes.BNRoleAttester)
-				h.appendBeaconDuty(committeeMap, specDuty)
-			}
+
+	for _, d := range attDuties {
+		if h.shouldExecuteAtt(d) {
+			specDuty := h.toSpecAttDuty(d, spectypes.BNRoleAttester)
+			h.appendBeaconDuty(committeeMap, specDuty)
 		}
 	}
 
-	if syncDuties != nil {
-		for _, d := range syncDuties {
-			if h.shouldExecuteSync(d, slot) {
-				specDuty := h.toSpecSyncDuty(d, slot, spectypes.BNRoleSyncCommittee)
-				h.appendBeaconDuty(committeeMap, specDuty)
-			}
+	for _, d := range syncDuties {
+		if h.shouldExecuteSync(d, slot) {
+			specDuty := h.toSpecSyncDuty(d, slot, spectypes.BNRoleSyncCommittee)
+			h.appendBeaconDuty(committeeMap, specDuty)
 		}
 	}
 
