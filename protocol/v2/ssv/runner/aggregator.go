@@ -91,7 +91,6 @@ func (r *AggregatorRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *sp
 		return errors.Wrap(err, "got pre-consensus quorum but it has invalid signatures")
 	}
 	r.metrics.EndPreConsensus()
-	r.metrics.StartConsensus()
 
 	r.metrics.PauseDutyFullFlow()
 	// get block data
@@ -112,6 +111,7 @@ func (r *AggregatorRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *sp
 		DataSSZ: byts,
 	}
 
+	r.metrics.StartConsensus()
 	if err := r.BaseRunner.decide(logger, r, input); err != nil {
 		return errors.Wrap(err, "can't start new duty runner instance for duty")
 	}
