@@ -698,6 +698,8 @@ func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.BeaconDuty)
 	pk := make([]byte, 48)
 	copy(pk, duty.PubKey[:])
 
+	logger.Debug(" <><> executing duty")
+
 	if v, ok := c.GetValidator(spectypes.ValidatorPK(pk)); ok {
 		ssvMsg, err := CreateDutyExecuteMsg(duty, pk, types.GetDefaultDomain())
 		if err != nil {
@@ -711,6 +713,10 @@ func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.BeaconDuty)
 		}
 		if v.Queues == nil {
 			logger.Warn("validator queues are nil")
+			return
+		}
+		if v.Queues[duty.RunnerRole()].Q == nil {
+			logger.Warn("validator queues Q are nil")
 			return
 		}
 		if pushed := v.Queues[duty.RunnerRole()].Q.TryPush(dec); !pushed {
