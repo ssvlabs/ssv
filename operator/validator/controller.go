@@ -709,6 +709,10 @@ func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.BeaconDuty)
 			logger.Error("could not decode duty execute msg", zap.Error(err))
 			return
 		}
+		if v.Queues == nil {
+			logger.Warn("validator queues are nil")
+			return
+		}
 		if pushed := v.Queues[duty.RunnerRole()].Q.TryPush(dec); !pushed {
 			logger.Warn("dropping ExecuteDuty message because the queue is full")
 		}
