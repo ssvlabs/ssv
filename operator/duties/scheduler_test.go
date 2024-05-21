@@ -273,16 +273,16 @@ func setExecuteDutyFunc(s *Scheduler, executeDutiesCall chan []*spectypes.Beacon
 
 func setExecuteDutyFuncs(s *Scheduler, executeDutiesCall chan committeeDutiesMap, executeDutiesCallSize int) {
 	type committeeDuty struct {
-		spectypes.ClusterID
+		spectypes.CommitteeID
 		*spectypes.CommitteeDuty
 	}
 	executeDutiesBuffer := make(chan *committeeDuty, executeDutiesCallSize)
 	s.executeDuty = func(logger *zap.Logger, duty *spectypes.BeaconDuty) {
 		logger.Debug("🏃 Executing duty", zap.Any("duty", duty))
 	}
-	s.executeCommitteeDuty = func(logger *zap.Logger, committeeID spectypes.ClusterID, duty *spectypes.CommitteeDuty) {
+	s.executeCommitteeDuty = func(logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) {
 		logger.Debug("🏃 Executing committee duty", zap.Any("duty", duty))
-		executeDutiesBuffer <- &committeeDuty{ClusterID: committeeID, CommitteeDuty: duty}
+		executeDutiesBuffer <- &committeeDuty{CommitteeID: committeeID, CommitteeDuty: duty}
 
 		// Check if all expected duties have been received
 		if len(executeDutiesBuffer) == executeDutiesCallSize {
@@ -291,8 +291,8 @@ func setExecuteDutyFuncs(s *Scheduler, executeDutiesCall chan committeeDutiesMap
 			for i := 0; i < executeDutiesCallSize; i++ {
 				d := <-executeDutiesBuffer
 
-				if _, ok := duties[d.ClusterID]; !ok {
-					duties[d.ClusterID] = d.CommitteeDuty
+				if _, ok := duties[d.CommitteeID]; !ok {
+					duties[d.CommitteeID] = d.CommitteeDuty
 				}
 			}
 
@@ -376,8 +376,8 @@ func waitForCommitteeDutiesExecution(t *testing.T, logger *zap.Logger, fetchDuti
 		require.FailNow(t, "unexpected duties call")
 	case actualDuties := <-executeDutiesCall:
 		require.Len(t, actualDuties, len(expectedDuties))
-		for eClusterID, eCommDuty := range expectedDuties {
-			aCommDuty, ok := actualDuties[eClusterID]
+		for eCommitteeID, eCommDuty := range expectedDuties {
+			aCommDuty, ok := actualDuties[eCommitteeID]
 			if !ok {
 				require.FailNow(t, "missing cluster id")
 			}

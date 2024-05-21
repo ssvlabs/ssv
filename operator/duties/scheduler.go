@@ -80,7 +80,7 @@ type ValidatorController interface {
 }
 
 type ExecuteDutyFunc func(logger *zap.Logger, duty *spectypes.BeaconDuty)
-type ExecuteCommitteeDutyFunc func(logger *zap.Logger, committeeID spectypes.ClusterID, duty *spectypes.CommitteeDuty)
+type ExecuteCommitteeDutyFunc func(logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty)
 
 type SchedulerOptions struct {
 	Ctx                  context.Context
@@ -418,7 +418,7 @@ func (s *Scheduler) loggerWithDutyContext(logger *zap.Logger, duty *spectypes.Be
 }
 
 // loggerWithCommitteeDutyContext returns an instance of logger with the given committee duty's information
-func (s *Scheduler) loggerWithCommitteeDutyContext(logger *zap.Logger, committeeID spectypes.ClusterID, duty *spectypes.CommitteeDuty) *zap.Logger {
+func (s *Scheduler) loggerWithCommitteeDutyContext(logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) *zap.Logger {
 	dutyEpoch := s.network.Beacon.EstimatedEpochAtSlot(duty.Slot)
 	return logger.
 		With(fields.CommitteeID(committeeID)).

@@ -12,7 +12,7 @@ import (
 	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 )
 
-type committeeDutiesMap map[spectypes.ClusterID]*spectypes.CommitteeDuty
+type committeeDutiesMap map[spectypes.CommitteeID]*spectypes.CommitteeDuty
 
 type CommitteeHandler struct {
 	baseHandler

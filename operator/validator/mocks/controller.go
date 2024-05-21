@@ -11,13 +11,13 @@ import (
 	common "github.com/ethereum/go-ethereum/common"
 	gomock "github.com/golang/mock/gomock"
 	peer "github.com/libp2p/go-libp2p/core/peer"
-	types0 "github.com/ssvlabs/ssv-spec/types"
+	types "github.com/ssvlabs/ssv-spec/types"
 	network "github.com/ssvlabs/ssv/network"
 	duties "github.com/ssvlabs/ssv/operator/duties"
 	beacon "github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	validator "github.com/ssvlabs/ssv/protocol/v2/ssv/validator"
-	types "github.com/ssvlabs/ssv/protocol/v2/types"
+	types0 "github.com/ssvlabs/ssv/protocol/v2/types"
 	storage "github.com/ssvlabs/ssv/registry/storage"
 	basedb "github.com/ssvlabs/ssv/storage/basedb"
 	zap "go.uber.org/zap"
@@ -75,7 +75,7 @@ func (mr *MockControllerMockRecorder) CommitteeActiveIndices(epoch interface{}) 
 }
 
 // ExecuteCommitteeDuty mocks base method.
-func (m *MockController) ExecuteCommitteeDuty(logger *zap.Logger, committeeID types0.ClusterID, duty *types0.CommitteeDuty) {
+func (m *MockController) ExecuteCommitteeDuty(logger *zap.Logger, committeeID types.CommitteeID, duty *types.CommitteeDuty) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "ExecuteCommitteeDuty", logger, committeeID, duty)
 }
@@ -87,7 +87,7 @@ func (mr *MockControllerMockRecorder) ExecuteCommitteeDuty(logger, committeeID, 
 }
 
 // ExecuteDuty mocks base method.
-func (m *MockController) ExecuteDuty(logger *zap.Logger, duty *types0.BeaconDuty) {
+func (m *MockController) ExecuteDuty(logger *zap.Logger, duty *types.BeaconDuty) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "ExecuteDuty", logger, duty)
 }
@@ -113,10 +113,10 @@ func (mr *MockControllerMockRecorder) ExitValidator(pubKey, blockNumber, validat
 }
 
 // GetOperatorShares mocks base method.
-func (m *MockController) GetOperatorShares() []*types.SSVShare {
+func (m *MockController) GetOperatorShares() []*types0.SSVShare {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetOperatorShares")
-	ret0, _ := ret[0].([]*types.SSVShare)
+	ret0, _ := ret[0].([]*types0.SSVShare)
 	return ret0
 }
 
@@ -127,7 +127,7 @@ func (mr *MockControllerMockRecorder) GetOperatorShares() *gomock.Call {
 }
 
 // GetValidator mocks base method.
-func (m *MockController) GetValidator(pubKey types0.ValidatorPK) (*validator.Validator, bool) {
+func (m *MockController) GetValidator(pubKey types.ValidatorPK) (*validator.Validator, bool) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetValidator", pubKey)
 	ret0, _ := ret[0].(*validator.Validator)
@@ -173,7 +173,7 @@ func (mr *MockControllerMockRecorder) IndicesChangeChan() *gomock.Call {
 }
 
 // LiquidateCluster mocks base method.
-func (m *MockController) LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*types.SSVShare) error {
+func (m *MockController) LiquidateCluster(owner common.Address, operatorIDs []uint64, toLiquidate []*types0.SSVShare) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "LiquidateCluster", owner, operatorIDs, toLiquidate)
 	ret0, _ := ret[0].(error)
@@ -187,7 +187,7 @@ func (mr *MockControllerMockRecorder) LiquidateCluster(owner, operatorIDs, toLiq
 }
 
 // ReactivateCluster mocks base method.
-func (m *MockController) ReactivateCluster(owner common.Address, operatorIDs []uint64, toReactivate []*types.SSVShare) error {
+func (m *MockController) ReactivateCluster(owner common.Address, operatorIDs []uint64, toReactivate []*types0.SSVShare) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReactivateCluster", owner, operatorIDs, toReactivate)
 	ret0, _ := ret[0].(error)
@@ -213,7 +213,7 @@ func (mr *MockControllerMockRecorder) StartNetworkHandlers() *gomock.Call {
 }
 
 // StartValidator mocks base method.
-func (m *MockController) StartValidator(share *types.SSVShare) error {
+func (m *MockController) StartValidator(share *types0.SSVShare) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StartValidator", share)
 	ret0, _ := ret[0].(error)
@@ -239,7 +239,7 @@ func (mr *MockControllerMockRecorder) StartValidators() *gomock.Call {
 }
 
 // StopValidator mocks base method.
-func (m *MockController) StopValidator(pubKey types0.ValidatorPK) error {
+func (m *MockController) StopValidator(pubKey types.ValidatorPK) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "StopValidator", pubKey)
 	ret0, _ := ret[0].(error)
@@ -355,10 +355,10 @@ func (m *MockSharesStorage) EXPECT() *MockSharesStorageMockRecorder {
 }
 
 // Get mocks base method.
-func (m *MockSharesStorage) Get(txn basedb.Reader, pubKey []byte) *types.SSVShare {
+func (m *MockSharesStorage) Get(txn basedb.Reader, pubKey []byte) *types0.SSVShare {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Get", txn, pubKey)
-	ret0, _ := ret[0].(*types.SSVShare)
+	ret0, _ := ret[0].(*types0.SSVShare)
 	return ret0
 }
 
@@ -369,14 +369,14 @@ func (mr *MockSharesStorageMockRecorder) Get(txn, pubKey interface{}) *gomock.Ca
 }
 
 // List mocks base method.
-func (m *MockSharesStorage) List(txn basedb.Reader, filters ...storage.SharesFilter) []*types.SSVShare {
+func (m *MockSharesStorage) List(txn basedb.Reader, filters ...storage.SharesFilter) []*types0.SSVShare {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{txn}
 	for _, a := range filters {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "List", varargs...)
-	ret0, _ := ret[0].([]*types.SSVShare)
+	ret0, _ := ret[0].([]*types0.SSVShare)
 	return ret0
 }
 
@@ -388,7 +388,7 @@ func (mr *MockSharesStorageMockRecorder) List(txn interface{}, filters ...interf
 }
 
 // UpdateValidatorMetadata mocks base method.
-func (m *MockSharesStorage) UpdateValidatorMetadata(pk types0.ValidatorPK, metadata *beacon.ValidatorMetadata) error {
+func (m *MockSharesStorage) UpdateValidatorMetadata(pk types.ValidatorPK, metadata *beacon.ValidatorMetadata) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateValidatorMetadata", pk, metadata)
 	ret0, _ := ret[0].(error)
@@ -399,6 +399,20 @@ func (m *MockSharesStorage) UpdateValidatorMetadata(pk types0.ValidatorPK, metad
 func (mr *MockSharesStorageMockRecorder) UpdateValidatorMetadata(pk, metadata interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateValidatorMetadata", reflect.TypeOf((*MockSharesStorage)(nil).UpdateValidatorMetadata), pk, metadata)
+}
+
+// UpdateValidatorsMetadata mocks base method.
+func (m *MockSharesStorage) UpdateValidatorsMetadata(arg0 map[types.ValidatorPK]*beacon.ValidatorMetadata) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateValidatorsMetadata", arg0)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateValidatorsMetadata indicates an expected call of UpdateValidatorsMetadata.
+func (mr *MockSharesStorageMockRecorder) UpdateValidatorsMetadata(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateValidatorsMetadata", reflect.TypeOf((*MockSharesStorage)(nil).UpdateValidatorsMetadata), arg0)
 }
 
 // MockP2PNetwork is a mock of P2PNetwork interface.
@@ -425,7 +439,7 @@ func (m *MockP2PNetwork) EXPECT() *MockP2PNetworkMockRecorder {
 }
 
 // Broadcast mocks base method.
-func (m *MockP2PNetwork) Broadcast(id types0.MessageID, message *types0.SignedSSVMessage) error {
+func (m *MockP2PNetwork) Broadcast(id types.MessageID, message *types.SignedSSVMessage) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Broadcast", id, message)
 	ret0, _ := ret[0].(error)
@@ -439,7 +453,7 @@ func (mr *MockP2PNetworkMockRecorder) Broadcast(id, message interface{}) *gomock
 }
 
 // Peers mocks base method.
-func (m *MockP2PNetwork) Peers(pk types0.ValidatorPK) ([]peer.ID, error) {
+func (m *MockP2PNetwork) Peers(pk types.ValidatorPK) ([]peer.ID, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Peers", pk)
 	ret0, _ := ret[0].([]peer.ID)
