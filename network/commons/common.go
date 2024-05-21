@@ -79,7 +79,7 @@ func ValidatorTopicID(pkByts []byte) []string {
 	return []string{SubnetTopicID(subnet)}
 }
 
-func CommitteeTopicID(cid spectypes.ClusterID) []string {
+func CommitteeTopicID(cid spectypes.CommitteeID) []string {
 	return []string{strconv.Itoa(CommitteeSubnet(cid))}
 }
 
@@ -103,7 +103,7 @@ func ValidatorSubnet(validatorPKHex string) int {
 }
 
 // CommitteeSubnet returns the subnet for the given committee
-func CommitteeSubnet(cid spectypes.ClusterID) int {
+func CommitteeSubnet(cid spectypes.CommitteeID) int {
 	subnet := new(big.Int).Mod(new(big.Int).SetBytes(cid[:]), new(big.Int).SetUint64(subnetsCount))
 	return int(subnet.Int64())
 }
