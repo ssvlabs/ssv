@@ -120,6 +120,17 @@ func TestUpdateValidatorsMetadata(t *testing.T) {
 		return nil
 	}).AnyTimes()
 
+	storage.EXPECT().UpdateValidatorsMetadata(gomock.Any()).DoAndReturn(func(metadata map[spectypes.ValidatorPK]*ValidatorMetadata) error {
+		storageMu.Lock()
+		defer storageMu.Unlock()
+
+		for pk, meta := range metadata {
+			storageData[pk] = meta
+		}
+
+		return nil
+	}).AnyTimes()
+
 	onUpdated := func(pk spectypes.ValidatorPK, meta *ValidatorMetadata) {
 		joined := strings.Join(pks, ":")
 
