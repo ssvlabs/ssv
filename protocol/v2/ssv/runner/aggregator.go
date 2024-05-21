@@ -202,7 +202,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 		copy(specSig[:], sig)
 		logger.Debug("🧩 reconstructed partial signatures",
 			zap.Uint64s("signers", getPostConsensusSigners(r.GetState(), root)),
-			fields.QuorumTime(r.metrics.GetPreConsensusTime()))
+			fields.PostConsensusTime(r.metrics.GetPreConsensusTime()))
 
 		aggregateAndProof, err := r.GetState().DecidedValue.GetAggregateAndProof()
 		if err != nil {
@@ -215,7 +215,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 		}
 
 		start := time.Now()
-		proofSubmissionEnd := r.metrics.StartBeaconSubmission()
+		endSubmission := r.metrics.StartBeaconSubmission()
 
 		if err := r.GetBeaconNode().SubmitSignedAggregateSelectionProof(msg); err != nil {
 			r.metrics.RoleSubmissionFailed()
@@ -227,7 +227,7 @@ func (r *AggregatorRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed aggregate")
 		}
 
-		proofSubmissionEnd()
+		endSubmission()
 		r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
 		r.metrics.RoleSubmitted()
 

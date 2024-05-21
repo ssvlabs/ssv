@@ -158,7 +158,7 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg
 		copy(specSig[:], sig)
 		r.metrics.EndPostConsensus()
 
-		messageSubmissionEnd := r.metrics.StartBeaconSubmission()
+		endSubmission := r.metrics.StartBeaconSubmission()
 		start := time.Now()
 		msg := &altair.SyncCommitteeMessage{
 			Slot:            r.GetState().DecidedValue.Duty.Slot,
@@ -183,7 +183,7 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed sync committee")
 		}
 
-		messageSubmissionEnd()
+		endSubmission()
 		r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
 		r.metrics.RoleSubmitted()
 

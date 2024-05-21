@@ -163,9 +163,9 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		r.metrics.EndPostConsensus()
 		logger.Debug("🧩 reconstructed partial signatures",
 			zap.Uint64s("signers", getPostConsensusSigners(r.GetState(), root)),
-			fields.QuorumTime(r.metrics.GetPostConsensusTime()))
+			fields.PostConsensusTime(r.metrics.GetPostConsensusTime()))
 
-		attestationSubmissionEnd := r.metrics.StartBeaconSubmission()
+		endSubmission := r.metrics.StartBeaconSubmission()
 		startSubmissionTime := time.Now()
 
 		duty := r.GetState().DecidedValue.Duty
@@ -193,7 +193,7 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed attestation")
 		}
 
-		attestationSubmissionEnd()
+		endSubmission()
 		r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
 		r.metrics.RoleSubmitted()
 
