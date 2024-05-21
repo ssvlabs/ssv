@@ -80,13 +80,17 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 ) error {
 	signers := signedSSVMessage.GetOperatorIDs()
 	quorumSize, _ := ssvtypes.ComputeQuorumAndPartialQuorum(len(committee))
+	msgType := consensusMessage.MsgType
+
 	if len(signers) > 1 {
-		if consensusMessage.MsgType != specqbft.CommitMsgType {
+		// Rule: Decided msg with different type than Commit
+		if msgType != specqbft.CommitMsgType {
 			e := ErrNonDecidedWithMultipleSigners
 			e.got = len(signers)
 			return e
 		}
 
+		// Rule: Number of signers must be more than quorum size
 		if uint64(len(signers)) < quorumSize {
 			e := ErrDecidedNotEnoughSigners
 			e.want = quorumSize
@@ -96,8 +100,8 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 	}
 
 	if len(signedSSVMessage.FullData) != 0 {
-		if consensusMessage.MsgType == specqbft.PrepareMsgType ||
-			consensusMessage.MsgType == specqbft.CommitMsgType && len(signedSSVMessage.GetOperatorIDs()) == 1 {
+		// Rule: Prepare or commit messages must not have full data
+		if msgType == specqbft.PrepareMsgType || msgType == specqbft.CommitMsgType && len(signers) == 1 {
 			return ErrPrepareOrCommitWithFullData
 		}
 
@@ -108,21 +112,25 @@ func (mv *messageValidator) validateConsensusMessageSemantics(
 			return e
 		}
 
+		// Rule: Full data hash must match root
 		if hashedFullData != consensusMessage.Root {
 			return ErrInvalidHash
 		}
 	}
 
-	if !mv.validConsensusMsgType(consensusMessage.MsgType) {
+	// Rule: Consensus message type must be valid
+	if !mv.validConsensusMsgType(msgType) {
 		return ErrUnknownQBFTMessageType
 	}
 
+	// Rule: Round must be valid
 	if consensusMessage.Round == specqbft.NoRound {
 		e := ErrInvalidRound
 		e.got = specqbft.NoRound
 		return e
 	}
 
+	// Rule: consensus message must have the same identifier as the ssv message's identifier
 	if !bytes.Equal(consensusMessage.Identifier, signedSSVMessage.SSVMessage.MsgID[:]) {
 		e := ErrMismatchedIdentifier
 		e.want = hex.EncodeToString(signedSSVMessage.SSVMessage.MsgID[:])
@@ -145,17 +153,12 @@ func (mv *messageValidator) validateQBFTLogic(
 	state *consensusState,
 ) error {
 	if consensusMessage.MsgType == specqbft.ProposalMsgType {
+		// Rule: Signer must be the leader
 		leader := mv.roundRobinProposer(consensusMessage.Height, consensusMessage.Round, committee)
 		if signedSSVMessage.GetOperatorIDs()[0] != leader {
 			err := ErrSignerNotLeader
 			err.got = signedSSVMessage.GetOperatorIDs()[0]
 			err.want = leader
-			return err
-		}
-	}
-
-	if len(signedSSVMessage.GetOperatorIDs()) == 1 {
-		if err := mv.roundBelongsToAllowedSpread(signedSSVMessage, consensusMessage, receivedAt); err != nil {
 			return err
 		}
 	}
@@ -170,6 +173,7 @@ func (mv *messageValidator) validateQBFTLogic(
 
 		signerState := signerStateInterface.(*SignerState)
 
+		// Rule: Ignore if peer already advanced to a later round. Only for non-decided messages
 		if consensusMessage.Round < signerState.Round && len(signedSSVMessage.GetOperatorIDs()) == 1 {
 			// Signers aren't allowed to decrease their round.
 			// If they've sent a future message due to clock error,
@@ -180,13 +184,14 @@ func (mv *messageValidator) validateQBFTLogic(
 			return err
 		}
 
-		// It should be checked after ErrNonDecidedWithMultipleSigners
 		if len(signedSSVMessage.GetOperatorIDs()) > 1 {
+			// Rule: Decided msg can't have the same signers as previously sent before for the same duty
 			encodedOperators, err := encodeOperators(signedSSVMessage.GetOperatorIDs())
 			if err != nil {
 				return err
 			}
 
+			// Rule: Decided msg can't have the same signers as previously sent before for the same duty
 			if _, ok := signerState.SeenSigners[string(encodedOperators)]; ok {
 				return ErrDecidedWithSameSigners
 			}
@@ -194,15 +199,24 @@ func (mv *messageValidator) validateQBFTLogic(
 
 		if consensusMessage.Round == signerState.Round {
 			if len(signedSSVMessage.GetOperatorIDs()) == 1 {
+				// Rule: Peer must not send two proposals with different data
 				if len(signedSSVMessage.FullData) != 0 && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedSSVMessage.FullData) {
 					return ErrDuplicatedProposalWithDifferentData
 				}
 			}
 
+			// Rule: Peer must send only 1 proposal, 1 prepare, 1 commit, maxDecidedCount(committeeSize) decided and 1 round-change per round
 			limits := maxMessageCounts(len(committee))
 			if err := signerState.MessageCounts.ValidateConsensusMessage(signedSSVMessage, consensusMessage, limits); err != nil {
 				return err
 			}
+		}
+	}
+
+	if len(signedSSVMessage.GetOperatorIDs()) == 1 {
+		// Rule: Round must not be smaller than current peer's round -1 or +1. Only for non-decided messages
+		if err := mv.roundBelongsToAllowedSpread(signedSSVMessage, consensusMessage, receivedAt); err != nil {
+			return err
 		}
 	}
 
@@ -231,6 +245,8 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 	}
 
 	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
+
+	// Rule: Duty role has consensus (true except for ValidatorRegistration and VoluntaryExit)
 	if role == spectypes.RoleValidatorRegistration || role == spectypes.RoleVoluntaryExit {
 		e := ErrUnexpectedConsensusMessage
 		e.got = role
@@ -242,10 +258,17 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 		return err
 	}
 
+	// Rule: current slot(height) must be between duty's starting slot and:
+	// - duty's starting slot + 34 (committee and aggregation)
+	// - duty's starting slot + 3 (other types)
 	if err := mv.validateSlotTime(msgSlot, role, receivedAt); err != nil {
 		return err
 	}
 
+	// Rule: valid number of duties per epoch:
+	// - 2 for aggregation, voluntary exit and validator registration
+	// - 2*V for Committee duty (where V is the number of validators in the cluster) (if no validator is doing sync committee in this epoch)
+	// - else, accept
 	for _, signer := range signedSSVMessage.GetOperatorIDs() {
 		signerStateBySlot := state.Get(signer)
 		if err := mv.validateDutyCount(signedSSVMessage.SSVMessage.GetID(), msgSlot, validatorIndices, signerStateBySlot); err != nil {
@@ -253,6 +276,9 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 		}
 	}
 
+	// Rule: Round cut-offs for roles:
+	// - 12 (committee and aggregation)
+	// - 6 (other types)
 	if maxRound := mv.maxRound(role); consensusMessage.Round > maxRound {
 		err := ErrRoundTooHigh
 		err.got = fmt.Sprintf("%v (%v role)", consensusMessage.Round, message.RunnerRoleToString(role))
@@ -267,23 +293,24 @@ func (mv *messageValidator) updateConsensusState(signedSSVMessage *spectypes.Sig
 	msgSlot := phase0.Slot(consensusMessage.Height)
 
 	for _, signer := range signedSSVMessage.GetOperatorIDs() {
+		var signerState *SignerState
+
 		stateBySlot := consensusState.Get(signer)
 		signerStateInterface, ok := stateBySlot.Get(msgSlot)
 		if !ok {
-			signerState := &SignerState{}
+			signerState = &SignerState{}
 			signerState.Init()
 			signerState.ResetRound(consensusMessage.Round)
 
 			stateBySlot.Put(msgSlot, signerState)
 			mv.pruneOldSlots(stateBySlot, msgSlot)
-			mv.processSignerState(signedSSVMessage, consensusMessage, signerState)
-			return
+		} else {
+			signerState = signerStateInterface.(*SignerState)
+			if consensusMessage.Round > signerState.Round {
+				signerState.ResetRound(consensusMessage.Round)
+			}
 		}
 
-		signerState := signerStateInterface.(*SignerState)
-		if consensusMessage.Round > signerState.Round {
-			signerState.ResetRound(consensusMessage.Round)
-		}
 		mv.processSignerState(signedSSVMessage, consensusMessage, signerState)
 		return
 	}
@@ -349,28 +376,6 @@ func (mv *messageValidator) validateJustifications(message *specqbft.Message) er
 		e := ErrUnexpectedRoundChangeJustifications
 		e.got = message.MsgType
 		return e
-	}
-
-	return nil
-}
-
-func (mv *messageValidator) validateBeaconDuty(
-	role spectypes.RunnerRole,
-	slot phase0.Slot,
-	indices []phase0.ValidatorIndex,
-) error {
-	if role == spectypes.RoleProposer {
-		epoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(slot)
-		if mv.dutyStore != nil && mv.dutyStore.Proposer.ValidatorDuty(epoch, slot, indices[0]) == nil {
-			return ErrNoDuty
-		}
-	}
-
-	if role == spectypes.RoleSyncCommitteeContribution {
-		period := mv.netCfg.Beacon.EstimatedSyncCommitteePeriodAtEpoch(mv.netCfg.Beacon.EstimatedEpochAtSlot(slot))
-		if mv.dutyStore != nil && mv.dutyStore.SyncCommittee.Duty(period, indices[0]) == nil {
-			return ErrNoDuty
-		}
 	}
 
 	return nil

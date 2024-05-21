@@ -96,3 +96,27 @@ func (mv *messageValidator) dutyLimit(msgID spectypes.MessageID, validatorIndice
 		return 0, false
 	}
 }
+
+func (mv *messageValidator) validateBeaconDuty(
+	role spectypes.RunnerRole,
+	slot phase0.Slot,
+	indices []phase0.ValidatorIndex,
+) error {
+	// Rule: For a proposal duty message, we check if the validator is assigned to it
+	if role == spectypes.RoleProposer {
+		epoch := mv.netCfg.Beacon.EstimatedEpochAtSlot(slot)
+		if mv.dutyStore != nil && mv.dutyStore.Proposer.ValidatorDuty(epoch, slot, indices[0]) == nil {
+			return ErrNoDuty
+		}
+	}
+
+	// Rule: For a sync committee aggregation duty message, we check if the validator is assigned to it
+	if role == spectypes.RoleSyncCommitteeContribution {
+		period := mv.netCfg.Beacon.EstimatedSyncCommitteePeriodAtEpoch(mv.netCfg.Beacon.EstimatedEpochAtSlot(slot))
+		if mv.dutyStore != nil && mv.dutyStore.SyncCommittee.Duty(period, indices[0]) == nil {
+			return ErrNoDuty
+		}
+	}
+
+	return nil
+}

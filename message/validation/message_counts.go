@@ -7,20 +7,17 @@ import (
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
-
-	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
 // MessageCounts tracks the number of various message types received for validation.
 type MessageCounts struct {
-	PreConsensus   int
-	Proposal       int
-	Prepare        int
-	Commit         int
-	Decided        int
-	RoundChange    int
-	RoundChangeMsg queue.DecodedSSVMessage // TODO: delete it, it was added for debugging
-	PostConsensus  int
+	PreConsensus  int
+	Proposal      int
+	Prepare       int
+	Commit        int
+	Decided       int
+	RoundChange   int
+	PostConsensus int
 }
 
 // String provides a formatted representation of the MessageCounts.

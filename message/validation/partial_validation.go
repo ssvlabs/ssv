@@ -67,37 +67,52 @@ func (mv *messageValidator) validatePartialSignatureMessageSemantics(
 ) error {
 	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
 
+	// Rule: Partial Signature message must have 1 signer
 	signers := signedSSVMessage.GetOperatorIDs()
 	if len(signers) != 1 {
 		return ErrPartialSigOneSigner
 	}
 
+	signer := signers[0]
+
+	// Rule: Partial signature message must not have full data
 	if len(signedSSVMessage.FullData) > 0 {
 		return ErrFullDataNotInConsensusMessage
 	}
 
+	// Rule: Valid signature type
 	if !mv.validPartialSigMsgType(partialSignatureMessages.Type) {
 		e := ErrInvalidPartialSignatureType
 		e.got = partialSignatureMessages.Type
 		return e
 	}
 
+	// Rule: Partial signature type must match expected type:
+	// - PostConsensusPartialSig, for Committee duty
+	// - RandaoPartialSig or PostConsensusPartialSig for Proposer
+	// - SelectionProofPartialSig or PostConsensusPartialSig for Aggregator
+	// - SelectionProofPartialSig or PostConsensusPartialSig for Sync committee contribution
+	// - ValidatorRegistrationPartialSig for Validator Registration
+	// - VoluntaryExitPartialSig for Voluntary Exit
 	if !mv.partialSignatureTypeMatchesRole(partialSignatureMessages.Type, role) {
 		return ErrPartialSignatureTypeRoleMismatch
 	}
 
+	// Rule: Partial signature message must have at least one signature
 	if len(partialSignatureMessages.Messages) == 0 {
 		return ErrNoPartialSignatureMessages
 	}
 
 	for _, message := range partialSignatureMessages.Messages {
-		if message.Signer != signers[0] {
+		// Rule: Partial signature signer must be consistent
+		if message.Signer != signer {
 			err := ErrInconsistentSigners
-			err.got = signers[0]
+			err.got = signer
 			err.want = message.Signer
 			return err
 		}
 
+		// Rule: Validator index must match with validatorPK or one of CommitteeID's validators
 		if !slices.Contains(validatorIndices, message.ValidatorIndex) {
 			e := ErrValidatorIndexMismatch
 			e.got = message.ValidatorIndex
@@ -118,25 +133,49 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 ) error {
 	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
 	messageSlot := partialSignatureMessages.Slot
+	signer := signedSSVMessage.GetOperatorIDs()[0]
+	signerStateBySlot := state.Get(signer)
+
+	// Rule: Height must not be "old". I.e., signer must not have already advanced to a later slot.
+	if signedSSVMessage.SSVMessage.MsgID.GetRoleType() != types.RoleCommittee { // Rule only for validator runners
+		maxSlot, _ := signerStateBySlot.Max()
+		if maxSlot != nil && maxSlot.(phase0.Slot) > partialSignatureMessages.Slot {
+			e := ErrSlotAlreadyAdvanced
+			e.got = partialSignatureMessages.Slot
+			e.want = maxSlot
+			return e
+		}
+	}
 
 	if err := mv.validateBeaconDuty(signedSSVMessage.SSVMessage.GetID().GetRoleType(), messageSlot, committeeData.indices); err != nil {
 		return err
 	}
 
-	signer := signedSSVMessage.GetOperatorIDs()[0]
-	signerStateBySlot := state.Get(signer)
-
 	if signerState, ok := signerStateBySlot.Get(messageSlot); ok {
+		// Rule: peer must send only:
+		// - 1 PostConsensusPartialSig, for Committee duty
+		// - 1 RandaoPartialSig and 1 PostConsensusPartialSig for Proposer
+		// - 1 SelectionProofPartialSig and 1 PostConsensusPartialSig for Aggregator
+		// - 1 SelectionProofPartialSig and 1 PostConsensusPartialSig for Sync committee contribution
+		// - 1 ValidatorRegistrationPartialSig for Validator Registration
+		// - 1 VoluntaryExitPartialSig for Voluntary Exit
 		limits := maxMessageCounts(len(committeeData.operatorIDs))
 		if err := signerState.(*SignerState).MessageCounts.ValidatePartialSignatureMessage(partialSignatureMessages, limits); err != nil {
 			return err
 		}
 	}
 
+	// Rule: current slot must be between duty's starting slot and:
+	// - duty's starting slot + 34 (committee and aggregation)
+	// - duty's starting slot + 3 (other duties)
 	if err := mv.validateSlotTime(messageSlot, role, receivedAt); err != nil {
 		return err
 	}
 
+	// Rule: valid number of duties per epoch:
+	// - 2 for aggregation, voluntary exit and validator registration
+	// - 2*V for Committee duty (where V is the number of validators in the cluster) (if no validator is doing sync committee in this epoch)
+	// - else, accept
 	if err := mv.validateDutyCount(signedSSVMessage.SSVMessage.GetID(), messageSlot, committeeData.indices, signerStateBySlot); err != nil {
 		return err
 	}
@@ -145,10 +184,12 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 	clusterValidatorCount := len(committeeData.indices)
 
 	if signedSSVMessage.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
+		// Rule: The number of signatures must be <= min(2*V, V + SYNC_COMMITTEE_SIZE) where V is the number of validators assigned to the cluster
 		if partialSignatureMessageCount > min(2*clusterValidatorCount, clusterValidatorCount+syncCommitteeSize) {
 			return ErrTooManyPartialSignatureMessages
 		}
 
+		// Rule: a ValidatorIndex can't appear more than 2 times in the []*PartialSignatureMessage list
 		validatorIndexCount := make(map[phase0.ValidatorIndex]int)
 		for _, message := range partialSignatureMessages.Messages {
 			validatorIndexCount[message.ValidatorIndex]++
@@ -157,6 +198,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 			}
 		}
 	} else if signedSSVMessage.SSVMessage.MsgID.GetRoleType() == types.RoleSyncCommitteeContribution {
+		// Rule: The number of signatures must be <= MaxSignaturesInSyncCommitteeContribution for the sync comittee contribution duty
 		if partialSignatureMessageCount > maxSignaturesInSyncCommitteeContribution {
 			e := ErrTooManyPartialSignatureMessages
 			e.got = partialSignatureMessageCount
@@ -164,6 +206,7 @@ func (mv *messageValidator) validatePartialSigMessagesByDutyLogic(
 			return e
 		}
 	} else if partialSignatureMessageCount > 1 {
+		// Rule: The number of signatures must be 1 for the other types of duties
 		e := ErrTooManyPartialSignatureMessages
 		e.got = partialSignatureMessageCount
 		e.want = 1
@@ -178,19 +221,22 @@ func (mv *messageValidator) updatePartialSignatureState(
 	signer spectypes.OperatorID,
 ) {
 	stateBySlot := state.Get(signer)
-	msgSlot := partialSignatureMessages.Slot
+	messageSlot := partialSignatureMessages.Slot
+	var signerState *SignerState
 
-	if maxStateSlot, _ := stateBySlot.Max(); maxStateSlot != nil && msgSlot > maxStateSlot.(phase0.Slot) {
-		signerState := &SignerState{}
+	signerStateInterface, ok := stateBySlot.Get(messageSlot)
+	if !ok {
+		signerState = &SignerState{}
 		signerState.Init()
-		stateBySlot.Put(msgSlot, signerState)
-		mv.pruneOldSlots(stateBySlot, msgSlot)
+		stateBySlot.Put(messageSlot, signerState)
+		mv.pruneOldSlots(stateBySlot, messageSlot)
+	} else {
+		signerState = signerStateInterface.(*SignerState)
 	}
 
-	signerState, ok := stateBySlot.Get(msgSlot)
-	if ok {
-		signerState.(*SignerState).MessageCounts.RecordPartialSignatureMessage(partialSignatureMessages)
-	}
+	signerState.MessageCounts.RecordPartialSignatureMessage(partialSignatureMessages)
+
+	return
 }
 
 func (mv *messageValidator) validPartialSigMsgType(msgType spectypes.PartialSigMsgType) bool {
