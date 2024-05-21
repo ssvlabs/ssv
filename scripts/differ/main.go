@@ -69,7 +69,7 @@ func run() (changes int, err error) {
 	}
 
 	// Prepare the transformers.
-	transformers := []Transformer{
+	transformers := Transformers{
 		NoComments(),
 		NoPackageNames(config.ReducedPackageNames),
 		NoEmptyLines(),
@@ -120,9 +120,7 @@ func run() (changes int, err error) {
 
 			// Apply transformations to the code before comparing.
 			for _, e := range []*Element{&left, &right} {
-				for _, transformer := range transformers {
-					e.Code = transformer(e.Code)
-				}
+				e.Code = transformers.Transform(e.Code)
 			}
 
 			// Compute a unique ID of the change.

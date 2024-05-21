@@ -209,7 +209,7 @@ type CommitteeData struct {
 func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.MessageID) (CommitteeData, error) {
 	if mv.committeeRole(msgID.GetRoleType()) {
 		// TODO: add metrics and logs for committee role
-		committeeID := spectypes.ClusterID(msgID.GetSenderID()[16:])
+		committeeID := spectypes.CommitteeID(msgID.GetDutyExecutorID()[16:])
 
 		// Rule: Cluster does not exist
 		committee := mv.validatorStore.Committee(committeeID) // TODO: consider passing whole senderID
@@ -237,7 +237,7 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 		}, nil
 	}
 
-	publicKey, err := ssvtypes.DeserializeBLSPublicKey(msgID.GetSenderID())
+	publicKey, err := ssvtypes.DeserializeBLSPublicKey(msgID.GetDutyExecutorID())
 	if err != nil {
 		e := ErrDeserializePublicKey
 		e.innerErr = err
@@ -284,7 +284,7 @@ func (mv *messageValidator) consensusState(messageID spectypes.MessageID) *conse
 	defer mv.consensusStateIndexMu.Unlock()
 
 	id := consensusID{
-		SenderID: string(messageID.GetSenderID()),
+		SenderID: string(messageID.GetDutyExecutorID()),
 		Role:     messageID.GetRoleType(),
 	}
 

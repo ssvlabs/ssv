@@ -15,11 +15,11 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/libp2p/go-libp2p/core/peer"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/eth/contract"
 	"github.com/ssvlabs/ssv/logging/fields/stringer"
 	"github.com/ssvlabs/ssv/network/records"
@@ -322,10 +322,6 @@ func FeeRecipient(pubKey []byte) zap.Field {
 	return zap.Stringer(FieldFeeRecipient, stringer.HexStringer{Val: pubKey})
 }
 
-func BuilderProposals(v bool) zap.Field {
-	return zap.Bool(FieldBuilderProposals, v)
-}
-
 func FormatDutyID(epoch phase0.Epoch, duty *spectypes.BeaconDuty) string {
 	return fmt.Sprintf("%v-e%v-s%v-v%v", duty.Type.String(), epoch, duty.Slot, duty.ValidatorIndex)
 }
@@ -365,7 +361,7 @@ func ClusterIndex(cluster contract.ISSVNetworkCoreCluster) zap.Field {
 	return zap.Uint64(FieldClusterIndex, cluster.Index)
 }
 
-func CommitteeID(val spectypes.ClusterID) zap.Field {
+func CommitteeID(val spectypes.CommitteeID) zap.Field {
 	return zap.String(FieldCommitteeID, string(val[:]))
 }
 

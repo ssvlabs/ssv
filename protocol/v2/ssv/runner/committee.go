@@ -13,13 +13,13 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prysmaticlabs/go-bitfield"
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	specssv "github.com/ssvlabs/ssv-spec/ssv"
 	"github.com/ssvlabs/ssv-spec/types"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/networkconfig"
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 )
@@ -36,8 +36,8 @@ import (
 type CommitteeRunner struct {
 	BaseRunner     *BaseRunner
 	networkConfig  networkconfig.NetworkConfig
-	beacon         specssv.BeaconNode
-	network        qbft.FutureSpecNetwork
+	beacon         beacon.BeaconNode
+	network        specqbft.Network
 	signer         types.BeaconSigner
 	operatorSigner types.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
@@ -52,8 +52,8 @@ func NewCommitteeRunner(
 	beaconNetwork types.BeaconNetwork,
 	share map[phase0.ValidatorIndex]*types.Share,
 	qbftController *controller.Controller,
-	beacon specssv.BeaconNode,
-	network qbft.FutureSpecNetwork,
+	beacon beacon.BeaconNode,
+	network specqbft.Network,
 	signer types.BeaconSigner,
 	operatorSigner types.OperatorSigner,
 	valCheck specqbft.ProposedValueCheckF,
@@ -110,7 +110,7 @@ func (cr *CommitteeRunner) GetBaseRunner() *BaseRunner {
 	return cr.BaseRunner
 }
 
-func (cr *CommitteeRunner) GetBeaconNode() specssv.BeaconNode {
+func (cr *CommitteeRunner) GetBeaconNode() beacon.BeaconNode {
 	return cr.beacon
 }
 
@@ -118,7 +118,7 @@ func (cr *CommitteeRunner) GetValCheckF() specqbft.ProposedValueCheckF {
 	return cr.valCheck
 }
 
-func (cr *CommitteeRunner) GetNetwork() qbft.FutureSpecNetwork {
+func (cr *CommitteeRunner) GetNetwork() specqbft.Network {
 	return cr.network
 }
 

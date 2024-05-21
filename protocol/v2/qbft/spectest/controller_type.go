@@ -15,6 +15,7 @@ import (
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	spectestingutils "github.com/ssvlabs/ssv-spec/types/testingutils"
 	typescomparable "github.com/ssvlabs/ssv-spec/types/testingutils/comparable"
+
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 
@@ -116,29 +117,26 @@ func testBroadcastedDecided(
 		broadcastedSignedMsgs := config.GetNetwork().(*spectestingutils.TestingNetwork).BroadcastedMsgs
 		require.Greater(t, len(broadcastedSignedMsgs), 0)
 		require.NoError(t, spectestingutils.VerifyListOfSignedSSVMessages(broadcastedSignedMsgs, operators))
-		broadcastedMsgs := spectestingutils.ConvertBroadcastedMessagesToSSVMessages(broadcastedSignedMsgs)
 		found := false
-		for _, msg := range broadcastedMsgs {
+		for _, msg := range broadcastedSignedMsgs {
 
 			// a hack for testing non standard messageID identifiers since we copy them into a MessageID this fixes it
 			msgID := spectypes.MessageID{}
 			copy(msgID[:], identifier)
 
-			if !bytes.Equal(msgID[:], msg.MsgID[:]) {
+			if !bytes.Equal(msgID[:], msg.SSVMessage.MsgID[:]) {
 				continue
 			}
 
-			msg1 := &spectypes.SignedSSVMessage{}
-			require.NoError(t, msg1.Decode(msg.Data))
-			r1, err := msg1.GetRoot()
+			r1, err := msg.GetRoot()
 			require.NoError(t, err)
 
 			r2, err := runData.ExpectedDecidedState.BroadcastedDecided.GetRoot()
 			require.NoError(t, err)
 
 			if r1 == r2 &&
-				reflect.DeepEqual(runData.ExpectedDecidedState.BroadcastedDecided.OperatorIDs, msg1.OperatorIDs) &&
-				reflect.DeepEqual(runData.ExpectedDecidedState.BroadcastedDecided.Signatures, msg1.Signatures) {
+				reflect.DeepEqual(runData.ExpectedDecidedState.BroadcastedDecided.OperatorIDs, msg.OperatorIDs) &&
+				reflect.DeepEqual(runData.ExpectedDecidedState.BroadcastedDecided.Signatures, msg.Signatures) {
 				require.False(t, found)
 				found = true
 			}

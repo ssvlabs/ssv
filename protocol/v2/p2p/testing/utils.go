@@ -12,12 +12,14 @@ import (
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
+	"github.com/ssvlabs/ssv/network/commons"
+	"go.uber.org/zap"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
 	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
 	ssvtypes "github.com/ssvlabs/ssv/protocol/v2/types"
-	"go.uber.org/zap"
 )
 
 // MockMessageEvent is an abstraction used to push stream/pubsub messages
@@ -201,7 +203,8 @@ func (m *mockNetwork) Peers(pk spectypes.ValidatorPK) ([]peer.ID, error) {
 }
 
 func (m *mockNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedSSVMessage) error {
-	pk, err := ssvtypes.DeserializeBLSPublicKey(msgID.GetSenderID())
+	// #TODO fixme. GetDutyExecutorID can be not only publicKey, but also committeeID
+	pk, err := ssvtypes.DeserializeBLSPublicKey(msgID.GetDutyExecutorID())
 	if err != nil {
 		return err
 	}
@@ -256,7 +259,8 @@ func (m *mockNetwork) SyncHighestDecided(mid spectypes.MessageID) error {
 
 	m.logger.Debug("🔀 CALL SYNC")
 	m.calledDecidedSyncCnt++
-	pk, err := ssvtypes.DeserializeBLSPublicKey(mid.GetSenderID())
+	// #TODO fixme. GetDutyExecutorID can be not only publicKey, but also committeeID
+	pk, err := ssvtypes.DeserializeBLSPublicKey(mid.GetDutyExecutorID())
 	if err != nil {
 		return err
 	}
@@ -309,12 +313,12 @@ func (m *mockNetwork) SyncDecidedByRange(identifier spectypes.MessageID, to, fro
 }
 
 func (m *mockNetwork) SyncHighestRoundChange(mid spectypes.MessageID, height specqbft.Height) error {
-	pk, err := ssvtypes.DeserializeBLSPublicKey(mid.GetSenderID())
+	// #TODO fixme. GetDutyExecutorID can be not only publicKey, but also committeeID
+	dutyExecutorId, err := ssvtypes.DeserializeBLSPublicKey(mid.GetDutyExecutorID())
 	if err != nil {
 		return err
 	}
-	spk := hex.EncodeToString(pk.Serialize())
-	topic := spk
+	topic := commons.ValidatorTopicID(dutyExecutorId.Serialize())[0]
 
 	syncMsg, err := json.Marshal(&message.SyncMessage{
 		Params: &message.SyncParams{

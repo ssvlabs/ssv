@@ -8,6 +8,9 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slices"
+
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/ethereum/go-ethereum/common"
@@ -72,7 +75,6 @@ type ControllerOptions struct {
 	Beacon                     beaconprotocol.BeaconNode
 	FullNode                   bool `yaml:"FullNode" env:"FULLNODE" env-default:"false" env-description:"Save decided history rather than just highest messages"`
 	Exporter                   bool `yaml:"Exporter" env:"EXPORTER" env-default:"false" env-description:""`
-	BuilderProposals           bool `yaml:"BuilderProposals" env:"BUILDER_PROPOSALS" env-default:"false" env-description:"Use external builders to produce blocks"`
 	BeaconSigner               spectypes.BeaconSigner
 	OperatorSigner             spectypes.OperatorSigner
 	OperatorDataStore          operatordatastore.OperatorDataStore
@@ -100,7 +102,7 @@ type Controller interface {
 	AllActiveIndices(epoch phase0.Epoch, afterInit bool) []phase0.ValidatorIndex
 	GetValidator(pubKey spectypes.ValidatorPK) (*validator.Validator, bool)
 	ExecuteDuty(logger *zap.Logger, duty *spectypes.BeaconDuty)
-	ExecuteCommitteeDuty(logger *zap.Logger, committeeID spectypes.ClusterID, duty *spectypes.CommitteeDuty)
+	ExecuteCommitteeDuty(logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty)
 	UpdateValidatorMetaDataLoop()
 	StartNetworkHandlers()
 	GetOperatorShares() []*ssvtypes.SSVShare
@@ -220,7 +222,6 @@ func NewController(logger *zap.Logger, options ControllerOptions) Controller {
 		NewDecidedHandler: options.NewDecidedHandler,
 		FullNode:          options.FullNode,
 		Exporter:          options.Exporter,
-		BuilderProposals:  options.BuilderProposals,
 		GasLimit:          options.GasLimit,
 		MessageValidator:  options.MessageValidator,
 		Metrics:           options.Metrics,
@@ -343,11 +344,11 @@ func (c *controller) handleRouterMessages() {
 			}
 
 			// TODO: only try copying clusterid if validator failed
-			pk := msg.GetID().GetSenderID()
-			var cid spectypes.ClusterID
-			copy(cid[:], pk[16:])
+			dutyExecutorID := msg.GetID().GetDutyExecutorID()
+			var cid spectypes.CommitteeID
+			copy(cid[:], dutyExecutorID[16:])
 
-			if v, ok := c.validatorsMap.GetValidator(spectypes.ValidatorPK(pk)); ok {
+			if v, ok := c.validatorsMap.GetValidator(spectypes.ValidatorPK(dutyExecutorID)); ok {
 				v.HandleMessage(c.logger, msg)
 			} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
 				vc.HandleMessage(c.logger, msg)
@@ -384,9 +385,10 @@ func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
 			ncv = item.Value()
 		} else {
 			// Create a new nonCommitteeValidator and cache it.
-			share := c.sharesStorage.Get(nil, msg.GetID().GetSenderID())
+			// #TODO fixme. GetDutyExecutorID can be not only publicKey, but also committeeID
+			share := c.sharesStorage.Get(nil, msg.GetID().GetDutyExecutorID())
 			if share == nil {
-				return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetID().GetSenderID()))
+				return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetID().GetDutyExecutorID()))
 			}
 
 			opts := c.validatorOptions
@@ -723,7 +725,7 @@ func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.BeaconDuty)
 	}
 }
 
-func (c *controller) ExecuteCommitteeDuty(logger *zap.Logger, committeeID spectypes.ClusterID, duty *spectypes.CommitteeDuty) {
+func (c *controller) ExecuteCommitteeDuty(logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty) {
 	logger = logger.With(fields.Slot(duty.Slot), fields.Role(duty.RunnerRole()))
 
 	if cm, ok := c.validatorsMap.GetCommittee(committeeID); ok {
@@ -759,7 +761,7 @@ func CreateDutyExecuteMsg(duty *spectypes.BeaconDuty, pubKey []byte, domain spec
 }
 
 // CreateCommitteeDutyExecuteMsg returns ssvMsg with event type of execute committee duty
-func CreateCommitteeDutyExecuteMsg(duty *spectypes.CommitteeDuty, committeeID spectypes.ClusterID, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
+func CreateCommitteeDutyExecuteMsg(duty *spectypes.CommitteeDuty, committeeID spectypes.CommitteeID, domain spectypes.DomainType) (*spectypes.SSVMessage, error) {
 	executeCommitteeDutyData := types.ExecuteCommitteeDutyData{Duty: duty}
 	data, err := json.Marshal(executeCommitteeDutyData)
 	if err != nil {
@@ -1262,7 +1264,6 @@ func SetupRunners(
 			proposedValueCheck := specssv.ProposerValueCheckF(options.Signer, options.BeaconNetwork.GetBeaconNetwork(), options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index, options.SSVShare.SharePubKey)
 			qbftCtrl := buildController(spectypes.RoleProposer, proposedValueCheck)
 			runners[role] = runner.NewProposerRunner(options.BeaconNetwork.GetBeaconNetwork(), shareMap, qbftCtrl, options.Beacon, options.Network, options.Signer, options.OperatorSigner, proposedValueCheck, 0)
-			runners[role].(*runner.ProposerRunner).ProducesBlindedBlocks = options.BuilderProposals // apply blinded block flag
 		case spectypes.RoleAggregator:
 			aggregatorValueCheckF := specssv.AggregatorValueCheckF(options.Signer, options.BeaconNetwork.GetBeaconNetwork(), options.SSVShare.Share.ValidatorPubKey, options.SSVShare.BeaconMetadata.Index)
 			qbftCtrl := buildController(spectypes.RoleAggregator, aggregatorValueCheckF)

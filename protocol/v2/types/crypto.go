@@ -2,6 +2,7 @@ package types
 
 import (
 	"encoding/hex"
+
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 
 	"github.com/herumi/bls-eth-go-binary/bls"

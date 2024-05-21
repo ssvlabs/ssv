@@ -120,7 +120,7 @@ func (n *p2pNetwork) SetupHost(logger *zap.Logger) error {
 	if err != nil {
 		return errors.Wrap(err, "could not create resource manager")
 	}
-	n.connGater = connections.NewConnectionGater(logger, n.connectionsAtLimit)
+	n.connGater = connections.NewConnectionGater(logger, n.cfg.DisableIPRateLimit, n.connectionsAtLimit)
 	opts = append(opts, libp2p.ResourceManager(rmgr), libp2p.ConnectionGater(n.connGater))
 	host, err := libp2p.New(opts...)
 	if err != nil {
@@ -199,7 +199,11 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 		return n.subnets
 	}
 
-	var filters func() []connections.HandshakeFilter
+	filters := func() []connections.HandshakeFilter {
+		return []connections.HandshakeFilter{
+			connections.NetworkIDFilter(domain),
+		}
+	}
 
 	handshaker := connections.NewHandshaker(n.ctx, &connections.HandshakerCfg{
 		Streams:         n.streamCtrl,
@@ -277,6 +281,7 @@ func (n *p2pNetwork) setupPubsub(logger *zap.Logger) error {
 		ValidationQueueSize: n.cfg.PubsubValidationQueueSize,
 		ValidateThrottle:    n.cfg.PubsubValidateThrottle,
 		MsgIDCacheTTL:       n.cfg.PubsubMsgCacheTTL,
+		DisableIPRateLimit:  n.cfg.DisableIPRateLimit,
 		GetValidatorStats:   n.cfg.GetValidatorStats,
 	}
 

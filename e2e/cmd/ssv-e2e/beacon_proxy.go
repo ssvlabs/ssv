@@ -7,11 +7,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/attestantio/go-eth2-client/api"
-	"github.com/attestantio/go-eth2-client/http"
-
 	eth2client "github.com/attestantio/go-eth2-client"
-	"github.com/attestantio/go-eth2-client/auto"
+	"github.com/attestantio/go-eth2-client/api"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"golang.org/x/exp/maps"
 
@@ -19,9 +16,12 @@ import (
 
 	//eth2client "github.com/attestantio/go-eth2-client/http"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
+	"github.com/attestantio/go-eth2-client/http"
+	"github.com/attestantio/go-eth2-client/spec/phase0"
 	"github.com/rs/zerolog"
-
+	"github.com/ssvlabs/ssv/networkconfig"
 	"go.uber.org/zap"
+	"golang.org/x/exp/maps"
 
 	beaconproxy "github.com/ssvlabs/ssv/e2e/beacon_proxy"
 	"github.com/ssvlabs/ssv/e2e/beacon_proxy/intercept/slashinginterceptor"
@@ -39,11 +39,12 @@ type BeaconProxyJSON struct {
 
 func GetValidators(ctx context.Context, beaconURL string, idxs []phase0.ValidatorIndex) (map[phase0.ValidatorIndex]*v1.Validator, error) {
 	// todo: maybe create the client on top and pass down to all components
-	client, err := auto.New(
+	client, err := http.New(
 		ctx,
-		auto.WithAddress(beaconURL),
-		auto.WithTimeout(30*time.Second),
-		auto.WithLogLevel(zerolog.ErrorLevel),
+		http.WithAddress(beaconURL),
+		http.WithTimeout(30*time.Second),
+		http.WithLogLevel(zerolog.ErrorLevel),
+		http.WithReducedMemoryUsage(true),
 	)
 
 	if err != nil {
@@ -51,9 +52,8 @@ func GetValidators(ctx context.Context, beaconURL string, idxs []phase0.Validato
 	}
 
 	validatorsResp, err := client.(eth2client.ValidatorsProvider).Validators(ctx, &api.ValidatorsOpts{
-		State:              "head",
-		Indices:            idxs,
-		WithoutBeaconState: true,
+		State:   "head",
+		Indices: idxs,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get validators: %w", err)

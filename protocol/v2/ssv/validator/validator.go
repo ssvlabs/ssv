@@ -16,7 +16,6 @@ import (
 	"github.com/ssvlabs/ssv/message/validation"
 	"github.com/ssvlabs/ssv/networkconfig"
 	"github.com/ssvlabs/ssv/protocol/v2/message"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner"
 	"github.com/ssvlabs/ssv/protocol/v2/types"
@@ -32,7 +31,7 @@ type Validator struct {
 
 	NetworkConfig networkconfig.NetworkConfig
 	DutyRunners   runner.ValidatorDutyRunners
-	Network       qbft.FutureSpecNetwork
+	Network       specqbft.Network
 
 	Operator          *spectypes.Operator
 	Share             *types.SSVShare
@@ -129,7 +128,7 @@ func (v *Validator) ProcessMessage(logger *zap.Logger, msg *queue.DecodedSSVMess
 	if msg.GetType() != message.SSVEventMsgType {
 		// Validate message
 		if err := msg.SignedSSVMessage.Validate(); err != nil {
-			return errors.Wrap(err, "invalid SignedSSVMessage")
+			return errors.Wrap(err, "invalid signed message")
 		}
 
 		// Verify SignedSSVMessage's signature

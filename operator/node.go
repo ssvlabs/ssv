@@ -107,7 +107,6 @@ func New(logger *zap.Logger, opts Options, slotTickerProvider slotticker.Provide
 			ValidatorExitCh:      opts.ValidatorController.ValidatorExitChan(),
 			ExecuteDuty:          opts.ValidatorController.ExecuteDuty,
 			ExecuteCommitteeDuty: opts.ValidatorController.ExecuteCommitteeDuty,
-			BuilderProposals:     opts.ValidatorOptions.BuilderProposals,
 			DutyStore:            opts.DutyStore,
 			SlotTickerProvider:   slotTickerProvider,
 		}),

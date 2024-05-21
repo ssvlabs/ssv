@@ -9,8 +9,10 @@ import (
 
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
 	common "github.com/ethereum/go-ethereum/common"
-	gomock "github.com/golang/mock/gomock"
+	gomock "go.uber.org/mock/gomock"
 	peer "github.com/libp2p/go-libp2p/core/peer"
+	zap "go.uber.org/zap"
+
 	types0 "github.com/ssvlabs/ssv-spec/types"
 	network "github.com/ssvlabs/ssv/network"
 	duties "github.com/ssvlabs/ssv/operator/duties"
@@ -20,7 +22,6 @@ import (
 	types "github.com/ssvlabs/ssv/protocol/v2/types"
 	storage "github.com/ssvlabs/ssv/registry/storage"
 	basedb "github.com/ssvlabs/ssv/storage/basedb"
-	zap "go.uber.org/zap"
 )
 
 // MockController is a mock of Controller interface.
@@ -75,7 +76,7 @@ func (mr *MockControllerMockRecorder) CommitteeActiveIndices(epoch interface{}) 
 }
 
 // ExecuteCommitteeDuty mocks base method.
-func (m *MockController) ExecuteCommitteeDuty(logger *zap.Logger, committeeID types0.ClusterID, duty *types0.CommitteeDuty) {
+func (m *MockController) ExecuteCommitteeDuty(logger *zap.Logger, committeeID types0.CommitteeID, duty *types0.CommitteeDuty) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "ExecuteCommitteeDuty", logger, committeeID, duty)
 }
