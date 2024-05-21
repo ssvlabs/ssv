@@ -119,7 +119,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 	encodedCommitteeID := append(bytes.Repeat([]byte{0}, 16), committeeID[:]...)
 	committeeIdentifier := spectypes.NewMsgID(netCfg.Domain, encodedCommitteeID, committeeRole)
-	//nonCommitteeIdentifier := spectypes.NewMsgID(netCfg.Domain, ks.ValidatorPK.Serialize(), committeeRole)
+	nonCommitteeIdentifier := spectypes.NewMsgID(netCfg.Domain, ks.ValidatorPK.Serialize(), nonCommitteeRole)
 
 	// Message validation happy flow, messages are not ignored or rejected and there are no errors
 	t.Run("happy flow", func(t *testing.T) {
@@ -1276,6 +1276,29 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorIs(t, err, ErrDecidedWithSameSigners)
+	})
+
+	// Send message with a slot lower than in the previous message
+	t.Run("slot already advanced", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+
+		signedSSVMessage := generateSignedMessage(ks, nonCommitteeIdentifier, slot, func(message *specqbft.Message) {
+			message.Height = 8
+		})
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(committeeID[:])[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
+		require.NoError(t, err)
+
+		signedSSVMessage = generateSignedMessage(ks, nonCommitteeIdentifier, slot, func(message *specqbft.Message) {
+			message.Height = 4
+		})
+
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
+		require.ErrorContains(t, err, ErrSlotAlreadyAdvanced.Error())
 	})
 
 	// Send message with a round lower than in the previous message
