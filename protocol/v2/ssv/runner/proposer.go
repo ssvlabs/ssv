@@ -242,6 +242,7 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		start := time.Now()
 
 		logger = logger.With(
+			fields.BeaconDataTime(r.metrics.GetBeaconDataTime()),
 			fields.PreConsensusTime(r.metrics.GetPreConsensusTime()),
 			fields.ConsensusTime(r.metrics.GetConsensusTime()),
 			fields.PostConsensusTime(r.metrics.GetPostConsensusTime()),
@@ -469,6 +470,16 @@ func summarizeBlock(block any) (summary blockSummary, err error) {
 			return summarizeBlock(b.Deneb.Block)
 		default:
 			return summary, fmt.Errorf("unsupported block version %d", b.Version)
+		}
+
+	case *api.VersionedBlindedProposal:
+		switch b.Version {
+		case spec.DataVersionCapella:
+			return summarizeBlock(b.Capella)
+		case spec.DataVersionDeneb:
+			return summarizeBlock(b.Deneb)
+		default:
+			return summary, fmt.Errorf("unsupported blinded block version %d", b.Version)
 		}
 
 	case *capella.BeaconBlock:
