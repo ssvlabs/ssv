@@ -26,5 +26,4 @@ func (s *SignerState) ResetRound(round specqbft.Round) {
 	s.Round = round
 	s.MessageCounts = MessageCounts{}
 	s.ProposalData = nil
-	s.SeenSigners = make(map[string]struct{})
 }

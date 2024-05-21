@@ -180,19 +180,19 @@ func (mv *messageValidator) validateQBFTLogic(
 			return err
 		}
 
-		if consensusMessage.Round == signerState.Round {
-			// It should be checked after ErrNonDecidedWithMultipleSigners
-			if len(signedSSVMessage.GetOperatorIDs()) > 1 {
-				encodedOperators, err := encodeOperators(signedSSVMessage.GetOperatorIDs())
-				if err != nil {
-					return err
-				}
-
-				if _, ok := signerState.SeenSigners[string(encodedOperators)]; ok {
-					return ErrDecidedWithSameSigners
-				}
+		// It should be checked after ErrNonDecidedWithMultipleSigners
+		if len(signedSSVMessage.GetOperatorIDs()) > 1 {
+			encodedOperators, err := encodeOperators(signedSSVMessage.GetOperatorIDs())
+			if err != nil {
+				return err
 			}
 
+			if _, ok := signerState.SeenSigners[string(encodedOperators)]; ok {
+				return ErrDecidedWithSameSigners
+			}
+		}
+
+		if consensusMessage.Round == signerState.Round {
 			if len(signedSSVMessage.GetOperatorIDs()) == 1 {
 				if len(signedSSVMessage.FullData) != 0 && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedSSVMessage.FullData) {
 					return ErrDuplicatedProposalWithDifferentData
@@ -248,22 +248,14 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 
 	return nil
 }
+
 func (mv *messageValidator) updateConsensusState(signedSSVMessage *spectypes.SignedSSVMessage, consensusMessage *specqbft.Message, consensusState *consensusState) {
 	msgSlot := phase0.Slot(consensusMessage.Height)
 
 	for _, signer := range signedSSVMessage.GetOperatorIDs() {
 		stateBySlot := consensusState.Get(signer)
 		signerStateInterface, ok := stateBySlot.Get(msgSlot)
-
-		if ok {
-			signerState := signerStateInterface.(*SignerState)
-			if consensusMessage.Round > signerState.Round {
-				signerState.ResetRound(consensusMessage.Round)
-			}
-			mv.processSignerState(signedSSVMessage, consensusMessage, signerState)
-		}
-
-		if maxStateSlot, _ := stateBySlot.Max(); maxStateSlot == nil || msgSlot > maxStateSlot.(phase0.Slot) {
+		if !ok {
 			signerState := &SignerState{}
 			signerState.Init()
 			signerState.ResetRound(consensusMessage.Round)
@@ -271,12 +263,20 @@ func (mv *messageValidator) updateConsensusState(signedSSVMessage *spectypes.Sig
 			stateBySlot.Put(msgSlot, signerState)
 			mv.pruneOldSlots(stateBySlot, msgSlot)
 			mv.processSignerState(signedSSVMessage, consensusMessage, signerState)
+			return
 		}
+
+		signerState := signerStateInterface.(*SignerState)
+		if consensusMessage.Round > signerState.Round {
+			signerState.ResetRound(consensusMessage.Round)
+		}
+		mv.processSignerState(signedSSVMessage, consensusMessage, signerState)
+		return
 	}
 }
 
 func (mv *messageValidator) processSignerState(signedSSVMessage *spectypes.SignedSSVMessage, consensusMessage *specqbft.Message, signerState *SignerState) {
-	if len(signedSSVMessage.FullData) != 0 && signerState.ProposalData == nil {
+	if len(signedSSVMessage.FullData) != 0 && consensusMessage.MsgType == specqbft.ProposalMsgType {
 		signerState.ProposalData = signedSSVMessage.FullData
 	}
 
