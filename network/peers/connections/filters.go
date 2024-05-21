@@ -16,7 +16,7 @@ func NetworkIDFilter(networkID string) HandshakeFilter {
 	return func(sender peer.ID, ni *records.NodeInfo) error {
 		nid := ni.GetNodeInfo().NetworkID
 		if networkID != nid {
-			return errors.Errorf("networkID '%s' instead of '%s'", nid, networkID)
+			return errors.Errorf("mismatching domain type (want %s, got %s)", networkID, nid)
 		}
 		return nil
 	}
