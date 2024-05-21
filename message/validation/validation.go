@@ -231,8 +231,7 @@ func (mv *messageValidator) ValidatorForTopic(_ string) func(ctx context.Context
 // ValidatePubsubMessage validates the given pubsub message.
 // Depending on the outcome, it will return one of the pubsub validation results (Accept, Ignore, or Reject).
 func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer.ID, pmsg *pubsub.Message) pubsub.ValidationResult {
-	// if mv.selfAccept && peerID == mv.selfPID {
-	if true { // TODO: revert
+	if mv.selfAccept && peerID == mv.selfPID {
 		signedSSVMsg := &spectypes.SignedSSVMessage{}
 		if err := signedSSVMsg.Decode(pmsg.GetData()); err != nil {
 			mv.logger.Error("failed to decode signed ssv message", zap.Error(err))
@@ -289,19 +288,21 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer
 		var valErr Error
 		if errors.As(err, &valErr) {
 			if valErr.Reject() {
-				if !valErr.Silent() {
-					f = append(f, zap.Error(err))
-					mv.logger.Debug("rejecting invalid message", f...)
-				}
+				// TODO: revert
+				// if !valErr.Silent() {
+				f = append(f, zap.Error(err))
+				mv.logger.Debug("rejecting invalid message", f...)
+				// }
 
 				mv.metrics.MessageRejected(valErr.Text(), descriptor.Role, round)
 				return pubsub.ValidationReject
 			}
 
-			if !valErr.Silent() {
-				f = append(f, zap.Error(err))
-				mv.logger.Debug("ignoring invalid message", f...)
-			}
+			// TODO: revert
+			// if !valErr.Silent() {
+			f = append(f, zap.Error(err))
+			mv.logger.Debug("ignoring invalid message", f...)
+			// }
 			mv.metrics.MessageIgnored(valErr.Text(), descriptor.Role, round)
 			return pubsub.ValidationIgnore
 		}
