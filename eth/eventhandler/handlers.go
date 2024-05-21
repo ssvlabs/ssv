@@ -333,7 +333,7 @@ func (eh *EventHandler) validatorAddedEventToShare(
 		operators = append(operators, &spectypes.Operator{
 			OperatorID:        operatorID,
 			SSVOperatorPubKey: od.PublicKey,
-			ClusterID:         spectypes.GetClusterID(committeeIDs),
+			ClusterID:         spectypes.GetCommitteeID(committeeIDs),
 			Committee:         committee,
 			Quorum:            quorum,
 			PartialQuorum:     partialQuorum,

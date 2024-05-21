@@ -26,7 +26,7 @@ const (
 type SSVShare struct {
 	spectypes.Share
 	Metadata
-	committeeID *spectypes.ClusterID
+	committeeID *spectypes.CommitteeID
 }
 
 // BelongsToOperator checks whether the share belongs to operator.
@@ -58,7 +58,7 @@ func (s *SSVShare) SetFeeRecipient(feeRecipient bellatrix.ExecutionAddress) {
 	s.FeeRecipientAddress = feeRecipient
 }
 
-func (s *SSVShare) CommitteeID() spectypes.ClusterID {
+func (s *SSVShare) CommitteeID() spectypes.CommitteeID {
 	if s.committeeID != nil {
 		return *s.committeeID
 	}
@@ -109,7 +109,7 @@ type Metadata struct {
 }
 
 // Return a 32 bytes ID for the committee of operators
-func ComputeCommitteeID(committee []spectypes.OperatorID) spectypes.ClusterID {
+func ComputeCommitteeID(committee []spectypes.OperatorID) spectypes.CommitteeID {
 	// sort
 	sort.Slice(committee, func(i, j int) bool {
 		return committee[i] < committee[j]
@@ -120,5 +120,5 @@ func ComputeCommitteeID(committee []spectypes.OperatorID) spectypes.ClusterID {
 		binary.LittleEndian.PutUint32(bytes[i*4:], uint32(v))
 	}
 	// Hash
-	return spectypes.ClusterID(sha256.Sum256(bytes))
+	return spectypes.CommitteeID(sha256.Sum256(bytes))
 }

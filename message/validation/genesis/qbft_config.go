@@ -37,7 +37,7 @@ func (q qbftConfig) GetProposerF() specqbft.ProposerF {
 	panic("should not be called")
 }
 
-func (q qbftConfig) GetNetwork() qbft.FutureSpecNetwork {
+func (q qbftConfig) GetNetwork() specqbft.Network {
 	panic("should not be called")
 }
 

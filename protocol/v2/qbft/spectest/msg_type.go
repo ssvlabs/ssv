@@ -4,9 +4,10 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectests "github.com/ssvlabs/ssv-spec/qbft/spectest/tests"
-	"github.com/stretchr/testify/require"
 )
 
 func RunMsg(t *testing.T, test *spectests.MsgSpecTest) { // using only spec struct so this test can be imported
@@ -26,13 +27,13 @@ func RunMsg(t *testing.T, test *spectests.MsgSpecTest) { // using only spec stru
 		}
 
 		if len(test.EncodedMessages) > 0 {
-			byts, err := msg.Encode()
+			byts, err := rc.Encode()
 			require.NoError(t, err)
 			require.EqualValues(t, test.EncodedMessages[i], byts)
 		}
 
 		if len(test.ExpectedRoots) > 0 {
-			r, err := msg.GetRoot()
+			r, err := rc.GetRoot()
 			require.NoError(t, err)
 			require.EqualValues(t, test.ExpectedRoots[i], r)
 		}
@@ -40,6 +41,7 @@ func RunMsg(t *testing.T, test *spectests.MsgSpecTest) { // using only spec stru
 
 	// check error
 	if len(test.ExpectedError) != 0 {
+		t.Log("Expected error", test.ExpectedError)
 		require.EqualError(t, lastErr, test.ExpectedError)
 	} else {
 		require.NoError(t, lastErr)

@@ -4,13 +4,14 @@ import (
 	"bytes"
 
 	"github.com/pkg/errors"
+	"go.uber.org/zap"
+
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	"github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv-spec/types/testingutils"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
-	"go.uber.org/zap"
 )
 
 var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, role types.RunnerRole) *qbft.Config {
@@ -42,25 +43,6 @@ var TestingConfig = func(logger *zap.Logger, keySet *testingutils.TestKeySet, ro
 
 var TestingInvalidValueCheck = []byte{1, 1, 1, 1}
 
-var TestingShare = func(keysSet *testingutils.TestKeySet) *types.Share {
-
-	// Decode validator public key
-	pkBytesSlice := keysSet.ValidatorPK.Serialize()
-	pkBytesArray := [48]byte{}
-	copy(pkBytesArray[:], pkBytesSlice)
-
-	return &types.Share{
-		ValidatorIndex:      testingutils.TestingValidatorIndex,
-		ValidatorPubKey:     pkBytesArray,
-		SharePubKey:         keysSet.Shares[1].GetPublicKey().Serialize(),
-		Committee:           keysSet.Committee(),
-		Quorum:              keysSet.Threshold,
-		DomainType:          testingutils.TestingSSVDomainType,
-		FeeRecipientAddress: testingutils.TestingFeeRecipient,
-		Graffiti:            testingutils.TestingGraffiti[:],
-	}
-}
-
 var TestingOperator = func(keysSet *testingutils.TestKeySet) *types.Operator {
 	committeeMembers := []*types.CommitteeMember{}
 
@@ -90,7 +72,7 @@ var TestingOperator = func(keysSet *testingutils.TestKeySet) *types.Operator {
 
 	return &types.Operator{
 		OperatorID:        1,
-		ClusterID:         types.GetClusterID(opIds),
+		ClusterID:         types.GetCommitteeID(opIds),
 		SSVOperatorPubKey: operatorPubKeyBytes,
 		Quorum:            keysSet.Threshold,
 		PartialQuorum:     keysSet.PartialThreshold,
