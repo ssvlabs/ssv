@@ -175,7 +175,7 @@ func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSS
 	}
 
 	// Rule: Check if message was sent in the correct topic
-	messageTopics := commons.CommitteeTopicID(committeeData.committeeID[:])
+	messageTopics := commons.CommitteeTopicID(committeeData.committeeID)
 	topicBaseName := commons.GetTopicBaseName(topic)
 	if !slices.Contains(messageTopics, topicBaseName) {
 		e := ErrIncorrectTopic
@@ -203,7 +203,7 @@ func (mv *messageValidator) obtainValidationLock(messageID spectypes.MessageID) 
 type CommitteeData struct {
 	operatorIDs []spectypes.OperatorID
 	indices     []phase0.ValidatorIndex
-	committeeID spectypes.ClusterID
+	committeeID spectypes.CommitteeID
 }
 
 func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.MessageID) (CommitteeData, error) {

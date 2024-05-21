@@ -129,7 +129,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.NoError(t, err)
 	})
@@ -152,7 +152,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
 
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.NoError(t, err)
 
@@ -233,7 +233,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
-		topic := commons.GetTopicFullName(commons.CommitteeTopicID(committeeIdentifier[:])[0])
+		topic := commons.GetTopicFullName(commons.CommitteeTopicID(committeeID)[0])
 		msgSize := maxSignedMsgSize*2 + commons.MessageOffset
 
 		pmsg := &pubsub.Message{
@@ -258,7 +258,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
 
-		topic := commons.GetTopicFullName(commons.CommitteeTopicID(committeeIdentifier[:])[0])
+		topic := commons.GetTopicFullName(commons.CommitteeTopicID(committeeID)[0])
 		pmsg := &pubsub.Message{
 			Message: &pspb.Message{
 				Data:  bytes.Repeat([]byte{1}, 1+commons.MessageOffset),
@@ -283,7 +283,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage.SSVMessage.Data = bytes.Repeat([]byte{1}, 500)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 
 		require.ErrorContains(t, err, ErrUndecodableMessageData.Error())
@@ -299,7 +299,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage.SSVMessage.Data = []byte{}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorIs(t, err, ErrEmptyData)
 
@@ -320,7 +320,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage.SSVMessage.Data = bytes.Repeat([]byte{1}, tooBigMsgSize)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 
 		expectedErr := ErrSSVDataTooBig
@@ -339,7 +339,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage.SSVMessage.Data = bytes.Repeat([]byte{1}, maxPayloadSize)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 
 		require.ErrorContains(t, err, ErrUndecodableMessageData.Error())
@@ -354,7 +354,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
 		signedSSVMessage.SSVMessage.MsgType = math.MaxUint64
 
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, time.Now())
 		require.ErrorContains(t, err, ErrUnknownSSVMessageType.Error())
 	})
@@ -403,7 +403,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		unknownIdentifier := spectypes.NewMsgID(netCfg.Domain, unknownCommitteeID, committeeRole)
 		signedSSVMessage := generateSignedMessage(ks, unknownIdentifier, slot)
 
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, time.Now())
 		expectedErr := ErrNonExistentCommitteeID
 		expectedErr.got = hex.EncodeToString(unknownCommitteeID[16:])
@@ -453,7 +453,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		badIdentifier := spectypes.NewMsgID(netCfg.Domain, shares.active.ValidatorPubKey[:], spectypes.RoleValidatorRegistration)
 		signedSSVMessage := generateSignedMessage(ks, badIdentifier, slot)
 
-		topicID := commons.CommitteeTopicID(committeeID[:])[0]
+		topicID := commons.CommitteeTopicID(committeeID)[0]
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		expectedErr := ErrUnexpectedConsensusMessage
@@ -542,7 +542,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage.FullData = spectestingutils.TestingQBFTFullData
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(committeeID[:])[0]
+		topicID := commons.CommitteeTopicID(committeeID)[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.NoError(t, err)
 	})
@@ -577,7 +577,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		identifier := spectypes.NewMsgID(netCfg.Domain, ks.ValidatorPK.Serialize(), role)
 		signedSSVMessage := generateSignedMessage(ks, identifier, slot)
 
-		topicID := commons.CommitteeTopicID(committeeID[:])[0]
+		topicID := commons.CommitteeTopicID(committeeID)[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, netCfg.Beacon.GetSlotStartTime(slot))
 		require.NoError(t, err)
 
@@ -602,7 +602,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		identifier := spectypes.NewMsgID(netCfg.Domain, ks.ValidatorPK.Serialize(), spectypes.RoleProposer)
 		signedSSVMessage := generateSignedMessage(ks, identifier, slot)
 
-		topicID := commons.CommitteeTopicID(committeeID[:])[0]
+		topicID := commons.CommitteeTopicID(committeeID)[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, netCfg.Beacon.GetSlotStartTime(slot))
 		require.ErrorContains(t, err, ErrNoDuty.Error())
 
@@ -647,7 +647,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage.FullData = spectestingutils.TestingQBFTFullData
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorContains(t, err, ErrSignerNotInCommittee.Error())
 	})
@@ -677,7 +677,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		partialSigSSVMessage.OperatorIDs = []spectypes.OperatorID{2}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(committeeID[:])[0]
+		topicID := commons.CommitteeTopicID(committeeID)[0]
 		_, err = validator.handleSignedSSVMessage(partialSigSSVMessage, topicID, receivedAt)
 		expectedErr := ErrInconsistentSigners
 		expectedErr.got = spectypes.OperatorID(2)
@@ -696,7 +696,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage := spectestingutils.SignedSSVMessageWithSigner(1, ks.OperatorKeys[1], spectestingutils.SSVMsgAggregator(nil, messages))
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(committeeID[:])[0]
+		topicID := commons.CommitteeTopicID(committeeID)[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorIs(t, err, ErrNoPartialSignatureMessages)
 	})
@@ -760,7 +760,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 
 						receivedAt := netCfg.Beacon.GetSlotStartTime(spectestingutils.TestingDutySlot)
 
-						topicID := commons.CommitteeTopicID(committeeID[:])[0]
+						topicID := commons.CommitteeTopicID(committeeID)[0]
 
 						_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 						require.NoError(t, err)
@@ -789,7 +789,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 			signedSSVMessage := spectestingutils.SignedSSVMessageWithSigner(1, ks.OperatorKeys[1], ssvMessage)
 
 			receivedAt := netCfg.Beacon.GetSlotStartTime(spectestingutils.TestingDutySlot)
-			topicID := commons.CommitteeTopicID(committeeID[:])[0]
+			topicID := commons.CommitteeTopicID(committeeID)[0]
 			_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 			require.ErrorContains(t, err, ErrInvalidPartialSignatureType.Error())
 		})
@@ -835,7 +835,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 						signedSSVMessage := spectestingutils.SignedSSVMessageWithSigner(1, ks.OperatorKeys[1], ssvMessage)
 
 						receivedAt := netCfg.Beacon.GetSlotStartTime(spectestingutils.TestingDutySlot)
-						topicID := commons.CommitteeTopicID(committeeID[:])[0]
+						topicID := commons.CommitteeTopicID(committeeID)[0]
 						_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 						require.ErrorContains(t, err, ErrPartialSignatureTypeRoleMismatch.Error())
 					})
@@ -854,7 +854,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		})
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		expectedErr := ErrUnknownQBFTMessageType
 		require.ErrorIs(t, err, expectedErr)
@@ -869,7 +869,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage.Signatures = [][]byte{{0x1}}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorContains(t, err, ErrWrongRSASignatureSize.Error())
 	})
@@ -883,7 +883,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage.OperatorIDs = nil
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetSenderID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorIs(t, err, ErrNoSigners)
 	})
@@ -905,7 +905,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorContains(t, err, ErrSignerNotInCommittee.Error())
 	})
@@ -919,7 +919,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage.OperatorIDs = []spectypes.OperatorID{0}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorIs(t, err, ErrZeroSigner)
 	})
@@ -933,7 +933,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage.OperatorIDs = []spectypes.OperatorID{1, 2, 2}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorIs(t, err, ErrDuplicatedSigner)
 	})
@@ -947,7 +947,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage.OperatorIDs = []spectypes.OperatorID{3, 2, 1}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorIs(t, err, ErrSignersNotSorted)
 	})
@@ -961,7 +961,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage.OperatorIDs = []spectypes.OperatorID{1, 2, 3, 4}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 
 		require.ErrorContains(t, err, ErrSignatureOperatorIDLengthMismatch.Error())
@@ -977,7 +977,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage.Signatures = signedSSVMessage.Signatures[:2]
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 
 		require.ErrorContains(t, err, ErrDecidedNotEnoughSigners.Error())
@@ -993,7 +993,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		})
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 
 		expectedErr := ErrNonDecidedWithMultipleSigners
@@ -1030,7 +1030,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				msgID := spectypes.NewMsgID(netCfg.Domain, senderID, role)
 				signedSSVMessage := generateSignedMessage(ks, msgID, slot)
 
-				topicID := commons.CommitteeTopicID(committeeID[:])[0]
+				topicID := commons.CommitteeTopicID(committeeID)[0]
 				_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 				require.ErrorContains(t, err, ErrLateMessage.Error())
 			})
@@ -1045,7 +1045,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot - 1)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 
 		require.ErrorContains(t, err, ErrEarlyMessage.Error())
@@ -1060,7 +1060,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage.OperatorIDs = []spectypes.OperatorID{2}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorContains(t, err, ErrSignerNotLeader.Error())
 	})
@@ -1076,7 +1076,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage.OperatorIDs = []spectypes.OperatorID{2}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 
 		require.ErrorContains(t, err, ErrMalformedPrepareJustifications.Error())
@@ -1099,7 +1099,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage.FullData = nil
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 
 		require.ErrorContains(t, err, ErrUnexpectedPrepareJustifications.Error())
@@ -1122,7 +1122,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage.FullData = nil
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 
 		require.ErrorContains(t, err, ErrUnexpectedRoundChangeJustifications.Error())
@@ -1140,7 +1140,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage.FullData = nil
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 
 		require.ErrorContains(t, err, ErrMalformedRoundChangeJustifications.Error())
@@ -1156,7 +1156,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage.FullData = []byte{1}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 
 		expectedErr := ErrInvalidHash
@@ -1172,7 +1172,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.NoError(t, err)
 
@@ -1201,7 +1201,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage.FullData = nil
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(committeeID[:])[0]
+		topicID := commons.CommitteeTopicID(committeeID)[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.NoError(t, err)
 
@@ -1223,7 +1223,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage.FullData = nil
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.NoError(t, err)
 
@@ -1245,7 +1245,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage.FullData = nil
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.NoError(t, err)
 
@@ -1267,7 +1267,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage.FullData = nil
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.NoError(t, err)
@@ -1287,7 +1287,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		})
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(committeeID[:])[0]
+		topicID := commons.CommitteeTopicID(committeeID)[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.NoError(t, err)
 
@@ -1310,7 +1310,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		})
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot).Add(5 * roundtimer.QuickTimeout)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetSenderID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.NoError(t, err)
 
@@ -1355,7 +1355,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 				})
 				signedSSVMessage.FullData = nil
 
-				topicID := commons.CommitteeTopicID(committeeID[:])[0]
+				topicID := commons.CommitteeTopicID(committeeID)[0]
 
 				sinceSlotStart := time.Duration(0)
 				for validator.currentEstimatedRound(sinceSlotStart) != round {
@@ -1383,7 +1383,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage.SSVMessage.MsgType = message.SSVEventMsgType
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorIs(t, err, ErrEventMessage)
@@ -1399,7 +1399,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage.SSVMessage.MsgType = spectypes.DKGMsgType
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorIs(t, err, ErrDKGMessage)
@@ -1414,7 +1414,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorContains(t, err, ErrSignatureVerification.Error())
@@ -1473,7 +1473,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		})
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorContains(t, err, ErrInvalidRound.Error())
 	})
@@ -1488,7 +1488,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage.Signatures = [][]byte{}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorContains(t, err, ErrNoSignatures.Error())
 	})
@@ -1506,7 +1506,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage.SSVMessage.MsgID = committeeIdentifier
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorContains(t, err, ErrMismatchedIdentifier.Error())
 	})
@@ -1522,7 +1522,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		})
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorContains(t, err, ErrPrepareOrCommitWithFullData.Error())
 
@@ -1543,7 +1543,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage.FullData = []byte{1}
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(committeeID[:])[0]
+		topicID := commons.CommitteeTopicID(committeeID)[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorIs(t, err, ErrFullDataNotInConsensusMessage)
 	})
@@ -1559,7 +1559,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage.Signatures = append(signedSSVMessage.Signatures, signedSSVMessage.Signatures[0])
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(committeeID[:])[0]
+		topicID := commons.CommitteeTopicID(committeeID)[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorIs(t, err, ErrPartialSigOneSigner)
 	})
@@ -1588,7 +1588,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage := spectestingutils.SignPartialSigSSVMessage(ks, ssvMessage)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorContains(t, err, ErrTooManyPartialSignatureMessages.Error())
 	})
@@ -1617,7 +1617,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage := spectestingutils.SignPartialSigSSVMessage(ks, ssvMessage)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorContains(t, err, ErrTripleValidatorIndexInPartialSignatures.Error())
 	})
@@ -1644,7 +1644,7 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		signedSSVMessage := spectestingutils.SignPartialSigSSVMessage(ks, ssvMessage)
 
 		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:])[0]
+		topicID := commons.CommitteeTopicID(spectypes.CommitteeID(signedSSVMessage.SSVMessage.GetID().GetDutyExecutorID()[16:]))[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorContains(t, err, ErrValidatorIndexMismatch.Error())
 	})
