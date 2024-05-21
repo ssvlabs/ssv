@@ -1255,10 +1255,8 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorIs(t, err, expectedErr)
 	})
 
-	// Decided with same number of signers should receive an error
-	t.Run("decided with same number of signers", func(t *testing.T) {
-		t.Skip("this rule is being researched because it gets triggered often")
-
+	// Decided with same signers should receive an error
+	t.Run("decided with same signers", func(t *testing.T) {
 		validator := New(netCfg, validatorStore, dutyStore, signatureVerifier).(*messageValidator)
 
 		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
