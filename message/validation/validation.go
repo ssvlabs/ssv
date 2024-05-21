@@ -264,6 +264,14 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer
 		round = descriptor.Consensus.Round
 	}
 
+	// TODO: revert
+	mv.logger.Debug("got p2p message",
+		fields.PeerID(peerID),
+		fields.Role(decodedMessage.MsgID.GetRoleType()),
+		fields.MessageType(decodedMessage.MsgType),
+		fields.PubKey(decodedMessage.MsgID.GetPubKey()),
+	)
+
 	f := append(descriptor.Fields(), fields.PeerID(peerID))
 
 	if err != nil {
