@@ -144,6 +144,8 @@ func (mv *messageValidator) validateQBFTLogic(
 	receivedAt time.Time,
 	state *consensusState,
 ) error {
+	// TODO: try to rearrange checks to simplify them
+
 	if consensusMessage.MsgType == specqbft.ProposalMsgType {
 		leader := mv.roundRobinProposer(consensusMessage.Height, consensusMessage.Round, committee)
 		if signedSSVMessage.GetOperatorIDs()[0] != leader {
@@ -165,7 +167,7 @@ func (mv *messageValidator) validateQBFTLogic(
 		signerState := signerStateInterface.(*SignerState)
 
 		// It should be checked after ErrNonDecidedWithMultipleSigners
-		if len(signedSSVMessage.GetOperatorIDs()) > 1 {
+		if len(signedSSVMessage.GetOperatorIDs()) > 1 && consensusMessage.Round == signerState.Round {
 			encodedOperators, err := encodeOperators(signedSSVMessage.GetOperatorIDs())
 			if err != nil {
 				return err
@@ -177,7 +179,7 @@ func (mv *messageValidator) validateQBFTLogic(
 		}
 
 		if len(signedSSVMessage.GetOperatorIDs()) == 1 {
-			if len(signedSSVMessage.FullData) != 0 && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedSSVMessage.FullData) {
+			if len(signedSSVMessage.FullData) != 0 && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedSSVMessage.FullData) && consensusMessage.Round == signerState.Round {
 				return ErrDuplicatedProposalWithDifferentData
 			}
 
@@ -192,11 +194,12 @@ func (mv *messageValidator) validateQBFTLogic(
 			}
 		}
 
-		limits := maxMessageCounts(len(committee))
-		if err := signerState.MessageCounts.ValidateConsensusMessage(signedSSVMessage, consensusMessage, limits); err != nil {
-			return err
+		if consensusMessage.Round == signerState.Round {
+			limits := maxMessageCounts(len(committee))
+			if err := signerState.MessageCounts.ValidateConsensusMessage(signedSSVMessage, consensusMessage, limits); err != nil {
+				return err
+			}
 		}
-
 	}
 
 	if len(signedSSVMessage.GetOperatorIDs()) == 1 {
