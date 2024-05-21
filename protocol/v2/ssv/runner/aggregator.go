@@ -2,6 +2,7 @@ package runner
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"time"
 
@@ -91,9 +92,6 @@ func (r *AggregatorRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *sp
 	}
 	r.metrics.EndPreConsensus()
 	r.metrics.StartConsensus()
-	logger.Debug("🧩 reconstructed pre-consensus partial signatures",
-		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)),
-		fields.QuorumTime(r.metrics.GetPreConsensusTime()))
 
 	r.metrics.PauseDutyFullFlow()
 	// get block data
@@ -200,9 +198,6 @@ func (r *AggregatorRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 		}
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
-		logger.Debug("🧩 reconstructed post-consensus partial signatures",
-			zap.Uint64s("signers", getPostConsensusSigners(r.GetState(), root)),
-			fields.PostConsensusTime(r.metrics.GetPreConsensusTime()))
 
 		aggregateAndProof, err := r.GetState().DecidedValue.GetAggregateAndProof()
 		if err != nil {
@@ -217,11 +212,16 @@ func (r *AggregatorRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 		start := time.Now()
 		endSubmission := r.metrics.StartBeaconSubmission()
 
+		logger = logger.With(
+			zap.Uint64s("signers", getPostConsensusSigners(r.GetState(), root)),
+			fields.PreConsensusTime(r.metrics.GetPreConsensusTime()),
+			fields.ConsensusTime(r.metrics.GetConsensusTime()),
+			fields.PostConsensusTime(r.metrics.GetPostConsensusTime()),
+			zap.String("block_root", hex.EncodeToString(msg.Message.Aggregate.Data.BeaconBlockRoot[:])),
+		)
 		if err := r.GetBeaconNode().SubmitSignedAggregateSelectionProof(msg); err != nil {
 			r.metrics.RoleSubmissionFailed()
 			logger.Error("❌ could not submit to Beacon chain reconstructed contribution and proof",
-				fields.ConsensusTime(r.metrics.GetConsensusTime()),
-				fields.PostConsensusTime(r.metrics.GetPostConsensusTime()),
 				fields.SubmissionTime(time.Since(start)),
 				zap.Error(err))
 			return errors.Wrap(err, "could not submit to Beacon chain reconstructed signed aggregate")
@@ -232,8 +232,6 @@ func (r *AggregatorRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *s
 		r.metrics.RoleSubmitted()
 
 		logger.Debug("✅ successful submitted aggregate",
-			fields.ConsensusTime(r.metrics.GetConsensusTime()),
-			fields.PostConsensusTime(r.metrics.GetPostConsensusTime()),
 			fields.SubmissionTime(time.Since(start)),
 		)
 	}
