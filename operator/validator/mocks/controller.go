@@ -75,7 +75,7 @@ func (mr *MockControllerMockRecorder) CommitteeActiveIndices(epoch interface{}) 
 }
 
 // ExecuteCommitteeDuty mocks base method.
-func (m *MockController) ExecuteCommitteeDuty(logger *zap.Logger, committeeID types0.ClusterID, duty *types0.CommitteeDuty) {
+func (m *MockController) ExecuteCommitteeDuty(logger *zap.Logger, committeeID types0.CommitteeID, duty *types0.CommitteeDuty) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "ExecuteCommitteeDuty", logger, committeeID, duty)
 }
