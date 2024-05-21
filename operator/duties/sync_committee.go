@@ -84,12 +84,10 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 			if h.fetchFirst {
 				h.fetchFirst = false
 				h.processFetching(ctx, period, true)
-				// TODO: (Alan) genesis support
-				//h.processExecution(period, slot)
+				h.processExecution(period, slot)
 			} else {
 				h.processExecution(period, slot)
-				// TODO: (Alan) genesis support
-				//h.processFetching(ctx, period, true)
+				h.processFetching(ctx, period, true)
 			}
 			cancel()
 
@@ -102,11 +100,10 @@ func (h *SyncCommitteeHandler) HandleDuties(ctx context.Context) {
 				h.fetchNextPeriod = true
 			}
 
-			// TODO: (Alan) genesis support
-			//// last slot of period
-			//if slot == h.network.Beacon.LastSlotOfSyncPeriod(period) {
-			//	h.duties.Reset(period - 1)
-			//}
+			// last slot of period
+			if slot == h.network.Beacon.LastSlotOfSyncPeriod(period) {
+				h.duties.Reset(period - 1)
+			}
 
 		case reorgEvent := <-h.reorg:
 			epoch := h.network.Beacon.EstimatedEpochAtSlot(reorgEvent.Slot)
@@ -145,11 +142,6 @@ func (h *SyncCommitteeHandler) HandleInitialDuties(ctx context.Context) {
 	epoch := h.network.Beacon.EstimatedCurrentEpoch()
 	period := h.network.Beacon.EstimatedSyncCommitteePeriodAtEpoch(epoch)
 	h.processFetching(ctx, period, false)
-
-	// At the init time we may not have enough duties to fetch
-	// we should not set those values to false in processFetching() call
-	h.fetchNextPeriod = true
-	h.fetchCurrentPeriod = true
 }
 
 func (h *SyncCommitteeHandler) processFetching(ctx context.Context, period uint64, waitForInitial bool) {
@@ -183,7 +175,8 @@ func (h *SyncCommitteeHandler) processExecution(period uint64, slot phase0.Slot)
 	toExecute := make([]*spectypes.BeaconDuty, 0, len(duties)*2)
 	for _, d := range duties {
 		if h.shouldExecute(d, slot) {
-			toExecute = append(toExecute, h.toSpecDuty(d, slot, spectypes.BNRoleSyncCommittee))
+			// TODO: (Alan) genesis support
+			//toExecute = append(toExecute, h.toSpecDuty(d, slot, spectypes.BNRoleSyncCommittee))
 			toExecute = append(toExecute, h.toSpecDuty(d, slot, spectypes.BNRoleSyncCommitteeContribution))
 		}
 	}

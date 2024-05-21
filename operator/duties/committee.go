@@ -78,18 +78,6 @@ func (h *CommitteeHandler) HandleDuties(ctx context.Context) {
 
 			h.processExecution(period, epoch, slot)
 
-			// cleanups
-			slotsPerEpoch := h.network.Beacon.SlotsPerEpoch()
-			// last slot of epoch
-			if uint64(slot)%slotsPerEpoch == slotsPerEpoch-1 {
-				h.attDuties.ResetEpoch(epoch)
-			}
-
-			// last slot of period
-			if slot == h.network.Beacon.LastSlotOfSyncPeriod(period) {
-				h.syncDuties.Reset(period - 1)
-			}
-
 		case reorgEvent := <-h.reorg:
 			currentEpoch := h.network.Beacon.EstimatedEpochAtSlot(reorgEvent.Slot)
 			buildStr := fmt.Sprintf("e%v-s%v-#%v", currentEpoch, reorgEvent.Slot, reorgEvent.Slot%32+1)
