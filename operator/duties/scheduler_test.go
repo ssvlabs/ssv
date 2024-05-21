@@ -16,7 +16,6 @@ import (
 
 	"github.com/ssvlabs/ssv/logging"
 	"github.com/ssvlabs/ssv/networkconfig"
-	"github.com/ssvlabs/ssv/operator/duties/dutystore"
 	"github.com/ssvlabs/ssv/operator/duties/mocks"
 	"github.com/ssvlabs/ssv/operator/slotticker"
 	mockslotticker "github.com/ssvlabs/ssv/operator/slotticker/mocks"
@@ -161,7 +160,7 @@ func setupSchedulerAndMocks(t *testing.T, handler dutyHandler, currentSlot *Safe
 	return s, logger, mockSlotService, timeout, cancel, schedulerPool, startFunction
 }
 
-func setupSchedulerAndMocksCommittee(t *testing.T, attHandler, syncHandler, commHandler dutyHandler, dutyStore *dutystore.Store, currentSlot *SafeValue[phase0.Slot]) (
+func setupSchedulerAndMocksCommittee(t *testing.T, handlers []dutyHandler, currentSlot *SafeValue[phase0.Slot]) (
 	*Scheduler,
 	*zap.Logger,
 	*mockSlotTickerService,
@@ -172,7 +171,7 @@ func setupSchedulerAndMocksCommittee(t *testing.T, attHandler, syncHandler, comm
 ) {
 	ctrl := gomock.NewController(t)
 	// A 200ms timeout ensures the test passes, even with mockSlotTicker overhead.
-	timeout := 12000 * time.Millisecond
+	timeout := 5000 * time.Millisecond
 
 	ctx, cancel := context.WithCancel(context.Background())
 	logger := logging.TestLogger(t)
@@ -203,7 +202,7 @@ func setupSchedulerAndMocksCommittee(t *testing.T, attHandler, syncHandler, comm
 	s := NewScheduler(opts)
 	s.blockPropagateDelay = 1 * time.Millisecond
 	s.indicesChg = make(chan struct{})
-	s.handlers = []dutyHandler{attHandler, commHandler}
+	s.handlers = handlers
 
 	mockBeaconNode.EXPECT().Events(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 
@@ -359,7 +358,7 @@ func waitForCommitteeDutiesFetch(t *testing.T, logger *zap.Logger, fetchDutiesCa
 	}
 }
 
-func waitForCommitteeNoAction(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan []*spectypes.CommitteeDuty, timeout time.Duration) {
+func waitForNoActionCommittee(t *testing.T, logger *zap.Logger, fetchDutiesCall chan struct{}, executeDutiesCall chan committeeDutiesMap, timeout time.Duration) {
 	select {
 	case <-fetchDutiesCall:
 		require.FailNow(t, "unexpected duties call")
