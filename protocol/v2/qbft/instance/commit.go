@@ -5,10 +5,10 @@ import (
 	"sort"
 
 	"github.com/pkg/errors"
-	specqbft "github.com/ssvlabs/ssv-spec/qbft"
-	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"go.uber.org/zap"
 
+	specqbft "github.com/ssvlabs/ssv-spec/qbft"
+	spectypes "github.com/ssvlabs/ssv-spec/types"
 	"github.com/ssvlabs/ssv/logging/fields"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 )
@@ -215,7 +215,7 @@ func validateCommit(
 	}
 
 	if !bytes.Equal(msg.Root[:], msg.Root[:]) {
-		return errors.New("proposed data mistmatch")
+		return errors.New("proposed data mismatch")
 	}
 
 	return nil

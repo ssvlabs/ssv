@@ -361,7 +361,7 @@ func ClusterIndex(cluster contract.ISSVNetworkCoreCluster) zap.Field {
 	return zap.Uint64(FieldClusterIndex, cluster.Index)
 }
 
-func CommitteeID(val spectypes.ClusterID) zap.Field {
+func CommitteeID(val spectypes.CommitteeID) zap.Field {
 	return zap.String(FieldCommitteeID, hex.EncodeToString(val[:]))
 }
 

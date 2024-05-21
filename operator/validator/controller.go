@@ -5,10 +5,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slices"
 	"sync"
 	"time"
+
+	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slices"
 
 	"github.com/attestantio/go-eth2-client/spec/bellatrix"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -336,6 +337,7 @@ func (c *controller) handleRouterMessages() {
 				continue
 			}
 
+			// #TODO fixme. can be not only publicKey, but also committeeID
 			// TODO: only try copying clusterid if validator failed
 			pk := msg.GetID().GetSenderID()
 			var cid spectypes.ClusterID
@@ -378,7 +380,8 @@ func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
 			ncv = item.Value()
 		} else {
 			// Create a new nonCommitteeValidator and cache it.
-			share := c.sharesStorage.Get(nil, msg.GetID().GetSenderID())
+			// #TODO fixme. GetDutyExecutorID can be not only publicKey, but also committeeID
+			share := c.sharesStorage.Get(nil, msg.GetID().GetDutyExecutorID())
 			if share == nil {
 				return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetID().GetSenderID()))
 			}

@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -14,7 +15,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
 )
 
@@ -23,7 +23,7 @@ type VoluntaryExitRunner struct {
 	BaseRunner *BaseRunner
 
 	beacon         beacon.BeaconNode
-	network        qbft.FutureSpecNetwork
+	network        specqbft.Network
 	signer         spectypes.BeaconSigner
 	operatorSigner spectypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
@@ -37,7 +37,7 @@ func NewVoluntaryExitRunner(
 	beaconNetwork spectypes.BeaconNetwork,
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	beacon beacon.BeaconNode,
-	network qbft.FutureSpecNetwork,
+	network specqbft.Network,
 	signer spectypes.BeaconSigner,
 	operatorSigner spectypes.OperatorSigner,
 ) Runner {
@@ -182,7 +182,7 @@ func (r *VoluntaryExitRunner) GetBaseRunner() *BaseRunner {
 	return r.BaseRunner
 }
 
-func (r *VoluntaryExitRunner) GetNetwork() qbft.FutureSpecNetwork {
+func (r *VoluntaryExitRunner) GetNetwork() specqbft.Network {
 	return r.network
 }
 
