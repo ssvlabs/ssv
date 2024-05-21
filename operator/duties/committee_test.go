@@ -139,7 +139,7 @@ func TestScheduler_Committee_Same_Slot_Attester_Only(t *testing.T) {
 
 	// STEP 1: wait for attester duties to be fetched and executed at the same slot
 	duties, _ := attDuties.Get(phase0.Epoch(0))
-	committeeMap := commHandler.buildCommitteeDuties(duties, nil, currentSlot.Get())
+	committeeMap := commHandler.buildCommitteeDuties(duties, nil, 0, currentSlot.Get())
 
 	setExecuteDutyFuncs(scheduler, executeDutiesCall, len(committeeMap))
 
@@ -193,7 +193,7 @@ func TestScheduler_Committee_Same_Slot_SyncCommittee_Only(t *testing.T) {
 
 	// STEP 1: wait for attester duties to be fetched and executed at the same slot
 	duties, _ := syncDuties.Get(0)
-	committeeMap := commHandler.buildCommitteeDuties(nil, duties, currentSlot.Get())
+	committeeMap := commHandler.buildCommitteeDuties(nil, duties, 0, currentSlot.Get())
 
 	setExecuteDutyFuncs(scheduler, executeDutiesCall, len(committeeMap))
 
@@ -255,7 +255,7 @@ func TestScheduler_Committee_Same_Slot(t *testing.T) {
 	// STEP 1: wait for attester duties to be fetched and executed at the same slot
 	aDuties, _ := attDuties.Get(0)
 	sDuties, _ := syncDuties.Get(0)
-	committeeMap := commHandler.buildCommitteeDuties(aDuties, sDuties, currentSlot.Get())
+	committeeMap := commHandler.buildCommitteeDuties(aDuties, sDuties, 0, currentSlot.Get())
 
 	setExecuteDutyFuncs(scheduler, executeDutiesCall, len(committeeMap))
 
@@ -317,7 +317,7 @@ func TestScheduler_Committee_Diff_Slot_Attester_Only(t *testing.T) {
 	currentSlot.Set(phase0.Slot(2))
 	aDuties, _ := attDuties.Get(0)
 	sDuties, _ := syncDuties.Get(0)
-	committeeMap := commHandler.buildCommitteeDuties(aDuties, sDuties, currentSlot.Get())
+	committeeMap := commHandler.buildCommitteeDuties(aDuties, sDuties, 0, currentSlot.Get())
 	setExecuteDutyFuncs(scheduler, executeDutiesCall, len(committeeMap))
 
 	startTime := time.Now()

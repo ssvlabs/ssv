@@ -126,39 +126,50 @@ func (h *CommitteeHandler) processExecution(period uint64, epoch phase0.Epoch, s
 		return
 	}
 
-	committeeMap := h.buildCommitteeDuties(attDuties, syncDuties, slot)
+	committeeMap := h.buildCommitteeDuties(attDuties, syncDuties, epoch, slot)
 	h.executeCommitteeDuties(h.logger, committeeMap)
 }
 
-func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterDuty, syncDuties []*eth2apiv1.SyncCommitteeDuty, slot phase0.Slot) committeeDutiesMap {
+func (h *CommitteeHandler) buildCommitteeDuties(attDuties []*eth2apiv1.AttesterDuty, syncDuties []*eth2apiv1.SyncCommitteeDuty, epoch phase0.Epoch, slot phase0.Slot) committeeDutiesMap {
+	// tmp solution to get committee id fast
+	vcmap := make(map[phase0.ValidatorIndex]spectypes.CommitteeID)
+	vs := h.validatorProvider.SelfParticipatingValidators(epoch)
+	for _, v := range vs {
+		vcmap[v.ValidatorIndex] = v.CommitteeID()
+	}
 	committeeMap := make(committeeDutiesMap)
 
 	for _, d := range attDuties {
 		if h.shouldExecuteAtt(d) {
 			specDuty := h.toSpecAttDuty(d, spectypes.BNRoleAttester)
-			h.appendBeaconDuty(committeeMap, specDuty)
+			h.appendBeaconDuty(committeeMap, vcmap, specDuty)
 		}
 	}
 
 	for _, d := range syncDuties {
 		if h.shouldExecuteSync(d, slot) {
 			specDuty := h.toSpecSyncDuty(d, slot, spectypes.BNRoleSyncCommittee)
-			h.appendBeaconDuty(committeeMap, specDuty)
+			h.appendBeaconDuty(committeeMap, vcmap, specDuty)
 		}
 	}
 
 	return committeeMap
 }
 
-func (h *CommitteeHandler) appendBeaconDuty(m committeeDutiesMap, beaconDuty *spectypes.BeaconDuty) {
-	clusterID := h.validatorProvider.Validator(beaconDuty.PubKey[:]).CommitteeID()
-	if _, ok := m[clusterID]; !ok {
-		m[clusterID] = &spectypes.CommitteeDuty{
+func (h *CommitteeHandler) appendBeaconDuty(m committeeDutiesMap, vcmap map[phase0.ValidatorIndex]spectypes.CommitteeID, beaconDuty *spectypes.BeaconDuty) {
+	committeeID, ok := vcmap[beaconDuty.ValidatorIndex]
+	if !ok {
+		h.logger.Error("can't find validator committeeID in validator store", zap.Uint64("validator_index", uint64(beaconDuty.ValidatorIndex)))
+		return
+	}
+
+	if _, ok := m[committeeID]; !ok {
+		m[committeeID] = &spectypes.CommitteeDuty{
 			Slot:         beaconDuty.Slot,
 			BeaconDuties: make([]*spectypes.BeaconDuty, 0),
 		}
 	}
-	m[clusterID].BeaconDuties = append(m[clusterID].BeaconDuties, beaconDuty)
+	m[committeeID].BeaconDuties = append(m[committeeID].BeaconDuties, beaconDuty)
 }
 
 func (h *CommitteeHandler) toSpecAttDuty(duty *eth2apiv1.AttesterDuty, role spectypes.BeaconRole) *spectypes.BeaconDuty {
