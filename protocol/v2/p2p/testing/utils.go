@@ -12,6 +12,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/pkg/errors"
+	"github.com/ssvlabs/ssv/network/commons"
 	"go.uber.org/zap"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
@@ -313,12 +314,11 @@ func (m *mockNetwork) SyncDecidedByRange(identifier spectypes.MessageID, to, fro
 
 func (m *mockNetwork) SyncHighestRoundChange(mid spectypes.MessageID, height specqbft.Height) error {
 	// #TODO fixme. GetDutyExecutorID can be not only publicKey, but also committeeID
-	pk, err := ssvtypes.DeserializeBLSPublicKey(mid.GetDutyExecutorID())
+	dutyExecutorId, err := ssvtypes.DeserializeBLSPublicKey(mid.GetDutyExecutorID())
 	if err != nil {
 		return err
 	}
-	spk := hex.EncodeToString(pk.Serialize())
-	topic := spk
+	topic := commons.ValidatorTopicID(dutyExecutorId.Serialize())[0]
 
 	syncMsg, err := json.Marshal(&message.SyncMessage{
 		Params: &message.SyncParams{

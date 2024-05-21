@@ -337,13 +337,12 @@ func (c *controller) handleRouterMessages() {
 				continue
 			}
 
-			// #TODO fixme. can be not only publicKey, but also committeeID
 			// TODO: only try copying clusterid if validator failed
-			pk := msg.GetID().GetSenderID()
+			dutyExecutorID := msg.GetID().GetDutyExecutorID()
 			var cid spectypes.CommitteeID
-			copy(cid[:], pk[16:])
+			copy(cid[:], dutyExecutorID[16:])
 
-			if v, ok := c.validatorsMap.GetValidator(spectypes.ValidatorPK(pk)); ok {
+			if v, ok := c.validatorsMap.GetValidator(spectypes.ValidatorPK(dutyExecutorID)); ok {
 				v.HandleMessage(c.logger, msg)
 			} else if vc, ok := c.validatorsMap.GetCommittee(cid); ok {
 				vc.HandleMessage(c.logger, msg)
@@ -383,7 +382,7 @@ func (c *controller) handleWorkerMessages(msg *queue.DecodedSSVMessage) error {
 			// #TODO fixme. GetDutyExecutorID can be not only publicKey, but also committeeID
 			share := c.sharesStorage.Get(nil, msg.GetID().GetDutyExecutorID())
 			if share == nil {
-				return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetID().GetSenderID()))
+				return errors.Errorf("could not find validator [%s]", hex.EncodeToString(msg.GetID().GetDutyExecutorID()))
 			}
 
 			opts := c.validatorOptions
