@@ -61,6 +61,7 @@ var (
 	ErrEarlyMessage                            = Error{text: "early message"}
 	ErrLateMessage                             = Error{text: "late message"}
 	ErrTooManySameTypeMessagesPerRound         = Error{text: "too many messages of same type per round"}
+	ErrSlotAlreadyAdvanced                     = Error{text: "signer has already advanced to a later slot"}
 	ErrRoundAlreadyAdvanced                    = Error{text: "signer has already advanced to a later round"}
 	ErrRoundTooHigh                            = Error{text: "round is too high for this role" /*, reject: true*/} // TODO: enable reject
 	ErrSignatureVerification                   = Error{text: "signature verification", reject: true}

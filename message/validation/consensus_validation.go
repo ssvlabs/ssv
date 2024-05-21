@@ -216,6 +216,20 @@ func (mv *messageValidator) validateQBFTMessageByDutyLogic(
 	receivedAt time.Time,
 	state *consensusState,
 ) error {
+	// Rule: Height must not be "old". I.e., signer must not have already advanced to a later slot.
+	if signedSSVMessage.SSVMessage.MsgID.GetRoleType() != spectypes.RoleCommittee { // Rule only for validator runners
+		for _, signer := range signedSSVMessage.GetOperatorIDs() {
+			signerStateBySlot := state.Get(signer)
+			maxSlot, _ := signerStateBySlot.Max()
+			if maxSlot != nil && maxSlot.(phase0.Slot) > phase0.Slot(consensusMessage.Height) {
+				e := ErrSlotAlreadyAdvanced
+				e.got = consensusMessage.Height
+				e.want = maxSlot
+				return e
+			}
+		}
+	}
+
 	role := signedSSVMessage.SSVMessage.GetID().GetRoleType()
 	if role == spectypes.RoleValidatorRegistration || role == spectypes.RoleVoluntaryExit {
 		e := ErrUnexpectedConsensusMessage
