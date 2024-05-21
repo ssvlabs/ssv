@@ -4,7 +4,6 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 )
 
@@ -28,7 +27,7 @@ type IConfig interface {
 	// GetStorage returns a storage instance
 	GetStorage() qbftstorage.QBFTStore
 	// GetTimer returns round timer
-	GetTimer() roundtimer.Timer
+	GetTimer() specqbft.Timer
 	// VerifySignatures returns if signature is checked
 	VerifySignatures() bool
 	// GetSignatureVerifier returns the signature verifier for operator signatures
@@ -46,7 +45,7 @@ type Config struct {
 	ProposerF             specqbft.ProposerF
 	Storage               qbftstorage.QBFTStore
 	Network               specqbft.Network
-	Timer                 roundtimer.Timer
+	Timer                 specqbft.Timer
 	SignatureVerification bool
 	SignatureVerifier     spectypes.SignatureVerifier
 	CutOffRound           specqbft.Round
@@ -93,7 +92,7 @@ func (c *Config) GetStorage() qbftstorage.QBFTStore {
 }
 
 // GetTimer returns round timer
-func (c *Config) GetTimer() roundtimer.Timer {
+func (c *Config) GetTimer() specqbft.Timer {
 	return c.Timer
 }
 

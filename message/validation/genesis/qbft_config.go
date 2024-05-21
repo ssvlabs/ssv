@@ -45,7 +45,7 @@ func (q qbftConfig) GetStorage() qbftstorage.QBFTStore {
 	panic("should not be called")
 }
 
-func (q qbftConfig) GetTimer() roundtimer.Timer {
+func (q qbftConfig) GetTimer() specqbft.Timer {
 	panic("should not be called")
 }
 
