@@ -127,6 +127,8 @@ func (r *AttesterRunner) ProcessConsensus(logger *zap.Logger, signedMsg *specqbf
 		return errors.Wrap(err, "could not create SignedSSVMessage from SSVMessage")
 	}
 
+	logger.Debug("broadcasting partial post consensus sig",
+		zap.Uint64("signer", postSignedMsg.Signer))
 	if err := r.GetNetwork().Broadcast(ssvMsg.GetID(), msgToBroadcast); err != nil {
 		return errors.Wrap(err, "can't broadcast partial post consensus sig")
 	}
