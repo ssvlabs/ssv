@@ -169,11 +169,12 @@ func (r *SyncCommitteeRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg
 
 		logger = logger.With(
 			zap.Uint64s("signers", getPostConsensusSigners(r.GetState(), root)),
+			fields.BeaconDataTime(r.metrics.GetBeaconDataTime()),
 			fields.ConsensusTime(r.metrics.GetConsensusTime()),
 			fields.PostConsensusTime(r.metrics.GetPostConsensusTime()),
-			zap.String("block_root", hex.EncodeToString(msg.BeaconBlockRoot[:])),
 			fields.Height(r.BaseRunner.QBFTController.Height),
 			fields.Round(r.GetState().RunningInstance.State.Round),
+			zap.String("block_root", hex.EncodeToString(msg.BeaconBlockRoot[:])),
 		)
 		if err := r.GetBeaconNode().SubmitSyncMessage(msg); err != nil {
 			r.metrics.RoleSubmissionFailed()

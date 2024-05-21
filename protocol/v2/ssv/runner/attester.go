@@ -161,9 +161,6 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
 		r.metrics.EndPostConsensus()
-		logger.Debug("🧩 reconstructed partial signatures",
-			zap.Uint64s("signers", getPostConsensusSigners(r.GetState(), root)),
-			fields.PostConsensusTime(r.metrics.GetPostConsensusTime()))
 
 		endSubmission := r.metrics.StartBeaconSubmission()
 		startSubmissionTime := time.Now()
@@ -179,11 +176,13 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 
 		// Submit it to the BN.
 		logger = logger.With(
+			zap.Uint64s("signers", getPostConsensusSigners(r.GetState(), root)),
 			fields.BeaconDataTime(r.metrics.GetBeaconDataTime()),
 			fields.ConsensusTime(r.metrics.GetConsensusTime()),
 			fields.PostConsensusTime(r.metrics.GetPostConsensusTime()),
 			fields.Height(r.BaseRunner.QBFTController.Height),
 			fields.Round(r.GetState().RunningInstance.State.Round),
+			zap.String("block_root", hex.EncodeToString(signedAtt.Data.BeaconBlockRoot[:])),
 		)
 		if err := r.beacon.SubmitAttestation(signedAtt); err != nil {
 			r.metrics.RoleSubmissionFailed()
@@ -198,7 +197,6 @@ func (r *AttesterRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		r.metrics.RoleSubmitted()
 
 		logger.Info("✅ successfully submitted attestation",
-			zap.String("block_root", hex.EncodeToString(signedAtt.Data.BeaconBlockRoot[:])),
 			fields.SubmissionTime(time.Since(startSubmissionTime)))
 	}
 	r.GetState().Finished = true

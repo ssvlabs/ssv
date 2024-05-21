@@ -102,7 +102,7 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 	r.metrics.EndPreConsensus()
 	logger.Debug("🧩 reconstructed partial RANDAO signatures",
 		zap.Uint64s("signers", getPreConsensusSigners(r.GetState(), root)),
-		fields.PostConsensusTime(r.metrics.GetPreConsensusTime()))
+		fields.PreConsensusTime(r.metrics.GetPreConsensusTime()))
 
 	r.metrics.StartBeaconData()
 	start := time.Now()
@@ -110,7 +110,7 @@ func (r *ProposerRunner) ProcessPreConsensus(logger *zap.Logger, signedMsg *spec
 	obj, ver, err := r.GetBeaconNode().GetBeaconBlock(duty.Slot, r.GetShare().Graffiti, fullSig)
 	if err != nil {
 		logger.Error("❌ failed to get blinded beacon block",
-			fields.PostConsensusTime(r.metrics.GetPreConsensusTime()),
+			fields.PreConsensusTime(r.metrics.GetPreConsensusTime()),
 			fields.BlockTime(time.Since(start)),
 			zap.Error(err))
 		return errors.Wrap(err, "failed to get beacon block")
@@ -234,7 +234,7 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		specSig := phase0.BLSSignature{}
 		copy(specSig[:], sig)
 		r.metrics.EndPostConsensus()
-		logger.Debug("🧩 reconstructed partial RANDAO signatures",
+		logger.Debug("🧩 reconstructed partial post consensus signatures",
 			zap.Uint64s("signers", getPostConsensusSigners(r.GetState(), root)),
 			fields.PostConsensusTime(r.metrics.GetPostConsensusTime()))
 		endSubmission := r.metrics.StartBeaconSubmission()
