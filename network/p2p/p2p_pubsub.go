@@ -83,6 +83,7 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 			fields.Role(msgID.GetRoleType()),
 			fields.MessageType(decodedMsg.MsgType),
 			fields.PubKey(msgID.GetPubKey()),
+			fields.Topic(topic),
 		)
 
 		if err := n.topicsCtrl.Broadcast(topic, encodedMsg, n.cfg.RequestTimeout); err != nil {
