@@ -199,7 +199,11 @@ func (n *p2pNetwork) setupPeerServices(logger *zap.Logger) error {
 		return n.subnets
 	}
 
-	var filters func() []connections.HandshakeFilter
+	filters := func() []connections.HandshakeFilter {
+		return []connections.HandshakeFilter{
+			connections.NetworkIDFilter(domain),
+		}
+	}
 
 	handshaker := connections.NewHandshaker(n.ctx, &connections.HandshakerCfg{
 		Streams:         n.streamCtrl,
