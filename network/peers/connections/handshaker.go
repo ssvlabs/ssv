@@ -17,11 +17,14 @@ import (
 	"github.com/ssvlabs/ssv/operator/keys"
 )
 
+// errPeerWasFiltered is thrown when a peer is filtered during handshake
+var errPeerWasFiltered = errors.New("peer was filtered during handshake")
+
 // errConsumingMessage is thrown when we сan't consume(parse) message: data is broken or incoming msg is from node with different Permissioned mode
 var errConsumingMessage = errors.New("error consuming message")
 
 // HandshakeFilter can be used to filter nodes once we handshaked with them
-type HandshakeFilter func(senderID peer.ID, sni records.NodeInfo) error
+type HandshakeFilter func(senderID peer.ID, sni *records.NodeInfo) error
 
 // SubnetsProvider returns the subnets of or node
 type SubnetsProvider func() records.Subnets
@@ -137,6 +140,10 @@ func (h *handshaker) Handler(logger *zap.Logger) libp2pnetwork.StreamHandler {
 func (h *handshaker) verifyTheirNodeInfo(logger *zap.Logger, sender peer.ID, ni *records.NodeInfo) error {
 	h.updateNodeSubnets(logger, sender, ni.GetNodeInfo())
 
+	if err := h.applyFilters(sender, ni); err != nil {
+		return err
+	}
+
 	h.nodeInfos.SetNodeInfo(sender, ni.GetNodeInfo())
 
 	logger.Info("Verified handshake nodeinfo",
@@ -214,4 +221,16 @@ func (h *handshaker) requestNodeInfo(logger *zap.Logger, conn libp2pnetwork.Conn
 		return nil, errors.Wrap(errConsumingMessage, err.Error())
 	}
 	return nodeInfo, nil
+}
+
+func (h *handshaker) applyFilters(sender peer.ID, ni *records.NodeInfo) error {
+	fltrs := h.filters()
+	for i := range fltrs {
+		err := fltrs[i](sender, ni)
+		if err != nil {
+			return errors.Wrap(errPeerWasFiltered, err.Error())
+		}
+	}
+
+	return nil
 }
