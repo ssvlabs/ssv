@@ -13,9 +13,9 @@ import (
 	client "github.com/attestantio/go-eth2-client"
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
 	phase0 "github.com/attestantio/go-eth2-client/spec/phase0"
-	types0 "github.com/ethereum/go-ethereum/core/types"
+	types "github.com/ethereum/go-ethereum/core/types"
 	gomock "github.com/golang/mock/gomock"
-	types "github.com/ssvlabs/ssv/protocol/v2/types"
+	types0 "github.com/ssvlabs/ssv/protocol/v2/types"
 )
 
 // MockSlotTicker is a mock of SlotTicker interface.
@@ -203,10 +203,10 @@ func (m *MockExecutionClient) EXPECT() *MockExecutionClientMockRecorder {
 }
 
 // BlockByNumber mocks base method.
-func (m *MockExecutionClient) BlockByNumber(ctx context.Context, blockNumber *big.Int) (*types0.Block, error) {
+func (m *MockExecutionClient) BlockByNumber(ctx context.Context, blockNumber *big.Int) (*types.Block, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "BlockByNumber", ctx, blockNumber)
-	ret0, _ := ret[0].(*types0.Block)
+	ret0, _ := ret[0].(*types.Block)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -241,10 +241,10 @@ func (m *MockValidatorProvider) EXPECT() *MockValidatorProviderMockRecorder {
 }
 
 // ParticipatingValidators mocks base method.
-func (m *MockValidatorProvider) ParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare {
+func (m *MockValidatorProvider) ParticipatingValidators(epoch phase0.Epoch) []*types0.SSVShare {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ParticipatingValidators", epoch)
-	ret0, _ := ret[0].([]*types.SSVShare)
+	ret0, _ := ret[0].([]*types0.SSVShare)
 	return ret0
 }
 
@@ -255,10 +255,10 @@ func (mr *MockValidatorProviderMockRecorder) ParticipatingValidators(epoch inter
 }
 
 // SelfParticipatingValidators mocks base method.
-func (m *MockValidatorProvider) SelfParticipatingValidators(epoch phase0.Epoch) []*types.SSVShare {
+func (m *MockValidatorProvider) SelfParticipatingValidators(epoch phase0.Epoch) []*types0.SSVShare {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SelfParticipatingValidators", epoch)
-	ret0, _ := ret[0].([]*types.SSVShare)
+	ret0, _ := ret[0].([]*types0.SSVShare)
 	return ret0
 }
 
@@ -269,10 +269,10 @@ func (mr *MockValidatorProviderMockRecorder) SelfParticipatingValidators(epoch i
 }
 
 // Validator mocks base method.
-func (m *MockValidatorProvider) Validator(pubKey []byte) *types.SSVShare {
+func (m *MockValidatorProvider) Validator(pubKey []byte) *types0.SSVShare {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Validator", pubKey)
-	ret0, _ := ret[0].(*types.SSVShare)
+	ret0, _ := ret[0].(*types0.SSVShare)
 	return ret0
 }
 
