@@ -144,14 +144,18 @@ func (mv *messageValidator) validateQBFTLogic(
 	receivedAt time.Time,
 	state *consensusState,
 ) error {
-	// TODO: try to rearrange checks to simplify them
-
 	if consensusMessage.MsgType == specqbft.ProposalMsgType {
 		leader := mv.roundRobinProposer(consensusMessage.Height, consensusMessage.Round, committee)
 		if signedSSVMessage.GetOperatorIDs()[0] != leader {
 			err := ErrSignerNotLeader
 			err.got = signedSSVMessage.GetOperatorIDs()[0]
 			err.want = leader
+			return err
+		}
+	}
+
+	if len(signedSSVMessage.GetOperatorIDs()) == 1 {
+		if err := mv.roundBelongsToAllowedSpread(signedSSVMessage, consensusMessage, receivedAt); err != nil {
 			return err
 		}
 	}
@@ -166,45 +170,39 @@ func (mv *messageValidator) validateQBFTLogic(
 
 		signerState := signerStateInterface.(*SignerState)
 
-		// It should be checked after ErrNonDecidedWithMultipleSigners
-		if len(signedSSVMessage.GetOperatorIDs()) > 1 && consensusMessage.Round == signerState.Round {
-			encodedOperators, err := encodeOperators(signedSSVMessage.GetOperatorIDs())
-			if err != nil {
-				return err
-			}
-
-			if _, ok := signerState.SeenSigners[string(encodedOperators)]; ok {
-				return ErrDecidedWithSameSigners
-			}
-		}
-
-		if len(signedSSVMessage.GetOperatorIDs()) == 1 {
-			if len(signedSSVMessage.FullData) != 0 && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedSSVMessage.FullData) && consensusMessage.Round == signerState.Round {
-				return ErrDuplicatedProposalWithDifferentData
-			}
-
-			if consensusMessage.Round < signerState.Round {
-				// Signers aren't allowed to decrease their round.
-				// If they've sent a future message due to clock error,
-				// they'd have to wait for the next slot/round to be accepted.
-				err := ErrRoundAlreadyAdvanced
-				err.want = signerState.Round
-				err.got = consensusMessage.Round
-				return err
-			}
+		if consensusMessage.Round < signerState.Round && len(signedSSVMessage.GetOperatorIDs()) == 1 {
+			// Signers aren't allowed to decrease their round.
+			// If they've sent a future message due to clock error,
+			// they'd have to wait for the next slot/round to be accepted.
+			err := ErrRoundAlreadyAdvanced
+			err.want = signerState.Round
+			err.got = consensusMessage.Round
+			return err
 		}
 
 		if consensusMessage.Round == signerState.Round {
+			// It should be checked after ErrNonDecidedWithMultipleSigners
+			if len(signedSSVMessage.GetOperatorIDs()) > 1 {
+				encodedOperators, err := encodeOperators(signedSSVMessage.GetOperatorIDs())
+				if err != nil {
+					return err
+				}
+
+				if _, ok := signerState.SeenSigners[string(encodedOperators)]; ok {
+					return ErrDecidedWithSameSigners
+				}
+			}
+
+			if len(signedSSVMessage.GetOperatorIDs()) == 1 {
+				if len(signedSSVMessage.FullData) != 0 && signerState.ProposalData != nil && !bytes.Equal(signerState.ProposalData, signedSSVMessage.FullData) {
+					return ErrDuplicatedProposalWithDifferentData
+				}
+			}
+
 			limits := maxMessageCounts(len(committee))
 			if err := signerState.MessageCounts.ValidateConsensusMessage(signedSSVMessage, consensusMessage, limits); err != nil {
 				return err
 			}
-		}
-	}
-
-	if len(signedSSVMessage.GetOperatorIDs()) == 1 {
-		if err := mv.roundBelongsToAllowedSpread(signedSSVMessage, consensusMessage, receivedAt); err != nil {
-			return err
 		}
 	}
 
