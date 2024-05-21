@@ -75,7 +75,7 @@ type ValidatorProvider interface {
 }
 
 type ExecuteDutyFunc func(logger *zap.Logger, duty *spectypes.BeaconDuty)
-type ExecuteCommitteeDutyFunc func(logger *zap.Logger, committeeID spectypes.ClusterID, duty *spectypes.CommitteeDuty)
+type ExecuteCommitteeDutyFunc func(logger *zap.Logger, committeeID spectypes.CommitteeID, duty *spectypes.CommitteeDuty)
 
 type SchedulerOptions struct {
 	Ctx                  context.Context

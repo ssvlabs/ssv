@@ -39,7 +39,13 @@ func (n *p2pNetwork) UseMessageRouter(router network.MessageRouter) {
 // Peers registers a message router to handle incoming messages
 func (n *p2pNetwork) Peers(pk spectypes.ValidatorPK) ([]peer.ID, error) {
 	all := make([]peer.ID, 0)
-	topics := commons.ValidatorTopicID(pk[:])
+	// TODO: Alan - fork support
+	share := n.nodeStorage.Shares().Get(nil, pk[:])
+	if share == nil {
+		return nil, fmt.Errorf("could not find validator: %x", pk[:])
+	}
+	cmtid := share.CommitteeID()
+	topics := commons.CommitteeTopicID(cmtid)
 	for _, topic := range topics {
 		peers, err := n.topicsCtrl.Peers(topic)
 		if err != nil {
@@ -86,7 +92,7 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 		}
 		committeeID = share.CommitteeID()
 	}
-	topics := commons.CommitteeTopicID(committeeID[:])
+	topics := commons.CommitteeTopicID(committeeID)
 
 	for _, topic := range topics {
 		n.interfaceLogger.Debug("broadcasting msg",
@@ -174,7 +180,7 @@ func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) e
 		return nil
 	}
 	cmtid := n.nodeStorage.ValidatorStore().Validator(pk[:]).CommitteeID()
-	topics := commons.CommitteeTopicID(cmtid[:])
+	topics := commons.CommitteeTopicID(cmtid)
 	for _, topic := range topics {
 		if err := n.topicsCtrl.Unsubscribe(logger, topic, false); err != nil {
 			return err
@@ -200,7 +206,7 @@ func (n *p2pNetwork) Unsubscribe(logger *zap.Logger, pk spectypes.ValidatorPK) e
 // subscribe to validator topics, as defined in the fork
 func (n *p2pNetwork) subscribe(logger *zap.Logger, pk spectypes.ValidatorPK) error {
 	cmtid := n.nodeStorage.ValidatorStore().Validator(pk[:]).CommitteeID()
-	topics := commons.CommitteeTopicID(cmtid[:])
+	topics := commons.CommitteeTopicID(cmtid)
 	for _, topic := range topics {
 		if err := n.topicsCtrl.Subscribe(logger, topic); err != nil {
 			// return errors.Wrap(err, "could not broadcast message")
