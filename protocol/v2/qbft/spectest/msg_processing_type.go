@@ -74,14 +74,7 @@ func RunMsgProcessing(t *testing.T, test *spectests.MsgProcessingSpecTest) {
 
 		for i, msg := range test.OutputMessages {
 			r1, _ := msg.GetRoot()
-
-			ssvMsg := &spectypes.SSVMessage{}
-			require.NoError(t, ssvMsg.Decode(broadcastedMsgs[i].FullData))
-
-			msg2 := &spectypes.SignedSSVMessage{}
-			require.NoError(t, msg2.Decode(ssvMsg.Data))
-			r2, _ := msg2.GetRoot()
-
+			r2, _ := broadcastedMsgs[i].GetRoot()
 			require.EqualValues(t, r1, r2, fmt.Sprintf("output msg %d roots not equal", i))
 		}
 	}
