@@ -235,8 +235,6 @@ func (mv *messageValidator) updatePartialSignatureState(
 	}
 
 	signerState.MessageCounts.RecordPartialSignatureMessage(partialSignatureMessages)
-
-	return
 }
 
 func (mv *messageValidator) validPartialSigMsgType(msgType spectypes.PartialSigMsgType) bool {

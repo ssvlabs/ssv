@@ -312,7 +312,6 @@ func (mv *messageValidator) updateConsensusState(signedSSVMessage *spectypes.Sig
 		}
 
 		mv.processSignerState(signedSSVMessage, consensusMessage, signerState)
-		return
 	}
 }
 
@@ -397,7 +396,7 @@ func (mv *messageValidator) currentEstimatedRound(sinceSlotStart time.Duration) 
 		return currentQuickRound
 	}
 
-	sinceFirstSlowRound := sinceSlotStart - (time.Duration(specqbft.Round(roundtimer.QuickTimeoutThreshold)) * roundtimer.QuickTimeout)
+	sinceFirstSlowRound := sinceSlotStart - (time.Duration(roundtimer.QuickTimeoutThreshold) * roundtimer.QuickTimeout)
 	estimatedRound := roundtimer.QuickTimeoutThreshold + specqbft.FirstRound + specqbft.Round(sinceFirstSlowRound/roundtimer.SlowTimeout)
 	return estimatedRound
 }
