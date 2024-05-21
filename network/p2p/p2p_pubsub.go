@@ -82,13 +82,13 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 		return fmt.Errorf("could not encode signed ssv message: %w", err)
 	}
 
-	var committeeID spectypes.ClusterID
+	var committeeID spectypes.CommitteeID
 	if msg.SSVMessage.MsgID.GetRoleType() == spectypes.RoleCommittee {
-		committeeID = spectypes.ClusterID(msg.SSVMessage.MsgID.GetSenderID()[16:])
+		committeeID = spectypes.CommitteeID(msg.SSVMessage.MsgID.GetDutyExecutorID()[16:])
 	} else {
-		share := n.nodeStorage.ValidatorStore().Validator(msg.SSVMessage.MsgID.GetSenderID())
+		share := n.nodeStorage.ValidatorStore().Validator(msg.SSVMessage.MsgID.GetDutyExecutorID())
 		if share == nil {
-			return fmt.Errorf("could not find validator: %x", msg.SSVMessage.MsgID.GetSenderID())
+			return fmt.Errorf("could not find validator: %x", msg.SSVMessage.MsgID.GetDutyExecutorID())
 		}
 		committeeID = share.CommitteeID()
 	}

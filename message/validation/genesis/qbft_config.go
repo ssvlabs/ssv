@@ -37,7 +37,7 @@ func (q qbftConfig) GetProposerF() specqbft.ProposerF {
 	panic("should not be called")
 }
 
-func (q qbftConfig) GetNetwork() qbft.FutureSpecNetwork {
+func (q qbftConfig) GetNetwork() specqbft.Network {
 	panic("should not be called")
 }
 
@@ -45,7 +45,7 @@ func (q qbftConfig) GetStorage() qbftstorage.QBFTStore {
 	panic("should not be called")
 }
 
-func (q qbftConfig) GetTimer() roundtimer.Timer {
+func (q qbftConfig) GetTimer() specqbft.Timer {
 	panic("should not be called")
 }
 

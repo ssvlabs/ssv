@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+
 	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 
 	v1 "github.com/attestantio/go-eth2-client/api/v1"
@@ -15,7 +16,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 	"github.com/ssvlabs/ssv/protocol/v2/ssv/runner/metrics"
 )
@@ -24,7 +24,7 @@ type ValidatorRegistrationRunner struct {
 	BaseRunner *BaseRunner
 
 	beacon         beacon.BeaconNode
-	network        qbft.FutureSpecNetwork
+	network        specqbft.Network
 	signer         spectypes.BeaconSigner
 	operatorSigner spectypes.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
@@ -37,7 +37,7 @@ func NewValidatorRegistrationRunner(
 	share map[phase0.ValidatorIndex]*spectypes.Share,
 	qbftController *controller.Controller,
 	beacon beacon.BeaconNode,
-	network qbft.FutureSpecNetwork,
+	network specqbft.Network,
 	signer spectypes.BeaconSigner,
 	operatorSigner spectypes.OperatorSigner,
 ) Runner {
@@ -197,7 +197,7 @@ func (r *ValidatorRegistrationRunner) GetBaseRunner() *BaseRunner {
 	return r.BaseRunner
 }
 
-func (r *ValidatorRegistrationRunner) GetNetwork() qbft.FutureSpecNetwork {
+func (r *ValidatorRegistrationRunner) GetNetwork() specqbft.Network {
 	return r.network
 }
 

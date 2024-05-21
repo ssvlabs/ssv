@@ -160,10 +160,10 @@ func (mv *messageValidator) validRole(roleType spectypes.RunnerRole) bool {
 func (mv *messageValidator) topicMatches(ssvMessage *spectypes.SSVMessage, topic string) bool {
 	var topics []string
 	if mv.committeeRole(ssvMessage.GetID().GetRoleType()) {
-		cid := spectypes.ClusterID(ssvMessage.GetID().GetSenderID()[16:])
+		cid := spectypes.CommitteeID(ssvMessage.GetID().GetDutyExecutorID()[16:])
 		topics = commons.CommitteeTopicID(cid)
 	} else {
-		topics = commons.ValidatorTopicID(ssvMessage.GetID().GetSenderID())
+		topics = commons.ValidatorTopicID(ssvMessage.GetID().GetDutyExecutorID())
 	}
 	return slices.Contains(topics, commons.GetTopicBaseName(topic))
 }

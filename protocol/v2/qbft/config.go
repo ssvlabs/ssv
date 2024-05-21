@@ -4,15 +4,8 @@ import (
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
 
-	protocolp2p "github.com/ssvlabs/ssv/protocol/v2/p2p"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft/roundtimer"
 	qbftstorage "github.com/ssvlabs/ssv/protocol/v2/qbft/storage"
 )
-
-// TODO: (Alan) revert back to using spec Network once they merge in the msgID passing with cluster consensus branch.
-type FutureSpecNetwork interface {
-	protocolp2p.Broadcaster
-}
 
 type signing interface {
 	// GetShareSigner returns a BeaconSigner instance
@@ -30,17 +23,17 @@ type IConfig interface {
 	// GetProposerF returns func used to calculate proposer
 	GetProposerF() specqbft.ProposerF
 	// GetNetwork returns a p2p Network instance
-	GetNetwork() FutureSpecNetwork
+	GetNetwork() specqbft.Network
 	// GetStorage returns a storage instance
 	GetStorage() qbftstorage.QBFTStore
 	// GetTimer returns round timer
-	GetTimer() roundtimer.Timer
+	GetTimer() specqbft.Timer
 	// VerifySignatures returns if signature is checked
 	VerifySignatures() bool
 	// GetSignatureVerifier returns the signature verifier for operator signatures
 	GetSignatureVerifier() spectypes.SignatureVerifier
 	// GetRoundCutOff returns the round cut off
-	GetCutOffRound() int
+	GetCutOffRound() specqbft.Round
 }
 
 type Config struct {
@@ -51,11 +44,11 @@ type Config struct {
 	ValueCheckF           specqbft.ProposedValueCheckF
 	ProposerF             specqbft.ProposerF
 	Storage               qbftstorage.QBFTStore
-	Network               FutureSpecNetwork
-	Timer                 roundtimer.Timer
+	Network               specqbft.Network
+	Timer                 specqbft.Timer
 	SignatureVerification bool
 	SignatureVerifier     spectypes.SignatureVerifier
-	CutOffRound           int
+	CutOffRound           specqbft.Round
 }
 
 // GetShareSigner returns a BeaconSigner instance
@@ -89,7 +82,7 @@ func (c *Config) GetProposerF() specqbft.ProposerF {
 }
 
 // GetNetwork returns a p2p Network instance
-func (c *Config) GetNetwork() FutureSpecNetwork {
+func (c *Config) GetNetwork() specqbft.Network {
 	return c.Network
 }
 
@@ -99,11 +92,11 @@ func (c *Config) GetStorage() qbftstorage.QBFTStore {
 }
 
 // GetTimer returns round timer
-func (c *Config) GetTimer() roundtimer.Timer {
+func (c *Config) GetTimer() specqbft.Timer {
 	return c.Timer
 }
 
-func (c *Config) GetCutOffRound() int {
+func (c *Config) GetCutOffRound() specqbft.Round {
 	return c.CutOffRound
 }
 

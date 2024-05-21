@@ -4,9 +4,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 	"strconv"
 	"time"
+
+	"github.com/ssvlabs/ssv/protocol/v2/blockchain/beacon"
 
 	"github.com/attestantio/go-eth2-client/spec/altair"
 	"github.com/attestantio/go-eth2-client/spec/phase0"
@@ -19,7 +20,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/ssvlabs/ssv/logging/fields"
-	"github.com/ssvlabs/ssv/protocol/v2/qbft"
 	"github.com/ssvlabs/ssv/protocol/v2/qbft/controller"
 )
 
@@ -35,7 +35,7 @@ import (
 type CommitteeRunner struct {
 	BaseRunner     *BaseRunner
 	beacon         beacon.BeaconNode
-	network        qbft.FutureSpecNetwork
+	network        specqbft.Network
 	signer         types.BeaconSigner
 	operatorSigner types.OperatorSigner
 	valCheck       specqbft.ProposedValueCheckF
@@ -49,7 +49,7 @@ func NewCommitteeRunner(beaconNetwork types.BeaconNetwork,
 	share map[phase0.ValidatorIndex]*types.Share,
 	qbftController *controller.Controller,
 	beacon beacon.BeaconNode,
-	network qbft.FutureSpecNetwork,
+	network specqbft.Network,
 	signer types.BeaconSigner,
 	operatorSigner types.OperatorSigner,
 	valCheck specqbft.ProposedValueCheckF,
@@ -113,7 +113,7 @@ func (cr *CommitteeRunner) GetValCheckF() specqbft.ProposedValueCheckF {
 	return cr.valCheck
 }
 
-func (cr *CommitteeRunner) GetNetwork() qbft.FutureSpecNetwork {
+func (cr *CommitteeRunner) GetNetwork() specqbft.Network {
 	return cr.network
 }
 
