@@ -698,7 +698,7 @@ func (c *controller) ExecuteDuty(logger *zap.Logger, duty *spectypes.BeaconDuty)
 	pk := make([]byte, 48)
 	copy(pk, duty.PubKey[:])
 
-	logger.Debug(" <><> executing duty")
+	logger.Debug(" <><> #  executing duty")
 
 	if v, ok := c.GetValidator(spectypes.ValidatorPK(pk)); ok {
 		ssvMsg, err := CreateDutyExecuteMsg(duty, pk, types.GetDefaultDomain())
