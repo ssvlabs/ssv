@@ -21,12 +21,6 @@ const (
 	SlowTimeout           = 2 * time.Minute
 )
 
-// Timer is an interface for a round timer, calling the UponRoundTimeout when times out
-type Timer interface {
-	// TimeoutForRound will reset running timer if exists and will start a new timer for a specific round
-	TimeoutForRound(height specqbft.Height, round specqbft.Round)
-}
-
 type BeaconNetwork interface {
 	GetSlotStartTime(slot phase0.Slot) time.Time
 	SlotDurationSec() time.Duration
