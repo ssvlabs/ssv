@@ -3,21 +3,25 @@ package validation
 // message_counts.go contains code for counting and validating messages per validator-slot-round.
 
 import (
+	"encoding/json"
 	"fmt"
 
 	specqbft "github.com/ssvlabs/ssv-spec/qbft"
 	spectypes "github.com/ssvlabs/ssv-spec/types"
+
+	"github.com/ssvlabs/ssv/protocol/v2/ssv/queue"
 )
 
 // MessageCounts tracks the number of various message types received for validation.
 type MessageCounts struct {
-	PreConsensus  int
-	Proposal      int
-	Prepare       int
-	Commit        int
-	Decided       int
-	RoundChange   int
-	PostConsensus int
+	PreConsensus   int
+	Proposal       int
+	Prepare        int
+	Commit         int
+	Decided        int
+	RoundChange    int
+	RoundChangeMsg queue.DecodedSSVMessage
+	PostConsensus  int
 }
 
 // String provides a formatted representation of the MessageCounts.
@@ -67,7 +71,17 @@ func (c *MessageCounts) ValidateConsensusMessage(signedSSVMessage *spectypes.Sig
 	case specqbft.RoundChangeMsgType:
 		if c.RoundChange >= limits.RoundChange {
 			err := ErrTooManySameTypeMessagesPerRound
-			err.got = fmt.Sprintf("round change, having %v", c.String())
+
+			receivedMsgJSON, _ := json.Marshal(queue.DecodedSSVMessage{
+				SignedSSVMessage: signedSSVMessage,
+				SSVMessage:       signedSSVMessage.SSVMessage,
+				Body:             msg,
+			})
+
+			existingMsgJSON, _ := json.Marshal(c.RoundChangeMsg)
+
+			err.got = fmt.Sprintf("received round change: %v", string(receivedMsgJSON))
+			err.want = fmt.Sprintf("existing round change: %v", string(existingMsgJSON))
 			return err
 		}
 	default:
@@ -118,6 +132,11 @@ func (c *MessageCounts) RecordConsensusMessage(signedSSVMessage *spectypes.Signe
 		}
 	case specqbft.RoundChangeMsgType:
 		c.RoundChange++
+		c.RoundChangeMsg = queue.DecodedSSVMessage{
+			SignedSSVMessage: signedSSVMessage,
+			SSVMessage:       signedSSVMessage.SSVMessage,
+			Body:             msg,
+		}
 	default:
 		panic("unexpected signed message type") // should be checked before
 	}
