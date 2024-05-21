@@ -129,7 +129,7 @@ func (mv *messageValidator) handleSignedSSVMessage(signedSSVMessage *spectypes.S
 
 	decodedMessage.SSVMessage = signedSSVMessage.SSVMessage
 
-	if err := mv.validateSSVMessage(signedSSVMessage.SSVMessage, topic); err != nil {
+	if err := mv.validateSSVMessage(signedSSVMessage.SSVMessage); err != nil {
 		return decodedMessage, err
 	}
 
@@ -174,6 +174,7 @@ func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSS
 		return err
 	}
 
+	// Rule: Check if message was sent in the correct topic
 	messageTopics := commons.CommitteeTopicID(committeeData.committeeID[:])
 	topicBaseName := commons.GetTopicBaseName(topic)
 	if !slices.Contains(messageTopics, topicBaseName) {
@@ -182,6 +183,7 @@ func (mv *messageValidator) committeeChecks(signedSSVMessage *spectypes.SignedSS
 		e.want = messageTopics
 		return e
 	}
+
 	return nil
 }
 
@@ -208,6 +210,8 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 	if mv.committeeRole(msgID.GetRoleType()) {
 		// TODO: add metrics and logs for committee role
 		committeeID := spectypes.ClusterID(msgID.GetSenderID()[16:])
+
+		// Rule: Cluster does not exist
 		committee := mv.validatorStore.Committee(committeeID) // TODO: consider passing whole senderID
 		if committee == nil {
 			e := ErrNonExistentCommitteeID
@@ -247,6 +251,7 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 		return CommitteeData{}, e
 	}
 
+	// Rule: If validator is liquidated
 	if validator.Liquidated {
 		return CommitteeData{}, ErrValidatorLiquidated
 	}
@@ -255,6 +260,7 @@ func (mv *messageValidator) getCommitteeAndValidatorIndices(msgID spectypes.Mess
 		return CommitteeData{}, ErrNoShareMetadata
 	}
 
+	// Rule: If validator is not active
 	if !validator.IsAttesting(mv.netCfg.Beacon.EstimatedCurrentEpoch()) {
 		e := ErrValidatorNotAttesting
 		e.got = validator.BeaconMetadata.Status.String()

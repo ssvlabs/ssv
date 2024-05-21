@@ -91,10 +91,6 @@ func (mv *messageValidator) validatePartialSignatureMessageSemantics(
 	}
 
 	for _, message := range partialSignatureMessages.Messages {
-		if len(message.PartialSignature) == 0 {
-			return ErrEmptySignature
-		}
-
 		if message.Signer != signers[0] {
 			err := ErrInconsistentSigners
 			err.got = signers[0]

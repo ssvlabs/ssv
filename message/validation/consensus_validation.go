@@ -296,6 +296,7 @@ func (mv *messageValidator) processSignerState(signedSSVMessage *spectypes.Signe
 func (mv *messageValidator) pruneOldSlots(stateBySlot *treemap.Map, lastSlot phase0.Slot) {
 	maxSlotsInState := phase0.Slot(mv.netCfg.SlotsPerEpoch()) + lateSlotAllowance
 
+	// Check underflow.
 	if lastSlot <= maxSlotsInState {
 		return
 	}

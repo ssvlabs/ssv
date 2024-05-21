@@ -75,7 +75,6 @@ var (
 	ErrUnexpectedConsensusMessage              = Error{text: "unexpected consensus message for this role", reject: true}
 	ErrNoSigners                               = Error{text: "no signers", reject: true}
 	ErrWrongRSASignatureSize                   = Error{text: "wrong RSA signature size", reject: true}
-	ErrEmptySignature                          = Error{text: "empty signature", reject: true}
 	ErrZeroSigner                              = Error{text: "zero signer ID", reject: true}
 	ErrSignerNotInCommittee                    = Error{text: "signer is not in committee", reject: true}
 	ErrDuplicatedSigner                        = Error{text: "signer is duplicated", reject: true}

@@ -874,35 +874,6 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		require.ErrorContains(t, err, ErrWrongRSASignatureSize.Error())
 	})
 
-	// Initialize signature tests
-	t.Run("zero signature", func(t *testing.T) {
-		validator := New(netCfg, validatorStore, dutyStore, signatureVerifier).(*messageValidator)
-
-		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
-
-		// Get error when receiving a consensus message with a zero signature
-		t.Run("consensus message", func(t *testing.T) {
-			signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
-			signedSSVMessage.Signatures = [][]byte{{}}
-
-			receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-			topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetSenderID()[16:])[0]
-			_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
-			require.ErrorIs(t, err, ErrEmptySignature)
-		})
-
-		// Get error when receiving a consensus message with a zero signature
-		t.Run("partial signature message", func(t *testing.T) {
-			partialSigSSVMessage := spectestingutils.SignPartialSigSSVMessage(ks, spectestingutils.SSVMsgAggregator(nil, spectestingutils.PostConsensusAggregatorMsg(ks.Shares[1], 1)))
-			partialSigSSVMessage.Signatures = [][]byte{{}}
-
-			receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
-			topicID := commons.ValidatorTopicID(partialSigSSVMessage.SSVMessage.GetID().GetSenderID())[0]
-			_, err = validator.handleSignedSSVMessage(partialSigSSVMessage, topicID, receivedAt)
-			require.ErrorIs(t, err, ErrEmptySignature)
-		})
-	})
-
 	// Get error when receiving a message with an empty list of signers
 	t.Run("no signers", func(t *testing.T) {
 		validator := New(netCfg, validatorStore, dutyStore, signatureVerifier).(*messageValidator)
@@ -915,6 +886,28 @@ func Test_ValidateSSVMessage(t *testing.T) {
 		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetSenderID()[16:])[0]
 		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
 		require.ErrorIs(t, err, ErrNoSigners)
+	})
+
+	// Get error when receiving a message with more signers than committee size.
+	// It tests ErrMoreSignersThanCommitteeSize from knowledge base.
+	t.Run("more signers than committee size", func(t *testing.T) {
+		validator := New(netCfg, validatorStore, dutyStore, signatureVerifier).(*messageValidator)
+
+		slot := netCfg.Beacon.FirstSlotAtEpoch(1)
+		signedSSVMessage := generateSignedMessage(ks, committeeIdentifier, slot)
+		signedSSVMessage.OperatorIDs = []spectypes.OperatorID{1, 2, 3, 4, 5}
+		signedSSVMessage.Signatures = [][]byte{
+			signedSSVMessage.Signatures[0],
+			signedSSVMessage.Signatures[0],
+			signedSSVMessage.Signatures[0],
+			signedSSVMessage.Signatures[0],
+			signedSSVMessage.Signatures[0],
+		}
+
+		receivedAt := netCfg.Beacon.GetSlotStartTime(slot)
+		topicID := commons.CommitteeTopicID(signedSSVMessage.SSVMessage.GetID().GetSenderID()[16:])[0]
+		_, err = validator.handleSignedSSVMessage(signedSSVMessage, topicID, receivedAt)
+		require.ErrorContains(t, err, ErrSignerNotInCommittee.Error())
 	})
 
 	// Get error when receiving a consensus message with zero signer
