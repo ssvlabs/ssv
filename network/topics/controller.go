@@ -260,14 +260,15 @@ func (ctrl *topicsCtrl) setupTopicValidator(name string) error {
 		// first try to unregister in case there is already a msg validator for that topic (e.g. fork scenario)
 		_ = ctrl.ps.UnregisterTopicValidator(name)
 
-		var opts []pubsub.ValidatorOpt
+		// var opts []pubsub.ValidatorOpt
 		// Optional: set a timeout for message validation
 		// opts = append(opts, pubsub.WithValidatorTimeout(time.Second))
 
-		err := ctrl.ps.RegisterTopicValidator(name, ctrl.msgValidator.ValidatorForTopic(name), opts...)
-		if err != nil {
-			return errors.Wrap(err, "could not register topic validator")
-		}
+		// TODO: uncomment
+		// err := ctrl.ps.RegisterTopicValidator(name, ctrl.msgValidator.ValidatorForTopic(name), opts...)
+		// if err != nil {
+		// 	return errors.Wrap(err, "could not register topic validator")
+		// }
 	}
 	return nil
 }
