@@ -250,13 +250,16 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 			zap.Bool("blinded", r.decidedBlindedBlock()),
 		)
 
-		var blk any
 		if r.decidedBlindedBlock() {
 			vBlindedBlk, _, err := r.GetState().DecidedValue.GetBlindedBlockData()
 			if err != nil {
 				return errors.Wrap(err, "could not get blinded block")
 			}
-			blk = vBlindedBlk
+			blockSummary, summarizeErr := summarizeBlock(vBlindedBlk)
+			logger = logger.With(
+				zap.String("block_hash", blockSummary.Hash.String()),
+				zap.NamedError("summarize_err", summarizeErr),
+			)
 
 			if err := r.GetBeaconNode().SubmitBlindedBeaconBlock(vBlindedBlk, specSig); err != nil {
 				r.metrics.RoleSubmissionFailed()
@@ -270,7 +273,11 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 			if err != nil {
 				return errors.Wrap(err, "could not get block")
 			}
-			blk = vBlk
+			blockSummary, summarizeErr := summarizeBlock(vBlk)
+			logger = logger.With(
+				zap.String("block_hash", blockSummary.Hash.String()),
+				zap.NamedError("summarize_err", summarizeErr),
+			)
 
 			if err := r.GetBeaconNode().SubmitBeaconBlock(vBlk, specSig); err != nil {
 				r.metrics.RoleSubmissionFailed()
@@ -285,10 +292,7 @@ func (r *ProposerRunner) ProcessPostConsensus(logger *zap.Logger, signedMsg *spe
 		r.metrics.EndDutyFullFlow(r.GetState().RunningInstance.State.Round)
 		r.metrics.RoleSubmitted()
 
-		blockSummary, summarizeErr := summarizeBlock(blk)
 		logger.Info("✅ successfully submitted block proposal",
-			zap.String("block_hash", blockSummary.Hash.String()),
-			zap.NamedError("summarize_err", summarizeErr),
 			fields.SubmissionTime(time.Since(start)))
 	}
 	r.GetState().Finished = true
