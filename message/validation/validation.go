@@ -264,45 +264,25 @@ func (mv *messageValidator) ValidatePubsubMessage(_ context.Context, peerID peer
 		round = descriptor.Consensus.Round
 	}
 
-	// TODO: revert
-	if err == nil {
-		mv.logger.Debug("got p2p message",
-			fields.PeerID(peerID),
-			fields.Role(decodedMessage.MsgID.GetRoleType()),
-			fields.MessageType(decodedMessage.MsgType),
-			fields.PubKey(decodedMessage.MsgID.GetPubKey()),
-		)
-	} else {
-		mv.logger.Debug("failed to validate p2p message",
-			fields.PeerID(peerID),
-			fields.Role(descriptor.Role),
-			fields.MessageType(descriptor.SSVMessageType),
-			fields.PubKey(descriptor.ValidatorPK),
-			zap.Error(err),
-		)
-	}
-
 	f := append(descriptor.Fields(), fields.PeerID(peerID))
 
 	if err != nil {
 		var valErr Error
 		if errors.As(err, &valErr) {
 			if valErr.Reject() {
-				// TODO: revert
-				// if !valErr.Silent() {
-				f = append(f, zap.Error(err))
-				mv.logger.Debug("rejecting invalid message", f...)
-				// }
+				if !valErr.Silent() {
+					f = append(f, zap.Error(err))
+					mv.logger.Debug("rejecting invalid message", f...)
+				}
 
 				mv.metrics.MessageRejected(valErr.Text(), descriptor.Role, round)
 				return pubsub.ValidationReject
 			}
 
-			// TODO: revert
-			// if !valErr.Silent() {
-			f = append(f, zap.Error(err))
-			mv.logger.Debug("ignoring invalid message", f...)
-			// }
+			if !valErr.Silent() {
+				f = append(f, zap.Error(err))
+				mv.logger.Debug("ignoring invalid message", f...)
+			}
 			mv.metrics.MessageIgnored(valErr.Text(), descriptor.Role, round)
 			return pubsub.ValidationIgnore
 		}

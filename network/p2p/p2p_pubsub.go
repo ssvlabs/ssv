@@ -74,18 +74,6 @@ func (n *p2pNetwork) Broadcast(msgID spectypes.MessageID, msg *spectypes.SignedS
 		return fmt.Errorf("could not get validator topics: %w", err)
 	}
 	for _, topic := range topics {
-		// TODO: revert
-		decodedMsg, err := queue.DecodeSignedSSVMessage(msg)
-		if err != nil {
-			return fmt.Errorf("could not decode signed ssv message: %w", err)
-		}
-		n.interfaceLogger.Debug("broadcast p2p message",
-			fields.Role(msgID.GetRoleType()),
-			fields.MessageType(decodedMsg.MsgType),
-			fields.PubKey(msgID.GetPubKey()),
-			fields.Topic(topic),
-		)
-
 		if err := n.topicsCtrl.Broadcast(topic, encodedMsg, n.cfg.RequestTimeout); err != nil {
 			n.interfaceLogger.Debug("could not broadcast msg", fields.PubKey(msgID.GetPubKey()), zap.Error(err))
 			return fmt.Errorf("could not broadcast msg: %w", err)
